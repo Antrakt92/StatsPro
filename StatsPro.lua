@@ -377,11 +377,12 @@ Panel.__index = Panel
 function Panel:New(globalName, dbKeyPrefix)
     local self = setmetatable({}, Panel)
     self.dbKeyPrefix = dbKeyPrefix or ""
-    self.lastText = nil
+    self.lastLabelText = nil
+    self.lastValueText = nil
     self.lastLineCount = -1
 
     local frame = CreateFrame("Frame", globalName, UIParent, "BackdropTemplate")
-    frame:SetSize(200, 100)
+    frame:SetSize(220, 100)
     frame:SetMovable(true)
     frame:EnableMouse(false)
     frame:SetClampedToScreen(true)
@@ -395,16 +396,29 @@ function Panel:New(globalName, dbKeyPrefix)
     frame:SetBackdropColor(0, 0, 0, 0)
     frame:SetBackdropBorderColor(0, 0, 0, 0)
 
-    local statsText = frame:CreateFontString(nil, "OVERLAY")
-    statsText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
-    statsText:SetJustifyH(GetDB("textAlign"))
-    statsText:SetJustifyV("TOP")
-    statsText:SetTextColor(1, 1, 1, 1)
-    statsText:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-    statsText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+    -- Two-column rendering: labels on the LEFT, values on the RIGHT, anchored to opposite
+    -- edges. Frame width auto-fits to (label width + value width + gap) on each render.
+    -- WHY: matches the professional HUD look (SinStats, etc.) — values' rightmost digit
+    -- visually aligns down the column instead of floating with each row's content length.
+    local labelText = frame:CreateFontString(nil, "OVERLAY")
+    labelText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
+    labelText:SetJustifyH("LEFT")
+    labelText:SetJustifyV("TOP")
+    labelText:SetTextColor(1, 1, 1, 1)
+    labelText:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+    labelText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
+
+    local valueText = frame:CreateFontString(nil, "OVERLAY")
+    valueText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
+    valueText:SetJustifyH("RIGHT")
+    valueText:SetJustifyV("TOP")
+    valueText:SetTextColor(1, 1, 1, 1)
+    valueText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+    valueText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
 
     self.frame = frame
-    self.statsText = statsText
+    self.labelText = labelText
+    self.valueText = valueText
 
     -- Drag handlers (unsecure frames; not protected in combat lockdown)
     frame:SetScript("OnMouseDown", function(f, button)
@@ -473,7 +487,8 @@ end
 
 function Panel:Hide()
     self.frame:Hide()
-    self.lastText = nil
+    self.lastLabelText = nil
+    self.lastValueText = nil
     -- WARNING: reset lineCount cache too; otherwise re-show may use stale height after font change
     self.lastLineCount = -1
 end
@@ -483,20 +498,34 @@ function Panel:IsShown()
 end
 
 -- Hide frame if no lines; otherwise apply text+height.
--- WARNING: in 12.x, `text` may be a secret-tainted string (built from in-combat stat
+-- WARNING: in 12.x, label/value strings may be secret-tainted (built from in-combat stat
 -- API returns). String comparisons (==, ~=) on secrets error. Use lineCount (always a
 -- real number) for empty-check, and SetText every call instead of deduping by text.
 -- FontString:SetText accepts secrets — that's how Blizzard's own UI renders them.
-function Panel:SetTextSafe(text, lineCount)
-    if not text or lineCount == 0 then
+function Panel:SetTextSafe(labelStr, valueStr, lineCount)
+    if not labelStr or lineCount == 0 then
         self:Hide()
         return
     end
     if not self:IsShown() then
         self.frame:Show()
     end
-    self.statsText:SetText(text)
-    self.lastText = text
+    self.labelText:SetText(labelStr)
+    self.valueText:SetText(valueStr)
+    self.lastLabelText = labelStr
+    self.lastValueText = valueStr
+
+    -- Auto-fit width to (label column + gap + value column). Min width prevents the
+    -- frame from collapsing when both columns are very short.
+    -- WHY 16px gap: visual breathing room between the two columns; matches SinStats spacing.
+    -- WHY GetStringWidth here (not deferred): WoW lays out FontStrings before the next
+    -- Draw call, so by the time the frame is rendered the width is correct. Even if the
+    -- first frame is one tick stale on extreme transitions, the next 0.5s tick corrects it.
+    local labelW = self.labelText:GetStringWidth() or 0
+    local valueW = self.valueText:GetStringWidth() or 0
+    local totalW = math.max(labelW + valueW + 16, 80)
+    self.frame:SetWidth(totalW)
+
     if lineCount ~= self.lastLineCount then
         local fontSize = GetDB("fontSize")
         self.frame:SetHeight((lineCount * fontSize) + 8)
@@ -504,12 +533,15 @@ function Panel:SetTextSafe(text, lineCount)
     end
 end
 
-function Panel:ApplyStyle(font, size, align)
-    self.statsText:SetFont(font, size, "OUTLINE")
-    self.statsText:SetJustifyH(align)
+function Panel:ApplyStyle(font, size)
+    self.labelText:SetFont(font, size, "OUTLINE")
+    self.valueText:SetFont(font, size, "OUTLINE")
     -- WHY: Blizzard quirk - SetFont clears text; re-apply if we have one.
-    if self.lastText then
-        self.statsText:SetText(self.lastText)
+    if self.lastLabelText then
+        self.labelText:SetText(self.lastLabelText)
+    end
+    if self.lastValueText then
+        self.valueText:SetText(self.lastValueText)
     end
     -- Force resize on next SetTextSafe
     self.lastLineCount = -1
@@ -521,9 +553,9 @@ end
 local mainPanel      = Panel:New("StatsProFrame",          "")
 local defensivePanel = Panel:New("StatsProDefensiveFrame", "defensive_")
 
-local function ApplyTextStyleToAllPanels(font, size, align)
-    mainPanel:ApplyStyle(font, size, align)
-    defensivePanel:ApplyStyle(font, size, align)
+local function ApplyTextStyleToAllPanels(font, size)
+    mainPanel:ApplyStyle(font, size)
+    defensivePanel:ApplyStyle(font, size)
 end
 
 local function LoadAllPositions()
@@ -570,21 +602,34 @@ local function FmtPctOnly(pct, statColor)
     return string.format("|cff%s%.1f%%|r", pc, pct)
 end
 
-local function BuildPrimaryLines(lines)
+-- Two-column rendering: every Build*() function pushes paired (label, value) entries
+-- into the supplied tables. UpdateStats joins them with newlines and hands one string
+-- to each FontString (labelText left-justified, valueText right-justified).
+-- WHY pair-pushed instead of a single struct: cheaper than allocating a row-table per
+-- line, and lets us reuse JoinLinesSecretSafe unchanged.
+
+local function PushRow(labels, values, label, value)
+    labels[#labels + 1] = label
+    values[#values + 1] = value
+end
+
+local function BuildPrimaryLines(labels, values)
     local cs = cached.colorStrings
     local primaryStr = cs.primary
     local valueColor = (cached.matchValueColorToStat and primaryStr) or cs.rating
     for _, def in ipairs(PRIMARY_STATS) do
         if cached[def.showKey] then
             local val = safeCall(UnitStat, "player", def.unitStatId)
-            lines[#lines + 1] = string.format("|cff%s%s:|r |cff%s%d|r", primaryStr, def.label, valueColor, val)
+            PushRow(labels, values,
+                string.format("|cff%s%s|r", primaryStr, def.label),
+                string.format("|cff%s%d|r", valueColor, val))
         end
     end
 end
 
-local function BuildOffensiveLines(lines)
-    -- WHY: with both display modes off, FmtRatingPct returns "" → "Crit: " (empty trailing).
-    -- Respect the user's choice: skip the whole block instead of rendering label-only lines.
+local function BuildOffensiveLines(labels, values)
+    -- WHY: with both display modes off, FmtRatingPct returns "" → empty value column.
+    -- Respect the user's choice: skip the whole block instead of rendering label-only rows.
     if not (cached.showRating or cached.showPercentage) then return end
     local cs = cached.colorStrings
 
@@ -594,8 +639,9 @@ local function BuildOffensiveLines(lines)
         local val = safeCall(def.api)
         local rating = needRating and safeCall(GetCombatRating, def.ratingCR) or 0
         local statColor = cs[def.colorKey]
-        lines[#lines + 1] = string.format("|cff%s%s:|r %s",
-            statColor, def.label, FmtRatingPct(rating, val, statColor))
+        PushRow(labels, values,
+            string.format("|cff%s%s|r", statColor, def.label),
+            FmtRatingPct(rating, val, statColor))
     end
 
     -- Versatility: dual-source (rating bonus + flat). Cache OOC; in combat use cached.
@@ -609,13 +655,13 @@ local function BuildOffensiveLines(lines)
         cached.versTotalRating = versRating
     end
     local versStr = cs.versatility
-    lines[#lines + 1] = string.format("|cff%sVers:|r %s",
-        versStr, FmtRatingPct(cached.versTotalRating, cached.versTotal, versStr))
+    PushRow(labels, values,
+        string.format("|cff%sVers|r", versStr),
+        FmtRatingPct(cached.versTotalRating, cached.versTotal, versStr))
 end
 
-local function BuildTertiaryLines(lines)
+local function BuildTertiaryLines(labels, values)
     if not cached.showTertiary then return end
-    -- WHY: same reason as BuildOffensiveLines — empty-format combo would render label-only lines.
     if not (cached.showRating or cached.showPercentage) then return end
     local cs = cached.colorStrings
 
@@ -626,8 +672,9 @@ local function BuildTertiaryLines(lines)
             if shouldShow(val, cached.hideZeroTertiary) then
                 local rating = needRating and safeCall(GetCombatRating, def.ratingCR) or 0
                 local statColor = cs[def.colorKey]
-                lines[#lines + 1] = string.format("|cff%s%s:|r %s",
-                    statColor, def.label, FmtRatingPct(rating, val, statColor))
+                PushRow(labels, values,
+                    string.format("|cff%s%s|r", statColor, def.label),
+                    FmtRatingPct(rating, val, statColor))
             end
         end
     end
@@ -646,23 +693,24 @@ local function BuildTertiaryLines(lines)
         local speedRating = needRating and safeCall(GetCombatRating, CR_SPEED) or 0
         if shouldShow(speed, cached.hideZeroTertiary) then
             local statColor = cs.speed
-            lines[#lines + 1] = string.format("|cff%sSpeed:|r %s",
-                statColor, FmtRatingPct(speedRating, speed, statColor))
+            PushRow(labels, values,
+                string.format("|cff%sSpeed|r", statColor),
+                FmtRatingPct(speedRating, speed, statColor))
         end
     end
 end
 
 local function BuildMainLines()
-    local lines = {}
-    BuildPrimaryLines(lines)
-    BuildOffensiveLines(lines)
-    BuildTertiaryLines(lines)
-    return lines
+    local labels, values = {}, {}
+    BuildPrimaryLines(labels, values)
+    BuildOffensiveLines(labels, values)
+    BuildTertiaryLines(labels, values)
+    return labels, values
 end
 
 local function BuildDefensiveLines()
-    local lines = {}
-    if not cached.showDefensive then return lines end
+    local labels, values = {}, {}
+    if not cached.showDefensive then return labels, values end
     local cs = cached.colorStrings
 
     -- Dodge / Parry / Block (table-driven)
@@ -671,8 +719,9 @@ local function BuildDefensiveLines()
             local val = safeCall(def.api)
             if shouldShow(val, cached.hideZeroDefensive) then
                 local statColor = cs[def.colorKey]
-                lines[#lines + 1] = string.format("|cff%s%s:|r %s",
-                    statColor, def.label, FmtPctOnly(val, statColor))
+                PushRow(labels, values,
+                    string.format("|cff%s%s|r", statColor, def.label),
+                    FmtPctOnly(val, statColor))
             end
         end
     end
@@ -683,20 +732,21 @@ local function BuildDefensiveLines()
         local armorStr = cs.armor
         local valueColor = (cached.matchValueColorToStat and armorStr) or cs.percentage
         if shouldShow(cached.armorDR, cached.hideZeroDefensive) then
-            lines[#lines + 1] = string.format("|cff%sArmor:|r |cff%s%.1f%%|r",
-                armorStr, valueColor, cached.armorDR)
+            PushRow(labels, values,
+                string.format("|cff%sArmor|r", armorStr),
+                string.format("|cff%s%.1f%%|r", valueColor, cached.armorDR))
         end
     end
 
-    return lines
+    return labels, values
 end
 
 -- WHY: durability is independent of "Show Defensive Stats" — gear wear is not a
 -- defensive stat (one is mitigation %, the other is item integrity). Kept as its own
 -- builder so users can show only durability without enabling the dodge/parry/block block.
 local function BuildDurabilityLines()
-    local lines = {}
-    if not cached.showDurability then return lines end
+    local labels, values = {}, {}
+    if not cached.showDurability then return labels, values end
     local cs = cached.colorStrings
     local pct = cached.durabilityValue
     local durStr = cs.durability
@@ -707,16 +757,33 @@ local function BuildDurabilityLines()
         valueColor = durStr
     end
     -- %.1f%% matches vendor precision (95.2% vs 95%)
-    lines[#lines + 1] = string.format("|cff%sDurability:|r |cff%s%.1f%%|r",
-        durStr, valueColor, pct)
+    PushRow(labels, values,
+        string.format("|cff%sDurability|r", durStr),
+        string.format("|cff%s%.1f%%|r", valueColor, pct))
     if cached.showRepairCost and cached.repairCost > 0 then
-        -- WHY: own line — appended form gets truncated when other stats push panel width.
-        -- Don't wrap GetCoinTextureString output in |cff...|r — coin icons render inline
-        -- as textures and the color tag would tint them.
-        lines[#lines + 1] = string.format("|cff%sRepair:|r %s",
-            durStr, FormatRepairCost(cached.repairCost))
+        -- WHY: own row — keeps the right column visually a column of values, not a mix
+        -- of percentages and coin strings. Don't wrap GetCoinTextureString output in
+        -- |cff...|r — coin icons render inline as textures and the color tag would tint them.
+        PushRow(labels, values,
+            string.format("|cff%sRepair|r", durStr),
+            FormatRepairCost(cached.repairCost))
     end
-    return lines
+    return labels, values
+end
+
+-- WHY: separate header injector — sectioned mode places "— Defensive —" between sections.
+-- Header text spans the label column with an empty value column to preserve row alignment.
+local function PushHeader(labels, values, headerStr)
+    labels[#labels + 1] = headerStr
+    values[#values + 1] = ""
+end
+
+-- Append (srcLabels, srcValues) into (dstLabels, dstValues) row-by-row.
+local function AppendRows(dstLabels, dstValues, srcLabels, srcValues)
+    for i = 1, #srcLabels do
+        dstLabels[#dstLabels + 1] = srcLabels[i]
+        dstValues[#dstValues + 1] = srcValues[i]
+    end
 end
 
 local function UpdateStats()
@@ -733,57 +800,63 @@ local function UpdateStats()
     end
 
     -- Armor refresh: cheap (one pcall + one Lua call); always do it out of combat.
-    -- Covers spec swaps, talent changes, level ups, equipment changes, buffs without
-    -- needing per-event handlers.
     if not InCombatLockdown() and cached.showArmor then
         RefreshArmorCache()
     end
 
     -- Durability: event-driven (avoid scanning 19 slots every 0.5s).
-    -- WHY: gate on showDurability — repair cost is rendered inside the same block.
-    -- Dirty flag stays true until enabled; first eligible tick computes fresh value.
     if cached.showDurability and durabilityDirty then
         RefreshDurabilityCache()
     end
 
-    -- 2. Build line lists
-    local mainLines = BuildMainLines()
-    local defLines  = BuildDefensiveLines()
-    local durLines  = BuildDurabilityLines()
+    -- Build paired (label, value) row arrays per builder
+    local mainLabels, mainValues = BuildMainLines()
+    local defLabels,  defValues  = BuildDefensiveLines()
+    local durLabels,  durValues  = BuildDurabilityLines()
 
-    -- 3. Dispatch by display mode
+    -- Dispatch by display mode
     local mode = cached.displayMode or "flat"
     if mode == "split" then
-        mainPanel:SetTextSafe(JoinLinesSecretSafe(mainLines), #mainLines)
+        mainPanel:SetTextSafe(
+            JoinLinesSecretSafe(mainLabels),
+            JoinLinesSecretSafe(mainValues),
+            #mainLabels)
         -- WHY: defensive panel hosts both defensive stats and durability so the user can
         -- see them together while keeping the main panel focused on offensive/primary.
-        local sideLines = {}
-        for _, l in ipairs(defLines) do sideLines[#sideLines + 1] = l end
-        for _, l in ipairs(durLines) do sideLines[#sideLines + 1] = l end
-        if #sideLines > 0 then
-            defensivePanel:SetTextSafe(JoinLinesSecretSafe(sideLines), #sideLines)
+        local sideLabels, sideValues = {}, {}
+        AppendRows(sideLabels, sideValues, defLabels, defValues)
+        AppendRows(sideLabels, sideValues, durLabels, durValues)
+        if #sideLabels > 0 then
+            defensivePanel:SetTextSafe(
+                JoinLinesSecretSafe(sideLabels),
+                JoinLinesSecretSafe(sideValues),
+                #sideLabels)
         else
             defensivePanel:Hide()
         end
     elseif mode == "sectioned" then
-        local combined = {}
-        for _, l in ipairs(mainLines) do combined[#combined + 1] = l end
-        -- WHY: header only above defensive stats; durability is its own concept and
-        -- appears below them without an extra section divider (would look noisy).
-        if #defLines > 0 then
-            combined[#combined + 1] = DEFENSIVE_HEADER
-            for _, l in ipairs(defLines) do combined[#combined + 1] = l end
+        local cLabels, cValues = {}, {}
+        AppendRows(cLabels, cValues, mainLabels, mainValues)
+        if #defLabels > 0 then
+            PushHeader(cLabels, cValues, DEFENSIVE_HEADER)
+            AppendRows(cLabels, cValues, defLabels, defValues)
         end
-        for _, l in ipairs(durLines) do combined[#combined + 1] = l end
-        mainPanel:SetTextSafe(JoinLinesSecretSafe(combined), #combined)
+        AppendRows(cLabels, cValues, durLabels, durValues)
+        mainPanel:SetTextSafe(
+            JoinLinesSecretSafe(cLabels),
+            JoinLinesSecretSafe(cValues),
+            #cLabels)
         defensivePanel:Hide()
     else
         -- flat (default)
-        local combined = {}
-        for _, l in ipairs(mainLines) do combined[#combined + 1] = l end
-        for _, l in ipairs(defLines)  do combined[#combined + 1] = l end
-        for _, l in ipairs(durLines)  do combined[#combined + 1] = l end
-        mainPanel:SetTextSafe(JoinLinesSecretSafe(combined), #combined)
+        local cLabels, cValues = {}, {}
+        AppendRows(cLabels, cValues, mainLabels, mainValues)
+        AppendRows(cLabels, cValues, defLabels,  defValues)
+        AppendRows(cLabels, cValues, durLabels,  durValues)
+        mainPanel:SetTextSafe(
+            JoinLinesSecretSafe(cLabels),
+            JoinLinesSecretSafe(cValues),
+            #cLabels)
         defensivePanel:Hide()
     end
 end
@@ -1267,7 +1340,7 @@ function addon:OpenConfigMenu()
                 info.checked = (GetDB("font") == f.path)
                 info.func = function()
                     StatsProDB.font = f.path
-                    ApplyTextStyleToAllPanels(f.path, GetDB("fontSize"), GetDB("textAlign"))
+                    ApplyTextStyleToAllPanels(f.path, GetDB("fontSize"))
                     UIDropDownMenu_SetText(fontDropdown, f.name)
                     CloseDropDownMenus()
                     UpdateStats()
@@ -1282,45 +1355,10 @@ function addon:OpenConfigMenu()
         UIDropDownMenu_SetText(fontDropdown, currentFontName)
         UIDropDownMenu_SetWidth(fontDropdown, 150)
 
-        -- Align label + buttons (right side of same row)
-        local alignLabel = displayTab:CreateFontString(nil, "OVERLAY")
-        alignLabel:SetFont("Fonts\\FRIZQT__.TTF", 12)
-        alignLabel:SetPoint("TOPLEFT", cd.padX + 250, rowY)
-        alignLabel:SetText("Align:")
-
-        local leftBtn, centerBtn, rightBtn
-        local function CreateAlignButton(align, xOff)
-            local btn = CreateFrame("Button", nil, displayTab)
-            btn:SetPoint("TOPLEFT", cd.padX + 290 + xOff, rowY - 1)
-            btn:SetSize(32, 22)
-            local bg = btn:CreateTexture(nil, "BACKGROUND")
-            bg:SetAllPoints(btn)
-            bg:SetColorTexture(0.15, 0.15, 0.15, 0.9)
-            local hl = btn:CreateTexture(nil, "HIGHLIGHT")
-            hl:SetAllPoints(btn)
-            hl:SetColorTexture(1, 1, 1, 0.1)
-            local sel = btn:CreateTexture(nil, "ARTWORK")
-            sel:SetAllPoints(btn)
-            sel:SetColorTexture(0, 0.7, 0.4, 0.6)
-            sel:Hide()
-            btn.selected = sel
-            local text = btn:CreateFontString(nil, "OVERLAY")
-            text:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
-            text:SetPoint("CENTER")
-            text:SetText(align:sub(1, 1))
-            if GetDB("textAlign") == align then sel:Show() end
-            btn:SetScript("OnClick", function(self)
-                StatsProDB.textAlign = align
-                ApplyTextStyleToAllPanels(GetDB("font"), GetDB("fontSize"), align)
-                leftBtn.selected:Hide(); centerBtn.selected:Hide(); rightBtn.selected:Hide()
-                self.selected:Show()
-                UpdateStats()
-            end)
-            return btn
-        end
-        leftBtn   = CreateAlignButton("LEFT",   0)
-        centerBtn = CreateAlignButton("CENTER", 36)
-        rightBtn  = CreateAlignButton("RIGHT",  72)
+        -- WHY: text-alignment buttons removed — two-column rendering anchors labels to
+        -- the LEFT and values to the RIGHT regardless of any global alignment setting.
+        -- The defaults.textAlign field is kept in DB only for backward compat with
+        -- v1.0 saves; it has no runtime effect.
 
         cd.y = rowY - 32
     end
@@ -1345,7 +1383,7 @@ function addon:OpenConfigMenu()
         slider:SetScript("OnValueChanged", function(self, value)
             _G[self:GetName() .. "Text"]:SetText(math.floor(value))
             StatsProDB.fontSize = value
-            ApplyTextStyleToAllPanels(GetDB("font"), value, GetDB("textAlign"))
+            ApplyTextStyleToAllPanels(GetDB("font"), value)
             UpdateStats()
         end)
         cd.y = sliderY - 50
@@ -1518,7 +1556,7 @@ function addon:OpenConfigMenu()
         StatsProDB.dbVersion = CURRENT_DB_VERSION
 
         CacheSettings()
-        ApplyTextStyleToAllPanels(defaults.font, defaults.fontSize, defaults.textAlign)
+        ApplyTextStyleToAllPanels(defaults.font, defaults.fontSize)
         SetAllPanelsScale(defaults.scale)
         LoadAllPositions()
         SetAllPanelsLockState(defaults.isLocked)

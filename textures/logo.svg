@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c1f30"/>
+      <stop offset="1" stop-color="#0a0c16"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#00ff7f" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#00ff7f" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#00ff7f" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.5"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="dropShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+      <feOffset dx="0" dy="2"/>
+      <feComposite in2="SourceAlpha" operator="in"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.6"/></feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Panel background -->
+  <rect width="512" height="512" rx="84" fill="url(#bg)"/>
+  <rect x="12" y="12" width="488" height="488" rx="72" fill="none" stroke="#363a52" stroke-width="2.5"/>
+
+  <!-- Accent line at top -->
+  <rect x="56" y="60" width="400" height="2" fill="url(#accent)"/>
+
+  <!-- Stats: two-column layout, colored labels left, white values right -->
+  <g font-family="-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-weight="800" filter="url(#dropShadow)">
+    <!-- Crit (red) -->
+    <text x="80" y="180" font-size="60" fill="#ff4040" filter="url(#softGlow)">Crit</text>
+    <text x="432" y="180" font-size="60" fill="#ffffff" text-anchor="end">42.0%</text>
+
+    <!-- Haste (blue) -->
+    <text x="80" y="262" font-size="60" fill="#4ec5ff" filter="url(#softGlow)">Haste</text>
+    <text x="432" y="262" font-size="60" fill="#ffffff" text-anchor="end">28.4%</text>
+
+    <!-- Mastery (green) -->
+    <text x="80" y="344" font-size="60" fill="#3fff7f" filter="url(#softGlow)">Mast</text>
+    <text x="432" y="344" font-size="60" fill="#ffffff" text-anchor="end">35.7%</text>
+
+    <!-- Versatility (yellow) -->
+    <text x="80" y="426" font-size="60" fill="#ffd84e" filter="url(#softGlow)">Vers</text>
+    <text x="432" y="426" font-size="60" fill="#ffffff" text-anchor="end">18.2%</text>
+  </g>
+
+  <!-- Bottom accent line -->
+  <rect x="56" y="456" width="400" height="2" fill="url(#accent)"/>
+</svg>

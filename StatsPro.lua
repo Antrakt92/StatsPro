@@ -396,13 +396,17 @@ function Panel:New(globalName, dbKeyPrefix)
     frame:SetBackdropColor(0, 0, 0, 0)
     frame:SetBackdropBorderColor(0, 0, 0, 0)
 
-    -- Two-column rendering: labels on the LEFT, values on the RIGHT, anchored to opposite
-    -- edges. Frame width auto-fits to (label width + value width + gap) on each render.
-    -- WHY: matches the professional HUD look (SinStats, etc.) — values' rightmost digit
-    -- visually aligns down the column instead of floating with each row's content length.
+    -- Two-column rendering: BOTH columns right-justified.
+    -- WHY right-justify labels (not left): with left-justified labels in an auto-fit box,
+    -- short labels leave huge trailing blank space (e.g. "Crit" 40px sitting inside the
+    -- "Durability"-sized box of 140px → 100px of empty space before the column gap).
+    -- Right-justifying lines up all label right-edges at the same x, so the visual gap
+    -- to the value column stays constant across rows regardless of label length.
+    -- Values stay right-justified so the rightmost digit of every percentage aligns
+    -- down the column for easy at-a-glance scanning.
     local labelText = frame:CreateFontString(nil, "OVERLAY")
     labelText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
-    labelText:SetJustifyH("LEFT")
+    labelText:SetJustifyH("RIGHT")
     labelText:SetJustifyV("TOP")
     labelText:SetTextColor(1, 1, 1, 1)
     labelText:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
@@ -517,13 +521,12 @@ function Panel:SetTextSafe(labelStr, valueStr, lineCount)
 
     -- Auto-fit width to (label column + gap + value column). Min width prevents the
     -- frame from collapsing when both columns are very short.
-    -- WHY 16px gap: visual breathing room between the two columns; matches SinStats spacing.
-    -- WHY GetStringWidth here (not deferred): WoW lays out FontStrings before the next
-    -- Draw call, so by the time the frame is rendered the width is correct. Even if the
-    -- first frame is one tick stale on extreme transitions, the next 0.5s tick corrects it.
+    -- WHY 8px gap: tight column spacing — labels right-justified hug the gap, values
+    -- right-justified so the rightmost char of the longest value sits at the panel's
+    -- right edge. Two text columns visually pulled together with no wasted space.
     local labelW = self.labelText:GetStringWidth() or 0
     local valueW = self.valueText:GetStringWidth() or 0
-    local totalW = math.max(labelW + valueW + 16, 80)
+    local totalW = math.max(labelW + valueW + 8, 80)
     self.frame:SetWidth(totalW)
 
     if lineCount ~= self.lastLineCount then

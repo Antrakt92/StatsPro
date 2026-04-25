@@ -1,17 +1,31 @@
 <!--
-  CurseForge project description for StatsPro.
-  Paste the body below (everything after this comment) into the project's
-  Description field on CurseForge in Markdown mode. Replace each
-  INSERT_<filename> placeholder with the URL CurseForge gives you after
-  uploading the matching image (see "How to upload images" at the bottom
-  of this file).
+  CurseForge project description for StatsPro — finalized version.
+
+  How to use this file:
+    1. Copy everything between the two HORIZONTAL BAR markers below
+       (skipping these top comments and the bottom comment block).
+    2. On CurseForge → project → Description editor → switch to Markdown mode.
+    3. Paste.
+    4. For each `INSERT_<filename>` placeholder line:
+         a. Click the "Image" button in the editor toolbar.
+         b. Upload the matching file from screenshots/<filename>.jpg.
+         c. CurseForge replaces the line with a media.forgecdn.net URL.
+         d. Delete any leftover `INSERT_` token text on the line.
+    5. Save / Submit.
+
+  Reminder: do NOT use raw.githubusercontent.com URLs as image sources —
+  GitHub explicitly forbids hotlinking raw content as a CDN, and the
+  images will eventually 429 / 403 under traffic. CurseForge's own
+  image hosting (media.forgecdn.net) is permanent and built for this.
 -->
+
+---  COPY FROM HERE ---
 
 ![StatsPro split mode panels](INSERT_01-split-mode-hero)
 
 # StatsPro
 
-A clean, lightweight **on-screen HUD for World of Warcraft Retail** that displays your secondary stats, defensive stats, durability, and live repair cost — without the bloat of a full framework.
+A clean, lightweight on-screen HUD for World of Warcraft Retail. Displays your secondary stats, defensive stats, durability, and live repair cost — without the bloat of a full framework.
 
 > Forked from [SwiftStats by TaylorSay](https://www.curseforge.com/wow/addons/swiftstats) (MIT). Adds a defensive panel, durability and repair cost integration, multi-panel layouts, and tightened two-column rendering.
 
@@ -49,9 +63,7 @@ A clean, lightweight **on-screen HUD for World of Warcraft Retail** that display
 
 ![Repair cost at vendor](INSERT_04-repair-cost-vendor)
 
-**Split mode — separate draggable panels for offensive and defensive stats:**
-
-![Split mode panels](INSERT_01-split-mode-hero)
+**Split mode** lets you place offensive and defensive stats as separate, independently draggable panels — see the screenshot at the top of this page.
 
 ---
 
@@ -86,24 +98,17 @@ Open the settings window with `/ss` or `/statspro`. Three tabs cover everything.
 
 ## Why "Pro"
 
-- **Two-column rendering** — labels right-justified, values left-justified, constant tight gap on every row. Clean professional HUD look without monospace dependency.
-- **TWW 12.x ready** — every stat read passes through secret-value filtering so the HUD never shows `[secret]` tokens or breaks mid-pull.
-- **Repair cost actually shows** — uses `C_TooltipInfo.GetInventoryItem` plus `TooltipUtil.SurfaceArgs` (the modern Blizzard path), not the legacy `GameTooltip:SetInventoryItem` that returns secret values in 12.x.
-- **Position persists across reloads** — proper `SetUserPlaced` ordering means dragged panels stay where you put them, even after `/reload` or relog.
-- **Vendor-accurate repair cost format** — `GetCoinTextureString` produces the exact `46g 40s 81c` format with inline coin icons that the vendor frame uses, not a hand-rolled `46g` truncation.
+- **Always tight, never crooked** — the two-column layout keeps labels and values perfectly aligned regardless of which stats you enable, what font you pick, or what scale you set.
+- **War Within (12.x) ready** — uses Blizzard's modern tooltip API, so repair cost actually shows up at the vendor (the legacy API silently broke this in older addons).
+- **Position survives /reload** — drag your panels once, they stay there forever. No "reset to default" surprises after a UI reload or relog.
+- **Vendor-accurate coin display** — repair cost shows as `46g 40s 81c` with the same inline gold / silver / copper icons the vendor frame uses, not a stripped-down `46g`.
+- **No combat lag, no taint errors** — every stat read is filtered for protected values before display, so the HUD never shows `[secret]` tokens, never breaks mid-pull, and never bleeds tainted state into other addons.
 
 ---
 
-## Migration from SwiftStats / SwiftStatsLocal
+## Migration from SwiftStats
 
-If you previously used **SwiftStats** or the **SwiftStatsLocal** fork, your settings migrate automatically on first load — no reconfiguration needed. Just install StatsPro, `/reload`, and disable the old addon in your AddOns list. Frame positions, colors, font choice, and toggles all transfer over.
-
----
-
-## Compatibility
-
-- **WoW Retail** — Interface 12.0.5 / 12.0.7 (The War Within / Midnight)
-- Classic / TBC / MoP Classic — not supported (Retail-only)
+If you previously used **SwiftStats**, your settings migrate automatically on first load — no reconfiguration needed. Just install StatsPro, `/reload`, and disable SwiftStats in your AddOns list. Frame positions, colors, font choice, and toggles all transfer over.
 
 ---
 
@@ -123,13 +128,16 @@ If you previously used **SwiftStats** or the **SwiftStatsLocal** fork, your sett
 
 **License:** MIT — both the original SwiftStats portion (© TaylorSay) and the StatsPro extensions (© Antrakt). See [LICENSE](https://github.com/Antrakt92/StatsPro/blob/main/LICENSE) for the full text.
 
+---  COPY UP TO HERE ---
+
 <!--
   ============================================================
-  HOW TO UPLOAD IMAGES (workflow notes — do NOT paste this section
-  into the CurseForge description field)
+  IMAGE PLACEHOLDER → SOURCE FILE MAPPING
   ============================================================
 
-  Image placeholders in the body above (each appears once):
+  Each INSERT_<name> placeholder appears exactly once in the body.
+  Upload these files in this order via the editor's image button:
+
     INSERT_01-split-mode-hero        → screenshots/01-split-mode-hero.jpg
     INSERT_02-flat-default           → screenshots/02-flat-default.jpg
     INSERT_08-rating-and-percentage  → screenshots/08-rating-and-percentage.jpg
@@ -139,25 +147,11 @@ If you previously used **SwiftStats** or the **SwiftStatsLocal** fork, your sett
     INSERT_06-settings-stats         → screenshots/06-settings-stats.jpg
     INSERT_07-settings-defensive     → screenshots/07-settings-defensive.jpg
 
-  Easiest workflow (one-shot):
-    1. Open the project's Description editor on CurseForge in Markdown mode.
-    2. Paste the entire body above.
-    3. For each INSERT_<name> placeholder:
-         a. Place cursor on the placeholder line.
-         b. Click the "Image" button in the editor toolbar (the picture icon).
-         c. Upload the matching screenshots/<name>.jpg file.
-         d. The editor inserts the markdown image syntax with the CDN URL.
-         e. Delete the leftover INSERT_ placeholder text on that line.
-    4. Save / Submit.
+  Note: 01-split-mode-hero is referenced ONCE (as the hero image at the
+  top of the page). The "Split mode" entry in "How it looks" now uses a
+  text-only callback to the hero shot to avoid duplicating the same
+  image twice on a single page.
 
-  Alternative workflow (bulk upload):
-    1. Open the project's "Images" tab on CurseForge.
-    2. Upload all 7 numbered screenshots from the screenshots/ folder.
-    3. CurseForge assigns each a permanent URL on media.forgecdn.net.
-    4. In the description Markdown, replace each INSERT_<name> token with the
-       matching URL.
-
-  Extra screenshots (not referenced in the body, kept in the repo for future
-  reuse — extra-flat-alt-1..4 and extra-flat-with-defensives-alt) can be
-  uploaded later if you want to add more visual examples.
+  Extra screenshots (extra-flat-alt-1..4, extra-flat-with-defensives-alt)
+  are NOT referenced in the body but stay in the repo for future use.
 -->

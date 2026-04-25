@@ -1,0 +1,17 @@
+## Interface: 120005, 120007
+## Title: |cff00ff7fStatsPro|r
+## Notes: On-screen secondary, defensive stats, durability and repair cost
+## Author: Antrakt
+## Version: @project-version@
+## IconTexture: Interface\AddOns\StatsPro\textures\logo.blp
+## SavedVariables: StatsProDB
+## X-License: MIT
+## X-Website: https://github.com/Antrakt92/StatsPro
+## X-Curse-Project-ID: 0
+## X-Category: Combat
+## X-Credits: Based on SwiftStats by TaylorSay (MIT)
+
+libs\LibStub\LibStub.lua
+libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
+StatsPro.lua

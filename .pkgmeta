@@ -1,0 +1,23 @@
+package-as: StatsPro
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+ignore:
+  - .github
+  - .gitignore
+  - README.md
+  - LICENSE
+  - .pkgmeta
+
+externals:
+  libs/LibStub:
+    url: https://repos.curseforge.com/wow/libstub/trunk
+    tag: latest
+  libs/CallbackHandler-1.0:
+    url: https://repos.curseforge.com/wow/callbackhandler/trunk/CallbackHandler-1.0
+    tag: latest
+  libs/LibSharedMedia-3.0:
+    url: https://repos.curseforge.com/wow/libsharedmedia-3-0/trunk/LibSharedMedia-3.0
+    tag: latest

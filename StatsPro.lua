@@ -519,14 +519,18 @@ function Panel:SetTextSafe(labelStr, valueStr, lineCount)
     self.lastLabelText = labelStr
     self.lastValueText = valueStr
 
-    -- Auto-fit width to (label column + gap + value column). Min width prevents the
-    -- frame from collapsing when both columns are very short.
-    -- WHY 8px gap: tight column spacing — labels right-justified hug the gap, values
-    -- right-justified so the rightmost char of the longest value sits at the panel's
-    -- right edge. Two text columns visually pulled together with no wasted space.
+    -- Auto-fit width to (label column + small gap + value column). Min width prevents
+    -- the frame from collapsing when both columns are very short.
+    -- WHY 2px gap: smallest visible separation. With both columns right-justified, the
+    -- longest-value row touches the label column with just 2px of breathing room. Shorter
+    -- values still appear further from their label because the value column box is sized
+    -- to the WIDEST value (right-justification leaves leading padding for shorter ones).
+    -- That padding is the unavoidable cost of keeping values' rightmost chars vertically
+    -- aligned in a column — switching values to LEFT-justify would eliminate it but lose
+    -- the percent-column scan-down look.
     local labelW = self.labelText:GetStringWidth() or 0
     local valueW = self.valueText:GetStringWidth() or 0
-    local totalW = math.max(labelW + valueW + 8, 80)
+    local totalW = math.max(labelW + valueW + 2, 80)
     self.frame:SetWidth(totalW)
 
     if lineCount ~= self.lastLineCount then

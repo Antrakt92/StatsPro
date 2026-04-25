@@ -527,11 +527,26 @@ function Panel:SetTextSafe(labelStr, valueStr, lineCount)
     -- the frame from collapsing when both columns are very short.
     -- WHY 2px constant: with labels RIGHT-justified and values LEFT-justified, every
     -- row's visible gap from label-colon to value-text equals exactly this constant —
-    -- no per-row variance from internal column padding. Tightest possible while
-    -- keeping the two-column structure.
-    local labelW = self.labelText:GetStringWidth() or 0
-    local valueW = self.valueText:GetStringWidth() or 0
-    local totalW = math.max(labelW + valueW + 2, 80)
+    -- no per-row variance from internal column padding.
+    -- WARNING: GetStringWidth() on a FontString whose text contains secret-tainted
+    -- substrings (e.g. in-combat stat reads that became secret) returns a secret-
+    -- tainted NUMBER. Arithmetic on a secret number errors with "attempt to perform
+    -- arithmetic on local 'valueW' (a secret number value, while execution tainted
+    -- by 'StatsPro')". SetText itself accepts secrets (Blizzard whitelisted that for
+    -- the FontString display path), but width measurement is not whitelisted.
+    -- Mitigation: cache the last NON-secret width per FontString. On each render,
+    -- read GetStringWidth and only refresh the cache if the result is non-secret.
+    -- Use cached widths for arithmetic. Initial widths default to 0 (frame starts at
+    -- the 80px min until the first OOC tick produces real measurements).
+    local labelW = self.labelText:GetStringWidth()
+    if labelW and not issecretvalue(labelW) then
+        self.cachedLabelW = labelW
+    end
+    local valueW = self.valueText:GetStringWidth()
+    if valueW and not issecretvalue(valueW) then
+        self.cachedValueW = valueW
+    end
+    local totalW = math.max((self.cachedLabelW or 0) + (self.cachedValueW or 0) + 2, 80)
     self.frame:SetWidth(totalW)
 
     if lineCount ~= self.lastLineCount then

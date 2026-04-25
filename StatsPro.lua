@@ -1,0 +1,1598 @@
+-- StatsPro.lua  v1.0
+-- Based on SwiftStats by TaylorSay (MIT). See LICENSE for full attribution.
+local _, addon = ...
+
+--[[ ============================================================
+    1. CONSTANTS
+============================================================ ]]
+local CURRENT_DB_VERSION = 3
+
+local DURABILITY_SLOT_MIN = 1
+local DURABILITY_SLOT_MAX = 19
+-- WHY: slot 4 = shirt, slot 18 = deprecated ranged. Slot 19 (tabard) self-filters via max>0.
+local DURABILITY_SKIP_SLOTS = { [4] = true, [18] = true }
+
+local DURABILITY_GREEN_THRESHOLD  = 60
+local DURABILITY_YELLOW_THRESHOLD = 30
+
+local DEFENSIVE_HEADER = "|cff808080— Defensive —|r"
+
+--[[ ============================================================
+    2. LIBRARIES + API SHIMS
+============================================================ ]]
+-- LibSharedMedia-3.0 (soft dependency - gracefully falls back if not loaded)
+local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+
+-- WHY: issecretvalue is 12.0+ retail; shim falsy on older clients so addon doesn't hard-error.
+local issecretvalue = _G.issecretvalue or function() return false end
+
+--[[ ============================================================
+    3. DEFAULTS
+============================================================ ]]
+local defaults = {
+    -- Position / appearance
+    point = "CENTER",
+    relativePoint = "CENTER",
+    xOfs = 0,
+    yOfs = 0,
+    scale = 1.0,
+    fontSize = 14,
+    font = "Fonts\\FRIZQT__.TTF",
+    textAlign = "RIGHT",
+    updateInterval = 0.5,
+    isVisible = true,
+    isLocked = false,
+
+    -- Display mode (v2.2): "flat" | "sectioned" | "split"
+    displayMode = "flat",
+
+    -- Defensive panel position (v2.2)
+    defensive_point = "CENTER",
+    defensive_relativePoint = "CENTER",
+    defensive_xOfs = 0,
+    defensive_yOfs = -100,
+
+    -- Display formatting
+    showRating = false,
+    showPercentage = true,
+    matchValueColorToStat = false,
+
+    -- Tertiary stats
+    showTertiary = false,
+    hideZeroTertiary = true,
+    showLeech = true,
+    showAvoidance = true,
+    showSpeed = true,
+
+    -- Primary stats
+    showStrength = false,
+    showAgility = false,
+    showIntellect = false,
+
+    -- Defensive stats (v2.2)
+    showDefensive = false,
+    hideZeroDefensive = true,
+    showDodge = true,
+    showParry = true,
+    showBlock = true,
+    showArmor = true,
+
+    -- Durability (v2.2)
+    showDurability = false,
+    showRepairCost = true,
+    useAutoColorDurability = true,
+    useWorstDurability = false,  -- default: average (matches vendor display); ON = show worst slot
+
+    colors = {
+        crit        = { r = 1,    g = 0,    b = 0 },
+        haste       = { r = 0,    g = 0.5,  b = 1 },
+        mastery     = { r = 0,    g = 1,    b = 0 },
+        versatility = { r = 1,    g = 1,    b = 0 },
+        rating      = { r = 0.7,  g = 0.7,  b = 0.7 },
+        percentage  = { r = 1,    g = 1,    b = 1 },
+        leech       = { r = 0.8,  g = 0.2,  b = 0.8 },
+        avoidance   = { r = 0.2,  g = 0.8,  b = 0.8 },
+        speed       = { r = 1,    g = 0.65, b = 0 },
+        primary     = { r = 1,    g = 0.84, b = 0 },
+        -- v2.2 defensive colors
+        dodge       = { r = 0.4,  g = 0.7,  b = 1 },
+        parry       = { r = 1,    g = 0.4,  b = 0.2 },
+        block       = { r = 0.7,  g = 0.5,  b = 0.3 },
+        armor       = { r = 0.6,  g = 0.6,  b = 0.7 },
+        durability  = { r = 1,    g = 1,    b = 1 },
+    },
+}
+
+--[[ ============================================================
+    4. STAT DEFINITION TABLES (data-driven; UpdateStats iterates these)
+============================================================ ]]
+local OFFENSIVE_STATS = {
+    { label = "Crit",    api = GetCritChance,    ratingCR = CR_CRIT_MELEE,  colorKey = "crit"    },
+    { label = "Haste",   api = GetHaste,         ratingCR = CR_HASTE_MELEE, colorKey = "haste"   },
+    { label = "Mastery", api = GetMasteryEffect, ratingCR = CR_MASTERY,     colorKey = "mastery" },
+    -- versatility handled specially (dual-source: rating + flat)
+}
+
+local DEFENSIVE_STATS = {
+    { label = "Dodge", api = GetDodgeChance, colorKey = "dodge", showKey = "showDodge" },
+    { label = "Parry", api = GetParryChance, colorKey = "parry", showKey = "showParry" },
+    { label = "Block", api = GetBlockChance, colorKey = "block", showKey = "showBlock" },
+    -- Armor & DR handled specially: armor = absolute number, DR = cached arithmetic
+}
+
+local PRIMARY_STATS = {
+    { label = "Strength",  unitStatId = 1, showKey = "showStrength"  },
+    { label = "Agility",   unitStatId = 2, showKey = "showAgility"   },
+    { label = "Intellect", unitStatId = 4, showKey = "showIntellect" },
+}
+
+local TERTIARY_STATS = {
+    { label = "Leech",     api = GetLifesteal, ratingCR = CR_LIFESTEAL, colorKey = "leech",     showKey = "showLeech"     },
+    { label = "Avoidance", api = GetAvoidance, ratingCR = CR_AVOIDANCE, colorKey = "avoidance", showKey = "showAvoidance" },
+    -- speed handled specially (yps→% via GetUnitSpeed)
+}
+
+--[[ ============================================================
+    5. CACHE KEY TABLES (single source of truth for CacheSettings loops)
+============================================================ ]]
+local CACHED_BOOL_KEYS = {
+    "isLocked", "isVisible",
+    "showRating", "showPercentage", "matchValueColorToStat",
+    "showTertiary", "hideZeroTertiary", "showLeech", "showAvoidance", "showSpeed",
+    "showStrength", "showAgility", "showIntellect",
+    -- v2.2:
+    "showDefensive", "hideZeroDefensive",
+    "showDodge", "showParry", "showBlock", "showArmor",
+    "showDurability", "showRepairCost", "useAutoColorDurability", "useWorstDurability",
+}
+
+-- WHY: COLOR_KEYS removed - CacheSettings now iterates pairs(defaults.colors) directly
+-- since defaults table IS the canonical color list; no separate string table needed.
+
+--[[ ============================================================
+    6. SAVED VARIABLES + RUNTIME STATE
+============================================================ ]]
+StatsProDB = StatsProDB or {}
+
+-- WHY: one-time migration for users coming from the SwiftStatsLocal fork. Copies the
+-- entire saved-variables table on first load if the new DB is empty AND the old global
+-- happens to be present (only true while both addons are simultaneously enabled). After
+-- migration the old DB is left untouched — disable SwiftStatsLocal in the addon list
+-- to remove its panels. Safe to ship to new users: SwiftStatsLocalDB simply doesn't
+-- exist for them, so the block is a no-op.
+if next(StatsProDB) == nil and _G.SwiftStatsLocalDB and next(_G.SwiftStatsLocalDB) ~= nil then
+    for k, v in pairs(_G.SwiftStatsLocalDB) do
+        StatsProDB[k] = v
+    end
+end
+
+local cached = {
+    colorStrings = {},
+    -- versatility cached out-of-combat (existing)
+    versTotal = 0,
+    versTotalRating = 0,
+    -- v2.2: defensive cached out-of-combat
+    armorDR = 0,
+    durabilityValue = 100,  -- holds avg or min depending on cached.useWorstDurability
+    repairCost = 0,         -- live repair cost in copper (sum from per-slot tooltip scan)
+    -- WARNING: GetUnitSpeed returns secret values in combat → math.max taints. Cache OOC.
+    speedPct = 0,
+    displayMode = "flat",
+    updateInterval = 0.5,
+}
+
+-- Dirty flag for event-driven cache refresh (durability scan is per-19-slot, not free)
+local durabilityDirty = true
+-- Init guard: UpdateStats must not run before CacheSettings populates cached.colorStrings
+local isLoaded = false
+
+--[[ ============================================================
+    7. HELPERS
+============================================================ ]]
+-- Read DB value with fallback to defaults (replaces 30+ if-nil patterns)
+local function GetDB(key)
+    local v = StatsProDB[key]
+    if v == nil then return defaults[key] end
+    return v
+end
+
+-- pcall every stat API so 12.x secret values never touch our Lua logic.
+-- Raw returns flow only into string.format, which Blizzard whitelisted for secrets.
+local function safeCall(fn, ...)
+    local ok, val = pcall(fn, ...)
+    if ok then return val end
+    return 0
+end
+
+-- 12.x: hideZero check on a possibly-secret value.
+-- issecretvalue() == in combat → always show (real value is non-zero).
+local function shouldShow(val, hideZero)
+    if not hideZero then return true end
+    if issecretvalue(val) then return true end
+    return val ~= 0
+end
+
+local function FormatRepairCost(copper)
+    -- WHY: Blizzard's GetCoinTextureString embeds gold/silver/copper icons inline,
+    -- matching the vendor display exactly. Falls back to gold-only if API missing.
+    if GetCoinTextureString then
+        return GetCoinTextureString(copper)
+    end
+    return string.format("%dg", math.floor(copper / 10000))
+end
+
+local function ComputeDurabilityColor(pct)
+    if pct >= DURABILITY_GREEN_THRESHOLD then
+        return 0.2, 1, 0.2
+    elseif pct >= DURABILITY_YELLOW_THRESHOLD then
+        return 1, 0.8, 0.2
+    else
+        return 1, 0.2, 0.2
+    end
+end
+
+local function RGBToHex(r, g, b)
+    -- WARNING: explicit floor for portability across Lua versions (5.1 tolerates floats; 5.3+ requires int)
+    return string.format("%02x%02x%02x",
+        math.floor(r * 255 + 0.5),
+        math.floor(g * 255 + 0.5),
+        math.floor(b * 255 + 0.5))
+end
+
+-- WARNING: table.concat rejects secret strings in 12.0; manual .. is allowed.
+local function JoinLinesSecretSafe(lines)
+    if #lines == 0 then return "" end
+    local text = lines[1]
+    for i = 2, #lines do
+        text = text .. "\n" .. lines[i]
+    end
+    return text
+end
+
+local function PrintMsg(text)
+    print("|cff00ff7f[StatsPro]|r " .. text)
+end
+
+--[[ ============================================================
+    8. CACHE UTILITIES
+============================================================ ]]
+local function CacheSettings()
+    -- Booleans / scalar settings
+    for _, k in ipairs(CACHED_BOOL_KEYS) do
+        cached[k] = GetDB(k)
+    end
+    cached.updateInterval = GetDB("updateInterval")
+    cached.displayMode = GetDB("displayMode")
+
+    -- Color → hex string lookup. Iterate defaults.colors (single source of truth) to
+    -- guarantee non-nil colorStrings for every key — eliminates the need for `or "ffffff"`
+    -- fallbacks throughout the render pipeline.
+    local userColors = StatsProDB.colors or {}
+    for name, defaultColor in pairs(defaults.colors) do
+        local c = userColors[name] or defaultColor
+        cached.colorStrings[name] = RGBToHex(c.r, c.g, c.b)
+    end
+end
+
+local function MigrateDB()
+    local db = StatsProDB
+    if db.dbVersion == CURRENT_DB_VERSION then return end
+
+    -- v2 → v3: default textAlign changed "LEFT" → "RIGHT". Upgrade only users still on
+    -- the old default; preserve any explicit user choice (CENTER/RIGHT untouched).
+    if db.dbVersion == 2 and db.textAlign == "LEFT" then
+        db.textAlign = "RIGHT"
+    end
+
+    -- Initialize missing scalars without clobbering user prefs
+    for k, v in pairs(defaults) do
+        if db[k] == nil and type(v) ~= "table" then
+            db[k] = v
+        end
+    end
+
+    -- Merge missing colors
+    if not db.colors then db.colors = {} end
+    for k, v in pairs(defaults.colors) do
+        if not db.colors[k] then
+            db.colors[k] = { r = v.r, g = v.g, b = v.b }
+        end
+    end
+
+    db.dbVersion = CURRENT_DB_VERSION
+end
+
+local function RefreshArmorCache()
+    if InCombatLockdown() then return end
+    -- 12.x retail: UnitArmor returns 4 values; we want effectiveArmor (2nd).
+    -- Effective armor accounts for item durability (broken items give reduced armor).
+    local ok, _, effectiveArmor = pcall(UnitArmor, "player")
+    -- WARNING: pcall succeeds when UnitArmor returns secret values (no Lua error fires
+    -- on assignment, only on later comparison). InCombatLockdown lags real combat state
+    -- in M+/transitional moments, so OOC-only guard isn't enough — must verify the value
+    -- itself isn't tainted before any comparison/arithmetic.
+    if not ok or issecretvalue(effectiveArmor) then return end
+    if PaperDollFrame_GetArmorReduction and effectiveArmor and effectiveArmor > 0 then
+        -- WARNING: PaperDollFrame_GetArmorReduction in 12.x retail returns 0..100 percent
+        -- (not 0..1 fraction as some docs claim). Normalize defensively: if return is <=1
+        -- treat as fraction and scale, else use as-is. Cap at 100% for sanity.
+        local raw = PaperDollFrame_GetArmorReduction(effectiveArmor, UnitEffectiveLevel("player")) or 0
+        if raw <= 1 then raw = raw * 100 end
+        if raw > 100 then raw = 100 end
+        cached.armorDR = raw
+    else
+        cached.armorDR = 0
+    end
+end
+
+-- Single-pass scan: computes avg %, worst %, and total repair cost across all slots.
+-- WHY: C_TooltipInfo.GetInventoryItem returns a TooltipData table with a .repairCost
+-- field. SetInventoryItem's 3rd return became a secret value in 12.x retail (after the
+-- 10.0.2 tooltip rewrite) — issecretvalue filtered it out → cost was always 0.
+-- TooltipUtil.SurfaceArgs unwraps secure args into plain Lua fields. This is the path
+-- modern Blizzard UI and addons (Broker Durability Info, etc.) use.
+local function ScanDurabilityAndCost()
+    local sum, count, totalCost = 0, 0, 0
+    local minPct
+    for slot = DURABILITY_SLOT_MIN, DURABILITY_SLOT_MAX do
+        if not DURABILITY_SKIP_SLOTS[slot] then
+            local cur, max = GetInventoryItemDurability(slot)
+            if cur and max and max > 0 then
+                local pct = (cur / max) * 100
+                sum = sum + pct
+                count = count + 1
+                if not minPct or pct < minPct then minPct = pct end
+                if cur < max and C_TooltipInfo and C_TooltipInfo.GetInventoryItem then
+                    local data = C_TooltipInfo.GetInventoryItem("player", slot)
+                    if data then
+                        if TooltipUtil and TooltipUtil.SurfaceArgs then
+                            TooltipUtil.SurfaceArgs(data)
+                        end
+                        local cost = data.repairCost
+                        if cost and not issecretvalue(cost) and cost > 0 then
+                            totalCost = totalCost + cost
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if count == 0 then return 100, 100, 0 end
+    return sum / count, minPct, totalCost
+end
+
+local function RefreshDurabilityCache()
+    local avg, mn, cost = ScanDurabilityAndCost()
+    cached.durabilityValue = cached.useWorstDurability and mn or avg
+    cached.repairCost = cost
+    durabilityDirty = false
+end
+
+--[[ ============================================================
+    9. PANEL CLASS
+============================================================ ]]
+local Panel = {}
+Panel.__index = Panel
+
+function Panel:New(globalName, dbKeyPrefix)
+    local self = setmetatable({}, Panel)
+    self.dbKeyPrefix = dbKeyPrefix or ""
+    self.lastText = nil
+    self.lastLineCount = -1
+
+    local frame = CreateFrame("Frame", globalName, UIParent, "BackdropTemplate")
+    frame:SetSize(200, 100)
+    frame:SetMovable(true)
+    frame:EnableMouse(false)
+    frame:SetClampedToScreen(true)
+
+    frame:SetBackdrop({
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 16,
+        insets = { left = 4, right = 4, top = 4, bottom = 4 },
+    })
+    frame:SetBackdropColor(0, 0, 0, 0)
+    frame:SetBackdropBorderColor(0, 0, 0, 0)
+
+    local statsText = frame:CreateFontString(nil, "OVERLAY")
+    statsText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
+    statsText:SetJustifyH(GetDB("textAlign"))
+    statsText:SetJustifyV("TOP")
+    statsText:SetTextColor(1, 1, 1, 1)
+    statsText:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+    statsText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+
+    self.frame = frame
+    self.statsText = statsText
+
+    -- Drag handlers (unsecure frames; not protected in combat lockdown)
+    frame:SetScript("OnMouseDown", function(f, button)
+        if button == "LeftButton" and not InCombatLockdown() then
+            f:StartMoving()
+        end
+    end)
+    frame:SetScript("OnMouseUp", function(f, button)
+        if button == "LeftButton" then
+            f:StopMovingOrSizing()
+            self:SavePosition()
+        end
+    end)
+
+    return self
+end
+
+function Panel:DBKey(suffix)
+    if self.dbKeyPrefix == "" then return suffix end
+    return self.dbKeyPrefix .. suffix
+end
+
+function Panel:SavePosition()
+    local point, _, relativePoint, xOfs, yOfs = self.frame:GetPoint()
+    -- WHY: if the frame has no anchor yet (called before LoadPosition), GetPoint returns
+    -- nil. Writing nil deletes the key — next load would fall back to defaults and the
+    -- previously-saved position would be lost.
+    if not point then return end
+    StatsProDB[self:DBKey("point")] = point
+    StatsProDB[self:DBKey("relativePoint")] = relativePoint
+    StatsProDB[self:DBKey("xOfs")] = xOfs
+    StatsProDB[self:DBKey("yOfs")] = yOfs
+end
+
+function Panel:LoadPosition()
+    local point         = StatsProDB[self:DBKey("point")]         or defaults[self:DBKey("point")]         or "CENTER"
+    local relativePoint = StatsProDB[self:DBKey("relativePoint")] or defaults[self:DBKey("relativePoint")] or "CENTER"
+    local xOfs          = StatsProDB[self:DBKey("xOfs")]          or defaults[self:DBKey("xOfs")]          or 0
+    local yOfs          = StatsProDB[self:DBKey("yOfs")]          or defaults[self:DBKey("yOfs")]          or 0
+
+    if type(xOfs) ~= "number" or type(yOfs) ~= "number"
+        or xOfs < -3000 or xOfs > 3000 or yOfs < -3000 or yOfs > 3000 then
+        xOfs, yOfs = 0, 0
+    end
+
+    self.frame:ClearAllPoints()
+    self.frame:SetPoint(point, UIParent, relativePoint, xOfs, yOfs)
+    -- WHY: SetUserPlaced(true) AFTER SetPoint marks the frame as user-positioned at our
+    -- chosen anchor. Required in 12.x retail for StartMoving/StopMovingOrSizing to commit
+    -- the new position to the frame's internal anchor — without it, GetPoint() can return
+    -- the pre-drag anchor on some setups, so SavePosition writes the OLD position back
+    -- to SavedVariables and the move appears not to have saved. Order matters: SetPoint
+    -- first, then SetUserPlaced — otherwise WoW's layout-cache could overwrite our anchor.
+    self.frame:SetUserPlaced(true)
+    -- WHY: scale is set via SetAllPanelsScale (single ownership); not duplicated here
+end
+
+function Panel:Lock()
+    self.frame:EnableMouse(false)
+end
+
+function Panel:Unlock()
+    if InCombatLockdown() then return end
+    self.frame:EnableMouse(true)
+end
+
+function Panel:Hide()
+    self.frame:Hide()
+    self.lastText = nil
+    -- WARNING: reset lineCount cache too; otherwise re-show may use stale height after font change
+    self.lastLineCount = -1
+end
+
+function Panel:IsShown()
+    return self.frame:IsShown()
+end
+
+-- Hide frame if no lines; otherwise apply text+height.
+-- WARNING: in 12.x, `text` may be a secret-tainted string (built from in-combat stat
+-- API returns). String comparisons (==, ~=) on secrets error. Use lineCount (always a
+-- real number) for empty-check, and SetText every call instead of deduping by text.
+-- FontString:SetText accepts secrets — that's how Blizzard's own UI renders them.
+function Panel:SetTextSafe(text, lineCount)
+    if not text or lineCount == 0 then
+        self:Hide()
+        return
+    end
+    if not self:IsShown() then
+        self.frame:Show()
+    end
+    self.statsText:SetText(text)
+    self.lastText = text
+    if lineCount ~= self.lastLineCount then
+        local fontSize = GetDB("fontSize")
+        self.frame:SetHeight((lineCount * fontSize) + 8)
+        self.lastLineCount = lineCount
+    end
+end
+
+function Panel:ApplyStyle(font, size, align)
+    self.statsText:SetFont(font, size, "OUTLINE")
+    self.statsText:SetJustifyH(align)
+    -- WHY: Blizzard quirk - SetFont clears text; re-apply if we have one.
+    if self.lastText then
+        self.statsText:SetText(self.lastText)
+    end
+    -- Force resize on next SetTextSafe
+    self.lastLineCount = -1
+end
+
+--[[ ============================================================
+    10. PANELS (instantiated at file scope)
+============================================================ ]]
+local mainPanel      = Panel:New("StatsProFrame",          "")
+local defensivePanel = Panel:New("StatsProDefensiveFrame", "defensive_")
+
+local function ApplyTextStyleToAllPanels(font, size, align)
+    mainPanel:ApplyStyle(font, size, align)
+    defensivePanel:ApplyStyle(font, size, align)
+end
+
+local function LoadAllPositions()
+    mainPanel:LoadPosition()
+    defensivePanel:LoadPosition()
+end
+
+local function SetAllPanelsLockState(locked)
+    if locked then
+        mainPanel:Lock()
+        defensivePanel:Lock()
+    else
+        mainPanel:Unlock()
+        defensivePanel:Unlock()
+    end
+end
+
+local function SetAllPanelsScale(scale)
+    mainPanel.frame:SetScale(scale)
+    defensivePanel.frame:SetScale(scale)
+end
+
+--[[ ============================================================
+    11. RENDER LOGIC
+============================================================ ]]
+-- Format a stat value (rating + percentage variants honoring user toggles).
+local function FmtRatingPct(rating, pct, statColor)
+    local cs = cached.colorStrings
+    local rc = (cached.matchValueColorToStat and statColor) or cs.rating
+    local pc = (cached.matchValueColorToStat and statColor) or cs.percentage
+    if cached.showRating and cached.showPercentage then
+        return string.format("|cff%s%d|r |cff808080|||r |cff%s%.1f%%|r", rc, rating, pc, pct)
+    elseif cached.showRating then
+        return string.format("|cff%s%d|r", rc, rating)
+    else
+        return string.format("|cff%s%.1f%%|r", pc, pct)
+    end
+end
+
+-- Format a percentage-only stat (no rating dimension, e.g. defensive Dodge/Parry).
+local function FmtPctOnly(pct, statColor)
+    local cs = cached.colorStrings
+    local pc = (cached.matchValueColorToStat and statColor) or cs.percentage
+    return string.format("|cff%s%.1f%%|r", pc, pct)
+end
+
+local function BuildPrimaryLines(lines)
+    local cs = cached.colorStrings
+    local primaryStr = cs.primary
+    local valueColor = (cached.matchValueColorToStat and primaryStr) or cs.rating
+    for _, def in ipairs(PRIMARY_STATS) do
+        if cached[def.showKey] then
+            local val = safeCall(UnitStat, "player", def.unitStatId)
+            lines[#lines + 1] = string.format("|cff%s%s:|r |cff%s%d|r", primaryStr, def.label, valueColor, val)
+        end
+    end
+end
+
+local function BuildOffensiveLines(lines)
+    -- WHY: with both display modes off, FmtRatingPct returns "" → "Crit: " (empty trailing).
+    -- Respect the user's choice: skip the whole block instead of rendering label-only lines.
+    if not (cached.showRating or cached.showPercentage) then return end
+    local cs = cached.colorStrings
+
+    -- m9 fix: skip the rating fetch when the user has it disabled
+    local needRating = cached.showRating
+    for _, def in ipairs(OFFENSIVE_STATS) do
+        local val = safeCall(def.api)
+        local rating = needRating and safeCall(GetCombatRating, def.ratingCR) or 0
+        local statColor = cs[def.colorKey]
+        lines[#lines + 1] = string.format("|cff%s%s:|r %s",
+            statColor, def.label, FmtRatingPct(rating, val, statColor))
+    end
+
+    -- Versatility: dual-source (rating bonus + flat). Cache OOC; in combat use cached.
+    local versFromRating = safeCall(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
+    local versFlat       = safeCall(GetVersatilityBonus,  CR_VERSATILITY_DAMAGE_DONE)
+    local versRating     = safeCall(GetCombatRating,      CR_VERSATILITY_DAMAGE_DONE)
+    -- WARNING: must check ALL three for secret state before arithmetic. Different APIs may
+    -- have different secret states despite same combat status (defensive: guard everything).
+    if not issecretvalue(versFromRating) and not issecretvalue(versFlat) and not issecretvalue(versRating) then
+        cached.versTotal = versFromRating + versFlat
+        cached.versTotalRating = versRating
+    end
+    local versStr = cs.versatility
+    lines[#lines + 1] = string.format("|cff%sVers:|r %s",
+        versStr, FmtRatingPct(cached.versTotalRating, cached.versTotal, versStr))
+end
+
+local function BuildTertiaryLines(lines)
+    if not cached.showTertiary then return end
+    -- WHY: same reason as BuildOffensiveLines — empty-format combo would render label-only lines.
+    if not (cached.showRating or cached.showPercentage) then return end
+    local cs = cached.colorStrings
+
+    local needRating = cached.showRating
+    for _, def in ipairs(TERTIARY_STATS) do
+        if cached[def.showKey] then
+            local val = safeCall(def.api)
+            if shouldShow(val, cached.hideZeroTertiary) then
+                local rating = needRating and safeCall(GetCombatRating, def.ratingCR) or 0
+                local statColor = cs[def.colorKey]
+                lines[#lines + 1] = string.format("|cff%s%s:|r %s",
+                    statColor, def.label, FmtRatingPct(rating, val, statColor))
+            end
+        end
+    end
+
+    -- Speed: GetSpeed returns rating-derived %, GetUnitSpeed gives actual yps.
+    -- Base run = 7 yps = 100%. Max of all modes covers mounts/sprint/swim.
+    if cached.showSpeed then
+        local cur, run, flight, swim = GetUnitSpeed("player")
+        -- WARNING: 12.x retail returns secrets from GetUnitSpeed in combat → math.max
+        -- triggers numeric conversion taint. Recompute OOC, reuse cached value in combat.
+        if not (issecretvalue(cur) or issecretvalue(run) or issecretvalue(flight) or issecretvalue(swim)) then
+            local effectiveYps = math.max(cur or 0, run or 0, flight or 0, swim or 0)
+            cached.speedPct = (effectiveYps / 7) * 100
+        end
+        local speed = cached.speedPct
+        local speedRating = needRating and safeCall(GetCombatRating, CR_SPEED) or 0
+        if shouldShow(speed, cached.hideZeroTertiary) then
+            local statColor = cs.speed
+            lines[#lines + 1] = string.format("|cff%sSpeed:|r %s",
+                statColor, FmtRatingPct(speedRating, speed, statColor))
+        end
+    end
+end
+
+local function BuildMainLines()
+    local lines = {}
+    BuildPrimaryLines(lines)
+    BuildOffensiveLines(lines)
+    BuildTertiaryLines(lines)
+    return lines
+end
+
+local function BuildDefensiveLines()
+    local lines = {}
+    if not cached.showDefensive then return lines end
+    local cs = cached.colorStrings
+
+    -- Dodge / Parry / Block (table-driven)
+    for _, def in ipairs(DEFENSIVE_STATS) do
+        if cached[def.showKey] then
+            local val = safeCall(def.api)
+            if shouldShow(val, cached.hideZeroDefensive) then
+                local statColor = cs[def.colorKey]
+                lines[#lines + 1] = string.format("|cff%s%s:|r %s",
+                    statColor, def.label, FmtPctOnly(val, statColor))
+            end
+        end
+    end
+
+    -- Armor: shown as % damage reduction (computed from effective armor, cached OOC).
+    -- WARNING: never call UnitArmor in combat - it returns secrets that break arithmetic.
+    if cached.showArmor then
+        local armorStr = cs.armor
+        local valueColor = (cached.matchValueColorToStat and armorStr) or cs.percentage
+        if shouldShow(cached.armorDR, cached.hideZeroDefensive) then
+            lines[#lines + 1] = string.format("|cff%sArmor:|r |cff%s%.1f%%|r",
+                armorStr, valueColor, cached.armorDR)
+        end
+    end
+
+    return lines
+end
+
+-- WHY: durability is independent of "Show Defensive Stats" — gear wear is not a
+-- defensive stat (one is mitigation %, the other is item integrity). Kept as its own
+-- builder so users can show only durability without enabling the dodge/parry/block block.
+local function BuildDurabilityLines()
+    local lines = {}
+    if not cached.showDurability then return lines end
+    local cs = cached.colorStrings
+    local pct = cached.durabilityValue
+    local durStr = cs.durability
+    local valueColor
+    if cached.useAutoColorDurability then
+        valueColor = RGBToHex(ComputeDurabilityColor(pct))
+    else
+        valueColor = durStr
+    end
+    -- %.1f%% matches vendor precision (95.2% vs 95%)
+    lines[#lines + 1] = string.format("|cff%sDurability:|r |cff%s%.1f%%|r",
+        durStr, valueColor, pct)
+    if cached.showRepairCost and cached.repairCost > 0 then
+        -- WHY: own line — appended form gets truncated when other stats push panel width.
+        -- Don't wrap GetCoinTextureString output in |cff...|r — coin icons render inline
+        -- as textures and the color tag would tint them.
+        lines[#lines + 1] = string.format("|cff%sRepair:|r %s",
+            durStr, FormatRepairCost(cached.repairCost))
+    end
+    return lines
+end
+
+local function UpdateStats()
+    -- WARNING: skip until init complete; cached.colorStrings is empty until CacheSettings runs
+    if not isLoaded then return end
+
+    -- WHY: master visibility toggle. When off, hide both panels and skip all work
+    -- (stat APIs, slot scans). Re-enabling via slash/UI calls UpdateStats explicitly,
+    -- which Shows the frame again on first non-empty SetTextSafe call.
+    if cached.isVisible == false then
+        mainPanel:Hide()
+        defensivePanel:Hide()
+        return
+    end
+
+    -- Armor refresh: cheap (one pcall + one Lua call); always do it out of combat.
+    -- Covers spec swaps, talent changes, level ups, equipment changes, buffs without
+    -- needing per-event handlers.
+    if not InCombatLockdown() and cached.showArmor then
+        RefreshArmorCache()
+    end
+
+    -- Durability: event-driven (avoid scanning 19 slots every 0.5s).
+    -- WHY: gate on showDurability — repair cost is rendered inside the same block.
+    -- Dirty flag stays true until enabled; first eligible tick computes fresh value.
+    if cached.showDurability and durabilityDirty then
+        RefreshDurabilityCache()
+    end
+
+    -- 2. Build line lists
+    local mainLines = BuildMainLines()
+    local defLines  = BuildDefensiveLines()
+    local durLines  = BuildDurabilityLines()
+
+    -- 3. Dispatch by display mode
+    local mode = cached.displayMode or "flat"
+    if mode == "split" then
+        mainPanel:SetTextSafe(JoinLinesSecretSafe(mainLines), #mainLines)
+        -- WHY: defensive panel hosts both defensive stats and durability so the user can
+        -- see them together while keeping the main panel focused on offensive/primary.
+        local sideLines = {}
+        for _, l in ipairs(defLines) do sideLines[#sideLines + 1] = l end
+        for _, l in ipairs(durLines) do sideLines[#sideLines + 1] = l end
+        if #sideLines > 0 then
+            defensivePanel:SetTextSafe(JoinLinesSecretSafe(sideLines), #sideLines)
+        else
+            defensivePanel:Hide()
+        end
+    elseif mode == "sectioned" then
+        local combined = {}
+        for _, l in ipairs(mainLines) do combined[#combined + 1] = l end
+        -- WHY: header only above defensive stats; durability is its own concept and
+        -- appears below them without an extra section divider (would look noisy).
+        if #defLines > 0 then
+            combined[#combined + 1] = DEFENSIVE_HEADER
+            for _, l in ipairs(defLines) do combined[#combined + 1] = l end
+        end
+        for _, l in ipairs(durLines) do combined[#combined + 1] = l end
+        mainPanel:SetTextSafe(JoinLinesSecretSafe(combined), #combined)
+        defensivePanel:Hide()
+    else
+        -- flat (default)
+        local combined = {}
+        for _, l in ipairs(mainLines) do combined[#combined + 1] = l end
+        for _, l in ipairs(defLines)  do combined[#combined + 1] = l end
+        for _, l in ipairs(durLines)  do combined[#combined + 1] = l end
+        mainPanel:SetTextSafe(JoinLinesSecretSafe(combined), #combined)
+        defensivePanel:Hide()
+    end
+end
+
+--[[ ============================================================
+    12. UPDATE TIMER (single source; lives on mainPanel)
+============================================================ ]]
+local timeSinceLastUpdate = 0
+mainPanel.frame:SetScript("OnUpdate", function(self, elapsed)
+    timeSinceLastUpdate = timeSinceLastUpdate + elapsed
+    if timeSinceLastUpdate >= cached.updateInterval then
+        UpdateStats()
+        timeSinceLastUpdate = 0
+    end
+end)
+
+--[[ ============================================================
+    13. EVENT DISPATCHER
+============================================================ ]]
+-- isLoaded declared earlier (section 6) so UpdateStats closure captures the same upvalue
+
+local function OnPlayerEnteringWorld()
+    if not isLoaded then
+        MigrateDB()
+        CacheSettings()
+        LoadAllPositions()
+        SetAllPanelsLockState(GetDB("isLocked"))
+        SetAllPanelsScale(GetDB("scale"))
+        isLoaded = true
+    end
+    -- WHY: UpdateStats handles Show/Hide based on cached.isVisible + line content.
+    durabilityDirty = true
+    UpdateStats()
+end
+
+-- WHY: Armor/DR refresh runs inline in UpdateStats out-of-combat (cheap), so we
+-- don't need PLAYER_REGEN_ENABLED / PLAYER_SPECIALIZATION_CHANGED / TRAIT_CONFIG_UPDATED /
+-- PLAYER_LEVEL_UP handlers. Worst-case latency for stat refresh is one OnUpdate tick (~0.5s).
+-- WHY: no MERCHANT_SHOW/CLOSED handlers — repair cost comes from per-slot tooltip scan
+-- (Blizzard's own approach). UPDATE_INVENTORY_DURABILITY rebuilds cost on every change.
+-- WHY: PLAYER_LOGOUT fires before SavedVariables are written to disk. Re-saving
+-- positions here is a belt-and-suspenders backup: OnMouseUp already saves on drop,
+-- but if the user reloads/quits via a path that bypasses our drag handler (rare),
+-- this guarantees the latest GetPoint() is what hits disk.
+local function OnPlayerLogout()
+    mainPanel:SavePosition()
+    defensivePanel:SavePosition()
+end
+
+local EVENT_HANDLERS = {
+    PLAYER_ENTERING_WORLD       = OnPlayerEnteringWorld,
+    PLAYER_LOGOUT               = OnPlayerLogout,
+    UPDATE_INVENTORY_DURABILITY = function() durabilityDirty = true end,
+    PLAYER_EQUIPMENT_CHANGED    = function() durabilityDirty = true end,
+}
+
+local eventFrame = CreateFrame("Frame")
+for event in pairs(EVENT_HANDLERS) do
+    eventFrame:RegisterEvent(event)
+end
+eventFrame:SetScript("OnEvent", function(self, event, ...)
+    local handler = EVENT_HANDLERS[event]
+    if handler then handler(...) end
+end)
+
+--[[ ============================================================
+    14. SETTINGS UI HELPERS
+============================================================ ]]
+local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWidth)
+    local cb = CreateFrame("CheckButton", name, parent, "UICheckButtonTemplate")
+    cb:SetPoint("TOPLEFT", x, y)
+    cb:SetSize(22, 22)
+    local text = _G[name .. "Text"]
+    text:SetText(label)
+    text:SetFont("Fonts\\FRIZQT__.TTF", 12)
+    -- textWidth: 200 default for plain checkboxes; pass 140 for "checkbox + inline color" rows
+    text:SetWidth(textWidth or 200)
+    text:SetJustifyH("LEFT")
+    cb:SetChecked(GetDB(dbKey))
+    cb:SetScript("OnClick", function(self)
+        StatsProDB[dbKey] = self:GetChecked()
+        CacheSettings()
+        if onChange then onChange(self:GetChecked()) end
+        UpdateStats()
+    end)
+    return cb
+end
+
+-- WHY: shared snapshot/select/cancel handler used by both CreateColorSwatch (compact 22x16
+-- inline button) and CreateColorPicker (labeled "Stat Color:" 30x20 row). Snapshot is taken
+-- at click time, not creation time, so cancelling a 2nd pick reverts to the user's prior
+-- color, not the original default.
+local function OpenColorPicker(btn, statName)
+    if not StatsProDB.colors then StatsProDB.colors = {} end
+    local current = StatsProDB.colors[statName] or defaults.colors[statName]
+    local snapshot = { r = current.r, g = current.g, b = current.b }
+    local function OnColorSelect()
+        local r, g, b = ColorPickerFrame:GetColorRGB()
+        btn:SetBackdropColor(r, g, b, 1)
+        StatsProDB.colors[statName] = { r = r, g = g, b = b }
+        CacheSettings()
+        UpdateStats()
+    end
+    local function OnCancel()
+        btn:SetBackdropColor(snapshot.r, snapshot.g, snapshot.b, 1)
+        StatsProDB.colors[statName] = snapshot
+        CacheSettings()
+        UpdateStats()
+    end
+    ColorPickerFrame:SetupColorPickerAndShow({
+        r = snapshot.r, g = snapshot.g, b = snapshot.b,
+        opacity = 1, hasOpacity = false,
+        swatchFunc = OnColorSelect,
+        cancelFunc = OnCancel,
+    })
+end
+
+-- Compact color swatch (no "Color:" label). Used for inline-with-checkbox placement
+-- and section-header shared colors.
+local function CreateColorSwatch(parent, statName, x, y)
+    local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    btn:SetPoint("TOPLEFT", x, y)
+    btn:SetSize(22, 16)
+    btn:SetBackdrop({
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 10,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+    })
+    if not StatsProDB.colors then StatsProDB.colors = {} end
+    local initialColor = StatsProDB.colors[statName] or defaults.colors[statName]
+    btn:SetBackdropColor(initialColor.r, initialColor.g, initialColor.b, 1)
+    btn:SetScript("OnClick", function(self) OpenColorPicker(self, statName) end)
+    return btn
+end
+
+-- Combined: checkbox with color swatch immediately to the right of label.
+-- swatch x = x + 22 (checkbox) + 140 (label) + 8 (gap) = x + 170
+-- Returns (cb, swatch). Most callers ignore swatch; durability captures it to grey-out
+-- when Auto Color overrides the user-picked color.
+local function CreateCheckboxColor(parent, name, label, dbKey, colorKey, x, y, onChange)
+    local cb = CreateCheckbox(parent, name, label, dbKey, x, y, onChange, 140)
+    local swatch
+    if colorKey then
+        swatch = CreateColorSwatch(parent, colorKey, x + 170, y - 3)
+    end
+    return cb, swatch
+end
+
+local function CreateColorPicker(parent, label, statName, yPos, xPos)
+    local colorLabel = parent:CreateFontString(nil, "OVERLAY")
+    colorLabel:SetFont("Fonts\\FRIZQT__.TTF", 12)
+    colorLabel:SetPoint("TOPLEFT", xPos, yPos)
+    colorLabel:SetText(label .. " Color:")
+
+    local colorBtn = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    colorBtn:SetPoint("LEFT", colorLabel, "RIGHT", 10, 0)
+    colorBtn:SetSize(30, 20)
+    colorBtn:SetBackdrop({
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 16,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+    })
+
+    if not StatsProDB.colors then StatsProDB.colors = {} end
+    local initialColor = StatsProDB.colors[statName] or defaults.colors[statName]
+    colorBtn:SetBackdropColor(initialColor.r, initialColor.g, initialColor.b, 1)
+    colorBtn:SetScript("OnClick", function(self) OpenColorPicker(self, statName) end)
+end
+
+--[[ ============================================================
+    15. CONFIG MENU (tabs: Display / Stats / Defensive)
+============================================================ ]]
+local configFrame
+local configSpecialFrameRegistered = false
+
+-- Layout cursor: stateful y-position tracker; eliminates manual `y = y - 25` math
+local function NewCursor(parent, padX, startY, gap)
+    return {
+        parent = parent, padX = padX or 12,
+        y = startY or -8, gap = gap or 6,
+        initialY = startY or -8,
+    }
+end
+local function CursorAdvance(c, h) c.y = c.y - (h or 24) - c.gap end
+local function CursorGap(c, n)     c.y = c.y - (n or 8) end
+local function CursorUsed(c)       return math.abs(c.initialY - c.y) + 16 end
+-- CursorSection: section header with green underline.
+-- Optional `sharedColorKey`: places a color swatch right after the header text;
+-- use this when one color applies to all stats in the section (e.g. Primary).
+local function CursorSection(c, label, sharedColorKey)
+    local hdr = c.parent:CreateFontString(nil, "OVERLAY")
+    hdr:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+    hdr:SetPoint("TOPLEFT", c.parent, "TOPLEFT", c.padX, c.y)
+    hdr:SetText("|cff00ff7f" .. string.upper(label) .. "|r")
+    if sharedColorKey then
+        -- WHY: GetStringWidth is unreliable immediately after SetText; use a generous
+        -- fixed offset that fits any of our header labels in uppercase.
+        CreateColorSwatch(c.parent, sharedColorKey, c.padX + 200, c.y + 1)
+    end
+    local line = c.parent:CreateTexture(nil, "ARTWORK")
+    line:SetPoint("TOPLEFT", c.parent, "TOPLEFT", c.padX, c.y - 18)
+    line:SetPoint("TOPRIGHT", c.parent, "TOPRIGHT", -c.padX, c.y - 18)
+    line:SetHeight(1)
+    line:SetColorTexture(0, 1, 0.5, 0.25)
+    c.y = c.y - 24 - c.gap
+end
+
+function addon:OpenConfigMenu()
+    if configFrame then
+        if configFrame:IsShown() then
+            configFrame:Hide()
+        else
+            configFrame:Show()
+            -- Always reopen on Display tab (predictable UX)
+            if configFrame.SwitchToTab then configFrame.SwitchToTab(1) end
+        end
+        return
+    end
+
+    --[[ ===== Frame ===== ]]
+    configFrame = CreateFrame("Frame", "StatsProConfigFrame", UIParent, "BackdropTemplate")
+    configFrame:SetSize(500, 540)
+    configFrame:SetPoint("CENTER")
+    configFrame:SetBackdrop({
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true, tileSize = 16, edgeSize = 16,
+        insets = { left = 5, right = 5, top = 5, bottom = 5 },
+    })
+    configFrame:SetBackdropColor(0, 0, 0, 0.92)
+    configFrame:EnableMouse(true)
+    configFrame:SetMovable(true)
+    configFrame:RegisterForDrag("LeftButton")
+    configFrame:SetScript("OnDragStart", configFrame.StartMoving)
+    configFrame:SetScript("OnDragStop", configFrame.StopMovingOrSizing)
+    configFrame:SetClampedToScreen(true)
+    -- WHY: register only once per session; Reset rebuilds the frame but keeps the global name
+    if not configSpecialFrameRegistered then
+        tinsert(UISpecialFrames, "StatsProConfigFrame")
+        configSpecialFrameRegistered = true
+    end
+
+    --[[ ===== Header (title + X) ===== ]]
+    local title = configFrame:CreateFontString(nil, "OVERLAY")
+    title:SetFont("Fonts\\FRIZQT__.TTF", 16, "OUTLINE")
+    title:SetPoint("TOP", 0, -12)
+    title:SetText("|cff00ff7fStatsPro|r v1.0 Settings")
+
+    local closeX = CreateFrame("Button", nil, configFrame, "UIPanelCloseButton")
+    closeX:SetPoint("TOPRIGHT", -4, -4)
+
+    -- Header separator
+    local headerLine = configFrame:CreateTexture(nil, "ARTWORK")
+    headerLine:SetPoint("TOPLEFT", 12, -38)
+    headerLine:SetPoint("TOPRIGHT", -12, -38)
+    headerLine:SetHeight(1)
+    headerLine:SetColorTexture(0.3, 0.3, 0.3, 0.5)
+
+    --[[ ===== Tab strip (custom, top-anchored, underline-active style) ===== ]]
+    local TAB_HEIGHT = 28
+    local tabStrip = CreateFrame("Frame", nil, configFrame)
+    tabStrip:SetPoint("TOPLEFT", 18, -44)
+    tabStrip:SetPoint("TOPRIGHT", -18, -44)
+    tabStrip:SetHeight(TAB_HEIGHT)
+
+    -- Separator below tab strip
+    local tabsLine = configFrame:CreateTexture(nil, "ARTWORK")
+    tabsLine:SetPoint("TOPLEFT", 12, -76)
+    tabsLine:SetPoint("TOPRIGHT", -12, -76)
+    tabsLine:SetHeight(1)
+    tabsLine:SetColorTexture(0.3, 0.3, 0.3, 0.7)
+
+    --[[ ===== Footer (Reset + Close) ===== ]]
+    local footerLine = configFrame:CreateTexture(nil, "ARTWORK")
+    footerLine:SetPoint("BOTTOMLEFT", 12, 50)
+    footerLine:SetPoint("BOTTOMRIGHT", -12, 50)
+    footerLine:SetHeight(1)
+    footerLine:SetColorTexture(0.3, 0.3, 0.3, 0.7)
+
+    local resetBtn = CreateFrame("Button", nil, configFrame, "GameMenuButtonTemplate")
+    resetBtn:SetPoint("BOTTOMLEFT", 18, 14)
+    resetBtn:SetSize(160, 26)
+    resetBtn:SetText("Reset to Defaults")
+    resetBtn:SetNormalFontObject("GameFontNormal")
+    resetBtn:SetHighlightFontObject("GameFontHighlight")
+
+    local closeBtn = CreateFrame("Button", nil, configFrame, "GameMenuButtonTemplate")
+    closeBtn:SetPoint("BOTTOMRIGHT", -18, 14)
+    closeBtn:SetSize(100, 26)
+    closeBtn:SetText("Close")
+    closeBtn:SetNormalFontObject("GameFontNormal")
+    closeBtn:SetHighlightFontObject("GameFontHighlight")
+    closeBtn:SetScript("OnClick", function() configFrame:Hide() end)
+
+    --[[ ===== ScrollFrame for tab content ===== ]]
+    local scrollFrame = CreateFrame("ScrollFrame", "StatsProConfigScroll", configFrame, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", 14, -82)
+    scrollFrame:SetPoint("BOTTOMRIGHT", -32, 60)
+
+    local scrollChild = CreateFrame("Frame", nil, scrollFrame)
+    scrollChild:SetSize(scrollFrame:GetWidth() - 4, 1)  -- height set per active tab
+    scrollFrame:SetScrollChild(scrollChild)
+
+    -- Tab content frames (children of scrollChild)
+    local displayTab   = CreateFrame("Frame", nil, scrollChild)
+    local statsTab     = CreateFrame("Frame", nil, scrollChild)
+    local defensiveTab = CreateFrame("Frame", nil, scrollChild)
+    local tabContents  = { displayTab, statsTab, defensiveTab }
+    for _, tab in ipairs(tabContents) do
+        tab:SetPoint("TOPLEFT", 0, 0)
+        tab:SetPoint("TOPRIGHT", 0, 0)
+        tab:Hide()
+    end
+
+    --[[ ===== Tab buttons (custom, with underline indicator) ===== ]]
+    local tabButtons = {}
+
+    local function CreateTabButton(label)
+        local btn = CreateFrame("Button", nil, tabStrip)
+        btn:SetSize(110, TAB_HEIGHT)
+        local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(btn)
+        hl:SetColorTexture(1, 1, 1, 0.06)
+        local sel = btn:CreateTexture(nil, "ARTWORK")
+        sel:SetPoint("BOTTOMLEFT",  btn, "BOTTOMLEFT",  8,  0)
+        sel:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -8, 0)
+        sel:SetHeight(2)
+        sel:SetColorTexture(0, 1, 0.5, 1)
+        sel:Hide()
+        btn.selected = sel
+        local txt = btn:CreateFontString(nil, "OVERLAY")
+        txt:SetFont("Fonts\\FRIZQT__.TTF", 13, "OUTLINE")
+        txt:SetPoint("CENTER", 0, 1)
+        txt:SetText(label)
+        txt:SetTextColor(0.65, 0.65, 0.65, 1)
+        btn.text = txt
+        return btn
+    end
+
+    local function SwitchToTab(idx)
+        for i, content in ipairs(tabContents) do
+            if i == idx then
+                content:Show()
+                if content.contentHeight then
+                    scrollChild:SetHeight(content.contentHeight)
+                end
+                tabButtons[i].selected:Show()
+                tabButtons[i].text:SetTextColor(1, 1, 1, 1)
+            else
+                content:Hide()
+                tabButtons[i].selected:Hide()
+                tabButtons[i].text:SetTextColor(0.65, 0.65, 0.65, 1)
+            end
+        end
+        scrollFrame:SetVerticalScroll(0)
+    end
+    configFrame.SwitchToTab = SwitchToTab
+
+    do
+        local names = { "Display", "Stats", "Defensive" }
+        for i, name in ipairs(names) do
+            local btn = CreateTabButton(name)
+            if i == 1 then
+                btn:SetPoint("LEFT", tabStrip, "LEFT", 0, 0)
+            else
+                btn:SetPoint("LEFT", tabButtons[i - 1], "RIGHT", 4, 0)
+            end
+            btn:SetScript("OnClick", function() SwitchToTab(i) end)
+            tabButtons[i] = btn
+        end
+    end
+
+    --[[ ===== DISPLAY TAB ===== ]]
+    local cd = NewCursor(displayTab, 12, -8)
+
+    -- Frame & Position section
+    CursorSection(cd, "Frame & Position")
+    do
+        local rowY = cd.y
+        -- WHY: master visibility toggle. Hides both panels without losing settings.
+        -- OnClick already runs CacheSettings + UpdateStats; UpdateStats checks cached.isVisible
+        -- and Hides both panels. Slash equivalents: /ss show, /ss hide, /ss toggle.
+        CreateCheckbox(displayTab, "StatsProVisibleCheck",
+            "Show Stats Panel", "isVisible", cd.padX, rowY, nil, 140)
+        CreateCheckbox(displayTab, "StatsProLockCheck",
+            "Lock Frames", "isLocked", cd.padX + 180, rowY, function(checked)
+                SetAllPanelsLockState(checked)
+            end, 140)
+        cd.y = rowY - 26
+        rowY = cd.y
+
+        local dmLabel = displayTab:CreateFontString(nil, "OVERLAY")
+        dmLabel:SetFont("Fonts\\FRIZQT__.TTF", 12)
+        dmLabel:SetPoint("TOPLEFT", cd.padX, rowY - 4)
+        dmLabel:SetText("Display Mode:")
+
+        local DISPLAY_MODES = {
+            { value = "flat",      label = "Flat" },
+            { value = "sectioned", label = "Sectioned" },
+            { value = "split",     label = "Split" },
+        }
+        local function GetDisplayModeLabel(value)
+            for _, m in ipairs(DISPLAY_MODES) do
+                if m.value == value then return m.label end
+            end
+            return DISPLAY_MODES[1].label
+        end
+
+        local dmDropdown = CreateFrame("Frame", "StatsProDisplayModeDropdown", displayTab, "UIDropDownMenuTemplate")
+        dmDropdown:SetPoint("TOPLEFT", cd.padX + 240, rowY + 2)
+        UIDropDownMenu_SetWidth(dmDropdown, 130)
+        UIDropDownMenu_Initialize(dmDropdown, function(self, level)
+            for _, m in ipairs(DISPLAY_MODES) do
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = m.label
+                info.value = m.value
+                info.checked = (GetDB("displayMode") == m.value)
+                info.func = function()
+                    StatsProDB.displayMode = m.value
+                    CacheSettings()
+                    UIDropDownMenu_SetText(dmDropdown, m.label)
+                    CloseDropDownMenus()
+                    UpdateStats()
+                end
+                UIDropDownMenu_AddButton(info)
+            end
+        end)
+        UIDropDownMenu_SetText(dmDropdown, GetDisplayModeLabel(GetDB("displayMode")))
+        cd.y = rowY - 30
+    end
+
+    CursorGap(cd, 4)
+
+    -- Display Format section
+    CursorSection(cd, "Display Format")
+    do
+        local rowY = cd.y
+        CreateCheckbox(displayTab, "StatsProRatingCheck",     "Show Rating",     "showRating",     cd.padX,       rowY)
+        CreateCheckbox(displayTab, "StatsProPercentageCheck", "Show Percentage", "showPercentage", cd.padX + 200, rowY)
+        cd.y = rowY - 26
+    end
+    CreateCheckbox(displayTab, "StatsProMatchColorCheck",
+        "Match Value Color to Stat", "matchValueColorToStat", cd.padX, cd.y)
+    CursorAdvance(cd, 22)
+    CursorGap(cd, 4)
+
+    -- Typography section
+    CursorSection(cd, "Typography")
+    do
+        local rowY = cd.y
+
+        local fontLabel = displayTab:CreateFontString(nil, "OVERLAY")
+        fontLabel:SetFont("Fonts\\FRIZQT__.TTF", 12)
+        fontLabel:SetPoint("TOPLEFT", cd.padX, rowY)
+        fontLabel:SetText("Font:")
+
+        local fonts
+        if LSM then
+            fonts = {}
+            for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
+                fonts[#fonts + 1] = { name = name, path = LSM:Fetch(LSM.MediaType.FONT, name) }
+            end
+        else
+            fonts = {
+                { name = "Friz Quadrata TT", path = "Fonts\\FRIZQT__.TTF" },
+                { name = "Arial Narrow",     path = "Fonts\\ARIALN.TTF" },
+                { name = "Skurri",           path = "Fonts\\SKURRI.TTF" },
+                { name = "Morpheus",         path = "Fonts\\MORPHEUS.TTF" },
+            }
+        end
+
+        local fontDropdown = CreateFrame("Frame", "StatsProFontDropdown", displayTab, "UIDropDownMenuTemplate")
+        fontDropdown:SetPoint("TOPLEFT", cd.padX + 36, rowY - 4)
+        UIDropDownMenu_Initialize(fontDropdown, function(self, level)
+            for _, f in ipairs(fonts) do
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = f.name
+                info.value = f.path
+                info.checked = (GetDB("font") == f.path)
+                info.func = function()
+                    StatsProDB.font = f.path
+                    ApplyTextStyleToAllPanels(f.path, GetDB("fontSize"), GetDB("textAlign"))
+                    UIDropDownMenu_SetText(fontDropdown, f.name)
+                    CloseDropDownMenus()
+                    UpdateStats()
+                end
+                UIDropDownMenu_AddButton(info)
+            end
+        end)
+        local currentFontName = "Friz Quadrata TT"
+        for _, f in ipairs(fonts) do
+            if f.path == GetDB("font") then currentFontName = f.name; break end
+        end
+        UIDropDownMenu_SetText(fontDropdown, currentFontName)
+        UIDropDownMenu_SetWidth(fontDropdown, 150)
+
+        -- Align label + buttons (right side of same row)
+        local alignLabel = displayTab:CreateFontString(nil, "OVERLAY")
+        alignLabel:SetFont("Fonts\\FRIZQT__.TTF", 12)
+        alignLabel:SetPoint("TOPLEFT", cd.padX + 250, rowY)
+        alignLabel:SetText("Align:")
+
+        local leftBtn, centerBtn, rightBtn
+        local function CreateAlignButton(align, xOff)
+            local btn = CreateFrame("Button", nil, displayTab)
+            btn:SetPoint("TOPLEFT", cd.padX + 290 + xOff, rowY - 1)
+            btn:SetSize(32, 22)
+            local bg = btn:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints(btn)
+            bg:SetColorTexture(0.15, 0.15, 0.15, 0.9)
+            local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+            hl:SetAllPoints(btn)
+            hl:SetColorTexture(1, 1, 1, 0.1)
+            local sel = btn:CreateTexture(nil, "ARTWORK")
+            sel:SetAllPoints(btn)
+            sel:SetColorTexture(0, 0.7, 0.4, 0.6)
+            sel:Hide()
+            btn.selected = sel
+            local text = btn:CreateFontString(nil, "OVERLAY")
+            text:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
+            text:SetPoint("CENTER")
+            text:SetText(align:sub(1, 1))
+            if GetDB("textAlign") == align then sel:Show() end
+            btn:SetScript("OnClick", function(self)
+                StatsProDB.textAlign = align
+                ApplyTextStyleToAllPanels(GetDB("font"), GetDB("fontSize"), align)
+                leftBtn.selected:Hide(); centerBtn.selected:Hide(); rightBtn.selected:Hide()
+                self.selected:Show()
+                UpdateStats()
+            end)
+            return btn
+        end
+        leftBtn   = CreateAlignButton("LEFT",   0)
+        centerBtn = CreateAlignButton("CENTER", 36)
+        rightBtn  = CreateAlignButton("RIGHT",  72)
+
+        cd.y = rowY - 32
+    end
+
+    -- Font Size slider
+    do
+        local sliderY = cd.y
+        local lbl = displayTab:CreateFontString(nil, "OVERLAY")
+        lbl:SetFont("Fonts\\FRIZQT__.TTF", 12)
+        lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
+        lbl:SetText("Font Size:")
+        local slider = CreateFrame("Slider", "StatsProFontSlider", displayTab, "OptionsSliderTemplate")
+        slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
+        slider:SetMinMaxValues(8, 32)
+        slider:SetValue(GetDB("fontSize"))
+        slider:SetValueStep(1)
+        slider:SetObeyStepOnDrag(true)
+        slider:SetWidth(420)
+        _G[slider:GetName() .. "Low"]:SetText("8")
+        _G[slider:GetName() .. "High"]:SetText("32")
+        _G[slider:GetName() .. "Text"]:SetText(slider:GetValue())
+        slider:SetScript("OnValueChanged", function(self, value)
+            _G[self:GetName() .. "Text"]:SetText(math.floor(value))
+            StatsProDB.fontSize = value
+            ApplyTextStyleToAllPanels(GetDB("font"), value, GetDB("textAlign"))
+            UpdateStats()
+        end)
+        cd.y = sliderY - 50
+    end
+
+    -- Scale slider
+    do
+        local sliderY = cd.y
+        local lbl = displayTab:CreateFontString(nil, "OVERLAY")
+        lbl:SetFont("Fonts\\FRIZQT__.TTF", 12)
+        lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
+        lbl:SetText("Scale:")
+        local slider = CreateFrame("Slider", "StatsProScaleSlider", displayTab, "OptionsSliderTemplate")
+        slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
+        slider:SetMinMaxValues(0.5, 2.0)
+        slider:SetValue(GetDB("scale"))
+        slider:SetValueStep(0.1)
+        slider:SetObeyStepOnDrag(true)
+        slider:SetWidth(420)
+        _G[slider:GetName() .. "Low"]:SetText("0.5")
+        _G[slider:GetName() .. "High"]:SetText("2.0")
+        _G[slider:GetName() .. "Text"]:SetText(string.format("%.1f", slider:GetValue()))
+        slider:SetScript("OnValueChanged", function(self, value)
+            _G[self:GetName() .. "Text"]:SetText(string.format("%.1f", value))
+            StatsProDB.scale = value
+            SetAllPanelsScale(value)
+        end)
+        cd.y = sliderY - 50
+    end
+
+    CursorGap(cd, 6)
+
+    -- Always-shown stats (Crit/Haste/Mastery/Vers) and format colors live here.
+    -- Per-stat colors that have a toggle (Primary, Tertiary, Defensive, Durability)
+    -- now live inline next to their checkbox in their respective tabs.
+    CursorSection(cd, "Stat Colors")
+    do
+        local rowY = cd.y
+        local function ColorRow(l1, k1, l2, k2)
+            CreateColorPicker(displayTab, l1, k1, rowY, cd.padX)
+            if l2 then CreateColorPicker(displayTab, l2, k2, rowY, cd.padX + 220) end
+            rowY = rowY - 25
+        end
+        ColorRow("Crit",     "crit",     "Mastery",     "mastery")
+        ColorRow("Haste",    "haste",    "Versatility", "versatility")
+        ColorRow("Rating",   "rating",   "Percentage",  "percentage")
+        cd.y = rowY
+    end
+
+    displayTab.contentHeight = CursorUsed(cd)
+    displayTab:SetHeight(displayTab.contentHeight)
+
+    --[[ ===== STATS TAB ===== ]]
+    local cs = NewCursor(statsTab, 12, -8)
+
+    -- Primary stats share one color, shown inline in section header
+    CursorSection(cs, "Primary Stat Ratings", "primary")
+    do
+        local rowY = cs.y
+        CreateCheckbox(statsTab, "StatsProStrCheck", "Show Strength",  "showStrength",  cs.padX,       rowY)
+        CreateCheckbox(statsTab, "StatsProAgiCheck", "Show Agility",   "showAgility",   cs.padX + 220, rowY)
+        cs.y = rowY - 26
+        CreateCheckbox(statsTab, "StatsProIntCheck", "Show Intellect", "showIntellect", cs.padX,       cs.y)
+        CursorAdvance(cs, 22)
+    end
+
+    CursorGap(cs, 6)
+
+    CursorSection(cs, "Tertiary Stats")
+    do
+        local rowY = cs.y
+        -- Master toggles: no per-stat color
+        CreateCheckbox(statsTab, "StatsProTertiaryCheck", "Show Tertiary Stats", "showTertiary",     cs.padX,       rowY)
+        CreateCheckbox(statsTab, "StatsProHideZeroCheck", "Hide Zero Values",    "hideZeroTertiary", cs.padX + 220, rowY)
+        cs.y = rowY - 26
+        -- Each tertiary stat with its own inline color swatch
+        CreateCheckboxColor(statsTab, "StatsProLeechCheck",     "Show Leech",     "showLeech",     "leech",     cs.padX,       cs.y)
+        CreateCheckboxColor(statsTab, "StatsProAvoidanceCheck", "Show Avoidance", "showAvoidance", "avoidance", cs.padX + 220, cs.y)
+        CursorAdvance(cs, 22)
+        CreateCheckboxColor(statsTab, "StatsProSpeedCheck",     "Show Speed",     "showSpeed",     "speed",     cs.padX,       cs.y)
+        CursorAdvance(cs, 22)
+    end
+
+    statsTab.contentHeight = CursorUsed(cs)
+    statsTab:SetHeight(statsTab.contentHeight)
+
+    --[[ ===== DEFENSIVE TAB ===== ]]
+    local cdef = NewCursor(defensiveTab, 12, -8)
+
+    CursorSection(cdef, "Defensive Stats")
+    do
+        local rowY = cdef.y
+        -- Master toggles: no per-stat color
+        CreateCheckbox(defensiveTab, "StatsProDefensiveCheck",   "Show Defensive Stats", "showDefensive",     cdef.padX,       rowY)
+        CreateCheckbox(defensiveTab, "StatsProHideZeroDefCheck", "Hide Zero Values",     "hideZeroDefensive", cdef.padX + 220, rowY)
+        cdef.y = rowY - 26
+        -- Each defensive stat with its own inline color swatch
+        CreateCheckboxColor(defensiveTab, "StatsProDodgeCheck", "Show Dodge", "showDodge", "dodge", cdef.padX,       cdef.y)
+        CreateCheckboxColor(defensiveTab, "StatsProParryCheck", "Show Parry", "showParry", "parry", cdef.padX + 220, cdef.y)
+        CursorAdvance(cdef, 22)
+        CreateCheckboxColor(defensiveTab, "StatsProBlockCheck", "Show Block", "showBlock", "block", cdef.padX,       cdef.y)
+        CreateCheckboxColor(defensiveTab, "StatsProArmorCheck", "Show Armor", "showArmor", "armor", cdef.padX + 220, cdef.y)
+        CursorAdvance(cdef, 22)
+    end
+
+    CursorGap(cdef, 6)
+
+    CursorSection(cdef, "Durability")
+    do
+        local rowY = cdef.y
+        -- WHY: Repair Cost only renders when Durability is on (it's appended to that line).
+        -- Grey out the cost checkbox when durability is off so the dependency is visible.
+        local repairCostCb
+        local function ApplyRepairCostEnabled(durEnabled)
+            if not repairCostCb then return end
+            local txt = _G[repairCostCb:GetName() .. "Text"]
+            if durEnabled then
+                repairCostCb:Enable()
+                if txt then txt:SetTextColor(1, 1, 1, 1) end
+            else
+                repairCostCb:Disable()
+                if txt then txt:SetTextColor(0.5, 0.5, 0.5, 1) end
+            end
+        end
+        -- Durability swatch is the override color used when Auto Color is OFF.
+        -- WHY: also mark dirty so re-enabling after a long off period gets fresh values
+        -- on the next tick, not whatever was cached when last enabled.
+        local _, durSwatch = CreateCheckboxColor(defensiveTab, "StatsProDurabilityCheck", "Show Durability",  "showDurability", "durability", cdef.padX,       rowY,
+            function(checked)
+                ApplyRepairCostEnabled(checked)
+                durabilityDirty = true
+            end)
+        repairCostCb = CreateCheckbox(defensiveTab, "StatsProRepairCostCheck", "Show Repair Cost", "showRepairCost", cdef.padX + 220, rowY)
+        ApplyRepairCostEnabled(GetDB("showDurability"))
+        cdef.y = rowY - 26
+        -- WHY: durability swatch sets the override color, used only when Auto Color is OFF.
+        -- Grey it out when auto-color is on so the dependency is visible.
+        local function ApplyDurSwatchEnabled(autoColorOn)
+            if not durSwatch then return end
+            if autoColorOn then
+                durSwatch:Disable()
+                durSwatch:SetAlpha(0.4)
+            else
+                durSwatch:Enable()
+                durSwatch:SetAlpha(1.0)
+            end
+        end
+        CreateCheckbox(defensiveTab, "StatsProAutoColorCheck",
+            "Auto Color by Threshold", "useAutoColorDurability", cdef.padX, cdef.y,
+            function(checked) ApplyDurSwatchEnabled(checked) end)
+        ApplyDurSwatchEnabled(GetDB("useAutoColorDurability"))
+        CursorAdvance(cdef, 22)
+        -- WHY: onChange forces recompute via dirty flag; otherwise display stays stale
+        -- until the next equipment event (which may be far off).
+        CreateCheckbox(defensiveTab, "StatsProWorstDurCheck",
+            "Use Worst Slot (instead of average)", "useWorstDurability", cdef.padX, cdef.y,
+            function() durabilityDirty = true end)
+        CursorAdvance(cdef, 22)
+    end
+
+    defensiveTab.contentHeight = CursorUsed(cdef)
+    defensiveTab:SetHeight(defensiveTab.contentHeight)
+
+    --[[ ===== Reset action (footer button wired here so it can rebuild config) ===== ]]
+    resetBtn:SetScript("OnClick", function()
+        for k, v in pairs(defaults) do
+            if type(v) ~= "table" then StatsProDB[k] = v end
+        end
+        StatsProDB.colors = CopyTable(defaults.colors)
+        StatsProDB.dbVersion = CURRENT_DB_VERSION
+
+        CacheSettings()
+        ApplyTextStyleToAllPanels(defaults.font, defaults.fontSize, defaults.textAlign)
+        SetAllPanelsScale(defaults.scale)
+        LoadAllPositions()
+        SetAllPanelsLockState(defaults.isLocked)
+        UpdateStats()
+
+        configFrame:Hide()
+        configFrame = nil
+        addon:OpenConfigMenu()
+
+        PrintMsg("Settings reset to defaults")
+    end)
+
+    --[[ ===== Initial state ===== ]]
+    SwitchToTab(1)
+end
+
+--[[ ============================================================
+    16. BLIZZARD SETTINGS PANEL LAUNCHER
+============================================================ ]]
+local launcher = CreateFrame("Frame")
+launcher.name = "StatsPro"
+
+local launcherTitle = launcher:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+launcherTitle:SetPoint("TOPLEFT", 16, -16)
+launcherTitle:SetText("StatsPro v1.0")
+
+local launcherDesc = launcher:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+launcherDesc:SetPoint("TOPLEFT", launcherTitle, "BOTTOMLEFT", 0, -8)
+launcherDesc:SetWidth(560)
+launcherDesc:SetJustifyH("LEFT")
+launcherDesc:SetText("Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window.")
+
+local launcherBtn = CreateFrame("Button", nil, launcher, "UIPanelButtonTemplate")
+launcherBtn:SetSize(180, 28)
+launcherBtn:SetPoint("TOPLEFT", launcherDesc, "BOTTOMLEFT", 0, -16)
+launcherBtn:SetText("Open Settings")
+launcherBtn:SetScript("OnClick", function()
+    if SettingsPanel and SettingsPanel:IsShown() then
+        HideUIPanel(SettingsPanel)
+    end
+    addon:OpenConfigMenu()
+end)
+
+local launcherCategory = Settings.RegisterCanvasLayoutCategory(launcher, launcher.name)
+Settings.RegisterAddOnCategory(launcherCategory)
+
+--[[ ============================================================
+    17. SLASH COMMANDS
+============================================================ ]]
+SLASH_STATSPRO1 = "/ss"
+SLASH_STATSPRO2 = "/statspro"
+local function SetVisible(visible)
+    StatsProDB.isVisible = visible
+    CacheSettings()
+    UpdateStats()
+    -- WHY: master Visible checkbox in config menu may be open; sync its state.
+    local cb = _G["StatsProVisibleCheck"]
+    if cb then cb:SetChecked(visible) end
+end
+SlashCmdList["STATSPRO"] = function(msg)
+    local arg = (msg or ""):lower():match("^%s*(%S+)") or ""
+    if arg == "show" then
+        SetVisible(true)
+        PrintMsg("Stats panel shown")
+    elseif arg == "hide" then
+        SetVisible(false)
+        PrintMsg("Stats panel hidden")
+    elseif arg == "toggle" then
+        local newState = StatsProDB.isVisible == false
+        SetVisible(newState)
+        PrintMsg(newState and "Stats panel shown" or "Stats panel hidden")
+    elseif arg == "help" or arg == "?" then
+        PrintMsg("Commands: /ss (config), /ss show, /ss hide, /ss toggle")
+    else
+        addon:OpenConfigMenu()
+    end
+end

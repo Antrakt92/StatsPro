@@ -37,6 +37,10 @@ A clean, lightweight **on-screen HUD for World of Warcraft Retail** that display
 
 ![Flat default panel](INSERT_02-flat-default)
 
+**Rating and percentage side by side — enable both display modes to see the underlying combat ratings alongside the resulting percentages, with a clean separator and three perfectly aligned columns:**
+
+![Rating and percentage columns](INSERT_08-rating-and-percentage)
+
 **With the defensive panel enabled — Dodge, Parry, Armor as % damage reduction:**
 
 ![Flat with defensives](INSERT_03-flat-with-defensives)
@@ -126,13 +130,14 @@ If you previously used **SwiftStats** or the **SwiftStatsLocal** fork, your sett
   ============================================================
 
   Image placeholders in the body above (each appears once):
-    INSERT_01-split-mode-hero       → screenshots/01-split-mode-hero.jpg
-    INSERT_02-flat-default          → screenshots/02-flat-default.jpg
-    INSERT_03-flat-with-defensives  → screenshots/03-flat-with-defensives.jpg
-    INSERT_04-repair-cost-vendor    → screenshots/04-repair-cost-vendor.jpg
-    INSERT_05-settings-display      → screenshots/05-settings-display.jpg
-    INSERT_06-settings-stats        → screenshots/06-settings-stats.jpg
-    INSERT_07-settings-defensive    → screenshots/07-settings-defensive.jpg
+    INSERT_01-split-mode-hero        → screenshots/01-split-mode-hero.jpg
+    INSERT_02-flat-default           → screenshots/02-flat-default.jpg
+    INSERT_08-rating-and-percentage  → screenshots/08-rating-and-percentage.jpg
+    INSERT_03-flat-with-defensives   → screenshots/03-flat-with-defensives.jpg
+    INSERT_04-repair-cost-vendor     → screenshots/04-repair-cost-vendor.jpg
+    INSERT_05-settings-display       → screenshots/05-settings-display.jpg
+    INSERT_06-settings-stats         → screenshots/06-settings-stats.jpg
+    INSERT_07-settings-defensive     → screenshots/07-settings-defensive.jpg
 
   Easiest workflow (one-shot):
     1. Open the project's Description editor on CurseForge in Markdown mode.

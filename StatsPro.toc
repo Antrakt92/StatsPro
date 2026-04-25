@@ -9,7 +9,7 @@
 ## X-Website: https://github.com/Antrakt92/StatsPro
 ## X-Curse-Project-ID: 0
 ## X-Category: Combat
-## X-Credits: Based on SwiftStats by TaylorSay (MIT)
+## X-Credits: Inspired by SwiftStats by TaylorSay (MIT)
 
 libs\LibStub\LibStub.lua
 libs\CallbackHandler-1.0\CallbackHandler-1.0.lua

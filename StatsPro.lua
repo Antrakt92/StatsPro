@@ -1,5 +1,7 @@
 -- StatsPro.lua  v1.0
--- Based on SwiftStats by TaylorSay (MIT). See LICENSE for full attribution.
+-- Inspired by SwiftStats by TaylorSay (MIT). ~9% of upstream code remains verbatim
+-- (boilerplate, color defaults, basic stat list); the rest is original work. See
+-- LICENSE for full attribution.
 local _, addon = ...
 
 --[[ ============================================================
@@ -396,14 +398,17 @@ function Panel:New(globalName, dbKeyPrefix)
     frame:SetBackdropColor(0, 0, 0, 0)
     frame:SetBackdropBorderColor(0, 0, 0, 0)
 
-    -- Two-column rendering: BOTH columns right-justified.
-    -- WHY right-justify labels (not left): with left-justified labels in an auto-fit box,
-    -- short labels leave huge trailing blank space (e.g. "Crit" 40px sitting inside the
-    -- "Durability"-sized box of 140px → 100px of empty space before the column gap).
-    -- Right-justifying lines up all label right-edges at the same x, so the visual gap
-    -- to the value column stays constant across rows regardless of label length.
-    -- Values stay right-justified so the rightmost digit of every percentage aligns
-    -- down the column for easy at-a-glance scanning.
+    -- Three-column rendering: label (RIGHT) | rating (RIGHT) | value (LEFT).
+    -- WHY right-justify labels: with left-justified labels in an auto-fit box, short
+    -- labels leave huge trailing blank space. Right-justifying lines up all label
+    -- right-edges at the same x, so the visual gap to the next column stays constant.
+    -- WHY right-justify rating column: rating numbers vary in width (46 vs 843); a
+    -- right-justified column lines up their right edges so the "|" separator and
+    -- everything after it sits in a clean vertical line down all rows.
+    -- WHY left-justify value column: values' left edges line up at a fixed x giving a
+    -- CONSTANT visible gap from rating-end (or label-colon when no rating) to value
+    -- text regardless of value length. Cost: values' right edges no longer align
+    -- vertically. User chose tight constant gap over right-edge alignment.
     local labelText = frame:CreateFontString(nil, "OVERLAY")
     labelText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
     labelText:SetJustifyH("RIGHT")
@@ -412,10 +417,18 @@ function Panel:New(globalName, dbKeyPrefix)
     labelText:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
     labelText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
 
-    -- valueText LEFT-justified so values' left edges line up at (labelW + gap), giving
-    -- a CONSTANT visible gap from each label's colon to its value regardless of value
-    -- length. Cost: values' right edges no longer align vertically (e.g. "28.3%" ends
-    -- earlier than "128.0%"). User chose tight constant gap over right-edge alignment.
+    -- ratingText sits between label and value. Anchored to the frame's RIGHT edge with
+    -- a NEGATIVE x-offset = -(valueW + gap) so its right edge ends just before the value
+    -- column starts. Offset is recomputed each SetTextSafe once valueW is measured.
+    -- Initial offset 0; first render repositions it.
+    local ratingText = frame:CreateFontString(nil, "OVERLAY")
+    ratingText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
+    ratingText:SetJustifyH("RIGHT")
+    ratingText:SetJustifyV("TOP")
+    ratingText:SetTextColor(1, 1, 1, 1)
+    ratingText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+    ratingText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+
     local valueText = frame:CreateFontString(nil, "OVERLAY")
     valueText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
     valueText:SetJustifyH("LEFT")
@@ -426,6 +439,7 @@ function Panel:New(globalName, dbKeyPrefix)
 
     self.frame = frame
     self.labelText = labelText
+    self.ratingText = ratingText
     self.valueText = valueText
 
     -- Drag handlers (unsecure frames; not protected in combat lockdown)
@@ -496,6 +510,7 @@ end
 function Panel:Hide()
     self.frame:Hide()
     self.lastLabelText = nil
+    self.lastRatingText = nil
     self.lastValueText = nil
     -- WARNING: reset lineCount cache too; otherwise re-show may use stale height after font change
     self.lastLineCount = -1
@@ -510,7 +525,7 @@ end
 -- API returns). String comparisons (==, ~=) on secrets error. Use lineCount (always a
 -- real number) for empty-check, and SetText every call instead of deduping by text.
 -- FontString:SetText accepts secrets — that's how Blizzard's own UI renders them.
-function Panel:SetTextSafe(labelStr, valueStr, lineCount)
+function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount)
     if not labelStr or lineCount == 0 then
         self:Hide()
         return
@@ -519,34 +534,55 @@ function Panel:SetTextSafe(labelStr, valueStr, lineCount)
         self.frame:Show()
     end
     self.labelText:SetText(labelStr)
+    self.ratingText:SetText(ratingStr or "")
     self.valueText:SetText(valueStr)
     self.lastLabelText = labelStr
+    self.lastRatingText = ratingStr or ""
     self.lastValueText = valueStr
 
-    -- Auto-fit width to (label column + 2px gap + value column). Min width prevents
-    -- the frame from collapsing when both columns are very short.
-    -- WHY 2px constant: with labels RIGHT-justified and values LEFT-justified, every
-    -- row's visible gap from label-colon to value-text equals exactly this constant —
-    -- no per-row variance from internal column padding.
+    -- Auto-fit width to (label + gap + rating + gap + value). Min width prevents the
+    -- frame from collapsing when all columns are very short.
+    -- WHY 2px gaps: labels RIGHT-justified, rating RIGHT-justified, value LEFT-justified
+    -- — at each column boundary one side is justified outward, so visible gap equals
+    -- exactly this constant with no per-row variance from internal column padding.
     -- WARNING: GetStringWidth() on a FontString whose text contains secret-tainted
     -- substrings (e.g. in-combat stat reads that became secret) returns a secret-
-    -- tainted NUMBER. Arithmetic on a secret number errors with "attempt to perform
-    -- arithmetic on local 'valueW' (a secret number value, while execution tainted
-    -- by 'StatsPro')". SetText itself accepts secrets (Blizzard whitelisted that for
-    -- the FontString display path), but width measurement is not whitelisted.
+    -- tainted NUMBER. Arithmetic on a secret number errors. SetText itself accepts
+    -- secrets (Blizzard whitelisted display), but width measurement is not whitelisted.
     -- Mitigation: cache the last NON-secret width per FontString. On each render,
     -- read GetStringWidth and only refresh the cache if the result is non-secret.
-    -- Use cached widths for arithmetic. Initial widths default to 0 (frame starts at
-    -- the 80px min until the first OOC tick produces real measurements).
     local labelW = self.labelText:GetStringWidth()
     if labelW and not issecretvalue(labelW) then
         self.cachedLabelW = labelW
+    end
+    local ratingW = self.ratingText:GetStringWidth()
+    if ratingW and not issecretvalue(ratingW) then
+        self.cachedRatingW = ratingW
     end
     local valueW = self.valueText:GetStringWidth()
     if valueW and not issecretvalue(valueW) then
         self.cachedValueW = valueW
     end
-    local totalW = math.max((self.cachedLabelW or 0) + (self.cachedValueW or 0) + 2, 80)
+
+    -- Reposition ratingText so its right edge sits just before the value column.
+    -- ratingText anchors to frame.RIGHT with a NEGATIVE x-offset = -(valueW + rGap).
+    -- rGap = 2 ONLY when BOTH columns have content (real boundary between them).
+    -- valueW=0, ratingW>0 (rating-only): rOffset=0 → rating right-edge at frame.right.
+    -- valueW>0, ratingW=0 (rated/non-rated mixed rows): rOffset=-valueW; rating empty
+    --   so visible position doesn't matter, but no spurious 2px slack in totalW.
+    local hasRating = (self.cachedRatingW or 0) > 0
+    local hasValue  = (self.cachedValueW  or 0) > 0
+    local rGap = (hasRating and hasValue) and 2 or 0
+    local rOffset = -((self.cachedValueW or 0) + rGap)
+    self.ratingText:ClearAllPoints()
+    self.ratingText:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", rOffset, 0)
+    self.ratingText:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", rOffset, 0)
+
+    -- Total = label + (single 2px gap if anything follows) + rating + rGap + value
+    local lGap = (hasRating or hasValue) and 2 or 0
+    local totalW = math.max(
+        (self.cachedLabelW or 0) + lGap + (self.cachedRatingW or 0) + rGap + (self.cachedValueW or 0),
+        80)
     self.frame:SetWidth(totalW)
 
     if lineCount ~= self.lastLineCount then
@@ -558,10 +594,14 @@ end
 
 function Panel:ApplyStyle(font, size)
     self.labelText:SetFont(font, size, "OUTLINE")
+    self.ratingText:SetFont(font, size, "OUTLINE")
     self.valueText:SetFont(font, size, "OUTLINE")
     -- WHY: Blizzard quirk - SetFont clears text; re-apply if we have one.
     if self.lastLabelText then
         self.labelText:SetText(self.lastLabelText)
+    end
+    if self.lastRatingText then
+        self.ratingText:SetText(self.lastRatingText)
     end
     if self.lastValueText then
         self.valueText:SetText(self.lastValueText)
@@ -605,53 +645,65 @@ end
     11. RENDER LOGIC
 ============================================================ ]]
 -- Format a stat value (rating + percentage variants honoring user toggles).
+-- Returns TWO strings (ratingStr, valueStr) — three-column rendering: rating column is
+-- RIGHT-justified, value column is LEFT-justified. The "|" separator lives in the rating
+-- column suffix so mixed-and-pct-only rows can share a clean value-column left edge.
+-- WHY two return values, not concatenated: a single FontString has one JustifyH; we need
+-- right-justified ratings (line up 843/46 right edges) AND left-justified percentages
+-- (line up 28.3%/12.5% left edges) on the same row — that requires two FontStrings.
 local function FmtRatingPct(rating, pct, statColor)
     local cs = cached.colorStrings
     local rc = (cached.matchValueColorToStat and statColor) or cs.rating
     local pc = (cached.matchValueColorToStat and statColor) or cs.percentage
     if cached.showRating and cached.showPercentage then
-        return string.format("|cff%s%d|r |cff808080|||r |cff%s%.1f%%|r", rc, rating, pc, pct)
+        return string.format("|cff%s%d|r |cff808080|||r", rc, rating),
+               string.format("|cff%s%.1f%%|r", pc, pct)
     elseif cached.showRating then
-        return string.format("|cff%s%d|r", rc, rating)
+        return string.format("|cff%s%d|r", rc, rating), ""
     else
-        return string.format("|cff%s%.1f%%|r", pc, pct)
+        return "", string.format("|cff%s%.1f%%|r", pc, pct)
     end
 end
 
 -- Format a percentage-only stat (no rating dimension, e.g. defensive Dodge/Parry).
+-- Returns ("", valueStr) so callers can uniformly push (label, rating, value) triples.
 local function FmtPctOnly(pct, statColor)
     local cs = cached.colorStrings
     local pc = (cached.matchValueColorToStat and statColor) or cs.percentage
-    return string.format("|cff%s%.1f%%|r", pc, pct)
+    return "", string.format("|cff%s%.1f%%|r", pc, pct)
 end
 
--- Two-column rendering: every Build*() function pushes paired (label, value) entries
+-- Three-column rendering: every Build*() function pushes (label, rating, value) entries
 -- into the supplied tables. UpdateStats joins them with newlines and hands one string
--- to each FontString (labelText left-justified, valueText right-justified).
--- WHY pair-pushed instead of a single struct: cheaper than allocating a row-table per
--- line, and lets us reuse JoinLinesSecretSafe unchanged.
+-- to each FontString: labelText (RIGHT), ratingText (RIGHT), valueText (LEFT).
+-- WHY triple-pushed instead of a single struct: cheaper than allocating a row-table per
+-- line, and lets us reuse JoinLinesSecretSafe unchanged per column.
+-- For rows without a rating dimension (Primary stats, Defensives, Durability, Repair,
+-- headers), the rating column is "" and that line of the rating FontString is empty.
 
-local function PushRow(labels, values, label, value)
+local function PushRow(labels, ratings, values, label, rating, value)
     labels[#labels + 1] = label
+    ratings[#ratings + 1] = rating
     values[#values + 1] = value
 end
 
-local function BuildPrimaryLines(labels, values)
+local function BuildPrimaryLines(labels, ratings, values)
     local cs = cached.colorStrings
     local primaryStr = cs.primary
     local valueColor = (cached.matchValueColorToStat and primaryStr) or cs.rating
     for _, def in ipairs(PRIMARY_STATS) do
         if cached[def.showKey] then
             local val = safeCall(UnitStat, "player", def.unitStatId)
-            PushRow(labels, values,
+            PushRow(labels, ratings, values,
                 string.format("|cff%s%s:|r", primaryStr, def.label),
+                "",
                 string.format("|cff%s%d|r", valueColor, val))
         end
     end
 end
 
-local function BuildOffensiveLines(labels, values)
-    -- WHY: with both display modes off, FmtRatingPct returns "" → empty value column.
+local function BuildOffensiveLines(labels, ratings, values)
+    -- WHY: with both display modes off, FmtRatingPct returns "","" → empty rating + value.
     -- Respect the user's choice: skip the whole block instead of rendering label-only rows.
     if not (cached.showRating or cached.showPercentage) then return end
     local cs = cached.colorStrings
@@ -662,9 +714,10 @@ local function BuildOffensiveLines(labels, values)
         local val = safeCall(def.api)
         local rating = needRating and safeCall(GetCombatRating, def.ratingCR) or 0
         local statColor = cs[def.colorKey]
-        PushRow(labels, values,
+        local rStr, vStr = FmtRatingPct(rating, val, statColor)
+        PushRow(labels, ratings, values,
             string.format("|cff%s%s:|r", statColor, def.label),
-            FmtRatingPct(rating, val, statColor))
+            rStr, vStr)
     end
 
     -- Versatility: dual-source (rating bonus + flat). Cache OOC; in combat use cached.
@@ -678,12 +731,13 @@ local function BuildOffensiveLines(labels, values)
         cached.versTotalRating = versRating
     end
     local versStr = cs.versatility
-    PushRow(labels, values,
+    local vRatStr, vValStr = FmtRatingPct(cached.versTotalRating, cached.versTotal, versStr)
+    PushRow(labels, ratings, values,
         string.format("|cff%sVers:|r", versStr),
-        FmtRatingPct(cached.versTotalRating, cached.versTotal, versStr))
+        vRatStr, vValStr)
 end
 
-local function BuildTertiaryLines(labels, values)
+local function BuildTertiaryLines(labels, ratings, values)
     if not cached.showTertiary then return end
     if not (cached.showRating or cached.showPercentage) then return end
     local cs = cached.colorStrings
@@ -695,9 +749,10 @@ local function BuildTertiaryLines(labels, values)
             if shouldShow(val, cached.hideZeroTertiary) then
                 local rating = needRating and safeCall(GetCombatRating, def.ratingCR) or 0
                 local statColor = cs[def.colorKey]
-                PushRow(labels, values,
+                local rStr, vStr = FmtRatingPct(rating, val, statColor)
+                PushRow(labels, ratings, values,
                     string.format("|cff%s%s:|r", statColor, def.label),
-                    FmtRatingPct(rating, val, statColor))
+                    rStr, vStr)
             end
         end
     end
@@ -716,24 +771,25 @@ local function BuildTertiaryLines(labels, values)
         local speedRating = needRating and safeCall(GetCombatRating, CR_SPEED) or 0
         if shouldShow(speed, cached.hideZeroTertiary) then
             local statColor = cs.speed
-            PushRow(labels, values,
+            local rStr, vStr = FmtRatingPct(speedRating, speed, statColor)
+            PushRow(labels, ratings, values,
                 string.format("|cff%sSpeed:|r", statColor),
-                FmtRatingPct(speedRating, speed, statColor))
+                rStr, vStr)
         end
     end
 end
 
 local function BuildMainLines()
-    local labels, values = {}, {}
-    BuildPrimaryLines(labels, values)
-    BuildOffensiveLines(labels, values)
-    BuildTertiaryLines(labels, values)
-    return labels, values
+    local labels, ratings, values = {}, {}, {}
+    BuildPrimaryLines(labels, ratings, values)
+    BuildOffensiveLines(labels, ratings, values)
+    BuildTertiaryLines(labels, ratings, values)
+    return labels, ratings, values
 end
 
 local function BuildDefensiveLines()
-    local labels, values = {}, {}
-    if not cached.showDefensive then return labels, values end
+    local labels, ratings, values = {}, {}, {}
+    if not cached.showDefensive then return labels, ratings, values end
     local cs = cached.colorStrings
 
     -- Dodge / Parry / Block (table-driven)
@@ -742,9 +798,10 @@ local function BuildDefensiveLines()
             local val = safeCall(def.api)
             if shouldShow(val, cached.hideZeroDefensive) then
                 local statColor = cs[def.colorKey]
-                PushRow(labels, values,
+                local rStr, vStr = FmtPctOnly(val, statColor)
+                PushRow(labels, ratings, values,
                     string.format("|cff%s%s:|r", statColor, def.label),
-                    FmtPctOnly(val, statColor))
+                    rStr, vStr)
             end
         end
     end
@@ -755,21 +812,22 @@ local function BuildDefensiveLines()
         local armorStr = cs.armor
         local valueColor = (cached.matchValueColorToStat and armorStr) or cs.percentage
         if shouldShow(cached.armorDR, cached.hideZeroDefensive) then
-            PushRow(labels, values,
+            PushRow(labels, ratings, values,
                 string.format("|cff%sArmor:|r", armorStr),
+                "",
                 string.format("|cff%s%.1f%%|r", valueColor, cached.armorDR))
         end
     end
 
-    return labels, values
+    return labels, ratings, values
 end
 
 -- WHY: durability is independent of "Show Defensive Stats" — gear wear is not a
 -- defensive stat (one is mitigation %, the other is item integrity). Kept as its own
 -- builder so users can show only durability without enabling the dodge/parry/block block.
 local function BuildDurabilityLines()
-    local labels, values = {}, {}
-    if not cached.showDurability then return labels, values end
+    local labels, ratings, values = {}, {}, {}
+    if not cached.showDurability then return labels, ratings, values end
     local cs = cached.colorStrings
     local pct = cached.durabilityValue
     local durStr = cs.durability
@@ -780,31 +838,35 @@ local function BuildDurabilityLines()
         valueColor = durStr
     end
     -- %.1f%% matches vendor precision (95.2% vs 95%)
-    PushRow(labels, values,
+    PushRow(labels, ratings, values,
         string.format("|cff%sDurability:|r", durStr),
+        "",
         string.format("|cff%s%.1f%%|r", valueColor, pct))
     if cached.showRepairCost and cached.repairCost > 0 then
         -- WHY: own row — keeps the right column visually a column of values, not a mix
         -- of percentages and coin strings. Don't wrap GetCoinTextureString output in
         -- |cff...|r — coin icons render inline as textures and the color tag would tint them.
-        PushRow(labels, values,
+        PushRow(labels, ratings, values,
             string.format("|cff%sRepair:|r", durStr),
+            "",
             FormatRepairCost(cached.repairCost))
     end
-    return labels, values
+    return labels, ratings, values
 end
 
 -- WHY: separate header injector — sectioned mode places "— Defensive —" between sections.
--- Header text spans the label column with an empty value column to preserve row alignment.
-local function PushHeader(labels, values, headerStr)
+-- Header text spans the label column with empty rating + value to preserve row alignment.
+local function PushHeader(labels, ratings, values, headerStr)
     labels[#labels + 1] = headerStr
+    ratings[#ratings + 1] = ""
     values[#values + 1] = ""
 end
 
--- Append (srcLabels, srcValues) into (dstLabels, dstValues) row-by-row.
-local function AppendRows(dstLabels, dstValues, srcLabels, srcValues)
+-- Append (srcLabels, srcRatings, srcValues) into the destination tables row-by-row.
+local function AppendRows(dstLabels, dstRatings, dstValues, srcLabels, srcRatings, srcValues)
     for i = 1, #srcLabels do
         dstLabels[#dstLabels + 1] = srcLabels[i]
+        dstRatings[#dstRatings + 1] = srcRatings[i]
         dstValues[#dstValues + 1] = srcValues[i]
     end
 end
@@ -833,51 +895,55 @@ local function UpdateStats()
     end
 
     -- Build paired (label, value) row arrays per builder
-    local mainLabels, mainValues = BuildMainLines()
-    local defLabels,  defValues  = BuildDefensiveLines()
-    local durLabels,  durValues  = BuildDurabilityLines()
+    local mainLabels, mainRatings, mainValues = BuildMainLines()
+    local defLabels,  defRatings,  defValues  = BuildDefensiveLines()
+    local durLabels,  durRatings,  durValues  = BuildDurabilityLines()
 
     -- Dispatch by display mode
     local mode = cached.displayMode or "flat"
     if mode == "split" then
         mainPanel:SetTextSafe(
             JoinLinesSecretSafe(mainLabels),
+            JoinLinesSecretSafe(mainRatings),
             JoinLinesSecretSafe(mainValues),
             #mainLabels)
         -- WHY: defensive panel hosts both defensive stats and durability so the user can
         -- see them together while keeping the main panel focused on offensive/primary.
-        local sideLabels, sideValues = {}, {}
-        AppendRows(sideLabels, sideValues, defLabels, defValues)
-        AppendRows(sideLabels, sideValues, durLabels, durValues)
+        local sideLabels, sideRatings, sideValues = {}, {}, {}
+        AppendRows(sideLabels, sideRatings, sideValues, defLabels, defRatings, defValues)
+        AppendRows(sideLabels, sideRatings, sideValues, durLabels, durRatings, durValues)
         if #sideLabels > 0 then
             defensivePanel:SetTextSafe(
                 JoinLinesSecretSafe(sideLabels),
+                JoinLinesSecretSafe(sideRatings),
                 JoinLinesSecretSafe(sideValues),
                 #sideLabels)
         else
             defensivePanel:Hide()
         end
     elseif mode == "sectioned" then
-        local cLabels, cValues = {}, {}
-        AppendRows(cLabels, cValues, mainLabels, mainValues)
+        local cLabels, cRatings, cValues = {}, {}, {}
+        AppendRows(cLabels, cRatings, cValues, mainLabels, mainRatings, mainValues)
         if #defLabels > 0 then
-            PushHeader(cLabels, cValues, DEFENSIVE_HEADER)
-            AppendRows(cLabels, cValues, defLabels, defValues)
+            PushHeader(cLabels, cRatings, cValues, DEFENSIVE_HEADER)
+            AppendRows(cLabels, cRatings, cValues, defLabels, defRatings, defValues)
         end
-        AppendRows(cLabels, cValues, durLabels, durValues)
+        AppendRows(cLabels, cRatings, cValues, durLabels, durRatings, durValues)
         mainPanel:SetTextSafe(
             JoinLinesSecretSafe(cLabels),
+            JoinLinesSecretSafe(cRatings),
             JoinLinesSecretSafe(cValues),
             #cLabels)
         defensivePanel:Hide()
     else
         -- flat (default)
-        local cLabels, cValues = {}, {}
-        AppendRows(cLabels, cValues, mainLabels, mainValues)
-        AppendRows(cLabels, cValues, defLabels,  defValues)
-        AppendRows(cLabels, cValues, durLabels,  durValues)
+        local cLabels, cRatings, cValues = {}, {}, {}
+        AppendRows(cLabels, cRatings, cValues, mainLabels, mainRatings, mainValues)
+        AppendRows(cLabels, cRatings, cValues, defLabels,  defRatings,  defValues)
+        AppendRows(cLabels, cRatings, cValues, durLabels,  durRatings,  durValues)
         mainPanel:SetTextSafe(
             JoinLinesSecretSafe(cLabels),
+            JoinLinesSecretSafe(cRatings),
             JoinLinesSecretSafe(cValues),
             #cLabels)
         defensivePanel:Hide()

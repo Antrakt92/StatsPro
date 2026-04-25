@@ -412,9 +412,13 @@ function Panel:New(globalName, dbKeyPrefix)
     labelText:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
     labelText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
 
+    -- valueText LEFT-justified so values' left edges line up at (labelW + gap), giving
+    -- a CONSTANT visible gap from each label's colon to its value regardless of value
+    -- length. Cost: values' right edges no longer align vertically (e.g. "28.3%" ends
+    -- earlier than "128.0%"). User chose tight constant gap over right-edge alignment.
     local valueText = frame:CreateFontString(nil, "OVERLAY")
     valueText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
-    valueText:SetJustifyH("RIGHT")
+    valueText:SetJustifyH("LEFT")
     valueText:SetJustifyV("TOP")
     valueText:SetTextColor(1, 1, 1, 1)
     valueText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
@@ -519,15 +523,12 @@ function Panel:SetTextSafe(labelStr, valueStr, lineCount)
     self.lastLabelText = labelStr
     self.lastValueText = valueStr
 
-    -- Auto-fit width to (label column + small gap + value column). Min width prevents
+    -- Auto-fit width to (label column + 2px gap + value column). Min width prevents
     -- the frame from collapsing when both columns are very short.
-    -- WHY 2px gap: smallest visible separation. With both columns right-justified, the
-    -- longest-value row touches the label column with just 2px of breathing room. Shorter
-    -- values still appear further from their label because the value column box is sized
-    -- to the WIDEST value (right-justification leaves leading padding for shorter ones).
-    -- That padding is the unavoidable cost of keeping values' rightmost chars vertically
-    -- aligned in a column — switching values to LEFT-justify would eliminate it but lose
-    -- the percent-column scan-down look.
+    -- WHY 2px constant: with labels RIGHT-justified and values LEFT-justified, every
+    -- row's visible gap from label-colon to value-text equals exactly this constant —
+    -- no per-row variance from internal column padding. Tightest possible while
+    -- keeping the two-column structure.
     local labelW = self.labelText:GetStringWidth() or 0
     local valueW = self.valueText:GetStringWidth() or 0
     local totalW = math.max(labelW + valueW + 2, 80)
@@ -628,7 +629,7 @@ local function BuildPrimaryLines(labels, values)
         if cached[def.showKey] then
             local val = safeCall(UnitStat, "player", def.unitStatId)
             PushRow(labels, values,
-                string.format("|cff%s%s|r", primaryStr, def.label),
+                string.format("|cff%s%s:|r", primaryStr, def.label),
                 string.format("|cff%s%d|r", valueColor, val))
         end
     end
@@ -647,7 +648,7 @@ local function BuildOffensiveLines(labels, values)
         local rating = needRating and safeCall(GetCombatRating, def.ratingCR) or 0
         local statColor = cs[def.colorKey]
         PushRow(labels, values,
-            string.format("|cff%s%s|r", statColor, def.label),
+            string.format("|cff%s%s:|r", statColor, def.label),
             FmtRatingPct(rating, val, statColor))
     end
 
@@ -663,7 +664,7 @@ local function BuildOffensiveLines(labels, values)
     end
     local versStr = cs.versatility
     PushRow(labels, values,
-        string.format("|cff%sVers|r", versStr),
+        string.format("|cff%sVers:|r", versStr),
         FmtRatingPct(cached.versTotalRating, cached.versTotal, versStr))
 end
 
@@ -680,7 +681,7 @@ local function BuildTertiaryLines(labels, values)
                 local rating = needRating and safeCall(GetCombatRating, def.ratingCR) or 0
                 local statColor = cs[def.colorKey]
                 PushRow(labels, values,
-                    string.format("|cff%s%s|r", statColor, def.label),
+                    string.format("|cff%s%s:|r", statColor, def.label),
                     FmtRatingPct(rating, val, statColor))
             end
         end
@@ -701,7 +702,7 @@ local function BuildTertiaryLines(labels, values)
         if shouldShow(speed, cached.hideZeroTertiary) then
             local statColor = cs.speed
             PushRow(labels, values,
-                string.format("|cff%sSpeed|r", statColor),
+                string.format("|cff%sSpeed:|r", statColor),
                 FmtRatingPct(speedRating, speed, statColor))
         end
     end
@@ -727,7 +728,7 @@ local function BuildDefensiveLines()
             if shouldShow(val, cached.hideZeroDefensive) then
                 local statColor = cs[def.colorKey]
                 PushRow(labels, values,
-                    string.format("|cff%s%s|r", statColor, def.label),
+                    string.format("|cff%s%s:|r", statColor, def.label),
                     FmtPctOnly(val, statColor))
             end
         end
@@ -740,7 +741,7 @@ local function BuildDefensiveLines()
         local valueColor = (cached.matchValueColorToStat and armorStr) or cs.percentage
         if shouldShow(cached.armorDR, cached.hideZeroDefensive) then
             PushRow(labels, values,
-                string.format("|cff%sArmor|r", armorStr),
+                string.format("|cff%sArmor:|r", armorStr),
                 string.format("|cff%s%.1f%%|r", valueColor, cached.armorDR))
         end
     end
@@ -765,14 +766,14 @@ local function BuildDurabilityLines()
     end
     -- %.1f%% matches vendor precision (95.2% vs 95%)
     PushRow(labels, values,
-        string.format("|cff%sDurability|r", durStr),
+        string.format("|cff%sDurability:|r", durStr),
         string.format("|cff%s%.1f%%|r", valueColor, pct))
     if cached.showRepairCost and cached.repairCost > 0 then
         -- WHY: own row — keeps the right column visually a column of values, not a mix
         -- of percentages and coin strings. Don't wrap GetCoinTextureString output in
         -- |cff...|r — coin icons render inline as textures and the color tag would tint them.
         PushRow(labels, values,
-            string.format("|cff%sRepair|r", durStr),
+            string.format("|cff%sRepair:|r", durStr),
             FormatRepairCost(cached.repairCost))
     end
     return labels, values

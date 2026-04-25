@@ -4,9 +4,11 @@ A lightweight on-screen HUD for World of Warcraft Retail. Displays secondary sta
 defensive stats, durability and repair cost in a clean, draggable panel — without
 requiring any heavy framework.
 
-> Based on [SwiftStats](https://www.curseforge.com/wow/addons/swiftstats) by TaylorSay (MIT).
-> StatsPro extends the original with defensive stats, durability/repair cost integration,
-> multi-panel layouts and additional configuration. See [`CHANGELOG.md`](CHANGELOG.md)
+> Originally inspired by [SwiftStats](https://www.curseforge.com/wow/addons/swiftstats) by
+> TaylorSay (MIT). StatsPro is substantially rewritten — only ~9% of upstream code remains
+> verbatim (mostly defaults and boilerplate). The defensive panel, durability/repair cost
+> system, multi-panel layouts, two-column rendering pipeline, 12.x retail secret-value
+> handling, and three-tab settings UI are all original work. See [`CHANGELOG.md`](CHANGELOG.md)
 > for the full diff.
 
 ## Features
@@ -62,10 +64,12 @@ configuration window. Three tabs:
 ## Acknowledgements
 
 - **[TaylorSay](https://www.curseforge.com/members/taylorsay)** — author of the original
-  [SwiftStats](https://www.curseforge.com/wow/addons/swiftstats) addon, released under MIT.
+  [SwiftStats](https://www.curseforge.com/wow/addons/swiftstats) addon (MIT), the project
+  that inspired StatsPro and from which the initial defaults and color scheme are derived.
 - **[LibSharedMedia-3.0](https://www.curseforge.com/wow/addons/libsharedmedia-3-0)** — font selection support.
 
 ## License
 
-[MIT](LICENSE) — both the original SwiftStats portion (© TaylorSay) and the StatsPro
-extensions (© Antrakt).
+[MIT](LICENSE) — copyright held by Antrakt for original code (~91% of the codebase) and
+by TaylorSay for derived portions (~9%, mostly defaults and boilerplate from upstream
+SwiftStats).

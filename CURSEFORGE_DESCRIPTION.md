@@ -26,7 +26,7 @@
 
 A clean, lightweight on-screen HUD for World of Warcraft Retail. Displays your secondary stats, defensive stats, durability, and live repair cost — without the bloat of a full framework.
 
-> Forked from [SwiftStats by TaylorSay](https://www.curseforge.com/wow/addons/swiftstats) (MIT). Adds a defensive panel, durability and repair cost integration, multi-panel layouts, and tightened two-column rendering.
+> Originally inspired by [SwiftStats by TaylorSay](https://www.curseforge.com/wow/addons/swiftstats) (MIT) — substantially rewritten and extended with a defensive panel, durability and repair cost integration, multi-panel layouts, two-column rendering pipeline, and War Within (12.x) secret-value safety throughout.
 
 ---
 
@@ -113,7 +113,7 @@ If you previously used **SwiftStats**, your settings migrate automatically on fi
 
 ## Credits
 
-- **TaylorSay** — author of the original [SwiftStats](https://www.curseforge.com/wow/addons/swiftstats) (MIT), on top of which StatsPro is built.
+- **TaylorSay** — author of the original [SwiftStats](https://www.curseforge.com/wow/addons/swiftstats) (MIT), the addon that inspired StatsPro.
 - **LibSharedMedia-3.0** — font selection support.
 - **LibStub** and **CallbackHandler-1.0** — bundled standard libraries.
 

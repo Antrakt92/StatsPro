@@ -1,8 +1,22 @@
+# Build artifacts
 .release/
+*.zip
+
+# Editor / IDE
 .idea/
 .vscode/
-*.zip
 *.bak
 *~
+
+# OS junk
 Thumbs.db
 .DS_Store
+
+# Dev-internal docs (live in private WOW repo, NOT public)
+CLAUDE.md
+AUDIT.md
+PLAN.md
+NOTES.md
+CURSEFORGE_DESCRIPTION.md
+*.private.md
+*.private/

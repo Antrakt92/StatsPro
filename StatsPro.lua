@@ -174,8 +174,11 @@ StatsProDB = StatsProDB or {}
 -- to remove its panels. Safe to ship to new users: SwiftStatsLocalDB simply doesn't
 -- exist for them, so the block is a no-op.
 if next(StatsProDB) == nil and _G.SwiftStatsLocalDB and next(_G.SwiftStatsLocalDB) ~= nil then
+    -- WHY CopyTable: shallow copy would alias sub-tables (e.g. .colors) between the two
+    -- DBs. Color-picker edits in either addon while both are simultaneously enabled
+    -- would silently mutate both. Deep copy breaks the aliasing.
     for k, v in pairs(_G.SwiftStatsLocalDB) do
-        StatsProDB[k] = v
+        StatsProDB[k] = (type(v) == "table") and CopyTable(v) or v
     end
 end
 

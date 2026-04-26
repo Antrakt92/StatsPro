@@ -229,12 +229,23 @@ local function shouldShow(val, hideZero)
 end
 
 local function FormatRepairCost(copper)
-    -- WHY: Blizzard's GetCoinTextureString embeds gold/silver/copper icons inline,
-    -- matching the vendor display exactly. Falls back to gold-only if API missing.
-    if GetCoinTextureString then
-        return GetCoinTextureString(copper)
+    -- WHY custom build over GetCoinTextureString: the Blizzard helper sizes inline icons
+    -- to font height, which makes the resulting `151g 17c` string wider than typical
+    -- value-column content. Building manually with icons at (fontSize - 2, floor 8) keeps
+    -- the row narrow enough to right-edge align with the rating column without bloating
+    -- the whole panel. Same texture paths as GetCoinTextureString uses internally.
+    local g = math.floor(copper / 10000)
+    local s = math.floor((copper % 10000) / 100)
+    local c = copper % 100
+    local sz = math.max(8, GetDB("fontSize") - 2)
+    local function icon(name)
+        return "|TInterface\\MoneyFrame\\UI-" .. name .. "Icon:" .. sz .. ":" .. sz .. ":2:0|t"
     end
-    return string.format("%dg", math.floor(copper / 10000))
+    local out = ""
+    if g > 0 then out = g .. icon("Gold") end
+    if s > 0 then out = out .. (out ~= "" and " " or "") .. s .. icon("Silver") end
+    if c > 0 or out == "" then out = out .. (out ~= "" and " " or "") .. c .. icon("Copper") end
+    return out
 end
 
 local function ComputeDurabilityColor(pct)
@@ -880,13 +891,17 @@ local function BuildDurabilityLines()
             rCol, vCol)
     end
     if cached.showRepairCost and cached.repairCost > 0 then
-        -- WHY: own row — keeps the right column visually a column of values, not a mix
-        -- of percentages and coin strings. Don't wrap GetCoinTextureString output in
-        -- |cff...|r — coin icons render inline as textures and the color tag would tint them.
-        local rCol, vCol = RouteValueOnly(FormatRepairCost(cached.repairCost))
+        -- WHY rating column always (not via RouteValueOnly): coin string with embedded
+        -- icon textures is wider than typical percent values. Routing it through the
+        -- rating column (RIGHT-justified) lets it right-edge align with other rating
+        -- numbers (1054, 357, etc.) instead of bloating the value column and forcing
+        -- the whole panel wider in dual-column mode.
+        -- Don't wrap the coin string in |cff...|r — coin icons render inline as
+        -- textures and the color tag would tint them.
         PushRow(labels, ratings, values,
             string.format("|cff%sRepair:|r", durStr),
-            rCol, vCol)
+            FormatRepairCost(cached.repairCost),
+            "")
     end
     return labels, ratings, values
 end

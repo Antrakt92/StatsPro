@@ -229,22 +229,12 @@ local function shouldShow(val, hideZero)
 end
 
 local function FormatRepairCost(copper)
-    -- WHY custom build over GetCoinTextureString: the Blizzard helper sizes inline
-    -- icons to font height. Building manually with slightly smaller icons (fontSize-2,
-    -- floor 8) keeps the row compact when it overhangs leftward off the panel.
-    -- Same texture paths as GetCoinTextureString uses internally.
-    local g = math.floor(copper / 10000)
-    local s = math.floor((copper % 10000) / 100)
-    local c = copper % 100
-    local sz = math.max(8, GetDB("fontSize") - 2)
-    local function icon(name)
-        return "|TInterface\\MoneyFrame\\UI-" .. name .. "Icon:" .. sz .. ":" .. sz .. ":2:0|t"
+    -- WHY: Blizzard's GetCoinTextureString embeds gold/silver/copper icons inline,
+    -- matching the vendor display exactly. Falls back to gold-only if API missing.
+    if GetCoinTextureString then
+        return GetCoinTextureString(copper)
     end
-    local out = ""
-    if g > 0 then out = g .. icon("Gold") end
-    if s > 0 then out = out .. (out ~= "" and " " or "") .. s .. icon("Silver") end
-    if c > 0 or out == "" then out = out .. (out ~= "" and " " or "") .. c .. icon("Copper") end
-    return out
+    return string.format("%dg", math.floor(copper / 10000))
 end
 
 local function ComputeDurabilityColor(pct)
@@ -644,11 +634,10 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr)
         80)
     self.frame:SetWidth(totalW)
 
-    local effectiveLineCount = lineCount + (hasRepair and 1 or 0)
-    if effectiveLineCount ~= self.lastLineCount then
+    if lineCount ~= self.lastLineCount then
         local fontSize = GetDB("fontSize")
-        self.frame:SetHeight((effectiveLineCount * fontSize) + 8)
-        self.lastLineCount = effectiveLineCount
+        self.frame:SetHeight((lineCount * fontSize) + 8)
+        self.lastLineCount = lineCount
     end
 end
 
@@ -925,14 +914,20 @@ local function BuildDurabilityLines()
             rCol, vCol)
     end
     if cached.showRepairCost and cached.repairCost > 0 then
-        -- WHY returned separately (not pushed into label/rating/value columns): the
-        -- coin string with embedded icons is much wider than typical percent values.
-        -- A dedicated FontString outside the column system carries it (see Panel:New
-        -- comment) so wide repairs don't bloat the panel; they extend leftward freely.
-        -- Don't wrap in |cff...|r — coin icons render inline as textures and the
-        -- color tag would tint them. The "Repair:" label is bundled into the same
-        -- string with explicit color so the row reads naturally.
-        repairStr = string.format("|cff%sRepair:|r ", durStr) .. FormatRepairCost(cached.repairCost)
+        -- WHY label-in-columns + coin-separately split: the "Repair:" label needs to
+        -- right-align with other labels (Durability:, Crit:, ...) at the label-column
+        -- boundary. The coin string with embedded icons is much wider than typical
+        -- percent values though — putting it in the rating or value column would
+        -- inflate that column and bloat the whole panel. So the label takes a normal
+        -- row in the main columns (rating/value left empty), and the coin string is
+        -- returned separately for the dedicated repairText FontString that overlays
+        -- this same row's rating+value area, RIGHT-anchored to frame.right and free
+        -- to extend leftward past the column system without affecting auto-fit math.
+        -- Don't wrap the coin string in |cff...|r — coin icons render inline as
+        -- textures and the color tag would tint them.
+        PushRow(labels, ratings, values,
+            string.format("|cff%sRepair:|r", durStr), "", "")
+        repairStr = FormatRepairCost(cached.repairCost)
     end
     return labels, ratings, values, repairStr
 end

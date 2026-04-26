@@ -296,27 +296,29 @@ end
 
 local function MigrateDB()
     local db = StatsProDB
+
+    -- WHY runs before the version early-return: SwiftStatsLocal migrants whose legacy
+    -- DB carried dbVersion=3 (coincidental scheme overlap) would otherwise skip these
+    -- loops and never get StatsPro's defaults populated. Idempotent: only fills missing
+    -- keys, never clobbers user prefs.
+    for k, v in pairs(defaults) do
+        if db[k] == nil and type(v) ~= "table" then
+            db[k] = v
+        end
+    end
+    if not db.colors then db.colors = {} end
+    for k, v in pairs(defaults.colors) do
+        if not db.colors[k] then
+            db.colors[k] = { r = v.r, g = v.g, b = v.b }
+        end
+    end
+
     if db.dbVersion == CURRENT_DB_VERSION then return end
 
     -- v2 → v3: default textAlign changed "LEFT" → "RIGHT". Upgrade only users still on
     -- the old default; preserve any explicit user choice (CENTER/RIGHT untouched).
     if db.dbVersion == 2 and db.textAlign == "LEFT" then
         db.textAlign = "RIGHT"
-    end
-
-    -- Initialize missing scalars without clobbering user prefs
-    for k, v in pairs(defaults) do
-        if db[k] == nil and type(v) ~= "table" then
-            db[k] = v
-        end
-    end
-
-    -- Merge missing colors
-    if not db.colors then db.colors = {} end
-    for k, v in pairs(defaults.colors) do
-        if not db.colors[k] then
-            db.colors[k] = { r = v.r, g = v.g, b = v.b }
-        end
     end
 
     db.dbVersion = CURRENT_DB_VERSION

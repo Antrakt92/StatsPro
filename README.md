@@ -9,7 +9,7 @@ defensive stats, durability and live repair cost in a clean, draggable panel —
 heavy framework needed.
 
 <p align="center">
-  <img src="screenshots/08-rating-and-percentage.jpg" alt="StatsPro — rating and percentage in three aligned columns">
+  <img src="screenshots/09-flat-in-game.jpg" alt="StatsPro — full flat panel sitting next to the action bars during real-world play">
 </p>
 
 > Originally inspired by [SwiftStats by TaylorSay](https://www.curseforge.com/wow/addons/swiftstats)
@@ -37,6 +37,10 @@ heavy framework needed.
 **Flat mode (default) — secondary stats in one tight panel:**
 
 ![Flat default panel](screenshots/02-flat-default.jpg)
+
+**Rating and percentage side by side — enable both display modes to see the underlying combat ratings alongside the resulting percentages, with three perfectly aligned columns:**
+
+![Rating and percentage columns](screenshots/08-rating-and-percentage.jpg)
 
 **Defensive panel enabled — Dodge, Parry, Armor as % damage reduction:**
 

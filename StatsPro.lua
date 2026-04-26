@@ -56,10 +56,10 @@ local defaults = {
     isVisible = true,
     isLocked = false,
 
-    -- Display mode (v2.2): "flat" | "sectioned" | "split"
+    -- Display mode: "flat" | "sectioned" | "split"
     displayMode = "flat",
 
-    -- Defensive panel position (v2.2)
+    -- Defensive panel position
     defensive_point = "CENTER",
     defensive_relativePoint = "CENTER",
     defensive_xOfs = 0,
@@ -82,7 +82,7 @@ local defaults = {
     showAgility = false,
     showIntellect = false,
 
-    -- Defensive stats (v2.2)
+    -- Defensive stats
     showDefensive = false,
     hideZeroDefensive = true,
     showDodge = true,
@@ -90,7 +90,7 @@ local defaults = {
     showBlock = true,
     showArmor = true,
 
-    -- Durability (v2.2)
+    -- Durability
     showDurability = false,
     showRepairCost = true,
     useAutoColorDurability = true,
@@ -107,7 +107,7 @@ local defaults = {
         avoidance   = { r = 0.2,  g = 0.8,  b = 0.8 },
         speed       = { r = 1,    g = 0.65, b = 0 },
         primary     = { r = 1,    g = 0.84, b = 0 },
-        -- v2.2 defensive colors
+        -- Defensive colors
         dodge       = { r = 0.4,  g = 0.7,  b = 1 },
         parry       = { r = 1,    g = 0.4,  b = 0.2 },
         block       = { r = 0.7,  g = 0.5,  b = 0.3 },
@@ -153,7 +153,7 @@ local CACHED_BOOL_KEYS = {
     "showRating", "showPercentage", "matchValueColorToStat",
     "showTertiary", "hideZeroTertiary", "showLeech", "showAvoidance", "showSpeed",
     "showStrength", "showAgility", "showIntellect",
-    -- v2.2:
+    -- Defensive & durability:
     "showDefensive", "hideZeroDefensive",
     "showDodge", "showParry", "showBlock", "showArmor",
     "showDurability", "showRepairCost", "useAutoColorDurability", "useWorstDurability",
@@ -187,7 +187,7 @@ local cached = {
     -- versatility cached out-of-combat (existing)
     versTotal = 0,
     versTotalRating = 0,
-    -- v2.2: defensive cached out-of-combat
+    -- Defensive cached out-of-combat
     armorDR = 0,
     durabilityValue = 100,  -- holds avg or min depending on cached.useWorstDurability
     repairCost = 0,         -- live repair cost in copper (sum from per-slot tooltip scan)

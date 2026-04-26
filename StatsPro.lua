@@ -1471,14 +1471,18 @@ function addon:OpenConfigMenu()
         fontLabel:SetPoint("TOPLEFT", cd.padX, rowY)
         fontLabel:SetText("Font:")
 
-        local fonts
-        if LSM then
-            fonts = {}
-            for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
-                fonts[#fonts + 1] = { name = name, path = LSM:Fetch(LSM.MediaType.FONT, name) }
+        -- WHY rebuilt on each open: LSM-registered fonts can appear after StatsPro
+        -- loads (other addon registers later). Static one-time build would miss them
+        -- until /reload. Cost is O(n) over ~20-30 fonts on a user click — negligible.
+        local function BuildFontsList()
+            if LSM then
+                local list = {}
+                for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
+                    list[#list + 1] = { name = name, path = LSM:Fetch(LSM.MediaType.FONT, name) }
+                end
+                return list
             end
-        else
-            fonts = {
+            return {
                 { name = "Friz Quadrata TT", path = "Fonts\\FRIZQT__.TTF" },
                 { name = "Arial Narrow",     path = "Fonts\\ARIALN.TTF" },
                 { name = "Skurri",           path = "Fonts\\SKURRI.TTF" },
@@ -1489,7 +1493,7 @@ function addon:OpenConfigMenu()
         local fontDropdown = CreateFrame("Frame", "StatsProFontDropdown", displayTab, "UIDropDownMenuTemplate")
         fontDropdown:SetPoint("TOPLEFT", cd.padX + 36, rowY - 4)
         UIDropDownMenu_Initialize(fontDropdown, function(self, level)
-            for _, f in ipairs(fonts) do
+            for _, f in ipairs(BuildFontsList()) do
                 local info = UIDropDownMenu_CreateInfo()
                 info.text = f.name
                 info.value = f.path
@@ -1505,7 +1509,7 @@ function addon:OpenConfigMenu()
             end
         end)
         local currentFontName = "Friz Quadrata TT"
-        for _, f in ipairs(fonts) do
+        for _, f in ipairs(BuildFontsList()) do
             if f.path == GetDB("font") then currentFontName = f.name; break end
         end
         UIDropDownMenu_SetText(fontDropdown, currentFontName)

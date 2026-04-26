@@ -1825,6 +1825,44 @@ function addon:OpenConfigMenu()
     SwitchToTab(1)
 end
 
+-- Self-serve diagnostics: dump runtime state to chat for bug reports.
+-- Each group is a separate PrintMsg so taint isolation is automatic
+-- (per workspace CLAUDE.md "log fields as separate entries"); no API
+-- here reads stat values, so taint is not actually a risk — but the
+-- per-line format is also far more readable in chat than a 400-char wall.
+function addon:PrintDebugDump()
+    PrintMsg(string.format("debug v%s  dbVer %s/%d  isLoaded=%s  durDirty=%s  mem=%dKB",
+        ADDON_VERSION,
+        tostring(StatsProDB.dbVersion or "?"),
+        CURRENT_DB_VERSION,
+        tostring(isLoaded), tostring(durabilityDirty),
+        math.floor(collectgarbage("count"))))
+
+    PrintMsg(string.format("visible=%s  locked=%s  mode=%s  font=%dpx  scale=%.1f  refresh=%.2fs",
+        tostring(cached.isVisible), tostring(cached.isLocked),
+        tostring(GetDB("displayMode")),
+        GetDB("fontSize"), GetDB("scale"), GetDB("updateInterval")))
+
+    PrintMsg(string.format("show fmt: rating=%s pct=%s matchColor=%s",
+        tostring(cached.showRating), tostring(cached.showPercentage), tostring(cached.matchValueColorToStat)))
+
+    PrintMsg(string.format("show stats: tert=%s defensive=%s dur=%s str=%s agi=%s int=%s",
+        tostring(cached.showTertiary), tostring(cached.showDefensive), tostring(cached.showDurability),
+        tostring(cached.showStrength), tostring(cached.showAgility), tostring(cached.showIntellect)))
+
+    PrintMsg(string.format("subs: leech=%s avoid=%s speed=%s | dodge=%s parry=%s block=%s armor=%s",
+        tostring(cached.showLeech), tostring(cached.showAvoidance), tostring(cached.showSpeed),
+        tostring(cached.showDodge), tostring(cached.showParry), tostring(cached.showBlock), tostring(cached.showArmor)))
+
+    -- Panel positions: nil-guard (DB may be partial in pre-PEW edge cases)
+    local function PosLine(label, p, rp, x, y)
+        if not p then return label..": <unset>" end
+        return string.format("%s: %s/%s  %+d/%+d", label, p, rp, x or 0, y or 0)
+    end
+    PrintMsg(PosLine("main",      GetDB("point"),           GetDB("relativePoint"),           GetDB("xOfs"),           GetDB("yOfs")))
+    PrintMsg(PosLine("defensive", GetDB("defensive_point"), GetDB("defensive_relativePoint"), GetDB("defensive_xOfs"), GetDB("defensive_yOfs")))
+end
+
 --[[ ============================================================
     16. BLIZZARD SETTINGS PANEL LAUNCHER
 ============================================================ ]]
@@ -1880,8 +1918,10 @@ SlashCmdList["STATSPRO"] = function(msg)
         local newState = StatsProDB.isVisible == false
         SetVisible(newState)
         PrintMsg(newState and "Stats panel shown" or "Stats panel hidden")
+    elseif arg == "debug" then
+        addon:PrintDebugDump()
     elseif arg == "help" or arg == "?" then
-        PrintMsg("Commands: /ss (config), /ss show, /ss hide, /ss toggle")
+        PrintMsg("Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss debug")
     else
         addon:OpenConfigMenu()
     end

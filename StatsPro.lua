@@ -230,9 +230,11 @@ end
 
 local function FormatRepairCost(copper)
     -- WHY: Blizzard's GetCoinTextureString embeds gold/silver/copper icons inline,
-    -- matching the vendor display exactly. Falls back to gold-only if API missing.
+    -- matching the vendor display exactly. Pass fontHeight explicitly — without it
+    -- the helper produces `:0:0` markup which in TWW 12.x sometimes renders icons
+    -- at the wrong size or with the digits floating to a separate baseline.
     if GetCoinTextureString then
-        return GetCoinTextureString(copper)
+        return GetCoinTextureString(copper, GetDB("fontSize"))
     end
     return string.format("%dg", math.floor(copper / 10000))
 end
@@ -466,7 +468,8 @@ function Panel:New(globalName, dbKeyPrefix)
     local repairText = frame:CreateFontString(nil, "OVERLAY")
     repairText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
     repairText:SetJustifyH("RIGHT")
-    repairText:SetJustifyV("BOTTOM")
+    -- WHY default JustifyV (MIDDLE), not BOTTOM: BOTTOM mis-aligns inline coin icon
+    -- textures relative to text glyphs, leaving the digits visually below the icons.
     repairText:SetTextColor(1, 1, 1, 1)
     repairText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 4)
     repairText:Hide()

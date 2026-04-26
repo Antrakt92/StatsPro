@@ -20,6 +20,12 @@
 
 ### Improved
 
+- **Repair cost no longer widens the panel** — moved out of the 3-column grid
+  onto its own bottom-anchored line (RIGHT-justified, grows leftward off the
+  panel edge if needed). The wide `60g 63s 9c` coin string used to inflate the
+  value column and stretch the whole panel just for that one row; now panel
+  width is determined purely by stat content. Coin icons also shrunk to
+  `fontSize - 2` for a cleaner look.
 - **Tertiary sub-toggles grey out when master is off** — `Show Leech` /
   `Show Avoidance` / `Show Speed` now follow the same dependency-disable pattern
   the Defensive tab already uses for `Show Repair Cost` (gated on `Show Durability`)

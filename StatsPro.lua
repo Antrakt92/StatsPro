@@ -656,20 +656,22 @@ end
 --[[ ============================================================
     11. RENDER LOGIC
 ============================================================ ]]
+-- Single point of truth for column-routing decisions across FmtRatingPct / FmtPctOnly /
+-- RouteValueOnly / UpdateStats's value-col join. Dual-column mode = both display toggles
+-- on; in every other case (single-column or neither) all visible content stacks in the
+-- rating col and the value col is force-empty to avoid the GetStringWidth degenerate
+-- case on a mostly-empty multi-line string.
+local function IsDualColMode()
+    return cached.showRating and cached.showPercentage
+end
+
 -- Format a stat value (rating + percentage variants honoring user toggles).
--- Returns TWO strings (ratingStr, valueStr).
--- WHY column routing: only the dual-column mode (rating + percent both on) uses two
--- FontStrings — rating right-justified for "843"/"46" right-edge alignment, percent
--- left-justified for "28.3%"/"12.5%" left-edge alignment. In single-column modes
--- (only rating or only percent on, or neither), everything goes into the rating col.
--- That keeps the visible numbers in one tight RIGHT-justified vertical line and avoids
--- the mostly-empty value-col degenerate case where GetStringWidth on a "\n\n\n92.3%"
--- string is unreliable.
+-- Returns TWO strings (ratingStr, valueStr) — see IsDualColMode for routing rules.
 local function FmtRatingPct(rating, pct, statColor)
     local cs = cached.colorStrings
     local rc = (cached.matchValueColorToStat and statColor) or cs.rating
     local pc = (cached.matchValueColorToStat and statColor) or cs.percentage
-    if cached.showRating and cached.showPercentage then
+    if IsDualColMode() then
         return string.format("|cff%s%d|r |cff808080|||r", rc, rating),
                string.format("|cff%s%.1f%%|r", pc, pct)
     elseif cached.showRating then
@@ -681,23 +683,19 @@ local function FmtRatingPct(rating, pct, statColor)
 end
 
 -- Format a percentage-only stat (no rating dimension, e.g. defensive Dodge/Parry).
--- Returns (ratingCol, valueCol) — same column-routing rule as FmtRatingPct.
+-- Returns (ratingCol, valueCol) — same routing rule as FmtRatingPct.
 local function FmtPctOnly(pct, statColor)
     local cs = cached.colorStrings
     local pc = (cached.matchValueColorToStat and statColor) or cs.percentage
     local pctStr = string.format("|cff%s%.1f%%|r", pc, pct)
-    if cached.showRating and cached.showPercentage then
-        return "", pctStr
-    end
+    if IsDualColMode() then return "", pctStr end
     return pctStr, ""
 end
 
 -- Route a plain value (Primary stat int, Durability %, Repair coin string) into the
 -- rating col in single-column modes, into the value col in dual-column mode.
 local function RouteValueOnly(valStr)
-    if cached.showRating and cached.showPercentage then
-        return "", valStr
-    end
+    if IsDualColMode() then return "", valStr end
     return valStr, ""
 end
 
@@ -936,9 +934,8 @@ local function UpdateStats()
     -- empty literals — joining produces "\n\n\n" which makes valueText:GetStringWidth()
     -- unreliable in 12.x (returns stale/secret-tainted, panel layout breaks). Safe because
     -- "" is a literal at all push sites in single-col mode (no taint comparison needed).
-    local dualCol = cached.showRating and cached.showPercentage
     local function JoinValuesCol(values)
-        if dualCol then return JoinLinesSecretSafe(values) end
+        if IsDualColMode() then return JoinLinesSecretSafe(values) end
         return ""
     end
 
@@ -1542,6 +1539,32 @@ function addon:OpenConfigMenu()
             _G[self:GetName() .. "Text"]:SetText(string.format("%.1f", value))
             StatsProDB.scale = value
             SetAllPanelsScale(value)
+        end)
+        cd.y = sliderY - 50
+    end
+
+    -- Refresh rate slider — controls how often stat values recompute (seconds).
+    -- Lower = smoother but more CPU; higher = less CPU but values lag behind gear/buff swaps.
+    do
+        local sliderY = cd.y
+        local lbl = displayTab:CreateFontString(nil, "OVERLAY")
+        lbl:SetFont("Fonts\\FRIZQT__.TTF", 12)
+        lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
+        lbl:SetText("Refresh Rate (sec):")
+        local slider = CreateFrame("Slider", "StatsProRefreshSlider", displayTab, "OptionsSliderTemplate")
+        slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
+        slider:SetMinMaxValues(0.1, 1.0)
+        slider:SetValue(GetDB("updateInterval"))
+        slider:SetValueStep(0.05)
+        slider:SetObeyStepOnDrag(true)
+        slider:SetWidth(420)
+        _G[slider:GetName() .. "Low"]:SetText("0.1s")
+        _G[slider:GetName() .. "High"]:SetText("1.0s")
+        _G[slider:GetName() .. "Text"]:SetText(string.format("%.2f", slider:GetValue()))
+        slider:SetScript("OnValueChanged", function(self, value)
+            _G[self:GetName() .. "Text"]:SetText(string.format("%.2f", value))
+            StatsProDB.updateInterval = value
+            CacheSettings()
         end)
         cd.y = sliderY - 50
     end

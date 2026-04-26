@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.0.3 — Refresh-rate slider
+
+### Added
+
+- **Refresh Rate slider** on the Display tab (range `0.1s – 1.0s`, default `0.5s`).
+  Controls how often stat values recompute on screen. Lower = smoother updates,
+  higher = lighter on CPU. Previously the only way to change this was the hidden
+  `/run StatsProDB.updateInterval = X` workaround.
+
+### Internal
+
+- Extracted `IsDualColMode()` helper — single source of truth for the column-routing
+  decision now used uniformly by `FmtRatingPct`, `FmtPctOnly`, `RouteValueOnly`, and
+  the `UpdateStats` value-col join.
+- Wired automated CurseForge upload from the GitHub Actions release workflow
+  (`X-Curse-Project-ID` populated in TOC, `CF_API_KEY` secret set on the repo).
+  Future release tags now auto-publish the file + per-version changelog from
+  `CHANGELOG.md` to CurseForge with no manual paste step.
+
 ## 1.0.2 — Dynamic version display
 
 ### Fixed

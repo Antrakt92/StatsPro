@@ -32,9 +32,12 @@ local issecretvalue = _G.issecretvalue or function() return false end
 -- BigWigs Packager substitutes from the git tag at release build time (`@project-version@`
 -- → e.g. `1.0.1`). Reading via GetAddOnMetadata means every release auto-syncs the
 -- in-game settings title without a code edit. Local dev (running from source) sees the
--- literal `@project-version@` token from the unsubstituted TOC — collapse to "dev".
+-- literal `@project-version@` token from the unsubstituted TOC — fall back to a
+-- hand-maintained constant so the title still reads e.g. `v1.0.3-dev` instead of `vdev`.
+-- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
+local CURRENT_RELEASE = "1.0.3"
 local ADDON_VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("StatsPro", "Version") or "?"
-if ADDON_VERSION:find("project%-version") then ADDON_VERSION = "dev" end
+if ADDON_VERSION:find("project%-version") then ADDON_VERSION = CURRENT_RELEASE .. "-dev" end
 
 --[[ ============================================================
     3. DEFAULTS

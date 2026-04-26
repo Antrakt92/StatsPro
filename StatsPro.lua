@@ -462,16 +462,18 @@ function Panel:New(globalName, dbKeyPrefix)
     -- WHY 4th FontString outside the 3-column system: Repair coin string with embedded
     -- gold/silver/copper icons is much wider than typical percent values. Including it
     -- in any of the 3 columns would inflate that column's width and bloat the whole
-    -- panel just for one row. This FontString sits at the bottom row (below the column
-    -- area), RIGHT-anchored to frame.right but its width does NOT participate in panel
+    -- panel just for one row. This FontString spans the full frame height (mirrors the
+    -- label/rating/value anchor pattern), and the rendered text is padded with N-1
+    -- blank lines so the coin string lands on the SAME line as the "Repair:" label
+    -- in the label column — baseline alignment is guaranteed because both FontStrings
+    -- use the same font/size/anchor geometry. Width does NOT participate in panel
     -- auto-fit math — wide repair strings extend leftward past frame.left if needed.
     local repairText = frame:CreateFontString(nil, "OVERLAY")
     repairText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
     repairText:SetJustifyH("RIGHT")
-    -- WHY default JustifyV (MIDDLE), not BOTTOM: BOTTOM mis-aligns inline coin icon
-    -- textures relative to text glyphs, leaving the digits visually below the icons.
     repairText:SetTextColor(1, 1, 1, 1)
-    repairText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 4)
+    repairText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+    repairText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
     repairText:Hide()
 
     self.frame = frame
@@ -580,12 +582,17 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr)
     self.lastRatingText = ratingStr or ""
     self.lastValueText = valueStr
 
-    -- Repair string lives on its own FontString anchored BOTTOMRIGHT, RIGHT-justified.
-    -- Excluded from auto-fit width math (see WHY at the FontString creation in Panel:New).
-    -- Counts as one extra row for height purposes.
+    -- Repair string lives on its own FontString that mirrors the label/rating/value
+    -- column anchor geometry (full frame height, JustifyV defaults to TOP for multi-line).
+    -- We pad with (lineCount - 1) blank lines so the coin string lands on the same line
+    -- as the "Repair:" label in the label column. Width is excluded from auto-fit math.
     local hasRepair = repairStr and repairStr ~= ""
     if hasRepair then
-        self.repairText:SetText(repairStr)
+        local padded = repairStr
+        for _ = 1, lineCount - 1 do
+            padded = "\n" .. padded
+        end
+        self.repairText:SetText(padded)
         self.repairText:Show()
     else
         self.repairText:Hide()

@@ -20,12 +20,14 @@
 
 ### Improved
 
-- **Repair cost no longer widens the panel** — coin string is now rendered on a
-  dedicated FontString that overlays the rating+value area of the Repair row,
-  RIGHT-anchored to the panel edge and free to extend leftward past the columns
-  if very wide. The `Repair:` label still sits in the main label column,
-  aligned with the other labels. Previously the wide `60g 63s 9c` coin string
-  inflated the value column and stretched the whole panel just for that one row.
+- **Repair cost no longer widens the panel** — coin string is rendered on a
+  dedicated single-line FontString anchored to the same row as the `Repair:`
+  label, RIGHT-aligned to the panel edge and free to extend leftward past the
+  rating/value column for wide values. The `Repair:` label still sits in the
+  main label column, aligned with the other labels. Previously the wide
+  `60g 63s 9c` coin string inflated the value column and stretched the whole
+  panel just for that one row; now panel width is determined purely by stat
+  content.
 - **Tertiary sub-toggles grey out when master is off** — `Show Leech` /
   `Show Avoidance` / `Show Speed` now follow the same dependency-disable pattern
   the Defensive tab already uses for `Show Repair Cost` (gated on `Show Durability`)

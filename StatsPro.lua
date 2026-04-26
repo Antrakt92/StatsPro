@@ -462,18 +462,18 @@ function Panel:New(globalName, dbKeyPrefix)
     -- WHY 4th FontString outside the 3-column system: Repair coin string with embedded
     -- gold/silver/copper icons is much wider than typical percent values. Including it
     -- in any of the 3 columns would inflate that column's width and bloat the whole
-    -- panel just for one row. This FontString spans the full frame height (mirrors the
-    -- label/rating/value anchor pattern), and the rendered text is padded with N-1
-    -- blank lines so the coin string lands on the SAME line as the "Repair:" label
-    -- in the label column — baseline alignment is guaranteed because both FontStrings
-    -- use the same font/size/anchor geometry. Width does NOT participate in panel
-    -- auto-fit math — wide repair strings extend leftward past frame.left if needed.
+    -- panel just for one row. Single-line FontString anchored only TOPRIGHT (Y is set
+    -- per-render in SetTextSafe to land on the same row as the "Repair:" label in the
+    -- label column). Width does NOT participate in auto-fit math — wide coin strings
+    -- extend leftward past frame.left if needed.
+    -- WARNING: do NOT use a multi-line padded approach (`\n` * N + coin) — inline coin
+    -- icons inflate that line's height (`:14:14:2:0|t` yoffset=0 puts texture top above
+    -- glyph top), causing cumulative drift vs labelText's pure-text rows.
     local repairText = frame:CreateFontString(nil, "OVERLAY")
     repairText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
     repairText:SetJustifyH("RIGHT")
     repairText:SetTextColor(1, 1, 1, 1)
-    repairText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
-    repairText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+    repairText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)  -- y repositioned per render
     repairText:Hide()
 
     self.frame = frame
@@ -562,6 +562,19 @@ function Panel:IsShown()
     return self.frame:IsShown()
 end
 
+-- WARNING: GetStringWidth/GetStringHeight on a FontString whose text contains in-combat
+-- secret-tainted substrings return secret-tainted numbers. Arithmetic on those errors.
+-- Mitigation: keep last non-secret measurement; refresh cache only if current read is
+-- non-secret. Used for all 4 measurement points in SetTextSafe (label/rating/value
+-- widths + label height for repair Y positioning).
+local function MeasuredOrCached(fs, current_cache, method)
+    local v = fs[method](fs)
+    if v and not issecretvalue(v) then
+        return v
+    end
+    return current_cache
+end
+
 -- Hide frame if no lines; otherwise apply text+height.
 -- WARNING: in 12.x, label/value strings may be secret-tainted (built from in-combat stat
 -- API returns). String comparisons (==, ~=) on secrets error. Use lineCount (always a
@@ -582,46 +595,33 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr)
     self.lastRatingText = ratingStr or ""
     self.lastValueText = valueStr
 
-    -- Repair string lives on its own FontString that mirrors the label/rating/value
-    -- column anchor geometry (full frame height, JustifyV defaults to TOP for multi-line).
-    -- We pad with (lineCount - 1) blank lines so the coin string lands on the same line
-    -- as the "Repair:" label in the label column. Width is excluded from auto-fit math.
-    local hasRepair = repairStr and repairStr ~= ""
-    if hasRepair then
-        local padded = repairStr
-        for _ = 1, lineCount - 1 do
-            padded = "\n" .. padded
-        end
-        self.repairText:SetText(padded)
-        self.repairText:Show()
-    else
-        self.repairText:Hide()
-    end
-    self.lastRepairText = repairStr or ""
-
     -- Auto-fit width to (label + gap + rating + gap + value). Min width prevents the
     -- frame from collapsing when all columns are very short.
     -- WHY 2px gaps: labels RIGHT-justified, rating RIGHT-justified, value LEFT-justified
     -- — at each column boundary one side is justified outward, so visible gap equals
     -- exactly this constant with no per-row variance from internal column padding.
-    -- WARNING: GetStringWidth() on a FontString whose text contains secret-tainted
-    -- substrings (e.g. in-combat stat reads that became secret) returns a secret-
-    -- tainted NUMBER. Arithmetic on a secret number errors. SetText itself accepts
-    -- secrets (Blizzard whitelisted display), but width measurement is not whitelisted.
-    -- Mitigation: cache the last NON-secret width per FontString. On each render,
-    -- read GetStringWidth and only refresh the cache if the result is non-secret.
-    local labelW = self.labelText:GetStringWidth()
-    if labelW and not issecretvalue(labelW) then
-        self.cachedLabelW = labelW
+    self.cachedLabelW  = MeasuredOrCached(self.labelText,  self.cachedLabelW,  "GetStringWidth")
+    self.cachedRatingW = MeasuredOrCached(self.ratingText, self.cachedRatingW, "GetStringWidth")
+    self.cachedValueW  = MeasuredOrCached(self.valueText,  self.cachedValueW,  "GetStringWidth")
+    -- labelText height drives Repair-row Y positioning below; cache same way as widths.
+    self.cachedLabelH  = MeasuredOrCached(self.labelText,  self.cachedLabelH,  "GetStringHeight")
+
+    -- Repair string lives on its own single-line FontString anchored only TOPRIGHT,
+    -- positioned dynamically so its TOP sits on last label row's TOP (= -(N-1)*lineH
+    -- from frame.top). lineH measured from labelText's actual rendered height — accounts
+    -- for OUTLINE padding and font metrics that fontSize alone misses. Width does NOT
+    -- participate in auto-fit math; wide coin strings extend leftward freely.
+    local hasRepair = repairStr and repairStr ~= ""
+    if hasRepair then
+        local lineH = (self.cachedLabelH and lineCount > 0) and (self.cachedLabelH / lineCount) or GetDB("fontSize")
+        self.repairText:ClearAllPoints()
+        self.repairText:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", 0, -(lineCount - 1) * lineH)
+        self.repairText:SetText(repairStr)
+        self.repairText:Show()
+    else
+        self.repairText:Hide()
     end
-    local ratingW = self.ratingText:GetStringWidth()
-    if ratingW and not issecretvalue(ratingW) then
-        self.cachedRatingW = ratingW
-    end
-    local valueW = self.valueText:GetStringWidth()
-    if valueW and not issecretvalue(valueW) then
-        self.cachedValueW = valueW
-    end
+    self.lastRepairText = repairStr or ""
 
     -- Reposition ratingText so its right edge sits just before the value column.
     -- ratingText anchors to frame.RIGHT with a NEGATIVE x-offset = -(valueW + rGap).
@@ -669,7 +669,8 @@ function Panel:ApplyStyle(font, size)
     if self.lastRepairText and self.lastRepairText ~= "" then
         self.repairText:SetText(self.lastRepairText)
     end
-    -- Force resize on next SetTextSafe
+    -- Force resize + line-height re-measure on next SetTextSafe
+    self.cachedLabelH = nil
     self.lastLineCount = -1
 end
 

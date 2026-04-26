@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.1 — Single-column display polish
 
 ### Changed
 
@@ -20,6 +20,11 @@
   now route their value into the rating column whenever the dual-column mode is off,
   and `UpdateStats` passes a literal `""` to the value FontString in that case —
   bypassing the unreliable measurement entirely.
+- **In-combat taint crash spam** — an over-eager all-empty short-circuit in
+  `JoinLinesSecretSafe` compared list elements against `""`, which raises a taint
+  error when in-combat stat reads put a secret-tainted string in the list. The
+  comparison was removed; all-empty detection now lives at call sites (`UpdateStats`)
+  using out-of-band config flags so no string content ever needs to be compared.
 
 ## 1.0.0 — Initial release
 

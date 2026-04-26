@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Single-column layout when only one display dimension is on** — toggling either
+  `Show Rating` or `Show Percentage` off now stacks every visible number in a single
+  RIGHT-justified column (the rating column). Previously, non-rating rows (Primary
+  stats, Defensives, Durability, Repair) still rendered in the value column, which
+  collapsed to a degenerate empty layout when most rows were empty there — leaving
+  visible gaps and, in the rating-only case, truncating Durability's percentage.
+
+### Fixed
+
+- **Wide gap / truncated percentage in single-display modes** — `FontString:GetString-
+  Width()` on a mostly-empty multi-line string (e.g. `"\n\n\n92.3%"`) is unreliable
+  in 12.x retail, leaving cached column widths stale and the panel layout broken.
+  `FmtRatingPct`, `FmtPctOnly`, and the inline Primary/Armor/Durability/Repair pushes
+  now route their value into the rating column whenever the dual-column mode is off,
+  and `UpdateStats` passes a literal `""` to the value FontString in that case —
+  bypassing the unreliable measurement entirely.
+
 ## 1.0.0 — Initial release
 
 First public release under the StatsPro name. Originally inspired by SwiftStats v2.1

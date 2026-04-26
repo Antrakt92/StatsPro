@@ -242,6 +242,10 @@ local function RGBToHex(r, g, b)
 end
 
 -- WARNING: table.concat rejects secret strings in 12.0; manual .. is allowed.
+-- WARNING: do NOT compare elements against "" here — in-combat reads can put secret-
+-- tainted strings in `lines`, and `secret_str ~= ""` raises a taint error. All-empty
+-- detection lives at call sites (UpdateStats), which can decide from `cached.show*`
+-- flags without touching string content.
 local function JoinLinesSecretSafe(lines)
     if #lines == 0 then return "" end
     local text = lines[1]
@@ -645,12 +649,14 @@ end
     11. RENDER LOGIC
 ============================================================ ]]
 -- Format a stat value (rating + percentage variants honoring user toggles).
--- Returns TWO strings (ratingStr, valueStr) — three-column rendering: rating column is
--- RIGHT-justified, value column is LEFT-justified. The "|" separator lives in the rating
--- column suffix so mixed-and-pct-only rows can share a clean value-column left edge.
--- WHY two return values, not concatenated: a single FontString has one JustifyH; we need
--- right-justified ratings (line up 843/46 right edges) AND left-justified percentages
--- (line up 28.3%/12.5% left edges) on the same row — that requires two FontStrings.
+-- Returns TWO strings (ratingStr, valueStr).
+-- WHY column routing: only the dual-column mode (rating + percent both on) uses two
+-- FontStrings — rating right-justified for "843"/"46" right-edge alignment, percent
+-- left-justified for "28.3%"/"12.5%" left-edge alignment. In single-column modes
+-- (only rating or only percent on, or neither), everything goes into the rating col.
+-- That keeps the visible numbers in one tight RIGHT-justified vertical line and avoids
+-- the mostly-empty value-col degenerate case where GetStringWidth on a "\n\n\n92.3%"
+-- string is unreliable.
 local function FmtRatingPct(rating, pct, statColor)
     local cs = cached.colorStrings
     local rc = (cached.matchValueColorToStat and statColor) or cs.rating
@@ -661,16 +667,30 @@ local function FmtRatingPct(rating, pct, statColor)
     elseif cached.showRating then
         return string.format("|cff%s%d|r", rc, rating), ""
     else
-        return "", string.format("|cff%s%.1f%%|r", pc, pct)
+        -- percent-only: route into rating col (single-column layout)
+        return string.format("|cff%s%.1f%%|r", pc, pct), ""
     end
 end
 
 -- Format a percentage-only stat (no rating dimension, e.g. defensive Dodge/Parry).
--- Returns ("", valueStr) so callers can uniformly push (label, rating, value) triples.
+-- Returns (ratingCol, valueCol) — same column-routing rule as FmtRatingPct.
 local function FmtPctOnly(pct, statColor)
     local cs = cached.colorStrings
     local pc = (cached.matchValueColorToStat and statColor) or cs.percentage
-    return "", string.format("|cff%s%.1f%%|r", pc, pct)
+    local pctStr = string.format("|cff%s%.1f%%|r", pc, pct)
+    if cached.showRating and cached.showPercentage then
+        return "", pctStr
+    end
+    return pctStr, ""
+end
+
+-- Route a plain value (Primary stat int, Durability %, Repair coin string) into the
+-- rating col in single-column modes, into the value col in dual-column mode.
+local function RouteValueOnly(valStr)
+    if cached.showRating and cached.showPercentage then
+        return "", valStr
+    end
+    return valStr, ""
 end
 
 -- Three-column rendering: every Build*() function pushes (label, rating, value) entries
@@ -694,21 +714,22 @@ local function BuildPrimaryLines(labels, ratings, values)
     for _, def in ipairs(PRIMARY_STATS) do
         if cached[def.showKey] then
             local val = safeCall(UnitStat, "player", def.unitStatId)
+            local rCol, vCol = RouteValueOnly(string.format("|cff%s%d|r", valueColor, val))
             PushRow(labels, ratings, values,
                 string.format("|cff%s%s:|r", primaryStr, def.label),
-                "",
-                string.format("|cff%s%d|r", valueColor, val))
+                rCol, vCol)
         end
     end
 end
 
 local function BuildOffensiveLines(labels, ratings, values)
-    -- WHY: with both display modes off, FmtRatingPct returns "","" → empty rating + value.
-    -- Respect the user's choice: skip the whole block instead of rendering label-only rows.
+    -- WHY guard: with both display toggles off the user wants offensive rows hidden
+    -- entirely. Without this guard the percent-only branch of FmtRatingPct would still
+    -- fire (single-column routing), producing visible percent rows and ignoring intent.
     if not (cached.showRating or cached.showPercentage) then return end
     local cs = cached.colorStrings
 
-    -- m9 fix: skip the rating fetch when the user has it disabled
+    -- skip the GetCombatRating fetch when rating display is off (no consumer)
     local needRating = cached.showRating
     for _, def in ipairs(OFFENSIVE_STATS) do
         local val = safeCall(def.api)
@@ -812,10 +833,10 @@ local function BuildDefensiveLines()
         local armorStr = cs.armor
         local valueColor = (cached.matchValueColorToStat and armorStr) or cs.percentage
         if shouldShow(cached.armorDR, cached.hideZeroDefensive) then
+            local rCol, vCol = RouteValueOnly(string.format("|cff%s%.1f%%|r", valueColor, cached.armorDR))
             PushRow(labels, ratings, values,
                 string.format("|cff%sArmor:|r", armorStr),
-                "",
-                string.format("|cff%s%.1f%%|r", valueColor, cached.armorDR))
+                rCol, vCol)
         end
     end
 
@@ -838,18 +859,20 @@ local function BuildDurabilityLines()
         valueColor = durStr
     end
     -- %.1f%% matches vendor precision (95.2% vs 95%)
-    PushRow(labels, ratings, values,
-        string.format("|cff%sDurability:|r", durStr),
-        "",
-        string.format("|cff%s%.1f%%|r", valueColor, pct))
+    do
+        local rCol, vCol = RouteValueOnly(string.format("|cff%s%.1f%%|r", valueColor, pct))
+        PushRow(labels, ratings, values,
+            string.format("|cff%sDurability:|r", durStr),
+            rCol, vCol)
+    end
     if cached.showRepairCost and cached.repairCost > 0 then
         -- WHY: own row — keeps the right column visually a column of values, not a mix
         -- of percentages and coin strings. Don't wrap GetCoinTextureString output in
         -- |cff...|r — coin icons render inline as textures and the color tag would tint them.
+        local rCol, vCol = RouteValueOnly(FormatRepairCost(cached.repairCost))
         PushRow(labels, ratings, values,
             string.format("|cff%sRepair:|r", durStr),
-            "",
-            FormatRepairCost(cached.repairCost))
+            rCol, vCol)
     end
     return labels, ratings, values
 end
@@ -899,13 +922,25 @@ local function UpdateStats()
     local defLabels,  defRatings,  defValues  = BuildDefensiveLines()
     local durLabels,  durRatings,  durValues  = BuildDurabilityLines()
 
+    -- WHY: in single-column display modes (only rating OR only percent on, or neither),
+    -- Build*/Fmt* helpers route ALL content into the rating col and push a literal "" to
+    -- the value col for every row. Pass "" directly to SetTextSafe instead of joining N
+    -- empty literals — joining produces "\n\n\n" which makes valueText:GetStringWidth()
+    -- unreliable in 12.x (returns stale/secret-tainted, panel layout breaks). Safe because
+    -- "" is a literal at all push sites in single-col mode (no taint comparison needed).
+    local dualCol = cached.showRating and cached.showPercentage
+    local function JoinValuesCol(values)
+        if dualCol then return JoinLinesSecretSafe(values) end
+        return ""
+    end
+
     -- Dispatch by display mode
     local mode = cached.displayMode or "flat"
     if mode == "split" then
         mainPanel:SetTextSafe(
             JoinLinesSecretSafe(mainLabels),
             JoinLinesSecretSafe(mainRatings),
-            JoinLinesSecretSafe(mainValues),
+            JoinValuesCol(mainValues),
             #mainLabels)
         -- WHY: defensive panel hosts both defensive stats and durability so the user can
         -- see them together while keeping the main panel focused on offensive/primary.
@@ -916,7 +951,7 @@ local function UpdateStats()
             defensivePanel:SetTextSafe(
                 JoinLinesSecretSafe(sideLabels),
                 JoinLinesSecretSafe(sideRatings),
-                JoinLinesSecretSafe(sideValues),
+                JoinValuesCol(sideValues),
                 #sideLabels)
         else
             defensivePanel:Hide()
@@ -932,7 +967,7 @@ local function UpdateStats()
         mainPanel:SetTextSafe(
             JoinLinesSecretSafe(cLabels),
             JoinLinesSecretSafe(cRatings),
-            JoinLinesSecretSafe(cValues),
+            JoinValuesCol(cValues),
             #cLabels)
         defensivePanel:Hide()
     else
@@ -944,7 +979,7 @@ local function UpdateStats()
         mainPanel:SetTextSafe(
             JoinLinesSecretSafe(cLabels),
             JoinLinesSecretSafe(cRatings),
-            JoinLinesSecretSafe(cValues),
+            JoinValuesCol(cValues),
             #cLabels)
         defensivePanel:Hide()
     end

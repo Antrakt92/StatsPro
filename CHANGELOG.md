@@ -11,7 +11,6 @@
   the offensive block without disabling both display-format toggles. Includes
   an opt-in `Hide Zero Values` filter (default off) for users with classes
   that drop a stat to zero.
-
 - **`/ss debug` slash subcommand** — dumps addon version, DB version, all
   visible-toggle states, panel positions, and current Lua memory usage into
   chat. Useful for self-serve bug-report diagnostics — paste the output
@@ -23,14 +22,12 @@
   `Show Parry` / `Show Block` / `Show Armor` now follow the same dependency-
   disable pattern already used by the Tertiary tab (Leech/Avoidance/Speed
   greyed when master Tertiary is off) and the Durability sub-controls.
-
 - **"Reset to Defaults" no longer leaks the config frame** — every Reset click
   used to orphan the previous `StatsProConfigFrame` global plus all its child
   widgets in `_G` (CreateFrame's named globals are immortal in WoW Lua) and
   build a brand new frame. Long sessions with frequent resets gradually grew
   Lua memory. Widget visuals are now re-synced from the freshly-reset DB
   in-place; the frame is reused.
-
 - **Repair coin moved to its own row below stats** — the coin string with
   embedded gold/silver/copper icons used to share a row with the `Repair:`
   label inside the multi-line stats label FontString, and the coin width was
@@ -51,11 +48,9 @@
   auto-register a "refresher" closure when they build a widget. The Reset
   button walks this list to re-sync each widget's visual state from DB
   without rebuilding the frame.
-
 - Extracted `GetColor(statName)` helper — shared between `OpenColorPicker`,
   `CreateColorSwatch`, `CreateColorPicker`, and the new color-swatch
   refreshers. Single source of truth for "DB color or fallback to default".
-
 - `OFFENSIVE_STATS` table extended with a `showKey` field per row, enabling
   the per-stat guard in `BuildOffensiveLines` (mirrors the existing
   `DEFENSIVE_STATS` / `TERTIARY_STATS` pattern).
@@ -68,12 +63,10 @@
   updated saved settings but `Panel:Unlock` no-op'd via its `InCombatLockdown`
   guard, leaving panels mouse-disabled until `/reload`. A `PLAYER_REGEN_ENABLED`
   handler now re-applies the saved lock state on combat exit.
-
 - **SwiftStatsLocal migration aliased sub-tables** — first-load migration
   shallow-copied the legacy DB, so `StatsProDB.colors` shared a Lua table reference with
   `SwiftStatsLocalDB.colors` for as long as both addons were enabled. Color-picker
   edits in either silently mutated the other. Sub-tables now go through `CopyTable`.
-
 - **Default-fill skipped on coincidental version match** — `MigrateDB`
   early-returned when `db.dbVersion == CURRENT_DB_VERSION`, so SwiftStatsLocal migrants
   whose legacy DB happened to carry `dbVersion=3` never picked up StatsPro's
@@ -90,12 +83,10 @@
   `60g 63s 9c` coin string inflated the value column and stretched the whole
   panel just for that one row; now panel width is determined purely by stat
   content.
-
 - **Tertiary sub-toggles grey out when master is off** — `Show Leech` /
   `Show Avoidance` / `Show Speed` now follow the same dependency-disable pattern
   the Defensive tab already uses for `Show Repair Cost` (gated on `Show Durability`)
   and the durability swatch (gated on `Auto Color by Threshold`).
-
 - **Font dropdown refreshes on each open** — fonts registered via LibSharedMedia
   by addons that load after StatsPro now appear in the dropdown without requiring
   `/reload`. Previously the list was built once at config-menu open time.
@@ -104,11 +95,9 @@
 
 - Stripped stale `v2.2` version-tag noise from `defaults`, `cached`, and
   `CACHED_BOOL_KEYS` block comments.
-
 - Extracted shared `SetCheckboxEnabled` helper for dependent-toggle greying;
   `ApplyRepairCostEnabled` now calls it instead of duplicating the
   Enable/Disable + text-color logic.
-
 - Dev-only build label now reads e.g. `1.0.4-dev` instead of `vdev` when running
   from local source (token-substituted release builds are unaffected).
 
@@ -126,7 +115,6 @@
 - Extracted `IsDualColMode()` helper — single source of truth for the column-routing
   decision now used uniformly by `FmtRatingPct`, `FmtPctOnly`, `RouteValueOnly`, and
   the `UpdateStats` value-col join.
-
 - Wired automated CurseForge upload from the GitHub Actions release workflow
   (`X-Curse-Project-ID` populated in TOC, `CF_API_KEY` secret set on the repo).
   Future release tags now auto-publish the file + per-version changelog from
@@ -162,7 +150,6 @@
   now route their value into the rating column whenever the dual-column mode is off,
   and `UpdateStats` passes a literal `""` to the value FontString in that case —
   bypassing the unreliable measurement entirely.
-
 - **In-combat taint crash spam** — an over-eager all-empty short-circuit in
   `JoinLinesSecretSafe` compared list elements against `""`, which raises a taint
   error when in-combat stat reads put a secret-tainted string in the list. The
@@ -180,23 +167,16 @@ work added on top of (or in place of) the upstream foundation.
 
 - **Defensive stats panel** — Dodge, Parry, Block, Armor (as % damage reduction).
   Independent visibility toggle from the offensive stats; per-stat color swatches; hide-zero option.
-
 - **Durability tracking** — single-pass scan of equipment slots (skipping shirt/tabard),
   with toggle between average and worst-slot percentage. Vendor-format precision (`%.1f%%`).
-
 - **Auto-color durability** — green ≥60%, yellow ≥30%, red <30%. Override available
   by disabling auto-color and picking a custom color.
-
 - **Repair cost** — live vendor-format coin string using `GetCoinTextureString` with
   inline gold/silver/copper icons. Rendered on its own line below durability to avoid truncation.
-
 - **Display modes** — three layouts: Flat (one panel, all stats), Sectioned (one panel
   with `— Defensive —` divider), Split (separate draggable panels for offensive/defensive).
-
 - **Multi-panel positioning** — defensive panel is independently draggable when in Split mode.
-
 - **Master visibility toggle** — show/hide all panels with a single checkbox or `/ss toggle`.
-
 - **Settings UI rewrite** — three-tab config window (Display / Stats / Defensive) with
   inline color swatches, dependency-aware enable/disable (Repair Cost greyed out when
   Durability is off, durability swatch greyed when Auto Color is on).
@@ -205,13 +185,10 @@ work added on top of (or in place of) the upstream foundation.
 
 - **Default text alignment** — `RIGHT` (was `LEFT`). Migrated automatically for users
   on the old default; explicit user choices preserved.
-
 - **Effective armor handling** — uses `pcall(UnitArmor)` and filters secret values for
   12.x retail compatibility. Refresh runs out-of-combat only.
-
 - **Versatility** — split into rating + flat dual-source display, with combat-safe caching
   (recompute OOC, use cached value in combat).
-
 - **Repair cost API** — switched from `GameTooltip:SetInventoryItem` (returns secret
   values in 12.x) to `C_TooltipInfo.GetInventoryItem` + `TooltipUtil.SurfaceArgs`.
 
@@ -222,16 +199,12 @@ work added on top of (or in place of) the upstream foundation.
   rating widths varied (46 vs 843). Rating is now its own RIGHT-justified third FontString
   between label and value, so all rating right-edges line up vertically and the percent
   column has a clean fixed left edge.
-
 - **Frame position not persisting** — `SetUserPlaced(true)` now called after `SetPoint(...)`
   in `LoadPosition`, ensuring 12.x retail correctly commits the user's drag-saved anchor.
-
 - **Position lost on /reload** — `PLAYER_LOGOUT` handler now saves both panels
   defensively, in case the user drags via paths that bypass `OnDragStop`.
-
 - **Durability % differing from vendor** — default switched to average (matching the vendor
   display); worst-slot mode preserved as opt-in.
-
 - **In-combat secret-value taint** — every stat-API read (`GetCombatRating`,
   `GetUnitMaxHealthModifier`, `UnitArmor`, `GetUnitSpeed`, etc.) now passes through
   `pcall` + `issecretvalue` filtering before any arithmetic or comparison.

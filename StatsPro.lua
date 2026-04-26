@@ -619,8 +619,7 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr)
     -- Repair string lives on its own single-line FontString anchored only TOPRIGHT,
     -- positioned dynamically so its TOP sits on last label row's TOP (= -(N-1)*lineH
     -- from frame.top). lineH measured from labelText's actual rendered height — accounts
-    -- for OUTLINE padding and font metrics that fontSize alone misses. Width does NOT
-    -- participate in auto-fit math; wide coin strings extend leftward freely.
+    -- for OUTLINE padding and font metrics that fontSize alone misses.
     local hasRepair = repairStr and repairStr ~= ""
     if hasRepair then
         local lineH = (self.cachedLabelH and lineCount > 0) and (self.cachedLabelH / lineCount) or GetDB("fontSize")
@@ -628,8 +627,13 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr)
         self.repairText:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", 0, -(lineCount - 1) * lineH)
         self.repairText:SetText(repairStr)
         self.repairText:Show()
+        -- WHY measure here (not in auto-fit below): coin width depends on Text just set above.
+        self.cachedRepairW = MeasuredOrCached(self.repairText, self.cachedRepairW, "GetStringWidth")
     else
         self.repairText:Hide()
+        -- Reset so a previously-wide coin doesn't keep the panel inflated after the user
+        -- disables Show Repair Cost or repair drops to 0g (coin string becomes "").
+        self.cachedRepairW = 0
     end
     self.lastRepairText = repairStr or ""
 
@@ -647,11 +651,19 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr)
     self.ratingText:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", rOffset, 0)
     self.ratingText:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", rOffset, 0)
 
-    -- Total = label + (single 2px gap if anything follows) + rating + rGap + value
+    -- Total width: max of (3-col content row), (label + 2 + repair coin), 80px floor.
+    -- WHY include label+repair as a separate term: the repair row pushes "" for both
+    -- rating and value, so its 3-col total is just label width. The coin string lives
+    -- on the dedicated repairText FontString anchored TOPRIGHT and extends leftward —
+    -- if the panel is narrower than (label + gap + coin), the coin spills into the
+    -- "Repair:" label area (visible regression in single-column display modes where
+    -- offensive rows have only rating OR only percent, narrowing the rating+value side).
+    -- Adding the term as a separate max() candidate (not into the 3-col sum) keeps
+    -- the coin from inflating rating/value column widths for non-repair rows.
     local lGap = (hasRating or hasValue) and 2 or 0
-    local totalW = math.max(
-        (self.cachedLabelW or 0) + lGap + (self.cachedRatingW or 0) + rGap + (self.cachedValueW or 0),
-        80)
+    local rowsTotal = (self.cachedLabelW or 0) + lGap + (self.cachedRatingW or 0) + rGap + (self.cachedValueW or 0)
+    local repairTotal = hasRepair and ((self.cachedLabelW or 0) + 2 + (self.cachedRepairW or 0)) or 0
+    local totalW = math.max(rowsTotal, repairTotal, 80)
     self.frame:SetWidth(totalW)
 
     if lineCount ~= self.lastLineCount then

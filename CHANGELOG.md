@@ -28,6 +28,16 @@
   build a brand new frame. Long sessions with frequent resets gradually grew
   Lua memory. Widget visuals are now re-synced from the freshly-reset DB
   in-place; the frame is reused.
+- **Repair coin no longer overlaps the `Repair:` label** — the coin string
+  with embedded gold/silver/copper icons lives on a dedicated FontString
+  anchored to the panel's right edge, but its width was not participating in
+  the panel auto-fit. In narrower panel layouts (single-column display modes
+  where only `Show Rating` or only `Show Percentage` is on, and no defensive
+  rows) the coin extended leftward across the rating/value area and into the
+  `Repair:` label, producing visual mash like `Repair55..88..12`. Auto-fit now
+  guarantees the panel is wide enough for `label + gap + coin` while keeping
+  the coin OUT of the rating/value column-width math (so non-repair rows
+  aren't bloated). Toggling `Show Repair Cost` off narrows the panel back.
 
 ### Internal
 

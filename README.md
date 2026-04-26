@@ -30,6 +30,24 @@ heavy framework needed.
 - **Auto-aligning columns** — labels and values stay neatly aligned regardless of which stats are enabled, font, or scale; toggling rating-only or percent-only collapses cleanly into one tight column with no awkward gaps
 - **Light footprint** — single-file pure Lua (~1.8k lines), no Ace3, no embedded UI library
 
+## How it looks
+
+**Flat mode (default) — secondary stats in one tight panel:**
+
+![Flat default panel](screenshots/02-flat-default.jpg)
+
+**Rating + percentage side by side — toggle both display modes for three perfectly aligned columns with a clean separator:**
+
+![Rating and percentage columns](screenshots/08-rating-and-percentage.jpg)
+
+**Defensive panel enabled — Dodge, Parry, Armor as % damage reduction:**
+
+![Flat with defensives](screenshots/03-flat-with-defensives.jpg)
+
+**Live repair cost at the vendor — vendor-format coin string with inline gold/silver/copper icons:**
+
+![Repair cost at vendor](screenshots/04-repair-cost-vendor.jpg)
+
 ## Slash commands
 
 | Command | Action |
@@ -59,6 +77,8 @@ the configuration window.
 | **Display** | Master visibility, lock, display mode, font, font size, panel scale, refresh rate, color presets |
 | **Stats** | Per-stat toggles for Primary (Str/Agi/Int) and Tertiary (Leech/Avoidance/Speed) with inline color swatches |
 | **Defensive** | Per-stat toggles for Dodge/Parry/Block/Armor, durability options (auto-color, worst-slot vs average), repair cost |
+
+![Display tab settings](screenshots/05-settings-display.jpg)
 
 ## Compatibility
 

@@ -8,7 +8,9 @@ A lightweight on-screen HUD for World of Warcraft Retail. Displays secondary sta
 defensive stats, durability and live repair cost in a clean, draggable panel — no
 heavy framework needed.
 
-![StatsPro split-mode panels](screenshots/01-split-mode-hero.jpg)
+<p align="center">
+  <img src="screenshots/08-rating-and-percentage.jpg" alt="StatsPro — rating and percentage in three aligned columns" width="640">
+</p>
 
 > Originally inspired by [SwiftStats by TaylorSay](https://www.curseforge.com/wow/addons/swiftstats)
 > (MIT). StatsPro is substantially rewritten — only ~9% of upstream code remains
@@ -36,13 +38,13 @@ heavy framework needed.
 
 ![Flat default panel](screenshots/02-flat-default.jpg)
 
-**Rating + percentage side by side — toggle both display modes for three perfectly aligned columns with a clean separator:**
-
-![Rating and percentage columns](screenshots/08-rating-and-percentage.jpg)
-
 **Defensive panel enabled — Dodge, Parry, Armor as % damage reduction:**
 
 ![Flat with defensives](screenshots/03-flat-with-defensives.jpg)
+
+**Split mode — offensive and defensive on separate movable panels:**
+
+![Split mode panels](screenshots/01-split-mode-hero.jpg)
 
 **Live repair cost at the vendor — vendor-format coin string with inline gold/silver/copper icons:**
 

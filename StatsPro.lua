@@ -1122,6 +1122,22 @@ end)
 --[[ ============================================================
     14. SETTINGS UI HELPERS
 ============================================================ ]]
+-- WHY: each helper that creates a config widget pushes a zero-arg closure that
+-- re-syncs that widget's visuals from DB. Reset to Defaults walks this list
+-- (Section 15) instead of rebuilding the named frame (which would leak
+-- _G.StatsProConfigFrame per click — CreateFrame's named globals are immortal
+-- in WoW Lua, no Hide()/SetParent(nil) releases them).
+local configRefreshers = {}
+local function PushRefresher(fn) tinsert(configRefreshers, fn) end
+
+-- Single source of truth for "DB color or fallback to default". Used by every
+-- color-related helper + their refreshers; lazily initializes the colors table
+-- (StatsProDB may not have it yet on a fresh install).
+local function GetColor(statName)
+    if not StatsProDB.colors then StatsProDB.colors = {} end
+    return StatsProDB.colors[statName] or defaults.colors[statName]
+end
+
 local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWidth)
     local cb = CreateFrame("CheckButton", name, parent, "UICheckButtonTemplate")
     cb:SetPoint("TOPLEFT", x, y)
@@ -1139,6 +1155,7 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
         if onChange then onChange(self:GetChecked()) end
         UpdateStats()
     end)
+    PushRefresher(function() cb:SetChecked(GetDB(dbKey)) end)
     return cb
 end
 
@@ -1162,8 +1179,7 @@ end
 -- at click time, not creation time, so cancelling a 2nd pick reverts to the user's prior
 -- color, not the original default.
 local function OpenColorPicker(btn, statName)
-    if not StatsProDB.colors then StatsProDB.colors = {} end
-    local current = StatsProDB.colors[statName] or defaults.colors[statName]
+    local current = GetColor(statName)
     local snapshot = { r = current.r, g = current.g, b = current.b }
     local function OnColorSelect()
         local r, g, b = ColorPickerFrame:GetColorRGB()
@@ -1198,10 +1214,13 @@ local function CreateColorSwatch(parent, statName, x, y)
         tile = true, tileSize = 16, edgeSize = 10,
         insets = { left = 2, right = 2, top = 2, bottom = 2 },
     })
-    if not StatsProDB.colors then StatsProDB.colors = {} end
-    local initialColor = StatsProDB.colors[statName] or defaults.colors[statName]
+    local initialColor = GetColor(statName)
     btn:SetBackdropColor(initialColor.r, initialColor.g, initialColor.b, 1)
     btn:SetScript("OnClick", function(self) OpenColorPicker(self, statName) end)
+    PushRefresher(function()
+        local c = GetColor(statName)
+        btn:SetBackdropColor(c.r, c.g, c.b, 1)
+    end)
     return btn
 end
 
@@ -1234,10 +1253,13 @@ local function CreateColorPicker(parent, label, statName, yPos, xPos)
         insets = { left = 2, right = 2, top = 2, bottom = 2 },
     })
 
-    if not StatsProDB.colors then StatsProDB.colors = {} end
-    local initialColor = StatsProDB.colors[statName] or defaults.colors[statName]
+    local initialColor = GetColor(statName)
     colorBtn:SetBackdropColor(initialColor.r, initialColor.g, initialColor.b, 1)
     colorBtn:SetScript("OnClick", function(self) OpenColorPicker(self, statName) end)
+    PushRefresher(function()
+        local c = GetColor(statName)
+        colorBtn:SetBackdropColor(c.r, c.g, c.b, 1)
+    end)
 end
 
 --[[ ============================================================
@@ -1290,6 +1312,11 @@ function addon:OpenConfigMenu()
         return
     end
 
+    -- WHY: future-proofing — body below runs exactly once per session due to
+    -- the early-return guard above, but if anyone makes this re-entrant the
+    -- refresher list would duplicate every entry. Cheap insurance.
+    wipe(configRefreshers)
+
     --[[ ===== Frame ===== ]]
     configFrame = CreateFrame("Frame", "StatsProConfigFrame", UIParent, "BackdropTemplate")
     configFrame:SetSize(500, 540)
@@ -1307,7 +1334,9 @@ function addon:OpenConfigMenu()
     configFrame:SetScript("OnDragStart", configFrame.StartMoving)
     configFrame:SetScript("OnDragStop", configFrame.StopMovingOrSizing)
     configFrame:SetClampedToScreen(true)
-    -- WHY: register only once per session; Reset rebuilds the frame but keeps the global name
+    -- WHY: guarded as a one-shot for symmetry — body of OpenConfigMenu runs once
+    -- per session via the early-return on line ~1304, but defensive registration
+    -- guard means even a re-entrant rebuild wouldn't double-add to UISpecialFrames.
     if not configSpecialFrameRegistered then
         tinsert(UISpecialFrames, "StatsProConfigFrame")
         configSpecialFrameRegistered = true
@@ -1499,6 +1528,9 @@ function addon:OpenConfigMenu()
             end
         end)
         UIDropDownMenu_SetText(dmDropdown, GetDisplayModeLabel(GetDB("displayMode")))
+        PushRefresher(function()
+            UIDropDownMenu_SetText(dmDropdown, GetDisplayModeLabel(GetDB("displayMode")))
+        end)
         cd.y = rowY - 30
     end
 
@@ -1564,12 +1596,15 @@ function addon:OpenConfigMenu()
                 UIDropDownMenu_AddButton(info)
             end
         end)
-        local currentFontName = "Friz Quadrata TT"
-        for _, f in ipairs(BuildFontsList()) do
-            if f.path == GetDB("font") then currentFontName = f.name; break end
+        local function CurrentFontName()
+            for _, f in ipairs(BuildFontsList()) do
+                if f.path == GetDB("font") then return f.name end
+            end
+            return "Friz Quadrata TT"
         end
-        UIDropDownMenu_SetText(fontDropdown, currentFontName)
+        UIDropDownMenu_SetText(fontDropdown, CurrentFontName())
         UIDropDownMenu_SetWidth(fontDropdown, 150)
+        PushRefresher(function() UIDropDownMenu_SetText(fontDropdown, CurrentFontName()) end)
 
         -- WHY: text-alignment buttons removed — two-column rendering anchors labels to
         -- the LEFT and values to the RIGHT regardless of any global alignment setting.
@@ -1602,6 +1637,11 @@ function addon:OpenConfigMenu()
             ApplyTextStyleToAllPanels(GetDB("font"), value)
             UpdateStats()
         end)
+        PushRefresher(function()
+            local v = GetDB("fontSize")
+            slider:SetValue(v)
+            _G[slider:GetName().."Text"]:SetText(math.floor(v))
+        end)
         cd.y = sliderY - 50
     end
 
@@ -1626,6 +1666,11 @@ function addon:OpenConfigMenu()
             _G[self:GetName() .. "Text"]:SetText(string.format("%.1f", value))
             StatsProDB.scale = value
             SetAllPanelsScale(value)
+        end)
+        PushRefresher(function()
+            local v = GetDB("scale")
+            slider:SetValue(v)
+            _G[slider:GetName().."Text"]:SetText(string.format("%.1f", v))
         end)
         cd.y = sliderY - 50
     end
@@ -1652,6 +1697,11 @@ function addon:OpenConfigMenu()
             _G[self:GetName() .. "Text"]:SetText(string.format("%.2f", value))
             StatsProDB.updateInterval = value
             CacheSettings()
+        end)
+        PushRefresher(function()
+            local v = GetDB("updateInterval")
+            slider:SetValue(v)
+            _G[slider:GetName().."Text"]:SetText(string.format("%.2f", v))
         end)
         cd.y = sliderY - 50
     end
@@ -1716,6 +1766,7 @@ function addon:OpenConfigMenu()
         speedCb     = CreateCheckboxColor(statsTab, "StatsProSpeedCheck",     "Show Speed",     "showSpeed",     "speed",     cs.padX,       cs.y)
         CursorAdvance(cs, 22)
         ApplyTertiarySubsEnabled(GetDB("showTertiary"))
+        PushRefresher(function() ApplyTertiarySubsEnabled(GetDB("showTertiary")) end)
     end
 
     statsTab.contentHeight = CursorUsed(cs)
@@ -1747,6 +1798,7 @@ function addon:OpenConfigMenu()
         armorCb = CreateCheckboxColor(defensiveTab, "StatsProArmorCheck", "Show Armor", "showArmor", "armor", cdef.padX + 220, cdef.y)
         CursorAdvance(cdef, 22)
         ApplyDefensiveSubsEnabled(GetDB("showDefensive"))
+        PushRefresher(function() ApplyDefensiveSubsEnabled(GetDB("showDefensive")) end)
     end
 
     CursorGap(cdef, 6)
@@ -1770,6 +1822,7 @@ function addon:OpenConfigMenu()
             end)
         repairCostCb = CreateCheckbox(defensiveTab, "StatsProRepairCostCheck", "Show Repair Cost", "showRepairCost", cdef.padX + 220, rowY)
         ApplyRepairCostEnabled(GetDB("showDurability"))
+        PushRefresher(function() ApplyRepairCostEnabled(GetDB("showDurability")) end)
         cdef.y = rowY - 26
         -- WHY: durability swatch sets the override color, used only when Auto Color is OFF.
         -- Grey it out when auto-color is on so the dependency is visible.
@@ -1787,6 +1840,7 @@ function addon:OpenConfigMenu()
             "Auto Color by Threshold", "useAutoColorDurability", cdef.padX, cdef.y,
             function(checked) ApplyDurSwatchEnabled(checked) end)
         ApplyDurSwatchEnabled(GetDB("useAutoColorDurability"))
+        PushRefresher(function() ApplyDurSwatchEnabled(GetDB("useAutoColorDurability")) end)
         CursorAdvance(cdef, 22)
         -- WHY: onChange forces recompute via dirty flag; otherwise display stays stale
         -- until the next equipment event (which may be far off).
@@ -1799,14 +1853,24 @@ function addon:OpenConfigMenu()
     defensiveTab.contentHeight = CursorUsed(cdef)
     defensiveTab:SetHeight(defensiveTab.contentHeight)
 
-    --[[ ===== Reset action (footer button wired here so it can rebuild config) ===== ]]
+    --[[ ===== Reset action (in-place widget refresh, no frame rebuild) ===== ]]
     resetBtn:SetScript("OnClick", function()
+        -- Step 1: close any open modal BEFORE touching DB.
+        -- WHY: ColorPickerFrame:Hide() synchronously fires its registered cancelFunc
+        -- which writes the pre-reset snapshot back to StatsProDB.colors[statName]. If
+        -- we did DB reset first, that cancelFunc would clobber the just-reset default.
+        -- Closing first means cancelFunc writes to a (soon-overwritten) DB — irrelevant.
+        CloseDropDownMenus()
+        if ColorPickerFrame and ColorPickerFrame:IsShown() then ColorPickerFrame:Hide() end
+
+        -- Step 2: reset DB scalars + colors to defaults.
         for k, v in pairs(defaults) do
             if type(v) ~= "table" then StatsProDB[k] = v end
         end
         StatsProDB.colors = CopyTable(defaults.colors)
         StatsProDB.dbVersion = CURRENT_DB_VERSION
 
+        -- Step 3: re-cache + re-apply panel-level visual state.
         CacheSettings()
         ApplyTextStyleToAllPanels(defaults.font, defaults.fontSize)
         SetAllPanelsScale(defaults.scale)
@@ -1814,9 +1878,13 @@ function addon:OpenConfigMenu()
         SetAllPanelsLockState(defaults.isLocked)
         UpdateStats()
 
-        configFrame:Hide()
-        configFrame = nil
-        addon:OpenConfigMenu()
+        -- Step 4: re-sync config widget visuals from freshly-reset DB.
+        -- WHY pcall: a buggy refresher should not break the entire walk. Print error
+        -- context instead of silent fail (CLAUDE.md "Log meaningful context").
+        for _, fn in ipairs(configRefreshers) do
+            local ok, err = pcall(fn)
+            if not ok then PrintMsg("refresher error: " .. tostring(err)) end
+        end
 
         PrintMsg("Settings reset to defaults")
     end)

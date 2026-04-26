@@ -1727,17 +1727,26 @@ function addon:OpenConfigMenu()
     CursorSection(cdef, "Defensive Stats")
     do
         local rowY = cdef.y
-        -- Master toggles: no per-stat color
-        CreateCheckbox(defensiveTab, "StatsProDefensiveCheck",   "Show Defensive Stats", "showDefensive",     cdef.padX,       rowY)
+        -- Sub-toggle refs captured to grey them when master is off (mirrors Tertiary tab).
+        local dodgeCb, parryCb, blockCb, armorCb
+        local function ApplyDefensiveSubsEnabled(masterOn)
+            SetCheckboxEnabled(dodgeCb, masterOn)
+            SetCheckboxEnabled(parryCb, masterOn)
+            SetCheckboxEnabled(blockCb, masterOn)
+            SetCheckboxEnabled(armorCb, masterOn)
+        end
+        CreateCheckbox(defensiveTab, "StatsProDefensiveCheck",   "Show Defensive Stats", "showDefensive",     cdef.padX,       rowY,
+            function(checked) ApplyDefensiveSubsEnabled(checked) end)
         CreateCheckbox(defensiveTab, "StatsProHideZeroDefCheck", "Hide Zero Values",     "hideZeroDefensive", cdef.padX + 220, rowY)
         cdef.y = rowY - 26
         -- Each defensive stat with its own inline color swatch
-        CreateCheckboxColor(defensiveTab, "StatsProDodgeCheck", "Show Dodge", "showDodge", "dodge", cdef.padX,       cdef.y)
-        CreateCheckboxColor(defensiveTab, "StatsProParryCheck", "Show Parry", "showParry", "parry", cdef.padX + 220, cdef.y)
+        dodgeCb = CreateCheckboxColor(defensiveTab, "StatsProDodgeCheck", "Show Dodge", "showDodge", "dodge", cdef.padX,       cdef.y)
+        parryCb = CreateCheckboxColor(defensiveTab, "StatsProParryCheck", "Show Parry", "showParry", "parry", cdef.padX + 220, cdef.y)
         CursorAdvance(cdef, 22)
-        CreateCheckboxColor(defensiveTab, "StatsProBlockCheck", "Show Block", "showBlock", "block", cdef.padX,       cdef.y)
-        CreateCheckboxColor(defensiveTab, "StatsProArmorCheck", "Show Armor", "showArmor", "armor", cdef.padX + 220, cdef.y)
+        blockCb = CreateCheckboxColor(defensiveTab, "StatsProBlockCheck", "Show Block", "showBlock", "block", cdef.padX,       cdef.y)
+        armorCb = CreateCheckboxColor(defensiveTab, "StatsProArmorCheck", "Show Armor", "showArmor", "armor", cdef.padX + 220, cdef.y)
         CursorAdvance(cdef, 22)
+        ApplyDefensiveSubsEnabled(GetDB("showDefensive"))
     end
 
     CursorGap(cdef, 6)

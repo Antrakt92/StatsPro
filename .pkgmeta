@@ -10,6 +10,7 @@ ignore:
   - README.md
   - LICENSE
   - .pkgmeta
+  - screenshots
 
 externals:
   libs/LibStub:

@@ -486,11 +486,22 @@ function Panel:New(globalName, dbKeyPrefix)
     repairText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)  -- y repositioned per render
     repairText:Hide()
 
+    -- Repair row label — dedicated FontString anchored TOPLEFT below labelText (Y set
+    -- per-render in SetTextSafe). Architecturally separate from labelText so the repair
+    -- row sits on its own visual row below stats (visual separation), and so coin can't
+    -- overlap stat-row content. Width set per-render = stats labelW for column alignment.
+    local repairLabelText = frame:CreateFontString(nil, "OVERLAY")
+    repairLabelText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
+    repairLabelText:SetJustifyH("RIGHT")  -- match labelText alignment
+    repairLabelText:SetTextColor(1, 1, 1, 1)
+    repairLabelText:Hide()  -- shown only when hasRepair
+
     self.frame = frame
     self.labelText = labelText
     self.ratingText = ratingText
     self.valueText = valueText
     self.repairText = repairText
+    self.repairLabelText = repairLabelText
 
     -- Drag handlers (unsecure frames; not protected in combat lockdown)
     frame:SetScript("OnMouseDown", function(f, button)
@@ -564,8 +575,11 @@ function Panel:Hide()
     self.lastValueText = nil
     self.lastRepairText = nil
     self.repairText:Hide()
-    -- WARNING: reset lineCount cache too; otherwise re-show may use stale height after font change
+    self.repairLabelText:Hide()
+    -- WARNING: reset lineCount + hasRepair caches too; otherwise re-show may use stale
+    -- height after font change OR fail to re-call SetHeight when hasRepair toggles.
     self.lastLineCount = -1
+    self.lastHasRepair = nil
 end
 
 function Panel:IsShown()
@@ -590,7 +604,7 @@ end
 -- API returns). String comparisons (==, ~=) on secrets error. Use lineCount (always a
 -- real number) for empty-check, and SetText every call instead of deduping by text.
 -- FontString:SetText accepts secrets — that's how Blizzard's own UI renders them.
-function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr)
+function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr)
     if not labelStr or lineCount == 0 then
         self:Hide()
         return
@@ -605,31 +619,47 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr)
     self.lastRatingText = ratingStr or ""
     self.lastValueText = valueStr
 
-    -- Auto-fit width to (label + gap + rating + gap + value). Min width prevents the
-    -- frame from collapsing when all columns are very short.
-    -- WHY 2px gaps: labels RIGHT-justified, rating RIGHT-justified, value LEFT-justified
-    -- — at each column boundary one side is justified outward, so visible gap equals
-    -- exactly this constant with no per-row variance from internal column padding.
+    -- Measure stat columns. WHY 2px gaps: labels RIGHT-justified, rating RIGHT-justified,
+    -- value LEFT-justified — at each column boundary one side is justified outward, so
+    -- visible gap equals exactly this constant with no per-row variance.
     self.cachedLabelW  = MeasuredOrCached(self.labelText,  self.cachedLabelW,  "GetStringWidth")
     self.cachedRatingW = MeasuredOrCached(self.ratingText, self.cachedRatingW, "GetStringWidth")
     self.cachedValueW  = MeasuredOrCached(self.valueText,  self.cachedValueW,  "GetStringWidth")
-    -- labelText height drives Repair-row Y positioning below; cache same way as widths.
+    -- labelText height drives Repair-row Y positioning; cache same way as widths.
     self.cachedLabelH  = MeasuredOrCached(self.labelText,  self.cachedLabelH,  "GetStringHeight")
 
-    -- Repair string lives on its own single-line FontString anchored only TOPRIGHT,
-    -- positioned dynamically so its TOP sits on last label row's TOP (= -(N-1)*lineH
-    -- from frame.top). lineH measured from labelText's actual rendered height — accounts
-    -- for OUTLINE padding and font metrics that fontSize alone misses.
+    local hasRating = (self.cachedRatingW or 0) > 0
+    local hasValue  = (self.cachedValueW  or 0) > 0
+    local rGap = (hasRating and hasValue) and 2 or 0
+    local lGap = (hasRating or hasValue) and 2 or 0
+
+    -- Repair row: rendered on a DEDICATED row below the stat rows (NOT as part of the
+    -- multi-line labelText). Two FontStrings: repairLabelText for "Repair:" at frame.left
+    -- (right-justified to align with stat labels), repairText for the coin at frame.right.
+    -- WHY dedicated row: visual separation from stats + the coin width can exceed stat-
+    -- column space without overlapping stat content rows.
     local hasRepair = repairStr and repairStr ~= ""
     if hasRepair then
         local lineH = (self.cachedLabelH and lineCount > 0) and (self.cachedLabelH / lineCount) or GetDB("fontSize")
+        local repairRowY = -(lineCount * lineH + 4)  -- 4px visible gap separates stats and repair
+
+        -- Repair label: width = stats labelW so "Repair:" right-aligns with other labels.
+        self.repairLabelText:ClearAllPoints()
+        self.repairLabelText:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, repairRowY)
+        self.repairLabelText:SetWidth(self.cachedLabelW or 80)
+        self.repairLabelText:SetText(repairLabelStr or "")
+        self.repairLabelText:Show()
+
+        -- Coin: anchored to frame.right, same Y as the repair label.
         self.repairText:ClearAllPoints()
-        self.repairText:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", 0, -(lineCount - 1) * lineH)
+        self.repairText:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", 0, repairRowY)
         self.repairText:SetText(repairStr)
         self.repairText:Show()
-        -- WHY measure here (not in auto-fit below): coin width depends on Text just set above.
+
+        -- WHY measure here (not in width math below): coin width depends on Text just set.
         self.cachedRepairW = MeasuredOrCached(self.repairText, self.cachedRepairW, "GetStringWidth")
     else
+        self.repairLabelText:Hide()
         self.repairText:Hide()
         -- Reset so a previously-wide coin doesn't keep the panel inflated after the user
         -- disables Show Repair Cost or repair drops to 0g (coin string becomes "").
@@ -637,39 +667,47 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr)
     end
     self.lastRepairText = repairStr or ""
 
-    -- Reposition ratingText so its right edge sits just before the value column.
-    -- ratingText anchors to frame.RIGHT with a NEGATIVE x-offset = -(valueW + rGap).
-    -- rGap = 2 ONLY when BOTH columns have content (real boundary between them).
-    -- valueW=0, ratingW>0 (rating-only): rOffset=0 → rating right-edge at frame.right.
-    -- valueW>0, ratingW=0 (rated/non-rated mixed rows): rOffset=-valueW; rating empty
-    --   so visible position doesn't matter, but no spurious 2px slack in totalW.
-    local hasRating = (self.cachedRatingW or 0) > 0
-    local hasValue  = (self.cachedValueW  or 0) > 0
-    local rGap = (hasRating and hasValue) and 2 or 0
-    local rOffset = -((self.cachedValueW or 0) + rGap)
+    -- Compute width totals.
+    local rowsTotal = (self.cachedLabelW or 0) + lGap + (self.cachedRatingW or 0) + rGap + (self.cachedValueW or 0)
+    -- WHY repair row participates in width as a SEPARATE max() candidate (not added to
+    -- rowsTotal): rowsTotal is the natural width of stat content. Repair row widens the
+    -- panel only when its content (label + 2 + coin) exceeds that. Adding repairW into
+    -- rowsTotal would inflate rating/value column widths for stat rows too, which is
+    -- the exact bug v1.0.4 fixed.
+    local repairTotal = hasRepair and ((self.cachedLabelW or 0) + 2 + (self.cachedRepairW or 0)) or 0
+    local totalW = math.max(rowsTotal, repairTotal, 80)
+
+    -- WHY gated extra: only widen-by-coin causes the offset compensation. Floor 80 (when
+    -- stats < 80 and no repair) must NOT trigger shift — pushing ratingText/valueText
+    -- left of frame.right unnecessarily creates a different visual bug.
+    local extra = (hasRepair and repairTotal > rowsTotal) and (repairTotal - rowsTotal) or 0
+
+    -- ratingText: shift LEFT by `extra` so right edge stays at "stat-content right edge"
+    -- (frame.right - extra), not frame.right. Without this, when frame is widened for
+    -- coin, ratings track frame.right and create a huge gap between labels and values.
+    local rOffset = -(extra + (self.cachedValueW or 0) + rGap)
     self.ratingText:ClearAllPoints()
     self.ratingText:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", rOffset, 0)
     self.ratingText:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", rOffset, 0)
 
-    -- Total width: max of (3-col content row), (label + 2 + repair coin), 80px floor.
-    -- WHY include label+repair as a separate term: the repair row pushes "" for both
-    -- rating and value, so its 3-col total is just label width. The coin string lives
-    -- on the dedicated repairText FontString anchored TOPRIGHT and extends leftward —
-    -- if the panel is narrower than (label + gap + coin), the coin spills into the
-    -- "Repair:" label area (visible regression in single-column display modes where
-    -- offensive rows have only rating OR only percent, narrowing the rating+value side).
-    -- Adding the term as a separate max() candidate (not into the 3-col sum) keeps
-    -- the coin from inflating rating/value column widths for non-repair rows.
-    local lGap = (hasRating or hasValue) and 2 or 0
-    local rowsTotal = (self.cachedLabelW or 0) + lGap + (self.cachedRatingW or 0) + rGap + (self.cachedValueW or 0)
-    local repairTotal = hasRepair and ((self.cachedLabelW or 0) + 2 + (self.cachedRepairW or 0)) or 0
-    local totalW = math.max(rowsTotal, repairTotal, 80)
+    -- valueText: same shift. Was statically anchored in Panel:New (TOPRIGHT 0,0 = frame.right).
+    -- Switch to dynamic per-render so it also pulls back from frame.right when widened.
+    local vOffset = -extra
+    self.valueText:ClearAllPoints()
+    self.valueText:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", vOffset, 0)
+    self.valueText:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", vOffset, 0)
+
     self.frame:SetWidth(totalW)
 
-    if lineCount ~= self.lastLineCount then
+    -- Frame height: stats rows + (1 row + 4px gap if hasRepair) + 8px padding.
+    -- Cache invalidates on either lineCount change or hasRepair flip — both affect height.
+    if lineCount ~= self.lastLineCount or hasRepair ~= self.lastHasRepair then
         local fontSize = GetDB("fontSize")
-        self.frame:SetHeight((lineCount * fontSize) + 8)
+        local h = lineCount * fontSize
+        if hasRepair then h = h + fontSize + 4 end  -- 1 extra row + visual gap
+        self.frame:SetHeight(h + 8)
         self.lastLineCount = lineCount
+        self.lastHasRepair = hasRepair
     end
 end
 
@@ -678,6 +716,7 @@ function Panel:ApplyStyle(font, size)
     self.ratingText:SetFont(font, size, "OUTLINE")
     self.valueText:SetFont(font, size, "OUTLINE")
     self.repairText:SetFont(font, size, "OUTLINE")
+    self.repairLabelText:SetFont(font, size, "OUTLINE")
     -- WHY: Blizzard quirk - SetFont clears text; re-apply if we have one.
     if self.lastLabelText then
         self.labelText:SetText(self.lastLabelText)
@@ -956,23 +995,21 @@ local function BuildDurabilityLines()
             string.format("|cff%sDurability:|r", durStr),
             rCol, vCol)
     end
+    local repairLabelStr
     if cached.showRepairCost and cached.repairCost > 0 then
-        -- WHY label-in-columns + coin-separately split: the "Repair:" label needs to
-        -- right-align with other labels (Durability:, Crit:, ...) at the label-column
-        -- boundary. The coin string with embedded icons is much wider than typical
-        -- percent values though — putting it in the rating or value column would
-        -- inflate that column and bloat the whole panel. So the label takes a normal
-        -- row in the main columns (rating/value left empty), and the coin string is
-        -- returned separately for the dedicated repairText FontString that overlays
-        -- this same row's rating+value area, RIGHT-anchored to frame.right and free
-        -- to extend leftward past the column system without affecting auto-fit math.
-        -- Don't wrap the coin string in |cff...|r — coin icons render inline as
-        -- textures and the color tag would tint them.
-        PushRow(labels, ratings, values,
-            string.format("|cff%sRepair:|r", durStr), "", "")
+        -- WHY no PushRow for Repair: the label + coin render on a DEDICATED row below
+        -- the stat rows (see Panel:SetTextSafe), not as part of the multi-line labelText.
+        -- Two reasons: (1) the coin string with inline gold/silver/copper icons is wider
+        -- than typical stat values, so putting "Repair:" in labelText keeps coin sharing
+        -- a Y with that row — coin overlaps the rating/value content area and (in narrow
+        -- panel modes) the label itself. (2) Visual separation: stats render as one
+        -- group, repair-cost info as a distinct group below.
+        -- Don't wrap the coin string in |cff...|r — coin icons render inline as textures
+        -- and the color tag would tint them.
+        repairLabelStr = string.format("|cff%sRepair:|r", durStr)
         repairStr = FormatRepairCost(cached.repairCost)
     end
-    return labels, ratings, values, repairStr
+    return labels, ratings, values, repairStr, repairLabelStr
 end
 
 -- WHY: separate header injector — sectioned mode places "— Defensive —" between sections.
@@ -1016,12 +1053,12 @@ local function UpdateStats()
     end
 
     -- Build paired (label, value) row arrays per builder.
-    -- repairStr is returned separately because it's rendered on a 4th FontString
-    -- outside the 3-column system (see Panel:New). Goes into whichever panel hosts
-    -- the durability rows in the active display mode.
+    -- repairStr + repairLabelStr are returned separately because they're rendered on
+    -- a dedicated row below the stat columns (see Panel:SetTextSafe), not inside the
+    -- 3-column system. Both travel with whichever panel hosts durability in the active mode.
     local mainLabels, mainRatings, mainValues = BuildMainLines()
     local defLabels,  defRatings,  defValues  = BuildDefensiveLines()
-    local durLabels,  durRatings,  durValues, repairStr = BuildDurabilityLines()
+    local durLabels,  durRatings,  durValues, repairStr, repairLabelStr = BuildDurabilityLines()
 
     -- WHY: in single-column display modes (only rating OR only percent on, or neither),
     -- Build*/Fmt* helpers route ALL content into the rating col and push a literal "" to
@@ -1042,7 +1079,7 @@ local function UpdateStats()
             JoinLinesSecretSafe(mainLabels),
             JoinLinesSecretSafe(mainRatings),
             JoinValuesCol(mainValues),
-            #mainLabels, "")
+            #mainLabels, "", nil)
         -- WHY: defensive panel hosts both defensive stats and durability so the user can
         -- see them together while keeping the main panel focused on offensive/primary.
         local sideLabels, sideRatings, sideValues = {}, {}, {}
@@ -1053,7 +1090,7 @@ local function UpdateStats()
                 JoinLinesSecretSafe(sideLabels),
                 JoinLinesSecretSafe(sideRatings),
                 JoinValuesCol(sideValues),
-                #sideLabels, repairStr)
+                #sideLabels, repairStr, repairLabelStr)
         else
             defensivePanel:Hide()
         end
@@ -1069,7 +1106,7 @@ local function UpdateStats()
             JoinLinesSecretSafe(cLabels),
             JoinLinesSecretSafe(cRatings),
             JoinValuesCol(cValues),
-            #cLabels, repairStr)
+            #cLabels, repairStr, repairLabelStr)
         defensivePanel:Hide()
     else
         -- flat (default)
@@ -1081,7 +1118,7 @@ local function UpdateStats()
             JoinLinesSecretSafe(cLabels),
             JoinLinesSecretSafe(cRatings),
             JoinValuesCol(cValues),
-            #cLabels, repairStr)
+            #cLabels, repairStr, repairLabelStr)
         defensivePanel:Hide()
     end
 end

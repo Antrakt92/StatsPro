@@ -90,6 +90,14 @@ local defaults = {
     showBlock = true,
     showArmor = true,
 
+    -- Offensive stats (preserve current always-shown behavior with default true)
+    showOffensive = true,
+    hideZeroOffensive = false,  -- combat ratings rarely 0; opt-in only (Vers may legit hit 0)
+    showCrit = true,
+    showHaste = true,
+    showMastery = true,
+    showVersatility = true,
+
     -- Durability
     showDurability = false,
     showRepairCost = true,
@@ -120,10 +128,10 @@ local defaults = {
     4. STAT DEFINITION TABLES (data-driven; UpdateStats iterates these)
 ============================================================ ]]
 local OFFENSIVE_STATS = {
-    { label = "Crit",    api = GetCritChance,    ratingCR = CR_CRIT_MELEE,  colorKey = "crit"    },
-    { label = "Haste",   api = GetHaste,         ratingCR = CR_HASTE_MELEE, colorKey = "haste"   },
-    { label = "Mastery", api = GetMasteryEffect, ratingCR = CR_MASTERY,     colorKey = "mastery" },
-    -- versatility handled specially (dual-source: rating + flat)
+    { label = "Crit",    api = GetCritChance,    ratingCR = CR_CRIT_MELEE,  colorKey = "crit",    showKey = "showCrit"    },
+    { label = "Haste",   api = GetHaste,         ratingCR = CR_HASTE_MELEE, colorKey = "haste",   showKey = "showHaste"   },
+    { label = "Mastery", api = GetMasteryEffect, ratingCR = CR_MASTERY,     colorKey = "mastery", showKey = "showMastery" },
+    -- versatility handled specially (dual-source: rating + flat); gated by showVersatility
 }
 
 local DEFENSIVE_STATS = {
@@ -151,6 +159,8 @@ local TERTIARY_STATS = {
 local CACHED_BOOL_KEYS = {
     "isLocked", "isVisible",
     "showRating", "showPercentage", "matchValueColorToStat",
+    "showOffensive", "hideZeroOffensive",
+    "showCrit", "showHaste", "showMastery", "showVersatility",
     "showTertiary", "hideZeroTertiary", "showLeech", "showAvoidance", "showSpeed",
     "showStrength", "showAgility", "showIntellect",
     -- Defensive & durability:
@@ -781,6 +791,8 @@ local function BuildPrimaryLines(labels, ratings, values)
 end
 
 local function BuildOffensiveLines(labels, ratings, values)
+    -- master gate (P-7): hide entire section when off (cheapest check, exits whole function)
+    if not cached.showOffensive then return end
     -- WHY guard: with both display toggles off the user wants offensive rows hidden
     -- entirely. Without this guard the percent-only branch of FmtRatingPct would still
     -- fire (single-column routing), producing visible percent rows and ignoring intent.
@@ -790,30 +802,38 @@ local function BuildOffensiveLines(labels, ratings, values)
     -- skip the GetCombatRating fetch when rating display is off (no consumer)
     local needRating = cached.showRating
     for _, def in ipairs(OFFENSIVE_STATS) do
-        local val = safeCall(def.api)
-        local rating = needRating and safeCall(GetCombatRating, def.ratingCR) or 0
-        local statColor = cs[def.colorKey]
-        local rStr, vStr = FmtRatingPct(rating, val, statColor)
-        PushRow(labels, ratings, values,
-            string.format("|cff%s%s:|r", statColor, def.label),
-            rStr, vStr)
+        if cached[def.showKey] then
+            local val = safeCall(def.api)
+            if shouldShow(val, cached.hideZeroOffensive) then
+                local rating = needRating and safeCall(GetCombatRating, def.ratingCR) or 0
+                local statColor = cs[def.colorKey]
+                local rStr, vStr = FmtRatingPct(rating, val, statColor)
+                PushRow(labels, ratings, values,
+                    string.format("|cff%s%s:|r", statColor, def.label),
+                    rStr, vStr)
+            end
+        end
     end
 
     -- Versatility: dual-source (rating bonus + flat). Cache OOC; in combat use cached.
-    local versFromRating = safeCall(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
-    local versFlat       = safeCall(GetVersatilityBonus,  CR_VERSATILITY_DAMAGE_DONE)
-    local versRating     = safeCall(GetCombatRating,      CR_VERSATILITY_DAMAGE_DONE)
-    -- WARNING: must check ALL three for secret state before arithmetic. Different APIs may
-    -- have different secret states despite same combat status (defensive: guard everything).
-    if not issecretvalue(versFromRating) and not issecretvalue(versFlat) and not issecretvalue(versRating) then
-        cached.versTotal = versFromRating + versFlat
-        cached.versTotalRating = versRating
+    if cached.showVersatility then
+        local versFromRating = safeCall(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
+        local versFlat       = safeCall(GetVersatilityBonus,  CR_VERSATILITY_DAMAGE_DONE)
+        local versRating     = safeCall(GetCombatRating,      CR_VERSATILITY_DAMAGE_DONE)
+        -- WARNING: must check ALL three for secret state before arithmetic. Different APIs may
+        -- have different secret states despite same combat status (defensive: guard everything).
+        if not issecretvalue(versFromRating) and not issecretvalue(versFlat) and not issecretvalue(versRating) then
+            cached.versTotal = versFromRating + versFlat
+            cached.versTotalRating = versRating
+        end
+        if shouldShow(cached.versTotal, cached.hideZeroOffensive) then
+            local versStr = cs.versatility
+            local vRatStr, vValStr = FmtRatingPct(cached.versTotalRating, cached.versTotal, versStr)
+            PushRow(labels, ratings, values,
+                string.format("|cff%sVers:|r", versStr),
+                vRatStr, vValStr)
+        end
     end
-    local versStr = cs.versatility
-    local vRatStr, vValStr = FmtRatingPct(cached.versTotalRating, cached.versTotal, versStr)
-    PushRow(labels, ratings, values,
-        string.format("|cff%sVers:|r", versStr),
-        vRatStr, vValStr)
 end
 
 local function BuildTertiaryLines(labels, ratings, values)
@@ -1744,6 +1764,33 @@ function addon:OpenConfigMenu()
 
     CursorGap(cs, 6)
 
+    CursorSection(cs, "Offensive Stats")
+    do
+        local rowY = cs.y
+        -- Per-stat colors live in Display tab "Stat Colors" — don't duplicate inline swatches.
+        local critCb, hasteCb, masteryCb, versCb
+        local function ApplyOffensiveSubsEnabled(masterOn)
+            SetCheckboxEnabled(critCb,    masterOn)
+            SetCheckboxEnabled(hasteCb,   masterOn)
+            SetCheckboxEnabled(masteryCb, masterOn)
+            SetCheckboxEnabled(versCb,    masterOn)
+        end
+        CreateCheckbox(statsTab, "StatsProOffensiveCheck",  "Show Offensive Stats", "showOffensive",     cs.padX,       rowY,
+            function(checked) ApplyOffensiveSubsEnabled(checked) end)
+        CreateCheckbox(statsTab, "StatsProHideZeroOffCheck", "Hide Zero Values",    "hideZeroOffensive", cs.padX + 220, rowY)
+        cs.y = rowY - 26
+        critCb    = CreateCheckbox(statsTab, "StatsProCritCheck",    "Show Crit",        "showCrit",        cs.padX,       cs.y)
+        hasteCb   = CreateCheckbox(statsTab, "StatsProHasteCheck",   "Show Haste",       "showHaste",       cs.padX + 220, cs.y)
+        CursorAdvance(cs, 22)
+        masteryCb = CreateCheckbox(statsTab, "StatsProMasteryCheck", "Show Mastery",     "showMastery",     cs.padX,       cs.y)
+        versCb    = CreateCheckbox(statsTab, "StatsProVersCheck",    "Show Versatility", "showVersatility", cs.padX + 220, cs.y)
+        CursorAdvance(cs, 22)
+        ApplyOffensiveSubsEnabled(GetDB("showOffensive"))
+        PushRefresher(function() ApplyOffensiveSubsEnabled(GetDB("showOffensive")) end)
+    end
+
+    CursorGap(cs, 6)
+
     CursorSection(cs, "Tertiary Stats")
     do
         local rowY = cs.y
@@ -1914,9 +1961,13 @@ function addon:PrintDebugDump()
     PrintMsg(string.format("show fmt: rating=%s pct=%s matchColor=%s",
         tostring(cached.showRating), tostring(cached.showPercentage), tostring(cached.matchValueColorToStat)))
 
-    PrintMsg(string.format("show stats: tert=%s defensive=%s dur=%s str=%s agi=%s int=%s",
+    PrintMsg(string.format("show stats: off=%s tert=%s defensive=%s dur=%s str=%s agi=%s int=%s",
+        tostring(cached.showOffensive),
         tostring(cached.showTertiary), tostring(cached.showDefensive), tostring(cached.showDurability),
         tostring(cached.showStrength), tostring(cached.showAgility), tostring(cached.showIntellect)))
+
+    PrintMsg(string.format("subs off: crit=%s haste=%s mastery=%s vers=%s",
+        tostring(cached.showCrit), tostring(cached.showHaste), tostring(cached.showMastery), tostring(cached.showVersatility)))
 
     PrintMsg(string.format("subs: leech=%s avoid=%s speed=%s | dodge=%s parry=%s block=%s armor=%s",
         tostring(cached.showLeech), tostring(cached.showAvoidance), tostring(cached.showSpeed),

@@ -1,5 +1,47 @@
 # Changelog
 
+## 1.0.5 — Offensive toggles + leak-free reset
+
+### Added
+
+- **Master "Show Offensive Stats" toggle on the Stats tab** — Crit / Haste /
+  Mastery / Versatility now each have their own visibility checkbox plus a
+  master toggle, mirroring the Tertiary and Defensive sections. Healers and
+  tanks who only want defensive + tertiary stats on screen can finally hide
+  the offensive block without disabling both display-format toggles. Includes
+  an opt-in `Hide Zero Values` filter (default off) for users with classes
+  that drop a stat to zero.
+- **`/ss debug` slash subcommand** — dumps addon version, DB version, all
+  visible-toggle states, panel positions, and current Lua memory usage into
+  chat. Useful for self-serve bug-report diagnostics — paste the output
+  instead of describing config state by hand.
+
+### Fixed
+
+- **Defensive sub-toggles now grey out when master is off** — `Show Dodge` /
+  `Show Parry` / `Show Block` / `Show Armor` now follow the same dependency-
+  disable pattern already used by the Tertiary tab (Leech/Avoidance/Speed
+  greyed when master Tertiary is off) and the Durability sub-controls.
+- **"Reset to Defaults" no longer leaks the config frame** — every Reset click
+  used to orphan the previous `StatsProConfigFrame` global plus all its child
+  widgets in `_G` (CreateFrame's named globals are immortal in WoW Lua) and
+  build a brand new frame. Long sessions with frequent resets gradually grew
+  Lua memory. Widget visuals are now re-synced from the freshly-reset DB
+  in-place; the frame is reused.
+
+### Internal
+
+- Config-UI helpers (`CreateCheckbox`, `CreateColorSwatch`, `CreateColorPicker`)
+  auto-register a "refresher" closure when they build a widget. The Reset
+  button walks this list to re-sync each widget's visual state from DB
+  without rebuilding the frame.
+- Extracted `GetColor(statName)` helper — shared between `OpenColorPicker`,
+  `CreateColorSwatch`, `CreateColorPicker`, and the new color-swatch
+  refreshers. Single source of truth for "DB color or fallback to default".
+- `OFFENSIVE_STATS` table extended with a `showKey` field per row, enabling
+  the per-stat guard in `BuildOffensiveLines` (mirrors the existing
+  `DEFENSIVE_STATS` / `TERTIARY_STATS` pattern).
+
 ## 1.0.4 — Combat-safe lock toggle
 
 ### Fixed

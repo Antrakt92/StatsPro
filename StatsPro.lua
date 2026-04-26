@@ -641,7 +641,7 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     local hasRepair = repairStr and repairStr ~= ""
     if hasRepair then
         local lineH = (self.cachedLabelH and lineCount > 0) and (self.cachedLabelH / lineCount) or GetDB("fontSize")
-        local repairRowY = -(lineCount * lineH + 4)  -- 4px visible gap separates stats and repair
+        local repairRowY = -(lineCount * lineH + 2)  -- 2px visible gap separates stats and repair
 
         -- Repair label: width = stats labelW so "Repair:" right-aligns with other labels.
         self.repairLabelText:ClearAllPoints()
@@ -699,12 +699,12 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
 
     self.frame:SetWidth(totalW)
 
-    -- Frame height: stats rows + (1 row + 4px gap if hasRepair) + 8px padding.
+    -- Frame height: stats rows + (1 row + 2px gap if hasRepair) + 8px padding.
     -- Cache invalidates on either lineCount change or hasRepair flip — both affect height.
     if lineCount ~= self.lastLineCount or hasRepair ~= self.lastHasRepair then
         local fontSize = GetDB("fontSize")
         local h = lineCount * fontSize
-        if hasRepair then h = h + fontSize + 4 end  -- 1 extra row + visual gap
+        if hasRepair then h = h + fontSize + 2 end  -- 1 extra row + visual gap
         self.frame:SetHeight(h + 8)
         self.lastLineCount = lineCount
         self.lastHasRepair = hasRepair

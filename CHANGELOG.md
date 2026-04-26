@@ -37,7 +37,7 @@
   visual mash like `Repair55..88..12`. The Repair row is now visually
   separated from the stats: stat columns render compactly at the top of the
   panel, and the Repair label + coin sit on a dedicated row below them with
-  a 4px gap. Stat columns stay packed at the panel's left edge even when the
+  a 2px gap. Stat columns stay packed at the panel's left edge even when the
   panel widens to accommodate the coin, so values are no longer pushed to the
   far-right with a big gap from their labels. Toggling `Show Repair Cost`
   off shrinks the panel back to stat-content size.

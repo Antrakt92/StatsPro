@@ -28,16 +28,19 @@
   build a brand new frame. Long sessions with frequent resets gradually grew
   Lua memory. Widget visuals are now re-synced from the freshly-reset DB
   in-place; the frame is reused.
-- **Repair coin no longer overlaps the `Repair:` label** — the coin string
-  with embedded gold/silver/copper icons lives on a dedicated FontString
-  anchored to the panel's right edge, but its width was not participating in
-  the panel auto-fit. In narrower panel layouts (single-column display modes
-  where only `Show Rating` or only `Show Percentage` is on, and no defensive
-  rows) the coin extended leftward across the rating/value area and into the
-  `Repair:` label, producing visual mash like `Repair55..88..12`. Auto-fit now
-  guarantees the panel is wide enough for `label + gap + coin` while keeping
-  the coin OUT of the rating/value column-width math (so non-repair rows
-  aren't bloated). Toggling `Show Repair Cost` off narrows the panel back.
+- **Repair coin moved to its own row below stats** — the coin string with
+  embedded gold/silver/copper icons used to share a row with the `Repair:`
+  label inside the multi-line stats label FontString, and the coin width was
+  not participating in panel auto-fit. In narrower panel layouts (single-
+  column display modes with no defensive rows) the coin extended leftward
+  across the rating/value area and into the `Repair:` label, producing a
+  visual mash like `Repair55..88..12`. The Repair row is now visually
+  separated from the stats: stat columns render compactly at the top of the
+  panel, and the Repair label + coin sit on a dedicated row below them with
+  a 4px gap. Stat columns stay packed at the panel's left edge even when the
+  panel widens to accommodate the coin, so values are no longer pushed to the
+  far-right with a big gap from their labels. Toggling `Show Repair Cost`
+  off shrinks the panel back to stat-content size.
 
 ### Internal
 

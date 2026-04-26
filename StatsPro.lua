@@ -1084,6 +1084,21 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
     return cb
 end
 
+-- Toggle a checkbox's enabled state with matching label dim. Used by dependent-toggle
+-- greying patterns (Repair Cost gated on Show Durability; Leech/Avoidance/Speed gated
+-- on Show Tertiary Stats master) to make the dependency visible.
+local function SetCheckboxEnabled(cb, enabled)
+    if not cb then return end
+    local txt = _G[cb:GetName() .. "Text"]
+    if enabled then
+        cb:Enable()
+        if txt then txt:SetTextColor(1, 1, 1, 1) end
+    else
+        cb:Disable()
+        if txt then txt:SetTextColor(0.5, 0.5, 0.5, 1) end
+    end
+end
+
 -- WHY: shared snapshot/select/cancel handler used by both CreateColorSwatch (compact 22x16
 -- inline button) and CreateColorPicker (labeled "Stat Color:" 30x20 row). Snapshot is taken
 -- at click time, not creation time, so cancelling a 2nd pick reverts to the user's prior
@@ -1620,16 +1635,25 @@ function addon:OpenConfigMenu()
     CursorSection(cs, "Tertiary Stats")
     do
         local rowY = cs.y
-        -- Master toggles: no per-stat color
-        CreateCheckbox(statsTab, "StatsProTertiaryCheck", "Show Tertiary Stats", "showTertiary",     cs.padX,       rowY)
+        -- Sub-toggle refs captured to grey them when master is off (mirrors the
+        -- dependency-disable pattern on the Defensive tab's Repair Cost / Auto-Color).
+        local leechCb, avoidanceCb, speedCb
+        local function ApplyTertiarySubsEnabled(masterOn)
+            SetCheckboxEnabled(leechCb,     masterOn)
+            SetCheckboxEnabled(avoidanceCb, masterOn)
+            SetCheckboxEnabled(speedCb,     masterOn)
+        end
+        CreateCheckbox(statsTab, "StatsProTertiaryCheck", "Show Tertiary Stats", "showTertiary", cs.padX, rowY,
+            function(checked) ApplyTertiarySubsEnabled(checked) end)
         CreateCheckbox(statsTab, "StatsProHideZeroCheck", "Hide Zero Values",    "hideZeroTertiary", cs.padX + 220, rowY)
         cs.y = rowY - 26
         -- Each tertiary stat with its own inline color swatch
-        CreateCheckboxColor(statsTab, "StatsProLeechCheck",     "Show Leech",     "showLeech",     "leech",     cs.padX,       cs.y)
-        CreateCheckboxColor(statsTab, "StatsProAvoidanceCheck", "Show Avoidance", "showAvoidance", "avoidance", cs.padX + 220, cs.y)
+        leechCb     = CreateCheckboxColor(statsTab, "StatsProLeechCheck",     "Show Leech",     "showLeech",     "leech",     cs.padX,       cs.y)
+        avoidanceCb = CreateCheckboxColor(statsTab, "StatsProAvoidanceCheck", "Show Avoidance", "showAvoidance", "avoidance", cs.padX + 220, cs.y)
         CursorAdvance(cs, 22)
-        CreateCheckboxColor(statsTab, "StatsProSpeedCheck",     "Show Speed",     "showSpeed",     "speed",     cs.padX,       cs.y)
+        speedCb     = CreateCheckboxColor(statsTab, "StatsProSpeedCheck",     "Show Speed",     "showSpeed",     "speed",     cs.padX,       cs.y)
         CursorAdvance(cs, 22)
+        ApplyTertiarySubsEnabled(GetDB("showTertiary"))
     end
 
     statsTab.contentHeight = CursorUsed(cs)
@@ -1663,15 +1687,7 @@ function addon:OpenConfigMenu()
         -- Grey out the cost checkbox when durability is off so the dependency is visible.
         local repairCostCb
         local function ApplyRepairCostEnabled(durEnabled)
-            if not repairCostCb then return end
-            local txt = _G[repairCostCb:GetName() .. "Text"]
-            if durEnabled then
-                repairCostCb:Enable()
-                if txt then txt:SetTextColor(1, 1, 1, 1) end
-            else
-                repairCostCb:Disable()
-                if txt then txt:SetTextColor(0.5, 0.5, 0.5, 1) end
-            end
+            SetCheckboxEnabled(repairCostCb, durEnabled)
         end
         -- Durability swatch is the override color used when Auto Color is OFF.
         -- WHY: also mark dirty so re-enabling after a long off period gets fresh values

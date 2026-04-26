@@ -1043,6 +1043,10 @@ local EVENT_HANDLERS = {
     PLAYER_LOGOUT               = OnPlayerLogout,
     UPDATE_INVENTORY_DURABILITY = function() durabilityDirty = true end,
     PLAYER_EQUIPMENT_CHANGED    = function() durabilityDirty = true end,
+    -- WHY: Panel:Unlock no-ops in combat (defensive InCombatLockdown guard). Toggling
+    -- Lock Frames OFF mid-combat writes DB but leaves panels mouse-disabled until
+    -- /reload. Re-apply lock state on combat exit so visual matches DB.
+    PLAYER_REGEN_ENABLED        = function() SetAllPanelsLockState(GetDB("isLocked")) end,
 }
 
 local eventFrame = CreateFrame("Frame")

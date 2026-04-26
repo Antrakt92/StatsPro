@@ -7,7 +7,7 @@
 ## SavedVariables: StatsProDB
 ## X-License: MIT
 ## X-Website: https://github.com/Antrakt92/StatsPro
-## X-Curse-Project-ID: 0
+## X-Curse-Project-ID: 1525100
 ## X-Category: Combat
 ## X-Credits: Inspired by SwiftStats by TaylorSay (MIT)
 

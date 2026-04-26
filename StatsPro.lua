@@ -1,4 +1,4 @@
--- StatsPro.lua  v1.0
+-- StatsPro.lua
 -- Inspired by SwiftStats by TaylorSay (MIT). ~9% of upstream code remains verbatim
 -- (boilerplate, color defaults, basic stat list); the rest is original work. See
 -- LICENSE for full attribution.
@@ -27,6 +27,14 @@ local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
 
 -- WHY: issecretvalue is 12.0+ retail; shim falsy on older clients so addon doesn't hard-error.
 local issecretvalue = _G.issecretvalue or function() return false end
+
+-- WHY single source of truth: Version comes from the TOC `## Version:` line, which
+-- BigWigs Packager substitutes from the git tag at release build time (`@project-version@`
+-- → e.g. `1.0.1`). Reading via GetAddOnMetadata means every release auto-syncs the
+-- in-game settings title without a code edit. Local dev (running from source) sees the
+-- literal `@project-version@` token from the unsubstituted TOC — collapse to "dev".
+local ADDON_VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("StatsPro", "Version") or "?"
+if ADDON_VERSION:find("project%-version") then ADDON_VERSION = "dev" end
 
 --[[ ============================================================
     3. DEFAULTS
@@ -1229,7 +1237,7 @@ function addon:OpenConfigMenu()
     local title = configFrame:CreateFontString(nil, "OVERLAY")
     title:SetFont("Fonts\\FRIZQT__.TTF", 16, "OUTLINE")
     title:SetPoint("TOP", 0, -12)
-    title:SetText("|cff00ff7fStatsPro|r v1.0 Settings")
+    title:SetText("|cff00ff7fStatsPro|r v" .. ADDON_VERSION .. " Settings")
 
     local closeX = CreateFrame("Button", nil, configFrame, "UIPanelCloseButton")
     closeX:SetPoint("TOPRIGHT", -4, -4)
@@ -1705,7 +1713,7 @@ launcher.name = "StatsPro"
 
 local launcherTitle = launcher:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
 launcherTitle:SetPoint("TOPLEFT", 16, -16)
-launcherTitle:SetText("StatsPro v1.0")
+launcherTitle:SetText("StatsPro v" .. ADDON_VERSION)
 
 local launcherDesc = launcher:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 launcherDesc:SetPoint("TOPLEFT", launcherTitle, "BOTTOMLEFT", 0, -8)

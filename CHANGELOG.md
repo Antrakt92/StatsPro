@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.2 — Dynamic version display
+
+### Fixed
+
+- **Settings window and Blizzard interface options panel showed stale "v1.0"** —
+  the version string was hardcoded in the title and launcher labels, so installing
+  v1.0.1 still displayed "StatsPro v1.0 Settings". Both labels now read the version
+  from the TOC at runtime via `C_AddOns.GetAddOnMetadata`, so future releases keep
+  the in-game UI in sync without a code edit.
+
 ## 1.0.1 — Single-column display polish
 
 ### Changed

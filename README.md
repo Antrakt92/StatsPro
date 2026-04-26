@@ -9,7 +9,7 @@ defensive stats, durability and live repair cost in a clean, draggable panel —
 heavy framework needed.
 
 <p align="center">
-  <img src="screenshots/08-rating-and-percentage.jpg" alt="StatsPro — rating and percentage in three aligned columns" width="640">
+  <img src="screenshots/08-rating-and-percentage.jpg" alt="StatsPro — rating and percentage in three aligned columns">
 </p>
 
 > Originally inspired by [SwiftStats by TaylorSay](https://www.curseforge.com/wow/addons/swiftstats)

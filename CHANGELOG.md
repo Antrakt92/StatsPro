@@ -8,12 +8,12 @@
   updated saved settings but `Panel:Unlock` no-op'd via its `InCombatLockdown`
   guard, leaving panels mouse-disabled until `/reload`. A `PLAYER_REGEN_ENABLED`
   handler now re-applies the saved lock state on combat exit.
-- **SwiftStatsLocal migration aliased sub-tables** — first-load migration shallow-
-  copied the legacy DB, so `StatsProDB.colors` shared a Lua table reference with
+- **SwiftStatsLocal migration aliased sub-tables** — first-load migration
+  shallow-copied the legacy DB, so `StatsProDB.colors` shared a Lua table reference with
   `SwiftStatsLocalDB.colors` for as long as both addons were enabled. Color-picker
   edits in either silently mutated the other. Sub-tables now go through `CopyTable`.
-- **Default-fill skipped on coincidental version match** — `MigrateDB` early-
-  returned when `db.dbVersion == CURRENT_DB_VERSION`, so SwiftStatsLocal migrants
+- **Default-fill skipped on coincidental version match** — `MigrateDB`
+  early-returned when `db.dbVersion == CURRENT_DB_VERSION`, so SwiftStatsLocal migrants
   whose legacy DB happened to carry `dbVersion=3` never picked up StatsPro's
   default scalars or color entries. The init loops now run before the version
   early-return (idempotent — only fills missing keys).
@@ -88,8 +88,8 @@
 
 ### Fixed
 
-- **Wide gap / truncated percentage in single-display modes** — `FontString:GetString-
-  Width()` on a mostly-empty multi-line string (e.g. `"\n\n\n92.3%"`) is unreliable
+- **Wide gap / truncated percentage in single-display modes** —
+  `FontString:GetStringWidth()` on a mostly-empty multi-line string (e.g. `"\n\n\n92.3%"`) is unreliable
   in 12.x retail, leaving cached column widths stale and the panel layout broken.
   `FmtRatingPct`, `FmtPctOnly`, and the inline Primary/Armor/Durability/Repair pushes
   now route their value into the rating column whenever the dual-column mode is off,

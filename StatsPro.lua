@@ -229,12 +229,22 @@ local function shouldShow(val, hideZero)
 end
 
 local function FormatRepairCost(copper)
-    -- WHY: Blizzard's GetCoinTextureString embeds gold/silver/copper icons inline,
-    -- matching the vendor display exactly. Falls back to gold-only if API missing.
-    if GetCoinTextureString then
-        return GetCoinTextureString(copper)
+    -- WHY custom build over GetCoinTextureString: the Blizzard helper sizes inline
+    -- icons to font height. Building manually with slightly smaller icons (fontSize-2,
+    -- floor 8) keeps the row compact when it overhangs leftward off the panel.
+    -- Same texture paths as GetCoinTextureString uses internally.
+    local g = math.floor(copper / 10000)
+    local s = math.floor((copper % 10000) / 100)
+    local c = copper % 100
+    local sz = math.max(8, GetDB("fontSize") - 2)
+    local function icon(name)
+        return "|TInterface\\MoneyFrame\\UI-" .. name .. "Icon:" .. sz .. ":" .. sz .. ":2:0|t"
     end
-    return string.format("%dg", math.floor(copper / 10000))
+    local out = ""
+    if g > 0 then out = g .. icon("Gold") end
+    if s > 0 then out = out .. (out ~= "" and " " or "") .. s .. icon("Silver") end
+    if c > 0 or out == "" then out = out .. (out ~= "" and " " or "") .. c .. icon("Copper") end
+    return out
 end
 
 local function ComputeDurabilityColor(pct)
@@ -457,10 +467,25 @@ function Panel:New(globalName, dbKeyPrefix)
     valueText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
     valueText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
 
+    -- WHY 4th FontString outside the 3-column system: Repair coin string with embedded
+    -- gold/silver/copper icons is much wider than typical percent values. Including it
+    -- in any of the 3 columns would inflate that column's width and bloat the whole
+    -- panel just for one row. This FontString sits at the bottom row (below the column
+    -- area), RIGHT-anchored to frame.right but its width does NOT participate in panel
+    -- auto-fit math — wide repair strings extend leftward past frame.left if needed.
+    local repairText = frame:CreateFontString(nil, "OVERLAY")
+    repairText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
+    repairText:SetJustifyH("RIGHT")
+    repairText:SetJustifyV("BOTTOM")
+    repairText:SetTextColor(1, 1, 1, 1)
+    repairText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 4)
+    repairText:Hide()
+
     self.frame = frame
     self.labelText = labelText
     self.ratingText = ratingText
     self.valueText = valueText
+    self.repairText = repairText
 
     -- Drag handlers (unsecure frames; not protected in combat lockdown)
     frame:SetScript("OnMouseDown", function(f, button)
@@ -532,6 +557,8 @@ function Panel:Hide()
     self.lastLabelText = nil
     self.lastRatingText = nil
     self.lastValueText = nil
+    self.lastRepairText = nil
+    self.repairText:Hide()
     -- WARNING: reset lineCount cache too; otherwise re-show may use stale height after font change
     self.lastLineCount = -1
 end
@@ -545,7 +572,7 @@ end
 -- API returns). String comparisons (==, ~=) on secrets error. Use lineCount (always a
 -- real number) for empty-check, and SetText every call instead of deduping by text.
 -- FontString:SetText accepts secrets — that's how Blizzard's own UI renders them.
-function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount)
+function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr)
     if not labelStr or lineCount == 0 then
         self:Hide()
         return
@@ -559,6 +586,18 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount)
     self.lastLabelText = labelStr
     self.lastRatingText = ratingStr or ""
     self.lastValueText = valueStr
+
+    -- Repair string lives on its own FontString anchored BOTTOMRIGHT, RIGHT-justified.
+    -- Excluded from auto-fit width math (see WHY at the FontString creation in Panel:New).
+    -- Counts as one extra row for height purposes.
+    local hasRepair = repairStr and repairStr ~= ""
+    if hasRepair then
+        self.repairText:SetText(repairStr)
+        self.repairText:Show()
+    else
+        self.repairText:Hide()
+    end
+    self.lastRepairText = repairStr or ""
 
     -- Auto-fit width to (label + gap + rating + gap + value). Min width prevents the
     -- frame from collapsing when all columns are very short.
@@ -605,10 +644,11 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount)
         80)
     self.frame:SetWidth(totalW)
 
-    if lineCount ~= self.lastLineCount then
+    local effectiveLineCount = lineCount + (hasRepair and 1 or 0)
+    if effectiveLineCount ~= self.lastLineCount then
         local fontSize = GetDB("fontSize")
-        self.frame:SetHeight((lineCount * fontSize) + 8)
-        self.lastLineCount = lineCount
+        self.frame:SetHeight((effectiveLineCount * fontSize) + 8)
+        self.lastLineCount = effectiveLineCount
     end
 end
 
@@ -616,6 +656,7 @@ function Panel:ApplyStyle(font, size)
     self.labelText:SetFont(font, size, "OUTLINE")
     self.ratingText:SetFont(font, size, "OUTLINE")
     self.valueText:SetFont(font, size, "OUTLINE")
+    self.repairText:SetFont(font, size, "OUTLINE")
     -- WHY: Blizzard quirk - SetFont clears text; re-apply if we have one.
     if self.lastLabelText then
         self.labelText:SetText(self.lastLabelText)
@@ -625,6 +666,9 @@ function Panel:ApplyStyle(font, size)
     end
     if self.lastValueText then
         self.valueText:SetText(self.lastValueText)
+    end
+    if self.lastRepairText and self.lastRepairText ~= "" then
+        self.repairText:SetText(self.lastRepairText)
     end
     -- Force resize on next SetTextSafe
     self.lastLineCount = -1
@@ -862,7 +906,8 @@ end
 -- builder so users can show only durability without enabling the dodge/parry/block block.
 local function BuildDurabilityLines()
     local labels, ratings, values = {}, {}, {}
-    if not cached.showDurability then return labels, ratings, values end
+    local repairStr = ""
+    if not cached.showDurability then return labels, ratings, values, repairStr end
     local cs = cached.colorStrings
     local pct = cached.durabilityValue
     local durStr = cs.durability
@@ -880,15 +925,16 @@ local function BuildDurabilityLines()
             rCol, vCol)
     end
     if cached.showRepairCost and cached.repairCost > 0 then
-        -- WHY: own row — keeps the right column visually a column of values, not a mix
-        -- of percentages and coin strings. Don't wrap GetCoinTextureString output in
-        -- |cff...|r — coin icons render inline as textures and the color tag would tint them.
-        local rCol, vCol = RouteValueOnly(FormatRepairCost(cached.repairCost))
-        PushRow(labels, ratings, values,
-            string.format("|cff%sRepair:|r", durStr),
-            rCol, vCol)
+        -- WHY returned separately (not pushed into label/rating/value columns): the
+        -- coin string with embedded icons is much wider than typical percent values.
+        -- A dedicated FontString outside the column system carries it (see Panel:New
+        -- comment) so wide repairs don't bloat the panel; they extend leftward freely.
+        -- Don't wrap in |cff...|r — coin icons render inline as textures and the
+        -- color tag would tint them. The "Repair:" label is bundled into the same
+        -- string with explicit color so the row reads naturally.
+        repairStr = string.format("|cff%sRepair:|r ", durStr) .. FormatRepairCost(cached.repairCost)
     end
-    return labels, ratings, values
+    return labels, ratings, values, repairStr
 end
 
 -- WHY: separate header injector — sectioned mode places "— Defensive —" between sections.
@@ -931,10 +977,13 @@ local function UpdateStats()
         RefreshDurabilityCache()
     end
 
-    -- Build paired (label, value) row arrays per builder
+    -- Build paired (label, value) row arrays per builder.
+    -- repairStr is returned separately because it's rendered on a 4th FontString
+    -- outside the 3-column system (see Panel:New). Goes into whichever panel hosts
+    -- the durability rows in the active display mode.
     local mainLabels, mainRatings, mainValues = BuildMainLines()
     local defLabels,  defRatings,  defValues  = BuildDefensiveLines()
-    local durLabels,  durRatings,  durValues  = BuildDurabilityLines()
+    local durLabels,  durRatings,  durValues, repairStr = BuildDurabilityLines()
 
     -- WHY: in single-column display modes (only rating OR only percent on, or neither),
     -- Build*/Fmt* helpers route ALL content into the rating col and push a literal "" to
@@ -947,14 +996,15 @@ local function UpdateStats()
         return ""
     end
 
-    -- Dispatch by display mode
+    -- Dispatch by display mode. repairStr always travels with the durability rows;
+    -- in split mode that's the defensive panel, otherwise the main panel.
     local mode = cached.displayMode or "flat"
     if mode == "split" then
         mainPanel:SetTextSafe(
             JoinLinesSecretSafe(mainLabels),
             JoinLinesSecretSafe(mainRatings),
             JoinValuesCol(mainValues),
-            #mainLabels)
+            #mainLabels, "")
         -- WHY: defensive panel hosts both defensive stats and durability so the user can
         -- see them together while keeping the main panel focused on offensive/primary.
         local sideLabels, sideRatings, sideValues = {}, {}, {}
@@ -965,7 +1015,7 @@ local function UpdateStats()
                 JoinLinesSecretSafe(sideLabels),
                 JoinLinesSecretSafe(sideRatings),
                 JoinValuesCol(sideValues),
-                #sideLabels)
+                #sideLabels, repairStr)
         else
             defensivePanel:Hide()
         end
@@ -981,7 +1031,7 @@ local function UpdateStats()
             JoinLinesSecretSafe(cLabels),
             JoinLinesSecretSafe(cRatings),
             JoinValuesCol(cValues),
-            #cLabels)
+            #cLabels, repairStr)
         defensivePanel:Hide()
     else
         -- flat (default)
@@ -993,7 +1043,7 @@ local function UpdateStats()
             JoinLinesSecretSafe(cLabels),
             JoinLinesSecretSafe(cRatings),
             JoinValuesCol(cValues),
-            #cLabels)
+            #cLabels, repairStr)
         defensivePanel:Hide()
     end
 end

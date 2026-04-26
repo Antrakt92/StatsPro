@@ -20,6 +20,11 @@
 
 ### Improved
 
+- **Repair cost no longer widens the panel** — the coin string (`151g 17c` with
+  inline icons) now renders in the rating column (right-edge-aligned with
+  `1054`, `357`, etc.) instead of the value column. Previously its extra width
+  forced the whole panel wider just for that one row. Coin icons also shrunk
+  to `fontSize - 2` so wide values fit cleanly.
 - **Tertiary sub-toggles grey out when master is off** — `Show Leech` /
   `Show Avoidance` / `Show Speed` now follow the same dependency-disable pattern
   the Defensive tab already uses for `Show Repair Cost` (gated on `Show Durability`)

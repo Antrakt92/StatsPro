@@ -1,15 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Fixed
-
-- **Misaligned rating + percentage columns** — when both "Show Rating" and "Show Percentage"
-  were on, the `|` separator and percent values drifted horizontally row-to-row because
-  rating widths varied (46 vs 843). Split the value display into a third FontString:
-  rating column is now its own RIGHT-justified column between label and value, so all
-  rating right-edges line up vertically and the percent column has a clean fixed left edge.
-
 ## 1.0.0 — Initial release
 
 First public release under the StatsPro name. Originally inspired by SwiftStats v2.1
@@ -48,6 +38,11 @@ work added on top of (or in place of) the upstream foundation.
 
 ### Fixed
 
+- **Misaligned rating + percentage columns** — when both "Show Rating" and "Show Percentage"
+  were on, the `|` separator and percent values drifted horizontally row-to-row because
+  rating widths varied (46 vs 843). Rating is now its own RIGHT-justified third FontString
+  between label and value, so all rating right-edges line up vertically and the percent
+  column has a clean fixed left edge.
 - **Frame position not persisting** — `SetUserPlaced(true)` now called after `SetPoint(...)`
   in `LoadPosition`, ensuring 12.x retail correctly commits the user's drag-saved anchor.
 - **Position lost on /reload** — `PLAYER_LOGOUT` handler now saves both panels

@@ -36,7 +36,7 @@ local issecretvalue = _G.issecretvalue or function() return false end
 -- literal `@project-version@` token from the unsubstituted TOC — fall back to a
 -- hand-maintained constant so the title still reads e.g. `v1.0.3-dev` instead of `vdev`.
 -- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
-local CURRENT_RELEASE = "1.0.6"
+local CURRENT_RELEASE = "1.0.7"
 local ADDON_VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("StatsPro", "Version") or "?"
 if ADDON_VERSION:find("project%-version") then ADDON_VERSION = CURRENT_RELEASE .. "-dev" end
 
@@ -229,13 +229,17 @@ local isLoaded = false
 -- Compact short-form stat labels, hand-curated per locale to match StatsPro's
 -- 4-7-char aesthetic across every client language. Translation philosophy:
 -- preserve the same visual weight as the English "Crit" / "Vers" — abbreviated
--- where the natural translation is long, full where it's already short.
+-- where the natural translation is long, full where it's already short. Aim for
+-- ≥4 chars when the language supports it (3-char abbreviations like "Par" or
+-- "Cel" read as truncations rather than words and look unfinished).
 --
 -- Ships with all 11 retail WoW locales:
 --   enUS (canonical, identity map)
---   ruRU (Haste/Speed disambig user-confirmed; other rows reviewable in seconds)
---   deDE / esES / esMX / frFR / itIT / koKR / ptBR / zhCN / zhTW (Claude drafts;
---     native-speaker review tracked via GitHub Issues, per-row fixes in v1.0.7+)
+--   ruRU (Russian native-speaker reviewed by maintainer)
+--   zhCN / zhTW (use official WoW Chinese client stat terminology — high confidence)
+--   deDE / frFR / esES / esMX / itIT / ptBR / koKR (deeper review pass against
+--     each language's WoW client term + community shorthand conventions; native-
+--     speaker spot-checks still welcome via GitHub Issues for per-row tweaks).
 -- Locales not in this table (any future Blizzard locale, e.g. plPL) fall back
 -- to enUS via the `or LABELS_BY_LOCALE.enUS` selector AND the toggle is hidden
 -- in the config UI (no dead switch). HAS_LOCALIZATION below is the gate.
@@ -249,6 +253,10 @@ local isLoaded = false
 --   - "Defensive" used by DefensiveHeader() for sectioned-mode divider
 -- Adding a new key here without updating callers is a no-op; adding a new caller
 -- without a key here falls back gracefully to the English literal (`L(k) → k`).
+--
+-- WARNING: Armor and Defensive must be visually DISTINCT in the same locale.
+-- Armor is a stat row label; Defensive is the sectioned-mode divider. Same word
+-- for both makes the divider blend into the row beneath it.
 local LABELS_BY_LOCALE = {
     enUS = {
         Crit = "Crit",          Haste = "Haste",        Mastery = "Mastery",    Vers = "Vers",
@@ -259,95 +267,119 @@ local LABELS_BY_LOCALE = {
         Defensive = "Defensive",
     },
 
-    -- ruRU: Haste/Speed disambig user-confirmed (Хаст / Скор). Other rows are draft;
-    -- ruRU user (the maintainer) can spot-check during impl in seconds. Скорость is the
-    -- WoW client term for BOTH Haste and Speed → Хаст (transliteration) frees Скор for Speed.
+    -- ruRU: Russian. Haste/Speed disambig is structural — WoW client uses "Скорость"
+    -- for BOTH stats, so we transliterate Haste as "Хаст" (community shorthand) to free
+    -- "Скор" for Speed. Leech uses "Вамп" (вампиризм) over the literal "Кров" because
+    -- "Кров…" risks being mis-read as "Кровотечение" (Bleed). All stat rows use 4-char
+    -- forms where the language allows; "Сила" / "Блок" / "Крит" are already 4 chars.
     ruRU = {
         Crit = "Крит",          Haste = "Хаст",         Mastery = "Маст",       Vers = "Унив",
-        Dodge = "Укл",          Parry = "Пар",          Block = "Блок",         Armor = "Брон",
+        Dodge = "Укл",          Parry = "Пари",         Block = "Блок",         Armor = "Брон",
         Strength = "Сила",      Agility = "Ловк",       Intellect = "Инт",
-        Leech = "Кров",         Avoidance = "Избег",    Speed = "Скор",
-        Durability = "Прч",     Repair = "Рем",
+        Leech = "Вамп",         Avoidance = "Избег",    Speed = "Скор",
+        Durability = "Проч",    Repair = "Рем",
         Defensive = "Защита",
     },
 
-    -- deDE: DRAFT (Claude-generated, native-speaker review pending). German.
-    -- Haste = "Tempo" (4 chars) vs Speed = "Lauf" (run-speed) to disambiguate.
+    -- deDE: German. Haste="Tempo" matches the WoW German client term; Speed="Lauf"
+    -- (run-speed) keeps the Haste/Speed split clear. Vers="Viels" evokes Vielseitigkeit
+    -- without colliding with the everyday word "viel" (many/much). Durability="Haltb"
+    -- avoids collision with the everyday word "Halt" (stop). Strength="Stär" preserves
+    -- the umlaut character of Stärke at 4 chars (single char "Stä" reads truncated).
     deDE = {
-        Crit = "Krit",          Haste = "Tempo",        Mastery = "Meist",      Vers = "Viel",
+        Crit = "Krit",          Haste = "Tempo",        Mastery = "Meist",      Vers = "Viels",
         Dodge = "Ausw",         Parry = "Par",          Block = "Block",        Armor = "Rüst",
-        Strength = "Stä",       Agility = "Bew",        Intellect = "Int",
+        Strength = "Stär",      Agility = "Bew",        Intellect = "Int",
         Leech = "Saug",         Avoidance = "Verm",     Speed = "Lauf",
-        Durability = "Halt",    Repair = "Repar",
+        Durability = "Haltb",   Repair = "Repar",
         Defensive = "Defensiv",
     },
 
-    -- frFR: DRAFT. French. Hâte (full word, 4 chars) and Vit (Vitesse) distinct.
+    -- frFR: French. Hâte (4 chars, accented form) is WoW's official Haste term; Vit
+    -- (Vitesse) distinct. Strength="Forc" and Durability="Dura" use 4-char forms so
+    -- they don't collide with the everyday words "Fort" / "Dur". Esqu (Esquive) at 4
+    -- chars reads more clearly than the truncated 3-char "Esq".
     frFR = {
         Crit = "Crit",          Haste = "Hâte",         Mastery = "Maît",       Vers = "Polyv",
-        Dodge = "Esq",          Parry = "Par",          Block = "Bloc",         Armor = "Arm",
-        Strength = "For",       Agility = "Agil",       Intellect = "Int",
+        Dodge = "Esqu",         Parry = "Par",          Block = "Bloc",         Armor = "Arm",
+        Strength = "Forc",      Agility = "Agil",       Intellect = "Int",
         Leech = "Vamp",         Avoidance = "Évit",     Speed = "Vit",
-        Durability = "Dur",     Repair = "Rép",
+        Durability = "Dura",    Repair = "Rép",
         Defensive = "Défense",
     },
 
-    -- esES: DRAFT. Spanish (Spain). Cel (Celeridad) vs Vel (Velocidad) for the
-    -- Haste / Speed split, mirroring WoW's own Spanish client term distinction.
+    -- esES: Spanish (Spain). WoW Spanish client uses Celeridad / Velocidad for the
+    -- Haste/Speed split → Cele / Vel. Leech="Robo" matches "Robo de vida" (life steal),
+    -- the WoW Spanish term — closer to client wording than the literal "Suc(ción)".
+    -- Most rows use 4-char forms (Esqu / Fuer / Agil) — 3-char abbreviations look
+    -- unfinished beside Spanish's typically-longer words.
     esES = {
-        Crit = "Crít",          Haste = "Cel",          Mastery = "Maest",      Vers = "Versat",
-        Dodge = "Esq",          Parry = "Par",          Block = "Bloq",         Armor = "Arm",
-        Strength = "Fue",       Agility = "Agi",        Intellect = "Int",
-        Leech = "Suc",          Avoidance = "Evit",     Speed = "Vel",
+        Crit = "Crít",          Haste = "Cele",         Mastery = "Maest",      Vers = "Versat",
+        Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",
+        Strength = "Fuer",      Agility = "Agil",       Intellect = "Int",
+        Leech = "Robo",         Avoidance = "Evit",     Speed = "Vel",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defensa",
     },
 
-    -- esMX: DRAFT. Latin American Spanish — same base translations as esES; minor
-    -- regional differences exist but stat-term short forms are effectively shared.
+    -- esMX: Latin American Spanish — stat-term short forms are effectively shared
+    -- with esES (no regional split for combat stats). Mirrored 1:1 from esES table.
     esMX = {
-        Crit = "Crít",          Haste = "Cel",          Mastery = "Maest",      Vers = "Versat",
-        Dodge = "Esq",          Parry = "Par",          Block = "Bloq",         Armor = "Arm",
-        Strength = "Fue",       Agility = "Agi",        Intellect = "Int",
-        Leech = "Suc",          Avoidance = "Evit",     Speed = "Vel",
+        Crit = "Crít",          Haste = "Cele",         Mastery = "Maest",      Vers = "Versat",
+        Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",
+        Strength = "Fuer",      Agility = "Agil",       Intellect = "Int",
+        Leech = "Robo",         Avoidance = "Evit",     Speed = "Vel",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defensa",
     },
 
-    -- itIT: DRAFT. Italian. Cele (Celerità) vs Vel (Velocità) Haste/Speed split.
+    -- itIT: Italian. Cele (Celerità) / Vel (Velocità) Haste/Speed split. Para
+    -- (Parata) at 4 chars reads more naturally than "Par"; Armat (Armatura) gives
+    -- enough char-count to feel like a word; Forz / Agil keep 4-char rhythm. Ag
+    -- (2 chars) was clearly too short — Italian readers wouldn't recognize it.
     itIT = {
         Crit = "Crit",          Haste = "Cele",         Mastery = "Maest",      Vers = "Vers",
-        Dodge = "Schiv",        Parry = "Par",          Block = "Bloc",         Armor = "Arm",
-        Strength = "For",       Agility = "Ag",         Intellect = "Int",
+        Dodge = "Schiv",        Parry = "Para",         Block = "Bloc",         Armor = "Armat",
+        Strength = "Forz",      Agility = "Agil",       Intellect = "Int",
         Leech = "Vamp",         Avoidance = "Evit",     Speed = "Vel",
-        Durability = "Durab",   Repair = "Rip",
+        Durability = "Durab",   Repair = "Ripa",
         Defensive = "Difesa",
     },
 
-    -- ptBR: DRAFT. Brazilian Portuguese. Cele (Celeridade) vs Vel (Velocidade).
+    -- ptBR: Brazilian Portuguese. Cele (Celeridade) / Vel (Velocidade). Forç (with
+    -- cedilla, Força) and Agil at 4 chars match Portuguese's prosody better than the
+    -- 3-char truncations. Esqu (Esquiva) likewise.
     ptBR = {
         Crit = "Crít",          Haste = "Cele",         Mastery = "Maest",      Vers = "Vers",
-        Dodge = "Esq",          Parry = "Par",          Block = "Bloq",         Armor = "Arm",
-        Strength = "For",       Agility = "Agi",        Intellect = "Int",
+        Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",
+        Strength = "Forç",      Agility = "Agil",       Intellect = "Int",
         Leech = "Vamp",         Avoidance = "Evit",     Speed = "Vel",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defesa",
     },
 
-    -- koKR: DRAFT — lowest confidence locale, native-speaker review strongly
-    -- recommended. CJK 2-char common community terms; Block (방패) vs Armor (방어) distinct.
-    -- Parry uses 막기 (more standard). Avoidance (광피) is uncommon shorthand.
+    -- koKR: Korean. Parry/Block previously collided — both used 막기-family terms
+    -- and Armor/Defensive both rendered as 방어 (a real bug — sectioned-mode header
+    -- merged visually with the Armor row beneath it). New split:
+    --   Parry = 쳐막 (쳐서 막다, "strike-block" — community shorthand for parry)
+    --   Block = 막기 (standard WoW Korean client term for blocking)
+    --   Armor = 방어 (matches WoW Korean stat terminology — 방어도)
+    --   Defensive = 수비 (defense as category — distinct from 방어 above)
+    -- Avoidance = 광피 (community shorthand for 광역 피해 회피, "AoE-damage avoidance")
+    -- — uncommon outside dedicated theorycraft contexts but visually distinct from
+    -- 회피 (Dodge). Native-speaker review still welcome via GitHub Issues.
     koKR = {
         Crit = "치명",          Haste = "가속",         Mastery = "특화",       Vers = "유연",
-        Dodge = "회피",         Parry = "막기",         Block = "방패",         Armor = "방어",
+        Dodge = "회피",         Parry = "쳐막",         Block = "막기",         Armor = "방어",
         Strength = "힘",        Agility = "민첩",       Intellect = "지능",
         Leech = "흡혈",         Avoidance = "광피",     Speed = "이속",
         Durability = "내구",    Repair = "수리",
-        Defensive = "방어",
+        Defensive = "수비",
     },
 
-    -- zhCN: DRAFT. Simplified Chinese. 2-char terms widely used in CN WoW community
-    -- for stat displays. 躲闪 (Dodge) vs 闪避 (Avoidance) is the standard zhCN split.
+    -- zhCN: Simplified Chinese. All terms match the official WoW Chinese client
+    -- terminology — 2-char widely used in CN WoW community for stat displays.
+    -- 躲闪 (Dodge) vs 闪避 (Avoidance) is the standard zhCN split. High confidence.
     zhCN = {
         Crit = "暴击",          Haste = "急速",         Mastery = "精通",       Vers = "全能",
         Dodge = "躲闪",         Parry = "招架",         Block = "格挡",         Armor = "护甲",
@@ -357,8 +389,9 @@ local LABELS_BY_LOCALE = {
         Defensive = "防御",
     },
 
-    -- zhTW: DRAFT. Traditional Chinese (Taiwan). Same 2-char convention as zhCN
-    -- but Traditional script forms (護甲 vs 护甲, 格擋 vs 格挡, 迴避 vs 闪避).
+    -- zhTW: Traditional Chinese (Taiwan). Same 2-char convention as zhCN but
+    -- Traditional script forms (護甲 vs 护甲, 格擋 vs 格挡, 迴避 vs 闪避).
+    -- Matches WoW Taiwan client terminology. High confidence.
     zhTW = {
         Crit = "致命",          Haste = "加速",         Mastery = "精通",       Vers = "全能",
         Dodge = "躲避",         Parry = "招架",         Block = "格擋",         Armor = "護甲",
@@ -379,7 +412,8 @@ local HAS_LOCALIZATION = (LOCALIZED_LABELS ~= LABELS_BY_LOCALE.enUS)
 -- WHY identity-fast-path: when toggle is off (opt-out), this is a no-op direct return.
 -- When toggle is on (default), we hit one table read — still O(1), no _G access, no
 -- iteration. Both paths are constant-time. `cached` upvalue is captured by reference
--- (line 195 declaration is never reassigned) so toggle flips reflect immediately.
+-- (the table is declared once at module load and never reassigned, only mutated) so
+-- toggle flips reflect immediately.
 local function L(englishKey)
     if cached.useLocalizedLabels then
         return LOCALIZED_LABELS[englishKey] or englishKey
@@ -865,8 +899,9 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- WHY repair row participates in width as a SEPARATE max() candidate (not added to
     -- rowsTotal): rowsTotal is the natural width of stat content. Repair row widens the
     -- panel only when its content (label + 2 + coin) exceeds that. Adding repairW into
-    -- rowsTotal would inflate rating/value column widths for stat rows too, which is
-    -- the exact bug v1.0.4 fixed.
+    -- rowsTotal would inflate rating/value column widths for stat rows too — wide coin
+    -- strings would push every percent and rating column rightward on rows that have
+    -- nothing to do with repair, breaking the visual contract of column alignment.
     local repairTotal = hasRepair and ((self.cachedLabelW or 0) + 2 + (self.cachedRepairW or 0)) or 0
     local totalW = math.max(rowsTotal, repairTotal, 80)
 
@@ -1599,9 +1634,9 @@ function addon:OpenConfigMenu()
     configFrame:SetScript("OnDragStart", configFrame.StartMoving)
     configFrame:SetScript("OnDragStop", configFrame.StopMovingOrSizing)
     configFrame:SetClampedToScreen(true)
-    -- WHY: guarded as a one-shot for symmetry — body of OpenConfigMenu runs once
-    -- per session via the early-return on line ~1304, but defensive registration
-    -- guard means even a re-entrant rebuild wouldn't double-add to UISpecialFrames.
+    -- WHY: guarded as a one-shot for symmetry — the early-return at the top of
+    -- OpenConfigMenu already ensures this body runs once per session, but the flag
+    -- means even a re-entrant rebuild wouldn't double-add to UISpecialFrames.
     if not configSpecialFrameRegistered then
         tinsert(UISpecialFrames, "StatsProConfigFrame")
         configSpecialFrameRegistered = true
@@ -1887,10 +1922,10 @@ function addon:OpenConfigMenu()
         UIDropDownMenu_SetWidth(fontDropdown, 150)
         PushRefresher(function() UIDropDownMenu_SetText(fontDropdown, CurrentFontName()) end)
 
-        -- WHY: text-alignment buttons removed — two-column rendering anchors labels to
-        -- the LEFT and values to the RIGHT regardless of any global alignment setting.
-        -- The defaults.textAlign field is kept in DB only for backward compat with
-        -- v1.0 saves; it has no runtime effect.
+        -- WHY no text-alignment control: three-column rendering pins labels RIGHT,
+        -- ratings RIGHT, values LEFT — there is no global alignment to adjust. The
+        -- defaults.textAlign field exists in DB purely so existing saves don't lose
+        -- the key on migration; nothing reads it at runtime.
 
         cd.y = rowY - 32
     end

@@ -79,6 +79,10 @@ To revert to compact English on a non-English client: open `/ss` → **Display**
 `/reload` and across all characters on the account. The toggle is hidden on enUS
 clients (no localized form to switch to).
 
+The in-game AddOn list (Esc → Options → AddOns) also shows StatsPro's
+description in your client language — a localized one-liner per `## Notes-<locale>`
+TOC field is shipped for all 10 non-English retail locales.
+
 If a label reads oddly to you as a native speaker, please open an issue with the
 suggested correction — single-row fixes ship in the next patch.
 

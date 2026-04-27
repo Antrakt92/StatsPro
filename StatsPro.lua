@@ -36,7 +36,7 @@ local issecretvalue = _G.issecretvalue or function() return false end
 -- literal `@project-version@` token from the unsubstituted TOC — fall back to a
 -- hand-maintained constant so the title still reads e.g. `v1.0.3-dev` instead of `vdev`.
 -- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
-local CURRENT_RELEASE = "1.0.7"
+local CURRENT_RELEASE = "1.0.8"
 local ADDON_VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("StatsPro", "Version") or "?"
 if ADDON_VERSION:find("project%-version") then ADDON_VERSION = CURRENT_RELEASE .. "-dev" end
 
@@ -444,6 +444,20 @@ local function safeCall(fn, ...)
     return 0
 end
 
+-- WHY dedicated helper for UnitStat: the API returns FOUR values
+--   (stat, effectiveStat, posBuff, negBuff)
+-- where `stat` is base (level + items, no temporary buffs) and `effectiveStat`
+-- includes raid/food/flask/cooldown buffs. Blizzard's own CharacterFrame
+-- displays `effectiveStat`, so users expect the same. `safeCall` only returns
+-- the first value (stat), which would silently understate Primary stats for
+-- any buffed player. Fall back chain: effectiveStat → stat → 0 covers a
+-- hypothetical future API change that returns only one value.
+local function GetEffectiveStat(statId)
+    local ok, stat, effectiveStat = pcall(UnitStat, "player", statId)
+    if not ok then return 0 end
+    return effectiveStat or stat or 0
+end
+
 -- 12.x: hideZero check on a possibly-secret value.
 -- issecretvalue() == in combat → always show (real value is non-zero).
 local function shouldShow(val, hideZero)
@@ -564,7 +578,15 @@ local function RefreshArmorCache()
         -- WARNING: PaperDollFrame_GetArmorReduction in 12.x retail returns 0..100 percent
         -- (not 0..1 fraction as some docs claim). Normalize defensively: if return is <=1
         -- treat as fraction and scale, else use as-is. Cap at 100% for sanity.
-        local raw = PaperDollFrame_GetArmorReduction(effectiveArmor, UnitEffectiveLevel("player")) or 0
+        -- WARNING: armor effectiveness can be secret-tagged in M+ transitional combat
+        -- moments where InCombatLockdown lags real combat state — the OOC guard above
+        -- isn't sufficient. Filter the return value before any comparison or arithmetic;
+        -- comparing a secret number to 1 raises a taint error and aborts the OnUpdate.
+        local ok, raw = pcall(PaperDollFrame_GetArmorReduction, effectiveArmor, UnitEffectiveLevel("player"))
+        if not ok or not raw or issecretvalue(raw) then
+            cached.armorDR = 0
+            return
+        end
         if raw <= 1 then raw = raw * 100 end
         if raw > 100 then raw = 100 end
         cached.armorDR = raw
@@ -1056,7 +1078,7 @@ local function BuildPrimaryLines(labels, ratings, values)
     local valueColor = (cached.matchValueColorToStat and primaryStr) or cs.rating
     for _, def in ipairs(PRIMARY_STATS) do
         if cached[def.showKey] then
-            local val = safeCall(UnitStat, "player", def.unitStatId)
+            local val = GetEffectiveStat(def.unitStatId)
             local rCol, vCol = RouteValueOnly(string.format("|cff%s%d|r", valueColor, val))
             PushRow(labels, ratings, values,
                 FormatLabel(primaryStr, def.label),
@@ -1202,7 +1224,7 @@ end
 local function BuildDurabilityLines()
     local labels, ratings, values = {}, {}, {}
     local repairStr = ""
-    if not cached.showDurability then return labels, ratings, values, repairStr end
+    if not cached.showDurability then return labels, ratings, values, repairStr, nil end
     local cs = cached.colorStrings
     local pct = cached.durabilityValue
     local durStr = cs.durability

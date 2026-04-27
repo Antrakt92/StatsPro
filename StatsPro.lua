@@ -187,20 +187,13 @@ local CACHED_BOOL_KEYS = {
 ============================================================ ]]
 StatsProDB = StatsProDB or {}
 
--- WHY: one-time migration for users coming from the SwiftStatsLocal fork. Copies the
--- entire saved-variables table on first load if the new DB is empty AND the old global
--- happens to be present (only true while both addons are simultaneously enabled). After
--- migration the old DB is left untouched — disable SwiftStatsLocal in the addon list
--- to remove its panels. Safe to ship to new users: SwiftStatsLocalDB simply doesn't
--- exist for them, so the block is a no-op.
-if next(StatsProDB) == nil and _G.SwiftStatsLocalDB and next(_G.SwiftStatsLocalDB) ~= nil then
-    -- WHY CopyTable: shallow copy would alias sub-tables (e.g. .colors) between the two
-    -- DBs. Color-picker edits in either addon while both are simultaneously enabled
-    -- would silently mutate both. Deep copy breaks the aliasing.
-    for k, v in pairs(_G.SwiftStatsLocalDB) do
-        StatsProDB[k] = (type(v) == "table") and CopyTable(v) or v
-    end
-end
+-- SwiftStatsLocal migration runs in OnPlayerEnteringWorld (section 13) — NOT here at
+-- file scope. WoW loads addon SavedVariables alongside the addon's code; if StatsPro
+-- loads alphabetically before SwiftStatsLocal (StatsPro < SwiftStats — the typical
+-- install ordering), `_G.SwiftStatsLocalDB` is nil at file scope and the migration
+-- check would silently skip even though the user's legacy data is present. By PEW
+-- every enabled addon's SavedVariables are loaded; the check fires reliably regardless
+-- of load order.
 
 local cached = {
     colorStrings = {},
@@ -1355,10 +1348,19 @@ local function UpdateStats()
 end
 
 --[[ ============================================================
-    12. UPDATE TIMER (single source; lives on mainPanel)
+    12. UPDATE TIMER (dedicated invisible frame)
 ============================================================ ]]
+-- WARNING: do NOT host this OnUpdate on mainPanel.frame or defensivePanel.frame.
+-- WoW only fires OnUpdate on SHOWN frames. Both panels can become hidden via
+-- normal user paths: (a) cached.isVisible=false from /ss hide, (b) split mode
+-- with all primary/offensive/tertiary stats disabled — mainPanel:SetTextSafe
+-- with lineCount=0 calls Hide(), and the defensive-only data on the OTHER panel
+-- would freeze because the ticker stopped firing. A standalone, never-hidden
+-- frame keeps the update loop independent of user-visible panel state.
+-- The cost of running UpdateStats during /ss hide is one early-return per tick.
 local timeSinceLastUpdate = 0
-mainPanel.frame:SetScript("OnUpdate", function(self, elapsed)
+local tickerFrame = CreateFrame("Frame")
+tickerFrame:SetScript("OnUpdate", function(self, elapsed)
     timeSinceLastUpdate = timeSinceLastUpdate + elapsed
     if timeSinceLastUpdate >= cached.updateInterval then
         UpdateStats()
@@ -1373,6 +1375,18 @@ end)
 
 local function OnPlayerEnteringWorld()
     if not isLoaded then
+        -- One-time SwiftStatsLocal → StatsPro migration. Runs at PEW (not at file scope)
+        -- so `_G.SwiftStatsLocalDB` is reliably populated regardless of which addon's
+        -- SavedVariables loaded first. Triggers only when StatsPro's DB is empty AND
+        -- the legacy global has content — both conditions ensure we don't clobber
+        -- existing StatsPro state and don't no-op-write defaults to fresh installs.
+        -- CopyTable: deep copy so color-picker edits in either addon, while both are
+        -- simultaneously enabled, don't silently alias and mutate the other's table.
+        if next(StatsProDB) == nil and _G.SwiftStatsLocalDB and next(_G.SwiftStatsLocalDB) ~= nil then
+            for k, v in pairs(_G.SwiftStatsLocalDB) do
+                StatsProDB[k] = (type(v) == "table") and CopyTable(v) or v
+            end
+        end
         MigrateDB()
         CacheSettings()
         LoadAllPositions()

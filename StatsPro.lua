@@ -36,7 +36,7 @@ local issecretvalue = _G.issecretvalue or function() return false end
 -- literal `@project-version@` token from the unsubstituted TOC — fall back to a
 -- hand-maintained constant so the title still reads e.g. `v1.0.3-dev` instead of `vdev`.
 -- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
-local CURRENT_RELEASE = "1.0.8"
+local CURRENT_RELEASE = "1.0.9"
 local ADDON_VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("StatsPro", "Version") or "?"
 if ADDON_VERSION:find("project%-version") then ADDON_VERSION = CURRENT_RELEASE .. "-dev" end
 
@@ -187,13 +187,17 @@ local CACHED_BOOL_KEYS = {
 ============================================================ ]]
 StatsProDB = StatsProDB or {}
 
--- SwiftStatsLocal migration runs in OnPlayerEnteringWorld (section 13) — NOT here at
--- file scope. WoW loads addon SavedVariables alongside the addon's code; if StatsPro
--- loads alphabetically before SwiftStatsLocal (StatsPro < SwiftStats — the typical
--- install ordering), `_G.SwiftStatsLocalDB` is nil at file scope and the migration
--- check would silently skip even though the user's legacy data is present. By PEW
--- every enabled addon's SavedVariables are loaded; the check fires reliably regardless
--- of load order.
+-- Legacy-DB carry-forward runs in OnPlayerEnteringWorld (section 13) — NOT here at
+-- file scope. Two sources are checked:
+--   * `_G.SwiftStatsDB` — the original public SwiftStats by TaylorSay (the upstream
+--     this addon was inspired by); covers the common case of a user moving from the
+--     CurseForge upstream to StatsPro.
+--   * `_G.SwiftStatsLocalDB` — fallback for an earlier internal name of this addon
+--     (renamed to StatsPro before publication); a tiny audience.
+-- WoW loads addon SavedVariables alongside the addon's code in alphabetical folder-
+-- name order. StatsPro loads BEFORE either source addon, so at file scope the source
+-- globals are still nil. By PEW every enabled addon's SavedVariables are loaded; the
+-- check fires reliably regardless of load order.
 
 local cached = {
     colorStrings = {},
@@ -537,10 +541,10 @@ end
 local function MigrateDB()
     local db = StatsProDB
 
-    -- WHY runs before the version early-return: SwiftStatsLocal migrants whose legacy
-    -- DB carried dbVersion=3 (coincidental scheme overlap) would otherwise skip these
-    -- loops and never get StatsPro's defaults populated. Idempotent: only fills missing
-    -- keys, never clobbers user prefs.
+    -- WHY runs before the version early-return: legacy migrants (from SwiftStats or the
+    -- earlier internal SwiftStatsLocal name) whose source DB carried a dbVersion equal
+    -- to ours would otherwise skip these loops and never get StatsPro's defaults
+    -- populated. Idempotent: only fills missing keys, never clobbers user prefs.
     for k, v in pairs(defaults) do
         if db[k] == nil and type(v) ~= "table" then
             db[k] = v
@@ -1397,16 +1401,24 @@ end)
 
 local function OnPlayerEnteringWorld()
     if not isLoaded then
-        -- One-time SwiftStatsLocal → StatsPro migration. Runs at PEW (not at file scope)
-        -- so `_G.SwiftStatsLocalDB` is reliably populated regardless of which addon's
-        -- SavedVariables loaded first. Triggers only when StatsPro's DB is empty AND
-        -- the legacy global has content — both conditions ensure we don't clobber
-        -- existing StatsPro state and don't no-op-write defaults to fresh installs.
+        -- One-time legacy-DB carry-forward. Runs at PEW (not at file scope) so source
+        -- globals are reliably populated regardless of addon load order. Triggers only
+        -- when StatsPro's DB is empty AND a legacy global has content — these guards
+        -- prevent clobbering existing StatsPro state and avoid no-op writes on fresh
+        -- installs. Source priority:
+        --   1. `_G.SwiftStatsDB` — the original public SwiftStats by TaylorSay (most
+        --      users coming from the upstream addon land here).
+        --   2. `_G.SwiftStatsLocalDB` — fallback for an earlier internal name of this
+        --      addon (renamed to StatsPro before publication).
         -- CopyTable: deep copy so color-picker edits in either addon, while both are
         -- simultaneously enabled, don't silently alias and mutate the other's table.
-        if next(StatsProDB) == nil and _G.SwiftStatsLocalDB and next(_G.SwiftStatsLocalDB) ~= nil then
-            for k, v in pairs(_G.SwiftStatsLocalDB) do
-                StatsProDB[k] = (type(v) == "table") and CopyTable(v) or v
+        if next(StatsProDB) == nil then
+            local source = (_G.SwiftStatsDB and next(_G.SwiftStatsDB) ~= nil and _G.SwiftStatsDB)
+                        or (_G.SwiftStatsLocalDB and next(_G.SwiftStatsLocalDB) ~= nil and _G.SwiftStatsLocalDB)
+            if source then
+                for k, v in pairs(source) do
+                    StatsProDB[k] = (type(v) == "table") and CopyTable(v) or v
+                end
             end
         end
         MigrateDB()

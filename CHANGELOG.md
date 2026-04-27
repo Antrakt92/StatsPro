@@ -4,6 +4,23 @@
 
 ### Fixed
 
+- **Defensive panel no longer freezes in split mode when offensive stats are
+  all disabled.** The per-frame update timer was hosted on `mainPanel.frame`;
+  when that panel went empty (split mode + primary/offensive/tertiary all off
+  → `lineCount=0` → `Hide()`), WoW stopped firing OnUpdate on the hidden
+  frame and the defensive panel's live values (Dodge / Parry / Armor /
+  Durability) would freeze on whatever was last computed. Tank-focused
+  defensive-only configurations were the most likely to hit this. The ticker
+  now lives on a dedicated invisible frame that's never hidden by user logic.
+- **SwiftStatsLocal → StatsPro one-time migration now runs reliably.** WoW
+  loads each addon's SavedVariables alongside that addon's code; in the
+  typical alphabetical install order (`StatsPro` loads before
+  `SwiftStatsLocal`), `_G.SwiftStatsLocalDB` was still nil at StatsPro's
+  file-scope migration check — the check silently skipped and the user's
+  legacy panel position, font, and colors didn't carry forward to a fresh
+  StatsPro install. The migration now runs in `PLAYER_ENTERING_WORLD` (after
+  every enabled addon's SavedVariables are loaded), making the carry-forward
+  reliable regardless of which addon happened to load first.
 - **koKR: Armor and Defensive section header no longer collide.** Both labels
   rendered as `방어` previously, which made the sectioned-mode `— 방어 —`
   divider visually merge with the Armor row immediately beneath it. New split:

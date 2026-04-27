@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.0.9 — Carry forward settings from upstream SwiftStats (TaylorSay)
+
+### Added
+
+- **One-time settings carry-forward from the original SwiftStats by TaylorSay.**
+  StatsPro is "inspired by" the upstream `SwiftStats` addon and the
+  `LICENSE` already credits TaylorSay, but until this release the legacy
+  carry-forward only checked for `_G.SwiftStatsLocalDB` — the saved-variable
+  name of an earlier internal fork of this addon, not the upstream
+  `_G.SwiftStatsDB`. Users moving from the public CurseForge SwiftStats
+  to StatsPro now get their panel position, font, font size, scale, and
+  per-stat colors automatically copied on first launch (provided StatsPro
+  itself has no existing data — fresh installs only). Source priority:
+  `SwiftStatsDB` (upstream public) takes precedence; `SwiftStatsLocalDB`
+  remains as a fallback for the small audience that used the earlier
+  internal name.
+
+### Note on v1.0.7's release notes
+
+- The v1.0.7 changelog described the migration fix as "SwiftStatsLocal →
+  StatsPro" — this was technically accurate for the source-DB name the
+  code checked at the time, but misleading: most CurseForge users have
+  never heard of `SwiftStatsLocal` (it was an internal fork name, never
+  publicly released). The v1.0.7 fix made the existing migration check
+  reliable across addon load orders; v1.0.9 expands what the migration
+  actually covers to include the upstream public addon.
+
 ## 1.0.8 — Primary stats now show effective (buffed) values + armor combat-taint guard
 
 ### Fixed

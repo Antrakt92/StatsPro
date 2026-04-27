@@ -1,12 +1,21 @@
-# StatsPro
+<p align="center">
+  <img src="screenshots/logo.png" alt="StatsPro logo" width="280">
+</p>
 
-[![Latest release](https://img.shields.io/github/v/release/Antrakt92/StatsPro?label=release&color=brightgreen)](https://github.com/Antrakt92/StatsPro/releases/latest)
-[![CurseForge](https://img.shields.io/curseforge/dt/1525100?label=curseforge&color=orange)](https://www.curseforge.com/wow/addons/statspro)
-[![License: MIT](https://img.shields.io/github/license/Antrakt92/StatsPro)](LICENSE)
+<h1 align="center">StatsPro</h1>
 
-A lightweight on-screen HUD for World of Warcraft Retail. Displays secondary stats,
-defensive stats, durability and live repair cost in a clean, draggable panel — no
-heavy framework needed.
+<p align="center">
+  <a href="https://github.com/Antrakt92/StatsPro/releases/latest"><img src="https://img.shields.io/github/v/release/Antrakt92/StatsPro?label=release&color=brightgreen" alt="Latest release"></a>
+  <a href="https://www.curseforge.com/wow/addons/statspro"><img src="https://img.shields.io/curseforge/dt/1525100?label=curseforge&color=orange" alt="CurseForge"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Antrakt92/StatsPro" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/WoW-Retail%2012.x-blueviolet" alt="WoW Retail 12.x">
+</p>
+
+<p align="center">
+  A clean, lightweight on-screen HUD for World of Warcraft Retail. Secondary stats,
+  defensive stats, durability, and live repair cost in a draggable panel — without
+  the bloat of a full framework.
+</p>
 
 <p align="center">
   <img src="screenshots/09-flat-in-game.jpg" alt="StatsPro — full flat panel sitting next to the action bars during real-world play">
@@ -15,8 +24,8 @@ heavy framework needed.
 > Originally inspired by [SwiftStats by TaylorSay](https://www.curseforge.com/wow/addons/swiftstats)
 > (MIT). StatsPro is substantially rewritten — only ~9% of upstream code remains
 > verbatim (defaults and boilerplate). The defensive panel, durability/repair-cost
-> system, multi-panel layouts, auto-aligning column rendering, 12.x retail secret-value
-> handling, and the three-tab settings UI are all original work. See
+> system, multi-panel layouts, auto-aligning column rendering, 12.x retail
+> secret-value handling, and the three-tab settings UI are all original work. See
 > [`CHANGELOG.md`](CHANGELOG.md) for the full list of additions per version.
 
 ## Features
@@ -35,31 +44,64 @@ heavy framework needed.
 
 ## How it looks
 
-**Flat mode (default) — secondary stats in one tight panel:**
+Layouts auto-fit to enabled stats, drag panels anywhere, no awkward gaps when
+toggling columns. Top: **Flat** (default secondary stats) and **Rating + Percentage**
+(both columns side by side). Middle: **With Defensives** (Dodge / Parry / Block /
+Armor as % damage reduction) and **Repair Cost at Vendor** (vendor-format coin
+string with inline gold / silver / copper icons). Bottom: **Split Mode** —
+offensive and defensive stats as separate, independently draggable panels.
 
-![Flat default panel](screenshots/02-flat-default.jpg)
+![StatsPro display modes — flat, rating + percentage, with defensives, repair cost at vendor, and split mode](screenshots/display-modes.png)
 
-**Rating and percentage side by side — enable both display modes to see the underlying combat ratings alongside the resulting percentages, with three perfectly aligned columns:**
+## Highlights
 
-![Rating and percentage columns](screenshots/08-rating-and-percentage.jpg)
+- **Reads at a glance** — labels and values stay neatly aligned no matter how many
+  stats you've enabled or what font you've chosen. Toggle to rating-only or
+  percent-only and everything collapses cleanly into a single tight column — no
+  awkward gaps, no drifting percent column.
+- **Tertiary stats by default** — Leech, Avoidance, and Speed are first-class rows
+  with their own toggles. Most stat addons silently omit them; theorycrafting builds
+  that lean on tertiaries can finally see what they're doing without a separate addon.
+- **Vendor-accurate repair cost** — shows as `46g 40s 81c` with the inline gold /
+  silver / copper icons you see at the vendor, not a stripped-down `46g`. A lot of
+  older stat addons quietly broke this starting in War Within (11.x) — and stayed
+  broken into Midnight (12.x) — because they rely on the legacy tooltip API;
+  StatsPro uses the new one.
+- **Drag once, done forever** — your panel positions survive `/reload`, logout, and
+  client patches. No reset-to-center surprises after a UI reload or expansion update.
+- **Configurable from one place** — every visible element lives behind `/ss`:
+  per-stat colors, font via LibSharedMedia, panel scale, layout preset, durability
+  thresholds. No SavedVariables editing, no `/reload` between tweaks.
+- **Built for Midnight (12.x)** — works correctly mid-combat where many older stat
+  addons silently break (see the section below).
 
-**Defensive panel enabled — Dodge, Parry, Armor as % damage reduction:**
+## Built for Midnight (12.x)
 
-![Flat with defensives](screenshots/03-flat-with-defensives.jpg)
+Blizzard quietly turned many stat-API returns (`GetCombatRating`, `UnitArmor`, even
+`FontString:GetStringWidth`) into "secret values" — first in War Within (11.0), and
+the protection has only tightened in Midnight (12.x). Read them naively in combat
+and you get `[secret]` placeholders in the UI, or — worse — silently leak taint
+into action bars, macros, and other addons.
 
-**Split mode — offensive and defensive on separate movable panels:**
+StatsPro defends against this end-to-end:
 
-![Split mode panels](screenshots/01-split-mode-hero.jpg)
+- Every stat read is wrapped in `pcall + issecretvalue` before display
+- FontString widths are cached when non-secret, so the auto-fit layout stays stable
+  mid-pull instead of collapsing to zero
+- Repair cost uses the modern `C_TooltipInfo.GetInventoryItem` API (the legacy
+  `GameTooltip:SetInventoryItem` returns the cost as a secret value in 12.x — a lot
+  of older HUD-style addons broke quietly because of this)
 
-**Live repair cost at the vendor — vendor-format coin string with inline gold/silver/copper icons:**
-
-![Repair cost at vendor](screenshots/04-repair-cost-vendor.jpg)
+If you're not sure whether your current stat addon is Midnight-safe, run a heavy
+pull and check whether the numbers stay correct throughout the fight.
 
 ## Localization
 
 Stat labels render in your WoW client's language by default — no setup required.
 Curated short-form translations across all 11 retail WoW locales preserve the same
 compact 4-7 char visual rhythm as the original English labels:
+
+![StatsPro localization — short-form stat names across 11 retail WoW locales, color-coded with default StatsPro stat colors](screenshots/localization.png)
 
 | Locale | Sample row |
 |---|---|
@@ -97,6 +139,8 @@ suggested correction — single-row fixes ship in the next patch.
 | `/ss debug` | Dump runtime state to chat (for bug reports) |
 | `/ss help` | List commands in chat |
 
+Tip: bind `/ss toggle` to a key — open Esc → Options → Keybindings → AddOns → StatsPro.
+
 ## Installation
 
 **CurseForge:** [www.curseforge.com/wow/addons/statspro](https://www.curseforge.com/wow/addons/statspro)
@@ -108,16 +152,16 @@ suggested correction — single-row fixes ship in the next patch.
 
 ## Configuration
 
-Type `/ss` or click the StatsPro entry in the Blizzard AddOns settings panel to open
-the configuration window.
+Type `/ss` or click the StatsPro entry in the Blizzard AddOns settings panel to
+open the configuration window. Three tabs cover everything:
+
+![StatsPro settings — Display, Stats, and Defensive tabs side by side](screenshots/settings-tabs.png)
 
 | Tab | What lives here |
 |---|---|
 | **Display** | Master visibility, lock, display mode, localization toggle (non-English clients), font, font size, panel scale, refresh rate, color presets |
 | **Stats** | Per-stat toggles for Primary (Str/Agi/Int), Offensive (Crit/Haste/Mastery/Vers) and Tertiary (Leech/Avoidance/Speed) with inline color swatches |
 | **Defensive** | Per-stat toggles for Dodge/Parry/Block/Armor, durability options (auto-color, worst-slot vs average), repair cost |
-
-![Display tab settings](screenshots/05-settings-display.jpg)
 
 ## Compatibility
 
@@ -144,22 +188,23 @@ Single-file design. Everything renders out of [`StatsPro.lua`](StatsPro.lua):
   conditional `vN-1 → vN` clause when changing a default value, so existing users
   on the old default upgrade automatically while explicit user choices are preserved.
 
-The repository's [`CHANGELOG.md`](CHANGELOG.md) documents what shipped per version and
-why. Tricky 12.x retail API behavior (secret-value handling, FontString taint, layout
-ordering quirks) is annotated as `WHY:` / `WARNING:` comments at the relevant call sites.
+The repository's [`CHANGELOG.md`](CHANGELOG.md) documents what shipped per version
+and why. Tricky 12.x retail API behavior (secret-value handling, FontString taint,
+layout ordering quirks) is annotated as `WHY:` / `WARNING:` comments at the
+relevant call sites.
 
 ## Bug reports / feature requests
 
-Open an issue on [GitHub Issues](https://github.com/Antrakt92/StatsPro/issues). Helpful
-to include: WoW client version, addon version (visible in the settings window header),
-exact reproduction steps, and a screenshot if the issue is visual.
+Open an issue on [GitHub Issues](https://github.com/Antrakt92/StatsPro/issues).
+Helpful to include: WoW client version, addon version (visible in the settings
+window header), exact reproduction steps, and a screenshot if the issue is visual.
 
 ## Acknowledgements
 
-- **[TaylorSay](https://www.curseforge.com/members/taylorsay)** — author of the original
-  [SwiftStats](https://www.curseforge.com/wow/addons/swiftstats) addon (MIT), the
-  project that inspired StatsPro and from which the initial defaults and color scheme
-  are derived.
+- **[TaylorSay](https://www.curseforge.com/members/taylorsay)** — author of the
+  original [SwiftStats](https://www.curseforge.com/wow/addons/swiftstats) addon
+  (MIT), the project that inspired StatsPro and from which the initial defaults
+  and color scheme are derived.
 - **[LibSharedMedia-3.0](https://www.curseforge.com/wow/addons/libsharedmedia-3-0)** — font selection support.
 
 ## License

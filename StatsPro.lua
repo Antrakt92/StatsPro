@@ -7,7 +7,7 @@ local _, addon = ...
 --[[ ============================================================
     1. CONSTANTS
 ============================================================ ]]
-local CURRENT_DB_VERSION = 3
+local CURRENT_DB_VERSION = 4
 
 local DURABILITY_SLOT_MIN = 1
 local DURABILITY_SLOT_MAX = 19
@@ -36,7 +36,7 @@ local issecretvalue = _G.issecretvalue or function() return false end
 -- literal `@project-version@` token from the unsubstituted TOC — fall back to a
 -- hand-maintained constant so the title still reads e.g. `v1.0.3-dev` instead of `vdev`.
 -- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
-local CURRENT_RELEASE = "1.0.9"
+local CURRENT_RELEASE = "1.0.10"
 local ADDON_VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("StatsPro", "Version") or "?"
 if ADDON_VERSION:find("project%-version") then ADDON_VERSION = CURRENT_RELEASE .. "-dev" end
 
@@ -51,7 +51,14 @@ local defaults = {
     yOfs = 0,
     scale = 1.0,
     fontSize = 14,
-    font = "Fonts\\FRIZQT__.TTF",
+    -- WHY STANDARD_TEXT_FONT: Blizzard's locale-aware default-font global. Resolves to
+    -- the right TTF for the current WoW client locale: on zhCN/zhTW/koKR clients it
+    -- maps to a CJK-supporting font; on enUS/ruRU/deDE/etc. it maps to the appropriate
+    -- Latin-or-Cyrillic-supporting one. Hardcoding `Fonts\\FRIZQT__.TTF` would render
+    -- localized labels (Crit / 暴击 / 치명 / etc.) as `?` boxes on CJK clients that
+    -- ship the CJK font under a different filename. Fall back to FRIZQT only if the
+    -- global is somehow unavailable (extreme edge case in pre-init contexts).
+    font = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF",
     textAlign = "RIGHT",
     updateInterval = 0.5,
     isVisible = true,
@@ -493,6 +500,15 @@ end
 
 local function RGBToHex(r, g, b)
     -- WARNING: explicit floor for portability across Lua versions (5.1 tolerates floats; 5.3+ requires int)
+    -- WARNING: clamp + nil-coalesce defends against SavedVariables corruption / manual
+    -- edits. Out-of-range values (e.g. r=2 from a hand-edited Lua file) would render
+    -- as 3-hex-digit substrings (`1fe`) and corrupt the surrounding `|cffXXXXXX...|r`
+    -- color escape — every stat row downstream would render with broken colors until
+    -- the user resets settings. ColorPicker always returns 0..1, so this is purely
+    -- a defensive guard against external DB tampering, not a hot-path concern.
+    r = math.max(0, math.min(1, tonumber(r) or 0))
+    g = math.max(0, math.min(1, tonumber(g) or 0))
+    b = math.max(0, math.min(1, tonumber(b) or 0))
     return string.format("%02x%02x%02x",
         math.floor(r * 255 + 0.5),
         math.floor(g * 255 + 0.5),
@@ -563,6 +579,17 @@ local function MigrateDB()
     -- the old default; preserve any explicit user choice (CENTER/RIGHT untouched).
     if db.dbVersion == 2 and db.textAlign == "LEFT" then
         db.textAlign = "RIGHT"
+    end
+
+    -- v3 → v4: default font changed from hardcoded `Fonts\FRIZQT__.TTF` to the
+    -- locale-aware `STANDARD_TEXT_FONT` global. Upgrade only users still on the old
+    -- hardcoded default — preserve any explicit user choice (LSM-registered font,
+    -- ARIALN, etc.). For enUS clients STANDARD_TEXT_FONT typically resolves to
+    -- FRIZQT__.TTF anyway, so the migration is visually a no-op there; on
+    -- zhCN/zhTW/koKR clients it switches to the CJK-supporting default font so
+    -- localized labels render correctly out of the box.
+    if (db.dbVersion or 3) <= 3 and db.font == "Fonts\\FRIZQT__.TTF" and STANDARD_TEXT_FONT then
+        db.font = STANDARD_TEXT_FONT
     end
 
     db.dbVersion = CURRENT_DB_VERSION
@@ -1426,6 +1453,14 @@ local function OnPlayerEnteringWorld()
         LoadAllPositions()
         SetAllPanelsLockState(GetDB("isLocked"))
         SetAllPanelsScale(GetDB("scale"))
+        -- WHY re-apply font/size at PEW: Panel:New creates FontStrings at file scope
+        -- with whatever GetDB("font") returns BEFORE MigrateDB runs. If the migration
+        -- changed db.font (e.g. v3→v4 hardcoded → STANDARD_TEXT_FONT auto-upgrade),
+        -- the FontStrings would still hold the pre-migration font for the entire
+        -- session until /reload. CJK users on the old default would see `?` boxes for
+        -- their localized labels for one whole session. Re-applying after MigrateDB
+        -- closes that window.
+        ApplyTextStyleToAllPanels(GetDB("font"), GetDB("fontSize"))
         isLoaded = true
     end
     -- WHY: UpdateStats handles Show/Hide based on cached.isVisible + line content.

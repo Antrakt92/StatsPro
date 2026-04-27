@@ -36,7 +36,7 @@ local issecretvalue = _G.issecretvalue or function() return false end
 -- literal `@project-version@` token from the unsubstituted TOC — fall back to a
 -- hand-maintained constant so the title still reads e.g. `v1.0.3-dev` instead of `vdev`.
 -- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
-local CURRENT_RELEASE = "1.0.10"
+local CURRENT_RELEASE = "1.0.11"
 local ADDON_VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("StatsPro", "Version") or "?"
 if ADDON_VERSION:find("project%-version") then ADDON_VERSION = CURRENT_RELEASE .. "-dev" end
 
@@ -269,6 +269,8 @@ local LABELS_BY_LOCALE = {
         Leech = "Leech",        Avoidance = "Avoidance", Speed = "Speed",
         Durability = "Durability", Repair = "Repair",
         Defensive = "Defensive",
+        -- Settings UI words (config menu only, never appear on the panel itself):
+        Color = "Color",
     },
 
     -- ruRU: Russian. Haste/Speed disambig is structural — WoW client uses "Скорость"
@@ -283,6 +285,7 @@ local LABELS_BY_LOCALE = {
         Leech = "Вамп",         Avoidance = "Избег",    Speed = "Скор",
         Durability = "Проч",    Repair = "Рем",
         Defensive = "Защита",
+        Color = "Цвет",
     },
 
     -- deDE: German. Haste="Tempo" matches the WoW German client term; Speed="Lauf"
@@ -297,6 +300,7 @@ local LABELS_BY_LOCALE = {
         Leech = "Saug",         Avoidance = "Verm",     Speed = "Lauf",
         Durability = "Haltb",   Repair = "Repar",
         Defensive = "Defensiv",
+        Color = "Farbe",
     },
 
     -- frFR: French. Hâte (4 chars, accented form) is WoW's official Haste term; Vit
@@ -310,6 +314,7 @@ local LABELS_BY_LOCALE = {
         Leech = "Vamp",         Avoidance = "Évit",     Speed = "Vit",
         Durability = "Dura",    Repair = "Rép",
         Defensive = "Défense",
+        Color = "Couleur",
     },
 
     -- esES: Spanish (Spain). WoW Spanish client uses Celeridad / Velocidad for the
@@ -324,6 +329,7 @@ local LABELS_BY_LOCALE = {
         Leech = "Robo",         Avoidance = "Evit",     Speed = "Vel",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defensa",
+        Color = "Color",
     },
 
     -- esMX: Latin American Spanish — stat-term short forms are effectively shared
@@ -335,6 +341,7 @@ local LABELS_BY_LOCALE = {
         Leech = "Robo",         Avoidance = "Evit",     Speed = "Vel",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defensa",
+        Color = "Color",
     },
 
     -- itIT: Italian. Cele (Celerità) / Vel (Velocità) Haste/Speed split. Para
@@ -348,6 +355,7 @@ local LABELS_BY_LOCALE = {
         Leech = "Vamp",         Avoidance = "Evit",     Speed = "Vel",
         Durability = "Durab",   Repair = "Ripa",
         Defensive = "Difesa",
+        Color = "Colore",
     },
 
     -- ptBR: Brazilian Portuguese. Cele (Celeridade) / Vel (Velocidade). Forç (with
@@ -360,6 +368,7 @@ local LABELS_BY_LOCALE = {
         Leech = "Vamp",         Avoidance = "Evit",     Speed = "Vel",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defesa",
+        Color = "Cor",
     },
 
     -- koKR: Korean. Parry/Block previously collided — both used 막기-family terms
@@ -379,6 +388,7 @@ local LABELS_BY_LOCALE = {
         Leech = "흡혈",         Avoidance = "광피",     Speed = "이속",
         Durability = "내구",    Repair = "수리",
         Defensive = "수비",
+        Color = "색상",
     },
 
     -- zhCN: Simplified Chinese. All terms match the official WoW Chinese client
@@ -391,6 +401,7 @@ local LABELS_BY_LOCALE = {
         Leech = "吸血",         Avoidance = "闪避",     Speed = "移速",
         Durability = "耐久",    Repair = "修理",
         Defensive = "防御",
+        Color = "颜色",
     },
 
     -- zhTW: Traditional Chinese (Taiwan). Same 2-char convention as zhCN but
@@ -403,6 +414,7 @@ local LABELS_BY_LOCALE = {
         Leech = "汲取",         Avoidance = "迴避",     Speed = "移速",
         Durability = "耐久",    Repair = "修理",
         Defensive = "防禦",
+        Color = "顏色",
     },
 }
 
@@ -1527,7 +1539,14 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
     cb:SetSize(22, 22)
     local text = _G[name .. "Text"]
     text:SetText(label)
-    text:SetFont("Fonts\\FRIZQT__.TTF", 12)
+    -- WHY STANDARD_TEXT_FONT (not hardcoded FRIZQT__.TTF): the Localization-toggle
+    -- checkbox label embeds a live-localized stat name preview (e.g. on zhCN: "Use
+    -- localized stat names (e.g. '暴击' instead of 'Crit')"). FRIZQT__.TTF on CJK
+    -- clients doesn't ship CJK glyphs — the preview character would render as `?`.
+    -- Using the locale-aware Blizzard global fixes the preview rendering on CJK
+    -- clients without affecting Latin/Cyrillic locales (where STANDARD_TEXT_FONT
+    -- resolves to FRIZQT or a Cyrillic-extended variant anyway).
+    text:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 12)
     -- textWidth: 200 default for plain checkboxes; pass 140 for "checkbox + inline color" rows
     text:SetWidth(textWidth or 200)
     text:SetJustifyH("LEFT")
@@ -1622,9 +1641,19 @@ end
 
 local function CreateColorPicker(parent, label, statName, yPos, xPos)
     local colorLabel = parent:CreateFontString(nil, "OVERLAY")
-    colorLabel:SetFont("Fonts\\FRIZQT__.TTF", 12)
+    -- WHY STANDARD_TEXT_FONT (not hardcoded FRIZQT__.TTF): same trap as the panel's
+    -- default font — on CJK clients FRIZQT__.TTF doesn't ship the locale's glyphs,
+    -- so the just-localized "Crit 颜色:" label would render with a `?` box for the
+    -- Chinese stat name. Use the locale-aware Blizzard global so the config UI
+    -- displays correctly regardless of client locale.
+    colorLabel:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 12)
     colorLabel:SetPoint("TOPLEFT", xPos, yPos)
-    colorLabel:SetText(label .. " Color:")
+    -- Localize both the stat name and the "Color" word. Stat names like Crit/Haste/
+    -- Mastery/Versatility have entries in LABELS_BY_LOCALE; "Rating"/"Percentage" don't,
+    -- so L() falls through to the English literal for those rows. Word order ("X Color")
+    -- is universal across all locales for now — native speakers can request a per-locale
+    -- format string ("Color X" for Romance languages) via GitHub Issues if it reads oddly.
+    colorLabel:SetText(L(label) .. " " .. L("Color") .. ":")
 
     local colorBtn = CreateFrame("Button", nil, parent, "BackdropTemplate")
     colorBtn:SetPoint("LEFT", colorLabel, "RIGHT", 10, 0)

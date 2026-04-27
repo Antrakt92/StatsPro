@@ -1,5 +1,49 @@
 # Changelog
 
+## 1.0.11 — Localized color-picker labels + Localization toggle preview fix
+
+### Added
+
+- **Color-picker rows in the Display tab now show localized stat names.**
+  Previously hardcoded as `Crit Color:` / `Mastery Color:` / etc. in
+  English even on non-enUS clients. Now both the stat name and the
+  word "Color" are translated through the per-locale `LABELS_BY_LOCALE`
+  table — a ruRU client sees `Крит Цвет:`, zhCN sees `暴击 颜色:`,
+  deDE sees `Krit Farbe:`, and so on. Word order ("X Color") is
+  universal across all 11 locales for now; native speakers who'd
+  prefer the more natural "Color X" order in Romance languages can
+  request it via GitHub Issues for a per-locale format-string
+  expansion in a later release.
+- The two non-stat color-picker rows ("Rating Color" and "Percentage
+  Color") still display "Rating" / "Percentage" in English — those
+  aren't stat names and aren't part of the per-locale translation
+  table. The `Color` word IS localized for them, so the result is a
+  half-and-half label like `Rating Цвет:` for now. They'll be fully
+  localized when the full settings-UI L-table ships (tracked in AUDIT).
+
+### Fixed
+
+- **Localization-toggle checkbox preview no longer renders as `?` boxes
+  on CJK clients.** The toggle's label embeds a live-localized stat name
+  example (e.g. `Use localized stat names (e.g. '暴击' instead of 'Crit')`
+  on zhCN). The checkbox FontString was hardcoded to `Fonts\FRIZQT__.TTF`
+  which on Chinese / Korean / Traditional Chinese clients doesn't ship
+  the CJK glyphs — ironically, the very feature for switching to
+  localized labels showed `?` boxes for the localized preview character.
+  Now uses `STANDARD_TEXT_FONT` (locale-aware), affecting only the
+  rendering of CJK glyphs; Latin / Cyrillic clients see no visual change.
+
+### Internal
+
+- New `Color` key added to all 11 locale entries in `LABELS_BY_LOCALE`.
+  Translations: enUS=Color, ruRU=Цвет, deDE=Farbe, frFR=Couleur,
+  esES/esMX=Color, itIT=Colore, ptBR=Cor, koKR=색상, zhCN=颜色, zhTW=顏色.
+  This is the start of a settings-UI L-table; the full L-table (tab
+  names, section headers, every checkbox label, slider labels) is
+  tracked separately and requires a UTF-8-aware uppercase helper to
+  avoid the `string.upper` byte-corruption trap on non-ASCII section
+  headers.
+
 ## 1.0.10 — Locale-aware default font (CJK fix) + RGBToHex hardening
 
 ### Fixed

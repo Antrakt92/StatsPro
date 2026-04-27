@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.0.12 — Per-locale TOC Notes
+
+### Added
+
+- **Localized addon-list description (`## Notes-<locale>:` TOC fields).**
+  The in-game AddOn list (Esc → Options → AddOns) shows a one-liner under
+  each addon's name. Until now StatsPro displayed the English line on every
+  client. v1.0.12 adds localized variants for all 10 non-English retail
+  locales: deDE, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, zhTW. ruRU
+  is maintainer-language; CJK lines use standard WoW client UI / stat
+  terminology consistent with the per-stat localization shipped in v1.0.6.
+  Latin-script translations are mechanical phrase mappings respecting each
+  language's capitalization rules. Single-line corrections from native
+  speakers welcome via GitHub Issues.
+
+### Internal
+
+- **`JoinValuesCol` lifted from a per-tick closure to module scope.** The
+  function is a stateless wrapper around `IsDualColMode` + `JoinLinesSecretSafe`
+  with no upvalue capture — defining it as a `local function` inside
+  `UpdateStats` allocated a fresh closure on every refresh tick (~2/sec at
+  default refresh rate). Move to module scope eliminates the allocation.
+  Imperceptible on modern hardware, free hygiene on weak hardware running
+  at very low refresh rates.
+- **`OpenColorPicker` cancel handler now preserves "uses default" inheritance
+  state.** When you opened the per-stat color picker for a stat that was
+  unset in `StatsProDB.colors` (i.e. resolved via the default-fallback chain
+  in `GetColor`), then dragged through different colors and clicked Cancel,
+  the cancel handler wrote the resolved-default tuple back into the DB —
+  converting unset → explicit-default. In practice the storage model
+  populates explicit-default tuples for every color key on every `/reload`
+  (via `MigrateDB`), so the user-facing impact of the prior behavior was
+  negligible — but the function-level invariant is now correct and remains
+  correct under any future storage-model refactor that produces unset
+  entries.
+
 ## 1.0.11 — Localized color-picker labels + Localization toggle preview fix
 
 ### Added

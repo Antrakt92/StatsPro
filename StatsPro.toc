@@ -1,6 +1,16 @@
 ## Interface: 120005, 120007
 ## Title: |cff00ff7fStatsPro|r
 ## Notes: On-screen secondary, defensive stats, durability and repair cost
+## Notes-deDE: Bildschirm-Sekundär- und Verteidigungswerte, Haltbarkeit und Reparaturkosten
+## Notes-esES: Estadísticas secundarias y defensivas en pantalla, durabilidad y coste de reparación
+## Notes-esMX: Estadísticas secundarias y defensivas en pantalla, durabilidad y costo de reparación
+## Notes-frFR: Statistiques secondaires et défensives à l'écran, durabilité et coût de réparation
+## Notes-itIT: Statistiche secondarie e difensive a schermo, durabilità e costo di riparazione
+## Notes-koKR: 보조 및 방어 능력치, 내구도, 수리 비용 화면 표시
+## Notes-ptBR: Atributos secundários e defensivos na tela, durabilidade e custo de reparo
+## Notes-ruRU: Вторичные и защитные характеристики, прочность и стоимость ремонта на экране
+## Notes-zhCN: 屏显副属性、防御属性、耐久度和修理花费
+## Notes-zhTW: 螢幕顯示副屬性、防禦屬性、耐久度與修理費用
 ## Author: Antrakt
 ## Version: @project-version@
 ## IconTexture: Interface\AddOns\StatsPro\textures\logo.blp

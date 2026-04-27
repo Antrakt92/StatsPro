@@ -36,7 +36,7 @@ local issecretvalue = _G.issecretvalue or function() return false end
 -- literal `@project-version@` token from the unsubstituted TOC — fall back to a
 -- hand-maintained constant so the title still reads e.g. `v1.0.3-dev` instead of `vdev`.
 -- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
-local CURRENT_RELEASE = "1.0.11"
+local CURRENT_RELEASE = "1.0.12"
 local ADDON_VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("StatsPro", "Version") or "?"
 if ADDON_VERSION:find("project%-version") then ADDON_VERSION = CURRENT_RELEASE .. "-dev" end
 
@@ -1067,6 +1067,17 @@ local function IsDualColMode()
     return cached.showRating and cached.showPercentage
 end
 
+-- WHY: in single-column display modes (only rating OR only percent on, or neither),
+-- Build*/Fmt* helpers route ALL content into the rating col and push a literal "" to
+-- the value col for every row. Pass "" directly to SetTextSafe instead of joining N
+-- empty literals — joining produces "\n\n\n" which makes valueText:GetStringWidth()
+-- unreliable in 12.x (returns stale/secret-tainted, panel layout breaks). Safe because
+-- "" is a literal at all push sites in single-col mode (no taint comparison needed).
+local function JoinValuesCol(values)
+    if IsDualColMode() then return JoinLinesSecretSafe(values) end
+    return ""
+end
+
 -- Format a stat value (rating + percentage variants honoring user toggles).
 -- Returns TWO strings (ratingStr, valueStr) — see IsDualColMode for routing rules.
 local function FmtRatingPct(rating, pct, statColor)
@@ -1349,17 +1360,6 @@ local function UpdateStats()
     local defLabels,  defRatings,  defValues  = BuildDefensiveLines()
     local durLabels,  durRatings,  durValues, repairStr, repairLabelStr = BuildDurabilityLines()
 
-    -- WHY: in single-column display modes (only rating OR only percent on, or neither),
-    -- Build*/Fmt* helpers route ALL content into the rating col and push a literal "" to
-    -- the value col for every row. Pass "" directly to SetTextSafe instead of joining N
-    -- empty literals — joining produces "\n\n\n" which makes valueText:GetStringWidth()
-    -- unreliable in 12.x (returns stale/secret-tainted, panel layout breaks). Safe because
-    -- "" is a literal at all push sites in single-col mode (no taint comparison needed).
-    local function JoinValuesCol(values)
-        if IsDualColMode() then return JoinLinesSecretSafe(values) end
-        return ""
-    end
-
     -- Dispatch by display mode. repairStr always travels with the durability rows;
     -- in split mode that's the defensive panel, otherwise the main panel.
     local mode = cached.displayMode or "flat"
@@ -1581,6 +1581,10 @@ end
 -- at click time, not creation time, so cancelling a 2nd pick reverts to the user's prior
 -- color, not the original default.
 local function OpenColorPicker(btn, statName)
+    -- WHY: capture "uses default" state so cancel can restore exactly that — writing
+    -- the resolved-default tuple back would convert unset → explicit-default in DB
+    -- (visible only between cancel and the next /reload, but the invariant is correct).
+    local hadExplicitColor = StatsProDB.colors and StatsProDB.colors[statName] ~= nil
     local current = GetColor(statName)
     local snapshot = { r = current.r, g = current.g, b = current.b }
     local function OnColorSelect()
@@ -1592,7 +1596,7 @@ local function OpenColorPicker(btn, statName)
     end
     local function OnCancel()
         btn:SetBackdropColor(snapshot.r, snapshot.g, snapshot.b, 1)
-        StatsProDB.colors[statName] = snapshot
+        StatsProDB.colors[statName] = hadExplicitColor and snapshot or nil
         CacheSettings()
         UpdateStats()
     end

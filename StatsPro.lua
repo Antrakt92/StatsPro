@@ -17,7 +17,8 @@ local DURABILITY_SKIP_SLOTS = { [4] = true, [18] = true }
 local DURABILITY_GREEN_THRESHOLD  = 60
 local DURABILITY_YELLOW_THRESHOLD = 30
 
-local DEFENSIVE_HEADER = "|cff808080— Defensive —|r"
+-- DEFENSIVE_HEADER moved into a function (DefensiveHeader) in section 7 so it picks up
+-- the locale-aware divider word from L("Defensive") and reacts to toggle flips.
 
 --[[ ============================================================
     2. LIBRARIES + API SHIMS
@@ -35,7 +36,7 @@ local issecretvalue = _G.issecretvalue or function() return false end
 -- literal `@project-version@` token from the unsubstituted TOC — fall back to a
 -- hand-maintained constant so the title still reads e.g. `v1.0.3-dev` instead of `vdev`.
 -- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
-local CURRENT_RELEASE = "1.0.5"
+local CURRENT_RELEASE = "1.0.6"
 local ADDON_VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("StatsPro", "Version") or "?"
 if ADDON_VERSION:find("project%-version") then ADDON_VERSION = CURRENT_RELEASE .. "-dev" end
 
@@ -58,6 +59,13 @@ local defaults = {
 
     -- Display mode: "flat" | "sectioned" | "split"
     displayMode = "flat",
+
+    -- Localization: when true, swap compact English stat labels for hand-curated short-form
+    -- equivalents in the user's WoW client locale (e.g. "Crit" → "Крит" on ruRU, "暴击" on
+    -- zhCN). Default true: non-English clients see localized labels by default, matching
+    -- the rest of their localized WoW UI. Opt out via Display tab → Localization checkbox.
+    -- enUS clients see no visible difference (LABELS_BY_LOCALE.enUS is the identity map).
+    useLocalizedLabels = true,
 
     -- Defensive panel position
     defensive_point = "CENTER",
@@ -167,6 +175,8 @@ local CACHED_BOOL_KEYS = {
     "showDefensive", "hideZeroDefensive",
     "showDodge", "showParry", "showBlock", "showArmor",
     "showDurability", "showRepairCost", "useAutoColorDurability", "useWorstDurability",
+    -- Localization toggle (gated by HAS_LOCALIZATION in Display tab — checkbox hidden on enUS):
+    "useLocalizedLabels",
 }
 
 -- WHY: COLOR_KEYS removed - CacheSettings now iterates pairs(defaults.colors) directly
@@ -215,6 +225,183 @@ local isLoaded = false
 --[[ ============================================================
     7. HELPERS
 ============================================================ ]]
+
+-- Compact short-form stat labels, hand-curated per locale to match StatsPro's
+-- 4-7-char aesthetic across every client language. Translation philosophy:
+-- preserve the same visual weight as the English "Crit" / "Vers" — abbreviated
+-- where the natural translation is long, full where it's already short.
+--
+-- Ships with all 11 retail WoW locales:
+--   enUS (canonical, identity map)
+--   ruRU (Haste/Speed disambig user-confirmed; other rows reviewable in seconds)
+--   deDE / esES / esMX / frFR / itIT / koKR / ptBR / zhCN / zhTW (Claude drafts;
+--     native-speaker review tracked via GitHub Issues, per-row fixes in v1.0.7+)
+-- Locales not in this table (any future Blizzard locale, e.g. plPL) fall back
+-- to enUS via the `or LABELS_BY_LOCALE.enUS` selector AND the toggle is hidden
+-- in the config UI (no dead switch). HAS_LOCALIZATION below is the gate.
+--
+-- WARNING: keys MUST match exactly the English literals used at the call sites:
+--   - def.label values from OFFENSIVE_STATS / DEFENSIVE_STATS / PRIMARY_STATS /
+--     TERTIARY_STATS (section 4)
+--   - hardcoded literals in special-case branches: "Vers" / "Speed" / "Armor"
+--     (additive rows for dual-source stats not in the loop tables)
+--   - "Durability" / "Repair" in BuildDurabilityLines
+--   - "Defensive" used by DefensiveHeader() for sectioned-mode divider
+-- Adding a new key here without updating callers is a no-op; adding a new caller
+-- without a key here falls back gracefully to the English literal (`L(k) → k`).
+local LABELS_BY_LOCALE = {
+    enUS = {
+        Crit = "Crit",          Haste = "Haste",        Mastery = "Mastery",    Vers = "Vers",
+        Dodge = "Dodge",        Parry = "Parry",        Block = "Block",        Armor = "Armor",
+        Strength = "Strength",  Agility = "Agility",    Intellect = "Intellect",
+        Leech = "Leech",        Avoidance = "Avoidance", Speed = "Speed",
+        Durability = "Durability", Repair = "Repair",
+        Defensive = "Defensive",
+    },
+
+    -- ruRU: Haste/Speed disambig user-confirmed (Хаст / Скор). Other rows are draft;
+    -- ruRU user (the maintainer) can spot-check during impl in seconds. Скорость is the
+    -- WoW client term for BOTH Haste and Speed → Хаст (transliteration) frees Скор for Speed.
+    ruRU = {
+        Crit = "Крит",          Haste = "Хаст",         Mastery = "Маст",       Vers = "Унив",
+        Dodge = "Укл",          Parry = "Пар",          Block = "Блок",         Armor = "Брон",
+        Strength = "Сила",      Agility = "Ловк",       Intellect = "Инт",
+        Leech = "Кров",         Avoidance = "Избег",    Speed = "Скор",
+        Durability = "Прч",     Repair = "Рем",
+        Defensive = "Защита",
+    },
+
+    -- deDE: DRAFT (Claude-generated, native-speaker review pending). German.
+    -- Haste = "Tempo" (4 chars) vs Speed = "Lauf" (run-speed) to disambiguate.
+    deDE = {
+        Crit = "Krit",          Haste = "Tempo",        Mastery = "Meist",      Vers = "Viel",
+        Dodge = "Ausw",         Parry = "Par",          Block = "Block",        Armor = "Rüst",
+        Strength = "Stä",       Agility = "Bew",        Intellect = "Int",
+        Leech = "Saug",         Avoidance = "Verm",     Speed = "Lauf",
+        Durability = "Halt",    Repair = "Repar",
+        Defensive = "Defensiv",
+    },
+
+    -- frFR: DRAFT. French. Hâte (full word, 4 chars) and Vit (Vitesse) distinct.
+    frFR = {
+        Crit = "Crit",          Haste = "Hâte",         Mastery = "Maît",       Vers = "Polyv",
+        Dodge = "Esq",          Parry = "Par",          Block = "Bloc",         Armor = "Arm",
+        Strength = "For",       Agility = "Agil",       Intellect = "Int",
+        Leech = "Vamp",         Avoidance = "Évit",     Speed = "Vit",
+        Durability = "Dur",     Repair = "Rép",
+        Defensive = "Défense",
+    },
+
+    -- esES: DRAFT. Spanish (Spain). Cel (Celeridad) vs Vel (Velocidad) for the
+    -- Haste / Speed split, mirroring WoW's own Spanish client term distinction.
+    esES = {
+        Crit = "Crít",          Haste = "Cel",          Mastery = "Maest",      Vers = "Versat",
+        Dodge = "Esq",          Parry = "Par",          Block = "Bloq",         Armor = "Arm",
+        Strength = "Fue",       Agility = "Agi",        Intellect = "Int",
+        Leech = "Suc",          Avoidance = "Evit",     Speed = "Vel",
+        Durability = "Durab",   Repair = "Rep",
+        Defensive = "Defensa",
+    },
+
+    -- esMX: DRAFT. Latin American Spanish — same base translations as esES; minor
+    -- regional differences exist but stat-term short forms are effectively shared.
+    esMX = {
+        Crit = "Crít",          Haste = "Cel",          Mastery = "Maest",      Vers = "Versat",
+        Dodge = "Esq",          Parry = "Par",          Block = "Bloq",         Armor = "Arm",
+        Strength = "Fue",       Agility = "Agi",        Intellect = "Int",
+        Leech = "Suc",          Avoidance = "Evit",     Speed = "Vel",
+        Durability = "Durab",   Repair = "Rep",
+        Defensive = "Defensa",
+    },
+
+    -- itIT: DRAFT. Italian. Cele (Celerità) vs Vel (Velocità) Haste/Speed split.
+    itIT = {
+        Crit = "Crit",          Haste = "Cele",         Mastery = "Maest",      Vers = "Vers",
+        Dodge = "Schiv",        Parry = "Par",          Block = "Bloc",         Armor = "Arm",
+        Strength = "For",       Agility = "Ag",         Intellect = "Int",
+        Leech = "Vamp",         Avoidance = "Evit",     Speed = "Vel",
+        Durability = "Durab",   Repair = "Rip",
+        Defensive = "Difesa",
+    },
+
+    -- ptBR: DRAFT. Brazilian Portuguese. Cele (Celeridade) vs Vel (Velocidade).
+    ptBR = {
+        Crit = "Crít",          Haste = "Cele",         Mastery = "Maest",      Vers = "Vers",
+        Dodge = "Esq",          Parry = "Par",          Block = "Bloq",         Armor = "Arm",
+        Strength = "For",       Agility = "Agi",        Intellect = "Int",
+        Leech = "Vamp",         Avoidance = "Evit",     Speed = "Vel",
+        Durability = "Durab",   Repair = "Rep",
+        Defensive = "Defesa",
+    },
+
+    -- koKR: DRAFT — lowest confidence locale, native-speaker review strongly
+    -- recommended. CJK 2-char common community terms; Block (방패) vs Armor (방어) distinct.
+    -- Parry uses 막기 (more standard). Avoidance (광피) is uncommon shorthand.
+    koKR = {
+        Crit = "치명",          Haste = "가속",         Mastery = "특화",       Vers = "유연",
+        Dodge = "회피",         Parry = "막기",         Block = "방패",         Armor = "방어",
+        Strength = "힘",        Agility = "민첩",       Intellect = "지능",
+        Leech = "흡혈",         Avoidance = "광피",     Speed = "이속",
+        Durability = "내구",    Repair = "수리",
+        Defensive = "방어",
+    },
+
+    -- zhCN: DRAFT. Simplified Chinese. 2-char terms widely used in CN WoW community
+    -- for stat displays. 躲闪 (Dodge) vs 闪避 (Avoidance) is the standard zhCN split.
+    zhCN = {
+        Crit = "暴击",          Haste = "急速",         Mastery = "精通",       Vers = "全能",
+        Dodge = "躲闪",         Parry = "招架",         Block = "格挡",         Armor = "护甲",
+        Strength = "力量",      Agility = "敏捷",       Intellect = "智力",
+        Leech = "吸血",         Avoidance = "闪避",     Speed = "移速",
+        Durability = "耐久",    Repair = "修理",
+        Defensive = "防御",
+    },
+
+    -- zhTW: DRAFT. Traditional Chinese (Taiwan). Same 2-char convention as zhCN
+    -- but Traditional script forms (護甲 vs 护甲, 格擋 vs 格挡, 迴避 vs 闪避).
+    zhTW = {
+        Crit = "致命",          Haste = "加速",         Mastery = "精通",       Vers = "全能",
+        Dodge = "躲避",         Parry = "招架",         Block = "格擋",         Armor = "護甲",
+        Strength = "力量",      Agility = "敏捷",       Intellect = "智力",
+        Leech = "汲取",         Avoidance = "迴避",     Speed = "移速",
+        Durability = "耐久",    Repair = "修理",
+        Defensive = "防禦",
+    },
+}
+
+-- Locale resolves once at addon load (it doesn't change at runtime). If the user's
+-- locale isn't curated, fall back to enUS (identity map) — toggle has no effect
+-- visually, and the config UI hides the checkbox to avoid confusion.
+local CURRENT_LOCALE = GetLocale()
+local LOCALIZED_LABELS = LABELS_BY_LOCALE[CURRENT_LOCALE] or LABELS_BY_LOCALE.enUS
+local HAS_LOCALIZATION = (LOCALIZED_LABELS ~= LABELS_BY_LOCALE.enUS)
+
+-- WHY identity-fast-path: when toggle is off (opt-out), this is a no-op direct return.
+-- When toggle is on (default), we hit one table read — still O(1), no _G access, no
+-- iteration. Both paths are constant-time. `cached` upvalue is captured by reference
+-- (line 195 declaration is never reassigned) so toggle flips reflect immediately.
+local function L(englishKey)
+    if cached.useLocalizedLabels then
+        return LOCALIZED_LABELS[englishKey] or englishKey
+    end
+    return englishKey
+end
+
+-- Replaces nine `string.format("|cff%s%s:|r", color, label)` sites in builder
+-- functions. Single point where coloring + localization compose. Future new stat
+-- needs one row in LABELS_BY_LOCALE.enUS + one FormatLabel call site, plus a
+-- translation row in each shipped non-English locale (4-7 char short form).
+local function FormatLabel(colorHex, englishKey)
+    return string.format("|cff%s%s:|r", colorHex, L(englishKey))
+end
+
+-- Replaces the static `local DEFENSIVE_HEADER = ...` constant. Resolves at use time
+-- (not at file load) so toggle flips immediately update the divider on next render.
+-- Cheap: one string.format per sectioned-mode UpdateStats (throttled to ~2/s default).
+local function DefensiveHeader()
+    return string.format("|cff808080— %s —|r", L("Defensive"))
+end
+
 -- Read DB value with fallback to defaults (replaces 30+ if-nil patterns)
 local function GetDB(key)
     local v = StatsProDB[key]
@@ -574,6 +761,7 @@ function Panel:Hide()
     self.lastRatingText = nil
     self.lastValueText = nil
     self.lastRepairText = nil
+    self.lastRepairLabelText = nil
     self.repairText:Hide()
     self.repairLabelText:Hide()
     -- WARNING: reset lineCount + hasRepair caches too; otherwise re-show may use stale
@@ -666,6 +854,11 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
         self.cachedRepairW = 0
     end
     self.lastRepairText = repairStr or ""
+    -- WHY: completes the five-FontString font-change resilience surface (label / rating /
+    -- value / repair-coin / repair-label). Without this cache, after a font change the
+    -- repairLabelText "Repair:" / "Рем:" / "修理:" stays blank for one frame until next
+    -- OnUpdate re-emits. More visible on non-EN clients (the user's language flickers).
+    self.lastRepairLabelText = repairLabelStr or ""
 
     -- Compute width totals.
     local rowsTotal = (self.cachedLabelW or 0) + lGap + (self.cachedRatingW or 0) + rGap + (self.cachedValueW or 0)
@@ -729,6 +922,9 @@ function Panel:ApplyStyle(font, size)
     end
     if self.lastRepairText and self.lastRepairText ~= "" then
         self.repairText:SetText(self.lastRepairText)
+    end
+    if self.lastRepairLabelText and self.lastRepairLabelText ~= "" then
+        self.repairLabelText:SetText(self.lastRepairLabelText)
     end
     -- Force resize + line-height re-measure on next SetTextSafe
     self.cachedLabelH = nil
@@ -835,7 +1031,7 @@ local function BuildPrimaryLines(labels, ratings, values)
             local val = safeCall(UnitStat, "player", def.unitStatId)
             local rCol, vCol = RouteValueOnly(string.format("|cff%s%d|r", valueColor, val))
             PushRow(labels, ratings, values,
-                string.format("|cff%s%s:|r", primaryStr, def.label),
+                FormatLabel(primaryStr, def.label),
                 rCol, vCol)
         end
     end
@@ -860,7 +1056,7 @@ local function BuildOffensiveLines(labels, ratings, values)
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtRatingPct(rating, val, statColor)
                 PushRow(labels, ratings, values,
-                    string.format("|cff%s%s:|r", statColor, def.label),
+                    FormatLabel(statColor, def.label),
                     rStr, vStr)
             end
         end
@@ -881,7 +1077,7 @@ local function BuildOffensiveLines(labels, ratings, values)
             local versStr = cs.versatility
             local vRatStr, vValStr = FmtRatingPct(cached.versTotalRating, cached.versTotal, versStr)
             PushRow(labels, ratings, values,
-                string.format("|cff%sVers:|r", versStr),
+                FormatLabel(versStr, "Vers"),
                 vRatStr, vValStr)
         end
     end
@@ -901,7 +1097,7 @@ local function BuildTertiaryLines(labels, ratings, values)
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtRatingPct(rating, val, statColor)
                 PushRow(labels, ratings, values,
-                    string.format("|cff%s%s:|r", statColor, def.label),
+                    FormatLabel(statColor, def.label),
                     rStr, vStr)
             end
         end
@@ -923,7 +1119,7 @@ local function BuildTertiaryLines(labels, ratings, values)
             local statColor = cs.speed
             local rStr, vStr = FmtRatingPct(speedRating, speed, statColor)
             PushRow(labels, ratings, values,
-                string.format("|cff%sSpeed:|r", statColor),
+                FormatLabel(statColor, "Speed"),
                 rStr, vStr)
         end
     end
@@ -950,7 +1146,7 @@ local function BuildDefensiveLines()
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtPctOnly(val, statColor)
                 PushRow(labels, ratings, values,
-                    string.format("|cff%s%s:|r", statColor, def.label),
+                    FormatLabel(statColor, def.label),
                     rStr, vStr)
             end
         end
@@ -964,7 +1160,7 @@ local function BuildDefensiveLines()
         if shouldShow(cached.armorDR, cached.hideZeroDefensive) then
             local rCol, vCol = RouteValueOnly(string.format("|cff%s%.1f%%|r", valueColor, cached.armorDR))
             PushRow(labels, ratings, values,
-                string.format("|cff%sArmor:|r", armorStr),
+                FormatLabel(armorStr, "Armor"),
                 rCol, vCol)
         end
     end
@@ -992,7 +1188,7 @@ local function BuildDurabilityLines()
     do
         local rCol, vCol = RouteValueOnly(string.format("|cff%s%.1f%%|r", valueColor, pct))
         PushRow(labels, ratings, values,
-            string.format("|cff%sDurability:|r", durStr),
+            FormatLabel(durStr, "Durability"),
             rCol, vCol)
     end
     local repairLabelStr
@@ -1006,7 +1202,7 @@ local function BuildDurabilityLines()
         -- group, repair-cost info as a distinct group below.
         -- Don't wrap the coin string in |cff...|r — coin icons render inline as textures
         -- and the color tag would tint them.
-        repairLabelStr = string.format("|cff%sRepair:|r", durStr)
+        repairLabelStr = FormatLabel(durStr, "Repair")
         repairStr = FormatRepairCost(cached.repairCost)
     end
     return labels, ratings, values, repairStr, repairLabelStr
@@ -1098,7 +1294,7 @@ local function UpdateStats()
         local cLabels, cRatings, cValues = {}, {}, {}
         AppendRows(cLabels, cRatings, cValues, mainLabels, mainRatings, mainValues)
         if #defLabels > 0 then
-            PushHeader(cLabels, cRatings, cValues, DEFENSIVE_HEADER)
+            PushHeader(cLabels, cRatings, cValues, DefensiveHeader())
             AppendRows(cLabels, cRatings, cValues, defLabels, defRatings, defValues)
         end
         AppendRows(cLabels, cRatings, cValues, durLabels, durRatings, durValues)
@@ -1618,6 +1814,22 @@ function addon:OpenConfigMenu()
     CursorAdvance(cd, 22)
     CursorGap(cd, 4)
 
+    -- Localization section — gated: only shown on locales we ship translations for.
+    -- enUS clients see no toggle (LABELS_BY_LOCALE.enUS is identity, so the toggle has
+    -- no effect). HAS_LOCALIZATION is resolved once at addon load from GetLocale().
+    if HAS_LOCALIZATION then
+        CursorSection(cd, "Localization")
+        -- Data-driven preview: pull this locale's own translation of "Crit" so the
+        -- checkbox text shows a concrete substitution preview that's always correct
+        -- for whatever client the user is on. No per-locale UI string maintenance.
+        local sample = LOCALIZED_LABELS.Crit or "Crit"
+        CreateCheckbox(displayTab, "StatsProLocalizedLabelsCheck",
+            "Use localized stat names (e.g. '" .. sample .. "' instead of 'Crit')",
+            "useLocalizedLabels", cd.padX, cd.y)
+        CursorAdvance(cd, 22)
+        CursorGap(cd, 4)
+    end
+
     -- Typography section
     CursorSection(cd, "Typography")
     do
@@ -2009,6 +2221,9 @@ function addon:PrintDebugDump()
 
     PrintMsg(string.format("show fmt: rating=%s pct=%s matchColor=%s",
         tostring(cached.showRating), tostring(cached.showPercentage), tostring(cached.matchValueColorToStat)))
+
+    PrintMsg(string.format("locale: client=%s curated=%s toggle=%s",
+        CURRENT_LOCALE, tostring(HAS_LOCALIZATION), tostring(cached.useLocalizedLabels)))
 
     PrintMsg(string.format("show stats: off=%s tert=%s defensive=%s dur=%s str=%s agi=%s int=%s",
         tostring(cached.showOffensive),

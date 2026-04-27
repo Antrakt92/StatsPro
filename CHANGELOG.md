@@ -1,5 +1,99 @@
 # Changelog
 
+## 1.0.6 — Localized stat labels (all 11 WoW locales)
+
+### Added
+
+- **Stat labels now display in your WoW client's language by default** —
+  on-screen labels (Crit / Haste / Mastery / Vers / Dodge / Parry / Block /
+  Armor / Strength / Agility / Intellect / Leech / Avoidance / Speed /
+  Durability / Repair) are translated into hand-curated short-form
+  equivalents matching StatsPro's compact 4-7 char visual language across
+  all 11 retail WoW locales: deDE, esES, esMX, frFR, itIT, koKR, ptBR,
+  ruRU, zhCN, zhTW (enUS is unchanged). Examples: ruRU shows "Крит / Хаст /
+  Маст / ...", zhCN shows "暴击 / 急速 / 精通 / ...", deDE shows "Krit /
+  Tempo / Meist / ...". Translations cover both standard WoW client terms
+  (e.g. zhCN's `暴击`) and theorycrafting-community shorthand where the
+  client term is too long (e.g. ruRU's `Хаст` for Haste, since the WoW
+  client uses "Скорость" which would collide with Speed).
+- **Sectioned-mode divider is also localized** — in Sectioned display mode,
+  the `— Defensive —` separator between offensive and defensive rows now
+  uses the same locale (e.g. ruRU `— Защита —`, zhCN `— 防御 —`,
+  frFR `— Défense —`).
+- **"Use localized stat names" toggle on the Display tab** — non-English
+  clients can switch back to the previous compact English labels via this
+  checkbox (Display tab → Localization). Toggle is hidden on enUS clients
+  (no localized form to switch to). Saves automatically; no `/reload`
+  needed. The toggle's example text dynamically reflects the user's own
+  locale — e.g. on a German client it reads "(e.g. 'Krit' instead of
+  'Crit')" with the locale's actual translation embedded.
+- **Translation quality note** — ruRU is user-confirmed; the other 9
+  locales are best-effort drafts based on cognates, theorycraft community
+  conventions, and per-locale WoW client term truncations. If a label
+  reads oddly to you as a native speaker of your client's language,
+  please open an issue at github.com/Antrakt92/StatsPro/issues with the
+  suggested correction — it's a one-string per-row fix and would ship
+  in v1.0.7. Native font glyphs (Cyrillic, Hangul, CJK) render correctly
+  out of the box on default WoW fonts; if you've selected a custom Latin-
+  only font via LibSharedMedia and labels show as `?` boxes, switch back
+  to a default font in Display tab → Typography.
+
+### Fixed
+
+- **Repair-row label no longer flickers blank for one frame after a
+  font change.** Previously `Panel:ApplyStyle` re-applied every other
+  panel FontString from cached text, but `repairLabelText` was missed —
+  the "Repair:" / "Рем:" / "修理:" word would vanish for one OnUpdate
+  tick after a Display tab → Typography font change. Pre-existing
+  v1.0.5 issue; closed for v1.0.6 because the bug becomes more visible
+  on non-English clients (the user's own language flickers).
+
+### Behavior change for non-English-locale users
+
+- **First `/reload` after upgrade switches your panel from English to
+  localized labels.** This is the new default. To keep the previous
+  English appearance: open Display tab → Localization → uncheck "Use
+  localized stat names". Setting persists across `/reload`, logout,
+  and across all characters on the account (StatsPro DB is account-wide).
+- **English (enUS) clients see no change.** The Localization section is
+  hidden in your settings; your panel renders exactly as before.
+
+### Known limitation (acknowledged, fix tracked for v1.0.7+)
+
+- The Stat Colors color-picker rows in the settings window still show
+  English labels ("Crit color", "Mastery color", etc.) even when the
+  panel is rendering in your locale. The on-screen panel — the surface
+  you actually look at during play — is fully localized; only the
+  config-UI rows are still English. A separate L-table for the entire
+  settings window is tracked.
+
+### Internal
+
+- `LABELS_BY_LOCALE` table indexed by `GetLocale()` return values; each
+  locale entry has 17 keys (16 stat-label keys + `Defensive` for the
+  sectioned-mode divider). At addon load `LOCALIZED_LABELS` is selected
+  once via `LABELS_BY_LOCALE[GetLocale()] or LABELS_BY_LOCALE.enUS`.
+- New helpers: `L(englishKey)` (identity-fast-path when toggle off,
+  single table read when on); `FormatLabel(colorHex, englishKey)`
+  (replaces nine hand-rolled `string.format("|cff%s%s:|r", ...)` sites
+  across `BuildPrimaryLines` / `BuildOffensiveLines` (table loop + Vers
+  branch) / `BuildTertiaryLines` (table loop + Speed branch) /
+  `BuildDefensiveLines` (table loop + Armor branch) / `BuildDurabilityLines`
+  (Durability + Repair)); `DefensiveHeader()` (replaces the static
+  `DEFENSIVE_HEADER` constant for sectioned-mode divider — resolves at
+  use time so toggle flips immediately update the divider).
+- `HAS_LOCALIZATION` flag (resolved once at load) gates the config UI:
+  the Localization section + checkbox render only on non-enUS locales.
+  No dead switch on enUS.
+- `Panel:ApplyStyle` now caches `lastRepairLabelText` symmetrically with
+  the existing `lastLabelText` / `lastRatingText` / `lastValueText` /
+  `lastRepairText` family — completes the font-change resilience surface.
+- `CURRENT_DB_VERSION` stays at 3 (no schema-flip; existing idempotent
+  init-loop in `MigrateDB` populates the new field on upgrade — same
+  pattern v1.0.5 used for its five new defaults).
+- `/ss debug` dump now includes a `locale: client=<X> curated=<bool>
+  toggle=<bool>` line for self-serve diagnosis.
+
 ## 1.0.5 — Offensive toggles + leak-free reset
 
 ### Added
@@ -180,6 +274,15 @@ work added on top of (or in place of) the upstream foundation.
 - **Settings UI rewrite** — three-tab config window (Display / Stats / Defensive) with
   inline color swatches, dependency-aware enable/disable (Repair Cost greyed out when
   Durability is off, durability swatch greyed when Auto Color is on).
+- **Scrollable settings window** — the config window is now wrapped in a `ScrollFrame`,
+  so the full Stats / Defensive content remains reachable on small monitors and
+  windowed-mode layouts where the upstream fixed-height frame used to clip controls
+  off the bottom of the screen. Scroll position resets to top on tab switch.
+- **Native Blizzard Settings panel integration** — StatsPro registers itself as a
+  category in WoW's built-in Settings UI (`Esc → Options → AddOns → StatsPro`).
+  Clicking the launcher opens the addon's three-tab config window. Discoverable
+  for users who never learn slash commands; coexists with `/ss` and the in-game
+  config opened from the launcher button.
 
 ### Changed
 
@@ -208,6 +311,21 @@ work added on top of (or in place of) the upstream foundation.
 - **In-combat secret-value taint** — every stat-API read (`GetCombatRating`,
   `GetUnitMaxHealthModifier`, `UnitArmor`, `GetUnitSpeed`, etc.) now passes through
   `pcall` + `issecretvalue` filtering before any arithmetic or comparison.
+
+### Removed
+
+- **Minimap button** — the upstream `SwiftStatsMinimapButton` (drag-around minimap
+  icon with left-click toggle and right-click config) was removed. The same actions
+  are now reachable via `/ss toggle`, the native Blizzard Settings entry, or the
+  master visibility checkbox in the config window. Frees minimap real estate for
+  users running many addons; the `showMinimapButton` and `minimapPos` settings are
+  no longer read.
+- **Legacy slash subcommands** — the upstream `move`, `unlock`, `lock`, `reset`,
+  `scale N`, and `size N` verbs were removed in favor of doing the same actions
+  through the redesigned Settings window (drag-to-move while unlocked, scale slider,
+  font-size slider, Reset button). Remaining commands: `/ss` (open config),
+  `/ss show`, `/ss hide`, `/ss toggle`, `/ss help`. Macros referencing the removed
+  verbs need to be updated.
 
 ### Migrated
 

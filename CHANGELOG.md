@@ -1,5 +1,52 @@
 # Changelog
 
+## 1.0.7 — Translation polish + Korean Armor/Defensive disambiguation
+
+### Fixed
+
+- **koKR: Armor and Defensive section header no longer collide.** Both labels
+  rendered as `방어` previously, which made the sectioned-mode `— 방어 —`
+  divider visually merge with the Armor row immediately beneath it. New split:
+  Armor stays `방어` (matches WoW Korean stat term `방어도`), Defensive section
+  divider becomes `수비` — clearly distinct and reads as a category header.
+- **koKR: Parry/Block now distinguishable.** Parry was `막기`, Block was `방패`
+  — readable but inverted from the most common Korean WoW community convention.
+  New split: Parry = `쳐막` (community shorthand for `쳐서 막다`, "strike-block"),
+  Block = `막기` (standard WoW Korean client term for blocking).
+
+### Changed
+
+- **Translation polish across deDE / esES / esMX / frFR / itIT / ptBR / ruRU.**
+  Deeper review pass against each language's WoW client term and theorycrafting
+  community shorthand. Most rows where the previous draft used 3-char
+  abbreviations (e.g. `Cel` / `Esq` / `Par` / `Forc` / `Agi`) now use 4-char
+  forms that read as words rather than truncations. Selected swap-outs:
+  - **ruRU:** Parry `Пар` → `Пари`, Leech `Кров` → `Вамп` (avoids confusion
+    with `Кровотечение` / Bleed), Durability `Прч` → `Проч`.
+  - **deDE:** Vers `Viel` → `Viels` (evokes `Vielseitigkeit`, doesn't collide
+    with the everyday word `viel` = much/many), Strength `Stä` → `Stär`,
+    Durability `Halt` → `Haltb` (avoids `Halt` = stop).
+  - **frFR:** Strength `For` → `Forc`, Durability `Dur` → `Dura` (avoids
+    `Dur` = hard), Dodge `Esq` → `Esqu`.
+  - **esES** / **esMX:** Haste `Cel` → `Cele`, Leech `Suc` → `Robo` (matches
+    WoW Spanish `Robo de vida` term), Strength `Fue` → `Fuer`, Agility `Agi` → `Agil`,
+    Dodge `Esq` → `Esqu`.
+  - **itIT:** Parry `Par` → `Para`, Armor `Arm` → `Armat`, Strength `For` → `Forz`,
+    Agility `Ag` → `Agil` (`Ag` was visibly truncated at 2 chars), Repair `Rip` → `Ripa`.
+  - **ptBR:** Strength `For` → `Forç` (with cedilla), Agility `Agi` → `Agil`,
+    Dodge `Esq` → `Esqu`.
+  - **enUS / zhCN / zhTW:** unchanged — already match official WoW client
+    terminology (CJK locales use the in-game WoW Chinese stat terms verbatim).
+
+### Internal
+
+- Comment hygiene: removed two stale "line N" references in source comments
+  (line numbers drift after every edit) and two version-tag references
+  (`v1.0.4` / `v1.0`) — bug history belongs in this CHANGELOG and `git log`,
+  source comments stay timeless. `LABELS_BY_LOCALE` header comment now warns
+  about the Armor/Defensive same-word trap so future locale additions don't
+  reintroduce it.
+
 ## 1.0.6 — Localized stat labels (all 11 WoW locales)
 
 ### Added

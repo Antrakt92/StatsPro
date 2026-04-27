@@ -28,9 +28,10 @@ heavy framework needed.
 - **Durability** — average or worst-slot percentage with auto-color thresholds (green / yellow / red)
 - **Repair cost** — live vendor-format coin display (`46g 40s 81c` with embedded gold/silver/copper icons)
 - **Three display modes** — Flat (one panel), Sectioned (one panel with header divider), Split (separate movable panels for offensive vs defensive)
+- **Localized stat labels** — on-screen panel auto-translates to your WoW client language across all 11 retail locales (deDE, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, zhTW; English unchanged). One-click toggle on the Display tab if you prefer compact English.
 - **Customization** — per-stat colors, fonts via LibSharedMedia, font size, panel scale, refresh rate
 - **Auto-aligning columns** — labels and values stay neatly aligned regardless of which stats are enabled, font, or scale; toggling rating-only or percent-only collapses cleanly into one tight column with no awkward gaps
-- **Light footprint** — single-file pure Lua (~1.8k lines), no Ace3, no embedded UI library
+- **Light footprint** — single-file pure Lua (~2.3k lines), no Ace3, no embedded UI library
 
 ## How it looks
 
@@ -54,6 +55,33 @@ heavy framework needed.
 
 ![Repair cost at vendor](screenshots/04-repair-cost-vendor.jpg)
 
+## Localization
+
+Stat labels render in your WoW client's language by default — no setup required.
+Curated short-form translations across all 11 retail WoW locales preserve the same
+compact 4-7 char visual rhythm as the original English labels:
+
+| Locale | Sample row |
+|---|---|
+| **enUS** | `Crit:    843  28.3%` |
+| **ruRU** | `Крит:    843  28.3%` |
+| **deDE** | `Krit:    843  28.3%` |
+| **frFR** | `Crit:    843  28.3%` |
+| **esES** / **esMX** | `Crít:    843  28.3%` |
+| **itIT** | `Crit:    843  28.3%` |
+| **ptBR** | `Crít:    843  28.3%` |
+| **koKR** | `치명:    843  28.3%` |
+| **zhCN** | `暴击:    843  28.3%` |
+| **zhTW** | `致命:    843  28.3%` |
+
+To revert to compact English on a non-English client: open `/ss` → **Display** tab →
+**Localization** → uncheck *Use localized stat names*. Setting persists across
+`/reload` and across all characters on the account. The toggle is hidden on enUS
+clients (no localized form to switch to).
+
+If a label reads oddly to you as a native speaker, please open an issue with the
+suggested correction — single-row fixes ship in the next patch.
+
 ## Slash commands
 
 | Command | Action |
@@ -62,6 +90,7 @@ heavy framework needed.
 | `/ss show` | Show stats panel |
 | `/ss hide` | Hide stats panel |
 | `/ss toggle` | Toggle visibility |
+| `/ss debug` | Dump runtime state to chat (for bug reports) |
 | `/ss help` | List commands in chat |
 
 ## Installation
@@ -80,8 +109,8 @@ the configuration window.
 
 | Tab | What lives here |
 |---|---|
-| **Display** | Master visibility, lock, display mode, font, font size, panel scale, refresh rate, color presets |
-| **Stats** | Per-stat toggles for Primary (Str/Agi/Int) and Tertiary (Leech/Avoidance/Speed) with inline color swatches |
+| **Display** | Master visibility, lock, display mode, localization toggle (non-English clients), font, font size, panel scale, refresh rate, color presets |
+| **Stats** | Per-stat toggles for Primary (Str/Agi/Int), Offensive (Crit/Haste/Mastery/Vers) and Tertiary (Leech/Avoidance/Speed) with inline color swatches |
 | **Defensive** | Per-stat toggles for Dodge/Parry/Block/Armor, durability options (auto-color, worst-slot vs average), repair cost |
 
 ![Display tab settings](screenshots/05-settings-display.jpg)
@@ -96,13 +125,17 @@ the configuration window.
 Single-file design. Everything renders out of [`StatsPro.lua`](StatsPro.lua):
 
 - **`Panel:SetTextSafe`** — three-FontString rendering (label / rating / value), each
-  with its own `JustifyH` for column alignment. Caches non-secret widths per render
-  to survive in-combat measurement taint.
+  with its own `JustifyH` for column alignment, plus two more for the dedicated
+  repair row (label + coin). Caches non-secret widths per render to survive in-combat
+  measurement taint.
 - **`FmtRatingPct` / `FmtPctOnly` / `RouteValueOnly`** — column-routing helpers.
   Dual-column mode = both display toggles on; otherwise everything stacks in the
   rating column. `IsDualColMode()` is the single source of truth for that decision.
 - **`UpdateStats`** — drives the per-frame OnUpdate, dispatches by display mode
   (flat / sectioned / split), gates value-column joining on `IsDualColMode()`.
+- **`LABELS_BY_LOCALE` + `L()` + `FormatLabel()`** — i18n layer. One table indexed
+  by `GetLocale()` return values; helpers compose color + localized label in a
+  single call. Identity-fast-path when toggle is off (no allocation, no table read).
 - **`MigrateDB`** — DB schema versioning. Bump `CURRENT_DB_VERSION` and add a
   conditional `vN-1 → vN` clause when changing a default value, so existing users
   on the old default upgrade automatically while explicit user choices are preserved.

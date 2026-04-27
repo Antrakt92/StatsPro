@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.0.8 — Primary stats now show effective (buffed) values + armor combat-taint guard
+
+### Fixed
+
+- **Primary stats (Strength / Agility / Intellect) now show the same value
+  Blizzard's character sheet displays.** The addon was capturing `UnitStat`'s
+  first return value (base stat — level + items, no temporary modifiers)
+  instead of the second (effective stat — including raid buffs, food, flask,
+  and active cooldowns). For a buffed raider this could understate Primary
+  by 10–25%; for an unbuffed character solo'ing in the world the values
+  matched. New dedicated `GetEffectiveStat` helper captures both returns and
+  prefers `effectiveStat`, falling back to `stat` if the API ever drops the
+  second value. Affects users who explicitly enabled `Show Strength` /
+  `Show Agility` / `Show Intellect` (off by default).
+- **Armor damage-reduction calculation no longer aborts mid-pull on
+  `[ADDON_BLOCKED]` if armor effectiveness is briefly secret-tagged.** In
+  Mythic+ transitional moments where `InCombatLockdown()` lags real combat
+  state, `PaperDollFrame_GetArmorReduction` can return a secret-tainted
+  number; the subsequent `if raw <= 1` comparison would raise a taint error
+  and silently abort the OnUpdate tick. The function is now wrapped in
+  `pcall` and the return is filtered through `issecretvalue` before any
+  arithmetic — the row simply shows 0% briefly until the next clean tick,
+  rather than nuking the whole stats refresh.
+
+### Internal
+
+- `BuildDurabilityLines` early-return path now explicitly returns 5 values
+  (`labels, ratings, values, repairStr, nil`) matching the normal path's
+  arity. Cosmetic — consumers already handled the implicit nil via `or ""`
+  fallback in `Panel:SetTextSafe` — but explicit intent prevents a future
+  reader from wondering whether the missing return is load-bearing.
+
 ## 1.0.7 — Translation polish + Korean Armor/Defensive disambiguation
 
 ### Fixed

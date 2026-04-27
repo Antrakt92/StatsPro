@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.0.10 — Locale-aware default font (CJK fix) + RGBToHex hardening
+
+### Fixed
+
+- **Localized stat labels now render correctly out of the box on CJK
+  clients (zhCN / zhTW / koKR).** The default font was hardcoded to
+  `Fonts\FRIZQT__.TTF` (Latin-supporting), which doesn't ship CJK glyphs
+  on Chinese / Korean / Traditional Chinese WoW clients — fresh installs
+  on those locales would show the v1.0.6+ localized labels (暴击 / 致命 /
+  치명 / etc.) as `?` boxes until users manually picked a different font
+  in Display tab → Typography. Default now uses Blizzard's `STANDARD_TEXT_FONT`
+  global, which auto-resolves to the locale-appropriate CJK / Cyrillic /
+  Latin font shipped with each client. enUS clients see no change
+  (`STANDARD_TEXT_FONT` resolves to FRIZQT there).
+- **Existing users who never picked a font are auto-upgraded.** Migration
+  v3 → v4: if `db.font == "Fonts\FRIZQT__.TTF"` (the previous hardcoded
+  default), it's swapped to `STANDARD_TEXT_FONT`. Users who explicitly
+  chose a font (LSM-registered, ARIALN, MORPHEUS, etc.) keep their
+  selection — the migration only touches the old-default value.
+- **Font re-applies cleanly within the upgrade session.** Without an
+  explicit re-apply, the `Panel:New` FontStrings keep the pre-migration
+  font until `/reload`; CJK users would see broken glyphs for one whole
+  session post-upgrade. `ApplyTextStyleToAllPanels` now runs at PEW
+  after `MigrateDB` so the migration takes effect immediately.
+- **`RGBToHex` defensive guard against SavedVariables corruption.**
+  Out-of-range RGB values from a hand-edited SavedVariables file (e.g.
+  `r = 2`) would render as 3-hex-digit substrings (`1fe`) and corrupt
+  the surrounding `|cffXXXXXX...|r` color escape, breaking colors on
+  every stat row downstream. Now clamps to `[0, 1]` and `tonumber`s
+  non-numeric inputs to 0. ColorPicker still always returns 0..1, so
+  this is purely a hardening guard — not a hot-path concern.
+
+### Internal
+
+- `CURRENT_DB_VERSION` bumped to 4 (font-default migration).
+
 ## 1.0.9 — Carry forward settings from upstream SwiftStats (TaylorSay)
 
 ### Added

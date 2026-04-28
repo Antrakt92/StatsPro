@@ -51,11 +51,13 @@ local LOCALE_GLYPH_REQ = {
     koKR = GLYPH_HANGUL, zhCN = GLYPH_HANS, zhTW = GLYPH_HANT,
 }
 
--- WHY hardcoded by file path: WoW shipped TTF filenames are stable per locale install;
--- LSM-registered fonts have no glyph-coverage API. Conservative default for unknown
--- paths: Latin only. Pessimistic for actually-CJK-capable LSM fonts → surfaces as
--- inline warning, never as broken UI. Follow-up tracked in AUDIT.md (extend by
--- font-name pattern matching for popular LSM CJK fonts).
+-- WHY two-tier coverage detection: WoW shipped TTF filenames are stable per locale
+-- install (FONT_GLYPH_SUPPORT exact-match, O(1) hash); LSM-registered fonts have no
+-- glyph-coverage API but popular CJK families ship under predictable filenames, so
+-- FONT_GLYPH_PATTERNS (below) catches NotoCJK / SourceHan / WenQuanYi / PingFang /
+-- YaHei / JhengHei / SimSun / SimHei / MingLiU / Malgun / Nanum / AppleSDGothicNeo
+-- by filename pattern. Unknown paths conservatively Latin-only — false-positives
+-- surface as inline warning, never as silently broken UI.
 local FONT_GLYPH_SUPPORT = {
     ["Fonts\\FRIZQT__.TTF"] = { GLYPH_LATIN, GLYPH_CYR },    -- universal Blizzard default
     ["Fonts\\ARIALN.TTF"]   = { GLYPH_LATIN, GLYPH_CYR },
@@ -70,6 +72,66 @@ local FONT_GLYPH_SUPPORT = {
     ["Fonts\\2002B.ttf"]    = { GLYPH_HANGUL },              -- koKR
     ["Fonts\\K_Damage.TTF"] = { GLYPH_HANGUL },              -- koKR damage font (UI fallback in some installs)
 }
+
+-- WHY ordered list (not hash like FONT_GLYPH_SUPPORT): patterns are first-match-wins,
+-- broader/universal-coverage families first. Path basename is lowercased before match
+-- (Lua 5.1 string.lower is byte-based; safe for ASCII font filenames). Each pattern
+-- requires a script qualifier (cjk, sourcehan, hei, sun, yahei, msyh, msjh, mingliu,
+-- pingfang, gothic, nanum, wqy/wenquanyi, applesdgothicneo) — guards against false-
+-- positives on plain "Noto Mono" / "Source Sans" Latin-only fonts and addon-folder
+-- substrings. WARNING: patterns are Lua patterns — escape % + - ? . ( ) [ ] $ ^ if
+-- adding a literal special char in a future pattern.
+local FONT_GLYPH_PATTERNS = {
+    -- Adobe / Google universal CJK (documented Latin + Cyrillic + full CJK coverage)
+    { pattern = "noto.*cjk",        glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT, GLYPH_HANGUL } },
+    { pattern = "sourcehan",        glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT, GLYPH_HANGUL } },
+    -- Open-source CN+TW
+    { pattern = "wenquanyi",        glyphs = { GLYPH_LATIN, GLYPH_HANS, GLYPH_HANT } },
+    { pattern = "wqy",              glyphs = { GLYPH_LATIN, GLYPH_HANS, GLYPH_HANT } },
+    -- Apple macOS Chinese (PingFang covers SC+TC; HANGUL via separate font)
+    { pattern = "pingfang",         glyphs = { GLYPH_LATIN, GLYPH_HANS, GLYPH_HANT } },
+    -- Microsoft Windows Simplified Chinese
+    { pattern = "yahei",            glyphs = { GLYPH_LATIN, GLYPH_HANS } },
+    { pattern = "msyh",             glyphs = { GLYPH_LATIN, GLYPH_HANS } },
+    -- Microsoft Windows Traditional Chinese
+    { pattern = "msjh",             glyphs = { GLYPH_LATIN, GLYPH_HANT } },
+    -- Legacy / classical Windows Chinese
+    { pattern = "simsun",           glyphs = { GLYPH_LATIN, GLYPH_HANS } },
+    { pattern = "simhei",           glyphs = { GLYPH_LATIN, GLYPH_HANS } },
+    { pattern = "mingliu",          glyphs = { GLYPH_LATIN, GLYPH_HANT } },
+    -- Korean (Apple, Microsoft, Naver)
+    { pattern = "applesdgothicneo", glyphs = { GLYPH_LATIN, GLYPH_HANGUL } },
+    { pattern = "malgun.*gothic",   glyphs = { GLYPH_LATIN, GLYPH_HANGUL } },
+    { pattern = "nanum",            glyphs = { GLYPH_LATIN, GLYPH_HANGUL } },
+}
+
+-- WHY load-time sanity: catches FONT_GLYPH_PATTERNS typos (e.g. nono.*cjk) at addon
+-- load, not at user-report time. Silent on success; chat warning on regression.
+do
+    local SAMPLES = {
+        ["noto.*cjk"]        = "notosanscjk-regular.otf",
+        ["sourcehan"]        = "sourcehansans-regular.otf",
+        ["wenquanyi"]        = "wenquanyimicrohei.ttf",
+        ["wqy"]              = "wqy-zenhei.ttc",
+        ["pingfang"]         = "pingfangsc.ttf",
+        ["yahei"]            = "msyahei.ttf",
+        ["msyh"]             = "msyh.ttf",
+        ["msjh"]             = "msjh.ttf",
+        ["simsun"]           = "simsun.ttc",
+        ["simhei"]           = "simhei.ttf",
+        ["mingliu"]          = "mingliu.ttc",
+        ["applesdgothicneo"] = "applesdgothicneo.ttc",
+        ["malgun.*gothic"]   = "malgungothic.ttf",
+        ["nanum"]            = "nanumgothic.ttf",
+    }
+    for _, p in ipairs(FONT_GLYPH_PATTERNS) do
+        local sample = SAMPLES[p.pattern]
+        if not (sample and string.find(sample, p.pattern)) then
+            print("|cffff4444[StatsPro] FONT_GLYPH_PATTERNS regression: '"
+                .. tostring(p.pattern) .. "' fails canonical sample|r")
+        end
+    end
+end
 
 --[[ ============================================================
     2. LIBRARIES + API SHIMS
@@ -495,13 +557,16 @@ local function ResolveActiveLocale()
     return force
 end
 
--- WHY hardcoded font-path table for glyph coverage: WoW's shipped TTF filenames are
--- stable per locale install; LSM-registered fonts have no glyph-coverage API. Unknown
--- paths conservatively assumed Latin-only — false-positives surface as inline warning,
--- never as silently broken UI.
 local function FontSupports(fontPath, glyph)
     if not fontPath then return glyph == GLYPH_LATIN end
     local entry = FONT_GLYPH_SUPPORT[fontPath]
+    if not entry then
+        -- WHY basename: anchor patterns to filename, not addon-folder substrings.
+        local lower = (string.match(fontPath, "[^\\/]+$") or fontPath):lower()
+        for _, p in ipairs(FONT_GLYPH_PATTERNS) do
+            if string.find(lower, p.pattern) then entry = p.glyphs; break end
+        end
+    end
     if not entry then return glyph == GLYPH_LATIN end
     for _, g in ipairs(entry) do
         if g == glyph then return true end

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.4 — LSM CJK font auto-detect
+
+### Fixed
+
+- **LSM CJK fonts (NotoCJK / SourceHan / WenQuanYi / PingFang / Microsoft YaHei / JhengHei / SimSun / SimHei / MingLiU / Malgun Gothic / Nanum / Apple SD Gothic Neo) no longer trigger a false "font may not cover glyphs" warning when picking a CJK locale.** Auto-switch logic now recognizes them by font-family name patterns; previously any non-Blizzard-shipped font was conservatively assumed Latin-only. NotoCJK and SourceHan are now also correctly recognized as covering Cyrillic — ruRU users with these fonts no longer see a false warning either.
+
+### Known limitations
+
+- **Custom CJK families with generic filenames** (e.g. `regular.ttf` inside a CJK font pack) still surface the warning because path-based detection can't see the font's display name. Recoverable by ignoring the warning, or report the family on GitHub Issues to add an explicit pattern.
+- **Auto-fallback prefers alphabetic-first match.** When multiple LSM CJK fonts are installed, manual font selection is preferred over auto-fallback for best coverage.
+
 ## 1.1.3 — Settings window layering fix
 
 ### Fixed

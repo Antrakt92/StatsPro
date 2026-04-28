@@ -1909,6 +1909,7 @@ function addon:OpenConfigMenu()
     configFrame:SetScript("OnDragStart", configFrame.StartMoving)
     configFrame:SetScript("OnDragStop", configFrame.StopMovingOrSizing)
     configFrame:SetClampedToScreen(true)
+    configFrame:SetFrameStrata("DIALOG")
     -- WHY: guarded as a one-shot for symmetry — the early-return at the top of
     -- OpenConfigMenu already ensures this body runs once per session, but the flag
     -- means even a re-entrant rebuild wouldn't double-add to UISpecialFrames.

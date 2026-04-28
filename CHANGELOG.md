@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.1 — Migration fix for opted-out users
+
+### Fixed
+
+- **Migration v1.0.x → v1.1.x now honors the `useLocalizedLabels=false`
+  opt-out.** Users who had explicitly turned off localized labels in v1.0.x
+  via the Localization checkbox would migrate to `forceLocale="auto"`
+  instead of `forceLocale="enUS"`, silently re-enabling client-locale
+  panels. Caused by an order-of-operations bug: the defaults-loop in
+  MigrateDB pre-populated `forceLocale="auto"` before the v4→v5 clause
+  could read the legacy field. v1.1.1 ships before most installs migrated,
+  so the bug primarily affects very early v1.1.0 adopters who had opted
+  out — those users can simply pick "English" in the new Language dropdown
+  to restore their preference.
+
 ## 1.1.0 — Manual locale override + auto-switch font
 
 ### Added

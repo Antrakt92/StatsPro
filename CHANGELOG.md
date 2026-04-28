@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.2 — Fix empty panels + empty settings on v1.1.x
+
+### Fixed
+
+- **Panels render empty and settings window opens blank on v1.1.0 / v1.1.1.**
+  The `ResolveActiveLocale` helper introduced in the v1.1.0 i18n refactor
+  called `GetDB`, which was declared later in the file. Lua resolves local-
+  name references at function-definition time, so the call site was bound
+  to a non-existent global instead of the local helper, producing a silent
+  `attempt to call a nil value` chain that aborted `CacheSettings` at
+  `PLAYER_ENTERING_WORLD`, broke the panel font auto-switch, and prevented
+  the new Language section in the config window from rendering. Hotfix
+  reorders the helpers so the reference resolves correctly. Affected users
+  see panels and settings work normally again on next login — no DB reset
+  needed, all existing preferences are preserved.
+
 ## 1.1.1 — Migration fix for opted-out users
 
 ### Fixed

@@ -7,7 +7,7 @@ local _, addon = ...
 --[[ ============================================================
     1. CONSTANTS
 ============================================================ ]]
-local CURRENT_DB_VERSION = 4
+local CURRENT_DB_VERSION = 5
 
 local DURABILITY_SLOT_MIN = 1
 local DURABILITY_SLOT_MAX = 19
@@ -19,6 +19,57 @@ local DURABILITY_YELLOW_THRESHOLD = 30
 
 -- DEFENSIVE_HEADER moved into a function (DefensiveHeader) in section 7 so it picks up
 -- the locale-aware divider word from L("Defensive") and reacts to toggle flips.
+
+local GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL, GLYPH_HANS, GLYPH_HANT =
+    "Latin", "Cyrillic", "Hangul", "Hans", "Hant"
+
+-- WHY hybrid native+English labels for non-Latin: dropdown buttons render with the
+-- system font of the dropdown frame; on non-CJK clients the frame font lacks CJK
+-- glyphs and "한국어" / "中文" render as `?` boxes. Adding English in parens keeps a
+-- readable fallback on every client. Latin labels render universally — kept clean.
+-- WARNING: LANGUAGE_OPTIONS[1] MUST be the auto entry; CurrentLabel() falls back to
+-- it on unknown forceLocale values.
+local LANGUAGE_OPTIONS = {
+    { value = "auto",  label = nil },                        -- composed dynamically (Auto + native of GetLocale())
+    { value = "enUS",  label = "English" },
+    { value = "deDE",  label = "Deutsch" },
+    { value = "esES",  label = "Español (España)" },
+    { value = "esMX",  label = "Español (México)" },
+    { value = "frFR",  label = "Français" },
+    { value = "itIT",  label = "Italiano" },
+    { value = "ptBR",  label = "Português (Brasil)" },
+    { value = "koKR",  label = "한국어 (Korean)" },
+    { value = "ruRU",  label = "Русский (Russian)" },
+    { value = "zhCN",  label = "中文 简体 (Simplified)" },
+    { value = "zhTW",  label = "中文 繁體 (Traditional)" },
+}
+
+local LOCALE_GLYPH_REQ = {
+    enUS = GLYPH_LATIN, deDE = GLYPH_LATIN, esES = GLYPH_LATIN, esMX = GLYPH_LATIN,
+    frFR = GLYPH_LATIN, itIT = GLYPH_LATIN, ptBR = GLYPH_LATIN,
+    ruRU = GLYPH_CYR,
+    koKR = GLYPH_HANGUL, zhCN = GLYPH_HANS, zhTW = GLYPH_HANT,
+}
+
+-- WHY hardcoded by file path: WoW shipped TTF filenames are stable per locale install;
+-- LSM-registered fonts have no glyph-coverage API. Conservative default for unknown
+-- paths: Latin only. Pessimistic for actually-CJK-capable LSM fonts → surfaces as
+-- inline warning, never as broken UI. Follow-up tracked in AUDIT.md (extend by
+-- font-name pattern matching for popular LSM CJK fonts).
+local FONT_GLYPH_SUPPORT = {
+    ["Fonts\\FRIZQT__.TTF"] = { GLYPH_LATIN, GLYPH_CYR },    -- universal Blizzard default
+    ["Fonts\\ARIALN.TTF"]   = { GLYPH_LATIN, GLYPH_CYR },
+    ["Fonts\\MORPHEUS.TTF"] = { GLYPH_LATIN },
+    ["Fonts\\SKURRI.TTF"]   = { GLYPH_LATIN },
+    ["Fonts\\ARKai_T.ttf"]  = { GLYPH_HANS },                -- zhCN client default
+    ["Fonts\\ARKai_C.ttf"]  = { GLYPH_HANS },                -- zhCN
+    ["Fonts\\bHEI00M.ttf"]  = { GLYPH_HANT },                -- zhTW client default
+    ["Fonts\\bHEI01B.ttf"]  = { GLYPH_HANT },                -- zhTW
+    ["Fonts\\bLEI00D.ttf"]  = { GLYPH_HANT },                -- zhTW
+    ["Fonts\\2002.ttf"]     = { GLYPH_HANGUL },              -- koKR client default
+    ["Fonts\\2002B.ttf"]    = { GLYPH_HANGUL },              -- koKR
+    ["Fonts\\K_Damage.TTF"] = { GLYPH_HANGUL },              -- koKR damage font (UI fallback in some installs)
+}
 
 --[[ ============================================================
     2. LIBRARIES + API SHIMS
@@ -67,12 +118,14 @@ local defaults = {
     -- Display mode: "flat" | "sectioned" | "split"
     displayMode = "flat",
 
-    -- Localization: when true, swap compact English stat labels for hand-curated short-form
-    -- equivalents in the user's WoW client locale (e.g. "Crit" → "Крит" on ruRU, "暴击" on
-    -- zhCN). Default true: non-English clients see localized labels by default, matching
-    -- the rest of their localized WoW UI. Opt out via Display tab → Localization checkbox.
-    -- enUS clients see no visible difference (LABELS_BY_LOCALE.enUS is the identity map).
-    useLocalizedLabels = true,
+    -- WHY forceLocale (string) replaces the prior boolean useLocalizedLabels:
+    -- "auto" follows GetLocale(); explicit value ("enUS", "ruRU", ..., "zhTW") forces
+    -- panels to that locale regardless of WoW client. Auto-switches font if needed
+    -- (see MaybeAutoSwitchFont). Migration v4→v5 maps legacy useLocalizedLabels=false
+    -- to forceLocale="enUS"; anything else to "auto". The dropdown is shown on every
+    -- client locale (replacing the prior HAS_LOCALIZATION-gated checkbox) — useful
+    -- even on enUS for picking 中文 / 한국어 etc. for screenshots.
+    forceLocale = "auto",
 
     -- Defensive panel position
     defensive_point = "CENTER",
@@ -182,8 +235,6 @@ local CACHED_BOOL_KEYS = {
     "showDefensive", "hideZeroDefensive",
     "showDodge", "showParry", "showBlock", "showArmor",
     "showDurability", "showRepairCost", "useAutoColorDurability", "useWorstDurability",
-    -- Localization toggle (gated by HAS_LOCALIZATION in Display tab — checkbox hidden on enUS):
-    "useLocalizedLabels",
 }
 
 -- WHY: COLOR_KEYS removed - CacheSettings now iterates pairs(defaults.colors) directly
@@ -208,6 +259,13 @@ StatsProDB = StatsProDB or {}
 
 local cached = {
     colorStrings = {},
+    -- WHY {}: cached table inits at file scope BEFORE LABELS_BY_LOCALE declaration
+    -- (sect 6 vs sect 7). Empty table fallback gives identity-map L() behavior
+    -- (table[key]=nil; "nil or englishKey" returns the English key) — safe for any
+    -- L()-using code that runs pre-CacheSettings (e.g. CreateColorPicker at config
+    -- build time before PEW). CacheSettings overwrites with real LABELS_BY_LOCALE
+    -- entry at PEW. WARNING: never mutate; treat read-only.
+    activeLabels = {},
     -- versatility cached out-of-combat (existing)
     versTotal = 0,
     versTotalRating = 0,
@@ -245,8 +303,12 @@ local isLoaded = false
 --     each language's WoW client term + community shorthand conventions; native-
 --     speaker spot-checks still welcome via GitHub Issues for per-row tweaks).
 -- Locales not in this table (any future Blizzard locale, e.g. plPL) fall back
--- to enUS via the `or LABELS_BY_LOCALE.enUS` selector AND the toggle is hidden
--- in the config UI (no dead switch). HAS_LOCALIZATION below is the gate.
+-- to enUS via the `or LABELS_BY_LOCALE.enUS` selector in CacheSettings — panels
+-- silently render English labels for the unsupported locale.
+--
+-- LOAD-BEARING INVARIANT: LABELS_BY_LOCALE.enUS MUST exist as the universal
+-- fallback. Removing it breaks every L() call when forceLocale resolves to a
+-- locale missing from this table.
 --
 -- WARNING: keys MUST match exactly the English literals used at the call sites:
 --   - def.label values from OFFENSIVE_STATS / DEFENSIVE_STATS / PRIMARY_STATS /
@@ -418,23 +480,34 @@ local LABELS_BY_LOCALE = {
     },
 }
 
--- Locale resolves once at addon load (it doesn't change at runtime). If the user's
--- locale isn't curated, fall back to enUS (identity map) — toggle has no effect
--- visually, and the config UI hides the checkbox to avoid confusion.
-local CURRENT_LOCALE = GetLocale()
-local LOCALIZED_LABELS = LABELS_BY_LOCALE[CURRENT_LOCALE] or LABELS_BY_LOCALE.enUS
-local HAS_LOCALIZATION = (LOCALIZED_LABELS ~= LABELS_BY_LOCALE.enUS)
+-- Resolve the active locale: forceLocale="auto" (default) → GetLocale(); explicit
+-- value forces panels to that locale regardless of WoW client locale.
+local function ResolveActiveLocale()
+    local force = GetDB("forceLocale")
+    if not force or force == "auto" then return GetLocale() end
+    return force
+end
 
--- WHY identity-fast-path: when toggle is off (opt-out), this is a no-op direct return.
--- When toggle is on (default), we hit one table read — still O(1), no _G access, no
--- iteration. Both paths are constant-time. `cached` upvalue is captured by reference
--- (the table is declared once at module load and never reassigned, only mutated) so
--- toggle flips reflect immediately.
-local function L(englishKey)
-    if cached.useLocalizedLabels then
-        return LOCALIZED_LABELS[englishKey] or englishKey
+-- WHY hardcoded font-path table for glyph coverage: WoW's shipped TTF filenames are
+-- stable per locale install; LSM-registered fonts have no glyph-coverage API. Unknown
+-- paths conservatively assumed Latin-only — false-positives surface as inline warning,
+-- never as silently broken UI.
+local function FontSupports(fontPath, glyph)
+    if not fontPath then return glyph == GLYPH_LATIN end
+    local entry = FONT_GLYPH_SUPPORT[fontPath]
+    if not entry then return glyph == GLYPH_LATIN end
+    for _, g in ipairs(entry) do
+        if g == glyph then return true end
     end
-    return englishKey
+    return false
+end
+
+-- WHY identity-fast-path remains: cached.activeLabels for enUS IS the identity map
+-- (LABELS_BY_LOCALE.enUS where every key maps to itself). Pre-CacheSettings the table
+-- is empty {} (see cached init in section 6) → nil lookup → "or englishKey" fallback
+-- also yields identity. Both paths are O(1) single table access.
+local function L(englishKey)
+    return cached.activeLabels[englishKey] or englishKey
 end
 
 -- Replaces nine `string.format("|cff%s%s:|r", color, label)` sites in builder
@@ -556,6 +629,12 @@ local function CacheSettings()
     cached.updateInterval = GetDB("updateInterval")
     cached.displayMode = GetDB("displayMode")
 
+    -- Resolve labels for the active locale. forceLocale="auto" → GetLocale().
+    -- WHY reference, not copy: LABELS_BY_LOCALE entries are never mutated; reference
+    -- assignment is O(1) vs O(n) deep copy. WARNING: never mutate cached.activeLabels —
+    -- it is a REFERENCE to the LABELS_BY_LOCALE entry.
+    cached.activeLabels = LABELS_BY_LOCALE[ResolveActiveLocale()] or LABELS_BY_LOCALE.enUS
+
     -- Color → hex string lookup. Iterate defaults.colors (single source of truth) to
     -- guarantee non-nil colorStrings for every key — eliminates the need for `or "ffffff"`
     -- fallbacks throughout the render pipeline.
@@ -602,6 +681,22 @@ local function MigrateDB()
     -- localized labels render correctly out of the box.
     if (db.dbVersion or 3) <= 3 and db.font == "Fonts\\FRIZQT__.TTF" and STANDARD_TEXT_FONT then
         db.font = STANDARD_TEXT_FONT
+    end
+
+    -- v4 → v5: replaced boolean useLocalizedLabels with forceLocale string.
+    --   useLocalizedLabels=false  → user opted out → forceLocale="enUS"
+    --   useLocalizedLabels=true|nil → keep auto-follow → forceLocale="auto"
+    -- WHY guard `db.forceLocale == nil`: do not clobber a manually-set forceLocale
+    -- (corrupted DB with both keys; idempotent for downgrade-then-upgrade flows).
+    if (db.dbVersion or 4) <= 4 then
+        if db.forceLocale == nil then
+            if db.useLocalizedLabels == false then
+                db.forceLocale = "enUS"
+            else
+                db.forceLocale = "auto"
+            end
+        end
+        db.useLocalizedLabels = nil  -- drop legacy field unconditionally
     end
 
     db.dbVersion = CURRENT_DB_VERSION
@@ -1035,6 +1130,59 @@ local function ApplyTextStyleToAllPanels(font, size)
     defensivePanel:ApplyStyle(font, size)
 end
 
+-- Auto-switch panel font when active locale needs glyphs the current font lacks.
+-- Saves the previous font in db.fontBeforeAutoSwitch so we can revert when the user
+-- moves back to a compatible locale.
+--
+-- WHY `fontBeforeAutoSwitch or cur` (not just cur): chained switches (Russian →
+-- Chinese → Korean) must preserve the ORIGINAL user-picked font, not an intermediate
+-- one. Saving "or cur" only fires the first time; subsequent switches keep original.
+--
+-- WHY idempotent: when current font already supports active locale, function checks
+-- restore-path opportunistically and otherwise returns. Safe to call from PEW + every
+-- dropdown change without producing extra SetFont noise.
+--
+-- Caller must set StatsProDB.forceLocale + run CacheSettings BEFORE calling.
+local function MaybeAutoSwitchFont()
+    local active = ResolveActiveLocale()
+    local req    = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
+    local cur    = StatsProDB.font
+
+    if FontSupports(cur, req) then
+        local saved = StatsProDB.fontBeforeAutoSwitch
+        if saved and saved ~= cur and FontSupports(saved, req) then
+            StatsProDB.font = saved
+            StatsProDB.fontBeforeAutoSwitch = nil
+            ApplyTextStyleToAllPanels(saved, GetDB("fontSize"))
+        end
+        return
+    end
+
+    -- Not compatible. Try STANDARD_TEXT_FONT first (locale-aware on user's CLIENT —
+    -- may or may not cover cross-locale forcing). If incompatible, scan LSM for any
+    -- registered font we know covers the required glyph. Last resort: leave font
+    -- alone and let RefreshLanguageWarning surface the issue.
+    local fallback = STANDARD_TEXT_FONT
+    if not fallback or not FontSupports(fallback, req) then
+        fallback = nil
+        if LSM then
+            for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
+                local p = LSM:Fetch(LSM.MediaType.FONT, name)
+                if p and FontSupports(p, req) then
+                    fallback = p
+                    break
+                end
+            end
+        end
+    end
+
+    if fallback and fallback ~= cur then
+        StatsProDB.fontBeforeAutoSwitch = StatsProDB.fontBeforeAutoSwitch or cur
+        StatsProDB.font = fallback
+        ApplyTextStyleToAllPanels(fallback, GetDB("fontSize"))
+    end
+end
+
 local function LoadAllPositions()
     mainPanel:LoadPosition()
     defensivePanel:LoadPosition()
@@ -1462,6 +1610,11 @@ local function OnPlayerEnteringWorld()
         end
         MigrateDB()
         CacheSettings()
+        -- WHY here: forceLocale is migrated + cached.activeLabels resolved; if active
+        -- locale needs glyphs db.font lacks, auto-switch BEFORE the
+        -- ApplyTextStyleToAllPanels call below so the FontStrings load with the
+        -- correct font on the very first frame (no `?` boxes for one session).
+        MaybeAutoSwitchFont()
         LoadAllPositions()
         SetAllPanelsLockState(GetDB("isLocked"))
         SetAllPanelsScale(GetDB("scale"))
@@ -1681,6 +1834,11 @@ end
 --[[ ============================================================
     15. CONFIG MENU (tabs: Display / Stats / Defensive)
 ============================================================ ]]
+-- Forward-decl: assigned in OpenConfigMenu Display-tab build pass (Localization section).
+-- Captured as upvalue by font dropdown info.func (Step 6) which reaches a font that may
+-- not cover the current active locale's glyphs and needs to refresh the inline warning.
+local RefreshLanguageWarning
+
 local configFrame
 local configSpecialFrameRegistered = false
 
@@ -1965,21 +2123,100 @@ function addon:OpenConfigMenu()
     CursorAdvance(cd, 22)
     CursorGap(cd, 4)
 
-    -- Localization section — gated: only shown on locales we ship translations for.
-    -- enUS clients see no toggle (LABELS_BY_LOCALE.enUS is identity, so the toggle has
-    -- no effect). HAS_LOCALIZATION is resolved once at addon load from GetLocale().
-    if HAS_LOCALIZATION then
-        CursorSection(cd, "Localization")
-        -- Data-driven preview: pull this locale's own translation of "Crit" so the
-        -- checkbox text shows a concrete substitution preview that's always correct
-        -- for whatever client the user is on. No per-locale UI string maintenance.
-        local sample = LOCALIZED_LABELS.Crit or "Crit"
-        CreateCheckbox(displayTab, "StatsProLocalizedLabelsCheck",
-            "Use localized stat names (e.g. '" .. sample .. "' instead of 'Crit')",
-            "useLocalizedLabels", cd.padX, cd.y)
-        CursorAdvance(cd, 22)
-        CursorGap(cd, 4)
+    -- Localization section. Always shown (replaces former HAS_LOCALIZATION-gated checkbox —
+    -- the new dropdown is useful even on enUS, e.g. picking 中文 for screenshots).
+    -- WHY header stays English literal: CursorSection uses byte-based string.upper() which
+    -- corrupts non-ASCII UTF-8 (Lua 5.1 trap). Localizing this header is part of T2-4.
+    CursorSection(cd, "Localization")
+    do
+        local rowY = cd.y
+
+        local langLabel = displayTab:CreateFontString(nil, "OVERLAY")
+        -- WHY STANDARD_TEXT_FONT: this label may localize to "Язык:" / "语言:" under T2-4;
+        -- locale-aware default ensures glyphs render correctly when that ships.
+        langLabel:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 12)
+        langLabel:SetPoint("TOPLEFT", cd.padX, rowY)
+        langLabel:SetText("Language:")
+        langLabel:SetWidth(75)
+        langLabel:SetJustifyH("LEFT")
+
+        local function DisplayLabel(opt)
+            if opt.value ~= "auto" then return opt.label end
+            local cur = GetLocale()
+            local nat
+            for _, o in ipairs(LANGUAGE_OPTIONS) do
+                if o.value == cur then nat = o.label; break end
+            end
+            return string.format("Auto (current: %s)", nat or cur)
+        end
+
+        local function CurrentLabel()
+            local v = GetDB("forceLocale")
+            for _, opt in ipairs(LANGUAGE_OPTIONS) do
+                if opt.value == v then return DisplayLabel(opt) end
+            end
+            return DisplayLabel(LANGUAGE_OPTIONS[1])  -- fallback "Auto" for unknown values
+        end
+
+        local langDropdown = CreateFrame("Frame", "StatsProLanguageDropdown", displayTab, "UIDropDownMenuTemplate")
+        langDropdown:SetPoint("TOPLEFT", cd.padX + 85, rowY + 2)
+        UIDropDownMenu_SetWidth(langDropdown, 220)
+        UIDropDownMenu_Initialize(langDropdown, function(self, level)
+            for _, opt in ipairs(LANGUAGE_OPTIONS) do
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = DisplayLabel(opt)
+                info.value = opt.value
+                info.checked = (GetDB("forceLocale") == opt.value)
+                info.func = function()
+                    StatsProDB.forceLocale = opt.value
+                    CacheSettings()
+                    MaybeAutoSwitchFont()
+                    UIDropDownMenu_SetText(langDropdown, DisplayLabel(opt))
+                    CloseDropDownMenus()
+                    RefreshLanguageWarning()
+                    UpdateStats()
+                end
+                UIDropDownMenu_AddButton(info)
+            end
+        end)
+        UIDropDownMenu_SetText(langDropdown, CurrentLabel())
+
+        -- 24 + cd.gap (6) = 30 effective; matches Display Mode dropdown row pattern.
+        CursorAdvance(cd, 24)
+
+        local langWarn = displayTab:CreateFontString(nil, "OVERLAY")
+        langWarn:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 11)
+        langWarn:SetPoint("TOPLEFT", cd.padX, cd.y)
+        langWarn:SetWidth(440)
+        langWarn:SetJustifyH("LEFT")
+        langWarn:SetTextColor(1, 0.6, 0.2)
+        langWarn:SetText("")
+
+        -- Assignment to file-scope upvalue declared in section 15 prelude (NOT a global).
+        RefreshLanguageWarning = function()
+            local active = ResolveActiveLocale()
+            local req    = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
+            if FontSupports(StatsProDB.font, req) then
+                langWarn:SetText("")
+            else
+                langWarn:SetText(string.format(
+                    "|cffffaa44⚠|r Selected locale needs %s glyphs the current font doesn't ship. Pick a SharedMedia font with %s coverage.",
+                    req, req))
+            end
+        end
+        RefreshLanguageWarning()
+        -- WHY 34 (vs 18 default): warning string can wrap to 2 lines at 11pt inside
+        -- SetWidth(440). 34 + cd.gap (6) = 40px reservation keeps the next section clear
+        -- regardless of whether the warning is currently shown.
+        CursorAdvance(cd, 34)
+
+        -- Reset button: re-syncs both dropdown SetText and warning state.
+        PushRefresher(function()
+            UIDropDownMenu_SetText(langDropdown, CurrentLabel())
+            RefreshLanguageWarning()
+        end)
     end
+    CursorGap(cd, 4)
 
     -- Typography section
     CursorSection(cd, "Typography")
@@ -2020,9 +2257,11 @@ function addon:OpenConfigMenu()
                 info.checked = (GetDB("font") == f.path)
                 info.func = function()
                     StatsProDB.font = f.path
+                    StatsProDB.fontBeforeAutoSwitch = nil  -- explicit user pick clears auto-switch memory
                     ApplyTextStyleToAllPanels(f.path, GetDB("fontSize"))
                     UIDropDownMenu_SetText(fontDropdown, f.name)
                     CloseDropDownMenus()
+                    RefreshLanguageWarning()  -- new font may not cover active locale's glyphs
                     UpdateStats()
                 end
                 UIDropDownMenu_AddButton(info)
@@ -2326,6 +2565,12 @@ function addon:OpenConfigMenu()
         for k, v in pairs(defaults) do
             if type(v) ~= "table" then StatsProDB[k] = v end
         end
+        -- Explicit cleanup of fields not in defaults (the loop above only writes present-key
+        -- defaults). These would linger in DB across Reset otherwise:
+        --   - useLocalizedLabels: dropped in v4→v5 migration; legacy users may still have it
+        --   - fontBeforeAutoSwitch: transient runtime state set when MaybeAutoSwitchFont fires
+        StatsProDB.useLocalizedLabels = nil
+        StatsProDB.fontBeforeAutoSwitch = nil
         StatsProDB.colors = CopyTable(defaults.colors)
         StatsProDB.dbVersion = CURRENT_DB_VERSION
 
@@ -2373,8 +2618,15 @@ function addon:PrintDebugDump()
     PrintMsg(string.format("show fmt: rating=%s pct=%s matchColor=%s",
         tostring(cached.showRating), tostring(cached.showPercentage), tostring(cached.matchValueColorToStat)))
 
-    PrintMsg(string.format("locale: client=%s curated=%s toggle=%s",
-        CURRENT_LOCALE, tostring(HAS_LOCALIZATION), tostring(cached.useLocalizedLabels)))
+    local active = ResolveActiveLocale()
+    local req    = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
+    PrintMsg(string.format("locale: client=%s force=%s active=%s",
+        GetLocale(), tostring(GetDB("forceLocale")), active))
+    PrintMsg(string.format("font: path=%s glyphReq=%s supports=%s saved=%s",
+        tostring(StatsProDB.font or "?"),
+        req,
+        tostring(FontSupports(StatsProDB.font, req)),
+        tostring(StatsProDB.fontBeforeAutoSwitch)))
 
     PrintMsg(string.format("show stats: off=%s tert=%s defensive=%s dur=%s str=%s agi=%s int=%s",
         tostring(cached.showOffensive),

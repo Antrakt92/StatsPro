@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.1.3 — Settings window layering fix
+
+### Fixed
+
+- **Settings window rendered under raid frames, nameplate addons, and
+  Decursive instead of above them.** `StatsProConfigFrame` was created
+  without an explicit frame strata, so it defaulted to `MEDIUM` — the
+  same layer the game HUD lives on. Frame-level ordering then decided
+  the winner, and HUD addons that registered later (or with a higher
+  level) drew on top of the open settings panel. Users editing options
+  during gameplay saw raid health bars and decursive markers bleeding
+  through the config UI. Fix bumps the frame to `DIALOG` strata —
+  Blizzard's standard for `StaticPopup`, `ColorPickerFrame`, and similar
+  configuration dialogs — so the window now sits cleanly above the
+  gameplay HUD while remaining below tooltips. Dropdowns and the color
+  picker continue to lift above the window via their own Blizzard-
+  registered top-level behavior; no other interactions change.
+
 ## 1.1.2 — Fix empty panels + empty settings on v1.1.x
 
 ### Fixed

@@ -684,17 +684,18 @@ local function MigrateDB()
     end
 
     -- v4 → v5: replaced boolean useLocalizedLabels with forceLocale string.
-    --   useLocalizedLabels=false  → user opted out → forceLocale="enUS"
-    --   useLocalizedLabels=true|nil → keep auto-follow → forceLocale="auto"
-    -- WHY guard `db.forceLocale == nil`: do not clobber a manually-set forceLocale
-    -- (corrupted DB with both keys; idempotent for downgrade-then-upgrade flows).
+    -- Only legacy users with useLocalizedLabels=false (explicit opt-out) need an
+    -- override; useLocalizedLabels=true|nil already maps to forceLocale="auto" via the
+    -- defaults loop above.
+    --
+    -- WHY guard `db.forceLocale == "auto"` (not == nil): the defaults loop above
+    -- already pre-populated forceLocale="auto" for any pre-v5 user (the field didn't
+    -- exist before this version). Checking == nil would be a no-op. Checking == "auto"
+    -- only overrides the just-prefilled default — preserves any manually-edited
+    -- forceLocale value (corrupted DB with both keys, downgrade-then-upgrade flow).
     if (db.dbVersion or 4) <= 4 then
-        if db.forceLocale == nil then
-            if db.useLocalizedLabels == false then
-                db.forceLocale = "enUS"
-            else
-                db.forceLocale = "auto"
-            end
+        if db.forceLocale == "auto" and db.useLocalizedLabels == false then
+            db.forceLocale = "enUS"
         end
         db.useLocalizedLabels = nil  -- drop legacy field unconditionally
     end

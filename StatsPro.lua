@@ -480,6 +480,13 @@ local LABELS_BY_LOCALE = {
     },
 }
 
+-- WARNING: must precede ResolveActiveLocale — forward-ref to GetDB resolves as _G.GetDB at parse time.
+local function GetDB(key)
+    local v = StatsProDB[key]
+    if v == nil then return defaults[key] end
+    return v
+end
+
 -- Resolve the active locale: forceLocale="auto" (default) → GetLocale(); explicit
 -- value forces panels to that locale regardless of WoW client locale.
 local function ResolveActiveLocale()
@@ -523,13 +530,6 @@ end
 -- Cheap: one string.format per sectioned-mode UpdateStats (throttled to ~2/s default).
 local function DefensiveHeader()
     return string.format("|cff808080— %s —|r", L("Defensive"))
-end
-
--- Read DB value with fallback to defaults (replaces 30+ if-nil patterns)
-local function GetDB(key)
-    local v = StatsProDB[key]
-    if v == nil then return defaults[key] end
-    return v
 end
 
 -- pcall every stat API so 12.x secret values never touch our Lua logic.

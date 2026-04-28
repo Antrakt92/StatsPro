@@ -1,5 +1,59 @@
 # Changelog
 
+## 1.1.0 — Manual locale override + auto-switch font
+
+### Added
+
+- **New "Language" dropdown in Display tab → Localization section.** Pick any
+  of the 11 retail locales for on-screen panel labels regardless of your WoW
+  client locale. Useful for bilingual players (Russian on EN-locale realm,
+  theorycrafters comparing label rendering, screenshot consistency). Replaces
+  the prior `useLocalizedLabels` boolean toggle which was hidden on enUS
+  clients and only offered "client locale ↔ enUS". Native language names with
+  English in parentheses for non-Latin entries (`한국어 (Korean)`,
+  `Русский (Russian)`, `中文 简体 (Simplified)`, `中文 繁體 (Traditional)`)
+  so users on any client can recognize their own language.
+
+- **Auto-switch font when picked locale needs glyphs the current font lacks.**
+  Picking a CJK locale on a Latin-fonts-only install would otherwise render
+  labels as `?` boxes. StatsPro now saves your previous font, switches to the
+  client's locale-aware default font (or scans SharedMedia for a compatible
+  alternative), and restores your pre-switch font when you return to a
+  compatible locale. Manually picking a font in the Font dropdown clears
+  this auto-switch memory — your manual choice always wins.
+
+- **Inline warning under the Language dropdown** when no installed font
+  covers the picked locale's glyphs (rare: e.g. enUS client picking zhCN
+  with no LSM CJK font installed). Suggests installing a SharedMedia font
+  with the required glyph coverage. Doesn't block the choice.
+
+### Internal
+
+- **DB schema v4 → v5.** Legacy `useLocalizedLabels` boolean migrated to
+  new `forceLocale` string. `useLocalizedLabels=false` (explicit opt-out)
+  becomes `forceLocale="enUS"`; default-on or unset becomes
+  `forceLocale="auto"`. The legacy field is dropped from the DB. Migration
+  is idempotent and preserves any manually-set `forceLocale` value.
+
+- **Refactored `LOCALIZED_LABELS` from file-scope upvalue to per-call read
+  of `cached.activeLabels`.** Previously the active locale was resolved
+  once at addon load via `GetLocale()` and baked into a module upvalue.
+  Now resolved per-tick from `forceLocale` so dropdown changes apply on
+  the next render frame without needing `/reload`.
+
+- **Removed `HAS_LOCALIZATION` gate.** The Localization section in Display
+  tab is now always visible — the new dropdown is useful even on enUS
+  clients (e.g. picking 中文 for screenshots).
+
+### Known limitations
+
+- **LSM CJK fonts** (NotoSansCJK, SourceHanSans, etc. registered via
+  SharedMedia) are conservatively treated as Latin-only by the auto-switch
+  logic — picking a CJK locale will fire a "font may not cover glyphs"
+  warning even when your LSM font does cover them. Workaround: pick the
+  LSM CJK font manually via the Font dropdown after switching the locale;
+  the warning re-evaluates and clears. Tracked as a future refinement.
+
 ## 1.0.12 — Per-locale TOC Notes
 
 ### Added

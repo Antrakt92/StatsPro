@@ -29,6 +29,17 @@ local GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL, GLYPH_HANS, GLYPH_HANT =
 -- readable fallback on every client. Latin labels render universally — kept clean.
 -- WARNING: LANGUAGE_OPTIONS[1] MUST be the auto entry; CurrentLabel() falls back to
 -- it on unknown forceLocale values.
+--
+-- WHY four locale-keyed tables, two axes — read this BEFORE adding new ones:
+--   * REQUIRED-BY-OUTPUT-LOCALE (what label-set we want to render):
+--     LANGUAGE_OPTIONS (UI dropdown), LOCALE_GLYPH_REQ (glyph need),
+--     LABELS_BY_LOCALE (label data). Indexed by `forceLocale` / output choice.
+--   * PROVIDED-BY-CLIENT-LOCALE (what physical fonts THIS install ships):
+--     LOCALE_NATIVE_GLYPHS (see do-block after FONT_GLYPH_SUPPORT).
+--     Indexed by `GetLocale()` / client install.
+-- Confusing the two axes was exactly the v1.1.4-era bug (FRIZQT entry assumed
+-- universal CYR coverage from the output-locale axis but actual coverage is
+-- on the client-locale axis). Index by the right axis or the bug recurs.
 local LANGUAGE_OPTIONS = {
     { value = "auto",  label = nil },                        -- composed dynamically (Auto + native of GetLocale())
     { value = "enUS",  label = "English" },
@@ -56,11 +67,18 @@ local LOCALE_GLYPH_REQ = {
 -- glyph-coverage API but popular CJK families ship under predictable filenames, so
 -- FONT_GLYPH_PATTERNS (below) catches NotoCJK / SourceHan / WenQuanYi / PingFang /
 -- YaHei / JhengHei / SimSun / SimHei / MingLiU / Malgun / Nanum / AppleSDGothicNeo
--- by filename pattern. Unknown paths conservatively Latin-only — false-positives
--- surface as inline warning, never as silently broken UI.
+-- by filename pattern. Unknown paths conservatively Latin-only.
+--
+-- WHY ARIALN universal vs FRIZQT locale-conditional: Blizzard ships ARIALN with
+-- Cyrillic on EVERY non-CJK client (it's the chat/nameplate font where cross-realm
+-- Russian names appear — Latin+Cyrillic is mandatory). FRIZQT, by contrast, is the
+-- brand-style font with locale-specific design — ruRU FRIZQT ships proper Cyrillic
+-- glyphs, but enUS / deDE / frFR / etc. FRIZQT is Latin-design (Cyrillic renders
+-- via OS system font fallback — visible but ugly, mismatched kerning/stroke weights).
+-- See locale-conditional do-block below for FRIZQT populating.
 local FONT_GLYPH_SUPPORT = {
-    ["Fonts\\FRIZQT__.TTF"] = { GLYPH_LATIN, GLYPH_CYR },    -- universal Blizzard default
-    ["Fonts\\ARIALN.TTF"]   = { GLYPH_LATIN, GLYPH_CYR },
+    ["Fonts\\ARIALN.TTF"]   = { GLYPH_LATIN, GLYPH_CYR },    -- universal Latin+Cyrillic (cross-realm chat/nameplates)
+    -- FRIZQT populated by the locale-conditional do-block below this table.
     ["Fonts\\MORPHEUS.TTF"] = { GLYPH_LATIN },
     ["Fonts\\SKURRI.TTF"]   = { GLYPH_LATIN },
     ["Fonts\\ARKai_T.ttf"]  = { GLYPH_HANS },                -- zhCN client default
@@ -72,6 +90,20 @@ local FONT_GLYPH_SUPPORT = {
     ["Fonts\\2002B.ttf"]    = { GLYPH_HANGUL },              -- koKR
     ["Fonts\\K_Damage.TTF"] = { GLYPH_HANGUL },              -- koKR damage font (UI fallback in some installs)
 }
+
+-- WHY locale-conditional FRIZQT: same path resolves to a DIFFERENT physical file
+-- per client install — properly-designed Cyrillic on ruRU; on other clients Cyrillic
+-- only renders via OS system fallback (mixed glyph design). MaybeAutoSwitchFont's
+-- ARIALN-fallback handles the cross-locale CYR case (see ARIALN comment above).
+-- CJK clients get plain Latin too; their actual CJK coverage lives in the
+-- 2002/ARKai/bHEI entries above. See axis-naming comment over LANGUAGE_OPTIONS
+-- for why path-keyed (provided-by-client) is the right axis here.
+do
+    local LOCALE_NATIVE_GLYPHS = {
+        ruRU = { GLYPH_LATIN, GLYPH_CYR },
+    }
+    FONT_GLYPH_SUPPORT["Fonts\\FRIZQT__.TTF"] = LOCALE_NATIVE_GLYPHS[GetLocale()] or { GLYPH_LATIN }
+end
 
 -- WHY ordered list (not hash like FONT_GLYPH_SUPPORT): patterns are first-match-wins,
 -- broader/universal-coverage families first. Path basename is lowercased before match
@@ -149,7 +181,7 @@ local issecretvalue = _G.issecretvalue or function() return false end
 -- literal `@project-version@` token from the unsubstituted TOC — fall back to a
 -- hand-maintained constant so the title still reads e.g. `v1.0.3-dev` instead of `vdev`.
 -- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
-local CURRENT_RELEASE = "1.1.4"
+local CURRENT_RELEASE = "1.1.5"
 local ADDON_VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("StatsPro", "Version") or "?"
 if ADDON_VERSION:find("project%-version") then ADDON_VERSION = CURRENT_RELEASE .. "-dev" end
 
@@ -1224,14 +1256,18 @@ local function MaybeAutoSwitchFont()
         return
     end
 
-    -- Not compatible. Try STANDARD_TEXT_FONT first (locale-aware on user's CLIENT —
-    -- may or may not cover cross-locale forcing). If incompatible, scan LSM for any
-    -- registered font we know covers the required glyph. Last resort: leave font
-    -- alone and let RefreshLanguageWarning surface the issue.
+    -- Not compatible. Three-tier fallback:
+    --   1. STANDARD_TEXT_FONT (locale-aware on user's CLIENT — covers native locale).
+    --   2. ARIALN (Blizzard ships Latin+Cyrillic universally — saves cross-locale
+    --      Russian users from needing an LSM addon for clean rendering).
+    --   3. LSM scan (catches CJK / installed Cyrillic fonts).
+    -- Last resort: leave font alone and let RefreshLanguageWarning surface the issue.
     local fallback = STANDARD_TEXT_FONT
     if not fallback or not FontSupports(fallback, req) then
         fallback = nil
-        if LSM then
+        if cur ~= "Fonts\\ARIALN.TTF" and FontSupports("Fonts\\ARIALN.TTF", req) then
+            fallback = "Fonts\\ARIALN.TTF"
+        elseif LSM then
             for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
                 local p = LSM:Fetch(LSM.MediaType.FONT, name)
                 if p and FontSupports(p, req) then
@@ -2267,7 +2303,7 @@ function addon:OpenConfigMenu()
                 langWarn:SetText("")
             else
                 langWarn:SetText(string.format(
-                    "|cffffaa44⚠|r Selected locale needs %s glyphs the current font doesn't ship. Pick a SharedMedia font with %s coverage.",
+                    "|cffffaa44⚠|r Current font may not render %s cleanly. Pick a SharedMedia font with proper %s coverage for best results.",
                     req, req))
             end
         end

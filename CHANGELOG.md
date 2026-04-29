@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.5 — Honest font coverage on cross-locale picks
+
+### Fixed
+
+- **Selecting a non-native locale (e.g. Russian on an English client) now auto-switches to Blizzard's built-in Arial Narrow** for readable rendering — no SharedMedia addon required. Previously the addon mistakenly assumed `Fonts\FRIZQT__.TTF` always shipped clean Cyrillic glyphs (true only on the Russian client build); on English / German / French / etc. FRIZQT is Latin-designed, with Cyrillic falling back to OS system fonts (visible but with mismatched kerning and stroke weights — hard to read). The fix recognizes ARIALN as the Blizzard-shipped Latin+Cyrillic font (universal across all non-CJK clients, since it's used for chat/nameplates with cross-realm Russian names) and auto-switches to it when needed.
+- **Existing users with a stale cross-locale `forceLocale` setting now self-heal on next login.** The per-login auto-switch sees the now-correct coverage answer and picks the right font.
+- **The "current font may not render cleanly" warning now correctly fires** when even the auto-fallback can't cover the chosen locale (e.g. picking Korean on an English client without a SharedMedia CJK font installed). Previously suppressed for Cyrillic on non-Russian clients due to the incorrect assumption above.
+
+### Known limitations
+
+- **Korean / Chinese on non-CJK clients** still requires a SharedMedia font with CJK coverage (NotoSansCJK, SourceHanSans, WenQuanYi, etc.) — Blizzard doesn't ship CJK glyphs on non-CJK client builds, and bundled CJK fonts are too large (5-20MB) to ship inside the addon. Install one of the SharedMedia CJK addons from CurseForge for clean rendering. Without one, labels render as `?`-boxes and the inline warning will stay visible.
+
 ## 1.1.4 — LSM CJK font auto-detect
 
 ### Fixed

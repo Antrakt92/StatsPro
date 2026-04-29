@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.1.6 — Settings UI polish
+
+### Fixed
+
+- **Durability color swatch is now always clickable.** Previously it appeared greyed out and unresponsive when "Auto Color by Threshold" was on (the default). The override color you pick still takes effect only when Auto Color is turned off — nothing else changed about the threshold behavior.
+- **Tertiary stats sub-toggles (Show Leech / Avoidance / Speed) now form a clean single-column layout** with their color swatches aligned vertically. Previously the 3-stat 2-column grid produced an asymmetric L-shape of swatches.
+- **All color swatches across Settings now form clean aligned columns**, regardless of label length or chosen language. Previously swatches drifted horizontally based on rendered label width — e.g. "Crit Color:" and "Versatility Color:" pushed swatches to different x positions per row.
+- **Color swatches throughout Settings now have consistent sizing.** Previously the labeled "Stat Color:" pickers in the Display tab used larger swatches than the inline checkbox swatches in Stats / Defensive tabs — visually inconsistent. Now all swatches share one size and styling.
+- **Section header color swatches (e.g. the shared Primary stat swatch next to the "PRIMARY STAT RATINGS" header) now sit right next to the header text** with the same gap as everywhere else, instead of at a fixed offset that left wide empty space.
+- **Default stats panel font is no longer hijacked by third-party font-replacement addons** (ChonkyCharacterSheet, Tukui, ElvUI font modules, and similar). Those addons mutate Blizzard's `STANDARD_TEXT_FONT` global; previously StatsPro's defaults, migration, and auto-switch fallback followed the mutation and silently pinned your panel font to the addon's path — even if you never picked it. StatsPro now trusts `STANDARD_TEXT_FONT` only when it points to a Blizzard-shipped path; addon-overridden values fall back to Friz Quadrata. You can still pick any installed font manually via the Font dropdown.
+- **Display tab dropdowns (`Display Mode`, `Language`, `Font`) now share a single column with matching width.** Previously the `Display Mode` dropdown sat far to the right while the other two clung close to their labels and rendered at three different sizes. All three now share the same left edge (column adapts to label widths in any locale) and the same body width. The Language dropdown's collapsed text is shown in compact form (e.g. `English` / `Русский` / `中文 简体`) so it fits without truncation; the menu still shows full descriptive labels when opened.
+- **Tighter spacing below the Language row when no font-coverage warning is shown** (the common case). Previously a fixed 2-line warning slot was reserved unconditionally, leaving visible empty space between the Language dropdown and the Typography section.
+- **Font dropdown no longer overflows the screen on systems with many SharedMedia fonts.** Users with multiple font packs registered (50–200+ entries) saw a single huge non-scrolling list that ran off the bottom of the screen with the bottom entries unreachable. The list now groups into alphabetic letter-range submenus (e.g. `A`, `B – C`, `D – F`, …) that each fit on screen. Short font lists (≤ 20 entries) still render as a single flat menu — no extra clicks for users without large font packs.
+
+### Added
+
+- **Settings UI now refreshes localized stat color labels immediately when you change Language**, instead of requiring `/reload`. Column alignment recomputes on the fly to fit the new locale's text widths.
+
 ## 1.1.5 — Honest font coverage on cross-locale picks
 
 ### Fixed

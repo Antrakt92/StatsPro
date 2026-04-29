@@ -174,6 +174,22 @@ local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
 -- WHY: issecretvalue is 12.0+ retail; shim falsy on older clients so addon doesn't hard-error.
 local issecretvalue = _G.issecretvalue or function() return false end
 
+-- WHY hijack-guard: STANDARD_TEXT_FONT is a Blizzard global ANY addon can mutate
+-- (ChonkyCharacterSheet / Tukui / ElvUI font modules / other "system font replacement"
+-- addons all do). Reading it raw lets a third-party pin StatsPro's defaults, migration
+-- target, fallback chain, and config UI rendering to an addon-shipped path forever.
+-- Guard: trust STANDARD_TEXT_FONT only when it points to a Blizzard-shipped path
+-- (`Fonts\…`). Non-Blizzard paths (`Interface\AddOns\…`) fall back to FRIZQT — the
+-- localized-labels concern was always about CJK CLIENT-shipped fonts (under Fonts\),
+-- not about user-installed font replacements which the user can still pick manually
+-- via the Font dropdown if they want them in StatsPro specifically.
+local function LocaleAwareDefaultFont()
+    if STANDARD_TEXT_FONT and STANDARD_TEXT_FONT:match("^Fonts\\") then
+        return STANDARD_TEXT_FONT
+    end
+    return "Fonts\\FRIZQT__.TTF"
+end
+
 -- WHY single source of truth: Version comes from the TOC `## Version:` line, which
 -- BigWigs Packager substitutes from the git tag at release build time (`@project-version@`
 -- → e.g. `1.0.1`). Reading via GetAddOnMetadata means every release auto-syncs the
@@ -181,7 +197,7 @@ local issecretvalue = _G.issecretvalue or function() return false end
 -- literal `@project-version@` token from the unsubstituted TOC — fall back to a
 -- hand-maintained constant so the title still reads e.g. `v1.0.3-dev` instead of `vdev`.
 -- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
-local CURRENT_RELEASE = "1.1.5"
+local CURRENT_RELEASE = "1.1.6"
 local ADDON_VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("StatsPro", "Version") or "?"
 if ADDON_VERSION:find("project%-version") then ADDON_VERSION = CURRENT_RELEASE .. "-dev" end
 
@@ -196,14 +212,14 @@ local defaults = {
     yOfs = 0,
     scale = 1.0,
     fontSize = 14,
-    -- WHY STANDARD_TEXT_FONT: Blizzard's locale-aware default-font global. Resolves to
-    -- the right TTF for the current WoW client locale: on zhCN/zhTW/koKR clients it
-    -- maps to a CJK-supporting font; on enUS/ruRU/deDE/etc. it maps to the appropriate
-    -- Latin-or-Cyrillic-supporting one. Hardcoding `Fonts\\FRIZQT__.TTF` would render
-    -- localized labels (Crit / 暴击 / 치명 / etc.) as `?` boxes on CJK clients that
-    -- ship the CJK font under a different filename. Fall back to FRIZQT only if the
-    -- global is somehow unavailable (extreme edge case in pre-init contexts).
-    font = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF",
+    -- WHY LocaleAwareDefaultFont: Blizzard's locale-aware default-font global resolves
+    -- to the right TTF for the current WoW client locale (CJK-supporting on zhCN/zhTW/
+    -- koKR; Latin/Cyrillic-supporting elsewhere). Hardcoding FRIZQT would render
+    -- localized labels (Crit / 暴击 / 치명 / etc.) as `?` boxes on CJK clients. The
+    -- helper guards against font-replacement addons (Chonky, Tukui, ElvUI) that
+    -- override STANDARD_TEXT_FONT to their own path — those would hijack our defaults
+    -- otherwise. Falls back to FRIZQT for any non-Blizzard path.
+    font = LocaleAwareDefaultFont(),
     textAlign = "RIGHT",
     updateInterval = 0.5,
     isVisible = true,
@@ -776,8 +792,13 @@ local function MigrateDB()
     -- FRIZQT__.TTF anyway, so the migration is visually a no-op there; on
     -- zhCN/zhTW/koKR clients it switches to the CJK-supporting default font so
     -- localized labels render correctly out of the box.
-    if (db.dbVersion or 3) <= 3 and db.font == "Fonts\\FRIZQT__.TTF" and STANDARD_TEXT_FONT then
-        db.font = STANDARD_TEXT_FONT
+    -- WHY LocaleAwareDefaultFont (not raw STANDARD_TEXT_FONT): the global is mutated by
+    -- font-replacement addons (ChonkyCharacterSheet, Tukui font modules, ElvUI, etc.).
+    -- Reading raw at PEW lets a third-party hijack pin db.font to an addon-shipped path
+    -- forever (migration runs once, dbVersion bumps, hijacked path persists). Guarded
+    -- helper falls back to FRIZQT for non-Blizzard paths.
+    if (db.dbVersion or 3) <= 3 and db.font == "Fonts\\FRIZQT__.TTF" then
+        db.font = LocaleAwareDefaultFont()
     end
 
     -- v4 → v5: replaced boolean useLocalizedLabels with forceLocale string.
@@ -1257,12 +1278,12 @@ local function MaybeAutoSwitchFont()
     end
 
     -- Not compatible. Three-tier fallback:
-    --   1. STANDARD_TEXT_FONT (locale-aware on user's CLIENT — covers native locale).
+    --   1. LocaleAwareDefaultFont (Blizzard-shipped STANDARD_TEXT_FONT, hijack-guarded).
     --   2. ARIALN (Blizzard ships Latin+Cyrillic universally — saves cross-locale
     --      Russian users from needing an LSM addon for clean rendering).
     --   3. LSM scan (catches CJK / installed Cyrillic fonts).
     -- Last resort: leave font alone and let RefreshLanguageWarning surface the issue.
-    local fallback = STANDARD_TEXT_FONT
+    local fallback = LocaleAwareDefaultFont()
     if not fallback or not FontSupports(fallback, req) then
         fallback = nil
         if cur ~= "Fonts\\ARIALN.TTF" and FontSupports("Fonts\\ARIALN.TTF", req) then
@@ -1780,6 +1801,30 @@ end)
 local configRefreshers = {}
 local function PushRefresher(fn) tinsert(configRefreshers, fn) end
 
+-- WHY centralized layout constants: a tweak (tighter swatch gap, wider columns) used
+-- to require hunting ~10 callsites with hardcoded 6/220/12/"FRIZQT" literals — easy to
+-- miss one and ship inconsistent UI. CONFIG_FONT routes through LocaleAwareDefaultFont
+-- to dodge the FRIZQT-on-CJK rendering trap (CLAUDE.md "Hardcoded default font path")
+-- while resisting third-party-addon hijacks of the STANDARD_TEXT_FONT global.
+local CONFIG_FONT       = LocaleAwareDefaultFont()
+local CONFIG_FONT_SIZE  = 12
+local CONFIG_SWATCH_GAP = 6     -- label.RIGHT → swatch.LEFT
+local CONFIG_COL_OFFSET = 220   -- left-col x → right-col x within a 2-column section
+-- WHY separate from CONFIG_SWATCH_GAP: heavy chrome on UIDropDownMenuTemplate may want
+-- different breathing room than flat color swatches; tracked independently so a future
+-- visual tweak to the dropdown column doesn't ripple through swatch placements.
+local CONFIG_DROPDOWN_GAP = 6   -- label.RIGHT → dropdown TOPLEFT x gap (matches swatch column rhythm)
+-- Vertical offset from a label row's baseline (rowY) to its dropdown's TOPLEFT y. Positive
+-- value lifts the dropdown 2px above rowY so the dropdown chrome visually centers around
+-- the label text. Shared across Display Mode / Language / Font so all 3 rows align identically.
+local CONFIG_DROPDOWN_Y_OFFSET = 2
+-- Dropdown body width: 100px for all three (Display Mode / Language / Font). Long-content
+-- labels (Language's "Auto (current: %s)" and Latin-with-parenthetical locale labels) get
+-- a CompactLabel transform that strips parentheticals so text fits without truncation. Menu
+-- items keep the full label form for disambiguation when picking. Font names from SharedMedia
+-- can occasionally overflow at 100px — accepted: rare, names truncate to "Long Name..." and
+-- the user can hover the dropdown for full text via Blizzard's tooltip.
+
 -- Single source of truth for "DB color or fallback to default". Used by every
 -- color-related helper + their refreshers; lazily initializes the colors table
 -- (StatsProDB may not have it yet on a fresh install).
@@ -1794,15 +1839,9 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
     cb:SetSize(22, 22)
     local text = _G[name .. "Text"]
     text:SetText(label)
-    -- WHY STANDARD_TEXT_FONT (not hardcoded FRIZQT__.TTF): the Localization-toggle
-    -- checkbox label embeds a live-localized stat name preview (e.g. on zhCN: "Use
-    -- localized stat names (e.g. '暴击' instead of 'Crit')"). FRIZQT__.TTF on CJK
-    -- clients doesn't ship CJK glyphs — the preview character would render as `?`.
-    -- Using the locale-aware Blizzard global fixes the preview rendering on CJK
-    -- clients without affecting Latin/Cyrillic locales (where STANDARD_TEXT_FONT
-    -- resolves to FRIZQT or a Cyrillic-extended variant anyway).
-    text:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 12)
-    -- textWidth: 200 default for plain checkboxes; pass 140 for "checkbox + inline color" rows
+    text:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
+    -- textWidth: 200 default for plain checkboxes; pass 140 for "checkbox + inline color"
+    -- rows (CreateCheckboxColor overrides the bound width to actual text width post-call).
     text:SetWidth(textWidth or 200)
     text:SetJustifyH("LEFT")
     cb:SetChecked(GetDB(dbKey))
@@ -1813,7 +1852,7 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
         UpdateStats()
     end)
     PushRefresher(function() cb:SetChecked(GetDB(dbKey)) end)
-    return cb
+    return cb, text
 end
 
 -- Toggle a checkbox's enabled state with matching label dim. Used by dependent-toggle
@@ -1831,9 +1870,9 @@ local function SetCheckboxEnabled(cb, enabled)
     end
 end
 
--- WHY: shared snapshot/select/cancel handler used by both CreateColorSwatch (compact 22x16
--- inline button) and CreateColorPicker (labeled "Stat Color:" 30x20 row). Snapshot is taken
--- at click time, not creation time, so cancelling a 2nd pick reverts to the user's prior
+-- WHY: shared snapshot/select/cancel handler used by every swatch (CreateColorSwatch and
+-- CreateColorPicker both produce buttons that route OnClick here). Snapshot is taken at
+-- click time, not creation time, so cancelling a 2nd pick reverts to the user's prior
 -- color, not the original default.
 local function OpenColorPicker(btn, statName)
     -- WHY: capture "uses default" state so cancel can restore exactly that — writing
@@ -1885,52 +1924,119 @@ local function CreateColorSwatch(parent, statName, x, y)
     return btn
 end
 
--- Combined: checkbox with color swatch immediately to the right of label.
--- swatch x = x + 22 (checkbox) + 140 (label) + 8 (gap) = x + 170
--- Returns (cb, swatch). Most callers ignore swatch; durability captures it to grey-out
--- when Auto Color overrides the user-picked color.
+-- WHY swatch anchored to text:RIGHT (not absolute x): the swatch hugs the actual rendered
+-- label end with CONFIG_SWATCH_GAP — works for any locale (en "Show Avoidance" ≠ ru "Уворот"
+-- pixel widths). For groups of rows that should form a vertical column of swatches, call
+-- AlignSwatchColumn(rows) post-creation — it normalizes all texts to the group's max
+-- GetStringWidth so swatches line up at the same x relative to column start.
 local function CreateCheckboxColor(parent, name, label, dbKey, colorKey, x, y, onChange)
-    local cb = CreateCheckbox(parent, name, label, dbKey, x, y, onChange, 140)
+    local cb, text = CreateCheckbox(parent, name, label, dbKey, x, y, onChange, 140)
     local swatch
     if colorKey then
-        swatch = CreateColorSwatch(parent, colorKey, x + 170, y - 3)
+        -- Override the 140-bound width with actual text rendering width — swatch needs
+        -- to hug the text end, not the right edge of the 140px reservation.
+        text:SetWidth(text:GetStringWidth())
+        swatch = CreateColorSwatch(parent, colorKey, 0, 0)
+        swatch:ClearAllPoints()
+        swatch:SetPoint("LEFT", text, "RIGHT", CONFIG_SWATCH_GAP, 0)
     end
-    return cb, swatch
+    return cb, swatch, text
+end
+
+-- Tracked groups + L()-using labels for re-alignment on language change. Both registered
+-- at config UI build time, replayed by RefreshConfigLocalization() when forceLocale changes.
+local alignmentGroups = {}
+local localizedConfigLabels = {}
+
+-- WHY unconstrain-before-measure: a prior AlignSwatchColumn or a SetText with text wider
+-- than the current SetWidth would leave the FontString in wrap/truncate mode, where
+-- GetStringWidth returns the wrapped width (≤ SetWidth), not the natural width. Setting a
+-- huge SetWidth first forces single-line layout so GetStringWidth returns the real width
+-- of the new text — critical when language switch grows a label (en "Crit" → ru "Крит. удар").
+local function ReAlignGroupImpl(rows, gap)
+    for _, row in ipairs(rows) do
+        row.text:SetWidth(9999)
+    end
+    local maxW = 0
+    for _, row in ipairs(rows) do
+        local w = row.text:GetStringWidth()
+        if w > maxW then maxW = w end
+    end
+    for _, row in ipairs(rows) do
+        row.text:SetWidth(maxW)
+        if row.swatch then
+            row.swatch:ClearAllPoints()
+            row.swatch:SetPoint("LEFT", row.text, "RIGHT", gap, 0)
+        elseif row.dropdown then
+            -- WHY TOPLEFT (not LEFT-to-RIGHT like swatches): UIDropDownMenuTemplate's chrome
+            -- height and internal vertical padding aren't reliable to compute a y-offset that
+            -- centers dropdown text on label baseline. Preserve each row's original TOPLEFT y
+            -- (hand-tuned at row creation) and only update x to the shared column.
+            row.dropdown:ClearAllPoints()
+            row.dropdown:SetPoint("TOPLEFT", row.dropdownParent, "TOPLEFT",
+                row.dropdownX_base + maxW + gap, row.dropdownY)
+        end
+    end
+end
+
+-- AlignSwatchColumn: post-creation max-width sync for a group of rows that should share a
+-- control column (swatch OR dropdown — both anchor relative to label.RIGHT, dispatch on
+-- which field is set). rows[i] = { text=FontString, swatch=Frame? } for swatch rows;
+-- { text=FontString, dropdown=Frame, dropdownX_base=number, dropdownY=number,
+-- dropdownParent=Frame } for dropdown rows. Locale-aware: measures actual rendered widths
+-- in the current font, no hardcoded en-biased SetWidth(N). Registers the group so
+-- RefreshConfigLocalization() can re-run alignment after a language switch shrinks or
+-- grows the labels.
+local function AlignSwatchColumn(rows, gap)
+    gap = gap or CONFIG_SWATCH_GAP
+    ReAlignGroupImpl(rows, gap)
+    tinsert(alignmentGroups, { rows = rows, gap = gap })
+end
+
+-- PushLocalizedLabel: register a setter closure that calls fs:SetText with a fresh L()-resolved
+-- string. RefreshConfigLocalization() replays every setter when forceLocale changes, then
+-- re-aligns all groups (label widths shift on translation: "Versatility" → "Унив" is shorter,
+-- "Crit" → "致命一击" is wider). Initial set is performed here so callers don't duplicate it.
+local function PushLocalizedLabel(setter)
+    tinsert(localizedConfigLabels, setter)
+    setter()
+end
+
+-- RefreshConfigLocalization: re-runs all SetText setters and re-aligns every registered group.
+-- Called from the Language dropdown's selection handler after CacheSettings() updates
+-- cached.activeLabels — all L() calls inside setters now resolve to the new locale.
+local function RefreshConfigLocalization()
+    for _, setter in ipairs(localizedConfigLabels) do setter() end
+    for _, g in ipairs(alignmentGroups) do
+        ReAlignGroupImpl(g.rows, g.gap)
+    end
 end
 
 local function CreateColorPicker(parent, label, statName, yPos, xPos)
     local colorLabel = parent:CreateFontString(nil, "OVERLAY")
-    -- WHY STANDARD_TEXT_FONT (not hardcoded FRIZQT__.TTF): same trap as the panel's
-    -- default font — on CJK clients FRIZQT__.TTF doesn't ship the locale's glyphs,
-    -- so the just-localized "Crit 颜色:" label would render with a `?` box for the
-    -- Chinese stat name. Use the locale-aware Blizzard global so the config UI
-    -- displays correctly regardless of client locale.
-    colorLabel:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 12)
+    colorLabel:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
     colorLabel:SetPoint("TOPLEFT", xPos, yPos)
+    colorLabel:SetJustifyH("LEFT")
     -- Localize both the stat name and the "Color" word. Stat names like Crit/Haste/
     -- Mastery/Versatility have entries in LABELS_BY_LOCALE; "Rating"/"Percentage" don't,
     -- so L() falls through to the English literal for those rows. Word order ("X Color")
     -- is universal across all locales for now — native speakers can request a per-locale
     -- format string ("Color X" for Romance languages) via GitHub Issues if it reads oddly.
-    colorLabel:SetText(L(label) .. " " .. L("Color") .. ":")
-
-    local colorBtn = CreateFrame("Button", nil, parent, "BackdropTemplate")
-    colorBtn:SetPoint("LEFT", colorLabel, "RIGHT", 10, 0)
-    colorBtn:SetSize(30, 20)
-    colorBtn:SetBackdrop({
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 2, right = 2, top = 2, bottom = 2 },
-    })
-
-    local initialColor = GetColor(statName)
-    colorBtn:SetBackdropColor(initialColor.r, initialColor.g, initialColor.b, 1)
-    colorBtn:SetScript("OnClick", function(self) OpenColorPicker(self, statName) end)
-    PushRefresher(function()
-        local c = GetColor(statName)
-        colorBtn:SetBackdropColor(c.r, c.g, c.b, 1)
+    -- Setter registered with PushLocalizedLabel so RefreshConfigLocalization() can re-set
+    -- on Language dropdown change without /reload.
+    PushLocalizedLabel(function()
+        colorLabel:SetText(L(label) .. " " .. L("Color") .. ":")
     end)
+    -- Default-hug the label end. AlignSwatchColumn(rows) overrides SetWidth across a group
+    -- so swatches line up at text:RIGHT + CONFIG_SWATCH_GAP, locale-adapted (no hardcoded px).
+    colorLabel:SetWidth(colorLabel:GetStringWidth())
+
+    -- Reuse CreateColorSwatch (single source of truth for swatch size/styling/click/refresh)
+    -- so STAT COLORS swatches match the inline ones in TERTIARY / DEFENSIVE / DURABILITY.
+    local colorBtn = CreateColorSwatch(parent, statName, 0, 0)
+    colorBtn:ClearAllPoints()
+    colorBtn:SetPoint("LEFT", colorLabel, "RIGHT", CONFIG_SWATCH_GAP, 0)
+    return colorBtn, colorLabel
 end
 
 --[[ ============================================================
@@ -1960,13 +2066,17 @@ local function CursorUsed(c)       return math.abs(c.initialY - c.y) + 16 end
 -- use this when one color applies to all stats in the section (e.g. Primary).
 local function CursorSection(c, label, sharedColorKey)
     local hdr = c.parent:CreateFontString(nil, "OVERLAY")
-    hdr:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+    hdr:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE, "OUTLINE")
     hdr:SetPoint("TOPLEFT", c.parent, "TOPLEFT", c.padX, c.y)
     hdr:SetText("|cff00ff7f" .. string.upper(label) .. "|r")
     if sharedColorKey then
-        -- WHY: GetStringWidth is unreliable immediately after SetText; use a generous
-        -- fixed offset that fits any of our header labels in uppercase.
-        CreateColorSwatch(c.parent, sharedColorKey, c.padX + 200, c.y + 1)
+        -- Anchor swatch to header RIGHT edge — same hug pattern used for inline checkbox
+        -- swatches and STAT COLORS pickers. WoW resolves the position from hdr's actual
+        -- rendered width, so no GetStringWidth call needed and the gap stays consistent
+        -- whether the localized header is short or long.
+        local sw = CreateColorSwatch(c.parent, sharedColorKey, 0, 0)
+        sw:ClearAllPoints()
+        sw:SetPoint("LEFT", hdr, "RIGHT", CONFIG_SWATCH_GAP, 0)
     end
     local line = c.parent:CreateTexture(nil, "ARTWORK")
     line:SetPoint("TOPLEFT", c.parent, "TOPLEFT", c.padX, c.y - 18)
@@ -1992,6 +2102,13 @@ function addon:OpenConfigMenu()
     -- the early-return guard above, but if anyone makes this re-entrant the
     -- refresher list would duplicate every entry. Cheap insurance.
     wipe(configRefreshers)
+    wipe(alignmentGroups)
+    wipe(localizedConfigLabels)
+    -- Function-local: collected during Display tab build, aligned once at end of Typography
+    -- section via AlignSwatchColumn(displayDropdownRows, CONFIG_DROPDOWN_GAP). Table reference
+    -- retained via alignmentGroups after registration so RefreshConfigLocalization can re-run
+    -- alignment when locale-driven label widths shift.
+    local displayDropdownRows = {}
 
     --[[ ===== Frame ===== ]]
     configFrame = CreateFrame("Frame", "StatsProConfigFrame", UIParent, "BackdropTemplate")
@@ -2021,7 +2138,7 @@ function addon:OpenConfigMenu()
 
     --[[ ===== Header (title + X) ===== ]]
     local title = configFrame:CreateFontString(nil, "OVERLAY")
-    title:SetFont("Fonts\\FRIZQT__.TTF", 16, "OUTLINE")
+    title:SetFont(CONFIG_FONT, 16, "OUTLINE")
     title:SetPoint("TOP", 0, -12)
     title:SetText("|cff00ff7fStatsPro|r v" .. ADDON_VERSION .. " Settings")
 
@@ -2108,7 +2225,7 @@ function addon:OpenConfigMenu()
         sel:Hide()
         btn.selected = sel
         local txt = btn:CreateFontString(nil, "OVERLAY")
-        txt:SetFont("Fonts\\FRIZQT__.TTF", 13, "OUTLINE")
+        txt:SetFont(CONFIG_FONT, 13, "OUTLINE")
         txt:SetPoint("CENTER", 0, 1)
         txt:SetText(label)
         txt:SetTextColor(0.65, 0.65, 0.65, 1)
@@ -2162,14 +2279,14 @@ function addon:OpenConfigMenu()
         CreateCheckbox(displayTab, "StatsProVisibleCheck",
             "Show Stats Panel", "isVisible", cd.padX, rowY, nil, 140)
         CreateCheckbox(displayTab, "StatsProLockCheck",
-            "Lock Frames", "isLocked", cd.padX + 180, rowY, function(checked)
+            "Lock Frames", "isLocked", cd.padX + CONFIG_COL_OFFSET, rowY, function(checked)
                 SetAllPanelsLockState(checked)
             end, 140)
         cd.y = rowY - 26
         rowY = cd.y
 
         local dmLabel = displayTab:CreateFontString(nil, "OVERLAY")
-        dmLabel:SetFont("Fonts\\FRIZQT__.TTF", 12)
+        dmLabel:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
         dmLabel:SetPoint("TOPLEFT", cd.padX, rowY - 4)
         dmLabel:SetText("Display Mode:")
 
@@ -2186,8 +2303,10 @@ function addon:OpenConfigMenu()
         end
 
         local dmDropdown = CreateFrame("Frame", "StatsProDisplayModeDropdown", displayTab, "UIDropDownMenuTemplate")
-        dmDropdown:SetPoint("TOPLEFT", cd.padX + 240, rowY + 2)
-        UIDropDownMenu_SetWidth(dmDropdown, 130)
+        -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after all 3 dropdown rows built.
+        dmDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
+        UIDropDownMenu_SetWidth(dmDropdown, 100)
+        UIDropDownMenu_JustifyText(dmDropdown, "CENTER")
         UIDropDownMenu_Initialize(dmDropdown, function(self, level)
             for _, m in ipairs(DISPLAY_MODES) do
                 local info = UIDropDownMenu_CreateInfo()
@@ -2208,6 +2327,11 @@ function addon:OpenConfigMenu()
         PushRefresher(function()
             UIDropDownMenu_SetText(dmDropdown, GetDisplayModeLabel(GetDB("displayMode")))
         end)
+
+        tinsert(displayDropdownRows, {
+            text = dmLabel, dropdown = dmDropdown,
+            dropdownX_base = cd.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = displayTab,
+        })
         cd.y = rowY - 30
     end
 
@@ -2218,7 +2342,7 @@ function addon:OpenConfigMenu()
     do
         local rowY = cd.y
         CreateCheckbox(displayTab, "StatsProRatingCheck",     "Show Rating",     "showRating",     cd.padX,       rowY)
-        CreateCheckbox(displayTab, "StatsProPercentageCheck", "Show Percentage", "showPercentage", cd.padX + 200, rowY)
+        CreateCheckbox(displayTab, "StatsProPercentageCheck", "Show Percentage", "showPercentage", cd.padX + CONFIG_COL_OFFSET, rowY)
         cd.y = rowY - 26
     end
     CreateCheckbox(displayTab, "StatsProMatchColorCheck",
@@ -2235,14 +2359,11 @@ function addon:OpenConfigMenu()
         local rowY = cd.y
 
         local langLabel = displayTab:CreateFontString(nil, "OVERLAY")
-        -- WHY STANDARD_TEXT_FONT: this label may localize to "Язык:" / "语言:" under T2-4;
-        -- locale-aware default ensures glyphs render correctly when that ships.
-        langLabel:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 12)
+        langLabel:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
         langLabel:SetPoint("TOPLEFT", cd.padX, rowY)
         langLabel:SetText("Language:")
-        langLabel:SetWidth(75)
-        langLabel:SetJustifyH("LEFT")
 
+        -- DisplayLabel: full descriptive form for menu items (user disambiguates picks).
         local function DisplayLabel(opt)
             if opt.value ~= "auto" then return opt.label end
             local cur = GetLocale()
@@ -2253,17 +2374,35 @@ function addon:OpenConfigMenu()
             return string.format("Auto (current: %s)", nat or cur)
         end
 
+        -- CompactLabel: short form for the dropdown's collapsed current-text field, sized to
+        -- fit a 100px-wide dropdown body. Strips trailing parentheticals from explicit-pick
+        -- labels ("Español (España)" -> "Español"); for "auto" mode shows native name only.
+        local function CompactLabel(opt)
+            if opt.value == "auto" then
+                local cur = GetLocale()
+                local nat
+                for _, o in ipairs(LANGUAGE_OPTIONS) do
+                    if o.value == cur then nat = o.label; break end
+                end
+                local short = (nat or cur):match("^(.-)%s*%(") or nat or cur
+                return short  -- e.g. "English", "Русский", "中文 简体"
+            end
+            return (opt.label or ""):match("^(.-)%s*%(") or opt.label or ""
+        end
+
         local function CurrentLabel()
             local v = GetDB("forceLocale")
             for _, opt in ipairs(LANGUAGE_OPTIONS) do
-                if opt.value == v then return DisplayLabel(opt) end
+                if opt.value == v then return CompactLabel(opt) end
             end
-            return DisplayLabel(LANGUAGE_OPTIONS[1])  -- fallback "Auto" for unknown values
+            return CompactLabel(LANGUAGE_OPTIONS[1])  -- fallback for unknown values
         end
 
         local langDropdown = CreateFrame("Frame", "StatsProLanguageDropdown", displayTab, "UIDropDownMenuTemplate")
-        langDropdown:SetPoint("TOPLEFT", cd.padX + 85, rowY + 2)
-        UIDropDownMenu_SetWidth(langDropdown, 220)
+        -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after all 3 dropdown rows built.
+        langDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
+        UIDropDownMenu_SetWidth(langDropdown, 100)
+        UIDropDownMenu_JustifyText(langDropdown, "CENTER")
         UIDropDownMenu_Initialize(langDropdown, function(self, level)
             for _, opt in ipairs(LANGUAGE_OPTIONS) do
                 local info = UIDropDownMenu_CreateInfo()
@@ -2274,9 +2413,10 @@ function addon:OpenConfigMenu()
                     StatsProDB.forceLocale = opt.value
                     CacheSettings()
                     MaybeAutoSwitchFont()
-                    UIDropDownMenu_SetText(langDropdown, DisplayLabel(opt))
+                    UIDropDownMenu_SetText(langDropdown, CompactLabel(opt))
                     CloseDropDownMenus()
                     RefreshLanguageWarning()
+                    RefreshConfigLocalization()
                     UpdateStats()
                 end
                 UIDropDownMenu_AddButton(info)
@@ -2288,9 +2428,9 @@ function addon:OpenConfigMenu()
         CursorAdvance(cd, 24)
 
         local langWarn = displayTab:CreateFontString(nil, "OVERLAY")
-        langWarn:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 11)
+        langWarn:SetFont(CONFIG_FONT, 11)
         langWarn:SetPoint("TOPLEFT", cd.padX, cd.y)
-        langWarn:SetWidth(440)
+        langWarn:SetWidth(470)
         langWarn:SetJustifyH("LEFT")
         langWarn:SetTextColor(1, 0.6, 0.2)
         langWarn:SetText("")
@@ -2303,21 +2443,26 @@ function addon:OpenConfigMenu()
                 langWarn:SetText("")
             else
                 langWarn:SetText(string.format(
-                    "|cffffaa44⚠|r Current font may not render %s cleanly. Pick a SharedMedia font with proper %s coverage for best results.",
-                    req, req))
+                    "|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage.",
+                    req))
             end
         end
         RefreshLanguageWarning()
-        -- WHY 34 (vs 18 default): warning string can wrap to 2 lines at 11pt inside
-        -- SetWidth(440). 34 + cd.gap (6) = 40px reservation keeps the next section clear
-        -- regardless of whether the warning is currently shown.
-        CursorAdvance(cd, 34)
+        -- WHY 14 (single-line at 11pt): shortened warning fits one line at SetWidth(440).
+        -- Empty (common) state shows tight gap to next section; non-empty (rare, font/locale
+        -- mismatch) shows one orange line below the dropdown. 14 + cd.gap (6) = 20 effective.
+        CursorAdvance(cd, 14)
 
         -- Reset button: re-syncs both dropdown SetText and warning state.
         PushRefresher(function()
             UIDropDownMenu_SetText(langDropdown, CurrentLabel())
             RefreshLanguageWarning()
         end)
+
+        tinsert(displayDropdownRows, {
+            text = langLabel, dropdown = langDropdown,
+            dropdownX_base = cd.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = displayTab,
+        })
     end
     CursorGap(cd, 4)
 
@@ -2327,47 +2472,108 @@ function addon:OpenConfigMenu()
         local rowY = cd.y
 
         local fontLabel = displayTab:CreateFontString(nil, "OVERLAY")
-        fontLabel:SetFont("Fonts\\FRIZQT__.TTF", 12)
+        fontLabel:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
         fontLabel:SetPoint("TOPLEFT", cd.padX, rowY)
         fontLabel:SetText("Font:")
 
         -- WHY rebuilt on each open: LSM-registered fonts can appear after StatsPro
         -- loads (other addon registers later). Static one-time build would miss them
-        -- until /reload. Cost is O(n) over ~20-30 fonts on a user click — negligible.
+        -- until /reload. Cost is O(n) over ~20-200 fonts on a user click — negligible.
         local function BuildFontsList()
+            local list
             if LSM then
-                local list = {}
+                list = {}
                 for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
                     list[#list + 1] = { name = name, path = LSM:Fetch(LSM.MediaType.FONT, name) }
                 end
-                return list
+            else
+                list = {
+                    { name = "Friz Quadrata TT", path = "Fonts\\FRIZQT__.TTF" },
+                    { name = "Arial Narrow",     path = "Fonts\\ARIALN.TTF" },
+                    { name = "Skurri",           path = "Fonts\\SKURRI.TTF" },
+                    { name = "Morpheus",         path = "Fonts\\MORPHEUS.TTF" },
+                }
             end
-            return {
-                { name = "Friz Quadrata TT", path = "Fonts\\FRIZQT__.TTF" },
-                { name = "Arial Narrow",     path = "Fonts\\ARIALN.TTF" },
-                { name = "Skurri",           path = "Fonts\\SKURRI.TTF" },
-                { name = "Morpheus",         path = "Fonts\\MORPHEUS.TTF" },
-            }
+            -- Stable sort independent of LSM internal ordering, so alphabetic bucketing below
+            -- always matches user expectation (case-insensitive).
+            table.sort(list, function(a, b) return a.name:lower() < b.name:lower() end)
+            return list
+        end
+
+        -- Bucketize fonts alphabetically into submenu groups. Threshold-gated: short lists
+        -- (<= FLAT_THRESHOLD) render as a single flat menu; longer lists (typical for users
+        -- with multiple SharedMedia font packs registered — 50-200 entries that overflow
+        -- WoW's non-scrolling UIDropDownMenu off the screen) go through letter-range submenus.
+        -- A single starting letter is never split across buckets — guarantees the user can
+        -- find "Foo" by clicking the bucket containing 'F'.
+        local FONT_FLAT_THRESHOLD = 20
+        local FONT_PER_GROUP      = 14   -- target bucket size; single-letter overflow allowed
+        local function BuildFontGroups(fonts)
+            local groups = {}
+            local cur    = { fonts = {} }
+            for _, f in ipairs(fonts) do
+                local c = (f.name:sub(1, 1)):upper()
+                if #cur.fonts >= FONT_PER_GROUP and c ~= cur.last_char then
+                    groups[#groups + 1] = cur
+                    cur = { fonts = {} }
+                end
+                cur.first_char = cur.first_char or c
+                cur.last_char  = c
+                cur.fonts[#cur.fonts + 1] = f
+            end
+            if #cur.fonts > 0 then groups[#groups + 1] = cur end
+            for _, g in ipairs(groups) do
+                g.label = (g.first_char == g.last_char)
+                    and g.first_char
+                    or  (g.first_char .. " – " .. g.last_char)
+            end
+            return groups
         end
 
         local fontDropdown = CreateFrame("Frame", "StatsProFontDropdown", displayTab, "UIDropDownMenuTemplate")
-        fontDropdown:SetPoint("TOPLEFT", cd.padX + 36, rowY - 4)
-        UIDropDownMenu_Initialize(fontDropdown, function(self, level)
-            for _, f in ipairs(BuildFontsList()) do
-                local info = UIDropDownMenu_CreateInfo()
-                info.text = f.name
-                info.value = f.path
-                info.checked = (GetDB("font") == f.path)
-                info.func = function()
-                    StatsProDB.font = f.path
-                    StatsProDB.fontBeforeAutoSwitch = nil  -- explicit user pick clears auto-switch memory
-                    ApplyTextStyleToAllPanels(f.path, GetDB("fontSize"))
-                    UIDropDownMenu_SetText(fontDropdown, f.name)
-                    CloseDropDownMenus()
-                    RefreshLanguageWarning()  -- new font may not cover active locale's glyphs
-                    UpdateStats()
+        -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after all 3 dropdown rows built.
+        fontDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
+        local function PickFont(f)
+            StatsProDB.font = f.path
+            StatsProDB.fontBeforeAutoSwitch = nil  -- explicit user pick clears auto-switch memory
+            ApplyTextStyleToAllPanels(f.path, GetDB("fontSize"))
+            UIDropDownMenu_SetText(fontDropdown, f.name)
+            CloseDropDownMenus()
+            RefreshLanguageWarning()  -- new font may not cover active locale's glyphs
+            UpdateStats()
+        end
+        UIDropDownMenu_Initialize(fontDropdown, function(self, level, menuList)
+            level = level or 1
+            if level == 1 then
+                local fonts = BuildFontsList()
+                if #fonts <= FONT_FLAT_THRESHOLD then
+                    for _, f in ipairs(fonts) do
+                        local info = UIDropDownMenu_CreateInfo()
+                        info.text    = f.name
+                        info.value   = f.path
+                        info.checked = (GetDB("font") == f.path)
+                        info.func    = function() PickFont(f) end
+                        UIDropDownMenu_AddButton(info, level)
+                    end
+                else
+                    for _, group in ipairs(BuildFontGroups(fonts)) do
+                        local info = UIDropDownMenu_CreateInfo()
+                        info.text         = group.label
+                        info.hasArrow     = true
+                        info.notCheckable = true
+                        info.menuList     = group.fonts
+                        UIDropDownMenu_AddButton(info, level)
+                    end
                 end
-                UIDropDownMenu_AddButton(info)
+            elseif level == 2 and menuList then
+                for _, f in ipairs(menuList) do
+                    local info = UIDropDownMenu_CreateInfo()
+                    info.text    = f.name
+                    info.value   = f.path
+                    info.checked = (GetDB("font") == f.path)
+                    info.func    = function() PickFont(f) end
+                    UIDropDownMenu_AddButton(info, level)
+                end
             end
         end)
         local function CurrentFontName()
@@ -2377,8 +2583,14 @@ function addon:OpenConfigMenu()
             return "Friz Quadrata TT"
         end
         UIDropDownMenu_SetText(fontDropdown, CurrentFontName())
-        UIDropDownMenu_SetWidth(fontDropdown, 150)
+        UIDropDownMenu_SetWidth(fontDropdown, 100)
+        UIDropDownMenu_JustifyText(fontDropdown, "CENTER")
         PushRefresher(function() UIDropDownMenu_SetText(fontDropdown, CurrentFontName()) end)
+
+        tinsert(displayDropdownRows, {
+            text = fontLabel, dropdown = fontDropdown,
+            dropdownX_base = cd.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = displayTab,
+        })
 
         -- WHY no text-alignment control: three-column rendering pins labels RIGHT,
         -- ratings RIGHT, values LEFT — there is no global alignment to adjust. The
@@ -2388,11 +2600,16 @@ function addon:OpenConfigMenu()
         cd.y = rowY - 32
     end
 
+    -- Align all 3 Display-tab dropdowns into one column. Re-runs on language change via
+    -- RefreshConfigLocalization (alignmentGroups iteration), so future label localization
+    -- (T2-4) automatically widens or shrinks the column.
+    AlignSwatchColumn(displayDropdownRows, CONFIG_DROPDOWN_GAP)
+
     -- Font Size slider
     do
         local sliderY = cd.y
         local lbl = displayTab:CreateFontString(nil, "OVERLAY")
-        lbl:SetFont("Fonts\\FRIZQT__.TTF", 12)
+        lbl:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
         lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
         lbl:SetText("Font Size:")
         local slider = CreateFrame("Slider", "StatsProFontSlider", displayTab, "OptionsSliderTemplate")
@@ -2423,7 +2640,7 @@ function addon:OpenConfigMenu()
     do
         local sliderY = cd.y
         local lbl = displayTab:CreateFontString(nil, "OVERLAY")
-        lbl:SetFont("Fonts\\FRIZQT__.TTF", 12)
+        lbl:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
         lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
         lbl:SetText("Scale:")
         local slider = CreateFrame("Slider", "StatsProScaleSlider", displayTab, "OptionsSliderTemplate")
@@ -2454,7 +2671,7 @@ function addon:OpenConfigMenu()
     do
         local sliderY = cd.y
         local lbl = displayTab:CreateFontString(nil, "OVERLAY")
-        lbl:SetFont("Fonts\\FRIZQT__.TTF", 12)
+        lbl:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
         lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
         lbl:SetText("Refresh Rate (sec):")
         local slider = CreateFrame("Slider", "StatsProRefreshSlider", displayTab, "OptionsSliderTemplate")
@@ -2488,15 +2705,25 @@ function addon:OpenConfigMenu()
     CursorSection(cd, "Stat Colors")
     do
         local rowY = cd.y
+        -- Two-column layout, each column independently aligned so swatches form a clean
+        -- vertical line per column at maxLabelW + CONFIG_SWATCH_GAP. Localized labels
+        -- (e.g. ru "Унив Цвет:") shrink the column accordingly — no en-biased hardcoded px.
+        local leftRows, rightRows = {}, {}
         local function ColorRow(l1, k1, l2, k2)
-            CreateColorPicker(displayTab, l1, k1, rowY, cd.padX)
-            if l2 then CreateColorPicker(displayTab, l2, k2, rowY, cd.padX + 220) end
+            local btn1, lbl1 = CreateColorPicker(displayTab, l1, k1, rowY, cd.padX)
+            leftRows[#leftRows + 1] = { text = lbl1, swatch = btn1 }
+            if l2 then
+                local btn2, lbl2 = CreateColorPicker(displayTab, l2, k2, rowY, cd.padX + CONFIG_COL_OFFSET)
+                rightRows[#rightRows + 1] = { text = lbl2, swatch = btn2 }
+            end
             rowY = rowY - 25
         end
         ColorRow("Crit",     "crit",     "Mastery",     "mastery")
         ColorRow("Haste",    "haste",    "Versatility", "versatility")
         ColorRow("Rating",   "rating",   "Percentage",  "percentage")
         cd.y = rowY
+        AlignSwatchColumn(leftRows)
+        AlignSwatchColumn(rightRows)
     end
 
     displayTab.contentHeight = CursorUsed(cd)
@@ -2510,7 +2737,7 @@ function addon:OpenConfigMenu()
     do
         local rowY = cs.y
         CreateCheckbox(statsTab, "StatsProStrCheck", "Show Strength",  "showStrength",  cs.padX,       rowY)
-        CreateCheckbox(statsTab, "StatsProAgiCheck", "Show Agility",   "showAgility",   cs.padX + 220, rowY)
+        CreateCheckbox(statsTab, "StatsProAgiCheck", "Show Agility",   "showAgility",   cs.padX + CONFIG_COL_OFFSET, rowY)
         cs.y = rowY - 26
         CreateCheckbox(statsTab, "StatsProIntCheck", "Show Intellect", "showIntellect", cs.padX,       cs.y)
         CursorAdvance(cs, 22)
@@ -2531,13 +2758,13 @@ function addon:OpenConfigMenu()
         end
         CreateCheckbox(statsTab, "StatsProOffensiveCheck",  "Show Offensive Stats", "showOffensive",     cs.padX,       rowY,
             function(checked) ApplyOffensiveSubsEnabled(checked) end)
-        CreateCheckbox(statsTab, "StatsProHideZeroOffCheck", "Hide Zero Values",    "hideZeroOffensive", cs.padX + 220, rowY)
+        CreateCheckbox(statsTab, "StatsProHideZeroOffCheck", "Hide Zero Values",    "hideZeroOffensive", cs.padX + CONFIG_COL_OFFSET, rowY)
         cs.y = rowY - 26
         critCb    = CreateCheckbox(statsTab, "StatsProCritCheck",    "Show Crit",        "showCrit",        cs.padX,       cs.y)
-        hasteCb   = CreateCheckbox(statsTab, "StatsProHasteCheck",   "Show Haste",       "showHaste",       cs.padX + 220, cs.y)
+        hasteCb   = CreateCheckbox(statsTab, "StatsProHasteCheck",   "Show Haste",       "showHaste",       cs.padX + CONFIG_COL_OFFSET, cs.y)
         CursorAdvance(cs, 22)
         masteryCb = CreateCheckbox(statsTab, "StatsProMasteryCheck", "Show Mastery",     "showMastery",     cs.padX,       cs.y)
-        versCb    = CreateCheckbox(statsTab, "StatsProVersCheck",    "Show Versatility", "showVersatility", cs.padX + 220, cs.y)
+        versCb    = CreateCheckbox(statsTab, "StatsProVersCheck",    "Show Versatility", "showVersatility", cs.padX + CONFIG_COL_OFFSET, cs.y)
         CursorAdvance(cs, 22)
         ApplyOffensiveSubsEnabled(GetDB("showOffensive"))
         PushRefresher(function() ApplyOffensiveSubsEnabled(GetDB("showOffensive")) end)
@@ -2558,14 +2785,23 @@ function addon:OpenConfigMenu()
         end
         CreateCheckbox(statsTab, "StatsProTertiaryCheck", "Show Tertiary Stats", "showTertiary", cs.padX, rowY,
             function(checked) ApplyTertiarySubsEnabled(checked) end)
-        CreateCheckbox(statsTab, "StatsProHideZeroCheck", "Hide Zero Values",    "hideZeroTertiary", cs.padX + 220, rowY)
+        CreateCheckbox(statsTab, "StatsProHideZeroCheck", "Hide Zero Values",    "hideZeroTertiary", cs.padX + CONFIG_COL_OFFSET, rowY)
         cs.y = rowY - 26
-        -- Each tertiary stat with its own inline color swatch
-        leechCb     = CreateCheckboxColor(statsTab, "StatsProLeechCheck",     "Show Leech",     "showLeech",     "leech",     cs.padX,       cs.y)
-        avoidanceCb = CreateCheckboxColor(statsTab, "StatsProAvoidanceCheck", "Show Avoidance", "showAvoidance", "avoidance", cs.padX + 220, cs.y)
+        -- WHY single-column: 3 sub-toggles in a 2-col grid leave an asymmetric L-shape
+        -- of swatches (Leech+Speed left, Avoidance alone right). Stack all three in the
+        -- left column so swatches form a single clean vertical line via AlignSwatchColumn.
+        local rows = {}
+        local sw, txt
+        leechCb,     sw, txt = CreateCheckboxColor(statsTab, "StatsProLeechCheck",     "Show Leech",     "showLeech",     "leech",     cs.padX, cs.y)
+        rows[#rows + 1] = { text = txt, swatch = sw }
         CursorAdvance(cs, 22)
-        speedCb     = CreateCheckboxColor(statsTab, "StatsProSpeedCheck",     "Show Speed",     "showSpeed",     "speed",     cs.padX,       cs.y)
+        avoidanceCb, sw, txt = CreateCheckboxColor(statsTab, "StatsProAvoidanceCheck", "Show Avoidance", "showAvoidance", "avoidance", cs.padX, cs.y)
+        rows[#rows + 1] = { text = txt, swatch = sw }
         CursorAdvance(cs, 22)
+        speedCb,     sw, txt = CreateCheckboxColor(statsTab, "StatsProSpeedCheck",     "Show Speed",     "showSpeed",     "speed",     cs.padX, cs.y)
+        rows[#rows + 1] = { text = txt, swatch = sw }
+        CursorAdvance(cs, 22)
+        AlignSwatchColumn(rows)
         ApplyTertiarySubsEnabled(GetDB("showTertiary"))
         PushRefresher(function() ApplyTertiarySubsEnabled(GetDB("showTertiary")) end)
     end
@@ -2589,15 +2825,25 @@ function addon:OpenConfigMenu()
         end
         CreateCheckbox(defensiveTab, "StatsProDefensiveCheck",   "Show Defensive Stats", "showDefensive",     cdef.padX,       rowY,
             function(checked) ApplyDefensiveSubsEnabled(checked) end)
-        CreateCheckbox(defensiveTab, "StatsProHideZeroDefCheck", "Hide Zero Values",     "hideZeroDefensive", cdef.padX + 220, rowY)
+        CreateCheckbox(defensiveTab, "StatsProHideZeroDefCheck", "Hide Zero Values",     "hideZeroDefensive", cdef.padX + CONFIG_COL_OFFSET, rowY)
         cdef.y = rowY - 26
-        -- Each defensive stat with its own inline color swatch
-        dodgeCb = CreateCheckboxColor(defensiveTab, "StatsProDodgeCheck", "Show Dodge", "showDodge", "dodge", cdef.padX,       cdef.y)
-        parryCb = CreateCheckboxColor(defensiveTab, "StatsProParryCheck", "Show Parry", "showParry", "parry", cdef.padX + 220, cdef.y)
+        -- Each defensive stat with its own inline color swatch. Two columns of 2 rows each;
+        -- aligned per-column via AlignSwatchColumn so left swatches share an x and right
+        -- swatches share an x (each column's max GetStringWidth measured independently).
+        local leftRows, rightRows = {}, {}
+        local sw, txt
+        dodgeCb, sw, txt = CreateCheckboxColor(defensiveTab, "StatsProDodgeCheck", "Show Dodge", "showDodge", "dodge", cdef.padX,                       cdef.y)
+        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
+        parryCb, sw, txt = CreateCheckboxColor(defensiveTab, "StatsProParryCheck", "Show Parry", "showParry", "parry", cdef.padX + CONFIG_COL_OFFSET, cdef.y)
+        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         CursorAdvance(cdef, 22)
-        blockCb = CreateCheckboxColor(defensiveTab, "StatsProBlockCheck", "Show Block", "showBlock", "block", cdef.padX,       cdef.y)
-        armorCb = CreateCheckboxColor(defensiveTab, "StatsProArmorCheck", "Show Armor", "showArmor", "armor", cdef.padX + 220, cdef.y)
+        blockCb, sw, txt = CreateCheckboxColor(defensiveTab, "StatsProBlockCheck", "Show Block", "showBlock", "block", cdef.padX,                       cdef.y)
+        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
+        armorCb, sw, txt = CreateCheckboxColor(defensiveTab, "StatsProArmorCheck", "Show Armor", "showArmor", "armor", cdef.padX + CONFIG_COL_OFFSET, cdef.y)
+        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         CursorAdvance(cdef, 22)
+        AlignSwatchColumn(leftRows)
+        AlignSwatchColumn(rightRows)
         ApplyDefensiveSubsEnabled(GetDB("showDefensive"))
         PushRefresher(function() ApplyDefensiveSubsEnabled(GetDB("showDefensive")) end)
     end
@@ -2616,32 +2862,17 @@ function addon:OpenConfigMenu()
         -- Durability swatch is the override color used when Auto Color is OFF.
         -- WHY: also mark dirty so re-enabling after a long off period gets fresh values
         -- on the next tick, not whatever was cached when last enabled.
-        local _, durSwatch = CreateCheckboxColor(defensiveTab, "StatsProDurabilityCheck", "Show Durability",  "showDurability", "durability", cdef.padX,       rowY,
+        CreateCheckboxColor(defensiveTab, "StatsProDurabilityCheck", "Show Durability",  "showDurability", "durability", cdef.padX,       rowY,
             function(checked)
                 ApplyRepairCostEnabled(checked)
                 durabilityDirty = true
             end)
-        repairCostCb = CreateCheckbox(defensiveTab, "StatsProRepairCostCheck", "Show Repair Cost", "showRepairCost", cdef.padX + 220, rowY)
+        repairCostCb = CreateCheckbox(defensiveTab, "StatsProRepairCostCheck", "Show Repair Cost", "showRepairCost", cdef.padX + CONFIG_COL_OFFSET, rowY)
         ApplyRepairCostEnabled(GetDB("showDurability"))
         PushRefresher(function() ApplyRepairCostEnabled(GetDB("showDurability")) end)
         cdef.y = rowY - 26
-        -- WHY: durability swatch sets the override color, used only when Auto Color is OFF.
-        -- Grey it out when auto-color is on so the dependency is visible.
-        local function ApplyDurSwatchEnabled(autoColorOn)
-            if not durSwatch then return end
-            if autoColorOn then
-                durSwatch:Disable()
-                durSwatch:SetAlpha(0.4)
-            else
-                durSwatch:Enable()
-                durSwatch:SetAlpha(1.0)
-            end
-        end
         CreateCheckbox(defensiveTab, "StatsProAutoColorCheck",
-            "Auto Color by Threshold", "useAutoColorDurability", cdef.padX, cdef.y,
-            function(checked) ApplyDurSwatchEnabled(checked) end)
-        ApplyDurSwatchEnabled(GetDB("useAutoColorDurability"))
-        PushRefresher(function() ApplyDurSwatchEnabled(GetDB("useAutoColorDurability")) end)
+            "Auto Color by Threshold", "useAutoColorDurability", cdef.padX, cdef.y)
         CursorAdvance(cdef, 22)
         -- WHY: onChange forces recompute via dirty flag; otherwise display stays stale
         -- until the next equipment event (which may be far off).
@@ -2692,6 +2923,11 @@ function addon:OpenConfigMenu()
             local ok, err = pcall(fn)
             if not ok then PrintMsg("refresher error: " .. tostring(err)) end
         end
+        -- WHY also RefreshConfigLocalization: Reset writes forceLocale=auto, so L() now
+        -- resolves to a (potentially) different locale. Stat color picker labels need to
+        -- re-set + groups re-align to match. configRefreshers above only re-sync checkbox
+        -- states / swatch colors / dropdown text, not L()-using labels.
+        RefreshConfigLocalization()
 
         PrintMsg("Settings reset to defaults")
     end)

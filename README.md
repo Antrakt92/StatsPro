@@ -37,10 +37,10 @@
 - **Durability** — average or worst-slot percentage with auto-color thresholds (green / yellow / red)
 - **Repair cost** — live vendor-format coin display (`46g 40s 81c` with embedded gold/silver/copper icons)
 - **Three display modes** — Flat (one panel), Sectioned (one panel with header divider), Split (separate movable panels for offensive vs defensive)
-- **Localized stat labels** — on-screen panel auto-translates to your WoW client language across all 11 retail locales (deDE, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, zhTW; English unchanged). One-click toggle on the Display tab if you prefer compact English.
+- **Localized stat labels** — on-screen panel auto-translates to your WoW client language across all 11 retail locales (deDE, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, zhTW; English unchanged). Switchable from a **Language** dropdown on the Display tab — pick another language, "Auto" to follow your client locale, or compact English.
 - **Customization** — per-stat colors, fonts via LibSharedMedia, font size, panel scale, refresh rate
 - **Auto-aligning columns** — labels and values stay neatly aligned regardless of which stats are enabled, font, or scale; toggling rating-only or percent-only collapses cleanly into one tight column with no awkward gaps
-- **Light footprint** — single-file pure Lua (~2.3k lines), no Ace3, no embedded UI library
+- **Light footprint** — single-file pure Lua (~3k lines), no Ace3, no embedded UI library
 
 ## How it looks
 
@@ -116,10 +116,10 @@ compact 4-7 char visual rhythm as the original English labels:
 | **zhCN** | `暴击:    843  28.3%` |
 | **zhTW** | `致命:    843  28.3%` |
 
-To revert to compact English on a non-English client: open `/ss` → **Display** tab →
-**Localization** → uncheck *Use localized stat names*. Setting persists across
-`/reload` and across all characters on the account. The toggle is hidden on enUS
-clients (no localized form to switch to).
+To pick a different language for stat labels (or revert to compact English):
+open `/ss` → **Display** tab → **Localization** → use the **Language** dropdown.
+"Auto" follows your WoW client locale. The setting persists across `/reload`
+and across all characters on the account.
 
 The in-game AddOn list (Esc → Options → AddOns) also shows StatsPro's
 description in your client language — a localized one-liner per `## Notes-<locale>`
@@ -139,7 +139,8 @@ suggested correction — single-row fixes ship in the next patch.
 | `/ss debug` | Dump runtime state to chat (for bug reports) |
 | `/ss help` | List commands in chat |
 
-Tip: bind `/ss toggle` to a key — open Esc → Options → Keybindings → AddOns → StatsPro.
+Tip: to bind toggling to a key, create a macro running `/ss toggle` and bind that
+macro from Esc → Options → Keybindings → Macros.
 
 ## Installation
 
@@ -159,7 +160,7 @@ open the configuration window. Three tabs cover everything:
 
 | Tab | What lives here |
 |---|---|
-| **Display** | Master visibility, lock, display mode, localization toggle (non-English clients), font, font size, panel scale, refresh rate, color presets |
+| **Display** | Master visibility, lock, display mode, language picker, font, font size, panel scale, refresh rate, color presets |
 | **Stats** | Per-stat toggles for Primary (Str/Agi/Int), Offensive (Crit/Haste/Mastery/Vers) and Tertiary (Leech/Avoidance/Speed) with inline color swatches |
 | **Defensive** | Per-stat toggles for Dodge/Parry/Block/Armor, durability options (auto-color, worst-slot vs average), repair cost |
 

@@ -372,9 +372,9 @@ local cached = {
     -- WHY {}: cached table inits at file scope BEFORE LABELS_BY_LOCALE declaration
     -- (sect 6 vs sect 7). Empty table fallback gives identity-map L() behavior
     -- (table[key]=nil; "nil or englishKey" returns the English key) — safe for any
-    -- L()-using code that runs pre-CacheSettings (e.g. CreateColorPicker at config
-    -- build time before PEW). CacheSettings overwrites with real LABELS_BY_LOCALE
-    -- entry at PEW. WARNING: never mutate; treat read-only.
+    -- L()-using code that runs pre-CacheSettings at config build time before PEW.
+    -- CacheSettings overwrites with real LABELS_BY_LOCALE entry at PEW.
+    -- WARNING: never mutate; treat read-only.
     activeLabels = {},
     -- versatility cached out-of-combat (existing)
     versTotal = 0,
@@ -1870,10 +1870,9 @@ local function SetCheckboxEnabled(cb, enabled)
     end
 end
 
--- WHY: shared snapshot/select/cancel handler used by every swatch (CreateColorSwatch and
--- CreateColorPicker both produce buttons that route OnClick here). Snapshot is taken at
--- click time, not creation time, so cancelling a 2nd pick reverts to the user's prior
--- color, not the original default.
+-- WHY: shared snapshot/select/cancel handler used by every swatch (CreateColorSwatch
+-- buttons route OnClick here). Snapshot is taken at click time, not creation time, so
+-- cancelling a 2nd pick reverts to the user's prior color, not the original default.
 local function OpenColorPicker(btn, statName)
     -- WHY: capture "uses default" state so cancel can restore exactly that — writing
     -- the resolved-default tuple back would convert unset → explicit-default in DB
@@ -2012,33 +2011,6 @@ local function RefreshConfigLocalization()
     end
 end
 
-local function CreateColorPicker(parent, label, statName, yPos, xPos)
-    local colorLabel = parent:CreateFontString(nil, "OVERLAY")
-    colorLabel:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
-    colorLabel:SetPoint("TOPLEFT", xPos, yPos)
-    colorLabel:SetJustifyH("LEFT")
-    -- Localize both the stat name and the "Color" word. Stat names like Crit/Haste/
-    -- Mastery/Versatility have entries in LABELS_BY_LOCALE; "Rating"/"Percentage" don't,
-    -- so L() falls through to the English literal for those rows. Word order ("X Color")
-    -- is universal across all locales for now — native speakers can request a per-locale
-    -- format string ("Color X" for Romance languages) via GitHub Issues if it reads oddly.
-    -- Setter registered with PushLocalizedLabel so RefreshConfigLocalization() can re-set
-    -- on Language dropdown change without /reload.
-    PushLocalizedLabel(function()
-        colorLabel:SetText(L(label) .. " " .. L("Color") .. ":")
-    end)
-    -- Default-hug the label end. AlignSwatchColumn(rows) overrides SetWidth across a group
-    -- so swatches line up at text:RIGHT + CONFIG_SWATCH_GAP, locale-adapted (no hardcoded px).
-    colorLabel:SetWidth(colorLabel:GetStringWidth())
-
-    -- Reuse CreateColorSwatch (single source of truth for swatch size/styling/click/refresh)
-    -- so STAT COLORS swatches match the inline ones in TERTIARY / DEFENSIVE / DURABILITY.
-    local colorBtn = CreateColorSwatch(parent, statName, 0, 0)
-    colorBtn:ClearAllPoints()
-    colorBtn:SetPoint("LEFT", colorLabel, "RIGHT", CONFIG_SWATCH_GAP, 0)
-    return colorBtn, colorLabel
-end
-
 --[[ ============================================================
     15. CONFIG MENU (tabs: Display / Stats / Defensive)
 ============================================================ ]]
@@ -2077,9 +2049,9 @@ local function CursorSection(c, label, sharedColorKey)
     hdr:SetText("|cff00ff7f" .. string.upper(label) .. "|r")
     if sharedColorKey then
         -- Anchor swatch to header RIGHT edge — same hug pattern used for inline checkbox
-        -- swatches and STAT COLORS pickers. WoW resolves the position from hdr's actual
-        -- rendered width, so no GetStringWidth call needed and the gap stays consistent
-        -- whether the localized header is short or long.
+        -- swatches. WoW resolves the position from hdr's actual rendered width, so no
+        -- GetStringWidth call needed and the gap stays consistent whether the localized
+        -- header is short or long.
         local sw = CreateColorSwatch(c.parent, sharedColorKey, 0, 0)
         sw:ClearAllPoints()
         sw:SetPoint("LEFT", hdr, "RIGHT", CONFIG_SWATCH_GAP, 0)
@@ -2399,8 +2371,16 @@ function addon:OpenConfigMenu()
     CursorSection(cd, "Display Format")
     do
         local rowY = cd.y
-        CreateCheckbox(displayTab, "StatsProRatingCheck",     "Show Rating",     "showRating",     cd.padX,       rowY)
-        CreateCheckbox(displayTab, "StatsProPercentageCheck", "Show Percentage", "showPercentage", cd.padX + CONFIG_COL_OFFSET, rowY)
+        -- Rating / Percentage swatches inline with their Show toggles. These are the
+        -- COLUMN-meta colors used when "Match Value Color to Stat" is OFF.
+        local leftRows, rightRows = {}, {}
+        local _, sw, txt
+        _, sw, txt = CreateCheckboxColor(displayTab, "StatsProRatingCheck",     "Show Rating",     "showRating",     "rating",     cd.padX,                       rowY)
+        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
+        _, sw, txt = CreateCheckboxColor(displayTab, "StatsProPercentageCheck", "Show Percentage", "showPercentage", "percentage", cd.padX + CONFIG_COL_OFFSET, rowY)
+        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
+        AlignSwatchColumn(leftRows)
+        AlignSwatchColumn(rightRows)
         cd.y = rowY - 26
     end
     CreateCheckbox(displayTab, "StatsProMatchColorCheck",
@@ -2760,35 +2740,6 @@ function addon:OpenConfigMenu()
         cd.y = sliderY - 50
     end
 
-    CursorGap(cd, 6)
-
-    -- Always-shown stats (Crit/Haste/Mastery/Vers) and format colors live here.
-    -- Per-stat colors that have a toggle (Primary, Tertiary, Defensive, Durability)
-    -- now live inline next to their checkbox in their respective tabs.
-    CursorSection(cd, "Stat Colors")
-    do
-        local rowY = cd.y
-        -- Two-column layout, each column independently aligned so swatches form a clean
-        -- vertical line per column at maxLabelW + CONFIG_SWATCH_GAP. Localized labels
-        -- (e.g. ru "Унив Цвет:") shrink the column accordingly — no en-biased hardcoded px.
-        local leftRows, rightRows = {}, {}
-        local function ColorRow(l1, k1, l2, k2)
-            local btn1, lbl1 = CreateColorPicker(displayTab, l1, k1, rowY, cd.padX)
-            leftRows[#leftRows + 1] = { text = lbl1, swatch = btn1 }
-            if l2 then
-                local btn2, lbl2 = CreateColorPicker(displayTab, l2, k2, rowY, cd.padX + CONFIG_COL_OFFSET)
-                rightRows[#rightRows + 1] = { text = lbl2, swatch = btn2 }
-            end
-            rowY = rowY - 25
-        end
-        ColorRow("Crit",     "crit",     "Mastery",     "mastery")
-        ColorRow("Haste",    "haste",    "Versatility", "versatility")
-        ColorRow("Rating",   "rating",   "Percentage",  "percentage")
-        cd.y = rowY
-        AlignSwatchColumn(leftRows)
-        AlignSwatchColumn(rightRows)
-    end
-
     displayTab.contentHeight = CursorUsed(cd)
     displayTab:SetHeight(displayTab.contentHeight)
 
@@ -2811,7 +2762,6 @@ function addon:OpenConfigMenu()
     CursorSection(cs, "Offensive Stats")
     do
         local rowY = cs.y
-        -- Per-stat colors live in Display tab "Stat Colors" — don't duplicate inline swatches.
         local critCb, hasteCb, masteryCb, versCb
         local function ApplyOffensiveSubsEnabled(masterOn)
             SetCheckboxEnabled(critCb,    masterOn)
@@ -2823,12 +2773,22 @@ function addon:OpenConfigMenu()
             function(checked) ApplyOffensiveSubsEnabled(checked) end)
         CreateCheckbox(statsTab, "StatsProHideZeroOffCheck", "Hide Zero Values",    "hideZeroOffensive", cs.padX + CONFIG_COL_OFFSET, rowY)
         cs.y = rowY - 26
-        critCb    = CreateCheckbox(statsTab, "StatsProCritCheck",    "Show Crit",        "showCrit",        cs.padX,       cs.y)
-        hasteCb   = CreateCheckbox(statsTab, "StatsProHasteCheck",   "Show Haste",       "showHaste",       cs.padX + CONFIG_COL_OFFSET, cs.y)
+        -- Inline color swatches per stat (mirrors Defensive dodge/parry/block/armor pattern).
+        -- Two-column AlignSwatchColumn — left and right column widths measured independently.
+        local leftRows, rightRows = {}, {}
+        local sw, txt
+        critCb,    sw, txt = CreateCheckboxColor(statsTab, "StatsProCritCheck",    "Show Crit",        "showCrit",        "crit",        cs.padX,                       cs.y)
+        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
+        hasteCb,   sw, txt = CreateCheckboxColor(statsTab, "StatsProHasteCheck",   "Show Haste",       "showHaste",       "haste",       cs.padX + CONFIG_COL_OFFSET, cs.y)
+        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         CursorAdvance(cs, 22)
-        masteryCb = CreateCheckbox(statsTab, "StatsProMasteryCheck", "Show Mastery",     "showMastery",     cs.padX,       cs.y)
-        versCb    = CreateCheckbox(statsTab, "StatsProVersCheck",    "Show Versatility", "showVersatility", cs.padX + CONFIG_COL_OFFSET, cs.y)
+        masteryCb, sw, txt = CreateCheckboxColor(statsTab, "StatsProMasteryCheck", "Show Mastery",     "showMastery",     "mastery",     cs.padX,                       cs.y)
+        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
+        versCb,    sw, txt = CreateCheckboxColor(statsTab, "StatsProVersCheck",    "Show Versatility", "showVersatility", "versatility", cs.padX + CONFIG_COL_OFFSET, cs.y)
+        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         CursorAdvance(cs, 22)
+        AlignSwatchColumn(leftRows)
+        AlignSwatchColumn(rightRows)
         ApplyOffensiveSubsEnabled(GetDB("showOffensive"))
         PushRefresher(function() ApplyOffensiveSubsEnabled(GetDB("showOffensive")) end)
     end

@@ -3018,8 +3018,12 @@ launcherTitle:SetPoint("TOPLEFT", 16, -16)
 launcherTitle:SetText("StatsPro v" .. ADDON_VERSION)
 
 local launcherDesc = launcher:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+-- Dual-anchor instead of SetWidth: launcher is canvas-resized by Settings panel,
+-- so deriving width from anchor span avoids right-edge clipping on narrow / low-res
+-- windows. launcherBtn anchors to launcherDesc BOTTOMLEFT — picks up the dynamic
+-- height from word-wrap automatically.
 launcherDesc:SetPoint("TOPLEFT", launcherTitle, "BOTTOMLEFT", 0, -8)
-launcherDesc:SetWidth(560)
+launcherDesc:SetPoint("RIGHT", launcher, "RIGHT", -16, 0)
 launcherDesc:SetJustifyH("LEFT")
 launcherDesc:SetText("Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window.")
 

@@ -2042,10 +2042,16 @@ end
 --[[ ============================================================
     15. CONFIG MENU (tabs: Display / Stats / Defensive)
 ============================================================ ]]
--- Forward-decl: assigned in OpenConfigMenu Display-tab build pass (Localization section).
--- Captured as upvalue by font dropdown info.func (Step 6) which reaches a font that may
--- not cover the current active locale's glyphs and needs to refresh the inline warning.
+-- Forward-decls — assigned during OpenConfigMenu Display-tab build pass.
+-- RefreshLanguageWarning: assigned in Localization section; captured by font dropdown's
+-- PickFont closure to refresh the inline warning when the user picks a font that may not
+-- cover the active locale's glyphs.
+-- fontDropdown / CurrentFontName: assigned in Typography section (which builds AFTER
+-- Localization in the source); captured by language-dropdown info.func to keep the font
+-- dropdown caption in sync after MaybeAutoSwitchFont silently changes db.font.
 local RefreshLanguageWarning
+local fontDropdown
+local CurrentFontName
 
 local configFrame
 local configSpecialFrameRegistered = false
@@ -2413,6 +2419,8 @@ function addon:OpenConfigMenu()
                     StatsProDB.forceLocale = opt.value
                     CacheSettings()
                     MaybeAutoSwitchFont()
+                    -- WHY: auto-switch may have changed db.font; PushRefresher only fires on Reset.
+                    UIDropDownMenu_SetText(fontDropdown, CurrentFontName())
                     UIDropDownMenu_SetText(langDropdown, CompactLabel(opt))
                     CloseDropDownMenus()
                     RefreshLanguageWarning()
@@ -2530,7 +2538,10 @@ function addon:OpenConfigMenu()
             return groups
         end
 
-        local fontDropdown = CreateFrame("Frame", "StatsProFontDropdown", displayTab, "UIDropDownMenuTemplate")
+        -- Assignment to forward-declared upvalue (section 15 prelude); language-dropdown
+        -- info.func captures fontDropdown / CurrentFontName to sync caption after
+        -- MaybeAutoSwitchFont silently changes db.font on a locale switch.
+        fontDropdown = CreateFrame("Frame", "StatsProFontDropdown", displayTab, "UIDropDownMenuTemplate")
         -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after all 3 dropdown rows built.
         fontDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
         local function PickFont(f)
@@ -2542,6 +2553,8 @@ function addon:OpenConfigMenu()
             RefreshLanguageWarning()  -- new font may not cover active locale's glyphs
             UpdateStats()
         end
+        UIDropDownMenu_SetWidth(fontDropdown, 100)
+        UIDropDownMenu_JustifyText(fontDropdown, "CENTER")
         UIDropDownMenu_Initialize(fontDropdown, function(self, level, menuList)
             level = level or 1
             if level == 1 then
@@ -2576,15 +2589,13 @@ function addon:OpenConfigMenu()
                 end
             end
         end)
-        local function CurrentFontName()
+        CurrentFontName = function()
             for _, f in ipairs(BuildFontsList()) do
                 if f.path == GetDB("font") then return f.name end
             end
             return "Friz Quadrata TT"
         end
         UIDropDownMenu_SetText(fontDropdown, CurrentFontName())
-        UIDropDownMenu_SetWidth(fontDropdown, 100)
-        UIDropDownMenu_JustifyText(fontDropdown, "CENTER")
         PushRefresher(function() UIDropDownMenu_SetText(fontDropdown, CurrentFontName()) end)
 
         tinsert(displayDropdownRows, {

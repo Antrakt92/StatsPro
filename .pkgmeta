@@ -11,6 +11,11 @@ ignore:
   - LICENSE
   - .pkgmeta
   - screenshots
+  - AUDIT.md
+  - CLAUDE.md
+  - PLAN.md
+  - NOTES.md
+  - "*.private.md"
 
 externals:
   libs/LibStub:

@@ -2092,6 +2092,58 @@ local function CursorSection(c, label, sharedColorKey)
     c.y = c.y - 24 - c.gap
 end
 
+-- Reset all settings to defaults — callable from both the resetBtn:OnClick (in
+-- OpenConfigMenu) and the /ss reset slash command (section 17). All deps are
+-- file-scope or global; configRefreshers / RefreshConfigLocalization no-op safely
+-- when settings UI has never been opened (empty arrays at file scope).
+local function ResetToDefaults()
+    -- Step 1: close any open modal BEFORE touching DB.
+    -- WHY: ColorPickerFrame:Hide() synchronously fires its registered cancelFunc
+    -- which writes the pre-reset snapshot back to StatsProDB.colors[statName]. If
+    -- we did DB reset first, that cancelFunc would clobber the just-reset default.
+    -- Closing first means cancelFunc writes to a (soon-overwritten) DB — irrelevant.
+    CloseDropDownMenus()
+    if ColorPickerFrame and ColorPickerFrame:IsShown() then ColorPickerFrame:Hide() end
+
+    -- Step 2: reset DB scalars + colors to defaults.
+    for k, v in pairs(defaults) do
+        if type(v) ~= "table" then StatsProDB[k] = v end
+    end
+    -- Explicit cleanup of fields not in defaults (the loop above only writes present-key
+    -- defaults). These would linger in DB across Reset otherwise:
+    --   - useLocalizedLabels: dropped in v4→v5 migration; legacy users may still have it
+    --   - fontBeforeAutoSwitch: transient runtime state set when MaybeAutoSwitchFont fires
+    StatsProDB.useLocalizedLabels = nil
+    StatsProDB.fontBeforeAutoSwitch = nil
+    StatsProDB.colors = CopyTable(defaults.colors)
+    StatsProDB.dbVersion = CURRENT_DB_VERSION
+
+    -- Step 3: re-cache + re-apply panel-level visual state.
+    CacheSettings()
+    ApplyTextStyleToAllPanels(defaults.font, defaults.fontSize)
+    SetAllPanelsScale(defaults.scale)
+    LoadAllPositions()
+    SetAllPanelsLockState(defaults.isLocked)
+    UpdateStats()
+
+    -- Step 4: re-sync config widget visuals from freshly-reset DB.
+    -- WHY pcall: a buggy refresher should not break the entire walk. Print error
+    -- context instead of silent fail (CLAUDE.md "Log meaningful context").
+    -- No-op when configRefreshers is empty (slash called pre-config-open).
+    for _, fn in ipairs(configRefreshers) do
+        local ok, err = pcall(fn)
+        if not ok then PrintMsg("refresher error: " .. tostring(err)) end
+    end
+    -- WHY also RefreshConfigLocalization: Reset writes forceLocale=auto, so L() now
+    -- resolves to a (potentially) different locale. Stat color picker labels need to
+    -- re-set + groups re-align to match. configRefreshers above only re-sync checkbox
+    -- states / swatch colors / dropdown text, not L()-using labels. No-op when
+    -- localizedConfigLabels and alignmentGroups are empty (slash called pre-config-open).
+    RefreshConfigLocalization()
+
+    PrintMsg("Settings reset to defaults")
+end
+
 function addon:OpenConfigMenu()
     if configFrame then
         if configFrame:IsShown() then
@@ -2897,51 +2949,7 @@ function addon:OpenConfigMenu()
     defensiveTab:SetHeight(defensiveTab.contentHeight)
 
     --[[ ===== Reset action (in-place widget refresh, no frame rebuild) ===== ]]
-    resetBtn:SetScript("OnClick", function()
-        -- Step 1: close any open modal BEFORE touching DB.
-        -- WHY: ColorPickerFrame:Hide() synchronously fires its registered cancelFunc
-        -- which writes the pre-reset snapshot back to StatsProDB.colors[statName]. If
-        -- we did DB reset first, that cancelFunc would clobber the just-reset default.
-        -- Closing first means cancelFunc writes to a (soon-overwritten) DB — irrelevant.
-        CloseDropDownMenus()
-        if ColorPickerFrame and ColorPickerFrame:IsShown() then ColorPickerFrame:Hide() end
-
-        -- Step 2: reset DB scalars + colors to defaults.
-        for k, v in pairs(defaults) do
-            if type(v) ~= "table" then StatsProDB[k] = v end
-        end
-        -- Explicit cleanup of fields not in defaults (the loop above only writes present-key
-        -- defaults). These would linger in DB across Reset otherwise:
-        --   - useLocalizedLabels: dropped in v4→v5 migration; legacy users may still have it
-        --   - fontBeforeAutoSwitch: transient runtime state set when MaybeAutoSwitchFont fires
-        StatsProDB.useLocalizedLabels = nil
-        StatsProDB.fontBeforeAutoSwitch = nil
-        StatsProDB.colors = CopyTable(defaults.colors)
-        StatsProDB.dbVersion = CURRENT_DB_VERSION
-
-        -- Step 3: re-cache + re-apply panel-level visual state.
-        CacheSettings()
-        ApplyTextStyleToAllPanels(defaults.font, defaults.fontSize)
-        SetAllPanelsScale(defaults.scale)
-        LoadAllPositions()
-        SetAllPanelsLockState(defaults.isLocked)
-        UpdateStats()
-
-        -- Step 4: re-sync config widget visuals from freshly-reset DB.
-        -- WHY pcall: a buggy refresher should not break the entire walk. Print error
-        -- context instead of silent fail (CLAUDE.md "Log meaningful context").
-        for _, fn in ipairs(configRefreshers) do
-            local ok, err = pcall(fn)
-            if not ok then PrintMsg("refresher error: " .. tostring(err)) end
-        end
-        -- WHY also RefreshConfigLocalization: Reset writes forceLocale=auto, so L() now
-        -- resolves to a (potentially) different locale. Stat color picker labels need to
-        -- re-set + groups re-align to match. configRefreshers above only re-sync checkbox
-        -- states / swatch colors / dropdown text, not L()-using labels.
-        RefreshConfigLocalization()
-
-        PrintMsg("Settings reset to defaults")
-    end)
+    resetBtn:SetScript("OnClick", function() ResetToDefaults() end)
 
     --[[ ===== Initial state ===== ]]
     SwitchToTab(1)
@@ -3060,10 +3068,12 @@ SlashCmdList["STATSPRO"] = function(msg)
         local newState = StatsProDB.isVisible == false
         SetVisible(newState)
         PrintMsg(newState and "Stats panel shown" or "Stats panel hidden")
+    elseif arg == "reset" then
+        ResetToDefaults()
     elseif arg == "debug" then
         addon:PrintDebugDump()
     elseif arg == "help" or arg == "?" then
-        PrintMsg("Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss debug")
+        PrintMsg("Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug")
     else
         addon:OpenConfigMenu()
     end

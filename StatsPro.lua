@@ -7,7 +7,7 @@ local _, addon = ...
 --[[ ============================================================
     1. CONSTANTS
 ============================================================ ]]
-local CURRENT_DB_VERSION = 5
+local CURRENT_DB_VERSION = 6
 
 local DURABILITY_SLOT_MIN = 1
 local DURABILITY_SLOT_MAX = 19
@@ -292,7 +292,9 @@ local defaults = {
         leech       = { r = 0.8,  g = 0.2,  b = 0.8 },
         avoidance   = { r = 0.2,  g = 0.8,  b = 0.8 },
         speed       = { r = 1,    g = 0.65, b = 0 },
-        primary     = { r = 1,    g = 0.84, b = 0 },
+        strength    = { r = 1,    g = 0.84, b = 0 },
+        agility     = { r = 1,    g = 0.84, b = 0 },
+        intellect   = { r = 1,    g = 0.84, b = 0 },
         -- Defensive colors
         dodge       = { r = 0.4,  g = 0.7,  b = 1 },
         parry       = { r = 1,    g = 0.4,  b = 0.2 },
@@ -320,9 +322,9 @@ local DEFENSIVE_STATS = {
 }
 
 local PRIMARY_STATS = {
-    { label = "Strength",  unitStatId = 1, showKey = "showStrength"  },
-    { label = "Agility",   unitStatId = 2, showKey = "showAgility"   },
-    { label = "Intellect", unitStatId = 4, showKey = "showIntellect" },
+    { label = "Strength",  unitStatId = 1, colorKey = "strength",  showKey = "showStrength"  },
+    { label = "Agility",   unitStatId = 2, colorKey = "agility",   showKey = "showAgility"   },
+    { label = "Intellect", unitStatId = 4, colorKey = "intellect", showKey = "showIntellect" },
 }
 
 local TERTIARY_STATS = {
@@ -816,6 +818,20 @@ local function MigrateDB()
             db.forceLocale = "enUS"
         end
         db.useLocalizedLabels = nil  -- drop legacy field unconditionally
+    end
+
+    -- v5 → v6: split single colors.primary into per-stat colors.strength/agility/intellect.
+    -- WHY copy then drop: pre-v6 user customized colors.primary applied uniformly to all
+    -- three primary stats; preserve that choice across all three new keys so visuals don't
+    -- change on upgrade. The defaults loop above already pre-populated the new keys with
+    -- their default gold (r=1,g=0.84,b=0), which we overwrite here when a custom value
+    -- exists. Drop colors.primary so it doesn't linger as orphaned data.
+    if (db.dbVersion or 5) <= 5 and db.colors and db.colors.primary then
+        local p = db.colors.primary
+        db.colors.strength  = { r = p.r, g = p.g, b = p.b }
+        db.colors.agility   = { r = p.r, g = p.g, b = p.b }
+        db.colors.intellect = { r = p.r, g = p.g, b = p.b }
+        db.colors.primary = nil
     end
 
     db.dbVersion = CURRENT_DB_VERSION
@@ -1399,14 +1415,14 @@ end
 
 local function BuildPrimaryLines(labels, ratings, values)
     local cs = cached.colorStrings
-    local primaryStr = cs.primary
-    local valueColor = (cached.matchValueColorToStat and primaryStr) or cs.rating
     for _, def in ipairs(PRIMARY_STATS) do
         if cached[def.showKey] then
+            local statStr = cs[def.colorKey]
+            local valueColor = (cached.matchValueColorToStat and statStr) or cs.rating
             local val = GetEffectiveStat(def.unitStatId)
             local rCol, vCol = RouteValueOnly(string.format("|cff%s%d|r", valueColor, val))
             PushRow(labels, ratings, values,
-                FormatLabel(primaryStr, def.label),
+                FormatLabel(statStr, def.label),
                 rCol, vCol)
         end
     end
@@ -2040,22 +2056,11 @@ local function CursorAdvance(c, h) c.y = c.y - (h or 24) - c.gap end
 local function CursorGap(c, n)     c.y = c.y - (n or 8) end
 local function CursorUsed(c)       return math.abs(c.initialY - c.y) + 16 end
 -- CursorSection: section header with green underline.
--- Optional `sharedColorKey`: places a color swatch right after the header text;
--- use this when one color applies to all stats in the section (e.g. Primary).
-local function CursorSection(c, label, sharedColorKey)
+local function CursorSection(c, label)
     local hdr = c.parent:CreateFontString(nil, "OVERLAY")
     hdr:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE, "OUTLINE")
     hdr:SetPoint("TOPLEFT", c.parent, "TOPLEFT", c.padX, c.y)
     hdr:SetText("|cff00ff7f" .. string.upper(label) .. "|r")
-    if sharedColorKey then
-        -- Anchor swatch to header RIGHT edge — same hug pattern used for inline checkbox
-        -- swatches. WoW resolves the position from hdr's actual rendered width, so no
-        -- GetStringWidth call needed and the gap stays consistent whether the localized
-        -- header is short or long.
-        local sw = CreateColorSwatch(c.parent, sharedColorKey, 0, 0)
-        sw:ClearAllPoints()
-        sw:SetPoint("LEFT", hdr, "RIGHT", CONFIG_SWATCH_GAP, 0)
-    end
     local line = c.parent:CreateTexture(nil, "ARTWORK")
     line:SetPoint("TOPLEFT", c.parent, "TOPLEFT", c.padX, c.y - 18)
     line:SetPoint("TOPRIGHT", c.parent, "TOPRIGHT", -c.padX, c.y - 18)
@@ -2074,7 +2079,12 @@ local function ResetToDefaults()
     -- which writes the pre-reset snapshot back to StatsProDB.colors[statName]. If
     -- we did DB reset first, that cancelFunc would clobber the just-reset default.
     -- Closing first means cancelFunc writes to a (soon-overwritten) DB — irrelevant.
+    -- Custom font picker is NOT a Blizzard dropdown so CloseDropDownMenus doesn't reach it;
+    -- explicit Hide triggers its OnHide → CancelFontPreview if a hover-preview was active.
     CloseDropDownMenus()
+    if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
+        _G.StatsProFontPicker:Hide()
+    end
     if ColorPickerFrame and ColorPickerFrame:IsShown() then ColorPickerFrame:Hide() end
 
     -- Step 2: reset DB scalars + colors to defaults.
@@ -2122,7 +2132,7 @@ function addon:OpenConfigMenu()
             configFrame:Hide()
         else
             configFrame:Show()
-            -- Always reopen on Display tab (predictable UX)
+            -- Always reopen on the first tab (Stats) — predictable UX, matches initial open.
             if configFrame.SwitchToTab then configFrame.SwitchToTab(1) end
         end
         return
@@ -2165,6 +2175,15 @@ function addon:OpenConfigMenu()
         tinsert(UISpecialFrames, "StatsProConfigFrame")
         configSpecialFrameRegistered = true
     end
+
+    -- Auto-close font picker when Settings UI hides (e.g., /ss toggle, click X). Picker
+    -- is parented to UIParent (NOT configFrame) so it doesn't auto-hide via parent — without
+    -- this hook it would orphan visible after Settings closes until next user interaction.
+    configFrame:HookScript("OnHide", function()
+        if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
+            _G.StatsProFontPicker:Hide()
+        end
+    end)
 
     --[[ ===== Header (title + X) ===== ]]
     local title = configFrame:CreateFontString(nil, "OVERLAY")
@@ -2231,7 +2250,10 @@ function addon:OpenConfigMenu()
     local displayTab   = CreateFrame("Frame", nil, scrollChild)
     local statsTab     = CreateFrame("Frame", nil, scrollChild)
     local defensiveTab = CreateFrame("Frame", nil, scrollChild)
-    local tabContents  = { displayTab, statsTab, defensiveTab }
+    -- Tab order: content-first (Stats / Defensive) then appearance (visual / typography /
+    -- localization). Variable names keep historical `displayTab` for low-churn diff; UI label
+    -- is "Appearance" (see `names` array below).
+    local tabContents  = { statsTab, defensiveTab, displayTab }
     for _, tab in ipairs(tabContents) do
         tab:SetPoint("TOPLEFT", 0, 0)
         tab:SetPoint("TOPRIGHT", 0, 0)
@@ -2283,7 +2305,7 @@ function addon:OpenConfigMenu()
     configFrame.SwitchToTab = SwitchToTab
 
     do
-        local names = { "Display", "Stats", "Defensive" }
+        local names = { "Stats", "Defensive", "Appearance" }
         for i, name in ipairs(names) do
             local btn = CreateTabButton(name)
             if i == 1 then
@@ -2299,7 +2321,8 @@ function addon:OpenConfigMenu()
     --[[ ===== DISPLAY TAB ===== ]]
     local cd = NewCursor(displayTab, 12, -8)
 
-    -- Frame & Position section
+    -- Frame & Position section: panel-level container settings (visibility, lock, layout
+    -- mode, scale, update rate). Most-used controls; sits at top.
     CursorSection(cd, "Frame & Position")
     do
         local rowY = cd.y
@@ -2365,10 +2388,418 @@ function addon:OpenConfigMenu()
         cd.y = rowY - 30
     end
 
+    -- Scale slider — panel-level visual scale. Grouped with Frame & Position because it
+    -- sizes the panel (visual layout), not the text rendering.
+    do
+        local sliderY = cd.y
+        local lbl = displayTab:CreateFontString(nil, "OVERLAY")
+        lbl:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
+        lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
+        lbl:SetText("Scale:")
+        local slider = CreateFrame("Slider", "StatsProScaleSlider", displayTab, "OptionsSliderTemplate")
+        slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
+        slider:SetMinMaxValues(0.5, 2.0)
+        slider:SetValue(GetDB("scale"))
+        slider:SetValueStep(0.1)
+        slider:SetObeyStepOnDrag(true)
+        slider:SetWidth(420)
+        _G[slider:GetName() .. "Low"]:SetText("0.5")
+        _G[slider:GetName() .. "High"]:SetText("2.0")
+        _G[slider:GetName() .. "Text"]:SetText(string.format("%.1f", slider:GetValue()))
+        slider:SetScript("OnValueChanged", function(self, value)
+            _G[self:GetName() .. "Text"]:SetText(string.format("%.1f", value))
+            StatsProDB.scale = value
+            SetAllPanelsScale(value)
+        end)
+        PushRefresher(function()
+            local v = GetDB("scale")
+            slider:SetValue(v)
+            _G[slider:GetName().."Text"]:SetText(string.format("%.1f", v))
+        end)
+        cd.y = sliderY - 50
+    end
+
+    -- Refresh rate slider — controls how often stat values recompute (seconds).
+    -- Lower = smoother but more CPU; higher = less CPU but values lag behind gear/buff swaps.
+    -- Grouped with Frame & Position (panel update rate, not a text/i18n concern).
+    do
+        local sliderY = cd.y
+        local lbl = displayTab:CreateFontString(nil, "OVERLAY")
+        lbl:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
+        lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
+        lbl:SetText("Refresh Rate (sec):")
+        local slider = CreateFrame("Slider", "StatsProRefreshSlider", displayTab, "OptionsSliderTemplate")
+        slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
+        slider:SetMinMaxValues(0.1, 1.0)
+        slider:SetValue(GetDB("updateInterval"))
+        slider:SetValueStep(0.05)
+        slider:SetObeyStepOnDrag(true)
+        slider:SetWidth(420)
+        _G[slider:GetName() .. "Low"]:SetText("0.1s")
+        _G[slider:GetName() .. "High"]:SetText("1.0s")
+        _G[slider:GetName() .. "Text"]:SetText(string.format("%.2f", slider:GetValue()))
+        slider:SetScript("OnValueChanged", function(self, value)
+            _G[self:GetName() .. "Text"]:SetText(string.format("%.2f", value))
+            StatsProDB.updateInterval = value
+            CacheSettings()
+        end)
+        PushRefresher(function()
+            local v = GetDB("updateInterval")
+            slider:SetValue(v)
+            _G[slider:GetName().."Text"]:SetText(string.format("%.2f", v))
+        end)
+        cd.y = sliderY - 50
+    end
+
+    CursorGap(cd, 4)
+
+    -- Typography section: text rendering (font face + size).
+    CursorSection(cd, "Typography")
+    do
+        local rowY = cd.y
+
+        local fontLabel = displayTab:CreateFontString(nil, "OVERLAY")
+        fontLabel:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
+        fontLabel:SetPoint("TOPLEFT", cd.padX, rowY)
+        fontLabel:SetText("Font:")
+
+        -- WHY rebuilt on each open: LSM-registered fonts can appear after StatsPro
+        -- loads (other addon registers later). Static one-time build would miss them
+        -- until /reload. Cost is O(n) over ~20-200 fonts on a user click — negligible.
+        local function BuildFontsList()
+            local list
+            if LSM then
+                list = {}
+                for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
+                    list[#list + 1] = { name = name, path = LSM:Fetch(LSM.MediaType.FONT, name) }
+                end
+            else
+                list = {
+                    { name = "Friz Quadrata TT", path = "Fonts\\FRIZQT__.TTF" },
+                    { name = "Arial Narrow",     path = "Fonts\\ARIALN.TTF" },
+                    { name = "Skurri",           path = "Fonts\\SKURRI.TTF" },
+                    { name = "Morpheus",         path = "Fonts\\MORPHEUS.TTF" },
+                }
+            end
+            -- Stable sort independent of LSM internal ordering, so alphabetic bucketing below
+            -- always matches user expectation (case-insensitive).
+            table.sort(list, function(a, b) return a.name:lower() < b.name:lower() end)
+            return list
+        end
+
+        -- Assignment to forward-declared upvalue (section 15 prelude); language-dropdown
+        -- info.func captures fontDropdown / CurrentFontName to sync caption after
+        -- MaybeAutoSwitchFont silently changes db.font on a locale switch.
+        fontDropdown = CreateFrame("Frame", "StatsProFontDropdown", displayTab, "UIDropDownMenuTemplate")
+        -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after all 3 dropdown rows built.
+        fontDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
+        -- Hover-preview state. While font picker is open, hovering a font button applies
+        -- it to panels temporarily without writing DB. Closing without click reverts.
+        -- OpenConfigMenu lazy-inits once per session, so these locals are created exactly once.
+        local fontPreviewActive = false
+        local fontPreviewBaseline = nil
+        local function PreviewFont(path)
+            if not fontPreviewActive then
+                fontPreviewActive = true
+                fontPreviewBaseline = GetDB("font")
+            end
+            ApplyTextStyleToAllPanels(path, GetDB("fontSize"))
+            -- WHY UpdateStats: ApplyStyle invalidates cachedLabelH and lastLineCount;
+            -- without immediate SetTextSafe via UpdateStats, repair-row anchor/width and
+            -- frame height stay stale until next OnUpdate tick (≤ updateInterval, ~0.5s),
+            -- causing transient missing repairLabelText and unrevertable preview state.
+            -- Matches the pattern at PickFont, Font Size slider, and ResetToDefaults.
+            UpdateStats()
+        end
+        local function CancelFontPreview()
+            if fontPreviewActive and fontPreviewBaseline then
+                ApplyTextStyleToAllPanels(fontPreviewBaseline, GetDB("fontSize"))
+                UpdateStats()
+            end
+            fontPreviewActive = false
+            fontPreviewBaseline = nil
+        end
+        local function CommitFontPreview()
+            fontPreviewActive = false
+            fontPreviewBaseline = nil
+        end
+        local function PickFont(f)
+            -- Commit-path: clears preview state so picker's OnHide skips cancel-restore.
+            CommitFontPreview()
+            StatsProDB.font = f.path
+            StatsProDB.fontBeforeAutoSwitch = nil  -- explicit user pick clears auto-switch memory
+            ApplyTextStyleToAllPanels(f.path, GetDB("fontSize"))
+            UIDropDownMenu_SetText(fontDropdown, f.name)
+            CloseDropDownMenus()  -- defensive; no-op when no Blizzard dropdown is open
+            RefreshLanguageWarning()  -- new font may not cover active locale's glyphs
+            UpdateStats()
+        end
+        UIDropDownMenu_SetWidth(fontDropdown, 100)
+        UIDropDownMenu_JustifyText(fontDropdown, "CENTER")
+        -- NOTE: UIDropDownMenu_Initialize is intentionally NOT called — Blizzard's default
+        -- popup is replaced by a custom multi-column picker (see Block B below). Without
+        -- Initialize, the template's default OnClick would open an empty DropDownList1, but
+        -- Block E overrides Button:OnClick to open our picker instead.
+
+        --[[ ===== Custom multi-column font picker ===== ]]
+        -- Constants. Geometry derived in plan F-11; do NOT inline magic numbers.
+        local FONT_PICKER_COLS         = 3
+        local FONT_PICKER_BTN_W        = 160      -- ~25 char names fit at CONFIG_FONT 12pt
+        local FONT_PICKER_BTN_H        = 22
+        local FONT_PICKER_PAD          = 8
+        local FONT_PICKER_SCROLLBAR_W  = 22
+        local FONT_PICKER_VISIBLE_ROWS = 14       -- visible area = 14 * 22 = 308px before scroll
+        local FONT_PICKER_FRAME_W      = FONT_PICKER_COLS * FONT_PICKER_BTN_W + FONT_PICKER_PAD * 2 + FONT_PICKER_SCROLLBAR_W  -- 518
+        local FONT_PICKER_FRAME_H      = FONT_PICKER_VISIBLE_ROWS * FONT_PICKER_BTN_H + FONT_PICKER_PAD * 2                    -- 324
+
+        local fontPickerFrame
+        local fontPickerScroll
+        local fontPickerContent
+        local fontPickerCatcher
+        local fontPickerButtons = {}   -- pool of font-button frames; reused across Populate calls
+        local fontPickerInitialized = false
+
+        local function HideFontPicker()
+            -- Single entry. picker:OnHide handler (set in Build) cancels active preview and
+            -- hides catcher; both are idempotent so calling here covers programmatic close paths.
+            if fontPickerFrame and fontPickerFrame:IsShown() then
+                fontPickerFrame:Hide()
+            end
+            if fontPickerCatcher and fontPickerCatcher:IsShown() then
+                fontPickerCatcher:Hide()
+            end
+        end
+
+        local function BuildFontPickerFrame()
+            -- Picker frame — DialogBox border style for visual parity with configFrame.
+            fontPickerFrame = CreateFrame("Frame", "StatsProFontPicker", UIParent, "BackdropTemplate")
+            fontPickerFrame:SetSize(FONT_PICKER_FRAME_W, FONT_PICKER_FRAME_H)
+            fontPickerFrame:SetFrameStrata("DIALOG")
+            -- Initial frame level; ShowFontPicker re-applies on each show in case configFrame's
+            -- level shifted (e.g., Blizzard Settings API re-parented configFrame between sessions).
+            fontPickerFrame:SetFrameLevel((configFrame and configFrame:GetFrameLevel() or 100) + 50)
+            fontPickerFrame:SetClampedToScreen(true)
+            fontPickerFrame:SetBackdrop({
+                bgFile   = "Interface\\ChatFrame\\ChatFrameBackground",
+                edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+                tile = true, tileSize = 16, edgeSize = 16,
+                insets = { left = 4, right = 4, top = 4, bottom = 4 },
+            })
+            fontPickerFrame:SetBackdropColor(0, 0, 0, 0.92)
+            fontPickerFrame:Hide()
+
+            -- Click-catcher: invisible fullscreen frame BEHIND picker, ABOVE other DIALOG content.
+            -- WHY consume click: standard modal-popup pattern (matches ColorPickerFrame, StaticPopup).
+            -- Trade-off: 2-click penalty for trigger toggle and tab-switch.
+            fontPickerCatcher = CreateFrame("Frame", nil, UIParent)
+            fontPickerCatcher:SetAllPoints(UIParent)
+            fontPickerCatcher:SetFrameStrata("DIALOG")
+            fontPickerCatcher:SetFrameLevel(fontPickerFrame:GetFrameLevel() - 1)
+            fontPickerCatcher:EnableMouse(true)
+            fontPickerCatcher:Hide()
+            fontPickerCatcher:SetScript("OnMouseDown", HideFontPicker)
+
+            -- ScrollFrame — UIPanelScrollFrameTemplate matches configFrame's existing scroll pattern.
+            fontPickerScroll = CreateFrame("ScrollFrame", "StatsProFontPickerScroll", fontPickerFrame, "UIPanelScrollFrameTemplate")
+            fontPickerScroll:SetPoint("TOPLEFT", FONT_PICKER_PAD, -FONT_PICKER_PAD)
+            fontPickerScroll:SetPoint("BOTTOMRIGHT", -(FONT_PICKER_PAD + FONT_PICKER_SCROLLBAR_W), FONT_PICKER_PAD)
+
+            fontPickerContent = CreateFrame("Frame", nil, fontPickerScroll)
+            fontPickerContent:SetSize(FONT_PICKER_COLS * FONT_PICKER_BTN_W, 100)  -- height set in Populate
+            fontPickerScroll:SetScrollChild(fontPickerContent)
+
+            -- OnHide: covers ALL close paths (Esc, click-outside, font-button click,
+            -- programmatic /ss reset). PickFont's CommitFontPreview cleared fontPreviewActive
+            -- on commit-path so cancel-restore correctly skips. On other paths cancel fires.
+            fontPickerFrame:SetScript("OnHide", function()
+                if fontPickerCatcher then fontPickerCatcher:Hide() end
+                if fontPreviewActive then CancelFontPreview() end
+            end)
+
+            -- Esc-to-close. UISpecialFrames pops top-most special frame on Esc — picker added
+            -- AFTER configFrame so picker closes first.
+            tinsert(UISpecialFrames, "StatsProFontPicker")
+        end
+
+        local function PopulateFontPicker()
+            local fonts = BuildFontsList()
+            local currentPath = GetDB("font")
+            local rows = math.ceil(#fonts / FONT_PICKER_COLS)
+            local currentRow = nil
+
+            fontPickerContent:SetHeight(math.max(rows * FONT_PICKER_BTN_H, 1))
+
+            for i, f in ipairs(fonts) do
+                local btn = fontPickerButtons[i]
+                if not btn then
+                    -- Lazy create + permanent setup. Pool-style — created once, reused.
+                    btn = CreateFrame("Button", nil, fontPickerContent)
+                    btn:SetSize(FONT_PICKER_BTN_W, FONT_PICKER_BTN_H)
+
+                    btn.bg = btn:CreateTexture(nil, "BACKGROUND")
+                    btn.bg:SetAllPoints()
+                    btn.bg:SetColorTexture(0, 0, 0, 0)
+
+                    -- Mouse-hover highlight — Blizzard standard listbox texture for consistency.
+                    btn:SetHighlightTexture("Interface\\Buttons\\UI-Listbox-Highlight2")
+                    local hl = btn:GetHighlightTexture()
+                    hl:SetBlendMode("ADD")
+                    hl:SetVertexColor(1, 1, 1, 0.4)
+
+                    btn.text = btn:CreateFontString(nil, "OVERLAY")
+                    btn.text:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
+                    btn.text:SetPoint("LEFT", 6, 0)
+                    btn.text:SetPoint("RIGHT", -4, 0)
+                    btn.text:SetJustifyH("LEFT")
+                    -- WHY no-wrap: long font names (>25 char) would wrap to a 2nd line, breaking
+                    -- the row-height grid. Single-line overflow visually clipped by FontString.
+                    btn.text:SetWordWrap(false)
+                    btn.text:SetMaxLines(1)
+
+                    btn:SetScript("OnEnter", function(self) PreviewFont(self.fontPath) end)
+                    btn:SetScript("OnClick", function(self)
+                        PickFont({ name = self.fontName, path = self.fontPath })
+                        HideFontPicker()
+                    end)
+
+                    fontPickerButtons[i] = btn
+                end
+
+                local row = math.floor((i - 1) / FONT_PICKER_COLS)
+                local col = (i - 1) % FONT_PICKER_COLS
+                btn:ClearAllPoints()
+                btn:SetPoint("TOPLEFT", col * FONT_PICKER_BTN_W, -row * FONT_PICKER_BTN_H)
+                btn.fontName = f.name
+                btn.fontPath = f.path
+                btn.text:SetText(f.name)
+
+                -- Current-committed font marker: subtle green-cyan tint.
+                if f.path == currentPath then
+                    btn.bg:SetColorTexture(0, 1, 0.5, 0.18)
+                    currentRow = row
+                else
+                    btn.bg:SetColorTexture(0, 0, 0, 0)
+                end
+                btn:Show()
+            end
+
+            -- Hide leftover buttons if list shrank (LSM addon disabled mid-session).
+            for i = #fonts + 1, #fontPickerButtons do
+                fontPickerButtons[i]:Hide()
+            end
+
+            -- Center current font in visible area; if in first half of viewport, scroll stays at 0.
+            if currentRow then
+                local centerOffset = math.floor(FONT_PICKER_VISIBLE_ROWS / 2)
+                local targetScroll = math.max(0, (currentRow - centerOffset) * FONT_PICKER_BTN_H)
+                local maxScroll    = math.max(0, rows * FONT_PICKER_BTN_H - FONT_PICKER_VISIBLE_ROWS * FONT_PICKER_BTN_H)
+                fontPickerScroll:SetVerticalScroll(math.min(targetScroll, maxScroll))
+            else
+                fontPickerScroll:SetVerticalScroll(0)
+            end
+        end
+
+        local function ShowFontPicker()
+            if not fontPickerInitialized then
+                BuildFontPickerFrame()
+                fontPickerInitialized = true
+            end
+            PopulateFontPicker()  -- always refresh: picks up LSM-added fonts + current-marker drift
+
+            -- Re-apply frame level — defensive against configFrame re-parenting.
+            fontPickerFrame:SetFrameLevel((configFrame and configFrame:GetFrameLevel() or 100) + 50)
+            fontPickerCatcher:SetFrameLevel(fontPickerFrame:GetFrameLevel() - 1)
+
+            -- Anchor TOPLEFT to fontDropdownButton's BOTTOMLEFT (NOT to fontDropdown frame —
+            -- frame includes template chrome with padding; button is the visible edge).
+            local btn = _G["StatsProFontDropdownButton"] or fontDropdown.Button
+            fontPickerFrame:ClearAllPoints()
+            if btn then
+                fontPickerFrame:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -2)
+            else
+                fontPickerFrame:SetPoint("TOPLEFT", fontDropdown, "BOTTOMLEFT", 16, -2)
+            end
+            fontPickerCatcher:Show()
+            fontPickerFrame:Show()
+        end
+
+        local function ToggleFontPicker()
+            if fontPickerFrame and fontPickerFrame:IsShown() then
+                HideFontPicker()
+            else
+                ShowFontPicker()
+            end
+        end
+
+        CurrentFontName = function()
+            for _, f in ipairs(BuildFontsList()) do
+                if f.path == GetDB("font") then return f.name end
+            end
+            return "Friz Quadrata TT"
+        end
+        UIDropDownMenu_SetText(fontDropdown, CurrentFontName())
+        PushRefresher(function() UIDropDownMenu_SetText(fontDropdown, CurrentFontName()) end)
+
+        -- Override Blizzard's default UIDropDownMenu trigger; open custom picker instead.
+        -- UIDropDownMenuTemplate creates child Button at <frame_name>Button (Cataclysm-stable
+        -- convention) OR exposes as frame.Button (Mixin-style). Defensive lookup covers both.
+        local fontDropdownButton = _G["StatsProFontDropdownButton"] or fontDropdown.Button
+        if fontDropdownButton then
+            fontDropdownButton:SetScript("OnClick", function()
+                PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)  -- audio parity with other dropdowns
+                ToggleFontPicker()
+            end)
+        end
+
+        tinsert(displayDropdownRows, {
+            text = fontLabel, dropdown = fontDropdown,
+            dropdownX_base = cd.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = displayTab,
+        })
+
+        -- WHY no text-alignment control: three-column rendering pins labels RIGHT,
+        -- ratings RIGHT, values LEFT — there is no global alignment to adjust. The
+        -- defaults.textAlign field exists in DB purely so existing saves don't lose
+        -- the key on migration; nothing reads it at runtime.
+
+        cd.y = rowY - 32
+    end
+
+    -- Font Size slider — text rendering size. Naturally pairs with Font dropdown above.
+    do
+        local sliderY = cd.y
+        local lbl = displayTab:CreateFontString(nil, "OVERLAY")
+        lbl:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
+        lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
+        lbl:SetText("Font Size:")
+        local slider = CreateFrame("Slider", "StatsProFontSlider", displayTab, "OptionsSliderTemplate")
+        slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
+        slider:SetMinMaxValues(8, 32)
+        slider:SetValue(GetDB("fontSize"))
+        slider:SetValueStep(1)
+        slider:SetObeyStepOnDrag(true)
+        slider:SetWidth(420)
+        _G[slider:GetName() .. "Low"]:SetText("8")
+        _G[slider:GetName() .. "High"]:SetText("32")
+        _G[slider:GetName() .. "Text"]:SetText(slider:GetValue())
+        slider:SetScript("OnValueChanged", function(self, value)
+            _G[self:GetName() .. "Text"]:SetText(math.floor(value))
+            StatsProDB.fontSize = value
+            ApplyTextStyleToAllPanels(GetDB("font"), value)
+            UpdateStats()
+        end)
+        PushRefresher(function()
+            local v = GetDB("fontSize")
+            slider:SetValue(v)
+            _G[slider:GetName().."Text"]:SetText(math.floor(v))
+        end)
+        cd.y = sliderY - 50
+    end
+
     CursorGap(cd, 4)
 
     -- Localization section. Always shown (replaces former HAS_LOCALIZATION-gated checkbox —
-    -- the new dropdown is useful even on enUS, e.g. picking 中文 for screenshots).
+    -- the new dropdown is useful even on enUS, e.g. picking 中文 for screenshots). Placed at
+    -- bottom: typically set once on first install and never revisited.
     -- WHY header stays English literal: CursorSection uses byte-based string.upper() which
     -- corrupts non-ASCII UTF-8 (Lua 5.1 trap). Localizing this header is part of T2-4.
     CursorSection(cd, "Localization")
@@ -2483,241 +2914,12 @@ function addon:OpenConfigMenu()
             dropdownX_base = cd.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = displayTab,
         })
     end
-    CursorGap(cd, 4)
-
-    -- Typography section
-    CursorSection(cd, "Typography")
-    do
-        local rowY = cd.y
-
-        local fontLabel = displayTab:CreateFontString(nil, "OVERLAY")
-        fontLabel:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
-        fontLabel:SetPoint("TOPLEFT", cd.padX, rowY)
-        fontLabel:SetText("Font:")
-
-        -- WHY rebuilt on each open: LSM-registered fonts can appear after StatsPro
-        -- loads (other addon registers later). Static one-time build would miss them
-        -- until /reload. Cost is O(n) over ~20-200 fonts on a user click — negligible.
-        local function BuildFontsList()
-            local list
-            if LSM then
-                list = {}
-                for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
-                    list[#list + 1] = { name = name, path = LSM:Fetch(LSM.MediaType.FONT, name) }
-                end
-            else
-                list = {
-                    { name = "Friz Quadrata TT", path = "Fonts\\FRIZQT__.TTF" },
-                    { name = "Arial Narrow",     path = "Fonts\\ARIALN.TTF" },
-                    { name = "Skurri",           path = "Fonts\\SKURRI.TTF" },
-                    { name = "Morpheus",         path = "Fonts\\MORPHEUS.TTF" },
-                }
-            end
-            -- Stable sort independent of LSM internal ordering, so alphabetic bucketing below
-            -- always matches user expectation (case-insensitive).
-            table.sort(list, function(a, b) return a.name:lower() < b.name:lower() end)
-            return list
-        end
-
-        -- Bucketize fonts alphabetically into submenu groups. Threshold-gated: short lists
-        -- (<= FLAT_THRESHOLD) render as a single flat menu; longer lists (typical for users
-        -- with multiple SharedMedia font packs registered — 50-200 entries that overflow
-        -- WoW's non-scrolling UIDropDownMenu off the screen) go through letter-range submenus.
-        -- A single starting letter is never split across buckets — guarantees the user can
-        -- find "Foo" by clicking the bucket containing 'F'.
-        local FONT_FLAT_THRESHOLD = 20
-        local FONT_PER_GROUP      = 14   -- target bucket size; single-letter overflow allowed
-        local function BuildFontGroups(fonts)
-            local groups = {}
-            local cur    = { fonts = {} }
-            for _, f in ipairs(fonts) do
-                local c = (f.name:sub(1, 1)):upper()
-                if #cur.fonts >= FONT_PER_GROUP and c ~= cur.last_char then
-                    groups[#groups + 1] = cur
-                    cur = { fonts = {} }
-                end
-                cur.first_char = cur.first_char or c
-                cur.last_char  = c
-                cur.fonts[#cur.fonts + 1] = f
-            end
-            if #cur.fonts > 0 then groups[#groups + 1] = cur end
-            for _, g in ipairs(groups) do
-                g.label = (g.first_char == g.last_char)
-                    and g.first_char
-                    or  (g.first_char .. " – " .. g.last_char)
-            end
-            return groups
-        end
-
-        -- Assignment to forward-declared upvalue (section 15 prelude); language-dropdown
-        -- info.func captures fontDropdown / CurrentFontName to sync caption after
-        -- MaybeAutoSwitchFont silently changes db.font on a locale switch.
-        fontDropdown = CreateFrame("Frame", "StatsProFontDropdown", displayTab, "UIDropDownMenuTemplate")
-        -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after all 3 dropdown rows built.
-        fontDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
-        local function PickFont(f)
-            StatsProDB.font = f.path
-            StatsProDB.fontBeforeAutoSwitch = nil  -- explicit user pick clears auto-switch memory
-            ApplyTextStyleToAllPanels(f.path, GetDB("fontSize"))
-            UIDropDownMenu_SetText(fontDropdown, f.name)
-            CloseDropDownMenus()
-            RefreshLanguageWarning()  -- new font may not cover active locale's glyphs
-            UpdateStats()
-        end
-        UIDropDownMenu_SetWidth(fontDropdown, 100)
-        UIDropDownMenu_JustifyText(fontDropdown, "CENTER")
-        UIDropDownMenu_Initialize(fontDropdown, function(self, level, menuList)
-            level = level or 1
-            if level == 1 then
-                local fonts = BuildFontsList()
-                if #fonts <= FONT_FLAT_THRESHOLD then
-                    for _, f in ipairs(fonts) do
-                        local info = UIDropDownMenu_CreateInfo()
-                        info.text    = f.name
-                        info.value   = f.path
-                        info.checked = (GetDB("font") == f.path)
-                        info.func    = function() PickFont(f) end
-                        UIDropDownMenu_AddButton(info, level)
-                    end
-                else
-                    for _, group in ipairs(BuildFontGroups(fonts)) do
-                        local info = UIDropDownMenu_CreateInfo()
-                        info.text         = group.label
-                        info.hasArrow     = true
-                        info.notCheckable = true
-                        info.menuList     = group.fonts
-                        UIDropDownMenu_AddButton(info, level)
-                    end
-                end
-            elseif level == 2 and menuList then
-                for _, f in ipairs(menuList) do
-                    local info = UIDropDownMenu_CreateInfo()
-                    info.text    = f.name
-                    info.value   = f.path
-                    info.checked = (GetDB("font") == f.path)
-                    info.func    = function() PickFont(f) end
-                    UIDropDownMenu_AddButton(info, level)
-                end
-            end
-        end)
-        CurrentFontName = function()
-            for _, f in ipairs(BuildFontsList()) do
-                if f.path == GetDB("font") then return f.name end
-            end
-            return "Friz Quadrata TT"
-        end
-        UIDropDownMenu_SetText(fontDropdown, CurrentFontName())
-        PushRefresher(function() UIDropDownMenu_SetText(fontDropdown, CurrentFontName()) end)
-
-        tinsert(displayDropdownRows, {
-            text = fontLabel, dropdown = fontDropdown,
-            dropdownX_base = cd.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = displayTab,
-        })
-
-        -- WHY no text-alignment control: three-column rendering pins labels RIGHT,
-        -- ratings RIGHT, values LEFT — there is no global alignment to adjust. The
-        -- defaults.textAlign field exists in DB purely so existing saves don't lose
-        -- the key on migration; nothing reads it at runtime.
-
-        cd.y = rowY - 32
-    end
 
     -- Align all 3 Display-tab dropdowns into one column. Re-runs on language change via
     -- RefreshConfigLocalization (alignmentGroups iteration), so future label localization
-    -- (T2-4) automatically widens or shrinks the column.
+    -- (T2-4) automatically widens or shrinks the column. Must run AFTER all 3 dropdown
+    -- rows have been registered (Display Mode + Font + Language).
     AlignSwatchColumn(displayDropdownRows, CONFIG_DROPDOWN_GAP)
-
-    -- Font Size slider
-    do
-        local sliderY = cd.y
-        local lbl = displayTab:CreateFontString(nil, "OVERLAY")
-        lbl:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
-        lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
-        lbl:SetText("Font Size:")
-        local slider = CreateFrame("Slider", "StatsProFontSlider", displayTab, "OptionsSliderTemplate")
-        slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
-        slider:SetMinMaxValues(8, 32)
-        slider:SetValue(GetDB("fontSize"))
-        slider:SetValueStep(1)
-        slider:SetObeyStepOnDrag(true)
-        slider:SetWidth(420)
-        _G[slider:GetName() .. "Low"]:SetText("8")
-        _G[slider:GetName() .. "High"]:SetText("32")
-        _G[slider:GetName() .. "Text"]:SetText(slider:GetValue())
-        slider:SetScript("OnValueChanged", function(self, value)
-            _G[self:GetName() .. "Text"]:SetText(math.floor(value))
-            StatsProDB.fontSize = value
-            ApplyTextStyleToAllPanels(GetDB("font"), value)
-            UpdateStats()
-        end)
-        PushRefresher(function()
-            local v = GetDB("fontSize")
-            slider:SetValue(v)
-            _G[slider:GetName().."Text"]:SetText(math.floor(v))
-        end)
-        cd.y = sliderY - 50
-    end
-
-    -- Scale slider
-    do
-        local sliderY = cd.y
-        local lbl = displayTab:CreateFontString(nil, "OVERLAY")
-        lbl:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
-        lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
-        lbl:SetText("Scale:")
-        local slider = CreateFrame("Slider", "StatsProScaleSlider", displayTab, "OptionsSliderTemplate")
-        slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
-        slider:SetMinMaxValues(0.5, 2.0)
-        slider:SetValue(GetDB("scale"))
-        slider:SetValueStep(0.1)
-        slider:SetObeyStepOnDrag(true)
-        slider:SetWidth(420)
-        _G[slider:GetName() .. "Low"]:SetText("0.5")
-        _G[slider:GetName() .. "High"]:SetText("2.0")
-        _G[slider:GetName() .. "Text"]:SetText(string.format("%.1f", slider:GetValue()))
-        slider:SetScript("OnValueChanged", function(self, value)
-            _G[self:GetName() .. "Text"]:SetText(string.format("%.1f", value))
-            StatsProDB.scale = value
-            SetAllPanelsScale(value)
-        end)
-        PushRefresher(function()
-            local v = GetDB("scale")
-            slider:SetValue(v)
-            _G[slider:GetName().."Text"]:SetText(string.format("%.1f", v))
-        end)
-        cd.y = sliderY - 50
-    end
-
-    -- Refresh rate slider — controls how often stat values recompute (seconds).
-    -- Lower = smoother but more CPU; higher = less CPU but values lag behind gear/buff swaps.
-    do
-        local sliderY = cd.y
-        local lbl = displayTab:CreateFontString(nil, "OVERLAY")
-        lbl:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
-        lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
-        lbl:SetText("Refresh Rate (sec):")
-        local slider = CreateFrame("Slider", "StatsProRefreshSlider", displayTab, "OptionsSliderTemplate")
-        slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
-        slider:SetMinMaxValues(0.1, 1.0)
-        slider:SetValue(GetDB("updateInterval"))
-        slider:SetValueStep(0.05)
-        slider:SetObeyStepOnDrag(true)
-        slider:SetWidth(420)
-        _G[slider:GetName() .. "Low"]:SetText("0.1s")
-        _G[slider:GetName() .. "High"]:SetText("1.0s")
-        _G[slider:GetName() .. "Text"]:SetText(string.format("%.2f", slider:GetValue()))
-        slider:SetScript("OnValueChanged", function(self, value)
-            _G[self:GetName() .. "Text"]:SetText(string.format("%.2f", value))
-            StatsProDB.updateInterval = value
-            CacheSettings()
-        end)
-        PushRefresher(function()
-            local v = GetDB("updateInterval")
-            slider:SetValue(v)
-            _G[slider:GetName().."Text"]:SetText(string.format("%.2f", v))
-        end)
-        cd.y = sliderY - 50
-    end
 
     displayTab.contentHeight = CursorUsed(cd)
     displayTab:SetHeight(displayTab.contentHeight)
@@ -2725,16 +2927,24 @@ function addon:OpenConfigMenu()
     --[[ ===== STATS TAB ===== ]]
     local cs = NewCursor(statsTab, 12, -8)
 
-    -- Primary stats share one color, shown inline in section header.
-    -- Sits ABOVE Display Format because Primary renders as flat numbers (no rating/% columns).
-    CursorSection(cs, "Primary Stat Ratings", "primary")
+    -- Primary stats: per-stat color swatch inline with each toggle (matches Offensive/
+    -- Tertiary/Defensive pattern). Sits ABOVE Display Format because Primary renders as
+    -- flat numbers (no rating/% columns).
+    CursorSection(cs, "Primary Stat Ratings")
     do
         local rowY = cs.y
-        CreateCheckbox(statsTab, "StatsProStrCheck", "Show Strength",  "showStrength",  cs.padX,       rowY)
-        CreateCheckbox(statsTab, "StatsProAgiCheck", "Show Agility",   "showAgility",   cs.padX + CONFIG_COL_OFFSET, rowY)
+        local leftRows, rightRows = {}, {}
+        local _, sw, txt
+        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProStrCheck", "Show Strength",  "showStrength",  "strength",  cs.padX,                       rowY)
+        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
+        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProAgiCheck", "Show Agility",   "showAgility",   "agility",   cs.padX + CONFIG_COL_OFFSET, rowY)
+        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         cs.y = rowY - 26
-        CreateCheckbox(statsTab, "StatsProIntCheck", "Show Intellect", "showIntellect", cs.padX,       cs.y)
+        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProIntCheck", "Show Intellect", "showIntellect", "intellect", cs.padX,                       cs.y)
+        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
         CursorAdvance(cs, 22)
+        AlignSwatchColumn(leftRows)
+        AlignSwatchColumn(rightRows)
     end
 
     CursorGap(cs, 6)

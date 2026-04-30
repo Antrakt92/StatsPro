@@ -5,6 +5,7 @@
 ### Added
 
 - **Multi-column font picker replaces the alphabetical sub-menu dropdown.** Click the Font field in Appearance → Typography and the full font list opens as a scrollable 3-column grid — no more drilling through `2-A` / `B-C` / `D-F` letter buckets. Hover any font to preview it on your panels live; click to commit; close the picker without picking to revert. The currently-selected font is tinted and the grid auto-scrolls to center it on open.
+- **Hover-preview for the Language dropdown.** Open Appearance → Localization → Language and hover any locale to see your panel labels switch live to that language. Close the dropdown without clicking to revert; click to commit. CJK locales preview as `?` boxes if your current font lacks the required glyphs — that's the same warning case the inline glyph-coverage warning already shows post-pick.
 - **Per-stat color customization for Strength / Agility / Intellect.** Previously all three primary stats shared a single color; now each has its own inline swatch in Stats → Primary Stat Ratings. If you'd previously customized the shared primary color, that choice is preserved across all three on upgrade — visuals unchanged unless you intentionally pick differently per stat.
 
 ### Changed

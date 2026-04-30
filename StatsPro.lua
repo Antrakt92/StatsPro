@@ -3018,6 +3018,12 @@ end)
 local launcherCategory = Settings.RegisterCanvasLayoutCategory(launcher, launcher.name)
 Settings.RegisterAddOnCategory(launcherCategory)
 
+-- WHY guards: Settings.SetKeywords is 11.0+ public API but Blizzard restructures
+-- Settings.* between patches; .ID may shift. Three-step guard is cheap.
+if Settings.SetKeywords and launcherCategory and launcherCategory.ID then
+    Settings.SetKeywords(launcherCategory.ID, {"stats", "secondary", "rating", "durability", "repair", "defensive"})
+end
+
 --[[ ============================================================
     17. SLASH COMMANDS
 ============================================================ ]]

@@ -2080,7 +2080,7 @@ local function ResetToDefaults()
     -- we did DB reset first, that cancelFunc would clobber the just-reset default.
     -- Closing first means cancelFunc writes to a (soon-overwritten) DB — irrelevant.
     -- Custom font picker is NOT a Blizzard dropdown so CloseDropDownMenus doesn't reach it;
-    -- explicit Hide triggers its OnHide → CancelFontPreview if a hover-preview was active.
+    -- explicit Hide triggers its OnHide which forcibly re-syncs panels with DB.font.
     CloseDropDownMenus()
     if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
         _G.StatsProFontPicker:Hide()
@@ -2493,39 +2493,19 @@ function addon:OpenConfigMenu()
         fontDropdown = CreateFrame("Frame", "StatsProFontDropdown", displayTab, "UIDropDownMenuTemplate")
         -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after all 3 dropdown rows built.
         fontDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
-        -- Hover-preview state. While font picker is open, hovering a font button applies
-        -- it to panels temporarily without writing DB. Closing without click reverts.
-        -- OpenConfigMenu lazy-inits once per session, so these locals are created exactly once.
-        local fontPreviewActive = false
-        local fontPreviewBaseline = nil
+        -- Hover-preview: while font picker is open, hovering a font button applies it to
+        -- panels temporarily without writing DB. Picker's OnHide handler is the SINGLE source
+        -- of font-state sync — it forcibly re-applies DB.font after close, so cancel-on-close
+        -- happens automatically (preview never wrote DB; PickFont wrote DB on commit-path).
+        -- WHY UpdateStats: ApplyStyle invalidates cachedLabelH and lastLineCount; without
+        -- immediate SetTextSafe via UpdateStats, repair-row anchor/width stays stale until
+        -- next OnUpdate tick (≤ updateInterval, ~0.5s), leaving repairLabelText transiently
+        -- missing. Matches the pattern at PickFont, Font Size slider, and ResetToDefaults.
         local function PreviewFont(path)
-            if not fontPreviewActive then
-                fontPreviewActive = true
-                fontPreviewBaseline = GetDB("font")
-            end
             ApplyTextStyleToAllPanels(path, GetDB("fontSize"))
-            -- WHY UpdateStats: ApplyStyle invalidates cachedLabelH and lastLineCount;
-            -- without immediate SetTextSafe via UpdateStats, repair-row anchor/width and
-            -- frame height stay stale until next OnUpdate tick (≤ updateInterval, ~0.5s),
-            -- causing transient missing repairLabelText and unrevertable preview state.
-            -- Matches the pattern at PickFont, Font Size slider, and ResetToDefaults.
             UpdateStats()
         end
-        local function CancelFontPreview()
-            if fontPreviewActive and fontPreviewBaseline then
-                ApplyTextStyleToAllPanels(fontPreviewBaseline, GetDB("fontSize"))
-                UpdateStats()
-            end
-            fontPreviewActive = false
-            fontPreviewBaseline = nil
-        end
-        local function CommitFontPreview()
-            fontPreviewActive = false
-            fontPreviewBaseline = nil
-        end
         local function PickFont(f)
-            -- Commit-path: clears preview state so picker's OnHide skips cancel-restore.
-            CommitFontPreview()
             StatsProDB.font = f.path
             StatsProDB.fontBeforeAutoSwitch = nil  -- explicit user pick clears auto-switch memory
             ApplyTextStyleToAllPanels(f.path, GetDB("fontSize"))
@@ -2608,12 +2588,16 @@ function addon:OpenConfigMenu()
             fontPickerContent:SetSize(FONT_PICKER_COLS * FONT_PICKER_BTN_W, 100)  -- height set in Populate
             fontPickerScroll:SetScrollChild(fontPickerContent)
 
-            -- OnHide: covers ALL close paths (Esc, click-outside, font-button click,
-            -- programmatic /ss reset). PickFont's CommitFontPreview cleared fontPreviewActive
-            -- on commit-path so cancel-restore correctly skips. On other paths cancel fires.
+            -- OnHide: SINGLE source of font-state sync after close. Forcibly re-applies DB.font
+            -- to panels — that's the truly-committed value (preview never writes DB; PickFont
+            -- writes DB BEFORE close on commit-path). Covers ALL close paths (Esc, click-outside,
+            -- font-button click, /ss reset, configFrame-Hide hook) without per-path bookkeeping.
+            -- Idempotent on commit-path (PickFont already applied DB.font); cancels preview on
+            -- non-commit paths (panels still showing last hover, OnHide reverts to DB.font).
             fontPickerFrame:SetScript("OnHide", function()
                 if fontPickerCatcher then fontPickerCatcher:Hide() end
-                if fontPreviewActive then CancelFontPreview() end
+                ApplyTextStyleToAllPanels(GetDB("font"), GetDB("fontSize"))
+                UpdateStats()
             end)
 
             -- Esc-to-close. UISpecialFrames pops top-most special frame on Esc — picker added

@@ -2367,27 +2367,6 @@ function addon:OpenConfigMenu()
 
     CursorGap(cd, 4)
 
-    -- Display Format section
-    CursorSection(cd, "Display Format")
-    do
-        local rowY = cd.y
-        -- Rating / Percentage swatches inline with their Show toggles. These are the
-        -- COLUMN-meta colors used when "Match Value Color to Stat" is OFF.
-        local leftRows, rightRows = {}, {}
-        local _, sw, txt
-        _, sw, txt = CreateCheckboxColor(displayTab, "StatsProRatingCheck",     "Show Rating",     "showRating",     "rating",     cd.padX,                       rowY)
-        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
-        _, sw, txt = CreateCheckboxColor(displayTab, "StatsProPercentageCheck", "Show Percentage", "showPercentage", "percentage", cd.padX + CONFIG_COL_OFFSET, rowY)
-        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
-        AlignSwatchColumn(leftRows)
-        AlignSwatchColumn(rightRows)
-        cd.y = rowY - 26
-    end
-    CreateCheckbox(displayTab, "StatsProMatchColorCheck",
-        "Match Value Color to Stat", "matchValueColorToStat", cd.padX, cd.y)
-    CursorAdvance(cd, 22)
-    CursorGap(cd, 4)
-
     -- Localization section. Always shown (replaces former HAS_LOCALIZATION-gated checkbox —
     -- the new dropdown is useful even on enUS, e.g. picking 中文 for screenshots).
     -- WHY header stays English literal: CursorSection uses byte-based string.upper() which
@@ -2745,6 +2724,29 @@ function addon:OpenConfigMenu()
 
     --[[ ===== STATS TAB ===== ]]
     local cs = NewCursor(statsTab, 12, -8)
+
+    -- Display Format applies only to RATED stats (Offensive Crit/Haste/Mastery/Vers +
+    -- Tertiary Leech/Avoidance/Speed) — column visibility + value-color rule. Lives at
+    -- top of Stats tab so the user sees column setup BEFORE per-stat toggles below.
+    CursorSection(cs, "Display Format")
+    do
+        local rowY = cs.y
+        -- Rating / Percentage swatches inline with their Show toggles. These are the
+        -- COLUMN-meta colors used when "Match Value Color to Stat" is OFF.
+        local leftRows, rightRows = {}, {}
+        local _, sw, txt
+        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProRatingCheck",     "Show Rating",     "showRating",     "rating",     cs.padX,                       rowY)
+        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
+        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProPercentageCheck", "Show Percentage", "showPercentage", "percentage", cs.padX + CONFIG_COL_OFFSET, rowY)
+        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
+        AlignSwatchColumn(leftRows)
+        AlignSwatchColumn(rightRows)
+        cs.y = rowY - 26
+    end
+    CreateCheckbox(statsTab, "StatsProMatchColorCheck",
+        "Match Value Color to Stat", "matchValueColorToStat", cs.padX, cs.y)
+    CursorAdvance(cs, 22)
+    CursorGap(cs, 6)
 
     -- Primary stats share one color, shown inline in section header
     CursorSection(cs, "Primary Stat Ratings", "primary")

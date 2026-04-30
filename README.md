@@ -142,6 +142,9 @@ suggested correction — single-row fixes ship in the next patch.
 Tip: to bind toggling to a key, create a macro running `/ss toggle` and bind that
 macro from Esc → Options → Keybindings → Macros.
 
+> Note: many users add `/ss` as a screenshot macro. If you have one, use the
+> `/statspro` alias instead — it's an equivalent built-in command.
+
 ## Installation
 
 **CurseForge:** [www.curseforge.com/wow/addons/statspro](https://www.curseforge.com/wow/addons/statspro)

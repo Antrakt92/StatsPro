@@ -2725,9 +2725,23 @@ function addon:OpenConfigMenu()
     --[[ ===== STATS TAB ===== ]]
     local cs = NewCursor(statsTab, 12, -8)
 
+    -- Primary stats share one color, shown inline in section header.
+    -- Sits ABOVE Display Format because Primary renders as flat numbers (no rating/% columns).
+    CursorSection(cs, "Primary Stat Ratings", "primary")
+    do
+        local rowY = cs.y
+        CreateCheckbox(statsTab, "StatsProStrCheck", "Show Strength",  "showStrength",  cs.padX,       rowY)
+        CreateCheckbox(statsTab, "StatsProAgiCheck", "Show Agility",   "showAgility",   cs.padX + CONFIG_COL_OFFSET, rowY)
+        cs.y = rowY - 26
+        CreateCheckbox(statsTab, "StatsProIntCheck", "Show Intellect", "showIntellect", cs.padX,       cs.y)
+        CursorAdvance(cs, 22)
+    end
+
+    CursorGap(cs, 6)
+
     -- Display Format applies only to RATED stats (Offensive Crit/Haste/Mastery/Vers +
-    -- Tertiary Leech/Avoidance/Speed) — column visibility + value-color rule. Lives at
-    -- top of Stats tab so the user sees column setup BEFORE per-stat toggles below.
+    -- Tertiary Leech/Avoidance/Speed) — column visibility + value-color rule. Sits between
+    -- Primary and Offensive: scope is "everything below this section header".
     CursorSection(cs, "Display Format")
     do
         local rowY = cs.y
@@ -2746,19 +2760,6 @@ function addon:OpenConfigMenu()
     CreateCheckbox(statsTab, "StatsProMatchColorCheck",
         "Match Value Color to Stat", "matchValueColorToStat", cs.padX, cs.y)
     CursorAdvance(cs, 22)
-    CursorGap(cs, 6)
-
-    -- Primary stats share one color, shown inline in section header
-    CursorSection(cs, "Primary Stat Ratings", "primary")
-    do
-        local rowY = cs.y
-        CreateCheckbox(statsTab, "StatsProStrCheck", "Show Strength",  "showStrength",  cs.padX,       rowY)
-        CreateCheckbox(statsTab, "StatsProAgiCheck", "Show Agility",   "showAgility",   cs.padX + CONFIG_COL_OFFSET, rowY)
-        cs.y = rowY - 26
-        CreateCheckbox(statsTab, "StatsProIntCheck", "Show Intellect", "showIntellect", cs.padX,       cs.y)
-        CursorAdvance(cs, 22)
-    end
-
     CursorGap(cs, 6)
 
     CursorSection(cs, "Offensive Stats")

@@ -1277,6 +1277,34 @@ end
 -- restore-path opportunistically and otherwise returns. Safe to call from PEW + every
 -- dropdown change without producing extra SetFont noise.
 --
+-- Read-only resolver: returns a font path that supports `req` glyph for `currentFont`.
+-- Pure function — no DB writes, no SetFont calls. Callsites:
+--   1. MaybeAutoSwitchFont (commit path) — wraps with DB mutations + ApplyTextStyle.
+--   2. PreviewLanguage hover (Localization do-block) — visual-only preview, no DB writes.
+-- Returns currentFont if already compatible (caller can use this to detect "no swap needed").
+-- Returns nil if no compatible font found anywhere in the 3-tier fallback chain
+-- (caller should leave font alone — RefreshLanguageWarning will surface the issue).
+-- Three-tier fallback:
+--   1. LocaleAwareDefaultFont (Blizzard-shipped STANDARD_TEXT_FONT, hijack-guarded).
+--   2. ARIALN (Blizzard ships Latin+Cyrillic universally — saves cross-locale
+--      Russian users from needing an LSM addon for clean rendering).
+--   3. LSM scan (catches CJK / installed Cyrillic fonts).
+local function FindCompatibleFont(currentFont, req)
+    if FontSupports(currentFont, req) then return currentFont end
+    local fallback = LocaleAwareDefaultFont()
+    if fallback and FontSupports(fallback, req) then return fallback end
+    if currentFont ~= "Fonts\\ARIALN.TTF" and FontSupports("Fonts\\ARIALN.TTF", req) then
+        return "Fonts\\ARIALN.TTF"
+    end
+    if LSM then
+        for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
+            local p = LSM:Fetch(LSM.MediaType.FONT, name)
+            if p and FontSupports(p, req) then return p end
+        end
+    end
+    return nil
+end
+
 -- Caller must set StatsProDB.forceLocale + run CacheSettings BEFORE calling.
 local function MaybeAutoSwitchFont()
     local active = ResolveActiveLocale()
@@ -1293,28 +1321,7 @@ local function MaybeAutoSwitchFont()
         return
     end
 
-    -- Not compatible. Three-tier fallback:
-    --   1. LocaleAwareDefaultFont (Blizzard-shipped STANDARD_TEXT_FONT, hijack-guarded).
-    --   2. ARIALN (Blizzard ships Latin+Cyrillic universally — saves cross-locale
-    --      Russian users from needing an LSM addon for clean rendering).
-    --   3. LSM scan (catches CJK / installed Cyrillic fonts).
-    -- Last resort: leave font alone and let RefreshLanguageWarning surface the issue.
-    local fallback = LocaleAwareDefaultFont()
-    if not fallback or not FontSupports(fallback, req) then
-        fallback = nil
-        if cur ~= "Fonts\\ARIALN.TTF" and FontSupports("Fonts\\ARIALN.TTF", req) then
-            fallback = "Fonts\\ARIALN.TTF"
-        elseif LSM then
-            for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
-                local p = LSM:Fetch(LSM.MediaType.FONT, name)
-                if p and FontSupports(p, req) then
-                    fallback = p
-                    break
-                end
-            end
-        end
-    end
-
+    local fallback = FindCompatibleFont(cur, req)
     if fallback and fallback ~= cur then
         StatsProDB.fontBeforeAutoSwitch = StatsProDB.fontBeforeAutoSwitch or cur
         StatsProDB.font = fallback
@@ -2831,14 +2838,36 @@ function addon:OpenConfigMenu()
         end
 
         -- Hover-preview: hovering a language item swaps panel labels live; close-without-pick
-        -- restores. Pure label preview — no MaybeAutoSwitchFont (would write db.font, must
-        -- be non-destructive); no langWarn refresh (settings UI stays stable). CJK locales
-        -- with current font lacking glyphs render as ?-boxes during hover (informative).
-        local langPreviewActive = false
+        -- restores. Visual-only preview — no DB writes (so /reload mid-hover doesn't persist
+        -- anything); no langWarn refresh (settings UI stays stable). When the committed font
+        -- doesn't cover the hovered locale's glyphs (e.g. ruRU on enUS client with FRIZQT —
+        -- no Cyrillic), we ALSO preview the auto-fallback font so labels don't render as
+        -- boxes. ruRU client is a no-op via FONT_GLYPH_SUPPORT's locale-conditional FRIZQT
+        -- entry (Cyrillic-supported on ruRU clients only) — FindCompatibleFont returns the
+        -- current font unchanged.
+        local langPreviewActive     = false
+        local langPreviewSwappedFnt = false  -- true when preview ApplyTextStyle'd a fallback
 
         local function PreviewLanguage(value)
             local locale = (value == "auto") and GetLocale() or value
             cached.activeLabels = LABELS_BY_LOCALE[locale] or LABELS_BY_LOCALE.enUS
+
+            -- Visual font swap if the committed font lacks the previewed locale's glyphs.
+            -- WHY GetDB("font") (committed) and not the currently-rendered preview font:
+            -- consecutive hovers must each evaluate against the BASELINE, otherwise hover
+            -- ru→ARIALN→hover de would compare ARIALN(Latin-OK) and skip restoring FRIZQT.
+            local req      = LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN
+            local cur      = GetDB("font")
+            local fallback = FindCompatibleFont(cur, req)
+            if fallback and fallback ~= cur then
+                ApplyTextStyleToAllPanels(fallback, GetDB("fontSize"))
+                langPreviewSwappedFnt = true
+            elseif langPreviewSwappedFnt then
+                -- Previous hover swapped to fallback; this hover doesn't need to → restore.
+                ApplyTextStyleToAllPanels(cur, GetDB("fontSize"))
+                langPreviewSwappedFnt = false
+            end
+
             langPreviewActive = true
             UpdateStats()
         end
@@ -2850,6 +2879,10 @@ function addon:OpenConfigMenu()
             if not langPreviewActive then return end
             local active = ResolveActiveLocale()
             cached.activeLabels = LABELS_BY_LOCALE[active] or LABELS_BY_LOCALE.enUS
+            if langPreviewSwappedFnt then
+                ApplyTextStyleToAllPanels(GetDB("font"), GetDB("fontSize"))
+                langPreviewSwappedFnt = false
+            end
             langPreviewActive = false
             UpdateStats()
         end
@@ -2866,7 +2899,10 @@ function addon:OpenConfigMenu()
                 info.value = opt.value
                 info.checked = (GetDB("forceLocale") == opt.value)
                 info.func = function()
-                    langPreviewActive = false  -- commit supersedes any in-flight hover preview
+                    -- commit supersedes any in-flight hover preview; MaybeAutoSwitchFont
+                    -- below is the authoritative font owner from this point on.
+                    langPreviewActive     = false
+                    langPreviewSwappedFnt = false
                     StatsProDB.forceLocale = opt.value
                     CacheSettings()
                     MaybeAutoSwitchFont()

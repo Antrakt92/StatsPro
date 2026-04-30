@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.8 — Settings UI restructure + multi-column font picker
+
+### Added
+
+- **Multi-column font picker replaces the alphabetical sub-menu dropdown.** Click the Font field in Appearance → Typography and the full font list opens as a scrollable 3-column grid — no more drilling through `2-A` / `B-C` / `D-F` letter buckets. Hover any font to preview it on your panels live; click to commit; close the picker without picking to revert. The currently-selected font is tinted and the grid auto-scrolls to center it on open.
+- **Per-stat color customization for Strength / Agility / Intellect.** Previously all three primary stats shared a single color; now each has its own inline swatch in Stats → Primary Stat Ratings. If you'd previously customized the shared primary color, that choice is preserved across all three on upgrade — visuals unchanged unless you intentionally pick differently per stat.
+
+### Changed
+
+- **Settings tab order is now `Stats | Defensive | Appearance`** (was `Display | Stats | Defensive`). The former "Display" tab is renamed to "Appearance" and moved to the end — new users land on Stats first (most common configuration); appearance tweaks are one tab away when needed. The settings window also reopens on Stats by default.
+- **Display Format toggles moved from Appearance to Stats tab top** — Show Rating / Show Percentage / value-color toggles now live next to the stat toggles they affect, instead of in a separate tab.
+- **Appearance tab reorganized** — sliders are grouped under their conceptual section instead of trailing as orphan rows. Frame & Position holds Visibility / Lock / Layout / Scale / Refresh Rate; Typography holds Font / Font Size; Localization sits at the bottom (typically set once and never revisited).
+- **Tertiary stats (Leech / Avoidance / Speed) now use a 2-column grid** matching Offensive and Defensive sections, instead of a single-column list.
+- **Inline color swatches everywhere.** Offensive stat toggles (Crit / Haste / Mastery / Versatility) and the value-color picks for Show Rating / Show Percentage now use the same inline-with-checkbox swatch layout already used in Defensive and Tertiary sections — replacing the older mix of inline and separate-row swatches.
+
 ## 1.1.7 — Polish & UX
 
 ### Fixed

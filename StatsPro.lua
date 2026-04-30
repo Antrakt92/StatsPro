@@ -2813,21 +2813,20 @@ function addon:OpenConfigMenu()
             function(checked) ApplyTertiarySubsEnabled(checked) end)
         CreateCheckbox(statsTab, "StatsProHideZeroCheck", "Hide Zero Values",    "hideZeroTertiary", cs.padX + CONFIG_COL_OFFSET, rowY)
         cs.y = rowY - 26
-        -- WHY single-column: 3 sub-toggles in a 2-col grid leave an asymmetric L-shape
-        -- of swatches (Leech+Speed left, Avoidance alone right). Stack all three in the
-        -- left column so swatches form a single clean vertical line via AlignSwatchColumn.
-        local rows = {}
+        -- Two-column grid matches Offensive/Defensive sections. With 3 stats the right
+        -- side of row 2 is empty; left/right columns align via independent AlignSwatchColumn.
+        local leftRows, rightRows = {}, {}
         local sw, txt
-        leechCb,     sw, txt = CreateCheckboxColor(statsTab, "StatsProLeechCheck",     "Show Leech",     "showLeech",     "leech",     cs.padX, cs.y)
-        rows[#rows + 1] = { text = txt, swatch = sw }
+        leechCb,     sw, txt = CreateCheckboxColor(statsTab, "StatsProLeechCheck",     "Show Leech",     "showLeech",     "leech",     cs.padX,                       cs.y)
+        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
+        avoidanceCb, sw, txt = CreateCheckboxColor(statsTab, "StatsProAvoidanceCheck", "Show Avoidance", "showAvoidance", "avoidance", cs.padX + CONFIG_COL_OFFSET, cs.y)
+        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         CursorAdvance(cs, 22)
-        avoidanceCb, sw, txt = CreateCheckboxColor(statsTab, "StatsProAvoidanceCheck", "Show Avoidance", "showAvoidance", "avoidance", cs.padX, cs.y)
-        rows[#rows + 1] = { text = txt, swatch = sw }
+        speedCb,     sw, txt = CreateCheckboxColor(statsTab, "StatsProSpeedCheck",     "Show Speed",     "showSpeed",     "speed",     cs.padX,                       cs.y)
+        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
         CursorAdvance(cs, 22)
-        speedCb,     sw, txt = CreateCheckboxColor(statsTab, "StatsProSpeedCheck",     "Show Speed",     "showSpeed",     "speed",     cs.padX, cs.y)
-        rows[#rows + 1] = { text = txt, swatch = sw }
-        CursorAdvance(cs, 22)
-        AlignSwatchColumn(rows)
+        AlignSwatchColumn(leftRows)
+        AlignSwatchColumn(rightRows)
         ApplyTertiarySubsEnabled(GetDB("showTertiary"))
         PushRefresher(function() ApplyTertiarySubsEnabled(GetDB("showTertiary")) end)
     end

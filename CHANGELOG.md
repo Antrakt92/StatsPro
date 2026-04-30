@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.7 — Polish & UX
+
+### Fixed
+
+- **Font dropdown caption now updates immediately after a language switch triggers an automatic font swap.** Previously the dropdown still showed the old font name even though the active font had changed — for example, switching to Russian on an English client silently auto-switched to Arial Narrow but the dropdown kept saying "Friz Quadrata TT".
+- **Launcher description text in the Blizzard AddOns panel no longer clips off the right edge** on narrow Settings windows or low-resolution displays.
+
+### Added
+
+- **`/ss reset` slash command.** Resets all settings to defaults without opening the settings window — handy for quick recovery without losing the current screen context.
+- **Settings panel search keywords.** StatsPro now appears in Blizzard Settings search results for terms like "stats", "rating", "durability", "repair", "defensive".
+
+### Changed
+
+- **README localization section** now references the **Language** dropdown (replacing the deprecated "Use localized stat names" toggle from before 1.1.0) and clarifies that key-binding requires creating a macro running `/ss toggle`.
+
 ## 1.1.6 — Settings UI polish
 
 ### Fixed

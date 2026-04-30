@@ -2830,6 +2830,30 @@ function addon:OpenConfigMenu()
             return CompactLabel(LANGUAGE_OPTIONS[1])  -- fallback for unknown values
         end
 
+        -- Hover-preview: hovering a language item swaps panel labels live; close-without-pick
+        -- restores. Pure label preview — no MaybeAutoSwitchFont (would write db.font, must
+        -- be non-destructive); no langWarn refresh (settings UI stays stable). CJK locales
+        -- with current font lacking glyphs render as ?-boxes during hover (informative).
+        local langPreviewActive = false
+
+        local function PreviewLanguage(value)
+            local locale = (value == "auto") and GetLocale() or value
+            cached.activeLabels = LABELS_BY_LOCALE[locale] or LABELS_BY_LOCALE.enUS
+            langPreviewActive = true
+            UpdateStats()
+        end
+
+        -- WHY re-resolve from DB instead of stored baseline: mirrors font picker's OnHide
+        -- pattern. Commit path overwrote forceLocale + cleared the flag, so this is a no-op
+        -- post-commit; close-without-pick path restores to baseline (=current forceLocale).
+        local function CancelLanguagePreview()
+            if not langPreviewActive then return end
+            local active = ResolveActiveLocale()
+            cached.activeLabels = LABELS_BY_LOCALE[active] or LABELS_BY_LOCALE.enUS
+            langPreviewActive = false
+            UpdateStats()
+        end
+
         local langDropdown = CreateFrame("Frame", "StatsProLanguageDropdown", displayTab, "UIDropDownMenuTemplate")
         -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after all 3 dropdown rows built.
         langDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
@@ -2842,6 +2866,7 @@ function addon:OpenConfigMenu()
                 info.value = opt.value
                 info.checked = (GetDB("forceLocale") == opt.value)
                 info.func = function()
+                    langPreviewActive = false  -- commit supersedes any in-flight hover preview
                     StatsProDB.forceLocale = opt.value
                     CacheSettings()
                     MaybeAutoSwitchFont()
@@ -2857,6 +2882,30 @@ function addon:OpenConfigMenu()
             end
         end)
         UIDropDownMenu_SetText(langDropdown, CurrentLabel())
+
+        -- Per-button OnEnter hover hook for live preview. WARNING: DropDownList1 is shared
+        -- across all UIDropDownMenuTemplate dropdowns (Display Mode, Language) — filter via
+        -- UIDROPDOWNMENU_OPEN_MENU == langDropdown so Display Mode hovers don't trigger us.
+        local function HookLanguageMenuButtons()
+            if not DropDownList1 or UIDROPDOWNMENU_OPEN_MENU ~= langDropdown then return end
+            for i = 1, 32 do
+                local btn = _G["DropDownList1Button" .. i]
+                if not btn then break end
+                if not btn._statsProLangPreviewHooked then
+                    btn:HookScript("OnEnter", function(self)
+                        if UIDROPDOWNMENU_OPEN_MENU ~= langDropdown then return end
+                        if self.value == nil then return end  -- separator/title row
+                        PreviewLanguage(self.value)
+                    end)
+                    btn._statsProLangPreviewHooked = true
+                end
+            end
+        end
+
+        if DropDownList1 then
+            DropDownList1:HookScript("OnShow", HookLanguageMenuButtons)
+            DropDownList1:HookScript("OnHide", CancelLanguagePreview)
+        end
 
         -- 24 + cd.gap (6) = 30 effective; matches Display Mode dropdown row pattern.
         CursorAdvance(cd, 24)

@@ -2765,15 +2765,20 @@ function addon:OpenConfigMenu()
         langLabel:SetPoint("TOPLEFT", cd.padX, rowY)
         langLabel:SetText("Language:")
 
+        -- Linear scan LANGUAGE_OPTIONS for opt.value == value match. 3 callsites.
+        local function FindLangOption(value)
+            for _, o in ipairs(LANGUAGE_OPTIONS) do
+                if o.value == value then return o end
+            end
+            return nil
+        end
+
         -- DisplayLabel: full descriptive form for menu items (user disambiguates picks).
         local function DisplayLabel(opt)
             if opt.value ~= "auto" then return opt.label end
             local cur = GetLocale()
-            local nat
-            for _, o in ipairs(LANGUAGE_OPTIONS) do
-                if o.value == cur then nat = o.label; break end
-            end
-            return string.format("Auto (current: %s)", nat or cur)
+            local o = FindLangOption(cur)
+            return string.format("Auto (current: %s)", (o and o.label) or cur)
         end
 
         -- CompactLabel: short form for the dropdown's collapsed current-text field, sized to
@@ -2782,21 +2787,17 @@ function addon:OpenConfigMenu()
         local function CompactLabel(opt)
             if opt.value == "auto" then
                 local cur = GetLocale()
-                local nat
-                for _, o in ipairs(LANGUAGE_OPTIONS) do
-                    if o.value == cur then nat = o.label; break end
-                end
-                local short = (nat or cur):match("^(.-)%s*%(") or nat or cur
+                local o = FindLangOption(cur)
+                local nat = (o and o.label) or cur
+                local short = nat:match("^(.-)%s*%(") or nat
                 return short  -- e.g. "English", "Русский", "中文 简体"
             end
             return (opt.label or ""):match("^(.-)%s*%(") or opt.label or ""
         end
 
         local function CurrentLabel()
-            local v = GetDB("forceLocale")
-            for _, opt in ipairs(LANGUAGE_OPTIONS) do
-                if opt.value == v then return CompactLabel(opt) end
-            end
+            local opt = FindLangOption(GetDB("forceLocale"))
+            if opt then return CompactLabel(opt) end
             return CompactLabel(LANGUAGE_OPTIONS[1])  -- fallback for unknown values
         end
 

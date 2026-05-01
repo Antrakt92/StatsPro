@@ -1603,14 +1603,18 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     self.frame:SetWidth(totalW)
 
     -- Frame height: stats rows + (1 row + 1px gap if hasRepair) + 8px padding.
-    -- Cache invalidates on either lineCount change or hasRepair flip — both affect height.
-    if lineCount ~= self.lastLineCount or hasRepair ~= self.lastHasRepair then
+    -- Cache invalidates on lineCount change, hasRepair flip, OR font/size change
+    -- (signaled via heightDirty by Panel:ApplyStyle). Reusing lastLineCount alone
+    -- would conflate "text changed" vs "font changed" — Panel:Reflow needs
+    -- lastLineCount preserved across ApplyStyle as the content-line-count marker.
+    if lineCount ~= self.lastLineCount or hasRepair ~= self.lastHasRepair or self.heightDirty then
         local fontSize = GetDB("fontSize")
         local h = lineCount * fontSize
         if hasRepair then h = h + fontSize + 1 end  -- 1 extra row + visual gap
         self.frame:SetHeight(h + 8)
         self.lastLineCount = lineCount
         self.lastHasRepair = hasRepair
+        self.heightDirty = false
     end
 end
 
@@ -1644,9 +1648,31 @@ function Panel:ApplyStyle(font, size)
     if self.lastRepairLabelText and self.lastRepairLabelText ~= "" then
         self.repairLabelText:SetText(self.lastRepairLabelText)
     end
-    -- Force resize + line-height re-measure on next SetTextSafe
+    -- Force re-measure on next SetTextSafe: cachedLabelH=nil drops the previous
+    -- glyph-height read; heightDirty=true makes the height-gate fire even when
+    -- lineCount + hasRepair are unchanged (the Reflow path always feeds the same
+    -- lineCount back). lastLineCount is intentionally NOT reset here — Panel:Reflow
+    -- relies on it as the cached content-line-count for re-feeding SetTextSafe.
     self.cachedLabelH = nil
-    self.lastLineCount = -1
+    self.heightDirty = true
+end
+
+-- Re-runs SetTextSafe with the last-known content. For font-only changes (font picker
+-- hover/commit, FontSize slider) where line text hasn't changed but glyph widths have —
+-- skip the heavy BuildLines + stat-API rescan that UpdateStats() does. SetTextSafe
+-- handles all the actual measurement / sizing / re-positioning that the new font needs.
+-- No-op pre-first-render or post-Hide (lastLabelText nil / lastLineCount<=0); callers
+-- there fall back to the regular UpdateStats path indirectly via the next OnUpdate tick.
+function Panel:Reflow()
+    if not self.lastLabelText or self.lastLineCount <= 0 then return end
+    self:SetTextSafe(
+        self.lastLabelText,
+        self.lastRatingText or "",
+        self.lastValueText or "",
+        self.lastLineCount,
+        self.lastRepairText or "",
+        self.lastRepairLabelText or ""
+    )
 end
 
 --[[ ============================================================
@@ -1658,6 +1684,16 @@ local defensivePanel = Panel:New("StatsProDefensiveFrame", "defensive_")
 local function ApplyTextStyleToAllPanels(font, size)
     mainPanel:ApplyStyle(font, size)
     defensivePanel:ApplyStyle(font, size)
+end
+
+-- Companion to ApplyTextStyleToAllPanels: re-flows both panels after a font/size change
+-- using cached text content. Use INSTEAD OF UpdateStats() in font-only paths (font picker,
+-- FontSize slider) — same visual result, ~10× cheaper since BuildMain/Defensive/Durability
+-- + stat-API scans + JoinLinesSecretSafe are skipped. Locale-change paths must keep
+-- UpdateStats() since label text actually changes there.
+local function ReflowAllPanels()
+    mainPanel:Reflow()
+    defensivePanel:Reflow()
 end
 
 -- Forward-decl: both helpers are defined in section 14 alongside their companions
@@ -3024,28 +3060,32 @@ function addon:OpenConfigMenu()
         -- panels temporarily without writing DB. Picker's OnHide handler is the SINGLE source
         -- of font-state sync — it forcibly re-applies DB.font after close, so cancel-on-close
         -- happens automatically (preview never wrote DB; PickFont wrote DB on commit-path).
-        -- WHY UpdateStats: ApplyStyle invalidates cachedLabelH and lastLineCount; without
-        -- immediate SetTextSafe via UpdateStats, repair-row anchor/width stays stale until
-        -- next OnUpdate tick (≤ updateInterval, ~0.5s), leaving repairLabelText transiently
-        -- missing. Matches the pattern at PickFont, Font Size slider, and ResetToDefaults.
+        -- WHY immediate Reflow after Apply: ApplyStyle invalidates cachedLabelH + sets
+        -- heightDirty; without an immediate SetTextSafe re-measure, frame width / repair
+        -- row anchor stay stale until the next OnUpdate tick (≤ updateInterval, ~0.5s).
         --
         -- Hover-preview state shared across font picker buttons + commit/cancel paths:
         --   previewedPath = nil  → no preview applied; panels show DB.font
         --   previewedPath = "X"  → panels currently showing preview of font X
         -- Without this dedup, scrolling the picker fires OnEnter dozens of times in <1s
         -- (each scroll tick re-targets a different button under the cursor), each call
-        -- re-running ApplyTextStyleToAllPanels (10 SetFonts + cache invalidation) +
-        -- UpdateStats (full panel rebuild). hoverGen + deferred-cancel pattern below
-        -- adds an OnLeave path that auto-restores when the mouse drifts off all buttons,
-        -- so the panels don't stay stuck on a previewed font when the user moves to the
-        -- picker's padding without clicking.
+        -- re-running the apply pipeline. hoverGen + deferred-cancel pattern below adds an
+        -- OnLeave path that auto-restores when the mouse drifts off all buttons, so the
+        -- panels don't stay stuck on a previewed font when the user moves to the picker's
+        -- padding without clicking.
         local previewedPath
         local hoverGen = 0
+        -- WHY ReflowAllPanels (not UpdateStats) for font-only paths: line text doesn't
+        -- change on font swap — only glyph widths do. Reflow re-feeds cached strings to
+        -- SetTextSafe so frame width / repair-row Y / column alignment all re-measure
+        -- under the new font, while skipping BuildMain/Defensive/Durability + the stat-API
+        -- rescan that UpdateStats does. Subjective speed-up on font-picker scroll-hover
+        -- where each unique button fires Apply + Reflow ~30× per second of scroll.
         local function PreviewFont(path)
             if path == previewedPath then return end
             previewedPath = path
             ApplyTextStyleToAllPanels(path, GetDB("fontSize"))
-            UpdateStats()
+            ReflowAllPanels()
         end
         -- Cancel preview: only fires the heavy Apply if a preview is actually active.
         -- Called from OnLeave-deferred path AND OnHide; idempotent across both.
@@ -3053,7 +3093,7 @@ function addon:OpenConfigMenu()
             if previewedPath == nil then return end
             previewedPath = nil
             ApplyTextStyleToAllPanels(GetDB("font"), GetDB("fontSize"))
-            UpdateStats()
+            ReflowAllPanels()
         end
         local function PickFont(f)
             StatsProDB.font = f.path
@@ -3062,7 +3102,7 @@ function addon:OpenConfigMenu()
             -- then click). DB write above is the only mandatory step in that branch.
             if previewedPath ~= f.path then
                 ApplyTextStyleToAllPanels(f.path, GetDB("fontSize"))
-                UpdateStats()
+                ReflowAllPanels()
             end
             previewedPath = nil  -- preview is now committed; OnHide skip its Apply
             UIDropDownMenu_SetText(fontDropdown, f.name)
@@ -3326,9 +3366,12 @@ function addon:OpenConfigMenu()
     end
 
     -- Font Size slider — text rendering size. Naturally pairs with Font dropdown above.
+    -- ReflowAllPanels (not UpdateStats) for the same reason as font picker: size change
+    -- only affects measurements, not text content. Slider fires OnValueChanged per
+    -- step-tick during drag (8→9→...→32 = up to 25 events); Reflow keeps drag smooth.
     CreateConfigSlider(displayTab, "StatsProFontSlider", "Font Size:", "fontSize", cd,
         8, 32, 1, "8", "32", "%d",
-        function(v) ApplyTextStyleToAllPanels(GetDB("font"), v); UpdateStats() end)
+        function(v) ApplyTextStyleToAllPanels(GetDB("font"), v); ReflowAllPanels() end)
 
     CursorGap(cd, 4)
 

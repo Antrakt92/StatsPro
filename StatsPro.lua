@@ -1645,6 +1645,14 @@ local function ApplyTextStyleToAllPanels(font, size)
     defensivePanel:ApplyStyle(font, size)
 end
 
+-- Forward-decl: ApplyConfigFont is defined alongside its companions in section 14
+-- (settings UI helpers — relies on declarations there) but is called from
+-- MaybeAutoSwitchFont below + PreviewLanguage/CancelLanguagePreview much later.
+-- WHY safe to call before menu opened: the registry list is empty pre-first-open
+-- so the body walks zero FontStrings; the cached `currentConfigFont` value is
+-- still updated, so first-open's RegisterConfigFont picks up the right font.
+local ApplyConfigFont
+
 -- Auto-switch panel font when active locale needs glyphs the current font lacks.
 -- Saves the previous font in db.fontBeforeAutoSwitch so we can revert when the user
 -- moves back to a compatible locale.
@@ -1698,6 +1706,7 @@ local function MaybeAutoSwitchFont()
             StatsProDB.fontBeforeAutoSwitch = nil
             ApplyTextStyleToAllPanels(saved, GetDB("fontSize"))
         end
+        ApplyConfigFont(ResolveConfigFont(active))
         return
     end
 
@@ -1707,6 +1716,7 @@ local function MaybeAutoSwitchFont()
         StatsProDB.font = fallback
         ApplyTextStyleToAllPanels(fallback, GetDB("fontSize"))
     end
+    ApplyConfigFont(ResolveConfigFont(active))
 end
 
 local function LoadAllPositions()
@@ -2215,6 +2225,47 @@ local function PushRefresher(fn) tinsert(configRefreshers, fn) end
 -- while resisting third-party-addon hijacks of the STANDARD_TEXT_FONT global.
 local CONFIG_FONT       = LocaleAwareDefaultFont()
 local CONFIG_FONT_SIZE  = 12
+
+-- Locale-aware settings UI font: same idea as MaybeAutoSwitchFont for stat panels,
+-- but for the config window's CreateFontString-based labels (title, tabs, section
+-- headers, checkboxes, sliders, dropdown captions, font picker rows, langWarn).
+-- Blizzard FontObjects (GameFontNormal etc. used by buttons) carry built-in OS
+-- fallback so they render Cyrillic/CJK acceptably; explicit SetFont(CONFIG_FONT, ...)
+-- does NOT — without this swap, ruRU/zhCN previews on enUS clients render as boxes
+-- even though stat panels next to them render correctly. RegisterConfigFont collects
+-- every settings-UI FontString + its (size, flags) at creation time so ApplyConfigFont
+-- can re-apply with a glyph-compatible font on language change without rebuilding.
+local currentConfigFont    = CONFIG_FONT
+local localizedConfigFonts = {}
+
+-- Pure resolver mirroring ResolveActiveLocale → MaybeAutoSwitchFont's FindCompatibleFont
+-- pattern, but with CONFIG_FONT as baseline (settings UI default) instead of db.font.
+-- Returns CONFIG_FONT unchanged when current locale's glyphs are already covered
+-- (e.g. enUS-back-switch from ruRU). Returns nil-via-`or` fallback only when no font
+-- in the 3-tier chain supports the locale (Korean on enUS without LSM K_Damage) —
+-- visible glyph gap is acceptable, langWarn already surfaces the problem.
+local function ResolveConfigFont(activeLocale)
+    local req = LOCALE_GLYPH_REQ[activeLocale] or GLYPH_LATIN
+    return FindCompatibleFont(CONFIG_FONT, req) or CONFIG_FONT
+end
+
+-- Replaces direct fs:SetFont(CONFIG_FONT, size, flags) at 12 call sites.
+-- Initial set uses currentConfigFont (already locale-correct via PEW MaybeAutoSwitchFont).
+local function RegisterConfigFont(fs, size, flags)
+    fs:SetFont(currentConfigFont, size, flags)
+    tinsert(localizedConfigFonts, { fs = fs, size = size, flags = flags })
+end
+
+-- Forward-decl assignment from line ~1646; called from MaybeAutoSwitchFont and
+-- PreviewLanguage/CancelLanguagePreview. Idempotent fast-path skips work when
+-- currentConfigFont already matches (covers PEW + back-to-default-locale scenarios).
+ApplyConfigFont = function(font)
+    if font == currentConfigFont then return end
+    currentConfigFont = font
+    for _, e in ipairs(localizedConfigFonts) do
+        e.fs:SetFont(font, e.size, e.flags)
+    end
+end
 local CONFIG_SWATCH_GAP = 6     -- label.RIGHT → swatch.LEFT
 local CONFIG_COL_OFFSET = 220   -- left-col x → right-col x within a 2-column section
 -- WHY separate from CONFIG_SWATCH_GAP: heavy chrome on UIDropDownMenuTemplate may want
@@ -2252,7 +2303,7 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
     cb:SetSize(22, 22)
     local text = _G[name .. "Text"]
     PushLocalizedLabel(function() text:SetText(L(label)) end)
-    text:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
+    RegisterConfigFont(text, CONFIG_FONT_SIZE)
     -- textWidth: 200 default for plain checkboxes; pass 140 for "checkbox + inline color"
     -- rows (CreateCheckboxColor overrides the bound width to actual text width post-call).
     text:SetWidth(textWidth or 200)
@@ -2515,7 +2566,7 @@ end
 -- CursorSection: section header with green underline. label is dual-role: L-key + enUS fallback.
 local function CursorSection(c, label)
     local hdr = c.parent:CreateFontString(nil, "OVERLAY")
-    hdr:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE, "OUTLINE")
+    RegisterConfigFont(hdr, CONFIG_FONT_SIZE, "OUTLINE")
     hdr:SetPoint("TOPLEFT", c.parent, "TOPLEFT", c.padX, c.y)
     PushLocalizedLabel(function() hdr:SetText("|cff00ff7f" .. Utf8Upper(L(label)) .. "|r") end)
     local line = c.parent:CreateTexture(nil, "ARTWORK")
@@ -2533,7 +2584,7 @@ end
 local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, maxVal, step, lowText, highText, valueFmt, onChange)
     local sliderY = cd.y
     local lbl = parent:CreateFontString(nil, "OVERLAY")
-    lbl:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
+    RegisterConfigFont(lbl, CONFIG_FONT_SIZE)
     lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
     PushLocalizedLabel(function() lbl:SetText(L(labelText)) end)
 
@@ -2639,6 +2690,7 @@ function addon:OpenConfigMenu()
     wipe(configRefreshers)
     wipe(alignmentGroups)
     wipe(localizedConfigLabels)
+    wipe(localizedConfigFonts)
     -- Function-local: collected during Display tab build, aligned once at end of Typography
     -- section via AlignSwatchColumn(displayDropdownRows, CONFIG_DROPDOWN_GAP). Table reference
     -- retained via alignmentGroups after registration so RefreshConfigLocalization can re-run
@@ -2682,7 +2734,7 @@ function addon:OpenConfigMenu()
 
     --[[ ===== Header (title + X) ===== ]]
     local title = configFrame:CreateFontString(nil, "OVERLAY")
-    title:SetFont(CONFIG_FONT, 16, "OUTLINE")
+    RegisterConfigFont(title, 16, "OUTLINE")
     title:SetPoint("TOP", 0, -12)
     PushLocalizedLabel(function()
         title:SetText("|cff00ff7fStatsPro|r v" .. ADDON_VERSION .. " " .. L("Settings"))
@@ -2774,7 +2826,7 @@ function addon:OpenConfigMenu()
         sel:Hide()
         btn.selected = sel
         local txt = btn:CreateFontString(nil, "OVERLAY")
-        txt:SetFont(CONFIG_FONT, 13, "OUTLINE")
+        RegisterConfigFont(txt, 13, "OUTLINE")
         txt:SetPoint("CENTER", 0, 1)
         PushLocalizedLabel(function() txt:SetText(L(label)) end)
         txt:SetTextColor(0.65, 0.65, 0.65, 1)
@@ -2836,7 +2888,7 @@ function addon:OpenConfigMenu()
         rowY = cd.y
 
         local dmLabel = displayTab:CreateFontString(nil, "OVERLAY")
-        dmLabel:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
+        RegisterConfigFont(dmLabel, CONFIG_FONT_SIZE)
         dmLabel:SetPoint("TOPLEFT", cd.padX, rowY - 4)
         PushLocalizedLabel(function() dmLabel:SetText(L("Display Mode:")) end)
 
@@ -2905,7 +2957,7 @@ function addon:OpenConfigMenu()
         local rowY = cd.y
 
         local fontLabel = displayTab:CreateFontString(nil, "OVERLAY")
-        fontLabel:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
+        RegisterConfigFont(fontLabel, CONFIG_FONT_SIZE)
         fontLabel:SetPoint("TOPLEFT", cd.padX, rowY)
         PushLocalizedLabel(function() fontLabel:SetText(L("Font:")) end)
 
@@ -3077,7 +3129,7 @@ function addon:OpenConfigMenu()
                     hl:SetVertexColor(1, 1, 1, 0.4)
 
                     btn.text = btn:CreateFontString(nil, "OVERLAY")
-                    btn.text:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
+                    RegisterConfigFont(btn.text, CONFIG_FONT_SIZE)
                     btn.text:SetPoint("LEFT", 6, 0)
                     btn.text:SetPoint("RIGHT", -4, 0)
                     btn.text:SetJustifyH("LEFT")
@@ -3209,7 +3261,7 @@ function addon:OpenConfigMenu()
         local rowY = cd.y
 
         local langLabel = displayTab:CreateFontString(nil, "OVERLAY")
-        langLabel:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
+        RegisterConfigFont(langLabel, CONFIG_FONT_SIZE)
         langLabel:SetPoint("TOPLEFT", cd.padX, rowY)
         PushLocalizedLabel(function() langLabel:SetText(L("Language:")) end)
 
@@ -3284,6 +3336,10 @@ function addon:OpenConfigMenu()
             -- Replay every settings-UI label setter so the open config window reflects the
             -- previewed locale live alongside the panel-side UpdateStats below — symmetry
             -- with the commit path's RefreshConfigLocalization at the dropdown info.func.
+            -- Also re-font settings UI labels: hovering ruRU on enUS client must swap our
+            -- custom CreateFontStrings to ARIALN (Cyrillic) so they don't render as boxes —
+            -- mirrors ApplyTextStyleToAllPanels above for the stat panels' baseline.
+            ApplyConfigFont(ResolveConfigFont(locale))
             RefreshConfigLocalization()
             UpdateStats()
         end
@@ -3300,6 +3356,10 @@ function addon:OpenConfigMenu()
                 langPreviewSwappedFnt = false
             end
             langPreviewActive = false
+            -- Restore settings-UI font for the COMMITTED locale (mirrors stat-panel restore
+            -- above): hover-ruRU-then-cancel on enUS must put our CreateFontStrings back to
+            -- the enUS-baseline CONFIG_FONT, otherwise they'd stay on ARIALN unnecessarily.
+            ApplyConfigFont(ResolveConfigFont(active))
             RefreshConfigLocalization()
             UpdateStats()
         end
@@ -3364,7 +3424,7 @@ function addon:OpenConfigMenu()
         CursorAdvance(cd, 24)
 
         local langWarn = displayTab:CreateFontString(nil, "OVERLAY")
-        langWarn:SetFont(CONFIG_FONT, 11)
+        RegisterConfigFont(langWarn, 11)
         langWarn:SetPoint("TOPLEFT", cd.padX, cd.y)
         langWarn:SetWidth(470)
         langWarn:SetJustifyH("LEFT")

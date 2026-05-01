@@ -3449,13 +3449,26 @@ function addon:OpenConfigMenu()
                 info.value = opt.value
                 info.checked = (GetDB("forceLocale") == opt.value)
                 info.func = function()
-                    -- commit supersedes any in-flight hover preview; MaybeAutoSwitchFont
-                    -- below is the authoritative font owner from this point on.
-                    langPreviewActive     = false
-                    langPreviewSwappedFnt = false
+                    -- Commit supersedes any in-flight hover preview. MaybeAutoSwitchFont
+                    -- is the authoritative font owner from this point on.
                     StatsProDB.forceLocale = opt.value
                     CacheSettings()
                     MaybeAutoSwitchFont()
+                    -- WHY conditional restore AFTER MAS: hover preview may have swapped
+                    -- panels to a fallback (e.g. ARIALN for ruRU on enUS). MAS only calls
+                    -- ApplyTextStyleToAllPanels when its own swap decision fires — committing
+                    -- to a same-script-as-baseline locale (hover ruRU then commit deDE on
+                    -- enUS) leaves MAS short-circuiting via FontSupports(FRIZQT, LATIN)=true,
+                    -- so panels remain stuck on ARIALN. Re-apply db.font (post-MAS, authoritative)
+                    -- to undo the preview leak; idempotent when MAS already applied. CancelLanguagePreview
+                    -- does the same conditional restore for the close-without-pick path.
+                    -- ApplyConfigFont is unconditionally called inside MAS so the settings
+                    -- UI doesn't share this asymmetry — panels are the only side affected.
+                    if langPreviewSwappedFnt then
+                        ApplyTextStyleToAllPanels(GetDB("font"), GetDB("fontSize"))
+                    end
+                    langPreviewActive     = false
+                    langPreviewSwappedFnt = false
                     -- WHY: auto-switch may have changed db.font; PushRefresher only fires on Reset.
                     UIDropDownMenu_SetText(fontDropdown, CurrentFontName())
                     UIDropDownMenu_SetText(langDropdown, CompactLabel(opt))

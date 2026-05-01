@@ -3281,6 +3281,10 @@ function addon:OpenConfigMenu()
             end
 
             langPreviewActive = true
+            -- Replay every settings-UI label setter so the open config window reflects the
+            -- previewed locale live alongside the panel-side UpdateStats below — symmetry
+            -- with the commit path's RefreshConfigLocalization at the dropdown info.func.
+            RefreshConfigLocalization()
             UpdateStats()
         end
 
@@ -3296,6 +3300,7 @@ function addon:OpenConfigMenu()
                 langPreviewSwappedFnt = false
             end
             langPreviewActive = false
+            RefreshConfigLocalization()
             UpdateStats()
         end
 

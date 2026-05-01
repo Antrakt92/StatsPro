@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.9 — "Show Repair Cost" toggle responsiveness
+
+### Fixed
+
+- **"Show Repair Cost" toggle now refreshes immediately when turned on.** Previously the toggle could display nothing or a stale value until your next gear swap, because the cache only refreshed on equipment events. Toggling Off → On with damaged items now updates the displayed cost right away.
+
 ## 1.1.8 — Settings UI restructure + multi-column font picker
 
 ### Added

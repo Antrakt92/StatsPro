@@ -1009,17 +1009,17 @@ function Panel:New(globalName, dbKeyPrefix)
     self.repairText = repairText
     self.repairLabelText = repairLabelText
 
-    -- Drag handlers (unsecure frames; not protected in combat lockdown)
-    frame:SetScript("OnMouseDown", function(f, button)
-        if button == "LeftButton" and not InCombatLockdown() then
-            f:StartMoving()
-        end
+    -- Drag handlers (unsecure frames; not protected in combat lockdown).
+    -- RegisterForDrag honors WoW's system drag-distance threshold — single clicks
+    -- without movement no longer trigger StartMoving. EnableMouse(false) above
+    -- gates drag activation through Panel:Unlock().
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", function(f)
+        if not InCombatLockdown() then f:StartMoving() end
     end)
-    frame:SetScript("OnMouseUp", function(f, button)
-        if button == "LeftButton" then
-            f:StopMovingOrSizing()
-            self:SavePosition()
-        end
+    frame:SetScript("OnDragStop", function(f)
+        f:StopMovingOrSizing()
+        self:SavePosition()
     end)
 
     return self

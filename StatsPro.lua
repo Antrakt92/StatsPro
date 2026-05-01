@@ -2654,6 +2654,12 @@ local function ResetToDefaults()
     -- Step 3: re-cache + re-apply panel-level visual state.
     CacheSettings()
     ApplyTextStyleToAllPanels(defaults.font, defaults.fontSize)
+    -- Sync settings-UI font to the fresh default-locale state. Without this, a Reset
+    -- performed while forceLocale was a non-baseline locale (e.g. ruRU on enUS — UI was
+    -- in ARIALN via prior MaybeAutoSwitchFont) would leave currentConfigFont stuck on
+    -- ARIALN even though forceLocale just reset to "auto" → enUS. Idempotent — no-op
+    -- when font is already the locale-correct baseline.
+    ApplyConfigFont(ResolveConfigFont(ResolveActiveLocale()))
     SetAllPanelsScale(defaults.scale)
     LoadAllPositions()
     SetAllPanelsLockState(defaults.isLocked)
@@ -2728,10 +2734,13 @@ function addon:OpenConfigMenu()
         configSpecialFrameRegistered = true
     end
 
-    -- Auto-close font picker when Settings UI hides (e.g., /ss toggle, click X). Picker
-    -- is parented to UIParent (NOT configFrame) so it doesn't auto-hide via parent — without
-    -- this hook it would orphan visible after Settings closes until next user interaction.
+    -- Auto-close font picker + Blizzard dropdown lists when Settings UI hides (e.g., /ss
+    -- toggle, click X, Esc). Both are parented to UIParent (NOT configFrame) so neither
+    -- auto-hides via parent — without these calls Esc-while-langDropdown-open leaves an
+    -- orphan dropdown list above (and a stale langPreview state until user clicks elsewhere
+    -- to trigger DropDownList1:OnHide → CancelLanguagePreview).
     configFrame:HookScript("OnHide", function()
+        CloseDropDownMenus()  -- closes any active Blizzard dropdown; fires its OnHide → CancelLanguagePreview
         if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
             _G.StatsProFontPicker:Hide()
         end

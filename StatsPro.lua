@@ -2073,6 +2073,44 @@ local function CursorSection(c, label)
     c.y = c.y - 24 - c.gap
 end
 
+-- CreateConfigSlider: standard label-on-top + horizontal slider pattern used across
+-- Display tab. valueFmt is a string.format specifier (e.g. "%.1f", "%d") applied to
+-- both initial display and live OnValueChanged updates. SetObeyStepOnDrag(true) +
+-- step=1 guarantees integer values for "%d" sliders. cd cursor advances by 50.
+local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, maxVal, step, lowText, highText, valueFmt, onChange)
+    local sliderY = cd.y
+    local lbl = parent:CreateFontString(nil, "OVERLAY")
+    lbl:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
+    lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
+    lbl:SetText(labelText)
+
+    local slider = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
+    slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
+    slider:SetMinMaxValues(minVal, maxVal)
+    slider:SetValue(GetDB(dbKey))
+    slider:SetValueStep(step)
+    slider:SetObeyStepOnDrag(true)
+    slider:SetWidth(420)
+    _G[name .. "Low"]:SetText(lowText)
+    _G[name .. "High"]:SetText(highText)
+    _G[name .. "Text"]:SetText(string.format(valueFmt, slider:GetValue()))
+
+    slider:SetScript("OnValueChanged", function(self, value)
+        _G[self:GetName() .. "Text"]:SetText(string.format(valueFmt, value))
+        StatsProDB[dbKey] = value
+        if onChange then onChange(value) end
+    end)
+
+    PushRefresher(function()
+        local v = GetDB(dbKey)
+        slider:SetValue(v)
+        _G[slider:GetName() .. "Text"]:SetText(string.format(valueFmt, v))
+    end)
+
+    cd.y = sliderY - 50
+    return slider
+end
+
 -- Reset all settings to defaults — callable from both the resetBtn:OnClick (in
 -- OpenConfigMenu) and the /ss reset slash command (section 17). All deps are
 -- file-scope or global; configRefreshers / RefreshConfigLocalization no-op safely
@@ -2394,66 +2432,16 @@ function addon:OpenConfigMenu()
 
     -- Scale slider — panel-level visual scale. Grouped with Frame & Position because it
     -- sizes the panel (visual layout), not the text rendering.
-    do
-        local sliderY = cd.y
-        local lbl = displayTab:CreateFontString(nil, "OVERLAY")
-        lbl:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
-        lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
-        lbl:SetText("Scale:")
-        local slider = CreateFrame("Slider", "StatsProScaleSlider", displayTab, "OptionsSliderTemplate")
-        slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
-        slider:SetMinMaxValues(0.5, 2.0)
-        slider:SetValue(GetDB("scale"))
-        slider:SetValueStep(0.1)
-        slider:SetObeyStepOnDrag(true)
-        slider:SetWidth(420)
-        _G[slider:GetName() .. "Low"]:SetText("0.5")
-        _G[slider:GetName() .. "High"]:SetText("2.0")
-        _G[slider:GetName() .. "Text"]:SetText(string.format("%.1f", slider:GetValue()))
-        slider:SetScript("OnValueChanged", function(self, value)
-            _G[self:GetName() .. "Text"]:SetText(string.format("%.1f", value))
-            StatsProDB.scale = value
-            SetAllPanelsScale(value)
-        end)
-        PushRefresher(function()
-            local v = GetDB("scale")
-            slider:SetValue(v)
-            _G[slider:GetName().."Text"]:SetText(string.format("%.1f", v))
-        end)
-        cd.y = sliderY - 50
-    end
+    CreateConfigSlider(displayTab, "StatsProScaleSlider", "Scale:", "scale", cd,
+        0.5, 2.0, 0.1, "0.5", "2.0", "%.1f",
+        function(v) SetAllPanelsScale(v) end)
 
     -- Refresh rate slider — controls how often stat values recompute (seconds).
     -- Lower = smoother but more CPU; higher = less CPU but values lag behind gear/buff swaps.
     -- Grouped with Frame & Position (panel update rate, not a text/i18n concern).
-    do
-        local sliderY = cd.y
-        local lbl = displayTab:CreateFontString(nil, "OVERLAY")
-        lbl:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
-        lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
-        lbl:SetText("Refresh Rate (sec):")
-        local slider = CreateFrame("Slider", "StatsProRefreshSlider", displayTab, "OptionsSliderTemplate")
-        slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
-        slider:SetMinMaxValues(0.1, 1.0)
-        slider:SetValue(GetDB("updateInterval"))
-        slider:SetValueStep(0.05)
-        slider:SetObeyStepOnDrag(true)
-        slider:SetWidth(420)
-        _G[slider:GetName() .. "Low"]:SetText("0.1s")
-        _G[slider:GetName() .. "High"]:SetText("1.0s")
-        _G[slider:GetName() .. "Text"]:SetText(string.format("%.2f", slider:GetValue()))
-        slider:SetScript("OnValueChanged", function(self, value)
-            _G[self:GetName() .. "Text"]:SetText(string.format("%.2f", value))
-            StatsProDB.updateInterval = value
-            CacheSettings()
-        end)
-        PushRefresher(function()
-            local v = GetDB("updateInterval")
-            slider:SetValue(v)
-            _G[slider:GetName().."Text"]:SetText(string.format("%.2f", v))
-        end)
-        cd.y = sliderY - 50
-    end
+    CreateConfigSlider(displayTab, "StatsProRefreshSlider", "Refresh Rate (sec):", "updateInterval", cd,
+        0.1, 1.0, 0.05, "0.1s", "1.0s", "%.2f",
+        function() CacheSettings() end)
 
     CursorGap(cd, 4)
 
@@ -2753,35 +2741,9 @@ function addon:OpenConfigMenu()
     end
 
     -- Font Size slider — text rendering size. Naturally pairs with Font dropdown above.
-    do
-        local sliderY = cd.y
-        local lbl = displayTab:CreateFontString(nil, "OVERLAY")
-        lbl:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
-        lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
-        lbl:SetText("Font Size:")
-        local slider = CreateFrame("Slider", "StatsProFontSlider", displayTab, "OptionsSliderTemplate")
-        slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
-        slider:SetMinMaxValues(8, 32)
-        slider:SetValue(GetDB("fontSize"))
-        slider:SetValueStep(1)
-        slider:SetObeyStepOnDrag(true)
-        slider:SetWidth(420)
-        _G[slider:GetName() .. "Low"]:SetText("8")
-        _G[slider:GetName() .. "High"]:SetText("32")
-        _G[slider:GetName() .. "Text"]:SetText(slider:GetValue())
-        slider:SetScript("OnValueChanged", function(self, value)
-            _G[self:GetName() .. "Text"]:SetText(math.floor(value))
-            StatsProDB.fontSize = value
-            ApplyTextStyleToAllPanels(GetDB("font"), value)
-            UpdateStats()
-        end)
-        PushRefresher(function()
-            local v = GetDB("fontSize")
-            slider:SetValue(v)
-            _G[slider:GetName().."Text"]:SetText(math.floor(v))
-        end)
-        cd.y = sliderY - 50
-    end
+    CreateConfigSlider(displayTab, "StatsProFontSlider", "Font Size:", "fontSize", cd,
+        8, 32, 1, "8", "32", "%d",
+        function(v) ApplyTextStyleToAllPanels(GetDB("font"), v); UpdateStats() end)
 
     CursorGap(cd, 4)
 

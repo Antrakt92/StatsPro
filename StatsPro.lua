@@ -882,7 +882,7 @@ local function ScanDurabilityAndCost()
                 sum = sum + pct
                 count = count + 1
                 if not minPct or pct < minPct then minPct = pct end
-                if cur < max and C_TooltipInfo and C_TooltipInfo.GetInventoryItem then
+                if cached.showRepairCost and cur < max and C_TooltipInfo and C_TooltipInfo.GetInventoryItem then
                     local data = C_TooltipInfo.GetInventoryItem("player", slot)
                     if data then
                         if TooltipUtil and TooltipUtil.SurfaceArgs then
@@ -3168,7 +3168,8 @@ function addon:OpenConfigMenu()
                 ApplyRepairCostEnabled(checked)
                 durabilityDirty = true
             end)
-        repairCostCb = CreateCheckbox(defensiveTab, "StatsProRepairCostCheck", "Show Repair Cost", "showRepairCost", cdef.padX + CONFIG_COL_OFFSET, rowY)
+        repairCostCb = CreateCheckbox(defensiveTab, "StatsProRepairCostCheck", "Show Repair Cost", "showRepairCost", cdef.padX + CONFIG_COL_OFFSET, rowY,
+            function() durabilityDirty = true end)
         ApplyRepairCostEnabled(GetDB("showDurability"))
         PushRefresher(function() ApplyRepairCostEnabled(GetDB("showDurability")) end)
         cdef.y = rowY - 26

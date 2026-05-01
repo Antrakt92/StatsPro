@@ -3004,18 +3004,46 @@ function addon:OpenConfigMenu()
         -- immediate SetTextSafe via UpdateStats, repair-row anchor/width stays stale until
         -- next OnUpdate tick (≤ updateInterval, ~0.5s), leaving repairLabelText transiently
         -- missing. Matches the pattern at PickFont, Font Size slider, and ResetToDefaults.
+        --
+        -- Hover-preview state shared across font picker buttons + commit/cancel paths:
+        --   previewedPath = nil  → no preview applied; panels show DB.font
+        --   previewedPath = "X"  → panels currently showing preview of font X
+        -- Without this dedup, scrolling the picker fires OnEnter dozens of times in <1s
+        -- (each scroll tick re-targets a different button under the cursor), each call
+        -- re-running ApplyTextStyleToAllPanels (10 SetFonts + cache invalidation) +
+        -- UpdateStats (full panel rebuild). hoverGen + deferred-cancel pattern below
+        -- adds an OnLeave path that auto-restores when the mouse drifts off all buttons,
+        -- so the panels don't stay stuck on a previewed font when the user moves to the
+        -- picker's padding without clicking.
+        local previewedPath
+        local hoverGen = 0
         local function PreviewFont(path)
+            if path == previewedPath then return end
+            previewedPath = path
             ApplyTextStyleToAllPanels(path, GetDB("fontSize"))
+            UpdateStats()
+        end
+        -- Cancel preview: only fires the heavy Apply if a preview is actually active.
+        -- Called from OnLeave-deferred path AND OnHide; idempotent across both.
+        local function CancelFontPreview()
+            if previewedPath == nil then return end
+            previewedPath = nil
+            ApplyTextStyleToAllPanels(GetDB("font"), GetDB("fontSize"))
             UpdateStats()
         end
         local function PickFont(f)
             StatsProDB.font = f.path
             StatsProDB.fontBeforeAutoSwitch = nil  -- explicit user pick clears auto-switch memory
-            ApplyTextStyleToAllPanels(f.path, GetDB("fontSize"))
+            -- Skip Apply when preview already painted the same font (common path: hover
+            -- then click). DB write above is the only mandatory step in that branch.
+            if previewedPath ~= f.path then
+                ApplyTextStyleToAllPanels(f.path, GetDB("fontSize"))
+                UpdateStats()
+            end
+            previewedPath = nil  -- preview is now committed; OnHide skip its Apply
             UIDropDownMenu_SetText(fontDropdown, f.name)
             CloseDropDownMenus()  -- defensive; no-op when no Blizzard dropdown is open
             RefreshLanguageWarning()  -- new font may not cover active locale's glyphs
-            UpdateStats()
         end
         UIDropDownMenu_SetWidth(fontDropdown, 100)
         UIDropDownMenu_JustifyText(fontDropdown, "CENTER")
@@ -3091,16 +3119,14 @@ function addon:OpenConfigMenu()
             fontPickerContent:SetSize(FONT_PICKER_COLS * FONT_PICKER_BTN_W, 100)  -- height set in Populate
             fontPickerScroll:SetScrollChild(fontPickerContent)
 
-            -- OnHide: SINGLE source of font-state sync after close. Forcibly re-applies DB.font
-            -- to panels — that's the truly-committed value (preview never writes DB; PickFont
-            -- writes DB BEFORE close on commit-path). Covers ALL close paths (Esc, click-outside,
-            -- font-button click, /ss reset, configFrame-Hide hook) without per-path bookkeeping.
-            -- Idempotent on commit-path (PickFont already applied DB.font); cancels preview on
-            -- non-commit paths (panels still showing last hover, OnHide reverts to DB.font).
+            -- OnHide: cancels active preview + hides catcher. Covers ALL close paths (Esc,
+            -- click-outside, font-button click, /ss reset, configFrame-Hide hook). Catcher
+            -- hide is unconditional (it's just a UIParent overlay); preview restore goes
+            -- through CancelFontPreview which short-circuits when previewedPath is already
+            -- nil (PickFont commit path resets it BEFORE Hide → no redundant Apply).
             fontPickerFrame:SetScript("OnHide", function()
                 if fontPickerCatcher then fontPickerCatcher:Hide() end
-                ApplyTextStyleToAllPanels(GetDB("font"), GetDB("fontSize"))
-                UpdateStats()
+                CancelFontPreview()
             end)
 
             -- Esc-to-close. UISpecialFrames pops top-most special frame on Esc — picker added
@@ -3143,7 +3169,26 @@ function addon:OpenConfigMenu()
                     btn.text:SetWordWrap(false)
                     btn.text:SetMaxLines(1)
 
-                    btn:SetScript("OnEnter", function(self) PreviewFont(self.fontPath) end)
+                    -- hoverGen pattern: OnEnter bumps gen + applies preview; OnLeave captures
+                    -- current gen and schedules a 0-tick deferred cancel. If the mouse moves
+                    -- to ANOTHER button before the timer fires, that button's OnEnter bumps
+                    -- gen — the captured-gen comparison fails, cancel is skipped (preview
+                    -- transitions directly button→button without an Apply DB.font in between).
+                    -- If the mouse leaves all buttons (drifts to picker padding or out of the
+                    -- frame), no OnEnter fires before the timer → cancel runs, panels return
+                    -- to DB.font. Without OnLeave, hovering then moving to padding leaves the
+                    -- preview "stuck" until the user clicks something — felt as the picker
+                    -- "fixating" on a random font in the user-facing report.
+                    btn:SetScript("OnEnter", function(self)
+                        hoverGen = hoverGen + 1
+                        PreviewFont(self.fontPath)
+                    end)
+                    btn:SetScript("OnLeave", function()
+                        local myGen = hoverGen
+                        C_Timer.After(0, function()
+                            if myGen == hoverGen then CancelFontPreview() end
+                        end)
+                    end)
                     btn:SetScript("OnClick", function(self)
                         PickFont({ name = self.fontName, path = self.fontPath })
                         HideFontPicker()
@@ -3191,6 +3236,11 @@ function addon:OpenConfigMenu()
                 BuildFontPickerFrame()
                 fontPickerInitialized = true
             end
+            -- Clean slate per show: any deferred-cancel timer captured prior session's
+            -- hoverGen; bumping here ensures it can't false-positive against this session.
+            -- previewedPath should already be nil from prior OnHide, but reset defensively.
+            previewedPath = nil
+            hoverGen = hoverGen + 1
             PopulateFontPicker()  -- always refresh: picks up LSM-added fonts + current-marker drift
 
             -- Re-apply frame level — defensive against configFrame re-parenting.
@@ -3316,9 +3366,17 @@ function addon:OpenConfigMenu()
         -- current font unchanged.
         local langPreviewActive     = false
         local langPreviewSwappedFnt = false  -- true when preview ApplyTextStyle'd a fallback
+        local langPreviewLocale            -- last applied preview's resolved locale, for dedup
 
         local function PreviewLanguage(value)
             local locale = (value == "auto") and GetLocale() or value
+            -- Dedup: hovering the SAME locale row twice in succession (mouse jitter,
+            -- entering then exiting then re-entering same item) repeats the heavy work
+            -- (ApplyTextStyleToAllPanels + ApplyConfigFont walking 10 FontStrings +
+            -- RefreshConfigLocalization replaying ~60 setters + alignment re-measure +
+            -- UpdateStats full panel rebuild). Bail when nothing actually changed.
+            if locale == langPreviewLocale then return end
+            langPreviewLocale = locale
             cached.activeLabels = LABELS_BY_LOCALE[locale] or LABELS_BY_LOCALE.enUS
 
             -- Visual font swap if the committed font lacks the previewed locale's glyphs.
@@ -3361,6 +3419,7 @@ function addon:OpenConfigMenu()
                 langPreviewSwappedFnt = false
             end
             langPreviewActive = false
+            langPreviewLocale = nil  -- next preview must always run a fresh apply
             -- Restore settings-UI font for the COMMITTED locale (mirrors stat-panel restore
             -- above): hover-ruRU-then-cancel on enUS must put our CreateFontStrings back to
             -- the enUS-baseline CONFIG_FONT, otherwise they'd stay on ARIALN unnecessarily.

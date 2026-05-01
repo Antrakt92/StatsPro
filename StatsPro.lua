@@ -2063,12 +2063,59 @@ end
 local function CursorAdvance(c, h) c.y = c.y - (h or 24) - c.gap end
 local function CursorGap(c, n)     c.y = c.y - (n or 8) end
 local function CursorUsed(c)       return math.abs(c.initialY - c.y) + 16 end
+
+-- WHY: Lua 5.1 string.upper is byte-based; mangles UTF-8. ASCII fast-pathed,
+-- Cyrillic basic+extended (а..я + ё/ѐ/і/ї/ў etc.) mapped via byte arithmetic.
+-- 2/3/4-byte non-Cyrillic sequences (Latin Supplement, CJK, emoji) pass identity.
+-- Lead-byte ranges per RFC 3629; malformed input progresses 1 byte to avoid infinite loop.
+local function Utf8Upper(s)
+    if not string.find(s, "[\128-\255]") then return string.upper(s) end
+    local out, i, n = {}, 1, #s
+    while i <= n do
+        local b1 = string.byte(s, i)
+        if b1 < 0x80 then
+            out[#out+1] = string.upper(string.char(b1))
+            i = i + 1
+        elseif b1 == 0xD0 then
+            local b2 = string.byte(s, i+1)
+            if b2 and b2 >= 0xB0 and b2 <= 0xBF then
+                out[#out+1] = string.char(0xD0, b2 - 0x20)
+            else
+                out[#out+1] = string.sub(s, i, i+1)
+            end
+            i = i + 2
+        elseif b1 == 0xD1 then
+            local b2 = string.byte(s, i+1)
+            if b2 and b2 >= 0x80 and b2 <= 0x8F then
+                out[#out+1] = string.char(0xD0, b2 + 0x20)
+            elseif b2 and b2 >= 0x90 and b2 <= 0x9F then
+                out[#out+1] = string.char(0xD0, b2 - 0x10)
+            else
+                out[#out+1] = string.sub(s, i, i+1)
+            end
+            i = i + 2
+        elseif b1 >= 0xC2 and b1 <= 0xDF then
+            out[#out+1] = string.sub(s, i, i+1)
+            i = i + 2
+        elseif b1 >= 0xE0 and b1 <= 0xEF then
+            out[#out+1] = string.sub(s, i, i+2)
+            i = i + 3
+        elseif b1 >= 0xF0 and b1 <= 0xF7 then
+            out[#out+1] = string.sub(s, i, i+3)
+            i = i + 4
+        else
+            out[#out+1] = string.char(b1)
+            i = i + 1
+        end
+    end
+    return table.concat(out)
+end
 -- CursorSection: section header with green underline.
 local function CursorSection(c, label)
     local hdr = c.parent:CreateFontString(nil, "OVERLAY")
     hdr:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE, "OUTLINE")
     hdr:SetPoint("TOPLEFT", c.parent, "TOPLEFT", c.padX, c.y)
-    hdr:SetText("|cff00ff7f" .. string.upper(label) .. "|r")
+    hdr:SetText("|cff00ff7f" .. Utf8Upper(label) .. "|r")
     local line = c.parent:CreateTexture(nil, "ARTWORK")
     line:SetPoint("TOPLEFT", c.parent, "TOPLEFT", c.padX, c.y - 18)
     line:SetPoint("TOPRIGHT", c.parent, "TOPRIGHT", -c.padX, c.y - 18)
@@ -2754,8 +2801,6 @@ function addon:OpenConfigMenu()
     -- Localization section. Always shown (replaces former HAS_LOCALIZATION-gated checkbox —
     -- the new dropdown is useful even on enUS, e.g. picking 中文 for screenshots). Placed at
     -- bottom: typically set once on first install and never revisited.
-    -- WHY header stays English literal: CursorSection uses byte-based string.upper() which
-    -- corrupts non-ASCII UTF-8 (Lua 5.1 trap). Localizing this header is part of T2-4.
     CursorSection(cd, "Localization")
     do
         local rowY = cd.y

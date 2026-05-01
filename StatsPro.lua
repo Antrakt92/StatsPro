@@ -1645,12 +1645,16 @@ local function ApplyTextStyleToAllPanels(font, size)
     defensivePanel:ApplyStyle(font, size)
 end
 
--- Forward-decl: ApplyConfigFont is defined alongside its companions in section 14
--- (settings UI helpers — relies on declarations there) but is called from
--- MaybeAutoSwitchFont below + PreviewLanguage/CancelLanguagePreview much later.
--- WHY safe to call before menu opened: the registry list is empty pre-first-open
--- so the body walks zero FontStrings; the cached `currentConfigFont` value is
--- still updated, so first-open's RegisterConfigFont picks up the right font.
+-- Forward-decl: both helpers are defined in section 14 alongside their companions
+-- but are called from MaybeAutoSwitchFont below + PreviewLanguage/CancelLanguagePreview
+-- much later. Without forward-decl, the function body captures `ResolveConfigFont` /
+-- `ApplyConfigFont` as global lookups (resolution at definition time) and crashes
+-- with "attempt to call a nil value" at PEW (CLAUDE.md: "Runtime error attempt to
+-- call a nil value from a function calling another function defined later").
+-- WHY safe to call before menu opened: registry is empty pre-first-open so
+-- ApplyConfigFont walks zero FontStrings; cached currentConfigFont is still updated,
+-- so first-open's RegisterConfigFont picks up the right font.
+local ResolveConfigFont
 local ApplyConfigFont
 
 -- Auto-switch panel font when active locale needs glyphs the current font lacks.
@@ -2244,7 +2248,8 @@ local localizedConfigFonts = {}
 -- (e.g. enUS-back-switch from ruRU). Returns nil-via-`or` fallback only when no font
 -- in the 3-tier chain supports the locale (Korean on enUS without LSM K_Damage) —
 -- visible glyph gap is acceptable, langWarn already surfaces the problem.
-local function ResolveConfigFont(activeLocale)
+-- Reassignment to forward-decl'd upvalue from line ~1654 (no `local` keyword).
+ResolveConfigFont = function(activeLocale)
     local req = LOCALE_GLYPH_REQ[activeLocale] or GLYPH_LATIN
     return FindCompatibleFont(CONFIG_FONT, req) or CONFIG_FONT
 end

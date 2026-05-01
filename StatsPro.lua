@@ -1391,6 +1391,13 @@ function Panel:New(globalName, dbKeyPrefix)
     self.valueText = valueText
     self.repairText = repairText
     self.repairLabelText = repairLabelText
+    -- WHY initialize from inline SetFont args above: Panel:ApplyStyle's idempotency check
+    -- (early-return when font+size match cache) would otherwise miss the very first PEW-time
+    -- apply when args happen to match the file-scope-inline SetFont calls — wasting 10
+    -- SetFont + 10 SetText per panel on every /reload. With this initialization, the
+    -- post-MaybeAutoSwitchFont apply at PEW becomes a no-op when MAS didn't swap.
+    self.appliedFont = GetDB("font")
+    self.appliedSize = GetDB("fontSize")
 
     -- Drag handlers (unsecure frames; not protected in combat lockdown).
     -- RegisterForDrag honors WoW's system drag-distance threshold — single clicks
@@ -1608,6 +1615,14 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
 end
 
 function Panel:ApplyStyle(font, size)
+    -- WHY idempotency: ApplyStyle is hot — fires from PEW (after MAS may have already
+    -- applied), Reset, font/locale preview-cancel, lang commit's conditional restore,
+    -- and the Font Size slider's OnValueChanged. Same-args calls cost 10 SetFont +
+    -- 10 SetText + cache invalidations + a follow-up UpdateStats re-measure pass.
+    -- Early return saves all of that whenever the panel is already at (font,size).
+    if self.appliedFont == font and self.appliedSize == size then return end
+    self.appliedFont = font
+    self.appliedSize = size
     self.labelText:SetFont(font, size, "OUTLINE")
     self.ratingText:SetFont(font, size, "OUTLINE")
     self.valueText:SetFont(font, size, "OUTLINE")

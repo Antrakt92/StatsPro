@@ -3114,10 +3114,23 @@ function addon:OpenConfigMenu()
             ApplyTextStyleToAllPanels(path, GetDB("fontSize"))
             ReflowAllPanels()
         end
-        -- Cancel preview: only fires the heavy Apply if a preview is actually active.
-        -- Called from OnLeave-deferred path AND OnHide; idempotent across both.
+        -- Unconditional restore on cancel — was previously gated on `previewedPath~=nil`
+        -- to skip work when no preview was active, but the gate was load-bearing on
+        -- perfect state tracking. Edge cases that left panels stuck on a preview-applied
+        -- font after picker close:
+        --   1. Race between PickFont's `previewedPath=nil` write and a pending OnLeave
+        --      timer — timer fires, gate trips, panel left on preview font.
+        --   2. SetFont silent-fallback on a path that WoW couldn't load (LSM addon
+        --      disabled mid-session etc.) — Panel:ApplyStyle wrote `appliedFont=path`
+        --      BEFORE SetFont, so the cache lies; cache hit on next Apply skips restore.
+        --   3. Frame:Hide → child OnLeave event ordering inside the WoW UI core —
+        --      OnHide → CancelFontPreview can run before the OnLeave timer that already
+        --      cleared previewedPath.
+        -- Removing the gate makes restore bulletproof. Cost is negligible:
+        -- Panel:ApplyStyle's idempotency cache short-circuits when panels are already
+        -- at db.font (no SetFont calls); only Reflow's SetTextSafe re-measure runs
+        -- (~50μs total). Called from OnLeave-deferred path AND picker:OnHide.
         local function CancelFontPreview()
-            if previewedPath == nil then return end
             previewedPath = nil
             ApplyTextStyleToAllPanels(GetDB("font"), GetDB("fontSize"))
             ReflowAllPanels()

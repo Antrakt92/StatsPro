@@ -3052,19 +3052,26 @@ function addon:OpenConfigMenu()
             if LSM then
                 list = {}
                 for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
-                    list[#list + 1] = { name = name, path = LSM:Fetch(LSM.MediaType.FONT, name) }
+                    list[#list + 1] = {
+                        name = name,
+                        path = LSM:Fetch(LSM.MediaType.FONT, name),
+                        sortKey = name:lower(),
+                    }
                 end
             else
                 list = {
-                    { name = "Friz Quadrata TT", path = "Fonts\\FRIZQT__.TTF" },
-                    { name = "Arial Narrow",     path = "Fonts\\ARIALN.TTF" },
-                    { name = "Skurri",           path = "Fonts\\SKURRI.TTF" },
-                    { name = "Morpheus",         path = "Fonts\\MORPHEUS.TTF" },
+                    { name = "Friz Quadrata TT", path = "Fonts\\FRIZQT__.TTF", sortKey = "friz quadrata tt" },
+                    { name = "Arial Narrow",     path = "Fonts\\ARIALN.TTF",   sortKey = "arial narrow" },
+                    { name = "Skurri",           path = "Fonts\\SKURRI.TTF",   sortKey = "skurri" },
+                    { name = "Morpheus",         path = "Fonts\\MORPHEUS.TTF", sortKey = "morpheus" },
                 }
             end
             -- Stable sort independent of LSM internal ordering, so alphabetic bucketing below
-            -- always matches user expectation (case-insensitive).
-            table.sort(list, function(a, b) return a.name:lower() < b.name:lower() end)
+            -- always matches user expectation (case-insensitive). Pre-computed sortKey
+            -- avoids the comparator allocating two lowercased strings per compare —
+            -- table.sort fires ~N log N compares for N=200 ≈ 1600 compares × 2 string.lower
+            -- calls each becomes N + N log N compares against an already-lowered string.
+            table.sort(list, function(a, b) return a.sortKey < b.sortKey end)
             cachedFontsList = list
             cachedFontsListLen = lsmLen
             return list

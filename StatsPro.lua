@@ -445,6 +445,48 @@ local LABELS_BY_LOCALE = {
         Defensive = "Defensive",
         -- Settings UI words (config menu only, never appear on the panel itself):
         Color = "Color",
+        -- ===== Settings UI strings (T2-4) =====
+        -- Tabs (Defensive reuses the existing key above):
+        ["Stats"] = "Stats", ["Appearance"] = "Appearance",
+        -- Section headers (Durability reuses the existing key above):
+        ["Frame & Position"] = "Frame & Position",
+        ["Typography"] = "Typography",
+        ["Localization"] = "Localization",
+        ["Primary Stat Ratings"] = "Primary Stat Ratings",
+        ["Display Format"] = "Display Format",
+        ["Offensive Stats"] = "Offensive Stats",
+        ["Tertiary Stats"] = "Tertiary Stats",
+        ["Defensive Stats"] = "Defensive Stats",
+        -- Checkboxes:
+        ["Show Stats Panel"] = "Show Stats Panel", ["Lock Frames"] = "Lock Frames",
+        ["Show Strength"] = "Show Strength", ["Show Agility"] = "Show Agility", ["Show Intellect"] = "Show Intellect",
+        ["Show Rating"] = "Show Rating", ["Show Percentage"] = "Show Percentage",
+        ["Match Value Color to Stat"] = "Match Value Color to Stat",
+        ["Show Offensive Stats"] = "Show Offensive Stats", ["Hide Zero Values"] = "Hide Zero Values",
+        ["Show Crit"] = "Show Crit", ["Show Haste"] = "Show Haste",
+        ["Show Mastery"] = "Show Mastery", ["Show Versatility"] = "Show Versatility",
+        ["Show Tertiary Stats"] = "Show Tertiary Stats",
+        ["Show Leech"] = "Show Leech", ["Show Avoidance"] = "Show Avoidance", ["Show Speed"] = "Show Speed",
+        ["Show Defensive Stats"] = "Show Defensive Stats",
+        ["Show Dodge"] = "Show Dodge", ["Show Parry"] = "Show Parry",
+        ["Show Block"] = "Show Block", ["Show Armor"] = "Show Armor",
+        ["Show Durability"] = "Show Durability", ["Show Repair Cost"] = "Show Repair Cost",
+        ["Auto Color by Threshold"] = "Auto Color by Threshold",
+        ["Use Worst Slot (instead of average)"] = "Use Worst Slot (instead of average)",
+        -- Sliders:
+        ["Scale:"] = "Scale:", ["Refresh Rate (sec):"] = "Refresh Rate (sec):", ["Font Size:"] = "Font Size:",
+        -- Dropdown captions:
+        ["Display Mode:"] = "Display Mode:", ["Font:"] = "Font:", ["Language:"] = "Language:",
+        -- Dropdown options (Display Mode):
+        ["Flat"] = "Flat", ["Sectioned"] = "Sectioned", ["Split"] = "Split",
+        -- Buttons + title:
+        ["Reset to Defaults"] = "Reset to Defaults", ["Close"] = "Close",
+        ["Open Settings"] = "Open Settings", ["Settings"] = "Settings",
+        -- Templates:
+        ["Auto (current: %s)"] = "Auto (current: %s)",
+        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage.",
+        -- Launcher description:
+        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window.",
     },
 
     -- ruRU: Russian. Haste/Speed disambig is structural — WoW client uses "Скорость"
@@ -460,6 +502,48 @@ local LABELS_BY_LOCALE = {
         Durability = "Проч",    Repair = "Рем",
         Defensive = "Защита",
         Color = "Цвет",
+        -- ===== Settings UI (T2-4) =====
+        -- Tabs (Defensive uses "Защита" via the existing key above):
+        ["Stats"] = "Статы", ["Appearance"] = "Внешний вид",
+        -- Section headers (Durability reuses "Проч" — short form, stylistically OK as cap'd header):
+        ["Frame & Position"] = "Окно и позиция",
+        ["Typography"] = "Типографика",
+        ["Localization"] = "Локализация",
+        ["Primary Stat Ratings"] = "Основные характеристики",
+        ["Display Format"] = "Формат отображения",
+        ["Offensive Stats"] = "Атакующие характеристики",
+        ["Tertiary Stats"] = "Третичные характеристики",
+        ["Defensive Stats"] = "Защитные характеристики",
+        -- Checkboxes:
+        ["Show Stats Panel"] = "Показать панель статов", ["Lock Frames"] = "Закрепить окна",
+        ["Show Strength"] = "Показывать Силу", ["Show Agility"] = "Показывать Ловкость", ["Show Intellect"] = "Показывать Интеллект",
+        ["Show Rating"] = "Показывать рейтинг", ["Show Percentage"] = "Показывать процент",
+        ["Match Value Color to Stat"] = "Цвет значения по характеристике",
+        ["Show Offensive Stats"] = "Показывать атакующие", ["Hide Zero Values"] = "Скрывать нулевые значения",
+        ["Show Crit"] = "Показывать Крит", ["Show Haste"] = "Показывать Хаст",
+        ["Show Mastery"] = "Показывать Мастерство", ["Show Versatility"] = "Показывать Универсальность",
+        ["Show Tertiary Stats"] = "Показывать третичные",
+        ["Show Leech"] = "Показывать Вампиризм", ["Show Avoidance"] = "Показывать Избегание", ["Show Speed"] = "Показывать Скорость",
+        ["Show Defensive Stats"] = "Показывать защитные",
+        ["Show Dodge"] = "Показывать Уклонение", ["Show Parry"] = "Показывать Парирование",
+        ["Show Block"] = "Показывать Блок", ["Show Armor"] = "Показывать Броню",
+        ["Show Durability"] = "Показывать прочность", ["Show Repair Cost"] = "Показывать стоимость ремонта",
+        ["Auto Color by Threshold"] = "Авто-цвет по порогу",
+        ["Use Worst Slot (instead of average)"] = "По худшему слоту (вместо среднего)",
+        -- Sliders:
+        ["Scale:"] = "Масштаб:", ["Refresh Rate (sec):"] = "Частота обновления (сек):", ["Font Size:"] = "Размер шрифта:",
+        -- Dropdown captions:
+        ["Display Mode:"] = "Режим отображения:", ["Font:"] = "Шрифт:", ["Language:"] = "Язык:",
+        -- Dropdown options (Display Mode):
+        ["Flat"] = "Плоский", ["Sectioned"] = "По секциям", ["Split"] = "Разделённый",
+        -- Buttons + title:
+        ["Reset to Defaults"] = "Сбросить настройки", ["Close"] = "Закрыть",
+        ["Open Settings"] = "Открыть настройки", ["Settings"] = "Настройки",
+        -- Templates:
+        ["Auto (current: %s)"] = "Авто (сейчас: %s)",
+        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Шрифт может не отображать символы %s. Выберите шрифт SharedMedia с нужным покрытием.",
+        -- Launcher description:
+        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Отображает вторичные, защитные характеристики и прочность экипировки на экране. Нажмите ниже, чтобы открыть окно настроек.",
     },
 
     -- deDE: German. Haste="Tempo" matches the WoW German client term; Speed="Lauf"
@@ -475,6 +559,40 @@ local LABELS_BY_LOCALE = {
         Durability = "Haltb",   Repair = "Repar",
         Defensive = "Defensiv",
         Color = "Farbe",
+        -- ===== Settings UI (T2-4, best-effort draft) =====
+        -- Speed checkbox uses "Lauftempo" (long form) to disambiguate from Haste="Tempo".
+        ["Stats"] = "Werte", ["Appearance"] = "Darstellung",
+        ["Frame & Position"] = "Fenster & Position",
+        ["Typography"] = "Typografie",
+        ["Localization"] = "Lokalisierung",
+        ["Primary Stat Ratings"] = "Primärwerte",
+        ["Display Format"] = "Anzeigeformat",
+        ["Offensive Stats"] = "Offensivwerte",
+        ["Tertiary Stats"] = "Tertiärwerte",
+        ["Defensive Stats"] = "Defensivwerte",
+        ["Show Stats Panel"] = "Wertepanel anzeigen", ["Lock Frames"] = "Fenster sperren",
+        ["Show Strength"] = "Stärke anzeigen", ["Show Agility"] = "Beweglichkeit anzeigen", ["Show Intellect"] = "Intelligenz anzeigen",
+        ["Show Rating"] = "Wertung anzeigen", ["Show Percentage"] = "Prozent anzeigen",
+        ["Match Value Color to Stat"] = "Wertfarbe wie Statfarbe",
+        ["Show Offensive Stats"] = "Offensivwerte anzeigen", ["Hide Zero Values"] = "Nullwerte ausblenden",
+        ["Show Crit"] = "Krit. anzeigen", ["Show Haste"] = "Tempo anzeigen",
+        ["Show Mastery"] = "Meisterschaft anzeigen", ["Show Versatility"] = "Vielseitigkeit anzeigen",
+        ["Show Tertiary Stats"] = "Tertiärwerte anzeigen",
+        ["Show Leech"] = "Aussaugen anzeigen", ["Show Avoidance"] = "Vermeidung anzeigen", ["Show Speed"] = "Lauftempo anzeigen",
+        ["Show Defensive Stats"] = "Defensivwerte anzeigen",
+        ["Show Dodge"] = "Ausweichen anzeigen", ["Show Parry"] = "Parieren anzeigen",
+        ["Show Block"] = "Blocken anzeigen", ["Show Armor"] = "Rüstung anzeigen",
+        ["Show Durability"] = "Haltbarkeit anzeigen", ["Show Repair Cost"] = "Reparaturkosten anzeigen",
+        ["Auto Color by Threshold"] = "Auto-Farbe nach Schwellwert",
+        ["Use Worst Slot (instead of average)"] = "Schlechtester Slot (statt Durchschnitt)",
+        ["Scale:"] = "Skalierung:", ["Refresh Rate (sec):"] = "Aktualisierungsrate (Sek.):", ["Font Size:"] = "Schriftgröße:",
+        ["Display Mode:"] = "Anzeigemodus:", ["Font:"] = "Schrift:", ["Language:"] = "Sprache:",
+        ["Flat"] = "Flach", ["Sectioned"] = "Gruppiert", ["Split"] = "Geteilt",
+        ["Reset to Defaults"] = "Auf Standard", ["Close"] = "Schließen",
+        ["Open Settings"] = "Einstellungen öffnen", ["Settings"] = "Einstellungen",
+        ["Auto (current: %s)"] = "Auto (aktuell: %s)",
+        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Schrift unterstützt %s eventuell nicht. Wähle eine SharedMedia-Schrift mit Glyphenabdeckung.",
+        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Zeigt sekundäre, defensive Werte und Haltbarkeit auf dem Bildschirm an. Klicke unten, um das Einstellungsfenster zu öffnen.",
     },
 
     -- frFR: French. Hâte (4 chars, accented form) is WoW's official Haste term; Vit
@@ -489,6 +607,39 @@ local LABELS_BY_LOCALE = {
         Durability = "Dura",    Repair = "Rép",
         Defensive = "Défense",
         Color = "Couleur",
+        -- ===== Settings UI (T2-4, best-effort draft) =====
+        ["Stats"] = "Stats", ["Appearance"] = "Apparence",
+        ["Frame & Position"] = "Cadre & Position",
+        ["Typography"] = "Typographie",
+        ["Localization"] = "Localisation",
+        ["Primary Stat Ratings"] = "Stats Primaires",
+        ["Display Format"] = "Format d'Affichage",
+        ["Offensive Stats"] = "Stats Offensives",
+        ["Tertiary Stats"] = "Stats Tertiaires",
+        ["Defensive Stats"] = "Stats Défensives",
+        ["Show Stats Panel"] = "Afficher le panneau", ["Lock Frames"] = "Verrouiller les cadres",
+        ["Show Strength"] = "Afficher Force", ["Show Agility"] = "Afficher Agilité", ["Show Intellect"] = "Afficher Intellect",
+        ["Show Rating"] = "Afficher cote", ["Show Percentage"] = "Afficher %",
+        ["Match Value Color to Stat"] = "Couleur valeur = stat",
+        ["Show Offensive Stats"] = "Afficher offensives", ["Hide Zero Values"] = "Masquer valeurs nulles",
+        ["Show Crit"] = "Afficher Crit", ["Show Haste"] = "Afficher Hâte",
+        ["Show Mastery"] = "Afficher Maîtrise", ["Show Versatility"] = "Afficher Polyvalence",
+        ["Show Tertiary Stats"] = "Afficher tertiaires",
+        ["Show Leech"] = "Afficher Vampirisme", ["Show Avoidance"] = "Afficher Évitement", ["Show Speed"] = "Afficher Vitesse",
+        ["Show Defensive Stats"] = "Afficher défensives",
+        ["Show Dodge"] = "Afficher Esquive", ["Show Parry"] = "Afficher Parade",
+        ["Show Block"] = "Afficher Blocage", ["Show Armor"] = "Afficher Armure",
+        ["Show Durability"] = "Afficher durabilité", ["Show Repair Cost"] = "Afficher coût de réparation",
+        ["Auto Color by Threshold"] = "Couleur auto par seuil",
+        ["Use Worst Slot (instead of average)"] = "Pire emplacement (vs moyenne)",
+        ["Scale:"] = "Échelle :", ["Refresh Rate (sec):"] = "Fréquence (sec) :", ["Font Size:"] = "Taille de police :",
+        ["Display Mode:"] = "Mode d'affichage :", ["Font:"] = "Police :", ["Language:"] = "Langue :",
+        ["Flat"] = "Plat", ["Sectioned"] = "Par sections", ["Split"] = "Séparé",
+        ["Reset to Defaults"] = "Par défaut", ["Close"] = "Fermer",
+        ["Open Settings"] = "Ouvrir les paramètres", ["Settings"] = "Paramètres",
+        ["Auto (current: %s)"] = "Auto (actuel : %s)",
+        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La police peut ne pas afficher les glyphes %s. Choisissez une police SharedMedia avec couverture appropriée.",
+        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Affiche vos statistiques secondaires, défensives et la durabilité à l'écran. Cliquez ci-dessous pour ouvrir la fenêtre de paramètres complète.",
     },
 
     -- esES: Spanish (Spain). WoW Spanish client uses Celeridad / Velocidad for the
@@ -504,6 +655,39 @@ local LABELS_BY_LOCALE = {
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defensa",
         Color = "Color",
+        -- ===== Settings UI (T2-4, best-effort draft) =====
+        ["Stats"] = "Atributos", ["Appearance"] = "Apariencia",
+        ["Frame & Position"] = "Marco y Posición",
+        ["Typography"] = "Tipografía",
+        ["Localization"] = "Localización",
+        ["Primary Stat Ratings"] = "Atributos Primarios",
+        ["Display Format"] = "Formato",
+        ["Offensive Stats"] = "Stats Ofensivas",
+        ["Tertiary Stats"] = "Stats Terciarias",
+        ["Defensive Stats"] = "Stats Defensivas",
+        ["Show Stats Panel"] = "Mostrar panel", ["Lock Frames"] = "Bloquear ventanas",
+        ["Show Strength"] = "Mostrar Fuerza", ["Show Agility"] = "Mostrar Agilidad", ["Show Intellect"] = "Mostrar Intelecto",
+        ["Show Rating"] = "Mostrar valor", ["Show Percentage"] = "Mostrar %",
+        ["Match Value Color to Stat"] = "Color valor = stat",
+        ["Show Offensive Stats"] = "Mostrar ofensivas", ["Hide Zero Values"] = "Ocultar valores cero",
+        ["Show Crit"] = "Mostrar Crít.", ["Show Haste"] = "Mostrar Celeridad",
+        ["Show Mastery"] = "Mostrar Maestría", ["Show Versatility"] = "Mostrar Versatilidad",
+        ["Show Tertiary Stats"] = "Mostrar terciarias",
+        ["Show Leech"] = "Mostrar Robo", ["Show Avoidance"] = "Mostrar Evitación", ["Show Speed"] = "Mostrar Velocidad",
+        ["Show Defensive Stats"] = "Mostrar defensivas",
+        ["Show Dodge"] = "Mostrar Esquiva", ["Show Parry"] = "Mostrar Parada",
+        ["Show Block"] = "Mostrar Bloqueo", ["Show Armor"] = "Mostrar Armadura",
+        ["Show Durability"] = "Mostrar durabilidad", ["Show Repair Cost"] = "Mostrar coste reparación",
+        ["Auto Color by Threshold"] = "Color auto por umbral",
+        ["Use Worst Slot (instead of average)"] = "Peor ranura (en vez de media)",
+        ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:",
+        ["Display Mode:"] = "Modo:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
+        ["Flat"] = "Plano", ["Sectioned"] = "Por secciones", ["Split"] = "Dividido",
+        ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
+        ["Open Settings"] = "Abrir ajustes", ["Settings"] = "Ajustes",
+        ["Auto (current: %s)"] = "Auto (actual: %s)",
+        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La fuente puede no mostrar glifos %s. Elige una fuente SharedMedia con cobertura.",
+        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Muestra atributos secundarios, defensivos y durabilidad en pantalla. Haz clic abajo para abrir la ventana de ajustes.",
     },
 
     -- esMX: Latin American Spanish — stat-term short forms are effectively shared
@@ -516,6 +700,40 @@ local LABELS_BY_LOCALE = {
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defensa",
         Color = "Color",
+        -- ===== Settings UI (T2-4, best-effort draft — mirrors esES with regional swaps:
+        --   "ajustes" → "configuración" (esMX preferred); "haz clic" → "da clic".
+        ["Stats"] = "Atributos", ["Appearance"] = "Apariencia",
+        ["Frame & Position"] = "Marco y Posición",
+        ["Typography"] = "Tipografía",
+        ["Localization"] = "Localización",
+        ["Primary Stat Ratings"] = "Atributos Primarios",
+        ["Display Format"] = "Formato",
+        ["Offensive Stats"] = "Stats Ofensivas",
+        ["Tertiary Stats"] = "Stats Terciarias",
+        ["Defensive Stats"] = "Stats Defensivas",
+        ["Show Stats Panel"] = "Mostrar panel", ["Lock Frames"] = "Bloquear ventanas",
+        ["Show Strength"] = "Mostrar Fuerza", ["Show Agility"] = "Mostrar Agilidad", ["Show Intellect"] = "Mostrar Intelecto",
+        ["Show Rating"] = "Mostrar valor", ["Show Percentage"] = "Mostrar %",
+        ["Match Value Color to Stat"] = "Color valor = stat",
+        ["Show Offensive Stats"] = "Mostrar ofensivas", ["Hide Zero Values"] = "Ocultar valores cero",
+        ["Show Crit"] = "Mostrar Crít.", ["Show Haste"] = "Mostrar Celeridad",
+        ["Show Mastery"] = "Mostrar Maestría", ["Show Versatility"] = "Mostrar Versatilidad",
+        ["Show Tertiary Stats"] = "Mostrar terciarias",
+        ["Show Leech"] = "Mostrar Robo", ["Show Avoidance"] = "Mostrar Evitación", ["Show Speed"] = "Mostrar Velocidad",
+        ["Show Defensive Stats"] = "Mostrar defensivas",
+        ["Show Dodge"] = "Mostrar Esquiva", ["Show Parry"] = "Mostrar Parada",
+        ["Show Block"] = "Mostrar Bloqueo", ["Show Armor"] = "Mostrar Armadura",
+        ["Show Durability"] = "Mostrar durabilidad", ["Show Repair Cost"] = "Mostrar costo de reparación",
+        ["Auto Color by Threshold"] = "Color auto por umbral",
+        ["Use Worst Slot (instead of average)"] = "Peor ranura (en vez del promedio)",
+        ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:",
+        ["Display Mode:"] = "Modo:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
+        ["Flat"] = "Plano", ["Sectioned"] = "Por secciones", ["Split"] = "Dividido",
+        ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
+        ["Open Settings"] = "Abrir configuración", ["Settings"] = "Configuración",
+        ["Auto (current: %s)"] = "Auto (actual: %s)",
+        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La fuente puede no mostrar glifos %s. Elige una fuente SharedMedia con cobertura.",
+        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Muestra atributos secundarios, defensivos y durabilidad en pantalla. Da clic abajo para abrir la ventana de configuración.",
     },
 
     -- itIT: Italian. Cele (Celerità) / Vel (Velocità) Haste/Speed split. Para
@@ -530,6 +748,39 @@ local LABELS_BY_LOCALE = {
         Durability = "Durab",   Repair = "Ripa",
         Defensive = "Difesa",
         Color = "Colore",
+        -- ===== Settings UI (T2-4, best-effort draft) =====
+        ["Stats"] = "Stat", ["Appearance"] = "Aspetto",
+        ["Frame & Position"] = "Cornice e Posizione",
+        ["Typography"] = "Tipografia",
+        ["Localization"] = "Localizzazione",
+        ["Primary Stat Ratings"] = "Stat Primarie",
+        ["Display Format"] = "Formato",
+        ["Offensive Stats"] = "Stat Offensive",
+        ["Tertiary Stats"] = "Stat Terziarie",
+        ["Defensive Stats"] = "Stat Difensive",
+        ["Show Stats Panel"] = "Mostra pannello", ["Lock Frames"] = "Blocca finestre",
+        ["Show Strength"] = "Mostra Forza", ["Show Agility"] = "Mostra Agilità", ["Show Intellect"] = "Mostra Intelletto",
+        ["Show Rating"] = "Mostra valore", ["Show Percentage"] = "Mostra %",
+        ["Match Value Color to Stat"] = "Colore valore = stat",
+        ["Show Offensive Stats"] = "Mostra offensive", ["Hide Zero Values"] = "Nascondi valori zero",
+        ["Show Crit"] = "Mostra Crit", ["Show Haste"] = "Mostra Celerità",
+        ["Show Mastery"] = "Mostra Maestria", ["Show Versatility"] = "Mostra Versatilità",
+        ["Show Tertiary Stats"] = "Mostra terziarie",
+        ["Show Leech"] = "Mostra Vampirismo", ["Show Avoidance"] = "Mostra Evitazione", ["Show Speed"] = "Mostra Velocità",
+        ["Show Defensive Stats"] = "Mostra difensive",
+        ["Show Dodge"] = "Mostra Schivata", ["Show Parry"] = "Mostra Parata",
+        ["Show Block"] = "Mostra Blocco", ["Show Armor"] = "Mostra Armatura",
+        ["Show Durability"] = "Mostra durata", ["Show Repair Cost"] = "Mostra costo riparazione",
+        ["Auto Color by Threshold"] = "Colore auto per soglia",
+        ["Use Worst Slot (instead of average)"] = "Slot peggiore (anziché media)",
+        ["Scale:"] = "Scala:", ["Refresh Rate (sec):"] = "Frequenza (sec):", ["Font Size:"] = "Dimensione font:",
+        ["Display Mode:"] = "Modalità:", ["Font:"] = "Font:", ["Language:"] = "Lingua:",
+        ["Flat"] = "Piatto", ["Sectioned"] = "A sezioni", ["Split"] = "Diviso",
+        ["Reset to Defaults"] = "Predefiniti", ["Close"] = "Chiudi",
+        ["Open Settings"] = "Apri impostazioni", ["Settings"] = "Impostazioni",
+        ["Auto (current: %s)"] = "Auto (attuale: %s)",
+        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Il font potrebbe non visualizzare i glifi %s. Scegli un font SharedMedia con copertura adeguata.",
+        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Visualizza statistiche secondarie, difensive e durata equipaggiamento sullo schermo. Clicca sotto per aprire le impostazioni complete.",
     },
 
     -- ptBR: Brazilian Portuguese. Cele (Celeridade) / Vel (Velocidade). Forç (with
@@ -543,6 +794,39 @@ local LABELS_BY_LOCALE = {
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defesa",
         Color = "Cor",
+        -- ===== Settings UI (T2-4, best-effort draft) =====
+        ["Stats"] = "Atributos", ["Appearance"] = "Aparência",
+        ["Frame & Position"] = "Janela e Posição",
+        ["Typography"] = "Tipografia",
+        ["Localization"] = "Localização",
+        ["Primary Stat Ratings"] = "Atributos Primários",
+        ["Display Format"] = "Formato",
+        ["Offensive Stats"] = "Atributos Ofensivos",
+        ["Tertiary Stats"] = "Atributos Terciários",
+        ["Defensive Stats"] = "Atributos Defensivos",
+        ["Show Stats Panel"] = "Mostrar painel", ["Lock Frames"] = "Travar janelas",
+        ["Show Strength"] = "Mostrar Força", ["Show Agility"] = "Mostrar Agilidade", ["Show Intellect"] = "Mostrar Intelecto",
+        ["Show Rating"] = "Mostrar valor", ["Show Percentage"] = "Mostrar %",
+        ["Match Value Color to Stat"] = "Cor do valor = atributo",
+        ["Show Offensive Stats"] = "Mostrar ofensivos", ["Hide Zero Values"] = "Ocultar valores zero",
+        ["Show Crit"] = "Mostrar Crít.", ["Show Haste"] = "Mostrar Celeridade",
+        ["Show Mastery"] = "Mostrar Maestria", ["Show Versatility"] = "Mostrar Versatilidade",
+        ["Show Tertiary Stats"] = "Mostrar terciários",
+        ["Show Leech"] = "Mostrar Vampirismo", ["Show Avoidance"] = "Mostrar Evasão", ["Show Speed"] = "Mostrar Velocidade",
+        ["Show Defensive Stats"] = "Mostrar defensivos",
+        ["Show Dodge"] = "Mostrar Esquiva", ["Show Parry"] = "Mostrar Aparar",
+        ["Show Block"] = "Mostrar Bloqueio", ["Show Armor"] = "Mostrar Armadura",
+        ["Show Durability"] = "Mostrar durabilidade", ["Show Repair Cost"] = "Mostrar custo de reparo",
+        ["Auto Color by Threshold"] = "Cor auto por limite",
+        ["Use Worst Slot (instead of average)"] = "Pior slot (em vez de média)",
+        ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Atualização (s):", ["Font Size:"] = "Tamanho da fonte:",
+        ["Display Mode:"] = "Modo:", ["Font:"] = "Fonte:", ["Language:"] = "Idioma:",
+        ["Flat"] = "Plano", ["Sectioned"] = "Por seções", ["Split"] = "Dividido",
+        ["Reset to Defaults"] = "Restaurar", ["Close"] = "Fechar",
+        ["Open Settings"] = "Abrir configurações", ["Settings"] = "Configurações",
+        ["Auto (current: %s)"] = "Auto (atual: %s)",
+        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r A fonte pode não exibir glifos %s. Escolha uma fonte SharedMedia com cobertura.",
+        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Exibe atributos secundários, defensivos e durabilidade na tela. Clique abaixo para abrir a janela de configurações.",
     },
 
     -- koKR: Korean. Parry/Block previously collided — both used 막기-family terms
@@ -563,6 +847,39 @@ local LABELS_BY_LOCALE = {
         Durability = "내구",    Repair = "수리",
         Defensive = "수비",
         Color = "색상",
+        -- ===== Settings UI (T2-4, best-effort draft — native review welcomed via Issues) =====
+        ["Stats"] = "능력치", ["Appearance"] = "외형",
+        ["Frame & Position"] = "창 및 위치",
+        ["Typography"] = "글꼴",
+        ["Localization"] = "현지화",
+        ["Primary Stat Ratings"] = "주 능력치",
+        ["Display Format"] = "표시 형식",
+        ["Offensive Stats"] = "공격 능력치",
+        ["Tertiary Stats"] = "3차 능력치",
+        ["Defensive Stats"] = "방어 능력치",
+        ["Show Stats Panel"] = "능력치 패널 표시", ["Lock Frames"] = "창 고정",
+        ["Show Strength"] = "힘 표시", ["Show Agility"] = "민첩 표시", ["Show Intellect"] = "지능 표시",
+        ["Show Rating"] = "수치 표시", ["Show Percentage"] = "% 표시",
+        ["Match Value Color to Stat"] = "값 색상 = 능력치",
+        ["Show Offensive Stats"] = "공격 능력치 표시", ["Hide Zero Values"] = "0 값 숨김",
+        ["Show Crit"] = "치명 표시", ["Show Haste"] = "가속 표시",
+        ["Show Mastery"] = "특화 표시", ["Show Versatility"] = "유연 표시",
+        ["Show Tertiary Stats"] = "3차 능력치 표시",
+        ["Show Leech"] = "흡혈 표시", ["Show Avoidance"] = "광피 표시", ["Show Speed"] = "이속 표시",
+        ["Show Defensive Stats"] = "방어 능력치 표시",
+        ["Show Dodge"] = "회피 표시", ["Show Parry"] = "쳐막 표시",
+        ["Show Block"] = "막기 표시", ["Show Armor"] = "방어도 표시",
+        ["Show Durability"] = "내구도 표시", ["Show Repair Cost"] = "수리 비용 표시",
+        ["Auto Color by Threshold"] = "임계값 자동 색상",
+        ["Use Worst Slot (instead of average)"] = "최악 슬롯 사용 (평균 대신)",
+        ["Scale:"] = "크기:", ["Refresh Rate (sec):"] = "갱신 주기 (초):", ["Font Size:"] = "글꼴 크기:",
+        ["Display Mode:"] = "표시 모드:", ["Font:"] = "글꼴:", ["Language:"] = "언어:",
+        ["Flat"] = "단일", ["Sectioned"] = "구역별", ["Split"] = "분리",
+        ["Reset to Defaults"] = "기본값", ["Close"] = "닫기",
+        ["Open Settings"] = "설정 열기", ["Settings"] = "설정",
+        ["Auto (current: %s)"] = "자동 (현재: %s)",
+        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 이 글꼴은 %s 글리프를 표시하지 못할 수 있습니다. SharedMedia에서 적합한 글꼴을 선택하세요.",
+        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "보조 능력치, 방어 능력치 및 내구도를 화면에 표시합니다. 아래를 눌러 전체 설정 창을 엽니다.",
     },
 
     -- zhCN: Simplified Chinese. All terms match the official WoW Chinese client
@@ -576,6 +893,39 @@ local LABELS_BY_LOCALE = {
         Durability = "耐久",    Repair = "修理",
         Defensive = "防御",
         Color = "颜色",
+        -- ===== Settings UI (T2-4, best-effort draft) =====
+        ["Stats"] = "属性", ["Appearance"] = "外观",
+        ["Frame & Position"] = "窗口与位置",
+        ["Typography"] = "字体",
+        ["Localization"] = "本地化",
+        ["Primary Stat Ratings"] = "主属性",
+        ["Display Format"] = "显示格式",
+        ["Offensive Stats"] = "进攻属性",
+        ["Tertiary Stats"] = "三级属性",
+        ["Defensive Stats"] = "防御属性",
+        ["Show Stats Panel"] = "显示属性面板", ["Lock Frames"] = "锁定窗口",
+        ["Show Strength"] = "显示力量", ["Show Agility"] = "显示敏捷", ["Show Intellect"] = "显示智力",
+        ["Show Rating"] = "显示等级", ["Show Percentage"] = "显示百分比",
+        ["Match Value Color to Stat"] = "数值颜色匹配属性",
+        ["Show Offensive Stats"] = "显示进攻属性", ["Hide Zero Values"] = "隐藏零值",
+        ["Show Crit"] = "显示暴击", ["Show Haste"] = "显示急速",
+        ["Show Mastery"] = "显示精通", ["Show Versatility"] = "显示全能",
+        ["Show Tertiary Stats"] = "显示三级属性",
+        ["Show Leech"] = "显示吸血", ["Show Avoidance"] = "显示闪避", ["Show Speed"] = "显示移速",
+        ["Show Defensive Stats"] = "显示防御属性",
+        ["Show Dodge"] = "显示躲闪", ["Show Parry"] = "显示招架",
+        ["Show Block"] = "显示格挡", ["Show Armor"] = "显示护甲",
+        ["Show Durability"] = "显示耐久", ["Show Repair Cost"] = "显示修理费用",
+        ["Auto Color by Threshold"] = "按阈值自动着色",
+        ["Use Worst Slot (instead of average)"] = "最差栏位（替代平均值）",
+        ["Scale:"] = "缩放:", ["Refresh Rate (sec):"] = "刷新率 (秒):", ["Font Size:"] = "字体大小:",
+        ["Display Mode:"] = "显示模式:", ["Font:"] = "字体:", ["Language:"] = "语言:",
+        ["Flat"] = "扁平", ["Sectioned"] = "分组", ["Split"] = "分离",
+        ["Reset to Defaults"] = "恢复默认", ["Close"] = "关闭",
+        ["Open Settings"] = "打开设置", ["Settings"] = "设置",
+        ["Auto (current: %s)"] = "自动（当前: %s）",
+        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 字体可能无法显示 %s 字形。请从 SharedMedia 选择合适的字体。",
+        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "在屏幕上显示副属性、防御属性和装备耐久度。点击下方打开完整设置窗口。",
     },
 
     -- zhTW: Traditional Chinese (Taiwan). Same 2-char convention as zhCN but
@@ -589,6 +939,39 @@ local LABELS_BY_LOCALE = {
         Durability = "耐久",    Repair = "修理",
         Defensive = "防禦",
         Color = "顏色",
+        -- ===== Settings UI (T2-4, best-effort draft, Traditional script) =====
+        ["Stats"] = "屬性", ["Appearance"] = "外觀",
+        ["Frame & Position"] = "視窗與位置",
+        ["Typography"] = "字型",
+        ["Localization"] = "在地化",
+        ["Primary Stat Ratings"] = "主要屬性",
+        ["Display Format"] = "顯示格式",
+        ["Offensive Stats"] = "進攻屬性",
+        ["Tertiary Stats"] = "三級屬性",
+        ["Defensive Stats"] = "防禦屬性",
+        ["Show Stats Panel"] = "顯示屬性面板", ["Lock Frames"] = "鎖定視窗",
+        ["Show Strength"] = "顯示力量", ["Show Agility"] = "顯示敏捷", ["Show Intellect"] = "顯示智力",
+        ["Show Rating"] = "顯示等級", ["Show Percentage"] = "顯示百分比",
+        ["Match Value Color to Stat"] = "數值色彩配合屬性",
+        ["Show Offensive Stats"] = "顯示進攻屬性", ["Hide Zero Values"] = "隱藏零值",
+        ["Show Crit"] = "顯示致命一擊", ["Show Haste"] = "顯示加速",
+        ["Show Mastery"] = "顯示精通", ["Show Versatility"] = "顯示全能",
+        ["Show Tertiary Stats"] = "顯示三級屬性",
+        ["Show Leech"] = "顯示汲取", ["Show Avoidance"] = "顯示迴避", ["Show Speed"] = "顯示移速",
+        ["Show Defensive Stats"] = "顯示防禦屬性",
+        ["Show Dodge"] = "顯示躲避", ["Show Parry"] = "顯示招架",
+        ["Show Block"] = "顯示格擋", ["Show Armor"] = "顯示護甲",
+        ["Show Durability"] = "顯示耐久", ["Show Repair Cost"] = "顯示修理費用",
+        ["Auto Color by Threshold"] = "依閾值自動上色",
+        ["Use Worst Slot (instead of average)"] = "最差欄位（替代平均值）",
+        ["Scale:"] = "縮放:", ["Refresh Rate (sec):"] = "更新率 (秒):", ["Font Size:"] = "字型大小:",
+        ["Display Mode:"] = "顯示模式:", ["Font:"] = "字型:", ["Language:"] = "語言:",
+        ["Flat"] = "扁平", ["Sectioned"] = "分組", ["Split"] = "分離",
+        ["Reset to Defaults"] = "恢復預設", ["Close"] = "關閉",
+        ["Open Settings"] = "開啟設定", ["Settings"] = "設定",
+        ["Auto (current: %s)"] = "自動（目前: %s）",
+        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 字型可能無法顯示 %s 字形。請從 SharedMedia 選擇合適的字型。",
+        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "在螢幕上顯示副屬性、防禦屬性和裝備耐久度。點擊下方開啟完整設定視窗。",
     },
 }
 
@@ -1857,12 +2240,18 @@ local function GetColor(statName)
     return StatsProDB.colors[statName] or defaults.colors[statName]
 end
 
+-- WHY forward-decl: CreateCheckbox / CursorSection / CreateConfigSlider / CreateTabButton
+-- below all register a setter via PushLocalizedLabel, but the function body lives further
+-- down in the file (it depends on localizedConfigLabels declared lower). Upvalue resolution
+-- is at call time — assignment happens before any helper is invoked from OpenConfigMenu.
+local PushLocalizedLabel
+
 local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWidth)
     local cb = CreateFrame("CheckButton", name, parent, "UICheckButtonTemplate")
     cb:SetPoint("TOPLEFT", x, y)
     cb:SetSize(22, 22)
     local text = _G[name .. "Text"]
-    text:SetText(label)
+    PushLocalizedLabel(function() text:SetText(L(label)) end)
     text:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
     -- textWidth: 200 default for plain checkboxes; pass 140 for "checkbox + inline color"
     -- rows (CreateCheckboxColor overrides the bound width to actual text width post-call).
@@ -2020,7 +2409,8 @@ end
 -- string. RefreshConfigLocalization() replays every setter when forceLocale changes, then
 -- re-aligns all groups (label widths shift on translation: "Versatility" → "Унив" is shorter,
 -- "Crit" → "致命一击" is wider). Initial set is performed here so callers don't duplicate it.
-local function PushLocalizedLabel(setter)
+-- WHY no `local`: forward-declared above CreateCheckbox; reassigns the existing upvalue.
+PushLocalizedLabel = function(setter)
     tinsert(localizedConfigLabels, setter)
     setter()
 end
@@ -2065,8 +2455,8 @@ local function CursorGap(c, n)     c.y = c.y - (n or 8) end
 local function CursorUsed(c)       return math.abs(c.initialY - c.y) + 16 end
 
 -- WHY: Lua 5.1 string.upper is byte-based; mangles UTF-8. ASCII fast-pathed,
--- Cyrillic basic+extended (а..я + ё/ѐ/і/ї/ў etc.) mapped via byte arithmetic.
--- 2/3/4-byte non-Cyrillic sequences (Latin Supplement, CJK, emoji) pass identity.
+-- Cyrillic basic+extended (а..я + ё/ѐ/і/ї/ў etc.) and Latin Supplement (à-þ excl.
+-- ÷/ß/ÿ) mapped via byte arithmetic. 3/4-byte sequences (CJK/emoji) pass identity.
 -- Lead-byte ranges per RFC 3629; malformed input progresses 1 byte to avoid infinite loop.
 local function Utf8Upper(s)
     if not string.find(s, "[\128-\255]") then return string.upper(s) end
@@ -2094,6 +2484,18 @@ local function Utf8Upper(s)
                 out[#out+1] = string.sub(s, i, i+1)
             end
             i = i + 2
+        elseif b1 == 0xC3 then
+            -- Latin Supplement (à-ï/ñ-ö/ø-þ): b2 - 0x20 mirrors ASCII toupper.
+            -- Skip 0xB7 (÷ — math sign, not a letter); 0xBF (ÿ → Ÿ U+0178) is
+            -- 2-byte→2-byte to a different page (C5 B8) — rare, identity for v1.
+            -- 0x9F (ß) stays identity (case-folds to "SS" in modern German, length-changing).
+            local b2 = string.byte(s, i+1)
+            if b2 and b2 >= 0xA0 and b2 <= 0xBE and b2 ~= 0xB7 then
+                out[#out+1] = string.char(0xC3, b2 - 0x20)
+            else
+                out[#out+1] = string.sub(s, i, i+1)
+            end
+            i = i + 2
         elseif b1 >= 0xC2 and b1 <= 0xDF then
             out[#out+1] = string.sub(s, i, i+1)
             i = i + 2
@@ -2110,12 +2512,12 @@ local function Utf8Upper(s)
     end
     return table.concat(out)
 end
--- CursorSection: section header with green underline.
+-- CursorSection: section header with green underline. label is dual-role: L-key + enUS fallback.
 local function CursorSection(c, label)
     local hdr = c.parent:CreateFontString(nil, "OVERLAY")
     hdr:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE, "OUTLINE")
     hdr:SetPoint("TOPLEFT", c.parent, "TOPLEFT", c.padX, c.y)
-    hdr:SetText("|cff00ff7f" .. Utf8Upper(label) .. "|r")
+    PushLocalizedLabel(function() hdr:SetText("|cff00ff7f" .. Utf8Upper(L(label)) .. "|r") end)
     local line = c.parent:CreateTexture(nil, "ARTWORK")
     line:SetPoint("TOPLEFT", c.parent, "TOPLEFT", c.padX, c.y - 18)
     line:SetPoint("TOPRIGHT", c.parent, "TOPRIGHT", -c.padX, c.y - 18)
@@ -2133,7 +2535,7 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
     local lbl = parent:CreateFontString(nil, "OVERLAY")
     lbl:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
     lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
-    lbl:SetText(labelText)
+    PushLocalizedLabel(function() lbl:SetText(L(labelText)) end)
 
     local slider = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
     slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
@@ -2282,7 +2684,9 @@ function addon:OpenConfigMenu()
     local title = configFrame:CreateFontString(nil, "OVERLAY")
     title:SetFont(CONFIG_FONT, 16, "OUTLINE")
     title:SetPoint("TOP", 0, -12)
-    title:SetText("|cff00ff7fStatsPro|r v" .. ADDON_VERSION .. " Settings")
+    PushLocalizedLabel(function()
+        title:SetText("|cff00ff7fStatsPro|r v" .. ADDON_VERSION .. " " .. L("Settings"))
+    end)
 
     local closeX = CreateFrame("Button", nil, configFrame, "UIPanelCloseButton")
     closeX:SetPoint("TOPRIGHT", -4, -4)
@@ -2318,14 +2722,14 @@ function addon:OpenConfigMenu()
     local resetBtn = CreateFrame("Button", nil, configFrame, "GameMenuButtonTemplate")
     resetBtn:SetPoint("BOTTOMLEFT", 18, 14)
     resetBtn:SetSize(160, 26)
-    resetBtn:SetText("Reset to Defaults")
+    PushLocalizedLabel(function() resetBtn:SetText(L("Reset to Defaults")) end)
     resetBtn:SetNormalFontObject("GameFontNormal")
     resetBtn:SetHighlightFontObject("GameFontHighlight")
 
     local closeBtn = CreateFrame("Button", nil, configFrame, "GameMenuButtonTemplate")
     closeBtn:SetPoint("BOTTOMRIGHT", -18, 14)
     closeBtn:SetSize(100, 26)
-    closeBtn:SetText("Close")
+    PushLocalizedLabel(function() closeBtn:SetText(L("Close")) end)
     closeBtn:SetNormalFontObject("GameFontNormal")
     closeBtn:SetHighlightFontObject("GameFontHighlight")
     closeBtn:SetScript("OnClick", function() configFrame:Hide() end)
@@ -2372,7 +2776,7 @@ function addon:OpenConfigMenu()
         local txt = btn:CreateFontString(nil, "OVERLAY")
         txt:SetFont(CONFIG_FONT, 13, "OUTLINE")
         txt:SetPoint("CENTER", 0, 1)
-        txt:SetText(label)
+        PushLocalizedLabel(function() txt:SetText(L(label)) end)
         txt:SetTextColor(0.65, 0.65, 0.65, 1)
         btn.text = txt
         return btn
@@ -2434,7 +2838,7 @@ function addon:OpenConfigMenu()
         local dmLabel = displayTab:CreateFontString(nil, "OVERLAY")
         dmLabel:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
         dmLabel:SetPoint("TOPLEFT", cd.padX, rowY - 4)
-        dmLabel:SetText("Display Mode:")
+        PushLocalizedLabel(function() dmLabel:SetText(L("Display Mode:")) end)
 
         local DISPLAY_MODES = {
             { value = "flat",      label = "Flat" },
@@ -2443,9 +2847,9 @@ function addon:OpenConfigMenu()
         }
         local function GetDisplayModeLabel(value)
             for _, m in ipairs(DISPLAY_MODES) do
-                if m.value == value then return m.label end
+                if m.value == value then return L(m.label) end
             end
-            return DISPLAY_MODES[1].label
+            return L(DISPLAY_MODES[1].label)
         end
 
         local dmDropdown = CreateFrame("Frame", "StatsProDisplayModeDropdown", displayTab, "UIDropDownMenuTemplate")
@@ -2456,21 +2860,20 @@ function addon:OpenConfigMenu()
         UIDropDownMenu_Initialize(dmDropdown, function(self, level)
             for _, m in ipairs(DISPLAY_MODES) do
                 local info = UIDropDownMenu_CreateInfo()
-                info.text = m.label
+                info.text = L(m.label)
                 info.value = m.value
                 info.checked = (GetDB("displayMode") == m.value)
                 info.func = function()
                     StatsProDB.displayMode = m.value
                     CacheSettings()
-                    UIDropDownMenu_SetText(dmDropdown, m.label)
+                    UIDropDownMenu_SetText(dmDropdown, L(m.label))
                     CloseDropDownMenus()
                     UpdateStats()
                 end
                 UIDropDownMenu_AddButton(info)
             end
         end)
-        UIDropDownMenu_SetText(dmDropdown, GetDisplayModeLabel(GetDB("displayMode")))
-        PushRefresher(function()
+        PushLocalizedLabel(function()
             UIDropDownMenu_SetText(dmDropdown, GetDisplayModeLabel(GetDB("displayMode")))
         end)
 
@@ -2504,7 +2907,7 @@ function addon:OpenConfigMenu()
         local fontLabel = displayTab:CreateFontString(nil, "OVERLAY")
         fontLabel:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
         fontLabel:SetPoint("TOPLEFT", cd.padX, rowY)
-        fontLabel:SetText("Font:")
+        PushLocalizedLabel(function() fontLabel:SetText(L("Font:")) end)
 
         -- WHY rebuilt on each open: LSM-registered fonts can appear after StatsPro
         -- loads (other addon registers later). Static one-time build would miss them
@@ -2808,7 +3211,7 @@ function addon:OpenConfigMenu()
         local langLabel = displayTab:CreateFontString(nil, "OVERLAY")
         langLabel:SetFont(CONFIG_FONT, CONFIG_FONT_SIZE)
         langLabel:SetPoint("TOPLEFT", cd.padX, rowY)
-        langLabel:SetText("Language:")
+        PushLocalizedLabel(function() langLabel:SetText(L("Language:")) end)
 
         -- Linear scan LANGUAGE_OPTIONS for opt.value == value match. 3 callsites.
         local function FindLangOption(value)
@@ -2823,7 +3226,7 @@ function addon:OpenConfigMenu()
             if opt.value ~= "auto" then return opt.label end
             local cur = GetLocale()
             local o = FindLangOption(cur)
-            return string.format("Auto (current: %s)", (o and o.label) or cur)
+            return string.format(L("Auto (current: %s)"), (o and o.label) or cur)
         end
 
         -- CompactLabel: short form for the dropdown's collapsed current-text field, sized to
@@ -2970,12 +3373,16 @@ function addon:OpenConfigMenu()
             if FontSupports(StatsProDB.font, req) then
                 langWarn:SetText("")
             else
-                langWarn:SetText(string.format(
-                    "|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage.",
-                    req))
+                langWarn:SetText(string.format(L(
+                    "|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."
+                ), req))
             end
         end
-        RefreshLanguageWarning()
+        -- WHY register as localized: warning text changes on language switch (req tag stays
+        -- raw — see plan F-4). Setter replays from RefreshConfigLocalization so wording
+        -- tracks active locale; RefreshLanguageWarning itself is also called from the
+        -- language dropdown's commit handler for the immediate font-coverage recheck.
+        PushLocalizedLabel(function() RefreshLanguageWarning() end)
         -- WHY 14 (single-line at 11pt): shortened warning fits one line at SetWidth(440).
         -- Empty (common) state shows tight gap to next section; non-empty (rare, font/locale
         -- mismatch) shows one orange line below the dropdown. 14 + cd.gap (6) = 20 effective.
@@ -3276,12 +3683,14 @@ local launcherDesc = launcher:CreateFontString(nil, "ARTWORK", "GameFontHighligh
 launcherDesc:SetPoint("TOPLEFT", launcherTitle, "BOTTOMLEFT", 0, -8)
 launcherDesc:SetPoint("RIGHT", launcher, "RIGHT", -16, 0)
 launcherDesc:SetJustifyH("LEFT")
-launcherDesc:SetText("Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window.")
+PushLocalizedLabel(function()
+    launcherDesc:SetText(L("Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."))
+end)
 
 local launcherBtn = CreateFrame("Button", nil, launcher, "UIPanelButtonTemplate")
 launcherBtn:SetSize(180, 28)
 launcherBtn:SetPoint("TOPLEFT", launcherDesc, "BOTTOMLEFT", 0, -16)
-launcherBtn:SetText("Open Settings")
+PushLocalizedLabel(function() launcherBtn:SetText(L("Open Settings")) end)
 launcherBtn:SetScript("OnClick", function()
     if SettingsPanel and SettingsPanel:IsShown() then
         HideUIPanel(SettingsPanel)

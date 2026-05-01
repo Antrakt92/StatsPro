@@ -682,10 +682,7 @@ local function FormatRepairCost(copper)
     -- matching the vendor display exactly. Pass fontHeight explicitly — without it
     -- the helper produces `:0:0` markup which in TWW 12.x sometimes renders icons
     -- at the wrong size or with the digits floating to a separate baseline.
-    if GetCoinTextureString then
-        return GetCoinTextureString(copper, GetDB("fontSize"))
-    end
-    return string.format("%dg", math.floor(copper / 10000))
+    return GetCoinTextureString(copper, GetDB("fontSize"))
 end
 
 local function ComputeDurabilityColor(pct)
@@ -847,7 +844,7 @@ local function RefreshArmorCache()
     -- in M+/transitional moments, so OOC-only guard isn't enough — must verify the value
     -- itself isn't tainted before any comparison/arithmetic.
     if not ok or issecretvalue(effectiveArmor) then return end
-    if PaperDollFrame_GetArmorReduction and effectiveArmor and effectiveArmor > 0 then
+    if effectiveArmor and effectiveArmor > 0 then
         -- WARNING: PaperDollFrame_GetArmorReduction in 12.x retail returns 0..100 percent
         -- (not 0..1 fraction as some docs claim). Normalize defensively: if return is <=1
         -- treat as fraction and scale, else use as-is. Cap at 100% for sanity.

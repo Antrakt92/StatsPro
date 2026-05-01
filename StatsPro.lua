@@ -220,7 +220,7 @@ local defaults = {
     -- override STANDARD_TEXT_FONT to their own path — those would hijack our defaults
     -- otherwise. Falls back to FRIZQT for any non-Blizzard path.
     font = LocaleAwareDefaultFont(),
-    textAlign = "RIGHT",
+    textAlign = "RIGHT", -- DEPRECATED: kept for DB compat (v1.0+ saves still contain key); no runtime reader
     updateInterval = 0.5,
     isVisible = true,
     isLocked = false,

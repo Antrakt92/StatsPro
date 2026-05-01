@@ -999,6 +999,11 @@ local function FontSupports(fontPath, glyph)
         for _, p in ipairs(FONT_GLYPH_PATTERNS) do
             if string.find(lower, p.pattern) then entry = p.glyphs; break end
         end
+        -- Write-back memoize: a font file's glyph coverage is immutable for the
+        -- session (file content can't change without /reload). FindCompatibleFont's
+        -- LSM scan calls FontSupports for every registered font on every locale
+        -- switch — this turns those repeated pattern-scans into O(1) hash hits.
+        if entry then FONT_GLYPH_SUPPORT[fontPath] = entry end
     end
     if not entry then return glyph == GLYPH_LATIN end
     for _, g in ipairs(entry) do
@@ -3026,10 +3031,23 @@ function addon:OpenConfigMenu()
         fontLabel:SetPoint("TOPLEFT", cd.padX, rowY)
         PushLocalizedLabel(function() fontLabel:SetText(L("Font:")) end)
 
-        -- WHY rebuilt on each open: LSM-registered fonts can appear after StatsPro
-        -- loads (other addon registers later). Static one-time build would miss them
-        -- until /reload. Cost is O(n) over ~20-200 fonts on a user click — negligible.
+        -- WHY rebuilt on demand (not at load): LSM-registered fonts can appear after
+        -- StatsPro loads (other addon registers later); static one-time build would miss
+        -- them until /reload. WHY cached across calls: BuildFontsList runs from the font
+        -- picker's PopulateFontPicker AND from CurrentFontName (called on Reset, on every
+        -- lang commit, and at initial picker setup) — that's 5-10× per session. The sort
+        -- inside is the dominant cost (each compare allocates two lowercased strings via
+        -- string.lower); on heavy LSM installs (~200 fonts) it runs ~16ms per uncached
+        -- call. Length-based signature catches the common LSM-add/remove invalidation case;
+        -- same-name font swaps are accepted as a stale-cache edge (rare and harmless —
+        -- worst case a stale path until next /reload).
+        local cachedFontsList
+        local cachedFontsListLen = -1
         local function BuildFontsList()
+            local lsmLen = LSM and #LSM:List(LSM.MediaType.FONT) or 0
+            if cachedFontsList and cachedFontsListLen == lsmLen then
+                return cachedFontsList
+            end
             local list
             if LSM then
                 list = {}
@@ -3047,6 +3065,8 @@ function addon:OpenConfigMenu()
             -- Stable sort independent of LSM internal ordering, so alphabetic bucketing below
             -- always matches user expectation (case-insensitive).
             table.sort(list, function(a, b) return a.name:lower() < b.name:lower() end)
+            cachedFontsList = list
+            cachedFontsListLen = lsmLen
             return list
         end
 

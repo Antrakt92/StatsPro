@@ -1369,6 +1369,11 @@ local function JoinValuesCol(values)
     return ""
 end
 
+-- Compose colored "X.X%" string. 5-callsite hot path; centralizes precision.
+local function FmtColorPct(colorHex, pct)
+    return string.format("|cff%s%.1f%%|r", colorHex, pct)
+end
+
 -- Format a stat value (rating + percentage variants honoring user toggles).
 -- Returns TWO strings (ratingStr, valueStr) — see IsDualColMode for routing rules.
 local function FmtRatingPct(rating, pct, statColor)
@@ -1376,13 +1381,12 @@ local function FmtRatingPct(rating, pct, statColor)
     local rc = (cached.matchValueColorToStat and statColor) or cs.rating
     local pc = (cached.matchValueColorToStat and statColor) or cs.percentage
     if IsDualColMode() then
-        return string.format("|cff%s%d|r |cff808080|||r", rc, rating),
-               string.format("|cff%s%.1f%%|r", pc, pct)
+        return string.format("|cff%s%d|r |cff808080|||r", rc, rating), FmtColorPct(pc, pct)
     elseif cached.showRating then
         return string.format("|cff%s%d|r", rc, rating), ""
     else
         -- percent-only: route into rating col (single-column layout)
-        return string.format("|cff%s%.1f%%|r", pc, pct), ""
+        return FmtColorPct(pc, pct), ""
     end
 end
 
@@ -1391,7 +1395,7 @@ end
 local function FmtPctOnly(pct, statColor)
     local cs = cached.colorStrings
     local pc = (cached.matchValueColorToStat and statColor) or cs.percentage
-    local pctStr = string.format("|cff%s%.1f%%|r", pc, pct)
+    local pctStr = FmtColorPct(pc, pct)
     if IsDualColMode() then return "", pctStr end
     return pctStr, ""
 end
@@ -1553,7 +1557,7 @@ local function BuildDefensiveLines()
         local armorStr = cs.armor
         local valueColor = (cached.matchValueColorToStat and armorStr) or cs.percentage
         if shouldShow(cached.armorDR, cached.hideZeroDefensive) then
-            local rCol, vCol = RouteValueOnly(string.format("|cff%s%.1f%%|r", valueColor, cached.armorDR))
+            local rCol, vCol = RouteValueOnly(FmtColorPct(valueColor, cached.armorDR))
             PushRow(labels, ratings, values,
                 FormatLabel(armorStr, "Armor"),
                 rCol, vCol)
@@ -1581,7 +1585,7 @@ local function BuildDurabilityLines()
     end
     -- %.1f%% matches vendor precision (95.2% vs 95%)
     do
-        local rCol, vCol = RouteValueOnly(string.format("|cff%s%.1f%%|r", valueColor, pct))
+        local rCol, vCol = RouteValueOnly(FmtColorPct(valueColor, pct))
         PushRow(labels, ratings, values,
             FormatLabel(durStr, "Durability"),
             rCol, vCol)

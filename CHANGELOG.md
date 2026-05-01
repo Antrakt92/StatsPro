@@ -1,10 +1,29 @@
 # Changelog
 
-## 1.1.9 — "Show Repair Cost" toggle responsiveness
+## 1.2.0 — Full settings UI localization
+
+### Added
+
+- **The entire Settings window now localizes** — tabs, section headers, every checkbox / slider / dropdown label, buttons, the launcher tooltip, and the font-coverage warning. All 11 retail locales covered, with live updates on Language dropdown change without `/reload`. enUS and ruRU are native quality; the other nine (deDE / esES / esMX / frFR / itIT / ptBR / koKR / zhCN / zhTW) are best-effort drafts — native-speaker corrections welcome via GitHub Issues.
 
 ### Fixed
 
 - **"Show Repair Cost" toggle now refreshes immediately when turned on.** Previously the toggle could display nothing or a stale value until your next gear swap, because the cache only refreshed on equipment events. Toggling Off → On with damaged items now updates the displayed cost right away.
+- **Settings UI labels no longer render as `?`-boxes** when previewing or committing a non-Latin locale (Russian / Chinese) on an English client. Settings labels now auto-switch to a glyph-compatible font — same logic the stat panels were already using.
+- **Section headers no longer corrupt non-ASCII letters** when rendered uppercase in localized languages. Previously Russian "Основные характеристики" produced byte garbage at the section header on non-Russian clients.
+- **Font picker hover-preview no longer leaves panels stuck on a previewed font** after closing the picker. Closing without picking always reverts to the committed font, including edge cases with rapid scrolling and unusual close paths.
+- **Hovering a language preview no longer leaves panels on a fallback font** after committing a different locale — e.g. hovering Russian then clicking German on an English client used to leave panels rendered in Arial Narrow despite German only needing the default Latin font.
+- **Closing the Settings window via Esc no longer leaves orphan dropdown menus** visible on screen.
+- **Reset to Defaults now correctly restores the Settings window's font** along with everything else.
+
+### Improved
+
+- **Font picker hover-preview is smoother during rapid scrolling** — redundant re-applies are deduped, and the mouse drifting to picker padding auto-cancels the preview instead of leaving it stuck.
+- **Font Size slider drag and locale switching feel more responsive** — the internal pipeline now skips redundant work when only the font changes (text content unchanged). First open of the Font picker on installs with many SharedMedia fonts is also faster (the alphabetical sort runs once per session instead of per open).
+
+### Known limitations
+
+- **Korean / Chinese label preview on non-CJK clients** still requires a SharedMedia font with CJK coverage installed (unchanged from prior versions). Without one, labels render as `?`-boxes; the inline warning makes the issue visible.
 
 ## 1.1.8 — Settings UI restructure + multi-column font picker
 

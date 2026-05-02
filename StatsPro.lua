@@ -1262,6 +1262,7 @@ end
 local function ScanDurabilityAndCost()
     local sum, count, totalCost = 0, 0, 0
     local minPct
+    local anyTooltipPending = false
     for slot = DURABILITY_SLOT_MIN, DURABILITY_SLOT_MAX do
         if not DURABILITY_SKIP_SLOTS[slot] then
             local cur, max = GetInventoryItemDurability(slot)
@@ -1280,20 +1281,36 @@ local function ScanDurabilityAndCost()
                         if cost and not issecretvalue(cost) and cost > 0 then
                             totalCost = totalCost + cost
                         end
+                    else
+                        anyTooltipPending = true
                     end
                 end
             end
         end
     end
-    if count == 0 then return 100, 100, 0 end
-    return sum / count, minPct, totalCost
+    if count == 0 then return 100, 100, 0, anyTooltipPending end
+    return sum / count, minPct, totalCost, anyTooltipPending
 end
 
+-- WARNING: C_TooltipInfo returns nil until item data loads (post-login async).
+-- No subsequent UPDATE_INVENTORY_DURABILITY fires for plain data-load — schedule
+-- one delayed re-scan if any slot's tooltip was pending. Flag prevents pile-up
+-- if multiple PEW-era refreshes hit pending state simultaneously.
+local durabilityRetryScheduled = false
+
 local function RefreshDurabilityCache()
-    local avg, mn, cost = ScanDurabilityAndCost()
+    local avg, mn, cost, anyTooltipPending = ScanDurabilityAndCost()
     cached.durabilityValue = cached.useWorstDurability and mn or avg
     cached.repairCost = cost
     durabilityDirty = false
+
+    if anyTooltipPending and not durabilityRetryScheduled then
+        durabilityRetryScheduled = true
+        C_Timer.After(3, function()
+            durabilityRetryScheduled = false
+            durabilityDirty = true
+        end)
+    end
 end
 
 --[[ ============================================================

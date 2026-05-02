@@ -2766,7 +2766,15 @@ function addon:OpenConfigMenu()
 
     --[[ ===== Frame ===== ]]
     configFrame = CreateFrame("Frame", "StatsProConfigFrame", UIParent, "BackdropTemplate")
-    configFrame:SetSize(500, 540)
+
+    -- WARNING: cap by parent so footer (Reset/Close at BOTTOM y=14) stays on-screen.
+    -- Floor 200 protects ScrollFrame chrome (82+60=142) from collapse on low-res.
+    local function ApplyConfigFrameSize()
+        local maxH = math.max(200, math.min(540, UIParent:GetHeight() * 0.9))
+        configFrame:SetSize(500, maxH)
+    end
+    ApplyConfigFrameSize()
+
     configFrame:SetPoint("CENTER")
     configFrame:SetBackdrop({
         bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
@@ -2789,6 +2797,8 @@ function addon:OpenConfigMenu()
         tinsert(UISpecialFrames, "StatsProConfigFrame")
         configSpecialFrameRegistered = true
     end
+
+    configFrame:HookScript("OnShow", ApplyConfigFrameSize)
 
     -- Auto-close font picker + Blizzard dropdown lists when Settings UI hides (e.g., /ss
     -- toggle, click X, Esc). Both are parented to UIParent (NOT configFrame) so neither

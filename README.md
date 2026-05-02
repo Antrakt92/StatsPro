@@ -9,6 +9,7 @@
   <a href="https://www.curseforge.com/wow/addons/statspro"><img src="https://img.shields.io/curseforge/dt/1525100?label=curseforge&color=orange" alt="CurseForge"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/Antrakt92/StatsPro" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/WoW-Retail%2012.x-blueviolet" alt="WoW Retail 12.x">
+  <a href="https://ko-fi.com/antrakt92"><img src="https://img.shields.io/badge/Ko--fi-Support-FF5E5B?logo=ko-fi&logoColor=white" alt="Support on Ko-fi"></a>
 </p>
 
 <p align="center">
@@ -208,6 +209,17 @@ relevant call sites.
 Open an issue on [GitHub Issues](https://github.com/Antrakt92/StatsPro/issues).
 Helpful to include: WoW client version, addon version (visible in the settings
 window header), exact reproduction steps, and a screenshot if the issue is visual.
+
+## Support
+
+StatsPro is free and MIT-licensed. If it saves you time and you'd like to support
+continued addon work:
+
+- **Ko-fi** — [ko-fi.com/antrakt92](https://ko-fi.com/antrakt92) (one-time or recurring)
+- **GitHub Sponsors** — the **❤ Sponsor** button at the top of this repo
+
+Bug reports and PRs remain the highest-leverage way to help — open an
+[issue](https://github.com/Antrakt92/StatsPro/issues) any time.
 
 ## Acknowledgements
 

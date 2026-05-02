@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.2 — Repair cost loads correctly after login
+
+### Fixed
+
+- **Repair cost now displays right after login** instead of staying blank until you toggle Show Repair Cost off and on (or swap a piece of gear). Item data loads asynchronously after entering the world; the addon now schedules a single delayed re-scan when any slot's tooltip wasn't ready yet, so the cost catches up without manual intervention.
+
 ## 1.2.1 — Settings window adapts to small screens
 
 ### Fixed

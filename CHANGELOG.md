@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1 — Settings window adapts to small screens
+
+### Fixed
+
+- **Settings window now fits on low-resolution screens and high UI-scale setups.** Previously the Reset and Close buttons could sit below the visible screen edge if your game window was small (e.g. 1024×768) or your UI Scale slider was set high — the window is now capped to ~90% of the game-window height and the inner tabs scroll if content overflows. At typical resolutions (1080p / 1440p / 4K with default UI scale) you'll see no change.
+
 ## 1.2.0 — Full settings UI localization
 
 ### Added

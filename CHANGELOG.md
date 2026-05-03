@@ -8,7 +8,7 @@
 
 ## 1.3.0 — Auto main stat + text opacity
 
-Both features in this release were suggested by tflo (GitHub Issue #1) — a fellow WoW addon developer (PetWalker, Auto Quest Tracker Mk III, Goyita, Move 'em All, Auto Discount Repair, and several others). Thank you for the thoughtful and detailed feedback — much appreciated!
+Both features in this release were suggested by **tflo** (GitHub Issue #1) — a fellow WoW addon developer (PetWalker, Auto Quest Tracker Mk III, Goyita, Move 'em All, Auto Discount Repair, and several others). Thank you for the thoughtful and detailed feedback — much appreciated!
 
 ### Added
 

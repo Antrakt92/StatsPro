@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- **AddOn List icon now shows our logo** instead of the legacy SwiftStats-era icon. The stale `logo.blp` from the original fork was never replaced when StatsPro got its own branding; replaced with our 64×64 quadrant logo (SP monogram on the four secondary-stat colors). Visible in Blizzard's external AddOn List tooltip.
+- **AddOn List icon updated** to our own StatsPro logo (was a legacy fork-era icon).
 
 ## 1.3.0 — Auto main stat + text opacity
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.1 — Branding fix
+
+### Fixed
+
+- **AddOn List icon now shows our logo** instead of the legacy SwiftStats-era icon. The stale `logo.blp` from the original fork was never replaced when StatsPro got its own branding; replaced with our 64×64 quadrant logo (SP monogram on the four secondary-stat colors). Visible in Blizzard's external AddOn List tooltip.
+
 ## 1.3.0 — Auto main stat + text opacity
 
 Both features in this release were suggested by tflo (GitHub Issue #1) — a fellow WoW addon developer (PetWalker, Auto Quest Tracker Mk III, Goyita, Move 'em All, Auto Discount Repair, and several others). Thank you for the thoughtful and detailed feedback — much appreciated!

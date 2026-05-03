@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.2 — Localization polish
+
+### Fixed
+
+- **Font picker on CJK clients without LibSharedMedia** — Korean / Simplified Chinese / Traditional Chinese installs without an LSM-providing addon (BigWigs, ElvUI, etc.) now see the canonical client-shipped script-native font as an additional picker option, and the dropdown caption matches what's actually rendering on screen. No change on non-CJK clients or with LSM installed.
+- **Auto-language dropdown nested parens** — Russian / Spanish / Portuguese / Korean / Chinese clients no longer see `Auto (current: <Lang> (English))`; the English suffix is stripped from the Auto display only — explicit-pick menu items keep the full bilingual label for disambiguation.
+
 ## 1.3.1 — Branding fix
 
 ### Fixed

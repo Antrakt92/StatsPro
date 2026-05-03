@@ -105,6 +105,24 @@ do
     FONT_GLYPH_SUPPORT["Fonts\\FRIZQT__.TTF"] = LOCALE_NATIVE_GLYPHS[GetLocale()] or { GLYPH_LATIN }
 end
 
+-- Per-client-shipped Blizzard font paths (drives BuildFontsList no-LSM fallback +
+-- CurrentFontName reverse-lookup). FONT_GLYPH_SUPPORT above answers "what glyphs
+-- at this path?"; this table answers the orthogonal "does THIS client install
+-- physically ship a working file at this path?". locale=nil → universal entry
+-- (every client). locale=<L> → only on the matching client install (gated by
+-- GetLocale(), NOT by db.forceLocale — file-existence axis is install-bound,
+-- never user-output-bound). Descriptive names mirror LSM-list convention and
+-- fit the 25-char FONT_PICKER_BTN_W ceiling.
+local BLIZZARD_SHIPPED_FONTS = {
+    { path = "Fonts\\FRIZQT__.TTF", name = "Friz Quadrata TT" },
+    { path = "Fonts\\ARIALN.TTF",   name = "Arial Narrow" },
+    { path = "Fonts\\SKURRI.TTF",   name = "Skurri" },
+    { path = "Fonts\\MORPHEUS.TTF", name = "Morpheus" },
+    { path = "Fonts\\ARKai_T.ttf",  name = "Chinese (Simplified)",  locale = "zhCN" },
+    { path = "Fonts\\bHEI00M.ttf",  name = "Chinese (Traditional)", locale = "zhTW" },
+    { path = "Fonts\\2002.ttf",     name = "Korean",                locale = "koKR" },
+}
+
 -- WHY ordered list (not hash like FONT_GLYPH_SUPPORT): patterns are first-match-wins,
 -- broader/universal-coverage families first. Path basename is lowercased before match
 -- (Lua 5.1 string.lower is byte-based; safe for ASCII font filenames). Each pattern
@@ -3182,12 +3200,17 @@ function addon:OpenConfigMenu()
                     }
                 end
             else
-                list = {
-                    { name = "Friz Quadrata TT", path = "Fonts\\FRIZQT__.TTF", sortKey = "friz quadrata tt" },
-                    { name = "Arial Narrow",     path = "Fonts\\ARIALN.TTF",   sortKey = "arial narrow" },
-                    { name = "Skurri",           path = "Fonts\\SKURRI.TTF",   sortKey = "skurri" },
-                    { name = "Morpheus",         path = "Fonts\\MORPHEUS.TTF", sortKey = "morpheus" },
-                }
+                list = {}
+                local clientLocale = GetLocale()
+                for _, f in ipairs(BLIZZARD_SHIPPED_FONTS) do
+                    if not f.locale or f.locale == clientLocale then
+                        list[#list + 1] = {
+                            name = f.name,
+                            path = f.path,
+                            sortKey = f.name:lower(),
+                        }
+                    end
+                end
             end
             -- Stable sort independent of LSM internal ordering, so alphabetic bucketing below
             -- always matches user expectation (case-insensitive). Pre-computed sortKey

@@ -3591,12 +3591,23 @@ function addon:OpenConfigMenu()
             return nil
         end
 
-        -- DisplayLabel: full descriptive form for menu items (user disambiguates picks).
+        -- StripParenSuffix: trim trailing " (Foo)" clarifier from a bilingual label.
+        -- Reused by DisplayLabel and CompactLabel for the LANGUAGE_OPTIONS native+English
+        -- form ("Русский (Russian)" -> "Русский"). Returns "" for nil so CompactLabel's
+        -- explicit-pick branch keeps its prior nil-coalesce semantics.
+        local function StripParenSuffix(s)
+            if not s then return "" end
+            return s:match("^(.-)%s*%(") or s
+        end
+
+        -- DisplayLabel: native form for menu items. For non-Latin Auto entries we strip
+        -- the "(English)" clarifier — "Auto (current: Русский)" reads cleanly while the
+        -- explicit-pick rows below keep the full bilingual label for disambiguation.
         local function DisplayLabel(opt)
             if opt.value ~= "auto" then return opt.label end
             local cur = GetLocale()
             local o = FindLangOption(cur)
-            return string.format(L("Auto (current: %s)"), (o and o.label) or cur)
+            return string.format(L("Auto (current: %s)"), StripParenSuffix((o and o.label) or cur))
         end
 
         -- CompactLabel: short form for the dropdown's collapsed current-text field, sized to
@@ -3606,11 +3617,9 @@ function addon:OpenConfigMenu()
             if opt.value == "auto" then
                 local cur = GetLocale()
                 local o = FindLangOption(cur)
-                local nat = (o and o.label) or cur
-                local short = nat:match("^(.-)%s*%(") or nat
-                return short  -- e.g. "English", "Русский", "中文 简体"
+                return StripParenSuffix((o and o.label) or cur)
             end
-            return (opt.label or ""):match("^(.-)%s*%(") or opt.label or ""
+            return StripParenSuffix(opt.label)
         end
 
         local function CurrentLabel()

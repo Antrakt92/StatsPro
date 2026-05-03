@@ -1241,8 +1241,20 @@ local function MigrateDB()
     -- Reading raw at PEW lets a third-party hijack pin db.font to an addon-shipped path
     -- forever (migration runs once, dbVersion bumps, hijacked path persists). Guarded
     -- helper falls back to FRIZQT for non-Blizzard paths.
-    if (db.dbVersion or 3) <= 3 and db.font == "Fonts\\FRIZQT__.TTF" then
-        db.font = LocaleAwareDefaultFont()
+    -- WHY FontSupports over the original path-equality check: the conceptually-
+    -- correct heuristic is "swap if saved font lacks the client's required glyph",
+    -- not "swap if saved font is the legacy hardcoded default". Equivalent for the
+    -- common case (legacy FRIZQT default), strictly broader for the rare pre-v3
+    -- user pinned on a custom Latin-only LSM font on a CJK client. Reuses
+    -- LOCALE_GLYPH_REQ — the locale → glyph table consumed by MaybeAutoSwitchFont
+    -- and ConfigFont resolver. GetLocale() (client-locale, file-shipping axis)
+    -- over ResolveActiveLocale() (output-locale axis) because the swap target is
+    -- itself client-locale-bound.
+    if (db.dbVersion or 3) <= 3 then
+        local req = LOCALE_GLYPH_REQ[GetLocale()] or GLYPH_LATIN
+        if not FontSupports(db.font, req) then
+            db.font = LocaleAwareDefaultFont()
+        end
     end
 
     -- v4 → v5: replaced boolean useLocalizedLabels with forceLocale string.

@@ -7,7 +7,7 @@ local _, addon = ...
 --[[ ============================================================
     1. CONSTANTS
 ============================================================ ]]
-local CURRENT_DB_VERSION = 6
+local CURRENT_DB_VERSION = 7
 
 local DURABILITY_SLOT_MIN = 1
 local DURABILITY_SLOT_MAX = 19
@@ -255,10 +255,9 @@ local defaults = {
     showAvoidance = true,
     showSpeed = true,
 
-    -- Primary stats
-    showStrength = false,
-    showAgility = false,
-    showIntellect = false,
+    -- Primary stat (single toggle, auto-detects via spec API; replaces v1.2.x's
+    -- separate Show Strength/Agility/Intellect toggles in v6→v7 migration).
+    showMainStat = false,
 
     -- Defensive stats
     showDefensive = false,
@@ -321,11 +320,48 @@ local DEFENSIVE_STATS = {
     -- Armor & DR handled specially: armor = absolute number, DR = cached arithmetic
 }
 
+-- WHY showKey field retained post-v6→v7: harmless leftover; removing it would force
+-- editing the table structure for zero benefit. Field is unused after BuildPrimaryLines
+-- refactor (showMainStat replaces per-stat toggles); colorKey + unitStatId still used
+-- by BuildPrimaryLines + PRIMARY_STATS_BY_ID lookup + Stats tab color swatches.
 local PRIMARY_STATS = {
     { label = "Strength",  unitStatId = 1, colorKey = "strength",  showKey = "showStrength"  },
     { label = "Agility",   unitStatId = 2, colorKey = "agility",   showKey = "showAgility"   },
     { label = "Intellect", unitStatId = 4, colorKey = "intellect", showKey = "showIntellect" },
 }
+
+-- O(1) lookup by unitStatId (1=Str, 2=Agi, 4=Int) for BuildPrimaryLines.
+local PRIMARY_STATS_BY_ID = {}
+for _, def in ipairs(PRIMARY_STATS) do
+    PRIMARY_STATS_BY_ID[def.unitStatId] = def
+end
+
+-- WHY shim: C_SpecializationInfo.* is the modern API in 12.x retail; legacy
+-- GetSpecialization* deprecated since 11.2 and may be removed in 13.x. Defensive
+-- chain mirrors C_AddOns.GetAddOnMetadata-or-GetAddOnMetadata pattern (line 200).
+local function SafeGetSpecIndex()
+    if C_SpecializationInfo and C_SpecializationInfo.GetSpecialization then
+        return C_SpecializationInfo.GetSpecialization()
+    end
+    return GetSpecialization and GetSpecialization() or nil
+end
+
+local function SafeGetSpecInfo(idx)
+    if C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfo then
+        return C_SpecializationInfo.GetSpecializationInfo(idx)
+    end
+    return GetSpecializationInfo and GetSpecializationInfo(idx) or nil
+end
+
+-- Returns 1 (Str) / 2 (Agi) / 4 (Int) or nil (no spec selected — sub-10 alts /
+-- pre-PEW edge / API stub in older clients). Per-render lookup (no caching) matches
+-- "no PLAYER_SPECIALIZATION_CHANGED handler" architecture per WHY-comment line 2253.
+local function GetCurrentMainStatId()
+    local idx = SafeGetSpecIndex()
+    if not idx then return nil end
+    local _, _, _, _, _, primaryStat = SafeGetSpecInfo(idx)
+    return primaryStat
+end
 
 local TERTIARY_STATS = {
     { label = "Leech",     api = GetLifesteal, ratingCR = CR_LIFESTEAL, colorKey = "leech",     showKey = "showLeech"     },
@@ -342,7 +378,7 @@ local CACHED_BOOL_KEYS = {
     "showOffensive", "hideZeroOffensive",
     "showCrit", "showHaste", "showMastery", "showVersatility",
     "showTertiary", "hideZeroTertiary", "showLeech", "showAvoidance", "showSpeed",
-    "showStrength", "showAgility", "showIntellect",
+    "showMainStat",
     -- Defensive & durability:
     "showDefensive", "hideZeroDefensive",
     "showDodge", "showParry", "showBlock", "showArmor",
@@ -459,7 +495,7 @@ local LABELS_BY_LOCALE = {
         ["Defensive Stats"] = "Defensive Stats",
         -- Checkboxes:
         ["Show Stats Panel"] = "Show Stats Panel", ["Lock Frames"] = "Lock Frames",
-        ["Show Strength"] = "Show Strength", ["Show Agility"] = "Show Agility", ["Show Intellect"] = "Show Intellect",
+        ["Show Main Stat"] = "Show Main Stat",
         ["Show Rating"] = "Show Rating", ["Show Percentage"] = "Show Percentage",
         ["Match Value Color to Stat"] = "Match Value Color to Stat",
         ["Show Offensive Stats"] = "Show Offensive Stats", ["Hide Zero Values"] = "Hide Zero Values",
@@ -516,7 +552,7 @@ local LABELS_BY_LOCALE = {
         ["Defensive Stats"] = "Защитные характеристики",
         -- Checkboxes:
         ["Show Stats Panel"] = "Показать панель статов", ["Lock Frames"] = "Закрепить окна",
-        ["Show Strength"] = "Показывать Силу", ["Show Agility"] = "Показывать Ловкость", ["Show Intellect"] = "Показывать Интеллект",
+        ["Show Main Stat"] = "Показывать мейн-стат",
         ["Show Rating"] = "Показывать рейтинг", ["Show Percentage"] = "Показывать процент",
         ["Match Value Color to Stat"] = "Цвет значения по характеристике",
         ["Show Offensive Stats"] = "Показывать атакующие", ["Hide Zero Values"] = "Скрывать нулевые значения",
@@ -571,7 +607,7 @@ local LABELS_BY_LOCALE = {
         ["Tertiary Stats"] = "Tertiärwerte",
         ["Defensive Stats"] = "Defensivwerte",
         ["Show Stats Panel"] = "Wertepanel anzeigen", ["Lock Frames"] = "Fenster sperren",
-        ["Show Strength"] = "Stärke anzeigen", ["Show Agility"] = "Beweglichkeit anzeigen", ["Show Intellect"] = "Intelligenz anzeigen",
+        ["Show Main Stat"] = "Hauptattribut anzeigen",
         ["Show Rating"] = "Wertung anzeigen", ["Show Percentage"] = "Prozent anzeigen",
         ["Match Value Color to Stat"] = "Wertfarbe wie Statfarbe",
         ["Show Offensive Stats"] = "Offensivwerte anzeigen", ["Hide Zero Values"] = "Nullwerte ausblenden",
@@ -618,7 +654,7 @@ local LABELS_BY_LOCALE = {
         ["Tertiary Stats"] = "Stats Tertiaires",
         ["Defensive Stats"] = "Stats Défensives",
         ["Show Stats Panel"] = "Afficher le panneau", ["Lock Frames"] = "Verrouiller les cadres",
-        ["Show Strength"] = "Afficher Force", ["Show Agility"] = "Afficher Agilité", ["Show Intellect"] = "Afficher Intellect",
+        ["Show Main Stat"] = "Afficher stat principale",
         ["Show Rating"] = "Afficher cote", ["Show Percentage"] = "Afficher %",
         ["Match Value Color to Stat"] = "Couleur valeur = stat",
         ["Show Offensive Stats"] = "Afficher offensives", ["Hide Zero Values"] = "Masquer valeurs nulles",
@@ -666,7 +702,7 @@ local LABELS_BY_LOCALE = {
         ["Tertiary Stats"] = "Stats Terciarias",
         ["Defensive Stats"] = "Stats Defensivas",
         ["Show Stats Panel"] = "Mostrar panel", ["Lock Frames"] = "Bloquear ventanas",
-        ["Show Strength"] = "Mostrar Fuerza", ["Show Agility"] = "Mostrar Agilidad", ["Show Intellect"] = "Mostrar Intelecto",
+        ["Show Main Stat"] = "Mostrar stat principal",
         ["Show Rating"] = "Mostrar valor", ["Show Percentage"] = "Mostrar %",
         ["Match Value Color to Stat"] = "Color valor = stat",
         ["Show Offensive Stats"] = "Mostrar ofensivas", ["Hide Zero Values"] = "Ocultar valores cero",
@@ -712,7 +748,7 @@ local LABELS_BY_LOCALE = {
         ["Tertiary Stats"] = "Stats Terciarias",
         ["Defensive Stats"] = "Stats Defensivas",
         ["Show Stats Panel"] = "Mostrar panel", ["Lock Frames"] = "Bloquear ventanas",
-        ["Show Strength"] = "Mostrar Fuerza", ["Show Agility"] = "Mostrar Agilidad", ["Show Intellect"] = "Mostrar Intelecto",
+        ["Show Main Stat"] = "Mostrar stat principal",
         ["Show Rating"] = "Mostrar valor", ["Show Percentage"] = "Mostrar %",
         ["Match Value Color to Stat"] = "Color valor = stat",
         ["Show Offensive Stats"] = "Mostrar ofensivas", ["Hide Zero Values"] = "Ocultar valores cero",
@@ -759,7 +795,7 @@ local LABELS_BY_LOCALE = {
         ["Tertiary Stats"] = "Stat Terziarie",
         ["Defensive Stats"] = "Stat Difensive",
         ["Show Stats Panel"] = "Mostra pannello", ["Lock Frames"] = "Blocca finestre",
-        ["Show Strength"] = "Mostra Forza", ["Show Agility"] = "Mostra Agilità", ["Show Intellect"] = "Mostra Intelletto",
+        ["Show Main Stat"] = "Mostra stat principale",
         ["Show Rating"] = "Mostra valore", ["Show Percentage"] = "Mostra %",
         ["Match Value Color to Stat"] = "Colore valore = stat",
         ["Show Offensive Stats"] = "Mostra offensive", ["Hide Zero Values"] = "Nascondi valori zero",
@@ -805,7 +841,7 @@ local LABELS_BY_LOCALE = {
         ["Tertiary Stats"] = "Atributos Terciários",
         ["Defensive Stats"] = "Atributos Defensivos",
         ["Show Stats Panel"] = "Mostrar painel", ["Lock Frames"] = "Travar janelas",
-        ["Show Strength"] = "Mostrar Força", ["Show Agility"] = "Mostrar Agilidade", ["Show Intellect"] = "Mostrar Intelecto",
+        ["Show Main Stat"] = "Mostrar stat principal",
         ["Show Rating"] = "Mostrar valor", ["Show Percentage"] = "Mostrar %",
         ["Match Value Color to Stat"] = "Cor do valor = atributo",
         ["Show Offensive Stats"] = "Mostrar ofensivos", ["Hide Zero Values"] = "Ocultar valores zero",
@@ -858,7 +894,7 @@ local LABELS_BY_LOCALE = {
         ["Tertiary Stats"] = "3차 능력치",
         ["Defensive Stats"] = "방어 능력치",
         ["Show Stats Panel"] = "능력치 패널 표시", ["Lock Frames"] = "창 고정",
-        ["Show Strength"] = "힘 표시", ["Show Agility"] = "민첩 표시", ["Show Intellect"] = "지능 표시",
+        ["Show Main Stat"] = "주요 능력치 표시",
         ["Show Rating"] = "수치 표시", ["Show Percentage"] = "% 표시",
         ["Match Value Color to Stat"] = "값 색상 = 능력치",
         ["Show Offensive Stats"] = "공격 능력치 표시", ["Hide Zero Values"] = "0 값 숨김",
@@ -904,7 +940,7 @@ local LABELS_BY_LOCALE = {
         ["Tertiary Stats"] = "三级属性",
         ["Defensive Stats"] = "防御属性",
         ["Show Stats Panel"] = "显示属性面板", ["Lock Frames"] = "锁定窗口",
-        ["Show Strength"] = "显示力量", ["Show Agility"] = "显示敏捷", ["Show Intellect"] = "显示智力",
+        ["Show Main Stat"] = "显示主属性",
         ["Show Rating"] = "显示等级", ["Show Percentage"] = "显示百分比",
         ["Match Value Color to Stat"] = "数值颜色匹配属性",
         ["Show Offensive Stats"] = "显示进攻属性", ["Hide Zero Values"] = "隐藏零值",
@@ -950,7 +986,7 @@ local LABELS_BY_LOCALE = {
         ["Tertiary Stats"] = "三級屬性",
         ["Defensive Stats"] = "防禦屬性",
         ["Show Stats Panel"] = "顯示屬性面板", ["Lock Frames"] = "鎖定視窗",
-        ["Show Strength"] = "顯示力量", ["Show Agility"] = "顯示敏捷", ["Show Intellect"] = "顯示智力",
+        ["Show Main Stat"] = "顯示主屬性",
         ["Show Rating"] = "顯示等級", ["Show Percentage"] = "顯示百分比",
         ["Match Value Color to Stat"] = "數值色彩配合屬性",
         ["Show Offensive Stats"] = "顯示進攻屬性", ["Hide Zero Values"] = "隱藏零值",
@@ -1217,6 +1253,20 @@ local function MigrateDB()
         db.colors.agility   = { r = p.r, g = p.g, b = p.b }
         db.colors.intellect = { r = p.r, g = p.g, b = p.b }
         db.colors.primary = nil
+    end
+
+    -- v6 → v7: collapse three Show Strength/Agility/Intellect toggles into single
+    -- showMainStat (auto-detects active spec's primary). Preserve user intent: if any
+    -- of three was ON, replace with showMainStat=true (their displayed-stat preference
+    -- carries over via spec API auto-resolution). If all three were OFF (v1.2.x default —
+    -- silent majority), keep hidden — user can enable via Stats tab toggle if desired.
+    -- Color customizations (db.colors.strength/agility/intellect) are unchanged and
+    -- still drive matchValueColorToStat coloring per-spec.
+    if (db.dbVersion or 6) <= 6 then
+        db.showMainStat = (db.showStrength or db.showAgility or db.showIntellect) and true or false
+        db.showStrength = nil
+        db.showAgility = nil
+        db.showIntellect = nil
     end
 
     db.dbVersion = CURRENT_DB_VERSION
@@ -1892,18 +1942,15 @@ local function PushRow(labels, ratings, values, label, rating, value)
 end
 
 local function BuildPrimaryLines(labels, ratings, values)
+    if not cached.showMainStat then return end
+    local def = PRIMARY_STATS_BY_ID[GetCurrentMainStatId()]
+    if not def then return end -- sub-10 alt / pre-PEW / unsupported client
     local cs = cached.colorStrings
-    for _, def in ipairs(PRIMARY_STATS) do
-        if cached[def.showKey] then
-            local statStr = cs[def.colorKey]
-            local valueColor = (cached.matchValueColorToStat and statStr) or cs.rating
-            local val = GetEffectiveStat(def.unitStatId)
-            local rCol, vCol = RouteValueOnly(string.format("|cff%s%d|r", valueColor, val))
-            PushRow(labels, ratings, values,
-                FormatLabel(statStr, def.label),
-                rCol, vCol)
-        end
-    end
+    local statStr = cs[def.colorKey]
+    local valueColor = (cached.matchValueColorToStat and statStr) or cs.rating
+    local val = GetEffectiveStat(def.unitStatId)
+    local rCol, vCol = RouteValueOnly(string.format("|cff%s%d|r", valueColor, val))
+    PushRow(labels, ratings, values, FormatLabel(statStr, def.label), rCol, vCol)
 end
 
 local function BuildOffensiveLines(labels, ratings, values)
@@ -2463,6 +2510,26 @@ local function CreateColorSwatch(parent, statName, x, y)
         btn:SetBackdropColor(c.r, c.g, c.b, 1)
     end)
     return btn
+end
+
+-- Label-then-swatch row helper (no checkbox prefix). Used for color-customization rows
+-- where the show/hide gate isn't per-stat (e.g. Primary Stat Ratings: one master Show
+-- Main Stat checkbox gates display, only color customization is per-stat). Returns
+-- (text, swatch) — both can be passed to AlignSwatchColumn for column alignment.
+-- WHY width-bound-then-collapse: same idiom as CreateCheckboxColor (line ~2479) — wide
+-- bound for layout reservation, then collapse to actual text width so swatch hugs end.
+local function CreateLabeledSwatch(parent, name, label, colorKey, x, y)
+    local lbl = parent:CreateFontString(name and (name .. "Text") or nil, "OVERLAY")
+    RegisterConfigFont(lbl, CONFIG_FONT_SIZE)
+    lbl:SetPoint("TOPLEFT", x, y)
+    lbl:SetWidth(140)
+    lbl:SetJustifyH("LEFT")
+    PushLocalizedLabel(function() lbl:SetText(L(label)) end)
+    lbl:SetWidth(lbl:GetStringWidth())
+    local swatch = CreateColorSwatch(parent, colorKey, 0, 0)
+    swatch:ClearAllPoints()
+    swatch:SetPoint("LEFT", lbl, "RIGHT", CONFIG_SWATCH_GAP, 0)
+    return lbl, swatch
 end
 
 -- WHY swatch anchored to text:RIGHT (not absolute x): the swatch hugs the actual rendered
@@ -3688,21 +3755,24 @@ function addon:OpenConfigMenu()
     --[[ ===== STATS TAB ===== ]]
     local cs = NewCursor(statsTab, 12, -8)
 
-    -- Primary stats: per-stat color swatch inline with each toggle (matches Offensive/
-    -- Tertiary/Defensive pattern). Sits ABOVE Display Format because Primary renders as
-    -- flat numbers (no rating/% columns).
+    -- Primary stat: single Show Main Stat toggle (auto-resolves spec's primary via
+    -- C_SpecializationInfo.GetSpecializationInfo). Per-stat color swatches retained
+    -- below the toggle for altoholic per-class color customization (drives
+    -- matchValueColorToStat coloring for the active spec's main stat).
     CursorSection(cs, "Primary Stat Ratings")
     do
-        local rowY = cs.y
+        CreateCheckbox(statsTab, "StatsProMainStatCheck",
+            "Show Main Stat", "showMainStat", cs.padX, cs.y)
+        CursorAdvance(cs, 26)
         local leftRows, rightRows = {}, {}
-        local _, sw, txt
-        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProStrCheck", "Show Strength",  "showStrength",  "strength",  cs.padX,                       rowY)
-        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
-        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProAgiCheck", "Show Agility",   "showAgility",   "agility",   cs.padX + CONFIG_COL_OFFSET, rowY)
-        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
-        cs.y = rowY - 26
-        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProIntCheck", "Show Intellect", "showIntellect", "intellect", cs.padX,                       cs.y)
-        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
+        local lbl, sw
+        lbl, sw = CreateLabeledSwatch(statsTab, "StatsProStrSwatch", "Strength",  "strength",  cs.padX,                       cs.y)
+        leftRows[#leftRows + 1]   = { text = lbl, swatch = sw }
+        lbl, sw = CreateLabeledSwatch(statsTab, "StatsProAgiSwatch", "Agility",   "agility",   cs.padX + CONFIG_COL_OFFSET, cs.y)
+        rightRows[#rightRows + 1] = { text = lbl, swatch = sw }
+        cs.y = cs.y - 26
+        lbl, sw = CreateLabeledSwatch(statsTab, "StatsProIntSwatch", "Intellect", "intellect", cs.padX,                       cs.y)
+        leftRows[#leftRows + 1]   = { text = lbl, swatch = sw }
         CursorAdvance(cs, 22)
         AlignSwatchColumn(leftRows)
         AlignSwatchColumn(rightRows)
@@ -3920,10 +3990,10 @@ function addon:PrintDebugDump()
         tostring(FontSupports(StatsProDB.font, req)),
         tostring(StatsProDB.fontBeforeAutoSwitch)))
 
-    PrintMsg(string.format("show stats: off=%s tert=%s defensive=%s dur=%s str=%s agi=%s int=%s",
+    PrintMsg(string.format("show stats: off=%s tert=%s defensive=%s dur=%s mainStat=%s liveMainId=%s",
         tostring(cached.showOffensive),
         tostring(cached.showTertiary), tostring(cached.showDefensive), tostring(cached.showDurability),
-        tostring(cached.showStrength), tostring(cached.showAgility), tostring(cached.showIntellect)))
+        tostring(cached.showMainStat), tostring(GetCurrentMainStatId())))
 
     PrintMsg(string.format("subs off: crit=%s haste=%s mastery=%s vers=%s",
         tostring(cached.showCrit), tostring(cached.showHaste), tostring(cached.showMastery), tostring(cached.showVersatility)))

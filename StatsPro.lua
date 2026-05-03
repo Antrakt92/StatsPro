@@ -295,9 +295,7 @@ local defaults = {
         leech       = { r = 0.8,  g = 0.2,  b = 0.8 },
         avoidance   = { r = 0.2,  g = 0.8,  b = 0.8 },
         speed       = { r = 1,    g = 0.65, b = 0 },
-        strength    = { r = 1,    g = 0.84, b = 0 },
-        agility     = { r = 1,    g = 0.84, b = 0 },
-        intellect   = { r = 1,    g = 0.84, b = 0 },
+        mainStat    = { r = 1,    g = 0.84, b = 0 },
         -- Defensive colors
         dodge       = { r = 0.4,  g = 0.7,  b = 1 },
         parry       = { r = 1,    g = 0.4,  b = 0.2 },
@@ -324,14 +322,12 @@ local DEFENSIVE_STATS = {
     -- Armor & DR handled specially: armor = absolute number, DR = cached arithmetic
 }
 
--- WHY showKey field retained post-v6→v7: harmless leftover; removing it would force
--- editing the table structure for zero benefit. Field is unused after BuildPrimaryLines
--- refactor (showMainStat replaces per-stat toggles); colorKey + unitStatId still used
--- by BuildPrimaryLines + PRIMARY_STATS_BY_ID lookup + Stats tab color swatches.
+-- Primary stat label + unitStatId mapping. Used by BuildPrimaryLines via the
+-- PRIMARY_STATS_BY_ID O(1) lookup. label routes through L() for locale render.
 local PRIMARY_STATS = {
-    { label = "Strength",  unitStatId = 1, colorKey = "strength",  showKey = "showStrength"  },
-    { label = "Agility",   unitStatId = 2, colorKey = "agility",   showKey = "showAgility"   },
-    { label = "Intellect", unitStatId = 4, colorKey = "intellect", showKey = "showIntellect" },
+    { label = "Strength",  unitStatId = 1 },
+    { label = "Agility",   unitStatId = 2 },
+    { label = "Intellect", unitStatId = 4 },
 }
 
 -- O(1) lookup by unitStatId (1=Str, 2=Agi, 4=Int) for BuildPrimaryLines.
@@ -1267,13 +1263,34 @@ local function MigrateDB()
     -- of three was ON, replace with showMainStat=true (their displayed-stat preference
     -- carries over via spec API auto-resolution). If all three were OFF (v1.2.x default —
     -- silent majority), keep hidden — user can enable via Stats tab toggle if desired.
-    -- Color customizations (db.colors.strength/agility/intellect) are unchanged and
-    -- still drive matchValueColorToStat coloring per-spec.
+    --
+    -- Color migration: also collapse three per-stat colors into single mainStat. Defaults
+    -- loop above already seeded mainStat=gold; overwrite if any of three was customized
+    -- away from gold (int>agi>str preference — int = most common main stat). Recovers
+    -- v5→v6 cascade customization (v5's single colors.primary was split into 3 identical
+    -- at v6; int picks it up by chance) AND respects v6 users who customized just one.
+    -- type-check guards against corrupt DB (`db.colors.intellect = "string"` etc.).
     if (db.dbVersion or 6) <= 6 then
         db.showMainStat = (db.showStrength or db.showAgility or db.showIntellect) and true or false
         db.showStrength = nil
         db.showAgility = nil
         db.showIntellect = nil
+        if db.colors then
+            local function isCustom(c)
+                return type(c) == "table" and c.r and c.g and c.b
+                   and not (c.r == 1 and c.g == 0.84 and c.b == 0)
+            end
+            for _, key in ipairs({ "intellect", "agility", "strength" }) do
+                if isCustom(db.colors[key]) then
+                    local c = db.colors[key]
+                    db.colors.mainStat = { r = c.r, g = c.g, b = c.b }
+                    break
+                end
+            end
+            db.colors.strength = nil
+            db.colors.agility = nil
+            db.colors.intellect = nil
+        end
     end
 
     db.dbVersion = CURRENT_DB_VERSION
@@ -1973,7 +1990,7 @@ local function BuildPrimaryLines(labels, ratings, values)
     local def = PRIMARY_STATS_BY_ID[GetCurrentMainStatId()]
     if not def then return end -- sub-10 alt / pre-PEW / unsupported client
     local cs = cached.colorStrings
-    local statStr = cs[def.colorKey]
+    local statStr = cs.mainStat
     local valueColor = (cached.matchValueColorToStat and statStr) or cs.rating
     local val = GetEffectiveStat(def.unitStatId)
     local rCol, vCol = RouteValueOnly(string.format("|cff%s%d|r", valueColor, val))
@@ -2541,26 +2558,6 @@ local function CreateColorSwatch(parent, statName, x, y)
         btn:SetBackdropColor(c.r, c.g, c.b, 1)
     end)
     return btn
-end
-
--- Label-then-swatch row helper (no checkbox prefix). Used for color-customization rows
--- where the show/hide gate isn't per-stat (e.g. Primary Stat Ratings: one master Show
--- Main Stat checkbox gates display, only color customization is per-stat). Returns
--- (text, swatch) — both can be passed to AlignSwatchColumn for column alignment.
--- WHY width-bound-then-collapse: same idiom as CreateCheckboxColor (line ~2479) — wide
--- bound for layout reservation, then collapse to actual text width so swatch hugs end.
-local function CreateLabeledSwatch(parent, name, label, colorKey, x, y)
-    local lbl = parent:CreateFontString(name and (name .. "Text") or nil, "OVERLAY")
-    RegisterConfigFont(lbl, CONFIG_FONT_SIZE)
-    lbl:SetPoint("TOPLEFT", x, y)
-    lbl:SetWidth(140)
-    lbl:SetJustifyH("LEFT")
-    PushLocalizedLabel(function() lbl:SetText(L(label)) end)
-    lbl:SetWidth(lbl:GetStringWidth())
-    local swatch = CreateColorSwatch(parent, colorKey, 0, 0)
-    swatch:ClearAllPoints()
-    swatch:SetPoint("LEFT", lbl, "RIGHT", CONFIG_SWATCH_GAP, 0)
-    return lbl, swatch
 end
 
 -- WHY swatch anchored to text:RIGHT (not absolute x): the swatch hugs the actual rendered
@@ -3798,27 +3795,13 @@ function addon:OpenConfigMenu()
     local cs = NewCursor(statsTab, 12, -8)
 
     -- Primary stat: single Show Main Stat toggle (auto-resolves spec's primary via
-    -- C_SpecializationInfo.GetSpecializationInfo). Per-stat color swatches retained
-    -- below the toggle for altoholic per-class color customization (drives
-    -- matchValueColorToStat coloring for the active spec's main stat).
+    -- C_SpecializationInfo.GetSpecializationInfo). Inline mainStat color swatch drives
+    -- main stat label color + matchValueColorToStat coloring (single global color,
+    -- collapsed from per-class strength/agility/intellect in v6→v7 migration).
     CursorSection(cs, "Primary Stat Ratings")
-    do
-        CreateCheckbox(statsTab, "StatsProMainStatCheck",
-            "Show Main Stat", "showMainStat", cs.padX, cs.y)
-        CursorAdvance(cs, 26)
-        local leftRows, rightRows = {}, {}
-        local lbl, sw
-        lbl, sw = CreateLabeledSwatch(statsTab, "StatsProStrSwatch", "Strength",  "strength",  cs.padX,                       cs.y)
-        leftRows[#leftRows + 1]   = { text = lbl, swatch = sw }
-        lbl, sw = CreateLabeledSwatch(statsTab, "StatsProAgiSwatch", "Agility",   "agility",   cs.padX + CONFIG_COL_OFFSET, cs.y)
-        rightRows[#rightRows + 1] = { text = lbl, swatch = sw }
-        cs.y = cs.y - 26
-        lbl, sw = CreateLabeledSwatch(statsTab, "StatsProIntSwatch", "Intellect", "intellect", cs.padX,                       cs.y)
-        leftRows[#leftRows + 1]   = { text = lbl, swatch = sw }
-        CursorAdvance(cs, 22)
-        AlignSwatchColumn(leftRows)
-        AlignSwatchColumn(rightRows)
-    end
+    CreateCheckboxColor(statsTab, "StatsProMainStatCheck",
+        "Show Main Stat", "showMainStat", "mainStat", cs.padX, cs.y)
+    CursorAdvance(cs, 22)
 
     CursorGap(cs, 6)
 

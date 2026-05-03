@@ -212,6 +212,10 @@ local defaults = {
     yOfs = 0,
     scale = 1.0,
     fontSize = 14,
+    -- Text opacity: stored as INT 25-100 (percentage) in DB, divided by 100 on apply.
+    -- Format-string compatibility with CreateConfigSlider's "%d%%" format. Default 100
+    -- (1.0 alpha) = zero behavior change for existing users.
+    textAlpha = 100,
     -- WHY LocaleAwareDefaultFont: Blizzard's locale-aware default-font global resolves
     -- to the right TTF for the current WoW client locale (CJK-supporting on zhCN/zhTW/
     -- koKR; Latin/Cyrillic-supporting elsewhere). Hardcoding FRIZQT would render
@@ -510,7 +514,7 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Auto Color by Threshold",
         ["Use Worst Slot (instead of average)"] = "Use Worst Slot (instead of average)",
         -- Sliders:
-        ["Scale:"] = "Scale:", ["Refresh Rate (sec):"] = "Refresh Rate (sec):", ["Font Size:"] = "Font Size:",
+        ["Scale:"] = "Scale:", ["Refresh Rate (sec):"] = "Refresh Rate (sec):", ["Font Size:"] = "Font Size:", ["Text Opacity:"] = "Text Opacity:",
         -- Dropdown captions:
         ["Display Mode:"] = "Display Mode:", ["Font:"] = "Font:", ["Language:"] = "Language:",
         -- Dropdown options (Display Mode):
@@ -567,7 +571,7 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Авто-цвет по порогу",
         ["Use Worst Slot (instead of average)"] = "По худшему слоту (вместо среднего)",
         -- Sliders:
-        ["Scale:"] = "Масштаб:", ["Refresh Rate (sec):"] = "Частота обновления (сек):", ["Font Size:"] = "Размер шрифта:",
+        ["Scale:"] = "Масштаб:", ["Refresh Rate (sec):"] = "Частота обновления (сек):", ["Font Size:"] = "Размер шрифта:", ["Text Opacity:"] = "Прозрачность текста:",
         -- Dropdown captions:
         ["Display Mode:"] = "Режим отображения:", ["Font:"] = "Шрифт:", ["Language:"] = "Язык:",
         -- Dropdown options (Display Mode):
@@ -621,7 +625,7 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "Haltbarkeit anzeigen", ["Show Repair Cost"] = "Reparaturkosten anzeigen",
         ["Auto Color by Threshold"] = "Auto-Farbe nach Schwellwert",
         ["Use Worst Slot (instead of average)"] = "Schlechtester Slot (statt Durchschnitt)",
-        ["Scale:"] = "Skalierung:", ["Refresh Rate (sec):"] = "Aktualisierungsrate (Sek.):", ["Font Size:"] = "Schriftgröße:",
+        ["Scale:"] = "Skalierung:", ["Refresh Rate (sec):"] = "Aktualisierungsrate (Sek.):", ["Font Size:"] = "Schriftgröße:", ["Text Opacity:"] = "Textdeckkraft:",
         ["Display Mode:"] = "Anzeigemodus:", ["Font:"] = "Schrift:", ["Language:"] = "Sprache:",
         ["Flat"] = "Flach", ["Sectioned"] = "Gruppiert", ["Split"] = "Geteilt",
         ["Reset to Defaults"] = "Auf Standard", ["Close"] = "Schließen",
@@ -668,7 +672,7 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "Afficher durabilité", ["Show Repair Cost"] = "Afficher coût de réparation",
         ["Auto Color by Threshold"] = "Couleur auto par seuil",
         ["Use Worst Slot (instead of average)"] = "Pire emplacement (vs moyenne)",
-        ["Scale:"] = "Échelle :", ["Refresh Rate (sec):"] = "Fréquence (sec) :", ["Font Size:"] = "Taille de police :",
+        ["Scale:"] = "Échelle :", ["Refresh Rate (sec):"] = "Fréquence (sec) :", ["Font Size:"] = "Taille de police :", ["Text Opacity:"] = "Opacité du texte :",
         ["Display Mode:"] = "Mode d'affichage :", ["Font:"] = "Police :", ["Language:"] = "Langue :",
         ["Flat"] = "Plat", ["Sectioned"] = "Par sections", ["Split"] = "Séparé",
         ["Reset to Defaults"] = "Par défaut", ["Close"] = "Fermer",
@@ -716,7 +720,7 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "Mostrar durabilidad", ["Show Repair Cost"] = "Mostrar coste reparación",
         ["Auto Color by Threshold"] = "Color auto por umbral",
         ["Use Worst Slot (instead of average)"] = "Peor ranura (en vez de media)",
-        ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:",
+        ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:", ["Text Opacity:"] = "Opacidad del texto:",
         ["Display Mode:"] = "Modo:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por secciones", ["Split"] = "Dividido",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
@@ -762,7 +766,7 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "Mostrar durabilidad", ["Show Repair Cost"] = "Mostrar costo de reparación",
         ["Auto Color by Threshold"] = "Color auto por umbral",
         ["Use Worst Slot (instead of average)"] = "Peor ranura (en vez del promedio)",
-        ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:",
+        ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:", ["Text Opacity:"] = "Opacidad del texto:",
         ["Display Mode:"] = "Modo:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por secciones", ["Split"] = "Dividido",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
@@ -809,7 +813,7 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "Mostra durata", ["Show Repair Cost"] = "Mostra costo riparazione",
         ["Auto Color by Threshold"] = "Colore auto per soglia",
         ["Use Worst Slot (instead of average)"] = "Slot peggiore (anziché media)",
-        ["Scale:"] = "Scala:", ["Refresh Rate (sec):"] = "Frequenza (sec):", ["Font Size:"] = "Dimensione font:",
+        ["Scale:"] = "Scala:", ["Refresh Rate (sec):"] = "Frequenza (sec):", ["Font Size:"] = "Dimensione font:", ["Text Opacity:"] = "Opacità del testo:",
         ["Display Mode:"] = "Modalità:", ["Font:"] = "Font:", ["Language:"] = "Lingua:",
         ["Flat"] = "Piatto", ["Sectioned"] = "A sezioni", ["Split"] = "Diviso",
         ["Reset to Defaults"] = "Predefiniti", ["Close"] = "Chiudi",
@@ -855,7 +859,7 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "Mostrar durabilidade", ["Show Repair Cost"] = "Mostrar custo de reparo",
         ["Auto Color by Threshold"] = "Cor auto por limite",
         ["Use Worst Slot (instead of average)"] = "Pior slot (em vez de média)",
-        ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Atualização (s):", ["Font Size:"] = "Tamanho da fonte:",
+        ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Atualização (s):", ["Font Size:"] = "Tamanho da fonte:", ["Text Opacity:"] = "Opacidade do texto:",
         ["Display Mode:"] = "Modo:", ["Font:"] = "Fonte:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por seções", ["Split"] = "Dividido",
         ["Reset to Defaults"] = "Restaurar", ["Close"] = "Fechar",
@@ -908,7 +912,7 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "내구도 표시", ["Show Repair Cost"] = "수리 비용 표시",
         ["Auto Color by Threshold"] = "임계값 자동 색상",
         ["Use Worst Slot (instead of average)"] = "최악 슬롯 사용 (평균 대신)",
-        ["Scale:"] = "크기:", ["Refresh Rate (sec):"] = "갱신 주기 (초):", ["Font Size:"] = "글꼴 크기:",
+        ["Scale:"] = "크기:", ["Refresh Rate (sec):"] = "갱신 주기 (초):", ["Font Size:"] = "글꼴 크기:", ["Text Opacity:"] = "텍스트 투명도:",
         ["Display Mode:"] = "표시 모드:", ["Font:"] = "글꼴:", ["Language:"] = "언어:",
         ["Flat"] = "단일", ["Sectioned"] = "구역별", ["Split"] = "분리",
         ["Reset to Defaults"] = "기본값", ["Close"] = "닫기",
@@ -954,7 +958,7 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "显示耐久", ["Show Repair Cost"] = "显示修理费用",
         ["Auto Color by Threshold"] = "按阈值自动着色",
         ["Use Worst Slot (instead of average)"] = "最差栏位（替代平均值）",
-        ["Scale:"] = "缩放:", ["Refresh Rate (sec):"] = "刷新率 (秒):", ["Font Size:"] = "字体大小:",
+        ["Scale:"] = "缩放:", ["Refresh Rate (sec):"] = "刷新率 (秒):", ["Font Size:"] = "字体大小:", ["Text Opacity:"] = "文字不透明度:",
         ["Display Mode:"] = "显示模式:", ["Font:"] = "字体:", ["Language:"] = "语言:",
         ["Flat"] = "扁平", ["Sectioned"] = "分组", ["Split"] = "分离",
         ["Reset to Defaults"] = "恢复默认", ["Close"] = "关闭",
@@ -1000,7 +1004,7 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "顯示耐久", ["Show Repair Cost"] = "顯示修理費用",
         ["Auto Color by Threshold"] = "依閾值自動上色",
         ["Use Worst Slot (instead of average)"] = "最差欄位（替代平均值）",
-        ["Scale:"] = "縮放:", ["Refresh Rate (sec):"] = "更新率 (秒):", ["Font Size:"] = "字型大小:",
+        ["Scale:"] = "縮放:", ["Refresh Rate (sec):"] = "更新率 (秒):", ["Font Size:"] = "字型大小:", ["Text Opacity:"] = "文字不透明度:",
         ["Display Mode:"] = "顯示模式:", ["Font:"] = "字型:", ["Language:"] = "語言:",
         ["Flat"] = "扁平", ["Sectioned"] = "分組", ["Split"] = "分離",
         ["Reset to Defaults"] = "恢復預設", ["Close"] = "關閉",
@@ -1164,6 +1168,9 @@ local function CacheSettings()
     end
     cached.updateInterval = GetDB("updateInterval")
     cached.displayMode = GetDB("displayMode")
+    -- WHY clamp: defensive against /run StatsProDB.textAlpha=0 (would set invisible text)
+    -- or out-of-range corrupt DB values. Floor matches slider min (25 = 25%).
+    cached.textAlpha = math.max(0.25, math.min(1.0, (StatsProDB.textAlpha or 100) / 100))
 
     -- Resolve labels for the active locale. forceLocale="auto" → GetLocale().
     -- WHY reference, not copy: LABELS_BY_LOCALE entries are never mutated; reference
@@ -1729,6 +1736,21 @@ function Panel:ApplyStyle(font, size)
     self.heightDirty = true
 end
 
+-- WHY SetAlpha (region prop), not SetTextColor(r,g,b,a): color escape codes
+-- |cffRRGGBB...|r in text content override the SetTextColor RGB, but alpha is
+-- a separate region-level prop applied after color resolution. SetAlpha is the
+-- canonical Blizzard pattern for transparent text with inline color escapes.
+-- WHY no defensive re-call from Panel:ApplyStyle: SetFont clears text only, not
+-- region transforms — alpha survives. Re-calling here would defeat ApplyStyle's
+-- idempotency early-return optimization for no benefit.
+function Panel:ApplyTextAlpha(alpha)
+    self.labelText:SetAlpha(alpha)
+    self.ratingText:SetAlpha(alpha)
+    self.valueText:SetAlpha(alpha)
+    self.repairText:SetAlpha(alpha)
+    self.repairLabelText:SetAlpha(alpha)
+end
+
 -- Re-runs SetTextSafe with the last-known content. For font-only changes (font picker
 -- hover/commit, FontSize slider) where line text hasn't changed but glyph widths have —
 -- skip the heavy BuildLines + stat-API rescan that UpdateStats() does. SetTextSafe
@@ -1756,6 +1778,11 @@ local defensivePanel = Panel:New("StatsProDefensiveFrame", "defensive_")
 local function ApplyTextStyleToAllPanels(font, size)
     mainPanel:ApplyStyle(font, size)
     defensivePanel:ApplyStyle(font, size)
+end
+
+local function ApplyTextAlphaToAllPanels(alpha)
+    if mainPanel then mainPanel:ApplyTextAlpha(alpha) end
+    if defensivePanel then defensivePanel:ApplyTextAlpha(alpha) end
 end
 
 -- Companion to ApplyTextStyleToAllPanels: re-flows both panels after a font/size change
@@ -2290,6 +2317,10 @@ local function OnPlayerEnteringWorld()
         -- their localized labels for one whole session. Re-applying after MigrateDB
         -- closes that window.
         ApplyTextStyleToAllPanels(GetDB("font"), GetDB("fontSize"))
+        -- WHY re-apply textAlpha at PEW: Panel:New runs at file scope (line 1703)
+        -- before CacheSettings, so cached.textAlpha is nil at FontString creation.
+        -- This call propagates user's saved alpha to FontStrings on first frame.
+        ApplyTextAlphaToAllPanels(cached.textAlpha)
         isLoaded = true
     end
     -- WHY: UpdateStats handles Show/Hide based on cached.isVisible + line content.
@@ -2794,6 +2825,7 @@ local function ResetToDefaults()
     -- Step 3: re-cache + re-apply panel-level visual state.
     CacheSettings()
     ApplyTextStyleToAllPanels(defaults.font, defaults.fontSize)
+    ApplyTextAlphaToAllPanels(cached.textAlpha)
     -- Sync settings-UI font to the fresh default-locale state. Without this, a Reset
     -- performed while forceLocale was a non-baseline locale (e.g. ruRU on enUS — UI was
     -- in ARIALN via prior MaybeAutoSwitchFont) would leave currentConfigFont stuck on
@@ -3507,6 +3539,16 @@ function addon:OpenConfigMenu()
         8, 32, 1, "8", "32", "%d",
         function(v) ApplyTextStyleToAllPanels(GetDB("font"), v); ReflowAllPanels() end)
 
+    -- Text Opacity slider — adjust panel text transparency. Stored as INT 25-100 in DB
+    -- (matches CreateConfigSlider's format-string contract); cached as float 0.25-1.0
+    -- for SetAlpha. Default 100 = zero behavior change for existing users.
+    CreateConfigSlider(displayTab, "StatsProTextAlphaSlider", "Text Opacity:", "textAlpha", cd,
+        25, 100, 5, "25%", "100%", "%d%%",
+        function(value)
+            cached.textAlpha = value / 100
+            ApplyTextAlphaToAllPanels(cached.textAlpha)
+        end)
+
     CursorGap(cd, 4)
 
     -- Localization section. Always shown (replaces former HAS_LOCALIZATION-gated checkbox —
@@ -3972,10 +4014,11 @@ function addon:PrintDebugDump()
         tostring(isLoaded), tostring(durabilityDirty),
         math.floor(collectgarbage("count"))))
 
-    PrintMsg(string.format("visible=%s  locked=%s  mode=%s  font=%dpx  scale=%.1f  refresh=%.2fs",
+    PrintMsg(string.format("visible=%s  locked=%s  mode=%s  font=%dpx  scale=%.1f  refresh=%.2fs  textAlpha=%d%%",
         tostring(cached.isVisible), tostring(cached.isLocked),
         tostring(GetDB("displayMode")),
-        GetDB("fontSize"), GetDB("scale"), GetDB("updateInterval")))
+        GetDB("fontSize"), GetDB("scale"), GetDB("updateInterval"),
+        StatsProDB.textAlpha or 100))
 
     PrintMsg(string.format("show fmt: rating=%s pct=%s matchColor=%s",
         tostring(cached.showRating), tostring(cached.showPercentage), tostring(cached.matchValueColorToStat)))

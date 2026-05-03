@@ -13,9 +13,9 @@
 </p>
 
 <p align="center">
-  A clean, lightweight on-screen HUD for World of Warcraft Retail. Secondary stats,
-  defensive stats, durability, and live repair cost in a draggable panel — without
-  the bloat of a full framework.
+  A clean on-screen HUD for World of Warcraft Retail. Secondary stats, defensive
+  stats, durability, and live repair cost in a draggable panel — without the bloat
+  of a full framework.
 </p>
 
 <p align="center">

@@ -17,9 +17,6 @@ local DURABILITY_SKIP_SLOTS = { [4] = true, [18] = true }
 local DURABILITY_GREEN_THRESHOLD  = 60
 local DURABILITY_YELLOW_THRESHOLD = 30
 
--- DEFENSIVE_HEADER moved into a function (DefensiveHeader) in section 7 so it picks up
--- the locale-aware divider word from L("Defensive") and reacts to toggle flips.
-
 local GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL, GLYPH_HANS, GLYPH_HANT =
     "Latin", "Cyrillic", "Hangul", "Hans", "Hant"
 
@@ -37,9 +34,9 @@ local GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL, GLYPH_HANS, GLYPH_HANT =
 --   * PROVIDED-BY-CLIENT-LOCALE (what physical fonts THIS install ships):
 --     LOCALE_NATIVE_GLYPHS (see do-block after FONT_GLYPH_SUPPORT).
 --     Indexed by `GetLocale()` / client install.
--- Confusing the two axes was exactly the v1.1.4-era bug (FRIZQT entry assumed
--- universal CYR coverage from the output-locale axis but actual coverage is
--- on the client-locale axis). Index by the right axis or the bug recurs.
+-- WARNING: indexing a table by the wrong axis silently breaks coverage detection
+-- on locales that need glyphs the client-shipped font can't render — labels go to
+-- `?` boxes. Per-table comments below name which axis applies.
 local LANGUAGE_OPTIONS = {
     { value = "auto",  label = nil },                        -- composed dynamically (Auto + native of GetLocale())
     { value = "enUS",  label = "English" },
@@ -231,8 +228,7 @@ local defaults = {
     scale = 1.0,
     fontSize = 14,
     -- Text opacity: stored as INT 25-100 (percentage) in DB, divided by 100 on apply.
-    -- Format-string compatibility with CreateConfigSlider's "%d%%" format. Default 100
-    -- (1.0 alpha) = zero behavior change for existing users.
+    -- WHY int-percent (not float 0..1): format-string compat with CreateConfigSlider's "%d%%".
     textAlpha = 100,
     -- WHY LocaleAwareDefaultFont: Blizzard's locale-aware default-font global resolves
     -- to the right TTF for the current WoW client locale (CJK-supporting on zhCN/zhTW/
@@ -277,8 +273,7 @@ local defaults = {
     showAvoidance = true,
     showSpeed = true,
 
-    -- Primary stat (single toggle, auto-detects via spec API; replaces v1.2.x's
-    -- separate Show Strength/Agility/Intellect toggles in v6→v7 migration).
+    -- Primary stat: single toggle; the active stat resolves from the player's spec.
     showMainStat = false,
 
     -- Defensive stats
@@ -289,7 +284,7 @@ local defaults = {
     showBlock = true,
     showArmor = true,
 
-    -- Offensive stats (preserve current always-shown behavior with default true)
+    -- Offensive stats
     showOffensive = true,
     hideZeroOffensive = false,  -- combat ratings rarely 0; opt-in only (Vers may legit hit 0)
     showCrit = true,
@@ -356,7 +351,7 @@ end
 
 -- WHY shim: C_SpecializationInfo.* is the modern API in 12.x retail; legacy
 -- GetSpecialization* deprecated since 11.2 and may be removed in 13.x. Defensive
--- chain mirrors C_AddOns.GetAddOnMetadata-or-GetAddOnMetadata pattern (line 200).
+-- chain mirrors the C_AddOns.GetAddOnMetadata-or-GetAddOnMetadata pattern used for ADDON_VERSION.
 local function SafeGetSpecIndex()
     if C_SpecializationInfo and C_SpecializationInfo.GetSpecialization then
         return C_SpecializationInfo.GetSpecialization()
@@ -372,8 +367,8 @@ local function SafeGetSpecInfo(idx)
 end
 
 -- Returns 1 (Str) / 2 (Agi) / 4 (Int) or nil (no spec selected — sub-10 alts /
--- pre-PEW edge / API stub in older clients). Per-render lookup (no caching) matches
--- "no PLAYER_SPECIALIZATION_CHANGED handler" architecture per WHY-comment line 2253.
+-- pre-PEW edge / API stub in older clients). Per-render lookup (no caching) — matches
+-- the no-spec-event-handler architecture (UpdateStats re-reads every tick anyway).
 local function GetCurrentMainStatId()
     local idx = SafeGetSpecIndex()
     if not idx then return nil end
@@ -403,9 +398,6 @@ local CACHED_BOOL_KEYS = {
     "showDurability", "showRepairCost", "useAutoColorDurability", "useWorstDurability",
 }
 
--- WHY: COLOR_KEYS removed - CacheSettings now iterates pairs(defaults.colors) directly
--- since defaults table IS the canonical color list; no separate string table needed.
-
 --[[ ============================================================
     6. SAVED VARIABLES + RUNTIME STATE
 ============================================================ ]]
@@ -432,10 +424,9 @@ local cached = {
     -- CacheSettings overwrites with real LABELS_BY_LOCALE entry at PEW.
     -- WARNING: never mutate; treat read-only.
     activeLabels = {},
-    -- versatility cached out-of-combat (existing)
+    -- WARNING: versatility / armor reads taint in combat — cache OOC, reuse cached value during combat.
     versTotal = 0,
     versTotalRating = 0,
-    -- Defensive cached out-of-combat
     armorDR = 0,
     durabilityValue = 100,  -- holds avg or min depending on cached.useWorstDurability
     repairCost = 0,         -- live repair cost in copper (sum from per-slot tooltip scan)
@@ -499,7 +490,7 @@ local LABELS_BY_LOCALE = {
         Defensive = "Defensive",
         -- Settings UI words (config menu only, never appear on the panel itself):
         Color = "Color",
-        -- ===== Settings UI strings (T2-4) =====
+        -- ===== Settings UI strings =====
         -- Tabs (Defensive reuses the existing key above):
         ["Stats"] = "Stats", ["Appearance"] = "Appearance",
         -- Section headers (Durability reuses the existing key above):
@@ -556,7 +547,7 @@ local LABELS_BY_LOCALE = {
         Durability = "Проч",    Repair = "Рем",
         Defensive = "Защита",
         Color = "Цвет",
-        -- ===== Settings UI (T2-4) =====
+        -- ===== Settings UI =====
         -- Tabs (Defensive uses "Защита" via the existing key above):
         ["Stats"] = "Статы", ["Appearance"] = "Внешний вид",
         -- Section headers (Durability reuses "Проч" — short form, stylistically OK as cap'd header):
@@ -613,7 +604,7 @@ local LABELS_BY_LOCALE = {
         Durability = "Haltb",   Repair = "Repar",
         Defensive = "Defensiv",
         Color = "Farbe",
-        -- ===== Settings UI (T2-4, best-effort draft) =====
+        -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         -- Speed checkbox uses "Lauftempo" (long form) to disambiguate from Haste="Tempo".
         ["Stats"] = "Werte", ["Appearance"] = "Darstellung",
         ["Frame & Position"] = "Fenster & Position",
@@ -661,7 +652,7 @@ local LABELS_BY_LOCALE = {
         Durability = "Dura",    Repair = "Rép",
         Defensive = "Défense",
         Color = "Couleur",
-        -- ===== Settings UI (T2-4, best-effort draft) =====
+        -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         ["Stats"] = "Stats", ["Appearance"] = "Apparence",
         ["Frame & Position"] = "Cadre & Position",
         ["Typography"] = "Typographie",
@@ -709,7 +700,7 @@ local LABELS_BY_LOCALE = {
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defensa",
         Color = "Color",
-        -- ===== Settings UI (T2-4, best-effort draft) =====
+        -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         ["Stats"] = "Atributos", ["Appearance"] = "Apariencia",
         ["Frame & Position"] = "Marco y Posición",
         ["Typography"] = "Tipografía",
@@ -754,7 +745,7 @@ local LABELS_BY_LOCALE = {
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defensa",
         Color = "Color",
-        -- ===== Settings UI (T2-4, best-effort draft — mirrors esES with regional swaps:
+        -- ===== Settings UI (best-effort draft — mirrors esES with regional swaps:
         --   "ajustes" → "configuración" (esMX preferred); "haz clic" → "da clic".
         ["Stats"] = "Atributos", ["Appearance"] = "Apariencia",
         ["Frame & Position"] = "Marco y Posición",
@@ -802,7 +793,7 @@ local LABELS_BY_LOCALE = {
         Durability = "Durab",   Repair = "Ripa",
         Defensive = "Difesa",
         Color = "Colore",
-        -- ===== Settings UI (T2-4, best-effort draft) =====
+        -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         ["Stats"] = "Stat", ["Appearance"] = "Aspetto",
         ["Frame & Position"] = "Cornice e Posizione",
         ["Typography"] = "Tipografia",
@@ -848,7 +839,7 @@ local LABELS_BY_LOCALE = {
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defesa",
         Color = "Cor",
-        -- ===== Settings UI (T2-4, best-effort draft) =====
+        -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         ["Stats"] = "Atributos", ["Appearance"] = "Aparência",
         ["Frame & Position"] = "Janela e Posição",
         ["Typography"] = "Tipografia",
@@ -901,7 +892,7 @@ local LABELS_BY_LOCALE = {
         Durability = "내구",    Repair = "수리",
         Defensive = "수비",
         Color = "색상",
-        -- ===== Settings UI (T2-4, best-effort draft — native review welcomed via Issues) =====
+        -- ===== Settings UI (best-effort draft — native review welcomed via Issues) =====
         ["Stats"] = "능력치", ["Appearance"] = "외형",
         ["Frame & Position"] = "창 및 위치",
         ["Typography"] = "글꼴",
@@ -947,7 +938,7 @@ local LABELS_BY_LOCALE = {
         Durability = "耐久",    Repair = "修理",
         Defensive = "防御",
         Color = "颜色",
-        -- ===== Settings UI (T2-4, best-effort draft) =====
+        -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         ["Stats"] = "属性", ["Appearance"] = "外观",
         ["Frame & Position"] = "窗口与位置",
         ["Typography"] = "字体",
@@ -993,7 +984,7 @@ local LABELS_BY_LOCALE = {
         Durability = "耐久",    Repair = "修理",
         Defensive = "防禦",
         Color = "顏色",
-        -- ===== Settings UI (T2-4, best-effort draft, Traditional script) =====
+        -- ===== Settings UI (best-effort draft, Traditional script) =====
         ["Stats"] = "屬性", ["Appearance"] = "外觀",
         ["Frame & Position"] = "視窗與位置",
         ["Typography"] = "字型",
@@ -1074,17 +1065,15 @@ local function L(englishKey)
     return cached.activeLabels[englishKey] or englishKey
 end
 
--- Replaces nine `string.format("|cff%s%s:|r", color, label)` sites in builder
--- functions. Single point where coloring + localization compose. Future new stat
--- needs one row in LABELS_BY_LOCALE.enUS + one FormatLabel call site, plus a
--- translation row in each shipped non-English locale (4-7 char short form).
+-- Single point where coloring + localization compose. New stat needs one row in
+-- LABELS_BY_LOCALE.enUS + one FormatLabel call site, plus a translation row in
+-- each shipped non-English locale (4-7 char short form).
 local function FormatLabel(colorHex, englishKey)
     return string.format("|cff%s%s:|r", colorHex, L(englishKey))
 end
 
--- Replaces the static `local DEFENSIVE_HEADER = ...` constant. Resolves at use time
--- (not at file load) so toggle flips immediately update the divider on next render.
--- Cheap: one string.format per sectioned-mode UpdateStats (throttled to ~2/s default).
+-- WHY function (not a constant): resolved at use time so locale-toggle flips update
+-- the divider on next render. Cheap: one string.format per sectioned-mode UpdateStats.
 local function DefensiveHeader()
     return string.format("|cff808080— %s —|r", L("Defensive"))
 end
@@ -2028,7 +2017,7 @@ local function BuildPrimaryLines(labels, ratings, values)
 end
 
 local function BuildOffensiveLines(labels, ratings, values)
-    -- master gate (P-7): hide entire section when off (cheapest check, exits whole function)
+    -- Master gate: hide entire section when off (cheapest check, exits whole function).
     if not cached.showOffensive then return end
     -- WHY guard: with both display toggles off the user wants offensive rows hidden
     -- entirely. Without this guard the percent-only branch of FmtRatingPct would still
@@ -2364,9 +2353,9 @@ local function OnPlayerEnteringWorld()
         -- their localized labels for one whole session. Re-applying after MigrateDB
         -- closes that window.
         ApplyTextStyleToAllPanels(GetDB("font"), GetDB("fontSize"))
-        -- WHY re-apply textAlpha at PEW: Panel:New runs at file scope (line 1703)
-        -- before CacheSettings, so cached.textAlpha is nil at FontString creation.
-        -- This call propagates user's saved alpha to FontStrings on first frame.
+        -- WHY re-apply textAlpha at PEW: Panel:New runs at file scope before CacheSettings,
+        -- so cached.textAlpha is nil at FontString creation. This propagates the user's
+        -- saved alpha to FontStrings on the first frame.
         ApplyTextAlphaToAllPanels(cached.textAlpha)
         isLoaded = true
     end
@@ -2446,22 +2435,23 @@ local localizedConfigFonts = {}
 -- (e.g. enUS-back-switch from ruRU). Returns nil-via-`or` fallback only when no font
 -- in the 3-tier chain supports the locale (Korean on enUS without LSM K_Damage) —
 -- visible glyph gap is acceptable, langWarn already surfaces the problem.
--- Reassignment to forward-decl'd upvalue from line ~1654 (no `local` keyword).
+-- WHY no `local`: assigning the forward-decl'd upvalue declared earlier in this section.
 ResolveConfigFont = function(activeLocale)
     local req = LOCALE_GLYPH_REQ[activeLocale] or GLYPH_LATIN
     return FindCompatibleFont(CONFIG_FONT, req) or CONFIG_FONT
 end
 
--- Replaces direct fs:SetFont(CONFIG_FONT, size, flags) at 12 call sites.
--- Initial set uses currentConfigFont (already locale-correct via PEW MaybeAutoSwitchFont).
+-- Settings-UI font register: collects every settings FontString + its (size, flags) so
+-- ApplyConfigFont can re-apply with a glyph-compatible font on language change without
+-- a UI rebuild. Initial set uses currentConfigFont (locale-correct via PEW MaybeAutoSwitchFont).
 local function RegisterConfigFont(fs, size, flags)
     fs:SetFont(currentConfigFont, size, flags)
     tinsert(localizedConfigFonts, { fs = fs, size = size, flags = flags })
 end
 
--- Forward-decl assignment from line ~1646; called from MaybeAutoSwitchFont and
--- PreviewLanguage/CancelLanguagePreview. Idempotent fast-path skips work when
--- currentConfigFont already matches (covers PEW + back-to-default-locale scenarios).
+-- Called from MaybeAutoSwitchFont and PreviewLanguage/CancelLanguagePreview. Idempotent
+-- fast-path skips work when currentConfigFont already matches (covers PEW + back-to-
+-- default-locale scenarios). WHY no `local`: assigns the forward-decl'd upvalue.
 ApplyConfigFont = function(font)
     if font == currentConfigFont then return end
     currentConfigFont = font
@@ -2680,9 +2670,10 @@ local function RefreshConfigLocalization()
 end
 
 --[[ ============================================================
-    15. CONFIG MENU (tabs: Display / Stats / Defensive)
+    15. CONFIG MENU (tabs: Stats / Defensive / Appearance)
 ============================================================ ]]
--- Forward-decls — assigned during OpenConfigMenu Display-tab build pass.
+-- Forward-decls — assigned during OpenConfigMenu's Appearance-tab build pass
+-- (the Lua frame variable is `displayTab`; UI label is "Appearance").
 -- RefreshLanguageWarning: assigned in Localization section; captured by font dropdown's
 -- PickFont closure to refresh the inline warning when the user picks a font that may not
 -- cover the active locale's glyphs.
@@ -2781,8 +2772,8 @@ local function CursorSection(c, label)
 end
 
 -- CreateConfigSlider: standard label-on-top + horizontal slider pattern used across
--- Display tab. valueFmt is a string.format specifier (e.g. "%.1f", "%d") applied to
--- both initial display and live OnValueChanged updates. SetObeyStepOnDrag(true) +
+-- the Appearance tab. valueFmt is a string.format specifier (e.g. "%.1f", "%d") applied
+-- to both initial display and live OnValueChanged updates. SetObeyStepOnDrag(true) +
 -- step=1 guarantees integer values for "%d" sliders. cd cursor advances by 50.
 local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, maxVal, step, lowText, highText, valueFmt, onChange)
     local sliderY = cd.y
@@ -2901,10 +2892,10 @@ function addon:OpenConfigMenu()
     wipe(alignmentGroups)
     wipe(localizedConfigLabels)
     wipe(localizedConfigFonts)
-    -- Function-local: collected during Display tab build, aligned once at end of Typography
-    -- section via AlignSwatchColumn(displayDropdownRows, CONFIG_DROPDOWN_GAP). Table reference
-    -- retained via alignmentGroups after registration so RefreshConfigLocalization can re-run
-    -- alignment when locale-driven label widths shift.
+    -- Function-local: collected during the Appearance tab build, aligned once at end of
+    -- the Typography section via AlignSwatchColumn(displayDropdownRows, CONFIG_DROPDOWN_GAP).
+    -- Table reference retained via alignmentGroups after registration so RefreshConfigLocalization
+    -- can re-run alignment when locale-driven label widths shift.
     local displayDropdownRows = {}
 
     --[[ ===== Frame ===== ]]
@@ -3018,13 +3009,12 @@ function addon:OpenConfigMenu()
     scrollChild:SetSize(scrollFrame:GetWidth() - 4, 1)  -- height set per active tab
     scrollFrame:SetScrollChild(scrollChild)
 
-    -- Tab content frames (children of scrollChild)
+    -- Tab content frames (children of scrollChild). Tab order: content-first (Stats /
+    -- Defensive) then appearance (typography / localization). Variable `displayTab`
+    -- backs the UI tab labelled "Appearance" (see `names` array below).
     local displayTab   = CreateFrame("Frame", nil, scrollChild)
     local statsTab     = CreateFrame("Frame", nil, scrollChild)
     local defensiveTab = CreateFrame("Frame", nil, scrollChild)
-    -- Tab order: content-first (Stats / Defensive) then appearance (visual / typography /
-    -- localization). Variable names keep historical `displayTab` for low-churn diff; UI label
-    -- is "Appearance" (see `names` array below).
     local tabContents  = { statsTab, defensiveTab, displayTab }
     for _, tab in ipairs(tabContents) do
         tab:SetPoint("TOPLEFT", 0, 0)
@@ -3090,7 +3080,7 @@ function addon:OpenConfigMenu()
         end
     end
 
-    --[[ ===== DISPLAY TAB ===== ]]
+    --[[ ===== APPEARANCE TAB (Lua var: displayTab) ===== ]]
     local cd = NewCursor(displayTab, 12, -8)
 
     -- Frame & Position section: panel-level container settings (visibility, lock, layout
@@ -3272,22 +3262,12 @@ function addon:OpenConfigMenu()
             ApplyTextStyleToAllPanels(path, GetDB("fontSize"))
             ReflowAllPanels()
         end
-        -- Unconditional restore on cancel — was previously gated on `previewedPath~=nil`
-        -- to skip work when no preview was active, but the gate was load-bearing on
-        -- perfect state tracking. Edge cases that left panels stuck on a preview-applied
-        -- font after picker close:
-        --   1. Race between PickFont's `previewedPath=nil` write and a pending OnLeave
-        --      timer — timer fires, gate trips, panel left on preview font.
-        --   2. SetFont silent-fallback on a path that WoW couldn't load (LSM addon
-        --      disabled mid-session etc.) — Panel:ApplyStyle wrote `appliedFont=path`
-        --      BEFORE SetFont, so the cache lies; cache hit on next Apply skips restore.
-        --   3. Frame:Hide → child OnLeave event ordering inside the WoW UI core —
-        --      OnHide → CancelFontPreview can run before the OnLeave timer that already
-        --      cleared previewedPath.
-        -- Removing the gate makes restore bulletproof. Cost is negligible:
-        -- Panel:ApplyStyle's idempotency cache short-circuits when panels are already
-        -- at db.font (no SetFont calls); only Reflow's SetTextSafe re-measure runs
-        -- (~50μs total). Called from OnLeave-deferred path AND picker:OnHide.
+        -- WHY unconditional restore (no `previewedPath~=nil` gate): preview-state
+        -- tracking can desync against panel-applied state via three paths — OnLeave-timer
+        -- racing PickFont's nil-write, SetFont silent-fallback poisoning ApplyStyle's
+        -- appliedFont cache, and Frame:Hide → child OnLeave event ordering. Cost of an
+        -- unconditional restore is negligible: ApplyStyle short-circuits when panels are
+        -- already at db.font; only Reflow's SetTextSafe re-measure runs.
         local function CancelFontPreview()
             previewedPath = nil
             ApplyTextStyleToAllPanels(GetDB("font"), GetDB("fontSize"))
@@ -3315,7 +3295,7 @@ function addon:OpenConfigMenu()
         -- Block E overrides Button:OnClick to open our picker instead.
 
         --[[ ===== Custom multi-column font picker ===== ]]
-        -- Constants. Geometry derived in plan F-11; do NOT inline magic numbers.
+        -- Geometry constants — tweak here, do NOT inline magic numbers at call sites.
         local FONT_PICKER_COLS         = 3
         local FONT_PICKER_BTN_W        = 160      -- ~25 char names fit at CONFIG_FONT 12pt
         local FONT_PICKER_BTN_H        = 22
@@ -3583,9 +3563,9 @@ function addon:OpenConfigMenu()
 
     CursorGap(cd, 4)
 
-    -- Localization section. Always shown (replaces former HAS_LOCALIZATION-gated checkbox —
-    -- the new dropdown is useful even on enUS, e.g. picking 中文 for screenshots). Placed at
-    -- bottom: typically set once on first install and never revisited.
+    -- Localization section. Always shown — useful even on enUS for screenshot-locale
+    -- picks (中文 / 한국어). Placed at bottom: typically set once on install and
+    -- never revisited.
     CursorSection(cd, "Localization")
     do
         local rowY = cd.y
@@ -3804,10 +3784,10 @@ function addon:OpenConfigMenu()
                 ), req))
             end
         end
-        -- WHY register as localized: warning text changes on language switch (req tag stays
-        -- raw — see plan F-4). Setter replays from RefreshConfigLocalization so wording
-        -- tracks active locale; RefreshLanguageWarning itself is also called from the
-        -- language dropdown's commit handler for the immediate font-coverage recheck.
+        -- WHY register as localized: warning text changes on language switch (req glyph
+        -- tag stays raw — it's a script name, not a translatable phrase). Setter replays
+        -- from RefreshConfigLocalization so wording tracks active locale; RefreshLanguageWarning
+        -- is also called from the language dropdown's commit handler for the immediate recheck.
         PushLocalizedLabel(function() RefreshLanguageWarning() end)
         -- WHY 14 (single-line at 11pt): shortened warning fits one line at SetWidth(440).
         -- Empty (common) state shows tight gap to next section; non-empty (rare, font/locale
@@ -3826,10 +3806,10 @@ function addon:OpenConfigMenu()
         })
     end
 
-    -- Align all 3 Display-tab dropdowns into one column. Re-runs on language change via
-    -- RefreshConfigLocalization (alignmentGroups iteration), so future label localization
-    -- (T2-4) automatically widens or shrinks the column. Must run AFTER all 3 dropdown
-    -- rows have been registered (Display Mode + Font + Language).
+    -- Align all 3 Appearance-tab dropdowns into one column. Re-runs on language change via
+    -- RefreshConfigLocalization (alignmentGroups iteration), so locale label-width shifts
+    -- automatically widen or shrink the column. Must run AFTER all 3 dropdown rows have
+    -- been registered (Display Mode + Font + Language).
     AlignSwatchColumn(displayDropdownRows, CONFIG_DROPDOWN_GAP)
 
     displayTab.contentHeight = CursorUsed(cd)
@@ -3840,8 +3820,7 @@ function addon:OpenConfigMenu()
 
     -- Primary stat: single Show Main Stat toggle (auto-resolves spec's primary via
     -- C_SpecializationInfo.GetSpecializationInfo). Inline mainStat color swatch drives
-    -- main stat label color + matchValueColorToStat coloring (single global color,
-    -- collapsed from per-class strength/agility/intellect in v6→v7 migration).
+    -- main stat label color + matchValueColorToStat coloring.
     CursorSection(cs, "Primary Stat Ratings")
     CreateCheckboxColor(statsTab, "StatsProMainStatCheck",
         "Show Main Stat", "showMainStat", "mainStat", cs.padX, cs.y)

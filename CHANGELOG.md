@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0 — Stamina row
+
+### Added
+
+- **Show Stamina** — new optional toggle in Stats → Primary Stat Ratings, default OFF. Sits next to Show Main Stat with its own color picker (default pastel green). Shows your Stamina value (the third primary stat — contributes to your max health pool), with raid buffs / flask / food included. Useful for tanks watching effective HP and for any spec wanting to see the contribution of consumables.
+
+Suggested by [@tflo](https://github.com/tflo) (issue #1).
+
 ## 1.3.2 — Localization polish
 
 ### Fixed

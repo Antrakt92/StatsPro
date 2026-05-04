@@ -33,7 +33,8 @@
 
 - **Secondary stats** — Crit, Haste, Mastery, Versatility (with rating + percentage display options)
 - **Tertiary stats** — Leech, Avoidance, Speed
-- **Primary stats** — Strength, Agility, Intellect (per-stat toggle)
+- **Main stat auto-detect** — Strength / Agility / Intellect resolves automatically from your active spec; no toggling when you respec or swap characters
+- **Stamina** — optional row for tanks tracking effective HP and any spec watching consumable contributions (raid buffs / flask / food included), default OFF
 - **Defensive panel** — Dodge, Parry, Block, Armor (as % damage reduction)
 - **Durability** — average or worst-slot percentage with auto-color thresholds (green / yellow / red)
 - **Repair cost** — live vendor-format coin display (`46g 40s 81c` with embedded gold/silver/copper icons)
@@ -143,8 +144,7 @@ suggested correction — single-row fixes ship in the next patch.
 | `/ss debug` | Dump runtime state to chat (for bug reports) |
 | `/ss help` | List commands in chat |
 
-Tip: to bind toggling to a key, create a macro running `/ss toggle` and bind that
-macro from Esc → Options → Keybindings → Macros.
+**Tip:** right-click anywhere on the stats panel also opens settings — same as `/ss`. To bind a key for toggling visibility, create a macro running `/ss toggle` and bind it from Esc → Options → Keybindings → Macros.
 
 > Note: many users add `/ss` as a screenshot macro. If you have one, use the
 > `/statspro` alias instead — it's an equivalent built-in command.

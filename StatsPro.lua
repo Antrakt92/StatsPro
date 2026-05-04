@@ -273,8 +273,10 @@ local defaults = {
     showAvoidance = true,
     showSpeed = true,
 
-    -- Primary stat: single toggle; the active stat resolves from the player's spec.
+    -- Primary stat: Show Main Stat (auto-resolves from spec) + Show Stamina (independent —
+    -- no spec uses Stamina as primary).
     showMainStat = false,
+    showStamina  = false,
 
     -- Defensive stats
     showDefensive = false,
@@ -309,6 +311,7 @@ local defaults = {
         avoidance   = { r = 0.2,  g = 0.8,  b = 0.8 },
         speed       = { r = 1,    g = 0.65, b = 0 },
         mainStat    = { r = 1,    g = 0.84, b = 0 },
+        stamina     = { r = 0.5,  g = 1,    b = 0.5 },
         -- Defensive colors
         dodge       = { r = 0.4,  g = 0.7,  b = 1 },
         parry       = { r = 1,    g = 0.4,  b = 0.2 },
@@ -348,6 +351,10 @@ local PRIMARY_STATS_BY_ID = {}
 for _, def in ipairs(PRIMARY_STATS) do
     PRIMARY_STATS_BY_ID[def.unitStatId] = def
 end
+
+-- Stamina is unitStatId 3 — excluded from PRIMARY_STATS / PRIMARY_STATS_BY_ID because
+-- GetCurrentMainStatId never returns 3 (no spec uses Stamina as primary).
+local STAMINA_UNIT_STAT_ID = 3
 
 -- WHY shim: C_SpecializationInfo.* is the modern API in 12.x retail; legacy
 -- GetSpecialization* deprecated since 11.2 and may be removed in 13.x. Defensive
@@ -391,7 +398,7 @@ local CACHED_BOOL_KEYS = {
     "showOffensive", "hideZeroOffensive",
     "showCrit", "showHaste", "showMastery", "showVersatility",
     "showTertiary", "hideZeroTertiary", "showLeech", "showAvoidance", "showSpeed",
-    "showMainStat",
+    "showMainStat", "showStamina",
     -- Defensive & durability:
     "showDefensive", "hideZeroDefensive",
     "showDodge", "showParry", "showBlock", "showArmor",
@@ -484,7 +491,7 @@ local LABELS_BY_LOCALE = {
     enUS = {
         Crit = "Crit",          Haste = "Haste",        Mastery = "Mastery",    Vers = "Vers",
         Dodge = "Dodge",        Parry = "Parry",        Block = "Block",        Armor = "Armor",
-        Strength = "Strength",  Agility = "Agility",    Intellect = "Intellect",
+        Strength = "Strength",  Agility = "Agility",    Intellect = "Intellect", Stamina = "Stamina",
         Leech = "Leech",        Avoidance = "Avoidance", Speed = "Speed",
         Durability = "Durability", Repair = "Repair",
         Defensive = "Defensive",
@@ -505,6 +512,7 @@ local LABELS_BY_LOCALE = {
         -- Checkboxes:
         ["Show Stats Panel"] = "Show Stats Panel", ["Lock Frames"] = "Lock Frames",
         ["Show Main Stat"] = "Show Main Stat",
+        ["Show Stamina"] = "Show Stamina",
         ["Show Rating"] = "Show Rating", ["Show Percentage"] = "Show Percentage",
         ["Match Value Color to Stat"] = "Match Value Color to Stat",
         ["Show Offensive Stats"] = "Show Offensive Stats", ["Hide Zero Values"] = "Hide Zero Values",
@@ -542,7 +550,7 @@ local LABELS_BY_LOCALE = {
     ruRU = {
         Crit = "Крит",          Haste = "Хаст",         Mastery = "Маст",       Vers = "Унив",
         Dodge = "Укл",          Parry = "Пари",         Block = "Блок",         Armor = "Брон",
-        Strength = "Сила",      Agility = "Ловк",       Intellect = "Инт",
+        Strength = "Сила",      Agility = "Ловк",       Intellect = "Инт",      Stamina = "Выно",
         Leech = "Вамп",         Avoidance = "Избег",    Speed = "Скор",
         Durability = "Проч",    Repair = "Рем",
         Defensive = "Защита",
@@ -562,6 +570,7 @@ local LABELS_BY_LOCALE = {
         -- Checkboxes:
         ["Show Stats Panel"] = "Показать панель статов", ["Lock Frames"] = "Закрепить окна",
         ["Show Main Stat"] = "Показывать мейн-стат",
+        ["Show Stamina"] = "Показывать Выносливость",
         ["Show Rating"] = "Показывать рейтинг", ["Show Percentage"] = "Показывать процент",
         ["Match Value Color to Stat"] = "Цвет значения по характеристике",
         ["Show Offensive Stats"] = "Показывать атакующие", ["Hide Zero Values"] = "Скрывать нулевые значения",
@@ -599,7 +608,7 @@ local LABELS_BY_LOCALE = {
     deDE = {
         Crit = "Krit",          Haste = "Tempo",        Mastery = "Meist",      Vers = "Viels",
         Dodge = "Ausw",         Parry = "Par",          Block = "Block",        Armor = "Rüst",
-        Strength = "Stär",      Agility = "Bew",        Intellect = "Int",
+        Strength = "Stär",      Agility = "Bew",        Intellect = "Int",      Stamina = "Aus",
         Leech = "Saug",         Avoidance = "Verm",     Speed = "Lauf",
         Durability = "Haltb",   Repair = "Repar",
         Defensive = "Defensiv",
@@ -617,6 +626,7 @@ local LABELS_BY_LOCALE = {
         ["Defensive Stats"] = "Defensivwerte",
         ["Show Stats Panel"] = "Wertepanel anzeigen", ["Lock Frames"] = "Fenster sperren",
         ["Show Main Stat"] = "Hauptattribut anzeigen",
+        ["Show Stamina"] = "Ausdauer anzeigen",
         ["Show Rating"] = "Wertung anzeigen", ["Show Percentage"] = "Prozent anzeigen",
         ["Match Value Color to Stat"] = "Wertfarbe wie Statfarbe",
         ["Show Offensive Stats"] = "Offensivwerte anzeigen", ["Hide Zero Values"] = "Nullwerte ausblenden",
@@ -647,7 +657,7 @@ local LABELS_BY_LOCALE = {
     frFR = {
         Crit = "Crit",          Haste = "Hâte",         Mastery = "Maît",       Vers = "Polyv",
         Dodge = "Esqu",         Parry = "Par",          Block = "Bloc",         Armor = "Arm",
-        Strength = "Forc",      Agility = "Agil",       Intellect = "Int",
+        Strength = "Forc",      Agility = "Agil",       Intellect = "Int",      Stamina = "End",
         Leech = "Vamp",         Avoidance = "Évit",     Speed = "Vit",
         Durability = "Dura",    Repair = "Rép",
         Defensive = "Défense",
@@ -664,6 +674,7 @@ local LABELS_BY_LOCALE = {
         ["Defensive Stats"] = "Stats Défensives",
         ["Show Stats Panel"] = "Afficher le panneau", ["Lock Frames"] = "Verrouiller les cadres",
         ["Show Main Stat"] = "Afficher stat principale",
+        ["Show Stamina"] = "Afficher Endurance",
         ["Show Rating"] = "Afficher cote", ["Show Percentage"] = "Afficher %",
         ["Match Value Color to Stat"] = "Couleur valeur = stat",
         ["Show Offensive Stats"] = "Afficher offensives", ["Hide Zero Values"] = "Masquer valeurs nulles",
@@ -695,7 +706,7 @@ local LABELS_BY_LOCALE = {
     esES = {
         Crit = "Crít",          Haste = "Cele",         Mastery = "Maest",      Vers = "Versat",
         Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",
-        Strength = "Fuer",      Agility = "Agil",       Intellect = "Int",
+        Strength = "Fuer",      Agility = "Agil",       Intellect = "Int",      Stamina = "Aguante",
         Leech = "Robo",         Avoidance = "Evit",     Speed = "Vel",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defensa",
@@ -712,6 +723,7 @@ local LABELS_BY_LOCALE = {
         ["Defensive Stats"] = "Stats Defensivas",
         ["Show Stats Panel"] = "Mostrar panel", ["Lock Frames"] = "Bloquear ventanas",
         ["Show Main Stat"] = "Mostrar stat principal",
+        ["Show Stamina"] = "Mostrar Aguante",
         ["Show Rating"] = "Mostrar valor", ["Show Percentage"] = "Mostrar %",
         ["Match Value Color to Stat"] = "Color valor = stat",
         ["Show Offensive Stats"] = "Mostrar ofensivas", ["Hide Zero Values"] = "Ocultar valores cero",
@@ -740,7 +752,7 @@ local LABELS_BY_LOCALE = {
     esMX = {
         Crit = "Crít",          Haste = "Cele",         Mastery = "Maest",      Vers = "Versat",
         Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",
-        Strength = "Fuer",      Agility = "Agil",       Intellect = "Int",
+        Strength = "Fuer",      Agility = "Agil",       Intellect = "Int",      Stamina = "Aguante",
         Leech = "Robo",         Avoidance = "Evit",     Speed = "Vel",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defensa",
@@ -758,6 +770,7 @@ local LABELS_BY_LOCALE = {
         ["Defensive Stats"] = "Stats Defensivas",
         ["Show Stats Panel"] = "Mostrar panel", ["Lock Frames"] = "Bloquear ventanas",
         ["Show Main Stat"] = "Mostrar stat principal",
+        ["Show Stamina"] = "Mostrar Aguante",
         ["Show Rating"] = "Mostrar valor", ["Show Percentage"] = "Mostrar %",
         ["Match Value Color to Stat"] = "Color valor = stat",
         ["Show Offensive Stats"] = "Mostrar ofensivas", ["Hide Zero Values"] = "Ocultar valores cero",
@@ -788,7 +801,7 @@ local LABELS_BY_LOCALE = {
     itIT = {
         Crit = "Crit",          Haste = "Cele",         Mastery = "Maest",      Vers = "Vers",
         Dodge = "Schiv",        Parry = "Para",         Block = "Bloc",         Armor = "Armat",
-        Strength = "Forz",      Agility = "Agil",       Intellect = "Int",
+        Strength = "Forz",      Agility = "Agil",       Intellect = "Int",      Stamina = "Cost",
         Leech = "Vamp",         Avoidance = "Evit",     Speed = "Vel",
         Durability = "Durab",   Repair = "Ripa",
         Defensive = "Difesa",
@@ -805,6 +818,7 @@ local LABELS_BY_LOCALE = {
         ["Defensive Stats"] = "Stat Difensive",
         ["Show Stats Panel"] = "Mostra pannello", ["Lock Frames"] = "Blocca finestre",
         ["Show Main Stat"] = "Mostra stat principale",
+        ["Show Stamina"] = "Mostra Costituzione",
         ["Show Rating"] = "Mostra valore", ["Show Percentage"] = "Mostra %",
         ["Match Value Color to Stat"] = "Colore valore = stat",
         ["Show Offensive Stats"] = "Mostra offensive", ["Hide Zero Values"] = "Nascondi valori zero",
@@ -834,7 +848,7 @@ local LABELS_BY_LOCALE = {
     ptBR = {
         Crit = "Crít",          Haste = "Cele",         Mastery = "Maest",      Vers = "Vers",
         Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",
-        Strength = "Forç",      Agility = "Agil",       Intellect = "Int",
+        Strength = "Forç",      Agility = "Agil",       Intellect = "Int",      Stamina = "Vig",
         Leech = "Vamp",         Avoidance = "Evit",     Speed = "Vel",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defesa",
@@ -851,6 +865,7 @@ local LABELS_BY_LOCALE = {
         ["Defensive Stats"] = "Atributos Defensivos",
         ["Show Stats Panel"] = "Mostrar painel", ["Lock Frames"] = "Travar janelas",
         ["Show Main Stat"] = "Mostrar stat principal",
+        ["Show Stamina"] = "Mostrar Vigor",
         ["Show Rating"] = "Mostrar valor", ["Show Percentage"] = "Mostrar %",
         ["Match Value Color to Stat"] = "Cor do valor = atributo",
         ["Show Offensive Stats"] = "Mostrar ofensivos", ["Hide Zero Values"] = "Ocultar valores zero",
@@ -887,7 +902,7 @@ local LABELS_BY_LOCALE = {
     koKR = {
         Crit = "치명",          Haste = "가속",         Mastery = "특화",       Vers = "유연",
         Dodge = "회피",         Parry = "쳐막",         Block = "막기",         Armor = "방어",
-        Strength = "힘",        Agility = "민첩",       Intellect = "지능",
+        Strength = "힘",        Agility = "민첩",       Intellect = "지능",      Stamina = "체력",
         Leech = "흡혈",         Avoidance = "광피",     Speed = "이속",
         Durability = "내구",    Repair = "수리",
         Defensive = "수비",
@@ -904,6 +919,7 @@ local LABELS_BY_LOCALE = {
         ["Defensive Stats"] = "방어 능력치",
         ["Show Stats Panel"] = "능력치 패널 표시", ["Lock Frames"] = "창 고정",
         ["Show Main Stat"] = "주요 능력치 표시",
+        ["Show Stamina"] = "체력 표시",
         ["Show Rating"] = "수치 표시", ["Show Percentage"] = "% 표시",
         ["Match Value Color to Stat"] = "값 색상 = 능력치",
         ["Show Offensive Stats"] = "공격 능력치 표시", ["Hide Zero Values"] = "0 값 숨김",
@@ -933,7 +949,7 @@ local LABELS_BY_LOCALE = {
     zhCN = {
         Crit = "暴击",          Haste = "急速",         Mastery = "精通",       Vers = "全能",
         Dodge = "躲闪",         Parry = "招架",         Block = "格挡",         Armor = "护甲",
-        Strength = "力量",      Agility = "敏捷",       Intellect = "智力",
+        Strength = "力量",      Agility = "敏捷",       Intellect = "智力",      Stamina = "耐力",
         Leech = "吸血",         Avoidance = "闪避",     Speed = "移速",
         Durability = "耐久",    Repair = "修理",
         Defensive = "防御",
@@ -950,6 +966,7 @@ local LABELS_BY_LOCALE = {
         ["Defensive Stats"] = "防御属性",
         ["Show Stats Panel"] = "显示属性面板", ["Lock Frames"] = "锁定窗口",
         ["Show Main Stat"] = "显示主属性",
+        ["Show Stamina"] = "显示耐力",
         ["Show Rating"] = "显示等级", ["Show Percentage"] = "显示百分比",
         ["Match Value Color to Stat"] = "数值颜色匹配属性",
         ["Show Offensive Stats"] = "显示进攻属性", ["Hide Zero Values"] = "隐藏零值",
@@ -979,7 +996,7 @@ local LABELS_BY_LOCALE = {
     zhTW = {
         Crit = "致命",          Haste = "加速",         Mastery = "精通",       Vers = "全能",
         Dodge = "躲避",         Parry = "招架",         Block = "格擋",         Armor = "護甲",
-        Strength = "力量",      Agility = "敏捷",       Intellect = "智力",
+        Strength = "力量",      Agility = "敏捷",       Intellect = "智力",      Stamina = "耐力",
         Leech = "汲取",         Avoidance = "迴避",     Speed = "移速",
         Durability = "耐久",    Repair = "修理",
         Defensive = "防禦",
@@ -996,6 +1013,7 @@ local LABELS_BY_LOCALE = {
         ["Defensive Stats"] = "防禦屬性",
         ["Show Stats Panel"] = "顯示屬性面板", ["Lock Frames"] = "鎖定視窗",
         ["Show Main Stat"] = "顯示主屬性",
+        ["Show Stamina"] = "顯示耐力",
         ["Show Rating"] = "顯示等級", ["Show Percentage"] = "顯示百分比",
         ["Match Value Color to Stat"] = "數值色彩配合屬性",
         ["Show Offensive Stats"] = "顯示進攻屬性", ["Hide Zero Values"] = "隱藏零值",
@@ -2004,16 +2022,31 @@ local function PushRow(labels, ratings, values, label, rating, value)
     values[#values + 1] = value
 end
 
-local function BuildPrimaryLines(labels, ratings, values)
-    if not cached.showMainStat then return end
-    local def = PRIMARY_STATS_BY_ID[GetCurrentMainStatId()]
-    if not def then return end -- sub-10 alt / pre-PEW / unsupported client
+-- Compose+push one Primary-section flat-value row. Shared by Main Stat and Stamina
+-- branches in BuildPrimaryLines — both resolve color via colorKey, optionally tint
+-- value via matchValueColorToStat, render numeric value through RouteValueOnly.
+local function PushPrimaryStatRow(labels, ratings, values, colorKey, statId, labelKey)
     local cs = cached.colorStrings
-    local statStr = cs.mainStat
+    local statStr = cs[colorKey]
     local valueColor = (cached.matchValueColorToStat and statStr) or cs.rating
-    local val = GetEffectiveStat(def.unitStatId)
+    local val = GetEffectiveStat(statId)
     local rCol, vCol = RouteValueOnly(string.format("|cff%s%d|r", valueColor, val))
-    PushRow(labels, ratings, values, FormatLabel(statStr, def.label), rCol, vCol)
+    PushRow(labels, ratings, values, FormatLabel(statStr, labelKey), rCol, vCol)
+end
+
+local function BuildPrimaryLines(labels, ratings, values)
+    if not cached.showMainStat and not cached.showStamina then return end
+
+    if cached.showMainStat then
+        local def = PRIMARY_STATS_BY_ID[GetCurrentMainStatId()]
+        if def then -- silently skip when sub-10 alt / pre-PEW; don't blank Stamina row
+            PushPrimaryStatRow(labels, ratings, values, "mainStat", def.unitStatId, def.label)
+        end
+    end
+
+    if cached.showStamina then
+        PushPrimaryStatRow(labels, ratings, values, "stamina", STAMINA_UNIT_STAT_ID, "Stamina")
+    end
 end
 
 local function BuildOffensiveLines(labels, ratings, values)
@@ -3818,13 +3851,25 @@ function addon:OpenConfigMenu()
     --[[ ===== STATS TAB ===== ]]
     local cs = NewCursor(statsTab, 12, -8)
 
-    -- Primary stat: single Show Main Stat toggle (auto-resolves spec's primary via
-    -- C_SpecializationInfo.GetSpecializationInfo). Inline mainStat color swatch drives
-    -- main stat label color + matchValueColorToStat coloring.
+    -- Primary stat: Show Main Stat (auto-resolves spec's primary via
+    -- C_SpecializationInfo.GetSpecializationInfo) + Show Stamina (independent, since no
+    -- spec uses Stamina as primary). Inline color swatches per row drive label color +
+    -- matchValueColorToStat coloring.
     CursorSection(cs, "Primary Stat Ratings")
-    CreateCheckboxColor(statsTab, "StatsProMainStatCheck",
-        "Show Main Stat", "showMainStat", "mainStat", cs.padX, cs.y)
-    CursorAdvance(cs, 22)
+    do
+        local rowY = cs.y
+        local leftRows, rightRows = {}, {}
+        local _, sw, txt
+        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProMainStatCheck",
+            "Show Main Stat", "showMainStat", "mainStat", cs.padX,                       rowY)
+        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
+        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProStaminaCheck",
+            "Show Stamina",   "showStamina",  "stamina",  cs.padX + CONFIG_COL_OFFSET, rowY)
+        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
+        AlignSwatchColumn(leftRows)
+        AlignSwatchColumn(rightRows)
+        cs.y = rowY - 26
+    end
 
     CursorGap(cs, 6)
 
@@ -4039,10 +4084,10 @@ function addon:PrintDebugDump()
         tostring(FontSupports(StatsProDB.font, req)),
         tostring(StatsProDB.fontBeforeAutoSwitch)))
 
-    PrintMsg(string.format("show stats: off=%s tert=%s defensive=%s dur=%s mainStat=%s liveMainId=%s",
+    PrintMsg(string.format("show stats: off=%s tert=%s defensive=%s dur=%s mainStat=%s liveMainId=%s stamina=%s",
         tostring(cached.showOffensive),
         tostring(cached.showTertiary), tostring(cached.showDefensive), tostring(cached.showDurability),
-        tostring(cached.showMainStat), tostring(GetCurrentMainStatId())))
+        tostring(cached.showMainStat), tostring(GetCurrentMainStatId()), tostring(cached.showStamina)))
 
     PrintMsg(string.format("subs off: crit=%s haste=%s mastery=%s vers=%s",
         tostring(cached.showCrit), tostring(cached.showHaste), tostring(cached.showMastery), tostring(cached.showVersatility)))

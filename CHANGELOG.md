@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.5.0 — Right-click opens Settings
+
+### Added
+
+- **Right-click on the stats panel opens Settings** — no need to remember `/ss`. Works regardless of whether the panel is locked or unlocked. Drag-aware: drag-then-release won't accidentally open Settings.
+
+### Behavior change
+
+- Locking the panel no longer makes it click-through to the underlying UI. Right-click on the panel now opens Settings; left-click does nothing visible. **Trade-off:** if your panel sits over the gameplay area, right-click-drag camera control through the panel area no longer works. Recommended fix: drag the panel to a margin / corner where click-through doesn't matter, or use `/ss hide` to temporarily hide it.
+
+Suggested by [@tflo](https://github.com/tflo) (issue #1).
+
 ## 1.4.0 — Stamina row
 
 ### Added

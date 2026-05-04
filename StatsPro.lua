@@ -1,7 +1,7 @@
 -- StatsPro.lua
--- Inspired by SwiftStats by TaylorSay (MIT). ~9% of upstream code remains verbatim
--- (boilerplate, color defaults, basic stat list); the rest is original work. See
--- LICENSE for full attribution.
+-- Inspired by SwiftStats by TaylorSay (MIT). Boilerplate, color defaults, and the
+-- basic stat list are adapted from upstream; the rest is original work. See LICENSE
+-- for full attribution.
 local _, addon = ...
 
 --[[ ============================================================

@@ -23,10 +23,10 @@
 </p>
 
 > Originally inspired by [SwiftStats by TaylorSay](https://www.curseforge.com/wow/addons/swiftstats)
-> (MIT). StatsPro is substantially rewritten — only ~9% of upstream code remains
-> verbatim (defaults and boilerplate). The defensive panel, durability/repair-cost
-> system, multi-panel layouts, auto-aligning column rendering, 12.x retail
-> secret-value handling, and the three-tab settings UI are all original work. See
+> (MIT) — substantially rewritten and extended. The defensive panel, durability and
+> repair-cost system, multi-panel layouts, auto-aligning column rendering, 12.x retail
+> secret-value handling, and the three-tab settings UI are all original work; some
+> upstream boilerplate, color defaults, and the basic stat list remain. See
 > [`CHANGELOG.md`](CHANGELOG.md) for the full list of additions per version.
 
 ## Features
@@ -231,6 +231,6 @@ Bug reports and PRs remain the highest-leverage way to help — open an
 
 ## License
 
-[MIT](LICENSE) — copyright held by Antrakt for original code (~91% of the codebase)
-and by TaylorSay for derived portions (~9%, mostly defaults and boilerplate from
-upstream SwiftStats).
+[MIT](LICENSE). Original SwiftStats portions (boilerplate, color defaults, basic
+stat list) © TaylorSay; all StatsPro extensions © Antrakt. See [`LICENSE`](LICENSE)
+for the full text.

@@ -1440,7 +1440,7 @@ function Panel:New(globalName, dbKeyPrefix)
     local frame = CreateFrame("Frame", globalName, UIParent, "BackdropTemplate")
     frame:SetSize(220, 100)
     frame:SetMovable(true)
-    frame:EnableMouse(false)
+    frame:EnableMouse(true)
     frame:SetClampedToScreen(true)
 
     frame:SetBackdrop({
@@ -1534,15 +1534,29 @@ function Panel:New(globalName, dbKeyPrefix)
 
     -- Drag handlers (unsecure frames; not protected in combat lockdown).
     -- RegisterForDrag honors WoW's system drag-distance threshold — single clicks
-    -- without movement no longer trigger StartMoving. EnableMouse(false) above
-    -- gates drag activation through Panel:Unlock().
+    -- without movement do NOT fire OnDragStart, so wasDragging stays false on pure
+    -- right-clicks and the OnMouseUp guard below correctly opens Settings.
+    -- Lock state gates drag inside OnDragStart via cached.isLocked; mouse-enable is
+    -- permanently true (Panel:New) so right-click → Settings works regardless of lock.
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", function(f)
-        if not InCombatLockdown() then f:StartMoving() end
+        if InCombatLockdown() or cached.isLocked then return end
+        f.wasDragging = true
+        f:StartMoving()
     end)
     frame:SetScript("OnDragStop", function(f)
         f:StopMovingOrSizing()
         self:SavePosition()
+        -- 100ms guard absorbs the OnMouseUp that fires immediately after a drag, so
+        -- the right-click handler doesn't open Settings on drag-end. Pure clicks
+        -- don't pass the drag-distance threshold, never set wasDragging, unaffected.
+        C_Timer.After(0.1, function() f.wasDragging = false end)
+    end)
+    -- Right-click → Settings (drag-aware via wasDragging guard).
+    frame:SetScript("OnMouseUp", function(f, button)
+        if button == "RightButton" and not f.wasDragging then
+            addon:OpenConfigMenu()
+        end
     end)
 
     return self
@@ -1588,14 +1602,9 @@ function Panel:LoadPosition()
     -- WHY: scale is set via SetAllPanelsScale (single ownership); not duplicated here
 end
 
-function Panel:Lock()
-    self.frame:EnableMouse(false)
-end
-
-function Panel:Unlock()
-    if InCombatLockdown() then return end
-    self.frame:EnableMouse(true)
-end
+-- WHY no-op: see Panel:New EnableMouse(true), drag gated by cached.isLocked
+function Panel:Lock() end
+function Panel:Unlock() end
 
 function Panel:Hide()
     self.frame:Hide()

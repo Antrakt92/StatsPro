@@ -1406,7 +1406,7 @@ end
 local function ScanDurabilityAndCost()
     local sum, count, totalCost = 0, 0, 0
     local minPct
-    local anyTooltipPending = false
+    local repairCostPending = false
     for slot = DURABILITY_SLOT_MIN, DURABILITY_SLOT_MAX do
         if not DURABILITY_SKIP_SLOTS[slot] then
             local cur, max = GetInventoryItemDurability(slot)
@@ -1422,33 +1422,38 @@ local function ScanDurabilityAndCost()
                             TooltipUtil.SurfaceArgs(data)
                         end
                         local cost = data.repairCost
-                        if cost and not issecretvalue(cost) and cost > 0 then
-                            totalCost = totalCost + cost
+                        if cost and not issecretvalue(cost) then
+                            if cost > 0 then
+                                totalCost = totalCost + cost
+                            end
+                        else
+                            repairCostPending = true
                         end
                     else
-                        anyTooltipPending = true
+                        repairCostPending = true
                     end
                 end
             end
         end
     end
-    if count == 0 then return 100, 100, 0, anyTooltipPending end
-    return sum / count, minPct, totalCost, anyTooltipPending
+    if count == 0 then return 100, 100, 0, repairCostPending end
+    return sum / count, minPct, totalCost, repairCostPending
 end
 
--- WARNING: C_TooltipInfo returns nil until item data loads (post-login async).
--- No subsequent UPDATE_INVENTORY_DURABILITY fires for plain data-load — schedule
--- one delayed re-scan if any slot's tooltip was pending. Flag prevents pile-up
--- if multiple PEW-era refreshes hit pending state simultaneously.
+-- WARNING: repairCost can lag behind durability: C_TooltipInfo may return nil
+-- post-login, or return data with repairCost still nil/secret until item/vendor
+-- info catches up. No durability event fires for plain data-load — schedule one
+-- delayed re-scan if any damaged slot's repair cost was pending. Flag prevents
+-- pile-up if multiple early refreshes hit pending state simultaneously.
 local durabilityRetryScheduled = false
 
 local function RefreshDurabilityCache()
-    local avg, mn, cost, anyTooltipPending = ScanDurabilityAndCost()
+    local avg, mn, cost, repairCostPending = ScanDurabilityAndCost()
     cached.durabilityValue = cached.useWorstDurability and mn or avg
     cached.repairCost = cost
     durabilityDirty = false
 
-    if anyTooltipPending and not durabilityRetryScheduled then
+    if repairCostPending and not durabilityRetryScheduled then
         durabilityRetryScheduled = true
         C_Timer.After(3, function()
             durabilityRetryScheduled = false
@@ -2442,8 +2447,9 @@ end
 -- WHY: Armor/DR refresh runs inline in UpdateStats out-of-combat (cheap), so we
 -- don't need PLAYER_REGEN_ENABLED / PLAYER_SPECIALIZATION_CHANGED / TRAIT_CONFIG_UPDATED /
 -- PLAYER_LEVEL_UP handlers. Worst-case latency for stat refresh is one OnUpdate tick (~0.5s).
--- WHY: no MERCHANT_SHOW/CLOSED handlers — repair cost comes from per-slot tooltip scan
--- (Blizzard's own approach). UPDATE_INVENTORY_DURABILITY rebuilds cost on every change.
+-- WHY MERCHANT_SHOW marks dirty: repairCost can surface after the old cached scan
+-- already settled at 0, and opening a vendor does not necessarily fire a durability event.
+-- The handler only flips the dirty flag; the OnUpdate path still coalesces the scan.
 -- WHY: PLAYER_LOGOUT fires before SavedVariables are written to disk. Re-saving
 -- positions here is a belt-and-suspenders backup: OnMouseUp already saves on drop,
 -- but if the user reloads/quits via a path that bypasses our drag handler (rare),
@@ -2458,6 +2464,7 @@ local EVENT_HANDLERS = {
     PLAYER_LOGOUT               = OnPlayerLogout,
     UPDATE_INVENTORY_DURABILITY = function() durabilityDirty = true end,
     PLAYER_EQUIPMENT_CHANGED    = function() durabilityDirty = true end,
+    MERCHANT_SHOW               = function() durabilityDirty = true end,
     -- WHY: Panel:Unlock no-ops in combat (defensive InCombatLockdown guard). Toggling
     -- Lock Frames OFF mid-combat writes DB but leaves panels mouse-disabled until
     -- /reload. Re-apply lock state on combat exit so visual matches DB.

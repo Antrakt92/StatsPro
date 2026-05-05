@@ -35,6 +35,7 @@
 - **Tertiary stats** — Leech, Avoidance, Speed
 - **Main stat auto-detect** — Strength / Agility / Intellect resolves automatically from your active spec; no toggling when you respec or swap characters
 - **Stamina** — optional row for tanks tracking effective HP and any spec watching consumable contributions (raid buffs / flask / food included), default OFF
+- **Item Level** — optional equipped / overall row (`271 / 273`) with a colored warning when your bags out-level what you are wearing, default OFF
 - **Defensive panel** — Dodge, Parry, Block, Armor (as % damage reduction)
 - **Durability** — average or worst-slot percentage with auto-color thresholds (green / yellow / red)
 - **Repair cost** — live vendor-format coin display (`46g 40s 81c` with embedded gold/silver/copper icons)
@@ -42,7 +43,7 @@
 - **Localized stat labels** — on-screen panel auto-translates to your WoW client language across all 11 retail locales (deDE, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, zhTW; English unchanged). Switchable from a **Language** dropdown in the Appearance tab → Localization — pick another language, "Auto" to follow your client locale, or compact English. **The settings window itself also localizes** — every tab, label, dropdown caption, button, and warning updates live the moment you switch languages, no `/reload` needed.
 - **Customization** — per-stat colors, fonts via LibSharedMedia, font size, panel scale, refresh rate
 - **Auto-aligning columns** — labels and values stay neatly aligned regardless of which stats are enabled, font, or scale; toggling rating-only or percent-only collapses cleanly into one tight column with no awkward gaps
-- **Light footprint** — single-file pure Lua (~3k lines), no Ace3, no embedded UI library
+- **Light footprint** — core UI in one Lua file, no Ace3; bundles standard LibSharedMedia support for font picking
 
 ## How it looks
 
@@ -61,14 +62,13 @@ offensive and defensive stats as separate, independently draggable panels.
   stats you've enabled or what font you've chosen. Toggle to rating-only or
   percent-only and everything collapses cleanly into a single tight column — no
   awkward gaps, no drifting percent column.
-- **Tertiary stats by default** — Leech, Avoidance, and Speed are first-class rows
+- **Tertiary stats on demand** — Leech, Avoidance, and Speed are first-class rows
   with their own toggles. Most stat addons silently omit them; theorycrafting builds
   that lean on tertiaries can finally see what they're doing without a separate addon.
 - **Vendor-accurate repair cost** — shows as `46g 40s 81c` with the inline gold /
   silver / copper icons you see at the vendor, not a stripped-down `46g`. A lot of
-  older stat addons quietly broke this starting in War Within (11.x) — and stayed
-  broken into Midnight (12.x) — because they rely on the legacy tooltip API;
-  StatsPro uses the new one.
+  older stat addons quietly broke in modern Retail because they rely on the legacy
+  tooltip API; StatsPro uses the new one.
 - **Drag once, done forever** — your panel positions survive `/reload`, logout, and
   client patches. No reset-to-center surprises after a UI reload or expansion update.
 - **Configurable from one place** — every visible element lives behind `/ss`:
@@ -80,8 +80,8 @@ offensive and defensive stats as separate, independently draggable panels.
 ## Built for Midnight (12.x)
 
 Blizzard quietly turned many stat-API returns (`GetCombatRating`, `UnitArmor`, even
-`FontString:GetStringWidth`) into "secret values" — first in War Within (11.0), and
-the protection has only tightened in Midnight (12.x). Read them naively in combat
+`FontString:GetStringWidth`) into "secret values" in modern Retail, and the
+protection has only tightened in Midnight (12.x). Read them naively in combat
 and you get `[secret]` placeholders in the UI, or — worse — silently leak taint
 into action bars, macros, and other addons.
 
@@ -167,18 +167,18 @@ open the configuration window. Three tabs cover everything:
 
 | Tab | What lives here |
 |---|---|
-| **Stats** | Display Format toggles (Show Rating / Show Percentage / value-color) at the top, then per-stat toggles for Primary (Str/Agi/Int), Offensive (Crit/Haste/Mastery/Vers), and Tertiary (Leech/Avoidance/Speed) with inline color swatches |
+| **Stats** | Display Format toggles (Show Rating / Show Percentage / value-color) at the top, then Primary rows (Show Main Stat, Stamina, Item Level), Offensive (Crit/Haste/Mastery/Vers), and Tertiary (Leech/Avoidance/Speed) toggles with inline color swatches |
 | **Defensive** | Per-stat toggles for Dodge/Parry/Block/Armor, durability options (auto-color, worst-slot vs average), repair cost |
 | **Appearance** | Frame & Position (Visibility / Lock / Layout / Scale / Refresh Rate), Typography (Font / Font Size), Localization (Language picker + font-coverage warning) |
 
 ## Compatibility
 
-- **WoW Retail** — Interface `120005, 120007` (The War Within / Midnight)
+- **WoW Retail Midnight** — Interface `120005, 120007`
 - Classic / TBC / MoP Classic — not supported (Retail-only at this time)
 
 ## Architecture (contributors / forks)
 
-Single-file design. Everything renders out of [`StatsPro.lua`](StatsPro.lua):
+Core single-file design. Everything renders out of [`StatsPro.lua`](StatsPro.lua):
 
 - **`Panel:SetTextSafe`** — three-FontString rendering (label / rating / value), each
   with its own `JustifyH` for column alignment, plus two more for the dedicated

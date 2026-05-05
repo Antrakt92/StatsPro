@@ -11,7 +11,7 @@ ignore:
   - .pkgmeta
   - screenshots
   - AUDIT.md
-  - CLAUDE.md
+  - AGENTS.md
   - PLAN.md
   - NOTES.md
   - "*.private.md"

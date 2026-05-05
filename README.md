@@ -13,9 +13,9 @@
 </p>
 
 <p align="center">
-  A clean on-screen HUD for World of Warcraft Retail. Secondary stats, defensive
-  stats, durability, and live repair cost in a draggable panel — without the bloat
-  of a full framework.
+  A clean on-screen HUD for World of Warcraft Retail. Secondary stats, item level,
+  defensive stats, durability, and optional live repair cost in draggable panels —
+  without the bloat of a full framework.
 </p>
 
 <p align="center">
@@ -23,8 +23,8 @@
 </p>
 
 > Originally inspired by [SwiftStats by TaylorSay](https://www.curseforge.com/wow/addons/swiftstats)
-> (MIT) — substantially rewritten and extended. The defensive panel, durability and
-> repair-cost system, multi-panel layouts, auto-aligning column rendering, 12.x retail
+> (MIT) — substantially rewritten and extended. The side-panel layout, durability and
+> repair-cost system, configurable multi-panel routing, auto-aligning column rendering, 12.x retail
 > secret-value handling, and the three-tab settings UI are all original work; some
 > upstream boilerplate, color defaults, and the basic stat list remain. See
 > [`CHANGELOG.md`](CHANGELOG.md) for the full list of additions per version.
@@ -36,10 +36,10 @@
 - **Main stat auto-detect** — Strength / Agility / Intellect resolves automatically from your active spec; no toggling when you respec or swap characters
 - **Stamina** — optional row for tanks tracking effective HP and any spec watching consumable contributions (raid buffs / flask / food included), default OFF
 - **Item Level** — optional equipped / overall row (`271 / 273`) with a colored warning when your bags out-level what you are wearing, default OFF
-- **Defensive panel** — Dodge, Parry, Block, Armor (as % damage reduction)
+- **Defensive stats** — Dodge, Parry, Block, Armor (as % damage reduction)
 - **Durability** — average or worst-slot percentage with auto-color thresholds (green / yellow / red)
-- **Repair cost** — live vendor-format coin display (`46g 40s 81c` with embedded gold/silver/copper icons)
-- **Three display modes** — Flat (one panel), Sectioned (one panel with header divider), Split (separate movable panels for offensive vs defensive)
+- **Repair cost** — optional live vendor-format coin display (`46g 40s 81c` with embedded gold/silver/copper icons), default OFF
+- **Three display modes** — Flat (one panel), Sectioned (one panel with header divider), Split (two movable panels with configurable block routing)
 - **Localized stat labels** — on-screen panel auto-translates to your WoW client language across all 11 retail locales (deDE, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, zhTW; English unchanged). Switchable from a **Language** dropdown in the Appearance tab → Localization — pick another language, "Auto" to follow your client locale, or compact English. **The settings window itself also localizes** — every tab, label, dropdown caption, button, and warning updates live the moment you switch languages, no `/reload` needed.
 - **Customization** — per-stat colors, fonts via LibSharedMedia, font size, panel scale, refresh rate
 - **Auto-aligning columns** — labels and values stay neatly aligned regardless of which stats are enabled, font, or scale; toggling rating-only or percent-only collapses cleanly into one tight column with no awkward gaps
@@ -52,7 +52,8 @@ toggling columns. Top: **Flat** (default secondary stats) and **Rating + Percent
 (both columns side by side). Middle: **With Defensives** (Dodge / Parry / Block /
 Armor as % damage reduction) and **Repair Cost at Vendor** (vendor-format coin
 string with inline gold / silver / copper icons). Bottom: **Split Mode** —
-offensive and defensive stats as separate, independently draggable panels.
+two independently draggable panels whose side-panel contents can be customized
+from Character / Item Level / Offensive / Tertiary / Defensive / Durability / Repair.
 
 ![StatsPro display modes — flat, rating + percentage, with defensives, repair cost at vendor, and split mode](screenshots/display-modes.png)
 
@@ -72,8 +73,9 @@ offensive and defensive stats as separate, independently draggable panels.
 - **Drag once, done forever** — your panel positions survive `/reload`, logout, and
   client patches. No reset-to-center surprises after a UI reload or expansion update.
 - **Configurable from one place** — every visible element lives behind `/ss`:
-  per-stat colors, font via LibSharedMedia, panel scale, layout preset, durability
-  thresholds. No SavedVariables editing, no `/reload` between tweaks.
+  per-stat colors, font via LibSharedMedia, panel scale, layout preset, split
+  block routing, durability thresholds. No SavedVariables editing, no `/reload`
+  between tweaks.
 - **Built for Midnight (12.x)** — works correctly mid-combat where many older stat
   addons silently break (see the section below).
 
@@ -161,15 +163,16 @@ suggested correction — single-row fixes ship in the next patch.
 ## Configuration
 
 Type `/ss` or click the StatsPro entry in the Blizzard AddOns settings panel to
-open the configuration window. Three tabs cover everything:
+open the configuration window. Three tabs (`Stats | Layout | Appearance`) cover
+everything:
 
-![StatsPro settings — Stats, Defensive, and Appearance tabs side by side](screenshots/settings-tabs.png)
+![StatsPro settings — Stats, Layout, and Appearance tabs side by side](screenshots/settings-tabs.png)
 
 | Tab | What lives here |
 |---|---|
-| **Stats** | Display Format toggles (Show Rating / Show Percentage / value-color) at the top, then Primary rows (Show Main Stat, Stamina, Item Level), Offensive (Crit/Haste/Mastery/Vers), and Tertiary (Leech/Avoidance/Speed) toggles with inline color swatches |
-| **Defensive** | Per-stat toggles for Dodge/Parry/Block/Armor, durability options (auto-color, worst-slot vs average), repair cost |
-| **Appearance** | Frame & Position (Visibility / Lock / Layout / Scale / Refresh Rate), Typography (Font / Font Size), Localization (Language picker + font-coverage warning) |
+| **Stats** | Character rows (Show Main Stat, Stamina), Item Level, Offensive, Tertiary, Defensive, and Gear toggles with inline color swatches |
+| **Layout** | Visibility / Lock, Display Mode, **Side Panel Contains** routing for Split mode, value-column display, Scale, Refresh Rate |
+| **Appearance** | Typography (Font / Font Size / Text Opacity), Localization (Language picker + font-coverage warning) |
 
 ## Compatibility
 
@@ -187,8 +190,9 @@ Core single-file design. Everything renders out of [`StatsPro.lua`](StatsPro.lua
 - **`FmtRatingPct` / `FmtPctOnly` / `RouteValueOnly`** — column-routing helpers.
   Dual-column mode = both display toggles on; otherwise everything stacks in the
   rating column. `IsDualColMode()` is the single source of truth for that decision.
-- **`UpdateStats`** — drives the per-frame OnUpdate, dispatches by display mode
-  (flat / sectioned / split), gates value-column joining on `IsDualColMode()`.
+- **`UpdateStats`** — drives the per-frame OnUpdate, builds logical render blocks
+  (Character / Item Level / Offensive / Tertiary / Defensive / Durability / Repair),
+  routes them by display mode, and gates value-column joining on `IsDualColMode()`.
 - **`LABELS_BY_LOCALE` + `L()` + `FormatLabel()` + `PushLocalizedLabel`** — i18n
   layer. One table indexed by locale; `L()` + `FormatLabel()` compose color +
   localized label in a single call. `PushLocalizedLabel` registers settings-UI

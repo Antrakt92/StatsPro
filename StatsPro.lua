@@ -7,7 +7,7 @@ local _, addon = ...
 --[[ ============================================================
     1. CONSTANTS
 ============================================================ ]]
-local CURRENT_DB_VERSION = 7
+local CURRENT_DB_VERSION = 8
 
 local DURABILITY_SLOT_MIN = 1
 local DURABILITY_SLOT_MAX = 19
@@ -280,6 +280,17 @@ local defaults = {
     -- Display mode: "flat" | "sectioned" | "split"
     displayMode = "flat",
 
+    -- Split routing: when displayMode="split", checked blocks move to the side panel.
+    -- Defaults preserve the original split behavior (main = character/offense/tertiary,
+    -- side = defensive/gear).
+    splitCharacter = false,
+    splitItemLevel = false,
+    splitOffensive = false,
+    splitTertiary = false,
+    splitDefensive = true,
+    splitDurability = true,
+    splitRepairCost = true,
+
     -- WHY forceLocale (string) replaces the prior boolean useLocalizedLabels:
     -- "auto" follows GetLocale(); explicit value ("enUS", "ruRU", ..., "zhTW") forces
     -- panels to that locale regardless of WoW client. Auto-switches font if needed
@@ -330,9 +341,9 @@ local defaults = {
     showMastery = true,
     showVersatility = true,
 
-    -- Durability
+    -- Durability / repair
     showDurability = false,
-    showRepairCost = true,
+    showRepairCost = false,
     useAutoColorDurability = true,
     useWorstDurability = false,  -- default: average (matches vendor display); ON = show worst slot
 
@@ -375,7 +386,7 @@ local DEFENSIVE_STATS = {
     -- Armor & DR handled specially: armor = absolute number, DR = cached arithmetic
 }
 
--- Primary stat label + unitStatId mapping. Used by BuildPrimaryLines via the
+-- Primary stat label + unitStatId mapping. Used by BuildCharacterLines via the
 -- PRIMARY_STATS_BY_ID O(1) lookup. label routes through L() for locale render.
 local PRIMARY_STATS = {
     { label = "Strength",  unitStatId = 1 },
@@ -383,7 +394,7 @@ local PRIMARY_STATS = {
     { label = "Intellect", unitStatId = 4 },
 }
 
--- O(1) lookup by unitStatId (1=Str, 2=Agi, 4=Int) for BuildPrimaryLines.
+-- O(1) lookup by unitStatId (1=Str, 2=Agi, 4=Int) for BuildCharacterLines.
 local PRIMARY_STATS_BY_ID = {}
 for _, def in ipairs(PRIMARY_STATS) do
     PRIMARY_STATS_BY_ID[def.unitStatId] = def
@@ -440,6 +451,9 @@ local CACHED_BOOL_KEYS = {
     "showDefensive", "hideZeroDefensive",
     "showDodge", "showParry", "showBlock", "showArmor",
     "showDurability", "showRepairCost", "useAutoColorDurability", "useWorstDurability",
+    -- Split routing:
+    "splitCharacter", "splitItemLevel", "splitOffensive", "splitTertiary",
+    "splitDefensive", "splitDurability", "splitRepairCost",
 }
 
 --[[ ============================================================
@@ -518,7 +532,7 @@ local isLoaded = false
 --     TERTIARY_STATS (section 4)
 --   - hardcoded literals in special-case branches: "Vers" / "Speed" / "Armor"
 --     (additive rows for dual-source stats not in the loop tables)
---   - "Durability" / "Repair" in BuildDurabilityLines
+--   - "Durability" in BuildDurabilityLines / "Repair" in BuildRepairCostPayload
 --   - "Defensive" used by DefensiveHeader() for sectioned-mode divider
 -- Adding a new key here without updating callers is a no-op; adding a new caller
 -- without a key here falls back gracefully to the English literal (`L(k) → k`).
@@ -539,8 +553,13 @@ local LABELS_BY_LOCALE = {
         Color = "Color",
         -- ===== Settings UI strings =====
         -- Tabs (Defensive reuses the existing key above):
-        ["Stats"] = "Stats", ["Appearance"] = "Appearance",
-        -- Section headers (Durability reuses the existing key above):
+        ["Stats"] = "Stats", ["Layout"] = "Layout", ["Appearance"] = "Appearance",
+        -- Section headers / split block labels (Durability reuses the existing key above):
+        ["Character"] = "Character", ["Item Level"] = "Item Level",
+        ["Offensive"] = "Offensive", ["Tertiary"] = "Tertiary",
+        ["Gear"] = "Gear", ["Repair Cost"] = "Repair Cost",
+        ["Side Panel"] = "Side Panel", ["Side Panel Contains"] = "Side Panel Contains",
+        ["Value Display"] = "Value Display",
         ["Frame & Position"] = "Frame & Position",
         ["Typography"] = "Typography",
         ["Localization"] = "Localization",
@@ -599,8 +618,13 @@ local LABELS_BY_LOCALE = {
         Color = "Цвет",
         -- ===== Settings UI =====
         -- Tabs (Defensive uses "Защита" via the existing key above):
-        ["Stats"] = "Статы", ["Appearance"] = "Внешний вид",
-        -- Section headers (Durability reuses "Проч" — short form, stylistically OK as cap'd header):
+        ["Stats"] = "Статы", ["Layout"] = "Макет", ["Appearance"] = "Внешний вид",
+        -- Section headers / split block labels (Durability reuses "Проч" — short form):
+        ["Character"] = "Персонаж", ["Item Level"] = "Уровень предметов",
+        ["Offensive"] = "Атака", ["Tertiary"] = "Третичные",
+        ["Gear"] = "Экипировка", ["Repair Cost"] = "Стоимость ремонта",
+        ["Side Panel"] = "Боковая панель", ["Side Panel Contains"] = "В боковой панели",
+        ["Value Display"] = "Отображение значений",
         ["Frame & Position"] = "Окно и позиция",
         ["Typography"] = "Типографика",
         ["Localization"] = "Локализация",
@@ -659,7 +683,12 @@ local LABELS_BY_LOCALE = {
         Color = "Farbe",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         -- Speed checkbox uses "Lauftempo" (long form) to disambiguate from Haste="Tempo".
-        ["Stats"] = "Werte", ["Appearance"] = "Darstellung",
+        ["Stats"] = "Werte", ["Layout"] = "Layout", ["Appearance"] = "Darstellung",
+        ["Character"] = "Charakter", ["Item Level"] = "Gegenstandsstufe",
+        ["Offensive"] = "Offensiv", ["Tertiary"] = "Tertiär",
+        ["Gear"] = "Ausrüstung", ["Repair Cost"] = "Reparaturkosten",
+        ["Side Panel"] = "Seitenpanel", ["Side Panel Contains"] = "Seitenpanel enthält",
+        ["Value Display"] = "Werteanzeige",
         ["Frame & Position"] = "Fenster & Position",
         ["Typography"] = "Typografie",
         ["Localization"] = "Lokalisierung",
@@ -709,7 +738,12 @@ local LABELS_BY_LOCALE = {
         Defensive = "Défense",
         Color = "Couleur",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
-        ["Stats"] = "Stats", ["Appearance"] = "Apparence",
+        ["Stats"] = "Stats", ["Layout"] = "Disposition", ["Appearance"] = "Apparence",
+        ["Character"] = "Personnage", ["Item Level"] = "Niveau d'objet",
+        ["Offensive"] = "Offensif", ["Tertiary"] = "Tertiaire",
+        ["Gear"] = "Équipement", ["Repair Cost"] = "Coût de réparation",
+        ["Side Panel"] = "Panneau latéral", ["Side Panel Contains"] = "Panneau latéral contient",
+        ["Value Display"] = "Affichage des valeurs",
         ["Frame & Position"] = "Cadre & Position",
         ["Typography"] = "Typographie",
         ["Localization"] = "Localisation",
@@ -760,7 +794,12 @@ local LABELS_BY_LOCALE = {
         Defensive = "Defensa",
         Color = "Color",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
-        ["Stats"] = "Atributos", ["Appearance"] = "Apariencia",
+        ["Stats"] = "Atributos", ["Layout"] = "Diseño", ["Appearance"] = "Apariencia",
+        ["Character"] = "Personaje", ["Item Level"] = "Nivel de objeto",
+        ["Offensive"] = "Ofensivo", ["Tertiary"] = "Terciario",
+        ["Gear"] = "Equipo", ["Repair Cost"] = "Coste reparación",
+        ["Side Panel"] = "Panel lateral", ["Side Panel Contains"] = "Panel lateral contiene",
+        ["Value Display"] = "Valores",
         ["Frame & Position"] = "Marco y Posición",
         ["Typography"] = "Tipografía",
         ["Localization"] = "Localización",
@@ -809,7 +848,12 @@ local LABELS_BY_LOCALE = {
         Color = "Color",
         -- ===== Settings UI (best-effort draft — mirrors esES with regional swaps:
         --   "ajustes" → "configuración" (esMX preferred); "haz clic" → "da clic".
-        ["Stats"] = "Atributos", ["Appearance"] = "Apariencia",
+        ["Stats"] = "Atributos", ["Layout"] = "Diseño", ["Appearance"] = "Apariencia",
+        ["Character"] = "Personaje", ["Item Level"] = "Nivel de objeto",
+        ["Offensive"] = "Ofensivo", ["Tertiary"] = "Terciario",
+        ["Gear"] = "Equipo", ["Repair Cost"] = "Costo reparación",
+        ["Side Panel"] = "Panel lateral", ["Side Panel Contains"] = "Panel lateral contiene",
+        ["Value Display"] = "Valores",
         ["Frame & Position"] = "Marco y Posición",
         ["Typography"] = "Tipografía",
         ["Localization"] = "Localización",
@@ -859,7 +903,12 @@ local LABELS_BY_LOCALE = {
         Defensive = "Difesa",
         Color = "Colore",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
-        ["Stats"] = "Stat", ["Appearance"] = "Aspetto",
+        ["Stats"] = "Stat", ["Layout"] = "Layout", ["Appearance"] = "Aspetto",
+        ["Character"] = "Personaggio", ["Item Level"] = "Livello oggetto",
+        ["Offensive"] = "Offensivo", ["Tertiary"] = "Terziario",
+        ["Gear"] = "Equipaggiamento", ["Repair Cost"] = "Costo riparazione",
+        ["Side Panel"] = "Pannello laterale", ["Side Panel Contains"] = "Pannello laterale contiene",
+        ["Value Display"] = "Valori",
         ["Frame & Position"] = "Cornice e Posizione",
         ["Typography"] = "Tipografia",
         ["Localization"] = "Localizzazione",
@@ -908,7 +957,12 @@ local LABELS_BY_LOCALE = {
         Defensive = "Defesa",
         Color = "Cor",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
-        ["Stats"] = "Atributos", ["Appearance"] = "Aparência",
+        ["Stats"] = "Atributos", ["Layout"] = "Layout", ["Appearance"] = "Aparência",
+        ["Character"] = "Personagem", ["Item Level"] = "Nível de item",
+        ["Offensive"] = "Ofensivo", ["Tertiary"] = "Terciário",
+        ["Gear"] = "Equipamento", ["Repair Cost"] = "Custo de reparo",
+        ["Side Panel"] = "Painel lateral", ["Side Panel Contains"] = "Painel lateral contém",
+        ["Value Display"] = "Valores",
         ["Frame & Position"] = "Janela e Posição",
         ["Typography"] = "Tipografia",
         ["Localization"] = "Localização",
@@ -964,7 +1018,12 @@ local LABELS_BY_LOCALE = {
         Defensive = "수비",
         Color = "색상",
         -- ===== Settings UI (best-effort draft — native review welcomed via Issues) =====
-        ["Stats"] = "능력치", ["Appearance"] = "외형",
+        ["Stats"] = "능력치", ["Layout"] = "배치", ["Appearance"] = "외형",
+        ["Character"] = "캐릭터", ["Item Level"] = "아이템 레벨",
+        ["Offensive"] = "공격", ["Tertiary"] = "보조",
+        ["Gear"] = "장비", ["Repair Cost"] = "수리 비용",
+        ["Side Panel"] = "보조 패널", ["Side Panel Contains"] = "보조 패널 포함",
+        ["Value Display"] = "값 표시",
         ["Frame & Position"] = "창 및 위치",
         ["Typography"] = "글꼴",
         ["Localization"] = "현지화",
@@ -1013,7 +1072,12 @@ local LABELS_BY_LOCALE = {
         Defensive = "防御",
         Color = "颜色",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
-        ["Stats"] = "属性", ["Appearance"] = "外观",
+        ["Stats"] = "属性", ["Layout"] = "布局", ["Appearance"] = "外观",
+        ["Character"] = "角色", ["Item Level"] = "装等",
+        ["Offensive"] = "进攻", ["Tertiary"] = "第三属性",
+        ["Gear"] = "装备", ["Repair Cost"] = "修理费用",
+        ["Side Panel"] = "侧面板", ["Side Panel Contains"] = "侧面板包含",
+        ["Value Display"] = "数值显示",
         ["Frame & Position"] = "窗口与位置",
         ["Typography"] = "字体",
         ["Localization"] = "本地化",
@@ -1062,7 +1126,12 @@ local LABELS_BY_LOCALE = {
         Defensive = "防禦",
         Color = "顏色",
         -- ===== Settings UI (best-effort draft, Traditional script) =====
-        ["Stats"] = "屬性", ["Appearance"] = "外觀",
+        ["Stats"] = "屬性", ["Layout"] = "版面", ["Appearance"] = "外觀",
+        ["Character"] = "角色", ["Item Level"] = "裝等",
+        ["Offensive"] = "攻擊", ["Tertiary"] = "第三屬性",
+        ["Gear"] = "裝備", ["Repair Cost"] = "修理費用",
+        ["Side Panel"] = "側面板", ["Side Panel Contains"] = "側面板包含",
+        ["Value Display"] = "數值顯示",
         ["Frame & Position"] = "視窗與位置",
         ["Typography"] = "字型",
         ["Localization"] = "在地化",
@@ -1306,6 +1375,8 @@ end
 
 local function MigrateDB()
     local db = StatsProDB
+    local preDefaultShowDurability = db.showDurability
+    local preDefaultShowRepairCost = db.showRepairCost
 
     -- WHY runs before the version early-return: legacy migrants (from SwiftStats or the
     -- earlier internal SwiftStatsLocal name) whose source DB carried a dbVersion equal
@@ -1422,6 +1493,18 @@ local function MigrateDB()
             db.colors.strength = nil
             db.colors.agility = nil
             db.colors.intellect = nil
+        end
+    end
+
+    -- v7 -> v8: Repair Cost becomes independent from Durability and changes from a
+    -- hidden-on-most-saves default ON to default OFF. Preserve visible old layouts
+    -- (Durability ON + Repair ON), but do not suddenly show a repair-only row for users
+    -- whose DB merely carried the old invisible default while Durability was OFF.
+    if (db.dbVersion or 7) <= 7 then
+        if preDefaultShowDurability == true and preDefaultShowRepairCost == nil then
+            db.showRepairCost = true
+        elseif preDefaultShowDurability ~= true and preDefaultShowRepairCost == true then
+            db.showRepairCost = false
         end
     end
 
@@ -1746,31 +1829,38 @@ end
 -- real number) for empty-check, and SetText every call instead of deduping by text.
 -- FontString:SetText accepts secrets — that's how Blizzard's own UI renders them.
 function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr)
-    if not labelStr or lineCount == 0 then
+    local hasRows = lineCount and lineCount > 0
+    local hasRepair = repairStr and repairStr ~= ""
+    if not labelStr or (not hasRows and not hasRepair) then
         self:Hide()
         return
     end
     if not self:IsShown() then
         self.frame:Show()
     end
-    self.labelText:SetText(labelStr)
-    self.ratingText:SetText(ratingStr or "")
-    self.valueText:SetText(valueStr)
-    self.lastLabelText = labelStr
+    self.labelText:SetText(hasRows and labelStr or "")
+    self.ratingText:SetText(hasRows and (ratingStr or "") or "")
+    self.valueText:SetText(hasRows and (valueStr or "") or "")
+    self.lastLabelText = hasRows and labelStr or ""
     self.lastRatingText = ratingStr or ""
-    self.lastValueText = valueStr
+    self.lastValueText = hasRows and (valueStr or "") or ""
 
     -- Measure stat columns. WHY 2px gaps: labels RIGHT-justified, rating RIGHT-justified,
     -- value LEFT-justified — at each column boundary one side is justified outward, so
     -- visible gap equals exactly this constant with no per-row variance.
-    self.cachedLabelW  = MeasuredOrCached(self.labelText,  self.cachedLabelW,  "GetStringWidth")
-    self.cachedRatingW = MeasuredOrCached(self.ratingText, self.cachedRatingW, "GetStringWidth")
-    self.cachedValueW  = MeasuredOrCached(self.valueText,  self.cachedValueW,  "GetStringWidth")
-    -- labelText height drives Repair-row Y positioning; cache same way as widths.
-    self.cachedLabelH  = MeasuredOrCached(self.labelText,  self.cachedLabelH,  "GetStringHeight")
+    if hasRows then
+        self.cachedLabelW  = MeasuredOrCached(self.labelText,  self.cachedLabelW,  "GetStringWidth")
+        self.cachedRatingW = MeasuredOrCached(self.ratingText, self.cachedRatingW, "GetStringWidth")
+        self.cachedValueW  = MeasuredOrCached(self.valueText,  self.cachedValueW,  "GetStringWidth")
+        -- labelText height drives Repair-row Y positioning; cache same way as widths.
+        self.cachedLabelH  = MeasuredOrCached(self.labelText,  self.cachedLabelH,  "GetStringHeight")
+    end
 
-    local hasRating = (self.cachedRatingW or 0) > 0
-    local hasValue  = (self.cachedValueW  or 0) > 0
+    local labelW = hasRows and (self.cachedLabelW or 0) or 0
+    local ratingW = hasRows and (self.cachedRatingW or 0) or 0
+    local valueW = hasRows and (self.cachedValueW or 0) or 0
+    local hasRating = ratingW > 0
+    local hasValue  = valueW > 0
     local rGap = (hasRating and hasValue) and 2 or 0
     local lGap = (hasRating or hasValue) and 2 or 0
 
@@ -1779,16 +1869,19 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- (right-justified to align with stat labels), repairText for the coin at frame.right.
     -- WHY dedicated row: visual separation from stats + the coin width can exceed stat-
     -- column space without overlapping stat content rows.
-    local hasRepair = repairStr and repairStr ~= ""
+    local repairLabelW = 0
     if hasRepair then
-        local lineH = (self.cachedLabelH and lineCount > 0) and (self.cachedLabelH / lineCount) or GetDB("fontSize")
-        local repairRowY = -(lineCount * lineH + 1)  -- 1px visible gap separates stats and repair
+        local lineH = (self.cachedLabelH and hasRows) and (self.cachedLabelH / lineCount) or GetDB("fontSize")
+        local repairRowY = hasRows and -(lineCount * lineH + 1) or 0  -- 1px gap only when below stat rows
 
-        -- Repair label: width = stats labelW so "Repair:" right-aligns with other labels.
+        -- Repair label: use stat labelW when below stat rows; measure its own label for
+        -- repair-only panels so a stale previous stat width cannot collapse or overinflate.
         self.repairLabelText:ClearAllPoints()
         self.repairLabelText:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, repairRowY)
-        self.repairLabelText:SetWidth(self.cachedLabelW or 80)
         self.repairLabelText:SetText(repairLabelStr or "")
+        repairLabelW = hasRows and labelW or (MeasuredOrCached(self.repairLabelText, self.cachedRepairLabelW, "GetStringWidth") or 80)
+        self.cachedRepairLabelW = repairLabelW
+        self.repairLabelText:SetWidth(repairLabelW)
         self.repairLabelText:Show()
 
         -- Coin: anchored to frame.right, same Y as the repair label.
@@ -1814,14 +1907,14 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     self.lastRepairLabelText = repairLabelStr or ""
 
     -- Compute width totals.
-    local rowsTotal = (self.cachedLabelW or 0) + lGap + (self.cachedRatingW or 0) + rGap + (self.cachedValueW or 0)
+    local rowsTotal = hasRows and (labelW + lGap + ratingW + rGap + valueW) or 0
     -- WHY repair row participates in width as a SEPARATE max() candidate (not added to
     -- rowsTotal): rowsTotal is the natural width of stat content. Repair row widens the
     -- panel only when its content (label + 2 + coin) exceeds that. Adding repairW into
     -- rowsTotal would inflate rating/value column widths for stat rows too — wide coin
     -- strings would push every percent and rating column rightward on rows that have
     -- nothing to do with repair, breaking the visual contract of column alignment.
-    local repairTotal = hasRepair and ((self.cachedLabelW or 0) + 2 + (self.cachedRepairW or 0)) or 0
+    local repairTotal = hasRepair and (repairLabelW + 2 + (self.cachedRepairW or 0)) or 0
     local totalW = math.max(rowsTotal, repairTotal, 80)
 
     -- WHY gated extra: only widen-by-coin causes the offset compensation. Floor 80 (when
@@ -1832,7 +1925,7 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- ratingText: shift LEFT by `extra` so right edge stays at "stat-content right edge"
     -- (frame.right - extra), not frame.right. Without this, when frame is widened for
     -- coin, ratings track frame.right and create a huge gap between labels and values.
-    local rOffset = -(extra + (self.cachedValueW or 0) + rGap)
+    local rOffset = -(extra + valueW + rGap)
     self.ratingText:ClearAllPoints()
     self.ratingText:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", rOffset, 0)
     self.ratingText:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", rOffset, 0)
@@ -1854,7 +1947,7 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     if lineCount ~= self.lastLineCount or hasRepair ~= self.lastHasRepair or self.heightDirty then
         local fontSize = GetDB("fontSize")
         local h = lineCount * fontSize
-        if hasRepair then h = h + fontSize + 1 end  -- 1 extra row + visual gap
+        if hasRepair then h = h + fontSize + (hasRows and 1 or 0) end  -- repair row + gap when below stats
         self.frame:SetHeight(h + 8)
         self.lastLineCount = lineCount
         self.lastHasRepair = hasRepair
@@ -1920,10 +2013,11 @@ end
 -- hover/commit, FontSize slider) where line text hasn't changed but glyph widths have —
 -- skip the heavy BuildLines + stat-API rescan that UpdateStats() does. SetTextSafe
 -- handles all the actual measurement / sizing / re-positioning that the new font needs.
--- No-op pre-first-render or post-Hide (lastLabelText nil / lastLineCount<=0); callers
--- there fall back to the regular UpdateStats path indirectly via the next OnUpdate tick.
+-- No-op pre-first-render or post-Hide (no rows and no repair payload); callers there fall
+-- back to the regular UpdateStats path indirectly via the next OnUpdate tick.
 function Panel:Reflow()
-    if not self.lastLabelText or self.lastLineCount <= 0 then return end
+    local hasRepair = self.lastRepairText and self.lastRepairText ~= ""
+    if (not self.lastLabelText or self.lastLineCount < 0) and not hasRepair then return end
     self:SetTextSafe(
         self.lastLabelText,
         self.lastRatingText or "",
@@ -1952,7 +2046,7 @@ end
 
 -- Companion to ApplyTextStyleToAllPanels: re-flows both panels after a font/size change
 -- using cached text content. Use INSTEAD OF UpdateStats() in font-only paths (font picker,
--- FontSize slider) — same visual result, ~10× cheaper since BuildMain/Defensive/Durability
+-- FontSize slider) — same visual result, ~10× cheaper since the stat/gear builders
 -- + stat-API scans + JoinLinesSecretSafe are skipped. Locale-change paths must keep
 -- UpdateStats() since label text actually changes there.
 local function ReflowAllPanels()
@@ -2112,7 +2206,7 @@ local function FmtPctOnly(pct, statColor)
     return pctStr, ""
 end
 
--- Route a plain value (Primary stat int, Durability %, Repair coin string) into the
+-- Route a plain value (Character stat int, Item Level, Durability %) into the
 -- rating col in single-column modes, into the value col in dual-column mode.
 local function RouteValueOnly(valStr)
     if IsDualColMode() then return "", valStr end
@@ -2124,7 +2218,7 @@ end
 -- to each FontString: labelText (RIGHT), ratingText (RIGHT), valueText (LEFT).
 -- WHY triple-pushed instead of a single struct: cheaper than allocating a row-table per
 -- line, and lets us reuse JoinLinesSecretSafe unchanged per column.
--- For rows without a rating dimension (Primary stats, Defensives, Durability, Repair,
+-- For rows without a rating dimension (Character stats, Defensives, Durability,
 -- headers), the rating column is "" and that line of the rating FontString is empty.
 
 local function PushRow(labels, ratings, values, label, rating, value)
@@ -2134,7 +2228,7 @@ local function PushRow(labels, ratings, values, label, rating, value)
 end
 
 -- Compose+push one Primary-section flat-value row. Shared by Main Stat and Stamina
--- branches in BuildPrimaryLines — both resolve color via colorKey, optionally tint
+-- branches in BuildCharacterLines — both resolve color via colorKey, optionally tint
 -- value via matchValueColorToStat, render numeric value through RouteValueOnly.
 local function PushPrimaryStatRow(labels, ratings, values, colorKey, statId, labelKey)
     local cs = cached.colorStrings
@@ -2164,9 +2258,8 @@ local function PushItemLevelRow(labels, ratings, values)
     PushRow(labels, ratings, values, FormatLabel(itemLevelColor, "ItemLevel"), rCol, vCol)
 end
 
-local function BuildPrimaryLines(labels, ratings, values)
-    if not cached.showMainStat and not cached.showStamina and not cached.showItemLevel then return end
-
+local function BuildCharacterLines(labels, ratings, values)
+    if not cached.showMainStat and not cached.showStamina then return end
     if cached.showMainStat then
         local def = PRIMARY_STATS_BY_ID[GetCurrentMainStatId()]
         if def then -- silently skip when sub-10 alt / pre-PEW; don't blank Stamina row
@@ -2177,7 +2270,9 @@ local function BuildPrimaryLines(labels, ratings, values)
     if cached.showStamina then
         PushPrimaryStatRow(labels, ratings, values, "stamina", STAMINA_UNIT_STAT_ID, "Stamina")
     end
+end
 
+local function BuildItemLevelLines(labels, ratings, values)
     if cached.showItemLevel then
         PushItemLevelRow(labels, ratings, values)
     end
@@ -2271,14 +2366,6 @@ local function BuildTertiaryLines(labels, ratings, values)
     end
 end
 
-local function BuildMainLines()
-    local labels, ratings, values = {}, {}, {}
-    BuildPrimaryLines(labels, ratings, values)
-    BuildOffensiveLines(labels, ratings, values)
-    BuildTertiaryLines(labels, ratings, values)
-    return labels, ratings, values
-end
-
 local function BuildDefensiveLines()
     local labels, ratings, values = {}, {}, {}
     if not cached.showDefensive then return labels, ratings, values end
@@ -2319,8 +2406,7 @@ end
 -- builder so users can show only durability without enabling the dodge/parry/block block.
 local function BuildDurabilityLines()
     local labels, ratings, values = {}, {}, {}
-    local repairStr = ""
-    if not cached.showDurability then return labels, ratings, values, repairStr, nil end
+    if not cached.showDurability then return labels, ratings, values end
     local cs = cached.colorStrings
     local pct = cached.durabilityValue
     local durStr = cs.durability
@@ -2337,21 +2423,22 @@ local function BuildDurabilityLines()
             FormatLabel(durStr, "Durability"),
             rCol, vCol)
     end
+    return labels, ratings, values
+end
+
+local function BuildRepairCostPayload()
+    if not cached.showRepairCost or cached.repairCost <= 0 then return "", nil end
+    local cs = cached.colorStrings
     local repairLabelStr
-    if cached.showRepairCost and cached.repairCost > 0 then
-        -- WHY no PushRow for Repair: the label + coin render on a DEDICATED row below
-        -- the stat rows (see Panel:SetTextSafe), not as part of the multi-line labelText.
-        -- Two reasons: (1) the coin string with inline gold/silver/copper icons is wider
-        -- than typical stat values, so putting "Repair:" in labelText keeps coin sharing
-        -- a Y with that row — coin overlaps the rating/value content area and (in narrow
-        -- panel modes) the label itself. (2) Visual separation: stats render as one
-        -- group, repair-cost info as a distinct group below.
-        -- Don't wrap the coin string in |cff...|r — coin icons render inline as textures
-        -- and the color tag would tint them.
-        repairLabelStr = FormatLabel(durStr, "Repair")
-        repairStr = FormatRepairCost(cached.repairCost)
-    end
-    return labels, ratings, values, repairStr, repairLabelStr
+    -- WHY no PushRow for Repair: the label + coin render on a DEDICATED row below
+    -- the stat rows (see Panel:SetTextSafe), not as part of the multi-line labelText.
+    -- Two reasons: (1) the coin string with inline gold/silver/copper icons is wider
+    -- than typical stat values, so putting it into a normal value column can overlap
+    -- stat rows. (2) Visual separation: stats render as one group, repair-cost info
+    -- as a distinct row. Don't wrap the coin string in |cff...|r — coin icons render
+    -- inline as textures and the color tag would tint them.
+    repairLabelStr = FormatLabel(cs.durability, "Repair")
+    return FormatRepairCost(cached.repairCost), repairLabelStr
 end
 
 -- WHY: separate header injector — sectioned mode places "— Defensive —" between sections.
@@ -2369,6 +2456,73 @@ local function AppendRows(dstLabels, dstRatings, dstValues, srcLabels, srcRating
         dstRatings[#dstRatings + 1] = srcRatings[i]
         dstValues[#dstValues + 1] = srcValues[i]
     end
+end
+
+local function BuildRowBlock(splitKey, buildFn)
+    local labels, ratings, values = {}, {}, {}
+    buildFn(labels, ratings, values)
+    return {
+        splitKey = splitKey,
+        labels = labels,
+        ratings = ratings,
+        values = values,
+        repairStr = "",
+        repairLabelStr = nil,
+    }
+end
+
+local function BuildRepairBlock()
+    local repairStr, repairLabelStr = BuildRepairCostPayload()
+    return {
+        splitKey = "splitRepairCost",
+        labels = {},
+        ratings = {},
+        values = {},
+        repairStr = repairStr,
+        repairLabelStr = repairLabelStr,
+    }
+end
+
+local function NewRenderBucket()
+    return { labels = {}, ratings = {}, values = {}, repairStr = "", repairLabelStr = nil }
+end
+
+local function AddBlockToBucket(bucket, block)
+    AppendRows(bucket.labels, bucket.ratings, bucket.values, block.labels, block.ratings, block.values)
+    if block.repairStr and block.repairStr ~= "" then
+        bucket.repairStr = block.repairStr
+        bucket.repairLabelStr = block.repairLabelStr
+    end
+end
+
+local function BucketHasContent(bucket)
+    return #bucket.labels > 0 or (bucket.repairStr and bucket.repairStr ~= "")
+end
+
+local function RenderBucket(panel, bucket)
+    if BucketHasContent(bucket) then
+        panel:SetTextSafe(
+            JoinLinesSecretSafe(bucket.labels),
+            JoinLinesSecretSafe(bucket.ratings),
+            JoinValuesCol(bucket.values),
+            #bucket.labels,
+            bucket.repairStr,
+            bucket.repairLabelStr)
+    else
+        panel:Hide()
+    end
+end
+
+local function BuildRenderBlocks()
+    return {
+        BuildRowBlock("splitCharacter", BuildCharacterLines),
+        BuildRowBlock("splitItemLevel", BuildItemLevelLines),
+        BuildRowBlock("splitOffensive", BuildOffensiveLines),
+        BuildRowBlock("splitTertiary", BuildTertiaryLines),
+        BuildRowBlock("splitDefensive", BuildDefensiveLines),
+        BuildRowBlock("splitDurability", BuildDurabilityLines),
+        BuildRepairBlock(),
+    }
 end
 
 local function UpdateStats()
@@ -2389,8 +2543,9 @@ local function UpdateStats()
         RefreshArmorCache()
     end
 
-    -- Durability: event-driven (avoid scanning 19 slots every 0.5s).
-    if cached.showDurability and durabilityDirty then
+    -- Gear cache: event-driven (avoid scanning 19 slots every 0.5s). Repair Cost can
+    -- now render independently from Durability, so either visible gear block needs data.
+    if (cached.showDurability or cached.showRepairCost) and durabilityDirty then
         RefreshDurabilityCache()
     end
 
@@ -2398,62 +2553,33 @@ local function UpdateStats()
         RefreshItemLevelCache()
     end
 
-    -- Build paired (label, value) row arrays per builder.
-    -- repairStr + repairLabelStr are returned separately because they're rendered on
-    -- a dedicated row below the stat columns (see Panel:SetTextSafe), not inside the
-    -- 3-column system. Both travel with whichever panel hosts durability in the active mode.
-    local mainLabels, mainRatings, mainValues = BuildMainLines()
-    local defLabels,  defRatings,  defValues  = BuildDefensiveLines()
-    local durLabels,  durRatings,  durValues, repairStr, repairLabelStr = BuildDurabilityLines()
-
-    -- Dispatch by display mode. repairStr always travels with the durability rows;
-    -- in split mode that's the defensive panel, otherwise the main panel.
+    local blocks = BuildRenderBlocks()
     local mode = cached.displayMode or "flat"
     if mode == "split" then
-        mainPanel:SetTextSafe(
-            JoinLinesSecretSafe(mainLabels),
-            JoinLinesSecretSafe(mainRatings),
-            JoinValuesCol(mainValues),
-            #mainLabels, "", nil)
-        -- WHY: defensive panel hosts both defensive stats and durability so the user can
-        -- see them together while keeping the main panel focused on offensive/primary.
-        local sideLabels, sideRatings, sideValues = {}, {}, {}
-        AppendRows(sideLabels, sideRatings, sideValues, defLabels, defRatings, defValues)
-        AppendRows(sideLabels, sideRatings, sideValues, durLabels, durRatings, durValues)
-        if #sideLabels > 0 then
-            defensivePanel:SetTextSafe(
-                JoinLinesSecretSafe(sideLabels),
-                JoinLinesSecretSafe(sideRatings),
-                JoinValuesCol(sideValues),
-                #sideLabels, repairStr, repairLabelStr)
-        else
-            defensivePanel:Hide()
+        local mainBucket = NewRenderBucket()
+        local sideBucket = NewRenderBucket()
+        for _, block in ipairs(blocks) do
+            AddBlockToBucket(cached[block.splitKey] and sideBucket or mainBucket, block)
         end
+        RenderBucket(mainPanel, mainBucket)
+        RenderBucket(defensivePanel, sideBucket)
     elseif mode == "sectioned" then
-        local cLabels, cRatings, cValues = {}, {}, {}
-        AppendRows(cLabels, cRatings, cValues, mainLabels, mainRatings, mainValues)
-        if #defLabels > 0 then
-            PushHeader(cLabels, cRatings, cValues, DefensiveHeader())
-            AppendRows(cLabels, cRatings, cValues, defLabels, defRatings, defValues)
+        local bucket = NewRenderBucket()
+        for i, block in ipairs(blocks) do
+            if block.splitKey == "splitDefensive" and #block.labels > 0 then
+                PushHeader(bucket.labels, bucket.ratings, bucket.values, DefensiveHeader())
+            end
+            AddBlockToBucket(bucket, block)
         end
-        AppendRows(cLabels, cRatings, cValues, durLabels, durRatings, durValues)
-        mainPanel:SetTextSafe(
-            JoinLinesSecretSafe(cLabels),
-            JoinLinesSecretSafe(cRatings),
-            JoinValuesCol(cValues),
-            #cLabels, repairStr, repairLabelStr)
+        RenderBucket(mainPanel, bucket)
         defensivePanel:Hide()
     else
         -- flat (default)
-        local cLabels, cRatings, cValues = {}, {}, {}
-        AppendRows(cLabels, cRatings, cValues, mainLabels, mainRatings, mainValues)
-        AppendRows(cLabels, cRatings, cValues, defLabels,  defRatings,  defValues)
-        AppendRows(cLabels, cRatings, cValues, durLabels,  durRatings,  durValues)
-        mainPanel:SetTextSafe(
-            JoinLinesSecretSafe(cLabels),
-            JoinLinesSecretSafe(cRatings),
-            JoinValuesCol(cValues),
-            #cLabels, repairStr, repairLabelStr)
+        local bucket = NewRenderBucket()
+        for _, block in ipairs(blocks) do
+            AddBlockToBucket(bucket, block)
+        end
+        RenderBucket(mainPanel, bucket)
         defensivePanel:Hide()
     end
 end
@@ -2690,8 +2816,8 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
 end
 
 -- Toggle a checkbox's enabled state with matching label dim. Used by dependent-toggle
--- greying patterns (Repair Cost gated on Show Durability; Leech/Avoidance/Speed gated
--- on Show Tertiary Stats master) to make the dependency visible.
+-- greying patterns (split routing gated on Split mode; Leech/Avoidance/Speed gated on
+-- Show Tertiary Stats master) to make the dependency visible.
 local function SetCheckboxEnabled(cb, enabled)
     if not cb then return end
     local txt = _G[cb:GetName() .. "Text"]
@@ -3086,6 +3212,7 @@ function addon:OpenConfigMenu()
     -- the Typography section via AlignSwatchColumn(displayDropdownRows, CONFIG_DROPDOWN_GAP).
     -- Table reference retained via alignmentGroups after registration so RefreshConfigLocalization
     -- can re-run alignment when locale-driven label widths shift.
+    local layoutDropdownRows = {}
     local displayDropdownRows = {}
 
     --[[ ===== Frame ===== ]]
@@ -3199,13 +3326,13 @@ function addon:OpenConfigMenu()
     scrollChild:SetSize(scrollFrame:GetWidth() - 4, 1)  -- height set per active tab
     scrollFrame:SetScrollChild(scrollChild)
 
-    -- Tab content frames (children of scrollChild). Tab order: content-first (Stats /
-    -- Defensive) then appearance (typography / localization). Variable `displayTab`
-    -- backs the UI tab labelled "Appearance" (see `names` array below).
+    -- Tab content frames (children of scrollChild). Tab order: content toggles (Stats),
+    -- layout/routing, then appearance (typography / localization). Variable
+    -- `displayTab` backs the UI tab labelled "Appearance" (see `names` array below).
     local displayTab   = CreateFrame("Frame", nil, scrollChild)
     local statsTab     = CreateFrame("Frame", nil, scrollChild)
-    local defensiveTab = CreateFrame("Frame", nil, scrollChild)
-    local tabContents  = { statsTab, defensiveTab, displayTab }
+    local layoutTab    = CreateFrame("Frame", nil, scrollChild)
+    local tabContents  = { statsTab, layoutTab, displayTab }
     for _, tab in ipairs(tabContents) do
         tab:SetPoint("TOPLEFT", 0, 0)
         tab:SetPoint("TOPRIGHT", 0, 0)
@@ -3257,7 +3384,7 @@ function addon:OpenConfigMenu()
     configFrame.SwitchToTab = SwitchToTab
 
     do
-        local names = { "Stats", "Defensive", "Appearance" }
+        local names = { "Stats", "Layout", "Appearance" }
         for i, name in ipairs(names) do
             local btn = CreateTabButton(name)
             if i == 1 then
@@ -3270,8 +3397,15 @@ function addon:OpenConfigMenu()
         end
     end
 
-    --[[ ===== APPEARANCE TAB (Lua var: displayTab) ===== ]]
-    local cd = NewCursor(displayTab, 12, -8)
+    --[[ ===== LAYOUT TAB ===== ]]
+    local cd = NewCursor(layoutTab, 12, -8)
+    local splitBlockChecks = {}
+    local function ApplySplitBlockChecksEnabled()
+        local enabled = GetDB("displayMode") == "split"
+        for _, cb in ipairs(splitBlockChecks) do
+            SetCheckboxEnabled(cb, enabled)
+        end
+    end
 
     -- Frame & Position section: panel-level container settings (visibility, lock, layout
     -- mode, scale, update rate). Most-used controls; sits at top.
@@ -3281,16 +3415,16 @@ function addon:OpenConfigMenu()
         -- WHY: master visibility toggle. Hides both panels without losing settings.
         -- OnClick already runs CacheSettings + UpdateStats; UpdateStats checks cached.isVisible
         -- and Hides both panels. Slash equivalents: /ss show, /ss hide, /ss toggle.
-        CreateCheckbox(displayTab, "StatsProVisibleCheck",
+        CreateCheckbox(layoutTab, "StatsProVisibleCheck",
             "Show Stats Panel", "isVisible", cd.padX, rowY, nil, 140)
-        CreateCheckbox(displayTab, "StatsProLockCheck",
+        CreateCheckbox(layoutTab, "StatsProLockCheck",
             "Lock Frames", "isLocked", cd.padX + CONFIG_COL_OFFSET, rowY, function(checked)
                 SetAllPanelsLockState(checked)
             end, 140)
         cd.y = rowY - 26
         rowY = cd.y
 
-        local dmLabel = displayTab:CreateFontString(nil, "OVERLAY")
+        local dmLabel = layoutTab:CreateFontString(nil, "OVERLAY")
         RegisterConfigFont(dmLabel, CONFIG_FONT_SIZE)
         dmLabel:SetPoint("TOPLEFT", cd.padX, rowY - 4)
         PushLocalizedLabel(function() dmLabel:SetText(L("Display Mode:")) end)
@@ -3307,7 +3441,7 @@ function addon:OpenConfigMenu()
             return L(DISPLAY_MODES[1].label)
         end
 
-        local dmDropdown = CreateFrame("Frame", "StatsProDisplayModeDropdown", displayTab, "UIDropDownMenuTemplate")
+        local dmDropdown = CreateFrame("Frame", "StatsProDisplayModeDropdown", layoutTab, "UIDropDownMenuTemplate")
         -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after all 3 dropdown rows built.
         dmDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
         UIDropDownMenu_SetWidth(dmDropdown, 100)
@@ -3322,6 +3456,7 @@ function addon:OpenConfigMenu()
                     StatsProDB.displayMode = m.value
                     CacheSettings()
                     UIDropDownMenu_SetText(dmDropdown, L(m.label))
+                    ApplySplitBlockChecksEnabled()
                     CloseDropDownMenus()
                     UpdateStats()
                 end
@@ -3332,27 +3467,78 @@ function addon:OpenConfigMenu()
             UIDropDownMenu_SetText(dmDropdown, GetDisplayModeLabel(GetDB("displayMode")))
         end)
 
-        tinsert(displayDropdownRows, {
+        tinsert(layoutDropdownRows, {
             text = dmLabel, dropdown = dmDropdown,
-            dropdownX_base = cd.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = displayTab,
+            dropdownX_base = cd.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = layoutTab,
         })
         cd.y = rowY - 30
     end
 
     -- Scale slider — panel-level visual scale. Grouped with Frame & Position because it
     -- sizes the panel (visual layout), not the text rendering.
-    CreateConfigSlider(displayTab, "StatsProScaleSlider", "Scale:", "scale", cd,
+    CreateConfigSlider(layoutTab, "StatsProScaleSlider", "Scale:", "scale", cd,
         0.5, 2.0, 0.1, "0.5", "2.0", "%.1f",
         function(v) SetAllPanelsScale(v) end)
 
     -- Refresh rate slider — controls how often stat values recompute (seconds).
     -- Lower = smoother but more CPU; higher = less CPU but values lag behind gear/buff swaps.
     -- Grouped with Frame & Position (panel update rate, not a text/i18n concern).
-    CreateConfigSlider(displayTab, "StatsProRefreshSlider", "Refresh Rate (sec):", "updateInterval", cd,
+    CreateConfigSlider(layoutTab, "StatsProRefreshSlider", "Refresh Rate (sec):", "updateInterval", cd,
         0.1, 1.0, 0.05, "0.1s", "1.0s", "%.2f",
         function() CacheSettings() end)
 
     CursorGap(cd, 4)
+
+    CursorSection(cd, "Side Panel Contains")
+    do
+        local rowY = cd.y
+        local function AddSplitCheck(name, label, key, x, y)
+            local cb = CreateCheckbox(layoutTab, name, label, key, x, y)
+            splitBlockChecks[#splitBlockChecks + 1] = cb
+            return cb
+        end
+        AddSplitCheck("StatsProSplitCharacterCheck",  "Character",    "splitCharacter",  cd.padX,                       rowY)
+        AddSplitCheck("StatsProSplitItemLevelCheck",  "Item Level",   "splitItemLevel",  cd.padX + CONFIG_COL_OFFSET, rowY)
+        cd.y = rowY - 26
+        AddSplitCheck("StatsProSplitOffensiveCheck",  "Offensive",    "splitOffensive",  cd.padX,                       cd.y)
+        AddSplitCheck("StatsProSplitTertiaryCheck",   "Tertiary",     "splitTertiary",   cd.padX + CONFIG_COL_OFFSET, cd.y)
+        CursorAdvance(cd, 22)
+        AddSplitCheck("StatsProSplitDefensiveCheck",  "Defensive",    "splitDefensive",  cd.padX,                       cd.y)
+        AddSplitCheck("StatsProSplitDurabilityCheck", "Durability",   "splitDurability", cd.padX + CONFIG_COL_OFFSET, cd.y)
+        CursorAdvance(cd, 22)
+        AddSplitCheck("StatsProSplitRepairCheck",     "Repair Cost",  "splitRepairCost", cd.padX,                       cd.y)
+        CursorAdvance(cd, 22)
+        ApplySplitBlockChecksEnabled()
+        PushRefresher(ApplySplitBlockChecksEnabled)
+    end
+
+    CursorGap(cd, 6)
+
+    -- Value Display applies only to RATED stats (Offensive Crit/Haste/Mastery/Vers +
+    -- Tertiary Leech/Avoidance/Speed) — column visibility + value-color rule.
+    CursorSection(cd, "Value Display")
+    do
+        local rowY = cd.y
+        local leftRows, rightRows = {}, {}
+        local _, sw, txt
+        _, sw, txt = CreateCheckboxColor(layoutTab, "StatsProRatingCheck",     "Show Rating",     "showRating",     "rating",     cd.padX,                       rowY)
+        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
+        _, sw, txt = CreateCheckboxColor(layoutTab, "StatsProPercentageCheck", "Show Percentage", "showPercentage", "percentage", cd.padX + CONFIG_COL_OFFSET, rowY)
+        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
+        AlignSwatchColumn(leftRows)
+        AlignSwatchColumn(rightRows)
+        cd.y = rowY - 26
+    end
+    CreateCheckbox(layoutTab, "StatsProMatchColorCheck",
+        "Match Value Color to Stat", "matchValueColorToStat", cd.padX, cd.y)
+    CursorAdvance(cd, 22)
+
+    AlignSwatchColumn(layoutDropdownRows, CONFIG_DROPDOWN_GAP)
+    layoutTab.contentHeight = CursorUsed(cd)
+    layoutTab:SetHeight(layoutTab.contentHeight)
+
+    --[[ ===== APPEARANCE TAB (Lua var: displayTab) ===== ]]
+    cd = NewCursor(displayTab, 12, -8)
 
     -- Typography section: text rendering (font face + size).
     CursorSection(cd, "Typography")
@@ -3443,7 +3629,7 @@ function addon:OpenConfigMenu()
         -- WHY ReflowAllPanels (not UpdateStats) for font-only paths: line text doesn't
         -- change on font swap — only glyph widths do. Reflow re-feeds cached strings to
         -- SetTextSafe so frame width / repair-row Y / column alignment all re-measure
-        -- under the new font, while skipping BuildMain/Defensive/Durability + the stat-API
+        -- under the new font, while skipping the stat/gear builders + the stat-API
         -- rescan that UpdateStats does. Subjective speed-up on font-picker scroll-hover
         -- where each unique button fires Apply + Reflow ~30× per second of scroll.
         local function PreviewFont(path)
@@ -3996,10 +4182,9 @@ function addon:OpenConfigMenu()
         })
     end
 
-    -- Align all 3 Appearance-tab dropdowns into one column. Re-runs on language change via
+    -- Align Appearance-tab dropdowns into one column. Re-runs on language change via
     -- RefreshConfigLocalization (alignmentGroups iteration), so locale label-width shifts
-    -- automatically widen or shrink the column. Must run AFTER all 3 dropdown rows have
-    -- been registered (Display Mode + Font + Language).
+    -- automatically widen or shrink the column.
     AlignSwatchColumn(displayDropdownRows, CONFIG_DROPDOWN_GAP)
 
     displayTab.contentHeight = CursorUsed(cd)
@@ -4008,11 +4193,9 @@ function addon:OpenConfigMenu()
     --[[ ===== STATS TAB ===== ]]
     local cs = NewCursor(statsTab, 12, -8)
 
-    -- Primary stat: Show Main Stat (auto-resolves spec's primary via
-    -- C_SpecializationInfo.GetSpecializationInfo) + Show Stamina (independent, since no
-    -- spec uses Stamina as primary) + Item Level. Inline color swatches per row drive
-    -- label color + matchValueColorToStat coloring.
-    CursorSection(cs, "Primary Stat Ratings")
+    -- Character-sheet rows. Inline color swatches per row drive label color +
+    -- matchValueColorToStat coloring.
+    CursorSection(cs, "Character")
     do
         local rowY = cs.y
         local leftRows, rightRows = {}, {}
@@ -4023,37 +4206,25 @@ function addon:OpenConfigMenu()
         _, sw, txt = CreateCheckboxColor(statsTab, "StatsProStaminaCheck",
             "Show Stamina",   "showStamina",  "stamina",  cs.padX + CONFIG_COL_OFFSET, rowY)
         rightRows[#rightRows + 1] = { text = txt, swatch = sw }
-        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProItemLevelCheck",
-            "Show Item Level", "showItemLevel", "itemLevel", cs.padX, rowY - 22)
-        leftRows[#leftRows + 1] = { text = txt, swatch = sw }
-        AlignSwatchColumn(leftRows)
-        AlignSwatchColumn(rightRows)
-        cs.y = rowY - 48
-    end
-
-    CursorGap(cs, 6)
-
-    -- Display Format applies only to RATED stats (Offensive Crit/Haste/Mastery/Vers +
-    -- Tertiary Leech/Avoidance/Speed) — column visibility + value-color rule. Sits between
-    -- Primary and Offensive: scope is "everything below this section header".
-    CursorSection(cs, "Display Format")
-    do
-        local rowY = cs.y
-        -- Rating / Percentage swatches inline with their Show toggles. These are the
-        -- COLUMN-meta colors used when "Match Value Color to Stat" is OFF.
-        local leftRows, rightRows = {}, {}
-        local _, sw, txt
-        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProRatingCheck",     "Show Rating",     "showRating",     "rating",     cs.padX,                       rowY)
-        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
-        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProPercentageCheck", "Show Percentage", "showPercentage", "percentage", cs.padX + CONFIG_COL_OFFSET, rowY)
-        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         AlignSwatchColumn(leftRows)
         AlignSwatchColumn(rightRows)
         cs.y = rowY - 26
     end
-    CreateCheckbox(statsTab, "StatsProMatchColorCheck",
-        "Match Value Color to Stat", "matchValueColorToStat", cs.padX, cs.y)
-    CursorAdvance(cs, 22)
+
+    CursorGap(cs, 6)
+
+    CursorSection(cs, "Item Level")
+    do
+        local rowY = cs.y
+        local _, sw, txt
+        local leftRows = {}
+        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProItemLevelCheck",
+            "Show Item Level", "showItemLevel", "itemLevel", cs.padX, rowY)
+        leftRows[#leftRows + 1] = { text = txt, swatch = sw }
+        AlignSwatchColumn(leftRows)
+        cs.y = rowY - 26
+    end
+
     CursorGap(cs, 6)
 
     CursorSection(cs, "Offensive Stats")
@@ -4096,7 +4267,7 @@ function addon:OpenConfigMenu()
     do
         local rowY = cs.y
         -- Sub-toggle refs captured to grey them when master is off (mirrors the
-        -- dependency-disable pattern on the Defensive tab's Repair Cost / Auto-Color).
+        -- dependency-disable pattern in the Defensive Stats section).
         local leechCb, avoidanceCb, speedCb
         local function ApplyTertiarySubsEnabled(masterOn)
             SetCheckboxEnabled(leechCb,     masterOn)
@@ -4125,15 +4296,11 @@ function addon:OpenConfigMenu()
         PushRefresher(function() ApplyTertiarySubsEnabled(GetDB("showTertiary")) end)
     end
 
-    statsTab.contentHeight = CursorUsed(cs)
-    statsTab:SetHeight(statsTab.contentHeight)
+    CursorGap(cs, 6)
 
-    --[[ ===== DEFENSIVE TAB ===== ]]
-    local cdef = NewCursor(defensiveTab, 12, -8)
-
-    CursorSection(cdef, "Defensive Stats")
+    CursorSection(cs, "Defensive Stats")
     do
-        local rowY = cdef.y
+        local rowY = cs.y
         -- Sub-toggle refs captured to grey them when master is off (mirrors Tertiary tab).
         local dodgeCb, parryCb, blockCb, armorCb
         local function ApplyDefensiveSubsEnabled(masterOn)
@@ -4142,68 +4309,57 @@ function addon:OpenConfigMenu()
             SetCheckboxEnabled(blockCb, masterOn)
             SetCheckboxEnabled(armorCb, masterOn)
         end
-        CreateCheckbox(defensiveTab, "StatsProDefensiveCheck",   "Show Defensive Stats", "showDefensive",     cdef.padX,       rowY,
+        CreateCheckbox(statsTab, "StatsProDefensiveCheck",   "Show Defensive Stats", "showDefensive",     cs.padX,       rowY,
             function(checked) ApplyDefensiveSubsEnabled(checked) end)
-        CreateCheckbox(defensiveTab, "StatsProHideZeroDefCheck", "Hide Zero Values",     "hideZeroDefensive", cdef.padX + CONFIG_COL_OFFSET, rowY)
-        cdef.y = rowY - 26
+        CreateCheckbox(statsTab, "StatsProHideZeroDefCheck", "Hide Zero Values",     "hideZeroDefensive", cs.padX + CONFIG_COL_OFFSET, rowY)
+        cs.y = rowY - 26
         -- Each defensive stat with its own inline color swatch. Two columns of 2 rows each;
         -- aligned per-column via AlignSwatchColumn so left swatches share an x and right
         -- swatches share an x (each column's max GetStringWidth measured independently).
         local leftRows, rightRows = {}, {}
         local sw, txt
-        dodgeCb, sw, txt = CreateCheckboxColor(defensiveTab, "StatsProDodgeCheck", "Show Dodge", "showDodge", "dodge", cdef.padX,                       cdef.y)
+        dodgeCb, sw, txt = CreateCheckboxColor(statsTab, "StatsProDodgeCheck", "Show Dodge", "showDodge", "dodge", cs.padX,                       cs.y)
         leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
-        parryCb, sw, txt = CreateCheckboxColor(defensiveTab, "StatsProParryCheck", "Show Parry", "showParry", "parry", cdef.padX + CONFIG_COL_OFFSET, cdef.y)
+        parryCb, sw, txt = CreateCheckboxColor(statsTab, "StatsProParryCheck", "Show Parry", "showParry", "parry", cs.padX + CONFIG_COL_OFFSET, cs.y)
         rightRows[#rightRows + 1] = { text = txt, swatch = sw }
-        CursorAdvance(cdef, 22)
-        blockCb, sw, txt = CreateCheckboxColor(defensiveTab, "StatsProBlockCheck", "Show Block", "showBlock", "block", cdef.padX,                       cdef.y)
+        CursorAdvance(cs, 22)
+        blockCb, sw, txt = CreateCheckboxColor(statsTab, "StatsProBlockCheck", "Show Block", "showBlock", "block", cs.padX,                       cs.y)
         leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
-        armorCb, sw, txt = CreateCheckboxColor(defensiveTab, "StatsProArmorCheck", "Show Armor", "showArmor", "armor", cdef.padX + CONFIG_COL_OFFSET, cdef.y)
+        armorCb, sw, txt = CreateCheckboxColor(statsTab, "StatsProArmorCheck", "Show Armor", "showArmor", "armor", cs.padX + CONFIG_COL_OFFSET, cs.y)
         rightRows[#rightRows + 1] = { text = txt, swatch = sw }
-        CursorAdvance(cdef, 22)
+        CursorAdvance(cs, 22)
         AlignSwatchColumn(leftRows)
         AlignSwatchColumn(rightRows)
         ApplyDefensiveSubsEnabled(GetDB("showDefensive"))
         PushRefresher(function() ApplyDefensiveSubsEnabled(GetDB("showDefensive")) end)
     end
 
-    CursorGap(cdef, 6)
+    CursorGap(cs, 6)
 
-    CursorSection(cdef, "Durability")
+    CursorSection(cs, "Gear")
     do
-        local rowY = cdef.y
-        -- WHY: Repair Cost only renders when Durability is on (it's appended to that line).
-        -- Grey out the cost checkbox when durability is off so the dependency is visible.
-        local repairCostCb
-        local function ApplyRepairCostEnabled(durEnabled)
-            SetCheckboxEnabled(repairCostCb, durEnabled)
-        end
+        local rowY = cs.y
         -- Durability swatch is the override color used when Auto Color is OFF.
         -- WHY: also mark dirty so re-enabling after a long off period gets fresh values
         -- on the next tick, not whatever was cached when last enabled.
-        CreateCheckboxColor(defensiveTab, "StatsProDurabilityCheck", "Show Durability",  "showDurability", "durability", cdef.padX,       rowY,
-            function(checked)
-                ApplyRepairCostEnabled(checked)
-                durabilityDirty = true
-            end)
-        repairCostCb = CreateCheckbox(defensiveTab, "StatsProRepairCostCheck", "Show Repair Cost", "showRepairCost", cdef.padX + CONFIG_COL_OFFSET, rowY,
+        CreateCheckboxColor(statsTab, "StatsProDurabilityCheck", "Show Durability",  "showDurability", "durability", cs.padX, rowY,
             function() durabilityDirty = true end)
-        ApplyRepairCostEnabled(GetDB("showDurability"))
-        PushRefresher(function() ApplyRepairCostEnabled(GetDB("showDurability")) end)
-        cdef.y = rowY - 26
-        CreateCheckbox(defensiveTab, "StatsProAutoColorCheck",
-            "Auto Color by Threshold", "useAutoColorDurability", cdef.padX, cdef.y)
-        CursorAdvance(cdef, 22)
+        CreateCheckbox(statsTab, "StatsProRepairCostCheck", "Show Repair Cost", "showRepairCost", cs.padX + CONFIG_COL_OFFSET, rowY,
+            function() durabilityDirty = true end)
+        cs.y = rowY - 26
+        CreateCheckbox(statsTab, "StatsProAutoColorCheck",
+            "Auto Color by Threshold", "useAutoColorDurability", cs.padX, cs.y)
+        CursorAdvance(cs, 22)
         -- WHY: onChange forces recompute via dirty flag; otherwise display stays stale
         -- until the next equipment event (which may be far off).
-        CreateCheckbox(defensiveTab, "StatsProWorstDurCheck",
-            "Use Worst Slot (instead of average)", "useWorstDurability", cdef.padX, cdef.y,
+        CreateCheckbox(statsTab, "StatsProWorstDurCheck",
+            "Use Worst Slot (instead of average)", "useWorstDurability", cs.padX, cs.y,
             function() durabilityDirty = true end)
-        CursorAdvance(cdef, 22)
+        CursorAdvance(cs, 22)
     end
 
-    defensiveTab.contentHeight = CursorUsed(cdef)
-    defensiveTab:SetHeight(defensiveTab.contentHeight)
+    statsTab.contentHeight = CursorUsed(cs)
+    statsTab:SetHeight(statsTab.contentHeight)
 
     --[[ ===== Reset action (in-place widget refresh, no frame rebuild) ===== ]]
     resetBtn:SetScript("OnClick", function() ResetToDefaults() end)
@@ -4234,6 +4390,12 @@ function addon:PrintDebugDump()
     PrintMsg(string.format("show fmt: rating=%s pct=%s matchColor=%s",
         tostring(cached.showRating), tostring(cached.showPercentage), tostring(cached.matchValueColorToStat)))
 
+    PrintMsg(string.format("split side: character=%s itemLevel=%s off=%s tert=%s defensive=%s dur=%s repair=%s",
+        tostring(cached.splitCharacter), tostring(cached.splitItemLevel),
+        tostring(cached.splitOffensive), tostring(cached.splitTertiary),
+        tostring(cached.splitDefensive), tostring(cached.splitDurability),
+        tostring(cached.splitRepairCost)))
+
     local active = ResolveActiveLocale()
     local req    = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
     PrintMsg(string.format("locale: client=%s force=%s active=%s",
@@ -4244,9 +4406,10 @@ function addon:PrintDebugDump()
         tostring(FontSupports(StatsProDB.font, req)),
         tostring(StatsProDB.fontBeforeAutoSwitch)))
 
-    PrintMsg(string.format("show stats: off=%s tert=%s defensive=%s dur=%s mainStat=%s liveMainId=%s stamina=%s itemLevel=%s %s/%s",
+    PrintMsg(string.format("show stats: off=%s tert=%s defensive=%s dur=%s repair=%s cost=%s mainStat=%s liveMainId=%s stamina=%s itemLevel=%s %s/%s",
         tostring(cached.showOffensive),
         tostring(cached.showTertiary), tostring(cached.showDefensive), tostring(cached.showDurability),
+        tostring(cached.showRepairCost), tostring(cached.repairCost or 0),
         tostring(cached.showMainStat), tostring(GetCurrentMainStatId()), tostring(cached.showStamina),
         tostring(cached.showItemLevel), tostring(cached.itemLevelEquipped or "?"), tostring(cached.itemLevelOverall or "?")))
 
@@ -4263,7 +4426,7 @@ function addon:PrintDebugDump()
         return string.format("%s: %s/%s  %+d/%+d", label, p, rp, x or 0, y or 0)
     end
     PrintMsg(PosLine("main",      GetDB("point"),           GetDB("relativePoint"),           GetDB("xOfs"),           GetDB("yOfs")))
-    PrintMsg(PosLine("defensive", GetDB("defensive_point"), GetDB("defensive_relativePoint"), GetDB("defensive_xOfs"), GetDB("defensive_yOfs")))
+    PrintMsg(PosLine("side",      GetDB("defensive_point"), GetDB("defensive_relativePoint"), GetDB("defensive_xOfs"), GetDB("defensive_yOfs")))
 end
 
 --[[ ============================================================

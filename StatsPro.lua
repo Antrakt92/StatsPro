@@ -17,6 +17,11 @@ local DURABILITY_SKIP_SLOTS = { [4] = true, [18] = true }
 local DURABILITY_GREEN_THRESHOLD  = 60
 local DURABILITY_YELLOW_THRESHOLD = 30
 
+local ITEM_LEVEL_WARN_DELTA = 5
+local ITEM_LEVEL_DANGER_DELTA = 20
+local ITEM_LEVEL_WARN_COLOR = "ffcc33"
+local ITEM_LEVEL_DANGER_COLOR = "ff3333"
+
 local GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL, GLYPH_HANS, GLYPH_HANT =
     "Latin", "Cyrillic", "Hangul", "Hans", "Hant"
 
@@ -303,9 +308,11 @@ local defaults = {
     showSpeed = true,
 
     -- Primary stat: Show Main Stat (auto-resolves from spec) + Show Stamina (independent —
-    -- no spec uses Stamina as primary).
+    -- no spec uses Stamina as primary). Item Level is grouped here as character-sheet
+    -- summary data, not a rated stat.
     showMainStat = false,
     showStamina  = false,
+    showItemLevel = false,
 
     -- Defensive stats
     showDefensive = false,
@@ -341,6 +348,7 @@ local defaults = {
         speed       = { r = 1,    g = 0.65, b = 0 },
         mainStat    = { r = 1,    g = 0.84, b = 0 },
         stamina     = { r = 0.5,  g = 1,    b = 0.5 },
+        itemLevel   = { r = 0.55, g = 0.85, b = 1 },
         -- Defensive colors
         dodge       = { r = 0.4,  g = 0.7,  b = 1 },
         parry       = { r = 1,    g = 0.4,  b = 0.2 },
@@ -427,7 +435,7 @@ local CACHED_BOOL_KEYS = {
     "showOffensive", "hideZeroOffensive",
     "showCrit", "showHaste", "showMastery", "showVersatility",
     "showTertiary", "hideZeroTertiary", "showLeech", "showAvoidance", "showSpeed",
-    "showMainStat", "showStamina",
+    "showMainStat", "showStamina", "showItemLevel",
     -- Defensive & durability:
     "showDefensive", "hideZeroDefensive",
     "showDodge", "showParry", "showBlock", "showArmor",
@@ -464,6 +472,8 @@ local cached = {
     versTotal = 0,
     versTotalRating = 0,
     armorDR = 0,
+    itemLevelOverall = nil,
+    itemLevelEquipped = nil,
     durabilityValue = 100,  -- holds avg or min depending on cached.useWorstDurability
     repairCost = 0,         -- live repair cost in copper (sum from per-slot tooltip scan)
     -- WARNING: GetUnitSpeed returns secret values in combat → math.max taints. Cache OOC.
@@ -521,6 +531,7 @@ local LABELS_BY_LOCALE = {
         Crit = "Crit",          Haste = "Haste",        Mastery = "Mastery",    Vers = "Vers",
         Dodge = "Dodge",        Parry = "Parry",        Block = "Block",        Armor = "Armor",
         Strength = "Strength",  Agility = "Agility",    Intellect = "Intellect", Stamina = "Stamina",
+        ItemLevel = "iLvl",
         Leech = "Leech",        Avoidance = "Avoidance", Speed = "Speed",
         Durability = "Durability", Repair = "Repair",
         Defensive = "Defensive",
@@ -542,6 +553,7 @@ local LABELS_BY_LOCALE = {
         ["Show Stats Panel"] = "Show Stats Panel", ["Lock Frames"] = "Lock Frames",
         ["Show Main Stat"] = "Show Main Stat",
         ["Show Stamina"] = "Show Stamina",
+        ["Show Item Level"] = "Show Item Level",
         ["Show Rating"] = "Show Rating", ["Show Percentage"] = "Show Percentage",
         ["Match Value Color to Stat"] = "Match Value Color to Stat",
         ["Show Offensive Stats"] = "Show Offensive Stats", ["Hide Zero Values"] = "Hide Zero Values",
@@ -580,6 +592,7 @@ local LABELS_BY_LOCALE = {
         Crit = "Крит",          Haste = "Хаст",         Mastery = "Маст",       Vers = "Унив",
         Dodge = "Укл",          Parry = "Пари",         Block = "Блок",         Armor = "Брон",
         Strength = "Сила",      Agility = "Ловк",       Intellect = "Инт",      Stamina = "Выно",
+        ItemLevel = "iLvl",
         Leech = "Вамп",         Avoidance = "Избег",    Speed = "Скор",
         Durability = "Проч",    Repair = "Рем",
         Defensive = "Защита",
@@ -600,6 +613,7 @@ local LABELS_BY_LOCALE = {
         ["Show Stats Panel"] = "Показать панель статов", ["Lock Frames"] = "Закрепить окна",
         ["Show Main Stat"] = "Показывать мейн-стат",
         ["Show Stamina"] = "Показывать Выносливость",
+        ["Show Item Level"] = "Показывать уровень предметов",
         ["Show Rating"] = "Показывать рейтинг", ["Show Percentage"] = "Показывать процент",
         ["Match Value Color to Stat"] = "Цвет значения по характеристике",
         ["Show Offensive Stats"] = "Показывать атакующие", ["Hide Zero Values"] = "Скрывать нулевые значения",
@@ -638,6 +652,7 @@ local LABELS_BY_LOCALE = {
         Crit = "Krit",          Haste = "Tempo",        Mastery = "Meist",      Vers = "Viels",
         Dodge = "Ausw",         Parry = "Par",          Block = "Block",        Armor = "Rüst",
         Strength = "Stär",      Agility = "Bew",        Intellect = "Int",      Stamina = "Aus",
+        ItemLevel = "iLvl",
         Leech = "Saug",         Avoidance = "Verm",     Speed = "Lauf",
         Durability = "Haltb",   Repair = "Repar",
         Defensive = "Defensiv",
@@ -656,6 +671,7 @@ local LABELS_BY_LOCALE = {
         ["Show Stats Panel"] = "Wertepanel anzeigen", ["Lock Frames"] = "Fenster sperren",
         ["Show Main Stat"] = "Hauptattribut anzeigen",
         ["Show Stamina"] = "Ausdauer anzeigen",
+        ["Show Item Level"] = "Gegenstandsstufe anzeigen",
         ["Show Rating"] = "Wertung anzeigen", ["Show Percentage"] = "Prozent anzeigen",
         ["Match Value Color to Stat"] = "Wertfarbe wie Statfarbe",
         ["Show Offensive Stats"] = "Offensivwerte anzeigen", ["Hide Zero Values"] = "Nullwerte ausblenden",
@@ -687,6 +703,7 @@ local LABELS_BY_LOCALE = {
         Crit = "Crit",          Haste = "Hâte",         Mastery = "Maît",       Vers = "Polyv",
         Dodge = "Esqu",         Parry = "Par",          Block = "Bloc",         Armor = "Arm",
         Strength = "Forc",      Agility = "Agil",       Intellect = "Int",      Stamina = "End",
+        ItemLevel = "iLvl",
         Leech = "Vamp",         Avoidance = "Évit",     Speed = "Vit",
         Durability = "Dura",    Repair = "Rép",
         Defensive = "Défense",
@@ -704,6 +721,7 @@ local LABELS_BY_LOCALE = {
         ["Show Stats Panel"] = "Afficher le panneau", ["Lock Frames"] = "Verrouiller les cadres",
         ["Show Main Stat"] = "Afficher stat principale",
         ["Show Stamina"] = "Afficher Endurance",
+        ["Show Item Level"] = "Afficher niveau d'objet",
         ["Show Rating"] = "Afficher cote", ["Show Percentage"] = "Afficher %",
         ["Match Value Color to Stat"] = "Couleur valeur = stat",
         ["Show Offensive Stats"] = "Afficher offensives", ["Hide Zero Values"] = "Masquer valeurs nulles",
@@ -736,6 +754,7 @@ local LABELS_BY_LOCALE = {
         Crit = "Crít",          Haste = "Cele",         Mastery = "Maest",      Vers = "Versat",
         Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",
         Strength = "Fuer",      Agility = "Agil",       Intellect = "Int",      Stamina = "Aguante",
+        ItemLevel = "iLvl",
         Leech = "Robo",         Avoidance = "Evit",     Speed = "Vel",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defensa",
@@ -753,6 +772,7 @@ local LABELS_BY_LOCALE = {
         ["Show Stats Panel"] = "Mostrar panel", ["Lock Frames"] = "Bloquear ventanas",
         ["Show Main Stat"] = "Mostrar stat principal",
         ["Show Stamina"] = "Mostrar Aguante",
+        ["Show Item Level"] = "Mostrar nivel de objeto",
         ["Show Rating"] = "Mostrar valor", ["Show Percentage"] = "Mostrar %",
         ["Match Value Color to Stat"] = "Color valor = stat",
         ["Show Offensive Stats"] = "Mostrar ofensivas", ["Hide Zero Values"] = "Ocultar valores cero",
@@ -782,6 +802,7 @@ local LABELS_BY_LOCALE = {
         Crit = "Crít",          Haste = "Cele",         Mastery = "Maest",      Vers = "Versat",
         Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",
         Strength = "Fuer",      Agility = "Agil",       Intellect = "Int",      Stamina = "Aguante",
+        ItemLevel = "iLvl",
         Leech = "Robo",         Avoidance = "Evit",     Speed = "Vel",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defensa",
@@ -800,6 +821,7 @@ local LABELS_BY_LOCALE = {
         ["Show Stats Panel"] = "Mostrar panel", ["Lock Frames"] = "Bloquear ventanas",
         ["Show Main Stat"] = "Mostrar stat principal",
         ["Show Stamina"] = "Mostrar Aguante",
+        ["Show Item Level"] = "Mostrar nivel de objeto",
         ["Show Rating"] = "Mostrar valor", ["Show Percentage"] = "Mostrar %",
         ["Match Value Color to Stat"] = "Color valor = stat",
         ["Show Offensive Stats"] = "Mostrar ofensivas", ["Hide Zero Values"] = "Ocultar valores cero",
@@ -831,6 +853,7 @@ local LABELS_BY_LOCALE = {
         Crit = "Crit",          Haste = "Cele",         Mastery = "Maest",      Vers = "Vers",
         Dodge = "Schiv",        Parry = "Para",         Block = "Bloc",         Armor = "Armat",
         Strength = "Forz",      Agility = "Agil",       Intellect = "Int",      Stamina = "Cost",
+        ItemLevel = "iLvl",
         Leech = "Vamp",         Avoidance = "Evit",     Speed = "Vel",
         Durability = "Durab",   Repair = "Ripa",
         Defensive = "Difesa",
@@ -848,6 +871,7 @@ local LABELS_BY_LOCALE = {
         ["Show Stats Panel"] = "Mostra pannello", ["Lock Frames"] = "Blocca finestre",
         ["Show Main Stat"] = "Mostra stat principale",
         ["Show Stamina"] = "Mostra Costituzione",
+        ["Show Item Level"] = "Mostra livello oggetto",
         ["Show Rating"] = "Mostra valore", ["Show Percentage"] = "Mostra %",
         ["Match Value Color to Stat"] = "Colore valore = stat",
         ["Show Offensive Stats"] = "Mostra offensive", ["Hide Zero Values"] = "Nascondi valori zero",
@@ -878,6 +902,7 @@ local LABELS_BY_LOCALE = {
         Crit = "Crít",          Haste = "Cele",         Mastery = "Maest",      Vers = "Vers",
         Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",
         Strength = "Forç",      Agility = "Agil",       Intellect = "Int",      Stamina = "Vig",
+        ItemLevel = "iLvl",
         Leech = "Vamp",         Avoidance = "Evit",     Speed = "Vel",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defesa",
@@ -895,6 +920,7 @@ local LABELS_BY_LOCALE = {
         ["Show Stats Panel"] = "Mostrar painel", ["Lock Frames"] = "Travar janelas",
         ["Show Main Stat"] = "Mostrar stat principal",
         ["Show Stamina"] = "Mostrar Vigor",
+        ["Show Item Level"] = "Mostrar nível de item",
         ["Show Rating"] = "Mostrar valor", ["Show Percentage"] = "Mostrar %",
         ["Match Value Color to Stat"] = "Cor do valor = atributo",
         ["Show Offensive Stats"] = "Mostrar ofensivos", ["Hide Zero Values"] = "Ocultar valores zero",
@@ -932,6 +958,7 @@ local LABELS_BY_LOCALE = {
         Crit = "치명",          Haste = "가속",         Mastery = "특화",       Vers = "유연",
         Dodge = "회피",         Parry = "쳐막",         Block = "막기",         Armor = "방어",
         Strength = "힘",        Agility = "민첩",       Intellect = "지능",      Stamina = "체력",
+        ItemLevel = "iLvl",
         Leech = "흡혈",         Avoidance = "광피",     Speed = "이속",
         Durability = "내구",    Repair = "수리",
         Defensive = "수비",
@@ -949,6 +976,7 @@ local LABELS_BY_LOCALE = {
         ["Show Stats Panel"] = "능력치 패널 표시", ["Lock Frames"] = "창 고정",
         ["Show Main Stat"] = "주요 능력치 표시",
         ["Show Stamina"] = "체력 표시",
+        ["Show Item Level"] = "아이템 레벨 표시",
         ["Show Rating"] = "수치 표시", ["Show Percentage"] = "% 표시",
         ["Match Value Color to Stat"] = "값 색상 = 능력치",
         ["Show Offensive Stats"] = "공격 능력치 표시", ["Hide Zero Values"] = "0 값 숨김",
@@ -979,6 +1007,7 @@ local LABELS_BY_LOCALE = {
         Crit = "暴击",          Haste = "急速",         Mastery = "精通",       Vers = "全能",
         Dodge = "躲闪",         Parry = "招架",         Block = "格挡",         Armor = "护甲",
         Strength = "力量",      Agility = "敏捷",       Intellect = "智力",      Stamina = "耐力",
+        ItemLevel = "iLvl",
         Leech = "吸血",         Avoidance = "闪避",     Speed = "移速",
         Durability = "耐久",    Repair = "修理",
         Defensive = "防御",
@@ -996,6 +1025,7 @@ local LABELS_BY_LOCALE = {
         ["Show Stats Panel"] = "显示属性面板", ["Lock Frames"] = "锁定窗口",
         ["Show Main Stat"] = "显示主属性",
         ["Show Stamina"] = "显示耐力",
+        ["Show Item Level"] = "显示装等",
         ["Show Rating"] = "显示等级", ["Show Percentage"] = "显示百分比",
         ["Match Value Color to Stat"] = "数值颜色匹配属性",
         ["Show Offensive Stats"] = "显示进攻属性", ["Hide Zero Values"] = "隐藏零值",
@@ -1026,6 +1056,7 @@ local LABELS_BY_LOCALE = {
         Crit = "致命",          Haste = "加速",         Mastery = "精通",       Vers = "全能",
         Dodge = "躲避",         Parry = "招架",         Block = "格擋",         Armor = "護甲",
         Strength = "力量",      Agility = "敏捷",       Intellect = "智力",      Stamina = "耐力",
+        ItemLevel = "iLvl",
         Leech = "汲取",         Avoidance = "迴避",     Speed = "移速",
         Durability = "耐久",    Repair = "修理",
         Defensive = "防禦",
@@ -1043,6 +1074,7 @@ local LABELS_BY_LOCALE = {
         ["Show Stats Panel"] = "顯示屬性面板", ["Lock Frames"] = "鎖定視窗",
         ["Show Main Stat"] = "顯示主屬性",
         ["Show Stamina"] = "顯示耐力",
+        ["Show Item Level"] = "顯示裝等",
         ["Show Rating"] = "顯示等級", ["Show Percentage"] = "顯示百分比",
         ["Match Value Color to Stat"] = "數值色彩配合屬性",
         ["Show Offensive Stats"] = "顯示進攻屬性", ["Hide Zero Values"] = "隱藏零值",
@@ -1149,6 +1181,19 @@ local function GetEffectiveStat(statId)
     return effectiveStat or stat or 0
 end
 
+local function IsCleanNonNegativeNumber(value)
+    return value ~= nil and not issecretvalue(value) and type(value) == "number" and value >= 0
+end
+
+local function RefreshItemLevelCache()
+    if not GetAverageItemLevel then return end
+    local ok, overall, equipped = pcall(GetAverageItemLevel)
+    if not ok then return end
+    if not IsCleanNonNegativeNumber(overall) or not IsCleanNonNegativeNumber(equipped) then return end
+    cached.itemLevelOverall = overall
+    cached.itemLevelEquipped = equipped
+end
+
 -- 12.x: hideZero check on a possibly-secret value.
 -- issecretvalue() == in combat → always show (real value is non-zero).
 local function shouldShow(val, hideZero)
@@ -1175,6 +1220,25 @@ local function ComputeDurabilityColor(pct)
     end
 end
 
+local function ClampColorChannel(value, fallback)
+    local n = tonumber(value)
+    if n == nil then n = fallback or 0 end
+    return math.max(0, math.min(1, n))
+end
+
+local function IsCompleteColor(c)
+    return type(c) == "table" and tonumber(c.r) ~= nil and tonumber(c.g) ~= nil and tonumber(c.b) ~= nil
+end
+
+local function NormalizeColor(c, fallback)
+    fallback = type(fallback) == "table" and fallback or nil
+    if type(c) ~= "table" then c = nil end
+    return
+        ClampColorChannel(c and c.r, fallback and fallback.r),
+        ClampColorChannel(c and c.g, fallback and fallback.g),
+        ClampColorChannel(c and c.b, fallback and fallback.b)
+end
+
 local function RGBToHex(r, g, b)
     -- WARNING: explicit floor for portability across Lua versions (5.1 tolerates floats; 5.3+ requires int)
     -- WARNING: clamp + nil-coalesce defends against SavedVariables corruption / manual
@@ -1183,9 +1247,9 @@ local function RGBToHex(r, g, b)
     -- color escape — every stat row downstream would render with broken colors until
     -- the user resets settings. ColorPicker always returns 0..1, so this is purely
     -- a defensive guard against external DB tampering, not a hot-path concern.
-    r = math.max(0, math.min(1, tonumber(r) or 0))
-    g = math.max(0, math.min(1, tonumber(g) or 0))
-    b = math.max(0, math.min(1, tonumber(b) or 0))
+    r = ClampColorChannel(r, 0)
+    g = ClampColorChannel(g, 0)
+    b = ClampColorChannel(b, 0)
     return string.format("%02x%02x%02x",
         math.floor(r * 255 + 0.5),
         math.floor(g * 255 + 0.5),
@@ -1233,10 +1297,10 @@ local function CacheSettings()
     -- Color → hex string lookup. Iterate defaults.colors (single source of truth) to
     -- guarantee non-nil colorStrings for every key — eliminates the need for `or "ffffff"`
     -- fallbacks throughout the render pipeline.
-    local userColors = StatsProDB.colors or {}
+    local userColors = type(StatsProDB.colors) == "table" and StatsProDB.colors or {}
     for name, defaultColor in pairs(defaults.colors) do
-        local c = userColors[name] or defaultColor
-        cached.colorStrings[name] = RGBToHex(c.r, c.g, c.b)
+        local r, g, b = NormalizeColor(userColors[name], defaultColor)
+        cached.colorStrings[name] = RGBToHex(r, g, b)
     end
 end
 
@@ -1252,7 +1316,7 @@ local function MigrateDB()
             db[k] = v
         end
     end
-    if not db.colors then db.colors = {} end
+    if type(db.colors) ~= "table" then db.colors = {} end
     for k, v in pairs(defaults.colors) do
         if not db.colors[k] then
             db.colors[k] = { r = v.r, g = v.g, b = v.b }
@@ -1318,7 +1382,7 @@ local function MigrateDB()
     -- change on upgrade. The defaults loop above already pre-populated the new keys with
     -- their default gold (r=1,g=0.84,b=0), which we overwrite here when a custom value
     -- exists. Drop colors.primary so it doesn't linger as orphaned data.
-    if (db.dbVersion or 5) <= 5 and db.colors and db.colors.primary then
+    if (db.dbVersion or 5) <= 5 and type(db.colors) == "table" and IsCompleteColor(db.colors.primary) then
         local p = db.colors.primary
         db.colors.strength  = { r = p.r, g = p.g, b = p.b }
         db.colors.agility   = { r = p.r, g = p.g, b = p.b }
@@ -1343,7 +1407,7 @@ local function MigrateDB()
         db.showStrength = nil
         db.showAgility = nil
         db.showIntellect = nil
-        if db.colors then
+        if type(db.colors) == "table" then
             local function isCustom(c)
                 return type(c) == "table" and c.r and c.g and c.b
                    and not (c.r == 1 and c.g == 0.84 and c.b == 0)
@@ -2081,8 +2145,27 @@ local function PushPrimaryStatRow(labels, ratings, values, colorKey, statId, lab
     PushRow(labels, ratings, values, FormatLabel(statStr, labelKey), rCol, vCol)
 end
 
+local function PushItemLevelRow(labels, ratings, values)
+    if not cached.itemLevelOverall or not cached.itemLevelEquipped then return end
+    local cs = cached.colorStrings
+    local itemLevelColor = cs.itemLevel
+    local valueColor = (cached.matchValueColorToStat and itemLevelColor) or cs.rating
+    local overall = math.floor(cached.itemLevelOverall + 0.5)
+    local equipped = math.floor(cached.itemLevelEquipped + 0.5)
+    local delta = math.max(0, overall - equipped)
+    local equippedColor = valueColor
+    if delta >= ITEM_LEVEL_DANGER_DELTA then
+        equippedColor = ITEM_LEVEL_DANGER_COLOR
+    elseif delta >= ITEM_LEVEL_WARN_DELTA then
+        equippedColor = ITEM_LEVEL_WARN_COLOR
+    end
+    local value = string.format("|cff%s%d|r |cff808080/|r |cff%s%d|r", equippedColor, equipped, valueColor, overall)
+    local rCol, vCol = RouteValueOnly(value)
+    PushRow(labels, ratings, values, FormatLabel(itemLevelColor, "ItemLevel"), rCol, vCol)
+end
+
 local function BuildPrimaryLines(labels, ratings, values)
-    if not cached.showMainStat and not cached.showStamina then return end
+    if not cached.showMainStat and not cached.showStamina and not cached.showItemLevel then return end
 
     if cached.showMainStat then
         local def = PRIMARY_STATS_BY_ID[GetCurrentMainStatId()]
@@ -2093,6 +2176,10 @@ local function BuildPrimaryLines(labels, ratings, values)
 
     if cached.showStamina then
         PushPrimaryStatRow(labels, ratings, values, "stamina", STAMINA_UNIT_STAT_ID, "Stamina")
+    end
+
+    if cached.showItemLevel then
+        PushItemLevelRow(labels, ratings, values)
     end
 end
 
@@ -2305,6 +2392,10 @@ local function UpdateStats()
     -- Durability: event-driven (avoid scanning 19 slots every 0.5s).
     if cached.showDurability and durabilityDirty then
         RefreshDurabilityCache()
+    end
+
+    if cached.showItemLevel then
+        RefreshItemLevelCache()
     end
 
     -- Build paired (label, value) row arrays per builder.
@@ -2562,8 +2653,9 @@ local CONFIG_DROPDOWN_Y_OFFSET = 2
 -- color-related helper + their refreshers; lazily initializes the colors table
 -- (StatsProDB may not have it yet on a fresh install).
 local function GetColor(statName)
-    if not StatsProDB.colors then StatsProDB.colors = {} end
-    return StatsProDB.colors[statName] or defaults.colors[statName]
+    if type(StatsProDB.colors) ~= "table" then StatsProDB.colors = {} end
+    local r, g, b = NormalizeColor(StatsProDB.colors[statName], defaults.colors[statName])
+    return { r = r, g = g, b = b }
 end
 
 -- WHY forward-decl: CreateCheckbox / CursorSection / CreateConfigSlider / CreateTabButton
@@ -2616,7 +2708,8 @@ local function OpenColorPicker(btn, statName)
     -- WHY: capture "uses default" state so cancel can restore exactly that — writing
     -- the resolved-default tuple back would convert unset → explicit-default in DB
     -- (visible only between cancel and the next /reload, but the invariant is correct).
-    local hadExplicitColor = StatsProDB.colors and StatsProDB.colors[statName] ~= nil
+    if type(StatsProDB.colors) ~= "table" then StatsProDB.colors = {} end
+    local hadExplicitColor = IsCompleteColor(StatsProDB.colors[statName])
     local current = GetColor(statName)
     local snapshot = { r = current.r, g = current.g, b = current.b }
     local function OnColorSelect()
@@ -3902,8 +3995,8 @@ function addon:OpenConfigMenu()
 
     -- Primary stat: Show Main Stat (auto-resolves spec's primary via
     -- C_SpecializationInfo.GetSpecializationInfo) + Show Stamina (independent, since no
-    -- spec uses Stamina as primary). Inline color swatches per row drive label color +
-    -- matchValueColorToStat coloring.
+    -- spec uses Stamina as primary) + Item Level. Inline color swatches per row drive
+    -- label color + matchValueColorToStat coloring.
     CursorSection(cs, "Primary Stat Ratings")
     do
         local rowY = cs.y
@@ -3915,9 +4008,12 @@ function addon:OpenConfigMenu()
         _, sw, txt = CreateCheckboxColor(statsTab, "StatsProStaminaCheck",
             "Show Stamina",   "showStamina",  "stamina",  cs.padX + CONFIG_COL_OFFSET, rowY)
         rightRows[#rightRows + 1] = { text = txt, swatch = sw }
+        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProItemLevelCheck",
+            "Show Item Level", "showItemLevel", "itemLevel", cs.padX, rowY - 22)
+        leftRows[#leftRows + 1] = { text = txt, swatch = sw }
         AlignSwatchColumn(leftRows)
         AlignSwatchColumn(rightRows)
-        cs.y = rowY - 26
+        cs.y = rowY - 48
     end
 
     CursorGap(cs, 6)
@@ -4133,10 +4229,11 @@ function addon:PrintDebugDump()
         tostring(FontSupports(StatsProDB.font, req)),
         tostring(StatsProDB.fontBeforeAutoSwitch)))
 
-    PrintMsg(string.format("show stats: off=%s tert=%s defensive=%s dur=%s mainStat=%s liveMainId=%s stamina=%s",
+    PrintMsg(string.format("show stats: off=%s tert=%s defensive=%s dur=%s mainStat=%s liveMainId=%s stamina=%s itemLevel=%s %s/%s",
         tostring(cached.showOffensive),
         tostring(cached.showTertiary), tostring(cached.showDefensive), tostring(cached.showDurability),
-        tostring(cached.showMainStat), tostring(GetCurrentMainStatId()), tostring(cached.showStamina)))
+        tostring(cached.showMainStat), tostring(GetCurrentMainStatId()), tostring(cached.showStamina),
+        tostring(cached.showItemLevel), tostring(cached.itemLevelEquipped or "?"), tostring(cached.itemLevelOverall or "?")))
 
     PrintMsg(string.format("subs off: crit=%s haste=%s mastery=%s vers=%s",
         tostring(cached.showCrit), tostring(cached.showHaste), tostring(cached.showMastery), tostring(cached.showVersatility)))

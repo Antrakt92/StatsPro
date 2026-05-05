@@ -227,6 +227,8 @@ Bug reports and PRs remain the highest-leverage way to help — open an
 
 ## Acknowledgements
 
+- **[@tflo](https://github.com/tflo)** — auto main stat, text opacity, item level,
+  stamina, right-click-to-settings, and label style modes feedback (issue #1).
 - **[TaylorSay](https://www.curseforge.com/members/taylorsay)** — author of the
   original [SwiftStats](https://www.curseforge.com/wow/addons/swiftstats) addon
   (MIT), the project that inspired StatsPro and from which the initial defaults

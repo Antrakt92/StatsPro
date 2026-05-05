@@ -498,6 +498,8 @@ local cached = {
 
 -- Dirty flag for event-driven cache refresh (durability scan is per-19-slot, not free)
 local durabilityDirty = true
+-- Dirty flag for item-level refresh (overall iLvl can change from gear or bags)
+local itemLevelDirty = true
 -- Init guard: UpdateStats must not run before CacheSettings populates cached.colorStrings
 local isLoaded = false
 
@@ -1154,6 +1156,33 @@ local function GetDB(key)
     return v
 end
 
+local NUMBER_SETTING_META = {
+    scale          = { min = 0.5, max = 2.0, step = 0.1 },
+    fontSize       = { min = 8,   max = 32,  step = 1 },
+    textAlpha      = { min = 25,  max = 100, step = 5 },
+    updateInterval = { min = 0.1, max = 1.0, step = 0.05 },
+}
+
+local function NormalizeNumberSetting(key, value)
+    local meta = NUMBER_SETTING_META[key]
+    if not meta then return value end
+    local fallback = defaults[key]
+    local n = tonumber(value)
+    if n == nil then n = fallback end
+    if meta.step and meta.step > 0 then
+        n = meta.min + math.floor(((n - meta.min) / meta.step) + 0.5) * meta.step
+    end
+    if n < meta.min then n = meta.min end
+    if n > meta.max then n = meta.max end
+    return n
+end
+
+local function GetNumberDB(key)
+    local v = StatsProDB[key]
+    if v == nil then v = defaults[key] end
+    return NormalizeNumberSetting(key, v)
+end
+
 -- Resolve the active locale: forceLocale="auto" (default) → GetLocale(); explicit
 -- value forces panels to that locale regardless of WoW client locale.
 local function ResolveActiveLocale()
@@ -1234,12 +1263,16 @@ local function IsCleanNonNegativeNumber(value)
 end
 
 local function RefreshItemLevelCache()
-    if not GetAverageItemLevel then return end
+    if not GetAverageItemLevel then
+        itemLevelDirty = false
+        return
+    end
     local ok, overall, equipped = pcall(GetAverageItemLevel)
     if not ok then return end
     if not IsCleanNonNegativeNumber(overall) or not IsCleanNonNegativeNumber(equipped) then return end
     cached.itemLevelOverall = overall
     cached.itemLevelEquipped = equipped
+    itemLevelDirty = false
 end
 
 -- 12.x: hideZero check on a possibly-secret value.
@@ -1255,7 +1288,7 @@ local function FormatRepairCost(copper)
     -- matching the vendor display exactly. Pass fontHeight explicitly — without it
     -- the helper produces `:0:0` markup which in TWW 12.x sometimes renders icons
     -- at the wrong size or with the digits floating to a separate baseline.
-    return GetCoinTextureString(copper, GetDB("fontSize"))
+    return GetCoinTextureString(copper, GetNumberDB("fontSize"))
 end
 
 local function ComputeDurabilityColor(pct)
@@ -1330,11 +1363,12 @@ local function CacheSettings()
     for _, k in ipairs(CACHED_BOOL_KEYS) do
         cached[k] = GetDB(k)
     end
-    cached.updateInterval = GetDB("updateInterval")
+    cached.updateInterval = GetNumberDB("updateInterval")
     cached.displayMode = GetDB("displayMode")
-    -- WHY clamp: defensive against /run StatsProDB.textAlpha=0 (would set invisible text)
-    -- or out-of-range corrupt DB values. Floor matches slider min (25 = 25%).
-    cached.textAlpha = math.max(0.25, math.min(1.0, (StatsProDB.textAlpha or 100) / 100))
+    -- WHY runtime clamp: corrupt SavedVariables should not make text invisible,
+    -- spam OnUpdate, or break font/scale arithmetic. Do not write back here; UI
+    -- slider commits remain the only normal path that mutates SavedVariables.
+    cached.textAlpha = GetNumberDB("textAlpha") / 100
 
     -- Resolve labels for the active locale. forceLocale="auto" → GetLocale().
     -- WHY reference, not copy: LABELS_BY_LOCALE entries are never mutated; reference
@@ -1628,7 +1662,7 @@ function Panel:New(globalName, dbKeyPrefix)
     -- text regardless of value length. Cost: values' right edges no longer align
     -- vertically. User chose tight constant gap over right-edge alignment.
     local labelText = frame:CreateFontString(nil, "OVERLAY")
-    labelText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
+    labelText:SetFont(GetDB("font"), GetNumberDB("fontSize"), "OUTLINE")
     labelText:SetJustifyH("RIGHT")
     labelText:SetJustifyV("TOP")
     labelText:SetTextColor(1, 1, 1, 1)
@@ -1640,7 +1674,7 @@ function Panel:New(globalName, dbKeyPrefix)
     -- column starts. Offset is recomputed each SetTextSafe once valueW is measured.
     -- Initial offset 0; first render repositions it.
     local ratingText = frame:CreateFontString(nil, "OVERLAY")
-    ratingText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
+    ratingText:SetFont(GetDB("font"), GetNumberDB("fontSize"), "OUTLINE")
     ratingText:SetJustifyH("RIGHT")
     ratingText:SetJustifyV("TOP")
     ratingText:SetTextColor(1, 1, 1, 1)
@@ -1648,7 +1682,7 @@ function Panel:New(globalName, dbKeyPrefix)
     ratingText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
 
     local valueText = frame:CreateFontString(nil, "OVERLAY")
-    valueText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
+    valueText:SetFont(GetDB("font"), GetNumberDB("fontSize"), "OUTLINE")
     valueText:SetJustifyH("LEFT")
     valueText:SetJustifyV("TOP")
     valueText:SetTextColor(1, 1, 1, 1)
@@ -1666,7 +1700,7 @@ function Panel:New(globalName, dbKeyPrefix)
     -- icons inflate that line's height (`:14:14:2:0|t` yoffset=0 puts texture top above
     -- glyph top), causing cumulative drift vs labelText's pure-text rows.
     local repairText = frame:CreateFontString(nil, "OVERLAY")
-    repairText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
+    repairText:SetFont(GetDB("font"), GetNumberDB("fontSize"), "OUTLINE")
     repairText:SetJustifyH("RIGHT")
     repairText:SetTextColor(1, 1, 1, 1)
     repairText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)  -- y repositioned per render
@@ -1677,7 +1711,7 @@ function Panel:New(globalName, dbKeyPrefix)
     -- row sits on its own visual row below stats (visual separation), and so coin can't
     -- overlap stat-row content. Width set per-render = stats labelW for column alignment.
     local repairLabelText = frame:CreateFontString(nil, "OVERLAY")
-    repairLabelText:SetFont(GetDB("font"), GetDB("fontSize"), "OUTLINE")
+    repairLabelText:SetFont(GetDB("font"), GetNumberDB("fontSize"), "OUTLINE")
     repairLabelText:SetJustifyH("RIGHT")  -- match labelText alignment
     repairLabelText:SetTextColor(1, 1, 1, 1)
     repairLabelText:Hide()  -- shown only when hasRepair
@@ -1694,7 +1728,7 @@ function Panel:New(globalName, dbKeyPrefix)
     -- SetFont + 10 SetText per panel on every /reload. With this initialization, the
     -- post-MaybeAutoSwitchFont apply at PEW becomes a no-op when MAS didn't swap.
     self.appliedFont = GetDB("font")
-    self.appliedSize = GetDB("fontSize")
+    self.appliedSize = GetNumberDB("fontSize")
 
     -- Drag handlers (unsecure frames; not protected in combat lockdown).
     -- RegisterForDrag honors WoW's system drag-distance threshold — single clicks
@@ -1771,6 +1805,7 @@ function Panel:Lock() end
 function Panel:Unlock() end
 
 function Panel:Hide()
+    if not self:IsShown() and self.lastLineCount == -1 and not self.lastRepairText then return end
     self.frame:Hide()
     self.lastLabelText = nil
     self.lastRatingText = nil
@@ -1850,7 +1885,7 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- column space without overlapping stat content rows.
     local repairLabelW = 0
     if hasRepair then
-        local lineH = (self.cachedLabelH and hasRows) and (self.cachedLabelH / lineCount) or GetDB("fontSize")
+        local lineH = (self.cachedLabelH and hasRows) and (self.cachedLabelH / lineCount) or GetNumberDB("fontSize")
         local repairRowY = hasRows and -(lineCount * lineH + 1) or 0  -- 1px gap only when below stat rows
 
         -- Repair label: use stat labelW when below stat rows; measure its own label for
@@ -1924,7 +1959,7 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- would conflate "text changed" vs "font changed" — Panel:Reflow needs
     -- lastLineCount preserved across ApplyStyle as the content-line-count marker.
     if lineCount ~= self.lastLineCount or hasRepair ~= self.lastHasRepair or self.heightDirty then
-        local fontSize = GetDB("fontSize")
+        local fontSize = GetNumberDB("fontSize")
         local h = lineCount * fontSize
         if hasRepair then h = h + fontSize + (hasRows and 1 or 0) end  -- repair row + gap when below stats
         self.frame:SetHeight(h + 8)
@@ -2096,7 +2131,7 @@ local function MaybeAutoSwitchFont()
         if saved and not SameFontPath(saved, cur) and FontSupports(saved, req) then
             StatsProDB.font = saved
             StatsProDB.fontBeforeAutoSwitch = nil
-            ApplyTextStyleToAllPanels(saved, GetDB("fontSize"))
+            ApplyTextStyleToAllPanels(saved, GetNumberDB("fontSize"))
         end
         ApplyConfigFont(ResolveConfigFont(active))
         return
@@ -2106,7 +2141,7 @@ local function MaybeAutoSwitchFont()
     if fallback and not SameFontPath(fallback, cur) then
         StatsProDB.fontBeforeAutoSwitch = StatsProDB.fontBeforeAutoSwitch or cur
         StatsProDB.font = fallback
-        ApplyTextStyleToAllPanels(fallback, GetDB("fontSize"))
+        ApplyTextStyleToAllPanels(fallback, GetNumberDB("fontSize"))
     end
     ApplyConfigFont(ResolveConfigFont(active))
 end
@@ -2127,6 +2162,7 @@ local function SetAllPanelsLockState(locked)
 end
 
 local function SetAllPanelsScale(scale)
+    scale = NormalizeNumberSetting("scale", scale)
     mainPanel.frame:SetScale(scale)
     defensivePanel.frame:SetScale(scale)
 end
@@ -2288,12 +2324,16 @@ local function BuildOffensiveLines(labels, ratings, values)
     if cached.showVersatility then
         local versFromRating = safeCall(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
         local versFlat       = safeCall(GetVersatilityBonus,  CR_VERSATILITY_DAMAGE_DONE)
-        local versRating     = safeCall(GetCombatRating,      CR_VERSATILITY_DAMAGE_DONE)
-        -- WARNING: must check ALL three for secret state before arithmetic. Different APIs may
-        -- have different secret states despite same combat status (defensive: guard everything).
-        if not issecretvalue(versFromRating) and not issecretvalue(versFlat) and not issecretvalue(versRating) then
+        -- WARNING: must check operands for secret state before arithmetic. Rating is
+        -- only read when visible; percent cache can still refresh independently.
+        if not issecretvalue(versFromRating) and not issecretvalue(versFlat) then
             cached.versTotal = versFromRating + versFlat
-            cached.versTotalRating = versRating
+        end
+        if needRating then
+            local versRating = safeCall(GetCombatRating, CR_VERSATILITY_DAMAGE_DONE)
+            if not issecretvalue(versRating) then
+                cached.versTotalRating = versRating
+            end
         end
         if shouldShow(cached.versTotal, cached.hideZeroOffensive) then
             local versStr = cs.versatility
@@ -2557,9 +2597,11 @@ local function RouteRenderBlocks(blocks, mode, splitSelection)
     return mainBucket, sideBucket
 end
 
+local updateCount = 0
 local function UpdateStats()
     -- WARNING: skip until init complete; cached.colorStrings is empty until CacheSettings runs
     if not isLoaded then return end
+    updateCount = updateCount + 1
 
     -- WHY: master visibility toggle. When off, hide both panels and skip all work
     -- (stat APIs, slot scans). Re-enabling via slash/UI calls UpdateStats explicitly,
@@ -2581,7 +2623,7 @@ local function UpdateStats()
         RefreshDurabilityCache()
     end
 
-    if cached.showItemLevel then
+    if cached.showItemLevel and itemLevelDirty then
         RefreshItemLevelCache()
     end
 
@@ -2656,7 +2698,7 @@ local function OnPlayerEnteringWorld()
         MaybeAutoSwitchFont()
         LoadAllPositions()
         SetAllPanelsLockState(GetDB("isLocked"))
-        SetAllPanelsScale(GetDB("scale"))
+        SetAllPanelsScale(GetNumberDB("scale"))
         -- WHY re-apply font/size at PEW: Panel:New creates FontStrings at file scope
         -- with whatever GetDB("font") returns BEFORE MigrateDB runs. If the migration
         -- changed db.font (e.g. v3→v4 hardcoded → STANDARD_TEXT_FONT auto-upgrade),
@@ -2664,7 +2706,7 @@ local function OnPlayerEnteringWorld()
         -- session until /reload. CJK users on the old default would see `?` boxes for
         -- their localized labels for one whole session. Re-applying after MigrateDB
         -- closes that window.
-        ApplyTextStyleToAllPanels(GetDB("font"), GetDB("fontSize"))
+        ApplyTextStyleToAllPanels(GetDB("font"), GetNumberDB("fontSize"))
         -- WHY re-apply textAlpha at PEW: Panel:New runs at file scope before CacheSettings,
         -- so cached.textAlpha is nil at FontString creation. This propagates the user's
         -- saved alpha to FontStrings on the first frame.
@@ -2673,6 +2715,7 @@ local function OnPlayerEnteringWorld()
     end
     -- WHY: UpdateStats handles Show/Hide based on cached.isVisible + line content.
     durabilityDirty = true
+    itemLevelDirty = true
     UpdateStats()
 end
 
@@ -2695,7 +2738,8 @@ local EVENT_HANDLERS = {
     PLAYER_ENTERING_WORLD       = OnPlayerEnteringWorld,
     PLAYER_LOGOUT               = OnPlayerLogout,
     UPDATE_INVENTORY_DURABILITY = function() durabilityDirty = true end,
-    PLAYER_EQUIPMENT_CHANGED    = function() durabilityDirty = true end,
+    PLAYER_EQUIPMENT_CHANGED    = function() durabilityDirty = true; itemLevelDirty = true end,
+    BAG_UPDATE_DELAYED          = function() itemLevelDirty = true end,
     MERCHANT_SHOW               = function() durabilityDirty = true end,
     -- WHY: lock state is stored in cached.isLocked and read by OnDragStart. Mouse stays
     -- enabled permanently so right-click Settings works even while locked; Panel:Lock /
@@ -3099,6 +3143,17 @@ local function CursorSection(c, label)
     c.y = c.y - 24 - c.gap
 end
 
+local coalesceGenerations = {}
+local function RunCoalesced(key, delay, fn)
+    coalesceGenerations[key] = (coalesceGenerations[key] or 0) + 1
+    local generation = coalesceGenerations[key]
+    C_Timer.After(delay, function()
+        if coalesceGenerations[key] == generation then
+            fn()
+        end
+    end)
+end
+
 -- CreateConfigSlider: standard label-on-top + horizontal slider pattern used across
 -- the Appearance tab. valueFmt is a string.format specifier (e.g. "%.1f", "%d") applied
 -- to both initial display and live OnValueChanged updates. SetObeyStepOnDrag(true) +
@@ -3113,22 +3168,24 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
     local slider = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
     slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
     slider:SetMinMaxValues(minVal, maxVal)
-    slider:SetValue(GetDB(dbKey))
     slider:SetValueStep(step)
     slider:SetObeyStepOnDrag(true)
     slider:SetWidth(420)
+    local initialValue = NUMBER_SETTING_META[dbKey] and GetNumberDB(dbKey) or GetDB(dbKey)
+    slider:SetValue(initialValue)
     _G[name .. "Low"]:SetText(lowText)
     _G[name .. "High"]:SetText(highText)
     _G[name .. "Text"]:SetText(string.format(valueFmt, slider:GetValue()))
 
     slider:SetScript("OnValueChanged", function(self, value)
-        _G[self:GetName() .. "Text"]:SetText(string.format(valueFmt, value))
-        StatsProDB[dbKey] = value
-        if onChange then onChange(value) end
+        local normalized = NUMBER_SETTING_META[dbKey] and NormalizeNumberSetting(dbKey, value) or value
+        _G[self:GetName() .. "Text"]:SetText(string.format(valueFmt, normalized))
+        StatsProDB[dbKey] = normalized
+        if onChange then onChange(normalized) end
     end)
 
     PushRefresher(function()
-        local v = GetDB(dbKey)
+        local v = NUMBER_SETTING_META[dbKey] and GetNumberDB(dbKey) or GetDB(dbKey)
         slider:SetValue(v)
         _G[slider:GetName() .. "Text"]:SetText(string.format(valueFmt, v))
     end)
@@ -3490,14 +3547,20 @@ function addon:OpenConfigMenu()
     -- sizes the panel (visual layout), not the text rendering.
     CreateConfigSlider(layoutTab, "StatsProScaleSlider", "Scale:", "scale", cd,
         0.5, 2.0, 0.1, "0.5", "2.0", "%.1f",
-        function(v) SetAllPanelsScale(v) end)
+        function()
+            RunCoalesced("scale", 0.05, function()
+                SetAllPanelsScale(GetNumberDB("scale"))
+            end)
+        end)
 
     -- Refresh rate slider — controls how often stat values recompute (seconds).
     -- Lower = smoother but more CPU; higher = less CPU but values lag behind gear/buff swaps.
     -- Grouped with Frame & Position (panel update rate, not a text/i18n concern).
     CreateConfigSlider(layoutTab, "StatsProRefreshSlider", "Refresh Rate (sec):", "updateInterval", cd,
         0.1, 1.0, 0.05, "0.1s", "1.0s", "%.2f",
-        function() CacheSettings() end)
+        function()
+            RunCoalesced("updateInterval", 0.05, CacheSettings)
+        end)
 
     CursorGap(cd, 4)
 
@@ -3647,7 +3710,7 @@ function addon:OpenConfigMenu()
         local function PreviewFont(path)
             if SameFontPath(path, previewedPath) then return end
             previewedPath = path
-            ApplyTextStyleToAllPanels(path, GetDB("fontSize"))
+            ApplyTextStyleToAllPanels(path, GetNumberDB("fontSize"))
             ReflowAllPanels()
         end
         -- WHY unconditional restore (no `previewedPath~=nil` gate): preview-state
@@ -3658,7 +3721,7 @@ function addon:OpenConfigMenu()
         -- already at db.font; only Reflow's SetTextSafe re-measure runs.
         local function CancelFontPreview()
             previewedPath = nil
-            ApplyTextStyleToAllPanels(GetDB("font"), GetDB("fontSize"))
+            ApplyTextStyleToAllPanels(GetDB("font"), GetNumberDB("fontSize"))
             ReflowAllPanels()
         end
         local function PickFont(f)
@@ -3667,7 +3730,7 @@ function addon:OpenConfigMenu()
             -- Skip Apply when preview already painted the same font (common path: hover
             -- then click). DB write above is the only mandatory step in that branch.
             if not SameFontPath(previewedPath, f.path) then
-                ApplyTextStyleToAllPanels(f.path, GetDB("fontSize"))
+                ApplyTextStyleToAllPanels(f.path, GetNumberDB("fontSize"))
                 ReflowAllPanels()
             end
             previewedPath = nil  -- preview is now committed; OnHide skip its Apply
@@ -3937,7 +4000,12 @@ function addon:OpenConfigMenu()
     -- step-tick during drag (8→9→...→32 = up to 25 events); Reflow keeps drag smooth.
     CreateConfigSlider(displayTab, "StatsProFontSlider", "Font Size:", "fontSize", cd,
         8, 32, 1, "8", "32", "%d",
-        function(v) ApplyTextStyleToAllPanels(GetDB("font"), v); ReflowAllPanels() end)
+        function()
+            RunCoalesced("fontSize", 0.05, function()
+                ApplyTextStyleToAllPanels(GetDB("font"), GetNumberDB("fontSize"))
+                ReflowAllPanels()
+            end)
+        end)
 
     -- Text Opacity slider — adjust panel text transparency. Stored as INT 25-100 in DB
     -- (matches CreateConfigSlider's format-string contract); cached as float 0.25-1.0
@@ -4039,11 +4107,11 @@ function addon:OpenConfigMenu()
             local cur      = GetDB("font")
             local fallback = FindCompatibleFont(cur, req)
             if fallback and not SameFontPath(fallback, cur) then
-                ApplyTextStyleToAllPanels(fallback, GetDB("fontSize"))
+                ApplyTextStyleToAllPanels(fallback, GetNumberDB("fontSize"))
                 langPreviewSwappedFnt = true
             elseif langPreviewSwappedFnt then
                 -- Previous hover swapped to fallback; this hover doesn't need to → restore.
-                ApplyTextStyleToAllPanels(cur, GetDB("fontSize"))
+                ApplyTextStyleToAllPanels(cur, GetNumberDB("fontSize"))
                 langPreviewSwappedFnt = false
             end
 
@@ -4067,7 +4135,7 @@ function addon:OpenConfigMenu()
             local active = ResolveActiveLocale()
             cached.activeLabels = LABELS_BY_LOCALE[active] or LABELS_BY_LOCALE.enUS
             if langPreviewSwappedFnt then
-                ApplyTextStyleToAllPanels(GetDB("font"), GetDB("fontSize"))
+                ApplyTextStyleToAllPanels(GetDB("font"), GetNumberDB("fontSize"))
                 langPreviewSwappedFnt = false
             end
             langPreviewActive = false
@@ -4108,7 +4176,7 @@ function addon:OpenConfigMenu()
                     -- ApplyConfigFont is unconditionally called inside MAS so the settings
                     -- UI doesn't share this asymmetry — panels are the only side affected.
                     if langPreviewSwappedFnt then
-                        ApplyTextStyleToAllPanels(GetDB("font"), GetDB("fontSize"))
+                        ApplyTextStyleToAllPanels(GetDB("font"), GetNumberDB("fontSize"))
                     end
                     langPreviewActive     = false
                     langPreviewSwappedFnt = false
@@ -4231,7 +4299,8 @@ function addon:OpenConfigMenu()
         local _, sw, txt
         local leftRows = {}
         _, sw, txt = CreateCheckboxColor(statsTab, "StatsProItemLevelCheck",
-            "Show Item Level", "showItemLevel", "itemLevel", cs.padX, rowY)
+            "Show Item Level", "showItemLevel", "itemLevel", cs.padX, rowY,
+            function(checked) if checked then itemLevelDirty = true end end)
         leftRows[#leftRows + 1] = { text = txt, swatch = sw }
         AlignSwatchColumn(leftRows)
         cs.y = rowY - 26
@@ -4396,8 +4465,8 @@ function addon:PrintDebugDump()
     PrintMsg(string.format("visible=%s  locked=%s  mode=%s  font=%dpx  scale=%.1f  refresh=%.2fs  textAlpha=%d%%",
         tostring(cached.isVisible), tostring(cached.isLocked),
         tostring(GetDB("displayMode")),
-        GetDB("fontSize"), GetDB("scale"), GetDB("updateInterval"),
-        StatsProDB.textAlpha or 100))
+        GetNumberDB("fontSize"), GetNumberDB("scale"), GetNumberDB("updateInterval"),
+        GetNumberDB("textAlpha")))
 
     PrintMsg(string.format("show fmt: rating=%s pct=%s matchColor=%s",
         tostring(cached.showRating), tostring(cached.showPercentage), tostring(cached.matchValueColorToStat)))
@@ -4439,6 +4508,28 @@ function addon:PrintDebugDump()
     end
     PrintMsg(PosLine("main",      GetDB("point"),           GetDB("relativePoint"),           GetDB("xOfs"),           GetDB("yOfs")))
     PrintMsg(PosLine("side",      GetDB("defensive_point"), GetDB("defensive_relativePoint"), GetDB("defensive_xOfs"), GetDB("defensive_yOfs")))
+end
+
+local function PrintDebugPerf()
+    PrintMsg(string.format("debug perf: mem=%dKB updates=%d refresh=%.2fs elapsed=%.2fs",
+        math.floor(collectgarbage("count")),
+        updateCount,
+        cached.updateInterval or GetNumberDB("updateInterval"),
+        timeSinceLastUpdate or 0))
+    PrintMsg(string.format("debug perf: visible=%s mode=%s mainShown=%s sideShown=%s",
+        tostring(cached.isVisible),
+        tostring(cached.displayMode),
+        tostring(mainPanel:IsShown()),
+        tostring(defensivePanel:IsShown())))
+    PrintMsg(string.format("debug perf: dirty durability=%s itemLevel=%s repairCost=%s durability=%.1f",
+        tostring(durabilityDirty),
+        tostring(itemLevelDirty),
+        tostring(cached.repairCost or 0),
+        cached.durabilityValue or 0))
+    PrintMsg(string.format("debug perf: itemLevel enabled=%s equipped=%s overall=%s",
+        tostring(cached.showItemLevel),
+        tostring(cached.itemLevelEquipped or "?"),
+        tostring(cached.itemLevelOverall or "?")))
 end
 
 local function RunRenderRoutingSmokeCheck()
@@ -4576,8 +4667,11 @@ SlashCmdList["STATSPRO"] = function(msg)
     elseif arg == "reset" then
         ResetToDefaults()
     elseif arg == "debug" then
-        if (rest:match("^(%S+)") or "") == "routing" then
+        local debugArg = rest:match("^(%S+)") or ""
+        if debugArg == "routing" then
             RunRenderRoutingSmokeCheck()
+        elseif debugArg == "perf" then
+            PrintDebugPerf()
         else
             addon:PrintDebugDump()
         end

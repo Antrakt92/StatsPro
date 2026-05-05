@@ -533,7 +533,8 @@ local isLoaded = false
 --   - hardcoded literals in special-case branches: "Vers" / "Speed" / "Armor"
 --     (additive rows for dual-source stats not in the loop tables)
 --   - "Durability" in BuildDurabilityLines / "Repair" in BuildRepairCostPayload
---   - "Defensive" used by DefensiveHeader() for sectioned-mode divider
+--   - section keys used by SectionHeader(): Character / Item Level / Offensive /
+--     Tertiary / Defensive / Gear
 -- Adding a new key here without updating callers is a no-op; adding a new caller
 -- without a key here falls back gracefully to the English literal (`L(k) → k`).
 --
@@ -1201,9 +1202,9 @@ local function FormatLabel(colorHex, englishKey)
 end
 
 -- WHY function (not a constant): resolved at use time so locale-toggle flips update
--- the divider on next render. Cheap: one string.format per sectioned-mode UpdateStats.
-local function DefensiveHeader()
-    return string.format("|cff808080— %s —|r", L("Defensive"))
+-- section headers on next render. Cheap: one string.format per visible section.
+local function SectionHeader(labelKey)
+    return string.format("|cff808080— %s —|r", L(labelKey))
 end
 
 -- pcall every stat API so 12.x secret values never touch our Lua logic.
@@ -2421,8 +2422,9 @@ local function BuildRepairCostPayload()
     return FormatRepairCost(cached.repairCost), repairLabelStr
 end
 
--- WHY: separate header injector — sectioned mode places "— Defensive —" between sections.
--- Header text spans the label column with empty rating + value to preserve row alignment.
+-- WHY: separate header injector — sectioned mode places localized structural rows
+-- between logical stat blocks. Header text spans the label column with empty rating
+-- + value to preserve row alignment.
 local function PushHeader(labels, ratings, values, headerStr)
     labels[#labels + 1] = headerStr
     ratings[#ratings + 1] = ""
@@ -2440,16 +2442,17 @@ end
 
 -- Build*Lines share one contract: mutate the supplied row arrays and return them.
 -- The return fallback preserves rows if a future builder accidentally stays mutate-only.
-local function BuildRowBlock(splitKey, buildFn)
+local function BuildRowBlock(def)
     local labels, ratings, values = {}, {}, {}
-    local outLabels, outRatings, outValues = buildFn(labels, ratings, values)
+    local outLabels, outRatings, outValues = def.buildFn(labels, ratings, values)
     if outLabels then
         labels = outLabels
         ratings = outRatings or ratings
         values = outValues or values
     end
     return {
-        splitKey = splitKey,
+        splitKey = def.splitKey,
+        sectionKey = def.sectionKey,
         labels = labels or {},
         ratings = ratings or {},
         values = values or {},
@@ -2458,10 +2461,11 @@ local function BuildRowBlock(splitKey, buildFn)
     }
 end
 
-local function BuildRepairBlock()
+local function BuildRepairBlock(def)
     local repairStr, repairLabelStr = BuildRepairCostPayload()
     return {
-        splitKey = "splitRepairCost",
+        splitKey = def.splitKey,
+        sectionKey = def.sectionKey,
         labels = {},
         ratings = {},
         values = {},
@@ -2469,6 +2473,16 @@ local function BuildRepairBlock()
         repairLabelStr = repairLabelStr,
     }
 end
+
+local RENDER_BLOCK_DEFS = {
+    { splitKey = "splitCharacter",  sectionKey = "Character",  buildFn = BuildCharacterLines },
+    { splitKey = "splitItemLevel",  sectionKey = "Item Level", buildFn = BuildItemLevelLines },
+    { splitKey = "splitOffensive",  sectionKey = "Offensive",  buildFn = BuildOffensiveLines },
+    { splitKey = "splitTertiary",   sectionKey = "Tertiary",   buildFn = BuildTertiaryLines },
+    { splitKey = "splitDefensive",  sectionKey = "Defensive",  buildFn = BuildDefensiveLines },
+    { splitKey = "splitDurability", sectionKey = "Gear",       buildFn = BuildDurabilityLines },
+    { splitKey = "splitRepairCost", sectionKey = "Gear",       buildRepair = true },
+}
 
 local function NewRenderBucket()
     return { labels = {}, ratings = {}, values = {}, repairStr = "", repairLabelStr = nil }
@@ -2480,6 +2494,20 @@ local function AddBlockToBucket(bucket, block)
         bucket.repairStr = block.repairStr
         bucket.repairLabelStr = block.repairLabelStr
     end
+end
+
+local function BlockHasContent(block)
+    return #block.labels > 0 or (block.repairStr and block.repairStr ~= "")
+end
+
+local function AddSectionedBlockToBucket(bucket, block, lastSectionKey)
+    if not BlockHasContent(block) then return lastSectionKey end
+    if block.sectionKey and block.sectionKey ~= lastSectionKey then
+        PushHeader(bucket.labels, bucket.ratings, bucket.values, SectionHeader(block.sectionKey))
+        lastSectionKey = block.sectionKey
+    end
+    AddBlockToBucket(bucket, block)
+    return lastSectionKey
 end
 
 local function BucketHasContent(bucket)
@@ -2501,15 +2529,11 @@ local function RenderBucket(panel, bucket)
 end
 
 local function BuildRenderBlocks()
-    return {
-        BuildRowBlock("splitCharacter", BuildCharacterLines),
-        BuildRowBlock("splitItemLevel", BuildItemLevelLines),
-        BuildRowBlock("splitOffensive", BuildOffensiveLines),
-        BuildRowBlock("splitTertiary", BuildTertiaryLines),
-        BuildRowBlock("splitDefensive", BuildDefensiveLines),
-        BuildRowBlock("splitDurability", BuildDurabilityLines),
-        BuildRepairBlock(),
-    }
+    local blocks = {}
+    for _, def in ipairs(RENDER_BLOCK_DEFS) do
+        blocks[#blocks + 1] = def.buildRepair and BuildRepairBlock(def) or BuildRowBlock(def)
+    end
+    return blocks
 end
 
 local function UpdateStats()
@@ -2552,11 +2576,9 @@ local function UpdateStats()
         RenderBucket(defensivePanel, sideBucket)
     elseif mode == "sectioned" then
         local bucket = NewRenderBucket()
-        for i, block in ipairs(blocks) do
-            if block.splitKey == "splitDefensive" and #block.labels > 0 then
-                PushHeader(bucket.labels, bucket.ratings, bucket.values, DefensiveHeader())
-            end
-            AddBlockToBucket(bucket, block)
+        local lastSectionKey
+        for _, block in ipairs(blocks) do
+            lastSectionKey = AddSectionedBlockToBucket(bucket, block, lastSectionKey)
         end
         RenderBucket(mainPanel, bucket)
         defensivePanel:Hide()
@@ -2973,7 +2995,7 @@ local function RefreshConfigLocalization()
 end
 
 --[[ ============================================================
-    15. CONFIG MENU (tabs: Stats / Defensive / Appearance)
+    15. CONFIG MENU (tabs: Stats / Layout / Appearance)
 ============================================================ ]]
 -- Forward-decls — assigned during OpenConfigMenu's Appearance-tab build pass
 -- (the Lua frame variable is `displayTab`; UI label is "Appearance").

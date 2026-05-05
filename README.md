@@ -39,7 +39,7 @@
 - **Defensive stats** — Dodge, Parry, Block, Armor (as % damage reduction)
 - **Durability** — average or worst-slot percentage with auto-color thresholds (green / yellow / red)
 - **Repair cost** — optional live vendor-format coin display (`46g 40s 81c` with embedded gold/silver/copper icons), default OFF
-- **Three display modes** — Flat (one panel), Sectioned (one panel with header divider), Split (two movable panels with configurable block routing)
+- **Three display modes** — Flat (one panel), Sectioned (one panel with block headers), Split (two movable panels with configurable block routing)
 - **Localized stat labels** — on-screen panel auto-translates to your WoW client language across all 11 retail locales (deDE, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, zhTW; English unchanged). Switchable from a **Language** dropdown in the Appearance tab → Localization — pick another language, "Auto" to follow your client locale, or compact English. **The settings window itself also localizes** — every tab, label, dropdown caption, button, and warning updates live the moment you switch languages, no `/reload` needed.
 - **Customization** — per-stat colors, fonts via LibSharedMedia, font size, panel scale, refresh rate
 - **Auto-aligning columns** — labels and values stay neatly aligned regardless of which stats are enabled, font, or scale; toggling rating-only or percent-only collapses cleanly into one tight column with no awkward gaps

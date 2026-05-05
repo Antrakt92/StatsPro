@@ -2536,6 +2536,27 @@ local function BuildRenderBlocks()
     return blocks
 end
 
+local function RouteRenderBlocks(blocks, mode, splitSelection)
+    local mainBucket = NewRenderBucket()
+    local sideBucket = NewRenderBucket()
+    if mode == "split" then
+        local selection = splitSelection or cached
+        for _, block in ipairs(blocks) do
+            AddBlockToBucket(selection[block.splitKey] and sideBucket or mainBucket, block)
+        end
+    elseif mode == "sectioned" then
+        local lastSectionKey
+        for _, block in ipairs(blocks) do
+            lastSectionKey = AddSectionedBlockToBucket(mainBucket, block, lastSectionKey)
+        end
+    else
+        for _, block in ipairs(blocks) do
+            AddBlockToBucket(mainBucket, block)
+        end
+    end
+    return mainBucket, sideBucket
+end
+
 local function UpdateStats()
     -- WARNING: skip until init complete; cached.colorStrings is empty until CacheSettings runs
     if not isLoaded then return end
@@ -2566,29 +2587,11 @@ local function UpdateStats()
 
     local blocks = BuildRenderBlocks()
     local mode = cached.displayMode or "flat"
+    local mainBucket, sideBucket = RouteRenderBlocks(blocks, mode, cached)
+    RenderBucket(mainPanel, mainBucket)
     if mode == "split" then
-        local mainBucket = NewRenderBucket()
-        local sideBucket = NewRenderBucket()
-        for _, block in ipairs(blocks) do
-            AddBlockToBucket(cached[block.splitKey] and sideBucket or mainBucket, block)
-        end
-        RenderBucket(mainPanel, mainBucket)
         RenderBucket(defensivePanel, sideBucket)
-    elseif mode == "sectioned" then
-        local bucket = NewRenderBucket()
-        local lastSectionKey
-        for _, block in ipairs(blocks) do
-            lastSectionKey = AddSectionedBlockToBucket(bucket, block, lastSectionKey)
-        end
-        RenderBucket(mainPanel, bucket)
-        defensivePanel:Hide()
     else
-        -- flat (default)
-        local bucket = NewRenderBucket()
-        for _, block in ipairs(blocks) do
-            AddBlockToBucket(bucket, block)
-        end
-        RenderBucket(mainPanel, bucket)
         defensivePanel:Hide()
     end
 end
@@ -4438,6 +4441,74 @@ function addon:PrintDebugDump()
     PrintMsg(PosLine("side",      GetDB("defensive_point"), GetDB("defensive_relativePoint"), GetDB("defensive_xOfs"), GetDB("defensive_yOfs")))
 end
 
+local function RunRenderRoutingSmokeCheck()
+    local failures = {}
+    local function Check(name, ok, detail)
+        if not ok then failures[#failures + 1] = name .. ": " .. detail end
+    end
+    local function Block(splitKey, sectionKey, labels, ratings, values, repairStr, repairLabelStr)
+        return {
+            splitKey = splitKey,
+            sectionKey = sectionKey,
+            labels = labels or {},
+            ratings = ratings or {},
+            values = values or {},
+            repairStr = repairStr or "",
+            repairLabelStr = repairLabelStr,
+        }
+    end
+    local function CountLabel(bucket, label)
+        local n = 0
+        for _, v in ipairs(bucket.labels) do
+            if v == label then n = n + 1 end
+        end
+        return n
+    end
+
+    local character = Block("splitCharacter", "Character", { "Crit:" }, { "123" }, { "12.3%" })
+    local defensive = Block("splitDefensive", "Defensive", { "Dodge:" }, { "17.2%" }, { "" })
+    local durability = Block("splitDurability", "Gear", { "Durability:" }, { "86.4%" }, { "" })
+    local repair = Block("splitRepairCost", "Gear", {}, {}, {}, "243g", "Repair:")
+    local empty = Block("splitOffensive", "Offensive")
+
+    local main, side = RouteRenderBlocks({ character, defensive, repair }, "flat", { splitDefensive = true, splitRepairCost = true })
+    Check("flat-main-rows", #main.labels == 2, "expected two normal rows in main")
+    Check("flat-main-repair", main.repairStr == "243g" and main.repairLabelStr == "Repair:", "repair payload missing from main")
+    Check("flat-side-empty", not BucketHasContent(side), "side bucket should stay empty")
+
+    main, side = RouteRenderBlocks({ character, defensive, repair }, "split", { splitDefensive = true, splitRepairCost = true })
+    Check("split-main-character", #main.labels == 1 and main.labels[1] == "Crit:", "character row should remain in main")
+    Check("split-side-defensive", #side.labels == 1 and side.labels[1] == "Dodge:", "defensive row should route to side")
+    Check("split-side-repair", side.repairStr == "243g" and side.repairLabelStr == "Repair:", "repair payload should route to side")
+
+    main, side = RouteRenderBlocks({ empty }, "sectioned")
+    Check("sectioned-empty-main", not BucketHasContent(main), "empty block should not create a header")
+    Check("sectioned-empty-side", not BucketHasContent(side), "side bucket should stay empty")
+
+    main = RouteRenderBlocks({ empty, defensive }, "sectioned")
+    Check("sectioned-defensive-header", main.labels[1] == SectionHeader("Defensive"), "missing Defensive header")
+    Check("sectioned-defensive-row", main.labels[2] == "Dodge:" and #main.labels == 2, "defensive row/header shape changed")
+    Check("sectioned-skip-empty-header", CountLabel(main, SectionHeader("Offensive")) == 0, "empty Offensive block inserted a header")
+
+    main = RouteRenderBlocks({ durability, repair }, "sectioned")
+    Check("sectioned-gear-header-once", CountLabel(main, SectionHeader("Gear")) == 1, "Gear header should appear once")
+    Check("sectioned-gear-row", main.labels[2] == "Durability:" and #main.labels == 2, "durability row should sit under Gear header")
+    Check("sectioned-gear-repair", main.repairStr == "243g" and main.repairLabelStr == "Repair:", "repair payload missing under Gear")
+
+    main = RouteRenderBlocks({ repair }, "sectioned")
+    Check("sectioned-repair-only-header", #main.labels == 1 and main.labels[1] == SectionHeader("Gear"), "repair-only should produce only Gear header")
+    Check("sectioned-repair-only-payload", main.repairStr == "243g", "repair-only payload missing")
+
+    if #failures == 0 then
+        PrintMsg("debug routing: PASS")
+    else
+        PrintMsg(string.format("debug routing: FAIL (%d)", #failures))
+        for _, failure in ipairs(failures) do
+            PrintMsg("debug routing: " .. failure)
+        end
+    end
+end
+
 --[[ ============================================================
     16. BLIZZARD SETTINGS PANEL LAUNCHER
 ============================================================ ]]
@@ -4488,7 +4559,10 @@ local function SetVisible(visible)
     if cb then cb:SetChecked(visible) end
 end
 SlashCmdList["STATSPRO"] = function(msg)
-    local arg = (msg or ""):lower():match("^%s*(%S+)") or ""
+    local input = (msg or ""):lower()
+    local arg, rest = input:match("^%s*(%S*)%s*(.-)%s*$")
+    arg = arg or ""
+    rest = rest or ""
     if arg == "show" then
         SetVisible(true)
         PrintMsg("Stats panel shown")
@@ -4502,7 +4576,11 @@ SlashCmdList["STATSPRO"] = function(msg)
     elseif arg == "reset" then
         ResetToDefaults()
     elseif arg == "debug" then
-        addon:PrintDebugDump()
+        if (rest:match("^(%S+)") or "") == "routing" then
+            RunRenderRoutingSmokeCheck()
+        else
+            addon:PrintDebugDump()
+        end
     elseif arg == "help" or arg == "?" then
         PrintMsg("Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug")
     else

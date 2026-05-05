@@ -1,10 +1,10 @@
 name: Package and release
 
 on:
+  # Publishing is tag-only; rerun failed releases from the original tag-triggered run.
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
 
 jobs:
   release:

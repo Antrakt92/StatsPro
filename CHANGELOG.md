@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.6.0 — Item Level + configurable layout blocks
+
+### Added
+
+- **Item Level row** — optional `iLvl` display showing equipped / overall item level, with a warning color when your bags significantly out-level what you are wearing. Suggested by [@tflo](https://github.com/tflo) (issue #1).
+- **Configurable Split mode** — choose which logical blocks live in the side panel: Character, Item Level, Offensive, Tertiary, Defensive, Durability, and Repair Cost.
+- **Independent Repair Cost toggle** — repair cost can now be shown without also enabling Durability.
+- **Stats / Layout / Appearance settings tabs** — settings are reorganized around what you are changing: stat rows, frame/layout behavior, and visual/localization choices.
+
+### Fixed
+
+- **Repair Cost no longer needs a settings toggle after login/vendor timing** — delayed tooltip/item data now triggers a repair-cost rescan when it catches up.
+- **Armor damage reduction no longer flickers to 0 during transient unreadable 12.x stat reads** — the addon keeps the last clean value until fresh readable data arrives.
+- **Korean / Chinese / Russian font compatibility is more reliable** — Blizzard font paths are normalized across casing/path variants, and bundled font coverage now classifies localized Blizzard fonts correctly.
+- **Malformed color SavedVariables no longer break rendering** — invalid color tables/channels are repaired from defaults and clamped safely.
+- **Sectioned mode now matches the new layout model** — it shows headers for visible Character, Item Level, Offensive, Tertiary, Defensive, and Gear blocks instead of only the old Defensive divider.
+- **Settings launcher localization stays in sync** after language changes.
+
+### Changed
+
+- **Repair Cost is OFF by default for fresh/reset profiles** so it only appears when explicitly enabled.
+- **Release packages include the MIT license** and exclude Codex/private development metadata.
+
 ## 1.5.0 — Right-click opens Settings
 
 ### Added

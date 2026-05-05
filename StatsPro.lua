@@ -64,6 +64,16 @@ local function FontPathKey(fontPath)
     return (fontPath:gsub("/", "\\"):lower())
 end
 
+local function SameFontPath(a, b)
+    local ak, bk = FontPathKey(a), FontPathKey(b)
+    return ak ~= nil and bk ~= nil and ak == bk
+end
+
+local function IsBlizzardFontPath(fontPath)
+    local key = FontPathKey(fontPath)
+    return key ~= nil and string.sub(key, 1, 6) == "fonts\\"
+end
+
 -- WHY two-tier coverage detection: WoW shipped TTF filenames are stable per locale
 -- install (FONT_GLYPH_SUPPORT normalized exact-match, O(1) hash); LSM-registered fonts have no
 -- glyph-coverage API but popular CJK families ship under predictable filenames, so
@@ -78,26 +88,34 @@ end
 -- glyphs, but enUS / deDE / frFR / etc. FRIZQT is Latin-design (Cyrillic renders
 -- via OS system font fallback — visible but ugly, mismatched kerning/stroke weights).
 -- See locale-conditional do-block below for FRIZQT populating.
-local FONT_GLYPH_SUPPORT = {
-    [FontPathKey("Fonts\\ARIALN.TTF")]        = { GLYPH_LATIN, GLYPH_CYR },    -- universal Latin+Cyrillic (cross-realm chat/nameplates)
-    -- FRIZQT populated by the locale-conditional do-block below this table.
-    [FontPathKey("Fonts\\FRIZQT___CYR.TTF")]  = { GLYPH_LATIN, GLYPH_CYR },
-    [FontPathKey("Fonts\\MORPHEUS.TTF")]      = { GLYPH_LATIN },
-    [FontPathKey("Fonts\\MORPHEUS_CYR.TTF")]  = { GLYPH_LATIN, GLYPH_CYR },
-    [FontPathKey("Fonts\\SKURRI.TTF")]        = { GLYPH_LATIN },
-    [FontPathKey("Fonts\\SKURRI_CYR.TTF")]    = { GLYPH_LATIN, GLYPH_CYR },
-    [FontPathKey("Fonts\\ARKai_T.ttf")]       = { GLYPH_HANS },                -- zhCN client default
-    [FontPathKey("Fonts\\ARKai_C.ttf")]       = { GLYPH_HANS },                -- zhCN
-    [FontPathKey("Fonts\\ARHei.TTF")]         = { GLYPH_HANS },                -- zhCN LSM localized Blizzard path
-    [FontPathKey("Fonts\\bHEI00M.ttf")]       = { GLYPH_HANT },                -- zhTW client default
-    [FontPathKey("Fonts\\bHEI01B.ttf")]       = { GLYPH_HANT },                -- zhTW
-    [FontPathKey("Fonts\\bLEI00D.ttf")]       = { GLYPH_HANT },                -- zhTW
-    [FontPathKey("Fonts\\bKAI00M.ttf")]       = { GLYPH_HANT },                -- zhTW LSM localized Blizzard path
-    [FontPathKey("Fonts\\2002.ttf")]          = { GLYPH_HANGUL },              -- koKR client default
-    [FontPathKey("Fonts\\2002B.ttf")]         = { GLYPH_HANGUL },              -- koKR
-    [FontPathKey("Fonts\\K_Damage.TTF")]      = { GLYPH_HANGUL },              -- koKR damage font (UI fallback in some installs)
-    [FontPathKey("Fonts\\K_Pagetext.TTF")]    = { GLYPH_HANGUL },              -- koKR LSM localized Blizzard path
-}
+-- WHY GLYPH_LATIN means StatsPro's western-locale labels (not ASCII-only):
+-- frFR/esES/esMX/ptBR strings include accents. LibSharedMedia documents that
+-- FRIZQT___CYR misses accented European chars, so it is Cyrillic-capable but
+-- intentionally NOT GLYPH_LATIN-compatible here.
+local FONT_GLYPH_SUPPORT = {}
+local function AddFontGlyphSupport(path, glyphs)
+    FONT_GLYPH_SUPPORT[FontPathKey(path)] = glyphs
+end
+
+AddFontGlyphSupport("Fonts\\2002.ttf",         { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL })
+AddFontGlyphSupport("Fonts\\2002B.ttf",        { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL })
+AddFontGlyphSupport("Fonts\\ARHei.TTF",        { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT })
+AddFontGlyphSupport("Fonts\\ARIALN.TTF",       { GLYPH_LATIN, GLYPH_CYR })
+AddFontGlyphSupport("Fonts\\ARKai_C.ttf",      { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT })
+AddFontGlyphSupport("Fonts\\ARKai_T.ttf",      { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT })
+AddFontGlyphSupport("Fonts\\bHEI00M.ttf",      { GLYPH_HANT })
+AddFontGlyphSupport("Fonts\\bHEI01B.ttf",      { GLYPH_HANT })
+AddFontGlyphSupport("Fonts\\bKAI00M.ttf",      { GLYPH_HANT })
+AddFontGlyphSupport("Fonts\\bLEI00D.ttf",      { GLYPH_HANT })
+-- FRIZQT__.TTF populated by the locale-conditional do-block below this table.
+AddFontGlyphSupport("Fonts\\FRIZQT___CYR.TTF", { GLYPH_CYR })
+AddFontGlyphSupport("Fonts\\K_Damage.TTF",     { GLYPH_CYR, GLYPH_HANGUL })
+AddFontGlyphSupport("Fonts\\K_Pagetext.TTF",   { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL })
+AddFontGlyphSupport("Fonts\\MORPHEUS.TTF",     { GLYPH_LATIN })
+AddFontGlyphSupport("Fonts\\MORPHEUS_CYR.TTF", { GLYPH_LATIN, GLYPH_CYR })
+AddFontGlyphSupport("Fonts\\NIM_____.ttf",     { GLYPH_LATIN, GLYPH_CYR })
+AddFontGlyphSupport("Fonts\\SKURRI.TTF",       { GLYPH_LATIN })
+AddFontGlyphSupport("Fonts\\SKURRI_CYR.TTF",   { GLYPH_LATIN, GLYPH_CYR })
 
 -- WHY locale-conditional FRIZQT: same path resolves to a DIFFERENT physical file
 -- per client install — properly-designed Cyrillic on ruRU; on other clients Cyrillic
@@ -110,7 +128,7 @@ do
     local LOCALE_NATIVE_GLYPHS = {
         ruRU = { GLYPH_LATIN, GLYPH_CYR },
     }
-    FONT_GLYPH_SUPPORT[FontPathKey("Fonts\\FRIZQT__.TTF")] = LOCALE_NATIVE_GLYPHS[GetLocale()] or { GLYPH_LATIN }
+    AddFontGlyphSupport("Fonts\\FRIZQT__.TTF", LOCALE_NATIVE_GLYPHS[GetLocale()] or { GLYPH_LATIN })
 end
 
 -- Per-client-shipped Blizzard font paths (drives BuildFontsList no-LSM fallback +
@@ -210,7 +228,7 @@ local issecretvalue = _G.issecretvalue or function() return false end
 -- not about user-installed font replacements which the user can still pick manually
 -- via the Font dropdown if they want them in StatsPro specifically.
 local function LocaleAwareDefaultFont()
-    if STANDARD_TEXT_FONT and STANDARD_TEXT_FONT:match("^Fonts\\") then
+    if IsBlizzardFontPath(STANDARD_TEXT_FONT) then
         return STANDARD_TEXT_FONT
     end
     return "Fonts\\FRIZQT__.TTF"
@@ -1355,23 +1373,28 @@ local function RefreshArmorCache()
     -- on assignment, only on later comparison). InCombatLockdown lags real combat state
     -- in M+/transitional moments, so OOC-only guard isn't enough — must verify the value
     -- itself isn't tainted before any comparison/arithmetic.
-    if not ok or issecretvalue(effectiveArmor) then return end
-    if effectiveArmor and effectiveArmor > 0 then
-        -- WARNING: PaperDollFrame_GetArmorReduction in 12.x retail returns 0..100 percent
-        -- (not 0..1 fraction as some docs claim). Normalize defensively: if return is <=1
-        -- treat as fraction and scale, else use as-is. Cap at 100% for sanity.
-        -- WARNING: armor effectiveness can be secret-tagged in M+ transitional combat
-        -- moments where InCombatLockdown lags real combat state — the OOC guard above
-        -- isn't sufficient. Filter the return value before any comparison or arithmetic;
-        -- comparing a secret number to 1 raises a taint error and aborts the OnUpdate.
-        local ok, raw = pcall(PaperDollFrame_GetArmorReduction, effectiveArmor, UnitEffectiveLevel("player"))
-        if not ok or not raw or issecretvalue(raw) then return end
-        if raw <= 1 then raw = raw * 100 end
-        if raw > 100 then raw = 100 end
-        cached.armorDR = raw
-    else
+    if not ok or not effectiveArmor or issecretvalue(effectiveArmor) then return end
+    if effectiveArmor <= 0 then
         cached.armorDR = 0
+        return
     end
+
+    local okLevel, level = pcall(UnitEffectiveLevel, "player")
+    if not okLevel or not level or issecretvalue(level) then return end
+
+    -- WARNING: PaperDollFrame_GetArmorReduction in 12.x retail returns 0..100 percent
+    -- (not 0..1 fraction as some docs claim). Normalize defensively: if return is <=1
+    -- treat as fraction and scale, else use as-is. Clamp to 0..100 for sanity.
+    -- WARNING: armor effectiveness can be secret-tagged in M+ transitional combat
+    -- moments where InCombatLockdown lags real combat state — the OOC guard above
+    -- isn't sufficient. Filter the return value before any comparison or arithmetic;
+    -- comparing a secret number to 1 raises a taint error and aborts the OnUpdate.
+    local okReduction, raw = pcall(PaperDollFrame_GetArmorReduction, effectiveArmor, level)
+    if not okReduction or not raw or issecretvalue(raw) then return end
+    if raw <= 1 then raw = raw * 100 end
+    if raw < 0 then raw = 0 end
+    if raw > 100 then raw = 100 end
+    cached.armorDR = raw
 end
 
 -- Single-pass scan: computes avg %, worst %, and total repair cost across all slots.
@@ -1776,7 +1799,7 @@ function Panel:ApplyStyle(font, size)
     -- and the Font Size slider's OnValueChanged. Same-args calls cost 10 SetFont +
     -- 10 SetText + cache invalidations + a follow-up UpdateStats re-measure pass.
     -- Early return saves all of that whenever the panel is already at (font,size).
-    if self.appliedFont == font and self.appliedSize == size then return end
+    if SameFontPath(self.appliedFont, font) and self.appliedSize == size then return end
     self.appliedFont = font
     self.appliedSize = size
     self.labelText:SetFont(font, size, "OUTLINE")
@@ -1908,7 +1931,7 @@ local function FindCompatibleFont(currentFont, req)
     if FontSupports(currentFont, req) then return currentFont end
     local fallback = LocaleAwareDefaultFont()
     if fallback and FontSupports(fallback, req) then return fallback end
-    if currentFont ~= "Fonts\\ARIALN.TTF" and FontSupports("Fonts\\ARIALN.TTF", req) then
+    if not SameFontPath(currentFont, "Fonts\\ARIALN.TTF") and FontSupports("Fonts\\ARIALN.TTF", req) then
         return "Fonts\\ARIALN.TTF"
     end
     if LSM then
@@ -1928,7 +1951,7 @@ local function MaybeAutoSwitchFont()
 
     if FontSupports(cur, req) then
         local saved = StatsProDB.fontBeforeAutoSwitch
-        if saved and saved ~= cur and FontSupports(saved, req) then
+        if saved and not SameFontPath(saved, cur) and FontSupports(saved, req) then
             StatsProDB.font = saved
             StatsProDB.fontBeforeAutoSwitch = nil
             ApplyTextStyleToAllPanels(saved, GetDB("fontSize"))
@@ -1938,7 +1961,7 @@ local function MaybeAutoSwitchFont()
     end
 
     local fallback = FindCompatibleFont(cur, req)
-    if fallback and fallback ~= cur then
+    if fallback and not SameFontPath(fallback, cur) then
         StatsProDB.fontBeforeAutoSwitch = StatsProDB.fontBeforeAutoSwitch or cur
         StatsProDB.font = fallback
         ApplyTextStyleToAllPanels(fallback, GetDB("fontSize"))
@@ -2505,7 +2528,7 @@ end
 -- fast-path skips work when currentConfigFont already matches (covers PEW + back-to-
 -- default-locale scenarios). WHY no `local`: assigns the forward-decl'd upvalue.
 ApplyConfigFont = function(font)
-    if font == currentConfigFont then return end
+    if SameFontPath(font, currentConfigFont) then return end
     currentConfigFont = font
     for _, e in ipairs(localizedConfigFonts) do
         e.fs:SetFont(font, e.size, e.flags)
@@ -3309,7 +3332,7 @@ function addon:OpenConfigMenu()
         -- rescan that UpdateStats does. Subjective speed-up on font-picker scroll-hover
         -- where each unique button fires Apply + Reflow ~30× per second of scroll.
         local function PreviewFont(path)
-            if path == previewedPath then return end
+            if SameFontPath(path, previewedPath) then return end
             previewedPath = path
             ApplyTextStyleToAllPanels(path, GetDB("fontSize"))
             ReflowAllPanels()
@@ -3330,7 +3353,7 @@ function addon:OpenConfigMenu()
             StatsProDB.fontBeforeAutoSwitch = nil  -- explicit user pick clears auto-switch memory
             -- Skip Apply when preview already painted the same font (common path: hover
             -- then click). DB write above is the only mandatory step in that branch.
-            if previewedPath ~= f.path then
+            if not SameFontPath(previewedPath, f.path) then
                 ApplyTextStyleToAllPanels(f.path, GetDB("fontSize"))
                 ReflowAllPanels()
             end
@@ -3500,7 +3523,7 @@ function addon:OpenConfigMenu()
                 btn.text:SetText(f.name)
 
                 -- Current-committed font marker: subtle green-cyan tint.
-                if f.path == currentPath then
+                if SameFontPath(f.path, currentPath) then
                     btn.bg:SetColorTexture(0, 1, 0.5, 0.18)
                     currentRow = row
                 else
@@ -3564,7 +3587,7 @@ function addon:OpenConfigMenu()
 
         CurrentFontName = function()
             for _, f in ipairs(BuildFontsList()) do
-                if f.path == GetDB("font") then return f.name end
+                if SameFontPath(f.path, GetDB("font")) then return f.name end
             end
             return "Friz Quadrata TT"
         end
@@ -3702,7 +3725,7 @@ function addon:OpenConfigMenu()
             local req      = LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN
             local cur      = GetDB("font")
             local fallback = FindCompatibleFont(cur, req)
-            if fallback and fallback ~= cur then
+            if fallback and not SameFontPath(fallback, cur) then
                 ApplyTextStyleToAllPanels(fallback, GetDB("fontSize"))
                 langPreviewSwappedFnt = true
             elseif langPreviewSwappedFnt then

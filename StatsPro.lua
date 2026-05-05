@@ -1964,7 +1964,7 @@ end
 -- but are called from MaybeAutoSwitchFont below + PreviewLanguage/CancelLanguagePreview
 -- much later. Without forward-decl, the function body captures `ResolveConfigFont` /
 -- `ApplyConfigFont` as global lookups (resolution at definition time) and crashes
--- with "attempt to call a nil value" at PEW (CLAUDE.md: "Runtime error attempt to
+-- with "attempt to call a nil value" at PEW (AGENTS.md: "Runtime error attempt to
 -- call a nil value from a function calling another function defined later").
 -- WHY safe to call before menu opened: registry is empty pre-first-open so
 -- ApplyConfigFont walks zero FontStrings; cached currentConfigFont is still updated,
@@ -2484,6 +2484,8 @@ end)
 ============================================================ ]]
 -- isLoaded declared earlier (section 6) so UpdateStats closure captures the same upvalue
 
+local RefreshPersistentLocalization
+
 local function OnPlayerEnteringWorld()
     if not isLoaded then
         -- One-time legacy-DB carry-forward. Runs at PEW (not at file scope) so source
@@ -2508,6 +2510,7 @@ local function OnPlayerEnteringWorld()
         end
         MigrateDB()
         CacheSettings()
+        if RefreshPersistentLocalization then RefreshPersistentLocalization() end
         -- WHY here: forceLocale is migrated + cached.activeLabels resolved; if active
         -- locale needs glyphs db.font lacks, auto-switch BEFORE the
         -- ApplyTextStyleToAllPanels call below so the FontStrings load with the
@@ -2556,9 +2559,9 @@ local EVENT_HANDLERS = {
     UPDATE_INVENTORY_DURABILITY = function() durabilityDirty = true end,
     PLAYER_EQUIPMENT_CHANGED    = function() durabilityDirty = true end,
     MERCHANT_SHOW               = function() durabilityDirty = true end,
-    -- WHY: Panel:Unlock no-ops in combat (defensive InCombatLockdown guard). Toggling
-    -- Lock Frames OFF mid-combat writes DB but leaves panels mouse-disabled until
-    -- /reload. Re-apply lock state on combat exit so visual matches DB.
+    -- WHY: lock state is stored in cached.isLocked and read by OnDragStart. Mouse stays
+    -- enabled permanently so right-click Settings works even while locked; Panel:Lock /
+    -- Panel:Unlock are no-op stubs kept behind this semantic wrapper.
     PLAYER_REGEN_ENABLED        = function() SetAllPanelsLockState(GetDB("isLocked")) end,
 }
 
@@ -2585,7 +2588,7 @@ local function PushRefresher(fn) tinsert(configRefreshers, fn) end
 -- WHY centralized layout constants: a tweak (tighter swatch gap, wider columns) used
 -- to require hunting ~10 callsites with hardcoded 6/220/12/"FRIZQT" literals — easy to
 -- miss one and ship inconsistent UI. CONFIG_FONT routes through LocaleAwareDefaultFont
--- to dodge the FRIZQT-on-CJK rendering trap (CLAUDE.md "Hardcoded default font path")
+-- to dodge the FRIZQT-on-CJK rendering trap (AGENTS.md "Hardcoded default font path")
 -- while resisting third-party-addon hijacks of the STANDARD_TEXT_FONT global.
 local CONFIG_FONT       = LocaleAwareDefaultFont()
 local CONFIG_FONT_SIZE  = 12
@@ -2774,10 +2777,12 @@ local function CreateCheckboxColor(parent, name, label, dbKey, colorKey, x, y, o
     return cb, swatch, text
 end
 
--- Tracked groups + L()-using labels for re-alignment on language change. Both registered
--- at config UI build time, replayed by RefreshConfigLocalization() when forceLocale changes.
+-- Tracked groups + L()-using labels for re-alignment on language change. Config labels
+-- are rebuilt/wiped with the config window; persistent labels are file-scope launchers
+-- that must survive OpenConfigMenu's one-shot registry reset.
 local alignmentGroups = {}
 local localizedConfigLabels = {}
+local localizedPersistentLabels = {}
 
 -- WHY unconstrain-before-measure: a prior AlignSwatchColumn or a SetText with text wider
 -- than the current SetWidth would leave the FontString in wrap/truncate mode, where
@@ -2834,10 +2839,20 @@ PushLocalizedLabel = function(setter)
     setter()
 end
 
+local function PushPersistentLocalizedLabel(setter)
+    tinsert(localizedPersistentLabels, setter)
+    setter()
+end
+
+RefreshPersistentLocalization = function()
+    for _, setter in ipairs(localizedPersistentLabels) do setter() end
+end
+
 -- RefreshConfigLocalization: re-runs all SetText setters and re-aligns every registered group.
 -- Called from the Language dropdown's selection handler after CacheSettings() updates
 -- cached.activeLabels — all L() calls inside setters now resolve to the new locale.
 local function RefreshConfigLocalization()
+    RefreshPersistentLocalization()
     for _, setter in ipairs(localizedConfigLabels) do setter() end
     for _, g in ipairs(alignmentGroups) do
         ReAlignGroupImpl(g.rows, g.gap)
@@ -3032,7 +3047,7 @@ local function ResetToDefaults()
 
     -- Step 4: re-sync config widget visuals from freshly-reset DB.
     -- WHY pcall: a buggy refresher should not break the entire walk. Print error
-    -- context instead of silent fail (CLAUDE.md "Log meaningful context").
+    -- context instead of silent fail (AGENTS.md "Log meaningful context").
     -- No-op when configRefreshers is empty (slash called pre-config-open).
     for _, fn in ipairs(configRefreshers) do
         local ok, err = pcall(fn)
@@ -4199,7 +4214,7 @@ end
 
 -- Self-serve diagnostics: dump runtime state to chat for bug reports.
 -- Each group is a separate PrintMsg so taint isolation is automatic
--- (per workspace CLAUDE.md "log fields as separate entries"); no API
+-- (per workspace AGENTS.md "log fields as separate entries"); no API
 -- here reads stat values, so taint is not actually a risk — but the
 -- per-line format is also far more readable in chat than a 400-char wall.
 function addon:PrintDebugDump()
@@ -4269,14 +4284,14 @@ local launcherDesc = launcher:CreateFontString(nil, "ARTWORK", "GameFontHighligh
 launcherDesc:SetPoint("TOPLEFT", launcherTitle, "BOTTOMLEFT", 0, -8)
 launcherDesc:SetPoint("RIGHT", launcher, "RIGHT", -16, 0)
 launcherDesc:SetJustifyH("LEFT")
-PushLocalizedLabel(function()
+PushPersistentLocalizedLabel(function()
     launcherDesc:SetText(L("Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."))
 end)
 
 local launcherBtn = CreateFrame("Button", nil, launcher, "UIPanelButtonTemplate")
 launcherBtn:SetSize(180, 28)
 launcherBtn:SetPoint("TOPLEFT", launcherDesc, "BOTTOMLEFT", 0, -16)
-PushLocalizedLabel(function() launcherBtn:SetText(L("Open Settings")) end)
+PushPersistentLocalizedLabel(function() launcherBtn:SetText(L("Open Settings")) end)
 launcherBtn:SetScript("OnClick", function()
     if SettingsPanel and SettingsPanel:IsShown() then
         HideUIPanel(SettingsPanel)

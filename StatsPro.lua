@@ -59,8 +59,13 @@ local LOCALE_GLYPH_REQ = {
     koKR = GLYPH_HANGUL, zhCN = GLYPH_HANS, zhTW = GLYPH_HANT,
 }
 
+local function FontPathKey(fontPath)
+    if type(fontPath) ~= "string" then return nil end
+    return (fontPath:gsub("/", "\\"):lower())
+end
+
 -- WHY two-tier coverage detection: WoW shipped TTF filenames are stable per locale
--- install (FONT_GLYPH_SUPPORT exact-match, O(1) hash); LSM-registered fonts have no
+-- install (FONT_GLYPH_SUPPORT normalized exact-match, O(1) hash); LSM-registered fonts have no
 -- glyph-coverage API but popular CJK families ship under predictable filenames, so
 -- FONT_GLYPH_PATTERNS (below) catches NotoCJK / SourceHan / WenQuanYi / PingFang /
 -- YaHei / JhengHei / SimSun / SimHei / MingLiU / Malgun / Nanum / AppleSDGothicNeo
@@ -74,18 +79,24 @@ local LOCALE_GLYPH_REQ = {
 -- via OS system font fallback — visible but ugly, mismatched kerning/stroke weights).
 -- See locale-conditional do-block below for FRIZQT populating.
 local FONT_GLYPH_SUPPORT = {
-    ["Fonts\\ARIALN.TTF"]   = { GLYPH_LATIN, GLYPH_CYR },    -- universal Latin+Cyrillic (cross-realm chat/nameplates)
+    [FontPathKey("Fonts\\ARIALN.TTF")]        = { GLYPH_LATIN, GLYPH_CYR },    -- universal Latin+Cyrillic (cross-realm chat/nameplates)
     -- FRIZQT populated by the locale-conditional do-block below this table.
-    ["Fonts\\MORPHEUS.TTF"] = { GLYPH_LATIN },
-    ["Fonts\\SKURRI.TTF"]   = { GLYPH_LATIN },
-    ["Fonts\\ARKai_T.ttf"]  = { GLYPH_HANS },                -- zhCN client default
-    ["Fonts\\ARKai_C.ttf"]  = { GLYPH_HANS },                -- zhCN
-    ["Fonts\\bHEI00M.ttf"]  = { GLYPH_HANT },                -- zhTW client default
-    ["Fonts\\bHEI01B.ttf"]  = { GLYPH_HANT },                -- zhTW
-    ["Fonts\\bLEI00D.ttf"]  = { GLYPH_HANT },                -- zhTW
-    ["Fonts\\2002.ttf"]     = { GLYPH_HANGUL },              -- koKR client default
-    ["Fonts\\2002B.ttf"]    = { GLYPH_HANGUL },              -- koKR
-    ["Fonts\\K_Damage.TTF"] = { GLYPH_HANGUL },              -- koKR damage font (UI fallback in some installs)
+    [FontPathKey("Fonts\\FRIZQT___CYR.TTF")]  = { GLYPH_LATIN, GLYPH_CYR },
+    [FontPathKey("Fonts\\MORPHEUS.TTF")]      = { GLYPH_LATIN },
+    [FontPathKey("Fonts\\MORPHEUS_CYR.TTF")]  = { GLYPH_LATIN, GLYPH_CYR },
+    [FontPathKey("Fonts\\SKURRI.TTF")]        = { GLYPH_LATIN },
+    [FontPathKey("Fonts\\SKURRI_CYR.TTF")]    = { GLYPH_LATIN, GLYPH_CYR },
+    [FontPathKey("Fonts\\ARKai_T.ttf")]       = { GLYPH_HANS },                -- zhCN client default
+    [FontPathKey("Fonts\\ARKai_C.ttf")]       = { GLYPH_HANS },                -- zhCN
+    [FontPathKey("Fonts\\ARHei.TTF")]         = { GLYPH_HANS },                -- zhCN LSM localized Blizzard path
+    [FontPathKey("Fonts\\bHEI00M.ttf")]       = { GLYPH_HANT },                -- zhTW client default
+    [FontPathKey("Fonts\\bHEI01B.ttf")]       = { GLYPH_HANT },                -- zhTW
+    [FontPathKey("Fonts\\bLEI00D.ttf")]       = { GLYPH_HANT },                -- zhTW
+    [FontPathKey("Fonts\\bKAI00M.ttf")]       = { GLYPH_HANT },                -- zhTW LSM localized Blizzard path
+    [FontPathKey("Fonts\\2002.ttf")]          = { GLYPH_HANGUL },              -- koKR client default
+    [FontPathKey("Fonts\\2002B.ttf")]         = { GLYPH_HANGUL },              -- koKR
+    [FontPathKey("Fonts\\K_Damage.TTF")]      = { GLYPH_HANGUL },              -- koKR damage font (UI fallback in some installs)
+    [FontPathKey("Fonts\\K_Pagetext.TTF")]    = { GLYPH_HANGUL },              -- koKR LSM localized Blizzard path
 }
 
 -- WHY locale-conditional FRIZQT: same path resolves to a DIFFERENT physical file
@@ -99,7 +110,7 @@ do
     local LOCALE_NATIVE_GLYPHS = {
         ruRU = { GLYPH_LATIN, GLYPH_CYR },
     }
-    FONT_GLYPH_SUPPORT["Fonts\\FRIZQT__.TTF"] = LOCALE_NATIVE_GLYPHS[GetLocale()] or { GLYPH_LATIN }
+    FONT_GLYPH_SUPPORT[FontPathKey("Fonts\\FRIZQT__.TTF")] = LOCALE_NATIVE_GLYPHS[GetLocale()] or { GLYPH_LATIN }
 end
 
 -- Per-client-shipped Blizzard font paths (drives BuildFontsList no-LSM fallback +
@@ -1055,7 +1066,9 @@ end
 
 local function FontSupports(fontPath, glyph)
     if not fontPath then return glyph == GLYPH_LATIN end
-    local entry = FONT_GLYPH_SUPPORT[fontPath]
+    local key = FontPathKey(fontPath)
+    if not key then return glyph == GLYPH_LATIN end
+    local entry = FONT_GLYPH_SUPPORT[key]
     if not entry then
         -- WHY basename: anchor patterns to filename, not addon-folder substrings.
         local lower = (string.match(fontPath, "[^\\/]+$") or fontPath):lower()
@@ -1066,7 +1079,7 @@ local function FontSupports(fontPath, glyph)
         -- session (file content can't change without /reload). FindCompatibleFont's
         -- LSM scan calls FontSupports for every registered font on every locale
         -- switch — this turns those repeated pattern-scans into O(1) hash hits.
-        if entry then FONT_GLYPH_SUPPORT[fontPath] = entry end
+        if entry then FONT_GLYPH_SUPPORT[key] = entry end
     end
     if not entry then return glyph == GLYPH_LATIN end
     for _, g in ipairs(entry) do
@@ -1352,10 +1365,7 @@ local function RefreshArmorCache()
         -- isn't sufficient. Filter the return value before any comparison or arithmetic;
         -- comparing a secret number to 1 raises a taint error and aborts the OnUpdate.
         local ok, raw = pcall(PaperDollFrame_GetArmorReduction, effectiveArmor, UnitEffectiveLevel("player"))
-        if not ok or not raw or issecretvalue(raw) then
-            cached.armorDR = 0
-            return
-        end
+        if not ok or not raw or issecretvalue(raw) then return end
         if raw <= 1 then raw = raw * 100 end
         if raw > 100 then raw = 100 end
         cached.armorDR = raw

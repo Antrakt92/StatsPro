@@ -563,8 +563,6 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "Frame & Position",
         ["Typography"] = "Typography",
         ["Localization"] = "Localization",
-        ["Primary Stat Ratings"] = "Primary Stat Ratings",
-        ["Display Format"] = "Display Format",
         ["Offensive Stats"] = "Offensive Stats",
         ["Tertiary Stats"] = "Tertiary Stats",
         ["Defensive Stats"] = "Defensive Stats",
@@ -628,8 +626,6 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "Окно и позиция",
         ["Typography"] = "Типографика",
         ["Localization"] = "Локализация",
-        ["Primary Stat Ratings"] = "Основные характеристики",
-        ["Display Format"] = "Формат отображения",
         ["Offensive Stats"] = "Атакующие характеристики",
         ["Tertiary Stats"] = "Третичные характеристики",
         ["Defensive Stats"] = "Защитные характеристики",
@@ -692,8 +688,6 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "Fenster & Position",
         ["Typography"] = "Typografie",
         ["Localization"] = "Lokalisierung",
-        ["Primary Stat Ratings"] = "Primärwerte",
-        ["Display Format"] = "Anzeigeformat",
         ["Offensive Stats"] = "Offensivwerte",
         ["Tertiary Stats"] = "Tertiärwerte",
         ["Defensive Stats"] = "Defensivwerte",
@@ -747,8 +741,6 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "Cadre & Position",
         ["Typography"] = "Typographie",
         ["Localization"] = "Localisation",
-        ["Primary Stat Ratings"] = "Stats Primaires",
-        ["Display Format"] = "Format d'Affichage",
         ["Offensive Stats"] = "Stats Offensives",
         ["Tertiary Stats"] = "Stats Tertiaires",
         ["Defensive Stats"] = "Stats Défensives",
@@ -803,8 +795,6 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "Marco y Posición",
         ["Typography"] = "Tipografía",
         ["Localization"] = "Localización",
-        ["Primary Stat Ratings"] = "Atributos Primarios",
-        ["Display Format"] = "Formato",
         ["Offensive Stats"] = "Stats Ofensivas",
         ["Tertiary Stats"] = "Stats Terciarias",
         ["Defensive Stats"] = "Stats Defensivas",
@@ -857,8 +847,6 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "Marco y Posición",
         ["Typography"] = "Tipografía",
         ["Localization"] = "Localización",
-        ["Primary Stat Ratings"] = "Atributos Primarios",
-        ["Display Format"] = "Formato",
         ["Offensive Stats"] = "Stats Ofensivas",
         ["Tertiary Stats"] = "Stats Terciarias",
         ["Defensive Stats"] = "Stats Defensivas",
@@ -912,8 +900,6 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "Cornice e Posizione",
         ["Typography"] = "Tipografia",
         ["Localization"] = "Localizzazione",
-        ["Primary Stat Ratings"] = "Stat Primarie",
-        ["Display Format"] = "Formato",
         ["Offensive Stats"] = "Stat Offensive",
         ["Tertiary Stats"] = "Stat Terziarie",
         ["Defensive Stats"] = "Stat Difensive",
@@ -966,8 +952,6 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "Janela e Posição",
         ["Typography"] = "Tipografia",
         ["Localization"] = "Localização",
-        ["Primary Stat Ratings"] = "Atributos Primários",
-        ["Display Format"] = "Formato",
         ["Offensive Stats"] = "Atributos Ofensivos",
         ["Tertiary Stats"] = "Atributos Terciários",
         ["Defensive Stats"] = "Atributos Defensivos",
@@ -1027,8 +1011,6 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "창 및 위치",
         ["Typography"] = "글꼴",
         ["Localization"] = "현지화",
-        ["Primary Stat Ratings"] = "주 능력치",
-        ["Display Format"] = "표시 형식",
         ["Offensive Stats"] = "공격 능력치",
         ["Tertiary Stats"] = "3차 능력치",
         ["Defensive Stats"] = "방어 능력치",
@@ -1081,8 +1063,6 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "窗口与位置",
         ["Typography"] = "字体",
         ["Localization"] = "本地化",
-        ["Primary Stat Ratings"] = "主属性",
-        ["Display Format"] = "显示格式",
         ["Offensive Stats"] = "进攻属性",
         ["Tertiary Stats"] = "三级属性",
         ["Defensive Stats"] = "防御属性",
@@ -1135,8 +1115,6 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "視窗與位置",
         ["Typography"] = "字型",
         ["Localization"] = "在地化",
-        ["Primary Stat Ratings"] = "主要屬性",
-        ["Display Format"] = "顯示格式",
         ["Offensive Stats"] = "進攻屬性",
         ["Tertiary Stats"] = "三級屬性",
         ["Defensive Stats"] = "防禦屬性",
@@ -2259,7 +2237,7 @@ local function PushItemLevelRow(labels, ratings, values)
 end
 
 local function BuildCharacterLines(labels, ratings, values)
-    if not cached.showMainStat and not cached.showStamina then return end
+    if not cached.showMainStat and not cached.showStamina then return labels, ratings, values end
     if cached.showMainStat then
         local def = PRIMARY_STATS_BY_ID[GetCurrentMainStatId()]
         if def then -- silently skip when sub-10 alt / pre-PEW; don't blank Stamina row
@@ -2270,21 +2248,23 @@ local function BuildCharacterLines(labels, ratings, values)
     if cached.showStamina then
         PushPrimaryStatRow(labels, ratings, values, "stamina", STAMINA_UNIT_STAT_ID, "Stamina")
     end
+    return labels, ratings, values
 end
 
 local function BuildItemLevelLines(labels, ratings, values)
     if cached.showItemLevel then
         PushItemLevelRow(labels, ratings, values)
     end
+    return labels, ratings, values
 end
 
 local function BuildOffensiveLines(labels, ratings, values)
     -- Master gate: hide entire section when off (cheapest check, exits whole function).
-    if not cached.showOffensive then return end
+    if not cached.showOffensive then return labels, ratings, values end
     -- WHY guard: with both display toggles off the user wants offensive rows hidden
     -- entirely. Without this guard the percent-only branch of FmtRatingPct would still
     -- fire (single-column routing), producing visible percent rows and ignoring intent.
-    if not (cached.showRating or cached.showPercentage) then return end
+    if not (cached.showRating or cached.showPercentage) then return labels, ratings, values end
     local cs = cached.colorStrings
 
     -- skip the GetCombatRating fetch when rating display is off (no consumer)
@@ -2322,11 +2302,12 @@ local function BuildOffensiveLines(labels, ratings, values)
                 vRatStr, vValStr)
         end
     end
+    return labels, ratings, values
 end
 
 local function BuildTertiaryLines(labels, ratings, values)
-    if not cached.showTertiary then return end
-    if not (cached.showRating or cached.showPercentage) then return end
+    if not cached.showTertiary then return labels, ratings, values end
+    if not (cached.showRating or cached.showPercentage) then return labels, ratings, values end
     local cs = cached.colorStrings
 
     local needRating = cached.showRating
@@ -2364,10 +2345,10 @@ local function BuildTertiaryLines(labels, ratings, values)
                 rStr, vStr)
         end
     end
+    return labels, ratings, values
 end
 
-local function BuildDefensiveLines()
-    local labels, ratings, values = {}, {}, {}
+local function BuildDefensiveLines(labels, ratings, values)
     if not cached.showDefensive then return labels, ratings, values end
     local cs = cached.colorStrings
 
@@ -2404,8 +2385,7 @@ end
 -- WHY: durability is independent of "Show Defensive Stats" — gear wear is not a
 -- defensive stat (one is mitigation %, the other is item integrity). Kept as its own
 -- builder so users can show only durability without enabling the dodge/parry/block block.
-local function BuildDurabilityLines()
-    local labels, ratings, values = {}, {}, {}
+local function BuildDurabilityLines(labels, ratings, values)
     if not cached.showDurability then return labels, ratings, values end
     local cs = cached.colorStrings
     local pct = cached.durabilityValue
@@ -2458,14 +2438,21 @@ local function AppendRows(dstLabels, dstRatings, dstValues, srcLabels, srcRating
     end
 end
 
+-- Build*Lines share one contract: mutate the supplied row arrays and return them.
+-- The return fallback preserves rows if a future builder accidentally stays mutate-only.
 local function BuildRowBlock(splitKey, buildFn)
     local labels, ratings, values = {}, {}, {}
-    buildFn(labels, ratings, values)
+    local outLabels, outRatings, outValues = buildFn(labels, ratings, values)
+    if outLabels then
+        labels = outLabels
+        ratings = outRatings or ratings
+        values = outValues or values
+    end
     return {
         splitKey = splitKey,
-        labels = labels,
-        ratings = ratings,
-        values = values,
+        labels = labels or {},
+        ratings = ratings or {},
+        values = values or {},
         repairStr = "",
         repairLabelStr = nil,
     }

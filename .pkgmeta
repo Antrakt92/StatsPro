@@ -8,7 +8,6 @@ ignore:
   - .github
   - .gitignore
   - README.md
-  - LICENSE
   - .pkgmeta
   - screenshots
   - AUDIT.md

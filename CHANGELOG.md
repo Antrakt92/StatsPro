@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.6.1 — Performance hardening
+
+### Improved
+
+- **Settings sliders are smoother while dragging** — Font Size, Scale, and Refresh Rate now coalesce heavy UI refresh work instead of reapplying it on every tiny slider step.
+- **Item Level refresh is more efficient** — equipped / overall item level now refreshes from gear and bag-change signals instead of polling every HUD tick.
+- **Hidden panels do less repeated work** — already-hidden stat panels skip redundant text/cache clearing.
+
+### Fixed
+
+- **Malformed numeric SavedVariables are clamped safely** — bad Scale, Font Size, Text Opacity, or Refresh Rate values fall back to sane runtime values instead of breaking rendering or update timing.
+- **Versatility rating reads are skipped when Rating display is off** while percentage display continues updating normally.
+
+### Changed
+
+- **Release workflow now runs only from `v*` tags** and uses the newer checkout action runtime, removing the manual-dispatch footgun and Node.js runtime warning.
+
 ## 1.6.0 — Item Level + configurable layout blocks
 
 ### Added

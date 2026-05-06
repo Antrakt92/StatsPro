@@ -40,7 +40,7 @@
 - **Durability** — average or worst-slot percentage with auto-color thresholds (green / yellow / red)
 - **Repair cost** — optional live vendor-format coin display (`46g 40s 81c` with embedded gold/silver/copper icons), default OFF
 - **Three display modes** — Flat (one panel), Sectioned (one panel with block headers), Split (two movable panels with configurable block routing)
-- **Localized stat labels** — on-screen panel auto-translates to your WoW client language across all 11 retail locales (deDE, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, zhTW; English unchanged). Switchable from a **Language** dropdown in the Appearance tab → Localization — pick another language, "Auto" to follow your client locale, or compact English. **The settings window itself also localizes** — every tab, label, dropdown caption, button, and warning updates live the moment you switch languages, no `/reload` needed.
+- **Localized stat labels** — on-screen panel auto-translates to your WoW client language across all 11 retail locales (deDE, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, zhTW; English unchanged). Use the **Language** dropdown in Appearance → Localization to choose Auto or a fixed locale, and **Label Style** in Layout → Value Display to switch **Full / Short / Hidden** label rendering. **The settings window itself also localizes** — every tab, label, dropdown caption, button, and warning updates live the moment you switch languages, no `/reload` needed.
 - **Customization** — per-stat colors, fonts via LibSharedMedia, font size, panel scale, refresh rate
 - **Auto-aligning columns** — labels and values stay neatly aligned regardless of which stats are enabled, font, or scale; toggling rating-only or percent-only collapses cleanly into one tight column with no awkward gaps
 - **Light footprint** — core UI in one Lua file, no Ace3; bundles standard LibSharedMedia support for font picking
@@ -120,12 +120,14 @@ compact 4-7 char visual rhythm as the original English labels:
 | **zhCN** | `暴击:    843  28.3%` |
 | **zhTW** | `致命:    843  28.3%` |
 
-To pick a different language for stat labels (or revert to compact English):
-open `/ss` → **Appearance** tab → **Localization** → use the **Language** dropdown.
-"Auto" follows your WoW client locale. The setting persists across `/reload`
-and across all characters on the account. The entire settings window
-re-localizes live the moment you change language — every label, dropdown,
-and button reflects the chosen locale immediately.
+To pick a different language for stat labels, open `/ss` → **Appearance**
+tab → **Localization** → use the **Language** dropdown. "Auto" follows your
+WoW client locale. To change how compact the labels look, open `/ss` →
+**Layout** tab → **Value Display** → **Label Style** and choose **Full**,
+**Short**, or **Hidden**. These settings persist across `/reload` and across
+all characters on the account. The entire settings window re-localizes live
+the moment you change language — every label, dropdown, and button reflects
+the chosen locale immediately.
 
 The in-game AddOn list (Esc → Options → AddOns) also shows StatsPro's
 description in your client language — a localized one-liner per `## Notes-<locale>`
@@ -171,7 +173,7 @@ everything:
 | Tab | What lives here |
 |---|---|
 | **Stats** | Character rows (Show Main Stat, Stamina), Item Level, Offensive, Tertiary, Defensive, and Gear toggles with inline color swatches |
-| **Layout** | Visibility / Lock, Display Mode, **Side Panel Contains** routing for Split mode, value-column display, Scale, Refresh Rate |
+| **Layout** | Visibility / Lock, Display Mode, **Side Panel Contains** routing for Split mode, **Value Display** controls (Show Rating / Show Percentage / Label Style / Match Value Color to Stat), Scale, Refresh Rate |
 | **Appearance** | Typography (Font / Font Size / Text Opacity), Localization (Language picker + font-coverage warning) |
 
 ## Compatibility
@@ -193,12 +195,14 @@ Core single-file design. Everything renders out of [`StatsPro.lua`](StatsPro.lua
 - **`UpdateStats`** — drives the per-frame OnUpdate, builds logical render blocks
   (Character / Item Level / Offensive / Tertiary / Defensive / Durability / Repair),
   routes them by display mode, and gates value-column joining on `IsDualColMode()`.
-- **`LABELS_BY_LOCALE` + `L()` + `FormatLabel()` + `PushLocalizedLabel`** — i18n
-  layer. One table indexed by locale; `L()` + `FormatLabel()` compose color +
-  localized label in a single call. `PushLocalizedLabel` registers settings-UI
-  setter closures so labels update live when the user picks a new locale via the
-  Language dropdown — no `/reload` required. Identity-fast-path on enUS (no
-  allocation, no table read).
+- **`LABELS_BY_LOCALE` + `L()` + `GetStyledLabelText()` + `FormatLabel()` + `PushLocalizedLabel`** — i18n
+  and label-presentation layer. One table indexed by locale; `L()` resolves the
+  active locale, `GetStyledLabelText()` applies the `Full / Short / Hidden`
+  label-style rule with UTF-8-safe short labels, and `FormatLabel()` composes
+  that with row color in a single call. `PushLocalizedLabel` registers
+  settings-UI setter closures so labels update live when the user picks a new
+  locale via the Language dropdown — no `/reload` required. Identity-fast-path
+  on enUS (no allocation, no table read).
 - **`MigrateDB`** — DB schema versioning. Bump `CURRENT_DB_VERSION` and add a
   conditional `vN-1 → vN` clause when changing a default value, so existing users
   on the old default upgrade automatically while explicit user choices are preserved.

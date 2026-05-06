@@ -279,6 +279,7 @@ local defaults = {
 
     -- Display mode: "flat" | "sectioned" | "split"
     displayMode = "flat",
+    labelStyle = "full",
 
     -- Split routing: when displayMode="split", checked blocks move to the side panel.
     -- Defaults preserve the original split behavior (main = character/offense/tertiary,
@@ -493,6 +494,7 @@ local cached = {
     -- WARNING: GetUnitSpeed returns secret values in combat → math.max taints. Cache OOC.
     speedPct = 0,
     displayMode = "flat",
+    labelStyle = "full",
     updateInterval = 0.5,
 }
 
@@ -590,9 +592,10 @@ local LABELS_BY_LOCALE = {
         -- Sliders:
         ["Scale:"] = "Scale:", ["Refresh Rate (sec):"] = "Refresh Rate (sec):", ["Font Size:"] = "Font Size:", ["Text Opacity:"] = "Text Opacity:",
         -- Dropdown captions:
-        ["Display Mode:"] = "Display Mode:", ["Font:"] = "Font:", ["Language:"] = "Language:",
+        ["Display Mode:"] = "Display Mode:", ["Label Style:"] = "Label Style:", ["Font:"] = "Font:", ["Language:"] = "Language:",
         -- Dropdown options (Display Mode):
         ["Flat"] = "Flat", ["Sectioned"] = "Sectioned", ["Split"] = "Split",
+        ["Full"] = "Full", ["Short"] = "Short", ["Hidden"] = "Hidden",
         -- Buttons + title:
         ["Reset to Defaults"] = "Reset to Defaults", ["Close"] = "Close",
         ["Open Settings"] = "Open Settings", ["Settings"] = "Settings",
@@ -653,9 +656,10 @@ local LABELS_BY_LOCALE = {
         -- Sliders:
         ["Scale:"] = "Масштаб:", ["Refresh Rate (sec):"] = "Частота обновления (сек):", ["Font Size:"] = "Размер шрифта:", ["Text Opacity:"] = "Прозрачность текста:",
         -- Dropdown captions:
-        ["Display Mode:"] = "Режим отображения:", ["Font:"] = "Шрифт:", ["Language:"] = "Язык:",
+        ["Display Mode:"] = "Режим отображения:", ["Label Style:"] = "Стиль меток:", ["Font:"] = "Шрифт:", ["Language:"] = "Язык:",
         -- Dropdown options (Display Mode):
         ["Flat"] = "Плоский", ["Sectioned"] = "По секциям", ["Split"] = "Разделённый",
+        ["Full"] = "Полный", ["Short"] = "Короткий", ["Hidden"] = "Скрытый",
         -- Buttons + title:
         ["Reset to Defaults"] = "Сбросить настройки", ["Close"] = "Закрыть",
         ["Open Settings"] = "Открыть настройки", ["Settings"] = "Настройки",
@@ -712,8 +716,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Auto-Farbe nach Schwellwert",
         ["Use Worst Slot (instead of average)"] = "Schlechtester Slot (statt Durchschnitt)",
         ["Scale:"] = "Skalierung:", ["Refresh Rate (sec):"] = "Aktualisierungsrate (Sek.):", ["Font Size:"] = "Schriftgröße:", ["Text Opacity:"] = "Textdeckkraft:",
-        ["Display Mode:"] = "Anzeigemodus:", ["Font:"] = "Schrift:", ["Language:"] = "Sprache:",
+        ["Display Mode:"] = "Anzeigemodus:", ["Label Style:"] = "Labelstil:", ["Font:"] = "Schrift:", ["Language:"] = "Sprache:",
         ["Flat"] = "Flach", ["Sectioned"] = "Gruppiert", ["Split"] = "Geteilt",
+        ["Full"] = "Voll", ["Short"] = "Kurz", ["Hidden"] = "Versteckt",
         ["Reset to Defaults"] = "Auf Standard", ["Close"] = "Schließen",
         ["Open Settings"] = "Einstellungen öffnen", ["Settings"] = "Einstellungen",
         ["Auto (current: %s)"] = "Auto (aktuell: %s)",
@@ -765,8 +770,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Couleur auto par seuil",
         ["Use Worst Slot (instead of average)"] = "Pire emplacement (vs moyenne)",
         ["Scale:"] = "Échelle :", ["Refresh Rate (sec):"] = "Fréquence (sec) :", ["Font Size:"] = "Taille de police :", ["Text Opacity:"] = "Opacité du texte :",
-        ["Display Mode:"] = "Mode d'affichage :", ["Font:"] = "Police :", ["Language:"] = "Langue :",
+        ["Display Mode:"] = "Mode d'affichage :", ["Label Style:"] = "Style d'étiquette :", ["Font:"] = "Police :", ["Language:"] = "Langue :",
         ["Flat"] = "Plat", ["Sectioned"] = "Par sections", ["Split"] = "Séparé",
+        ["Full"] = "Complet", ["Short"] = "Court", ["Hidden"] = "Masqué",
         ["Reset to Defaults"] = "Par défaut", ["Close"] = "Fermer",
         ["Open Settings"] = "Ouvrir les paramètres", ["Settings"] = "Paramètres",
         ["Auto (current: %s)"] = "Auto (actuel : %s)",
@@ -819,8 +825,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Color auto por umbral",
         ["Use Worst Slot (instead of average)"] = "Peor ranura (en vez de media)",
         ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:", ["Text Opacity:"] = "Opacidad del texto:",
-        ["Display Mode:"] = "Modo:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
+        ["Display Mode:"] = "Modo:", ["Label Style:"] = "Estilo de etiqueta:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por secciones", ["Split"] = "Dividido",
+        ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Oculto",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
         ["Open Settings"] = "Abrir ajustes", ["Settings"] = "Ajustes",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
@@ -871,8 +878,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Color auto por umbral",
         ["Use Worst Slot (instead of average)"] = "Peor ranura (en vez del promedio)",
         ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:", ["Text Opacity:"] = "Opacidad del texto:",
-        ["Display Mode:"] = "Modo:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
+        ["Display Mode:"] = "Modo:", ["Label Style:"] = "Estilo de etiqueta:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por secciones", ["Split"] = "Dividido",
+        ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Oculto",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
         ["Open Settings"] = "Abrir configuración", ["Settings"] = "Configuración",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
@@ -924,8 +932,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Colore auto per soglia",
         ["Use Worst Slot (instead of average)"] = "Slot peggiore (anziché media)",
         ["Scale:"] = "Scala:", ["Refresh Rate (sec):"] = "Frequenza (sec):", ["Font Size:"] = "Dimensione font:", ["Text Opacity:"] = "Opacità del testo:",
-        ["Display Mode:"] = "Modalità:", ["Font:"] = "Font:", ["Language:"] = "Lingua:",
+        ["Display Mode:"] = "Modalità:", ["Label Style:"] = "Stile etichetta:", ["Font:"] = "Font:", ["Language:"] = "Lingua:",
         ["Flat"] = "Piatto", ["Sectioned"] = "A sezioni", ["Split"] = "Diviso",
+        ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Nascosto",
         ["Reset to Defaults"] = "Predefiniti", ["Close"] = "Chiudi",
         ["Open Settings"] = "Apri impostazioni", ["Settings"] = "Impostazioni",
         ["Auto (current: %s)"] = "Auto (attuale: %s)",
@@ -976,8 +985,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Cor auto por limite",
         ["Use Worst Slot (instead of average)"] = "Pior slot (em vez de média)",
         ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Atualização (s):", ["Font Size:"] = "Tamanho da fonte:", ["Text Opacity:"] = "Opacidade do texto:",
-        ["Display Mode:"] = "Modo:", ["Font:"] = "Fonte:", ["Language:"] = "Idioma:",
+        ["Display Mode:"] = "Modo:", ["Label Style:"] = "Estilo do rótulo:", ["Font:"] = "Fonte:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por seções", ["Split"] = "Dividido",
+        ["Full"] = "Completo", ["Short"] = "Curto", ["Hidden"] = "Oculto",
         ["Reset to Defaults"] = "Restaurar", ["Close"] = "Fechar",
         ["Open Settings"] = "Abrir configurações", ["Settings"] = "Configurações",
         ["Auto (current: %s)"] = "Auto (atual: %s)",
@@ -1035,8 +1045,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "임계값 자동 색상",
         ["Use Worst Slot (instead of average)"] = "최악 슬롯 사용 (평균 대신)",
         ["Scale:"] = "크기:", ["Refresh Rate (sec):"] = "갱신 주기 (초):", ["Font Size:"] = "글꼴 크기:", ["Text Opacity:"] = "텍스트 투명도:",
-        ["Display Mode:"] = "표시 모드:", ["Font:"] = "글꼴:", ["Language:"] = "언어:",
+        ["Display Mode:"] = "표시 모드:", ["Label Style:"] = "라벨 스타일:", ["Font:"] = "글꼴:", ["Language:"] = "언어:",
         ["Flat"] = "단일", ["Sectioned"] = "구역별", ["Split"] = "분리",
+        ["Full"] = "전체", ["Short"] = "짧게", ["Hidden"] = "숨김",
         ["Reset to Defaults"] = "기본값", ["Close"] = "닫기",
         ["Open Settings"] = "설정 열기", ["Settings"] = "설정",
         ["Auto (current: %s)"] = "자동 (현재: %s)",
@@ -1087,8 +1098,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "按阈值自动着色",
         ["Use Worst Slot (instead of average)"] = "最差栏位（替代平均值）",
         ["Scale:"] = "缩放:", ["Refresh Rate (sec):"] = "刷新率 (秒):", ["Font Size:"] = "字体大小:", ["Text Opacity:"] = "文字不透明度:",
-        ["Display Mode:"] = "显示模式:", ["Font:"] = "字体:", ["Language:"] = "语言:",
+        ["Display Mode:"] = "显示模式:", ["Label Style:"] = "标签样式:", ["Font:"] = "字体:", ["Language:"] = "语言:",
         ["Flat"] = "扁平", ["Sectioned"] = "分组", ["Split"] = "分离",
+        ["Full"] = "完整", ["Short"] = "简短", ["Hidden"] = "隐藏",
         ["Reset to Defaults"] = "恢复默认", ["Close"] = "关闭",
         ["Open Settings"] = "打开设置", ["Settings"] = "设置",
         ["Auto (current: %s)"] = "自动（当前: %s）",
@@ -1139,8 +1151,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "依閾值自動上色",
         ["Use Worst Slot (instead of average)"] = "最差欄位（替代平均值）",
         ["Scale:"] = "縮放:", ["Refresh Rate (sec):"] = "更新率 (秒):", ["Font Size:"] = "字型大小:", ["Text Opacity:"] = "文字不透明度:",
-        ["Display Mode:"] = "顯示模式:", ["Font:"] = "字型:", ["Language:"] = "語言:",
+        ["Display Mode:"] = "顯示模式:", ["Label Style:"] = "標籤樣式:", ["Font:"] = "字型:", ["Language:"] = "語言:",
         ["Flat"] = "扁平", ["Sectioned"] = "分組", ["Split"] = "分離",
+        ["Full"] = "完整", ["Short"] = "簡短", ["Hidden"] = "隱藏",
         ["Reset to Defaults"] = "恢復預設", ["Close"] = "關閉",
         ["Open Settings"] = "開啟設定", ["Settings"] = "設定",
         ["Auto (current: %s)"] = "自動（目前: %s）",
@@ -1191,6 +1204,13 @@ local function ResolveActiveLocale()
     return force
 end
 
+local function NormalizeLabelStyle(value)
+    if value == "short" or value == "hidden" then
+        return value
+    end
+    return "full"
+end
+
 local function FontSupports(fontPath, glyph)
     if not fontPath then return glyph == GLYPH_LATIN end
     local key = FontPathKey(fontPath)
@@ -1223,11 +1243,15 @@ local function L(englishKey)
     return cached.activeLabels[englishKey] or englishKey
 end
 
+local GetStyledLabelText
+
 -- Single point where coloring + localization compose. New stat needs one row in
 -- LABELS_BY_LOCALE.enUS + one FormatLabel call site, plus a translation row in
 -- each shipped non-English locale (4-7 char short form).
 local function FormatLabel(colorHex, englishKey)
-    return string.format("|cff%s%s:|r", colorHex, L(englishKey))
+    local text = GetStyledLabelText(englishKey, cached.labelStyle)
+    if text == "" then return "" end
+    return string.format("|cff%s%s|r", colorHex, text)
 end
 
 -- WHY function (not a constant): resolved at use time so locale-toggle flips update
@@ -1351,6 +1375,13 @@ local function JoinLinesSecretSafe(lines)
     return text
 end
 
+local function JoinLabelsCol(labels, labelStyle)
+    if NormalizeLabelStyle(labelStyle) == "hidden" then
+        return ""
+    end
+    return JoinLinesSecretSafe(labels)
+end
+
 local function PrintMsg(text)
     print("|cff00ff7f[StatsPro]|r " .. text)
 end
@@ -1365,6 +1396,7 @@ local function CacheSettings()
     end
     cached.updateInterval = GetNumberDB("updateInterval")
     cached.displayMode = GetDB("displayMode")
+    cached.labelStyle = NormalizeLabelStyle(GetDB("labelStyle"))
     -- WHY runtime clamp: corrupt SavedVariables should not make text invisible,
     -- spam OnUpdate, or break font/scale arithmetic. Do not write back here; UI
     -- slider commits remain the only normal path that mutates SavedVariables.
@@ -1845,6 +1877,8 @@ end
 function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr)
     local hasRows = lineCount and lineCount > 0
     local hasRepair = repairStr and repairStr ~= ""
+    local labelStyle = NormalizeLabelStyle(cached.labelStyle)
+    local labelsHidden = labelStyle == "hidden"
     if not labelStr or (not hasRows and not hasRepair) then
         self:Hide()
         return
@@ -1863,20 +1897,22 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- value LEFT-justified — at each column boundary one side is justified outward, so
     -- visible gap equals exactly this constant with no per-row variance.
     if hasRows then
-        self.cachedLabelW  = MeasuredOrCached(self.labelText,  self.cachedLabelW,  "GetStringWidth")
         self.cachedRatingW = MeasuredOrCached(self.ratingText, self.cachedRatingW, "GetStringWidth")
         self.cachedValueW  = MeasuredOrCached(self.valueText,  self.cachedValueW,  "GetStringWidth")
-        -- labelText height drives Repair-row Y positioning; cache same way as widths.
-        self.cachedLabelH  = MeasuredOrCached(self.labelText,  self.cachedLabelH,  "GetStringHeight")
+        if not labelsHidden then
+            self.cachedLabelW = MeasuredOrCached(self.labelText, self.cachedLabelW, "GetStringWidth")
+            -- labelText height drives Repair-row Y positioning; cache same way as widths.
+            self.cachedLabelH = MeasuredOrCached(self.labelText, self.cachedLabelH, "GetStringHeight")
+        end
     end
 
-    local labelW = hasRows and (self.cachedLabelW or 0) or 0
+    local labelW = (hasRows and not labelsHidden) and (self.cachedLabelW or 0) or 0
     local ratingW = hasRows and (self.cachedRatingW or 0) or 0
     local valueW = hasRows and (self.cachedValueW or 0) or 0
     local hasRating = ratingW > 0
     local hasValue  = valueW > 0
     local rGap = (hasRating and hasValue) and 2 or 0
-    local lGap = (hasRating or hasValue) and 2 or 0
+    local lGap = (labelW > 0 and (hasRating or hasValue)) and 2 or 0
 
     -- Repair row: rendered on a DEDICATED row below the stat rows (NOT as part of the
     -- multi-line labelText). Two FontStrings: repairLabelText for "Repair:" at frame.left
@@ -1885,7 +1921,11 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- column space without overlapping stat content rows.
     local repairLabelW = 0
     if hasRepair then
-        local lineH = (self.cachedLabelH and hasRows) and (self.cachedLabelH / lineCount) or GetNumberDB("fontSize")
+        local repairLabelVisible = repairLabelStr and repairLabelStr ~= ""
+        local lineH = GetNumberDB("fontSize")
+        if hasRows and not labelsHidden and self.cachedLabelH then
+            lineH = self.cachedLabelH / lineCount
+        end
         local repairRowY = hasRows and -(lineCount * lineH + 1) or 0  -- 1px gap only when below stat rows
 
         -- Repair label: use stat labelW when below stat rows; measure its own label for
@@ -1893,10 +1933,16 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
         self.repairLabelText:ClearAllPoints()
         self.repairLabelText:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, repairRowY)
         self.repairLabelText:SetText(repairLabelStr or "")
-        repairLabelW = hasRows and labelW or (MeasuredOrCached(self.repairLabelText, self.cachedRepairLabelW, "GetStringWidth") or 80)
-        self.cachedRepairLabelW = repairLabelW
-        self.repairLabelText:SetWidth(repairLabelW)
-        self.repairLabelText:Show()
+        if repairLabelVisible then
+            repairLabelW = hasRows and labelW or (MeasuredOrCached(self.repairLabelText, self.cachedRepairLabelW, "GetStringWidth") or 80)
+            self.cachedRepairLabelW = repairLabelW
+            self.repairLabelText:SetWidth(repairLabelW)
+            self.repairLabelText:Show()
+        else
+            self.cachedRepairLabelW = 0
+            self.repairLabelText:SetWidth(0)
+            self.repairLabelText:Hide()
+        end
 
         -- Coin: anchored to frame.right, same Y as the repair label.
         self.repairText:ClearAllPoints()
@@ -1928,7 +1974,8 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- rowsTotal would inflate rating/value column widths for stat rows too — wide coin
     -- strings would push every percent and rating column rightward on rows that have
     -- nothing to do with repair, breaking the visual contract of column alignment.
-    local repairTotal = hasRepair and (repairLabelW + 2 + (self.cachedRepairW or 0)) or 0
+    local repairGap = (repairLabelW > 0) and 2 or 0
+    local repairTotal = hasRepair and (repairLabelW + repairGap + (self.cachedRepairW or 0)) or 0
     local totalW = math.max(rowsTotal, repairTotal, 80)
 
     -- WHY gated extra: only widen-by-coin causes the offset compensation. Floor 80 (when
@@ -2540,10 +2587,12 @@ local function BlockHasContent(block)
     return #block.labels > 0 or (block.repairStr and block.repairStr ~= "")
 end
 
-local function AddSectionedBlockToBucket(bucket, block, lastSectionKey)
+local function AddSectionedBlockToBucket(bucket, block, lastSectionKey, labelStyle)
     if not BlockHasContent(block) then return lastSectionKey end
-    if block.sectionKey and block.sectionKey ~= lastSectionKey then
+    if NormalizeLabelStyle(labelStyle) ~= "hidden" and block.sectionKey and block.sectionKey ~= lastSectionKey then
         PushHeader(bucket.labels, bucket.ratings, bucket.values, SectionHeader(block.sectionKey))
+        lastSectionKey = block.sectionKey
+    elseif block.sectionKey and block.sectionKey ~= lastSectionKey then
         lastSectionKey = block.sectionKey
     end
     AddBlockToBucket(bucket, block)
@@ -2557,7 +2606,7 @@ end
 local function RenderBucket(panel, bucket)
     if BucketHasContent(bucket) then
         panel:SetTextSafe(
-            JoinLinesSecretSafe(bucket.labels),
+            JoinLabelsCol(bucket.labels, cached.labelStyle),
             JoinLinesSecretSafe(bucket.ratings),
             JoinValuesCol(bucket.values),
             #bucket.labels,
@@ -2576,9 +2625,10 @@ local function BuildRenderBlocks()
     return blocks
 end
 
-local function RouteRenderBlocks(blocks, mode, splitSelection)
+local function RouteRenderBlocks(blocks, mode, splitSelection, labelStyle)
     local mainBucket = NewRenderBucket()
     local sideBucket = NewRenderBucket()
+    local style = NormalizeLabelStyle(labelStyle or cached.labelStyle)
     if mode == "split" then
         local selection = splitSelection or cached
         for _, block in ipairs(blocks) do
@@ -2587,7 +2637,7 @@ local function RouteRenderBlocks(blocks, mode, splitSelection)
     elseif mode == "sectioned" then
         local lastSectionKey
         for _, block in ipairs(blocks) do
-            lastSectionKey = AddSectionedBlockToBucket(mainBucket, block, lastSectionKey)
+            lastSectionKey = AddSectionedBlockToBucket(mainBucket, block, lastSectionKey, style)
         end
     else
         for _, block in ipairs(blocks) do
@@ -2629,7 +2679,7 @@ local function UpdateStats()
 
     local blocks = BuildRenderBlocks()
     local mode = cached.displayMode or "flat"
-    local mainBucket, sideBucket = RouteRenderBlocks(blocks, mode, cached)
+    local mainBucket, sideBucket = RouteRenderBlocks(blocks, mode, cached, cached.labelStyle)
     RenderBucket(mainPanel, mainBucket)
     if mode == "split" then
         RenderBucket(defensivePanel, sideBucket)
@@ -3075,6 +3125,16 @@ local function CursorUsed(c)       return math.abs(c.initialY - c.y) + 16 end
 -- Cyrillic basic+extended (а..я + ё/ѐ/і/ї/ў etc.) and Latin Supplement (à-þ excl.
 -- ÷/ß/ÿ) mapped via byte arithmetic. 3/4-byte sequences (CJK/emoji) pass identity.
 -- Lead-byte ranges per RFC 3629; malformed input progresses 1 byte to avoid infinite loop.
+local function Utf8CharLen(s, i)
+    local b1 = s and string.byte(s, i or 1)
+    if not b1 then return 0 end
+    if b1 < 0x80 then return 1 end
+    if b1 >= 0xC2 and b1 <= 0xDF then return 2 end
+    if b1 >= 0xE0 and b1 <= 0xEF then return 3 end
+    if b1 >= 0xF0 and b1 <= 0xF7 then return 4 end
+    return 1
+end
+
 local function Utf8Upper(s)
     if not string.find(s, "[\128-\255]") then return string.upper(s) end
     local out, i, n = {}, 1, #s
@@ -3113,21 +3173,35 @@ local function Utf8Upper(s)
                 out[#out+1] = string.sub(s, i, i+1)
             end
             i = i + 2
-        elseif b1 >= 0xC2 and b1 <= 0xDF then
-            out[#out+1] = string.sub(s, i, i+1)
-            i = i + 2
-        elseif b1 >= 0xE0 and b1 <= 0xEF then
-            out[#out+1] = string.sub(s, i, i+2)
-            i = i + 3
-        elseif b1 >= 0xF0 and b1 <= 0xF7 then
-            out[#out+1] = string.sub(s, i, i+3)
-            i = i + 4
         else
-            out[#out+1] = string.char(b1)
-            i = i + 1
+            local charLen = Utf8CharLen(s, i)
+            out[#out+1] = string.sub(s, i, i + charLen - 1)
+            i = i + charLen
         end
     end
     return table.concat(out)
+end
+
+local function FirstUTF8Char(s)
+    if not s or s == "" then return "" end
+    local charLen = Utf8CharLen(s, 1)
+    if charLen <= 0 then return "" end
+    return string.sub(s, 1, charLen)
+end
+
+GetStyledLabelText = function(englishKey, labelStyle)
+    local base = L(englishKey)
+    if not base or base == "" then return "" end
+
+    local style = NormalizeLabelStyle(labelStyle)
+    if style == "hidden" then
+        return ""
+    elseif style == "short" then
+        local first = FirstUTF8Char(base)
+        if first == "" then return "" end
+        return first .. ":"
+    end
+    return base .. ":"
 end
 -- CursorSection: section header with green underline. label is dual-role: L-key + enUS fallback.
 local function CursorSection(c, label)
@@ -3283,6 +3357,54 @@ function addon:OpenConfigMenu()
     -- can re-run alignment when locale-driven label widths shift.
     local layoutDropdownRows = {}
     local displayDropdownRows = {}
+    local function CreateSimpleDropdownRow(parent, rows, frameName, labelKey, options, cursor, getValue, onSelect)
+        local rowY = cursor.y
+
+        local label = parent:CreateFontString(nil, "OVERLAY")
+        RegisterConfigFont(label, CONFIG_FONT_SIZE)
+        label:SetPoint("TOPLEFT", cursor.padX, rowY - 4)
+
+        local dropdown = CreateFrame("Frame", frameName, parent, "UIDropDownMenuTemplate")
+        -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after all dropdown rows build.
+        dropdown:SetPoint("TOPLEFT", cursor.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
+        UIDropDownMenu_SetWidth(dropdown, 100)
+        UIDropDownMenu_JustifyText(dropdown, "CENTER")
+
+        local function ResolveOption(value)
+            for _, opt in ipairs(options) do
+                if opt.value == value then return opt end
+            end
+            return options[1]
+        end
+
+        local function RefreshDropdownText()
+            label:SetText(L(labelKey))
+            UIDropDownMenu_SetText(dropdown, L(ResolveOption(getValue()).label))
+        end
+
+        UIDropDownMenu_Initialize(dropdown, function(self, level)
+            local current = getValue()
+            for _, opt in ipairs(options) do
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = L(opt.label)
+                info.value = opt.value
+                info.checked = (current == opt.value)
+                info.func = function()
+                    onSelect(opt.value, ResolveOption(opt.value), dropdown)
+                end
+                UIDropDownMenu_AddButton(info)
+            end
+        end)
+
+        PushLocalizedLabel(RefreshDropdownText)
+        PushRefresher(RefreshDropdownText)
+        tinsert(rows, {
+            text = label, dropdown = dropdown,
+            dropdownX_base = cursor.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = parent,
+        })
+        cursor.y = rowY - 30
+        return dropdown, label
+    end
 
     --[[ ===== Frame ===== ]]
     configFrame = CreateFrame("Frame", "StatsProConfigFrame", UIParent, "BackdropTemplate")
@@ -3493,54 +3615,27 @@ function addon:OpenConfigMenu()
         cd.y = rowY - 26
         rowY = cd.y
 
-        local dmLabel = layoutTab:CreateFontString(nil, "OVERLAY")
-        RegisterConfigFont(dmLabel, CONFIG_FONT_SIZE)
-        dmLabel:SetPoint("TOPLEFT", cd.padX, rowY - 4)
-        PushLocalizedLabel(function() dmLabel:SetText(L("Display Mode:")) end)
-
         local DISPLAY_MODES = {
             { value = "flat",      label = "Flat" },
             { value = "sectioned", label = "Sectioned" },
             { value = "split",     label = "Split" },
         }
-        local function GetDisplayModeLabel(value)
-            for _, m in ipairs(DISPLAY_MODES) do
-                if m.value == value then return L(m.label) end
-            end
-            return L(DISPLAY_MODES[1].label)
-        end
-
-        local dmDropdown = CreateFrame("Frame", "StatsProDisplayModeDropdown", layoutTab, "UIDropDownMenuTemplate")
-        -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after all 3 dropdown rows built.
-        dmDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
-        UIDropDownMenu_SetWidth(dmDropdown, 100)
-        UIDropDownMenu_JustifyText(dmDropdown, "CENTER")
-        UIDropDownMenu_Initialize(dmDropdown, function(self, level)
-            for _, m in ipairs(DISPLAY_MODES) do
-                local info = UIDropDownMenu_CreateInfo()
-                info.text = L(m.label)
-                info.value = m.value
-                info.checked = (GetDB("displayMode") == m.value)
-                info.func = function()
-                    StatsProDB.displayMode = m.value
-                    CacheSettings()
-                    UIDropDownMenu_SetText(dmDropdown, L(m.label))
-                    ApplySplitBlockChecksEnabled()
-                    CloseDropDownMenus()
-                    UpdateStats()
-                end
-                UIDropDownMenu_AddButton(info)
-            end
-        end)
-        PushLocalizedLabel(function()
-            UIDropDownMenu_SetText(dmDropdown, GetDisplayModeLabel(GetDB("displayMode")))
-        end)
-
-        tinsert(layoutDropdownRows, {
-            text = dmLabel, dropdown = dmDropdown,
-            dropdownX_base = cd.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = layoutTab,
-        })
-        cd.y = rowY - 30
+        CreateSimpleDropdownRow(
+            layoutTab,
+            layoutDropdownRows,
+            "StatsProDisplayModeDropdown",
+            "Display Mode:",
+            DISPLAY_MODES,
+            cd,
+            function() return GetDB("displayMode") end,
+            function(value, opt, dropdown)
+                StatsProDB.displayMode = value
+                CacheSettings()
+                UIDropDownMenu_SetText(dropdown, L(opt.label))
+                ApplySplitBlockChecksEnabled()
+                CloseDropDownMenus()
+                UpdateStats()
+            end)
     end
 
     -- Scale slider — panel-level visual scale. Grouped with Frame & Position because it
@@ -3588,8 +3683,8 @@ function addon:OpenConfigMenu()
 
     CursorGap(cd, 6)
 
-    -- Value Display applies only to RATED stats (Offensive Crit/Haste/Mastery/Vers +
-    -- Tertiary Leech/Avoidance/Speed) — column visibility + value-color rule.
+    -- Value Display covers rated-stat column visibility plus label presentation for all
+    -- normal HUD rows.
     CursorSection(cd, "Value Display")
     do
         local rowY = cd.y
@@ -3602,6 +3697,28 @@ function addon:OpenConfigMenu()
         AlignSwatchColumn(leftRows)
         AlignSwatchColumn(rightRows)
         cd.y = rowY - 26
+    end
+    do
+        local LABEL_STYLE_OPTIONS = {
+            { value = "full",   label = "Full" },
+            { value = "short",  label = "Short" },
+            { value = "hidden", label = "Hidden" },
+        }
+        CreateSimpleDropdownRow(
+            layoutTab,
+            layoutDropdownRows,
+            "StatsProLabelStyleDropdown",
+            "Label Style:",
+            LABEL_STYLE_OPTIONS,
+            cd,
+            function() return NormalizeLabelStyle(GetDB("labelStyle")) end,
+            function(value, opt, dropdown)
+                StatsProDB.labelStyle = value
+                CacheSettings()
+                UIDropDownMenu_SetText(dropdown, L(opt.label))
+                CloseDropDownMenus()
+                UpdateStats()
+            end)
     end
     CreateCheckbox(layoutTab, "StatsProMatchColorCheck",
         "Match Value Color to Stat", "matchValueColorToStat", cd.padX, cd.y)
@@ -3679,7 +3796,7 @@ function addon:OpenConfigMenu()
         -- info.func captures fontDropdown / CurrentFontName to sync caption after
         -- MaybeAutoSwitchFont silently changes db.font on a locale switch.
         fontDropdown = CreateFrame("Frame", "StatsProFontDropdown", displayTab, "UIDropDownMenuTemplate")
-        -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after all 3 dropdown rows built.
+        -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after the Appearance-tab dropdown rows build.
         fontDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
         -- Hover-preview: while font picker is open, hovering a font button applies it to
         -- panels temporarily without writing DB. Picker's OnHide handler is the SINGLE source
@@ -4148,7 +4265,7 @@ function addon:OpenConfigMenu()
         end
 
         local langDropdown = CreateFrame("Frame", "StatsProLanguageDropdown", displayTab, "UIDropDownMenuTemplate")
-        -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after all 3 dropdown rows built.
+        -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after the Appearance-tab dropdown rows build.
         langDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
         UIDropDownMenu_SetWidth(langDropdown, 100)
         UIDropDownMenu_JustifyText(langDropdown, "CENTER")
@@ -4461,9 +4578,9 @@ function addon:PrintDebugDump()
         tostring(isLoaded), tostring(durabilityDirty),
         math.floor(collectgarbage("count"))))
 
-    PrintMsg(string.format("visible=%s  locked=%s  mode=%s  font=%dpx  scale=%.1f  refresh=%.2fs  textAlpha=%d%%",
+    PrintMsg(string.format("visible=%s  locked=%s  mode=%s  labelStyle=%s  font=%dpx  scale=%.1f  refresh=%.2fs  textAlpha=%d%%",
         tostring(cached.isVisible), tostring(cached.isLocked),
-        tostring(GetDB("displayMode")),
+        tostring(GetDB("displayMode")), tostring(cached.labelStyle),
         GetNumberDB("fontSize"), GetNumberDB("scale"), GetNumberDB("updateInterval"),
         GetNumberDB("textAlpha")))
 
@@ -4561,33 +4678,41 @@ local function RunRenderRoutingSmokeCheck()
     local repair = Block("splitRepairCost", "Gear", {}, {}, {}, "243g", "Repair:")
     local empty = Block("splitOffensive", "Offensive")
 
-    local main, side = RouteRenderBlocks({ character, defensive, repair }, "flat", { splitDefensive = true, splitRepairCost = true })
+    local main, side = RouteRenderBlocks({ character, defensive, repair }, "flat", { splitDefensive = true, splitRepairCost = true }, "full")
     Check("flat-main-rows", #main.labels == 2, "expected two normal rows in main")
     Check("flat-main-repair", main.repairStr == "243g" and main.repairLabelStr == "Repair:", "repair payload missing from main")
     Check("flat-side-empty", not BucketHasContent(side), "side bucket should stay empty")
 
-    main, side = RouteRenderBlocks({ character, defensive, repair }, "split", { splitDefensive = true, splitRepairCost = true })
+    main, side = RouteRenderBlocks({ character, defensive, repair }, "split", { splitDefensive = true, splitRepairCost = true }, "full")
     Check("split-main-character", #main.labels == 1 and main.labels[1] == "Crit:", "character row should remain in main")
     Check("split-side-defensive", #side.labels == 1 and side.labels[1] == "Dodge:", "defensive row should route to side")
     Check("split-side-repair", side.repairStr == "243g" and side.repairLabelStr == "Repair:", "repair payload should route to side")
 
-    main, side = RouteRenderBlocks({ empty }, "sectioned")
+    main, side = RouteRenderBlocks({ empty }, "sectioned", nil, "full")
     Check("sectioned-empty-main", not BucketHasContent(main), "empty block should not create a header")
     Check("sectioned-empty-side", not BucketHasContent(side), "side bucket should stay empty")
 
-    main = RouteRenderBlocks({ empty, defensive }, "sectioned")
+    main = RouteRenderBlocks({ empty, defensive }, "sectioned", nil, "full")
     Check("sectioned-defensive-header", main.labels[1] == SectionHeader("Defensive"), "missing Defensive header")
     Check("sectioned-defensive-row", main.labels[2] == "Dodge:" and #main.labels == 2, "defensive row/header shape changed")
     Check("sectioned-skip-empty-header", CountLabel(main, SectionHeader("Offensive")) == 0, "empty Offensive block inserted a header")
 
-    main = RouteRenderBlocks({ durability, repair }, "sectioned")
+    main = RouteRenderBlocks({ durability, repair }, "sectioned", nil, "full")
     Check("sectioned-gear-header-once", CountLabel(main, SectionHeader("Gear")) == 1, "Gear header should appear once")
     Check("sectioned-gear-row", main.labels[2] == "Durability:" and #main.labels == 2, "durability row should sit under Gear header")
     Check("sectioned-gear-repair", main.repairStr == "243g" and main.repairLabelStr == "Repair:", "repair payload missing under Gear")
 
-    main = RouteRenderBlocks({ repair }, "sectioned")
+    main = RouteRenderBlocks({ repair }, "sectioned", nil, "full")
     Check("sectioned-repair-only-header", #main.labels == 1 and main.labels[1] == SectionHeader("Gear"), "repair-only should produce only Gear header")
     Check("sectioned-repair-only-payload", main.repairStr == "243g", "repair-only payload missing")
+
+    main = RouteRenderBlocks({ defensive }, "sectioned", nil, "hidden")
+    Check("sectioned-hidden-no-header", CountLabel(main, SectionHeader("Defensive")) == 0, "hidden label style should suppress section headers")
+    Check("sectioned-hidden-rows-stay", #main.labels == 1 and main.labels[1] == "Dodge:", "hidden label style should keep data rows")
+
+    main = RouteRenderBlocks({ repair }, "sectioned", nil, "hidden")
+    Check("sectioned-hidden-repair-no-header", #main.labels == 0, "hidden repair-only should not inject a Gear header")
+    Check("sectioned-hidden-repair-payload", main.repairStr == "243g" and main.repairLabelStr == "Repair:", "hidden repair-only should keep repair payload")
 
     if #failures == 0 then
         PrintMsg("debug routing: PASS")
@@ -4595,6 +4720,30 @@ local function RunRenderRoutingSmokeCheck()
         PrintMsg(string.format("debug routing: FAIL (%d)", #failures))
         for _, failure in ipairs(failures) do
             PrintMsg("debug routing: " .. failure)
+        end
+    end
+end
+
+local function RunLabelStyleSmokeCheck()
+    local failures = {}
+    local function Check(name, actual, expected)
+        if actual ~= expected then
+            failures[#failures + 1] = string.format("%s: expected %q, got %q", name, expected, actual)
+        end
+    end
+
+    Check("ascii", FirstUTF8Char("Crit"), "C")
+    Check("cyrillic", FirstUTF8Char("Крит"), "К")
+    Check("cjk", FirstUTF8Char("暴击"), "暴")
+    Check("empty", FirstUTF8Char(""), "")
+    Check("nil", FirstUTF8Char(nil), "")
+
+    if #failures == 0 then
+        PrintMsg("debug labelstyle: PASS")
+    else
+        PrintMsg(string.format("debug labelstyle: FAIL (%d)", #failures))
+        for _, failure in ipairs(failures) do
+            PrintMsg("debug labelstyle: " .. failure)
         end
     end
 end
@@ -4669,6 +4818,8 @@ SlashCmdList["STATSPRO"] = function(msg)
         local debugArg = rest:match("^(%S+)") or ""
         if debugArg == "routing" then
             RunRenderRoutingSmokeCheck()
+        elseif debugArg == "labelstyle" then
+            RunLabelStyleSmokeCheck()
         elseif debugArg == "perf" then
             PrintDebugPerf()
         else

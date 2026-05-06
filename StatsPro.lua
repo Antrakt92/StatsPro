@@ -2375,11 +2375,12 @@ local function BuildItemLevelPayload()
     elseif delta >= ITEM_LEVEL_WARN_DELTA then
         equippedColor = ITEM_LEVEL_WARN_COLOR
     end
-    -- "277 / 277" with gray slash delimiter and surrounding spaces. Safe here because
-    -- itemLevelValueText is a single-line FontString anchored to labelText:TOPRIGHT —
-    -- not the multi-line values column where regular spaces triggered Blizzard's
-    -- word-wrap heuristic and broke per-row alignment.
-    return string.format("|cff%s%d|r |cff808080/|r |cff%s%d|r",
+    -- "277 | 277" with the same gray "|" delimiter the rated stat rows use between
+    -- rating and percent (see FmtRatingPct → "|cff808080|||r"). The literal pipe is
+    -- escaped as "||" inside the |cff...|r color block. Safe here (no wrap risk):
+    -- itemLevelValueText is a single-line FontString anchored to labelText:TOPRIGHT,
+    -- not the multi-line values column where wrap-on-whitespace bit us.
+    return string.format("|cff%s%d|r |cff808080|||r |cff%s%d|r",
                          equippedColor, equipped, valueColor, overall)
 end
 

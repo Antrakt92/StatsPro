@@ -2336,17 +2336,14 @@ local function PushItemLevelRow(labels, ratings, values)
         rStr = string.format("|cff%s%d|r |cff808080|||r", equippedColor, equipped)
         vStr = string.format("|cff%s%d|r", valueColor, overall)
     else
-        -- Single-col: combined "EQUIPPED|OVERALL" with NO whitespace around the
-        -- pipe so the multi-line FontString won't word-wrap mid-string. Routes
-        -- to whichever column is visible, mirroring FmtRatingPct's single-col
-        -- fallback (rating col when showRating, value col when showPercentage).
-        local combined = string.format("|cff%s%d|r|cff808080|||r|cff%s%d|r",
-                                       equippedColor, equipped, valueColor, overall)
-        if cached.showRating then
-            rStr, vStr = combined, ""
-        else
-            rStr, vStr = "", combined
-        end
+        -- Single-col mode: ALL content routes into the rating column, value col is "".
+        -- Mirrors FmtRatingPct's single-col fallback (and JoinValuesCol returns "" in
+        -- non-dual-col mode regardless, so anything pushed to value col would be
+        -- dropped). No whitespace around the pipe so the multi-line rating FontString
+        -- won't word-wrap mid-string.
+        rStr = string.format("|cff%s%d|r|cff808080|||r|cff%s%d|r",
+                             equippedColor, equipped, valueColor, overall)
+        vStr = ""
     end
     PushRow(labels, ratings, values, label, rStr, vStr)
 end

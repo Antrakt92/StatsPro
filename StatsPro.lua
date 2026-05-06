@@ -2315,22 +2315,18 @@ local function PushItemLevelRow(labels, ratings, values)
     elseif delta >= ITEM_LEVEL_WARN_DELTA then
         equippedColor = ITEM_LEVEL_WARN_COLOR
     end
-    -- WHY collapse to a single number when delta=0: the joined values column is a
-    -- multi-line FontString. The "X / Y" form was wrapping mid-string in sectioned
-    -- mode — both regular spaces and NBSP (U+00A0) trigger Blizzard's word-wrap
-    -- heuristic, and the wrap added a stray line to valueText only, mis-aligning
-    -- every row after iLvl. When equipped == overall the second number adds zero
-    -- info, so render just one digit-group — no separator, no wrap candidates.
-    -- Delta path keeps slash but drops surrounding spaces so width stays minimal
-    -- (slash itself can still be a wrap point in some fonts; if the bug returns for
-    -- delta>0 cases, switch to a single-number format with delta encoded in color).
-    local value
-    if delta == 0 then
-        value = string.format("|cff%s%d|r", valueColor, overall)
-    else
-        value = string.format("|cff%s%d|r/|cff%s%d|r",
-                              equippedColor, equipped, valueColor, overall)
-    end
+    -- WHY no whitespace around the slash: the joined values column is a multi-line
+    -- FontString. With either regular space or NBSP (U+00A0) around "/", Blizzard's
+    -- wrap heuristic split "277 / 277" mid-string in sectioned mode (the joined
+    -- column hits an implicit width constraint during the SetText/re-anchor pipeline,
+    -- and the engine wraps at the only whitespace candidate it finds). The wrap
+    -- added a stray line to valueText only, mis-aligning every row after iLvl.
+    -- "277/277" has no whitespace at all — slash is not a word-break candidate in
+    -- Latin scripts in FRIZQT, and the natural width is ~25% narrower so it fits
+    -- the column comfortably. Both numbers stay visible; equippedColor still encodes
+    -- delta warn/danger; bucket parity is unaffected.
+    local value = string.format("|cff%s%d|r/|cff%s%d|r",
+                                equippedColor, equipped, valueColor, overall)
     local rCol, vCol = RouteValueOnly(value)
     PushRow(labels, ratings, values, FormatLabel(itemLevelColor, "ItemLevel"), rCol, vCol)
 end

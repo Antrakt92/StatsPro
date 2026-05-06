@@ -3641,7 +3641,6 @@ function addon:OpenConfigMenu()
                 SetAllPanelsLockState(checked)
             end, 140)
         cd.y = rowY - 26
-        rowY = cd.y
 
         local DISPLAY_MODES = {
             { value = "flat",      label = "Flat" },

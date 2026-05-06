@@ -1693,11 +1693,25 @@ function Panel:New(globalName, dbKeyPrefix)
     -- CONSTANT visible gap from rating-end (or label-colon when no rating) to value
     -- text regardless of value length. Cost: values' right edges no longer align
     -- vertically. User chose tight constant gap over right-edge alignment.
+    -- WHY SetWordWrap(false) on all three column FontStrings: the joined column text
+    -- contains "\n"-separated entries, one per row. With default SetWordWrap(true) and
+    -- the dynamic frame-width pipeline (SetText runs BEFORE the per-render frame:SetWidth
+    -- + ratingText/valueText re-anchor pass), Blizzard's wrap heuristic could split a
+    -- wide single entry across two visual lines mid-string at a space — observed with
+    -- iLvl value "277 / 277" wrapping in sectioned mode where the joined values column
+    -- has 16 entries. The wrap added an extra visual line to valueText only, breaking
+    -- per-row alignment with labelText (16 entries) and shifting every value after iLvl
+    -- down by one (e.g., Defensive header row visually pulled in Speed's value). Bucket
+    -- data was always correct (parity=true in /ss debug bucket); only the rendering
+    -- diverged. Strict per-source-line rendering keeps row N in values aligned with row
+    -- N in labels regardless of natural text width — the auto-fit math already widens
+    -- the frame to fit the widest GetStringWidth.
     local labelText = frame:CreateFontString(nil, "OVERLAY")
     labelText:SetFont(GetDB("font"), GetNumberDB("fontSize"), "OUTLINE")
     labelText:SetJustifyH("RIGHT")
     labelText:SetJustifyV("TOP")
     labelText:SetTextColor(1, 1, 1, 1)
+    labelText:SetWordWrap(false)
     labelText:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
     labelText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
 
@@ -1710,6 +1724,7 @@ function Panel:New(globalName, dbKeyPrefix)
     ratingText:SetJustifyH("RIGHT")
     ratingText:SetJustifyV("TOP")
     ratingText:SetTextColor(1, 1, 1, 1)
+    ratingText:SetWordWrap(false)
     ratingText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
     ratingText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
 
@@ -1718,6 +1733,7 @@ function Panel:New(globalName, dbKeyPrefix)
     valueText:SetJustifyH("LEFT")
     valueText:SetJustifyV("TOP")
     valueText:SetTextColor(1, 1, 1, 1)
+    valueText:SetWordWrap(false)
     valueText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
     valueText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
 

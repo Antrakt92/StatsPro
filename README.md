@@ -181,6 +181,19 @@ everything:
 - **WoW Retail Midnight** — Interface `120005, 120007`
 - Classic / TBC / MoP Classic — not supported (Retail-only at this time)
 
+## Local checks
+
+For addon code changes, run the Lua syntax and static diagnostics wrapper from
+the repository root:
+
+```powershell
+.\scripts\check-lua.ps1
+```
+
+It uses `luac5.1` for Lua 5.1 syntax and `lua-language-server` with the
+repository's `.luarc.json` to catch accidental globals and other warning-level
+Lua diagnostics without linting vendored libraries.
+
 ## Architecture (contributors / forks)
 
 Core single-file design. Everything renders out of [`StatsPro.lua`](StatsPro.lua):

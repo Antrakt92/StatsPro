@@ -9,6 +9,9 @@ ignore:
   - .gitignore
   - README.md
   - .pkgmeta
+  - .luacheckrc
+  - .luarc.json
+  - scripts
   - screenshots
   - AUDIT.md
   - AGENTS.md

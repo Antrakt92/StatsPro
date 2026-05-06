@@ -4,9 +4,9 @@
 
 ### Improved
 
-- **Settings sliders are smoother while dragging** — Font Size, Scale, and Refresh Rate now coalesce heavy UI refresh work instead of reapplying it on every tiny slider step.
 - **Item Level refresh is more efficient** — equipped / overall item level now refreshes from gear and bag-change signals instead of polling every HUD tick.
 - **Hidden panels do less repeated work** — already-hidden stat panels skip redundant text/cache clearing.
+- **Refresh Rate changes avoid redundant cache refresh work** while Font Size, Scale, and Text Opacity keep instant live preview as you drag.
 
 ### Fixed
 

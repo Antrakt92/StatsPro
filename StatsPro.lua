@@ -3548,9 +3548,8 @@ function addon:OpenConfigMenu()
     CreateConfigSlider(layoutTab, "StatsProScaleSlider", "Scale:", "scale", cd,
         0.5, 2.0, 0.1, "0.5", "2.0", "%.1f",
         function()
-            RunCoalesced("scale", 0.05, function()
-                SetAllPanelsScale(GetNumberDB("scale"))
-            end)
+            -- Scale is a visual preview control: keep immediate feedback while dragging.
+            SetAllPanelsScale(GetNumberDB("scale"))
         end)
 
     -- Refresh rate slider — controls how often stat values recompute (seconds).
@@ -3997,14 +3996,14 @@ function addon:OpenConfigMenu()
     -- Font Size slider — text rendering size. Naturally pairs with Font dropdown above.
     -- ReflowAllPanels (not UpdateStats) for the same reason as font picker: size change
     -- only affects measurements, not text content. Slider fires OnValueChanged per
-    -- step-tick during drag (8→9→...→32 = up to 25 events); Reflow keeps drag smooth.
+    -- step-tick during drag (8→9→...→32 = up to 25 events), intentionally preserving
+    -- live visual preview because this control is adjusted rarely but benefits hugely
+    -- from immediate feedback.
     CreateConfigSlider(displayTab, "StatsProFontSlider", "Font Size:", "fontSize", cd,
         8, 32, 1, "8", "32", "%d",
         function()
-            RunCoalesced("fontSize", 0.05, function()
-                ApplyTextStyleToAllPanels(GetDB("font"), GetNumberDB("fontSize"))
-                ReflowAllPanels()
-            end)
+            ApplyTextStyleToAllPanels(GetDB("font"), GetNumberDB("fontSize"))
+            ReflowAllPanels()
         end)
 
     -- Text Opacity slider — adjust panel text transparency. Stored as INT 25-100 in DB

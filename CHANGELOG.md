@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.2 — Item Level row alignment fix
+
+### Fixed
+
+- **Item Level row no longer wraps mid-value in Sectioned mode** — the `277 / 277` text could split across two lines under tight panel widths, shifting every stat row below it out of alignment (Crit picked up Haste's value, Defensive header pulled in Speed's, Repair overlapped Durability). Equipped and overall iLvl now render in the same rating/value columns the rated stats use, so the row stays single-line and the separator lines up with the other rows.
+
+### Changed
+
+- **Item Level separator is now a gray pipe** (`iLvl: 277 | 277`) instead of a gray slash, matching the visual style used between rating and percent on Crit, Haste, Mastery, Vers, Leech, and Speed.
+
 ## 1.6.1 — Performance hardening
 
 ### Improved

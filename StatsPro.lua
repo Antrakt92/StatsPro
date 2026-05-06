@@ -2315,7 +2315,17 @@ local function PushItemLevelRow(labels, ratings, values)
     elseif delta >= ITEM_LEVEL_WARN_DELTA then
         equippedColor = ITEM_LEVEL_WARN_COLOR
     end
-    local value = string.format("|cff%s%d|r |cff808080/|r |cff%s%d|r", equippedColor, equipped, valueColor, overall)
+    -- WHY non-breaking spaces (\194\160 = UTF-8 U+00A0): the joined values column is
+    -- a multi-line FontString. With regular spaces, Blizzard's wrap heuristic split
+    -- "277 / 277" mid-string in sectioned mode (the only entry wide enough to trigger
+    -- it), adding a stray "277" line to valueText only. labels/ratings stayed at the
+    -- correct line count, so every row after iLvl mis-aligned: Speed pulled Leech's
+    -- value, Defensive header showed Speed's value, Repair-row overlapped Durability.
+    -- NBSP renders identically to a space but is not a wrap candidate, so the entire
+    -- iLvl value stays on one source line regardless of column width. Bucket data was
+    -- always correct (parity=true in /ss debug bucket); fix is purely render-side.
+    local value = string.format("|cff%s%d|r\194\160|cff808080/|r\194\160|cff%s%d|r",
+                                equippedColor, equipped, valueColor, overall)
     local rCol, vCol = RouteValueOnly(value)
     PushRow(labels, ratings, values, FormatLabel(itemLevelColor, "ItemLevel"), rCol, vCol)
 end

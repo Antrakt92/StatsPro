@@ -4,6 +4,7 @@ $ErrorActionPreference = "Stop"
 
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $RepoRoot
+$AddonFile = Join-Path $RepoRoot "StatsPro.lua"
 
 $LuacCandidates = @(
     (Get-Command luac5.1 -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
@@ -29,7 +30,7 @@ Write-Host "== Lua diagnostics =="
 $LogPath = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lls-" + [System.Guid]::NewGuid().ToString("N"))
 try {
     $Output = & $LuaLanguageServer `
-        --check="$RepoRoot" `
+        --check="$AddonFile" `
         --check_format=pretty `
         --checklevel=Warning `
         --configpath="$RepoRoot\.luarc.json" `

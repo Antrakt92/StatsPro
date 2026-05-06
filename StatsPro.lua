@@ -4648,6 +4648,84 @@ local function PrintDebugPerf()
         tostring(cached.itemLevelOverall or "?")))
 end
 
+-- WHY: row-shift bug class diagnostic. Strips color escapes + texture markup so
+-- chat output is readable, AND escapes control chars (\n \r \t) as literal "\n"
+-- so embedded newlines (the leading shift hypothesis) are VISIBLE in the dump
+-- instead of silently splitting the line.
+local function StripDumpEscapes(s)
+    if not s or s == "" then return "" end
+    return (s:gsub("|c%x%x%x%x%x%x%x%x", "")
+             :gsub("|r", "")
+             :gsub("|T[^|]+|t", "[icon]")
+             :gsub("\n", "\\n")
+             :gsub("\r", "\\r")
+             :gsub("\t", "\\t"))
+end
+
+-- WHY local pipeline rerun (BuildRenderBlocks + RouteRenderBlocks): UpdateStats's
+-- last result is collapsed into joined strings on the FontStrings; the per-row
+-- arrays are not retained. Re-running the pipeline read-only (no SetTextSafe)
+-- snapshots the same data without touching live render state. Manual-only
+-- (/ss debug bucket), not in OnUpdate hot path.
+local function PrintDebugBucketDump()
+    if not isLoaded then PrintMsg("debug bucket: not loaded yet"); return end
+
+    local mode = cached.displayMode or "flat"
+    PrintMsg(string.format("bucket: mode=%s labelStyle=%s dur=%.1f speed=%.1f armorDR=%.1f vers=%.1f cost=%d",
+        tostring(mode), tostring(cached.labelStyle),
+        cached.durabilityValue or -1, cached.speedPct or -1,
+        cached.armorDR or -1, cached.versTotal or -1,
+        cached.repairCost or 0))
+
+    -- Per-panel widget state (read what's CURRENTLY rendered, not the snapshot below).
+    local panels = { { "main", mainPanel }, { "side", defensivePanel } }
+    for _, p in ipairs(panels) do
+        local n, panel = p[1], p[2]
+        PrintMsg(string.format("bucket: %s shown=%s lineN=%s hasRepair=%s W=%dx%d",
+            n, tostring(panel:IsShown()),
+            tostring(panel.lastLineCount or "?"),
+            tostring(panel.lastHasRepair),
+            math.floor(panel.frame:GetWidth() or 0),
+            math.floor(panel.frame:GetHeight() or 0)))
+        PrintMsg(string.format("bucket: %s cached LW=%s RW=%s VW=%s LH=%s RpW=%s RpLW=%s",
+            n,
+            tostring(panel.cachedLabelW), tostring(panel.cachedRatingW),
+            tostring(panel.cachedValueW), tostring(panel.cachedLabelH),
+            tostring(panel.cachedRepairW), tostring(panel.cachedRepairLabelW)))
+    end
+
+    -- Read-only snapshot: same pipeline UpdateStats uses, no SetTextSafe call.
+    local blocks = BuildRenderBlocks()
+    local main, side = RouteRenderBlocks(blocks, mode, cached, cached.labelStyle)
+
+    for _, b in ipairs({ { "main", main }, { "side", side } }) do
+        local n, bucket = b[1], b[2]
+        -- WHY nL/nR/nV (not L/R/V): "L" would shadow the localization function L()
+        -- declared at file scope. Even though we don't call L() in this loop, the
+        -- shadow is a future-edit hazard (someone adds L("...") and gets a confusing
+        -- "attempt to call a number value" error).
+        local nL, nR, nV = #bucket.labels, #bucket.ratings, #bucket.values
+        PrintMsg(string.format("bucket: %s L=%d R=%d V=%d parity=%s repair=%q",
+            n, nL, nR, nV, tostring(nL == nR and nR == nV), tostring(bucket.repairStr or "")))
+    end
+
+    -- Per-row dump (mainBucket only; side is empty in non-split modes).
+    local rowMax = math.max(#main.labels, #main.ratings, #main.values)
+    for i = 1, rowMax do
+        PrintMsg(string.format("  [%02d] L=%q R=%q V=%q",
+            i,
+            StripDumpEscapes(main.labels[i] or ""),
+            StripDumpEscapes(main.ratings[i] or ""),
+            StripDumpEscapes(main.values[i] or "")))
+    end
+
+    -- Raw FormatRepairCost — confirms whether visible "86.4%" inside Repair-row
+    -- comes from coin-string itself or from a misaligned value column above.
+    local raw = FormatRepairCost(cached.repairCost or 0)
+    PrintMsg(string.format("bucket: rawRepair len=%d head=%q tail=%q",
+        #raw, StripDumpEscapes(raw:sub(1, 30)), StripDumpEscapes(raw:sub(-30))))
+end
+
 local function RunRenderRoutingSmokeCheck()
     local failures = {}
     local function Check(name, ok, detail)
@@ -4671,6 +4749,16 @@ local function RunRenderRoutingSmokeCheck()
         end
         return n
     end
+    -- WHY: row-shift bug class — labels/ratings/values FontStrings are joined with "\n"
+    -- and rendered as parallel multi-line columns. If counts diverge, value-N visually
+    -- aligns with label-(N-k). Asymmetric pushes were ruled out by code-grep, but a
+    -- field-grade invariant guards against future regressions and any embedded "\n"
+    -- inside individual cell strings (which JoinLinesSecretSafe forwards as extra lines).
+    local function CheckParity(name, bucket)
+        Check(name .. "-parity",
+              #bucket.labels == #bucket.ratings and #bucket.ratings == #bucket.values,
+              string.format("L=%d R=%d V=%d", #bucket.labels, #bucket.ratings, #bucket.values))
+    end
 
     local character = Block("splitCharacter", "Character", { "Crit:" }, { "123" }, { "12.3%" })
     local defensive = Block("splitDefensive", "Defensive", { "Dodge:" }, { "17.2%" }, { "" })
@@ -4682,37 +4770,45 @@ local function RunRenderRoutingSmokeCheck()
     Check("flat-main-rows", #main.labels == 2, "expected two normal rows in main")
     Check("flat-main-repair", main.repairStr == "243g" and main.repairLabelStr == "Repair:", "repair payload missing from main")
     Check("flat-side-empty", not BucketHasContent(side), "side bucket should stay empty")
+    CheckParity("flat-main", main); CheckParity("flat-side", side)
 
     main, side = RouteRenderBlocks({ character, defensive, repair }, "split", { splitDefensive = true, splitRepairCost = true }, "full")
     Check("split-main-character", #main.labels == 1 and main.labels[1] == "Crit:", "character row should remain in main")
     Check("split-side-defensive", #side.labels == 1 and side.labels[1] == "Dodge:", "defensive row should route to side")
     Check("split-side-repair", side.repairStr == "243g" and side.repairLabelStr == "Repair:", "repair payload should route to side")
+    CheckParity("split-main", main); CheckParity("split-side", side)
 
     main, side = RouteRenderBlocks({ empty }, "sectioned", nil, "full")
     Check("sectioned-empty-main", not BucketHasContent(main), "empty block should not create a header")
     Check("sectioned-empty-side", not BucketHasContent(side), "side bucket should stay empty")
+    CheckParity("sectioned-empty-main", main); CheckParity("sectioned-empty-side", side)
 
     main = RouteRenderBlocks({ empty, defensive }, "sectioned", nil, "full")
     Check("sectioned-defensive-header", main.labels[1] == SectionHeader("Defensive"), "missing Defensive header")
     Check("sectioned-defensive-row", main.labels[2] == "Dodge:" and #main.labels == 2, "defensive row/header shape changed")
     Check("sectioned-skip-empty-header", CountLabel(main, SectionHeader("Offensive")) == 0, "empty Offensive block inserted a header")
+    CheckParity("sectioned-defensive", main)
 
     main = RouteRenderBlocks({ durability, repair }, "sectioned", nil, "full")
     Check("sectioned-gear-header-once", CountLabel(main, SectionHeader("Gear")) == 1, "Gear header should appear once")
     Check("sectioned-gear-row", main.labels[2] == "Durability:" and #main.labels == 2, "durability row should sit under Gear header")
     Check("sectioned-gear-repair", main.repairStr == "243g" and main.repairLabelStr == "Repair:", "repair payload missing under Gear")
+    CheckParity("sectioned-gear", main)
 
     main = RouteRenderBlocks({ repair }, "sectioned", nil, "full")
     Check("sectioned-repair-only-header", #main.labels == 1 and main.labels[1] == SectionHeader("Gear"), "repair-only should produce only Gear header")
     Check("sectioned-repair-only-payload", main.repairStr == "243g", "repair-only payload missing")
+    CheckParity("sectioned-repair-only", main)
 
     main = RouteRenderBlocks({ defensive }, "sectioned", nil, "hidden")
     Check("sectioned-hidden-no-header", CountLabel(main, SectionHeader("Defensive")) == 0, "hidden label style should suppress section headers")
     Check("sectioned-hidden-rows-stay", #main.labels == 1 and main.labels[1] == "Dodge:", "hidden label style should keep data rows")
+    CheckParity("sectioned-hidden-defensive", main)
 
     main = RouteRenderBlocks({ repair }, "sectioned", nil, "hidden")
     Check("sectioned-hidden-repair-no-header", #main.labels == 0, "hidden repair-only should not inject a Gear header")
     Check("sectioned-hidden-repair-payload", main.repairStr == "243g" and main.repairLabelStr == "Repair:", "hidden repair-only should keep repair payload")
+    CheckParity("sectioned-hidden-repair-only", main)
 
     if #failures == 0 then
         PrintMsg("debug routing: PASS")
@@ -4822,6 +4918,8 @@ SlashCmdList["STATSPRO"] = function(msg)
             RunLabelStyleSmokeCheck()
         elseif debugArg == "perf" then
             PrintDebugPerf()
+        elseif debugArg == "bucket" then
+            PrintDebugBucketDump()
         else
             addon:PrintDebugDump()
         end

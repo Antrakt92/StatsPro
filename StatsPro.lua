@@ -1748,28 +1748,12 @@ function Panel:New(globalName, dbKeyPrefix)
     repairLabelText:SetTextColor(1, 1, 1, 1)
     repairLabelText:Hide()  -- shown only when hasRepair
 
-    -- Item Level row — dedicated single FontString containing the entire "iLvl: 277/277"
-    -- string (label + value combined, with three colored escape blocks for label, equipped,
-    -- overall). Architecturally separate from the multi-line stat columns so the value
-    -- packs flush against the label on the LEFT edge of the panel — no large gap between
-    -- right-justified labels column and left-justified values column. Mirrors the Repair
-    -- row pattern (separate FontString outside the 3-column join, dedicated Y row); placed
-    -- ABOVE stat rows (Repair sits BELOW). Width participates in auto-fit max() so the
-    -- frame grows when iLvl is the widest element. Y set per-render in SetTextSafe.
-    local itemLevelText = frame:CreateFontString(nil, "OVERLAY")
-    itemLevelText:SetFont(GetDB("font"), GetNumberDB("fontSize"), "OUTLINE")
-    itemLevelText:SetJustifyH("LEFT")
-    itemLevelText:SetJustifyV("TOP")
-    itemLevelText:SetTextColor(1, 1, 1, 1)
-    itemLevelText:Hide()  -- shown only when iLvl payload present
-
     self.frame = frame
     self.labelText = labelText
     self.ratingText = ratingText
     self.valueText = valueText
     self.repairText = repairText
     self.repairLabelText = repairLabelText
-    self.itemLevelText = itemLevelText
     -- WHY initialize from inline SetFont args above: Panel:ApplyStyle's idempotency check
     -- (early-return when font+size match cache) would otherwise miss the very first PEW-time
     -- apply when args happen to match the file-scope-inline SetFont calls — wasting 10
@@ -1890,13 +1874,12 @@ end
 -- API returns). String comparisons (==, ~=) on secrets error. Use lineCount (always a
 -- real number) for empty-check, and SetText every call instead of deduping by text.
 -- FontString:SetText accepts secrets — that's how Blizzard's own UI renders them.
-function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr, itemLevelStr)
+function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr)
     local hasRows = lineCount and lineCount > 0
     local hasRepair = repairStr and repairStr ~= ""
-    local hasItemLevel = itemLevelStr and itemLevelStr ~= ""
     local labelStyle = NormalizeLabelStyle(cached.labelStyle)
     local labelsHidden = labelStyle == "hidden"
-    if not labelStr or (not hasRows and not hasRepair and not hasItemLevel) then
+    if not labelStr or (not hasRows and not hasRepair) then
         self:Hide()
         return
     end
@@ -1931,30 +1914,6 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     local rGap = (hasRating and hasValue) and 2 or 0
     local lGap = (labelW > 0 and (hasRating or hasValue)) and 2 or 0
 
-    local fontSize = GetNumberDB("fontSize")
-
-    -- iLvl row: rendered on a DEDICATED row ABOVE the stat block (mirror of the Repair
-    -- row pattern, which sits BELOW). Single LEFT-justified FontString containing label
-    -- + value as one combined string. Anchored TOPLEFT to the frame; pushes stat rows
-    -- (labelText/ratingText/valueText) and the Repair row down by (fontSize + 1).
-    -- WHY one combined string instead of two FontStrings (vs Repair which uses two):
-    -- iLvl label and value sit packed on the LEFT edge with no big gap between them —
-    -- a single LEFT-justified FontString is the simplest way to achieve that. Repair
-    -- needs label-on-LEFT + coin-on-RIGHT (full panel width) which requires two anchors,
-    -- hence its two-FontString design.
-    local iLvlOffset = hasItemLevel and (fontSize + 1) or 0
-    if hasItemLevel then
-        self.itemLevelText:ClearAllPoints()
-        self.itemLevelText:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, 0)
-        self.itemLevelText:SetText(itemLevelStr)
-        self.itemLevelText:Show()
-        self.cachedItemLevelW = MeasuredOrCached(self.itemLevelText, self.cachedItemLevelW, "GetStringWidth")
-    else
-        self.itemLevelText:Hide()
-        self.cachedItemLevelW = 0
-    end
-    self.lastItemLevelText = itemLevelStr or ""
-
     -- Repair row: rendered on a DEDICATED row below the stat rows (NOT as part of the
     -- multi-line labelText). Two FontStrings: repairLabelText for "Repair:" at frame.left
     -- (right-justified to align with stat labels), repairText for the coin at frame.right.
@@ -1963,19 +1922,11 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     local repairLabelW = 0
     if hasRepair then
         local repairLabelVisible = repairLabelStr and repairLabelStr ~= ""
-        local lineH = fontSize
+        local lineH = GetNumberDB("fontSize")
         if hasRows and not labelsHidden and self.cachedLabelH then
             lineH = self.cachedLabelH / lineCount
         end
-        -- Repair Y is RELATIVE TO frame.top (anchored to FRAME). When iLvl row is present,
-        -- it occupies the top (fontSize + 1) px, so everything below — stat rows + repair
-        -- — shifts down by iLvlOffset.
-        local repairRowY
-        if hasRows then
-            repairRowY = -(iLvlOffset + lineCount * lineH + 1)  -- 1px gap below stats
-        else
-            repairRowY = -iLvlOffset  -- 0 if no iLvl, else just below iLvl row
-        end
+        local repairRowY = hasRows and -(lineCount * lineH + 1) or 0  -- 1px gap only when below stat rows
 
         -- Repair label: use stat labelW when below stat rows; measure its own label for
         -- repair-only panels so a stale previous stat width cannot collapse or overinflate.
@@ -2009,9 +1960,10 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
         self.cachedRepairW = 0
     end
     self.lastRepairText = repairStr or ""
-    -- WHY: completes the FontString font-change resilience surface (label / rating /
-    -- value / repair-coin / repair-label / itemLevel). Without these caches, after a
-    -- font change the dedicated FontStrings stay blank for one frame until next OnUpdate.
+    -- WHY: completes the five-FontString font-change resilience surface (label / rating /
+    -- value / repair-coin / repair-label). Without this cache, after a font change the
+    -- repairLabelText "Repair:" / "Рем:" / "修理:" stays blank for one frame until next
+    -- OnUpdate re-emits. More visible on non-EN clients (the user's language flickers).
     self.lastRepairLabelText = repairLabelStr or ""
 
     -- Compute width totals.
@@ -2024,55 +1976,42 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- nothing to do with repair, breaking the visual contract of column alignment.
     local repairGap = (repairLabelW > 0) and 2 or 0
     local repairTotal = hasRepair and (repairLabelW + repairGap + (self.cachedRepairW or 0)) or 0
-    -- iLvl row participates the same way: max() candidate, no inflation of stat columns.
-    local itemLevelTotal = hasItemLevel and (self.cachedItemLevelW or 0) or 0
-    local totalW = math.max(rowsTotal, repairTotal, itemLevelTotal, 80)
+    local totalW = math.max(rowsTotal, repairTotal, 80)
 
     -- WHY gated extra: only widen-by-coin causes the offset compensation. Floor 80 (when
     -- stats < 80 and no repair) must NOT trigger shift — pushing ratingText/valueText
     -- left of frame.right unnecessarily creates a different visual bug.
     local extra = (hasRepair and repairTotal > rowsTotal) and (repairTotal - rowsTotal) or 0
 
-    -- Stat-column anchor Y offsets: iLvl row at top pushes stat content down; repair row
-    -- at bottom pushes content up. labelText is normally anchored at file scope; re-anchor
-    -- here so the dynamic offsets take effect each render.
-    local statTopY = -iLvlOffset
-    local statBottomY = hasRepair and (fontSize + 1) or 0
-    self.labelText:ClearAllPoints()
-    self.labelText:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, statTopY)
-    self.labelText:SetPoint("BOTTOMLEFT", self.frame, "BOTTOMLEFT", 0, statBottomY)
-
     -- ratingText: shift LEFT by `extra` so right edge stays at "stat-content right edge"
     -- (frame.right - extra), not frame.right. Without this, when frame is widened for
     -- coin, ratings track frame.right and create a huge gap between labels and values.
     local rOffset = -(extra + valueW + rGap)
     self.ratingText:ClearAllPoints()
-    self.ratingText:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", rOffset, statTopY)
-    self.ratingText:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", rOffset, statBottomY)
+    self.ratingText:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", rOffset, 0)
+    self.ratingText:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", rOffset, 0)
 
     -- valueText: same shift. Was statically anchored in Panel:New (TOPRIGHT 0,0 = frame.right).
     -- Switch to dynamic per-render so it also pulls back from frame.right when widened.
     local vOffset = -extra
     self.valueText:ClearAllPoints()
-    self.valueText:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", vOffset, statTopY)
-    self.valueText:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", vOffset, statBottomY)
+    self.valueText:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", vOffset, 0)
+    self.valueText:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", vOffset, 0)
 
     self.frame:SetWidth(totalW)
 
-    -- Frame height: iLvl row + stat rows + repair row + 8 padding. Cache invalidates on
-    -- lineCount / hasRepair / hasItemLevel change, OR font/size change (signaled via
-    -- heightDirty by Panel:ApplyStyle). Reusing lastLineCount alone would conflate
-    -- "text changed" vs "font changed" — Panel:Reflow needs lastLineCount preserved
-    -- across ApplyStyle as the content-line-count marker.
-    if lineCount ~= self.lastLineCount or hasRepair ~= self.lastHasRepair
-       or hasItemLevel ~= self.lastHasItemLevel or self.heightDirty then
+    -- Frame height: stats rows + (1 row + 1px gap if hasRepair) + 8px padding.
+    -- Cache invalidates on lineCount change, hasRepair flip, OR font/size change
+    -- (signaled via heightDirty by Panel:ApplyStyle). Reusing lastLineCount alone
+    -- would conflate "text changed" vs "font changed" — Panel:Reflow needs
+    -- lastLineCount preserved across ApplyStyle as the content-line-count marker.
+    if lineCount ~= self.lastLineCount or hasRepair ~= self.lastHasRepair or self.heightDirty then
+        local fontSize = GetNumberDB("fontSize")
         local h = lineCount * fontSize
-        if hasItemLevel then h = h + fontSize + 1 end  -- iLvl row + 1px gap
         if hasRepair then h = h + fontSize + (hasRows and 1 or 0) end  -- repair row + gap when below stats
         self.frame:SetHeight(h + 8)
         self.lastLineCount = lineCount
         self.lastHasRepair = hasRepair
-        self.lastHasItemLevel = hasItemLevel
         self.heightDirty = false
     end
 end
@@ -2091,7 +2030,6 @@ function Panel:ApplyStyle(font, size)
     self.valueText:SetFont(font, size, "OUTLINE")
     self.repairText:SetFont(font, size, "OUTLINE")
     self.repairLabelText:SetFont(font, size, "OUTLINE")
-    self.itemLevelText:SetFont(font, size, "OUTLINE")
     -- WHY: Blizzard quirk - SetFont clears text; re-apply if we have one.
     if self.lastLabelText then
         self.labelText:SetText(self.lastLabelText)
@@ -2107,9 +2045,6 @@ function Panel:ApplyStyle(font, size)
     end
     if self.lastRepairLabelText and self.lastRepairLabelText ~= "" then
         self.repairLabelText:SetText(self.lastRepairLabelText)
-    end
-    if self.lastItemLevelText and self.lastItemLevelText ~= "" then
-        self.itemLevelText:SetText(self.lastItemLevelText)
     end
     -- Force re-measure on next SetTextSafe: cachedLabelH=nil drops the previous
     -- glyph-height read; heightDirty=true makes the height-gate fire even when
@@ -2133,7 +2068,6 @@ function Panel:ApplyTextAlpha(alpha)
     self.valueText:SetAlpha(alpha)
     self.repairText:SetAlpha(alpha)
     self.repairLabelText:SetAlpha(alpha)
-    self.itemLevelText:SetAlpha(alpha)
 end
 
 -- Re-runs SetTextSafe with the last-known content. For font-only changes (font picker
@@ -2144,16 +2078,14 @@ end
 -- back to the regular UpdateStats path indirectly via the next OnUpdate tick.
 function Panel:Reflow()
     local hasRepair = self.lastRepairText and self.lastRepairText ~= ""
-    local hasItemLevel = self.lastItemLevelText and self.lastItemLevelText ~= ""
-    if (not self.lastLabelText or self.lastLineCount < 0) and not hasRepair and not hasItemLevel then return end
+    if (not self.lastLabelText or self.lastLineCount < 0) and not hasRepair then return end
     self:SetTextSafe(
         self.lastLabelText,
         self.lastRatingText or "",
         self.lastValueText or "",
         self.lastLineCount,
         self.lastRepairText or "",
-        self.lastRepairLabelText or "",
-        self.lastItemLevelText or ""
+        self.lastRepairLabelText or ""
     )
 end
 
@@ -2369,18 +2301,8 @@ local function PushPrimaryStatRow(labels, ratings, values, colorKey, statId, lab
     PushRow(labels, ratings, values, FormatLabel(statStr, labelKey), rCol, vCol)
 end
 
--- WHY single combined string returned by payload (not pushed to multi-line columns):
--- iLvl now renders via the dedicated itemLevelText FontString, anchored TOPLEFT to
--- the panel so label and value sit packed on the LEFT edge — no "iLvl: ... 277/277"
--- gap from the right-justified label column to the left-justified value column.
--- Mirrors BuildRepairCostPayload (also a payload-style helper, not a row-pusher).
--- Three colored escape blocks: label color, equipped (with delta warn/danger), overall.
--- Returns "" when iLvl is hidden / not yet cached / labelStyle is "hidden".
-local function BuildItemLevelPayload()
-    if not cached.showItemLevel then return "" end
-    if not cached.itemLevelOverall or not cached.itemLevelEquipped then return "" end
-    local labelStr = GetStyledLabelText("ItemLevel", cached.labelStyle)
-    if labelStr == "" then return "" end
+local function PushItemLevelRow(labels, ratings, values)
+    if not cached.itemLevelOverall or not cached.itemLevelEquipped then return end
     local cs = cached.colorStrings
     local itemLevelColor = cs.itemLevel
     local valueColor = (cached.matchValueColorToStat and itemLevelColor) or cs.rating
@@ -2393,13 +2315,20 @@ local function BuildItemLevelPayload()
     elseif delta >= ITEM_LEVEL_WARN_DELTA then
         equippedColor = ITEM_LEVEL_WARN_COLOR
     end
-    -- "iLvl: 277/277" — slash without whitespace (latin scripts in FRIZQT don't
-    -- treat "/" as a wrap candidate, and the dedicated FontString has no implicit
-    -- width constraint anyway).
-    return string.format("|cff%s%s|r |cff%s%d|r/|cff%s%d|r",
-                         itemLevelColor, labelStr,
-                         equippedColor, equipped,
-                         valueColor, overall)
+    -- WHY no whitespace around the slash: the joined values column is a multi-line
+    -- FontString. With either regular space or NBSP (U+00A0) around "/", Blizzard's
+    -- wrap heuristic split "277 / 277" mid-string in sectioned mode (the joined
+    -- column hits an implicit width constraint during the SetText/re-anchor pipeline,
+    -- and the engine wraps at the only whitespace candidate it finds). The wrap
+    -- added a stray line to valueText only, mis-aligning every row after iLvl.
+    -- "277/277" has no whitespace at all — slash is not a word-break candidate in
+    -- Latin scripts in FRIZQT, and the natural width is ~25% narrower so it fits
+    -- the column comfortably. Both numbers stay visible; equippedColor still encodes
+    -- delta warn/danger; bucket parity is unaffected.
+    local value = string.format("|cff%s%d|r/|cff%s%d|r",
+                                equippedColor, equipped, valueColor, overall)
+    local rCol, vCol = RouteValueOnly(value)
+    PushRow(labels, ratings, values, FormatLabel(itemLevelColor, "ItemLevel"), rCol, vCol)
 end
 
 local function BuildCharacterLines(labels, ratings, values)
@@ -2413,6 +2342,13 @@ local function BuildCharacterLines(labels, ratings, values)
 
     if cached.showStamina then
         PushPrimaryStatRow(labels, ratings, values, "stamina", STAMINA_UNIT_STAT_ID, "Stamina")
+    end
+    return labels, ratings, values
+end
+
+local function BuildItemLevelLines(labels, ratings, values)
+    if cached.showItemLevel then
+        PushItemLevelRow(labels, ratings, values)
     end
     return labels, ratings, values
 end
@@ -2620,7 +2556,6 @@ local function BuildRowBlock(def)
         values = values or {},
         repairStr = "",
         repairLabelStr = nil,
-        itemLevelStr = "",
     }
 end
 
@@ -2634,30 +2569,12 @@ local function BuildRepairBlock(def)
         values = {},
         repairStr = repairStr,
         repairLabelStr = repairLabelStr,
-        itemLevelStr = "",
-    }
-end
-
--- WHY no sectionKey on the iLvl block: the dedicated itemLevelText FontString IS
--- the iLvl section's visual element — adding "— Item Level —" header above it in
--- sectioned mode would duplicate the label and waste a row.
-local function BuildItemLevelBlock(def)
-    local payload = BuildItemLevelPayload()
-    return {
-        splitKey = def.splitKey,
-        sectionKey = nil,
-        labels = {},
-        ratings = {},
-        values = {},
-        repairStr = "",
-        repairLabelStr = nil,
-        itemLevelStr = payload,
     }
 end
 
 local RENDER_BLOCK_DEFS = {
     { splitKey = "splitCharacter",  sectionKey = "Character",  buildFn = BuildCharacterLines },
-    { splitKey = "splitItemLevel",                             buildItemLevel = true },
+    { splitKey = "splitItemLevel",  sectionKey = "Item Level", buildFn = BuildItemLevelLines },
     { splitKey = "splitOffensive",  sectionKey = "Offensive",  buildFn = BuildOffensiveLines },
     { splitKey = "splitTertiary",   sectionKey = "Tertiary",   buildFn = BuildTertiaryLines },
     { splitKey = "splitDefensive",  sectionKey = "Defensive",  buildFn = BuildDefensiveLines },
@@ -2666,7 +2583,7 @@ local RENDER_BLOCK_DEFS = {
 }
 
 local function NewRenderBucket()
-    return { labels = {}, ratings = {}, values = {}, repairStr = "", repairLabelStr = nil, itemLevelStr = "" }
+    return { labels = {}, ratings = {}, values = {}, repairStr = "", repairLabelStr = nil }
 end
 
 local function AddBlockToBucket(bucket, block)
@@ -2675,15 +2592,10 @@ local function AddBlockToBucket(bucket, block)
         bucket.repairStr = block.repairStr
         bucket.repairLabelStr = block.repairLabelStr
     end
-    if block.itemLevelStr and block.itemLevelStr ~= "" then
-        bucket.itemLevelStr = block.itemLevelStr
-    end
 end
 
 local function BlockHasContent(block)
-    return #block.labels > 0
-        or (block.repairStr and block.repairStr ~= "")
-        or (block.itemLevelStr and block.itemLevelStr ~= "")
+    return #block.labels > 0 or (block.repairStr and block.repairStr ~= "")
 end
 
 local function AddSectionedBlockToBucket(bucket, block, lastSectionKey, labelStyle)
@@ -2699,9 +2611,7 @@ local function AddSectionedBlockToBucket(bucket, block, lastSectionKey, labelSty
 end
 
 local function BucketHasContent(bucket)
-    return #bucket.labels > 0
-        or (bucket.repairStr and bucket.repairStr ~= "")
-        or (bucket.itemLevelStr and bucket.itemLevelStr ~= "")
+    return #bucket.labels > 0 or (bucket.repairStr and bucket.repairStr ~= "")
 end
 
 local function RenderBucket(panel, bucket)
@@ -2712,8 +2622,7 @@ local function RenderBucket(panel, bucket)
             JoinValuesCol(bucket.values),
             #bucket.labels,
             bucket.repairStr,
-            bucket.repairLabelStr,
-            bucket.itemLevelStr)
+            bucket.repairLabelStr)
     else
         panel:Hide()
     end
@@ -2722,13 +2631,7 @@ end
 local function BuildRenderBlocks()
     local blocks = {}
     for _, def in ipairs(RENDER_BLOCK_DEFS) do
-        if def.buildRepair then
-            blocks[#blocks + 1] = BuildRepairBlock(def)
-        elseif def.buildItemLevel then
-            blocks[#blocks + 1] = BuildItemLevelBlock(def)
-        else
-            blocks[#blocks + 1] = BuildRowBlock(def)
-        end
+        blocks[#blocks + 1] = def.buildRepair and BuildRepairBlock(def) or BuildRowBlock(def)
     end
     return blocks
 end
@@ -4813,10 +4716,8 @@ local function PrintDebugBucketDump()
         -- shadow is a future-edit hazard (someone adds L("...") and gets a confusing
         -- "attempt to call a number value" error).
         local nL, nR, nV = #bucket.labels, #bucket.ratings, #bucket.values
-        PrintMsg(string.format("bucket: %s L=%d R=%d V=%d parity=%s repair=%q iLvl=%q",
-            n, nL, nR, nV, tostring(nL == nR and nR == nV),
-            tostring(bucket.repairStr or ""),
-            StripDumpEscapes(bucket.itemLevelStr or "")))
+        PrintMsg(string.format("bucket: %s L=%d R=%d V=%d parity=%s repair=%q",
+            n, nL, nR, nV, tostring(nL == nR and nR == nV), tostring(bucket.repairStr or "")))
     end
 
     -- Per-row dump (mainBucket only; side is empty in non-split modes).

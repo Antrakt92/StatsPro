@@ -2375,9 +2375,11 @@ local function BuildItemLevelPayload()
     elseif delta >= ITEM_LEVEL_WARN_DELTA then
         equippedColor = ITEM_LEVEL_WARN_COLOR
     end
-    -- "277/277" — no whitespace (FRIZQT doesn't wrap at "/"), tight format that fits
-    -- naturally next to the "iLvl:" label.
-    return string.format("|cff%s%d|r/|cff%s%d|r",
+    -- "277 / 277" with gray slash delimiter and surrounding spaces. Safe here because
+    -- itemLevelValueText is a single-line FontString anchored to labelText:TOPRIGHT —
+    -- not the multi-line values column where regular spaces triggered Blizzard's
+    -- word-wrap heuristic and broke per-row alignment.
+    return string.format("|cff%s%d|r |cff808080/|r |cff%s%d|r",
                          equippedColor, equipped, valueColor, overall)
 end
 

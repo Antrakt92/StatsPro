@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.6.2 - 2026-05-06 — Item Level row alignment fix
+## 1.6.2 - 06-May-2026 — Item Level row alignment fix
 
 ### Fixed
 
@@ -10,7 +10,7 @@
 
 - **Item Level separator is now a gray pipe** (`iLvl: 277 | 277`) instead of a gray slash, matching the visual style used between rating and percent on Crit, Haste, Mastery, Vers, Leech, and Speed.
 
-## 1.6.1 - 2026-05-06 — Performance hardening
+## 1.6.1 - 06-May-2026 — Performance hardening
 
 ### Improved
 
@@ -27,7 +27,7 @@
 
 - **Release workflow now runs only from `v*` tags** and uses the newer checkout action runtime, removing the manual-dispatch footgun and Node.js runtime warning.
 
-## 1.6.0 - 2026-05-05 — Item Level + configurable layout blocks
+## 1.6.0 - 05-May-2026 — Item Level + configurable layout blocks
 
 ### Added
 
@@ -50,7 +50,7 @@
 - **Repair Cost is OFF by default for fresh/reset profiles** so it only appears when explicitly enabled.
 - **Release packages include the MIT license** and exclude Codex/private development metadata.
 
-## 1.5.0 - 2026-05-04 — Right-click opens Settings
+## 1.5.0 - 04-May-2026 — Right-click opens Settings
 
 ### Added
 
@@ -62,7 +62,7 @@
 
 Suggested by [@tflo](https://github.com/tflo) (issue #1).
 
-## 1.4.0 - 2026-05-04 — Stamina row
+## 1.4.0 - 04-May-2026 — Stamina row
 
 ### Added
 
@@ -70,20 +70,20 @@ Suggested by [@tflo](https://github.com/tflo) (issue #1).
 
 Suggested by [@tflo](https://github.com/tflo) (issue #1).
 
-## 1.3.2 - 2026-05-03 — Localization polish
+## 1.3.2 - 03-May-2026 — Localization polish
 
 ### Fixed
 
 - **Font picker on CJK clients without LibSharedMedia** — Korean / Simplified Chinese / Traditional Chinese installs without an LSM-providing addon (BigWigs, ElvUI, etc.) now see the canonical client-shipped script-native font as an additional picker option, and the dropdown caption matches what's actually rendering on screen. No change on non-CJK clients or with LSM installed.
 - **Auto-language dropdown nested parens** — Russian / Spanish / Portuguese / Korean / Chinese clients no longer see `Auto (current: <Lang> (English))`; the English suffix is stripped from the Auto display only — explicit-pick menu items keep the full bilingual label for disambiguation.
 
-## 1.3.1 - 2026-05-03 — Branding fix
+## 1.3.1 - 03-May-2026 — Branding fix
 
 ### Fixed
 
 - **AddOn List icon updated** to our own StatsPro logo (was a legacy fork-era icon).
 
-## 1.3.0 - 2026-05-03 — Auto main stat + text opacity
+## 1.3.0 - 03-May-2026 — Auto main stat + text opacity
 
 Both features in this release were suggested by **tflo** (GitHub Issue #1) — a fellow WoW addon developer (PetWalker, Auto Quest Tracker Mk III, Goyita, Move 'em All, Auto Discount Repair, and several others). Thank you for the thoughtful and detailed feedback — much appreciated!
 
@@ -97,19 +97,19 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 - The three primary stat toggles (Show Strength / Agility / Intellect) are gone — replaced by the single Show Main Stat toggle. If you had any of the three previously enabled, "Show Main Stat" turns ON automatically (your displayed-stat preference is preserved). If all three were OFF (the v1.2.x default — most users), main stat stays hidden — open the Stats tab and check "Show Main Stat" if you want it now.
 - The three per-stat color pickers (Strength / Agility / Intellect) are collapsed into a single Main Stat color. If you previously customized any of the three away from the default gold, the most-likely-main-stat color (Intellect first, then Agility, then Strength) carries over to the new Main Stat picker — your color preference survives in the common case. Multi-class altoholics who set three different colors will only see the first carry-over (Intellect-priority); pick a new color in Stats → Show Main Stat swatch if you want a different one.
 
-## 1.2.2 - 2026-05-02 — Repair cost loads correctly after login
+## 1.2.2 - 02-May-2026 — Repair cost loads correctly after login
 
 ### Fixed
 
 - **Repair cost now displays right after login** instead of staying blank until you toggle Show Repair Cost off and on (or swap a piece of gear). Item data loads asynchronously after entering the world; the addon now schedules a single delayed re-scan when any slot's tooltip wasn't ready yet, so the cost catches up without manual intervention.
 
-## 1.2.1 - 2026-05-02 — Settings window adapts to small screens
+## 1.2.1 - 02-May-2026 — Settings window adapts to small screens
 
 ### Fixed
 
 - **Settings window now fits on low-resolution screens and high UI-scale setups.** Previously the Reset and Close buttons could sit below the visible screen edge if your game window was small (e.g. 1024×768) or your UI Scale slider was set high — the window is now capped to ~90% of the game-window height and the inner tabs scroll if content overflows. At typical resolutions (1080p / 1440p / 4K with default UI scale) you'll see no change.
 
-## 1.2.0 - 2026-05-01 — Full settings UI localization
+## 1.2.0 - 01-May-2026 — Full settings UI localization
 
 ### Added
 
@@ -134,7 +134,7 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 
 - **Korean / Chinese label preview on non-CJK clients** still requires a SharedMedia font with CJK coverage installed (unchanged from prior versions). Without one, labels render as `?`-boxes; the inline warning makes the issue visible.
 
-## 1.1.8 - 2026-04-30 — Settings UI restructure + multi-column font picker
+## 1.1.8 - 30-Apr-2026 — Settings UI restructure + multi-column font picker
 
 ### Added
 
@@ -150,7 +150,7 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 - **Tertiary stats (Leech / Avoidance / Speed) now use a 2-column grid** matching Offensive and Defensive sections, instead of a single-column list.
 - **Inline color swatches everywhere.** Offensive stat toggles (Crit / Haste / Mastery / Versatility) and the value-color picks for Show Rating / Show Percentage now use the same inline-with-checkbox swatch layout already used in Defensive and Tertiary sections — replacing the older mix of inline and separate-row swatches.
 
-## 1.1.7 - 2026-04-30 — Polish & UX
+## 1.1.7 - 30-Apr-2026 — Polish & UX
 
 ### Fixed
 
@@ -161,7 +161,7 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 
 - **`/ss reset` slash command.** Resets all settings to defaults without opening the settings window — handy for quick recovery without losing the current screen context.
 
-## 1.1.6 - 2026-04-29 — Settings UI polish
+## 1.1.6 - 29-Apr-2026 — Settings UI polish
 
 ### Fixed
 
@@ -179,7 +179,7 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 
 - **Settings UI now refreshes localized stat color labels immediately when you change Language**, instead of requiring `/reload`. Column alignment recomputes on the fly to fit the new locale's text widths.
 
-## 1.1.5 - 2026-04-29 — Honest font coverage on cross-locale picks
+## 1.1.5 - 29-Apr-2026 — Honest font coverage on cross-locale picks
 
 ### Fixed
 
@@ -191,7 +191,7 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 
 - **Korean / Chinese on non-CJK clients** still requires a SharedMedia font with CJK coverage (NotoSansCJK, SourceHanSans, WenQuanYi, etc.) — Blizzard doesn't ship CJK glyphs on non-CJK client builds, and bundled CJK fonts are too large (5-20MB) to ship inside the addon. Install one of the SharedMedia CJK addons from CurseForge for clean rendering. Without one, labels render as `?`-boxes and the inline warning will stay visible.
 
-## 1.1.4 - 2026-04-28 — LSM CJK font auto-detect
+## 1.1.4 - 28-Apr-2026 — LSM CJK font auto-detect
 
 ### Fixed
 
@@ -202,25 +202,25 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 - **Custom CJK families with generic filenames** (e.g. `regular.ttf` inside a CJK font pack) still surface the warning because path-based detection can't see the font's display name. Recoverable by ignoring the warning, or report the family on GitHub Issues to add an explicit pattern.
 - **Auto-fallback prefers alphabetic-first match.** When multiple LSM CJK fonts are installed, manual font selection is preferred over auto-fallback for best coverage.
 
-## 1.1.3 - 2026-04-28 — Settings window layering fix
+## 1.1.3 - 28-Apr-2026 — Settings window layering fix
 
 ### Fixed
 
 - **Settings window now opens above raid frames and HUD addons** (was rendering at `MEDIUM` strata, same as gameplay HUD; now uses `DIALOG`).
 
-## 1.1.2 - 2026-04-28 — Fix empty panels + empty settings on v1.1.x
+## 1.1.2 - 28-Apr-2026 — Fix empty panels + empty settings on v1.1.x
 
 ### Fixed
 
 - **Panels render empty and settings window opens blank on v1.1.0 / v1.1.1.** Hotfix — no DB reset needed, all preferences preserved.
 
-## 1.1.1 - 2026-04-28 — Migration fix for opted-out users
+## 1.1.1 - 28-Apr-2026 — Migration fix for opted-out users
 
 ### Fixed
 
 - **Migration honors the v1.0.x "use localized labels = off" opt-out** — earlier v1.1.0 adopters with the toggle off were silently re-enabled. If affected: open Display → Localization → pick "English".
 
-## 1.1.0 - 2026-04-28 — Manual locale override + auto-switch font
+## 1.1.0 - 28-Apr-2026 — Manual locale override + auto-switch font
 
 ### Added
 
@@ -232,13 +232,13 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 
 - **LSM CJK fonts treated as Latin-only by the auto-switch logic** — picking a CJK locale fires a "font may not cover glyphs" warning even if your LSM font does cover them. Workaround: pick the LSM font manually via the Font dropdown after switching locale.
 
-## 1.0.12 - 2026-04-27 — Per-locale TOC Notes
+## 1.0.12 - 27-Apr-2026 — Per-locale TOC Notes
 
 ### Added
 
 - **Localized addon-list description (`## Notes-<locale>:` TOC fields)** for all 10 non-English retail locales: deDE, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, zhTW. Single-line corrections from native speakers welcome via GitHub Issues.
 
-## 1.0.11 - 2026-04-27 — Localized color-picker labels + Localization toggle preview fix
+## 1.0.11 - 27-Apr-2026 — Localized color-picker labels + Localization toggle preview fix
 
 ### Added
 
@@ -248,7 +248,7 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 
 - **Localization-toggle checkbox preview no longer renders as `?` boxes on CJK clients.** Was hardcoded to `Fonts\FRIZQT__.TTF` (no CJK glyphs); now uses `STANDARD_TEXT_FONT`.
 
-## 1.0.10 - 2026-04-27 — Locale-aware default font (CJK fix) + RGBToHex hardening
+## 1.0.10 - 27-Apr-2026 — Locale-aware default font (CJK fix) + RGBToHex hardening
 
 ### Fixed
 
@@ -257,20 +257,20 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 - **Font re-applies cleanly within the upgrade session** — no broken-glyph flash for CJK users until next `/reload`.
 - **`RGBToHex` defensive guard against SavedVariables corruption** — out-of-range RGB values from a hand-edited DB are clamped to `[0, 1]`.
 
-## 1.0.9 - 2026-04-27 — Carry forward settings from upstream SwiftStats (TaylorSay)
+## 1.0.9 - 27-Apr-2026 — Carry forward settings from upstream SwiftStats (TaylorSay)
 
 ### Added
 
 - **One-time settings carry-forward from the original SwiftStats by TaylorSay.** Users moving from CurseForge SwiftStats to StatsPro now get their panel position, font, scale, and per-stat colors copied on first launch (fresh installs only). Source priority: `SwiftStatsDB` (upstream public) > `SwiftStatsLocalDB` (older internal name).
 
-## 1.0.8 - 2026-04-27 — Primary stats now show effective (buffed) values + armor combat-taint guard
+## 1.0.8 - 27-Apr-2026 — Primary stats now show effective (buffed) values + armor combat-taint guard
 
 ### Fixed
 
 - **Primary stats (Strength / Agility / Intellect) now show the same value Blizzard's character sheet displays.** Was capturing `UnitStat`'s base return instead of the effective return; for buffed raiders this understated by 10–25%. Affects users who explicitly enabled `Show Strength` / `Show Agility` / `Show Intellect` (off by default).
 - **Armor damage-reduction calculation no longer aborts mid-pull** if `PaperDollFrame_GetArmorReduction` returns a secret-tainted number — wrapped in `pcall` + `issecretvalue` filter.
 
-## 1.0.7 - 2026-04-27 — Translation polish + Korean Armor/Defensive disambiguation
+## 1.0.7 - 27-Apr-2026 — Translation polish + Korean Armor/Defensive disambiguation
 
 ### Fixed
 
@@ -290,7 +290,7 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
   - **ptBR:** Strength `For` → `Forç`, Agility `Agi` → `Agil`, Dodge `Esq` → `Esqu`.
   - enUS / zhCN / zhTW unchanged (already match official WoW client terminology).
 
-## 1.0.6 - 2026-04-27 — Localized stat labels (all 11 WoW locales)
+## 1.0.6 - 27-Apr-2026 — Localized stat labels (all 11 WoW locales)
 
 ### Added
 
@@ -311,7 +311,7 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 
 - **Stat Colors color-picker rows in the settings window still show English labels.** The on-screen panel is fully localized; only the config-UI rows aren't yet.
 
-## 1.0.5 - 2026-04-26 — Offensive toggles + leak-free reset
+## 1.0.5 - 26-Apr-2026 — Offensive toggles + leak-free reset
 
 ### Added
 
@@ -324,7 +324,7 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 - **"Reset to Defaults" no longer leaks the config frame** — widget visuals are re-synced from the freshly-reset DB in-place; the frame is reused instead of orphaning child widgets in `_G` on every Reset click.
 - **Repair coin moved to its own row below stats** — was sharing a row with the `Repair:` label and could overlap stat content in narrow panel layouts (visual mash like `Repair55..88..12`).
 
-## 1.0.4 - 2026-04-26 — Combat-safe lock toggle
+## 1.0.4 - 26-Apr-2026 — Combat-safe lock toggle
 
 ### Fixed
 
@@ -338,19 +338,19 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 - **Tertiary sub-toggles grey out when master is off** (matches Defensive tab pattern).
 - **Font dropdown refreshes on each open** — fonts registered via LibSharedMedia after StatsPro loads now appear without `/reload`.
 
-## 1.0.3 - 2026-04-26 — Refresh-rate slider
+## 1.0.3 - 26-Apr-2026 — Refresh-rate slider
 
 ### Added
 
 - **Refresh Rate slider** on the Display tab (range `0.1s – 1.0s`, default `0.5s`). Replaces the hidden `/run StatsProDB.updateInterval = X` workaround.
 
-## 1.0.2 - 2026-04-26 — Dynamic version display
+## 1.0.2 - 26-Apr-2026 — Dynamic version display
 
 ### Fixed
 
 - **Settings window and Blizzard interface options panel showed stale "v1.0"** — version was hardcoded; both labels now read from TOC at runtime via `C_AddOns.GetAddOnMetadata`.
 
-## 1.0.1 - 2026-04-26 — Single-column display polish
+## 1.0.1 - 26-Apr-2026 — Single-column display polish
 
 ### Changed
 
@@ -361,7 +361,7 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 - **Wide gap / truncated percentage in single-display modes** — `GetStringWidth` on mostly-empty multi-line strings is unreliable in 12.x retail. Format helpers now route into the rating column when dual-column mode is off.
 - **In-combat taint crash spam** — the all-empty short-circuit in `JoinLinesSecretSafe` compared elements against `""`, raising a taint error when in-combat reads put a secret-tainted string in the list. Comparison removed.
 
-## 1.0.0 - 2026-04-26 — Initial release
+## 1.0.0 - 26-Apr-2026 — Initial release
 
 First public release under the StatsPro name. Originally inspired by SwiftStats v2.1 by TaylorSay (MIT) — substantially rewritten, with only ~9% of upstream code remaining verbatim (boilerplate, color defaults, basic stat list).
 

@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- **Item Level follows the selected language on the HUD** — the row now localizes with the rest of the stat labels instead of always showing `iLvl`.
 - **Malformed SavedVariables fall back safely** — invalid DB roots, font and position scalars, booleans, and non-finite numeric settings no longer crash early startup or invert toggles before settings can self-heal.
 - **Legacy migration inputs are more defensive** — string, invalid, or non-finite `dbVersion` values now run through the forward migration path instead of breaking version comparisons or skipping repairs.
 

@@ -949,6 +949,26 @@ do
     eq("labels.full_short_hidden_enUS.hidden", test.getStyledLabelText("Crit", "hidden"), "")
     runCache(runMigrate({ forceLocale = "ruRU" }))
     eq("labels.short_ruRU_first_utf8_char", test.getStyledLabelText("Crit", "short"), "К:")
+
+    local itemLevelCases = {
+        { "enUS", "iLvl" },
+        { "ruRU", "УрП" },
+        { "deDE", "GS" },
+        { "frFR", "NivObj" },
+        { "esES", "NvObj" },
+        { "esMX", "NvObj" },
+        { "itIT", "LivOg" },
+        { "ptBR", "NvItem" },
+        { "koKR", "템렙" },
+        { "zhCN", "装等" },
+        { "zhTW", "裝等" },
+    }
+
+    for _, case in ipairs(itemLevelCases) do
+        local locale, expected = case[1], case[2]
+        runCache(runMigrate({ forceLocale = locale }))
+        eq("labels.item_level_" .. locale .. "_full", test.getStyledLabelText("ItemLevel", "full"), expected .. ":")
+    end
 end
 
 eq("fonts.path_key_slash_case", test.fontPathKey("Fonts/ARIALN.TTF"), "fonts\\arialn.ttf")

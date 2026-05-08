@@ -4754,7 +4754,7 @@ local function PrintDebugBucketDump()
         #raw, StripDumpEscapes(raw:sub(1, 30)), StripDumpEscapes(raw:sub(-30))))
 end
 
-local function RunRenderRoutingSmokeCheck()
+local function CollectRenderRoutingSmokeFailures()
     local failures = {}
     local function Check(name, ok, detail)
         if not ok then failures[#failures + 1] = name .. ": " .. detail end
@@ -4782,10 +4782,25 @@ local function RunRenderRoutingSmokeCheck()
     -- aligns with label-(N-k). Asymmetric pushes were ruled out by code-grep, but a
     -- field-grade invariant guards against future regressions and any embedded "\n"
     -- inside individual cell strings (which JoinLinesSecretSafe forwards as extra lines).
+    local function CountRenderedLines(lines)
+        local n = 0
+        for _, v in ipairs(lines) do
+            if type(v) == "string" then
+                local _, extra = v:gsub("\n", "\n")
+                n = n + 1 + extra
+            else
+                n = n + 1
+            end
+        end
+        return n
+    end
     local function CheckParity(name, bucket)
+        local labelLines = CountRenderedLines(bucket.labels)
+        local ratingLines = CountRenderedLines(bucket.ratings)
+        local valueLines = CountRenderedLines(bucket.values)
         Check(name .. "-parity",
-              #bucket.labels == #bucket.ratings and #bucket.ratings == #bucket.values,
-              string.format("L=%d R=%d V=%d", #bucket.labels, #bucket.ratings, #bucket.values))
+              labelLines == ratingLines and ratingLines == valueLines,
+              string.format("L=%d R=%d V=%d", labelLines, ratingLines, valueLines))
     end
 
     local character = Block("splitCharacter", "Character", { "Crit:" }, { "123" }, { "12.3%" })
@@ -4838,6 +4853,11 @@ local function RunRenderRoutingSmokeCheck()
     Check("sectioned-hidden-repair-payload", main.repairStr == "243g" and main.repairLabelStr == "Repair:", "hidden repair-only should keep repair payload")
     CheckParity("sectioned-hidden-repair-only", main)
 
+    return failures
+end
+
+local function RunRenderRoutingSmokeCheck()
+    local failures = CollectRenderRoutingSmokeFailures()
     if #failures == 0 then
         PrintMsg("debug routing: PASS")
     else
@@ -4848,11 +4868,11 @@ local function RunRenderRoutingSmokeCheck()
     end
 end
 
-local function RunLabelStyleSmokeCheck()
+local function CollectLabelStyleSmokeFailures()
     local failures = {}
     local function Check(name, actual, expected)
         if actual ~= expected then
-            failures[#failures + 1] = string.format("%s: expected %q, got %q", name, expected, actual)
+            failures[#failures + 1] = string.format("%s: expected %q, got %q", name, tostring(expected), tostring(actual))
         end
     end
 
@@ -4861,7 +4881,16 @@ local function RunLabelStyleSmokeCheck()
     Check("cjk", FirstUTF8Char("暴击"), "暴")
     Check("empty", FirstUTF8Char(""), "")
     Check("nil", FirstUTF8Char(nil), "")
+    local activeCrit = L("Crit")
+    Check("full-active-locale", GetStyledLabelText("Crit", "full"), activeCrit .. ":")
+    Check("short-active-locale", GetStyledLabelText("Crit", "short"), FirstUTF8Char(activeCrit) .. ":")
+    Check("hidden-active-locale", GetStyledLabelText("Crit", "hidden"), "")
 
+    return failures
+end
+
+local function RunLabelStyleSmokeCheck()
+    local failures = CollectLabelStyleSmokeFailures()
     if #failures == 0 then
         PrintMsg("debug labelstyle: PASS")
     else
@@ -4870,6 +4899,30 @@ local function RunLabelStyleSmokeCheck()
             PrintMsg("debug labelstyle: " .. failure)
         end
     end
+end
+
+if addon and addon.__statsproSmoke == true then
+    addon.__test = {
+        currentDBVersion = function() return CURRENT_DB_VERSION end,
+        copyDefaults = function() return CopyTable(defaults) end,
+        migrateDB = MigrateDB,
+        cacheSettings = CacheSettings,
+        normalizeNumberSetting = NormalizeNumberSetting,
+        fontPathKey = FontPathKey,
+        sameFontPath = SameFontPath,
+        isBlizzardFontPath = IsBlizzardFontPath,
+        fontSupports = FontSupports,
+        findCompatibleFont = FindCompatibleFont,
+        formatRepairCost = FormatRepairCost,
+        normalizeColor = NormalizeColor,
+        rgbToHex = RGBToHex,
+        routeRenderBlocks = RouteRenderBlocks,
+        bucketHasContent = BucketHasContent,
+        firstUTF8Char = FirstUTF8Char,
+        getStyledLabelText = GetStyledLabelText,
+        collectRenderRoutingSmokeFailures = CollectRenderRoutingSmokeFailures,
+        collectLabelStyleSmokeFailures = CollectLabelStyleSmokeFailures,
+    }
 end
 
 --[[ ============================================================

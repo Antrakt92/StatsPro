@@ -5,6 +5,7 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $RepoRoot
 $AddonFile = Join-Path $RepoRoot "StatsPro.lua"
+$SmokeFile = Join-Path $RepoRoot "scripts\smoke.lua"
 
 $LuacCandidates = @(
     (Get-Command luac5.1 -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
@@ -17,6 +18,21 @@ if (-not $Luac) {
     throw "Missing luac 5.1. Install with: choco install lua51 -y"
 }
 
+$LuaCandidates = @(
+    (Get-Command lua5.1 -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
+    (Get-Command lua -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
+    "C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe"
+) | Where-Object { $_ -and (Test-Path $_) }
+
+$Lua = $LuaCandidates | Select-Object -First 1
+if (-not $Lua) {
+    throw "Missing lua 5.1 runtime. Install with: choco install lua51 -y"
+}
+$LuaVersion = (& $Lua -v 2>&1) -join "`n"
+if ($LuaVersion -notmatch "Lua\s+5\.1") {
+    throw "StatsPro smoke requires Lua 5.1 because it uses setfenv; found: $LuaVersion"
+}
+
 $LuaLanguageServer = Get-Command lua-language-server -ErrorAction SilentlyContinue |
     Select-Object -First 1 -ExpandProperty Source
 if (-not $LuaLanguageServer) {
@@ -24,7 +40,16 @@ if (-not $LuaLanguageServer) {
 }
 
 Write-Host "== Lua syntax =="
-& $Luac -p StatsPro.lua
+& $Luac -p StatsPro.lua $SmokeFile
+if ($LASTEXITCODE -ne 0) {
+    throw "luac exited with code $LASTEXITCODE"
+}
+
+Write-Host "== Lua smoke =="
+& $Lua $SmokeFile
+if ($LASTEXITCODE -ne 0) {
+    throw "Lua smoke exited with code $LASTEXITCODE"
+}
 
 Write-Host "== Lua diagnostics =="
 $LogPath = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lls-" + [System.Guid]::NewGuid().ToString("N"))

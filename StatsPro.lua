@@ -4980,6 +4980,8 @@ end
 if addon and addon.__statsproSmoke == true then
     addon.__test = {
         currentDBVersion = function() return CURRENT_DB_VERSION end,
+        cachedUpdateInterval = function() return cached.updateInterval end,
+        cachedTextAlpha = function() return cached.textAlpha end,
         copyDefaults = function() return CopyTable(defaults) end,
         migrateDB = MigrateDB,
         cacheSettings = CacheSettings,

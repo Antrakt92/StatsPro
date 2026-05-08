@@ -29,8 +29,6 @@ globals = {
     "StatsProMasteryCheck", "StatsProVersCheck",
     "StatsProHideZeroOffCheck", "StatsProHideZeroCheck", "StatsProHideZeroDefCheck",
     "StatsProItemLevelCheck", "StatsProMainStatCheck", "StatsProStaminaCheck",
-    "StatsProShowOffensiveCheck", "StatsProShowTertiaryCheck", "StatsProShowDefensiveCheck",
-    "StatsProShowDurabilityCheck", "StatsProShowRepairCostCheck",
     "StatsProDisplayModeDropdown", "StatsProScaleSlider", "StatsProRefreshSlider",
 }
 

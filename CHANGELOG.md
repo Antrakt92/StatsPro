@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.6.3 - 08-May-2026 — Verification and startup hardening
+## 1.6.4 - 08-May-2026 — Verification and startup hardening
 
 ### Improved
 

@@ -1,7 +1,7 @@
 name: Package and release
 
 on:
-  # Publishing is tag-only; rerun failed releases from the original tag-triggered run.
+  # Publishing is tag-only. Existing releases are refused before marketplace upload.
   push:
     tags:
       - 'v*'
@@ -19,6 +19,15 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+
+      - name: Refuse existing release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release $GITHUB_REF_NAME already exists; refusing to republish marketplace files."
+            exit 1
+          fi
 
       - name: Package and release
         uses: BigWigsMods/packager@v2

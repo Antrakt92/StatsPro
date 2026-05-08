@@ -46,7 +46,7 @@ $LuacheckCandidates = @(
 
 $Luacheck = $LuacheckCandidates | Select-Object -First 1
 if (-not $Luacheck) {
-    throw "Missing luacheck. Install with: luarocks install luacheck"
+    throw "Missing luacheck. Run: .\scripts\install-check-tools.ps1 -Install"
 }
 
 Write-Host "== Lua syntax =="

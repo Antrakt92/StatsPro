@@ -195,6 +195,12 @@ It uses `luac5.1` for Lua 5.1 syntax, `lua5.1` for the pure-Lua smoke harness,
 the repository's `.luarc.json` to catch accidental globals and other
 warning-level Lua diagnostics without linting vendored libraries.
 
+On a fresh Windows machine, bootstrap the local check tools with:
+
+```powershell
+.\scripts\install-check-tools.ps1 -Install
+```
+
 ## Architecture (contributors / forks)
 
 Core single-file design. Everything renders out of [`StatsPro.lua`](StatsPro.lua):

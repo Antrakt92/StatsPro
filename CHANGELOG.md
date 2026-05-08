@@ -5,6 +5,7 @@
 ### Improved
 
 - **Local addon checks are stricter** — the project wrapper now runs Lua syntax, the pure-Lua smoke harness, luacheck, and LuaLS diagnostics before release prep.
+- **Release preflight now checks version consistency** — tag packaging verifies the release tag, TOC version, addon fallback version, changelog heading, and local Lua checks before marketplace upload.
 - **Smoke coverage now protects key StatsPro internals** — migrations/default normalization, render routing, UTF-8 labels, font compatibility helpers, repair formatting, and color normalization are covered outside the WoW client.
 
 ### Changed

@@ -1,20 +1,23 @@
 # Changelog
 
-## 1.6.3 - 08-May-2026 — Release verification hardening
+## 1.6.3 - 08-May-2026 — Verification and startup hardening
 
 ### Improved
 
-- **Local addon checks are stricter** — the project wrapper now runs Lua syntax, the pure-Lua smoke harness, luacheck, and LuaLS diagnostics before release prep.
+- **Local addon checks are much stricter** — the project wrapper now runs Lua 5.1 syntax, the pure-Lua smoke harness, luacheck, and LuaLS diagnostics before release prep.
+- **Smoke coverage now protects the main addon lifecycle outside the WoW client** — startup migration, legacy SwiftStats carry-forward, logout position saves, slash commands, render routing, config construction, representative settings interactions, UTF-8 labels, font compatibility helpers, repair formatting, and color normalization are covered by local checks.
+- **Fresh-machine check setup is scripted** — `scripts/install-check-tools.ps1` can bootstrap the Lua 5.1, LuaLS, LuaRocks, and luacheck tools used by the local verification wrapper.
 - **Release preflight now checks version consistency** — tag packaging verifies the release tag, TOC version, addon fallback version, changelog heading, and local Lua checks before marketplace upload.
-- **Smoke coverage now protects key StatsPro internals** — migrations/default normalization, lifecycle and slash-command state, config construction and representative interactions, render routing, UTF-8 labels, font compatibility helpers, repair formatting, and color normalization are covered outside the WoW client.
 
 ### Fixed
 
 - **Malformed SavedVariables fall back safely** — invalid DB roots, font and position scalars, booleans, and non-finite numeric settings no longer crash early startup or invert toggles before settings can self-heal.
+- **Legacy migration inputs are more defensive** — string, invalid, or non-finite `dbVersion` values now run through the forward migration path instead of breaking version comparisons or skipping repairs.
 
 ### Changed
 
 - **Release publishing has stronger duplicate-upload guards** — tag-triggered packaging refuses forced-tag and existing-release republish paths before marketplace upload.
+- **Static diagnostics are tighter** — luacheck is now a required local gate and stale named-frame diagnostic allowlist entries were removed.
 - **Changelog dates are easier to read** in release notes.
 
 ## 1.6.2 - 06-May-2026 — Item Level row alignment fix

@@ -39,6 +39,16 @@ if (-not $LuaLanguageServer) {
     throw "Missing lua-language-server. Install with: choco install lua-language-server -y"
 }
 
+$LuacheckCandidates = @(
+    (Get-Command luacheck -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
+    "C:\ProgramData\chocolatey\lib\luarocks\luarocks-2.4.4-win32\systree\bin\luacheck.bat"
+) | Where-Object { $_ -and (Test-Path $_) }
+
+$Luacheck = $LuacheckCandidates | Select-Object -First 1
+if (-not $Luacheck) {
+    throw "Missing luacheck. Install with: luarocks install luacheck"
+}
+
 Write-Host "== Lua syntax =="
 & $Luac -p StatsPro.lua $SmokeFile
 if ($LASTEXITCODE -ne 0) {
@@ -49,6 +59,12 @@ Write-Host "== Lua smoke =="
 & $Lua $SmokeFile
 if ($LASTEXITCODE -ne 0) {
     throw "Lua smoke exited with code $LASTEXITCODE"
+}
+
+Write-Host "== Luacheck =="
+& $Luacheck StatsPro.lua
+if ($LASTEXITCODE -ne 0) {
+    throw "luacheck exited with code $LASTEXITCODE"
 }
 
 Write-Host "== Lua diagnostics =="

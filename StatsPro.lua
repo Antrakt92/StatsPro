@@ -1661,11 +1661,11 @@ local Panel = {}
 Panel.__index = Panel
 
 function Panel:New(globalName, dbKeyPrefix)
-    local self = setmetatable({}, Panel)
-    self.dbKeyPrefix = dbKeyPrefix or ""
-    self.lastLabelText = nil
-    self.lastValueText = nil
-    self.lastLineCount = -1
+    local panel = setmetatable({}, Panel)
+    panel.dbKeyPrefix = dbKeyPrefix or ""
+    panel.lastLabelText = nil
+    panel.lastValueText = nil
+    panel.lastLineCount = -1
 
     local frame = CreateFrame("Frame", globalName, UIParent, "BackdropTemplate")
     frame:SetSize(220, 100)
@@ -1748,19 +1748,19 @@ function Panel:New(globalName, dbKeyPrefix)
     repairLabelText:SetTextColor(1, 1, 1, 1)
     repairLabelText:Hide()  -- shown only when hasRepair
 
-    self.frame = frame
-    self.labelText = labelText
-    self.ratingText = ratingText
-    self.valueText = valueText
-    self.repairText = repairText
-    self.repairLabelText = repairLabelText
+    panel.frame = frame
+    panel.labelText = labelText
+    panel.ratingText = ratingText
+    panel.valueText = valueText
+    panel.repairText = repairText
+    panel.repairLabelText = repairLabelText
     -- WHY initialize from inline SetFont args above: Panel:ApplyStyle's idempotency check
     -- (early-return when font+size match cache) would otherwise miss the very first PEW-time
     -- apply when args happen to match the file-scope-inline SetFont calls — wasting 10
     -- SetFont + 10 SetText per panel on every /reload. With this initialization, the
     -- post-MaybeAutoSwitchFont apply at PEW becomes a no-op when MAS didn't swap.
-    self.appliedFont = GetDB("font")
-    self.appliedSize = GetNumberDB("fontSize")
+    panel.appliedFont = GetDB("font")
+    panel.appliedSize = GetNumberDB("fontSize")
 
     -- Drag handlers (unsecure frames; not protected in combat lockdown).
     -- RegisterForDrag honors WoW's system drag-distance threshold — single clicks
@@ -1776,7 +1776,7 @@ function Panel:New(globalName, dbKeyPrefix)
     end)
     frame:SetScript("OnDragStop", function(f)
         f:StopMovingOrSizing()
-        self:SavePosition()
+        panel:SavePosition()
         -- 100ms guard absorbs the OnMouseUp that fires immediately after a drag, so
         -- the right-click handler doesn't open Settings on drag-end. Pure clicks
         -- don't pass the drag-distance threshold, never set wasDragging, unaffected.
@@ -1789,7 +1789,7 @@ function Panel:New(globalName, dbKeyPrefix)
         end
     end)
 
-    return self
+    return panel
 end
 
 function Panel:DBKey(suffix)
@@ -3410,7 +3410,7 @@ function addon:OpenConfigMenu()
             UIDropDownMenu_SetText(dropdown, L(ResolveOption(getValue()).label))
         end
 
-        UIDropDownMenu_Initialize(dropdown, function(self, level)
+        UIDropDownMenu_Initialize(dropdown, function()
             local current = getValue()
             for _, opt in ipairs(options) do
                 local info = UIDropDownMenu_CreateInfo()
@@ -4015,9 +4015,9 @@ function addon:OpenConfigMenu()
                     -- to DB.font. Without OnLeave, hovering then moving to padding leaves the
                     -- preview "stuck" until the user clicks something — felt as the picker
                     -- "fixating" on a random font in the user-facing report.
-                    btn:SetScript("OnEnter", function(self)
+                    btn:SetScript("OnEnter", function(button)
                         hoverGen = hoverGen + 1
-                        PreviewFont(self.fontPath)
+                        PreviewFont(button.fontPath)
                     end)
                     btn:SetScript("OnLeave", function()
                         local myGen = hoverGen
@@ -4025,8 +4025,8 @@ function addon:OpenConfigMenu()
                             if myGen == hoverGen then CancelFontPreview() end
                         end)
                     end)
-                    btn:SetScript("OnClick", function(self)
-                        PickFont({ name = self.fontName, path = self.fontPath })
+                    btn:SetScript("OnClick", function(button)
+                        PickFont({ name = button.fontName, path = button.fontPath })
                         HideFontPicker()
                     end)
 
@@ -4296,7 +4296,7 @@ function addon:OpenConfigMenu()
         langDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
         UIDropDownMenu_SetWidth(langDropdown, 100)
         UIDropDownMenu_JustifyText(langDropdown, "CENTER")
-        UIDropDownMenu_Initialize(langDropdown, function(self, level)
+        UIDropDownMenu_Initialize(langDropdown, function()
             for _, opt in ipairs(LANGUAGE_OPTIONS) do
                 local info = UIDropDownMenu_CreateInfo()
                 info.text = DisplayLabel(opt)
@@ -4345,10 +4345,10 @@ function addon:OpenConfigMenu()
                 local btn = _G["DropDownList1Button" .. i]
                 if not btn then break end
                 if not btn._statsProLangPreviewHooked then
-                    btn:HookScript("OnEnter", function(self)
+                    btn:HookScript("OnEnter", function(button)
                         if UIDROPDOWNMENU_OPEN_MENU ~= langDropdown then return end
-                        if self.value == nil then return end  -- separator/title row
-                        PreviewLanguage(self.value)
+                        if button.value == nil then return end  -- separator/title row
+                        PreviewLanguage(button.value)
                     end)
                     btn._statsProLangPreviewHooked = true
                 end

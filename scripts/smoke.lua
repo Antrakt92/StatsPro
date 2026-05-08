@@ -194,7 +194,7 @@ local function makeEnv(locale)
     env.STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
     env.C_AddOns = {
         GetAddOnMetadata = function(_, field)
-            if field == "Version" then return "1.6.2" end
+            if field == "Version" then return "@project-version@" end
             return nil
         end,
     }

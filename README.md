@@ -183,17 +183,17 @@ everything:
 
 ## Local checks
 
-For addon code changes, run the Lua syntax, smoke, and static diagnostics wrapper
-from the repository root:
+For addon code changes, run the Lua syntax, smoke, luacheck, and static
+diagnostics wrapper from the repository root:
 
 ```powershell
 .\scripts\check-lua.ps1
 ```
 
 It uses `luac5.1` for Lua 5.1 syntax, `lua5.1` for the pure-Lua smoke harness,
-and `lua-language-server` with the repository's `.luarc.json` to catch
-accidental globals and other warning-level Lua diagnostics without linting
-vendored libraries.
+`luacheck` with the repository's `.luacheckrc`, and `lua-language-server` with
+the repository's `.luarc.json` to catch accidental globals and other
+warning-level Lua diagnostics without linting vendored libraries.
 
 ## Architecture (contributors / forks)
 

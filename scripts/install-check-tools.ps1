@@ -33,7 +33,7 @@ function Install-ChocoPackage {
         throw "Missing Chocolatey; cannot install $PackageName automatically."
     }
     Write-Host "Installing $PackageName with Chocolatey..."
-    & $Choco install $PackageName -y --no-progress
+    & $Choco install $PackageName -y --no-progress | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) {
         throw "choco install $PackageName exited with code $LASTEXITCODE"
     }
@@ -64,21 +64,21 @@ function Install-Luacheck {
     )
 
     Write-Host "Installing luacheck with LuaRocks..."
-    & $LuarocksPath install luacheck
+    & $LuarocksPath install luacheck | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -eq 0) {
         return
     }
 
     Write-Host "Direct luacheck install failed; trying Windows-friendly dependency bootstrap..."
-    & $LuarocksPath install argparse
+    & $LuarocksPath install argparse | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) {
         throw "luarocks install argparse exited with code $LASTEXITCODE"
     }
-    & $LuarocksPath install luafilesystem 1.6.0-1
+    & $LuarocksPath install luafilesystem 1.6.0-1 | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) {
         throw "luarocks install luafilesystem 1.6.0-1 exited with code $LASTEXITCODE"
     }
-    & $LuarocksPath install luacheck --deps-mode=none
+    & $LuarocksPath install luacheck --deps-mode=none | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) {
         throw "luarocks install luacheck --deps-mode=none exited with code $LASTEXITCODE"
     }

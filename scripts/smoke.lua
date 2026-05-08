@@ -62,6 +62,8 @@ local function makeFrame(name)
         scripts = {},
         text = "",
         fontSize = 12,
+        enabled = true,
+        verticalScroll = 0,
     }
 
     function frame:SetSize(w, h) self.width, self.height = w, h end
@@ -77,6 +79,7 @@ local function makeFrame(name)
     function frame:SetBackdropBorderColor() end
     function frame:SetColorTexture() end
     function frame:SetVertexColor() end
+    function frame:SetBlendMode() end
     function frame:SetFont(_, size) self.fontSize = size or self.fontSize end
     function frame:SetJustifyH() end
     function frame:SetJustifyV() end
@@ -98,6 +101,9 @@ local function makeFrame(name)
     function frame:Hide() self.shown = false end
     function frame:Show() self.shown = true end
     function frame:IsShown() return self.shown end
+    function frame:Enable() self.enabled = true end
+    function frame:Disable() self.enabled = false end
+    function frame:IsEnabled() return self.enabled end
     function frame:RegisterForDrag() end
     function frame:SetScript(event, fn) self.scripts[event] = fn end
     function frame:HookScript(event, fn) self.scripts["hook:" .. event] = fn end
@@ -113,8 +119,18 @@ local function makeFrame(name)
     function frame:GetFrameLevel() return self.frameLevel end
     function frame:SetAllPoints() end
     function frame:SetScrollChild(child) self.scrollChild = child end
+    function frame:SetVerticalScroll(value) self.verticalScroll = value or 0 end
+    function frame:GetVerticalScroll() return self.verticalScroll end
+    function frame:GetVerticalScrollRange() return 0 end
     function frame:SetNormalFontObject() end
     function frame:SetHighlightFontObject() end
+    function frame:SetHighlightTexture()
+        self.highlightTexture = self.highlightTexture or makeFrame(nil)
+    end
+    function frame:GetHighlightTexture()
+        self.highlightTexture = self.highlightTexture or makeFrame(nil)
+        return self.highlightTexture
+    end
     function frame:SetChecked(value) self.checked = value end
     function frame:GetChecked() return self.checked end
     function frame:GetName() return self.name end
@@ -130,8 +146,10 @@ local function makeFrame(name)
     function frame:SetAutoFocus() end
     function frame:SetMultiLine() end
     function frame:SetMaxLetters() end
+    function frame:SetMaxLines() end
     function frame:SetNumeric() end
     function frame:SetTextInsets() end
+    function frame:SetWordWrap() end
     function frame:GetStringWidth()
         return #(self.text or "") * ((self.fontSize or 12) * 0.5)
     end
@@ -347,10 +365,10 @@ local function loadStatsPro(locale)
     if not addon.__test then
         error("missing addon.__test; StatsPro smoke bridge was not initialized", 0)
     end
-    return env, addon.__test
+    return env, addon, addon.__test
 end
 
-local env, test = loadStatsPro("enUS")
+local env, addon, test = loadStatsPro("enUS")
 
 local function runMigrate(db)
     env.StatsProDB = db
@@ -368,6 +386,31 @@ local function assertColor(name, color, r, g, b)
     near(name .. ".r", color.r, r)
     near(name .. ".g", color.g, g)
     near(name .. ".b", color.b, b)
+end
+
+local function exists(name, value)
+    check(name, value ~= nil, "missing")
+    return value
+end
+
+local function hasScript(name, frame, scriptName)
+    frame = exists(name .. ".frame", frame)
+    check(name, type(frame.scripts) == "table" and type(frame.scripts[scriptName]) == "function",
+        "missing " .. scriptName .. " script")
+    return frame.scripts[scriptName]
+end
+
+local function runScript(name, frame, scriptName, ...)
+    local fn = hasScript(name, frame, scriptName)
+    local ok, err = pcall(fn, ...)
+    check(name, ok, err)
+end
+
+local function runDropdownInit(name, dropdown)
+    dropdown = exists(name .. ".frame", dropdown)
+    check(name .. ".initializer_exists", type(dropdown.dropdownInit) == "function", "missing dropdown initializer")
+    local ok, err = pcall(dropdown.dropdownInit)
+    check(name, ok, err)
 end
 
 do
@@ -472,6 +515,85 @@ do
     near("color.normalize_fallback_and_clamp.g", g, 0)
     near("color.normalize_fallback_and_clamp.b", b, 0.75)
     eq("color.rgb_to_hex_clamps_invalid_channels", test.rgbToHex(2, -1, "bad"), "ff0000")
+end
+
+do
+    runCache(runMigrate({ forceLocale = "auto" }))
+
+    local ok, err = pcall(function() addon:OpenConfigMenu() end)
+    check("config.open_constructs_frame", ok, err)
+
+    exists("config.frame_registered.frame", env.StatsProConfigFrame)
+    exists("config.frame_registered.scroll", env.StatsProConfigScroll)
+    check("config.frame_registered.special", contains(env.UISpecialFrames, "StatsProConfigFrame"),
+        "StatsProConfigFrame missing from UISpecialFrames")
+
+    local coreControls = {
+        "StatsProVisibleCheck",
+        "StatsProLockCheck",
+        "StatsProDisplayModeDropdown",
+        "StatsProScaleSlider",
+        "StatsProRefreshSlider",
+    }
+    for _, name in ipairs(coreControls) do
+        exists("config.core_controls_exist." .. name, env[name])
+    end
+
+    local layoutControls = {
+        "StatsProSplitCharacterCheck",
+        "StatsProSplitOffensiveCheck",
+        "StatsProRatingCheck",
+        "StatsProPercentageCheck",
+        "StatsProLabelStyleDropdown",
+        "StatsProMatchColorCheck",
+    }
+    for _, name in ipairs(layoutControls) do
+        exists("config.layout_controls_exist." .. name, env[name])
+    end
+
+    local statsControls = {
+        "StatsProMainStatCheck",
+        "StatsProItemLevelCheck",
+        "StatsProOffensiveCheck",
+        "StatsProCritCheck",
+        "StatsProTertiaryCheck",
+        "StatsProDefensiveCheck",
+        "StatsProDurabilityCheck",
+        "StatsProRepairCostCheck",
+    }
+    for _, name in ipairs(statsControls) do
+        exists("config.stats_controls_exist." .. name, env[name])
+    end
+
+    local appearanceControls = {
+        "StatsProFontDropdown",
+        "StatsProFontSlider",
+        "StatsProTextAlphaSlider",
+        "StatsProLanguageDropdown",
+    }
+    for _, name in ipairs(appearanceControls) do
+        exists("config.appearance_controls_exist." .. name, env[name])
+    end
+
+    runDropdownInit("config.dropdown_initializers.display_mode", env.StatsProDisplayModeDropdown)
+    runDropdownInit("config.dropdown_initializers.label_style", env.StatsProLabelStyleDropdown)
+    runDropdownInit("config.dropdown_initializers.language", env.StatsProLanguageDropdown)
+
+    local switchToTab = exists("config.tab_switching.switcher", env.StatsProConfigFrame.SwitchToTab)
+    ok, err = pcall(switchToTab, 2)
+    check("config.tab_switching.layout", ok, err)
+    ok, err = pcall(switchToTab, 3)
+    check("config.tab_switching.appearance", ok, err)
+
+    ok, err = pcall(function() addon:OpenConfigMenu() end)
+    check("config.reopen_toggle.hide", ok, err)
+    ok, err = pcall(function() addon:OpenConfigMenu() end)
+    check("config.reopen_toggle.show", ok, err)
+
+    runScript("config.font_picker_lazy_scaffold.open", env.StatsProFontDropdownButton, "OnClick",
+        env.StatsProFontDropdownButton)
+    exists("config.font_picker_lazy_scaffold.frame", env.StatsProFontPicker)
+    exists("config.font_picker_lazy_scaffold.scroll", env.StatsProFontPickerScroll)
 end
 
 print(string.format("StatsPro smoke: PASS (%d assertions)", assertionCount))

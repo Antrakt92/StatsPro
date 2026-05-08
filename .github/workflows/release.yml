@@ -8,8 +8,11 @@ on:
 
 jobs:
   release:
-    # Prevent history rewrites or forced tag updates from republishing old
-    # marketplace files. A real release is the first creation of a v* tag.
+    # WARNING: BigWigs Packager uploads to public marketplaces and is not
+    # idempotent there. Re-running an old tag can create duplicate
+    # CurseForge/Wago/WoWI files even if the GitHub Release already existed.
+    # A real release is the first creation of a v* tag; history rewrites,
+    # mirror pushes, and forced tag updates must not publish anything.
     if: ${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}
     runs-on: ubuntu-latest
     permissions:
@@ -24,6 +27,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # WARNING: This is a second marketplace safety gate, not a bug.
+          # If a release for this tag exists, the tag has already been
+          # packaged at least once. Stop before BigWigs Packager reaches
+          # CurseForge/Wago/WoWI, where duplicate uploads are visible and
+          # cleanup requires marketplace-specific manual/API deletion.
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "::error::Release $GITHUB_REF_NAME already exists; refusing to republish marketplace files."
             exit 1

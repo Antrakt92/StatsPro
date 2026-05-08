@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.3 - 08-May-2026 — Release verification hardening
+
+### Improved
+
+- **Local addon checks are stricter** — the project wrapper now runs Lua syntax, the pure-Lua smoke harness, luacheck, and LuaLS diagnostics before release prep.
+- **Smoke coverage now protects key StatsPro internals** — migrations/default normalization, render routing, UTF-8 labels, font compatibility helpers, repair formatting, and color normalization are covered outside the WoW client.
+
+### Changed
+
+- **Release publishing has stronger duplicate-upload guards** — tag-triggered packaging refuses forced-tag and existing-release republish paths before marketplace upload.
+- **Changelog dates are easier to read** in release notes.
+
 ## 1.6.2 - 06-May-2026 — Item Level row alignment fix
 
 ### Fixed

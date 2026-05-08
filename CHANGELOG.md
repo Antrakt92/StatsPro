@@ -8,6 +8,10 @@
 - **Release preflight now checks version consistency** — tag packaging verifies the release tag, TOC version, addon fallback version, changelog heading, and local Lua checks before marketplace upload.
 - **Smoke coverage now protects key StatsPro internals** — migrations/default normalization, render routing, UTF-8 labels, font compatibility helpers, repair formatting, and color normalization are covered outside the WoW client.
 
+### Fixed
+
+- **Malformed SavedVariables fall back safely** — invalid DB roots, font and position scalars, booleans, and non-finite numeric settings no longer crash early startup or invert toggles before settings can self-heal.
+
 ### Changed
 
 - **Release publishing has stronger duplicate-upload guards** — tag-triggered packaging refuses forced-tag and existing-release republish paths before marketplace upload.

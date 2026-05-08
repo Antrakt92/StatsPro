@@ -51,6 +51,47 @@ local function contains(t, value)
     return false
 end
 
+local function isFiniteNumber(value)
+    return type(value) == "number" and value == value and value > -math.huge and value < math.huge
+end
+
+local validAnchorPoints = {
+    CENTER = true,
+    TOP = true,
+    BOTTOM = true,
+    LEFT = true,
+    RIGHT = true,
+    TOPLEFT = true,
+    TOPRIGHT = true,
+    BOTTOMLEFT = true,
+    BOTTOMRIGHT = true,
+}
+
+local function validatePointArgs(args)
+    local point = args[1]
+    if type(point) ~= "string" or not validAnchorPoints[point] then
+        error("invalid SetPoint point: " .. tostring(point), 3)
+    end
+
+    local xOfs, yOfs
+    if #args >= 5 then
+        local relativePoint = args[3]
+        if type(relativePoint) ~= "string" or not validAnchorPoints[relativePoint] then
+            error("invalid SetPoint relativePoint: " .. tostring(relativePoint), 3)
+        end
+        xOfs, yOfs = args[4], args[5]
+    elseif #args == 3 and type(args[2]) == "number" and type(args[3]) == "number" then
+        xOfs, yOfs = args[2], args[3]
+    end
+
+    if xOfs ~= nil and not isFiniteNumber(xOfs) then
+        error("invalid SetPoint x offset: " .. tostring(xOfs), 3)
+    end
+    if yOfs ~= nil and not isFiniteNumber(yOfs) then
+        error("invalid SetPoint y offset: " .. tostring(yOfs), 3)
+    end
+end
+
 local function makeFrame(name)
     local frame = {
         name = name,
@@ -80,14 +121,20 @@ local function makeFrame(name)
     function frame:SetColorTexture() end
     function frame:SetVertexColor() end
     function frame:SetBlendMode() end
-    function frame:SetFont(_, size) self.fontSize = size or self.fontSize end
+    function frame:SetFont(font, size)
+        if type(font) ~= "string" then error("SetFont font must be a string", 2) end
+        if not isFiniteNumber(size) then error("SetFont size must be a finite number", 2) end
+        self.font, self.fontSize = font, size
+    end
     function frame:SetJustifyH() end
     function frame:SetJustifyV() end
     function frame:SetTextColor() end
     function frame:SetText(text) self.text = text or "" end
     function frame:GetText() return self.text end
     function frame:SetPoint(...)
-        self.points[#self.points + 1] = { ... }
+        local args = { ... }
+        validatePointArgs(args)
+        self.points[#self.points + 1] = args
     end
     function frame:ClearAllPoints() self.points = {} end
     function frame:GetPoint()
@@ -96,8 +143,15 @@ local function makeFrame(name)
         return p[1], p[2], p[3], p[4], p[5]
     end
     function frame:SetUserPlaced() end
-    function frame:SetScale(scale) self.scale = scale end
+    function frame:SetScale(scale)
+        if not isFiniteNumber(scale) then error("SetScale scale must be a finite number", 2) end
+        self.scale = scale
+    end
     function frame:GetScale() return self.scale or 1 end
+    function frame:SetAlpha(alpha)
+        if not isFiniteNumber(alpha) then error("SetAlpha alpha must be a finite number", 2) end
+        self.alpha = alpha
+    end
     function frame:Hide() self.shown = false end
     function frame:Show() self.shown = true end
     function frame:IsShown() return self.shown end
@@ -168,7 +222,8 @@ local function makeFrame(name)
     return frame
 end
 
-local function makeEnv(locale)
+local function makeEnv(locale, opts)
+    opts = opts or {}
     local env = {}
     local currentLocale = locale or "enUS"
     local lastCoinCall
@@ -199,12 +254,24 @@ local function makeEnv(locale)
 
     setmetatable(env, { __index = std })
     env._G = env
+    env.__frames = {}
     env.__setLocale = function(value) currentLocale = value end
     env.__lastCoinCall = function() return lastCoinCall end
+    env.__fireEvent = function(event, ...)
+        for _, frame in ipairs(env.__frames) do
+            if frame.events and frame.events[event] and frame.scripts and type(frame.scripts.OnEvent) == "function" then
+                frame.scripts.OnEvent(frame, event, ...)
+            end
+        end
+    end
 
-    env.StatsProDB = {}
-    env.SwiftStatsDB = nil
-    env.SwiftStatsLocalDB = nil
+    if opts.statsProDB == nil then
+        env.StatsProDB = {}
+    else
+        env.StatsProDB = opts.statsProDB
+    end
+    env.SwiftStatsDB = opts.swiftStatsDB
+    env.SwiftStatsLocalDB = opts.swiftStatsLocalDB
     env.SlashCmdList = {}
     env.UISpecialFrames = {}
     env.UIParent = makeFrame("UIParent")
@@ -276,6 +343,7 @@ local function makeEnv(locale)
 
     env.CreateFrame = function(_, name)
         local frame = makeFrame(name)
+        env.__frames[#env.__frames + 1] = frame
         if name then
             env[name] = frame
             env[name .. "Text"] = env[name .. "Text"] or makeFrame(name .. "Text")
@@ -354,8 +422,8 @@ local function makeEnv(locale)
     return env
 end
 
-local function loadStatsPro(locale)
-    local env = makeEnv(locale)
+local function loadStatsPro(locale, opts)
+    local env = makeEnv(locale, opts)
     local addon = { __statsproSmoke = true }
     local chunk, loadErr = loadfile("StatsPro.lua")
     if not chunk then error(loadErr, 0) end
@@ -366,6 +434,16 @@ local function loadStatsPro(locale)
         error("missing addon.__test; StatsPro smoke bridge was not initialized", 0)
     end
     return env, addon, addon.__test
+end
+
+do
+    local ok, err = pcall(loadStatsPro, "enUS", { statsProDB = true })
+    check("load.root_non_table_self_heals", ok, err)
+end
+
+do
+    local ok, err = pcall(loadStatsPro, "enUS", { statsProDB = { font = {} } })
+    check("load.font_table_falls_back_before_migration", ok, err)
 end
 
 local env, addon, test = loadStatsPro("enUS")
@@ -458,6 +536,16 @@ do
 end
 
 do
+    local db = runMigrate({
+        dbVersion = 6,
+        showStrength = "false",
+        showAgility = false,
+        showIntellect = false,
+    })
+    eq("db.v6_legacy_boolean_string_not_truthy", db.showMainStat, false)
+end
+
+do
     local db = runMigrate({ dbVersion = 7, showDurability = true })
     eq("db.v7_repair_preserve_visible_layout", db.showRepairCost, true)
 end
@@ -467,12 +555,103 @@ do
     eq("db.v7_repair_no_new_repair_only_row", db.showRepairCost, false)
 end
 
+do
+    local db = runMigrate({ dbVersion = "7", showDurability = true })
+    eq("db.version_string_migrates_without_error.version", db.dbVersion, test.currentDBVersion())
+    eq("db.version_string_migrates_without_error.repair", db.showRepairCost, true)
+end
+
+do
+    local db = runMigrate({ dbVersion = "bad" })
+    eq("db.version_invalid_runs_forward_migrations.string", db.dbVersion, test.currentDBVersion())
+    db = runMigrate({ dbVersion = 0 / 0 })
+    eq("db.version_invalid_runs_forward_migrations.nan", db.dbVersion, test.currentDBVersion())
+end
+
+do
+    local defaults = test.copyDefaults()
+    local db = runMigrate({ font = {}, fontBeforeAutoSwitch = {} })
+    eq("db.malformed_font_self_heals.font", db.font, defaults.font)
+    eq("db.malformed_font_self_heals.saved_auto_font", db.fontBeforeAutoSwitch, nil)
+end
+
+do
+    local legacyEnv, _, legacyTest = loadStatsPro("enUS", {
+        statsProDB = {},
+        swiftStatsDB = true,
+        swiftStatsLocalDB = true,
+    })
+    legacyEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    eq("db.legacy_roots_ignore_non_tables", legacyEnv.StatsProDB.dbVersion, legacyTest.currentDBVersion())
+end
+
 eq("numbers.font_size_clamp_round.low", test.normalizeNumberSetting("fontSize", -5), 8)
 eq("numbers.font_size_clamp_round.high", test.normalizeNumberSetting("fontSize", 100), 32)
 eq("numbers.font_size_clamp_round.string", test.normalizeNumberSetting("fontSize", "15.4"), 15)
 near("numbers.scale_clamp_round", test.normalizeNumberSetting("scale", 1.36), 1.4)
 eq("numbers.text_alpha_clamp_step", test.normalizeNumberSetting("textAlpha", 22), 25)
 near("numbers.update_interval_clamp_step", test.normalizeNumberSetting("updateInterval", 0.83), 0.85)
+
+do
+    local nan = 0 / 0
+    eq("numbers.nan_falls_back.font_size", test.normalizeNumberSetting("fontSize", nan), 14)
+    near("numbers.nan_falls_back.scale", test.normalizeNumberSetting("scale", nan), 1)
+    eq("numbers.nan_falls_back.text_alpha", test.normalizeNumberSetting("textAlpha", nan), 100)
+    near("numbers.nan_falls_back.update_interval", test.normalizeNumberSetting("updateInterval", nan), 0.5)
+end
+
+do
+    local inf = 1 / 0
+    eq("numbers.inf_handled.font_size_pos", test.normalizeNumberSetting("fontSize", inf), 14)
+    eq("numbers.inf_handled.font_size_neg", test.normalizeNumberSetting("fontSize", -inf), 14)
+    near("numbers.inf_handled.scale_pos", test.normalizeNumberSetting("scale", inf), 1)
+    near("numbers.inf_handled.scale_neg", test.normalizeNumberSetting("scale", -inf), 1)
+end
+
+do
+    env.StatsProDB = { isVisible = "false", showRepairCost = "false" }
+    eq("booleans.string_false_uses_default.visible", test.getBoolDB("isVisible"), true)
+    eq("booleans.string_false_uses_default.repair", test.getBoolDB("showRepairCost"), false)
+end
+
+do
+    local boolEnv, boolAddon, boolTest = loadStatsPro("enUS", {
+        statsProDB = { showTertiary = "false" },
+    })
+    boolTest.migrateDB()
+    boolTest.cacheSettings()
+    local ok, err = pcall(function() boolAddon:OpenConfigMenu() end)
+    check("booleans.master_dependency_uses_real_boolean.open", ok, err)
+    eq("booleans.master_dependency_uses_real_boolean.leech_disabled",
+        boolEnv.StatsProLeechCheck:IsEnabled(), false)
+end
+
+do
+    local posEnv = loadStatsPro("enUS", {
+        statsProDB = {
+            point = "NOPE",
+            relativePoint = {},
+            xOfs = 0 / 0,
+            yOfs = 0 / 0,
+            defensive_point = "NOPE",
+            defensive_relativePoint = "WRONG",
+            defensive_xOfs = 0 / 0,
+            defensive_yOfs = 0 / 0,
+        },
+    })
+    local ok, err = pcall(posEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("position.invalid_anchor_falls_back", ok, err)
+    local mainPoint = posEnv.StatsProFrame.points[1]
+    local defensivePoint = posEnv.StatsProDefensiveFrame.points[1]
+    eq("position.invalid_anchor_falls_back.main_point", mainPoint[1], "CENTER")
+    eq("position.invalid_anchor_falls_back.main_relative", mainPoint[3], "CENTER")
+    eq("position.nan_offset_falls_back.main_x", mainPoint[4], 0)
+    eq("position.nan_offset_falls_back.main_y", mainPoint[5], 0)
+    eq("position.invalid_anchor_falls_back.defensive_point", defensivePoint[1], "CENTER")
+    eq("position.invalid_anchor_falls_back.defensive_relative", defensivePoint[3], "CENTER")
+    eq("position.nan_offset_falls_back.defensive_x", defensivePoint[4], 0)
+    eq("position.nan_offset_falls_back.defensive_y", defensivePoint[5], -100)
+end
 
 do
     local failures = test.collectRenderRoutingSmokeFailures()

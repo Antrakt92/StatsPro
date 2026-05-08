@@ -460,7 +460,12 @@ local CACHED_BOOL_KEYS = {
 --[[ ============================================================
     6. SAVED VARIABLES + RUNTIME STATE
 ============================================================ ]]
-StatsProDB = StatsProDB or {}
+if type(StatsProDB) ~= "table" then StatsProDB = {} end
+
+local function EnsureStatsProDBTable()
+    if type(StatsProDB) ~= "table" then StatsProDB = {} end
+    return StatsProDB
+end
 
 -- Legacy-DB carry-forward runs in OnPlayerEnteringWorld (section 13) — NOT here at
 -- file scope. Two sources are checked:
@@ -1164,9 +1169,64 @@ local LABELS_BY_LOCALE = {
 
 -- WARNING: must precede ResolveActiveLocale — forward-ref to GetDB resolves as _G.GetDB at parse time.
 local function GetDB(key)
-    local v = StatsProDB[key]
+    local db = EnsureStatsProDBTable()
+    local v = db[key]
     if v == nil then return defaults[key] end
     return v
+end
+
+local function GetBoolDB(key)
+    local db = EnsureStatsProDBTable()
+    if type(db[key]) == "boolean" then return db[key] end
+    return defaults[key] == true
+end
+
+local function GetFontDB()
+    local db = EnsureStatsProDBTable()
+    if type(db.font) == "string" and db.font ~= "" then return db.font end
+    return defaults.font
+end
+
+local function GetSavedAutoFontDB()
+    local db = EnsureStatsProDBTable()
+    if type(db.fontBeforeAutoSwitch) == "string" and db.fontBeforeAutoSwitch ~= "" then
+        return db.fontBeforeAutoSwitch
+    end
+    return nil
+end
+
+local function IsFiniteNumber(value)
+    return type(value) == "number" and value == value and value > -math.huge and value < math.huge
+end
+
+local VALID_ANCHOR_POINTS = {
+    CENTER = true,
+    TOP = true,
+    BOTTOM = true,
+    LEFT = true,
+    RIGHT = true,
+    TOPLEFT = true,
+    TOPRIGHT = true,
+    BOTTOMLEFT = true,
+    BOTTOMRIGHT = true,
+}
+
+local function NormalizeAnchorPoint(value, fallback)
+    if type(value) == "string" and VALID_ANCHOR_POINTS[value] then return value end
+    if type(fallback) == "string" and VALID_ANCHOR_POINTS[fallback] then return fallback end
+    return "CENTER"
+end
+
+local function NormalizePositionOffset(value, fallback)
+    if IsFiniteNumber(value) and value >= -3000 and value <= 3000 then return value end
+    if IsFiniteNumber(fallback) and fallback >= -3000 and fallback <= 3000 then return fallback end
+    return 0
+end
+
+local function NormalizeDBVersion(value)
+    local n = tonumber(value)
+    if not IsFiniteNumber(n) then return 0 end
+    return math.floor(n)
 end
 
 local NUMBER_SETTING_META = {
@@ -1181,7 +1241,7 @@ local function NormalizeNumberSetting(key, value)
     if not meta then return value end
     local fallback = defaults[key]
     local n = tonumber(value)
-    if n == nil then n = fallback end
+    if not IsFiniteNumber(n) then n = fallback end
     if meta.step and meta.step > 0 then
         n = meta.min + math.floor(((n - meta.min) / meta.step) + 0.5) * meta.step
     end
@@ -1191,7 +1251,8 @@ local function NormalizeNumberSetting(key, value)
 end
 
 local function GetNumberDB(key)
-    local v = StatsProDB[key]
+    local db = EnsureStatsProDBTable()
+    local v = db[key]
     if v == nil then v = defaults[key] end
     return NormalizeNumberSetting(key, v)
 end
@@ -1392,7 +1453,7 @@ end
 local function CacheSettings()
     -- Booleans / scalar settings
     for _, k in ipairs(CACHED_BOOL_KEYS) do
-        cached[k] = GetDB(k)
+        cached[k] = GetBoolDB(k)
     end
     cached.updateInterval = GetNumberDB("updateInterval")
     cached.displayMode = GetDB("displayMode")
@@ -1411,7 +1472,8 @@ local function CacheSettings()
     -- Color → hex string lookup. Iterate defaults.colors (single source of truth) to
     -- guarantee non-nil colorStrings for every key — eliminates the need for `or "ffffff"`
     -- fallbacks throughout the render pipeline.
-    local userColors = type(StatsProDB.colors) == "table" and StatsProDB.colors or {}
+    local db = EnsureStatsProDBTable()
+    local userColors = type(db.colors) == "table" and db.colors or {}
     for name, defaultColor in pairs(defaults.colors) do
         local r, g, b = NormalizeColor(userColors[name], defaultColor)
         cached.colorStrings[name] = RGBToHex(r, g, b)
@@ -1419,7 +1481,7 @@ local function CacheSettings()
 end
 
 local function MigrateDB()
-    local db = StatsProDB
+    local db = EnsureStatsProDBTable()
     local preDefaultShowDurability = db.showDurability
     local preDefaultShowRepairCost = db.showRepairCost
 
@@ -1438,12 +1500,18 @@ local function MigrateDB()
             db.colors[k] = { r = v.r, g = v.g, b = v.b }
         end
     end
+    if type(db.font) ~= "string" or db.font == "" then db.font = defaults.font end
+    if db.fontBeforeAutoSwitch ~= nil
+        and (type(db.fontBeforeAutoSwitch) ~= "string" or db.fontBeforeAutoSwitch == "") then
+        db.fontBeforeAutoSwitch = nil
+    end
 
-    if db.dbVersion == CURRENT_DB_VERSION then return end
+    local dbVersion = NormalizeDBVersion(db.dbVersion)
+    if dbVersion == CURRENT_DB_VERSION then return end
 
     -- v2 → v3: default textAlign changed "LEFT" → "RIGHT". Upgrade only users still on
     -- the old default; preserve any explicit user choice (CENTER/RIGHT untouched).
-    if db.dbVersion == 2 and db.textAlign == "LEFT" then
+    if dbVersion == 2 and db.textAlign == "LEFT" then
         db.textAlign = "RIGHT"
     end
 
@@ -1468,7 +1536,7 @@ local function MigrateDB()
     -- and ConfigFont resolver. GetLocale() (client-locale, file-shipping axis)
     -- over ResolveActiveLocale() (output-locale axis) because the swap target is
     -- itself client-locale-bound.
-    if (db.dbVersion or 3) <= 3 then
+    if dbVersion <= 3 then
         local req = LOCALE_GLYPH_REQ[GetLocale()] or GLYPH_LATIN
         if not FontSupports(db.font, req) then
             db.font = LocaleAwareDefaultFont()
@@ -1485,7 +1553,7 @@ local function MigrateDB()
     -- exist before this version). Checking == nil would be a no-op. Checking == "auto"
     -- only overrides the just-prefilled default — preserves any manually-edited
     -- forceLocale value (corrupted DB with both keys, downgrade-then-upgrade flow).
-    if (db.dbVersion or 4) <= 4 then
+    if dbVersion <= 4 then
         if db.forceLocale == "auto" and db.useLocalizedLabels == false then
             db.forceLocale = "enUS"
         end
@@ -1498,7 +1566,7 @@ local function MigrateDB()
     -- change on upgrade. The defaults loop above already pre-populated the new keys with
     -- their default gold (r=1,g=0.84,b=0), which we overwrite here when a custom value
     -- exists. Drop colors.primary so it doesn't linger as orphaned data.
-    if (db.dbVersion or 5) <= 5 and type(db.colors) == "table" and IsCompleteColor(db.colors.primary) then
+    if dbVersion <= 5 and type(db.colors) == "table" and IsCompleteColor(db.colors.primary) then
         local p = db.colors.primary
         db.colors.strength  = { r = p.r, g = p.g, b = p.b }
         db.colors.agility   = { r = p.r, g = p.g, b = p.b }
@@ -1518,8 +1586,8 @@ local function MigrateDB()
     -- v5→v6 cascade customization (v5's single colors.primary was split into 3 identical
     -- at v6; int picks it up by chance) AND respects v6 users who customized just one.
     -- type-check guards against corrupt DB (`db.colors.intellect = "string"` etc.).
-    if (db.dbVersion or 6) <= 6 then
-        db.showMainStat = (db.showStrength or db.showAgility or db.showIntellect) and true or false
+    if dbVersion <= 6 then
+        db.showMainStat = (db.showStrength == true or db.showAgility == true or db.showIntellect == true)
         db.showStrength = nil
         db.showAgility = nil
         db.showIntellect = nil
@@ -1545,7 +1613,7 @@ local function MigrateDB()
     -- hidden-on-most-saves default ON to default OFF. Preserve visible old layouts
     -- (Durability ON + Repair ON), but do not suddenly show a repair-only row for users
     -- whose DB merely carried the old invisible default while Durability was OFF.
-    if (db.dbVersion or 7) <= 7 then
+    if dbVersion <= 7 then
         if preDefaultShowDurability == true and preDefaultShowRepairCost == nil then
             db.showRepairCost = true
         elseif preDefaultShowDurability ~= true and preDefaultShowRepairCost == true then
@@ -1694,7 +1762,7 @@ function Panel:New(globalName, dbKeyPrefix)
     -- text regardless of value length. Cost: values' right edges no longer align
     -- vertically. User chose tight constant gap over right-edge alignment.
     local labelText = frame:CreateFontString(nil, "OVERLAY")
-    labelText:SetFont(GetDB("font"), GetNumberDB("fontSize"), "OUTLINE")
+    labelText:SetFont(GetFontDB(), GetNumberDB("fontSize"), "OUTLINE")
     labelText:SetJustifyH("RIGHT")
     labelText:SetJustifyV("TOP")
     labelText:SetTextColor(1, 1, 1, 1)
@@ -1706,7 +1774,7 @@ function Panel:New(globalName, dbKeyPrefix)
     -- column starts. Offset is recomputed each SetTextSafe once valueW is measured.
     -- Initial offset 0; first render repositions it.
     local ratingText = frame:CreateFontString(nil, "OVERLAY")
-    ratingText:SetFont(GetDB("font"), GetNumberDB("fontSize"), "OUTLINE")
+    ratingText:SetFont(GetFontDB(), GetNumberDB("fontSize"), "OUTLINE")
     ratingText:SetJustifyH("RIGHT")
     ratingText:SetJustifyV("TOP")
     ratingText:SetTextColor(1, 1, 1, 1)
@@ -1714,7 +1782,7 @@ function Panel:New(globalName, dbKeyPrefix)
     ratingText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
 
     local valueText = frame:CreateFontString(nil, "OVERLAY")
-    valueText:SetFont(GetDB("font"), GetNumberDB("fontSize"), "OUTLINE")
+    valueText:SetFont(GetFontDB(), GetNumberDB("fontSize"), "OUTLINE")
     valueText:SetJustifyH("LEFT")
     valueText:SetJustifyV("TOP")
     valueText:SetTextColor(1, 1, 1, 1)
@@ -1732,7 +1800,7 @@ function Panel:New(globalName, dbKeyPrefix)
     -- icons inflate that line's height (`:14:14:2:0|t` yoffset=0 puts texture top above
     -- glyph top), causing cumulative drift vs labelText's pure-text rows.
     local repairText = frame:CreateFontString(nil, "OVERLAY")
-    repairText:SetFont(GetDB("font"), GetNumberDB("fontSize"), "OUTLINE")
+    repairText:SetFont(GetFontDB(), GetNumberDB("fontSize"), "OUTLINE")
     repairText:SetJustifyH("RIGHT")
     repairText:SetTextColor(1, 1, 1, 1)
     repairText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)  -- y repositioned per render
@@ -1743,7 +1811,7 @@ function Panel:New(globalName, dbKeyPrefix)
     -- row sits on its own visual row below stats (visual separation), and so coin can't
     -- overlap stat-row content. Width set per-render = stats labelW for column alignment.
     local repairLabelText = frame:CreateFontString(nil, "OVERLAY")
-    repairLabelText:SetFont(GetDB("font"), GetNumberDB("fontSize"), "OUTLINE")
+    repairLabelText:SetFont(GetFontDB(), GetNumberDB("fontSize"), "OUTLINE")
     repairLabelText:SetJustifyH("RIGHT")  -- match labelText alignment
     repairLabelText:SetTextColor(1, 1, 1, 1)
     repairLabelText:Hide()  -- shown only when hasRepair
@@ -1759,7 +1827,7 @@ function Panel:New(globalName, dbKeyPrefix)
     -- apply when args happen to match the file-scope-inline SetFont calls — wasting 10
     -- SetFont + 10 SetText per panel on every /reload. With this initialization, the
     -- post-MaybeAutoSwitchFont apply at PEW becomes a no-op when MAS didn't swap.
-    panel.appliedFont = GetDB("font")
+    panel.appliedFont = GetFontDB()
     panel.appliedSize = GetNumberDB("fontSize")
 
     -- Drag handlers (unsecure frames; not protected in combat lockdown).
@@ -1810,15 +1878,15 @@ function Panel:SavePosition()
 end
 
 function Panel:LoadPosition()
-    local point         = StatsProDB[self:DBKey("point")]         or defaults[self:DBKey("point")]         or "CENTER"
-    local relativePoint = StatsProDB[self:DBKey("relativePoint")] or defaults[self:DBKey("relativePoint")] or "CENTER"
-    local xOfs          = StatsProDB[self:DBKey("xOfs")]          or defaults[self:DBKey("xOfs")]          or 0
-    local yOfs          = StatsProDB[self:DBKey("yOfs")]          or defaults[self:DBKey("yOfs")]          or 0
-
-    if type(xOfs) ~= "number" or type(yOfs) ~= "number"
-        or xOfs < -3000 or xOfs > 3000 or yOfs < -3000 or yOfs > 3000 then
-        xOfs, yOfs = 0, 0
-    end
+    local db = EnsureStatsProDBTable()
+    local pointKey         = self:DBKey("point")
+    local relativePointKey = self:DBKey("relativePoint")
+    local xOfsKey          = self:DBKey("xOfs")
+    local yOfsKey          = self:DBKey("yOfs")
+    local point            = NormalizeAnchorPoint(db[pointKey], defaults[pointKey] or "CENTER")
+    local relativePoint    = NormalizeAnchorPoint(db[relativePointKey], defaults[relativePointKey] or "CENTER")
+    local xOfs             = NormalizePositionOffset(db[xOfsKey], defaults[xOfsKey] or 0)
+    local yOfs             = NormalizePositionOffset(db[yOfsKey], defaults[yOfsKey] or 0)
 
     self.frame:ClearAllPoints()
     self.frame:SetPoint(point, UIParent, relativePoint, xOfs, yOfs)
@@ -2169,15 +2237,19 @@ end
 
 -- Caller must set StatsProDB.forceLocale + run CacheSettings BEFORE calling.
 local function MaybeAutoSwitchFont()
+    local db = EnsureStatsProDBTable()
     local active = ResolveActiveLocale()
     local req    = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
-    local cur    = StatsProDB.font
+    local cur    = GetFontDB()
 
     if FontSupports(cur, req) then
-        local saved = StatsProDB.fontBeforeAutoSwitch
+        local saved = GetSavedAutoFontDB()
+        if db.fontBeforeAutoSwitch ~= nil and not saved then
+            db.fontBeforeAutoSwitch = nil
+        end
         if saved and not SameFontPath(saved, cur) and FontSupports(saved, req) then
-            StatsProDB.font = saved
-            StatsProDB.fontBeforeAutoSwitch = nil
+            db.font = saved
+            db.fontBeforeAutoSwitch = nil
             ApplyTextStyleToAllPanels(saved, GetNumberDB("fontSize"))
         end
         ApplyConfigFont(ResolveConfigFont(active))
@@ -2186,8 +2258,8 @@ local function MaybeAutoSwitchFont()
 
     local fallback = FindCompatibleFont(cur, req)
     if fallback and not SameFontPath(fallback, cur) then
-        StatsProDB.fontBeforeAutoSwitch = StatsProDB.fontBeforeAutoSwitch or cur
-        StatsProDB.font = fallback
+        db.fontBeforeAutoSwitch = GetSavedAutoFontDB() or cur
+        db.font = fallback
         ApplyTextStyleToAllPanels(fallback, GetNumberDB("fontSize"))
     end
     ApplyConfigFont(ResolveConfigFont(active))
@@ -2757,12 +2829,15 @@ local function OnPlayerEnteringWorld()
         --      addon (renamed to StatsPro before publication).
         -- CopyTable: deep copy so color-picker edits in either addon, while both are
         -- simultaneously enabled, don't silently alias and mutate the other's table.
-        if next(StatsProDB) == nil then
-            local source = (_G.SwiftStatsDB and next(_G.SwiftStatsDB) ~= nil and _G.SwiftStatsDB)
-                        or (_G.SwiftStatsLocalDB and next(_G.SwiftStatsLocalDB) ~= nil and _G.SwiftStatsLocalDB)
+        local db = EnsureStatsProDBTable()
+        if next(db) == nil then
+            local swiftStatsDB = type(_G.SwiftStatsDB) == "table" and _G.SwiftStatsDB or nil
+            local swiftStatsLocalDB = type(_G.SwiftStatsLocalDB) == "table" and _G.SwiftStatsLocalDB or nil
+            local source = (swiftStatsDB and next(swiftStatsDB) ~= nil and swiftStatsDB)
+                        or (swiftStatsLocalDB and next(swiftStatsLocalDB) ~= nil and swiftStatsLocalDB)
             if source then
                 for k, v in pairs(source) do
-                    StatsProDB[k] = (type(v) == "table") and CopyTable(v) or v
+                    db[k] = (type(v) == "table") and CopyTable(v) or v
                 end
             end
         end
@@ -2775,16 +2850,16 @@ local function OnPlayerEnteringWorld()
         -- correct font on the very first frame (no `?` boxes for one session).
         MaybeAutoSwitchFont()
         LoadAllPositions()
-        SetAllPanelsLockState(GetDB("isLocked"))
+        SetAllPanelsLockState(GetBoolDB("isLocked"))
         SetAllPanelsScale(GetNumberDB("scale"))
         -- WHY re-apply font/size at PEW: Panel:New creates FontStrings at file scope
-        -- with whatever GetDB("font") returns BEFORE MigrateDB runs. If the migration
+        -- with whatever GetFontDB() returns BEFORE MigrateDB runs. If the migration
         -- changed db.font (e.g. v3→v4 hardcoded → STANDARD_TEXT_FONT auto-upgrade),
         -- the FontStrings would still hold the pre-migration font for the entire
         -- session until /reload. CJK users on the old default would see `?` boxes for
         -- their localized labels for one whole session. Re-applying after MigrateDB
         -- closes that window.
-        ApplyTextStyleToAllPanels(GetDB("font"), GetNumberDB("fontSize"))
+        ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"))
         -- WHY re-apply textAlpha at PEW: Panel:New runs at file scope before CacheSettings,
         -- so cached.textAlpha is nil at FontString creation. This propagates the user's
         -- saved alpha to FontStrings on the first frame.
@@ -2822,7 +2897,7 @@ local EVENT_HANDLERS = {
     -- WHY: lock state is stored in cached.isLocked and read by OnDragStart. Mouse stays
     -- enabled permanently so right-click Settings works even while locked; Panel:Lock /
     -- Panel:Unlock are no-op stubs kept behind this semantic wrapper.
-    PLAYER_REGEN_ENABLED        = function() SetAllPanelsLockState(GetDB("isLocked")) end,
+    PLAYER_REGEN_ENABLED        = function() SetAllPanelsLockState(GetBoolDB("isLocked")) end,
 }
 
 local eventFrame = CreateFrame("Frame")
@@ -2916,8 +2991,9 @@ local CONFIG_DROPDOWN_Y_OFFSET = 2
 -- color-related helper + their refreshers; lazily initializes the colors table
 -- (StatsProDB may not have it yet on a fresh install).
 local function GetColor(statName)
-    if type(StatsProDB.colors) ~= "table" then StatsProDB.colors = {} end
-    local r, g, b = NormalizeColor(StatsProDB.colors[statName], defaults.colors[statName])
+    local db = EnsureStatsProDBTable()
+    if type(db.colors) ~= "table" then db.colors = {} end
+    local r, g, b = NormalizeColor(db.colors[statName], defaults.colors[statName])
     return { r = r, g = g, b = b }
 end
 
@@ -2938,14 +3014,14 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
     -- rows (CreateCheckboxColor overrides the bound width to actual text width post-call).
     text:SetWidth(textWidth or 200)
     text:SetJustifyH("LEFT")
-    cb:SetChecked(GetDB(dbKey))
+    cb:SetChecked(GetBoolDB(dbKey))
     cb:SetScript("OnClick", function(self)
         StatsProDB[dbKey] = self:GetChecked()
         CacheSettings()
         if onChange then onChange(self:GetChecked()) end
         UpdateStats()
     end)
-    PushRefresher(function() cb:SetChecked(GetDB(dbKey)) end)
+    PushRefresher(function() cb:SetChecked(GetBoolDB(dbKey)) end)
     return cb, text
 end
 
@@ -3864,7 +3940,7 @@ function addon:OpenConfigMenu()
         -- already at db.font; only Reflow's SetTextSafe re-measure runs.
         local function CancelFontPreview()
             previewedPath = nil
-            ApplyTextStyleToAllPanels(GetDB("font"), GetNumberDB("fontSize"))
+            ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"))
             ReflowAllPanels()
         end
         local function PickFont(f)
@@ -3972,7 +4048,7 @@ function addon:OpenConfigMenu()
 
         local function PopulateFontPicker()
             local fonts = BuildFontsList()
-            local currentPath = GetDB("font")
+            local currentPath = GetFontDB()
             local rows = math.ceil(#fonts / FONT_PICKER_COLS)
             local currentRow = nil
 
@@ -4106,7 +4182,7 @@ function addon:OpenConfigMenu()
 
         CurrentFontName = function()
             for _, f in ipairs(BuildFontsList()) do
-                if SameFontPath(f.path, GetDB("font")) then return f.name end
+                if SameFontPath(f.path, GetFontDB()) then return f.name end
             end
             return "Friz Quadrata TT"
         end
@@ -4146,7 +4222,7 @@ function addon:OpenConfigMenu()
     CreateConfigSlider(displayTab, "StatsProFontSlider", "Font Size:", "fontSize", cd,
         8, 32, 1, "8", "32", "%d",
         function()
-            ApplyTextStyleToAllPanels(GetDB("font"), GetNumberDB("fontSize"))
+            ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"))
             ReflowAllPanels()
         end)
 
@@ -4243,11 +4319,11 @@ function addon:OpenConfigMenu()
             cached.activeLabels = LABELS_BY_LOCALE[locale] or LABELS_BY_LOCALE.enUS
 
             -- Visual font swap if the committed font lacks the previewed locale's glyphs.
-            -- WHY GetDB("font") (committed) and not the currently-rendered preview font:
+            -- WHY GetFontDB() (committed) and not the currently-rendered preview font:
             -- consecutive hovers must each evaluate against the BASELINE, otherwise hover
             -- ru→ARIALN→hover de would compare ARIALN(Latin-OK) and skip restoring FRIZQT.
             local req      = LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN
-            local cur      = GetDB("font")
+            local cur      = GetFontDB()
             local fallback = FindCompatibleFont(cur, req)
             if fallback and not SameFontPath(fallback, cur) then
                 ApplyTextStyleToAllPanels(fallback, GetNumberDB("fontSize"))
@@ -4278,7 +4354,7 @@ function addon:OpenConfigMenu()
             local active = ResolveActiveLocale()
             cached.activeLabels = LABELS_BY_LOCALE[active] or LABELS_BY_LOCALE.enUS
             if langPreviewSwappedFnt then
-                ApplyTextStyleToAllPanels(GetDB("font"), GetNumberDB("fontSize"))
+                ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"))
                 langPreviewSwappedFnt = false
             end
             langPreviewActive = false
@@ -4319,7 +4395,7 @@ function addon:OpenConfigMenu()
                     -- ApplyConfigFont is unconditionally called inside MAS so the settings
                     -- UI doesn't share this asymmetry — panels are the only side affected.
                     if langPreviewSwappedFnt then
-                        ApplyTextStyleToAllPanels(GetDB("font"), GetNumberDB("fontSize"))
+                        ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"))
                     end
                     langPreviewActive     = false
                     langPreviewSwappedFnt = false
@@ -4375,7 +4451,7 @@ function addon:OpenConfigMenu()
         RefreshLanguageWarning = function()
             local active = ResolveActiveLocale()
             local req    = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
-            if FontSupports(StatsProDB.font, req) then
+            if FontSupports(GetFontDB(), req) then
                 langWarn:SetText("")
             else
                 langWarn:SetText(string.format(L(
@@ -4481,8 +4557,8 @@ function addon:OpenConfigMenu()
         CursorAdvance(cs, 22)
         AlignSwatchColumn(leftRows)
         AlignSwatchColumn(rightRows)
-        ApplyOffensiveSubsEnabled(GetDB("showOffensive"))
-        PushRefresher(function() ApplyOffensiveSubsEnabled(GetDB("showOffensive")) end)
+        ApplyOffensiveSubsEnabled(GetBoolDB("showOffensive"))
+        PushRefresher(function() ApplyOffensiveSubsEnabled(GetBoolDB("showOffensive")) end)
     end
 
     CursorGap(cs, 6)
@@ -4516,8 +4592,8 @@ function addon:OpenConfigMenu()
         CursorAdvance(cs, 22)
         AlignSwatchColumn(leftRows)
         AlignSwatchColumn(rightRows)
-        ApplyTertiarySubsEnabled(GetDB("showTertiary"))
-        PushRefresher(function() ApplyTertiarySubsEnabled(GetDB("showTertiary")) end)
+        ApplyTertiarySubsEnabled(GetBoolDB("showTertiary"))
+        PushRefresher(function() ApplyTertiarySubsEnabled(GetBoolDB("showTertiary")) end)
     end
 
     CursorGap(cs, 6)
@@ -4554,8 +4630,8 @@ function addon:OpenConfigMenu()
         CursorAdvance(cs, 22)
         AlignSwatchColumn(leftRows)
         AlignSwatchColumn(rightRows)
-        ApplyDefensiveSubsEnabled(GetDB("showDefensive"))
-        PushRefresher(function() ApplyDefensiveSubsEnabled(GetDB("showDefensive")) end)
+        ApplyDefensiveSubsEnabled(GetBoolDB("showDefensive"))
+        PushRefresher(function() ApplyDefensiveSubsEnabled(GetBoolDB("showDefensive")) end)
     end
 
     CursorGap(cs, 6)
@@ -4625,9 +4701,9 @@ function addon:PrintDebugDump()
     PrintMsg(string.format("locale: client=%s force=%s active=%s",
         GetLocale(), tostring(GetDB("forceLocale")), active))
     PrintMsg(string.format("font: path=%s glyphReq=%s supports=%s saved=%s",
-        tostring(StatsProDB.font or "?"),
+        tostring(GetFontDB() or "?"),
         req,
-        tostring(FontSupports(StatsProDB.font, req)),
+        tostring(FontSupports(GetFontDB(), req)),
         tostring(StatsProDB.fontBeforeAutoSwitch)))
 
     PrintMsg(string.format("show stats: off=%s tert=%s defensive=%s dur=%s repair=%s cost=%s mainStat=%s liveMainId=%s stamina=%s itemLevel=%s %s/%s",
@@ -4907,6 +4983,7 @@ if addon and addon.__statsproSmoke == true then
         copyDefaults = function() return CopyTable(defaults) end,
         migrateDB = MigrateDB,
         cacheSettings = CacheSettings,
+        getBoolDB = GetBoolDB,
         normalizeNumberSetting = NormalizeNumberSetting,
         fontPathKey = FontPathKey,
         sameFontPath = SameFontPath,
@@ -4967,7 +5044,8 @@ Settings.RegisterAddOnCategory(launcherCategory)
 SLASH_STATSPRO1 = "/ss"
 SLASH_STATSPRO2 = "/statspro"
 local function SetVisible(visible)
-    StatsProDB.isVisible = visible
+    local db = EnsureStatsProDBTable()
+    db.isVisible = visible
     CacheSettings()
     UpdateStats()
     -- WHY: master Visible checkbox in config menu may be open; sync its state.
@@ -4986,7 +5064,7 @@ SlashCmdList["STATSPRO"] = function(msg)
         SetVisible(false)
         PrintMsg("Stats panel hidden")
     elseif arg == "toggle" then
-        local newState = StatsProDB.isVisible == false
+        local newState = not GetBoolDB("isVisible")
         SetVisible(newState)
         PrintMsg(newState and "Stats panel shown" or "Stats panel hidden")
     elseif arg == "reset" then

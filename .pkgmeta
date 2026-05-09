@@ -12,6 +12,7 @@ ignore:
   - .luacheckrc
   - .luarc.json
   - scripts
+  - docs
   - screenshots
   - AUDIT.md
   - AGENTS.md

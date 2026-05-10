@@ -102,23 +102,11 @@ pull and check whether the numbers stay correct throughout the fight.
 ## Localization
 
 Stat labels render in your WoW client's language by default — no setup required.
-Curated short-form translations across all 11 retail WoW locales preserve the same
-compact 4-7 char visual rhythm as the original English labels:
+Curated short-form translations across all 11 retail WoW locales keep the HUD
+compact and readable, including the same `rating | percentage`, defensive stat,
+item level, durability, and repair rows shown in game:
 
 ![StatsPro localization preview — live HUD label examples with rating and percentage values, defensives, item level, durability, and coin-style repair cost across all 11 Retail locales](screenshots/localization.png)
-
-| Locale | Sample row |
-|---|---|
-| **enUS** | `Crit:    843  28.3%` |
-| **ruRU** | `Крит:    843  28.3%` |
-| **deDE** | `Krit:    843  28.3%` |
-| **frFR** | `Crit:    843  28.3%` |
-| **esES** / **esMX** | `Crít:    843  28.3%` |
-| **itIT** | `Crit:    843  28.3%` |
-| **ptBR** | `Crít:    843  28.3%` |
-| **koKR** | `치명:    843  28.3%` |
-| **zhCN** | `暴击:    843  28.3%` |
-| **zhTW** | `致命:    843  28.3%` |
 
 To pick a different language for stat labels, open `/ss` → **Appearance**
 tab → **Localization** → use the **Language** dropdown. "Auto" follows your

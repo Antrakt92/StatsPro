@@ -1433,7 +1433,7 @@ end
 local function FormatRepairCost(copper)
     -- WHY: Blizzard's GetCoinTextureString embeds gold/silver/copper icons inline,
     -- matching the vendor display exactly. Pass fontHeight explicitly — without it
-    -- the helper produces `:0:0` markup which in TWW 12.x sometimes renders icons
+    -- the helper produces `:0:0` markup which in Retail 12.x sometimes renders icons
     -- at the wrong size or with the digits floating to a separate baseline.
     return GetCoinTextureString(copper, GetNumberDB("fontSize"))
 end

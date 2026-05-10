@@ -4491,7 +4491,7 @@ function addon:OpenConfigMenu()
             local active = ResolveActiveLocale()
             cached.activeLabels = LABELS_BY_LOCALE[active] or LABELS_BY_LOCALE.enUS
             if langPreviewSwappedFnt then
-                ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"))
+                ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"), true)
                 langPreviewSwappedFnt = false
             end
             langPreviewActive = false
@@ -4526,13 +4526,14 @@ function addon:OpenConfigMenu()
                     -- ApplyTextStyleToAllPanels when its own swap decision fires — committing
                     -- to a same-script-as-baseline locale (hover ruRU then commit deDE on
                     -- enUS) leaves MAS short-circuiting via FontSupports(FRIZQT, LATIN)=true,
-                    -- so panels remain stuck on ARIALN. Re-apply db.font (post-MAS, authoritative)
-                    -- to undo the preview leak; idempotent when MAS already applied. CancelLanguagePreview
-                    -- does the same conditional restore for the close-without-pick path.
+                    -- so panels remain stuck on ARIALN. Force re-apply db.font (post-MAS,
+                    -- authoritative) to undo the preview leak even if appliedFont cache
+                    -- drifted. CancelLanguagePreview does the same conditional restore for
+                    -- the close-without-pick path.
                     -- ApplyConfigFont is unconditionally called inside MAS so the settings
                     -- UI doesn't share this asymmetry — panels are the only side affected.
                     if langPreviewSwappedFnt then
-                        ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"))
+                        ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"), true)
                     end
                     langPreviewActive     = false
                     langPreviewSwappedFnt = false

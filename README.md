@@ -41,7 +41,7 @@
 - **Repair cost** — optional live vendor-format coin display (`46g 40s 81c` with embedded gold/silver/copper icons), default OFF
 - **Three display modes** — Flat (one panel), Sectioned (one panel with block headers), Split (two movable panels with configurable block routing)
 - **Localized stat labels** — on-screen panel auto-translates to your WoW client language across all 11 retail locales (deDE, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, zhTW; English unchanged). Use the **Language** dropdown in Appearance → Localization to choose Auto or a fixed locale, and **Label Style** in Layout → Value Display to switch **Full / Short / Hidden** label rendering. **The settings window itself also localizes** — every tab, label, dropdown caption, button, and warning updates live the moment you switch languages, no `/reload` needed.
-- **Customization** — per-stat colors, fonts via LibSharedMedia, font size, panel scale, refresh rate
+- **Customization** — per-stat colors, fonts via LibSharedMedia, font size, text opacity, panel scale, refresh rate
 - **Auto-aligning columns** — labels and values stay neatly aligned regardless of which stats are enabled, font, or scale; toggling rating-only or percent-only collapses cleanly into one tight column with no awkward gaps
 - **Light footprint** — core UI in one Lua file, no Ace3; bundles standard LibSharedMedia support for font picking
 
@@ -73,9 +73,9 @@ from Character / Offensive / Tertiary / Defensive / Item Level / Durability / Re
 - **Drag once, done forever** — your panel positions survive `/reload`, logout, and
   client patches. No reset-to-center surprises after a UI reload or expansion update.
 - **Configurable from one place** — every visible element lives behind `/ss`:
-  per-stat colors, font via LibSharedMedia, panel scale, layout preset, split
-  block routing, durability thresholds. No SavedVariables editing, no `/reload`
-  between tweaks.
+  per-stat colors, font via LibSharedMedia, font size and opacity, panel scale,
+  layout preset, split block routing, durability thresholds. No SavedVariables
+  editing, no `/reload` between tweaks.
 - **Built for Midnight (12.x)** — works correctly mid-combat where many older stat
   addons silently break (see the section below).
 
@@ -252,7 +252,8 @@ Bug reports and PRs remain the highest-leverage way to help — open an
 ## Acknowledgements
 
 - **[@tflo](https://github.com/tflo)** — auto main stat, text opacity, item level,
-  stamina, right-click-to-settings, and label style modes feedback (issue #1).
+  stamina, right-click-to-settings, label style modes, Stagger, Block visibility,
+  and gear grouping feedback (issues #1-#4).
 - **[TaylorSay](https://www.curseforge.com/members/taylorsay)** — author of the
   original [SwiftStats](https://www.curseforge.com/wow/addons/swiftstats) addon
   (MIT), the project that inspired StatsPro and from which the initial defaults

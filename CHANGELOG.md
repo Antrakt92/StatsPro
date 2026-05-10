@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.1 - 10-May-2026 — Runtime hardening
+
+### Fixed
+
+- **Rare malformed stat reads no longer break rendering** — missing, secret, or malformed percentage/rating values are skipped or safely normalized before they reach numeric formatters.
+- **Settings color previews clean up safely** — closing Settings, switching swatches, or resetting defaults now cancels unconfirmed color previews without leaving stale callbacks behind.
+- **`/ss debug bucket` is safer during unreadable stat states** — diagnostics now suppress secret or malformed render values instead of inspecting them.
+
 ## 1.7.0 - 10-May-2026 — Defensive and gear feedback pass
 
 Suggested by [@tflo](https://github.com/tflo) in issues #2, #3, and #4. Thank you for the detailed feedback and testing notes.

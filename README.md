@@ -168,7 +168,7 @@ Type `/ss` or click the StatsPro entry in the Blizzard AddOns settings panel to
 open the configuration window. Three tabs (`Stats | Layout | Appearance`) cover
 everything:
 
-![StatsPro settings — Stats, Layout, and Appearance tabs side by side](screenshots/settings-tabs.png)
+![StatsPro settings — Stats, Layout, and Appearance tabs stacked vertically](screenshots/settings-tabs.png)
 
 | Tab | What lives here |
 |---|---|

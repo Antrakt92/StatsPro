@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.7.0 - 10-May-2026 — Defensive and gear feedback pass
+
+### Added
+
+- **Optional Stagger row for Brewmaster Monks** — Stagger now lives with the Defensive stats and has its own checkbox and color swatch. It stays hidden for non-Brewmaster specs even when zero values are shown.
+
+### Changed
+
+- **Item Level now belongs to Gear** — Sectioned mode groups iLvl under the Gear heading with Durability and Repair, and fresh/reset Split layouts send Item Level to the side panel with the other gear rows.
+- **Block is class-aware** — Block stays visible for Warriors, Paladins, and Shamans, but hides on classes that cannot block even when `Hide Zero Values` is off. Dodge and Parry remain unchanged.
+
+### Improved
+
+- **Smoke coverage protects the new routing and defensive edge cases** — local checks now cover Brewmaster-only Stagger, non-block classes, Shaman zero-Block visibility, Item Level's Gear header, and the new Settings controls.
+
 ## 1.6.4 - 08-May-2026 — Verification and startup hardening
 
 ### Improved

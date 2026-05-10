@@ -17,6 +17,7 @@
   "diagnostics.globals": [
     "BackdropTemplateMixin",
     "C_AddOns",
+    "C_PaperDollInfo",
     "C_SpecializationInfo",
     "C_Timer",
     "C_TooltipInfo",

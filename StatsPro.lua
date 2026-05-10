@@ -7,7 +7,7 @@ local _, addon = ...
 --[[ ============================================================
     1. CONSTANTS
 ============================================================ ]]
-local CURRENT_DB_VERSION = 8
+local CURRENT_DB_VERSION = 9
 
 local DURABILITY_SLOT_MIN = 1
 local DURABILITY_SLOT_MAX = 19
@@ -246,7 +246,7 @@ end
 -- literal `@project-version@` token from the unsubstituted TOC — fall back to a
 -- hand-maintained constant so the title still reads e.g. `v1.0.3-dev` instead of `vdev`.
 -- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
-local CURRENT_RELEASE = "1.6.4"
+local CURRENT_RELEASE = "1.7.0"
 local ADDON_VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("StatsPro", "Version") or "?"
 if ADDON_VERSION:find("project%-version") then ADDON_VERSION = CURRENT_RELEASE .. "-dev" end
 
@@ -285,7 +285,7 @@ local defaults = {
     -- Defaults preserve the original split behavior (main = character/offense/tertiary,
     -- side = defensive/gear).
     splitCharacter = false,
-    splitItemLevel = false,
+    splitItemLevel = true,
     splitOffensive = false,
     splitTertiary = false,
     splitDefensive = true,
@@ -320,8 +320,8 @@ local defaults = {
     showSpeed = true,
 
     -- Primary stat: Show Main Stat (auto-resolves from spec) + Show Stamina (independent —
-    -- no spec uses Stamina as primary). Item Level is grouped here as character-sheet
-    -- summary data, not a rated stat.
+    -- no spec uses Stamina as primary). Item Level remains a separate gear-summary row,
+    -- not a rated stat.
     showMainStat = false,
     showStamina  = false,
     showItemLevel = false,
@@ -333,6 +333,7 @@ local defaults = {
     showParry = true,
     showBlock = true,
     showArmor = true,
+    showStagger = false,
 
     -- Offensive stats
     showOffensive = true,
@@ -366,6 +367,7 @@ local defaults = {
         parry       = { r = 1,    g = 0.4,  b = 0.2 },
         block       = { r = 0.7,  g = 0.5,  b = 0.3 },
         armor       = { r = 0.6,  g = 0.6,  b = 0.7 },
+        stagger     = { r = 0.3,  g = 0.8,  b = 0.5 },
         durability  = { r = 1,    g = 1,    b = 1 },
     },
 }
@@ -378,13 +380,6 @@ local OFFENSIVE_STATS = {
     { label = "Haste",   api = GetHaste,         ratingCR = CR_HASTE_MELEE, colorKey = "haste",   showKey = "showHaste"   },
     { label = "Mastery", api = GetMasteryEffect, ratingCR = CR_MASTERY,     colorKey = "mastery", showKey = "showMastery" },
     -- versatility handled specially (dual-source: rating + flat); gated by showVersatility
-}
-
-local DEFENSIVE_STATS = {
-    { label = "Dodge", api = GetDodgeChance, colorKey = "dodge", showKey = "showDodge" },
-    { label = "Parry", api = GetParryChance, colorKey = "parry", showKey = "showParry" },
-    { label = "Block", api = GetBlockChance, colorKey = "block", showKey = "showBlock" },
-    -- Armor & DR handled specially: armor = absolute number, DR = cached arithmetic
 }
 
 -- Primary stat label + unitStatId mapping. Used by BuildCharacterLines via the
@@ -432,6 +427,38 @@ local function GetCurrentMainStatId()
     return primaryStat
 end
 
+local function PlayerCanBlock()
+    local _, classToken = UnitClass("player")
+    return classToken == "PALADIN" or classToken == "SHAMAN" or classToken == "WARRIOR"
+end
+
+local function IsBrewmasterSpec()
+    local _, classToken = UnitClass("player")
+    if classToken ~= "MONK" then return false end
+    local idx = SafeGetSpecIndex()
+    if not idx then return false end
+    local specID = SafeGetSpecInfo(idx)
+    return specID == 268
+end
+
+local function GetStaggerChance()
+    if not IsBrewmasterSpec() then return nil end
+    if not C_PaperDollInfo or not C_PaperDollInfo.GetStaggerPercentage then return nil end
+    local ok, stagger = pcall(C_PaperDollInfo.GetStaggerPercentage, "player")
+    if not ok then return nil end
+    if issecretvalue(stagger) then return stagger end
+    if type(stagger) ~= "number" or stagger ~= stagger or stagger < 0 or stagger == math.huge then return nil end
+    return stagger
+end
+
+local DEFENSIVE_STATS = {
+    { label = "Dodge",   api = GetDodgeChance,    colorKey = "dodge",   showKey = "showDodge" },
+    { label = "Parry",   api = GetParryChance,    colorKey = "parry",   showKey = "showParry" },
+    { label = "Block",   api = GetBlockChance,    colorKey = "block",   showKey = "showBlock",   appliesFn = PlayerCanBlock },
+    { label = "Stagger", api = GetStaggerChance,  colorKey = "stagger", showKey = "showStagger", appliesFn = IsBrewmasterSpec },
+    -- Armor & DR handled specially: armor = absolute number, DR = cached arithmetic
+}
+
 local TERTIARY_STATS = {
     { label = "Leech",     api = GetLifesteal, ratingCR = CR_LIFESTEAL, colorKey = "leech",     showKey = "showLeech"     },
     { label = "Avoidance", api = GetAvoidance, ratingCR = CR_AVOIDANCE, colorKey = "avoidance", showKey = "showAvoidance" },
@@ -450,7 +477,7 @@ local CACHED_BOOL_KEYS = {
     "showMainStat", "showStamina", "showItemLevel",
     -- Defensive & durability:
     "showDefensive", "hideZeroDefensive",
-    "showDodge", "showParry", "showBlock", "showArmor",
+    "showDodge", "showParry", "showBlock", "showArmor", "showStagger",
     "showDurability", "showRepairCost", "useAutoColorDurability", "useWorstDurability",
     -- Split routing:
     "splitCharacter", "splitItemLevel", "splitOffensive", "splitTertiary",
@@ -542,8 +569,8 @@ local isLoaded = false
 --   - hardcoded literals in special-case branches: "Vers" / "Speed" / "Armor"
 --     (additive rows for dual-source stats not in the loop tables)
 --   - "Durability" in BuildDurabilityLines / "Repair" in BuildRepairCostPayload
---   - section keys used by SectionHeader(): Character / Item Level / Offensive /
---     Tertiary / Defensive / Gear
+--   - section keys used by SectionHeader(): Character / Offensive / Tertiary /
+--     Defensive / Gear
 -- Adding a new key here without updating callers is a no-op; adding a new caller
 -- without a key here falls back gracefully to the English literal (`L(k) → k`).
 --
@@ -553,7 +580,7 @@ local isLoaded = false
 local LABELS_BY_LOCALE = {
     enUS = {
         Crit = "Crit",          Haste = "Haste",        Mastery = "Mastery",    Vers = "Vers",
-        Dodge = "Dodge",        Parry = "Parry",        Block = "Block",        Armor = "Armor",
+        Dodge = "Dodge",        Parry = "Parry",        Block = "Block",        Armor = "Armor",        Stagger = "Stagger",
         Strength = "Strength",  Agility = "Agility",    Intellect = "Intellect", Stamina = "Stamina",
         ItemLevel = "iLvl",
         Leech = "Leech",        Avoidance = "Avoidance", Speed = "Speed",
@@ -590,7 +617,7 @@ local LABELS_BY_LOCALE = {
         ["Show Leech"] = "Show Leech", ["Show Avoidance"] = "Show Avoidance", ["Show Speed"] = "Show Speed",
         ["Show Defensive Stats"] = "Show Defensive Stats",
         ["Show Dodge"] = "Show Dodge", ["Show Parry"] = "Show Parry",
-        ["Show Block"] = "Show Block", ["Show Armor"] = "Show Armor",
+        ["Show Block"] = "Show Block", ["Show Armor"] = "Show Armor", ["Show Stagger"] = "Show Stagger",
         ["Show Durability"] = "Show Durability", ["Show Repair Cost"] = "Show Repair Cost",
         ["Auto Color by Threshold"] = "Auto Color by Threshold",
         ["Use Worst Slot (instead of average)"] = "Use Worst Slot (instead of average)",
@@ -618,7 +645,7 @@ local LABELS_BY_LOCALE = {
     -- forms where the language allows; "Сила" / "Блок" / "Крит" are already 4 chars.
     ruRU = {
         Crit = "Крит",          Haste = "Хаст",         Mastery = "Маст",       Vers = "Унив",
-        Dodge = "Укл",          Parry = "Пари",         Block = "Блок",         Armor = "Брон",
+        Dodge = "Укл",          Parry = "Пари",         Block = "Блок",         Armor = "Брон",         Stagger = "Пошат",
         Strength = "Сила",      Agility = "Ловк",       Intellect = "Инт",      Stamina = "Выно",
         ItemLevel = "УрП",
         Leech = "Вамп",         Avoidance = "Избег",    Speed = "Скор",
@@ -654,7 +681,7 @@ local LABELS_BY_LOCALE = {
         ["Show Leech"] = "Показывать Вампиризм", ["Show Avoidance"] = "Показывать Избегание", ["Show Speed"] = "Показывать Скорость",
         ["Show Defensive Stats"] = "Показывать защитные",
         ["Show Dodge"] = "Показывать Уклонение", ["Show Parry"] = "Показывать Парирование",
-        ["Show Block"] = "Показывать Блок", ["Show Armor"] = "Показывать Броню",
+        ["Show Block"] = "Показывать Блок", ["Show Armor"] = "Показывать Броню", ["Show Stagger"] = "Показывать Пошатывание",
         ["Show Durability"] = "Показывать прочность", ["Show Repair Cost"] = "Показывать стоимость ремонта",
         ["Auto Color by Threshold"] = "Авто-цвет по порогу",
         ["Use Worst Slot (instead of average)"] = "По худшему слоту (вместо среднего)",
@@ -682,7 +709,7 @@ local LABELS_BY_LOCALE = {
     -- the umlaut character of Stärke at 4 chars (single char "Stä" reads truncated).
     deDE = {
         Crit = "Krit",          Haste = "Tempo",        Mastery = "Meist",      Vers = "Viels",
-        Dodge = "Ausw",         Parry = "Par",          Block = "Block",        Armor = "Rüst",
+        Dodge = "Ausw",         Parry = "Par",          Block = "Block",        Armor = "Rüst",         Stagger = "Staff",
         Strength = "Stär",      Agility = "Bew",        Intellect = "Int",      Stamina = "Aus",
         ItemLevel = "GS",
         Leech = "Saug",         Avoidance = "Verm",     Speed = "Lauf",
@@ -716,7 +743,7 @@ local LABELS_BY_LOCALE = {
         ["Show Leech"] = "Aussaugen anzeigen", ["Show Avoidance"] = "Vermeidung anzeigen", ["Show Speed"] = "Lauftempo anzeigen",
         ["Show Defensive Stats"] = "Defensivwerte anzeigen",
         ["Show Dodge"] = "Ausweichen anzeigen", ["Show Parry"] = "Parieren anzeigen",
-        ["Show Block"] = "Blocken anzeigen", ["Show Armor"] = "Rüstung anzeigen",
+        ["Show Block"] = "Blocken anzeigen", ["Show Armor"] = "Rüstung anzeigen", ["Show Stagger"] = "Staffeln anzeigen",
         ["Show Durability"] = "Haltbarkeit anzeigen", ["Show Repair Cost"] = "Reparaturkosten anzeigen",
         ["Auto Color by Threshold"] = "Auto-Farbe nach Schwellwert",
         ["Use Worst Slot (instead of average)"] = "Schlechtester Slot (statt Durchschnitt)",
@@ -737,7 +764,7 @@ local LABELS_BY_LOCALE = {
     -- chars reads more clearly than the truncated 3-char "Esq".
     frFR = {
         Crit = "Crit",          Haste = "Hâte",         Mastery = "Maît",       Vers = "Polyv",
-        Dodge = "Esqu",         Parry = "Par",          Block = "Bloc",         Armor = "Arm",
+        Dodge = "Esqu",         Parry = "Par",          Block = "Bloc",         Armor = "Arm",          Stagger = "Report",
         Strength = "Forc",      Agility = "Agil",       Intellect = "Int",      Stamina = "End",
         ItemLevel = "NivObj",
         Leech = "Vamp",         Avoidance = "Évit",     Speed = "Vit",
@@ -770,7 +797,7 @@ local LABELS_BY_LOCALE = {
         ["Show Leech"] = "Afficher Vampirisme", ["Show Avoidance"] = "Afficher Évitement", ["Show Speed"] = "Afficher Vitesse",
         ["Show Defensive Stats"] = "Afficher défensives",
         ["Show Dodge"] = "Afficher Esquive", ["Show Parry"] = "Afficher Parade",
-        ["Show Block"] = "Afficher Blocage", ["Show Armor"] = "Afficher Armure",
+        ["Show Block"] = "Afficher Blocage", ["Show Armor"] = "Afficher Armure", ["Show Stagger"] = "Afficher Report",
         ["Show Durability"] = "Afficher durabilité", ["Show Repair Cost"] = "Afficher coût de réparation",
         ["Auto Color by Threshold"] = "Couleur auto par seuil",
         ["Use Worst Slot (instead of average)"] = "Pire emplacement (vs moyenne)",
@@ -792,7 +819,7 @@ local LABELS_BY_LOCALE = {
     -- unfinished beside Spanish's typically-longer words.
     esES = {
         Crit = "Crít",          Haste = "Cele",         Mastery = "Maest",      Vers = "Versat",
-        Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",
+        Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",          Stagger = "Aplaz",
         Strength = "Fuer",      Agility = "Agil",       Intellect = "Int",      Stamina = "Aguante",
         ItemLevel = "NvObj",
         Leech = "Robo",         Avoidance = "Evit",     Speed = "Vel",
@@ -825,7 +852,7 @@ local LABELS_BY_LOCALE = {
         ["Show Leech"] = "Mostrar Robo", ["Show Avoidance"] = "Mostrar Evitación", ["Show Speed"] = "Mostrar Velocidad",
         ["Show Defensive Stats"] = "Mostrar defensivas",
         ["Show Dodge"] = "Mostrar Esquiva", ["Show Parry"] = "Mostrar Parada",
-        ["Show Block"] = "Mostrar Bloqueo", ["Show Armor"] = "Mostrar Armadura",
+        ["Show Block"] = "Mostrar Bloqueo", ["Show Armor"] = "Mostrar Armadura", ["Show Stagger"] = "Mostrar Aplazar",
         ["Show Durability"] = "Mostrar durabilidad", ["Show Repair Cost"] = "Mostrar coste reparación",
         ["Auto Color by Threshold"] = "Color auto por umbral",
         ["Use Worst Slot (instead of average)"] = "Peor ranura (en vez de media)",
@@ -844,7 +871,7 @@ local LABELS_BY_LOCALE = {
     -- with esES (no regional split for combat stats). Mirrored 1:1 from esES table.
     esMX = {
         Crit = "Crít",          Haste = "Cele",         Mastery = "Maest",      Vers = "Versat",
-        Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",
+        Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",          Stagger = "Aplaz",
         Strength = "Fuer",      Agility = "Agil",       Intellect = "Int",      Stamina = "Aguante",
         ItemLevel = "NvObj",
         Leech = "Robo",         Avoidance = "Evit",     Speed = "Vel",
@@ -878,7 +905,7 @@ local LABELS_BY_LOCALE = {
         ["Show Leech"] = "Mostrar Robo", ["Show Avoidance"] = "Mostrar Evitación", ["Show Speed"] = "Mostrar Velocidad",
         ["Show Defensive Stats"] = "Mostrar defensivas",
         ["Show Dodge"] = "Mostrar Esquiva", ["Show Parry"] = "Mostrar Parada",
-        ["Show Block"] = "Mostrar Bloqueo", ["Show Armor"] = "Mostrar Armadura",
+        ["Show Block"] = "Mostrar Bloqueo", ["Show Armor"] = "Mostrar Armadura", ["Show Stagger"] = "Mostrar Aplazar",
         ["Show Durability"] = "Mostrar durabilidad", ["Show Repair Cost"] = "Mostrar costo de reparación",
         ["Auto Color by Threshold"] = "Color auto por umbral",
         ["Use Worst Slot (instead of average)"] = "Peor ranura (en vez del promedio)",
@@ -899,7 +926,7 @@ local LABELS_BY_LOCALE = {
     -- (2 chars) was clearly too short — Italian readers wouldn't recognize it.
     itIT = {
         Crit = "Crit",          Haste = "Cele",         Mastery = "Maest",      Vers = "Vers",
-        Dodge = "Schiv",        Parry = "Para",         Block = "Bloc",         Armor = "Armat",
+        Dodge = "Schiv",        Parry = "Para",         Block = "Bloc",         Armor = "Armat",        Stagger = "Barc",
         Strength = "Forz",      Agility = "Agil",       Intellect = "Int",      Stamina = "Cost",
         ItemLevel = "LivOg",
         Leech = "Vamp",         Avoidance = "Evit",     Speed = "Vel",
@@ -932,7 +959,7 @@ local LABELS_BY_LOCALE = {
         ["Show Leech"] = "Mostra Vampirismo", ["Show Avoidance"] = "Mostra Evitazione", ["Show Speed"] = "Mostra Velocità",
         ["Show Defensive Stats"] = "Mostra difensive",
         ["Show Dodge"] = "Mostra Schivata", ["Show Parry"] = "Mostra Parata",
-        ["Show Block"] = "Mostra Blocco", ["Show Armor"] = "Mostra Armatura",
+        ["Show Block"] = "Mostra Blocco", ["Show Armor"] = "Mostra Armatura", ["Show Stagger"] = "Mostra Barcollamento",
         ["Show Durability"] = "Mostra durata", ["Show Repair Cost"] = "Mostra costo riparazione",
         ["Auto Color by Threshold"] = "Colore auto per soglia",
         ["Use Worst Slot (instead of average)"] = "Slot peggiore (anziché media)",
@@ -952,7 +979,7 @@ local LABELS_BY_LOCALE = {
     -- 3-char truncations. Esqu (Esquiva) likewise.
     ptBR = {
         Crit = "Crít",          Haste = "Cele",         Mastery = "Maest",      Vers = "Vers",
-        Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",
+        Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",          Stagger = "Camb",
         Strength = "Forç",      Agility = "Agil",       Intellect = "Int",      Stamina = "Vig",
         ItemLevel = "NvItem",
         Leech = "Vamp",         Avoidance = "Evit",     Speed = "Vel",
@@ -985,7 +1012,7 @@ local LABELS_BY_LOCALE = {
         ["Show Leech"] = "Mostrar Vampirismo", ["Show Avoidance"] = "Mostrar Evasão", ["Show Speed"] = "Mostrar Velocidade",
         ["Show Defensive Stats"] = "Mostrar defensivos",
         ["Show Dodge"] = "Mostrar Esquiva", ["Show Parry"] = "Mostrar Aparar",
-        ["Show Block"] = "Mostrar Bloqueio", ["Show Armor"] = "Mostrar Armadura",
+        ["Show Block"] = "Mostrar Bloqueio", ["Show Armor"] = "Mostrar Armadura", ["Show Stagger"] = "Mostrar Cambalear",
         ["Show Durability"] = "Mostrar durabilidade", ["Show Repair Cost"] = "Mostrar custo de reparo",
         ["Auto Color by Threshold"] = "Cor auto por limite",
         ["Use Worst Slot (instead of average)"] = "Pior slot (em vez de média)",
@@ -1012,7 +1039,7 @@ local LABELS_BY_LOCALE = {
     -- 회피 (Dodge). Native-speaker review still welcome via GitHub Issues.
     koKR = {
         Crit = "치명",          Haste = "가속",         Mastery = "특화",       Vers = "유연",
-        Dodge = "회피",         Parry = "쳐막",         Block = "막기",         Armor = "방어",
+        Dodge = "회피",         Parry = "쳐막",         Block = "막기",         Armor = "방어",         Stagger = "시간차",
         Strength = "힘",        Agility = "민첩",       Intellect = "지능",      Stamina = "체력",
         ItemLevel = "템렙",
         Leech = "흡혈",         Avoidance = "광피",     Speed = "이속",
@@ -1045,7 +1072,7 @@ local LABELS_BY_LOCALE = {
         ["Show Leech"] = "흡혈 표시", ["Show Avoidance"] = "광피 표시", ["Show Speed"] = "이속 표시",
         ["Show Defensive Stats"] = "방어 능력치 표시",
         ["Show Dodge"] = "회피 표시", ["Show Parry"] = "쳐막 표시",
-        ["Show Block"] = "막기 표시", ["Show Armor"] = "방어도 표시",
+        ["Show Block"] = "막기 표시", ["Show Armor"] = "방어도 표시", ["Show Stagger"] = "시간차 표시",
         ["Show Durability"] = "내구도 표시", ["Show Repair Cost"] = "수리 비용 표시",
         ["Auto Color by Threshold"] = "임계값 자동 색상",
         ["Use Worst Slot (instead of average)"] = "최악 슬롯 사용 (평균 대신)",
@@ -1065,7 +1092,7 @@ local LABELS_BY_LOCALE = {
     -- 躲闪 (Dodge) vs 闪避 (Avoidance) is the standard zhCN split. High confidence.
     zhCN = {
         Crit = "暴击",          Haste = "急速",         Mastery = "精通",       Vers = "全能",
-        Dodge = "躲闪",         Parry = "招架",         Block = "格挡",         Armor = "护甲",
+        Dodge = "躲闪",         Parry = "招架",         Block = "格挡",         Armor = "护甲",         Stagger = "醉拳",
         Strength = "力量",      Agility = "敏捷",       Intellect = "智力",      Stamina = "耐力",
         ItemLevel = "装等",
         Leech = "吸血",         Avoidance = "闪避",     Speed = "移速",
@@ -1098,7 +1125,7 @@ local LABELS_BY_LOCALE = {
         ["Show Leech"] = "显示吸血", ["Show Avoidance"] = "显示闪避", ["Show Speed"] = "显示移速",
         ["Show Defensive Stats"] = "显示防御属性",
         ["Show Dodge"] = "显示躲闪", ["Show Parry"] = "显示招架",
-        ["Show Block"] = "显示格挡", ["Show Armor"] = "显示护甲",
+        ["Show Block"] = "显示格挡", ["Show Armor"] = "显示护甲", ["Show Stagger"] = "显示醉拳",
         ["Show Durability"] = "显示耐久", ["Show Repair Cost"] = "显示修理费用",
         ["Auto Color by Threshold"] = "按阈值自动着色",
         ["Use Worst Slot (instead of average)"] = "最差栏位（替代平均值）",
@@ -1118,7 +1145,7 @@ local LABELS_BY_LOCALE = {
     -- Matches WoW Taiwan client terminology. High confidence.
     zhTW = {
         Crit = "致命",          Haste = "加速",         Mastery = "精通",       Vers = "全能",
-        Dodge = "躲避",         Parry = "招架",         Block = "格擋",         Armor = "護甲",
+        Dodge = "躲避",         Parry = "招架",         Block = "格擋",         Armor = "護甲",         Stagger = "醉拳",
         Strength = "力量",      Agility = "敏捷",       Intellect = "智力",      Stamina = "耐力",
         ItemLevel = "裝等",
         Leech = "汲取",         Avoidance = "迴避",     Speed = "移速",
@@ -1151,7 +1178,7 @@ local LABELS_BY_LOCALE = {
         ["Show Leech"] = "顯示汲取", ["Show Avoidance"] = "顯示迴避", ["Show Speed"] = "顯示移速",
         ["Show Defensive Stats"] = "顯示防禦屬性",
         ["Show Dodge"] = "顯示躲避", ["Show Parry"] = "顯示招架",
-        ["Show Block"] = "顯示格擋", ["Show Armor"] = "顯示護甲",
+        ["Show Block"] = "顯示格擋", ["Show Armor"] = "顯示護甲", ["Show Stagger"] = "顯示醉拳",
         ["Show Durability"] = "顯示耐久", ["Show Repair Cost"] = "顯示修理費用",
         ["Auto Color by Threshold"] = "依閾值自動上色",
         ["Use Worst Slot (instead of average)"] = "最差欄位（替代平均值）",
@@ -1366,6 +1393,11 @@ local function shouldShow(val, hideZero)
     if not hideZero then return true end
     if issecretvalue(val) then return true end
     return val ~= 0
+end
+
+local function IsRenderablePercentValue(val)
+    if issecretvalue(val) then return true end
+    return type(val) == "number" and val == val and val > -math.huge and val < math.huge
 end
 
 local function FormatRepairCost(copper)
@@ -2540,11 +2572,11 @@ local function BuildDefensiveLines(labels, ratings, values)
     if not cached.showDefensive then return labels, ratings, values end
     local cs = cached.colorStrings
 
-    -- Dodge / Parry / Block (table-driven)
+    -- Dodge / Parry / Block / Stagger (table-driven)
     for _, def in ipairs(DEFENSIVE_STATS) do
-        if cached[def.showKey] then
+        if cached[def.showKey] and (not def.appliesFn or def.appliesFn()) then
             local val = safeCall(def.api)
-            if shouldShow(val, cached.hideZeroDefensive) then
+            if IsRenderablePercentValue(val) and shouldShow(val, cached.hideZeroDefensive) then
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtPctOnly(val, statColor)
                 PushRow(labels, ratings, values,
@@ -2663,10 +2695,10 @@ end
 
 local RENDER_BLOCK_DEFS = {
     { splitKey = "splitCharacter",  sectionKey = "Character",  buildFn = BuildCharacterLines },
-    { splitKey = "splitItemLevel",  sectionKey = "Item Level", buildFn = BuildItemLevelLines },
     { splitKey = "splitOffensive",  sectionKey = "Offensive",  buildFn = BuildOffensiveLines },
     { splitKey = "splitTertiary",   sectionKey = "Tertiary",   buildFn = BuildTertiaryLines },
     { splitKey = "splitDefensive",  sectionKey = "Defensive",  buildFn = BuildDefensiveLines },
+    { splitKey = "splitItemLevel",  sectionKey = "Gear",       buildFn = BuildItemLevelLines },
     { splitKey = "splitDurability", sectionKey = "Gear",       buildFn = BuildDurabilityLines },
     { splitKey = "splitRepairCost", sectionKey = "Gear",       buildRepair = true },
 }
@@ -4512,21 +4544,6 @@ function addon:OpenConfigMenu()
 
     CursorGap(cs, 6)
 
-    CursorSection(cs, "Item Level")
-    do
-        local rowY = cs.y
-        local _, sw, txt
-        local leftRows = {}
-        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProItemLevelCheck",
-            "Show Item Level", "showItemLevel", "itemLevel", cs.padX, rowY,
-            function(checked) if checked then itemLevelDirty = true end end)
-        leftRows[#leftRows + 1] = { text = txt, swatch = sw }
-        AlignSwatchColumn(leftRows)
-        cs.y = rowY - 26
-    end
-
-    CursorGap(cs, 6)
-
     CursorSection(cs, "Offensive Stats")
     do
         local rowY = cs.y
@@ -4602,18 +4619,19 @@ function addon:OpenConfigMenu()
     do
         local rowY = cs.y
         -- Sub-toggle refs captured to grey them when master is off (mirrors Tertiary tab).
-        local dodgeCb, parryCb, blockCb, armorCb
+        local dodgeCb, parryCb, blockCb, armorCb, staggerCb
         local function ApplyDefensiveSubsEnabled(masterOn)
             SetCheckboxEnabled(dodgeCb, masterOn)
             SetCheckboxEnabled(parryCb, masterOn)
             SetCheckboxEnabled(blockCb, masterOn)
             SetCheckboxEnabled(armorCb, masterOn)
+            SetCheckboxEnabled(staggerCb, masterOn)
         end
         CreateCheckbox(statsTab, "StatsProDefensiveCheck",   "Show Defensive Stats", "showDefensive",     cs.padX,       rowY,
             function(checked) ApplyDefensiveSubsEnabled(checked) end)
         CreateCheckbox(statsTab, "StatsProHideZeroDefCheck", "Hide Zero Values",     "hideZeroDefensive", cs.padX + CONFIG_COL_OFFSET, rowY)
         cs.y = rowY - 26
-        -- Each defensive stat with its own inline color swatch. Two columns of 2 rows each;
+        -- Each defensive stat with its own inline color swatch. Two balanced columns;
         -- aligned per-column via AlignSwatchColumn so left swatches share an x and right
         -- swatches share an x (each column's max GetStringWidth measured independently).
         local leftRows, rightRows = {}, {}
@@ -4628,6 +4646,9 @@ function addon:OpenConfigMenu()
         armorCb, sw, txt = CreateCheckboxColor(statsTab, "StatsProArmorCheck", "Show Armor", "showArmor", "armor", cs.padX + CONFIG_COL_OFFSET, cs.y)
         rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         CursorAdvance(cs, 22)
+        staggerCb, sw, txt = CreateCheckboxColor(statsTab, "StatsProStaggerCheck", "Show Stagger", "showStagger", "stagger", cs.padX, cs.y)
+        leftRows[#leftRows + 1] = { text = txt, swatch = sw }
+        CursorAdvance(cs, 22)
         AlignSwatchColumn(leftRows)
         AlignSwatchColumn(rightRows)
         ApplyDefensiveSubsEnabled(GetBoolDB("showDefensive"))
@@ -4639,14 +4660,24 @@ function addon:OpenConfigMenu()
     CursorSection(cs, "Gear")
     do
         local rowY = cs.y
+        local leftRows, rightRows = {}, {}
+        local sw, txt
+        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProItemLevelCheck",
+            "Show Item Level", "showItemLevel", "itemLevel", cs.padX, rowY,
+            function(checked) if checked then itemLevelDirty = true end end)
+        leftRows[#leftRows + 1] = { text = txt, swatch = sw }
         -- Durability swatch is the override color used when Auto Color is OFF.
         -- WHY: also mark dirty so re-enabling after a long off period gets fresh values
         -- on the next tick, not whatever was cached when last enabled.
-        CreateCheckboxColor(statsTab, "StatsProDurabilityCheck", "Show Durability",  "showDurability", "durability", cs.padX, rowY,
+        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProDurabilityCheck", "Show Durability",  "showDurability", "durability", cs.padX + CONFIG_COL_OFFSET, rowY,
             function() durabilityDirty = true end)
-        CreateCheckbox(statsTab, "StatsProRepairCostCheck", "Show Repair Cost", "showRepairCost", cs.padX + CONFIG_COL_OFFSET, rowY,
-            function() durabilityDirty = true end)
+        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
+        AlignSwatchColumn(leftRows)
+        AlignSwatchColumn(rightRows)
         cs.y = rowY - 26
+        CreateCheckbox(statsTab, "StatsProRepairCostCheck", "Show Repair Cost", "showRepairCost", cs.padX, cs.y,
+            function() durabilityDirty = true end)
+        CursorAdvance(cs, 22)
         CreateCheckbox(statsTab, "StatsProAutoColorCheck",
             "Auto Color by Threshold", "useAutoColorDurability", cs.padX, cs.y)
         CursorAdvance(cs, 22)
@@ -4716,9 +4747,10 @@ function addon:PrintDebugDump()
     PrintMsg(string.format("subs off: crit=%s haste=%s mastery=%s vers=%s",
         tostring(cached.showCrit), tostring(cached.showHaste), tostring(cached.showMastery), tostring(cached.showVersatility)))
 
-    PrintMsg(string.format("subs: leech=%s avoid=%s speed=%s | dodge=%s parry=%s block=%s armor=%s",
+    PrintMsg(string.format("subs: leech=%s avoid=%s speed=%s | dodge=%s parry=%s block=%s armor=%s stagger=%s",
         tostring(cached.showLeech), tostring(cached.showAvoidance), tostring(cached.showSpeed),
-        tostring(cached.showDodge), tostring(cached.showParry), tostring(cached.showBlock), tostring(cached.showArmor)))
+        tostring(cached.showDodge), tostring(cached.showParry), tostring(cached.showBlock),
+        tostring(cached.showArmor), tostring(cached.showStagger)))
 
     -- Panel positions: nil-guard (DB may be partial in pre-PEW edge cases)
     local function PosLine(label, p, rp, x, y)

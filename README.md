@@ -36,7 +36,7 @@
 - **Main stat auto-detect** — Strength / Agility / Intellect resolves automatically from your active spec; no toggling when you respec or swap characters
 - **Stamina** — optional row for tanks tracking effective HP and any spec watching consumable contributions (raid buffs / flask / food included), default OFF
 - **Item Level** — optional equipped / overall row (`271 / 273`) with a colored warning when your bags out-level what you are wearing, default OFF
-- **Defensive stats** — Dodge, Parry, Block, Armor (as % damage reduction)
+- **Defensive stats** — Dodge, Parry, Block, Brewmaster Stagger, and Armor damage reduction
 - **Durability** — average or worst-slot percentage with auto-color thresholds (green / yellow / red)
 - **Repair cost** — optional live vendor-format coin display (`46g 40s 81c` with embedded gold/silver/copper icons), default OFF
 - **Three display modes** — Flat (one panel), Sectioned (one panel with block headers), Split (two movable panels with configurable block routing)
@@ -50,10 +50,10 @@
 Layouts auto-fit to enabled stats, drag panels anywhere, no awkward gaps when
 toggling columns. Top: **Flat** (default secondary stats) and **Rating + Percentage**
 (both columns side by side). Middle: **With Defensives** (Dodge / Parry / Block /
-Armor as % damage reduction) and **Repair Cost at Vendor** (vendor-format coin
+Brewmaster Stagger / Armor damage reduction) and **Repair Cost at Vendor** (vendor-format coin
 string with inline gold / silver / copper icons). Bottom: **Split Mode** —
 two independently draggable panels whose side-panel contents can be customized
-from Character / Item Level / Offensive / Tertiary / Defensive / Durability / Repair.
+from Character / Offensive / Tertiary / Defensive / Item Level / Durability / Repair.
 
 ![StatsPro display modes — flat, rating + percentage, with defensives, repair cost at vendor, and split mode](screenshots/display-modes.png)
 
@@ -172,7 +172,7 @@ everything:
 
 | Tab | What lives here |
 |---|---|
-| **Stats** | Character rows (Show Main Stat, Stamina), Item Level, Offensive, Tertiary, Defensive, and Gear toggles with inline color swatches |
+| **Stats** | Character rows (Show Main Stat, Stamina), Offensive, Tertiary, Defensive, and Gear toggles, including Item Level, with inline color swatches |
 | **Layout** | Visibility / Lock, Display Mode, **Side Panel Contains** routing for Split mode, **Value Display** controls (Show Rating / Show Percentage / Label Style / Match Value Color to Stat), Scale, Refresh Rate |
 | **Appearance** | Typography (Font / Font Size / Text Opacity), Localization (Language picker + font-coverage warning) |
 
@@ -213,7 +213,7 @@ Core single-file design. Everything renders out of [`StatsPro.lua`](StatsPro.lua
   Dual-column mode = both display toggles on; otherwise everything stacks in the
   rating column. `IsDualColMode()` is the single source of truth for that decision.
 - **`UpdateStats`** — drives the per-frame OnUpdate, builds logical render blocks
-  (Character / Item Level / Offensive / Tertiary / Defensive / Durability / Repair),
+  (Character / Offensive / Tertiary / Defensive / Item Level / Durability / Repair),
   routes them by display mode, and gates value-column joining on `IsDualColMode()`.
 - **`LABELS_BY_LOCALE` + `L()` + `GetStyledLabelText()` + `FormatLabel()` + `PushLocalizedLabel`** — i18n
   and label-presentation layer. One table indexed by locale; `L()` resolves the

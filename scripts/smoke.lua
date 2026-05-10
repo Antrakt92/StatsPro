@@ -51,6 +51,13 @@ local function contains(t, value)
     return false
 end
 
+local function printContains(env, needle)
+    for _, line in ipairs(env.__prints) do
+        if line:find(needle, 1, true) then return true end
+    end
+    return false
+end
+
 local function isFiniteNumber(value)
     return type(value) == "number" and value == value and value > -math.huge and value < math.huge
 end
@@ -474,27 +481,32 @@ local function makeEnv(locale, opts)
     env.GetVersatilityBonus = zero
     env.GetCombatRating = zero
     env.GetCombatRatingBonus = zero
-    env.GetDodgeChance = zero
-    env.GetParryChance = zero
-    env.GetBlockChance = zero
+    env.GetDodgeChance = opts.getDodgeChance or zero
+    env.GetParryChance = opts.getParryChance or zero
+    env.GetBlockChance = opts.getBlockChance or zero
     env.GetLifesteal = zero
     env.GetAvoidance = zero
     env.GetSpeed = zero
     env.GetUnitSpeed = function() return 0, 0, 0, 0 end
-    env.GetAverageItemLevel = function() return 0, 0 end
+    env.GetAverageItemLevel = opts.getAverageItemLevel or function() return 0, 0 end
     env.UnitStat = function(_, statId) return 0, statId == 3 and 100 or 0 end
     env.UnitArmor = function() return 0, 0 end
     env.UnitEffectiveLevel = function() return 80 end
-    env.UnitClass = function() return "Warrior", "WARRIOR" end
+    env.UnitClass = function() return opts.unitClassName or "Warrior", opts.unitClassToken or "WARRIOR" end
     env.UnitRace = function() return "Human", "Human" end
     env.UnitSex = function() return 2 end
     env.GetSpecialization = function() return nil end
     env.GetSpecializationInfo = function() return nil end
     env.GetSpecializationRole = function() return nil end
     env.C_SpecializationInfo = {
-        GetSpecialization = function() return nil end,
-        GetSpecializationInfo = function() return nil end,
+        GetSpecialization = function() return opts.specIndex end,
+        GetSpecializationInfo = function()
+            return opts.specID, opts.specName, nil, nil, opts.specRole, opts.primaryStat
+        end,
         GetSpecializationRole = function() return nil end,
+    }
+    env.C_PaperDollInfo = {
+        GetStaggerPercentage = opts.getStaggerPercentage or function() return nil end,
     }
     env.PaperDollFrame_GetArmorReduction = zero
     env.GetInventoryItemDurability = function() return nil, nil end
@@ -661,8 +673,17 @@ do
     eq("db.empty_default_population.version", db.dbVersion, test.currentDBVersion())
     eq("db.empty_default_population.force_locale", db.forceLocale, "auto")
     eq("db.empty_default_population.font_size", db.fontSize, 14)
+    eq("db.empty_default_population.split_item_level", db.splitItemLevel, true)
+    eq("db.empty_default_population.show_stagger", db.showStagger, false)
     check("db.empty_default_population.colors", type(db.colors) == "table", "colors table missing")
     assertColor("db.empty_default_population.crit", db.colors.crit, 1, 0, 0)
+    assertColor("db.empty_default_population.stagger", db.colors.stagger, 0.3, 0.8, 0.5)
+end
+
+do
+    local db = runMigrate({ dbVersion = 8, splitItemLevel = false })
+    eq("db.v8_preserves_existing_split_item_level_false.value", db.splitItemLevel, false)
+    eq("db.v8_preserves_existing_split_item_level_false.version", db.dbVersion, test.currentDBVersion())
 end
 
 do
@@ -941,6 +962,107 @@ do
 end
 
 do
+    local ilvlEnv = loadStatsPro("enUS", {
+        statsProDB = {
+            displayMode = "sectioned",
+            showOffensive = false,
+            showItemLevel = true,
+            showDurability = false,
+            showRepairCost = false,
+        },
+        getAverageItemLevel = function() return 273, 271 end,
+    })
+    fireEvent("routing.item_level_uses_gear_header.fire", ilvlEnv, "PLAYER_ENTERING_WORLD")
+    slash("routing.item_level_uses_gear_header.dump", ilvlEnv, "debug bucket")
+    eq("routing.item_level_uses_gear_header.gear", printContains(ilvlEnv, "— Gear —"), true)
+    eq("routing.item_level_uses_gear_header.no_item_level_header", printContains(ilvlEnv, "— Item Level —"), false)
+    eq("routing.item_level_uses_gear_header.row", printContains(ilvlEnv, "iLvl:"), true)
+end
+
+do
+    local blockEnv = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showDefensive = true,
+            hideZeroDefensive = false,
+            showDodge = false,
+            showParry = false,
+            showBlock = true,
+            showArmor = false,
+        },
+        unitClassToken = "MONK",
+        getBlockChance = function() return 7 end,
+    })
+    fireEvent("defensive.block_skips_non_block_class.fire", blockEnv, "PLAYER_ENTERING_WORLD")
+    slash("defensive.block_skips_non_block_class.dump", blockEnv, "debug bucket")
+    eq("defensive.block_skips_non_block_class.no_block_row", printContains(blockEnv, "Block:"), false)
+end
+
+do
+    local blockEnv = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showDefensive = true,
+            hideZeroDefensive = false,
+            showDodge = false,
+            showParry = false,
+            showBlock = true,
+            showArmor = false,
+        },
+        unitClassToken = "SHAMAN",
+        getBlockChance = function() return 0 end,
+    })
+    fireEvent("defensive.block_renders_for_shaman_zero.fire", blockEnv, "PLAYER_ENTERING_WORLD")
+    slash("defensive.block_renders_for_shaman_zero.dump", blockEnv, "debug bucket")
+    eq("defensive.block_renders_for_shaman_zero.block_row", printContains(blockEnv, "Block:"), true)
+end
+
+do
+    local staggerEnv = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showDefensive = true,
+            hideZeroDefensive = false,
+            showDodge = false,
+            showParry = false,
+            showBlock = false,
+            showArmor = false,
+            showStagger = true,
+        },
+        unitClassToken = "MONK",
+        specIndex = 1,
+        specID = 268,
+        getStaggerPercentage = function() return 37.5, 37.5 end,
+    })
+    fireEvent("defensive.stagger_renders_for_brewmaster.fire", staggerEnv, "PLAYER_ENTERING_WORLD")
+    slash("defensive.stagger_renders_for_brewmaster.dump", staggerEnv, "debug bucket")
+    eq("defensive.stagger_renders_for_brewmaster.row", printContains(staggerEnv, "Stagger:"), true)
+    eq("defensive.stagger_renders_for_brewmaster.value", printContains(staggerEnv, "37.5%"), true)
+end
+
+do
+    local staggerEnv = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showDefensive = true,
+            hideZeroDefensive = false,
+            showDodge = false,
+            showParry = false,
+            showBlock = false,
+            showArmor = false,
+            showStagger = true,
+        },
+        unitClassToken = "MONK",
+        specIndex = 1,
+        specID = 269,
+        getStaggerPercentage = function() return 37.5, 37.5 end,
+    })
+    fireEvent("defensive.stagger_skips_non_brewmaster.fire", staggerEnv, "PLAYER_ENTERING_WORLD")
+    slash("defensive.stagger_skips_non_brewmaster.dump", staggerEnv, "debug bucket")
+    eq("defensive.stagger_skips_non_brewmaster.no_row", printContains(staggerEnv, "Stagger:"), false)
+end
+
+do
     runCache(runMigrate({ forceLocale = "auto" }))
     local failures = test.collectLabelStyleSmokeFailures()
     eq("labels.existing_utf8_invariants.count", #failures, 0)
@@ -1022,6 +1144,7 @@ do
 
     local layoutControls = {
         "StatsProSplitCharacterCheck",
+        "StatsProSplitItemLevelCheck",
         "StatsProSplitOffensiveCheck",
         "StatsProRatingCheck",
         "StatsProPercentageCheck",
@@ -1039,6 +1162,7 @@ do
         "StatsProCritCheck",
         "StatsProTertiaryCheck",
         "StatsProDefensiveCheck",
+        "StatsProStaggerCheck",
         "StatsProDurabilityCheck",
         "StatsProRepairCostCheck",
     }
@@ -1077,6 +1201,10 @@ do
     eq("config.checkbox_tertiary_master_enables_dependents.leech", env.StatsProLeechCheck:IsEnabled(), true)
     clickCheckbox("config.checkbox_tertiary_master_disables_dependents", env.StatsProTertiaryCheck, false)
     eq("config.checkbox_tertiary_master_disables_dependents.leech", env.StatsProLeechCheck:IsEnabled(), false)
+    clickCheckbox("config.checkbox_defensive_master_enables_dependents", env.StatsProDefensiveCheck, true)
+    eq("config.checkbox_defensive_master_enables_dependents.stagger", env.StatsProStaggerCheck:IsEnabled(), true)
+    clickCheckbox("config.checkbox_defensive_master_disables_dependents", env.StatsProDefensiveCheck, false)
+    eq("config.checkbox_defensive_master_disables_dependents.stagger", env.StatsProStaggerCheck:IsEnabled(), false)
     clickCheckbox("config.checkbox_repair_cost_updates_db", env.StatsProRepairCostCheck, true)
     eq("config.checkbox_repair_cost_updates_db.value", env.StatsProDB.showRepairCost, true)
 

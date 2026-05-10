@@ -53,7 +53,7 @@ read_globals = {
     "UnitStat", "UnitArmor", "UnitEffectiveLevel", "UnitClass", "UnitRace", "UnitSex",
     -- Spec / class
     "GetSpecialization", "GetSpecializationInfo", "GetSpecializationRole",
-    "C_SpecializationInfo",
+    "C_PaperDollInfo", "C_SpecializationInfo",
     -- Inventory / tooltips
     "GetInventoryItemDurability", "GetInventoryItemLink",
     "C_TooltipInfo", "TooltipUtil", "GetCoinTextureString",

@@ -2,6 +2,8 @@
 
 ## 1.7.0 - 10-May-2026 — Defensive and gear feedback pass
 
+Suggested by [@tflo](https://github.com/tflo) in issues #2, #3, and #4. Thank you for the detailed feedback and testing notes.
+
 ### Added
 
 - **Optional Stagger row for Brewmaster Monks** — Stagger now lives with the Defensive stats and has its own checkbox and color swatch. It stays hidden for non-Brewmaster specs even when zero values are shown.

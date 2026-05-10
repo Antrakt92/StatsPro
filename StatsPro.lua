@@ -4089,7 +4089,7 @@ function addon:OpenConfigMenu()
                 ApplyTextStyleToAllPanels(f.path, GetNumberDB("fontSize"))
                 ReflowAllPanels()
             end
-            previewedPath = nil  -- preview is now committed; OnHide skip its Apply
+            previewedPath = nil  -- preview is now committed; OnHide force-syncs to DB.font
             UIDropDownMenu_SetText(fontDropdown, f.name)
             CloseDropDownMenus()  -- defensive; no-op when no Blizzard dropdown is open
             RefreshLanguageWarning()  -- new font may not cover active locale's glyphs
@@ -4171,8 +4171,8 @@ function addon:OpenConfigMenu()
             -- OnHide: cancels active preview + hides catcher. Covers ALL close paths (Esc,
             -- click-outside, font-button click, /ss reset, configFrame-Hide hook). Catcher
             -- hide is unconditional (it's just a UIParent overlay); preview restore goes
-            -- through CancelFontPreview which short-circuits when previewedPath is already
-            -- nil (PickFont commit path resets it BEFORE Hide → no redundant Apply).
+            -- through CancelFontPreview's forced DB-font sync. PickFont writes DB first,
+            -- so the commit path still lands on the chosen font when Hide fires.
             fontPickerFrame:SetScript("OnHide", function()
                 if fontPickerCatcher then fontPickerCatcher:Hide() end
                 CancelFontPreview()
@@ -4466,8 +4466,9 @@ function addon:OpenConfigMenu()
                 ApplyTextStyleToAllPanels(fallback, GetNumberDB("fontSize"))
                 langPreviewSwappedFnt = true
             elseif langPreviewSwappedFnt then
-                -- Previous hover swapped to fallback; this hover doesn't need to → restore.
-                ApplyTextStyleToAllPanels(cur, GetNumberDB("fontSize"))
+                -- Previous hover swapped to fallback; this hover doesn't need to. Force
+                -- the restore for the same cache-drift class as picker/dropdown cancel.
+                ApplyTextStyleToAllPanels(cur, GetNumberDB("fontSize"), true)
                 langPreviewSwappedFnt = false
             end
 

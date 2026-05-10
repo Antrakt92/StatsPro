@@ -1327,6 +1327,37 @@ do
     runDropdownInit("config.dropdown_initializers.label_style", env.StatsProLabelStyleDropdown)
     runDropdownInit("config.dropdown_initializers.language", env.StatsProLanguageDropdown)
 
+    do
+        local defaultFont = test.copyDefaults().font
+        env.DropDownList1Button1.value = "ruRU"
+        env.DropDownList1Button2.value = "enUS"
+        env.UIDROPDOWNMENU_OPEN_MENU = env.StatsProLanguageDropdown
+        env.DropDownList1:Hide()
+        env.DropDownList1:Show()
+
+        local ruEnter = exists("config.language_hover_restore.ru_hook",
+            env.DropDownList1Button1.hooks.OnEnter and env.DropDownList1Button1.hooks.OnEnter[1])
+        local enEnter = exists("config.language_hover_restore.en_hook",
+            env.DropDownList1Button2.hooks.OnEnter and env.DropDownList1Button2.hooks.OnEnter[1])
+
+        ok, err = pcall(ruEnter, env.DropDownList1Button1)
+        check("config.language_hover_restore.preview_ru", ok, err)
+        local afterRuPreview = test.panelFontState()
+        check("config.language_hover_restore.ru_swaps_font",
+            afterRuPreview.mainLabelFont ~= defaultFont,
+            "ruRU hover did not exercise fallback-font preview")
+
+        test.setPanelAppliedStyleForSmoke(defaultFont, 14)
+        ok, err = pcall(enEnter, env.DropDownList1Button2)
+        check("config.language_hover_restore.preview_en", ok, err)
+        local afterEnPreview = test.panelFontState()
+        eq("config.language_hover_restore.forces_main_font", afterEnPreview.mainLabelFont, defaultFont)
+        eq("config.language_hover_restore.forces_side_font", afterEnPreview.sideLabelFont, defaultFont)
+
+        env.DropDownList1:Hide()
+        env.UIDROPDOWNMENU_OPEN_MENU = nil
+    end
+
     selectDropdownValue("config.dropdown_display_mode_split_writes_db", env.StatsProDisplayModeDropdown, "split")
     eq("config.dropdown_display_mode_split_writes_db.value", env.StatsProDB.displayMode, "split")
     eq("config.dropdown_display_mode_split_writes_db.split_check_enabled",

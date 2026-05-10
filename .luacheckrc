@@ -25,6 +25,7 @@ globals = {
     "SlashCmdList",  -- Blizzard table; addon adds keys, so it's writable for us
     -- Named UI widgets (referenced by global name elsewhere)
     "StatsProFrame", "StatsProDefensiveFrame",
+    "StatsProCloseColorPicker",
     "StatsProVisibleCheck", "StatsProCritCheck", "StatsProHasteCheck",
     "StatsProMasteryCheck", "StatsProVersCheck",
     "StatsProHideZeroOffCheck", "StatsProHideZeroCheck", "StatsProHideZeroDefCheck",

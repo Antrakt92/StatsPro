@@ -1356,6 +1356,34 @@ local function safeCall(fn, ...)
     return 0
 end
 
+local SAFE_NUM = {}
+
+function SAFE_NUM.IsCleanFiniteNumber(value)
+    if issecretvalue(value) then return false end
+    return type(value) == "number" and value == value and value > -math.huge and value < math.huge
+end
+
+function SAFE_NUM.IsRenderableNumberValue(value)
+    if issecretvalue(value) then return true end
+    return SAFE_NUM.IsCleanFiniteNumber(value)
+end
+
+function SAFE_NUM.NormalizeRatingValue(value)
+    if issecretvalue(value) then return value end
+    if not SAFE_NUM.IsCleanFiniteNumber(value) or value < 0 then return 0 end
+    return value
+end
+
+function SAFE_NUM.SafeDisplayPercent(fn, ...)
+    local value = safeCall(fn, ...)
+    if SAFE_NUM.IsRenderableNumberValue(value) then return value end
+    return nil
+end
+
+function SAFE_NUM.SafeRatingInt(fn, ...)
+    return SAFE_NUM.NormalizeRatingValue(safeCall(fn, ...))
+end
+
 -- WHY dedicated helper for UnitStat: the API returns FOUR values
 --   (stat, effectiveStat, posBuff, negBuff)
 -- where `stat` is base (level + items, no temporary buffs) and `effectiveStat`
@@ -1366,12 +1394,14 @@ end
 -- hypothetical future API change that returns only one value.
 local function GetEffectiveStat(statId)
     local ok, stat, effectiveStat = pcall(UnitStat, "player", statId)
-    if not ok then return 0 end
-    return effectiveStat or stat or 0
+    if not ok then return nil end
+    local value = effectiveStat or stat
+    if SAFE_NUM.IsRenderableNumberValue(value) then return value end
+    return nil
 end
 
 local function IsCleanNonNegativeNumber(value)
-    return value ~= nil and not issecretvalue(value) and type(value) == "number" and value >= 0
+    return value ~= nil and not issecretvalue(value) and SAFE_NUM.IsCleanFiniteNumber(value) and value >= 0
 end
 
 local function RefreshItemLevelCache()
@@ -1387,17 +1417,17 @@ local function RefreshItemLevelCache()
     itemLevelDirty = false
 end
 
+local function IsRenderablePercentValue(val)
+    return SAFE_NUM.IsRenderableNumberValue(val)
+end
+
 -- 12.x: hideZero check on a possibly-secret value.
 -- issecretvalue() == in combat → always show (real value is non-zero).
 local function shouldShow(val, hideZero)
+    if not IsRenderablePercentValue(val) then return false end
     if not hideZero then return true end
     if issecretvalue(val) then return true end
     return val ~= 0
-end
-
-local function IsRenderablePercentValue(val)
-    if issecretvalue(val) then return true end
-    return type(val) == "number" and val == val and val > -math.huge and val < math.huge
 end
 
 local function FormatRepairCost(copper)
@@ -1665,14 +1695,14 @@ local function RefreshArmorCache()
     -- on assignment, only on later comparison). InCombatLockdown lags real combat state
     -- in M+/transitional moments, so OOC-only guard isn't enough — must verify the value
     -- itself isn't tainted before any comparison/arithmetic.
-    if not ok or not effectiveArmor or issecretvalue(effectiveArmor) then return end
+    if not ok or issecretvalue(effectiveArmor) or not SAFE_NUM.IsCleanFiniteNumber(effectiveArmor) then return end
     if effectiveArmor <= 0 then
         cached.armorDR = 0
         return
     end
 
     local okLevel, level = pcall(UnitEffectiveLevel, "player")
-    if not okLevel or not level or issecretvalue(level) then return end
+    if not okLevel or issecretvalue(level) or not SAFE_NUM.IsCleanFiniteNumber(level) then return end
 
     -- WARNING: PaperDollFrame_GetArmorReduction in 12.x retail returns 0..100 percent
     -- (not 0..1 fraction as some docs claim). Normalize defensively: if return is <=1
@@ -1682,7 +1712,7 @@ local function RefreshArmorCache()
     -- isn't sufficient. Filter the return value before any comparison or arithmetic;
     -- comparing a secret number to 1 raises a taint error and aborts the OnUpdate.
     local okReduction, raw = pcall(PaperDollFrame_GetArmorReduction, effectiveArmor, level)
-    if not okReduction or not raw or issecretvalue(raw) then return end
+    if not okReduction or issecretvalue(raw) or not SAFE_NUM.IsCleanFiniteNumber(raw) then return end
     if raw <= 1 then raw = raw * 100 end
     if raw < 0 then raw = 0 end
     if raw > 100 then raw = 100 end
@@ -1702,7 +1732,7 @@ local function ScanDurabilityAndCost()
     for slot = DURABILITY_SLOT_MIN, DURABILITY_SLOT_MAX do
         if not DURABILITY_SKIP_SLOTS[slot] then
             local cur, max = GetInventoryItemDurability(slot)
-            if cur and max and max > 0 then
+            if SAFE_NUM.IsCleanFiniteNumber(cur) and SAFE_NUM.IsCleanFiniteNumber(max) and max > 0 then
                 local pct = (cur / max) * 100
                 sum = sum + pct
                 count = count + 1
@@ -1714,7 +1744,7 @@ local function ScanDurabilityAndCost()
                             TooltipUtil.SurfaceArgs(data)
                         end
                         local cost = data.repairCost
-                        if cost and not issecretvalue(cost) then
+                        if SAFE_NUM.IsCleanFiniteNumber(cost) and not issecretvalue(cost) then
                             if cost > 0 then
                                 totalCost = totalCost + cost
                             end
@@ -1742,7 +1772,11 @@ local durabilityRetryScheduled = false
 local function RefreshDurabilityCache()
     local avg, mn, cost, repairCostPending = ScanDurabilityAndCost()
     cached.durabilityValue = cached.useWorstDurability and mn or avg
-    cached.repairCost = cost
+    if repairCostPending and cost <= 0 then
+        cached.repairCost = cached.repairCost or 0
+    else
+        cached.repairCost = cost
+    end
     durabilityDirty = false
 
     if repairCostPending and not durabilityRetryScheduled then
@@ -2401,6 +2435,7 @@ local function PushPrimaryStatRow(labels, ratings, values, colorKey, statId, lab
     local statStr = cs[colorKey]
     local valueColor = (cached.matchValueColorToStat and statStr) or cs.rating
     local val = GetEffectiveStat(statId)
+    if not SAFE_NUM.IsRenderableNumberValue(val) then return end
     local rCol, vCol = RouteValueOnly(string.format("|cff%s%d|r", valueColor, val))
     PushRow(labels, ratings, values, FormatLabel(statStr, labelKey), rCol, vCol)
 end
@@ -2487,9 +2522,9 @@ local function BuildOffensiveLines(labels, ratings, values)
     local needRating = cached.showRating
     for _, def in ipairs(OFFENSIVE_STATS) do
         if cached[def.showKey] then
-            local val = safeCall(def.api)
+            local val = SAFE_NUM.SafeDisplayPercent(def.api)
             if shouldShow(val, cached.hideZeroOffensive) then
-                local rating = needRating and safeCall(GetCombatRating, def.ratingCR) or 0
+                local rating = needRating and SAFE_NUM.SafeRatingInt(GetCombatRating, def.ratingCR) or 0
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtRatingPct(rating, val, statColor)
                 PushRow(labels, ratings, values,
@@ -2505,12 +2540,13 @@ local function BuildOffensiveLines(labels, ratings, values)
         local versFlat       = safeCall(GetVersatilityBonus,  CR_VERSATILITY_DAMAGE_DONE)
         -- WARNING: must check operands for secret state before arithmetic. Rating is
         -- only read when visible; percent cache can still refresh independently.
-        if not issecretvalue(versFromRating) and not issecretvalue(versFlat) then
+        if SAFE_NUM.IsCleanFiniteNumber(versFromRating) and SAFE_NUM.IsCleanFiniteNumber(versFlat)
+            and not issecretvalue(versFromRating) and not issecretvalue(versFlat) then
             cached.versTotal = versFromRating + versFlat
         end
         if needRating then
             local versRating = safeCall(GetCombatRating, CR_VERSATILITY_DAMAGE_DONE)
-            if not issecretvalue(versRating) then
+            if SAFE_NUM.IsCleanFiniteNumber(versRating) and not issecretvalue(versRating) then
                 cached.versTotalRating = versRating
             end
         end
@@ -2533,9 +2569,9 @@ local function BuildTertiaryLines(labels, ratings, values)
     local needRating = cached.showRating
     for _, def in ipairs(TERTIARY_STATS) do
         if cached[def.showKey] then
-            local val = safeCall(def.api)
+            local val = SAFE_NUM.SafeDisplayPercent(def.api)
             if shouldShow(val, cached.hideZeroTertiary) then
-                local rating = needRating and safeCall(GetCombatRating, def.ratingCR) or 0
+                local rating = needRating and SAFE_NUM.SafeRatingInt(GetCombatRating, def.ratingCR) or 0
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtRatingPct(rating, val, statColor)
                 PushRow(labels, ratings, values,
@@ -2551,12 +2587,16 @@ local function BuildTertiaryLines(labels, ratings, values)
         local cur, run, flight, swim = GetUnitSpeed("player")
         -- WARNING: 12.x retail returns secrets from GetUnitSpeed in combat → math.max
         -- triggers numeric conversion taint. Recompute OOC, reuse cached value in combat.
-        if not (issecretvalue(cur) or issecretvalue(run) or issecretvalue(flight) or issecretvalue(swim)) then
+        if not (issecretvalue(cur) or issecretvalue(run) or issecretvalue(flight) or issecretvalue(swim))
+            and (cur == nil or SAFE_NUM.IsCleanFiniteNumber(cur))
+            and (run == nil or SAFE_NUM.IsCleanFiniteNumber(run))
+            and (flight == nil or SAFE_NUM.IsCleanFiniteNumber(flight))
+            and (swim == nil or SAFE_NUM.IsCleanFiniteNumber(swim)) then
             local effectiveYps = math.max(cur or 0, run or 0, flight or 0, swim or 0)
             cached.speedPct = (effectiveYps / 7) * 100
         end
         local speed = cached.speedPct
-        local speedRating = needRating and safeCall(GetCombatRating, CR_SPEED) or 0
+        local speedRating = needRating and SAFE_NUM.SafeRatingInt(GetCombatRating, CR_SPEED) or 0
         if shouldShow(speed, cached.hideZeroTertiary) then
             local statColor = cs.speed
             local rStr, vStr = FmtRatingPct(speedRating, speed, statColor)
@@ -2609,6 +2649,9 @@ local function BuildDurabilityLines(labels, ratings, values)
     if not cached.showDurability then return labels, ratings, values end
     local cs = cached.colorStrings
     local pct = cached.durabilityValue
+    if not SAFE_NUM.IsCleanFiniteNumber(pct) then pct = 100 end
+    if pct < 0 then pct = 0 end
+    if pct > 100 then pct = 100 end
     local durStr = cs.durability
     local valueColor
     if cached.useAutoColorDurability then
@@ -3075,7 +3118,51 @@ end
 -- WHY: shared snapshot/select/cancel handler used by every swatch (CreateColorSwatch
 -- buttons route OnClick here). Snapshot is taken at click time, not creation time, so
 -- cancelling a 2nd pick reverts to the user's prior color, not the original default.
+local COLOR_PICKER_STATE = { active = nil, token = 0 }
+
+function COLOR_PICKER_STATE.IsActive(session)
+    return COLOR_PICKER_STATE.active == session
+end
+
+function COLOR_PICKER_STATE.Clear(session)
+    if COLOR_PICKER_STATE.IsActive(session) then
+        COLOR_PICKER_STATE.active = nil
+    end
+end
+
+function COLOR_PICKER_STATE.OnFrameHide()
+    if COLOR_PICKER_STATE.active then
+        COLOR_PICKER_STATE.active = nil
+    end
+end
+
+function COLOR_PICKER_STATE.EnsureFrameHook()
+    if COLOR_PICKER_STATE.hooked then return end
+    if ColorPickerFrame and ColorPickerFrame.HookScript then
+        ColorPickerFrame:HookScript("OnHide", COLOR_PICKER_STATE.OnFrameHide)
+        COLOR_PICKER_STATE.hooked = true
+    end
+end
+
+function COLOR_PICKER_STATE.Close()
+    local session = COLOR_PICKER_STATE.active
+    if not session then return end
+    if ColorPickerFrame and ColorPickerFrame:IsShown() then
+        if session.cancelFunc then
+            session.cancelFunc()
+        else
+            COLOR_PICKER_STATE.Clear(session)
+        end
+        ColorPickerFrame:Hide()
+    else
+        COLOR_PICKER_STATE.Clear(session)
+    end
+end
+StatsProCloseColorPicker = COLOR_PICKER_STATE.Close
+
 local function OpenColorPicker(btn, statName)
+    COLOR_PICKER_STATE.Close()
+    COLOR_PICKER_STATE.EnsureFrameHook()
     -- WHY: capture "uses default" state so cancel can restore exactly that — writing
     -- the resolved-default tuple back would convert unset → explicit-default in DB
     -- (visible only between cancel and the next /reload, but the invariant is correct).
@@ -3083,7 +3170,18 @@ local function OpenColorPicker(btn, statName)
     local hadExplicitColor = IsCompleteColor(StatsProDB.colors[statName])
     local current = GetColor(statName)
     local snapshot = { r = current.r, g = current.g, b = current.b }
+
+    COLOR_PICKER_STATE.token = COLOR_PICKER_STATE.token + 1
+    local session = {
+        token = COLOR_PICKER_STATE.token,
+        btn = btn,
+        statName = statName,
+        hadExplicitColor = hadExplicitColor,
+        snapshot = snapshot,
+    }
+
     local function OnColorSelect()
+        if not COLOR_PICKER_STATE.IsActive(session) then return end
         local r, g, b = ColorPickerFrame:GetColorRGB()
         btn:SetBackdropColor(r, g, b, 1)
         StatsProDB.colors[statName] = { r = r, g = g, b = b }
@@ -3091,17 +3189,22 @@ local function OpenColorPicker(btn, statName)
         UpdateStats()
     end
     local function OnCancel()
+        if not COLOR_PICKER_STATE.IsActive(session) then return end
         btn:SetBackdropColor(snapshot.r, snapshot.g, snapshot.b, 1)
-        StatsProDB.colors[statName] = hadExplicitColor and snapshot or nil
+        StatsProDB.colors[statName] = hadExplicitColor and { r = snapshot.r, g = snapshot.g, b = snapshot.b } or nil
         CacheSettings()
         UpdateStats()
+        COLOR_PICKER_STATE.Clear(session)
     end
+    session.swatchFunc = OnColorSelect
+    session.cancelFunc = OnCancel
     ColorPickerFrame:SetupColorPickerAndShow({
         r = snapshot.r, g = snapshot.g, b = snapshot.b,
         opacity = 1, hasOpacity = false,
         swatchFunc = OnColorSelect,
         cancelFunc = OnCancel,
     })
+    COLOR_PICKER_STATE.active = session
 end
 
 -- Compact color swatch (no "Color:" label). Used for inline-with-checkbox placement
@@ -3410,8 +3513,9 @@ end
 -- when settings UI has never been opened (empty arrays at file scope).
 local function ResetToDefaults()
     -- Step 1: close any open modal BEFORE touching DB.
-    -- WHY: ColorPickerFrame:Hide() synchronously fires its registered cancelFunc
-    -- which writes the pre-reset snapshot back to StatsProDB.colors[statName]. If
+    -- WHY: StatsPro's color picker close path explicitly restores its snapshot
+    -- before hiding the Blizzard singleton; ColorPickerFrame:Hide() alone does
+    -- not call cancelFunc on current retail clients. If
     -- we did DB reset first, that cancelFunc would clobber the just-reset default.
     -- Closing first means cancelFunc writes to a (soon-overwritten) DB — irrelevant.
     -- Custom font picker is NOT a Blizzard dropdown so CloseDropDownMenus doesn't reach it;
@@ -3420,7 +3524,7 @@ local function ResetToDefaults()
     if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
         _G.StatsProFontPicker:Hide()
     end
-    if ColorPickerFrame and ColorPickerFrame:IsShown() then ColorPickerFrame:Hide() end
+    COLOR_PICKER_STATE.Close()
 
     -- Step 2: reset DB scalars + colors to defaults.
     for k, v in pairs(defaults) do
@@ -3585,6 +3689,7 @@ function addon:OpenConfigMenu()
     -- to trigger DropDownList1:OnHide → CancelLanguagePreview).
     configFrame:HookScript("OnHide", function()
         CloseDropDownMenus()  -- closes any active Blizzard dropdown; fires its OnHide → CancelLanguagePreview
+        if StatsProCloseColorPicker then StatsProCloseColorPicker() end
         if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
             _G.StatsProFontPicker:Hide()
         end
@@ -4788,13 +4893,25 @@ end
 -- so embedded newlines (the leading shift hypothesis) are VISIBLE in the dump
 -- instead of silently splitting the line.
 local function StripDumpEscapes(s)
-    if not s or s == "" then return "" end
+    if issecretvalue(s) then return "<secret>" end
+    if not s then return "" end
+    if type(s) ~= "string" then return "<non-string>" end
+    if s == "" then return "" end
     return (s:gsub("|c%x%x%x%x%x%x%x%x", "")
              :gsub("|r", "")
              :gsub("|T[^|]+|t", "[icon]")
              :gsub("\n", "\\n")
              :gsub("\r", "\\r")
              :gsub("\t", "\\t"))
+end
+
+function SAFE_NUM.DumpCell(s)
+    return StripDumpEscapes(s)
+end
+
+function SAFE_NUM.DumpNumber(value, fmt, fallback)
+    if issecretvalue(value) or not SAFE_NUM.IsCleanFiniteNumber(value) then return fallback or "?" end
+    return string.format(fmt, value)
 end
 
 -- WHY local pipeline rerun (BuildRenderBlocks + RouteRenderBlocks): UpdateStats's
@@ -4806,11 +4923,13 @@ local function PrintDebugBucketDump()
     if not isLoaded then PrintMsg("debug bucket: not loaded yet"); return end
 
     local mode = cached.displayMode or "flat"
-    PrintMsg(string.format("bucket: mode=%s labelStyle=%s dur=%.1f speed=%.1f armorDR=%.1f vers=%.1f cost=%d",
+    PrintMsg(string.format("bucket: mode=%s labelStyle=%s dur=%s speed=%s armorDR=%s vers=%s cost=%s",
         tostring(mode), tostring(cached.labelStyle),
-        cached.durabilityValue or -1, cached.speedPct or -1,
-        cached.armorDR or -1, cached.versTotal or -1,
-        cached.repairCost or 0))
+        SAFE_NUM.DumpNumber(cached.durabilityValue, "%.1f", "?"),
+        SAFE_NUM.DumpNumber(cached.speedPct, "%.1f", "?"),
+        SAFE_NUM.DumpNumber(cached.armorDR, "%.1f", "?"),
+        SAFE_NUM.DumpNumber(cached.versTotal, "%.1f", "?"),
+        SAFE_NUM.DumpNumber(cached.repairCost, "%d", "?")))
 
     -- Per-panel widget state (read what's CURRENTLY rendered, not the snapshot below).
     local panels = { { "main", mainPanel }, { "side", defensivePanel } }
@@ -4830,7 +4949,11 @@ local function PrintDebugBucketDump()
     end
 
     -- Read-only snapshot: same pipeline UpdateStats uses, no SetTextSafe call.
-    local blocks = BuildRenderBlocks()
+    local okSnapshot, blocks = pcall(BuildRenderBlocks)
+    if not okSnapshot then
+        PrintMsg("bucket: snapshot failed: " .. SAFE_NUM.DumpCell(blocks))
+        return
+    end
     local main, side = RouteRenderBlocks(blocks, mode, cached, cached.labelStyle)
 
     for _, b in ipairs({ { "main", main }, { "side", side } }) do
@@ -4842,7 +4965,7 @@ local function PrintDebugBucketDump()
         local nL, nR, nV = #bucket.labels, #bucket.ratings, #bucket.values
         PrintMsg(string.format("bucket: %s L=%d R=%d V=%d parity=%s repair=%q",
             n, nL, nR, nV, tostring(nL == nR and nR == nV),
-            tostring(bucket.repairStr or "")))
+            SAFE_NUM.DumpCell(bucket.repairStr or "")))
     end
 
     -- Per-row dump (mainBucket only; side is empty in non-split modes).
@@ -4850,16 +4973,21 @@ local function PrintDebugBucketDump()
     for i = 1, rowMax do
         PrintMsg(string.format("  [%02d] L=%q R=%q V=%q",
             i,
-            StripDumpEscapes(main.labels[i] or ""),
-            StripDumpEscapes(main.ratings[i] or ""),
-            StripDumpEscapes(main.values[i] or "")))
+            SAFE_NUM.DumpCell(main.labels[i] or ""),
+            SAFE_NUM.DumpCell(main.ratings[i] or ""),
+            SAFE_NUM.DumpCell(main.values[i] or "")))
     end
 
     -- Raw FormatRepairCost — confirms whether visible "86.4%" inside Repair-row
     -- comes from coin-string itself or from a misaligned value column above.
-    local raw = FormatRepairCost(cached.repairCost or 0)
-    PrintMsg(string.format("bucket: rawRepair len=%d head=%q tail=%q",
-        #raw, StripDumpEscapes(raw:sub(1, 30)), StripDumpEscapes(raw:sub(-30))))
+    local rawCopper = (SAFE_NUM.IsCleanFiniteNumber(cached.repairCost) and not issecretvalue(cached.repairCost)) and cached.repairCost or 0
+    local raw = FormatRepairCost(rawCopper)
+    local rawStr = SAFE_NUM.DumpCell(raw)
+    local rawLen = rawStr == "<secret>" and "<secret>" or tostring(#rawStr)
+    local rawHead = rawStr == "<secret>" and "<secret>" or SAFE_NUM.DumpCell(rawStr:sub(1, 30))
+    local rawTail = rawStr == "<secret>" and "<secret>" or SAFE_NUM.DumpCell(rawStr:sub(-30))
+    PrintMsg(string.format("bucket: rawRepair len=%s head=%q tail=%q",
+        rawLen, rawHead, rawTail))
 end
 
 local function CollectRenderRoutingSmokeFailures()
@@ -5027,8 +5155,11 @@ if addon and addon.__statsproSmoke == true then
         formatRepairCost = FormatRepairCost,
         normalizeColor = NormalizeColor,
         rgbToHex = RGBToHex,
+        buildRenderBlocks = BuildRenderBlocks,
         routeRenderBlocks = RouteRenderBlocks,
         bucketHasContent = BucketHasContent,
+        isCleanFiniteNumber = SAFE_NUM.IsCleanFiniteNumber,
+        stripDumpEscapes = StripDumpEscapes,
         firstUTF8Char = FirstUTF8Char,
         getStyledLabelText = GetStyledLabelText,
         collectRenderRoutingSmokeFailures = CollectRenderRoutingSmokeFailures,

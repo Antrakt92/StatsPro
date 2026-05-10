@@ -363,7 +363,7 @@ local function makeEnv(locale, opts)
     env.SettingsPanel = makeFrame("SettingsPanel")
     env.HideUIPanel = function(frame) if frame and frame.Hide then frame:Hide() end end
     env.LibStub = function() return nil end
-    env.issecretvalue = function() return false end
+    env.issecretvalue = opts.issecretvalue or function() return false end
     env.CopyTable = deepCopy
     env.tinsert = table.insert
     env.tremove = table.remove
@@ -422,16 +422,26 @@ local function makeEnv(locale, opts)
         self.colorPickerOptions = opts or {}
         self.colorPickerCancelActive = true
         self.colorRGB = { r = opts and opts.r or 1, g = opts and opts.g or 1, b = opts and opts.b or 1 }
+        if type(self.colorPickerOptions.swatchFunc) == "function" then self.colorPickerOptions.swatchFunc() end
         self:Show()
     end
-    local colorPickerHide = env.ColorPickerFrame.Hide
-    function env.ColorPickerFrame:Hide()
-        local opts = self.colorPickerOptions
-        local shouldCancel = self.shown and self.colorPickerCancelActive and opts and type(opts.cancelFunc) == "function"
-        self.colorPickerCancelActive = false
-        self.colorPickerOptions = nil
-        colorPickerHide(self)
-        if shouldCancel then opts.cancelFunc() end
+    function env.__acceptColorPicker()
+        local picker = env.ColorPickerFrame
+        local opts = picker.colorPickerOptions
+        if opts and type(opts.swatchFunc) == "function" then opts.swatchFunc() end
+        picker.colorPickerCancelActive = false
+        picker:Hide()
+        picker.colorPickerOptions = nil
+    end
+    function env.__cancelColorPicker()
+        local picker = env.ColorPickerFrame
+        local opts = picker.colorPickerOptions
+        if picker.shown and picker.colorPickerCancelActive and opts and type(opts.cancelFunc) == "function" then
+            opts.cancelFunc()
+        end
+        picker.colorPickerCancelActive = false
+        picker:Hide()
+        picker.colorPickerOptions = nil
     end
     env.OpenColorPicker = function() end
     env.PlaySound = function() end
@@ -469,29 +479,29 @@ local function makeEnv(locale, opts)
     end
 
     local function zero() return 0 end
-    env.GetCritChance = zero
-    env.GetSpellCritChance = zero
-    env.GetRangedCritChance = zero
-    env.GetHaste = zero
-    env.GetMeleeHaste = zero
-    env.GetSpellHaste = zero
-    env.GetRangedHaste = zero
-    env.GetMasteryEffect = zero
-    env.GetMastery = zero
-    env.GetVersatilityBonus = zero
-    env.GetCombatRating = zero
-    env.GetCombatRatingBonus = zero
+    env.GetCritChance = opts.getCritChance or zero
+    env.GetSpellCritChance = opts.getSpellCritChance or zero
+    env.GetRangedCritChance = opts.getRangedCritChance or zero
+    env.GetHaste = opts.getHaste or zero
+    env.GetMeleeHaste = opts.getMeleeHaste or zero
+    env.GetSpellHaste = opts.getSpellHaste or zero
+    env.GetRangedHaste = opts.getRangedHaste or zero
+    env.GetMasteryEffect = opts.getMasteryEffect or zero
+    env.GetMastery = opts.getMastery or zero
+    env.GetVersatilityBonus = opts.getVersatilityBonus or zero
+    env.GetCombatRating = opts.getCombatRating or zero
+    env.GetCombatRatingBonus = opts.getCombatRatingBonus or zero
     env.GetDodgeChance = opts.getDodgeChance or zero
     env.GetParryChance = opts.getParryChance or zero
     env.GetBlockChance = opts.getBlockChance or zero
-    env.GetLifesteal = zero
-    env.GetAvoidance = zero
-    env.GetSpeed = zero
-    env.GetUnitSpeed = function() return 0, 0, 0, 0 end
+    env.GetLifesteal = opts.getLifesteal or zero
+    env.GetAvoidance = opts.getAvoidance or zero
+    env.GetSpeed = opts.getSpeed or zero
+    env.GetUnitSpeed = opts.getUnitSpeed or function() return 0, 0, 0, 0 end
     env.GetAverageItemLevel = opts.getAverageItemLevel or function() return 0, 0 end
-    env.UnitStat = function(_, statId) return 0, statId == 3 and 100 or 0 end
-    env.UnitArmor = function() return 0, 0 end
-    env.UnitEffectiveLevel = function() return 80 end
+    env.UnitStat = opts.unitStat or function(_, statId) return 0, statId == 3 and 100 or 0 end
+    env.UnitArmor = opts.unitArmor or function() return 0, 0 end
+    env.UnitEffectiveLevel = opts.unitEffectiveLevel or function() return 80 end
     env.UnitClass = function() return opts.unitClassName or "Warrior", opts.unitClassToken or "WARRIOR" end
     env.UnitRace = function() return "Human", "Human" end
     env.UnitSex = function() return 2 end
@@ -508,8 +518,8 @@ local function makeEnv(locale, opts)
     env.C_PaperDollInfo = {
         GetStaggerPercentage = opts.getStaggerPercentage or function() return nil end,
     }
-    env.PaperDollFrame_GetArmorReduction = zero
-    env.GetInventoryItemDurability = function() return nil, nil end
+    env.PaperDollFrame_GetArmorReduction = opts.paperDollFrameGetArmorReduction or zero
+    env.GetInventoryItemDurability = opts.getInventoryItemDurability or function() return nil, nil end
     env.GetInventoryItemLink = function() return nil end
     env.C_TooltipInfo = {
         GetInventoryItem = function() return nil end,
@@ -666,6 +676,17 @@ local function findFrame(name, env, predicate)
         if predicate(frame) then return frame end
     end
     fail(name, "matching frame not found")
+end
+
+local function blockDumpContains(blocks, needle)
+    for _, block in ipairs(blocks or {}) do
+        for _, field in ipairs({ "labels", "ratings", "values" }) do
+            for _, value in ipairs(block[field] or {}) do
+                if type(value) == "string" and value:find(needle, 1, true) then return true end
+            end
+        end
+    end
+    return false
 end
 
 do
@@ -962,6 +983,128 @@ do
 end
 
 do
+    local critEnv, _, critTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            hideZeroOffensive = false,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCritChance = function() return nil end,
+    })
+    fireEvent("render.offensive_nil_percent_skips_crit.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.offensive_nil_percent_skips_crit.no_error", ok, blocks)
+    eq("render.offensive_nil_percent_skips_crit.no_row", blockDumpContains(blocks, "Crit:"), false)
+end
+
+do
+    local critEnv, _, critTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            hideZeroOffensive = false,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCritChance = function() return "bad" end,
+    })
+    fireEvent("render.offensive_wrong_type_percent_skips_crit.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.offensive_wrong_type_percent_skips_crit.no_error", ok, blocks)
+    eq("render.offensive_wrong_type_percent_skips_crit.no_row", blockDumpContains(blocks, "Crit:"), false)
+end
+
+do
+    local critEnv, _, critTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = true,
+            showPercentage = false,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCritChance = function() return 12.5 end,
+        getCombatRating = function() return nil end,
+    })
+    fireEvent("render.rating_nil_coerces_to_zero.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.rating_nil_coerces_to_zero.no_error", ok, blocks)
+    eq("render.rating_nil_coerces_to_zero.row", blockDumpContains(blocks, "Crit:"), true)
+    eq("render.rating_nil_coerces_to_zero.zero_rating", blockDumpContains(blocks, "0|r"), true)
+end
+
+do
+    local leechEnv, _, leechTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            hideZeroTertiary = false,
+            showLeech = true,
+            showAvoidance = false,
+            showSpeed = false,
+            showDefensive = false,
+        },
+        getLifesteal = function() return nil end,
+    })
+    fireEvent("render.tertiary_nil_percent_skips_leech.fire", leechEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(leechTest.buildRenderBlocks)
+    check("render.tertiary_nil_percent_skips_leech.no_error", ok, blocks)
+    eq("render.tertiary_nil_percent_skips_leech.no_row", blockDumpContains(blocks, "Leech:"), false)
+end
+
+do
+    local dodgeEnv, _, dodgeTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showDefensive = true,
+            hideZeroDefensive = false,
+            showDodge = true,
+            showParry = false,
+            showBlock = false,
+            showArmor = false,
+        },
+        getDodgeChance = function() return nil end,
+    })
+    fireEvent("render.defensive_nil_percent_skips_dodge.fire", dodgeEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(dodgeTest.buildRenderBlocks)
+    check("render.defensive_nil_percent_skips_dodge.no_error", ok, blocks)
+    eq("render.defensive_nil_percent_skips_dodge.no_row", blockDumpContains(blocks, "Dodge:"), false)
+end
+
+do
+    local versEnv, _, versTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            hideZeroOffensive = true,
+            showCrit = false,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = true,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCombatRatingBonus = function() return nil end,
+        getVersatilityBonus = function() return nil end,
+    })
+    fireEvent("render.versatility_nil_sources_no_error.fire", versEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_nil_sources_no_error.no_error", ok, blocks)
+    eq("render.versatility_nil_sources_no_error.no_row", blockDumpContains(blocks, "Vers:"), false)
+end
+
+do
     local ilvlEnv = loadStatsPro("enUS", {
         statsProDB = {
             displayMode = "sectioned",
@@ -1245,13 +1388,18 @@ do
     env.__setColorPickerRGB(0.2, 0.3, 0.4)
     ok, err = pcall(colorOptions.swatchFunc)
     check("config.color_picker.select", ok, err)
+    ok, err = pcall(env.__acceptColorPicker)
+    check("config.color_picker.select_commit", ok, err)
     assertColor("config.color_picker.select_db", env.StatsProDB.colors.crit, 0.2, 0.3, 0.4)
+    ok, err = pcall(env.StatsProCloseColorPicker)
+    check("config.color_picker.accept_clears_owned_session", ok, err)
+    assertColor("config.color_picker.accept_preserves_commit", env.StatsProDB.colors.crit, 0.2, 0.3, 0.4)
 
     callScript("config.color_picker.reopen_for_cancel", critSwatch, "OnClick")
     env.__setColorPickerRGB(0.6, 0.7, 0.8)
     ok, err = pcall(env.ColorPickerFrame.colorPickerOptions.swatchFunc)
     check("config.color_picker.preview_before_cancel", ok, err)
-    env.ColorPickerFrame:Hide()
+    env.__cancelColorPicker()
     assertColor("config.color_picker.cancel_restores_snapshot", env.StatsProDB.colors.crit, 0.2, 0.3, 0.4)
 
     env.StatsProDB.colors.crit = nil
@@ -1259,13 +1407,115 @@ do
     env.__setColorPickerRGB(0.7, 0.8, 0.9)
     ok, err = pcall(env.ColorPickerFrame.colorPickerOptions.swatchFunc)
     check("config.color_picker.default_preview", ok, err)
-    env.ColorPickerFrame:Hide()
+    env.__cancelColorPicker()
     eq("config.color_picker.default_cancel_preserves_nil", env.StatsProDB.colors.crit, nil)
 
     callScript("config.color_picker.reset_closes_picker.open", critSwatch, "OnClick")
     slash("config.reset_closes_color_picker", env, "reset")
     eq("config.reset_closes_color_picker.hidden", env.ColorPickerFrame:IsShown(), false)
     assertColor("config.reset_closes_color_picker.default_color", env.StatsProDB.colors.crit, 1, 0, 0)
+end
+
+do
+    local colorEnv = loadStatsPro("enUS", {
+        statsProDB = { colors = { crit = { r = 0.2, g = 0.3, b = 0.4 } } },
+    })
+    fireEvent("config.color_picker.config_hide.fire", colorEnv, "PLAYER_ENTERING_WORLD")
+    slash("config.color_picker.config_hide.open_config", colorEnv, "")
+    local critSwatch = findFrame("config.color_picker.config_hide.crit_swatch", colorEnv, function(frame)
+        local color = frame.backdropColor
+        return type(frame.scripts.OnClick) == "function"
+            and color and color.r == 0.2 and color.g == 0.3 and color.b == 0.4
+    end)
+    callScript("config.color_picker.config_hide.open_picker", critSwatch, "OnClick")
+    colorEnv.__setColorPickerRGB(0.6, 0.7, 0.8)
+    local ok, err = pcall(colorEnv.ColorPickerFrame.colorPickerOptions.swatchFunc)
+    check("config.color_picker.config_hide.preview", ok, err)
+    colorEnv.StatsProConfigFrame:Hide()
+    eq("config.color_picker.config_hide_closes_owned_picker.hidden", colorEnv.ColorPickerFrame:IsShown(), false)
+    assertColor("config.color_picker.config_hide_cancels_preview.crit", colorEnv.StatsProDB.colors.crit, 0.2, 0.3, 0.4)
+end
+
+do
+    local colorEnv = loadStatsPro("enUS")
+    fireEvent("config.color_picker.switch_swatch.fire", colorEnv, "PLAYER_ENTERING_WORLD")
+    slash("config.color_picker.switch_swatch.open_config", colorEnv, "")
+    local critSwatch = findFrame("config.color_picker.switch_swatch.crit_swatch", colorEnv, function(frame)
+        local color = frame.backdropColor
+        return type(frame.scripts.OnClick) == "function"
+            and color and color.r == 1 and color.g == 0 and color.b == 0
+    end)
+    local hasteSwatch = findFrame("config.color_picker.switch_swatch.haste_swatch", colorEnv, function(frame)
+        local color = frame.backdropColor
+        return type(frame.scripts.OnClick) == "function"
+            and color and color.r == 0 and color.g == 0.5 and color.b == 1
+    end)
+    colorEnv.StatsProDB.colors.crit = nil
+    callScript("config.color_picker.switch_swatch.open_crit", critSwatch, "OnClick")
+    colorEnv.__setColorPickerRGB(0.2, 0.3, 0.4)
+    local ok, err = pcall(colorEnv.ColorPickerFrame.colorPickerOptions.swatchFunc)
+    check("config.color_picker.switch_swatch.preview_crit", ok, err)
+    callScript("config.color_picker.switch_swatch.open_haste", hasteSwatch, "OnClick")
+    eq("config.color_picker.switch_swatch_cancels_previous_preview.crit", colorEnv.StatsProDB.colors.crit, nil)
+    eq("config.color_picker.switch_swatch_cancels_previous_preview.shown", colorEnv.ColorPickerFrame:IsShown(), true)
+end
+
+do
+    local foreignEnv = loadStatsPro("enUS")
+    fireEvent("config.color_picker.foreign.fire", foreignEnv, "PLAYER_ENTERING_WORLD")
+    slash("config.color_picker.foreign.open_config", foreignEnv, "")
+    local canceled = false
+    foreignEnv.ColorPickerFrame:SetupColorPickerAndShow({ cancelFunc = function() canceled = true end })
+    foreignEnv.StatsProConfigFrame:Hide()
+    eq("config.color_picker.config_hide_preserves_foreign_picker.shown", foreignEnv.ColorPickerFrame:IsShown(), true)
+    eq("config.color_picker.config_hide_preserves_foreign_picker.cancel", canceled, false)
+
+    slash("config.color_picker.reset_preserves_foreign_picker", foreignEnv, "reset")
+    eq("config.color_picker.reset_preserves_foreign_picker.shown", foreignEnv.ColorPickerFrame:IsShown(), true)
+    eq("config.color_picker.reset_preserves_foreign_picker.cancel", canceled, false)
+end
+
+do
+    local staleEnv = loadStatsPro("enUS")
+    fireEvent("config.color_picker.stale.fire", staleEnv, "PLAYER_ENTERING_WORLD")
+    slash("config.color_picker.stale.open_config", staleEnv, "")
+    local critSwatch = findFrame("config.color_picker.stale.crit_swatch", staleEnv, function(frame)
+        local color = frame.backdropColor
+        return type(frame.scripts.OnClick) == "function"
+            and color and color.r == 1 and color.g == 0 and color.b == 0
+    end)
+    callScript("config.color_picker.stale.open_crit", critSwatch, "OnClick")
+    local oldOptions = staleEnv.ColorPickerFrame.colorPickerOptions
+    slash("config.color_picker.stale.reset", staleEnv, "reset")
+    staleEnv.__setColorPickerRGB(0.2, 0.3, 0.4)
+    local ok, err = pcall(oldOptions.swatchFunc)
+    check("config.color_picker.stale_callbacks_noop_after_reset.call", ok, err)
+    assertColor("config.color_picker.stale_callbacks_noop_after_reset.crit", staleEnv.StatsProDB.colors.crit, 1, 0, 0)
+end
+
+do
+    local secret = setmetatable({}, {
+        __tostring = function() error("secret tostring inspected", 2) end,
+    })
+    local secretChecks = 0
+    local secretEnv, _, secretTest = loadStatsPro("enUS", {
+        issecretvalue = function(value)
+            if value == secret then
+                secretChecks = secretChecks + 1
+                return true
+            end
+            return false
+        end,
+    })
+    exists("debug.bucket_secret_sanitizer.hook", secretTest.stripDumpEscapes)
+    local ok, result = pcall(secretTest.stripDumpEscapes, secret)
+    check("debug.bucket_secret_sanitizer_no_string_ops", ok, result)
+    eq("debug.bucket_secret_sanitizer_placeholder", result, "<secret>")
+    ok, result = pcall(secretTest.isCleanFiniteNumber, secret)
+    check("numeric.secret_clean_guard_no_compare", ok, result)
+    eq("numeric.secret_clean_guard_returns_false", result, false)
+    eq("numeric.secret_clean_guard_checks_secret_first", secretChecks, 2)
+    eq("debug.bucket_secret_sanitizer_env_loaded", secretEnv ~= nil, true)
 end
 
 print(string.format("StatsPro smoke: PASS (%d assertions)", assertionCount))

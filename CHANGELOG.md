@@ -6,6 +6,7 @@
 
 - **Rare malformed stat reads no longer break rendering** — missing, secret, or malformed percentage/rating values are skipped or safely normalized before they reach numeric formatters.
 - **Settings color previews clean up safely** — closing Settings, switching swatches, or resetting defaults now cancels unconfirmed color previews without leaving stale callbacks behind.
+- **Font hover previews restore reliably** — closing the font picker after browsing fonts now forces the committed font back onto the HUD instead of occasionally leaving a hovered preview active.
 - **`/ss debug bucket` is safer during unreadable stat states** — diagnostics now suppress secret or malformed render values instead of inspecting them.
 
 ## 1.7.0 - 10-May-2026 — Defensive and gear feedback pass

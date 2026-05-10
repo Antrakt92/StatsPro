@@ -1378,6 +1378,15 @@ do
     exists("config.font_picker_lazy_scaffold.frame", env.StatsProFontPicker)
     exists("config.font_picker_lazy_scaffold.scroll", env.StatsProFontPickerScroll)
 
+    local defaultFont = test.copyDefaults().font
+    local previewFont = "Interface\\AddOns\\StatsPro\\Media\\PreviewOnly.ttf"
+    test.applyTextStyleToAllPanels(previewFont, 14)
+    test.setPanelAppliedStyleForSmoke(defaultFont, 14)
+    test.applyTextStyleToAllPanels(defaultFont, 14, true)
+    local fontState = test.panelFontState()
+    eq("config.font_picker_hover_restore_forces_main_font", fontState.mainLabelFont, defaultFont)
+    eq("config.font_picker_hover_restore_forces_side_font", fontState.sideLabelFont, defaultFont)
+
     local critSwatch = findFrame("config.color_picker.crit_swatch", env, function(frame)
         local color = frame.backdropColor
         return type(frame.scripts.OnClick) == "function"

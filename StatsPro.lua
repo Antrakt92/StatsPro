@@ -2150,13 +2150,13 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     end
 end
 
-function Panel:ApplyStyle(font, size)
+function Panel:ApplyStyle(font, size, force)
     -- WHY idempotency: ApplyStyle is hot — fires from PEW (after MAS may have already
     -- applied), Reset, font/locale preview-cancel, lang commit's conditional restore,
     -- and the Font Size slider's OnValueChanged. Same-args calls cost 10 SetFont +
     -- 10 SetText + cache invalidations + a follow-up UpdateStats re-measure pass.
     -- Early return saves all of that whenever the panel is already at (font,size).
-    if SameFontPath(self.appliedFont, font) and self.appliedSize == size then return end
+    if not force and SameFontPath(self.appliedFont, font) and self.appliedSize == size then return end
     self.appliedFont = font
     self.appliedSize = size
     self.labelText:SetFont(font, size, "OUTLINE")
@@ -2229,9 +2229,9 @@ end
 local mainPanel      = Panel:New("StatsProFrame",          "")
 local defensivePanel = Panel:New("StatsProDefensiveFrame", "defensive_")
 
-local function ApplyTextStyleToAllPanels(font, size)
-    mainPanel:ApplyStyle(font, size)
-    defensivePanel:ApplyStyle(font, size)
+local function ApplyTextStyleToAllPanels(font, size, force)
+    mainPanel:ApplyStyle(font, size, force)
+    defensivePanel:ApplyStyle(font, size, force)
 end
 
 local function ApplyTextAlphaToAllPanels(alpha)
@@ -4072,12 +4072,12 @@ function addon:OpenConfigMenu()
         -- WHY unconditional restore (no `previewedPath~=nil` gate): preview-state
         -- tracking can desync against panel-applied state via three paths — OnLeave-timer
         -- racing PickFont's nil-write, SetFont silent-fallback poisoning ApplyStyle's
-        -- appliedFont cache, and Frame:Hide → child OnLeave event ordering. Cost of an
-        -- unconditional restore is negligible: ApplyStyle short-circuits when panels are
-        -- already at db.font; only Reflow's SetTextSafe re-measure runs.
+        -- appliedFont cache, and Frame:Hide → child OnLeave event ordering. Force the
+        -- restore so a poisoned appliedFont cache cannot leave the HUD stuck on the
+        -- last hovered preview when the picker closes without a font pick.
         local function CancelFontPreview()
             previewedPath = nil
-            ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"))
+            ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"), true)
             ReflowAllPanels()
         end
         local function PickFont(f)
@@ -5158,6 +5158,25 @@ if addon and addon.__statsproSmoke == true then
         buildRenderBlocks = BuildRenderBlocks,
         routeRenderBlocks = RouteRenderBlocks,
         bucketHasContent = BucketHasContent,
+        applyTextStyleToAllPanels = ApplyTextStyleToAllPanels,
+        panelFontState = function()
+            return {
+                mainAppliedFont = mainPanel.appliedFont,
+                mainAppliedSize = mainPanel.appliedSize,
+                mainLabelFont = mainPanel.labelText.font,
+                mainLabelSize = mainPanel.labelText.fontSize,
+                sideAppliedFont = defensivePanel.appliedFont,
+                sideAppliedSize = defensivePanel.appliedSize,
+                sideLabelFont = defensivePanel.labelText.font,
+                sideLabelSize = defensivePanel.labelText.fontSize,
+            }
+        end,
+        setPanelAppliedStyleForSmoke = function(font, size)
+            mainPanel.appliedFont = font
+            mainPanel.appliedSize = size
+            defensivePanel.appliedFont = font
+            defensivePanel.appliedSize = size
+        end,
         isCleanFiniteNumber = SAFE_NUM.IsCleanFiniteNumber,
         stripDumpEscapes = StripDumpEscapes,
         firstUTF8Char = FirstUTF8Char,

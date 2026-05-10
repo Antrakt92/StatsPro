@@ -105,7 +105,7 @@ Stat labels render in your WoW client's language by default — no setup require
 Curated short-form translations across all 11 retail WoW locales preserve the same
 compact 4-7 char visual rhythm as the original English labels:
 
-![StatsPro localization — short-form stat names across 11 retail WoW locales, color-coded with default StatsPro stat colors](screenshots/localization.png)
+![StatsPro localization preview — 11 retail locales, HUD short labels, and label style examples](screenshots/localization.png)
 
 | Locale | Sample row |
 |---|---|

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.1 - 14-May-2026 — AddOn List category
+
+### Fixed
+
+- **StatsPro now appears under Combat in the modern AddOn List** across supported client locales, while keeping legacy `X-Category` metadata for addon managers.
+
 ## 1.8.0 - 14-May-2026 — Readability and branding
 
 ### Added

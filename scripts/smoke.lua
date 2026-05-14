@@ -141,10 +141,10 @@ local function makeFrame(name)
     function frame:SetColorTexture() end
     function frame:SetVertexColor() end
     function frame:SetBlendMode() end
-    function frame:SetFont(font, size)
+    function frame:SetFont(font, size, flags)
         if type(font) ~= "string" then error("SetFont font must be a string", 2) end
         if not isFiniteNumber(size) then error("SetFont size must be a finite number", 2) end
-        self.font, self.fontSize = font, size
+        self.font, self.fontSize, self.fontFlags = font, size, flags
     end
     function frame:SetJustifyH() end
     function frame:SetJustifyV() end
@@ -694,6 +694,8 @@ do
     eq("db.empty_default_population.version", db.dbVersion, test.currentDBVersion())
     eq("db.empty_default_population.force_locale", db.forceLocale, "auto")
     eq("db.empty_default_population.font_size", db.fontSize, 14)
+    eq("db.empty_default_population.panel_background_alpha", db.panelBackgroundAlpha, 0)
+    eq("db.empty_default_population.text_outline_style", db.textOutlineStyle, "outline")
     eq("db.empty_default_population.split_item_level", db.splitItemLevel, true)
     eq("db.empty_default_population.show_stagger", db.showStagger, false)
     check("db.empty_default_population.colors", type(db.colors) == "table", "colors table missing")
@@ -797,6 +799,9 @@ eq("numbers.font_size_clamp_round.high", test.normalizeNumberSetting("fontSize",
 eq("numbers.font_size_clamp_round.string", test.normalizeNumberSetting("fontSize", "15.4"), 15)
 near("numbers.scale_clamp_round", test.normalizeNumberSetting("scale", 1.36), 1.4)
 eq("numbers.text_alpha_clamp_step", test.normalizeNumberSetting("textAlpha", 22), 25)
+eq("numbers.panel_background_alpha_clamp.low", test.normalizeNumberSetting("panelBackgroundAlpha", -5), 0)
+eq("numbers.panel_background_alpha_clamp.high", test.normalizeNumberSetting("panelBackgroundAlpha", 100), 80)
+eq("numbers.panel_background_alpha_clamp.step", test.normalizeNumberSetting("panelBackgroundAlpha", 43), 45)
 near("numbers.update_interval_clamp_step", test.normalizeNumberSetting("updateInterval", 0.83), 0.85)
 
 do
@@ -804,6 +809,7 @@ do
     eq("numbers.nan_falls_back.font_size", test.normalizeNumberSetting("fontSize", nan), 14)
     near("numbers.nan_falls_back.scale", test.normalizeNumberSetting("scale", nan), 1)
     eq("numbers.nan_falls_back.text_alpha", test.normalizeNumberSetting("textAlpha", nan), 100)
+    eq("numbers.nan_falls_back.panel_background_alpha", test.normalizeNumberSetting("panelBackgroundAlpha", nan), 0)
     near("numbers.nan_falls_back.update_interval", test.normalizeNumberSetting("updateInterval", nan), 0.5)
 end
 
@@ -813,6 +819,8 @@ do
     eq("numbers.inf_handled.font_size_neg", test.normalizeNumberSetting("fontSize", -inf), 14)
     near("numbers.inf_handled.scale_pos", test.normalizeNumberSetting("scale", inf), 1)
     near("numbers.inf_handled.scale_neg", test.normalizeNumberSetting("scale", -inf), 1)
+    eq("numbers.inf_handled.panel_background_alpha_pos", test.normalizeNumberSetting("panelBackgroundAlpha", inf), 0)
+    eq("numbers.inf_handled.panel_background_alpha_neg", test.normalizeNumberSetting("panelBackgroundAlpha", -inf), 0)
 end
 
 do
@@ -969,9 +977,13 @@ do
     eq("slash.toggle.visible", slashEnv.StatsProDB.isVisible, false)
     slashEnv.StatsProDB.fontBeforeAutoSwitch = "Fonts\\ARIALN.TTF"
     slashEnv.StatsProDB.useLocalizedLabels = false
+    slashEnv.StatsProDB.panelBackgroundAlpha = 55
+    slashEnv.StatsProDB.textOutlineStyle = "thick"
     slashEnv.StatsProDB.colors.crit = { r = 0.4, g = 0.5, b = 0.6 }
     slash("slash.reset_restores_defaults", slashEnv, "reset")
     eq("slash.reset_restores_defaults.visible", slashEnv.StatsProDB.isVisible, true)
+    eq("slash.reset_restores_defaults.panel_background_alpha", slashEnv.StatsProDB.panelBackgroundAlpha, 0)
+    eq("slash.reset_restores_defaults.text_outline_style", slashEnv.StatsProDB.textOutlineStyle, "outline")
     eq("slash.reset_restores_defaults.transient_font", slashEnv.StatsProDB.fontBeforeAutoSwitch, nil)
     eq("slash.reset_restores_defaults.legacy_locale", slashEnv.StatsProDB.useLocalizedLabels, nil)
     assertColor("slash.reset_restores_defaults.crit", slashEnv.StatsProDB.colors.crit, 1, 0, 0)
@@ -1317,6 +1329,8 @@ do
         "StatsProFontDropdown",
         "StatsProFontSlider",
         "StatsProTextAlphaSlider",
+        "StatsProTextOutlineDropdown",
+        "StatsProPanelBackgroundSlider",
         "StatsProLanguageDropdown",
     }
     for _, name in ipairs(appearanceControls) do
@@ -1325,6 +1339,7 @@ do
 
     runDropdownInit("config.dropdown_initializers.display_mode", env.StatsProDisplayModeDropdown)
     runDropdownInit("config.dropdown_initializers.label_style", env.StatsProLabelStyleDropdown)
+    runDropdownInit("config.dropdown_initializers.text_outline", env.StatsProTextOutlineDropdown)
     runDropdownInit("config.dropdown_initializers.language", env.StatsProLanguageDropdown)
 
     do
@@ -1366,6 +1381,32 @@ do
     selectDropdownValue("config.dropdown_label_style_hidden_writes_db", env.StatsProLabelStyleDropdown, "hidden")
     eq("config.dropdown_label_style_hidden_writes_db.value", env.StatsProDB.labelStyle, "hidden")
 
+    selectDropdownValue("config.dropdown_text_outline_none_writes_db", env.StatsProTextOutlineDropdown, "none")
+    eq("config.dropdown_text_outline_none_writes_db.value", env.StatsProDB.textOutlineStyle, "none")
+    do
+        local visualState = test.panelVisualState()
+        eq("config.dropdown_text_outline_none_writes_db.cache", visualState.textOutlineStyle, "none")
+        eq("config.dropdown_text_outline_none_writes_db.main_label_flags", visualState.mainLabelFlags, nil)
+        eq("config.dropdown_text_outline_none_writes_db.side_repair_label_flags", visualState.sideRepairLabelFlags, nil)
+    end
+
+    selectDropdownValue("config.dropdown_text_outline_thick_writes_db", env.StatsProTextOutlineDropdown, "thick")
+    eq("config.dropdown_text_outline_thick_writes_db.value", env.StatsProDB.textOutlineStyle, "thick")
+    do
+        local visualState = test.panelVisualState()
+        eq("config.dropdown_text_outline_thick_writes_db.cache", visualState.textOutlineStyle, "thick")
+        eq("config.dropdown_text_outline_thick_writes_db.main_label_flags", visualState.mainLabelFlags, "THICKOUTLINE")
+        eq("config.dropdown_text_outline_thick_writes_db.main_rating_flags", visualState.mainRatingFlags, "THICKOUTLINE")
+        eq("config.dropdown_text_outline_thick_writes_db.main_value_flags", visualState.mainValueFlags, "THICKOUTLINE")
+        eq("config.dropdown_text_outline_thick_writes_db.main_repair_flags", visualState.mainRepairFlags, "THICKOUTLINE")
+        eq("config.dropdown_text_outline_thick_writes_db.main_repair_label_flags", visualState.mainRepairLabelFlags, "THICKOUTLINE")
+        eq("config.dropdown_text_outline_thick_writes_db.side_label_flags", visualState.sideLabelFlags, "THICKOUTLINE")
+        eq("config.dropdown_text_outline_thick_writes_db.side_rating_flags", visualState.sideRatingFlags, "THICKOUTLINE")
+        eq("config.dropdown_text_outline_thick_writes_db.side_value_flags", visualState.sideValueFlags, "THICKOUTLINE")
+        eq("config.dropdown_text_outline_thick_writes_db.side_repair_flags", visualState.sideRepairFlags, "THICKOUTLINE")
+        eq("config.dropdown_text_outline_thick_writes_db.side_repair_label_flags", visualState.sideRepairLabelFlags, "THICKOUTLINE")
+    end
+
     selectDropdownValue("config.dropdown_language_ruRU_commits_locale", env.StatsProLanguageDropdown, "ruRU")
     eq("config.dropdown_language_ruRU_commits_locale.value", env.StatsProDB.forceLocale, "ruRU")
 
@@ -1392,6 +1433,15 @@ do
     changeSlider("config.slider_text_alpha_immediate", env.StatsProTextAlphaSlider, 55)
     eq("config.slider_text_alpha_immediate.db", env.StatsProDB.textAlpha, 55)
     near("config.slider_text_alpha_immediate.cache", test.cachedTextAlpha(), 0.55)
+
+    changeSlider("config.slider_panel_background_immediate", env.StatsProPanelBackgroundSlider, 45)
+    eq("config.slider_panel_background_immediate.db", env.StatsProDB.panelBackgroundAlpha, 45)
+    near("config.slider_panel_background_immediate.cache", test.cachedPanelBackgroundAlpha(), 0.45)
+    do
+        local visualState = test.panelVisualState()
+        near("config.slider_panel_background_immediate.main_alpha", visualState.mainBackgroundAlpha, 0.45)
+        near("config.slider_panel_background_immediate.side_alpha", visualState.sideBackgroundAlpha, 0.45)
+    end
 
     local switchToTab = exists("config.tab_switching.switcher", env.StatsProConfigFrame.SwitchToTab)
     ok, err = pcall(switchToTab, 2)

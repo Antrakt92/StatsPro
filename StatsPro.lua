@@ -246,7 +246,7 @@ end
 -- literal `@project-version@` token from the unsubstituted TOC — fall back to a
 -- hand-maintained constant so the title still reads e.g. `v1.0.3-dev` instead of `vdev`.
 -- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
-local CURRENT_RELEASE = "1.7.1"
+local CURRENT_RELEASE = "1.8.0"
 local ADDON_VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("StatsPro", "Version") or "?"
 if ADDON_VERSION:find("project%-version") then ADDON_VERSION = CURRENT_RELEASE .. "-dev" end
 
@@ -264,6 +264,11 @@ local defaults = {
     -- Text opacity: stored as INT 25-100 (percentage) in DB, divided by 100 on apply.
     -- WHY int-percent (not float 0..1): format-string compat with CreateConfigSlider's "%d%%".
     textAlpha = 100,
+    -- Panel background alpha: stored as INT 0-80 (percentage) in DB, divided by 100 on apply.
+    -- Default 0 preserves the original fully transparent HUD.
+    panelBackgroundAlpha = 0,
+    -- Text outline style: "none" | "outline" | "thick". Default preserves current OUTLINE text.
+    textOutlineStyle = "outline",
     -- WHY LocaleAwareDefaultFont: Blizzard's locale-aware default-font global resolves
     -- to the right TTF for the current WoW client locale (CJK-supporting on zhCN/zhTW/
     -- koKR; Latin/Cyrillic-supporting elsewhere). Hardcoding FRIZQT would render
@@ -599,6 +604,7 @@ local LABELS_BY_LOCALE = {
         ["Value Display"] = "Value Display",
         ["Frame & Position"] = "Frame & Position",
         ["Typography"] = "Typography",
+        ["Readability"] = "Readability",
         ["Localization"] = "Localization",
         ["Offensive Stats"] = "Offensive Stats",
         ["Tertiary Stats"] = "Tertiary Stats",
@@ -622,12 +628,13 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Auto Color by Threshold",
         ["Use Worst Slot (instead of average)"] = "Use Worst Slot (instead of average)",
         -- Sliders:
-        ["Scale:"] = "Scale:", ["Refresh Rate (sec):"] = "Refresh Rate (sec):", ["Font Size:"] = "Font Size:", ["Text Opacity:"] = "Text Opacity:",
+        ["Scale:"] = "Scale:", ["Refresh Rate (sec):"] = "Refresh Rate (sec):", ["Font Size:"] = "Font Size:", ["Text Opacity:"] = "Text Opacity:", ["Panel Background:"] = "Panel Background:",
         -- Dropdown captions:
-        ["Display Mode:"] = "Display Mode:", ["Label Style:"] = "Label Style:", ["Font:"] = "Font:", ["Language:"] = "Language:",
+        ["Display Mode:"] = "Display Mode:", ["Label Style:"] = "Label Style:", ["Text Outline:"] = "Text Outline:", ["Font:"] = "Font:", ["Language:"] = "Language:",
         -- Dropdown options (Display Mode):
         ["Flat"] = "Flat", ["Sectioned"] = "Sectioned", ["Split"] = "Split",
         ["Full"] = "Full", ["Short"] = "Short", ["Hidden"] = "Hidden",
+        ["None"] = "None", ["Outline"] = "Outline", ["Thick Outline"] = "Thick Outline",
         -- Buttons + title:
         ["Reset to Defaults"] = "Reset to Defaults", ["Close"] = "Close",
         ["Open Settings"] = "Open Settings", ["Settings"] = "Settings",
@@ -663,6 +670,7 @@ local LABELS_BY_LOCALE = {
         ["Value Display"] = "Отображение значений",
         ["Frame & Position"] = "Окно и позиция",
         ["Typography"] = "Типографика",
+        ["Readability"] = "Читаемость",
         ["Localization"] = "Локализация",
         ["Offensive Stats"] = "Атакующие характеристики",
         ["Tertiary Stats"] = "Третичные характеристики",
@@ -686,12 +694,13 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Авто-цвет по порогу",
         ["Use Worst Slot (instead of average)"] = "По худшему слоту (вместо среднего)",
         -- Sliders:
-        ["Scale:"] = "Масштаб:", ["Refresh Rate (sec):"] = "Частота обновления (сек):", ["Font Size:"] = "Размер шрифта:", ["Text Opacity:"] = "Прозрачность текста:",
+        ["Scale:"] = "Масштаб:", ["Refresh Rate (sec):"] = "Частота обновления (сек):", ["Font Size:"] = "Размер шрифта:", ["Text Opacity:"] = "Прозрачность текста:", ["Panel Background:"] = "Фон панели:",
         -- Dropdown captions:
-        ["Display Mode:"] = "Режим отображения:", ["Label Style:"] = "Стиль меток:", ["Font:"] = "Шрифт:", ["Language:"] = "Язык:",
+        ["Display Mode:"] = "Режим отображения:", ["Label Style:"] = "Стиль меток:", ["Text Outline:"] = "Контур текста:", ["Font:"] = "Шрифт:", ["Language:"] = "Язык:",
         -- Dropdown options (Display Mode):
         ["Flat"] = "Плоский", ["Sectioned"] = "По секциям", ["Split"] = "Разделённый",
         ["Full"] = "Полный", ["Short"] = "Короткий", ["Hidden"] = "Скрытый",
+        ["None"] = "Нет", ["Outline"] = "Контур", ["Thick Outline"] = "Толстый контур",
         -- Buttons + title:
         ["Reset to Defaults"] = "Сбросить настройки", ["Close"] = "Закрыть",
         ["Open Settings"] = "Открыть настройки", ["Settings"] = "Настройки",
@@ -726,6 +735,7 @@ local LABELS_BY_LOCALE = {
         ["Value Display"] = "Werteanzeige",
         ["Frame & Position"] = "Fenster & Position",
         ["Typography"] = "Typografie",
+        ["Readability"] = "Lesbarkeit",
         ["Localization"] = "Lokalisierung",
         ["Offensive Stats"] = "Offensivwerte",
         ["Tertiary Stats"] = "Tertiärwerte",
@@ -747,10 +757,11 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "Haltbarkeit anzeigen", ["Show Repair Cost"] = "Reparaturkosten anzeigen",
         ["Auto Color by Threshold"] = "Auto-Farbe nach Schwellwert",
         ["Use Worst Slot (instead of average)"] = "Schlechtester Slot (statt Durchschnitt)",
-        ["Scale:"] = "Skalierung:", ["Refresh Rate (sec):"] = "Aktualisierungsrate (Sek.):", ["Font Size:"] = "Schriftgröße:", ["Text Opacity:"] = "Textdeckkraft:",
-        ["Display Mode:"] = "Anzeigemodus:", ["Label Style:"] = "Labelstil:", ["Font:"] = "Schrift:", ["Language:"] = "Sprache:",
+        ["Scale:"] = "Skalierung:", ["Refresh Rate (sec):"] = "Aktualisierungsrate (Sek.):", ["Font Size:"] = "Schriftgröße:", ["Text Opacity:"] = "Textdeckkraft:", ["Panel Background:"] = "Panelhintergrund:",
+        ["Display Mode:"] = "Anzeigemodus:", ["Label Style:"] = "Labelstil:", ["Text Outline:"] = "Textkontur:", ["Font:"] = "Schrift:", ["Language:"] = "Sprache:",
         ["Flat"] = "Flach", ["Sectioned"] = "Gruppiert", ["Split"] = "Geteilt",
         ["Full"] = "Voll", ["Short"] = "Kurz", ["Hidden"] = "Versteckt",
+        ["None"] = "Keine", ["Outline"] = "Kontur", ["Thick Outline"] = "Dicke Kontur",
         ["Reset to Defaults"] = "Auf Standard", ["Close"] = "Schließen",
         ["Open Settings"] = "Einstellungen öffnen", ["Settings"] = "Einstellungen",
         ["Auto (current: %s)"] = "Auto (aktuell: %s)",
@@ -780,6 +791,7 @@ local LABELS_BY_LOCALE = {
         ["Value Display"] = "Affichage des valeurs",
         ["Frame & Position"] = "Cadre & Position",
         ["Typography"] = "Typographie",
+        ["Readability"] = "Lisibilité",
         ["Localization"] = "Localisation",
         ["Offensive Stats"] = "Stats Offensives",
         ["Tertiary Stats"] = "Stats Tertiaires",
@@ -801,10 +813,11 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "Afficher durabilité", ["Show Repair Cost"] = "Afficher coût de réparation",
         ["Auto Color by Threshold"] = "Couleur auto par seuil",
         ["Use Worst Slot (instead of average)"] = "Pire emplacement (vs moyenne)",
-        ["Scale:"] = "Échelle :", ["Refresh Rate (sec):"] = "Fréquence (sec) :", ["Font Size:"] = "Taille de police :", ["Text Opacity:"] = "Opacité du texte :",
-        ["Display Mode:"] = "Mode d'affichage :", ["Label Style:"] = "Style d'étiquette :", ["Font:"] = "Police :", ["Language:"] = "Langue :",
+        ["Scale:"] = "Échelle :", ["Refresh Rate (sec):"] = "Fréquence (sec) :", ["Font Size:"] = "Taille de police :", ["Text Opacity:"] = "Opacité du texte :", ["Panel Background:"] = "Arrière-plan du panneau :",
+        ["Display Mode:"] = "Mode d'affichage :", ["Label Style:"] = "Style d'étiquette :", ["Text Outline:"] = "Contour du texte :", ["Font:"] = "Police :", ["Language:"] = "Langue :",
         ["Flat"] = "Plat", ["Sectioned"] = "Par sections", ["Split"] = "Séparé",
         ["Full"] = "Complet", ["Short"] = "Court", ["Hidden"] = "Masqué",
+        ["None"] = "Aucun", ["Outline"] = "Contour", ["Thick Outline"] = "Contour épais",
         ["Reset to Defaults"] = "Par défaut", ["Close"] = "Fermer",
         ["Open Settings"] = "Ouvrir les paramètres", ["Settings"] = "Paramètres",
         ["Auto (current: %s)"] = "Auto (actuel : %s)",
@@ -835,6 +848,7 @@ local LABELS_BY_LOCALE = {
         ["Value Display"] = "Valores",
         ["Frame & Position"] = "Marco y Posición",
         ["Typography"] = "Tipografía",
+        ["Readability"] = "Legibilidad",
         ["Localization"] = "Localización",
         ["Offensive Stats"] = "Stats Ofensivas",
         ["Tertiary Stats"] = "Stats Terciarias",
@@ -856,10 +870,11 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "Mostrar durabilidad", ["Show Repair Cost"] = "Mostrar coste reparación",
         ["Auto Color by Threshold"] = "Color auto por umbral",
         ["Use Worst Slot (instead of average)"] = "Peor ranura (en vez de media)",
-        ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:", ["Text Opacity:"] = "Opacidad del texto:",
-        ["Display Mode:"] = "Modo:", ["Label Style:"] = "Estilo de etiqueta:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
+        ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:", ["Text Opacity:"] = "Opacidad del texto:", ["Panel Background:"] = "Fondo del panel:",
+        ["Display Mode:"] = "Modo:", ["Label Style:"] = "Estilo de etiqueta:", ["Text Outline:"] = "Contorno del texto:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por secciones", ["Split"] = "Dividido",
         ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Oculto",
+        ["None"] = "Ninguno", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno grueso",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
         ["Open Settings"] = "Abrir ajustes", ["Settings"] = "Ajustes",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
@@ -888,6 +903,7 @@ local LABELS_BY_LOCALE = {
         ["Value Display"] = "Valores",
         ["Frame & Position"] = "Marco y Posición",
         ["Typography"] = "Tipografía",
+        ["Readability"] = "Legibilidad",
         ["Localization"] = "Localización",
         ["Offensive Stats"] = "Stats Ofensivas",
         ["Tertiary Stats"] = "Stats Terciarias",
@@ -909,10 +925,11 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "Mostrar durabilidad", ["Show Repair Cost"] = "Mostrar costo de reparación",
         ["Auto Color by Threshold"] = "Color auto por umbral",
         ["Use Worst Slot (instead of average)"] = "Peor ranura (en vez del promedio)",
-        ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:", ["Text Opacity:"] = "Opacidad del texto:",
-        ["Display Mode:"] = "Modo:", ["Label Style:"] = "Estilo de etiqueta:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
+        ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:", ["Text Opacity:"] = "Opacidad del texto:", ["Panel Background:"] = "Fondo del panel:",
+        ["Display Mode:"] = "Modo:", ["Label Style:"] = "Estilo de etiqueta:", ["Text Outline:"] = "Contorno del texto:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por secciones", ["Split"] = "Dividido",
         ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Oculto",
+        ["None"] = "Ninguno", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno grueso",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
         ["Open Settings"] = "Abrir configuración", ["Settings"] = "Configuración",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
@@ -942,6 +959,7 @@ local LABELS_BY_LOCALE = {
         ["Value Display"] = "Valori",
         ["Frame & Position"] = "Cornice e Posizione",
         ["Typography"] = "Tipografia",
+        ["Readability"] = "Leggibilità",
         ["Localization"] = "Localizzazione",
         ["Offensive Stats"] = "Stat Offensive",
         ["Tertiary Stats"] = "Stat Terziarie",
@@ -963,10 +981,11 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "Mostra durata", ["Show Repair Cost"] = "Mostra costo riparazione",
         ["Auto Color by Threshold"] = "Colore auto per soglia",
         ["Use Worst Slot (instead of average)"] = "Slot peggiore (anziché media)",
-        ["Scale:"] = "Scala:", ["Refresh Rate (sec):"] = "Frequenza (sec):", ["Font Size:"] = "Dimensione font:", ["Text Opacity:"] = "Opacità del testo:",
-        ["Display Mode:"] = "Modalità:", ["Label Style:"] = "Stile etichetta:", ["Font:"] = "Font:", ["Language:"] = "Lingua:",
+        ["Scale:"] = "Scala:", ["Refresh Rate (sec):"] = "Frequenza (sec):", ["Font Size:"] = "Dimensione font:", ["Text Opacity:"] = "Opacità del testo:", ["Panel Background:"] = "Sfondo pannello:",
+        ["Display Mode:"] = "Modalità:", ["Label Style:"] = "Stile etichetta:", ["Text Outline:"] = "Contorno testo:", ["Font:"] = "Font:", ["Language:"] = "Lingua:",
         ["Flat"] = "Piatto", ["Sectioned"] = "A sezioni", ["Split"] = "Diviso",
         ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Nascosto",
+        ["None"] = "Nessuno", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno spesso",
         ["Reset to Defaults"] = "Predefiniti", ["Close"] = "Chiudi",
         ["Open Settings"] = "Apri impostazioni", ["Settings"] = "Impostazioni",
         ["Auto (current: %s)"] = "Auto (attuale: %s)",
@@ -995,6 +1014,7 @@ local LABELS_BY_LOCALE = {
         ["Value Display"] = "Valores",
         ["Frame & Position"] = "Janela e Posição",
         ["Typography"] = "Tipografia",
+        ["Readability"] = "Legibilidade",
         ["Localization"] = "Localização",
         ["Offensive Stats"] = "Atributos Ofensivos",
         ["Tertiary Stats"] = "Atributos Terciários",
@@ -1016,10 +1036,11 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "Mostrar durabilidade", ["Show Repair Cost"] = "Mostrar custo de reparo",
         ["Auto Color by Threshold"] = "Cor auto por limite",
         ["Use Worst Slot (instead of average)"] = "Pior slot (em vez de média)",
-        ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Atualização (s):", ["Font Size:"] = "Tamanho da fonte:", ["Text Opacity:"] = "Opacidade do texto:",
-        ["Display Mode:"] = "Modo:", ["Label Style:"] = "Estilo do rótulo:", ["Font:"] = "Fonte:", ["Language:"] = "Idioma:",
+        ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Atualização (s):", ["Font Size:"] = "Tamanho da fonte:", ["Text Opacity:"] = "Opacidade do texto:", ["Panel Background:"] = "Fundo do painel:",
+        ["Display Mode:"] = "Modo:", ["Label Style:"] = "Estilo do rótulo:", ["Text Outline:"] = "Contorno do texto:", ["Font:"] = "Fonte:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por seções", ["Split"] = "Dividido",
         ["Full"] = "Completo", ["Short"] = "Curto", ["Hidden"] = "Oculto",
+        ["None"] = "Nenhum", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno grosso",
         ["Reset to Defaults"] = "Restaurar", ["Close"] = "Fechar",
         ["Open Settings"] = "Abrir configurações", ["Settings"] = "Configurações",
         ["Auto (current: %s)"] = "Auto (atual: %s)",
@@ -1055,6 +1076,7 @@ local LABELS_BY_LOCALE = {
         ["Value Display"] = "값 표시",
         ["Frame & Position"] = "창 및 위치",
         ["Typography"] = "글꼴",
+        ["Readability"] = "가독성",
         ["Localization"] = "현지화",
         ["Offensive Stats"] = "공격 능력치",
         ["Tertiary Stats"] = "3차 능력치",
@@ -1076,10 +1098,11 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "내구도 표시", ["Show Repair Cost"] = "수리 비용 표시",
         ["Auto Color by Threshold"] = "임계값 자동 색상",
         ["Use Worst Slot (instead of average)"] = "최악 슬롯 사용 (평균 대신)",
-        ["Scale:"] = "크기:", ["Refresh Rate (sec):"] = "갱신 주기 (초):", ["Font Size:"] = "글꼴 크기:", ["Text Opacity:"] = "텍스트 투명도:",
-        ["Display Mode:"] = "표시 모드:", ["Label Style:"] = "라벨 스타일:", ["Font:"] = "글꼴:", ["Language:"] = "언어:",
+        ["Scale:"] = "크기:", ["Refresh Rate (sec):"] = "갱신 주기 (초):", ["Font Size:"] = "글꼴 크기:", ["Text Opacity:"] = "텍스트 투명도:", ["Panel Background:"] = "패널 배경:",
+        ["Display Mode:"] = "표시 모드:", ["Label Style:"] = "라벨 스타일:", ["Text Outline:"] = "글자 외곽선:", ["Font:"] = "글꼴:", ["Language:"] = "언어:",
         ["Flat"] = "단일", ["Sectioned"] = "구역별", ["Split"] = "분리",
         ["Full"] = "전체", ["Short"] = "짧게", ["Hidden"] = "숨김",
+        ["None"] = "없음", ["Outline"] = "외곽선", ["Thick Outline"] = "굵은 외곽선",
         ["Reset to Defaults"] = "기본값", ["Close"] = "닫기",
         ["Open Settings"] = "설정 열기", ["Settings"] = "설정",
         ["Auto (current: %s)"] = "자동 (현재: %s)",
@@ -1108,6 +1131,7 @@ local LABELS_BY_LOCALE = {
         ["Value Display"] = "数值显示",
         ["Frame & Position"] = "窗口与位置",
         ["Typography"] = "字体",
+        ["Readability"] = "可读性",
         ["Localization"] = "本地化",
         ["Offensive Stats"] = "进攻属性",
         ["Tertiary Stats"] = "三级属性",
@@ -1129,10 +1153,11 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "显示耐久", ["Show Repair Cost"] = "显示修理费用",
         ["Auto Color by Threshold"] = "按阈值自动着色",
         ["Use Worst Slot (instead of average)"] = "最差栏位（替代平均值）",
-        ["Scale:"] = "缩放:", ["Refresh Rate (sec):"] = "刷新率 (秒):", ["Font Size:"] = "字体大小:", ["Text Opacity:"] = "文字不透明度:",
-        ["Display Mode:"] = "显示模式:", ["Label Style:"] = "标签样式:", ["Font:"] = "字体:", ["Language:"] = "语言:",
+        ["Scale:"] = "缩放:", ["Refresh Rate (sec):"] = "刷新率 (秒):", ["Font Size:"] = "字体大小:", ["Text Opacity:"] = "文字不透明度:", ["Panel Background:"] = "面板背景:",
+        ["Display Mode:"] = "显示模式:", ["Label Style:"] = "标签样式:", ["Text Outline:"] = "文字描边:", ["Font:"] = "字体:", ["Language:"] = "语言:",
         ["Flat"] = "扁平", ["Sectioned"] = "分组", ["Split"] = "分离",
         ["Full"] = "完整", ["Short"] = "简短", ["Hidden"] = "隐藏",
+        ["None"] = "无", ["Outline"] = "描边", ["Thick Outline"] = "粗描边",
         ["Reset to Defaults"] = "恢复默认", ["Close"] = "关闭",
         ["Open Settings"] = "打开设置", ["Settings"] = "设置",
         ["Auto (current: %s)"] = "自动（当前: %s）",
@@ -1161,6 +1186,7 @@ local LABELS_BY_LOCALE = {
         ["Value Display"] = "數值顯示",
         ["Frame & Position"] = "視窗與位置",
         ["Typography"] = "字型",
+        ["Readability"] = "可讀性",
         ["Localization"] = "在地化",
         ["Offensive Stats"] = "進攻屬性",
         ["Tertiary Stats"] = "三級屬性",
@@ -1182,10 +1208,11 @@ local LABELS_BY_LOCALE = {
         ["Show Durability"] = "顯示耐久", ["Show Repair Cost"] = "顯示修理費用",
         ["Auto Color by Threshold"] = "依閾值自動上色",
         ["Use Worst Slot (instead of average)"] = "最差欄位（替代平均值）",
-        ["Scale:"] = "縮放:", ["Refresh Rate (sec):"] = "更新率 (秒):", ["Font Size:"] = "字型大小:", ["Text Opacity:"] = "文字不透明度:",
-        ["Display Mode:"] = "顯示模式:", ["Label Style:"] = "標籤樣式:", ["Font:"] = "字型:", ["Language:"] = "語言:",
+        ["Scale:"] = "縮放:", ["Refresh Rate (sec):"] = "更新率 (秒):", ["Font Size:"] = "字型大小:", ["Text Opacity:"] = "文字不透明度:", ["Panel Background:"] = "面板背景:",
+        ["Display Mode:"] = "顯示模式:", ["Label Style:"] = "標籤樣式:", ["Text Outline:"] = "文字描邊:", ["Font:"] = "字型:", ["Language:"] = "語言:",
         ["Flat"] = "扁平", ["Sectioned"] = "分組", ["Split"] = "分離",
         ["Full"] = "完整", ["Short"] = "簡短", ["Hidden"] = "隱藏",
+        ["None"] = "無", ["Outline"] = "描邊", ["Thick Outline"] = "粗描邊",
         ["Reset to Defaults"] = "恢復預設", ["Close"] = "關閉",
         ["Open Settings"] = "開啟設定", ["Settings"] = "設定",
         ["Auto (current: %s)"] = "自動（目前: %s）",
@@ -1257,10 +1284,11 @@ local function NormalizeDBVersion(value)
 end
 
 local NUMBER_SETTING_META = {
-    scale          = { min = 0.5, max = 2.0, step = 0.1 },
-    fontSize       = { min = 8,   max = 32,  step = 1 },
-    textAlpha      = { min = 25,  max = 100, step = 5 },
-    updateInterval = { min = 0.1, max = 1.0, step = 0.05 },
+    scale                = { min = 0.5, max = 2.0, step = 0.1 },
+    fontSize             = { min = 8,   max = 32,  step = 1 },
+    textAlpha            = { min = 25,  max = 100, step = 5 },
+    panelBackgroundAlpha = { min = 0,   max = 80,  step = 5 },
+    updateInterval       = { min = 0.1, max = 1.0, step = 0.05 },
 }
 
 local function NormalizeNumberSetting(key, value)
@@ -1297,6 +1325,32 @@ local function NormalizeLabelStyle(value)
         return value
     end
     return "full"
+end
+
+addon.readabilityConfig = {
+    textOutlineOptions = {
+        { value = "none",    label = "None" },
+        { value = "outline", label = "Outline" },
+        { value = "thick",   label = "Thick Outline" },
+    },
+}
+
+function addon.readabilityConfig.normalizeTextOutlineStyle(value)
+    if value == "none" or value == "thick" then
+        return value
+    end
+    return "outline"
+end
+
+function addon.readabilityConfig.textOutlineStyleToFontFlags(value)
+    local style = addon.readabilityConfig.normalizeTextOutlineStyle(value)
+    if style == "none" then return nil end
+    if style == "thick" then return "THICKOUTLINE" end
+    return "OUTLINE"
+end
+
+function addon.readabilityConfig.getTextOutlineStyleDB()
+    return addon.readabilityConfig.normalizeTextOutlineStyle(GetDB("textOutlineStyle"))
 end
 
 local function FontSupports(fontPath, glyph)
@@ -1524,6 +1578,8 @@ local function CacheSettings()
     -- spam OnUpdate, or break font/scale arithmetic. Do not write back here; UI
     -- slider commits remain the only normal path that mutates SavedVariables.
     cached.textAlpha = GetNumberDB("textAlpha") / 100
+    cached.panelBackgroundAlpha = GetNumberDB("panelBackgroundAlpha") / 100
+    cached.textOutlineStyle = addon.readabilityConfig.getTextOutlineStyleDB()
 
     -- Resolve labels for the active locale. forceLocale="auto" → GetLocale().
     -- WHY reference, not copy: LABELS_BY_LOCALE entries are never mutated; reference
@@ -1813,7 +1869,7 @@ function Panel:New(globalName, dbKeyPrefix)
         tile = true, tileSize = 16, edgeSize = 16,
         insets = { left = 4, right = 4, top = 4, bottom = 4 },
     })
-    frame:SetBackdropColor(0, 0, 0, 0)
+    frame:SetBackdropColor(0, 0, 0, GetNumberDB("panelBackgroundAlpha") / 100)
     frame:SetBackdropBorderColor(0, 0, 0, 0)
 
     -- Three-column rendering: label (RIGHT) | rating (RIGHT) | value (LEFT).
@@ -1827,8 +1883,13 @@ function Panel:New(globalName, dbKeyPrefix)
     -- CONSTANT visible gap from rating-end (or label-colon when no rating) to value
     -- text regardless of value length. Cost: values' right edges no longer align
     -- vertically. User chose tight constant gap over right-edge alignment.
+    local font = GetFontDB()
+    local fontSize = GetNumberDB("fontSize")
+    local outlineStyle = addon.readabilityConfig.getTextOutlineStyleDB()
+    local fontFlags = addon.readabilityConfig.textOutlineStyleToFontFlags(outlineStyle)
+
     local labelText = frame:CreateFontString(nil, "OVERLAY")
-    labelText:SetFont(GetFontDB(), GetNumberDB("fontSize"), "OUTLINE")
+    labelText:SetFont(font, fontSize, fontFlags)
     labelText:SetJustifyH("RIGHT")
     labelText:SetJustifyV("TOP")
     labelText:SetTextColor(1, 1, 1, 1)
@@ -1840,7 +1901,7 @@ function Panel:New(globalName, dbKeyPrefix)
     -- column starts. Offset is recomputed each SetTextSafe once valueW is measured.
     -- Initial offset 0; first render repositions it.
     local ratingText = frame:CreateFontString(nil, "OVERLAY")
-    ratingText:SetFont(GetFontDB(), GetNumberDB("fontSize"), "OUTLINE")
+    ratingText:SetFont(font, fontSize, fontFlags)
     ratingText:SetJustifyH("RIGHT")
     ratingText:SetJustifyV("TOP")
     ratingText:SetTextColor(1, 1, 1, 1)
@@ -1848,7 +1909,7 @@ function Panel:New(globalName, dbKeyPrefix)
     ratingText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
 
     local valueText = frame:CreateFontString(nil, "OVERLAY")
-    valueText:SetFont(GetFontDB(), GetNumberDB("fontSize"), "OUTLINE")
+    valueText:SetFont(font, fontSize, fontFlags)
     valueText:SetJustifyH("LEFT")
     valueText:SetJustifyV("TOP")
     valueText:SetTextColor(1, 1, 1, 1)
@@ -1866,7 +1927,7 @@ function Panel:New(globalName, dbKeyPrefix)
     -- icons inflate that line's height (`:14:14:2:0|t` yoffset=0 puts texture top above
     -- glyph top), causing cumulative drift vs labelText's pure-text rows.
     local repairText = frame:CreateFontString(nil, "OVERLAY")
-    repairText:SetFont(GetFontDB(), GetNumberDB("fontSize"), "OUTLINE")
+    repairText:SetFont(font, fontSize, fontFlags)
     repairText:SetJustifyH("RIGHT")
     repairText:SetTextColor(1, 1, 1, 1)
     repairText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)  -- y repositioned per render
@@ -1877,7 +1938,7 @@ function Panel:New(globalName, dbKeyPrefix)
     -- row sits on its own visual row below stats (visual separation), and so coin can't
     -- overlap stat-row content. Width set per-render = stats labelW for column alignment.
     local repairLabelText = frame:CreateFontString(nil, "OVERLAY")
-    repairLabelText:SetFont(GetFontDB(), GetNumberDB("fontSize"), "OUTLINE")
+    repairLabelText:SetFont(font, fontSize, fontFlags)
     repairLabelText:SetJustifyH("RIGHT")  -- match labelText alignment
     repairLabelText:SetTextColor(1, 1, 1, 1)
     repairLabelText:Hide()  -- shown only when hasRepair
@@ -1893,8 +1954,9 @@ function Panel:New(globalName, dbKeyPrefix)
     -- apply when args happen to match the file-scope-inline SetFont calls — wasting 10
     -- SetFont + 10 SetText per panel on every /reload. With this initialization, the
     -- post-MaybeAutoSwitchFont apply at PEW becomes a no-op when MAS didn't swap.
-    panel.appliedFont = GetFontDB()
-    panel.appliedSize = GetNumberDB("fontSize")
+    panel.appliedFont = font
+    panel.appliedSize = fontSize
+    panel.appliedTextOutlineStyle = outlineStyle
 
     -- Drag handlers (unsecure frames; not protected in combat lockdown).
     -- RegisterForDrag honors WoW's system drag-distance threshold — single clicks
@@ -2155,15 +2217,21 @@ function Panel:ApplyStyle(font, size, force)
     -- applied), Reset, font/locale preview-cancel, lang commit's conditional restore,
     -- and the Font Size slider's OnValueChanged. Same-args calls cost 10 SetFont +
     -- 10 SetText + cache invalidations + a follow-up UpdateStats re-measure pass.
-    -- Early return saves all of that whenever the panel is already at (font,size).
-    if not force and SameFontPath(self.appliedFont, font) and self.appliedSize == size then return end
+    -- Early return saves all of that whenever the panel is already at (font,size,outline).
+    local outlineStyle = cached.textOutlineStyle or addon.readabilityConfig.getTextOutlineStyleDB()
+    if not force
+        and SameFontPath(self.appliedFont, font)
+        and self.appliedSize == size
+        and self.appliedTextOutlineStyle == outlineStyle then return end
+    local fontFlags = addon.readabilityConfig.textOutlineStyleToFontFlags(outlineStyle)
     self.appliedFont = font
     self.appliedSize = size
-    self.labelText:SetFont(font, size, "OUTLINE")
-    self.ratingText:SetFont(font, size, "OUTLINE")
-    self.valueText:SetFont(font, size, "OUTLINE")
-    self.repairText:SetFont(font, size, "OUTLINE")
-    self.repairLabelText:SetFont(font, size, "OUTLINE")
+    self.appliedTextOutlineStyle = outlineStyle
+    self.labelText:SetFont(font, size, fontFlags)
+    self.ratingText:SetFont(font, size, fontFlags)
+    self.valueText:SetFont(font, size, fontFlags)
+    self.repairText:SetFont(font, size, fontFlags)
+    self.repairLabelText:SetFont(font, size, fontFlags)
     -- WHY: Blizzard quirk - SetFont clears text; re-apply if we have one.
     if self.lastLabelText then
         self.labelText:SetText(self.lastLabelText)
@@ -2234,9 +2302,18 @@ local function ApplyTextStyleToAllPanels(font, size, force)
     defensivePanel:ApplyStyle(font, size, force)
 end
 
+function Panel:ApplyBackgroundAlpha(alpha)
+    self.frame:SetBackdropColor(0, 0, 0, alpha)
+end
+
 local function ApplyTextAlphaToAllPanels(alpha)
     if mainPanel then mainPanel:ApplyTextAlpha(alpha) end
     if defensivePanel then defensivePanel:ApplyTextAlpha(alpha) end
+end
+
+addon.readabilityConfig.applyPanelBackgroundAlphaToAllPanels = function(alpha)
+    if mainPanel then mainPanel:ApplyBackgroundAlpha(alpha) end
+    if defensivePanel then defensivePanel:ApplyBackgroundAlpha(alpha) end
 end
 
 -- Companion to ApplyTextStyleToAllPanels: re-flows both panels after a font/size change
@@ -2247,6 +2324,22 @@ end
 local function ReflowAllPanels()
     mainPanel:Reflow()
     defensivePanel:Reflow()
+end
+
+addon.readabilityConfig.getTextOutlineStyle = addon.readabilityConfig.getTextOutlineStyleDB
+
+addon.readabilityConfig.selectTextOutlineStyle = function(value, opt, dropdown)
+    StatsProDB.textOutlineStyle = addon.readabilityConfig.normalizeTextOutlineStyle(value)
+    CacheSettings()
+    UIDropDownMenu_SetText(dropdown, L(opt.label))
+    CloseDropDownMenus()
+    ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"))
+    ReflowAllPanels()
+end
+
+addon.readabilityConfig.changePanelBackgroundAlpha = function(value)
+    cached.panelBackgroundAlpha = value / 100
+    addon.readabilityConfig.applyPanelBackgroundAlphaToAllPanels(cached.panelBackgroundAlpha)
 end
 
 -- Forward-decl: both helpers are defined in section 14 alongside their companions
@@ -2939,6 +3032,7 @@ local function OnPlayerEnteringWorld()
         -- so cached.textAlpha is nil at FontString creation. This propagates the user's
         -- saved alpha to FontStrings on the first frame.
         ApplyTextAlphaToAllPanels(cached.textAlpha)
+        addon.readabilityConfig.applyPanelBackgroundAlphaToAllPanels(cached.panelBackgroundAlpha)
         isLoaded = true
     end
     -- WHY: UpdateStats handles Show/Hide based on cached.isVisible + line content.
@@ -3543,6 +3637,7 @@ local function ResetToDefaults()
     CacheSettings()
     ApplyTextStyleToAllPanels(defaults.font, defaults.fontSize)
     ApplyTextAlphaToAllPanels(cached.textAlpha)
+    addon.readabilityConfig.applyPanelBackgroundAlphaToAllPanels(cached.panelBackgroundAlpha)
     -- Sync settings-UI font to the fresh default-locale state. Without this, a Reset
     -- performed while forceLocale was a non-baseline locale (e.g. ruRU on enUS — UI was
     -- in ARIALN via prior MaybeAutoSwitchFont) would leave currentConfigFont stuck on
@@ -4374,6 +4469,22 @@ function addon:OpenConfigMenu()
         end)
 
     CursorGap(cd, 4)
+    CursorSection(cd, "Readability")
+    CreateSimpleDropdownRow(
+        displayTab,
+        displayDropdownRows,
+        "StatsProTextOutlineDropdown",
+        "Text Outline:",
+        self.readabilityConfig.textOutlineOptions,
+        cd,
+        self.readabilityConfig.getTextOutlineStyle,
+        self.readabilityConfig.selectTextOutlineStyle)
+
+    CreateConfigSlider(displayTab, "StatsProPanelBackgroundSlider", "Panel Background:", "panelBackgroundAlpha", cd,
+        0, 80, 5, "0%", "80%", "%d%%",
+        self.readabilityConfig.changePanelBackgroundAlpha)
+
+    CursorGap(cd, 4)
 
     -- Localization section. Always shown — useful even on enUS for screenshot-locale
     -- picks (中文 / 한국어). Placed at bottom: typically set once on install and
@@ -4819,11 +4930,11 @@ function addon:PrintDebugDump()
         tostring(isLoaded), tostring(durabilityDirty),
         math.floor(collectgarbage("count"))))
 
-    PrintMsg(string.format("visible=%s  locked=%s  mode=%s  labelStyle=%s  font=%dpx  scale=%.1f  refresh=%.2fs  textAlpha=%d%%",
+    PrintMsg(string.format("visible=%s  locked=%s  mode=%s  labelStyle=%s  outline=%s  font=%dpx  scale=%.1f  refresh=%.2fs  textAlpha=%d%%  bgAlpha=%d%%",
         tostring(cached.isVisible), tostring(cached.isLocked),
-        tostring(GetDB("displayMode")), tostring(cached.labelStyle),
+        tostring(GetDB("displayMode")), tostring(cached.labelStyle), tostring(cached.textOutlineStyle),
         GetNumberDB("fontSize"), GetNumberDB("scale"), GetNumberDB("updateInterval"),
-        GetNumberDB("textAlpha")))
+        GetNumberDB("textAlpha"), GetNumberDB("panelBackgroundAlpha")))
 
     PrintMsg(string.format("show fmt: rating=%s pct=%s matchColor=%s",
         tostring(cached.showRating), tostring(cached.showPercentage), tostring(cached.matchValueColorToStat)))
@@ -5144,6 +5255,7 @@ if addon and addon.__statsproSmoke == true then
         currentDBVersion = function() return CURRENT_DB_VERSION end,
         cachedUpdateInterval = function() return cached.updateInterval end,
         cachedTextAlpha = function() return cached.textAlpha end,
+        cachedPanelBackgroundAlpha = function() return cached.panelBackgroundAlpha end,
         copyDefaults = function() return CopyTable(defaults) end,
         migrateDB = MigrateDB,
         cacheSettings = CacheSettings,
@@ -5165,19 +5277,42 @@ if addon and addon.__statsproSmoke == true then
             return {
                 mainAppliedFont = mainPanel.appliedFont,
                 mainAppliedSize = mainPanel.appliedSize,
+                mainAppliedTextOutlineStyle = mainPanel.appliedTextOutlineStyle,
                 mainLabelFont = mainPanel.labelText.font,
                 mainLabelSize = mainPanel.labelText.fontSize,
+                mainLabelFlags = mainPanel.labelText.fontFlags,
                 sideAppliedFont = defensivePanel.appliedFont,
                 sideAppliedSize = defensivePanel.appliedSize,
+                sideAppliedTextOutlineStyle = defensivePanel.appliedTextOutlineStyle,
                 sideLabelFont = defensivePanel.labelText.font,
                 sideLabelSize = defensivePanel.labelText.fontSize,
+                sideLabelFlags = defensivePanel.labelText.fontFlags,
             }
         end,
-        setPanelAppliedStyleForSmoke = function(font, size)
+        panelVisualState = function()
+            return {
+                textOutlineStyle = cached.textOutlineStyle,
+                mainBackgroundAlpha = mainPanel.frame.backdropColor and mainPanel.frame.backdropColor.a or nil,
+                mainLabelFlags = mainPanel.labelText.fontFlags,
+                mainRatingFlags = mainPanel.ratingText.fontFlags,
+                mainValueFlags = mainPanel.valueText.fontFlags,
+                mainRepairFlags = mainPanel.repairText.fontFlags,
+                mainRepairLabelFlags = mainPanel.repairLabelText.fontFlags,
+                sideBackgroundAlpha = defensivePanel.frame.backdropColor and defensivePanel.frame.backdropColor.a or nil,
+                sideLabelFlags = defensivePanel.labelText.fontFlags,
+                sideRatingFlags = defensivePanel.ratingText.fontFlags,
+                sideValueFlags = defensivePanel.valueText.fontFlags,
+                sideRepairFlags = defensivePanel.repairText.fontFlags,
+                sideRepairLabelFlags = defensivePanel.repairLabelText.fontFlags,
+            }
+        end,
+        setPanelAppliedStyleForSmoke = function(font, size, outlineStyle)
             mainPanel.appliedFont = font
             mainPanel.appliedSize = size
+            mainPanel.appliedTextOutlineStyle = outlineStyle or cached.textOutlineStyle or addon.readabilityConfig.getTextOutlineStyleDB()
             defensivePanel.appliedFont = font
             defensivePanel.appliedSize = size
+            defensivePanel.appliedTextOutlineStyle = outlineStyle or cached.textOutlineStyle or addon.readabilityConfig.getTextOutlineStyleDB()
         end,
         isCleanFiniteNumber = SAFE_NUM.IsCleanFiniteNumber,
         stripDumpEscapes = StripDumpEscapes,

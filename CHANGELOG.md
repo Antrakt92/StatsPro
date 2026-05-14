@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.8.0 - 14-May-2026 — Readability and branding
+
+### Added
+
+- **Readability controls in Appearance** — choose Text Outline (`None`, `Outline`, or `Thick Outline`) and add an optional translucent panel background without changing the default transparent HUD.
+- **Localized settings labels for the new controls** across all 11 retail locales.
+
+### Changed
+
+- **StatsPro branding has been refreshed** — the README logo and packaged AddOn List icon now use the current stats-panel logo.
+
+### Improved
+
+- **Smoke coverage now protects the new visual settings** — local checks cover default population, numeric clamping, reset behavior, live config controls, both split panels, font outline flags, and panel background alpha.
+
 ## 1.7.1 - 10-May-2026 — Runtime hardening
 
 ### Fixed

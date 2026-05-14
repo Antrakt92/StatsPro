@@ -41,9 +41,9 @@
 - **Repair cost** — optional live vendor-format coin display (`46g 40s 81c` with embedded gold/silver/copper icons), default OFF
 - **Three display modes** — Flat (one panel), Sectioned (one panel with block headers), Split (two movable panels with configurable block routing)
 - **Localized stat labels** — on-screen panel auto-translates to your WoW client language across all 11 retail locales (deDE, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, zhTW; English unchanged). Use the **Language** dropdown in Appearance → Localization to choose Auto or a fixed locale, and **Label Style** in Layout → Value Display to switch **Full / Short / Hidden** label rendering. **The settings window itself also localizes** — every tab, label, dropdown caption, button, and warning updates live the moment you switch languages, no `/reload` needed.
-- **Customization** — per-stat colors, fonts via LibSharedMedia, font size, text opacity, panel scale, refresh rate
+- **Readability controls** — per-stat colors, fonts via LibSharedMedia, font size, text opacity, text outline style, optional panel background, panel scale, refresh rate
 - **Auto-aligning columns** — labels and values stay neatly aligned regardless of which stats are enabled, font, or scale; toggling rating-only or percent-only collapses cleanly into one tight column with no awkward gaps
-- **Light footprint** — core UI in one Lua file, no Ace3; bundles standard LibSharedMedia support for font picking
+- **Light footprint** — core addon logic lives in one Lua file, no Ace3; release zips bundle standard LibStub / CallbackHandler / LibSharedMedia support for font picking
 
 ## How it looks
 
@@ -73,8 +73,8 @@ from Character / Offensive / Tertiary / Defensive / Item Level / Durability / Re
 - **Drag once, done forever** — your panel positions survive `/reload`, logout, and
   client patches. No reset-to-center surprises after a UI reload or expansion update.
 - **Configurable from one place** — every visible element lives behind `/ss`:
-  per-stat colors, font via LibSharedMedia, font size and opacity, panel scale,
-  layout preset, split block routing, durability thresholds. No SavedVariables
+  per-stat colors, font via LibSharedMedia, font size and opacity, text outline,
+  optional panel background, panel scale, layout preset, split block routing, durability thresholds. No SavedVariables
   editing, no `/reload` between tweaks.
 - **Built for Midnight (12.x)** — works correctly mid-combat where many older stat
   addons silently break (see the section below).
@@ -89,7 +89,7 @@ into action bars, macros, and other addons.
 
 StatsPro defends against this end-to-end:
 
-- Every stat read is wrapped in `pcall + issecretvalue` before display
+- Stat reads that can return secret values are guarded with `pcall + issecretvalue` before display
 - FontString widths are cached when non-secret, so the auto-fit layout stays stable
   mid-pull instead of collapsing to zero
 - Repair cost uses the modern `C_TooltipInfo.GetInventoryItem` API (the legacy
@@ -162,7 +162,7 @@ everything:
 |---|---|
 | **Stats** | Character rows (Show Main Stat, Stamina), Offensive, Tertiary, Defensive, and Gear toggles, including Item Level, with inline color swatches |
 | **Layout** | Visibility / Lock, Display Mode, **Side Panel Contains** routing for Split mode, **Value Display** controls (Show Rating / Show Percentage / Label Style / Match Value Color to Stat), Scale, Refresh Rate |
-| **Appearance** | Typography (Font / Font Size / Text Opacity), Localization (Language picker + font-coverage warning) |
+| **Appearance** | Typography (Font / Font Size / Text Opacity), Readability (Text Outline / Panel Background), Localization (Language picker + font-coverage warning) |
 
 ## Compatibility
 

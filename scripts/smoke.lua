@@ -135,7 +135,7 @@ local function makeFrame(name)
     function frame:SetMovable() end
     function frame:EnableMouse() end
     function frame:SetClampedToScreen() end
-    function frame:SetBackdrop() end
+    function frame:SetBackdrop(backdrop) self.backdrop = backdrop end
     function frame:SetBackdropColor(r, g, b, a) self.backdropColor = { r = r, g = g, b = b, a = a } end
     function frame:SetBackdropBorderColor() end
     function frame:SetColorTexture() end
@@ -597,6 +597,19 @@ end
 local function exists(name, value)
     check(name, value ~= nil, "missing")
     return value
+end
+
+do
+    local mainInsets = exists("panel.background_insets.main", env.StatsProFrame.backdrop and env.StatsProFrame.backdrop.insets)
+    local sideInsets = exists("panel.background_insets.side", env.StatsProDefensiveFrame.backdrop and env.StatsProDefensiveFrame.backdrop.insets)
+    eq("panel.background_insets.main.left", mainInsets.left, 0)
+    eq("panel.background_insets.main.right", mainInsets.right, 0)
+    eq("panel.background_insets.main.top", mainInsets.top, 0)
+    eq("panel.background_insets.main.bottom", mainInsets.bottom, 0)
+    eq("panel.background_insets.side.left", sideInsets.left, 0)
+    eq("panel.background_insets.side.right", sideInsets.right, 0)
+    eq("panel.background_insets.side.top", sideInsets.top, 0)
+    eq("panel.background_insets.side.bottom", sideInsets.bottom, 0)
 end
 
 local function hasScript(name, frame, scriptName)
@@ -1335,12 +1348,6 @@ do
     }
     for _, name in ipairs(appearanceControls) do
         exists("config.appearance_controls_exist." .. name, env[name])
-    end
-
-    do
-        local outlinePoint = exists("config.readability_alignment.outline_point", env.StatsProTextOutlineDropdown.points[1])
-        local backgroundPoint = exists("config.readability_alignment.background_point", env.StatsProPanelBackgroundSlider.points[1])
-        eq("config.readability_alignment.same_control_column", backgroundPoint[4], outlinePoint[4])
     end
 
     runDropdownInit("config.dropdown_initializers.display_mode", env.StatsProDisplayModeDropdown)

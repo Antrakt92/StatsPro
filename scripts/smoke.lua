@@ -1337,6 +1337,12 @@ do
         exists("config.appearance_controls_exist." .. name, env[name])
     end
 
+    do
+        local outlinePoint = exists("config.readability_alignment.outline_point", env.StatsProTextOutlineDropdown.points[1])
+        local backgroundPoint = exists("config.readability_alignment.background_point", env.StatsProPanelBackgroundSlider.points[1])
+        eq("config.readability_alignment.same_control_column", backgroundPoint[4], outlinePoint[4])
+    end
+
     runDropdownInit("config.dropdown_initializers.display_mode", env.StatsProDisplayModeDropdown)
     runDropdownInit("config.dropdown_initializers.label_style", env.StatsProLabelStyleDropdown)
     runDropdownInit("config.dropdown_initializers.text_outline", env.StatsProTextOutlineDropdown)

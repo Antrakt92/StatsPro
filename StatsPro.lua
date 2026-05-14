@@ -3376,15 +3376,20 @@ local function ReAlignGroupImpl(rows, gap)
             row.dropdown:ClearAllPoints()
             row.dropdown:SetPoint("TOPLEFT", row.dropdownParent, "TOPLEFT",
                 row.dropdownX_base + maxW + gap, row.dropdownY)
+        elseif row.slider then
+            row.slider:ClearAllPoints()
+            row.slider:SetPoint("TOPLEFT", row.sliderParent, "TOPLEFT",
+                row.sliderX_base + maxW + gap, row.sliderY)
         end
     end
 end
 
 -- AlignSwatchColumn: post-creation max-width sync for a group of rows that should share a
--- control column (swatch OR dropdown — both anchor relative to label.RIGHT, dispatch on
+-- control column (swatch, dropdown, or compact slider — all anchor relative to label.RIGHT, dispatch on
 -- which field is set). rows[i] = { text=FontString, swatch=Frame? } for swatch rows;
 -- { text=FontString, dropdown=Frame, dropdownX_base=number, dropdownY=number,
--- dropdownParent=Frame } for dropdown rows. Locale-aware: measures actual rendered widths
+-- dropdownParent=Frame } for dropdown rows; { text=FontString, slider=Frame, ... } for
+-- compact slider rows. Locale-aware: measures actual rendered widths
 -- in the current font, no hardcoded en-biased SetWidth(N). Registers the group so
 -- RefreshConfigLocalization() can re-run alignment after a language switch shrinks or
 -- grows the labels.
@@ -3565,19 +3570,11 @@ end
 -- the Appearance tab. valueFmt is a string.format specifier (e.g. "%.1f", "%d") applied
 -- to both initial display and live OnValueChanged updates. SetObeyStepOnDrag(true) +
 -- step=1 guarantees integer values for "%d" sliders. cd cursor advances by 50.
-local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, maxVal, step, lowText, highText, valueFmt, onChange)
-    local sliderY = cd.y
-    local lbl = parent:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(lbl, CONFIG_FONT_SIZE)
-    lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
-    PushLocalizedLabel(function() lbl:SetText(L(labelText)) end)
-
-    local slider = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
-    slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
+addon.readabilityConfig.configureConfigSlider = function(slider, name, dbKey, width, minVal, maxVal, step, lowText, highText, valueFmt, onChange)
     slider:SetMinMaxValues(minVal, maxVal)
     slider:SetValueStep(step)
     slider:SetObeyStepOnDrag(true)
-    slider:SetWidth(420)
+    slider:SetWidth(width)
     local initialValue = NUMBER_SETTING_META[dbKey] and GetNumberDB(dbKey) or GetDB(dbKey)
     slider:SetValue(initialValue)
     _G[name .. "Low"]:SetText(lowText)
@@ -3596,9 +3593,42 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
         slider:SetValue(v)
         _G[slider:GetName() .. "Text"]:SetText(string.format(valueFmt, v))
     end)
+end
+
+local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, maxVal, step, lowText, highText, valueFmt, onChange)
+    local sliderY = cd.y
+    local lbl = parent:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(lbl, CONFIG_FONT_SIZE)
+    lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
+    PushLocalizedLabel(function() lbl:SetText(L(labelText)) end)
+
+    local slider = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
+    slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
+    addon.readabilityConfig.configureConfigSlider(slider, name, dbKey, 420, minVal, maxVal, step, lowText, highText, valueFmt, onChange)
 
     cd.y = sliderY - 50
     return slider
+end
+
+addon.readabilityConfig.createAlignedConfigSliderRow = function(parent, rows, name, labelText, dbKey, cd, minVal, maxVal, step, lowText, highText, valueFmt, controlWidth, onChange)
+    local rowY = cd.y
+
+    local lbl = parent:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(lbl, CONFIG_FONT_SIZE)
+    lbl:SetPoint("TOPLEFT", cd.padX, rowY - 4)
+    PushLocalizedLabel(function() lbl:SetText(L(labelText)) end)
+
+    local slider = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
+    local sliderY = rowY - 18
+    slider:SetPoint("TOPLEFT", cd.padX + 100, sliderY)
+    addon.readabilityConfig.configureConfigSlider(slider, name, dbKey, controlWidth or 240, minVal, maxVal, step, lowText, highText, valueFmt, onChange)
+
+    tinsert(rows, {
+        text = lbl, slider = slider,
+        sliderX_base = cd.padX, sliderY = sliderY, sliderParent = parent,
+    })
+    cd.y = rowY - 50
+    return slider, lbl
 end
 
 -- Reset all settings to defaults — callable from both the resetBtn:OnClick (in
@@ -4480,8 +4510,9 @@ function addon:OpenConfigMenu()
         self.readabilityConfig.getTextOutlineStyle,
         self.readabilityConfig.selectTextOutlineStyle)
 
-    CreateConfigSlider(displayTab, "StatsProPanelBackgroundSlider", "Panel Background:", "panelBackgroundAlpha", cd,
-        0, 80, 5, "0%", "80%", "%d%%",
+    self.readabilityConfig.createAlignedConfigSliderRow(displayTab, displayDropdownRows,
+        "StatsProPanelBackgroundSlider", "Panel Background:", "panelBackgroundAlpha", cd,
+        0, 80, 5, "0%", "80%", "%d%%", 240,
         self.readabilityConfig.changePanelBackgroundAlpha)
 
     CursorGap(cd, 4)

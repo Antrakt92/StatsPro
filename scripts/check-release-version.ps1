@@ -40,6 +40,21 @@ function Get-FirstRegexMatch {
     return $Match.Groups[1].Value
 }
 
+function Get-FirstRegexObject {
+    param(
+        [string]$Path,
+        [string]$Pattern,
+        [string]$Description
+    )
+
+    $Text = Get-Content -Path $Path -Raw
+    $Match = [regex]::Match($Text, $Pattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
+    if (-not $Match.Success) {
+        throw "Missing or malformed $Description in $Path"
+    }
+    return $Match
+}
+
 if ([string]::IsNullOrWhiteSpace($Tag)) {
     throw "Missing release tag. Pass -Tag vX.Y.Z or set GITHUB_REF_NAME."
 }
@@ -70,10 +85,19 @@ $CurrentRelease = Get-SingleRegexMatch `
     -Pattern '^\s*local\s+CURRENT_RELEASE\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"\s*$' `
     -Description "CURRENT_RELEASE"
 
-$ChangelogVersion = Get-FirstRegexMatch `
+$ChangelogHeading = Get-FirstRegexObject `
     -Path "CHANGELOG.md" `
-    -Pattern "^##\s+([0-9]+\.[0-9]+\.[0-9]+)\s+-\s+.+$" `
-    -Description "top changelog version"
+    -Pattern "^##\s+([0-9]+\.[0-9]+\.[0-9]+)\s+-\s+([0-9]{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-[0-9]{4})\s+—\s+\S.*$" `
+    -Description "top changelog heading (`## X.Y.Z - DD-MMM-YYYY — Title`)"
+
+$ChangelogVersion = $ChangelogHeading.Groups[1].Value
+$ChangelogDate = $ChangelogHeading.Groups[2].Value
+[void][datetime]::ParseExact(
+    $ChangelogDate,
+    "dd-MMM-yyyy",
+    [System.Globalization.CultureInfo]::InvariantCulture,
+    [System.Globalization.DateTimeStyles]::None
+)
 
 $Errors = @()
 if ($TocVersion -ne $TagVersion) {

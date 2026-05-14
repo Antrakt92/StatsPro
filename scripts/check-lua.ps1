@@ -6,6 +6,7 @@ $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $RepoRoot
 $AddonFile = Join-Path $RepoRoot "StatsPro.lua"
 $SmokeFile = Join-Path $RepoRoot "scripts\smoke.lua"
+$MetadataCheck = Join-Path $RepoRoot "scripts\check-metadata.ps1"
 
 $LuacCandidates = @(
     (Get-Command luac5.1 -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
@@ -47,6 +48,11 @@ $LuacheckCandidates = @(
 $Luacheck = $LuacheckCandidates | Select-Object -First 1
 if (-not $Luacheck) {
     throw "Missing luacheck. Run: .\scripts\install-check-tools.ps1 -Install"
+}
+
+& $MetadataCheck
+if ($LASTEXITCODE -ne 0) {
+    throw "metadata check exited with code $LASTEXITCODE"
 }
 
 Write-Host "== Lua syntax =="

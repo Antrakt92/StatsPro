@@ -1869,8 +1869,13 @@ function Panel:New(globalName, dbKeyPrefix)
         tile = true, tileSize = 16, edgeSize = 16,
         insets = { left = 0, right = 0, top = 0, bottom = 0 },
     })
-    frame:SetBackdropColor(0, 0, 0, GetNumberDB("panelBackgroundAlpha") / 100)
+    frame:SetBackdropColor(0, 0, 0, 0)
     frame:SetBackdropBorderColor(0, 0, 0, 0)
+
+    local backgroundTexture = frame:CreateTexture(nil, "BACKGROUND")
+    backgroundTexture:SetPoint("TOPLEFT", frame, "TOPLEFT", -4, 4)
+    backgroundTexture:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 4, -4)
+    backgroundTexture:SetColorTexture(0, 0, 0, GetNumberDB("panelBackgroundAlpha") / 100)
 
     -- Three-column rendering: label (RIGHT) | rating (RIGHT) | value (LEFT).
     -- WHY right-justify labels: with left-justified labels in an auto-fit box, short
@@ -1949,6 +1954,7 @@ function Panel:New(globalName, dbKeyPrefix)
     panel.valueText = valueText
     panel.repairText = repairText
     panel.repairLabelText = repairLabelText
+    panel.backgroundTexture = backgroundTexture
     -- WHY initialize from inline SetFont args above: Panel:ApplyStyle's idempotency check
     -- (early-return when font+size match cache) would otherwise miss the very first PEW-time
     -- apply when args happen to match the file-scope-inline SetFont calls — wasting 10
@@ -2116,12 +2122,13 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- WHY dedicated row: visual separation from stats + the coin width can exceed stat-
     -- column space without overlapping stat content rows.
     local repairLabelW = 0
+    local lineH = GetNumberDB("fontSize")
+    if hasRows and not labelsHidden and self.cachedLabelH then
+        lineH = self.cachedLabelH / lineCount
+    end
+
     if hasRepair then
         local repairLabelVisible = repairLabelStr and repairLabelStr ~= ""
-        local lineH = GetNumberDB("fontSize")
-        if hasRows and not labelsHidden and self.cachedLabelH then
-            lineH = self.cachedLabelH / lineCount
-        end
         local repairRowY = hasRows and -(lineCount * lineH + 1) or 0  -- 1px gap only when below stat rows
 
         -- Repair label: use stat labelW when below stat rows; measure its own label for
@@ -2196,16 +2203,17 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
 
     self.frame:SetWidth(totalW)
 
-    -- Frame height: stats rows + (1 row + 1px gap if hasRepair) + 8px padding.
+    -- Frame height: text content bounds only. The optional background texture adds
+    -- symmetric visual padding around this frame, so the text itself stays anchored
+    -- exactly where older transparent-panel users placed it.
     -- Cache invalidates on lineCount change, hasRepair flip, OR font/size change
     -- (signaled via heightDirty by Panel:ApplyStyle). Reusing lastLineCount alone
     -- would conflate "text changed" vs "font changed" — Panel:Reflow needs
     -- lastLineCount preserved across ApplyStyle as the content-line-count marker.
     if lineCount ~= self.lastLineCount or hasRepair ~= self.lastHasRepair or self.heightDirty then
-        local fontSize = GetNumberDB("fontSize")
-        local h = lineCount * fontSize
-        if hasRepair then h = h + fontSize + (hasRows and 1 or 0) end  -- repair row + gap when below stats
-        self.frame:SetHeight(h + 8)
+        local h = lineCount * lineH
+        if hasRepair then h = h + lineH + (hasRows and 1 or 0) end  -- repair row + gap when below stats
+        self.frame:SetHeight(h)
         self.lastLineCount = lineCount
         self.lastHasRepair = hasRepair
         self.heightDirty = false
@@ -2303,7 +2311,8 @@ local function ApplyTextStyleToAllPanels(font, size, force)
 end
 
 function Panel:ApplyBackgroundAlpha(alpha)
-    self.frame:SetBackdropColor(0, 0, 0, alpha)
+    self.frame:SetBackdropColor(0, 0, 0, 0)
+    self.backgroundTexture:SetColorTexture(0, 0, 0, alpha)
 end
 
 local function ApplyTextAlphaToAllPanels(alpha)
@@ -5292,19 +5301,28 @@ if addon and addon.__statsproSmoke == true then
         panelVisualState = function()
             return {
                 textOutlineStyle = cached.textOutlineStyle,
+                mainFrameHeight = mainPanel.frame:GetHeight(),
                 mainBackgroundAlpha = mainPanel.frame.backdropColor and mainPanel.frame.backdropColor.a or nil,
+                mainBackgroundTextureAlpha = mainPanel.backgroundTexture and mainPanel.backgroundTexture.colorTexture and mainPanel.backgroundTexture.colorTexture.a or nil,
+                mainBackgroundTexturePoints = mainPanel.backgroundTexture and mainPanel.backgroundTexture.points or nil,
                 mainLabelFlags = mainPanel.labelText.fontFlags,
                 mainRatingFlags = mainPanel.ratingText.fontFlags,
                 mainValueFlags = mainPanel.valueText.fontFlags,
                 mainRepairFlags = mainPanel.repairText.fontFlags,
                 mainRepairLabelFlags = mainPanel.repairLabelText.fontFlags,
+                sideFrameHeight = defensivePanel.frame:GetHeight(),
                 sideBackgroundAlpha = defensivePanel.frame.backdropColor and defensivePanel.frame.backdropColor.a or nil,
+                sideBackgroundTextureAlpha = defensivePanel.backgroundTexture and defensivePanel.backgroundTexture.colorTexture and defensivePanel.backgroundTexture.colorTexture.a or nil,
+                sideBackgroundTexturePoints = defensivePanel.backgroundTexture and defensivePanel.backgroundTexture.points or nil,
                 sideLabelFlags = defensivePanel.labelText.fontFlags,
                 sideRatingFlags = defensivePanel.ratingText.fontFlags,
                 sideValueFlags = defensivePanel.valueText.fontFlags,
                 sideRepairFlags = defensivePanel.repairText.fontFlags,
                 sideRepairLabelFlags = defensivePanel.repairLabelText.fontFlags,
             }
+        end,
+        renderMainPanelForSmoke = function(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr)
+            mainPanel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr)
         end,
         setPanelAppliedStyleForSmoke = function(font, size, outlineStyle)
             mainPanel.appliedFont = font

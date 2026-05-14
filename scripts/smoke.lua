@@ -138,7 +138,7 @@ local function makeFrame(name)
     function frame:SetBackdrop(backdrop) self.backdrop = backdrop end
     function frame:SetBackdropColor(r, g, b, a) self.backdropColor = { r = r, g = g, b = b, a = a } end
     function frame:SetBackdropBorderColor() end
-    function frame:SetColorTexture() end
+    function frame:SetColorTexture(r, g, b, a) self.colorTexture = { r = r, g = g, b = b, a = a } end
     function frame:SetVertexColor() end
     function frame:SetBlendMode() end
     function frame:SetFont(font, size, flags)
@@ -610,6 +610,20 @@ do
     eq("panel.background_insets.side.right", sideInsets.right, 0)
     eq("panel.background_insets.side.top", sideInsets.top, 0)
     eq("panel.background_insets.side.bottom", sideInsets.bottom, 0)
+end
+
+do
+    test.renderMainPanelForSmoke("Crit:\nHaste:", "903 |\n199 |", "29.6%\n9.7%", 2, "438 coin", "Repair:")
+    local visualState = test.panelVisualState()
+    eq("panel.background_texture.height_uses_content_bounds", visualState.mainFrameHeight, 43)
+    local topLeft = exists("panel.background_texture.top_left", visualState.mainBackgroundTexturePoints and visualState.mainBackgroundTexturePoints[1])
+    local bottomRight = exists("panel.background_texture.bottom_right", visualState.mainBackgroundTexturePoints and visualState.mainBackgroundTexturePoints[2])
+    eq("panel.background_texture.top_left.point", topLeft[1], "TOPLEFT")
+    eq("panel.background_texture.top_left.x", topLeft[4], -4)
+    eq("panel.background_texture.top_left.y", topLeft[5], 4)
+    eq("panel.background_texture.bottom_right.point", bottomRight[1], "BOTTOMRIGHT")
+    eq("panel.background_texture.bottom_right.x", bottomRight[4], 4)
+    eq("panel.background_texture.bottom_right.y", bottomRight[5], -4)
 end
 
 local function hasScript(name, frame, scriptName)
@@ -1452,8 +1466,8 @@ do
     near("config.slider_panel_background_immediate.cache", test.cachedPanelBackgroundAlpha(), 0.45)
     do
         local visualState = test.panelVisualState()
-        near("config.slider_panel_background_immediate.main_alpha", visualState.mainBackgroundAlpha, 0.45)
-        near("config.slider_panel_background_immediate.side_alpha", visualState.sideBackgroundAlpha, 0.45)
+        near("config.slider_panel_background_immediate.main_alpha", visualState.mainBackgroundTextureAlpha, 0.45)
+        near("config.slider_panel_background_immediate.side_alpha", visualState.sideBackgroundTextureAlpha, 0.45)
     end
 
     local switchToTab = exists("config.tab_switching.switcher", env.StatsProConfigFrame.SwitchToTab)

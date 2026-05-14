@@ -5276,6 +5276,15 @@ if addon and addon.__statsproSmoke == true then
         fontSupports = FontSupports,
         findCompatibleFont = FindCompatibleFont,
         formatRepairCost = FormatRepairCost,
+        refreshDurabilityCache = RefreshDurabilityCache,
+        durabilityState = function()
+            return {
+                durabilityValue = cached.durabilityValue,
+                repairCost = cached.repairCost,
+                dirty = durabilityDirty,
+                retryScheduled = durabilityRetryScheduled,
+            }
+        end,
         normalizeColor = NormalizeColor,
         rgbToHex = RGBToHex,
         buildRenderBlocks = BuildRenderBlocks,

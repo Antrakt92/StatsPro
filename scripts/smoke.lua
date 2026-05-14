@@ -260,6 +260,7 @@ local function makeEnv(locale, opts)
     local env = {}
     local currentLocale = locale or "enUS"
     local lastCoinCall
+    local lsm
 
     local std = {
         assert = assert,
@@ -362,7 +363,29 @@ local function makeEnv(locale, opts)
     }
     env.SettingsPanel = makeFrame("SettingsPanel")
     env.HideUIPanel = function(frame) if frame and frame.Hide then frame:Hide() end end
-    env.LibStub = function() return nil end
+    if opts.lsmFonts then
+        local names = {}
+        local paths = {}
+        for _, font in ipairs(opts.lsmFonts) do
+            names[#names + 1] = font.name
+            paths[font.name] = font.path
+        end
+        lsm = {
+            MediaType = { FONT = "font" },
+            List = function(_, mediaType)
+                if mediaType == "font" then return names end
+                return {}
+            end,
+            Fetch = function(_, mediaType, name)
+                if mediaType == "font" then return paths[name] end
+                return nil
+            end,
+        }
+    end
+    env.LibStub = function(name)
+        if name == "LibSharedMedia-3.0" then return lsm end
+        return nil
+    end
     env.issecretvalue = opts.issecretvalue or function() return false end
     env.CopyTable = deepCopy
     env.tinsert = table.insert
@@ -522,10 +545,10 @@ local function makeEnv(locale, opts)
     env.GetInventoryItemDurability = opts.getInventoryItemDurability or function() return nil, nil end
     env.GetInventoryItemLink = function() return nil end
     env.C_TooltipInfo = {
-        GetInventoryItem = function() return nil end,
+        GetInventoryItem = opts.getTooltipInventoryItem or function() return nil end,
     }
     env.TooltipUtil = {
-        SurfaceArgs = function() end,
+        SurfaceArgs = opts.surfaceTooltipArgs or function() end,
     }
     env.GetCoinTextureString = function(copper, fontSize)
         lastCoinCall = { copper = copper, fontSize = fontSize }
@@ -703,6 +726,14 @@ local function findFrame(name, env, predicate)
         if predicate(frame) then return frame end
     end
     fail(name, "matching frame not found")
+end
+
+local function countFrameField(env, field, value)
+    local count = 0
+    for _, frame in ipairs(env.__frames) do
+        if frame[field] == value then count = count + 1 end
+    end
+    return count
 end
 
 local function blockDumpContains(blocks, needle)
@@ -1286,12 +1317,118 @@ eq("fonts.unknown_path_latin_only.latin", test.fontSupports("Interface\\AddOns\\
 eq("fonts.unknown_path_latin_only.hangul", test.fontSupports("Interface\\AddOns\\Media\\Mystery.ttf", "Hangul"), false)
 
 do
+    local cjkFontPath = "Interface\\AddOns\\SharedMedia\\Fonts\\NotoSansCJK-Regular.otf"
+    local lsmEnv, lsmAddon, lsmTest = loadStatsPro("enUS", {
+        lsmFonts = {
+            { name = "Latin Decorative", path = "Interface\\AddOns\\SharedMedia\\Fonts\\Decorative.ttf" },
+            { name = "Noto Sans CJK", path = cjkFontPath },
+        },
+    })
+    eq("fonts.lsm_pattern_font_supports_hans", lsmTest.fontSupports(cjkFontPath, "Hans"), true)
+    eq("fonts.lsm_find_compatible_font_scans_lsm", lsmTest.findCompatibleFont("Fonts\\FRIZQT__.TTF", "Hans"), cjkFontPath)
+
+    lsmTest.migrateDB()
+    lsmEnv.StatsProDB.forceLocale = "auto"
+    lsmEnv.StatsProDB.font = "Fonts\\FRIZQT__.TTF"
+    lsmTest.cacheSettings()
+    local ok, err = pcall(function() lsmAddon:OpenConfigMenu() end)
+    check("fonts.lsm_picker_open_constructs_config", ok, err)
+    runScript("fonts.lsm_picker_open", lsmEnv.StatsProFontDropdownButton, "OnClick", lsmEnv.StatsProFontDropdownButton)
+    eq("fonts.lsm_picker_includes_registered_name", countFrameField(lsmEnv, "fontName", "Noto Sans CJK"), 1)
+    local lsmFontButton = findFrame("fonts.lsm_picker_registered_button", lsmEnv, function(frame)
+        return frame.fontName == "Noto Sans CJK"
+    end)
+    eq("fonts.lsm_picker_button_carries_path", lsmFontButton.fontPath, cjkFontPath)
+    callScript("fonts.lsm_picker_click_commits_path", lsmFontButton, "OnClick")
+    eq("fonts.lsm_picker_click_writes_db_font", lsmEnv.StatsProDB.font, cjkFontPath)
+
+    local autoEnv = loadStatsPro("enUS", {
+        statsProDB = { forceLocale = "zhCN", font = "Fonts\\FRIZQT__.TTF" },
+        lsmFonts = {
+            { name = "Noto Sans CJK", path = cjkFontPath },
+        },
+    })
+    fireEvent("fonts.lsm_locale_auto_switch.fire", autoEnv, "PLAYER_ENTERING_WORLD")
+    eq("fonts.lsm_locale_auto_switch.font", autoEnv.StatsProDB.font, cjkFontPath)
+end
+
+do
     runMigrate({ fontSize = "15.4" })
     local formatted = test.formatRepairCost(12345)
     local call = env.__lastCoinCall()
     eq("repair.coin_string_uses_normalized_font_size.copper", call.copper, 12345)
     eq("repair.coin_string_uses_normalized_font_size.font", call.fontSize, 15)
     eq("repair.coin_string_uses_normalized_font_size.return", formatted, "coin:12345:15")
+end
+
+do
+    local tooltipCalls, surfaceCalls = {}, 0
+    local costs = { [1] = 100, [2] = 200, [4] = 999, [18] = 999 }
+    local _, _, repairTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showDurability = true,
+            showRepairCost = true,
+            useWorstDurability = false,
+        },
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then return 50, 100 end
+            if slot == 2 then return 25, 100 end
+            if slot == 4 or slot == 18 then return 1, 100 end
+            if slot == 19 then return 0, 0 end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function(_, slot)
+            tooltipCalls[#tooltipCalls + 1] = slot
+            return { slot = slot }
+        end,
+        surfaceTooltipArgs = function(data)
+            surfaceCalls = surfaceCalls + 1
+            data.repairCost = costs[data.slot]
+        end,
+    })
+    repairTest.cacheSettings()
+    exists("repair.scan_refresh_bridge", repairTest.refreshDurabilityCache)
+    repairTest.refreshDurabilityCache()
+    local state = repairTest.durabilityState()
+    near("repair.scan_avg_percent", state.durabilityValue, 37.5)
+    eq("repair.scan_cost_sums_damaged_slots", state.repairCost, 300)
+    eq("repair.scan_skips_shirt_and_ranged.calls", table.concat(tooltipCalls, ","), "1,2")
+    eq("repair.scan_surfaces_tooltip_args", surfaceCalls, 2)
+    eq("repair.scan_no_retry_when_complete", state.retryScheduled, false)
+end
+
+do
+    local secretRepairCost = setmetatable({}, {
+        __tostring = function() error("secret repair cost inspected", 2) end,
+    })
+    local tooltipDataBySlot = { [1] = { repairCost = 300 } }
+    local repairEnv, _, repairTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showDurability = true,
+            showRepairCost = true,
+            useWorstDurability = true,
+        },
+        issecretvalue = function(value) return value == secretRepairCost end,
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then return 50, 100 end
+            if slot == 2 then return 80, 100 end
+            if slot == 3 then return 90, 100 end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function(_, slot)
+            if slot == 2 then return { repairCost = secretRepairCost } end
+            return tooltipDataBySlot[slot]
+        end,
+    })
+    repairTest.cacheSettings()
+    local ok, err = pcall(repairTest.refreshDurabilityCache)
+    check("repair.pending_secret_cost_no_error", ok, err)
+    local state = repairTest.durabilityState()
+    near("repair.pending_worst_percent", state.durabilityValue, 50)
+    eq("repair.pending_keeps_partial_known_cost", state.repairCost, 300)
+    eq("repair.pending_schedules_retry", state.retryScheduled, true)
+    flushTimers("repair.pending_retry_timer", repairEnv, 3, 1)
+    eq("repair.pending_retry_marks_dirty", repairTest.durabilityState().dirty, true)
 end
 
 do

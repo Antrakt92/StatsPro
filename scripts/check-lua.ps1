@@ -5,6 +5,7 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $RepoRoot
 $AddonFile = Join-Path $RepoRoot "StatsPro.lua"
+$ArchonTargetsFile = Join-Path $RepoRoot "StatsPro_ArchonTargets.lua"
 $SmokeFile = Join-Path $RepoRoot "scripts\smoke.lua"
 $MetadataCheck = Join-Path $RepoRoot "scripts\check-metadata.ps1"
 
@@ -56,7 +57,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "== Lua syntax =="
-& $Luac -p StatsPro.lua $SmokeFile
+$SyntaxFiles = @()
+if (Test-Path $ArchonTargetsFile) { $SyntaxFiles += "StatsPro_ArchonTargets.lua" }
+$SyntaxFiles += "StatsPro.lua"
+$SyntaxFiles += $SmokeFile
+& $Luac -p @SyntaxFiles
 if ($LASTEXITCODE -ne 0) {
     throw "luac exited with code $LASTEXITCODE"
 }

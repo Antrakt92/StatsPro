@@ -2019,12 +2019,27 @@ function Panel:New(globalName, dbKeyPrefix)
     repairLabelText:SetTextColor(1, 1, 1, 1)
     repairLabelText:Hide()  -- shown only when hasRepair
 
+    local tooltipOverlays = {}
+    local function makeTooltipOverlay()
+        local overlay = CreateFrame("Frame", nil, frame)
+        overlay:EnableMouse(true)
+        overlay:SetFrameLevel(frame:GetFrameLevel() + 10)
+        overlay:Hide()
+        overlay:SetScript("OnLeave", function()
+            GameTooltip:Hide()
+        end)
+        return overlay
+    end
+
     panel.frame = frame
     panel.labelText = labelText
     panel.ratingText = ratingText
     panel.valueText = valueText
     panel.repairText = repairText
     panel.repairLabelText = repairLabelText
+    panel.tooltipOverlays = tooltipOverlays
+    panel.makeTooltipOverlay = makeTooltipOverlay
+    panel.lastTargetRows = nil
     panel.backgroundTexture = backgroundTexture
     -- WHY initialize from inline SetFont args above: Panel:ApplyStyle's idempotency check
     -- (early-return when font+size match cache) would otherwise miss the very first PEW-time
@@ -2112,6 +2127,7 @@ function Panel:Unlock() end
 function Panel:Hide()
     if not self:IsShown() and self.lastLineCount == -1 and not self.lastRepairText then return end
     self.frame:Hide()
+    self:ApplyTooltipRows(nil, 0)
     self.lastLabelText = nil
     self.lastRatingText = nil
     self.lastValueText = nil
@@ -2127,6 +2143,56 @@ end
 
 function Panel:IsShown()
     return self.frame:IsShown()
+end
+
+function addon.archonTargets.FormatSignedRatingDelta(delta)
+    if type(delta) ~= "number" or issecretvalue(delta) then return nil end
+    if delta >= 0 then return "+" .. tostring(delta) end
+    return "-" .. tostring(math.abs(delta))
+end
+
+function addon.archonTargets.ShowTooltip(anchor, meta)
+    if not meta then return end
+    GameTooltip:SetOwner(anchor, "ANCHOR_RIGHT")
+    GameTooltip:AddLine("StatsPro M+ Target", 1, 0.82, 0)
+    GameTooltip:AddDoubleLine("Target", tostring(meta.target), 0.7, 0.7, 0.7, 1, 1, 1)
+    GameTooltip:AddDoubleLine("Current", tostring(meta.current), 0.7, 0.7, 0.7, 1, 1, 1)
+    if meta.delta < 0 then
+        GameTooltip:AddDoubleLine("Missing", tostring(math.abs(meta.delta)), 1, 0.35, 0.35, 1, 0.35, 0.35)
+    else
+        GameTooltip:AddDoubleLine("Over", addon.archonTargets.FormatSignedRatingDelta(meta.delta), 0.35, 0.8, 1, 0.35, 0.8, 1)
+    end
+    if meta.capturedAt then
+        GameTooltip:AddDoubleLine("Snapshot", "M+ High Keys, " .. meta.capturedAt, 0.7, 0.7, 0.7, 0.85, 0.85, 0.85)
+    end
+    GameTooltip:Show()
+end
+
+function Panel:ApplyTooltipRows(targetRows, lineCount)
+    self.lastTargetRows = targetRows
+    local rowHeight = self.lastLineH or GetNumberDB("fontSize")
+    if not SAFE_NUM.IsCleanFiniteNumber(rowHeight) or rowHeight <= 0 then rowHeight = 1 end
+    for i = 1, math.max(#(targetRows or {}), #(self.tooltipOverlays or {})) do
+        local overlay = self.tooltipOverlays[i]
+        if not overlay then
+            overlay = self.makeTooltipOverlay()
+            self.tooltipOverlays[i] = overlay
+        end
+        local meta = targetRows and targetRows[i] or nil
+        if meta and i <= (lineCount or 0) then
+            overlay:ClearAllPoints()
+            overlay:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, -((i - 1) * rowHeight))
+            overlay:SetPoint("RIGHT", self.frame, "RIGHT", 0, 0)
+            overlay:SetHeight(rowHeight)
+            overlay:SetScript("OnEnter", function(f)
+                addon.archonTargets.ShowTooltip(f, meta)
+            end)
+            overlay:Show()
+        else
+            overlay:Hide()
+            overlay:SetScript("OnEnter", nil)
+        end
+    end
 end
 
 -- WARNING: GetStringWidth/GetStringHeight on a FontString whose text contains in-combat
@@ -2147,7 +2213,7 @@ end
 -- API returns). String comparisons (==, ~=) on secrets error. Use lineCount (always a
 -- real number) for empty-check, and SetText every call instead of deduping by text.
 -- FontString:SetText accepts secrets — that's how Blizzard's own UI renders them.
-function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr)
+function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr, targetRows)
     local hasRows = lineCount and lineCount > 0
     local hasRepair = repairStr and repairStr ~= ""
     local labelStyle = NormalizeLabelStyle(cached.labelStyle)
@@ -2197,6 +2263,7 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     if hasRows and not labelsHidden and self.cachedLabelH then
         lineH = self.cachedLabelH / lineCount
     end
+    self.lastLineH = lineH
 
     if hasRepair then
         local repairLabelVisible = repairLabelStr and repairLabelStr ~= ""
@@ -2289,6 +2356,7 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
         self.lastHasRepair = hasRepair
         self.heightDirty = false
     end
+    self:ApplyTooltipRows(targetRows, lineCount)
 end
 
 function Panel:ApplyStyle(font, size, force)
@@ -2366,7 +2434,8 @@ function Panel:Reflow()
         self.lastValueText or "",
         self.lastLineCount,
         self.lastRepairText or "",
-        self.lastRepairLabelText or ""
+        self.lastRepairLabelText or "",
+        self.lastTargetRows
     )
 end
 
@@ -2682,7 +2751,7 @@ local function BuildItemLevelLines(labels, ratings, values)
     return labels, ratings, values
 end
 
-local function BuildOffensiveLines(labels, ratings, values)
+local function BuildOffensiveLines(labels, ratings, values, targetRows)
     -- Master gate: hide entire section when off (cheapest check, exits whole function).
     if not cached.showOffensive then return labels, ratings, values end
     -- WHY guard: with both display toggles off the user wants offensive rows hidden
@@ -2691,8 +2760,9 @@ local function BuildOffensiveLines(labels, ratings, values)
     if not (cached.showRating or cached.showPercentage) then return labels, ratings, values end
     local cs = cached.colorStrings
 
-    -- skip the GetCombatRating fetch when rating display is off (no consumer)
-    local needRating = cached.showRating
+    -- Tooltip targets need the raw rating even when the rating column is hidden.
+    local needTargetRating = targetRows ~= nil
+    local needRating = cached.showRating or needTargetRating
     for _, def in ipairs(OFFENSIVE_STATS) do
         if cached[def.showKey] then
             local val = SAFE_NUM.SafeDisplayPercent(def.api)
@@ -2700,6 +2770,9 @@ local function BuildOffensiveLines(labels, ratings, values)
                 local rating = needRating and SAFE_NUM.SafeRatingInt(GetCombatRating, def.ratingCR) or 0
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtRatingPct(rating, val, statColor)
+                if targetRows then
+                    targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta(def.statKey, rating) or false
+                end
                 PushRow(labels, ratings, values,
                     FormatLabel(statColor, def.label),
                     rStr, vStr)
@@ -2726,6 +2799,9 @@ local function BuildOffensiveLines(labels, ratings, values)
         if shouldShow(cached.versTotal, cached.hideZeroOffensive) then
             local versStr = cs.versatility
             local vRatStr, vValStr = FmtRatingPct(cached.versTotalRating, cached.versTotal, versStr)
+            if targetRows then
+                targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta("versatility", cached.versTotalRating) or false
+            end
             PushRow(labels, ratings, values,
                 FormatLabel(versStr, "Vers"),
                 vRatStr, vValStr)
@@ -2875,11 +2951,20 @@ local function AppendRows(dstLabels, dstRatings, dstValues, srcLabels, srcRating
     end
 end
 
+function addon.archonTargets.AppendTargetRows(dst, src, rowCount)
+    dst = dst or {}
+    for i = 1, rowCount do
+        dst[#dst + 1] = (src and src[i]) or false
+    end
+    return dst
+end
+
 -- Build*Lines share one contract: mutate the supplied row arrays and return them.
 -- The return fallback preserves rows if a future builder accidentally stays mutate-only.
 local function BuildRowBlock(def)
     local labels, ratings, values = {}, {}, {}
-    local outLabels, outRatings, outValues = def.buildFn(labels, ratings, values)
+    local targetRows = def.splitKey == "splitOffensive" and {} or nil
+    local outLabels, outRatings, outValues = def.buildFn(labels, ratings, values, targetRows)
     if outLabels then
         labels = outLabels
         ratings = outRatings or ratings
@@ -2891,6 +2976,7 @@ local function BuildRowBlock(def)
         labels = labels or {},
         ratings = ratings or {},
         values = values or {},
+        targetRows = targetRows,
         repairStr = "",
         repairLabelStr = nil,
     }
@@ -2920,11 +3006,12 @@ local RENDER_BLOCK_DEFS = {
 }
 
 local function NewRenderBucket()
-    return { labels = {}, ratings = {}, values = {}, repairStr = "", repairLabelStr = nil }
+    return { labels = {}, ratings = {}, values = {}, targetRows = {}, repairStr = "", repairLabelStr = nil }
 end
 
 local function AddBlockToBucket(bucket, block)
     AppendRows(bucket.labels, bucket.ratings, bucket.values, block.labels, block.ratings, block.values)
+    bucket.targetRows = addon.archonTargets.AppendTargetRows(bucket.targetRows, block.targetRows, #block.labels)
     if block.repairStr and block.repairStr ~= "" then
         bucket.repairStr = block.repairStr
         bucket.repairLabelStr = block.repairLabelStr
@@ -2939,6 +3026,7 @@ local function AddSectionedBlockToBucket(bucket, block, lastSectionKey, labelSty
     if not BlockHasContent(block) then return lastSectionKey end
     if NormalizeLabelStyle(labelStyle) ~= "hidden" and block.sectionKey and block.sectionKey ~= lastSectionKey then
         PushHeader(bucket.labels, bucket.ratings, bucket.values, SectionHeader(block.sectionKey))
+        bucket.targetRows[#bucket.targetRows + 1] = false
         lastSectionKey = block.sectionKey
     elseif block.sectionKey and block.sectionKey ~= lastSectionKey then
         lastSectionKey = block.sectionKey
@@ -2959,7 +3047,8 @@ local function RenderBucket(panel, bucket)
             JoinValuesCol(bucket.values),
             #bucket.labels,
             bucket.repairStr,
-            bucket.repairLabelStr)
+            bucket.repairLabelStr,
+            bucket.targetRows)
     else
         panel:Hide()
     end
@@ -5403,8 +5492,16 @@ if addon and addon.__statsproSmoke == true then
                 sideRepairLabelFlags = defensivePanel.repairLabelText.fontFlags,
             }
         end,
-        renderMainPanelForSmoke = function(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr)
-            mainPanel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr)
+        renderMainPanelForSmoke = function(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr, targetRows)
+            mainPanel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr, targetRows)
+        end,
+        mainPanelTooltipState = function()
+            return {
+                overlayCount = #(mainPanel.tooltipOverlays or {}),
+                firstShown = mainPanel.tooltipOverlays[1] and mainPanel.tooltipOverlays[1]:IsShown() or false,
+                secondShown = mainPanel.tooltipOverlays[2] and mainPanel.tooltipOverlays[2]:IsShown() or false,
+                lastTargetRows = mainPanel.lastTargetRows,
+            }
         end,
         setPanelAppliedStyleForSmoke = function(font, size, outlineStyle)
             mainPanel.appliedFont = font

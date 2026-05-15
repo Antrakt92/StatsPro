@@ -682,6 +682,45 @@ do
     eq("panel.background_texture.bottom_right.y", bottomRight[5], -4)
 end
 
+do
+    test.renderMainPanelForSmoke("Crit:\nMastery:", "921\n812", "29.6%\n30.0%", 2, nil, nil, {
+        false,
+        { statKey = "mastery", target = 1043, current = 812, delta = -231, capturedAt = "2026-05-15" },
+    })
+    local tooltipState = test.mainPanelTooltipState()
+    eq("tooltip.overlay_count", tooltipState.overlayCount, 2)
+    eq("tooltip.first_row_hidden", tooltipState.firstShown, false)
+    eq("tooltip.second_row_shown", tooltipState.secondShown, true)
+    eq("tooltip.target_row_dense_alignment", tooltipState.lastTargetRows[2].statKey, "mastery")
+end
+
+do
+    local meta = { statKey = "mastery", target = 1043, current = 812, delta = -231 }
+    local main = test.routeRenderBlocks({
+        {
+            splitKey = "splitCharacter",
+            sectionKey = "Character",
+            labels = { "Stamina:" },
+            ratings = { "100" },
+            values = { "" },
+            repairStr = "",
+        },
+        {
+            splitKey = "splitOffensive",
+            sectionKey = "Offensive",
+            labels = { "Mastery:" },
+            ratings = { "812" },
+            values = { "30.0%" },
+            targetRows = { meta },
+            repairStr = "",
+        },
+    }, "sectioned", nil, "full")
+    eq("tooltip.route_header_character", main.targetRows[1], false)
+    eq("tooltip.route_character_row", main.targetRows[2], false)
+    eq("tooltip.route_header_offensive", main.targetRows[3], false)
+    eq("tooltip.route_offensive_row", main.targetRows[4], meta)
+end
+
 local function hasScript(name, frame, scriptName)
     frame = exists(name .. ".frame", frame)
     check(name, type(frame.scripts) == "table" and type(frame.scripts[scriptName]) == "function",

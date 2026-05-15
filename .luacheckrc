@@ -57,7 +57,7 @@ read_globals = {
     "C_PaperDollInfo", "C_SpecializationInfo",
     -- Inventory / tooltips
     "GetInventoryItemDurability", "GetInventoryItemLink",
-    "C_TooltipInfo", "TooltipUtil", "GetCoinTextureString",
+    "GameTooltip", "C_TooltipInfo", "TooltipUtil", "GetCoinTextureString",
     -- Combat ratings constants (CR_*)
     "CR_CRIT_MELEE", "CR_CRIT_RANGED", "CR_CRIT_SPELL",
     "CR_HASTE_MELEE", "CR_HASTE_RANGED", "CR_HASTE_SPELL",

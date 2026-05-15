@@ -76,28 +76,16 @@ Archon targets for your active spec.
 
 ## Why StatsPro feels different
 
-- **Reads at a glance** — labels and values stay neatly aligned no matter how many
-  stats you've enabled or what font you've chosen. Toggle to rating-only or
-  percent-only and everything collapses cleanly into a single tight column — no
-  awkward gaps, no drifting percent column.
-- **Tertiary stats on demand** — Leech, Avoidance, and Speed are first-class rows
-  with their own toggles. Most stat addons silently omit them; theorycrafting builds
-  that lean on tertiaries can finally see what they're doing without a separate addon.
-- **M+ and Raid stat target context** — secondary-stat hovers can show how far you
-  are from generated Archon targets for your active spec. Pick Mythic+ or Raid in
-  settings; the addon ships the snapshot data and never makes web requests in game.
-- **Vendor-accurate repair cost** — shows as `46g 40s 81c` with the inline gold /
-  silver / copper icons you see at the vendor, not a stripped-down `46g`. A lot of
-  older stat addons quietly broke in modern Retail because they rely on the legacy
-  tooltip API; StatsPro uses the new one.
-- **Drag once, done forever** — your panel positions survive `/reload`, logout, and
-  client patches. No reset-to-center surprises after a UI reload or expansion update.
-- **Configurable from one place** — every visible element lives behind `/ss`:
-  per-stat colors, font via LibSharedMedia, font size and opacity, text outline,
-  optional panel background, panel scale, layout preset, split block routing, durability thresholds. No SavedVariables
-  editing, no `/reload` between tweaks.
-- **Built for Midnight (12.x)** — works correctly mid-combat where many older stat
-  addons silently break (see the section below).
+- **Reads at a glance** — labels and values stay aligned whether you show rating,
+  percentage, or both.
+- **Adapts to your spec** — main stat and Archon target hovers follow your active
+  spec without per-character setup.
+- **More than secondary stats** — tertiaries, defensives, durability, item level,
+  and vendor-format repair cost can live in the same HUD.
+- **M+ and Raid target context** — compare your current rating to generated Archon
+  targets without any in-game network calls.
+- **Built for Midnight (12.x)** — guarded stat reads and modern tooltip APIs keep
+  the HUD stable where older stat addons can break.
 
 ## Built for Midnight (12.x)
 

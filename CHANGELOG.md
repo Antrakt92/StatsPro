@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.1 - 15-May-2026 — Localization polish
+
+### Improved
+
+- **Archon target hovers and `/ss` confirmations now follow the selected output language** — target tooltip labels, snapshot month names, and normal slash-command responses localize together, while `/ss debug*` diagnostics remain English for support.
+
 ## 1.9.0 - 15-May-2026 — Archon target tooltips
 
 ### Added

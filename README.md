@@ -13,9 +13,9 @@
 </p>
 
 <p align="center">
-  A clean on-screen HUD for World of Warcraft Retail. Secondary stats, item level,
-  defensive stats, durability, and optional live repair cost in draggable panels —
-  without the bloat of a full framework.
+  A clean, colorful stat HUD for World of Warcraft Retail / Midnight 12.x.
+  Secondary stats, Archon targets, item level, defensives, durability, and repair
+  cost in draggable panels — without the bloat of a full framework.
 </p>
 
 <p align="center">
@@ -29,22 +29,27 @@
 > upstream boilerplate, color defaults, and the basic stat list remain. See
 > [`CHANGELOG.md`](CHANGELOG.md) for the full list of additions per version.
 
-## Features
+## At a glance
 
-- **Secondary stats** — Crit, Haste, Mastery, Versatility (with rating + percentage display options)
-- **Archon target tooltips** — hover secondary stat rows to compare your current rating against generated M+ High Keys or Raid Mythic All Bosses targets, with rating deltas and approximate percentage impact
-- **Tertiary stats** — Leech, Avoidance, Speed
-- **Main stat auto-detect** — Strength / Agility / Intellect resolves automatically from your active spec; no toggling when you respec or swap characters
-- **Stamina** — optional row for tanks tracking effective HP and any spec watching consumable contributions (raid buffs / flask / food included), default OFF
-- **Item Level** — optional equipped / overall row (`271 / 273`) with a colored warning when your bags out-level what you are wearing, default OFF
-- **Defensive stats** — Dodge, Parry, Block, Brewmaster Stagger, and Armor damage reduction
-- **Durability** — average or worst-slot percentage with auto-color thresholds (green / yellow / red)
-- **Repair cost** — optional live vendor-format coin display (`46g 40s 81c` with embedded gold/silver/copper icons), default OFF
-- **Three display modes** — Flat (one panel), Sectioned (one panel with block headers), Split (two movable panels with configurable block routing)
-- **Localized stat labels** — on-screen panel auto-translates to your WoW client language across all 11 retail locales (deDE, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, zhTW; English unchanged). Use the **Language** dropdown in Appearance → Localization to choose Auto or a fixed locale, and **Label Style** in Layout → Value Display to switch **Full / Short / Hidden** label rendering. **The settings window itself also localizes** — every tab, label, dropdown caption, button, and warning updates live the moment you switch languages, no `/reload` needed.
-- **Readability controls** — per-stat colors, fonts via LibSharedMedia, font size, text opacity, text outline style, optional panel background, panel scale, refresh rate
-- **Auto-aligning columns** — labels and values stay neatly aligned regardless of which stats are enabled, font, or scale; toggling rating-only or percent-only collapses cleanly into one tight column with no awkward gaps
-- **Light footprint** — core addon logic lives in one Lua file, no Ace3; release zips bundle standard LibStub / CallbackHandler / LibSharedMedia support for font picking
+- **Secondary stat HUD** — Crit, Haste, Mastery, Versatility with rating, percentage, or both.
+- **Archon target hovers** — compare your current rating to generated M+ High Keys or Raid Mythic All Bosses targets.
+- **Defensive and gear rows** — Dodge, Parry, Block, Brewmaster Stagger, Armor DR, durability, repair cost, item level, and stamina.
+- **Readable layouts** — Flat, Sectioned, or Split panels with auto-aligning columns and optional background/outline.
+- **Live localization** — HUD, settings, target hovers, and slash confirmations follow your chosen output language.
+- **Retail 12.x safety** — built around modern secret-value and tooltip API traps.
+
+## What StatsPro shows
+
+| Area | Rows |
+|---|---|
+| **Offensive** | Crit, Haste, Mastery, Versatility |
+| **Character** | Main stat auto-detect, Stamina, Item Level |
+| **Tertiary** | Leech, Avoidance, Speed |
+| **Defensive** | Dodge, Parry, Block, Brewmaster Stagger, Armor damage reduction |
+| **Gear** | Durability, worst-slot durability, live vendor-format repair cost |
+
+Everything is optional. Keep a tiny secondary-stat strip, build a tank dashboard,
+or split gear/defensive rows into a second movable panel.
 
 ## How it looks
 
@@ -58,7 +63,18 @@ from Character / Offensive / Tertiary / Defensive / Item Level / Durability / Re
 
 ![StatsPro display modes — flat, rating + percentage, with defensives, repair cost at vendor, and split mode](screenshots/display-modes.png)
 
-## Highlights
+## Archon target tooltips
+
+Hover any secondary stat row to see how your current rating compares to generated
+Archon targets for your active spec.
+
+- Choose **Mythic+** or **Raid** targets in `/ss` → **Layout** → **Value Display** → **Tooltip Targets**
+- See **Target**, **Current**, **Missing / Over / Matched**, approximate percentage impact, and snapshot date
+- Current values can inherit your stat colors when **Match Value Color to Stat** is enabled
+- Data ships with the addon — no web scraping, network calls, or external API access in game
+- Snapshot coverage includes all 40 current Retail specs, including Demon Hunter Devourer
+
+## Why StatsPro feels different
 
 - **Reads at a glance** — labels and values stay neatly aligned no matter how many
   stats you've enabled or what font you've chosen. Toggle to rating-only or
@@ -117,9 +133,9 @@ tab → **Localization** → use the **Language** dropdown. "Auto" follows your
 WoW client locale. To change how compact the labels look, open `/ss` →
 **Layout** tab → **Value Display** → **Label Style** and choose **Full**,
 **Short**, or **Hidden**. These settings persist across `/reload` and across
-all characters on the account. The entire settings window re-localizes live
-the moment you change language — every label, dropdown, and button reflects
-the chosen locale immediately.
+all characters on the account. The settings window, target hovers, snapshot
+month names, and normal slash-command confirmations update with the selected
+output language.
 
 The in-game AddOn list (Esc → Options → AddOns) also shows StatsPro's
 description in your client language — a localized one-liner per `## Notes-<locale>`

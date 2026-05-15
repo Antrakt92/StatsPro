@@ -42,6 +42,16 @@ StatsProArchonTargets = {
       },
     },
     ["DEMONHUNTER"] = {
+      ["devourer"] = {
+        sourceUrl = "https://www.archon.gg/wow/builds/devourer/demon-hunter/mythic-plus/overview/high-keys/all-dungeons/this-week",
+        targets = {
+          crit = 259,
+          haste = 1036,
+          mastery = 1187,
+          versatility = 58,
+        },
+        order = { "mastery", "haste", "crit", "versatility" },
+      },
       ["havoc"] = {
         sourceUrl = "https://www.archon.gg/wow/builds/havoc/demon-hunter/mythic-plus/overview/high-keys/all-dungeons/this-week",
         targets = {

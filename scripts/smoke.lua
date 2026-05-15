@@ -645,6 +645,30 @@ do
     eq("archon.meta.missing_snapshot", archonTest.getArchonTargetSnapshot("MAGE", "fire"), nil)
     eq("archon.meta.hidden_without_root", archonEnv.StatsProArchonTargets.schemaVersion, 1)
 
+    local _, _, devourerArchonTest = loadStatsPro("enUS", {
+        unitClassToken = "DEMONHUNTER",
+        specIndex = 1,
+        specID = 1480,
+        statsProArchonTargets = {
+            schemaVersion = 1,
+            capturedAt = "2026-05-15",
+            bracket = "high-keys",
+            dungeon = "all-dungeons",
+            window = "this-week",
+            specs = {
+                DEMONHUNTER = {
+                    devourer = {
+                        sourceUrl = "https://www.archon.gg/wow/builds/devourer/demon-hunter/mythic-plus/overview/high-keys/all-dungeons/this-week",
+                        targets = { crit = 259, haste = 1036, mastery = 1187, versatility = 58 },
+                    },
+                },
+            },
+        },
+    })
+    local devourerMeta = devourerArchonTest.buildArchonTargetMeta("mastery", 1000)
+    eq("archon.devourer.spec_id_maps", devourerMeta.target, 1187)
+    eq("archon.devourer.delta", devourerMeta.delta, -187)
+
     local secretChecks = 0
     local _, _, secretArchonTest = loadStatsPro("enUS", {
         issecretvalue = function(value)

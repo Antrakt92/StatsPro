@@ -436,7 +436,7 @@ addon.archonTargets = addon.archonTargets or {}
 
 addon.archonTargets.specKeyByID = {
     [250] = "blood", [251] = "frost", [252] = "unholy",
-    [577] = "havoc", [581] = "vengeance",
+    [577] = "havoc", [581] = "vengeance", [1480] = "devourer",
     [102] = "balance", [103] = "feral", [104] = "guardian", [105] = "restoration",
     [1467] = "devastation", [1468] = "preservation", [1473] = "augmentation",
     [253] = "beast-mastery", [254] = "marksmanship", [255] = "survival",

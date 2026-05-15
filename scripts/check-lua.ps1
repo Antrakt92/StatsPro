@@ -66,6 +66,18 @@ if ($LASTEXITCODE -ne 0) {
     throw "luac exited with code $LASTEXITCODE"
 }
 
+if (Test-Path $ArchonTargetsFile) {
+    Write-Host "== Archon target snapshot =="
+    $SpecCount = (Select-String -Path $ArchonTargetsFile -Pattern 'sourceUrl =').Count
+    $TargetCount = (Select-String -Path $ArchonTargetsFile -Pattern '^\s+(crit|haste|mastery|versatility) = \d+,' ).Count
+    if ($SpecCount -ne 40) {
+        throw "StatsPro_ArchonTargets.lua must contain 40 M+ spec snapshots; found $SpecCount"
+    }
+    if ($TargetCount -ne 160) {
+        throw "StatsPro_ArchonTargets.lua must contain 160 secondary-stat targets; found $TargetCount"
+    }
+}
+
 Write-Host "== Lua smoke =="
 & $Lua $SmokeFile
 if ($LASTEXITCODE -ne 0) {

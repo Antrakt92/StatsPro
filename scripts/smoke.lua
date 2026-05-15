@@ -332,6 +332,7 @@ local function makeEnv(locale, opts)
     else
         env.StatsProDB = opts.statsProDB
     end
+    env.StatsProArchonTargets = opts.statsProArchonTargets
     env.SwiftStatsDB = opts.swiftStatsDB
     env.SwiftStatsLocalDB = opts.swiftStatsLocalDB
     env.SlashCmdList = {}
@@ -598,6 +599,38 @@ do
 end
 
 local env, addon, test = loadStatsPro("enUS")
+
+do
+    local archonEnv, _, archonTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProArchonTargets = {
+            schemaVersion = 1,
+            capturedAt = "2026-05-15",
+            bracket = "high-keys",
+            dungeon = "all-dungeons",
+            window = "this-week",
+            specs = {
+                MAGE = {
+                    frost = {
+                        sourceUrl = "https://www.archon.gg/wow/builds/frost/mage/mythic-plus/overview/high-keys/all-dungeons/this-week",
+                        targets = { crit = 1007, haste = 560, mastery = 823, versatility = 97 },
+                    },
+                },
+            },
+        },
+    })
+    local snapshot = archonTest.getArchonTargetSnapshot("MAGE", "frost")
+    eq("archon.snapshot.source", snapshot.sourceUrl, "https://www.archon.gg/wow/builds/frost/mage/mythic-plus/overview/high-keys/all-dungeons/this-week")
+    local meta = archonTest.buildArchonTargetMeta("mastery", 700)
+    eq("archon.meta.target", meta.target, 823)
+    eq("archon.meta.current", meta.current, 700)
+    eq("archon.meta.delta", meta.delta, -123)
+    eq("archon.meta.captured_at", meta.capturedAt, "2026-05-15")
+    eq("archon.meta.missing_snapshot", archonTest.getArchonTargetSnapshot("MAGE", "fire"), nil)
+    eq("archon.meta.hidden_without_root", archonEnv.StatsProArchonTargets.schemaVersion, 1)
+end
 
 local function runMigrate(db)
     env.StatsProDB = db

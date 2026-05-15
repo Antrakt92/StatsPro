@@ -381,9 +381,9 @@ local defaults = {
     4. STAT DEFINITION TABLES (data-driven; UpdateStats iterates these)
 ============================================================ ]]
 local OFFENSIVE_STATS = {
-    { label = "Crit",    api = GetCritChance,    ratingCR = CR_CRIT_MELEE,  colorKey = "crit",    showKey = "showCrit"    },
-    { label = "Haste",   api = GetHaste,         ratingCR = CR_HASTE_MELEE, colorKey = "haste",   showKey = "showHaste"   },
-    { label = "Mastery", api = GetMasteryEffect, ratingCR = CR_MASTERY,     colorKey = "mastery", showKey = "showMastery" },
+    { statKey = "crit",    label = "Crit",    api = GetCritChance,    ratingCR = CR_CRIT_MELEE,  colorKey = "crit",    showKey = "showCrit"    },
+    { statKey = "haste",   label = "Haste",   api = GetHaste,         ratingCR = CR_HASTE_MELEE, colorKey = "haste",   showKey = "showHaste"   },
+    { statKey = "mastery", label = "Mastery", api = GetMasteryEffect, ratingCR = CR_MASTERY,     colorKey = "mastery", showKey = "showMastery" },
     -- versatility handled specially (dual-source: rating + flat); gated by showVersatility
 }
 
@@ -430,6 +430,77 @@ local function GetCurrentMainStatId()
     if not idx then return nil end
     local _, _, _, _, _, primaryStat = SafeGetSpecInfo(idx)
     return primaryStat
+end
+
+addon.archonTargets = addon.archonTargets or {}
+
+addon.archonTargets.specKeyByID = {
+    [250] = "blood", [251] = "frost", [252] = "unholy",
+    [577] = "havoc", [581] = "vengeance",
+    [102] = "balance", [103] = "feral", [104] = "guardian", [105] = "restoration",
+    [1467] = "devastation", [1468] = "preservation", [1473] = "augmentation",
+    [253] = "beast-mastery", [254] = "marksmanship", [255] = "survival",
+    [62] = "arcane", [63] = "fire", [64] = "frost",
+    [268] = "brewmaster", [269] = "windwalker", [270] = "mistweaver",
+    [65] = "holy", [66] = "protection", [70] = "retribution",
+    [256] = "discipline", [257] = "holy", [258] = "shadow",
+    [259] = "assassination", [260] = "outlaw", [261] = "subtlety",
+    [262] = "elemental", [263] = "enhancement", [264] = "restoration",
+    [265] = "affliction", [266] = "demonology", [267] = "destruction",
+    [71] = "arms", [72] = "fury", [73] = "protection",
+}
+
+function addon.archonTargets.GetCurrentClassToken()
+    local _, classToken = UnitClass("player")
+    return classToken
+end
+
+function addon.archonTargets.GetCurrentSpecKey()
+    local idx = SafeGetSpecIndex()
+    if not idx then return nil end
+    local specID = SafeGetSpecInfo(idx)
+    return specID and addon.archonTargets.specKeyByID[specID] or nil
+end
+
+function addon.archonTargets.GetSnapshot(classToken, specKey)
+    local root = _G.StatsProArchonTargets
+    if type(root) ~= "table" or root.schemaVersion ~= 1 then return nil end
+    local specs = root.specs
+    if type(specs) ~= "table" then return nil end
+    local classData = specs[classToken]
+    if type(classData) ~= "table" then return nil end
+    local specData = classData[specKey]
+    if type(specData) ~= "table" then return nil end
+    return specData, root
+end
+
+function addon.archonTargets.GetCurrentSnapshot()
+    return addon.archonTargets.GetSnapshot(addon.archonTargets.GetCurrentClassToken(), addon.archonTargets.GetCurrentSpecKey())
+end
+
+function addon.archonTargets.GetStatTarget(statKey)
+    local snapshot, root = addon.archonTargets.GetCurrentSnapshot()
+    local targets = snapshot and snapshot.targets
+    local target = type(targets) == "table" and targets[statKey] or nil
+    if type(target) ~= "number" or target <= 0 or issecretvalue(target) then return nil end
+    return target, snapshot, root
+end
+
+function addon.archonTargets.BuildMeta(statKey, currentRating)
+    if type(currentRating) ~= "number" or currentRating < 0 or issecretvalue(currentRating) then return nil end
+    local target, snapshot, root = addon.archonTargets.GetStatTarget(statKey)
+    if not target then return nil end
+    return {
+        statKey = statKey,
+        target = target,
+        current = currentRating,
+        delta = currentRating - target,
+        sourceUrl = snapshot.sourceUrl,
+        capturedAt = root.capturedAt,
+        bracket = root.bracket,
+        dungeon = root.dungeon,
+        window = root.window,
+    }
 end
 
 local function PlayerCanBlock()
@@ -5287,6 +5358,8 @@ if addon and addon.__statsproSmoke == true then
         end,
         normalizeColor = NormalizeColor,
         rgbToHex = RGBToHex,
+        getArchonTargetSnapshot = addon.archonTargets.GetSnapshot,
+        buildArchonTargetMeta = addon.archonTargets.BuildMeta,
         buildRenderBlocks = BuildRenderBlocks,
         routeRenderBlocks = RouteRenderBlocks,
         bucketHasContent = BucketHasContent,

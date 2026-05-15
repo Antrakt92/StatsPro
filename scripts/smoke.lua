@@ -529,6 +529,7 @@ local function makeEnv(locale, opts)
     env.GetVersatilityBonus = opts.getVersatilityBonus or zero
     env.GetCombatRating = opts.getCombatRating or zero
     env.GetCombatRatingBonus = opts.getCombatRatingBonus or zero
+    env.GetCombatRatingBonusForCombatRatingValue = opts.getCombatRatingBonusForCombatRatingValue
     env.GetDodgeChance = opts.getDodgeChance or zero
     env.GetParryChance = opts.getParryChance or zero
     env.GetBlockChance = opts.getBlockChance or zero
@@ -637,15 +638,186 @@ do
     })
     local snapshot = archonTest.getArchonTargetSnapshot("MAGE", "frost")
     eq("archon.snapshot.source", snapshot.sourceUrl, "https://www.archon.gg/wow/builds/frost/mage/mythic-plus/overview/high-keys/all-dungeons/this-week")
-    local meta = archonTest.buildArchonTargetMeta("mastery", 700)
+    local meta = archonTest.buildArchonTargetMeta("mastery", 700, archonEnv.CR_MASTERY)
     eq("archon.meta.target", meta.target, 823)
     eq("archon.meta.current", meta.current, 700)
     eq("archon.meta.delta", meta.delta, -123)
+    eq("archon.meta.rating_cr", meta.ratingCR, archonEnv.CR_MASTERY)
     eq("archon.meta.captured_at", meta.capturedAt, "2026-05-15")
     eq("archon.meta.missing_snapshot", archonTest.getArchonTargetSnapshot("MAGE", "fire"), nil)
     eq("archon.meta.hidden_without_root", archonEnv.StatsProArchonTargets.schemaVersion, 1)
 
-    local _, _, devourerArchonTest = loadStatsPro("enUS", {
+    local dualEnv, _, dualTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProDB = {
+            targetSnapshot = "raid",
+        },
+        statsProArchonTargets = {
+            schemaVersion = 2,
+            source = "archon",
+            snapshots = {
+                mythicPlus = {
+                    label = "M+ High Keys",
+                    title = "M+ Target",
+                    activity = "mythic-plus",
+                    bracket = "high-keys",
+                    dungeon = "all-dungeons",
+                    window = "this-week",
+                    capturedAt = "2026-05-15",
+                    specs = {
+                        MAGE = {
+                            frost = {
+                                sourceUrl = "https://www.archon.gg/wow/builds/frost/mage/mythic-plus/overview/high-keys/all-dungeons/this-week",
+                                targets = { crit = 1007, haste = 560, mastery = 823, versatility = 97 },
+                            },
+                        },
+                    },
+                },
+                raid = {
+                    label = "Raid Mythic All Bosses",
+                    title = "Raid Target",
+                    activity = "raid",
+                    difficulty = "mythic",
+                    boss = "all-bosses",
+                    window = "last-14-days",
+                    capturedAt = "2026-05-16",
+                    specs = {
+                        MAGE = {
+                            frost = {
+                                sourceUrl = "https://www.archon.gg/wow/builds/frost/mage/raid/overview/mythic/all-bosses",
+                                targets = { crit = 1044, haste = 551, mastery = 812, versatility = 88 },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    })
+    local okDual, errDual = pcall(dualEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("archon.v2_raid_selected.fire", okDual, errDual)
+    local raidSnapshot = dualTest.getArchonTargetSnapshot("MAGE", "frost", "raid")
+    eq("archon.v2.raid_snapshot_source", raidSnapshot.sourceUrl, "https://www.archon.gg/wow/builds/frost/mage/raid/overview/mythic/all-bosses")
+    local mplusSnapshot = dualTest.getArchonTargetSnapshot("MAGE", "frost", "mythicPlus")
+    eq("archon.v2.mplus_snapshot_still_available", mplusSnapshot.targets.mastery, 823)
+    local raidMeta = dualTest.buildArchonTargetMeta("mastery", 700, dualEnv.CR_MASTERY)
+    eq("archon.v2.selected_raid_target", raidMeta.target, 812)
+    eq("archon.v2.selected_raid_label", raidMeta.snapshotLabel, "Raid Mythic All Bosses")
+    eq("archon.v2.selected_raid_title", raidMeta.snapshotTitle, "Raid Target")
+    eq("archon.v2.selected_raid_captured_at", raidMeta.capturedAt, "2026-05-16")
+    dualTest.renderMainPanelForSmoke("Mastery:", "700", "20.0%", 1, nil, nil, { raidMeta })
+    dualTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("archon.v2.raid_tooltip_title", dualEnv.GameTooltip.lines[1].left, "StatsPro Raid Target")
+    eq("archon.v2.raid_tooltip_snapshot_label", dualEnv.GameTooltip.lines[5].right, "Raid Mythic All Bosses, 16-May-26")
+
+    local corruptPrefEnv, _, corruptPrefTest = loadStatsPro("enUS", {
+        statsProDB = {
+            targetSnapshot = "arena",
+        },
+    })
+    local okCorruptPref, errCorruptPref = pcall(corruptPrefEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("archon.corrupt_target_snapshot_pref.fire", okCorruptPref, errCorruptPref)
+    eq("archon.corrupt_target_snapshot_pref.cache_default", corruptPrefTest.cachedTargetSnapshot(), "mythicPlus")
+
+    local v1RaidPrefEnv, _, v1RaidPrefTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProDB = {
+            targetSnapshot = "raid",
+        },
+        statsProArchonTargets = {
+            schemaVersion = 1,
+            capturedAt = "2026-05-15",
+            specs = {
+                MAGE = {
+                    frost = {
+                        sourceUrl = "https://www.archon.gg/wow/builds/frost/mage/mythic-plus/overview/high-keys/all-dungeons/this-week",
+                        targets = { mastery = 823 },
+                    },
+                },
+            },
+        },
+    })
+    local okV1RaidPref, errV1RaidPref = pcall(v1RaidPrefEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("archon.v1_with_raid_pref_falls_back.fire", okV1RaidPref, errV1RaidPref)
+    local v1FallbackMeta = v1RaidPrefTest.buildArchonTargetMeta("mastery", 700, v1RaidPrefEnv.CR_MASTERY)
+    eq("archon.v1_with_raid_pref_falls_back.target", v1FallbackMeta.target, 823)
+    eq("archon.v1_with_raid_pref_falls_back.key", v1FallbackMeta.snapshotKey, "mythicPlus")
+
+    local v2MissingRaidEnv, _, v2MissingRaidTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProDB = {
+            targetSnapshot = "raid",
+        },
+        statsProArchonTargets = {
+            schemaVersion = 2,
+            source = "archon",
+            snapshots = {
+                mythicPlus = {
+                    label = "M+ High Keys",
+                    title = "M+ Target",
+                    capturedAt = "2026-05-15",
+                    specs = {
+                        MAGE = {
+                            frost = {
+                                sourceUrl = "https://www.archon.gg/wow/builds/frost/mage/mythic-plus/overview/high-keys/all-dungeons/this-week",
+                                targets = { mastery = 823 },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    })
+    local okV2MissingRaid, errV2MissingRaid = pcall(v2MissingRaidEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("archon.v2_missing_raid_profile_falls_back.fire", okV2MissingRaid, errV2MissingRaid)
+    local v2FallbackMeta = v2MissingRaidTest.buildArchonTargetMeta("mastery", 700, v2MissingRaidEnv.CR_MASTERY)
+    eq("archon.v2_missing_raid_profile_falls_back.target", v2FallbackMeta.target, 823)
+    eq("archon.v2_missing_raid_profile_falls_back.key", v2FallbackMeta.snapshotKey, "mythicPlus")
+
+    local v2RaidMissingSpecEnv, _, v2RaidMissingSpecTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProDB = {
+            targetSnapshot = "raid",
+        },
+        statsProArchonTargets = {
+            schemaVersion = 2,
+            source = "archon",
+            snapshots = {
+                mythicPlus = {
+                    capturedAt = "2026-05-15",
+                    specs = {
+                        MAGE = {
+                            frost = {
+                                targets = { mastery = 823 },
+                            },
+                        },
+                    },
+                },
+                raid = {
+                    capturedAt = "2026-05-15",
+                    specs = {
+                        WARRIOR = {
+                            arms = {
+                                targets = { mastery = 500 },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    })
+    local okV2RaidMissingSpec, errV2RaidMissingSpec = pcall(v2RaidMissingSpecEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("archon.v2_raid_profile_missing_spec_no_mplus_fallback.fire", okV2RaidMissingSpec, errV2RaidMissingSpec)
+    eq("archon.v2_raid_profile_missing_spec_no_mplus_fallback.meta", v2RaidMissingSpecTest.buildArchonTargetMeta("mastery", 700, v2RaidMissingSpecEnv.CR_MASTERY), nil)
+
+    local devourerArchonEnv, _, devourerArchonTest = loadStatsPro("enUS", {
         unitClassToken = "DEMONHUNTER",
         specIndex = 1,
         specID = 1480,
@@ -665,9 +837,27 @@ do
             },
         },
     })
-    local devourerMeta = devourerArchonTest.buildArchonTargetMeta("mastery", 1000)
+    local devourerMeta = devourerArchonTest.buildArchonTargetMeta("mastery", 1000, devourerArchonEnv.CR_MASTERY)
     eq("archon.devourer.spec_id_maps", devourerMeta.target, 1187)
     eq("archon.devourer.delta", devourerMeta.delta, -187)
+
+    local _, _, badTargetArchonTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProArchonTargets = {
+            schemaVersion = 1,
+            capturedAt = "2026-05-15",
+            specs = {
+                MAGE = {
+                    frost = {
+                        targets = { mastery = math.huge },
+                    },
+                },
+            },
+        },
+    })
+    eq("archon.meta.nonfinite_target_returns_nil", badTargetArchonTest.buildArchonTargetMeta("mastery", 1000), nil)
 
     local secretChecks = 0
     local _, _, secretArchonTest = loadStatsPro("enUS", {
@@ -746,16 +936,25 @@ do
 end
 
 do
-    local tooltipEnv, _, tooltipTest = loadStatsPro("enUS")
+    local tooltipEnv, _, tooltipTest = loadStatsPro("enUS", {
+        getCombatRatingBonusForCombatRatingValue = function(_, value)
+            return value / 70
+        end,
+    })
     tooltipTest.renderMainPanelForSmoke("Mastery:", "812", "30.0%", 1, nil, nil, {
-        { statKey = "mastery", target = 1043, current = 812, delta = -231, capturedAt = "2026-05-15" },
+        { statKey = "crit", ratingCR = tooltipEnv.CR_CRIT_MELEE, target = 1043, current = 812, currentPct = 30.0, delta = -231, capturedAt = "2026-05-15" },
     })
     tooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("tooltip.on_enter_shows", tooltipEnv.GameTooltip:IsShown(), true)
     eq("tooltip.on_enter_title", tooltipEnv.GameTooltip.lines[1].left, "StatsPro M+ Target")
-    eq("tooltip.on_enter_target", tooltipEnv.GameTooltip.lines[2].right, "1043")
-    eq("tooltip.on_enter_missing", tooltipEnv.GameTooltip.lines[4].left, "Missing")
-    eq("tooltip.on_enter_missing_value", tooltipEnv.GameTooltip.lines[4].right, "231")
+    eq("tooltip.on_enter_target", tooltipEnv.GameTooltip.lines[2].right, "1043 (~33.3%)")
+    eq("tooltip.on_enter_target_label", tooltipEnv.GameTooltip.lines[2].left, "Target:")
+    eq("tooltip.on_enter_current_label", tooltipEnv.GameTooltip.lines[3].left, "Current:")
+    eq("tooltip.on_enter_current_value", tooltipEnv.GameTooltip.lines[3].right, "812 (~30.0%)")
+    eq("tooltip.on_enter_missing", tooltipEnv.GameTooltip.lines[4].left, "Missing:")
+    eq("tooltip.on_enter_missing_value", tooltipEnv.GameTooltip.lines[4].right, "231 (~+3.3%)")
+    eq("tooltip.on_enter_snapshot_label", tooltipEnv.GameTooltip.lines[5].left, "Snapshot:")
+    eq("tooltip.on_enter_snapshot_date", tooltipEnv.GameTooltip.lines[5].right, "M+ High Keys, 15-May-26")
     tooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnLeave")
     eq("tooltip.on_leave_hides", tooltipEnv.GameTooltip:IsShown(), false)
     tooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnMouseUp", "RightButton")
@@ -767,6 +966,118 @@ do
     check("tooltip.drag_guard_timer", okFlush, flushed)
     eq("tooltip.drag_guard_timer.count", flushed, 1)
     eq("tooltip.drag_guard_clears", tooltipEnv.StatsProFrame.wasDragging, false)
+end
+
+do
+    local masteryEnv, _, masteryTest = loadStatsPro("enUS", {
+        getCombatRatingBonusForCombatRatingValue = function(_, value)
+            return value / 100
+        end,
+        getMasteryEffect = function()
+            return 0, 2
+        end,
+    })
+    masteryTest.renderMainPanelForSmoke("Mastery:", "800", "16.0%", 1, nil, nil, {
+        { statKey = "mastery", ratingCR = masteryEnv.CR_MASTERY, target = 1000, current = 800, currentPct = 16.0, delta = -200, capturedAt = "2026-05-15" },
+    })
+    masteryTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("tooltip.mastery_target_effect_pct", masteryEnv.GameTooltip.lines[2].right, "1000 (~20.0%)")
+    eq("tooltip.mastery_current_effect_pct", masteryEnv.GameTooltip.lines[3].right, "800 (~16.0%)")
+    eq("tooltip.mastery_missing_effect_pct", masteryEnv.GameTooltip.lines[4].right, "200 (~+4.0%)")
+end
+
+do
+    local overEnv, _, overTest = loadStatsPro("enUS", {
+        getCombatRatingBonusForCombatRatingValue = function(_, value)
+            return value / 100
+        end,
+    })
+    overTest.renderMainPanelForSmoke("Crit:", "1200", "17.0%", 1, nil, nil, {
+        { statKey = "crit", ratingCR = overEnv.CR_CRIT_MELEE, target = 1000, current = 1200, currentPct = 17.0, delta = 200, capturedAt = "2027-02-29" },
+    })
+    overTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("tooltip.over_target_pct", overEnv.GameTooltip.lines[2].right, "1000 (~15.0%)")
+    eq("tooltip.over_current_pct", overEnv.GameTooltip.lines[3].right, "1200 (~17.0%)")
+    eq("tooltip.over_value_pct", overEnv.GameTooltip.lines[4].right, "+200 (~+2.0%)")
+    eq("tooltip.invalid_snapshot_date_fallback", overEnv.GameTooltip.lines[5].right, "M+ High Keys, 2027-02-29")
+end
+
+do
+    local masteryLiveEnv, _, masteryLiveTest = loadStatsPro("enUS", {
+        getCombatRatingBonusForCombatRatingValue = function(_, value)
+            return value / 50
+        end,
+        getMasteryEffect = function()
+            return 0, 1
+        end,
+    })
+    masteryLiveTest.renderMainPanelForSmoke("Mastery:", "515", "22.4%", 1, nil, nil, {
+        { statKey = "mastery", colorKey = "mastery", ratingCR = masteryLiveEnv.CR_MASTERY, target = 350, current = 515, currentPct = 22.4, delta = 165, capturedAt = "2026-05-15" },
+    })
+    masteryLiveTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("tooltip.mastery_live_like_target_uses_projected_total_pct", masteryLiveEnv.GameTooltip.lines[2].right, "350 (~19.1%)")
+    eq("tooltip.mastery_live_like_current_uses_panel_pct", masteryLiveEnv.GameTooltip.lines[3].right, "515 (~22.4%)")
+    eq("tooltip.mastery_live_like_over_uses_rating_delta_pct", masteryLiveEnv.GameTooltip.lines[4].right, "+165 (~+3.3%)")
+end
+
+do
+    local fallbackEnv, _, fallbackTest = loadStatsPro("enUS", {
+        getCombatRatingBonusForCombatRatingValue = function()
+            error("rating bonus unavailable")
+        end,
+    })
+    fallbackTest.renderMainPanelForSmoke("Crit:", "812", "30.0%", 1, nil, nil, {
+        { statKey = "crit", ratingCR = fallbackEnv.CR_CRIT_MELEE, target = 1043, current = 812, currentPct = 30.0, delta = -231, capturedAt = "2026-05-15" },
+    })
+    fallbackTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("tooltip.rating_bonus_fallback_target", fallbackEnv.GameTooltip.lines[2].right, "1043")
+    eq("tooltip.rating_bonus_fallback_current", fallbackEnv.GameTooltip.lines[3].right, "812 (~30.0%)")
+    eq("tooltip.rating_bonus_fallback_missing", fallbackEnv.GameTooltip.lines[4].right, "231")
+end
+
+do
+    local matchedEnv, _, matchedTest = loadStatsPro("enUS", {
+        getCombatRatingBonusForCombatRatingValue = function(_, value)
+            return value / 100
+        end,
+    })
+    matchedTest.renderMainPanelForSmoke("Crit:", "1000", "20.0%", 1, nil, nil, {
+        { statKey = "crit", ratingCR = matchedEnv.CR_CRIT_MELEE, target = 1000, current = 1000, currentPct = 20.0, delta = 0, capturedAt = "2026-05-15" },
+    })
+    matchedTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("tooltip.matched_label", matchedEnv.GameTooltip.lines[4].left, "Matched:")
+    eq("tooltip.matched_value_pct", matchedEnv.GameTooltip.lines[4].right, "0 (~+0.0%)")
+end
+
+do
+    local zeroSignEnv, _, zeroSignTest = loadStatsPro("enUS", {
+        getCombatRatingBonusForCombatRatingValue = function(_, value)
+            return value == 999 and 1.00004 or 1
+        end,
+    })
+    zeroSignTest.renderMainPanelForSmoke("Crit:", "999", "20.0%", 1, nil, nil, {
+        { statKey = "crit", ratingCR = zeroSignEnv.CR_CRIT_MELEE, target = 1000, current = 999, currentPct = 20.0, delta = -1, capturedAt = "2026-05-15" },
+    })
+    zeroSignTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("tooltip.signed_zero_bonus_uses_positive_zero", zeroSignEnv.GameTooltip.lines[4].right, "1 (~+0.0%)")
+end
+
+do
+    local secretBonusEnv, _, secretBonusTest = loadStatsPro("enUS", {
+        issecretvalue = function(value)
+            return value == -999
+        end,
+        getCombatRatingBonusForCombatRatingValue = function()
+            return -999
+        end,
+    })
+    secretBonusTest.renderMainPanelForSmoke("Crit:", "812", "30.0%", 1, nil, nil, {
+        { statKey = "crit", ratingCR = secretBonusEnv.CR_CRIT_MELEE, target = 1043, current = 812, currentPct = 30.0, delta = -231, capturedAt = "2026-05-15" },
+    })
+    secretBonusTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("tooltip.secret_rating_bonus_fallback_target", secretBonusEnv.GameTooltip.lines[2].right, "1043")
+    eq("tooltip.secret_rating_bonus_fallback_current", secretBonusEnv.GameTooltip.lines[3].right, "812 (~30.0%)")
+    eq("tooltip.secret_rating_bonus_fallback_missing", secretBonusEnv.GameTooltip.lines[4].right, "231")
 end
 
 do
@@ -892,6 +1203,58 @@ local function blockDumpContains(blocks, needle)
         end
     end
     return false
+end
+
+do
+    local coloredEnv, _, coloredTest = loadStatsPro("enUS", {
+        statsProDB = {
+            matchValueColorToStat = true,
+            colors = {
+                mastery = { r = 0, g = 1, b = 0 },
+            },
+        },
+        getCombatRatingBonusForCombatRatingValue = function(_, value)
+            return value / 50
+        end,
+        getMasteryEffect = function()
+            return 0, 1
+        end,
+    })
+    fireEvent("tooltip.match_color_cache.fire", coloredEnv, "PLAYER_ENTERING_WORLD")
+    coloredTest.renderMainPanelForSmoke("Mastery:", "515", "22.4%", 1, nil, nil, {
+        { statKey = "mastery", colorKey = "mastery", ratingCR = coloredEnv.CR_MASTERY, target = 350, current = 515, currentPct = 22.4, delta = 165, capturedAt = "2026-05-15" },
+    })
+    coloredTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("tooltip.match_color_target_value_stays_neutral", coloredEnv.GameTooltip.lines[2].right, "350 (~19.1%)")
+    eq("tooltip.match_color_current_value", coloredEnv.GameTooltip.lines[3].right, "|cff00ff00" .. "515 (~22.4%)" .. "|r")
+    eq("tooltip.match_color_over_value_uses_status_color", coloredEnv.GameTooltip.lines[4].right, "+165 (~+3.3%)")
+    eq("tooltip.match_color_snapshot_plain", coloredEnv.GameTooltip.lines[5].right, "M+ High Keys, 15-May-26")
+
+    coloredTest.renderMainPanelForSmoke("Mastery:", "200", "16.0%", 1, nil, nil, {
+        { statKey = "mastery", colorKey = "mastery", ratingCR = coloredEnv.CR_MASTERY, target = 350, current = 200, currentPct = 16.0, delta = -150, capturedAt = "2026-05-15" },
+    })
+    coloredTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("tooltip.match_color_missing_value_uses_status_color", coloredEnv.GameTooltip.lines[4].right, "150 (~+3.0%)")
+end
+
+do
+    local debugRatingEnv = loadStatsPro("enUS", {
+        getCombatRating = function(cr)
+            return cr == 1 and 700 or 350
+        end,
+        getCombatRatingBonus = function(cr)
+            return cr == 1 and 10 or 5
+        end,
+        getCombatRatingBonusForCombatRatingValue = function(_, value)
+            return value / 70
+        end,
+        getMasteryEffect = function()
+            return 0, 2
+        end,
+    })
+    slash("debug.rating_conversion.dump", debugRatingEnv, "debug rating")
+    eq("debug.rating_conversion.crit", printContains(debugRatingEnv, "debug rating crit: rating=700 live=10.00 converted=10.00 delta=0.00"), true)
+    eq("debug.rating_conversion.mastery", printContains(debugRatingEnv, "debug rating mastery: rating=350 live=5.00 converted=5.00 delta=0.00 effective=10.00 coefficient=2.00"), true)
 end
 
 do
@@ -1184,11 +1547,13 @@ do
     slashEnv.StatsProDB.useLocalizedLabels = false
     slashEnv.StatsProDB.panelBackgroundAlpha = 55
     slashEnv.StatsProDB.textOutlineStyle = "thick"
+    slashEnv.StatsProDB.targetSnapshot = "raid"
     slashEnv.StatsProDB.colors.crit = { r = 0.4, g = 0.5, b = 0.6 }
     slash("slash.reset_restores_defaults", slashEnv, "reset")
     eq("slash.reset_restores_defaults.visible", slashEnv.StatsProDB.isVisible, true)
     eq("slash.reset_restores_defaults.panel_background_alpha", slashEnv.StatsProDB.panelBackgroundAlpha, 0)
     eq("slash.reset_restores_defaults.text_outline_style", slashEnv.StatsProDB.textOutlineStyle, "outline")
+    eq("slash.reset_restores_defaults.target_snapshot", slashEnv.StatsProDB.targetSnapshot, "mythicPlus")
     eq("slash.reset_restores_defaults.transient_font", slashEnv.StatsProDB.fontBeforeAutoSwitch, nil)
     eq("slash.reset_restores_defaults.legacy_locale", slashEnv.StatsProDB.useLocalizedLabels, nil)
     assertColor("slash.reset_restores_defaults.crit", slashEnv.StatsProDB.colors.crit, 1, 0, 0)
@@ -1260,6 +1625,49 @@ do
     check("render.rating_nil_coerces_to_zero.no_error", ok, blocks)
     eq("render.rating_nil_coerces_to_zero.row", blockDumpContains(blocks, "Crit:"), true)
     eq("render.rating_nil_coerces_to_zero.zero_rating", blockDumpContains(blocks, "0|r"), true)
+end
+
+do
+    local ratingCalls = 0
+    local critEnv, _, critTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProDB = {
+            showOffensive = true,
+            showRating = false,
+            showPercentage = true,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        statsProArchonTargets = {
+            schemaVersion = 1,
+            capturedAt = "2026-05-15",
+            specs = {
+                MAGE = {
+                    frost = {
+                        targets = { crit = 1000 },
+                    },
+                },
+            },
+        },
+        getCritChance = function() return 12.5 end,
+        getCombatRating = function()
+            ratingCalls = ratingCalls + 1
+            error("rating API tainted")
+        end,
+    })
+    fireEvent("render.target_hover_rating_error.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    ratingCalls = 0
+    local ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.target_hover_rating_error.no_error", ok, blocks)
+    eq("render.target_hover_rating_error.row_still_visible", blockDumpContains(blocks, "Crit:"), true)
+    eq("render.target_hover_rating_error.no_false_current_zero_meta", blocks[2].targetRows[1], false)
+    eq("render.target_hover_rating_error.no_second_percent_only_rating_read", ratingCalls, 1)
 end
 
 do
@@ -1612,6 +2020,7 @@ do
         "StatsProSplitCharacterCheck",
         "StatsProSplitItemLevelCheck",
         "StatsProSplitOffensiveCheck",
+        "StatsProTargetSnapshotDropdown",
         "StatsProRatingCheck",
         "StatsProPercentageCheck",
         "StatsProLabelStyleDropdown",
@@ -1649,6 +2058,7 @@ do
     end
 
     runDropdownInit("config.dropdown_initializers.display_mode", env.StatsProDisplayModeDropdown)
+    runDropdownInit("config.dropdown_initializers.target_snapshot", env.StatsProTargetSnapshotDropdown)
     runDropdownInit("config.dropdown_initializers.label_style", env.StatsProLabelStyleDropdown)
     runDropdownInit("config.dropdown_initializers.text_outline", env.StatsProTextOutlineDropdown)
     runDropdownInit("config.dropdown_initializers.language", env.StatsProLanguageDropdown)
@@ -1688,6 +2098,10 @@ do
     eq("config.dropdown_display_mode_split_writes_db.value", env.StatsProDB.displayMode, "split")
     eq("config.dropdown_display_mode_split_writes_db.split_check_enabled",
         env.StatsProSplitOffensiveCheck:IsEnabled(), true)
+
+    selectDropdownValue("config.dropdown_target_snapshot_raid_writes_db", env.StatsProTargetSnapshotDropdown, "raid")
+    eq("config.dropdown_target_snapshot_raid_writes_db.value", env.StatsProDB.targetSnapshot, "raid")
+    eq("config.dropdown_target_snapshot_raid_writes_db.cache", test.cachedTargetSnapshot(), "raid")
 
     selectDropdownValue("config.dropdown_label_style_hidden_writes_db", env.StatsProLabelStyleDropdown, "hidden")
     eq("config.dropdown_label_style_hidden_writes_db.value", env.StatsProDB.labelStyle, "hidden")

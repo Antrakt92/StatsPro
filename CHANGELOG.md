@@ -1,10 +1,24 @@
 # Changelog
 
-## 1.8.1 - 14-May-2026 — AddOn List polish
+## 1.9.0 - 15-May-2026 — Archon target tooltips
+
+### Added
+
+- **Archon target tooltips for secondary stats** — hover Crit, Haste, Mastery, or Versatility to compare your current rating against generated Archon targets, including Target, Current, Missing / Over / Matched, and the snapshot source date.
+- **Mythic+ and Raid target profiles** — choose whether hover targets use Archon M+ High Keys or Raid Mythic All Bosses data from `/ss` → Layout → Value Display → Tooltip Targets.
+- **Generated target data for every current Midnight spec** — the bundled snapshot covers all 40 Retail specs, including Demon Hunter Devourer, with no in-game web requests or runtime scraping.
+
+### Improved
+
+- **Tooltip percentages now reflect real rating conversion better** — target/current/delta percentages use Blizzard's rating conversion API, Mastery's spec coefficient, and total-rating comparisons so diminishing-return brackets are handled at the current and target rating positions.
+- **Target hover presentation is easier to scan** — labels now use colons, snapshot dates use `DD-Mmm-YY`, Current can inherit the stat color when Match Value Color to Stat is enabled, and Missing / Over / Matched keep their own status colors.
+- **Release checks now protect target snapshots** — local verification validates M+ and Raid profile coverage, expected target counts, generated table shape, and malformed/duplicate snapshot cases before release prep.
 
 ### Fixed
 
 - **StatsPro now appears under Combat in the modern AddOn List** across supported client locales, while keeping legacy `X-Category` metadata for addon managers.
+- **Target hover rows no longer block normal panel interactions** such as right-click settings and drag behavior.
+- **Target metadata skips unsafe stat reads** instead of formatting secret, malformed, missing, negative, or non-finite rating values.
 
 ### Changed
 

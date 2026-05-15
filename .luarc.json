@@ -55,6 +55,7 @@
     "GetCoinTextureString",
     "GetCombatRating",
     "GetCombatRatingBonus",
+    "GetCombatRatingBonusForCombatRatingValue",
     "GetCritChance",
     "GetDodgeChance",
     "GetHaste",

@@ -48,6 +48,7 @@ read_globals = {
     "GetHaste", "GetMeleeHaste", "GetSpellHaste", "GetRangedHaste",
     "GetMasteryEffect", "GetMastery",
     "GetVersatilityBonus", "GetCombatRating", "GetCombatRatingBonus",
+    "GetCombatRatingBonusForCombatRatingValue",
     "GetDodgeChance", "GetParryChance", "GetBlockChance",
     "GetLifesteal", "GetAvoidance", "GetSpeed", "GetUnitSpeed",
     "GetAverageItemLevel",

@@ -3,9 +3,9 @@
 ## Goal
 
 StatsPro will show a small, high-value target comparison for secondary stats:
-the player's current rating, the current M+ High Keys target rating, and the
-missing or surplus rating. The first data source is Archon M+ pages for
-`high-keys/all-dungeons/this-week`.
+the player's current rating, the selected Archon target rating, and the missing
+or surplus rating. The shipped data sources are Archon M+ High Keys
+`high-keys/all-dungeons/this-week` and Archon Raid Mythic `all-bosses`.
 
 The addon must not fetch network data in game. A private local build/update
 script in the `WOW` coordination repository will collect Archon snapshots before
@@ -17,20 +17,23 @@ StatsPro addon repository for packaging.
 Included in the first version:
 
 - Retail Midnight StatsPro only.
-- Mythic+ only.
-- Archon URL shape:
+- Mythic+ and Raid target profiles.
+- Archon M+ URL shape:
   `https://www.archon.gg/wow/builds/{spec}/{class}/mythic-plus/overview/high-keys/all-dungeons/this-week`
+- Archon Raid URL shape:
+  `https://www.archon.gg/wow/builds/{spec}/{class}/raid/overview/mythic/all-bosses`
 - All supported player specializations.
 - Secondary stat targets only: critical strike, haste, mastery, versatility.
-- Tooltip-only display on StatsPro secondary stat rows.
+- Tooltip-only display on StatsPro secondary stat rows, selected by a settings
+  dropdown.
 - Snapshot metadata in generated data: source, activity, bracket, dungeon,
   window, capture date, and source URL per spec.
 - Safe runtime behavior when data is missing or stale.
 
 Excluded from the first version:
 
-- Raid targets.
 - Per-dungeon targets.
+- Per-boss raid targets.
 - Talent builds, hero talent builds, gear, consumables, rotations, or guide text.
 - In-game networking.
 - Automatic release tag publishing.
@@ -42,14 +45,15 @@ The feature has three separate layers.
 1. `WOW/stats-pro-meta/tools/update-archon-targets.ps1`
 
    The private collector runs on the developer machine. It requests each Archon
-   M+ High Keys page, extracts the embedded Next.js JSON payload, locates the
-   stat priority section, normalizes the four secondary stat ratings, and writes
-   a deterministic Lua snapshot into the StatsPro addon repository.
+   M+ High Keys and Raid Mythic All Bosses page, extracts the embedded Next.js
+   JSON payload, locates the stat priority section, normalizes the four
+   secondary stat ratings, and writes deterministic Lua snapshots into the
+   StatsPro addon repository.
 
 2. `StatsPro_ArchonTargets.lua`
 
    The generated snapshot is loaded by `StatsPro.toc` before `StatsPro.lua`.
-   It exposes one global table, `StatsProArchonTargets`, with source metadata
+   It exposes one global table, `StatsProArchonTargets`, with profile metadata
    and spec-keyed target ratings. The file is treated as generated output and
    should not contain runtime logic.
 
@@ -65,25 +69,41 @@ The generated Lua table should use stable internal keys:
 
 ```lua
 StatsProArchonTargets = {
-  schemaVersion = 1,
+  schemaVersion = 2,
   source = "archon",
-  activity = "mythic-plus",
-  bracket = "high-keys",
-  dungeon = "all-dungeons",
-  window = "this-week",
-  capturedAt = "2026-05-15",
-  specs = {
-    ["DEATHKNIGHT"] = {
-      ["frost"] = {
-        sourceUrl = "https://www.archon.gg/wow/builds/frost/death-knight/mythic-plus/overview/high-keys/all-dungeons/this-week",
-        targets = {
-          mastery = 1043,
-          crit = 921,
-          haste = 419,
-          versatility = 92,
+  snapshots = {
+    ["mythicPlus"] = {
+      label = "M+ High Keys",
+      title = "M+ Target",
+      activity = "mythic-plus",
+      bracket = "high-keys",
+      dungeon = "all-dungeons",
+      window = "this-week",
+      capturedAt = "2026-05-15",
+      specs = {
+        ["DEATHKNIGHT"] = {
+          ["frost"] = {
+            sourceUrl = "https://www.archon.gg/wow/builds/frost/death-knight/mythic-plus/overview/high-keys/all-dungeons/this-week",
+            targets = {
+              mastery = 1043,
+              crit = 921,
+              haste = 419,
+              versatility = 92,
+            },
+            order = { "mastery", "crit", "haste", "versatility" },
+          },
         },
-        order = { "mastery", "crit", "haste", "versatility" },
       },
+    },
+    ["raid"] = {
+      label = "Raid Mythic All Bosses",
+      title = "Raid Target",
+      activity = "raid",
+      difficulty = "mythic",
+      boss = "all-bosses",
+      window = "last-14-days",
+      capturedAt = "2026-05-15",
+      specs = {},
     },
   },
 }
@@ -102,7 +122,7 @@ keep StatsPro's compact HUD style and add only the target-specific lines:
 - Current: current player rating.
 - Missing: positive rating deficit when current is below target.
 - Over: positive surplus when current is above target.
-- Snapshot: M+ High Keys, All Dungeons, this week, capture date.
+- Snapshot: selected profile label and capture date.
 
 The tooltip must avoid copying Archon guide text, page copy, charts, talent
 strings, or other guide content. It only uses transformed numeric targets.

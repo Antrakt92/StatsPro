@@ -32,6 +32,7 @@
 ## Features
 
 - **Secondary stats** — Crit, Haste, Mastery, Versatility (with rating + percentage display options)
+- **Archon target tooltips** — hover secondary stat rows to compare your current rating against generated M+ High Keys or Raid Mythic All Bosses targets, with rating deltas and approximate percentage impact
 - **Tertiary stats** — Leech, Avoidance, Speed
 - **Main stat auto-detect** — Strength / Agility / Intellect resolves automatically from your active spec; no toggling when you respec or swap characters
 - **Stamina** — optional row for tanks tracking effective HP and any spec watching consumable contributions (raid buffs / flask / food included), default OFF
@@ -66,6 +67,9 @@ from Character / Offensive / Tertiary / Defensive / Item Level / Durability / Re
 - **Tertiary stats on demand** — Leech, Avoidance, and Speed are first-class rows
   with their own toggles. Most stat addons silently omit them; theorycrafting builds
   that lean on tertiaries can finally see what they're doing without a separate addon.
+- **M+ and Raid stat target context** — secondary-stat hovers can show how far you
+  are from generated Archon targets for your active spec. Pick Mythic+ or Raid in
+  settings; the addon ships the snapshot data and never makes web requests in game.
 - **Vendor-accurate repair cost** — shows as `46g 40s 81c` with the inline gold /
   silver / copper icons you see at the vendor, not a stripped-down `46g`. A lot of
   older stat addons quietly broke in modern Retail because they rely on the legacy
@@ -161,7 +165,7 @@ everything:
 | Tab | What lives here |
 |---|---|
 | **Stats** | Character rows (Show Main Stat, Stamina), Offensive, Tertiary, Defensive, and Gear toggles, including Item Level, with inline color swatches |
-| **Layout** | Visibility / Lock, Display Mode, **Side Panel Contains** routing for Split mode, **Value Display** controls (Show Rating / Show Percentage / Label Style / Match Value Color to Stat), Scale, Refresh Rate |
+| **Layout** | Visibility / Lock, Display Mode, **Side Panel Contains** routing for Split mode, **Value Display** controls (Tooltip Targets, Show Rating / Show Percentage / Label Style / Match Value Color to Stat), Scale, Refresh Rate |
 | **Appearance** | Typography (Font / Font Size / Text Opacity), Readability (Text Outline / Panel Background), Localization (Language picker + font-coverage warning) |
 
 ## Compatibility

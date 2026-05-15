@@ -246,7 +246,7 @@ end
 -- literal `@project-version@` token from the unsubstituted TOC — fall back to a
 -- hand-maintained constant so the title still reads e.g. `v1.0.3-dev` instead of `vdev`.
 -- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
-local CURRENT_RELEASE = "1.8.1"
+local CURRENT_RELEASE = "1.9.0"
 local ADDON_VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("StatsPro", "Version") or "?"
 if ADDON_VERSION:find("project%-version") then ADDON_VERSION = CURRENT_RELEASE .. "-dev" end
 
@@ -316,6 +316,7 @@ local defaults = {
     showRating = false,
     showPercentage = true,
     matchValueColorToStat = false,
+    targetSnapshot = "mythicPlus",
 
     -- Tertiary stats
     showTertiary = false,
@@ -433,6 +434,12 @@ local function GetCurrentMainStatId()
 end
 
 addon.archonTargets = addon.archonTargets or {}
+addon.archonTargets.defaultSnapshotKey = "mythicPlus"
+addon.archonTargets.snapshotOptions = {
+    { value = "mythicPlus", label = "Mythic+" },
+    { value = "raid",       label = "Raid" },
+}
+local cached
 
 addon.archonTargets.specKeyByID = {
     [250] = "blood", [251] = "frost", [252] = "unholy",
@@ -462,44 +469,98 @@ function addon.archonTargets.GetCurrentSpecKey()
     return specID and addon.archonTargets.specKeyByID[specID] or nil
 end
 
-function addon.archonTargets.GetSnapshot(classToken, specKey)
+function addon.archonTargets.NormalizeSnapshotKey(value)
+    if value == "raid" then return "raid" end
+    return addon.archonTargets.defaultSnapshotKey
+end
+
+function addon.archonTargets.GetRootSnapshot(snapshotKey)
     local root = _G.StatsProArchonTargets
-    if type(root) ~= "table" or root.schemaVersion ~= 1 then return nil end
-    local specs = root.specs
+    if type(root) ~= "table" then return nil end
+    local normalizedKey = addon.archonTargets.NormalizeSnapshotKey(snapshotKey)
+    if root.schemaVersion == 2 then
+        local snapshots = root.snapshots
+        local snapshotRoot = type(snapshots) == "table" and snapshots[normalizedKey] or nil
+        if type(snapshotRoot) ~= "table" and normalizedKey ~= addon.archonTargets.defaultSnapshotKey then
+            normalizedKey = addon.archonTargets.defaultSnapshotKey
+            snapshotRoot = type(snapshots) == "table" and snapshots[normalizedKey] or nil
+        end
+        if type(snapshotRoot) ~= "table" then return nil end
+        return snapshotRoot, root, normalizedKey
+    end
+    if root.schemaVersion == 1 then
+        return root, root, addon.archonTargets.defaultSnapshotKey
+    end
+    return nil
+end
+
+function addon.archonTargets.GetSnapshotLabel(snapshotRoot, snapshotKey)
+    if type(snapshotRoot) == "table" and type(snapshotRoot.label) == "string" and snapshotRoot.label ~= "" then
+        return snapshotRoot.label
+    end
+    if snapshotKey == "raid" then return "Raid Mythic All Bosses" end
+    return "M+ High Keys"
+end
+
+function addon.archonTargets.GetSnapshotTitle(snapshotRoot, snapshotKey)
+    if type(snapshotRoot) == "table" and type(snapshotRoot.title) == "string" and snapshotRoot.title ~= "" then
+        return snapshotRoot.title
+    end
+    if snapshotKey == "raid" then return "Raid Target" end
+    return "M+ Target"
+end
+
+function addon.archonTargets.GetSnapshot(classToken, specKey, snapshotKey)
+    local snapshotRoot, root, normalizedKey = addon.archonTargets.GetRootSnapshot(snapshotKey)
+    if not snapshotRoot then return nil end
+    local specs = snapshotRoot.specs
     if type(specs) ~= "table" then return nil end
     local classData = specs[classToken]
     if type(classData) ~= "table" then return nil end
     local specData = classData[specKey]
     if type(specData) ~= "table" then return nil end
-    return specData, root
+    return specData, snapshotRoot, root, normalizedKey
 end
 
 function addon.archonTargets.GetCurrentSnapshot()
-    return addon.archonTargets.GetSnapshot(addon.archonTargets.GetCurrentClassToken(), addon.archonTargets.GetCurrentSpecKey())
+    return addon.archonTargets.GetSnapshot(addon.archonTargets.GetCurrentClassToken(), addon.archonTargets.GetCurrentSpecKey(), cached.targetSnapshot)
 end
 
 function addon.archonTargets.GetStatTarget(statKey)
-    local snapshot, root = addon.archonTargets.GetCurrentSnapshot()
+    local snapshot, snapshotRoot, root, snapshotKey = addon.archonTargets.GetCurrentSnapshot()
     local targets = snapshot and snapshot.targets
     local target = type(targets) == "table" and targets[statKey] or nil
-    if type(target) ~= "number" or issecretvalue(target) or target <= 0 then return nil end
-    return target, snapshot, root
+    if type(target) ~= "number" or issecretvalue(target)
+        or target ~= target or target <= 0 or target >= math.huge then return nil end
+    return target, snapshot, snapshotRoot, root, snapshotKey
 end
 
-function addon.archonTargets.BuildMeta(statKey, currentRating)
-    if type(currentRating) ~= "number" or issecretvalue(currentRating) or currentRating < 0 then return nil end
-    local target, snapshot, root = addon.archonTargets.GetStatTarget(statKey)
+function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, currentPct, colorKey)
+    if type(currentRating) ~= "number" or issecretvalue(currentRating)
+        or currentRating ~= currentRating or currentRating < 0 or currentRating >= math.huge then return nil end
+    local target, snapshot, snapshotRoot, _, snapshotKey = addon.archonTargets.GetStatTarget(statKey)
     if not target then return nil end
+    local displayPct = (type(currentPct) == "number" and not issecretvalue(currentPct)
+        and currentPct == currentPct and currentPct > -math.huge and currentPct < math.huge) and currentPct or nil
     return {
         statKey = statKey,
+        colorKey = colorKey or statKey,
+        ratingCR = ratingCR,
         target = target,
         current = currentRating,
+        currentPct = displayPct,
         delta = currentRating - target,
         sourceUrl = snapshot.sourceUrl,
-        capturedAt = root.capturedAt,
-        bracket = root.bracket,
-        dungeon = root.dungeon,
-        window = root.window,
+        capturedAt = snapshotRoot.capturedAt,
+        snapshotKey = snapshotKey,
+        snapshotLabel = addon.archonTargets.GetSnapshotLabel(snapshotRoot, snapshotKey),
+        snapshotTitle = addon.archonTargets.GetSnapshotTitle(snapshotRoot, snapshotKey),
+        activity = snapshotRoot.activity,
+        bracket = snapshotRoot.bracket,
+        dungeon = snapshotRoot.dungeon,
+        difficulty = snapshotRoot.difficulty,
+        boss = snapshotRoot.boss,
+        window = snapshotRoot.window,
     }
 end
 
@@ -582,7 +643,7 @@ end
 -- globals are still nil. By PEW every enabled addon's SavedVariables are loaded; the
 -- check fires reliably regardless of load order.
 
-local cached = {
+cached = {
     colorStrings = {},
     -- WHY {}: cached table inits at file scope BEFORE LABELS_BY_LOCALE declaration
     -- (sect 6 vs sect 7). Empty table fallback gives identity-map L() behavior
@@ -603,6 +664,7 @@ local cached = {
     speedPct = 0,
     displayMode = "flat",
     labelStyle = "full",
+    targetSnapshot = "mythicPlus",
     updateInterval = 0.5,
 }
 
@@ -701,9 +763,10 @@ local LABELS_BY_LOCALE = {
         -- Sliders:
         ["Scale:"] = "Scale:", ["Refresh Rate (sec):"] = "Refresh Rate (sec):", ["Font Size:"] = "Font Size:", ["Text Opacity:"] = "Text Opacity:", ["Panel Background:"] = "Panel Background:",
         -- Dropdown captions:
-        ["Display Mode:"] = "Display Mode:", ["Label Style:"] = "Label Style:", ["Text Outline:"] = "Text Outline:", ["Font:"] = "Font:", ["Language:"] = "Language:",
+        ["Display Mode:"] = "Display Mode:", ["Tooltip Targets:"] = "Tooltip Targets:", ["Label Style:"] = "Label Style:", ["Text Outline:"] = "Text Outline:", ["Font:"] = "Font:", ["Language:"] = "Language:",
         -- Dropdown options (Display Mode):
         ["Flat"] = "Flat", ["Sectioned"] = "Sectioned", ["Split"] = "Split",
+        ["Mythic+"] = "Mythic+", ["Raid"] = "Raid",
         ["Full"] = "Full", ["Short"] = "Short", ["Hidden"] = "Hidden",
         ["None"] = "None", ["Outline"] = "Outline", ["Thick Outline"] = "Thick Outline",
         -- Buttons + title:
@@ -767,9 +830,10 @@ local LABELS_BY_LOCALE = {
         -- Sliders:
         ["Scale:"] = "Масштаб:", ["Refresh Rate (sec):"] = "Частота обновления (сек):", ["Font Size:"] = "Размер шрифта:", ["Text Opacity:"] = "Прозрачность текста:", ["Panel Background:"] = "Фон панели:",
         -- Dropdown captions:
-        ["Display Mode:"] = "Режим отображения:", ["Label Style:"] = "Стиль меток:", ["Text Outline:"] = "Контур текста:", ["Font:"] = "Шрифт:", ["Language:"] = "Язык:",
+        ["Display Mode:"] = "Режим отображения:", ["Tooltip Targets:"] = "Цели в подсказке:", ["Label Style:"] = "Стиль меток:", ["Text Outline:"] = "Контур текста:", ["Font:"] = "Шрифт:", ["Language:"] = "Язык:",
         -- Dropdown options (Display Mode):
         ["Flat"] = "Плоский", ["Sectioned"] = "По секциям", ["Split"] = "Разделённый",
+        ["Mythic+"] = "Мифик+", ["Raid"] = "Рейд",
         ["Full"] = "Полный", ["Short"] = "Короткий", ["Hidden"] = "Скрытый",
         ["None"] = "Нет", ["Outline"] = "Контур", ["Thick Outline"] = "Толстый контур",
         -- Buttons + title:
@@ -829,8 +893,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Auto-Farbe nach Schwellwert",
         ["Use Worst Slot (instead of average)"] = "Schlechtester Slot (statt Durchschnitt)",
         ["Scale:"] = "Skalierung:", ["Refresh Rate (sec):"] = "Aktualisierungsrate (Sek.):", ["Font Size:"] = "Schriftgröße:", ["Text Opacity:"] = "Textdeckkraft:", ["Panel Background:"] = "Panelhintergrund:",
-        ["Display Mode:"] = "Anzeigemodus:", ["Label Style:"] = "Labelstil:", ["Text Outline:"] = "Textkontur:", ["Font:"] = "Schrift:", ["Language:"] = "Sprache:",
+        ["Display Mode:"] = "Anzeigemodus:", ["Tooltip Targets:"] = "Tooltip-Ziele:", ["Label Style:"] = "Labelstil:", ["Text Outline:"] = "Textkontur:", ["Font:"] = "Schrift:", ["Language:"] = "Sprache:",
         ["Flat"] = "Flach", ["Sectioned"] = "Gruppiert", ["Split"] = "Geteilt",
+        ["Mythic+"] = "Mythic+", ["Raid"] = "Raid",
         ["Full"] = "Voll", ["Short"] = "Kurz", ["Hidden"] = "Versteckt",
         ["None"] = "Keine", ["Outline"] = "Kontur", ["Thick Outline"] = "Dicke Kontur",
         ["Reset to Defaults"] = "Auf Standard", ["Close"] = "Schließen",
@@ -885,8 +950,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Couleur auto par seuil",
         ["Use Worst Slot (instead of average)"] = "Pire emplacement (vs moyenne)",
         ["Scale:"] = "Échelle :", ["Refresh Rate (sec):"] = "Fréquence (sec) :", ["Font Size:"] = "Taille de police :", ["Text Opacity:"] = "Opacité du texte :", ["Panel Background:"] = "Arrière-plan du panneau :",
-        ["Display Mode:"] = "Mode d'affichage :", ["Label Style:"] = "Style d'étiquette :", ["Text Outline:"] = "Contour du texte :", ["Font:"] = "Police :", ["Language:"] = "Langue :",
+        ["Display Mode:"] = "Mode d'affichage :", ["Tooltip Targets:"] = "Cibles infobulle :", ["Label Style:"] = "Style d'étiquette :", ["Text Outline:"] = "Contour du texte :", ["Font:"] = "Police :", ["Language:"] = "Langue :",
         ["Flat"] = "Plat", ["Sectioned"] = "Par sections", ["Split"] = "Séparé",
+        ["Mythic+"] = "Mythique+", ["Raid"] = "Raid",
         ["Full"] = "Complet", ["Short"] = "Court", ["Hidden"] = "Masqué",
         ["None"] = "Aucun", ["Outline"] = "Contour", ["Thick Outline"] = "Contour épais",
         ["Reset to Defaults"] = "Par défaut", ["Close"] = "Fermer",
@@ -942,8 +1008,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Color auto por umbral",
         ["Use Worst Slot (instead of average)"] = "Peor ranura (en vez de media)",
         ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:", ["Text Opacity:"] = "Opacidad del texto:", ["Panel Background:"] = "Fondo del panel:",
-        ["Display Mode:"] = "Modo:", ["Label Style:"] = "Estilo de etiqueta:", ["Text Outline:"] = "Contorno del texto:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
+        ["Display Mode:"] = "Modo:", ["Tooltip Targets:"] = "Objetivos tooltip:", ["Label Style:"] = "Estilo de etiqueta:", ["Text Outline:"] = "Contorno del texto:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por secciones", ["Split"] = "Dividido",
+        ["Mythic+"] = "Mítico+", ["Raid"] = "Banda",
         ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Oculto",
         ["None"] = "Ninguno", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno grueso",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
@@ -997,8 +1064,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Color auto por umbral",
         ["Use Worst Slot (instead of average)"] = "Peor ranura (en vez del promedio)",
         ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:", ["Text Opacity:"] = "Opacidad del texto:", ["Panel Background:"] = "Fondo del panel:",
-        ["Display Mode:"] = "Modo:", ["Label Style:"] = "Estilo de etiqueta:", ["Text Outline:"] = "Contorno del texto:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
+        ["Display Mode:"] = "Modo:", ["Tooltip Targets:"] = "Objetivos tooltip:", ["Label Style:"] = "Estilo de etiqueta:", ["Text Outline:"] = "Contorno del texto:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por secciones", ["Split"] = "Dividido",
+        ["Mythic+"] = "Mítico+", ["Raid"] = "Banda",
         ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Oculto",
         ["None"] = "Ninguno", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno grueso",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
@@ -1053,8 +1121,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Colore auto per soglia",
         ["Use Worst Slot (instead of average)"] = "Slot peggiore (anziché media)",
         ["Scale:"] = "Scala:", ["Refresh Rate (sec):"] = "Frequenza (sec):", ["Font Size:"] = "Dimensione font:", ["Text Opacity:"] = "Opacità del testo:", ["Panel Background:"] = "Sfondo pannello:",
-        ["Display Mode:"] = "Modalità:", ["Label Style:"] = "Stile etichetta:", ["Text Outline:"] = "Contorno testo:", ["Font:"] = "Font:", ["Language:"] = "Lingua:",
+        ["Display Mode:"] = "Modalità:", ["Tooltip Targets:"] = "Target tooltip:", ["Label Style:"] = "Stile etichetta:", ["Text Outline:"] = "Contorno testo:", ["Font:"] = "Font:", ["Language:"] = "Lingua:",
         ["Flat"] = "Piatto", ["Sectioned"] = "A sezioni", ["Split"] = "Diviso",
+        ["Mythic+"] = "Mitica+", ["Raid"] = "Incursione",
         ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Nascosto",
         ["None"] = "Nessuno", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno spesso",
         ["Reset to Defaults"] = "Predefiniti", ["Close"] = "Chiudi",
@@ -1108,8 +1177,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Cor auto por limite",
         ["Use Worst Slot (instead of average)"] = "Pior slot (em vez de média)",
         ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Atualização (s):", ["Font Size:"] = "Tamanho da fonte:", ["Text Opacity:"] = "Opacidade do texto:", ["Panel Background:"] = "Fundo do painel:",
-        ["Display Mode:"] = "Modo:", ["Label Style:"] = "Estilo do rótulo:", ["Text Outline:"] = "Contorno do texto:", ["Font:"] = "Fonte:", ["Language:"] = "Idioma:",
+        ["Display Mode:"] = "Modo:", ["Tooltip Targets:"] = "Alvos do tooltip:", ["Label Style:"] = "Estilo do rótulo:", ["Text Outline:"] = "Contorno do texto:", ["Font:"] = "Fonte:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por seções", ["Split"] = "Dividido",
+        ["Mythic+"] = "Mítico+", ["Raid"] = "Raide",
         ["Full"] = "Completo", ["Short"] = "Curto", ["Hidden"] = "Oculto",
         ["None"] = "Nenhum", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno grosso",
         ["Reset to Defaults"] = "Restaurar", ["Close"] = "Fechar",
@@ -1170,8 +1240,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "임계값 자동 색상",
         ["Use Worst Slot (instead of average)"] = "최악 슬롯 사용 (평균 대신)",
         ["Scale:"] = "크기:", ["Refresh Rate (sec):"] = "갱신 주기 (초):", ["Font Size:"] = "글꼴 크기:", ["Text Opacity:"] = "텍스트 투명도:", ["Panel Background:"] = "패널 배경:",
-        ["Display Mode:"] = "표시 모드:", ["Label Style:"] = "라벨 스타일:", ["Text Outline:"] = "글자 외곽선:", ["Font:"] = "글꼴:", ["Language:"] = "언어:",
+        ["Display Mode:"] = "표시 모드:", ["Tooltip Targets:"] = "툴팁 목표:", ["Label Style:"] = "라벨 스타일:", ["Text Outline:"] = "글자 외곽선:", ["Font:"] = "글꼴:", ["Language:"] = "언어:",
         ["Flat"] = "단일", ["Sectioned"] = "구역별", ["Split"] = "분리",
+        ["Mythic+"] = "쐐기+", ["Raid"] = "공격대",
         ["Full"] = "전체", ["Short"] = "짧게", ["Hidden"] = "숨김",
         ["None"] = "없음", ["Outline"] = "외곽선", ["Thick Outline"] = "굵은 외곽선",
         ["Reset to Defaults"] = "기본값", ["Close"] = "닫기",
@@ -1225,8 +1296,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "按阈值自动着色",
         ["Use Worst Slot (instead of average)"] = "最差栏位（替代平均值）",
         ["Scale:"] = "缩放:", ["Refresh Rate (sec):"] = "刷新率 (秒):", ["Font Size:"] = "字体大小:", ["Text Opacity:"] = "文字不透明度:", ["Panel Background:"] = "面板背景:",
-        ["Display Mode:"] = "显示模式:", ["Label Style:"] = "标签样式:", ["Text Outline:"] = "文字描边:", ["Font:"] = "字体:", ["Language:"] = "语言:",
+        ["Display Mode:"] = "显示模式:", ["Tooltip Targets:"] = "提示目标:", ["Label Style:"] = "标签样式:", ["Text Outline:"] = "文字描边:", ["Font:"] = "字体:", ["Language:"] = "语言:",
         ["Flat"] = "扁平", ["Sectioned"] = "分组", ["Split"] = "分离",
+        ["Mythic+"] = "史诗+", ["Raid"] = "团队",
         ["Full"] = "完整", ["Short"] = "简短", ["Hidden"] = "隐藏",
         ["None"] = "无", ["Outline"] = "描边", ["Thick Outline"] = "粗描边",
         ["Reset to Defaults"] = "恢复默认", ["Close"] = "关闭",
@@ -1280,8 +1352,9 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "依閾值自動上色",
         ["Use Worst Slot (instead of average)"] = "最差欄位（替代平均值）",
         ["Scale:"] = "縮放:", ["Refresh Rate (sec):"] = "更新率 (秒):", ["Font Size:"] = "字型大小:", ["Text Opacity:"] = "文字不透明度:", ["Panel Background:"] = "面板背景:",
-        ["Display Mode:"] = "顯示模式:", ["Label Style:"] = "標籤樣式:", ["Text Outline:"] = "文字描邊:", ["Font:"] = "字型:", ["Language:"] = "語言:",
+        ["Display Mode:"] = "顯示模式:", ["Tooltip Targets:"] = "提示目標:", ["Label Style:"] = "標籤樣式:", ["Text Outline:"] = "文字描邊:", ["Font:"] = "字型:", ["Language:"] = "語言:",
         ["Flat"] = "扁平", ["Sectioned"] = "分組", ["Split"] = "分離",
+        ["Mythic+"] = "傳奇+", ["Raid"] = "團隊",
         ["Full"] = "完整", ["Short"] = "簡短", ["Hidden"] = "隱藏",
         ["None"] = "無", ["Outline"] = "描邊", ["Thick Outline"] = "粗描邊",
         ["Reset to Defaults"] = "恢復預設", ["Close"] = "關閉",
@@ -1509,6 +1582,12 @@ function SAFE_NUM.SafeRatingInt(fn, ...)
     return SAFE_NUM.NormalizeRatingValue(safeCall(fn, ...))
 end
 
+function SAFE_NUM.CleanRatingInt(fn, ...)
+    local ok, value = pcall(fn, ...)
+    if not ok or not SAFE_NUM.IsCleanFiniteNumber(value) or value < 0 then return nil end
+    return value
+end
+
 -- WHY dedicated helper for UnitStat: the API returns FOUR values
 --   (stat, effectiveStat, posBuff, negBuff)
 -- where `stat` is base (level + items, no temporary buffs) and `effectiveStat`
@@ -1645,6 +1724,7 @@ local function CacheSettings()
     cached.updateInterval = GetNumberDB("updateInterval")
     cached.displayMode = GetDB("displayMode")
     cached.labelStyle = NormalizeLabelStyle(GetDB("labelStyle"))
+    cached.targetSnapshot = addon.archonTargets.NormalizeSnapshotKey(GetDB("targetSnapshot"))
     -- WHY runtime clamp: corrupt SavedVariables should not make text invisible,
     -- spam OnUpdate, or break font/scale arithmetic. Do not write back here; UI
     -- slider commits remain the only normal path that mutates SavedVariables.
@@ -2167,19 +2247,110 @@ function addon.archonTargets.FormatSignedRatingDelta(delta)
     return "-" .. tostring(math.abs(delta))
 end
 
+function addon.archonTargets.GetRatingBonusForValue(ratingCR, rating)
+    if type(GetCombatRatingBonusForCombatRatingValue) ~= "function" then return nil end
+    if not SAFE_NUM.IsCleanFiniteNumber(ratingCR) or not SAFE_NUM.IsCleanFiniteNumber(rating) or rating < 0 then return nil end
+    local okBonus, bonus = pcall(GetCombatRatingBonusForCombatRatingValue, ratingCR, rating)
+    if not okBonus then return nil end
+    if not SAFE_NUM.IsCleanFiniteNumber(bonus) then return nil end
+    if ratingCR == CR_MASTERY then
+        if type(GetMasteryEffect) ~= "function" then return nil end
+        local ok, _, coefficient = pcall(GetMasteryEffect)
+        if not ok or not SAFE_NUM.IsCleanFiniteNumber(coefficient) then return nil end
+        bonus = bonus * coefficient
+    end
+    if not SAFE_NUM.IsCleanFiniteNumber(bonus) then return nil end
+    return bonus
+end
+
+function addon.archonTargets.FormatPercentBonus(value, signed)
+    if not SAFE_NUM.IsCleanFiniteNumber(value) then return nil end
+    if math.abs(value) < 0.05 then value = 0 end
+    if signed then
+        local sign = value >= 0 and "+" or "-"
+        return string.format("%s%.1f%%", sign, math.abs(value))
+    end
+    return string.format("%.1f%%", value)
+end
+
+function addon.archonTargets.FormatRatingWithBonus(rating, bonus, signedBonus)
+    local ratingText = tostring(rating)
+    local pctText = addon.archonTargets.FormatPercentBonus(bonus, signedBonus)
+    if not pctText then return ratingText end
+    return ratingText .. " (~" .. pctText .. ")"
+end
+
+function addon.archonTargets.GetTooltipValueColor(meta)
+    if not cached.matchValueColorToStat or type(meta) ~= "table" then return nil end
+    local colorKey = meta.colorKey or meta.statKey
+    local colorHex = colorKey and cached.colorStrings[colorKey] or nil
+    if type(colorHex) == "string" and colorHex ~= "" then return colorHex end
+    return nil
+end
+
+function addon.archonTargets.ColorTooltipValue(text, colorHex)
+    if not colorHex then return text end
+    return "|cff" .. colorHex .. text .. "|r"
+end
+
+addon.archonTargets.monthAbbrs = {
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+}
+
+addon.archonTargets.monthDays = {
+    31, 28, 31, 30, 31, 30,
+    31, 31, 30, 31, 30, 31,
+}
+
+function addon.archonTargets.IsLeapYear(year)
+    return year % 4 == 0 and (year % 100 ~= 0 or year % 400 == 0)
+end
+
+function addon.archonTargets.FormatSnapshotDate(capturedAt)
+    if type(capturedAt) ~= "string" or issecretvalue(capturedAt) then return nil end
+    local year, month, day = capturedAt:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+    if not year then return capturedAt end
+    local yearNum = tonumber(year)
+    local monthNum = tonumber(month)
+    local dayNum = tonumber(day)
+    local monthName = addon.archonTargets.monthAbbrs[monthNum]
+    local maxDay = addon.archonTargets.monthDays[monthNum]
+    if monthNum == 2 and addon.archonTargets.IsLeapYear(yearNum) then maxDay = 29 end
+    if not monthName or not dayNum or dayNum < 1 or dayNum > maxDay then return capturedAt end
+    return day .. "-" .. monthName .. "-" .. year:sub(3, 4)
+end
+
 function addon.archonTargets.ShowTooltip(anchor, meta)
     if not meta then return end
-    GameTooltip:SetOwner(anchor, "ANCHOR_RIGHT")
-    GameTooltip:AddLine("StatsPro M+ Target", 1, 0.82, 0)
-    GameTooltip:AddDoubleLine("Target", tostring(meta.target), 0.7, 0.7, 0.7, 1, 1, 1)
-    GameTooltip:AddDoubleLine("Current", tostring(meta.current), 0.7, 0.7, 0.7, 1, 1, 1)
-    if meta.delta < 0 then
-        GameTooltip:AddDoubleLine("Missing", tostring(math.abs(meta.delta)), 1, 0.35, 0.35, 1, 0.35, 0.35)
-    else
-        GameTooltip:AddDoubleLine("Over", addon.archonTargets.FormatSignedRatingDelta(meta.delta), 0.35, 0.8, 1, 0.35, 0.8, 1)
+    local currentBonus = addon.archonTargets.GetRatingBonusForValue(meta.ratingCR, meta.current)
+    local targetBonus = addon.archonTargets.GetRatingBonusForValue(meta.ratingCR, meta.target)
+    local deltaBonus
+    -- WHY: subtract converted total ratings, not converted `abs(delta)`, so DR brackets
+    -- and hard caps are evaluated at the player's current/target stat positions.
+    if SAFE_NUM.IsCleanFiniteNumber(currentBonus) and SAFE_NUM.IsCleanFiniteNumber(targetBonus) then
+        deltaBonus = targetBonus - currentBonus
     end
-    if meta.capturedAt then
-        GameTooltip:AddDoubleLine("Snapshot", "M+ High Keys, " .. meta.capturedAt, 0.7, 0.7, 0.7, 0.85, 0.85, 0.85)
+    local currentDisplayBonus = SAFE_NUM.IsCleanFiniteNumber(meta.currentPct) and meta.currentPct or currentBonus
+    local targetDisplayBonus = targetBonus
+    if SAFE_NUM.IsCleanFiniteNumber(meta.currentPct) and SAFE_NUM.IsCleanFiniteNumber(deltaBonus) then
+        targetDisplayBonus = meta.currentPct + deltaBonus
+    end
+    local valueColor = addon.archonTargets.GetTooltipValueColor(meta)
+    GameTooltip:SetOwner(anchor, "ANCHOR_RIGHT")
+    GameTooltip:AddLine("StatsPro " .. (meta.snapshotTitle or addon.archonTargets.GetSnapshotTitle(nil, meta.snapshotKey)), 1, 0.82, 0)
+    GameTooltip:AddDoubleLine("Target:", addon.archonTargets.FormatRatingWithBonus(meta.target, targetDisplayBonus, false), 0.7, 0.7, 0.7, 1, 1, 1)
+    GameTooltip:AddDoubleLine("Current:", addon.archonTargets.ColorTooltipValue(addon.archonTargets.FormatRatingWithBonus(meta.current, currentDisplayBonus, false), valueColor), 0.7, 0.7, 0.7, 1, 1, 1)
+    if meta.delta < 0 then
+        GameTooltip:AddDoubleLine("Missing:", addon.archonTargets.FormatRatingWithBonus(math.abs(meta.delta), deltaBonus, true), 1, 0.35, 0.35, 1, 0.35, 0.35)
+    elseif meta.delta > 0 then
+        GameTooltip:AddDoubleLine("Over:", addon.archonTargets.FormatRatingWithBonus(addon.archonTargets.FormatSignedRatingDelta(meta.delta), deltaBonus and -deltaBonus, true), 0.35, 0.8, 1, 0.35, 0.8, 1)
+    else
+        GameTooltip:AddDoubleLine("Matched:", addon.archonTargets.FormatRatingWithBonus(0, deltaBonus, true), 0.5, 1, 0.5, 0.5, 1, 0.5)
+    end
+    local snapshotDate = addon.archonTargets.FormatSnapshotDate(meta.capturedAt)
+    if snapshotDate then
+        GameTooltip:AddDoubleLine("Snapshot:", (meta.snapshotLabel or "M+ High Keys") .. ", " .. snapshotDate, 0.7, 0.7, 0.7, 0.85, 0.85, 0.85)
     end
     GameTooltip:Show()
 end
@@ -2778,16 +2949,16 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
 
     -- Tooltip targets need the raw rating even when the rating column is hidden.
     local needTargetRating = targetRows ~= nil
-    local needRating = cached.showRating or needTargetRating
     for _, def in ipairs(OFFENSIVE_STATS) do
         if cached[def.showKey] then
             local val = SAFE_NUM.SafeDisplayPercent(def.api)
             if shouldShow(val, cached.hideZeroOffensive) then
-                local rating = needRating and SAFE_NUM.SafeRatingInt(GetCombatRating, def.ratingCR) or 0
+                local targetRating = needTargetRating and SAFE_NUM.CleanRatingInt(GetCombatRating, def.ratingCR) or nil
+                local rating = cached.showRating and (targetRating or SAFE_NUM.SafeRatingInt(GetCombatRating, def.ratingCR)) or 0
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtRatingPct(rating, val, statColor)
                 if targetRows then
-                    targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta(def.statKey, rating) or false
+                    targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta(def.statKey, targetRating, def.ratingCR, val, def.colorKey) or false
                 end
                 PushRow(labels, ratings, values,
                     FormatLabel(statColor, def.label),
@@ -2800,23 +2971,25 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
     if cached.showVersatility then
         local versFromRating = safeCall(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
         local versFlat       = safeCall(GetVersatilityBonus,  CR_VERSATILITY_DAMAGE_DONE)
-        -- WARNING: must check operands for secret state before arithmetic. Rating is
-        -- only read when visible; percent cache can still refresh independently.
+        local targetVersRating
+        -- WARNING: must check operands for secret state before arithmetic. Rating
+        -- may be read for either the visible rating column or target-hover metadata;
+        -- percent cache can still refresh independently.
         if SAFE_NUM.IsCleanFiniteNumber(versFromRating) and SAFE_NUM.IsCleanFiniteNumber(versFlat)
             and not issecretvalue(versFromRating) and not issecretvalue(versFlat) then
             cached.versTotal = versFromRating + versFlat
         end
-        if needRating then
-            local versRating = safeCall(GetCombatRating, CR_VERSATILITY_DAMAGE_DONE)
-            if SAFE_NUM.IsCleanFiniteNumber(versRating) and not issecretvalue(versRating) then
-                cached.versTotalRating = versRating
+        if cached.showRating or needTargetRating then
+            targetVersRating = SAFE_NUM.CleanRatingInt(GetCombatRating, CR_VERSATILITY_DAMAGE_DONE)
+            if targetVersRating then
+                cached.versTotalRating = targetVersRating
             end
         end
         if shouldShow(cached.versTotal, cached.hideZeroOffensive) then
             local versStr = cs.versatility
             local vRatStr, vValStr = FmtRatingPct(cached.versTotalRating, cached.versTotal, versStr)
             if targetRows then
-                targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta("versatility", cached.versTotalRating) or false
+                targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta("versatility", targetVersRating, CR_VERSATILITY_DAMAGE_DONE, cached.versTotal, "versatility") or false
             end
             PushRow(labels, ratings, values,
                 FormatLabel(versStr, "Vers"),
@@ -3852,6 +4025,23 @@ local function ResetToDefaults()
     PrintMsg("Settings reset to defaults")
 end
 
+function addon.archonTargets.GetTargetSnapshotDropdownValue()
+    return addon.archonTargets.NormalizeSnapshotKey(GetDB("targetSnapshot"))
+end
+
+function addon.archonTargets.SelectTargetSnapshotDropdownValue(value, opt, dropdown)
+    StatsProDB.targetSnapshot = addon.archonTargets.NormalizeSnapshotKey(value)
+    CacheSettings()
+    UIDropDownMenu_SetText(dropdown, L(opt.label))
+    CloseDropDownMenus()
+    UpdateStats()
+end
+-- WARNING: OpenConfigMenu is already near Lua 5.1's 60-upvalue function limit.
+-- Keep these as global bridge references instead of local upvalues inside the builder.
+_G.StatsProTargetSnapshotDropdownOptions = addon.archonTargets.snapshotOptions
+_G.StatsProGetTargetSnapshotDropdownValue = addon.archonTargets.GetTargetSnapshotDropdownValue
+_G.StatsProSelectTargetSnapshotDropdownValue = addon.archonTargets.SelectTargetSnapshotDropdownValue
+
 function addon:OpenConfigMenu()
     if configFrame then
         if configFrame:IsShown() then
@@ -4206,6 +4396,15 @@ function addon:OpenConfigMenu()
     -- Value Display covers rated-stat column visibility plus label presentation for all
     -- normal HUD rows.
     CursorSection(cd, "Value Display")
+    CreateSimpleDropdownRow(
+        layoutTab,
+        layoutDropdownRows,
+        "StatsProTargetSnapshotDropdown",
+        "Tooltip Targets:",
+        _G.StatsProTargetSnapshotDropdownOptions,
+        cd,
+        _G.StatsProGetTargetSnapshotDropdownValue,
+        _G.StatsProSelectTargetSnapshotDropdownValue)
     do
         local rowY = cd.y
         local leftRows, rightRows = {}, {}
@@ -5121,8 +5320,9 @@ function addon:PrintDebugDump()
         GetNumberDB("fontSize"), GetNumberDB("scale"), GetNumberDB("updateInterval"),
         GetNumberDB("textAlpha"), GetNumberDB("panelBackgroundAlpha")))
 
-    PrintMsg(string.format("show fmt: rating=%s pct=%s matchColor=%s",
-        tostring(cached.showRating), tostring(cached.showPercentage), tostring(cached.matchValueColorToStat)))
+    PrintMsg(string.format("show fmt: rating=%s pct=%s matchColor=%s target=%s",
+        tostring(cached.showRating), tostring(cached.showPercentage),
+        tostring(cached.matchValueColorToStat), tostring(cached.targetSnapshot)))
 
     PrintMsg(string.format("split side: character=%s itemLevel=%s off=%s tert=%s defensive=%s dur=%s repair=%s",
         tostring(cached.splitCharacter), tostring(cached.splitItemLevel),
@@ -5210,6 +5410,44 @@ end
 function SAFE_NUM.DumpNumber(value, fmt, fallback)
     if issecretvalue(value) or not SAFE_NUM.IsCleanFiniteNumber(value) then return fallback or "?" end
     return string.format(fmt, value)
+end
+
+function addon.archonTargets.CleanNumberCall(fn, ...)
+    if type(fn) ~= "function" then return nil end
+    local ok, value = pcall(fn, ...)
+    if ok and SAFE_NUM.IsCleanFiniteNumber(value) then return value end
+    return nil
+end
+
+function addon:PrintDebugRatingConversion()
+    local rows = {
+        { "crit", CR_CRIT_MELEE },
+        { "haste", CR_HASTE_MELEE },
+        { "mastery", CR_MASTERY },
+        { "vers", CR_VERSATILITY_DAMAGE_DONE },
+    }
+    for _, row in ipairs(rows) do
+        local label, ratingCR = row[1], row[2]
+        local rating = addon.archonTargets.CleanNumberCall(GetCombatRating, ratingCR)
+        local live = addon.archonTargets.CleanNumberCall(GetCombatRatingBonus, ratingCR)
+        local converted = rating and addon.archonTargets.CleanNumberCall(GetCombatRatingBonusForCombatRatingValue, ratingCR, rating) or nil
+        local delta = (live and converted) and (converted - live) or nil
+        local text = string.format("debug rating %s: rating=%s live=%s converted=%s delta=%s",
+            label,
+            SAFE_NUM.DumpNumber(rating, "%d", "?"),
+            SAFE_NUM.DumpNumber(live, "%.2f", "?"),
+            SAFE_NUM.DumpNumber(converted, "%.2f", "?"),
+            SAFE_NUM.DumpNumber(delta, "%.2f", "?"))
+        if ratingCR == CR_MASTERY then
+            local okMastery, _, coefficient = pcall(GetMasteryEffect)
+            if not okMastery or not SAFE_NUM.IsCleanFiniteNumber(coefficient) then coefficient = nil end
+            local effective = (converted and coefficient) and (converted * coefficient) or nil
+            text = text .. string.format(" effective=%s coefficient=%s",
+                SAFE_NUM.DumpNumber(effective, "%.2f", "?"),
+                SAFE_NUM.DumpNumber(coefficient, "%.2f", "?"))
+        end
+        PrintMsg(text)
+    end
 end
 
 -- WHY local pipeline rerun (BuildRenderBlocks + RouteRenderBlocks): UpdateStats's
@@ -5441,6 +5679,7 @@ if addon and addon.__statsproSmoke == true then
         cachedUpdateInterval = function() return cached.updateInterval end,
         cachedTextAlpha = function() return cached.textAlpha end,
         cachedPanelBackgroundAlpha = function() return cached.panelBackgroundAlpha end,
+        cachedTargetSnapshot = function() return cached.targetSnapshot end,
         copyDefaults = function() return CopyTable(defaults) end,
         migrateDB = MigrateDB,
         cacheSettings = CacheSettings,
@@ -5616,6 +5855,8 @@ SlashCmdList["STATSPRO"] = function(msg)
             RunLabelStyleSmokeCheck()
         elseif debugArg == "perf" then
             PrintDebugPerf()
+        elseif debugArg == "rating" then
+            addon:PrintDebugRatingConversion()
         elseif debugArg == "bucket" then
             PrintDebugBucketDump()
         else

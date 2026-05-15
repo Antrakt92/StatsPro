@@ -68,13 +68,17 @@ if ($LASTEXITCODE -ne 0) {
 
 if (Test-Path $ArchonTargetsFile) {
     Write-Host "== Archon target snapshot =="
-    $SpecCount = (Select-String -Path $ArchonTargetsFile -Pattern 'sourceUrl =').Count
+    $MPlusSpecCount = (Select-String -Path $ArchonTargetsFile -Pattern 'mythic-plus/overview/high-keys/all-dungeons/this-week').Count
+    $RaidSpecCount = (Select-String -Path $ArchonTargetsFile -Pattern 'raid/overview/mythic/all-bosses').Count
     $TargetCount = (Select-String -Path $ArchonTargetsFile -Pattern '^\s+(crit|haste|mastery|versatility) = \d+,' ).Count
-    if ($SpecCount -ne 40) {
-        throw "StatsPro_ArchonTargets.lua must contain 40 M+ spec snapshots; found $SpecCount"
+    if ($MPlusSpecCount -ne 40) {
+        throw "StatsPro_ArchonTargets.lua must contain 40 M+ spec snapshots; found $MPlusSpecCount"
     }
-    if ($TargetCount -ne 160) {
-        throw "StatsPro_ArchonTargets.lua must contain 160 secondary-stat targets; found $TargetCount"
+    if ($RaidSpecCount -ne 40) {
+        throw "StatsPro_ArchonTargets.lua must contain 40 Raid spec snapshots; found $RaidSpecCount"
+    }
+    if ($TargetCount -ne 320) {
+        throw "StatsPro_ArchonTargets.lua must contain 320 secondary-stat targets; found $TargetCount"
     }
 }
 

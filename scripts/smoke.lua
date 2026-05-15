@@ -339,6 +339,20 @@ local function makeEnv(locale, opts)
     env.UISpecialFrames = {}
     env.UIParent = makeFrame("UIParent")
     env.UIParent:SetSize(1920, 1080)
+    env.GameTooltip = makeFrame("GameTooltip")
+    env.GameTooltip.shown = false
+    env.GameTooltip.lines = {}
+    function env.GameTooltip:SetOwner(anchor, point)
+        self.owner = anchor
+        self.ownerPoint = point
+        self.lines = {}
+    end
+    function env.GameTooltip:AddLine(text)
+        self.lines[#self.lines + 1] = { left = text }
+    end
+    function env.GameTooltip:AddDoubleLine(left, right)
+        self.lines[#self.lines + 1] = { left = left, right = right }
+    end
     env.STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
     env.C_AddOns = {
         GetAddOnMetadata = function(_, field)
@@ -630,6 +644,19 @@ do
     eq("archon.meta.captured_at", meta.capturedAt, "2026-05-15")
     eq("archon.meta.missing_snapshot", archonTest.getArchonTargetSnapshot("MAGE", "fire"), nil)
     eq("archon.meta.hidden_without_root", archonEnv.StatsProArchonTargets.schemaVersion, 1)
+
+    local secretChecks = 0
+    local _, _, secretArchonTest = loadStatsPro("enUS", {
+        issecretvalue = function(value)
+            if value == -1 then
+                secretChecks = secretChecks + 1
+                return true
+            end
+            return false
+        end,
+    })
+    eq("archon.meta.secret_guard_returns_nil", secretArchonTest.buildArchonTargetMeta("mastery", -1), nil)
+    eq("archon.meta.secret_guard_before_compare", secretChecks, 1)
 end
 
 local function runMigrate(db)
@@ -699,6 +726,14 @@ do
     tooltipTest.renderMainPanelForSmoke("Mastery:", "812", "30.0%", 1, nil, nil, {
         { statKey = "mastery", target = 1043, current = 812, delta = -231, capturedAt = "2026-05-15" },
     })
+    tooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("tooltip.on_enter_shows", tooltipEnv.GameTooltip:IsShown(), true)
+    eq("tooltip.on_enter_title", tooltipEnv.GameTooltip.lines[1].left, "StatsPro M+ Target")
+    eq("tooltip.on_enter_target", tooltipEnv.GameTooltip.lines[2].right, "1043")
+    eq("tooltip.on_enter_missing", tooltipEnv.GameTooltip.lines[4].left, "Missing")
+    eq("tooltip.on_enter_missing_value", tooltipEnv.GameTooltip.lines[4].right, "231")
+    tooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnLeave")
+    eq("tooltip.on_leave_hides", tooltipEnv.GameTooltip:IsShown(), false)
     tooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnMouseUp", "RightButton")
     exists("tooltip.right_click_forwards_settings", tooltipEnv.StatsProConfigFrame)
     tooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnDragStart")

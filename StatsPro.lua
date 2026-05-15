@@ -482,12 +482,12 @@ function addon.archonTargets.GetStatTarget(statKey)
     local snapshot, root = addon.archonTargets.GetCurrentSnapshot()
     local targets = snapshot and snapshot.targets
     local target = type(targets) == "table" and targets[statKey] or nil
-    if type(target) ~= "number" or target <= 0 or issecretvalue(target) then return nil end
+    if type(target) ~= "number" or issecretvalue(target) or target <= 0 then return nil end
     return target, snapshot, root
 end
 
 function addon.archonTargets.BuildMeta(statKey, currentRating)
-    if type(currentRating) ~= "number" or currentRating < 0 or issecretvalue(currentRating) then return nil end
+    if type(currentRating) ~= "number" or issecretvalue(currentRating) or currentRating < 0 then return nil end
     local target, snapshot, root = addon.archonTargets.GetStatTarget(statKey)
     if not target then return nil end
     return {

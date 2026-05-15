@@ -7,9 +7,10 @@ the player's current rating, the current M+ High Keys target rating, and the
 missing or surplus rating. The first data source is Archon M+ pages for
 `high-keys/all-dungeons/this-week`.
 
-The addon must not fetch network data in game. A local build/update script will
-collect Archon snapshots before release, generate a Lua data file, and package
-that file with the addon.
+The addon must not fetch network data in game. A private local build/update
+script in the `WOW` coordination repository will collect Archon snapshots before
+release, generate a Lua data file, and copy that generated file into the public
+StatsPro addon repository for packaging.
 
 ## Scope
 
@@ -38,12 +39,12 @@ Excluded from the first version:
 
 The feature has three separate layers.
 
-1. `scripts/update-archon-targets.ps1`
+1. `WOW/stats-pro-meta/tools/update-archon-targets.ps1`
 
-   The collector runs on the developer machine or CI. It requests each Archon M+
-   High Keys page, extracts the embedded Next.js JSON payload, locates the stat
-   priority section, normalizes the four secondary stat ratings, and writes a
-   deterministic Lua snapshot.
+   The private collector runs on the developer machine. It requests each Archon
+   M+ High Keys page, extracts the embedded Next.js JSON payload, locates the
+   stat priority section, normalizes the four secondary stat ratings, and writes
+   a deterministic Lua snapshot into the StatsPro addon repository.
 
 2. `StatsPro_ArchonTargets.lua`
 
@@ -136,16 +137,19 @@ The collector should:
 - Write deterministic Lua output without secrets.
 
 The collector should not store API credentials, cookies, personal data, or raw
-HTML pages in the repository.
+HTML pages in either repository. The collector itself remains private in the
+`WOW` repository; the public StatsPro repository receives only transformed
+generated targets.
 
 ## Daily Update Flow
 
 The first automation should stop at a prepared commit or pull request:
 
 1. Run the collector.
-2. Run Lua syntax checks and existing StatsPro verification.
-3. Commit generated target changes when the snapshot changed.
-4. Leave release tagging/manual publishing for a separate, gated step.
+2. Write or update `StatsPro_ArchonTargets.lua` in the public StatsPro repo.
+3. Run Lua syntax checks and existing StatsPro verification.
+4. Commit generated target changes when the snapshot changed.
+5. Leave release tagging/manual publishing for a separate, gated step.
 
 StatsPro release safety still applies: no automatic `vX.Y.Z` tag push until the
 user has verified the addon in game or explicitly waived the check.
@@ -179,8 +183,9 @@ Runtime checks should cover:
 ## Implementation Decisions
 
 - The generated data file is `StatsPro_ArchonTargets.lua`.
-- The first update path is a local script that creates or updates generated
-  data and lets the user or Codex prepare a normal commit.
+- The first update path is a private local script under
+  `WOW/stats-pro-meta/tools/` that creates or updates generated data in the
+  StatsPro repo and lets the user or Codex prepare a normal StatsPro commit.
 - GitHub Actions scheduling and automatic release publishing are out of scope
   for the first implementation pass. They can be added after the parser and
   runtime tooltip have been verified in game.

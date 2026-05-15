@@ -2025,6 +2025,22 @@ function Panel:New(globalName, dbKeyPrefix)
         overlay:EnableMouse(true)
         overlay:SetFrameLevel(frame:GetFrameLevel() + 10)
         overlay:Hide()
+        overlay:RegisterForDrag("LeftButton")
+        overlay:SetScript("OnDragStart", function()
+            if InCombatLockdown() or cached.isLocked then return end
+            frame.wasDragging = true
+            frame:StartMoving()
+        end)
+        overlay:SetScript("OnDragStop", function()
+            frame:StopMovingOrSizing()
+            panel:SavePosition()
+            C_Timer.After(0.1, function() frame.wasDragging = false end)
+        end)
+        overlay:SetScript("OnMouseUp", function(_, button)
+            if button == "RightButton" and not frame.wasDragging then
+                addon:OpenConfigMenu()
+            end
+        end)
         overlay:SetScript("OnLeave", function()
             GameTooltip:Hide()
         end)
@@ -5502,6 +5518,11 @@ if addon and addon.__statsproSmoke == true then
                 secondShown = mainPanel.tooltipOverlays[2] and mainPanel.tooltipOverlays[2]:IsShown() or false,
                 lastTargetRows = mainPanel.lastTargetRows,
             }
+        end,
+        fireMainPanelTooltipOverlayForSmoke = function(index, scriptName, ...)
+            local overlay = mainPanel.tooltipOverlays and mainPanel.tooltipOverlays[index]
+            local script = overlay and overlay.scripts and overlay.scripts[scriptName]
+            if script then script(overlay, ...) end
         end,
         setPanelAppliedStyleForSmoke = function(font, size, outlineStyle)
             mainPanel.appliedFont = font

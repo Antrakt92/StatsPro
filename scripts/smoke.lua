@@ -695,6 +695,22 @@ do
 end
 
 do
+    local tooltipEnv, _, tooltipTest = loadStatsPro("enUS")
+    tooltipTest.renderMainPanelForSmoke("Mastery:", "812", "30.0%", 1, nil, nil, {
+        { statKey = "mastery", target = 1043, current = 812, delta = -231, capturedAt = "2026-05-15" },
+    })
+    tooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnMouseUp", "RightButton")
+    exists("tooltip.right_click_forwards_settings", tooltipEnv.StatsProConfigFrame)
+    tooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnDragStart")
+    eq("tooltip.drag_forwards_parent_flag", tooltipEnv.StatsProFrame.wasDragging, true)
+    tooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnDragStop")
+    local okFlush, flushed = pcall(tooltipEnv.__flushTimers, 0.1)
+    check("tooltip.drag_guard_timer", okFlush, flushed)
+    eq("tooltip.drag_guard_timer.count", flushed, 1)
+    eq("tooltip.drag_guard_clears", tooltipEnv.StatsProFrame.wasDragging, false)
+end
+
+do
     local meta = { statKey = "mastery", target = 1043, current = 812, delta = -231 }
     local main = test.routeRenderBlocks({
         {

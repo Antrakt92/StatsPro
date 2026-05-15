@@ -58,6 +58,16 @@ local function printContains(env, needle)
     return false
 end
 
+local STATSPRO_PRINT_PREFIX = "|cff00ff7f[StatsPro]|r "
+
+local function lastPrint(env)
+    return env.__prints[#env.__prints]
+end
+
+local function clearPrints(env)
+    env.__prints = {}
+end
+
 local function isFiniteNumber(value)
     return type(value) == "number" and value == value and value > -math.huge and value < math.huge
 end
@@ -969,6 +979,49 @@ do
 end
 
 do
+    local localizedTooltipEnv, _, localizedTooltipTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProDB = {
+            forceLocale = "ruRU",
+        },
+        getCombatRatingBonusForCombatRatingValue = function(_, value)
+            return value / 70
+        end,
+        statsProArchonTargets = {
+            schemaVersion = 2,
+            source = "archon",
+            snapshots = {
+                mythicPlus = {
+                    label = "M+ High Keys",
+                    title = "M+ Target",
+                    capturedAt = "2026-05-15",
+                    specs = {
+                        MAGE = {
+                            frost = {
+                                targets = { crit = 1043 },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    })
+    local okLocalizedTooltip, errLocalizedTooltip = pcall(localizedTooltipEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("tooltip.localized_ruRU.fire", okLocalizedTooltip, errLocalizedTooltip)
+    local localizedMeta = localizedTooltipTest.buildArchonTargetMeta("crit", 812, localizedTooltipEnv.CR_CRIT_MELEE, 30.0)
+    localizedTooltipTest.renderMainPanelForSmoke("Крит:", "812", "30.0%", 1, nil, nil, { localizedMeta })
+    localizedTooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("tooltip.localized_ruRU_title", localizedTooltipEnv.GameTooltip.lines[1].left, "StatsPro Цель M+")
+    eq("tooltip.localized_ruRU_target_label", localizedTooltipEnv.GameTooltip.lines[2].left, "Цель:")
+    eq("tooltip.localized_ruRU_current_label", localizedTooltipEnv.GameTooltip.lines[3].left, "Сейчас:")
+    eq("tooltip.localized_ruRU_missing_label", localizedTooltipEnv.GameTooltip.lines[4].left, "Не хватает:")
+    eq("tooltip.localized_ruRU_snapshot_label", localizedTooltipEnv.GameTooltip.lines[5].left, "Снимок:")
+    eq("tooltip.localized_ruRU_snapshot_value", localizedTooltipEnv.GameTooltip.lines[5].right, "M+ высокие ключи, 15-май-26")
+end
+
+do
     local masteryEnv, _, masteryTest = loadStatsPro("enUS", {
         getCombatRatingBonusForCombatRatingValue = function(_, value)
             return value / 100
@@ -1536,19 +1589,29 @@ do
     fireEvent("slash.pew", slashEnv, "PLAYER_ENTERING_WORLD")
     slash("slash.default_opens_config", slashEnv, "")
     exists("slash.default_opens_config.frame", slashEnv.StatsProConfigFrame)
+    clearPrints(slashEnv)
     slash("slash.hide", slashEnv, "hide")
     eq("slash.hide.visible", slashEnv.StatsProDB.isVisible, false)
     eq("slash.hide.checkbox_synced", slashEnv.StatsProVisibleCheck:GetChecked(), false)
+    eq("slash.hide.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Stats panel hidden")
+    clearPrints(slashEnv)
     slash("slash.show", slashEnv, "show")
     eq("slash.show.visible", slashEnv.StatsProDB.isVisible, true)
+    eq("slash.show.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Stats panel shown")
+    clearPrints(slashEnv)
     slash("slash.toggle", slashEnv, "toggle")
     eq("slash.toggle.visible", slashEnv.StatsProDB.isVisible, false)
+    eq("slash.toggle.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Stats panel hidden")
+    clearPrints(slashEnv)
+    slash("slash.help", slashEnv, "help")
+    eq("slash.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug")
     slashEnv.StatsProDB.fontBeforeAutoSwitch = "Fonts\\ARIALN.TTF"
     slashEnv.StatsProDB.useLocalizedLabels = false
     slashEnv.StatsProDB.panelBackgroundAlpha = 55
     slashEnv.StatsProDB.textOutlineStyle = "thick"
     slashEnv.StatsProDB.targetSnapshot = "raid"
     slashEnv.StatsProDB.colors.crit = { r = 0.4, g = 0.5, b = 0.6 }
+    clearPrints(slashEnv)
     slash("slash.reset_restores_defaults", slashEnv, "reset")
     eq("slash.reset_restores_defaults.visible", slashEnv.StatsProDB.isVisible, true)
     eq("slash.reset_restores_defaults.panel_background_alpha", slashEnv.StatsProDB.panelBackgroundAlpha, 0)
@@ -1556,7 +1619,54 @@ do
     eq("slash.reset_restores_defaults.target_snapshot", slashEnv.StatsProDB.targetSnapshot, "mythicPlus")
     eq("slash.reset_restores_defaults.transient_font", slashEnv.StatsProDB.fontBeforeAutoSwitch, nil)
     eq("slash.reset_restores_defaults.legacy_locale", slashEnv.StatsProDB.useLocalizedLabels, nil)
+    eq("slash.reset_restores_defaults.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Settings reset to defaults")
     assertColor("slash.reset_restores_defaults.crit", slashEnv.StatsProDB.colors.crit, 1, 0, 0)
+end
+
+do
+    local slashEnv = loadStatsPro("enUS", {
+        statsProDB = {
+            forceLocale = "ruRU",
+        },
+    })
+    fireEvent("slash.localized_ruRU.pew", slashEnv, "PLAYER_ENTERING_WORLD")
+    clearPrints(slashEnv)
+    slash("slash.localized_ruRU.hide", slashEnv, "hide")
+    eq("slash.localized_ruRU.hide.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Панель статов скрыта")
+    clearPrints(slashEnv)
+    slash("slash.localized_ruRU.show", slashEnv, "show")
+    eq("slash.localized_ruRU.show.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Панель статов показана")
+    clearPrints(slashEnv)
+    slash("slash.localized_ruRU.toggle", slashEnv, "toggle")
+    eq("slash.localized_ruRU.toggle.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Панель статов скрыта")
+    clearPrints(slashEnv)
+    slash("slash.localized_ruRU.help", slashEnv, "help")
+    eq("slash.localized_ruRU.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Команды: /ss (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug")
+    clearPrints(slashEnv)
+    slash("slash.localized_ruRU.debug", slashEnv, "debug")
+    eq("slash.localized_ruRU.debug_english", printContains(slashEnv, "debug v"), true)
+    clearPrints(slashEnv)
+    slash("slash.localized_ruRU.debug_perf", slashEnv, "debug perf")
+    eq("slash.localized_ruRU.debug_perf_english", printContains(slashEnv, "debug perf:"), true)
+    clearPrints(slashEnv)
+    slash("slash.localized_ruRU.debug_rating", slashEnv, "debug rating")
+    eq("slash.localized_ruRU.debug_rating_english", printContains(slashEnv, "debug rating"), true)
+    clearPrints(slashEnv)
+    slash("slash.localized_ruRU.debug_bucket", slashEnv, "debug bucket")
+    eq("slash.localized_ruRU.debug_bucket_english", printContains(slashEnv, "bucket:"), true)
+    clearPrints(slashEnv)
+    slash("slash.localized_ruRU.debug_routing", slashEnv, "debug routing")
+    eq("slash.localized_ruRU.debug_routing_english", printContains(slashEnv, "debug routing:"), true)
+    clearPrints(slashEnv)
+    slash("slash.localized_ruRU.debug_labelstyle", slashEnv, "debug labelstyle")
+    eq("slash.localized_ruRU.debug_labelstyle_english", printContains(slashEnv, "debug labelstyle:"), true)
+    slashEnv.StatsProDB.forceLocale = "ruRU"
+    slashEnv.StatsProDB.fontBeforeAutoSwitch = "Fonts\\ARIALN.TTF"
+    slashEnv.StatsProDB.useLocalizedLabels = false
+    clearPrints(slashEnv)
+    slash("slash.localized_ruRU.reset", slashEnv, "reset")
+    eq("slash.localized_ruRU.reset.force_locale", slashEnv.StatsProDB.forceLocale, "auto")
+    eq("slash.localized_ruRU.reset.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Настройки сброшены по умолчанию")
 end
 
 do
@@ -2082,6 +2192,7 @@ do
         check("config.language_hover_restore.ru_swaps_font",
             afterRuPreview.mainLabelFont ~= defaultFont,
             "ruRU hover did not exercise fallback-font preview")
+        eq("config.language_hover_restore.ru_snapshot_month_preview", test.formatSnapshotDate("2026-05-15"), "15-май-26")
 
         test.setPanelAppliedStyleForSmoke(defaultFont, 14)
         ok, err = pcall(enEnter, env.DropDownList1Button2)
@@ -2089,6 +2200,7 @@ do
         local afterEnPreview = test.panelFontState()
         eq("config.language_hover_restore.forces_main_font", afterEnPreview.mainLabelFont, defaultFont)
         eq("config.language_hover_restore.forces_side_font", afterEnPreview.sideLabelFont, defaultFont)
+        eq("config.language_hover_restore.en_snapshot_month_preview", test.formatSnapshotDate("2026-05-15"), "15-May-26")
 
         env.DropDownList1:Hide()
         env.UIDROPDOWNMENU_OPEN_MENU = nil

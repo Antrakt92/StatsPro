@@ -652,6 +652,7 @@ cached = {
     -- CacheSettings overwrites with real LABELS_BY_LOCALE entry at PEW.
     -- WARNING: never mutate; treat read-only.
     activeLabels = {},
+    activeLabelsLocale = "enUS",
     -- WARNING: versatility / armor reads taint in combat — cache OOC, reuse cached value during combat.
     versTotal = 0,
     versTotalRating = 0,
@@ -769,6 +770,13 @@ local LABELS_BY_LOCALE = {
         ["Mythic+"] = "Mythic+", ["Raid"] = "Raid",
         ["Full"] = "Full", ["Short"] = "Short", ["Hidden"] = "Hidden",
         ["None"] = "None", ["Outline"] = "Outline", ["Thick Outline"] = "Thick Outline",
+        ["M+ Target"] = "M+ Target", ["Raid Target"] = "Raid Target",
+        ["M+ High Keys"] = "M+ High Keys", ["Raid Mythic All Bosses"] = "Raid Mythic All Bosses",
+        ["Target:"] = "Target:", ["Current:"] = "Current:", ["Missing:"] = "Missing:",
+        ["Over:"] = "Over:", ["Matched:"] = "Matched:", ["Snapshot:"] = "Snapshot:",
+        ["Stats panel shown"] = "Stats panel shown", ["Stats panel hidden"] = "Stats panel hidden",
+        ["Settings reset to defaults"] = "Settings reset to defaults",
+        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
         -- Buttons + title:
         ["Reset to Defaults"] = "Reset to Defaults", ["Close"] = "Close",
         ["Open Settings"] = "Open Settings", ["Settings"] = "Settings",
@@ -836,6 +844,13 @@ local LABELS_BY_LOCALE = {
         ["Mythic+"] = "Мифик+", ["Raid"] = "Рейд",
         ["Full"] = "Полный", ["Short"] = "Короткий", ["Hidden"] = "Скрытый",
         ["None"] = "Нет", ["Outline"] = "Контур", ["Thick Outline"] = "Толстый контур",
+        ["M+ Target"] = "Цель M+", ["Raid Target"] = "Цель рейда",
+        ["M+ High Keys"] = "M+ высокие ключи", ["Raid Mythic All Bosses"] = "Эпох. рейд, все боссы",
+        ["Target:"] = "Цель:", ["Current:"] = "Сейчас:", ["Missing:"] = "Не хватает:",
+        ["Over:"] = "Сверх:", ["Matched:"] = "Совпало:", ["Snapshot:"] = "Снимок:",
+        ["Stats panel shown"] = "Панель статов показана", ["Stats panel hidden"] = "Панель статов скрыта",
+        ["Settings reset to defaults"] = "Настройки сброшены по умолчанию",
+        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "Команды: /ss (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
         -- Buttons + title:
         ["Reset to Defaults"] = "Сбросить настройки", ["Close"] = "Закрыть",
         ["Open Settings"] = "Открыть настройки", ["Settings"] = "Настройки",
@@ -898,6 +913,13 @@ local LABELS_BY_LOCALE = {
         ["Mythic+"] = "Mythic+", ["Raid"] = "Raid",
         ["Full"] = "Voll", ["Short"] = "Kurz", ["Hidden"] = "Versteckt",
         ["None"] = "Keine", ["Outline"] = "Kontur", ["Thick Outline"] = "Dicke Kontur",
+        ["M+ Target"] = "M+ Ziel", ["Raid Target"] = "Raid-Ziel",
+        ["M+ High Keys"] = "M+ hohe Schlüssel", ["Raid Mythic All Bosses"] = "Raid Mythisch alle Bosse",
+        ["Target:"] = "Ziel:", ["Current:"] = "Aktuell:", ["Missing:"] = "Fehlt:",
+        ["Over:"] = "Drüber:", ["Matched:"] = "Erreicht:", ["Snapshot:"] = "Datenstand:",
+        ["Stats panel shown"] = "Statpanel angezeigt", ["Stats panel hidden"] = "Statpanel ausgeblendet",
+        ["Settings reset to defaults"] = "Einstellungen auf Standard zurückgesetzt",
+        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "Befehle: /ss (Einstellungen), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
         ["Reset to Defaults"] = "Auf Standard", ["Close"] = "Schließen",
         ["Open Settings"] = "Einstellungen öffnen", ["Settings"] = "Einstellungen",
         ["Auto (current: %s)"] = "Auto (aktuell: %s)",
@@ -955,6 +977,13 @@ local LABELS_BY_LOCALE = {
         ["Mythic+"] = "Mythique+", ["Raid"] = "Raid",
         ["Full"] = "Complet", ["Short"] = "Court", ["Hidden"] = "Masqué",
         ["None"] = "Aucun", ["Outline"] = "Contour", ["Thick Outline"] = "Contour épais",
+        ["M+ Target"] = "Cible M+", ["Raid Target"] = "Cible raid",
+        ["M+ High Keys"] = "M+ hautes clés", ["Raid Mythic All Bosses"] = "Raid mythique tous les boss",
+        ["Target:"] = "Cible :", ["Current:"] = "Actuel :", ["Missing:"] = "Manquant :",
+        ["Over:"] = "Excès :", ["Matched:"] = "Atteint :", ["Snapshot:"] = "Instantané :",
+        ["Stats panel shown"] = "Panneau de stats affiché", ["Stats panel hidden"] = "Panneau de stats masqué",
+        ["Settings reset to defaults"] = "Paramètres réinitialisés",
+        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "Commandes : /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
         ["Reset to Defaults"] = "Par défaut", ["Close"] = "Fermer",
         ["Open Settings"] = "Ouvrir les paramètres", ["Settings"] = "Paramètres",
         ["Auto (current: %s)"] = "Auto (actuel : %s)",
@@ -1013,6 +1042,13 @@ local LABELS_BY_LOCALE = {
         ["Mythic+"] = "Mítico+", ["Raid"] = "Banda",
         ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Oculto",
         ["None"] = "Ninguno", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno grueso",
+        ["M+ Target"] = "Objetivo M+", ["Raid Target"] = "Objetivo banda",
+        ["M+ High Keys"] = "M+ llaves altas", ["Raid Mythic All Bosses"] = "Banda mítica todos los jefes",
+        ["Target:"] = "Objetivo:", ["Current:"] = "Actual:", ["Missing:"] = "Falta:",
+        ["Over:"] = "Exceso:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Captura:",
+        ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
+        ["Settings reset to defaults"] = "Ajustes restablecidos",
+        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "Comandos: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
         ["Open Settings"] = "Abrir ajustes", ["Settings"] = "Ajustes",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
@@ -1069,6 +1105,13 @@ local LABELS_BY_LOCALE = {
         ["Mythic+"] = "Mítico+", ["Raid"] = "Banda",
         ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Oculto",
         ["None"] = "Ninguno", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno grueso",
+        ["M+ Target"] = "Objetivo M+", ["Raid Target"] = "Objetivo banda",
+        ["M+ High Keys"] = "M+ llaves altas", ["Raid Mythic All Bosses"] = "Banda mítica todos los jefes",
+        ["Target:"] = "Objetivo:", ["Current:"] = "Actual:", ["Missing:"] = "Falta:",
+        ["Over:"] = "Exceso:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Captura:",
+        ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
+        ["Settings reset to defaults"] = "Configuración restablecida",
+        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "Comandos: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
         ["Open Settings"] = "Abrir configuración", ["Settings"] = "Configuración",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
@@ -1126,6 +1169,13 @@ local LABELS_BY_LOCALE = {
         ["Mythic+"] = "Mitica+", ["Raid"] = "Incursione",
         ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Nascosto",
         ["None"] = "Nessuno", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno spesso",
+        ["M+ Target"] = "Bersaglio M+", ["Raid Target"] = "Bersaglio incursione",
+        ["M+ High Keys"] = "M+ chiavi alte", ["Raid Mythic All Bosses"] = "Incursione Mitica tutti i boss",
+        ["Target:"] = "Bersaglio:", ["Current:"] = "Attuale:", ["Missing:"] = "Manca:",
+        ["Over:"] = "Oltre:", ["Matched:"] = "Raggiunto:", ["Snapshot:"] = "Istantanea:",
+        ["Stats panel shown"] = "Pannello statistiche mostrato", ["Stats panel hidden"] = "Pannello statistiche nascosto",
+        ["Settings reset to defaults"] = "Impostazioni ripristinate",
+        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "Comandi: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
         ["Reset to Defaults"] = "Predefiniti", ["Close"] = "Chiudi",
         ["Open Settings"] = "Apri impostazioni", ["Settings"] = "Impostazioni",
         ["Auto (current: %s)"] = "Auto (attuale: %s)",
@@ -1182,6 +1232,13 @@ local LABELS_BY_LOCALE = {
         ["Mythic+"] = "Mítico+", ["Raid"] = "Raide",
         ["Full"] = "Completo", ["Short"] = "Curto", ["Hidden"] = "Oculto",
         ["None"] = "Nenhum", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno grosso",
+        ["M+ Target"] = "Alvo M+", ["Raid Target"] = "Alvo de raide",
+        ["M+ High Keys"] = "M+ chaves altas", ["Raid Mythic All Bosses"] = "Raide Mítico todos os chefes",
+        ["Target:"] = "Alvo:", ["Current:"] = "Atual:", ["Missing:"] = "Falta:",
+        ["Over:"] = "Acima:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Registro:",
+        ["Stats panel shown"] = "Painel de atributos mostrado", ["Stats panel hidden"] = "Painel de atributos oculto",
+        ["Settings reset to defaults"] = "Configurações restauradas",
+        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "Comandos: /ss (configurações), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
         ["Reset to Defaults"] = "Restaurar", ["Close"] = "Fechar",
         ["Open Settings"] = "Abrir configurações", ["Settings"] = "Configurações",
         ["Auto (current: %s)"] = "Auto (atual: %s)",
@@ -1245,6 +1302,13 @@ local LABELS_BY_LOCALE = {
         ["Mythic+"] = "쐐기+", ["Raid"] = "공격대",
         ["Full"] = "전체", ["Short"] = "짧게", ["Hidden"] = "숨김",
         ["None"] = "없음", ["Outline"] = "외곽선", ["Thick Outline"] = "굵은 외곽선",
+        ["M+ Target"] = "쐐기+ 목표", ["Raid Target"] = "공격대 목표",
+        ["M+ High Keys"] = "쐐기+ 고단", ["Raid Mythic All Bosses"] = "신화 공격대 모든 우두머리",
+        ["Target:"] = "목표:", ["Current:"] = "현재:", ["Missing:"] = "부족:",
+        ["Over:"] = "초과:", ["Matched:"] = "일치:", ["Snapshot:"] = "스냅샷:",
+        ["Stats panel shown"] = "능력치 패널 표시됨", ["Stats panel hidden"] = "능력치 패널 숨김",
+        ["Settings reset to defaults"] = "설정이 기본값으로 초기화되었습니다",
+        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "명령어: /ss (설정), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
         ["Reset to Defaults"] = "기본값", ["Close"] = "닫기",
         ["Open Settings"] = "설정 열기", ["Settings"] = "설정",
         ["Auto (current: %s)"] = "자동 (현재: %s)",
@@ -1301,6 +1365,13 @@ local LABELS_BY_LOCALE = {
         ["Mythic+"] = "史诗+", ["Raid"] = "团队",
         ["Full"] = "完整", ["Short"] = "简短", ["Hidden"] = "隐藏",
         ["None"] = "无", ["Outline"] = "描边", ["Thick Outline"] = "粗描边",
+        ["M+ Target"] = "史诗+目标", ["Raid Target"] = "团队目标",
+        ["M+ High Keys"] = "史诗+高层", ["Raid Mythic All Bosses"] = "史诗团队全部首领",
+        ["Target:"] = "目标:", ["Current:"] = "当前:", ["Missing:"] = "缺少:",
+        ["Over:"] = "超出:", ["Matched:"] = "已达成:", ["Snapshot:"] = "快照:",
+        ["Stats panel shown"] = "属性面板已显示", ["Stats panel hidden"] = "属性面板已隐藏",
+        ["Settings reset to defaults"] = "设置已恢复默认",
+        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "命令: /ss (设置), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
         ["Reset to Defaults"] = "恢复默认", ["Close"] = "关闭",
         ["Open Settings"] = "打开设置", ["Settings"] = "设置",
         ["Auto (current: %s)"] = "自动（当前: %s）",
@@ -1357,6 +1428,13 @@ local LABELS_BY_LOCALE = {
         ["Mythic+"] = "傳奇+", ["Raid"] = "團隊",
         ["Full"] = "完整", ["Short"] = "簡短", ["Hidden"] = "隱藏",
         ["None"] = "無", ["Outline"] = "描邊", ["Thick Outline"] = "粗描邊",
+        ["M+ Target"] = "傳奇+目標", ["Raid Target"] = "團隊目標",
+        ["M+ High Keys"] = "傳奇+高層", ["Raid Mythic All Bosses"] = "傳奇團隊全部首領",
+        ["Target:"] = "目標:", ["Current:"] = "目前:", ["Missing:"] = "缺少:",
+        ["Over:"] = "超出:", ["Matched:"] = "已達成:", ["Snapshot:"] = "快照:",
+        ["Stats panel shown"] = "屬性面板已顯示", ["Stats panel hidden"] = "屬性面板已隱藏",
+        ["Settings reset to defaults"] = "設定已恢復預設",
+        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "指令: /ss (設定), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
         ["Reset to Defaults"] = "恢復預設", ["Close"] = "關閉",
         ["Open Settings"] = "開啟設定", ["Settings"] = "設定",
         ["Auto (current: %s)"] = "自動（目前: %s）",
@@ -1736,7 +1814,9 @@ local function CacheSettings()
     -- WHY reference, not copy: LABELS_BY_LOCALE entries are never mutated; reference
     -- assignment is O(1) vs O(n) deep copy. WARNING: never mutate cached.activeLabels —
     -- it is a REFERENCE to the LABELS_BY_LOCALE entry.
-    cached.activeLabels = LABELS_BY_LOCALE[ResolveActiveLocale()] or LABELS_BY_LOCALE.enUS
+    local activeLocale = ResolveActiveLocale()
+    cached.activeLabels = LABELS_BY_LOCALE[activeLocale] or LABELS_BY_LOCALE.enUS
+    cached.activeLabelsLocale = LABELS_BY_LOCALE[activeLocale] and activeLocale or "enUS"
 
     -- Color → hex string lookup. Iterate defaults.colors (single source of truth) to
     -- guarantee non-nil colorStrings for every key — eliminates the need for `or "ffffff"`
@@ -2293,15 +2373,44 @@ function addon.archonTargets.ColorTooltipValue(text, colorHex)
     return "|cff" .. colorHex .. text .. "|r"
 end
 
-addon.archonTargets.monthAbbrs = {
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+addon.archonTargets.monthAbbrsByLocale = {
+    enUS = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" },
+    ruRU = { "янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек" },
+    deDE = { "Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez" },
+    frFR = { "janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc" },
+    esES = { "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic" },
+    esMX = { "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sept", "oct", "nov", "dic" },
+    itIT = { "gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic" },
+    ptBR = { "jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez" },
+    koKR = { "1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월" },
+    zhCN = { "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月" },
+    zhTW = { "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月" },
 }
 
 addon.archonTargets.monthDays = {
     31, 28, 31, 30, 31, 30,
     31, 31, 30, 31, 30, 31,
 }
+
+function addon.archonTargets.GetMonthAbbr(monthNum)
+    local allMonthAbbrs = addon.archonTargets.monthAbbrsByLocale
+    local monthAbbrs = allMonthAbbrs[cached.activeLabelsLocale] or allMonthAbbrs.enUS
+    return monthAbbrs[monthNum]
+end
+
+function addon.archonTargets.GetLocalizedSnapshotLabel(snapshotKey)
+    if addon.archonTargets.NormalizeSnapshotKey(snapshotKey) == "raid" then
+        return L("Raid Mythic All Bosses")
+    end
+    return L("M+ High Keys")
+end
+
+function addon.archonTargets.GetLocalizedSnapshotTitle(snapshotKey)
+    if addon.archonTargets.NormalizeSnapshotKey(snapshotKey) == "raid" then
+        return L("Raid Target")
+    end
+    return L("M+ Target")
+end
 
 function addon.archonTargets.IsLeapYear(year)
     return year % 4 == 0 and (year % 100 ~= 0 or year % 400 == 0)
@@ -2314,7 +2423,7 @@ function addon.archonTargets.FormatSnapshotDate(capturedAt)
     local yearNum = tonumber(year)
     local monthNum = tonumber(month)
     local dayNum = tonumber(day)
-    local monthName = addon.archonTargets.monthAbbrs[monthNum]
+    local monthName = addon.archonTargets.GetMonthAbbr(monthNum)
     local maxDay = addon.archonTargets.monthDays[monthNum]
     if monthNum == 2 and addon.archonTargets.IsLeapYear(yearNum) then maxDay = 29 end
     if not monthName or not dayNum or dayNum < 1 or dayNum > maxDay then return capturedAt end
@@ -2338,19 +2447,19 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     end
     local valueColor = addon.archonTargets.GetTooltipValueColor(meta)
     GameTooltip:SetOwner(anchor, "ANCHOR_RIGHT")
-    GameTooltip:AddLine("StatsPro " .. (meta.snapshotTitle or addon.archonTargets.GetSnapshotTitle(nil, meta.snapshotKey)), 1, 0.82, 0)
-    GameTooltip:AddDoubleLine("Target:", addon.archonTargets.FormatRatingWithBonus(meta.target, targetDisplayBonus, false), 0.7, 0.7, 0.7, 1, 1, 1)
-    GameTooltip:AddDoubleLine("Current:", addon.archonTargets.ColorTooltipValue(addon.archonTargets.FormatRatingWithBonus(meta.current, currentDisplayBonus, false), valueColor), 0.7, 0.7, 0.7, 1, 1, 1)
+    GameTooltip:AddLine("StatsPro " .. addon.archonTargets.GetLocalizedSnapshotTitle(meta.snapshotKey), 1, 0.82, 0)
+    GameTooltip:AddDoubleLine(L("Target:"), addon.archonTargets.FormatRatingWithBonus(meta.target, targetDisplayBonus, false), 0.7, 0.7, 0.7, 1, 1, 1)
+    GameTooltip:AddDoubleLine(L("Current:"), addon.archonTargets.ColorTooltipValue(addon.archonTargets.FormatRatingWithBonus(meta.current, currentDisplayBonus, false), valueColor), 0.7, 0.7, 0.7, 1, 1, 1)
     if meta.delta < 0 then
-        GameTooltip:AddDoubleLine("Missing:", addon.archonTargets.FormatRatingWithBonus(math.abs(meta.delta), deltaBonus, true), 1, 0.35, 0.35, 1, 0.35, 0.35)
+        GameTooltip:AddDoubleLine(L("Missing:"), addon.archonTargets.FormatRatingWithBonus(math.abs(meta.delta), deltaBonus, true), 1, 0.35, 0.35, 1, 0.35, 0.35)
     elseif meta.delta > 0 then
-        GameTooltip:AddDoubleLine("Over:", addon.archonTargets.FormatRatingWithBonus(addon.archonTargets.FormatSignedRatingDelta(meta.delta), deltaBonus and -deltaBonus, true), 0.35, 0.8, 1, 0.35, 0.8, 1)
+        GameTooltip:AddDoubleLine(L("Over:"), addon.archonTargets.FormatRatingWithBonus(addon.archonTargets.FormatSignedRatingDelta(meta.delta), deltaBonus and -deltaBonus, true), 0.35, 0.8, 1, 0.35, 0.8, 1)
     else
-        GameTooltip:AddDoubleLine("Matched:", addon.archonTargets.FormatRatingWithBonus(0, deltaBonus, true), 0.5, 1, 0.5, 0.5, 1, 0.5)
+        GameTooltip:AddDoubleLine(L("Matched:"), addon.archonTargets.FormatRatingWithBonus(0, deltaBonus, true), 0.5, 1, 0.5, 0.5, 1, 0.5)
     end
     local snapshotDate = addon.archonTargets.FormatSnapshotDate(meta.capturedAt)
     if snapshotDate then
-        GameTooltip:AddDoubleLine("Snapshot:", (meta.snapshotLabel or "M+ High Keys") .. ", " .. snapshotDate, 0.7, 0.7, 0.7, 0.85, 0.85, 0.85)
+        GameTooltip:AddDoubleLine(L("Snapshot:"), addon.archonTargets.GetLocalizedSnapshotLabel(meta.snapshotKey) .. ", " .. snapshotDate, 0.7, 0.7, 0.7, 0.85, 0.85, 0.85)
     end
     GameTooltip:Show()
 end
@@ -3964,6 +4073,10 @@ end
 -- file-scope or global; configRefreshers / RefreshConfigLocalization no-op safely
 -- when settings UI has never been opened (empty arrays at file scope).
 local function ResetToDefaults()
+    -- Preserve the user's current output language for the confirmation, because
+    -- reset itself restores forceLocale to "auto" before the final chat message.
+    local resetMessage = L("Settings reset to defaults")
+
     -- Step 1: close any open modal BEFORE touching DB.
     -- WHY: StatsPro's color picker close path explicitly restores its snapshot
     -- before hiding the Blizzard singleton; ColorPickerFrame:Hide() alone does
@@ -4022,7 +4135,7 @@ local function ResetToDefaults()
     -- localizedConfigLabels and alignmentGroups are empty (slash called pre-config-open).
     RefreshConfigLocalization()
 
-    PrintMsg("Settings reset to defaults")
+    PrintMsg(resetMessage)
 end
 
 function addon.archonTargets.GetTargetSnapshotDropdownValue()
@@ -4949,6 +5062,7 @@ function addon:OpenConfigMenu()
             if locale == langPreviewLocale then return end
             langPreviewLocale = locale
             cached.activeLabels = LABELS_BY_LOCALE[locale] or LABELS_BY_LOCALE.enUS
+            cached.activeLabelsLocale = LABELS_BY_LOCALE[locale] and locale or "enUS"
 
             -- Visual font swap if the committed font lacks the previewed locale's glyphs.
             -- WHY GetFontDB() (committed) and not the currently-rendered preview font:
@@ -4986,6 +5100,7 @@ function addon:OpenConfigMenu()
             if not langPreviewActive then return end
             local active = ResolveActiveLocale()
             cached.activeLabels = LABELS_BY_LOCALE[active] or LABELS_BY_LOCALE.enUS
+            cached.activeLabelsLocale = LABELS_BY_LOCALE[active] and active or "enUS"
             if langPreviewSwappedFnt then
                 ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"), true)
                 langPreviewSwappedFnt = false
@@ -5704,6 +5819,7 @@ if addon and addon.__statsproSmoke == true then
         rgbToHex = RGBToHex,
         getArchonTargetSnapshot = addon.archonTargets.GetSnapshot,
         buildArchonTargetMeta = addon.archonTargets.BuildMeta,
+        formatSnapshotDate = addon.archonTargets.FormatSnapshotDate,
         buildRenderBlocks = BuildRenderBlocks,
         routeRenderBlocks = RouteRenderBlocks,
         bucketHasContent = BucketHasContent,
@@ -5837,14 +5953,14 @@ SlashCmdList["STATSPRO"] = function(msg)
     rest = rest or ""
     if arg == "show" then
         SetVisible(true)
-        PrintMsg("Stats panel shown")
+        PrintMsg(L("Stats panel shown"))
     elseif arg == "hide" then
         SetVisible(false)
-        PrintMsg("Stats panel hidden")
+        PrintMsg(L("Stats panel hidden"))
     elseif arg == "toggle" then
         local newState = not GetBoolDB("isVisible")
         SetVisible(newState)
-        PrintMsg(newState and "Stats panel shown" or "Stats panel hidden")
+        PrintMsg(L(newState and "Stats panel shown" or "Stats panel hidden"))
     elseif arg == "reset" then
         ResetToDefaults()
     elseif arg == "debug" then
@@ -5863,7 +5979,7 @@ SlashCmdList["STATSPRO"] = function(msg)
             addon:PrintDebugDump()
         end
     elseif arg == "help" or arg == "?" then
-        PrintMsg("Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug")
+        PrintMsg(L("Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"))
     else
         addon:OpenConfigMenu()
     end

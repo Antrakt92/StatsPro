@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.3 - 16-May-2026 — Runtime and release hardening
+
+### Fixed
+
+- **Versatility no longer appears as a misleading `0.0%` during cold-start unreadable stat states** — if the first Versatility read after login or combat is missing or secret-tagged, StatsPro now waits for a clean sample instead of rendering an invented zero.
+
+### Improved
+
+- **Release preflight is stricter before marketplace packaging** — checks now enforce the expected SemVer bump from commit history, guard release metadata edge cases more defensively on Windows, and require fresher Archon target snapshots for tag releases.
+
 ## 1.9.2 - 16-May-2026 — Archon target refresh
 
 ### Updated

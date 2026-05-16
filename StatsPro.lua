@@ -653,8 +653,10 @@ cached = {
     -- WARNING: never mutate; treat read-only.
     activeLabels = {},
     activeLabelsLocale = "enUS",
-    -- WARNING: versatility / armor reads taint in combat — cache OOC, reuse cached value during combat.
-    versTotal = 0,
+    -- WARNING: versatility / armor reads taint in combat — cache clean values,
+    -- reuse cached value during combat. Vers starts unknown so cold-start
+    -- secret/nil reads do not render as a real 0.0%.
+    versTotal = nil,
     versTotalRating = 0,
     armorDR = 0,
     itemLevelOverall = nil,

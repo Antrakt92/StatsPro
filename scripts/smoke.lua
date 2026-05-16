@@ -1840,6 +1840,27 @@ do
 end
 
 do
+    local versEnv, _, versTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            hideZeroOffensive = false,
+            showCrit = false,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = true,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCombatRatingBonus = function() return nil end,
+        getVersatilityBonus = function() return nil end,
+    })
+    fireEvent("render.versatility_cold_unknown_not_zero.fire", versEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_cold_unknown_not_zero.no_error", ok, blocks)
+    eq("render.versatility_cold_unknown_not_zero.no_row", blockDumpContains(blocks, "Vers:"), false)
+end
+
+do
     local ilvlEnv = loadStatsPro("enUS", {
         statsProDB = {
             displayMode = "sectioned",

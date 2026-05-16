@@ -6,6 +6,27 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Invoke-NativeCapture {
+    param(
+        [string]$FilePath,
+        [string[]]$Arguments = @()
+    )
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $output = @(& $FilePath @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    return @{
+        ExitCode = $exitCode
+        Output = $output
+    }
+}
+
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $RepoRoot
 $AddonFile = Join-Path $RepoRoot "StatsPro.lua"
@@ -35,7 +56,11 @@ $Lua = $LuaCandidates | Select-Object -First 1
 if (-not $Lua) {
     throw "Missing lua 5.1 runtime. Install with: choco install lua51 -y"
 }
-$LuaVersion = (& $Lua -v 2>&1) -join "`n"
+$LuaVersionResult = Invoke-NativeCapture -FilePath $Lua -Arguments @("-v")
+$LuaVersion = $LuaVersionResult.Output -join "`n"
+if ($LuaVersionResult.ExitCode -ne 0) {
+    throw "lua -v exited with code $($LuaVersionResult.ExitCode): $LuaVersion"
+}
 if ($LuaVersion -notmatch "Lua\s+5\.1") {
     throw "StatsPro smoke requires Lua 5.1 because it uses setfenv; found: $LuaVersion"
 }
@@ -108,15 +133,17 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "== Lua diagnostics =="
 $LogPath = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lls-" + [System.Guid]::NewGuid().ToString("N"))
 try {
-    $Output = & $LuaLanguageServer `
-        --check="$AddonFile" `
-        --check_format=pretty `
-        --checklevel=Warning `
-        --configpath="$RepoRoot\.luarc.json" `
-        --logpath="$LogPath" 2>&1
+    $LuaLanguageServerResult = Invoke-NativeCapture -FilePath $LuaLanguageServer -Arguments @(
+        "--check=$AddonFile",
+        "--check_format=pretty",
+        "--checklevel=Warning",
+        "--configpath=$RepoRoot\.luarc.json",
+        "--logpath=$LogPath"
+    )
+    $Output = $LuaLanguageServerResult.Output
     $Output | ForEach-Object { Write-Host $_ }
-    if ($LASTEXITCODE -ne 0) {
-        throw "lua-language-server exited with code $LASTEXITCODE"
+    if ($LuaLanguageServerResult.ExitCode -ne 0) {
+        throw "lua-language-server exited with code $($LuaLanguageServerResult.ExitCode)"
     }
     $JoinedOutput = $Output -join "`n"
     if (

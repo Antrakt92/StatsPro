@@ -6,6 +6,27 @@ $ErrorActionPreference = "Stop"
 
 $LuacheckFallback = "C:\ProgramData\chocolatey\lib\luarocks\luarocks-2.4.4-win32\systree\bin\luacheck.bat"
 
+function Invoke-NativeCapture {
+    param(
+        [string]$FilePath,
+        [string[]]$Arguments = @()
+    )
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $output = @(& $FilePath @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    return @{
+        ExitCode = $exitCode
+        Output = $output
+    }
+}
+
 function Resolve-Tool {
     param(
         [string[]]$Names
@@ -104,7 +125,11 @@ $Luarocks = Require-Tool `
     -Names @("luarocks") `
     -ChocoPackage "luarocks"
 
-$LuaVersion = (& $Lua -v 2>&1) -join "`n"
+$LuaVersionResult = Invoke-NativeCapture -FilePath $Lua -Arguments @("-v")
+$LuaVersion = $LuaVersionResult.Output -join "`n"
+if ($LuaVersionResult.ExitCode -ne 0) {
+    throw "lua -v exited with code $($LuaVersionResult.ExitCode): $LuaVersion"
+}
 if ($LuaVersion -notmatch "Lua\s+5\.1") {
     throw "StatsPro smoke requires Lua 5.1 because it uses setfenv; found: $LuaVersion"
 }

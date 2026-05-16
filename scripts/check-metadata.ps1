@@ -12,7 +12,7 @@ function Get-SingleRegexMatch {
         [string]$Description
     )
 
-    $Text = Get-Content -Path $Path -Raw
+    $Text = Get-Content -Path $Path -Raw -Encoding UTF8
     $Matches = [regex]::Matches($Text, $Pattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
     if ($Matches.Count -eq 0) {
         throw "Missing $Description in $Path"
@@ -38,7 +38,7 @@ Write-Host "== Metadata =="
 
 $TocPath = "StatsPro.toc"
 $PkgmetaPath = ".pkgmeta"
-$TocLines = Get-Content -Path $TocPath
+$TocLines = Get-Content -Path $TocPath -Encoding UTF8
 
 $PackageName = Get-SingleRegexMatch `
     -Path $PkgmetaPath `
@@ -73,11 +73,11 @@ $ExpectedCategories = [ordered]@{
     "Category-esMX" = "Combate"
     "Category-frFR" = "Combat"
     "Category-itIT" = "Combattimento"
-    "Category-koKR" = "전투"
+    "Category-koKR" = ([string][char]0xC804 + [string][char]0xD22C)
     "Category-ptBR" = "Combate"
-    "Category-ruRU" = "Бой"
-    "Category-zhCN" = "战斗"
-    "Category-zhTW" = "戰鬥"
+    "Category-ruRU" = ([string][char]0x0411 + [string][char]0x043E + [string][char]0x0439)
+    "Category-zhCN" = ([string][char]0x6218 + [string][char]0x6597)
+    "Category-zhTW" = ([string][char]0x6230 + [string][char]0x9B25)
 }
 
 foreach ($Key in $ExpectedCategories.Keys) {

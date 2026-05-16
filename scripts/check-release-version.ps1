@@ -14,7 +14,7 @@ function Get-SingleRegexMatch {
         [string]$Description
     )
 
-    $Text = Get-Content -Path $Path -Raw
+    $Text = Get-Content -Path $Path -Raw -Encoding UTF8
     $Matches = [regex]::Matches($Text, $Pattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
     if ($Matches.Count -eq 0) {
         throw "Missing $Description in $Path"
@@ -32,7 +32,7 @@ function Get-FirstRegexMatch {
         [string]$Description
     )
 
-    $Text = Get-Content -Path $Path -Raw
+    $Text = Get-Content -Path $Path -Raw -Encoding UTF8
     $Match = [regex]::Match($Text, $Pattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
     if (-not $Match.Success) {
         throw "Missing $Description in $Path"
@@ -47,7 +47,7 @@ function Get-FirstRegexObject {
         [string]$Description
     )
 
-    $Text = Get-Content -Path $Path -Raw
+    $Text = Get-Content -Path $Path -Raw -Encoding UTF8
     $Match = [regex]::Match($Text, $Pattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
     if (-not $Match.Success) {
         throw "Missing or malformed $Description in $Path"
@@ -85,10 +85,12 @@ $CurrentRelease = Get-SingleRegexMatch `
     -Pattern '^\s*local\s+CURRENT_RELEASE\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"\s*$' `
     -Description "CURRENT_RELEASE"
 
+$HeadingDash = [regex]::Escape([string][char]0x2014)
+$HeadingPattern = "^##\s+([0-9]+\.[0-9]+\.[0-9]+)\s+-\s+([0-9]{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-[0-9]{4})\s+$HeadingDash\s+\S.*$"
 $ChangelogHeading = Get-FirstRegexObject `
     -Path "CHANGELOG.md" `
-    -Pattern "^##\s+([0-9]+\.[0-9]+\.[0-9]+)\s+-\s+([0-9]{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-[0-9]{4})\s+—\s+\S.*$" `
-    -Description "top changelog heading (`## X.Y.Z - DD-MMM-YYYY — Title`)"
+    -Pattern $HeadingPattern `
+    -Description "top changelog heading (`## X.Y.Z - DD-MMM-YYYY [em dash] Title`)"
 
 $ChangelogVersion = $ChangelogHeading.Groups[1].Value
 $ChangelogDate = $ChangelogHeading.Groups[2].Value

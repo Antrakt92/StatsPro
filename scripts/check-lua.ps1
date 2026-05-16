@@ -6,6 +6,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if ($ArchonMaxAgeDays -lt 0) {
+    throw "-ArchonMaxAgeDays must be a non-negative integer."
+}
+
 function Invoke-NativeCapture {
     param(
         [string]$FilePath,

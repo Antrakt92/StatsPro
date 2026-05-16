@@ -504,6 +504,9 @@ local function parse_args(argv)
             if not options.maxAgeDays then
                 fail("--max-age-days requires a number")
             end
+            if options.maxAgeDays < 0 or math.floor(options.maxAgeDays) ~= options.maxAgeDays then
+                fail("--max-age-days must be a non-negative integer")
+            end
         elseif arg == "--today" then
             index = index + 1
             options.today = argv[index]

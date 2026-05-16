@@ -424,6 +424,8 @@ local function assert_throws(name, fn, pattern)
     end
 end
 
+local parse_args
+
 local function run_self_test()
     local options = { today = "2026-05-16", maxAgeDays = 14 }
     validate_snapshot(make_valid_fixture("2026-05-16"), nil, options)
@@ -474,6 +476,14 @@ local function run_self_test()
         validate_snapshot(staleDate, nil, options)
     end, "stale")
 
+    assert_throws("negative max age rejected", function()
+        parse_args({ "--max-age-days", "-1" })
+    end, "non-negative integer")
+
+    assert_throws("fractional max age rejected", function()
+        parse_args({ "--max-age-days", "1.5" })
+    end, "non-negative integer")
+
     assert_throws("raw duplicate sourceUrl entries", function()
         validate_raw_text_shape('sourceUrl = "https://www.archon.gg/wow/builds/a"\nsourceUrl = "https://www.archon.gg/wow/builds/b"\n')
     end, "sourceUrl entries")
@@ -487,7 +497,7 @@ local function run_self_test()
     io.write("Archon target validator self-test passed.\n")
 end
 
-local function parse_args(argv)
+function parse_args(argv)
     local options = { path = DEFAULT_PATH }
     local index = 1
     while index <= #argv do

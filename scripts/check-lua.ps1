@@ -1,4 +1,8 @@
-param()
+param(
+    [switch]$Release,
+    [int]$ArchonMaxAgeDays = 14,
+    [switch]$AllowStaleArchonTargets
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -8,6 +12,7 @@ $AddonFile = Join-Path $RepoRoot "StatsPro.lua"
 $ArchonTargetsFile = Join-Path $RepoRoot "StatsPro_ArchonTargets.lua"
 $SmokeFile = Join-Path $RepoRoot "scripts\smoke.lua"
 $MetadataCheck = Join-Path $RepoRoot "scripts\check-metadata.ps1"
+$ArchonTargetsCheck = Join-Path $RepoRoot "scripts\check-archon-targets.lua"
 
 $LuacCandidates = @(
     (Get-Command luac5.1 -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
@@ -60,6 +65,7 @@ Write-Host "== Lua syntax =="
 $SyntaxFiles = @()
 if (Test-Path $ArchonTargetsFile) { $SyntaxFiles += "StatsPro_ArchonTargets.lua" }
 $SyntaxFiles += "StatsPro.lua"
+if (Test-Path $ArchonTargetsCheck) { $SyntaxFiles += $ArchonTargetsCheck }
 $SyntaxFiles += $SmokeFile
 & $Luac -p @SyntaxFiles
 if ($LASTEXITCODE -ne 0) {
@@ -68,17 +74,22 @@ if ($LASTEXITCODE -ne 0) {
 
 if (Test-Path $ArchonTargetsFile) {
     Write-Host "== Archon target snapshot =="
-    $MPlusSpecCount = (Select-String -Path $ArchonTargetsFile -Pattern 'mythic-plus/overview/high-keys/all-dungeons/this-week').Count
-    $RaidSpecCount = (Select-String -Path $ArchonTargetsFile -Pattern 'raid/overview/mythic/all-bosses').Count
-    $TargetCount = (Select-String -Path $ArchonTargetsFile -Pattern '^\s+(crit|haste|mastery|versatility) = \d+,' ).Count
-    if ($MPlusSpecCount -ne 40) {
-        throw "StatsPro_ArchonTargets.lua must contain 40 M+ spec snapshots; found $MPlusSpecCount"
+    if (-not (Test-Path $ArchonTargetsCheck)) {
+        throw "Missing Archon target validator: $ArchonTargetsCheck"
     }
-    if ($RaidSpecCount -ne 40) {
-        throw "StatsPro_ArchonTargets.lua must contain 40 Raid spec snapshots; found $RaidSpecCount"
+    $ArchonArgs = @($ArchonTargetsCheck, "--path", $ArchonTargetsFile)
+    if ($Release) {
+        if ($AllowStaleArchonTargets -or $env:STATSPRO_ALLOW_STALE_ARCHON_TARGETS -eq "1") {
+            Write-Warning "Allowing stale Archon targets because an explicit stale-data override is set."
+            $ArchonArgs += "--allow-stale"
+        }
+        else {
+            $ArchonArgs += @("--max-age-days", $ArchonMaxAgeDays)
+        }
     }
-    if ($TargetCount -ne 320) {
-        throw "StatsPro_ArchonTargets.lua must contain 320 secondary-stat targets; found $TargetCount"
+    & $Lua @ArchonArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Archon target snapshot check exited with code $LASTEXITCODE"
     }
 }
 

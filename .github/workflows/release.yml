@@ -18,6 +18,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check release ancestry
+        shell: pwsh
+        run: .\scripts\check-release-ancestry.ps1 -Tag $env:GITHUB_REF_NAME
+
       - name: Install check tools
         shell: pwsh
         run: .\scripts\install-check-tools.ps1 -Install
@@ -28,7 +32,7 @@ jobs:
 
       - name: Lua checks
         shell: pwsh
-        run: .\scripts\check-lua.ps1
+        run: .\scripts\check-lua.ps1 -Release
 
   release:
     needs: preflight

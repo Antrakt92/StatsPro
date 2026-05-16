@@ -32,7 +32,7 @@ jobs:
 
       - name: Lua checks
         shell: pwsh
-        run: .\scripts\check-lua.ps1 -Release
+        run: .\scripts\check-lua.ps1 -Release -ArchonMaxAgeDays 3
 
   release:
     needs: preflight

@@ -110,11 +110,11 @@ pull and check whether the numbers stay correct throughout the fight.
 ## Localization
 
 Stat labels render in your WoW client's language by default — no setup required.
-Curated short-form translations across all 11 retail WoW locales keep the HUD
+Curated short-form translations across all current WoW addon locales keep the HUD
 compact and readable, including the same `rating | percentage`, defensive stat,
 item level, durability, and repair rows shown in game:
 
-![StatsPro localization preview — live HUD label examples with rating and percentage values, defensives, item level, durability, and coin-style repair cost across all 11 Retail locales](screenshots/localization.png)
+![StatsPro localization preview — live HUD label examples with rating and percentage values, defensives, item level, durability, and coin-style repair cost across current WoW addon locales](screenshots/localization.png)
 
 To pick a different language for stat labels, open `/ss` → **Appearance**
 tab → **Localization** → use the **Language** dropdown. "Auto" follows your
@@ -127,7 +127,7 @@ output language.
 
 The in-game AddOn list (Esc → Options → AddOns) also shows StatsPro's
 description in your client language — a localized one-liner per `## Notes-<locale>`
-TOC field is shipped for all 10 non-English retail locales.
+TOC field is shipped for every non-English WoW addon locale.
 
 If a label reads oddly to you as a native speaker, please open an issue with the
 suggested correction — single-row fixes ship in the next patch.
@@ -199,7 +199,7 @@ On a fresh Windows machine, bootstrap the local check tools with:
 
 ## Architecture (contributors / forks)
 
-Core single-file design. Everything renders out of [`StatsPro.lua`](StatsPro.lua):
+Core addon logic lives in [`StatsPro.lua`](StatsPro.lua):
 
 - **`Panel:SetTextSafe`** — three-FontString rendering (label / rating / value), each
   with its own `JustifyH` for column alignment, plus two more for the dedicated

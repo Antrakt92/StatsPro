@@ -1,5 +1,10 @@
 # StatsPro Archon M+ Targets Design
 
+> Status: current design reference, refreshed after the initial implementation.
+> Generated data now uses schema v2 with Mythic+ and Raid snapshots. The
+> private scheduled data-only release flow is documented in
+> `WOW/stats-pro-meta/docs/runbooks/statspro-archon-target-refresh.md`.
+
 ## Goal
 
 StatsPro will show a small, high-value target comparison for secondary stats:
@@ -36,7 +41,8 @@ Excluded from the first version:
 - Per-boss raid targets.
 - Talent builds, hero talent builds, gear, consumables, rotations, or guide text.
 - In-game networking.
-- Automatic release tag publishing.
+- General feature-release tag publishing. A guarded private automation may
+  publish data-only Archon refreshes under the workspace release-safety rules.
 
 ## Architecture
 
@@ -161,18 +167,24 @@ HTML pages in either repository. The collector itself remains private in the
 `WOW` repository; the public StatsPro repository receives only transformed
 generated targets.
 
-## Daily Update Flow
+## Data-Only Refresh Flow
 
-The first automation should stop at a prepared commit or pull request:
+The private scheduled automation may refresh and publish only generated Archon
+target data when all release-safety gates pass. The current runbook in the
+private `WOW` repository is authoritative; this public spec records the addon
+contract only.
 
 1. Run the collector.
 2. Write or update `StatsPro_ArchonTargets.lua` in the public StatsPro repo.
-3. Run Lua syntax checks and existing StatsPro verification.
-4. Commit generated target changes when the snapshot changed.
-5. Leave release tagging/manual publishing for a separate, gated step.
+3. Validate both Mythic+ and Raid snapshots across all supported specs.
+4. Run existing StatsPro verification.
+5. Commit generated target changes only when the semantic target data changed.
+6. For the private automation path only, publish a PATCH tag after the guarded
+   release checks pass and the release workflow/package assets are confirmed.
 
-StatsPro release safety still applies: no automatic `vX.Y.Z` tag push until the
-user has verified the addon in game or explicitly waived the check.
+Normal feature, fix, UI, behavior, infrastructure, manual, and non-Archon
+releases still require the workspace in-game verification or explicit waiver
+gate before any `vX.Y.Z` tag push.
 
 ## Error Handling
 
@@ -206,6 +218,6 @@ Runtime checks should cover:
 - The first update path is a private local script under
   `WOW/stats-pro-meta/tools/` that creates or updates generated data in the
   StatsPro repo and lets the user or Codex prepare a normal StatsPro commit.
-- GitHub Actions scheduling and automatic release publishing are out of scope
-  for the first implementation pass. They can be added after the parser and
-  runtime tooltip have been verified in game.
+- GitHub Actions scheduling and data-only release publishing now exist outside
+  this public repo. Keep collector/runbook details private in `WOW`; the public
+  addon continues to ship only transformed generated data and runtime readers.

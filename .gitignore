@@ -1,6 +1,7 @@
 # Build artifacts
 .release/
 *.zip
+.ruff_cache/
 
 # Editor / IDE
 .idea/

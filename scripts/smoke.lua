@@ -1604,7 +1604,7 @@ do
     eq("slash.toggle.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Stats panel hidden")
     clearPrints(slashEnv)
     slash("slash.help", slashEnv, "help")
-    eq("slash.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug")
+    eq("slash.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help")
     slashEnv.StatsProDB.fontBeforeAutoSwitch = "Fonts\\ARIALN.TTF"
     slashEnv.StatsProDB.useLocalizedLabels = false
     slashEnv.StatsProDB.panelBackgroundAlpha = 55
@@ -1641,7 +1641,7 @@ do
     eq("slash.localized_ruRU.toggle.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Панель статов скрыта")
     clearPrints(slashEnv)
     slash("slash.localized_ruRU.help", slashEnv, "help")
-    eq("slash.localized_ruRU.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Команды: /ss (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug")
+    eq("slash.localized_ruRU.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help")
     clearPrints(slashEnv)
     slash("slash.localized_ruRU.debug", slashEnv, "debug")
     eq("slash.localized_ruRU.debug_english", printContains(slashEnv, "debug v"), true)

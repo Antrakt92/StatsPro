@@ -689,7 +689,7 @@ local isLoaded = false
 -- ≥4 chars when the language supports it (3-char abbreviations like "Par" or
 -- "Cel" read as truncations rather than words and look unfinished).
 --
--- Ships with all 11 retail WoW locales:
+-- Ships with current WoW addon locale tables:
 --   enUS (canonical, identity map)
 --   ruRU (Russian native-speaker reviewed by maintainer)
 --   zhCN / zhTW (use official WoW Chinese client stat terminology — high confidence)
@@ -778,7 +778,7 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "Over:", ["Matched:"] = "Matched:", ["Snapshot:"] = "Snapshot:",
         ["Stats panel shown"] = "Stats panel shown", ["Stats panel hidden"] = "Stats panel hidden",
         ["Settings reset to defaults"] = "Settings reset to defaults",
-        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
         -- Buttons + title:
         ["Reset to Defaults"] = "Reset to Defaults", ["Close"] = "Close",
         ["Open Settings"] = "Open Settings", ["Settings"] = "Settings",
@@ -852,7 +852,7 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "Сверх:", ["Matched:"] = "Совпало:", ["Snapshot:"] = "Снимок:",
         ["Stats panel shown"] = "Панель статов показана", ["Stats panel hidden"] = "Панель статов скрыта",
         ["Settings reset to defaults"] = "Настройки сброшены по умолчанию",
-        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "Команды: /ss (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
         -- Buttons + title:
         ["Reset to Defaults"] = "Сбросить настройки", ["Close"] = "Закрыть",
         ["Open Settings"] = "Открыть настройки", ["Settings"] = "Настройки",
@@ -921,7 +921,7 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "Drüber:", ["Matched:"] = "Erreicht:", ["Snapshot:"] = "Datenstand:",
         ["Stats panel shown"] = "Statpanel angezeigt", ["Stats panel hidden"] = "Statpanel ausgeblendet",
         ["Settings reset to defaults"] = "Einstellungen auf Standard zurückgesetzt",
-        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "Befehle: /ss (Einstellungen), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "Befehle: /ss oder /statspro (Einstellungen), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
         ["Reset to Defaults"] = "Auf Standard", ["Close"] = "Schließen",
         ["Open Settings"] = "Einstellungen öffnen", ["Settings"] = "Einstellungen",
         ["Auto (current: %s)"] = "Auto (aktuell: %s)",
@@ -985,7 +985,7 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "Excès :", ["Matched:"] = "Atteint :", ["Snapshot:"] = "Instantané :",
         ["Stats panel shown"] = "Panneau de stats affiché", ["Stats panel hidden"] = "Panneau de stats masqué",
         ["Settings reset to defaults"] = "Paramètres réinitialisés",
-        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "Commandes : /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "Commandes : /ss ou /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
         ["Reset to Defaults"] = "Par défaut", ["Close"] = "Fermer",
         ["Open Settings"] = "Ouvrir les paramètres", ["Settings"] = "Paramètres",
         ["Auto (current: %s)"] = "Auto (actuel : %s)",
@@ -1050,7 +1050,7 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "Exceso:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Captura:",
         ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
         ["Settings reset to defaults"] = "Ajustes restablecidos",
-        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "Comandos: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
         ["Open Settings"] = "Abrir ajustes", ["Settings"] = "Ajustes",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
@@ -1113,7 +1113,7 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "Exceso:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Captura:",
         ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
         ["Settings reset to defaults"] = "Configuración restablecida",
-        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "Comandos: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
         ["Open Settings"] = "Abrir configuración", ["Settings"] = "Configuración",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
@@ -1177,7 +1177,7 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "Oltre:", ["Matched:"] = "Raggiunto:", ["Snapshot:"] = "Istantanea:",
         ["Stats panel shown"] = "Pannello statistiche mostrato", ["Stats panel hidden"] = "Pannello statistiche nascosto",
         ["Settings reset to defaults"] = "Impostazioni ripristinate",
-        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "Comandi: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "Comandi: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
         ["Reset to Defaults"] = "Predefiniti", ["Close"] = "Chiudi",
         ["Open Settings"] = "Apri impostazioni", ["Settings"] = "Impostazioni",
         ["Auto (current: %s)"] = "Auto (attuale: %s)",
@@ -1240,7 +1240,7 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "Acima:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Registro:",
         ["Stats panel shown"] = "Painel de atributos mostrado", ["Stats panel hidden"] = "Painel de atributos oculto",
         ["Settings reset to defaults"] = "Configurações restauradas",
-        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "Comandos: /ss (configurações), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "Comandos: /ss ou /statspro (configurações), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
         ["Reset to Defaults"] = "Restaurar", ["Close"] = "Fechar",
         ["Open Settings"] = "Abrir configurações", ["Settings"] = "Configurações",
         ["Auto (current: %s)"] = "Auto (atual: %s)",
@@ -1310,7 +1310,7 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "초과:", ["Matched:"] = "일치:", ["Snapshot:"] = "스냅샷:",
         ["Stats panel shown"] = "능력치 패널 표시됨", ["Stats panel hidden"] = "능력치 패널 숨김",
         ["Settings reset to defaults"] = "설정이 기본값으로 초기화되었습니다",
-        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "명령어: /ss (설정), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "명령어: /ss 또는 /statspro (설정), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
         ["Reset to Defaults"] = "기본값", ["Close"] = "닫기",
         ["Open Settings"] = "설정 열기", ["Settings"] = "설정",
         ["Auto (current: %s)"] = "자동 (현재: %s)",
@@ -1373,7 +1373,7 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "超出:", ["Matched:"] = "已达成:", ["Snapshot:"] = "快照:",
         ["Stats panel shown"] = "属性面板已显示", ["Stats panel hidden"] = "属性面板已隐藏",
         ["Settings reset to defaults"] = "设置已恢复默认",
-        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "命令: /ss (设置), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "命令: /ss 或 /statspro (设置), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
         ["Reset to Defaults"] = "恢复默认", ["Close"] = "关闭",
         ["Open Settings"] = "打开设置", ["Settings"] = "设置",
         ["Auto (current: %s)"] = "自动（当前: %s）",
@@ -1436,7 +1436,7 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "超出:", ["Matched:"] = "已達成:", ["Snapshot:"] = "快照:",
         ["Stats panel shown"] = "屬性面板已顯示", ["Stats panel hidden"] = "屬性面板已隱藏",
         ["Settings reset to defaults"] = "設定已恢復預設",
-        ["Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"] = "指令: /ss (設定), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "指令: /ss 或 /statspro (設定), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
         ["Reset to Defaults"] = "恢復預設", ["Close"] = "關閉",
         ["Open Settings"] = "開啟設定", ["Settings"] = "設定",
         ["Auto (current: %s)"] = "自動（目前: %s）",
@@ -5981,7 +5981,7 @@ SlashCmdList["STATSPRO"] = function(msg)
             addon:PrintDebugDump()
         end
     elseif arg == "help" or arg == "?" then
-        PrintMsg(L("Commands: /ss (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug"))
+        PrintMsg(L("Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"))
     else
         addon:OpenConfigMenu()
     end

@@ -19,18 +19,11 @@ ignore = {
 globals = {
     -- SavedVariables + legacy carry-over
     "StatsProDB",
-    "SwiftStatsDB", "SwiftStatsLocalDB",
     -- Slash registration
     "SLASH_STATSPRO1", "SLASH_STATSPRO2",
     "SlashCmdList",  -- Blizzard table; addon adds keys, so it's writable for us
-    -- Named UI widgets (referenced by global name elsewhere)
-    "StatsProFrame", "StatsProDefensiveFrame",
+    -- Explicit support bridge exposed on a named global.
     "StatsProCloseColorPicker",
-    "StatsProVisibleCheck", "StatsProCritCheck", "StatsProHasteCheck",
-    "StatsProMasteryCheck", "StatsProVersCheck",
-    "StatsProHideZeroOffCheck", "StatsProHideZeroCheck", "StatsProHideZeroDefCheck",
-    "StatsProItemLevelCheck", "StatsProMainStatCheck", "StatsProStaminaCheck",
-    "StatsProDisplayModeDropdown", "StatsProScaleSlider", "StatsProRefreshSlider",
 }
 
 -- WoW API surface (read-only). Curated to what StatsPro touches; add more as
@@ -40,7 +33,7 @@ read_globals = {
     "CreateFrame", "UIParent", "BackdropTemplateMixin",
     "SettingsPanel", "HideUIPanel", "Settings",
     "C_Timer", "C_AddOns", "InCombatLockdown",
-    "UIDropDownMenu_SetText", "CloseDropDownMenus", "UIDropDownMenu_Initialize",
+    "UIDropDownMenu_SetText", "CloseDropDownMenus",
     "DurabilityFrame", "MERCHANT_SHOW", "PaperDollFrame_GetArmorReduction",
     "GameFontNormalLarge", "GameFontHighlight", "GameFontHighlightSmall",
     -- Stat APIs (12.x retail)

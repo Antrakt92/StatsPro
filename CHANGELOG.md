@@ -8,8 +8,8 @@
 
 ### Improved
 
-- **Public documentation now uses future-proof locale wording** — README and marketplace copy describe support for current WoW addon locales without hardcoding a locale count that can drift.
-- **Slash command documentation is readable even when marketplace screenshots do not load** — CurseForge and WoWInterface copy now include text command fallbacks alongside the command image.
+- **Public documentation now uses future-proof locale wording** — README and prepared marketplace copy describe support for current WoW addon locales without hardcoding a locale count that can drift.
+- **Slash command documentation is easier to preserve across public copy surfaces** — README keeps the full command table, and prepared CurseForge / WoWInterface copy now includes text command fallbacks alongside the command image.
 - **Local verification stays focused on real globals** — stale diagnostic allowlist entries were removed, and smoke coverage now protects the localized slash-help output.
 
 ## 1.9.4 - 17-May-2026 — Archon target refresh

@@ -19,6 +19,10 @@
 </p>
 
 <p align="center">
+  <strong>Actively maintained.</strong> <span style="color: red;"><strong>Feedback and suggestions are very welcome.</strong></span>
+</p>
+
+<p align="center">
   <img src="screenshots/09-flat-in-game.jpg" alt="StatsPro — full flat panel sitting next to the action bars during real-world play">
 </p>
 

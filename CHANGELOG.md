@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.11 - 21-May-2026 — Combat crit fallback hardening
+
+### Fixed
+
+- **Crit updates stay safer when spell crit reads are protected in combat** — StatsPro now guards the spell-crit fallback path so melee/ranged crit can continue driving the HUD when Midnight returns protected spell crit values.
+
+### Improved
+
+- **Release checks catch more Archon target and metadata drift before packaging** — local and CI gates now cover target manifest parity, addon metadata shape, and release validation more strictly.
+
 ## 1.9.10 - 21-May-2026 — Midnight combat stat fixes
 
 ### Fixed

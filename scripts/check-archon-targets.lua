@@ -1,49 +1,50 @@
 local args = { ... }
 
 local DEFAULT_PATH = "StatsPro_ArchonTargets.lua"
+local DEFAULT_STATSPRO_LUA_PATH = "StatsPro.lua"
 local REQUIRED_STATS = { "crit", "haste", "mastery", "versatility" }
 
 local SPECS = {
-    { classToken = "DEATHKNIGHT", classSlug = "death-knight", specKey = "blood", specSlug = "blood" },
-    { classToken = "DEATHKNIGHT", classSlug = "death-knight", specKey = "frost", specSlug = "frost" },
-    { classToken = "DEATHKNIGHT", classSlug = "death-knight", specKey = "unholy", specSlug = "unholy" },
-    { classToken = "DEMONHUNTER", classSlug = "demon-hunter", specKey = "havoc", specSlug = "havoc" },
-    { classToken = "DEMONHUNTER", classSlug = "demon-hunter", specKey = "devourer", specSlug = "devourer" },
-    { classToken = "DEMONHUNTER", classSlug = "demon-hunter", specKey = "vengeance", specSlug = "vengeance" },
-    { classToken = "DRUID", classSlug = "druid", specKey = "balance", specSlug = "balance" },
-    { classToken = "DRUID", classSlug = "druid", specKey = "feral", specSlug = "feral" },
-    { classToken = "DRUID", classSlug = "druid", specKey = "guardian", specSlug = "guardian" },
-    { classToken = "DRUID", classSlug = "druid", specKey = "restoration", specSlug = "restoration" },
-    { classToken = "EVOKER", classSlug = "evoker", specKey = "augmentation", specSlug = "augmentation" },
-    { classToken = "EVOKER", classSlug = "evoker", specKey = "devastation", specSlug = "devastation" },
-    { classToken = "EVOKER", classSlug = "evoker", specKey = "preservation", specSlug = "preservation" },
-    { classToken = "HUNTER", classSlug = "hunter", specKey = "beast-mastery", specSlug = "beast-mastery" },
-    { classToken = "HUNTER", classSlug = "hunter", specKey = "marksmanship", specSlug = "marksmanship" },
-    { classToken = "HUNTER", classSlug = "hunter", specKey = "survival", specSlug = "survival" },
-    { classToken = "MAGE", classSlug = "mage", specKey = "arcane", specSlug = "arcane" },
-    { classToken = "MAGE", classSlug = "mage", specKey = "fire", specSlug = "fire" },
-    { classToken = "MAGE", classSlug = "mage", specKey = "frost", specSlug = "frost" },
-    { classToken = "MONK", classSlug = "monk", specKey = "brewmaster", specSlug = "brewmaster" },
-    { classToken = "MONK", classSlug = "monk", specKey = "mistweaver", specSlug = "mistweaver" },
-    { classToken = "MONK", classSlug = "monk", specKey = "windwalker", specSlug = "windwalker" },
-    { classToken = "PALADIN", classSlug = "paladin", specKey = "holy", specSlug = "holy" },
-    { classToken = "PALADIN", classSlug = "paladin", specKey = "protection", specSlug = "protection" },
-    { classToken = "PALADIN", classSlug = "paladin", specKey = "retribution", specSlug = "retribution" },
-    { classToken = "PRIEST", classSlug = "priest", specKey = "discipline", specSlug = "discipline" },
-    { classToken = "PRIEST", classSlug = "priest", specKey = "holy", specSlug = "holy" },
-    { classToken = "PRIEST", classSlug = "priest", specKey = "shadow", specSlug = "shadow" },
-    { classToken = "ROGUE", classSlug = "rogue", specKey = "assassination", specSlug = "assassination" },
-    { classToken = "ROGUE", classSlug = "rogue", specKey = "outlaw", specSlug = "outlaw" },
-    { classToken = "ROGUE", classSlug = "rogue", specKey = "subtlety", specSlug = "subtlety" },
-    { classToken = "SHAMAN", classSlug = "shaman", specKey = "elemental", specSlug = "elemental" },
-    { classToken = "SHAMAN", classSlug = "shaman", specKey = "enhancement", specSlug = "enhancement" },
-    { classToken = "SHAMAN", classSlug = "shaman", specKey = "restoration", specSlug = "restoration" },
-    { classToken = "WARLOCK", classSlug = "warlock", specKey = "affliction", specSlug = "affliction" },
-    { classToken = "WARLOCK", classSlug = "warlock", specKey = "demonology", specSlug = "demonology" },
-    { classToken = "WARLOCK", classSlug = "warlock", specKey = "destruction", specSlug = "destruction" },
-    { classToken = "WARRIOR", classSlug = "warrior", specKey = "arms", specSlug = "arms" },
-    { classToken = "WARRIOR", classSlug = "warrior", specKey = "fury", specSlug = "fury" },
-    { classToken = "WARRIOR", classSlug = "warrior", specKey = "protection", specSlug = "protection" },
+    { specID = 250, classToken = "DEATHKNIGHT", classSlug = "death-knight", specKey = "blood", specSlug = "blood" },
+    { specID = 251, classToken = "DEATHKNIGHT", classSlug = "death-knight", specKey = "frost", specSlug = "frost" },
+    { specID = 252, classToken = "DEATHKNIGHT", classSlug = "death-knight", specKey = "unholy", specSlug = "unholy" },
+    { specID = 577, classToken = "DEMONHUNTER", classSlug = "demon-hunter", specKey = "havoc", specSlug = "havoc" },
+    { specID = 1480, classToken = "DEMONHUNTER", classSlug = "demon-hunter", specKey = "devourer", specSlug = "devourer" },
+    { specID = 581, classToken = "DEMONHUNTER", classSlug = "demon-hunter", specKey = "vengeance", specSlug = "vengeance" },
+    { specID = 102, classToken = "DRUID", classSlug = "druid", specKey = "balance", specSlug = "balance" },
+    { specID = 103, classToken = "DRUID", classSlug = "druid", specKey = "feral", specSlug = "feral" },
+    { specID = 104, classToken = "DRUID", classSlug = "druid", specKey = "guardian", specSlug = "guardian" },
+    { specID = 105, classToken = "DRUID", classSlug = "druid", specKey = "restoration", specSlug = "restoration" },
+    { specID = 1473, classToken = "EVOKER", classSlug = "evoker", specKey = "augmentation", specSlug = "augmentation" },
+    { specID = 1467, classToken = "EVOKER", classSlug = "evoker", specKey = "devastation", specSlug = "devastation" },
+    { specID = 1468, classToken = "EVOKER", classSlug = "evoker", specKey = "preservation", specSlug = "preservation" },
+    { specID = 253, classToken = "HUNTER", classSlug = "hunter", specKey = "beast-mastery", specSlug = "beast-mastery" },
+    { specID = 254, classToken = "HUNTER", classSlug = "hunter", specKey = "marksmanship", specSlug = "marksmanship" },
+    { specID = 255, classToken = "HUNTER", classSlug = "hunter", specKey = "survival", specSlug = "survival" },
+    { specID = 62, classToken = "MAGE", classSlug = "mage", specKey = "arcane", specSlug = "arcane" },
+    { specID = 63, classToken = "MAGE", classSlug = "mage", specKey = "fire", specSlug = "fire" },
+    { specID = 64, classToken = "MAGE", classSlug = "mage", specKey = "frost", specSlug = "frost" },
+    { specID = 268, classToken = "MONK", classSlug = "monk", specKey = "brewmaster", specSlug = "brewmaster" },
+    { specID = 270, classToken = "MONK", classSlug = "monk", specKey = "mistweaver", specSlug = "mistweaver" },
+    { specID = 269, classToken = "MONK", classSlug = "monk", specKey = "windwalker", specSlug = "windwalker" },
+    { specID = 65, classToken = "PALADIN", classSlug = "paladin", specKey = "holy", specSlug = "holy" },
+    { specID = 66, classToken = "PALADIN", classSlug = "paladin", specKey = "protection", specSlug = "protection" },
+    { specID = 70, classToken = "PALADIN", classSlug = "paladin", specKey = "retribution", specSlug = "retribution" },
+    { specID = 256, classToken = "PRIEST", classSlug = "priest", specKey = "discipline", specSlug = "discipline" },
+    { specID = 257, classToken = "PRIEST", classSlug = "priest", specKey = "holy", specSlug = "holy" },
+    { specID = 258, classToken = "PRIEST", classSlug = "priest", specKey = "shadow", specSlug = "shadow" },
+    { specID = 259, classToken = "ROGUE", classSlug = "rogue", specKey = "assassination", specSlug = "assassination" },
+    { specID = 260, classToken = "ROGUE", classSlug = "rogue", specKey = "outlaw", specSlug = "outlaw" },
+    { specID = 261, classToken = "ROGUE", classSlug = "rogue", specKey = "subtlety", specSlug = "subtlety" },
+    { specID = 262, classToken = "SHAMAN", classSlug = "shaman", specKey = "elemental", specSlug = "elemental" },
+    { specID = 263, classToken = "SHAMAN", classSlug = "shaman", specKey = "enhancement", specSlug = "enhancement" },
+    { specID = 264, classToken = "SHAMAN", classSlug = "shaman", specKey = "restoration", specSlug = "restoration" },
+    { specID = 265, classToken = "WARLOCK", classSlug = "warlock", specKey = "affliction", specSlug = "affliction" },
+    { specID = 266, classToken = "WARLOCK", classSlug = "warlock", specKey = "demonology", specSlug = "demonology" },
+    { specID = 267, classToken = "WARLOCK", classSlug = "warlock", specKey = "destruction", specSlug = "destruction" },
+    { specID = 71, classToken = "WARRIOR", classSlug = "warrior", specKey = "arms", specSlug = "arms" },
+    { specID = 72, classToken = "WARRIOR", classSlug = "warrior", specKey = "fury", specSlug = "fury" },
+    { specID = 73, classToken = "WARRIOR", classSlug = "warrior", specKey = "protection", specSlug = "protection" },
 }
 
 local PROFILES = {
@@ -98,6 +99,28 @@ end
 local function expect_equal(actual, expected, context)
     if actual ~= expected then
         fail(context .. " must be " .. tostring(expected) .. ", got " .. tostring(actual))
+    end
+end
+
+local function make_key_set(keys)
+    local set = {}
+    for _, key in ipairs(keys) do
+        set[key] = true
+    end
+    return set
+end
+
+local function validate_exact_keys(tbl, allowedKeys, context)
+    expect_type(tbl, "table", context)
+    for key in pairs(tbl) do
+        if not allowedKeys[key] then
+            fail(context .. " has unexpected key " .. tostring(key))
+        end
+    end
+    for key in pairs(allowedKeys) do
+        if tbl[key] == nil then
+            fail(context .. " missing key " .. tostring(key))
+        end
     end
 end
 
@@ -260,8 +283,80 @@ local function validate_raw_text_shape(text)
     end
 end
 
+local function validate_spec_manifest()
+    local seenSpecIDs = {}
+    local seenClassSpecs = {}
+    for _, spec in ipairs(SPECS) do
+        if type(spec.specID) ~= "number" or spec.specID <= 0 or math.floor(spec.specID) ~= spec.specID then
+            fail("SPECS entry " .. tostring(spec.classToken) .. "/" .. tostring(spec.specKey) .. " must define positive integer specID")
+        end
+        local specIDKey = tostring(spec.specID)
+        if seenSpecIDs[specIDKey] then
+            fail("SPECS duplicate specID " .. specIDKey .. " for " .. tostring(spec.classToken) .. "/" .. tostring(spec.specKey))
+        end
+        seenSpecIDs[specIDKey] = true
+
+        local classSpecKey = tostring(spec.classToken) .. "/" .. tostring(spec.specKey)
+        if seenClassSpecs[classSpecKey] then
+            fail("SPECS duplicate class/spec " .. classSpecKey)
+        end
+        seenClassSpecs[classSpecKey] = true
+    end
+    expect_equal(#SPECS, 40, "SPECS count")
+    if not seenSpecIDs["1480"] then
+        fail("SPECS must include Demon Hunter Devourer specID 1480")
+    end
+end
+
+local function parse_runtime_spec_map(path)
+    local text = read_file(path)
+    local _, blockStart = string.find(text, "addon%.archonTargets%.specKeyByID%s*=%s*{")
+    if not blockStart then
+        fail("cannot find addon.archonTargets.specKeyByID in " .. tostring(path))
+    end
+    local blockEnd = string.find(text, "\n}", blockStart + 1, true)
+    if not blockEnd then
+        fail("cannot find end of addon.archonTargets.specKeyByID in " .. tostring(path))
+    end
+
+    local block = string.sub(text, blockStart + 1, blockEnd - 1)
+    local out = {}
+    for specID, specKey in string.gmatch(block, "%[(%d+)%]%s*=%s*\"([^\"]+)\"") do
+        local id = tonumber(specID)
+        if out[id] then
+            fail("runtime spec map duplicate specID " .. specID)
+        end
+        out[id] = specKey
+    end
+    return out
+end
+
+local function validate_runtime_spec_parity(statsProLuaPath)
+    local runtimeMap = parse_runtime_spec_map(statsProLuaPath)
+    expect_equal(count_keys(runtimeMap), #SPECS, "runtime spec map count")
+
+    local expectedIDs = {}
+    for _, spec in ipairs(SPECS) do
+        expectedIDs[spec.specID] = spec
+        local actualSpecKey = runtimeMap[spec.specID]
+        if actualSpecKey ~= spec.specKey then
+            fail("runtime spec map mismatch for " .. spec.classToken .. "/" .. spec.specKey
+                .. " specID " .. tostring(spec.specID) .. ": got " .. tostring(actualSpecKey))
+        end
+    end
+
+    for specID, specKey in pairs(runtimeMap) do
+        if not expectedIDs[specID] then
+            fail("runtime spec map has unexpected specID " .. tostring(specID) .. " -> " .. tostring(specKey))
+        end
+    end
+end
+
 local function validate_snapshot(root, text, options)
+    validate_spec_manifest()
+    validate_runtime_spec_parity(options.statsProLua)
     validate_raw_text_shape(text)
+    validate_exact_keys(root, make_key_set({ "schemaVersion", "source", "snapshots" }), "StatsProArchonTargets")
     expect_type(root, "table", "StatsProArchonTargets")
     expect_equal(root.schemaVersion, 2, "schemaVersion")
     expect_equal(root.source, "archon", "source")
@@ -273,6 +368,11 @@ local function validate_snapshot(root, text, options)
         local expectedProfile = PROFILES[profileKey]
         local profileContext = "snapshots." .. profileKey
         expect_type(profile, "table", profileContext)
+        local allowedProfileKeys = { capturedAt = true, specs = true }
+        for key in pairs(expectedProfile) do
+            allowedProfileKeys[key] = true
+        end
+        validate_exact_keys(profile, allowedProfileKeys, profileContext)
         for key, value in pairs(expectedProfile) do
             expect_equal(profile[key], value, profileContext .. "." .. key)
         end
@@ -303,6 +403,7 @@ local function validate_snapshot(root, text, options)
             local specContext = profileContext .. ".specs." .. spec.classToken .. "." .. spec.specKey
             local specData = profile.specs[spec.classToken] and profile.specs[spec.classToken][spec.specKey]
             expect_type(specData, "table", specContext)
+            validate_exact_keys(specData, make_key_set({ "sourceUrl", "targets", "order" }), specContext)
             local url = expected_url(spec, profileKey)
             expect_equal(specData.sourceUrl, url, specContext .. ".sourceUrl")
             local occurrenceCount = count_plain_occurrences(text, url)
@@ -424,10 +525,39 @@ local function assert_throws(name, fn, pattern)
     end
 end
 
+local function dump_spec_manifest()
+    for _, spec in ipairs(SPECS) do
+        io.write(table.concat({
+            tostring(spec.specID),
+            spec.classToken,
+            spec.classSlug,
+            spec.specKey,
+            spec.specSlug,
+        }, "\t") .. "\n")
+    end
+end
+
+local function make_public_module()
+    return {
+        specs = clone(SPECS),
+        profiles = clone(PROFILES),
+        profileOrder = clone(PROFILE_ORDER),
+        requiredStats = clone(REQUIRED_STATS),
+        expectedUrl = expected_url,
+        makeValidFixture = make_valid_fixture,
+    }
+end
+
 local parse_args
 
-local function run_self_test()
-    local options = { today = "2026-05-16", maxAgeDays = 14 }
+local function run_self_test(parsedOptions)
+    local options = {
+        today = (parsedOptions and parsedOptions.today) or "2026-05-16",
+        maxAgeDays = (parsedOptions and parsedOptions.maxAgeDays) or 14,
+        statsProLua = (parsedOptions and parsedOptions.statsProLua) or DEFAULT_STATSPRO_LUA_PATH,
+    }
+    validate_spec_manifest()
+    validate_runtime_spec_parity(options.statsProLua)
     validate_snapshot(make_valid_fixture("2026-05-16"), nil, options)
 
     local rawLines = {}
@@ -494,16 +624,34 @@ local function run_self_test()
         validate_snapshot(badMetadata, nil, options)
     end, "this-week")
 
+    local extraRootKey = clone(make_valid_fixture("2026-05-16"))
+    extraRootKey.specManifest = {}
+    assert_throws("unexpected root key", function()
+        validate_snapshot(extraRootKey, nil, options)
+    end, "unexpected key specManifest")
+
+    local extraSpecKey = clone(make_valid_fixture("2026-05-16"))
+    extraSpecKey.snapshots.mythicPlus.specs.MAGE.frost.specID = 64
+    assert_throws("unexpected spec key", function()
+        validate_snapshot(extraSpecKey, nil, options)
+    end, "unexpected key specID")
+
     io.write("Archon target validator self-test passed.\n")
 end
 
+if _G and _G.__STATSPRO_ARCHON_TARGETS_MODULE then
+    return make_public_module()
+end
+
 function parse_args(argv)
-    local options = { path = DEFAULT_PATH }
+    local options = { path = DEFAULT_PATH, statsProLua = DEFAULT_STATSPRO_LUA_PATH }
     local index = 1
     while index <= #argv do
         local arg = argv[index]
         if arg == "--self-test" then
             options.selfTest = true
+        elseif arg == "--dump-spec-manifest" then
+            options.dumpSpecManifest = true
         elseif arg == "--semantic-lines" then
             options.semanticLines = true
         elseif arg == "--allow-stale" then
@@ -529,6 +677,12 @@ function parse_args(argv)
             if not options.path then
                 fail("--path requires a path")
             end
+        elseif arg == "--statspro-lua" then
+            index = index + 1
+            options.statsProLua = argv[index]
+            if not options.statsProLua then
+                fail("--statspro-lua requires a path")
+            end
         elseif string.sub(arg, 1, 2) == "--" then
             fail("unknown option: " .. arg)
         else
@@ -541,7 +695,12 @@ end
 
 local options = parse_args(args)
 if options.selfTest then
-    run_self_test()
+    run_self_test(options)
+    return
+end
+if options.dumpSpecManifest then
+    validate_spec_manifest()
+    dump_spec_manifest()
     return
 end
 

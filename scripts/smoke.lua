@@ -613,6 +613,36 @@ local function loadStatsPro(locale, opts)
     return env, addon, addon.__test
 end
 
+local function loadArchonValidatorModule()
+    local previous = _G.__STATSPRO_ARCHON_TARGETS_MODULE
+    _G.__STATSPRO_ARCHON_TARGETS_MODULE = true
+    local chunk, loadErr = loadfile("scripts/check-archon-targets.lua")
+    if not chunk then
+        _G.__STATSPRO_ARCHON_TARGETS_MODULE = previous
+        error(loadErr, 0)
+    end
+    local ok, moduleOrErr = pcall(chunk)
+    _G.__STATSPRO_ARCHON_TARGETS_MODULE = previous
+    if not ok then error(moduleOrErr, 0) end
+    return moduleOrErr
+end
+
+local archonManifest = loadArchonValidatorModule()
+
+local function makeArchonV2Fixture(capturedAt)
+    return deepCopy(archonManifest.makeValidFixture(capturedAt or "2026-05-15"))
+end
+
+local function setArchonFixtureTargets(fixture, profileKey, classToken, specKey, targets, order)
+    local profile = fixture.snapshots[profileKey]
+    local specData = profile and profile.specs and profile.specs[classToken] and profile.specs[classToken][specKey]
+    if not specData then
+        error(string.format("missing Archon fixture spec %s/%s/%s", tostring(profileKey), tostring(classToken), tostring(specKey)), 2)
+    end
+    specData.targets = deepCopy(targets)
+    specData.order = deepCopy(order or { "crit", "haste", "mastery", "versatility" })
+end
+
 do
     local ok, err = pcall(loadStatsPro, "enUS", { statsProDB = true })
     check("load.root_non_table_self_heals", ok, err)
@@ -626,25 +656,15 @@ end
 local env, addon, test = loadStatsPro("enUS")
 
 do
+    local archonFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(archonFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 1007, haste = 560, mastery = 823, versatility = 97 })
+    archonFixture.snapshots.mythicPlus.specs.MAGE.fire = nil
     local archonEnv, _, archonTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
         specIndex = 1,
         specID = 64,
-        statsProArchonTargets = {
-            schemaVersion = 1,
-            capturedAt = "2026-05-15",
-            bracket = "high-keys",
-            dungeon = "all-dungeons",
-            window = "this-week",
-            specs = {
-                MAGE = {
-                    frost = {
-                        sourceUrl = "https://www.archon.gg/wow/builds/frost/mage/mythic-plus/overview/high-keys/all-dungeons/this-week",
-                        targets = { crit = 1007, haste = 560, mastery = 823, versatility = 97 },
-                    },
-                },
-            },
-        },
+        statsProArchonTargets = archonFixture,
     })
     local snapshot = archonTest.getArchonTargetSnapshot("MAGE", "frost")
     eq("archon.snapshot.source", snapshot.sourceUrl, "https://www.archon.gg/wow/builds/frost/mage/mythic-plus/overview/high-keys/all-dungeons/this-week")
@@ -655,8 +675,14 @@ do
     eq("archon.meta.rating_cr", meta.ratingCR, archonEnv.CR_MASTERY)
     eq("archon.meta.captured_at", meta.capturedAt, "2026-05-15")
     eq("archon.meta.missing_snapshot", archonTest.getArchonTargetSnapshot("MAGE", "fire"), nil)
-    eq("archon.meta.hidden_without_root", archonEnv.StatsProArchonTargets.schemaVersion, 1)
+    eq("archon.meta.hidden_without_root", archonEnv.StatsProArchonTargets.schemaVersion, 2)
 
+    local dualFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(dualFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 1007, haste = 560, mastery = 823, versatility = 97 })
+    dualFixture.snapshots.raid.capturedAt = "2026-05-16"
+    setArchonFixtureTargets(dualFixture, "raid", "MAGE", "frost",
+        { crit = 1044, haste = 551, mastery = 812, versatility = 88 })
     local dualEnv, _, dualTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
         specIndex = 1,
@@ -664,46 +690,7 @@ do
         statsProDB = {
             targetSnapshot = "raid",
         },
-        statsProArchonTargets = {
-            schemaVersion = 2,
-            source = "archon",
-            snapshots = {
-                mythicPlus = {
-                    label = "M+ High Keys",
-                    title = "M+ Target",
-                    activity = "mythic-plus",
-                    bracket = "high-keys",
-                    dungeon = "all-dungeons",
-                    window = "this-week",
-                    capturedAt = "2026-05-15",
-                    specs = {
-                        MAGE = {
-                            frost = {
-                                sourceUrl = "https://www.archon.gg/wow/builds/frost/mage/mythic-plus/overview/high-keys/all-dungeons/this-week",
-                                targets = { crit = 1007, haste = 560, mastery = 823, versatility = 97 },
-                            },
-                        },
-                    },
-                },
-                raid = {
-                    label = "Raid Mythic All Bosses",
-                    title = "Raid Target",
-                    activity = "raid",
-                    difficulty = "mythic",
-                    boss = "all-bosses",
-                    window = "last-14-days",
-                    capturedAt = "2026-05-16",
-                    specs = {
-                        MAGE = {
-                            frost = {
-                                sourceUrl = "https://www.archon.gg/wow/builds/frost/mage/raid/overview/mythic/all-bosses",
-                                targets = { crit = 1044, haste = 551, mastery = 812, versatility = 88 },
-                            },
-                        },
-                    },
-                },
-            },
-        },
+        statsProArchonTargets = dualFixture,
     })
     local okDual, errDual = pcall(dualEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
     check("archon.v2_raid_selected.fire", okDual, errDual)
@@ -756,6 +743,10 @@ do
     eq("archon.v1_with_raid_pref_falls_back.target", v1FallbackMeta.target, 823)
     eq("archon.v1_with_raid_pref_falls_back.key", v1FallbackMeta.snapshotKey, "mythicPlus")
 
+    local v2MissingRaidFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(v2MissingRaidFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 100, haste = 200, mastery = 823, versatility = 400 })
+    v2MissingRaidFixture.snapshots.raid = nil
     local v2MissingRaidEnv, _, v2MissingRaidTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
         specIndex = 1,
@@ -763,25 +754,7 @@ do
         statsProDB = {
             targetSnapshot = "raid",
         },
-        statsProArchonTargets = {
-            schemaVersion = 2,
-            source = "archon",
-            snapshots = {
-                mythicPlus = {
-                    label = "M+ High Keys",
-                    title = "M+ Target",
-                    capturedAt = "2026-05-15",
-                    specs = {
-                        MAGE = {
-                            frost = {
-                                sourceUrl = "https://www.archon.gg/wow/builds/frost/mage/mythic-plus/overview/high-keys/all-dungeons/this-week",
-                                targets = { mastery = 823 },
-                            },
-                        },
-                    },
-                },
-            },
-        },
+        statsProArchonTargets = v2MissingRaidFixture,
     })
     local okV2MissingRaid, errV2MissingRaid = pcall(v2MissingRaidEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
     check("archon.v2_missing_raid_profile_falls_back.fire", okV2MissingRaid, errV2MissingRaid)
@@ -789,6 +762,10 @@ do
     eq("archon.v2_missing_raid_profile_falls_back.target", v2FallbackMeta.target, 823)
     eq("archon.v2_missing_raid_profile_falls_back.key", v2FallbackMeta.snapshotKey, "mythicPlus")
 
+    local v2RaidMissingSpecFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(v2RaidMissingSpecFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 100, haste = 200, mastery = 823, versatility = 400 })
+    v2RaidMissingSpecFixture.snapshots.raid.specs.MAGE.frost = nil
     local v2RaidMissingSpecEnv, _, v2RaidMissingSpecTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
         specIndex = 1,
@@ -796,76 +773,59 @@ do
         statsProDB = {
             targetSnapshot = "raid",
         },
-        statsProArchonTargets = {
-            schemaVersion = 2,
-            source = "archon",
-            snapshots = {
-                mythicPlus = {
-                    capturedAt = "2026-05-15",
-                    specs = {
-                        MAGE = {
-                            frost = {
-                                targets = { mastery = 823 },
-                            },
-                        },
-                    },
-                },
-                raid = {
-                    capturedAt = "2026-05-15",
-                    specs = {
-                        WARRIOR = {
-                            arms = {
-                                targets = { mastery = 500 },
-                            },
-                        },
-                    },
-                },
-            },
-        },
+        statsProArchonTargets = v2RaidMissingSpecFixture,
     })
     local okV2RaidMissingSpec, errV2RaidMissingSpec = pcall(v2RaidMissingSpecEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
     check("archon.v2_raid_profile_missing_spec_no_mplus_fallback.fire", okV2RaidMissingSpec, errV2RaidMissingSpec)
     eq("archon.v2_raid_profile_missing_spec_no_mplus_fallback.meta", v2RaidMissingSpecTest.buildArchonTargetMeta("mastery", 700, v2RaidMissingSpecEnv.CR_MASTERY), nil)
 
+    for index, spec in ipairs(archonManifest.specs) do
+        local parityFixture = makeArchonV2Fixture("2026-05-15")
+        local expectedTarget = 1000 + index
+        setArchonFixtureTargets(parityFixture, "mythicPlus", spec.classToken, spec.specKey,
+            { crit = 100, haste = 200, mastery = expectedTarget, versatility = 400 })
+        local parityEnv, _, parityTest = loadStatsPro("enUS", {
+            unitClassToken = spec.classToken,
+            specIndex = 1,
+            specID = spec.specID,
+            statsProArchonTargets = parityFixture,
+        })
+        local parityMeta = parityTest.buildArchonTargetMeta("mastery", 900, parityEnv.CR_MASTERY)
+        eq("archon.spec_manifest_runtime_resolves." .. spec.classToken .. "." .. spec.specKey, parityMeta and parityMeta.target, expectedTarget)
+    end
+
+    local wrongMappingFixture = makeArchonV2Fixture("2026-05-15")
+    wrongMappingFixture.snapshots.mythicPlus.specs.MAGE.frost = nil
+    local _, _, wrongMappingTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProArchonTargets = wrongMappingFixture,
+    })
+    eq("archon.spec_manifest_runtime_wrong_mapping_returns_nil", wrongMappingTest.buildArchonTargetMeta("mastery", 900), nil)
+
+    local devourerFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(devourerFixture, "mythicPlus", "DEMONHUNTER", "devourer",
+        { crit = 259, haste = 1036, mastery = 1187, versatility = 58 })
     local devourerArchonEnv, _, devourerArchonTest = loadStatsPro("enUS", {
         unitClassToken = "DEMONHUNTER",
         specIndex = 1,
         specID = 1480,
-        statsProArchonTargets = {
-            schemaVersion = 1,
-            capturedAt = "2026-05-15",
-            bracket = "high-keys",
-            dungeon = "all-dungeons",
-            window = "this-week",
-            specs = {
-                DEMONHUNTER = {
-                    devourer = {
-                        sourceUrl = "https://www.archon.gg/wow/builds/devourer/demon-hunter/mythic-plus/overview/high-keys/all-dungeons/this-week",
-                        targets = { crit = 259, haste = 1036, mastery = 1187, versatility = 58 },
-                    },
-                },
-            },
-        },
+        statsProArchonTargets = devourerFixture,
     })
     local devourerMeta = devourerArchonTest.buildArchonTargetMeta("mastery", 1000, devourerArchonEnv.CR_MASTERY)
     eq("archon.devourer.spec_id_maps", devourerMeta.target, 1187)
     eq("archon.devourer.delta", devourerMeta.delta, -187)
+    eq("archon.devourer.snapshot_key", devourerMeta.snapshotKey, "mythicPlus")
 
+    local badTargetFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(badTargetFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 100, haste = 200, mastery = math.huge, versatility = 400 })
     local _, _, badTargetArchonTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
         specIndex = 1,
         specID = 64,
-        statsProArchonTargets = {
-            schemaVersion = 1,
-            capturedAt = "2026-05-15",
-            specs = {
-                MAGE = {
-                    frost = {
-                        targets = { mastery = math.huge },
-                    },
-                },
-            },
-        },
+        statsProArchonTargets = badTargetFixture,
     })
     eq("archon.meta.nonfinite_target_returns_nil", badTargetArchonTest.buildArchonTargetMeta("mastery", 1000), nil)
 
@@ -2054,6 +2014,9 @@ end
 
 do
     local ratingCalls = 0
+    local targetHoverFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(targetHoverFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 1000, haste = 200, mastery = 300, versatility = 400 })
     local critEnv, _, critTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
         specIndex = 1,
@@ -2069,17 +2032,7 @@ do
             showTertiary = false,
             showDefensive = false,
         },
-        statsProArchonTargets = {
-            schemaVersion = 1,
-            capturedAt = "2026-05-15",
-            specs = {
-                MAGE = {
-                    frost = {
-                        targets = { crit = 1000 },
-                    },
-                },
-            },
-        },
+        statsProArchonTargets = targetHoverFixture,
         getCritChance = function() return 12.5 end,
         getCombatRating = function()
             ratingCalls = ratingCalls + 1
@@ -2307,6 +2260,9 @@ end
 do
     local secretVersRatingBonus = 14.7
     local secretVersRating = 888
+    local secretVersFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(secretVersFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 100, haste = 200, mastery = 300, versatility = 1000 })
     local versEnv, _, versTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
         specIndex = 1,
@@ -2323,17 +2279,7 @@ do
             showTertiary = false,
             showDefensive = false,
         },
-        statsProArchonTargets = {
-            schemaVersion = 1,
-            capturedAt = "2026-05-15",
-            specs = {
-                MAGE = {
-                    frost = {
-                        targets = { versatility = 1000 },
-                    },
-                },
-            },
-        },
+        statsProArchonTargets = secretVersFixture,
         getCombatRatingBonus = function() return secretVersRatingBonus end,
         getVersatilityBonus = function() return 0 end,
         getCombatRating = function() return secretVersRating end,

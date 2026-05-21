@@ -1743,6 +1743,48 @@ do
 end
 
 do
+    local hasteEnv, _, hasteTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            hideZeroOffensive = false,
+            showCrit = false,
+            showHaste = true,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getHaste = function() error("haste API unavailable") end,
+    })
+    fireEvent("render.offensive_api_error_skips_haste.fire", hasteEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(hasteTest.buildRenderBlocks)
+    check("render.offensive_api_error_skips_haste.no_error", ok, blocks)
+    eq("render.offensive_api_error_skips_haste.no_fake_zero_row", blockDumpContains(blocks, "Haste:"), false)
+end
+
+do
+    local critEnv, _, critTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            hideZeroOffensive = false,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCritChance = function() error("crit API unavailable") end,
+        getRangedCritChance = function() return nil end,
+        getSpellCritChance = function() return nil end,
+    })
+    fireEvent("render.offensive_api_error_skips_crit.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.offensive_api_error_skips_crit.no_error", ok, blocks)
+    eq("render.offensive_api_error_skips_crit.no_fake_zero_row", blockDumpContains(blocks, "Crit:"), false)
+end
+
+do
     local critEnv, _, critTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = true,
@@ -2061,6 +2103,52 @@ do
     ok, blocks = pcall(versTest.buildRenderBlocks)
     check("render.versatility_secret_bonus_uses_live_renderable.secret_no_error", ok, blocks)
     eq("render.versatility_secret_bonus_uses_live_renderable.secret_live_value", blockDumpContains(blocks, "14.7%"), true)
+end
+
+do
+    local secretVersRatingBonus = 14.7
+    local secretVersRating = 888
+    local versEnv, _, versTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProDB = {
+            showOffensive = true,
+            showRating = true,
+            showPercentage = true,
+            hideZeroOffensive = false,
+            showCrit = false,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = true,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        statsProArchonTargets = {
+            schemaVersion = 1,
+            capturedAt = "2026-05-15",
+            specs = {
+                MAGE = {
+                    frost = {
+                        targets = { versatility = 1000 },
+                    },
+                },
+            },
+        },
+        getCombatRatingBonus = function() return secretVersRatingBonus end,
+        getVersatilityBonus = function() return 0 end,
+        getCombatRating = function() return secretVersRating end,
+        issecretvalue = function(value)
+            return value == secretVersRatingBonus or value == secretVersRating
+        end,
+    })
+    fireEvent("render.versatility_secret_rating_displays_without_meta.fire", versEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_secret_rating_displays_without_meta.no_error", ok, blocks)
+    eq("render.versatility_secret_rating_displays_without_meta.row", blockDumpContains(blocks, "Vers:"), true)
+    eq("render.versatility_secret_rating_displays_without_meta.rating", blockDumpContains(blocks, "888"), true)
+    eq("render.versatility_secret_rating_displays_without_meta.percent", blockDumpContains(blocks, "14.7%"), true)
+    eq("render.versatility_secret_rating_displays_without_meta.no_target_meta", blocks[2].targetRows[1], false)
 end
 
 do

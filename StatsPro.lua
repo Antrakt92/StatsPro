@@ -1668,12 +1668,13 @@ local function SectionHeader(labelKey)
     return string.format("|cff808080— %s —|r", L(labelKey))
 end
 
--- pcall every stat API so 12.x secret values never touch our Lua logic.
--- Raw returns flow only into string.format, which Blizzard whitelisted for secrets.
+-- pcall every stat API so 12.x secret values never touch unsafe Lua logic.
+-- Raw successful returns flow only into string.format/SetText paths that Blizzard
+-- allows for secrets. API failures stay nil rather than rendering fake 0 values.
 local function safeCall(fn, ...)
     local ok, val = pcall(fn, ...)
     if ok then return val end
-    return 0
+    return nil
 end
 
 local SAFE_NUM = {}
@@ -1698,6 +1699,13 @@ function SAFE_NUM.SafeDisplayPercent(fn, ...)
     local value = safeCall(fn, ...)
     if SAFE_NUM.IsRenderableNumberValue(value) then return value end
     return nil
+end
+
+function SAFE_NUM.ReadRatingValue(fn, ...)
+    local value = safeCall(fn, ...)
+    if issecretvalue(value) then return value, nil end
+    if SAFE_NUM.IsCleanFiniteNumber(value) and value >= 0 then return value, value end
+    return nil, nil
 end
 
 function SAFE_NUM.SafeRatingInt(fn, ...)
@@ -3111,8 +3119,11 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
         if cached[def.showKey] then
             local val = SAFE_NUM.SafeDisplayPercent(def.api)
             if shouldShow(def.showKey, val, cached.hideZeroOffensive) then
-                local targetRating = needTargetRating and SAFE_NUM.CleanRatingInt(GetCombatRating, def.ratingCR) or nil
-                local rating = cached.showRating and (targetRating or SAFE_NUM.SafeRatingInt(GetCombatRating, def.ratingCR)) or 0
+                local ratingDisplay, targetRating
+                if cached.showRating or needTargetRating then
+                    ratingDisplay, targetRating = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
+                end
+                local rating = cached.showRating and (ratingDisplay or 0) or 0
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtRatingPct(rating, val, statColor)
                 if targetRows then
@@ -3132,6 +3143,8 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
         local versFromRating = safeCall(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
         local versFlat       = safeCall(GetVersatilityBonus,  CR_VERSATILITY_DAMAGE_DONE)
         local versDisplay = cached.versTotal
+        local versClean
+        local versRatingDisplay
         local targetVersRating
         -- WARNING: must check operands for secret state before arithmetic. Rating
         -- may be read for either the visible rating column or target-hover metadata;
@@ -3140,22 +3153,24 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
             and not issecretvalue(versFromRating) and not issecretvalue(versFlat) then
             cached.versTotal = versFromRating + versFlat
             versDisplay = cached.versTotal
+            versClean = cached.versTotal
         elseif issecretvalue(versFromRating) then
             versDisplay = versFromRating
         elseif issecretvalue(versFlat) then
             versDisplay = versFlat
         end
         if cached.showRating or needTargetRating then
-            targetVersRating = SAFE_NUM.CleanRatingInt(GetCombatRating, CR_VERSATILITY_DAMAGE_DONE)
+            versRatingDisplay, targetVersRating = SAFE_NUM.ReadRatingValue(GetCombatRating, CR_VERSATILITY_DAMAGE_DONE)
             if targetVersRating then
                 cached.versTotalRating = targetVersRating
             end
         end
         if shouldShow("showVersatility", versDisplay, cached.hideZeroOffensive) then
             local versStr = cs.versatility
-            local vRatStr, vValStr = FmtRatingPct(cached.versTotalRating, versDisplay, versStr)
+            local rating = cached.showRating and (versRatingDisplay or cached.versTotalRating) or 0
+            local vRatStr, vValStr = FmtRatingPct(rating, versDisplay, versStr)
             if targetRows then
-                targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta("versatility", targetVersRating, CR_VERSATILITY_DAMAGE_DONE, versDisplay, "versatility") or false
+                targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta("versatility", targetVersRating, CR_VERSATILITY_DAMAGE_DONE, versClean, "versatility") or false
             end
             PushRow(labels, ratings, values,
                 FormatLabel(versStr, "Vers"),
@@ -3175,7 +3190,8 @@ local function BuildTertiaryLines(labels, ratings, values)
         if cached[def.showKey] then
             local val = SAFE_NUM.SafeDisplayPercent(def.api)
             if shouldShow(def.showKey, val, cached.hideZeroTertiary) then
-                local rating = needRating and SAFE_NUM.SafeRatingInt(GetCombatRating, def.ratingCR) or 0
+                local ratingDisplay = needRating and SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR) or nil
+                local rating = needRating and (ratingDisplay or 0) or 0
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtRatingPct(rating, val, statColor)
                 PushRow(labels, ratings, values,
@@ -3200,7 +3216,8 @@ local function BuildTertiaryLines(labels, ratings, values)
             cached.speedPct = (effectiveYps / 7) * 100
         end
         local speed = cached.speedPct
-        local speedRating = needRating and SAFE_NUM.SafeRatingInt(GetCombatRating, CR_SPEED) or 0
+        local speedRatingDisplay = needRating and SAFE_NUM.ReadRatingValue(GetCombatRating, CR_SPEED) or nil
+        local speedRating = needRating and (speedRatingDisplay or 0) or 0
         if shouldShow("showSpeed", speed, cached.hideZeroTertiary) then
             local statColor = cs.speed
             local rStr, vStr = FmtRatingPct(speedRating, speed, statColor)

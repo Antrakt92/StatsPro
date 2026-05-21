@@ -1800,6 +1800,97 @@ do
 end
 
 do
+    local leechValue = 0
+    local secretMode = false
+    local leechEnv, _, leechTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            hideZeroTertiary = true,
+            showLeech = true,
+            showAvoidance = false,
+            showSpeed = false,
+            showDefensive = false,
+        },
+        getLifesteal = function() return leechValue end,
+        issecretvalue = function(value) return secretMode and value == leechValue end,
+    })
+    fireEvent("render.hide_zero_secret_preserves_hidden_zero.fire", leechEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(leechTest.buildRenderBlocks)
+    check("render.hide_zero_secret_preserves_hidden_zero.clean_no_error", ok, blocks)
+    eq("render.hide_zero_secret_preserves_hidden_zero.clean_no_row", blockDumpContains(blocks, "Leech:"), false)
+    secretMode = true
+    ok, blocks = pcall(leechTest.buildRenderBlocks)
+    check("render.hide_zero_secret_preserves_hidden_zero.secret_no_error", ok, blocks)
+    eq("render.hide_zero_secret_preserves_hidden_zero.secret_no_row", blockDumpContains(blocks, "Leech:"), false)
+end
+
+do
+    local leechValue = 4
+    local secretMode = false
+    local leechEnv, _, leechTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            hideZeroTertiary = true,
+            showLeech = true,
+            showAvoidance = false,
+            showSpeed = false,
+            showDefensive = false,
+        },
+        getLifesteal = function() return leechValue end,
+        issecretvalue = function(value) return secretMode and value == leechValue end,
+    })
+    fireEvent("render.hide_zero_secret_preserves_visible_nonzero.fire", leechEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(leechTest.buildRenderBlocks)
+    check("render.hide_zero_secret_preserves_visible_nonzero.clean_no_error", ok, blocks)
+    eq("render.hide_zero_secret_preserves_visible_nonzero.clean_row", blockDumpContains(blocks, "Leech:"), true)
+    leechValue = 0
+    secretMode = true
+    ok, blocks = pcall(leechTest.buildRenderBlocks)
+    check("render.hide_zero_secret_preserves_visible_nonzero.secret_no_error", ok, blocks)
+    eq("render.hide_zero_secret_preserves_visible_nonzero.secret_row", blockDumpContains(blocks, "Leech:"), true)
+end
+
+do
+    local secretCrit = {}
+    local secretMode = false
+    local updateEnv = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = false,
+            showPercentage = true,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCritChance = function()
+            if secretMode then return secretCrit end
+            return 10
+        end,
+        issecretvalue = function(value) return value == secretCrit end,
+    })
+    fireEvent("render.update_ticker_survives_stat_error.fire", updateEnv, "PLAYER_ENTERING_WORLD")
+    local ticker
+    for _, frame in ipairs(updateEnv.__frames) do
+        if frame.scripts and type(frame.scripts.OnUpdate) == "function" then
+            ticker = frame
+            break
+        end
+    end
+    exists("render.update_ticker_survives_stat_error.ticker", ticker)
+    secretMode = true
+    local ok, err = pcall(ticker.scripts.OnUpdate, ticker, 999)
+    check("render.update_ticker_survives_stat_error.no_bubble", ok, err)
+    clearPrints(updateEnv)
+    slash("render.update_ticker_survives_stat_error.debug_perf", updateEnv, "debug perf")
+    eq("render.update_ticker_survives_stat_error.debug_reports_error", printContains(updateEnv, "updateErrors=1"), true)
+end
+
+do
     local dodgeEnv, _, dodgeTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = false,

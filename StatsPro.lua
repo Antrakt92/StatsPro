@@ -665,6 +665,11 @@ cached = {
     repairCost = 0,         -- live repair cost in copper (sum from per-slot tooltip scan)
     -- WARNING: GetUnitSpeed returns secret values in combat → math.max taints. Cache OOC.
     speedPct = 0,
+    -- Last clean hide-zero decision per stat row. Secret combat reads cannot be safely
+    -- compared to 0, so they reuse this instead of making absent rows appear.
+    cleanRowVisibility = {},
+    updateErrorCount = 0,
+    lastUpdateError = nil,
     displayMode = "flat",
     labelStyle = "full",
     targetSnapshot = "mythicPlus",
@@ -1706,11 +1711,16 @@ local function IsRenderablePercentValue(val)
 end
 
 -- 12.x: hideZero check on a possibly-secret value.
--- issecretvalue() == in combat → always show (real value is non-zero).
-local function shouldShow(val, hideZero)
+-- Secret values cannot be compared with 0, so hide-zero rows reuse the last clean
+-- visibility decision. Cold secret reads stay hidden rather than surfacing fake 0 rows.
+local function shouldShow(rowKey, val, hideZero)
     if not IsRenderablePercentValue(val) then return false end
+    local isSecret = issecretvalue(val)
+    if not isSecret and rowKey then
+        cached.cleanRowVisibility[rowKey] = val ~= 0
+    end
     if not hideZero then return true end
-    if issecretvalue(val) then return true end
+    if isSecret then return rowKey and cached.cleanRowVisibility[rowKey] == true end
     return val ~= 0
 end
 
@@ -3063,7 +3073,7 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
     for _, def in ipairs(OFFENSIVE_STATS) do
         if cached[def.showKey] then
             local val = SAFE_NUM.SafeDisplayPercent(def.api)
-            if shouldShow(val, cached.hideZeroOffensive) then
+            if shouldShow(def.showKey, val, cached.hideZeroOffensive) then
                 local targetRating = needTargetRating and SAFE_NUM.CleanRatingInt(GetCombatRating, def.ratingCR) or nil
                 local rating = cached.showRating and (targetRating or SAFE_NUM.SafeRatingInt(GetCombatRating, def.ratingCR)) or 0
                 local statColor = cs[def.colorKey]
@@ -3096,7 +3106,7 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
                 cached.versTotalRating = targetVersRating
             end
         end
-        if shouldShow(cached.versTotal, cached.hideZeroOffensive) then
+        if shouldShow("showVersatility", cached.versTotal, cached.hideZeroOffensive) then
             local versStr = cs.versatility
             local vRatStr, vValStr = FmtRatingPct(cached.versTotalRating, cached.versTotal, versStr)
             if targetRows then
@@ -3119,7 +3129,7 @@ local function BuildTertiaryLines(labels, ratings, values)
     for _, def in ipairs(TERTIARY_STATS) do
         if cached[def.showKey] then
             local val = SAFE_NUM.SafeDisplayPercent(def.api)
-            if shouldShow(val, cached.hideZeroTertiary) then
+            if shouldShow(def.showKey, val, cached.hideZeroTertiary) then
                 local rating = needRating and SAFE_NUM.SafeRatingInt(GetCombatRating, def.ratingCR) or 0
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtRatingPct(rating, val, statColor)
@@ -3146,7 +3156,7 @@ local function BuildTertiaryLines(labels, ratings, values)
         end
         local speed = cached.speedPct
         local speedRating = needRating and SAFE_NUM.SafeRatingInt(GetCombatRating, CR_SPEED) or 0
-        if shouldShow(speed, cached.hideZeroTertiary) then
+        if shouldShow("showSpeed", speed, cached.hideZeroTertiary) then
             local statColor = cs.speed
             local rStr, vStr = FmtRatingPct(speedRating, speed, statColor)
             PushRow(labels, ratings, values,
@@ -3165,7 +3175,7 @@ local function BuildDefensiveLines(labels, ratings, values)
     for _, def in ipairs(DEFENSIVE_STATS) do
         if cached[def.showKey] and (not def.appliesFn or def.appliesFn()) then
             local val = safeCall(def.api)
-            if IsRenderablePercentValue(val) and shouldShow(val, cached.hideZeroDefensive) then
+            if IsRenderablePercentValue(val) and shouldShow(def.showKey, val, cached.hideZeroDefensive) then
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtPctOnly(val, statColor)
                 PushRow(labels, ratings, values,
@@ -3180,7 +3190,7 @@ local function BuildDefensiveLines(labels, ratings, values)
     if cached.showArmor then
         local armorStr = cs.armor
         local valueColor = (cached.matchValueColorToStat and armorStr) or cs.percentage
-        if shouldShow(cached.armorDR, cached.hideZeroDefensive) then
+        if shouldShow("showArmor", cached.armorDR, cached.hideZeroDefensive) then
             local rCol, vCol = RouteValueOnly(FmtColorPct(valueColor, cached.armorDR))
             PushRow(labels, ratings, values,
                 FormatLabel(armorStr, "Armor"),
@@ -3425,6 +3435,21 @@ local function UpdateStats()
     end
 end
 
+function addon:RunUpdateStatsSafe()
+    local ok, err = pcall(UpdateStats)
+    if not ok then
+        cached.updateErrorCount = (cached.updateErrorCount or 0) + 1
+        if issecretvalue(err) then
+            cached.lastUpdateError = "<secret>"
+        elseif type(err) == "string" then
+            cached.lastUpdateError = err
+        else
+            cached.lastUpdateError = "<non-string error>"
+        end
+    end
+    return ok
+end
+
 --[[ ============================================================
     12. UPDATE TIMER (dedicated invisible frame)
 ============================================================ ]]
@@ -3441,7 +3466,7 @@ local tickerFrame = CreateFrame("Frame")
 tickerFrame:SetScript("OnUpdate", function(self, elapsed)
     timeSinceLastUpdate = timeSinceLastUpdate + elapsed
     if timeSinceLastUpdate >= cached.updateInterval then
-        UpdateStats()
+        addon:RunUpdateStatsSafe()
         timeSinceLastUpdate = 0
     end
 end)
@@ -3657,7 +3682,7 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
         StatsProDB[dbKey] = self:GetChecked()
         CacheSettings()
         if onChange then onChange(self:GetChecked()) end
-        UpdateStats()
+        addon:RunUpdateStatsSafe()
     end)
     PushRefresher(function() cb:SetChecked(GetBoolDB(dbKey)) end)
     return cb, text
@@ -3749,14 +3774,14 @@ local function OpenColorPicker(btn, statName)
         btn:SetBackdropColor(r, g, b, 1)
         StatsProDB.colors[statName] = { r = r, g = g, b = b }
         CacheSettings()
-        UpdateStats()
+        addon:RunUpdateStatsSafe()
     end
     local function OnCancel()
         if not COLOR_PICKER_STATE.IsActive(session) then return end
         btn:SetBackdropColor(snapshot.r, snapshot.g, snapshot.b, 1)
         StatsProDB.colors[statName] = hadExplicitColor and { r = snapshot.r, g = snapshot.g, b = snapshot.b } or nil
         CacheSettings()
-        UpdateStats()
+        addon:RunUpdateStatsSafe()
         COLOR_PICKER_STATE.Clear(session)
     end
     session.swatchFunc = OnColorSelect
@@ -4120,7 +4145,7 @@ local function ResetToDefaults()
     SetAllPanelsScale(defaults.scale)
     LoadAllPositions()
     SetAllPanelsLockState(defaults.isLocked)
-    UpdateStats()
+    addon:RunUpdateStatsSafe()
 
     -- Step 4: re-sync config widget visuals from freshly-reset DB.
     -- WHY pcall: a buggy refresher should not break the entire walk. Print error
@@ -4149,7 +4174,7 @@ function addon.archonTargets.SelectTargetSnapshotDropdownValue(value, opt, dropd
     CacheSettings()
     UIDropDownMenu_SetText(dropdown, L(opt.label))
     CloseDropDownMenus()
-    UpdateStats()
+    addon:RunUpdateStatsSafe()
 end
 -- WARNING: OpenConfigMenu is already near Lua 5.1's 60-upvalue function limit.
 -- Keep these as global bridge references instead of local upvalues inside the builder.
@@ -4459,7 +4484,7 @@ function addon:OpenConfigMenu()
                 UIDropDownMenu_SetText(dropdown, L(opt.label))
                 ApplySplitBlockChecksEnabled()
                 CloseDropDownMenus()
-                UpdateStats()
+                addon:RunUpdateStatsSafe()
             end)
     end
 
@@ -4551,7 +4576,7 @@ function addon:OpenConfigMenu()
                 CacheSettings()
                 UIDropDownMenu_SetText(dropdown, L(opt.label))
                 CloseDropDownMenus()
-                UpdateStats()
+                addon:RunUpdateStatsSafe()
             end)
     end
     CreateCheckbox(layoutTab, "StatsProMatchColorCheck",
@@ -5092,7 +5117,7 @@ function addon:OpenConfigMenu()
             -- mirrors ApplyTextStyleToAllPanels above for the stat panels' baseline.
             ApplyConfigFont(ResolveConfigFont(locale))
             RefreshConfigLocalization()
-            UpdateStats()
+            addon:RunUpdateStatsSafe()
         end
 
         -- WHY re-resolve from DB instead of stored baseline: mirrors font picker's OnHide
@@ -5114,7 +5139,7 @@ function addon:OpenConfigMenu()
             -- the enUS-baseline CONFIG_FONT, otherwise they'd stay on ARIALN unnecessarily.
             ApplyConfigFont(ResolveConfigFont(active))
             RefreshConfigLocalization()
-            UpdateStats()
+            addon:RunUpdateStatsSafe()
         end
 
         local langDropdown = CreateFrame("Frame", "StatsProLanguageDropdown", displayTab, "UIDropDownMenuTemplate")
@@ -5156,7 +5181,7 @@ function addon:OpenConfigMenu()
                     CloseDropDownMenus()
                     RefreshLanguageWarning()
                     RefreshConfigLocalization()
-                    UpdateStats()
+                    addon:RunUpdateStatsSafe()
                 end
                 UIDropDownMenu_AddButton(info)
             end
@@ -5487,6 +5512,9 @@ local function PrintDebugPerf()
         updateCount,
         cached.updateInterval or GetNumberDB("updateInterval"),
         timeSinceLastUpdate or 0))
+    PrintMsg(string.format("debug perf: updateErrors=%d lastError=%s",
+        cached.updateErrorCount or 0,
+        cached.lastUpdateError or "<none>"))
     PrintMsg(string.format("debug perf: visible=%s mode=%s mainShown=%s sideShown=%s",
         tostring(cached.isVisible),
         tostring(cached.displayMode),
@@ -5943,7 +5971,7 @@ local function SetVisible(visible)
     local db = EnsureStatsProDBTable()
     db.isVisible = visible
     CacheSettings()
-    UpdateStats()
+    addon:RunUpdateStatsSafe()
     -- WHY: master Visible checkbox in config menu may be open; sync its state.
     local cb = _G["StatsProVisibleCheck"]
     if cb then cb:SetChecked(visible) end

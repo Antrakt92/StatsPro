@@ -407,7 +407,7 @@ function addon.GetBestCritChance()
     local melee = read(GetCritChance)
     local ranged = read(GetRangedCritChance)
     local spell = read(GetSpellCritChance, 2)
-    if spell == nil then
+    if not issecretvalue(spell) and spell == nil then
         spell = read(GetSpellCritChance)
     end
     local clean = maxClean(melee, ranged, spell)

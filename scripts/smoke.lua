@@ -1699,6 +1699,86 @@ do
 end
 
 do
+    eq("selector.best_crit_exposed_on_addon", type(addon.GetBestCritChance), "function")
+end
+
+do
+    local _, critAddon = loadStatsPro("enUS", {
+        getCritChance = function() return 10 end,
+        getRangedCritChance = function() return 15 end,
+        getSpellCritChance = function() return 20 end,
+    })
+    local ok, value = pcall(critAddon.GetBestCritChance)
+    check("selector.best_crit_uses_best_clean_source.no_error", ok, value)
+    eq("selector.best_crit_uses_best_clean_source.value", value, 20)
+end
+
+do
+    local bareSpellCalls = 0
+    local _, critAddon = loadStatsPro("enUS", {
+        getCritChance = function() return nil end,
+        getRangedCritChance = function() return nil end,
+        getSpellCritChance = function(school)
+            if school == 2 then return nil end
+            bareSpellCalls = bareSpellCalls + 1
+            return 23.4
+        end,
+    })
+    local ok, value = pcall(critAddon.GetBestCritChance)
+    check("selector.best_crit_spell2_falls_back_to_unscoped_spell.no_error", ok, value)
+    eq("selector.best_crit_spell2_falls_back_to_unscoped_spell.value", value, 23.4)
+    eq("selector.best_crit_spell2_falls_back_to_unscoped_spell.calls", bareSpellCalls, 1)
+end
+
+do
+    local _, critAddon = loadStatsPro("enUS", {
+        getCritChance = function() return "bad" end,
+        getRangedCritChance = function() return 17 end,
+        getSpellCritChance = function() return nil end,
+    })
+    local ok, value = pcall(critAddon.GetBestCritChance)
+    check("selector.best_crit_ignores_malformed_sources.no_error", ok, value)
+    eq("selector.best_crit_ignores_malformed_sources.value", value, 17)
+end
+
+do
+    local _, critAddon = loadStatsPro("enUS", {
+        getCritChance = function() return nil end,
+        getRangedCritChance = function() return "bad" end,
+        getSpellCritChance = function() return nil end,
+    })
+    local ok, value = pcall(critAddon.GetBestCritChance)
+    check("selector.best_crit_returns_nil_when_no_renderable_source.no_error", ok, value)
+    eq("selector.best_crit_returns_nil_when_no_renderable_source.value", value, nil)
+end
+
+do
+    local secretCrit = {}
+    local _, critAddon = loadStatsPro("enUS", {
+        getCritChance = function() return secretCrit end,
+        getRangedCritChance = function() return 12 end,
+        getSpellCritChance = function() return nil end,
+        issecretvalue = function(value) return value == secretCrit end,
+    })
+    local ok, value = pcall(critAddon.GetBestCritChance)
+    check("selector.best_crit_prefers_clean_value_over_secret.no_error", ok, value)
+    eq("selector.best_crit_prefers_clean_value_over_secret.value", value, 12)
+end
+
+do
+    local secretCrit = {}
+    local _, critAddon = loadStatsPro("enUS", {
+        getCritChance = function() return nil end,
+        getRangedCritChance = function() return secretCrit end,
+        getSpellCritChance = function() return nil end,
+        issecretvalue = function(value) return value == secretCrit end,
+    })
+    local ok, value = pcall(critAddon.GetBestCritChance)
+    check("selector.best_crit_returns_secret_when_only_secret_source_exists.no_error", ok, value)
+    eq("selector.best_crit_returns_secret_when_only_secret_source_exists.value", value, secretCrit)
+end
+
+do
     local critEnv, _, critTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = true,
@@ -1828,6 +1908,36 @@ do
     check("render.crit_falls_back_to_spell_source.no_error", ok, blocks)
     eq("render.crit_falls_back_to_spell_source.row", blockDumpContains(blocks, "Crit:"), true)
     eq("render.crit_falls_back_to_spell_source.spell_value", blockDumpContains(blocks, "23.4%"), true)
+end
+
+do
+    local secretSpellCrit = {}
+    local spellCalls = 0
+    local critEnv, _, critTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            hideZeroOffensive = false,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCritChance = function() return 11.1 end,
+        getRangedCritChance = function() return 18.6 end,
+        getSpellCritChance = function()
+            spellCalls = spellCalls + 1
+            return secretSpellCrit
+        end,
+        issecretvalue = function(value) return value == secretSpellCrit end,
+    })
+    fireEvent("render.crit_spell_secret_uses_best_clean_fallback.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.crit_spell_secret_uses_best_clean_fallback.no_error", ok, blocks)
+    eq("render.crit_spell_secret_uses_best_clean_fallback.spell_secret_seen", spellCalls > 0, true)
+    eq("render.crit_spell_secret_uses_best_clean_fallback.row", blockDumpContains(blocks, "Crit:"), true)
+    eq("render.crit_spell_secret_uses_best_clean_fallback.clean_fallback_value", blockDumpContains(blocks, "18.6%"), true)
 end
 
 do

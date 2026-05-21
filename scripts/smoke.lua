@@ -1652,6 +1652,9 @@ do
     slash("slash.localized_ruRU.debug_rating", slashEnv, "debug rating")
     eq("slash.localized_ruRU.debug_rating_english", printContains(slashEnv, "debug rating"), true)
     clearPrints(slashEnv)
+    slash("slash.localized_ruRU.debug_live", slashEnv, "debug live")
+    eq("slash.localized_ruRU.debug_live_english", printContains(slashEnv, "debug live"), true)
+    clearPrints(slashEnv)
     slash("slash.localized_ruRU.debug_bucket", slashEnv, "debug bucket")
     eq("slash.localized_ruRU.debug_bucket_english", printContains(slashEnv, "bucket:"), true)
     clearPrints(slashEnv)
@@ -1687,6 +1690,8 @@ do
             showDefensive = false,
         },
         getCritChance = function() return nil end,
+        getRangedCritChance = function() return nil end,
+        getSpellCritChance = function() return nil end,
     })
     fireEvent("render.offensive_nil_percent_skips_crit.fire", critEnv, "PLAYER_ENTERING_WORLD")
     local ok, blocks = pcall(critTest.buildRenderBlocks)
@@ -1707,11 +1712,59 @@ do
             showDefensive = false,
         },
         getCritChance = function() return "bad" end,
+        getRangedCritChance = function() return "bad" end,
+        getSpellCritChance = function() return "bad" end,
     })
     fireEvent("render.offensive_wrong_type_percent_skips_crit.fire", critEnv, "PLAYER_ENTERING_WORLD")
     local ok, blocks = pcall(critTest.buildRenderBlocks)
     check("render.offensive_wrong_type_percent_skips_crit.no_error", ok, blocks)
     eq("render.offensive_wrong_type_percent_skips_crit.no_row", blockDumpContains(blocks, "Crit:"), false)
+end
+
+do
+    local critEnv, _, critTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            hideZeroOffensive = false,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCritChance = function() return 10 end,
+        getRangedCritChance = function() return 15 end,
+        getSpellCritChance = function() return 20 end,
+    })
+    fireEvent("render.crit_uses_best_clean_source.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.crit_uses_best_clean_source.no_error", ok, blocks)
+    eq("render.crit_uses_best_clean_source.row", blockDumpContains(blocks, "Crit:"), true)
+    eq("render.crit_uses_best_clean_source.spell_value", blockDumpContains(blocks, "20.0%"), true)
+end
+
+do
+    local critEnv, _, critTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            hideZeroOffensive = false,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCritChance = function() return nil end,
+        getRangedCritChance = function() return nil end,
+        getSpellCritChance = function() return 23.4 end,
+    })
+    fireEvent("render.crit_falls_back_to_spell_source.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.crit_falls_back_to_spell_source.no_error", ok, blocks)
+    eq("render.crit_falls_back_to_spell_source.row", blockDumpContains(blocks, "Crit:"), true)
+    eq("render.crit_falls_back_to_spell_source.spell_value", blockDumpContains(blocks, "23.4%"), true)
 end
 
 do
@@ -1871,6 +1924,8 @@ do
             if secretMode then return secretCrit end
             return 10
         end,
+        getRangedCritChance = function() return nil end,
+        getSpellCritChance = function() return nil end,
         issecretvalue = function(value) return value == secretCrit end,
     })
     fireEvent("render.update_ticker_survives_stat_error.fire", updateEnv, "PLAYER_ENTERING_WORLD")
@@ -1949,6 +2004,42 @@ do
     local ok, blocks = pcall(versTest.buildRenderBlocks)
     check("render.versatility_cold_unknown_not_zero.no_error", ok, blocks)
     eq("render.versatility_cold_unknown_not_zero.no_row", blockDumpContains(blocks, "Vers:"), false)
+end
+
+do
+    local secretMode = false
+    local secretVersRatingBonus = 14.7
+    local versEnv, _, versTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = false,
+            showPercentage = true,
+            hideZeroOffensive = false,
+            showCrit = false,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = true,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCombatRatingBonus = function()
+            if secretMode then return secretVersRatingBonus end
+            return 10
+        end,
+        getVersatilityBonus = function()
+            if secretMode then return 0 end
+            return 2
+        end,
+        issecretvalue = function(value) return secretMode and value == secretVersRatingBonus end,
+    })
+    fireEvent("render.versatility_secret_bonus_uses_live_renderable.fire", versEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_secret_bonus_uses_live_renderable.clean_no_error", ok, blocks)
+    eq("render.versatility_secret_bonus_uses_live_renderable.clean_total", blockDumpContains(blocks, "12.0%"), true)
+    secretMode = true
+    ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_secret_bonus_uses_live_renderable.secret_no_error", ok, blocks)
+    eq("render.versatility_secret_bonus_uses_live_renderable.secret_live_value", blockDumpContains(blocks, "14.7%"), true)
 end
 
 do

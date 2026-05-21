@@ -381,8 +381,45 @@ local defaults = {
 --[[ ============================================================
     4. STAT DEFINITION TABLES (data-driven; UpdateStats iterates these)
 ============================================================ ]]
+-- WHY: Retail exposes crit through separate melee/ranged/spell APIs. In 12.x dungeon
+-- contexts the generic melee read can be stale or secret while spell/ranged reads still
+-- carry the live paper-doll value. SinStats uses max(melee, ranged, spell); Peavers
+-- prefers spell crit first. We use max when clean, and pass a secret value through for
+-- display instead of manufacturing 0.
+function addon.GetBestCritChance()
+    local function read(fn, ...)
+        if type(fn) ~= "function" then return nil end
+        local ok, value = pcall(fn, ...)
+        if ok then return value end
+        return nil
+    end
+    local function maxClean(...)
+        local best
+        for i = 1, select("#", ...) do
+            local value = select(i, ...)
+            if not issecretvalue(value) and type(value) == "number" and value == value
+                and value > -math.huge and value < math.huge then
+                best = best and math.max(best, value) or value
+            end
+        end
+        return best
+    end
+    local melee = read(GetCritChance)
+    local ranged = read(GetRangedCritChance)
+    local spell = read(GetSpellCritChance, 2)
+    if spell == nil then
+        spell = read(GetSpellCritChance)
+    end
+    local clean = maxClean(melee, ranged, spell)
+    if clean ~= nil then return clean end
+    if issecretvalue(spell) then return spell end
+    if issecretvalue(ranged) then return ranged end
+    if issecretvalue(melee) then return melee end
+    return nil
+end
+
 local OFFENSIVE_STATS = {
-    { statKey = "crit",    label = "Crit",    api = GetCritChance,    ratingCR = CR_CRIT_MELEE,  colorKey = "crit",    showKey = "showCrit"    },
+    { statKey = "crit",    label = "Crit",    api = addon.GetBestCritChance, ratingCR = CR_CRIT_MELEE,  colorKey = "crit",    showKey = "showCrit"    },
     { statKey = "haste",   label = "Haste",   api = GetHaste,         ratingCR = CR_HASTE_MELEE, colorKey = "haste",   showKey = "showHaste"   },
     { statKey = "mastery", label = "Mastery", api = GetMasteryEffect, ratingCR = CR_MASTERY,     colorKey = "mastery", showKey = "showMastery" },
     -- versatility handled specially (dual-source: rating + flat); gated by showVersatility
@@ -3088,10 +3125,13 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
         end
     end
 
-    -- Versatility: dual-source (rating bonus + flat). Cache OOC; in combat use cached.
+    -- Versatility: dual-source (rating bonus + flat). Cache clean exact totals; when
+    -- 12.x returns a secret rating bonus in combat, pass that renderable value through
+    -- instead of freezing the visible row on the last out-of-combat total.
     if cached.showVersatility then
         local versFromRating = safeCall(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
         local versFlat       = safeCall(GetVersatilityBonus,  CR_VERSATILITY_DAMAGE_DONE)
+        local versDisplay = cached.versTotal
         local targetVersRating
         -- WARNING: must check operands for secret state before arithmetic. Rating
         -- may be read for either the visible rating column or target-hover metadata;
@@ -3099,6 +3139,11 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
         if SAFE_NUM.IsCleanFiniteNumber(versFromRating) and SAFE_NUM.IsCleanFiniteNumber(versFlat)
             and not issecretvalue(versFromRating) and not issecretvalue(versFlat) then
             cached.versTotal = versFromRating + versFlat
+            versDisplay = cached.versTotal
+        elseif issecretvalue(versFromRating) then
+            versDisplay = versFromRating
+        elseif issecretvalue(versFlat) then
+            versDisplay = versFlat
         end
         if cached.showRating or needTargetRating then
             targetVersRating = SAFE_NUM.CleanRatingInt(GetCombatRating, CR_VERSATILITY_DAMAGE_DONE)
@@ -3106,11 +3151,11 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
                 cached.versTotalRating = targetVersRating
             end
         end
-        if shouldShow("showVersatility", cached.versTotal, cached.hideZeroOffensive) then
+        if shouldShow("showVersatility", versDisplay, cached.hideZeroOffensive) then
             local versStr = cs.versatility
-            local vRatStr, vValStr = FmtRatingPct(cached.versTotalRating, cached.versTotal, versStr)
+            local vRatStr, vValStr = FmtRatingPct(cached.versTotalRating, versDisplay, versStr)
             if targetRows then
-                targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta("versatility", targetVersRating, CR_VERSATILITY_DAMAGE_DONE, cached.versTotal, "versatility") or false
+                targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta("versatility", targetVersRating, CR_VERSATILITY_DAMAGE_DONE, versDisplay, "versatility") or false
             end
             PushRow(labels, ratings, values,
                 FormatLabel(versStr, "Vers"),
@@ -5557,6 +5602,43 @@ function SAFE_NUM.DumpNumber(value, fmt, fallback)
     return string.format(fmt, value)
 end
 
+function addon.DebugStatCall(fn, fmt, ...)
+    if type(fn) ~= "function" then return "missing" end
+    local ok, value = pcall(fn, ...)
+    if not ok then return "error" end
+    if issecretvalue(value) then return "secret" end
+    if SAFE_NUM.IsCleanFiniteNumber(value) then return string.format(fmt or "%.2f", value) end
+    if value == nil then return "nil" end
+    return type(value)
+end
+
+function addon:PrintDebugLiveStats()
+    PrintMsg(string.format("debug live: updateErrors=%d lastError=%s",
+        cached.updateErrorCount or 0,
+        cached.lastUpdateError or "<none>"))
+    PrintMsg(string.format("debug live crit: best=%s melee=%s ranged=%s spell2=%s spell=%s rating=%s",
+        addon.DebugStatCall(addon.GetBestCritChance, "%.2f"),
+        addon.DebugStatCall(GetCritChance, "%.2f"),
+        addon.DebugStatCall(GetRangedCritChance, "%.2f"),
+        addon.DebugStatCall(GetSpellCritChance, "%.2f", 2),
+        addon.DebugStatCall(GetSpellCritChance, "%.2f"),
+        addon.DebugStatCall(GetCombatRating, "%d", CR_CRIT_MELEE)))
+    PrintMsg(string.format("debug live haste: percent=%s rating=%s bonus=%s",
+        addon.DebugStatCall(GetHaste, "%.2f"),
+        addon.DebugStatCall(GetCombatRating, "%d", CR_HASTE_MELEE),
+        addon.DebugStatCall(GetCombatRatingBonus, "%.2f", CR_HASTE_MELEE)))
+    PrintMsg(string.format("debug live mastery: effect=%s rating=%s bonus=%s",
+        addon.DebugStatCall(GetMasteryEffect, "%.2f"),
+        addon.DebugStatCall(GetCombatRating, "%d", CR_MASTERY),
+        addon.DebugStatCall(GetCombatRatingBonus, "%.2f", CR_MASTERY)))
+    PrintMsg(string.format("debug live vers: ratingBonus=%s flat=%s rating=%s cachedTotal=%s cachedRating=%s",
+        addon.DebugStatCall(GetCombatRatingBonus, "%.2f", CR_VERSATILITY_DAMAGE_DONE),
+        addon.DebugStatCall(GetVersatilityBonus, "%.2f", CR_VERSATILITY_DAMAGE_DONE),
+        addon.DebugStatCall(GetCombatRating, "%d", CR_VERSATILITY_DAMAGE_DONE),
+        SAFE_NUM.DumpNumber(cached.versTotal, "%.2f", "?"),
+        SAFE_NUM.DumpNumber(cached.versTotalRating, "%d", "?")))
+end
+
 function addon.archonTargets.CleanNumberCall(fn, ...)
     if type(fn) ~= "function" then return nil end
     local ok, value = pcall(fn, ...)
@@ -6003,6 +6085,8 @@ SlashCmdList["STATSPRO"] = function(msg)
             PrintDebugPerf()
         elseif debugArg == "rating" then
             addon:PrintDebugRatingConversion()
+        elseif debugArg == "live" then
+            addon:PrintDebugLiveStats()
         elseif debugArg == "bucket" then
             PrintDebugBucketDump()
         else

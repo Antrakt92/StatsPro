@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.9.10 - 21-May-2026 — Midnight combat stat fixes
+
+### Fixed
+
+- **Stats now keep updating more reliably during combat and Mythic+ runs** — StatsPro separates renderable Midnight secret values from clean numeric logic so live HUD updates do not freeze when Blizzard protects stat reads.
+- **Hidden zero-value rows stay hidden when their stat becomes protected in combat** — absent stats no longer pop back onto the HUD as misleading `0` rows.
+- **Right-click no longer opens Settings during combat** — accidental clicks in keys will not bring up the configuration window.
+
+### Improved
+
+- **`/ss debug live` now gives better support output for combat stat reads** — diagnostics report live Crit, Haste, Mastery, and Versatility API states when a key still needs investigation.
+
 ## 1.9.9 - 21-May-2026 — Archon target refresh
 
 ### Updated

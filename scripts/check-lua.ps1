@@ -1,7 +1,8 @@
 param(
     [switch]$Release,
     [int]$ArchonMaxAgeDays = 14,
-    [switch]$AllowStaleArchonTargets
+    [switch]$AllowStaleArchonTargets,
+    [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
@@ -31,13 +32,175 @@ function Invoke-NativeCapture {
     }
 }
 
-$RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-Set-Location $RepoRoot
-$AddonFile = Join-Path $RepoRoot "StatsPro.lua"
+function Get-RuntimeLuaRefs {
+    param([string]$MetadataCheckPath)
+
+    $json = @(& $MetadataCheckPath -ListRuntimeLuaRefs) -join "`n"
+    $refs = $json | ConvertFrom-Json
+    return @($refs)
+}
+
+function Read-LuaLanguageServerDiagnostics {
+    param([string]$JsonPath)
+
+    if (-not (Test-Path -LiteralPath $JsonPath -PathType Leaf)) {
+        throw "lua-language-server did not write JSON diagnostics to $JsonPath"
+    }
+    $raw = Get-Content -LiteralPath $JsonPath -Raw -Encoding UTF8
+    try {
+        $parsed = $raw | ConvertFrom-Json
+    }
+    catch {
+        throw "lua-language-server wrote invalid JSON diagnostics to ${JsonPath}: $($_.Exception.Message)"
+    }
+
+    $diagnostics = @()
+    if ($null -eq $parsed) {
+        return $diagnostics
+    }
+    if ($parsed -is [System.Array]) {
+        foreach ($item in $parsed) {
+            if ($null -ne $item) {
+                $diagnostics += $item
+            }
+        }
+        return $diagnostics
+    }
+    foreach ($property in $parsed.PSObject.Properties) {
+        foreach ($diagnostic in @($property.Value)) {
+            if ($null -eq $diagnostic) {
+                continue
+            }
+            $diagnostics += [pscustomobject]@{
+                FileUri  = $property.Name
+                Code     = $diagnostic.code
+                Message  = $diagnostic.message
+                Severity = $diagnostic.severity
+                Source   = $diagnostic.source
+                Range    = $diagnostic.range
+            }
+        }
+    }
+    return $diagnostics
+}
+
+function Assert-NoLuaDiagnostics {
+    param(
+        [object[]]$Diagnostics,
+        [int]$ExitCode,
+        [switch]$Quiet
+    )
+
+    if ($Diagnostics.Count -gt 0) {
+        if (-not $Quiet) {
+            foreach ($diagnostic in $Diagnostics) {
+                $location = $diagnostic.FileUri
+                if ($diagnostic.Range -and $diagnostic.Range.start) {
+                    $line = [int]$diagnostic.Range.start.line + 1
+                    $character = [int]$diagnostic.Range.start.character + 1
+                    $location = "$location`:$line`:$character"
+                }
+                Write-Host "$location $($diagnostic.Code): $($diagnostic.Message)"
+            }
+        }
+        throw "lua-language-server reported $($Diagnostics.Count) diagnostic problem(s)"
+    }
+    if ($ExitCode -ne 0) {
+        throw "lua-language-server exited with code $ExitCode without JSON diagnostics"
+    }
+}
+
+function Assert-ThrowsMatch {
+    param([string]$Name, [scriptblock]$Script, [string]$Pattern)
+
+    $ok = $false
+    try {
+        & $Script
+        $ok = $true
+    }
+    catch {
+        if ($_.Exception.Message -notmatch $Pattern) {
+            throw "$Name failed with wrong error: $($_.Exception.Message)"
+        }
+    }
+    if ($ok) {
+        throw "$Name should have failed."
+    }
+}
+
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $ArchonTargetsFile = Join-Path $RepoRoot "StatsPro_ArchonTargets.lua"
 $SmokeFile = Join-Path $RepoRoot "scripts\smoke.lua"
 $MetadataCheck = Join-Path $RepoRoot "scripts\check-metadata.ps1"
 $ArchonTargetsCheck = Join-Path $RepoRoot "scripts\check-archon-targets.lua"
+
+function Invoke-SelfTest {
+    & $MetadataCheck -SelfTest
+
+    $root = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lua-check-" + [System.Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $root | Out-Null
+    try {
+        $emptyPath = Join-Path $root "empty.json"
+        Set-Content -Path $emptyPath -Value "[]" -Encoding UTF8
+        $emptyDiagnostics = Read-LuaLanguageServerDiagnostics -JsonPath $emptyPath
+        if ($emptyDiagnostics.Count -ne 0) {
+            throw "empty JSON diagnostics should produce zero diagnostics"
+        }
+        Assert-NoLuaDiagnostics -Diagnostics $emptyDiagnostics -ExitCode 0
+
+        $objectPath = Join-Path $root "object.json"
+        Set-Content -Path $objectPath -Value @"
+{
+  "file:///c%3A/StatsPro/StatsPro.lua": [
+    {
+      "code": "undefined-global",
+      "message": "Undefined global `GameTooltip`.",
+      "severity": 2,
+      "source": "Lua Diagnostics.",
+      "range": {
+        "start": { "line": 4, "character": 2 },
+        "end": { "line": 4, "character": 13 }
+      }
+    }
+  ]
+}
+"@ -Encoding UTF8
+        $objectDiagnostics = Read-LuaLanguageServerDiagnostics -JsonPath $objectPath
+        if ($objectDiagnostics.Count -ne 1) {
+            throw "URI-keyed JSON diagnostics should produce one diagnostic"
+        }
+        Assert-ThrowsMatch "diagnostics are rejected" {
+            Assert-NoLuaDiagnostics -Diagnostics $objectDiagnostics -ExitCode 1 -Quiet
+        } "1 diagnostic"
+
+        Assert-ThrowsMatch "missing JSON rejected" {
+            [void](Read-LuaLanguageServerDiagnostics -JsonPath (Join-Path $root "missing.json"))
+        } "did not write JSON"
+
+        $invalidPath = Join-Path $root "invalid.json"
+        Set-Content -Path $invalidPath -Value "not-json" -Encoding UTF8
+        Assert-ThrowsMatch "invalid JSON rejected" {
+            [void](Read-LuaLanguageServerDiagnostics -JsonPath $invalidPath)
+        } "invalid JSON"
+
+        Assert-ThrowsMatch "nonzero exit without diagnostics rejected" {
+            Assert-NoLuaDiagnostics -Diagnostics @() -ExitCode 1
+        } "without JSON diagnostics"
+    }
+    finally {
+        if (Test-Path -LiteralPath $root) {
+            Remove-Item -LiteralPath $root -Recurse -Force
+        }
+    }
+    Write-Host "Lua check self-test passed."
+}
+
+if ($SelfTest) {
+    Invoke-SelfTest
+    return
+}
+
+Set-Location $RepoRoot
 
 $LuacCandidates = @(
     (Get-Command luac5.1 -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
@@ -90,10 +253,10 @@ if ($LASTEXITCODE -ne 0) {
     throw "metadata check exited with code $LASTEXITCODE"
 }
 
+$RuntimeLuaRefs = @(Get-RuntimeLuaRefs -MetadataCheckPath $MetadataCheck)
+
 Write-Host "== Lua syntax =="
-$SyntaxFiles = @()
-if (Test-Path $ArchonTargetsFile) { $SyntaxFiles += "StatsPro_ArchonTargets.lua" }
-$SyntaxFiles += "StatsPro.lua"
+$SyntaxFiles = @($RuntimeLuaRefs | ForEach-Object { $_.FullPath })
 if (Test-Path $ArchonTargetsCheck) { $SyntaxFiles += $ArchonTargetsCheck }
 $SyntaxFiles += $SmokeFile
 & $Luac -p @SyntaxFiles
@@ -128,37 +291,42 @@ if ($LASTEXITCODE -ne 0) {
     throw "Lua smoke exited with code $LASTEXITCODE"
 }
 
+$StaticAnalysisFiles = @(
+    $RuntimeLuaRefs |
+        Where-Object { -not $_.IsVendored -and -not $_.IsGenerated } |
+        ForEach-Object { $_.FullPath }
+)
+if ($StaticAnalysisFiles.Count -eq 0) {
+    throw "No first-party runtime Lua files available for static analysis."
+}
+
 Write-Host "== Luacheck =="
-& $Luacheck StatsPro.lua
+& $Luacheck @StaticAnalysisFiles
 if ($LASTEXITCODE -ne 0) {
     throw "luacheck exited with code $LASTEXITCODE"
 }
 
 Write-Host "== Lua diagnostics =="
-$LogPath = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lls-" + [System.Guid]::NewGuid().ToString("N"))
-try {
-    $LuaLanguageServerResult = Invoke-NativeCapture -FilePath $LuaLanguageServer -Arguments @(
-        "--check=$AddonFile",
-        "--check_format=pretty",
-        "--checklevel=Warning",
-        "--configpath=$RepoRoot\.luarc.json",
-        "--logpath=$LogPath"
-    )
-    $Output = $LuaLanguageServerResult.Output
-    $Output | ForEach-Object { Write-Host $_ }
-    if ($LuaLanguageServerResult.ExitCode -ne 0) {
-        throw "lua-language-server exited with code $($LuaLanguageServerResult.ExitCode)"
+foreach ($LuaFile in $StaticAnalysisFiles) {
+    Write-Host "-- $LuaFile"
+    $LogPath = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lls-" + [System.Guid]::NewGuid().ToString("N"))
+    $JsonPath = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lls-" + [System.Guid]::NewGuid().ToString("N") + ".json")
+    try {
+        $LuaLanguageServerResult = Invoke-NativeCapture -FilePath $LuaLanguageServer -Arguments @(
+            "--check=$LuaFile",
+            "--check_format=json",
+            "--check_out_path=$JsonPath",
+            "--checklevel=Warning",
+            "--configpath=$RepoRoot\.luarc.json",
+            "--logpath=$LogPath"
+        )
+        $Diagnostics = @(Read-LuaLanguageServerDiagnostics -JsonPath $JsonPath)
+        Assert-NoLuaDiagnostics -Diagnostics $Diagnostics -ExitCode $LuaLanguageServerResult.ExitCode
     }
-    $JoinedOutput = $Output -join "`n"
-    if (
-        $JoinedOutput -match "Diagnosis complete(?:d)?,\s+([1-9]\d*) problems? found" -or
-        $JoinedOutput -match "Found\s+([1-9]\d*) problems?"
-    ) {
-        throw "lua-language-server reported $($Matches[1]) diagnostic problem(s)"
+    finally {
+        Remove-Item -Recurse -Force $LogPath -ErrorAction SilentlyContinue
+        Remove-Item -Force $JsonPath -ErrorAction SilentlyContinue
     }
-}
-finally {
-    Remove-Item -Recurse -Force $LogPath -ErrorAction SilentlyContinue
 }
 
 Write-Host "All Lua checks passed."

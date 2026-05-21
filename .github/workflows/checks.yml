@@ -20,6 +20,15 @@ jobs:
         shell: pwsh
         run: .\scripts\install-check-tools.ps1 -Install
 
+      - name: Check helper self-tests
+        shell: pwsh
+        run: |
+          .\scripts\check-metadata.ps1 -SelfTest
+          .\scripts\check-lua.ps1 -SelfTest
+          .\scripts\check-release-version.ps1 -SelfTest
+          .\scripts\check-release-ancestry.ps1 -SelfTest
+          lua5.1 .\scripts\check-archon-targets.lua --self-test
+
       - name: Check release metadata
         shell: pwsh
         run: |

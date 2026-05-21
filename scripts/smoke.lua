@@ -419,7 +419,7 @@ local function makeEnv(locale, opts)
     env.tContains = contains
     env.GetLocale = function() return currentLocale end
     env.GetAddOnMetadata = env.C_AddOns.GetAddOnMetadata
-    env.InCombatLockdown = function() return false end
+    env.InCombatLockdown = opts.inCombatLockdown or function() return false end
     env.CloseDropDownMenus = function()
         env.__closedDropdowns = env.__closedDropdowns + 1
         if env.DropDownList1 then env.DropDownList1:Hide() end
@@ -1582,6 +1582,27 @@ do
     flushTimers("lifecycle.drag_guard.timer_flush", dragEnv, 0.11, 1)
     callScript("lifecycle.drag_guard.right_click_after_timer", dragEnv.StatsProFrame, "OnMouseUp", "RightButton")
     exists("lifecycle.drag_guard.config_opened", dragEnv.StatsProConfigFrame)
+end
+
+do
+    local combatClickEnv = loadStatsPro("enUS", {
+        inCombatLockdown = function() return true end,
+    })
+    fireEvent("lifecycle.right_click_combat.fire", combatClickEnv, "PLAYER_ENTERING_WORLD")
+    callScript("lifecycle.right_click_combat.main_panel", combatClickEnv.StatsProFrame, "OnMouseUp", "RightButton")
+    eq("lifecycle.right_click_combat.config_not_opened", combatClickEnv.StatsProConfigFrame, nil)
+
+    local combatTooltipEnv, _, combatTooltipTest = loadStatsPro("enUS", {
+        inCombatLockdown = function() return true end,
+        getCombatRatingBonusForCombatRatingValue = function(_, value)
+            return value / 70
+        end,
+    })
+    combatTooltipTest.renderMainPanelForSmoke("Mastery:", "812", "30.0%", 1, nil, nil, {
+        { statKey = "crit", ratingCR = combatTooltipEnv.CR_CRIT_MELEE, target = 1043, current = 812, currentPct = 30.0, delta = -231, capturedAt = "2026-05-15" },
+    })
+    combatTooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnMouseUp", "RightButton")
+    eq("lifecycle.right_click_combat.tooltip_config_not_opened", combatTooltipEnv.StatsProConfigFrame, nil)
 end
 
 do

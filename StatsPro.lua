@@ -2246,7 +2246,7 @@ function Panel:New(globalName, dbKeyPrefix)
             C_Timer.After(0.1, function() frame.wasDragging = false end)
         end)
         overlay:SetScript("OnMouseUp", function(_, button)
-            if button == "RightButton" and not frame.wasDragging then
+            if button == "RightButton" and not frame.wasDragging and not InCombatLockdown() then
                 addon:OpenConfigMenu()
             end
         end)
@@ -2295,9 +2295,9 @@ function Panel:New(globalName, dbKeyPrefix)
         -- don't pass the drag-distance threshold, never set wasDragging, unaffected.
         C_Timer.After(0.1, function() f.wasDragging = false end)
     end)
-    -- Right-click → Settings (drag-aware via wasDragging guard).
+    -- Right-click -> Settings while out of combat (drag-aware via wasDragging guard).
     frame:SetScript("OnMouseUp", function(f, button)
-        if button == "RightButton" and not f.wasDragging then
+        if button == "RightButton" and not f.wasDragging and not InCombatLockdown() then
             addon:OpenConfigMenu()
         end
     end)

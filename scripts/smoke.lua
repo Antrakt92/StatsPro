@@ -1218,6 +1218,15 @@ local function blockDumpContains(blocks, needle)
     return false
 end
 
+local function findTargetMeta(blocks, statKey)
+    for _, block in ipairs(blocks or {}) do
+        for _, meta in ipairs(block.targetRows or {}) do
+            if type(meta) == "table" and meta.statKey == statKey then return meta end
+        end
+    end
+    return nil
+end
+
 do
     local coloredEnv, _, coloredTest = loadStatsPro("enUS", {
         statsProDB = {
@@ -2013,6 +2022,156 @@ do
 end
 
 do
+    local critEnv, _, critTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = true,
+            showPercentage = false,
+            hideZeroOffensive = true,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCritChance = function() return nil end,
+        getRangedCritChance = function() return nil end,
+        getSpellCritChance = function() return nil end,
+        getCombatRating = function() return 812 end,
+    })
+    fireEvent("render.offensive_rating_only_nil_percent_uses_clean_rating.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.offensive_rating_only_nil_percent_uses_clean_rating.no_error", ok, blocks)
+    eq("render.offensive_rating_only_nil_percent_uses_clean_rating.row", blockDumpContains(blocks, "Crit:"), true)
+    eq("render.offensive_rating_only_nil_percent_uses_clean_rating.rating", blockDumpContains(blocks, "812"), true)
+end
+
+do
+    local hasteEnv, _, hasteTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = true,
+            showPercentage = false,
+            hideZeroOffensive = true,
+            showCrit = false,
+            showHaste = true,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getHaste = function() error("haste API unavailable") end,
+        getCombatRating = function() return 733 end,
+    })
+    fireEvent("render.offensive_rating_only_error_percent_uses_clean_rating.fire", hasteEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(hasteTest.buildRenderBlocks)
+    check("render.offensive_rating_only_error_percent_uses_clean_rating.no_error", ok, blocks)
+    eq("render.offensive_rating_only_error_percent_uses_clean_rating.row", blockDumpContains(blocks, "Haste:"), true)
+    eq("render.offensive_rating_only_error_percent_uses_clean_rating.rating", blockDumpContains(blocks, "733"), true)
+end
+
+do
+    local critEnv, _, critTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = true,
+            showPercentage = false,
+            hideZeroOffensive = false,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCritChance = function() return nil end,
+        getRangedCritChance = function() return nil end,
+        getSpellCritChance = function() return nil end,
+        getCombatRating = function() return nil end,
+    })
+    fireEvent("render.offensive_rating_only_nil_rating_stays_hidden.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.offensive_rating_only_nil_rating_stays_hidden.no_error", ok, blocks)
+    eq("render.offensive_rating_only_nil_rating_stays_hidden.no_row", blockDumpContains(blocks, "Crit:"), false)
+end
+
+do
+    local percentValue
+    local ratingValue = 812
+    local secretRating = 777
+    local critEnv, _, critTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = true,
+            showPercentage = false,
+            hideZeroOffensive = true,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCritChance = function() return percentValue end,
+        getRangedCritChance = function() return nil end,
+        getSpellCritChance = function() return nil end,
+        getCombatRating = function() return ratingValue end,
+        issecretvalue = function(value) return value == secretRating end,
+    })
+    fireEvent("render.offensive_rating_only_refreshes_rating_visibility_cache.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.offensive_rating_only_refreshes_rating_visibility_cache.positive_no_error", ok, blocks)
+    eq("render.offensive_rating_only_refreshes_rating_visibility_cache.positive_row", blockDumpContains(blocks, "Crit:"), true)
+    percentValue = 12.5
+    ratingValue = 0
+    ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.offensive_rating_only_refreshes_rating_visibility_cache.zero_no_error", ok, blocks)
+    eq("render.offensive_rating_only_refreshes_rating_visibility_cache.percent_keeps_row", blockDumpContains(blocks, "Crit:"), true)
+    percentValue = nil
+    ratingValue = secretRating
+    ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.offensive_rating_only_refreshes_rating_visibility_cache.secret_no_error", ok, blocks)
+    eq("render.offensive_rating_only_refreshes_rating_visibility_cache.secret_no_row", blockDumpContains(blocks, "Crit:"), false)
+end
+
+do
+    local targetFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 1000, haste = 200, mastery = 300, versatility = 400 })
+    local critEnv, _, critTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProDB = {
+            showOffensive = true,
+            showRating = true,
+            showPercentage = false,
+            hideZeroOffensive = true,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        statsProArchonTargets = targetFixture,
+        getCritChance = function() return nil end,
+        getRangedCritChance = function() return nil end,
+        getSpellCritChance = function() return nil end,
+        getCombatRating = function() return 812 end,
+    })
+    fireEvent("render.offensive_rating_only_builds_target_meta_without_pct.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.offensive_rating_only_builds_target_meta_without_pct.no_error", ok, blocks)
+    local meta = findTargetMeta(blocks, "crit")
+    check("render.offensive_rating_only_builds_target_meta_without_pct.meta", type(meta) == "table", meta)
+    eq("render.offensive_rating_only_builds_target_meta_without_pct.current", meta.current, 812)
+    eq("render.offensive_rating_only_builds_target_meta_without_pct.current_pct", meta.currentPct, nil)
+    eq("render.offensive_rating_only_builds_target_meta_without_pct.target", meta.target, 1000)
+end
+
+do
     local ratingCalls = 0
     local targetHoverFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(targetHoverFixture, "mythicPlus", "MAGE", "frost",
@@ -2065,6 +2224,51 @@ do
     local ok, blocks = pcall(leechTest.buildRenderBlocks)
     check("render.tertiary_nil_percent_skips_leech.no_error", ok, blocks)
     eq("render.tertiary_nil_percent_skips_leech.no_row", blockDumpContains(blocks, "Leech:"), false)
+end
+
+do
+    local leechEnv, _, leechTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            showRating = true,
+            showPercentage = false,
+            hideZeroTertiary = true,
+            showLeech = true,
+            showAvoidance = false,
+            showSpeed = false,
+            showDefensive = false,
+        },
+        getLifesteal = function() return nil end,
+        getCombatRating = function() return 421 end,
+    })
+    fireEvent("render.tertiary_rating_only_nil_percent_uses_clean_rating.fire", leechEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(leechTest.buildRenderBlocks)
+    check("render.tertiary_rating_only_nil_percent_uses_clean_rating.no_error", ok, blocks)
+    eq("render.tertiary_rating_only_nil_percent_uses_clean_rating.row", blockDumpContains(blocks, "Leech:"), true)
+    eq("render.tertiary_rating_only_nil_percent_uses_clean_rating.rating", blockDumpContains(blocks, "421"), true)
+end
+
+do
+    local leechEnv, _, leechTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            showRating = true,
+            showPercentage = false,
+            hideZeroTertiary = false,
+            showLeech = true,
+            showAvoidance = false,
+            showSpeed = false,
+            showDefensive = false,
+        },
+        getLifesteal = function() return nil end,
+        getCombatRating = function() return nil end,
+    })
+    fireEvent("render.tertiary_rating_only_nil_rating_stays_hidden.fire", leechEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(leechTest.buildRenderBlocks)
+    check("render.tertiary_rating_only_nil_rating_stays_hidden.no_error", ok, blocks)
+    eq("render.tertiary_rating_only_nil_rating_stays_hidden.no_row", blockDumpContains(blocks, "Leech:"), false)
 end
 
 do
@@ -2177,6 +2381,196 @@ do
     local ok, blocks = pcall(dodgeTest.buildRenderBlocks)
     check("render.defensive_nil_percent_skips_dodge.no_error", ok, blocks)
     eq("render.defensive_nil_percent_skips_dodge.no_row", blockDumpContains(blocks, "Dodge:"), false)
+end
+
+do
+    local armorEnv, _, armorTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showDefensive = true,
+            hideZeroDefensive = false,
+            showDodge = false,
+            showParry = false,
+            showBlock = false,
+            showArmor = true,
+            showStagger = false,
+        },
+        unitArmor = function() return 0, 5000 end,
+        unitEffectiveLevel = function() return 80 end,
+        paperDollFrameGetArmorReduction = function() return 0.345 end,
+    })
+    fireEvent("defensive.armor_fraction_reduction_renders.fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(armorTest.buildRenderBlocks)
+    check("defensive.armor_fraction_reduction_renders.no_error", ok, blocks)
+    eq("defensive.armor_fraction_reduction_renders.row", blockDumpContains(blocks, "Armor:"), true)
+    eq("defensive.armor_fraction_reduction_renders.value", blockDumpContains(blocks, "34.5%"), true)
+end
+
+do
+    local armorEnv, _, armorTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showDefensive = true,
+            hideZeroDefensive = false,
+            showDodge = false,
+            showParry = false,
+            showBlock = false,
+            showArmor = true,
+            showStagger = false,
+        },
+        unitArmor = function() return 0, 5000 end,
+        unitEffectiveLevel = function() return 80 end,
+        paperDollFrameGetArmorReduction = function() return 150 end,
+    })
+    fireEvent("defensive.armor_large_reduction_clamps_to_100.fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(armorTest.buildRenderBlocks)
+    check("defensive.armor_large_reduction_clamps_to_100.no_error", ok, blocks)
+    eq("defensive.armor_large_reduction_clamps_to_100.value", blockDumpContains(blocks, "100.0%"), true)
+end
+
+do
+    local armorEnv, _, armorTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showDefensive = true,
+            hideZeroDefensive = false,
+            showDodge = false,
+            showParry = false,
+            showBlock = false,
+            showArmor = true,
+            showStagger = false,
+        },
+        unitArmor = function() return 0, 5000 end,
+        unitEffectiveLevel = function() return 80 end,
+        paperDollFrameGetArmorReduction = function() return -5 end,
+    })
+    fireEvent("defensive.armor_negative_reduction_clamps_to_zero.fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(armorTest.buildRenderBlocks)
+    check("defensive.armor_negative_reduction_clamps_to_zero.no_error", ok, blocks)
+    eq("defensive.armor_negative_reduction_clamps_to_zero.value", blockDumpContains(blocks, "0.0%"), true)
+end
+
+do
+    local secretArmor = {}
+    local secretMode = false
+    local armorEnv, _, armorTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showDefensive = true,
+            hideZeroDefensive = false,
+            showDodge = false,
+            showParry = false,
+            showBlock = false,
+            showArmor = true,
+            showStagger = false,
+        },
+        unitArmor = function()
+            if secretMode then return 0, secretArmor end
+            return 0, 5000
+        end,
+        unitEffectiveLevel = function() return 80 end,
+        paperDollFrameGetArmorReduction = function()
+            if secretMode then error("secret effective armor should stop before reduction") end
+            return 25
+        end,
+        issecretvalue = function(value) return value == secretArmor end,
+    })
+    fireEvent("defensive.armor_secret_effective_preserves_last_clean.clean_fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    secretMode = true
+    fireEvent("defensive.armor_secret_effective_preserves_last_clean.secret_fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(armorTest.buildRenderBlocks)
+    check("defensive.armor_secret_effective_preserves_last_clean.no_error", ok, blocks)
+    eq("defensive.armor_secret_effective_preserves_last_clean.value", blockDumpContains(blocks, "25.0%"), true)
+end
+
+do
+    local secretReduction = {}
+    local secretMode = false
+    local armorEnv, _, armorTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showDefensive = true,
+            hideZeroDefensive = false,
+            showDodge = false,
+            showParry = false,
+            showBlock = false,
+            showArmor = true,
+            showStagger = false,
+        },
+        unitArmor = function() return 0, 5000 end,
+        unitEffectiveLevel = function() return 80 end,
+        paperDollFrameGetArmorReduction = function()
+            if secretMode then return secretReduction end
+            return 25
+        end,
+        issecretvalue = function(value) return value == secretReduction end,
+    })
+    fireEvent("defensive.armor_secret_reduction_preserves_last_clean.clean_fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    secretMode = true
+    fireEvent("defensive.armor_secret_reduction_preserves_last_clean.secret_fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(armorTest.buildRenderBlocks)
+    check("defensive.armor_secret_reduction_preserves_last_clean.no_error", ok, blocks)
+    eq("defensive.armor_secret_reduction_preserves_last_clean.value", blockDumpContains(blocks, "25.0%"), true)
+end
+
+do
+    local badLevel = false
+    local armorEnv, _, armorTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showDefensive = true,
+            hideZeroDefensive = false,
+            showDodge = false,
+            showParry = false,
+            showBlock = false,
+            showArmor = true,
+            showStagger = false,
+        },
+        unitArmor = function() return 0, 5000 end,
+        unitEffectiveLevel = function()
+            if badLevel then return "bad-level" end
+            return 80
+        end,
+        paperDollFrameGetArmorReduction = function()
+            if badLevel then error("bad level should stop before reduction") end
+            return 25
+        end,
+    })
+    fireEvent("defensive.armor_bad_level_preserves_last_clean.clean_fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    badLevel = true
+    fireEvent("defensive.armor_bad_level_preserves_last_clean.bad_fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(armorTest.buildRenderBlocks)
+    check("defensive.armor_bad_level_preserves_last_clean.no_error", ok, blocks)
+    eq("defensive.armor_bad_level_preserves_last_clean.value", blockDumpContains(blocks, "25.0%"), true)
+end
+
+do
+    local inCombat = false
+    local armorEnv, _, armorTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showDefensive = true,
+            hideZeroDefensive = false,
+            showDodge = false,
+            showParry = false,
+            showBlock = false,
+            showArmor = true,
+            showStagger = false,
+        },
+        inCombatLockdown = function() return inCombat end,
+        unitArmor = function()
+            if inCombat then error("combat should stop before UnitArmor") end
+            return 0, 5000
+        end,
+        unitEffectiveLevel = function() return 80 end,
+        paperDollFrameGetArmorReduction = function() return 25 end,
+    })
+    fireEvent("defensive.armor_in_combat_preserves_last_clean.clean_fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    inCombat = true
+    fireEvent("defensive.armor_in_combat_preserves_last_clean.combat_fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(armorTest.buildRenderBlocks)
+    check("defensive.armor_in_combat_preserves_last_clean.no_error", ok, blocks)
+    eq("defensive.armor_in_combat_preserves_last_clean.value", blockDumpContains(blocks, "25.0%"), true)
 end
 
 do
@@ -2294,6 +2688,54 @@ do
     eq("render.versatility_secret_rating_displays_without_meta.rating", blockDumpContains(blocks, "888"), true)
     eq("render.versatility_secret_rating_displays_without_meta.percent", blockDumpContains(blocks, "14.7%"), true)
     eq("render.versatility_secret_rating_displays_without_meta.no_target_meta", blocks[2].targetRows[1], false)
+end
+
+do
+    local versEnv, _, versTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = true,
+            showPercentage = false,
+            hideZeroOffensive = true,
+            showCrit = false,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = true,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCombatRatingBonus = function() return nil end,
+        getVersatilityBonus = function() return nil end,
+        getCombatRating = function() return 699 end,
+    })
+    fireEvent("render.versatility_rating_only_nil_bonus_uses_clean_rating.fire", versEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_rating_only_nil_bonus_uses_clean_rating.no_error", ok, blocks)
+    eq("render.versatility_rating_only_nil_bonus_uses_clean_rating.row", blockDumpContains(blocks, "Vers:"), true)
+    eq("render.versatility_rating_only_nil_bonus_uses_clean_rating.rating", blockDumpContains(blocks, "699"), true)
+end
+
+do
+    local speedEnv, _, speedTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            showRating = true,
+            showPercentage = false,
+            hideZeroTertiary = true,
+            showLeech = false,
+            showAvoidance = false,
+            showSpeed = true,
+            showDefensive = false,
+        },
+        getUnitSpeed = function() return 0, 0, 0, 0 end,
+        getCombatRating = function() return 377 end,
+    })
+    fireEvent("render.speed_rating_only_zero_speed_uses_clean_rating.fire", speedEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_rating_only_zero_speed_uses_clean_rating.no_error", ok, blocks)
+    eq("render.speed_rating_only_zero_speed_uses_clean_rating.row", blockDumpContains(blocks, "Speed:"), true)
+    eq("render.speed_rating_only_zero_speed_uses_clean_rating.rating", blockDumpContains(blocks, "377"), true)
 end
 
 do

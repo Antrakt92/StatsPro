@@ -3115,12 +3115,21 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
 
     -- Tooltip targets need the raw rating even when the rating column is hidden.
     local needTargetRating = targetRows ~= nil
+    local isRatingOnly = cached.showRating and not cached.showPercentage
     for _, def in ipairs(OFFENSIVE_STATS) do
         if cached[def.showKey] then
             local val = SAFE_NUM.SafeDisplayPercent(def.api)
-            if shouldShow(def.showKey, val, cached.hideZeroOffensive) then
-                local ratingDisplay, targetRating
-                if cached.showRating or needTargetRating then
+            local ratingDisplay, targetRating
+            local ratingRead = false
+            local visible = shouldShow(def.showKey, val, cached.hideZeroOffensive)
+            if isRatingOnly then
+                ratingDisplay, targetRating = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
+                ratingRead = true
+                local ratingVisible = shouldShow(def.showKey .. "Rating", ratingDisplay, cached.hideZeroOffensive)
+                visible = visible or ratingVisible
+            end
+            if visible then
+                if (cached.showRating or needTargetRating) and not ratingRead then
                     ratingDisplay, targetRating = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
                 end
                 local rating = cached.showRating and (ratingDisplay or 0) or 0
@@ -3165,9 +3174,14 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
                 cached.versTotalRating = targetVersRating
             end
         end
-        if shouldShow("showVersatility", versDisplay, cached.hideZeroOffensive) then
+        local versVisible = shouldShow("showVersatility", versDisplay, cached.hideZeroOffensive)
+        if isRatingOnly then
+            local versRatingVisible = shouldShow("showVersatilityRating", versRatingDisplay, cached.hideZeroOffensive)
+            versVisible = versVisible or versRatingVisible
+        end
+        if versVisible then
             local versStr = cs.versatility
-            local rating = cached.showRating and (versRatingDisplay or cached.versTotalRating) or 0
+            local rating = cached.showRating and (versRatingDisplay or cached.versTotalRating or 0) or 0
             local vRatStr, vValStr = FmtRatingPct(rating, versDisplay, versStr)
             if targetRows then
                 targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta("versatility", targetVersRating, CR_VERSATILITY_DAMAGE_DONE, versClean, "versatility") or false
@@ -3186,11 +3200,23 @@ local function BuildTertiaryLines(labels, ratings, values)
     local cs = cached.colorStrings
 
     local needRating = cached.showRating
+    local isRatingOnly = cached.showRating and not cached.showPercentage
     for _, def in ipairs(TERTIARY_STATS) do
         if cached[def.showKey] then
             local val = SAFE_NUM.SafeDisplayPercent(def.api)
-            if shouldShow(def.showKey, val, cached.hideZeroTertiary) then
-                local ratingDisplay = needRating and SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR) or nil
+            local ratingDisplay
+            local ratingRead = false
+            local visible = shouldShow(def.showKey, val, cached.hideZeroTertiary)
+            if isRatingOnly then
+                ratingDisplay = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
+                ratingRead = true
+                local ratingVisible = shouldShow(def.showKey .. "Rating", ratingDisplay, cached.hideZeroTertiary)
+                visible = visible or ratingVisible
+            end
+            if visible then
+                if needRating and not ratingRead then
+                    ratingDisplay = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
+                end
                 local rating = needRating and (ratingDisplay or 0) or 0
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtRatingPct(rating, val, statColor)
@@ -3218,7 +3244,12 @@ local function BuildTertiaryLines(labels, ratings, values)
         local speed = cached.speedPct
         local speedRatingDisplay = needRating and SAFE_NUM.ReadRatingValue(GetCombatRating, CR_SPEED) or nil
         local speedRating = needRating and (speedRatingDisplay or 0) or 0
-        if shouldShow("showSpeed", speed, cached.hideZeroTertiary) then
+        local speedVisible = shouldShow("showSpeed", speed, cached.hideZeroTertiary)
+        if isRatingOnly then
+            local speedRatingVisible = shouldShow("showSpeedRating", speedRatingDisplay, cached.hideZeroTertiary)
+            speedVisible = speedVisible or speedRatingVisible
+        end
+        if speedVisible then
             local statColor = cs.speed
             local rStr, vStr = FmtRatingPct(speedRating, speed, statColor)
             PushRow(labels, ratings, values,

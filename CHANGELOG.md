@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.9.19 - 30-May-2026 — Rating-only rows and release checks
+## 1.9.19 - 30-May-2026 — Rating rows, HUD layering, and release checks
 
 ### Fixed
 

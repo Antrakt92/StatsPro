@@ -128,6 +128,7 @@ local function makeFrame(name)
         width = 100,
         height = 20,
         frameLevel = 1,
+        frameStrata = "MEDIUM",
         points = {},
         scripts = {},
         hooks = {},
@@ -211,7 +212,8 @@ local function makeFrame(name)
     function frame:RegisterUnitEvent(event)
         self:RegisterEvent(event)
     end
-    function frame:SetFrameStrata() end
+    function frame:SetFrameStrata(strata) self.frameStrata = strata end
+    function frame:GetFrameStrata() return self.frameStrata end
     function frame:SetFrameLevel(level) self.frameLevel = level end
     function frame:GetFrameLevel() return self.frameLevel end
     function frame:SetAllPoints() end
@@ -867,6 +869,8 @@ local function exists(name, value)
 end
 
 do
+    eq("panel.frame_strata.main", env.StatsProFrame:GetFrameStrata(), "BACKGROUND")
+    eq("panel.frame_strata.side", env.StatsProDefensiveFrame:GetFrameStrata(), "BACKGROUND")
     local mainInsets = exists("panel.background_insets.main", env.StatsProFrame.backdrop and env.StatsProFrame.backdrop.insets)
     local sideInsets = exists("panel.background_insets.side", env.StatsProDefensiveFrame.backdrop and env.StatsProDefensiveFrame.backdrop.insets)
     eq("panel.background_insets.main.left", mainInsets.left, 0)
@@ -3010,6 +3014,7 @@ do
     check("config.open_constructs_frame", ok, err)
 
     exists("config.frame_registered.frame", env.StatsProConfigFrame)
+    eq("config.frame_strata.dialog", env.StatsProConfigFrame:GetFrameStrata(), "DIALOG")
     exists("config.frame_registered.scroll", env.StatsProConfigScroll)
     check("config.frame_registered.special", contains(env.UISpecialFrames, "StatsProConfigFrame"),
         "StatsProConfigFrame missing from UISpecialFrames")
@@ -3193,6 +3198,10 @@ do
     runScript("config.font_picker_lazy_scaffold.open", env.StatsProFontDropdownButton, "OnClick",
         env.StatsProFontDropdownButton)
     exists("config.font_picker_lazy_scaffold.frame", env.StatsProFontPicker)
+    eq("config.font_picker_strata.dialog", env.StatsProFontPicker:GetFrameStrata(), "DIALOG")
+    check("config.font_picker_level_above_config",
+        env.StatsProFontPicker:GetFrameLevel() > env.StatsProConfigFrame:GetFrameLevel(),
+        "font picker should stay above config frame")
     exists("config.font_picker_lazy_scaffold.scroll", env.StatsProFontPickerScroll)
 
     local defaultFont = test.copyDefaults().font

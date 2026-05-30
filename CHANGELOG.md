@@ -5,6 +5,7 @@
 ### Fixed
 
 - **Rating-only offensive and tertiary rows stay visible when their rating is available** — rows such as Versatility and Speed no longer disappear in rating-only mode when the percentage or bonus read is missing, zero, or protected while the rating itself is readable.
+- **Stats panels now sit behind raid frames and other higher-priority UI** — the always-on HUD uses background frame strata instead of overlapping gameplay panels.
 
 ### Improved
 

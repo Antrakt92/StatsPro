@@ -2146,6 +2146,7 @@ function Panel:New(globalName, dbKeyPrefix)
     panel.lastLineCount = -1
 
     local frame = CreateFrame("Frame", globalName, UIParent, "BackdropTemplate")
+    frame:SetFrameStrata("BACKGROUND")
     frame:SetSize(220, 100)
     frame:SetMovable(true)
     frame:EnableMouse(true)

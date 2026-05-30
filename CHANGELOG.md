@@ -11,6 +11,10 @@
 
 - **Release checks fail faster on invalid Archon target snapshots** — generated target data is parsed without executing arbitrary Lua, native check processes have timeouts, and collector self-tests cover representative M+ and Raid page payloads.
 
+### Updated
+
+- **Bundled M+ High Keys and Raid Mythic All Bosses target ratings were refreshed from latest Archon data.**
+
 ## 1.9.18 - 29-May-2026 — Archon target refresh
 
 ### Updated

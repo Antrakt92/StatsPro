@@ -280,7 +280,7 @@ function Invoke-SelfTest {
 
         $emptyPath = Join-Path $root "empty.json"
         Set-Content -Path $emptyPath -Value "[]" -Encoding UTF8
-        $emptyDiagnostics = Read-LuaLanguageServerDiagnostics -JsonPath $emptyPath
+        $emptyDiagnostics = @(Read-LuaLanguageServerDiagnostics -JsonPath $emptyPath)
         if ($emptyDiagnostics.Count -ne 0) {
             throw "empty JSON diagnostics should produce zero diagnostics"
         }
@@ -303,7 +303,7 @@ function Invoke-SelfTest {
   ]
 }
 "@ -Encoding UTF8
-        $objectDiagnostics = Read-LuaLanguageServerDiagnostics -JsonPath $objectPath
+        $objectDiagnostics = @(Read-LuaLanguageServerDiagnostics -JsonPath $objectPath)
         if ($objectDiagnostics.Count -ne 1) {
             throw "URI-keyed JSON diagnostics should produce one diagnostic"
         }

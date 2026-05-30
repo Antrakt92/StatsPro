@@ -89,6 +89,7 @@ function Invoke-NativeCapture {
 
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $effectiveFilePath
+    $startInfo.WorkingDirectory = (Get-Location).Path
     $startInfo.Arguments = (@($effectiveArguments) | ForEach-Object { Format-NativeArgument $_ }) -join " "
     $startInfo.UseShellExecute = $false
     $startInfo.RedirectStandardOutput = $true
@@ -258,6 +259,18 @@ function Invoke-SelfTest {
         $nativeOutput = $nativeCapture.Output -join "`n"
         if ($nativeOutput -notmatch "stdout-line" -or $nativeOutput -notmatch "stderr-line") {
             throw "native capture should include stdout and stderr, got: $nativeOutput"
+        }
+
+        Push-Location -Path $root
+        try {
+            $cwdCapture = Invoke-NativeCapture -FilePath $cmd -Arguments @("/d", "/c", "cd") -TimeoutSeconds 10 -Description "native working-directory self-test"
+        }
+        finally {
+            Pop-Location
+        }
+        $childCwd = ($cwdCapture.Output | Select-Object -First 1)
+        if ([System.IO.Path]::GetFullPath($childCwd) -ne [System.IO.Path]::GetFullPath($root)) {
+            throw "native capture should run from the current PowerShell location; got <$childCwd>, expected <$root>"
         }
 
         $ping = Get-Command ping.exe -ErrorAction Stop | Select-Object -First 1 -ExpandProperty Source

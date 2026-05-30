@@ -11,24 +11,134 @@ if ($ArchonMaxAgeDays -lt 0) {
     throw "-ArchonMaxAgeDays must be a non-negative integer."
 }
 
+function Format-NativeArgument {
+    param([AllowNull()][string]$Argument)
+
+    if ($null -eq $Argument -or $Argument -eq "") {
+        return '""'
+    }
+    if ($Argument -notmatch '[\s"]') {
+        return $Argument
+    }
+
+    $slash = [string][char]92
+    $builder = [System.Text.StringBuilder]::new()
+    [void]$builder.Append('"')
+    $pendingSlashes = 0
+    foreach ($char in $Argument.ToCharArray()) {
+        if ($char -eq [char]92) {
+            $pendingSlashes++
+            continue
+        }
+        if ($char -eq '"') {
+            if ($pendingSlashes -gt 0) {
+                [void]$builder.Append($slash * ($pendingSlashes * 2))
+                $pendingSlashes = 0
+            }
+            [void]$builder.Append($slash)
+            [void]$builder.Append('"')
+            continue
+        }
+        if ($pendingSlashes -gt 0) {
+            [void]$builder.Append($slash * $pendingSlashes)
+            $pendingSlashes = 0
+        }
+        [void]$builder.Append($char)
+    }
+    if ($pendingSlashes -gt 0) {
+        [void]$builder.Append($slash * ($pendingSlashes * 2))
+    }
+    [void]$builder.Append('"')
+    return $builder.ToString()
+}
+
+function Split-NativeOutput {
+    param([AllowNull()][string]$Text)
+
+    if ([string]::IsNullOrEmpty($Text)) {
+        return @()
+    }
+    return @($Text -split "\r?\n" | Where-Object { $_ -ne "" })
+}
+
 function Invoke-NativeCapture {
     param(
         [string]$FilePath,
-        [string[]]$Arguments = @()
+        [string[]]$Arguments = @(),
+        [int]$TimeoutSeconds = 0,
+        [string]$Description = $null
     )
 
-    $previousErrorActionPreference = $ErrorActionPreference
+    if (-not $FilePath) {
+        throw "Native process path is required."
+    }
+    if ($TimeoutSeconds -lt 0) {
+        throw "TimeoutSeconds must be non-negative."
+    }
+
+    $effectiveFilePath = $FilePath
+    $effectiveArguments = @($Arguments)
+    $extension = [System.IO.Path]::GetExtension($FilePath)
+    if ($extension -in @(".bat", ".cmd")) {
+        if (-not $env:ComSpec) {
+            throw "Cannot run ${FilePath}: ComSpec is not set."
+        }
+        $effectiveFilePath = $env:ComSpec
+        $effectiveArguments = @("/d", "/c", "call", $FilePath) + @($Arguments)
+    }
+
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $effectiveFilePath
+    $startInfo.Arguments = (@($effectiveArguments) | ForEach-Object { Format-NativeArgument $_ }) -join " "
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.CreateNoWindow = $true
+
+    $process = [System.Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    $displayName = if ($Description) { $Description } else { "$FilePath $($Arguments -join ' ')" }
     try {
-        $ErrorActionPreference = "Continue"
-        $output = @(& $FilePath @Arguments 2>&1)
-        $exitCode = $LASTEXITCODE
+        [void]$process.Start()
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        if ($TimeoutSeconds -gt 0) {
+            $completed = $process.WaitForExit($TimeoutSeconds * 1000)
+        }
+        else {
+            $process.WaitForExit()
+            $completed = $true
+        }
+        if (-not $completed) {
+            try {
+                $process.Kill()
+            }
+            catch {
+                # Preserve the timeout failure below; the process may have exited between WaitForExit and Kill.
+            }
+            [void]$process.WaitForExit(5000)
+            $timeoutOutput = @()
+            if ($stdoutTask.Wait(1000)) { $timeoutOutput += Split-NativeOutput $stdoutTask.Result }
+            if ($stderrTask.Wait(1000)) { $timeoutOutput += Split-NativeOutput $stderrTask.Result }
+            $details = if ($timeoutOutput.Count -gt 0) { " Output: $($timeoutOutput -join ' ')" } else { "" }
+            throw "Timed out after $TimeoutSeconds second(s): $displayName.$details"
+        }
+        if (-not $stdoutTask.Wait(5000)) {
+            throw "Timed out reading stdout from $displayName."
+        }
+        if (-not $stderrTask.Wait(5000)) {
+            throw "Timed out reading stderr from $displayName."
+        }
+        $output = @()
+        $output += Split-NativeOutput $stdoutTask.Result
+        $output += Split-NativeOutput $stderrTask.Result
+        return @{
+            ExitCode = $process.ExitCode
+            Output = $output
+        }
     }
     finally {
-        $ErrorActionPreference = $previousErrorActionPreference
-    }
-    return @{
-        ExitCode = $exitCode
-        Output = $output
+        $process.Dispose()
     }
 }
 
@@ -140,6 +250,21 @@ function Invoke-SelfTest {
     $root = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lua-check-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $root | Out-Null
     try {
+        $cmd = Get-Command cmd.exe -ErrorAction Stop | Select-Object -First 1 -ExpandProperty Source
+        $nativeCapture = Invoke-NativeCapture -FilePath $cmd -Arguments @("/d", "/c", "echo stdout-line && echo stderr-line 1>&2 && exit /b 7") -TimeoutSeconds 10 -Description "native capture self-test"
+        if ($nativeCapture.ExitCode -ne 7) {
+            throw "native capture should preserve nonzero exit code 7, got $($nativeCapture.ExitCode)"
+        }
+        $nativeOutput = $nativeCapture.Output -join "`n"
+        if ($nativeOutput -notmatch "stdout-line" -or $nativeOutput -notmatch "stderr-line") {
+            throw "native capture should include stdout and stderr, got: $nativeOutput"
+        }
+
+        $ping = Get-Command ping.exe -ErrorAction Stop | Select-Object -First 1 -ExpandProperty Source
+        Assert-ThrowsMatch "native timeout rejected" {
+            [void](Invoke-NativeCapture -FilePath $ping -Arguments @("-n", "6", "127.0.0.1") -TimeoutSeconds 1 -Description "native timeout self-test")
+        } "Timed out"
+
         $emptyPath = Join-Path $root "empty.json"
         Set-Content -Path $emptyPath -Value "[]" -Encoding UTF8
         $emptyDiagnostics = Read-LuaLanguageServerDiagnostics -JsonPath $emptyPath
@@ -223,7 +348,7 @@ $Lua = $LuaCandidates | Select-Object -First 1
 if (-not $Lua) {
     throw "Missing lua 5.1 runtime. Install with: choco install lua51 -y"
 }
-$LuaVersionResult = Invoke-NativeCapture -FilePath $Lua -Arguments @("-v")
+$LuaVersionResult = Invoke-NativeCapture -FilePath $Lua -Arguments @("-v") -TimeoutSeconds 10 -Description "lua -v"
 $LuaVersion = $LuaVersionResult.Output -join "`n"
 if ($LuaVersionResult.ExitCode -ne 0) {
     throw "lua -v exited with code $($LuaVersionResult.ExitCode): $LuaVersion"
@@ -249,9 +374,6 @@ if (-not $Luacheck) {
 }
 
 & $MetadataCheck
-if ($LASTEXITCODE -ne 0) {
-    throw "metadata check exited with code $LASTEXITCODE"
-}
 
 $RuntimeLuaRefs = @(Get-RuntimeLuaRefs -MetadataCheckPath $MetadataCheck)
 
@@ -279,9 +401,10 @@ if (Test-Path $ArchonTargetsFile) {
             $ArchonArgs += @("--max-age-days", $ArchonMaxAgeDays)
         }
     }
-    & $Lua @ArchonArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "Archon target snapshot check exited with code $LASTEXITCODE"
+    $ArchonResult = Invoke-NativeCapture -FilePath $Lua -Arguments $ArchonArgs -TimeoutSeconds 30 -Description "Archon target snapshot check"
+    $ArchonResult.Output | ForEach-Object { Write-Host $_ }
+    if ($ArchonResult.ExitCode -ne 0) {
+        throw "Archon target snapshot check exited with code $($ArchonResult.ExitCode)"
     }
 }
 
@@ -319,7 +442,7 @@ foreach ($LuaFile in $StaticAnalysisFiles) {
             "--checklevel=Warning",
             "--configpath=$RepoRoot\.luarc.json",
             "--logpath=$LogPath"
-        )
+        ) -TimeoutSeconds 180 -Description "lua-language-server diagnostics for $LuaFile"
         $Diagnostics = @(Read-LuaLanguageServerDiagnostics -JsonPath $JsonPath)
         Assert-NoLuaDiagnostics -Diagnostics $Diagnostics -ExitCode $LuaLanguageServerResult.ExitCode
     }

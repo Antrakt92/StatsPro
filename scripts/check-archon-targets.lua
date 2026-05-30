@@ -283,6 +283,205 @@ local function validate_raw_text_shape(text)
     end
 end
 
+local function parse_generated_lua(text, sourceName)
+    local parser = {
+        text = text or "",
+        sourceName = sourceName or "generated file",
+        index = 1,
+        length = #(text or ""),
+    }
+
+    local function at_end()
+        return parser.index > parser.length
+    end
+
+    local function peek(offset)
+        offset = offset or 0
+        local position = parser.index + offset
+        if position > parser.length then return "" end
+        return string.sub(parser.text, position, position)
+    end
+
+    local function parse_fail(message)
+        fail(parser.sourceName .. ": " .. message .. " near byte " .. tostring(parser.index))
+    end
+
+    local function skip_ws_and_comments()
+        while not at_end() do
+            local c = peek()
+            if c == " " or c == "\t" or c == "\r" or c == "\n" then
+                parser.index = parser.index + 1
+            elseif c == "-" and peek(1) == "-" then
+                if peek(2) == "[" then
+                    parse_fail("long comments are not valid generated data")
+                end
+                parser.index = parser.index + 2
+                while not at_end() and peek() ~= "\n" do
+                    parser.index = parser.index + 1
+                end
+            else
+                return
+            end
+        end
+    end
+
+    local function consume_literal(value)
+        skip_ws_and_comments()
+        if string.sub(parser.text, parser.index, parser.index + #value - 1) == value then
+            parser.index = parser.index + #value
+            return true
+        end
+        return false
+    end
+
+    local function expect_literal(value)
+        if not consume_literal(value) then
+            parse_fail("expected " .. value)
+        end
+    end
+
+    local function parse_identifier(optional)
+        skip_ws_and_comments()
+        local startIndex, endIndex = string.find(parser.text, "^[_%a][_%w]*", parser.index)
+        if not startIndex then
+            if optional then return nil end
+            parse_fail("expected identifier")
+        end
+        parser.index = endIndex + 1
+        return string.sub(parser.text, startIndex, endIndex)
+    end
+
+    local function parse_string()
+        skip_ws_and_comments()
+        if peek() ~= '"' then
+            parse_fail("expected string")
+        end
+        parser.index = parser.index + 1
+        local parts = {}
+        while not at_end() do
+            local c = peek()
+            if c == '"' then
+                parser.index = parser.index + 1
+                return table.concat(parts)
+            end
+            if c == "\n" or c == "\r" then
+                parse_fail("unterminated string")
+            end
+            if c == "\\" then
+                local escaped = peek(1)
+                if escaped ~= '"' and escaped ~= "\\" then
+                    parse_fail("unsupported string escape")
+                end
+                parts[#parts + 1] = escaped
+                parser.index = parser.index + 2
+            else
+                parts[#parts + 1] = c
+                parser.index = parser.index + 1
+            end
+        end
+        parse_fail("unterminated string")
+    end
+
+    local function parse_integer()
+        skip_ws_and_comments()
+        if not string.match(peek(), "^[1-9]$") then
+            parse_fail("expected positive integer")
+        end
+        local startIndex = parser.index
+        parser.index = parser.index + 1
+        while string.match(peek(), "^%d$") do
+            parser.index = parser.index + 1
+        end
+        if string.match(peek(), "^[%w_%.%-]$") then
+            parse_fail("invalid integer literal")
+        end
+        local value = tonumber(string.sub(parser.text, startIndex, parser.index - 1))
+        if not is_finite_positive_number(value) or math.floor(value) ~= value then
+            parse_fail("expected positive finite integer")
+        end
+        return value
+    end
+
+    local parse_value
+
+    local function assign_field(tbl, seenKeys, key, value)
+        if seenKeys[key] then
+            parse_fail("duplicate key " .. tostring(key))
+        end
+        seenKeys[key] = true
+        tbl[key] = value
+    end
+
+    local function parse_table_value()
+        expect_literal("{")
+        local out = {}
+        local seenKeys = {}
+        local arrayIndex = 1
+
+        skip_ws_and_comments()
+        if consume_literal("}") then
+            return out
+        end
+
+        while true do
+            skip_ws_and_comments()
+            local c = peek()
+            if c == '"' then
+                out[arrayIndex] = parse_string()
+                arrayIndex = arrayIndex + 1
+            elseif c == "[" then
+                expect_literal("[")
+                local key = parse_string()
+                expect_literal("]")
+                expect_literal("=")
+                assign_field(out, seenKeys, key, parse_value())
+            else
+                local key = parse_identifier(false)
+                expect_literal("=")
+                assign_field(out, seenKeys, key, parse_value())
+            end
+
+            skip_ws_and_comments()
+            if consume_literal(",") then
+                skip_ws_and_comments()
+                if consume_literal("}") then
+                    return out
+                end
+            elseif consume_literal("}") then
+                return out
+            else
+                parse_fail("expected ',' or '}'")
+            end
+        end
+    end
+
+    parse_value = function()
+        skip_ws_and_comments()
+        local c = peek()
+        if c == "{" then
+            return parse_table_value()
+        elseif c == '"' then
+            return parse_string()
+        elseif string.match(c, "^%d$") then
+            return parse_integer()
+        end
+        parse_fail("expected value")
+    end
+
+    skip_ws_and_comments()
+    local rootName = parse_identifier(false)
+    if rootName ~= "StatsProArchonTargets" then
+        parse_fail("expected StatsProArchonTargets root assignment")
+    end
+    expect_literal("=")
+    local root = parse_table_value()
+    skip_ws_and_comments()
+    if not at_end() then
+        parse_fail("expected end of file")
+    end
+    return root
+end
+
 local function validate_spec_manifest()
     local seenSpecIDs = {}
     local seenClassSpecs = {}
@@ -461,17 +660,8 @@ local function build_semantic_lines(root)
 end
 
 local function load_generated_file(path)
-    local env = {}
-    local chunk, err = loadfile(path)
-    if not chunk then
-        fail("cannot load " .. path .. ": " .. tostring(err))
-    end
-    setfenv(chunk, env)
-    local ok, runErr = pcall(chunk)
-    if not ok then
-        fail("cannot evaluate " .. path .. ": " .. tostring(runErr))
-    end
-    return env.StatsProArchonTargets
+    local text = read_file(path)
+    return parse_generated_lua(text, path), text
 end
 
 local function make_valid_fixture(capturedAt)
@@ -572,6 +762,37 @@ local function run_self_test(parsedOptions)
         end
     end
     validate_raw_text_shape(table.concat(rawLines, "\n"))
+    assert_throws("raw fragment without root assignment", function()
+        parse_generated_lua(table.concat(rawLines, "\n"), "raw fragment")
+    end, "StatsProArchonTargets")
+
+    local currentGeneratedText = read_file(DEFAULT_PATH)
+    local currentGeneratedRoot = parse_generated_lua(currentGeneratedText, DEFAULT_PATH)
+    validate_snapshot(currentGeneratedRoot, currentGeneratedText, {
+        today = "2099-01-01",
+        allowStale = true,
+        statsProLua = options.statsProLua,
+    })
+
+    assert_throws("generated parser rejects trailing loop", function()
+        parse_generated_lua(currentGeneratedText .. "\nwhile true do end\n", "trailing loop")
+    end, "end of file")
+
+    assert_throws("generated parser rejects function call value", function()
+        parse_generated_lua('StatsProArchonTargets = { source = tostring("archon") }', "function call")
+    end, "expected value")
+
+    assert_throws("generated parser rejects duplicate map key", function()
+        parse_generated_lua('StatsProArchonTargets = { source = "archon", source = "archon" }', "duplicate key")
+    end, "duplicate key source")
+
+    assert_throws("generated parser rejects zero integer", function()
+        parse_generated_lua("StatsProArchonTargets = { schemaVersion = 0 }", "zero integer")
+    end, "positive integer")
+
+    assert_throws("generated parser rejects float integer", function()
+        parse_generated_lua("StatsProArchonTargets = { schemaVersion = 1.5 }", "float integer")
+    end, "invalid integer literal")
 
     local missingSpec = clone(make_valid_fixture("2026-05-16"))
     missingSpec.snapshots.mythicPlus.specs.DEMONHUNTER.devourer = nil
@@ -704,8 +925,7 @@ if options.dumpSpecManifest then
     return
 end
 
-local root = load_generated_file(options.path)
-local text = read_file(options.path)
+local root, text = load_generated_file(options.path)
 validate_snapshot(root, text, options)
 if options.semanticLines then
     for _, line in ipairs(build_semantic_lines(root)) do

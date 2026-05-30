@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.19 - 30-May-2026 — Rating-only rows and release checks
+
+### Fixed
+
+- **Rating-only offensive and tertiary rows stay visible when their rating is available** — rows such as Versatility and Speed no longer disappear in rating-only mode when the percentage or bonus read is missing, zero, or protected while the rating itself is readable.
+
+### Improved
+
+- **Release checks fail faster on invalid Archon target snapshots** — generated target data is parsed without executing arbitrary Lua, native check processes have timeouts, and collector self-tests cover representative M+ and Raid page payloads.
+
 ## 1.9.18 - 29-May-2026 — Archon target refresh
 
 ### Updated

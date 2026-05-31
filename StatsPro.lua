@@ -2982,10 +2982,14 @@ local function FmtRatingPct(rating, pct, statColor)
     local cs = cached.colorStrings
     local rc = (cached.matchValueColorToStat and statColor) or cs.rating
     local pc = (cached.matchValueColorToStat and statColor) or cs.percentage
+    local ratingStr = string.format("|cff%s%d|r", rc, rating)
     if IsDualColMode() then
-        return string.format("|cff%s%d|r |cff808080|||r", rc, rating), FmtColorPct(pc, pct)
+        if type(pct) == "number" then
+            return ratingStr .. " |cff808080|||r", FmtColorPct(pc, pct)
+        end
+        return ratingStr .. " |cff808080|||r", ""
     elseif cached.showRating then
-        return string.format("|cff%s%d|r", rc, rating), ""
+        return ratingStr, ""
     else
         -- percent-only: route into rating col (single-column layout)
         return FmtColorPct(pc, pct), ""
@@ -3116,14 +3120,13 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
 
     -- Tooltip targets need the raw rating even when the rating column is hidden.
     local needTargetRating = targetRows ~= nil
-    local isRatingOnly = cached.showRating and not cached.showPercentage
     for _, def in ipairs(OFFENSIVE_STATS) do
         if cached[def.showKey] then
             local val = SAFE_NUM.SafeDisplayPercent(def.api)
             local ratingDisplay, targetRating
             local ratingRead = false
             local visible = shouldShow(def.showKey, val, cached.hideZeroOffensive)
-            if isRatingOnly then
+            if cached.showRating then
                 ratingDisplay, targetRating = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
                 ratingRead = true
                 local ratingVisible = shouldShow(def.showKey .. "Rating", ratingDisplay, cached.hideZeroOffensive)
@@ -3176,7 +3179,7 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
             end
         end
         local versVisible = shouldShow("showVersatility", versDisplay, cached.hideZeroOffensive)
-        if isRatingOnly then
+        if cached.showRating then
             local versRatingVisible = shouldShow("showVersatilityRating", versRatingDisplay, cached.hideZeroOffensive)
             versVisible = versVisible or versRatingVisible
         end
@@ -3201,14 +3204,13 @@ local function BuildTertiaryLines(labels, ratings, values)
     local cs = cached.colorStrings
 
     local needRating = cached.showRating
-    local isRatingOnly = cached.showRating and not cached.showPercentage
     for _, def in ipairs(TERTIARY_STATS) do
         if cached[def.showKey] then
             local val = SAFE_NUM.SafeDisplayPercent(def.api)
             local ratingDisplay
             local ratingRead = false
             local visible = shouldShow(def.showKey, val, cached.hideZeroTertiary)
-            if isRatingOnly then
+            if needRating then
                 ratingDisplay = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
                 ratingRead = true
                 local ratingVisible = shouldShow(def.showKey .. "Rating", ratingDisplay, cached.hideZeroTertiary)
@@ -3246,7 +3248,7 @@ local function BuildTertiaryLines(labels, ratings, values)
         local speedRatingDisplay = needRating and SAFE_NUM.ReadRatingValue(GetCombatRating, CR_SPEED) or nil
         local speedRating = needRating and (speedRatingDisplay or 0) or 0
         local speedVisible = shouldShow("showSpeed", speed, cached.hideZeroTertiary)
-        if isRatingOnly then
+        if needRating then
             local speedRatingVisible = shouldShow("showSpeedRating", speedRatingDisplay, cached.hideZeroTertiary)
             speedVisible = speedVisible or speedRatingVisible
         end
@@ -3626,7 +3628,7 @@ local function OnPlayerEnteringWorld()
     -- WHY: UpdateStats handles Show/Hide based on cached.isVisible + line content.
     durabilityDirty = true
     itemLevelDirty = true
-    UpdateStats()
+    addon:RunUpdateStatsSafe()
 end
 
 -- WHY: Armor/DR refresh runs inline in UpdateStats out-of-combat (cheap), so we

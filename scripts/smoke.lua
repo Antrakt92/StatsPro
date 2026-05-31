@@ -1525,6 +1525,34 @@ do
 end
 
 do
+    local secretCrit = {}
+    local pewEnv = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = false,
+            showPercentage = true,
+            hideZeroOffensive = false,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCritChance = function() return secretCrit end,
+        getRangedCritChance = function() return nil end,
+        getSpellCritChance = function() return nil end,
+        issecretvalue = function(value) return value == secretCrit end,
+    })
+    local ok, err = pcall(pewEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("lifecycle.pew_initial_update_error_is_counted.no_bubble", ok, err)
+    clearPrints(pewEnv)
+    slash("lifecycle.pew_initial_update_error_is_counted.debug_perf", pewEnv, "debug perf")
+    eq("lifecycle.pew_initial_update_error_is_counted.debug_reports_error",
+        printContains(pewEnv, "updateErrors=1"), true)
+end
+
+do
     local logoutEnv = loadStatsPro("enUS")
     logoutEnv.StatsProFrame:ClearAllPoints()
     logoutEnv.StatsProFrame:SetPoint("TOPLEFT", logoutEnv.UIParent, "TOPLEFT", 41, -42)
@@ -2176,6 +2204,125 @@ do
 end
 
 do
+    local targetFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 1000, haste = 200, mastery = 300, versatility = 400 })
+    local critEnv, _, critTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProDB = {
+            showOffensive = true,
+            showRating = true,
+            showPercentage = true,
+            hideZeroOffensive = true,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        statsProArchonTargets = targetFixture,
+        getCritChance = function() return nil end,
+        getRangedCritChance = function() return nil end,
+        getSpellCritChance = function() return nil end,
+        getCombatRating = function() return 812 end,
+    })
+    fireEvent("render.offensive_dual_nil_percent_uses_clean_rating_and_meta.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.offensive_dual_nil_percent_uses_clean_rating_and_meta.no_error", ok, blocks)
+    local offensive = blocks[2]
+    eq("render.offensive_dual_nil_percent_uses_clean_rating_and_meta.block", offensive.splitKey, "splitOffensive")
+    eq("render.offensive_dual_nil_percent_uses_clean_rating_and_meta.row_count", #(offensive.labels or {}), 1)
+    eq("render.offensive_dual_nil_percent_uses_clean_rating_and_meta.label",
+        offensive.labels[1]:find("Crit:", 1, true) ~= nil, true)
+    eq("render.offensive_dual_nil_percent_uses_clean_rating_and_meta.rating",
+        offensive.ratings[1]:find("812", 1, true) ~= nil, true)
+    eq("render.offensive_dual_nil_percent_uses_clean_rating_and_meta.no_fake_percent",
+        offensive.values[1], "")
+    local meta = offensive.targetRows[1]
+    check("render.offensive_dual_nil_percent_uses_clean_rating_and_meta.meta", type(meta) == "table", meta)
+    eq("render.offensive_dual_nil_percent_uses_clean_rating_and_meta.current", meta.current, 812)
+    eq("render.offensive_dual_nil_percent_uses_clean_rating_and_meta.current_pct", meta.currentPct, nil)
+    eq("render.offensive_dual_nil_percent_uses_clean_rating_and_meta.target", meta.target, 1000)
+end
+
+do
+    local hasteEnv, _, hasteTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = true,
+            showPercentage = true,
+            hideZeroOffensive = true,
+            showCrit = false,
+            showHaste = true,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getHaste = function() error("haste API unavailable") end,
+        getCombatRating = function() return 733 end,
+    })
+    fireEvent("render.offensive_dual_error_percent_uses_clean_rating.fire", hasteEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(hasteTest.buildRenderBlocks)
+    check("render.offensive_dual_error_percent_uses_clean_rating.no_error", ok, blocks)
+    local offensive = blocks[2]
+    eq("render.offensive_dual_error_percent_uses_clean_rating.row_count", #(offensive.labels or {}), 1)
+    eq("render.offensive_dual_error_percent_uses_clean_rating.label",
+        offensive.labels[1]:find("Haste:", 1, true) ~= nil, true)
+    eq("render.offensive_dual_error_percent_uses_clean_rating.rating",
+        offensive.ratings[1]:find("733", 1, true) ~= nil, true)
+    eq("render.offensive_dual_error_percent_uses_clean_rating.no_fake_percent",
+        offensive.values[1], "")
+    eq("render.offensive_dual_error_percent_uses_clean_rating.no_target_meta",
+        offensive.targetRows[1], false)
+end
+
+do
+    local secretCritPercent = 18.4
+    local targetFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 1000, haste = 200, mastery = 300, versatility = 400 })
+    local critEnv, _, critTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProDB = {
+            showOffensive = true,
+            showRating = true,
+            showPercentage = true,
+            hideZeroOffensive = true,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        statsProArchonTargets = targetFixture,
+        getCritChance = function() return secretCritPercent end,
+        getRangedCritChance = function() return nil end,
+        getSpellCritChance = function() return nil end,
+        getCombatRating = function() return 812 end,
+        issecretvalue = function(value) return value == secretCritPercent end,
+    })
+    fireEvent("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.no_error", ok, blocks)
+    local offensive = blocks[2]
+    eq("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.row_count", #(offensive.labels or {}), 1)
+    eq("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.rating",
+        offensive.ratings[1]:find("812", 1, true) ~= nil, true)
+    local meta = offensive.targetRows[1]
+    check("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.meta", type(meta) == "table", meta)
+    eq("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.current", meta.current, 812)
+    eq("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.current_pct", meta.currentPct, nil)
+    eq("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.target", meta.target, 1000)
+end
+
+do
     local ratingCalls = 0
     local targetHoverFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(targetHoverFixture, "mythicPlus", "MAGE", "frost",
@@ -2251,6 +2398,65 @@ do
     check("render.tertiary_rating_only_nil_percent_uses_clean_rating.no_error", ok, blocks)
     eq("render.tertiary_rating_only_nil_percent_uses_clean_rating.row", blockDumpContains(blocks, "Leech:"), true)
     eq("render.tertiary_rating_only_nil_percent_uses_clean_rating.rating", blockDumpContains(blocks, "421"), true)
+end
+
+do
+    local leechEnv, _, leechTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            showRating = true,
+            showPercentage = true,
+            hideZeroTertiary = true,
+            showLeech = true,
+            showAvoidance = false,
+            showSpeed = false,
+            showDefensive = false,
+        },
+        getLifesteal = function() return nil end,
+        getCombatRating = function() return 421 end,
+    })
+    fireEvent("render.tertiary_dual_nil_percent_uses_clean_rating.fire", leechEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(leechTest.buildRenderBlocks)
+    check("render.tertiary_dual_nil_percent_uses_clean_rating.no_error", ok, blocks)
+    local tertiary = blocks[3]
+    eq("render.tertiary_dual_nil_percent_uses_clean_rating.block", tertiary.splitKey, "splitTertiary")
+    eq("render.tertiary_dual_nil_percent_uses_clean_rating.row_count", #(tertiary.labels or {}), 1)
+    eq("render.tertiary_dual_nil_percent_uses_clean_rating.label",
+        tertiary.labels[1]:find("Leech:", 1, true) ~= nil, true)
+    eq("render.tertiary_dual_nil_percent_uses_clean_rating.rating",
+        tertiary.ratings[1]:find("421", 1, true) ~= nil, true)
+    eq("render.tertiary_dual_nil_percent_uses_clean_rating.no_fake_percent",
+        tertiary.values[1], "")
+end
+
+do
+    local avoidanceEnv, _, avoidanceTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            showRating = true,
+            showPercentage = true,
+            hideZeroTertiary = true,
+            showLeech = false,
+            showAvoidance = true,
+            showSpeed = false,
+            showDefensive = false,
+        },
+        getAvoidance = function() error("avoidance API unavailable") end,
+        getCombatRating = function() return 318 end,
+    })
+    fireEvent("render.tertiary_dual_error_percent_uses_clean_rating.fire", avoidanceEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(avoidanceTest.buildRenderBlocks)
+    check("render.tertiary_dual_error_percent_uses_clean_rating.no_error", ok, blocks)
+    local tertiary = blocks[3]
+    eq("render.tertiary_dual_error_percent_uses_clean_rating.row_count", #(tertiary.labels or {}), 1)
+    eq("render.tertiary_dual_error_percent_uses_clean_rating.label",
+        tertiary.labels[1]:find("Avoidance:", 1, true) ~= nil, true)
+    eq("render.tertiary_dual_error_percent_uses_clean_rating.rating",
+        tertiary.ratings[1]:find("318", 1, true) ~= nil, true)
+    eq("render.tertiary_dual_error_percent_uses_clean_rating.no_fake_percent",
+        tertiary.values[1], "")
 end
 
 do
@@ -2720,6 +2926,49 @@ do
 end
 
 do
+    local targetFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 100, haste = 200, mastery = 300, versatility = 1000 })
+    local versEnv, _, versTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProDB = {
+            showOffensive = true,
+            showRating = true,
+            showPercentage = true,
+            hideZeroOffensive = true,
+            showCrit = false,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = true,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        statsProArchonTargets = targetFixture,
+        getCombatRatingBonus = function() return nil end,
+        getVersatilityBonus = function() return nil end,
+        getCombatRating = function() return 699 end,
+    })
+    fireEvent("render.versatility_dual_nil_bonus_uses_clean_rating_and_meta.fire", versEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_dual_nil_bonus_uses_clean_rating_and_meta.no_error", ok, blocks)
+    local offensive = blocks[2]
+    eq("render.versatility_dual_nil_bonus_uses_clean_rating_and_meta.row_count", #(offensive.labels or {}), 1)
+    eq("render.versatility_dual_nil_bonus_uses_clean_rating_and_meta.label",
+        offensive.labels[1]:find("Vers:", 1, true) ~= nil, true)
+    eq("render.versatility_dual_nil_bonus_uses_clean_rating_and_meta.rating",
+        offensive.ratings[1]:find("699", 1, true) ~= nil, true)
+    eq("render.versatility_dual_nil_bonus_uses_clean_rating_and_meta.no_fake_percent",
+        offensive.values[1], "")
+    local meta = offensive.targetRows[1]
+    check("render.versatility_dual_nil_bonus_uses_clean_rating_and_meta.meta", type(meta) == "table", meta)
+    eq("render.versatility_dual_nil_bonus_uses_clean_rating_and_meta.current", meta.current, 699)
+    eq("render.versatility_dual_nil_bonus_uses_clean_rating_and_meta.current_pct", meta.currentPct, nil)
+    eq("render.versatility_dual_nil_bonus_uses_clean_rating_and_meta.target", meta.target, 1000)
+end
+
+do
     local speedEnv, _, speedTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = false,
@@ -2740,6 +2989,35 @@ do
     check("render.speed_rating_only_zero_speed_uses_clean_rating.no_error", ok, blocks)
     eq("render.speed_rating_only_zero_speed_uses_clean_rating.row", blockDumpContains(blocks, "Speed:"), true)
     eq("render.speed_rating_only_zero_speed_uses_clean_rating.rating", blockDumpContains(blocks, "377"), true)
+end
+
+do
+    local speedEnv, _, speedTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            showRating = true,
+            showPercentage = true,
+            hideZeroTertiary = true,
+            showLeech = false,
+            showAvoidance = false,
+            showSpeed = true,
+            showDefensive = false,
+        },
+        getUnitSpeed = function() return 0, 0, 0, 0 end,
+        getCombatRating = function() return 377 end,
+    })
+    fireEvent("render.speed_dual_zero_speed_uses_clean_rating.fire", speedEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_dual_zero_speed_uses_clean_rating.no_error", ok, blocks)
+    local tertiary = blocks[3]
+    eq("render.speed_dual_zero_speed_uses_clean_rating.row_count", #(tertiary.labels or {}), 1)
+    eq("render.speed_dual_zero_speed_uses_clean_rating.label",
+        tertiary.labels[1]:find("Speed:", 1, true) ~= nil, true)
+    eq("render.speed_dual_zero_speed_uses_clean_rating.rating",
+        tertiary.ratings[1]:find("377", 1, true) ~= nil, true)
+    eq("render.speed_dual_zero_speed_uses_clean_rating.clean_zero_percent",
+        tertiary.values[1]:find("0.0%", 1, true) ~= nil, true)
 end
 
 do

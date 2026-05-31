@@ -65,6 +65,10 @@ jobs:
             exit 1
           fi
 
+      - name: Trim release changelog
+        shell: pwsh
+        run: ./scripts/check-release-version.ps1 -Tag $env:GITHUB_REF_NAME -EnforceSemVer -ExportTopChangelogPath CHANGELOG.md
+
       - name: Package and release
         uses: BigWigsMods/packager@v2
         env:

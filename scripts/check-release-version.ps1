@@ -1,8 +1,10 @@
 param(
     [string]$Tag = $env:GITHUB_REF_NAME,
     [switch]$EnforceSemVer,
+    [switch]$EnforceSemVerWhenAhead,
     [switch]$AllowSemVerMismatch,
     [switch]$SelfTest,
+    [string]$ExportTopChangelogPath,
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot ".."))
 )
 
@@ -88,6 +90,21 @@ function ConvertTo-SemVerParts {
     }
 }
 
+function Compare-SemVer {
+    param(
+        [string]$Left,
+        [string]$Right
+    )
+
+    $leftParts = ConvertTo-SemVerParts $Left
+    $rightParts = ConvertTo-SemVerParts $Right
+    foreach ($field in @("Major", "Minor", "Patch")) {
+        if ($leftParts[$field] -lt $rightParts[$field]) { return -1 }
+        if ($leftParts[$field] -gt $rightParts[$field]) { return 1 }
+    }
+    return 0
+}
+
 function Get-NextSemVer {
     param(
         [string]$PreviousVersion,
@@ -162,6 +179,24 @@ function Get-PreviousReleaseTag {
     return $null
 }
 
+function Get-LatestReachableReleaseTag {
+    $result = Invoke-Git -Arguments @(
+        "tag",
+        "--merged",
+        "HEAD",
+        "--list",
+        "v[0-9]*.[0-9]*.[0-9]*",
+        "--sort=-v:refname"
+    )
+    foreach ($tag in $result.Output) {
+        $name = $tag.Trim()
+        if ($name -match "^v\d+\.\d+\.\d+$") {
+            return $name
+        }
+    }
+    return $null
+}
+
 function Get-CommitRecordsSinceTag {
     param([string]$PreviousTag)
 
@@ -218,6 +253,35 @@ function Assert-SemVerMatchesCommits {
     throw "$message Pass -AllowSemVerMismatch only for an intentional exceptional release."
 }
 
+function Assert-SemVerWhenAhead {
+    param(
+        [string]$CurrentTagName,
+        [string]$RequestedVersion,
+        [bool]$PermitMismatch
+    )
+
+    $latestTag = Get-LatestReachableReleaseTag
+    if (-not $latestTag) {
+        Write-Warning "Skipping prepared-release SemVer check: no vX.Y.Z tag is reachable from HEAD."
+        return
+    }
+
+    $latestVersion = Get-ReleaseVersionFromTag $latestTag
+    $comparison = Compare-SemVer -Left $RequestedVersion -Right $latestVersion
+    if ($comparison -lt 0) {
+        throw "Release tag $CurrentTagName requests $RequestedVersion, older than latest reachable release tag $latestTag."
+    }
+    if ($comparison -eq 0) {
+        Write-Host "Prepared-release SemVer check skipped: $RequestedVersion equals latest reachable release tag $latestTag."
+        return
+    }
+
+    Assert-SemVerMatchesCommits `
+        -CurrentTagName $CurrentTagName `
+        -RequestedVersion $RequestedVersion `
+        -PermitMismatch:$PermitMismatch
+}
+
 function Get-FirstRegexMatch {
     param(
         [string]$Path,
@@ -248,11 +312,56 @@ function Get-FirstRegexObject {
     return $Match
 }
 
+function Get-ChangelogHeadingPattern {
+    $HeadingDash = [regex]::Escape([string][char]0x2014)
+    return "^##\s+([0-9]+\.[0-9]+\.[0-9]+)\s+-\s+([0-9]{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-[0-9]{4})\s+$HeadingDash\s+\S.*$"
+}
+
+function Get-TopChangelogEntry {
+    param([string]$Path)
+
+    $text = Get-Content -Path $Path -Raw -Encoding UTF8
+    $headingMatches = [regex]::Matches(
+        $text,
+        (Get-ChangelogHeadingPattern),
+        [System.Text.RegularExpressions.RegexOptions]::Multiline
+    )
+    if ($headingMatches.Count -eq 0) {
+        throw "Missing top changelog heading in $Path"
+    }
+
+    $firstHeading = $headingMatches[0]
+    $endIndex = if ($headingMatches.Count -gt 1) { $headingMatches[1].Index } else { $text.Length }
+    $prefix = $text.Substring(0, $firstHeading.Index).TrimEnd()
+    $entry = $text.Substring($firstHeading.Index, $endIndex - $firstHeading.Index).TrimEnd()
+    if (-not [string]::IsNullOrWhiteSpace($prefix)) {
+        return "$prefix`n`n$entry`n"
+    }
+    return "$entry`n"
+}
+
+function Export-TopChangelogEntry {
+    param(
+        [string]$SourcePath,
+        [string]$DestinationPath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($DestinationPath)) {
+        return
+    }
+    $entry = Get-TopChangelogEntry -Path $SourcePath
+    $destinationFullPath = [System.IO.Path]::GetFullPath($DestinationPath)
+    [System.IO.File]::WriteAllText($destinationFullPath, $entry, [System.Text.UTF8Encoding]::new($false))
+    Write-Host "Exported top changelog entry to $destinationFullPath"
+}
+
 function Assert-ReleaseVersion {
     param(
         [string]$TagValue,
         [bool]$ShouldEnforceSemVer,
-        [bool]$PermitSemVerMismatch
+        [bool]$ShouldEnforceSemVerWhenAhead,
+        [bool]$PermitSemVerMismatch,
+        [string]$ExportTopChangelogPath
     )
 
     $TagName = Normalize-ReleaseTagName $TagValue
@@ -268,8 +377,7 @@ function Assert-ReleaseVersion {
         -Pattern '^\s*local\s+CURRENT_RELEASE\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"\s*$' `
         -Description "CURRENT_RELEASE"
 
-    $HeadingDash = [regex]::Escape([string][char]0x2014)
-    $HeadingPattern = "^##\s+([0-9]+\.[0-9]+\.[0-9]+)\s+-\s+([0-9]{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-[0-9]{4})\s+$HeadingDash\s+\S.*$"
+    $HeadingPattern = Get-ChangelogHeadingPattern
     $ChangelogHeading = Get-FirstRegexObject `
         -Path "CHANGELOG.md" `
         -Pattern $HeadingPattern `
@@ -305,6 +413,14 @@ function Assert-ReleaseVersion {
             -RequestedVersion $TagVersion `
             -PermitMismatch:$PermitSemVerMismatch
     }
+    elseif ($ShouldEnforceSemVerWhenAhead) {
+        Assert-SemVerWhenAhead `
+            -CurrentTagName $TagName `
+            -RequestedVersion $TagVersion `
+            -PermitMismatch:$PermitSemVerMismatch
+    }
+
+    Export-TopChangelogEntry -SourcePath "CHANGELOG.md" -DestinationPath $ExportTopChangelogPath
 
     Write-Host "Release version check passed: $TagName -> $TagVersion"
 }
@@ -338,23 +454,35 @@ function Invoke-SelfTest {
 
         Set-Content -Path "StatsPro.toc" -Value "## Version: 1.0.0" -Encoding UTF8
         Set-Content -Path "StatsPro.lua" -Value 'local CURRENT_RELEASE = "1.0.0"' -Encoding UTF8
-        Set-Content -Path "CHANGELOG.md" -Value "## 1.0.0 - 01-Jan-2026 $([char]0x2014) Initial`n" -Encoding UTF8
+        Set-Content -Path "CHANGELOG.md" -Value "# Changelog`n`n## 1.0.0 - 01-Jan-2026 $([char]0x2014) Initial`n" -Encoding UTF8
         [void](Invoke-Git -Arguments @("add", "."))
         [void](Invoke-Git -Arguments @("commit", "-m", "chore: initial release"))
         [void](Invoke-Git -Arguments @("tag", "v1.0.0"))
 
         Set-Content -Path "StatsPro.toc" -Value "## Version: 1.0.1" -Encoding UTF8
         Set-Content -Path "StatsPro.lua" -Value 'local CURRENT_RELEASE = "1.0.1"' -Encoding UTF8
-        Set-Content -Path "CHANGELOG.md" -Value "## 1.0.1 - 02-Jan-2026 $([char]0x2014) Fix`n" -Encoding UTF8
+        Set-Content -Path "CHANGELOG.md" -Value "# Changelog`n`n## 1.0.1 - 02-Jan-2026 $([char]0x2014) Fix`n`n### Fixed`n`n- Release gate regression.`n`n## 1.0.0 - 01-Jan-2026 $([char]0x2014) Initial`n" -Encoding UTF8
         [void](Invoke-Git -Arguments @("add", "."))
         [void](Invoke-Git -Arguments @("commit", "-m", "fix: repair release gate"))
+        $topChangelogPath = Join-Path $root "TOP-CHANGELOG.md"
+        Assert-ReleaseVersion -TagValue "v1.0.1" -ShouldEnforceSemVer:$false -ShouldEnforceSemVerWhenAhead:$true -PermitSemVerMismatch:$false -ExportTopChangelogPath $topChangelogPath
+        $topChangelog = Get-Content -Path $topChangelogPath -Raw -Encoding UTF8
+        if (-not $topChangelog.StartsWith("# Changelog`n`n## 1.0.1 - 02-Jan-2026 $([char]0x2014) Fix")) {
+            throw "exported top changelog must preserve the H1 and current release heading, got: $topChangelog"
+        }
+        if ([regex]::Matches($topChangelog, "(?m)^##\s+\d+\.\d+\.\d+\s+-\s+").Count -ne 1) {
+            throw "exported top changelog must contain exactly one version heading, got: $topChangelog"
+        }
         Assert-ReleaseVersion -TagValue "v1.0.1" -ShouldEnforceSemVer:$true -PermitSemVerMismatch:$false
 
         Set-Content -Path "StatsPro.toc" -Value "## Version: 1.1.0" -Encoding UTF8
         Set-Content -Path "StatsPro.lua" -Value 'local CURRENT_RELEASE = "1.1.0"' -Encoding UTF8
-        Set-Content -Path "CHANGELOG.md" -Value "## 1.1.0 - 03-Jan-2026 $([char]0x2014) Feature`n" -Encoding UTF8
+        Set-Content -Path "CHANGELOG.md" -Value "# Changelog`n`n## 1.1.0 - 03-Jan-2026 $([char]0x2014) Feature`n" -Encoding UTF8
         Assert-ThrowsMatch "patch commit cannot release minor without override" {
             Assert-ReleaseVersion -TagValue "v1.1.0" -ShouldEnforceSemVer:$true -PermitSemVerMismatch:$false
+        } "require patch bump 1\.0\.1"
+        Assert-ThrowsMatch "when-ahead rejects wrong prepared minor bump" {
+            Assert-ReleaseVersion -TagValue "v1.1.0" -ShouldEnforceSemVer:$false -ShouldEnforceSemVerWhenAhead:$true -PermitSemVerMismatch:$false
         } "require patch bump 1\.0\.1"
         Assert-ReleaseVersion -TagValue "v1.1.0" -ShouldEnforceSemVer:$true -PermitSemVerMismatch:$true
 
@@ -362,9 +490,21 @@ function Invoke-SelfTest {
         Assert-ReleaseVersion -TagValue "refs/tags/v1.1.0" -ShouldEnforceSemVer:$true -PermitSemVerMismatch:$false
         [void](Invoke-Git -Arguments @("tag", "v1.1.0"))
 
+        Set-Content -Path "notes.txt" -Value "unreleased follow-up" -Encoding UTF8
+        [void](Invoke-Git -Arguments @("add", "notes.txt"))
+        [void](Invoke-Git -Arguments @("commit", "-m", "fix: unreleased follow-up"))
+        Assert-ReleaseVersion -TagValue "v1.1.0" -ShouldEnforceSemVer:$false -ShouldEnforceSemVerWhenAhead:$true -PermitSemVerMismatch:$false
+
+        Set-Content -Path "StatsPro.toc" -Value "## Version: 1.0.9" -Encoding UTF8
+        Set-Content -Path "StatsPro.lua" -Value 'local CURRENT_RELEASE = "1.0.9"' -Encoding UTF8
+        Set-Content -Path "CHANGELOG.md" -Value "# Changelog`n`n## 1.0.9 - 04-Jan-2026 $([char]0x2014) Regression`n" -Encoding UTF8
+        Assert-ThrowsMatch "when-ahead rejects version behind latest tag" {
+            Assert-ReleaseVersion -TagValue "v1.0.9" -ShouldEnforceSemVer:$false -ShouldEnforceSemVerWhenAhead:$true -PermitSemVerMismatch:$false
+        } "older than latest reachable release tag v1\.1\.0"
+
         Set-Content -Path "StatsPro.toc" -Value "## Version: 2.0.0" -Encoding UTF8
         Set-Content -Path "StatsPro.lua" -Value 'local CURRENT_RELEASE = "2.0.0"' -Encoding UTF8
-        Set-Content -Path "CHANGELOG.md" -Value "## 2.0.0 - 05-Jan-2026 $([char]0x2014) Breaking`n" -Encoding UTF8
+        Set-Content -Path "CHANGELOG.md" -Value "# Changelog`n`n## 2.0.0 - 05-Jan-2026 $([char]0x2014) Breaking`n" -Encoding UTF8
         [void](Invoke-Git -Arguments @("add", "."))
         [void](Invoke-Git -Arguments @("commit", "-m", "fix!: change saved variables contract"))
         Assert-ReleaseVersion -TagValue "v2.0.0" -ShouldEnforceSemVer:$true -PermitSemVerMismatch:$false
@@ -397,7 +537,9 @@ try {
     Assert-ReleaseVersion `
         -TagValue $Tag `
         -ShouldEnforceSemVer:$EnforceSemVer.IsPresent `
-        -PermitSemVerMismatch:$AllowSemVerMismatch.IsPresent
+        -ShouldEnforceSemVerWhenAhead:$EnforceSemVerWhenAhead.IsPresent `
+        -PermitSemVerMismatch:$AllowSemVerMismatch.IsPresent `
+        -ExportTopChangelogPath $ExportTopChangelogPath
 }
 finally {
     Pop-Location

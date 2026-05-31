@@ -74,12 +74,13 @@ end
 
 local function read_file(path)
     local file, err = io.open(path, "rb")
-    if not file then
+    if file then
+        local text = file:read("*a")
+        file:close()
+        return text
+    else
         fail("cannot read " .. path .. ": " .. tostring(err))
     end
-    local text = file:read("*a")
-    file:close()
-    return text
 end
 
 local function count_keys(tbl)
@@ -522,10 +523,14 @@ local function parse_runtime_spec_map(path)
     local out = {}
     for specID, specKey in string.gmatch(block, "%[(%d+)%]%s*=%s*\"([^\"]+)\"") do
         local id = tonumber(specID)
-        if out[id] then
-            fail("runtime spec map duplicate specID " .. specID)
+        if id then
+            if out[id] then
+                fail("runtime spec map duplicate specID " .. specID)
+            end
+            out[id] = specKey
+        else
+            fail("runtime spec map invalid specID " .. specID)
         end
-        out[id] = specKey
     end
     return out
 end

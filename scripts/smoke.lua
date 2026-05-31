@@ -2239,9 +2239,11 @@ do
     check("render.offensive_rating_only_builds_target_meta_without_pct.no_error", ok, blocks)
     local meta = findTargetMeta(blocks, "crit")
     check("render.offensive_rating_only_builds_target_meta_without_pct.meta", type(meta) == "table", meta)
-    eq("render.offensive_rating_only_builds_target_meta_without_pct.current", meta.current, 812)
-    eq("render.offensive_rating_only_builds_target_meta_without_pct.current_pct", meta.currentPct, nil)
-    eq("render.offensive_rating_only_builds_target_meta_without_pct.target", meta.target, 1000)
+    if type(meta) == "table" then
+        eq("render.offensive_rating_only_builds_target_meta_without_pct.current", meta.current, 812)
+        eq("render.offensive_rating_only_builds_target_meta_without_pct.current_pct", meta.currentPct, nil)
+        eq("render.offensive_rating_only_builds_target_meta_without_pct.target", meta.target, 1000)
+    end
 end
 
 do

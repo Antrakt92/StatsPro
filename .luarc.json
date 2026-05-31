@@ -45,6 +45,7 @@
     "DURABILITY_SLOT_MAX",
     "DURABILITY_SLOT_MIN",
     "FONT_COLOR_CODE_CLOSE",
+    "GameTooltip",
     "GameFontHighlight",
     "GameFontHighlightSmall",
     "GameFontNormalLarge",

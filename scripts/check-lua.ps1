@@ -443,26 +443,24 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "== Lua diagnostics =="
-foreach ($LuaFile in $StaticAnalysisFiles) {
-    Write-Host "-- $LuaFile"
-    $LogPath = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lls-" + [System.Guid]::NewGuid().ToString("N"))
-    $JsonPath = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lls-" + [System.Guid]::NewGuid().ToString("N") + ".json")
-    try {
-        $LuaLanguageServerResult = Invoke-NativeCapture -FilePath $LuaLanguageServer -Arguments @(
-            "--check=$LuaFile",
-            "--check_format=json",
-            "--check_out_path=$JsonPath",
-            "--checklevel=Warning",
-            "--configpath=$RepoRoot\.luarc.json",
-            "--logpath=$LogPath"
-        ) -TimeoutSeconds 180 -Description "lua-language-server diagnostics for $LuaFile"
-        $Diagnostics = @(Read-LuaLanguageServerDiagnostics -JsonPath $JsonPath)
-        Assert-NoLuaDiagnostics -Diagnostics $Diagnostics -ExitCode $LuaLanguageServerResult.ExitCode
-    }
-    finally {
-        Remove-Item -Recurse -Force $LogPath -ErrorAction SilentlyContinue
-        Remove-Item -Force $JsonPath -ErrorAction SilentlyContinue
-    }
+Write-Host "-- $RepoRoot"
+$LogPath = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lls-" + [System.Guid]::NewGuid().ToString("N"))
+$JsonPath = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lls-" + [System.Guid]::NewGuid().ToString("N") + ".json")
+try {
+    $LuaLanguageServerResult = Invoke-NativeCapture -FilePath $LuaLanguageServer -Arguments @(
+        "--check=$RepoRoot",
+        "--check_format=json",
+        "--check_out_path=$JsonPath",
+        "--checklevel=Warning",
+        "--configpath=$RepoRoot\.luarc.json",
+        "--logpath=$LogPath"
+    ) -TimeoutSeconds 180 -Description "lua-language-server diagnostics for $RepoRoot"
+    $Diagnostics = @(Read-LuaLanguageServerDiagnostics -JsonPath $JsonPath)
+    Assert-NoLuaDiagnostics -Diagnostics $Diagnostics -ExitCode $LuaLanguageServerResult.ExitCode
+}
+finally {
+    Remove-Item -Recurse -Force $LogPath -ErrorAction SilentlyContinue
+    Remove-Item -Force $JsonPath -ErrorAction SilentlyContinue
 }
 
 Write-Host "All Lua checks passed."

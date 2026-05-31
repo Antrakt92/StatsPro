@@ -577,6 +577,7 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
         or currentRating ~= currentRating or currentRating < 0 or currentRating >= math.huge then return nil end
     local target, snapshot, snapshotRoot, _, snapshotKey = addon.archonTargets.GetStatTarget(statKey)
     if not target then return nil end
+    if type(snapshot) ~= "table" or type(snapshotRoot) ~= "table" then return nil end
     local displayPct = (type(currentPct) == "number" and not issecretvalue(currentPct)
         and currentPct == currentPct and currentPct > -math.huge and currentPct < math.huge) and currentPct or nil
     return {

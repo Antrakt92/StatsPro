@@ -25,6 +25,51 @@ function Get-SingleRegexMatch {
     return $Matches[0].Groups[1].Value
 }
 
+function Get-PkgmetaListItems {
+    param(
+        [string]$Path,
+        [string]$Section
+    )
+
+    $items = @()
+    $phase = $null
+    foreach ($line in Get-Content -LiteralPath $Path -Encoding UTF8) {
+        if ($line -match "^\s*#") {
+            continue
+        }
+        if ($line -match "^([^\s:#][^:]*)\s*:") {
+            $phase = $Matches[1].Trim()
+            continue
+        }
+        if ($phase -eq $Section -and $line -match "^\s*-\s+(.+?)\s*$") {
+            $item = $Matches[1].Trim()
+            $item = $item.Trim("'`"")
+            $items += $item
+        }
+    }
+    return @($items)
+}
+
+function Assert-RequiredPkgmetaIgnores {
+    param([string]$Path)
+
+    $expectedIgnores = @(
+        "libs/LibStub/tests",
+        "libs/LibStub/*.toc",
+        "libs/CallbackHandler-1.0/*.xml",
+        "libs/LibSharedMedia-3.0/*.xml"
+    )
+    $actualIgnores = @(Get-PkgmetaListItems -Path $Path -Section "ignore")
+    $actualLookup = @{}
+    foreach ($item in $actualIgnores) {
+        $actualLookup[$item] = $true
+    }
+    $missing = @($expectedIgnores | Where-Object { -not $actualLookup.ContainsKey($_) })
+    if ($missing.Count -gt 0) {
+        throw ".pkgmeta ignore is missing package-external guard(s): $($missing -join ', ')"
+    }
+}
+
 function Assert-PathExists {
     param(
         [string]$Description,
@@ -297,6 +342,26 @@ function Invoke-SelfTest {
         Assert-ThrowsMatch "inline comments rejected" {
             [void](Get-TocRuntimeContract -RepoRoot $root -TocPath (Join-Path $root "StatsPro.toc"))
         } "inline comment"
+
+        Set-Content -Path (Join-Path $root ".pkgmeta") -Value @"
+ignore:
+  - .github
+  - libs/LibStub/tests
+  - libs/LibStub/*.toc
+  - libs/CallbackHandler-1.0/*.xml
+  - libs/LibSharedMedia-3.0/*.xml
+"@ -Encoding UTF8
+        Assert-RequiredPkgmetaIgnores -Path (Join-Path $root ".pkgmeta")
+
+        Set-Content -Path (Join-Path $root ".pkgmeta") -Value @"
+ignore:
+  - .github
+  - libs/LibStub/tests
+  - libs/LibStub/*.toc
+"@ -Encoding UTF8
+        Assert-ThrowsMatch "missing external ignore rejected" {
+            Assert-RequiredPkgmetaIgnores -Path (Join-Path $root ".pkgmeta")
+        } "LibSharedMedia-3\.0/\*\.xml"
     }
     finally {
         if (Test-Path -LiteralPath $root) {
@@ -337,6 +402,8 @@ try {
         -Pattern "^\s*filename:\s*(\S+)\s*$" `
         -Description ".pkgmeta manual changelog filename"
     Assert-PathExists ".pkgmeta manual changelog" $ManualChangelog
+
+    Assert-RequiredPkgmetaIgnores -Path $PkgmetaPath
 
     $IconTexture = Get-SingleRegexMatch `
         -Path $contract.TocPath `

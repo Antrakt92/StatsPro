@@ -16,6 +16,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Report CI action refs
+        shell: pwsh
+        run: .\scripts\report-ci-action-refs.ps1 -ActionRefs "actions/checkout@v6"
+
       - name: Install check tools
         shell: pwsh
         run: .\scripts\install-check-tools.ps1 -Install
@@ -23,6 +27,8 @@ jobs:
       - name: Check helper self-tests
         shell: pwsh
         run: |
+          .\scripts\install-check-tools.ps1 -SelfTest
+          .\scripts\report-ci-action-refs.ps1 -SelfTest
           .\scripts\check-metadata.ps1 -SelfTest
           .\scripts\check-lua.ps1 -SelfTest
           .\scripts\check-release-version.ps1 -SelfTest

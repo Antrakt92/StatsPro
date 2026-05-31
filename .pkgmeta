@@ -19,6 +19,10 @@ ignore:
   - PLAN.md
   - NOTES.md
   - "*.private.md"
+  - libs/LibStub/tests
+  - libs/LibStub/*.toc
+  - libs/CallbackHandler-1.0/*.xml
+  - libs/LibSharedMedia-3.0/*.xml
 
 externals:
   libs/LibStub:

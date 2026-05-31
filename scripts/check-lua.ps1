@@ -61,6 +61,16 @@ function Split-NativeOutput {
     return @($Text -split "\r?\n" | Where-Object { $_ -ne "" })
 }
 
+function Format-VersionOutput {
+    param([object[]]$Output)
+
+    $lines = @($Output | ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne "" })
+    if ($lines.Count -eq 0) {
+        return "<no version output>"
+    }
+    return ($lines -join " | ")
+}
+
 function Invoke-NativeCapture {
     param(
         [string]$FilePath,
@@ -140,6 +150,23 @@ function Invoke-NativeCapture {
     }
     finally {
         $process.Dispose()
+    }
+}
+
+function Write-ToolVersionReport {
+    param(
+        [string]$Label,
+        [string]$Path,
+        [string[]]$Arguments
+    )
+
+    Write-Host "${Label}: $Path"
+    $result = Invoke-NativeCapture -FilePath $Path -Arguments $Arguments -TimeoutSeconds 30 -Description "$Label version"
+    if ($result.ExitCode -eq 0) {
+        Write-Host "${Label} version: $(Format-VersionOutput $result.Output)"
+    }
+    else {
+        Write-Warning "${Label} version command exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
     }
 }
 
@@ -385,6 +412,12 @@ $Luacheck = $LuacheckCandidates | Select-Object -First 1
 if (-not $Luacheck) {
     throw "Missing luacheck. Run: .\scripts\install-check-tools.ps1 -Install"
 }
+
+Write-Host "== Tool versions =="
+Write-ToolVersionReport -Label "lua" -Path $Lua -Arguments @("-v")
+Write-ToolVersionReport -Label "luac" -Path $Luac -Arguments @("-v")
+Write-ToolVersionReport -Label "lua-language-server" -Path $LuaLanguageServer -Arguments @("--version")
+Write-ToolVersionReport -Label "luacheck" -Path $Luacheck -Arguments @("--version")
 
 & $MetadataCheck
 

@@ -18,6 +18,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Report CI action refs
+        shell: pwsh
+        run: .\scripts\report-ci-action-refs.ps1 -ActionRefs "actions/checkout@v6"
+
       - name: Check release ancestry
         shell: pwsh
         run: .\scripts\check-release-ancestry.ps1 -Tag $env:GITHUB_REF_NAME
@@ -68,6 +72,14 @@ jobs:
       - name: Trim release changelog
         shell: pwsh
         run: ./scripts/check-release-version.ps1 -Tag $env:GITHUB_REF_NAME -EnforceSemVer -ExportTopChangelogPath CHANGELOG.md
+
+      - name: Report CI action refs
+        shell: pwsh
+        run: |
+          ./scripts/report-ci-action-refs.ps1 -ActionRefs @(
+            "actions/checkout@v6",
+            "BigWigsMods/packager@v2"
+          )
 
       - name: Package and release
         uses: BigWigsMods/packager@v2

@@ -245,10 +245,10 @@ local function makeFrame(name)
     function frame:SetAutoFocus() end
     function frame:SetMultiLine() end
     function frame:SetMaxLetters() end
-    function frame:SetMaxLines() end
+    function frame:SetMaxLines(value) self.maxLines = value end
     function frame:SetNumeric() end
     function frame:SetTextInsets() end
-    function frame:SetWordWrap() end
+    function frame:SetWordWrap(value) self.wordWrap = value end
     function frame:GetStringWidth()
         return #(self.text or "") * ((self.fontSize or 12) * 0.5)
     end
@@ -3389,6 +3389,62 @@ do
 end
 
 do
+    local function assertLanguageCaption(name, clientLocale, forceLocale, expected)
+        local localeEnv, localeAddon = loadStatsPro(clientLocale, {
+            statsProDB = { forceLocale = forceLocale },
+        })
+        fireEvent(name .. ".fire", localeEnv, "PLAYER_ENTERING_WORLD")
+        local ok, err = pcall(function() localeAddon:OpenConfigMenu() end)
+        check(name .. ".open", ok, err)
+        eq(name .. ".caption", localeEnv.StatsProLanguageDropdown.dropdownText, expected)
+        return localeEnv
+    end
+
+    assertLanguageCaption("config.language_compact.esES_explicit", "enUS", "esES", "Español ES")
+    assertLanguageCaption("config.language_compact.esMX_explicit", "enUS", "esMX", "Español MX")
+    assertLanguageCaption("config.language_compact.esMX_auto_current", "esMX", "auto", "Español MX")
+    assertLanguageCaption("config.language_compact.koKR_forced_fallback", "enUS", "koKR", "한국어 / Korean")
+    assertLanguageCaption("config.language_compact.zhCN_forced_fallback", "enUS", "zhCN", "中文 / Simpl.")
+    assertLanguageCaption("config.language_compact.zhTW_forced_fallback", "enUS", "zhTW", "中文 / Trad.")
+end
+
+do
+    local function assertLocalizedCheckboxGuards(locale)
+        local guardEnv, guardAddon = loadStatsPro("enUS", {
+            statsProDB = { forceLocale = locale },
+        })
+        fireEvent("config.checkbox_label_guard." .. locale .. ".fire", guardEnv, "PLAYER_ENTERING_WORLD")
+        local ok, err = pcall(function() guardAddon:OpenConfigMenu() end)
+        check("config.checkbox_label_guard." .. locale .. ".open", ok, err)
+        for _, name in ipairs({
+            "StatsProOffensiveCheckText",
+            "StatsProCritCheckText",
+            "StatsProHideZeroOffCheckText",
+            "StatsProDefensiveCheckText",
+            "StatsProStaggerCheckText",
+            "StatsProWorstDurCheckText",
+        }) do
+            local label = exists("config.checkbox_label_guard." .. locale .. "." .. name, guardEnv[name])
+            eq("config.checkbox_label_guard." .. locale .. "." .. name .. ".word_wrap", label.wordWrap, false)
+            eq("config.checkbox_label_guard." .. locale .. "." .. name .. ".max_lines", label.maxLines, 1)
+        end
+        for _, name in ipairs({
+            "StatsProCritCheckText",
+            "StatsProStaggerCheckText",
+        }) do
+            local label = exists("config.checkbox_label_guard." .. locale .. "." .. name .. ".width", guardEnv[name])
+            check("config.checkbox_label_guard." .. locale .. "." .. name .. ".width_cap",
+                label.width <= 160,
+                "color checkbox label width exceeds cap")
+        end
+    end
+
+    assertLocalizedCheckboxGuards("ruRU")
+    assertLocalizedCheckboxGuards("deDE")
+    assertLocalizedCheckboxGuards("frFR")
+end
+
+do
     runCache(runMigrate({ forceLocale = "auto" }))
 
     local ok, err = pcall(function() addon:OpenConfigMenu() end)
@@ -3531,6 +3587,20 @@ do
 
     selectDropdownValue("config.dropdown_language_ruRU_commits_locale", env.StatsProLanguageDropdown, "ruRU")
     eq("config.dropdown_language_ruRU_commits_locale.value", env.StatsProDB.forceLocale, "ruRU")
+
+    for _, name in ipairs({
+        "StatsProOffensiveCheckText",
+        "StatsProCritCheckText",
+        "StatsProHideZeroOffCheckText",
+        "StatsProTertiaryCheckText",
+        "StatsProDefensiveCheckText",
+        "StatsProStaggerCheckText",
+        "StatsProWorstDurCheckText",
+    }) do
+        local label = exists("config.checkbox_label_guard.enUS." .. name, env[name])
+        eq("config.checkbox_label_guard.enUS." .. name .. ".word_wrap", label.wordWrap, false)
+        eq("config.checkbox_label_guard.enUS." .. name .. ".max_lines", label.maxLines, 1)
+    end
 
     clickCheckbox("config.checkbox_visible_updates_db", env.StatsProVisibleCheck, false)
     eq("config.checkbox_visible_updates_db.value", env.StatsProDB.isVisible, false)

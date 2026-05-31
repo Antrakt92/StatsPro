@@ -46,15 +46,15 @@ local LANGUAGE_OPTIONS = {
     { value = "auto",  label = nil },                        -- composed dynamically (Auto + native of GetLocale())
     { value = "enUS",  label = "English" },
     { value = "deDE",  label = "Deutsch" },
-    { value = "esES",  label = "Español (España)" },
-    { value = "esMX",  label = "Español (México)" },
+    { value = "esES",  label = "Español (España)", compactLabel = "Español ES" },
+    { value = "esMX",  label = "Español (México)", compactLabel = "Español MX" },
     { value = "frFR",  label = "Français" },
     { value = "itIT",  label = "Italiano" },
     { value = "ptBR",  label = "Português (Brasil)" },
-    { value = "koKR",  label = "한국어 (Korean)" },
+    { value = "koKR",  label = "한국어 (Korean)", compactLabel = "한국어 / Korean" },
     { value = "ruRU",  label = "Русский (Russian)" },
-    { value = "zhCN",  label = "中文 简体 (Simplified)" },
-    { value = "zhTW",  label = "中文 繁體 (Traditional)" },
+    { value = "zhCN",  label = "中文 简体 (Simplified)", compactLabel = "中文 / Simpl." },
+    { value = "zhTW",  label = "中文 繁體 (Traditional)", compactLabel = "中文 / Trad." },
 }
 
 local LOCALE_GLYPH_REQ = {
@@ -3763,8 +3763,8 @@ local CONFIG_DROPDOWN_GAP = 6   -- label.RIGHT → dropdown TOPLEFT x gap (match
 local CONFIG_DROPDOWN_Y_OFFSET = 2
 -- Dropdown body width: 100px for all three (Display Mode / Language / Font). Long-content
 -- labels (Language's "Auto (current: %s)" and Latin-with-parenthetical locale labels) get
--- a CompactLabel transform that strips parentheticals so text fits without truncation. Menu
--- items keep the full label form for disambiguation when picking. Font names from SharedMedia
+-- a CompactLabel transform that keeps short disambiguators where needed. Menu items
+-- keep the full label form for disambiguation when picking. Font names from SharedMedia
 -- can occasionally overflow at 100px — accepted: rare, names truncate to "Long Name..." and
 -- the user can hover the dropdown for full text via Blizzard's tooltip.
 
@@ -3795,6 +3795,8 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
     -- rows (CreateCheckboxColor overrides the bound width to actual text width post-call).
     text:SetWidth(textWidth or 200)
     text:SetJustifyH("LEFT")
+    text:SetWordWrap(false)
+    text:SetMaxLines(1)
     cb:SetChecked(GetBoolDB(dbKey))
     cb:SetScript("OnClick", function(self)
         StatsProDB[dbKey] = self:GetChecked()
@@ -3945,8 +3947,10 @@ local function CreateCheckboxColor(parent, name, label, dbKey, colorKey, x, y, o
     local swatch
     if colorKey then
         -- Override the 140-bound width with actual text rendering width — swatch needs
-        -- to hug the text end, not the right edge of the 140px reservation.
-        text:SetWidth(text:GetStringWidth())
+        -- to hug the text end, not the right edge of the 140px reservation. Cap the
+        -- width so verbose localized labels clip instead of pushing into the next column.
+        text.statsProMaxWidth = 160
+        text:SetWidth(math.min(text:GetStringWidth(), text.statsProMaxWidth))
         swatch = CreateColorSwatch(parent, colorKey, 0, 0)
         swatch:ClearAllPoints()
         swatch:SetPoint("LEFT", text, "RIGHT", CONFIG_SWATCH_GAP, 0)
@@ -3973,6 +3977,8 @@ local function ReAlignGroupImpl(rows, gap)
     local maxW = 0
     for _, row in ipairs(rows) do
         local w = row.text:GetStringWidth()
+        local maxTextWidth = row.maxTextWidth or row.text.statsProMaxWidth
+        if maxTextWidth and w > maxTextWidth then w = maxTextWidth end
         if w > maxW then maxW = w end
     end
     for _, row in ipairs(rows) do
@@ -5167,16 +5173,15 @@ function addon:OpenConfigMenu()
             return string.format(L("Auto (current: %s)"), StripParenSuffix((o and o.label) or cur))
         end
 
-        -- CompactLabel: short form for the dropdown's collapsed current-text field, sized to
-        -- fit a 100px-wide dropdown body. Strips trailing parentheticals from explicit-pick
-        -- labels ("Español (España)" -> "Español"); for "auto" mode shows native name only.
+        -- CompactLabel: short form for the dropdown's collapsed current-text field, sized
+        -- for the 100px body while keeping locale variants distinguishable.
         local function CompactLabel(opt)
             if opt.value == "auto" then
                 local cur = GetLocale()
                 local o = FindLangOption(cur)
-                return StripParenSuffix((o and o.label) or cur)
+                return (o and (o.compactLabel or StripParenSuffix(o.label))) or cur
             end
-            return StripParenSuffix(opt.label)
+            return opt.compactLabel or StripParenSuffix(opt.label)
         end
 
         local function CurrentLabel()

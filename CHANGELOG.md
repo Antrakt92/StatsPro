@@ -5,12 +5,14 @@
 ### Fixed
 
 - **Rating rows stay visible through protected or missing stat reads** — rating-only rows such as Versatility and Speed no longer disappear when a percentage, bonus, or protected read is unavailable while the rating itself is still available.
+- **Initial HUD refresh errors are contained during login and reload** — protected stat reads during the first update are counted in diagnostics instead of surfacing as addon errors.
 - **Saved display and language choices recover to safe defaults** — stale or invalid SavedVariables no longer leave display-mode or language dropdowns in inconsistent states.
 - **Item Level remains visible when labels are hidden** — hidden-label mode keeps the enabled Item Level values aligned with the rest of the HUD instead of suppressing the row.
 
 ### Improved
 
-- **Release checks catch more version and package drift before publishing** — local and CI gates now validate release metadata more strictly, report check-tool and GitHub Action versions, and reject unexpected bundled-library files in packaged zips.
+- **Release metadata checks are stricter before tagging and packaging** — prepared releases now validate SemVer against the commits since the previous tag and export only the current changelog entry for release notes.
+- **CI logs and package gates are easier to audit** — local and CI checks now report check-tool and GitHub Action versions, run Lua diagnostics from the workspace root, and reject unexpected bundled-library files in packaged zips.
 
 ## 1.9.20 - 31-May-2026 — Archon target refresh
 

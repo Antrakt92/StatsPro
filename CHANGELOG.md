@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.9.21 - 31-May-2026 — HUD fixes and release checks
+
+### Fixed
+
+- **Rating rows stay visible through protected or missing stat reads** — rating-only rows such as Versatility and Speed no longer disappear when a percentage, bonus, or protected read is unavailable while the rating itself is still available.
+- **Saved display and language choices recover to safe defaults** — stale or invalid SavedVariables no longer leave display-mode or language dropdowns in inconsistent states.
+- **Item Level remains visible when labels are hidden** — hidden-label mode keeps the enabled Item Level values aligned with the rest of the HUD instead of suppressing the row.
+
+### Improved
+
+- **Release checks catch more version and package drift before publishing** — local and CI gates now validate release metadata more strictly, report check-tool and GitHub Action versions, and reject unexpected bundled-library files in packaged zips.
+
 ## 1.9.20 - 31-May-2026 — Archon target refresh
 
 ### Updated

@@ -1578,11 +1578,27 @@ local function GetNumberDB(key)
     return NormalizeNumberSetting(key, v)
 end
 
+-- WHY addon-table helpers: this file is close to Lua 5.1 top-level local limits.
+-- Keeping small DB normalizers off file-scope locals avoids chunk-local overflow.
+function addon.NormalizeDisplayMode(value)
+    if value == "sectioned" or value == "split" then
+        return value
+    end
+    return "flat"
+end
+
+function addon.NormalizeForceLocale(value)
+    for _, opt in ipairs(LANGUAGE_OPTIONS) do
+        if value == opt.value then return value end
+    end
+    return "auto"
+end
+
 -- Resolve the active locale: forceLocale="auto" (default) → GetLocale(); explicit
 -- value forces panels to that locale regardless of WoW client locale.
 local function ResolveActiveLocale()
-    local force = GetDB("forceLocale")
-    if not force or force == "auto" then return GetLocale() end
+    local force = addon.NormalizeForceLocale(GetDB("forceLocale"))
+    if force == "auto" then return GetLocale() end
     return force
 end
 
@@ -1857,7 +1873,7 @@ local function CacheSettings()
         cached[k] = GetBoolDB(k)
     end
     cached.updateInterval = GetNumberDB("updateInterval")
-    cached.displayMode = GetDB("displayMode")
+    cached.displayMode = addon.NormalizeDisplayMode(GetDB("displayMode"))
     cached.labelStyle = NormalizeLabelStyle(GetDB("labelStyle"))
     cached.targetSnapshot = addon.archonTargets.NormalizeSnapshotKey(GetDB("targetSnapshot"))
     -- WHY runtime clamp: corrupt SavedVariables should not make text invisible,
@@ -1888,10 +1904,13 @@ end
 
 local function MigrateDB()
     local db = EnsureStatsProDBTable()
+    local dbVersion = NormalizeDBVersion(db.dbVersion)
+    if dbVersion > CURRENT_DB_VERSION then return end
+
     local preDefaultShowDurability = db.showDurability
     local preDefaultShowRepairCost = db.showRepairCost
 
-    -- WHY runs before the version early-return: legacy migrants (from SwiftStats or the
+    -- WHY runs before the current-version early-return: legacy migrants (from SwiftStats or the
     -- earlier internal SwiftStatsLocal name) whose source DB carried a dbVersion equal
     -- to ours would otherwise skip these loops and never get StatsPro's defaults
     -- populated. Idempotent: only fills missing keys, never clobbers user prefs.
@@ -1912,7 +1931,6 @@ local function MigrateDB()
         db.fontBeforeAutoSwitch = nil
     end
 
-    local dbVersion = NormalizeDBVersion(db.dbVersion)
     if dbVersion == CURRENT_DB_VERSION then return end
 
     -- v2 → v3: default textAlign changed "LEFT" → "RIGHT". Upgrade only users still on
@@ -3048,12 +3066,12 @@ end
 -- bug we hit earlier was specifically "277 / 277" in a single value-col cell —
 -- splitting across columns gives 4-5 char cells with no whitespace candidates
 -- between numbers).
--- WHY hidden labelStyle skip: labelText is hidden in that style, so showing
--- iLvl rating/value alone (without the "iLvl:" label) would orphan the row.
+-- WHY hidden labelStyle pushes an empty label, not no row: render buckets use
+-- label/rating/value array parity for row count; JoinLabelsCol hides the whole
+-- label column later while the enabled Item Level values remain visible.
 local function PushItemLevelRow(labels, ratings, values)
     if not cached.itemLevelOverall or not cached.itemLevelEquipped then return end
     local labelStr = GetStyledLabelText("ItemLevel", cached.labelStyle)
-    if labelStr == "" then return end
     local cs = cached.colorStrings
     local itemLevelColor = cs.itemLevel
     local valueColor = (cached.matchValueColorToStat and itemLevelColor) or cs.rating
@@ -3066,7 +3084,10 @@ local function PushItemLevelRow(labels, ratings, values)
     elseif delta >= ITEM_LEVEL_WARN_DELTA then
         equippedColor = ITEM_LEVEL_WARN_COLOR
     end
-    local label = string.format("|cff%s%s|r", itemLevelColor, labelStr)
+    local label = ""
+    if labelStr ~= "" then
+        label = string.format("|cff%s%s|r", itemLevelColor, labelStr)
+    end
     local rStr, vStr
     if IsDualColMode() then
         -- Dual: rating col gets "EQUIPPED |" (right-justified, aligns with rated
@@ -4329,12 +4350,12 @@ function addon:OpenConfigMenu()
         end
 
         UIDropDownMenu_Initialize(dropdown, function()
-            local current = getValue()
+            local current = ResolveOption(getValue())
             for _, opt in ipairs(options) do
                 local info = UIDropDownMenu_CreateInfo()
                 info.text = L(opt.label)
                 info.value = opt.value
-                info.checked = (current == opt.value)
+                info.checked = (current.value == opt.value)
                 info.func = function()
                     onSelect(opt.value, ResolveOption(opt.value), dropdown)
                 end
@@ -5244,11 +5265,12 @@ function addon:OpenConfigMenu()
         UIDropDownMenu_SetWidth(langDropdown, 100)
         UIDropDownMenu_JustifyText(langDropdown, "CENTER")
         UIDropDownMenu_Initialize(langDropdown, function()
+            local current = (FindLangOption(GetDB("forceLocale")) or LANGUAGE_OPTIONS[1]).value
             for _, opt in ipairs(LANGUAGE_OPTIONS) do
                 local info = UIDropDownMenu_CreateInfo()
                 info.text = DisplayLabel(opt)
                 info.value = opt.value
-                info.checked = (GetDB("forceLocale") == opt.value)
+                info.checked = (current == opt.value)
                 info.func = function()
                     -- Commit supersedes any in-flight hover preview. MaybeAutoSwitchFont
                     -- is the authoritative font owner from this point on.

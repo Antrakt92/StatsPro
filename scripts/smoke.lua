@@ -1165,6 +1165,19 @@ local function runDropdownInit(name, dropdown)
     return dropdown.dropdownEntries or {}
 end
 
+local function checkedDropdownValue(name, entries)
+    local checkedValue
+    local checkedCount = 0
+    for _, entry in ipairs(entries or {}) do
+        if entry.checked then
+            checkedCount = checkedCount + 1
+            checkedValue = entry.value
+        end
+    end
+    eq(name .. ".checked_count", checkedCount, 1)
+    return checkedValue
+end
+
 local function selectDropdownValue(name, dropdown, value)
     local entries = runDropdownInit(name .. ".init", dropdown)
     for _, entry in ipairs(entries) do
@@ -1220,6 +1233,13 @@ local function blockDumpContains(blocks, needle)
         end
     end
     return false
+end
+
+local function findBlockBySplitKey(name, blocks, splitKey)
+    for _, block in ipairs(blocks or {}) do
+        if block.splitKey == splitKey then return block end
+    end
+    fail(name, "missing block " .. tostring(splitKey))
 end
 
 local function findTargetMeta(blocks, statKey)
@@ -1369,6 +1389,27 @@ do
     eq("db.version_invalid_runs_forward_migrations.string", db.dbVersion, test.currentDBVersion())
     db = runMigrate({ dbVersion = 0 / 0 })
     eq("db.version_invalid_runs_forward_migrations.nan", db.dbVersion, test.currentDBVersion())
+end
+
+do
+    local futureVersion = test.currentDBVersion() + 1
+    local db = runMigrate({ dbVersion = futureVersion, futureOnly = "keep" })
+    eq("db.future_version_noop.version", db.dbVersion, futureVersion)
+    eq("db.future_version_noop.future_field", db.futureOnly, "keep")
+    eq("db.future_version_noop.no_force_locale_backfill", db.forceLocale, nil)
+    eq("db.future_version_noop.no_colors_backfill", db.colors, nil)
+    eq("db.future_version_noop.no_font_backfill", db.font, nil)
+end
+
+do
+    local futureVersion = test.currentDBVersion() + 1
+    local db = { dbVersion = futureVersion }
+    runCache(db)
+    eq("db.future_sparse_cache_no_backfill.version", db.dbVersion, futureVersion)
+    eq("db.future_sparse_cache_no_backfill.force_locale", db.forceLocale, nil)
+    eq("db.future_sparse_cache_no_backfill.colors", db.colors, nil)
+    eq("db.future_sparse_cache_no_backfill.display_mode", db.displayMode, nil)
+    eq("db.future_sparse_cache_no_backfill.label", test.getStyledLabelText("ItemLevel", "full"), "iLvl:")
 end
 
 do
@@ -3039,6 +3080,33 @@ do
 end
 
 do
+    local ilvlHiddenEnv, _, ilvlHiddenTest = loadStatsPro("enUS", {
+        statsProDB = {
+            labelStyle = "hidden",
+            showRating = true,
+            showPercentage = true,
+            showOffensive = false,
+            showTertiary = false,
+            showDefensive = false,
+            showItemLevel = true,
+            showDurability = false,
+            showRepairCost = false,
+        },
+        getAverageItemLevel = function() return 273, 271 end,
+    })
+    fireEvent("render.item_level_hidden_label_keeps_values.fire", ilvlHiddenEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(ilvlHiddenTest.buildRenderBlocks)
+    check("render.item_level_hidden_label_keeps_values.no_error", ok, blocks)
+    local itemLevel = findBlockBySplitKey("render.item_level_hidden_label_keeps_values.block", blocks, "splitItemLevel")
+    eq("render.item_level_hidden_label_keeps_values.row_count", #(itemLevel.labels or {}), 1)
+    eq("render.item_level_hidden_label_keeps_values.blank_label", itemLevel.labels[1], "")
+    eq("render.item_level_hidden_label_keeps_values.equipped", itemLevel.ratings[1]:find("271", 1, true) ~= nil, true)
+    eq("render.item_level_hidden_label_keeps_values.overall", itemLevel.values[1]:find("273", 1, true) ~= nil, true)
+    local mainBucket = ilvlHiddenTest.routeRenderBlocks(blocks, "sectioned", nil, "hidden")
+    eq("render.item_level_hidden_label_keeps_values.bucket_content", ilvlHiddenTest.bucketHasContent(mainBucket), true)
+end
+
+do
     local blockEnv = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = false,
@@ -3283,6 +3351,39 @@ do
     near("color.normalize_fallback_and_clamp.g", g, 0)
     near("color.normalize_fallback_and_clamp.b", b, 0.75)
     eq("color.rgb_to_hex_clamps_invalid_channels", test.rgbToHex(2, -1, "bad"), "ff0000")
+end
+
+do
+    local badDisplayEnv, badDisplayAddon = loadStatsPro("enUS", {
+        statsProDB = { displayMode = "sideways" },
+    })
+    fireEvent("config.invalid_display_mode_recovers.fire", badDisplayEnv, "PLAYER_ENTERING_WORLD")
+    slash("config.invalid_display_mode_recovers.dump", badDisplayEnv, "debug bucket")
+    eq("config.invalid_display_mode_recovers.cache_mode", printContains(badDisplayEnv, "bucket: mode=flat"), true)
+
+    local ok, err = pcall(function() badDisplayAddon:OpenConfigMenu() end)
+    check("config.invalid_display_mode_recovers.open", ok, err)
+    eq("config.invalid_display_mode_recovers.caption", badDisplayEnv.StatsProDisplayModeDropdown.dropdownText, "Flat")
+    local displayEntries = runDropdownInit("config.invalid_display_mode_recovers.dropdown", badDisplayEnv.StatsProDisplayModeDropdown)
+    eq("config.invalid_display_mode_recovers.checked", checkedDropdownValue("config.invalid_display_mode_recovers", displayEntries), "flat")
+    eq("config.invalid_display_mode_recovers.split_check_disabled", badDisplayEnv.StatsProSplitOffensiveCheck:IsEnabled(), false)
+    eq("config.invalid_display_mode_recovers.db_unchanged", badDisplayEnv.StatsProDB.displayMode, "sideways")
+end
+
+do
+    local badLocaleEnv, badLocaleAddon, badLocaleTest = loadStatsPro("deDE", {
+        statsProDB = { forceLocale = "xxYY" },
+    })
+    fireEvent("config.invalid_force_locale_recovers.fire", badLocaleEnv, "PLAYER_ENTERING_WORLD")
+    eq("config.invalid_force_locale_recovers.label", badLocaleTest.getStyledLabelText("ItemLevel", "full"), "GS:")
+    eq("config.invalid_force_locale_recovers.db_unchanged", badLocaleEnv.StatsProDB.forceLocale, "xxYY")
+
+    local ok, err = pcall(function() badLocaleAddon:OpenConfigMenu() end)
+    check("config.invalid_force_locale_recovers.open", ok, err)
+    eq("config.invalid_force_locale_recovers.caption", badLocaleEnv.StatsProLanguageDropdown.dropdownText, "Deutsch")
+    local languageEntries = runDropdownInit("config.invalid_force_locale_recovers.dropdown", badLocaleEnv.StatsProLanguageDropdown)
+    eq("config.invalid_force_locale_recovers.checked", checkedDropdownValue("config.invalid_force_locale_recovers", languageEntries), "auto")
+    eq("config.invalid_force_locale_recovers.db_after_open", badLocaleEnv.StatsProDB.forceLocale, "xxYY")
 end
 
 do

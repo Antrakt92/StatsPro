@@ -8,7 +8,7 @@
 
 ### Changed
 
-- **The tertiary Speed row is now labelled Movement across supported languages** to match the actual value shown on the HUD while keeping existing settings and SavedVariables compatible.
+- **The tertiary Speed row and setting are now labelled Movement across supported languages** to match the actual value shown on the HUD while keeping existing settings and SavedVariables compatible.
 
 ## 1.9.22 - 01-Jun-2026 — Archon target refresh
 

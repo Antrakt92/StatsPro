@@ -44,6 +44,7 @@ read_globals = {
     "GetCombatRatingBonusForCombatRatingValue",
     "GetDodgeChance", "GetParryChance", "GetBlockChance",
     "GetLifesteal", "GetAvoidance", "GetSpeed", "GetUnitSpeed",
+    "IsSwimming", "IsFlying", "IsFalling",
     "GetAverageItemLevel",
     "UnitStat", "UnitArmor", "UnitEffectiveLevel", "UnitClass", "UnitRace", "UnitSex",
     -- Spec / class

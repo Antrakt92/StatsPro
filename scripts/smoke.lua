@@ -549,6 +549,9 @@ local function makeEnv(locale, opts)
     env.GetAvoidance = opts.getAvoidance or zero
     env.GetSpeed = opts.getSpeed or zero
     env.GetUnitSpeed = opts.getUnitSpeed or function() return 0, 0, 0, 0 end
+    env.IsSwimming = opts.isSwimming or function() return false end
+    env.IsFlying = opts.isFlying or function() return false end
+    env.IsFalling = opts.isFalling or function() return false end
     env.GetAverageItemLevel = opts.getAverageItemLevel or function() return 0, 0 end
     env.UnitStat = opts.unitStat or function(_, statId) return 0, statId == 3 and 100 or 0 end
     env.UnitArmor = opts.unitArmor or function() return 0, 0 end
@@ -3030,7 +3033,7 @@ do
     fireEvent("render.speed_rating_only_zero_speed_uses_clean_rating.fire", speedEnv, "PLAYER_ENTERING_WORLD")
     local ok, blocks = pcall(speedTest.buildRenderBlocks)
     check("render.speed_rating_only_zero_speed_uses_clean_rating.no_error", ok, blocks)
-    eq("render.speed_rating_only_zero_speed_uses_clean_rating.row", blockDumpContains(blocks, "Speed:"), true)
+    eq("render.speed_rating_only_zero_speed_uses_clean_rating.row", blockDumpContains(blocks, "Movement:"), true)
     eq("render.speed_rating_only_zero_speed_uses_clean_rating.rating", blockDumpContains(blocks, "377"), true)
 end
 
@@ -3056,11 +3059,66 @@ do
     local tertiary = blocks[3]
     eq("render.speed_dual_zero_speed_uses_clean_rating.row_count", #(tertiary.labels or {}), 1)
     eq("render.speed_dual_zero_speed_uses_clean_rating.label",
-        tertiary.labels[1]:find("Speed:", 1, true) ~= nil, true)
+        tertiary.labels[1]:find("Movement:", 1, true) ~= nil, true)
     eq("render.speed_dual_zero_speed_uses_clean_rating.rating",
         tertiary.ratings[1]:find("377", 1, true) ~= nil, true)
     eq("render.speed_dual_zero_speed_uses_clean_rating.clean_zero_percent",
         tertiary.values[1]:find("0.0%", 1, true) ~= nil, true)
+end
+
+do
+    local speedEnv, _, speedTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            showRating = false,
+            showPercentage = true,
+            hideZeroTertiary = false,
+            showLeech = false,
+            showAvoidance = false,
+            showSpeed = true,
+            showDefensive = false,
+        },
+        getUnitSpeed = function() return 0, 15.4, 29.4, 7.7 end,
+        isSwimming = function() return false end,
+        isFlying = function() return false end,
+    })
+    fireEvent("render.speed_ground_mount_uses_run_not_flight.fire", speedEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_ground_mount_uses_run_not_flight.no_error", ok, blocks)
+    eq("render.speed_ground_mount_uses_run_not_flight.value",
+        blockDumpContains(blocks, "220.0%"), true)
+    eq("render.speed_ground_mount_uses_run_not_flight.no_flight_value",
+        blockDumpContains(blocks, "420.0%"), false)
+end
+
+do
+    local runYps = 7.7
+    local speedEnv, _, speedTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            showRating = false,
+            showPercentage = true,
+            hideZeroTertiary = false,
+            showLeech = false,
+            showAvoidance = false,
+            showSpeed = true,
+            showDefensive = false,
+        },
+        getUnitSpeed = function() return 0, runYps, 7.7, 7.7 end,
+    })
+    fireEvent("render.speed_ground_buff_tracks_run_speed.fire", speedEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_ground_buff_tracks_run_speed.buff_no_error", ok, blocks)
+    eq("render.speed_ground_buff_tracks_run_speed.buff_value",
+        blockDumpContains(blocks, "110.0%"), true)
+
+    runYps = 7
+    ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_ground_buff_tracks_run_speed.unbuff_no_error", ok, blocks)
+    eq("render.speed_ground_buff_tracks_run_speed.unbuff_value",
+        blockDumpContains(blocks, "100.0%"), true)
 end
 
 do
@@ -3219,6 +3277,26 @@ do
         local locale, expected = case[1], case[2]
         runCache(runMigrate({ forceLocale = locale }))
         eq("labels.item_level_" .. locale .. "_full", test.getStyledLabelText("ItemLevel", "full"), expected .. ":")
+    end
+
+    local movementCases = {
+        { "enUS", "Movement" },
+        { "ruRU", "Движ" },
+        { "deDE", "Beweg" },
+        { "frFR", "Dépl" },
+        { "esES", "Mov" },
+        { "esMX", "Mov" },
+        { "itIT", "Mov" },
+        { "ptBR", "Mov" },
+        { "koKR", "이동" },
+        { "zhCN", "移动" },
+        { "zhTW", "移動" },
+    }
+
+    for _, case in ipairs(movementCases) do
+        local locale, expected = case[1], case[2]
+        runCache(runMigrate({ forceLocale = locale }))
+        eq("labels.movement_" .. locale .. "_full", test.getStyledLabelText("Speed", "full"), expected .. ":")
     end
 end
 

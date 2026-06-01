@@ -48,7 +48,7 @@
 |---|---|
 | **Offensive** | Crit, Haste, Mastery, Versatility |
 | **Character** | Main stat auto-detect, Stamina, Item Level |
-| **Tertiary** | Leech, Avoidance, Speed |
+| **Tertiary** | Leech, Avoidance, Movement |
 | **Defensive** | Dodge, Parry, Block, Brewmaster Stagger, Armor damage reduction |
 | **Gear** | Durability, worst-slot durability, live vendor-format repair cost |
 

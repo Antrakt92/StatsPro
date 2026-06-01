@@ -637,7 +637,7 @@ local DEFENSIVE_STATS = {
 local TERTIARY_STATS = {
     { label = "Leech",     api = GetLifesteal, ratingCR = CR_LIFESTEAL, colorKey = "leech",     showKey = "showLeech"     },
     { label = "Avoidance", api = GetAvoidance, ratingCR = CR_AVOIDANCE, colorKey = "avoidance", showKey = "showAvoidance" },
-    -- speed handled specially (yps→% via GetUnitSpeed)
+    -- speed handled specially (Movement % via GetUnitSpeed)
 }
 
 --[[ ============================================================
@@ -701,8 +701,9 @@ cached = {
     itemLevelEquipped = nil,
     durabilityValue = 100,  -- holds avg or min depending on cached.useWorstDurability
     repairCost = 0,         -- live repair cost in copper (sum from per-slot tooltip scan)
-    -- WARNING: GetUnitSpeed returns secret values in combat → math.max taints. Cache OOC.
+    -- WARNING: GetUnitSpeed returns secret values in combat → arithmetic taints. Cache OOC.
     speedPct = 0,
+    speedWasSwimming = nil,
     -- Last clean hide-zero decision per stat row. Secret combat reads cannot be safely
     -- compared to 0, so they reuse this instead of making absent rows appear.
     cleanRowVisibility = {},
@@ -750,7 +751,7 @@ local isLoaded = false
 -- WARNING: keys MUST match exactly the English literals used at the call sites:
 --   - def.label values from OFFENSIVE_STATS / DEFENSIVE_STATS / PRIMARY_STATS /
 --     TERTIARY_STATS (section 4)
---   - hardcoded literals in special-case branches: "Vers" / "Speed" / "Armor"
+--   - hardcoded literal keys in special-case branches: "Vers" / "Speed" / "Armor"
 --     (additive rows for dual-source stats not in the loop tables)
 --   - "Durability" in BuildDurabilityLines / "Repair" in BuildRepairCostPayload
 --   - section keys used by SectionHeader(): Character / Offensive / Tertiary /
@@ -767,7 +768,7 @@ local LABELS_BY_LOCALE = {
         Dodge = "Dodge",        Parry = "Parry",        Block = "Block",        Armor = "Armor",        Stagger = "Stagger",
         Strength = "Strength",  Agility = "Agility",    Intellect = "Intellect", Stamina = "Stamina",
         ItemLevel = "iLvl",
-        Leech = "Leech",        Avoidance = "Avoidance", Speed = "Speed",
+        Leech = "Leech",        Avoidance = "Avoidance", Speed = "Movement",
         Durability = "Durability", Repair = "Repair",
         Defensive = "Defensive",
         -- Settings UI words (config menu only, never appear on the panel itself):
@@ -799,7 +800,7 @@ local LABELS_BY_LOCALE = {
         ["Show Crit"] = "Show Crit", ["Show Haste"] = "Show Haste",
         ["Show Mastery"] = "Show Mastery", ["Show Versatility"] = "Show Versatility",
         ["Show Tertiary Stats"] = "Show Tertiary Stats",
-        ["Show Leech"] = "Show Leech", ["Show Avoidance"] = "Show Avoidance", ["Show Speed"] = "Show Speed",
+        ["Show Leech"] = "Show Leech", ["Show Avoidance"] = "Show Avoidance", ["Show Speed"] = "Show Movement",
         ["Show Defensive Stats"] = "Show Defensive Stats",
         ["Show Dodge"] = "Show Dodge", ["Show Parry"] = "Show Parry",
         ["Show Block"] = "Show Block", ["Show Armor"] = "Show Armor", ["Show Stagger"] = "Show Stagger",
@@ -832,9 +833,9 @@ local LABELS_BY_LOCALE = {
         ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window.",
     },
 
-    -- ruRU: Russian. Haste/Speed disambig is structural — WoW client uses "Скорость"
-    -- for BOTH stats, so we transliterate Haste as "Хаст" (community shorthand) to free
-    -- "Скор" for Speed. Leech uses "Вамп" (вампиризм) over the literal "Кров" because
+    -- ruRU: Russian. Haste/Movement disambig is structural — WoW client uses speed
+    -- words for both concepts, so Haste stays "Хаст" and Movement uses "Движ".
+    -- Leech uses "Вамп" (вампиризм) over the literal "Кров" because
     -- "Кров…" risks being mis-read as "Кровотечение" (Bleed). All stat rows use 4-char
     -- forms where the language allows; "Сила" / "Блок" / "Крит" are already 4 chars.
     ruRU = {
@@ -842,7 +843,7 @@ local LABELS_BY_LOCALE = {
         Dodge = "Укл",          Parry = "Пари",         Block = "Блок",         Armor = "Брон",         Stagger = "Пошат",
         Strength = "Сила",      Agility = "Ловк",       Intellect = "Инт",      Stamina = "Выно",
         ItemLevel = "УрП",
-        Leech = "Вамп",         Avoidance = "Избег",    Speed = "Скор",
+        Leech = "Вамп",         Avoidance = "Избег",    Speed = "Движ",
         Durability = "Проч",    Repair = "Рем",
         Defensive = "Защита",
         Color = "Цвет",
@@ -873,7 +874,7 @@ local LABELS_BY_LOCALE = {
         ["Show Crit"] = "Показывать Крит", ["Show Haste"] = "Показывать Хаст",
         ["Show Mastery"] = "Показывать Мастерство", ["Show Versatility"] = "Показывать Универсальность",
         ["Show Tertiary Stats"] = "Показывать третичные",
-        ["Show Leech"] = "Показывать Вампиризм", ["Show Avoidance"] = "Показывать Избегание", ["Show Speed"] = "Показывать Скорость",
+        ["Show Leech"] = "Показывать Вампиризм", ["Show Avoidance"] = "Показывать Избегание", ["Show Speed"] = "Показывать скорость передвижения",
         ["Show Defensive Stats"] = "Показывать защитные",
         ["Show Dodge"] = "Показывать Уклонение", ["Show Parry"] = "Показывать Парирование",
         ["Show Block"] = "Показывать Блок", ["Show Armor"] = "Показывать Броню", ["Show Stagger"] = "Показывать Пошатывание",
@@ -906,8 +907,8 @@ local LABELS_BY_LOCALE = {
         ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Отображает вторичные, защитные характеристики и прочность экипировки на экране. Нажмите ниже, чтобы открыть окно настроек.",
     },
 
-    -- deDE: German. Haste="Tempo" matches the WoW German client term; Speed="Lauf"
-    -- (run-speed) keeps the Haste/Speed split clear. Vers="Viels" evokes Vielseitigkeit
+    -- deDE: German. Haste="Tempo" matches the WoW German client term; Movement="Beweg"
+    -- keeps the Haste/Movement split clear. Vers="Viels" evokes Vielseitigkeit
     -- without colliding with the everyday word "viel" (many/much). Durability="Haltb"
     -- avoids collision with the everyday word "Halt" (stop). Strength="Stär" preserves
     -- the umlaut character of Stärke at 4 chars (single char "Stä" reads truncated).
@@ -916,12 +917,12 @@ local LABELS_BY_LOCALE = {
         Dodge = "Ausw",         Parry = "Par",          Block = "Block",        Armor = "Rüst",         Stagger = "Staff",
         Strength = "Stär",      Agility = "Bew",        Intellect = "Int",      Stamina = "Aus",
         ItemLevel = "GS",
-        Leech = "Saug",         Avoidance = "Verm",     Speed = "Lauf",
+        Leech = "Saug",         Avoidance = "Verm",     Speed = "Beweg",
         Durability = "Haltb",   Repair = "Repar",
         Defensive = "Defensiv",
         Color = "Farbe",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
-        -- Speed checkbox uses "Lauftempo" (long form) to disambiguate from Haste="Tempo".
+        -- Movement checkbox uses the long form to disambiguate from Haste="Tempo".
         ["Stats"] = "Werte", ["Layout"] = "Layout", ["Appearance"] = "Darstellung",
         ["Character"] = "Charakter", ["Item Level"] = "Gegenstandsstufe",
         ["Offensive"] = "Offensiv", ["Tertiary"] = "Tertiär",
@@ -945,7 +946,7 @@ local LABELS_BY_LOCALE = {
         ["Show Crit"] = "Krit. anzeigen", ["Show Haste"] = "Tempo anzeigen",
         ["Show Mastery"] = "Meisterschaft anzeigen", ["Show Versatility"] = "Vielseitigkeit anzeigen",
         ["Show Tertiary Stats"] = "Tertiärwerte anzeigen",
-        ["Show Leech"] = "Aussaugen anzeigen", ["Show Avoidance"] = "Vermeidung anzeigen", ["Show Speed"] = "Lauftempo anzeigen",
+        ["Show Leech"] = "Aussaugen anzeigen", ["Show Avoidance"] = "Vermeidung anzeigen", ["Show Speed"] = "Bewegung anzeigen",
         ["Show Defensive Stats"] = "Defensivwerte anzeigen",
         ["Show Dodge"] = "Ausweichen anzeigen", ["Show Parry"] = "Parieren anzeigen",
         ["Show Block"] = "Blocken anzeigen", ["Show Armor"] = "Rüstung anzeigen", ["Show Stagger"] = "Staffeln anzeigen",
@@ -972,8 +973,8 @@ local LABELS_BY_LOCALE = {
         ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Zeigt sekundäre, defensive Werte und Haltbarkeit auf dem Bildschirm an. Klicke unten, um das Einstellungsfenster zu öffnen.",
     },
 
-    -- frFR: French. Hâte (4 chars, accented form) is WoW's official Haste term; Vit
-    -- (Vitesse) distinct. Strength="Forc" and Durability="Dura" use 4-char forms so
+    -- frFR: French. Hâte (4 chars, accented form) is WoW's official Haste term; Dépl
+    -- (déplacement) distinguishes Movement. Strength="Forc" and Durability="Dura" use 4-char forms so
     -- they don't collide with the everyday words "Fort" / "Dur". Esqu (Esquive) at 4
     -- chars reads more clearly than the truncated 3-char "Esq".
     frFR = {
@@ -981,7 +982,7 @@ local LABELS_BY_LOCALE = {
         Dodge = "Esqu",         Parry = "Par",          Block = "Bloc",         Armor = "Arm",          Stagger = "Report",
         Strength = "Forc",      Agility = "Agil",       Intellect = "Int",      Stamina = "End",
         ItemLevel = "NivObj",
-        Leech = "Vamp",         Avoidance = "Évit",     Speed = "Vit",
+        Leech = "Vamp",         Avoidance = "Évit",     Speed = "Dépl",
         Durability = "Dura",    Repair = "Rép",
         Defensive = "Défense",
         Color = "Couleur",
@@ -1009,7 +1010,7 @@ local LABELS_BY_LOCALE = {
         ["Show Crit"] = "Afficher Crit", ["Show Haste"] = "Afficher Hâte",
         ["Show Mastery"] = "Afficher Maîtrise", ["Show Versatility"] = "Afficher Polyvalence",
         ["Show Tertiary Stats"] = "Afficher tertiaires",
-        ["Show Leech"] = "Afficher Vampirisme", ["Show Avoidance"] = "Afficher Évitement", ["Show Speed"] = "Afficher Vitesse",
+        ["Show Leech"] = "Afficher Vampirisme", ["Show Avoidance"] = "Afficher Évitement", ["Show Speed"] = "Afficher déplacement",
         ["Show Defensive Stats"] = "Afficher défensives",
         ["Show Dodge"] = "Afficher Esquive", ["Show Parry"] = "Afficher Parade",
         ["Show Block"] = "Afficher Blocage", ["Show Armor"] = "Afficher Armure", ["Show Stagger"] = "Afficher Report",
@@ -1036,8 +1037,8 @@ local LABELS_BY_LOCALE = {
         ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Affiche vos statistiques secondaires, défensives et la durabilité à l'écran. Cliquez ci-dessous pour ouvrir la fenêtre de paramètres complète.",
     },
 
-    -- esES: Spanish (Spain). WoW Spanish client uses Celeridad / Velocidad for the
-    -- Haste/Speed split → Cele / Vel. Leech="Robo" matches "Robo de vida" (life steal),
+    -- esES: Spanish (Spain). Haste stays Celeridad; Movement uses Movimiento
+    -- to avoid the old Speed-rating wording. Leech="Robo" matches "Robo de vida" (life steal),
     -- the WoW Spanish term — closer to client wording than the literal "Suc(ción)".
     -- Most rows use 4-char forms (Esqu / Fuer / Agil) — 3-char abbreviations look
     -- unfinished beside Spanish's typically-longer words.
@@ -1046,7 +1047,7 @@ local LABELS_BY_LOCALE = {
         Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",          Stagger = "Aplaz",
         Strength = "Fuer",      Agility = "Agil",       Intellect = "Int",      Stamina = "Aguante",
         ItemLevel = "NvObj",
-        Leech = "Robo",         Avoidance = "Evit",     Speed = "Vel",
+        Leech = "Robo",         Avoidance = "Evit",     Speed = "Mov",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defensa",
         Color = "Color",
@@ -1074,7 +1075,7 @@ local LABELS_BY_LOCALE = {
         ["Show Crit"] = "Mostrar Crít.", ["Show Haste"] = "Mostrar Celeridad",
         ["Show Mastery"] = "Mostrar Maestría", ["Show Versatility"] = "Mostrar Versatilidad",
         ["Show Tertiary Stats"] = "Mostrar terciarias",
-        ["Show Leech"] = "Mostrar Robo", ["Show Avoidance"] = "Mostrar Evitación", ["Show Speed"] = "Mostrar Velocidad",
+        ["Show Leech"] = "Mostrar Robo", ["Show Avoidance"] = "Mostrar Evitación", ["Show Speed"] = "Mostrar movimiento",
         ["Show Defensive Stats"] = "Mostrar defensivas",
         ["Show Dodge"] = "Mostrar Esquiva", ["Show Parry"] = "Mostrar Parada",
         ["Show Block"] = "Mostrar Bloqueo", ["Show Armor"] = "Mostrar Armadura", ["Show Stagger"] = "Mostrar Aplazar",
@@ -1108,7 +1109,7 @@ local LABELS_BY_LOCALE = {
         Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",          Stagger = "Aplaz",
         Strength = "Fuer",      Agility = "Agil",       Intellect = "Int",      Stamina = "Aguante",
         ItemLevel = "NvObj",
-        Leech = "Robo",         Avoidance = "Evit",     Speed = "Vel",
+        Leech = "Robo",         Avoidance = "Evit",     Speed = "Mov",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defensa",
         Color = "Color",
@@ -1137,7 +1138,7 @@ local LABELS_BY_LOCALE = {
         ["Show Crit"] = "Mostrar Crít.", ["Show Haste"] = "Mostrar Celeridad",
         ["Show Mastery"] = "Mostrar Maestría", ["Show Versatility"] = "Mostrar Versatilidad",
         ["Show Tertiary Stats"] = "Mostrar terciarias",
-        ["Show Leech"] = "Mostrar Robo", ["Show Avoidance"] = "Mostrar Evitación", ["Show Speed"] = "Mostrar Velocidad",
+        ["Show Leech"] = "Mostrar Robo", ["Show Avoidance"] = "Mostrar Evitación", ["Show Speed"] = "Mostrar movimiento",
         ["Show Defensive Stats"] = "Mostrar defensivas",
         ["Show Dodge"] = "Mostrar Esquiva", ["Show Parry"] = "Mostrar Parada",
         ["Show Block"] = "Mostrar Bloqueo", ["Show Armor"] = "Mostrar Armadura", ["Show Stagger"] = "Mostrar Aplazar",
@@ -1164,7 +1165,7 @@ local LABELS_BY_LOCALE = {
         ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Muestra atributos secundarios, defensivos y durabilidad en pantalla. Da clic abajo para abrir la ventana de configuración.",
     },
 
-    -- itIT: Italian. Cele (Celerità) / Vel (Velocità) Haste/Speed split. Para
+    -- itIT: Italian. Cele (Celerità) / Mov (Movimento) Haste/Movement split. Para
     -- (Parata) at 4 chars reads more naturally than "Par"; Armat (Armatura) gives
     -- enough char-count to feel like a word; Forz / Agil keep 4-char rhythm. Ag
     -- (2 chars) was clearly too short — Italian readers wouldn't recognize it.
@@ -1173,7 +1174,7 @@ local LABELS_BY_LOCALE = {
         Dodge = "Schiv",        Parry = "Para",         Block = "Bloc",         Armor = "Armat",        Stagger = "Barc",
         Strength = "Forz",      Agility = "Agil",       Intellect = "Int",      Stamina = "Cost",
         ItemLevel = "LivOg",
-        Leech = "Vamp",         Avoidance = "Evit",     Speed = "Vel",
+        Leech = "Vamp",         Avoidance = "Evit",     Speed = "Mov",
         Durability = "Durab",   Repair = "Ripa",
         Defensive = "Difesa",
         Color = "Colore",
@@ -1201,7 +1202,7 @@ local LABELS_BY_LOCALE = {
         ["Show Crit"] = "Mostra Crit", ["Show Haste"] = "Mostra Celerità",
         ["Show Mastery"] = "Mostra Maestria", ["Show Versatility"] = "Mostra Versatilità",
         ["Show Tertiary Stats"] = "Mostra terziarie",
-        ["Show Leech"] = "Mostra Vampirismo", ["Show Avoidance"] = "Mostra Evitazione", ["Show Speed"] = "Mostra Velocità",
+        ["Show Leech"] = "Mostra Vampirismo", ["Show Avoidance"] = "Mostra Evitazione", ["Show Speed"] = "Mostra movimento",
         ["Show Defensive Stats"] = "Mostra difensive",
         ["Show Dodge"] = "Mostra Schivata", ["Show Parry"] = "Mostra Parata",
         ["Show Block"] = "Mostra Blocco", ["Show Armor"] = "Mostra Armatura", ["Show Stagger"] = "Mostra Barcollamento",
@@ -1228,7 +1229,7 @@ local LABELS_BY_LOCALE = {
         ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Visualizza statistiche secondarie, difensive e durata equipaggiamento sullo schermo. Clicca sotto per aprire le impostazioni complete.",
     },
 
-    -- ptBR: Brazilian Portuguese. Cele (Celeridade) / Vel (Velocidade). Forç (with
+    -- ptBR: Brazilian Portuguese. Cele (Celeridade) / Mov (Movimento). Forç (with
     -- cedilla, Força) and Agil at 4 chars match Portuguese's prosody better than the
     -- 3-char truncations. Esqu (Esquiva) likewise.
     ptBR = {
@@ -1236,7 +1237,7 @@ local LABELS_BY_LOCALE = {
         Dodge = "Esqu",         Parry = "Par",          Block = "Bloq",         Armor = "Arm",          Stagger = "Camb",
         Strength = "Forç",      Agility = "Agil",       Intellect = "Int",      Stamina = "Vig",
         ItemLevel = "NvItem",
-        Leech = "Vamp",         Avoidance = "Evit",     Speed = "Vel",
+        Leech = "Vamp",         Avoidance = "Evit",     Speed = "Mov",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defesa",
         Color = "Cor",
@@ -1264,7 +1265,7 @@ local LABELS_BY_LOCALE = {
         ["Show Crit"] = "Mostrar Crít.", ["Show Haste"] = "Mostrar Celeridade",
         ["Show Mastery"] = "Mostrar Maestria", ["Show Versatility"] = "Mostrar Versatilidade",
         ["Show Tertiary Stats"] = "Mostrar terciários",
-        ["Show Leech"] = "Mostrar Vampirismo", ["Show Avoidance"] = "Mostrar Evasão", ["Show Speed"] = "Mostrar Velocidade",
+        ["Show Leech"] = "Mostrar Vampirismo", ["Show Avoidance"] = "Mostrar Evasão", ["Show Speed"] = "Mostrar movimento",
         ["Show Defensive Stats"] = "Mostrar defensivos",
         ["Show Dodge"] = "Mostrar Esquiva", ["Show Parry"] = "Mostrar Aparar",
         ["Show Block"] = "Mostrar Bloqueio", ["Show Armor"] = "Mostrar Armadura", ["Show Stagger"] = "Mostrar Cambalear",
@@ -1306,7 +1307,7 @@ local LABELS_BY_LOCALE = {
         Dodge = "회피",         Parry = "쳐막",         Block = "막기",         Armor = "방어",         Stagger = "시간차",
         Strength = "힘",        Agility = "민첩",       Intellect = "지능",      Stamina = "체력",
         ItemLevel = "템렙",
-        Leech = "흡혈",         Avoidance = "광피",     Speed = "이속",
+        Leech = "흡혈",         Avoidance = "광피",     Speed = "이동",
         Durability = "내구",    Repair = "수리",
         Defensive = "수비",
         Color = "색상",
@@ -1334,7 +1335,7 @@ local LABELS_BY_LOCALE = {
         ["Show Crit"] = "치명 표시", ["Show Haste"] = "가속 표시",
         ["Show Mastery"] = "특화 표시", ["Show Versatility"] = "유연 표시",
         ["Show Tertiary Stats"] = "3차 능력치 표시",
-        ["Show Leech"] = "흡혈 표시", ["Show Avoidance"] = "광피 표시", ["Show Speed"] = "이속 표시",
+        ["Show Leech"] = "흡혈 표시", ["Show Avoidance"] = "광피 표시", ["Show Speed"] = "이동 속도 표시",
         ["Show Defensive Stats"] = "방어 능력치 표시",
         ["Show Dodge"] = "회피 표시", ["Show Parry"] = "쳐막 표시",
         ["Show Block"] = "막기 표시", ["Show Armor"] = "방어도 표시", ["Show Stagger"] = "시간차 표시",
@@ -1369,7 +1370,7 @@ local LABELS_BY_LOCALE = {
         Dodge = "躲闪",         Parry = "招架",         Block = "格挡",         Armor = "护甲",         Stagger = "醉拳",
         Strength = "力量",      Agility = "敏捷",       Intellect = "智力",      Stamina = "耐力",
         ItemLevel = "装等",
-        Leech = "吸血",         Avoidance = "闪避",     Speed = "移速",
+        Leech = "吸血",         Avoidance = "闪避",     Speed = "移动",
         Durability = "耐久",    Repair = "修理",
         Defensive = "防御",
         Color = "颜色",
@@ -1397,7 +1398,7 @@ local LABELS_BY_LOCALE = {
         ["Show Crit"] = "显示暴击", ["Show Haste"] = "显示急速",
         ["Show Mastery"] = "显示精通", ["Show Versatility"] = "显示全能",
         ["Show Tertiary Stats"] = "显示三级属性",
-        ["Show Leech"] = "显示吸血", ["Show Avoidance"] = "显示闪避", ["Show Speed"] = "显示移速",
+        ["Show Leech"] = "显示吸血", ["Show Avoidance"] = "显示闪避", ["Show Speed"] = "显示移动速度",
         ["Show Defensive Stats"] = "显示防御属性",
         ["Show Dodge"] = "显示躲闪", ["Show Parry"] = "显示招架",
         ["Show Block"] = "显示格挡", ["Show Armor"] = "显示护甲", ["Show Stagger"] = "显示醉拳",
@@ -1432,7 +1433,7 @@ local LABELS_BY_LOCALE = {
         Dodge = "躲避",         Parry = "招架",         Block = "格擋",         Armor = "護甲",         Stagger = "醉拳",
         Strength = "力量",      Agility = "敏捷",       Intellect = "智力",      Stamina = "耐力",
         ItemLevel = "裝等",
-        Leech = "汲取",         Avoidance = "迴避",     Speed = "移速",
+        Leech = "汲取",         Avoidance = "迴避",     Speed = "移動",
         Durability = "耐久",    Repair = "修理",
         Defensive = "防禦",
         Color = "顏色",
@@ -1460,7 +1461,7 @@ local LABELS_BY_LOCALE = {
         ["Show Crit"] = "顯示致命一擊", ["Show Haste"] = "顯示加速",
         ["Show Mastery"] = "顯示精通", ["Show Versatility"] = "顯示全能",
         ["Show Tertiary Stats"] = "顯示三級屬性",
-        ["Show Leech"] = "顯示汲取", ["Show Avoidance"] = "顯示迴避", ["Show Speed"] = "顯示移速",
+        ["Show Leech"] = "顯示汲取", ["Show Avoidance"] = "顯示迴避", ["Show Speed"] = "顯示移動速度",
         ["Show Defensive Stats"] = "顯示防禦屬性",
         ["Show Dodge"] = "顯示躲避", ["Show Parry"] = "顯示招架",
         ["Show Block"] = "顯示格擋", ["Show Armor"] = "顯示護甲", ["Show Stagger"] = "顯示醉拳",
@@ -3252,19 +3253,35 @@ local function BuildTertiaryLines(labels, ratings, values)
         end
     end
 
-    -- Speed: GetSpeed returns rating-derived %, GetUnitSpeed gives actual yps.
-    -- Base run = 7 yps = 100%. Max of all modes covers mounts/sprint/swim.
+    -- Legacy Speed key: GetSpeed returns rating-derived %, GetUnitSpeed gives Movement yps.
+    -- Match Blizzard's paper-doll Movement stat: choose ground/swim/flight by
+    -- current movement state instead of maxing every available mode.
     if cached.showSpeed then
-        local cur, run, flight, swim = GetUnitSpeed("player")
-        -- WARNING: 12.x retail returns secrets from GetUnitSpeed in combat → math.max
+        local _, run, flight, swim = GetUnitSpeed("player")
+        -- WARNING: 12.x retail returns secrets from GetUnitSpeed in combat → arithmetic
         -- triggers numeric conversion taint. Recompute OOC, reuse cached value in combat.
-        if not (issecretvalue(cur) or issecretvalue(run) or issecretvalue(flight) or issecretvalue(swim))
-            and (cur == nil or SAFE_NUM.IsCleanFiniteNumber(cur))
+        if not (issecretvalue(run) or issecretvalue(flight) or issecretvalue(swim))
             and (run == nil or SAFE_NUM.IsCleanFiniteNumber(run))
             and (flight == nil or SAFE_NUM.IsCleanFiniteNumber(flight))
             and (swim == nil or SAFE_NUM.IsCleanFiniteNumber(swim)) then
-            local effectiveYps = math.max(cur or 0, run or 0, flight or 0, swim or 0)
-            cached.speedPct = (effectiveYps / 7) * 100
+            local runPct = ((run or 0) / 7) * 100
+            local flightPct = ((flight or 0) / 7) * 100
+            local swimPct = ((swim or 0) / 7) * 100
+            local swimming = IsSwimming("player")
+            local speedPct = runPct
+            if swimming then
+                speedPct = swimPct
+            elseif IsFlying("player") then
+                speedPct = flightPct
+            end
+            -- Blizzard keeps the swim value while falling out of water so Movement
+            -- does not flicker to ground speed during the jump/fall transition.
+            if IsFalling("player") then
+                if cached.speedWasSwimming then speedPct = swimPct end
+            else
+                cached.speedWasSwimming = swimming
+            end
+            cached.speedPct = speedPct
         end
         local speed = cached.speedPct
         local speedRatingDisplay = needRating and SAFE_NUM.ReadRatingValue(GetCombatRating, CR_SPEED) or nil
@@ -3809,7 +3826,7 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
 end
 
 -- Toggle a checkbox's enabled state with matching label dim. Used by dependent-toggle
--- greying patterns (split routing gated on Split mode; Leech/Avoidance/Speed gated on
+-- greying patterns (split routing gated on Split mode; Leech/Avoidance/Movement gated on
 -- Show Tertiary Stats master) to make the dependency visible.
 local function SetCheckboxEnabled(cb, enabled)
     if not cb then return end

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.23 - 02-Jun-2026 — Movement speed display
+
+### Fixed
+
+- **Movement now matches the Blizzard character panel instead of the highest possible speed mode** — ground mounts no longer show the faster flying value while grounded, and run-speed buffs correctly update back down when they expire.
+
+### Changed
+
+- **The tertiary Speed row is now labelled Movement across supported languages** to match the actual value shown on the HUD while keeping existing settings and SavedVariables compatible.
+
 ## 1.9.22 - 01-Jun-2026 — Archon target refresh
 
 ### Updated

@@ -2869,8 +2869,8 @@ end
 -- but are called from MaybeAutoSwitchFont below + PreviewLanguage/CancelLanguagePreview
 -- much later. Without forward-decl, the function body captures `ResolveConfigFont` /
 -- `ApplyConfigFont` as global lookups (resolution at definition time) and crashes
--- with "attempt to call a nil value" at PEW (AGENTS.md: "Runtime error attempt to
--- call a nil value from a function calling another function defined later").
+-- with "attempt to call a nil value" at PEW when a later-defined helper is
+-- captured as a global lookup.
 -- WHY safe to call before menu opened: registry is empty pre-first-open so
 -- ApplyConfigFont walks zero FontStrings; cached currentConfigFont is still updated,
 -- so first-open's RegisterConfigFont picks up the right font.
@@ -3721,7 +3721,7 @@ local function PushRefresher(fn) tinsert(configRefreshers, fn) end
 -- WHY centralized layout constants: a tweak (tighter swatch gap, wider columns) used
 -- to require hunting ~10 callsites with hardcoded 6/220/12/"FRIZQT" literals — easy to
 -- miss one and ship inconsistent UI. CONFIG_FONT routes through LocaleAwareDefaultFont
--- to dodge the FRIZQT-on-CJK rendering trap (AGENTS.md "Hardcoded default font path")
+-- to dodge the FRIZQT-on-CJK rendering trap
 -- while resisting third-party-addon hijacks of the STANDARD_TEXT_FONT global.
 local CONFIG_FONT       = LocaleAwareDefaultFont()
 local CONFIG_FONT_SIZE  = 12
@@ -4290,7 +4290,7 @@ local function ResetToDefaults()
 
     -- Step 4: re-sync config widget visuals from freshly-reset DB.
     -- WHY pcall: a buggy refresher should not break the entire walk. Print error
-    -- context instead of silent fail (AGENTS.md "Log meaningful context").
+    -- context instead of silent fail.
     -- No-op when configRefreshers is empty (slash called pre-config-open).
     for _, fn in ipairs(configRefreshers) do
         local ok, err = pcall(fn)
@@ -5586,7 +5586,6 @@ end
 
 -- Self-serve diagnostics: dump runtime state to chat for bug reports.
 -- Each group is a separate PrintMsg so taint isolation is automatic
--- (per workspace AGENTS.md "log fields as separate entries"); no API
 -- here reads stat values, so taint is not actually a risk — but the
 -- per-line format is also far more readable in chat than a 400-char wall.
 function addon:PrintDebugDump()

@@ -13,9 +13,8 @@
 Thumbs.db
 .DS_Store
 
-# Dev-internal docs — must NOT leak into the public repo. AUDIT, CURSEFORGE_DESCRIPTION,
-# build scripts and screenshots all live in WOW/stats-pro-meta/ (private repo);
-# any local notes / planning sketches stay private.
+# Developer-only local notes and private marketplace buffers.
+AGENTS.md
 CLAUDE.md
 AUDIT.md
 PLAN.md

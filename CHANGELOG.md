@@ -317,7 +317,7 @@ Suggested by [@tflo](https://github.com/tflo) in issues #2, #3, and #4. Thank yo
 ### Changed
 
 - **Repair Cost is OFF by default for fresh/reset profiles** so it only appears when explicitly enabled.
-- **Release packages include the MIT license** and exclude Codex/private development metadata.
+- **Release packages include the MIT license** and exclude developer-only metadata.
 
 ## 1.5.0 - 04-May-2026 — Right-click opens Settings
 

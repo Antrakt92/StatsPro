@@ -10,6 +10,10 @@
 
 - **The tertiary Speed row and setting are now labelled Movement across supported languages** to match the actual value shown on the HUD while keeping existing settings and SavedVariables compatible.
 
+### Updated
+
+- **Bundled M+ High Keys and Raid Mythic All Bosses target ratings were refreshed from latest Archon data.**
+
 ## 1.9.22 - 01-Jun-2026 — Archon target refresh
 
 ### Updated

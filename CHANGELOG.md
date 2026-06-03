@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.24 - 03-Jun-2026 — Archon target refresh
+
+### Updated
+
+- **Bundled M+ High Keys and Raid Mythic All Bosses target ratings were refreshed from latest Archon data.**
+
 ## 1.9.23 - 02-Jun-2026 — Movement speed display
 
 ### Fixed

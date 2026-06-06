@@ -1,0 +1,101 @@
+name: CurseForge upload
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to upload to CurseForge only
+        required: true
+        default: v1.9.25
+      confirm:
+        description: Type UPLOAD_CURSEFORGE_ONLY
+        required: true
+
+jobs:
+  upload:
+    if: ${{ inputs.confirm == 'UPLOAD_CURSEFORGE_ONLY' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Upload GitHub release zip to CurseForge
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STATSPRO_CF_PROJECT_ID: "1525100"
+          STATSPRO_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${CF_API_KEY:-}" ]]; then
+            echo "::error::CF_API_KEY secret is not set."
+            exit 1
+          fi
+          if [[ ! "${STATSPRO_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Bad tag: ${STATSPRO_TAG}"
+            exit 1
+          fi
+
+          zip_name="StatsPro-${STATSPRO_TAG}.zip"
+          mkdir -p dist
+          gh release download "${STATSPRO_TAG}" --pattern "${zip_name}" --dir dist --clobber
+          test -f "dist/${zip_name}"
+
+          changelog="$(gh release view "${STATSPRO_TAG}" --json body --jq .body)"
+          versions_json="$(curl -sS --retry 3 --retry-delay 5 \
+            -H "x-api-token: ${CF_API_KEY}" \
+            "https://wow.curseforge.com/api/game/wow/versions")"
+          game_versions="$(jq -c '
+            [ .[]
+              | select(.name == "12.0.7" or .name == "12.0.5")
+              | .id
+            ] | unique
+          ' <<<"${versions_json}")"
+          count="$(jq 'length' <<<"${game_versions}")"
+          if [[ "${count}" -ne 2 ]]; then
+            echo "::error::Expected exactly 2 CurseForge game version IDs for 12.0.7 and 12.0.5; got ${game_versions}"
+            exit 1
+          fi
+          echo "CurseForge gameVersions=${game_versions}"
+
+          metadata="$(jq -nc \
+            --arg changelog "${changelog}" \
+            --arg displayName "${STATSPRO_TAG}" \
+            --argjson gameVersions "${game_versions}" \
+            '{
+              changelog: $changelog,
+              changelogType: "markdown",
+              displayName: $displayName,
+              gameVersions: $gameVersions,
+              releaseType: "release"
+            }')"
+
+          echo "Uploading ${zip_name} to CurseForge project ${STATSPRO_CF_PROJECT_ID}"
+          response_file="$(mktemp)"
+          status="$(curl -sS --retry 3 --retry-delay 10 \
+            -w "%{http_code}" \
+            -o "${response_file}" \
+            -H "x-api-token: ${CF_API_KEY}" \
+            -F "metadata=${metadata}" \
+            -F "file=@dist/${zip_name}" \
+            "https://wow.curseforge.com/api/projects/${STATSPRO_CF_PROJECT_ID}/upload-file")"
+          echo "HTTP ${status}"
+          cat "${response_file}"
+          echo
+
+          if [[ "${status}" != "200" ]]; then
+            echo "::error::CurseForge upload returned HTTP ${status}."
+            exit 1
+          fi
+          if ! jq -e '.id and (.id | type == "number")' "${response_file}" >/dev/null; then
+            echo "::error::CurseForge upload did not return a numeric file id."
+            exit 1
+          fi
+
+          file_id="$(jq -r .id "${response_file}")"
+          echo "CurseForge accepted ${zip_name}; file id ${file_id}."

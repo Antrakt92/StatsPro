@@ -3,6 +3,7 @@ param(
     [string]$ExpectedTag,
     [string]$SourceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")),
     [string]$PackageRoot = (Join-Path (Join-Path (Join-Path $PSScriptRoot "..") ".release") "StatsPro"),
+    [string]$ReleaseRoot = (Join-Path (Join-Path $PSScriptRoot "..") ".release"),
     [string]$ManifestPath,
     [string]$CompareManifestPath,
     [int]$ArchonMaxAgeDays = 3,
@@ -82,6 +83,23 @@ function Resolve-StatsProExpectedTag {
     }
     Assert-ReleaseTag $Value
     return $Value
+}
+
+function Resolve-StatsProArchivePath {
+    param([string]$Value, [string]$Root)
+
+    if (-not [string]::IsNullOrWhiteSpace($Value)) {
+        return (Resolve-Path -LiteralPath $Value).Path
+    }
+
+    if (-not (Test-Path -LiteralPath $Root -PathType Container)) {
+        throw "Missing -ArchivePath and release root not found: $Root"
+    }
+    $candidates = @(Get-ChildItem -LiteralPath $Root -Recurse -File -Filter "StatsPro-*.zip" | Sort-Object FullName)
+    if ($candidates.Count -ne 1) {
+        throw "Missing -ArchivePath and expected exactly one StatsPro-*.zip in $Root; found $($candidates.Count)."
+    }
+    return $candidates[0].FullName
 }
 
 function Get-StatsProPackageManifestLines {
@@ -183,6 +201,21 @@ function Invoke-SelfTest {
         Assert-ThrowsMatch "manifest mismatch rejected" {
             Assert-StatsProPackageManifestMatches -Root $packageRoot -ExpectedManifestPath $manifest
         } "not repeatable"
+
+        $releaseRoot = Join-Path $tempDir "release"
+        New-Item -ItemType Directory -Path $releaseRoot | Out-Null
+        $singleZip = Join-Path $releaseRoot "StatsPro-v1.2.3-4-gabcdef0.zip"
+        Set-Content -LiteralPath $singleZip -Value "zip" -Encoding UTF8
+        if ((Resolve-StatsProArchivePath -Value "" -Root $releaseRoot) -ne $singleZip) {
+            throw "Archive fallback must return the only StatsPro zip."
+        }
+        Assert-ThrowsMatch "missing archive fallback rejected" {
+            Resolve-StatsProArchivePath -Value "" -Root (Join-Path $tempDir "missing-release")
+        } "release root not found"
+        Set-Content -LiteralPath (Join-Path $releaseRoot "StatsPro-v1.2.3-5-gabcdef1.zip") -Value "zip" -Encoding UTF8
+        Assert-ThrowsMatch "ambiguous archive fallback rejected" {
+            Resolve-StatsProArchivePath -Value "" -Root $releaseRoot
+        } "exactly one"
     }
     finally {
         if (Test-Path -LiteralPath $tempDir) {
@@ -200,12 +233,8 @@ if ($SelfTest) {
 
 Assert-PowerShell7OrNewer
 
-if ([string]::IsNullOrWhiteSpace($ArchivePath)) {
-    throw "Missing -ArchivePath."
-}
-
 $resolvedSourceRoot = (Resolve-Path -LiteralPath $SourceRoot).Path
-$resolvedArchivePath = (Resolve-Path -LiteralPath $ArchivePath).Path
+$resolvedArchivePath = Resolve-StatsProArchivePath -Value $ArchivePath -Root $ReleaseRoot
 $resolvedTag = Resolve-StatsProExpectedTag -Value $ExpectedTag -Root $resolvedSourceRoot
 
 Invoke-StatsProPackageArtifactCheck `

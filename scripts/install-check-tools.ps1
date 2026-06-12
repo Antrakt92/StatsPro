@@ -328,6 +328,7 @@ function Invoke-SelfTest {
 
     $locks = Read-StatsProToolLocks -Path (Join-Path $PSScriptRoot "tool-version-locks.json")
     Assert-Equal "locked lua51 choco version" (Get-StatsProLockedChocolateyVersion -Locks $locks -PackageName "lua51") "5.1.5"
+    Assert-Equal "locked LuaLS choco version" (Get-StatsProLockedChocolateyVersion -Locks $locks -PackageName "lua-language-server") "3.18.1"
     Assert-Equal "locked luacheck rock version" (Get-StatsProLockedLuarocksVersion -Locks $locks -PackageName "luacheck") "1.2.0-1"
     Assert-Equal "locked choco install args" ((Get-StatsProChocoInstallArguments -PackageName "lua51" -Version "5.1.5") -join " ") "install lua51 --version 5.1.5 -y --no-progress"
     Assert-Equal "locked luarocks install args" ((Get-StatsProLuarocksInstallArguments -PackageName "luacheck" -Version "1.2.0-1") -join " ") "install luacheck 1.2.0-1"

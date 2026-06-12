@@ -1,7 +1,7 @@
 {
   "chocolatey": {
     "lua51": "5.1.5",
-    "lua-language-server": "3.17.0",
+    "lua-language-server": "3.18.1",
     "luarocks": "2.4.4"
   },
   "luarocks": {
@@ -12,7 +12,7 @@
   "commands": {
     "lua5.1": "Lua\\s+5\\.1\\.5",
     "luac5.1": "Lua\\s+5\\.1\\.5",
-    "lua-language-server": "^3\\.17\\.0$",
+    "lua-language-server": "^3\\.18\\.1(?:-dev)?$",
     "luarocks": "2\\.4\\.4",
     "luacheck": "Luacheck:\\s+1\\.2\\.0"
   }

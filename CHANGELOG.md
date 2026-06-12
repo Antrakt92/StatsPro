@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.9.31 - 12-Jun-2026 — Runtime and release hardening
+## 1.9.32 - 12-Jun-2026 — Runtime and release hardening
 
 ### Fixed
 
@@ -10,6 +10,7 @@
 
 - **Release packaging checks are stricter before marketplace upload** — local and CI gates now validate package contents, bundled third-party notices, marketplace versions, and published GitHub assets more defensively.
 - **Release automation is easier to audit** — pinned action/tool versions and package dry-run comparisons make release failures clearer before public files are uploaded.
+- **Marketplace compatibility checks handle WoWInterface's Midnight metadata correctly** — release gates accept WoWInterface's aggregate Retail 12.0 compatibility entry while keeping CurseForge patch-version validation strict.
 
 ### Updated
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.9.31 - 12-Jun-2026 — Runtime and release hardening
+
+### Fixed
+
+- **Stats and repair rows recover more safely from protected or malformed reads** — transient Midnight API states no longer break cached stat refreshes or repair scans.
+
+### Improved
+
+- **Release packaging checks are stricter before marketplace upload** — local and CI gates now validate package contents, bundled third-party notices, marketplace versions, and published GitHub assets more defensively.
+- **Release automation is easier to audit** — pinned action/tool versions and package dry-run comparisons make release failures clearer before public files are uploaded.
+
+### Updated
+
+- **Bundled M+ High Keys and Raid Mythic All Bosses target ratings were refreshed from latest Archon data.**
+
 ## 1.9.30 - 12-Jun-2026 — Archon target refresh
 
 ### Updated

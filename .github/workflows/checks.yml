@@ -34,6 +34,7 @@ jobs:
           .\scripts\report-ci-action-refs.ps1 -SelfTest
           .\scripts\check-metadata.ps1 -SelfTest
           .\scripts\check-marketplace-versions.ps1 -SelfTest
+          .\scripts\check-curseforge-diagnostics.ps1 -SelfTest
           .\scripts\check-release-artifact.ps1 -SelfTest
           .\scripts\check-package-dry-run.ps1 -SelfTest
           .\scripts\check-lua.ps1 -SelfTest

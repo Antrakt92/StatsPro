@@ -74,6 +74,111 @@ function Get-RequiredRetailVersionsFromInterfaces {
     return @($versions | Sort-Object { [version]$_ } -Unique)
 }
 
+function Get-MarketplaceHttpStatusCode {
+    param($Exception)
+
+    if ($null -eq $Exception) { return $null }
+    try {
+        if ($Exception.Data -and $Exception.Data.Contains("MarketplaceStatusCode")) {
+            return [int]$Exception.Data["MarketplaceStatusCode"]
+        }
+    }
+    catch {
+    }
+    try {
+        if ($Exception.Response -and $Exception.Response.StatusCode) {
+            return [int]$Exception.Response.StatusCode
+        }
+    }
+    catch {
+    }
+    return $null
+}
+
+function Format-MarketplaceRequestFailure {
+    param($Exception)
+
+    $message = if ($Exception -and $Exception.Message) { $Exception.Message } else { "unknown error" }
+    $statusCode = Get-MarketplaceHttpStatusCode $Exception
+    if ($null -ne $statusCode) {
+        return "HTTP $statusCode ($message)"
+    }
+    return $message
+}
+
+function Test-MarketplaceAuthFailure {
+    param($Exception)
+
+    $statusCode = Get-MarketplaceHttpStatusCode $Exception
+    return $null -ne $statusCode -and @(401, 403) -contains [int]$statusCode
+}
+
+function Test-MarketplaceRequestRetryable {
+    param($Exception)
+
+    $statusCode = Get-MarketplaceHttpStatusCode $Exception
+    if ($null -eq $statusCode) { return $true }
+    return @(408, 429, 500, 502, 503, 504) -contains [int]$statusCode
+}
+
+function Invoke-MarketplaceWebRequest {
+    param(
+        [string]$Uri,
+        [hashtable]$Headers = @{},
+        [string]$Description,
+        [int]$TimeoutSec = 30,
+        [int]$MaxAttempts = 3,
+        [int]$InitialDelaySeconds = 2,
+        [int]$MaxDelaySeconds = 10,
+        [scriptblock]$Request = $null,
+        [scriptblock]$Sleep = $null
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Uri)) { throw "Marketplace request URI is required." }
+    if ([string]::IsNullOrWhiteSpace($Description)) { throw "Marketplace request description is required." }
+    if ($TimeoutSec -le 0) { throw "TimeoutSec must be positive." }
+    if ($MaxAttempts -lt 1) { throw "MaxAttempts must be at least 1." }
+    if ($InitialDelaySeconds -lt 0) { throw "InitialDelaySeconds must be non-negative." }
+    if ($MaxDelaySeconds -lt 0) { throw "MaxDelaySeconds must be non-negative." }
+
+    if ($null -eq $Request) {
+        $Request = {
+            param([string]$RequestUri, [hashtable]$RequestHeaders, [int]$RequestTimeoutSec)
+            Invoke-WebRequest -Uri $RequestUri -Headers $RequestHeaders -UseBasicParsing -TimeoutSec $RequestTimeoutSec
+        }
+    }
+    if ($null -eq $Sleep) {
+        $Sleep = {
+            param([int]$Seconds)
+            Start-Sleep -Seconds $Seconds
+        }
+    }
+
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            return (& $Request $Uri $Headers $TimeoutSec)
+        }
+        catch {
+            $failure = Format-MarketplaceRequestFailure $_.Exception
+            if (Test-MarketplaceAuthFailure $_.Exception) {
+                throw ("Failed to fetch {0} from {1}: auth/permission failure: {2}" -f $Description, $Uri, $failure)
+            }
+            if (-not (Test-MarketplaceRequestRetryable $_.Exception)) {
+                throw ("Failed to fetch {0} from {1}: {2}" -f $Description, $Uri, $failure)
+            }
+            if ($attempt -ge $MaxAttempts) {
+                throw ("Failed to fetch {0} from {1} after {2} attempt(s): {3}" -f $Description, $Uri, $MaxAttempts, $failure)
+            }
+
+            $delaySeconds = [int][Math]::Min($MaxDelaySeconds, $InitialDelaySeconds * [Math]::Pow(2, $attempt - 1))
+            Write-Warning ("Marketplace request attempt {0}/{1} failed for {2}: {3}. Retrying in {4} second(s)." -f $attempt, $MaxAttempts, $Description, $failure, $delaySeconds)
+            if ($delaySeconds -gt 0) {
+                & $Sleep $delaySeconds
+            }
+        }
+    }
+}
+
 function Read-JsonTextOrFetch {
     param(
         [string]$Path,
@@ -87,7 +192,7 @@ function Read-JsonTextOrFetch {
     }
 
     try {
-        $response = Invoke-WebRequest -Uri $Uri -Headers $Headers -UseBasicParsing
+        $response = Invoke-MarketplaceWebRequest -Uri $Uri -Headers $Headers -Description $Description
         return [string]$response.Content
     }
     catch {
@@ -208,6 +313,106 @@ function Invoke-SelfTest {
     Assert-ThrowsMatch "bad interface rejected" {
         [void](Get-RequiredRetailVersionsFromInterfaces -Interfaces @("12005"))
     } "12005"
+
+    $retryState = @{ Attempts = 0; Delays = @(); Timeouts = @(); SawTokenHeader = $false }
+    $retryResponse = Invoke-MarketplaceWebRequest `
+        -Uri "https://example.invalid/retry" `
+        -Headers @{ "x-api-token" = "secret-value" } `
+        -Description "retry self-test" `
+        -TimeoutSec 17 `
+        -MaxAttempts 3 `
+        -InitialDelaySeconds 1 `
+        -MaxDelaySeconds 5 `
+        -Request {
+            param([string]$RequestUri, [hashtable]$RequestHeaders, [int]$RequestTimeoutSec)
+            $retryState.Attempts = [int]$retryState.Attempts + 1
+            $retryState.Timeouts += $RequestTimeoutSec
+            if ($RequestHeaders["x-api-token"] -eq "secret-value") {
+                $retryState.SawTokenHeader = $true
+            }
+            if ($RequestUri -ne "https://example.invalid/retry") {
+                throw "retry request URI binding failed"
+            }
+            if ($retryState.Attempts -lt 3) {
+                $ex = [System.Exception]::new("transient marketplace self-test")
+                $ex.Data["MarketplaceStatusCode"] = 503
+                throw $ex
+            }
+            return [pscustomobject]@{ Content = "ok" }
+        } `
+        -Sleep {
+            param([int]$Seconds)
+            $retryState.Delays += $Seconds
+        }
+    if ($retryResponse.Content -ne "ok") {
+        throw "Marketplace retry response content mismatch."
+    }
+    if ($retryState.Attempts -ne 3) {
+        throw "Marketplace retry should use 3 attempts, got $($retryState.Attempts)."
+    }
+    if (($retryState.Delays -join ",") -ne "1,2") {
+        throw "Marketplace retry delays should be 1,2; got $($retryState.Delays -join ',')."
+    }
+    if (($retryState.Timeouts | Sort-Object -Unique) -join "," -ne "17") {
+        throw "Marketplace retry should pass the configured timeout to every request."
+    }
+    if (-not $retryState.SawTokenHeader) {
+        throw "Marketplace retry should pass request headers to the transport."
+    }
+
+    $authState = @{ Attempts = 0; Delays = @() }
+    Assert-ThrowsMatch "auth failure is not retried" {
+        [void](Invoke-MarketplaceWebRequest `
+            -Uri "https://example.invalid/auth" `
+            -Headers @{ "x-api-token" = "secret-value" } `
+            -Description "auth self-test" `
+            -MaxAttempts 3 `
+            -InitialDelaySeconds 1 `
+            -Request {
+                param([string]$RequestUri, [hashtable]$RequestHeaders, [int]$RequestTimeoutSec)
+                $authState.Attempts = [int]$authState.Attempts + 1
+                $ex = [System.Exception]::new("forbidden marketplace self-test")
+                $ex.Data["MarketplaceStatusCode"] = 403
+                throw $ex
+            } `
+            -Sleep {
+                param([int]$Seconds)
+                $authState.Delays += $Seconds
+            })
+    } "auth/permission.*HTTP 403"
+    if ($authState.Attempts -ne 1) {
+        throw "Marketplace auth failure should not retry, got $($authState.Attempts) attempt(s)."
+    }
+    if ($authState.Delays.Count -ne 0) {
+        throw "Marketplace auth failure should not sleep before failing."
+    }
+
+    $exhaustionState = @{ Attempts = 0; Delays = @() }
+    Assert-ThrowsMatch "retry exhaustion reports attempts" {
+        [void](Invoke-MarketplaceWebRequest `
+            -Uri "https://example.invalid/exhaustion" `
+            -Description "exhaustion self-test" `
+            -MaxAttempts 3 `
+            -InitialDelaySeconds 1 `
+            -MaxDelaySeconds 5 `
+            -Request {
+                param([string]$RequestUri, [hashtable]$RequestHeaders, [int]$RequestTimeoutSec)
+                $exhaustionState.Attempts = [int]$exhaustionState.Attempts + 1
+                $ex = [System.Exception]::new("still unavailable marketplace self-test")
+                $ex.Data["MarketplaceStatusCode"] = 503
+                throw $ex
+            } `
+            -Sleep {
+                param([int]$Seconds)
+                $exhaustionState.Delays += $Seconds
+            })
+    } "after 3 attempt\(s\).*HTTP 503"
+    if ($exhaustionState.Attempts -ne 3) {
+        throw "Marketplace retry exhaustion should use 3 attempts, got $($exhaustionState.Attempts)."
+    }
+    if (($exhaustionState.Delays -join ",") -ne "1,2") {
+        throw "Marketplace retry exhaustion delays should be 1,2; got $($exhaustionState.Delays -join ',')."
+    }
     Write-Host "Marketplace version self-test passed."
 }
 

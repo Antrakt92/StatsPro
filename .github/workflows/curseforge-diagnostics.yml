@@ -14,85 +14,15 @@ jobs:
   files:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+
       - name: Query CurseForge legacy API
+        shell: pwsh
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           STATSPRO_CF_PROJECT_ID: "1525100"
           STATSPRO_VERSION: ${{ inputs.version }}
-        run: |
-          set -euo pipefail
-
-          if [[ -z "${CF_API_KEY:-}" ]]; then
-            echo "::error::CF_API_KEY secret is not set."
-            exit 1
-          fi
-
-          api_base="https://wow.curseforge.com/api/projects/${STATSPRO_CF_PROJECT_ID}"
-          endpoints=(
-            "${api_base}/files"
-            "${api_base}/files?sort=-id"
-            "${api_base}/files?page=1&pageSize=20"
-          )
-
-          found="false"
-          for endpoint in "${endpoints[@]}"; do
-            echo "== GET ${endpoint} =="
-            body="$(mktemp)"
-            status="$(curl -sS --retry 3 --retry-delay 5 \
-              -w "%{http_code}" \
-              -o "${body}" \
-              -H "x-api-token: ${CF_API_KEY}" \
-              "${endpoint}")"
-            echo "HTTP ${status}"
-            if [[ "${status}" != 2* ]]; then
-              head -c 2000 "${body}" || true
-              echo
-              continue
-            fi
-
-            jq --arg version "${STATSPRO_VERSION}" '
-              def files:
-                if type == "array" then .
-                elif (.data? | type) == "array" then .data
-                elif (.files? | type) == "array" then .files
-                else [] end;
-              files
-              | map({
-                  id,
-                  displayName,
-                  fileName,
-                  name,
-                  releaseType,
-                  status,
-                  fileStatus,
-                  gameVersions,
-                  dateCreated,
-                  dateModified,
-                  downloadUrl
-                })
-              | .[0:25]
-            ' "${body}"
-
-            if jq -e --arg version "${STATSPRO_VERSION}" '
-              def files:
-                if type == "array" then .
-                elif (.data? | type) == "array" then .data
-                elif (.files? | type) == "array" then .files
-                else [] end;
-              files
-              | any(
-                  ((.displayName // "") | contains($version))
-                  or ((.fileName // "") | contains($version))
-                  or ((.name // "") | contains($version))
-                )
-            ' "${body}" >/dev/null; then
-              found="true"
-            fi
-          done
-
-          if [[ "${found}" != "true" ]]; then
-            echo "::error::${STATSPRO_VERSION} was not found in CurseForge project ${STATSPRO_CF_PROJECT_ID} file listings."
-            exit 1
-          fi
-
-          echo "${STATSPRO_VERSION} found in CurseForge file listings."
+        run: ./scripts/check-curseforge-diagnostics.ps1

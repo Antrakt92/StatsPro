@@ -575,6 +575,52 @@ function Invoke-SelfTest {
         Assert-ThrowsMatch "release json duplicate metadata rejected" {
             Assert-StatsProReleaseJson -JsonText '{"releases":[{"name":"StatsPro","version":"v1.2.3","filename":"StatsPro-v1.2.3.zip","nolib":false,"metadata":[{"flavor":"mainline","interface":120005},{"flavor":"mainline","interface":120005}]}]}' -ExpectedTag "v1.2.3" -ExpectedInterfaces @(120005)
         } "entry count"
+
+        $noticeRoot = Join-Path $tempDir "notice-root"
+        New-Item -ItemType Directory -Path (Join-Path $noticeRoot "libs\LibStub") -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $noticeRoot "libs\CallbackHandler-1.0") -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $noticeRoot "libs\LibSharedMedia-3.0") -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $noticeRoot "libs\LibStub\LibStub.lua") -Value "libstub" -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $noticeRoot "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua") -Value "callback" -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $noticeRoot "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua") -Value "lsm" -Encoding UTF8
+
+        $libStubHash = Get-NormalizedTextSha256 -Path (Join-Path $noticeRoot "libs\LibStub\LibStub.lua")
+        $callbackHash = Get-NormalizedTextSha256 -Path (Join-Path $noticeRoot "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua")
+        $lsmHash = Get-NormalizedTextSha256 -Path (Join-Path $noticeRoot "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua")
+        $validNotice = @"
+# Third-party notices
+
+## libs/LibStub/LibStub.lua
+- License: Public Domain
+- SHA256: $libStubHash
+
+## libs/CallbackHandler-1.0/CallbackHandler-1.0.lua
+- License: BSD
+- SHA256: $callbackHash
+
+## libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua
+- License: LGPL v2.1
+- SHA256: $lsmHash
+"@
+        $noticePath = Join-Path $noticeRoot "THIRD-PARTY-NOTICES.md"
+        Set-Content -LiteralPath $noticePath -Value $validNotice -Encoding UTF8
+        Assert-PackagedThirdPartyNotices -PackageRoot $noticeRoot
+
+        Set-Content -LiteralPath $noticePath -Value ($validNotice -replace "(?ms)^## libs/LibStub/LibStub\.lua.*?(?=^## |\z)", "") -Encoding UTF8
+        Assert-ThrowsMatch "notice missing library section rejected" {
+            Assert-PackagedThirdPartyNotices -PackageRoot $noticeRoot
+        } "missing section"
+
+        Set-Content -LiteralPath $noticePath -Value ($validNotice -replace "License: BSD", "License: MIT") -Encoding UTF8
+        Assert-ThrowsMatch "notice wrong license rejected" {
+            Assert-PackagedThirdPartyNotices -PackageRoot $noticeRoot
+        } "license 'BSD'"
+
+        Set-Content -LiteralPath $noticePath -Value ($validNotice -replace $lsmHash, ("0" * 64)) -Encoding UTF8
+        Assert-ThrowsMatch "notice stale hash rejected" {
+            Assert-PackagedThirdPartyNotices -PackageRoot $noticeRoot
+        } "SHA256"
+
         Assert-ThrowsMatch "missing package file rejected" {
             Assert-StatsProPackageEntries -Entries @(
                 "StatsPro/CHANGELOG.md",

@@ -7,6 +7,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   checks:
     runs-on: windows-latest
@@ -32,6 +35,7 @@ jobs:
           .\scripts\check-metadata.ps1 -SelfTest
           .\scripts\check-marketplace-versions.ps1 -SelfTest
           .\scripts\check-release-artifact.ps1 -SelfTest
+          .\scripts\check-package-dry-run.ps1 -SelfTest
           .\scripts\check-lua.ps1 -SelfTest
           .\scripts\check-release-version.ps1 -SelfTest
           .\scripts\check-release-ancestry.ps1 -SelfTest
@@ -49,3 +53,33 @@ jobs:
       - name: Lua checks
         shell: pwsh
         run: .\scripts\check-lua.ps1 -EnforceToolLocks
+
+  package-contract:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+
+      - name: Install release validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.1
+
+      - name: Build package without publishing
+        id: package
+        uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28
+        with:
+          args: -d
+
+      - name: Validate package contract
+        shell: pwsh
+        env:
+          STATSPRO_ARCHIVE_PATH: ${{ steps.package.outputs.archive_path }}
+        run: |
+          ./scripts/check-package-dry-run.ps1 `
+            -ArchivePath $env:STATSPRO_ARCHIVE_PATH `
+            -ArchonMaxAgeDays 14 `
+            -EnforceToolLocks

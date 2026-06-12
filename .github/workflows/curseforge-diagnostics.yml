@@ -4,9 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version label to search for, such as v1.9.25
+        description: Version label to search for, such as vX.Y.Z
         required: true
-        default: v1.9.25
+
+permissions:
+  contents: read
 
 jobs:
   files:

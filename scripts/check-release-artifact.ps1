@@ -547,13 +547,31 @@ function Invoke-SelfTest {
         Set-Content -LiteralPath $jsonPath -Value $releaseJson -Encoding UTF8
         Assert-StatsProReleaseArtifact -ZipPath $zip -ReleaseJsonPath $jsonPath -ExpectedTag $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$false -WithReleaseJson:$true
         Assert-StatsProReleaseArtifact -ZipPath $zip -ExpectedTag $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$true -WithReleaseJson:$false
+        $branchZip = Join-Path $tempDir "StatsPro-$tag-12-gabcdef0.zip"
+        Copy-Item -LiteralPath $zip -Destination $branchZip
+        Assert-StatsProReleaseArtifact -ZipPath $branchZip -ExpectedTag $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$true -WithReleaseJson:$false
 
         Assert-ThrowsMatch "release json mismatch rejected" {
             Assert-StatsProReleaseJson -JsonText '{"releases":[{"name":"Other"}]}' -ExpectedTag "v1.2.3" -ExpectedInterfaces @(120005)
         } "StatsPro"
+        Assert-ThrowsMatch "release json wrong version rejected" {
+            Assert-StatsProReleaseJson -JsonText '{"releases":[{"name":"StatsPro","version":"v1.2.2","filename":"StatsPro-v1.2.3.zip","nolib":false,"metadata":[{"flavor":"mainline","interface":120005}]}]}' -ExpectedTag "v1.2.3" -ExpectedInterfaces @(120005)
+        } "version"
+        Assert-ThrowsMatch "release json wrong filename rejected" {
+            Assert-StatsProReleaseJson -JsonText '{"releases":[{"name":"StatsPro","version":"v1.2.3","filename":"StatsPro-v1.2.3-1-gabc.zip","nolib":false,"metadata":[{"flavor":"mainline","interface":120005}]}]}' -ExpectedTag "v1.2.3" -ExpectedInterfaces @(120005)
+        } "filename"
         Assert-ThrowsMatch "release json missing nolib rejected" {
             Assert-StatsProReleaseJson -JsonText '{"releases":[{"name":"StatsPro","version":"v1.2.3","filename":"StatsPro-v1.2.3.zip","metadata":[{"flavor":"mainline","interface":120005}]}]}' -ExpectedTag "v1.2.3" -ExpectedInterfaces @(120005)
         } "nolib"
+        Assert-ThrowsMatch "release json nolib true rejected" {
+            Assert-StatsProReleaseJson -JsonText '{"releases":[{"name":"StatsPro","version":"v1.2.3","filename":"StatsPro-v1.2.3.zip","nolib":true,"metadata":[{"flavor":"mainline","interface":120005}]}]}' -ExpectedTag "v1.2.3" -ExpectedInterfaces @(120005)
+        } "nolib=true"
+        Assert-ThrowsMatch "release json wrong flavor rejected" {
+            Assert-StatsProReleaseJson -JsonText '{"releases":[{"name":"StatsPro","version":"v1.2.3","filename":"StatsPro-v1.2.3.zip","nolib":false,"metadata":[{"flavor":"classic","interface":120005}]}]}' -ExpectedTag "v1.2.3" -ExpectedInterfaces @(120005)
+        } "flavor"
+        Assert-ThrowsMatch "release json missing interface rejected" {
+            Assert-StatsProReleaseJson -JsonText '{"releases":[{"name":"StatsPro","version":"v1.2.3","filename":"StatsPro-v1.2.3.zip","nolib":false,"metadata":[{"flavor":"mainline"}]}]}' -ExpectedTag "v1.2.3" -ExpectedInterfaces @(120005)
+        } "interface"
         Assert-ThrowsMatch "release json duplicate metadata rejected" {
             Assert-StatsProReleaseJson -JsonText '{"releases":[{"name":"StatsPro","version":"v1.2.3","filename":"StatsPro-v1.2.3.zip","nolib":false,"metadata":[{"flavor":"mainline","interface":120005},{"flavor":"mainline","interface":120005}]}]}' -ExpectedTag "v1.2.3" -ExpectedInterfaces @(120005)
         } "entry count"

@@ -12,6 +12,8 @@ jobs:
     # must not run release machinery.
     if: ${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -83,19 +85,23 @@ jobs:
           sudo apt-get install -y lua5.1
 
       - name: Build package without publishing
-        uses: BigWigsMods/packager@5abb6e1ddbd98c818ac5ee3692613cd372619dc9
+        id: build-package
+        uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28
         with:
           args: -d
 
       - name: Validate package artifact
         shell: pwsh
+        env:
+          STATSPRO_ARCHIVE_PATH: ${{ steps.build-package.outputs.archive_path }}
         run: |
-          $zip = @(Get-ChildItem -Path ".release" -Recurse -File -Filter "StatsPro-$env:GITHUB_REF_NAME.zip")
-          if ($zip.Count -ne 1) {
-            throw "Expected exactly one StatsPro-$env:GITHUB_REF_NAME.zip in .release; found $($zip.Count)."
-          }
-          $zip[0].FullName | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP "statspro-package-zip-path.txt") -Encoding UTF8
-          ./scripts/check-release-artifact.ps1 -ZipPath $zip[0].FullName -ExpectedTag $env:GITHUB_REF_NAME -PackageOnly -ArchonMaxAgeDays 3 -EnforceToolLocks
+          ./scripts/check-package-dry-run.ps1 `
+            -ArchivePath $env:STATSPRO_ARCHIVE_PATH `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -PackageRoot (Join-Path ".release" "StatsPro") `
+            -ManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256") `
+            -ArchonMaxAgeDays 3 `
+            -EnforceToolLocks
 
       - name: Check marketplace versions
         shell: pwsh
@@ -103,54 +109,27 @@ jobs:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
         run: ./scripts/check-marketplace-versions.ps1
 
-      - name: Save package tree manifest
-        shell: pwsh
-        run: |
-          $root = (Resolve-Path ".release/StatsPro").Path
-          Get-ChildItem -LiteralPath $root -Recurse -File |
-            Sort-Object FullName |
-            ForEach-Object {
-              $relative = [System.IO.Path]::GetRelativePath($root, $_.FullName) -replace "\\", "/"
-              $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
-              "$relative`t$hash"
-            } |
-            Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256") -Encoding UTF8
-
       - name: Rebuild package without publishing
-        uses: BigWigsMods/packager@5abb6e1ddbd98c818ac5ee3692613cd372619dc9
+        id: rebuild-package
+        uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28
         with:
           args: -e -d
 
       - name: Compare rebuilt package and validate again
         shell: pwsh
+        env:
+          STATSPRO_ARCHIVE_PATH: ${{ steps.rebuild-package.outputs.archive_path }}
         run: |
-          $root = (Resolve-Path ".release/StatsPro").Path
-          $afterPath = Join-Path $env:RUNNER_TEMP "statspro-package-tree.after.sha256"
-          Get-ChildItem -LiteralPath $root -Recurse -File |
-            Sort-Object FullName |
-            ForEach-Object {
-              $relative = [System.IO.Path]::GetRelativePath($root, $_.FullName) -replace "\\", "/"
-              $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
-              "$relative`t$hash"
-            } |
-            Set-Content -LiteralPath $afterPath -Encoding UTF8
-
-          $diff = Compare-Object `
-            -ReferenceObject (Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256")) `
-            -DifferenceObject (Get-Content -LiteralPath $afterPath)
-          if ($diff) {
-            $diff | Format-Table -AutoSize | Out-String | Write-Host
-            throw "Package tree is not repeatable between dry-run builds."
-          }
-
-          $zip = @(Get-ChildItem -Path ".release" -Recurse -File -Filter "StatsPro-$env:GITHUB_REF_NAME.zip")
-          if ($zip.Count -ne 1) {
-            throw "Expected exactly one StatsPro-$env:GITHUB_REF_NAME.zip in .release after rebuild; found $($zip.Count)."
-          }
-          ./scripts/check-release-artifact.ps1 -ZipPath $zip[0].FullName -ExpectedTag $env:GITHUB_REF_NAME -PackageOnly -ArchonMaxAgeDays 3 -EnforceToolLocks
+          ./scripts/check-package-dry-run.ps1 `
+            -ArchivePath $env:STATSPRO_ARCHIVE_PATH `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -PackageRoot (Join-Path ".release" "StatsPro") `
+            -CompareManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256") `
+            -ArchonMaxAgeDays 3 `
+            -EnforceToolLocks
 
       - name: Publish package and release
-        uses: BigWigsMods/packager@5abb6e1ddbd98c818ac5ee3692613cd372619dc9
+        uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
@@ -158,3 +137,39 @@ jobs:
           GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
         with:
           args: -c -e -o
+
+      - name: Validate published GitHub release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $assetDir = Join-Path $env:RUNNER_TEMP "statspro-release-assets"
+          New-Item -ItemType Directory -Path $assetDir -Force | Out-Null
+
+          function Save-ReleaseAsset {
+            param([string]$Name)
+
+            $path = Join-Path $assetDir $Name
+            for ($attempt = 1; $attempt -le 6; $attempt++) {
+              $output = @(gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern $Name --dir $assetDir --clobber 2>&1)
+              if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $path -PathType Leaf)) {
+                return $path
+              }
+              Write-Host "Release asset $Name not ready on attempt $attempt`: $($output -join ' ')"
+              if ($attempt -lt 6) {
+                Start-Sleep -Seconds ([Math]::Min(60, 5 * [Math]::Pow(2, $attempt - 1)))
+              }
+            }
+            throw "Release asset $Name was not downloadable after retries."
+          }
+
+          $zipPath = Save-ReleaseAsset -Name "StatsPro-$tag.zip"
+          $releaseJsonPath = Save-ReleaseAsset -Name "release.json"
+          ./scripts/check-release-artifact.ps1 `
+            -ZipPath $zipPath `
+            -ReleaseJsonPath $releaseJsonPath `
+            -ExpectedTag $tag `
+            -WithReleaseJson `
+            -ArchonMaxAgeDays 3 `
+            -EnforceToolLocks

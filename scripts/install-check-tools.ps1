@@ -1,9 +1,13 @@
 param(
     [switch]$Install,
+    [string]$ToolLockPath = (Join-Path $PSScriptRoot "tool-version-locks.json"),
+    [switch]$EnforceToolLocks,
     [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
+
+. (Join-Path $PSScriptRoot "tool-version-locks.ps1")
 
 $LuacheckFallback = "C:\ProgramData\chocolatey\lib\luarocks\luarocks-2.4.4-win32\systree\bin\luacheck.bat"
 
@@ -158,17 +162,18 @@ function Resolve-Tool {
 
 function Install-ChocoPackage {
     param(
-        [string]$PackageName
+        [string]$PackageName,
+        [string]$Version
     )
 
     $Choco = Resolve-Tool -Names @("choco")
     if (-not $Choco) {
         throw "Missing Chocolatey; cannot install $PackageName automatically."
     }
-    Write-Host "Installing $PackageName with Chocolatey..."
-    & $Choco install $PackageName -y --no-progress | ForEach-Object { Write-Host $_ }
+    Write-Host "Installing $PackageName $Version with Chocolatey..."
+    & $Choco @(Get-StatsProChocoInstallArguments -PackageName $PackageName -Version $Version) | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) {
-        throw "choco install $PackageName exited with code $LASTEXITCODE"
+        throw "choco install $PackageName $Version exited with code $LASTEXITCODE"
     }
 }
 
@@ -176,12 +181,13 @@ function Require-Tool {
     param(
         [string]$Label,
         [string[]]$Names,
-        [string]$ChocoPackage
+        [string]$ChocoPackage,
+        [string]$ChocoVersion
     )
 
     $Path = Resolve-Tool -Names $Names
     if (-not $Path -and $Install) {
-        Install-ChocoPackage -PackageName $ChocoPackage
+        Install-ChocoPackage -PackageName $ChocoPackage -Version $ChocoVersion
         $Path = Resolve-Tool -Names $Names
     }
     if (-not $Path) {
@@ -191,29 +197,33 @@ function Require-Tool {
     return $Path
 }
 
+function Get-LuacheckInstallPlan {
+    param($Locks)
+    $luacheckVersion = Get-StatsProLockedLuarocksVersion -Locks $Locks -PackageName "luacheck"
+    $argparseVersion = Get-StatsProLockedLuarocksVersion -Locks $Locks -PackageName "argparse"
+    $luafilesystemVersion = Get-StatsProLockedLuarocksVersion -Locks $Locks -PackageName "luafilesystem"
+
+    return @(
+        [pscustomobject]@{ Name = "argparse"; Version = $argparseVersion; DepsModeNone = $false },
+        [pscustomobject]@{ Name = "luafilesystem"; Version = $luafilesystemVersion; DepsModeNone = $false },
+        [pscustomobject]@{ Name = "luacheck"; Version = $luacheckVersion; DepsModeNone = $true }
+    )
+}
+
 function Install-Luacheck {
     param(
-        [string]$LuarocksPath
+        [string]$LuarocksPath,
+        $Locks
     )
 
-    Write-Host "Installing luacheck with LuaRocks..."
-    & $LuarocksPath install luacheck | ForEach-Object { Write-Host $_ }
-    if ($LASTEXITCODE -eq 0) {
-        return
-    }
-
-    Write-Host "Direct luacheck install failed; trying Windows-friendly dependency bootstrap..."
-    & $LuarocksPath install argparse | ForEach-Object { Write-Host $_ }
-    if ($LASTEXITCODE -ne 0) {
-        throw "luarocks install argparse exited with code $LASTEXITCODE"
-    }
-    & $LuarocksPath install luafilesystem 1.6.0-1 | ForEach-Object { Write-Host $_ }
-    if ($LASTEXITCODE -ne 0) {
-        throw "luarocks install luafilesystem 1.6.0-1 exited with code $LASTEXITCODE"
-    }
-    & $LuarocksPath install luacheck --deps-mode=none | ForEach-Object { Write-Host $_ }
-    if ($LASTEXITCODE -ne 0) {
-        throw "luarocks install luacheck --deps-mode=none exited with code $LASTEXITCODE"
+    foreach ($package in @(Get-LuacheckInstallPlan -Locks $Locks)) {
+        Write-Host "Installing $($package.Name) $($package.Version) with LuaRocks..."
+        $installArgs = Get-StatsProLuarocksInstallArguments -PackageName $package.Name -Version $package.Version -DepsModeNone:([bool]$package.DepsModeNone)
+        & $LuarocksPath @installArgs | ForEach-Object { Write-Host $_ }
+        if ($LASTEXITCODE -ne 0) {
+            $depsMessage = if ($package.DepsModeNone) { " --deps-mode=none" } else { "" }
+            throw "luarocks install $($package.Name) $($package.Version)$depsMessage exited with code $LASTEXITCODE"
+        }
     }
 }
 
@@ -273,6 +283,33 @@ function Write-LuarocksPackageReport {
     }
 }
 
+function Assert-ChocoPackageVersion {
+    param([string]$ChocoPath, [string]$PackageName, [string]$ExpectedVersion)
+    $result = Invoke-NativeCapture -FilePath $ChocoPath -Arguments @("list", "--exact", $PackageName, "--limit-output") -TimeoutSeconds 30 -Description "choco list $PackageName"
+    if ($result.ExitCode -ne 0) {
+        throw "choco list $PackageName exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
+    }
+    Assert-StatsProPackageVersionLine -Label $PackageName -Output $result.Output -ExpectedVersion $ExpectedVersion -Format "choco"
+}
+
+function Assert-LuarocksPackageVersion {
+    param([string]$LuarocksPath, [string]$PackageName, [string]$ExpectedVersion)
+    $result = Invoke-NativeCapture -FilePath $LuarocksPath -Arguments @("list", "--porcelain", $PackageName) -TimeoutSeconds 30 -Description "luarocks list $PackageName"
+    if ($result.ExitCode -ne 0) {
+        throw "luarocks list $PackageName exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
+    }
+    Assert-StatsProPackageVersionLine -Label $PackageName -Output $result.Output -ExpectedVersion $ExpectedVersion -Format "luarocks"
+}
+
+function Assert-ToolCommandVersion {
+    param([string]$Label, [string]$Path, [string[]]$Arguments, [string]$Pattern)
+    $result = Invoke-NativeCapture -FilePath $Path -Arguments $Arguments -TimeoutSeconds 30 -Description "$Label version"
+    if ($result.ExitCode -ne 0) {
+        throw "$Label version command exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
+    }
+    Assert-StatsProCommandVersionText -Label $Label -Text ($result.Output -join "`n") -Pattern $Pattern
+}
+
 function Assert-Equal {
     param(
         [string]$Name,
@@ -289,6 +326,19 @@ function Invoke-SelfTest {
     Assert-Equal "version output collapses lines" (Format-VersionOutput @(" Tool 1.2.3 ", "", "Lua 5.1 ")) "Tool 1.2.3 | Lua 5.1"
     Assert-Equal "version output empty fallback" (Format-VersionOutput @("", "   ")) "<no version output>"
 
+    $locks = Read-StatsProToolLocks -Path (Join-Path $PSScriptRoot "tool-version-locks.json")
+    Assert-Equal "locked lua51 choco version" (Get-StatsProLockedChocolateyVersion -Locks $locks -PackageName "lua51") "5.1.5"
+    Assert-Equal "locked luacheck rock version" (Get-StatsProLockedLuarocksVersion -Locks $locks -PackageName "luacheck") "1.2.0-1"
+    Assert-Equal "locked choco install args" ((Get-StatsProChocoInstallArguments -PackageName "lua51" -Version "5.1.5") -join " ") "install lua51 --version 5.1.5 -y --no-progress"
+    Assert-Equal "locked luarocks install args" ((Get-StatsProLuarocksInstallArguments -PackageName "luacheck" -Version "1.2.0-1") -join " ") "install luacheck 1.2.0-1"
+    Assert-Equal "locked luarocks no-deps install args" ((Get-StatsProLuarocksInstallArguments -PackageName "luacheck" -Version "1.2.0-1" -DepsModeNone) -join " ") "install luacheck 1.2.0-1 --deps-mode=none"
+    $luacheckPlan = @(Get-LuacheckInstallPlan -Locks $locks)
+    Assert-Equal "locked luacheck install plan count" $luacheckPlan.Count 3
+    Assert-Equal "locked luacheck install plan order" (($luacheckPlan | ForEach-Object { $_.Name }) -join " ") "argparse luafilesystem luacheck"
+    Assert-Equal "locked luacheck installs without auto deps" $luacheckPlan[2].DepsModeNone $true
+    Assert-StatsProPackageVersionLine -Label "lua51" -Output @("lua51|5.1.5") -ExpectedVersion "5.1.5" -Format "choco"
+    Assert-StatsProPackageVersionLine -Label "luacheck" -Output @("luacheck`t1.2.0-1`tinstalled`tC:/rocks") -ExpectedVersion "1.2.0-1" -Format "luarocks"
+
     Write-Host "Install check tools self-test passed."
 }
 
@@ -297,25 +347,31 @@ if ($SelfTest) {
     return
 }
 
+$ToolLocks = Read-StatsProToolLocks -Path $ToolLockPath
+
 $Lua = Require-Tool `
     -Label "lua5.1" `
     -Names @("lua5.1", "C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe") `
-    -ChocoPackage "lua51"
+    -ChocoPackage "lua51" `
+    -ChocoVersion (Get-StatsProLockedChocolateyVersion -Locks $ToolLocks -PackageName "lua51")
 
 $Luac = Require-Tool `
     -Label "luac5.1" `
     -Names @("luac5.1", "C:\ProgramData\chocolatey\lib\lua51\tools\luac5.1.exe") `
-    -ChocoPackage "lua51"
+    -ChocoPackage "lua51" `
+    -ChocoVersion (Get-StatsProLockedChocolateyVersion -Locks $ToolLocks -PackageName "lua51")
 
 $LuaLanguageServer = Require-Tool `
     -Label "lua-language-server" `
     -Names @("lua-language-server") `
-    -ChocoPackage "lua-language-server"
+    -ChocoPackage "lua-language-server" `
+    -ChocoVersion (Get-StatsProLockedChocolateyVersion -Locks $ToolLocks -PackageName "lua-language-server")
 
 $Luarocks = Require-Tool `
     -Label "luarocks" `
     -Names @("luarocks") `
-    -ChocoPackage "luarocks"
+    -ChocoPackage "luarocks" `
+    -ChocoVersion (Get-StatsProLockedChocolateyVersion -Locks $ToolLocks -PackageName "luarocks")
 
 $LuaVersionResult = Invoke-NativeCapture -FilePath $Lua -Arguments @("-v")
 $LuaVersion = $LuaVersionResult.Output -join "`n"
@@ -328,7 +384,7 @@ if ($LuaVersion -notmatch "Lua\s+5\.1") {
 
 $Luacheck = Resolve-Tool -Names @("luacheck", $LuacheckFallback)
 if (-not $Luacheck -and $Install) {
-    Install-Luacheck -LuarocksPath $Luarocks
+    Install-Luacheck -LuarocksPath $Luarocks -Locks $ToolLocks
     $Luacheck = Resolve-Tool -Names @("luacheck", $LuacheckFallback)
 }
 if (-not $Luacheck) {
@@ -357,5 +413,25 @@ else {
 Write-LuarocksPackageReport -LuarocksPath $Luarocks -PackageName "luacheck"
 Write-LuarocksPackageReport -LuarocksPath $Luarocks -PackageName "argparse"
 Write-LuarocksPackageReport -LuarocksPath $Luarocks -PackageName "luafilesystem"
+
+if ($EnforceToolLocks) {
+    Assert-ToolCommandVersion -Label "lua5.1" -Path $Lua -Arguments @("-v") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "lua5.1")
+    Assert-ToolCommandVersion -Label "luac5.1" -Path $Luac -Arguments @("-v") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "luac5.1")
+    Assert-ToolCommandVersion -Label "lua-language-server" -Path $LuaLanguageServer -Arguments @("--version") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "lua-language-server")
+    Assert-ToolCommandVersion -Label "luarocks" -Path $Luarocks -Arguments @("--version") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "luarocks")
+    Assert-ToolCommandVersion -Label "luacheck" -Path $Luacheck -Arguments @("--version") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "luacheck")
+
+    $ChocoForAssert = Resolve-Tool -Names @("choco")
+    if (-not $ChocoForAssert) {
+        throw "Chocolatey is required to enforce Chocolatey package locks."
+    }
+    Assert-ChocoPackageVersion -ChocoPath $ChocoForAssert -PackageName "lua51" -ExpectedVersion (Get-StatsProLockedChocolateyVersion -Locks $ToolLocks -PackageName "lua51")
+    Assert-ChocoPackageVersion -ChocoPath $ChocoForAssert -PackageName "lua-language-server" -ExpectedVersion (Get-StatsProLockedChocolateyVersion -Locks $ToolLocks -PackageName "lua-language-server")
+    Assert-ChocoPackageVersion -ChocoPath $ChocoForAssert -PackageName "luarocks" -ExpectedVersion (Get-StatsProLockedChocolateyVersion -Locks $ToolLocks -PackageName "luarocks")
+    Assert-LuarocksPackageVersion -LuarocksPath $Luarocks -PackageName "luacheck" -ExpectedVersion (Get-StatsProLockedLuarocksVersion -Locks $ToolLocks -PackageName "luacheck")
+    Assert-LuarocksPackageVersion -LuarocksPath $Luarocks -PackageName "argparse" -ExpectedVersion (Get-StatsProLockedLuarocksVersion -Locks $ToolLocks -PackageName "argparse")
+    Assert-LuarocksPackageVersion -LuarocksPath $Luarocks -PackageName "luafilesystem" -ExpectedVersion (Get-StatsProLockedLuarocksVersion -Locks $ToolLocks -PackageName "luafilesystem")
+    Write-Host "Tool version locks enforced."
+}
 
 Write-Host "StatsPro check tools are available."

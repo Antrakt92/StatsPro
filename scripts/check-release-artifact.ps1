@@ -4,12 +4,16 @@ param(
     [string]$ExpectedTag,
     [string]$SourceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")),
     [int]$ArchonMaxAgeDays = 3,
+    [string]$ToolLockPath = (Join-Path $PSScriptRoot "tool-version-locks.json"),
+    [switch]$EnforceToolLocks,
     [switch]$PackageOnly,
     [switch]$WithReleaseJson,
     [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
+
+. (Join-Path $PSScriptRoot "tool-version-locks.ps1")
 
 function Invoke-NativeCapture {
     param(
@@ -324,6 +328,16 @@ function Resolve-Lua51 {
     throw "lua5.1 is required for Archon target validation."
 }
 
+function Assert-Lua51VersionLock {
+    param([string]$LuaPath, [string]$LockPath)
+    $locks = Read-StatsProToolLocks -Path $LockPath
+    $result = Invoke-NativeCapture -FilePath $LuaPath -Arguments @("-v")
+    if ($result.ExitCode -ne 0) {
+        throw "lua5.1 -v exited with code $($result.ExitCode): $($result.Output -join ' ')"
+    }
+    Assert-StatsProCommandVersionText -Label "lua5.1" -Text ($result.Output -join "`n") -Pattern (Get-StatsProLockedCommandPattern -Locks $locks -CommandName "lua5.1")
+}
+
 function Invoke-ArchonTargetValidator {
     param(
         [string]$LuaPath,
@@ -397,6 +411,9 @@ function Assert-PackagedArchonTargets {
     )
 
     $lua = Resolve-Lua51
+    if ($EnforceToolLocks) {
+        Assert-Lua51VersionLock -LuaPath $lua -LockPath $ToolLockPath
+    }
     $validator = Join-Path $SourceRoot "scripts\check-archon-targets.lua"
     if (-not (Test-Path -LiteralPath $validator -PathType Leaf)) {
         throw "Missing Archon target validator: $validator"

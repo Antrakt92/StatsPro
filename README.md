@@ -187,7 +187,7 @@ For addon code changes, run the Lua syntax, smoke, luacheck, and static
 diagnostics wrapper from the repository root:
 
 ```powershell
-.\scripts\check-lua.ps1
+.\scripts\check-lua.ps1 -EnforceToolLocks
 ```
 
 It uses `luac5.1` for Lua 5.1 syntax, `lua5.1` for the pure-Lua smoke harness,
@@ -198,7 +198,7 @@ warning-level Lua diagnostics without linting vendored libraries.
 On a fresh Windows machine, bootstrap the local check tools with:
 
 ```powershell
-.\scripts\install-check-tools.ps1 -Install
+.\scripts\install-check-tools.ps1 -Install -EnforceToolLocks
 ```
 
 ## Architecture (contributors / forks)

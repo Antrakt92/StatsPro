@@ -125,8 +125,12 @@ local function validate_exact_keys(tbl, allowedKeys, context)
     end
 end
 
-local function is_finite_positive_number(value)
-    return type(value) == "number" and value == value and value > 0 and value < math.huge
+local function is_finite_positive_integer(value)
+    return type(value) == "number"
+        and value == value
+        and value > 0
+        and value < math.huge
+        and math.floor(value) == value
 end
 
 local function expected_url(spec, profileKey)
@@ -185,8 +189,8 @@ local function contains_exactly_required_stats(tbl, context)
     expect_type(tbl, "table", context)
     expect_equal(count_keys(tbl), #REQUIRED_STATS, context .. " key count")
     for _, key in ipairs(REQUIRED_STATS) do
-        if not is_finite_positive_number(tbl[key]) then
-            fail(context .. "." .. key .. " must be a positive finite number")
+        if not is_finite_positive_integer(tbl[key]) then
+            fail(context .. "." .. key .. " must be a positive finite integer")
         end
     end
 end
@@ -397,7 +401,7 @@ local function parse_generated_lua(text, sourceName)
             parse_fail("invalid integer literal")
         end
         local value = tonumber(string.sub(parser.text, startIndex, parser.index - 1))
-        if not is_finite_positive_number(value) or math.floor(value) ~= value then
+        if not is_finite_positive_integer(value) then
             parse_fail("expected positive finite integer")
         end
         return value
@@ -809,7 +813,13 @@ local function run_self_test(parsedOptions)
     badTarget.snapshots.raid.specs.MAGE.frost.targets.mastery = 0
     assert_throws("zero target", function()
         validate_snapshot(badTarget, nil, options)
-    end, "positive finite number")
+    end, "positive finite integer")
+
+    local fractionalTarget = clone(make_valid_fixture("2026-05-16"))
+    fractionalTarget.snapshots.raid.specs.MAGE.frost.targets.crit = 100.5
+    assert_throws("fractional target", function()
+        validate_snapshot(fractionalTarget, nil, options)
+    end, "positive finite integer")
 
     local badOrder = clone(make_valid_fixture("2026-05-16"))
     badOrder.snapshots.raid.specs.MAGE.frost.order = { "crit", "crit", "haste", "mastery" }

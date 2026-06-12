@@ -2,10 +2,14 @@ param(
     [switch]$Release,
     [int]$ArchonMaxAgeDays = 14,
     [switch]$AllowStaleArchonTargets,
+    [string]$ToolLockPath = (Join-Path $PSScriptRoot "tool-version-locks.json"),
+    [switch]$EnforceToolLocks,
     [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
+
+. (Join-Path $PSScriptRoot "tool-version-locks.ps1")
 
 if ($ArchonMaxAgeDays -lt 0) {
     throw "-ArchonMaxAgeDays must be a non-negative integer."
@@ -168,6 +172,15 @@ function Write-ToolVersionReport {
     else {
         Write-Warning "${Label} version command exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
     }
+}
+
+function Assert-ToolCommandVersion {
+    param([string]$Label, [string]$Path, [string[]]$Arguments, [string]$Pattern)
+    $result = Invoke-NativeCapture -FilePath $Path -Arguments $Arguments -TimeoutSeconds 30 -Description "$Label version"
+    if ($result.ExitCode -ne 0) {
+        throw "$Label version command exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
+    }
+    Assert-StatsProCommandVersionText -Label $Label -Text ($result.Output -join "`n") -Pattern $Pattern
 }
 
 function Get-RuntimeLuaRefs {
@@ -418,6 +431,15 @@ Write-ToolVersionReport -Label "lua" -Path $Lua -Arguments @("-v")
 Write-ToolVersionReport -Label "luac" -Path $Luac -Arguments @("-v")
 Write-ToolVersionReport -Label "lua-language-server" -Path $LuaLanguageServer -Arguments @("--version")
 Write-ToolVersionReport -Label "luacheck" -Path $Luacheck -Arguments @("--version")
+
+if ($EnforceToolLocks) {
+    $ToolLocks = Read-StatsProToolLocks -Path $ToolLockPath
+    Assert-ToolCommandVersion -Label "lua" -Path $Lua -Arguments @("-v") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "lua5.1")
+    Assert-ToolCommandVersion -Label "luac" -Path $Luac -Arguments @("-v") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "luac5.1")
+    Assert-ToolCommandVersion -Label "lua-language-server" -Path $LuaLanguageServer -Arguments @("--version") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "lua-language-server")
+    Assert-ToolCommandVersion -Label "luacheck" -Path $Luacheck -Arguments @("--version") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "luacheck")
+    Write-Host "Tool command version locks enforced."
+}
 
 & $MetadataCheck
 

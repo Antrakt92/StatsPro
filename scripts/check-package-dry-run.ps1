@@ -164,7 +164,7 @@ function Invoke-StatsProPackageArtifactCheck {
         throw "Missing release artifact checker: $checker"
     }
 
-    $args = @(
+    $checkerArgs = @(
         "-ZipPath", $ZipPath,
         "-ExpectedTag", $ExpectedTag,
         "-SourceRoot", $Root,
@@ -172,9 +172,9 @@ function Invoke-StatsProPackageArtifactCheck {
         "-PackageOnly"
     )
     if ($CheckToolLocks) {
-        $args += "-EnforceToolLocks"
+        $checkerArgs += "-EnforceToolLocks"
     }
-    & $checker @args
+    & $checker @checkerArgs
 }
 
 function Invoke-SelfTest {

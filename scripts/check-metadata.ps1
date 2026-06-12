@@ -115,6 +115,21 @@ function Assert-NoRuntimeLibExternals {
     }
 }
 
+function Get-NormalizedTextSha256 {
+    param([string]$Path)
+
+    $text = [System.IO.File]::ReadAllText($Path)
+    $normalized = ($text -replace "`r`n", "`n") -replace "`r", "`n"
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($normalized)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return (($sha.ComputeHash($bytes) | ForEach-Object { $_.ToString("X2") }) -join "")
+    }
+    finally {
+        $sha.Dispose()
+    }
+}
+
 function Get-RuntimeLibNoticeRequirements {
     param([object[]]$RuntimeRefs)
 
@@ -136,7 +151,7 @@ function Get-RuntimeLibNoticeRequirements {
             Path     = $noticePath
             FullPath = $ref.FullPath
             License  = $knownLicenses[$noticePath]
-            Hash     = (Get-FileHash -LiteralPath $ref.FullPath -Algorithm SHA256).Hash
+            Hash     = Get-NormalizedTextSha256 -Path $ref.FullPath
         }
     }
     return @($requirements)
@@ -358,7 +373,7 @@ function Write-TestThirdPartyNotices {
     $lines = @("# Third-Party Notices", "")
     foreach ($entry in $entries) {
         $fullPath = Join-Path $Root $entry.Path
-        $hash = (Get-FileHash -LiteralPath $fullPath -Algorithm SHA256).Hash
+        $hash = Get-NormalizedTextSha256 -Path $fullPath
         $normalized = $entry.Path -replace "\\", "/"
         $lines += "## $normalized"
         $lines += ""

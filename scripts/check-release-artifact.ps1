@@ -113,6 +113,21 @@ function Get-StatsProPackageFileContract {
     }
 }
 
+function Get-NormalizedTextSha256 {
+    param([string]$Path)
+
+    $text = [System.IO.File]::ReadAllText($Path)
+    $normalized = ($text -replace "`r`n", "`n") -replace "`r", "`n"
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($normalized)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return (($sha.ComputeHash($bytes) | ForEach-Object { $_.ToString("X2") }) -join "")
+    }
+    finally {
+        $sha.Dispose()
+    }
+}
+
 function Assert-StatsProPackageEntries {
     param([string[]]$Entries)
 
@@ -358,7 +373,7 @@ function Assert-PackagedThirdPartyNotices {
         if (-not (Test-Path -LiteralPath $libPath -PathType Leaf)) {
             throw "Package is missing bundled library $($requirement.Path)."
         }
-        $hash = (Get-FileHash -LiteralPath $libPath -Algorithm SHA256).Hash
+        $hash = Get-NormalizedTextSha256 -Path $libPath
         $sectionPattern = "(?ms)^##\s+" + [regex]::Escape($requirement.Path) + "\s*\r?\n(?<Body>.*?)(?=^##\s+|\z)"
         $section = [regex]::Match($text, $sectionPattern)
         if (-not $section.Success) {

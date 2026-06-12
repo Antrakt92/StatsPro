@@ -1,26 +1,28 @@
 # Third-Party Notices
 
 StatsPro bundles these runtime libraries so release packages use the same reviewed
-bytes that are present in the source tree. The StatsPro addon code is MIT-licensed;
-bundled libraries keep their upstream licenses.
+source that is present in the source tree. The SHA256 values below are computed
+after normalizing text line endings to LF, so Windows and Linux checkouts validate
+the same library content. The StatsPro addon code is MIT-licensed; bundled
+libraries keep their upstream licenses.
 
 ## libs/LibStub/LibStub.lua
 
 - Project: LibStub
 - Source: https://repos.curseforge.com/wow/libstub/trunk
 - License: Public Domain
-- SHA256: 6CDE125E8DAC6A7AC1655A580D2C68146C02A769DB78EDB3F4E31F7527137753
+- SHA256: 43C1355A2BED1C426BD33ABB53B8ABD0A7C6E9B3E295A73FA98BEE73CE2CCC50
 
 ## libs/CallbackHandler-1.0/CallbackHandler-1.0.lua
 
 - Project: CallbackHandler-1.0
 - Source: https://repos.curseforge.com/wow/callbackhandler/trunk/CallbackHandler-1.0
 - License: BSD
-- SHA256: D8A175F5823A999D8A188EE5E8E1133C393FD8C25B71931AB929D4691EFF750B
+- SHA256: 84A15AF505E728AC5E5EB6A8EABA8989D1131D5F8BA14D11ABCFE4CE086DE3C1
 
 ## libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua
 
 - Project: LibSharedMedia-3.0
 - Source: https://repos.curseforge.com/wow/libsharedmedia-3-0/trunk/LibSharedMedia-3.0
 - License: LGPL v2.1
-- SHA256: C0D81C14450C379C19134530F7D9F8DC462CFE78A20D36F84CEA3D653FF3E985
+- SHA256: 39445CC0486FB0FDBA7367AAE9979CAA342D2AB194CDBC5ED1C6FED72FDD8D6E

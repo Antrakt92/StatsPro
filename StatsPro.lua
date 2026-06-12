@@ -696,13 +696,13 @@ cached = {
     -- secret/nil reads do not render as a real 0.0%.
     versTotal = nil,
     versTotalRating = 0,
-    armorDR = 0,
+    armorDR = nil,
     itemLevelOverall = nil,
     itemLevelEquipped = nil,
     durabilityValue = 100,  -- holds avg or min depending on cached.useWorstDurability
     repairCost = 0,         -- live repair cost in copper (sum from per-slot tooltip scan)
     -- WARNING: GetUnitSpeed returns secret values in combat → arithmetic taints. Cache OOC.
-    speedPct = 0,
+    speedPct = nil,
     speedWasSwimming = nil,
     -- Last clean hide-zero decision per stat row. Secret combat reads cannot be safely
     -- compared to 0, so they reuse this instead of making absent rows appear.
@@ -2093,6 +2093,7 @@ local function ScanDurabilityAndCost()
     local sum, count, totalCost = 0, 0, 0
     local minPct
     local repairCostPending = false
+    local repairCostKnownCount = 0
     for slot = DURABILITY_SLOT_MIN, DURABILITY_SLOT_MAX do
         if not DURABILITY_SKIP_SLOTS[slot] then
             local cur, max = GetInventoryItemDurability(slot)
@@ -2109,6 +2110,7 @@ local function ScanDurabilityAndCost()
                         end
                         local cost = data.repairCost
                         if SAFE_NUM.IsCleanFiniteNumber(cost) and not issecretvalue(cost) then
+                            repairCostKnownCount = repairCostKnownCount + 1
                             if cost > 0 then
                                 totalCost = totalCost + cost
                             end
@@ -2122,8 +2124,8 @@ local function ScanDurabilityAndCost()
             end
         end
     end
-    if count == 0 then return 100, 100, 0, repairCostPending end
-    return sum / count, minPct, totalCost, repairCostPending
+    if count == 0 then return 100, 100, 0, repairCostPending, repairCostKnownCount end
+    return sum / count, minPct, totalCost, repairCostPending, repairCostKnownCount
 end
 
 -- WARNING: repairCost can lag behind durability: C_TooltipInfo may return nil
@@ -2134,10 +2136,10 @@ end
 local durabilityRetryScheduled = false
 
 local function RefreshDurabilityCache()
-    local avg, mn, cost, repairCostPending = ScanDurabilityAndCost()
+    local avg, mn, cost, repairCostPending, repairCostKnownCount = ScanDurabilityAndCost()
     cached.durabilityValue = cached.useWorstDurability and mn or avg
-    if repairCostPending and cost <= 0 then
-        cached.repairCost = cached.repairCost or 0
+    if repairCostPending and (repairCostKnownCount or 0) == 0 then
+        cached.repairCost = 0
     else
         cached.repairCost = cost
     end
@@ -2572,8 +2574,7 @@ end
 -- WARNING: GetStringWidth/GetStringHeight on a FontString whose text contains in-combat
 -- secret-tainted substrings return secret-tainted numbers. Arithmetic on those errors.
 -- Mitigation: keep last non-secret measurement; refresh cache only if current read is
--- non-secret. Used for all 4 measurement points in SetTextSafe (label/rating/value
--- widths + label height for repair Y positioning).
+-- non-secret. Used for column widths and row-height reads in SetTextSafe.
 local function MeasuredOrCached(fs, current_cache, method)
     local v = fs[method](fs)
     if v and not issecretvalue(v) then
@@ -2612,6 +2613,8 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     if hasRows then
         self.cachedRatingW = MeasuredOrCached(self.ratingText, self.cachedRatingW, "GetStringWidth")
         self.cachedValueW  = MeasuredOrCached(self.valueText,  self.cachedValueW,  "GetStringWidth")
+        self.cachedRatingH = MeasuredOrCached(self.ratingText, self.cachedRatingH, "GetStringHeight")
+        self.cachedValueH  = MeasuredOrCached(self.valueText,  self.cachedValueH,  "GetStringHeight")
         if not labelsHidden then
             self.cachedLabelW = MeasuredOrCached(self.labelText, self.cachedLabelW, "GetStringWidth")
             -- labelText height drives Repair-row Y positioning; cache same way as widths.
@@ -2634,8 +2637,15 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- column space without overlapping stat content rows.
     local repairLabelW = 0
     local lineH = GetNumberDB("fontSize")
-    if hasRows and not labelsHidden and self.cachedLabelH then
-        lineH = self.cachedLabelH / lineCount
+    if hasRows then
+        if labelsHidden then
+            local renderedH = 0
+            if hasRating and self.cachedRatingH then renderedH = math.max(renderedH, self.cachedRatingH) end
+            if hasValue and self.cachedValueH then renderedH = math.max(renderedH, self.cachedValueH) end
+            if renderedH > 0 then lineH = renderedH / lineCount end
+        elseif self.cachedLabelH then
+            lineH = self.cachedLabelH / lineCount
+        end
     end
     self.lastLineH = lineH
 
@@ -2775,6 +2785,8 @@ function Panel:ApplyStyle(font, size, force)
     -- lineCount back). lastLineCount is intentionally NOT reset here — Panel:Reflow
     -- relies on it as the cached content-line-count for re-feeding SetTextSafe.
     self.cachedLabelH = nil
+    self.cachedRatingH = nil
+    self.cachedValueH = nil
     self.heightDirty = true
 end
 
@@ -3630,11 +3642,23 @@ local function OnPlayerEnteringWorld()
         if next(db) == nil then
             local swiftStatsDB = type(_G.SwiftStatsDB) == "table" and _G.SwiftStatsDB or nil
             local swiftStatsLocalDB = type(_G.SwiftStatsLocalDB) == "table" and _G.SwiftStatsLocalDB or nil
-            local source = (swiftStatsDB and next(swiftStatsDB) ~= nil and swiftStatsDB)
-                        or (swiftStatsLocalDB and next(swiftStatsLocalDB) ~= nil and swiftStatsLocalDB)
+            local source, sourceIsLocal
+            if swiftStatsDB and next(swiftStatsDB) ~= nil then
+                source = swiftStatsDB
+                sourceIsLocal = false
+            elseif swiftStatsLocalDB and next(swiftStatsLocalDB) ~= nil then
+                source = swiftStatsLocalDB
+                sourceIsLocal = true
+            end
             if source then
                 for k, v in pairs(source) do
-                    db[k] = (type(v) == "table") and CopyTable(v) or v
+                    local copyKey = k ~= "dbVersion"
+                    if not copyKey and sourceIsLocal and NormalizeDBVersion(v) <= CURRENT_DB_VERSION then
+                        copyKey = true
+                    end
+                    if copyKey then
+                        db[k] = (type(v) == "table") and CopyTable(v) or v
+                    end
                 end
             end
         end
@@ -5638,12 +5662,16 @@ function addon:PrintDebugDump()
         tostring(cached.showArmor), tostring(cached.showStagger)))
 
     -- Panel positions: nil-guard (DB may be partial in pre-PEW edge cases)
-    local function PosLine(label, p, rp, x, y)
+    local function PosLine(label, p, rp, x, y, fallbackY)
         if not p then return label..": <unset>" end
-        return string.format("%s: %s/%s  %+d/%+d", label, p, rp, x or 0, y or 0)
+        local point = NormalizeAnchorPoint(p, "CENTER")
+        local relativePoint = NormalizeAnchorPoint(rp, point)
+        local xOfs = NormalizePositionOffset(x, 0)
+        local yOfs = NormalizePositionOffset(y, fallbackY or 0)
+        return string.format("%s: %s/%s  %+.0f/%+.0f", label, point, relativePoint, xOfs, yOfs)
     end
-    PrintMsg(PosLine("main",      GetDB("point"),           GetDB("relativePoint"),           GetDB("xOfs"),           GetDB("yOfs")))
-    PrintMsg(PosLine("side",      GetDB("defensive_point"), GetDB("defensive_relativePoint"), GetDB("defensive_xOfs"), GetDB("defensive_yOfs")))
+    PrintMsg(PosLine("main",      GetDB("point"),           GetDB("relativePoint"),           GetDB("xOfs"),           GetDB("yOfs"),           defaults.yOfs))
+    PrintMsg(PosLine("side",      GetDB("defensive_point"), GetDB("defensive_relativePoint"), GetDB("defensive_xOfs"), GetDB("defensive_yOfs"), defaults.defensive_yOfs))
 end
 
 local function PrintDebugPerf()
@@ -6048,12 +6076,21 @@ if addon and addon.__statsproSmoke == true then
             }
         end,
         panelVisualState = function()
+            local firstOverlay = mainPanel.tooltipOverlays and mainPanel.tooltipOverlays[1] or nil
+            local secondOverlay = mainPanel.tooltipOverlays and mainPanel.tooltipOverlays[2] or nil
             return {
                 textOutlineStyle = cached.textOutlineStyle,
                 mainFrameHeight = mainPanel.frame:GetHeight(),
+                mainLastLineH = mainPanel.lastLineH,
                 mainBackgroundAlpha = mainPanel.frame.backdropColor and mainPanel.frame.backdropColor.a or nil,
                 mainBackgroundTextureAlpha = mainPanel.backgroundTexture and mainPanel.backgroundTexture.colorTexture and mainPanel.backgroundTexture.colorTexture.a or nil,
                 mainBackgroundTexturePoints = mainPanel.backgroundTexture and mainPanel.backgroundTexture.points or nil,
+                mainRepairPoints = mainPanel.repairText.points,
+                mainRepairLabelPoints = mainPanel.repairLabelText.points,
+                mainFirstOverlayHeight = firstOverlay and firstOverlay:GetHeight() or nil,
+                mainFirstOverlayPoints = firstOverlay and firstOverlay.points or nil,
+                mainSecondOverlayHeight = secondOverlay and secondOverlay:GetHeight() or nil,
+                mainSecondOverlayPoints = secondOverlay and secondOverlay.points or nil,
                 mainLabelFlags = mainPanel.labelText.fontFlags,
                 mainRatingFlags = mainPanel.ratingText.fontFlags,
                 mainValueFlags = mainPanel.valueText.fontFlags,
@@ -6072,6 +6109,10 @@ if addon and addon.__statsproSmoke == true then
         end,
         renderMainPanelForSmoke = function(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr, targetRows)
             mainPanel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr, targetRows)
+        end,
+        setMainPanelStringHeightMultiplier = function(column, multiplier)
+            local fs = ({ label = mainPanel.labelText, rating = mainPanel.ratingText, value = mainPanel.valueText })[column]
+            if fs then fs.statsProStringHeightMultiplier = multiplier end
         end,
         mainPanelTooltipState = function()
             return {

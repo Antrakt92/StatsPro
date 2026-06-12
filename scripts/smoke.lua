@@ -255,7 +255,7 @@ local function makeFrame(name)
     function frame:GetStringHeight()
         local text = self.text or ""
         local _, lines = text:gsub("\n", "\n")
-        return (lines + 1) * (self.fontSize or 12)
+        return (lines + 1) * (self.fontSize or 12) * (self.statsProStringHeightMultiplier or 1)
     end
     function frame:CreateFontString()
         return makeFrame(nil)
@@ -913,6 +913,31 @@ do
 end
 
 do
+    local hiddenEnv, _, hiddenTest = loadStatsPro("enUS", {
+        statsProDB = {
+            labelStyle = "hidden",
+            fontSize = 14,
+        },
+    })
+    hiddenTest.cacheSettings()
+    hiddenTest.setMainPanelStringHeightMultiplier("rating", 1.5)
+    hiddenTest.renderMainPanelForSmoke("", "903 |\n199 |", "29.6%\n9.7%", 2, "438 coin", "Repair:", {
+        { statKey = "crit" },
+        { statKey = "haste" },
+    })
+    local visualState = hiddenTest.panelVisualState()
+    near("panel.hidden_labels_uses_rating_height.line_h", visualState.mainLastLineH, 21)
+    eq("panel.hidden_labels_uses_rating_height.frame_height", visualState.mainFrameHeight, 64)
+    local repairPoint = exists("panel.hidden_labels_uses_rating_height.repair_point", visualState.mainRepairPoints and visualState.mainRepairPoints[1])
+    eq("panel.hidden_labels_uses_rating_height.repair_y", repairPoint[5], -43)
+    eq("panel.hidden_labels_uses_rating_height.overlay_height", visualState.mainFirstOverlayHeight, 21)
+    local secondOverlayPoint = exists("panel.hidden_labels_uses_rating_height.second_overlay_point",
+        visualState.mainSecondOverlayPoints and visualState.mainSecondOverlayPoints[1])
+    eq("panel.hidden_labels_uses_rating_height.second_overlay_y", secondOverlayPoint[5], -21)
+    eq("panel.hidden_labels_uses_rating_height.env_loaded", hiddenEnv ~= nil, true)
+end
+
+do
     local tooltipEnv, _, tooltipTest = loadStatsPro("enUS", {
         getCombatRatingBonusForCombatRatingValue = function(_, value)
             return value / 70
@@ -1504,6 +1529,12 @@ do
     eq("position.invalid_anchor_falls_back.defensive_relative", defensivePoint[3], "CENTER")
     eq("position.nan_offset_falls_back.defensive_x", defensivePoint[4], 0)
     eq("position.nan_offset_falls_back.defensive_y", defensivePoint[5], -100)
+    clearPrints(posEnv)
+    slash("position.debug_malformed_savedvars_no_error.dump", posEnv, "debug")
+    eq("position.debug_malformed_savedvars_no_error.main",
+        printContains(posEnv, "main: CENTER/CENTER  +0/+0"), true)
+    eq("position.debug_malformed_savedvars_no_error.side",
+        printContains(posEnv, "side: CENTER/CENTER  +0/-100"), true)
 end
 
 do
@@ -1553,6 +1584,49 @@ do
     })
     fireEvent("lifecycle.pew_legacy_local_fallback.fire", fallbackEnv, "PLAYER_ENTERING_WORLD")
     eq("lifecycle.pew_legacy_local_fallback.font_size", fallbackEnv.StatsProDB.fontSize, 19)
+end
+
+do
+    local futureVersion = test.currentDBVersion() + 1
+    local legacyEnv = loadStatsPro("enUS", {
+        statsProDB = {},
+        swiftStatsDB = {
+            dbVersion = futureVersion,
+            fontSize = 17,
+            useLocalizedLabels = false,
+            showStrength = true,
+            colors = { primary = { r = 0.2, g = 0.3, b = 0.4 } },
+        },
+    })
+    fireEvent("lifecycle.pew_swiftstats_future_db_version_backfills_defaults.fire", legacyEnv, "PLAYER_ENTERING_WORLD")
+    eq("lifecycle.pew_swiftstats_future_db_version_backfills_defaults.version",
+        legacyEnv.StatsProDB.dbVersion, test.currentDBVersion())
+    eq("lifecycle.pew_swiftstats_future_db_version_backfills_defaults.font_size",
+        legacyEnv.StatsProDB.fontSize, 17)
+    eq("lifecycle.pew_swiftstats_future_db_version_backfills_defaults.force_locale",
+        legacyEnv.StatsProDB.forceLocale, "enUS")
+    eq("lifecycle.pew_swiftstats_future_db_version_backfills_defaults.main_stat",
+        legacyEnv.StatsProDB.showMainStat, true)
+    assertColor("lifecycle.pew_swiftstats_future_db_version_backfills_defaults.main_color",
+        legacyEnv.StatsProDB.colors.mainStat, 0.2, 0.3, 0.4)
+    eq("lifecycle.pew_swiftstats_future_db_version_backfills_defaults.primary_removed",
+        legacyEnv.StatsProDB.colors.primary, nil)
+
+    local localEnv = loadStatsPro("enUS", {
+        statsProDB = {},
+        swiftStatsLocalDB = {
+            dbVersion = futureVersion,
+            fontSize = 18,
+            showDurability = true,
+        },
+    })
+    fireEvent("lifecycle.pew_swiftstatslocal_future_db_version_backfills_defaults.fire", localEnv, "PLAYER_ENTERING_WORLD")
+    eq("lifecycle.pew_swiftstatslocal_future_db_version_backfills_defaults.version",
+        localEnv.StatsProDB.dbVersion, test.currentDBVersion())
+    eq("lifecycle.pew_swiftstatslocal_future_db_version_backfills_defaults.font_size",
+        localEnv.StatsProDB.fontSize, 18)
+    eq("lifecycle.pew_swiftstatslocal_future_db_version_backfills_defaults.repair_visible_layout",
+        localEnv.StatsProDB.showRepairCost, true)
 end
 
 do
@@ -2651,6 +2725,53 @@ do
             showArmor = true,
             showStagger = false,
         },
+        inCombatLockdown = function() return true end,
+        unitArmor = function() error("cold combat should not call UnitArmor") end,
+    })
+    fireEvent("defensive.armor_cold_combat_stays_unknown.fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(armorTest.buildRenderBlocks)
+    check("defensive.armor_cold_combat_stays_unknown.no_error", ok, blocks)
+    eq("defensive.armor_cold_combat_stays_unknown.no_fake_zero",
+        blockDumpContains(blocks, "Armor:"), false)
+end
+
+do
+    local secretReduction = {}
+    local armorEnv, _, armorTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showDefensive = true,
+            hideZeroDefensive = false,
+            showDodge = false,
+            showParry = false,
+            showBlock = false,
+            showArmor = true,
+            showStagger = false,
+        },
+        unitArmor = function() return 0, 5000 end,
+        unitEffectiveLevel = function() return 80 end,
+        paperDollFrameGetArmorReduction = function() return secretReduction end,
+        issecretvalue = function(value) return value == secretReduction end,
+    })
+    fireEvent("defensive.armor_cold_secret_reduction_stays_unknown.fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(armorTest.buildRenderBlocks)
+    check("defensive.armor_cold_secret_reduction_stays_unknown.no_error", ok, blocks)
+    eq("defensive.armor_cold_secret_reduction_stays_unknown.no_fake_zero",
+        blockDumpContains(blocks, "Armor:"), false)
+end
+
+do
+    local armorEnv, _, armorTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showDefensive = true,
+            hideZeroDefensive = false,
+            showDodge = false,
+            showParry = false,
+            showBlock = false,
+            showArmor = true,
+            showStagger = false,
+        },
         unitArmor = function() return 0, 5000 end,
         unitEffectiveLevel = function() return 80 end,
         paperDollFrameGetArmorReduction = function() return 0.345 end,
@@ -3012,6 +3133,58 @@ do
     eq("render.versatility_dual_nil_bonus_uses_clean_rating_and_meta.current", meta.current, 699)
     eq("render.versatility_dual_nil_bonus_uses_clean_rating_and_meta.current_pct", meta.currentPct, nil)
     eq("render.versatility_dual_nil_bonus_uses_clean_rating_and_meta.target", meta.target, 1000)
+end
+
+do
+    local secretSpeed = {}
+    local speedEnv, _, speedTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            showRating = false,
+            showPercentage = true,
+            hideZeroTertiary = false,
+            showLeech = false,
+            showAvoidance = false,
+            showSpeed = true,
+            showDefensive = false,
+        },
+        getUnitSpeed = function() return 0, secretSpeed, secretSpeed, secretSpeed end,
+        issecretvalue = function(value) return value == secretSpeed end,
+    })
+    fireEvent("render.speed_cold_unknown_percent_only_no_row.fire", speedEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_cold_unknown_percent_only_no_row.no_error", ok, blocks)
+    eq("render.speed_cold_unknown_percent_only_no_row.no_fake_zero",
+        blockDumpContains(blocks, "Movement:"), false)
+end
+
+do
+    local secretSpeed = {}
+    local speedEnv, _, speedTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            showRating = true,
+            showPercentage = true,
+            hideZeroTertiary = true,
+            showLeech = false,
+            showAvoidance = false,
+            showSpeed = true,
+            showDefensive = false,
+        },
+        getUnitSpeed = function() return 0, secretSpeed, secretSpeed, secretSpeed end,
+        getCombatRating = function() return 377 end,
+        issecretvalue = function(value) return value == secretSpeed end,
+    })
+    fireEvent("render.speed_cold_unknown_dual_rating_row_blank_value.fire", speedEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_cold_unknown_dual_rating_row_blank_value.no_error", ok, blocks)
+    local tertiary = blocks[3]
+    eq("render.speed_cold_unknown_dual_rating_row_blank_value.row_count", #(tertiary.labels or {}), 1)
+    eq("render.speed_cold_unknown_dual_rating_row_blank_value.rating",
+        tertiary.ratings[1]:find("377", 1, true) ~= nil, true)
+    eq("render.speed_cold_unknown_dual_rating_row_blank_value.blank_value", tertiary.values[1], "")
 end
 
 do
@@ -3423,6 +3596,121 @@ do
     eq("repair.pending_schedules_retry", state.retryScheduled, true)
     flushTimers("repair.pending_retry_timer", repairEnv, 3, 1)
     eq("repair.pending_retry_marks_dirty", repairTest.durabilityState().dirty, true)
+end
+
+do
+    local mode = "known"
+    local repairEnv, _, repairTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showDurability = true,
+            showRepairCost = true,
+        },
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then return 50, 100 end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function()
+            if mode == "known" then return { repairCost = 300 } end
+            return nil
+        end,
+    })
+    repairTest.cacheSettings()
+    repairTest.refreshDurabilityCache()
+    eq("repair.pending_all_nil.seed_cost", repairTest.durabilityState().repairCost, 300)
+    mode = "pending"
+    repairTest.refreshDurabilityCache()
+    local state = repairTest.durabilityState()
+    eq("repair.pending_all_nil_clears_prior_cost", state.repairCost, 0)
+    eq("repair.pending_all_nil_schedules_retry", state.retryScheduled, true)
+    eq("repair.pending_all_nil_one_timer", #repairEnv.__timers, 1)
+    repairTest.refreshDurabilityCache()
+    eq("repair.pending_all_nil_no_duplicate_timer", #repairEnv.__timers, 1)
+    flushTimers("repair.pending_all_nil_retry_timer", repairEnv, 3, 1)
+    eq("repair.pending_all_nil_retry_marks_dirty", repairTest.durabilityState().dirty, true)
+    repairTest.refreshDurabilityCache()
+    eq("repair.pending_all_nil_reschedules_after_timer", #repairEnv.__timers, 1)
+end
+
+do
+    local mode = "known"
+    local secretRepairCost = {}
+    local _, _, repairTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showDurability = true,
+            showRepairCost = true,
+        },
+        issecretvalue = function(value) return value == secretRepairCost end,
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then return 50, 100 end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function()
+            if mode == "known" then return { repairCost = 300 } end
+            return { repairCost = secretRepairCost }
+        end,
+    })
+    repairTest.cacheSettings()
+    repairTest.refreshDurabilityCache()
+    eq("repair.pending_all_secret.seed_cost", repairTest.durabilityState().repairCost, 300)
+    mode = "pending"
+    repairTest.refreshDurabilityCache()
+    local state = repairTest.durabilityState()
+    eq("repair.pending_all_secret_clears_prior_cost", state.repairCost, 0)
+    eq("repair.pending_all_secret_schedules_retry", state.retryScheduled, true)
+end
+
+do
+    local mode = "stale"
+    local _, _, repairTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showDurability = true,
+            showRepairCost = true,
+        },
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then return 50, 100 end
+            if slot == 2 then return 25, 100 end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function(_, slot)
+            if mode == "stale" then return { repairCost = 700 } end
+            if slot == 1 then return { repairCost = 300 } end
+            return nil
+        end,
+    })
+    repairTest.cacheSettings()
+    repairTest.refreshDurabilityCache()
+    eq("repair.pending_partial.seed_cost", repairTest.durabilityState().repairCost, 1400)
+    mode = "partial"
+    repairTest.refreshDurabilityCache()
+    local state = repairTest.durabilityState()
+    eq("repair.pending_partial_replaces_prior_cost", state.repairCost, 300)
+    eq("repair.pending_partial_still_schedules_retry", state.retryScheduled, true)
+end
+
+do
+    local damaged = true
+    local _, _, repairTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showDurability = true,
+            showRepairCost = true,
+        },
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then
+                if damaged then return 50, 100 end
+                return 100, 100
+            end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function() return { repairCost = 300 } end,
+    })
+    repairTest.cacheSettings()
+    repairTest.refreshDurabilityCache()
+    eq("repair.clean_zero.seed_cost", repairTest.durabilityState().repairCost, 300)
+    damaged = false
+    repairTest.refreshDurabilityCache()
+    local state = repairTest.durabilityState()
+    eq("repair.clean_zero_clears_prior_cost", state.repairCost, 0)
+    eq("repair.clean_zero_no_retry", state.retryScheduled, false)
 end
 
 do

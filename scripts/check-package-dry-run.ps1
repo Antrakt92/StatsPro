@@ -159,22 +159,28 @@ function Invoke-StatsProPackageArtifactCheck {
         [bool]$CheckToolLocks
     )
 
-    $checker = Join-Path $Root "scripts\check-release-artifact.ps1"
+    $checker = Join-Path (Join-Path $Root "scripts") "check-release-artifact.ps1"
     if (-not (Test-Path -LiteralPath $checker -PathType Leaf)) {
         throw "Missing release artifact checker: $checker"
     }
 
-    $checkerArgs = @(
-        "-ZipPath", $ZipPath,
-        "-ExpectedTag", $ExpectedTag,
-        "-SourceRoot", $Root,
-        "-ArchonMaxAgeDays", [string]$MaxAgeDays,
-        "-PackageOnly"
-    )
     if ($CheckToolLocks) {
-        $checkerArgs += "-EnforceToolLocks"
+        & $checker `
+            -ZipPath $ZipPath `
+            -ExpectedTag $ExpectedTag `
+            -SourceRoot $Root `
+            -ArchonMaxAgeDays $MaxAgeDays `
+            -PackageOnly `
+            -EnforceToolLocks
     }
-    & $checker @checkerArgs
+    else {
+        & $checker `
+            -ZipPath $ZipPath `
+            -ExpectedTag $ExpectedTag `
+            -SourceRoot $Root `
+            -ArchonMaxAgeDays $MaxAgeDays `
+            -PackageOnly
+    }
 }
 
 function Invoke-SelfTest {

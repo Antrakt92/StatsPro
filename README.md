@@ -264,4 +264,5 @@ Bug reports and PRs remain the highest-leverage way to help — open an
 
 [MIT](LICENSE). Original SwiftStats portions (boilerplate, color defaults, basic
 stat list) © TaylorSay; all StatsPro extensions © Antrakt. See [`LICENSE`](LICENSE)
-for the full text.
+for the full text. Bundled runtime libraries keep their upstream licenses; see
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

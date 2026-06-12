@@ -70,6 +70,108 @@ function Assert-RequiredPkgmetaIgnores {
     }
 }
 
+function Get-PkgmetaMappingKeys {
+    param(
+        [string]$Path,
+        [string]$Section
+    )
+
+    $items = @()
+    $phase = $null
+    foreach ($line in Get-Content -LiteralPath $Path -Encoding UTF8) {
+        if ($line -match "^\s*#") {
+            continue
+        }
+        if ($line -match "^([^\s:#][^:]*)\s*:") {
+            $phase = $Matches[1].Trim()
+            continue
+        }
+        if ($phase -eq $Section -and $line -match "^\s{2,}([^:#]+?)\s*:") {
+            $item = $Matches[1].Trim()
+            $item = $item.Trim("'`"")
+            $items += $item
+        }
+    }
+    return @($items)
+}
+
+function Assert-NoRuntimeLibExternals {
+    param([string]$Path)
+
+    $runtimeLibRoots = @(
+        "libs/LibStub",
+        "libs/CallbackHandler-1.0",
+        "libs/LibSharedMedia-3.0"
+    )
+    $externalKeys = @(Get-PkgmetaMappingKeys -Path $Path -Section "externals")
+    foreach ($externalKey in $externalKeys) {
+        $normalized = ($externalKey -replace "\\", "/").TrimEnd("/")
+        foreach ($runtimeLibRoot in $runtimeLibRoots) {
+            if ($normalized.Equals($runtimeLibRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+                $normalized.StartsWith("$runtimeLibRoot/", [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw ".pkgmeta must not declare runtime lib external '$externalKey'; bundled runtime libraries must be vendored and covered by THIRD-PARTY-NOTICES.md."
+            }
+        }
+    }
+}
+
+function Get-RuntimeLibNoticeRequirements {
+    param([object[]]$RuntimeRefs)
+
+    $knownLicenses = @{
+        "libs/LibStub/LibStub.lua" = "Public Domain"
+        "libs/CallbackHandler-1.0/CallbackHandler-1.0.lua" = "BSD"
+        "libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua" = "LGPL v2.1"
+    }
+    $requirements = @()
+    foreach ($ref in @($RuntimeRefs)) {
+        if (-not $ref.IsVendored) {
+            continue
+        }
+        $noticePath = ($ref.RelativePath -replace "\\", "/")
+        if (-not $knownLicenses.ContainsKey($noticePath)) {
+            throw "No third-party notice requirement is defined for vendored runtime file $noticePath."
+        }
+        $requirements += [pscustomobject]@{
+            Path     = $noticePath
+            FullPath = $ref.FullPath
+            License  = $knownLicenses[$noticePath]
+            Hash     = (Get-FileHash -LiteralPath $ref.FullPath -Algorithm SHA256).Hash
+        }
+    }
+    return @($requirements)
+}
+
+function Assert-ThirdPartyNotices {
+    param(
+        [string]$RepoRoot,
+        [object[]]$RuntimeRefs
+    )
+
+    $noticePath = Join-Path $RepoRoot "THIRD-PARTY-NOTICES.md"
+    if (-not (Test-Path -LiteralPath $noticePath -PathType Leaf)) {
+        throw "Missing THIRD-PARTY-NOTICES.md for bundled runtime library notices."
+    }
+
+    $text = Get-Content -LiteralPath $noticePath -Raw -Encoding UTF8
+    $requirements = @(Get-RuntimeLibNoticeRequirements -RuntimeRefs $RuntimeRefs)
+    foreach ($requirement in $requirements) {
+        $sectionPattern = "(?ms)^##\s+" + [regex]::Escape($requirement.Path) + "\s*\r?\n(?<Body>.*?)(?=^##\s+|\z)"
+        $section = [regex]::Match($text, $sectionPattern)
+        if (-not $section.Success) {
+            throw "THIRD-PARTY-NOTICES.md is missing section for $($requirement.Path)."
+        }
+
+        $body = $section.Groups["Body"].Value
+        if ($body -notmatch ("(?m)^\s*-\s*License:\s*" + [regex]::Escape($requirement.License) + "\s*$")) {
+            throw "THIRD-PARTY-NOTICES.md section $($requirement.Path) must include license '$($requirement.License)'."
+        }
+        if ($body -notmatch ("(?m)^\s*-\s*SHA256:\s*" + [regex]::Escape($requirement.Hash) + "\s*$")) {
+            throw "THIRD-PARTY-NOTICES.md section $($requirement.Path) must include current SHA256 $($requirement.Hash)."
+        }
+    }
+}
+
 function Assert-PathExists {
     param(
         [string]$Description,
@@ -245,6 +347,28 @@ function Set-TestToc {
     Set-Content -Path (Join-Path $Root "StatsPro.toc") -Value ($content -join "`n") -Encoding UTF8
 }
 
+function Write-TestThirdPartyNotices {
+    param([string]$Root)
+
+    $entries = @(
+        @{ Path = "libs\LibStub\LibStub.lua"; License = "Public Domain" },
+        @{ Path = "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua"; License = "BSD" },
+        @{ Path = "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua"; License = "LGPL v2.1" }
+    )
+    $lines = @("# Third-Party Notices", "")
+    foreach ($entry in $entries) {
+        $fullPath = Join-Path $Root $entry.Path
+        $hash = (Get-FileHash -LiteralPath $fullPath -Algorithm SHA256).Hash
+        $normalized = $entry.Path -replace "\\", "/"
+        $lines += "## $normalized"
+        $lines += ""
+        $lines += "- License: $($entry.License)"
+        $lines += "- SHA256: $hash"
+        $lines += ""
+    }
+    Set-Content -Path (Join-Path $Root "THIRD-PARTY-NOTICES.md") -Value $lines -Encoding UTF8
+}
+
 function Invoke-SelfTest {
     $root = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-metadata-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $root | Out-Null
@@ -258,6 +382,7 @@ function Invoke-SelfTest {
             "StatsPro.lua"
         )
         Set-TestToc -Root $root -Refs $validRefs
+        Write-TestThirdPartyNotices -Root $root
         $contract = Get-TocRuntimeContract -RepoRoot $root -TocPath (Join-Path $root "StatsPro.toc")
         if ($contract.RuntimeLuaRefs.Count -ne 5) {
             throw "expected five runtime Lua refs, got $($contract.RuntimeLuaRefs.Count)"
@@ -352,6 +477,8 @@ ignore:
   - libs/LibSharedMedia-3.0/*.xml
 "@ -Encoding UTF8
         Assert-RequiredPkgmetaIgnores -Path (Join-Path $root ".pkgmeta")
+        Assert-NoRuntimeLibExternals -Path (Join-Path $root ".pkgmeta")
+        Assert-ThirdPartyNotices -RepoRoot $root -RuntimeRefs $contract.RuntimeLuaRefs
 
         Set-Content -Path (Join-Path $root ".pkgmeta") -Value @"
 ignore:
@@ -362,6 +489,27 @@ ignore:
         Assert-ThrowsMatch "missing external ignore rejected" {
             Assert-RequiredPkgmetaIgnores -Path (Join-Path $root ".pkgmeta")
         } "LibSharedMedia-3\.0/\*\.xml"
+
+        Set-Content -Path (Join-Path $root ".pkgmeta") -Value @"
+ignore:
+  - .github
+  - libs/LibStub/tests
+  - libs/LibStub/*.toc
+  - libs/CallbackHandler-1.0/*.xml
+  - libs/LibSharedMedia-3.0/*.xml
+externals:
+  libs/LibStub:
+    url: https://repos.curseforge.com/wow/libstub/trunk
+    tag: latest
+"@ -Encoding UTF8
+        Assert-ThrowsMatch "runtime lib externals rejected" {
+            Assert-NoRuntimeLibExternals -Path (Join-Path $root ".pkgmeta")
+        } "runtime lib external"
+
+        Remove-Item -LiteralPath (Join-Path $root "THIRD-PARTY-NOTICES.md")
+        Assert-ThrowsMatch "missing third-party notices rejected" {
+            Assert-ThirdPartyNotices -RepoRoot $root -RuntimeRefs $contract.RuntimeLuaRefs
+        } "THIRD-PARTY-NOTICES"
     }
     finally {
         if (Test-Path -LiteralPath $root) {
@@ -404,6 +552,8 @@ try {
     Assert-PathExists ".pkgmeta manual changelog" $ManualChangelog
 
     Assert-RequiredPkgmetaIgnores -Path $PkgmetaPath
+    Assert-NoRuntimeLibExternals -Path $PkgmetaPath
+    Assert-ThirdPartyNotices -RepoRoot $RepoRoot -RuntimeRefs $contract.RuntimeLuaRefs
 
     $IconTexture = Get-SingleRegexMatch `
         -Path $contract.TocPath `

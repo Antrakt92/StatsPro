@@ -81,10 +81,84 @@ jobs:
             "BigWigsMods/packager@v2"
           )
 
-      - name: Package and release
+      - name: Install release validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.1
+
+      - name: Build package without publishing
+        uses: BigWigsMods/packager@v2
+        with:
+          args: -d
+
+      - name: Validate package artifact
+        shell: pwsh
+        run: |
+          $zip = @(Get-ChildItem -Path ".release" -Recurse -File -Filter "StatsPro-$env:GITHUB_REF_NAME.zip")
+          if ($zip.Count -ne 1) {
+            throw "Expected exactly one StatsPro-$env:GITHUB_REF_NAME.zip in .release; found $($zip.Count)."
+          }
+          $zip[0].FullName | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP "statspro-package-zip-path.txt") -Encoding UTF8
+          ./scripts/check-release-artifact.ps1 -ZipPath $zip[0].FullName -ExpectedTag $env:GITHUB_REF_NAME -PackageOnly -ArchonMaxAgeDays 3
+
+      - name: Check marketplace versions
+        shell: pwsh
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+        run: ./scripts/check-marketplace-versions.ps1
+
+      - name: Save package tree manifest
+        shell: pwsh
+        run: |
+          $root = (Resolve-Path ".release/StatsPro").Path
+          Get-ChildItem -LiteralPath $root -Recurse -File |
+            Sort-Object FullName |
+            ForEach-Object {
+              $relative = [System.IO.Path]::GetRelativePath($root, $_.FullName) -replace "\\", "/"
+              $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+              "$relative`t$hash"
+            } |
+            Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256") -Encoding UTF8
+
+      - name: Rebuild package without publishing
+        uses: BigWigsMods/packager@v2
+        with:
+          args: -e -d
+
+      - name: Compare rebuilt package and validate again
+        shell: pwsh
+        run: |
+          $root = (Resolve-Path ".release/StatsPro").Path
+          $afterPath = Join-Path $env:RUNNER_TEMP "statspro-package-tree.after.sha256"
+          Get-ChildItem -LiteralPath $root -Recurse -File |
+            Sort-Object FullName |
+            ForEach-Object {
+              $relative = [System.IO.Path]::GetRelativePath($root, $_.FullName) -replace "\\", "/"
+              $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+              "$relative`t$hash"
+            } |
+            Set-Content -LiteralPath $afterPath -Encoding UTF8
+
+          $diff = Compare-Object `
+            -ReferenceObject (Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256")) `
+            -DifferenceObject (Get-Content -LiteralPath $afterPath)
+          if ($diff) {
+            $diff | Format-Table -AutoSize | Out-String | Write-Host
+            throw "Package tree is not repeatable between dry-run builds."
+          }
+
+          $zip = @(Get-ChildItem -Path ".release" -Recurse -File -Filter "StatsPro-$env:GITHUB_REF_NAME.zip")
+          if ($zip.Count -ne 1) {
+            throw "Expected exactly one StatsPro-$env:GITHUB_REF_NAME.zip in .release after rebuild; found $($zip.Count)."
+          }
+          ./scripts/check-release-artifact.ps1 -ZipPath $zip[0].FullName -ExpectedTag $env:GITHUB_REF_NAME -PackageOnly -ArchonMaxAgeDays 3
+
+      - name: Publish package and release
         uses: BigWigsMods/packager@v2
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
           WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
           GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: -c -e -o

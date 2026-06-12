@@ -30,6 +30,8 @@ jobs:
           .\scripts\install-check-tools.ps1 -SelfTest
           .\scripts\report-ci-action-refs.ps1 -SelfTest
           .\scripts\check-metadata.ps1 -SelfTest
+          .\scripts\check-marketplace-versions.ps1 -SelfTest
+          .\scripts\check-release-artifact.ps1 -SelfTest
           .\scripts\check-lua.ps1 -SelfTest
           .\scripts\check-release-version.ps1 -SelfTest
           .\scripts\check-release-ancestry.ps1 -SelfTest

@@ -46,7 +46,14 @@ function Get-StatsProLockedCommandPattern {
 
 function Get-StatsProChocoInstallArguments {
     param([string]$PackageName, [string]$Version)
-    return @("install", $PackageName, "--version", $Version, "-y", "--no-progress")
+    $args = @("install", $PackageName, "--version", $Version, "-y", "--no-progress")
+    if ($PackageName -eq "lua51") {
+        # WHY: Chocolatey's legacy lua51 package downloads the old LuaBinaries
+        # payload without a package checksum. We still enforce the installed
+        # package and command versions immediately after install.
+        $args += "--allow-empty-checksums"
+    }
+    return $args
 }
 
 function Get-StatsProLuarocksInstallArguments {

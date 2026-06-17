@@ -11,7 +11,7 @@ StatsProArchonTargets = {
       bracket = "high-keys",
       dungeon = "all-dungeons",
       window = "this-week",
-      capturedAt = "2026-06-16",
+      capturedAt = "2026-06-17",
       specs = {
         ["DEATHKNIGHT"] = {
           ["blood"] = {
@@ -448,25 +448,25 @@ StatsProArchonTargets = {
       difficulty = "mythic",
       boss = "all-bosses",
       window = "last-14-days",
-      capturedAt = "2026-06-16",
+      capturedAt = "2026-06-17",
       specs = {
         ["DEATHKNIGHT"] = {
           ["blood"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/blood/death-knight/raid/overview/mythic/all-bosses",
             targets = {
               crit = 831,
-              haste = 863,
-              mastery = 649,
-              versatility = 220,
+              haste = 841,
+              mastery = 648,
+              versatility = 219,
             },
             order = { "haste", "crit", "mastery", "versatility" },
           },
           ["frost"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/frost/death-knight/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 1006,
-              haste = 379,
-              mastery = 1146,
+              crit = 1008,
+              haste = 378,
+              mastery = 1148,
               versatility = 72,
             },
             order = { "mastery", "crit", "haste", "versatility" },
@@ -475,8 +475,8 @@ StatsProArchonTargets = {
             sourceUrl = "https://www.archon.gg/wow/builds/unholy/death-knight/raid/overview/mythic/all-bosses",
             targets = {
               crit = 1026,
-              haste = 374,
-              mastery = 1121,
+              haste = 373,
+              mastery = 1122,
               versatility = 67,
             },
             order = { "mastery", "crit", "haste", "versatility" },
@@ -487,8 +487,8 @@ StatsProArchonTargets = {
             sourceUrl = "https://www.archon.gg/wow/builds/devourer/demon-hunter/raid/overview/mythic/all-bosses",
             targets = {
               crit = 278,
-              haste = 1074,
-              mastery = 1215,
+              haste = 1075,
+              mastery = 1216,
               versatility = 65,
             },
             order = { "mastery", "haste", "crit", "versatility" },
@@ -498,7 +498,7 @@ StatsProArchonTargets = {
             targets = {
               crit = 1195,
               haste = 328,
-              mastery = 959,
+              mastery = 960,
               versatility = 81,
             },
             order = { "crit", "mastery", "haste", "versatility" },
@@ -506,10 +506,10 @@ StatsProArchonTargets = {
           ["vengeance"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/vengeance/demon-hunter/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 712,
+              crit = 714,
               haste = 1083,
-              mastery = 463,
-              versatility = 257,
+              mastery = 464,
+              versatility = 256,
             },
             order = { "haste", "crit", "mastery", "versatility" },
           },
@@ -518,9 +518,9 @@ StatsProArchonTargets = {
           ["balance"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/balance/druid/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 801,
-              haste = 736,
-              mastery = 977,
+              crit = 802,
+              haste = 737,
+              mastery = 976,
               versatility = 125,
             },
             order = { "mastery", "crit", "haste", "versatility" },
@@ -528,10 +528,10 @@ StatsProArchonTargets = {
           ["feral"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/feral/druid/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 597,
+              crit = 599,
               haste = 820,
-              mastery = 1022,
-              versatility = 170,
+              mastery = 1019,
+              versatility = 169,
             },
             order = { "mastery", "haste", "crit", "versatility" },
           },
@@ -539,7 +539,7 @@ StatsProArchonTargets = {
             sourceUrl = "https://www.archon.gg/wow/builds/guardian/druid/raid/overview/mythic/all-bosses",
             targets = {
               crit = 390,
-              haste = 1154,
+              haste = 1157,
               mastery = 426,
               versatility = 532,
             },
@@ -548,8 +548,8 @@ StatsProArchonTargets = {
           ["restoration"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/restoration/druid/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 155,
-              haste = 1228,
+              crit = 156,
+              haste = 1229,
               mastery = 1082,
               versatility = 172,
             },
@@ -560,9 +560,9 @@ StatsProArchonTargets = {
           ["augmentation"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/augmentation/evoker/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 1317,
-              haste = 860,
-              mastery = 266,
+              crit = 1318,
+              haste = 861,
+              mastery = 265,
               versatility = 87,
             },
             order = { "crit", "haste", "mastery", "versatility" },
@@ -572,7 +572,7 @@ StatsProArchonTargets = {
             targets = {
               crit = 1243,
               haste = 793,
-              mastery = 415,
+              mastery = 414,
               versatility = 98,
             },
             order = { "crit", "haste", "mastery", "versatility" },
@@ -582,7 +582,7 @@ StatsProArchonTargets = {
             targets = {
               crit = 871,
               haste = 492,
-              mastery = 1229,
+              mastery = 1230,
               versatility = 105,
             },
             order = { "mastery", "crit", "haste", "versatility" },
@@ -593,8 +593,8 @@ StatsProArchonTargets = {
             sourceUrl = "https://www.archon.gg/wow/builds/beast-mastery/hunter/raid/overview/mythic/all-bosses",
             targets = {
               crit = 1080,
-              haste = 479,
-              mastery = 993,
+              haste = 480,
+              mastery = 994,
               versatility = 85,
             },
             order = { "crit", "mastery", "haste", "versatility" },
@@ -602,9 +602,9 @@ StatsProArchonTargets = {
           ["marksmanship"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/marksmanship/hunter/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 1326,
-              haste = 422,
-              mastery = 798,
+              crit = 1325,
+              haste = 423,
+              mastery = 799,
               versatility = 100,
             },
             order = { "crit", "mastery", "haste", "versatility" },
@@ -612,8 +612,8 @@ StatsProArchonTargets = {
           ["survival"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/survival/hunter/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 841,
-              haste = 586,
+              crit = 842,
+              haste = 587,
               mastery = 1188,
               versatility = 84,
             },
@@ -624,30 +624,30 @@ StatsProArchonTargets = {
           ["arcane"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/arcane/mage/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 872,
-              haste = 614,
-              mastery = 851,
-              versatility = 232,
+              crit = 874,
+              haste = 615,
+              mastery = 850,
+              versatility = 229,
             },
             order = { "crit", "mastery", "haste", "versatility" },
           },
           ["fire"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/fire/mage/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 168,
+              crit = 167,
               haste = 1200,
-              mastery = 984,
-              versatility = 156,
+              mastery = 983,
+              versatility = 158,
             },
             order = { "haste", "mastery", "crit", "versatility" },
           },
           ["frost"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/frost/mage/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 1081,
+              crit = 1082,
               haste = 576,
-              mastery = 879,
-              versatility = 84,
+              mastery = 880,
+              versatility = 83,
             },
             order = { "crit", "mastery", "haste", "versatility" },
           },
@@ -656,9 +656,9 @@ StatsProArchonTargets = {
           ["brewmaster"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/brewmaster/monk/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 1198,
-              haste = 309,
-              mastery = 414,
+              crit = 1199,
+              haste = 310,
+              mastery = 415,
               versatility = 673,
             },
             order = { "crit", "versatility", "mastery", "haste" },
@@ -668,18 +668,18 @@ StatsProArchonTargets = {
             targets = {
               crit = 944,
               haste = 1201,
-              mastery = 201,
-              versatility = 211,
+              mastery = 200,
+              versatility = 212,
             },
             order = { "haste", "crit", "versatility", "mastery" },
           },
           ["windwalker"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/windwalker/monk/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 846,
+              crit = 847,
               haste = 921,
               mastery = 689,
-              versatility = 140,
+              versatility = 139,
             },
             order = { "haste", "crit", "mastery", "versatility" },
           },
@@ -690,7 +690,7 @@ StatsProArchonTargets = {
             targets = {
               crit = 512,
               haste = 862,
-              mastery = 1124,
+              mastery = 1126,
               versatility = 141,
             },
             order = { "mastery", "haste", "crit", "versatility" },
@@ -699,9 +699,9 @@ StatsProArchonTargets = {
             sourceUrl = "https://www.archon.gg/wow/builds/protection/paladin/raid/overview/mythic/all-bosses",
             targets = {
               crit = 785,
-              haste = 1039,
-              mastery = 458,
-              versatility = 235,
+              haste = 1040,
+              mastery = 457,
+              versatility = 236,
             },
             order = { "haste", "crit", "mastery", "versatility" },
           },
@@ -709,8 +709,8 @@ StatsProArchonTargets = {
             sourceUrl = "https://www.archon.gg/wow/builds/retribution/paladin/raid/overview/mythic/all-bosses",
             targets = {
               crit = 909,
-              haste = 622,
-              mastery = 977,
+              haste = 623,
+              mastery = 988,
               versatility = 75,
             },
             order = { "mastery", "crit", "haste", "versatility" },
@@ -720,7 +720,7 @@ StatsProArchonTargets = {
           ["discipline"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/discipline/priest/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 904,
+              crit = 905,
               haste = 1010,
               mastery = 538,
               versatility = 99,
@@ -730,19 +730,19 @@ StatsProArchonTargets = {
           ["holy"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/holy/priest/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 1133,
+              crit = 1134,
               haste = 554,
               mastery = 664,
-              versatility = 198,
+              versatility = 199,
             },
             order = { "crit", "mastery", "haste", "versatility" },
           },
           ["shadow"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/shadow/priest/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 575,
-              haste = 1013,
-              mastery = 955,
+              crit = 576,
+              haste = 1014,
+              mastery = 954,
               versatility = 74,
             },
             order = { "haste", "mastery", "crit", "versatility" },
@@ -752,18 +752,18 @@ StatsProArchonTargets = {
           ["assassination"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/assassination/rogue/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 1229,
-              haste = 687,
+              crit = 1230,
+              haste = 689,
               mastery = 503,
-              versatility = 108,
+              versatility = 107,
             },
             order = { "crit", "haste", "mastery", "versatility" },
           },
           ["outlaw"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/outlaw/rogue/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 1251,
-              haste = 881,
+              crit = 1254,
+              haste = 882,
               mastery = 278,
               versatility = 181,
             },
@@ -773,7 +773,7 @@ StatsProArchonTargets = {
             sourceUrl = "https://www.archon.gg/wow/builds/subtlety/rogue/raid/overview/mythic/all-bosses",
             targets = {
               crit = 736,
-              haste = 695,
+              haste = 696,
               mastery = 1032,
               versatility = 89,
             },
@@ -784,19 +784,19 @@ StatsProArchonTargets = {
           ["elemental"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/elemental/shaman/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 906,
+              crit = 907,
               haste = 464,
               mastery = 1088,
-              versatility = 94,
+              versatility = 93,
             },
             order = { "mastery", "crit", "haste", "versatility" },
           },
           ["enhancement"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/enhancement/shaman/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 382,
-              haste = 971,
-              mastery = 1090,
+              crit = 383,
+              haste = 972,
+              mastery = 1089,
               versatility = 82,
             },
             order = { "mastery", "haste", "crit", "versatility" },
@@ -804,7 +804,7 @@ StatsProArchonTargets = {
           ["restoration"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/restoration/shaman/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 1217,
+              crit = 1218,
               haste = 467,
               mastery = 351,
               versatility = 443,
@@ -817,8 +817,8 @@ StatsProArchonTargets = {
             sourceUrl = "https://www.archon.gg/wow/builds/affliction/warlock/raid/overview/mythic/all-bosses",
             targets = {
               crit = 1067,
-              haste = 895,
-              mastery = 531,
+              haste = 896,
+              mastery = 530,
               versatility = 103,
             },
             order = { "crit", "haste", "mastery", "versatility" },
@@ -826,19 +826,19 @@ StatsProArchonTargets = {
           ["demonology"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/demonology/warlock/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 1154,
+              crit = 1155,
               haste = 821,
               mastery = 519,
-              versatility = 87,
+              versatility = 86,
             },
             order = { "crit", "haste", "mastery", "versatility" },
           },
           ["destruction"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/destruction/warlock/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 1067,
+              crit = 1066,
               haste = 848,
-              mastery = 591,
+              mastery = 574,
               versatility = 87,
             },
             order = { "crit", "haste", "mastery", "versatility" },
@@ -849,7 +849,7 @@ StatsProArchonTargets = {
             sourceUrl = "https://www.archon.gg/wow/builds/arms/warrior/raid/overview/mythic/all-bosses",
             targets = {
               crit = 1164,
-              haste = 986,
+              haste = 988,
               mastery = 356,
               versatility = 71,
             },
@@ -860,18 +860,18 @@ StatsProArchonTargets = {
             targets = {
               crit = 497,
               haste = 1095,
-              mastery = 1089,
-              versatility = 85,
+              mastery = 1090,
+              versatility = 84,
             },
             order = { "haste", "mastery", "crit", "versatility" },
           },
           ["protection"] = {
             sourceUrl = "https://www.archon.gg/wow/builds/protection/warrior/raid/overview/mythic/all-bosses",
             targets = {
-              crit = 722,
-              haste = 1134,
-              mastery = 466,
-              versatility = 189,
+              crit = 723,
+              haste = 1135,
+              mastery = 465,
+              versatility = 188,
             },
             order = { "haste", "crit", "mastery", "versatility" },
           },

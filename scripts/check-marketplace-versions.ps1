@@ -226,6 +226,27 @@ function Assert-CurseForgeVersions {
     }
 }
 
+function Get-WowInterfaceAcceptedRetailVersions {
+    param([string]$Version)
+
+    $parts = [version]$Version
+    $accepted = @($Version)
+
+    $minorAggregate = "$($parts.Major).$($parts.Minor).0"
+    if ($accepted -notcontains $minorAggregate) {
+        $accepted += $minorAggregate
+    }
+
+    if ($parts.Minor -gt 0 -and $parts.Build -eq 0) {
+        $expansionAggregate = "$($parts.Major).0.0"
+        if ($accepted -notcontains $expansionAggregate) {
+            $accepted += $expansionAggregate
+        }
+    }
+
+    return @($accepted)
+}
+
 function Assert-WowInterfaceVersions {
     param(
         [string]$JsonText,
@@ -234,28 +255,23 @@ function Assert-WowInterfaceVersions {
 
     $items = @(ConvertFrom-JsonCompat $JsonText)
     foreach ($version in $RequiredVersions) {
-        $exactMatches = @($items | Where-Object {
-            [string]$_.game -eq "Retail" -and [string]$_.id -eq $version
-        })
-        if ($exactMatches.Count -eq 1) {
-            continue
+        $acceptedVersions = @(Get-WowInterfaceAcceptedRetailVersions -Version $version)
+        $matched = $false
+        foreach ($acceptedVersion in $acceptedVersions) {
+            $matches = @($items | Where-Object {
+                [string]$_.game -eq "Retail" -and [string]$_.id -eq $acceptedVersion
+            })
+            if ($matches.Count -eq 1) {
+                $matched = $true
+                break
+            }
+            if ($matches.Count -gt 1) {
+                throw "WoWInterface must expose at most one Retail compatibility version '$acceptedVersion' for requested '$version'; found $($matches.Count)."
+            }
         }
-        if ($exactMatches.Count -gt 1) {
-            throw "WoWInterface must expose at most one exact Retail compatibility version '$version'; found $($exactMatches.Count)."
+        if (-not $matched) {
+            throw "WoWInterface must expose Retail compatibility version '$version' or accepted aggregate '$($acceptedVersions -join ', ')'; found none."
         }
-
-        $parts = [version]$version
-        $aggregateVersion = "$($parts.Major).$($parts.Minor).0"
-        $aggregateMatches = @($items | Where-Object {
-            [string]$_.game -eq "Retail" -and [string]$_.id -eq $aggregateVersion
-        })
-        if ($aggregateMatches.Count -eq 1) {
-            continue
-        }
-        if ($aggregateMatches.Count -gt 1) {
-            throw "WoWInterface must expose at most one Retail compatibility aggregate '$aggregateVersion' for '$version'; found $($aggregateMatches.Count)."
-        }
-        throw "WoWInterface must expose Retail compatibility version '$version' or aggregate '$aggregateVersion'; found neither."
     }
 }
 
@@ -314,10 +330,9 @@ function Invoke-SelfTest {
   {"game": "Classic", "id": "1.15.7"}
 ]
 '@
-    $wowiAggregateValid = @'
+$wowiAggregateValid = @'
 [
   {"game": "Retail", "id": "12.0.0"},
-  {"game": "Retail", "id": "12.1.0"},
   {"game": "Classic", "id": "1.15.7"}
 ]
 '@

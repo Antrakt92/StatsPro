@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.45 - 25-Jun-2026 — PTR marketplace compatibility
+
+### Fixed
+
+- **PTR compatibility now publishes through marketplaces while WoWInterface still exposes only Midnight aggregate metadata.** The addon still advertises Retail 12.0.7 and PTR 12.1.0 in its TOC.
+
 ## 1.9.44 - 25-Jun-2026 — PTR compatibility
 
 ### Changed

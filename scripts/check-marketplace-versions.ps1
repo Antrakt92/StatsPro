@@ -295,28 +295,29 @@ function Assert-MarketplaceVersions {
 }
 
 function Invoke-SelfTest {
-    $versions = Get-RequiredRetailVersionsFromInterfaces -Interfaces @("120005", "120007")
-    if (($versions -join ",") -ne "12.0.5,12.0.7") {
-        throw "Expected TOC interface conversion to 12.0.5,12.0.7; got $($versions -join ',')"
+    $versions = Get-RequiredRetailVersionsFromInterfaces -Interfaces @("120007", "120100")
+    if (($versions -join ",") -ne "12.0.7,12.1.0") {
+        throw "Expected TOC interface conversion to 12.0.7,12.1.0; got $($versions -join ',')"
     }
 
     $cfValid = @'
 [
-  {"id": 1005, "gameVersionTypeID": 517, "name": "12.0.5"},
   {"id": 1007, "gameVersionTypeID": 517, "name": "12.0.7"},
+  {"id": 120100, "gameVersionTypeID": 517, "name": "12.1.0"},
   {"id": 1, "gameVersionTypeID": 732, "name": "12.0.7"}
 ]
 '@
     $wowiExactValid = @'
 [
-  {"game": "Retail", "id": "12.0.5"},
   {"game": "Retail", "id": "12.0.7"},
+  {"game": "Retail", "id": "12.1.0"},
   {"game": "Classic", "id": "1.15.7"}
 ]
 '@
     $wowiAggregateValid = @'
 [
   {"game": "Retail", "id": "12.0.0"},
+  {"game": "Retail", "id": "12.1.0"},
   {"game": "Classic", "id": "1.15.7"}
 ]
 '@
@@ -325,14 +326,14 @@ function Invoke-SelfTest {
     Assert-WowInterfaceVersions -JsonText $wowiAggregateValid -RequiredVersions $versions
 
     Assert-ThrowsMatch "missing CurseForge version rejected" {
-        Assert-CurseForgeVersions -JsonText '[{"id":1,"gameVersionTypeID":517,"name":"12.0.5"}]' -RequiredVersions $versions
-    } "12\.0\.7"
+        Assert-CurseForgeVersions -JsonText '[{"id":1,"gameVersionTypeID":517,"name":"12.0.7"}]' -RequiredVersions $versions
+    } "12\.1\.0"
     Assert-ThrowsMatch "duplicate CurseForge version rejected" {
-        Assert-CurseForgeVersions -JsonText '[{"id":1,"gameVersionTypeID":517,"name":"12.0.5"},{"id":2,"gameVersionTypeID":517,"name":"12.0.5"},{"id":3,"gameVersionTypeID":517,"name":"12.0.7"}]' -RequiredVersions $versions
-    } "12\.0\.5"
+        Assert-CurseForgeVersions -JsonText '[{"id":1,"gameVersionTypeID":517,"name":"12.0.7"},{"id":2,"gameVersionTypeID":517,"name":"12.0.7"},{"id":3,"gameVersionTypeID":517,"name":"12.1.0"}]' -RequiredVersions $versions
+    } "12\.0\.7"
     Assert-ThrowsMatch "WoWInterface missing exact and aggregate rejected" {
         Assert-WowInterfaceVersions -JsonText '[{"game":"Retail","id":"11.0.0"}]' -RequiredVersions $versions
-    } "12\.0\.5"
+    } "12\.0\.7"
     Assert-ThrowsMatch "duplicate WoWInterface aggregate rejected" {
         Assert-WowInterfaceVersions -JsonText '[{"game":"Retail","id":"12.0.0"},{"game":"Retail","id":"12.0.0"}]' -RequiredVersions $versions
     } "12\.0\.0"

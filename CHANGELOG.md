@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.44 - 25-Jun-2026 — PTR compatibility
+
+### Changed
+
+- **Retail compatibility metadata now targets 12.0.7 and the 12.1.0 PTR.** StatsPro no longer advertises the retired older interface in the TOC or public compatibility copy.
+
 ## 1.9.43 - 25-Jun-2026 — Archon target refresh
 
 ### Updated

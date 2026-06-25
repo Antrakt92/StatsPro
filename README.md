@@ -178,7 +178,7 @@ everything:
 
 ## Compatibility
 
-- **WoW Retail Midnight** — Interface `120005, 120007`
+- **WoW Retail Midnight** — Interface `120007, 120100` (Retail 12.0.7 and PTR 12.1.0)
 - Classic / TBC / MoP Classic — not supported (Retail-only at this time)
 
 ## Local checks

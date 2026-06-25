@@ -358,7 +358,7 @@ function Set-TestToc {
         [string[]]$Refs
     )
 
-    $content = @("## Interface: 120005, 120007") + $Refs
+    $content = @("## Interface: 120007, 120100") + $Refs
     Set-Content -Path (Join-Path $Root "StatsPro.toc") -Value ($content -join "`n") -Encoding UTF8
 }
 
@@ -569,6 +569,15 @@ try {
     Assert-RequiredPkgmetaIgnores -Path $PkgmetaPath
     Assert-NoRuntimeLibExternals -Path $PkgmetaPath
     Assert-ThirdPartyNotices -RepoRoot $RepoRoot -RuntimeRefs $contract.RuntimeLuaRefs
+
+    $InterfaceText = Get-SingleRegexMatch `
+        -Path $contract.TocPath `
+        -Pattern "^##\s+Interface:\s*(.+?)\s*$" `
+        -Description "TOC Interface"
+    $ExpectedInterfaceText = "120007, 120100"
+    if ($InterfaceText -ne $ExpectedInterfaceText) {
+        throw "TOC Interface is '$InterfaceText', expected '$ExpectedInterfaceText'."
+    }
 
     $IconTexture = Get-SingleRegexMatch `
         -Path $contract.TocPath `

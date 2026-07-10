@@ -6,6 +6,12 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  # WARNING: the default single pending slot drops an older queued tag. Keep
+  # every publication attempt serialized so marketplace uploads never overlap.
+  group: statspro-release-publication
+  queue: max
+
 jobs:
   preflight:
     # Keep this in sync with the publishing job gate: forced/deleted tag events
@@ -119,6 +125,10 @@ jobs:
             -CompareManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256") `
             -ArchonMaxAgeDays 3 `
             -EnforceToolLocks
+
+      - name: Recheck release ancestry before marketplace upload
+        shell: pwsh
+        run: ./scripts/check-release-ancestry.ps1 -Tag $env:GITHUB_REF_NAME
 
       - name: Create draft release marker
         shell: pwsh

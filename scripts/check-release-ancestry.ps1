@@ -170,6 +170,8 @@ function Invoke-SelfTest {
             Set-Content -Path "file.txt" -Value "two" -Encoding ASCII
             [void](Invoke-Git -Arguments @("commit", "-am", "fix: main update"))
             [void](Invoke-Git -Arguments @("push", "origin", "main"))
+            [void](Invoke-Git -Arguments @("tag", "v1.0.2"))
+            Assert-ReleaseTagAtMainHead -TagName "v1.0.2" -RemoteName "origin" -MainRefName "origin/main" -PermitAncestor:$false
             Assert-ThrowsMatch "older main ancestor rejected" {
                 Assert-ReleaseTagAtMainHead -TagName "v1.0.0" -RemoteName "origin" -MainRefName "origin/main" -PermitAncestor:$false
             } "older main ancestor"
@@ -178,9 +180,9 @@ function Invoke-SelfTest {
             [void](Invoke-Git -Arguments @("checkout", "-b", "side"))
             Set-Content -Path "file.txt" -Value "side" -Encoding ASCII
             [void](Invoke-Git -Arguments @("commit", "-am", "fix: side update"))
-            [void](Invoke-Git -Arguments @("tag", "v1.0.2"))
+            [void](Invoke-Git -Arguments @("tag", "v1.0.3"))
             Assert-ThrowsMatch "side branch tag rejected" {
-                Assert-ReleaseTagAtMainHead -TagName "v1.0.2" -RemoteName "origin" -MainRefName "origin/main" -PermitAncestor:$false
+                Assert-ReleaseTagAtMainHead -TagName "v1.0.3" -RemoteName "origin" -MainRefName "origin/main" -PermitAncestor:$false
             } "not reachable"
 
             Assert-ThrowsMatch "malformed tag rejected" {

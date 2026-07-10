@@ -398,6 +398,7 @@ function Assert-ReleaseWorkflowBoundary {
 
     $orderedSteps = @(
         "- name: Refuse existing release marker",
+        "- name: Recheck release ancestry before marketplace upload",
         "- name: Create draft release marker",
         "- name: Publish package to marketplaces",
         "- name: Validate marketplace archive and create release metadata",
@@ -405,6 +406,16 @@ function Assert-ReleaseWorkflowBoundary {
         "- name: Publish immutable GitHub release",
         "- name: Validate published immutable release assets"
     )
+
+    $concurrencyBlock = [regex]::Match($WorkflowText, "(?ms)^concurrency:\s*$.*?(?=^jobs:\s*$)")
+    if (-not $concurrencyBlock.Success -or
+        $concurrencyBlock.Value -notmatch "(?m)^  group: statspro-release-publication\s*$" -or
+        $concurrencyBlock.Value -notmatch "(?m)^  queue: max\s*$") {
+        throw "Release workflow must use the shared statspro-release-publication queue with queue: max."
+    }
+    if ($concurrencyBlock.Value -match "(?m)^\s+cancel-in-progress:") {
+        throw "Release publication concurrency must not cancel in-progress runs."
+    }
     $previousIndex = -1
     foreach ($step in $orderedSteps) {
         $index = $WorkflowText.IndexOf($step, [System.StringComparison]::Ordinal)
@@ -423,6 +434,14 @@ function Assert-ReleaseWorkflowBoundary {
     )
     if (-not $marketplaceStep.Success) {
         throw "Could not isolate the marketplace Packager step."
+    }
+
+    $ancestryStep = [regex]::Match(
+        $WorkflowText,
+        "(?ms)^\s{6}- name: Recheck release ancestry before marketplace upload\s*$.*?(?=^\s{6}- name:|\z)"
+    )
+    if (-not $ancestryStep.Success -or $ancestryStep.Value -notmatch "check-release-ancestry\.ps1") {
+        throw "Release workflow must run the executable fresh ancestry gate immediately before marketplace upload."
     }
     $actualEnvironmentKeys = @(
         [regex]::Matches($marketplaceStep.Value, "(?m)^\s{10}([A-Z][A-Z0-9_]+):") |
@@ -644,6 +663,12 @@ function Invoke-SelfTest {
     $workflowPath = Join-Path (Join-Path $PSScriptRoot "..") ".github\workflows\release.yml"
     $workflowText = Get-Content -LiteralPath $workflowPath -Raw -Encoding UTF8
     Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText
+    Assert-ThrowsMatch "single-pending release queue rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "queue: max", "queue: single")
+    } "queue: max"
+    Assert-ThrowsMatch "missing publication ancestry recheck rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "check-release-ancestry\.ps1", "echo ancestry-skipped")
+    } "fresh ancestry gate"
     Assert-ThrowsMatch "GitHub token in marketplace step rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "WOWI_API_TOKEN: \$\{\{ secrets\.WOWI_API_TOKEN \}\}", 'GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}')
     } "only marketplace tokens"

@@ -38,6 +38,7 @@ jobs:
           .\scripts\check-release-artifact.ps1 -SelfTest
           .\scripts\check-package-dry-run.ps1 -SelfTest
           .\scripts\manage-github-release.ps1 -SelfTest
+          .\scripts\check-repository-settings.ps1 -SelfTest
           .\scripts\check-lua.ps1 -SelfTest
           .\scripts\check-release-version.ps1 -SelfTest
           .\scripts\check-release-ancestry.ps1 -SelfTest

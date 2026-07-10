@@ -4,6 +4,11 @@
 -- for full attribution.
 local _, addon = ...
 addon.fontRuntime = {}
+addon.durabilityRuntime = {
+    generation = 0,
+    attemptedGeneration = nil,
+    scheduledGeneration = nil,
+}
 
 --[[ ============================================================
     1. CONSTANTS
@@ -704,7 +709,8 @@ cached = {
     itemLevelOverall = nil,
     itemLevelEquipped = nil,
     durabilityValue = 100,  -- holds avg or min depending on cached.useWorstDurability
-    repairCost = 0,         -- live repair cost in copper (sum from per-slot tooltip scan)
+    repairCost = nil,       -- exact live repair cost; nil while any damaged slot is unresolved
+    repairCostComplete = false,
     -- WARNING: GetUnitSpeed returns secret values in combat → arithmetic taints. Cache OOC.
     speedPct = nil,
     speedWasSwimming = nil,
@@ -721,6 +727,14 @@ cached = {
 
 -- Dirty flag for event-driven cache refresh (durability scan is per-19-slot, not free)
 local durabilityDirty = true
+
+-- External inventory/config events open one fresh delayed-retry generation. Timer
+-- callbacks never reset this budget, so a stable nil/secret tooltip state cannot
+-- create an endless three-second scan loop.
+function addon.durabilityRuntime.MarkDirty()
+    addon.durabilityRuntime.generation = addon.durabilityRuntime.generation + 1
+    durabilityDirty = true
+end
 -- Dirty flag for item-level refresh (overall iLvl can change from gear or bags)
 local itemLevelDirty = true
 -- Init guard: UpdateStats must not run before CacheSettings populates cached.colorStrings
@@ -2012,7 +2026,7 @@ local function GetEffectiveStat(statId)
 end
 
 local function IsCleanNonNegativeNumber(value)
-    return value ~= nil and not issecretvalue(value) and SAFE_NUM.IsCleanFiniteNumber(value) and value >= 0
+    return not issecretvalue(value) and SAFE_NUM.IsCleanFiniteNumber(value) and value >= 0
 end
 
 local function RefreshItemLevelCache()
@@ -2557,7 +2571,7 @@ local function ScanDurabilityAndCost()
     local sum, count, totalCost = 0, 0, 0
     local minPct
     local repairCostPending = false
-    local repairCostKnownCount = 0
+    local repairCostRetryable = false
     for slot = DURABILITY_SLOT_MIN, DURABILITY_SLOT_MAX do
         if not DURABILITY_SKIP_SLOTS[slot] then
             local cur, max = GetInventoryItemDurability(slot)
@@ -2566,54 +2580,69 @@ local function ScanDurabilityAndCost()
                 sum = sum + pct
                 count = count + 1
                 if not minPct or pct < minPct then minPct = pct end
-                if cached.showRepairCost and cur < max and C_TooltipInfo and C_TooltipInfo.GetInventoryItem then
-                    local data = C_TooltipInfo.GetInventoryItem("player", slot)
-                    if data then
-                        if TooltipUtil and TooltipUtil.SurfaceArgs then
-                            TooltipUtil.SurfaceArgs(data)
-                        end
-                        local cost = data.repairCost
-                        if SAFE_NUM.IsCleanFiniteNumber(cost) and not issecretvalue(cost) then
-                            repairCostKnownCount = repairCostKnownCount + 1
-                            if cost > 0 then
-                                totalCost = totalCost + cost
+                if cached.showRepairCost and cur < max then
+                    if C_TooltipInfo and C_TooltipInfo.GetInventoryItem then
+                        local okData, data = pcall(C_TooltipInfo.GetInventoryItem, "player", slot)
+                        if okData and data then
+                            local surfaced = true
+                            if TooltipUtil and TooltipUtil.SurfaceArgs then
+                                surfaced = pcall(TooltipUtil.SurfaceArgs, data)
+                            end
+                            if surfaced then
+                                local okCost, cost = pcall(function() return data.repairCost end)
+                                if okCost and IsCleanNonNegativeNumber(cost) then
+                                    totalCost = totalCost + cost
+                                else
+                                    repairCostPending = true
+                                    if not okCost or not issecretvalue(cost) then repairCostRetryable = true end
+                                end
+                            else
+                                repairCostPending = true
+                                repairCostRetryable = true
                             end
                         else
                             repairCostPending = true
+                            repairCostRetryable = true
                         end
                     else
                         repairCostPending = true
                     end
                 end
+            elseif cached.showRepairCost and (issecretvalue(cur) or issecretvalue(max)) then
+                repairCostPending = true
             end
         end
     end
-    if count == 0 then return 100, 100, 0, repairCostPending, repairCostKnownCount end
-    return sum / count, minPct, totalCost, repairCostPending, repairCostKnownCount
+    if count == 0 then return 100, 100, 0, repairCostPending, repairCostRetryable end
+    return sum / count, minPct, totalCost, repairCostPending, repairCostRetryable
 end
 
 -- WARNING: repairCost can lag behind durability: C_TooltipInfo may return nil
 -- post-login, or return data with repairCost still nil/secret until item/vendor
--- info catches up. No durability event fires for plain data-load — schedule one
--- delayed re-scan if any damaged slot's repair cost was pending. Flag prevents
--- pile-up if multiple early refreshes hit pending state simultaneously.
-local durabilityRetryScheduled = false
+-- info catches up. No durability event fires for plain data-load, so each external
+-- dirty generation gets one delayed re-scan. A generation token makes older timers
+-- harmless after a newer inventory/config event.
 
 local function RefreshDurabilityCache()
-    local avg, mn, cost, repairCostPending, repairCostKnownCount = ScanDurabilityAndCost()
+    local avg, mn, cost, repairCostPending, repairCostRetryable = ScanDurabilityAndCost()
     cached.durabilityValue = cached.useWorstDurability and mn or avg
-    if repairCostPending and (repairCostKnownCount or 0) == 0 then
-        cached.repairCost = 0
-    else
-        cached.repairCost = cost
-    end
+    cached.repairCostComplete = not repairCostPending
+    cached.repairCost = cached.repairCostComplete and cost or nil
     durabilityDirty = false
 
-    if repairCostPending and not durabilityRetryScheduled then
-        durabilityRetryScheduled = true
+    local retryGeneration = addon.durabilityRuntime.generation
+    if repairCostPending and repairCostRetryable
+            and addon.durabilityRuntime.attemptedGeneration ~= retryGeneration then
+        addon.durabilityRuntime.attemptedGeneration = retryGeneration
+        addon.durabilityRuntime.scheduledGeneration = retryGeneration
         C_Timer.After(3, function()
-            durabilityRetryScheduled = false
-            durabilityDirty = true
+            if addon.durabilityRuntime.scheduledGeneration == retryGeneration then
+                addon.durabilityRuntime.scheduledGeneration = nil
+            end
+            if addon.durabilityRuntime.generation == retryGeneration
+                    and cached.repairCostComplete == false then
+                durabilityDirty = true
+            end
         end)
     end
 end
@@ -3986,7 +4015,7 @@ local function BuildDurabilityLines(labels, ratings, values)
 end
 
 local function BuildRepairCostPayload()
-    if not cached.showRepairCost or cached.repairCost <= 0 then return "", nil end
+    if not cached.showRepairCost then return "", nil end
     local cs = cached.colorStrings
     local repairLabelStr
     -- WHY no PushRow for Repair: the label + coin render on a DEDICATED row below
@@ -3997,6 +4026,10 @@ local function BuildRepairCostPayload()
     -- as a distinct row. Don't wrap the coin string in |cff...|r — coin icons render
     -- inline as textures and the color tag would tint them.
     repairLabelStr = FormatLabel(cs.durability, "Repair")
+    if cached.repairCostComplete ~= true or not IsCleanNonNegativeNumber(cached.repairCost) then
+        return "?", repairLabelStr
+    end
+    if cached.repairCost <= 0 then return "", nil end
     return FormatRepairCost(cached.repairCost), repairLabelStr
 end
 
@@ -4268,16 +4301,16 @@ local function OnPlayerEnteringWorld()
         isLoaded = true
     end
     -- WHY: UpdateStats handles Show/Hide based on cached.isVisible + line content.
-    durabilityDirty = true
+    addon.durabilityRuntime.MarkDirty()
     itemLevelDirty = true
     addon:RunUpdateStatsSafe()
 end
 
 -- WHY: Armor/DR refresh runs inline in UpdateStats out-of-combat (cheap), so we
--- don't need PLAYER_REGEN_ENABLED / PLAYER_SPECIALIZATION_CHANGED / TRAIT_CONFIG_UPDATED /
--- PLAYER_LEVEL_UP handlers. Worst-case latency for stat refresh is one OnUpdate tick (~0.5s).
+-- don't need specialization/trait/level handlers. PLAYER_REGEN_ENABLED remains
+-- useful for retrying repair costs that were secret while combat-restricted.
 -- WHY MERCHANT_SHOW marks dirty: repairCost can surface after the old cached scan
--- already settled at 0, and opening a vendor does not necessarily fire a durability event.
+-- settled as unknown, and opening a vendor does not necessarily fire a durability event.
 -- The handler only flips the dirty flag; the OnUpdate path still coalesces the scan.
 -- WHY: PLAYER_LOGOUT fires before SavedVariables are written to disk. Re-saving
 -- positions here is a belt-and-suspenders backup: OnMouseUp already saves on drop,
@@ -4291,14 +4324,19 @@ end
 local EVENT_HANDLERS = {
     PLAYER_ENTERING_WORLD       = OnPlayerEnteringWorld,
     PLAYER_LOGOUT               = OnPlayerLogout,
-    UPDATE_INVENTORY_DURABILITY = function() durabilityDirty = true end,
-    PLAYER_EQUIPMENT_CHANGED    = function() durabilityDirty = true; itemLevelDirty = true end,
+    UPDATE_INVENTORY_DURABILITY = function() addon.durabilityRuntime.MarkDirty() end,
+    PLAYER_EQUIPMENT_CHANGED    = function() addon.durabilityRuntime.MarkDirty(); itemLevelDirty = true end,
     BAG_UPDATE_DELAYED          = function() itemLevelDirty = true end,
-    MERCHANT_SHOW               = function() durabilityDirty = true end,
+    MERCHANT_SHOW               = function() addon.durabilityRuntime.MarkDirty() end,
     -- WHY: lock state is stored in cached.isLocked and read by OnDragStart. Mouse stays
     -- enabled permanently so right-click Settings works even while locked; Panel:Lock /
     -- Panel:Unlock are no-op stubs kept behind this semantic wrapper.
-    PLAYER_REGEN_ENABLED        = function() SetAllPanelsLockState(GetBoolDB("isLocked")) end,
+    PLAYER_REGEN_ENABLED        = function()
+        SetAllPanelsLockState(GetBoolDB("isLocked"))
+        if cached.showRepairCost and cached.repairCostComplete == false then
+            addon.durabilityRuntime.MarkDirty()
+        end
+    end,
 }
 
 local eventFrame = CreateFrame("Frame")
@@ -6441,13 +6479,13 @@ function addon:OpenConfigMenu()
         -- WHY: also mark dirty so re-enabling after a long off period gets fresh values
         -- on the next tick, not whatever was cached when last enabled.
         _, sw, txt = CreateCheckboxColor(statsTab, "StatsProDurabilityCheck", "Show Durability",  "showDurability", "durability", cs.padX + CONFIG_COL_OFFSET, rowY,
-            function() durabilityDirty = true end)
+            function() addon.durabilityRuntime.MarkDirty() end)
         rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         AlignSwatchColumn(leftRows)
         AlignSwatchColumn(rightRows)
         cs.y = rowY - 26
         CreateCheckbox(statsTab, "StatsProRepairCostCheck", "Show Repair Cost", "showRepairCost", cs.padX, cs.y,
-            function() durabilityDirty = true end)
+            function() addon.durabilityRuntime.MarkDirty() end)
         CursorAdvance(cs, 22)
         CreateCheckbox(statsTab, "StatsProAutoColorCheck",
             "Auto Color by Threshold", "useAutoColorDurability", cs.padX, cs.y)
@@ -6456,7 +6494,7 @@ function addon:OpenConfigMenu()
         -- until the next equipment event (which may be far off).
         CreateCheckbox(statsTab, "StatsProWorstDurCheck",
             "Use Worst Slot (instead of average)", "useWorstDurability", cs.padX, cs.y,
-            function() durabilityDirty = true end)
+            function() addon.durabilityRuntime.MarkDirty() end)
         CursorAdvance(cs, 22)
     end
 
@@ -6509,10 +6547,11 @@ function addon:PrintDebugDump()
         tostring(FontSupports(addon.fontRuntime.currentPath(), req)),
         savedFontText))
 
-    PrintMsg(string.format("show stats: off=%s tert=%s defensive=%s dur=%s repair=%s cost=%s mainStat=%s liveMainId=%s stamina=%s itemLevel=%s %s/%s",
+    PrintMsg(string.format("show stats: off=%s tert=%s defensive=%s dur=%s repair=%s cost=%s complete=%s mainStat=%s liveMainId=%s stamina=%s itemLevel=%s %s/%s",
         tostring(cached.showOffensive),
         tostring(cached.showTertiary), tostring(cached.showDefensive), tostring(cached.showDurability),
-        tostring(cached.showRepairCost), tostring(cached.repairCost or 0),
+        tostring(cached.showRepairCost), SAFE_NUM.DumpNumber(cached.repairCost, "%d", "?"),
+        tostring(cached.repairCostComplete),
         tostring(cached.showMainStat), tostring(GetCurrentMainStatId()), tostring(cached.showStamina),
         tostring(cached.showItemLevel), tostring(cached.itemLevelEquipped or "?"), tostring(cached.itemLevelOverall or "?")))
 
@@ -6551,10 +6590,11 @@ local function PrintDebugPerf()
         tostring(cached.displayMode),
         tostring(mainPanel:IsShown()),
         tostring(defensivePanel:IsShown())))
-    PrintMsg(string.format("debug perf: dirty durability=%s itemLevel=%s repairCost=%s durability=%.1f",
+    PrintMsg(string.format("debug perf: dirty durability=%s itemLevel=%s repairCost=%s complete=%s durability=%.1f",
         tostring(durabilityDirty),
         tostring(itemLevelDirty),
-        tostring(cached.repairCost or 0),
+        SAFE_NUM.DumpNumber(cached.repairCost, "%d", "?"),
+        tostring(cached.repairCostComplete),
         cached.durabilityValue or 0))
     PrintMsg(string.format("debug perf: itemLevel enabled=%s equipped=%s overall=%s",
         tostring(cached.showItemLevel),
@@ -6916,8 +6956,10 @@ if addon and addon.__statsproSmoke == true then
             return {
                 durabilityValue = cached.durabilityValue,
                 repairCost = cached.repairCost,
+                repairCostComplete = cached.repairCostComplete,
                 dirty = durabilityDirty,
-                retryScheduled = durabilityRetryScheduled,
+                retryScheduled = addon.durabilityRuntime.scheduledGeneration
+                    == addon.durabilityRuntime.generation,
             }
         end,
         versatilityState = function()

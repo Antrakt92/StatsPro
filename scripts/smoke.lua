@@ -5065,15 +5065,20 @@ do
     local state = repairTest.durabilityState()
     near("repair.scan_avg_percent", state.durabilityValue, 37.5)
     eq("repair.scan_cost_sums_damaged_slots", state.repairCost, 300)
+    eq("repair.scan_cost_complete", state.repairCostComplete, true)
     eq("repair.scan_skips_shirt_and_ranged.calls", table.concat(tooltipCalls, ","), "1,2")
     eq("repair.scan_surfaces_tooltip_args", surfaceCalls, 2)
     eq("repair.scan_no_retry_when_complete", state.retryScheduled, false)
+    local repairBlock = findBlockBySplitKey("repair.scan_complete.block",
+        repairTest.buildRenderBlocks(), "splitRepairCost")
+    check("repair.scan_complete_row_visible", repairBlock.repairStr ~= "", "missing repair value")
 end
 
 do
     local secretRepairCost = setmetatable({}, {
         __tostring = function() error("secret repair cost inspected", 2) end,
     })
+    local restricted = true
     local tooltipDataBySlot = { [1] = { repairCost = 300 } }
     local repairEnv, _, repairTest = loadStatsPro("enUS", {
         statsProDB = {
@@ -5085,11 +5090,12 @@ do
         getInventoryItemDurability = function(slot)
             if slot == 1 then return 50, 100 end
             if slot == 2 then return 80, 100 end
-            if slot == 3 then return 90, 100 end
             return nil, nil
         end,
         getTooltipInventoryItem = function(_, slot)
-            if slot == 2 then return { repairCost = secretRepairCost } end
+            if slot == 2 then
+                return { repairCost = restricted and secretRepairCost or 200 }
+            end
             return tooltipDataBySlot[slot]
         end,
     })
@@ -5098,10 +5104,21 @@ do
     check("repair.pending_secret_cost_no_error", ok, err)
     local state = repairTest.durabilityState()
     near("repair.pending_worst_percent", state.durabilityValue, 50)
-    eq("repair.pending_keeps_partial_known_cost", state.repairCost, 300)
-    eq("repair.pending_schedules_retry", state.retryScheduled, true)
-    flushTimers("repair.pending_retry_timer", repairEnv, 3, 1)
-    eq("repair.pending_retry_marks_dirty", repairTest.durabilityState().dirty, true)
+    eq("repair.pending_hides_partial_known_cost", state.repairCost, nil)
+    eq("repair.pending_marks_cost_incomplete", state.repairCostComplete, false)
+    eq("repair.pending_secret_waits_for_event", state.retryScheduled, false)
+    eq("repair.pending_secret_has_no_timer", #repairEnv.__timers, 0)
+    local repairBlock = findBlockBySplitKey("repair.pending_secret.block",
+        repairTest.buildRenderBlocks(), "splitRepairCost")
+    eq("repair.pending_secret_renders_unknown", repairBlock.repairStr, "?")
+    restricted = false
+    fireEvent("repair.pending_secret_regen", repairEnv, "PLAYER_REGEN_ENABLED")
+    eq("repair.pending_secret_regen_marks_dirty", repairTest.durabilityState().dirty, true)
+    repairTest.refreshDurabilityCache()
+    state = repairTest.durabilityState()
+    eq("repair.pending_secret_regen_recovers_cost", state.repairCost, 500)
+    eq("repair.pending_secret_regen_recovers_complete", state.repairCostComplete, true)
+    eq("repair.pending_secret_regen_no_timer", #repairEnv.__timers, 0)
 end
 
 do
@@ -5126,7 +5143,11 @@ do
     mode = "pending"
     repairTest.refreshDurabilityCache()
     local state = repairTest.durabilityState()
-    eq("repair.pending_all_nil_clears_prior_cost", state.repairCost, 0)
+    eq("repair.pending_all_nil_clears_prior_cost", state.repairCost, nil)
+    eq("repair.pending_all_nil_marks_incomplete", state.repairCostComplete, false)
+    local repairBlock = findBlockBySplitKey("repair.pending_all_nil.block",
+        repairTest.buildRenderBlocks(), "splitRepairCost")
+    eq("repair.pending_all_nil_renders_unknown", repairBlock.repairStr, "?")
     eq("repair.pending_all_nil_schedules_retry", state.retryScheduled, true)
     eq("repair.pending_all_nil_one_timer", #repairEnv.__timers, 1)
     repairTest.refreshDurabilityCache()
@@ -5134,7 +5155,19 @@ do
     flushTimers("repair.pending_all_nil_retry_timer", repairEnv, 3, 1)
     eq("repair.pending_all_nil_retry_marks_dirty", repairTest.durabilityState().dirty, true)
     repairTest.refreshDurabilityCache()
-    eq("repair.pending_all_nil_reschedules_after_timer", #repairEnv.__timers, 1)
+    eq("repair.pending_all_nil_stops_after_retry", #repairEnv.__timers, 0)
+    mode = "known"
+    fireEvent("repair.pending_all_nil_merchant_update", repairEnv, "MERCHANT_SHOW")
+    eq("repair.pending_all_nil_merchant_marks_dirty", repairTest.durabilityState().dirty, true)
+    repairTest.refreshDurabilityCache()
+    state = repairTest.durabilityState()
+    eq("repair.pending_all_nil_merchant_recovers_cost", state.repairCost, 300)
+    eq("repair.pending_all_nil_merchant_recovers_complete", state.repairCostComplete, true)
+    mode = "pending"
+    fireEvent("repair.pending_all_nil_event_reset", repairEnv, "UPDATE_INVENTORY_DURABILITY")
+    eq("repair.pending_all_nil_event_marks_dirty", repairTest.durabilityState().dirty, true)
+    repairTest.refreshDurabilityCache()
+    eq("repair.pending_all_nil_event_allows_one_retry", #repairEnv.__timers, 1)
 end
 
 do
@@ -5161,8 +5194,9 @@ do
     mode = "pending"
     repairTest.refreshDurabilityCache()
     local state = repairTest.durabilityState()
-    eq("repair.pending_all_secret_clears_prior_cost", state.repairCost, 0)
-    eq("repair.pending_all_secret_schedules_retry", state.retryScheduled, true)
+    eq("repair.pending_all_secret_clears_prior_cost", state.repairCost, nil)
+    eq("repair.pending_all_secret_marks_incomplete", state.repairCostComplete, false)
+    eq("repair.pending_all_secret_uses_events", state.retryScheduled, false)
 end
 
 do
@@ -5189,8 +5223,12 @@ do
     mode = "partial"
     repairTest.refreshDurabilityCache()
     local state = repairTest.durabilityState()
-    eq("repair.pending_partial_replaces_prior_cost", state.repairCost, 300)
+    eq("repair.pending_partial_hides_lower_bound", state.repairCost, nil)
+    eq("repair.pending_partial_marks_incomplete", state.repairCostComplete, false)
     eq("repair.pending_partial_still_schedules_retry", state.retryScheduled, true)
+    local repairBlock = findBlockBySplitKey("repair.pending_partial.block",
+        repairTest.buildRenderBlocks(), "splitRepairCost")
+    eq("repair.pending_partial_renders_unknown", repairBlock.repairStr, "?")
 end
 
 do
@@ -5216,7 +5254,59 @@ do
     repairTest.refreshDurabilityCache()
     local state = repairTest.durabilityState()
     eq("repair.clean_zero_clears_prior_cost", state.repairCost, 0)
+    eq("repair.clean_zero_is_complete", state.repairCostComplete, true)
     eq("repair.clean_zero_no_retry", state.retryScheduled, false)
+end
+
+do
+    local mode = "pending"
+    local repairEnv, _, repairTest = loadStatsPro("enUS", {
+        statsProDB = { showRepairCost = true },
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then return 50, 100 end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function()
+            if mode == "known" then return { repairCost = 300 } end
+            return nil
+        end,
+    })
+    repairTest.cacheSettings()
+    repairTest.refreshDurabilityCache()
+    eq("repair.stale_timer.seed_timer", #repairEnv.__timers, 1)
+    mode = "known"
+    fireEvent("repair.stale_timer.merchant_event", repairEnv, "MERCHANT_SHOW")
+    repairTest.refreshDurabilityCache()
+    local state = repairTest.durabilityState()
+    eq("repair.stale_timer.complete_cost", state.repairCost, 300)
+    eq("repair.stale_timer.complete_state", state.repairCostComplete, true)
+    eq("repair.stale_timer.clean_before_flush", state.dirty, false)
+    flushTimers("repair.stale_timer.flush_old_generation", repairEnv, 3, 1)
+    state = repairTest.durabilityState()
+    eq("repair.stale_timer_does_not_redirty", state.dirty, false)
+    eq("repair.stale_timer_preserves_complete", state.repairCostComplete, true)
+end
+
+do
+    local repairEnv, _, repairTest = loadStatsPro("enUS", {
+        statsProDB = { showRepairCost = true },
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then return 50, 100 end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function() return { repairCost = 300 } end,
+        surfaceTooltipArgs = function() error("surface failed") end,
+    })
+    repairTest.cacheSettings()
+    local ok, err = pcall(repairTest.refreshDurabilityCache)
+    check("repair.surface_failure_no_error", ok, err)
+    local state = repairTest.durabilityState()
+    eq("repair.surface_failure_is_unknown", state.repairCostComplete, false)
+    eq("repair.surface_failure_hides_total", state.repairCost, nil)
+    eq("repair.surface_failure_one_retry", #repairEnv.__timers, 1)
+    flushTimers("repair.surface_failure_retry", repairEnv, 3, 1)
+    repairTest.refreshDurabilityCache()
+    eq("repair.surface_failure_retry_is_bounded", #repairEnv.__timers, 0)
 end
 
 do

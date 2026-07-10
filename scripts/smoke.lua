@@ -5523,6 +5523,56 @@ do
 end
 
 do
+    local warningEnv, warningAddon, warningTest = loadStatsPro("enUS", {
+        statsProDB = {
+            forceLocale = "koKR",
+            font = "Fonts\\FRIZQT__.TTF",
+        },
+    })
+    warningTest.cacheSettings()
+    local ok, err = pcall(function() warningAddon:OpenConfigMenu() end)
+    check("config.language_warning_layout.open", ok, err)
+
+    local config = exists("config.language_warning_layout.frame", warningEnv.StatsProConfigFrame)
+    local warning = exists("config.language_warning_layout.warning", config.languageWarning)
+    local appearance = exists("config.language_warning_layout.appearance", config.appearanceTab)
+    local scroll = exists("config.language_warning_layout.scroll", warningEnv.StatsProConfigScroll)
+    local scrollChild = exists("config.language_warning_layout.scroll_child", scroll.scrollChild)
+    config.SwitchToTab(3)
+
+    check("config.language_warning_layout.text_visible", warning:GetText() ~= "", "missing warning text")
+    eq("config.language_warning_layout.word_wrap", warning.wordWrap, true)
+    eq("config.language_warning_layout.max_lines", warning.maxLines, 2)
+    eq("config.language_warning_layout.two_line_height", warning:GetHeight(), 28)
+    eq("config.language_warning_layout.scroll_child_width", scrollChild:GetWidth(), 450)
+    eq("config.language_warning_layout.practical_width", warning:GetWidth(), 426)
+    check("config.language_warning_layout.fits_content",
+        warning:GetWidth() <= scrollChild:GetWidth() - 24,
+        "warning exceeds padded scroll content")
+    check("config.language_warning_layout.replaces_oversized_width",
+        warning:GetWidth() < 470,
+        "warning kept oversized legacy width")
+
+    local warningPoint = exists("config.language_warning_layout.point", warning.points[1])
+    eq("config.language_warning_layout.point_x", warningPoint[2], 12)
+    local warningTopY = warningPoint[3]
+    check("config.language_warning_layout.bottom_inside_content",
+        appearance.contentHeight >= -warningTopY + warning:GetHeight() + 12,
+        "appearance content clips warning bottom")
+    eq("config.language_warning_layout.active_scroll_height",
+        scrollChild:GetHeight(), appearance.contentHeight)
+
+    local widthBefore, heightBefore, contentBefore =
+        warning:GetWidth(), warning:GetHeight(), appearance.contentHeight
+    warningAddon:OpenConfigMenu()
+    warningAddon:OpenConfigMenu()
+    config.SwitchToTab(3)
+    eq("config.language_warning_layout.reopen_width", warning:GetWidth(), widthBefore)
+    eq("config.language_warning_layout.reopen_height", warning:GetHeight(), heightBefore)
+    eq("config.language_warning_layout.reopen_content", appearance.contentHeight, contentBefore)
+end
+
+do
     runCache(runMigrate({ forceLocale = "auto" }))
 
     local ok, err = pcall(function() addon:OpenConfigMenu() end)

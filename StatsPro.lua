@@ -5317,12 +5317,13 @@ function addon:OpenConfigMenu()
 
     --[[ ===== Frame ===== ]]
     configFrame = CreateFrame("Frame", "StatsProConfigFrame", UIParent, "BackdropTemplate")
+    local configFrameWidth = 500
 
     -- WARNING: cap by parent so footer (Reset/Close at BOTTOM y=14) stays on-screen.
     -- Floor 200 protects ScrollFrame chrome (82+60=142) from collapse on low-res.
     local function ApplyConfigFrameSize()
         local maxH = math.max(200, math.min(540, UIParent:GetHeight() * 0.9))
-        configFrame:SetSize(500, maxH)
+        configFrame:SetSize(configFrameWidth, maxH)
     end
     ApplyConfigFrameSize()
 
@@ -5424,7 +5425,11 @@ function addon:OpenConfigMenu()
     scrollFrame:SetPoint("BOTTOMRIGHT", -32, 60)
 
     local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-    scrollChild:SetSize(scrollFrame:GetWidth() - 4, 1)  -- height set per active tab
+    -- SYNC: 14px left + 32px right are the scrollFrame anchors above; 4px keeps
+    -- the child inside the viewport chrome. Explicit width avoids construction-time
+    -- GetWidth ambiguity and gives every tab a stable 450px content surface.
+    local scrollChildWidth = configFrameWidth - 14 - 32 - 4
+    scrollChild:SetSize(scrollChildWidth, 1)  -- height set per active tab
     scrollFrame:SetScrollChild(scrollChild)
 
     -- Tab content frames (children of scrollChild). Tab order: content toggles (Stats),
@@ -5433,6 +5438,7 @@ function addon:OpenConfigMenu()
     local displayTab   = CreateFrame("Frame", nil, scrollChild)
     local statsTab     = CreateFrame("Frame", nil, scrollChild)
     local layoutTab    = CreateFrame("Frame", nil, scrollChild)
+    if self.__statsproSmoke == true then configFrame.appearanceTab = displayTab end
     local tabContents  = { statsTab, layoutTab, displayTab }
     for _, tab in ipairs(tabContents) do
         tab:SetPoint("TOPLEFT", 0, 0)
@@ -6294,12 +6300,18 @@ function addon:OpenConfigMenu()
         CursorAdvance(cd, 24)
 
         local langWarn = displayTab:CreateFontString(nil, "OVERLAY")
+        local langWarnHeight = 28
         RegisterConfigFont(langWarn, 11)
         langWarn:SetPoint("TOPLEFT", cd.padX, cd.y)
-        langWarn:SetWidth(470)
+        langWarn:SetWidth(scrollChildWidth - (cd.padX * 2))
+        langWarn:SetHeight(langWarnHeight)
         langWarn:SetJustifyH("LEFT")
+        langWarn:SetJustifyV("TOP")
+        langWarn:SetWordWrap(true)
+        langWarn:SetMaxLines(2)
         langWarn:SetTextColor(1, 0.6, 0.2)
         langWarn:SetText("")
+        if self.__statsproSmoke == true then configFrame.languageWarning = langWarn end
 
         -- Assignment to file-scope upvalue declared in section 15 prelude (NOT a global).
         RefreshLanguageWarning = function()
@@ -6318,10 +6330,10 @@ function addon:OpenConfigMenu()
         -- from RefreshConfigLocalization so wording tracks active locale; RefreshLanguageWarning
         -- is also called from the language dropdown's commit handler for the immediate recheck.
         PushLocalizedLabel(function() RefreshLanguageWarning() end)
-        -- WHY 14 (single-line at 11pt): shortened warning fits one line at SetWidth(440).
-        -- Empty (common) state shows tight gap to next section; non-empty (rare, font/locale
-        -- mismatch) shows one orange line below the dropdown. 14 + cd.gap (6) = 20 effective.
-        CursorAdvance(cd, 14)
+        -- WHY fixed two-line reservation: localized warnings wrap inside the padded
+        -- scroll content. Avoid GetStringHeight arithmetic because the measurement can
+        -- become secret-tainted when the active text contains restricted glyph data.
+        CursorAdvance(cd, langWarnHeight)
 
         -- Reset button: re-syncs both dropdown SetText and warning state.
         PushRefresher(function()

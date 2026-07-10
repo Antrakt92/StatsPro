@@ -3038,6 +3038,387 @@ do
 end
 
 do
+    local ratingBonus = 10
+    local flatBonus = 2
+    local secretRating = false
+    local secretFlat = false
+    local targetFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 100, haste = 200, mastery = 300, versatility = 1000 })
+    local versEnv, _, versTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProDB = {
+            showOffensive = true,
+            showRating = false,
+            showPercentage = true,
+            hideZeroOffensive = false,
+            showCrit = false,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = true,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        statsProArchonTargets = targetFixture,
+        getCombatRatingBonus = function() return ratingBonus end,
+        getVersatilityBonus = function() return flatBonus end,
+        getCombatRating = function() return 700 end,
+        issecretvalue = function(value)
+            return (secretRating and value == ratingBonus) or (secretFlat and value == flatBonus)
+        end,
+    })
+    fireEvent("render.versatility_partial_secret_preserves_last_full_total.fire", versEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_partial_secret_preserves_last_full_total.clean_no_error", ok, blocks)
+    eq("render.versatility_partial_secret_preserves_last_full_total.clean_total",
+        blockDumpContains(blocks, "12.0%"), true)
+    eq("render.versatility_partial_secret_preserves_last_full_total.clean_cache",
+        versTest.versatilityState().total, 12)
+    eq("render.versatility_partial_secret_preserves_last_full_total.clean_meta_pct",
+        blocks[2].targetRows[1].currentPct, 12)
+
+    ratingBonus = 14.7
+    flatBonus = 3.3
+    secretRating = true
+    ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_partial_secret_preserves_last_full_total.mixed_no_error", ok, blocks)
+    eq("render.versatility_partial_secret_preserves_last_full_total.mixed_last_full",
+        blockDumpContains(blocks, "12.0%"), true)
+    eq("render.versatility_partial_secret_preserves_last_full_total.mixed_no_partial_rating",
+        blockDumpContains(blocks, "14.7%"), false)
+    eq("render.versatility_partial_secret_preserves_last_full_total.mixed_cache_unchanged",
+        versTest.versatilityState().total, 12)
+    eq("render.versatility_partial_secret_preserves_last_full_total.mixed_meta_pct_unknown",
+        blocks[2].targetRows[1].currentPct, nil)
+
+    secretFlat = true
+    ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_partial_secret_preserves_last_full_total.both_secret_no_error", ok, blocks)
+    eq("render.versatility_partial_secret_preserves_last_full_total.both_secret_last_full",
+        blockDumpContains(blocks, "12.0%"), true)
+    eq("render.versatility_partial_secret_preserves_last_full_total.both_secret_cache_unchanged",
+        versTest.versatilityState().total, 12)
+
+    secretRating = false
+    ratingBonus = 10
+    ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_partial_secret_preserves_last_full_total.flat_secret_no_error", ok, blocks)
+    eq("render.versatility_partial_secret_preserves_last_full_total.flat_secret_last_full",
+        blockDumpContains(blocks, "12.0%"), true)
+    eq("render.versatility_partial_secret_preserves_last_full_total.flat_secret_no_partial",
+        blockDumpContains(blocks, "3.3%"), false)
+    eq("render.versatility_partial_secret_preserves_last_full_total.flat_secret_cache_unchanged",
+        versTest.versatilityState().total, 12)
+
+    secretFlat = false
+    ratingBonus = 15
+    flatBonus = 3
+    ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_partial_secret_preserves_last_full_total.recovery_no_error", ok, blocks)
+    eq("render.versatility_partial_secret_preserves_last_full_total.recovery_total",
+        blockDumpContains(blocks, "18.0%"), true)
+    eq("render.versatility_partial_secret_preserves_last_full_total.recovery_cache",
+        versTest.versatilityState().total, 18)
+end
+
+do
+    local secretRatingBonus = 14.7
+    local versEnv, _, versTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = false,
+            showPercentage = true,
+            hideZeroOffensive = false,
+            showCrit = false,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = true,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCombatRatingBonus = function() return secretRatingBonus end,
+        getVersatilityBonus = function() return 2 end,
+        issecretvalue = function(value) return value == secretRatingBonus end,
+    })
+    fireEvent("render.versatility_cold_partial_secret_stays_unknown.fire", versEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_cold_partial_secret_stays_unknown.no_error", ok, blocks)
+    eq("render.versatility_cold_partial_secret_stays_unknown.no_row", blockDumpContains(blocks, "Vers:"), false)
+    eq("render.versatility_cold_partial_secret_stays_unknown.no_partial", blockDumpContains(blocks, "14.7%"), false)
+    eq("render.versatility_cold_partial_secret_stays_unknown.cache", versTest.versatilityState().total, nil)
+end
+
+do
+    local secretFlatBonus = 3.3
+    local versEnv, _, versTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = false,
+            showPercentage = true,
+            hideZeroOffensive = false,
+            showCrit = false,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = true,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCombatRatingBonus = function() return 0 end,
+        getVersatilityBonus = function() return secretFlatBonus end,
+        issecretvalue = function(value) return value == secretFlatBonus end,
+    })
+    fireEvent("render.versatility_secret_flat_with_zero_rating_is_complete.fire", versEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_secret_flat_with_zero_rating_is_complete.no_error", ok, blocks)
+    eq("render.versatility_secret_flat_with_zero_rating_is_complete.live_total",
+        blockDumpContains(blocks, "3.3%"), true)
+    eq("render.versatility_secret_flat_with_zero_rating_is_complete.clean_cache_unchanged",
+        versTest.versatilityState().total, nil)
+end
+
+do
+    local secretFlatBonus = 3.3
+    local versEnv, _, versTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = false,
+            showPercentage = true,
+            hideZeroOffensive = false,
+            showCrit = false,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = true,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCombatRatingBonus = function() return 5 end,
+        getVersatilityBonus = function() return secretFlatBonus end,
+        issecretvalue = function(value) return value == secretFlatBonus end,
+    })
+    fireEvent("render.versatility_cold_secret_flat_with_nonzero_rating_unknown.fire", versEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_cold_secret_flat_with_nonzero_rating_unknown.no_error", ok, blocks)
+    eq("render.versatility_cold_secret_flat_with_nonzero_rating_unknown.no_row",
+        blockDumpContains(blocks, "Vers:"), false)
+    eq("render.versatility_cold_secret_flat_with_nonzero_rating_unknown.no_partial",
+        blockDumpContains(blocks, "3.3%"), false)
+    eq("render.versatility_cold_secret_flat_with_nonzero_rating_unknown.cache",
+        versTest.versatilityState().total, nil)
+end
+
+do
+    local secretRatingBonus = 14.7
+    local secretFlatBonus = 3.3
+    local versEnv, _, versTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = false,
+            showPercentage = true,
+            hideZeroOffensive = false,
+            showCrit = false,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = true,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCombatRatingBonus = function() return secretRatingBonus end,
+        getVersatilityBonus = function() return secretFlatBonus end,
+        issecretvalue = function(value)
+            return value == secretRatingBonus or value == secretFlatBonus
+        end,
+    })
+    fireEvent("render.versatility_cold_both_secret_unknown.fire", versEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_cold_both_secret_unknown.no_error", ok, blocks)
+    eq("render.versatility_cold_both_secret_unknown.no_row", blockDumpContains(blocks, "Vers:"), false)
+    eq("render.versatility_cold_both_secret_unknown.no_rating_partial",
+        blockDumpContains(blocks, "14.7%"), false)
+    eq("render.versatility_cold_both_secret_unknown.no_flat_partial",
+        blockDumpContains(blocks, "3.3%"), false)
+    eq("render.versatility_cold_both_secret_unknown.cache", versTest.versatilityState().total, nil)
+end
+
+do
+    local secretMode = false
+    local ratingBonus = 0
+    local flatBonus = 0
+    local versEnv, _, versTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = false,
+            showPercentage = true,
+            hideZeroOffensive = true,
+            showCrit = false,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = true,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCombatRatingBonus = function() return ratingBonus end,
+        getVersatilityBonus = function() return flatBonus end,
+        issecretvalue = function(value)
+            return secretMode and (value == ratingBonus or value == flatBonus)
+        end,
+    })
+    fireEvent("render.versatility_hide_zero_secret_preserves_hidden.fire", versEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_hide_zero_secret_preserves_hidden.clean_no_error", ok, blocks)
+    eq("render.versatility_hide_zero_secret_preserves_hidden.clean_no_row",
+        blockDumpContains(blocks, "Vers:"), false)
+    eq("render.versatility_hide_zero_secret_preserves_hidden.clean_cache", versTest.versatilityState().total, 0)
+    ratingBonus = 14.7
+    flatBonus = 3.3
+    secretMode = true
+    ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_hide_zero_secret_preserves_hidden.secret_no_error", ok, blocks)
+    eq("render.versatility_hide_zero_secret_preserves_hidden.secret_no_row",
+        blockDumpContains(blocks, "Vers:"), false)
+    eq("render.versatility_hide_zero_secret_preserves_hidden.secret_cache", versTest.versatilityState().total, 0)
+    eq("render.versatility_hide_zero_secret_preserves_hidden.visibility",
+        versTest.versatilityState().percentVisible, false)
+end
+
+do
+    local secretMode = false
+    local ratingBonus = 10
+    local flatBonus = 2
+    local versEnv, _, versTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = false,
+            showPercentage = true,
+            hideZeroOffensive = true,
+            showCrit = false,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = true,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCombatRatingBonus = function() return ratingBonus end,
+        getVersatilityBonus = function() return flatBonus end,
+        issecretvalue = function(value)
+            return secretMode and (value == ratingBonus or value == flatBonus)
+        end,
+    })
+    fireEvent("render.versatility_hide_zero_secret_preserves_visible.fire", versEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_hide_zero_secret_preserves_visible.clean_no_error", ok, blocks)
+    eq("render.versatility_hide_zero_secret_preserves_visible.clean_row",
+        blockDumpContains(blocks, "12.0%"), true)
+    ratingBonus = 14.7
+    flatBonus = 3.3
+    secretMode = true
+    ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_hide_zero_secret_preserves_visible.secret_no_error", ok, blocks)
+    eq("render.versatility_hide_zero_secret_preserves_visible.secret_last_full",
+        blockDumpContains(blocks, "12.0%"), true)
+    eq("render.versatility_hide_zero_secret_preserves_visible.secret_cache", versTest.versatilityState().total, 12)
+    eq("render.versatility_hide_zero_secret_preserves_visible.visibility",
+        versTest.versatilityState().percentVisible, true)
+end
+
+do
+    local secretRatingBonus = 14.7
+    local secretFlatBonus = 3.3
+    local conversionCalls = 0
+    local conversionMode = "normal"
+    local targetFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 100, haste = 200, mastery = 300, versatility = 1000 })
+    local versEnv, _, versTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProDB = {
+            showOffensive = true,
+            showRating = true,
+            showPercentage = true,
+            hideZeroOffensive = true,
+            showCrit = false,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = true,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        statsProArchonTargets = targetFixture,
+        getCombatRatingBonus = function() return secretRatingBonus end,
+        getVersatilityBonus = function() return secretFlatBonus end,
+        getCombatRating = function() return 699 end,
+        getCombatRatingBonusForCombatRatingValue = function(_, rating)
+            conversionCalls = conversionCalls + 1
+            if conversionMode == "missing-current" and rating == 700 then return nil end
+            return rating / 100
+        end,
+        issecretvalue = function(value)
+            return value == secretRatingBonus or value == secretFlatBonus
+        end,
+    })
+    fireEvent("render.versatility_cold_secret_percent_keeps_clean_rating.fire", versEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_cold_secret_percent_keeps_clean_rating.no_error", ok, blocks)
+    local offensive = blocks[2]
+    eq("render.versatility_cold_secret_percent_keeps_clean_rating.row_count", #(offensive.labels or {}), 1)
+    eq("render.versatility_cold_secret_percent_keeps_clean_rating.rating",
+        offensive.ratings[1]:find("699", 1, true) ~= nil, true)
+    eq("render.versatility_cold_secret_percent_keeps_clean_rating.no_partial_percent",
+        offensive.values[1], "")
+    local meta = offensive.targetRows[1]
+    check("render.versatility_cold_secret_percent_keeps_clean_rating.meta", type(meta) == "table", meta)
+    eq("render.versatility_cold_secret_percent_keeps_clean_rating.meta_current", meta.current, 699)
+    eq("render.versatility_cold_secret_percent_keeps_clean_rating.meta_current_pct", meta.currentPct, nil)
+    eq("render.versatility_cold_secret_percent_keeps_clean_rating.cache", versTest.versatilityState().total, nil)
+    versTest.renderMainPanelForSmoke("Vers:", "699", "", 1, nil, nil, { meta })
+    versTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("render.versatility_cold_secret_percent_keeps_clean_rating.tooltip_target_raw",
+        versEnv.GameTooltip.lines[2].right, "1000")
+    eq("render.versatility_cold_secret_percent_keeps_clean_rating.tooltip_current_raw",
+        versEnv.GameTooltip.lines[3].right, "699")
+    eq("render.versatility_cold_secret_percent_keeps_clean_rating.tooltip_missing_raw",
+        versEnv.GameTooltip.lines[4].right, "301")
+    eq("render.versatility_cold_secret_percent_keeps_clean_rating.tooltip_skips_partial_conversion",
+        conversionCalls, 0)
+
+    local cleanMeta = {
+        statKey = "versatility",
+        colorKey = "versatility",
+        ratingCR = versEnv.CR_VERSATILITY_DAMAGE_DONE,
+        target = 1000,
+        current = 700,
+        currentPct = 12,
+        delta = -300,
+        capturedAt = "2026-05-15",
+        snapshotKey = "mythicPlus",
+    }
+    versTest.renderMainPanelForSmoke("Vers:", "700", "12.0%", 1, nil, nil, { cleanMeta })
+    versTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("render.versatility_clean_percent_tooltip.target_projected_total",
+        versEnv.GameTooltip.lines[2].right, "1000 (~15.0%)")
+    eq("render.versatility_clean_percent_tooltip.current_complete_total",
+        versEnv.GameTooltip.lines[3].right, "700 (~12.0%)")
+    eq("render.versatility_clean_percent_tooltip.missing_rating_delta",
+        versEnv.GameTooltip.lines[4].right, "300 (~+3.0%)")
+    eq("render.versatility_clean_percent_tooltip.uses_rating_conversion", conversionCalls, 2)
+
+    conversionMode = "missing-current"
+    conversionCalls = 0
+    versTest.renderMainPanelForSmoke("Vers:", "700", "12.0%", 1, nil, nil, { cleanMeta })
+    versTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("render.versatility_partial_conversion_tooltip.target_raw",
+        versEnv.GameTooltip.lines[2].right, "1000")
+    eq("render.versatility_partial_conversion_tooltip.current_complete_total",
+        versEnv.GameTooltip.lines[3].right, "700 (~12.0%)")
+    eq("render.versatility_partial_conversion_tooltip.missing_raw",
+        versEnv.GameTooltip.lines[4].right, "300")
+    eq("render.versatility_partial_conversion_tooltip.attempts_both_conversions", conversionCalls, 2)
+end
+
+do
     local secretVersRatingBonus = 14.7
     local secretVersRating = 888
     local secretVersFixture = makeArchonV2Fixture("2026-05-15")

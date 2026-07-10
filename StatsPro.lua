@@ -2675,17 +2675,24 @@ end
 
 function addon.archonTargets.ShowTooltip(anchor, meta)
     if not meta then return end
-    local currentBonus = addon.archonTargets.GetRatingBonusForValue(meta.ratingCR, meta.current)
-    local targetBonus = addon.archonTargets.GetRatingBonusForValue(meta.ratingCR, meta.target)
+    local hasCleanCurrentPct = SAFE_NUM.IsCleanFiniteNumber(meta.currentPct)
+    local currentBonus, targetBonus
+    -- Versatility includes a flat component that rating conversion cannot recover.
+    -- Without a clean complete currentPct, raw-rating percentages would be partial.
+    if meta.statKey ~= "versatility" or hasCleanCurrentPct then
+        currentBonus = addon.archonTargets.GetRatingBonusForValue(meta.ratingCR, meta.current)
+        targetBonus = addon.archonTargets.GetRatingBonusForValue(meta.ratingCR, meta.target)
+    end
     local deltaBonus
     -- WHY: subtract converted total ratings, not converted `abs(delta)`, so DR brackets
     -- and hard caps are evaluated at the player's current/target stat positions.
     if SAFE_NUM.IsCleanFiniteNumber(currentBonus) and SAFE_NUM.IsCleanFiniteNumber(targetBonus) then
         deltaBonus = targetBonus - currentBonus
     end
-    local currentDisplayBonus = SAFE_NUM.IsCleanFiniteNumber(meta.currentPct) and meta.currentPct or currentBonus
+    local currentDisplayBonus = hasCleanCurrentPct and meta.currentPct or currentBonus
     local targetDisplayBonus = targetBonus
-    if SAFE_NUM.IsCleanFiniteNumber(meta.currentPct) and SAFE_NUM.IsCleanFiniteNumber(deltaBonus) then
+    if meta.statKey == "versatility" then targetDisplayBonus = nil end
+    if hasCleanCurrentPct and SAFE_NUM.IsCleanFiniteNumber(deltaBonus) then
         targetDisplayBonus = meta.currentPct + deltaBonus
     end
     local valueColor = addon.archonTargets.GetTooltipValueColor(meta)
@@ -3437,9 +3444,9 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
         end
     end
 
-    -- Versatility: dual-source (rating bonus + flat). Cache clean exact totals; when
-    -- 12.x returns a secret rating bonus in combat, pass that renderable value through
-    -- instead of freezing the visible row on the last out-of-combat total.
+    -- Versatility: dual-source (rating bonus + flat). Cache clean exact totals. A
+    -- secret component may render live only when the other clean component is zero;
+    -- otherwise retain the last complete total instead of showing a partial value.
     if cached.showVersatility then
         local versFromRating = safeCall(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
         local versFlat       = safeCall(GetVersatilityBonus,  CR_VERSATILITY_DAMAGE_DONE)
@@ -3450,14 +3457,20 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
         -- WARNING: must check operands for secret state before arithmetic. Rating
         -- may be read for either the visible rating column or target-hover metadata;
         -- percent cache can still refresh independently.
-        if SAFE_NUM.IsCleanFiniteNumber(versFromRating) and SAFE_NUM.IsCleanFiniteNumber(versFlat)
-            and not issecretvalue(versFromRating) and not issecretvalue(versFlat) then
+        local ratingIsSecret = issecretvalue(versFromRating)
+        local flatIsSecret = issecretvalue(versFlat)
+        local ratingIsClean = not ratingIsSecret and SAFE_NUM.IsCleanFiniteNumber(versFromRating)
+        local flatIsClean = not flatIsSecret and SAFE_NUM.IsCleanFiniteNumber(versFlat)
+        if ratingIsClean and flatIsClean then
             cached.versTotal = versFromRating + versFlat
             versDisplay = cached.versTotal
             versClean = cached.versTotal
-        elseif issecretvalue(versFromRating) then
+        -- A secret component is the complete total only when its clean counterpart
+        -- is exactly zero. Otherwise keep the last clean total (or cold unknown)
+        -- instead of presenting one non-zero component as full Versatility.
+        elseif ratingIsSecret and flatIsClean and versFlat == 0 then
             versDisplay = versFromRating
-        elseif issecretvalue(versFlat) then
+        elseif flatIsSecret and ratingIsClean and versFromRating == 0 then
             versDisplay = versFlat
         end
         if cached.showRating or needTargetRating then
@@ -6396,6 +6409,14 @@ if addon and addon.__statsproSmoke == true then
                 repairCost = cached.repairCost,
                 dirty = durabilityDirty,
                 retryScheduled = durabilityRetryScheduled,
+            }
+        end,
+        versatilityState = function()
+            return {
+                total = cached.versTotal,
+                rating = cached.versTotalRating,
+                percentVisible = cached.cleanRowVisibility.showVersatility,
+                ratingVisible = cached.cleanRowVisibility.showVersatilityRating,
             }
         end,
         normalizeColor = NormalizeColor,

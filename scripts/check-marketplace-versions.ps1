@@ -2,6 +2,7 @@ param(
     [string]$TocPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..")) "StatsPro.toc"),
     [string]$CurseForgeVersionsJsonPath,
     [string]$WowInterfaceVersionsJsonPath,
+    [string]$WagoVersionsJsonPath,
     [switch]$SelfTest
 )
 
@@ -226,7 +227,7 @@ function Assert-CurseForgeVersions {
     }
 }
 
-function Get-WowInterfaceAcceptedRetailVersions {
+function Get-AcceptedRetailCompatibilityVersions {
     param([string]$Version)
 
     $parts = [version]$Version
@@ -255,7 +256,7 @@ function Assert-WowInterfaceVersions {
 
     $items = @(ConvertFrom-JsonCompat $JsonText)
     foreach ($version in $RequiredVersions) {
-        $acceptedVersions = @(Get-WowInterfaceAcceptedRetailVersions -Version $version)
+        $acceptedVersions = @(Get-AcceptedRetailCompatibilityVersions -Version $version)
         $matched = $false
         foreach ($acceptedVersion in $acceptedVersions) {
             $matches = @($items | Where-Object {
@@ -275,11 +276,95 @@ function Assert-WowInterfaceVersions {
     }
 }
 
+function Get-WagoPackagerFallbackVersion {
+    param(
+        [string[]]$AvailableVersions,
+        [string]$RequestedVersion
+    )
+
+    $comparer = [System.StringComparer]::Ordinal
+    $bestLower = $null
+    $bestOverall = $null
+    foreach ($version in $AvailableVersions) {
+        if ($null -eq $bestOverall -or $comparer.Compare($version, $bestOverall) -gt 0) {
+            $bestOverall = $version
+        }
+        if ($comparer.Compare($version, $RequestedVersion) -lt 0 -and
+            ($null -eq $bestLower -or $comparer.Compare($version, $bestLower) -gt 0)) {
+            $bestLower = $version
+        }
+    }
+    if ($null -ne $bestLower) {
+        return $bestLower
+    }
+    return $bestOverall
+}
+
+function Assert-WagoVersions {
+    param(
+        [string]$JsonText,
+        [string[]]$RequiredVersions
+    )
+
+    # SYNC: BigWigs Packager release.sh::upload_wago reads patches.retail from this endpoint.
+    $data = ConvertFrom-JsonCompat $JsonText
+    if ($null -eq $data -or $null -eq $data.patches) {
+        throw "Wago game data must contain a patches object."
+    }
+    $retailProperty = $data.patches.PSObject.Properties["retail"]
+    if ($null -eq $retailProperty) {
+        throw "Wago game data is missing patches.retail; Packager would ignore Retail versions."
+    }
+
+    $retailVersions = @($retailProperty.Value)
+    if ($retailVersions.Count -eq 0) {
+        throw "Wago patches.retail is empty; Packager would ignore Retail versions."
+    }
+    $seen = @{}
+    foreach ($item in $retailVersions) {
+        $versionText = [string]$item
+        if ($versionText -notmatch "^\d+\.\d+\.\d+$") {
+            throw "Wago patches.retail contains malformed version '$versionText'."
+        }
+        if ($seen.ContainsKey($versionText)) {
+            throw "Wago patches.retail contains duplicate version '$versionText'."
+        }
+        $seen[$versionText] = $true
+    }
+
+    foreach ($version in $RequiredVersions) {
+        $acceptedVersions = @(Get-AcceptedRetailCompatibilityVersions -Version $version)
+        $matches = @($acceptedVersions | Where-Object { $seen.ContainsKey($_) })
+        if ($matches.Count -eq 0) {
+            throw "Wago must expose Retail patch '$version' or accepted aggregate '$($acceptedVersions -join ', ')'; found none."
+        }
+        if ($seen.ContainsKey($version)) {
+            continue
+        }
+
+        $packagerFallback = Get-WagoPackagerFallbackVersion -AvailableVersions $retailVersions -RequestedVersion $version
+        $allowedFallbacks = @($acceptedVersions)
+        $requestedParsed = [version]$version
+        foreach ($requiredVersion in $RequiredVersions) {
+            $requiredParsed = [version]$requiredVersion
+            if ($requiredParsed.Major -eq $requestedParsed.Major -and
+                $requiredParsed -le $requestedParsed -and
+                $allowedFallbacks -notcontains $requiredVersion) {
+                $allowedFallbacks += $requiredVersion
+            }
+        }
+        if ($allowedFallbacks -notcontains $packagerFallback) {
+            throw "Wago Packager would replace Retail patch '$version' with unexpected fallback '$packagerFallback'; allowed: $($allowedFallbacks -join ', ')."
+        }
+    }
+}
+
 function Assert-MarketplaceVersions {
     param(
         [string]$TocPath,
         [string]$CurseForgeVersionsJsonPath,
-        [string]$WowInterfaceVersionsJsonPath
+        [string]$WowInterfaceVersionsJsonPath,
+        [string]$WagoVersionsJsonPath
     )
 
     $interfaces = @(Get-TocInterfaceValues -Path $TocPath)
@@ -307,6 +392,12 @@ function Assert-MarketplaceVersions {
         -Description "WoWInterface compatibility versions"
     Assert-WowInterfaceVersions -JsonText $wowInterfaceJson -RequiredVersions $requiredVersions
 
+    $wagoJson = Read-JsonTextOrFetch `
+        -Path $WagoVersionsJsonPath `
+        -Uri "https://addons.wago.io/api/data/game" `
+        -Description "Wago game versions"
+    Assert-WagoVersions -JsonText $wagoJson -RequiredVersions $requiredVersions
+
     Write-Host "Marketplace version gate passed for Retail $($requiredVersions -join ', ')."
 }
 
@@ -330,15 +421,27 @@ function Invoke-SelfTest {
   {"game": "Classic", "id": "1.15.7"}
 ]
 '@
-$wowiAggregateValid = @'
+    $wowiAggregateValid = @'
 [
   {"game": "Retail", "id": "12.0.0"},
   {"game": "Classic", "id": "1.15.7"}
 ]
 '@
+    $wagoExactValid = @'
+{"patches":{"retail":["12.1.0","12.0.7"],"classic":["1.15.8"]}}
+'@
+    $wagoAggregateValid = @'
+{"patches":{"retail":["12.0.0"],"classic":["1.15.8"]}}
+'@
+    $wagoRequestedVersionFallbackValid = @'
+{"patches":{"retail":["12.0.7","12.0.0"],"classic":["1.15.8"]}}
+'@
     Assert-CurseForgeVersions -JsonText $cfValid -RequiredVersions $versions
     Assert-WowInterfaceVersions -JsonText $wowiExactValid -RequiredVersions $versions
     Assert-WowInterfaceVersions -JsonText $wowiAggregateValid -RequiredVersions $versions
+    Assert-WagoVersions -JsonText $wagoExactValid -RequiredVersions $versions
+    Assert-WagoVersions -JsonText $wagoAggregateValid -RequiredVersions $versions
+    Assert-WagoVersions -JsonText $wagoRequestedVersionFallbackValid -RequiredVersions $versions
 
     Assert-ThrowsMatch "missing CurseForge version rejected" {
         Assert-CurseForgeVersions -JsonText '[{"id":1,"gameVersionTypeID":517,"name":"12.0.7"}]' -RequiredVersions $versions
@@ -352,6 +455,18 @@ $wowiAggregateValid = @'
     Assert-ThrowsMatch "duplicate WoWInterface aggregate rejected" {
         Assert-WowInterfaceVersions -JsonText '[{"game":"Retail","id":"12.0.0"},{"game":"Retail","id":"12.0.0"}]' -RequiredVersions $versions
     } "12\.0\.0"
+    Assert-ThrowsMatch "missing Wago version and aggregate rejected" {
+        Assert-WagoVersions -JsonText '{"patches":{"retail":["12.0.7"]}}' -RequiredVersions $versions
+    } "12\.1\.0"
+    Assert-ThrowsMatch "ignored Wago Retail versions rejected" {
+        Assert-WagoVersions -JsonText '{"patches":{"retail":[]}}' -RequiredVersions $versions
+    } "ignore Retail"
+    Assert-ThrowsMatch "duplicate Wago version rejected" {
+        Assert-WagoVersions -JsonText '{"patches":{"retail":["12.0.7","12.0.7","12.1.0"]}}' -RequiredVersions $versions
+    } "duplicate version '12\.0\.7'"
+    Assert-ThrowsMatch "unexpected Wago Packager fallback rejected" {
+        Assert-WagoVersions -JsonText '{"patches":{"retail":["12.0.9","12.0.7","12.0.0"]}}' -RequiredVersions $versions
+    } "unexpected fallback '12\.0\.9'"
     Assert-ThrowsMatch "bad interface rejected" {
         [void](Get-RequiredRetailVersionsFromInterfaces -Interfaces @("12005"))
     } "12005"
@@ -466,4 +581,5 @@ if ($SelfTest) {
 Assert-MarketplaceVersions `
     -TocPath $TocPath `
     -CurseForgeVersionsJsonPath $CurseForgeVersionsJsonPath `
-    -WowInterfaceVersionsJsonPath $WowInterfaceVersionsJsonPath
+    -WowInterfaceVersionsJsonPath $WowInterfaceVersionsJsonPath `
+    -WagoVersionsJsonPath $WagoVersionsJsonPath

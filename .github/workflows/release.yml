@@ -92,10 +92,12 @@ jobs:
         shell: pwsh
         env:
           STATSPRO_ARCHIVE_PATH: ${{ steps.build-package.outputs.archive_path }}
+          STATSPRO_PROJECT_VERSION: ${{ steps.build-package.outputs.project_version }}
         run: |
           ./scripts/check-package-dry-run.ps1 `
             -ArchivePath $env:STATSPRO_ARCHIVE_PATH `
             -ExpectedTag $env:GITHUB_REF_NAME `
+            -PackagerProjectVersion $env:STATSPRO_PROJECT_VERSION `
             -PackageRoot (Join-Path ".release" "StatsPro") `
             -ManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256") `
             -ArchonMaxAgeDays 3 `
@@ -117,10 +119,12 @@ jobs:
         shell: pwsh
         env:
           STATSPRO_ARCHIVE_PATH: ${{ steps.rebuild-package.outputs.archive_path }}
+          STATSPRO_PROJECT_VERSION: ${{ steps.rebuild-package.outputs.project_version }}
         run: |
           ./scripts/check-package-dry-run.ps1 `
             -ArchivePath $env:STATSPRO_ARCHIVE_PATH `
             -ExpectedTag $env:GITHUB_REF_NAME `
+            -PackagerProjectVersion $env:STATSPRO_PROJECT_VERSION `
             -PackageRoot (Join-Path ".release" "StatsPro") `
             -CompareManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256") `
             -ArchonMaxAgeDays 3 `
@@ -156,11 +160,13 @@ jobs:
         shell: pwsh
         env:
           STATSPRO_ARCHIVE_PATH: ${{ steps.publish-package.outputs.archive_path }}
+          STATSPRO_PROJECT_VERSION: ${{ steps.publish-package.outputs.project_version }}
         run: |
           $releaseJsonPath = Join-Path ".release" "release.json"
           ./scripts/check-package-dry-run.ps1 `
             -ArchivePath $env:STATSPRO_ARCHIVE_PATH `
             -ExpectedTag $env:GITHUB_REF_NAME `
+            -PackagerProjectVersion $env:STATSPRO_PROJECT_VERSION `
             -PackageRoot (Join-Path ".release" "StatsPro") `
             -CompareManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256") `
             -ArchonMaxAgeDays 3 `
@@ -233,6 +239,7 @@ jobs:
             -ZipPath $zipPath `
             -ReleaseJsonPath $releaseJsonPath `
             -ExpectedTag $tag `
+            -PackagerProjectVersion $tag `
             -WithReleaseJson `
             -ArchonMaxAgeDays 3 `
             -EnforceToolLocks

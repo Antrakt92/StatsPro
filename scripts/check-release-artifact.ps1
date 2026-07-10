@@ -2,6 +2,7 @@ param(
     [string]$ZipPath,
     [string]$ReleaseJsonPath,
     [string]$ExpectedTag,
+    [string]$PackagerProjectVersion,
     [string]$SourceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")),
     [int]$ArchonMaxAgeDays = 3,
     [string]$ToolLockPath = (Join-Path $PSScriptRoot "tool-version-locks.json"),
@@ -80,9 +81,21 @@ function Normalize-StatsProZipEntryPath {
     if ([string]::IsNullOrWhiteSpace($Entry)) {
         throw "Package contains an empty entry path."
     }
-    $path = ($Entry -replace "\\", "/").Trim()
+    $path = $Entry -replace "\\", "/"
+    if ($path -cne $path.Trim()) {
+        throw "Package contains an entry path with leading or trailing whitespace: '$Entry'."
+    }
     if ($path.StartsWith("/") -or $path -match "^[A-Za-z]:/" -or $path -match "(^|/)\.\.(/|$)") {
         throw "Package contains unsafe entry path '$Entry'."
+    }
+    $pathWithoutTrailingSlash = if ($path.EndsWith("/")) { $path.Substring(0, $path.Length - 1) } else { $path }
+    if ([string]::IsNullOrWhiteSpace($pathWithoutTrailingSlash)) {
+        throw "Package contains an empty entry path."
+    }
+    foreach ($segment in $pathWithoutTrailingSlash.Split([char[]]@('/'), [System.StringSplitOptions]::None)) {
+        if ([string]::IsNullOrEmpty($segment) -or $segment -eq "." -or $segment -eq "..") {
+            throw "Package contains unsafe entry path '$Entry'."
+        }
     }
     return $path
 }
@@ -119,9 +132,19 @@ function Get-StatsProPackageFileContract {
         "StatsPro/libs/CallbackHandler-1.0/CallbackHandler-1.0.lua",
         "StatsPro/libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua"
     )
+    $textFiles = @($requiredFiles | Where-Object { $_ -ne "StatsPro/textures/logo.png" })
     return [pscustomobject]@{
         RequiredFiles = $requiredFiles
         AllowedFiles  = $requiredFiles
+        TextFiles     = $textFiles
+        SourceSubstitutions = @(
+            # SYNC: Pinned BigWigs Packager vcs_filter replaces only these two package-surface tokens today.
+            [pscustomobject]@{
+                Path          = "StatsPro/StatsPro.lua"
+                Token         = "@project-version@"
+                ExpectedCount = 2
+            }
+        )
     }
 }
 
@@ -141,7 +164,9 @@ function Assert-StatsProPackageEntries {
     $fileEntries = @($normalized | Where-Object { -not $_.EndsWith("/") })
     $fileSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     foreach ($entry in $fileEntries) {
-        [void]$fileSet.Add($entry)
+        if (-not $fileSet.Add($entry)) {
+            throw "Package contains duplicate file entry $entry."
+        }
     }
 
     $contract = Get-StatsProPackageFileContract
@@ -249,6 +274,307 @@ function Assert-PackagedStatsProVersionMetadata {
     return [pscustomobject]@{
         Version    = $expectedVersion
         Interfaces = @(Get-TocInterfaceValues -TocPath $tocPath)
+    }
+}
+
+function Assert-PackagerProjectVersion {
+    param([string]$Value)
+
+    if ($Value -notmatch '^v\d+\.\d+\.\d+(?:-\d+-g[0-9a-fA-F]{7,40})?$') {
+        throw "Malformed Packager project version '$Value'. Expected vX.Y.Z or vX.Y.Z-N-gHASH."
+    }
+}
+
+function ConvertTo-StatsProNormalizedText {
+    param(
+        [string]$Path,
+        [string]$ContractPath
+    )
+
+    $utf8 = [System.Text.UTF8Encoding]::new($false, $true)
+    try {
+        $text = $utf8.GetString([System.IO.File]::ReadAllBytes($Path))
+    }
+    catch {
+        throw "Package source-fidelity text file $ContractPath is not valid UTF-8: $($_.Exception.Message)"
+    }
+    if ($ContractPath -eq "StatsPro/StatsPro.toc" -and $text.Length -gt 0 -and $text[0] -eq [char]0xFEFF) {
+        $text = $text.Substring(1)
+    }
+    return (($text -replace "`r`n", "`n") -replace "`r", "`n")
+}
+
+function ConvertTo-StatsProExpectedPackagedText {
+    param(
+        [string]$SourceText,
+        [string]$ContractPath,
+        [string]$ProjectVersion,
+        [object]$Contract = (Get-StatsProPackageFileContract)
+    )
+
+    $expectedText = $SourceText
+    foreach ($substitution in @($Contract.SourceSubstitutions | Where-Object { $_.Path -eq $ContractPath })) {
+        $parts = $expectedText.Split([string[]]@($substitution.Token), [System.StringSplitOptions]::None)
+        $count = $parts.Length - 1
+        if ($count -ne $substitution.ExpectedCount) {
+            throw "Package source-fidelity contract expected $($substitution.ExpectedCount) '$($substitution.Token)' token(s) in $ContractPath, found $count."
+        }
+        $expectedText = $expectedText.Replace($substitution.Token, $ProjectVersion)
+    }
+    return $expectedText
+}
+
+function Get-StatsProTopChangelogEntryFromText {
+    param([string]$Text)
+
+    # SYNC: check-release-version.ps1::Get-TopChangelogEntry prepares the release-only manual changelog.
+    $headingDash = [regex]::Escape([string][char]0x2014)
+    $headingPattern = "^##\s+([0-9]+\.[0-9]+\.[0-9]+)\s+-\s+([0-9]{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-[0-9]{4})\s+$headingDash\s+\S.*$"
+    $headingMatches = [regex]::Matches($Text, $headingPattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
+    if ($headingMatches.Count -eq 0) {
+        throw "Package source-fidelity changelog has no release heading."
+    }
+    $firstHeading = $headingMatches[0]
+    $endIndex = if ($headingMatches.Count -gt 1) { $headingMatches[1].Index } else { $Text.Length }
+    $prefix = $Text.Substring(0, $firstHeading.Index).TrimEnd()
+    $entry = $Text.Substring($firstHeading.Index, $endIndex - $firstHeading.Index).TrimEnd()
+    if (-not [string]::IsNullOrWhiteSpace($prefix)) {
+        return "$prefix`n`n$entry`n"
+    }
+    return "$entry`n"
+}
+
+function Get-StatsProBytesSha256 {
+    param([byte[]]$Bytes)
+
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return (($sha.ComputeHash($Bytes) | ForEach-Object { $_.ToString("X2") }) -join "")
+    }
+    finally {
+        $sha.Dispose()
+    }
+}
+
+function Get-StatsProTextSha256 {
+    param([string]$Text)
+
+    return Get-StatsProBytesSha256 -Bytes ([System.Text.Encoding]::UTF8.GetBytes($Text))
+}
+
+function Sort-StatsProOrdinalStrings {
+    param([string[]]$Values)
+
+    $copy = [string[]]@($Values)
+    [System.Array]::Sort($copy, [System.StringComparer]::Ordinal)
+    return $copy
+}
+
+function Assert-StatsProOrdinalPathSet {
+    param(
+        [string[]]$Expected,
+        [string[]]$Actual,
+        [string]$Description
+    )
+
+    $expectedSorted = @(Sort-StatsProOrdinalStrings -Values $Expected)
+    $actualSorted = @(Sort-StatsProOrdinalStrings -Values $Actual)
+    if ($expectedSorted.Count -ne $actualSorted.Count) {
+        throw "$Description path count is $($actualSorted.Count), expected $($expectedSorted.Count). Actual: $($actualSorted -join ', ')"
+    }
+    for ($index = 0; $index -lt $expectedSorted.Count; $index++) {
+        if (-not [System.StringComparer]::Ordinal.Equals($expectedSorted[$index], $actualSorted[$index])) {
+            throw "$Description path mismatch at entry $($index + 1): '$($actualSorted[$index])', expected '$($expectedSorted[$index])'."
+        }
+    }
+}
+
+function Get-StatsProExpandedPackageFilePaths {
+    param([string]$PackageRoot)
+
+    $resolvedRoot = (Resolve-Path -LiteralPath $PackageRoot).Path
+    return @(
+        Get-ChildItem -LiteralPath $resolvedRoot -Recurse -File |
+            ForEach-Object {
+                $relative = [System.IO.Path]::GetRelativePath($resolvedRoot, $_.FullName) -replace "\\", "/"
+                $contractPath = Normalize-StatsProZipEntryPath "StatsPro/$relative"
+                [pscustomobject]@{
+                    ContractPath = $contractPath
+                    FullName     = $_.FullName
+                }
+            }
+    )
+}
+
+function Resolve-StatsProSourceContractFile {
+    param(
+        [string]$SourceRoot,
+        [string]$RelativePath
+    )
+
+    $current = Get-Item -LiteralPath (Resolve-Path -LiteralPath $SourceRoot).Path
+    foreach ($segment in ($RelativePath -split "/")) {
+        $matches = @(Get-ChildItem -LiteralPath $current.FullName -Force | Where-Object {
+            [System.StringComparer]::OrdinalIgnoreCase.Equals($_.Name, $segment)
+        })
+        if ($matches.Count -eq 0) {
+            throw "Package source-fidelity source file is missing: StatsPro/$RelativePath."
+        }
+        if ($matches.Count -gt 1) {
+            throw "Package source-fidelity source path is ambiguous at '$segment' in StatsPro/$RelativePath."
+        }
+        if (-not [System.StringComparer]::Ordinal.Equals($matches[0].Name, $segment)) {
+            throw "Package source-fidelity source path case mismatch: '$($matches[0].Name)', expected '$segment' in StatsPro/$RelativePath."
+        }
+        $current = $matches[0]
+    }
+    if (-not $current.PSIsContainer -and (Test-Path -LiteralPath $current.FullName -PathType Leaf)) {
+        return $current
+    }
+    throw "Package source-fidelity source file is missing: StatsPro/$RelativePath."
+}
+
+function Assert-StatsProPackageSourceFidelity {
+    param(
+        [string]$PackageRoot,
+        [string]$SourceRoot,
+        [string]$ProjectVersion
+    )
+
+    Assert-PackagerProjectVersion $ProjectVersion
+    $contract = Get-StatsProPackageFileContract
+    $expectedPaths = @($contract.RequiredFiles)
+    $packageFiles = @(Get-StatsProExpandedPackageFilePaths -PackageRoot $PackageRoot)
+    $actualPaths = @($packageFiles | ForEach-Object { $_.ContractPath })
+    Assert-StatsProOrdinalPathSet -Expected $expectedPaths -Actual $actualPaths -Description "Expanded package source-fidelity"
+
+    $packageByPath = @{}
+    foreach ($packageFile in $packageFiles) {
+        if ($packageByPath.ContainsKey($packageFile.ContractPath)) {
+            throw "Expanded package contains duplicate canonical path $($packageFile.ContractPath)."
+        }
+        $packageByPath[$packageFile.ContractPath] = $packageFile.FullName
+    }
+    $textFiles = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($path in $contract.TextFiles) {
+        [void]$textFiles.Add($path)
+    }
+
+    foreach ($contractPath in $expectedPaths) {
+        $relative = $contractPath.Substring("StatsPro/".Length)
+        $sourceItem = Resolve-StatsProSourceContractFile -SourceRoot $SourceRoot -RelativePath $relative
+
+        $packagePath = $packageByPath[$contractPath]
+        if ($textFiles.Contains($contractPath)) {
+            $sourceText = ConvertTo-StatsProNormalizedText -Path $sourceItem.FullName -ContractPath $contractPath
+            $expectedText = ConvertTo-StatsProExpectedPackagedText -SourceText $sourceText -ContractPath $contractPath -ProjectVersion $ProjectVersion -Contract $contract
+            $actualText = ConvertTo-StatsProNormalizedText -Path $packagePath -ContractPath $contractPath
+            $expectedAlternatives = @($expectedText)
+            if ($contractPath -eq "StatsPro/CHANGELOG.md") {
+                $topChangelogEntry = Get-StatsProTopChangelogEntryFromText -Text $expectedText
+                if (-not [System.StringComparer]::Ordinal.Equals($topChangelogEntry, $expectedText)) {
+                    $expectedAlternatives += $topChangelogEntry
+                }
+            }
+            $matched = $false
+            foreach ($expectedAlternative in $expectedAlternatives) {
+                if ([System.StringComparer]::Ordinal.Equals($expectedAlternative, $actualText)) {
+                    $matched = $true
+                    break
+                }
+            }
+            if (-not $matched) {
+                $expectedHashes = @($expectedAlternatives | ForEach-Object { Get-StatsProTextSha256 $_ })
+                throw "Package source-fidelity mismatch for ${contractPath}: normalized SHA256 $(Get-StatsProTextSha256 $actualText), expected one of $($expectedHashes -join ', ')."
+            }
+        }
+        else {
+            $expectedBytes = [System.IO.File]::ReadAllBytes($sourceItem.FullName)
+            $actualBytes = [System.IO.File]::ReadAllBytes($packagePath)
+            $expectedHash = Get-StatsProBytesSha256 -Bytes $expectedBytes
+            $actualHash = Get-StatsProBytesSha256 -Bytes $actualBytes
+            if (-not [System.StringComparer]::Ordinal.Equals($expectedHash, $actualHash)) {
+                throw "Package source-fidelity mismatch for ${contractPath}: SHA256 $actualHash, expected $expectedHash."
+            }
+        }
+    }
+}
+
+function Get-PackagedRuntimeLuaPathsFromToc {
+    param([string]$PackageRoot)
+
+    $tocPath = Join-Path $PackageRoot "StatsPro.toc"
+    $tocText = ConvertTo-StatsProNormalizedText -Path $tocPath -ContractPath "StatsPro/StatsPro.toc"
+    $refs = @()
+    foreach ($line in ($tocText -split "`n")) {
+        $trimmed = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith("#")) {
+            continue
+        }
+        if ($trimmed -match '(?i)\.lua$') {
+            $contractPath = Normalize-StatsProZipEntryPath ("StatsPro/" + ($trimmed -replace "\\", "/"))
+            $refs += $contractPath.Substring("StatsPro/".Length)
+        }
+    }
+    if ($refs.Count -eq 0) {
+        throw "Packaged StatsPro.toc contains no runtime Lua files."
+    }
+    return @($refs)
+}
+
+function Resolve-Luac51 {
+    $candidates = @(
+        (Get-Command "luac5.1" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
+        (Get-Command "luac" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
+        "C:\ProgramData\chocolatey\lib\lua51\tools\luac5.1.exe"
+    )
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($candidate in $candidates) {
+        if ([string]::IsNullOrWhiteSpace($candidate) -or -not $seen.Add($candidate) -or -not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            continue
+        }
+        $result = Invoke-NativeCapture -FilePath $candidate -Arguments @("-v")
+        if ($result.ExitCode -eq 0 -and ($result.Output -join "`n") -match 'Lua 5\.1(?:\.|\s|$)') {
+            return $candidate
+        }
+    }
+    throw "luac5.1 is required to syntax-check packaged runtime Lua."
+}
+
+function Assert-Luac51VersionLock {
+    param([string]$LuacPath, [string]$LockPath)
+
+    $locks = Read-StatsProToolLocks -Path $LockPath
+    $result = Invoke-NativeCapture -FilePath $LuacPath -Arguments @("-v")
+    if ($result.ExitCode -ne 0) {
+        throw "luac5.1 -v exited with code $($result.ExitCode): $($result.Output -join ' ')"
+    }
+    Assert-StatsProCommandVersionText -Label "luac5.1" -Text ($result.Output -join "`n") -Pattern (Get-StatsProLockedCommandPattern -Locks $locks -CommandName "luac5.1")
+}
+
+function Assert-PackagedRuntimeLuaSyntax {
+    param(
+        [string]$PackageRoot,
+        [string]$LuacPath,
+        [bool]$CheckToolLocks
+    )
+
+    if ($CheckToolLocks) {
+        Assert-Luac51VersionLock -LuacPath $LuacPath -LockPath $ToolLockPath
+    }
+    $refs = @(Get-PackagedRuntimeLuaPathsFromToc -PackageRoot $PackageRoot)
+    $packagedLua = @(
+        Get-ChildItem -LiteralPath $PackageRoot -Recurse -File -Filter "*.lua" |
+            ForEach-Object { [System.IO.Path]::GetRelativePath($PackageRoot, $_.FullName) -replace "\\", "/" }
+    )
+    Assert-StatsProOrdinalPathSet -Expected $refs -Actual $packagedLua -Description "Packaged runtime Lua"
+
+    foreach ($relative in (Sort-StatsProOrdinalStrings -Values $refs)) {
+        $path = Join-Path $PackageRoot ($relative -replace "/", [System.IO.Path]::DirectorySeparatorChar)
+        $result = Invoke-NativeCapture -FilePath $LuacPath -Arguments @("-p", $path)
+        if ($result.ExitCode -ne 0) {
+            throw "Packaged runtime Lua syntax failed for ${relative}: $($result.Output -join ' ')"
+        }
     }
 }
 
@@ -453,6 +779,7 @@ function Assert-StatsProReleaseArtifact {
         [string]$ZipPath,
         [string]$ReleaseJsonPath,
         [string]$ExpectedTag,
+        [string]$PackagerProjectVersion,
         [string]$SourceRoot,
         [int]$ArchonMaxAgeDays,
         [bool]$PackageOnly,
@@ -475,6 +802,10 @@ function Assert-StatsProReleaseArtifact {
         throw "Missing -ExpectedTag."
     }
     Assert-ReleaseTag $ExpectedTag
+    if ([string]::IsNullOrWhiteSpace($PackagerProjectVersion)) {
+        $PackagerProjectVersion = $ExpectedTag
+    }
+    Assert-PackagerProjectVersion $PackagerProjectVersion
     $zipFullPath = (Resolve-Path $ZipPath).Path
     $sourceFullPath = (Resolve-Path $SourceRoot).Path
 
@@ -484,6 +815,9 @@ function Assert-StatsProReleaseArtifact {
     $expanded = $null
     try {
         $expanded = Expand-StatsProPackageToTemp -Path $zipFullPath
+        $luac = Resolve-Luac51
+        Assert-PackagedRuntimeLuaSyntax -PackageRoot $expanded.PackageRoot -LuacPath $luac -CheckToolLocks:$EnforceToolLocks.IsPresent
+        Assert-StatsProPackageSourceFidelity -PackageRoot $expanded.PackageRoot -SourceRoot $sourceFullPath -ProjectVersion $PackagerProjectVersion
         $versionMetadata = Assert-PackagedStatsProVersionMetadata -PackageRoot $expanded.PackageRoot -ExpectedTag $ExpectedTag
         Assert-StatsProThirdPartyMaterials -Root $expanded.PackageRoot
         Assert-PackagedArchonTargets -PackageRoot $expanded.PackageRoot -SourceRoot $sourceFullPath -MaxAgeDays $ArchonMaxAgeDays
@@ -510,19 +844,42 @@ function Assert-StatsProReleaseArtifact {
 function New-TestPackageZip {
     param(
         [string]$SourceRoot,
-        [string]$ZipPath
+        [string]$ZipPath,
+        [string]$PackagerProjectVersion
     )
 
+    Assert-PackagerProjectVersion $PackagerProjectVersion
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     if (Test-Path -LiteralPath $ZipPath) {
         Remove-Item -LiteralPath $ZipPath -Force
     }
     $archive = [System.IO.Compression.ZipFile]::Open($ZipPath, [System.IO.Compression.ZipArchiveMode]::Create)
     try {
-        foreach ($file in (Get-StatsProPackageFileContract).RequiredFiles) {
+        $contract = Get-StatsProPackageFileContract
+        $textFiles = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+        foreach ($textFile in $contract.TextFiles) {
+            [void]$textFiles.Add($textFile)
+        }
+        foreach ($file in $contract.RequiredFiles) {
             $relative = $file.Substring("StatsPro/".Length)
             $sourceFile = Join-Path $SourceRoot ($relative -replace "/", [System.IO.Path]::DirectorySeparatorChar)
-            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $sourceFile, $file) | Out-Null
+            if ($textFiles.Contains($file)) {
+                $sourceText = ConvertTo-StatsProNormalizedText -Path $sourceFile -ContractPath $file
+                $packagedText = ConvertTo-StatsProExpectedPackagedText -SourceText $sourceText -ContractPath $file -ProjectVersion $PackagerProjectVersion -Contract $contract
+                $packagedText = $packagedText -replace "`n", "`r`n"
+                $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($packagedText)
+                $entry = $archive.CreateEntry($file)
+                $stream = $entry.Open()
+                try {
+                    $stream.Write($bytes, 0, $bytes.Length)
+                }
+                finally {
+                    $stream.Dispose()
+                }
+            }
+            else {
+                [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $sourceFile, $file) | Out-Null
+            }
         }
     }
     finally {
@@ -551,7 +908,7 @@ function Invoke-SelfTest {
         } "unsafe"
 
         $zip = Join-Path $tempDir "StatsPro-$tag.zip"
-        New-TestPackageZip -SourceRoot $sourceRoot -ZipPath $zip
+        New-TestPackageZip -SourceRoot $sourceRoot -ZipPath $zip -PackagerProjectVersion $tag
         $jsonPath = Join-Path $tempDir "release.json"
         Assert-StatsProReleaseArtifact -ZipPath $zip -ReleaseJsonPath $jsonPath -ExpectedTag $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$false -WithReleaseJson:$true -WriteReleaseJson:$true
         $expectedJson = New-StatsProReleaseJsonText -ExpectedTag $tag -Interfaces $interfaces
@@ -559,9 +916,137 @@ function Invoke-SelfTest {
             throw "Generated release.json is not deterministic."
         }
         Assert-StatsProReleaseArtifact -ZipPath $zip -ExpectedTag $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$true -WithReleaseJson:$false -WriteReleaseJson:$false
-        $branchZip = Join-Path $tempDir "StatsPro-$tag-12-gabcdef0.zip"
-        Copy-Item -LiteralPath $zip -Destination $branchZip
-        Assert-StatsProReleaseArtifact -ZipPath $branchZip -ExpectedTag $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$true -WithReleaseJson:$false
+        $branchProjectVersion = "$tag-12-gabcdef0"
+        $branchZip = Join-Path $tempDir "StatsPro-$branchProjectVersion.zip"
+        New-TestPackageZip -SourceRoot $sourceRoot -ZipPath $branchZip -PackagerProjectVersion $branchProjectVersion
+        Assert-StatsProReleaseArtifact -ZipPath $branchZip -ExpectedTag $tag -PackagerProjectVersion $branchProjectVersion -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$true -WithReleaseJson:$false
+
+        if ((Normalize-StatsProZipEntryPath "StatsPro\StatsPro.lua") -ne "StatsPro/StatsPro.lua") {
+            throw "Backslash package path normalization failed."
+        }
+        Assert-ThrowsMatch "unsafe dot-segment zip path rejected" {
+            [void](Normalize-StatsProZipEntryPath "StatsPro/./StatsPro.lua")
+        } "unsafe"
+        Assert-ThrowsMatch "unsafe duplicate-separator zip path rejected" {
+            [void](Normalize-StatsProZipEntryPath "StatsPro//StatsPro.lua")
+        } "unsafe"
+        Assert-ThrowsMatch "rooted zip path rejected" {
+            [void](Normalize-StatsProZipEntryPath "/StatsPro/StatsPro.lua")
+        } "unsafe"
+        Assert-ThrowsMatch "drive zip path rejected" {
+            [void](Normalize-StatsProZipEntryPath "C:/StatsPro/StatsPro.lua")
+        } "unsafe"
+        Assert-ThrowsMatch "whitespace zip path rejected" {
+            [void](Normalize-StatsProZipEntryPath " StatsPro/StatsPro.lua")
+        } "whitespace"
+        Assert-ThrowsMatch "duplicate zip file entry rejected" {
+            Assert-StatsProPackageEntries -Entries ((Get-StatsProPackageFileContract).RequiredFiles + "StatsPro/StatsPro.lua")
+        } "duplicate"
+        Assert-ThrowsMatch "malformed Packager project version rejected" {
+            Assert-PackagerProjectVersion "v1.2.3-dirty"
+        } "Malformed"
+        Assert-ThrowsMatch "source substitution token count drift rejected" {
+            [void](ConvertTo-StatsProExpectedPackagedText -SourceText "-- @project-version@" -ContractPath "StatsPro/StatsPro.lua" -ProjectVersion "v1.2.3")
+        } "expected 2"
+
+        $mutationPackage = Expand-StatsProPackageToTemp -Path $zip
+        try {
+            $mutationRoot = $mutationPackage.PackageRoot
+            $luac = Resolve-Luac51
+            Assert-PackagedRuntimeLuaSyntax -PackageRoot $mutationRoot -LuacPath $luac -CheckToolLocks:$false
+            Assert-StatsProPackageSourceFidelity -PackageRoot $mutationRoot -SourceRoot $sourceRoot -ProjectVersion $tag
+
+            $corePath = Join-Path $mutationRoot "StatsPro.lua"
+            $coreBytes = [System.IO.File]::ReadAllBytes($corePath)
+            [System.IO.File]::AppendAllText($corePath, "`r`n-- syntactically valid mutation", [System.Text.UTF8Encoding]::new($false))
+            Assert-ThrowsMatch "core source-fidelity mutation rejected" {
+                Assert-StatsProPackageSourceFidelity -PackageRoot $mutationRoot -SourceRoot $sourceRoot -ProjectVersion $tag
+            } "source-fidelity mismatch.*StatsPro/StatsPro\.lua"
+            [System.IO.File]::WriteAllBytes($corePath, $coreBytes)
+
+            $coreText = [System.IO.File]::ReadAllText($corePath)
+            $inconsistentVersionText = ([regex]::new([regex]::Escape($tag))).Replace($coreText, "v9.9.9", 1)
+            [System.IO.File]::WriteAllText($corePath, $inconsistentVersionText, [System.Text.UTF8Encoding]::new($false))
+            Assert-ThrowsMatch "inconsistent project-version substitution rejected" {
+                Assert-StatsProPackageSourceFidelity -PackageRoot $mutationRoot -SourceRoot $sourceRoot -ProjectVersion $tag
+            } "source-fidelity mismatch.*StatsPro/StatsPro\.lua"
+            [System.IO.File]::WriteAllBytes($corePath, $coreBytes)
+
+            [System.IO.File]::WriteAllText($corePath, "local =`n", [System.Text.UTF8Encoding]::new($false))
+            Assert-ThrowsMatch "invalid packaged core Lua rejected" {
+                Assert-PackagedRuntimeLuaSyntax -PackageRoot $mutationRoot -LuacPath $luac -CheckToolLocks:$false
+            } "syntax failed.*StatsPro\.lua"
+            [System.IO.File]::WriteAllBytes($corePath, $coreBytes)
+
+            $nestedLuaPath = Join-Path (Join-Path $mutationRoot "libs") "CallbackHandler-1.0"
+            $nestedLuaPath = Join-Path $nestedLuaPath "CallbackHandler-1.0.lua"
+            $nestedLuaBytes = [System.IO.File]::ReadAllBytes($nestedLuaPath)
+            [System.IO.File]::WriteAllText($nestedLuaPath, "local =`n", [System.Text.UTF8Encoding]::new($false))
+            Assert-ThrowsMatch "invalid packaged nested Lua rejected" {
+                Assert-PackagedRuntimeLuaSyntax -PackageRoot $mutationRoot -LuacPath $luac -CheckToolLocks:$false
+            } "syntax failed.*CallbackHandler-1\.0/CallbackHandler-1\.0\.lua"
+            [System.IO.File]::WriteAllBytes($nestedLuaPath, $nestedLuaBytes)
+
+            $changelogPath = Join-Path $mutationRoot "CHANGELOG.md"
+            $fullChangelogBytes = [System.IO.File]::ReadAllBytes($changelogPath)
+            $sourceChangelogPath = Join-Path $sourceRoot "CHANGELOG.md"
+            $sourceChangelogText = ConvertTo-StatsProNormalizedText -Path $sourceChangelogPath -ContractPath "StatsPro/CHANGELOG.md"
+            $topChangelogText = (Get-StatsProTopChangelogEntryFromText -Text $sourceChangelogText) -replace "`n", "`r`n"
+            [System.IO.File]::WriteAllText($changelogPath, $topChangelogText, [System.Text.UTF8Encoding]::new($false))
+            Assert-StatsProPackageSourceFidelity -PackageRoot $mutationRoot -SourceRoot $sourceRoot -ProjectVersion $tag
+            [System.IO.File]::AppendAllText($changelogPath, "mutation`r`n", [System.Text.UTF8Encoding]::new($false))
+            Assert-ThrowsMatch "trimmed changelog drift rejected" {
+                Assert-StatsProPackageSourceFidelity -PackageRoot $mutationRoot -SourceRoot $sourceRoot -ProjectVersion $tag
+            } "StatsPro/CHANGELOG\.md"
+            [System.IO.File]::WriteAllBytes($changelogPath, $fullChangelogBytes)
+
+            foreach ($relativeMutationPath in @(
+                "StatsPro.toc",
+                "CHANGELOG.md",
+                "LICENSE",
+                "LICENSES/CallbackHandler-1.0-BSD-2-Clause.txt",
+                "LICENSES/LibSharedMedia-3.0-LGPL-2.1.txt"
+            )) {
+                $mutationPath = Join-Path $mutationRoot ($relativeMutationPath -replace "/", [System.IO.Path]::DirectorySeparatorChar)
+                $originalBytes = [System.IO.File]::ReadAllBytes($mutationPath)
+                [System.IO.File]::AppendAllText($mutationPath, "`nmutation", [System.Text.UTF8Encoding]::new($false))
+                Assert-ThrowsMatch "$relativeMutationPath source-fidelity mutation rejected" {
+                    Assert-StatsProPackageSourceFidelity -PackageRoot $mutationRoot -SourceRoot $sourceRoot -ProjectVersion $tag
+                } ([regex]::Escape("StatsPro/$relativeMutationPath"))
+                [System.IO.File]::WriteAllBytes($mutationPath, $originalBytes)
+            }
+
+            $logoPath = Join-Path (Join-Path $mutationRoot "textures") "logo.png"
+            $logoBytes = [System.IO.File]::ReadAllBytes($logoPath)
+            if ($logoBytes.Length -eq 0) {
+                throw "Self-test logo fixture is empty."
+            }
+            $mutatedLogoBytes = [byte[]]$logoBytes.Clone()
+            $mutatedLogoBytes[0] = $mutatedLogoBytes[0] -bxor 0x01
+            [System.IO.File]::WriteAllBytes($logoPath, $mutatedLogoBytes)
+            Assert-ThrowsMatch "binary logo source-fidelity mutation rejected" {
+                Assert-StatsProPackageSourceFidelity -PackageRoot $mutationRoot -SourceRoot $sourceRoot -ProjectVersion $tag
+            } "StatsPro/textures/logo\.png"
+            [System.IO.File]::WriteAllBytes($logoPath, $logoBytes)
+
+            $extraPath = Join-Path $mutationRoot "debug.lua"
+            [System.IO.File]::WriteAllText($extraPath, "return true`n", [System.Text.UTF8Encoding]::new($false))
+            Assert-ThrowsMatch "extra package source-fidelity file rejected" {
+                Assert-StatsProPackageSourceFidelity -PackageRoot $mutationRoot -SourceRoot $sourceRoot -ProjectVersion $tag
+            } "path count"
+            Remove-Item -LiteralPath $extraPath -Force
+
+            Remove-Item -LiteralPath $corePath -Force
+            Assert-ThrowsMatch "missing package source-fidelity file rejected" {
+                Assert-StatsProPackageSourceFidelity -PackageRoot $mutationRoot -SourceRoot $sourceRoot -ProjectVersion $tag
+            } "path count"
+            [System.IO.File]::WriteAllBytes($corePath, $coreBytes)
+        }
+        finally {
+            if ($mutationPackage -and (Test-Path -LiteralPath $mutationPackage.TempDir)) {
+                Remove-Item -LiteralPath $mutationPackage.TempDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
 
         Assert-ThrowsMatch "release json mismatch rejected" {
             Assert-StatsProReleaseJson -JsonText '{"releases":[{"name":"Other"}]}' -ExpectedTag "v1.2.3" -ExpectedInterfaces @(120007)
@@ -688,6 +1173,7 @@ Assert-StatsProReleaseArtifact `
     -ZipPath $ZipPath `
     -ReleaseJsonPath $ReleaseJsonPath `
     -ExpectedTag $ExpectedTag `
+    -PackagerProjectVersion $PackagerProjectVersion `
     -SourceRoot $SourceRoot `
     -ArchonMaxAgeDays $ArchonMaxAgeDays `
     -PackageOnly:$PackageOnly.IsPresent `

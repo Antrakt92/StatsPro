@@ -81,8 +81,10 @@ jobs:
         shell: pwsh
         env:
           STATSPRO_ARCHIVE_PATH: ${{ steps.package.outputs.archive_path }}
+          STATSPRO_PROJECT_VERSION: ${{ steps.package.outputs.project_version }}
         run: |
           ./scripts/check-package-dry-run.ps1 `
             -ArchivePath $env:STATSPRO_ARCHIVE_PATH `
+            -PackagerProjectVersion $env:STATSPRO_PROJECT_VERSION `
             -ArchonMaxAgeDays 14 `
             -EnforceToolLocks

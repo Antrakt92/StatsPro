@@ -1,6 +1,7 @@
 param(
     [string]$ArchivePath,
     [string]$ExpectedTag,
+    [string]$PackagerProjectVersion,
     [string]$SourceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")),
     [string]$PackageRoot = (Join-Path (Join-Path (Join-Path $PSScriptRoot "..") ".release") "StatsPro"),
     [string]$ReleaseRoot = (Join-Path (Join-Path $PSScriptRoot "..") ".release"),
@@ -85,6 +86,28 @@ function Resolve-StatsProExpectedTag {
     return $Value
 }
 
+function Assert-StatsProPackagerProjectVersion {
+    param([string]$Value)
+
+    if ($Value -notmatch '^v\d+\.\d+\.\d+(?:-\d+-g[0-9a-fA-F]{7,40})?$') {
+        throw "Malformed Packager project version '$Value'. Expected vX.Y.Z or vX.Y.Z-N-gHASH."
+    }
+}
+
+function Resolve-StatsProPackagerProjectVersion {
+    param([string]$Value, [string]$Root)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        $output = @(& git -C $Root describe --tags --abbrev=7 '--exclude=*[Aa][Ll][Pp][Hh][Aa]*' 2>&1)
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not derive the pinned Packager project version from git: $($output -join ' ')"
+        }
+        $Value = ($output -join "`n").Trim()
+    }
+    Assert-StatsProPackagerProjectVersion $Value
+    return $Value
+}
+
 function Resolve-StatsProArchivePath {
     param([string]$Value, [string]$Root)
 
@@ -109,15 +132,20 @@ function Get-StatsProPackageManifestLines {
         throw "Package root not found: $Root"
     }
     $resolvedRoot = (Resolve-Path -LiteralPath $Root).Path
-    $lines = @(
-        Get-ChildItem -LiteralPath $resolvedRoot -Recurse -File |
-            Sort-Object FullName |
-            ForEach-Object {
-                $relative = [System.IO.Path]::GetRelativePath($resolvedRoot, $_.FullName) -replace "\\", "/"
-                $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
-                "$relative`t$hash"
-            }
-    )
+    $filesByRelativePath = @{}
+    foreach ($file in (Get-ChildItem -LiteralPath $resolvedRoot -Recurse -File)) {
+        $relative = [System.IO.Path]::GetRelativePath($resolvedRoot, $file.FullName) -replace "\\", "/"
+        if ($filesByRelativePath.ContainsKey($relative)) {
+            throw "Package root contains duplicate canonical path $relative."
+        }
+        $filesByRelativePath[$relative] = $file.FullName
+    }
+    $paths = [string[]]@($filesByRelativePath.Keys)
+    [System.Array]::Sort($paths, [System.StringComparer]::Ordinal)
+    $lines = @($paths | ForEach-Object {
+        $hash = (Get-FileHash -LiteralPath $filesByRelativePath[$_] -Algorithm SHA256).Hash
+        "$_`t$hash"
+    })
     if ($lines.Count -eq 0) {
         throw "Package root contains no files: $resolvedRoot"
     }
@@ -132,10 +160,13 @@ function Assert-StatsProPackageManifestMatches {
     }
     $expected = @(Get-Content -LiteralPath $ExpectedManifestPath)
     $actual = @(Get-StatsProPackageManifestLines -Root $Root)
-    $diff = Compare-Object -ReferenceObject $expected -DifferenceObject $actual
-    if ($diff) {
-        $text = ($diff | Format-Table -AutoSize | Out-String).Trim()
-        throw "Package tree is not repeatable between dry-run builds.`n$text"
+    if ($expected.Count -ne $actual.Count) {
+        throw "Package tree is not repeatable between dry-run builds: manifest line count is $($actual.Count), expected $($expected.Count)."
+    }
+    for ($index = 0; $index -lt $expected.Count; $index++) {
+        if (-not [System.StringComparer]::Ordinal.Equals([string]$expected[$index], [string]$actual[$index])) {
+            throw "Package tree is not repeatable between dry-run builds at manifest line $($index + 1): '$($actual[$index])', expected '$($expected[$index])'."
+        }
     }
 }
 
@@ -154,6 +185,7 @@ function Invoke-StatsProPackageArtifactCheck {
     param(
         [string]$ZipPath,
         [string]$ExpectedTag,
+        [string]$ProjectVersion,
         [string]$Root,
         [int]$MaxAgeDays,
         [bool]$CheckToolLocks
@@ -168,6 +200,7 @@ function Invoke-StatsProPackageArtifactCheck {
         & $checker `
             -ZipPath $ZipPath `
             -ExpectedTag $ExpectedTag `
+            -PackagerProjectVersion $ProjectVersion `
             -SourceRoot $Root `
             -ArchonMaxAgeDays $MaxAgeDays `
             -PackageOnly `
@@ -177,6 +210,7 @@ function Invoke-StatsProPackageArtifactCheck {
         & $checker `
             -ZipPath $ZipPath `
             -ExpectedTag $ExpectedTag `
+            -PackagerProjectVersion $ProjectVersion `
             -SourceRoot $Root `
             -ArchonMaxAgeDays $MaxAgeDays `
             -PackageOnly
@@ -189,6 +223,12 @@ function Invoke-SelfTest {
     if ($tag -notmatch "^v\d+\.\d+\.\d+$") {
         throw "Source version tag must be vX.Y.Z."
     }
+    if ((Resolve-StatsProPackagerProjectVersion -Value "v1.2.3-4-gabcdef0" -Root $sourceRoot) -ne "v1.2.3-4-gabcdef0") {
+        throw "Explicit Packager project version was not preserved."
+    }
+    Assert-ThrowsMatch "malformed Packager project version rejected" {
+        [void](Resolve-StatsProPackagerProjectVersion -Value "1.2.3" -Root $sourceRoot)
+    } "Malformed"
 
     $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-package-dry-run-test-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $tempDir | Out-Null
@@ -242,10 +282,12 @@ Assert-PowerShell7OrNewer
 $resolvedSourceRoot = (Resolve-Path -LiteralPath $SourceRoot).Path
 $resolvedArchivePath = Resolve-StatsProArchivePath -Value $ArchivePath -Root $ReleaseRoot
 $resolvedTag = Resolve-StatsProExpectedTag -Value $ExpectedTag -Root $resolvedSourceRoot
+$resolvedPackagerProjectVersion = Resolve-StatsProPackagerProjectVersion -Value $PackagerProjectVersion -Root $resolvedSourceRoot
 
 Invoke-StatsProPackageArtifactCheck `
     -ZipPath $resolvedArchivePath `
     -ExpectedTag $resolvedTag `
+    -ProjectVersion $resolvedPackagerProjectVersion `
     -Root $resolvedSourceRoot `
     -MaxAgeDays $ArchonMaxAgeDays `
     -CheckToolLocks:$EnforceToolLocks.IsPresent

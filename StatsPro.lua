@@ -826,7 +826,15 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "Over:", ["Matched:"] = "Matched:", ["Snapshot:"] = "Snapshot:",
         ["Stats panel shown"] = "Stats panel shown", ["Stats panel hidden"] = "Stats panel hidden",
         ["Settings reset to defaults"] = "Settings reset to defaults",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again.",
+        ["SwiftStats has no supported settings to import."] = "SwiftStats has no supported settings to import.",
+        ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "These settings use a newer schema and cannot be imported by this StatsPro version.",
+        ["SwiftStats import is unavailable during combat. Try again after combat."] = "SwiftStats import is unavailable during combat. Try again after combat.",
+        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload.",
+        ["Import"] = "Import",
+        ["SwiftStats settings imported. Reloading the UI."] = "SwiftStats settings imported. Reloading the UI.",
+        ["SwiftStats import failed; current StatsPro settings were preserved."] = "SwiftStats import failed; current StatsPro settings were preserved.",
         -- Buttons + title:
         ["Reset to Defaults"] = "Reset to Defaults", ["Close"] = "Close",
         ["Open Settings"] = "Open Settings", ["Settings"] = "Settings",
@@ -900,7 +908,15 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "Сверх:", ["Matched:"] = "Совпало:", ["Snapshot:"] = "Снимок:",
         ["Stats panel shown"] = "Панель статов показана", ["Stats panel hidden"] = "Панель статов скрыта",
         ["Settings reset to defaults"] = "Настройки сброшены по умолчанию",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Настройки SwiftStats не загружены. Включите SwiftStats на один вход в игру, выполните /reload, затем снова введите /statspro import.",
+        ["SwiftStats has no supported settings to import."] = "В SwiftStats нет поддерживаемых настроек для импорта.",
+        ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Эти настройки используют более новую схему и не могут быть импортированы этой версией StatsPro.",
+        ["SwiftStats import is unavailable during combat. Try again after combat."] = "Импорт SwiftStats недоступен в бою. Повторите после боя.",
+        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Заменить текущие настройки StatsPro совместимыми настройками SwiftStats? Параметры только для StatsPro будут сброшены, данные SwiftStats останутся без изменений, а интерфейс перезагрузится.",
+        ["Import"] = "Импорт",
+        ["SwiftStats settings imported. Reloading the UI."] = "Настройки SwiftStats импортированы. Интерфейс перезагружается.",
+        ["SwiftStats import failed; current StatsPro settings were preserved."] = "Не удалось импортировать SwiftStats; текущие настройки StatsPro сохранены.",
         -- Buttons + title:
         ["Reset to Defaults"] = "Сбросить настройки", ["Close"] = "Закрыть",
         ["Open Settings"] = "Открыть настройки", ["Settings"] = "Настройки",
@@ -969,7 +985,15 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "Drüber:", ["Matched:"] = "Erreicht:", ["Snapshot:"] = "Datenstand:",
         ["Stats panel shown"] = "Statpanel angezeigt", ["Stats panel hidden"] = "Statpanel ausgeblendet",
         ["Settings reset to defaults"] = "Einstellungen auf Standard zurückgesetzt",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "Befehle: /ss oder /statspro (Einstellungen), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Befehle: /ss oder /statspro (Einstellungen), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats-Einstellungen sind nicht geladen. Aktiviere SwiftStats für eine Anmeldung, führe /reload aus und gib danach erneut /statspro import ein.",
+        ["SwiftStats has no supported settings to import."] = "SwiftStats enthält keine unterstützten Einstellungen zum Importieren.",
+        ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Diese Einstellungen verwenden ein neueres Schema und können von dieser StatsPro-Version nicht importiert werden.",
+        ["SwiftStats import is unavailable during combat. Try again after combat."] = "Der SwiftStats-Import ist im Kampf nicht verfügbar. Versuche es nach dem Kampf erneut.",
+        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Aktuelle StatsPro-Einstellungen durch kompatible SwiftStats-Einstellungen ersetzen? StatsPro-spezifische Optionen werden zurückgesetzt, SwiftStats-Daten bleiben unverändert und die Benutzeroberfläche wird neu geladen.",
+        ["Import"] = "Importieren",
+        ["SwiftStats settings imported. Reloading the UI."] = "SwiftStats-Einstellungen importiert. Benutzeroberfläche wird neu geladen.",
+        ["SwiftStats import failed; current StatsPro settings were preserved."] = "SwiftStats-Import fehlgeschlagen; die aktuellen StatsPro-Einstellungen wurden beibehalten.",
         ["Reset to Defaults"] = "Auf Standard", ["Close"] = "Schließen",
         ["Open Settings"] = "Einstellungen öffnen", ["Settings"] = "Einstellungen",
         ["Auto (current: %s)"] = "Auto (aktuell: %s)",
@@ -1033,7 +1057,15 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "Excès :", ["Matched:"] = "Atteint :", ["Snapshot:"] = "Instantané :",
         ["Stats panel shown"] = "Panneau de stats affiché", ["Stats panel hidden"] = "Panneau de stats masqué",
         ["Settings reset to defaults"] = "Paramètres réinitialisés",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "Commandes : /ss ou /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Commandes : /ss ou /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Les réglages de SwiftStats ne sont pas chargés. Activez SwiftStats pour une connexion, exécutez /reload, puis relancez /statspro import.",
+        ["SwiftStats has no supported settings to import."] = "SwiftStats ne contient aucun réglage pris en charge à importer.",
+        ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Ces réglages utilisent un schéma plus récent et ne peuvent pas être importés par cette version de StatsPro.",
+        ["SwiftStats import is unavailable during combat. Try again after combat."] = "L’importation SwiftStats est indisponible en combat. Réessayez après le combat.",
+        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Remplacer les réglages StatsPro actuels par les réglages SwiftStats compatibles ? Les options propres à StatsPro seront réinitialisées, les données SwiftStats resteront intactes et l’interface sera rechargée.",
+        ["Import"] = "Importer",
+        ["SwiftStats settings imported. Reloading the UI."] = "Réglages SwiftStats importés. Rechargement de l’interface.",
+        ["SwiftStats import failed; current StatsPro settings were preserved."] = "Échec de l’importation SwiftStats ; les réglages StatsPro actuels ont été conservés.",
         ["Reset to Defaults"] = "Par défaut", ["Close"] = "Fermer",
         ["Open Settings"] = "Ouvrir les paramètres", ["Settings"] = "Paramètres",
         ["Auto (current: %s)"] = "Auto (actuel : %s)",
@@ -1098,7 +1130,15 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "Exceso:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Captura:",
         ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
         ["Settings reset to defaults"] = "Ajustes restablecidos",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Los ajustes de SwiftStats no están cargados. Activa SwiftStats durante un inicio de sesión, ejecuta /reload y vuelve a usar /statspro import.",
+        ["SwiftStats has no supported settings to import."] = "SwiftStats no tiene ajustes compatibles para importar.",
+        ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Estos ajustes usan un esquema más reciente y esta versión de StatsPro no puede importarlos.",
+        ["SwiftStats import is unavailable during combat. Try again after combat."] = "La importación de SwiftStats no está disponible en combate. Inténtalo de nuevo después.",
+        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "¿Reemplazar los ajustes actuales de StatsPro por los ajustes compatibles de SwiftStats? Las opciones exclusivas de StatsPro volverán a sus valores predeterminados, los datos de SwiftStats no cambiarán y la interfaz se recargará.",
+        ["Import"] = "Importar",
+        ["SwiftStats settings imported. Reloading the UI."] = "Ajustes de SwiftStats importados. Recargando la interfaz.",
+        ["SwiftStats import failed; current StatsPro settings were preserved."] = "La importación de SwiftStats falló; se conservaron los ajustes actuales de StatsPro.",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
         ["Open Settings"] = "Abrir ajustes", ["Settings"] = "Ajustes",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
@@ -1161,7 +1201,15 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "Exceso:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Captura:",
         ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
         ["Settings reset to defaults"] = "Configuración restablecida",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "La configuración de SwiftStats no está cargada. Activa SwiftStats durante un inicio de sesión, ejecuta /reload y vuelve a usar /statspro import.",
+        ["SwiftStats has no supported settings to import."] = "SwiftStats no tiene opciones compatibles para importar.",
+        ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Esta configuración usa un esquema más reciente y esta versión de StatsPro no puede importarla.",
+        ["SwiftStats import is unavailable during combat. Try again after combat."] = "La importación de SwiftStats no está disponible en combate. Inténtalo de nuevo al terminar.",
+        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "¿Reemplazar la configuración actual de StatsPro por la configuración compatible de SwiftStats? Las opciones exclusivas de StatsPro volverán a sus valores predeterminados, los datos de SwiftStats no cambiarán y la interfaz se recargará.",
+        ["Import"] = "Importar",
+        ["SwiftStats settings imported. Reloading the UI."] = "Configuración de SwiftStats importada. Recargando la interfaz.",
+        ["SwiftStats import failed; current StatsPro settings were preserved."] = "La importación de SwiftStats falló; se conservó la configuración actual de StatsPro.",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
         ["Open Settings"] = "Abrir configuración", ["Settings"] = "Configuración",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
@@ -1225,7 +1273,15 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "Oltre:", ["Matched:"] = "Raggiunto:", ["Snapshot:"] = "Istantanea:",
         ["Stats panel shown"] = "Pannello statistiche mostrato", ["Stats panel hidden"] = "Pannello statistiche nascosto",
         ["Settings reset to defaults"] = "Impostazioni ripristinate",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "Comandi: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandi: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Le impostazioni di SwiftStats non sono caricate. Abilita SwiftStats per un accesso, esegui /reload, quindi usa di nuovo /statspro import.",
+        ["SwiftStats has no supported settings to import."] = "SwiftStats non contiene impostazioni supportate da importare.",
+        ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Queste impostazioni usano uno schema più recente e non possono essere importate da questa versione di StatsPro.",
+        ["SwiftStats import is unavailable during combat. Try again after combat."] = "L’importazione di SwiftStats non è disponibile in combattimento. Riprova al termine.",
+        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Sostituire le impostazioni StatsPro attuali con quelle compatibili di SwiftStats? Le opzioni specifiche di StatsPro torneranno ai valori predefiniti, i dati di SwiftStats resteranno invariati e l’interfaccia verrà ricaricata.",
+        ["Import"] = "Importa",
+        ["SwiftStats settings imported. Reloading the UI."] = "Impostazioni SwiftStats importate. Ricaricamento dell’interfaccia.",
+        ["SwiftStats import failed; current StatsPro settings were preserved."] = "Importazione di SwiftStats non riuscita; le impostazioni StatsPro attuali sono state conservate.",
         ["Reset to Defaults"] = "Predefiniti", ["Close"] = "Chiudi",
         ["Open Settings"] = "Apri impostazioni", ["Settings"] = "Impostazioni",
         ["Auto (current: %s)"] = "Auto (attuale: %s)",
@@ -1288,7 +1344,15 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "Acima:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Registro:",
         ["Stats panel shown"] = "Painel de atributos mostrado", ["Stats panel hidden"] = "Painel de atributos oculto",
         ["Settings reset to defaults"] = "Configurações restauradas",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "Comandos: /ss ou /statspro (configurações), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandos: /ss ou /statspro (configurações), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "As configurações do SwiftStats não estão carregadas. Ative o SwiftStats por um login, execute /reload e use /statspro import novamente.",
+        ["SwiftStats has no supported settings to import."] = "O SwiftStats não tem configurações compatíveis para importar.",
+        ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Estas configurações usam um esquema mais recente e não podem ser importadas por esta versão do StatsPro.",
+        ["SwiftStats import is unavailable during combat. Try again after combat."] = "A importação do SwiftStats não está disponível em combate. Tente novamente depois.",
+        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Substituir as configurações atuais do StatsPro pelas configurações compatíveis do SwiftStats? As opções exclusivas do StatsPro voltarão ao padrão, os dados do SwiftStats permanecerão intactos e a interface será recarregada.",
+        ["Import"] = "Importar",
+        ["SwiftStats settings imported. Reloading the UI."] = "Configurações do SwiftStats importadas. Recarregando a interface.",
+        ["SwiftStats import failed; current StatsPro settings were preserved."] = "Falha ao importar o SwiftStats; as configurações atuais do StatsPro foram preservadas.",
         ["Reset to Defaults"] = "Restaurar", ["Close"] = "Fechar",
         ["Open Settings"] = "Abrir configurações", ["Settings"] = "Configurações",
         ["Auto (current: %s)"] = "Auto (atual: %s)",
@@ -1358,7 +1422,15 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "초과:", ["Matched:"] = "일치:", ["Snapshot:"] = "스냅샷:",
         ["Stats panel shown"] = "능력치 패널 표시됨", ["Stats panel hidden"] = "능력치 패널 숨김",
         ["Settings reset to defaults"] = "설정이 기본값으로 초기화되었습니다",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "명령어: /ss 또는 /statspro (설정), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "명령어: /ss 또는 /statspro (설정), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats 설정이 로드되지 않았습니다. 한 번 로그인하는 동안 SwiftStats를 활성화하고 /reload 후 /statspro import를 다시 실행하세요.",
+        ["SwiftStats has no supported settings to import."] = "SwiftStats에 가져올 수 있는 지원 설정이 없습니다.",
+        ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "이 설정은 더 새로운 스키마를 사용하므로 현재 StatsPro 버전에서 가져올 수 없습니다.",
+        ["SwiftStats import is unavailable during combat. Try again after combat."] = "전투 중에는 SwiftStats 설정을 가져올 수 없습니다. 전투 후 다시 시도하세요.",
+        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "현재 StatsPro 설정을 호환되는 SwiftStats 설정으로 바꾸시겠습니까? StatsPro 전용 옵션은 기본값으로 초기화되고 SwiftStats 데이터는 변경되지 않으며 UI가 다시 로드됩니다.",
+        ["Import"] = "가져오기",
+        ["SwiftStats settings imported. Reloading the UI."] = "SwiftStats 설정을 가져왔습니다. UI를 다시 로드합니다.",
+        ["SwiftStats import failed; current StatsPro settings were preserved."] = "SwiftStats 설정 가져오기에 실패했습니다. 현재 StatsPro 설정은 유지되었습니다.",
         ["Reset to Defaults"] = "기본값", ["Close"] = "닫기",
         ["Open Settings"] = "설정 열기", ["Settings"] = "설정",
         ["Auto (current: %s)"] = "자동 (현재: %s)",
@@ -1421,7 +1493,15 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "超出:", ["Matched:"] = "已达成:", ["Snapshot:"] = "快照:",
         ["Stats panel shown"] = "属性面板已显示", ["Stats panel hidden"] = "属性面板已隐藏",
         ["Settings reset to defaults"] = "设置已恢复默认",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "命令: /ss 或 /statspro (设置), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "命令: /ss 或 /statspro (设置), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "未加载 SwiftStats 设置。请启用 SwiftStats 登录一次，执行 /reload，然后再次运行 /statspro import。",
+        ["SwiftStats has no supported settings to import."] = "SwiftStats 中没有可导入的受支持设置。",
+        ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "这些设置使用较新的数据结构，当前版本的 StatsPro 无法导入。",
+        ["SwiftStats import is unavailable during combat. Try again after combat."] = "战斗中无法导入 SwiftStats 设置。请在战斗结束后重试。",
+        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "要用兼容的 SwiftStats 设置替换当前 StatsPro 设置吗？StatsPro 专属选项将恢复默认值，SwiftStats 数据不会改变，界面将重新加载。",
+        ["Import"] = "导入",
+        ["SwiftStats settings imported. Reloading the UI."] = "已导入 SwiftStats 设置。正在重新加载界面。",
+        ["SwiftStats import failed; current StatsPro settings were preserved."] = "SwiftStats 导入失败；当前 StatsPro 设置已保留。",
         ["Reset to Defaults"] = "恢复默认", ["Close"] = "关闭",
         ["Open Settings"] = "打开设置", ["Settings"] = "设置",
         ["Auto (current: %s)"] = "自动（当前: %s）",
@@ -1484,7 +1564,15 @@ local LABELS_BY_LOCALE = {
         ["Over:"] = "超出:", ["Matched:"] = "已達成:", ["Snapshot:"] = "快照:",
         ["Stats panel shown"] = "屬性面板已顯示", ["Stats panel hidden"] = "屬性面板已隱藏",
         ["Settings reset to defaults"] = "設定已恢復預設",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"] = "指令: /ss 或 /statspro (設定), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "指令: /ss 或 /statspro (設定), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "未載入 SwiftStats 設定。請啟用 SwiftStats 登入一次，執行 /reload，然後再次輸入 /statspro import。",
+        ["SwiftStats has no supported settings to import."] = "SwiftStats 中沒有可匯入的支援設定。",
+        ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "這些設定使用較新的資料結構，目前版本的 StatsPro 無法匯入。",
+        ["SwiftStats import is unavailable during combat. Try again after combat."] = "戰鬥中無法匯入 SwiftStats 設定。請在戰鬥結束後重試。",
+        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "要用相容的 SwiftStats 設定取代目前的 StatsPro 設定嗎？StatsPro 專屬選項將恢復預設值，SwiftStats 資料不會變更，介面將重新載入。",
+        ["Import"] = "匯入",
+        ["SwiftStats settings imported. Reloading the UI."] = "已匯入 SwiftStats 設定。正在重新載入介面。",
+        ["SwiftStats import failed; current StatsPro settings were preserved."] = "SwiftStats 匯入失敗；目前的 StatsPro 設定已保留。",
         ["Reset to Defaults"] = "恢復預設", ["Close"] = "關閉",
         ["Open Settings"] = "開啟設定", ["Settings"] = "設定",
         ["Auto (current: %s)"] = "自動（目前: %s）",
@@ -1550,7 +1638,12 @@ local function NormalizePositionOffset(value, fallback)
 end
 
 local function NormalizeDBVersion(value)
-    local n = tonumber(value)
+    local secretOK, secret = pcall(issecretvalue, value)
+    -- WARNING: an unreadable/secret schema marker must block mutation like a
+    -- future version; treating it as version 0 would run destructive migrations.
+    if not secretOK or secret then return CURRENT_DB_VERSION + 1 end
+    local numberOK, n = pcall(tonumber, value)
+    if not numberOK then return 0 end
     if not IsFiniteNumber(n) then return 0 end
     return math.floor(n)
 end
@@ -2070,8 +2163,8 @@ local function CacheSettings()
     end
 end
 
-local function MigrateDB()
-    local db = EnsureStatsProDBTable()
+local function MigrateDB(dbOverride)
+    local db = dbOverride or EnsureStatsProDBTable()
     local dbVersion = NormalizeDBVersion(db.dbVersion)
     if dbVersion > CURRENT_DB_VERSION then return end
 
@@ -2214,6 +2307,211 @@ local function MigrateDB()
     end
 
     db.dbVersion = CURRENT_DB_VERSION
+end
+
+-- SwiftStats migration is intentionally field-driven. Legacy SavedVariables are
+-- external input: never iterate their keys or retain their tables, because unknown
+-- fields, cyclic tables, and later source-addon mutations must not enter StatsProDB.
+addon.legacyImport = {
+    publicBooleanKeys = {
+        "isVisible", "isLocked", "showRating", "showPercentage",
+        "showTertiary", "hideZeroTertiary", "showLeech", "showAvoidance",
+        "showSpeed", "showStrength", "showAgility", "showIntellect",
+        "matchValueColorToStat",
+    },
+    publicNumberKeys = { "scale", "fontSize", "updateInterval" },
+    publicColorKeys = {
+        "crit", "haste", "mastery", "versatility", "rating", "percentage",
+        "leech", "avoidance", "speed", "primary",
+    },
+    localLegacyBooleanKeys = {
+        "useLocalizedLabels", "showStrength", "showAgility", "showIntellect",
+    },
+    localLegacyColorKeys = { "primary", "strength", "agility", "intellect" },
+    allowedStrings = {
+        displayMode = { flat = true, sectioned = true, split = true },
+        labelStyle = { full = true, short = true, hidden = true },
+        targetSnapshot = { mythicPlus = true, raid = true },
+        textOutlineStyle = { none = true, outline = true, thick = true },
+    },
+}
+
+function addon.legacyImport.IsCleanType(value, expectedType)
+    local ok, secret = pcall(issecretvalue, value)
+    if not ok or secret or type(value) ~= expectedType then return false end
+    if expectedType == "number" then return IsFiniteNumber(value) end
+    if expectedType == "table" then
+        if type(_G.issecrettable) == "function" then
+            local tableOK, secretTable = pcall(_G.issecrettable, value)
+            if not tableOK or secretTable then return false end
+        end
+        -- A secret/inaccessible table can still report type "table". Probe with
+        -- rawget inside pcall before any field read; metatables remain bypassed.
+        if not pcall(rawget, value, "__statspro_import_access_probe") then return false end
+    end
+    return true
+end
+
+function addon.legacyImport.SafeRawGet(source, key)
+    if not addon.legacyImport.IsCleanType(source, "table") then return nil, false end
+    local ok, value = pcall(rawget, source, key)
+    if not ok then return nil, false end
+    return value, true
+end
+
+function addon.legacyImport.CopyBoolean(source, candidate, key)
+    local value = addon.legacyImport.SafeRawGet(source, key)
+    if not addon.legacyImport.IsCleanType(value, "boolean") then return false end
+    candidate[key] = value
+    return true
+end
+
+function addon.legacyImport.CopyNumberSetting(source, candidate, key)
+    local value = addon.legacyImport.SafeRawGet(source, key)
+    if not addon.legacyImport.IsCleanType(value, "number") then return false end
+    candidate[key] = NormalizeNumberSetting(key, value)
+    return true
+end
+
+function addon.legacyImport.CopyPosition(source, candidate, prefix)
+    prefix = prefix or ""
+    local point = addon.legacyImport.SafeRawGet(source, prefix .. "point")
+    local relativePoint = addon.legacyImport.SafeRawGet(source, prefix .. "relativePoint")
+    local xOfs = addon.legacyImport.SafeRawGet(source, prefix .. "xOfs")
+    local yOfs = addon.legacyImport.SafeRawGet(source, prefix .. "yOfs")
+    if not addon.legacyImport.IsCleanType(point, "string") or not VALID_ANCHOR_POINTS[point]
+        or not addon.legacyImport.IsCleanType(relativePoint, "string") or not VALID_ANCHOR_POINTS[relativePoint]
+        or not addon.legacyImport.IsCleanType(xOfs, "number") or xOfs < -3000 or xOfs > 3000
+        or not addon.legacyImport.IsCleanType(yOfs, "number") or yOfs < -3000 or yOfs > 3000 then
+        return false
+    end
+    candidate[prefix .. "point"] = point
+    candidate[prefix .. "relativePoint"] = relativePoint
+    candidate[prefix .. "xOfs"] = xOfs
+    candidate[prefix .. "yOfs"] = yOfs
+    return true
+end
+
+function addon.legacyImport.CopyColor(sourceColors, candidate, key)
+    if not addon.legacyImport.IsCleanType(sourceColors, "table") then return false end
+    local color = addon.legacyImport.SafeRawGet(sourceColors, key)
+    if not addon.legacyImport.IsCleanType(color, "table") then return false end
+    local r = addon.legacyImport.SafeRawGet(color, "r")
+    local g = addon.legacyImport.SafeRawGet(color, "g")
+    local b = addon.legacyImport.SafeRawGet(color, "b")
+    if not addon.legacyImport.IsCleanType(r, "number") or r < 0 or r > 1
+        or not addon.legacyImport.IsCleanType(g, "number") or g < 0 or g > 1
+        or not addon.legacyImport.IsCleanType(b, "number") or b < 0 or b > 1 then
+        return false
+    end
+    candidate.colors = candidate.colors or {}
+    candidate.colors[key] = { r = r, g = g, b = b }
+    return true
+end
+
+function addon.legacyImport.CopyFont(source, candidate)
+    local font = addon.legacyImport.SafeRawGet(source, "font")
+    if not addon.legacyImport.IsCleanType(font, "string") then return false end
+    local usable = addon.fontRuntime.usablePath(font)
+    if not usable then return false end
+    candidate.font = usable
+    return true
+end
+
+function addon.legacyImport.BuildPublicCandidate(source)
+    if not addon.legacyImport.IsCleanType(source, "table") then return nil, false end
+    local candidate, found = {}, false
+    for _, key in ipairs(addon.legacyImport.publicBooleanKeys) do
+        if addon.legacyImport.CopyBoolean(source, candidate, key) then found = true end
+    end
+    for _, key in ipairs(addon.legacyImport.publicNumberKeys) do
+        if addon.legacyImport.CopyNumberSetting(source, candidate, key) then found = true end
+    end
+    if addon.legacyImport.CopyFont(source, candidate) then found = true end
+    if addon.legacyImport.CopyPosition(source, candidate, "") then found = true end
+    local sourceColors = addon.legacyImport.SafeRawGet(source, "colors")
+    for _, key in ipairs(addon.legacyImport.publicColorKeys) do
+        if addon.legacyImport.CopyColor(sourceColors, candidate, key) then found = true end
+    end
+    if not found then return nil, false end
+    MigrateDB(candidate)
+    return candidate, true
+end
+
+function addon.legacyImport.BuildLocalCandidate(source)
+    if not addon.legacyImport.IsCleanType(source, "table") then return nil, "missing" end
+    local candidate, found = {}, false
+    local sourceVersion = addon.legacyImport.SafeRawGet(source, "dbVersion")
+    local sourceVersionIsClean = addon.legacyImport.IsCleanType(sourceVersion, "number")
+    if sourceVersionIsClean then
+        sourceVersion = math.max(0, math.floor(sourceVersion))
+        if sourceVersion > CURRENT_DB_VERSION then return nil, "future" end
+        candidate.dbVersion = sourceVersion
+    elseif type(sourceVersion) ~= "nil" then
+        return nil, "future"
+    end
+    for key, defaultValue in pairs(defaults) do
+        if type(defaultValue) == "boolean" then
+            if addon.legacyImport.CopyBoolean(source, candidate, key) then found = true end
+        elseif NUMBER_SETTING_META[key] then
+            if addon.legacyImport.CopyNumberSetting(source, candidate, key) then found = true end
+        end
+    end
+    for _, key in ipairs(addon.legacyImport.localLegacyBooleanKeys) do
+        if addon.legacyImport.CopyBoolean(source, candidate, key) then found = true end
+    end
+    if addon.legacyImport.CopyPosition(source, candidate, "") then found = true end
+    if addon.legacyImport.CopyPosition(source, candidate, "defensive_") then found = true end
+    if addon.legacyImport.CopyFont(source, candidate) then found = true end
+    for key, allowed in pairs(addon.legacyImport.allowedStrings) do
+        local value = addon.legacyImport.SafeRawGet(source, key)
+        if addon.legacyImport.IsCleanType(value, "string") and allowed[value] then
+            candidate[key] = value
+            found = true
+        end
+    end
+    local forceLocale = addon.legacyImport.SafeRawGet(source, "forceLocale")
+    if addon.legacyImport.IsCleanType(forceLocale, "string")
+        and (forceLocale == "auto" or LOCALE_GLYPH_REQ[forceLocale]) then
+        candidate.forceLocale = forceLocale
+        found = true
+    end
+    local sourceColors = addon.legacyImport.SafeRawGet(source, "colors")
+    for key in pairs(defaults.colors) do
+        if addon.legacyImport.CopyColor(sourceColors, candidate, key) then found = true end
+    end
+    for _, key in ipairs(addon.legacyImport.localLegacyColorKeys) do
+        if addon.legacyImport.CopyColor(sourceColors, candidate, key) then found = true end
+    end
+    if not found then return nil, "empty" end
+    MigrateDB(candidate)
+    return candidate, "ready"
+end
+
+function addon.legacyImport.FindCandidate()
+    local sawSource, sawFuture = false, false
+    if type(_G.SwiftStatsDB) == "table" then
+        sawSource = true
+        local candidate, found = addon.legacyImport.BuildPublicCandidate(_G.SwiftStatsDB)
+        if found then return candidate, "ready" end
+    end
+    if type(_G.SwiftStatsLocalDB) == "table" then
+        sawSource = true
+        local candidate, status = addon.legacyImport.BuildLocalCandidate(_G.SwiftStatsLocalDB)
+        if status == "ready" then return candidate, status end
+        if status == "future" then sawFuture = true end
+    end
+    if sawFuture then return nil, "future" end
+    return nil, sawSource and "empty" or "missing"
+end
+
+function addon.legacyImport.ImportFreshIfAvailable()
+    local db = EnsureStatsProDBTable()
+    if next(db) ~= nil then return false end
+    local candidate = addon.legacyImport.FindCandidate()
+    if not candidate then return false end
+    _G.StatsProDB = candidate
+    return true
 end
 
 local function RefreshArmorCache()
@@ -3939,41 +4237,11 @@ local RefreshPersistentLocalization
 
 local function OnPlayerEnteringWorld()
     if not isLoaded then
-        -- One-time legacy-DB carry-forward. Runs at PEW (not at file scope) so source
-        -- globals are reliably populated regardless of addon load order. Triggers only
-        -- when StatsPro's DB is empty AND a legacy global has content — these guards
-        -- prevent clobbering existing StatsPro state and avoid no-op writes on fresh
-        -- installs. Source priority:
-        --   1. `_G.SwiftStatsDB` — the original public SwiftStats by TaylorSay (most
-        --      users coming from the upstream addon land here).
-        --   2. `_G.SwiftStatsLocalDB` — fallback for an earlier internal name of this
-        --      addon (renamed to StatsPro before publication).
-        -- CopyTable: deep copy so color-picker edits in either addon, while both are
-        -- simultaneously enabled, don't silently alias and mutate the other's table.
-        local db = EnsureStatsProDBTable()
-        if next(db) == nil then
-            local swiftStatsDB = type(_G.SwiftStatsDB) == "table" and _G.SwiftStatsDB or nil
-            local swiftStatsLocalDB = type(_G.SwiftStatsLocalDB) == "table" and _G.SwiftStatsLocalDB or nil
-            local source, sourceIsLocal
-            if swiftStatsDB and next(swiftStatsDB) ~= nil then
-                source = swiftStatsDB
-                sourceIsLocal = false
-            elseif swiftStatsLocalDB and next(swiftStatsLocalDB) ~= nil then
-                source = swiftStatsLocalDB
-                sourceIsLocal = true
-            end
-            if source then
-                for k, v in pairs(source) do
-                    local copyKey = k ~= "dbVersion"
-                    if not copyKey and sourceIsLocal and NormalizeDBVersion(v) <= CURRENT_DB_VERSION then
-                        copyKey = true
-                    end
-                    if copyKey then
-                        db[k] = (type(v) == "table") and CopyTable(v) or v
-                    end
-                end
-            end
-        end
+        -- First-run carry-forward happens at PEW so the source SavedVariables globals
+        -- are populated regardless of addon load order. The field-driven importer only
+        -- runs against an empty StatsPro DB; established settings are never overwritten
+        -- without the explicit `/statspro import` confirmation path.
+        addon.legacyImport.ImportFreshIfAvailable()
         MigrateDB()
         addon.fontRuntime.repairSavedPaths()
         CacheSettings()
@@ -4708,6 +4976,108 @@ local function ResetToDefaults()
     RefreshConfigLocalization()
 
     PrintMsg(resetMessage)
+end
+
+function addon.legacyImport.CloseOwnedSettingsModals()
+    CloseDropDownMenus()
+    if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
+        _G.StatsProFontPicker:Hide()
+    end
+    COLOR_PICKER_STATE.Close()
+end
+
+function addon.legacyImport.AcceptPending()
+    local candidate = addon.legacyImport.pending
+    addon.legacyImport.pending = nil
+    if not candidate then return end
+    if InCombatLockdown() then
+        PrintMsg(L("SwiftStats import is unavailable during combat. Try again after combat."))
+        return
+    end
+    local currentDB = EnsureStatsProDBTable()
+    if NormalizeDBVersion(currentDB.dbVersion) > CURRENT_DB_VERSION then
+        PrintMsg(L("These settings use a newer schema and cannot be imported by this StatsPro version."))
+        return
+    end
+    local closeOK = pcall(addon.legacyImport.CloseOwnedSettingsModals)
+    if not closeOK or type(_G.ReloadUI) ~= "function" then
+        PrintMsg(L("SwiftStats import failed; current StatsPro settings were preserved."))
+        return
+    end
+
+    -- WHY load anchors before ReloadUI: PLAYER_LOGOUT fires during reload and saves
+    -- live frame anchors. Without this step it would write the old on-screen position
+    -- over the newly imported offsets before SavedVariables flush.
+    _G.StatsProDB = candidate
+    local applied = pcall(LoadAllPositions)
+    if not applied then
+        _G.StatsProDB = currentDB
+        pcall(LoadAllPositions)
+        PrintMsg(L("SwiftStats import failed; current StatsPro settings were preserved."))
+        return
+    end
+    local reloadOK = pcall(_G.ReloadUI)
+    if reloadOK then
+        -- ReloadUI does not normally return; this branch is useful to test the
+        -- completed transaction in the standalone smoke harness.
+        PrintMsg(L("SwiftStats settings imported. Reloading the UI."))
+        return
+    end
+    _G.StatsProDB = currentDB
+    pcall(LoadAllPositions)
+    PrintMsg(L("SwiftStats import failed; current StatsPro settings were preserved."))
+end
+
+function addon.legacyImport.CancelPending()
+    addon.legacyImport.pending = nil
+end
+
+_G.StaticPopupDialogs["STATSPRO_IMPORT_SWIFTSTATS"] = {
+    text = "",
+    button1 = "",
+    button2 = _G.CANCEL,
+    OnAccept = addon.legacyImport.AcceptPending,
+    OnCancel = addon.legacyImport.CancelPending,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    exclusive = true,
+    preferredIndex = 3,
+}
+
+function addon.legacyImport.Request()
+    addon.legacyImport.pending = nil
+    if InCombatLockdown() then
+        PrintMsg(L("SwiftStats import is unavailable during combat. Try again after combat."))
+        return
+    end
+    local db = EnsureStatsProDBTable()
+    if NormalizeDBVersion(db.dbVersion) > CURRENT_DB_VERSION then
+        PrintMsg(L("These settings use a newer schema and cannot be imported by this StatsPro version."))
+        return
+    end
+    local candidate, status = addon.legacyImport.FindCandidate()
+    if not candidate then
+        if status == "missing" then
+            PrintMsg(L("SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."))
+        elseif status == "future" then
+            PrintMsg(L("These settings use a newer schema and cannot be imported by this StatsPro version."))
+        else
+            PrintMsg(L("SwiftStats has no supported settings to import."))
+        end
+        return
+    end
+
+    addon.legacyImport.pending = candidate
+    local definition = _G.StaticPopupDialogs["STATSPRO_IMPORT_SWIFTSTATS"]
+    definition.text = L("Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload.")
+    definition.button1 = L("Import")
+    definition.button2 = _G.CANCEL
+    local ok, popup = pcall(_G.StaticPopup_Show, "STATSPRO_IMPORT_SWIFTSTATS")
+    if not ok or not popup then
+        addon.legacyImport.pending = nil
+        PrintMsg(L("SwiftStats import failed; current StatsPro settings were preserved."))
+    end
 end
 
 function addon.archonTargets.GetTargetSnapshotDropdownValue()
@@ -6716,6 +7086,8 @@ SlashCmdList["STATSPRO"] = function(msg)
         PrintMsg(L(newState and "Stats panel shown" or "Stats panel hidden"))
     elseif arg == "reset" then
         ResetToDefaults()
+    elseif arg == "import" then
+        addon.legacyImport.Request()
     elseif arg == "debug" then
         local debugArg = rest:match("^(%S+)") or ""
         if debugArg == "routing" then
@@ -6734,7 +7106,7 @@ SlashCmdList["STATSPRO"] = function(msg)
             addon:PrintDebugDump()
         end
     elseif arg == "help" or arg == "?" then
-        PrintMsg(L("Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help"))
+        PrintMsg(L("Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"))
     else
         addon:OpenConfigMenu()
     end

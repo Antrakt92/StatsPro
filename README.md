@@ -145,6 +145,7 @@ suggested correction — single-row fixes ship in the next patch.
 | `/ss hide` | Hide stats panel |
 | `/ss toggle` | Toggle visibility |
 | `/ss reset` | Reset all settings to defaults (without opening the window) |
+| `/statspro import` | Import compatible SwiftStats settings after confirmation |
 | `/ss debug` | Dump runtime state to chat (for bug reports) |
 | `/ss help` | List commands in chat |
 
@@ -161,6 +162,22 @@ suggested correction — single-row fixes ship in the next patch.
 **Manual:** download the latest zip from the
 [Releases page](https://github.com/Antrakt92/StatsPro/releases/latest), extract the
 `StatsPro` folder into `World of Warcraft\_retail_\Interface\AddOns\`.
+
+## Moving from SwiftStats
+
+On a fresh install, StatsPro automatically carries forward compatible SwiftStats
+settings when both addons are loaded for the first login. If StatsPro was already
+started without SwiftStats enabled, the import remains recoverable:
+
+1. Enable SwiftStats and StatsPro together for one login.
+2. Run `/reload` so both SavedVariables files are loaded.
+3. Run `/statspro import` (use this full command because SwiftStats also owns `/ss`).
+4. Review and confirm the replacement; StatsPro reloads the UI automatically.
+5. Disable or uninstall SwiftStats after checking the imported layout.
+
+The confirmed import replaces current StatsPro settings with compatible SwiftStats
+values. StatsPro-only options reset to their defaults, unknown/source-only fields are
+ignored, and the original `SwiftStatsDB` remains untouched.
 
 ## Configuration
 

@@ -292,13 +292,13 @@ local function makeEnv(locale, opts)
         pairs = pairs,
         pcall = pcall,
         print = print,
-        rawget = rawget,
+        rawget = opts.rawget or rawget,
         rawset = rawset,
         select = select,
         setmetatable = setmetatable,
         string = string,
         table = table,
-        tonumber = tonumber,
+        tonumber = opts.tonumber or tonumber,
         tostring = tostring,
         type = type,
         unpack = unpack,
@@ -312,6 +312,9 @@ local function makeEnv(locale, opts)
     env.__timerOrder = 0
     env.__closedDropdowns = 0
     env.__prints = {}
+    env.__staticPopupShows = 0
+    env.__lastStaticPopup = nil
+    env.__reloadUICalls = 0
     env.print = function(text)
         env.__prints[#env.__prints + 1] = text
     end
@@ -356,6 +359,32 @@ local function makeEnv(locale, opts)
     env.SwiftStatsLocalDB = opts.swiftStatsLocalDB
     env.SlashCmdList = {}
     env.UISpecialFrames = {}
+    env.StaticPopupDialogs = {}
+    env.CANCEL = "Cancel"
+    env.StaticPopup_Show = function(key)
+        local definition = env.StaticPopupDialogs[key]
+        if type(definition) ~= "table" then error("missing static popup " .. tostring(key), 2) end
+        env.__staticPopupShows = env.__staticPopupShows + 1
+        env.__lastStaticPopup = { key = key, definition = definition }
+        return env.__lastStaticPopup
+    end
+    env.__acceptStaticPopup = function()
+        local popup = env.__lastStaticPopup
+        env.__lastStaticPopup = nil
+        if popup and type(popup.definition.OnAccept) == "function" then
+            popup.definition.OnAccept()
+        end
+    end
+    env.__cancelStaticPopup = function()
+        local popup = env.__lastStaticPopup
+        env.__lastStaticPopup = nil
+        if popup and type(popup.definition.OnCancel) == "function" then
+            popup.definition.OnCancel()
+        end
+    end
+    env.ReloadUI = opts.reloadUI or function()
+        env.__reloadUICalls = env.__reloadUICalls + 1
+    end
     env.UIParent = makeFrame("UIParent", opts.setFontResult)
     env.UIParent:SetSize(1920, 1080)
     env.GameTooltip = makeFrame("GameTooltip", opts.setFontResult)
@@ -425,6 +454,7 @@ local function makeEnv(locale, opts)
         return nil
     end
     env.issecretvalue = opts.issecretvalue or function() return false end
+    env.issecrettable = opts.issecrettable
     env.CopyTable = deepCopy
     env.tinsert = table.insert
     env.tremove = table.remove
@@ -1880,10 +1910,17 @@ end
 do
     local legacySource = {
         fontSize = 17,
-        colors = { crit = { r = 0.2, g = 0.3, b = 0.4 } },
+        dbVersion = 999,
+        minimapPos = 90,
+        updateNoticeShown = true,
+        privatePayload = { shouldNotCopy = true },
+        colors = {
+            crit = { r = 0.2, g = 0.3, b = 0.4 },
+            unknown = { r = 0.9, g = 0.8, b = 0.7 },
+        },
     }
     local localSource = { fontSize = 12 }
-    local legacyEnv = loadStatsPro("enUS", {
+    local legacyEnv, _, legacyTest = loadStatsPro("enUS", {
         statsProDB = {},
         swiftStatsDB = legacySource,
         swiftStatsLocalDB = localSource,
@@ -1891,6 +1928,12 @@ do
     fireEvent("lifecycle.pew_legacy_priority.fire", legacyEnv, "PLAYER_ENTERING_WORLD")
     eq("lifecycle.pew_legacy_priority.font_size", legacyEnv.StatsProDB.fontSize, 17)
     assertColor("lifecycle.pew_legacy_priority.color_copied", legacyEnv.StatsProDB.colors.crit, 0.2, 0.3, 0.4)
+    eq("lifecycle.pew_legacy_priority.foreign_version_ignored",
+        legacyEnv.StatsProDB.dbVersion, legacyTest.currentDBVersion())
+    eq("lifecycle.pew_legacy_priority.minimap_ignored", legacyEnv.StatsProDB.minimapPos, nil)
+    eq("lifecycle.pew_legacy_priority.runtime_flag_ignored", legacyEnv.StatsProDB.updateNoticeShown, nil)
+    eq("lifecycle.pew_legacy_priority.unknown_ignored", legacyEnv.StatsProDB.privatePayload, nil)
+    eq("lifecycle.pew_legacy_priority.unknown_color_ignored", legacyEnv.StatsProDB.colors.unknown, nil)
     legacySource.colors.crit.r = 0.9
     near("lifecycle.pew_legacy_priority.deep_copy", legacyEnv.StatsProDB.colors.crit.r, 0.2)
 
@@ -1914,18 +1957,18 @@ do
             colors = { primary = { r = 0.2, g = 0.3, b = 0.4 } },
         },
     })
-    fireEvent("lifecycle.pew_swiftstats_future_db_version_backfills_defaults.fire", legacyEnv, "PLAYER_ENTERING_WORLD")
-    eq("lifecycle.pew_swiftstats_future_db_version_backfills_defaults.version",
+    fireEvent("lifecycle.pew_swiftstats_foreign_db_version_ignored.fire", legacyEnv, "PLAYER_ENTERING_WORLD")
+    eq("lifecycle.pew_swiftstats_foreign_db_version_ignored.version",
         legacyEnv.StatsProDB.dbVersion, test.currentDBVersion())
-    eq("lifecycle.pew_swiftstats_future_db_version_backfills_defaults.font_size",
+    eq("lifecycle.pew_swiftstats_foreign_db_version_ignored.font_size",
         legacyEnv.StatsProDB.fontSize, 17)
-    eq("lifecycle.pew_swiftstats_future_db_version_backfills_defaults.force_locale",
-        legacyEnv.StatsProDB.forceLocale, "enUS")
-    eq("lifecycle.pew_swiftstats_future_db_version_backfills_defaults.main_stat",
+    eq("lifecycle.pew_swiftstats_foreign_db_version_ignored.non_upstream_locale_ignored",
+        legacyEnv.StatsProDB.forceLocale, "auto")
+    eq("lifecycle.pew_swiftstats_foreign_db_version_ignored.main_stat",
         legacyEnv.StatsProDB.showMainStat, true)
-    assertColor("lifecycle.pew_swiftstats_future_db_version_backfills_defaults.main_color",
+    assertColor("lifecycle.pew_swiftstats_foreign_db_version_ignored.main_color",
         legacyEnv.StatsProDB.colors.mainStat, 0.2, 0.3, 0.4)
-    eq("lifecycle.pew_swiftstats_future_db_version_backfills_defaults.primary_removed",
+    eq("lifecycle.pew_swiftstats_foreign_db_version_ignored.primary_removed",
         legacyEnv.StatsProDB.colors.primary, nil)
 
     local localEnv = loadStatsPro("enUS", {
@@ -1937,12 +1980,12 @@ do
         },
     })
     fireEvent("lifecycle.pew_swiftstatslocal_future_db_version_backfills_defaults.fire", localEnv, "PLAYER_ENTERING_WORLD")
-    eq("lifecycle.pew_swiftstatslocal_future_db_version_backfills_defaults.version",
+    eq("lifecycle.pew_swiftstatslocal_future_db_version_refused.version",
         localEnv.StatsProDB.dbVersion, test.currentDBVersion())
-    eq("lifecycle.pew_swiftstatslocal_future_db_version_backfills_defaults.font_size",
-        localEnv.StatsProDB.fontSize, 18)
-    eq("lifecycle.pew_swiftstatslocal_future_db_version_backfills_defaults.repair_visible_layout",
-        localEnv.StatsProDB.showRepairCost, true)
+    eq("lifecycle.pew_swiftstatslocal_future_db_version_refused.font_size",
+        localEnv.StatsProDB.fontSize, 14)
+    eq("lifecycle.pew_swiftstatslocal_future_db_version_refused.repair_default",
+        localEnv.StatsProDB.showRepairCost, false)
 end
 
 do
@@ -1956,6 +1999,304 @@ do
     idempotentSource.fontSize = 9
     fireEvent("lifecycle.pew_idempotent.second", idempotentEnv, "PLAYER_ENTERING_WORLD")
     eq("lifecycle.pew_idempotent.no_recapture", idempotentEnv.StatsProDB.fontSize, 22)
+end
+
+do
+    local existingEnv = loadStatsPro("enUS", {
+        statsProDB = { fontSize = 22 },
+        swiftStatsDB = { fontSize = 17 },
+    })
+    fireEvent("legacy_import.existing_db_pew.fire", existingEnv, "PLAYER_ENTERING_WORLD")
+    eq("legacy_import.existing_db_pew.no_unprompted_overwrite", existingEnv.StatsProDB.fontSize, 22)
+    eq("legacy_import.existing_db_pew.no_popup", existingEnv.__staticPopupShows, 0)
+end
+
+do
+    local fallbackEnv = loadStatsPro("enUS", {
+        statsProDB = {},
+        swiftStatsDB = { updateNoticeShown = true, minimapPos = 45 },
+        swiftStatsLocalDB = { dbVersion = test.currentDBVersion(), fontSize = 18 },
+    })
+    fireEvent("legacy_import.ignored_public_falls_back_local.fire", fallbackEnv, "PLAYER_ENTERING_WORLD")
+    eq("legacy_import.ignored_public_falls_back_local.font_size", fallbackEnv.StatsProDB.fontSize, 18)
+end
+
+do
+    local invalidEnv = loadStatsPro("enUS", {
+        statsProDB = {},
+        swiftStatsDB = {
+            fontSize = 18,
+            point = "TOPLEFT",
+            relativePoint = "TOPLEFT",
+            xOfs = 4001,
+            yOfs = -25,
+            colors = { crit = { r = 2, g = 0.3, b = 0.4 } },
+        },
+    })
+    fireEvent("legacy_import.invalid_groups.pew", invalidEnv, "PLAYER_ENTERING_WORLD")
+    eq("legacy_import.invalid_groups.supported_scalar_imported", invalidEnv.StatsProDB.fontSize, 18)
+    eq("legacy_import.invalid_groups.position_rejected_atomically", invalidEnv.StatsProDB.point, "CENTER")
+    eq("legacy_import.invalid_groups.position_x_default", invalidEnv.StatsProDB.xOfs, 0)
+    assertColor("legacy_import.invalid_groups.color_rejected", invalidEnv.StatsProDB.colors.crit, 1, 0, 0)
+end
+
+do
+    local missingEnv = loadStatsPro("enUS")
+    fireEvent("legacy_import.missing_source.pew", missingEnv, "PLAYER_ENTERING_WORLD")
+    local beforeFontSize = missingEnv.StatsProDB.fontSize
+    clearPrints(missingEnv)
+    slash("legacy_import.missing_source.request", missingEnv, "import")
+    eq("legacy_import.missing_source.no_popup", missingEnv.__staticPopupShows, 0)
+    eq("legacy_import.missing_source.no_mutation", missingEnv.StatsProDB.fontSize, beforeFontSize)
+    eq("legacy_import.missing_source.guidance",
+        printContains(missingEnv, "Enable SwiftStats for one login"), true)
+
+    missingEnv.SwiftStatsDB = { updateNoticeShown = true, minimapPos = 45 }
+    clearPrints(missingEnv)
+    slash("legacy_import.no_supported_fields.request", missingEnv, "import")
+    eq("legacy_import.no_supported_fields.no_popup", missingEnv.__staticPopupShows, 0)
+    eq("legacy_import.no_supported_fields.message",
+        printContains(missingEnv, "no supported settings"), true)
+end
+
+do
+    local secretValue = {}
+    local secretEnv = loadStatsPro("enUS", {
+        statsProDB = { fontSize = 20 },
+        swiftStatsDB = {
+            fontSize = secretValue,
+            isVisible = secretValue,
+            colors = { crit = { r = secretValue, g = 0.2, b = 0.3 } },
+        },
+        issecretvalue = function(value) return value == secretValue end,
+    })
+    fireEvent("legacy_import.secret_source.pew", secretEnv, "PLAYER_ENTERING_WORLD")
+    clearPrints(secretEnv)
+    slash("legacy_import.secret_source.request", secretEnv, "import")
+    eq("legacy_import.secret_source.no_popup", secretEnv.__staticPopupShows, 0)
+    eq("legacy_import.secret_source.no_mutation", secretEnv.StatsProDB.fontSize, 20)
+    eq("legacy_import.secret_source.unsupported_message",
+        printContains(secretEnv, "no supported settings"), true)
+end
+
+do
+    local secretRoot = {}
+    local secretRootEnv = loadStatsPro("enUS", {
+        statsProDB = { fontSize = 20 },
+        swiftStatsDB = secretRoot,
+        issecrettable = function(value) return value == secretRoot end,
+    })
+    fireEvent("legacy_import.secret_root.pew", secretRootEnv, "PLAYER_ENTERING_WORLD")
+    clearPrints(secretRootEnv)
+    slash("legacy_import.secret_root.request", secretRootEnv, "import")
+    eq("legacy_import.secret_root.no_popup", secretRootEnv.__staticPopupShows, 0)
+    eq("legacy_import.secret_root.no_mutation", secretRootEnv.StatsProDB.fontSize, 20)
+end
+
+do
+    local inaccessibleRoot = {}
+    local baseRawGet = rawget
+    local inaccessibleEnv = loadStatsPro("enUS", {
+        statsProDB = { fontSize = 20 },
+        swiftStatsDB = inaccessibleRoot,
+        rawget = function(source, key)
+            if source == inaccessibleRoot then error("inaccessible legacy table") end
+            return baseRawGet(source, key)
+        end,
+    })
+    fireEvent("legacy_import.inaccessible_root.pew", inaccessibleEnv, "PLAYER_ENTERING_WORLD")
+    clearPrints(inaccessibleEnv)
+    slash("legacy_import.inaccessible_root.request", inaccessibleEnv, "import")
+    eq("legacy_import.inaccessible_root.no_popup", inaccessibleEnv.__staticPopupShows, 0)
+    eq("legacy_import.inaccessible_root.no_mutation", inaccessibleEnv.StatsProDB.fontSize, 20)
+end
+
+do
+    local secretColors = { crit = { r = 0.2, g = 0.3, b = 0.4 } }
+    local nestedSecretEnv = loadStatsPro("enUS", {
+        statsProDB = { fontSize = 20 },
+        swiftStatsDB = { fontSize = 18, colors = secretColors },
+        issecrettable = function(value) return value == secretColors end,
+    })
+    fireEvent("legacy_import.secret_nested_table.pew", nestedSecretEnv, "PLAYER_ENTERING_WORLD")
+    slash("legacy_import.secret_nested_table.request", nestedSecretEnv, "import")
+    nestedSecretEnv.__acceptStaticPopup()
+    eq("legacy_import.secret_nested_table.scalar_imported", nestedSecretEnv.StatsProDB.fontSize, 18)
+    assertColor("legacy_import.secret_nested_table.color_rejected",
+        nestedSecretEnv.StatsProDB.colors.crit, 1, 0, 0)
+end
+
+do
+    local source = {
+        point = "TOPLEFT",
+        relativePoint = "TOPLEFT",
+        xOfs = 123,
+        yOfs = -234,
+        fontSize = 19,
+        showStrength = true,
+        fontBeforeAutoSwitch = "Fonts\\ARIALN.TTF",
+        minimapPos = 120,
+        unknown = "drop me",
+        colors = {
+            primary = { r = 0.2, g = 0.3, b = 0.4 },
+            crit = { r = 0.4, g = 0.5, b = 0.6 },
+            evil = { r = 1, g = 0, b = 1 },
+        },
+    }
+    source.unknownCycle = {}
+    source.unknownCycle.self = source.unknownCycle
+    setmetatable(source, { __index = function() error("legacy source __index must not run") end })
+    local lateEnv = loadStatsPro("enUS", { statsProDB = {} })
+    fireEvent("legacy_import.late.pew_without_source", lateEnv, "PLAYER_ENTERING_WORLD")
+    eq("legacy_import.late.defaults_initialized", lateEnv.StatsProDB.fontSize, 14)
+    lateEnv.SwiftStatsDB = source
+    fireEvent("legacy_import.late.second_pew", lateEnv, "PLAYER_ENTERING_WORLD")
+    eq("legacy_import.late.second_pew_no_auto_overwrite", lateEnv.StatsProDB.fontSize, 14)
+
+    slash("legacy_import.late.request_cancel", lateEnv, "import")
+    eq("legacy_import.late.popup_shown", lateEnv.__staticPopupShows, 1)
+    eq("legacy_import.late.request_no_mutation", lateEnv.StatsProDB.fontSize, 14)
+    lateEnv.__cancelStaticPopup()
+    eq("legacy_import.late.cancel_no_mutation", lateEnv.StatsProDB.fontSize, 14)
+    eq("legacy_import.late.cancel_no_reload", lateEnv.__reloadUICalls, 0)
+
+    slash("legacy_import.late.request_accept", lateEnv, "import")
+    eq("legacy_import.late.second_popup_shown", lateEnv.__staticPopupShows, 2)
+    source.fontSize = 8
+    source.xOfs = 999
+    source.colors.primary.r = 0.9
+    lateEnv.__acceptStaticPopup()
+    eq("legacy_import.late.accept_reload", lateEnv.__reloadUICalls, 1)
+    eq("legacy_import.late.accept_snapshot_font_size", lateEnv.StatsProDB.fontSize, 19)
+    eq("legacy_import.late.accept_snapshot_x", lateEnv.StatsProDB.xOfs, 123)
+    eq("legacy_import.late.accept_primary_toggle_migrated", lateEnv.StatsProDB.showMainStat, true)
+    assertColor("legacy_import.late.accept_primary_color_migrated",
+        lateEnv.StatsProDB.colors.mainStat, 0.2, 0.3, 0.4)
+    assertColor("legacy_import.late.accept_crit_color", lateEnv.StatsProDB.colors.crit, 0.4, 0.5, 0.6)
+    eq("legacy_import.late.accept_unknown_ignored", lateEnv.StatsProDB.unknown, nil)
+    eq("legacy_import.late.accept_minimap_ignored", lateEnv.StatsProDB.minimapPos, nil)
+    eq("legacy_import.late.accept_transient_ignored", lateEnv.StatsProDB.fontBeforeAutoSwitch, nil)
+    eq("legacy_import.late.accept_unknown_color_ignored", lateEnv.StatsProDB.colors.evil, nil)
+    eq("legacy_import.late.accept_current_version", lateEnv.StatsProDB.dbVersion, test.currentDBVersion())
+    local loadedPoint = lateEnv.StatsProFrame.points[1]
+    eq("legacy_import.late.accept_position_loaded.point", loadedPoint[1], "TOPLEFT")
+    eq("legacy_import.late.accept_position_loaded.x", loadedPoint[4], 123)
+    fireEvent("legacy_import.late.logout_preserves_imported_position", lateEnv, "PLAYER_LOGOUT")
+    eq("legacy_import.late.logout_position_x", lateEnv.StatsProDB.xOfs, 123)
+end
+
+do
+    local futureDestination = test.currentDBVersion() + 1
+    local futureEnv = loadStatsPro("enUS", {
+        statsProDB = { dbVersion = futureDestination, fontSize = 23 },
+        swiftStatsDB = { fontSize = 17 },
+    })
+    fireEvent("legacy_import.future_destination.pew", futureEnv, "PLAYER_ENTERING_WORLD")
+    clearPrints(futureEnv)
+    slash("legacy_import.future_destination.request", futureEnv, "import")
+    eq("legacy_import.future_destination.no_popup", futureEnv.__staticPopupShows, 0)
+    eq("legacy_import.future_destination.no_mutation", futureEnv.StatsProDB.fontSize, 23)
+    eq("legacy_import.future_destination.message", printContains(futureEnv, "newer schema"), true)
+end
+
+do
+    local secretVersion = {}
+    local secretTonumberCalls = 0
+    local function guardedTonumber(value)
+        if value == secretVersion then
+            secretTonumberCalls = secretTonumberCalls + 1
+            error("secret dbVersion reached tonumber")
+        end
+        return tonumber(value)
+    end
+    local localVersionEnv = loadStatsPro("enUS", {
+        statsProDB = { fontSize = 20 },
+        swiftStatsLocalDB = { dbVersion = secretVersion, fontSize = 17 },
+        issecretvalue = function(value) return value == secretVersion end,
+        tonumber = guardedTonumber,
+    })
+    fireEvent("legacy_import.secret_local_version.pew", localVersionEnv, "PLAYER_ENTERING_WORLD")
+    clearPrints(localVersionEnv)
+    slash("legacy_import.secret_local_version.request", localVersionEnv, "import")
+    eq("legacy_import.secret_local_version.no_popup", localVersionEnv.__staticPopupShows, 0)
+    eq("legacy_import.secret_local_version.no_mutation", localVersionEnv.StatsProDB.fontSize, 20)
+    eq("legacy_import.secret_local_version.no_tonumber", secretTonumberCalls, 0)
+    eq("legacy_import.secret_local_version.message", printContains(localVersionEnv, "newer schema"), true)
+
+    secretTonumberCalls = 0
+    local secretDestinationEnv = loadStatsPro("enUS", {
+        statsProDB = { dbVersion = secretVersion, fontSize = 23 },
+        swiftStatsDB = { fontSize = 17 },
+        issecretvalue = function(value) return value == secretVersion end,
+        tonumber = guardedTonumber,
+    })
+    fireEvent("legacy_import.secret_destination.pew", secretDestinationEnv, "PLAYER_ENTERING_WORLD")
+    clearPrints(secretDestinationEnv)
+    slash("legacy_import.secret_destination.request", secretDestinationEnv, "import")
+    eq("legacy_import.secret_destination.no_popup", secretDestinationEnv.__staticPopupShows, 0)
+    eq("legacy_import.secret_destination.no_mutation", secretDestinationEnv.StatsProDB.fontSize, 23)
+    eq("legacy_import.secret_destination.no_tonumber", secretTonumberCalls, 0)
+    eq("legacy_import.secret_destination.message", printContains(secretDestinationEnv, "newer schema"), true)
+
+    secretTonumberCalls = 0
+    local acceptEnv = loadStatsPro("enUS", {
+        statsProDB = { fontSize = 23 },
+        swiftStatsDB = { fontSize = 17 },
+        issecretvalue = function(value) return value == secretVersion end,
+        tonumber = guardedTonumber,
+    })
+    fireEvent("legacy_import.secret_destination_accept.pew", acceptEnv, "PLAYER_ENTERING_WORLD")
+    slash("legacy_import.secret_destination_accept.request", acceptEnv, "import")
+    acceptEnv.StatsProDB.dbVersion = secretVersion
+    clearPrints(acceptEnv)
+    acceptEnv.__acceptStaticPopup()
+    eq("legacy_import.secret_destination_accept.no_reload", acceptEnv.__reloadUICalls, 0)
+    eq("legacy_import.secret_destination_accept.no_mutation", acceptEnv.StatsProDB.fontSize, 23)
+    eq("legacy_import.secret_destination_accept.no_tonumber", secretTonumberCalls, 0)
+    eq("legacy_import.secret_destination_accept.message", printContains(acceptEnv, "newer schema"), true)
+end
+
+do
+    local reloadCalls = 0
+    local reloadFailureEnv = loadStatsPro("enUS", {
+        statsProDB = {
+            point = "BOTTOM",
+            relativePoint = "BOTTOM",
+            xOfs = 45,
+            yOfs = 67,
+            fontSize = 20,
+        },
+        swiftStatsDB = { fontSize = 17 },
+        reloadUI = function()
+            reloadCalls = reloadCalls + 1
+            error("ReloadUI unavailable")
+        end,
+    })
+    fireEvent("legacy_import.reload_failure.pew", reloadFailureEnv, "PLAYER_ENTERING_WORLD")
+    slash("legacy_import.reload_failure.request", reloadFailureEnv, "import")
+    clearPrints(reloadFailureEnv)
+    reloadFailureEnv.__acceptStaticPopup()
+    eq("legacy_import.reload_failure.attempted_once", reloadCalls, 1)
+    eq("legacy_import.reload_failure.db_restored", reloadFailureEnv.StatsProDB.fontSize, 20)
+    eq("legacy_import.reload_failure.position_restored",
+        reloadFailureEnv.StatsProFrame.points[1][1], "BOTTOM")
+    eq("legacy_import.reload_failure.failure_message",
+        printContains(reloadFailureEnv, "current StatsPro settings were preserved"), true)
+    eq("legacy_import.reload_failure.no_success_message",
+        printContains(reloadFailureEnv, "settings imported"), false)
+end
+
+do
+    local combatEnv = loadStatsPro("enUS", {
+        statsProDB = {},
+        swiftStatsDB = { fontSize = 17 },
+        inCombatLockdown = function() return true end,
+    })
+    fireEvent("legacy_import.combat.pew", combatEnv, "PLAYER_ENTERING_WORLD")
+    clearPrints(combatEnv)
+    slash("legacy_import.combat.request", combatEnv, "import")
+    eq("legacy_import.combat.no_popup", combatEnv.__staticPopupShows, 0)
+    eq("legacy_import.combat.message", printContains(combatEnv, "unavailable during combat"), true)
 end
 
 do
@@ -2060,7 +2401,7 @@ do
     eq("slash.toggle.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Stats panel hidden")
     clearPrints(slashEnv)
     slash("slash.help", slashEnv, "help")
-    eq("slash.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help")
+    eq("slash.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help")
     slashEnv.StatsProDB.fontBeforeAutoSwitch = "Fonts\\ARIALN.TTF"
     slashEnv.StatsProDB.useLocalizedLabels = false
     slashEnv.StatsProDB.panelBackgroundAlpha = 55
@@ -2097,7 +2438,7 @@ do
     eq("slash.localized_ruRU.toggle.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Панель статов скрыта")
     clearPrints(slashEnv)
     slash("slash.localized_ruRU.help", slashEnv, "help")
-    eq("slash.localized_ruRU.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss debug, /ss help")
+    eq("slash.localized_ruRU.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help")
     clearPrints(slashEnv)
     slash("slash.localized_ruRU.debug", slashEnv, "debug")
     eq("slash.localized_ruRU.debug_english", printContains(slashEnv, "debug v"), true)

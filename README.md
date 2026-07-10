@@ -264,5 +264,7 @@ Bug reports and PRs remain the highest-leverage way to help — open an
 
 [MIT](LICENSE). Original SwiftStats portions (boilerplate, color defaults, basic
 stat list) © TaylorSay; all StatsPro extensions © Antrakt. See [`LICENSE`](LICENSE)
-for the full text. Bundled runtime libraries keep their upstream licenses; see
-[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+for the full text. Bundled runtime libraries keep their upstream terms:
+LibSharedMedia-3.0 (`LGPL-2.1-only`), CallbackHandler-1.0 (`BSD-2-Clause`), and
+LibStub (Public Domain). Full license texts, pinned revisions, provenance, and
+hashes are in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

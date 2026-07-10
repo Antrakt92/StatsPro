@@ -6,6 +6,7 @@ manual-changelog:
 
 ignore:
   - .github
+  - .gitattributes
   - .gitignore
   - README.md
   - .pkgmeta

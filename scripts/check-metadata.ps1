@@ -7,6 +7,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "third-party-contract.ps1")
+
 function Get-SingleRegexMatch {
     param(
         [string]$Path,
@@ -54,6 +56,7 @@ function Assert-RequiredPkgmetaIgnores {
     param([string]$Path)
 
     $expectedIgnores = @(
+        ".gitattributes",
         "libs/LibStub/tests",
         "libs/LibStub/*.toc",
         "libs/CallbackHandler-1.0/*.xml",
@@ -111,78 +114,6 @@ function Assert-NoRuntimeLibExternals {
                 $normalized.StartsWith("$runtimeLibRoot/", [System.StringComparison]::OrdinalIgnoreCase)) {
                 throw ".pkgmeta must not declare runtime lib external '$externalKey'; bundled runtime libraries must be vendored and covered by THIRD-PARTY-NOTICES.md."
             }
-        }
-    }
-}
-
-function Get-NormalizedTextSha256 {
-    param([string]$Path)
-
-    $text = [System.IO.File]::ReadAllText($Path)
-    $normalized = ($text -replace "`r`n", "`n") -replace "`r", "`n"
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes($normalized)
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    try {
-        return (($sha.ComputeHash($bytes) | ForEach-Object { $_.ToString("X2") }) -join "")
-    }
-    finally {
-        $sha.Dispose()
-    }
-}
-
-function Get-RuntimeLibNoticeRequirements {
-    param([object[]]$RuntimeRefs)
-
-    $knownLicenses = @{
-        "libs/LibStub/LibStub.lua" = "Public Domain"
-        "libs/CallbackHandler-1.0/CallbackHandler-1.0.lua" = "BSD"
-        "libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua" = "LGPL v2.1"
-    }
-    $requirements = @()
-    foreach ($ref in @($RuntimeRefs)) {
-        if (-not $ref.IsVendored) {
-            continue
-        }
-        $noticePath = ($ref.RelativePath -replace "\\", "/")
-        if (-not $knownLicenses.ContainsKey($noticePath)) {
-            throw "No third-party notice requirement is defined for vendored runtime file $noticePath."
-        }
-        $requirements += [pscustomobject]@{
-            Path     = $noticePath
-            FullPath = $ref.FullPath
-            License  = $knownLicenses[$noticePath]
-            Hash     = Get-NormalizedTextSha256 -Path $ref.FullPath
-        }
-    }
-    return @($requirements)
-}
-
-function Assert-ThirdPartyNotices {
-    param(
-        [string]$RepoRoot,
-        [object[]]$RuntimeRefs
-    )
-
-    $noticePath = Join-Path $RepoRoot "THIRD-PARTY-NOTICES.md"
-    if (-not (Test-Path -LiteralPath $noticePath -PathType Leaf)) {
-        throw "Missing THIRD-PARTY-NOTICES.md for bundled runtime library notices."
-    }
-
-    $text = Get-Content -LiteralPath $noticePath -Raw -Encoding UTF8
-    $requirements = @(Get-RuntimeLibNoticeRequirements -RuntimeRefs $RuntimeRefs)
-    foreach ($requirement in $requirements) {
-        $sectionPattern = "(?ms)^##\s+" + [regex]::Escape($requirement.Path) + "\s*\r?\n(?<Body>.*?)(?=^##\s+|\z)"
-        $section = [regex]::Match($text, $sectionPattern)
-        if (-not $section.Success) {
-            throw "THIRD-PARTY-NOTICES.md is missing section for $($requirement.Path)."
-        }
-
-        $body = $section.Groups["Body"].Value
-        if ($body -notmatch ("(?m)^\s*-\s*License:\s*" + [regex]::Escape($requirement.License) + "\s*$")) {
-            throw "THIRD-PARTY-NOTICES.md section $($requirement.Path) must include license '$($requirement.License)'."
-        }
-        if ($body -notmatch ("(?m)^\s*-\s*SHA256:\s*" + [regex]::Escape($requirement.Hash) + "\s*$")) {
-            throw "THIRD-PARTY-NOTICES.md section $($requirement.Path) must include current SHA256 $($requirement.Hash)."
         }
     }
 }
@@ -365,23 +296,56 @@ function Set-TestToc {
 function Write-TestThirdPartyNotices {
     param([string]$Root)
 
+    New-Item -ItemType Directory -Path (Join-Path $Root "LICENSES") -Force | Out-Null
+    Set-Content -Path (Join-Path $Root "LICENSES\CallbackHandler.txt") -Value "callback license" -Encoding UTF8
+    Set-Content -Path (Join-Path $Root "LICENSES\LibSharedMedia.txt") -Value "lsm license" -Encoding UTF8
+
     $entries = @(
-        @{ Path = "libs\LibStub\LibStub.lua"; License = "Public Domain" },
-        @{ Path = "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua"; License = "BSD" },
-        @{ Path = "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua"; License = "LGPL v2.1" }
+        [pscustomobject][ordered]@{
+            Path = "libs/LibStub/LibStub.lua"; Project = "LibStub"; Source = "https://example.test/libstub"; SourceRevision = "r1"
+            SourceArtifact = ""; SourceArtifactSha256 = ""; RuntimeSha256 = Get-StatsProNormalizedTextSha256 -Path (Join-Path $Root "libs\LibStub\LibStub.lua")
+            License = "Public Domain"; LicenseFile = ""; LicenseTextSource = ""; LicenseTextSha256 = ""
+            LicenseDeclarationSource = ""; LicenseDeclarationSha256 = ""; CopyrightNoticeSource = ""; CopyrightNoticeSha256 = ""
+            LicenseTemplateSource = ""; LicenseTemplateSha256 = ""
+        },
+        [pscustomobject][ordered]@{
+            Path = "libs/CallbackHandler-1.0/CallbackHandler-1.0.lua"; Project = "CallbackHandler-1.0"; Source = "https://example.test/callback"; SourceRevision = "r2"
+            SourceArtifact = "callback.zip"; SourceArtifactSha256 = ("A" * 64); RuntimeSha256 = Get-StatsProNormalizedTextSha256 -Path (Join-Path $Root "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua")
+            License = "BSD-2-Clause"; LicenseFile = "LICENSES/CallbackHandler.txt"; LicenseTextSource = ""; LicenseTextSha256 = Get-StatsProNormalizedTextSha256 -Path (Join-Path $Root "LICENSES\CallbackHandler.txt")
+            LicenseDeclarationSource = "https://example.test/callback.toc"; LicenseDeclarationSha256 = ("B" * 64); CopyrightNoticeSource = "https://example.test/copyright"; CopyrightNoticeSha256 = ("C" * 64)
+            LicenseTemplateSource = "https://example.test/bsd"; LicenseTemplateSha256 = ("D" * 64)
+        },
+        [pscustomobject][ordered]@{
+            Path = "libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua"; Project = "LibSharedMedia-3.0"; Source = "https://example.test/lsm"; SourceRevision = "r3"
+            SourceArtifact = "lsm.zip"; SourceArtifactSha256 = ("E" * 64); RuntimeSha256 = Get-StatsProNormalizedTextSha256 -Path (Join-Path $Root "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua")
+            License = "LGPL-2.1-only"; LicenseFile = "LICENSES/LibSharedMedia.txt"; LicenseTextSource = "https://example.test/lgpl"; LicenseTextSha256 = Get-StatsProNormalizedTextSha256 -Path (Join-Path $Root "LICENSES\LibSharedMedia.txt")
+            LicenseDeclarationSource = "https://example.test/lsm.lua"; LicenseDeclarationSha256 = ("F" * 64); CopyrightNoticeSource = ""; CopyrightNoticeSha256 = ""
+            LicenseTemplateSource = ""; LicenseTemplateSha256 = ""
+        }
     )
     $lines = @("# Third-Party Notices", "")
     foreach ($entry in $entries) {
-        $fullPath = Join-Path $Root $entry.Path
-        $hash = Get-NormalizedTextSha256 -Path $fullPath
-        $normalized = $entry.Path -replace "\\", "/"
-        $lines += "## $normalized"
+        $lines += "## $($entry.Path)"
         $lines += ""
-        $lines += "- License: $($entry.License)"
-        $lines += "- SHA256: $hash"
+        $fields = @(
+            @{ Name = "Project"; Value = $entry.Project }, @{ Name = "Source"; Value = $entry.Source },
+            @{ Name = "Source revision"; Value = $entry.SourceRevision }, @{ Name = "Source artifact"; Value = $entry.SourceArtifact },
+            @{ Name = "Source artifact SHA256"; Value = $entry.SourceArtifactSha256 }, @{ Name = "License"; Value = $entry.License },
+            @{ Name = "License declaration"; Value = $entry.LicenseDeclarationSource }, @{ Name = "License declaration SHA256"; Value = $entry.LicenseDeclarationSha256 },
+            @{ Name = "Copyright notice"; Value = $entry.CopyrightNoticeSource }, @{ Name = "Copyright notice SHA256"; Value = $entry.CopyrightNoticeSha256 },
+            @{ Name = "License template"; Value = $entry.LicenseTemplateSource }, @{ Name = "License template SHA256"; Value = $entry.LicenseTemplateSha256 },
+            @{ Name = "License text"; Value = $entry.LicenseFile }, @{ Name = "License text source"; Value = $entry.LicenseTextSource },
+            @{ Name = "License text SHA256"; Value = $entry.LicenseTextSha256 }, @{ Name = "SHA256"; Value = $entry.RuntimeSha256 }
+        )
+        foreach ($field in $fields) {
+            if (-not [string]::IsNullOrWhiteSpace($field.Value)) {
+                $lines += "- $($field.Name): $($field.Value)"
+            }
+        }
         $lines += ""
     }
     Set-Content -Path (Join-Path $Root "THIRD-PARTY-NOTICES.md") -Value $lines -Encoding UTF8
+    return @($entries)
 }
 
 function Invoke-SelfTest {
@@ -397,7 +361,7 @@ function Invoke-SelfTest {
             "StatsPro.lua"
         )
         Set-TestToc -Root $root -Refs $validRefs
-        Write-TestThirdPartyNotices -Root $root
+        $noticeRequirements = @(Write-TestThirdPartyNotices -Root $root)
         $contract = Get-TocRuntimeContract -RepoRoot $root -TocPath (Join-Path $root "StatsPro.toc")
         if ($contract.RuntimeLuaRefs.Count -ne 5) {
             throw "expected five runtime Lua refs, got $($contract.RuntimeLuaRefs.Count)"
@@ -486,6 +450,7 @@ function Invoke-SelfTest {
         Set-Content -Path (Join-Path $root ".pkgmeta") -Value @"
 ignore:
   - .github
+  - .gitattributes
   - libs/LibStub/tests
   - libs/LibStub/*.toc
   - libs/CallbackHandler-1.0/*.xml
@@ -493,11 +458,12 @@ ignore:
 "@ -Encoding UTF8
         Assert-RequiredPkgmetaIgnores -Path (Join-Path $root ".pkgmeta")
         Assert-NoRuntimeLibExternals -Path (Join-Path $root ".pkgmeta")
-        Assert-ThirdPartyNotices -RepoRoot $root -RuntimeRefs $contract.RuntimeLuaRefs
+        Assert-StatsProThirdPartyMaterials -Root $root -Requirements $noticeRequirements
 
         Set-Content -Path (Join-Path $root ".pkgmeta") -Value @"
 ignore:
   - .github
+  - .gitattributes
   - libs/LibStub/tests
   - libs/LibStub/*.toc
 "@ -Encoding UTF8
@@ -508,6 +474,7 @@ ignore:
         Set-Content -Path (Join-Path $root ".pkgmeta") -Value @"
 ignore:
   - .github
+  - .gitattributes
   - libs/LibStub/tests
   - libs/LibStub/*.toc
   - libs/CallbackHandler-1.0/*.xml
@@ -523,8 +490,26 @@ externals:
 
         Remove-Item -LiteralPath (Join-Path $root "THIRD-PARTY-NOTICES.md")
         Assert-ThrowsMatch "missing third-party notices rejected" {
-            Assert-ThirdPartyNotices -RepoRoot $root -RuntimeRefs $contract.RuntimeLuaRefs
+            Assert-StatsProThirdPartyMaterials -Root $root -Requirements $noticeRequirements
         } "THIRD-PARTY-NOTICES"
+
+        $noticeRequirements = @(Write-TestThirdPartyNotices -Root $root)
+        Remove-Item -LiteralPath (Join-Path $root "LICENSES\CallbackHandler.txt")
+        Assert-ThrowsMatch "missing third-party license rejected" {
+            Assert-StatsProThirdPartyMaterials -Root $root -Requirements $noticeRequirements
+        } "Missing license text"
+
+        $noticeRequirements = @(Write-TestThirdPartyNotices -Root $root)
+        Set-Content -LiteralPath (Join-Path $root "LICENSES\LibSharedMedia.txt") -Value "modified" -Encoding UTF8
+        Assert-ThrowsMatch "modified third-party license rejected" {
+            Assert-StatsProThirdPartyMaterials -Root $root -Requirements $noticeRequirements
+        } "License text.*SHA256"
+
+        $noticeRequirements = @(Write-TestThirdPartyNotices -Root $root)
+        Set-Content -LiteralPath (Join-Path $root "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua") -Value "modified" -Encoding UTF8
+        Assert-ThrowsMatch "modified runtime library rejected" {
+            Assert-StatsProThirdPartyMaterials -Root $root -Requirements $noticeRequirements
+        } "runtime library.*SHA256"
     }
     finally {
         if (Test-Path -LiteralPath $root) {
@@ -568,7 +553,7 @@ try {
 
     Assert-RequiredPkgmetaIgnores -Path $PkgmetaPath
     Assert-NoRuntimeLibExternals -Path $PkgmetaPath
-    Assert-ThirdPartyNotices -RepoRoot $RepoRoot -RuntimeRefs $contract.RuntimeLuaRefs
+    Assert-StatsProThirdPartyMaterials -Root $RepoRoot
 
     $InterfaceText = Get-SingleRegexMatch `
         -Path $contract.TocPath `

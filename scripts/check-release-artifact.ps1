@@ -15,6 +15,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "tool-version-locks.ps1")
+. (Join-Path $PSScriptRoot "third-party-contract.ps1")
 
 function Invoke-NativeCapture {
     param(
@@ -100,10 +101,16 @@ function Get-ZipEntries {
 }
 
 function Get-StatsProPackageFileContract {
+    $licenseFiles = @(
+        Get-StatsProThirdPartyContract |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_.LicenseFile) } |
+            ForEach-Object { "StatsPro/$($_.LicenseFile)" }
+    )
     $requiredFiles = @(
         "StatsPro/CHANGELOG.md",
         "StatsPro/LICENSE",
-        "StatsPro/THIRD-PARTY-NOTICES.md",
+        "StatsPro/THIRD-PARTY-NOTICES.md"
+    ) + $licenseFiles + @(
         "StatsPro/StatsPro.toc",
         "StatsPro/StatsPro.lua",
         "StatsPro/StatsPro_ArchonTargets.lua",
@@ -115,21 +122,6 @@ function Get-StatsProPackageFileContract {
     return [pscustomobject]@{
         RequiredFiles = $requiredFiles
         AllowedFiles  = $requiredFiles
-    }
-}
-
-function Get-NormalizedTextSha256 {
-    param([string]$Path)
-
-    $text = [System.IO.File]::ReadAllText($Path)
-    $normalized = ($text -replace "`r`n", "`n") -replace "`r", "`n"
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes($normalized)
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    try {
-        return (($sha.ComputeHash($bytes) | ForEach-Object { $_.ToString("X2") }) -join "")
-    }
-    finally {
-        $sha.Dispose()
     }
 }
 
@@ -418,40 +410,6 @@ function Get-ArchonSemanticLines {
     return @($output | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
 }
 
-function Assert-PackagedThirdPartyNotices {
-    param([string]$PackageRoot)
-
-    $noticePath = Join-Path $PackageRoot "THIRD-PARTY-NOTICES.md"
-    if (-not (Test-Path -LiteralPath $noticePath -PathType Leaf)) {
-        throw "Package is missing THIRD-PARTY-NOTICES.md."
-    }
-    $text = Get-Content -LiteralPath $noticePath -Raw -Encoding UTF8
-    $requirements = @(
-        @{ Path = "libs/LibStub/LibStub.lua"; License = "Public Domain" },
-        @{ Path = "libs/CallbackHandler-1.0/CallbackHandler-1.0.lua"; License = "BSD" },
-        @{ Path = "libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua"; License = "LGPL v2.1" }
-    )
-    foreach ($requirement in $requirements) {
-        $libPath = Join-Path $PackageRoot ($requirement.Path -replace "/", [System.IO.Path]::DirectorySeparatorChar)
-        if (-not (Test-Path -LiteralPath $libPath -PathType Leaf)) {
-            throw "Package is missing bundled library $($requirement.Path)."
-        }
-        $hash = Get-NormalizedTextSha256 -Path $libPath
-        $sectionPattern = "(?ms)^##\s+" + [regex]::Escape($requirement.Path) + "\s*\r?\n(?<Body>.*?)(?=^##\s+|\z)"
-        $section = [regex]::Match($text, $sectionPattern)
-        if (-not $section.Success) {
-            throw "THIRD-PARTY-NOTICES.md is missing section for $($requirement.Path)."
-        }
-        $body = $section.Groups["Body"].Value
-        if ($body -notmatch ("(?m)^\s*-\s*License:\s*" + [regex]::Escape($requirement.License) + "\s*$")) {
-            throw "THIRD-PARTY-NOTICES.md section $($requirement.Path) must include license '$($requirement.License)'."
-        }
-        if ($body -notmatch ("(?m)^\s*-\s*SHA256:\s*" + [regex]::Escape($hash) + "\s*$")) {
-            throw "THIRD-PARTY-NOTICES.md section $($requirement.Path) must include packaged SHA256 $hash."
-        }
-    }
-}
-
 function Assert-PackagedArchonTargets {
     param(
         [string]$PackageRoot,
@@ -527,7 +485,7 @@ function Assert-StatsProReleaseArtifact {
     try {
         $expanded = Expand-StatsProPackageToTemp -Path $zipFullPath
         $versionMetadata = Assert-PackagedStatsProVersionMetadata -PackageRoot $expanded.PackageRoot -ExpectedTag $ExpectedTag
-        Assert-PackagedThirdPartyNotices -PackageRoot $expanded.PackageRoot
+        Assert-StatsProThirdPartyMaterials -Root $expanded.PackageRoot
         Assert-PackagedArchonTargets -PackageRoot $expanded.PackageRoot -SourceRoot $sourceFullPath -MaxAgeDays $ArchonMaxAgeDays
         if ($WithReleaseJson) {
             if ([string]::IsNullOrWhiteSpace($ReleaseJsonPath)) {
@@ -631,49 +589,61 @@ function Invoke-SelfTest {
         } "entry count"
 
         $noticeRoot = Join-Path $tempDir "notice-root"
-        New-Item -ItemType Directory -Path (Join-Path $noticeRoot "libs\LibStub") -Force | Out-Null
-        New-Item -ItemType Directory -Path (Join-Path $noticeRoot "libs\CallbackHandler-1.0") -Force | Out-Null
-        New-Item -ItemType Directory -Path (Join-Path $noticeRoot "libs\LibSharedMedia-3.0") -Force | Out-Null
-        Set-Content -LiteralPath (Join-Path $noticeRoot "libs\LibStub\LibStub.lua") -Value "libstub" -Encoding UTF8
-        Set-Content -LiteralPath (Join-Path $noticeRoot "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua") -Value "callback" -Encoding UTF8
-        Set-Content -LiteralPath (Join-Path $noticeRoot "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua") -Value "lsm" -Encoding UTF8
-
-        $libStubHash = Get-NormalizedTextSha256 -Path (Join-Path $noticeRoot "libs\LibStub\LibStub.lua")
-        $callbackHash = Get-NormalizedTextSha256 -Path (Join-Path $noticeRoot "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua")
-        $lsmHash = Get-NormalizedTextSha256 -Path (Join-Path $noticeRoot "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua")
-        $validNotice = @"
-# Third-party notices
-
-## libs/LibStub/LibStub.lua
-- License: Public Domain
-- SHA256: $libStubHash
-
-## libs/CallbackHandler-1.0/CallbackHandler-1.0.lua
-- License: BSD
-- SHA256: $callbackHash
-
-## libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua
-- License: LGPL v2.1
-- SHA256: $lsmHash
-"@
+        $noticeRequirements = @(Get-StatsProThirdPartyContract)
+        foreach ($requirement in $noticeRequirements) {
+            $runtimeSource = Join-Path $sourceRoot ($requirement.Path -replace "/", [System.IO.Path]::DirectorySeparatorChar)
+            $runtimeTarget = Join-Path $noticeRoot ($requirement.Path -replace "/", [System.IO.Path]::DirectorySeparatorChar)
+            New-Item -ItemType Directory -Path (Split-Path -Parent $runtimeTarget) -Force | Out-Null
+            Copy-Item -LiteralPath $runtimeSource -Destination $runtimeTarget
+            if (-not [string]::IsNullOrWhiteSpace($requirement.LicenseFile)) {
+                $licenseSource = Join-Path $sourceRoot ($requirement.LicenseFile -replace "/", [System.IO.Path]::DirectorySeparatorChar)
+                $licenseTarget = Join-Path $noticeRoot ($requirement.LicenseFile -replace "/", [System.IO.Path]::DirectorySeparatorChar)
+                New-Item -ItemType Directory -Path (Split-Path -Parent $licenseTarget) -Force | Out-Null
+                Copy-Item -LiteralPath $licenseSource -Destination $licenseTarget
+            }
+        }
         $noticePath = Join-Path $noticeRoot "THIRD-PARTY-NOTICES.md"
-        Set-Content -LiteralPath $noticePath -Value $validNotice -Encoding UTF8
-        Assert-PackagedThirdPartyNotices -PackageRoot $noticeRoot
+        Copy-Item -LiteralPath (Join-Path $sourceRoot "THIRD-PARTY-NOTICES.md") -Destination $noticePath
+        $validNotice = Get-Content -LiteralPath $noticePath -Raw -Encoding UTF8
+        Assert-StatsProThirdPartyMaterials -Root $noticeRoot
 
         Set-Content -LiteralPath $noticePath -Value ($validNotice -replace "(?ms)^## libs/LibStub/LibStub\.lua.*?(?=^## |\z)", "") -Encoding UTF8
         Assert-ThrowsMatch "notice missing library section rejected" {
-            Assert-PackagedThirdPartyNotices -PackageRoot $noticeRoot
+            Assert-StatsProThirdPartyMaterials -Root $noticeRoot
         } "missing section"
 
-        Set-Content -LiteralPath $noticePath -Value ($validNotice -replace "License: BSD", "License: MIT") -Encoding UTF8
+        Set-Content -LiteralPath $noticePath -Value ($validNotice -replace "License: BSD-2-Clause", "License: MIT") -Encoding UTF8
         Assert-ThrowsMatch "notice wrong license rejected" {
-            Assert-PackagedThirdPartyNotices -PackageRoot $noticeRoot
-        } "license 'BSD'"
+            Assert-StatsProThirdPartyMaterials -Root $noticeRoot
+        } "License: BSD-2-Clause"
 
-        Set-Content -LiteralPath $noticePath -Value ($validNotice -replace $lsmHash, ("0" * 64)) -Encoding UTF8
+        Set-Content -LiteralPath $noticePath -Value ($validNotice -replace $noticeRequirements[2].RuntimeSha256, ("0" * 64)) -Encoding UTF8
         Assert-ThrowsMatch "notice stale hash rejected" {
-            Assert-PackagedThirdPartyNotices -PackageRoot $noticeRoot
+            Assert-StatsProThirdPartyMaterials -Root $noticeRoot
         } "SHA256"
+
+        Set-Content -LiteralPath $noticePath -Value ($validNotice -replace $noticeRequirements[1].LicenseDeclarationSha256, ("0" * 64)) -Encoding UTF8
+        Assert-ThrowsMatch "notice stale provenance hash rejected" {
+            Assert-StatsProThirdPartyMaterials -Root $noticeRoot
+        } "License declaration SHA256"
+
+        Set-Content -LiteralPath $noticePath -Value $validNotice -Encoding UTF8
+        Remove-Item -LiteralPath (Join-Path $noticeRoot $noticeRequirements[1].LicenseFile)
+        Assert-ThrowsMatch "missing packaged license rejected" {
+            Assert-StatsProThirdPartyMaterials -Root $noticeRoot
+        } "Missing license text"
+
+        Copy-Item -LiteralPath (Join-Path $sourceRoot $noticeRequirements[1].LicenseFile) -Destination (Join-Path $noticeRoot $noticeRequirements[1].LicenseFile)
+        Set-Content -LiteralPath (Join-Path $noticeRoot $noticeRequirements[2].LicenseFile) -Value "modified" -Encoding UTF8
+        Assert-ThrowsMatch "modified packaged license rejected" {
+            Assert-StatsProThirdPartyMaterials -Root $noticeRoot
+        } "License text.*SHA256"
+
+        Copy-Item -LiteralPath (Join-Path $sourceRoot $noticeRequirements[2].LicenseFile) -Destination (Join-Path $noticeRoot $noticeRequirements[2].LicenseFile) -Force
+        Set-Content -LiteralPath (Join-Path $noticeRoot $noticeRequirements[1].Path) -Value "modified" -Encoding UTF8
+        Assert-ThrowsMatch "modified packaged runtime rejected" {
+            Assert-StatsProThirdPartyMaterials -Root $noticeRoot
+        } "runtime library.*SHA256"
 
         Assert-ThrowsMatch "missing package file rejected" {
             Assert-StatsProPackageEntries -Entries @(
@@ -688,6 +658,11 @@ function Invoke-SelfTest {
                 "StatsPro/libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua"
             )
         } "THIRD-PARTY-NOTICES"
+        foreach ($licenseFile in @($noticeRequirements | Where-Object { -not [string]::IsNullOrWhiteSpace($_.LicenseFile) } | ForEach-Object { "StatsPro/$($_.LicenseFile)" })) {
+            Assert-ThrowsMatch "missing packaged license entry rejected" {
+                Assert-StatsProPackageEntries -Entries @((Get-StatsProPackageFileContract).RequiredFiles | Where-Object { $_ -ne $licenseFile })
+            } ([regex]::Escape($licenseFile))
+        }
         Assert-ThrowsMatch "unexpected lib file rejected" {
             Assert-StatsProPackageEntries -Entries ((Get-StatsProPackageFileContract).RequiredFiles + "StatsPro/libs/LibStub/tests/test.lua")
         } "unexpected packaged lib file"

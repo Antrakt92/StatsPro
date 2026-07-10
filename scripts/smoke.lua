@@ -4684,6 +4684,41 @@ do
     end
 end
 
+do
+    local launcherKey = "Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."
+    local launcherDescriptionCases = {
+        { "enUS", "Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window." },
+        { "ruRU", "HUD характеристик и экипировки: уровень предметов, прочность, стоимость ремонта и цели характеристик Archon. Нажмите ниже, чтобы открыть окно настроек." },
+        { "deDE", "HUD für Werte und Ausrüstung: Gegenstandsstufe, Haltbarkeit, Reparaturkosten und Archon-Stat-Ziele. Klicke unten, um die vollständigen Einstellungen zu öffnen." },
+        { "frFR", "HUD de caractéristiques et d'équipement : niveau d'objet, durabilité, coût de réparation et objectifs de caractéristiques Archon. Cliquez ci-dessous pour ouvrir la fenêtre de paramètres complète." },
+        { "esES", "HUD de estadísticas y equipo: nivel de objeto, durabilidad, coste de reparación y objetivos de estadísticas de Archon. Haz clic abajo para abrir la ventana de ajustes." },
+        { "esMX", "HUD de estadísticas y equipo: nivel de objeto, durabilidad, costo de reparación y objetivos de estadísticas de Archon. Da clic abajo para abrir la ventana de configuración." },
+        { "itIT", "HUD di statistiche ed equipaggiamento: livello oggetto, durabilità, costo di riparazione e obiettivi statistiche Archon. Clicca sotto per aprire le impostazioni complete." },
+        { "ptBR", "HUD de atributos e equipamento: nível de item, durabilidade, custo de reparo e metas de atributos do Archon. Clique abaixo para abrir a janela de configurações." },
+        { "koKR", "능력치·장비 HUD: 아이템 레벨, 내구도, 수리 비용, Archon 능력치 목표. 아래를 눌러 전체 설정 창을 엽니다." },
+        { "zhCN", "属性与装备 HUD：装等、耐久度、修理费用及 Archon 属性目标。点击下方打开完整设置窗口。" },
+        { "zhTW", "屬性與裝備 HUD：裝等、耐久度、修理費用及 Archon 屬性目標。點擊下方開啟完整設定視窗。" },
+    }
+    local labelsByLocale = test.registrySnapshot().labelsByLocale
+
+    for _, case in ipairs(launcherDescriptionCases) do
+        local locale, expected = case[1], case[2]
+        eq("launcher.copy_registry_" .. locale, labelsByLocale[locale][launcherKey], expected)
+
+        local launcherEnv, _, launcherTest = loadStatsPro("enUS", {
+            statsProDB = { forceLocale = locale },
+        })
+        fireEvent("launcher.localized_" .. locale .. ".fire", launcherEnv, "PLAYER_ENTERING_WORLD")
+        eq("launcher.localized_" .. locale .. ".text", launcherTest.launcherDescriptionText(), expected)
+    end
+
+    local enGBEnv, _, enGBTest = loadStatsPro("enGB", {
+        statsProDB = { forceLocale = "auto" },
+    })
+    fireEvent("launcher.localized_enGB_fallback.fire", enGBEnv, "PLAYER_ENTERING_WORLD")
+    eq("launcher.localized_enGB_fallback.text", enGBTest.launcherDescriptionText(), launcherDescriptionCases[1][2])
+end
+
 eq("fonts.path_key_slash_case", test.fontPathKey("Fonts/ARIALN.TTF"), "fonts\\arialn.ttf")
 eq("fonts.path_same_slash_case", test.sameFontPath("Fonts/ARIALN.TTF", "fonts\\arialn.ttf"), true)
 eq("fonts.blizzard_path_detection.true", test.isBlizzardFontPath("Fonts\\ARIALN.TTF"), true)
@@ -5983,6 +6018,9 @@ do
 
     selectDropdownValue("config.dropdown_language_ruRU_commits_locale", env.StatsProLanguageDropdown, "ruRU")
     eq("config.dropdown_language_ruRU_commits_locale.value", env.StatsProDB.forceLocale, "ruRU")
+    eq("config.dropdown_language_ruRU_commits_locale.launcher",
+        test.launcherDescriptionText(),
+        "HUD характеристик и экипировки: уровень предметов, прочность, стоимость ремонта и цели характеристик Archon. Нажмите ниже, чтобы открыть окно настроек.")
 
     for _, name in ipairs({
         "StatsProOffensiveCheckText",

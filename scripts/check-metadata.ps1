@@ -27,6 +27,50 @@ function Get-SingleRegexMatch {
     return $Matches[0].Groups[1].Value
 }
 
+function Get-ExpectedTocNotes {
+    return [ordered]@{
+        "Notes"      = "Stats and gear HUD: item level, durability, repair cost and Archon stat targets."
+        "Notes-deDE" = "HUD für Werte und Ausrüstung: Gegenstandsstufe, Haltbarkeit, Reparaturkosten und Archon-Stat-Ziele."
+        "Notes-esES" = "HUD de estadísticas y equipo: nivel de objeto, durabilidad, coste de reparación y objetivos de estadísticas de Archon."
+        "Notes-esMX" = "HUD de estadísticas y equipo: nivel de objeto, durabilidad, costo de reparación y objetivos de estadísticas de Archon."
+        "Notes-frFR" = "HUD de caractéristiques et d'équipement : niveau d'objet, durabilité, coût de réparation et objectifs de caractéristiques Archon."
+        "Notes-itIT" = "HUD di statistiche ed equipaggiamento: livello oggetto, durabilità, costo di riparazione e obiettivi statistiche Archon."
+        "Notes-koKR" = "능력치·장비 HUD: 아이템 레벨, 내구도, 수리 비용, Archon 능력치 목표."
+        "Notes-ptBR" = "HUD de atributos e equipamento: nível de item, durabilidade, custo de reparo e metas de atributos do Archon."
+        "Notes-ruRU" = "HUD характеристик и экипировки: уровень предметов, прочность, стоимость ремонта и цели характеристик Archon."
+        "Notes-zhCN" = "属性与装备 HUD：装等、耐久度、修理费用及 Archon 属性目标。"
+        "Notes-zhTW" = "屬性與裝備 HUD：裝等、耐久度、修理費用及 Archon 屬性目標。"
+    }
+}
+
+function Assert-TocNotesContract {
+    param(
+        [System.Collections.IDictionary]$Metadata,
+        [string]$TocPath
+    )
+
+    $expected = Get-ExpectedTocNotes
+    $actualKeys = @($Metadata.Keys | Where-Object { $_ -eq "Notes" -or $_ -like "Notes-*" })
+    $missing = @($expected.Keys | Where-Object { $actualKeys -cnotcontains $_ })
+    $unexpected = @($actualKeys | Where-Object { $expected.Keys -cnotcontains $_ })
+    if ($missing.Count -gt 0 -or $unexpected.Count -gt 0) {
+        throw "TOC Notes locale set mismatch. Missing: $($missing -join ', '); unexpected: $($unexpected -join ', ')."
+    }
+
+    foreach ($key in $expected.Keys) {
+        $actual = Get-SingleRegexMatch `
+            -Path $TocPath `
+            -Pattern ("^##\s+" + [regex]::Escape($key) + ":\s*(.+?)\s*$") `
+            -Description "TOC $key"
+        if ([string]::IsNullOrWhiteSpace($actual)) {
+            throw "TOC $key must not be empty."
+        }
+        if ($actual -cne $expected[$key]) {
+            throw "TOC $key is '$actual', expected '$($expected[$key])'."
+        }
+    }
+}
+
 function Get-PkgmetaListItems {
     param(
         [string]$Path,
@@ -293,6 +337,18 @@ function Set-TestToc {
     Set-Content -Path (Join-Path $Root "StatsPro.toc") -Value ($content -join "`n") -Encoding UTF8
 }
 
+function Write-TestTocNotes {
+    param(
+        [string]$Root,
+        [System.Collections.IDictionary]$Notes
+    )
+
+    $path = Join-Path $Root "notes-contract.toc"
+    $lines = @($Notes.Keys | ForEach-Object { "## ${_}: $($Notes[$_])" })
+    Set-Content -Path $path -Value $lines -Encoding UTF8
+    return $path
+}
+
 function Write-TestThirdPartyNotices {
     param([string]$Root)
 
@@ -372,6 +428,40 @@ function Invoke-SelfTest {
         if (-not $contract.RuntimeLuaRefs[3].IsGenerated) {
             throw "expected Archon target file to be marked generated"
         }
+
+        $expectedNotes = Get-ExpectedTocNotes
+        $newNotesFixture = {
+            $copy = [ordered]@{}
+            foreach ($key in $expectedNotes.Keys) {
+                $copy[$key] = $expectedNotes[$key]
+            }
+            return $copy
+        }
+
+        $notesFixture = & $newNotesFixture
+        $notesPath = Write-TestTocNotes -Root $root -Notes $notesFixture
+        Assert-TocNotesContract -Metadata $notesFixture -TocPath $notesPath
+
+        $notesFixture = & $newNotesFixture
+        $notesFixture.Remove("Notes-zhTW")
+        $notesPath = Write-TestTocNotes -Root $root -Notes $notesFixture
+        Assert-ThrowsMatch "missing Notes locale rejected" {
+            Assert-TocNotesContract -Metadata $notesFixture -TocPath $notesPath
+        } "Missing: Notes-zhTW"
+
+        $notesFixture = & $newNotesFixture
+        $notesFixture["Notes-enGB"] = $notesFixture["Notes"]
+        $notesPath = Write-TestTocNotes -Root $root -Notes $notesFixture
+        Assert-ThrowsMatch "unexpected Notes locale rejected" {
+            Assert-TocNotesContract -Metadata $notesFixture -TocPath $notesPath
+        } "unexpected: Notes-enGB"
+
+        $notesFixture = & $newNotesFixture
+        $notesFixture["Notes"] = "On-screen secondary, defensive stats, durability and repair cost"
+        $notesPath = Write-TestTocNotes -Root $root -Notes $notesFixture
+        Assert-ThrowsMatch "stale Notes copy rejected" {
+            Assert-TocNotesContract -Metadata $notesFixture -TocPath $notesPath
+        } "TOC Notes is .* expected"
 
         Set-TestToc -Root $root -Refs @(
             "libs/LibStub/LibStub.lua",
@@ -599,6 +689,8 @@ try {
             throw "TOC $Key is '$Actual', expected '$($ExpectedCategories[$Key])'."
         }
     }
+
+    Assert-TocNotesContract -Metadata $contract.Metadata -TocPath $contract.TocPath
 
     $LegacyCategory = Get-SingleRegexMatch `
         -Path $contract.TocPath `

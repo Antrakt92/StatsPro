@@ -1,16 +1,16 @@
 ## Interface: 120007, 120100
 ## Title: |cff00ff7fStatsPro|r
-## Notes: On-screen secondary, defensive stats, durability and repair cost
-## Notes-deDE: Bildschirm-Sekundär- und Verteidigungswerte, Haltbarkeit und Reparaturkosten
-## Notes-esES: Estadísticas secundarias y defensivas en pantalla, durabilidad y coste de reparación
-## Notes-esMX: Estadísticas secundarias y defensivas en pantalla, durabilidad y costo de reparación
-## Notes-frFR: Statistiques secondaires et défensives à l'écran, durabilité et coût de réparation
-## Notes-itIT: Statistiche secondarie e difensive a schermo, durabilità e costo di riparazione
-## Notes-koKR: 보조 및 방어 능력치, 내구도, 수리 비용 화면 표시
-## Notes-ptBR: Atributos secundários e defensivos na tela, durabilidade e custo de reparo
-## Notes-ruRU: Вторичные и защитные характеристики, прочность и стоимость ремонта на экране
-## Notes-zhCN: 屏显副属性、防御属性、耐久度和修理花费
-## Notes-zhTW: 螢幕顯示副屬性、防禦屬性、耐久度與修理費用
+## Notes: Stats and gear HUD: item level, durability, repair cost and Archon stat targets.
+## Notes-deDE: HUD für Werte und Ausrüstung: Gegenstandsstufe, Haltbarkeit, Reparaturkosten und Archon-Stat-Ziele.
+## Notes-esES: HUD de estadísticas y equipo: nivel de objeto, durabilidad, coste de reparación y objetivos de estadísticas de Archon.
+## Notes-esMX: HUD de estadísticas y equipo: nivel de objeto, durabilidad, costo de reparación y objetivos de estadísticas de Archon.
+## Notes-frFR: HUD de caractéristiques et d'équipement : niveau d'objet, durabilité, coût de réparation et objectifs de caractéristiques Archon.
+## Notes-itIT: HUD di statistiche ed equipaggiamento: livello oggetto, durabilità, costo di riparazione e obiettivi statistiche Archon.
+## Notes-koKR: 능력치·장비 HUD: 아이템 레벨, 내구도, 수리 비용, Archon 능력치 목표.
+## Notes-ptBR: HUD de atributos e equipamento: nível de item, durabilidade, custo de reparo e metas de atributos do Archon.
+## Notes-ruRU: HUD характеристик и экипировки: уровень предметов, прочность, стоимость ремонта и цели характеристик Archon.
+## Notes-zhCN: 属性与装备 HUD：装等、耐久度、修理费用及 Archon 属性目标。
+## Notes-zhTW: 屬性與裝備 HUD：裝等、耐久度、修理費用及 Archon 屬性目標。
 ## Author: Antrakt
 ## Version: 1.9.59
 ## IconTexture: Interface\AddOns\StatsPro\textures\logo.png

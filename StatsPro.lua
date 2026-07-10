@@ -873,7 +873,7 @@ local LABELS_BY_LOCALE = {
         ["Auto (current: %s)"] = "Auto (current: %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage.",
         -- Launcher description:
-        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window.",
+        ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window.",
     },
 
     -- ruRU: Russian. Haste/Movement disambig is structural — WoW client uses speed
@@ -955,7 +955,7 @@ local LABELS_BY_LOCALE = {
         ["Auto (current: %s)"] = "Авто (сейчас: %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Шрифт может не отображать символы %s. Выберите шрифт SharedMedia с нужным покрытием.",
         -- Launcher description:
-        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Отображает вторичные, защитные характеристики и прочность экипировки на экране. Нажмите ниже, чтобы открыть окно настроек.",
+        ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD характеристик и экипировки: уровень предметов, прочность, стоимость ремонта и цели характеристик Archon. Нажмите ниже, чтобы открыть окно настроек.",
     },
 
     -- deDE: German. Haste="Tempo" matches the WoW German client term; Movement="Beweg"
@@ -1029,7 +1029,7 @@ local LABELS_BY_LOCALE = {
         ["Open Settings"] = "Einstellungen öffnen", ["Settings"] = "Einstellungen",
         ["Auto (current: %s)"] = "Auto (aktuell: %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Schrift unterstützt %s eventuell nicht. Wähle eine SharedMedia-Schrift mit Glyphenabdeckung.",
-        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Zeigt sekundäre, defensive Werte und Haltbarkeit auf dem Bildschirm an. Klicke unten, um das Einstellungsfenster zu öffnen.",
+        ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD für Werte und Ausrüstung: Gegenstandsstufe, Haltbarkeit, Reparaturkosten und Archon-Stat-Ziele. Klicke unten, um die vollständigen Einstellungen zu öffnen.",
     },
 
     -- frFR: French. Hâte (4 chars, accented form) is WoW's official Haste term; Dépl
@@ -1101,7 +1101,7 @@ local LABELS_BY_LOCALE = {
         ["Open Settings"] = "Ouvrir les paramètres", ["Settings"] = "Paramètres",
         ["Auto (current: %s)"] = "Auto (actuel : %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La police peut ne pas afficher les glyphes %s. Choisissez une police SharedMedia avec couverture appropriée.",
-        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Affiche vos statistiques secondaires, défensives et la durabilité à l'écran. Cliquez ci-dessous pour ouvrir la fenêtre de paramètres complète.",
+        ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD de caractéristiques et d'équipement : niveau d'objet, durabilité, coût de réparation et objectifs de caractéristiques Archon. Cliquez ci-dessous pour ouvrir la fenêtre de paramètres complète.",
     },
 
     -- esES: Spanish (Spain). Haste stays Celeridad; Movement uses Movimiento
@@ -1174,7 +1174,7 @@ local LABELS_BY_LOCALE = {
         ["Open Settings"] = "Abrir ajustes", ["Settings"] = "Ajustes",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La fuente puede no mostrar glifos %s. Elige una fuente SharedMedia con cobertura.",
-        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Muestra atributos secundarios, defensivos y durabilidad en pantalla. Haz clic abajo para abrir la ventana de ajustes.",
+        ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD de estadísticas y equipo: nivel de objeto, durabilidad, coste de reparación y objetivos de estadísticas de Archon. Haz clic abajo para abrir la ventana de ajustes.",
     },
 
     -- esMX: Latin American Spanish — stat-term short forms are effectively shared
@@ -1245,7 +1245,7 @@ local LABELS_BY_LOCALE = {
         ["Open Settings"] = "Abrir configuración", ["Settings"] = "Configuración",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La fuente puede no mostrar glifos %s. Elige una fuente SharedMedia con cobertura.",
-        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Muestra atributos secundarios, defensivos y durabilidad en pantalla. Da clic abajo para abrir la ventana de configuración.",
+        ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD de estadísticas y equipo: nivel de objeto, durabilidad, costo de reparación y objetivos de estadísticas de Archon. Da clic abajo para abrir la ventana de configuración.",
     },
 
     -- itIT: Italian. Cele (Celerità) / Mov (Movimento) Haste/Movement split. Para
@@ -1317,7 +1317,7 @@ local LABELS_BY_LOCALE = {
         ["Open Settings"] = "Apri impostazioni", ["Settings"] = "Impostazioni",
         ["Auto (current: %s)"] = "Auto (attuale: %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Il font potrebbe non visualizzare i glifi %s. Scegli un font SharedMedia con copertura adeguata.",
-        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Visualizza statistiche secondarie, difensive e durata equipaggiamento sullo schermo. Clicca sotto per aprire le impostazioni complete.",
+        ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD di statistiche ed equipaggiamento: livello oggetto, durabilità, costo di riparazione e obiettivi statistiche Archon. Clicca sotto per aprire le impostazioni complete.",
     },
 
     -- ptBR: Brazilian Portuguese. Cele (Celeridade) / Mov (Movimento). Forç (with
@@ -1388,7 +1388,7 @@ local LABELS_BY_LOCALE = {
         ["Open Settings"] = "Abrir configurações", ["Settings"] = "Configurações",
         ["Auto (current: %s)"] = "Auto (atual: %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r A fonte pode não exibir glifos %s. Escolha uma fonte SharedMedia com cobertura.",
-        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "Exibe atributos secundários, defensivos e durabilidade na tela. Clique abaixo para abrir a janela de configurações.",
+        ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD de atributos e equipamento: nível de item, durabilidade, custo de reparo e metas de atributos do Archon. Clique abaixo para abrir a janela de configurações.",
     },
 
     -- koKR: Korean. Parry/Block previously collided — both used 막기-family terms
@@ -1466,7 +1466,7 @@ local LABELS_BY_LOCALE = {
         ["Open Settings"] = "설정 열기", ["Settings"] = "설정",
         ["Auto (current: %s)"] = "자동 (현재: %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 이 글꼴은 %s 글리프를 표시하지 못할 수 있습니다. SharedMedia에서 적합한 글꼴을 선택하세요.",
-        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "보조 능력치, 방어 능력치 및 내구도를 화면에 표시합니다. 아래를 눌러 전체 설정 창을 엽니다.",
+        ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "능력치·장비 HUD: 아이템 레벨, 내구도, 수리 비용, Archon 능력치 목표. 아래를 눌러 전체 설정 창을 엽니다.",
     },
 
     -- zhCN: Simplified Chinese. All terms match the official WoW Chinese client
@@ -1537,7 +1537,7 @@ local LABELS_BY_LOCALE = {
         ["Open Settings"] = "打开设置", ["Settings"] = "设置",
         ["Auto (current: %s)"] = "自动（当前: %s）",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 字体可能无法显示 %s 字形。请从 SharedMedia 选择合适的字体。",
-        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "在屏幕上显示副属性、防御属性和装备耐久度。点击下方打开完整设置窗口。",
+        ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "属性与装备 HUD：装等、耐久度、修理费用及 Archon 属性目标。点击下方打开完整设置窗口。",
     },
 
     -- zhTW: Traditional Chinese (Taiwan). Same 2-char convention as zhCN but
@@ -1608,7 +1608,7 @@ local LABELS_BY_LOCALE = {
         ["Open Settings"] = "開啟設定", ["Settings"] = "設定",
         ["Auto (current: %s)"] = "自動（目前: %s）",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 字型可能無法顯示 %s 字形。請從 SharedMedia 選擇合適的字型。",
-        ["Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."] = "在螢幕上顯示副屬性、防禦屬性和裝備耐久度。點擊下方開啟完整設定視窗。",
+        ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "屬性與裝備 HUD：裝等、耐久度、修理費用及 Archon 屬性目標。點擊下方開啟完整設定視窗。",
     },
 }
 
@@ -7245,8 +7245,12 @@ launcherDesc:SetPoint("TOPLEFT", launcherTitle, "BOTTOMLEFT", 0, -8)
 launcherDesc:SetPoint("RIGHT", launcher, "RIGHT", -16, 0)
 launcherDesc:SetJustifyH("LEFT")
 PushPersistentLocalizedLabel(function()
-    launcherDesc:SetText(L("Displays your secondary, defensive stats and durability on screen. Click below to open the full settings window."))
+    launcherDesc:SetText(L("Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."))
 end)
+
+if addon.__test then
+    addon.__test.launcherDescriptionText = function() return launcherDesc:GetText() end
+end
 
 local launcherBtn = CreateFrame("Button", nil, launcher, "UIPanelButtonTemplate")
 launcherBtn:SetSize(180, 28)

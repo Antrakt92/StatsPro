@@ -5523,6 +5523,80 @@ do
 end
 
 do
+    local enGBEnv, enGBAddon, enGBTest = loadStatsPro("enGB", {
+        statsProDB = {
+            forceLocale = "auto",
+            showOffensive = true,
+            hideZeroOffensive = false,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCritChance = function() return 12 end,
+    })
+    fireEvent("config.language_enGB_uses_english.fire", enGBEnv, "PLAYER_ENTERING_WORLD")
+    local blocks = enGBTest.buildRenderBlocks()
+    eq("config.language_enGB_uses_english.hud_label", blockDumpContains(blocks, "Crit:"), true)
+    eq("config.language_enGB_uses_english.snapshot_date",
+        enGBTest.formatSnapshotDate("2026-05-15"), "15-May-26")
+
+    local ok, err = pcall(function() enGBAddon:OpenConfigMenu() end)
+    check("config.language_enGB_uses_english.open", ok, err)
+    eq("config.language_enGB_uses_english.auto_caption",
+        enGBEnv.StatsProLanguageDropdown.dropdownText, "English")
+    local entries = runDropdownInit("config.language_enGB_uses_english.dropdown",
+        enGBEnv.StatsProLanguageDropdown)
+    eq("config.language_enGB_uses_english.checked", checkedDropdownValue(
+        "config.language_enGB_uses_english", entries), "auto")
+
+    local autoCount, englishCount, enGBCount = 0, 0, 0
+    local autoText, englishText
+    for _, entry in ipairs(entries) do
+        if entry.value == "auto" then
+            autoCount = autoCount + 1
+            autoText = entry.text
+        end
+        if entry.value == "enUS" then
+            englishCount = englishCount + 1
+            englishText = entry.text
+        end
+        if entry.value == "enGB" then enGBCount = enGBCount + 1 end
+    end
+    eq("config.language_enGB_uses_english.menu_size", #entries, 12)
+    eq("config.language_enGB_uses_english.one_auto_option", autoCount, 1)
+    eq("config.language_enGB_uses_english.auto_menu_text", autoText, "Auto (current: English)")
+    eq("config.language_enGB_uses_english.one_english_option", englishCount, 1)
+    eq("config.language_enGB_uses_english.english_option_text", englishText, "English")
+    eq("config.language_enGB_uses_english.no_duplicate_enGB_option", enGBCount, 0)
+    eq("config.language_enGB_uses_english.db_stays_auto", enGBEnv.StatsProDB.forceLocale, "auto")
+    clearPrints(enGBEnv)
+    slash("config.language_enGB_uses_english.debug", enGBEnv, "debug")
+    eq("config.language_enGB_uses_english.debug_active",
+        printContains(enGBEnv, "locale: client=enGB force=auto active=enUS"), true)
+end
+
+do
+    local invalidEnv, invalidAddon = loadStatsPro("deDE", {
+        statsProDB = { forceLocale = "enGB" },
+    })
+    fireEvent("config.language_enGB_not_accepted_as_explicit.fire", invalidEnv,
+        "PLAYER_ENTERING_WORLD")
+    local ok, err = pcall(function() invalidAddon:OpenConfigMenu() end)
+    check("config.language_enGB_not_accepted_as_explicit.open", ok, err)
+    eq("config.language_enGB_not_accepted_as_explicit.caption",
+        invalidEnv.StatsProLanguageDropdown.dropdownText, "Deutsch")
+    local entries = runDropdownInit("config.language_enGB_not_accepted_as_explicit.dropdown",
+        invalidEnv.StatsProLanguageDropdown)
+    eq("config.language_enGB_not_accepted_as_explicit.checked", checkedDropdownValue(
+        "config.language_enGB_not_accepted_as_explicit", entries), "auto")
+    eq("config.language_enGB_not_accepted_as_explicit.db_unchanged",
+        invalidEnv.StatsProDB.forceLocale, "enGB")
+end
+
+do
     local warningEnv, warningAddon, warningTest = loadStatsPro("enUS", {
         statsProDB = {
             forceLocale = "koKR",

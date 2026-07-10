@@ -1707,11 +1707,18 @@ function addon.NormalizeForceLocale(value)
     return "auto"
 end
 
--- Resolve the active locale: forceLocale="auto" (default) → GetLocale(); explicit
--- value forces panels to that locale regardless of WoW client locale.
+-- enGB uses the existing English translation pack. Keep this alias on the
+-- output-language axis; raw client locale still drives client-shipped fonts.
+function addon.NormalizeOutputLocale(value)
+    if value == "enGB" then return "enUS" end
+    return value
+end
+
+-- Resolve the active output locale: forceLocale="auto" (default) follows the
+-- client's supported presentation; an explicit value overrides the client locale.
 local function ResolveActiveLocale()
     local force = addon.NormalizeForceLocale(GetDB("forceLocale"))
-    if force == "auto" then return GetLocale() end
+    if force == "auto" then return addon.NormalizeOutputLocale(GetLocale()) end
     return force
 end
 
@@ -2158,7 +2165,7 @@ local function CacheSettings()
     cached.panelBackgroundAlpha = GetNumberDB("panelBackgroundAlpha") / 100
     cached.textOutlineStyle = addon.readabilityConfig.getTextOutlineStyleDB()
 
-    -- Resolve labels for the active locale. forceLocale="auto" → GetLocale().
+    -- Resolve labels for the active output locale.
     -- WHY reference, not copy: LABELS_BY_LOCALE entries are never mutated; reference
     -- assignment is O(1) vs O(n) deep copy. WARNING: never mutate cached.activeLabels —
     -- it is a REFERENCE to the LABELS_BY_LOCALE entry.
@@ -6126,7 +6133,7 @@ function addon:OpenConfigMenu()
         -- explicit-pick rows below keep the full bilingual label for disambiguation.
         local function DisplayLabel(opt)
             if opt.value ~= "auto" then return opt.label end
-            local cur = GetLocale()
+            local cur = addon.NormalizeOutputLocale(GetLocale())
             local o = FindLangOption(cur)
             return string.format(L("Auto (current: %s)"), StripParenSuffix((o and o.label) or cur))
         end
@@ -6135,7 +6142,7 @@ function addon:OpenConfigMenu()
         -- for the 100px body while keeping locale variants distinguishable.
         local function CompactLabel(opt)
             if opt.value == "auto" then
-                local cur = GetLocale()
+                local cur = addon.NormalizeOutputLocale(GetLocale())
                 local o = FindLangOption(cur)
                 return (o and (o.compactLabel or StripParenSuffix(o.label))) or cur
             end
@@ -6161,7 +6168,8 @@ function addon:OpenConfigMenu()
         local langPreviewLocale            -- last applied preview's resolved locale, for dedup
 
         local function PreviewLanguage(value)
-            local locale = (value == "auto") and GetLocale() or value
+            local locale = (value == "auto")
+                and addon.NormalizeOutputLocale(GetLocale()) or value
             -- Dedup: hovering the SAME locale row twice in succession (mouse jitter,
             -- entering then exiting then re-entering same item) repeats the heavy work
             -- (ApplyTextStyleToAllPanels + ApplyConfigFont walking 10 FontStrings +

@@ -502,6 +502,10 @@ local function makeEnv(locale, opts)
     end
     env.ColorPickerFrame = makeFrame("ColorPickerFrame", opts.setFontResult)
     env.ColorPickerFrame.shown = false
+    env.ColorPickerFrame.Footer = {
+        OkayButton = makeFrame("ColorPickerFrameOkayButton", opts.setFontResult),
+        CancelButton = makeFrame("ColorPickerFrameCancelButton", opts.setFontResult),
+    }
     env.__setColorPickerRGB = function(r, g, b)
         env.ColorPickerFrame.colorRGB = { r = r, g = g, b = b }
     end
@@ -512,29 +516,51 @@ local function makeEnv(locale, opts)
     function env.ColorPickerFrame:SetupColorPickerAndShow(opts)
         self.colorPickerOptions = opts or {}
         self.colorPickerCancelActive = true
+        self.swatchFunc = self.colorPickerOptions.swatchFunc
+        self.cancelFunc = self.colorPickerOptions.cancelFunc
+        self.extraInfo = self.colorPickerOptions.extraInfo
+        self.previousValues = {
+            r = self.colorPickerOptions.r,
+            g = self.colorPickerOptions.g,
+            b = self.colorPickerOptions.b,
+            a = self.colorPickerOptions.opacity,
+        }
         self.colorRGB = { r = opts and opts.r or 1, g = opts and opts.g or 1, b = opts and opts.b or 1 }
         if type(self.colorPickerOptions.swatchFunc) == "function" then self.colorPickerOptions.swatchFunc() end
         self:Show()
     end
+    function env.ColorPickerFrame:GetExtraInfo()
+        return self.extraInfo
+    end
     function env.__acceptColorPicker()
         local picker = env.ColorPickerFrame
-        local opts = picker.colorPickerOptions
-        if opts and type(opts.swatchFunc) == "function" then opts.swatchFunc() end
+        runFrameHandlers(picker.Footer.OkayButton, "PreClick")
+        if type(picker.swatchFunc) == "function" then picker.swatchFunc() end
         picker.colorPickerCancelActive = false
         picker:Hide()
+        runFrameHandlers(picker.Footer.OkayButton, "PostClick")
         picker.colorPickerOptions = nil
     end
     function env.__cancelColorPicker()
         local picker = env.ColorPickerFrame
-        local opts = picker.colorPickerOptions
-        if picker.shown and picker.colorPickerCancelActive and opts and type(opts.cancelFunc) == "function" then
-            opts.cancelFunc()
+        runFrameHandlers(picker.Footer.CancelButton, "PreClick")
+        if picker.shown and picker.colorPickerCancelActive and type(picker.cancelFunc) == "function" then
+            picker.cancelFunc(picker.previousValues)
         end
         picker.colorPickerCancelActive = false
         picker:Hide()
         picker.colorPickerOptions = nil
     end
     env.OpenColorPicker = function() end
+    env.hooksecurefunc = function(target, methodName, hook)
+        local original = target and target[methodName]
+        if type(original) ~= "function" or type(hook) ~= "function" then return end
+        target[methodName] = function(...)
+            local results = { original(...) }
+            hook(...)
+            return unpack(results)
+        end
+    end
     env.PlaySound = function() end
     env.PlaySoundFile = function() end
     env.SOUNDKIT = {}
@@ -5543,6 +5569,11 @@ do
     eq("config.color_picker.default_cancel_preserves_nil", env.StatsProDB.colors.crit, nil)
 
     callScript("config.color_picker.reset_closes_picker.open", critSwatch, "OnClick")
+    env.__setColorPickerRGB(0.4, 0.5, 0.6)
+    ok, err = pcall(env.ColorPickerFrame.colorPickerOptions.swatchFunc)
+    check("config.color_picker.reset_closes_picker.preview", ok, err)
+    assertColor("config.color_picker.reset_closes_picker.preview_db",
+        env.StatsProDB.colors.crit, 0.4, 0.5, 0.6)
     slash("config.reset_closes_color_picker", env, "reset")
     eq("config.reset_closes_color_picker.hidden", env.ColorPickerFrame:IsShown(), false)
     assertColor("config.reset_closes_color_picker.default_color", env.StatsProDB.colors.crit, 1, 0, 0)
@@ -5569,6 +5600,116 @@ do
 end
 
 do
+    local rawHideEnv = loadStatsPro("enUS", {
+        statsProDB = { colors = { crit = { r = 0.2, g = 0.3, b = 0.4 } } },
+    })
+    fireEvent("config.color_picker.raw_hide.fire", rawHideEnv, "PLAYER_ENTERING_WORLD")
+    slash("config.color_picker.raw_hide.open_config", rawHideEnv, "")
+    local critSwatch = findFrame("config.color_picker.raw_hide.crit_swatch", rawHideEnv, function(frame)
+        local color = frame.backdropColor
+        return type(frame.scripts.OnClick) == "function"
+            and color and color.r == 0.2 and color.g == 0.3 and color.b == 0.4
+    end)
+    callScript("config.color_picker.raw_hide.open_picker", critSwatch, "OnClick")
+    rawHideEnv.__setColorPickerRGB(0.6, 0.7, 0.8)
+    local options = rawHideEnv.ColorPickerFrame.colorPickerOptions
+    local ok, err = pcall(options.swatchFunc)
+    check("config.color_picker.raw_hide.preview", ok, err)
+    rawHideEnv.ColorPickerFrame:Hide()
+    assertColor("config.color_picker.raw_hide_restores_snapshot.crit",
+        rawHideEnv.StatsProDB.colors.crit, 0.2, 0.3, 0.4)
+    ok, err = pcall(options.swatchFunc)
+    check("config.color_picker.raw_hide.stale_callback_call", ok, err)
+    assertColor("config.color_picker.raw_hide.stale_callback_noop.crit",
+        rawHideEnv.StatsProDB.colors.crit, 0.2, 0.3, 0.4)
+
+    rawHideEnv.StatsProDB.colors.crit = nil
+    callScript("config.color_picker.raw_hide_default.open_picker", critSwatch, "OnClick")
+    rawHideEnv.__setColorPickerRGB(0.7, 0.8, 0.9)
+    ok, err = pcall(rawHideEnv.ColorPickerFrame.colorPickerOptions.swatchFunc)
+    check("config.color_picker.raw_hide_default.preview", ok, err)
+    rawHideEnv.ColorPickerFrame:Hide()
+    eq("config.color_picker.raw_hide_default_restores_nil", rawHideEnv.StatsProDB.colors.crit, nil)
+end
+
+do
+    local fallbackEnv = loadStatsPro("enUS", {
+        statsProDB = { colors = { crit = { r = 0.2, g = 0.3, b = 0.4 } } },
+    })
+    fireEvent("config.color_picker.accept_boundary_fallback.fire", fallbackEnv, "PLAYER_ENTERING_WORLD")
+    slash("config.color_picker.accept_boundary_fallback.open_config", fallbackEnv, "")
+    local critSwatch = findFrame("config.color_picker.accept_boundary_fallback.crit_swatch", fallbackEnv, function(frame)
+        local color = frame.backdropColor
+        return type(frame.scripts.OnClick) == "function"
+            and color and color.r == 0.2 and color.g == 0.3 and color.b == 0.4
+    end)
+    fallbackEnv.ColorPickerFrame.Footer.OkayButton = nil
+    callScript("config.color_picker.accept_boundary_fallback.open_picker", critSwatch, "OnClick")
+    fallbackEnv.__setColorPickerRGB(0.6, 0.7, 0.8)
+    local options = fallbackEnv.ColorPickerFrame.colorPickerOptions
+    local ok, err = pcall(options.swatchFunc)
+    check("config.color_picker.accept_boundary_fallback.preview", ok, err)
+    -- Model Blizzard OK when PreClick is unavailable: final swatchFunc, then Hide.
+    ok, err = pcall(options.swatchFunc)
+    check("config.color_picker.accept_boundary_fallback.ok_swatch", ok, err)
+    fallbackEnv.ColorPickerFrame:Hide()
+    assertColor("config.color_picker.accept_boundary_fallback.preserves_ok_commit",
+        fallbackEnv.StatsProDB.colors.crit, 0.6, 0.7, 0.8)
+end
+
+do
+    local takeoverEnv = loadStatsPro("enUS", {
+        statsProDB = { colors = { crit = { r = 0.2, g = 0.3, b = 0.4 } } },
+    })
+    fireEvent("config.color_picker.takeover.fire", takeoverEnv, "PLAYER_ENTERING_WORLD")
+    slash("config.color_picker.takeover.open_config", takeoverEnv, "")
+    local critSwatch = findFrame("config.color_picker.takeover.crit_swatch", takeoverEnv, function(frame)
+        local color = frame.backdropColor
+        return type(frame.scripts.OnClick) == "function"
+            and color and color.r == 0.2 and color.g == 0.3 and color.b == 0.4
+    end)
+    callScript("config.color_picker.takeover.open_statspro", critSwatch, "OnClick")
+    takeoverEnv.__setColorPickerRGB(0.6, 0.7, 0.8)
+    local ok, err = pcall(takeoverEnv.ColorPickerFrame.colorPickerOptions.swatchFunc)
+    check("config.color_picker.takeover.preview", ok, err)
+
+    local foreignToken = {}
+    local foreignAccepted, foreignCanceled = 0, false
+    takeoverEnv.ColorPickerFrame:SetupColorPickerAndShow({
+        r = 0.1, g = 0.2, b = 0.3,
+        extraInfo = foreignToken,
+        swatchFunc = function() foreignAccepted = foreignAccepted + 1 end,
+        cancelFunc = function() foreignCanceled = true end,
+    })
+    foreignAccepted = 0
+    assertColor("config.color_picker.takeover_immediate_restores_statspro.crit",
+        takeoverEnv.StatsProDB.colors.crit, 0.2, 0.3, 0.4)
+    eq("config.color_picker.takeover_immediate.foreign_stays_open",
+        takeoverEnv.ColorPickerFrame:IsShown(), true)
+    takeoverEnv.__acceptColorPicker()
+    eq("config.color_picker.takeover.foreign_accept_called", foreignAccepted, 1)
+    eq("config.color_picker.takeover.foreign_not_canceled", foreignCanceled, false)
+    assertColor("config.color_picker.takeover_foreign_hide_restores_statspro.crit",
+        takeoverEnv.StatsProDB.colors.crit, 0.2, 0.3, 0.4)
+
+    callScript("config.color_picker.takeover_config_hide.open_statspro", critSwatch, "OnClick")
+    takeoverEnv.__setColorPickerRGB(0.7, 0.8, 0.9)
+    ok, err = pcall(takeoverEnv.ColorPickerFrame.colorPickerOptions.swatchFunc)
+    check("config.color_picker.takeover_config_hide.preview", ok, err)
+    foreignCanceled = false
+    -- Model a takeover that bypasses SetupColorPickerAndShow and leaves the old token
+    -- behind. Callback identity must still prevent hiding/canceling the foreign UI.
+    takeoverEnv.ColorPickerFrame.swatchFunc = function() end
+    takeoverEnv.ColorPickerFrame.cancelFunc = function() foreignCanceled = true end
+    takeoverEnv.StatsProConfigFrame:Hide()
+    eq("config.color_picker.takeover_config_hide.foreign_stays_open",
+        takeoverEnv.ColorPickerFrame:IsShown(), true)
+    eq("config.color_picker.takeover_config_hide.foreign_not_canceled", foreignCanceled, false)
+    assertColor("config.color_picker.takeover_config_hide.restores_statspro.crit",
+        takeoverEnv.StatsProDB.colors.crit, 0.2, 0.3, 0.4)
+end
+
+do
     local colorEnv = loadStatsPro("enUS")
     fireEvent("config.color_picker.switch_swatch.fire", colorEnv, "PLAYER_ENTERING_WORLD")
     slash("config.color_picker.switch_swatch.open_config", colorEnv, "")
@@ -5585,19 +5726,46 @@ do
     colorEnv.StatsProDB.colors.crit = nil
     callScript("config.color_picker.switch_swatch.open_crit", critSwatch, "OnClick")
     colorEnv.__setColorPickerRGB(0.2, 0.3, 0.4)
-    local ok, err = pcall(colorEnv.ColorPickerFrame.colorPickerOptions.swatchFunc)
+    local oldCritOptions = colorEnv.ColorPickerFrame.colorPickerOptions
+    local ok, err = pcall(oldCritOptions.swatchFunc)
     check("config.color_picker.switch_swatch.preview_crit", ok, err)
     callScript("config.color_picker.switch_swatch.open_haste", hasteSwatch, "OnClick")
     eq("config.color_picker.switch_swatch_cancels_previous_preview.crit", colorEnv.StatsProDB.colors.crit, nil)
     eq("config.color_picker.switch_swatch_cancels_previous_preview.shown", colorEnv.ColorPickerFrame:IsShown(), true)
+    colorEnv.__setColorPickerRGB(0.6, 0.7, 0.8)
+    ok, err = pcall(colorEnv.ColorPickerFrame.colorPickerOptions.swatchFunc)
+    check("config.color_picker.switch_swatch.preview_haste", ok, err)
+    ok, err = pcall(oldCritOptions.swatchFunc)
+    check("config.color_picker.switch_swatch.stale_swatch_call", ok, err)
+    ok, err = pcall(oldCritOptions.cancelFunc, oldCritOptions)
+    check("config.color_picker.switch_swatch.stale_cancel_call", ok, err)
+    eq("config.color_picker.switch_swatch.stale_callbacks_keep_crit_nil", colorEnv.StatsProDB.colors.crit, nil)
+    assertColor("config.color_picker.switch_swatch.stale_callbacks_keep_haste_preview",
+        colorEnv.StatsProDB.colors.haste, 0.6, 0.7, 0.8)
 end
 
 do
     local foreignEnv = loadStatsPro("enUS")
     fireEvent("config.color_picker.foreign.fire", foreignEnv, "PLAYER_ENTERING_WORLD")
     slash("config.color_picker.foreign.open_config", foreignEnv, "")
+    local critSwatch = findFrame("config.color_picker.foreign.crit_swatch", foreignEnv, function(frame)
+        local color = frame.backdropColor
+        return type(frame.scripts.OnClick) == "function"
+            and color and color.r == 1 and color.g == 0 and color.b == 0
+    end)
     local canceled = false
-    foreignEnv.ColorPickerFrame:SetupColorPickerAndShow({ cancelFunc = function() canceled = true end })
+    local foreignToken = {}
+    foreignEnv.ColorPickerFrame:SetupColorPickerAndShow({
+        r = 0.1, g = 0.2, b = 0.3,
+        extraInfo = foreignToken,
+        cancelFunc = function() canceled = true end,
+    })
+    callScript("config.color_picker.foreign.open_statspro_swatch_noop", critSwatch, "OnClick")
+    eq("config.color_picker.foreign.open_statspro_preserves_owner",
+        foreignEnv.ColorPickerFrame:GetExtraInfo(), foreignToken)
+    eq("config.color_picker.foreign.open_statspro_preserves_picker",
+        foreignEnv.ColorPickerFrame:IsShown(), true)
+    eq("config.color_picker.foreign.open_statspro_does_not_cancel", canceled, false)
     foreignEnv.StatsProConfigFrame:Hide()
     eq("config.color_picker.config_hide_preserves_foreign_picker.shown", foreignEnv.ColorPickerFrame:IsShown(), true)
     eq("config.color_picker.config_hide_preserves_foreign_picker.cancel", canceled, false)

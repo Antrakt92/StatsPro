@@ -4517,39 +4517,128 @@ function COLOR_PICKER_STATE.Clear(session)
     end
 end
 
+function COLOR_PICKER_STATE.OwnsFrame(session)
+    if not session or not ColorPickerFrame then return false end
+    -- Callback identity is the first ownership boundary. Avoid reading arbitrary
+    -- foreign extraInfo unless the singleton still carries both StatsPro callbacks.
+    local callbackOK, callbacksOwn = pcall(function()
+        return ColorPickerFrame.swatchFunc == session.swatchFunc
+            and ColorPickerFrame.cancelFunc == session.cancelFunc
+    end)
+    if not callbackOK or callbacksOwn ~= true then return false end
+    if type(ColorPickerFrame.GetExtraInfo) ~= "function" then return true end
+
+    local infoOK, extraInfo = pcall(ColorPickerFrame.GetExtraInfo, ColorPickerFrame)
+    if not infoOK then return false end
+    local secretOK, secret = pcall(issecretvalue, extraInfo)
+    if not secretOK or secret then return false end
+    local compareOK, tokenMatches = pcall(function() return extraInfo == session end)
+    return compareOK and tokenMatches == true
+end
+
+function COLOR_PICKER_STATE.RestoreSnapshot(session)
+    if session and session.cancelFunc then
+        session.cancelFunc()
+    else
+        COLOR_PICKER_STATE.Clear(session)
+    end
+end
+
+function COLOR_PICKER_STATE.OnOkayPreClick()
+    local session = COLOR_PICKER_STATE.active
+    if session and session.acceptBoundary and COLOR_PICKER_STATE.OwnsFrame(session) then
+        session.accepted = true
+    end
+end
+
+function COLOR_PICKER_STATE.OnOkayPostClick()
+    local session = COLOR_PICKER_STATE.active
+    if session and session.accepted and COLOR_PICKER_STATE.OwnsFrame(session)
+        and ColorPickerFrame:IsShown() then
+        -- Blizzard normally hides during OnClick. If it did not, do not leave an
+        -- acceptance marker that could turn a later raw Hide into a false commit.
+        session.accepted = false
+    end
+end
+
 function COLOR_PICKER_STATE.OnFrameHide()
-    if COLOR_PICKER_STATE.active then
-        COLOR_PICKER_STATE.active = nil
+    local session = COLOR_PICKER_STATE.active
+    if not session then return end
+    local ownsFrame = COLOR_PICKER_STATE.OwnsFrame(session)
+    if session.accepted and ownsFrame then
+        COLOR_PICKER_STATE.Clear(session)
+    elseif not ownsFrame or session.acceptBoundary then
+        -- Normal Cancel/outside/Escape paths already call cancelFunc before Hide and
+        -- clear active. Reaching OnHide unresolved means a raw Hide or foreign takeover.
+        COLOR_PICKER_STATE.RestoreSnapshot(session)
+    else
+        -- Capability fallback: without a proven pre-OK boundary, preserve the prior
+        -- clear-only behavior so a valid OK click is never rolled back.
+        COLOR_PICKER_STATE.Clear(session)
+    end
+end
+
+function COLOR_PICKER_STATE.OnFrameSetup()
+    local session = COLOR_PICKER_STATE.active
+    if session and not COLOR_PICKER_STATE.OwnsFrame(session) then
+        -- Another addon replaced the singleton callbacks without hiding it. Restore
+        -- only StatsPro's preview; never call the foreign cancelFunc or hide its frame.
+        COLOR_PICKER_STATE.RestoreSnapshot(session)
     end
 end
 
 function COLOR_PICKER_STATE.EnsureFrameHook()
-    if COLOR_PICKER_STATE.hooked then return end
-    if ColorPickerFrame and ColorPickerFrame.HookScript then
-        ColorPickerFrame:HookScript("OnHide", COLOR_PICKER_STATE.OnFrameHide)
-        COLOR_PICKER_STATE.hooked = true
+    if ColorPickerFrame and type(ColorPickerFrame.HookScript) == "function"
+        and not COLOR_PICKER_STATE.hideHooked then
+        local ok = pcall(ColorPickerFrame.HookScript, ColorPickerFrame,
+            "OnHide", COLOR_PICKER_STATE.OnFrameHide)
+        if ok then COLOR_PICKER_STATE.hideHooked = true end
+    end
+
+    local footer = ColorPickerFrame and ColorPickerFrame.Footer
+    local okayButton = footer and footer.OkayButton
+    if okayButton and type(okayButton.HookScript) == "function"
+        and not COLOR_PICKER_STATE.acceptHooked then
+        -- Blizzard's OK OnClick calls swatchFunc and then Hide. PreClick is the only
+        -- stable point that distinguishes that accepted Hide from a raw Hide.
+        local ok = pcall(okayButton.HookScript, okayButton,
+            "PreClick", COLOR_PICKER_STATE.OnOkayPreClick)
+        if ok then
+            COLOR_PICKER_STATE.acceptHooked = true
+            pcall(okayButton.HookScript, okayButton,
+                "PostClick", COLOR_PICKER_STATE.OnOkayPostClick)
+        end
+    end
+
+    if ColorPickerFrame and type(ColorPickerFrame.SetupColorPickerAndShow) == "function"
+        and type(_G.hooksecurefunc) == "function" and not COLOR_PICKER_STATE.setupHooked then
+        local ok = pcall(_G.hooksecurefunc, ColorPickerFrame,
+            "SetupColorPickerAndShow", COLOR_PICKER_STATE.OnFrameSetup)
+        if ok then COLOR_PICKER_STATE.setupHooked = true end
     end
 end
 
 function COLOR_PICKER_STATE.Close()
     local session = COLOR_PICKER_STATE.active
     if not session then return end
-    if ColorPickerFrame and ColorPickerFrame:IsShown() then
-        if session.cancelFunc then
-            session.cancelFunc()
-        else
-            COLOR_PICKER_STATE.Clear(session)
-        end
-        ColorPickerFrame:Hide()
-    else
+    if not ColorPickerFrame or not ColorPickerFrame:IsShown() then
         COLOR_PICKER_STATE.Clear(session)
+        return
+    end
+    local ownsFrame = COLOR_PICKER_STATE.OwnsFrame(session)
+    COLOR_PICKER_STATE.RestoreSnapshot(session)
+    if ownsFrame then
+        ColorPickerFrame:Hide()
     end
 end
 StatsProCloseColorPicker = COLOR_PICKER_STATE.Close
 
 local function OpenColorPicker(btn, statName)
-    COLOR_PICKER_STATE.Close()
     COLOR_PICKER_STATE.EnsureFrameHook()
+    COLOR_PICKER_STATE.Close()
+    -- The Blizzard picker is a shared singleton. Do not overwrite a foreign
+    -- session that is already visible; its owner must resolve it first.
+    if ColorPickerFrame and ColorPickerFrame:IsShown() then return end
     -- WHY: capture "uses default" state so cancel can restore exactly that — writing
     -- the resolved-default tuple back would convert unset → explicit-default in DB
     -- (visible only between cancel and the next /reload, but the invariant is correct).
@@ -4565,6 +4654,9 @@ local function OpenColorPicker(btn, statName)
         statName = statName,
         hadExplicitColor = hadExplicitColor,
         snapshot = snapshot,
+        accepted = false,
+        acceptBoundary = COLOR_PICKER_STATE.hideHooked == true
+            and COLOR_PICKER_STATE.acceptHooked == true,
     }
 
     local function OnColorSelect()
@@ -4590,6 +4682,7 @@ local function OpenColorPicker(btn, statName)
         opacity = 1, hasOpacity = false,
         swatchFunc = OnColorSelect,
         cancelFunc = OnCancel,
+        extraInfo = session,
     })
     COLOR_PICKER_STATE.active = session
 end

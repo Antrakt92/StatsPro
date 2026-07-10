@@ -57,19 +57,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Refuse existing release
+      - name: Refuse existing release marker
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # WARNING: This is a second marketplace safety gate, not a bug.
-          # If a release for this tag exists, the tag has already been
-          # packaged at least once. Stop before BigWigs Packager reaches
-          # CurseForge/Wago/WoWI, where duplicate uploads are visible and
-          # cleanup requires marketplace-specific manual/API deletion.
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::error::Release $GITHUB_REF_NAME already exists; refusing to republish marketplace files."
-            exit 1
-          fi
+        shell: pwsh
+        run: ./scripts/manage-github-release.ps1 -Mode RefuseExisting -Repository $env:GITHUB_REPOSITORY -ExpectedTag $env:GITHUB_REF_NAME
 
       - name: Trim release changelog
         shell: pwsh
@@ -128,17 +120,78 @@ jobs:
             -ArchonMaxAgeDays 3 `
             -EnforceToolLocks
 
-      - name: Publish package and release
+      - name: Create draft release marker
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./scripts/manage-github-release.ps1 `
+            -Mode CreateDraft `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -NotesPath CHANGELOG.md
+
+      - name: Publish package to marketplaces
+        id: publish-package
         uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
           WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
-          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
         with:
           args: -c -e -o
 
-      - name: Validate published GitHub release assets
+      - name: Validate marketplace archive and create release metadata
+        shell: pwsh
+        env:
+          STATSPRO_ARCHIVE_PATH: ${{ steps.publish-package.outputs.archive_path }}
+        run: |
+          $releaseJsonPath = Join-Path ".release" "release.json"
+          ./scripts/check-package-dry-run.ps1 `
+            -ArchivePath $env:STATSPRO_ARCHIVE_PATH `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -PackageRoot (Join-Path ".release" "StatsPro") `
+            -CompareManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256") `
+            -ArchonMaxAgeDays 3 `
+            -EnforceToolLocks
+          ./scripts/check-release-artifact.ps1 `
+            -ZipPath $env:STATSPRO_ARCHIVE_PATH `
+            -ReleaseJsonPath $releaseJsonPath `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -WithReleaseJson `
+            -WriteReleaseJson `
+            -ArchonMaxAgeDays 3 `
+            -EnforceToolLocks
+          "STATSPRO_RELEASE_ARCHIVE=$((Resolve-Path -LiteralPath $env:STATSPRO_ARCHIVE_PATH).Path)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "STATSPRO_RELEASE_JSON=$((Resolve-Path -LiteralPath $releaseJsonPath).Path)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Attach validated assets to draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./scripts/manage-github-release.ps1 `
+            -Mode AttachAssets `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ArchivePath $env:STATSPRO_RELEASE_ARCHIVE `
+            -ReleaseJsonPath $env:STATSPRO_RELEASE_JSON
+
+      - name: Publish immutable GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./scripts/manage-github-release.ps1 `
+            -Mode Publish `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -ArchivePath $env:STATSPRO_RELEASE_ARCHIVE `
+            -ReleaseJsonPath $env:STATSPRO_RELEASE_JSON
+
+      - name: Validate published immutable release assets
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -8,6 +8,7 @@ param(
     [switch]$EnforceToolLocks,
     [switch]$PackageOnly,
     [switch]$WithReleaseJson,
+    [switch]$WriteReleaseJson,
     [switch]$SelfTest
 )
 
@@ -320,6 +321,54 @@ function Assert-StatsProReleaseJson {
     }
 }
 
+function New-StatsProReleaseJsonText {
+    param(
+        [string]$ExpectedTag,
+        [int[]]$Interfaces
+    )
+
+    Assert-ReleaseTag $ExpectedTag
+    if ($Interfaces.Count -eq 0) {
+        throw "Cannot create release.json without TOC Interface values."
+    }
+    $metadata = @($Interfaces | ForEach-Object {
+        [ordered]@{
+            flavor    = "mainline"
+            interface = [int]$_
+        }
+    })
+    $document = [ordered]@{
+        releases = @(
+            [ordered]@{
+                name     = "StatsPro"
+                version  = $ExpectedTag
+                filename = "StatsPro-$ExpectedTag.zip"
+                nolib    = $false
+                metadata = $metadata
+            }
+        )
+    }
+    return ($document | ConvertTo-Json -Depth 8 -Compress)
+}
+
+function Write-StatsProReleaseJson {
+    param(
+        [string]$Path,
+        [string]$ExpectedTag,
+        [int[]]$Interfaces
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        throw "Missing release.json output path."
+    }
+    $parent = Split-Path -Parent $Path
+    if (-not [string]::IsNullOrWhiteSpace($parent) -and -not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+    $json = New-StatsProReleaseJsonText -ExpectedTag $ExpectedTag -Interfaces $Interfaces
+    [System.IO.File]::WriteAllText($Path, "$json`n", [System.Text.UTF8Encoding]::new($false))
+}
+
 function Resolve-Lua51 {
     $command = Get-Command "lua5.1" -ErrorAction SilentlyContinue
     if ($command) {
@@ -449,7 +498,8 @@ function Assert-StatsProReleaseArtifact {
         [string]$SourceRoot,
         [int]$ArchonMaxAgeDays,
         [bool]$PackageOnly,
-        [bool]$WithReleaseJson
+        [bool]$WithReleaseJson,
+        [bool]$WriteReleaseJson
     )
 
     if ($PackageOnly -and $WithReleaseJson) {
@@ -482,6 +532,9 @@ function Assert-StatsProReleaseArtifact {
         if ($WithReleaseJson) {
             if ([string]::IsNullOrWhiteSpace($ReleaseJsonPath)) {
                 throw "-WithReleaseJson requires -ReleaseJsonPath."
+            }
+            if ($WriteReleaseJson) {
+                Write-StatsProReleaseJson -Path $ReleaseJsonPath -ExpectedTag $ExpectedTag -Interfaces $versionMetadata.Interfaces
             }
             $releaseJsonText = Get-Content -LiteralPath (Resolve-Path $ReleaseJsonPath).Path -Raw -Encoding UTF8
             Assert-StatsProReleaseJson -JsonText $releaseJsonText -ExpectedTag $ExpectedTag -ExpectedInterfaces $versionMetadata.Interfaces
@@ -542,11 +595,12 @@ function Invoke-SelfTest {
         $zip = Join-Path $tempDir "StatsPro-$tag.zip"
         New-TestPackageZip -SourceRoot $sourceRoot -ZipPath $zip
         $jsonPath = Join-Path $tempDir "release.json"
-        $metadataEntries = @($interfaces | ForEach-Object { @{ flavor = "mainline"; interface = $_ } })
-        $releaseJson = @{ releases = @(@{ name = "StatsPro"; version = $tag; filename = "StatsPro-$tag.zip"; nolib = $false; metadata = $metadataEntries }) } | ConvertTo-Json -Depth 8 -Compress
-        Set-Content -LiteralPath $jsonPath -Value $releaseJson -Encoding UTF8
-        Assert-StatsProReleaseArtifact -ZipPath $zip -ReleaseJsonPath $jsonPath -ExpectedTag $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$false -WithReleaseJson:$true
-        Assert-StatsProReleaseArtifact -ZipPath $zip -ExpectedTag $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$true -WithReleaseJson:$false
+        Assert-StatsProReleaseArtifact -ZipPath $zip -ReleaseJsonPath $jsonPath -ExpectedTag $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$false -WithReleaseJson:$true -WriteReleaseJson:$true
+        $expectedJson = New-StatsProReleaseJsonText -ExpectedTag $tag -Interfaces $interfaces
+        if ((Get-Content -LiteralPath $jsonPath -Raw -Encoding UTF8).Trim() -ne $expectedJson) {
+            throw "Generated release.json is not deterministic."
+        }
+        Assert-StatsProReleaseArtifact -ZipPath $zip -ExpectedTag $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$true -WithReleaseJson:$false -WriteReleaseJson:$false
         $branchZip = Join-Path $tempDir "StatsPro-$tag-12-gabcdef0.zip"
         Copy-Item -LiteralPath $zip -Destination $branchZip
         Assert-StatsProReleaseArtifact -ZipPath $branchZip -ExpectedTag $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$true -WithReleaseJson:$false
@@ -651,6 +705,10 @@ if ($SelfTest) {
     return
 }
 
+if ($WriteReleaseJson) {
+    $WithReleaseJson = $true
+}
+
 Assert-StatsProReleaseArtifact `
     -ZipPath $ZipPath `
     -ReleaseJsonPath $ReleaseJsonPath `
@@ -658,4 +716,5 @@ Assert-StatsProReleaseArtifact `
     -SourceRoot $SourceRoot `
     -ArchonMaxAgeDays $ArchonMaxAgeDays `
     -PackageOnly:$PackageOnly.IsPresent `
-    -WithReleaseJson:$WithReleaseJson.IsPresent
+    -WithReleaseJson:$WithReleaseJson.IsPresent `
+    -WriteReleaseJson:$WriteReleaseJson.IsPresent

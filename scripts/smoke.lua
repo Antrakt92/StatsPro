@@ -402,9 +402,10 @@ local function makeEnv(locale, opts)
         self.lines[#self.lines + 1] = { left = left, right = right }
     end
     env.STANDARD_TEXT_FONT = opts.standardTextFont or "Fonts\\FRIZQT__.TTF"
+    local addonMetadataVersion = opts.addonMetadataVersion or "9.8.7"
     env.C_AddOns = {
         GetAddOnMetadata = function(_, field)
-            if field == "Version" then return "@project-version@" end
+            if field == "Version" then return addonMetadataVersion end
             return nil
         end,
     }
@@ -1600,6 +1601,36 @@ local function slash(name, env, msg)
     local fn = exists(name .. ".handler", env.SlashCmdList.STATSPRO)
     local ok, err = pcall(fn, msg)
     check(name, ok, err)
+end
+
+do
+    local versionEnv, versionAddon, versionTest = loadStatsPro("enUS", {
+        addonMetadataVersion = "9.8.7",
+    })
+    local currentRelease = versionTest.currentRelease()
+    eq("version.source_metadata_is_numeric",
+        versionEnv.C_AddOns.GetAddOnMetadata("StatsPro", "Version"), "9.8.7")
+    eq("version.source_checkout_is_dev",
+        versionTest.addonVersion(), "9.8.7-dev")
+    eq("version.packaged_tag_strips_prefix",
+        versionAddon.ResolveAddonVersion("v2.3.4", "9.8.7", currentRelease), "2.3.4")
+    eq("version.packaged_branch_preserves_suffix",
+        versionAddon.ResolveAddonVersion("v2.3.4-12-gabcdef0", "9.8.7", currentRelease),
+        "2.3.4-12-gabcdef0")
+    eq("version.unsubstituted_token_is_dev",
+        versionAddon.ResolveAddonVersion("@project-version@", "@project-version@", currentRelease),
+        currentRelease .. "-dev")
+    eq("version.malformed_token_uses_numeric_metadata",
+        versionAddon.ResolveAddonVersion("2.3.4", "9.8.7", currentRelease),
+        "9.8.7-dev")
+    eq("version.missing_metadata_uses_release_fallback",
+        versionAddon.ResolveAddonVersion("@project-version@", nil, currentRelease),
+        currentRelease .. "-dev")
+    fireEvent("version.source_checkout_debug.fire", versionEnv, "PLAYER_ENTERING_WORLD")
+    clearPrints(versionEnv)
+    slash("version.source_checkout_debug.dump", versionEnv, "debug")
+    eq("version.source_checkout_debug.has_dev_suffix",
+        printContains(versionEnv, "debug v9.8.7-dev  dbVer"), true)
 end
 
 local function clickCheckbox(name, frame, checked)

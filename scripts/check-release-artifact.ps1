@@ -138,11 +138,11 @@ function Get-StatsProPackageFileContract {
         AllowedFiles  = $requiredFiles
         TextFiles     = $textFiles
         SourceSubstitutions = @(
-            # SYNC: Pinned BigWigs Packager vcs_filter replaces only these two package-surface tokens today.
+            # SYNC: This is the executable build discriminator consumed by StatsPro.lua.
             [pscustomobject]@{
                 Path          = "StatsPro/StatsPro.lua"
                 Token         = "@project-version@"
-                ExpectedCount = 2
+                ExpectedCount = 1
             }
         )
     }
@@ -251,10 +251,12 @@ function Get-TocInterfaceValues {
 function Assert-PackagedStatsProVersionMetadata {
     param(
         [string]$PackageRoot,
-        [string]$ExpectedTag
+        [string]$ExpectedTag,
+        [string]$PackagerProjectVersion
     )
 
     Assert-ReleaseTag $ExpectedTag
+    Assert-PackagerProjectVersion $PackagerProjectVersion
     $expectedVersion = $ExpectedTag.Substring(1)
     $tocPath = Join-Path $PackageRoot "StatsPro.toc"
     $luaPath = Join-Path $PackageRoot "StatsPro.lua"
@@ -269,6 +271,16 @@ function Assert-PackagedStatsProVersionMetadata {
     $currentRelease = Get-SingleRegexMatchFromText -Text $luaText -Pattern 'CURRENT_RELEASE\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"' -Description "StatsPro.lua CURRENT_RELEASE"
     if ($currentRelease -ne $expectedVersion) {
         throw "Packaged CURRENT_RELEASE is $currentRelease, expected $expectedVersion."
+    }
+
+    $packagedBuildVersion = Get-SingleRegexMatchFromText -Text $luaText `
+        -Pattern '^local\s+ADDON_VERSION\s*=\s*addon\.ResolveAddonVersion\("([^"]+)",' `
+        -Description "StatsPro.lua executable Packager project version"
+    if ($packagedBuildVersion -ne $PackagerProjectVersion) {
+        throw "Packaged executable Packager project version is $packagedBuildVersion, expected $PackagerProjectVersion."
+    }
+    if ($luaText.Contains("@project-version@")) {
+        throw "Packaged StatsPro.lua still contains an unresolved project-version token."
     }
 
     return [pscustomobject]@{
@@ -818,7 +830,10 @@ function Assert-StatsProReleaseArtifact {
         $luac = Resolve-Luac51
         Assert-PackagedRuntimeLuaSyntax -PackageRoot $expanded.PackageRoot -LuacPath $luac -CheckToolLocks:$EnforceToolLocks.IsPresent
         Assert-StatsProPackageSourceFidelity -PackageRoot $expanded.PackageRoot -SourceRoot $sourceFullPath -ProjectVersion $PackagerProjectVersion
-        $versionMetadata = Assert-PackagedStatsProVersionMetadata -PackageRoot $expanded.PackageRoot -ExpectedTag $ExpectedTag
+        $versionMetadata = Assert-PackagedStatsProVersionMetadata `
+            -PackageRoot $expanded.PackageRoot `
+            -ExpectedTag $ExpectedTag `
+            -PackagerProjectVersion $PackagerProjectVersion
         Assert-StatsProThirdPartyMaterials -Root $expanded.PackageRoot
         Assert-PackagedArchonTargets -PackageRoot $expanded.PackageRoot -SourceRoot $sourceFullPath -MaxAgeDays $ArchonMaxAgeDays
         if ($WithReleaseJson) {
@@ -946,8 +961,8 @@ function Invoke-SelfTest {
             Assert-PackagerProjectVersion "v1.2.3-dirty"
         } "Malformed"
         Assert-ThrowsMatch "source substitution token count drift rejected" {
-            [void](ConvertTo-StatsProExpectedPackagedText -SourceText "-- @project-version@" -ContractPath "StatsPro/StatsPro.lua" -ProjectVersion "v1.2.3")
-        } "expected 2"
+            [void](ConvertTo-StatsProExpectedPackagedText -SourceText "@project-version@ @project-version@" -ContractPath "StatsPro/StatsPro.lua" -ProjectVersion "v1.2.3")
+        } "expected 1"
 
         $mutationPackage = Expand-StatsProPackageToTemp -Path $zip
         try {
@@ -967,6 +982,12 @@ function Invoke-SelfTest {
             $coreText = [System.IO.File]::ReadAllText($corePath)
             $inconsistentVersionText = ([regex]::new([regex]::Escape($tag))).Replace($coreText, "v9.9.9", 1)
             [System.IO.File]::WriteAllText($corePath, $inconsistentVersionText, [System.Text.UTF8Encoding]::new($false))
+            Assert-ThrowsMatch "inconsistent executable Packager version rejected" {
+                [void](Assert-PackagedStatsProVersionMetadata `
+                    -PackageRoot $mutationRoot `
+                    -ExpectedTag $tag `
+                    -PackagerProjectVersion $tag)
+            } "Packaged executable Packager project version is v9\.9\.9"
             Assert-ThrowsMatch "inconsistent project-version substitution rejected" {
                 Assert-StatsProPackageSourceFidelity -PackageRoot $mutationRoot -SourceRoot $sourceRoot -ProjectVersion $tag
             } "source-fidelity mismatch.*StatsPro/StatsPro\.lua"

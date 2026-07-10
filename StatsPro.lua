@@ -248,16 +248,33 @@ local function LocaleAwareDefaultFont()
     return "Fonts\\FRIZQT__.TTF"
 end
 
--- WHY single source of truth: Version comes from the TOC `## Version:` line, which
--- BigWigs Packager substitutes from the git tag at release build time (`@project-version@`
--- → e.g. `1.0.1`). Reading via GetAddOnMetadata means every release auto-syncs the
--- in-game settings title without a code edit. Local dev (running from source) sees the
--- literal `@project-version@` token from the unsubstituted TOC — fall back to a
--- hand-maintained constant so the title still reads e.g. `v1.0.3-dev` instead of `vdev`.
+-- WHY explicit package discriminator: the checked-in TOC has a numeric version, so
+-- metadata alone cannot distinguish a junction/source checkout from a release zip.
+-- BigWigs Packager rewrites the resolver argument below while copying Lua files. A
+-- source checkout appends -dev to its TOC version (falling back to CURRENT_RELEASE
+-- when metadata is invalid); a package uses its exact project version, including the
+-- branch build suffix in CI dry runs.
 -- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
 local CURRENT_RELEASE = "1.9.59"
-local ADDON_VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("StatsPro", "Version") or "?"
-if ADDON_VERSION:find("project%-version") then ADDON_VERSION = CURRENT_RELEASE .. "-dev" end
+
+function addon.ResolveAddonVersion(packagerProjectVersion, metadataVersion, sourceVersion)
+    if type(packagerProjectVersion) == "string" then
+        local packagedVersion = packagerProjectVersion:match("^v(%d+%.%d+%.%d+)$")
+            or packagerProjectVersion:match("^v(%d+%.%d+%.%d+%-%d+%-g%x+)$")
+        if packagedVersion then return packagedVersion end
+    end
+    local fallback = type(metadataVersion) == "string"
+        and metadataVersion:match("^(%d+%.%d+%.%d+)$")
+    if not fallback then
+        fallback = type(sourceVersion) == "string"
+        and sourceVersion:match("^(%d+%.%d+%.%d+)$")
+    end
+    return (fallback or "?") .. "-dev"
+end
+
+local ADDON_VERSION = addon.ResolveAddonVersion("@project-version@",
+    (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)("StatsPro", "Version"),
+    CURRENT_RELEASE)
 
 --[[ ============================================================
     3. DEFAULTS
@@ -454,7 +471,7 @@ local STAMINA_UNIT_STAT_ID = 3
 
 -- WHY shim: C_SpecializationInfo.* is the modern API in 12.x retail; legacy
 -- GetSpecialization* deprecated since 11.2 and may be removed in 13.x. Defensive
--- chain mirrors the C_AddOns.GetAddOnMetadata-or-GetAddOnMetadata pattern used for ADDON_VERSION.
+-- chain preserves the legacy fallback for clients missing the modern namespace.
 local function SafeGetSpecIndex()
     if C_SpecializationInfo and C_SpecializationInfo.GetSpecialization then
         return C_SpecializationInfo.GetSpecialization()
@@ -6977,6 +6994,8 @@ if addon and addon.__statsproSmoke == true then
         cachedTextAlpha = function() return cached.textAlpha end,
         cachedPanelBackgroundAlpha = function() return cached.panelBackgroundAlpha end,
         cachedTargetSnapshot = function() return cached.targetSnapshot end,
+        currentRelease = function() return CURRENT_RELEASE end,
+        addonVersion = function() return ADDON_VERSION end,
         copyDefaults = function() return CopyTable(defaults) end,
         registrySnapshot = function()
             return {

@@ -7,6 +7,7 @@ param(
     [int]$ArchonMaxAgeDays = 3,
     [string]$ToolLockPath = (Join-Path $PSScriptRoot "tool-version-locks.json"),
     [switch]$EnforceToolLocks,
+    [switch]$RequireExactPackagerProjectVersion,
     [switch]$PackageOnly,
     [switch]$WithReleaseJson,
     [switch]$WriteReleaseJson,
@@ -794,6 +795,7 @@ function Assert-StatsProReleaseArtifact {
         [string]$PackagerProjectVersion,
         [string]$SourceRoot,
         [int]$ArchonMaxAgeDays,
+        [bool]$RequireExactPackagerProjectVersion,
         [bool]$PackageOnly,
         [bool]$WithReleaseJson,
         [bool]$WriteReleaseJson
@@ -814,10 +816,17 @@ function Assert-StatsProReleaseArtifact {
         throw "Missing -ExpectedTag."
     }
     Assert-ReleaseTag $ExpectedTag
+    if ($RequireExactPackagerProjectVersion -and [string]::IsNullOrWhiteSpace($PackagerProjectVersion)) {
+        throw "Exact-tag mode requires an explicit -PackagerProjectVersion."
+    }
     if ([string]::IsNullOrWhiteSpace($PackagerProjectVersion)) {
         $PackagerProjectVersion = $ExpectedTag
     }
     Assert-PackagerProjectVersion $PackagerProjectVersion
+    if ($RequireExactPackagerProjectVersion -and
+        -not [System.StringComparer]::Ordinal.Equals($PackagerProjectVersion, $ExpectedTag)) {
+        throw "Packager project version '$PackagerProjectVersion' must exactly match release tag '$ExpectedTag' in exact-tag mode."
+    }
     $zipFullPath = (Resolve-Path $ZipPath).Path
     $sourceFullPath = (Resolve-Path $SourceRoot).Path
 
@@ -925,16 +934,22 @@ function Invoke-SelfTest {
         $zip = Join-Path $tempDir "StatsPro-$tag.zip"
         New-TestPackageZip -SourceRoot $sourceRoot -ZipPath $zip -PackagerProjectVersion $tag
         $jsonPath = Join-Path $tempDir "release.json"
-        Assert-StatsProReleaseArtifact -ZipPath $zip -ReleaseJsonPath $jsonPath -ExpectedTag $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$false -WithReleaseJson:$true -WriteReleaseJson:$true
+        Assert-StatsProReleaseArtifact -ZipPath $zip -ReleaseJsonPath $jsonPath -ExpectedTag $tag -PackagerProjectVersion $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -RequireExactPackagerProjectVersion:$true -PackageOnly:$false -WithReleaseJson:$true -WriteReleaseJson:$true
         $expectedJson = New-StatsProReleaseJsonText -ExpectedTag $tag -Interfaces $interfaces
         if ((Get-Content -LiteralPath $jsonPath -Raw -Encoding UTF8).Trim() -ne $expectedJson) {
             throw "Generated release.json is not deterministic."
         }
         Assert-StatsProReleaseArtifact -ZipPath $zip -ExpectedTag $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$true -WithReleaseJson:$false -WriteReleaseJson:$false
+        Assert-ThrowsMatch "missing explicit Packager version rejected in exact-tag mode" {
+            Assert-StatsProReleaseArtifact -ZipPath $zip -ExpectedTag $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -RequireExactPackagerProjectVersion:$true -PackageOnly:$true -WithReleaseJson:$false
+        } "explicit -PackagerProjectVersion"
         $branchProjectVersion = "$tag-12-gabcdef0"
         $branchZip = Join-Path $tempDir "StatsPro-$branchProjectVersion.zip"
         New-TestPackageZip -SourceRoot $sourceRoot -ZipPath $branchZip -PackagerProjectVersion $branchProjectVersion
         Assert-StatsProReleaseArtifact -ZipPath $branchZip -ExpectedTag $tag -PackagerProjectVersion $branchProjectVersion -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$true -WithReleaseJson:$false
+        Assert-ThrowsMatch "branch Packager version rejected in exact-tag mode" {
+            Assert-StatsProReleaseArtifact -ZipPath $branchZip -ExpectedTag $tag -PackagerProjectVersion $branchProjectVersion -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -RequireExactPackagerProjectVersion:$true -PackageOnly:$true -WithReleaseJson:$false
+        } "must exactly match release tag"
 
         if ((Normalize-StatsProZipEntryPath "StatsPro\StatsPro.lua") -ne "StatsPro/StatsPro.lua") {
             throw "Backslash package path normalization failed."
@@ -1197,6 +1212,7 @@ Assert-StatsProReleaseArtifact `
     -PackagerProjectVersion $PackagerProjectVersion `
     -SourceRoot $SourceRoot `
     -ArchonMaxAgeDays $ArchonMaxAgeDays `
+    -RequireExactPackagerProjectVersion:$RequireExactPackagerProjectVersion.IsPresent `
     -PackageOnly:$PackageOnly.IsPresent `
     -WithReleaseJson:$WithReleaseJson.IsPresent `
     -WriteReleaseJson:$WriteReleaseJson.IsPresent

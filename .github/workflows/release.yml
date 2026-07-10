@@ -101,6 +101,7 @@ jobs:
             -PackageRoot (Join-Path ".release" "StatsPro") `
             -ManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256") `
             -ArchonMaxAgeDays 3 `
+            -RequireExactPackagerProjectVersion `
             -EnforceToolLocks
 
       - name: Check marketplace versions
@@ -108,6 +109,10 @@ jobs:
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
         run: ./scripts/check-marketplace-versions.ps1
+
+      - name: Recheck release ancestry before final package build
+        shell: pwsh
+        run: ./scripts/check-release-ancestry.ps1 -Tag $env:GITHUB_REF_NAME
 
       - name: Rebuild package without publishing
         id: rebuild-package
@@ -128,11 +133,8 @@ jobs:
             -PackageRoot (Join-Path ".release" "StatsPro") `
             -CompareManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256") `
             -ArchonMaxAgeDays 3 `
+            -RequireExactPackagerProjectVersion `
             -EnforceToolLocks
-
-      - name: Recheck release ancestry before marketplace upload
-        shell: pwsh
-        run: ./scripts/check-release-ancestry.ps1 -Tag $env:GITHUB_REF_NAME
 
       - name: Create draft release marker
         shell: pwsh
@@ -145,6 +147,31 @@ jobs:
             -ExpectedTag $env:GITHUB_REF_NAME `
             -ExpectedCommitSha $env:GITHUB_SHA `
             -NotesPath CHANGELOG.md
+
+      - name: Validate exact package immediately before marketplace upload
+        shell: pwsh
+        env:
+          STATSPRO_ARCHIVE_PATH: ${{ steps.rebuild-package.outputs.archive_path }}
+          STATSPRO_PROJECT_VERSION: ${{ steps.rebuild-package.outputs.project_version }}
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          $tagCommit = (git rev-parse "refs/tags/$env:GITHUB_REF_NAME^{commit}").Trim()
+          if ($LASTEXITCODE -ne 0 -or $head -notmatch '^[0-9a-f]{40}$' -or $tagCommit -notmatch '^[0-9a-f]{40}$') {
+            throw "Could not resolve the release checkout boundary."
+          }
+          if (-not [System.StringComparer]::OrdinalIgnoreCase.Equals($head, $env:GITHUB_SHA) -or
+              -not [System.StringComparer]::OrdinalIgnoreCase.Equals($tagCommit, $env:GITHUB_SHA)) {
+            throw "Release checkout moved after final package validation."
+          }
+          ./scripts/check-package-dry-run.ps1 `
+            -ArchivePath $env:STATSPRO_ARCHIVE_PATH `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -PackagerProjectVersion $env:STATSPRO_PROJECT_VERSION `
+            -PackageRoot (Join-Path ".release" "StatsPro") `
+            -CompareManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256") `
+            -ArchonMaxAgeDays 3 `
+            -RequireExactPackagerProjectVersion `
+            -EnforceToolLocks
 
       - name: Publish package to marketplaces
         id: publish-package
@@ -170,11 +197,14 @@ jobs:
             -PackageRoot (Join-Path ".release" "StatsPro") `
             -CompareManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256") `
             -ArchonMaxAgeDays 3 `
+            -RequireExactPackagerProjectVersion `
             -EnforceToolLocks
           ./scripts/check-release-artifact.ps1 `
             -ZipPath $env:STATSPRO_ARCHIVE_PATH `
             -ReleaseJsonPath $releaseJsonPath `
             -ExpectedTag $env:GITHUB_REF_NAME `
+            -PackagerProjectVersion $env:STATSPRO_PROJECT_VERSION `
+            -RequireExactPackagerProjectVersion `
             -WithReleaseJson `
             -WriteReleaseJson `
             -ArchonMaxAgeDays 3 `
@@ -240,6 +270,7 @@ jobs:
             -ReleaseJsonPath $releaseJsonPath `
             -ExpectedTag $tag `
             -PackagerProjectVersion $tag `
+            -RequireExactPackagerProjectVersion `
             -WithReleaseJson `
             -ArchonMaxAgeDays 3 `
             -EnforceToolLocks

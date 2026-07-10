@@ -398,8 +398,11 @@ function Assert-ReleaseWorkflowBoundary {
 
     $orderedSteps = @(
         "- name: Refuse existing release marker",
-        "- name: Recheck release ancestry before marketplace upload",
+        "- name: Recheck release ancestry before final package build",
+        "- name: Rebuild package without publishing",
+        "- name: Compare rebuilt package and validate again",
         "- name: Create draft release marker",
+        "- name: Validate exact package immediately before marketplace upload",
         "- name: Publish package to marketplaces",
         "- name: Validate marketplace archive and create release metadata",
         "- name: Attach validated assets to draft",
@@ -428,20 +431,52 @@ function Assert-ReleaseWorkflowBoundary {
         $previousIndex = $index
     }
 
-    $marketplaceStep = [regex]::Match(
-        $WorkflowText,
-        "(?ms)^\s{6}- name: Publish package to marketplaces\s*$.*?(?=^\s{6}- name:|\z)"
-    )
+    $stepBlocks = @([regex]::Matches($WorkflowText, "(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)"))
+    $publishingPackagerSteps = @($stepBlocks | Where-Object {
+        $_.Value -match "BigWigsMods/packager@" -and
+        $_.Value -notmatch '(?m)^\s+args:.*(?:^|\s)-d(?:\s|$)'
+    })
+    if ($publishingPackagerSteps.Count -ne 1) {
+        throw "Release workflow must contain exactly one publishing Packager step; found $($publishingPackagerSteps.Count)."
+    }
+    $marketplaceStep = $publishingPackagerSteps[0]
     if (-not $marketplaceStep.Success) {
         throw "Could not isolate the marketplace Packager step."
+    }
+    if ($marketplaceStep.Value -notmatch "(?m)^\s{6}- name: Publish package to marketplaces\s*$" -or
+        $marketplaceStep.Value -notmatch "(?m)^\s{10}args: -c -e -o\s*$" -or
+        $marketplaceStep.Value -notmatch "CF_API_KEY:" -or
+        $marketplaceStep.Value -notmatch "WAGO_API_TOKEN:" -or
+        $marketplaceStep.Value -notmatch "WOWI_API_TOKEN:") {
+        throw "Marketplace publication must be the single named Packager step reusing the validated tree with -c -e -o."
     }
 
     $ancestryStep = [regex]::Match(
         $WorkflowText,
-        "(?ms)^\s{6}- name: Recheck release ancestry before marketplace upload\s*$.*?(?=^\s{6}- name:|\z)"
+        "(?ms)^\s{6}- name: Recheck release ancestry before final package build\s*$.*?(?=^\s{6}- name:|\z)"
     )
     if (-not $ancestryStep.Success -or $ancestryStep.Value -notmatch "check-release-ancestry\.ps1") {
-        throw "Release workflow must run the executable fresh ancestry gate immediately before marketplace upload."
+        throw "Release workflow must run the executable fresh ancestry gate before the final package build."
+    }
+
+    $preUploadStep = [regex]::Match(
+        $WorkflowText,
+        "(?ms)^\s{6}- name: Validate exact package immediately before marketplace upload\s*$.*?(?=^\s{6}- name:|\z)"
+    )
+    if (-not $preUploadStep.Success -or
+        $preUploadStep.Value -notmatch "check-package-dry-run\.ps1" -or
+        $preUploadStep.Value -notmatch '(?m)^\s+-ExpectedTag \$env:GITHUB_REF_NAME\s+\x60\s*$' -or
+        $preUploadStep.Value -notmatch '(?m)^\s+-PackagerProjectVersion \$env:STATSPRO_PROJECT_VERSION\s+\x60\s*$' -or
+        $preUploadStep.Value -notmatch '(?m)^\s+-CompareManifestPath .+statspro-package-tree\.before\.sha256.+\x60\s*$' -or
+        $preUploadStep.Value -notmatch '(?m)^\s+-RequireExactPackagerProjectVersion\s+\x60\s*$' -or
+        $preUploadStep.Value -notmatch "git rev-parse HEAD" -or
+        $preUploadStep.Value -notmatch "GITHUB_SHA" -or
+        $preUploadStep.Value.IndexOf('STATSPRO_ARCHIVE_PATH: ${{ steps.rebuild-package.outputs.archive_path }}', [System.StringComparison]::Ordinal) -lt 0 -or
+        $preUploadStep.Value.IndexOf('STATSPRO_PROJECT_VERSION: ${{ steps.rebuild-package.outputs.project_version }}', [System.StringComparison]::Ordinal) -lt 0) {
+        throw "The immediate pre-upload step must bind the exact Packager output, package manifest, tag checkout, and GITHUB_SHA."
+    }
+    if ($preUploadStep.Index + $preUploadStep.Length -ne $marketplaceStep.Index) {
+        throw "The exact package boundary must be the final workflow step before marketplace publication."
     }
     $actualEnvironmentKeys = @(
         [regex]::Matches($marketplaceStep.Value, "(?m)^\s{10}([A-Z][A-Z0-9_]+):") |
@@ -669,9 +704,37 @@ function Invoke-SelfTest {
     Assert-ThrowsMatch "missing publication ancestry recheck rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "check-release-ancestry\.ps1", "echo ancestry-skipped")
     } "fresh ancestry gate"
+    Assert-ThrowsMatch "disabled exact pre-upload switch rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "-RequireExactPackagerProjectVersion", '-RequireExactPackagerProjectVersion:$false')
+    } "immediate pre-upload step"
+    Assert-ThrowsMatch "marketplace tree reuse flags rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "args: -c -e -o", "args: -c -e")
+    } "reusing the validated tree"
+    $publishMarker = "      - name: Publish package to marketplaces"
+    $insertedStep = "      - name: Unexpected intervening step`n        run: echo changed`n`n"
+    Assert-ThrowsMatch "intervening pre-upload step rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace($publishMarker, $insertedStep + $publishMarker)
+    } "final workflow step"
+    $preUploadBlock = [regex]::Match($workflowText, "(?ms)^\s{6}- name: Validate exact package immediately before marketplace upload\s*$.*?(?=^\s{6}- name:|\z)")
+    $publishBlock = [regex]::Match($workflowText, "(?ms)^\s{6}- name: Publish package to marketplaces\s*$.*?(?=^\s{6}- name:|\z)")
+    $swappedWorkflow = $workflowText.Substring(0, $preUploadBlock.Index) +
+        $publishBlock.Value + $preUploadBlock.Value +
+        $workflowText.Substring($publishBlock.Index + $publishBlock.Length)
+    Assert-ThrowsMatch "pre-upload validation after marketplace publish rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $swappedWorkflow
+    } "out of the required"
+    $postPublishMarker = "      - name: Validate marketplace archive and create release metadata"
+    Assert-ThrowsMatch "duplicate publishing Packager step rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            $postPublishMarker,
+            $publishBlock.Value + $postPublishMarker)
+    } "exactly one publishing Packager step"
+    Assert-ThrowsMatch "wrong pre-upload Packager output binding rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace 'steps\.rebuild-package\.outputs\.project_version', 'steps.build-package.outputs.project_version')
+    } "immediate pre-upload step"
     Assert-ThrowsMatch "GitHub token in marketplace step rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "WOWI_API_TOKEN: \$\{\{ secrets\.WOWI_API_TOKEN \}\}", 'GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}')
-    } "only marketplace tokens"
+    } "reusing the validated tree"
 
     Write-Host "GitHub release management self-test passed."
 }

@@ -235,6 +235,37 @@ function Read-LuaLanguageServerDiagnostics {
     return $diagnostics
 }
 
+function Invoke-LuaLanguageServerCheck {
+    param(
+        [string]$ServerPath,
+        [string]$Root,
+        [string]$ConfigPath,
+        [int]$TimeoutSeconds = 180,
+        [string]$Description = "lua-language-server diagnostics"
+    )
+
+    $logPath = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lls-" + [System.Guid]::NewGuid().ToString("N"))
+    $jsonPath = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lls-" + [System.Guid]::NewGuid().ToString("N") + ".json")
+    try {
+        $result = Invoke-NativeCapture -FilePath $ServerPath -Arguments @(
+            "--check=$Root",
+            "--check_format=json",
+            "--check_out_path=$jsonPath",
+            "--checklevel=Warning",
+            "--configpath=$ConfigPath",
+            "--logpath=$logPath"
+        ) -TimeoutSeconds $TimeoutSeconds -Description $Description
+        return [pscustomobject]@{
+            ExitCode    = $result.ExitCode
+            Diagnostics = @(Read-LuaLanguageServerDiagnostics -JsonPath $jsonPath)
+        }
+    }
+    finally {
+        Remove-Item -Recurse -Force $logPath -ErrorAction SilentlyContinue
+        Remove-Item -Force $jsonPath -ErrorAction SilentlyContinue
+    }
+}
+
 function Assert-NoLuaDiagnostics {
     param(
         [object[]]$Diagnostics,
@@ -261,6 +292,21 @@ function Assert-NoLuaDiagnostics {
     }
 }
 
+function Assert-UndefinedFieldDiagnosticsEnabled {
+    param([string]$ConfigPath)
+
+    try {
+        $config = Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    }
+    catch {
+        throw "Could not parse LuaLS config ${ConfigPath}: $($_.Exception.Message)"
+    }
+    $disabled = @($config.'diagnostics.disable')
+    if ($disabled -contains "undefined-field") {
+        throw "LuaLS config must keep undefined-field diagnostics enabled."
+    }
+}
+
 function Assert-ThrowsMatch {
     param([string]$Name, [scriptblock]$Script, [string]$Pattern)
 
@@ -284,6 +330,7 @@ $ArchonTargetsFile = Join-Path $RepoRoot "StatsPro_ArchonTargets.lua"
 $SmokeFile = Join-Path $RepoRoot "scripts\smoke.lua"
 $MetadataCheck = Join-Path $RepoRoot "scripts\check-metadata.ps1"
 $ArchonTargetsCheck = Join-Path $RepoRoot "scripts\check-archon-targets.lua"
+$LuaGlobalStub = Join-Path $RepoRoot "scripts\types\wow-globals.d.lua"
 
 function Invoke-SelfTest {
     & $MetadataCheck -SelfTest
@@ -364,6 +411,53 @@ function Invoke-SelfTest {
         Assert-ThrowsMatch "nonzero exit without diagnostics rejected" {
             Assert-NoLuaDiagnostics -Diagnostics @() -ExitCode 1
         } "without JSON diagnostics"
+
+        if (-not (Test-Path -LiteralPath $LuaGlobalStub -PathType Leaf)) {
+            throw "Missing LuaLS WoW/global definition file: $LuaGlobalStub"
+        }
+        Assert-UndefinedFieldDiagnosticsEnabled -ConfigPath (Join-Path $RepoRoot ".luarc.json")
+        $luaLanguageServer = Get-Command lua-language-server -ErrorAction Stop |
+            Select-Object -First 1 -ExpandProperty Source
+        $fieldFixtureRoot = Join-Path $root "undefined-field"
+        $fieldFixtureTypes = Join-Path $fieldFixtureRoot "scripts\types"
+        New-Item -ItemType Directory -Path $fieldFixtureTypes -Force | Out-Null
+        Copy-Item -LiteralPath $LuaGlobalStub -Destination (Join-Path $fieldFixtureTypes "wow-globals.d.lua")
+        Copy-Item -LiteralPath (Join-Path $RepoRoot ".luarc.json") -Destination (Join-Path $fieldFixtureRoot ".luarc.json")
+        Set-Content -LiteralPath (Join-Path $fieldFixtureRoot "field-typo.lua") -Value @'
+---@class FieldContract
+---@field retryScheduled boolean
+---@type FieldContract
+local state = { retryScheduled = true }
+local picker = _G.StatsProFontPicker
+if picker then
+    picker:IsShown()
+    picker:Hide()
+    picker:IsShwon()
+end
+local definition = _G.StaticPopupDialogs["STATSPRO_FIXTURE"]
+definition.button1 = definition.buton1
+local globalTypo = _G.StatsProFontPickre
+local suffix = "Text"
+local dynamic = _G["StatsProVisibleCheck" .. suffix]
+return state.retrySchedueld or globalTypo or dynamic
+'@ -Encoding UTF8
+        $fieldCheck = Invoke-LuaLanguageServerCheck `
+            -ServerPath $luaLanguageServer `
+            -Root $fieldFixtureRoot `
+            -ConfigPath (Join-Path $fieldFixtureRoot ".luarc.json") `
+            -TimeoutSeconds 60 `
+            -Description "undefined-field regression fixture"
+        $undefinedFieldDiagnostics = @($fieldCheck.Diagnostics | Where-Object { $_.Code -eq "undefined-field" })
+        $fieldMessages = $undefinedFieldDiagnostics.Message -join "`n"
+        if ($fieldCheck.ExitCode -eq 0 -or $fieldCheck.Diagnostics.Count -ne 4 -or
+            $undefinedFieldDiagnostics.Count -ne 4 -or
+            $fieldMessages -notmatch "retrySchedueld" -or
+            $fieldMessages -notmatch "StatsProFontPickre" -or
+            $fieldMessages -notmatch "IsShwon" -or
+            $fieldMessages -notmatch "buton1") {
+            $summary = @($fieldCheck.Diagnostics | ForEach-Object { "$($_.Code): $($_.Message)" }) -join " | "
+            throw "LuaLS field-typo fixture must report only the four intentional field typos; exit=$($fieldCheck.ExitCode), diagnostics=$summary"
+        }
     }
     finally {
         if (Test-Path -LiteralPath $root) {
@@ -499,23 +593,15 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "== Lua diagnostics =="
 Write-Host "-- $RepoRoot"
-$LogPath = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lls-" + [System.Guid]::NewGuid().ToString("N"))
-$JsonPath = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lls-" + [System.Guid]::NewGuid().ToString("N") + ".json")
-try {
-    $LuaLanguageServerResult = Invoke-NativeCapture -FilePath $LuaLanguageServer -Arguments @(
-        "--check=$RepoRoot",
-        "--check_format=json",
-        "--check_out_path=$JsonPath",
-        "--checklevel=Warning",
-        "--configpath=$RepoRoot\.luarc.json",
-        "--logpath=$LogPath"
-    ) -TimeoutSeconds 180 -Description "lua-language-server diagnostics for $RepoRoot"
-    $Diagnostics = @(Read-LuaLanguageServerDiagnostics -JsonPath $JsonPath)
-    Assert-NoLuaDiagnostics -Diagnostics $Diagnostics -ExitCode $LuaLanguageServerResult.ExitCode
-}
-finally {
-    Remove-Item -Recurse -Force $LogPath -ErrorAction SilentlyContinue
-    Remove-Item -Force $JsonPath -ErrorAction SilentlyContinue
-}
+Assert-UndefinedFieldDiagnosticsEnabled -ConfigPath (Join-Path $RepoRoot ".luarc.json")
+$LuaLanguageServerResult = Invoke-LuaLanguageServerCheck `
+    -ServerPath $LuaLanguageServer `
+    -Root $RepoRoot `
+    -ConfigPath (Join-Path $RepoRoot ".luarc.json") `
+    -TimeoutSeconds 180 `
+    -Description "lua-language-server diagnostics for $RepoRoot"
+Assert-NoLuaDiagnostics `
+    -Diagnostics @($LuaLanguageServerResult.Diagnostics) `
+    -ExitCode $LuaLanguageServerResult.ExitCode
 
 Write-Host "All Lua checks passed."

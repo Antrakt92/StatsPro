@@ -132,7 +132,6 @@
     "lowercase-global",
     "param-type-mismatch",
     "redundant-parameter",
-    "undefined-field",
     "return-type-mismatch"
   ]
 }

@@ -47,10 +47,10 @@
 | Area | Rows |
 |---|---|
 | **Offensive** | Crit, Haste, Mastery, Versatility |
-| **Character** | Main stat auto-detect, Stamina, Item Level |
+| **Character** | Main stat auto-detect, Stamina |
 | **Tertiary** | Leech, Avoidance, Movement |
 | **Defensive** | Dodge, Parry, Block, Brewmaster Stagger, Armor damage reduction |
-| **Gear** | Durability, worst-slot durability, live vendor-format repair cost |
+| **Gear** | Item Level, Durability, worst-slot durability, live vendor-format repair cost |
 
 Everything is optional. Keep a tiny secondary-stat strip, build a tank dashboard,
 or split gear/defensive rows into a second movable panel.
@@ -58,7 +58,7 @@ or split gear/defensive rows into a second movable panel.
 ## How it looks
 
 Layouts auto-fit to enabled stats, drag panels anywhere, no awkward gaps when
-toggling columns. Top: **Flat** (default secondary stats) and **Rating + Percentage**
+toggling columns. Top: **Flat** (enabled rows in one compact panel) and **Rating + Percentage**
 (both columns side by side). Middle: **With Defensives** (Dodge / Parry / Block /
 Brewmaster Stagger / Armor damage reduction) and **Repair Cost at Vendor** (vendor-format coin
 string with inline gold / silver / copper icons). Bottom: **Split Mode** —
@@ -149,19 +149,17 @@ suggested correction — single-row fixes ship in the next patch.
 | `/ss debug` | Dump runtime state to chat (for bug reports) |
 | `/ss help` | List commands in chat |
 
-**Tip:** right-click anywhere on the stats panel also opens settings — same as `/ss`. To bind a key for toggling visibility, create a macro running `/ss toggle` and bind it from Esc → Options → Keybindings → Macros.
+**Tip:** Out of combat, right-click anywhere on the stats panel to open Settings — the same window as `/ss`. Right-click is intentionally ignored during combat. To bind a key for toggling visibility, create a macro running `/ss toggle` and bind it from Esc → Options → Keybindings → Macros.
 
 > Note: many users add `/ss` as a screenshot macro. If you have one, use the
 > `/statspro` alias instead — it's an equivalent built-in command.
 
 ## Installation
 
-**CurseForge:** [www.curseforge.com/wow/addons/statspro](https://www.curseforge.com/wow/addons/statspro)
-— install via the CurseForge App or WowUp.
-
-**Manual:** download the latest zip from the
-[Releases page](https://github.com/Antrakt92/StatsPro/releases/latest), extract the
-`StatsPro` folder into `World of Warcraft\_retail_\Interface\AddOns\`.
+- **CurseForge:** [StatsPro on CurseForge](https://www.curseforge.com/wow/addons/statspro)
+- **Wago Addons:** [StatsPro on Wago](https://addons.wago.io/addons/statspro)
+- **WoWInterface:** [StatsPro on WoWInterface](https://www.wowinterface.com/downloads/info27130-StatsPro.html)
+- **Manual:** download the latest zip from [GitHub Releases](https://github.com/Antrakt92/StatsPro/releases/latest), then extract the `StatsPro` folder into `World of Warcraft\_retail_\Interface\AddOns\`.
 
 ## Moving from SwiftStats
 
@@ -185,7 +183,7 @@ Type `/ss` or click the StatsPro entry in the Blizzard AddOns settings panel to
 open the configuration window. Three tabs (`Stats | Layout | Appearance`) cover
 everything:
 
-![StatsPro settings — Stats, Layout, and Appearance tabs stacked vertically](screenshots/settings-tabs.png)
+![StatsPro settings — Gear rows, Archon tooltip targets, label style, value colors, text outline, panel background, and localization across the Stats, Layout, and Appearance tabs](screenshots/settings-tabs.png)
 
 | Tab | What lives here |
 |---|---|
@@ -270,7 +268,7 @@ Bug reports and PRs remain the highest-leverage way to help — open an
 
 - **[@tflo](https://github.com/tflo)** — auto main stat, text opacity, item level,
   stamina, right-click-to-settings, label style modes, Stagger, Block visibility,
-  and gear grouping feedback (issues #1-#4).
+  gear grouping, and background HUD layering feedback (issues #1–#5).
 - **[TaylorSay](https://www.curseforge.com/members/taylorsay)** — author of the
   original [SwiftStats](https://www.curseforge.com/wow/addons/swiftstats) addon
   (MIT), the project that inspired StatsPro and from which the initial defaults

@@ -5434,6 +5434,169 @@ do
 end
 
 do
+    local function tableKeySet(value)
+        local out = {}
+        for key in pairs(value) do out[key] = true end
+        return out
+    end
+
+    local function assertSameSet(name, expected, actual)
+        for key in pairs(expected) do
+            eq(name .. ".missing." .. tostring(key), actual[key], true)
+        end
+        for key in pairs(actual) do
+            eq(name .. ".extra." .. tostring(key), expected[key], true)
+        end
+    end
+
+    local registryEnv, registryAddon, registryTest = loadStatsPro("enUS")
+    fireEvent("registry.config_bindings.fire", registryEnv, "PLAYER_ENTERING_WORLD")
+    local ok, err = pcall(function() registryAddon:OpenConfigMenu() end)
+    check("registry.config_bindings.open", ok, err)
+
+    local defaults = registryTest.copyDefaults()
+    local registry = registryTest.registrySnapshot()
+
+    local boolDefaults = {}
+    for key, value in pairs(defaults) do
+        if type(value) == "boolean" then boolDefaults[key] = true end
+    end
+
+    local cachedBoolKeys = {}
+    for index, key in ipairs(registry.cachedBoolKeys) do
+        eq("registry.bool_cache.key_type." .. index, type(key), "string")
+        check("registry.bool_cache.key_nonempty." .. index, key ~= "")
+        eq("registry.bool_cache.duplicate." .. key, cachedBoolKeys[key], nil)
+        cachedBoolKeys[key] = true
+        eq("registry.bool_cache.default_type." .. key, type(defaults[key]), "boolean")
+    end
+    assertSameSet("registry.bool_defaults_cached", boolDefaults, cachedBoolKeys)
+
+    local boolControls, numberControls, colorControls = {}, {}, {}
+    for _, frame in ipairs(registryEnv.__frames) do
+        local dbKey = frame.statsProDBKey
+        if dbKey then
+            eq("registry.config_binding.key_type", type(dbKey), "string")
+            check("registry.config_binding.key_nonempty", dbKey ~= "")
+            local expectedType = frame.statsProDBType
+            check("registry.config_binding.expected_type." .. dbKey,
+                expectedType == "boolean" or expectedType == "number")
+            eq("registry.config_binding.default_type." .. dbKey,
+                type(defaults[dbKey]), expectedType)
+            if expectedType == "boolean" then
+                eq("registry.bool_controls.duplicate." .. dbKey,
+                    boolControls[dbKey], nil)
+                boolControls[dbKey] = true
+            else
+                eq("registry.number_controls.duplicate." .. dbKey,
+                    numberControls[dbKey], nil)
+                numberControls[dbKey] = true
+            end
+        end
+
+        local colorKey = frame.statsProColorKey
+        if colorKey then
+            eq("registry.color_binding.key_type", type(colorKey), "string")
+            check("registry.color_binding.key_nonempty", colorKey ~= "")
+            eq("registry.color_controls.duplicate." .. colorKey,
+                colorControls[colorKey], nil)
+            colorControls[colorKey] = true
+        end
+    end
+    assertSameSet("registry.bool_cached_controls", cachedBoolKeys, boolControls)
+
+    local numberMetaKeys = tableKeySet(registry.numberSettingMeta)
+    assertSameSet("registry.number_meta_sliders", numberMetaKeys, numberControls)
+    for key, meta in pairs(registry.numberSettingMeta) do
+        eq("registry.number_meta.default_type." .. key, type(defaults[key]), "number")
+        eq("registry.number_meta.entry_type." .. key, type(meta), "table")
+        check("registry.number_meta.min_finite." .. key, isFiniteNumber(meta.min))
+        check("registry.number_meta.max_finite." .. key, isFiniteNumber(meta.max))
+        check("registry.number_meta.step_finite." .. key, isFiniteNumber(meta.step))
+        check("registry.number_meta.range_order." .. key, meta.min <= meta.max)
+        check("registry.number_meta.default_in_range." .. key,
+            defaults[key] >= meta.min and defaults[key] <= meta.max)
+        check("registry.number_meta.step_positive." .. key, meta.step > 0)
+    end
+
+    local stringControls = {
+        StatsProDisplayModeDropdown = "displayMode",
+        StatsProTargetSnapshotDropdown = "targetSnapshot",
+        StatsProLabelStyleDropdown = "labelStyle",
+        StatsProTextOutlineDropdown = "textOutlineStyle",
+        StatsProFontDropdown = "font",
+        StatsProLanguageDropdown = "forceLocale",
+    }
+    for frameName, dbKey in pairs(stringControls) do
+        exists("registry.string_control.exists." .. frameName, registryEnv[frameName])
+        eq("registry.string_control.default_type." .. dbKey, type(defaults[dbKey]), "string")
+    end
+
+    local optionValues, explicitLocales = {}, {}
+    local autoCount = 0
+    for index, option in ipairs(registry.languageOptions) do
+        eq("registry.locale_option.entry_type." .. index, type(option), "table")
+        eq("registry.locale_option.value_type." .. index, type(option.value), "string")
+        check("registry.locale_option.value_nonempty." .. index, option.value ~= "")
+        eq("registry.locale_option.duplicate." .. option.value, optionValues[option.value], nil)
+        optionValues[option.value] = true
+        if option.value == "auto" then
+            autoCount = autoCount + 1
+            eq("registry.locale_option.auto_label", option.label, nil)
+        else
+            explicitLocales[option.value] = true
+            eq("registry.locale_option.label_type." .. option.value,
+                type(option.label), "string")
+            check("registry.locale_option.label_nonempty." .. option.value,
+                option.label ~= "")
+        end
+    end
+    eq("registry.locale_option.one_auto", autoCount, 1)
+    eq("registry.locale_option.auto_first", registry.languageOptions[1].value, "auto")
+    assertSameSet("registry.locale_options_labels",
+        explicitLocales, tableKeySet(registry.labelsByLocale))
+    assertSameSet("registry.locale_options_glyphs",
+        explicitLocales, tableKeySet(registry.localeGlyphReq))
+
+    local englishLabels = registry.labelsByLocale.enUS
+    eq("registry.locale_keys.enUS_table", type(englishLabels), "table")
+    local englishKeySet = tableKeySet(englishLabels)
+    for locale in pairs(explicitLocales) do
+        local labels = registry.labelsByLocale[locale]
+        eq("registry.locale_keys.table_type." .. locale, type(labels), "table")
+        assertSameSet("registry.locale_keys." .. locale,
+            englishKeySet, tableKeySet(labels))
+        eq("registry.locale_glyph.type." .. locale,
+            type(registry.localeGlyphReq[locale]), "string")
+        check("registry.locale_glyph.nonempty." .. locale,
+            registry.localeGlyphReq[locale] ~= "")
+        for key, value in pairs(labels) do
+            eq("registry.locale_value.type." .. locale .. "." .. key,
+                type(value), "string")
+            check("registry.locale_value.nonempty." .. locale .. "." .. key,
+                value ~= "")
+        end
+    end
+
+    eq("registry.colors.defaults_type", type(defaults.colors), "table")
+    assertSameSet("registry.color_defaults_swatches",
+        tableKeySet(defaults.colors), colorControls)
+    local expectedChannels = { r = true, g = true, b = true }
+    for colorKey, color in pairs(defaults.colors) do
+        eq("registry.color.entry_type." .. colorKey, type(color), "table")
+        assertSameSet("registry.color.channels." .. colorKey,
+            expectedChannels, tableKeySet(color))
+        for channel in pairs(expectedChannels) do
+            local value = color[channel]
+            check("registry.color.channel_finite." .. colorKey .. "." .. channel,
+                isFiniteNumber(value))
+            check("registry.color.channel_range." .. colorKey .. "." .. channel,
+                value >= 0 and value <= 1)
+        end
+    end
+end
+
+do
     local badDisplayEnv, badDisplayAddon = loadStatsPro("enUS", {
         statsProDB = { displayMode = "sideways" },
     })

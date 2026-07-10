@@ -4523,6 +4523,10 @@ local PushLocalizedLabel
 
 local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWidth)
     local cb = CreateFrame("CheckButton", name, parent, "UICheckButtonTemplate")
+    if addon.__statsproSmoke == true then
+        cb.statsProDBKey = dbKey
+        cb.statsProDBType = "boolean"
+    end
     cb:SetPoint("TOPLEFT", x, y)
     cb:SetSize(22, 22)
     local text = _G[name .. "Text"]
@@ -4749,6 +4753,9 @@ end
 -- and section-header shared colors.
 local function CreateColorSwatch(parent, statName, x, y)
     local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    if addon.__statsproSmoke == true then
+        btn.statsProColorKey = statName
+    end
     btn:SetPoint("TOPLEFT", x, y)
     btn:SetSize(22, 16)
     btn:SetBackdrop({
@@ -5021,6 +5028,10 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
     PushLocalizedLabel(function() lbl:SetText(L(labelText)) end)
 
     local slider = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
+    if addon.__statsproSmoke == true then
+        slider.statsProDBKey = dbKey
+        slider.statsProDBType = "number"
+    end
     slider:SetPoint("TOPLEFT", cd.padX, sliderY - 18)
     slider:SetMinMaxValues(minVal, maxVal)
     slider:SetValueStep(step)
@@ -6967,6 +6978,15 @@ if addon and addon.__statsproSmoke == true then
         cachedPanelBackgroundAlpha = function() return cached.panelBackgroundAlpha end,
         cachedTargetSnapshot = function() return cached.targetSnapshot end,
         copyDefaults = function() return CopyTable(defaults) end,
+        registrySnapshot = function()
+            return {
+                cachedBoolKeys = CopyTable(CACHED_BOOL_KEYS),
+                numberSettingMeta = CopyTable(NUMBER_SETTING_META),
+                languageOptions = CopyTable(LANGUAGE_OPTIONS),
+                localeGlyphReq = CopyTable(LOCALE_GLYPH_REQ),
+                labelsByLocale = CopyTable(LABELS_BY_LOCALE),
+            }
+        end,
         migrateDB = MigrateDB,
         cacheSettings = CacheSettings,
         getBoolDB = GetBoolDB,

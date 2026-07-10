@@ -2530,6 +2530,17 @@ end
 
 local function RefreshArmorCache()
     if InCombatLockdown() then return end
+    local reductionFn, returnsFraction
+    if C_PaperDollInfo and type(C_PaperDollInfo.GetArmorEffectiveness) == "function" then
+        reductionFn = C_PaperDollInfo.GetArmorEffectiveness
+        returnsFraction = true
+    elseif type(PaperDollFrame_GetArmorReduction) == "function" then
+        reductionFn = PaperDollFrame_GetArmorReduction
+        returnsFraction = false
+    else
+        return
+    end
+
     -- 12.x retail: UnitArmor returns 4 values; we want effectiveArmor (2nd).
     -- Effective armor accounts for item durability (broken items give reduced armor).
     local ok, _, effectiveArmor = pcall(UnitArmor, "player")
@@ -2544,18 +2555,19 @@ local function RefreshArmorCache()
     end
 
     local okLevel, level = pcall(UnitEffectiveLevel, "player")
-    if not okLevel or issecretvalue(level) or not SAFE_NUM.IsCleanFiniteNumber(level) then return end
+    if not okLevel or issecretvalue(level) or not SAFE_NUM.IsCleanFiniteNumber(level) or level <= 0 then return end
 
-    -- WARNING: PaperDollFrame_GetArmorReduction in 12.x retail returns 0..100 percent
-    -- (not 0..1 fraction as some docs claim). Normalize defensively: if return is <=1
-    -- treat as fraction and scale, else use as-is. Clamp to 0..100 for sanity.
+    -- WHY source-specific units: the documented C API returns a 0..1 fraction;
+    -- Blizzard's legacy FrameXML helper already multiplies that value by 100.
+    -- Use the private helper only when the public symbol is absent, not to retry a
+    -- failed/secret public call that the helper would simply invoke again.
     -- WARNING: armor effectiveness can be secret-tagged in M+ transitional combat
     -- moments where InCombatLockdown lags real combat state — the OOC guard above
     -- isn't sufficient. Filter the return value before any comparison or arithmetic;
-    -- comparing a secret number to 1 raises a taint error and aborts the OnUpdate.
-    local okReduction, raw = pcall(PaperDollFrame_GetArmorReduction, effectiveArmor, level)
+    -- multiplying or comparing a secret number aborts the OnUpdate.
+    local okReduction, raw = pcall(reductionFn, effectiveArmor, level)
     if not okReduction or issecretvalue(raw) or not SAFE_NUM.IsCleanFiniteNumber(raw) then return end
-    if raw <= 1 then raw = raw * 100 end
+    if returnsFraction then raw = raw * 100 end
     if raw < 0 then raw = 0 end
     if raw > 100 then raw = 100 end
     cached.armorDR = raw
@@ -4199,8 +4211,9 @@ local function UpdateStats()
         return
     end
 
-    -- Armor refresh: cheap (one pcall + one Lua call); always do it out of combat.
-    if not InCombatLockdown() and cached.showArmor then
+    -- Armor refresh is unnecessary when either the master defensive block or the
+    -- Armor sub-row is hidden. Keep the API chain out of the recurring ticker then.
+    if not InCombatLockdown() and cached.showDefensive and cached.showArmor then
         RefreshArmorCache()
     end
 

@@ -639,7 +639,12 @@ local function makeEnv(locale, opts)
     env.C_PaperDollInfo = {
         GetStaggerPercentage = opts.getStaggerPercentage or function() return nil end,
     }
-    env.PaperDollFrame_GetArmorReduction = opts.paperDollFrameGetArmorReduction or zero
+    if type(opts.getArmorEffectiveness) == "function" then
+        env.C_PaperDollInfo.GetArmorEffectiveness = opts.getArmorEffectiveness
+    end
+    if opts.paperDollFrameGetArmorReduction ~= false then
+        env.PaperDollFrame_GetArmorReduction = opts.paperDollFrameGetArmorReduction or zero
+    end
     env.GetInventoryItemDurability = opts.getInventoryItemDurability or function() return nil, nil end
     env.GetInventoryItemLink = function() return nil end
     env.C_TooltipInfo = {
@@ -3433,7 +3438,10 @@ do
         },
         unitArmor = function() return 0, 5000 end,
         unitEffectiveLevel = function() return 80 end,
-        paperDollFrameGetArmorReduction = function() return secretReduction end,
+        getArmorEffectiveness = function() return secretReduction end,
+        paperDollFrameGetArmorReduction = function()
+            error("documented armor API should be preferred")
+        end,
         issecretvalue = function(value) return value == secretReduction end,
     })
     fireEvent("defensive.armor_cold_secret_reduction_stays_unknown.fire", armorEnv, "PLAYER_ENTERING_WORLD")
@@ -3457,13 +3465,108 @@ do
         },
         unitArmor = function() return 0, 5000 end,
         unitEffectiveLevel = function() return 80 end,
-        paperDollFrameGetArmorReduction = function() return 0.345 end,
+        getArmorEffectiveness = function(armor, attackerLevel)
+            eq("defensive.armor_documented_effectiveness.args.armor", armor, 5000)
+            eq("defensive.armor_documented_effectiveness.args.level", attackerLevel, 80)
+            return 0.345
+        end,
+        paperDollFrameGetArmorReduction = false,
     })
-    fireEvent("defensive.armor_fraction_reduction_renders.fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    fireEvent("defensive.armor_documented_effectiveness_renders.fire", armorEnv, "PLAYER_ENTERING_WORLD")
     local ok, blocks = pcall(armorTest.buildRenderBlocks)
-    check("defensive.armor_fraction_reduction_renders.no_error", ok, blocks)
-    eq("defensive.armor_fraction_reduction_renders.row", blockDumpContains(blocks, "Armor:"), true)
-    eq("defensive.armor_fraction_reduction_renders.value", blockDumpContains(blocks, "34.5%"), true)
+    check("defensive.armor_documented_effectiveness_renders.no_error", ok, blocks)
+    eq("defensive.armor_documented_effectiveness_renders.row", blockDumpContains(blocks, "Armor:"), true)
+    eq("defensive.armor_documented_effectiveness_renders.value", blockDumpContains(blocks, "34.5%"), true)
+end
+
+do
+    local armorEnv, _, armorTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showDefensive = true,
+            hideZeroDefensive = false,
+            showDodge = false,
+            showParry = false,
+            showBlock = false,
+            showArmor = true,
+            showStagger = false,
+        },
+        unitArmor = function() return 0, 5000 end,
+        unitEffectiveLevel = function() return 80 end,
+        paperDollFrameGetArmorReduction = function() return 1 end,
+    })
+    fireEvent("defensive.armor_fallback_percent_renders.fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(armorTest.buildRenderBlocks)
+    check("defensive.armor_fallback_percent_renders.no_error", ok, blocks)
+    eq("defensive.armor_fallback_percent_renders.value", blockDumpContains(blocks, "1.0%"), true)
+end
+
+do
+    local armorEnv, _, armorTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showDefensive = true,
+            hideZeroDefensive = false,
+            showDodge = false,
+            showParry = false,
+            showBlock = false,
+            showArmor = true,
+            showStagger = false,
+        },
+        unitArmor = function() return 0, 5000 end,
+        unitEffectiveLevel = function() return 80 end,
+        paperDollFrameGetArmorReduction = false,
+    })
+    fireEvent("defensive.armor_missing_providers_stays_unknown.fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(armorTest.buildRenderBlocks)
+    check("defensive.armor_missing_providers_stays_unknown.no_error", ok, blocks)
+    eq("defensive.armor_missing_providers_stays_unknown.no_row",
+        blockDumpContains(blocks, "Armor:"), false)
+end
+
+do
+    local calls = { armor = 0, level = 0, documented = 0, fallback = 0 }
+    local armorEnv, armorAddon, armorTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showDefensive = false,
+            showArmor = true,
+        },
+        unitArmor = function()
+            calls.armor = calls.armor + 1
+            return 0, 5000
+        end,
+        unitEffectiveLevel = function()
+            calls.level = calls.level + 1
+            return 80
+        end,
+        getArmorEffectiveness = function()
+            calls.documented = calls.documented + 1
+            return 0.25
+        end,
+        paperDollFrameGetArmorReduction = function()
+            calls.fallback = calls.fallback + 1
+            return 25
+        end,
+    })
+    fireEvent("defensive.armor_master_off_skips_apis.fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    check("defensive.armor_master_off_skips_apis.second_update", armorAddon:RunUpdateStatsSafe())
+    eq("defensive.armor_master_off_skips_apis.armor", calls.armor, 0)
+    eq("defensive.armor_master_off_skips_apis.level", calls.level, 0)
+    eq("defensive.armor_master_off_skips_apis.documented", calls.documented, 0)
+    eq("defensive.armor_master_off_skips_apis.fallback", calls.fallback, 0)
+    local ok, blocks = pcall(armorTest.buildRenderBlocks)
+    check("defensive.armor_master_off_skips_apis.no_error", ok, blocks)
+    eq("defensive.armor_master_off_skips_apis.no_row", blockDumpContains(blocks, "Armor:"), false)
+    armorEnv.StatsProDB.showDefensive = true
+    armorTest.cacheSettings()
+    check("defensive.armor_master_reenable_refreshes.update", armorAddon:RunUpdateStatsSafe())
+    eq("defensive.armor_master_reenable_refreshes.armor", calls.armor, 1)
+    eq("defensive.armor_master_reenable_refreshes.level", calls.level, 1)
+    eq("defensive.armor_master_reenable_refreshes.documented", calls.documented, 1)
+    eq("defensive.armor_master_reenable_refreshes.fallback", calls.fallback, 0)
+    blocks = armorTest.buildRenderBlocks()
+    eq("defensive.armor_master_reenable_refreshes.value", blockDumpContains(blocks, "25.0%"), true)
 end
 
 do
@@ -3545,7 +3648,8 @@ end
 
 do
     local secretReduction = {}
-    local secretMode = false
+    local reductionMode = "clean"
+    local fallbackCalls = 0
     local armorEnv, _, armorTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = false,
@@ -3559,18 +3663,30 @@ do
         },
         unitArmor = function() return 0, 5000 end,
         unitEffectiveLevel = function() return 80 end,
+        getArmorEffectiveness = function()
+            if reductionMode == "secret" then return secretReduction end
+            if reductionMode == "error" then error("documented armor API failed") end
+            return 0.25
+        end,
         paperDollFrameGetArmorReduction = function()
-            if secretMode then return secretReduction end
-            return 25
+            fallbackCalls = fallbackCalls + 1
+            return 99
         end,
         issecretvalue = function(value) return value == secretReduction end,
     })
     fireEvent("defensive.armor_secret_reduction_preserves_last_clean.clean_fire", armorEnv, "PLAYER_ENTERING_WORLD")
-    secretMode = true
+    reductionMode = "secret"
     fireEvent("defensive.armor_secret_reduction_preserves_last_clean.secret_fire", armorEnv, "PLAYER_ENTERING_WORLD")
     local ok, blocks = pcall(armorTest.buildRenderBlocks)
     check("defensive.armor_secret_reduction_preserves_last_clean.no_error", ok, blocks)
     eq("defensive.armor_secret_reduction_preserves_last_clean.value", blockDumpContains(blocks, "25.0%"), true)
+    eq("defensive.armor_secret_reduction_skips_fallback", fallbackCalls, 0)
+    reductionMode = "error"
+    fireEvent("defensive.armor_error_reduction_preserves_last_clean.error_fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    ok, blocks = pcall(armorTest.buildRenderBlocks)
+    check("defensive.armor_error_reduction_preserves_last_clean.no_error", ok, blocks)
+    eq("defensive.armor_error_reduction_preserves_last_clean.value", blockDumpContains(blocks, "25.0%"), true)
+    eq("defensive.armor_error_reduction_skips_fallback", fallbackCalls, 0)
 end
 
 do

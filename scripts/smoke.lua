@@ -121,7 +121,7 @@ local function runFrameHandlers(frame, event, ...)
     end
 end
 
-local function makeFrame(name)
+local function makeFrame(name, setFontResult)
     local frame = {
         name = name,
         shown = true,
@@ -136,6 +136,7 @@ local function makeFrame(name)
         fontSize = 12,
         enabled = true,
         verticalScroll = 0,
+        setFontResult = setFontResult,
     }
 
     function frame:SetSize(w, h) self.width, self.height = w, h end
@@ -155,7 +156,11 @@ local function makeFrame(name)
     function frame:SetFont(font, size, flags)
         if type(font) ~= "string" then error("SetFont font must be a string", 2) end
         if not isFiniteNumber(size) then error("SetFont size must be a finite number", 2) end
+        if self.setFontResult and self.setFontResult(self, font, size, flags) ~= true then
+            return false
+        end
         self.font, self.fontSize, self.fontFlags = font, size, flags
+        return true
     end
     function frame:SetJustifyH() end
     function frame:SetJustifyV() end
@@ -224,10 +229,10 @@ local function makeFrame(name)
     function frame:SetNormalFontObject() end
     function frame:SetHighlightFontObject() end
     function frame:SetHighlightTexture()
-        self.highlightTexture = self.highlightTexture or makeFrame(nil)
+        self.highlightTexture = self.highlightTexture or makeFrame(nil, self.setFontResult)
     end
     function frame:GetHighlightTexture()
-        self.highlightTexture = self.highlightTexture or makeFrame(nil)
+        self.highlightTexture = self.highlightTexture or makeFrame(nil, self.setFontResult)
         return self.highlightTexture
     end
     function frame:SetChecked(value) self.checked = value end
@@ -258,10 +263,10 @@ local function makeFrame(name)
         return (lines + 1) * (self.fontSize or 12) * (self.statsProStringHeightMultiplier or 1)
     end
     function frame:CreateFontString()
-        return makeFrame(nil)
+        return makeFrame(nil, self.setFontResult)
     end
     function frame:CreateTexture()
-        return makeFrame(nil)
+        return makeFrame(nil, self.setFontResult)
     end
 
     return frame
@@ -349,9 +354,9 @@ local function makeEnv(locale, opts)
     env.SwiftStatsLocalDB = opts.swiftStatsLocalDB
     env.SlashCmdList = {}
     env.UISpecialFrames = {}
-    env.UIParent = makeFrame("UIParent")
+    env.UIParent = makeFrame("UIParent", opts.setFontResult)
     env.UIParent:SetSize(1920, 1080)
-    env.GameTooltip = makeFrame("GameTooltip")
+    env.GameTooltip = makeFrame("GameTooltip", opts.setFontResult)
     env.GameTooltip.shown = false
     env.GameTooltip.lines = {}
     function env.GameTooltip:SetOwner(anchor, point)
@@ -365,7 +370,7 @@ local function makeEnv(locale, opts)
     function env.GameTooltip:AddDoubleLine(left, right)
         self.lines[#self.lines + 1] = { left = left, right = right }
     end
-    env.STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
+    env.STANDARD_TEXT_FONT = opts.standardTextFont or "Fonts\\FRIZQT__.TTF"
     env.C_AddOns = {
         GetAddOnMetadata = function(_, field)
             if field == "Version" then return "@project-version@" end
@@ -388,7 +393,7 @@ local function makeEnv(locale, opts)
         RegisterCanvasLayoutCategory = function(_, name) return { name = name } end,
         RegisterAddOnCategory = function() end,
     }
-    env.SettingsPanel = makeFrame("SettingsPanel")
+    env.SettingsPanel = makeFrame("SettingsPanel", opts.setFontResult)
     env.HideUIPanel = function(frame) if frame and frame.Hide then frame:Hide() end end
     if opts.lsmFonts then
         local names = {}
@@ -404,8 +409,12 @@ local function makeEnv(locale, opts)
                 return {}
             end,
             Fetch = function(_, mediaType, name)
-                if mediaType == "font" then return paths[name] end
+                if mediaType == "font" then return opts.lsmGlobalFontPath or paths[name] end
                 return nil
+            end,
+            HashTable = function(_, mediaType)
+                if mediaType == "font" then return paths end
+                return {}
             end,
         }
     end
@@ -455,11 +464,11 @@ local function makeEnv(locale, opts)
     end
     env.UIDropDownMenu_SetSelectedValue = function() end
     env.UIDROPDOWNMENU_OPEN_MENU = nil
-    env.DropDownList1 = makeFrame("DropDownList1")
+    env.DropDownList1 = makeFrame("DropDownList1", opts.setFontResult)
     for i = 1, 8 do
-        env["DropDownList1Button" .. i] = makeFrame("DropDownList1Button" .. i)
+        env["DropDownList1Button" .. i] = makeFrame("DropDownList1Button" .. i, opts.setFontResult)
     end
-    env.ColorPickerFrame = makeFrame("ColorPickerFrame")
+    env.ColorPickerFrame = makeFrame("ColorPickerFrame", opts.setFontResult)
     env.ColorPickerFrame.shown = false
     env.__setColorPickerRGB = function(r, g, b)
         env.ColorPickerFrame.colorRGB = { r = r, g = g, b = b }
@@ -515,14 +524,14 @@ local function makeEnv(locale, opts)
     end
 
     env.CreateFrame = function(_, name)
-        local frame = makeFrame(name)
+        local frame = makeFrame(name, opts.setFontResult)
         env.__frames[#env.__frames + 1] = frame
         if name then
             env[name] = frame
-            env[name .. "Text"] = env[name .. "Text"] or makeFrame(name .. "Text")
-            env[name .. "Low"] = env[name .. "Low"] or makeFrame(name .. "Low")
-            env[name .. "High"] = env[name .. "High"] or makeFrame(name .. "High")
-            env[name .. "Button"] = env[name .. "Button"] or makeFrame(name .. "Button")
+            env[name .. "Text"] = env[name .. "Text"] or makeFrame(name .. "Text", opts.setFontResult)
+            env[name .. "Low"] = env[name .. "Low"] or makeFrame(name .. "Low", opts.setFontResult)
+            env[name .. "High"] = env[name .. "High"] or makeFrame(name .. "High", opts.setFontResult)
+            env[name .. "Button"] = env[name .. "Button"] or makeFrame(name .. "Button", opts.setFontResult)
             frame.Button = env[name .. "Button"]
         end
         return frame
@@ -3482,14 +3491,163 @@ eq("fonts.known_glyph_support.cyr", test.fontSupports("Fonts\\ARIALN.TTF", "Cyri
 eq("fonts.known_glyph_support.cjk", test.fontSupports("Fonts\\ARKai_T.ttf", "Hans"), true)
 eq("fonts.unknown_path_latin_only.latin", test.fontSupports("Interface\\AddOns\\Media\\Mystery.ttf", "Latin"), true)
 eq("fonts.unknown_path_latin_only.hangul", test.fontSupports("Interface\\AddOns\\Media\\Mystery.ttf", "Hangul"), false)
+eq("fonts.uncataloged_path_is_not_usable", test.usableFontPath("Interface\\AddOns\\Media\\Mystery.ttf"), nil)
+
+do
+    local dangling = "B – C"
+    local danglingCalls = 0
+    local coldEnv, _, coldTest = loadStatsPro("enUS", {
+        statsProDB = {
+            dbVersion = test.currentDBVersion(),
+            font = dangling,
+            fontBeforeAutoSwitch = dangling,
+        },
+        setFontResult = function(_, font)
+            if font == dangling then
+                danglingCalls = danglingCalls + 1
+                error("dangling saved font must never reach SetFont")
+            end
+            return true
+        end,
+    })
+    eq("fonts.dangling_saved_path.cold_load_never_attempts_asset", danglingCalls, 0)
+    fireEvent("fonts.dangling_saved_path.pew", coldEnv, "PLAYER_ENTERING_WORLD")
+    eq("fonts.dangling_saved_path.pew_never_attempts_asset", danglingCalls, 0)
+    eq("fonts.dangling_saved_path.repairs_db", coldEnv.StatsProDB.font, "Fonts\\FRIZQT__.TTF")
+    eq("fonts.dangling_saved_path.clears_restore_path", coldEnv.StatsProDB.fontBeforeAutoSwitch, nil)
+    local state = coldTest.panelFontState()
+    eq("fonts.dangling_saved_path.main_panel_uses_fallback", state.mainAppliedFont, "Fonts\\FRIZQT__.TTF")
+    eq("fonts.dangling_saved_path.side_panel_uses_fallback", state.sideAppliedFont, "Fonts\\FRIZQT__.TTF")
+
+    local ruEnv, _, ruTest = loadStatsPro("enUS", {
+        statsProDB = {
+            dbVersion = test.currentDBVersion(),
+            font = dangling,
+            forceLocale = "ruRU",
+        },
+        setFontResult = function(_, font)
+            if font == dangling then error("dangling saved font must never reach SetFont") end
+            return true
+        end,
+    })
+    fireEvent("fonts.dangling_saved_path.ru_fallback.pew", ruEnv, "PLAYER_ENTERING_WORLD")
+    eq("fonts.dangling_saved_path.ru_fallback.db", ruEnv.StatsProDB.font, "Fonts\\ARIALN.TTF")
+    eq("fonts.dangling_saved_path.ru_fallback.panel", ruTest.panelFontState().mainAppliedFont, "Fonts\\ARIALN.TTF")
+end
+
+do
+    local secretPath = "Interface\\AddOns\\SecretMedia\\Secret.ttf"
+    local secretSetFontCalls = 0
+    local secretEnv = loadStatsPro("enUS", {
+        statsProDB = {
+            dbVersion = test.currentDBVersion(),
+            font = secretPath,
+            fontBeforeAutoSwitch = secretPath,
+        },
+        issecretvalue = function(value) return value == secretPath end,
+        setFontResult = function(_, font)
+            if font == secretPath then secretSetFontCalls = secretSetFontCalls + 1 end
+            return true
+        end,
+    })
+    fireEvent("fonts.secret_saved_path.pew", secretEnv, "PLAYER_ENTERING_WORLD")
+    eq("fonts.secret_saved_path.never_reaches_set_font", secretSetFontCalls, 0)
+    eq("fonts.secret_saved_path.repairs_font", secretEnv.StatsProDB.font, "Fonts\\FRIZQT__.TTF")
+    eq("fonts.secret_saved_path.clears_saved_font", secretEnv.StatsProDB.fontBeforeAutoSwitch, nil)
+
+    local futureSecretDB = {
+        dbVersion = test.currentDBVersion() + 1,
+        font = secretPath,
+        fontBeforeAutoSwitch = secretPath,
+        fontSize = 14,
+        forceLocale = "auto",
+        textOutlineStyle = "outline",
+    }
+    local futureSecretEnv = loadStatsPro("enUS", {
+        statsProDB = futureSecretDB,
+        issecretvalue = function(value) return value == secretPath end,
+    })
+    fireEvent("fonts.secret_saved_path.future_pew", futureSecretEnv, "PLAYER_ENTERING_WORLD")
+    clearPrints(futureSecretEnv)
+    slash("fonts.secret_saved_path.future_debug", futureSecretEnv, "debug")
+    eq("fonts.secret_saved_path.future_debug_redacts_saved",
+        printContains(futureSecretEnv, "saved=<unavailable>"), true)
+    eq("fonts.secret_saved_path.future_debug_preserves_db", futureSecretDB.fontBeforeAutoSwitch, secretPath)
+end
+
+do
+    local missingDefault = "Fonts\\Missing.ttf"
+    local defaultEnv, _, defaultTest = loadStatsPro("enUS", {
+        standardTextFont = missingDefault,
+        setFontResult = function(_, font)
+            if font == missingDefault then return false end
+            return true
+        end,
+    })
+    fireEvent("fonts.invalid_standard_text_font.pew", defaultEnv, "PLAYER_ENTERING_WORLD")
+    eq("fonts.invalid_standard_text_font.safe_default", defaultTest.safeDefaultFontPath(), "Fonts\\FRIZQT__.TTF")
+    eq("fonts.invalid_standard_text_font.repairs_db", defaultEnv.StatsProDB.font, "Fonts\\FRIZQT__.TTF")
+    eq("fonts.invalid_standard_text_font.panel_font", defaultTest.panelFontState().mainAppliedFont, "Fonts\\FRIZQT__.TTF")
+end
+
+do
+    local futureDB = {
+        dbVersion = test.currentDBVersion() + 1,
+        font = "Fonts\\FRIZQT__.TTF",
+        fontBeforeAutoSwitch = "B – C",
+        fontSize = 14,
+        forceLocale = "ruRU",
+        textOutlineStyle = "outline",
+    }
+    local futureEnv, _, futureTest = loadStatsPro("enUS", { statsProDB = futureDB })
+    fireEvent("fonts.future_schema_locale_runtime_fallback.pew", futureEnv, "PLAYER_ENTERING_WORLD")
+    eq("fonts.future_schema_locale_runtime_fallback.db_font_unchanged", futureDB.font, "Fonts\\FRIZQT__.TTF")
+    eq("fonts.future_schema_locale_runtime_fallback.saved_font_unchanged", futureDB.fontBeforeAutoSwitch, "B – C")
+    eq("fonts.future_schema_locale_runtime_fallback.panel_uses_cyrillic_font",
+        futureTest.panelFontState().mainAppliedFont, "Fonts\\ARIALN.TTF")
+end
+
+do
+    local brokenSaved = "Interface\\AddOns\\BrokenMedia\\Broken.ttf"
+    local brokenCalls = 0
+    local savedEnv = loadStatsPro("enUS", {
+        statsProDB = {
+            dbVersion = test.currentDBVersion(),
+            font = "Fonts\\FRIZQT__.TTF",
+            fontBeforeAutoSwitch = brokenSaved,
+        },
+        lsmFonts = { { name = "Broken Saved", path = brokenSaved } },
+        setFontResult = function(_, font)
+            if font == brokenSaved then
+                brokenCalls = brokenCalls + 1
+                return false
+            end
+            return true
+        end,
+    })
+    fireEvent("fonts.cataloged_but_unloadable_saved_path.pew", savedEnv, "PLAYER_ENTERING_WORLD")
+    eq("fonts.cataloged_but_unloadable_saved_path.probed_once", brokenCalls, 1)
+    eq("fonts.cataloged_but_unloadable_saved_path.cleared", savedEnv.StatsProDB.fontBeforeAutoSwitch, nil)
+end
 
 do
     local cjkFontPath = "Interface\\AddOns\\SharedMedia\\Fonts\\NotoSansCJK-Regular.otf"
+    local brokenFontPath = "Interface\\AddOns\\SharedMedia\\Fonts\\Missing.ttf"
+    local brokenFontCalls = 0
     local lsmEnv, lsmAddon, lsmTest = loadStatsPro("enUS", {
         lsmFonts = {
             { name = "Latin Decorative", path = "Interface\\AddOns\\SharedMedia\\Fonts\\Decorative.ttf" },
             { name = "Noto Sans CJK", path = cjkFontPath },
+            { name = "Broken Registration", path = brokenFontPath },
         },
+        lsmGlobalFontPath = "Fonts\\FRIZQT__.TTF",
+        setFontResult = function(_, font)
+            if font == brokenFontPath then
+                brokenFontCalls = brokenFontCalls + 1
+                return false
+            end
+            return true
+        end,
     })
     eq("fonts.lsm_pattern_font_supports_hans", lsmTest.fontSupports(cjkFontPath, "Hans"), true)
     eq("fonts.lsm_find_compatible_font_scans_lsm", lsmTest.findCompatibleFont("Fonts\\FRIZQT__.TTF", "Hans"), cjkFontPath)
@@ -3502,10 +3660,13 @@ do
     check("fonts.lsm_picker_open_constructs_config", ok, err)
     runScript("fonts.lsm_picker_open", lsmEnv.StatsProFontDropdownButton, "OnClick", lsmEnv.StatsProFontDropdownButton)
     eq("fonts.lsm_picker_includes_registered_name", countFrameField(lsmEnv, "fontName", "Noto Sans CJK"), 1)
+    eq("fonts.lsm_picker_filters_unloadable_registration", countFrameField(lsmEnv, "fontName", "Broken Registration"), 0)
+    eq("fonts.lsm_picker_probes_unloadable_registration_once", brokenFontCalls, 1)
     local lsmFontButton = findFrame("fonts.lsm_picker_registered_button", lsmEnv, function(frame)
         return frame.fontName == "Noto Sans CJK"
     end)
     eq("fonts.lsm_picker_button_carries_path", lsmFontButton.fontPath, cjkFontPath)
+    eq("fonts.lsm_picker_ignores_global_fetch_override", lsmFontButton.fontPath, cjkFontPath)
     callScript("fonts.lsm_picker_click_commits_path", lsmFontButton, "OnClick")
     eq("fonts.lsm_picker_click_writes_db_font", lsmEnv.StatsProDB.font, cjkFontPath)
 
@@ -3517,6 +3678,296 @@ do
     })
     fireEvent("fonts.lsm_locale_auto_switch.fire", autoEnv, "PLAYER_ENTERING_WORLD")
     eq("fonts.lsm_locale_auto_switch.font", autoEnv.StatsProDB.font, cjkFontPath)
+end
+
+do
+    local outlineFallbackPath = "Interface\\AddOns\\SharedMedia\\Fonts\\NoOutline.ttf"
+    local setFontCalls = 0
+    local fallbackEnv, _, fallbackTest = loadStatsPro("enUS", {
+        lsmFonts = { { name = "No Outline", path = outlineFallbackPath } },
+        setFontResult = function(_, _, _, flags)
+            setFontCalls = setFontCalls + 1
+            if flags ~= nil then return false end
+            return true
+        end,
+    })
+    fireEvent("fonts.unsupported_flags_fall_back_to_base.pew", fallbackEnv, "PLAYER_ENTERING_WORLD")
+    local applied, effectiveFont = fallbackTest.applyCommittedTextStyle(outlineFallbackPath, 14, true, false)
+    eq("fonts.unsupported_flags_fall_back_to_base.applied", applied, true)
+    eq("fonts.unsupported_flags_fall_back_to_base.effective_font", effectiveFont, outlineFallbackPath)
+    eq("fonts.unsupported_flags_fall_back_to_base.db_font", fallbackEnv.StatsProDB.font, outlineFallbackPath)
+    local state = fallbackTest.panelFontState()
+    eq("fonts.unsupported_flags_fall_back_to_base.main_outline_preference", state.mainAppliedTextOutlineStyle, "outline")
+    eq("fonts.unsupported_flags_fall_back_to_base.side_outline_preference", state.sideAppliedTextOutlineStyle, "outline")
+    for _, key in ipairs({
+        "mainAppliedFontFlags", "mainLabelFlags", "mainRatingFlags", "mainValueFlags",
+        "mainRepairFlags", "mainRepairLabelFlags", "sideAppliedFontFlags", "sideLabelFlags",
+        "sideRatingFlags", "sideValueFlags", "sideRepairFlags", "sideRepairLabelFlags",
+    }) do
+        eq("fonts.unsupported_flags_fall_back_to_base." .. key, state[key], nil)
+    end
+    local callsBeforeRepeat = setFontCalls
+    applied = fallbackTest.applyCommittedTextStyle(outlineFallbackPath, 14, false, false)
+    eq("fonts.unsupported_flags_fall_back_to_base.repeat_applied", applied, true)
+    eq("fonts.unsupported_flags_fall_back_to_base.repeat_is_idempotent", setFontCalls, callsBeforeRepeat)
+end
+
+do
+    local falsePath = "Interface\\AddOns\\SharedMedia\\Fonts\\FalseAtApply.ttf"
+    local errorPath = "Interface\\AddOns\\SharedMedia\\Fonts\\ErrorAtApply.ttf"
+    local failureMode = "pass"
+    local rollbackEnv, _, rollbackTest = loadStatsPro("enUS", {
+        statsProDB = { fontBeforeAutoSwitch = "Fonts\\ARIALN.TTF" },
+        lsmFonts = {
+            { name = "False At Apply", path = falsePath },
+            { name = "Error At Apply", path = errorPath },
+        },
+        setFontResult = function(_, font)
+            if font == falsePath and failureMode == "false" then return false end
+            if font == errorPath and failureMode == "error" then error("synthetic SetFont error") end
+            return true
+        end,
+    })
+    fireEvent("fonts.failed_apply_rolls_back.pew", rollbackEnv, "PLAYER_ENTERING_WORLD")
+    rollbackEnv.StatsProDB.fontBeforeAutoSwitch = "Fonts\\ARIALN.TTF"
+    local stateKeys = {
+        "mainAppliedFont", "mainAppliedSize", "mainAppliedTextOutlineStyle", "mainAppliedFontFlags",
+        "mainLabelFont", "mainLabelSize", "mainLabelFlags", "mainRatingFont", "mainRatingFlags",
+        "mainValueFont", "mainValueFlags", "mainRepairFont", "mainRepairFlags",
+        "mainRepairLabelFont", "mainRepairLabelFlags", "sideAppliedFont", "sideAppliedSize",
+        "sideAppliedTextOutlineStyle", "sideAppliedFontFlags", "sideLabelFont", "sideLabelSize",
+        "sideLabelFlags", "sideRatingFont", "sideRatingFlags", "sideValueFont", "sideValueFlags",
+        "sideRepairFont", "sideRepairFlags", "sideRepairLabelFont", "sideRepairLabelFlags",
+    }
+    local function assertPanelState(name, actual, expected)
+        for _, key in ipairs(stateKeys) do eq(name .. "." .. key, actual[key], expected[key]) end
+    end
+
+    eq("fonts.failed_apply_rolls_back.false_path_preprobe", rollbackTest.usableFontPath(falsePath), falsePath)
+    local baseline = rollbackTest.panelFontState()
+    local baselineDBFont = rollbackEnv.StatsProDB.font
+    failureMode = "false"
+    local applied = rollbackTest.applyCommittedTextStyle(falsePath, 14, true, false)
+    eq("fonts.failed_apply_rolls_back.false_result", applied, false)
+    eq("fonts.failed_apply_rolls_back.false_db_font", rollbackEnv.StatsProDB.font, baselineDBFont)
+    eq("fonts.failed_apply_rolls_back.false_saved_font", rollbackEnv.StatsProDB.fontBeforeAutoSwitch, "Fonts\\ARIALN.TTF")
+    assertPanelState("fonts.failed_apply_rolls_back.false_state", rollbackTest.panelFontState(), baseline)
+
+    failureMode = "pass"
+    eq("fonts.failed_apply_rolls_back.error_path_preprobe", rollbackTest.usableFontPath(errorPath), errorPath)
+    failureMode = "error"
+    applied = rollbackTest.applyCommittedTextStyle(errorPath, 14, true, false)
+    eq("fonts.failed_apply_rolls_back.error_result", applied, false)
+    eq("fonts.failed_apply_rolls_back.error_db_font", rollbackEnv.StatsProDB.font, baselineDBFont)
+    eq("fonts.failed_apply_rolls_back.error_saved_font", rollbackEnv.StatsProDB.fontBeforeAutoSwitch, "Fonts\\ARIALN.TTF")
+    assertPanelState("fonts.failed_apply_rolls_back.error_state", rollbackTest.panelFontState(), baseline)
+end
+
+do
+    local configTarget = "Interface\\AddOns\\SharedMedia\\Fonts\\ConfigTarget.ttf"
+    local pickerTarget = "Interface\\AddOns\\SharedMedia\\Fonts\\PickerTarget.ttf"
+    local mode = "pass"
+    local defaultFontCalls = 0
+    local configEnv, configAddon, configTest = loadStatsPro("enUS", {
+        lsmFonts = {
+            { name = "Config Target", path = configTarget },
+            { name = "Picker Target", path = pickerTarget },
+        },
+        setFontResult = function(frame, font, _, flags)
+            if font == configTarget and mode == "config-false" then return false end
+            if font == pickerTarget and mode == "picker-false" then return false end
+            if font == pickerTarget and mode == "picker-error" then error("synthetic config SetFont error") end
+            if font == "Fonts\\ARIALN.TTF" and mode == "arial-false" then return false end
+            if flags ~= nil then return false end
+            if font == "Fonts\\FRIZQT__.TTF" then defaultFontCalls = defaultFontCalls + 1 end
+            frame.text = ""  -- emulate Blizzard SetFont clearing an existing FontString
+            return true
+        end,
+    })
+    fireEvent("fonts.config_registry.pew", configEnv, "PLAYER_ENTERING_WORLD")
+    local ok, err = pcall(function() configAddon:OpenConfigMenu() end)
+    check("fonts.config_registry.open", ok, err)
+    local before = configTest.configFontState()
+    check("fonts.config_registry.has_entries", #before.entries > 10, "expected populated config font registry")
+
+    local applied, effective = configTest.applyConfigFont(configTarget, true)
+    eq("fonts.config_registry.flag_fallback_applies", applied, true)
+    eq("fonts.config_registry.flag_fallback_effective", effective, configTarget)
+    local after = configTest.configFontState()
+    eq("fonts.config_registry.flag_fallback_current", after.currentFont, configTarget)
+    eq("fonts.config_registry.flag_fallback_count", #after.entries, #before.entries)
+    for i, entry in ipairs(after.entries) do
+        eq("fonts.config_registry.flag_fallback.applied_font." .. i, entry.appliedFont, configTarget)
+        eq("fonts.config_registry.flag_fallback.actual_font." .. i, entry.actualFont, configTarget)
+        eq("fonts.config_registry.flag_fallback.applied_flags." .. i, entry.appliedFlags, nil)
+        eq("fonts.config_registry.flag_fallback.actual_flags." .. i, entry.actualFlags, nil)
+        eq("fonts.config_registry.flag_fallback.text_preserved." .. i, entry.actualText, before.entries[i].actualText)
+    end
+
+    applied = configTest.applyConfigFont("Fonts\\FRIZQT__.TTF", true)
+    eq("fonts.config_registry.restore_default", applied, true)
+    local defaultState = configTest.configFontState()
+    mode = "config-false"
+    applied = configTest.applyConfigFont(configTarget, true)
+    eq("fonts.config_registry.false_rolls_back", applied, false)
+    local falseState = configTest.configFontState()
+    eq("fonts.config_registry.false_current_unchanged", falseState.currentFont, defaultState.currentFont)
+    for i, entry in ipairs(falseState.entries) do
+        eq("fonts.config_registry.false.applied_font." .. i, entry.appliedFont, defaultState.entries[i].appliedFont)
+        eq("fonts.config_registry.false.actual_font." .. i, entry.actualFont, defaultState.entries[i].actualFont)
+        eq("fonts.config_registry.false.actual_text." .. i, entry.actualText, defaultState.entries[i].actualText)
+    end
+
+    mode = "pass"
+    applied = configTest.applyConfigFont(pickerTarget, true)
+    eq("fonts.config_registry.error_preapply", applied, true)
+    applied = configTest.applyConfigFont("Fonts\\FRIZQT__.TTF", true)
+    eq("fonts.config_registry.error_restore_default", applied, true)
+    local beforeError = configTest.configFontState()
+    mode = "picker-error"
+    applied = configTest.applyConfigFont(pickerTarget, true)
+    eq("fonts.config_registry.error_rolls_back", applied, false)
+    local errorState = configTest.configFontState()
+    eq("fonts.config_registry.error_current_unchanged", errorState.currentFont, beforeError.currentFont)
+    for i, entry in ipairs(errorState.entries) do
+        eq("fonts.config_registry.error.applied_font." .. i, entry.appliedFont, beforeError.entries[i].appliedFont)
+        eq("fonts.config_registry.error.actual_font." .. i, entry.actualFont, beforeError.entries[i].actualFont)
+        eq("fonts.config_registry.error.actual_text." .. i, entry.actualText, beforeError.entries[i].actualText)
+    end
+
+    mode = "pass"
+    eq("fonts.language_preview_failed_swap.preprobe_arial",
+        configTest.usableFontPath("Fonts\\ARIALN.TTF"), "Fonts\\ARIALN.TTF")
+    runDropdownInit("fonts.language_preview_failed_swap.language_init", configEnv.StatsProLanguageDropdown)
+    configEnv.DropDownList1Button1.value = "ruRU"
+    configEnv.UIDROPDOWNMENU_OPEN_MENU = configEnv.StatsProLanguageDropdown
+    configEnv.DropDownList1:Hide()
+    configEnv.DropDownList1:Show()
+    local ruEnter = exists("fonts.language_preview_failed_swap.ru_hook",
+        configEnv.DropDownList1Button1.hooks.OnEnter and configEnv.DropDownList1Button1.hooks.OnEnter[1])
+    local panelBeforePreview = configTest.panelFontState()
+    mode = "arial-false"
+    ok, err = pcall(ruEnter, configEnv.DropDownList1Button1)
+    check("fonts.language_preview_failed_swap.hover", ok, err)
+    local panelAfterPreview = configTest.panelFontState()
+    eq("fonts.language_preview_failed_swap.main_unchanged", panelAfterPreview.mainAppliedFont, panelBeforePreview.mainAppliedFont)
+    eq("fonts.language_preview_failed_swap.side_unchanged", panelAfterPreview.sideAppliedFont, panelBeforePreview.sideAppliedFont)
+    local callsAfterFailedPreview = defaultFontCalls
+    configEnv.DropDownList1:Hide()
+    configEnv.UIDROPDOWNMENU_OPEN_MENU = nil
+    eq("fonts.language_preview_failed_swap.cancel_skips_false_restore", defaultFontCalls, callsAfterFailedPreview)
+
+    mode = "pass"
+    local beforeLazyPicker = configTest.configFontState()
+    runScript("fonts.picker_failed_commit.open", configEnv.StatsProFontDropdownButton, "OnClick",
+        configEnv.StatsProFontDropdownButton)
+    local afterLazyPicker = configTest.configFontState()
+    for i, entry in ipairs(beforeLazyPicker.entries) do
+        eq("fonts.picker_lazy_registry.preserves_existing_text." .. i,
+            afterLazyPicker.entries[i].actualText, entry.actualText)
+    end
+    local pickerButton = findFrame("fonts.picker_failed_commit.button", configEnv, function(frame)
+        return frame.fontName == "Picker Target"
+    end)
+    local baselineDBFont = configEnv.StatsProDB.font
+    configEnv.StatsProDB.fontBeforeAutoSwitch = "Fonts\\ARIALN.TTF"
+    local baselineCaption = configEnv.StatsProFontDropdown.dropdownText
+    local baselinePanel = configTest.panelFontState()
+    mode = "picker-false"
+    callScript("fonts.picker_failed_commit.hover", pickerButton, "OnEnter")
+    callScript("fonts.picker_failed_commit.click", pickerButton, "OnClick")
+    eq("fonts.picker_failed_commit.db_unchanged", configEnv.StatsProDB.font, baselineDBFont)
+    eq("fonts.picker_failed_commit.saved_font_unchanged", configEnv.StatsProDB.fontBeforeAutoSwitch, "Fonts\\ARIALN.TTF")
+    eq("fonts.picker_failed_commit.caption_unchanged", configEnv.StatsProFontDropdown.dropdownText, baselineCaption)
+    local afterFailedPick = configTest.panelFontState()
+    eq("fonts.picker_failed_commit.main_unchanged", afterFailedPick.mainAppliedFont, baselinePanel.mainAppliedFont)
+    eq("fonts.picker_failed_commit.side_unchanged", afterFailedPick.sideAppliedFont, baselinePanel.sideAppliedFont)
+end
+
+do
+    local failAll = false
+    local settingsEnv, settingsAddon, settingsTest = loadStatsPro("enUS", {
+        setFontResult = function()
+            if failAll then return false end
+            return true
+        end,
+    })
+    fireEvent("fonts.settings_failure_rollback.pew", settingsEnv, "PLAYER_ENTERING_WORLD")
+    local ok, err = pcall(function() settingsAddon:OpenConfigMenu() end)
+    check("fonts.settings_failure_rollback.open", ok, err)
+    local baseline = settingsTest.panelFontState()
+    local baselineCaption = settingsEnv.StatsProFontDropdown.dropdownText
+    failAll = true
+    selectDropdownValue("fonts.settings_failure_rollback.outline", settingsEnv.StatsProTextOutlineDropdown, "thick")
+    eq("fonts.settings_failure_rollback.outline_db", settingsEnv.StatsProDB.textOutlineStyle, "outline")
+    eq("fonts.settings_failure_rollback.outline_caption", settingsEnv.StatsProTextOutlineDropdown.dropdownText, "Outline")
+    eq("fonts.settings_failure_rollback.font_caption", settingsEnv.StatsProFontDropdown.dropdownText, baselineCaption)
+    changeSlider("fonts.settings_failure_rollback.font_size", settingsEnv.StatsProFontSlider, 18)
+    eq("fonts.settings_failure_rollback.font_size_db", settingsEnv.StatsProDB.fontSize, 14)
+    eq("fonts.settings_failure_rollback.font_size_slider", settingsEnv.StatsProFontSlider:GetValue(), 14)
+    eq("fonts.settings_failure_rollback.font_size_label", settingsEnv.StatsProFontSliderText:GetText(), "14")
+    local after = settingsTest.panelFontState()
+    eq("fonts.settings_failure_rollback.main_font", after.mainAppliedFont, baseline.mainAppliedFont)
+    eq("fonts.settings_failure_rollback.main_size", after.mainAppliedSize, baseline.mainAppliedSize)
+    eq("fonts.settings_failure_rollback.main_outline", after.mainAppliedTextOutlineStyle, baseline.mainAppliedTextOutlineStyle)
+    eq("fonts.settings_failure_rollback.side_font", after.sideAppliedFont, baseline.sideAppliedFont)
+    eq("fonts.settings_failure_rollback.side_size", after.sideAppliedSize, baseline.sideAppliedSize)
+    eq("fonts.settings_failure_rollback.side_outline", after.sideAppliedTextOutlineStyle, baseline.sideAppliedTextOutlineStyle)
+end
+
+do
+    local stalePath = "Interface\\AddOns\\SharedMedia\\Fonts\\StaleAfterLoad.ttf"
+    local staleNow = false
+    local staleEnv, staleAddon, staleTest = loadStatsPro("enUS", {
+        statsProDB = { font = stalePath },
+        lsmFonts = { { name = "Stale After Load", path = stalePath } },
+        setFontResult = function(_, font)
+            if font == stalePath and staleNow then return false end
+            return true
+        end,
+    })
+    fireEvent("fonts.runtime_failure_fallback_caption.pew", staleEnv, "PLAYER_ENTERING_WORLD")
+    local ok, err = pcall(function() staleAddon:OpenConfigMenu() end)
+    check("fonts.runtime_failure_fallback_caption.open", ok, err)
+    eq("fonts.runtime_failure_fallback_caption.initial_caption",
+        staleEnv.StatsProFontDropdown.dropdownText, "Stale After Load")
+    staleNow = true
+    changeSlider("fonts.runtime_failure_fallback_caption.font_size", staleEnv.StatsProFontSlider, 18)
+    eq("fonts.runtime_failure_fallback_caption.db_font", staleEnv.StatsProDB.font, "Fonts\\FRIZQT__.TTF")
+    eq("fonts.runtime_failure_fallback_caption.db_size", staleEnv.StatsProDB.fontSize, 18)
+    eq("fonts.runtime_failure_fallback_caption.runtime_font",
+        staleTest.currentRuntimeFontPath(), "Fonts\\FRIZQT__.TTF")
+    eq("fonts.runtime_failure_fallback_caption.panel_font",
+        staleTest.panelFontState().mainAppliedFont, "Fonts\\FRIZQT__.TTF")
+    eq("fonts.runtime_failure_fallback_caption.caption",
+        staleEnv.StatsProFontDropdown.dropdownText, "Friz Quadrata TT")
+end
+
+do
+    local futureDB = {
+        dbVersion = test.currentDBVersion() + 1,
+        font = "Fonts\\FRIZQT__.TTF",
+        fontSize = 14,
+        forceLocale = "ruRU",
+        textOutlineStyle = "outline",
+    }
+    local futureEnv, futureAddon, futureTest = loadStatsPro("enUS", { statsProDB = futureDB })
+    fireEvent("fonts.future_schema_picker_baseline.pew", futureEnv, "PLAYER_ENTERING_WORLD")
+    local ok, err = pcall(function() futureAddon:OpenConfigMenu() end)
+    check("fonts.future_schema_picker_baseline.open_config", ok, err)
+    runScript("fonts.future_schema_picker_baseline.open_picker", futureEnv.StatsProFontDropdownButton, "OnClick",
+        futureEnv.StatsProFontDropdownButton)
+    local frizButton = findFrame("fonts.future_schema_picker_baseline.friz_button", futureEnv, function(frame)
+        return frame.fontName == "Friz Quadrata TT"
+    end)
+    callScript("fonts.future_schema_picker_baseline.refuses_commit", frizButton, "OnClick")
+    eq("fonts.future_schema_picker_baseline.db_unchanged", futureDB.font, "Fonts\\FRIZQT__.TTF")
+    eq("fonts.future_schema_picker_baseline.runtime_preserved",
+        futureTest.currentRuntimeFontPath(), "Fonts\\ARIALN.TTF")
+    eq("fonts.future_schema_picker_baseline.panel_preserved",
+        futureTest.panelFontState().mainAppliedFont, "Fonts\\ARIALN.TTF")
+    eq("fonts.future_schema_picker_baseline.caption_matches_runtime",
+        futureEnv.StatsProFontDropdown.dropdownText, "Arial Narrow")
 end
 
 do

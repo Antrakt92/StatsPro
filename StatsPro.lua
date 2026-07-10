@@ -3,6 +3,7 @@
 -- basic stat list are adapted from upstream; the rest is original work. See LICENSE
 -- for full attribution.
 local _, addon = ...
+addon.fontRuntime = {}
 
 --[[ ============================================================
     1. CONSTANTS
@@ -24,6 +25,10 @@ local ITEM_LEVEL_DANGER_COLOR = "ff3333"
 
 local GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL, GLYPH_HANS, GLYPH_HANT =
     "Latin", "Cyrillic", "Hangul", "Hans", "Hant"
+
+-- WHY early: font paths can come from SavedVariables or external media catalogs.
+-- Reject secret-tagged values before any path normalization or SetFont call.
+local issecretvalue = _G.issecretvalue or function() return false end
 
 -- WHY hybrid native+English labels for non-Latin: dropdown buttons render with the
 -- system font of the dropdown frame; on non-CJK clients the frame font lacks CJK
@@ -66,6 +71,8 @@ local LOCALE_GLYPH_REQ = {
 
 local function FontPathKey(fontPath)
     if type(fontPath) ~= "string" then return nil end
+    local ok, secret = pcall(issecretvalue, fontPath)
+    if not ok or secret then return nil end
     return (fontPath:gsub("/", "\\"):lower())
 end
 
@@ -219,9 +226,6 @@ end
 ============================================================ ]]
 -- LibSharedMedia-3.0 (soft dependency - gracefully falls back if not loaded)
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-
--- WHY: issecretvalue is 12.0+ retail; shim falsy on older clients so addon doesn't hard-error.
-local issecretvalue = _G.issecretvalue or function() return false end
 
 -- WHY hijack-guard: STANDARD_TEXT_FONT is a Blizzard global ANY addon can mutate
 -- (ChonkyCharacterSheet / Tukui / ElvUI font modules / other "system font replacement"
@@ -1505,16 +1509,16 @@ end
 
 local function GetFontDB()
     local db = EnsureStatsProDBTable()
-    if type(db.font) == "string" and db.font ~= "" then return db.font end
-    return defaults.font
+    local usable = addon.fontRuntime.usablePath and addon.fontRuntime.usablePath(db.font)
+    if usable then return usable end
+    if addon.fontRuntime.safeDefaultPath then return addon.fontRuntime.safeDefaultPath() end
+    return "Fonts\\FRIZQT__.TTF"
 end
 
 local function GetSavedAutoFontDB()
     local db = EnsureStatsProDBTable()
-    if type(db.fontBeforeAutoSwitch) == "string" and db.fontBeforeAutoSwitch ~= "" then
-        return db.fontBeforeAutoSwitch
-    end
-    return nil
+    if not addon.fontRuntime.usablePath then return nil end
+    return addon.fontRuntime.usablePath(db.fontBeforeAutoSwitch)
 end
 
 local function IsFiniteNumber(value)
@@ -1638,7 +1642,6 @@ function addon.readabilityConfig.getTextOutlineStyleDB()
 end
 
 local function FontSupports(fontPath, glyph)
-    if not fontPath then return glyph == GLYPH_LATIN end
     local key = FontPathKey(fontPath)
     if not key then return glyph == GLYPH_LATIN end
     local entry = FONT_GLYPH_SUPPORT[key]
@@ -1659,6 +1662,169 @@ local function FontSupports(fontPath, glyph)
         if g == glyph then return true end
     end
     return false
+end
+
+-- Font asset validity is separate from heuristic glyph coverage. LSM accepts
+-- arbitrary FONT data, and SavedVariables can retain paths after a media addon is
+-- removed, so only a successful real SetFont probe proves that a path is usable.
+addon.fontRuntime.probeFontString = UIParent:CreateFontString(nil, "OVERLAY")
+addon.fontRuntime.probeFontString:Hide()
+addon.fontRuntime.probeResults = {}
+
+function addon.fontRuntime.rawLSMPath(name)
+    if not LSM then return nil end
+    local mediaType = LSM.MediaType.FONT
+    if LSM.HashTable then
+        local paths = LSM:HashTable(mediaType)
+        return type(paths) == "table" and paths[name] or nil
+    end
+    return LSM:Fetch(mediaType, name)
+end
+
+function addon.fontRuntime.catalogEntry(fontPath)
+    local key = FontPathKey(fontPath)
+    if not key then return nil, nil end
+
+    local localeDefault = LocaleAwareDefaultFont()
+    if SameFontPath(fontPath, localeDefault) then return localeDefault, nil end
+    local clientLocale = GetLocale()
+    for _, entry in ipairs(BLIZZARD_SHIPPED_FONTS) do
+        if (not entry.locale or entry.locale == clientLocale) and SameFontPath(fontPath, entry.path) then
+            return entry.path, entry.name
+        end
+    end
+    if LSM then
+        for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
+            local path = addon.fontRuntime.rawLSMPath(name)
+            if SameFontPath(fontPath, path) then return path, name end
+        end
+    end
+    return nil, nil
+end
+
+function addon.fontRuntime.probe(fontPath, size, flags)
+    local key = FontPathKey(fontPath)
+    if not key then return false end
+    local cacheKey = key .. "\031" .. (flags or "") .. "\031" .. tostring(size)
+    local cachedResult = addon.fontRuntime.probeResults[cacheKey]
+    if cachedResult ~= nil then return cachedResult end
+    local ok, success = pcall(addon.fontRuntime.probeFontString.SetFont,
+        addon.fontRuntime.probeFontString, fontPath, size, flags)
+    local usable = ok and success == true
+    addon.fontRuntime.probeResults[cacheKey] = usable
+    return usable
+end
+
+function addon.fontRuntime.usableCatalogPath(fontPath)
+    if not FontPathKey(fontPath) then return nil end
+    if addon.fontRuntime.probe(fontPath, defaults.fontSize, nil) then return fontPath end
+    return nil
+end
+
+function addon.fontRuntime.usablePath(fontPath)
+    if not FontPathKey(fontPath) then return nil end
+    local catalogPath = addon.fontRuntime.catalogEntry(fontPath)
+    return catalogPath and addon.fontRuntime.usableCatalogPath(catalogPath) or nil
+end
+
+function addon.fontRuntime.safeDefaultPath()
+    local candidates = {
+        LocaleAwareDefaultFont(),
+        "Fonts\\FRIZQT__.TTF",
+        "Fonts\\ARIALN.TTF",
+    }
+    for _, entry in ipairs(BLIZZARD_SHIPPED_FONTS) do
+        if not entry.locale or entry.locale == GetLocale() then
+            candidates[#candidates + 1] = entry.path
+        end
+    end
+    for _, candidate in ipairs(candidates) do
+        local usable = addon.fontRuntime.usablePath(candidate)
+        if usable then return usable end
+    end
+    return "Fonts\\FRIZQT__.TTF"
+end
+
+function addon.fontRuntime.catalogName(fontPath)
+    if not FontPathKey(fontPath) then return "Font" end
+    local _, name = addon.fontRuntime.catalogEntry(fontPath)
+    if name then return name end
+    if SameFontPath(fontPath, LocaleAwareDefaultFont()) then
+        for _, entry in ipairs(BLIZZARD_SHIPPED_FONTS) do
+            if SameFontPath(fontPath, entry.path) then return entry.name end
+        end
+    end
+    return (type(fontPath) == "string" and string.match(fontPath, "[^\\/]+$")) or "Font"
+end
+
+local function FindCompatibleFont(currentFont, req)
+    local seen = {}
+    local function consider(path, knownCatalogEntry)
+        local usable = knownCatalogEntry
+            and addon.fontRuntime.usableCatalogPath(path)
+            or addon.fontRuntime.usablePath(path)
+        local key = FontPathKey(usable)
+        if not key or seen[key] then return nil end
+        seen[key] = true
+        if FontSupports(usable, req) then return usable end
+        return nil
+    end
+
+    local match = consider(currentFont)
+        or consider(LocaleAwareDefaultFont())
+        or consider("Fonts\\ARIALN.TTF")
+    if match then return match end
+    for _, entry in ipairs(BLIZZARD_SHIPPED_FONTS) do
+        if not entry.locale or entry.locale == GetLocale() then
+            match = consider(entry.path, true)
+            if match then return match end
+        end
+    end
+    if LSM then
+        for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
+            match = consider(addon.fontRuntime.rawLSMPath(name), true)
+            if match then return match end
+        end
+    end
+    return nil
+end
+
+function addon.fontRuntime.resolveUsableFlags(usable, size, requestedFlags)
+    if not FontPathKey(usable) then return nil, nil end
+    if requestedFlags and addon.fontRuntime.probe(usable, size, requestedFlags) then
+        return usable, requestedFlags
+    end
+    if addon.fontRuntime.probe(usable, size, nil) then return usable, nil end
+    return nil, nil
+end
+
+function addon.fontRuntime.resolveFlags(fontPath, size, requestedFlags)
+    local usable = addon.fontRuntime.usablePath(fontPath)
+    if not usable then return nil, nil end
+    return addon.fontRuntime.resolveUsableFlags(usable, size, requestedFlags)
+end
+
+function addon.fontRuntime.setRegionFont(region, fontPath, size, flags)
+    local ok, success = pcall(region.SetFont, region, fontPath, size, flags)
+    return ok and success == true
+end
+
+function addon.fontRuntime.applyExact(regions, fontPath, size, requestedFlags)
+    local resolvedFont, effectiveFlags = addon.fontRuntime.resolveFlags(fontPath, size, requestedFlags)
+    if not resolvedFont then return false end
+    for _, region in ipairs(regions) do
+        if not addon.fontRuntime.setRegionFont(region, resolvedFont, size, effectiveFlags) then
+            return false
+        end
+    end
+    return true, resolvedFont, effectiveFlags
+end
+
+function addon.fontRuntime.restore(regions, fontPath, size, flags)
+    if not fontPath then return end
+    for _, region in ipairs(regions) do
+        addon.fontRuntime.setRegionFont(region, fontPath, size, flags)
+    end
 end
 
 -- WHY identity-fast-path remains: cached.activeLabels for enUS IS the identity map
@@ -1927,9 +2093,9 @@ local function MigrateDB()
             db.colors[k] = { r = v.r, g = v.g, b = v.b }
         end
     end
-    if type(db.font) ~= "string" or db.font == "" then db.font = defaults.font end
-    if db.fontBeforeAutoSwitch ~= nil
-        and (type(db.fontBeforeAutoSwitch) ~= "string" or db.fontBeforeAutoSwitch == "") then
+    if not FontPathKey(db.font) then db.font = defaults.font end
+    if type(db.fontBeforeAutoSwitch) ~= "nil"
+        and not FontPathKey(db.fontBeforeAutoSwitch) then
         db.fontBeforeAutoSwitch = nil
     end
 
@@ -2199,13 +2365,15 @@ function Panel:New(globalName, dbKeyPrefix)
     -- CONSTANT visible gap from rating-end (or label-colon when no rating) to value
     -- text regardless of value length. Cost: values' right edges no longer align
     -- vertically. User chose tight constant gap over right-edge alignment.
-    local font = GetFontDB()
+    -- File-scope construction must never touch a saved custom path: the media addon
+    -- that registered it may not be loaded yet, and a dangling path can throw before
+    -- PLAYER_ENTERING_WORLD gets a chance to repair SavedVariables.
+    local font = addon.fontRuntime.safeDefaultPath()
     local fontSize = GetNumberDB("fontSize")
     local outlineStyle = addon.readabilityConfig.getTextOutlineStyleDB()
     local fontFlags = addon.readabilityConfig.textOutlineStyleToFontFlags(outlineStyle)
 
     local labelText = frame:CreateFontString(nil, "OVERLAY")
-    labelText:SetFont(font, fontSize, fontFlags)
     labelText:SetJustifyH("RIGHT")
     labelText:SetJustifyV("TOP")
     labelText:SetTextColor(1, 1, 1, 1)
@@ -2217,7 +2385,6 @@ function Panel:New(globalName, dbKeyPrefix)
     -- column starts. Offset is recomputed each SetTextSafe once valueW is measured.
     -- Initial offset 0; first render repositions it.
     local ratingText = frame:CreateFontString(nil, "OVERLAY")
-    ratingText:SetFont(font, fontSize, fontFlags)
     ratingText:SetJustifyH("RIGHT")
     ratingText:SetJustifyV("TOP")
     ratingText:SetTextColor(1, 1, 1, 1)
@@ -2225,7 +2392,6 @@ function Panel:New(globalName, dbKeyPrefix)
     ratingText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
 
     local valueText = frame:CreateFontString(nil, "OVERLAY")
-    valueText:SetFont(font, fontSize, fontFlags)
     valueText:SetJustifyH("LEFT")
     valueText:SetJustifyV("TOP")
     valueText:SetTextColor(1, 1, 1, 1)
@@ -2243,7 +2409,6 @@ function Panel:New(globalName, dbKeyPrefix)
     -- icons inflate that line's height (`:14:14:2:0|t` yoffset=0 puts texture top above
     -- glyph top), causing cumulative drift vs labelText's pure-text rows.
     local repairText = frame:CreateFontString(nil, "OVERLAY")
-    repairText:SetFont(font, fontSize, fontFlags)
     repairText:SetJustifyH("RIGHT")
     repairText:SetTextColor(1, 1, 1, 1)
     repairText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)  -- y repositioned per render
@@ -2254,7 +2419,6 @@ function Panel:New(globalName, dbKeyPrefix)
     -- row sits on its own visual row below stats (visual separation), and so coin can't
     -- overlap stat-row content. Width set per-render = stats labelW for column alignment.
     local repairLabelText = frame:CreateFontString(nil, "OVERLAY")
-    repairLabelText:SetFont(font, fontSize, fontFlags)
     repairLabelText:SetJustifyH("RIGHT")  -- match labelText alignment
     repairLabelText:SetTextColor(1, 1, 1, 1)
     repairLabelText:Hide()  -- shown only when hasRepair
@@ -2297,14 +2461,13 @@ function Panel:New(globalName, dbKeyPrefix)
     panel.makeTooltipOverlay = makeTooltipOverlay
     panel.lastTargetRows = nil
     panel.backgroundTexture = backgroundTexture
-    -- WHY initialize from inline SetFont args above: Panel:ApplyStyle's idempotency check
-    -- (early-return when font+size match cache) would otherwise miss the very first PEW-time
-    -- apply when args happen to match the file-scope-inline SetFont calls — wasting 10
-    -- SetFont + 10 SetText per panel on every /reload. With this initialization, the
-    -- post-MaybeAutoSwitchFont apply at PEW becomes a no-op when MAS didn't swap.
-    panel.appliedFont = font
-    panel.appliedSize = fontSize
-    panel.appliedTextOutlineStyle = outlineStyle
+    local initialRegions = { labelText, ratingText, valueText, repairText, repairLabelText }
+    local fontApplied, appliedFont, appliedFlags = addon.fontRuntime.applyExact(
+        initialRegions, font, fontSize, fontFlags)
+    panel.appliedFont = fontApplied and appliedFont or nil
+    panel.appliedSize = fontApplied and fontSize or nil
+    panel.appliedTextOutlineStyle = fontApplied and outlineStyle or nil
+    panel.appliedFontFlags = fontApplied and appliedFlags or nil
 
     -- Drag handlers (unsecure frames; not protected in combat lockdown).
     -- RegisterForDrag honors WoW's system drag-distance threshold — single clicks
@@ -2743,42 +2906,51 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     self:ApplyTooltipRows(targetRows, lineCount)
 end
 
-function Panel:ApplyStyle(font, size, force)
+function Panel:FontRegions()
+    return { self.labelText, self.ratingText, self.valueText, self.repairText, self.repairLabelText }
+end
+
+function Panel:RestoreCachedText()
+    if self.lastLabelText then self.labelText:SetText(self.lastLabelText) end
+    if self.lastRatingText then self.ratingText:SetText(self.lastRatingText) end
+    if self.lastValueText then self.valueText:SetText(self.lastValueText) end
+    if self.lastRepairText and self.lastRepairText ~= "" then self.repairText:SetText(self.lastRepairText) end
+    if self.lastRepairLabelText and self.lastRepairLabelText ~= "" then
+        self.repairLabelText:SetText(self.lastRepairLabelText)
+    end
+end
+
+function Panel:ApplyStyle(font, size, force, requestedOutlineStyle)
     -- WHY idempotency: ApplyStyle is hot — fires from PEW (after MAS may have already
     -- applied), Reset, font/locale preview-cancel, lang commit's conditional restore,
     -- and the Font Size slider's OnValueChanged. Same-args calls cost 10 SetFont +
     -- 10 SetText + cache invalidations + a follow-up UpdateStats re-measure pass.
     -- Early return saves all of that whenever the panel is already at (font,size,outline).
-    local outlineStyle = cached.textOutlineStyle or addon.readabilityConfig.getTextOutlineStyleDB()
+    local outlineStyle = requestedOutlineStyle
+        or cached.textOutlineStyle
+        or addon.readabilityConfig.getTextOutlineStyleDB()
     if not force
         and SameFontPath(self.appliedFont, font)
         and self.appliedSize == size
-        and self.appliedTextOutlineStyle == outlineStyle then return end
+        and self.appliedTextOutlineStyle == outlineStyle then
+        return true, self.appliedFont, self.appliedTextOutlineStyle, self.appliedFontFlags
+    end
     local fontFlags = addon.readabilityConfig.textOutlineStyleToFontFlags(outlineStyle)
-    self.appliedFont = font
+    local oldFont, oldSize, oldFlags = self.appliedFont, self.appliedSize, self.appliedFontFlags
+    local regions = self:FontRegions()
+    local applied, effectiveFont, effectiveFlags = addon.fontRuntime.applyExact(
+        regions, font, size, fontFlags)
+    if not applied then
+        addon.fontRuntime.restore(regions, oldFont, oldSize, oldFlags)
+        self:RestoreCachedText()
+        return false
+    end
+    self.appliedFont = effectiveFont
     self.appliedSize = size
     self.appliedTextOutlineStyle = outlineStyle
-    self.labelText:SetFont(font, size, fontFlags)
-    self.ratingText:SetFont(font, size, fontFlags)
-    self.valueText:SetFont(font, size, fontFlags)
-    self.repairText:SetFont(font, size, fontFlags)
-    self.repairLabelText:SetFont(font, size, fontFlags)
+    self.appliedFontFlags = effectiveFlags
     -- WHY: Blizzard quirk - SetFont clears text; re-apply if we have one.
-    if self.lastLabelText then
-        self.labelText:SetText(self.lastLabelText)
-    end
-    if self.lastRatingText then
-        self.ratingText:SetText(self.lastRatingText)
-    end
-    if self.lastValueText then
-        self.valueText:SetText(self.lastValueText)
-    end
-    if self.lastRepairText and self.lastRepairText ~= "" then
-        self.repairText:SetText(self.lastRepairText)
-    end
-    if self.lastRepairLabelText and self.lastRepairLabelText ~= "" then
-        self.repairLabelText:SetText(self.lastRepairLabelText)
-    end
+    self:RestoreCachedText()
     -- Force re-measure on next SetTextSafe: cachedLabelH=nil drops the previous
     -- glyph-height read; heightDirty=true makes the height-gate fire even when
     -- lineCount + hasRepair are unchanged (the Reflow path always feeds the same
@@ -2788,6 +2960,7 @@ function Panel:ApplyStyle(font, size, force)
     self.cachedRatingH = nil
     self.cachedValueH = nil
     self.heightDirty = true
+    return true, effectiveFont, outlineStyle, effectiveFlags
 end
 
 -- WHY SetAlpha (region prop), not SetTextColor(r,g,b,a): color escape codes
@@ -2832,8 +3005,72 @@ local mainPanel      = Panel:New("StatsProFrame",          "")
 local defensivePanel = Panel:New("StatsProDefensiveFrame", "defensive_")
 
 local function ApplyTextStyleToAllPanels(font, size, force)
-    mainPanel:ApplyStyle(font, size, force)
-    defensivePanel:ApplyStyle(font, size, force)
+    local oldMainFont, oldMainSize, oldMainOutline =
+        mainPanel.appliedFont, mainPanel.appliedSize, mainPanel.appliedTextOutlineStyle
+    local applied, effectiveFont, effectiveOutline, effectiveFlags = mainPanel:ApplyStyle(font, size, force)
+    if not applied then return false end
+    local sideApplied = defensivePanel:ApplyStyle(effectiveFont, size, force, effectiveOutline)
+    if not sideApplied then
+        mainPanel:ApplyStyle(oldMainFont, oldMainSize, true, oldMainOutline)
+        return false
+    end
+    return true, effectiveFont, effectiveOutline, effectiveFlags
+end
+
+function addon.fontRuntime.applyCommittedTextStyle(font, size, force, allowFontFallback)
+    local applied, effectiveFont, effectiveOutline, effectiveFlags =
+        ApplyTextStyleToAllPanels(font, size, force)
+    if not applied and allowFontFallback ~= false then
+        local active = ResolveActiveLocale()
+        local req = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
+        local fallback = FindCompatibleFont(addon.fontRuntime.safeDefaultPath(), req)
+        if fallback and not SameFontPath(fallback, font) then
+            applied, effectiveFont, effectiveOutline, effectiveFlags =
+                ApplyTextStyleToAllPanels(fallback, size, true)
+        end
+    end
+    if not applied then return false end
+
+    addon.fontRuntime.committedFont = effectiveFont
+    local db = EnsureStatsProDBTable()
+    if NormalizeDBVersion(db.dbVersion) <= CURRENT_DB_VERSION then
+        db.font = effectiveFont
+    end
+    if addon.fontRuntime.refreshCaption then addon.fontRuntime.refreshCaption() end
+    return true, effectiveFont, effectiveOutline, effectiveFlags
+end
+
+function addon.fontRuntime.currentPath()
+    return addon.fontRuntime.committedFont or GetFontDB()
+end
+
+function addon.fontRuntime.repairSavedPaths()
+    local db = EnsureStatsProDBTable()
+    if NormalizeDBVersion(db.dbVersion) > CURRENT_DB_VERSION then return end
+
+    local current = addon.fontRuntime.usablePath(db.font)
+    if not current then
+        local active = ResolveActiveLocale()
+        local req = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
+        current = FindCompatibleFont(addon.fontRuntime.safeDefaultPath(), req)
+    end
+    if current then db.font = current end
+
+    if type(db.fontBeforeAutoSwitch) ~= "nil" then
+        db.fontBeforeAutoSwitch = addon.fontRuntime.usablePath(db.fontBeforeAutoSwitch)
+    end
+end
+
+function addon.fontRuntime.clearSavedAutoFont()
+    local db = EnsureStatsProDBTable()
+    if NormalizeDBVersion(db.dbVersion) <= CURRENT_DB_VERSION then
+        db.fontBeforeAutoSwitch = nil
+    end
+end
+
+function addon.fontRuntime.canMutateDB()
+    local db = EnsureStatsProDBTable()
+    return NormalizeDBVersion(db.dbVersion) <= CURRENT_DB_VERSION
 end
 
 function Panel:ApplyBackgroundAlpha(alpha)
@@ -2864,12 +3101,28 @@ end
 addon.readabilityConfig.getTextOutlineStyle = addon.readabilityConfig.getTextOutlineStyleDB
 
 addon.readabilityConfig.selectTextOutlineStyle = function(value, opt, dropdown)
-    StatsProDB.textOutlineStyle = addon.readabilityConfig.normalizeTextOutlineStyle(value)
+    local previous = addon.readabilityConfig.getTextOutlineStyleDB()
+    local selected = addon.readabilityConfig.normalizeTextOutlineStyle(value)
+    StatsProDB.textOutlineStyle = selected
     CacheSettings()
+    local applied = addon.fontRuntime.applyCommittedTextStyle(
+        addon.fontRuntime.currentPath(), GetNumberDB("fontSize"), false, true)
+    if not applied then
+        StatsProDB.textOutlineStyle = previous
+        CacheSettings()
+        for _, previousOpt in ipairs(addon.readabilityConfig.textOutlineOptions) do
+            if previousOpt.value == previous then
+                UIDropDownMenu_SetText(dropdown, L(previousOpt.label))
+                break
+            end
+        end
+        CloseDropDownMenus()
+        return false
+    end
     UIDropDownMenu_SetText(dropdown, L(opt.label))
     CloseDropDownMenus()
-    ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"))
     ReflowAllPanels()
+    return true
 end
 
 addon.readabilityConfig.changePanelBackgroundAlpha = function(value)
@@ -2901,8 +3154,9 @@ local ApplyConfigFont
 -- restore-path opportunistically and otherwise returns. Safe to call from PEW + every
 -- dropdown change without producing extra SetFont noise.
 --
--- Read-only resolver: returns a font path that supports `req` glyph for `currentFont`.
--- Pure function — no DB writes, no SetFont calls. Callsites:
+-- Read-only resolver: returns a loadable font path that supports `req` glyph for
+-- `currentFont`. It may use the hidden probe FontString, but never writes DB or HUD
+-- state. Callsites:
 --   1. MaybeAutoSwitchFont (commit path) — wraps with DB mutations + ApplyTextStyle.
 --   2. PreviewLanguage hover (Localization do-block) — visual-only preview, no DB writes.
 -- Returns currentFont if already compatible (caller can use this to detect "no swap needed").
@@ -2912,51 +3166,50 @@ local ApplyConfigFont
 --   1. LocaleAwareDefaultFont (Blizzard-shipped STANDARD_TEXT_FONT, hijack-guarded).
 --   2. ARIALN (Blizzard ships Latin+Cyrillic universally — saves cross-locale
 --      Russian users from needing an LSM addon for clean rendering).
---   3. LSM scan (catches CJK / installed Cyrillic fonts).
-local function FindCompatibleFont(currentFont, req)
-    if FontSupports(currentFont, req) then return currentFont end
-    local fallback = LocaleAwareDefaultFont()
-    if fallback and FontSupports(fallback, req) then return fallback end
-    if not SameFontPath(currentFont, "Fonts\\ARIALN.TTF") and FontSupports("Fonts\\ARIALN.TTF", req) then
-        return "Fonts\\ARIALN.TTF"
-    end
-    if LSM then
-        for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
-            local p = LSM:Fetch(LSM.MediaType.FONT, name)
-            if p and FontSupports(p, req) then return p end
-        end
-    end
-    return nil
-end
+--   3. Client-shipped/LSM scan (catches CJK / installed Cyrillic fonts).
 
 -- Caller must set StatsProDB.forceLocale + run CacheSettings BEFORE calling.
 local function MaybeAutoSwitchFont()
     local db = EnsureStatsProDBTable()
+    local canMutateDB = NormalizeDBVersion(db.dbVersion) <= CURRENT_DB_VERSION
     local active = ResolveActiveLocale()
     local req    = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
     local cur    = GetFontDB()
 
     if FontSupports(cur, req) then
         local saved = GetSavedAutoFontDB()
-        if db.fontBeforeAutoSwitch ~= nil and not saved then
+        if canMutateDB and type(db.fontBeforeAutoSwitch) ~= "nil" and not saved then
             db.fontBeforeAutoSwitch = nil
         end
         if saved and not SameFontPath(saved, cur) and FontSupports(saved, req) then
-            db.font = saved
-            db.fontBeforeAutoSwitch = nil
-            ApplyTextStyleToAllPanels(saved, GetNumberDB("fontSize"))
+            local applied, effectiveFont = addon.fontRuntime.applyCommittedTextStyle(
+                saved, GetNumberDB("fontSize"), false, false)
+            if applied then
+                cur = effectiveFont
+                if canMutateDB then db.fontBeforeAutoSwitch = nil end
+            end
+        end
+        if not SameFontPath(cur, addon.fontRuntime.currentPath()) then
+            local applied, effectiveFont = addon.fontRuntime.applyCommittedTextStyle(
+                cur, GetNumberDB("fontSize"), false, false)
+            if applied then cur = effectiveFont end
         end
         ApplyConfigFont(ResolveConfigFont(active))
-        return
+        return cur
     end
 
     local fallback = FindCompatibleFont(cur, req)
     if fallback and not SameFontPath(fallback, cur) then
-        db.fontBeforeAutoSwitch = GetSavedAutoFontDB() or cur
-        db.font = fallback
-        ApplyTextStyleToAllPanels(fallback, GetNumberDB("fontSize"))
+        local saved = GetSavedAutoFontDB() or cur
+        local applied, effectiveFont = addon.fontRuntime.applyCommittedTextStyle(
+            fallback, GetNumberDB("fontSize"), false, false)
+        if applied then
+            cur = effectiveFont
+            if canMutateDB then db.fontBeforeAutoSwitch = saved end
+        end
     end
     ApplyConfigFont(ResolveConfigFont(active))
+    return cur
 end
 
 local function LoadAllPositions()
@@ -3663,24 +3916,23 @@ local function OnPlayerEnteringWorld()
             end
         end
         MigrateDB()
+        addon.fontRuntime.repairSavedPaths()
         CacheSettings()
         if RefreshPersistentLocalization then RefreshPersistentLocalization() end
         -- WHY here: forceLocale is migrated + cached.activeLabels resolved; if active
         -- locale needs glyphs db.font lacks, auto-switch BEFORE the
         -- ApplyTextStyleToAllPanels call below so the FontStrings load with the
         -- correct font on the very first frame (no `?` boxes for one session).
-        MaybeAutoSwitchFont()
+        local runtimeFont = MaybeAutoSwitchFont()
         LoadAllPositions()
         SetAllPanelsLockState(GetBoolDB("isLocked"))
         SetAllPanelsScale(GetNumberDB("scale"))
-        -- WHY re-apply font/size at PEW: Panel:New creates FontStrings at file scope
-        -- with whatever GetFontDB() returns BEFORE MigrateDB runs. If the migration
-        -- changed db.font (e.g. v3→v4 hardcoded → STANDARD_TEXT_FONT auto-upgrade),
-        -- the FontStrings would still hold the pre-migration font for the entire
-        -- session until /reload. CJK users on the old default would see `?` boxes for
-        -- their localized labels for one whole session. Re-applying after MigrateDB
-        -- closes that window.
-        ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"))
+        -- Panel:New deliberately bootstraps with a verified client font and never
+        -- touches saved custom media at file scope. Apply the migrated/repaired
+        -- runtime choice only after every SavedVariable and media registration is
+        -- available; future-schema DBs keep that effective choice out of storage.
+        addon.fontRuntime.applyCommittedTextStyle(
+            runtimeFont or GetFontDB(), GetNumberDB("fontSize"), false, true)
         -- WHY re-apply textAlpha at PEW: Panel:New runs at file scope before CacheSettings,
         -- so cached.textAlpha is nil at FontString creation. This propagates the user's
         -- saved alpha to FontStrings on the first frame.
@@ -3778,19 +4030,78 @@ end
 -- ApplyConfigFont can re-apply with a glyph-compatible font on language change without
 -- a UI rebuild. Initial set uses currentConfigFont (locale-correct via PEW MaybeAutoSwitchFont).
 local function RegisterConfigFont(fs, size, flags)
-    fs:SetFont(currentConfigFont, size, flags)
-    tinsert(localizedConfigFonts, { fs = fs, size = size, flags = flags })
+    local entry = { fs = fs, size = size, flags = flags }
+    local resolvedFont, effectiveFlags
+    if addon.fontRuntime.configFontValidated then
+        resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(currentConfigFont, size, flags)
+    else
+        resolvedFont, effectiveFlags = addon.fontRuntime.resolveFlags(currentConfigFont, size, flags)
+    end
+    if resolvedFont and addon.fontRuntime.setRegionFont(fs, resolvedFont, size, effectiveFlags) then
+        currentConfigFont = resolvedFont
+        addon.fontRuntime.configFontValidated = true
+        entry.appliedFont = resolvedFont
+        entry.appliedSize = size
+        entry.appliedFlags = effectiveFlags
+        tinsert(localizedConfigFonts, entry)
+        return true
+    end
+
+    tinsert(localizedConfigFonts, entry)
+    local active = ResolveActiveLocale()
+    local req = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
+    local fallback = FindCompatibleFont(addon.fontRuntime.safeDefaultPath(), req)
+        or addon.fontRuntime.safeDefaultPath()
+    return ApplyConfigFont(fallback, true)
 end
 
 -- Called from MaybeAutoSwitchFont and PreviewLanguage/CancelLanguagePreview. Idempotent
 -- fast-path skips work when currentConfigFont already matches (covers PEW + back-to-
 -- default-locale scenarios). WHY no `local`: assigns the forward-decl'd upvalue.
-ApplyConfigFont = function(font)
-    if SameFontPath(font, currentConfigFont) then return end
-    currentConfigFont = font
-    for _, e in ipairs(localizedConfigFonts) do
-        e.fs:SetFont(font, e.size, e.flags)
+ApplyConfigFont = function(font, force)
+    if not force and SameFontPath(font, currentConfigFont) then return true, currentConfigFont end
+    local usable = addon.fontRuntime.usablePath(font)
+    if not usable then return false end
+    if #localizedConfigFonts == 0 then
+        currentConfigFont = usable
+        addon.fontRuntime.configFontValidated = true
+        return true, usable
     end
+
+    local plans, previousText = {}, {}
+    for i, e in ipairs(localizedConfigFonts) do
+        local resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(usable, e.size, e.flags)
+        if not resolvedFont then return false end
+        plans[i] = { font = resolvedFont, flags = effectiveFlags }
+        previousText[i] = e.fs:GetText()
+    end
+
+    for i, e in ipairs(localizedConfigFonts) do
+        local plan = plans[i]
+        if not addon.fontRuntime.setRegionFont(e.fs, plan.font, e.size, plan.flags) then
+            for restoreIndex = 1, i do
+                local old = localizedConfigFonts[restoreIndex]
+                if old.appliedFont then
+                    addon.fontRuntime.setRegionFont(
+                        old.fs, old.appliedFont, old.appliedSize, old.appliedFlags)
+                end
+                if previousText[restoreIndex] ~= nil then
+                    old.fs:SetText(previousText[restoreIndex])
+                end
+            end
+            return false
+        end
+        if previousText[i] ~= nil then e.fs:SetText(previousText[i]) end
+    end
+
+    currentConfigFont = plans[1].font
+    addon.fontRuntime.configFontValidated = true
+    for i, e in ipairs(localizedConfigFonts) do
+        e.appliedFont = plans[i].font
+        e.appliedSize = e.size
+        e.appliedFlags = plans[i].flags
+    end
+    return true, currentConfigFont
 end
 local CONFIG_SWATCH_GAP = 6     -- label.RIGHT → swatch.LEFT
 local CONFIG_COL_OFFSET = 220   -- left-col x → right-col x within a 2-column section
@@ -4243,11 +4554,21 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
     _G[name .. "High"]:SetText(highText)
     _G[name .. "Text"]:SetText(string.format(valueFmt, slider:GetValue()))
 
+    local reverting = false
     slider:SetScript("OnValueChanged", function(self, value)
+        if reverting then return end
+        local previous = NUMBER_SETTING_META[dbKey] and GetNumberDB(dbKey) or GetDB(dbKey)
         local normalized = NUMBER_SETTING_META[dbKey] and NormalizeNumberSetting(dbKey, value) or value
         _G[self:GetName() .. "Text"]:SetText(string.format(valueFmt, normalized))
         StatsProDB[dbKey] = normalized
-        if onChange then onChange(normalized) end
+        local accepted = onChange and onChange(normalized, previous)
+        if accepted == false then
+            StatsProDB[dbKey] = previous
+            reverting = true
+            self:SetValue(previous)
+            reverting = false
+            _G[self:GetName() .. "Text"]:SetText(string.format(valueFmt, previous))
+        end
     end)
 
     PushRefresher(function()
@@ -4298,7 +4619,7 @@ local function ResetToDefaults()
 
     -- Step 3: re-cache + re-apply panel-level visual state.
     CacheSettings()
-    ApplyTextStyleToAllPanels(defaults.font, defaults.fontSize)
+    addon.fontRuntime.applyCommittedTextStyle(defaults.font, defaults.fontSize, false, true)
     ApplyTextAlphaToAllPanels(cached.textAlpha)
     addon.readabilityConfig.applyPanelBackgroundAlphaToAllPanels(cached.panelBackgroundAlpha)
     -- Sync settings-UI font to the fresh default-locale state. Without this, a Reset
@@ -4786,22 +5107,29 @@ function addon:OpenConfigMenu()
             if LSM then
                 list = {}
                 for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
-                    list[#list + 1] = {
-                        name = name,
-                        path = LSM:Fetch(LSM.MediaType.FONT, name),
-                        sortKey = name:lower(),
-                    }
+                    local path = type(name) == "string" and addon.fontRuntime.rawLSMPath(name) or nil
+                    local usable = addon.fontRuntime.usableCatalogPath(path)
+                    if usable then
+                        list[#list + 1] = {
+                            name = name,
+                            path = usable,
+                            sortKey = name:lower(),
+                        }
+                    end
                 end
             else
                 list = {}
                 local clientLocale = GetLocale()
                 for _, f in ipairs(BLIZZARD_SHIPPED_FONTS) do
                     if not f.locale or f.locale == clientLocale then
-                        list[#list + 1] = {
-                            name = f.name,
-                            path = f.path,
-                            sortKey = f.name:lower(),
-                        }
+                        local usable = addon.fontRuntime.usableCatalogPath(f.path)
+                        if usable then
+                            list[#list + 1] = {
+                                name = f.name,
+                                path = usable,
+                                sortKey = f.name:lower(),
+                            }
+                        end
                     end
                 end
             end
@@ -4849,9 +5177,11 @@ function addon:OpenConfigMenu()
         -- where each unique button fires Apply + Reflow ~30× per second of scroll.
         local function PreviewFont(path)
             if SameFontPath(path, previewedPath) then return end
-            previewedPath = path
-            ApplyTextStyleToAllPanels(path, GetNumberDB("fontSize"))
+            local applied, effectiveFont = ApplyTextStyleToAllPanels(path, GetNumberDB("fontSize"))
+            if not applied then return false end
+            previewedPath = effectiveFont
             ReflowAllPanels()
+            return true
         end
         -- WHY unconditional restore (no `previewedPath~=nil` gate): preview-state
         -- tracking can desync against panel-applied state via three paths — OnLeave-timer
@@ -4861,22 +5191,22 @@ function addon:OpenConfigMenu()
         -- last hovered preview when the picker closes without a font pick.
         local function CancelFontPreview()
             previewedPath = nil
-            ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"), true)
+            self.fontRuntime.applyCommittedTextStyle(
+                self.fontRuntime.currentPath(), GetNumberDB("fontSize"), true, true)
             ReflowAllPanels()
         end
         local function PickFont(f)
-            StatsProDB.font = f.path
-            StatsProDB.fontBeforeAutoSwitch = nil  -- explicit user pick clears auto-switch memory
-            -- Skip Apply when preview already painted the same font (common path: hover
-            -- then click). DB write above is the only mandatory step in that branch.
-            if not SameFontPath(previewedPath, f.path) then
-                ApplyTextStyleToAllPanels(f.path, GetNumberDB("fontSize"))
-                ReflowAllPanels()
-            end
+            if not self.fontRuntime.canMutateDB() then return false end
+            local applied = self.fontRuntime.applyCommittedTextStyle(
+                f.path, GetNumberDB("fontSize"), false, false)
+            if not applied then return false end
+            self.fontRuntime.clearSavedAutoFont()  -- explicit user pick clears auto-switch memory
+            ReflowAllPanels()
             previewedPath = nil  -- preview is now committed; OnHide force-syncs to DB.font
-            UIDropDownMenu_SetText(fontDropdown, f.name)
+            UIDropDownMenu_SetText(fontDropdown, CurrentFontName())
             CloseDropDownMenus()  -- defensive; no-op when no Blizzard dropdown is open
             RefreshLanguageWarning()  -- new font may not cover active locale's glyphs
+            return true
         end
         UIDropDownMenu_SetWidth(fontDropdown, 100)
         UIDropDownMenu_JustifyText(fontDropdown, "CENTER")
@@ -4969,7 +5299,7 @@ function addon:OpenConfigMenu()
 
         local function PopulateFontPicker()
             local fonts = BuildFontsList()
-            local currentPath = GetFontDB()
+            local currentPath = self.fontRuntime.currentPath()
             local rows = math.ceil(#fonts / FONT_PICKER_COLS)
             local currentRow = nil
 
@@ -5102,10 +5432,16 @@ function addon:OpenConfigMenu()
         end
 
         CurrentFontName = function()
+            local current = self.fontRuntime.currentPath()
             for _, f in ipairs(BuildFontsList()) do
-                if SameFontPath(f.path, GetFontDB()) then return f.name end
+                if SameFontPath(f.path, current) then return f.name end
             end
-            return "Friz Quadrata TT"
+            return addon.fontRuntime.catalogName(current)
+        end
+        self.fontRuntime.refreshCaption = function()
+            if fontDropdown and CurrentFontName then
+                UIDropDownMenu_SetText(fontDropdown, CurrentFontName())
+            end
         end
         UIDropDownMenu_SetText(fontDropdown, CurrentFontName())
         PushRefresher(function() UIDropDownMenu_SetText(fontDropdown, CurrentFontName()) end)
@@ -5143,8 +5479,10 @@ function addon:OpenConfigMenu()
     CreateConfigSlider(displayTab, "StatsProFontSlider", "Font Size:", "fontSize", cd,
         8, 32, 1, "8", "32", "%d",
         function()
-            ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"))
-            ReflowAllPanels()
+            local applied = self.fontRuntime.applyCommittedTextStyle(
+                self.fontRuntime.currentPath(), GetNumberDB("fontSize"), false, true)
+            if applied then ReflowAllPanels() end
+            return applied
         end)
 
     -- Text Opacity slider — adjust panel text transparency. Stored as INT 25-100 in DB
@@ -5256,20 +5594,20 @@ function addon:OpenConfigMenu()
             cached.activeLabelsLocale = LABELS_BY_LOCALE[locale] and locale or "enUS"
 
             -- Visual font swap if the committed font lacks the previewed locale's glyphs.
-            -- WHY GetFontDB() (committed) and not the currently-rendered preview font:
+            -- WHY currentPath() (committed) and not the currently-rendered preview font:
             -- consecutive hovers must each evaluate against the BASELINE, otherwise hover
             -- ru→ARIALN→hover de would compare ARIALN(Latin-OK) and skip restoring FRIZQT.
             local req      = LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN
-            local cur      = GetFontDB()
+            local cur      = self.fontRuntime.currentPath()
             local fallback = FindCompatibleFont(cur, req)
             if fallback and not SameFontPath(fallback, cur) then
-                ApplyTextStyleToAllPanels(fallback, GetNumberDB("fontSize"))
-                langPreviewSwappedFnt = true
+                local applied = ApplyTextStyleToAllPanels(fallback, GetNumberDB("fontSize"))
+                if applied then langPreviewSwappedFnt = true end
             elseif langPreviewSwappedFnt then
                 -- Previous hover swapped to fallback; this hover doesn't need to. Force
                 -- the restore for the same cache-drift class as picker/dropdown cancel.
-                ApplyTextStyleToAllPanels(cur, GetNumberDB("fontSize"), true)
-                langPreviewSwappedFnt = false
+                local restored = ApplyTextStyleToAllPanels(cur, GetNumberDB("fontSize"), true)
+                if restored then langPreviewSwappedFnt = false end
             end
 
             langPreviewActive = true
@@ -5293,8 +5631,9 @@ function addon:OpenConfigMenu()
             cached.activeLabels = LABELS_BY_LOCALE[active] or LABELS_BY_LOCALE.enUS
             cached.activeLabelsLocale = LABELS_BY_LOCALE[active] and active or "enUS"
             if langPreviewSwappedFnt then
-                ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"), true)
-                langPreviewSwappedFnt = false
+                local restored = self.fontRuntime.applyCommittedTextStyle(
+                    self.fontRuntime.currentPath(), GetNumberDB("fontSize"), true, true)
+                if restored then langPreviewSwappedFnt = false end
             end
             langPreviewActive = false
             langPreviewLocale = nil  -- next preview must always run a fresh apply
@@ -5336,10 +5675,11 @@ function addon:OpenConfigMenu()
                     -- ApplyConfigFont is unconditionally called inside MAS so the settings
                     -- UI doesn't share this asymmetry — panels are the only side affected.
                     if langPreviewSwappedFnt then
-                        ApplyTextStyleToAllPanels(GetFontDB(), GetNumberDB("fontSize"), true)
+                        local restored = self.fontRuntime.applyCommittedTextStyle(
+                            self.fontRuntime.currentPath(), GetNumberDB("fontSize"), true, true)
+                        if restored then langPreviewSwappedFnt = false end
                     end
                     langPreviewActive     = false
-                    langPreviewSwappedFnt = false
                     -- WHY: auto-switch may have changed db.font; PushRefresher only fires on Reset.
                     UIDropDownMenu_SetText(fontDropdown, CurrentFontName())
                     UIDropDownMenu_SetText(langDropdown, CompactLabel(opt))
@@ -5392,7 +5732,7 @@ function addon:OpenConfigMenu()
         RefreshLanguageWarning = function()
             local active = ResolveActiveLocale()
             local req    = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
-            if FontSupports(GetFontDB(), req) then
+            if FontSupports(self.fontRuntime.currentPath(), req) then
                 langWarn:SetText("")
             else
                 langWarn:SetText(string.format(L(
@@ -5608,10 +5948,8 @@ function addon:OpenConfigMenu()
     SwitchToTab(1)
 end
 
--- Self-serve diagnostics: dump runtime state to chat for bug reports.
--- Each group is a separate PrintMsg so taint isolation is automatic
--- here reads stat values, so taint is not actually a risk — but the
--- per-line format is also far more readable in chat than a 400-char wall.
+-- Self-serve diagnostics: dump runtime state to chat for bug reports. Each group is
+-- a separate PrintMsg so restricted values cannot poison unrelated diagnostic lines.
 function addon:PrintDebugDump()
     PrintMsg(string.format("debug v%s  dbVer %s/%d  isLoaded=%s  durDirty=%s  mem=%dKB",
         ADDON_VERSION,
@@ -5640,11 +5978,14 @@ function addon:PrintDebugDump()
     local req    = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
     PrintMsg(string.format("locale: client=%s force=%s active=%s",
         GetLocale(), tostring(GetDB("forceLocale")), active))
+    local savedFont = GetSavedAutoFontDB()
+    local savedFontText = savedFont
+        or (type(StatsProDB.fontBeforeAutoSwitch) == "nil" and "nil" or "<unavailable>")
     PrintMsg(string.format("font: path=%s glyphReq=%s supports=%s saved=%s",
-        tostring(GetFontDB() or "?"),
+        tostring(addon.fontRuntime.currentPath() or "?"),
         req,
-        tostring(FontSupports(GetFontDB(), req)),
-        tostring(StatsProDB.fontBeforeAutoSwitch)))
+        tostring(FontSupports(addon.fontRuntime.currentPath(), req)),
+        savedFontText))
 
     PrintMsg(string.format("show stats: off=%s tert=%s defensive=%s dur=%s repair=%s cost=%s mainStat=%s liveMainId=%s stamina=%s itemLevel=%s %s/%s",
         tostring(cached.showOffensive),
@@ -6040,6 +6381,13 @@ if addon and addon.__statsproSmoke == true then
         isBlizzardFontPath = IsBlizzardFontPath,
         fontSupports = FontSupports,
         findCompatibleFont = FindCompatibleFont,
+        getFontDB = GetFontDB,
+        usableFontPath = addon.fontRuntime.usablePath,
+        safeDefaultFontPath = addon.fontRuntime.safeDefaultPath,
+        currentRuntimeFontPath = addon.fontRuntime.currentPath,
+        repairSavedFontPaths = addon.fontRuntime.repairSavedPaths,
+        applyCommittedTextStyle = addon.fontRuntime.applyCommittedTextStyle,
+        applyConfigFont = ApplyConfigFont,
         formatRepairCost = FormatRepairCost,
         refreshDurabilityCache = RefreshDurabilityCache,
         durabilityState = function()
@@ -6064,16 +6412,50 @@ if addon and addon.__statsproSmoke == true then
                 mainAppliedFont = mainPanel.appliedFont,
                 mainAppliedSize = mainPanel.appliedSize,
                 mainAppliedTextOutlineStyle = mainPanel.appliedTextOutlineStyle,
+                mainAppliedFontFlags = mainPanel.appliedFontFlags,
                 mainLabelFont = mainPanel.labelText.font,
                 mainLabelSize = mainPanel.labelText.fontSize,
                 mainLabelFlags = mainPanel.labelText.fontFlags,
+                mainRatingFont = mainPanel.ratingText.font,
+                mainRatingFlags = mainPanel.ratingText.fontFlags,
+                mainValueFont = mainPanel.valueText.font,
+                mainValueFlags = mainPanel.valueText.fontFlags,
+                mainRepairFont = mainPanel.repairText.font,
+                mainRepairFlags = mainPanel.repairText.fontFlags,
+                mainRepairLabelFont = mainPanel.repairLabelText.font,
+                mainRepairLabelFlags = mainPanel.repairLabelText.fontFlags,
                 sideAppliedFont = defensivePanel.appliedFont,
                 sideAppliedSize = defensivePanel.appliedSize,
                 sideAppliedTextOutlineStyle = defensivePanel.appliedTextOutlineStyle,
+                sideAppliedFontFlags = defensivePanel.appliedFontFlags,
                 sideLabelFont = defensivePanel.labelText.font,
                 sideLabelSize = defensivePanel.labelText.fontSize,
                 sideLabelFlags = defensivePanel.labelText.fontFlags,
+                sideRatingFont = defensivePanel.ratingText.font,
+                sideRatingFlags = defensivePanel.ratingText.fontFlags,
+                sideValueFont = defensivePanel.valueText.font,
+                sideValueFlags = defensivePanel.valueText.fontFlags,
+                sideRepairFont = defensivePanel.repairText.font,
+                sideRepairFlags = defensivePanel.repairText.fontFlags,
+                sideRepairLabelFont = defensivePanel.repairLabelText.font,
+                sideRepairLabelFlags = defensivePanel.repairLabelText.fontFlags,
             }
+        end,
+        configFontState = function()
+            local entries = {}
+            for i, entry in ipairs(localizedConfigFonts) do
+                entries[i] = {
+                    requestedFlags = entry.flags,
+                    appliedFont = entry.appliedFont,
+                    appliedSize = entry.appliedSize,
+                    appliedFlags = entry.appliedFlags,
+                    actualFont = entry.fs.font,
+                    actualSize = entry.fs.fontSize,
+                    actualFlags = entry.fs.fontFlags,
+                    actualText = entry.fs:GetText(),
+                }
+            end
+            return { currentFont = currentConfigFont, entries = entries }
         end,
         panelVisualState = function()
             local firstOverlay = mainPanel.tooltipOverlays and mainPanel.tooltipOverlays[1] or nil

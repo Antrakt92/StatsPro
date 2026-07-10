@@ -255,9 +255,11 @@ local function makeFrame(name, setFontResult)
     function frame:SetTextInsets() end
     function frame:SetWordWrap(value) self.wordWrap = value end
     function frame:GetStringWidth()
+        if self.statsProWidthOverride ~= nil then return self.statsProWidthOverride end
         return #(self.text or "") * ((self.fontSize or 12) * 0.5)
     end
     function frame:GetStringHeight()
+        if self.statsProHeightOverride ~= nil then return self.statsProHeightOverride end
         local text = self.text or ""
         local _, lines = text:gsub("\n", "\n")
         return (lines + 1) * (self.fontSize or 12) * (self.statsProStringHeightMultiplier or 1)
@@ -893,6 +895,311 @@ do
     eq("panel.background_insets.side.right", sideInsets.right, 0)
     eq("panel.background_insets.side.top", sideInsets.top, 0)
     eq("panel.background_insets.side.bottom", sideInsets.bottom, 0)
+end
+
+do
+    local scenarios = {
+        { name = "full_dual", style = "full", label = "Crit:\nMastery:", rating = "700 |\n500 |", value = "12.0%\n20.0%", showRating = true, showPercentage = true, labelW = 91, coldW = 228, expectedW = 207 },
+        { name = "short_dual", style = "short", label = "C:\nM:", rating = "700 |\n500 |", value = "12.0%\n20.0%", showRating = true, showPercentage = true, labelW = 35, coldW = 172, expectedW = 151 },
+        { name = "hidden_dual", style = "hidden", label = "", rating = "700 |\n500 |", value = "12.0%\n20.0%", showRating = true, showPercentage = true, coldW = 114, expectedW = 114 },
+        { name = "full_single", style = "full", label = "Crit:\nMastery:", rating = "700\n500", value = "", showRating = true, showPercentage = false, labelW = 91, coldW = 170, expectedW = 156 },
+        { name = "short_single", style = "short", label = "C:\nM:", rating = "12.0%\n20.0%", value = "", showRating = false, showPercentage = true, labelW = 35, coldW = 114, expectedW = 100 },
+        { name = "hidden_single", style = "hidden", label = "", rating = "12.0%\n20.0%", value = "", showRating = false, showPercentage = true, coldW = 80, expectedW = 80 },
+    }
+
+    local function pointX(points)
+        return points and points[1] and points[1][4] or nil
+    end
+
+    local function positiveNumber(name, value)
+        check(name, type(value) == "number" and value > 0, value)
+    end
+
+    for _, scenario in ipairs(scenarios) do
+        local secretWidth, secretHeight = {}, {}
+        local scenarioEnv, _, scenarioTest = loadStatsPro("enUS", {
+            statsProDB = {
+                labelStyle = scenario.style,
+                fontSize = 14,
+                showRating = scenario.showRating,
+                showPercentage = scenario.showPercentage,
+            },
+            issecretvalue = function(value)
+                return value == secretWidth or value == secretHeight
+            end,
+        })
+        scenarioTest.cacheSettings()
+
+        if scenario.style ~= "hidden" then
+            scenarioTest.setPanelMeasurementOverride("main", "label", secretWidth, secretHeight)
+        end
+        scenarioTest.setPanelMeasurementOverride("main", "rating", secretWidth, secretHeight)
+        scenarioTest.setPanelMeasurementOverride("main", "value", secretWidth, secretHeight)
+
+        local ok, err = pcall(scenarioTest.renderMainPanelForSmoke,
+            scenario.label, scenario.rating, scenario.value, 2)
+        check("panel.secret_cold." .. scenario.name .. ".render", ok, err)
+        local cold = scenarioTest.panelVisualState()
+        local coldRatingX = pointX(cold.mainRatingPoints)
+        local coldValueX = pointX(cold.mainValuePoints)
+
+        positiveNumber("panel.secret_cold." .. scenario.name .. ".rating_width", cold.mainRenderedRatingW)
+        eq("panel.secret_cold." .. scenario.name .. ".rating_cache_stays_clean", cold.mainCachedRatingW, nil)
+        eq("panel.secret_cold." .. scenario.name .. ".rating_height_cache_stays_clean", cold.mainCachedRatingH, nil)
+        eq("panel.secret_cold." .. scenario.name .. ".line_height", cold.mainLastLineH, 14)
+        eq("panel.secret_cold." .. scenario.name .. ".frame_height", cold.mainFrameHeight, 28)
+        eq("panel.secret_cold." .. scenario.name .. ".frame_width", cold.mainFrameWidth, scenario.coldW)
+        if scenario.style == "hidden" then
+            eq("panel.secret_cold." .. scenario.name .. ".label_width_ignored", cold.mainCachedLabelW, nil)
+            eq("panel.secret_cold." .. scenario.name .. ".rendered_label_width", cold.mainRenderedLabelW, 0)
+        else
+            positiveNumber("panel.secret_cold." .. scenario.name .. ".label_width", cold.mainRenderedLabelW)
+            eq("panel.secret_cold." .. scenario.name .. ".label_cache_stays_clean", cold.mainCachedLabelW, nil)
+            eq("panel.secret_cold." .. scenario.name .. ".label_height_cache_stays_clean", cold.mainCachedLabelH, nil)
+        end
+        if scenario.value ~= "" then
+            positiveNumber("panel.secret_cold." .. scenario.name .. ".value_width", cold.mainRenderedValueW)
+            eq("panel.secret_cold." .. scenario.name .. ".value_cache_stays_clean", cold.mainCachedValueW, nil)
+            eq("panel.secret_cold." .. scenario.name .. ".value_height_cache_stays_clean", cold.mainCachedValueH, nil)
+            check("panel.secret_cold." .. scenario.name .. ".dual_anchor_separation",
+                type(coldRatingX) == "number" and type(coldValueX) == "number" and coldRatingX < coldValueX,
+                tostring(coldRatingX) .. " / " .. tostring(coldValueX))
+            eq("panel.secret_cold." .. scenario.name .. ".value_anchor", coldValueX, 0)
+            if type(cold.mainRenderedValueW) == "number" then
+                eq("panel.secret_cold." .. scenario.name .. ".rating_anchor",
+                    coldRatingX, -(cold.mainRenderedValueW + 2))
+            end
+        else
+            eq("panel.secret_cold." .. scenario.name .. ".inactive_value_cache_stays_clean", cold.mainCachedValueW, nil)
+            eq("panel.secret_cold." .. scenario.name .. ".no_rendered_value_width", cold.mainRenderedValueW, 0)
+            eq("panel.secret_cold." .. scenario.name .. ".single_rating_anchor", coldRatingX, 0)
+            eq("panel.secret_cold." .. scenario.name .. ".single_value_anchor", coldValueX, 0)
+        end
+
+        if scenario.style ~= "hidden" then
+            scenarioTest.setPanelMeasurementOverride("main", "label", scenario.labelW, 42)
+        end
+        scenarioTest.setPanelMeasurementOverride("main", "rating", 63, 44)
+        scenarioTest.setPanelMeasurementOverride("main", "value", scenario.value ~= "" and 49 or 0,
+            scenario.value ~= "" and 40 or 0)
+        scenarioTest.renderMainPanelForSmoke(scenario.label, scenario.rating, scenario.value, 2)
+        local recovered = scenarioTest.panelVisualState()
+        local recoveredRatingX = pointX(recovered.mainRatingPoints)
+        local recoveredValueX = pointX(recovered.mainValuePoints)
+
+        eq("panel.secret_recovery." .. scenario.name .. ".rating_width", recovered.mainCachedRatingW, 63)
+        eq("panel.secret_recovery." .. scenario.name .. ".rating_height", recovered.mainCachedRatingH, 44)
+        eq("panel.secret_recovery." .. scenario.name .. ".value_width",
+            recovered.mainCachedValueW, scenario.value ~= "" and 49 or 0)
+        eq("panel.secret_recovery." .. scenario.name .. ".frame_width", recovered.mainFrameWidth, scenario.expectedW)
+        if scenario.style == "hidden" then
+            eq("panel.secret_recovery." .. scenario.name .. ".line_height", recovered.mainLastLineH, 22)
+            eq("panel.secret_recovery." .. scenario.name .. ".frame_height", recovered.mainFrameHeight, 44)
+        else
+            eq("panel.secret_recovery." .. scenario.name .. ".label_width", recovered.mainCachedLabelW, scenario.labelW)
+            eq("panel.secret_recovery." .. scenario.name .. ".label_height", recovered.mainCachedLabelH, 42)
+            eq("panel.secret_recovery." .. scenario.name .. ".line_height", recovered.mainLastLineH, 21)
+            eq("panel.secret_recovery." .. scenario.name .. ".frame_height", recovered.mainFrameHeight, 42)
+        end
+        if scenario.value ~= "" then
+            eq("panel.secret_recovery." .. scenario.name .. ".rating_anchor", recoveredRatingX, -51)
+            eq("panel.secret_recovery." .. scenario.name .. ".value_anchor", recoveredValueX, 0)
+        else
+            eq("panel.secret_recovery." .. scenario.name .. ".rating_anchor", recoveredRatingX, 0)
+            eq("panel.secret_recovery." .. scenario.name .. ".value_anchor", recoveredValueX, 0)
+        end
+        eq("panel.secret_recovery." .. scenario.name .. ".env_loaded", scenarioEnv ~= nil, true)
+    end
+end
+
+do
+    local secretWidth, secretHeight = {}, {}
+    local resizeEnv, _, resizeTest = loadStatsPro("enUS", {
+        statsProDB = {
+            labelStyle = "full",
+            fontSize = 14,
+            showRating = true,
+            showPercentage = true,
+        },
+        issecretvalue = function(value)
+            return value == secretWidth or value == secretHeight
+        end,
+    })
+    resizeTest.cacheSettings()
+    resizeTest.renderMainPanelForSmoke("Crit:", "700 |", "12.0%", 1)
+    local applied = resizeTest.applyTextStyleToAllPanels(resizeTest.copyDefaults().font, 20, true)
+    eq("panel.secret_resize.style_applied", applied, true)
+    for _, column in ipairs({ "label", "rating", "value" }) do
+        resizeTest.setPanelMeasurementOverride("main", column, secretWidth, secretHeight)
+    end
+    resizeTest.renderMainPanelForSmoke("Crit:", "700 |", "12.0%", 1)
+    local cold = resizeTest.panelVisualState()
+    eq("panel.secret_resize.cold_frame_width", cold.mainFrameWidth, 324)
+    eq("panel.secret_resize.cold_line_height", cold.mainLastLineH, 20)
+    eq("panel.secret_resize.cold_frame_height", cold.mainFrameHeight, 20)
+    eq("panel.secret_resize.clean_width_cache_preserved", cold.mainCachedLabelW, 35)
+    eq("panel.secret_resize.height_cache_invalidated", cold.mainCachedLabelH, nil)
+
+    resizeTest.setPanelMeasurementOverride("main", "label", 70, 24)
+    resizeTest.setPanelMeasurementOverride("main", "rating", 50, 22)
+    resizeTest.setPanelMeasurementOverride("main", "value", 40, 20)
+    resizeTest.renderMainPanelForSmoke("Crit:", "700 |", "12.0%", 1)
+    local recovered = resizeTest.panelVisualState()
+    eq("panel.secret_resize.recovery_frame_width", recovered.mainFrameWidth, 164)
+    eq("panel.secret_resize.recovery_line_height", recovered.mainLastLineH, 24)
+    eq("panel.secret_resize.recovery_frame_height", recovered.mainFrameHeight, 24)
+    eq("panel.secret_resize.recovery_label_cache", recovered.mainCachedLabelW, 70)
+    eq("panel.secret_resize.env_loaded", resizeEnv ~= nil, true)
+end
+
+do
+    local secretWidth, secretHeight = {}, {}
+    local repairEnv, _, repairTest = loadStatsPro("enUS", {
+        statsProDB = {
+            labelStyle = "full",
+            fontSize = 14,
+            showRating = true,
+            showPercentage = true,
+        },
+        issecretvalue = function(value)
+            return value == secretWidth or value == secretHeight
+        end,
+    })
+    repairTest.cacheSettings()
+    repairTest.setPanelMeasurementOverride("main", "repair", secretWidth, secretHeight)
+    repairTest.renderMainPanelForSmoke("C:", "700", "12.0%", 1, "coin", "Repair:")
+    local cold = repairTest.panelVisualState()
+    eq("panel.secret_repair.cold_render_width", cold.mainRenderedRepairW, 112)
+    eq("panel.secret_repair.cold_cache_stays_clean", cold.mainCachedRepairW, nil)
+    eq("panel.secret_repair.cold_frame_width", cold.mainFrameWidth, 128)
+    eq("panel.secret_repair.cold_rating_anchor", cold.mainRatingPoints[1][4], -91)
+    eq("panel.secret_repair.cold_value_anchor", cold.mainValuePoints[1][4], -54)
+    eq("panel.secret_repair.cold_frame_height", cold.mainFrameHeight, 29)
+
+    repairTest.setPanelMeasurementOverride("main", "repair", 28, 14)
+    repairTest.renderMainPanelForSmoke("C:", "700", "12.0%", 1, "coin", "Repair:")
+    local recovered = repairTest.panelVisualState()
+    eq("panel.secret_repair.recovery_render_width", recovered.mainRenderedRepairW, 28)
+    eq("panel.secret_repair.recovery_cache", recovered.mainCachedRepairW, 28)
+    eq("panel.secret_repair.recovery_frame_width", recovered.mainFrameWidth, 80)
+    eq("panel.secret_repair.recovery_rating_anchor", recovered.mainRatingPoints[1][4], -37)
+    eq("panel.secret_repair.recovery_value_anchor", recovered.mainValuePoints[1][4], 0)
+
+    repairTest.renderMainPanelForSmoke("C:", "700", "12.0%", 1)
+    local disabled = repairTest.panelVisualState()
+    eq("panel.secret_repair.disabled_render_width", disabled.mainRenderedRepairW, 0)
+    eq("panel.secret_repair.disabled_cache_reset", disabled.mainCachedRepairW, 0)
+    eq("panel.secret_repair.disabled_coin_hidden", disabled.mainRepairShown, false)
+    eq("panel.secret_repair.disabled_frame_width", disabled.mainFrameWidth, 80)
+
+    repairTest.setPanelMeasurementOverride("main", "repair", secretWidth, secretHeight)
+    repairTest.setPanelMeasurementOverride("main", "repairLabel", secretWidth, secretHeight)
+    repairTest.renderMainPanelForSmoke("", "", "", 0, "coin", "Repair:")
+    local repairOnly = repairTest.panelVisualState()
+    eq("panel.secret_repair.only_render_width", repairOnly.mainRenderedRepairW, 112)
+    eq("panel.secret_repair.only_label_width", repairOnly.mainRepairLabelWidth, 80)
+    eq("panel.secret_repair.only_frame_width", repairOnly.mainFrameWidth, 194)
+    eq("panel.secret_repair.only_frame_height", repairOnly.mainFrameHeight, 14)
+    eq("panel.secret_repair.only_label_shown", repairOnly.mainRepairLabelShown, true)
+
+    repairEnv.StatsProDB.labelStyle = "hidden"
+    repairTest.cacheSettings()
+    repairTest.renderMainPanelForSmoke("", "", "", 0, "coin", "")
+    local hiddenLabel = repairTest.panelVisualState()
+    eq("panel.secret_repair.hidden_label_width", hiddenLabel.mainRepairLabelWidth, 0)
+    eq("panel.secret_repair.hidden_label_frame_width", hiddenLabel.mainFrameWidth, 112)
+    eq("panel.secret_repair.hidden_label_hidden", hiddenLabel.mainRepairLabelShown, false)
+
+    repairEnv.StatsProDB.labelStyle = "full"
+    repairTest.cacheSettings()
+    repairTest.setPanelMeasurementOverride("main", "repair", 28, 14)
+    repairTest.setPanelMeasurementOverride("main", "repairLabel", 49, 14)
+    repairTest.renderMainPanelForSmoke("", "", "", 0, "coin", "Repair:")
+    local repairOnlyRecovered = repairTest.panelVisualState()
+    eq("panel.secret_repair.only_recovery_coin_cache", repairOnlyRecovered.mainCachedRepairW, 28)
+    eq("panel.secret_repair.only_recovery_label_cache", repairOnlyRecovered.mainCachedRepairLabelW, 49)
+    eq("panel.secret_repair.only_recovery_frame_width", repairOnlyRecovered.mainFrameWidth, 80)
+    eq("panel.secret_repair.env_loaded", repairEnv ~= nil, true)
+end
+
+do
+    local secretWidth, secretHeight = {}, {}
+    local splitEnv, splitAddon, splitTest = loadStatsPro("enUS", {
+        statsProDB = {
+            displayMode = "split",
+            labelStyle = "full",
+            fontSize = 14,
+            showMainStat = false,
+            showStamina = false,
+            showOffensive = true,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = true,
+            showLeech = true,
+            showAvoidance = false,
+            showSpeed = false,
+            showDefensive = false,
+            showItemLevel = false,
+            showDurability = false,
+            showRepairCost = false,
+            showRating = true,
+            showPercentage = true,
+            hideZeroOffensive = false,
+            hideZeroTertiary = false,
+            splitOffensive = false,
+            splitTertiary = true,
+        },
+        getCritChance = function() return 12 end,
+        getLifesteal = function() return 5 end,
+        getCombatRating = function() return 700 end,
+        issecretvalue = function(value)
+            return value == secretWidth or value == secretHeight
+        end,
+    })
+    for _, panelName in ipairs({ "main", "side" }) do
+        for _, column in ipairs({ "label", "rating", "value" }) do
+            splitTest.setPanelMeasurementOverride(panelName, column, secretWidth, secretHeight)
+        end
+    end
+
+    local okFire, errFire = pcall(splitEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("panel.secret_split.cold_fire", okFire, errFire)
+    local cold = splitTest.panelVisualState()
+    eq("panel.secret_split.cold_main_shown", cold.mainShown, true)
+    eq("panel.secret_split.cold_side_shown", cold.sideShown, true)
+    check("panel.secret_split.cold_main_routes_crit", cold.mainLabelText:find("Crit", 1, true) ~= nil, cold.mainLabelText)
+    check("panel.secret_split.cold_side_routes_leech", cold.sideLabelText:find("Leech", 1, true) ~= nil, cold.sideLabelText)
+    check("panel.secret_split.cold_main_widths",
+        type(cold.mainRenderedRatingW) == "number" and cold.mainRenderedRatingW > 0
+            and type(cold.mainRenderedValueW) == "number" and cold.mainRenderedValueW > 0,
+        tostring(cold.mainRenderedRatingW) .. " / " .. tostring(cold.mainRenderedValueW))
+    check("panel.secret_split.cold_side_widths",
+        type(cold.sideRenderedRatingW) == "number" and cold.sideRenderedRatingW > 0
+            and type(cold.sideRenderedValueW) == "number" and cold.sideRenderedValueW > 0,
+        tostring(cold.sideRenderedRatingW) .. " / " .. tostring(cold.sideRenderedValueW))
+    local coldMainRatingX = cold.mainRatingPoints and cold.mainRatingPoints[1] and cold.mainRatingPoints[1][4]
+    local coldSideRatingX = cold.sideRatingPoints and cold.sideRatingPoints[1] and cold.sideRatingPoints[1][4]
+    check("panel.secret_split.cold_main_anchor", type(coldMainRatingX) == "number" and coldMainRatingX < 0, coldMainRatingX)
+    check("panel.secret_split.cold_side_anchor", type(coldSideRatingX) == "number" and coldSideRatingX < 0, coldSideRatingX)
+
+    splitTest.setPanelMeasurementOverride("main", "label", 91, 14)
+    splitTest.setPanelMeasurementOverride("main", "rating", 63, 14)
+    splitTest.setPanelMeasurementOverride("main", "value", 49, 14)
+    splitTest.setPanelMeasurementOverride("side", "label", 70, 18)
+    splitTest.setPanelMeasurementOverride("side", "rating", 56, 18)
+    splitTest.setPanelMeasurementOverride("side", "value", 42, 18)
+    splitAddon:RunUpdateStatsSafe()
+    local recovered = splitTest.panelVisualState()
+    eq("panel.secret_split.recovery_main_width", recovered.mainFrameWidth, 207)
+    eq("panel.secret_split.recovery_side_width", recovered.sideFrameWidth, 172)
+    eq("panel.secret_split.recovery_main_height", recovered.mainFrameHeight, 14)
+    eq("panel.secret_split.recovery_side_height", recovered.sideFrameHeight, 18)
+    eq("panel.secret_split.recovery_main_rating_width", recovered.mainCachedRatingW, 63)
+    eq("panel.secret_split.recovery_side_rating_width", recovered.sideCachedRatingW, 56)
+    eq("panel.secret_split.recovery_main_anchor", recovered.mainRatingPoints[1][4], -51)
+    eq("panel.secret_split.recovery_side_anchor", recovered.sideRatingPoints[1][4], -44)
 end
 
 do

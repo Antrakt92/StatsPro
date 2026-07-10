@@ -2325,6 +2325,12 @@ end
 ============================================================ ]]
 local Panel = {}
 Panel.__index = Panel
+-- Font-size units, not pixels: cold restricted geometry must scale with the successfully
+-- applied 8..32px face and disappear as soon as a clean measurement is available.
+Panel.SECRET_FULL_LABEL_WIDTH_UNITS = 8
+Panel.SECRET_SHORT_LABEL_WIDTH_UNITS = 4
+Panel.SECRET_NUMERIC_WIDTH_UNITS = 4
+Panel.SECRET_REPAIR_WIDTH_UNITS = 8
 
 function Panel:New(globalName, dbKeyPrefix)
     local panel = setmetatable({}, Panel)
@@ -2743,14 +2749,18 @@ end
 
 -- WARNING: GetStringWidth/GetStringHeight on a FontString whose text contains in-combat
 -- secret-tainted substrings return secret-tainted numbers. Arithmetic on those errors.
--- Mitigation: keep last non-secret measurement; refresh cache only if current read is
--- non-secret. Used for column widths and row-height reads in SetTextSafe.
-local function MeasuredOrCached(fs, current_cache, method)
+-- Mitigation: keep last non-secret measurement separate from the conservative fallback
+-- used by this render. The second return value is always the last CLEAN measurement;
+-- fallback geometry must not masquerade as clean cache state across content changes.
+local function MeasuredOrCached(fs, current_cache, method, fallback)
     local v = fs[method](fs)
     if v and not issecretvalue(v) then
-        return v
+        return v, v
     end
-    return current_cache
+    if fallback and (not current_cache or current_cache < fallback) then
+        return fallback, current_cache
+    end
+    return current_cache, current_cache
 end
 
 -- Hide frame if no lines; otherwise apply text+height.
@@ -2780,21 +2790,46 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- Measure stat columns. WHY 2px gaps: labels RIGHT-justified, rating RIGHT-justified,
     -- value LEFT-justified — at each column boundary one side is justified outward, so
     -- visible gap equals exactly this constant with no per-row variance.
+    -- Cold secret reads use font-scaled geometry for this render only. Empty columns still
+    -- return a clean zero, so rating-only / percentage-only routing gets no phantom value
+    -- column. Height fallbacks are aggregate (lineCount * size), matching cached semantics.
+    local effectiveFontSize = self.appliedSize or GetNumberDB("fontSize")
+    local labelW, ratingW, valueW = 0, 0, 0
+    local labelH, ratingH, valueH
     if hasRows then
-        self.cachedRatingW = MeasuredOrCached(self.ratingText, self.cachedRatingW, "GetStringWidth")
-        self.cachedValueW  = MeasuredOrCached(self.valueText,  self.cachedValueW,  "GetStringWidth")
-        self.cachedRatingH = MeasuredOrCached(self.ratingText, self.cachedRatingH, "GetStringHeight")
-        self.cachedValueH  = MeasuredOrCached(self.valueText,  self.cachedValueH,  "GetStringHeight")
+        local minTextH = lineCount * effectiveFontSize
+        ratingW, self.cachedRatingW = MeasuredOrCached(
+            self.ratingText, self.cachedRatingW, "GetStringWidth",
+            effectiveFontSize * Panel.SECRET_NUMERIC_WIDTH_UNITS)
+        valueW, self.cachedValueW = MeasuredOrCached(
+            self.valueText, self.cachedValueW, "GetStringWidth",
+            effectiveFontSize * Panel.SECRET_NUMERIC_WIDTH_UNITS)
+        ratingH, self.cachedRatingH = MeasuredOrCached(
+            self.ratingText, self.cachedRatingH, "GetStringHeight", minTextH)
+        valueH, self.cachedValueH = MeasuredOrCached(
+            self.valueText, self.cachedValueH, "GetStringHeight", minTextH)
         if not labelsHidden then
-            self.cachedLabelW = MeasuredOrCached(self.labelText, self.cachedLabelW, "GetStringWidth")
+            local labelWidthUnits = labelStyle == "short"
+                and Panel.SECRET_SHORT_LABEL_WIDTH_UNITS
+                or Panel.SECRET_FULL_LABEL_WIDTH_UNITS
+            labelW, self.cachedLabelW = MeasuredOrCached(
+                self.labelText, self.cachedLabelW, "GetStringWidth",
+                effectiveFontSize * labelWidthUnits)
             -- labelText height drives Repair-row Y positioning; cache same way as widths.
-            self.cachedLabelH = MeasuredOrCached(self.labelText, self.cachedLabelH, "GetStringHeight")
+            labelH, self.cachedLabelH = MeasuredOrCached(
+                self.labelText, self.cachedLabelH, "GetStringHeight", minTextH)
         end
     end
 
-    local labelW = (hasRows and not labelsHidden) and (self.cachedLabelW or 0) or 0
-    local ratingW = hasRows and (self.cachedRatingW or 0) or 0
-    local valueW = hasRows and (self.cachedValueW or 0) or 0
+    -- Single-column routing is an out-of-band clean invariant: when either rated-stat
+    -- dimension is off, all visible cells are in ratingText and valueText is inactive.
+    -- Force its effective width to zero even if Retail reports a sticky secret measurement
+    -- after the prior dual-column text was replaced with a clean empty string.
+    if cached.showRating ~= nil and cached.showPercentage ~= nil
+        and not (cached.showRating and cached.showPercentage) then
+        valueW = 0
+    end
+
     local hasRating = ratingW > 0
     local hasValue  = valueW > 0
     local rGap = (hasRating and hasValue) and 2 or 0
@@ -2806,18 +2841,22 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- WHY dedicated row: visual separation from stats + the coin width can exceed stat-
     -- column space without overlapping stat content rows.
     local repairLabelW = 0
-    local lineH = GetNumberDB("fontSize")
+    local lineH = effectiveFontSize
     if hasRows then
         if labelsHidden then
             local renderedH = 0
-            if hasRating and self.cachedRatingH then renderedH = math.max(renderedH, self.cachedRatingH) end
-            if hasValue and self.cachedValueH then renderedH = math.max(renderedH, self.cachedValueH) end
+            if hasRating and ratingH then renderedH = math.max(renderedH, ratingH) end
+            if hasValue and valueH then renderedH = math.max(renderedH, valueH) end
             if renderedH > 0 then lineH = renderedH / lineCount end
-        elseif self.cachedLabelH then
-            lineH = self.cachedLabelH / lineCount
+        elseif labelH then
+            lineH = labelH / lineCount
         end
     end
+    local lineHChanged = self.lastLineH ~= lineH
     self.lastLineH = lineH
+    self.lastRenderedLabelW = labelW
+    self.lastRenderedRatingW = ratingW
+    self.lastRenderedValueW = valueW
 
     if hasRepair then
         local repairLabelVisible = repairLabelStr and repairLabelStr ~= ""
@@ -2829,8 +2868,12 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
         self.repairLabelText:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, repairRowY)
         self.repairLabelText:SetText(repairLabelStr or "")
         if repairLabelVisible then
-            repairLabelW = hasRows and labelW or (MeasuredOrCached(self.repairLabelText, self.cachedRepairLabelW, "GetStringWidth") or 80)
-            self.cachedRepairLabelW = repairLabelW
+            if hasRows then
+                repairLabelW = labelW
+            else
+                repairLabelW, self.cachedRepairLabelW = MeasuredOrCached(
+                    self.repairLabelText, self.cachedRepairLabelW, "GetStringWidth", 80)
+            end
             self.repairLabelText:SetWidth(repairLabelW)
             self.repairLabelText:Show()
         else
@@ -2846,13 +2889,16 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
         self.repairText:Show()
 
         -- WHY measure here (not in width math below): coin width depends on Text just set.
-        self.cachedRepairW = MeasuredOrCached(self.repairText, self.cachedRepairW, "GetStringWidth")
+        self.lastRenderedRepairW, self.cachedRepairW = MeasuredOrCached(
+            self.repairText, self.cachedRepairW, "GetStringWidth",
+            effectiveFontSize * Panel.SECRET_REPAIR_WIDTH_UNITS)
     else
         self.repairLabelText:Hide()
         self.repairText:Hide()
         -- Reset so a previously-wide coin doesn't keep the panel inflated after the user
         -- disables Show Repair Cost or repair drops to 0g (coin string becomes "").
         self.cachedRepairW = 0
+        self.lastRenderedRepairW = 0
     end
     self.lastRepairText = repairStr or ""
     -- WHY: completes the five-FontString font-change resilience surface (label / rating /
@@ -2870,7 +2916,7 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- strings would push every percent and rating column rightward on rows that have
     -- nothing to do with repair, breaking the visual contract of column alignment.
     local repairGap = (repairLabelW > 0) and 2 or 0
-    local repairTotal = hasRepair and (repairLabelW + repairGap + (self.cachedRepairW or 0)) or 0
+    local repairTotal = hasRepair and (repairLabelW + repairGap + (self.lastRenderedRepairW or 0)) or 0
     local totalW = math.max(rowsTotal, repairTotal, 80)
 
     -- WHY gated extra: only widen-by-coin causes the offset compensation. Floor 80 (when
@@ -2898,11 +2944,11 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- Frame height: text content bounds only. The optional background texture adds
     -- symmetric visual padding around this frame, so the text itself stays anchored
     -- exactly where older transparent-panel users placed it.
-    -- Cache invalidates on lineCount change, hasRepair flip, OR font/size change
-    -- (signaled via heightDirty by Panel:ApplyStyle). Reusing lastLineCount alone
-    -- would conflate "text changed" vs "font changed" — Panel:Reflow needs
-    -- lastLineCount preserved across ApplyStyle as the content-line-count marker.
-    if lineCount ~= self.lastLineCount or hasRepair ~= self.lastHasRepair or self.heightDirty then
+    -- Cache invalidates on lineCount change, hasRepair flip, font/size change
+    -- (heightDirty), OR an effective line-height change such as cold-fallback recovery.
+    -- Reusing lastLineCount alone would conflate "text changed" vs "font changed" —
+    -- Panel:Reflow needs it preserved across ApplyStyle as the content-line-count marker.
+    if lineCount ~= self.lastLineCount or hasRepair ~= self.lastHasRepair or self.heightDirty or lineHChanged then
         local h = lineCount * lineH
         if hasRepair then h = h + lineH + (hasRows and 1 or 0) end  -- repair row + gap when below stats
         self.frame:SetHeight(h)
@@ -6483,13 +6529,35 @@ if addon and addon.__statsproSmoke == true then
             local secondOverlay = mainPanel.tooltipOverlays and mainPanel.tooltipOverlays[2] or nil
             return {
                 textOutlineStyle = cached.textOutlineStyle,
+                mainShown = mainPanel:IsShown(),
+                mainFrameWidth = mainPanel.frame:GetWidth(),
                 mainFrameHeight = mainPanel.frame:GetHeight(),
                 mainLastLineH = mainPanel.lastLineH,
+                mainCachedLabelW = mainPanel.cachedLabelW,
+                mainCachedRatingW = mainPanel.cachedRatingW,
+                mainCachedValueW = mainPanel.cachedValueW,
+                mainCachedLabelH = mainPanel.cachedLabelH,
+                mainCachedRatingH = mainPanel.cachedRatingH,
+                mainCachedValueH = mainPanel.cachedValueH,
+                mainCachedRepairW = mainPanel.cachedRepairW,
+                mainCachedRepairLabelW = mainPanel.cachedRepairLabelW,
+                mainRenderedLabelW = mainPanel.lastRenderedLabelW,
+                mainRenderedRatingW = mainPanel.lastRenderedRatingW,
+                mainRenderedValueW = mainPanel.lastRenderedValueW,
+                mainRenderedRepairW = mainPanel.lastRenderedRepairW,
+                mainLabelText = mainPanel.labelText:GetText(),
+                mainRatingText = mainPanel.ratingText:GetText(),
+                mainValueText = mainPanel.valueText:GetText(),
+                mainRatingPoints = mainPanel.ratingText.points,
+                mainValuePoints = mainPanel.valueText.points,
                 mainBackgroundAlpha = mainPanel.frame.backdropColor and mainPanel.frame.backdropColor.a or nil,
                 mainBackgroundTextureAlpha = mainPanel.backgroundTexture and mainPanel.backgroundTexture.colorTexture and mainPanel.backgroundTexture.colorTexture.a or nil,
                 mainBackgroundTexturePoints = mainPanel.backgroundTexture and mainPanel.backgroundTexture.points or nil,
                 mainRepairPoints = mainPanel.repairText.points,
                 mainRepairLabelPoints = mainPanel.repairLabelText.points,
+                mainRepairShown = mainPanel.repairText:IsShown(),
+                mainRepairLabelShown = mainPanel.repairLabelText:IsShown(),
+                mainRepairLabelWidth = mainPanel.repairLabelText:GetWidth(),
                 mainFirstOverlayHeight = firstOverlay and firstOverlay:GetHeight() or nil,
                 mainFirstOverlayPoints = firstOverlay and firstOverlay.points or nil,
                 mainSecondOverlayHeight = secondOverlay and secondOverlay:GetHeight() or nil,
@@ -6499,7 +6567,27 @@ if addon and addon.__statsproSmoke == true then
                 mainValueFlags = mainPanel.valueText.fontFlags,
                 mainRepairFlags = mainPanel.repairText.fontFlags,
                 mainRepairLabelFlags = mainPanel.repairLabelText.fontFlags,
+                sideShown = defensivePanel:IsShown(),
+                sideFrameWidth = defensivePanel.frame:GetWidth(),
                 sideFrameHeight = defensivePanel.frame:GetHeight(),
+                sideLastLineH = defensivePanel.lastLineH,
+                sideCachedLabelW = defensivePanel.cachedLabelW,
+                sideCachedRatingW = defensivePanel.cachedRatingW,
+                sideCachedValueW = defensivePanel.cachedValueW,
+                sideCachedLabelH = defensivePanel.cachedLabelH,
+                sideCachedRatingH = defensivePanel.cachedRatingH,
+                sideCachedValueH = defensivePanel.cachedValueH,
+                sideCachedRepairW = defensivePanel.cachedRepairW,
+                sideCachedRepairLabelW = defensivePanel.cachedRepairLabelW,
+                sideRenderedLabelW = defensivePanel.lastRenderedLabelW,
+                sideRenderedRatingW = defensivePanel.lastRenderedRatingW,
+                sideRenderedValueW = defensivePanel.lastRenderedValueW,
+                sideRenderedRepairW = defensivePanel.lastRenderedRepairW,
+                sideLabelText = defensivePanel.labelText:GetText(),
+                sideRatingText = defensivePanel.ratingText:GetText(),
+                sideValueText = defensivePanel.valueText:GetText(),
+                sideRatingPoints = defensivePanel.ratingText.points,
+                sideValuePoints = defensivePanel.valueText.points,
                 sideBackgroundAlpha = defensivePanel.frame.backdropColor and defensivePanel.frame.backdropColor.a or nil,
                 sideBackgroundTextureAlpha = defensivePanel.backgroundTexture and defensivePanel.backgroundTexture.colorTexture and defensivePanel.backgroundTexture.colorTexture.a or nil,
                 sideBackgroundTexturePoints = defensivePanel.backgroundTexture and defensivePanel.backgroundTexture.points or nil,
@@ -6512,6 +6600,20 @@ if addon and addon.__statsproSmoke == true then
         end,
         renderMainPanelForSmoke = function(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr, targetRows)
             mainPanel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr, targetRows)
+        end,
+        setPanelMeasurementOverride = function(panelName, column, width, height)
+            local panel = panelName == "side" and defensivePanel or mainPanel
+            local fs = ({
+                label = panel.labelText,
+                rating = panel.ratingText,
+                value = panel.valueText,
+                repair = panel.repairText,
+                repairLabel = panel.repairLabelText,
+            })[column]
+            if fs then
+                fs.statsProWidthOverride = width
+                fs.statsProHeightOverride = height
+            end
         end,
         setMainPanelStringHeightMultiplier = function(column, multiplier)
             local fs = ({ label = mainPanel.labelText, rating = mainPanel.ratingText, value = mainPanel.valueText })[column]

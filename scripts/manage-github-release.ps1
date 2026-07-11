@@ -393,8 +393,148 @@ function Invoke-ImmutableReleaseAttestationChecks {
     [void](Invoke-Gh -Arguments @("release", "verify-asset", $ExpectedTag, $ReleaseJsonPath, "--repo", $Repository))
 }
 
+function Get-WorkflowJobBlock {
+    param([string]$WorkflowText, [string]$JobName)
+
+    $escapedName = [regex]::Escape($JobName)
+    $jobBlock = [regex]::Match(
+        $WorkflowText,
+        "(?ms)^  ${escapedName}:\s*$.*?(?=^  [A-Za-z0-9_-]+:\s*$|\z)"
+    )
+    if (-not $jobBlock.Success) {
+        throw "Workflow is missing job '$JobName'."
+    }
+    return $jobBlock
+}
+
+function Get-WorkflowStepName {
+    param([System.Text.RegularExpressions.Match]$StepBlock)
+
+    $name = [regex]::Match($StepBlock.Value, '(?m)^\s{6}- name:\s*(.+?)\s*$')
+    if (-not $name.Success) {
+        throw "Could not resolve a workflow step name."
+    }
+    return $name.Groups[1].Value
+}
+
+function Test-ContainsGitHubTokenReference {
+    param([string]$Text)
+
+    return $Text -match @'
+(?ix)
+\b(?:
+    secrets\s*(?:\.\s*GITHUB_TOKEN\b|\[\s*['"]\s*GITHUB_TOKEN\s*['"]\s*\])
+  | github\s*(?:\.\s*token\b|\[\s*['"]\s*token\s*['"]\s*\])
+)
+'@
+}
+
+function Assert-WorkflowCheckoutCredentialBoundary {
+    param(
+        [string]$WorkflowText,
+        [string[]]$JobNames
+    )
+
+    foreach ($jobName in $JobNames) {
+        $jobBlock = Get-WorkflowJobBlock -WorkflowText $WorkflowText -JobName $jobName
+        $stepBlocks = @([regex]::Matches($jobBlock.Value, '(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)'))
+        $checkoutSteps = @($stepBlocks | Where-Object {
+            $_.Value -match '(?m)^\s{8}uses:\s*actions/checkout@[0-9a-f]{40}\s*$'
+        })
+        if ($checkoutSteps.Count -ne 1) {
+            throw "Workflow job '$jobName' must contain exactly one SHA-pinned checkout step."
+        }
+
+        $checkoutStep = $checkoutSteps[0]
+        $fetchDepth = @([regex]::Matches($checkoutStep.Value, '(?m)^\s{10}fetch-depth:\s*(.*?)\s*$'))
+        if ($fetchDepth.Count -ne 1 -or $fetchDepth[0].Groups[1].Value -ne '0') {
+            throw "Workflow job '$jobName' checkout must preserve full history with fetch-depth: 0."
+        }
+        $persistCredentials = @([regex]::Matches($checkoutStep.Value, '(?m)^\s{10}persist-credentials:\s*(.*?)\s*$'))
+        if ($persistCredentials.Count -ne 1 -or $persistCredentials[0].Groups[1].Value -ne 'false') {
+            throw "Workflow job '$jobName' checkout must contain exactly one literal persist-credentials: false."
+        }
+        if ($checkoutStep.Value -match '(?m)^\s{10}(?:token|ssh-key):' -or
+            (Test-ContainsGitHubTokenReference -Text $checkoutStep.Value)) {
+            throw "Workflow job '$jobName' checkout must not receive explicit credentials."
+        }
+
+        $checkoutOrdinal = -1
+        for ($index = 0; $index -lt $stepBlocks.Count; $index++) {
+            if ($stepBlocks[$index].Index -eq $checkoutStep.Index) {
+                $checkoutOrdinal = $index
+                break
+            }
+        }
+        if ($checkoutOrdinal -lt 0 -or $checkoutOrdinal + 1 -ge $stepBlocks.Count) {
+            throw "Workflow job '$jobName' must verify checkout credentials immediately after checkout."
+        }
+        $verificationStep = $stepBlocks[$checkoutOrdinal + 1]
+        if ((Get-WorkflowStepName -StepBlock $verificationStep) -ne 'Verify anonymous checkout boundary' -or
+            $verificationStep.Value -notmatch '(?m)^\s{8}shell:\s*pwsh\s*$' -or
+            $verificationStep.Value -notmatch '(?m)^\s{8}run:\s*[.\\/]+scripts[\\/]check-anonymous-checkout\.ps1\s*$') {
+            throw "Workflow job '$jobName' must verify checkout credentials immediately after checkout."
+        }
+    }
+}
+
+function Assert-ReleaseGitHubTokenScope {
+    param([string]$WorkflowText)
+
+    $allowedStepNames = @(
+        'Refuse existing release marker',
+        'Create draft release marker',
+        'Attach validated assets to draft',
+        'Publish immutable GitHub release',
+        'Validate published immutable release assets'
+    )
+    $stepBlocks = @([regex]::Matches($WorkflowText, '(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)'))
+    $allowedBlocks = [System.Collections.Generic.List[System.Text.RegularExpressions.Match]]::new()
+
+    foreach ($allowedName in $allowedStepNames) {
+        $matchingBlocks = @($stepBlocks | Where-Object {
+            (Get-WorkflowStepName -StepBlock $_) -eq $allowedName
+        })
+        if ($matchingBlocks.Count -ne 1) {
+            throw "Release workflow must contain exactly one GitHub-management step '$allowedName'."
+        }
+        $block = $matchingBlocks[0]
+        $tokenLines = @([regex]::Matches(
+            $block.Value,
+            '(?m)^\s{10}GH_TOKEN:\s*\$\{\{\s*secrets\.GITHUB_TOKEN\s*\}\}\s*$'
+        ))
+        $blockWithoutCanonicalToken = if ($tokenLines.Count -eq 1) {
+            $block.Value.Remove($tokenLines[0].Index, $tokenLines[0].Length)
+        }
+        else {
+            $block.Value
+        }
+        if ($tokenLines.Count -ne 1 -or
+            $block.Value -match '(?m)^\s{10}(?:GITHUB_TOKEN|GITHUB_OAUTH):' -or
+            (Test-ContainsGitHubTokenReference -Text $blockWithoutCanonicalToken) -or
+            $block.Value -match '(?m)^\s{8}uses:') {
+            throw "GitHub token must be scoped only as GH_TOKEN in GitHub-management shell step '$allowedName'."
+        }
+        $allowedBlocks.Add($block)
+    }
+
+    $outsideAllowedSteps = $WorkflowText
+    foreach ($block in @($allowedBlocks | Sort-Object Index -Descending)) {
+        $outsideAllowedSteps = $outsideAllowedSteps.Remove($block.Index, $block.Length)
+    }
+    if ((Test-ContainsGitHubTokenReference -Text $outsideAllowedSteps) -or
+        $outsideAllowedSteps -match '(?m)^\s*(?:GH_TOKEN|GITHUB_TOKEN|GITHUB_OAUTH):') {
+        throw "GitHub token must not be exposed outside GitHub-management shell steps."
+    }
+}
+
 function Assert-ReleaseWorkflowBoundary {
     param([string]$WorkflowText)
+
+    Assert-WorkflowCheckoutCredentialBoundary `
+        -WorkflowText $WorkflowText `
+        -JobNames @('preflight', 'release')
+    Assert-ReleaseGitHubTokenScope -WorkflowText $WorkflowText
 
     $orderedSteps = @(
         "- name: Refuse existing release marker",
@@ -698,6 +838,123 @@ function Invoke-SelfTest {
     $workflowPath = Join-Path (Join-Path $PSScriptRoot "..") ".github\workflows\release.yml"
     $workflowText = Get-Content -LiteralPath $workflowPath -Raw -Encoding UTF8
     Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText
+    $checksWorkflowPath = Join-Path (Join-Path $PSScriptRoot "..") ".github\workflows\checks.yml"
+    $checksWorkflowText = Get-Content -LiteralPath $checksWorkflowPath -Raw -Encoding UTF8
+    Assert-WorkflowCheckoutCredentialBoundary `
+        -WorkflowText $checksWorkflowText `
+        -JobNames @('checks', 'package-contract')
+
+    foreach ($reference in @(
+        '${{ secrets.GITHUB_TOKEN }}',
+        '${{ secrets [ ''GITHUB_TOKEN'' ] }}',
+        '${{ secrets["GITHUB_TOKEN"] }}',
+        '${{ github.token }}',
+        '${{ github [ ''token'' ] }}',
+        '${{ github["token"] }}',
+        '${{ secrets . GITHUB_TOKEN }}'
+    )) {
+        if (-not (Test-ContainsGitHubTokenReference -Text $reference)) {
+            throw "GitHub token reference detector missed a supported expression form."
+        }
+    }
+    foreach ($reference in @(
+        '${{ secrets.CF_API_KEY }}',
+        '${{ github.repository }}',
+        'GITHUB_TOKEN is named only in documentation text'
+    )) {
+        if (Test-ContainsGitHubTokenReference -Text $reference) {
+            throw "GitHub token reference detector rejected a non-token expression."
+        }
+    }
+
+    $releaseJobBlock = Get-WorkflowJobBlock -WorkflowText $workflowText -JobName 'release'
+    $replaceReleaseJob = {
+        param([string]$Replacement)
+        return $workflowText.Remove($releaseJobBlock.Index, $releaseJobBlock.Length).Insert(
+            $releaseJobBlock.Index,
+            $Replacement)
+    }
+    Assert-ThrowsMatch "missing checkout persistence boundary rejected" {
+        $replacement = $releaseJobBlock.Value -replace '(?m)^\s{10}persist-credentials:\s*false\s*\r?\n', ''
+        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
+    } "persist-credentials: false"
+    Assert-ThrowsMatch "enabled checkout persistence rejected" {
+        $replacement = $releaseJobBlock.Value -replace '(?m)^(\s{10}persist-credentials:)\s*false\s*$', '$1 true'
+        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
+    } "persist-credentials: false"
+    Assert-ThrowsMatch "dynamic checkout persistence rejected" {
+        $replacement = $releaseJobBlock.Value -replace '(?m)^(\s{10}persist-credentials:)\s*false\s*$', '$1 ${{ always() }}'
+        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
+    } "literal persist-credentials: false"
+    Assert-ThrowsMatch "duplicate checkout persistence setting rejected" {
+        $replacement = $releaseJobBlock.Value.Replace(
+            '          persist-credentials: false',
+            "          persist-credentials: false`n          persist-credentials: false")
+        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
+    } "exactly one literal persist-credentials: false"
+    Assert-ThrowsMatch "explicit checkout token rejected" {
+        $replacement = $releaseJobBlock.Value.Replace(
+            '          persist-credentials: false',
+            "          persist-credentials: false`n          token: `${{ secrets.GITHUB_TOKEN }}")
+        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
+    } "must not receive explicit credentials"
+    Assert-ThrowsMatch "missing post-checkout credential verification rejected" {
+        $replacement = $releaseJobBlock.Value.Replace(
+            '      - name: Verify anonymous checkout boundary',
+            '      - name: Credential check removed')
+        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
+    } "verify checkout credentials immediately"
+
+    $checksPackageJob = Get-WorkflowJobBlock -WorkflowText $checksWorkflowText -JobName 'package-contract'
+    Assert-ThrowsMatch "checks package checkout persistence rejected" {
+        $replacement = $checksPackageJob.Value -replace '(?m)^\s{10}persist-credentials:\s*false\s*\r?\n', ''
+        $mutated = $checksWorkflowText.Remove($checksPackageJob.Index, $checksPackageJob.Length).Insert(
+            $checksPackageJob.Index,
+            $replacement)
+        Assert-WorkflowCheckoutCredentialBoundary `
+            -WorkflowText $mutated `
+            -JobNames @('checks', 'package-contract')
+    } "persist-credentials: false"
+
+    $githubTokenExpression = '${{ secrets.GITHUB_TOKEN }}'
+    $bracketSecretTokenExpression = '${{ secrets[''GITHUB_TOKEN''] }}'
+    $bracketContextTokenExpression = '${{ github["token"] }}'
+    Assert-ThrowsMatch "job-level GitHub token rejected" {
+        $replacement = $releaseJobBlock.Value.Replace(
+            '  release:',
+            "  release:`n    env:`n      GH_TOKEN: $githubTokenExpression")
+        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
+    } "outside GitHub-management shell steps"
+    Assert-ThrowsMatch "GitHub token in first Packager rejected" {
+        $mutated = $workflowText.Replace(
+            '      - name: Build package without publishing',
+            "      - name: Build package without publishing`n        env:`n          GH_TOKEN: $githubTokenExpression")
+        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+    } "outside GitHub-management shell steps"
+    Assert-ThrowsMatch "bracket GitHub secret in first Packager rejected" {
+        $mutated = $workflowText.Replace(
+            '      - name: Build package without publishing',
+            "      - name: Build package without publishing`n        env:`n          GH_TOKEN: $bracketSecretTokenExpression")
+        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+    } "outside GitHub-management shell steps"
+    Assert-ThrowsMatch "GitHub token in rebuild Packager rejected" {
+        $mutated = $workflowText.Replace(
+            '      - name: Rebuild package without publishing',
+            "      - name: Rebuild package without publishing`n        env:`n          GH_TOKEN: $githubTokenExpression")
+        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+    } "outside GitHub-management shell steps"
+    Assert-ThrowsMatch "GitHub token in non-management shell step rejected" {
+        $mutated = $workflowText.Replace(
+            '      - name: Trim release changelog',
+            "      - name: Trim release changelog`n        env:`n          GH_TOKEN: $githubTokenExpression")
+        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+    } "outside GitHub-management shell steps"
+    Assert-ThrowsMatch "bracket GitHub context token in non-management step rejected" {
+        $mutated = $workflowText.Replace(
+            '      - name: Trim release changelog',
+            "      - name: Trim release changelog`n        env:`n          GH_TOKEN: $bracketContextTokenExpression")
+        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+    } "outside GitHub-management shell steps"
     Assert-ThrowsMatch "single-pending release queue rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "queue: max", "queue: single")
     } "queue: max"
@@ -734,7 +991,10 @@ function Invoke-SelfTest {
     } "immediate pre-upload step"
     Assert-ThrowsMatch "GitHub token in marketplace step rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "WOWI_API_TOKEN: \$\{\{ secrets\.WOWI_API_TOKEN \}\}", 'GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}')
-    } "reusing the validated tree"
+    } "outside GitHub-management shell steps"
+    Assert-ThrowsMatch "bracket GitHub token in marketplace Packager rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "WOWI_API_TOKEN: \$\{\{ secrets\.WOWI_API_TOKEN \}\}", "WOWI_API_TOKEN: $bracketSecretTokenExpression")
+    } "outside GitHub-management shell steps"
 
     Write-Host "GitHub release management self-test passed."
 }

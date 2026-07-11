@@ -18,6 +18,11 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify anonymous checkout boundary
+        shell: pwsh
+        run: ./scripts/check-anonymous-checkout.ps1
 
       - name: Check CI action refs
         shell: pwsh
@@ -32,6 +37,7 @@ jobs:
         run: |
           .\scripts\install-check-tools.ps1 -SelfTest
           .\scripts\install-check-tools.ps1 -PinnedLuaIntegrationTest
+          .\scripts\check-anonymous-checkout.ps1 -SelfTest
           .\scripts\report-ci-action-refs.ps1 -SelfTest
           .\scripts\check-metadata.ps1 -SelfTest
           .\scripts\check-marketplace-versions.ps1 -SelfTest
@@ -66,6 +72,11 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify anonymous checkout boundary
+        shell: pwsh
+        run: ./scripts/check-anonymous-checkout.ps1
 
       - name: Install release validation tools
         run: |

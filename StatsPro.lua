@@ -7215,8 +7215,10 @@ local function PushItemLevelRow(labels, ratings, values)
     local cs = cached.colorStrings
     local itemLevelColor = cs.itemLevel
     local valueColor = (cached.matchValueColorToStat and itemLevelColor) or cs.rating
-    local overall = math.floor(cached.itemLevelOverall + 0.5)
-    local equipped = math.floor(cached.itemLevelEquipped + 0.5)
+    -- WHY: Blizzard's character panel floors both values; rounding can also
+    -- promote an equipped-vs-overall delta across the warning thresholds.
+    local overall = math.floor(cached.itemLevelOverall)
+    local equipped = math.floor(cached.itemLevelEquipped)
     local delta = math.max(0, overall - equipped)
     local equippedColor = valueColor
     if delta >= ITEM_LEVEL_DANGER_DELTA then

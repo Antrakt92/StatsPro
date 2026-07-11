@@ -6306,6 +6306,91 @@ do
 end
 
 do
+    local itemLevelFloorCases = {
+        {
+            name = "fraction_49",
+            overall = 273.49,
+            equipped = 271.49,
+            expectedOverall = 273,
+            expectedEquipped = 271,
+            expectedColor = nil,
+        },
+        {
+            name = "fraction_50",
+            overall = 273.50,
+            equipped = 271.50,
+            expectedOverall = 273,
+            expectedEquipped = 271,
+            expectedColor = nil,
+        },
+        {
+            name = "warn_below_boundary",
+            overall = 275.50,
+            equipped = 271.49,
+            expectedOverall = 275,
+            expectedEquipped = 271,
+            expectedColor = nil,
+        },
+        {
+            name = "warn_at_boundary",
+            overall = 276.00,
+            equipped = 271.99,
+            expectedOverall = 276,
+            expectedEquipped = 271,
+            expectedColor = "ffcc33",
+        },
+        {
+            name = "danger_below_boundary",
+            overall = 290.50,
+            equipped = 271.49,
+            expectedOverall = 290,
+            expectedEquipped = 271,
+            expectedColor = "ffcc33",
+        },
+        {
+            name = "danger_at_boundary",
+            overall = 291.00,
+            equipped = 271.99,
+            expectedOverall = 291,
+            expectedEquipped = 271,
+            expectedColor = "ff3333",
+        },
+    }
+
+    for _, case in ipairs(itemLevelFloorCases) do
+        local env, _, itemLevelTest = loadStatsPro("enUS", {
+            statsProDB = {
+                showRating = true,
+                showPercentage = true,
+                showOffensive = false,
+                showTertiary = false,
+                showDefensive = false,
+                showItemLevel = true,
+                showDurability = false,
+                showRepairCost = false,
+            },
+            getAverageItemLevel = function() return case.overall, case.equipped end,
+        })
+        local prefix = "render.item_level_blizzard_floor." .. case.name
+        fireEvent(prefix .. ".fire", env, "PLAYER_ENTERING_WORLD")
+        local state = itemLevelTest.itemLevelState()
+        eq(prefix .. ".raw_equipped", state.equipped, case.equipped)
+        eq(prefix .. ".raw_overall", state.overall, case.overall)
+        local itemLevel = findBlockBySplitKey(prefix .. ".block", itemLevelTest.buildRenderBlocks(), "splitItemLevel")
+        local ratingText = itemLevel.ratings[1] or ""
+        local valueText = itemLevel.values[1] or ""
+        local renderedEquipped = tonumber(ratingText:match("^|cff%x%x%x%x%x%x(%d+)|r"))
+        local renderedOverall = tonumber(valueText:match("^|cff%x%x%x%x%x%x(%d+)|r"))
+        eq(prefix .. ".equipped", renderedEquipped, case.expectedEquipped)
+        eq(prefix .. ".overall", renderedOverall, case.expectedOverall)
+        eq(prefix .. ".warn_color", ratingText:find("|cffffcc33", 1, true) ~= nil,
+            case.expectedColor == "ffcc33")
+        eq(prefix .. ".danger_color", ratingText:find("|cffff3333", 1, true) ~= nil,
+            case.expectedColor == "ff3333")
+    end
+end
+
+do
     local ilvlHiddenEnv, _, ilvlHiddenTest = loadStatsPro("enUS", {
         statsProDB = {
             labelStyle = "hidden",

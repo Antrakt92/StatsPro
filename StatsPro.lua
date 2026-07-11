@@ -8111,6 +8111,370 @@ addon.panelEditRuntime.Refresh = function(combatOverride)
     defensivePanel:SetEditAffordanceVisible(show)
 end
 
+-- The Settings shell uses one explicit visual vocabulary.  Keep this runtime-only:
+-- profile data and preview/commit semantics stay owned by their existing modules.
+-- WHY table methods instead of more locals: this file is close to Lua 5.1's local and
+-- closure limits, and T2-85 can reuse the same roles without duplicating literals.
+addon.settingsDesign = {
+    tokens = {
+        colors = {
+            window = { 0.018, 0.022, 0.020, 0.96 },
+            raised = { 0.030, 0.038, 0.034, 0.97 },
+            profile = { 0.050, 0.064, 0.057, 0.92 },
+            viewport = { 0.014, 0.018, 0.016, 0.78 },
+            section = { 0.050, 0.064, 0.057, 0.72 },
+            borderStrong = { 0.24, 0.28, 0.26, 0.85 },
+            borderSoft = { 0.22, 0.25, 0.23, 0.38 },
+            separator = { 0.42, 0.46, 0.44, 0.28 },
+            accent = { 0.10, 0.82, 0.48, 1 },
+            accentMuted = { 0.10, 0.82, 0.48, 0.28 },
+            textPrimary = { 0.92, 0.94, 0.93, 1 },
+            textSecondary = { 0.70, 0.74, 0.72, 1 },
+            textMuted = { 0.49, 0.54, 0.51, 1 },
+            textDisabled = { 0.38, 0.41, 0.40, 1 },
+            warning = { 1, 0.68, 0.22, 1 },
+            danger = { 0.86, 0.28, 0.25, 1 },
+            hover = { 0.10, 0.13, 0.115, 0.92 },
+            pressed = { 0.10, 0.82, 0.48, 0.12 },
+        },
+        typography = {
+            title = { size = 16, flags = "OUTLINE", color = "textPrimary" },
+            metadata = { size = 11, color = "textSecondary" },
+            profile = { size = 12, color = "textPrimary" },
+            tab = { size = 13, flags = "OUTLINE", color = "textSecondary" },
+            section = { size = 12, flags = "OUTLINE", color = "textPrimary" },
+            button = { size = 12, color = "textPrimary" },
+        },
+        spacing = { xxs = 2, xs = 4, sm = 8, md = 12, lg = 16, xl = 24 },
+        geometry = {
+            windowWidth = 500, minHeight = 260, maxHeight = 600,
+            parentHeightRatio = 0.90, outerInset = 12,
+            titleSurfaceInset = 5, titleSurfaceHeight = 35, titleHeight = 40,
+            titleTextInset = 16, titleTextTop = 11,
+            profileInset = 14, profileTop = 44, profileHeight = 48,
+            profileFieldInset = 68, profileFieldWidth = 286, manageWidth = 100,
+            tabInset = 18, tabTop = 100, tabHeight = 28, tabGap = 4, tabWidth = 152,
+            viewportInset = 12, viewportTop = 136, viewportBottom = 62,
+            scrollLeft = 16, scrollRight = 32, scrollTop = 140, scrollBottom = 66,
+            contentWidth = 450,
+            footerSurfaceInset = 5, footerSurfaceHeight = 51, footerHeight = 56,
+            footerButtonInset = 18, footerButtonBottom = 14,
+            resetButtonWidth = 240, closeButtonWidth = 100,
+            shellButtonHeight = 28, minHitTarget = 24,
+            sectionHeaderHeight = 22, scrollbarGutter = 16,
+            scrollbarTrackWidth = 4, scrollbarArrowInset = 18,
+        },
+    },
+    components = {
+        surfaces = {
+            window = { color = "window", border = "borderStrong", ornate = true },
+            raised = { color = "raised", border = "borderSoft" },
+            profile = { color = "profile", border = "borderSoft" },
+            viewport = { color = "viewport", border = "borderSoft" },
+            section = { color = "section", border = "borderSoft" },
+        },
+        buttons = {
+            field = {
+                normal = { bg = "raised", border = "borderSoft", text = "textPrimary" },
+                hover = { bg = "hover", border = "borderStrong", text = "textPrimary" },
+                pressed = { bg = "pressed", border = "accentMuted", text = "textPrimary" },
+                disabled = { bg = "raised", border = "borderSoft", text = "textDisabled" },
+            },
+            primary = {
+                normal = { bg = "raised", border = "accentMuted", text = "textPrimary" },
+                hover = { bg = "hover", border = "accent", text = "textPrimary" },
+                pressed = { bg = "pressed", border = "accent", text = "textPrimary" },
+                disabled = { bg = "raised", border = "borderSoft", text = "textDisabled" },
+            },
+            destructive = {
+                normal = { bg = "raised", border = "borderSoft", text = "textSecondary" },
+                hover = { bg = "pressed", border = "danger", text = "danger" },
+                pressed = { bg = "pressed", border = "danger", text = "textPrimary" },
+                disabled = { bg = "raised", border = "borderSoft", text = "textDisabled" },
+            },
+        },
+    },
+}
+
+function addon.settingsDesign.Color(name)
+    return addon.settingsDesign.tokens.colors[name]
+end
+
+function addon.settingsDesign.SetRegionColor(region, colorName)
+    local color = addon.settingsDesign.Color(colorName)
+    if color then region:SetTextColor(color[1], color[2], color[3], color[4]) end
+end
+
+function addon.settingsDesign.ApplyTextRole(region, roleName)
+    local role = addon.settingsDesign.tokens.typography[roleName]
+    if not role then return end
+    RegisterConfigFont(region, role.size, role.flags)
+    addon.settingsDesign.SetRegionColor(region, role.color)
+    region.statsProTextRole = roleName
+end
+
+function addon.settingsDesign.ApplySurface(frame, roleName)
+    local role = addon.settingsDesign.components.surfaces[roleName]
+    if not role then return end
+    frame:SetBackdrop({
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = role.ornate and "Interface\\DialogFrame\\UI-DialogBox-Border"
+            or "Interface\\Buttons\\WHITE8X8",
+        tile = true,
+        tileSize = 16,
+        edgeSize = role.ornate and 16 or 1,
+        insets = role.ornate
+            and { left = 5, right = 5, top = 5, bottom = 5 }
+            or { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    local bg = addon.settingsDesign.Color(role.color)
+    local border = addon.settingsDesign.Color(role.border)
+    frame:SetBackdropColor(bg[1], bg[2], bg[3], bg[4])
+    frame:SetBackdropBorderColor(border[1], border[2], border[3], border[4])
+    frame.statsProSurfaceRole = roleName
+end
+
+-- Decorative shell layers must stay parent-owned regions. A child Frame backdrop
+-- inherits a higher frame level and can cover OVERLAY FontStrings owned by its parent.
+function addon.settingsDesign.CreateTextureSurface(parent, roleName)
+    local role = addon.settingsDesign.components.surfaces[roleName]
+    if not role then error("Unknown Settings surface role: " .. tostring(roleName)) end
+    local background = parent:CreateTexture(nil, "BACKGROUND")
+    local bg = addon.settingsDesign.Color(role.color)
+    background:SetColorTexture(bg[1], bg[2], bg[3], bg[4])
+    background.statsProSurfaceRole = roleName
+    local border = addon.settingsDesign.Color(role.border)
+    local top = parent:CreateTexture(nil, "BORDER")
+    top:SetPoint("TOPLEFT", background, "TOPLEFT", 0, 0)
+    top:SetPoint("TOPRIGHT", background, "TOPRIGHT", 0, 0)
+    top:SetHeight(1)
+    top:SetColorTexture(border[1], border[2], border[3], border[4])
+    local bottom = parent:CreateTexture(nil, "BORDER")
+    bottom:SetPoint("BOTTOMLEFT", background, "BOTTOMLEFT", 0, 0)
+    bottom:SetPoint("BOTTOMRIGHT", background, "BOTTOMRIGHT", 0, 0)
+    bottom:SetHeight(1)
+    bottom:SetColorTexture(border[1], border[2], border[3], border[4])
+    local left = parent:CreateTexture(nil, "BORDER")
+    left:SetPoint("TOPLEFT", background, "TOPLEFT", 0, 0)
+    left:SetPoint("BOTTOMLEFT", background, "BOTTOMLEFT", 0, 0)
+    left:SetWidth(1)
+    left:SetColorTexture(border[1], border[2], border[3], border[4])
+    local right = parent:CreateTexture(nil, "BORDER")
+    right:SetPoint("TOPRIGHT", background, "TOPRIGHT", 0, 0)
+    right:SetPoint("BOTTOMRIGHT", background, "BOTTOMRIGHT", 0, 0)
+    right:SetWidth(1)
+    right:SetColorTexture(border[1], border[2], border[3], border[4])
+    background.statsProBorders = { top, bottom, left, right }
+    return background
+end
+
+function addon.settingsDesign.ApplySeparator(texture)
+    local color = addon.settingsDesign.Color("separator")
+    texture:SetColorTexture(color[1], color[2], color[3], color[4])
+    texture.statsProColorRole = "separator"
+end
+
+function addon.settingsDesign.RefreshShellButton(button)
+    local role = addon.settingsDesign.components.buttons[button.statsProButtonRole]
+    if not role then return end
+    local state
+    if not button:IsEnabled() then
+        state = "disabled"
+    elseif button.statsProPressed then
+        state = "pressed"
+    elseif button.statsProHovered then
+        state = "hover"
+    else
+        state = "normal"
+    end
+    local style = role[state]
+    local bg = addon.settingsDesign.Color(style.bg)
+    local border = addon.settingsDesign.Color(style.border)
+    button:SetBackdropColor(bg[1], bg[2], bg[3], bg[4])
+    button:SetBackdropBorderColor(border[1], border[2], border[3], border[4])
+    if button.statsProText then
+        addon.settingsDesign.SetRegionColor(button.statsProText, style.text)
+    end
+    button.statsProButtonState = state
+end
+
+function addon.settingsDesign.OnButtonEnter(button)
+    button.statsProHovered = true
+    addon.settingsDesign.RefreshShellButton(button)
+end
+
+function addon.settingsDesign.OnButtonLeave(button)
+    button.statsProHovered = false
+    button.statsProPressed = false
+    addon.settingsDesign.RefreshShellButton(button)
+end
+
+function addon.settingsDesign.OnButtonDown(button)
+    button.statsProPressed = true
+    addon.settingsDesign.RefreshShellButton(button)
+end
+
+function addon.settingsDesign.OnButtonUp(button)
+    button.statsProPressed = false
+    addon.settingsDesign.RefreshShellButton(button)
+end
+
+function addon.settingsDesign.CreateShellButton(parent, name, roleName, textRole)
+    local button = CreateFrame("Button", name, parent, "BackdropTemplate")
+    addon.settingsDesign.ApplySurface(button, "raised")
+    local text = button:CreateFontString(nil, "OVERLAY")
+    addon.settingsDesign.ApplyTextRole(text, textRole or "button")
+    text:SetPoint("LEFT", addon.settingsDesign.tokens.spacing.sm, 0)
+    text:SetPoint("RIGHT", -addon.settingsDesign.tokens.spacing.sm, 0)
+    text:SetJustifyH("CENTER")
+    text:SetWordWrap(false)
+    text:SetMaxLines(1)
+    button:SetFontString(text)
+    button.statsProText = text
+    button.statsProButtonRole = roleName or "field"
+    button:SetScript("OnEnter", addon.settingsDesign.OnButtonEnter)
+    button:SetScript("OnLeave", addon.settingsDesign.OnButtonLeave)
+    button:SetScript("OnMouseDown", addon.settingsDesign.OnButtonDown)
+    button:SetScript("OnMouseUp", addon.settingsDesign.OnButtonUp)
+    button:HookScript("OnEnable", addon.settingsDesign.RefreshShellButton)
+    button:HookScript("OnDisable", addon.settingsDesign.RefreshShellButton)
+    addon.settingsDesign.RefreshShellButton(button)
+    return button
+end
+
+function addon.settingsDesign.RefreshTab(button)
+    local selected = button.statsProSelected == true
+    local pressed = button.statsProPressed == true
+    local hovered = button.statsProHovered == true
+    local fill = addon.settingsDesign.Color(pressed and "pressed"
+        or (hovered and "hover" or (selected and "accentMuted" or "raised")))
+    local fillAlpha = selected and not pressed and not hovered and fill[4]
+        or (not selected and not pressed and not hovered and 0 or fill[4])
+    button.statsProFill:SetColorTexture(fill[1], fill[2], fill[3], fillAlpha)
+    if selected then button.statsProSelectedLine:Show() else button.statsProSelectedLine:Hide() end
+    addon.settingsDesign.SetRegionColor(button.statsProText,
+        (selected or hovered or pressed) and "textPrimary" or "textSecondary")
+    button.statsProTabState = selected and "selected"
+        or (pressed and "pressed" or (hovered and "hover" or "normal"))
+end
+
+function addon.settingsDesign.SetTabSelected(button, selected)
+    button.statsProSelected = selected == true
+    addon.settingsDesign.RefreshTab(button)
+end
+
+function addon.settingsDesign.CreateTab(parent, label)
+    local button = CreateFrame("Button", nil, parent)
+    local fill = button:CreateTexture(nil, "BACKGROUND")
+    fill:SetAllPoints(button)
+    button.statsProFill = fill
+    local line = button:CreateTexture(nil, "ARTWORK")
+    line:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT",
+        addon.settingsDesign.tokens.spacing.md, 0)
+    line:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT",
+        -addon.settingsDesign.tokens.spacing.md, 0)
+    line:SetHeight(2)
+    local accent = addon.settingsDesign.Color("accent")
+    line:SetColorTexture(accent[1], accent[2], accent[3], accent[4])
+    line:Hide()
+    button.statsProSelectedLine = line
+    local text = button:CreateFontString(nil, "OVERLAY")
+    addon.settingsDesign.ApplyTextRole(text, "tab")
+    text:SetPoint("CENTER", 0, 1)
+    PushLocalizedLabel(function() text:SetText(L(label)) end)
+    button.statsProText = text
+    button:SetScript("OnEnter", addon.settingsDesign.OnButtonEnter)
+    button:SetScript("OnLeave", addon.settingsDesign.OnButtonLeave)
+    button:SetScript("OnMouseDown", addon.settingsDesign.OnButtonDown)
+    button:SetScript("OnMouseUp", addon.settingsDesign.OnButtonUp)
+    button:HookScript("OnEnter", addon.settingsDesign.RefreshTab)
+    button:HookScript("OnLeave", addon.settingsDesign.RefreshTab)
+    button:HookScript("OnMouseDown", addon.settingsDesign.RefreshTab)
+    button:HookScript("OnMouseUp", addon.settingsDesign.RefreshTab)
+    addon.settingsDesign.RefreshTab(button)
+    return button
+end
+
+function addon.settingsDesign.RefreshScrollThumb(scrollBar)
+    local thumb = scrollBar.statsProThumb
+    if not thumb then return end
+    local color = addon.settingsDesign.Color(
+        (scrollBar.statsProHovered or scrollBar.statsProPressed) and "accent" or "textMuted")
+    thumb:SetVertexColor(color[1], color[2], color[3],
+        (scrollBar.statsProHovered or scrollBar.statsProPressed) and 0.78 or 0.62)
+end
+
+function addon.settingsDesign.OnScrollEnter(scrollBar)
+    scrollBar.statsProHovered = true
+    addon.settingsDesign.RefreshScrollThumb(scrollBar)
+end
+
+function addon.settingsDesign.OnScrollLeave(scrollBar)
+    scrollBar.statsProHovered = false
+    scrollBar.statsProPressed = false
+    addon.settingsDesign.RefreshScrollThumb(scrollBar)
+end
+
+function addon.settingsDesign.OnScrollDown(scrollBar)
+    scrollBar.statsProPressed = true
+    addon.settingsDesign.RefreshScrollThumb(scrollBar)
+end
+
+function addon.settingsDesign.OnScrollUp(scrollBar)
+    scrollBar.statsProPressed = false
+    addon.settingsDesign.RefreshScrollThumb(scrollBar)
+end
+
+function addon.settingsDesign.StyleScrollButton(button)
+    if not button then return end
+    local muted = addon.settingsDesign.Color("textMuted")
+    local accent = addon.settingsDesign.Color("accent")
+    local normal = type(button.GetNormalTexture) == "function" and button:GetNormalTexture()
+    local highlight = type(button.GetHighlightTexture) == "function" and button:GetHighlightTexture()
+    local pushed = type(button.GetPushedTexture) == "function" and button:GetPushedTexture()
+    local disabled = type(button.GetDisabledTexture) == "function" and button:GetDisabledTexture()
+    for _, texture in pairs({ normal, highlight, pushed, disabled }) do
+        if texture and type(texture.SetDesaturated) == "function" then texture:SetDesaturated(true) end
+    end
+    if normal then normal:SetVertexColor(muted[1], muted[2], muted[3], 0.62) end
+    if highlight then highlight:SetVertexColor(accent[1], accent[2], accent[3], 0.82) end
+    if pushed then pushed:SetVertexColor(accent[1], accent[2], accent[3], 0.92) end
+    if disabled then disabled:SetVertexColor(muted[1], muted[2], muted[3], 0.24) end
+    button:SetAlpha(1)
+    button.statsProScrollbarButtonStyled = true
+end
+
+function addon.settingsDesign.StyleScrollFrame(scrollFrame)
+    local frameName = scrollFrame:GetName()
+    local scrollBar = scrollFrame.ScrollBar
+        or (frameName and _G[frameName .. "ScrollBar"])
+    if not scrollBar then return end
+    local thumb = scrollBar.ThumbTexture
+        or (type(scrollBar.GetThumbTexture) == "function" and scrollBar:GetThumbTexture())
+    scrollBar.statsProThumb = thumb
+    scrollBar:HookScript("OnEnter", addon.settingsDesign.OnScrollEnter)
+    scrollBar:HookScript("OnLeave", addon.settingsDesign.OnScrollLeave)
+    scrollBar:HookScript("OnMouseDown", addon.settingsDesign.OnScrollDown)
+    scrollBar:HookScript("OnMouseUp", addon.settingsDesign.OnScrollUp)
+    addon.settingsDesign.RefreshScrollThumb(scrollBar)
+    local up = scrollBar.ScrollUpButton
+        or (frameName and _G[frameName .. "ScrollBarScrollUpButton"])
+    local down = scrollBar.ScrollDownButton
+        or (frameName and _G[frameName .. "ScrollBarScrollDownButton"])
+    addon.settingsDesign.StyleScrollButton(up)
+    addon.settingsDesign.StyleScrollButton(down)
+    local track = scrollFrame:CreateTexture(nil, "BACKGROUND")
+    local geometry = addon.settingsDesign.tokens.geometry
+    track:SetPoint("TOP", scrollBar, "TOP", 0, -geometry.scrollbarArrowInset)
+    track:SetPoint("BOTTOM", scrollBar, "BOTTOM", 0, geometry.scrollbarArrowInset)
+    track:SetWidth(geometry.scrollbarTrackWidth)
+    local trackColor = addon.settingsDesign.Color("borderSoft")
+    track:SetColorTexture(trackColor[1], trackColor[2], trackColor[3], 0.48)
+    track.statsProColorRole = "scrollbarTrack"
+    scrollFrame.statsProScrollTrack = track
+    scrollFrame.statsProScrollbarStyled = true
+end
+
 addon.panelEditRuntime.SetRequested = function(requested)
     addon.panelEditRuntime.requested = requested == true
     addon.panelEditRuntime.Refresh()
@@ -8129,9 +8493,6 @@ local function CursorAdvance(c, h) c.y = c.y - (h or 24) - c.gap end
 local function CursorGap(c, n)     c.y = c.y - (n or 8) end
 local function CursorUsed(c)       return math.abs(c.initialY - c.y) + 16 end
 
--- WHY: Lua 5.1 string.upper is byte-based; mangles UTF-8. ASCII fast-pathed,
--- Cyrillic basic+extended (а..я + ё/ѐ/і/ї/ў etc.) and Latin Supplement (à-þ excl.
--- ÷/ß/ÿ) mapped via byte arithmetic. 3/4-byte sequences (CJK/emoji) pass identity.
 -- Lead-byte ranges per RFC 3629; malformed input progresses 1 byte to avoid infinite loop.
 local function Utf8CharLen(s, i)
     local b1 = s and string.byte(s, i or 1)
@@ -8141,53 +8502,6 @@ local function Utf8CharLen(s, i)
     if b1 >= 0xE0 and b1 <= 0xEF then return 3 end
     if b1 >= 0xF0 and b1 <= 0xF7 then return 4 end
     return 1
-end
-
-local function Utf8Upper(s)
-    if not string.find(s, "[\128-\255]") then return string.upper(s) end
-    local out, i, n = {}, 1, #s
-    while i <= n do
-        local b1 = string.byte(s, i)
-        if b1 < 0x80 then
-            out[#out+1] = string.upper(string.char(b1))
-            i = i + 1
-        elseif b1 == 0xD0 then
-            local b2 = string.byte(s, i+1)
-            if b2 and b2 >= 0xB0 and b2 <= 0xBF then
-                out[#out+1] = string.char(0xD0, b2 - 0x20)
-            else
-                out[#out+1] = string.sub(s, i, i+1)
-            end
-            i = i + 2
-        elseif b1 == 0xD1 then
-            local b2 = string.byte(s, i+1)
-            if b2 and b2 >= 0x80 and b2 <= 0x8F then
-                out[#out+1] = string.char(0xD0, b2 + 0x20)
-            elseif b2 and b2 >= 0x90 and b2 <= 0x9F then
-                out[#out+1] = string.char(0xD0, b2 - 0x10)
-            else
-                out[#out+1] = string.sub(s, i, i+1)
-            end
-            i = i + 2
-        elseif b1 == 0xC3 then
-            -- Latin Supplement (à-ï/ñ-ö/ø-þ): b2 - 0x20 mirrors ASCII toupper.
-            -- Skip 0xB7 (÷ — math sign, not a letter); 0xBF (ÿ → Ÿ U+0178) is
-            -- 2-byte→2-byte to a different page (C5 B8) — rare, identity for v1.
-            -- 0x9F (ß) stays identity (case-folds to "SS" in modern German, length-changing).
-            local b2 = string.byte(s, i+1)
-            if b2 and b2 >= 0xA0 and b2 <= 0xBE and b2 ~= 0xB7 then
-                out[#out+1] = string.char(0xC3, b2 - 0x20)
-            else
-                out[#out+1] = string.sub(s, i, i+1)
-            end
-            i = i + 2
-        else
-            local charLen = Utf8CharLen(s, i)
-            out[#out+1] = string.sub(s, i, i + charLen - 1)
-            i = i + charLen
-        end
-    end
-    return table.concat(out)
 end
 
 local function FirstUTF8Char(s)
@@ -8211,17 +8525,25 @@ GetStyledLabelText = function(englishKey, labelStyle)
     end
     return base .. ":"
 end
--- CursorSection: section header with green underline. label is dual-role: L-key + enUS fallback.
+-- CursorSection: localized casing is preserved; a calm inset band carries hierarchy
+-- without forcing every heading through the accent color.
 local function CursorSection(c, label)
-    local hdr = c.parent:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(hdr, CONFIG_FONT_SIZE, "OUTLINE")
-    hdr:SetPoint("TOPLEFT", c.parent, "TOPLEFT", c.padX, c.y)
-    PushLocalizedLabel(function() hdr:SetText("|cff00ff7f" .. Utf8Upper(L(label)) .. "|r") end)
-    local line = c.parent:CreateTexture(nil, "ARTWORK")
-    line:SetPoint("TOPLEFT", c.parent, "TOPLEFT", c.padX, c.y - 18)
-    line:SetPoint("TOPRIGHT", c.parent, "TOPRIGHT", -c.padX, c.y - 18)
-    line:SetHeight(1)
-    line:SetColorTexture(0, 1, 0.5, 0.25)
+    local band = CreateFrame("Frame", nil, c.parent, "BackdropTemplate")
+    band:SetPoint("TOPLEFT", c.parent, "TOPLEFT", c.padX, c.y + 4)
+    band:SetPoint("TOPRIGHT", c.parent, "TOPRIGHT", -c.padX, c.y + 4)
+    band:SetHeight(addon.settingsDesign.tokens.geometry.sectionHeaderHeight)
+    band:EnableMouse(false)
+    addon.settingsDesign.ApplySurface(band, "section")
+    local hdr = band:CreateFontString(nil, "OVERLAY")
+    addon.settingsDesign.ApplyTextRole(hdr, "section")
+    hdr:SetPoint("LEFT", 8, 0)
+    hdr:SetPoint("RIGHT", -8, 0)
+    hdr:SetJustifyH("LEFT")
+    hdr:SetWordWrap(false)
+    hdr:SetMaxLines(1)
+    PushLocalizedLabel(function() hdr:SetText(L(label)) end)
+    c.parent.statsProSections = c.parent.statsProSections or {}
+    tinsert(c.parent.statsProSections, { key = label, surface = band, text = hdr, y = c.y })
     c.y = c.y - 24 - c.gap
 end
 
@@ -8883,30 +9205,30 @@ function addon.profileUI.BuildOperationUI(manager)
         "Frame", "StatsProProfileOperationDialog", manager, "BackdropTemplate")
     dialog:SetPoint("CENTER", manager, "CENTER", 0, 0)
     dialog:SetSize(440, 340)
-    dialog:SetBackdrop({
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 5, right = 5, top = 5, bottom = 5 },
-    })
-    dialog:SetBackdropColor(0, 0, 0, 0.98)
+    addon.settingsDesign.ApplySurface(dialog, "window")
     dialog:EnableMouse(true)
     dialog:SetFrameStrata("DIALOG")
     dialog:SetFrameLevel(manager:GetFrameLevel() + 10)
     dialog:SetClampedToScreen(true)
 
     local dialogTitle = dialog:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(dialogTitle, 15, "OUTLINE")
+    addon.settingsDesign.ApplyTextRole(dialogTitle, "title")
     dialogTitle:SetPoint("TOPLEFT", 18, -16)
     dialogTitle:SetPoint("TOPRIGHT", -42, -16)
     dialogTitle:SetJustifyH("LEFT")
-    dialogTitle:SetTextColor(0, 1, 0.5, 1)
+
+    local dialogLine = dialog:CreateTexture(nil, "ARTWORK")
+    dialogLine:SetPoint("TOPLEFT", 14, -42)
+    dialogLine:SetPoint("TOPRIGHT", -14, -42)
+    dialogLine:SetHeight(1)
+    addon.settingsDesign.ApplySeparator(dialogLine)
 
     local dialogClose = CreateFrame("Button", nil, dialog, "UIPanelCloseButton")
     dialogClose:SetPoint("TOPRIGHT", -4, -4)
 
     local dialogMessage = dialog:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(dialogMessage, 12)
+    addon.settingsDesign.SetRegionColor(dialogMessage, "textPrimary")
     dialogMessage:SetPoint("TOPLEFT", 20, -54)
     dialogMessage:SetPoint("TOPRIGHT", -20, -54)
     dialogMessage:SetJustifyH("LEFT")
@@ -8929,7 +9251,7 @@ function addon.profileUI.BuildOperationUI(manager)
     nameValidation:SetJustifyH("LEFT")
     nameValidation:SetWordWrap(true)
     nameValidation:SetMaxLines(2)
-    nameValidation:SetTextColor(1, 0.35, 0.25, 1)
+    addon.settingsDesign.SetRegionColor(nameValidation, "danger")
 
     local choiceScroll = CreateFrame(
         "ScrollFrame", "StatsProProfileChoiceScroll", dialog, "UIPanelScrollFrameTemplate")
@@ -8994,8 +9316,8 @@ function addon.profileUI.BuildOperationUI(manager)
     function ui.SetOperationStatus(message, failed)
         ui.lastOperationStatus = message or ""
         operationStatus:SetText(ui.lastOperationStatus)
-        operationStatus:SetTextColor(failed and 1 or 0, failed and 0.35 or 1,
-            failed and 0.25 or 0.5, 1)
+        addon.settingsDesign.SetRegionColor(
+            operationStatus, failed and "danger" or "accent")
     end
 
     function ui.CloseOperationDialog()
@@ -9606,60 +9928,52 @@ function addon.profileUI.BuildOperationUI(manager)
     dialog:Hide()
 end
 
-function addon.profileUI.BuildSettingsUI(owner, ownerWidth)
+function addon.profileUI.BuildSettingsUI(owner)
     local ui = addon.profileUI
+    local geometry = addon.settingsDesign.tokens.geometry
     local header = CreateFrame("Frame", "StatsProProfileHeader", owner, "BackdropTemplate")
-    header:SetPoint("TOPLEFT", 14, -44)
-    header:SetPoint("TOPRIGHT", -14, -44)
-    header:SetHeight(48)
-    header:SetBackdrop({
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        tile = true, tileSize = 16, edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 },
-    })
-    header:SetBackdropColor(0.02, 0.05, 0.04, 0.82)
-    header:SetBackdropBorderColor(0, 1, 0.5, 0.35)
+    header:SetPoint("TOPLEFT", geometry.profileInset, -geometry.profileTop)
+    header:SetPoint("TOPRIGHT", -geometry.profileInset, -geometry.profileTop)
+    header:SetHeight(geometry.profileHeight)
+    addon.settingsDesign.ApplySurface(header, "profile")
+    local profileRail = header:CreateTexture(nil, "ARTWORK")
+    profileRail:SetPoint("TOPLEFT", 0, -1)
+    profileRail:SetPoint("BOTTOMLEFT", 0, 1)
+    profileRail:SetWidth(2)
+    local accent = addon.settingsDesign.Color("accent")
+    profileRail:SetColorTexture(accent[1], accent[2], accent[3], 0.55)
+    header.statsProRail = profileRail
 
     local profileLabel = header:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(profileLabel, CONFIG_FONT_SIZE, "OUTLINE")
+    addon.settingsDesign.ApplyTextRole(profileLabel, "metadata")
     profileLabel:SetPoint("TOPLEFT", 10, -8)
+    profileLabel:SetWidth(50)
+    profileLabel:SetJustifyH("LEFT")
     PushLocalizedLabel(function() profileLabel:SetText(L("Profile:")) end)
 
-    local profileButton = CreateFrame(
-        "Button", "StatsProActiveProfileButton", header, "GameMenuButtonTemplate")
-    profileButton:SetPoint("TOPLEFT", 64, -5)
-    profileButton:SetSize(ownerWidth - 64 - 102 - 28, 22)
-    profileButton:SetNormalFontObject("GameFontNormal")
-    profileButton:SetHighlightFontObject("GameFontHighlight")
+    local profileButton = addon.settingsDesign.CreateShellButton(
+        header, "StatsProActiveProfileButton", "field", "profile")
+    profileButton:SetPoint("TOPLEFT", geometry.profileFieldInset, -5)
+    profileButton:SetSize(geometry.profileFieldWidth, geometry.minHitTarget)
 
-    local manageButton = CreateFrame(
-        "Button", "StatsProManageProfilesButton", header, "GameMenuButtonTemplate")
+    local manageButton = addon.settingsDesign.CreateShellButton(
+        header, "StatsProManageProfilesButton", "field")
     manageButton:SetPoint("TOPRIGHT", -8, -5)
-    manageButton:SetSize(94, 22)
-    manageButton:SetNormalFontObject("GameFontNormal")
-    manageButton:SetHighlightFontObject("GameFontHighlight")
+    manageButton:SetSize(geometry.manageWidth, geometry.minHitTarget)
     PushLocalizedLabel(function() manageButton:SetText(L("Manage")) end)
 
     local subtitle = header:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(subtitle, 11)
+    addon.settingsDesign.ApplyTextRole(subtitle, "metadata")
     subtitle:SetPoint("BOTTOMLEFT", 10, 7)
     subtitle:SetPoint("BOTTOMRIGHT", -10, 7)
     subtitle:SetJustifyH("LEFT")
     subtitle:SetWordWrap(false)
     subtitle:SetMaxLines(1)
-    subtitle:SetTextColor(0.72, 0.78, 0.75, 1)
 
     local manager = CreateFrame(
         "Frame", "StatsProProfileManager", UIParent, "BackdropTemplate")
     manager:SetPoint("CENTER")
-    manager:SetBackdrop({
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 5, right = 5, top = 5, bottom = 5 },
-    })
-    manager:SetBackdropColor(0, 0, 0, 0.96)
+    addon.settingsDesign.ApplySurface(manager, "window")
     manager:EnableMouse(true)
     manager:SetMovable(true)
     manager:RegisterForDrag("LeftButton")
@@ -9685,11 +9999,9 @@ function addon.profileUI.BuildSettingsUI(owner, ownerWidth)
     end)
 
     local managerTitle = manager:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(managerTitle, 16, "OUTLINE")
+    addon.settingsDesign.ApplyTextRole(managerTitle, "title")
     managerTitle:SetPoint("TOP", 0, -14)
-    PushLocalizedLabel(function()
-        managerTitle:SetText("|cff00ff7f" .. L("Profile Manager") .. "|r")
-    end)
+    PushLocalizedLabel(function() managerTitle:SetText(L("Profile Manager")) end)
 
     local managerCloseX = CreateFrame("Button", nil, manager, "UIPanelCloseButton")
     managerCloseX:SetPoint("TOPRIGHT", -4, -4)
@@ -9698,13 +10010,22 @@ function addon.profileUI.BuildSettingsUI(owner, ownerWidth)
     managerLine:SetPoint("TOPLEFT", 14, -42)
     managerLine:SetPoint("TOPRIGHT", -14, -42)
     managerLine:SetHeight(1)
-    managerLine:SetColorTexture(0.3, 0.3, 0.3, 0.7)
+    addon.settingsDesign.ApplySeparator(managerLine)
 
     local divider = manager:CreateTexture(nil, "ARTWORK")
     divider:SetPoint("TOPLEFT", 248, -52)
     divider:SetPoint("BOTTOMLEFT", 248, 52)
     divider:SetWidth(1)
-    divider:SetColorTexture(0.25, 0.25, 0.25, 0.8)
+    addon.settingsDesign.ApplySeparator(divider)
+
+    local listSurface = addon.settingsDesign.CreateTextureSurface(manager, "viewport")
+    listSurface:SetPoint("TOPLEFT", 12, -48)
+    listSurface:SetPoint("BOTTOMLEFT", 12, 50)
+    listSurface:SetWidth(230)
+
+    local detailSurface = addon.settingsDesign.CreateTextureSurface(manager, "raised")
+    detailSurface:SetPoint("TOPLEFT", 252, -48)
+    detailSurface:SetPoint("BOTTOMRIGHT", -12, 50)
 
     local listTitle = manager:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(listTitle, 12, "OUTLINE")
@@ -9725,7 +10046,7 @@ function addon.profileUI.BuildSettingsUI(owner, ownerWidth)
     emptyText:SetPoint("TOPLEFT", 6, -8)
     emptyText:SetWidth(178)
     emptyText:SetJustifyH("LEFT")
-    emptyText:SetTextColor(0.65, 0.65, 0.65, 1)
+    addon.settingsDesign.SetRegionColor(emptyText, "textMuted")
 
     local detailCharacter = manager:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(detailCharacter, 16, "OUTLINE")
@@ -9738,7 +10059,7 @@ function addon.profileUI.BuildSettingsUI(owner, ownerWidth)
     detailContext:SetPoint("TOPLEFT", detailCharacter, "BOTTOMLEFT", 0, -8)
     detailContext:SetPoint("TOPRIGHT", detailCharacter, "BOTTOMRIGHT", 0, -8)
     detailContext:SetJustifyH("LEFT")
-    detailContext:SetTextColor(0.72, 0.78, 0.75, 1)
+    addon.settingsDesign.SetRegionColor(detailContext, "textSecondary")
 
     local assignedLabel = manager:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(assignedLabel, 12, "OUTLINE")
@@ -9750,14 +10071,14 @@ function addon.profileUI.BuildSettingsUI(owner, ownerWidth)
     detailProfile:SetPoint("TOPLEFT", assignedLabel, "BOTTOMLEFT", 0, -8)
     detailProfile:SetPoint("TOPRIGHT", manager, "TOPRIGHT", -20, -138)
     detailProfile:SetJustifyH("LEFT")
-    detailProfile:SetTextColor(0, 1, 0.5, 1)
+    addon.settingsDesign.SetRegionColor(detailProfile, "accent")
 
     local detailSharing = manager:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(detailSharing, 12)
     detailSharing:SetPoint("TOPLEFT", detailProfile, "BOTTOMLEFT", 0, -10)
     detailSharing:SetPoint("TOPRIGHT", -20, 0)
     detailSharing:SetJustifyH("LEFT")
-    detailSharing:SetTextColor(0.72, 0.78, 0.75, 1)
+    addon.settingsDesign.SetRegionColor(detailSharing, "textSecondary")
 
     local detailNotice = manager:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(detailNotice, 12)
@@ -9767,13 +10088,12 @@ function addon.profileUI.BuildSettingsUI(owner, ownerWidth)
     detailNotice:SetJustifyV("BOTTOM")
     detailNotice:SetWordWrap(true)
     detailNotice:SetMaxLines(2)
-    detailNotice:SetTextColor(1, 0.65, 0.2, 1)
+    addon.settingsDesign.SetRegionColor(detailNotice, "warning")
 
-    local managerClose = CreateFrame("Button", nil, manager, "GameMenuButtonTemplate")
+    local managerClose = addon.settingsDesign.CreateShellButton(manager, nil, "primary")
     managerClose:SetPoint("BOTTOMRIGHT", -18, 18)
-    managerClose:SetSize(100, 26)
-    managerClose:SetNormalFontObject("GameFontNormal")
-    managerClose:SetHighlightFontObject("GameFontHighlight")
+    managerClose:SetSize(addon.settingsDesign.tokens.geometry.closeButtonWidth,
+        addon.settingsDesign.tokens.geometry.shellButtonHeight)
     managerClose:SetScript("OnClick", function() manager:Hide() end)
     PushLocalizedLabel(function() managerClose:SetText(L("Close")) end)
 
@@ -9783,6 +10103,8 @@ function addon.profileUI.BuildSettingsUI(owner, ownerWidth)
     ui.headerSubtitle = subtitle
     ui.manageButton = manageButton
     ui.manager = manager
+    ui.managerListSurface = listSurface
+    ui.managerDetailSurface = detailSurface
     ui.managerTitle = managerTitle
     ui.managerRows = {}
     ui.managerListChild = listChild
@@ -9856,16 +10178,21 @@ function addon.profileUI.BuildSettingsUI(owner, ownerWidth)
         profileButton:SetText(model.activeProfileName or L("Account default profile"))
         if model.readOnly then
             subtitle:SetText(L("Compatibility mode - profiles are read-only."))
+            addon.settingsDesign.SetRegionColor(subtitle, "warning")
         elseif model.pending then
             subtitle:SetText(L("Switch pending until combat ends"))
+            addon.settingsDesign.SetRegionColor(subtitle, "warning")
         elseif model.activeSharedCount > 1 then
             subtitle:SetText(string.format(L("Shared by %d specs"), model.activeSharedCount))
+            addon.settingsDesign.SetRegionColor(subtitle, "textSecondary")
         elseif model.activeGUID and model.activeSpecID then
             local displayName = model.activeDisplayName or "Character"
             local specName = ui.FormatSpecName(model.activeSpecID, model.activeSpecName)
             subtitle:SetText(string.format(L("Automatic - %s / %s"), displayName, specName))
+            addon.settingsDesign.SetRegionColor(subtitle, "textSecondary")
         else
             subtitle:SetText(L("Account default profile"))
+            addon.settingsDesign.SetRegionColor(subtitle, "textSecondary")
         end
 
         local selectedCharacter, selectedSpec
@@ -10093,24 +10420,20 @@ function addon:OpenConfigMenu()
 
     --[[ ===== Frame ===== ]]
     configFrame = CreateFrame("Frame", "StatsProConfigFrame", UIParent, "BackdropTemplate")
-    local configFrameWidth = 500
+    local shellGeometry = self.settingsDesign.tokens.geometry
+    local configFrameWidth = shellGeometry.windowWidth
 
     -- WARNING: cap by parent so footer (Reset/Close at BOTTOM y=14) stays on-screen.
-    -- Floor 200 protects ScrollFrame chrome (82+60=142) from collapse on low-res.
+    -- The 260px floor leaves a positive viewport after the 140px header and 66px footer.
     local function ApplyConfigFrameSize()
-        local maxH = math.max(260, math.min(600, UIParent:GetHeight() * 0.9))
+        local maxH = math.max(shellGeometry.minHeight,
+            math.min(shellGeometry.maxHeight, UIParent:GetHeight() * shellGeometry.parentHeightRatio))
         configFrame:SetSize(configFrameWidth, maxH)
     end
     ApplyConfigFrameSize()
 
     configFrame:SetPoint("CENTER")
-    configFrame:SetBackdrop({
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 5, right = 5, top = 5, bottom = 5 },
-    })
-    configFrame:SetBackdropColor(0, 0, 0, 0.92)
+    self.settingsDesign.ApplySurface(configFrame, "window")
     configFrame:EnableMouse(true)
     configFrame:SetMovable(true)
     configFrame:RegisterForDrag("LeftButton")
@@ -10150,11 +10473,24 @@ function addon:OpenConfigMenu()
     end)
 
     --[[ ===== Header (title + X) ===== ]]
+    local titleSurface = self.settingsDesign.CreateTextureSurface(configFrame, "raised")
+    titleSurface:SetPoint("TOPLEFT", shellGeometry.titleSurfaceInset,
+        -shellGeometry.titleSurfaceInset)
+    titleSurface:SetPoint("TOPRIGHT", -shellGeometry.titleSurfaceInset,
+        -shellGeometry.titleSurfaceInset)
+    titleSurface:SetHeight(shellGeometry.titleSurfaceHeight)
+
     local title = configFrame:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(title, 16, "OUTLINE")
-    title:SetPoint("TOP", 0, -12)
+    self.settingsDesign.ApplyTextRole(title, "title")
+    title:SetPoint("TOPLEFT", shellGeometry.titleTextInset, -shellGeometry.titleTextTop)
+    title:SetText("StatsPro")
+    self.settingsDesign.SetRegionColor(title, "accent")
+
+    local titleMetadata = configFrame:CreateFontString(nil, "OVERLAY")
+    self.settingsDesign.ApplyTextRole(titleMetadata, "metadata")
+    titleMetadata:SetPoint("LEFT", title, "RIGHT", 8, 0)
     PushLocalizedLabel(function()
-        title:SetText("|cff00ff7fStatsPro|r v" .. ADDON_VERSION .. " " .. L("Settings"))
+        titleMetadata:SetText(L("Settings") .. "  v" .. ADDON_VERSION)
     end)
 
     local closeX = CreateFrame("Button", nil, configFrame, "UIPanelCloseButton")
@@ -10162,60 +10498,74 @@ function addon:OpenConfigMenu()
 
     -- Header separator
     local headerLine = configFrame:CreateTexture(nil, "ARTWORK")
-    headerLine:SetPoint("TOPLEFT", 12, -38)
-    headerLine:SetPoint("TOPRIGHT", -12, -38)
+    headerLine:SetPoint("TOPLEFT", shellGeometry.outerInset, -shellGeometry.titleHeight)
+    headerLine:SetPoint("TOPRIGHT", -shellGeometry.outerInset, -shellGeometry.titleHeight)
     headerLine:SetHeight(1)
-    headerLine:SetColorTexture(0.3, 0.3, 0.3, 0.5)
+    self.settingsDesign.ApplySeparator(headerLine)
 
-    self.profileUI.BuildSettingsUI(configFrame, configFrameWidth)
+    self.profileUI.BuildSettingsUI(configFrame)
 
     --[[ ===== Tab strip (custom, top-anchored, underline-active style) ===== ]]
-    local TAB_HEIGHT = 28
+    local TAB_HEIGHT = shellGeometry.tabHeight
     local tabStrip = CreateFrame("Frame", nil, configFrame)
-    if self.__statsproSmoke == true then configFrame.tabStrip = tabStrip end
-    tabStrip:SetPoint("TOPLEFT", 18, -100)
-    tabStrip:SetPoint("TOPRIGHT", -18, -100)
+    tabStrip:SetPoint("TOPLEFT", shellGeometry.tabInset, -shellGeometry.tabTop)
+    tabStrip:SetPoint("TOPRIGHT", -shellGeometry.tabInset, -shellGeometry.tabTop)
     tabStrip:SetHeight(TAB_HEIGHT)
+    tabStrip.statsProSurfaceRole = "tabStrip"
 
     -- Separator below tab strip
     local tabsLine = configFrame:CreateTexture(nil, "ARTWORK")
-    tabsLine:SetPoint("TOPLEFT", 12, -132)
-    tabsLine:SetPoint("TOPRIGHT", -12, -132)
+    tabsLine:SetPoint("TOPLEFT", shellGeometry.outerInset,
+        -(shellGeometry.tabTop + shellGeometry.tabHeight + shellGeometry.tabGap))
+    tabsLine:SetPoint("TOPRIGHT", -shellGeometry.outerInset,
+        -(shellGeometry.tabTop + shellGeometry.tabHeight + shellGeometry.tabGap))
     tabsLine:SetHeight(1)
-    tabsLine:SetColorTexture(0.3, 0.3, 0.3, 0.7)
+    self.settingsDesign.ApplySeparator(tabsLine)
 
     --[[ ===== Footer (Reset + Close) ===== ]]
+    local footerSurface = self.settingsDesign.CreateTextureSurface(configFrame, "raised")
+    footerSurface:SetPoint("BOTTOMLEFT", shellGeometry.footerSurfaceInset,
+        shellGeometry.footerSurfaceInset)
+    footerSurface:SetPoint("BOTTOMRIGHT", -shellGeometry.footerSurfaceInset,
+        shellGeometry.footerSurfaceInset)
+    footerSurface:SetHeight(shellGeometry.footerSurfaceHeight)
+
     local footerLine = configFrame:CreateTexture(nil, "ARTWORK")
-    footerLine:SetPoint("BOTTOMLEFT", 12, 50)
-    footerLine:SetPoint("BOTTOMRIGHT", -12, 50)
+    footerLine:SetPoint("BOTTOMLEFT", shellGeometry.outerInset, shellGeometry.footerHeight)
+    footerLine:SetPoint("BOTTOMRIGHT", -shellGeometry.outerInset, shellGeometry.footerHeight)
     footerLine:SetHeight(1)
-    footerLine:SetColorTexture(0.3, 0.3, 0.3, 0.7)
+    self.settingsDesign.ApplySeparator(footerLine)
 
-    local resetBtn = CreateFrame("Button", nil, configFrame, "GameMenuButtonTemplate")
-    resetBtn:SetPoint("BOTTOMLEFT", 18, 14)
-    resetBtn:SetSize(200, 26)
+    local resetBtn = self.settingsDesign.CreateShellButton(configFrame, nil, "destructive")
+    resetBtn:SetPoint("BOTTOMLEFT", shellGeometry.footerButtonInset,
+        shellGeometry.footerButtonBottom)
+    resetBtn:SetSize(shellGeometry.resetButtonWidth, shellGeometry.shellButtonHeight)
     PushLocalizedLabel(function() resetBtn:SetText(L("Reset active profile...")) end)
-    resetBtn:SetNormalFontObject("GameFontNormal")
-    resetBtn:SetHighlightFontObject("GameFontHighlight")
 
-    local closeBtn = CreateFrame("Button", nil, configFrame, "GameMenuButtonTemplate")
-    closeBtn:SetPoint("BOTTOMRIGHT", -18, 14)
-    closeBtn:SetSize(100, 26)
+    local closeBtn = self.settingsDesign.CreateShellButton(configFrame, nil, "primary")
+    closeBtn:SetPoint("BOTTOMRIGHT", -shellGeometry.footerButtonInset,
+        shellGeometry.footerButtonBottom)
+    closeBtn:SetSize(shellGeometry.closeButtonWidth, shellGeometry.shellButtonHeight)
     PushLocalizedLabel(function() closeBtn:SetText(L("Close")) end)
-    closeBtn:SetNormalFontObject("GameFontNormal")
-    closeBtn:SetHighlightFontObject("GameFontHighlight")
     closeBtn:SetScript("OnClick", function() configFrame:Hide() end)
 
     --[[ ===== ScrollFrame for tab content ===== ]]
+    local viewportSurface = self.settingsDesign.CreateTextureSurface(configFrame, "viewport")
+    viewportSurface:SetPoint("TOPLEFT", shellGeometry.viewportInset, -shellGeometry.viewportTop)
+    viewportSurface:SetPoint("BOTTOMRIGHT", -shellGeometry.viewportInset,
+        shellGeometry.viewportBottom)
+
     local scrollFrame = CreateFrame("ScrollFrame", "StatsProConfigScroll", configFrame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", 14, -138)
-    scrollFrame:SetPoint("BOTTOMRIGHT", -32, 60)
+    scrollFrame:SetPoint("TOPLEFT", shellGeometry.scrollLeft, -shellGeometry.scrollTop)
+    scrollFrame:SetPoint("BOTTOMRIGHT", -shellGeometry.scrollRight,
+        shellGeometry.scrollBottom)
+    self.settingsDesign.StyleScrollFrame(scrollFrame)
 
     local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-    -- SYNC: 14px left + 32px right are the scrollFrame anchors above; 4px keeps
-    -- the child inside the viewport chrome. Explicit width avoids construction-time
+    -- SYNC: the 16px left / 32px right anchors reserve the template scrollbar gutter;
+    -- the 450px child keeps a 2px inset inside that viewport. Explicit width avoids construction-time
     -- GetWidth ambiguity and gives every tab a stable 450px content surface.
-    local scrollChildWidth = configFrameWidth - 14 - 32 - 4
+    local scrollChildWidth = shellGeometry.contentWidth
     scrollChild:SetSize(scrollChildWidth, 1)  -- height set per active tab
     scrollFrame:SetScrollChild(scrollChild)
 
@@ -10237,28 +10587,6 @@ function addon:OpenConfigMenu()
     --[[ ===== Tab buttons (custom, with underline indicator) ===== ]]
     local tabButtons = {}
 
-    local function CreateTabButton(label)
-        local btn = CreateFrame("Button", nil, tabStrip)
-        btn:SetSize(110, TAB_HEIGHT)
-        local hl = btn:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetAllPoints(btn)
-        hl:SetColorTexture(1, 1, 1, 0.06)
-        local sel = btn:CreateTexture(nil, "ARTWORK")
-        sel:SetPoint("BOTTOMLEFT",  btn, "BOTTOMLEFT",  8,  0)
-        sel:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -8, 0)
-        sel:SetHeight(2)
-        sel:SetColorTexture(0, 1, 0.5, 1)
-        sel:Hide()
-        btn.selected = sel
-        local txt = btn:CreateFontString(nil, "OVERLAY")
-        RegisterConfigFont(txt, 13, "OUTLINE")
-        txt:SetPoint("CENTER", 0, 1)
-        PushLocalizedLabel(function() txt:SetText(L(label)) end)
-        txt:SetTextColor(0.65, 0.65, 0.65, 1)
-        btn.text = txt
-        return btn
-    end
-
     local function SwitchToTab(idx)
         configFrame.activeTabIndex = idx
         for i, content in ipairs(tabContents) do
@@ -10267,12 +10595,10 @@ function addon:OpenConfigMenu()
                 if content.contentHeight then
                     scrollChild:SetHeight(content.contentHeight)
                 end
-                tabButtons[i].selected:Show()
-                tabButtons[i].text:SetTextColor(1, 1, 1, 1)
+                self.settingsDesign.SetTabSelected(tabButtons[i], true)
             else
                 content:Hide()
-                tabButtons[i].selected:Hide()
-                tabButtons[i].text:SetTextColor(0.65, 0.65, 0.65, 1)
+                self.settingsDesign.SetTabSelected(tabButtons[i], false)
             end
         end
         scrollFrame:SetVerticalScroll(0)
@@ -10282,15 +10608,34 @@ function addon:OpenConfigMenu()
     do
         local names = { "Stats", "Layout", "Appearance" }
         for i, name in ipairs(names) do
-            local btn = CreateTabButton(name)
+            local btn = self.settingsDesign.CreateTab(tabStrip, name)
+            btn:SetSize(shellGeometry.tabWidth, TAB_HEIGHT)
             if i == 1 then
                 btn:SetPoint("LEFT", tabStrip, "LEFT", 0, 0)
             else
-                btn:SetPoint("LEFT", tabButtons[i - 1], "RIGHT", 4, 0)
+                btn:SetPoint("LEFT", tabButtons[i - 1], "RIGHT", shellGeometry.tabGap, 0)
             end
             btn:SetScript("OnClick", function() SwitchToTab(i) end)
             tabButtons[i] = btn
         end
+    end
+
+    if self.__statsproSmoke == true then
+        configFrame.tabStrip = tabStrip
+        configFrame.tabButtons = tabButtons
+        configFrame.settingsShell = {
+            titleSurface = titleSurface,
+            title = title,
+            titleMetadata = titleMetadata,
+            profileHeader = configFrame.profileHeader,
+            tabStrip = tabStrip,
+            viewport = viewportSurface,
+            scroll = scrollFrame,
+            scrollChild = scrollChild,
+            footer = footerSurface,
+            resetButton = resetBtn,
+            closeButton = closeBtn,
+        }
     end
 
     --[[ ===== LAYOUT TAB ===== ]]
@@ -10626,7 +10971,8 @@ function addon:OpenConfigMenu()
         end
 
         local function BuildFontPickerFrame()
-            -- Picker frame — DialogBox border style for visual parity with configFrame.
+            -- Picker frame inherits the same restrained shell surface while keeping its
+            -- independent DIALOG level and click-catcher ownership.
             fontPickerFrame = CreateFrame("Frame", "StatsProFontPicker", UIParent, "BackdropTemplate")
             fontPickerFrame:SetSize(FONT_PICKER_FRAME_W, FONT_PICKER_FRAME_H)
             fontPickerFrame:SetFrameStrata("DIALOG")
@@ -10634,13 +10980,7 @@ function addon:OpenConfigMenu()
             -- level shifted (e.g., Blizzard Settings API re-parented configFrame between sessions).
             fontPickerFrame:SetFrameLevel((configFrame and configFrame:GetFrameLevel() or 100) + 50)
             fontPickerFrame:SetClampedToScreen(true)
-            fontPickerFrame:SetBackdrop({
-                bgFile   = "Interface\\ChatFrame\\ChatFrameBackground",
-                edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-                tile = true, tileSize = 16, edgeSize = 16,
-                insets = { left = 4, right = 4, top = 4, bottom = 4 },
-            })
-            fontPickerFrame:SetBackdropColor(0, 0, 0, 0.92)
+            self.settingsDesign.ApplySurface(fontPickerFrame, "window")
             fontPickerFrame:Hide()
 
             -- Click-catcher: invisible fullscreen frame BEHIND picker, ABOVE other DIALOG content.
@@ -10654,10 +10994,17 @@ function addon:OpenConfigMenu()
             fontPickerCatcher:Hide()
             fontPickerCatcher:SetScript("OnMouseDown", HideFontPicker)
 
+            local pickerSurface = self.settingsDesign.CreateTextureSurface(fontPickerFrame, "viewport")
+            pickerSurface:SetPoint("TOPLEFT", FONT_PICKER_PAD - 2, -(FONT_PICKER_PAD - 2))
+            pickerSurface:SetPoint("BOTTOMRIGHT",
+                -(FONT_PICKER_PAD + FONT_PICKER_SCROLLBAR_W - 2), FONT_PICKER_PAD - 2)
+            fontPickerFrame.statsProViewport = pickerSurface
+
             -- ScrollFrame — UIPanelScrollFrameTemplate matches configFrame's existing scroll pattern.
             fontPickerScroll = CreateFrame("ScrollFrame", "StatsProFontPickerScroll", fontPickerFrame, "UIPanelScrollFrameTemplate")
             fontPickerScroll:SetPoint("TOPLEFT", FONT_PICKER_PAD, -FONT_PICKER_PAD)
             fontPickerScroll:SetPoint("BOTTOMRIGHT", -(FONT_PICKER_PAD + FONT_PICKER_SCROLLBAR_W), FONT_PICKER_PAD)
+            self.settingsDesign.StyleScrollFrame(fontPickerScroll)
 
             fontPickerContent = CreateFrame("Frame", nil, fontPickerScroll)
             fontPickerContent:SetSize(FONT_PICKER_COLS * FONT_PICKER_BTN_W, 100)  -- height set in Populate
@@ -11899,8 +12246,18 @@ if addon and addon.__statsproSmoke == true then
                     and ui.headerProfileButton:IsEnabled() or false,
                 headerLabel = ui.headerLabel and ui.headerLabel:GetText() or nil,
                 headerSubtitle = ui.headerSubtitle and ui.headerSubtitle:GetText() or nil,
+                headerSubtitleColor = ui.headerSubtitle and ui.headerSubtitle.textColor
+                    and CopyTable(ui.headerSubtitle.textColor) or nil,
                 managerShown = ui.manager and ui.manager:IsShown() or false,
                 managerFrameStrata = ui.manager and ui.manager:GetFrameStrata() or nil,
+                managerListSurfaceRole = ui.managerListSurface
+                    and ui.managerListSurface.statsProSurfaceRole or nil,
+                managerListSurfaceParentOwned = ui.managerListSurface
+                    and ui.managerListSurface:GetParent() == ui.manager or false,
+                managerDetailSurfaceRole = ui.managerDetailSurface
+                    and ui.managerDetailSurface.statsProSurfaceRole or nil,
+                managerDetailSurfaceParentOwned = ui.managerDetailSurface
+                    and ui.managerDetailSurface:GetParent() == ui.manager or false,
                 managerTitle = ui.managerTitle and ui.managerTitle:GetText() or nil,
                 rows = rows,
                 detailCharacter = ui.detailCharacter and ui.detailCharacter:GetText() or nil,
@@ -11969,6 +12326,29 @@ if addon and addon.__statsproSmoke == true then
                 languageOptions = CopyTable(LANGUAGE_OPTIONS),
                 localeGlyphReq = CopyTable(LOCALE_GLYPH_REQ),
                 labelsByLocale = CopyTable(LABELS_BY_LOCALE),
+            }
+        end,
+        settingsDesignSnapshot = function()
+            return CopyTable(addon.settingsDesign.tokens)
+        end,
+        settingsShellState = function()
+            if not configFrame then return nil end
+            local sections = {}
+            for tabIndex, tab in ipairs(configFrame.tabContents or {}) do
+                sections[tabIndex] = {}
+                for sectionIndex, section in ipairs(tab.statsProSections or {}) do
+                    sections[tabIndex][sectionIndex] = {
+                        key = section.key,
+                        surface = section.surface,
+                        text = section.text,
+                        y = section.y,
+                    }
+                end
+            end
+            return {
+                shell = configFrame.settingsShell,
+                tabs = configFrame.tabButtons,
+                sections = sections,
             }
         end,
         migrateDB = MigrateDB,

@@ -193,6 +193,46 @@ local function runFrameHandlers(frame, event, ...)
     end
 end
 
+-- Approximate rendered width without treating every UTF-8 byte as a glyph. Latin and
+-- Cyrillic count as one unit; CJK/Hangul/emoji count as two, matching WoW font behavior
+-- closely enough for overlap guards without pretending this harness is a layout engine.
+local function utf8VisualUnits(text)
+    local units, index, length = 0, 1, #(text or "")
+    while index <= length do
+        local b1 = string.byte(text, index)
+        local codepoint, charLength = b1, 1
+        if b1 >= 0xC2 and b1 <= 0xDF then
+            local b2 = string.byte(text, index + 1)
+            if b2 then
+                codepoint = (b1 - 0xC0) * 0x40 + (b2 - 0x80)
+                charLength = 2
+            end
+        elseif b1 >= 0xE0 and b1 <= 0xEF then
+            local b2, b3 = string.byte(text, index + 1), string.byte(text, index + 2)
+            if b2 and b3 then
+                codepoint = (b1 - 0xE0) * 0x1000 + (b2 - 0x80) * 0x40 + (b3 - 0x80)
+                charLength = 3
+            end
+        elseif b1 >= 0xF0 and b1 <= 0xF4 then
+            local b2, b3, b4 = string.byte(text, index + 1), string.byte(text, index + 2),
+                string.byte(text, index + 3)
+            if b2 and b3 and b4 then
+                codepoint = (b1 - 0xF0) * 0x40000 + (b2 - 0x80) * 0x1000
+                    + (b3 - 0x80) * 0x40 + (b4 - 0x80)
+                charLength = 4
+            end
+        end
+        local wide = (codepoint >= 0x1100 and codepoint <= 0x11FF)
+            or (codepoint >= 0x2E80 and codepoint <= 0x9FFF)
+            or (codepoint >= 0xAC00 and codepoint <= 0xD7AF)
+            or (codepoint >= 0xF900 and codepoint <= 0xFAFF)
+            or codepoint >= 0x1F000
+        units = units + (wide and 2 or 1)
+        index = index + charLength
+    end
+    return units
+end
+
 local function makeFrame(name, setFontResult, parent)
     local frame = {
         name = name,
@@ -217,15 +257,21 @@ local function makeFrame(name, setFontResult, parent)
     function frame:GetHeight() return self.height end
     function frame:SetWidth(w) self.width = w end
     function frame:SetHeight(h) self.height = h end
-    function frame:SetMovable() end
+    function frame:SetMovable(value) self.movable = value ~= false end
+    function frame:IsMovable() return self.movable == true end
     function frame:EnableMouse(value) self.mouseEnabled = value ~= false end
-    function frame:SetClampedToScreen() end
+    function frame:IsMouseEnabled() return self.mouseEnabled == true end
+    function frame:SetClampedToScreen(value) self.clamped = value ~= false end
+    function frame:IsClampedToScreen() return self.clamped == true end
+    function frame:SetToplevel(value) self.toplevel = value ~= false end
     function frame:SetBackdrop(backdrop) self.backdrop = backdrop end
     function frame:SetBackdropColor(r, g, b, a) self.backdropColor = { r = r, g = g, b = b, a = a } end
     function frame:SetBackdropBorderColor(r, g, b, a) self.backdropBorderColor = { r = r, g = g, b = b, a = a } end
     function frame:SetColorTexture(r, g, b, a) self.colorTexture = { r = r, g = g, b = b, a = a } end
-    function frame:SetVertexColor() end
-    function frame:SetBlendMode() end
+    function frame:SetVertexColor(r, g, b, a) self.vertexColor = { r = r, g = g, b = b, a = a } end
+    function frame:SetDesaturated(value) self.desaturated = value ~= false end
+    function frame:SetBlendMode(mode) self.blendMode = mode end
+    function frame:SetTexture(texture) self.texture = texture end
     function frame:SetFont(font, size, flags)
         if type(font) ~= "string" then error("SetFont font must be a string", 2) end
         if not isFiniteNumber(size) then error("SetFont size must be a finite number", 2) end
@@ -237,9 +283,17 @@ local function makeFrame(name, setFontResult, parent)
     end
     function frame:SetJustifyH() end
     function frame:SetJustifyV() end
-    function frame:SetTextColor() end
-    function frame:SetText(text) self.text = text or "" end
-    function frame:GetText() return self.text end
+    function frame:SetTextColor(r, g, b, a) self.textColor = { r = r, g = g, b = b, a = a } end
+    function frame:SetFontString(fontString) self.fontString = fontString end
+    function frame:GetFontString() return self.fontString end
+    function frame:SetText(text)
+        self.text = text or ""
+        if self.fontString and self.fontString ~= self then self.fontString:SetText(self.text) end
+    end
+    function frame:GetText()
+        if self.fontString and self.fontString ~= self then return self.fontString:GetText() end
+        return self.text
+    end
     function frame:SetPoint(...)
         local args = { ... }
         validatePointArgs(args)
@@ -282,10 +336,16 @@ local function makeFrame(name, setFontResult, parent)
         return true
     end
     function frame:GetParent() return self.parent end
-    function frame:Enable() self.enabled = true end
-    function frame:Disable() self.enabled = false end
+    function frame:Enable()
+        self.enabled = true
+        runFrameHandlers(self, "OnEnable")
+    end
+    function frame:Disable()
+        self.enabled = false
+        runFrameHandlers(self, "OnDisable")
+    end
     function frame:IsEnabled() return self.enabled end
-    function frame:RegisterForDrag() end
+    function frame:RegisterForDrag(...) self.dragButtons = { ... } end
     function frame:SetScript(event, fn) self.scripts[event] = fn end
     function frame:HookScript(event, fn)
         self.hooks[event] = self.hooks[event] or {}
@@ -309,13 +369,33 @@ local function makeFrame(name, setFontResult, parent)
     function frame:GetVerticalScrollRange() return 0 end
     function frame:SetNormalFontObject() end
     function frame:SetHighlightFontObject() end
-    function frame:SetHighlightTexture()
-        self.highlightTexture = self.highlightTexture or makeFrame(nil, self.setFontResult)
+    function frame:SetNormalTexture(texture)
+        self.normalTexture = type(texture) == "table" and texture
+            or self.normalTexture or makeFrame(nil, self.setFontResult, self)
+        if type(texture) == "string" then self.normalTexture.texture = texture end
+    end
+    function frame:GetNormalTexture() return self.normalTexture end
+    function frame:SetHighlightTexture(texture)
+        self.highlightTexture = type(texture) == "table" and texture
+            or self.highlightTexture or makeFrame(nil, self.setFontResult, self)
+        if type(texture) == "string" then self.highlightTexture.texture = texture end
     end
     function frame:GetHighlightTexture()
-        self.highlightTexture = self.highlightTexture or makeFrame(nil, self.setFontResult)
+        self.highlightTexture = self.highlightTexture or makeFrame(nil, self.setFontResult, self)
         return self.highlightTexture
     end
+    function frame:SetPushedTexture(texture)
+        self.pushedTexture = type(texture) == "table" and texture
+            or self.pushedTexture or makeFrame(nil, self.setFontResult, self)
+        if type(texture) == "string" then self.pushedTexture.texture = texture end
+    end
+    function frame:GetPushedTexture() return self.pushedTexture end
+    function frame:SetDisabledTexture(texture)
+        self.disabledTexture = type(texture) == "table" and texture
+            or self.disabledTexture or makeFrame(nil, self.setFontResult, self)
+        if type(texture) == "string" then self.disabledTexture.texture = texture end
+    end
+    function frame:GetDisabledTexture() return self.disabledTexture end
     function frame:SetChecked(value) self.checked = value end
     function frame:GetChecked() return self.checked end
     function frame:GetName() return self.name end
@@ -343,7 +423,7 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetWordWrap(value) self.wordWrap = value end
     function frame:GetStringWidth()
         if self.statsProWidthOverride ~= nil then return self.statsProWidthOverride end
-        return #(self.text or "") * ((self.fontSize or 12) * 0.5)
+        return utf8VisualUnits(self.text or "") * ((self.fontSize or 12) * 0.5)
     end
     function frame:GetStringHeight()
         if self.statsProHeightOverride ~= nil then return self.statsProHeightOverride end
@@ -352,10 +432,14 @@ local function makeFrame(name, setFontResult, parent)
         return (lines + 1) * (self.fontSize or 12) * (self.statsProStringHeightMultiplier or 1)
     end
     function frame:CreateFontString()
-        return makeFrame(nil, self.setFontResult)
+        local region = makeFrame(nil, self.setFontResult, self)
+        region.regionType = "FontString"
+        return region
     end
     function frame:CreateTexture()
-        return makeFrame(nil, self.setFontResult)
+        local region = makeFrame(nil, self.setFontResult, self)
+        region.regionType = "Texture"
+        return region
     end
 
     return frame
@@ -677,12 +761,20 @@ local function makeEnv(locale, opts)
         return env.Mixin({}, ...)
     end
 
-    env.CreateFrame = function(_, name, parent)
+    env.CreateFrame = function(frameType, name, parent, template)
         local frame = makeFrame(name, opts.setFontResult, parent)
+        frame.frameType = frameType
+        frame.template = template
         frame.CreateFontString = function()
-            local fontString = makeFrame(nil, opts.setFontResult)
+            local fontString = makeFrame(nil, opts.setFontResult, frame)
+            fontString.regionType = "FontString"
             env.__fontStrings[#env.__fontStrings + 1] = fontString
             return fontString
+        end
+        frame.CreateTexture = function()
+            local texture = makeFrame(nil, opts.setFontResult, frame)
+            texture.regionType = "Texture"
+            return texture
         end
         env.__frames[#env.__frames + 1] = frame
         if name then
@@ -692,6 +784,34 @@ local function makeEnv(locale, opts)
             env[name .. "High"] = env[name .. "High"] or makeFrame(name .. "High", opts.setFontResult)
             env[name .. "Button"] = env[name .. "Button"] or makeFrame(name .. "Button", opts.setFontResult)
             frame.Button = env[name .. "Button"]
+        end
+        if template == "UIPanelScrollFrameTemplate" then
+            local scrollBarName = name and (name .. "ScrollBar") or nil
+            local scrollBar = makeFrame(scrollBarName, opts.setFontResult, frame)
+            local thumb = makeFrame(nil, opts.setFontResult, scrollBar)
+            local up = makeFrame(scrollBarName and (scrollBarName .. "ScrollUpButton") or nil,
+                opts.setFontResult, scrollBar)
+            local down = makeFrame(scrollBarName and (scrollBarName .. "ScrollDownButton") or nil,
+                opts.setFontResult, scrollBar)
+            scrollBar.ThumbTexture = thumb
+            scrollBar.ScrollUpButton = up
+            scrollBar.ScrollDownButton = down
+            for _, button in ipairs({ up, down }) do
+                button.normalTexture = makeFrame(nil, opts.setFontResult, button)
+                button.highlightTexture = makeFrame(nil, opts.setFontResult, button)
+                button.pushedTexture = makeFrame(nil, opts.setFontResult, button)
+                button.disabledTexture = makeFrame(nil, opts.setFontResult, button)
+            end
+            function scrollBar:GetThumbTexture() return thumb end
+            frame.ScrollBar = scrollBar
+            env.__frames[#env.__frames + 1] = scrollBar
+            env.__frames[#env.__frames + 1] = up
+            env.__frames[#env.__frames + 1] = down
+            if scrollBarName then
+                env[scrollBarName] = scrollBar
+                env[scrollBarName .. "ScrollUpButton"] = up
+                env[scrollBarName .. "ScrollDownButton"] = down
+            end
         end
         return frame
     end
@@ -1179,6 +1299,11 @@ do
     eq("panel.background_insets.side.right", sideInsets.right, 0)
     eq("panel.background_insets.side.top", sideInsets.top, 0)
     eq("panel.background_insets.side.bottom", sideInsets.bottom, 0)
+end
+
+local function assertRGBA(name, color, r, g, b, a)
+    assertColor(name, color, r, g, b)
+    near(name .. ".a", color.a, a)
 end
 
 do
@@ -7476,6 +7601,9 @@ do
         env.StatsProFontDropdownButton)
     exists("config.font_picker_lazy_scaffold.frame", env.StatsProFontPicker)
     eq("config.font_picker_strata.dialog", env.StatsProFontPicker:GetFrameStrata(), "DIALOG")
+    eq("config.font_picker_surface.window", env.StatsProFontPicker.statsProSurfaceRole, "window")
+    eq("config.font_picker_surface.viewport",
+        env.StatsProFontPicker.statsProViewport.statsProSurfaceRole, "viewport")
     check("config.font_picker_level_above_config",
         env.StatsProFontPicker:GetFrameLevel() > env.StatsProConfigFrame:GetFrameLevel(),
         "font picker should stay above config frame")
@@ -7534,6 +7662,286 @@ do
         activeSettings(env).colors.crit, nil)
     eq("config.mutation_gate.reuses_full_validation",
         test.dbValidationCount(), validationCountBeforeUIWrites)
+end
+
+do
+    local shellEnv, shellAddon, shellTest = loadStatsPro("enUS", {
+        uiParentWidth = 1024,
+        uiParentHeight = 768,
+    })
+    fireEvent("config.shell.pew", shellEnv, "PLAYER_ENTERING_WORLD")
+    local rootBefore = deepCopy(shellEnv.StatsProDB)
+    local rootRef = shellEnv.StatsProDB
+    local accountRef = rootRef.account
+    local profilesRef = rootRef.profiles
+    local charactersRef = rootRef.characters
+    local onUpdateBefore = 0
+    for _, frame in ipairs(shellEnv.__frames) do
+        if type(frame.scripts.OnUpdate) == "function" then onUpdateBefore = onUpdateBefore + 1 end
+    end
+
+    shellAddon:OpenConfigMenu()
+    local config = exists("config.shell.frame", shellEnv.StatsProConfigFrame)
+    local state = exists("config.shell.state", shellTest.settingsShellState())
+    local shell = exists("config.shell.surface_registry", state.shell)
+    local tokens = shellTest.settingsDesignSnapshot()
+    local detached = shellTest.settingsDesignSnapshot()
+    tokens.colors.window[1] = 0.99
+    near("config.shell.tokens.detached", detached.colors.window[1], 0.018)
+    near("config.shell.tokens.window_alpha", detached.colors.window[4], 0.96)
+    near("config.shell.tokens.accent_green", detached.colors.accent[2], 0.82)
+    eq("config.shell.tokens.window_width", detached.geometry.windowWidth, 500)
+    eq("config.shell.tokens.min_hit_target", detached.geometry.minHitTarget, 24)
+    eq("config.shell.tokens.equal_tab_width", detached.geometry.tabWidth, 152)
+
+    eq("config.shell.window.role", config.statsProSurfaceRole, "window")
+    assertColor("config.shell.window.color", config.backdropColor,
+        detached.colors.window[1], detached.colors.window[2], detached.colors.window[3])
+    near("config.shell.window.color.a", config.backdropColor.a, detached.colors.window[4])
+    eq("config.shell.window.strata", config:GetFrameStrata(), "DIALOG")
+    eq("config.shell.window.toplevel", config.toplevel, nil)
+    eq("config.shell.window.movable", config:IsMovable(), true)
+    eq("config.shell.window.clamped", config:IsClampedToScreen(), true)
+    eq("config.shell.window.drag_button", config.dragButtons[1], "LeftButton")
+    eq("config.shell.window.width", config:GetWidth(), detached.geometry.windowWidth)
+    eq("config.shell.window.height", config:GetHeight(), detached.geometry.maxHeight)
+
+    eq("config.shell.title.role", shell.titleSurface.statsProSurfaceRole, "raised")
+    eq("config.shell.profile.role", shell.profileHeader.statsProSurfaceRole, "profile")
+    eq("config.shell.viewport.role", shell.viewport.statsProSurfaceRole, "viewport")
+    eq("config.shell.footer.role", shell.footer.statsProSurfaceRole, "raised")
+    eq("config.shell.title.parent_owned_region", shell.titleSurface:GetParent(), config)
+    eq("config.shell.viewport.parent_owned_region", shell.viewport:GetParent(), config)
+    eq("config.shell.footer.parent_owned_region", shell.footer:GetParent(), config)
+    eq("config.shell.title.region_type", shell.titleSurface.regionType, "Texture")
+    eq("config.shell.viewport.region_type", shell.viewport.regionType, "Texture")
+    eq("config.shell.footer.region_type", shell.footer.regionType, "Texture")
+    eq("config.shell.title.surface_height", shell.titleSurface:GetHeight(),
+        detached.geometry.titleSurfaceHeight)
+    eq("config.shell.profile.top", shell.profileHeader.points[1][3],
+        -detached.geometry.profileTop)
+    eq("config.shell.profile.height", shell.profileHeader:GetHeight(),
+        detached.geometry.profileHeight)
+    eq("config.shell.tabs.top", shell.tabStrip.points[1][3], -detached.geometry.tabTop)
+    eq("config.shell.tabs.height", shell.tabStrip:GetHeight(), detached.geometry.tabHeight)
+    eq("config.shell.viewport.top", shell.viewport.points[1][3], -detached.geometry.viewportTop)
+    eq("config.shell.viewport.bottom", shell.viewport.points[2][3], detached.geometry.viewportBottom)
+    eq("config.shell.scroll.top", shell.scroll.points[1][3], -detached.geometry.scrollTop)
+    eq("config.shell.scroll.bottom", shell.scroll.points[2][3], detached.geometry.scrollBottom)
+    eq("config.shell.footer.height", shell.footer:GetHeight(), detached.geometry.footerSurfaceHeight)
+    eq("config.shell.scroll.child", shell.scroll.scrollChild, shell.scrollChild)
+    eq("config.shell.scroll.child_width", shell.scrollChild:GetWidth(), detached.geometry.contentWidth)
+    eq("config.shell.scroll.styled", shell.scroll.statsProScrollbarStyled, true)
+    local scrollBar = shell.scroll.ScrollBar
+    local thumb = scrollBar.ThumbTexture
+    local scrollUp = scrollBar.ScrollUpButton
+    local scrollDown = scrollBar.ScrollDownButton
+    exists("config.shell.scroll.thumb_color", thumb.vertexColor)
+    near("config.shell.scroll.thumb_normal.r", thumb.vertexColor.r, detached.colors.textMuted[1])
+    near("config.shell.scroll.thumb_normal.a", thumb.vertexColor.a, 0.62)
+    eq("config.shell.scroll.track_role", shell.scroll.statsProScrollTrack.statsProColorRole,
+        "scrollbarTrack")
+    eq("config.shell.scroll.track_width", shell.scroll.statsProScrollTrack:GetWidth(),
+        detached.geometry.scrollbarTrackWidth)
+    eq("config.shell.scroll.up_styled", scrollUp.statsProScrollbarButtonStyled, true)
+    eq("config.shell.scroll.down_styled", scrollDown.statsProScrollbarButtonStyled, true)
+    eq("config.shell.scroll.up_normal_desaturated", scrollUp:GetNormalTexture().desaturated, true)
+    eq("config.shell.scroll.up_highlight_desaturated", scrollUp:GetHighlightTexture().desaturated, true)
+    eq("config.shell.scroll.up_pushed_desaturated", scrollUp:GetPushedTexture().desaturated, true)
+    eq("config.shell.scroll.up_disabled_desaturated", scrollUp:GetDisabledTexture().desaturated, true)
+    runFrameHandlers(scrollBar, "OnEnter")
+    near("config.shell.scroll.thumb_hover.g", thumb.vertexColor.g, detached.colors.accent[2])
+    near("config.shell.scroll.thumb_hover.a", thumb.vertexColor.a, 0.78)
+    runFrameHandlers(scrollBar, "OnMouseDown", "LeftButton")
+    eq("config.shell.scroll.thumb_pressed_state", scrollBar.statsProPressed, true)
+    runFrameHandlers(scrollBar, "OnMouseUp", "LeftButton")
+    eq("config.shell.scroll.thumb_released_state", scrollBar.statsProPressed, false)
+    runFrameHandlers(scrollBar, "OnLeave")
+    near("config.shell.scroll.thumb_leave.r", thumb.vertexColor.r, detached.colors.textMuted[1])
+    eq("config.shell.profile.field_width", shellEnv.StatsProActiveProfileButton:GetWidth(),
+        detached.geometry.profileFieldWidth)
+    eq("config.shell.profile.manage_width", shellEnv.StatsProManageProfilesButton:GetWidth(),
+        detached.geometry.manageWidth)
+    eq("config.shell.profile.button_height", shellEnv.StatsProActiveProfileButton:GetHeight(),
+        detached.geometry.minHitTarget)
+    eq("config.shell.footer.reset_height", shell.resetButton:GetHeight(),
+        detached.geometry.shellButtonHeight)
+    eq("config.shell.footer.reset_width", shell.resetButton:GetWidth(),
+        detached.geometry.resetButtonWidth)
+    eq("config.shell.footer.close_height", shell.closeButton:GetHeight(),
+        detached.geometry.shellButtonHeight)
+    eq("config.shell.footer.close_width", shell.closeButton:GetWidth(),
+        detached.geometry.closeButtonWidth)
+    eq("config.shell.footer.reset_role", shell.resetButton.statsProButtonRole, "destructive")
+    eq("config.shell.footer.close_role", shell.closeButton.statsProButtonRole, "primary")
+
+    local selectedTabs = 0
+    for index, tab in ipairs(state.tabs) do
+        eq("config.shell.tabs.width." .. index, tab:GetWidth(), detached.geometry.tabWidth)
+        eq("config.shell.tabs.height." .. index, tab:GetHeight(), detached.geometry.tabHeight)
+        if tab.statsProSelected then selectedTabs = selectedTabs + 1 end
+    end
+    eq("config.shell.tabs.gap.second", state.tabs[2].points[1][4], detached.geometry.tabGap)
+    eq("config.shell.tabs.gap.third", state.tabs[3].points[1][4], detached.geometry.tabGap)
+    eq("config.shell.tabs.one_selected.initial", selectedTabs, 1)
+    eq("config.shell.tabs.initial_index", config.activeTabIndex, 1)
+    eq("config.shell.tabs.second.normal", state.tabs[2].statsProTabState, "normal")
+    assertRGBA("config.shell.tabs.second.normal_fill", state.tabs[2].statsProFill.colorTexture,
+        detached.colors.raised[1], detached.colors.raised[2], detached.colors.raised[3], 0)
+    assertRGBA("config.shell.tabs.second.normal_text", state.tabs[2].statsProText.textColor,
+        detached.colors.textSecondary[1], detached.colors.textSecondary[2],
+        detached.colors.textSecondary[3], detached.colors.textSecondary[4])
+    eq("config.shell.tabs.second.normal_line", state.tabs[2].statsProSelectedLine:IsShown(), false)
+    runFrameHandlers(state.tabs[2], "OnEnter")
+    eq("config.shell.tabs.second.hover", state.tabs[2].statsProTabState, "hover")
+    assertRGBA("config.shell.tabs.second.hover_fill", state.tabs[2].statsProFill.colorTexture,
+        detached.colors.hover[1], detached.colors.hover[2], detached.colors.hover[3],
+        detached.colors.hover[4])
+    runFrameHandlers(state.tabs[2], "OnMouseDown", "LeftButton")
+    eq("config.shell.tabs.second.pressed", state.tabs[2].statsProTabState, "pressed")
+    assertRGBA("config.shell.tabs.second.pressed_fill", state.tabs[2].statsProFill.colorTexture,
+        detached.colors.pressed[1], detached.colors.pressed[2], detached.colors.pressed[3],
+        detached.colors.pressed[4])
+    runFrameHandlers(state.tabs[2], "OnMouseUp", "LeftButton")
+    eq("config.shell.tabs.second.hover_after_up", state.tabs[2].statsProTabState, "hover")
+    runFrameHandlers(state.tabs[2], "OnLeave")
+    eq("config.shell.tabs.second.normal_after_leave", state.tabs[2].statsProTabState, "normal")
+    shell.scroll:SetVerticalScroll(100)
+    runFrameHandlers(state.tabs[2], "OnClick")
+    eq("config.shell.tabs.second.selected", state.tabs[2].statsProTabState, "selected")
+    assertRGBA("config.shell.tabs.second.selected_fill", state.tabs[2].statsProFill.colorTexture,
+        detached.colors.accentMuted[1], detached.colors.accentMuted[2],
+        detached.colors.accentMuted[3], detached.colors.accentMuted[4])
+    eq("config.shell.tabs.second.selected_line", state.tabs[2].statsProSelectedLine:IsShown(), true)
+    assertRGBA("config.shell.tabs.second.selected_line_color",
+        state.tabs[2].statsProSelectedLine.colorTexture,
+        detached.colors.accent[1], detached.colors.accent[2], detached.colors.accent[3],
+        detached.colors.accent[4])
+    eq("config.shell.tabs.second.active_index", config.activeTabIndex, 2)
+    eq("config.shell.tabs.second.scroll_reset", shell.scroll:GetVerticalScroll(), 0)
+    selectedTabs = 0
+    for _, tab in ipairs(state.tabs) do
+        if tab.statsProSelected then selectedTabs = selectedTabs + 1 end
+    end
+    eq("config.shell.tabs.one_selected.after_click", selectedTabs, 1)
+    runFrameHandlers(state.tabs[2], "OnEnter")
+    assertRGBA("config.shell.tabs.selected_hover_fill", state.tabs[2].statsProFill.colorTexture,
+        detached.colors.hover[1], detached.colors.hover[2], detached.colors.hover[3],
+        detached.colors.hover[4])
+    runFrameHandlers(state.tabs[2], "OnMouseDown", "LeftButton")
+    assertRGBA("config.shell.tabs.selected_pressed_fill", state.tabs[2].statsProFill.colorTexture,
+        detached.colors.pressed[1], detached.colors.pressed[2], detached.colors.pressed[3],
+        detached.colors.pressed[4])
+    runFrameHandlers(state.tabs[2], "OnMouseUp", "LeftButton")
+    runFrameHandlers(state.tabs[2], "OnLeave")
+    assertRGBA("config.shell.tabs.selected_leave_fill", state.tabs[2].statsProFill.colorTexture,
+        detached.colors.accentMuted[1], detached.colors.accentMuted[2],
+        detached.colors.accentMuted[3], detached.colors.accentMuted[4])
+    eq("config.shell.tabs.selected_leave_line", state.tabs[2].statsProSelectedLine:IsShown(), true)
+
+    local sectionCount = 0
+    for tabIndex, sections in ipairs(state.sections) do
+        check("config.shell.sections.present." .. tabIndex, #sections > 0)
+        for sectionIndex, section in ipairs(sections) do
+            sectionCount = sectionCount + 1
+            eq("config.shell.sections.role." .. tabIndex .. "." .. sectionIndex,
+                section.surface.statsProSurfaceRole, "section")
+            eq("config.shell.sections.text_role." .. tabIndex .. "." .. sectionIndex,
+                section.text.statsProTextRole, "section")
+            check("config.shell.sections.localized_text." .. tabIndex .. "." .. sectionIndex,
+                section.text:GetText() ~= "" and not string.find(section.text:GetText(), "|cff", 1, true))
+            eq("config.shell.sections.mouse_passthrough." .. tabIndex .. "." .. sectionIndex,
+                section.surface:IsMouseEnabled(), false)
+        end
+    end
+    check("config.shell.sections.total", sectionCount >= 8)
+
+    runFrameHandlers(shell.resetButton, "OnEnter")
+    eq("config.shell.reset.hover_state", shell.resetButton.statsProButtonState, "hover")
+    assertRGBA("config.shell.reset.hover_border", shell.resetButton.backdropBorderColor,
+        detached.colors.danger[1], detached.colors.danger[2], detached.colors.danger[3],
+        detached.colors.danger[4])
+    assertRGBA("config.shell.reset.hover_text", shell.resetButton.statsProText.textColor,
+        detached.colors.danger[1], detached.colors.danger[2], detached.colors.danger[3],
+        detached.colors.danger[4])
+    runFrameHandlers(shell.resetButton, "OnLeave")
+    eq("config.shell.reset.normal_state", shell.resetButton.statsProButtonState, "normal")
+    assertRGBA("config.shell.reset.normal_border", shell.resetButton.backdropBorderColor,
+        detached.colors.borderSoft[1], detached.colors.borderSoft[2],
+        detached.colors.borderSoft[3], detached.colors.borderSoft[4])
+    runFrameHandlers(shell.closeButton, "OnEnter")
+    eq("config.shell.close.hover_state", shell.closeButton.statsProButtonState, "hover")
+    assertRGBA("config.shell.close.hover_border", shell.closeButton.backdropBorderColor,
+        detached.colors.accent[1], detached.colors.accent[2], detached.colors.accent[3],
+        detached.colors.accent[4])
+    runFrameHandlers(shell.closeButton, "OnLeave")
+    eq("config.shell.close.normal_state", shell.closeButton.statsProButtonState, "normal")
+    assertRGBA("config.shell.close.normal_border", shell.closeButton.backdropBorderColor,
+        detached.colors.accentMuted[1], detached.colors.accentMuted[2],
+        detached.colors.accentMuted[3], detached.colors.accentMuted[4])
+
+    callScript("config.shell.drag.start", config, "OnDragStart")
+    eq("config.shell.drag.start_count", config.startMovingCalls, 1)
+    eq("config.shell.drag.moving", config.moving, true)
+    callScript("config.shell.drag.stop", config, "OnDragStop")
+    eq("config.shell.drag.stop_count", config.stopMovingCalls, 1)
+    eq("config.shell.drag.stopped", config.moving, false)
+
+    callScript("config.shell.no_onupdate.font_picker_open",
+        shellEnv.StatsProFontDropdownButton, "OnClick")
+    shellEnv.StatsProFontPicker:Hide()
+    callScript("config.shell.no_onupdate.manager_open",
+        shellEnv.StatsProManageProfilesButton, "OnClick")
+    eq("config.shell.layering.manager_level",
+        shellEnv.StatsProProfileManager:GetFrameLevel(), config:GetFrameLevel() + 20)
+    eq("config.shell.layering.operation_level",
+        shellEnv.StatsProProfileOperationDialog:GetFrameLevel(),
+        shellEnv.StatsProProfileManager:GetFrameLevel() + 10)
+    eq("config.shell.layering.font_picker_level",
+        shellEnv.StatsProFontPicker:GetFrameLevel(), config:GetFrameLevel() + 50)
+
+    local onUpdateAfter = 0
+    for _, frame in ipairs(shellEnv.__frames) do
+        if type(frame.scripts.OnUpdate) == "function" then onUpdateAfter = onUpdateAfter + 1 end
+    end
+    eq("config.shell.no_onupdate_delta", onUpdateAfter, onUpdateBefore)
+    assertDeepEqual("config.shell.navigation_zero_writes", shellEnv.StatsProDB, rootBefore)
+    eq("config.shell.navigation_root_identity", shellEnv.StatsProDB, rootRef)
+    eq("config.shell.navigation_account_identity", rootRef.account, accountRef)
+    eq("config.shell.navigation_profiles_identity", rootRef.profiles, profilesRef)
+    eq("config.shell.navigation_characters_identity", rootRef.characters, charactersRef)
+
+    config:Hide()
+    shellEnv.UIParent:SetSize(1024, 500)
+    config:Show()
+    eq("config.shell.onshow_resize.medium", config:GetHeight(), 450)
+    config:Hide()
+    shellEnv.UIParent:SetSize(2560, 1440)
+    config:Show()
+    eq("config.shell.onshow_resize.high", config:GetHeight(), 600)
+    eq("config.shell.onshow_resize.width_stable", config:GetWidth(), detached.geometry.windowWidth)
+end
+
+do
+    local longEnv, longAddon = loadStatsPro("ruRU", {
+        uiParentWidth = 1024,
+        uiParentHeight = 768,
+    })
+    fireEvent("config.shell.long_profile.pew", longEnv, "PLAYER_ENTERING_WORLD")
+    local longName = string.rep("Ж", 40)
+    local profileID = longEnv.StatsProDB.account.defaultProfileID
+    longEnv.StatsProDB.profiles[profileID].name = longName
+    longAddon:OpenConfigMenu()
+    longAddon.profileUI.RefreshSafe()
+    local button = longEnv.StatsProActiveProfileButton
+    eq("config.shell.long_profile.text_preserved", button:GetText(), longName)
+    eq("config.shell.long_profile.single_line", button.statsProText.wordWrap, false)
+    eq("config.shell.long_profile.max_lines", button.statsProText.maxLines, 1)
+    eq("config.shell.long_profile.left_inset", button.statsProText.points[1][2], 8)
+    eq("config.shell.long_profile.right_inset", button.statsProText.points[2][2], -8)
+    eq("config.shell.long_profile.fixed_width", button:GetWidth(), 286)
+    eq("config.shell.long_profile.manage_fixed_width",
+        longEnv.StatsProManageProfilesButton:GetWidth(), 100)
 end
 
 do
@@ -8990,6 +9398,9 @@ do
     local config = exists("profiles.ui.config", env.StatsProConfigFrame)
     local header = exists("profiles.ui.header", env.StatsProProfileHeader)
     local manager = exists("profiles.ui.manager", env.StatsProProfileManager)
+    eq("profiles.ui.manager.surface", manager.statsProSurfaceRole, "window")
+    eq("profiles.ui.operation_dialog.surface",
+        env.StatsProProfileOperationDialog.statsProSurfaceRole, "window")
     eq("profiles.ui.minimum.config_width", config:GetWidth(), 500)
     eq("profiles.ui.minimum.config_height", config:GetHeight(), 600)
     eq("profiles.ui.minimum.manager_width", manager:GetWidth(), 620)
@@ -8997,14 +9408,15 @@ do
     eq("profiles.ui.minimum.header_top", header.points[1][3], -44)
     eq("profiles.ui.minimum.header_height", header:GetHeight(), 48)
     eq("profiles.ui.minimum.tab_top", config.tabStrip.points[1][3], -100)
-    eq("profiles.ui.minimum.scroll_top", env.StatsProConfigScroll.points[1][3], -138)
+    eq("profiles.ui.minimum.scroll_top", env.StatsProConfigScroll.points[1][3], -140)
     check("profiles.ui.minimum.scroll_viewport_positive",
-        config:GetHeight() - 138 - 60 > 0)
+        config:GetHeight() - 140 - 66 > 0)
 
     local state = profileTest.profileUIState()
     eq("profiles.ui.header.label", state.headerLabel, "Profile:")
     eq("profiles.ui.header.profile", state.headerProfile, "Tank shared")
     eq("profiles.ui.header.shared", state.headerSubtitle, "Shared by 2 specs")
+    assertColor("profiles.ui.header.shared_color", state.headerSubtitleColor, 0.70, 0.74, 0.72)
     for tabIndex = 1, 3 do
         config.SwitchToTab(tabIndex)
         eq("profiles.ui.tabs.active." .. tabIndex, config.activeTabIndex, tabIndex)
@@ -9019,6 +9431,10 @@ do
     state = profileTest.profileUIState()
     eq("profiles.ui.manager.shown", state.managerShown, true)
     eq("profiles.ui.manager.strata", state.managerFrameStrata, "DIALOG")
+    eq("profiles.ui.manager.list_surface_role", state.managerListSurfaceRole, "viewport")
+    eq("profiles.ui.manager.list_surface_parent_owned", state.managerListSurfaceParentOwned, true)
+    eq("profiles.ui.manager.detail_surface_role", state.managerDetailSurfaceRole, "raised")
+    eq("profiles.ui.manager.detail_surface_parent_owned", state.managerDetailSurfaceParentOwned, true)
     check("profiles.ui.manager.level", manager:GetFrameLevel() > config:GetFrameLevel())
     check("profiles.ui.manager.special_frame",
         contains(env.UISpecialFrames, "StatsProProfileManager"))
@@ -9153,6 +9569,8 @@ do
     eq("profiles.ui.combat_pending.header_keeps_old", state.headerProfile, "Damage solo")
     eq("profiles.ui.combat_pending.subtitle", state.headerSubtitle,
         "Switch pending until combat ends")
+    assertColor("profiles.ui.combat_pending.subtitle_color",
+        state.headerSubtitleColor, 1, 0.68, 0.22)
     eq("profiles.ui.combat_pending.read_only", model.canMutate, false)
     eq("profiles.ui.combat_pending.active_kept", model.activeSpecID, 71)
     eq("profiles.ui.combat_pending.notice", state.detailNotice,
@@ -9242,6 +9660,12 @@ do
     })
     fireEvent("profiles.ui.unknown_combat.activate", env, "PLAYER_ENTERING_WORLD")
     addonContext:OpenConfigMenu()
+    local shellState = profileTest.settingsShellState()
+    runFrameHandlers(shellState.tabs[2], "OnEnter")
+    runFrameHandlers(shellState.tabs[2], "OnMouseDown", "LeftButton")
+    runFrameHandlers(shellState.tabs[2], "OnMouseUp", "LeftButton")
+    runFrameHandlers(shellState.tabs[2], "OnLeave")
+    runFrameHandlers(shellState.tabs[2], "OnClick")
     callScript("profiles.ui.unknown_combat.open_manager",
         env.StatsProManageProfilesButton, "OnClick")
     local model = profileTest.profileViewModel()
@@ -9275,12 +9699,21 @@ do
     })
     fireEvent("profiles.ui.compat.activate", env, "PLAYER_ENTERING_WORLD")
     addonContext:OpenConfigMenu()
+    local shellState = profileTest.settingsShellState()
+    for _, tab in ipairs(shellState.tabs) do
+        runFrameHandlers(tab, "OnEnter")
+        runFrameHandlers(tab, "OnMouseDown", "LeftButton")
+        runFrameHandlers(tab, "OnMouseUp", "LeftButton")
+        runFrameHandlers(tab, "OnLeave")
+        runFrameHandlers(tab, "OnClick")
+    end
     local state = profileTest.profileUIState()
     local model = profileTest.profileViewModel()
     eq("profiles.ui.compat.read_only", model.readOnly, true)
     eq("profiles.ui.compat.no_characters", #model.characters, 0)
     eq("profiles.ui.compat.header", state.headerSubtitle,
         "Compatibility mode - profiles are read-only.")
+    assertColor("profiles.ui.compat.header_color", state.headerSubtitleColor, 1, 0.68, 0.22)
     callScript("profiles.ui.compat.open_manager", env.StatsProManageProfilesButton, "OnClick")
     state = profileTest.profileUIState()
     eq("profiles.ui.compat.manager_open", state.managerShown, true)
@@ -9409,6 +9842,55 @@ do
         eq("profiles.ui.locales.minimum_manager_width." .. locale,
             env.StatsProProfileManager:GetWidth(), 620)
         local labels = labelsByLocale[locale]
+        local shellState = exists("profiles.ui.locales.shell." .. locale,
+            profileTest.settingsShellState())
+        eq("profiles.ui.locales.tab_count." .. locale, #shellState.tabs, 3)
+        for tabIndex, tab in ipairs(shellState.tabs) do
+            eq("profiles.ui.locales.tab_width." .. locale .. "." .. tabIndex,
+                tab:GetWidth(), 152)
+            check("profiles.ui.locales.tab_text." .. locale .. "." .. tabIndex,
+                tab.statsProText:GetText() ~= "")
+            check("profiles.ui.locales.tab_text_fit." .. locale .. "." .. tabIndex,
+                tab.statsProText:GetStringWidth() <= tab:GetWidth() - 24,
+                "tab label exceeds its inset text region")
+        end
+        check("profiles.ui.locales.title_metadata." .. locale,
+            string.find(shellState.shell.titleMetadata:GetText(), labels["Settings"], 1, true) ~= nil)
+        check("profiles.ui.locales.title_metadata_fit." .. locale,
+            shellState.shell.titleMetadata:GetStringWidth() <= 320,
+            "title metadata approaches the close button")
+        eq("profiles.ui.locales.reset_text." .. locale,
+            shellState.shell.resetButton:GetText(), labels["Reset active profile..."])
+        eq("profiles.ui.locales.close_text." .. locale,
+            shellState.shell.closeButton:GetText(), labels["Close"])
+        check("profiles.ui.locales.manage_fit." .. locale,
+            env.StatsProManageProfilesButton.statsProText:GetStringWidth()
+                <= env.StatsProManageProfilesButton:GetWidth() - 16,
+            "Manage label exceeds its inset text region")
+        check("profiles.ui.locales.reset_fit." .. locale,
+            shellState.shell.resetButton.statsProText:GetStringWidth()
+                <= shellState.shell.resetButton:GetWidth() - 16,
+            "Reset label exceeds its inset text region")
+        check("profiles.ui.locales.close_fit." .. locale,
+            shellState.shell.closeButton.statsProText:GetStringWidth()
+                <= shellState.shell.closeButton:GetWidth() - 16,
+            "Close label exceeds its inset text region")
+        local profileLabelFrame = findFontString(
+            "profiles.ui.locales.profile_label_frame." .. locale, env,
+            function(fontString)
+                return fontString:GetParent() == env.StatsProProfileHeader
+                    and fontString:GetText() == labels["Profile:"]
+            end)
+        check("profiles.ui.locales.profile_label_fit." .. locale,
+            profileLabelFrame:GetStringWidth() <= profileLabelFrame:GetWidth(),
+            "Profile label exceeds its fixed header region")
+        for tabIndex, sections in ipairs(shellState.sections) do
+            for sectionIndex, section in ipairs(sections) do
+                eq("profiles.ui.locales.section_casing." .. locale .. "."
+                    .. tabIndex .. "." .. sectionIndex,
+                    section.text:GetText(), labels[section.key])
+            end
+        end
         for _, key in ipairs(requiredOperationKeys) do
             check("profiles.ui.locales.required_key." .. locale .. "." .. key,
                 type(labels[key]) == "string" and labels[key] ~= "")
@@ -9438,7 +9920,7 @@ do
             env.StatsProManageProfilesButton, "OnClick")
         state = profileTest.profileUIState()
         eq("profiles.ui.locales.manager_title." .. locale,
-            state.managerTitle, "|cff00ff7f" .. labels["Profile Manager"] .. "|r")
+            state.managerTitle, labels["Profile Manager"])
         eq("profiles.ui.locales.manager_utf8." .. locale,
             state.detailProfile, "Танк 配置")
         local actionKeys = {

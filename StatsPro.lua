@@ -2999,7 +2999,9 @@ end
 -- WHY function (not a constant): resolved at use time so locale-toggle flips update
 -- section headers on next render. Cheap: one string.format per visible section.
 local function SectionHeader(labelKey)
-    return string.format("|cff808080— %s —|r", L(labelKey))
+    -- Reuse the Settings secondary-text neutral: brighter than the old gray,
+    -- still subordinate to stat colors, with the default outline helping on terrain.
+    return string.format("|cffb3bdb8— %s —|r", L(labelKey))
 end
 
 -- pcall every stat API so 12.x secret values never touch unsafe Lua logic.

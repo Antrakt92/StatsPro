@@ -6235,7 +6235,7 @@ do
 end
 
 do
-    local ilvlEnv = loadStatsPro("enUS", {
+    local ilvlEnv, _, ilvlTest = loadStatsPro("enUS", {
         statsProDB = {
             displayMode = "sectioned",
             showOffensive = false,
@@ -6250,6 +6250,56 @@ do
     eq("routing.item_level_uses_gear_header.gear", printContains(ilvlEnv, "— Gear —"), true)
     eq("routing.item_level_uses_gear_header.no_item_level_header", printContains(ilvlEnv, "— Item Level —"), false)
     eq("routing.item_level_uses_gear_header.row", printContains(ilvlEnv, "iLvl:"), true)
+    local sectionedBlocks = ilvlTest.buildRenderBlocks()
+    local sectionedBucket = ilvlTest.routeRenderBlocks(sectionedBlocks, "sectioned", nil, "full")
+    eq("routing.section_header.contrast_color", sectionedBucket.labels[1], "|cffb3bdb8— Gear —|r")
+    local transparentState = ilvlTest.panelVisualState()
+    eq("routing.section_header.transparent.runtime_text",
+        transparentState.mainLabelText:find("|cffb3bdb8— Gear —|r", 1, true) ~= nil, true)
+    eq("routing.section_header.transparent.outline", transparentState.mainLabelFlags, "OUTLINE")
+    near("routing.section_header.transparent.text_alpha", transparentState.mainLabelAlpha, 1)
+    near("routing.section_header.transparent.background_alpha",
+        transparentState.mainBackgroundTextureAlpha, 0)
+
+    local maxBackgroundEnv, _, maxBackgroundTest = loadStatsPro("enUS", {
+        statsProDB = {
+            displayMode = "sectioned",
+            textOutlineStyle = "outline",
+            panelBackgroundAlpha = 80,
+            showOffensive = false,
+            showItemLevel = true,
+            showDurability = false,
+            showRepairCost = false,
+        },
+        getAverageItemLevel = function() return 273, 271 end,
+    })
+    fireEvent("routing.section_header.max_background.fire", maxBackgroundEnv, "PLAYER_ENTERING_WORLD")
+    local maxBackgroundState = maxBackgroundTest.panelVisualState()
+    eq("routing.section_header.max_background.runtime_text",
+        maxBackgroundState.mainLabelText:find("|cffb3bdb8— Gear —|r", 1, true) ~= nil, true)
+    eq("routing.section_header.max_background.outline", maxBackgroundState.mainLabelFlags, "OUTLINE")
+    near("routing.section_header.max_background.background_alpha",
+        maxBackgroundState.mainBackgroundTextureAlpha, 0.8)
+
+    local noOutlineEnv, _, noOutlineTest = loadStatsPro("enUS", {
+        statsProDB = {
+            displayMode = "sectioned",
+            textOutlineStyle = "none",
+            panelBackgroundAlpha = 30,
+            showOffensive = false,
+            showItemLevel = true,
+            showDurability = false,
+            showRepairCost = false,
+        },
+        getAverageItemLevel = function() return 273, 271 end,
+    })
+    fireEvent("routing.section_header.no_outline.fire", noOutlineEnv, "PLAYER_ENTERING_WORLD")
+    local noOutlineState = noOutlineTest.panelVisualState()
+    eq("routing.section_header.no_outline.runtime_text",
+        noOutlineState.mainLabelText:find("|cffb3bdb8— Gear —|r", 1, true) ~= nil, true)
+    eq("routing.section_header.no_outline.flags", noOutlineState.mainLabelFlags, nil)
+    near("routing.section_header.no_outline.background_alpha",
+        noOutlineState.mainBackgroundTextureAlpha, 0.3)
 end
 
 do

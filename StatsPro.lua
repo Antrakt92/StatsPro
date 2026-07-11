@@ -1023,6 +1023,14 @@ local LABELS_BY_LOCALE = {
         -- Buttons + title:
         ["Reset to Defaults"] = "Reset to Defaults", ["Close"] = "Close",
         ["Open Settings"] = "Open Settings", ["Settings"] = "Settings",
+        ["Profile:"] = "Profile:", ["Manage"] = "Manage", ["Profile Manager"] = "Profile Manager",
+        ["Automatic - %s / %s"] = "Automatic - %s / %s", ["Shared by %d specs"] = "Shared by %d specs",
+        ["Switch pending until combat ends"] = "Switch pending until combat ends", ["Account default profile"] = "Account default profile",
+        ["Current"] = "Current", ["Active"] = "Active", ["Character default"] = "Character default",
+        ["Assigned profile:"] = "Assigned profile:", ["Independent"] = "Independent", ["No visited characters"] = "No visited characters",
+        ["Spec %d"] = "Spec %d", ["Profile changes are unavailable during combat."] = "Profile changes are unavailable during combat.",
+        ["Waiting for a safe profile context."] = "Waiting for a safe profile context.",
+        ["Compatibility mode - profiles are read-only."] = "Compatibility mode - profiles are read-only.",
         -- Templates:
         ["Auto (current: %s)"] = "Auto (current: %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage.",
@@ -1107,6 +1115,14 @@ local LABELS_BY_LOCALE = {
         -- Buttons + title:
         ["Reset to Defaults"] = "Сбросить настройки", ["Close"] = "Закрыть",
         ["Open Settings"] = "Открыть настройки", ["Settings"] = "Настройки",
+        ["Profile:"] = "Профиль:", ["Manage"] = "Управление", ["Profile Manager"] = "Управление профилями",
+        ["Automatic - %s / %s"] = "Автоматически — %s / %s", ["Shared by %d specs"] = "Общий для специализаций: %d",
+        ["Switch pending until combat ends"] = "Переключение после окончания боя", ["Account default profile"] = "Профиль аккаунта по умолчанию",
+        ["Current"] = "Текущий", ["Active"] = "Активно", ["Character default"] = "По умолчанию для персонажа",
+        ["Assigned profile:"] = "Назначенный профиль:", ["Independent"] = "Независимый", ["No visited characters"] = "Нет посещённых персонажей",
+        ["Spec %d"] = "Специализация %d", ["Profile changes are unavailable during combat."] = "Изменение профилей недоступно в бою.",
+        ["Waiting for a safe profile context."] = "Ожидание безопасного контекста профиля.",
+        ["Compatibility mode - profiles are read-only."] = "Режим совместимости — профили доступны только для чтения.",
         -- Templates:
         ["Auto (current: %s)"] = "Авто (сейчас: %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Шрифт может не отображать символы %s. Выберите шрифт SharedMedia с нужным покрытием.",
@@ -1185,6 +1201,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats import failed; current StatsPro settings were preserved."] = "SwiftStats-Import fehlgeschlagen; die aktuellen StatsPro-Einstellungen wurden beibehalten.",
         ["Reset to Defaults"] = "Auf Standard", ["Close"] = "Schließen",
         ["Open Settings"] = "Einstellungen öffnen", ["Settings"] = "Einstellungen",
+        ["Profile:"] = "Profil:", ["Manage"] = "Verwalten", ["Profile Manager"] = "Profilverwaltung",
+        ["Automatic - %s / %s"] = "Automatisch – %s / %s", ["Shared by %d specs"] = "Von %d Spezialisierungen geteilt",
+        ["Switch pending until combat ends"] = "Wechsel nach Kampfende", ["Account default profile"] = "Standardprofil des Accounts",
+        ["Current"] = "Aktuell", ["Active"] = "Aktiv", ["Character default"] = "Charakterstandard",
+        ["Assigned profile:"] = "Zugewiesenes Profil:", ["Independent"] = "Unabhängig", ["No visited characters"] = "Keine besuchten Charaktere",
+        ["Spec %d"] = "Spezialisierung %d", ["Profile changes are unavailable during combat."] = "Profiländerungen sind im Kampf nicht verfügbar.",
+        ["Waiting for a safe profile context."] = "Warten auf einen sicheren Profilkontext.",
+        ["Compatibility mode - profiles are read-only."] = "Kompatibilitätsmodus – Profile sind schreibgeschützt.",
         ["Auto (current: %s)"] = "Auto (aktuell: %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Schrift unterstützt %s eventuell nicht. Wähle eine SharedMedia-Schrift mit Glyphenabdeckung.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD für Werte und Ausrüstung: Gegenstandsstufe, Haltbarkeit, Reparaturkosten und Archon-Stat-Ziele. Klicke unten, um die vollständigen Einstellungen zu öffnen.",
@@ -1259,6 +1283,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats import failed; current StatsPro settings were preserved."] = "Échec de l’importation SwiftStats ; les réglages StatsPro actuels ont été conservés.",
         ["Reset to Defaults"] = "Par défaut", ["Close"] = "Fermer",
         ["Open Settings"] = "Ouvrir les paramètres", ["Settings"] = "Paramètres",
+        ["Profile:"] = "Profil :", ["Manage"] = "Gérer", ["Profile Manager"] = "Gestionnaire de profils",
+        ["Automatic - %s / %s"] = "Automatique – %s / %s", ["Shared by %d specs"] = "Partagé par %d spécialisations",
+        ["Switch pending until combat ends"] = "Changement après le combat", ["Account default profile"] = "Profil de compte par défaut",
+        ["Current"] = "Actuel", ["Active"] = "Actif", ["Character default"] = "Profil de personnage par défaut",
+        ["Assigned profile:"] = "Profil attribué :", ["Independent"] = "Indépendant", ["No visited characters"] = "Aucun personnage visité",
+        ["Spec %d"] = "Spécialisation %d", ["Profile changes are unavailable during combat."] = "Les changements de profil sont indisponibles en combat.",
+        ["Waiting for a safe profile context."] = "En attente d’un contexte de profil sûr.",
+        ["Compatibility mode - profiles are read-only."] = "Mode de compatibilité – les profils sont en lecture seule.",
         ["Auto (current: %s)"] = "Auto (actuel : %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La police peut ne pas afficher les glyphes %s. Choisissez une police SharedMedia avec couverture appropriée.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD de caractéristiques et d'équipement : niveau d'objet, durabilité, coût de réparation et objectifs de caractéristiques Archon. Cliquez ci-dessous pour ouvrir la fenêtre de paramètres complète.",
@@ -1334,6 +1366,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats import failed; current StatsPro settings were preserved."] = "La importación de SwiftStats falló; se conservaron los ajustes actuales de StatsPro.",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
         ["Open Settings"] = "Abrir ajustes", ["Settings"] = "Ajustes",
+        ["Profile:"] = "Perfil:", ["Manage"] = "Gestionar", ["Profile Manager"] = "Gestor de perfiles",
+        ["Automatic - %s / %s"] = "Automático – %s / %s", ["Shared by %d specs"] = "Compartido por %d especializaciones",
+        ["Switch pending until combat ends"] = "Cambio al terminar el combate", ["Account default profile"] = "Perfil de cuenta predeterminado",
+        ["Current"] = "Actual", ["Active"] = "Activo", ["Character default"] = "Predeterminado del personaje",
+        ["Assigned profile:"] = "Perfil asignado:", ["Independent"] = "Independiente", ["No visited characters"] = "No hay personajes visitados",
+        ["Spec %d"] = "Especialización %d", ["Profile changes are unavailable during combat."] = "Los cambios de perfil no están disponibles en combate.",
+        ["Waiting for a safe profile context."] = "Esperando un contexto de perfil seguro.",
+        ["Compatibility mode - profiles are read-only."] = "Modo de compatibilidad: los perfiles son de solo lectura.",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La fuente puede no mostrar glifos %s. Elige una fuente SharedMedia con cobertura.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD de estadísticas y equipo: nivel de objeto, durabilidad, coste de reparación y objetivos de estadísticas de Archon. Haz clic abajo para abrir la ventana de ajustes.",
@@ -1407,6 +1447,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats import failed; current StatsPro settings were preserved."] = "La importación de SwiftStats falló; se conservó la configuración actual de StatsPro.",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
         ["Open Settings"] = "Abrir configuración", ["Settings"] = "Configuración",
+        ["Profile:"] = "Perfil:", ["Manage"] = "Administrar", ["Profile Manager"] = "Administrador de perfiles",
+        ["Automatic - %s / %s"] = "Automático – %s / %s", ["Shared by %d specs"] = "Compartido por %d especializaciones",
+        ["Switch pending until combat ends"] = "Cambio al terminar el combate", ["Account default profile"] = "Perfil predeterminado de la cuenta",
+        ["Current"] = "Actual", ["Active"] = "Activo", ["Character default"] = "Predeterminado del personaje",
+        ["Assigned profile:"] = "Perfil asignado:", ["Independent"] = "Independiente", ["No visited characters"] = "No hay personajes visitados",
+        ["Spec %d"] = "Especialización %d", ["Profile changes are unavailable during combat."] = "Los cambios de perfil no están disponibles en combate.",
+        ["Waiting for a safe profile context."] = "Esperando un contexto de perfil seguro.",
+        ["Compatibility mode - profiles are read-only."] = "Modo de compatibilidad: los perfiles son de solo lectura.",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La fuente puede no mostrar glifos %s. Elige una fuente SharedMedia con cobertura.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD de estadísticas y equipo: nivel de objeto, durabilidad, costo de reparación y objetivos de estadísticas de Archon. Da clic abajo para abrir la ventana de configuración.",
@@ -1481,6 +1529,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats import failed; current StatsPro settings were preserved."] = "Importazione di SwiftStats non riuscita; le impostazioni StatsPro attuali sono state conservate.",
         ["Reset to Defaults"] = "Predefiniti", ["Close"] = "Chiudi",
         ["Open Settings"] = "Apri impostazioni", ["Settings"] = "Impostazioni",
+        ["Profile:"] = "Profilo:", ["Manage"] = "Gestisci", ["Profile Manager"] = "Gestione profili",
+        ["Automatic - %s / %s"] = "Automatico – %s / %s", ["Shared by %d specs"] = "Condiviso da %d specializzazioni",
+        ["Switch pending until combat ends"] = "Cambio dopo il combattimento", ["Account default profile"] = "Profilo account predefinito",
+        ["Current"] = "Attuale", ["Active"] = "Attivo", ["Character default"] = "Predefinito del personaggio",
+        ["Assigned profile:"] = "Profilo assegnato:", ["Independent"] = "Indipendente", ["No visited characters"] = "Nessun personaggio visitato",
+        ["Spec %d"] = "Specializzazione %d", ["Profile changes are unavailable during combat."] = "Le modifiche ai profili non sono disponibili in combattimento.",
+        ["Waiting for a safe profile context."] = "In attesa di un contesto profilo sicuro.",
+        ["Compatibility mode - profiles are read-only."] = "Modalità compatibilità – i profili sono in sola lettura.",
         ["Auto (current: %s)"] = "Auto (attuale: %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Il font potrebbe non visualizzare i glifi %s. Scegli un font SharedMedia con copertura adeguata.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD di statistiche ed equipaggiamento: livello oggetto, durabilità, costo di riparazione e obiettivi statistiche Archon. Clicca sotto per aprire le impostazioni complete.",
@@ -1554,6 +1610,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats import failed; current StatsPro settings were preserved."] = "Falha ao importar o SwiftStats; as configurações atuais do StatsPro foram preservadas.",
         ["Reset to Defaults"] = "Restaurar", ["Close"] = "Fechar",
         ["Open Settings"] = "Abrir configurações", ["Settings"] = "Configurações",
+        ["Profile:"] = "Perfil:", ["Manage"] = "Gerenciar", ["Profile Manager"] = "Gerenciador de perfis",
+        ["Automatic - %s / %s"] = "Automático – %s / %s", ["Shared by %d specs"] = "Compartilhado por %d especializações",
+        ["Switch pending until combat ends"] = "Troca após o combate", ["Account default profile"] = "Perfil padrão da conta",
+        ["Current"] = "Atual", ["Active"] = "Ativo", ["Character default"] = "Padrão do personagem",
+        ["Assigned profile:"] = "Perfil atribuído:", ["Independent"] = "Independente", ["No visited characters"] = "Nenhum personagem visitado",
+        ["Spec %d"] = "Especialização %d", ["Profile changes are unavailable during combat."] = "Alterações de perfil não estão disponíveis em combate.",
+        ["Waiting for a safe profile context."] = "Aguardando um contexto de perfil seguro.",
+        ["Compatibility mode - profiles are read-only."] = "Modo de compatibilidade – os perfis são somente leitura.",
         ["Auto (current: %s)"] = "Auto (atual: %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r A fonte pode não exibir glifos %s. Escolha uma fonte SharedMedia com cobertura.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD de atributos e equipamento: nível de item, durabilidade, custo de reparo e metas de atributos do Archon. Clique abaixo para abrir a janela de configurações.",
@@ -1634,6 +1698,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats import failed; current StatsPro settings were preserved."] = "SwiftStats 설정 가져오기에 실패했습니다. 현재 StatsPro 설정은 유지되었습니다.",
         ["Reset to Defaults"] = "기본값", ["Close"] = "닫기",
         ["Open Settings"] = "설정 열기", ["Settings"] = "설정",
+        ["Profile:"] = "프로필:", ["Manage"] = "관리", ["Profile Manager"] = "프로필 관리",
+        ["Automatic - %s / %s"] = "자동 – %s / %s", ["Shared by %d specs"] = "전문화 %d개에서 공유",
+        ["Switch pending until combat ends"] = "전투 종료 후 전환", ["Account default profile"] = "계정 기본 프로필",
+        ["Current"] = "현재", ["Active"] = "활성", ["Character default"] = "캐릭터 기본값",
+        ["Assigned profile:"] = "지정된 프로필:", ["Independent"] = "독립", ["No visited characters"] = "방문한 캐릭터 없음",
+        ["Spec %d"] = "전문화 %d", ["Profile changes are unavailable during combat."] = "전투 중에는 프로필을 변경할 수 없습니다.",
+        ["Waiting for a safe profile context."] = "안전한 프로필 상태를 기다리는 중입니다.",
+        ["Compatibility mode - profiles are read-only."] = "호환 모드 – 프로필이 읽기 전용입니다.",
         ["Auto (current: %s)"] = "자동 (현재: %s)",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 이 글꼴은 %s 글리프를 표시하지 못할 수 있습니다. SharedMedia에서 적합한 글꼴을 선택하세요.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "능력치·장비 HUD: 아이템 레벨, 내구도, 수리 비용, Archon 능력치 목표. 아래를 눌러 전체 설정 창을 엽니다.",
@@ -1707,6 +1779,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats import failed; current StatsPro settings were preserved."] = "SwiftStats 导入失败；当前 StatsPro 设置已保留。",
         ["Reset to Defaults"] = "恢复默认", ["Close"] = "关闭",
         ["Open Settings"] = "打开设置", ["Settings"] = "设置",
+        ["Profile:"] = "配置：", ["Manage"] = "管理", ["Profile Manager"] = "配置管理",
+        ["Automatic - %s / %s"] = "自动 – %s / %s", ["Shared by %d specs"] = "被 %d 个专精共享",
+        ["Switch pending until combat ends"] = "战斗结束后切换", ["Account default profile"] = "账号默认配置",
+        ["Current"] = "当前", ["Active"] = "激活", ["Character default"] = "角色默认配置",
+        ["Assigned profile:"] = "已分配配置：", ["Independent"] = "独立", ["No visited characters"] = "没有已访问角色",
+        ["Spec %d"] = "专精 %d", ["Profile changes are unavailable during combat."] = "战斗中无法更改配置。",
+        ["Waiting for a safe profile context."] = "正在等待安全的配置环境。",
+        ["Compatibility mode - profiles are read-only."] = "兼容模式 – 配置为只读。",
         ["Auto (current: %s)"] = "自动（当前: %s）",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 字体可能无法显示 %s 字形。请从 SharedMedia 选择合适的字体。",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "属性与装备 HUD：装等、耐久度、修理费用及 Archon 属性目标。点击下方打开完整设置窗口。",
@@ -1780,6 +1860,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats import failed; current StatsPro settings were preserved."] = "SwiftStats 匯入失敗；目前的 StatsPro 設定已保留。",
         ["Reset to Defaults"] = "恢復預設", ["Close"] = "關閉",
         ["Open Settings"] = "開啟設定", ["Settings"] = "設定",
+        ["Profile:"] = "設定檔：", ["Manage"] = "管理", ["Profile Manager"] = "設定檔管理",
+        ["Automatic - %s / %s"] = "自動 – %s / %s", ["Shared by %d specs"] = "由 %d 個專精共用",
+        ["Switch pending until combat ends"] = "戰鬥結束後切換", ["Account default profile"] = "帳號預設設定檔",
+        ["Current"] = "目前", ["Active"] = "啟用", ["Character default"] = "角色預設設定檔",
+        ["Assigned profile:"] = "已指派設定檔：", ["Independent"] = "獨立", ["No visited characters"] = "沒有已造訪角色",
+        ["Spec %d"] = "專精 %d", ["Profile changes are unavailable during combat."] = "戰鬥中無法變更設定檔。",
+        ["Waiting for a safe profile context."] = "正在等待安全的設定檔環境。",
+        ["Compatibility mode - profiles are read-only."] = "相容模式 – 設定檔為唯讀。",
         ["Auto (current: %s)"] = "自動（目前: %s）",
         ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 字型可能無法顯示 %s 字形。請從 SharedMedia 選擇合適的字型。",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "屬性與裝備 HUD：裝等、耐久度、修理費用及 Archon 屬性目標。點擊下方開啟完整設定視窗。",
@@ -2390,6 +2478,10 @@ addon.dbRuntime = {
 addon.profileRuntime = {
     activeGUID = nil,
     activeSpecID = nil,
+    activeDisplayName = nil,
+    activeSpecName = nil,
+    activeRole = nil,
+    knownSpecNames = {},
     pendingResolution = false,
     scheduledToken = nil,
     noSpecRetryToken = nil,
@@ -2404,6 +2496,95 @@ addon.profileRuntime = {
     structuralCommitCount = 0,
     contextReadCount = 0,
 }
+
+addon.profileUI = {
+    refreshCount = 0,
+    selectedGUID = nil,
+    selectedSpecID = nil,
+}
+
+function addon.profileUI.RefreshSafe()
+    local refresh = addon.profileUI.refreshAll
+    if type(refresh) == "function" then pcall(refresh) end
+end
+
+function addon.profileUI.BuildViewModel()
+    local root = addon.dbRuntime.Refresh()
+    local runtime = addon.profileRuntime
+    local pending = runtime.pendingResolution or runtime.scheduledToken ~= nil
+        or runtime.noSpecRetryToken ~= nil
+    local combat = runtime.ReadCombatState()
+    local model = {
+        mode = addon.dbRuntime.mode,
+        readOnly = addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady,
+        pending = pending,
+        combat = combat,
+        canMutate = false,
+        activeGUID = runtime.activeGUID,
+        activeSpecID = runtime.activeSpecID,
+        activeDisplayName = runtime.activeDisplayName,
+        activeSpecName = runtime.activeSpecName,
+        activeProfileID = addon.dbRuntime.activeProfileID,
+        activeProfileName = nil,
+        activeSharedCount = 0,
+        characters = {},
+    }
+    if model.readOnly then return model end
+
+    model.canMutate = combat == false and not pending
+    local assignmentCounts = {}
+    for _, character in pairs(root.characters) do
+        for _, profileID in pairs(character.specProfiles or {}) do
+            assignmentCounts[profileID] = (assignmentCounts[profileID] or 0) + 1
+        end
+    end
+
+    local activeProfile = root.profiles[model.activeProfileID]
+    if addon.dbRuntime.IsCleanTable(activeProfile)
+        and addon.dbRuntime.IsCleanType(activeProfile.name, "string") then
+        model.activeProfileName = activeProfile.name
+        model.activeSharedCount = assignmentCounts[model.activeProfileID] or 0
+    end
+
+    for guid, character in pairs(root.characters) do
+        local characterModel = {
+            guid = guid,
+            displayName = character.displayName or "Character",
+            lastSeen = character.lastSeen or 0,
+            isCurrent = guid == model.activeGUID,
+            defaultProfileID = character.defaultProfileID,
+            defaultProfileName = nil,
+            defaultSharedCount = assignmentCounts[character.defaultProfileID] or 0,
+            specs = {},
+        }
+        local defaultProfile = character.defaultProfileID
+            and root.profiles[character.defaultProfileID] or nil
+        if defaultProfile then characterModel.defaultProfileName = defaultProfile.name end
+        for specID, profileID in pairs(character.specProfiles or {}) do
+            local profile = root.profiles[profileID]
+            characterModel.specs[#characterModel.specs + 1] = {
+                specID = specID,
+                specName = runtime.knownSpecNames[specID],
+                profileID = profileID,
+                profileName = profile and profile.name or "",
+                sharedCount = assignmentCounts[profileID] or 0,
+                isActive = guid == model.activeGUID and specID == model.activeSpecID
+                    and profileID == model.activeProfileID,
+            }
+        end
+        table.sort(characterModel.specs, function(left, right)
+            if left.isActive ~= right.isActive then return left.isActive end
+            return left.specID < right.specID
+        end)
+        model.characters[#model.characters + 1] = characterModel
+    end
+    table.sort(model.characters, function(left, right)
+        if left.isCurrent ~= right.isCurrent then return left.isCurrent end
+        if left.lastSeen ~= right.lastSeen then return left.lastSeen > right.lastSeen end
+        return left.guid < right.guid
+    end)
+    return model
+end
 
 function addon.profileRuntime.BlocksUserWrites()
     return not addon.profileRuntime.transitioning
@@ -3160,6 +3341,8 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
     local oldProfileID = addon.dbRuntime.activeProfileID
     local oldSettings = addon.dbRuntime.activeSettings
     local oldGUID, oldSpecID = runtime.activeGUID, runtime.activeSpecID
+    local oldDisplayName, oldSpecName, oldRole =
+        runtime.activeDisplayName, runtime.activeSpecName, runtime.activeRole
 
     runtime.transitioning = true
     runtime.suppressIntermediateRefresh = true
@@ -3169,11 +3352,13 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
         if not saveOK then
             runtime.suppressIntermediateRefresh = false
             runtime.transitioning = false
+            addon.profileUI.RefreshSafe()
             return false
         end
         if not runtime.CloseOwnedSettingsModals() then
             runtime.suppressIntermediateRefresh = false
             runtime.transitioning = false
+            addon.profileUI.RefreshSafe()
             return false
         end
     end
@@ -3185,19 +3370,18 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
         runtime.RollbackTransaction(transaction)
         addon.dbRuntime.ActivateProfile(oldProfileID)
         runtime.transitioning = false
+        addon.profileUI.RefreshSafe()
         return false
     end
 
     local targetSettings = addon.dbRuntime.activeSettings
-    local targetSnapshot
-    if not transaction then
-        local copied
-        targetSnapshot, copied = addon.dbRuntime.CloneSerializable(targetSettings)
-        if not copied then
-            addon.dbRuntime.ActivateProfile(oldProfileID)
-            runtime.transitioning = false
-            return false
-        end
+    local targetSnapshot, copied = addon.dbRuntime.CloneSerializable(targetSettings)
+    if not copied then
+        runtime.RollbackTransaction(transaction)
+        addon.dbRuntime.ActivateProfile(oldProfileID)
+        runtime.transitioning = false
+        addon.profileUI.RefreshSafe()
+        return false
     end
 
     local applied = true
@@ -3213,18 +3397,31 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
         runtime.RollbackTransaction(transaction)
         addon.dbRuntime.ActivateProfile(oldProfileID)
         runtime.activeGUID, runtime.activeSpecID = oldGUID, oldSpecID
+        runtime.activeDisplayName, runtime.activeSpecName, runtime.activeRole =
+            oldDisplayName, oldSpecName, oldRole
         if type(runtime.applyActiveSettings) == "function" then
             pcall(runtime.applyActiveSettings)
         end
         runtime.transitioning = false
+        addon.profileUI.RefreshSafe()
         return false
     end
 
     runtime.activeGUID = context.guid
     runtime.activeSpecID = context.specID
+    local activeRoot = addon.dbRuntime.rootRef
+    local activeCharacter = transaction and transaction.characters
+        and transaction.characters[context.guid]
+        or (activeRoot and activeRoot.characters and activeRoot.characters[context.guid])
+    runtime.activeDisplayName = context.displayName
+        or (activeCharacter and activeCharacter.displayName)
+    runtime.activeSpecName = context.specName
+    runtime.activeRole = context.role
+    if context.specName then runtime.knownSpecNames[context.specID] = context.specName end
     runtime.pendingResolution = false
     runtime.activationCount = runtime.activationCount + 1
     runtime.transitioning = false
+    addon.profileUI.RefreshSafe()
     return true
 end
 
@@ -3233,6 +3430,7 @@ function addon.profileRuntime.ResolveCurrent(initializing)
     local combat = runtime.ReadCombatState()
     if combat ~= false then
         runtime.pendingResolution = true
+        addon.profileUI.RefreshSafe()
         return false
     end
     local context, contextStatus = runtime.ReadPlayerContext()
@@ -3256,6 +3454,7 @@ function addon.profileRuntime.ResolveCurrent(initializing)
                 end)
             end
         end
+        addon.profileUI.RefreshSafe()
         return false
     end
     runtime.noSpecRetryToken = nil
@@ -3263,6 +3462,7 @@ function addon.profileRuntime.ResolveCurrent(initializing)
     local root = addon.dbRuntime.Refresh()
     if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady then
         runtime.pendingResolution = true
+        addon.profileUI.RefreshSafe()
         return false
     end
     local character = root.characters and root.characters[context.guid]
@@ -3270,13 +3470,31 @@ function addon.profileRuntime.ResolveCurrent(initializing)
         and character.specProfiles[context.specID] or nil
     if runtime.activeGUID == context.guid and runtime.activeSpecID == context.specID
         and addon.dbRuntime.activeProfileID == mappedProfileID then
+        -- A same-context event is still allowed to enrich late character/spec metadata.
+        -- Do not reapply the profile payload or disturb open settings controls.
+        local transaction, profileID = runtime.PrepareContextTransaction(context)
+        if profileID ~= mappedProfileID then
+            runtime.pendingResolution = true
+            addon.profileUI.RefreshSafe()
+            return false
+        end
+        runtime.CommitTransaction(transaction)
+        local updatedCharacter = transaction and transaction.characters[context.guid] or character
+        runtime.activeDisplayName = context.displayName
+            or (updatedCharacter and updatedCharacter.displayName)
+            or runtime.activeDisplayName
+        runtime.activeSpecName = context.specName or runtime.activeSpecName
+        runtime.activeRole = context.role or runtime.activeRole
+        if context.specName then runtime.knownSpecNames[context.specID] = context.specName end
         runtime.pendingResolution = false
+        addon.profileUI.RefreshSafe()
         return true
     end
 
     local transaction, profileID = runtime.PrepareContextTransaction(context)
     if not addon.dbRuntime.IsCleanType(profileID, "string") then
         runtime.pendingResolution = true
+        addon.profileUI.RefreshSafe()
         return false
     end
     return runtime.ActivateResolvedContext(context, transaction, profileID, initializing)
@@ -3286,11 +3504,13 @@ function addon.profileRuntime.RequestResolution(immediate)
     local runtime = addon.profileRuntime
     if type(UnitGUID) ~= "function" then
         runtime.pendingResolution = false
+        addon.profileUI.RefreshSafe()
         return false
     end
     runtime.pendingResolution = true
     runtime.requestGeneration = runtime.requestGeneration + 1
     runtime.noSpecRetryToken = nil
+    addon.profileUI.RefreshSafe()
     if immediate then return runtime.ResolveCurrent(true) end
     if runtime.scheduledToken ~= nil then return true end
     local token = runtime.requestGeneration
@@ -6654,6 +6874,376 @@ _G.StatsProTargetSnapshotDropdownOptions = addon.archonTargets.snapshotOptions
 _G.StatsProGetTargetSnapshotDropdownValue = addon.archonTargets.GetTargetSnapshotDropdownValue
 _G.StatsProSelectTargetSnapshotDropdownValue = addon.archonTargets.SelectTargetSnapshotDropdownValue
 
+function addon.profileUI.FormatSpecName(specID, explicitName)
+    if addon.dbRuntime.IsCleanType(explicitName, "string") and explicitName ~= "" then
+        return explicitName
+    end
+    return string.format(L("Spec %d"), specID)
+end
+
+function addon.profileUI.BuildSettingsUI(owner, ownerWidth)
+    local ui = addon.profileUI
+    local header = CreateFrame("Frame", "StatsProProfileHeader", owner, "BackdropTemplate")
+    header:SetPoint("TOPLEFT", 14, -44)
+    header:SetPoint("TOPRIGHT", -14, -44)
+    header:SetHeight(48)
+    header:SetBackdrop({
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        tile = true, tileSize = 16, edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    header:SetBackdropColor(0.02, 0.05, 0.04, 0.82)
+    header:SetBackdropBorderColor(0, 1, 0.5, 0.35)
+
+    local profileLabel = header:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(profileLabel, CONFIG_FONT_SIZE, "OUTLINE")
+    profileLabel:SetPoint("TOPLEFT", 10, -8)
+    PushLocalizedLabel(function() profileLabel:SetText(L("Profile:")) end)
+
+    local profileButton = CreateFrame(
+        "Button", "StatsProActiveProfileButton", header, "GameMenuButtonTemplate")
+    profileButton:SetPoint("TOPLEFT", 64, -5)
+    profileButton:SetSize(ownerWidth - 64 - 102 - 28, 22)
+    profileButton:SetNormalFontObject("GameFontNormal")
+    profileButton:SetHighlightFontObject("GameFontHighlight")
+
+    local manageButton = CreateFrame(
+        "Button", "StatsProManageProfilesButton", header, "GameMenuButtonTemplate")
+    manageButton:SetPoint("TOPRIGHT", -8, -5)
+    manageButton:SetSize(94, 22)
+    manageButton:SetNormalFontObject("GameFontNormal")
+    manageButton:SetHighlightFontObject("GameFontHighlight")
+    PushLocalizedLabel(function() manageButton:SetText(L("Manage")) end)
+
+    local subtitle = header:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(subtitle, 11)
+    subtitle:SetPoint("BOTTOMLEFT", 10, 7)
+    subtitle:SetPoint("BOTTOMRIGHT", -10, 7)
+    subtitle:SetJustifyH("LEFT")
+    subtitle:SetWordWrap(false)
+    subtitle:SetMaxLines(1)
+    subtitle:SetTextColor(0.72, 0.78, 0.75, 1)
+
+    local manager = CreateFrame(
+        "Frame", "StatsProProfileManager", UIParent, "BackdropTemplate")
+    manager:SetPoint("CENTER")
+    manager:SetBackdrop({
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true, tileSize = 16, edgeSize = 16,
+        insets = { left = 5, right = 5, top = 5, bottom = 5 },
+    })
+    manager:SetBackdropColor(0, 0, 0, 0.96)
+    manager:EnableMouse(true)
+    manager:SetMovable(true)
+    manager:RegisterForDrag("LeftButton")
+    manager:SetScript("OnDragStart", manager.StartMoving)
+    manager:SetScript("OnDragStop", manager.StopMovingOrSizing)
+    manager:SetClampedToScreen(true)
+    manager:SetFrameStrata("DIALOG")
+    manager:SetFrameLevel((owner:GetFrameLevel() or 100) + 20)
+    manager:Hide()
+
+    function ui.ApplyManagerSize()
+        local width = math.max(430, math.min(620, UIParent:GetWidth() * 0.9))
+        local height = math.max(300, math.min(440, UIParent:GetHeight() * 0.85))
+        manager:SetSize(width, height)
+    end
+    ui.ApplyManagerSize()
+    manager:HookScript("OnShow", function()
+        ui.ApplyManagerSize()
+        ui.RefreshSafe()
+    end)
+
+    if not ui.managerSpecialFrameRegistered then
+        tinsert(UISpecialFrames, "StatsProProfileManager")
+        ui.managerSpecialFrameRegistered = true
+    end
+
+    local managerTitle = manager:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(managerTitle, 16, "OUTLINE")
+    managerTitle:SetPoint("TOP", 0, -14)
+    PushLocalizedLabel(function()
+        managerTitle:SetText("|cff00ff7f" .. L("Profile Manager") .. "|r")
+    end)
+
+    local managerCloseX = CreateFrame("Button", nil, manager, "UIPanelCloseButton")
+    managerCloseX:SetPoint("TOPRIGHT", -4, -4)
+
+    local managerLine = manager:CreateTexture(nil, "ARTWORK")
+    managerLine:SetPoint("TOPLEFT", 14, -42)
+    managerLine:SetPoint("TOPRIGHT", -14, -42)
+    managerLine:SetHeight(1)
+    managerLine:SetColorTexture(0.3, 0.3, 0.3, 0.7)
+
+    local divider = manager:CreateTexture(nil, "ARTWORK")
+    divider:SetPoint("TOPLEFT", 248, -52)
+    divider:SetPoint("BOTTOMLEFT", 248, 52)
+    divider:SetWidth(1)
+    divider:SetColorTexture(0.25, 0.25, 0.25, 0.8)
+
+    local listTitle = manager:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(listTitle, 12, "OUTLINE")
+    listTitle:SetPoint("TOPLEFT", 20, -54)
+    PushLocalizedLabel(function() listTitle:SetText(L("Character")) end)
+
+    local listScroll = CreateFrame(
+        "ScrollFrame", "StatsProProfileManagerScroll", manager, "UIPanelScrollFrameTemplate")
+    listScroll:SetPoint("TOPLEFT", 16, -76)
+    listScroll:SetPoint("BOTTOMLEFT", 16, 54)
+    listScroll:SetWidth(212)
+    local listChild = CreateFrame("Frame", nil, listScroll)
+    listChild:SetSize(190, 1)
+    listScroll:SetScrollChild(listChild)
+
+    local emptyText = listChild:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(emptyText, 12)
+    emptyText:SetPoint("TOPLEFT", 6, -8)
+    emptyText:SetWidth(178)
+    emptyText:SetJustifyH("LEFT")
+    emptyText:SetTextColor(0.65, 0.65, 0.65, 1)
+
+    local detailCharacter = manager:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(detailCharacter, 16, "OUTLINE")
+    detailCharacter:SetPoint("TOPLEFT", 266, -58)
+    detailCharacter:SetPoint("TOPRIGHT", -20, -58)
+    detailCharacter:SetJustifyH("LEFT")
+
+    local detailContext = manager:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(detailContext, 12)
+    detailContext:SetPoint("TOPLEFT", detailCharacter, "BOTTOMLEFT", 0, -8)
+    detailContext:SetPoint("TOPRIGHT", detailCharacter, "BOTTOMRIGHT", 0, -8)
+    detailContext:SetJustifyH("LEFT")
+    detailContext:SetTextColor(0.72, 0.78, 0.75, 1)
+
+    local assignedLabel = manager:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(assignedLabel, 12, "OUTLINE")
+    assignedLabel:SetPoint("TOPLEFT", detailContext, "BOTTOMLEFT", 0, -24)
+    PushLocalizedLabel(function() assignedLabel:SetText(L("Assigned profile:")) end)
+
+    local detailProfile = manager:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(detailProfile, 15, "OUTLINE")
+    detailProfile:SetPoint("TOPLEFT", assignedLabel, "BOTTOMLEFT", 0, -8)
+    detailProfile:SetPoint("TOPRIGHT", manager, "TOPRIGHT", -20, -138)
+    detailProfile:SetJustifyH("LEFT")
+    detailProfile:SetTextColor(0, 1, 0.5, 1)
+
+    local detailSharing = manager:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(detailSharing, 12)
+    detailSharing:SetPoint("TOPLEFT", detailProfile, "BOTTOMLEFT", 0, -10)
+    detailSharing:SetPoint("TOPRIGHT", -20, 0)
+    detailSharing:SetJustifyH("LEFT")
+    detailSharing:SetTextColor(0.72, 0.78, 0.75, 1)
+
+    local detailNotice = manager:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(detailNotice, 12)
+    detailNotice:SetPoint("BOTTOMLEFT", 266, 64)
+    detailNotice:SetPoint("BOTTOMRIGHT", -20, 64)
+    detailNotice:SetJustifyH("LEFT")
+    detailNotice:SetJustifyV("BOTTOM")
+    detailNotice:SetWordWrap(true)
+    detailNotice:SetMaxLines(2)
+    detailNotice:SetTextColor(1, 0.65, 0.2, 1)
+
+    local managerClose = CreateFrame("Button", nil, manager, "GameMenuButtonTemplate")
+    managerClose:SetPoint("BOTTOMRIGHT", -18, 18)
+    managerClose:SetSize(100, 26)
+    managerClose:SetNormalFontObject("GameFontNormal")
+    managerClose:SetHighlightFontObject("GameFontHighlight")
+    managerClose:SetScript("OnClick", function() manager:Hide() end)
+    PushLocalizedLabel(function() managerClose:SetText(L("Close")) end)
+
+    ui.header = header
+    ui.headerLabel = profileLabel
+    ui.headerProfileButton = profileButton
+    ui.headerSubtitle = subtitle
+    ui.manageButton = manageButton
+    ui.manager = manager
+    ui.managerTitle = managerTitle
+    ui.managerRows = {}
+    ui.managerListChild = listChild
+    ui.managerEmptyText = emptyText
+    ui.detailCharacter = detailCharacter
+    ui.detailContext = detailContext
+    ui.detailProfile = detailProfile
+    ui.detailSharing = detailSharing
+    ui.detailNotice = detailNotice
+
+    function ui.EnsureManagerRow(index)
+        local row = ui.managerRows[index]
+        if row then return row end
+        row = CreateFrame("Button", nil, listChild)
+        row:SetSize(188, 24)
+        local background = row:CreateTexture(nil, "BACKGROUND")
+        background:SetAllPoints(row)
+        background:SetColorTexture(1, 1, 1, 0)
+        local highlight = row:CreateTexture(nil, "HIGHLIGHT")
+        highlight:SetAllPoints(row)
+        highlight:SetColorTexture(1, 1, 1, 0.06)
+        local text = row:CreateFontString(nil, "OVERLAY")
+        RegisterConfigFont(text, 11)
+        text:SetPoint("LEFT", 6, 0)
+        local badge = row:CreateFontString(nil, "OVERLAY")
+        RegisterConfigFont(badge, 10, "OUTLINE")
+        badge:SetPoint("RIGHT", -6, 0)
+        badge:SetWidth(70)
+        badge:SetJustifyH("RIGHT")
+        badge:SetTextColor(0, 1, 0.5, 1)
+        text:SetPoint("RIGHT", badge, "LEFT", -4, 0)
+        text:SetJustifyH("LEFT")
+        text:SetWordWrap(false)
+        text:SetMaxLines(1)
+        row.background = background
+        row.text = text
+        row.badge = badge
+        row:SetScript("OnClick", function(button)
+            local context = button.profileContext
+            if not context then return end
+            ui.selectedGUID = context.guid
+            ui.selectedSpecID = context.specID
+            ui.RefreshSafe()
+        end)
+        ui.managerRows[index] = row
+        return row
+    end
+
+    function ui.RefreshAll()
+        local model = ui.BuildViewModel()
+        ui.currentModel = model
+        ui.refreshCount = ui.refreshCount + 1
+
+        profileButton:SetText(model.activeProfileName or L("Account default profile"))
+        if model.readOnly then
+            subtitle:SetText(L("Compatibility mode - profiles are read-only."))
+        elseif model.pending then
+            subtitle:SetText(L("Switch pending until combat ends"))
+        elseif model.activeSharedCount > 1 then
+            subtitle:SetText(string.format(L("Shared by %d specs"), model.activeSharedCount))
+        elseif model.activeGUID and model.activeSpecID then
+            local displayName = model.activeDisplayName or "Character"
+            local specName = ui.FormatSpecName(model.activeSpecID, model.activeSpecName)
+            subtitle:SetText(string.format(L("Automatic - %s / %s"), displayName, specName))
+        else
+            subtitle:SetText(L("Account default profile"))
+        end
+
+        local selectedCharacter, selectedSpec
+        for _, character in ipairs(model.characters) do
+            if character.guid == ui.selectedGUID then
+                selectedCharacter = character
+                if ui.selectedSpecID ~= nil then
+                    for _, spec in ipairs(character.specs) do
+                        if spec.specID == ui.selectedSpecID then selectedSpec = spec; break end
+                    end
+                end
+                break
+            end
+        end
+        if not selectedCharacter then
+            selectedCharacter = model.characters[1]
+            ui.selectedGUID = selectedCharacter and selectedCharacter.guid or nil
+            ui.selectedSpecID = selectedCharacter and model.activeGUID == selectedCharacter.guid
+                and model.activeSpecID or nil
+            if selectedCharacter and ui.selectedSpecID then
+                for _, spec in ipairs(selectedCharacter.specs) do
+                    if spec.specID == ui.selectedSpecID then selectedSpec = spec; break end
+                end
+            end
+        elseif ui.selectedSpecID ~= nil and not selectedSpec then
+            ui.selectedSpecID = nil
+        end
+
+        local rowIndex, y = 0, -2
+        for _, character in ipairs(model.characters) do
+            rowIndex = rowIndex + 1
+            local row = ui.EnsureManagerRow(rowIndex)
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", 0, y)
+            row.profileContext = { guid = character.guid, specID = nil }
+            row.text:SetText(character.displayName)
+            row.badge:SetText(character.isCurrent and L("Current") or "")
+            local selected = character.guid == ui.selectedGUID and ui.selectedSpecID == nil
+            row.background:SetColorTexture(0, 1, 0.5, selected and 0.16 or 0)
+            row:Show()
+            y = y - 26
+            for _, spec in ipairs(character.specs) do
+                rowIndex = rowIndex + 1
+                row = ui.EnsureManagerRow(rowIndex)
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", 0, y)
+                row.profileContext = { guid = character.guid, specID = spec.specID }
+                row.text:SetText("   " .. ui.FormatSpecName(spec.specID, spec.specName))
+                row.badge:SetText(spec.isActive and L("Active") or "")
+                selected = character.guid == ui.selectedGUID and ui.selectedSpecID == spec.specID
+                row.background:SetColorTexture(0, 1, 0.5, selected and 0.16 or 0)
+                row:Show()
+                y = y - 24
+            end
+            y = y - 4
+        end
+        for index = rowIndex + 1, #ui.managerRows do ui.managerRows[index]:Hide() end
+        listChild:SetHeight(math.max(1, -y + 4))
+        emptyText:SetText(#model.characters == 0 and L("No visited characters") or "")
+
+        if selectedCharacter then
+            detailCharacter:SetText(selectedCharacter.displayName)
+            if selectedSpec then
+                detailContext:SetText(ui.FormatSpecName(selectedSpec.specID, selectedSpec.specName))
+                detailProfile:SetText(selectedSpec.profileName)
+                detailSharing:SetText(selectedSpec.sharedCount > 1
+                    and string.format(L("Shared by %d specs"), selectedSpec.sharedCount)
+                    or L("Independent"))
+            else
+                detailContext:SetText(L("Character default"))
+                detailProfile:SetText(selectedCharacter.defaultProfileName or L("Account default profile"))
+                detailSharing:SetText(selectedCharacter.defaultSharedCount > 1
+                    and string.format(L("Shared by %d specs"), selectedCharacter.defaultSharedCount)
+                    or L("Independent"))
+            end
+        else
+            detailCharacter:SetText(L("No visited characters"))
+            detailContext:SetText("")
+            detailProfile:SetText(model.activeProfileName or L("Account default profile"))
+            detailSharing:SetText("")
+        end
+
+        if model.readOnly then
+            detailNotice:SetText(L("Compatibility mode - profiles are read-only."))
+        elseif model.combat == true then
+            detailNotice:SetText(L("Profile changes are unavailable during combat."))
+        elseif model.pending or model.combat == nil then
+            detailNotice:SetText(L("Waiting for a safe profile context."))
+        else
+            detailNotice:SetText("")
+        end
+    end
+    ui.refreshAll = ui.RefreshAll
+
+    local function ToggleManager()
+        if manager:IsShown() then
+            manager:Hide()
+            return
+        end
+        ui.selectedGUID = addon.profileRuntime.activeGUID
+        ui.selectedSpecID = addon.profileRuntime.activeSpecID
+        ui.RefreshSafe()
+        manager:Show()
+    end
+    profileButton:SetScript("OnClick", ToggleManager)
+    manageButton:SetScript("OnClick", ToggleManager)
+
+    function ui.HideManager()
+        if manager:IsShown() then manager:Hide() end
+    end
+
+    owner.profileHeader = header
+    owner.profileManager = manager
+    PushLocalizedLabel(function() ui.RefreshSafe() end)
+    PushRefresher(ui.RefreshSafe)
+    return header, manager
+end
+
 function addon:OpenConfigMenu()
     -- Settings remains inspectable under a future schema, but the shared write gate
     -- explains once per session why every mutating control is read-only.
@@ -6665,6 +7255,7 @@ function addon:OpenConfigMenu()
             configFrame:Show()
             -- Always reopen on the first tab (Stats) — predictable UX, matches initial open.
             if configFrame.SwitchToTab then configFrame.SwitchToTab(1) end
+            self.profileUI.RefreshSafe()
         end
         return
     end
@@ -6738,7 +7329,7 @@ function addon:OpenConfigMenu()
     -- WARNING: cap by parent so footer (Reset/Close at BOTTOM y=14) stays on-screen.
     -- Floor 200 protects ScrollFrame chrome (82+60=142) from collapse on low-res.
     local function ApplyConfigFrameSize()
-        local maxH = math.max(200, math.min(540, UIParent:GetHeight() * 0.9))
+        local maxH = math.max(260, math.min(600, UIParent:GetHeight() * 0.9))
         configFrame:SetSize(configFrameWidth, maxH)
     end
     ApplyConfigFrameSize()
@@ -6779,6 +7370,7 @@ function addon:OpenConfigMenu()
         if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
             _G.StatsProFontPicker:Hide()
         end
+        self.profileUI.HideManager()
     end)
 
     --[[ ===== Header (title + X) ===== ]]
@@ -6799,17 +7391,20 @@ function addon:OpenConfigMenu()
     headerLine:SetHeight(1)
     headerLine:SetColorTexture(0.3, 0.3, 0.3, 0.5)
 
+    self.profileUI.BuildSettingsUI(configFrame, configFrameWidth)
+
     --[[ ===== Tab strip (custom, top-anchored, underline-active style) ===== ]]
     local TAB_HEIGHT = 28
     local tabStrip = CreateFrame("Frame", nil, configFrame)
-    tabStrip:SetPoint("TOPLEFT", 18, -44)
-    tabStrip:SetPoint("TOPRIGHT", -18, -44)
+    if self.__statsproSmoke == true then configFrame.tabStrip = tabStrip end
+    tabStrip:SetPoint("TOPLEFT", 18, -100)
+    tabStrip:SetPoint("TOPRIGHT", -18, -100)
     tabStrip:SetHeight(TAB_HEIGHT)
 
     -- Separator below tab strip
     local tabsLine = configFrame:CreateTexture(nil, "ARTWORK")
-    tabsLine:SetPoint("TOPLEFT", 12, -76)
-    tabsLine:SetPoint("TOPRIGHT", -12, -76)
+    tabsLine:SetPoint("TOPLEFT", 12, -132)
+    tabsLine:SetPoint("TOPRIGHT", -12, -132)
     tabsLine:SetHeight(1)
     tabsLine:SetColorTexture(0.3, 0.3, 0.3, 0.7)
 
@@ -6837,7 +7432,7 @@ function addon:OpenConfigMenu()
 
     --[[ ===== ScrollFrame for tab content ===== ]]
     local scrollFrame = CreateFrame("ScrollFrame", "StatsProConfigScroll", configFrame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", 14, -82)
+    scrollFrame:SetPoint("TOPLEFT", 14, -138)
     scrollFrame:SetPoint("BOTTOMRIGHT", -32, 60)
 
     local scrollChild = CreateFrame("Frame", nil, scrollFrame)
@@ -6856,6 +7451,7 @@ function addon:OpenConfigMenu()
     local layoutTab    = CreateFrame("Frame", nil, scrollChild)
     if self.__statsproSmoke == true then configFrame.appearanceTab = displayTab end
     local tabContents  = { statsTab, layoutTab, displayTab }
+    if self.__statsproSmoke == true then configFrame.tabContents = tabContents end
     for _, tab in ipairs(tabContents) do
         tab:SetPoint("TOPLEFT", 0, 0)
         tab:SetPoint("TOPRIGHT", 0, 0)
@@ -6888,6 +7484,7 @@ function addon:OpenConfigMenu()
     end
 
     local function SwitchToTab(idx)
+        configFrame.activeTabIndex = idx
         for i, content in ipairs(tabContents) do
             if i == idx then
                 content:Show()
@@ -8438,6 +9035,8 @@ if addon and addon.__statsproSmoke == true then
             return {
                 activeGUID = runtime.activeGUID,
                 activeSpecID = runtime.activeSpecID,
+                activeDisplayName = runtime.activeDisplayName,
+                activeSpecName = runtime.activeSpecName,
                 pendingResolution = runtime.pendingResolution,
                 scheduled = runtime.scheduledToken ~= nil,
                 activationCount = runtime.activationCount,
@@ -8446,6 +9045,36 @@ if addon and addon.__statsproSmoke == true then
                 structuralCommitCount = runtime.structuralCommitCount,
                 contextReadCount = runtime.contextReadCount,
                 updateCount = updateCount,
+            }
+        end,
+        profileViewModel = addon.profileUI.BuildViewModel,
+        profileUIState = function()
+            local ui = addon.profileUI
+            local rows = {}
+            for index, row in ipairs(ui.managerRows or {}) do
+                rows[index] = {
+                    shown = row:IsShown(),
+                    text = row.text:GetText(),
+                    badge = row.badge:GetText(),
+                    context = row.profileContext and CopyTable(row.profileContext) or nil,
+                }
+            end
+            return {
+                refreshCount = ui.refreshCount,
+                selectedGUID = ui.selectedGUID,
+                selectedSpecID = ui.selectedSpecID,
+                headerProfile = ui.headerProfileButton and ui.headerProfileButton:GetText() or nil,
+                headerLabel = ui.headerLabel and ui.headerLabel:GetText() or nil,
+                headerSubtitle = ui.headerSubtitle and ui.headerSubtitle:GetText() or nil,
+                managerShown = ui.manager and ui.manager:IsShown() or false,
+                managerFrameStrata = ui.manager and ui.manager:GetFrameStrata() or nil,
+                managerTitle = ui.managerTitle and ui.managerTitle:GetText() or nil,
+                rows = rows,
+                detailCharacter = ui.detailCharacter and ui.detailCharacter:GetText() or nil,
+                detailContext = ui.detailContext and ui.detailContext:GetText() or nil,
+                detailProfile = ui.detailProfile and ui.detailProfile:GetText() or nil,
+                detailSharing = ui.detailSharing and ui.detailSharing:GetText() or nil,
+                detailNotice = ui.detailNotice and ui.detailNotice:GetText() or nil,
             }
         end,
         previewFontForSmoke = function(path)

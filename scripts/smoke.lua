@@ -440,7 +440,7 @@ local function makeEnv(locale, opts)
         env.__reloadUICalls = env.__reloadUICalls + 1
     end
     env.UIParent = makeFrame("UIParent", opts.setFontResult)
-    env.UIParent:SetSize(1920, 1080)
+    env.UIParent:SetSize(opts.uiParentWidth or 1920, opts.uiParentHeight or 1080)
     env.GameTooltip = makeFrame("GameTooltip", opts.setFontResult)
     env.GameTooltip.shown = false
     env.GameTooltip.lines = {}
@@ -8263,6 +8263,520 @@ do
         rawequal(root.profiles[oldProfileID].settings.colors, oldColorsRef), true)
     eq("profiles.context.rollback.no_orphan_profile", root.profiles["p" .. tostring(nextID)], nil)
     eq("profiles.context.rollback.registry_current", rollbackTest.dbCompatibilityState().mode, "current")
+end
+
+do
+    -- A metadata-only registry transaction can target an already existing profile.
+    -- If applying that target fails after touching its payload, both structures and
+    -- payload values must roll back rather than leaking a partial switch.
+    local seed = loadStatsPro("enUS")
+    fireEvent("profiles.context.metadata_rollback.seed", seed, "PLAYER_ENTERING_WORLD")
+    local root = deepCopy(seed.StatsProDB)
+    root.profiles.p2 = {
+        name = "Existing target",
+        settings = deepCopy(root.profiles.p1.settings),
+    }
+    root.profiles.p2.settings.showDefensive = true
+    root.account.nextProfileID = 3
+    root.roleTemplates = { TANK = "p1", HEALER = "p1", DAMAGER = "p1" }
+    root.characters = {
+        ["Player-1-META-A"] = {
+            displayName = "Alpha-Realm",
+            lastSeen = 1,
+            defaultProfileID = "p1",
+            specProfiles = { [73] = "p1" },
+        },
+        ["Player-1-META-B"] = {
+            displayName = "Old-Bravo",
+            lastSeen = 1,
+            defaultProfileID = "p1",
+            specProfiles = { [73] = "p2" },
+        },
+    }
+    local identity = { guid = "Player-1-META-A", name = "Alpha" }
+    local env, _, profileTest = loadStatsPro("enUS", {
+        statsProDB = root,
+        unitGUID = function() return identity.guid end,
+        unitFullName = function() return identity.name, "Realm" end,
+        getServerTime = function() return 1 end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return 73, "Protection", nil, nil, "TANK", 1
+        end,
+    })
+    fireEvent("profiles.context.metadata_rollback.activate", env, "PLAYER_ENTERING_WORLD")
+    local rootBefore = deepCopy(root)
+    local targetProfileRef = root.profiles.p2
+    local targetSettingsRef = targetProfileRef.settings
+    local runtimeBefore = profileTest.profileRuntimeState()
+    local oldSetPoint = env.StatsProFrame.SetPoint
+    local failNextApply = true
+    env.StatsProFrame.SetPoint = function(frame, ...)
+        if failNextApply then
+            failNextApply = false
+            root.profiles.p2.settings.showDefensive = false
+            root.profiles.p2.settings.colors.crit.r = 0.123
+            error("injected existing-target apply failure")
+        end
+        return oldSetPoint(frame, ...)
+    end
+    identity.guid, identity.name = "Player-1-META-B", "NewBravo"
+    fireEvent("profiles.context.metadata_rollback.switch",
+        env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    env.StatsProFrame.SetPoint = oldSetPoint
+    assertDeepEqual("profiles.context.metadata_rollback.full_root", root, rootBefore)
+    eq("profiles.context.metadata_rollback.profile_identity",
+        rawequal(root.profiles.p2, targetProfileRef), true)
+    eq("profiles.context.metadata_rollback.settings_identity",
+        rawequal(root.profiles.p2.settings, targetSettingsRef), true)
+    eq("profiles.context.metadata_rollback.active_guid",
+        profileTest.profileRuntimeState().activeGUID, runtimeBefore.activeGUID)
+    eq("profiles.context.metadata_rollback.active_profile",
+        profileTest.profileState().profileID, "p1")
+    eq("profiles.context.metadata_rollback.pending",
+        profileTest.profileRuntimeState().pendingResolution, true)
+end
+
+do
+    -- The profile manager shell is intentionally read-only until transactional profile
+    -- operations land. This block proves that navigation cannot mutate the
+    -- registry while active/pending/compatibility state stays live on every tab.
+    local seedEnv = loadStatsPro("enUS")
+    fireEvent("profiles.ui.seed", seedEnv, "PLAYER_ENTERING_WORLD")
+    local root = deepCopy(seedEnv.StatsProDB)
+    local baseSettings = deepCopy(root.profiles.p1.settings)
+    root.profiles.p1.name = "Account default"
+    root.profiles.p2 = { name = "Tank shared", settings = deepCopy(baseSettings) }
+    root.profiles.p3 = { name = "Damage solo", settings = deepCopy(baseSettings) }
+    root.account.defaultProfileID = "p1"
+    root.account.nextProfileID = 4
+    root.roleTemplates = { TANK = "p1", HEALER = "p1", DAMAGER = "p1" }
+    root.characters = {
+        ["Player-1-ALPHA"] = {
+            displayName = "Alpha-Realm",
+            lastSeen = 100,
+            defaultProfileID = "p1",
+            specProfiles = { [73] = "p2", [71] = "p3" },
+        },
+        ["Player-1-BRAVO"] = {
+            displayName = "Bravo-Realm",
+            lastSeen = 300,
+            defaultProfileID = "p1",
+            specProfiles = { [73] = "p2", [72] = "p1" },
+        },
+        ["Player-1-CHARLIE"] = {
+            displayName = "Charlie-Realm",
+            lastSeen = 200,
+            defaultProfileID = "p1",
+            specProfiles = { [72] = "p1" },
+        },
+    }
+
+    local identity = {
+        specID = 73,
+        specName = "Protection",
+        role = "TANK",
+        combat = false,
+    }
+    local env, addonContext, profileTest = loadStatsPro("enUS", {
+        statsProDB = root,
+        uiParentWidth = 1024,
+        uiParentHeight = 768,
+        unitGUID = function() return "Player-1-ALPHA" end,
+        unitFullName = function() return "Alpha", "Realm" end,
+        getServerTime = function() return 5000 end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return identity.specID, identity.specName, nil, nil, identity.role, 1
+        end,
+        inCombatLockdown = function() return identity.combat end,
+    })
+    fireEvent("profiles.ui.activate", env, "PLAYER_ENTERING_WORLD")
+
+    local model = profileTest.profileViewModel()
+    eq("profiles.ui.model.mode", model.mode, "current")
+    eq("profiles.ui.model.mutable", model.canMutate, true)
+    eq("profiles.ui.model.character_count", #model.characters, 3)
+    eq("profiles.ui.model.current_pinned", model.characters[1].guid, "Player-1-ALPHA")
+    eq("profiles.ui.model.recent_second", model.characters[2].guid, "Player-1-BRAVO")
+    eq("profiles.ui.model.recent_third", model.characters[3].guid, "Player-1-CHARLIE")
+    eq("profiles.ui.model.alpha_observed_specs", #model.characters[1].specs, 2)
+    eq("profiles.ui.model.bravo_observed_specs", #model.characters[2].specs, 2)
+    eq("profiles.ui.model.charlie_observed_specs", #model.characters[3].specs, 1)
+    eq("profiles.ui.model.active_spec_first", model.characters[1].specs[1].specID, 73)
+    eq("profiles.ui.model.active_spec_marked", model.characters[1].specs[1].isActive, true)
+    eq("profiles.ui.model.shared_count", model.characters[1].specs[1].sharedCount, 2)
+    eq("profiles.ui.model.active_shared_count", model.activeSharedCount, 2)
+    eq("profiles.ui.model.default_shared_count", model.characters[1].defaultSharedCount, 2)
+    eq("profiles.ui.model.offline_spec_fallback", model.characters[3].specs[1].specName, nil)
+    eq("profiles.ui.model.active_display_name", model.activeDisplayName, "Alpha-Realm")
+    eq("profiles.ui.model.active_spec_name", model.activeSpecName, "Protection")
+
+    local beforeUI = deepCopy(root)
+    local accountRef = root.account
+    local profilesRef = root.profiles
+    local charactersRef = root.characters
+    local alphaRef = root.characters["Player-1-ALPHA"]
+    local alphaSpecsRef = alphaRef.specProfiles
+    local bravoRef = root.characters["Player-1-BRAVO"]
+    local bravoSpecsRef = bravoRef.specProfiles
+    local sharedProfileRef = root.profiles.p2
+    local sharedSettingsRef = sharedProfileRef.settings
+    local validationBeforeUI = profileTest.dbValidationCount()
+    addonContext:OpenConfigMenu()
+    local config = exists("profiles.ui.config", env.StatsProConfigFrame)
+    local header = exists("profiles.ui.header", env.StatsProProfileHeader)
+    local manager = exists("profiles.ui.manager", env.StatsProProfileManager)
+    eq("profiles.ui.minimum.config_width", config:GetWidth(), 500)
+    eq("profiles.ui.minimum.config_height", config:GetHeight(), 600)
+    eq("profiles.ui.minimum.manager_width", manager:GetWidth(), 620)
+    eq("profiles.ui.minimum.manager_height", manager:GetHeight(), 440)
+    eq("profiles.ui.minimum.header_top", header.points[1][3], -44)
+    eq("profiles.ui.minimum.header_height", header:GetHeight(), 48)
+    eq("profiles.ui.minimum.tab_top", config.tabStrip.points[1][3], -100)
+    eq("profiles.ui.minimum.scroll_top", env.StatsProConfigScroll.points[1][3], -138)
+    check("profiles.ui.minimum.scroll_viewport_positive",
+        config:GetHeight() - 138 - 60 > 0)
+
+    local state = profileTest.profileUIState()
+    eq("profiles.ui.header.label", state.headerLabel, "Profile:")
+    eq("profiles.ui.header.profile", state.headerProfile, "Tank shared")
+    eq("profiles.ui.header.shared", state.headerSubtitle, "Shared by 2 specs")
+    for tabIndex = 1, 3 do
+        config.SwitchToTab(tabIndex)
+        eq("profiles.ui.tabs.active." .. tabIndex, config.activeTabIndex, tabIndex)
+        eq("profiles.ui.tabs.header_visible." .. tabIndex, header:IsShown(), true)
+        for contentIndex, content in ipairs(config.tabContents) do
+            eq("profiles.ui.tabs.content." .. tabIndex .. "." .. contentIndex,
+                content:IsShown(), contentIndex == tabIndex)
+        end
+    end
+
+    callScript("profiles.ui.manager.open", env.StatsProManageProfilesButton, "OnClick")
+    state = profileTest.profileUIState()
+    eq("profiles.ui.manager.shown", state.managerShown, true)
+    eq("profiles.ui.manager.strata", state.managerFrameStrata, "DIALOG")
+    check("profiles.ui.manager.level", manager:GetFrameLevel() > config:GetFrameLevel())
+    check("profiles.ui.manager.special_frame",
+        contains(env.UISpecialFrames, "StatsProProfileManager"))
+    eq("profiles.ui.manager.current_row", state.rows[1].context.guid, "Player-1-ALPHA")
+    eq("profiles.ui.manager.current_badge", state.rows[1].badge, "Current")
+    eq("profiles.ui.manager.active_row", state.rows[2].context.specID, 73)
+    eq("profiles.ui.manager.active_badge", state.rows[2].badge, "Active")
+    local shownRows = 0
+    for _, row in ipairs(state.rows) do
+        if row.shown then shownRows = shownRows + 1 end
+    end
+    eq("profiles.ui.manager.observed_row_storage", #state.rows, 8)
+    eq("profiles.ui.manager.observed_rows_shown", shownRows, 8)
+    eq("profiles.ui.manager.detail_character", state.detailCharacter, "Alpha-Realm")
+    eq("profiles.ui.manager.detail_context", state.detailContext, "Protection")
+    eq("profiles.ui.manager.detail_profile", state.detailProfile, "Tank shared")
+    eq("profiles.ui.manager.detail_shared", state.detailSharing, "Shared by 2 specs")
+    callScript("profiles.ui.header_button.close", env.StatsProActiveProfileButton, "OnClick")
+    eq("profiles.ui.header_button.closed", manager:IsShown(), false)
+    callScript("profiles.ui.header_button.open", env.StatsProActiveProfileButton, "OnClick")
+    eq("profiles.ui.header_button.opened", manager:IsShown(), true)
+
+    local alphaCharacterRow = findFrame("profiles.ui.manager.alpha_character_row", env, function(frame)
+        return type(frame.profileContext) == "table"
+            and frame.profileContext.guid == "Player-1-ALPHA"
+            and frame.profileContext.specID == nil
+    end)
+    callScript("profiles.ui.manager.select_character_default", alphaCharacterRow, "OnClick")
+    state = profileTest.profileUIState()
+    eq("profiles.ui.manager.default_context", state.detailContext, "Character default")
+    eq("profiles.ui.manager.default_profile", state.detailProfile, "Account default")
+    eq("profiles.ui.manager.default_shared", state.detailSharing, "Shared by 2 specs")
+
+    local bravoSpecRow = findFrame("profiles.ui.manager.bravo_spec_row", env, function(frame)
+        return type(frame.profileContext) == "table"
+            and frame.profileContext.guid == "Player-1-BRAVO"
+            and frame.profileContext.specID == 73
+    end)
+    callScript("profiles.ui.manager.select_other", bravoSpecRow, "OnClick")
+    state = profileTest.profileUIState()
+    eq("profiles.ui.manager.selection_guid", state.selectedGUID, "Player-1-BRAVO")
+    eq("profiles.ui.manager.selection_spec", state.selectedSpecID, 73)
+    eq("profiles.ui.manager.selection_detail", state.detailCharacter, "Bravo-Realm")
+    eq("profiles.ui.manager.selection_profile", state.detailProfile, "Tank shared")
+    assertDeepEqual("profiles.ui.navigation.no_writes", root, beforeUI)
+    eq("profiles.ui.navigation.account_identity", rawequal(root.account, accountRef), true)
+    eq("profiles.ui.navigation.profiles_identity", rawequal(root.profiles, profilesRef), true)
+    eq("profiles.ui.navigation.characters_identity", rawequal(root.characters, charactersRef), true)
+    eq("profiles.ui.navigation.alpha_identity",
+        rawequal(root.characters["Player-1-ALPHA"], alphaRef), true)
+    eq("profiles.ui.navigation.alpha_specs_identity",
+        rawequal(root.characters["Player-1-ALPHA"].specProfiles, alphaSpecsRef), true)
+    eq("profiles.ui.navigation.bravo_identity",
+        rawequal(root.characters["Player-1-BRAVO"], bravoRef), true)
+    eq("profiles.ui.navigation.bravo_specs_identity",
+        rawequal(root.characters["Player-1-BRAVO"].specProfiles, bravoSpecsRef), true)
+    eq("profiles.ui.navigation.shared_profile_identity", rawequal(root.profiles.p2, sharedProfileRef), true)
+    eq("profiles.ui.navigation.shared_settings_identity",
+        rawequal(root.profiles.p2.settings, sharedSettingsRef), true)
+    eq("profiles.ui.navigation.cached_validation",
+        profileTest.dbValidationCount(), validationBeforeUI)
+
+    identity.specID, identity.specName, identity.role = 71, "Arms", "DAMAGER"
+    fireEvent("profiles.ui.live_switch", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    state = profileTest.profileUIState()
+    eq("profiles.ui.live_switch.header", state.headerProfile, "Damage solo")
+    eq("profiles.ui.live_switch.subtitle", state.headerSubtitle,
+        "Automatic - Alpha-Realm / Arms")
+    eq("profiles.ui.live_switch.manager_stays_open", state.managerShown, true)
+    eq("profiles.ui.live_switch.selection_preserved", state.selectedGUID, "Player-1-BRAVO")
+    eq("profiles.ui.live_switch.selection_spec_preserved", state.selectedSpecID, 73)
+    eq("profiles.ui.live_switch.active_spec", profileTest.profileViewModel().activeSpecID, 71)
+
+    identity.combat = true
+    identity.specID, identity.specName, identity.role = 73, "Protection", "TANK"
+    fireEvent("profiles.ui.combat_pending", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    state = profileTest.profileUIState()
+    model = profileTest.profileViewModel()
+    eq("profiles.ui.combat_pending.header_keeps_old", state.headerProfile, "Damage solo")
+    eq("profiles.ui.combat_pending.subtitle", state.headerSubtitle,
+        "Switch pending until combat ends")
+    eq("profiles.ui.combat_pending.read_only", model.canMutate, false)
+    eq("profiles.ui.combat_pending.active_kept", model.activeSpecID, 71)
+    eq("profiles.ui.combat_pending.notice", state.detailNotice,
+        "Profile changes are unavailable during combat.")
+    identity.combat = false
+    fireEvent("profiles.ui.combat_resume", env, "PLAYER_REGEN_ENABLED")
+    state = profileTest.profileUIState()
+    eq("profiles.ui.combat_resume.header", state.headerProfile, "Tank shared")
+    eq("profiles.ui.combat_resume.subtitle", state.headerSubtitle, "Shared by 2 specs")
+    eq("profiles.ui.combat_resume.mutable", profileTest.profileViewModel().canMutate, true)
+
+    config:Hide()
+    eq("profiles.ui.config_hide.closes_manager", manager:IsShown(), false)
+    addonContext:OpenConfigMenu()
+    eq("profiles.ui.reopen.first_tab", config.activeTabIndex, 1)
+    eq("profiles.ui.reopen.header_visible", header:IsShown(), true)
+end
+
+do
+    local seed = loadStatsPro("enUS")
+    fireEvent("profiles.ui.late_metadata.seed", seed, "PLAYER_ENTERING_WORLD")
+    local root = deepCopy(seed.StatsProDB)
+    root.characters = {
+        ["Player-1-LATE"] = {
+            displayName = "Character",
+            lastSeen = 1,
+            defaultProfileID = "p1",
+            specProfiles = { [73] = "p1" },
+        },
+    }
+    local metadata = { available = false }
+    local env, addonContext, profileTest = loadStatsPro("enUS", {
+        statsProDB = root,
+        unitGUID = function() return "Player-1-LATE" end,
+        unitFullName = function()
+            if metadata.available then return "Late", "Realm" end
+            return nil, nil
+        end,
+        getServerTime = function() return 1 end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return 73, metadata.available and "Protection" or nil,
+                nil, nil, "TANK", 1
+        end,
+    })
+    fireEvent("profiles.ui.late_metadata.activate", env, "PLAYER_ENTERING_WORLD")
+    addonContext:OpenConfigMenu()
+    eq("profiles.ui.late_metadata.persisted_character_header",
+        profileTest.profileUIState().headerSubtitle, "Automatic - Character / Spec 73")
+    local runtimeBefore = profileTest.profileRuntimeState()
+    metadata.available = true
+    fireEvent("profiles.ui.late_metadata.refresh", env,
+        "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    local state = profileTest.profileUIState()
+    local runtimeAfter = profileTest.profileRuntimeState()
+    eq("profiles.ui.late_metadata.header", state.headerSubtitle,
+        "Automatic - Late-Realm / Protection")
+    eq("profiles.ui.late_metadata.character_record",
+        root.characters["Player-1-LATE"].displayName, "Late-Realm")
+    eq("profiles.ui.late_metadata.no_activation",
+        runtimeAfter.activationCount, runtimeBefore.activationCount)
+    eq("profiles.ui.late_metadata.no_reapply", runtimeAfter.applyCount, runtimeBefore.applyCount)
+    callScript("profiles.ui.late_metadata.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    state = profileTest.profileUIState()
+    check("profiles.ui.late_metadata.manager_row",
+        state.rows[1].text:find("Late-Realm", 1, true) ~= nil)
+    eq("profiles.ui.late_metadata.spec_name", state.detailContext, "Protection")
+end
+
+do
+    local seed = loadStatsPro("enUS")
+    fireEvent("profiles.ui.unknown_combat.seed", seed, "PLAYER_ENTERING_WORLD")
+    local root = deepCopy(seed.StatsProDB)
+    local before = deepCopy(root)
+    local secretCombat = {}
+    local env, addonContext, profileTest = loadStatsPro("enUS", {
+        statsProDB = root,
+        unitGUID = function() return "Player-1-UNKNOWN-COMBAT" end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return 73, "Protection", nil, nil, "TANK", 1
+        end,
+        inCombatLockdown = function() return secretCombat end,
+        issecretvalue = function(value) return value == secretCombat end,
+    })
+    fireEvent("profiles.ui.unknown_combat.activate", env, "PLAYER_ENTERING_WORLD")
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.unknown_combat.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    local model = profileTest.profileViewModel()
+    local state = profileTest.profileUIState()
+    eq("profiles.ui.unknown_combat.gated", model.canMutate, false)
+    eq("profiles.ui.unknown_combat.pending", model.pending, true)
+    eq("profiles.ui.unknown_combat.notice", state.detailNotice,
+        "Waiting for a safe profile context.")
+    eq("profiles.ui.unknown_combat.root_identity", rawequal(env.StatsProDB, root), true)
+    assertDeepEqual("profiles.ui.unknown_combat.no_writes", env.StatsProDB, before)
+end
+
+do
+    local seed = loadStatsPro("enUS")
+    fireEvent("profiles.ui.compat.seed", seed, "PLAYER_ENTERING_WORLD")
+    local futureRoot = {
+        dbVersion = seed.StatsProDB.dbVersion + 1,
+        opaque = { keep = "exactly" },
+        account = "not inspected",
+        profiles = 42,
+        characters = { secret = true },
+    }
+    local before = deepCopy(futureRoot)
+    local env, addonContext, profileTest = loadStatsPro("enUS", {
+        statsProDB = futureRoot,
+        unitGUID = function() return "Player-1-FUTURE-UI" end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return 73, "Protection", nil, nil, "TANK", 1
+        end,
+    })
+    fireEvent("profiles.ui.compat.activate", env, "PLAYER_ENTERING_WORLD")
+    addonContext:OpenConfigMenu()
+    local state = profileTest.profileUIState()
+    local model = profileTest.profileViewModel()
+    eq("profiles.ui.compat.read_only", model.readOnly, true)
+    eq("profiles.ui.compat.no_characters", #model.characters, 0)
+    eq("profiles.ui.compat.header", state.headerSubtitle,
+        "Compatibility mode - profiles are read-only.")
+    callScript("profiles.ui.compat.open_manager", env.StatsProManageProfilesButton, "OnClick")
+    state = profileTest.profileUIState()
+    eq("profiles.ui.compat.manager_open", state.managerShown, true)
+    eq("profiles.ui.compat.no_rows", #state.rows, 0)
+    eq("profiles.ui.compat.empty_detail", state.detailCharacter, "No visited characters")
+    eq("profiles.ui.compat.notice", state.detailNotice,
+        "Compatibility mode - profiles are read-only.")
+    eq("profiles.ui.compat.root_identity", rawequal(env.StatsProDB, futureRoot), true)
+    assertDeepEqual("profiles.ui.compat.no_writes", env.StatsProDB, before)
+end
+
+do
+    local seed = loadStatsPro("enUS")
+    fireEvent("profiles.ui.no_spec.seed", seed, "PLAYER_ENTERING_WORLD")
+    local root = deepCopy(seed.StatsProDB)
+    root.characters = {}
+    local before = deepCopy(root)
+    local env, addonContext, profileTest = loadStatsPro("enUS", {
+        statsProDB = root,
+        unitGUID = function() return "Player-1-NO-SPEC-UI" end,
+        getSpecialization = function() return nil end,
+    })
+    fireEvent("profiles.ui.no_spec.activate", env, "PLAYER_ENTERING_WORLD")
+    addonContext:OpenConfigMenu()
+    eq("profiles.ui.no_spec.pending", profileTest.profileUIState().headerSubtitle,
+        "Switch pending until combat ends")
+    env.__flushTimers(0.1)
+    eq("profiles.ui.no_spec.fallback", profileTest.profileUIState().headerSubtitle,
+        "Account default profile")
+    callScript("profiles.ui.no_spec.open_manager", env.StatsProManageProfilesButton, "OnClick")
+    eq("profiles.ui.no_spec.no_rows", #profileTest.profileUIState().rows, 0)
+    eq("profiles.ui.no_spec.root_identity", rawequal(env.StatsProDB, root), true)
+    assertDeepEqual("profiles.ui.no_spec.no_writes", env.StatsProDB, before)
+end
+
+do
+    local registryEnv, _, registryTest = loadStatsPro("enUS")
+    local labelsByLocale = registryTest.registrySnapshot().labelsByLocale
+    local locales = { "enUS", "ruRU", "deDE", "frFR", "esES", "esMX",
+        "itIT", "ptBR", "koKR", "zhCN", "zhTW" }
+    fireEvent("profiles.ui.locales.seed", registryEnv, "PLAYER_ENTERING_WORLD")
+    local seedRoot = deepCopy(registryEnv.StatsProDB)
+    for _, locale in ipairs(locales) do
+        local root = deepCopy(seedRoot)
+        root.profiles.p2 = { name = "Танк 配置", settings = deepCopy(root.profiles.p1.settings) }
+        root.profiles.p3 = { name = "Solo", settings = deepCopy(root.profiles.p1.settings) }
+        root.account.forceLocale = locale
+        root.account.nextProfileID = 4
+        root.roleTemplates = { TANK = "p1", HEALER = "p1", DAMAGER = "p1" }
+        root.characters = {
+            ["Player-1-LOCALE"] = {
+                displayName = "Alpha-Realm",
+                lastSeen = 1,
+                defaultProfileID = "p1",
+                specProfiles = { [73] = "p2", [71] = "p3" },
+            },
+            ["Player-1-LOCALE-OTHER"] = {
+                displayName = "Bravo-Realm",
+                lastSeen = 0,
+                defaultProfileID = "p1",
+                specProfiles = { [73] = "p2" },
+            },
+        }
+        local localeIdentity = { specID = 73, specName = "Protection", role = "TANK" }
+        local env, addonContext, profileTest = loadStatsPro("enUS", {
+            statsProDB = root,
+            uiParentWidth = 1024,
+            uiParentHeight = 768,
+            unitGUID = function() return "Player-1-LOCALE" end,
+            unitFullName = function() return "Alpha", "Realm" end,
+            getSpecialization = function() return 1 end,
+            getSpecializationInfo = function()
+                return localeIdentity.specID, localeIdentity.specName,
+                    nil, nil, localeIdentity.role, 1
+            end,
+        })
+        fireEvent("profiles.ui.locales.activate." .. locale, env, "PLAYER_ENTERING_WORLD")
+        addonContext:OpenConfigMenu()
+        eq("profiles.ui.locales.minimum_config_height." .. locale,
+            env.StatsProConfigFrame:GetHeight(), 600)
+        eq("profiles.ui.locales.minimum_manager_width." .. locale,
+            env.StatsProProfileManager:GetWidth(), 620)
+        local labels = labelsByLocale[locale]
+        local state = profileTest.profileUIState()
+        eq("profiles.ui.locales.header_label." .. locale,
+            state.headerLabel, labels["Profile:"])
+        eq("profiles.ui.locales.manage." .. locale,
+            env.StatsProManageProfilesButton:GetText(), labels["Manage"])
+        eq("profiles.ui.locales.utf8_profile." .. locale,
+            state.headerProfile, "Танк 配置")
+        eq("profiles.ui.locales.shared_subtitle." .. locale,
+            state.headerSubtitle,
+            string.format(labels["Shared by %d specs"], 2))
+        callScript("profiles.ui.locales.open_manager." .. locale,
+            env.StatsProManageProfilesButton, "OnClick")
+        state = profileTest.profileUIState()
+        eq("profiles.ui.locales.manager_title." .. locale,
+            state.managerTitle, "|cff00ff7f" .. labels["Profile Manager"] .. "|r")
+        eq("profiles.ui.locales.manager_utf8." .. locale,
+            state.detailProfile, "Танк 配置")
+        localeIdentity.specID, localeIdentity.specName, localeIdentity.role = 71, "Arms", "DAMAGER"
+        fireEvent("profiles.ui.locales.switch." .. locale,
+            env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+        env.__flushTimers(0)
+        state = profileTest.profileUIState()
+        eq("profiles.ui.locales.automatic_subtitle." .. locale,
+            state.headerSubtitle,
+            string.format(labels["Automatic - %s / %s"], "Alpha-Realm", "Arms"))
+    end
 end
 
 print(string.format("StatsPro smoke: PASS (%d assertions)", assertionCount))

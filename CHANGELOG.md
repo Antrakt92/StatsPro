@@ -766,7 +766,7 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 
 ### Improved
 
-- **Repair cost no longer widens the panel** — coin string anchored RIGHT, free to extend leftward past the rating/value column. Panel width is now determined purely by stat content.
+- **Repair cost uses its own auto-fit row** — the panel widens only when the complete repair row is wider than the stat rows, while stat columns retain their compact alignment.
 - **Tertiary sub-toggles grey out when master is off** (matches Defensive tab pattern).
 - **Font dropdown refreshes on each open** — fonts registered via LibSharedMedia after StatsPro loads now appear without `/reload`.
 

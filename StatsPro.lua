@@ -6145,11 +6145,10 @@ function Panel:New(globalName, dbKeyPrefix)
 
     -- WHY 4th FontString outside the 3-column system: Repair coin string with embedded
     -- gold/silver/copper icons is much wider than typical percent values. Including it
-    -- in any of the 3 columns would inflate that column's width and bloat the whole
-    -- panel just for one row. Single-line FontString anchored only TOPRIGHT (Y is set
-    -- per-render in SetTextSafe to land on the same row as the "Repair:" label in the
-    -- label column). Width does NOT participate in auto-fit math — wide coin strings
-    -- extend leftward past frame.left if needed.
+    -- in any stat column would inflate that column and break row alignment. SetTextSafe
+    -- instead measures the complete repair row as a separate auto-fit candidate: the
+    -- frame widens only when repair is wider than the stat rows, then shifts the stat
+    -- columns left so their natural spacing remains compact.
     -- WARNING: do NOT use a multi-line padded approach (`\n` * N + coin) — inline coin
     -- icons inflate that line's height (`:14:14:2:0|t` yoffset=0 puts texture top above
     -- glyph top), causing cumulative drift vs labelText's pure-text rows.

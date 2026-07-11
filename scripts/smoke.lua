@@ -8373,6 +8373,148 @@ do
 end
 
 do
+    local secretHeight
+    local resizeEnv, resizeAddon, resizeTest = loadStatsPro("enUS", {
+        uiParentWidth = 1024,
+        uiParentHeight = 768,
+        issecretvalue = function(value)
+            return secretHeight ~= nil and value == secretHeight
+        end,
+    })
+    fireEvent("config.live_resize.pew", resizeEnv, "PLAYER_ENTERING_WORLD")
+    local rootBefore = deepCopy(resizeEnv.StatsProDB)
+    local rootRef = resizeEnv.StatsProDB
+    local accountRef = rootRef.account
+    local profilesRef = rootRef.profiles
+    local charactersRef = rootRef.characters
+    local onUpdateBefore = 0
+    for _, frame in ipairs(resizeEnv.__frames) do
+        if type(frame.scripts.OnUpdate) == "function" then onUpdateBefore = onUpdateBefore + 1 end
+    end
+
+    local preconstructionTimers = #resizeEnv.__timers
+    resizeEnv.UIParent:SetSize(1024, 500)
+    fireEvent("config.live_resize.preconstruction.display", resizeEnv, "DISPLAY_SIZE_CHANGED")
+    fireEvent("config.live_resize.preconstruction.scale", resizeEnv, "UI_SCALE_CHANGED")
+    eq("config.live_resize.preconstruction.no_frame", resizeEnv.StatsProConfigFrame, nil)
+    eq("config.live_resize.preconstruction.no_timer", #resizeEnv.__timers, preconstructionTimers)
+
+    resizeAddon:OpenConfigMenu()
+    local config = exists("config.live_resize.frame", resizeEnv.StatsProConfigFrame)
+    local shell = exists("config.live_resize.shell", resizeTest.settingsShellState().shell)
+    local geometry = resizeTest.settingsDesignSnapshot().geometry
+    eq("config.live_resize.first_open_current_height", config:GetHeight(), 450)
+
+    config.SwitchToTab(3)
+    shell.scroll:SetVerticalScroll(87)
+    local pointsBefore = deepCopy(config.points)
+    local originalSetSize = config.SetSize
+    local resizeCalls = 0
+    config.SetSize = function(frame, width, height)
+        resizeCalls = resizeCalls + 1
+        originalSetSize(frame, width, height)
+    end
+
+    local burstTimersBefore = #resizeEnv.__timers
+    resizeEnv.UIParent:SetSize(1024, 520)
+    fireEvent("config.live_resize.burst.display", resizeEnv, "DISPLAY_SIZE_CHANGED")
+    resizeEnv.UIParent:SetSize(1024, 480)
+    fireEvent("config.live_resize.burst.scale", resizeEnv, "UI_SCALE_CHANGED")
+    eq("config.live_resize.burst.deferred", config:GetHeight(), 450)
+    eq("config.live_resize.burst.two_callbacks", #resizeEnv.__timers, burstTimersBefore + 2)
+    flushTimers("config.live_resize.burst.flush", resizeEnv, 0, 2)
+    eq("config.live_resize.burst.one_apply", resizeCalls, 1)
+    eq("config.live_resize.burst.latest_height", config:GetHeight(), 432)
+    eq("config.live_resize.burst.width_stable", config:GetWidth(), geometry.windowWidth)
+    eq("config.live_resize.burst.tab_preserved", config.activeTabIndex, 3)
+    eq("config.live_resize.burst.scroll_preserved", shell.scroll:GetVerticalScroll(), 87)
+    eq("config.live_resize.burst.scroll_child_preserved", shell.scroll.scrollChild, shell.scrollChild)
+    assertDeepEqual("config.live_resize.burst.position_preserved", config.points, pointsBefore)
+    eq("config.live_resize.burst.stays_visible", config:IsShown(), true)
+
+    resizeCalls = 0
+    resizeEnv.UIParent:SetSize(1024, 280)
+    fireEvent("config.live_resize.minimum.display", resizeEnv, "DISPLAY_SIZE_CHANGED")
+    flushTimers("config.live_resize.minimum.flush", resizeEnv, 0, 1)
+    eq("config.live_resize.minimum.one_apply", resizeCalls, 1)
+    eq("config.live_resize.minimum.height", config:GetHeight(), geometry.minHeight)
+    check("config.live_resize.minimum.scroll_reachable",
+        config:GetHeight() - geometry.scrollTop - geometry.scrollBottom > 0)
+    check("config.live_resize.minimum.viewport_reachable",
+        config:GetHeight() - geometry.viewportTop - geometry.viewportBottom > 0)
+    check("config.live_resize.minimum.footer_reachable",
+        geometry.footerSurfaceInset + geometry.footerSurfaceHeight < config:GetHeight())
+    local footerTop = geometry.footerSurfaceInset + geometry.footerSurfaceHeight
+    local buttonTop = geometry.footerButtonBottom + geometry.shellButtonHeight
+    check("config.live_resize.minimum.buttons_inside_footer",
+        geometry.footerButtonBottom >= geometry.footerSurfaceInset and buttonTop <= footerTop)
+    check("config.live_resize.minimum.scroll_above_footer", geometry.scrollBottom >= footerTop)
+    eq("config.live_resize.minimum.footer_parent", shell.footer:GetParent(), config)
+    eq("config.live_resize.minimum.reset_parent", shell.resetButton:GetParent(), config)
+    eq("config.live_resize.minimum.close_parent", shell.closeButton:GetParent(), config)
+
+    local stableHeight = config:GetHeight()
+    resizeEnv.UIParent.height = math.huge
+    fireEvent("config.live_resize.invalid_parent.request", resizeEnv, "DISPLAY_SIZE_CHANGED")
+    flushTimers("config.live_resize.invalid_parent.flush", resizeEnv, 0, 1)
+    eq("config.live_resize.invalid_parent.preserved", config:GetHeight(), stableHeight)
+
+    secretHeight = 777
+    resizeEnv.UIParent.height = secretHeight
+    fireEvent("config.live_resize.secret_parent.request", resizeEnv, "UI_SCALE_CHANGED")
+    flushTimers("config.live_resize.secret_parent.flush", resizeEnv, 0, 1)
+    eq("config.live_resize.secret_parent.preserved", config:GetHeight(), stableHeight)
+    secretHeight = nil
+
+    config:Hide()
+    resizeEnv.UIParent:SetSize(2560, 1440)
+    fireEvent("config.live_resize.hidden.request", resizeEnv, "DISPLAY_SIZE_CHANGED")
+    flushTimers("config.live_resize.hidden.flush", resizeEnv, 0, 1)
+    eq("config.live_resize.hidden.stays_hidden", config:IsShown(), false)
+    eq("config.live_resize.hidden.current_height", config:GetHeight(), geometry.maxHeight)
+    config:Show()
+    eq("config.live_resize.hidden.show_height", config:GetHeight(), geometry.maxHeight)
+
+    local onUpdateAfter = 0
+    for _, frame in ipairs(resizeEnv.__frames) do
+        if type(frame.scripts.OnUpdate) == "function" then onUpdateAfter = onUpdateAfter + 1 end
+    end
+    eq("config.live_resize.no_onupdate_delta", onUpdateAfter, onUpdateBefore)
+    assertDeepEqual("config.live_resize.zero_writes", resizeEnv.StatsProDB, rootBefore)
+    eq("config.live_resize.root_identity", resizeEnv.StatsProDB, rootRef)
+    eq("config.live_resize.account_identity", rootRef.account, accountRef)
+    eq("config.live_resize.profiles_identity", rootRef.profiles, profilesRef)
+    eq("config.live_resize.characters_identity", rootRef.characters, charactersRef)
+end
+
+do
+    local heightIsSecret = true
+    local firstReadEnv, firstReadAddon, firstReadTest = loadStatsPro("enUS", {
+        uiParentWidth = 1024,
+        uiParentHeight = 777,
+        issecretvalue = function(value)
+            return heightIsSecret and value == 777
+        end,
+    })
+    fireEvent("config.live_resize.first_secret.pew", firstReadEnv, "PLAYER_ENTERING_WORLD")
+    local rootBefore = deepCopy(firstReadEnv.StatsProDB)
+    firstReadAddon:OpenConfigMenu()
+    local config = exists("config.live_resize.first_secret.frame", firstReadEnv.StatsProConfigFrame)
+    local geometry = firstReadTest.settingsDesignSnapshot().geometry
+    eq("config.live_resize.first_secret.safe_width", config:GetWidth(), geometry.windowWidth)
+    eq("config.live_resize.first_secret.safe_height", config:GetHeight(), geometry.minHeight)
+    check("config.live_resize.first_secret.scroll_reachable",
+        config:GetHeight() - geometry.scrollTop - geometry.scrollBottom > 0)
+
+    heightIsSecret = false
+    firstReadEnv.UIParent:SetSize(1024, 500)
+    fireEvent("config.live_resize.first_secret.recover", firstReadEnv, "DISPLAY_SIZE_CHANGED")
+    flushTimers("config.live_resize.first_secret.recover_flush", firstReadEnv, 0, 1)
+    eq("config.live_resize.first_secret.recovered_height", config:GetHeight(), 450)
+    assertDeepEqual("config.live_resize.first_secret.zero_writes", firstReadEnv.StatsProDB, rootBefore)
+end
+
+do
     local longEnv, longAddon = loadStatsPro("ruRU", {
         uiParentWidth = 1024,
         uiParentHeight = 768,

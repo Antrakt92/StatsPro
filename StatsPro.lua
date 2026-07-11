@@ -7759,6 +7759,16 @@ local EVENT_HANDLERS = {
     UPDATE_INVENTORY_DURABILITY = function() addon.durabilityRuntime.MarkDirty() end,
     PLAYER_EQUIPMENT_CHANGED    = function() addon.durabilityRuntime.MarkDirty(); itemLevelDirty = true end,
     BAG_UPDATE_DELAYED          = function() itemLevelDirty = true end,
+    DISPLAY_SIZE_CHANGED        = function()
+        if type(addon.settingsDesign.RequestConfigFrameResize) == "function" then
+            addon.settingsDesign.RequestConfigFrameResize()
+        end
+    end,
+    UI_SCALE_CHANGED            = function()
+        if type(addon.settingsDesign.RequestConfigFrameResize) == "function" then
+            addon.settingsDesign.RequestConfigFrameResize()
+        end
+    end,
     -- WHY: bag/equipment events can precede Blizzard's asynchronous average-iLvl
     -- recompute. This authoritative follow-up reopens the cache for the coalesced ticker.
     PLAYER_AVG_ITEM_LEVEL_UPDATE = function() itemLevelDirty = true end,
@@ -9310,6 +9320,26 @@ local function RunCoalesced(key, delay, fn)
             fn()
         end
     end)
+end
+
+function addon.settingsDesign.RequestConfigFrameResize()
+    if type(addon.settingsDesign.applyConfigFrameSize) ~= "function" then return end
+    RunCoalesced("configFrameSize", 0, function()
+        local apply = addon.settingsDesign.applyConfigFrameSize
+        if type(apply) == "function" then apply() end
+    end)
+end
+
+function addon.settingsDesign.ReadUIParentHeight()
+    local getter = UIParent and UIParent.GetHeight
+    if type(getter) ~= "function" then return nil end
+    local readOK, parentHeight = pcall(getter, UIParent)
+    if not readOK then return nil end
+    local secretOK, secret = pcall(issecretvalue, parentHeight)
+    if not secretOK or secret or not IsFiniteNumber(parentHeight) or parentHeight <= 0 then
+        return nil
+    end
+    return parentHeight
 end
 
 -- CreateConfigSlider: standard label-on-top + horizontal slider pattern used across
@@ -11500,14 +11530,24 @@ function addon:OpenConfigMenu()
     configFrame = CreateFrame("Frame", "StatsProConfigFrame", UIParent, "BackdropTemplate")
     local shellGeometry = self.settingsDesign.tokens.geometry
     local configFrameWidth = shellGeometry.windowWidth
+    -- Seed a usable shell before the first parent read. A transient secret/invalid
+    -- UIParent height must not leave the already-shown frame at its default geometry.
+    configFrame:SetSize(configFrameWidth, shellGeometry.minHeight)
 
     -- WARNING: cap by parent so footer (Reset/Close at BOTTOM y=14) stays on-screen.
     -- The 260px floor leaves a positive viewport after the 140px header and 66px footer.
     local function ApplyConfigFrameSize()
+        local parentHeight = addon.settingsDesign.ReadUIParentHeight()
+        if not parentHeight then return false end
         local maxH = math.max(shellGeometry.minHeight,
-            math.min(shellGeometry.maxHeight, UIParent:GetHeight() * shellGeometry.parentHeightRatio))
+            math.min(shellGeometry.maxHeight, parentHeight * shellGeometry.parentHeightRatio))
+        if configFrame:GetWidth() == configFrameWidth and configFrame:GetHeight() == maxH then
+            return true
+        end
         configFrame:SetSize(configFrameWidth, maxH)
+        return true
     end
+    self.settingsDesign.applyConfigFrameSize = ApplyConfigFrameSize
     ApplyConfigFrameSize()
 
     configFrame:SetPoint("CENTER")

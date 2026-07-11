@@ -2744,6 +2744,104 @@ do
 end
 
 do
+    local wideEnv = loadStatsPro("enUS", {
+        statsProDB = {},
+        uiParentWidth = 7680,
+        uiParentHeight = 4320,
+    })
+    fireEvent("position.ui_bound.wide_round_trip.pew", wideEnv, "PLAYER_ENTERING_WORLD")
+    wideEnv.StatsProFrame:ClearAllPoints()
+    wideEnv.StatsProFrame:SetPoint("CENTER", wideEnv.UIParent, "CENTER", 3500, -120)
+    fireEvent("position.ui_bound.wide_round_trip.logout", wideEnv, "PLAYER_LOGOUT")
+    eq("position.ui_bound.wide_round_trip.saved_x", activeSettings(wideEnv).xOfs, 3500)
+
+    local saved = deepCopy(wideEnv.StatsProDB)
+    local reloadEnv = loadStatsPro("enUS", {
+        statsProDB = saved,
+        uiParentWidth = 7680,
+        uiParentHeight = 4320,
+    })
+    fireEvent("position.ui_bound.wide_round_trip.reload", reloadEnv, "PLAYER_ENTERING_WORLD")
+    eq("position.ui_bound.wide_round_trip.loaded_x", reloadEnv.StatsProFrame.points[1][4], 3500)
+    eq("position.ui_bound.wide_round_trip.loaded_y", reloadEnv.StatsProFrame.points[1][5], -120)
+    clearPrints(reloadEnv)
+    slash("position.ui_bound.wide_round_trip.debug", reloadEnv, "debug")
+    eq("position.ui_bound.wide_round_trip.debug_x",
+        printContains(reloadEnv, "main: CENTER/CENTER  +3500/-120"), true)
+
+    local fullExtentEnv = loadStatsPro("enUS", {
+        statsProDB = {
+            point = "LEFT",
+            relativePoint = "RIGHT",
+            xOfs = -7680,
+            yOfs = 0,
+        },
+        uiParentWidth = 7680,
+        uiParentHeight = 4320,
+    })
+    fireEvent("position.ui_bound.full_anchor_extent.pew", fullExtentEnv, "PLAYER_ENTERING_WORLD")
+    eq("position.ui_bound.full_anchor_extent.point", fullExtentEnv.StatsProFrame.points[1][1], "LEFT")
+    eq("position.ui_bound.full_anchor_extent.relative", fullExtentEnv.StatsProFrame.points[1][3], "RIGHT")
+    eq("position.ui_bound.full_anchor_extent.x", fullExtentEnv.StatsProFrame.points[1][4], -7680)
+
+    local narrowEnv = loadStatsPro("enUS", {
+        statsProDB = deepCopy(saved),
+        uiParentWidth = 1920,
+        uiParentHeight = 1080,
+    })
+    fireEvent("position.ui_bound.narrow_rejects_wide.pew", narrowEnv, "PLAYER_ENTERING_WORLD")
+    eq("position.ui_bound.narrow_rejects_wide.frame_x", narrowEnv.StatsProFrame.points[1][4], 0)
+    eq("position.ui_bound.narrow_rejects_wide.db_unchanged", activeSettings(narrowEnv).xOfs, 3500)
+end
+
+do
+    local axisEnv = loadStatsPro("enUS", {
+        statsProDB = {
+            xOfs = 3500,
+            yOfs = 3500,
+            defensive_xOfs = -3000,
+            defensive_yOfs = 3500,
+        },
+        uiParentWidth = 1920,
+        uiParentHeight = 5000,
+    })
+    fireEvent("position.ui_bound.axis_independent.pew", axisEnv, "PLAYER_ENTERING_WORLD")
+    eq("position.ui_bound.axis_independent.main_x_fallback", axisEnv.StatsProFrame.points[1][4], 0)
+    eq("position.ui_bound.axis_independent.main_y", axisEnv.StatsProFrame.points[1][5], 3500)
+    eq("position.ui_bound.axis_independent.legacy_floor",
+        axisEnv.StatsProDefensiveFrame.points[1][4], -3000)
+    eq("position.ui_bound.axis_independent.defensive_y",
+        axisEnv.StatsProDefensiveFrame.points[1][5], 3500)
+
+    local malformedEnv = loadStatsPro("enUS", {
+        statsProDB = {
+            xOfs = "3500",
+            yOfs = math.huge,
+            defensive_xOfs = -math.huge,
+            defensive_yOfs = 0 / 0,
+        },
+        uiParentWidth = 7680,
+        uiParentHeight = 5000,
+    })
+    fireEvent("position.ui_bound.malformed_offsets.pew", malformedEnv, "PLAYER_ENTERING_WORLD")
+    eq("position.ui_bound.malformed_offsets.string", malformedEnv.StatsProFrame.points[1][4], 0)
+    eq("position.ui_bound.malformed_offsets.inf", malformedEnv.StatsProFrame.points[1][5], 0)
+    eq("position.ui_bound.malformed_offsets.neg_inf",
+        malformedEnv.StatsProDefensiveFrame.points[1][4], 0)
+    eq("position.ui_bound.malformed_offsets.nan",
+        malformedEnv.StatsProDefensiveFrame.points[1][5], -100)
+
+    local invalidParentEnv = loadStatsPro("enUS", {
+        statsProDB = { xOfs = 3500 },
+        uiParentWidth = 7680,
+    })
+    invalidParentEnv.UIParent.GetWidth = function() return math.huge end
+    local ok, err = pcall(invalidParentEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("position.ui_bound.invalid_parent.no_error", ok, err)
+    eq("position.ui_bound.invalid_parent.fallback", invalidParentEnv.StatsProFrame.points[1][4], 0)
+end
+
+do
     local queuedEnv = makeEnv("enUS")
     local ran = false
     queuedEnv.C_Timer.After(0.1, function() ran = true end)
@@ -2898,6 +2996,69 @@ do
     eq("legacy_import.invalid_groups.position_rejected_atomically", activeSettings(invalidEnv).point, "CENTER")
     eq("legacy_import.invalid_groups.position_x_default", activeSettings(invalidEnv).xOfs, 0)
     assertColor("legacy_import.invalid_groups.color_rejected", activeSettings(invalidEnv).colors.crit, 1, 0, 0)
+end
+
+do
+    local wideImportEnv = loadStatsPro("enUS", {
+        statsProDB = {},
+        swiftStatsDB = {
+            point = "CENTER",
+            relativePoint = "CENTER",
+            xOfs = 3500,
+            yOfs = -120,
+        },
+        uiParentWidth = 7680,
+        uiParentHeight = 4320,
+    })
+    fireEvent("legacy_import.ui_bound.wide.pew", wideImportEnv, "PLAYER_ENTERING_WORLD")
+    eq("legacy_import.ui_bound.wide.settings_x", activeSettings(wideImportEnv).xOfs, 3500)
+    eq("legacy_import.ui_bound.wide.frame_x", wideImportEnv.StatsProFrame.points[1][4], 3500)
+
+    local tallImportEnv = loadStatsPro("enUS", {
+        statsProDB = {},
+        swiftStatsLocalDB = {
+            defensive_point = "CENTER",
+            defensive_relativePoint = "CENTER",
+            defensive_xOfs = 80,
+            defensive_yOfs = 3500,
+        },
+        uiParentWidth = 1920,
+        uiParentHeight = 5000,
+    })
+    fireEvent("legacy_import.ui_bound.tall_defensive.pew", tallImportEnv, "PLAYER_ENTERING_WORLD")
+    eq("legacy_import.ui_bound.tall_defensive.settings_y",
+        activeSettings(tallImportEnv).defensive_yOfs, 3500)
+    eq("legacy_import.ui_bound.tall_defensive.frame_y",
+        tallImportEnv.StatsProDefensiveFrame.points[1][5], 3500)
+
+    for caseName, invalidOffset in pairs({
+        nan = 0 / 0,
+        positive_infinity = math.huge,
+        negative_infinity = -math.huge,
+    }) do
+        local invalidOffsetEnv = loadStatsPro("enUS", {
+            statsProDB = {},
+            swiftStatsDB = {
+                fontSize = 18,
+                point = "TOPLEFT",
+                relativePoint = "TOPLEFT",
+                xOfs = invalidOffset,
+                yOfs = 25,
+            },
+            uiParentWidth = 7680,
+            uiParentHeight = 4320,
+        })
+        fireEvent("legacy_import.ui_bound.atomic_invalid." .. caseName,
+            invalidOffsetEnv, "PLAYER_ENTERING_WORLD")
+        eq("legacy_import.ui_bound.atomic_invalid." .. caseName .. ".scalar",
+            activeSettings(invalidOffsetEnv).fontSize, 18)
+        eq("legacy_import.ui_bound.atomic_invalid." .. caseName .. ".point",
+            activeSettings(invalidOffsetEnv).point, "CENTER")
+        eq("legacy_import.ui_bound.atomic_invalid." .. caseName .. ".x",
+            activeSettings(invalidOffsetEnv).xOfs, 0)
+        eq("legacy_import.ui_bound.atomic_invalid." .. caseName .. ".y",
+            activeSettings(invalidOffsetEnv).yOfs, 0)
+    end
 end
 
 do

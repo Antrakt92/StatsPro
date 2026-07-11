@@ -2570,9 +2570,36 @@ local function NormalizeAnchorPoint(value, fallback)
     return "CENTER"
 end
 
-local function NormalizePositionOffset(value, fallback)
-    if IsFiniteNumber(value) and value >= -3000 and value <= 3000 then return value end
-    if IsFiniteNumber(fallback) and fallback >= -3000 and fallback <= 3000 then return fallback end
+addon.positionRuntime = {
+    legacyOffsetFloor = 3000,
+}
+
+function addon.positionRuntime.GetOffsetBound(axis)
+    local fallback = addon.positionRuntime.legacyOffsetFloor
+    if not UIParent then return fallback end
+    local getter = axis == "y" and UIParent.GetHeight or UIParent.GetWidth
+    if type(getter) ~= "function" then return fallback end
+    local readOK, extent = pcall(getter, UIParent)
+    if not readOK then return fallback end
+    local secretOK, secret = pcall(issecretvalue, extent)
+    if not secretOK or secret or not IsFiniteNumber(extent) or extent <= 0 then
+        return fallback
+    end
+    -- WHY: mixed anchors can require a full-parent offset while remaining on-screen.
+    -- Retaining the legacy floor avoids invalidating existing positions on smaller UIs.
+    return math.max(fallback, extent)
+end
+
+function addon.positionRuntime.IsValidOffset(value, axis)
+    local secretOK, secret = pcall(issecretvalue, value)
+    if not secretOK or secret or not IsFiniteNumber(value) then return false end
+    local bound = addon.positionRuntime.GetOffsetBound(axis)
+    return value >= -bound and value <= bound
+end
+
+local function NormalizePositionOffset(value, fallback, axis)
+    if addon.positionRuntime.IsValidOffset(value, axis) then return value end
+    if addon.positionRuntime.IsValidOffset(fallback, axis) then return fallback end
     return 0
 end
 
@@ -5649,8 +5676,10 @@ function addon.legacyImport.CopyPosition(source, candidate, prefix)
     local yOfs = addon.legacyImport.SafeRawGet(source, prefix .. "yOfs")
     if not addon.legacyImport.IsCleanType(point, "string") or not VALID_ANCHOR_POINTS[point]
         or not addon.legacyImport.IsCleanType(relativePoint, "string") or not VALID_ANCHOR_POINTS[relativePoint]
-        or not addon.legacyImport.IsCleanType(xOfs, "number") or xOfs < -3000 or xOfs > 3000
-        or not addon.legacyImport.IsCleanType(yOfs, "number") or yOfs < -3000 or yOfs > 3000 then
+        or not addon.legacyImport.IsCleanType(xOfs, "number")
+        or not addon.positionRuntime.IsValidOffset(xOfs, "x")
+        or not addon.legacyImport.IsCleanType(yOfs, "number")
+        or not addon.positionRuntime.IsValidOffset(yOfs, "y") then
         return false
     end
     candidate[prefix .. "point"] = point
@@ -6203,8 +6232,8 @@ function Panel:LoadPosition()
     local yOfsKey          = self:DBKey("yOfs")
     local point            = NormalizeAnchorPoint(db[pointKey], defaults[pointKey] or "CENTER")
     local relativePoint    = NormalizeAnchorPoint(db[relativePointKey], defaults[relativePointKey] or "CENTER")
-    local xOfs             = NormalizePositionOffset(db[xOfsKey], defaults[xOfsKey] or 0)
-    local yOfs             = NormalizePositionOffset(db[yOfsKey], defaults[yOfsKey] or 0)
+    local xOfs             = NormalizePositionOffset(db[xOfsKey], defaults[xOfsKey] or 0, "x")
+    local yOfs             = NormalizePositionOffset(db[yOfsKey], defaults[yOfsKey] or 0, "y")
 
     local oldPoint, oldRelativeTo, oldRelativePoint, oldX, oldY = self.frame:GetPoint()
     self.frame:ClearAllPoints()
@@ -12919,8 +12948,8 @@ function addon:PrintDebugDump()
         if not p then return label..": <unset>" end
         local point = NormalizeAnchorPoint(p, "CENTER")
         local relativePoint = NormalizeAnchorPoint(rp, point)
-        local xOfs = NormalizePositionOffset(x, 0)
-        local yOfs = NormalizePositionOffset(y, fallbackY or 0)
+        local xOfs = NormalizePositionOffset(x, 0, "x")
+        local yOfs = NormalizePositionOffset(y, fallbackY or 0, "y")
         return string.format("%s: %s/%s  %+.0f/%+.0f", label, point, relativePoint, xOfs, yOfs)
     end
     PrintMsg(PosLine("main",      GetDB("point"),           GetDB("relativePoint"),           GetDB("xOfs"),           GetDB("yOfs"),           defaults.yOfs))

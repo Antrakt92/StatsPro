@@ -4750,6 +4750,59 @@ do
 end
 
 do
+    local overall, equipped = 273, 271
+    local reads = 0
+    local ilvlEnv, _, ilvlTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showRating = true,
+            showPercentage = true,
+            showOffensive = false,
+            showTertiary = false,
+            showDefensive = false,
+            showItemLevel = true,
+            showDurability = false,
+            showRepairCost = false,
+        },
+        getAverageItemLevel = function()
+            reads = reads + 1
+            return overall, equipped
+        end,
+    })
+    fireEvent("lifecycle.item_level_authoritative_update.initial", ilvlEnv, "PLAYER_ENTERING_WORLD")
+    local state = ilvlTest.itemLevelState()
+    eq("lifecycle.item_level_authoritative_update.initial_overall", state.overall, 273)
+    eq("lifecycle.item_level_authoritative_update.initial_equipped", state.equipped, 271)
+    eq("lifecycle.item_level_authoritative_update.initial_clean", state.dirty, false)
+    eq("lifecycle.item_level_authoritative_update.initial_read", reads, 1)
+
+    local ticker = findFrame("lifecycle.item_level_authoritative_update.ticker", ilvlEnv, function(frame)
+        return frame.scripts and type(frame.scripts.OnUpdate) == "function"
+    end)
+    fireEvent("lifecycle.item_level_authoritative_update.stale_bag_event", ilvlEnv, "BAG_UPDATE_DELAYED")
+    callScript("lifecycle.item_level_authoritative_update.stale_bag_tick", ticker, "OnUpdate", 999)
+    state = ilvlTest.itemLevelState()
+    eq("lifecycle.item_level_authoritative_update.stale_read_clears_dirty", state.dirty, false)
+    eq("lifecycle.item_level_authoritative_update.stale_read_count", reads, 2)
+
+    overall, equipped = 281, 279
+    fireEvent("lifecycle.item_level_authoritative_update.fire", ilvlEnv, "PLAYER_AVG_ITEM_LEVEL_UPDATE")
+    fireEvent("lifecycle.item_level_authoritative_update.coalesced_fire", ilvlEnv, "PLAYER_AVG_ITEM_LEVEL_UPDATE")
+    eq("lifecycle.item_level_authoritative_update.marks_dirty", ilvlTest.itemLevelState().dirty, true)
+    eq("lifecycle.item_level_authoritative_update.no_immediate_read", reads, 2)
+    callScript("lifecycle.item_level_authoritative_update.refresh_tick", ticker, "OnUpdate", 999)
+    state = ilvlTest.itemLevelState()
+    eq("lifecycle.item_level_authoritative_update.refreshed_overall", state.overall, 281)
+    eq("lifecycle.item_level_authoritative_update.refreshed_equipped", state.equipped, 279)
+    eq("lifecycle.item_level_authoritative_update.refreshed_clean", state.dirty, false)
+    eq("lifecycle.item_level_authoritative_update.coalesced_read_count", reads, 3)
+    local visualState = ilvlTest.panelVisualState()
+    eq("lifecycle.item_level_authoritative_update.rendered_equipped",
+        visualState.mainRatingText:find("279", 1, true) ~= nil, true)
+    eq("lifecycle.item_level_authoritative_update.rendered_overall",
+        visualState.mainValueText:find("281", 1, true) ~= nil, true)
+end
+
+do
     local ilvlHiddenEnv, _, ilvlHiddenTest = loadStatsPro("enUS", {
         statsProDB = {
             labelStyle = "hidden",

@@ -4507,6 +4507,9 @@ local EVENT_HANDLERS = {
     UPDATE_INVENTORY_DURABILITY = function() addon.durabilityRuntime.MarkDirty() end,
     PLAYER_EQUIPMENT_CHANGED    = function() addon.durabilityRuntime.MarkDirty(); itemLevelDirty = true end,
     BAG_UPDATE_DELAYED          = function() itemLevelDirty = true end,
+    -- WHY: bag/equipment events can precede Blizzard's asynchronous average-iLvl
+    -- recompute. This authoritative follow-up reopens the cache for the coalesced ticker.
+    PLAYER_AVG_ITEM_LEVEL_UPDATE = function() itemLevelDirty = true end,
     MERCHANT_SHOW               = function() addon.durabilityRuntime.MarkDirty() end,
     -- WHY: lock state is stored in cached.isLocked and read by OnDragStart. Mouse stays
     -- enabled permanently so right-click Settings works even while locked; Panel:Lock /
@@ -7178,6 +7181,13 @@ if addon and addon.__statsproSmoke == true then
                 dirty = durabilityDirty,
                 retryScheduled = addon.durabilityRuntime.scheduledGeneration
                     == addon.durabilityRuntime.generation,
+            }
+        end,
+        itemLevelState = function()
+            return {
+                overall = cached.itemLevelOverall,
+                equipped = cached.itemLevelEquipped,
+                dirty = itemLevelDirty,
             }
         end,
         versatilityState = function()

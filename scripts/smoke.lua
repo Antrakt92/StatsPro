@@ -281,8 +281,8 @@ local function makeFrame(name, setFontResult, parent)
         self.font, self.fontSize, self.fontFlags = font, size, flags
         return true
     end
-    function frame:SetJustifyH() end
-    function frame:SetJustifyV() end
+    function frame:SetJustifyH(value) self.justifyH = value end
+    function frame:SetJustifyV(value) self.justifyV = value end
     function frame:SetTextColor(r, g, b, a) self.textColor = { r = r, g = g, b = b, a = a } end
     function frame:SetFontString(fontString) self.fontString = fontString end
     function frame:GetFontString() return self.fontString end
@@ -317,6 +317,7 @@ local function makeFrame(name, setFontResult, parent)
         if not isFiniteNumber(alpha) then error("SetAlpha alpha must be a finite number", 2) end
         self.alpha = alpha
     end
+    function frame:GetAlpha() return self.alpha or 1 end
     function frame:Hide()
         if not self.shown then return end
         self.shown = false
@@ -396,6 +397,9 @@ local function makeFrame(name, setFontResult, parent)
         if type(texture) == "string" then self.disabledTexture.texture = texture end
     end
     function frame:GetDisabledTexture() return self.disabledTexture end
+    function frame:GetCheckedTexture() return self.checkedTexture end
+    function frame:GetDisabledCheckedTexture() return self.disabledCheckedTexture end
+    function frame:GetThumbTexture() return self.thumbTexture end
     function frame:SetChecked(value) self.checked = value end
     function frame:GetChecked() return self.checked end
     function frame:GetName() return self.name end
@@ -413,8 +417,19 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetValue(value) self.value = value end
     function frame:GetValue() return self.value or 0 end
     function frame:SetOrientation() end
-    function frame:EnableKeyboard() end
-    function frame:SetAutoFocus() end
+    function frame:EnableKeyboard(value) self.keyboardEnabled = value ~= false end
+    function frame:IsKeyboardEnabled() return self.keyboardEnabled == true end
+    function frame:SetAutoFocus(value) self.autoFocus = value ~= false end
+    function frame:SetFocus()
+        self.focused = true
+        runFrameHandlers(self, "OnEditFocusGained")
+    end
+    function frame:ClearFocus()
+        if not self.focused then return end
+        self.focused = false
+        runFrameHandlers(self, "OnEditFocusLost")
+    end
+    function frame:HasFocus() return self.focused == true end
     function frame:SetMultiLine() end
     function frame:SetMaxLetters() end
     function frame:SetMaxLines(value) self.maxLines = value end
@@ -648,8 +663,12 @@ local function makeEnv(locale, opts)
         if env.DropDownList1 then env.DropDownList1:Hide() end
     end
     env.UIDropDownMenu_SetText = function(frame, text) if frame then frame.dropdownText = text end end
-    env.UIDropDownMenu_SetWidth = function() end
-    env.UIDropDownMenu_JustifyText = function() end
+    env.UIDropDownMenu_SetWidth = function(frame, width)
+        if frame then frame.dropdownWidth = width end
+    end
+    env.UIDropDownMenu_JustifyText = function(frame, justify)
+        if frame then frame.dropdownJustify = justify end
+    end
     env.UIDropDownMenu_Initialize = function(frame, fn)
         if frame then
             frame.dropdownInit = function(...)
@@ -680,6 +699,7 @@ local function makeEnv(locale, opts)
     for i = 1, 8 do
         env["DropDownList1Button" .. i] = makeFrame("DropDownList1Button" .. i, opts.setFontResult)
     end
+    function env.GameTooltip:GetOwner() return self.owner end
     env.ColorPickerFrame = makeFrame("ColorPickerFrame", opts.setFontResult)
     env.ColorPickerFrame.shown = false
     env.ColorPickerFrame.Footer = {
@@ -763,6 +783,22 @@ local function makeEnv(locale, opts)
 
     env.CreateFrame = function(frameType, name, parent, template)
         local frame = makeFrame(name, opts.setFontResult, parent)
+        function frame:SetFocus()
+            local previous = env.__focusedFrame
+            if previous and previous ~= self then
+                previous.focused = false
+                runFrameHandlers(previous, "OnEditFocusLost")
+            end
+            self.focused = true
+            env.__focusedFrame = self
+            runFrameHandlers(self, "OnEditFocusGained")
+        end
+        function frame:ClearFocus()
+            if not self.focused then return end
+            self.focused = false
+            if env.__focusedFrame == self then env.__focusedFrame = nil end
+            runFrameHandlers(self, "OnEditFocusLost")
+        end
         frame.frameType = frameType
         frame.template = template
         frame.CreateFontString = function()
@@ -811,6 +847,17 @@ local function makeEnv(locale, opts)
                 env[scrollBarName] = scrollBar
                 env[scrollBarName .. "ScrollUpButton"] = up
                 env[scrollBarName .. "ScrollDownButton"] = down
+            end
+        end
+        if template == "UICheckButtonTemplate" then
+            frame.normalTexture = makeFrame(nil, opts.setFontResult, frame)
+            frame.checkedTexture = makeFrame(nil, opts.setFontResult, frame)
+            frame.disabledCheckedTexture = makeFrame(nil, opts.setFontResult, frame)
+        elseif template == "OptionsSliderTemplate" then
+            frame.thumbTexture = makeFrame(nil, opts.setFontResult, frame)
+        elseif template == "InputBoxTemplate" and name then
+            for _, suffix in ipairs({ "Left", "Middle", "Right" }) do
+                env[name .. suffix] = makeFrame(name .. suffix, opts.setFontResult, frame)
             end
         end
         return frame
@@ -1980,6 +2027,17 @@ local function runDropdownInit(name, dropdown)
     local ok, err = pcall(dropdown.dropdownInit)
     check(name, ok, err)
     return dropdown.dropdownEntries or {}
+end
+
+local function userInteract(name, frame, scriptName, ...)
+    frame = exists(name .. ".frame", frame)
+    if (scriptName == "OnClick" or scriptName == "OnMouseDown" or scriptName == "OnMouseUp")
+        and type(frame.IsEnabled) == "function" and not frame:IsEnabled() then
+        return false
+    end
+    local ok, err = pcall(runFrameHandlers, frame, scriptName, ...)
+    check(name, ok, err)
+    return true
 end
 
 local function checkedDropdownValue(name, entries)
@@ -7348,9 +7406,22 @@ do
     config.SwitchToTab(3)
 
     check("config.language_warning_layout.text_visible", warning:GetText() ~= "", "missing warning text")
+    eq("config.language_warning_layout.surface_visible",
+        warning.statsProWarningSurface:IsShown(), true)
+    eq("config.language_warning_layout.rail_visible",
+        warning.statsProWarningRail:IsShown(), true)
+    for index, border in ipairs(warning.statsProWarningSurface.statsProBorders) do
+        eq("config.language_warning_layout.border_visible." .. index,
+            border:IsShown(), true)
+    end
+    local warningTokens = warningTest.settingsDesignSnapshot()
+    assertColor("config.language_warning_layout.rail_color",
+        warning.statsProWarningRail.colorTexture,
+        warningTokens.colors.warning[1], warningTokens.colors.warning[2],
+        warningTokens.colors.warning[3])
     eq("config.language_warning_layout.word_wrap", warning.wordWrap, true)
     eq("config.language_warning_layout.max_lines", warning.maxLines, 2)
-    eq("config.language_warning_layout.two_line_height", warning:GetHeight(), 28)
+    eq("config.language_warning_layout.two_line_height", warning:GetHeight(), 40)
     eq("config.language_warning_layout.scroll_child_width", scrollChild:GetWidth(), 450)
     eq("config.language_warning_layout.practical_width", warning:GetWidth(), 426)
     check("config.language_warning_layout.fits_content",
@@ -7619,8 +7690,8 @@ do
     eq("config.font_picker_hover_restore_forces_side_font", fontState.sideLabelFont, defaultFont)
 
     local critSwatch = findFrame("config.color_picker.crit_swatch", env, function(frame)
-        local color = frame.backdropColor
-        return type(frame.scripts.OnClick) == "function"
+        local color = frame.statsProDisplayedColor
+        return frame.statsProColorKey == "crit" and type(frame.scripts.OnClick) == "function"
             and color and color.r == 1 and color.g == 0 and color.b == 0
     end)
     callScript("config.color_picker.open", critSwatch, "OnClick")
@@ -8375,6 +8446,25 @@ do
 
     local ok, err = pcall(function() futureAddon:OpenConfigMenu() end)
     check("db_compat.future_read_only.config_open", ok, err)
+    local disabledMutationControls = 0
+    for index, control in ipairs(futureTest.settingsControlState()) do
+        if control.mutatesSettings then
+            disabledMutationControls = disabledMutationControls + 1
+            eq("db_compat.future_read_only.control_disabled." .. index,
+                control.enabled, false)
+            eq("db_compat.future_read_only.control_state." .. index,
+                control.state, "disabled")
+        end
+    end
+    check("db_compat.future_read_only.mutation_controls_registered",
+        disabledMutationControls >= 60, "mutating controls were not centrally disabled")
+    userInteract("db_compat.future_read_only.dropdown_tooltip",
+        futureEnv.StatsProDisplayModeDropdownButton, "OnEnter")
+    eq("db_compat.future_read_only.dropdown_tooltip_text",
+        futureEnv.GameTooltip.lines[1].left,
+        "Compatibility mode - profiles are read-only.")
+    userInteract("db_compat.future_read_only.dropdown_tooltip_leave",
+        futureEnv.StatsProDisplayModeDropdownButton, "OnLeave")
     assertRootUnchanged("db_compat.future_read_only.config_open_unchanged")
     ok, err = pcall(function() futureAddon:OpenConfigMenu() end)
     check("db_compat.future_read_only.config_close", ok, err)
@@ -8501,9 +8591,7 @@ do
     fireEvent("config.color_picker.config_hide.fire", colorEnv, "PLAYER_ENTERING_WORLD")
     slash("config.color_picker.config_hide.open_config", colorEnv, "")
     local critSwatch = findFrame("config.color_picker.config_hide.crit_swatch", colorEnv, function(frame)
-        local color = frame.backdropColor
-        return type(frame.scripts.OnClick) == "function"
-            and color and color.r == 0.2 and color.g == 0.3 and color.b == 0.4
+        return frame.statsProColorKey == "crit"
     end)
     callScript("config.color_picker.config_hide.open_picker", critSwatch, "OnClick")
     colorEnv.__setColorPickerRGB(0.6, 0.7, 0.8)
@@ -8521,9 +8609,7 @@ do
     fireEvent("config.color_picker.raw_hide.fire", rawHideEnv, "PLAYER_ENTERING_WORLD")
     slash("config.color_picker.raw_hide.open_config", rawHideEnv, "")
     local critSwatch = findFrame("config.color_picker.raw_hide.crit_swatch", rawHideEnv, function(frame)
-        local color = frame.backdropColor
-        return type(frame.scripts.OnClick) == "function"
-            and color and color.r == 0.2 and color.g == 0.3 and color.b == 0.4
+        return frame.statsProColorKey == "crit"
     end)
     callScript("config.color_picker.raw_hide.open_picker", critSwatch, "OnClick")
     rawHideEnv.__setColorPickerRGB(0.6, 0.7, 0.8)
@@ -8554,9 +8640,7 @@ do
     fireEvent("config.color_picker.accept_boundary_fallback.fire", fallbackEnv, "PLAYER_ENTERING_WORLD")
     slash("config.color_picker.accept_boundary_fallback.open_config", fallbackEnv, "")
     local critSwatch = findFrame("config.color_picker.accept_boundary_fallback.crit_swatch", fallbackEnv, function(frame)
-        local color = frame.backdropColor
-        return type(frame.scripts.OnClick) == "function"
-            and color and color.r == 0.2 and color.g == 0.3 and color.b == 0.4
+        return frame.statsProColorKey == "crit"
     end)
     fallbackEnv.ColorPickerFrame.Footer.OkayButton = nil
     callScript("config.color_picker.accept_boundary_fallback.open_picker", critSwatch, "OnClick")
@@ -8579,9 +8663,7 @@ do
     fireEvent("config.color_picker.takeover.fire", takeoverEnv, "PLAYER_ENTERING_WORLD")
     slash("config.color_picker.takeover.open_config", takeoverEnv, "")
     local critSwatch = findFrame("config.color_picker.takeover.crit_swatch", takeoverEnv, function(frame)
-        local color = frame.backdropColor
-        return type(frame.scripts.OnClick) == "function"
-            and color and color.r == 0.2 and color.g == 0.3 and color.b == 0.4
+        return frame.statsProColorKey == "crit"
     end)
     callScript("config.color_picker.takeover.open_statspro", critSwatch, "OnClick")
     takeoverEnv.__setColorPickerRGB(0.6, 0.7, 0.8)
@@ -8629,14 +8711,10 @@ do
     fireEvent("config.color_picker.switch_swatch.fire", colorEnv, "PLAYER_ENTERING_WORLD")
     slash("config.color_picker.switch_swatch.open_config", colorEnv, "")
     local critSwatch = findFrame("config.color_picker.switch_swatch.crit_swatch", colorEnv, function(frame)
-        local color = frame.backdropColor
-        return type(frame.scripts.OnClick) == "function"
-            and color and color.r == 1 and color.g == 0 and color.b == 0
+        return frame.statsProColorKey == "crit"
     end)
     local hasteSwatch = findFrame("config.color_picker.switch_swatch.haste_swatch", colorEnv, function(frame)
-        local color = frame.backdropColor
-        return type(frame.scripts.OnClick) == "function"
-            and color and color.r == 0 and color.g == 0.5 and color.b == 1
+        return frame.statsProColorKey == "haste"
     end)
     activeSettings(colorEnv).colors.crit = nil
     callScript("config.color_picker.switch_swatch.open_crit", critSwatch, "OnClick")
@@ -8664,9 +8742,7 @@ do
     fireEvent("config.color_picker.foreign.fire", foreignEnv, "PLAYER_ENTERING_WORLD")
     slash("config.color_picker.foreign.open_config", foreignEnv, "")
     local critSwatch = findFrame("config.color_picker.foreign.crit_swatch", foreignEnv, function(frame)
-        local color = frame.backdropColor
-        return type(frame.scripts.OnClick) == "function"
-            and color and color.r == 1 and color.g == 0 and color.b == 0
+        return frame.statsProColorKey == "crit"
     end)
     local canceled = false
     local foreignToken = {}
@@ -8695,9 +8771,7 @@ do
     fireEvent("config.color_picker.stale.fire", staleEnv, "PLAYER_ENTERING_WORLD")
     slash("config.color_picker.stale.open_config", staleEnv, "")
     local critSwatch = findFrame("config.color_picker.stale.crit_swatch", staleEnv, function(frame)
-        local color = frame.backdropColor
-        return type(frame.scripts.OnClick) == "function"
-            and color and color.r == 1 and color.g == 0 and color.b == 0
+        return frame.statsProColorKey == "crit"
     end)
     callScript("config.color_picker.stale.open_crit", critSwatch, "OnClick")
     local oldOptions = staleEnv.ColorPickerFrame.colorPickerOptions
@@ -12007,6 +12081,286 @@ do
         dbVersion = root.dbVersion + 1,
         opaque = { keep = true }, account = "opaque", profiles = 42, characters = false,
     })
+end
+
+do
+    local env, _, test = loadStatsPro("enUS")
+    local function pointOffsets(frame)
+        local point = frame.points and frame.points[1] or {}
+        if #point == 3 then return point[2], point[3] end
+        return point[4] or 0, point[5] or 0
+    end
+    fireEvent("config.control_design.pew", env, "PLAYER_ENTERING_WORLD")
+    slash("config.control_design.open", env, "")
+
+    local tokens = test.settingsDesignSnapshot()
+    local controls = test.settingsControlState()
+    local counts = {}
+    for _, control in ipairs(controls) do
+        counts[control.kind] = (counts[control.kind] or 0) + 1
+        check("config.control_design.hit_target." .. tostring(control.kind)
+                .. "." .. tostring(control.name or _),
+            control.height >= 24 and control.width >= 24,
+            "interactive control is smaller than 24x24px")
+    end
+    eq("config.control_design.checkbox_count", counts.checkbox, 37)
+    eq("config.control_design.swatch_count", counts.swatch, 18)
+    eq("config.control_design.slider_count", counts.slider, 5)
+    eq("config.control_design.dropdown_trigger_count", counts.dropdown, 6)
+    check("config.control_design.button_count", (counts.button or 0) >= 18,
+        "shared shell buttons are not registered")
+    eq("config.control_design.empty_warning_surface_hidden",
+        env.StatsProConfigFrame.languageWarning.statsProWarningSurface:IsShown(), false)
+    eq("config.control_design.empty_warning_rail_hidden",
+        env.StatsProConfigFrame.languageWarning.statsProWarningRail:IsShown(), false)
+    for index, border in ipairs(
+        env.StatsProConfigFrame.languageWarning.statsProWarningSurface.statsProBorders) do
+        eq("config.control_design.empty_warning_border_hidden." .. index,
+            border:IsShown(), false)
+    end
+    local chatInput = env.CreateFrame("EditBox", "StatsProSmokeChatInput", env.UIParent,
+        "InputBoxTemplate")
+    chatInput:SetFocus()
+    eq("config.control_design.chat_focus_setup", env.__focusedFrame, chatInput)
+
+    local dbBeforeHover = deepCopy(env.StatsProDB)
+    userInteract("config.control_design.checkbox_hover", env.StatsProOffensiveCheck, "OnEnter")
+    eq("config.control_design.checkbox_hover_state",
+        env.StatsProOffensiveCheck.statsProControlState, "hover")
+    assertColor("config.control_design.checkbox_hover_fill",
+        env.StatsProOffensiveCheck.statsProStateTexture.colorTexture,
+        tokens.colors.rowHover[1], tokens.colors.rowHover[2], tokens.colors.rowHover[3])
+    near("config.control_design.checkbox_hover_fill.a",
+        env.StatsProOffensiveCheck.statsProStateTexture.colorTexture.a,
+        tokens.colors.rowHover[4])
+    userInteract("config.control_design.checkbox_pressed", env.StatsProOffensiveCheck, "OnMouseDown")
+    eq("config.control_design.checkbox_pressed_state",
+        env.StatsProOffensiveCheck.statsProControlState, "pressed")
+    assertColor("config.control_design.checkbox_pressed_fill",
+        env.StatsProOffensiveCheck.statsProStateTexture.colorTexture,
+        tokens.colors.rowPressed[1], tokens.colors.rowPressed[2], tokens.colors.rowPressed[3])
+    userInteract("config.control_design.checkbox_release", env.StatsProOffensiveCheck, "OnMouseUp")
+    userInteract("config.control_design.checkbox_leave", env.StatsProOffensiveCheck, "OnLeave")
+    assertDeepEqual("config.control_design.hover_zero_writes", env.StatsProDB, dbBeforeHover)
+    local _, critY = pointOffsets(env.StatsProCritCheck)
+    local _, masteryY = pointOffsets(env.StatsProMasteryCheck)
+    check("config.control_design.checkbox_row_pitch",
+        math.abs(critY - masteryY) >= env.StatsProCritCheck:GetHeight(),
+        "checkbox rows overlap")
+
+    env.StatsProOffensiveCheck:SetChecked(false)
+    userInteract("config.control_design.disable_master", env.StatsProOffensiveCheck, "OnClick")
+    eq("config.control_design.disabled_checkbox", env.StatsProCritCheck:IsEnabled(), false)
+    eq("config.control_design.disabled_checkbox_state",
+        env.StatsProCritCheck.statsProControlState, "disabled")
+    assertColor("config.control_design.disabled_checkbox_text",
+        env.StatsProCritCheck.statsProText.textColor,
+        tokens.colors.textDisabled[1], tokens.colors.textDisabled[2],
+        tokens.colors.textDisabled[3])
+    eq("config.control_design.disabled_reason",
+        env.StatsProCritCheck.statsProDisabledReasonKey, "Show Offensive Stats")
+    local critSwatch = exists("config.control_design.disabled_swatch",
+        env.StatsProCritCheck.statsProSwatch)
+    eq("config.control_design.disabled_swatch_enabled", critSwatch:IsEnabled(), false)
+    eq("config.control_design.disabled_swatch_alpha", critSwatch:GetAlpha(), 0.35)
+    userInteract("config.control_design.disabled_tooltip", env.StatsProCritCheck, "OnEnter")
+    eq("config.control_design.disabled_tooltip_owner", env.GameTooltip:GetOwner(),
+        env.StatsProCritCheck)
+    eq("config.control_design.disabled_tooltip_text", env.GameTooltip.lines[1].left,
+        "Requires Show Offensive Stats.")
+    local showCritBefore = activeSettings(env).showCrit
+    eq("config.control_design.disabled_click_suppressed",
+        userInteract("config.control_design.disabled_click", env.StatsProCritCheck, "OnClick"), false)
+    eq("config.control_design.disabled_click_zero_write",
+        activeSettings(env).showCrit, showCritBefore)
+    local foreignTooltipOwner = env.CreateFrame("Frame", "StatsProSmokeForeignTooltipOwner",
+        env.UIParent)
+    env.GameTooltip:SetOwner(foreignTooltipOwner, "ANCHOR_LEFT")
+    env.GameTooltip:AddLine("Foreign tooltip")
+    env.GameTooltip:Show()
+    userInteract("config.control_design.disabled_tooltip_leave", env.StatsProCritCheck, "OnLeave")
+    eq("config.control_design.foreign_tooltip_preserved", env.GameTooltip:IsShown(), true)
+    eq("config.control_design.foreign_tooltip_owner", env.GameTooltip:GetOwner(),
+        foreignTooltipOwner)
+    eq("config.control_design.foreign_tooltip_text",
+        env.GameTooltip.lines[1].left, "Foreign tooltip")
+    env.GameTooltip:Hide()
+
+    local hoverSurfacesBefore = deepCopy(env.StatsProDB)
+    userInteract("config.control_design.swatch_hover", critSwatch, "OnEnter")
+    userInteract("config.control_design.swatch_leave", critSwatch, "OnLeave")
+
+    userInteract("config.control_design.slider_hover", env.StatsProScaleSlider, "OnEnter")
+    eq("config.control_design.slider_hover_state",
+        env.StatsProScaleSlider.statsProControlState, "hover")
+    exists("config.control_design.slider_thumb", env.StatsProScaleSlider.statsProThumb)
+    exists("config.control_design.slider_track", env.StatsProScaleSlider.statsProTrack)
+    assertColor("config.control_design.slider_hover_thumb",
+        env.StatsProScaleSlider.statsProThumb.vertexColor,
+        tokens.colors.textPrimary[1], tokens.colors.textPrimary[2],
+        tokens.colors.textPrimary[3])
+    assertColor("config.control_design.slider_track_color",
+        env.StatsProScaleSlider.statsProTrack.colorTexture,
+        tokens.colors.track[1], tokens.colors.track[2], tokens.colors.track[3])
+    userInteract("config.control_design.slider_leave", env.StatsProScaleSlider, "OnLeave")
+
+    local dropdownTrigger = exists("config.control_design.dropdown_trigger",
+        env.StatsProDisplayModeDropdown.statsProTrigger)
+    userInteract("config.control_design.dropdown_hover", dropdownTrigger, "OnEnter")
+    eq("config.control_design.dropdown_hover_state",
+        dropdownTrigger.statsProControlState, "hover")
+    eq("config.control_design.dropdown_width",
+        env.StatsProDisplayModeDropdown.dropdownWidth, 180)
+    eq("config.control_design.dropdown_justify",
+        env.StatsProDisplayModeDropdown.dropdownJustify, "LEFT")
+    assertColor("config.control_design.dropdown_hover_border",
+        dropdownTrigger.statsProSurface.statsProBorders[1].colorTexture,
+        tokens.colors.borderStrong[1], tokens.colors.borderStrong[2],
+        tokens.colors.borderStrong[3])
+    userInteract("config.control_design.dropdown_leave", dropdownTrigger, "OnLeave")
+
+    eq("config.control_design.destructive_role",
+        env.StatsProProfileResetButton.statsProButtonRole, "destructive")
+    userInteract("config.control_design.destructive_hover",
+        env.StatsProProfileResetButton, "OnEnter")
+    eq("config.control_design.destructive_hover_state",
+        env.StatsProProfileResetButton.statsProButtonState, "hover")
+    local destructiveHoverColor = tokens.colors.pressed
+    assertColor("config.control_design.destructive_hover_fill",
+        env.StatsProProfileResetButton.backdropColor,
+        destructiveHoverColor[1], destructiveHoverColor[2], destructiveHoverColor[3])
+    userInteract("config.control_design.destructive_press",
+        env.StatsProProfileResetButton, "OnMouseDown")
+    env.StatsProProfileResetButton:Disable()
+    eq("config.control_design.disable_clears_hover",
+        env.StatsProProfileResetButton.statsProHovered, false)
+    eq("config.control_design.disable_clears_pressed",
+        env.StatsProProfileResetButton.statsProPressed, false)
+    eq("config.control_design.disable_state",
+        env.StatsProProfileResetButton.statsProButtonState, "disabled")
+    env.StatsProProfileResetButton:Enable()
+    eq("config.control_design.reenable_normal_state",
+        env.StatsProProfileResetButton.statsProButtonState, "normal")
+    userInteract("config.control_design.destructive_leave",
+        env.StatsProProfileResetButton, "OnLeave")
+    assertDeepEqual("config.control_design.multi_surface_hover_zero_writes",
+        env.StatsProDB, hoverSurfacesBefore)
+    eq("config.control_design.non_edit_controls_preserve_chat_focus",
+        env.__focusedFrame, chatInput)
+
+    env.StatsProConfigFrame.SwitchToTab(3)
+    userInteract("config.control_design.font_picker_open",
+        env.StatsProFontDropdownButton, "OnClick")
+    eq("config.control_design.font_dropdown_open_state",
+        env.StatsProFontDropdownButton.statsProControlState, "normal")
+    eq("config.control_design.font_dropdown_open_flag",
+        env.StatsProFontDropdownButton.statsProOpen, true)
+    local selectedFontRows = 0
+    for _, control in ipairs(test.settingsControlState()) do
+        if control.kind == "listRow" and control.selected then
+            selectedFontRows = selectedFontRows + 1
+        end
+    end
+    eq("config.control_design.font_selected_row", selectedFontRows, 1)
+    local fontRows = {}
+    for _, frame in ipairs(env.__frames) do
+        if frame.fontPath and frame.statsProControlKind == "listRow" then
+            fontRows[#fontRows + 1] = frame
+        end
+    end
+    for left = 1, #fontRows do
+        local leftX, leftY = pointOffsets(fontRows[left])
+        for right = left + 1, #fontRows do
+            local rightX, rightY = pointOffsets(fontRows[right])
+            if leftX == rightX and leftY ~= rightY then
+                check("config.control_design.font_row_pitch." .. left .. "." .. right,
+                    math.abs(leftY - rightY) >= fontRows[left]:GetHeight(),
+                    "font rows overlap")
+            end
+        end
+    end
+    local fontHoverBefore = deepCopy(env.StatsProDB)
+    local fontRow = findFrame("config.control_design.font_row", env, function(frame)
+        return frame.fontPath ~= nil and frame.statsProControlKind == "listRow"
+    end)
+    userInteract("config.control_design.font_row_hover", fontRow, "OnEnter")
+    userInteract("config.control_design.font_row_leave", fontRow, "OnLeave")
+    flushTimers("config.control_design.font_hover_timer", env, 0, 1)
+    assertDeepEqual("config.control_design.font_hover_zero_writes",
+        env.StatsProDB, fontHoverBefore)
+    env.StatsProFontPicker:Hide()
+    eq("config.control_design.font_dropdown_closed_flag",
+        env.StatsProFontDropdownButton.statsProOpen, false)
+    env.StatsProConfigFrame.SwitchToTab(1)
+
+    userInteract("config.control_design.manager_open", env.StatsProManageProfilesButton, "OnClick")
+    userInteract("config.control_design.profile_choices", env.StatsProManagedProfileButton, "OnClick")
+    local visibleListRows = 0
+    for _, row in ipairs(test.profileUIState().rows) do
+        if row.shown then
+            check("config.control_design.manager_row_hit_target." .. _,
+                env.StatsProProfileManager:IsShown(), "manager row built outside manager")
+        end
+    end
+    for _, control in ipairs(test.settingsControlState()) do
+        if control.kind == "listRow" and control.enabled then visibleListRows = visibleListRows + 1 end
+    end
+    check("config.control_design.choice_rows_styled", visibleListRows >= 1,
+        "choice rows are not registered with the shared list-row design")
+    local choiceRow = findFrame("config.control_design.choice_row", env, function(frame)
+        return frame.choiceData ~= nil and frame.statsProControlKind == "listRow"
+    end)
+    local choiceHoverBefore = deepCopy(env.StatsProDB)
+    userInteract("config.control_design.choice_row_hover", choiceRow, "OnEnter")
+    userInteract("config.control_design.choice_row_leave", choiceRow, "OnLeave")
+    assertDeepEqual("config.control_design.choice_hover_zero_writes",
+        env.StatsProDB, choiceHoverBefore)
+    userInteract("config.control_design.profile_choices_close",
+        env.StatsProProfileOperationCancelButton, "OnClick")
+
+    userInteract("config.control_design.name_dialog_open", env.StatsProProfileNewButton, "OnClick")
+    eq("config.control_design.name_releases_chat_focus", chatInput:HasFocus(), false)
+    eq("config.control_design.name_focus", env.StatsProProfileNameInput:HasFocus(), true)
+    for _, suffix in ipairs({ "Left", "Middle", "Right" }) do
+        eq("config.control_design.editbox_legacy_hidden." .. suffix,
+            env["StatsProProfileNameInput" .. suffix]:GetAlpha(), 0)
+    end
+    eq("config.control_design.name_focus_border",
+        env.StatsProProfileNameInput.statsProSurface.statsProBorderRole, "accent")
+    assertColor("config.control_design.name_focus_border_color",
+        env.StatsProProfileNameInput.statsProSurface.statsProBorders[1].colorTexture,
+        tokens.colors.accent[1], tokens.colors.accent[2], tokens.colors.accent[3])
+    env.StatsProProfileNameInput:SetText("")
+    userInteract("config.control_design.name_invalid", env.StatsProProfileNameInput, "OnTextChanged")
+    eq("config.control_design.name_invalid_state",
+        env.StatsProProfileNameInput.statsProInvalid, true)
+    eq("config.control_design.name_invalid_border",
+        env.StatsProProfileNameInput.statsProSurface.statsProBorderRole, "danger")
+    assertColor("config.control_design.name_invalid_border_color",
+        env.StatsProProfileNameInput.statsProSurface.statsProBorders[1].colorTexture,
+        tokens.colors.danger[1], tokens.colors.danger[2], tokens.colors.danger[3])
+    userInteract("config.control_design.name_escape", env.StatsProProfileNameInput, "OnEscapePressed")
+    eq("config.control_design.name_focus_cleared", env.StatsProProfileNameInput:HasFocus(), false)
+    eq("config.control_design.name_focus_owner_cleared", env.__focusedFrame, nil)
+
+    for index, control in ipairs(test.settingsControlState()) do
+        check("config.control_design.lazy_hit_target." .. index,
+            control.width >= 24 and control.height >= 24,
+            "lazy control is smaller than 24x24px")
+        local frame
+        for _, candidate in ipairs(env.__frames) do
+            if candidate:GetName() == control.name and control.name then frame = candidate break end
+        end
+        if frame then
+            eq("config.control_design.no_onupdate." .. index, frame.scripts.OnUpdate, nil)
+            if control.kind ~= "editBox" then
+                eq("config.control_design.no_keyboard_capture." .. index,
+                    frame:IsKeyboardEnabled(), false)
+                eq("config.control_design.no_focus_capture." .. index,
+                    frame:HasFocus(), false)
+            end
+        end
+    end
 end
 
 print(string.format("StatsPro smoke: PASS (%d assertions)", assertionCount))

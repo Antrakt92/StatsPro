@@ -987,6 +987,7 @@ local LABELS_BY_LOCALE = {
         ["Show Rating"] = "Show Rating", ["Show Percentage"] = "Show Percentage",
         ["Match Value Color to Stat"] = "Match Value Color to Stat",
         ["Show Offensive Stats"] = "Show Offensive Stats", ["Hide Zero Values"] = "Hide Zero Values",
+        ["Requires %s."] = "Requires %s.",
         ["Show Crit"] = "Show Crit", ["Show Haste"] = "Show Haste",
         ["Show Mastery"] = "Show Mastery", ["Show Versatility"] = "Show Versatility",
         ["Show Tertiary Stats"] = "Show Tertiary Stats",
@@ -1120,6 +1121,7 @@ local LABELS_BY_LOCALE = {
         ["Show Rating"] = "Показывать рейтинг", ["Show Percentage"] = "Показывать процент",
         ["Match Value Color to Stat"] = "Цвет значения по характеристике",
         ["Show Offensive Stats"] = "Показывать атакующие", ["Hide Zero Values"] = "Скрывать нулевые значения",
+        ["Requires %s."] = "Требуется: %s.",
         ["Show Crit"] = "Показывать Крит", ["Show Haste"] = "Показывать Хаст",
         ["Show Mastery"] = "Показывать Мастерство", ["Show Versatility"] = "Показывать Универсальность",
         ["Show Tertiary Stats"] = "Показывать третичные",
@@ -1251,6 +1253,7 @@ local LABELS_BY_LOCALE = {
         ["Show Rating"] = "Wertung anzeigen", ["Show Percentage"] = "Prozent anzeigen",
         ["Match Value Color to Stat"] = "Wertfarbe wie Statfarbe",
         ["Show Offensive Stats"] = "Offensivwerte anzeigen", ["Hide Zero Values"] = "Nullwerte ausblenden",
+        ["Requires %s."] = "Erfordert %s.",
         ["Show Crit"] = "Krit. anzeigen", ["Show Haste"] = "Tempo anzeigen",
         ["Show Mastery"] = "Meisterschaft anzeigen", ["Show Versatility"] = "Vielseitigkeit anzeigen",
         ["Show Tertiary Stats"] = "Tertiärwerte anzeigen",
@@ -1374,6 +1377,7 @@ local LABELS_BY_LOCALE = {
         ["Show Rating"] = "Afficher cote", ["Show Percentage"] = "Afficher %",
         ["Match Value Color to Stat"] = "Couleur valeur = stat",
         ["Show Offensive Stats"] = "Afficher offensives", ["Hide Zero Values"] = "Masquer valeurs nulles",
+        ["Requires %s."] = "Nécessite %s.",
         ["Show Crit"] = "Afficher Crit", ["Show Haste"] = "Afficher Hâte",
         ["Show Mastery"] = "Afficher Maîtrise", ["Show Versatility"] = "Afficher Polyvalence",
         ["Show Tertiary Stats"] = "Afficher tertiaires",
@@ -1498,6 +1502,7 @@ local LABELS_BY_LOCALE = {
         ["Show Rating"] = "Mostrar valor", ["Show Percentage"] = "Mostrar %",
         ["Match Value Color to Stat"] = "Color valor = stat",
         ["Show Offensive Stats"] = "Mostrar ofensivas", ["Hide Zero Values"] = "Ocultar valores cero",
+        ["Requires %s."] = "Requiere %s.",
         ["Show Crit"] = "Mostrar Crít.", ["Show Haste"] = "Mostrar Celeridad",
         ["Show Mastery"] = "Mostrar Maestría", ["Show Versatility"] = "Mostrar Versatilidad",
         ["Show Tertiary Stats"] = "Mostrar terciarias",
@@ -1620,6 +1625,7 @@ local LABELS_BY_LOCALE = {
         ["Show Rating"] = "Mostrar valor", ["Show Percentage"] = "Mostrar %",
         ["Match Value Color to Stat"] = "Color valor = stat",
         ["Show Offensive Stats"] = "Mostrar ofensivas", ["Hide Zero Values"] = "Ocultar valores cero",
+        ["Requires %s."] = "Requiere %s.",
         ["Show Crit"] = "Mostrar Crít.", ["Show Haste"] = "Mostrar Celeridad",
         ["Show Mastery"] = "Mostrar Maestría", ["Show Versatility"] = "Mostrar Versatilidad",
         ["Show Tertiary Stats"] = "Mostrar terciarias",
@@ -1743,6 +1749,7 @@ local LABELS_BY_LOCALE = {
         ["Show Rating"] = "Mostra valore", ["Show Percentage"] = "Mostra %",
         ["Match Value Color to Stat"] = "Colore valore = stat",
         ["Show Offensive Stats"] = "Mostra offensive", ["Hide Zero Values"] = "Nascondi valori zero",
+        ["Requires %s."] = "Richiede %s.",
         ["Show Crit"] = "Mostra Crit", ["Show Haste"] = "Mostra Celerità",
         ["Show Mastery"] = "Mostra Maestria", ["Show Versatility"] = "Mostra Versatilità",
         ["Show Tertiary Stats"] = "Mostra terziarie",
@@ -1865,6 +1872,7 @@ local LABELS_BY_LOCALE = {
         ["Show Rating"] = "Mostrar valor", ["Show Percentage"] = "Mostrar %",
         ["Match Value Color to Stat"] = "Cor do valor = atributo",
         ["Show Offensive Stats"] = "Mostrar ofensivos", ["Hide Zero Values"] = "Ocultar valores zero",
+        ["Requires %s."] = "Requer %s.",
         ["Show Crit"] = "Mostrar Crít.", ["Show Haste"] = "Mostrar Celeridade",
         ["Show Mastery"] = "Mostrar Maestria", ["Show Versatility"] = "Mostrar Versatilidade",
         ["Show Tertiary Stats"] = "Mostrar terciários",
@@ -1994,6 +2002,7 @@ local LABELS_BY_LOCALE = {
         ["Show Rating"] = "수치 표시", ["Show Percentage"] = "% 표시",
         ["Match Value Color to Stat"] = "값 색상 = 능력치",
         ["Show Offensive Stats"] = "공격 능력치 표시", ["Hide Zero Values"] = "0 값 숨김",
+        ["Requires %s."] = "%s 필요.",
         ["Show Crit"] = "치명 표시", ["Show Haste"] = "가속 표시",
         ["Show Mastery"] = "특화 표시", ["Show Versatility"] = "유연 표시",
         ["Show Tertiary Stats"] = "3차 능력치 표시",
@@ -2116,6 +2125,7 @@ local LABELS_BY_LOCALE = {
         ["Show Rating"] = "显示等级", ["Show Percentage"] = "显示百分比",
         ["Match Value Color to Stat"] = "数值颜色匹配属性",
         ["Show Offensive Stats"] = "显示进攻属性", ["Hide Zero Values"] = "隐藏零值",
+        ["Requires %s."] = "需要%s。",
         ["Show Crit"] = "显示暴击", ["Show Haste"] = "显示急速",
         ["Show Mastery"] = "显示精通", ["Show Versatility"] = "显示全能",
         ["Show Tertiary Stats"] = "显示三级属性",
@@ -2238,6 +2248,7 @@ local LABELS_BY_LOCALE = {
         ["Show Rating"] = "顯示等級", ["Show Percentage"] = "顯示百分比",
         ["Match Value Color to Stat"] = "數值色彩配合屬性",
         ["Show Offensive Stats"] = "顯示進攻屬性", ["Hide Zero Values"] = "隱藏零值",
+        ["Requires %s."] = "需要%s。",
         ["Show Crit"] = "顯示致命一擊", ["Show Haste"] = "顯示加速",
         ["Show Mastery"] = "顯示精通", ["Show Versatility"] = "顯示全能",
         ["Show Tertiary Stats"] = "顯示三級屬性",
@@ -3007,6 +3018,10 @@ addon.profileOps = {
 function addon.profileUI.RefreshSafe()
     local refresh = addon.profileUI.refreshAll
     if type(refresh) == "function" then pcall(refresh) end
+    local design = addon.settingsDesign
+    if design and type(design.RefreshMutationControls) == "function" then
+        pcall(design.RefreshMutationControls)
+    end
 end
 
 function addon.profileOps.CountSpecAssignments(root)
@@ -7711,11 +7726,12 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
     RegisterConfigFont(text, CONFIG_FONT_SIZE)
     -- textWidth: 200 default for plain checkboxes; pass 140 for "checkbox + inline color"
     -- rows (CreateCheckboxColor overrides the bound width to actual text width post-call).
-    text:SetWidth(textWidth or 200)
+    text:SetWidth(textWidth or addon.settingsDesign.tokens.geometry.checkboxLabelWidth)
     text:SetJustifyH("LEFT")
     text:SetWordWrap(false)
     text:SetMaxLines(1)
     cb:SetChecked(GetBoolDB(dbKey))
+    addon.settingsDesign.StyleCheckbox(cb, text)
     cb:SetScript("OnClick", function(self)
         local db = addon.dbRuntime.GetWritableSettings(true, dbKey)
         if not db then
@@ -7727,23 +7743,19 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
         if onChange then onChange(self:GetChecked()) end
         addon:RunUpdateStatsSafe()
     end)
-    PushRefresher(function() cb:SetChecked(GetBoolDB(dbKey)) end)
+    PushRefresher(function()
+        cb:SetChecked(GetBoolDB(dbKey))
+        addon.settingsDesign.RefreshControl(cb)
+    end)
     return cb, text
 end
 
 -- Toggle a checkbox's enabled state with matching label dim. Used by dependent-toggle
 -- greying patterns (split routing gated on Split mode; Leech/Avoidance/Movement gated on
 -- Show Tertiary Stats master) to make the dependency visible.
-local function SetCheckboxEnabled(cb, enabled)
+local function SetCheckboxEnabled(cb, enabled, reasonKey)
     if not cb then return end
-    local txt = _G[cb:GetName() .. "Text"]
-    if enabled then
-        cb:Enable()
-        if txt then txt:SetTextColor(1, 1, 1, 1) end
-    else
-        cb:Disable()
-        if txt then txt:SetTextColor(0.5, 0.5, 0.5, 1) end
-    end
+    addon.settingsDesign.SetControlEnabled(cb, enabled, reasonKey)
 end
 
 -- WHY: shared snapshot/select/cancel handler used by every swatch (CreateColorSwatch
@@ -7758,6 +7770,10 @@ end
 function COLOR_PICKER_STATE.Clear(session)
     if COLOR_PICKER_STATE.IsActive(session) then
         COLOR_PICKER_STATE.active = nil
+    end
+    if session and session.btn then
+        session.btn.statsProActive = false
+        addon.settingsDesign.RefreshControl(session.btn)
     end
 end
 
@@ -7911,12 +7927,12 @@ local function OpenColorPicker(btn, statName)
         local writableDB = addon.dbRuntime.GetWritableSettings(true)
         if not writableDB or session.generation ~= addon.dbRuntime.generation then
             local persisted = GetColor(statName)
-            btn:SetBackdropColor(persisted.r, persisted.g, persisted.b, 1)
+            addon.settingsDesign.SetSwatchColor(btn, persisted.r, persisted.g, persisted.b)
             return
         end
         if type(writableDB.colors) ~= "table" then writableDB.colors = {} end
         local r, g, b = ColorPickerFrame:GetColorRGB()
-        btn:SetBackdropColor(r, g, b, 1)
+        addon.settingsDesign.SetSwatchColor(btn, r, g, b)
         writableDB.colors[statName] = { r = r, g = g, b = b }
         CacheSettings()
         addon:RunUpdateStatsSafe()
@@ -7926,12 +7942,12 @@ local function OpenColorPicker(btn, statName)
         local writableDB = addon.dbRuntime.GetWritableSettings(true)
         if writableDB and session.generation == addon.dbRuntime.generation then
             if type(writableDB.colors) ~= "table" then writableDB.colors = {} end
-            btn:SetBackdropColor(snapshot.r, snapshot.g, snapshot.b, 1)
+            addon.settingsDesign.SetSwatchColor(btn, snapshot.r, snapshot.g, snapshot.b)
             writableDB.colors[statName] = hadExplicitColor
                 and { r = snapshot.r, g = snapshot.g, b = snapshot.b } or nil
         else
             local persisted = GetColor(statName)
-            btn:SetBackdropColor(persisted.r, persisted.g, persisted.b, 1)
+            addon.settingsDesign.SetSwatchColor(btn, persisted.r, persisted.g, persisted.b)
         end
         if not addon.profileRuntime.suppressIntermediateRefresh then
             CacheSettings()
@@ -7949,29 +7965,37 @@ local function OpenColorPicker(btn, statName)
         extraInfo = session,
     })
     COLOR_PICKER_STATE.active = session
+    btn.statsProActive = true
+    addon.settingsDesign.RefreshControl(btn)
 end
 
 -- Compact color swatch (no "Color:" label). Used for inline-with-checkbox placement
 -- and section-header shared colors.
 local function CreateColorSwatch(parent, statName, x, y)
-    local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    local btn = CreateFrame("Button", nil, parent)
     if addon.__statsproSmoke == true then
         btn.statsProColorKey = statName
     end
     btn:SetPoint("TOPLEFT", x, y)
-    btn:SetSize(22, 16)
-    btn:SetBackdrop({
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 10,
-        insets = { left = 2, right = 2, top = 2, bottom = 2 },
-    })
+    local geometry = addon.settingsDesign.tokens.geometry
+    btn:SetSize(geometry.swatchSize, geometry.swatchSize)
+    local surface = addon.settingsDesign.CreateTextureSurface(btn, "raised")
+    surface:SetAllPoints(btn)
+    btn.statsProSurface = surface
+    local well = btn:CreateTexture(nil, "ARTWORK")
+    well:SetPoint("CENTER")
+    well:SetSize(geometry.swatchWellWidth, geometry.swatchWellHeight)
+    btn.statsProColorWell = well
     local initialColor = GetColor(statName)
-    btn:SetBackdropColor(initialColor.r, initialColor.g, initialColor.b, 1)
-    btn:SetScript("OnClick", function(self) OpenColorPicker(self, statName) end)
+    addon.settingsDesign.SetSwatchColor(btn, initialColor.r, initialColor.g, initialColor.b)
+    addon.settingsDesign.StyleSwatch(btn)
+    btn:SetScript("OnClick", function(self)
+        if self:IsEnabled() then OpenColorPicker(self, statName) end
+    end)
     PushRefresher(function()
         local c = GetColor(statName)
-        btn:SetBackdropColor(c.r, c.g, c.b, 1)
+        addon.settingsDesign.SetSwatchColor(btn, c.r, c.g, c.b)
+        addon.settingsDesign.RefreshControl(btn)
     end)
     return btn
 end
@@ -7982,7 +8006,8 @@ end
 -- AlignSwatchColumn(rows) post-creation — it normalizes all texts to the group's max
 -- GetStringWidth so swatches line up at the same x relative to column start.
 local function CreateCheckboxColor(parent, name, label, dbKey, colorKey, x, y, onChange)
-    local cb, text = CreateCheckbox(parent, name, label, dbKey, x, y, onChange, 140)
+    local cb, text = CreateCheckbox(parent, name, label, dbKey, x, y, onChange,
+        addon.settingsDesign.tokens.geometry.checkboxColorLabelWidth)
     local swatch
     if colorKey then
         -- Override the 140-bound width with actual text rendering width — swatch needs
@@ -7993,6 +8018,7 @@ local function CreateCheckboxColor(parent, name, label, dbKey, colorKey, x, y, o
         swatch = CreateColorSwatch(parent, colorKey, 0, 0)
         swatch:ClearAllPoints()
         swatch:SetPoint("LEFT", text, "RIGHT", CONFIG_SWATCH_GAP, 0)
+        cb.statsProSwatch = swatch
     end
     return cb, swatch, text
 end
@@ -8136,6 +8162,10 @@ addon.settingsDesign = {
             danger = { 0.86, 0.28, 0.25, 1 },
             hover = { 0.10, 0.13, 0.115, 0.92 },
             pressed = { 0.10, 0.82, 0.48, 0.12 },
+            rowHover = { 1, 1, 1, 0.045 },
+            rowPressed = { 1, 1, 1, 0.075 },
+            selected = { 0.10, 0.82, 0.48, 0.16 },
+            track = { 0.22, 0.25, 0.23, 0.62 },
         },
         typography = {
             title = { size = 16, flags = "OUTLINE", color = "textPrimary" },
@@ -8144,6 +8174,11 @@ addon.settingsDesign = {
             tab = { size = 13, flags = "OUTLINE", color = "textSecondary" },
             section = { size = 12, flags = "OUTLINE", color = "textPrimary" },
             button = { size = 12, color = "textPrimary" },
+            body = { size = 12, color = "textPrimary" },
+            value = { size = 12, flags = "OUTLINE", color = "textPrimary" },
+            controlMetadata = { size = 10, color = "textSecondary" },
+            warning = { size = 11, color = "warning" },
+            error = { size = 11, color = "danger" },
         },
         spacing = { xxs = 2, xs = 4, sm = 8, md = 12, lg = 16, xl = 24 },
         geometry = {
@@ -8163,6 +8198,13 @@ addon.settingsDesign = {
             shellButtonHeight = 28, minHitTarget = 24,
             sectionHeaderHeight = 22, scrollbarGutter = 16,
             scrollbarTrackWidth = 4, scrollbarArrowInset = 18,
+            controlRowHeight = 28, controlHitTarget = 24,
+            checkboxLabelWidth = 200, checkboxColorLabelWidth = 140,
+            swatchSize = 24, swatchWellWidth = 18, swatchWellHeight = 14,
+            sliderHeight = 24, sliderWidth = 420, sliderTrackHeight = 4,
+            dropdownWidth = 180, dropdownLabelMaxWidth = 210,
+            actionWidth = 292, actionHeight = 26,
+            listRowHeight = 26, fontRowHeight = 24, warningHeight = 40,
         },
     },
     components = {
@@ -8268,6 +8310,457 @@ function addon.settingsDesign.CreateTextureSurface(parent, roleName)
     return background
 end
 
+function addon.settingsDesign.SetTextureSurfaceBorder(surface, colorName)
+    local color = addon.settingsDesign.Color(colorName)
+    if not surface or not color then return end
+    for _, border in ipairs(surface.statsProBorders or {}) do
+        border:SetColorTexture(color[1], color[2], color[3], color[4])
+    end
+    surface.statsProBorderRole = colorName
+end
+
+function addon.settingsDesign.SetTextureSurfaceColor(surface, colorName, alpha)
+    local color = addon.settingsDesign.Color(colorName)
+    if not surface or not color then return end
+    surface:SetColorTexture(color[1], color[2], color[3], alpha or color[4])
+    surface.statsProColorRole = colorName
+end
+
+function addon.settingsDesign.RegisterControl(control, kind)
+    control.statsProControlKind = kind
+    if addon.__statsproSmoke == true then
+        addon.settingsDesign.testControls = addon.settingsDesign.testControls or {}
+        tinsert(addon.settingsDesign.testControls, control)
+    end
+end
+
+function addon.settingsDesign.IsControlEnabled(control)
+    return type(control.IsEnabled) ~= "function" or control:IsEnabled()
+end
+
+function addon.settingsDesign.ShowControlTooltip(control)
+    local provider = control.statsProTooltipProvider
+    if type(provider) ~= "function" then return end
+    local title, detail = provider(control)
+    if not title or title == "" then return end
+    GameTooltip:SetOwner(control, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(title, 1, 1, 1)
+    if detail and detail ~= "" then GameTooltip:AddLine(detail, 0.72, 0.77, 0.75) end
+    GameTooltip:Show()
+end
+
+function addon.settingsDesign.HideControlTooltip(control)
+    if type(GameTooltip.GetOwner) ~= "function" or GameTooltip:GetOwner() == control then
+        GameTooltip:Hide()
+    end
+end
+
+function addon.settingsDesign.AttachTooltip(control, provider)
+    control.statsProTooltipProvider = provider
+    if not control.statsProTooltipHooksAttached then
+        control:HookScript("OnEnter", addon.settingsDesign.ShowControlTooltip)
+        control:HookScript("OnLeave", addon.settingsDesign.HideControlTooltip)
+        control:HookScript("OnHide", addon.settingsDesign.HideControlTooltip)
+        control.statsProTooltipHooksAttached = true
+    end
+end
+
+function addon.settingsDesign.DisabledControlTooltip(control)
+    if addon.settingsDesign.IsControlEnabled(control) then return nil end
+    local blockers = control.statsProControlBlockers
+    local blocker = blockers and (blockers.schema or blockers.context or blockers.dependency)
+    if not blocker then return nil end
+    if blocker.mode == "requires" then
+        return string.format(L("Requires %s."), L(blocker.key))
+    end
+    return L(blocker.key)
+end
+
+function addon.settingsDesign.RefreshControl(control)
+    local kind = control.statsProControlKind
+    local enabled = addon.settingsDesign.IsControlEnabled(control)
+    local hovered = control.statsProHovered == true and enabled
+    local pressed = control.statsProPressed == true and enabled
+
+    if kind == "checkbox" then
+        local checked = control:GetChecked() == true
+        local bgRole = pressed and "rowPressed" or (hovered and "rowHover"
+            or (checked and "selected" or "raised"))
+        local bgAlpha = not enabled and 0 or (not hovered and not pressed and not checked and 0
+            or addon.settingsDesign.Color(bgRole)[4])
+        addon.settingsDesign.SetTextureSurfaceColor(control.statsProStateTexture, bgRole, bgAlpha)
+        addon.settingsDesign.SetRegionColor(
+            control.statsProText, enabled and "textPrimary" or "textDisabled")
+        local normalColor = addon.settingsDesign.Color(enabled and "borderStrong" or "textDisabled")
+        if control.statsProNormalTexture then
+            control.statsProNormalTexture:SetVertexColor(
+                normalColor[1], normalColor[2], normalColor[3], enabled and 0.82 or 0.35)
+        end
+        local checkColor = addon.settingsDesign.Color(enabled and "accent" or "textDisabled")
+        if control.statsProCheckedTexture then
+            control.statsProCheckedTexture:SetVertexColor(
+                checkColor[1], checkColor[2], checkColor[3], enabled and 0.92 or 0.35)
+        end
+        if control.statsProDisabledCheckedTexture then
+            control.statsProDisabledCheckedTexture:SetVertexColor(
+                checkColor[1], checkColor[2], checkColor[3], 0.35)
+        end
+    elseif kind == "swatch" then
+        local borderRole = not enabled and "textDisabled"
+            or (control.statsProActive and "accent"
+                or (pressed and "accent" or (hovered and "borderStrong" or "borderSoft")))
+        addon.settingsDesign.SetTextureSurfaceBorder(control.statsProSurface, borderRole)
+        control:SetAlpha(enabled and 1 or 0.35)
+    elseif kind == "slider" then
+        local thumbRole = not enabled and "textDisabled"
+            or (pressed and "accent" or (hovered and "textPrimary" or "textMuted"))
+        local thumbColor = addon.settingsDesign.Color(thumbRole)
+        if control.statsProThumb then
+            control.statsProThumb:SetVertexColor(
+                thumbColor[1], thumbColor[2], thumbColor[3], enabled and 0.86 or 0.35)
+        end
+        addon.settingsDesign.SetRegionColor(
+            control.statsProLabel, enabled and "textPrimary" or "textDisabled")
+        addon.settingsDesign.SetRegionColor(
+            control.statsProValueText, enabled and "textPrimary" or "textDisabled")
+        addon.settingsDesign.SetRegionColor(
+            control.statsProLowText, enabled and "textSecondary" or "textDisabled")
+        addon.settingsDesign.SetRegionColor(
+            control.statsProHighText, enabled and "textSecondary" or "textDisabled")
+        if control.statsProTrack then
+            local track = addon.settingsDesign.Color(enabled and "track" or "textDisabled")
+            control.statsProTrack:SetColorTexture(
+                track[1], track[2], track[3], enabled and track[4] or 0.24)
+        end
+    elseif kind == "dropdown" then
+        local open = control.statsProActive == true
+            or UIDROPDOWNMENU_OPEN_MENU == control.statsProDropdown
+        local bgRole = pressed and "pressed" or (hovered and "hover" or "raised")
+        local borderRole = not enabled and "textDisabled"
+            or ((open or pressed) and "accent" or (hovered and "borderStrong" or "borderSoft"))
+        addon.settingsDesign.SetTextureSurfaceColor(control.statsProSurface, bgRole,
+            enabled and addon.settingsDesign.Color(bgRole)[4] or 0.35)
+        addon.settingsDesign.SetTextureSurfaceBorder(control.statsProSurface, borderRole)
+        addon.settingsDesign.SetRegionColor(
+            control.statsProText, enabled and "textPrimary" or "textDisabled")
+        control:SetAlpha(enabled and 1 or 0.45)
+        control.statsProOpen = open
+    elseif kind == "listRow" then
+        local bgRole = pressed and "rowPressed" or (hovered and "rowHover"
+            or (control.statsProSelected and "selected" or "raised"))
+        local alpha = not enabled and 0 or (not hovered and not pressed
+            and not control.statsProSelected and 0 or addon.settingsDesign.Color(bgRole)[4])
+        addon.settingsDesign.SetTextureSurfaceColor(control.statsProStateTexture, bgRole, alpha)
+        addon.settingsDesign.SetRegionColor(control.statsProText,
+            not enabled and "textDisabled"
+                or ((hovered or pressed or control.statsProSelected) and "textPrimary"
+                    or "textSecondary"))
+    elseif kind == "editBox" then
+        local borderRole = control.statsProInvalid and "danger"
+            or (control.statsProFocused and "accent" or "borderSoft")
+        addon.settingsDesign.SetTextureSurfaceBorder(control.statsProSurface, borderRole)
+    end
+    control.statsProControlState = not enabled and "disabled"
+        or (pressed and "pressed" or (hovered and "hover"
+            or (control.statsProSelected and "selected" or "normal")))
+end
+
+function addon.settingsDesign.OnControlEnter(control)
+    control.statsProHovered = true
+    addon.settingsDesign.RefreshControl(control)
+end
+
+function addon.settingsDesign.OnControlLeave(control)
+    control.statsProHovered = false
+    control.statsProPressed = false
+    addon.settingsDesign.RefreshControl(control)
+end
+
+function addon.settingsDesign.OnControlDown(control)
+    if addon.settingsDesign.IsControlEnabled(control) then control.statsProPressed = true end
+    addon.settingsDesign.RefreshControl(control)
+end
+
+function addon.settingsDesign.OnControlUp(control)
+    control.statsProPressed = false
+    addon.settingsDesign.RefreshControl(control)
+end
+
+function addon.settingsDesign.OnControlDisabled(control)
+    control.statsProHovered = false
+    control.statsProPressed = false
+    addon.settingsDesign.HideControlTooltip(control)
+    addon.settingsDesign.RefreshControl(control)
+end
+
+function addon.settingsDesign.HookControl(control)
+    control:HookScript("OnEnter", addon.settingsDesign.OnControlEnter)
+    control:HookScript("OnLeave", addon.settingsDesign.OnControlLeave)
+    control:HookScript("OnMouseDown", addon.settingsDesign.OnControlDown)
+    control:HookScript("OnMouseUp", addon.settingsDesign.OnControlUp)
+    control:HookScript("OnEnable", addon.settingsDesign.RefreshControl)
+    control:HookScript("OnDisable", addon.settingsDesign.OnControlDisabled)
+end
+
+function addon.settingsDesign.RefreshEnabledState(control)
+    local blockers = control.statsProControlBlockers
+    local blocked = type(blockers) == "table" and next(blockers) ~= nil
+    if blocked then control:Disable() else control:Enable() end
+    if control.statsProControlKind == "button" then
+        addon.settingsDesign.RefreshShellButton(control)
+    else
+        addon.settingsDesign.RefreshControl(control)
+    end
+end
+
+function addon.settingsDesign.SetControlBlocked(control, source, blocked, mode, key)
+    if not control then return end
+    control.statsProControlBlockers = control.statsProControlBlockers or {}
+    control.statsProControlBlockers[source] = blocked and { mode = mode, key = key } or nil
+    addon.settingsDesign.RefreshEnabledState(control)
+    if control.statsProSwatch then
+        addon.settingsDesign.SetControlBlocked(
+            control.statsProSwatch, source, blocked, mode, key)
+    end
+end
+
+function addon.settingsDesign.RegisterMutationControl(control)
+    control.statsProMutatesSettings = true
+    addon.settingsDesign.mutationControls = addon.settingsDesign.mutationControls or {}
+    tinsert(addon.settingsDesign.mutationControls, control)
+    addon.settingsDesign.AttachTooltip(control, addon.settingsDesign.DisabledControlTooltip)
+end
+
+function addon.settingsDesign.RefreshMutationControls()
+    addon.dbRuntime.Refresh()
+    local schemaBlocked = addon.dbRuntime.readOnly == true
+    local contextBlocked = addon.profileRuntime.BlocksUserWrites() == true
+    for _, control in ipairs(addon.settingsDesign.mutationControls or {}) do
+        addon.settingsDesign.SetControlBlocked(control, "schema", schemaBlocked,
+            "message", "Compatibility mode - profiles are read-only.")
+        addon.settingsDesign.SetControlBlocked(control, "context", contextBlocked,
+            "message", "Waiting for a safe profile context.")
+    end
+end
+
+function addon.settingsDesign.SetControlEnabled(control, enabled, reasonKey)
+    if not control then return end
+    control.statsProDisabledReasonKey = enabled and nil or reasonKey
+    addon.settingsDesign.SetControlBlocked(
+        control, "dependency", not enabled, "requires", reasonKey)
+end
+
+function addon.settingsDesign.StyleCheckbox(control, text)
+    local geometry = addon.settingsDesign.tokens.geometry
+    control:SetSize(geometry.controlHitTarget, geometry.controlHitTarget)
+    addon.settingsDesign.ApplyTextRole(text, "body")
+    local state = control:CreateTexture(nil, "BACKGROUND")
+    state:SetAllPoints(control)
+    control.statsProStateTexture = state
+    control.statsProText = text
+    control.statsProNormalTexture = type(control.GetNormalTexture) == "function"
+        and control:GetNormalTexture() or nil
+    control.statsProCheckedTexture = type(control.GetCheckedTexture) == "function"
+        and control:GetCheckedTexture() or nil
+    control.statsProDisabledCheckedTexture = type(control.GetDisabledCheckedTexture) == "function"
+        and control:GetDisabledCheckedTexture() or nil
+    local highlight = type(control.GetHighlightTexture) == "function"
+        and control:GetHighlightTexture() or nil
+    if highlight then highlight:SetAlpha(0) end
+    for _, texture in pairs({ control.statsProNormalTexture, control.statsProCheckedTexture,
+        control.statsProDisabledCheckedTexture }) do
+        if texture and type(texture.SetDesaturated) == "function" then texture:SetDesaturated(true) end
+    end
+    addon.settingsDesign.RegisterControl(control, "checkbox")
+    addon.settingsDesign.RegisterMutationControl(control)
+    addon.settingsDesign.HookControl(control)
+    control:HookScript("OnClick", addon.settingsDesign.RefreshControl)
+    addon.settingsDesign.RefreshControl(control)
+end
+
+function addon.settingsDesign.SetSwatchColor(control, r, g, b)
+    if control and control.statsProColorWell then
+        control.statsProColorWell:SetColorTexture(r, g, b, 1)
+        control.statsProDisplayedColor = { r = r, g = g, b = b }
+    end
+end
+
+function addon.settingsDesign.StyleSwatch(control)
+    addon.settingsDesign.RegisterControl(control, "swatch")
+    addon.settingsDesign.RegisterMutationControl(control)
+    addon.settingsDesign.HookControl(control)
+    addon.settingsDesign.RefreshControl(control)
+end
+
+function addon.settingsDesign.StyleSlider(slider, label, valueText, lowText, highText)
+    local geometry = addon.settingsDesign.tokens.geometry
+    slider:SetSize(geometry.sliderWidth, geometry.sliderHeight)
+    addon.settingsDesign.ApplyTextRole(label, "body")
+    addon.settingsDesign.ApplyTextRole(valueText, "value")
+    addon.settingsDesign.ApplyTextRole(lowText, "controlMetadata")
+    addon.settingsDesign.ApplyTextRole(highText, "controlMetadata")
+    local track = slider:CreateTexture(nil, "BACKGROUND")
+    track:SetPoint("LEFT", 0, 0)
+    track:SetPoint("RIGHT", 0, 0)
+    track:SetHeight(geometry.sliderTrackHeight)
+    slider.statsProTrack = track
+    slider.statsProThumb = type(slider.GetThumbTexture) == "function"
+        and slider:GetThumbTexture() or nil
+    local name = slider:GetName()
+    for _, suffix in ipairs({ "Left", "Middle", "Right" }) do
+        local texture = name and _G[name .. suffix]
+        if texture then texture:SetAlpha(0) end
+    end
+    slider.statsProLabel = label
+    slider.statsProValueText = valueText
+    slider.statsProLowText = lowText
+    slider.statsProHighText = highText
+    addon.settingsDesign.RegisterControl(slider, "slider")
+    addon.settingsDesign.RegisterMutationControl(slider)
+    addon.settingsDesign.HookControl(slider)
+    addon.settingsDesign.RefreshControl(slider)
+end
+
+function addon.settingsDesign.StyleDropdown(dropdown, label)
+    local geometry = addon.settingsDesign.tokens.geometry
+    local name = dropdown:GetName()
+    local button = dropdown.Button or (name and _G[name .. "Button"])
+    local text = name and _G[name .. "Text"] or nil
+    if not button or not text then return end
+    local surface = addon.settingsDesign.CreateTextureSurface(dropdown, "raised")
+    surface:SetPoint("TOPLEFT", 16, -4)
+    surface:SetPoint("BOTTOMRIGHT", -8, 4)
+    addon.settingsDesign.ApplyTextRole(label, "body")
+    addon.settingsDesign.ApplyTextRole(text, "body")
+    text:SetWidth(geometry.dropdownWidth - 32)
+    text:SetJustifyH("LEFT")
+    text:SetWordWrap(false)
+    text:SetMaxLines(1)
+    button:SetSize(geometry.controlHitTarget, geometry.controlRowHeight)
+    for _, suffix in ipairs({ "Left", "Middle", "Right" }) do
+        local texture = name and _G[name .. suffix]
+        if texture then texture:SetAlpha(0) end
+    end
+    for _, texture in pairs({
+        type(button.GetNormalTexture) == "function" and button:GetNormalTexture(),
+        type(button.GetHighlightTexture) == "function" and button:GetHighlightTexture(),
+        type(button.GetPushedTexture) == "function" and button:GetPushedTexture(),
+        type(button.GetDisabledTexture) == "function" and button:GetDisabledTexture(),
+    }) do
+        if texture and type(texture.SetDesaturated) == "function" then texture:SetDesaturated(true) end
+    end
+    button.statsProDropdown = dropdown
+    button.statsProSurface = surface
+    button.statsProText = text
+    dropdown.statsProTrigger = button
+    dropdown.statsProLabel = label
+    addon.settingsDesign.dropdownTriggers = addon.settingsDesign.dropdownTriggers or {}
+    tinsert(addon.settingsDesign.dropdownTriggers, button)
+    if DropDownList1 and not addon.settingsDesign.dropdownCloseHooked then
+        DropDownList1:HookScript("OnHide", function()
+            for _, trigger in ipairs(addon.settingsDesign.dropdownTriggers or {}) do
+                addon.settingsDesign.RefreshControl(trigger)
+            end
+        end)
+        addon.settingsDesign.dropdownCloseHooked = true
+    end
+    addon.settingsDesign.RegisterControl(button, "dropdown")
+    addon.settingsDesign.RegisterMutationControl(button)
+    addon.settingsDesign.HookControl(button)
+    button:HookScript("OnClick", addon.settingsDesign.RefreshControl)
+    addon.settingsDesign.AttachTooltip(button, function(trigger)
+        local blockedTitle, blockedDetail = addon.settingsDesign.DisabledControlTooltip(trigger)
+        if blockedTitle then return blockedTitle, blockedDetail end
+        local textRegion = trigger.statsProText
+        local constrainedWidth = textRegion:GetWidth()
+        textRegion:SetWidth(10000)
+        local naturalWidth = textRegion:GetStringWidth()
+        textRegion:SetWidth(constrainedWidth)
+        if naturalWidth > constrainedWidth then
+            return textRegion:GetText()
+        end
+        return nil
+    end)
+    addon.settingsDesign.RefreshControl(button)
+end
+
+function addon.settingsDesign.StyleListRow(row, text)
+    local state = row.statsProStateTexture or row.background
+    if not state then
+        state = row:CreateTexture(nil, "BACKGROUND")
+        state:SetAllPoints(row)
+    end
+    row.statsProStateTexture = state
+    row.statsProText = text
+    addon.settingsDesign.ApplyTextRole(text, "controlMetadata")
+    addon.settingsDesign.RegisterControl(row, "listRow")
+    addon.settingsDesign.HookControl(row)
+    addon.settingsDesign.RefreshControl(row)
+end
+
+function addon.settingsDesign.SetListRowSelected(row, selected)
+    row.statsProSelected = selected == true
+    addon.settingsDesign.RefreshControl(row)
+end
+
+function addon.settingsDesign.StyleStatusText(text, roleName)
+    addon.settingsDesign.ApplyTextRole(text, roleName or "controlMetadata")
+    text.statsProStatusRole = roleName or "controlMetadata"
+end
+
+function addon.settingsDesign.StyleWarning(parent, text, roleName)
+    local role = roleName or "warning"
+    addon.settingsDesign.ApplyTextRole(text, role)
+    local surface = addon.settingsDesign.CreateTextureSurface(parent, "raised")
+    surface:SetPoint("TOPLEFT", text, "TOPLEFT", -8, 6)
+    surface:SetPoint("BOTTOMRIGHT", text, "BOTTOMRIGHT", 8, -6)
+    local rail = parent:CreateTexture(nil, "ARTWORK")
+    rail:SetPoint("TOPLEFT", surface, "TOPLEFT", 0, 0)
+    rail:SetPoint("BOTTOMLEFT", surface, "BOTTOMLEFT", 0, 0)
+    rail:SetWidth(2)
+    local color = addon.settingsDesign.Color(role == "error" and "danger" or "warning")
+    rail:SetColorTexture(color[1], color[2], color[3], color[4])
+    text.statsProWarningSurface = surface
+    text.statsProWarningRail = rail
+    addon.settingsDesign.SetWarningVisible(text, false)
+end
+
+function addon.settingsDesign.SetWarningVisible(text, visible)
+    if not text then return end
+    if text.statsProWarningSurface then
+        if visible then text.statsProWarningSurface:Show()
+        else text.statsProWarningSurface:Hide() end
+        for _, border in ipairs(text.statsProWarningSurface.statsProBorders or {}) do
+            if visible then border:Show() else border:Hide() end
+        end
+    end
+    if text.statsProWarningRail then
+        if visible then text.statsProWarningRail:Show()
+        else text.statsProWarningRail:Hide() end
+    end
+end
+
+function addon.settingsDesign.StyleEditBox(editBox)
+    local surface = addon.settingsDesign.CreateTextureSurface(editBox, "raised")
+    surface:SetAllPoints(editBox)
+    editBox.statsProSurface = surface
+    local name = editBox:GetName()
+    for _, suffix in ipairs({ "Left", "Middle", "Right" }) do
+        local texture = name and _G[name .. suffix]
+        if texture then texture:SetAlpha(0) end
+    end
+    addon.settingsDesign.RegisterControl(editBox, "editBox")
+    editBox:HookScript("OnEditFocusGained", function(box)
+        box.statsProFocused = true
+        addon.settingsDesign.RefreshControl(box)
+    end)
+    editBox:HookScript("OnEditFocusLost", function(box)
+        box.statsProFocused = false
+        addon.settingsDesign.RefreshControl(box)
+    end)
+    addon.settingsDesign.RefreshControl(editBox)
+end
+
 function addon.settingsDesign.ApplySeparator(texture)
     local color = addon.settingsDesign.Color("separator")
     texture:SetColorTexture(color[1], color[2], color[3], color[4])
@@ -8319,6 +8812,12 @@ function addon.settingsDesign.OnButtonUp(button)
     addon.settingsDesign.RefreshShellButton(button)
 end
 
+function addon.settingsDesign.OnButtonDisabled(button)
+    button.statsProHovered = false
+    button.statsProPressed = false
+    addon.settingsDesign.RefreshShellButton(button)
+end
+
 function addon.settingsDesign.CreateShellButton(parent, name, roleName, textRole)
     local button = CreateFrame("Button", name, parent, "BackdropTemplate")
     addon.settingsDesign.ApplySurface(button, "raised")
@@ -8337,7 +8836,8 @@ function addon.settingsDesign.CreateShellButton(parent, name, roleName, textRole
     button:SetScript("OnMouseDown", addon.settingsDesign.OnButtonDown)
     button:SetScript("OnMouseUp", addon.settingsDesign.OnButtonUp)
     button:HookScript("OnEnable", addon.settingsDesign.RefreshShellButton)
-    button:HookScript("OnDisable", addon.settingsDesign.RefreshShellButton)
+    button:HookScript("OnDisable", addon.settingsDesign.OnButtonDisabled)
+    addon.settingsDesign.RegisterControl(button, "button")
     addon.settingsDesign.RefreshShellButton(button)
     return button
 end
@@ -8584,6 +9084,8 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
     _G[name .. "Low"]:SetText(lowText)
     _G[name .. "High"]:SetText(highText)
     _G[name .. "Text"]:SetText(string.format(valueFmt, slider:GetValue()))
+    addon.settingsDesign.StyleSlider(
+        slider, lbl, _G[name .. "Text"], _G[name .. "Low"], _G[name .. "High"])
 
     local reverting = false
     slider:SetScript("OnValueChanged", function(self, value)
@@ -8616,6 +9118,7 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
         slider:SetValue(v)
         reverting = false
         _G[slider:GetName() .. "Text"]:SetText(string.format(valueFmt, v))
+        addon.settingsDesign.RefreshControl(slider)
     end)
 
     cd.y = sliderY - 50
@@ -9099,19 +9602,18 @@ function addon.profileUI.BuildOperationUI(manager)
     managedLabel:SetPoint("TOPLEFT", 8, -4)
     PushLocalizedLabel(function() managedLabel:SetText(L("Profile to manage:")) end)
 
-    local profileSelector = CreateFrame(
-        "Button", "StatsProManagedProfileButton", actionChild, "GameMenuButtonTemplate")
+    local profileSelector = addon.settingsDesign.CreateShellButton(
+        actionChild, "StatsProManagedProfileButton", "field")
     profileSelector:SetPoint("TOPLEFT", 6, -22)
-    profileSelector:SetSize(292, 24)
-    profileSelector:SetNormalFontObject("GameFontNormal")
-    profileSelector:SetHighlightFontObject("GameFontHighlight")
+    profileSelector:SetSize(addon.settingsDesign.tokens.geometry.actionWidth,
+        addon.settingsDesign.tokens.geometry.controlHitTarget)
 
     local managedImpact = actionChild:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(managedImpact, 10)
     managedImpact:SetPoint("TOPLEFT", 8, -50)
     managedImpact:SetPoint("TOPRIGHT", -12, -50)
     managedImpact:SetJustifyH("LEFT")
-    managedImpact:SetTextColor(0.7, 0.75, 0.72, 1)
+    addon.settingsDesign.StyleStatusText(managedImpact)
 
     local operationStatus = actionChild:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(operationStatus, 10)
@@ -9120,19 +9622,20 @@ function addon.profileUI.BuildOperationUI(manager)
     operationStatus:SetJustifyH("LEFT")
     operationStatus:SetWordWrap(true)
     operationStatus:SetMaxLines(2)
+    addon.settingsDesign.StyleStatusText(operationStatus)
 
-    local function createAction(name, labelKey, y)
-        local button = CreateFrame("Button", name, actionChild, "GameMenuButtonTemplate")
+    local function createAction(name, labelKey, y, roleName)
+        local button = addon.settingsDesign.CreateShellButton(
+            actionChild, name, roleName or "field")
         button:SetPoint("TOPLEFT", 6, y)
-        button:SetSize(292, 25)
-        button:SetNormalFontObject("GameFontNormal")
-        button:SetHighlightFontObject("GameFontHighlight")
+        button:SetSize(addon.settingsDesign.tokens.geometry.actionWidth,
+            addon.settingsDesign.tokens.geometry.actionHeight)
         PushLocalizedLabel(function() button:SetText(L(labelKey)) end)
         return button
     end
 
     local assignButton = createAction(
-        "StatsProProfileAssignButton", "Assign to selected context", -104)
+        "StatsProProfileAssignButton", "Assign to selected context", -104, "primary")
     local newButton = createAction(
         "StatsProProfileNewButton", "New from defaults...", -132)
     local duplicateButton = createAction(
@@ -9144,11 +9647,11 @@ function addon.profileUI.BuildOperationUI(manager)
     local swapButton = createAction(
         "StatsProProfileSwapButton", "Swap assignments...", -244)
     local resetButton = createAction(
-        "StatsProProfileResetButton", "Reset active profile...", -272)
+        "StatsProProfileResetButton", "Reset active profile...", -272, "destructive")
     local deleteButton = createAction(
-        "StatsProProfileDeleteButton", "Delete profile...", -300)
+        "StatsProProfileDeleteButton", "Delete profile...", -300, "destructive")
     local forgetButton = createAction(
-        "StatsProProfileForgetButton", "Forget character...", -328)
+        "StatsProProfileForgetButton", "Forget character...", -328, "destructive")
 
     local selectedCharacterTitle = actionChild:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(selectedCharacterTitle, 11, "OUTLINE")
@@ -9164,7 +9667,7 @@ function addon.profileUI.BuildOperationUI(manager)
     selectedCharacterSummary:SetJustifyH("LEFT")
     selectedCharacterSummary:SetWordWrap(false)
     selectedCharacterSummary:SetMaxLines(1)
-    selectedCharacterSummary:SetTextColor(0.7, 0.75, 0.72, 1)
+    addon.settingsDesign.StyleStatusText(selectedCharacterSummary)
 
     local useAllSpecsButton = createAction(
         "StatsProProfileUseAllSpecsButton", "Use profile for all known specs...", -406)
@@ -9187,7 +9690,7 @@ function addon.profileUI.BuildOperationUI(manager)
         line:SetJustifyH("LEFT")
         line:SetWordWrap(false)
         line:SetMaxLines(1)
-        line:SetTextColor(0.7, 0.75, 0.72, 1)
+        addon.settingsDesign.StyleStatusText(line)
         roleTemplateSummary[role] = line
     end
 
@@ -9243,6 +9746,7 @@ function addon.profileUI.BuildOperationUI(manager)
     nameInput:SetHeight(28)
     nameInput:SetAutoFocus(false)
     nameInput:SetMaxLetters(160)
+    addon.settingsDesign.StyleEditBox(nameInput)
 
     local nameValidation = dialog:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(nameValidation, 11)
@@ -9261,20 +9765,16 @@ function addon.profileUI.BuildOperationUI(manager)
     choiceChild:SetSize(376, 1)
     choiceScroll:SetScrollChild(choiceChild)
 
-    local primaryButton = CreateFrame(
-        "Button", "StatsProProfileOperationConfirmButton", dialog, "GameMenuButtonTemplate")
+    local primaryButton = addon.settingsDesign.CreateShellButton(
+        dialog, "StatsProProfileOperationConfirmButton", "primary")
     primaryButton:SetPoint("BOTTOMRIGHT", -126, 18)
     primaryButton:SetSize(112, 26)
-    primaryButton:SetNormalFontObject("GameFontNormal")
-    primaryButton:SetHighlightFontObject("GameFontHighlight")
     PushLocalizedLabel(function() primaryButton:SetText(L("Confirm")) end)
 
-    local cancelButton = CreateFrame(
-        "Button", "StatsProProfileOperationCancelButton", dialog, "GameMenuButtonTemplate")
+    local cancelButton = addon.settingsDesign.CreateShellButton(
+        dialog, "StatsProProfileOperationCancelButton", "field")
     cancelButton:SetPoint("BOTTOMRIGHT", -16, 18)
     cancelButton:SetSize(102, 26)
-    cancelButton:SetNormalFontObject("GameFontNormal")
-    cancelButton:SetHighlightFontObject("GameFontHighlight")
     cancelButton:SetText(_G.CANCEL)
 
     ui.actionScroll = actionScroll
@@ -9335,6 +9835,8 @@ function addon.profileUI.BuildOperationUI(manager)
         choiceScroll:Hide()
         primaryButton:Show()
         primaryButton:Enable()
+        primaryButton.statsProButtonRole = "primary"
+        addon.settingsDesign.RefreshShellButton(primaryButton)
         ui.CancelSpecialFrameRestore("StatsProProfileManager")
         ui.RemoveSpecialFrame("StatsProProfileManager")
         ui.PushSpecialFrame("StatsProProfileOperationDialog")
@@ -9352,6 +9854,8 @@ function addon.profileUI.BuildOperationUI(manager)
             pending.nameStatus = "read-only"
             nameValidation:SetText(ui.OperationErrorText("read-only"))
             primaryButton:Disable()
+            nameInput.statsProInvalid = true
+            addon.settingsDesign.RefreshControl(nameInput)
             return
         end
         local exceptID = pending.kind == "rename" and pending.profileID or nil
@@ -9362,10 +9866,13 @@ function addon.profileUI.BuildOperationUI(manager)
         if normalized then
             nameValidation:SetText("")
             primaryButton:Enable()
+            nameInput.statsProInvalid = false
         else
             nameValidation:SetText(addon.profileUI.OperationErrorText(status))
             primaryButton:Disable()
+            nameInput.statsProInvalid = true
         end
+        addon.settingsDesign.RefreshControl(nameInput)
     end
 
     function ui.ShowNameDialog(kind, title, initialName, profileID, expected)
@@ -9386,6 +9893,9 @@ function addon.profileUI.BuildOperationUI(manager)
             mode = "confirm", kind = kind, payload = payload, expected = expected,
         }
         ui.ShowDialogBase(title)
+        primaryButton.statsProButtonRole = (kind == "reset" or kind == "delete"
+            or kind == "forget") and "destructive" or "primary"
+        addon.settingsDesign.RefreshShellButton(primaryButton)
         dialogMessage:SetText(message)
     end
 
@@ -9394,9 +9904,6 @@ function addon.profileUI.BuildOperationUI(manager)
         if row then return row end
         row = CreateFrame("Button", nil, choiceChild)
         row:SetSize(372, 26)
-        local highlight = row:CreateTexture(nil, "HIGHLIGHT")
-        highlight:SetAllPoints(row)
-        highlight:SetColorTexture(1, 1, 1, 0.06)
         local text = row:CreateFontString(nil, "OVERLAY")
         RegisterConfigFont(text, 11)
         text:SetPoint("LEFT", 8, 0)
@@ -9404,6 +9911,7 @@ function addon.profileUI.BuildOperationUI(manager)
         text:SetJustifyH("LEFT")
         text:SetWordWrap(false)
         row.text = text
+        addon.settingsDesign.StyleListRow(row, text)
         row:SetScript("OnClick", function(button)
             if button.choiceData then ui.HandleChoice(button.choiceData) end
         end)
@@ -10135,13 +10643,10 @@ function addon.profileUI.BuildSettingsUI(owner)
         local row = ui.managerRows[index]
         if row then return row end
         row = CreateFrame("Button", nil, listChild)
-        row:SetSize(188, 24)
+        row:SetSize(188, addon.settingsDesign.tokens.geometry.listRowHeight)
         local background = row:CreateTexture(nil, "BACKGROUND")
         background:SetAllPoints(row)
         background:SetColorTexture(1, 1, 1, 0)
-        local highlight = row:CreateTexture(nil, "HIGHLIGHT")
-        highlight:SetAllPoints(row)
-        highlight:SetColorTexture(1, 1, 1, 0.06)
         local text = row:CreateFontString(nil, "OVERLAY")
         RegisterConfigFont(text, 11)
         text:SetPoint("LEFT", 6, 0)
@@ -10158,6 +10663,7 @@ function addon.profileUI.BuildSettingsUI(owner)
         row.background = background
         row.text = text
         row.badge = badge
+        addon.settingsDesign.StyleListRow(row, text)
         row:SetScript("OnClick", function(button)
             local context = button.profileContext
             if not context then return end
@@ -10237,7 +10743,7 @@ function addon.profileUI.BuildSettingsUI(owner)
             row.text:SetText(character.displayName)
             row.badge:SetText(character.isCurrent and L("Current") or "")
             local selected = character.guid == ui.selectedGUID and ui.selectedSpecID == nil
-            row.background:SetColorTexture(0, 1, 0.5, selected and 0.16 or 0)
+            addon.settingsDesign.SetListRowSelected(row, selected)
             row:Show()
             y = y - 26
             for _, spec in ipairs(character.specs) do
@@ -10249,9 +10755,9 @@ function addon.profileUI.BuildSettingsUI(owner)
                 row.text:SetText("   " .. ui.FormatSpecName(spec.specID, spec.specName))
                 row.badge:SetText(spec.isActive and L("Active") or "")
                 selected = character.guid == ui.selectedGUID and ui.selectedSpecID == spec.specID
-                row.background:SetColorTexture(0, 1, 0.5, selected and 0.16 or 0)
+            addon.settingsDesign.SetListRowSelected(row, selected)
                 row:Show()
-                y = y - 24
+                y = y - addon.settingsDesign.tokens.geometry.listRowHeight
             end
             y = y - 4
         end
@@ -10379,8 +10885,9 @@ function addon:OpenConfigMenu()
         local dropdown = CreateFrame("Frame", frameName, parent, "UIDropDownMenuTemplate")
         -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after all dropdown rows build.
         dropdown:SetPoint("TOPLEFT", cursor.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
-        UIDropDownMenu_SetWidth(dropdown, 100)
-        UIDropDownMenu_JustifyText(dropdown, "CENTER")
+        UIDropDownMenu_SetWidth(dropdown, addon.settingsDesign.tokens.geometry.dropdownWidth)
+        UIDropDownMenu_JustifyText(dropdown, "LEFT")
+        addon.settingsDesign.StyleDropdown(dropdown, label)
 
         local function ResolveOption(value)
             for _, opt in ipairs(options) do
@@ -10392,6 +10899,7 @@ function addon:OpenConfigMenu()
         local function RefreshDropdownText()
             label:SetText(L(labelKey))
             UIDropDownMenu_SetText(dropdown, L(ResolveOption(getValue()).label))
+            addon.settingsDesign.RefreshControl(dropdown.statsProTrigger)
         end
 
         UIDropDownMenu_Initialize(dropdown, function()
@@ -10412,6 +10920,7 @@ function addon:OpenConfigMenu()
         PushRefresher(RefreshDropdownText)
         tinsert(rows, {
             text = label, dropdown = dropdown,
+            maxTextWidth = addon.settingsDesign.tokens.geometry.dropdownLabelMaxWidth,
             dropdownX_base = cursor.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = parent,
         })
         cursor.y = rowY - 30
@@ -10541,6 +11050,7 @@ function addon:OpenConfigMenu()
         shellGeometry.footerButtonBottom)
     resetBtn:SetSize(shellGeometry.resetButtonWidth, shellGeometry.shellButtonHeight)
     PushLocalizedLabel(function() resetBtn:SetText(L("Reset active profile...")) end)
+    self.settingsDesign.RegisterMutationControl(resetBtn)
 
     local closeBtn = self.settingsDesign.CreateShellButton(configFrame, nil, "primary")
     closeBtn:SetPoint("BOTTOMRIGHT", -shellGeometry.footerButtonInset,
@@ -10644,7 +11154,7 @@ function addon:OpenConfigMenu()
     local function ApplySplitBlockChecksEnabled()
         local enabled = GetDB("displayMode") == "split"
         for _, cb in ipairs(splitBlockChecks) do
-            SetCheckboxEnabled(cb, enabled)
+            SetCheckboxEnabled(cb, enabled, "Split")
         end
     end
 
@@ -10873,6 +11383,9 @@ function addon:OpenConfigMenu()
         fontDropdown = CreateFrame("Frame", "StatsProFontDropdown", displayTab, "UIDropDownMenuTemplate")
         -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after the Appearance-tab dropdown rows build.
         fontDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
+        UIDropDownMenu_SetWidth(fontDropdown, addon.settingsDesign.tokens.geometry.dropdownWidth)
+        UIDropDownMenu_JustifyText(fontDropdown, "LEFT")
+        addon.settingsDesign.StyleDropdown(fontDropdown, fontLabel)
         -- Hover-preview: while font picker is open, hovering a font button applies it to
         -- panels temporarily without writing DB. Picker's OnHide handler is the SINGLE source
         -- of font-state sync — it forcibly re-applies DB.font after close, so cancel-on-close
@@ -10934,8 +11447,8 @@ function addon:OpenConfigMenu()
             return true
         end
         self.profileRuntime.previewFont = PreviewFont
-        UIDropDownMenu_SetWidth(fontDropdown, 100)
-        UIDropDownMenu_JustifyText(fontDropdown, "CENTER")
+        UIDropDownMenu_SetWidth(fontDropdown, addon.settingsDesign.tokens.geometry.dropdownWidth)
+        UIDropDownMenu_JustifyText(fontDropdown, "LEFT")
         -- NOTE: UIDropDownMenu_Initialize is intentionally NOT called — Blizzard's default
         -- popup is replaced by a custom multi-column picker (see Block B below). Without
         -- Initialize, the template's default OnClick would open an empty DropDownList1, but
@@ -10945,10 +11458,10 @@ function addon:OpenConfigMenu()
         -- Geometry constants — tweak here, do NOT inline magic numbers at call sites.
         local FONT_PICKER_COLS         = 3
         local FONT_PICKER_BTN_W        = 160      -- ~25 char names fit at CONFIG_FONT 12pt
-        local FONT_PICKER_BTN_H        = 22
+        local FONT_PICKER_BTN_H        = addon.settingsDesign.tokens.geometry.fontRowHeight
         local FONT_PICKER_PAD          = 8
         local FONT_PICKER_SCROLLBAR_W  = 22
-        local FONT_PICKER_VISIBLE_ROWS = 14       -- visible area = 14 * 22 = 308px before scroll
+        local FONT_PICKER_VISIBLE_ROWS = 14
         local FONT_PICKER_FRAME_W      = FONT_PICKER_COLS * FONT_PICKER_BTN_W + FONT_PICKER_PAD * 2 + FONT_PICKER_SCROLLBAR_W  -- 518
         local FONT_PICKER_FRAME_H      = FONT_PICKER_VISIBLE_ROWS * FONT_PICKER_BTN_H + FONT_PICKER_PAD * 2                    -- 324
 
@@ -10967,6 +11480,10 @@ function addon:OpenConfigMenu()
             end
             if fontPickerCatcher and fontPickerCatcher:IsShown() then
                 fontPickerCatcher:Hide()
+            end
+            if fontDropdown and fontDropdown.statsProTrigger then
+                fontDropdown.statsProTrigger.statsProActive = false
+                addon.settingsDesign.RefreshControl(fontDropdown.statsProTrigger)
             end
         end
 
@@ -11017,6 +11534,10 @@ function addon:OpenConfigMenu()
             -- so the commit path still lands on the chosen font when Hide fires.
             fontPickerFrame:SetScript("OnHide", function()
                 if fontPickerCatcher then fontPickerCatcher:Hide() end
+                if fontDropdown and fontDropdown.statsProTrigger then
+                    fontDropdown.statsProTrigger.statsProActive = false
+                    addon.settingsDesign.RefreshControl(fontDropdown.statsProTrigger)
+                end
                 CancelFontPreview()
             end)
 
@@ -11044,12 +11565,6 @@ function addon:OpenConfigMenu()
                     btn.bg:SetAllPoints()
                     btn.bg:SetColorTexture(0, 0, 0, 0)
 
-                    -- Mouse-hover highlight — Blizzard standard listbox texture for consistency.
-                    btn:SetHighlightTexture("Interface\\Buttons\\UI-Listbox-Highlight2")
-                    local hl = btn:GetHighlightTexture()
-                    hl:SetBlendMode("ADD")
-                    hl:SetVertexColor(1, 1, 1, 0.4)
-
                     btn.text = btn:CreateFontString(nil, "OVERLAY")
                     RegisterConfigFont(btn.text, CONFIG_FONT_SIZE)
                     btn.text:SetPoint("LEFT", 6, 0)
@@ -11059,6 +11574,7 @@ function addon:OpenConfigMenu()
                     -- the row-height grid. Single-line overflow visually clipped by FontString.
                     btn.text:SetWordWrap(false)
                     btn.text:SetMaxLines(1)
+                    addon.settingsDesign.StyleListRow(btn, btn.text)
 
                     -- hoverGen pattern: OnEnter bumps gen + applies preview; OnLeave captures
                     -- current gen and schedules a 0-tick deferred cancel. If the mouse moves
@@ -11098,10 +11614,10 @@ function addon:OpenConfigMenu()
 
                 -- Current-committed font marker: subtle green-cyan tint.
                 if SameFontPath(f.path, currentPath) then
-                    btn.bg:SetColorTexture(0, 1, 0.5, 0.18)
+                    addon.settingsDesign.SetListRowSelected(btn, true)
                     currentRow = row
                 else
-                    btn.bg:SetColorTexture(0, 0, 0, 0)
+                    addon.settingsDesign.SetListRowSelected(btn, false)
                 end
                 btn:Show()
             end
@@ -11149,6 +11665,10 @@ function addon:OpenConfigMenu()
             end
             fontPickerCatcher:Show()
             fontPickerFrame:Show()
+            if fontDropdown.statsProTrigger then
+                fontDropdown.statsProTrigger.statsProActive = true
+                addon.settingsDesign.RefreshControl(fontDropdown.statsProTrigger)
+            end
         end
 
         local function ToggleFontPicker()
@@ -11187,6 +11707,7 @@ function addon:OpenConfigMenu()
 
         tinsert(displayDropdownRows, {
             text = fontLabel, dropdown = fontDropdown,
+            maxTextWidth = addon.settingsDesign.tokens.geometry.dropdownLabelMaxWidth,
             dropdownX_base = cd.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = displayTab,
         })
 
@@ -11385,8 +11906,9 @@ function addon:OpenConfigMenu()
         local langDropdown = CreateFrame("Frame", "StatsProLanguageDropdown", displayTab, "UIDropDownMenuTemplate")
         -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after the Appearance-tab dropdown rows build.
         langDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
-        UIDropDownMenu_SetWidth(langDropdown, 100)
-        UIDropDownMenu_JustifyText(langDropdown, "CENTER")
+        UIDropDownMenu_SetWidth(langDropdown, addon.settingsDesign.tokens.geometry.dropdownWidth)
+        UIDropDownMenu_JustifyText(langDropdown, "LEFT")
+        addon.settingsDesign.StyleDropdown(langDropdown, langLabel)
         UIDropDownMenu_Initialize(langDropdown, function()
             local current = (FindLangOption(GetDB("forceLocale")) or LANGUAGE_OPTIONS[1]).value
             for _, opt in ipairs(LANGUAGE_OPTIONS) do
@@ -11464,7 +11986,7 @@ function addon:OpenConfigMenu()
         CursorAdvance(cd, 24)
 
         local langWarn = displayTab:CreateFontString(nil, "OVERLAY")
-        local langWarnHeight = 28
+        local langWarnHeight = addon.settingsDesign.tokens.geometry.warningHeight
         RegisterConfigFont(langWarn, 11)
         langWarn:SetPoint("TOPLEFT", cd.padX, cd.y)
         langWarn:SetWidth(scrollChildWidth - (cd.padX * 2))
@@ -11473,8 +11995,8 @@ function addon:OpenConfigMenu()
         langWarn:SetJustifyV("TOP")
         langWarn:SetWordWrap(true)
         langWarn:SetMaxLines(2)
-        langWarn:SetTextColor(1, 0.6, 0.2)
         langWarn:SetText("")
+        addon.settingsDesign.StyleWarning(displayTab, langWarn, "warning")
         if self.__statsproSmoke == true then configFrame.languageWarning = langWarn end
 
         -- Assignment to file-scope upvalue declared in section 15 prelude (NOT a global).
@@ -11483,10 +12005,12 @@ function addon:OpenConfigMenu()
             local req    = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
             if FontSupports(self.fontRuntime.currentPath(), req) then
                 langWarn:SetText("")
+                addon.settingsDesign.SetWarningVisible(langWarn, false)
             else
                 langWarn:SetText(string.format(L(
                     "|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."
                 ), req))
+                addon.settingsDesign.SetWarningVisible(langWarn, true)
             end
         end
         -- WHY register as localized: warning text changes on language switch (req glyph
@@ -11507,6 +12031,7 @@ function addon:OpenConfigMenu()
 
         tinsert(displayDropdownRows, {
             text = langLabel, dropdown = langDropdown,
+            maxTextWidth = addon.settingsDesign.tokens.geometry.dropdownLabelMaxWidth,
             dropdownX_base = cd.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = displayTab,
         })
     end
@@ -11547,10 +12072,10 @@ function addon:OpenConfigMenu()
         local rowY = cs.y
         local critCb, hasteCb, masteryCb, versCb
         local function ApplyOffensiveSubsEnabled(masterOn)
-            SetCheckboxEnabled(critCb,    masterOn)
-            SetCheckboxEnabled(hasteCb,   masterOn)
-            SetCheckboxEnabled(masteryCb, masterOn)
-            SetCheckboxEnabled(versCb,    masterOn)
+            SetCheckboxEnabled(critCb,    masterOn, "Show Offensive Stats")
+            SetCheckboxEnabled(hasteCb,   masterOn, "Show Offensive Stats")
+            SetCheckboxEnabled(masteryCb, masterOn, "Show Offensive Stats")
+            SetCheckboxEnabled(versCb,    masterOn, "Show Offensive Stats")
         end
         CreateCheckbox(statsTab, "StatsProOffensiveCheck",  "Show Offensive Stats", "showOffensive",     cs.padX,       rowY,
             function(checked) ApplyOffensiveSubsEnabled(checked) end)
@@ -11585,9 +12110,9 @@ function addon:OpenConfigMenu()
         -- dependency-disable pattern in the Defensive Stats section).
         local leechCb, avoidanceCb, speedCb
         local function ApplyTertiarySubsEnabled(masterOn)
-            SetCheckboxEnabled(leechCb,     masterOn)
-            SetCheckboxEnabled(avoidanceCb, masterOn)
-            SetCheckboxEnabled(speedCb,     masterOn)
+            SetCheckboxEnabled(leechCb,     masterOn, "Show Tertiary Stats")
+            SetCheckboxEnabled(avoidanceCb, masterOn, "Show Tertiary Stats")
+            SetCheckboxEnabled(speedCb,     masterOn, "Show Tertiary Stats")
         end
         CreateCheckbox(statsTab, "StatsProTertiaryCheck", "Show Tertiary Stats", "showTertiary", cs.padX, rowY,
             function(checked) ApplyTertiarySubsEnabled(checked) end)
@@ -11619,11 +12144,11 @@ function addon:OpenConfigMenu()
         -- Sub-toggle refs captured to grey them when master is off (mirrors Tertiary tab).
         local dodgeCb, parryCb, blockCb, armorCb, staggerCb
         local function ApplyDefensiveSubsEnabled(masterOn)
-            SetCheckboxEnabled(dodgeCb, masterOn)
-            SetCheckboxEnabled(parryCb, masterOn)
-            SetCheckboxEnabled(blockCb, masterOn)
-            SetCheckboxEnabled(armorCb, masterOn)
-            SetCheckboxEnabled(staggerCb, masterOn)
+            SetCheckboxEnabled(dodgeCb, masterOn, "Show Defensive Stats")
+            SetCheckboxEnabled(parryCb, masterOn, "Show Defensive Stats")
+            SetCheckboxEnabled(blockCb, masterOn, "Show Defensive Stats")
+            SetCheckboxEnabled(armorCb, masterOn, "Show Defensive Stats")
+            SetCheckboxEnabled(staggerCb, masterOn, "Show Defensive Stats")
         end
         CreateCheckbox(statsTab, "StatsProDefensiveCheck",   "Show Defensive Stats", "showDefensive",     cs.padX,       rowY,
             function(checked) ApplyDefensiveSubsEnabled(checked) end)
@@ -11697,6 +12222,7 @@ function addon:OpenConfigMenu()
     resetBtn:SetScript("OnClick", function() ResetToDefaults() end)
 
     --[[ ===== Initial state ===== ]]
+    self.settingsDesign.RefreshMutationControls()
     SwitchToTab(1)
     -- CreateFrame starts shown, before the OnShow hook above exists. Explicitly seed
     -- the first-open state; later opens are handled by the hook.
@@ -12330,6 +12856,32 @@ if addon and addon.__statsproSmoke == true then
         end,
         settingsDesignSnapshot = function()
             return CopyTable(addon.settingsDesign.tokens)
+        end,
+        settingsControlState = function()
+            local controls = {}
+            for index, control in ipairs(addon.settingsDesign.testControls or {}) do
+                local border = control.statsProSurface
+                    and control.statsProSurface.statsProBorders
+                    and control.statsProSurface.statsProBorders[1] or nil
+                controls[index] = {
+                    kind = control.statsProControlKind,
+                    name = control:GetName(),
+                    enabled = addon.settingsDesign.IsControlEnabled(control),
+                    state = control.statsProControlState or control.statsProButtonState,
+                    width = control:GetWidth(),
+                    height = control:GetHeight(),
+                    role = control.statsProButtonRole,
+                    disabledReasonKey = control.statsProDisabledReasonKey,
+                    mutatesSettings = control.statsProMutatesSettings == true,
+                    selected = control.statsProSelected == true,
+                    fill = control.statsProStateTexture
+                        and CopyTable(control.statsProStateTexture.colorTexture) or nil,
+                    border = border and CopyTable(border.colorTexture) or nil,
+                    textColor = control.statsProText
+                        and CopyTable(control.statsProText.textColor) or nil,
+                }
+            end
+            return controls
         end,
         settingsShellState = function()
             if not configFrame then return nil end

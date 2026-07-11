@@ -600,6 +600,7 @@ local function makeEnv(locale, opts)
     env.GetCritChance = opts.getCritChance or zero
     env.GetSpellCritChance = opts.getSpellCritChance or zero
     env.GetRangedCritChance = opts.getRangedCritChance or zero
+    env.MAX_SPELL_SCHOOLS = opts.maxSpellSchools or 7
     env.GetHaste = opts.getHaste or zero
     env.GetMeleeHaste = opts.getMeleeHaste or zero
     env.GetSpellHaste = opts.getSpellHaste or zero
@@ -2708,6 +2709,24 @@ do
 end
 
 do
+    local secretMaxSpellSchools = 99
+    local maxSpellSchoolCases = {
+        { name = "valid", value = 5, expected = 5 },
+        { name = "malformed", value = "bad", expected = 7 },
+        { name = "secret", value = secretMaxSpellSchools, expected = 7, secret = true },
+    }
+    for _, case in ipairs(maxSpellSchoolCases) do
+        local _, critAddon = loadStatsPro("enUS", {
+            maxSpellSchools = case.value,
+            issecretvalue = function(value)
+                return case.secret == true and value == secretMaxSpellSchools
+            end,
+        })
+        eq("selector.max_spell_school." .. case.name, critAddon.GetMaxSpellSchool(), case.expected)
+    end
+end
+
+do
     local _, critAddon = loadStatsPro("enUS", {
         getCritChance = function() return 10 end,
         getRangedCritChance = function() return 15 end,
@@ -2719,20 +2738,78 @@ do
 end
 
 do
-    local bareSpellCalls = 0
+    local schoolCrit = { [2] = 25, [3] = 20, [4] = 19, [5] = 18, [6] = 22, [7] = 15 }
+    local critEnv, critAddon = loadStatsPro("enUS", {
+        getCritChance = function() return 16 end,
+        getRangedCritChance = function() return 17 end,
+        getSpellCritChance = function(school) return schoolCrit[school] end,
+    })
+    local ok, value = pcall(critAddon.GetBestCritChance)
+    check("selector.best_crit_uses_minimum_spell_school.no_error", ok, value)
+    eq("selector.best_crit_uses_minimum_spell_school.value", value, 17)
+    slash("selector.best_crit_uses_minimum_spell_school.debug_live", critEnv, "debug live")
+    eq("selector.best_crit_uses_minimum_spell_school.debug_schools",
+        printContains(critEnv, "debug live crit schools: 2=25.00 3=20.00 4=19.00 5=18.00 6=22.00 7=15.00"), true)
+end
+
+do
+    local secretSpellCrit = 30
+    local schoolCalls = {}
+    local schoolCrit = { [2] = 24, [3] = 22, [4] = secretSpellCrit, [5] = 21, [6] = 20, [7] = 19 }
+    local _, critAddon = loadStatsPro("enUS", {
+        getCritChance = function() return 16 end,
+        getRangedCritChance = function() return 18 end,
+        getSpellCritChance = function(school)
+            schoolCalls[school] = (schoolCalls[school] or 0) + 1
+            return schoolCrit[school]
+        end,
+        issecretvalue = function(value) return value == secretSpellCrit end,
+    })
+    local ok, value = pcall(critAddon.GetBestCritChance)
+    check("selector.best_crit_secret_school_rejects_partial_spell.no_error", ok, value)
+    eq("selector.best_crit_secret_school_rejects_partial_spell.value", value, 18)
+    for school = 2, 7 do
+        eq("selector.best_crit_secret_school_rejects_partial_spell.school_" .. school, schoolCalls[school], 1)
+    end
+end
+
+do
+    local invalidSchoolCases = {
+        { name = "error", read = function() error("school unavailable") end },
+        { name = "string", read = function() return "bad" end },
+        { name = "nan", read = function() return 0 / 0 end },
+        { name = "infinity", read = function() return math.huge end },
+    }
+    for _, case in ipairs(invalidSchoolCases) do
+        local _, critAddon = loadStatsPro("enUS", {
+            getCritChance = function() return 16 end,
+            getRangedCritChance = function() return 17 end,
+            getSpellCritChance = function(school)
+                if school == 4 then return case.read() end
+                return 25
+            end,
+        })
+        local ok, value = pcall(critAddon.GetBestCritChance)
+        check("selector.best_crit_invalid_school_rejects_partial_spell." .. case.name .. ".no_error", ok, value)
+        eq("selector.best_crit_invalid_school_rejects_partial_spell." .. case.name .. ".value", value, 17)
+    end
+end
+
+do
+    local otherSchoolCalls = 0
     local _, critAddon = loadStatsPro("enUS", {
         getCritChance = function() return nil end,
         getRangedCritChance = function() return nil end,
         getSpellCritChance = function(school)
             if school == 2 then return nil end
-            bareSpellCalls = bareSpellCalls + 1
+            otherSchoolCalls = otherSchoolCalls + 1
             return 23.4
         end,
     })
     local ok, value = pcall(critAddon.GetBestCritChance)
-    check("selector.best_crit_spell2_falls_back_to_unscoped_spell.no_error", ok, value)
-    eq("selector.best_crit_spell2_falls_back_to_unscoped_spell.value", value, 23.4)
-    eq("selector.best_crit_spell2_falls_back_to_unscoped_spell.calls", bareSpellCalls, 1)
+    check("selector.best_crit_incomplete_spell_aggregate_is_rejected.no_error", ok, value)
+    eq("selector.best_crit_incomplete_spell_aggregate_is_rejected.value", value, nil)
+    eq("selector.best_crit_incomplete_spell_aggregate_is_rejected.other_school_calls", otherSchoolCalls, 5)
 end
 
 do
@@ -2772,50 +2849,39 @@ end
 
 do
     local secretSpellCrit = 24.2
-    local spell2Calls = 0
-    local bareSpellCalls = 0
+    local spellCalls = 0
     local _, critAddon = loadStatsPro("enUS", {
         getCritChance = function() return 11 end,
         getRangedCritChance = function() return 18 end,
         getSpellCritChance = function(school)
-            if school == 2 then
-                spell2Calls = spell2Calls + 1
-                return secretSpellCrit
-            end
-            bareSpellCalls = bareSpellCalls + 1
-            error("bare spell fallback should not run after secret spell2")
+            spellCalls = spellCalls + 1
+            if school == 2 then return secretSpellCrit end
+            return 23.8
         end,
         issecretvalue = function(value) return value == secretSpellCrit end,
     })
     local ok, value = pcall(critAddon.GetBestCritChance)
     check("selector.best_crit_secret_spell2_uses_clean_fallback.no_error", ok, value)
-    eq("selector.best_crit_secret_spell2_uses_clean_fallback.spell2_seen", spell2Calls, 1)
     eq("selector.best_crit_secret_spell2_uses_clean_fallback.value", value, 18)
-    eq("selector.best_crit_secret_spell2_uses_clean_fallback.no_bare_spell_call", bareSpellCalls, 0)
+    eq("selector.best_crit_secret_spell2_uses_clean_fallback.all_schools_seen", spellCalls, 6)
 end
 
 do
     local secretSpellCrit = 24.2
-    local spell2Calls = 0
-    local bareSpellCalls = 0
+    local spellCalls = 0
     local _, critAddon = loadStatsPro("enUS", {
         getCritChance = function() return nil end,
         getRangedCritChance = function() return nil end,
-        getSpellCritChance = function(school)
-            if school == 2 then
-                spell2Calls = spell2Calls + 1
-                return secretSpellCrit
-            end
-            bareSpellCalls = bareSpellCalls + 1
+        getSpellCritChance = function()
+            spellCalls = spellCalls + 1
             return secretSpellCrit
         end,
         issecretvalue = function(value) return value == secretSpellCrit end,
     })
     local ok, value = pcall(critAddon.GetBestCritChance)
     check("selector.best_crit_secret_spell2_returns_secret.no_error", ok, value)
-    eq("selector.best_crit_secret_spell2_returns_secret.spell2_seen", spell2Calls, 1)
     eq("selector.best_crit_secret_spell2_returns_secret.value", value, secretSpellCrit)
-    eq("selector.best_crit_secret_spell2_returns_secret.no_bare_spell_call", bareSpellCalls, 0)
+    eq("selector.best_crit_secret_spell2_returns_secret.all_schools_seen", spellCalls, 6)
 end
 
 do
@@ -2829,6 +2895,32 @@ do
     local ok, value = pcall(critAddon.GetBestCritChance)
     check("selector.best_crit_returns_secret_when_only_secret_source_exists.no_error", ok, value)
     eq("selector.best_crit_returns_secret_when_only_secret_source_exists.value", value, secretCrit)
+end
+
+do
+    local schoolCrit = { [2] = 25, [3] = 20, [4] = 19, [5] = 18, [6] = 22, [7] = 15 }
+    local critEnv, _, critTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = false,
+            showPercentage = true,
+            hideZeroOffensive = false,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getCritChance = function() return 16 end,
+        getRangedCritChance = function() return 17 end,
+        getSpellCritChance = function(school) return schoolCrit[school] end,
+    })
+    fireEvent("render.crit_uses_minimum_spell_school.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.crit_uses_minimum_spell_school.no_error", ok, blocks)
+    eq("render.crit_uses_minimum_spell_school.paper_doll_value", blockDumpContains(blocks, "17.0%"), true)
+    eq("render.crit_uses_minimum_spell_school.no_school2_overstatement", blockDumpContains(blocks, "25.0%"), false)
 end
 
 do
@@ -2965,8 +3057,7 @@ end
 
 do
     local secretSpellCrit = 24.2
-    local spell2Calls = 0
-    local bareSpellCalls = 0
+    local spellCalls = 0
     local critEnv, _, critTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = true,
@@ -2981,28 +3072,23 @@ do
         getCritChance = function() return 11.1 end,
         getRangedCritChance = function() return 18.6 end,
         getSpellCritChance = function(school)
-            if school == 2 then
-                spell2Calls = spell2Calls + 1
-                return secretSpellCrit
-            end
-            bareSpellCalls = bareSpellCalls + 1
-            error("bare spell fallback should not run after secret spell2")
+            spellCalls = spellCalls + 1
+            if school == 2 then return secretSpellCrit end
+            return 23.8
         end,
         issecretvalue = function(value) return value == secretSpellCrit end,
     })
     fireEvent("render.crit_spell_secret_uses_best_clean_fallback.fire", critEnv, "PLAYER_ENTERING_WORLD")
     local ok, blocks = pcall(critTest.buildRenderBlocks)
     check("render.crit_spell_secret_uses_best_clean_fallback.no_error", ok, blocks)
-    eq("render.crit_spell_secret_uses_best_clean_fallback.spell2_seen", spell2Calls > 0, true)
-    eq("render.crit_spell_secret_uses_best_clean_fallback.no_bare_spell_call", bareSpellCalls, 0)
+    eq("render.crit_spell_secret_uses_best_clean_fallback.all_schools_seen", spellCalls, 12)
     eq("render.crit_spell_secret_uses_best_clean_fallback.row", blockDumpContains(blocks, "Crit:"), true)
     eq("render.crit_spell_secret_uses_best_clean_fallback.clean_fallback_value", blockDumpContains(blocks, "18.6%"), true)
 end
 
 do
     local secretSpellCrit = 24.2
-    local spell2Calls = 0
-    local bareSpellCalls = 0
+    local spellCalls = 0
     local critEnv, _, critTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = true,
@@ -3016,12 +3102,8 @@ do
         },
         getCritChance = function() return nil end,
         getRangedCritChance = function() return nil end,
-        getSpellCritChance = function(school)
-            if school == 2 then
-                spell2Calls = spell2Calls + 1
-                return secretSpellCrit
-            end
-            bareSpellCalls = bareSpellCalls + 1
+        getSpellCritChance = function()
+            spellCalls = spellCalls + 1
             return secretSpellCrit
         end,
         issecretvalue = function(value) return value == secretSpellCrit end,
@@ -3029,8 +3111,7 @@ do
     fireEvent("render.crit_spell_secret_only_keeps_row.fire", critEnv, "PLAYER_ENTERING_WORLD")
     local ok, blocks = pcall(critTest.buildRenderBlocks)
     check("render.crit_spell_secret_only_keeps_row.no_error", ok, blocks)
-    eq("render.crit_spell_secret_only_keeps_row.spell2_seen", spell2Calls > 0, true)
-    eq("render.crit_spell_secret_only_keeps_row.no_bare_spell_call", bareSpellCalls, 0)
+    eq("render.crit_spell_secret_only_keeps_row.all_schools_seen", spellCalls, 12)
     eq("render.crit_spell_secret_only_keeps_row.row", blockDumpContains(blocks, "Crit:"), true)
 end
 

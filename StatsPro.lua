@@ -407,11 +407,19 @@ local defaults = {
 --[[ ============================================================
     4. STAT DEFINITION TABLES (data-driven; UpdateStats iterates these)
 ============================================================ ]]
--- WHY: Retail exposes crit through separate melee/ranged/spell APIs. In 12.x dungeon
--- contexts the generic melee read can be stale or secret while spell/ranged reads still
--- carry the live paper-doll value. SinStats uses max(melee, ranged, spell); Peavers
--- prefers spell crit first. We use max when clean, and pass a secret value through for
--- display instead of manufacturing 0.
+-- WHY: Blizzard's paper doll defines spell crit as the minimum across schools
+-- 2..MAX_SPELL_SCHOOLS, then chooses the best of spell/ranged/melee. In restricted
+-- content any school can be secret, so an incomplete spell aggregate must never
+-- masquerade as a clean partial min.
+function addon.GetMaxSpellSchool()
+    local value = _G.MAX_SPELL_SCHOOLS
+    if issecretvalue(value) or type(value) ~= "number" or value ~= value
+        or value <= -math.huge or value >= math.huge or value < 2 then
+        return 7
+    end
+    return math.floor(value)
+end
+
 function addon.GetBestCritChance()
     local function read(fn, ...)
         if type(fn) ~= "function" then return nil end
@@ -419,12 +427,15 @@ function addon.GetBestCritChance()
         if ok then return value end
         return nil
     end
+    local function isCleanFinite(value)
+        return not issecretvalue(value) and type(value) == "number" and value == value
+            and value > -math.huge and value < math.huge
+    end
     local function maxClean(...)
         local best
         for i = 1, select("#", ...) do
             local value = select(i, ...)
-            if not issecretvalue(value) and type(value) == "number" and value == value
-                and value > -math.huge and value < math.huge then
+            if isCleanFinite(value) then
                 best = best and math.max(best, value) or value
             end
         end
@@ -432,13 +443,27 @@ function addon.GetBestCritChance()
     end
     local melee = read(GetCritChance)
     local ranged = read(GetRangedCritChance)
-    local spell = read(GetSpellCritChance, 2)
-    if not issecretvalue(spell) and spell == nil then
-        spell = read(GetSpellCritChance)
+    local maxSpellSchool = addon.GetMaxSpellSchool()
+    local spell, secretSpell
+    local spellComplete, hasSecretSpell = true, false
+    for school = 2, maxSpellSchool do
+        local value = read(GetSpellCritChance, school)
+        if issecretvalue(value) then
+            if not hasSecretSpell then
+                secretSpell = value
+                hasSecretSpell = true
+            end
+            spellComplete = false
+        elseif isCleanFinite(value) then
+            spell = spell and math.min(spell, value) or value
+        else
+            spellComplete = false
+        end
     end
+    if not spellComplete then spell = nil end
     local clean = maxClean(melee, ranged, spell)
     if clean ~= nil then return clean end
-    if issecretvalue(spell) then return spell end
+    if hasSecretSpell then return secretSpell end
     if issecretvalue(ranged) then return ranged end
     if issecretvalue(melee) then return melee end
     return nil
@@ -6852,13 +6877,17 @@ function addon:PrintDebugLiveStats()
     PrintMsg(string.format("debug live: updateErrors=%d lastError=%s",
         cached.updateErrorCount or 0,
         cached.lastUpdateError or "<none>"))
-    PrintMsg(string.format("debug live crit: best=%s melee=%s ranged=%s spell2=%s spell=%s rating=%s",
+    PrintMsg(string.format("debug live crit: best=%s melee=%s ranged=%s rating=%s",
         addon.DebugStatCall(addon.GetBestCritChance, "%.2f"),
         addon.DebugStatCall(GetCritChance, "%.2f"),
         addon.DebugStatCall(GetRangedCritChance, "%.2f"),
-        addon.DebugStatCall(GetSpellCritChance, "%.2f", 2),
-        addon.DebugStatCall(GetSpellCritChance, "%.2f"),
         addon.DebugStatCall(GetCombatRating, "%d", CR_CRIT_MELEE)))
+    local spellSchoolValues = {}
+    for school = 2, addon.GetMaxSpellSchool() do
+        spellSchoolValues[#spellSchoolValues + 1] = string.format(
+            "%d=%s", school, addon.DebugStatCall(GetSpellCritChance, "%.2f", school))
+    end
+    PrintMsg("debug live crit schools: " .. table.concat(spellSchoolValues, " "))
     PrintMsg(string.format("debug live haste: percent=%s rating=%s bonus=%s",
         addon.DebugStatCall(GetHaste, "%.2f"),
         addon.DebugStatCall(GetCombatRating, "%d", CR_HASTE_MELEE),

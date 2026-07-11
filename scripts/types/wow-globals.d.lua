@@ -22,6 +22,9 @@
 ---@type string
 CANCEL = ""
 
+---@type number
+MAX_SPELL_SCHOOLS = 7
+
 ---@type table<string, StatsProStaticPopupDefinition>
 StaticPopupDialogs = {}
 

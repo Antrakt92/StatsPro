@@ -437,9 +437,10 @@ end
 local definition = _G.StaticPopupDialogs["STATSPRO_FIXTURE"]
 definition.button1 = definition.buton1
 local globalTypo = _G.StatsProFontPickre
+local maxSchoolsTypo = _G.MAX_SPELL_SCHOOL
 local suffix = "Text"
 local dynamic = _G["StatsProVisibleCheck" .. suffix]
-return state.retrySchedueld or globalTypo or dynamic
+return state.retrySchedueld or globalTypo or maxSchoolsTypo or dynamic
 '@ -Encoding UTF8
         $fieldCheck = Invoke-LuaLanguageServerCheck `
             -ServerPath $luaLanguageServer `
@@ -449,14 +450,15 @@ return state.retrySchedueld or globalTypo or dynamic
             -Description "undefined-field regression fixture"
         $undefinedFieldDiagnostics = @($fieldCheck.Diagnostics | Where-Object { $_.Code -eq "undefined-field" })
         $fieldMessages = $undefinedFieldDiagnostics.Message -join "`n"
-        if ($fieldCheck.ExitCode -eq 0 -or $fieldCheck.Diagnostics.Count -ne 4 -or
-            $undefinedFieldDiagnostics.Count -ne 4 -or
+        if ($fieldCheck.ExitCode -eq 0 -or $fieldCheck.Diagnostics.Count -ne 5 -or
+            $undefinedFieldDiagnostics.Count -ne 5 -or
             $fieldMessages -notmatch "retrySchedueld" -or
             $fieldMessages -notmatch "StatsProFontPickre" -or
+            $fieldMessages -notmatch "MAX_SPELL_SCHOOL" -or
             $fieldMessages -notmatch "IsShwon" -or
             $fieldMessages -notmatch "buton1") {
             $summary = @($fieldCheck.Diagnostics | ForEach-Object { "$($_.Code): $($_.Message)" }) -join " | "
-            throw "LuaLS field-typo fixture must report only the four intentional field typos; exit=$($fieldCheck.ExitCode), diagnostics=$summary"
+            throw "LuaLS field-typo fixture must report only the five intentional field typos; exit=$($fieldCheck.ExitCode), diagnostics=$summary"
         }
     }
     finally {

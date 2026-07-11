@@ -502,6 +502,13 @@ addon.archonTargets.snapshotOptions = {
     { value = "mythicPlus", label = "Mythic+" },
     { value = "raid",       label = "Raid" },
 }
+-- Session-local by design: a character change reloads addon Lua, while zoning into
+-- Mythic+ does not. Context changes clear entries so switching away and back cannot
+-- revive a comparison captured before the switch.
+addon.archonTargets.comparisonCache = {
+    generation = 0,
+    entries = {},
+}
 local cached
 
 addon.archonTargets.specKeyByID = {
@@ -522,14 +529,96 @@ addon.archonTargets.specKeyByID = {
 
 function addon.archonTargets.GetCurrentClassToken()
     local _, classToken = UnitClass("player")
+    if type(classToken) ~= "string" or issecretvalue(classToken) or classToken == "" then return nil end
     return classToken
 end
 
 function addon.archonTargets.GetCurrentSpecKey()
     local idx = SafeGetSpecIndex()
-    if not idx then return nil end
+    if type(idx) ~= "number" or issecretvalue(idx) then return nil end
     local specID = SafeGetSpecInfo(idx)
-    return specID and addon.archonTargets.specKeyByID[specID] or nil
+    if type(specID) ~= "number" or issecretvalue(specID) then return nil end
+    return addon.archonTargets.specKeyByID[specID]
+end
+
+function addon.archonTargets.IsCleanFiniteNumber(value)
+    if issecretvalue(value) then return false end
+    return type(value) == "number" and value == value and value > -math.huge and value < math.huge
+end
+
+function addon.archonTargets.IsCleanContextKey(value)
+    return type(value) == "string" and not issecretvalue(value) and value ~= ""
+end
+
+function addon.archonTargets.ActivateComparisonContext(classToken, specKey, snapshotKey)
+    if not addon.archonTargets.IsCleanContextKey(classToken)
+        or not addon.archonTargets.IsCleanContextKey(specKey)
+        or not addon.archonTargets.IsCleanContextKey(snapshotKey) then return nil end
+    local cache = addon.archonTargets.comparisonCache
+    if cache.classToken ~= classToken or cache.specKey ~= specKey or cache.snapshotKey ~= snapshotKey then
+        cache.generation = cache.generation + 1
+        cache.classToken = classToken
+        cache.specKey = specKey
+        cache.snapshotKey = snapshotKey
+        cache.entries = {}
+    end
+    return cache
+end
+
+function addon.archonTargets.GetCachedComparison(classToken, specKey, snapshotKey, statKey,
+                                                  target, ratingCR, capturedAt)
+    if not addon.archonTargets.IsCleanContextKey(statKey)
+        or not addon.archonTargets.IsCleanFiniteNumber(target)
+        or not addon.archonTargets.IsCleanFiniteNumber(ratingCR)
+        or type(capturedAt) ~= "string" or issecretvalue(capturedAt) then return nil end
+    local cache = addon.archonTargets.ActivateComparisonContext(classToken, specKey, snapshotKey)
+    if not cache then return nil end
+    local entry = cache.entries[statKey]
+    if type(entry) ~= "table" or entry.generation ~= cache.generation
+        or entry.classToken ~= classToken or entry.specKey ~= specKey
+        or entry.snapshotKey ~= snapshotKey or entry.statKey ~= statKey
+        or entry.target ~= target or entry.ratingCR ~= ratingCR
+        or entry.capturedAt ~= capturedAt then
+        cache.entries[statKey] = nil
+        return nil
+    end
+    if not addon.archonTargets.IsCleanFiniteNumber(entry.current)
+        or not addon.archonTargets.IsCleanFiniteNumber(entry.delta) then
+        cache.entries[statKey] = nil
+        return nil
+    end
+    if entry.currentPct ~= nil and not addon.archonTargets.IsCleanFiniteNumber(entry.currentPct) then
+        cache.entries[statKey] = nil
+        return nil
+    end
+    return entry
+end
+
+function addon.archonTargets.StoreCleanComparison(classToken, specKey, snapshotKey, statKey,
+                                                   target, ratingCR, capturedAt,
+                                                   current, currentPct, delta)
+    if not addon.archonTargets.IsCleanContextKey(statKey)
+        or not addon.archonTargets.IsCleanFiniteNumber(target)
+        or not addon.archonTargets.IsCleanFiniteNumber(ratingCR)
+        or not addon.archonTargets.IsCleanFiniteNumber(current)
+        or not addon.archonTargets.IsCleanFiniteNumber(delta)
+        or type(capturedAt) ~= "string" or issecretvalue(capturedAt) then return end
+    if currentPct ~= nil and not addon.archonTargets.IsCleanFiniteNumber(currentPct) then return end
+    local cache = addon.archonTargets.ActivateComparisonContext(classToken, specKey, snapshotKey)
+    if not cache then return end
+    cache.entries[statKey] = {
+        generation = cache.generation,
+        classToken = classToken,
+        specKey = specKey,
+        snapshotKey = snapshotKey,
+        statKey = statKey,
+        target = target,
+        ratingCR = ratingCR,
+        capturedAt = capturedAt,
+        current = current,
+        currentPct = currentPct,
+        delta = delta,
+    }
 end
 
 function addon.archonTargets.NormalizeSnapshotKey(value)
@@ -577,45 +666,48 @@ function addon.archonTargets.GetSnapshot(classToken, specKey, snapshotKey)
     local snapshotRoot, root, normalizedKey = addon.archonTargets.GetRootSnapshot(snapshotKey)
     if not snapshotRoot then return nil end
     local specs = snapshotRoot.specs
-    if type(specs) ~= "table" then return nil end
+    if type(specs) ~= "table" then return nil, snapshotRoot, root, normalizedKey end
     local classData = specs[classToken]
-    if type(classData) ~= "table" then return nil end
+    if type(classData) ~= "table" then return nil, snapshotRoot, root, normalizedKey end
     local specData = classData[specKey]
-    if type(specData) ~= "table" then return nil end
+    if type(specData) ~= "table" then return nil, snapshotRoot, root, normalizedKey end
     return specData, snapshotRoot, root, normalizedKey
 end
 
 function addon.archonTargets.GetCurrentSnapshot()
-    return addon.archonTargets.GetSnapshot(addon.archonTargets.GetCurrentClassToken(), addon.archonTargets.GetCurrentSpecKey(), cached.targetSnapshot)
+    local classToken = addon.archonTargets.GetCurrentClassToken()
+    local specKey = addon.archonTargets.GetCurrentSpecKey()
+    if not classToken or not specKey then return nil end
+    local snapshot, snapshotRoot, root, snapshotKey = addon.archonTargets.GetSnapshot(classToken, specKey, cached.targetSnapshot)
+    snapshotKey = snapshotKey or addon.archonTargets.NormalizeSnapshotKey(cached.targetSnapshot)
+    addon.archonTargets.ActivateComparisonContext(classToken, specKey, snapshotKey)
+    return snapshot, snapshotRoot, root, snapshotKey, classToken, specKey
 end
 
 function addon.archonTargets.GetStatTarget(statKey)
-    local snapshot, snapshotRoot, root, snapshotKey = addon.archonTargets.GetCurrentSnapshot()
+    local snapshot, snapshotRoot, root, snapshotKey, classToken, specKey = addon.archonTargets.GetCurrentSnapshot()
     local targets = snapshot and snapshot.targets
     local target = type(targets) == "table" and targets[statKey] or nil
     if type(target) ~= "number" or issecretvalue(target)
         or target ~= target or target <= 0 or target >= math.huge then return nil end
-    return target, snapshot, snapshotRoot, root, snapshotKey
+    return target, snapshot, snapshotRoot, root, snapshotKey, classToken, specKey
 end
 
 function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, currentPct, colorKey)
-    if type(currentRating) ~= "number" or issecretvalue(currentRating)
-        or currentRating ~= currentRating or currentRating < 0 or currentRating >= math.huge then return nil end
-    local target, snapshot, snapshotRoot, _, snapshotKey = addon.archonTargets.GetStatTarget(statKey)
+    local hasCleanCurrent = addon.archonTargets.IsCleanFiniteNumber(currentRating) and currentRating >= 0
+    local target, snapshot, snapshotRoot, _, snapshotKey, classToken, specKey = addon.archonTargets.GetStatTarget(statKey)
     if not target then return nil end
     if type(snapshot) ~= "table" or type(snapshotRoot) ~= "table" then return nil end
-    local displayPct = (type(currentPct) == "number" and not issecretvalue(currentPct)
-        and currentPct == currentPct and currentPct > -math.huge and currentPct < math.huge) and currentPct or nil
-    return {
+    local cleanRatingCR = addon.archonTargets.IsCleanFiniteNumber(ratingCR) and ratingCR or nil
+    local capturedAt = snapshotRoot.capturedAt
+    local meta = {
         statKey = statKey,
         colorKey = colorKey or statKey,
-        ratingCR = ratingCR,
+        ratingCR = cleanRatingCR,
         target = target,
-        current = currentRating,
-        currentPct = displayPct,
-        delta = currentRating - target,
+        comparisonState = "targetOnly",
         sourceUrl = snapshot.sourceUrl,
-        capturedAt = snapshotRoot.capturedAt,
+        capturedAt = capturedAt,
         snapshotKey = snapshotKey,
         snapshotLabel = addon.archonTargets.GetSnapshotLabel(snapshotRoot, snapshotKey),
         snapshotTitle = addon.archonTargets.GetSnapshotTitle(snapshotRoot, snapshotKey),
@@ -626,6 +718,29 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
         boss = snapshotRoot.boss,
         window = snapshotRoot.window,
     }
+    if hasCleanCurrent then
+        local displayPct = addon.archonTargets.IsCleanFiniteNumber(currentPct) and currentPct or nil
+        local delta = currentRating - target
+        if addon.archonTargets.IsCleanFiniteNumber(delta) then
+            meta.comparisonState = "exact"
+            meta.current = currentRating
+            meta.currentPct = displayPct
+            meta.delta = delta
+            addon.archonTargets.StoreCleanComparison(
+                classToken, specKey, snapshotKey, statKey, target, cleanRatingCR,
+                capturedAt, currentRating, displayPct, delta)
+        end
+        return meta
+    end
+    local entry = addon.archonTargets.GetCachedComparison(
+        classToken, specKey, snapshotKey, statKey, target, cleanRatingCR, capturedAt)
+    if entry then
+        meta.comparisonState = "lastKnown"
+        meta.current = entry.current
+        meta.currentPct = entry.currentPct
+        meta.delta = entry.delta
+    end
+    return meta
 end
 
 local function PlayerCanBlock()
@@ -855,6 +970,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "M+ High Keys", ["Raid Mythic All Bosses"] = "Raid Mythic All Bosses",
         ["Target:"] = "Target:", ["Current:"] = "Current:", ["Missing:"] = "Missing:",
         ["Over:"] = "Over:", ["Matched:"] = "Matched:", ["Snapshot:"] = "Snapshot:",
+        ["Last known comparison"] = "Last known comparison", ["Source:"] = "Source:",
         ["Stats panel shown"] = "Stats panel shown", ["Stats panel hidden"] = "Stats panel hidden",
         ["Settings reset to defaults"] = "Settings reset to defaults",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
@@ -937,6 +1053,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "M+ высокие ключи", ["Raid Mythic All Bosses"] = "Эпох. рейд, все боссы",
         ["Target:"] = "Цель:", ["Current:"] = "Сейчас:", ["Missing:"] = "Не хватает:",
         ["Over:"] = "Сверх:", ["Matched:"] = "Совпало:", ["Snapshot:"] = "Снимок:",
+        ["Last known comparison"] = "Последнее известное сравнение", ["Source:"] = "Источник:",
         ["Stats panel shown"] = "Панель статов показана", ["Stats panel hidden"] = "Панель статов скрыта",
         ["Settings reset to defaults"] = "Настройки сброшены по умолчанию",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
@@ -1014,6 +1131,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "M+ hohe Schlüssel", ["Raid Mythic All Bosses"] = "Raid Mythisch alle Bosse",
         ["Target:"] = "Ziel:", ["Current:"] = "Aktuell:", ["Missing:"] = "Fehlt:",
         ["Over:"] = "Drüber:", ["Matched:"] = "Erreicht:", ["Snapshot:"] = "Datenstand:",
+        ["Last known comparison"] = "Letzter bekannter Vergleich", ["Source:"] = "Quelle:",
         ["Stats panel shown"] = "Statpanel angezeigt", ["Stats panel hidden"] = "Statpanel ausgeblendet",
         ["Settings reset to defaults"] = "Einstellungen auf Standard zurückgesetzt",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Befehle: /ss oder /statspro (Einstellungen), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
@@ -1086,6 +1204,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "M+ hautes clés", ["Raid Mythic All Bosses"] = "Raid mythique tous les boss",
         ["Target:"] = "Cible :", ["Current:"] = "Actuel :", ["Missing:"] = "Manquant :",
         ["Over:"] = "Excès :", ["Matched:"] = "Atteint :", ["Snapshot:"] = "Instantané :",
+        ["Last known comparison"] = "Dernière comparaison connue", ["Source:"] = "Source :",
         ["Stats panel shown"] = "Panneau de stats affiché", ["Stats panel hidden"] = "Panneau de stats masqué",
         ["Settings reset to defaults"] = "Paramètres réinitialisés",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Commandes : /ss ou /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
@@ -1159,6 +1278,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "M+ llaves altas", ["Raid Mythic All Bosses"] = "Banda mítica todos los jefes",
         ["Target:"] = "Objetivo:", ["Current:"] = "Actual:", ["Missing:"] = "Falta:",
         ["Over:"] = "Exceso:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Captura:",
+        ["Last known comparison"] = "Última comparación conocida", ["Source:"] = "Fuente:",
         ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
         ["Settings reset to defaults"] = "Ajustes restablecidos",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
@@ -1230,6 +1350,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "M+ llaves altas", ["Raid Mythic All Bosses"] = "Banda mítica todos los jefes",
         ["Target:"] = "Objetivo:", ["Current:"] = "Actual:", ["Missing:"] = "Falta:",
         ["Over:"] = "Exceso:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Captura:",
+        ["Last known comparison"] = "Última comparación conocida", ["Source:"] = "Fuente:",
         ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
         ["Settings reset to defaults"] = "Configuración restablecida",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
@@ -1302,6 +1423,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "M+ chiavi alte", ["Raid Mythic All Bosses"] = "Incursione Mitica tutti i boss",
         ["Target:"] = "Bersaglio:", ["Current:"] = "Attuale:", ["Missing:"] = "Manca:",
         ["Over:"] = "Oltre:", ["Matched:"] = "Raggiunto:", ["Snapshot:"] = "Istantanea:",
+        ["Last known comparison"] = "Ultimo confronto noto", ["Source:"] = "Fonte:",
         ["Stats panel shown"] = "Pannello statistiche mostrato", ["Stats panel hidden"] = "Pannello statistiche nascosto",
         ["Settings reset to defaults"] = "Impostazioni ripristinate",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandi: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
@@ -1373,6 +1495,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "M+ chaves altas", ["Raid Mythic All Bosses"] = "Raide Mítico todos os chefes",
         ["Target:"] = "Alvo:", ["Current:"] = "Atual:", ["Missing:"] = "Falta:",
         ["Over:"] = "Acima:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Registro:",
+        ["Last known comparison"] = "Última comparação conhecida", ["Source:"] = "Fonte:",
         ["Stats panel shown"] = "Painel de atributos mostrado", ["Stats panel hidden"] = "Painel de atributos oculto",
         ["Settings reset to defaults"] = "Configurações restauradas",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandos: /ss ou /statspro (configurações), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
@@ -1451,6 +1574,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "쐐기+ 고단", ["Raid Mythic All Bosses"] = "신화 공격대 모든 우두머리",
         ["Target:"] = "목표:", ["Current:"] = "현재:", ["Missing:"] = "부족:",
         ["Over:"] = "초과:", ["Matched:"] = "일치:", ["Snapshot:"] = "스냅샷:",
+        ["Last known comparison"] = "마지막으로 확인된 비교", ["Source:"] = "출처:",
         ["Stats panel shown"] = "능력치 패널 표시됨", ["Stats panel hidden"] = "능력치 패널 숨김",
         ["Settings reset to defaults"] = "설정이 기본값으로 초기화되었습니다",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "명령어: /ss 또는 /statspro (설정), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
@@ -1522,6 +1646,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "史诗+高层", ["Raid Mythic All Bosses"] = "史诗团队全部首领",
         ["Target:"] = "目标:", ["Current:"] = "当前:", ["Missing:"] = "缺少:",
         ["Over:"] = "超出:", ["Matched:"] = "已达成:", ["Snapshot:"] = "快照:",
+        ["Last known comparison"] = "上次已知对比", ["Source:"] = "来源:",
         ["Stats panel shown"] = "属性面板已显示", ["Stats panel hidden"] = "属性面板已隐藏",
         ["Settings reset to defaults"] = "设置已恢复默认",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "命令: /ss 或 /statspro (设置), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
@@ -1593,6 +1718,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "傳奇+高層", ["Raid Mythic All Bosses"] = "傳奇團隊全部首領",
         ["Target:"] = "目標:", ["Current:"] = "目前:", ["Missing:"] = "缺少:",
         ["Over:"] = "超出:", ["Matched:"] = "已達成:", ["Snapshot:"] = "快照:",
+        ["Last known comparison"] = "上次已知比較", ["Source:"] = "來源:",
         ["Stats panel shown"] = "屬性面板已顯示", ["Stats panel hidden"] = "屬性面板已隱藏",
         ["Settings reset to defaults"] = "設定已恢復預設",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "指令: /ss 或 /statspro (設定), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
@@ -3043,13 +3169,22 @@ function addon.archonTargets.FormatSnapshotDate(capturedAt)
 end
 
 function addon.archonTargets.ShowTooltip(anchor, meta)
-    if not meta then return end
+    if type(meta) ~= "table" or not SAFE_NUM.IsCleanFiniteNumber(meta.target) or meta.target < 0 then return end
+    local comparisonState = meta.comparisonState
+    local hasCleanComparison = SAFE_NUM.IsCleanFiniteNumber(meta.current) and meta.current >= 0
+        and SAFE_NUM.IsCleanFiniteNumber(meta.delta)
+    -- Compatibility for smoke/manual metadata built before comparisonState existed.
+    if comparisonState == nil and hasCleanComparison then comparisonState = "exact" end
+    local hasComparison = (comparisonState == "exact" or comparisonState == "lastKnown")
+        and hasCleanComparison
     local hasCleanCurrentPct = SAFE_NUM.IsCleanFiniteNumber(meta.currentPct)
     local currentBonus, targetBonus
     -- Versatility includes a flat component that rating conversion cannot recover.
     -- Without a clean complete currentPct, raw-rating percentages would be partial.
     if meta.statKey ~= "versatility" or hasCleanCurrentPct then
-        currentBonus = addon.archonTargets.GetRatingBonusForValue(meta.ratingCR, meta.current)
+        if hasComparison then
+            currentBonus = addon.archonTargets.GetRatingBonusForValue(meta.ratingCR, meta.current)
+        end
         targetBonus = addon.archonTargets.GetRatingBonusForValue(meta.ratingCR, meta.target)
     end
     local deltaBonus
@@ -3067,18 +3202,26 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     local valueColor = addon.archonTargets.GetTooltipValueColor(meta)
     GameTooltip:SetOwner(anchor, "ANCHOR_RIGHT")
     GameTooltip:AddLine("StatsPro " .. addon.archonTargets.GetLocalizedSnapshotTitle(meta.snapshotKey), 1, 0.82, 0)
+    if comparisonState == "lastKnown" then
+        GameTooltip:AddLine(L("Last known comparison"), 0.7, 0.7, 0.7)
+    end
     GameTooltip:AddDoubleLine(L("Target:"), addon.archonTargets.FormatRatingWithBonus(meta.target, targetDisplayBonus, false), 0.7, 0.7, 0.7, 1, 1, 1)
-    GameTooltip:AddDoubleLine(L("Current:"), addon.archonTargets.ColorTooltipValue(addon.archonTargets.FormatRatingWithBonus(meta.current, currentDisplayBonus, false), valueColor), 0.7, 0.7, 0.7, 1, 1, 1)
-    if meta.delta < 0 then
-        GameTooltip:AddDoubleLine(L("Missing:"), addon.archonTargets.FormatRatingWithBonus(math.abs(meta.delta), deltaBonus, true), 1, 0.35, 0.35, 1, 0.35, 0.35)
-    elseif meta.delta > 0 then
-        GameTooltip:AddDoubleLine(L("Over:"), addon.archonTargets.FormatRatingWithBonus(addon.archonTargets.FormatSignedRatingDelta(meta.delta), deltaBonus and -deltaBonus, true), 0.35, 0.8, 1, 0.35, 0.8, 1)
-    else
-        GameTooltip:AddDoubleLine(L("Matched:"), addon.archonTargets.FormatRatingWithBonus(0, deltaBonus, true), 0.5, 1, 0.5, 0.5, 1, 0.5)
+    if hasComparison then
+        GameTooltip:AddDoubleLine(L("Current:"), addon.archonTargets.ColorTooltipValue(addon.archonTargets.FormatRatingWithBonus(meta.current, currentDisplayBonus, false), valueColor), 0.7, 0.7, 0.7, 1, 1, 1)
+        if meta.delta < 0 then
+            GameTooltip:AddDoubleLine(L("Missing:"), addon.archonTargets.FormatRatingWithBonus(math.abs(meta.delta), deltaBonus, true), 1, 0.35, 0.35, 1, 0.35, 0.35)
+        elseif meta.delta > 0 then
+            GameTooltip:AddDoubleLine(L("Over:"), addon.archonTargets.FormatRatingWithBonus(addon.archonTargets.FormatSignedRatingDelta(meta.delta), deltaBonus and -deltaBonus, true), 0.35, 0.8, 1, 0.35, 0.8, 1)
+        else
+            GameTooltip:AddDoubleLine(L("Matched:"), addon.archonTargets.FormatRatingWithBonus(0, deltaBonus, true), 0.5, 1, 0.5, 0.5, 1, 0.5)
+        end
     end
     local snapshotDate = addon.archonTargets.FormatSnapshotDate(meta.capturedAt)
     if snapshotDate then
         GameTooltip:AddDoubleLine(L("Snapshot:"), addon.archonTargets.GetLocalizedSnapshotLabel(meta.snapshotKey) .. ", " .. snapshotDate, 0.7, 0.7, 0.7, 0.85, 0.85, 0.85)
+    end
+    if type(meta.sourceUrl) == "string" and not issecretvalue(meta.sourceUrl) and meta.sourceUrl ~= "" then
+        GameTooltip:AddDoubleLine(L("Source:"), "Archon", 0.7, 0.7, 0.7, 0.85, 0.85, 0.85)
     end
     GameTooltip:Show()
 end
@@ -7049,6 +7192,7 @@ if addon and addon.__statsproSmoke == true then
         rgbToHex = RGBToHex,
         getArchonTargetSnapshot = addon.archonTargets.GetSnapshot,
         buildArchonTargetMeta = addon.archonTargets.BuildMeta,
+        archonComparisonCache = function() return CopyTable(addon.archonTargets.comparisonCache) end,
         formatSnapshotDate = addon.archonTargets.FormatSnapshotDate,
         buildRenderBlocks = BuildRenderBlocks,
         routeRenderBlocks = RouteRenderBlocks,

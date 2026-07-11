@@ -631,8 +631,8 @@ local function makeEnv(locale, opts)
     env.GetSpecializationInfo = function() return nil end
     env.GetSpecializationRole = function() return nil end
     env.C_SpecializationInfo = {
-        GetSpecialization = function() return opts.specIndex end,
-        GetSpecializationInfo = function()
+        GetSpecialization = opts.getSpecialization or function() return opts.specIndex end,
+        GetSpecializationInfo = opts.getSpecializationInfo or function()
             return opts.specID, opts.specName, nil, nil, opts.specRole, opts.primaryStat
         end,
         GetSpecializationRole = function() return nil end,
@@ -747,6 +747,7 @@ do
     local snapshot = archonTest.getArchonTargetSnapshot("MAGE", "frost")
     eq("archon.snapshot.source", snapshot.sourceUrl, "https://www.archon.gg/wow/builds/frost/mage/mythic-plus/overview/high-keys/all-dungeons/this-week")
     local meta = archonTest.buildArchonTargetMeta("mastery", 700, archonEnv.CR_MASTERY)
+    eq("archon.meta.state", meta.comparisonState, "exact")
     eq("archon.meta.target", meta.target, 823)
     eq("archon.meta.current", meta.current, 700)
     eq("archon.meta.delta", meta.delta, -123)
@@ -785,6 +786,8 @@ do
     dualTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("archon.v2.raid_tooltip_title", dualEnv.GameTooltip.lines[1].left, "StatsPro Raid Target")
     eq("archon.v2.raid_tooltip_snapshot_label", dualEnv.GameTooltip.lines[5].right, "Raid Mythic All Bosses, 16-May-26")
+    eq("archon.v2.raid_tooltip_source_label", dualEnv.GameTooltip.lines[6].left, "Source:")
+    eq("archon.v2.raid_tooltip_source_value", dualEnv.GameTooltip.lines[6].right, "Archon")
 
     local corruptPrefEnv, _, corruptPrefTest = loadStatsPro("enUS", {
         statsProDB = {
@@ -919,6 +922,106 @@ do
     })
     eq("archon.meta.secret_guard_returns_nil", secretArchonTest.buildArchonTargetMeta("mastery", -1), nil)
     eq("archon.meta.secret_guard_before_compare", secretChecks, 1)
+
+    local restrictedFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(restrictedFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 1007, haste = 560, mastery = 823, versatility = 97 })
+    local restrictedEnv, _, restrictedTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProArchonTargets = restrictedFixture,
+        issecretvalue = function(value) return value == -1 end,
+    })
+    local ratingCRs = {
+        crit = restrictedEnv.CR_CRIT_MELEE,
+        haste = restrictedEnv.CR_HASTE_MELEE,
+        mastery = restrictedEnv.CR_MASTERY,
+        versatility = restrictedEnv.CR_VERSATILITY_DAMAGE_DONE,
+    }
+    for _, statKey in ipairs({ "crit", "haste", "mastery", "versatility" }) do
+        local targetOnly = restrictedTest.buildArchonTargetMeta(statKey, -1, ratingCRs[statKey])
+        check("archon.restricted.target_only." .. statKey .. ".meta", type(targetOnly) == "table", targetOnly)
+        eq("archon.restricted.target_only." .. statKey .. ".state", targetOnly.comparisonState, "targetOnly")
+        eq("archon.restricted.target_only." .. statKey .. ".current", targetOnly.current, nil)
+        eq("archon.restricted.target_only." .. statKey .. ".delta", targetOnly.delta, nil)
+    end
+
+    local exactMeta = restrictedTest.buildArchonTargetMeta("mastery", 700, restrictedEnv.CR_MASTERY, 22.4)
+    eq("archon.restricted.exact.state", exactMeta.comparisonState, "exact")
+    eq("archon.restricted.exact.current", exactMeta.current, 700)
+    eq("archon.restricted.exact.current_pct", exactMeta.currentPct, 22.4)
+    local lastKnownMeta = restrictedTest.buildArchonTargetMeta("mastery", -1, restrictedEnv.CR_MASTERY)
+    eq("archon.restricted.last_known.state", lastKnownMeta.comparisonState, "lastKnown")
+    eq("archon.restricted.last_known.current", lastKnownMeta.current, 700)
+    eq("archon.restricted.last_known.current_pct", lastKnownMeta.currentPct, 22.4)
+    eq("archon.restricted.last_known.delta", lastKnownMeta.delta, -123)
+    local recoveredMeta = restrictedTest.buildArchonTargetMeta("mastery", 710, restrictedEnv.CR_MASTERY, 23.1)
+    eq("archon.restricted.recovery.state", recoveredMeta.comparisonState, "exact")
+    eq("archon.restricted.recovery.current", recoveredMeta.current, 710)
+    eq("archon.restricted.recovery.current_pct", recoveredMeta.currentPct, 23.1)
+
+    restrictedFixture.snapshots.mythicPlus.specs.MAGE.frost.targets.mastery = 900
+    local changedTargetMeta = restrictedTest.buildArchonTargetMeta("mastery", -1, restrictedEnv.CR_MASTERY)
+    eq("archon.restricted.changed_target.state", changedTargetMeta.comparisonState, "targetOnly")
+    eq("archon.restricted.changed_target.target", changedTargetMeta.target, 900)
+    restrictedFixture.snapshots.mythicPlus.specs.MAGE.frost.targets.mastery = 823
+    local revertedTargetMeta = restrictedTest.buildArchonTargetMeta("mastery", -1, restrictedEnv.CR_MASTERY)
+    eq("archon.restricted.target_revert_stays_invalid.state", revertedTargetMeta.comparisonState, "targetOnly")
+    restrictedTest.buildArchonTargetMeta("mastery", 710, restrictedEnv.CR_MASTERY, 23.1)
+    restrictedFixture.snapshots.mythicPlus.capturedAt = "2026-05-16"
+    local changedCaptureMeta = restrictedTest.buildArchonTargetMeta("mastery", -1, restrictedEnv.CR_MASTERY)
+    eq("archon.restricted.changed_capture.state", changedCaptureMeta.comparisonState, "targetOnly")
+    eq("archon.restricted.changed_capture.captured_at", changedCaptureMeta.capturedAt, "2026-05-16")
+    restrictedFixture.snapshots.mythicPlus.capturedAt = "2026-05-15"
+    local revertedCaptureMeta = restrictedTest.buildArchonTargetMeta("mastery", -1, restrictedEnv.CR_MASTERY)
+    eq("archon.restricted.capture_revert_stays_invalid.state", revertedCaptureMeta.comparisonState, "targetOnly")
+
+    local contextFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(contextFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 100, haste = 200, mastery = 823, versatility = 400 })
+    setArchonFixtureTargets(contextFixture, "mythicPlus", "MAGE", "fire",
+        { crit = 110, haste = 210, mastery = 933, versatility = 410 })
+    setArchonFixtureTargets(contextFixture, "raid", "MAGE", "frost",
+        { crit = 120, haste = 220, mastery = 812, versatility = 420 })
+    local activeSpecID = 64
+    local contextEnv, _, contextTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        statsProArchonTargets = contextFixture,
+        getSpecializationInfo = function()
+            return activeSpecID, nil, nil, nil, nil, 4
+        end,
+        issecretvalue = function(value) return value == -1 end,
+    })
+    contextTest.buildArchonTargetMeta("mastery", 700, contextEnv.CR_MASTERY, 20.0)
+    local untouchedCritMeta = contextTest.buildArchonTargetMeta("crit", -1, contextEnv.CR_CRIT_MELEE)
+    eq("archon.restricted.stat_isolation.state", untouchedCritMeta.comparisonState, "targetOnly")
+    activeSpecID = 63
+    local fireMeta = contextTest.buildArchonTargetMeta("mastery", -1, contextEnv.CR_MASTERY)
+    eq("archon.restricted.spec_isolation.state", fireMeta.comparisonState, "targetOnly")
+    eq("archon.restricted.spec_isolation.target", fireMeta.target, 933)
+    activeSpecID = 64
+    local frostAgainMeta = contextTest.buildArchonTargetMeta("mastery", -1, contextEnv.CR_MASTERY)
+    eq("archon.restricted.spec_switch_back_invalidates.state", frostAgainMeta.comparisonState, "targetOnly")
+    contextEnv.StatsProDB.targetSnapshot = "raid"
+    contextTest.cacheSettings()
+    local raidRestrictedMeta = contextTest.buildArchonTargetMeta("mastery", -1, contextEnv.CR_MASTERY)
+    eq("archon.restricted.snapshot_isolation.state", raidRestrictedMeta.comparisonState, "targetOnly")
+    eq("archon.restricted.snapshot_isolation.target", raidRestrictedMeta.target, 812)
+    contextEnv.StatsProDB.targetSnapshot = "mythicPlus"
+    contextTest.cacheSettings()
+    local mythicPlusAgainMeta = contextTest.buildArchonTargetMeta("mastery", -1, contextEnv.CR_MASTERY)
+    eq("archon.restricted.snapshot_switch_back_invalidates.state", mythicPlusAgainMeta.comparisonState, "targetOnly")
+    contextTest.buildArchonTargetMeta("mastery", 705, contextEnv.CR_MASTERY, 20.5)
+    contextFixture.snapshots.mythicPlus.specs.MAGE.fire = nil
+    activeSpecID = 63
+    eq("archon.restricted.missing_spec_context.meta",
+        contextTest.buildArchonTargetMeta("mastery", -1, contextEnv.CR_MASTERY), nil)
+    activeSpecID = 64
+    local afterMissingSpecMeta = contextTest.buildArchonTargetMeta("mastery", -1, contextEnv.CR_MASTERY)
+    eq("archon.restricted.missing_spec_switch_back_invalidates.state",
+        afterMissingSpecMeta.comparisonState, "targetOnly")
 end
 
 local function runMigrate(db)
@@ -1349,6 +1452,51 @@ do
 end
 
 do
+    local targetFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 1043, haste = 560, mastery = 823, versatility = 97 })
+    local targetOnlyEnv, _, targetOnlyTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProArchonTargets = targetFixture,
+        inCombatLockdown = function() return true end,
+        getCombatRating = function() return -1 end,
+        issecretvalue = function(value) return value == -1 end,
+    })
+    local okTargetOnlyFire, errTargetOnlyFire = pcall(targetOnlyEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("tooltip.restricted_target_only.fire", okTargetOnlyFire, errTargetOnlyFire)
+    local targetOnlyMeta = targetOnlyTest.buildArchonTargetMeta(
+        "crit", -1, targetOnlyEnv.CR_CRIT_MELEE)
+    eq("tooltip.restricted_target_only.state", targetOnlyMeta.comparisonState, "targetOnly")
+    targetOnlyTest.renderMainPanelForSmoke("Crit:", "812", "30.0%", 1, nil, nil, { targetOnlyMeta })
+    targetOnlyTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("tooltip.restricted_target_only.combat_on_enter_shows", targetOnlyEnv.GameTooltip:IsShown(), true)
+    eq("tooltip.restricted_target_only.line_count", #targetOnlyEnv.GameTooltip.lines, 4)
+    eq("tooltip.restricted_target_only.target_label", targetOnlyEnv.GameTooltip.lines[2].left, "Target:")
+    eq("tooltip.restricted_target_only.target_value", targetOnlyEnv.GameTooltip.lines[2].right, "1043")
+    eq("tooltip.restricted_target_only.snapshot_label", targetOnlyEnv.GameTooltip.lines[3].left, "Snapshot:")
+    eq("tooltip.restricted_target_only.source_label", targetOnlyEnv.GameTooltip.lines[4].left, "Source:")
+    eq("tooltip.restricted_target_only.source_value", targetOnlyEnv.GameTooltip.lines[4].right, "Archon")
+
+    local exactMeta = targetOnlyTest.buildArchonTargetMeta(
+        "crit", 812, targetOnlyEnv.CR_CRIT_MELEE, 30.0)
+    eq("tooltip.restricted_last_known.prime_exact", exactMeta.comparisonState, "exact")
+    local lastKnownMeta = targetOnlyTest.buildArchonTargetMeta(
+        "crit", -1, targetOnlyEnv.CR_CRIT_MELEE)
+    targetOnlyTest.renderMainPanelForSmoke("Crit:", "812", "30.0%", 1, nil, nil, { lastKnownMeta })
+    targetOnlyTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("tooltip.restricted_last_known.line_count", #targetOnlyEnv.GameTooltip.lines, 7)
+    eq("tooltip.restricted_last_known.notice", targetOnlyEnv.GameTooltip.lines[2].left, "Last known comparison")
+    eq("tooltip.restricted_last_known.target_label", targetOnlyEnv.GameTooltip.lines[3].left, "Target:")
+    eq("tooltip.restricted_last_known.current_label", targetOnlyEnv.GameTooltip.lines[4].left, "Current:")
+    eq("tooltip.restricted_last_known.current_value", targetOnlyEnv.GameTooltip.lines[4].right, "812 (~30.0%)")
+    eq("tooltip.restricted_last_known.delta_label", targetOnlyEnv.GameTooltip.lines[5].left, "Missing:")
+    eq("tooltip.restricted_last_known.snapshot_label", targetOnlyEnv.GameTooltip.lines[6].left, "Snapshot:")
+    eq("tooltip.restricted_last_known.source_label", targetOnlyEnv.GameTooltip.lines[7].left, "Source:")
+end
+
+do
     local localizedTooltipEnv, _, localizedTooltipTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
         specIndex = 1,
@@ -1359,6 +1507,7 @@ do
         getCombatRatingBonusForCombatRatingValue = function(_, value)
             return value / 70
         end,
+        issecretvalue = function(value) return value == -1 end,
         statsProArchonTargets = {
             schemaVersion = 2,
             source = "archon",
@@ -1389,6 +1538,12 @@ do
     eq("tooltip.localized_ruRU_missing_label", localizedTooltipEnv.GameTooltip.lines[4].left, "Не хватает:")
     eq("tooltip.localized_ruRU_snapshot_label", localizedTooltipEnv.GameTooltip.lines[5].left, "Снимок:")
     eq("tooltip.localized_ruRU_snapshot_value", localizedTooltipEnv.GameTooltip.lines[5].right, "M+ высокие ключи, 15-май-26")
+    local localizedLastKnown = localizedTooltipTest.buildArchonTargetMeta(
+        "crit", -1, localizedTooltipEnv.CR_CRIT_MELEE)
+    localizedTooltipTest.renderMainPanelForSmoke("Крит:", "812", "30.0%", 1, nil, nil, { localizedLastKnown })
+    localizedTooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("tooltip.localized_ruRU_last_known_notice",
+        localizedTooltipEnv.GameTooltip.lines[2].left, "Последнее известное сравнение")
 end
 
 do
@@ -1504,8 +1659,8 @@ do
 end
 
 do
-    local meta = { statKey = "mastery", target = 1043, current = 812, delta = -231 }
-    local main = test.routeRenderBlocks({
+    local meta = { statKey = "mastery", target = 1043, comparisonState = "targetOnly" }
+    local blocks = {
         {
             splitKey = "splitCharacter",
             sectionKey = "Character",
@@ -1523,11 +1678,23 @@ do
             targetRows = { meta },
             repairStr = "",
         },
-    }, "sectioned", nil, "full")
+    }
+    local flatMain = test.routeRenderBlocks(blocks, "flat", nil, "hidden")
+    eq("tooltip.route_flat_character_row", flatMain.targetRows[1], false)
+    eq("tooltip.route_flat_offensive_row", flatMain.targetRows[2], meta)
+
+    local main = test.routeRenderBlocks(blocks, "sectioned", nil, "full")
     eq("tooltip.route_header_character", main.targetRows[1], false)
     eq("tooltip.route_character_row", main.targetRows[2], false)
     eq("tooltip.route_header_offensive", main.targetRows[3], false)
     eq("tooltip.route_offensive_row", main.targetRows[4], meta)
+
+    local splitMain, splitSide = test.routeRenderBlocks(blocks, "split", {
+        splitCharacter = false,
+        splitOffensive = true,
+    }, "hidden")
+    eq("tooltip.route_split_main_character_row", splitMain.targetRows[1], false)
+    eq("tooltip.route_split_side_offensive_row", splitSide.targetRows[1], meta)
 end
 
 local function hasScript(name, frame, scriptName)
@@ -3193,8 +3360,63 @@ do
     local ok, blocks = pcall(critTest.buildRenderBlocks)
     check("render.target_hover_rating_error.no_error", ok, blocks)
     eq("render.target_hover_rating_error.row_still_visible", blockDumpContains(blocks, "Crit:"), true)
-    eq("render.target_hover_rating_error.no_false_current_zero_meta", blocks[2].targetRows[1], false)
+    local targetOnlyMeta = blocks[2].targetRows[1]
+    check("render.target_hover_rating_error.target_only_meta", type(targetOnlyMeta) == "table", targetOnlyMeta)
+    eq("render.target_hover_rating_error.target_only_state", targetOnlyMeta.comparisonState, "targetOnly")
+    eq("render.target_hover_rating_error.no_false_current_zero", targetOnlyMeta.current, nil)
+    eq("render.target_hover_rating_error.no_false_delta_zero", targetOnlyMeta.delta, nil)
     eq("render.target_hover_rating_error.no_second_percent_only_rating_read", ratingCalls, 1)
+end
+
+do
+    local liveRating = 812
+    local targetHoverFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(targetHoverFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 1000, haste = 200, mastery = 300, versatility = 400 })
+    local critEnv, _, critTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        inCombatLockdown = function() return true end,
+        statsProDB = {
+            showOffensive = true,
+            showRating = false,
+            showPercentage = true,
+            showCrit = true,
+            showHaste = false,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        statsProArchonTargets = targetHoverFixture,
+        getCritChance = function() return 12.5 end,
+        getCombatRating = function() return liveRating end,
+        issecretvalue = function(value) return value == -1 end,
+    })
+    fireEvent("render.target_hover_clean_secret_clean.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    local exactBlocks = critTest.buildRenderBlocks()
+    local exactMeta = exactBlocks[2].targetRows[1]
+    eq("render.target_hover_clean_secret_clean.exact_state", exactMeta.comparisonState, "exact")
+    eq("render.target_hover_clean_secret_clean.exact_current", exactMeta.current, 812)
+
+    liveRating = -1
+    local restrictedBlocks = critTest.buildRenderBlocks()
+    local lastKnownMeta = restrictedBlocks[2].targetRows[1]
+    eq("render.target_hover_clean_secret_clean.last_known_state", lastKnownMeta.comparisonState, "lastKnown")
+    eq("render.target_hover_clean_secret_clean.last_known_current", lastKnownMeta.current, 812)
+    eq("render.target_hover_clean_secret_clean.secret_not_stored", lastKnownMeta.current == -1, false)
+    local cacheState = critTest.archonComparisonCache()
+    eq("render.target_hover_clean_secret_clean.cache_current_clean", cacheState.entries.crit.current, 812)
+    critTest.renderMainPanelForSmoke("Crit:", "12.5%", "", 1, nil, nil, { lastKnownMeta })
+    critTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("render.target_hover_clean_secret_clean.combat_overlay_shows", critEnv.GameTooltip:IsShown(), true)
+
+    liveRating = 830
+    local recoveredBlocks = critTest.buildRenderBlocks()
+    local recoveredMeta = recoveredBlocks[2].targetRows[1]
+    eq("render.target_hover_clean_secret_clean.recovered_state", recoveredMeta.comparisonState, "exact")
+    eq("render.target_hover_clean_secret_clean.recovered_current", recoveredMeta.current, 830)
 end
 
 do
@@ -4275,7 +4497,11 @@ do
     eq("render.versatility_secret_rating_displays_without_meta.row", blockDumpContains(blocks, "Vers:"), true)
     eq("render.versatility_secret_rating_displays_without_meta.rating", blockDumpContains(blocks, "888"), true)
     eq("render.versatility_secret_rating_displays_without_meta.percent", blockDumpContains(blocks, "14.7%"), true)
-    eq("render.versatility_secret_rating_displays_without_meta.no_target_meta", blocks[2].targetRows[1], false)
+    local targetOnlyMeta = blocks[2].targetRows[1]
+    check("render.versatility_secret_rating_displays_without_meta.target_meta", type(targetOnlyMeta) == "table", targetOnlyMeta)
+    eq("render.versatility_secret_rating_displays_without_meta.target_only_state", targetOnlyMeta.comparisonState, "targetOnly")
+    eq("render.versatility_secret_rating_displays_without_meta.no_current", targetOnlyMeta.current, nil)
+    eq("render.versatility_secret_rating_displays_without_meta.no_delta", targetOnlyMeta.delta, nil)
 end
 
 do

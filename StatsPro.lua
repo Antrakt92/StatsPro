@@ -498,17 +498,26 @@ local STAMINA_UNIT_STAT_ID = 3
 -- GetSpecialization* deprecated since 11.2 and may be removed in 13.x. Defensive
 -- chain preserves the legacy fallback for clients missing the modern namespace.
 local function SafeGetSpecIndex()
-    if C_SpecializationInfo and C_SpecializationInfo.GetSpecialization then
-        return C_SpecializationInfo.GetSpecialization()
+    local fn = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization
+        or GetSpecialization
+    if type(fn) ~= "function" then return nil end
+    local ok, idx = pcall(fn)
+    if not ok then return nil end
+    local secretOK, secret = pcall(issecretvalue, idx)
+    if not secretOK or secret or type(idx) ~= "number"
+        or idx ~= idx or idx <= 0 or idx ~= math.floor(idx) then
+        return nil
     end
-    return GetSpecialization and GetSpecialization() or nil
+    return idx
 end
 
 local function SafeGetSpecInfo(idx)
-    if C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfo then
-        return C_SpecializationInfo.GetSpecializationInfo(idx)
-    end
-    return GetSpecializationInfo and GetSpecializationInfo(idx) or nil
+    local fn = C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfo
+        or GetSpecializationInfo
+    if type(fn) ~= "function" then return nil end
+    local ok, specID, name, description, icon, role, primaryStat = pcall(fn, idx)
+    if not ok then return nil end
+    return specID, name, description, icon, role, primaryStat
 end
 
 -- Returns 1 (Str) / 2 (Agi) / 4 (Int) or nil (no spec selected — sub-10 alts /
@@ -518,7 +527,10 @@ local function GetCurrentMainStatId()
     local idx = SafeGetSpecIndex()
     if not idx then return nil end
     local _, _, _, _, _, primaryStat = SafeGetSpecInfo(idx)
-    return primaryStat
+    local secretOK, secret = pcall(issecretvalue, primaryStat)
+    if not secretOK or secret or type(primaryStat) ~= "number" then return nil end
+    if primaryStat == 1 or primaryStat == 2 or primaryStat == 4 then return primaryStat end
+    return nil
 end
 
 addon.archonTargets = addon.archonTargets or {}
@@ -2375,6 +2387,30 @@ addon.dbRuntime = {
     },
 }
 
+addon.profileRuntime = {
+    activeGUID = nil,
+    activeSpecID = nil,
+    pendingResolution = false,
+    scheduledToken = nil,
+    noSpecRetryToken = nil,
+    settlingNoSpec = false,
+    requestGeneration = 0,
+    transitioning = false,
+    suppressIntermediateRefresh = false,
+    activationCount = 0,
+    applyCount = 0,
+    configRefreshCount = 0,
+    contextRenderCount = 0,
+    structuralCommitCount = 0,
+    contextReadCount = 0,
+}
+
+function addon.profileRuntime.BlocksUserWrites()
+    return not addon.profileRuntime.transitioning
+        and (addon.profileRuntime.pendingResolution
+            or addon.profileRuntime.scheduledToken ~= nil)
+end
+
 function addon.dbRuntime.IsCleanType(value, expectedType)
     local secretOK, secret = pcall(issecretvalue, value)
     return secretOK and not secret and type(value) == expectedType
@@ -2784,6 +2820,29 @@ function addon.dbRuntime.GetAccount()
     return addon.dbRuntime.activeAccount or root
 end
 
+function addon.dbRuntime.ActivateProfile(profileID)
+    local root = addon.dbRuntime.Refresh()
+    if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady
+        or not addon.dbRuntime.IsCleanType(profileID, "string") then
+        return false, false
+    end
+    local profile = root.profiles[profileID]
+    if not addon.dbRuntime.IsCleanTable(profile)
+        or not addon.dbRuntime.IsCleanTable(profile.settings) then
+        return false, false
+    end
+    if addon.dbRuntime.activeProfileID == profileID
+        and rawequal(addon.dbRuntime.activeSettings, profile.settings) then
+        return true, false
+    end
+    addon.dbRuntime.activeProfileID = profileID
+    addon.dbRuntime.activeSettings = profile.settings
+    addon.dbRuntime.activeAccount = root.account
+    addon.dbRuntime.validatedActiveProfileRef = profile
+    addon.dbRuntime.generation = addon.dbRuntime.generation + 1
+    return true, true
+end
+
 function addon.dbRuntime.GetSettingStore(key)
     if addon.dbRuntime.accountSettingKeys[key] then return addon.dbRuntime.GetAccount() end
     return addon.dbRuntime.GetActiveSettings()
@@ -2798,22 +2857,28 @@ end
 
 function addon.dbRuntime.GetWritableRoot(showGuidance)
     local root = addon.dbRuntime.Refresh()
-    if not addon.dbRuntime.readOnly then return root end
-    addon.dbRuntime.ShowReadOnlyGuidance(showGuidance)
+    if not addon.dbRuntime.readOnly and not addon.profileRuntime.BlocksUserWrites() then
+        return root
+    end
+    if addon.dbRuntime.readOnly then addon.dbRuntime.ShowReadOnlyGuidance(showGuidance) end
     return nil
 end
 
 function addon.dbRuntime.GetWritableSettings(showGuidance, key)
     addon.dbRuntime.Refresh()
-    if not addon.dbRuntime.readOnly then return addon.dbRuntime.GetSettingStore(key) end
-    addon.dbRuntime.ShowReadOnlyGuidance(showGuidance)
+    if not addon.dbRuntime.readOnly and not addon.profileRuntime.BlocksUserWrites() then
+        return addon.dbRuntime.GetSettingStore(key)
+    end
+    if addon.dbRuntime.readOnly then addon.dbRuntime.ShowReadOnlyGuidance(showGuidance) end
     return nil
 end
 
 function addon.dbRuntime.GetWritableAccount(showGuidance)
     addon.dbRuntime.Refresh()
-    if not addon.dbRuntime.readOnly then return addon.dbRuntime.GetAccount() end
-    addon.dbRuntime.ShowReadOnlyGuidance(showGuidance)
+    if not addon.dbRuntime.readOnly and not addon.profileRuntime.BlocksUserWrites() then
+        return addon.dbRuntime.GetAccount()
+    end
+    if addon.dbRuntime.readOnly then addon.dbRuntime.ShowReadOnlyGuidance(showGuidance) end
     return nil
 end
 
@@ -2855,6 +2920,396 @@ function addon.dbRuntime.BuildRegistry(flat)
     }
     if not addon.dbRuntime.ValidateRegistry(registry) then return nil end
     return registry
+end
+
+function addon.profileRuntime.ReadCombatState()
+    local ok, value = pcall(InCombatLockdown)
+    if not ok then return nil end
+    local secretOK, secret = pcall(issecretvalue, value)
+    if not secretOK or secret or type(value) ~= "boolean" then return nil end
+    return value
+end
+
+function addon.profileRuntime.ReadPlayerContext()
+    addon.profileRuntime.contextReadCount = addon.profileRuntime.contextReadCount + 1
+    if type(UnitGUID) ~= "function" then return nil, "unavailable" end
+    local guidOK, guid = pcall(UnitGUID, "player")
+    if not guidOK or not addon.dbRuntime.IsCleanType(guid, "string") or guid == "" then
+        return nil, "unknown"
+    end
+
+    local getSpecIndex = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization
+        or GetSpecialization
+    if type(getSpecIndex) ~= "function" then return nil, "unknown" end
+    local indexOK, specIndex = pcall(getSpecIndex)
+    if not indexOK then return nil, "unknown" end
+    local indexSecretOK, indexSecret = pcall(issecretvalue, specIndex)
+    if not indexSecretOK or indexSecret then return nil, "unknown" end
+    if type(specIndex) == "nil" then return nil, "no-spec" end
+    if type(specIndex) ~= "number" or not IsFiniteNumber(specIndex)
+        or specIndex <= 0 or specIndex ~= math.floor(specIndex) then
+        return nil, "unknown"
+    end
+
+    local getSpecInfo = C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfo
+        or GetSpecializationInfo
+    if type(getSpecInfo) ~= "function" then return nil, "unknown" end
+    local infoOK, specID, specName, _, _, role = pcall(getSpecInfo, specIndex)
+    if not infoOK or not addon.dbRuntime.IsCleanType(specID, "number")
+        or not IsFiniteNumber(specID) or specID <= 0 or specID ~= math.floor(specID) then
+        return nil, "unknown"
+    end
+
+    local context = { guid = guid, specID = specID }
+    if addon.dbRuntime.IsCleanType(specName, "string") and specName ~= "" then
+        context.specName = specName
+    end
+    if addon.dbRuntime.IsCleanType(role, "string")
+        and (role == "TANK" or role == "HEALER" or role == "DAMAGER") then
+        context.role = role
+    end
+
+    if type(UnitFullName) == "function" then
+        local nameOK, name, realm = pcall(UnitFullName, "player")
+        if nameOK and addon.dbRuntime.IsCleanType(name, "string") and name ~= "" then
+            if addon.dbRuntime.IsCleanType(realm, "string") and realm ~= "" then
+                context.displayName = name .. "-" .. realm
+            else
+                context.displayName = name
+            end
+        end
+    end
+    if type(UnitClass) == "function" then
+        local classOK, _, _, classID = pcall(UnitClass, "player")
+        if classOK and addon.dbRuntime.IsCleanType(classID, "number")
+            and IsFiniteNumber(classID) and classID > 0 and classID == math.floor(classID) then
+            context.classID = classID
+        end
+    end
+    if type(GetServerTime) == "function" then
+        local timeOK, lastSeen = pcall(GetServerTime)
+        if timeOK and addon.dbRuntime.IsCleanType(lastSeen, "number")
+            and IsFiniteNumber(lastSeen) and lastSeen >= 0
+            and lastSeen == math.floor(lastSeen) then
+            context.lastSeen = lastSeen
+        end
+    end
+    return context, "valid"
+end
+
+function addon.profileRuntime.ShallowCopy(source)
+    local copy = {}
+    for key, value in pairs(source) do copy[key] = value end
+    return copy
+end
+
+function addon.profileRuntime.AllocateProfileID(account, profiles)
+    local number = account.nextProfileID
+    if not addon.dbRuntime.IsCleanType(number, "number")
+        or number < 2 or number >= addon.dbRuntime.maxProfileNumber
+        or number ~= math.floor(number) then
+        return nil
+    end
+    local profileID = "p" .. tostring(number)
+    if profiles[profileID] ~= nil then return nil end
+    account.nextProfileID = number + 1
+    return profileID
+end
+
+function addon.profileRuntime.ProfileName(context, suffix)
+    local base = context.displayName or "Character"
+    if suffix == "default" then return base .. " - Default" end
+    return base .. " - " .. (context.specName or string.format("Spec %d", context.specID))
+end
+
+function addon.profileRuntime.CloneProfile(sourceProfile, name)
+    if not addon.dbRuntime.IsCleanTable(sourceProfile)
+        or not addon.dbRuntime.IsCleanTable(sourceProfile.settings) then
+        return nil
+    end
+    local settings, copied = addon.dbRuntime.CloneSerializable(sourceProfile.settings)
+    if not copied then return nil end
+    return { name = name, settings = settings }
+end
+
+function addon.profileRuntime.PrepareContextTransaction(context)
+    local root = addon.dbRuntime.Refresh()
+    if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady then return nil, nil end
+    local currentCharacter = root.characters[context.guid]
+    local existingProfileID = currentCharacter and currentCharacter.specProfiles
+        and currentCharacter.specProfiles[context.specID] or nil
+    if addon.dbRuntime.IsCleanType(existingProfileID, "string")
+        and addon.dbRuntime.IsCleanTable(root.profiles[existingProfileID]) then
+        local metadataChanged = (context.displayName and context.displayName ~= currentCharacter.displayName)
+            or (context.classID and context.classID ~= currentCharacter.classID)
+            or (context.lastSeen and context.lastSeen ~= currentCharacter.lastSeen)
+        if not metadataChanged then return nil, existingProfileID end
+        local character, copied = addon.dbRuntime.CloneSerializable(currentCharacter)
+        if not copied then return nil, nil end
+        if context.displayName then character.displayName = context.displayName end
+        if context.classID then character.classID = context.classID end
+        if context.lastSeen then character.lastSeen = context.lastSeen end
+        local characters = addon.profileRuntime.ShallowCopy(root.characters)
+        characters[context.guid] = character
+        local candidate = addon.profileRuntime.ShallowCopy(root)
+        candidate.characters = characters
+        if not addon.dbRuntime.ValidateRegistry(candidate) then return nil, nil end
+        return {
+            root = root,
+            oldAccount = root.account,
+            oldProfiles = root.profiles,
+            oldCharacters = root.characters,
+            account = root.account,
+            profiles = root.profiles,
+            characters = characters,
+        }, existingProfileID
+    end
+
+    local account, accountCopied = addon.dbRuntime.CloneSerializable(root.account)
+    if not accountCopied or type(account) ~= "table"
+        or not addon.dbRuntime.IsCleanTable(account)
+        or type(account.defaultProfileID) ~= "string"
+        or not addon.dbRuntime.IsCleanType(account.defaultProfileID, "string") then
+        return nil, nil
+    end
+    local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
+    local characters = addon.profileRuntime.ShallowCopy(root.characters)
+    local character
+    if currentCharacter then
+        local characterCopied
+        character, characterCopied = addon.dbRuntime.CloneSerializable(currentCharacter)
+        if not characterCopied or type(character) ~= "table" then return nil, nil end
+    else
+        local defaultSource = profiles[account.defaultProfileID]
+        local defaultProfileID = addon.profileRuntime.AllocateProfileID(account, profiles)
+        if type(defaultProfileID) ~= "string"
+            or not addon.dbRuntime.IsCleanType(defaultProfileID, "string") then return nil, nil end
+        local defaultProfile = addon.profileRuntime.CloneProfile(
+            defaultSource, addon.profileRuntime.ProfileName(context, "default"))
+        if type(defaultProfile) ~= "table" then return nil, nil end
+        profiles[defaultProfileID] = defaultProfile
+        character = { defaultProfileID = defaultProfileID, specProfiles = {} }
+    end
+    if not addon.dbRuntime.IsCleanTable(character) then return nil, nil end
+    if type(character.specProfiles) ~= "table" then character.specProfiles = {} end
+
+    local sourceProfileID = context.role and root.roleTemplates[context.role] or nil
+    if type(sourceProfileID) ~= "string" then sourceProfileID = account.defaultProfileID end
+    local sourceProfile = profiles[sourceProfileID]
+    if type(sourceProfile) ~= "table" then return nil, nil end
+    local specProfileID = addon.profileRuntime.AllocateProfileID(account, profiles)
+    if type(specProfileID) ~= "string"
+        or not addon.dbRuntime.IsCleanType(specProfileID, "string") then return nil, nil end
+    local specProfile = addon.profileRuntime.CloneProfile(
+        sourceProfile, addon.profileRuntime.ProfileName(context, "spec"))
+    if type(specProfile) ~= "table" then return nil, nil end
+    profiles[specProfileID] = specProfile
+    character.specProfiles[context.specID] = specProfileID
+    if context.displayName then character.displayName = context.displayName end
+    if context.classID then character.classID = context.classID end
+    if context.lastSeen then character.lastSeen = context.lastSeen end
+    characters[context.guid] = character
+
+    local candidate = addon.profileRuntime.ShallowCopy(root)
+    candidate.account = account
+    candidate.profiles = profiles
+    candidate.characters = characters
+    local valid = addon.dbRuntime.ValidateRegistry(candidate)
+    if not valid then return nil, nil end
+    return {
+        root = root,
+        oldAccount = root.account,
+        oldProfiles = root.profiles,
+        oldCharacters = root.characters,
+        account = account,
+        profiles = profiles,
+        characters = characters,
+    }, specProfileID
+end
+
+function addon.profileRuntime.CommitTransaction(transaction)
+    if not transaction then return true end
+    local root = transaction.root
+    root.account = transaction.account
+    root.profiles = transaction.profiles
+    root.characters = transaction.characters
+    addon.dbRuntime.Invalidate()
+    addon.profileRuntime.structuralCommitCount = addon.profileRuntime.structuralCommitCount + 1
+    return true
+end
+
+function addon.profileRuntime.RollbackTransaction(transaction)
+    if not transaction then return end
+    local root = transaction.root
+    root.account = transaction.oldAccount
+    root.profiles = transaction.oldProfiles
+    root.characters = transaction.oldCharacters
+    addon.dbRuntime.Invalidate()
+    addon.dbRuntime.Refresh()
+end
+
+function addon.profileRuntime.CloseOwnedSettingsModals()
+    local close = addon.profileRuntime.closeOwnedSettingsModals
+    if type(close) ~= "function" then return true end
+    local ok = pcall(close)
+    return ok
+end
+
+function addon.profileRuntime.ActivateResolvedContext(context, transaction, profileID, initializing)
+    local runtime = addon.profileRuntime
+    local oldProfileID = addon.dbRuntime.activeProfileID
+    local oldSettings = addon.dbRuntime.activeSettings
+    local oldGUID, oldSpecID = runtime.activeGUID, runtime.activeSpecID
+
+    runtime.transitioning = true
+    runtime.suppressIntermediateRefresh = true
+    if not initializing and addon.dbRuntime.IsCleanTable(oldSettings) then
+        local saveOK = type(runtime.saveActivePositions) ~= "function"
+            or pcall(runtime.saveActivePositions, oldSettings)
+        if not saveOK then
+            runtime.suppressIntermediateRefresh = false
+            runtime.transitioning = false
+            return false
+        end
+        if not runtime.CloseOwnedSettingsModals() then
+            runtime.suppressIntermediateRefresh = false
+            runtime.transitioning = false
+            return false
+        end
+    end
+    runtime.suppressIntermediateRefresh = false
+
+    runtime.CommitTransaction(transaction)
+    local activated = addon.dbRuntime.ActivateProfile(profileID)
+    if not activated then
+        runtime.RollbackTransaction(transaction)
+        addon.dbRuntime.ActivateProfile(oldProfileID)
+        runtime.transitioning = false
+        return false
+    end
+
+    local targetSettings = addon.dbRuntime.activeSettings
+    local targetSnapshot
+    if not transaction then
+        local copied
+        targetSnapshot, copied = addon.dbRuntime.CloneSerializable(targetSettings)
+        if not copied then
+            addon.dbRuntime.ActivateProfile(oldProfileID)
+            runtime.transitioning = false
+            return false
+        end
+    end
+
+    local applied = true
+    if not initializing and type(runtime.applyActiveSettings) == "function" then
+        applied = pcall(runtime.applyActiveSettings)
+    end
+    if not applied then
+        if targetSnapshot and addon.dbRuntime.IsCleanTable(targetSettings) then
+            wipe(targetSettings)
+            for key, value in pairs(targetSnapshot) do targetSettings[key] = value end
+            addon.dbRuntime.Invalidate()
+        end
+        runtime.RollbackTransaction(transaction)
+        addon.dbRuntime.ActivateProfile(oldProfileID)
+        runtime.activeGUID, runtime.activeSpecID = oldGUID, oldSpecID
+        if type(runtime.applyActiveSettings) == "function" then
+            pcall(runtime.applyActiveSettings)
+        end
+        runtime.transitioning = false
+        return false
+    end
+
+    runtime.activeGUID = context.guid
+    runtime.activeSpecID = context.specID
+    runtime.pendingResolution = false
+    runtime.activationCount = runtime.activationCount + 1
+    runtime.transitioning = false
+    return true
+end
+
+function addon.profileRuntime.ResolveCurrent(initializing)
+    local runtime = addon.profileRuntime
+    local combat = runtime.ReadCombatState()
+    if combat ~= false then
+        runtime.pendingResolution = true
+        return false
+    end
+    local context, contextStatus = runtime.ReadPlayerContext()
+    if not context then
+        if contextStatus == "unavailable" then
+            runtime.pendingResolution = false
+        elseif contextStatus == "no-spec" and runtime.settlingNoSpec then
+            runtime.pendingResolution = false
+        else
+            runtime.pendingResolution = true
+            if contextStatus == "no-spec" and runtime.noSpecRetryToken == nil then
+                local token = runtime.requestGeneration
+                runtime.noSpecRetryToken = token
+                C_Timer.After(0.1, function()
+                    if runtime.noSpecRetryToken ~= token then return end
+                    runtime.noSpecRetryToken = nil
+                    if runtime.requestGeneration ~= token then return end
+                    runtime.settlingNoSpec = true
+                    runtime.ResolveCurrent(false)
+                    runtime.settlingNoSpec = false
+                end)
+            end
+        end
+        return false
+    end
+    runtime.noSpecRetryToken = nil
+
+    local root = addon.dbRuntime.Refresh()
+    if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady then
+        runtime.pendingResolution = true
+        return false
+    end
+    local character = root.characters and root.characters[context.guid]
+    local mappedProfileID = character and character.specProfiles
+        and character.specProfiles[context.specID] or nil
+    if runtime.activeGUID == context.guid and runtime.activeSpecID == context.specID
+        and addon.dbRuntime.activeProfileID == mappedProfileID then
+        runtime.pendingResolution = false
+        return true
+    end
+
+    local transaction, profileID = runtime.PrepareContextTransaction(context)
+    if not addon.dbRuntime.IsCleanType(profileID, "string") then
+        runtime.pendingResolution = true
+        return false
+    end
+    return runtime.ActivateResolvedContext(context, transaction, profileID, initializing)
+end
+
+function addon.profileRuntime.RequestResolution(immediate)
+    local runtime = addon.profileRuntime
+    if type(UnitGUID) ~= "function" then
+        runtime.pendingResolution = false
+        return false
+    end
+    runtime.pendingResolution = true
+    runtime.requestGeneration = runtime.requestGeneration + 1
+    runtime.noSpecRetryToken = nil
+    if immediate then return runtime.ResolveCurrent(true) end
+    if runtime.scheduledToken ~= nil then return true end
+    local token = runtime.requestGeneration
+    runtime.scheduledToken = token
+    C_Timer.After(0, function()
+        if runtime.scheduledToken ~= token then return end
+        runtime.scheduledToken = nil
+        runtime.ResolveCurrent(false)
+    end)
+    return true
+end
+
+function addon.profileRuntime.ResolvePending()
+    local runtime = addon.profileRuntime
+    if not runtime.pendingResolution and runtime.scheduledToken == nil then return false end
+    runtime.requestGeneration = runtime.requestGeneration + 1
+    runtime.scheduledToken = nil
+    runtime.noSpecRetryToken = nil
+    return runtime.ResolveCurrent(false)
 end
 
 --[[ ============================================================
@@ -3612,18 +4067,22 @@ function Panel:DBKey(suffix)
     return self.dbKeyPrefix .. suffix
 end
 
-function Panel:SavePosition()
+function Panel:SavePositionTo(db)
     local point, _, relativePoint, xOfs, yOfs = self.frame:GetPoint()
     -- WHY: if the frame has no anchor yet (called before LoadPosition), GetPoint returns
     -- nil. Writing nil deletes the key — next load would fall back to defaults and the
     -- previously-saved position would be lost.
-    if not point then return end
-    local db = addon.dbRuntime.GetWritableSettings(false)
-    if not db then return end
+    if not point or not addon.dbRuntime.IsCleanTable(db) then return end
     db[self:DBKey("point")] = point
     db[self:DBKey("relativePoint")] = relativePoint
     db[self:DBKey("xOfs")] = xOfs
     db[self:DBKey("yOfs")] = yOfs
+end
+
+function Panel:SavePosition()
+    local db = addon.dbRuntime.GetWritableSettings(false)
+    if not db then return end
+    self:SavePositionTo(db)
 end
 
 function Panel:LoadPosition()
@@ -3637,15 +4096,27 @@ function Panel:LoadPosition()
     local xOfs             = NormalizePositionOffset(db[xOfsKey], defaults[xOfsKey] or 0)
     local yOfs             = NormalizePositionOffset(db[yOfsKey], defaults[yOfsKey] or 0)
 
+    local oldPoint, oldRelativeTo, oldRelativePoint, oldX, oldY = self.frame:GetPoint()
     self.frame:ClearAllPoints()
-    self.frame:SetPoint(point, UIParent, relativePoint, xOfs, yOfs)
+    local positioned = pcall(
+        self.frame.SetPoint, self.frame, point, UIParent, relativePoint, xOfs, yOfs)
     -- WHY: SetUserPlaced(true) AFTER SetPoint marks the frame as user-positioned at our
     -- chosen anchor. Required in 12.x retail for StartMoving/StopMovingOrSizing to commit
     -- the new position to the frame's internal anchor — without it, GetPoint() can return
     -- the pre-drag anchor on some setups, so SavePosition writes the OLD position back
     -- to SavedVariables and the move appears not to have saved. Order matters: SetPoint
     -- first, then SetUserPlaced — otherwise WoW's layout-cache could overwrite our anchor.
-    self.frame:SetUserPlaced(true)
+    if positioned then
+        positioned = pcall(self.frame.SetUserPlaced, self.frame, true)
+    end
+    if not positioned then
+        self.frame:ClearAllPoints()
+        if oldPoint then
+            pcall(self.frame.SetPoint, self.frame,
+                oldPoint, oldRelativeTo, oldRelativePoint, oldX, oldY)
+        end
+        error("panel position apply failed")
+    end
     -- WHY: scale is set via SetAllPanelsScale (single ownership); not duplicated here
 end
 
@@ -4177,6 +4648,11 @@ end
 ============================================================ ]]
 local mainPanel      = Panel:New("StatsProFrame",          "")
 local defensivePanel = Panel:New("StatsProDefensiveFrame", "defensive_")
+
+addon.profileRuntime.saveActivePositions = function(settings)
+    mainPanel:SavePositionTo(settings)
+    defensivePanel:SavePositionTo(settings)
+end
 
 local function ApplyTextStyleToAllPanels(font, size, force)
     local oldMainFont, oldMainSize, oldMainOutline =
@@ -5072,6 +5548,9 @@ local function OnPlayerEnteringWorld()
         addon.legacyImport.ImportFreshIfAvailable()
         MigrateDB()
         addon.dbRuntime.Refresh()
+        -- Resolve the character/spec profile before the first cache/style/position
+        -- pass so the account-default profile never flashes on login.
+        addon.profileRuntime.RequestResolution(true)
         addon.fontRuntime.repairSavedPaths()
         CacheSettings()
         if RefreshPersistentLocalization then RefreshPersistentLocalization() end
@@ -5095,6 +5574,8 @@ local function OnPlayerEnteringWorld()
         ApplyTextAlphaToAllPanels(cached.textAlpha)
         addon.readabilityConfig.applyPanelBackgroundAlphaToAllPanels(cached.panelBackgroundAlpha)
         isLoaded = true
+    else
+        addon.profileRuntime.RequestResolution(false)
     end
     -- WHY: UpdateStats handles Show/Hide based on cached.isVisible + line content.
     addon.durabilityRuntime.MarkDirty()
@@ -5113,13 +5594,23 @@ end
 -- but if the user reloads/quits via a path that bypasses our drag handler (rare),
 -- this guarantees the latest GetPoint() is what hits disk.
 local function OnPlayerLogout()
-    mainPanel:SavePosition()
-    defensivePanel:SavePosition()
+    addon.dbRuntime.Refresh()
+    if addon.dbRuntime.readOnly then return end
+    if addon.profileRuntime.pendingResolution and addon.profileRuntime.activeGUID == nil then return end
+    local settings = addon.dbRuntime.activeSettings
+    if addon.dbRuntime.IsCleanTable(settings) then
+        mainPanel:SavePositionTo(settings)
+        defensivePanel:SavePositionTo(settings)
+    end
 end
 
 local EVENT_HANDLERS = {
     PLAYER_ENTERING_WORLD       = OnPlayerEnteringWorld,
     PLAYER_LOGOUT               = OnPlayerLogout,
+    PLAYER_SPECIALIZATION_CHANGED = function(unit)
+        if not addon.dbRuntime.IsCleanType(unit, "string") or unit ~= "player" then return end
+        addon.profileRuntime.RequestResolution(false)
+    end,
     UPDATE_INVENTORY_DURABILITY = function() addon.durabilityRuntime.MarkDirty() end,
     PLAYER_EQUIPMENT_CHANGED    = function() addon.durabilityRuntime.MarkDirty(); itemLevelDirty = true end,
     BAG_UPDATE_DELAYED          = function() itemLevelDirty = true end,
@@ -5131,6 +5622,7 @@ local EVENT_HANDLERS = {
     -- enabled permanently so right-click Settings works even while locked; Panel:Lock /
     -- Panel:Unlock are no-op stubs kept behind this semantic wrapper.
     PLAYER_REGEN_ENABLED        = function()
+        addon.profileRuntime.ResolvePending()
         SetAllPanelsLockState(GetBoolDB("isLocked"))
         if cached.showRepairCost and cached.repairCostComplete == false then
             addon.durabilityRuntime.MarkDirty()
@@ -5535,8 +6027,10 @@ local function OpenColorPicker(btn, statName)
             local persisted = GetColor(statName)
             btn:SetBackdropColor(persisted.r, persisted.g, persisted.b, 1)
         end
-        CacheSettings()
-        addon:RunUpdateStatsSafe()
+        if not addon.profileRuntime.suppressIntermediateRefresh then
+            CacheSettings()
+            addon:RunUpdateStatsSafe()
+        end
         COLOR_PICKER_STATE.Clear(session)
     end
     session.swatchFunc = OnColorSelect
@@ -5872,7 +6366,9 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
 
     PushRefresher(function()
         local v = NUMBER_SETTING_META[dbKey] and GetNumberDB(dbKey) or GetDB(dbKey)
+        reverting = true
         slider:SetValue(v)
+        reverting = false
         _G[slider:GetName() .. "Text"]:SetText(string.format(valueFmt, v))
     end)
 
@@ -5951,12 +6447,72 @@ local function ResetToDefaults()
     PrintMsg(resetMessage)
 end
 
-function addon.legacyImport.CloseOwnedSettingsModals()
-    CloseDropDownMenus()
+addon.profileRuntime.closeOwnedSettingsModals = function()
+    if type(addon.profileRuntime.cancelLanguagePreview) == "function" then
+        addon.profileRuntime.cancelLanguagePreview()
+    end
+    local openMenu = _G.UIDROPDOWNMENU_OPEN_MENU
+    local menuName
+    if openMenu and type(openMenu.GetName) == "function" then
+        local ok, value = pcall(openMenu.GetName, openMenu)
+        if ok and addon.dbRuntime.IsCleanType(value, "string") then menuName = value end
+    end
+    if menuName and menuName:match("^StatsPro") then CloseDropDownMenus() end
+    if type(addon.profileRuntime.cancelFontPreview) == "function" then
+        addon.profileRuntime.cancelFontPreview()
+    end
     if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
         _G.StatsProFontPicker:Hide()
     end
     COLOR_PICKER_STATE.Close()
+    if addon.legacyImport.pending then
+        if type(_G.StaticPopup_Hide) == "function" then
+            pcall(_G.StaticPopup_Hide, "STATSPRO_IMPORT_SWIFTSTATS")
+        end
+        addon.legacyImport.CancelPending()
+    end
+end
+
+function addon.legacyImport.CloseOwnedSettingsModals()
+    addon.profileRuntime.closeOwnedSettingsModals()
+end
+
+addon.profileRuntime.applyActiveSettings = function()
+    CacheSettings()
+    if RefreshPersistentLocalization then
+        local localized = pcall(RefreshPersistentLocalization)
+        if not localized then PrintMsg("Launcher localization refresh failed.") end
+    end
+    local runtimeFont = MaybeAutoSwitchFont()
+    local applied = addon.fontRuntime.applyCommittedTextStyle(
+        runtimeFont or GetFontDB(), GetNumberDB("fontSize"), false, true)
+    if not applied then error("profile font apply failed") end
+    ApplyTextAlphaToAllPanels(cached.textAlpha)
+    addon.readabilityConfig.applyPanelBackgroundAlphaToAllPanels(cached.panelBackgroundAlpha)
+    LoadAllPositions()
+    SetAllPanelsLockState(GetBoolDB("isLocked"))
+    SetAllPanelsScale(GetNumberDB("scale"))
+    addon.durabilityRuntime.MarkDirty()
+    itemLevelDirty = true
+    local comparison = addon.archonTargets.comparisonCache
+    comparison.generation = comparison.generation + 1
+    comparison.classToken = nil
+    comparison.specKey = nil
+    comparison.snapshotKey = nil
+    comparison.entries = {}
+
+    if #configRefreshers > 0 then
+        for _, refresh in ipairs(configRefreshers) do
+            local ok = pcall(refresh)
+            if not ok then PrintMsg("Settings control refresh failed.") end
+        end
+        local localized = pcall(RefreshConfigLocalization)
+        if not localized then PrintMsg("Settings localization refresh failed.") end
+        addon.profileRuntime.configRefreshCount = addon.profileRuntime.configRefreshCount + 1
+    end
+    timeSinceLastUpdate = 0
+    if not addon:RunUpdateStatsSafe() then error("profile render failed") end
+    addon.profileRuntime.applyCount = addon.profileRuntime.applyCount + 1
 end
 
 function addon.legacyImport.AcceptPending()
@@ -6640,10 +7196,12 @@ function addon:OpenConfigMenu()
         -- last hovered preview when the picker closes without a font pick.
         local function CancelFontPreview()
             previewedPath = nil
+            if self.profileRuntime.suppressIntermediateRefresh then return end
             self.fontRuntime.applyCommittedTextStyle(
                 self.fontRuntime.currentPath(), GetNumberDB("fontSize"), true, true)
             ReflowAllPanels()
         end
+        self.profileRuntime.cancelFontPreview = CancelFontPreview
         local function PickFont(f)
             if not self.fontRuntime.canMutateDB(true) then return false end
             local applied = self.fontRuntime.applyCommittedTextStyle(
@@ -6657,6 +7215,7 @@ function addon:OpenConfigMenu()
             RefreshLanguageWarning()  -- new font may not cover active locale's glyphs
             return true
         end
+        self.profileRuntime.previewFont = PreviewFont
         UIDropDownMenu_SetWidth(fontDropdown, 100)
         UIDropDownMenu_JustifyText(fontDropdown, "CENTER")
         -- NOTE: UIDropDownMenu_Initialize is intentionally NOT called — Blizzard's default
@@ -7077,6 +7636,12 @@ function addon:OpenConfigMenu()
         -- post-commit; close-without-pick path restores to baseline (=current forceLocale).
         local function CancelLanguagePreview()
             if not langPreviewActive then return end
+            if self.profileRuntime.suppressIntermediateRefresh then
+                langPreviewActive = false
+                langPreviewSwappedFnt = false
+                langPreviewLocale = nil
+                return
+            end
             local active = ResolveActiveLocale()
             cached.activeLabels = LABELS_BY_LOCALE[active] or LABELS_BY_LOCALE.enUS
             cached.activeLabelsLocale = LABELS_BY_LOCALE[active] and active or "enUS"
@@ -7094,6 +7659,8 @@ function addon:OpenConfigMenu()
             RefreshConfigLocalization()
             addon:RunUpdateStatsSafe()
         end
+        self.profileRuntime.previewLanguage = PreviewLanguage
+        self.profileRuntime.cancelLanguagePreview = CancelLanguagePreview
 
         local langDropdown = CreateFrame("Frame", "StatsProLanguageDropdown", displayTab, "UIDropDownMenuTemplate")
         -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after the Appearance-tab dropdown rows build.
@@ -7865,6 +8432,33 @@ if addon and addon.__statsproSmoke == true then
                 characters = root.characters,
                 generation = addon.dbRuntime.generation,
             }
+        end,
+        profileRuntimeState = function()
+            local runtime = addon.profileRuntime
+            return {
+                activeGUID = runtime.activeGUID,
+                activeSpecID = runtime.activeSpecID,
+                pendingResolution = runtime.pendingResolution,
+                scheduled = runtime.scheduledToken ~= nil,
+                activationCount = runtime.activationCount,
+                applyCount = runtime.applyCount,
+                configRefreshCount = runtime.configRefreshCount,
+                structuralCommitCount = runtime.structuralCommitCount,
+                contextReadCount = runtime.contextReadCount,
+                updateCount = updateCount,
+            }
+        end,
+        previewFontForSmoke = function(path)
+            return addon.profileRuntime.previewFont(path)
+        end,
+        previewLanguageForSmoke = function(locale)
+            return addon.profileRuntime.previewLanguage(locale)
+        end,
+        addConfigRefresherForSmoke = function(refresh)
+            PushRefresher(refresh)
+        end,
+        addPersistentLocalizedLabelForSmoke = function(refresh)
+            tinsert(localizedPersistentLabels, refresh)
         end,
         cachedUpdateInterval = function() return cached.updateInterval end,
         cachedTextAlpha = function() return cached.textAlpha end,

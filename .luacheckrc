@@ -47,6 +47,7 @@ read_globals = {
     "IsSwimming", "IsFlying", "IsFalling",
     "GetAverageItemLevel",
     "UnitStat", "UnitArmor", "UnitEffectiveLevel", "UnitClass", "UnitRace", "UnitSex",
+    "UnitGUID", "UnitFullName", "GetServerTime",
     -- Spec / class
     "GetSpecialization", "GetSpecializationInfo", "GetSpecializationRole",
     "C_PaperDollInfo", "C_SpecializationInfo",

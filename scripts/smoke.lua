@@ -416,6 +416,12 @@ local function makeEnv(locale, opts)
         env.__lastStaticPopup = { key = key, definition = definition }
         return env.__lastStaticPopup
     end
+    env.StaticPopup_Hide = function(key)
+        local popup = env.__lastStaticPopup
+        if not popup or popup.key ~= key then return end
+        env.__lastStaticPopup = nil
+        if type(popup.definition.OnCancel) == "function" then popup.definition.OnCancel() end
+    end
     env.__acceptStaticPopup = function()
         local popup = env.__lastStaticPopup
         env.__lastStaticPopup = nil
@@ -673,7 +679,14 @@ local function makeEnv(locale, opts)
     env.UnitStat = opts.unitStat or function(_, statId) return 0, statId == 3 and 100 or 0 end
     env.UnitArmor = opts.unitArmor or function() return 0, 0 end
     env.UnitEffectiveLevel = opts.unitEffectiveLevel or function() return 80 end
-    env.UnitClass = function() return opts.unitClassName or "Warrior", opts.unitClassToken or "WARRIOR" end
+    env.UnitGUID = opts.unitGUID
+    env.UnitFullName = opts.unitFullName or function()
+        return opts.unitName or "Tester", opts.realmName or "TestRealm"
+    end
+    env.GetServerTime = opts.getServerTime or function() return 1770000000 end
+    env.UnitClass = opts.unitClass or function()
+        return opts.unitClassName or "Warrior", opts.unitClassToken or "WARRIOR", opts.classID or 1
+    end
     env.UnitRace = function() return "Human", "Human" end
     env.UnitSex = function() return 2 end
     env.GetSpecialization = function() return nil end
@@ -7748,6 +7761,508 @@ do
     eq("numeric.secret_clean_guard_returns_false", result, false)
     eq("numeric.secret_clean_guard_checks_secret_first", secretChecks, 2)
     eq("debug.bucket_secret_sanitizer_env_loaded", secretEnv ~= nil, true)
+end
+
+do
+    -- Character/spec profile activation is exercised against one shared SavedVariables
+    -- root so switches have the same identity and aliasing hazards as real relogs.
+    local seedEnv = loadStatsPro("enUS")
+    fireEvent("profiles.context.seed", seedEnv, "PLAYER_ENTERING_WORLD")
+    local root = seedEnv.StatsProDB
+    root.profiles.p2 = { name = "Tank template", settings = deepCopy(root.profiles.p1.settings) }
+    root.profiles.p2.settings.showDefensive = true
+    root.profiles.p2.settings.isVisible = true
+    root.profiles.p3 = { name = "Damage template", settings = deepCopy(root.profiles.p1.settings) }
+    root.profiles.p3.settings.showDefensive = false
+    root.profiles.p3.settings.isVisible = true
+    root.account.nextProfileID = 4
+    root.roleTemplates = { TANK = "p2", HEALER = "p1", DAMAGER = "p3" }
+
+    local identity = {
+        guid = "Player-1-AAA",
+        name = "Alpha",
+        specIndex = 1,
+        specID = 73,
+        specName = "Protection",
+        role = "TANK",
+        combat = false,
+    }
+    local env, addonContext, contextTest = loadStatsPro("enUS", {
+        statsProDB = root,
+        unitGUID = function() return identity.guid end,
+        unitFullName = function() return identity.name, "Realm" end,
+        getSpecialization = function() return identity.specIndex end,
+        getSpecializationInfo = function()
+            return identity.specID, identity.specName, nil, nil, identity.role, 1
+        end,
+        inCombatLockdown = function() return identity.combat end,
+    })
+    fireEvent("profiles.context.first_visit", env, "PLAYER_ENTERING_WORLD")
+    local state = contextTest.profileState()
+    local runtime = contextTest.profileRuntimeState()
+    local alpha = root.characters[identity.guid]
+    eq("profiles.context.first_visit.active_guid", runtime.activeGUID, identity.guid)
+    eq("profiles.context.first_visit.active_spec", runtime.activeSpecID, 73)
+    eq("profiles.context.first_visit.default_profile", alpha.defaultProfileID, "p4")
+    eq("profiles.context.first_visit.spec_profile", alpha.specProfiles[73], "p5")
+    eq("profiles.context.first_visit.active_profile", state.profileID, "p5")
+    eq("profiles.context.first_visit.role_template_copy", state.settings.showDefensive, true)
+    eq("profiles.context.first_visit.next_id", root.account.nextProfileID, 6)
+    eq("profiles.context.first_visit.default_independent",
+        rawequal(root.profiles.p4.settings, root.profiles.p1.settings), false)
+    eq("profiles.context.first_visit.spec_independent",
+        rawequal(root.profiles.p5.settings, root.profiles.p2.settings), false)
+    eq("profiles.context.first_visit.nested_independent",
+        rawequal(root.profiles.p5.settings.colors, root.profiles.p2.settings.colors), false)
+
+    local beforeNoop = deepCopy(root)
+    local accountRef, profilesRef, charactersRef = root.account, root.profiles, root.characters
+    local noOpRuntime = contextTest.profileRuntimeState()
+    fireEvent("profiles.context.same_event", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    eq("profiles.context.same_event.scheduled", contextTest.profileRuntimeState().scheduled, true)
+    env.__flushTimers(0)
+    local afterNoop = contextTest.profileRuntimeState()
+    assertDeepEqual("profiles.context.same_event.no_writes", root, beforeNoop)
+    eq("profiles.context.same_event.account_identity", rawequal(root.account, accountRef), true)
+    eq("profiles.context.same_event.profiles_identity", rawequal(root.profiles, profilesRef), true)
+    eq("profiles.context.same_event.characters_identity", rawequal(root.characters, charactersRef), true)
+    eq("profiles.context.same_event.no_activation", afterNoop.activationCount, noOpRuntime.activationCount)
+    eq("profiles.context.same_event.no_apply", afterNoop.applyCount, noOpRuntime.applyCount)
+    eq("profiles.context.same_event.no_render", afterNoop.updateCount, noOpRuntime.updateCount)
+
+    local timersBeforeForeign = #env.__timers
+    fireEvent("profiles.context.foreign_spec_event", env, "PLAYER_SPECIALIZATION_CHANGED", "party1")
+    eq("profiles.context.foreign_spec_event.no_timer", #env.__timers, timersBeforeForeign)
+
+    env.StatsProFrame:ClearAllPoints()
+    env.StatsProFrame:SetPoint("TOPLEFT", env.UIParent, "TOPLEFT", 111, -112)
+    identity.specID, identity.specName, identity.role = 71, "Arms", "DAMAGER"
+    fireEvent("profiles.context.tank_to_dps", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    slash("profiles.context.scheduled_write_block", env, "hide")
+    eq("profiles.context.scheduled_write_block.keeps_tank", root.profiles.p5.settings.isVisible, true)
+    env.__flushTimers(0)
+    state = contextTest.profileState()
+    eq("profiles.context.dps_profile_created", root.characters["Player-1-AAA"].specProfiles[71], "p6")
+    eq("profiles.context.dps_active", state.profileID, "p6")
+    eq("profiles.context.dps_template_copy", state.settings.showDefensive, false)
+    eq("profiles.context.tank_position_saved", root.profiles.p5.settings.xOfs, 111)
+    env.StatsProFrame:ClearAllPoints()
+    env.StatsProFrame:SetPoint("BOTTOMRIGHT", env.UIParent, "BOTTOMRIGHT", -221, 222)
+    identity.specID, identity.specName, identity.role = 73, "Protection", "TANK"
+    fireEvent("profiles.context.dps_to_tank", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    eq("profiles.context.tank_restored", contextTest.profileState().profileID, "p5")
+    eq("profiles.context.tank_position_restored", env.StatsProFrame.points[1][4], 111)
+    eq("profiles.context.dps_position_saved", root.profiles.p6.settings.xOfs, -221)
+
+    identity.guid, identity.name = "Player-1-BBB", "Bravo"
+    fireEvent("profiles.context.character_b", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    local bravo = root.characters[identity.guid]
+    local bravoTankID = bravo.specProfiles[73]
+    check("profiles.context.character_b.separate_profile",
+        bravoTankID ~= root.characters["Player-1-AAA"].specProfiles[73])
+    contextTest.profileState().settings.showDefensive = false
+    identity.guid, identity.name = "Player-1-AAA", "Alpha"
+    fireEvent("profiles.context.character_a_restore", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    eq("profiles.context.character_a_isolated", contextTest.profileState().settings.showDefensive, true)
+    identity.guid, identity.name = "Player-1-BBB", "Bravo"
+    fireEvent("profiles.context.character_b_restore", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    eq("profiles.context.character_b_isolated", contextTest.profileState().settings.showDefensive, false)
+
+    local noSpecBefore = deepCopy(root)
+    local activeBeforeNoSpec = contextTest.profileState().profileID
+    identity.specIndex = nil
+    fireEvent("profiles.context.no_spec", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    eq("profiles.context.no_spec.keeps_active", contextTest.profileState().profileID, activeBeforeNoSpec)
+    eq("profiles.context.no_spec.pending", contextTest.profileRuntimeState().pendingResolution, true)
+    assertDeepEqual("profiles.context.no_spec.no_writes", root, noSpecBefore)
+    identity.specIndex = 1
+
+    identity.combat = true
+    identity.specID, identity.specName, identity.role = 71, "Arms", "DAMAGER"
+    fireEvent("profiles.context.combat_defer", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    eq("profiles.context.combat_defer.keeps_active", contextTest.profileState().profileID, bravoTankID)
+    eq("profiles.context.combat_defer.pending", contextTest.profileRuntimeState().pendingResolution, true)
+    local outgoingVisible = contextTest.profileState().settings.isVisible
+    slash("profiles.context.combat_defer.blocks_write", env, "hide")
+    eq("profiles.context.combat_defer.write_unchanged",
+        contextTest.profileState().settings.isVisible, outgoingVisible)
+    env.StatsProFrame:ClearAllPoints()
+    env.StatsProFrame:SetPoint("TOP", env.UIParent, "TOP", 333, -334)
+    fireEvent("profiles.context.pending_logout", env, "PLAYER_LOGOUT")
+    eq("profiles.context.pending_logout.active_scope", root.profiles[bravoTankID].settings.xOfs, 333)
+    identity.combat = false
+    fireEvent("profiles.context.combat_resume", env, "PLAYER_REGEN_ENABLED")
+    eq("profiles.context.combat_resume.latest_spec", contextTest.profileRuntimeState().activeSpecID, 71)
+    eq("profiles.context.combat_resume.one_apply", contextTest.profileRuntimeState().pendingResolution, false)
+
+    addonContext:OpenConfigMenu()
+    identity.specID, identity.specName, identity.role = 73, "Protection", "TANK"
+    fireEvent("profiles.context.open_settings_switch", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    eq("profiles.context.open_settings.control_refresh",
+        env.StatsProDefensiveCheck:GetChecked(), root.profiles[bravoTankID].settings.showDefensive)
+    local validationBeforeRefreshWrite = contextTest.dbValidationCount()
+    callScript("profiles.context.open_settings.write", env.StatsProDefensiveCheck, "OnClick")
+    eq("profiles.context.open_settings.write_targets_active",
+        root.profiles[bravoTankID].settings.showDefensive, env.StatsProDefensiveCheck:GetChecked())
+    eq("profiles.context.open_settings.cached_validation",
+        contextTest.dbValidationCount(), validationBeforeRefreshWrite)
+
+    local bravoDpsID = root.characters["Player-1-BBB"].specProfiles[71]
+    root.profiles[bravoDpsID].settings.font = "Fonts\\ARIALN.TTF"
+    callScript("profiles.context.font_modal.open", env.StatsProFontDropdownButton, "OnClick")
+    eq("profiles.context.font_modal.shown", env.StatsProFontPicker:IsShown(), true)
+    contextTest.previewFontForSmoke("Fonts\\MORPHEUS.TTF")
+    identity.specID, identity.specName, identity.role = 71, "Arms", "DAMAGER"
+    fireEvent("profiles.context.font_modal.switch", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    eq("profiles.context.font_modal.closed", env.StatsProFontPicker:IsShown(), false)
+    eq("profiles.context.font_modal.target_font_applied",
+        contextTest.panelFontState().mainAppliedFont, "Fonts\\ARIALN.TTF")
+    identity.specID, identity.specName, identity.role = 73, "Protection", "TANK"
+    fireEvent("profiles.context.font_modal.restore_tank", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+
+    env.UIDROPDOWNMENU_OPEN_MENU = env.StatsProLanguageDropdown
+    env.DropDownList1:Show()
+    contextTest.previewLanguageForSmoke("ruRU")
+    identity.specID, identity.specName, identity.role = 71, "Arms", "DAMAGER"
+    fireEvent("profiles.context.language_modal.switch", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    eq("profiles.context.language_modal.closed", env.DropDownList1:IsShown(), false)
+    eq("profiles.context.language_modal.account_locale_unchanged", root.account.forceLocale, "auto")
+    eq("profiles.context.language_modal.restored_copy",
+        contextTest.launcherDescriptionText(),
+        "Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window.")
+    identity.specID, identity.specName, identity.role = 73, "Protection", "TANK"
+    fireEvent("profiles.context.language_modal.restore_tank", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+
+    contextTest.addConfigRefresherForSmoke(function() error("injected settings refresh failure") end)
+    contextTest.addPersistentLocalizedLabelForSmoke(function()
+        error("injected launcher refresh failure")
+    end)
+    identity.specID, identity.specName, identity.role = 71, "Arms", "DAMAGER"
+    fireEvent("profiles.context.settings_refresh_failure", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    eq("profiles.context.settings_refresh_failure.context_survives",
+        contextTest.profileRuntimeState().activeSpecID, 71)
+    eq("profiles.context.settings_refresh_failure.profile_survives",
+        contextTest.profileState().profileID, root.characters["Player-1-BBB"].specProfiles[71])
+    identity.specID, identity.specName, identity.role = 73, "Protection", "TANK"
+    fireEvent("profiles.context.settings_refresh_failure.restore_tank", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+
+    local critSwatch = findFrame("profiles.context.modal.crit", env, function(frame)
+        return frame.statsProColorKey == "crit" and type(frame.scripts.OnClick) == "function"
+    end)
+    local tankCrit = deepCopy(root.profiles[bravoTankID].settings.colors.crit)
+    callScript("profiles.context.modal.open_color", critSwatch, "OnClick")
+    local staleColorOptions = env.ColorPickerFrame.colorPickerOptions
+    env.__setColorPickerRGB(0.2, 0.3, 0.4)
+    staleColorOptions.swatchFunc()
+    identity.specID, identity.specName, identity.role = 71, "Arms", "DAMAGER"
+    fireEvent("profiles.context.modal.switch", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    eq("profiles.context.modal.color_closed", env.ColorPickerFrame:IsShown(), false)
+    assertColor("profiles.context.modal.outgoing_restored",
+        root.profiles[bravoTankID].settings.colors.crit, tankCrit.r, tankCrit.g, tankCrit.b)
+    local newCritBefore = deepCopy(contextTest.profileState().settings.colors.crit)
+    staleColorOptions.cancelFunc()
+    assertColor("profiles.context.modal.stale_callback_noop",
+        contextTest.profileState().settings.colors.crit,
+        newCritBefore.r, newCritBefore.g, newCritBefore.b)
+
+    env.SwiftStatsDB = { fontSize = 17 }
+    slash("profiles.context.modal.import_open", env, "import")
+    check("profiles.context.modal.import_visible", env.__lastStaticPopup ~= nil)
+    identity.specID, identity.specName, identity.role = 73, "Protection", "TANK"
+    fireEvent("profiles.context.modal.import_switch", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    eq("profiles.context.modal.import_closed", env.__lastStaticPopup, nil)
+
+    local burstBefore = contextTest.profileRuntimeState()
+    local timersBeforeBurst = #env.__timers
+    identity.specID, identity.specName, identity.role = 71, "Arms", "DAMAGER"
+    fireEvent("profiles.context.burst.first", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    identity.specID, identity.specName, identity.role = 73, "Protection", "TANK"
+    fireEvent("profiles.context.burst.middle", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    identity.specID, identity.specName, identity.role = 71, "Arms", "DAMAGER"
+    fireEvent("profiles.context.burst.last", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    eq("profiles.context.burst.one_timer", #env.__timers, timersBeforeBurst + 1)
+    env.__flushTimers(0)
+    local burstAfter = contextTest.profileRuntimeState()
+    eq("profiles.context.burst.latest_context", burstAfter.activeSpecID, 71)
+    eq("profiles.context.burst.one_activation", burstAfter.activationCount, burstBefore.activationCount + 1)
+    eq("profiles.context.burst.one_apply", burstAfter.applyCount, burstBefore.applyCount + 1)
+
+    local foreignMenu = makeFrame("OtherAddonDropdown")
+    env.UIDROPDOWNMENU_OPEN_MENU = foreignMenu
+    local closedBeforeForeign = env.__closedDropdowns
+    identity.specID, identity.specName, identity.role = 73, "Protection", "TANK"
+    fireEvent("profiles.context.foreign_modal_switch", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    eq("profiles.context.foreign_modal_preserved", env.__closedDropdowns, closedBeforeForeign)
+
+    local relogEnv, _, relogTest = loadStatsPro("enUS", {
+        statsProDB = root,
+        unitGUID = function() return "Player-1-BBB" end,
+        unitFullName = function() return "BravoRenamed", "Realm" end,
+        getServerTime = function() return 1770001000 end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function() return 73, "Protection", nil, nil, "TANK", 1 end,
+    })
+    fireEvent("profiles.context.relog_metadata", relogEnv, "PLAYER_ENTERING_WORLD")
+    eq("profiles.context.relog_metadata.active", relogTest.profileRuntimeState().activeSpecID, 73)
+    eq("profiles.context.relog_metadata.name",
+        root.characters["Player-1-BBB"].displayName, "BravoRenamed-Realm")
+    eq("profiles.context.relog_metadata.last_seen",
+        root.characters["Player-1-BBB"].lastSeen, 1770001000)
+end
+
+do
+    local seed = loadStatsPro("enUS")
+    fireEvent("profiles.context.invalid.seed", seed, "PLAYER_ENTERING_WORLD")
+    local cleanRoot = deepCopy(seed.StatsProDB)
+    local secretGUID = {}
+    local invalidEnv, _, invalidTest = loadStatsPro("enUS", {
+        statsProDB = cleanRoot,
+        unitGUID = function() return secretGUID end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function() return 73, "Protection", nil, nil, "TANK", 1 end,
+        issecretvalue = function(value) return value == secretGUID end,
+    })
+    local before = deepCopy(cleanRoot)
+    fireEvent("profiles.context.invalid.secret_guid", invalidEnv, "PLAYER_ENTERING_WORLD")
+    assertDeepEqual("profiles.context.invalid.secret_guid.no_writes", cleanRoot, before)
+    eq("profiles.context.invalid.secret_guid.no_activation",
+        invalidTest.profileRuntimeState().activationCount, 0)
+    slash("profiles.context.invalid.secret_guid.block_write", invalidEnv, "hide")
+    fireEvent("profiles.context.invalid.secret_guid.logout", invalidEnv, "PLAYER_LOGOUT")
+    assertDeepEqual("profiles.context.invalid.secret_guid.pending_blocks_all_writes", cleanRoot, before)
+
+    local noSpecRoot = deepCopy(seed.StatsProDB)
+    local noSpecBefore = deepCopy(noSpecRoot)
+    local noSpecEnv, _, noSpecTest = loadStatsPro("enUS", {
+        statsProDB = noSpecRoot,
+        unitGUID = function() return "Player-1-NOSPEC" end,
+        getSpecialization = function() return nil end,
+    })
+    fireEvent("profiles.context.invalid.no_spec_initial", noSpecEnv, "PLAYER_ENTERING_WORLD")
+    eq("profiles.context.invalid.no_spec_initial.no_character",
+        noSpecRoot.characters["Player-1-NOSPEC"], nil)
+    eq("profiles.context.invalid.no_spec_initial.default_profile",
+        noSpecTest.profileState().profileID, noSpecRoot.account.defaultProfileID)
+    slash("profiles.context.invalid.no_spec_initial.block_write", noSpecEnv, "hide")
+    assertDeepEqual("profiles.context.invalid.no_spec_initial.no_writes",
+        noSpecRoot, noSpecBefore)
+    fireEvent("profiles.context.invalid.no_spec_initial.second_event",
+        noSpecEnv, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    eq("profiles.context.invalid.no_spec_initial.second_event_coalesced",
+        noSpecEnv.__flushTimers(0), 1)
+    local readsBeforeNoSpecRetry = noSpecTest.profileRuntimeState().contextReadCount
+    eq("profiles.context.invalid.no_spec_initial.stale_and_latest_timers",
+        noSpecEnv.__flushTimers(0.1), 2)
+    eq("profiles.context.invalid.no_spec_initial.only_latest_retries",
+        noSpecTest.profileRuntimeState().contextReadCount, readsBeforeNoSpecRetry + 1)
+    eq("profiles.context.invalid.no_spec_initial.settled",
+        noSpecTest.profileRuntimeState().pendingResolution, false)
+    slash("profiles.context.invalid.no_spec_initial.fallback_write", noSpecEnv, "hide")
+    eq("profiles.context.invalid.no_spec_initial.fallback_unlocked",
+        noSpecTest.profileState().settings.isVisible, false)
+
+    local exhaustedRoot = deepCopy(seed.StatsProDB)
+    exhaustedRoot.account.nextProfileID = 99999999999999
+    local exhaustedBefore = deepCopy(exhaustedRoot)
+    local exhaustedEnv, _, exhaustedTest = loadStatsPro("enUS", {
+        statsProDB = exhaustedRoot,
+        unitGUID = function() return "Player-1-FULL" end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function() return 73, "Protection", nil, nil, "TANK", 1 end,
+    })
+    fireEvent("profiles.context.invalid.exhausted", exhaustedEnv, "PLAYER_ENTERING_WORLD")
+    assertDeepEqual("profiles.context.invalid.exhausted.no_writes", exhaustedRoot, exhaustedBefore)
+    eq("profiles.context.invalid.exhausted.pending",
+        exhaustedTest.profileRuntimeState().pendingResolution, true)
+
+    local futureRoot = deepCopy(seed.StatsProDB)
+    futureRoot.dbVersion = invalidTest.currentDBVersion() + 1
+    futureRoot.characters = "future-shape"
+    local futureBefore = deepCopy(futureRoot)
+    local futureEnv = loadStatsPro("enUS", {
+        statsProDB = futureRoot,
+        unitGUID = function() return "Player-1-FUTURE" end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function() return 73, "Protection", nil, nil, "TANK", 1 end,
+    })
+    local ok, err = pcall(futureEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("profiles.context.invalid.future.no_error", ok, err)
+    assertDeepEqual("profiles.context.invalid.future.no_writes", futureRoot, futureBefore)
+
+    local corruptRoot = deepCopy(seed.StatsProDB)
+    corruptRoot.characters = "corrupt-shape"
+    local corruptBefore = deepCopy(corruptRoot)
+    local corruptEnv = loadStatsPro("enUS", {
+        statsProDB = corruptRoot,
+        unitGUID = function() return "Player-1-CORRUPT" end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function() return 73, "Protection", nil, nil, "TANK", 1 end,
+    })
+    ok, err = pcall(corruptEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("profiles.context.invalid.corrupt.no_error", ok, err)
+    assertDeepEqual("profiles.context.invalid.corrupt.no_writes", corruptRoot, corruptBefore)
+
+    local secretSpecID = {}
+    local secretSpecRoot = deepCopy(seed.StatsProDB)
+    local secretSpecBefore = deepCopy(secretSpecRoot)
+    local secretSpecEnv = loadStatsPro("enUS", {
+        statsProDB = secretSpecRoot,
+        unitGUID = function() return "Player-1-SECRET-SPEC" end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function() return secretSpecID, "Protection", nil, nil, "TANK", 1 end,
+        issecretvalue = function(value) return value == secretSpecID end,
+    })
+    ok, err = pcall(secretSpecEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("profiles.context.invalid.secret_spec.no_error", ok, err)
+    assertDeepEqual("profiles.context.invalid.secret_spec.no_writes",
+        secretSpecRoot, secretSpecBefore)
+
+    local secretIndex = {}
+    local invalidSpecCases = {
+        {
+            name = "secret_index",
+            getIndex = function() return secretIndex end,
+            isSecret = function(value) return value == secretIndex end,
+        },
+        {
+            name = "index_error",
+            getIndex = function() error("spec index unavailable") end,
+        },
+        {
+            name = "info_error",
+            getIndex = function() return 1 end,
+            getInfo = function() error("spec info unavailable") end,
+        },
+        {
+            name = "nan_id",
+            getIndex = function() return 1 end,
+            getInfo = function() return 0 / 0, "Spec", nil, nil, "TANK", 1 end,
+        },
+        {
+            name = "fractional_id",
+            getIndex = function() return 1 end,
+            getInfo = function() return 73.5, "Spec", nil, nil, "TANK", 1 end,
+        },
+        {
+            name = "string_id",
+            getIndex = function() return 1 end,
+            getInfo = function() return "73", "Spec", nil, nil, "TANK", 1 end,
+        },
+    }
+    for _, case in ipairs(invalidSpecCases) do
+        local caseRoot = deepCopy(seed.StatsProDB)
+        local caseBefore = deepCopy(caseRoot)
+        local caseEnv, _, caseTest = loadStatsPro("enUS", {
+            statsProDB = caseRoot,
+            unitGUID = function() return "Player-1-" .. case.name end,
+            getSpecialization = case.getIndex,
+            getSpecializationInfo = case.getInfo or function()
+                return 73, "Protection", nil, nil, "TANK", 1
+            end,
+            issecretvalue = case.isSecret,
+        })
+        ok, err = pcall(caseEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+        check("profiles.context.invalid." .. case.name .. ".no_error", ok, err)
+        assertDeepEqual("profiles.context.invalid." .. case.name .. ".no_writes",
+            caseRoot, caseBefore)
+        eq("profiles.context.invalid." .. case.name .. ".pending",
+            caseTest.profileRuntimeState().pendingResolution, true)
+    end
+
+    local secretRole = "secret-tank-role"
+    local secretRoleRoot = deepCopy(seed.StatsProDB)
+    secretRoleRoot.profiles.p1.settings.showDefensive = false
+    secretRoleRoot.profiles.p2 = {
+        name = "Tank template",
+        settings = deepCopy(secretRoleRoot.profiles.p1.settings),
+    }
+    secretRoleRoot.profiles.p2.settings.showDefensive = true
+    secretRoleRoot.account.nextProfileID = 3
+    secretRoleRoot.roleTemplates = { TANK = "p2", HEALER = "p1", DAMAGER = "p1" }
+    local secretRoleEnv, _, secretRoleTest = loadStatsPro("enUS", {
+        statsProDB = secretRoleRoot,
+        unitGUID = function() return "Player-1-SECRET-ROLE" end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return 73, "Protection", nil, nil, secretRole, 1
+        end,
+        issecretvalue = function(value) return value == secretRole end,
+    })
+    fireEvent("profiles.context.invalid.secret_role", secretRoleEnv, "PLAYER_ENTERING_WORLD")
+    eq("profiles.context.invalid.secret_role.account_fallback",
+        secretRoleTest.profileState().settings.showDefensive, false)
+end
+
+do
+    local seed = loadStatsPro("enUS")
+    fireEvent("profiles.context.rollback.seed", seed, "PLAYER_ENTERING_WORLD")
+    local root = deepCopy(seed.StatsProDB)
+    local identity = { specID = 73 }
+    local env, _, rollbackTest = loadStatsPro("enUS", {
+        statsProDB = root,
+        unitGUID = function() return "Player-1-ROLLBACK" end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return identity.specID, "Spec", nil, nil, "TANK", 1
+        end,
+    })
+    fireEvent("profiles.context.rollback.first", env, "PLAYER_ENTERING_WORLD")
+    local oldProfileID = rollbackTest.profileState().profileID
+    local nextID = root.account.nextProfileID
+    local rootBefore = deepCopy(root)
+    local accountRef = root.account
+    local profilesRef = root.profiles
+    local charactersRef = root.characters
+    local rolesRef = root.roleTemplates
+    local oldSettingsRef = root.profiles[oldProfileID].settings
+    local oldColorsRef = oldSettingsRef.colors
+    local oldSetPoint = env.StatsProFrame.SetPoint
+    local oldPoint = deepCopy(env.StatsProFrame.points)
+    local failNextSetPoint = true
+    env.StatsProFrame.SetPoint = function(frame, ...)
+        if failNextSetPoint then
+            failNextSetPoint = false
+            error("injected profile apply failure")
+        end
+        return oldSetPoint(frame, ...)
+    end
+    identity.specID = 999
+    fireEvent("profiles.context.rollback.switch", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    env.StatsProFrame.SetPoint = oldSetPoint
+    eq("profiles.context.rollback.active_restored", rollbackTest.profileState().profileID, oldProfileID)
+    eq("profiles.context.rollback.assignment_removed",
+        root.characters["Player-1-ROLLBACK"].specProfiles[999], nil)
+    eq("profiles.context.rollback.next_id_restored", root.account.nextProfileID, nextID)
+    eq("profiles.context.rollback.pending", rollbackTest.profileRuntimeState().pendingResolution, true)
+    assertDeepEqual("profiles.context.rollback.position_restored", env.StatsProFrame.points, oldPoint)
+    assertDeepEqual("profiles.context.rollback.full_root_restored", root, rootBefore)
+    eq("profiles.context.rollback.account_identity", rawequal(root.account, accountRef), true)
+    eq("profiles.context.rollback.profiles_identity", rawequal(root.profiles, profilesRef), true)
+    eq("profiles.context.rollback.characters_identity", rawequal(root.characters, charactersRef), true)
+    eq("profiles.context.rollback.roles_identity", rawequal(root.roleTemplates, rolesRef), true)
+    eq("profiles.context.rollback.settings_identity",
+        rawequal(root.profiles[oldProfileID].settings, oldSettingsRef), true)
+    eq("profiles.context.rollback.colors_identity",
+        rawequal(root.profiles[oldProfileID].settings.colors, oldColorsRef), true)
+    eq("profiles.context.rollback.no_orphan_profile", root.profiles["p" .. tostring(nextID)], nil)
+    eq("profiles.context.rollback.registry_current", rollbackTest.dbCompatibilityState().mode, "current")
 end
 
 print(string.format("StatsPro smoke: PASS (%d assertions)", assertionCount))

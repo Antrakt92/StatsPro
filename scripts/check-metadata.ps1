@@ -132,6 +132,54 @@ function Assert-BugReportTemplateContract {
     }
 }
 
+function Assert-PublicChangelogContract {
+    param(
+        [string]$ChangelogPath,
+        [string]$ReadmePath
+    )
+
+    foreach ($path in @($ChangelogPath, $ReadmePath)) {
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            throw "Missing public documentation file: $path"
+        }
+    }
+
+    $changelog = Get-Content -LiteralPath $ChangelogPath -Raw -Encoding UTF8
+    if (-not [regex]::IsMatch($changelog, "\A# Changelog(?:\r?\n|$)")) {
+        throw "CHANGELOG.md must begin with '# Changelog'."
+    }
+
+    $versionHeadings = [regex]::Matches($changelog, "(?m)^##(?!#)\s+.*$")
+    if ($versionHeadings.Count -eq 0) {
+        throw "CHANGELOG.md must contain at least one version heading."
+    }
+    $versionHeadingPattern = "^##\s+\d+\.\d+\.\d+\s+-\s+\d{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{4}\s+—\s+\S.+$"
+    foreach ($heading in $versionHeadings) {
+        if (-not [regex]::IsMatch($heading.Value, $versionHeadingPattern)) {
+            throw "Invalid historical changelog version heading: $($heading.Value)"
+        }
+    }
+
+    # WHY: Historical version headings are immutable release records; prose cleanup
+    # must not rename headings that may contain an old code symbol.
+    $publicProse = [regex]::Replace($changelog, "(?m)^##(?!#).*?(?:\r?\n|$)", "")
+    $forbiddenPatterns = [ordered]@{
+        "raw internal identifier" = "(?i)(?<![A-Za-z0-9_])(?:StatsProDB|SwiftStatsDB|SwiftStatsLocalDB|dbVersion|CURRENT_DB_VERSION|MigrateDB|JoinLinesSecretSafe|RGBToHex|Panel:Unlock|CopyTable)(?![A-Za-z0-9_])"
+        "internal pipeline prose" = "(?i)\binternal pipeline\b"
+        "process-only release/CI bullet" = "(?im)^-\s+\*\*(?:Release (?:checks|preflight|automation|workflow|publishing|metadata|packaging checks|packages)|CI logs|Local (?:addon checks|verification)|Smoke coverage|Fresh-machine check setup|Static diagnostics|Marketplace compatibility checks|Windows release preflight)\b"
+    }
+    foreach ($description in $forbiddenPatterns.Keys) {
+        if ([regex]::IsMatch($publicProse, $forbiddenPatterns[$description])) {
+            throw "CHANGELOG.md contains $description; describe the user-visible outcome instead."
+        }
+    }
+
+    $readme = Get-Content -LiteralPath $ReadmePath -Raw -Encoding UTF8
+    if (-not [regex]::IsMatch($readme, '\[(?:`)?CHANGELOG\.md(?:`)?\]\(CHANGELOG\.md\)')) {
+        throw "README.md must include a repo-relative CHANGELOG.md link."
+    }
+}
+
 function Get-PkgmetaListItems {
     param(
         [string]$Path,
@@ -575,6 +623,53 @@ GitHub issues are public.
             Assert-BugReportTemplateContract -Path $bugReportPath
         } "closed YAML front-matter"
 
+        $validChangelog = @"
+# Changelog
+
+## 1.0.1 - 02-Jan-2026 — Display fix
+
+### Fixed
+
+- **The HUD remains visible** after login.
+
+## 1.0.0 - 01-Jan-2026 — Initial release
+
+### Added
+
+- **Compact secondary-stat HUD.**
+"@
+        $changelogPath = Join-Path $root "CHANGELOG.md"
+        $readmePath = Join-Path $root "README.md"
+        Set-Content -LiteralPath $changelogPath -Value $validChangelog -Encoding UTF8
+        Set-Content -LiteralPath $readmePath -Value 'See [`CHANGELOG.md`](CHANGELOG.md).' -Encoding UTF8
+        Assert-PublicChangelogContract -ChangelogPath $changelogPath -ReadmePath $readmePath
+
+        $malformedHistoricalHeading = $validChangelog.Replace(
+            "## 1.0.0 - 01-Jan-2026 — Initial release",
+            "## v1.0.0 (01-Jan-2026) — Initial release")
+        Set-Content -LiteralPath $changelogPath -Value $malformedHistoricalHeading -Encoding UTF8
+        Assert-ThrowsMatch "malformed historical changelog heading rejected" {
+            Assert-PublicChangelogContract -ChangelogPath $changelogPath -ReadmePath $readmePath
+        } "version heading"
+
+        Set-Content -LiteralPath $changelogPath `
+            -Value ($validChangelog + "`n- **Release checks now expose tool versions.**") -Encoding UTF8
+        Assert-ThrowsMatch "process-only changelog bullet rejected" {
+            Assert-PublicChangelogContract -ChangelogPath $changelogPath -ReadmePath $readmePath
+        } "process-only release/CI bullet"
+
+        Set-Content -LiteralPath $changelogPath `
+            -Value ($validChangelog + "`n- **Settings fixed** through StatsProDB.") -Encoding UTF8
+        Assert-ThrowsMatch "raw changelog DB identifier rejected" {
+            Assert-PublicChangelogContract -ChangelogPath $changelogPath -ReadmePath $readmePath
+        } "raw internal identifier"
+
+        Set-Content -LiteralPath $changelogPath -Value $validChangelog -Encoding UTF8
+        Set-Content -LiteralPath $readmePath -Value "See the release history." -Encoding UTF8
+        Assert-ThrowsMatch "missing README changelog link rejected" {
+            Assert-PublicChangelogContract -ChangelogPath $changelogPath -ReadmePath $readmePath
+        } "repo-relative CHANGELOG.md link"
+
         Set-TestToc -Root $root -Refs @(
             "libs/LibStub/LibStub.lua",
             "libs/CallbackHandler-1.0/CallbackHandler-1.0.lua",
@@ -804,6 +899,9 @@ try {
 
     Assert-TocNotesContract -Metadata $contract.Metadata -TocPath $contract.TocPath
     Assert-BugReportTemplateContract -Path (Join-Path $RepoRoot ".github\ISSUE_TEMPLATE\bug_report.md")
+    Assert-PublicChangelogContract `
+        -ChangelogPath (Join-Path $RepoRoot "CHANGELOG.md") `
+        -ReadmePath (Join-Path $RepoRoot "README.md")
 
     $LegacyCategory = Get-SingleRegexMatch `
         -Path $contract.TocPath `

@@ -160,14 +160,7 @@
 
 ### Fixed
 
-- **Stats and repair rows recover more safely from protected or malformed reads** — transient Midnight API states no longer break cached stat refreshes or repair scans.
-
-### Improved
-
-- **Release packaging checks are stricter before marketplace upload** — local and CI gates now validate package contents, bundled third-party notices, marketplace versions, and published GitHub assets more defensively.
-- **Release automation is easier to audit** — pinned action/tool versions and package dry-run comparisons make release failures clearer before public files are uploaded.
-- **Marketplace compatibility checks handle WoWInterface's Midnight metadata correctly** — release gates accept WoWInterface's aggregate Retail 12.0 compatibility entry while keeping CurseForge patch-version validation strict.
-- **Windows release preflight can bootstrap the locked Lua 5.1 toolchain on current Chocolatey runners** while still enforcing installed tool versions before packaging.
+- **Stats and repair rows now recover after temporarily unreadable Midnight data** instead of remaining blank or stale.
 
 ### Updated
 
@@ -223,7 +216,7 @@
 
 ### Changed
 
-- **The tertiary Speed row and setting are now labelled Movement across supported languages** to match the actual value shown on the HUD while keeping existing settings and SavedVariables compatible.
+- **The tertiary Speed row and setting are now labelled Movement across supported languages**, while existing choices remain unchanged.
 
 ### Updated
 
@@ -240,14 +233,9 @@
 ### Fixed
 
 - **Rating rows stay visible through protected or missing stat reads** — rating-only rows such as Versatility and Speed no longer disappear when a percentage, bonus, or protected read is unavailable while the rating itself is still available.
-- **Initial HUD refresh errors are contained during login and reload** — protected stat reads during the first update are counted in diagnostics instead of surfacing as addon errors.
-- **Saved display and language choices recover to safe defaults** — stale or invalid SavedVariables no longer leave display-mode or language dropdowns in inconsistent states.
+- **Initial HUD refreshes no longer surface addon errors** when stats are temporarily unreadable during login or `/reload`.
+- **Invalid saved display or language choices now fall back safely** instead of leaving their dropdowns inconsistent.
 - **Item Level remains visible when labels are hidden** — hidden-label mode keeps the enabled Item Level values aligned with the rest of the HUD instead of suppressing the row.
-
-### Improved
-
-- **Release metadata checks are stricter before tagging and packaging** — prepared releases now validate SemVer against the commits since the previous tag and export only the current changelog entry for release notes.
-- **CI logs and package gates are easier to audit** — local and CI checks now report check-tool and GitHub Action versions, run Lua diagnostics from the workspace root, and reject unexpected bundled-library files in packaged zips.
 
 ## 1.9.20 - 31-May-2026 — Archon target refresh
 
@@ -261,10 +249,6 @@
 
 - **Rating-only offensive and tertiary rows stay visible when their rating is available** — rows such as Versatility and Speed no longer disappear in rating-only mode when the percentage or bonus read is missing, zero, or protected while the rating itself is readable.
 - **Stats panels now sit behind raid frames and other higher-priority UI** — the always-on HUD uses background frame strata instead of overlapping gameplay panels.
-
-### Improved
-
-- **Release checks fail faster on invalid Archon target snapshots** — generated target data is parsed without executing arbitrary Lua, native check processes have timeouts, and collector self-tests cover representative M+ and Raid page payloads.
 
 ### Updated
 
@@ -318,15 +302,11 @@
 
 - **Crit updates stay safer when spell crit reads are protected in combat** — StatsPro now guards the spell-crit fallback path so melee/ranged crit can continue driving the HUD when Midnight returns protected spell crit values.
 
-### Improved
-
-- **Release checks catch more Archon target and metadata drift before packaging** — local and CI gates now cover target manifest parity, addon metadata shape, and release validation more strictly.
-
 ## 1.9.10 - 21-May-2026 — Midnight combat stat fixes
 
 ### Fixed
 
-- **Stats now keep updating more reliably during combat and Mythic+ runs** — StatsPro separates renderable Midnight secret values from clean numeric logic so live HUD updates do not freeze when Blizzard protects stat reads.
+- **Stats now keep updating more reliably during combat and Mythic+ runs** when Blizzard temporarily protects stat reads.
 - **Hidden zero-value rows stay hidden when their stat becomes protected in combat** — absent stats no longer pop back onto the HUD as misleading `0` rows.
 - **Right-click no longer opens Settings during combat** — accidental clicks in keys will not bring up the configuration window.
 
@@ -366,9 +346,8 @@
 
 ### Improved
 
-- **Public documentation now uses future-proof locale wording** — README and prepared marketplace copy describe support for current WoW addon locales without hardcoding a locale count that can drift.
-- **Slash command documentation is easier to preserve across public copy surfaces** — README keeps the full command table, and prepared CurseForge / WoWInterface copy now includes text command fallbacks alongside the command image.
-- **Local verification stays focused on real globals** — stale diagnostic allowlist entries were removed, and smoke coverage now protects the localized slash-help output.
+- **README and marketplace descriptions now cover all supported WoW addon locales** without a hardcoded locale count.
+- **README, CurseForge, and WoWInterface descriptions now include complete text command lists** alongside the command image.
 
 ## 1.9.4 - 17-May-2026 — Archon target refresh
 
@@ -380,11 +359,7 @@
 
 ### Fixed
 
-- **Versatility no longer appears as a misleading `0.0%` during cold-start unreadable stat states** — if the first Versatility read after login or combat is missing or secret-tagged, StatsPro now waits for a clean sample instead of rendering an invented zero.
-
-### Improved
-
-- **Release preflight is stricter before marketplace packaging** — checks now enforce the expected SemVer bump from commit history, guard release metadata edge cases more defensively on Windows, and require fresher Archon target snapshots for tag releases.
+- **Versatility no longer briefly appears as `0.0%`** when it is temporarily unreadable after login or during combat.
 
 ## 1.9.2 - 16-May-2026 — Archon target refresh
 
@@ -408,15 +383,14 @@
 
 ### Improved
 
-- **Tooltip percentages now reflect real rating conversion better** — target/current/delta percentages use Blizzard's rating conversion API, Mastery's spec coefficient, and total-rating comparisons so diminishing-return brackets are handled at the current and target rating positions.
+- **Archon tooltip percentages now account more accurately for stat conversion, Mastery scaling, and diminishing returns.**
 - **Target hover presentation is easier to scan** — labels now use colons, snapshot dates use `DD-Mmm-YY`, Current can inherit the stat color when Match Value Color to Stat is enabled, and Missing / Over / Matched keep their own status colors.
-- **Release checks now protect target snapshots** — local verification validates M+ and Raid profile coverage, expected target counts, generated table shape, and malformed/duplicate snapshot cases before release prep.
 
 ### Fixed
 
 - **StatsPro now appears under Combat in the modern AddOn List** across supported client locales, while keeping legacy `X-Category` metadata for addon managers.
 - **Target hover rows no longer block normal panel interactions** such as right-click settings and drag behavior.
-- **Target metadata skips unsafe stat reads** instead of formatting secret, malformed, missing, negative, or non-finite rating values.
+- **Archon tooltips no longer error or show invalid comparisons** when the current rating is unavailable.
 
 ### Changed
 
@@ -433,18 +407,14 @@
 
 - **StatsPro branding has been refreshed** — the README logo and packaged AddOn List icon now use the current stats-panel logo.
 
-### Improved
-
-- **Smoke coverage now protects the new visual settings** — local checks cover default population, numeric clamping, reset behavior, live config controls, both split panels, font outline flags, and panel background alpha.
-
 ## 1.7.1 - 10-May-2026 — Runtime hardening
 
 ### Fixed
 
-- **Rare malformed stat reads no longer break rendering** — missing, secret, or malformed percentage/rating values are skipped or safely normalized before they reach numeric formatters.
-- **Settings color previews clean up safely** — closing Settings, switching swatches, or resetting defaults now cancels unconfirmed color previews without leaving stale callbacks behind.
+- **Rare unreadable or malformed stat values no longer break the HUD.**
+- **Closing Settings, switching color swatches, or resetting defaults now reliably cancels unconfirmed color previews.**
 - **Font and locale hover previews restore reliably** — closing the font picker or language dropdown after browsing previews now forces the committed font back onto the HUD instead of occasionally leaving a hovered preview active.
-- **`/ss debug bucket` is safer during unreadable stat states** — diagnostics now suppress secret or malformed render values instead of inspecting them.
+- **`/ss debug bucket` no longer errors** when stat values are temporarily unreadable.
 
 ## 1.7.0 - 10-May-2026 — Defensive and gear feedback pass
 
@@ -459,36 +429,19 @@ Suggested by [@tflo](https://github.com/tflo) in issues #2, #3, and #4. Thank yo
 - **Item Level now belongs to Gear** — Sectioned mode groups iLvl under the Gear heading with Durability and Repair, and fresh/reset Split layouts send Item Level to the side panel with the other gear rows.
 - **Block is class-aware** — Block stays visible for Warriors, Paladins, and Shamans, but hides on classes that cannot block even when `Hide Zero Values` is off. Dodge and Parry remain unchanged.
 
-### Improved
-
-- **Smoke coverage protects the new routing and defensive edge cases** — local checks now cover Brewmaster-only Stagger, non-block classes, Shaman zero-Block visibility, Item Level's Gear header, and the new Settings controls.
-
 ## 1.6.4 - 08-May-2026 — Verification and startup hardening
-
-### Improved
-
-- **Local addon checks are much stricter** — the project wrapper now runs Lua 5.1 syntax, the pure-Lua smoke harness, luacheck, and LuaLS diagnostics before release prep.
-- **Smoke coverage now protects the main addon lifecycle outside the WoW client** — startup migration, legacy SwiftStats carry-forward, logout position saves, slash commands, render routing, config construction, representative settings interactions, UTF-8 labels, font compatibility helpers, repair formatting, and color normalization are covered by local checks.
-- **Fresh-machine check setup is scripted** — `scripts/install-check-tools.ps1` can bootstrap the Lua 5.1, LuaLS, LuaRocks, and luacheck tools used by the local verification wrapper.
-- **Release preflight now checks version consistency** — tag packaging verifies the release tag, TOC version, addon fallback version, changelog heading, and local Lua checks before marketplace upload.
 
 ### Fixed
 
 - **Item Level follows the selected language on the HUD** — the row now localizes with the rest of the stat labels instead of always showing `iLvl`.
-- **Malformed SavedVariables fall back safely** — invalid DB roots, font and position scalars, booleans, and non-finite numeric settings no longer crash early startup or invert toggles before settings can self-heal.
-- **Legacy migration inputs are more defensive** — string, invalid, or non-finite `dbVersion` values now run through the forward migration path instead of breaking version comparisons or skipping repairs.
-
-### Changed
-
-- **Release publishing has stronger duplicate-upload guards** — tag-triggered packaging refuses forced-tag and existing-release republish paths before marketplace upload.
-- **Static diagnostics are tighter** — luacheck is now a required local gate and stale named-frame diagnostic allowlist entries were removed.
-- **Changelog dates are easier to read** in release notes.
+- **Corrupted saved settings no longer prevent StatsPro from starting**; invalid values fall back safely.
+- **Legacy settings with invalid version data now migrate safely** instead of being skipped.
 
 ## 1.6.2 - 06-May-2026 — Item Level row alignment fix
 
 ### Fixed
 
-- **Item Level row no longer wraps mid-value in Sectioned mode** — the `277 / 277` text could split across two lines under tight panel widths, shifting every stat row below it out of alignment (Crit picked up Haste's value, Defensive header pulled in Speed's, Repair overlapped Durability). Equipped and overall iLvl now render in the same rating/value columns the rated stats use, so the row stays single-line and the separator lines up with the other rows.
+- **Item Level remains on one line in Sectioned mode**, keeping its separator and every row below it aligned at narrow panel widths.
 
 ### Changed
 
@@ -498,18 +451,14 @@ Suggested by [@tflo](https://github.com/tflo) in issues #2, #3, and #4. Thank yo
 
 ### Improved
 
-- **Item Level refresh is more efficient** — equipped / overall item level now refreshes from gear and bag-change signals instead of polling every HUD tick.
-- **Hidden panels do less repeated work** — already-hidden stat panels skip redundant text/cache clearing.
-- **Refresh Rate changes avoid redundant cache refresh work** while Font Size, Scale, and Text Opacity keep instant live preview as you drag.
+- **Item Level now updates promptly after gear or bag changes** with less background work.
+- **Hidden stat panels now use fewer resources.**
+- **Refresh Rate changes are more efficient** without affecting live Appearance previews.
 
 ### Fixed
 
-- **Malformed numeric SavedVariables are clamped safely** — bad Scale, Font Size, Text Opacity, or Refresh Rate values fall back to sane runtime values instead of breaking rendering or update timing.
+- **Invalid saved Scale, Font Size, Text Opacity, or Refresh Rate values now fall back safely.**
 - **Versatility rating reads are skipped when Rating display is off** while percentage display continues updating normally.
-
-### Changed
-
-- **Release workflow now runs only from `v*` tags** and uses the newer checkout action runtime, removing the manual-dispatch footgun and Node.js runtime warning.
 
 ## 1.6.0 - 05-May-2026 — Item Level + configurable layout blocks
 
@@ -522,17 +471,16 @@ Suggested by [@tflo](https://github.com/tflo) in issues #2, #3, and #4. Thank yo
 
 ### Fixed
 
-- **Repair Cost no longer needs a settings toggle after login/vendor timing** — delayed tooltip/item data now triggers a repair-cost rescan when it catches up.
+- **Repair Cost now appears automatically** when delayed item data becomes available after login or visiting a vendor.
 - **Armor damage reduction no longer flickers to 0 during transient unreadable 12.x stat reads** — the addon keeps the last clean value until fresh readable data arrives.
-- **Korean / Chinese / Russian font compatibility is more reliable** — Blizzard font paths are normalized across casing/path variants, and bundled font coverage now classifies localized Blizzard fonts correctly.
-- **Malformed color SavedVariables no longer break rendering** — invalid color tables/channels are repaired from defaults and clamped safely.
+- **Korean, Chinese, and Russian font compatibility is more reliable** across Blizzard font variants.
+- **Invalid saved color values no longer break rendering** and now fall back safely.
 - **Sectioned mode now matches the new layout model** — it shows headers for visible Character, Item Level, Offensive, Tertiary, Defensive, and Gear blocks instead of only the old Defensive divider.
 - **Settings launcher localization stays in sync** after language changes.
 
 ### Changed
 
 - **Repair Cost is OFF by default for fresh/reset profiles** so it only appears when explicitly enabled.
-- **Release packages include the MIT license** and exclude developer-only metadata.
 
 ## 1.5.0 - 04-May-2026 — Right-click opens Settings
 
@@ -578,14 +526,14 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 
 ### Migrated
 
-- The three primary stat toggles (Show Strength / Agility / Intellect) are gone — replaced by the single Show Main Stat toggle. If you had any of the three previously enabled, "Show Main Stat" turns ON automatically (your displayed-stat preference is preserved). If all three were OFF (the v1.2.x default — most users), main stat stays hidden — open the Stats tab and check "Show Main Stat" if you want it now.
-- The three per-stat color pickers (Strength / Agility / Intellect) are collapsed into a single Main Stat color. If you previously customized any of the three away from the default gold, the most-likely-main-stat color (Intellect first, then Agility, then Strength) carries over to the new Main Stat picker — your color preference survives in the common case. Multi-class altoholics who set three different colors will only see the first carry-over (Intellect-priority); pick a new color in Stats → Show Main Stat swatch if you want a different one.
+- Show Main Stat replaces the separate Strength, Agility, and Intellect toggles. It turns on automatically if any of those rows was enabled; otherwise it remains off.
+- The three primary-stat colors are replaced by one Main Stat color. Existing custom colors carry over when possible; users with different colors for each stat may need to choose a new shared color.
 
 ## 1.2.2 - 02-May-2026 — Repair cost loads correctly after login
 
 ### Fixed
 
-- **Repair cost now displays right after login** instead of staying blank until you toggle Show Repair Cost off and on (or swap a piece of gear). Item data loads asynchronously after entering the world; the addon now schedules a single delayed re-scan when any slot's tooltip wasn't ready yet, so the cost catches up without manual intervention.
+- **Repair cost now appears automatically after login** once item data is ready, without toggling the setting or swapping gear.
 
 ## 1.2.1 - 02-May-2026 — Settings window adapts to small screens
 
@@ -601,7 +549,7 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 
 ### Fixed
 
-- **"Show Repair Cost" toggle now refreshes immediately when turned on.** Previously the toggle could display nothing or a stale value until your next gear swap, because the cache only refreshed on equipment events. Toggling Off → On with damaged items now updates the displayed cost right away.
+- **Turning on Show Repair Cost now displays the current value immediately** instead of waiting for a gear change.
 - **Settings UI labels no longer render as `?`-boxes** when previewing or committing a non-Latin locale (Russian / Chinese) on an English client. Settings labels now auto-switch to a glyph-compatible font — same logic the stat panels were already using.
 - **Section headers no longer corrupt non-ASCII letters** when rendered uppercase in localized languages. Previously Russian "Основные характеристики" produced byte garbage at the section header on non-Russian clients.
 - **Font picker hover-preview no longer leaves panels stuck on a previewed font** after closing the picker. Closing without picking always reverts to the committed font, including edge cases with rapid scrolling and unusual close paths.
@@ -612,7 +560,7 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 ### Improved
 
 - **Font picker hover-preview is smoother during rapid scrolling** — redundant re-applies are deduped, and the mouse drifting to picker padding auto-cancels the preview instead of leaving it stuck.
-- **Font Size slider drag and locale switching feel more responsive** — the internal pipeline now skips redundant work when only the font changes (text content unchanged). First open of the Font picker on installs with many SharedMedia fonts is also faster (the alphabetical sort runs once per session instead of per open).
+- **Font Size and language previews feel more responsive**, and the font picker opens faster with large SharedMedia lists.
 
 ### Known limitations
 
@@ -624,7 +572,7 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 
 - **Multi-column font picker replaces the alphabetical sub-menu dropdown.** Click the Font field in Appearance → Typography and the full font list opens as a scrollable 3-column grid — no more drilling through `2-A` / `B-C` / `D-F` letter buckets. Hover any font to preview it on your panels live; click to commit; close the picker without picking to revert. The currently-selected font is tinted and the grid auto-scrolls to center it on open.
 - **Hover-preview for the Language dropdown.** Open Appearance → Localization → Language and hover any locale to see your panel labels switch live to that language. Close the dropdown without clicking to revert; click to commit. When your committed font can't render the hovered locale's glyphs (e.g. Russian on an English client with the default Latin-only font), the preview also temporarily switches to a glyph-compatible fallback so labels render correctly during hover — same auto-switch the commit path already does.
-- **Per-stat color customization for Strength / Agility / Intellect.** Previously all three primary stats shared a single color; now each has its own inline swatch in Stats → Primary Stat Ratings. If you'd previously customized the shared primary color, that choice is preserved across all three on upgrade — visuals unchanged unless you intentionally pick differently per stat.
+- **Per-stat color customization for Strength, Agility, and Intellect.** Each primary stat now has its own inline swatch, and existing custom primary-stat colors are preserved on upgrade.
 
 ### Changed
 
@@ -654,22 +602,22 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 - **All color swatches across Settings now form clean aligned columns**, regardless of label length or chosen language. Previously swatches drifted horizontally based on rendered label width — e.g. "Crit Color:" and "Versatility Color:" pushed swatches to different x positions per row.
 - **Color swatches throughout Settings now have consistent sizing.** Previously the labeled "Stat Color:" pickers in the Display tab used larger swatches than the inline checkbox swatches in Stats / Defensive tabs — visually inconsistent. Now all swatches share one size and styling.
 - **Section header color swatches (e.g. the shared Primary stat swatch next to the "PRIMARY STAT RATINGS" header) now sit right next to the header text** with the same gap as everywhere else, instead of at a fixed offset that left wide empty space.
-- **Default stats panel font is no longer hijacked by third-party font-replacement addons** (ChonkyCharacterSheet, Tukui, ElvUI font modules, and similar). Those addons mutate Blizzard's `STANDARD_TEXT_FONT` global; previously StatsPro's defaults, migration, and auto-switch fallback followed the mutation and silently pinned your panel font to the addon's path — even if you never picked it. StatsPro now trusts `STANDARD_TEXT_FONT` only when it points to a Blizzard-shipped path; addon-overridden values fall back to Friz Quadrata. You can still pick any installed font manually via the Font dropdown.
+- **Third-party font replacements no longer change StatsPro's default font unexpectedly.** Installed fonts can still be selected manually.
 - **Display tab dropdowns (`Display Mode`, `Language`, `Font`) now share a single column with matching width.** Previously the `Display Mode` dropdown sat far to the right while the other two clung close to their labels and rendered at three different sizes. All three now share the same left edge (column adapts to label widths in any locale) and the same body width. The Language dropdown's collapsed text is shown in compact form (e.g. `English` / `Русский` / `中文 简体`) so it fits without truncation; the menu still shows full descriptive labels when opened.
-- **Tighter spacing below the Language row when no font-coverage warning is shown** (the common case). Previously a fixed 2-line warning slot was reserved unconditionally, leaving visible empty space between the Language dropdown and the Typography section.
-- **Font dropdown no longer overflows the screen on systems with many SharedMedia fonts.** Users with multiple font packs registered (50–200+ entries) saw a single huge non-scrolling list that ran off the bottom of the screen with the bottom entries unreachable. The list now groups into alphabetic letter-range submenus (e.g. `A`, `B – C`, `D – F`, …) that each fit on screen. Short font lists (≤ 20 entries) still render as a single flat menu — no extra clicks for users without large font packs.
+- **Removed unnecessary empty space below Language** when no font-coverage warning is shown.
+- **The Font dropdown remains usable with large SharedMedia libraries** by grouping long font lists into compact alphabetical submenus.
 
 ### Added
 
-- **Settings UI now refreshes localized stat color labels immediately when you change Language**, instead of requiring `/reload`. Column alignment recomputes on the fly to fit the new locale's text widths.
+- **Localized stat-color labels and their alignment now update immediately** when Language changes, without `/reload`.
 
 ## 1.1.5 - 29-Apr-2026 — Honest font coverage on cross-locale picks
 
 ### Fixed
 
-- **Selecting a non-native locale (e.g. Russian on an English client) now auto-switches to Blizzard's built-in Arial Narrow** for readable rendering — no SharedMedia addon required. Previously the addon mistakenly assumed `Fonts\FRIZQT__.TTF` always shipped clean Cyrillic glyphs (true only on the Russian client build); on English / German / French / etc. FRIZQT is Latin-designed, with Cyrillic falling back to OS system fonts (visible but with mismatched kerning and stroke weights — hard to read). The fix recognizes ARIALN as the Blizzard-shipped Latin+Cyrillic font (universal across all non-CJK clients, since it's used for chat/nameplates with cross-realm Russian names) and auto-switches to it when needed.
-- **Existing users with a stale cross-locale `forceLocale` setting now self-heal on next login.** The per-login auto-switch sees the now-correct coverage answer and picks the right font.
-- **The "current font may not render cleanly" warning now correctly fires** when even the auto-fallback can't cover the chosen locale (e.g. picking Korean on an English client without a SharedMedia CJK font installed). Previously suppressed for Cyrillic on non-Russian clients due to the incorrect assumption above.
+- **Selecting Russian on a non-Russian client now switches to Blizzard's Arial Narrow automatically** for clearer Cyrillic text.
+- **Existing cross-locale language choices now recover to a compatible font automatically** on the next login.
+- **The font-coverage warning now appears correctly** when the selected locale still lacks a compatible font.
 
 ### Known limitations
 
@@ -679,18 +627,18 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 
 ### Fixed
 
-- **LSM CJK fonts (NotoCJK / SourceHan / WenQuanYi / PingFang / Microsoft YaHei / JhengHei / SimSun / SimHei / MingLiU / Malgun Gothic / Nanum / Apple SD Gothic Neo) no longer trigger a false "font may not cover glyphs" warning when picking a CJK locale.** Auto-switch logic now recognizes them by font-family name patterns; previously any non-Blizzard-shipped font was conservatively assumed Latin-only. NotoCJK and SourceHan are now also correctly recognized as covering Cyrillic — ruRU users with these fonts no longer see a false warning either.
+- **Common SharedMedia CJK fonts no longer trigger false coverage warnings**; NotoCJK and SourceHan also work correctly for Russian.
 
 ### Known limitations
 
-- **Custom CJK families with generic filenames** (e.g. `regular.ttf` inside a CJK font pack) still surface the warning because path-based detection can't see the font's display name. Recoverable by ignoring the warning, or report the family on GitHub Issues to add an explicit pattern.
-- **Auto-fallback prefers alphabetic-first match.** When multiple LSM CJK fonts are installed, manual font selection is preferred over auto-fallback for best coverage.
+- **Some CJK fonts with generic filenames may still show a false coverage warning**; you can ignore it or report the font family on GitHub Issues.
+- **With multiple CJK fonts installed, automatic selection may not choose your preferred font**; select it manually for best results.
 
 ## 1.1.3 - 28-Apr-2026 — Settings window layering fix
 
 ### Fixed
 
-- **Settings window now opens above raid frames and HUD addons** (was rendering at `MEDIUM` strata, same as gameplay HUD; now uses `DIALOG`).
+- **Settings now opens above raid frames and other HUD add-ons.**
 
 ## 1.1.2 - 28-Apr-2026 — Fix empty panels + empty settings on v1.1.x
 
@@ -708,7 +656,7 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 
 ### Added
 
-- **New "Language" dropdown in Display tab → Localization.** Pick any of the 11 retail locales for on-screen labels regardless of WoW client locale. Replaces the prior `useLocalizedLabels` boolean.
+- **New Language dropdown in Display → Localization** lets you choose any supported locale regardless of the WoW client language, replacing the earlier localization toggle.
 - **Auto-switch font when picked locale needs glyphs the current font lacks.** Saves your previous font, switches to the locale-aware default, restores on switching back. Manually picking a font clears the auto-switch memory.
 - **Inline warning under the Language dropdown** when no installed font covers the picked locale's glyphs. Doesn't block the choice.
 
@@ -720,7 +668,7 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 
 ### Added
 
-- **Localized addon-list description (`## Notes-<locale>:` TOC fields)** for all 10 non-English retail locales: deDE, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, zhTW. Single-line corrections from native speakers welcome via GitHub Issues.
+- **The AddOn List description is now localized** for all supported non-English retail locales. Native-speaker corrections are welcome via GitHub Issues.
 
 ## 1.0.11 - 27-Apr-2026 — Localized color-picker labels + Localization toggle preview fix
 
@@ -730,36 +678,36 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 
 ### Fixed
 
-- **Localization-toggle checkbox preview no longer renders as `?` boxes on CJK clients.** Was hardcoded to `Fonts\FRIZQT__.TTF` (no CJK glyphs); now uses `STANDARD_TEXT_FONT`.
+- **Localization-toggle previews no longer render as `?` boxes on CJK clients.**
 
 ## 1.0.10 - 27-Apr-2026 — Locale-aware default font (CJK fix) + RGBToHex hardening
 
 ### Fixed
 
-- **Localized stat labels now render correctly out of the box on CJK clients (zhCN / zhTW / koKR).** Default font was `Fonts\FRIZQT__.TTF` (no CJK glyphs); now `STANDARD_TEXT_FONT` (locale-aware).
-- **Existing users on the old default font are auto-upgraded** (DB v3 → v4). Explicit font choices preserved.
+- **Localized stat labels now render correctly out of the box on CJK clients** with a locale-appropriate default font.
+- **Existing users on the old default font upgrade automatically**, while explicit font choices are preserved.
 - **Font re-applies cleanly within the upgrade session** — no broken-glyph flash for CJK users until next `/reload`.
-- **`RGBToHex` defensive guard against SavedVariables corruption** — out-of-range RGB values from a hand-edited DB are clamped to `[0, 1]`.
+- **Out-of-range saved color values now fall back safely** instead of breaking color rendering.
 
 ## 1.0.9 - 27-Apr-2026 — Carry forward settings from upstream SwiftStats (TaylorSay)
 
 ### Added
 
-- **One-time settings carry-forward from the original SwiftStats by TaylorSay.** Users moving from CurseForge SwiftStats to StatsPro now get their panel position, font, scale, and per-stat colors copied on first launch (fresh installs only). Source priority: `SwiftStatsDB` (upstream public) > `SwiftStatsLocalDB` (older internal name).
+- **One-time settings carry-forward from the original SwiftStats by TaylorSay.** Users moving from CurseForge SwiftStats to StatsPro keep their panel position, font, scale, and per-stat colors on first launch.
 
 ## 1.0.8 - 27-Apr-2026 — Primary stats now show effective (buffed) values + armor combat-taint guard
 
 ### Fixed
 
-- **Primary stats (Strength / Agility / Intellect) now show the same value Blizzard's character sheet displays.** Was capturing `UnitStat`'s base return instead of the effective return; for buffed raiders this understated by 10–25%. Affects users who explicitly enabled `Show Strength` / `Show Agility` / `Show Intellect` (off by default).
-- **Armor damage-reduction calculation no longer aborts mid-pull** if `PaperDollFrame_GetArmorReduction` returns a secret-tainted number — wrapped in `pcall` + `issecretvalue` filter.
+- **Primary stats now match Blizzard's character sheet while buffed** instead of showing an understated base value.
+- **Armor damage reduction no longer disappears mid-pull** when Midnight temporarily restricts the underlying stat data.
 
 ## 1.0.7 - 27-Apr-2026 — Translation polish + Korean Armor/Defensive disambiguation
 
 ### Fixed
 
-- **Defensive panel no longer freezes in split mode when offensive stats are all disabled.** Ticker moved off `mainPanel.frame` to a dedicated invisible frame that's never hidden by user logic.
-- **SwiftStatsLocal → StatsPro one-time migration now runs reliably** — moved from file scope to `PLAYER_ENTERING_WORLD`, so it fires regardless of addon load order.
+- **The Defensive panel no longer freezes in Split mode** when all Offensive stats are disabled.
+- **One-time SwiftStats settings import now runs reliably on first login** regardless of addon load order.
 - **koKR: Armor and Defensive section header no longer collide.** Armor stays `방어`; Defensive divider becomes `수비`.
 - **koKR: Parry/Block now distinguishable.** Parry `쳐막`, Block `막기` (matches WoW Korean client / community convention).
 
@@ -800,21 +748,21 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 ### Added
 
 - **Master "Show Offensive Stats" toggle on the Stats tab** — Crit / Haste / Mastery / Versatility each have their own visibility checkbox plus a master toggle. Includes an opt-in `Hide Zero Values` filter (default off).
-- **`/ss debug` slash subcommand** — dumps addon version, DB version, toggle states, panel positions, and Lua memory usage into chat for self-serve diagnostics.
+- **`/ss debug` slash subcommand** — prints addon, settings, and panel diagnostics for troubleshooting.
 
 ### Fixed
 
 - **Defensive sub-toggles now grey out when master is off** (matches existing Tertiary / Durability dependency-disable pattern).
-- **"Reset to Defaults" no longer leaks the config frame** — widget visuals are re-synced from the freshly-reset DB in-place; the frame is reused instead of orphaning child widgets in `_G` on every Reset click.
+- **Reset to Defaults now refreshes the existing Settings window correctly** without duplicated or orphaned controls.
 - **Repair coin moved to its own row below stats** — was sharing a row with the `Repair:` label and could overlap stat content in narrow panel layouts (visual mash like `Repair55..88..12`).
 
 ## 1.0.4 - 26-Apr-2026 — Combat-safe lock toggle
 
 ### Fixed
 
-- **Lock Frames toggle stuck after combat** — switching off mid-combat updated DB but `Panel:Unlock` no-op'd via its `InCombatLockdown` guard. Now re-applies on `PLAYER_REGEN_ENABLED`.
-- **SwiftStatsLocal migration aliased sub-tables** — first-load shallow-copy meant `StatsProDB.colors` shared a Lua table reference with `SwiftStatsLocalDB.colors` while both addons were enabled, so color-picker edits in either silently mutated the other. Now uses `CopyTable`.
-- **Default-fill skipped on coincidental version match** — `MigrateDB` early-returned when `dbVersion == CURRENT_DB_VERSION`, so SwiftStatsLocal migrants whose legacy DB carried `dbVersion=3` never picked up StatsPro's defaults. Init loops now run before the version early-return.
+- **Lock Frames changes made during combat now apply correctly** when combat ends.
+- **Imported SwiftStats colors no longer remain linked to the original add-on**, so editing colors in either add-on does not alter the other.
+- **SwiftStats imports now receive all StatsPro defaults** even when legacy version data happens to match.
 
 ### Improved
 
@@ -826,13 +774,13 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 
 ### Added
 
-- **Refresh Rate slider** on the Display tab (range `0.1s – 1.0s`, default `0.5s`). Replaces the hidden `/run StatsProDB.updateInterval = X` workaround.
+- **Refresh Rate slider** on the Display tab (range `0.1s – 1.0s`, default `0.5s`) replaces the old manual console workaround.
 
 ## 1.0.2 - 26-Apr-2026 — Dynamic version display
 
 ### Fixed
 
-- **Settings window and Blizzard interface options panel showed stale "v1.0"** — version was hardcoded; both labels now read from TOC at runtime via `C_AddOns.GetAddOnMetadata`.
+- **Settings and Blizzard's AddOns panel now show the current StatsPro version** instead of a stale hardcoded value.
 
 ## 1.0.1 - 26-Apr-2026 — Single-column display polish
 
@@ -842,19 +790,19 @@ Both features in this release were suggested by **tflo** (GitHub Issue #1) — a
 
 ### Fixed
 
-- **Wide gap / truncated percentage in single-display modes** — `GetStringWidth` on mostly-empty multi-line strings is unreliable in 12.x retail. Format helpers now route into the rating column when dual-column mode is off.
-- **In-combat taint crash spam** — the all-empty short-circuit in `JoinLinesSecretSafe` compared elements against `""`, raising a taint error when in-combat reads put a secret-tainted string in the list. Comparison removed.
+- **Single-display modes no longer leave a wide gap or truncate percentages.**
+- **Protected in-combat stat text no longer causes repeated UI errors.**
 
 ## 1.0.0 - 26-Apr-2026 — Initial release
 
-First public release under the StatsPro name. Originally inspired by SwiftStats v2.1 by TaylorSay (MIT) — substantially rewritten, with only ~9% of upstream code remaining verbatim (boilerplate, color defaults, basic stat list).
+First public release under the StatsPro name. Inspired by SwiftStats v2.1 by TaylorSay (MIT), with substantial StatsPro-specific development.
 
 ### Added
 
 - **Defensive stats panel** — Dodge, Parry, Block, Armor (as % damage reduction). Independent visibility toggle, per-stat color swatches, hide-zero option.
-- **Durability tracking** — single-pass scan of equipment slots (skipping shirt/tabard), toggle between average and worst-slot percentage. Vendor-format precision (`%.1f%%`).
+- **Durability tracking** — choose average or worst-slot percentage with familiar one-decimal precision.
 - **Auto-color durability** — green ≥60%, yellow ≥30%, red <30%. Override via custom color when auto-color is off.
-- **Repair cost** — live vendor-format coin string with inline gold/silver/copper icons (`GetCoinTextureString`). Rendered on its own line below durability.
+- **Repair cost** — live vendor-style gold, silver, and copper display on its own line below durability.
 - **Display modes** — Flat (one panel, all stats), Sectioned (one panel with `— Defensive —` divider), Split (separate draggable panels).
 - **Multi-panel positioning** — defensive panel independently draggable in Split mode.
 - **Master visibility toggle** — show/hide all panels via checkbox or `/ss toggle`.
@@ -865,17 +813,17 @@ First public release under the StatsPro name. Originally inspired by SwiftStats 
 ### Changed
 
 - **Default text alignment** — `RIGHT` (was `LEFT`). Migrated automatically; explicit user choices preserved.
-- **Effective armor handling** — `pcall(UnitArmor)` + secret-value filter for 12.x retail. Refresh runs out-of-combat only.
+- **Armor damage reduction remains stable** when Midnight temporarily restricts armor data.
 - **Versatility** — split into rating + flat dual-source display, with combat-safe caching.
-- **Repair cost API** — switched from `GameTooltip:SetInventoryItem` (returns secret values in 12.x) to `C_TooltipInfo.GetInventoryItem` + `TooltipUtil.SurfaceArgs`.
+- **Repair cost uses Midnight-compatible item data** so restricted tooltip values no longer break the row.
 
 ### Fixed
 
 - **Misaligned rating + percentage columns** — rating is now its own RIGHT-justified third FontString between label and value, so all rating right-edges line up vertically and the percent column has a clean fixed left edge.
-- **Frame position not persisting** — `SetUserPlaced(true)` now called after `SetPoint(...)` in `LoadPosition` (12.x retail order requirement).
-- **Position lost on /reload** — `PLAYER_LOGOUT` handler saves both panels defensively, in case the user drags via paths that bypass `OnDragStop`.
+- **Frame positions now persist reliably** after moving a panel.
+- **Panel positions are preserved across `/reload`** even after unusual drag paths.
 - **Durability % differing from vendor** — default switched to average (matches vendor display); worst-slot mode preserved as opt-in.
-- **In-combat secret-value taint** — every stat-API read passes through `pcall` + `issecretvalue` filtering before any arithmetic or comparison.
+- **Combat-protected stat reads no longer trigger addon errors.**
 
 ### Removed
 
@@ -884,4 +832,4 @@ First public release under the StatsPro name. Originally inspired by SwiftStats 
 
 ### Migrated
 
-- Existing **SwiftStatsLocal** users keep all settings — `StatsProDB` is populated from `SwiftStatsLocalDB` on first load if present. Old DB is left untouched.
+- Existing **SwiftStatsLocal** users keep all settings on first launch, and the original add-on's saved data is left untouched.

@@ -64,3 +64,6 @@ SwiftStatsDB = nil
 
 ---@type table?
 SwiftStatsLocalDB = nil
+
+---@type boolean?
+__STATSPRO_ARCHON_TARGETS_MODULE = nil

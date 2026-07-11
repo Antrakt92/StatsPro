@@ -9490,7 +9490,7 @@ do
     local oldScale = env.StatsProFrame:GetScale()
     local oldSetPoint = env.StatsProFrame.SetPoint
     local failNext = true
-    env.StatsProFrame.SetPoint = function(frame, ...)
+    rawset(env.StatsProFrame, "SetPoint", function(frame, ...)
         if failNext then
             failNext = false
             root.profiles.p3.settings.showDefensive = true
@@ -9498,9 +9498,9 @@ do
             error("injected profile operation apply failure")
         end
         return oldSetPoint(frame, ...)
-    end
+    end)
     local ok, reason = test.profileOps.assign("Player-1-OPS-A", 73, "p3")
-    env.StatsProFrame.SetPoint = oldSetPoint
+    rawset(env.StatsProFrame, "SetPoint", oldSetPoint)
     eq("profiles.ops.failure.mutating_apply.rejected", ok, false)
     eq("profiles.ops.failure.mutating_apply.reason", reason, "apply-failed")
     assertDeepEqual("profiles.ops.failure.mutating_apply.root", root, before)
@@ -9517,9 +9517,9 @@ do
     env, _, test, root = makeProfileOpsFixture()
     before = deepCopy(root)
     oldSetPoint = env.StatsProFrame.SetPoint
-    env.StatsProFrame.SetPoint = function(frame, ...)
+    rawset(env.StatsProFrame, "SetPoint", function(frame, ...)
         error("injected target and rollback apply failure")
-    end
+    end)
     ok, reason = test.profileOps.assign("Player-1-OPS-A", 73, "p3")
     eq("profiles.ops.failure.rollback_apply.rejected", ok, false)
     eq("profiles.ops.failure.rollback_apply.reason", reason, "rollback-apply-failed")
@@ -9528,21 +9528,21 @@ do
     eq("profiles.ops.failure.rollback_apply.pending",
         test.profileRuntimeState().pendingResolution, true)
     local failRecoveryOnce = true
-    env.StatsProFrame.SetPoint = function(frame, ...)
+    rawset(env.StatsProFrame, "SetPoint", function(frame, ...)
         if failRecoveryOnce then
             failRecoveryOnce = false
             root.profiles.p2.settings.colors.crit.r = 0.777
             error("injected first recovery apply failure")
         end
         return oldSetPoint(frame, ...)
-    end
+    end)
     env.__flushTimers(0)
     eq("profiles.ops.failure.rollback_apply.first_retry_force",
         test.profileRuntimeState().forceReapply, true)
     eq("profiles.ops.failure.rollback_apply.first_retry_pending",
         test.profileRuntimeState().pendingResolution, true)
     assertDeepEqual("profiles.ops.failure.rollback_apply.first_retry_root", root, before)
-    env.StatsProFrame.SetPoint = oldSetPoint
+    rawset(env.StatsProFrame, "SetPoint", oldSetPoint)
     env.__flushTimers(0.25)
     eq("profiles.ops.failure.rollback_apply.recovered_force",
         test.profileRuntimeState().forceReapply, false)

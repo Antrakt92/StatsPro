@@ -387,6 +387,7 @@ local function makeEnv(locale, opts)
     setmetatable(env, { __index = std })
     env._G = env
     env.__frames = {}
+    env.__fontStrings = {}
     env.__timers = {}
     env.__timerOrder = 0
     env.__closedDropdowns = 0
@@ -669,6 +670,11 @@ local function makeEnv(locale, opts)
 
     env.CreateFrame = function(_, name)
         local frame = makeFrame(name, opts.setFontResult)
+        frame.CreateFontString = function()
+            local fontString = makeFrame(nil, opts.setFontResult)
+            env.__fontStrings[#env.__fontStrings + 1] = fontString
+            return fontString
+        end
         env.__frames[#env.__frames + 1] = frame
         if name then
             env[name] = frame
@@ -1929,6 +1935,13 @@ local function blockDumpContains(blocks, needle)
         end
     end
     return false
+end
+
+local function findFontString(name, env, predicate)
+    for _, fontString in ipairs(env.__fontStrings) do
+        if predicate(fontString) then return fontString end
+    end
+    fail(name, "matching font string not found")
 end
 
 local function findBlockBySplitKey(name, blocks, splitKey)
@@ -7305,6 +7318,9 @@ do
         function() return corruptTest.profileOps.rename("p1", "Blocked") end,
         function() return corruptTest.profileOps.copySettings("p1", "p2", "all") end,
         function() return corruptTest.profileOps.assign("guid", 73, "p1") end,
+        function() return corruptTest.profileOps.useProfileForKnownSpecs("guid", "p1") end,
+        function() return corruptTest.profileOps.makeKnownSpecsIndependent("guid") end,
+        function() return corruptTest.profileOps.setRoleTemplate("TANK", "p1") end,
         function() return corruptTest.profileOps.swap(
             { guid = "a", specID = 73 }, { guid = "b", specID = 72 }) end,
         function() return corruptTest.profileOps.resetCurrent("p1") end,
@@ -9015,6 +9031,15 @@ do
         ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = { "A", 2, 3 },
         ["Delete unused profile \"%s\"?"] = { "A" },
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = { "A" },
+        ["%s - %d known specs"] = { "A", 3 },
+        ["Tank: %s"] = { "A" },
+        ["Healer: %s"] = { "A" },
+        ["Damage: %s"] = { "A" },
+        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = { "A", 3, "B" },
+        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = { 2, "A" },
+        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = { "A" },
+        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = { "A" },
+        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = { "A" },
     }
     local requiredOperationKeys = {
         "Profile to manage:", "Choose a profile", "Assign to selected context",
@@ -9031,6 +9056,9 @@ do
         "The last profile cannot be deleted.", "Choose a replacement profile.",
         "The current character cannot be forgotten.", "Nothing changed.",
         "Profile operation failed. Review the selection and try again.",
+        "Selected character", "Future new contexts", "Tank", "Healer", "Damage",
+        "Use profile for all known specs...", "Make shared specs independent...",
+        "Set future role template...", "Choose a role",
     }
     local function placeholderCount(value, token)
         local _, count = value:gsub("%%" .. token, "")
@@ -9117,10 +9145,47 @@ do
             copy = "Copy settings to assigned profile...", swap = "Swap assignments...",
             reset = "Reset active profile...", delete = "Delete profile...",
             forget = "Forget character...",
+            useAllSpecs = "Use profile for all known specs...",
+            independent = "Make shared specs independent...",
+            roleTemplate = "Set future role template...",
         }
         for action, key in pairs(actionKeys) do
             eq("profiles.ui.locales.action." .. locale .. "." .. action,
                 state.actions[action].text, labels[key])
+        end
+        eq("profiles.ui.locales.character_summary." .. locale,
+            state.selectedCharacterSummary,
+            string.format(labels["%s - %d known specs"], "Alpha-Realm", 2))
+        local characterSummaryFrame = findFontString(
+            "profiles.ui.locales.character_summary_frame." .. locale, env,
+            function(fontString)
+                return fontString:GetText() == state.selectedCharacterSummary
+                    and fontString.wordWrap == false and fontString.maxLines == 1
+            end)
+        eq("profiles.ui.locales.character_summary_nowrap." .. locale,
+            characterSummaryFrame.wordWrap, false)
+        eq("profiles.ui.locales.character_summary_one_line." .. locale,
+            characterSummaryFrame.maxLines, 1)
+        eq("profiles.ui.locales.role_tank." .. locale,
+            state.roleTemplateSummary.TANK,
+            string.format(labels["Tank: %s"], "Default"))
+        eq("profiles.ui.locales.role_healer." .. locale,
+            state.roleTemplateSummary.HEALER,
+            string.format(labels["Healer: %s"], "Default"))
+        eq("profiles.ui.locales.role_damage." .. locale,
+            state.roleTemplateSummary.DAMAGER,
+            string.format(labels["Damage: %s"], "Default"))
+        for role in pairs(state.roleTemplateSummary) do
+            local roleSummaryFrame = findFontString(
+                "profiles.ui.locales.role_summary_frame." .. locale .. "." .. role,
+                env, function(fontString)
+                    return fontString:GetText() == state.roleTemplateSummary[role]
+                        and fontString.wordWrap == false and fontString.maxLines == 1
+                end)
+            eq("profiles.ui.locales.role_summary_nowrap." .. locale .. "." .. role,
+                roleSummaryFrame.wordWrap, false)
+            eq("profiles.ui.locales.role_summary_one_line." .. locale .. "." .. role,
+                roleSummaryFrame.maxLines, 1)
         end
         localeIdentity.specID, localeIdentity.specName, localeIdentity.role = 71, "Arms", "DAMAGER"
         fireEvent("profiles.ui.locales.switch." .. locale,
@@ -9282,6 +9347,427 @@ local function assertRegistryIdentities(name, root, snapshot)
             rawequal(root.characters[guid], character), true)
         eq(name .. ".specs." .. guid,
             rawequal(root.characters[guid].specProfiles, snapshot.characterSpecs[guid]), true)
+    end
+end
+
+do
+    local _, _, test, root = makeProfileOpsFixture()
+    local ops = test.profileOps
+    local accountRef, profilesRef, charactersRef = root.account, root.profiles, root.characters
+    local oldRoles = root.roleTemplates
+    local assignmentsBefore = deepCopy(root.characters)
+    local payloadsBefore = deepCopy(root.profiles)
+    local applyBefore = test.profileRuntimeState().applyCount
+    local ok, result = ops.setRoleTemplate("HEALER", "p4")
+    eq("profiles.automation.roles.set.ok", ok, true)
+    eq("profiles.automation.roles.set.role", result.role, "HEALER")
+    eq("profiles.automation.roles.set.profile", result.profileID, "p4")
+    eq("profiles.automation.roles.set.value", root.roleTemplates.HEALER, "p4")
+    eq("profiles.automation.roles.set.other_tank", root.roleTemplates.TANK, oldRoles.TANK)
+    eq("profiles.automation.roles.set.other_damage", root.roleTemplates.DAMAGER, oldRoles.DAMAGER)
+    eq("profiles.automation.roles.set.roles_replaced", rawequal(root.roleTemplates, oldRoles), false)
+    eq("profiles.automation.roles.set.account_identity", rawequal(root.account, accountRef), true)
+    eq("profiles.automation.roles.set.profiles_identity", rawequal(root.profiles, profilesRef), true)
+    eq("profiles.automation.roles.set.characters_identity", rawequal(root.characters, charactersRef), true)
+    assertDeepEqual("profiles.automation.roles.set.assignments", root.characters, assignmentsBefore)
+    assertDeepEqual("profiles.automation.roles.set.payloads", root.profiles, payloadsBefore)
+    eq("profiles.automation.roles.set.no_apply", test.profileRuntimeState().applyCount, applyBefore)
+
+    for _, case in ipairs({
+        { role = "TANK", profileID = "p3" },
+        { role = "DAMAGER", profileID = "p4" },
+    }) do
+        local beforeRoles = deepCopy(root.roleTemplates)
+        local beforeTable = root.roleTemplates
+        ok, result = ops.setRoleTemplate(case.role, case.profileID)
+        eq("profiles.automation.roles.set_each." .. case.role .. ".ok", ok, true)
+        eq("profiles.automation.roles.set_each." .. case.role .. ".value",
+            root.roleTemplates[case.role], case.profileID)
+        eq("profiles.automation.roles.set_each." .. case.role .. ".table_replaced",
+            rawequal(root.roleTemplates, beforeTable), false)
+        for _, otherRole in ipairs({ "TANK", "HEALER", "DAMAGER" }) do
+            if otherRole ~= case.role then
+                eq("profiles.automation.roles.set_each." .. case.role .. ".preserves_" .. otherRole,
+                    root.roleTemplates[otherRole], beforeRoles[otherRole])
+            end
+        end
+    end
+
+    local beforeNoChange = deepCopy(root)
+    ok, result = ops.setRoleTemplate("HEALER", "p4")
+    eq("profiles.automation.roles.same.rejected", ok, false)
+    eq("profiles.automation.roles.same.reason", result, "no-change")
+    assertDeepEqual("profiles.automation.roles.same.no_writes", root, beforeNoChange)
+    local beforeInvalid = deepCopy(root)
+    ok, result = ops.setRoleTemplate("INVALID", "p1")
+    eq("profiles.automation.roles.invalid_role.rejected", ok, false)
+    eq("profiles.automation.roles.invalid_role.reason", result, "invalid-role")
+    ok, result = ops.setRoleTemplate("TANK", "missing")
+    eq("profiles.automation.roles.invalid_profile.rejected", ok, false)
+    eq("profiles.automation.roles.invalid_profile.reason", result, "missing-profile")
+    assertDeepEqual("profiles.automation.roles.invalid.no_writes", root, beforeInvalid)
+end
+
+do
+    local env, _, test, root, identity = makeProfileOpsFixture()
+    local ok = test.profileOps.setRoleTemplate("HEALER", "p3")
+    eq("profiles.automation.roles.all_roles.set_healer", ok, true)
+    ok = test.profileOps.setRoleTemplate("DAMAGER", "p4")
+    eq("profiles.automation.roles.all_roles.set_damage", ok, true)
+    local sourceByRole = { TANK = "p2", HEALER = "p3", DAMAGER = "p4" }
+    local sourceSnapshots = {
+        TANK = deepCopy(root.profiles.p2.settings),
+        HEALER = deepCopy(root.profiles.p3.settings),
+        DAMAGER = deepCopy(root.profiles.p4.settings),
+    }
+    identity.guid, identity.name = "Player-1-OPS-NEW", "Newcomer"
+    local contexts = {
+        { specID = 73, specName = "Protection", role = "TANK" },
+        { specID = 65, specName = "Holy", role = "HEALER" },
+        { specID = 71, specName = "Arms", role = "DAMAGER" },
+    }
+    local cloneIDs = {}
+    for index, context in ipairs(contexts) do
+        identity.specID, identity.specName, identity.role =
+            context.specID, context.specName, context.role
+        if index == 1 then
+            fireEvent("profiles.automation.roles.all_roles.first",
+                env, "PLAYER_ENTERING_WORLD")
+            flushTimers("profiles.automation.roles.all_roles.first_flush", env, 0, 1)
+        else
+            fireEvent("profiles.automation.roles.all_roles.switch." .. context.role,
+                env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+            flushTimers("profiles.automation.roles.all_roles.flush." .. context.role,
+                env, 0, 1)
+        end
+        local cloneID = root.characters[identity.guid].specProfiles[context.specID]
+        cloneIDs[context.role] = cloneID
+        check("profiles.automation.roles.all_roles.allocated." .. context.role,
+            type(cloneID) == "string" and cloneID ~= sourceByRole[context.role], cloneID)
+        assertDeepEqual("profiles.automation.roles.all_roles.payload." .. context.role,
+            root.profiles[cloneID].settings, sourceSnapshots[context.role])
+        assertNoSharedTables("profiles.automation.roles.all_roles.source_isolation." .. context.role,
+            root.profiles[sourceByRole[context.role]].settings,
+            root.profiles[cloneID].settings)
+    end
+    check("profiles.automation.roles.all_roles.distinct_tank_healer",
+        cloneIDs.TANK ~= cloneIDs.HEALER)
+    check("profiles.automation.roles.all_roles.distinct_healer_damage",
+        cloneIDs.HEALER ~= cloneIDs.DAMAGER)
+    assertNoSharedTables("profiles.automation.roles.all_roles.clone_isolation",
+        root.profiles[cloneIDs.TANK].settings, root.profiles[cloneIDs.HEALER].settings)
+    root.profiles.p2.settings.showDefensive = false
+    eq("profiles.automation.roles.all_roles.template_change_not_retroactive",
+        root.profiles[cloneIDs.TANK].settings.showDefensive,
+        sourceSnapshots.TANK.showDefensive)
+end
+
+do
+    local env, _, test, root, identity = makeProfileOpsFixture()
+    local ops = test.profileOps
+    local ok = ops.setRoleTemplate("DAMAGER", "p4")
+    eq("profiles.automation.roles.future.set_first", ok, true)
+    local sourceBefore = deepCopy(root.profiles.p4.settings)
+    identity.specID, identity.specName, identity.role = 72, "Fury", "DAMAGER"
+    fireEvent("profiles.automation.roles.future.first_event",
+        env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    flushTimers("profiles.automation.roles.future.first_flush", env, 0, 1)
+    local firstProfileID = root.characters[identity.guid].specProfiles[72]
+    check("profiles.automation.roles.future.first_allocated",
+        type(firstProfileID) == "string" and firstProfileID ~= "p4", firstProfileID)
+    assertDeepEqual("profiles.automation.roles.future.first_payload",
+        root.profiles[firstProfileID].settings, sourceBefore)
+    assertNoSharedTables("profiles.automation.roles.future.first_isolated",
+        root.profiles.p4.settings, root.profiles[firstProfileID].settings)
+
+    root.profiles.p4.settings.showTertiary = false
+    eq("profiles.automation.roles.future.source_change_not_retroactive",
+        root.profiles[firstProfileID].settings.showTertiary, sourceBefore.showTertiary)
+    root.profiles[firstProfileID].settings.scale = 1.77
+    eq("profiles.automation.roles.future.clone_change_not_source",
+        root.profiles.p4.settings.scale, sourceBefore.scale)
+
+    local firstMapping = root.characters[identity.guid].specProfiles[72]
+    ok = ops.setRoleTemplate("DAMAGER", "p1")
+    eq("profiles.automation.roles.future.switch_template", ok, true)
+    eq("profiles.automation.roles.future.existing_mapping", root.characters[identity.guid].specProfiles[72], firstMapping)
+    identity.specID, identity.specName = 70, "Retribution"
+    fireEvent("profiles.automation.roles.future.second_event",
+        env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    flushTimers("profiles.automation.roles.future.second_flush", env, 0, 1)
+    local secondProfileID = root.characters[identity.guid].specProfiles[70]
+    assertDeepEqual("profiles.automation.roles.future.second_payload",
+        root.profiles[secondProfileID].settings, root.profiles.p1.settings)
+    assertNoSharedTables("profiles.automation.roles.future.second_isolated",
+        root.profiles.p1.settings, root.profiles[secondProfileID].settings)
+
+    identity.specID, identity.specName = 69, "Second Damage"
+    fireEvent("profiles.automation.roles.future.third_event",
+        env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    flushTimers("profiles.automation.roles.future.third_flush", env, 0, 1)
+    local thirdProfileID = root.characters[identity.guid].specProfiles[69]
+    check("profiles.automation.roles.future.distinct_ids",
+        secondProfileID ~= thirdProfileID, thirdProfileID)
+    assertNoSharedTables("profiles.automation.roles.future.clone_pair_isolated",
+        root.profiles[secondProfileID].settings, root.profiles[thirdProfileID].settings)
+end
+
+do
+    local _, _, test, root = makeProfileOpsFixture()
+    local ops = test.profileOps
+    local accountRef, profilesRef, rolesRef = root.account, root.profiles, root.roleTemplates
+    local alphaRef = root.characters["Player-1-OPS-A"]
+    local bravoRef = root.characters["Player-1-OPS-B"]
+    local charlieRef = root.characters["Player-1-OPS-C"]
+    local profileIdentities = captureRegistryIdentities(root)
+    local defaultBefore = alphaRef.defaultProfileID
+    local nextBefore = root.account.nextProfileID
+    local applyBefore = test.profileRuntimeState().applyCount
+    local ok, result = ops.useProfileForKnownSpecs("Player-1-OPS-A", "p4")
+    eq("profiles.automation.share.current.ok", ok, true)
+    eq("profiles.automation.share.current.changed", result.changedCount, 2)
+    eq("profiles.automation.share.current.spec_73", root.characters["Player-1-OPS-A"].specProfiles[73], "p4")
+    eq("profiles.automation.share.current.spec_71", root.characters["Player-1-OPS-A"].specProfiles[71], "p4")
+    eq("profiles.automation.share.current.default_unchanged", root.characters["Player-1-OPS-A"].defaultProfileID, defaultBefore)
+    eq("profiles.automation.share.current.account_identity", rawequal(root.account, accountRef), true)
+    eq("profiles.automation.share.current.profiles_identity", rawequal(root.profiles, profilesRef), true)
+    eq("profiles.automation.share.current.roles_identity", rawequal(root.roleTemplates, rolesRef), true)
+    eq("profiles.automation.share.current.alpha_replaced", rawequal(root.characters["Player-1-OPS-A"], alphaRef), false)
+    eq("profiles.automation.share.current.bravo_unchanged", rawequal(root.characters["Player-1-OPS-B"], bravoRef), true)
+    eq("profiles.automation.share.current.charlie_unchanged", rawequal(root.characters["Player-1-OPS-C"], charlieRef), true)
+    eq("profiles.automation.share.current.no_ids", root.account.nextProfileID, nextBefore)
+    eq("profiles.automation.share.current.active_profile", test.profileState().profileID, "p4")
+    eq("profiles.automation.share.current.one_apply", test.profileRuntimeState().applyCount, applyBefore + 1)
+    for profileID, profileRef in pairs(profileIdentities.profileEntries) do
+        eq("profiles.automation.share.current.profile_identity." .. profileID,
+            rawequal(root.profiles[profileID], profileRef), true)
+    end
+
+    local beforeSame = deepCopy(root)
+    ok, result = ops.useProfileForKnownSpecs("Player-1-OPS-A", "p4")
+    eq("profiles.automation.share.same.rejected", ok, false)
+    eq("profiles.automation.share.same.reason", result, "no-change")
+    assertDeepEqual("profiles.automation.share.same.no_writes", root, beforeSame)
+
+    applyBefore = test.profileRuntimeState().applyCount
+    ok, result = ops.useProfileForKnownSpecs("Player-1-OPS-B", "p3")
+    eq("profiles.automation.share.offline.ok", ok, true)
+    eq("profiles.automation.share.offline.changed", result.changedCount, 2)
+    eq("profiles.automation.share.offline.no_apply", test.profileRuntimeState().applyCount, applyBefore)
+    local beforeInvalid = deepCopy(root)
+    ok, result = ops.useProfileForKnownSpecs("missing", "p1")
+    eq("profiles.automation.share.missing_character.rejected", ok, false)
+    eq("profiles.automation.share.missing_character.reason", result, "missing-context")
+    ok, result = ops.useProfileForKnownSpecs("Player-1-OPS-A", "missing")
+    eq("profiles.automation.share.missing_profile.rejected", ok, false)
+    eq("profiles.automation.share.missing_profile.reason", result, "missing-profile")
+    assertDeepEqual("profiles.automation.share.invalid.no_writes", root, beforeInvalid)
+end
+
+do
+    local _, _, test, root = makeProfileOpsFixture({
+        mutateRoot = function(candidate)
+            candidate.characters["Player-1-OPS-A"].specProfiles[72] = "p2"
+            candidate.profiles.p2.settings.unknownAutomation = {
+                role = "tank", nested = { token = 73 }, explicitFalse = false,
+            }
+        end,
+    })
+    local ops = test.profileOps
+    local sourceRef = root.profiles.p2
+    local sourceSettingsRef = sourceRef.settings
+    local sourceBefore = deepCopy(sourceSettingsRef)
+    local p3Ref = root.profiles.p3
+    local defaultBefore = root.characters["Player-1-OPS-A"].defaultProfileID
+    local applyBefore = test.profileRuntimeState().applyCount
+    local ok, result = ops.makeKnownSpecsIndependent("Player-1-OPS-A")
+    eq("profiles.automation.independent.ok", ok, true)
+    eq("profiles.automation.independent.changed", result.changedCount, 2)
+    eq("profiles.automation.independent.spec_72_id", result.assignments[72], "p5")
+    eq("profiles.automation.independent.spec_73_id", result.assignments[73], "p6")
+    eq("profiles.automation.independent.unique",
+        result.assignments[72] ~= result.assignments[73], true)
+    eq("profiles.automation.independent.unique_spec_preserved",
+        root.characters["Player-1-OPS-A"].specProfiles[71], "p3")
+    eq("profiles.automation.independent.default_preserved",
+        root.characters["Player-1-OPS-A"].defaultProfileID, defaultBefore)
+    eq("profiles.automation.independent.next_id", root.account.nextProfileID, 7)
+    eq("profiles.automation.independent.source_identity", rawequal(root.profiles.p2, sourceRef), true)
+    eq("profiles.automation.independent.source_settings_identity",
+        rawequal(root.profiles.p2.settings, sourceSettingsRef), true)
+    eq("profiles.automation.independent.unique_profile_identity", rawequal(root.profiles.p3, p3Ref), true)
+    for _, specID in ipairs({ 72, 73 }) do
+        local profileID = result.assignments[specID]
+        assertDeepEqual("profiles.automation.independent.payload." .. specID,
+            root.profiles[profileID].settings, sourceBefore)
+        assertNoSharedTables("profiles.automation.independent.source_isolation." .. specID,
+            sourceSettingsRef, root.profiles[profileID].settings)
+        eq("profiles.automation.independent.single_spec_ref." .. specID,
+            ops.countReferences(root, profileID).specs, 1)
+    end
+    assertNoSharedTables("profiles.automation.independent.sibling_isolation",
+        root.profiles.p5.settings, root.profiles.p6.settings)
+    eq("profiles.automation.independent.active_profile", test.profileState().profileID, "p6")
+    eq("profiles.automation.independent.one_apply", test.profileRuntimeState().applyCount, applyBefore + 1)
+
+    ok = ops.useProfileForKnownSpecs("Player-1-OPS-A", "p2")
+    eq("profiles.automation.round_trip.share", ok, true)
+    ok = ops.assign("Player-1-OPS-A", 71, "p3")
+    eq("profiles.automation.round_trip.restore_damage", ok, true)
+    eq("profiles.automation.round_trip.spec_71", root.characters["Player-1-OPS-A"].specProfiles[71], "p3")
+    eq("profiles.automation.round_trip.spec_72", root.characters["Player-1-OPS-A"].specProfiles[72], "p2")
+    eq("profiles.automation.round_trip.spec_73", root.characters["Player-1-OPS-A"].specProfiles[73], "p2")
+    assertDeepEqual("profiles.automation.round_trip.source_preserved", root.profiles.p2.settings, sourceBefore)
+    eq("profiles.automation.round_trip.monotonic_ids", root.account.nextProfileID, 7)
+end
+
+do
+    local _, _, noOpTest, noOpRoot = makeProfileOpsFixture({
+        mutateRoot = function(candidate)
+            candidate.profiles.p5 = {
+                name = "Bravo tank", settings = deepCopy(candidate.profiles.p1.settings),
+            }
+            candidate.profiles.p6 = {
+                name = "Charlie healer", settings = deepCopy(candidate.profiles.p1.settings),
+            }
+            candidate.account.nextProfileID = 7
+            candidate.characters["Player-1-OPS-B"].specProfiles[73] = "p5"
+            candidate.characters["Player-1-OPS-C"].specProfiles[65] = "p6"
+        end,
+    })
+    local beforeNoOp = deepCopy(noOpRoot)
+    local ok, reason = noOpTest.profileOps.makeKnownSpecsIndependent("Player-1-OPS-A")
+    eq("profiles.automation.independent.noop.rejected", ok, false)
+    eq("profiles.automation.independent.noop.reason", reason, "no-change")
+    assertDeepEqual("profiles.automation.independent.noop.no_writes", noOpRoot, beforeNoOp)
+
+    local _, _, exhaustedTest, exhaustedRoot = makeProfileOpsFixture({
+        mutateRoot = function(candidate)
+            candidate.characters["Player-1-OPS-A"].specProfiles[72] = "p2"
+            candidate.account.nextProfileID = 99999999999998
+        end,
+    })
+    local beforeExhausted = deepCopy(exhaustedRoot)
+    local exhaustedIdentities = captureRegistryIdentities(exhaustedRoot)
+    ok, reason = exhaustedTest.profileOps.makeKnownSpecsIndependent("Player-1-OPS-A")
+    eq("profiles.automation.independent.exhausted.rejected", ok, false)
+    eq("profiles.automation.independent.exhausted.reason", reason, "id-exhausted")
+    assertDeepEqual("profiles.automation.independent.exhausted.no_writes",
+        exhaustedRoot, beforeExhausted)
+    assertRegistryIdentities("profiles.automation.independent.exhausted.identities",
+        exhaustedRoot, exhaustedIdentities)
+
+    for _, stage in ipairs({ "validate", "commit", "apply" }) do
+        local _, _, test, root = makeProfileOpsFixture()
+        local before = deepCopy(root)
+        local identities = captureRegistryIdentities(root)
+        local runtimeBefore = test.profileRuntimeState()
+        test.profileOps.setFailureStage(stage)
+        ok, reason = test.profileOps.useProfileForKnownSpecs("Player-1-OPS-A", "p4")
+        eq("profiles.automation.share.failure." .. stage .. ".rejected", ok, false)
+        eq("profiles.automation.share.failure." .. stage .. ".reason",
+            reason, stage .. "-failed")
+        assertDeepEqual("profiles.automation.share.failure." .. stage .. ".root", root, before)
+        assertRegistryIdentities("profiles.automation.share.failure." .. stage .. ".identities",
+            root, identities)
+        eq("profiles.automation.share.failure." .. stage .. ".active",
+            test.profileState().profileID, "p2")
+        eq("profiles.automation.share.failure." .. stage .. ".apply_count",
+            test.profileRuntimeState().applyCount,
+            runtimeBefore.applyCount + (stage == "apply" and 1 or 0))
+        eq("profiles.automation.share.failure." .. stage .. ".not_busy",
+            test.profileOps.state().inProgress, false)
+    end
+
+    for _, stage in ipairs({ "validate", "commit", "apply" }) do
+        local _, _, test, root = makeProfileOpsFixture({
+            mutateRoot = function(candidate)
+                candidate.characters["Player-1-OPS-A"].specProfiles[72] = "p2"
+            end,
+        })
+        local before = deepCopy(root)
+        local identities = captureRegistryIdentities(root)
+        local runtimeBefore = test.profileRuntimeState()
+        test.profileOps.setFailureStage(stage)
+        ok, reason = test.profileOps.makeKnownSpecsIndependent("Player-1-OPS-A")
+        eq("profiles.automation.independent.failure." .. stage .. ".rejected", ok, false)
+        eq("profiles.automation.independent.failure." .. stage .. ".reason",
+            reason, stage .. "-failed")
+        assertDeepEqual("profiles.automation.independent.failure." .. stage .. ".root", root, before)
+        assertRegistryIdentities("profiles.automation.independent.failure." .. stage .. ".identities",
+            root, identities)
+        eq("profiles.automation.independent.failure." .. stage .. ".active",
+            test.profileState().profileID, "p2")
+        eq("profiles.automation.independent.failure." .. stage .. ".apply_count",
+            test.profileRuntimeState().applyCount, runtimeBefore.applyCount + (stage == "apply" and 1 or 0))
+        eq("profiles.automation.independent.failure." .. stage .. ".not_busy",
+            test.profileOps.state().inProgress, false)
+    end
+
+    for _, stage in ipairs({ "validate", "commit" }) do
+        local _, _, roleTest, roleRoot = makeProfileOpsFixture()
+        local roleBefore = deepCopy(roleRoot)
+        local roleIdentities = captureRegistryIdentities(roleRoot)
+        roleTest.profileOps.setFailureStage(stage)
+        ok, reason = roleTest.profileOps.setRoleTemplate("HEALER", "p4")
+        eq("profiles.automation.roles.failure." .. stage .. ".rejected", ok, false)
+        eq("profiles.automation.roles.failure." .. stage .. ".reason",
+            reason, stage .. "-failed")
+        assertDeepEqual("profiles.automation.roles.failure." .. stage .. ".root",
+            roleRoot, roleBefore)
+        assertRegistryIdentities(
+            "profiles.automation.roles.failure." .. stage .. ".identities",
+            roleRoot, roleIdentities)
+    end
+end
+
+do
+    for _, case in ipairs({
+        {
+            name = "profiles_ref",
+            replace = function(root) root.profiles = deepCopy(root.profiles) end,
+            invoke = function(test, expected)
+                return test.profileOps.setRoleTemplate("HEALER", "p4", expected)
+            end,
+        },
+        {
+            name = "roles_ref",
+            replace = function(root) root.roleTemplates = deepCopy(root.roleTemplates) end,
+            invoke = function(test, expected)
+                return test.profileOps.setRoleTemplate("HEALER", "p4", expected)
+            end,
+        },
+        {
+            name = "character_ref",
+            replace = function(root)
+                root.characters["Player-1-OPS-A"] =
+                    deepCopy(root.characters["Player-1-OPS-A"])
+            end,
+            invoke = function(test, expected)
+                return test.profileOps.useProfileForKnownSpecs(
+                    "Player-1-OPS-A", "p4", expected)
+            end,
+        },
+    }) do
+        local _, _, test, root = makeProfileOpsFixture()
+        local state = test.profileState()
+        local expected = {
+            rootRef = root,
+            generation = state.generation,
+            profilesRef = root.profiles,
+            roleTemplatesRef = root.roleTemplates,
+            guid = "Player-1-OPS-A",
+            characterRef = root.characters["Player-1-OPS-A"],
+        }
+        case.replace(root)
+        local before = deepCopy(root)
+        local identities = captureRegistryIdentities(root)
+        local ok, reason = case.invoke(test, expected)
+        eq("profiles.ops.gate.exact_ref." .. case.name .. ".rejected", ok, false)
+        eq("profiles.ops.gate.exact_ref." .. case.name .. ".reason", reason, "stale")
+        assertDeepEqual("profiles.ops.gate.exact_ref." .. case.name .. ".root", root, before)
+        assertRegistryIdentities(
+            "profiles.ops.gate.exact_ref." .. case.name .. ".identities", root, identities)
     end
 end
 
@@ -9833,6 +10319,9 @@ do
             function() return ops.rename("p2", "Blocked Rename") end,
             function() return ops.copySettings("p3", "p2") end,
             function() return ops.assign("Player-1-OPS-A", 73, "p3") end,
+            function() return ops.useProfileForKnownSpecs("Player-1-OPS-A", "p3") end,
+            function() return ops.makeKnownSpecsIndependent("Player-1-OPS-A") end,
+            function() return ops.setRoleTemplate("HEALER", "p4") end,
             function() return ops.swap(
                 { guid = "Player-1-OPS-A", specID = 73 },
                 { guid = "Player-1-OPS-B", specID = 72 }) end,
@@ -9955,6 +10444,9 @@ do
         function() return test.profileOps.rename("p1", "Blocked") end,
         function() return test.profileOps.copySettings("p1", "p2") end,
         function() return test.profileOps.assign("guid", 73, "p1") end,
+        function() return test.profileOps.useProfileForKnownSpecs("guid", "p1") end,
+        function() return test.profileOps.makeKnownSpecsIndependent("guid") end,
+        function() return test.profileOps.setRoleTemplate("TANK", "p1") end,
         function() return test.profileOps.swap(
             { guid = "a", specID = 73 }, { guid = "b", specID = 72 }) end,
         function() return test.profileOps.resetCurrent("p1") end,
@@ -9974,6 +10466,236 @@ end
 do
     local env, addonContext, test, root, identity = makeProfileOpsFixture()
     addonContext:OpenConfigMenu()
+    callScript("profiles.ui.automation.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    local state = test.profileUIState()
+    eq("profiles.ui.automation.character_summary",
+        state.selectedCharacterSummary, "Alpha-Realm - 2 known specs")
+    eq("profiles.ui.automation.role_tank", state.roleTemplateSummary.TANK,
+        "Tank: Tank shared")
+    eq("profiles.ui.automation.role_healer", state.roleTemplateSummary.HEALER,
+        "Healer: Default")
+    eq("profiles.ui.automation.role_damage", state.roleTemplateSummary.DAMAGER,
+        "Damage: Damage solo")
+    eq("profiles.ui.automation.share_enabled", state.actions.useAllSpecs.enabled, true)
+    eq("profiles.ui.automation.independent_enabled", state.actions.independent.enabled, true)
+    eq("profiles.ui.automation.role_enabled", state.actions.roleTemplate.enabled, true)
+
+    local function findChoice(name, predicate)
+        return findFrame(name, env, function(frame)
+            return frame:IsShown() and type(frame.choiceData) == "table"
+                and predicate(frame.choiceData)
+        end)
+    end
+    local function chooseRole(name, role)
+        callScript(name .. ".open", env.StatsProProfileRoleTemplateButton, "OnClick")
+        eq(name .. ".choice_mode", test.profileUIState().operationKind, "role-template")
+        local row = findChoice(name .. ".choice", function(choice)
+            return choice.role == role
+        end)
+        callScript(name .. ".choose", row, "OnClick")
+        eq(name .. ".confirm_mode", test.profileUIState().operationKind, "set-role-template")
+    end
+
+    local beforeRoleCancel = deepCopy(root)
+    chooseRole("profiles.ui.automation.role_cancel", "HEALER")
+    callScript("profiles.ui.automation.role_cancel.cancel",
+        env.StatsProProfileOperationCancelButton, "OnClick")
+    assertDeepEqual("profiles.ui.automation.role_cancel.no_writes", root, beforeRoleCancel)
+    chooseRole("profiles.ui.automation.role_confirm", "HEALER")
+    callScript("profiles.ui.automation.role_confirm.confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    eq("profiles.ui.automation.role_confirm.mapping", root.roleTemplates.HEALER, "p2")
+    eq("profiles.ui.automation.role_confirm.summary",
+        test.profileUIState().roleTemplateSummary.HEALER, "Healer: Tank shared")
+
+    callScript("profiles.ui.automation.select_share_profile.open",
+        env.StatsProManagedProfileButton, "OnClick")
+    local shareProfileChoice = findChoice(
+        "profiles.ui.automation.select_share_profile.choice",
+        function(choice) return choice.profileID == "p4" end)
+    callScript("profiles.ui.automation.select_share_profile.choose",
+        shareProfileChoice, "OnClick")
+    eq("profiles.ui.automation.select_share_profile.selected",
+        test.profileUIState().selectedProfileID, "p4")
+
+    local assignmentsBeforeShare = deepCopy(root.characters["Player-1-OPS-A"].specProfiles)
+    callScript("profiles.ui.automation.share_cancel.open",
+        env.StatsProProfileUseAllSpecsButton, "OnClick")
+    eq("profiles.ui.automation.share_cancel.mode",
+        test.profileUIState().operationKind, "use-profile-for-specs")
+    callScript("profiles.ui.automation.share_cancel.cancel",
+        env.StatsProProfileOperationCancelButton, "OnClick")
+    assertDeepEqual("profiles.ui.automation.share_cancel.no_writes",
+        root.characters["Player-1-OPS-A"].specProfiles, assignmentsBeforeShare)
+    callScript("profiles.ui.automation.share_confirm.open",
+        env.StatsProProfileUseAllSpecsButton, "OnClick")
+    callScript("profiles.ui.automation.share_confirm.confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    eq("profiles.ui.automation.share_confirm.spec_71",
+        root.characters["Player-1-OPS-A"].specProfiles[71], "p4")
+    eq("profiles.ui.automation.share_confirm.spec_73",
+        root.characters["Player-1-OPS-A"].specProfiles[73], "p4")
+    state = test.profileUIState()
+    eq("profiles.ui.automation.share_confirm.header_profile",
+        state.headerProfile, root.profiles.p4.name)
+    eq("profiles.ui.automation.share_confirm.header_subtitle",
+        state.headerSubtitle, "Shared by 3 specs")
+    eq("profiles.ui.automation.share_confirm.button_disabled",
+        state.actions.useAllSpecs.enabled, false)
+    eq("profiles.ui.automation.share_confirm.independent_enabled",
+        state.actions.independent.enabled, true)
+
+    local rootBeforeIndependentCancel = deepCopy(root)
+    callScript("profiles.ui.automation.independent_cancel.open",
+        env.StatsProProfileMakeIndependentButton, "OnClick")
+    eq("profiles.ui.automation.independent_cancel.mode",
+        test.profileUIState().operationKind, "make-specs-independent")
+    callScript("profiles.ui.automation.independent_cancel.cancel",
+        env.StatsProProfileOperationCancelButton, "OnClick")
+    assertDeepEqual("profiles.ui.automation.independent_cancel.no_writes",
+        root, rootBeforeIndependentCancel)
+    callScript("profiles.ui.automation.independent_confirm.open",
+        env.StatsProProfileMakeIndependentButton, "OnClick")
+    callScript("profiles.ui.automation.independent_confirm.confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    eq("profiles.ui.automation.independent_confirm.spec_71",
+        root.characters["Player-1-OPS-A"].specProfiles[71], "p5")
+    eq("profiles.ui.automation.independent_confirm.spec_73",
+        root.characters["Player-1-OPS-A"].specProfiles[73], "p6")
+    check("profiles.ui.automation.independent_confirm.distinct",
+        root.characters["Player-1-OPS-A"].specProfiles[71]
+            ~= root.characters["Player-1-OPS-A"].specProfiles[73])
+    eq("profiles.ui.automation.independent_confirm.selected_active_clone",
+        test.profileUIState().selectedProfileID, "p6")
+    eq("profiles.ui.automation.independent_confirm.header_profile",
+        test.profileUIState().headerProfile, root.profiles.p6.name)
+    eq("profiles.ui.automation.independent_confirm.header_subtitle",
+        test.profileUIState().headerSubtitle, "Automatic - Alpha-Realm / Protection")
+    eq("profiles.ui.automation.independent_confirm.button_disabled",
+        test.profileUIState().actions.independent.enabled, false)
+
+    local rolesBeforeCombat = deepCopy(root.roleTemplates)
+    chooseRole("profiles.ui.automation.combat_dialog", "TANK")
+    identity.combat = true
+    fireEvent("profiles.ui.automation.combat_start", env, "PLAYER_REGEN_DISABLED")
+    state = test.profileUIState()
+    eq("profiles.ui.automation.combat_dialog.closed", state.operationDialogShown, false)
+    eq("profiles.ui.automation.combat_dialog.blocker_closed", state.operationBlockerShown, false)
+    assertDeepEqual("profiles.ui.automation.combat_dialog.no_writes",
+        root.roleTemplates, rolesBeforeCombat)
+    for _, action in ipairs({ "useAllSpecs", "independent", "roleTemplate" }) do
+        eq("profiles.ui.automation.combat_disabled." .. action,
+            state.actions[action].enabled, false)
+    end
+    identity.combat = false
+    fireEvent("profiles.ui.automation.combat_end", env, "PLAYER_REGEN_ENABLED")
+
+    callScript("profiles.ui.automation.stale.open",
+        env.StatsProProfileUseAllSpecsButton, "OnClick")
+    local staleConfirm = env.StatsProProfileOperationConfirmButton.scripts.OnClick
+    local staleBefore = deepCopy(root.characters["Player-1-OPS-A"].specProfiles)
+    local changed = test.profileOps.setRoleTemplate("DAMAGER", "p4")
+    eq("profiles.ui.automation.stale.setup", changed, true)
+    staleConfirm(env.StatsProProfileOperationConfirmButton)
+    assertDeepEqual("profiles.ui.automation.stale.no_old_bulk",
+        root.characters["Player-1-OPS-A"].specProfiles, staleBefore)
+end
+
+do
+    local env, addonContext, test, root = makeProfileOpsFixture()
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.slash_modal.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+
+    callScript("profiles.ui.slash_modal.visibility.open_reset",
+        env.StatsProProfileResetButton, "OnClick")
+    local staleVisibilityConfirm = env.StatsProProfileOperationConfirmButton.scripts.OnClick
+    local visibilityAssignments = deepCopy(root.characters)
+    local visibilityRoles = deepCopy(root.roleTemplates)
+    slash("profiles.ui.slash_modal.visibility.hide", env, "hide")
+    local state = test.profileUIState()
+    eq("profiles.ui.slash_modal.visibility.dialog_closed", state.operationDialogShown, false)
+    eq("profiles.ui.slash_modal.visibility.blocker_closed", state.operationBlockerShown, false)
+    eq("profiles.ui.slash_modal.visibility.setting_applied", root.profiles.p2.settings.isVisible, false)
+    staleVisibilityConfirm(env.StatsProProfileOperationConfirmButton)
+    assertDeepEqual("profiles.ui.slash_modal.visibility.stale_no_assignments",
+        root.characters, visibilityAssignments)
+    assertDeepEqual("profiles.ui.slash_modal.visibility.stale_no_roles",
+        root.roleTemplates, visibilityRoles)
+    eq("profiles.ui.slash_modal.visibility.stale_did_not_reset",
+        root.profiles.p2.settings.showDefensive, true)
+
+    local otherProfileBeforeReset = deepCopy(root.profiles.p3)
+    local assignmentsBeforeReset = deepCopy(root.characters)
+    local rolesBeforeReset = deepCopy(root.roleTemplates)
+    callScript("profiles.ui.slash_modal.reset.open",
+        env.StatsProProfileResetButton, "OnClick")
+    local staleResetConfirm = env.StatsProProfileOperationConfirmButton.scripts.OnClick
+    slash("profiles.ui.slash_modal.reset.run", env, "reset")
+    state = test.profileUIState()
+    eq("profiles.ui.slash_modal.reset.dialog_closed", state.operationDialogShown, false)
+    eq("profiles.ui.slash_modal.reset.blocker_closed", state.operationBlockerShown, false)
+    eq("profiles.ui.slash_modal.reset.manager_stays_open", state.managerShown, true)
+    eq("profiles.ui.slash_modal.reset.header_refreshed", state.headerProfile, "Tank shared")
+    eq("profiles.ui.slash_modal.reset.active_default", root.profiles.p2.settings.showDefensive, false)
+    assertDeepEqual("profiles.ui.slash_modal.reset.other_profile_preserved",
+        root.profiles.p3, otherProfileBeforeReset)
+    assertDeepEqual("profiles.ui.slash_modal.reset.assignments_preserved",
+        root.characters, assignmentsBeforeReset)
+    assertDeepEqual("profiles.ui.slash_modal.reset.roles_preserved",
+        root.roleTemplates, rolesBeforeReset)
+    local rootAfterReset = deepCopy(root)
+    staleResetConfirm(env.StatsProProfileOperationConfirmButton)
+    assertDeepEqual("profiles.ui.slash_modal.reset.stale_confirm_noop", root, rootAfterReset)
+
+    root.profiles.p2.settings.showDefensive = true
+    callScript("profiles.ui.slash_modal.import.open_role",
+        env.StatsProProfileRoleTemplateButton, "OnClick")
+    local healerChoice = findFrame("profiles.ui.slash_modal.import.healer_choice", env,
+        function(frame)
+            return frame:IsShown() and type(frame.choiceData) == "table"
+                and frame.choiceData.role == "HEALER"
+        end)
+    callScript("profiles.ui.slash_modal.import.choose_role", healerChoice, "OnClick")
+    local staleImportConfirm = env.StatsProProfileOperationConfirmButton.scripts.OnClick
+    local rolesBeforeImport = deepCopy(root.roleTemplates)
+    env.SwiftStatsDB = { fontSize = 17 }
+    slash("profiles.ui.slash_modal.import.request", env, "import")
+    state = test.profileUIState()
+    eq("profiles.ui.slash_modal.import.operation_closed", state.operationDialogShown, false)
+    eq("profiles.ui.slash_modal.import.blocker_closed", state.operationBlockerShown, false)
+    check("profiles.ui.slash_modal.import.popup_open", env.__lastStaticPopup ~= nil)
+    staleImportConfirm(env.StatsProProfileOperationConfirmButton)
+    assertDeepEqual("profiles.ui.slash_modal.import.stale_role_noop",
+        root.roleTemplates, rolesBeforeImport)
+    env.__cancelStaticPopup()
+end
+
+do
+    local env, addonContext, test, root = makeProfileOpsFixture()
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.slash_modal.close_failure.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    callScript("profiles.ui.slash_modal.close_failure.open_reset",
+        env.StatsProProfileResetButton, "OnClick")
+    local before = deepCopy(root)
+    local oldHide = env.StatsProProfileOperationDialog.Hide
+    env.StatsProProfileOperationDialog.Hide = function()
+        error("injected operation modal close failure")
+    end
+    slash("profiles.ui.slash_modal.close_failure.reset", env, "reset")
+    env.StatsProProfileOperationDialog.Hide = oldHide
+    assertDeepEqual("profiles.ui.slash_modal.close_failure.no_writes", root, before)
+    eq("profiles.ui.slash_modal.close_failure.dialog_preserved",
+        test.profileUIState().operationDialogShown, true)
+    callScript("profiles.ui.slash_modal.close_failure.cleanup",
+        env.StatsProProfileOperationCancelButton, "OnClick")
+end
+
+do
+    local env, addonContext, test, root, identity = makeProfileOpsFixture()
+    addonContext:OpenConfigMenu()
     callScript("profiles.ui.ops.open_manager", env.StatsProManageProfilesButton, "OnClick")
     local state = test.profileUIState()
     eq("profiles.ui.ops.manager", state.managerShown, true)
@@ -9981,7 +10703,7 @@ do
     eq("profiles.ui.ops.selector_assigned", state.selectedAssignedProfileID, "p2")
     local actionCount = 0
     for _ in pairs(state.actions) do actionCount = actionCount + 1 end
-    eq("profiles.ui.ops.action_count", actionCount, 9)
+    eq("profiles.ui.ops.action_count", actionCount, 12)
     eq("profiles.ui.ops.assign_same_disabled", state.actions.assign.enabled, false)
     eq("profiles.ui.ops.create_enabled", state.actions.create.enabled, true)
     eq("profiles.ui.ops.forget_current_disabled", state.actions.forget.enabled, false)

@@ -10,6 +10,10 @@
 ---@class (exact) StatsProDropdownFrame
 ---@field GetName fun(self: StatsProDropdownFrame): string?
 
+---@class (exact) StatsProTargetSnapshotDropdownOption
+---@field value "mythicPlus"|"raid"
+---@field label string
+
 ---@class (exact) StatsProStaticPopupDefinition
 ---@field text string
 ---@field button1 string
@@ -58,6 +62,18 @@ StatsProFontPicker = nil
 
 ---@type StatsProDropdownFrame?
 UIDROPDOWNMENU_OPEN_MENU = nil
+
+---@type StatsProTargetSnapshotDropdownOption[]
+StatsProTargetSnapshotDropdownOptions = {}
+
+---@return string
+function StatsProGetTargetSnapshotDropdownValue() return "" end
+
+---@param value string
+---@param option StatsProTargetSnapshotDropdownOption
+---@param dropdown StatsProDropdownFrame
+---@return boolean?
+function StatsProSelectTargetSnapshotDropdownValue(value, option, dropdown) end
 
 ---@type table?
 SwiftStatsDB = nil

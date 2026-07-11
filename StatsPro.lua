@@ -1039,6 +1039,18 @@ local LABELS_BY_LOCALE = {
         ["Copy settings to assigned profile..."] = "Copy settings to assigned profile...", ["Swap assignments..."] = "Swap assignments...",
         ["Reset active profile..."] = "Reset active profile...", ["Delete profile..."] = "Delete profile...",
         ["Forget character..."] = "Forget character...", ["Confirm"] = "Confirm",
+        ["Selected character"] = "Selected character", ["%s - %d known specs"] = "%s - %d known specs",
+        ["Future new contexts"] = "Future new contexts", ["Tank: %s"] = "Tank: %s",
+        ["Healer: %s"] = "Healer: %s", ["Damage: %s"] = "Damage: %s",
+        ["Tank"] = "Tank", ["Healer"] = "Healer", ["Damage"] = "Damage",
+        ["Use profile for all known specs..."] = "Use profile for all known specs...",
+        ["Make shared specs independent..."] = "Make shared specs independent...",
+        ["Set future role template..."] = "Set future role template...", ["Choose a role"] = "Choose a role",
+        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept.",
+        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged.",
+        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy.",
+        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy.",
+        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy.",
         ["Unused"] = "Unused", ["Unused profile"] = "Unused profile", ["New Profile"] = "New Profile",
         ["%s Copy"] = "%s Copy", ["Choose a replacement profile"] = "Choose a replacement profile",
         ["Choose a context"] = "Choose a context", ["%d assigned specs, %d other references"] = "%d assigned specs, %d other references",
@@ -1158,6 +1170,18 @@ local LABELS_BY_LOCALE = {
         ["Copy settings to assigned profile..."] = "Копировать настройки в назначенный профиль...", ["Swap assignments..."] = "Поменять назначения местами...",
         ["Reset active profile..."] = "Сбросить активный профиль...", ["Delete profile..."] = "Удалить профиль...",
         ["Forget character..."] = "Забыть персонажа...", ["Confirm"] = "Подтвердить",
+        ["Selected character"] = "Выбранный персонаж", ["%s - %d known specs"] = "%s — %d известных специализаций",
+        ["Future new contexts"] = "Будущие новые контексты", ["Tank: %s"] = "Танк: %s",
+        ["Healer: %s"] = "Лекарь: %s", ["Damage: %s"] = "Урон: %s",
+        ["Tank"] = "Танк", ["Healer"] = "Лекарь", ["Damage"] = "Урон",
+        ["Use profile for all known specs..."] = "Для всех известных специализаций...",
+        ["Make shared specs independent..."] = "Разделить общие специализации...",
+        ["Set future role template..."] = "Шаблон для будущей роли...", ["Choose a role"] = "Выберите роль",
+        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "Использовать «%s» для всех %d известных специализаций персонажа «%s»? Существующие профили и настройки будут сохранены.",
+        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "Сделать %d общих специализаций персонажа «%s» независимыми? Каждая получит отдельную копию; существующие профили не изменятся.",
+        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "Использовать «%s» как источник для будущих специализаций танка? Существующие назначения не изменятся; каждый новый контекст получит независимую копию.",
+        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "Использовать «%s» как источник для будущих специализаций лекаря? Существующие назначения не изменятся; каждый новый контекст получит независимую копию.",
+        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "Использовать «%s» как источник для будущих специализаций урона? Существующие назначения не изменятся; каждый новый контекст получит независимую копию.",
         ["Unused"] = "Не используется", ["Unused profile"] = "Неиспользуемый профиль", ["New Profile"] = "Новый профиль",
         ["%s Copy"] = "Копия %s", ["Choose a replacement profile"] = "Выберите профиль для замены",
         ["Choose a context"] = "Выберите контекст", ["%d assigned specs, %d other references"] = "Назначено специализациям: %d, других ссылок: %d",
@@ -1271,6 +1295,18 @@ local LABELS_BY_LOCALE = {
         ["Copy settings to assigned profile..."] = "Einstellungen ins zugewiesene Profil kopieren...", ["Swap assignments..."] = "Zuweisungen tauschen...",
         ["Reset active profile..."] = "Aktives Profil zurücksetzen...", ["Delete profile..."] = "Profil löschen...",
         ["Forget character..."] = "Charakter vergessen...", ["Confirm"] = "Bestätigen",
+        ["Selected character"] = "Ausgewählter Charakter", ["%s - %d known specs"] = "%s – %d bekannte Spezialisierungen",
+        ["Future new contexts"] = "Künftige neue Kontexte", ["Tank: %s"] = "Tank: %s",
+        ["Healer: %s"] = "Heiler: %s", ["Damage: %s"] = "Schaden: %s",
+        ["Tank"] = "Tank", ["Healer"] = "Heiler", ["Damage"] = "Schaden",
+        ["Use profile for all known specs..."] = "Profil für alle bekannten Spezialisierungen...",
+        ["Make shared specs independent..."] = "Geteilte Spezialisierungen unabhängig machen...",
+        ["Set future role template..."] = "Künftige Rollenvorlage festlegen...", ["Choose a role"] = "Rolle auswählen",
+        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "„%s“ für alle %d bekannten Spezialisierungen von „%s“ verwenden? Bestehende Profile und Einstellungen bleiben erhalten.",
+        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "%d geteilte Spezialisierungen von „%s“ unabhängig machen? Jede betroffene Spezialisierung erhält eine eigene Kopie; bestehende Profile bleiben unverändert.",
+        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "„%s“ als Quelle für künftige Tank-Kontexte verwenden? Bestehende Zuweisungen ändern sich nicht; jeder neue Kontext erhält eine unabhängige Kopie.",
+        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "„%s“ als Quelle für künftige Heiler-Kontexte verwenden? Bestehende Zuweisungen ändern sich nicht; jeder neue Kontext erhält eine unabhängige Kopie.",
+        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "„%s“ als Quelle für künftige Schadenskontexte verwenden? Bestehende Zuweisungen ändern sich nicht; jeder neue Kontext erhält eine unabhängige Kopie.",
         ["Unused"] = "Ungenutzt", ["Unused profile"] = "Ungenutztes Profil", ["New Profile"] = "Neues Profil",
         ["%s Copy"] = "Kopie von %s", ["Choose a replacement profile"] = "Ersatzprofil auswählen",
         ["Choose a context"] = "Kontext auswählen", ["%d assigned specs, %d other references"] = "%d zugewiesene Spezialisierungen, %d weitere Verweise",
@@ -1380,6 +1416,18 @@ local LABELS_BY_LOCALE = {
         ["Copy settings to assigned profile..."] = "Copier les réglages vers le profil attribué...", ["Swap assignments..."] = "Échanger les attributions...",
         ["Reset active profile..."] = "Réinitialiser le profil actif...", ["Delete profile..."] = "Supprimer le profil...",
         ["Forget character..."] = "Oublier le personnage...", ["Confirm"] = "Confirmer",
+        ["Selected character"] = "Personnage sélectionné", ["%s - %d known specs"] = "%s – %d spécialisations connues",
+        ["Future new contexts"] = "Nouveaux contextes futurs", ["Tank: %s"] = "Tank : %s",
+        ["Healer: %s"] = "Soigneur : %s", ["Damage: %s"] = "Dégâts : %s",
+        ["Tank"] = "Tank", ["Healer"] = "Soigneur", ["Damage"] = "Dégâts",
+        ["Use profile for all known specs..."] = "Utiliser pour toutes les spécialisations...",
+        ["Make shared specs independent..."] = "Rendre indépendantes les spécialisations partagées...",
+        ["Set future role template..."] = "Définir le modèle de rôle futur...", ["Choose a role"] = "Choisir un rôle",
+        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "Utiliser « %s » pour les %d spécialisations connues de « %s » ? Les profils et réglages existants seront conservés.",
+        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "Rendre indépendantes %d spécialisations partagées de « %s » ? Chacune recevra une copie distincte ; les profils existants resteront inchangés.",
+        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "Utiliser « %s » comme source des futurs contextes Tank ? Les attributions existantes ne changeront pas ; chaque nouveau contexte recevra une copie indépendante.",
+        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "Utiliser « %s » comme source des futurs contextes Soigneur ? Les attributions existantes ne changeront pas ; chaque nouveau contexte recevra une copie indépendante.",
+        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "Utiliser « %s » comme source des futurs contextes Dégâts ? Les attributions existantes ne changeront pas ; chaque nouveau contexte recevra une copie indépendante.",
         ["Unused"] = "Inutilisé", ["Unused profile"] = "Profil inutilisé", ["New Profile"] = "Nouveau profil",
         ["%s Copy"] = "Copie de %s", ["Choose a replacement profile"] = "Choisir un profil de remplacement",
         ["Choose a context"] = "Choisir un contexte", ["%d assigned specs, %d other references"] = "%d spécialisations attribuées, %d autres références",
@@ -1490,6 +1538,18 @@ local LABELS_BY_LOCALE = {
         ["Copy settings to assigned profile..."] = "Copiar ajustes al perfil asignado...", ["Swap assignments..."] = "Intercambiar asignaciones...",
         ["Reset active profile..."] = "Restablecer perfil activo...", ["Delete profile..."] = "Eliminar perfil...",
         ["Forget character..."] = "Olvidar personaje...", ["Confirm"] = "Confirmar",
+        ["Selected character"] = "Personaje seleccionado", ["%s - %d known specs"] = "%s – %d especializaciones conocidas",
+        ["Future new contexts"] = "Nuevos contextos futuros", ["Tank: %s"] = "Tanque: %s",
+        ["Healer: %s"] = "Sanador: %s", ["Damage: %s"] = "Daño: %s",
+        ["Tank"] = "Tanque", ["Healer"] = "Sanador", ["Damage"] = "Daño",
+        ["Use profile for all known specs..."] = "Usar en todas las especializaciones conocidas...",
+        ["Make shared specs independent..."] = "Independizar especializaciones compartidas...",
+        ["Set future role template..."] = "Definir plantilla de rol futura...", ["Choose a role"] = "Elige un rol",
+        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "¿Usar «%s» para las %d especializaciones conocidas de «%s»? Se conservarán los perfiles y ajustes existentes.",
+        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "¿Independizar %d especializaciones compartidas de «%s»? Cada una recibirá una copia distinta; los perfiles existentes no cambiarán.",
+        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Tanque? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
+        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Sanador? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
+        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Daño? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
         ["Unused"] = "Sin usar", ["Unused profile"] = "Perfil sin usar", ["New Profile"] = "Perfil nuevo",
         ["%s Copy"] = "Copia de %s", ["Choose a replacement profile"] = "Elige un perfil de reemplazo",
         ["Choose a context"] = "Elige un contexto", ["%d assigned specs, %d other references"] = "%d especializaciones asignadas, %d referencias más",
@@ -1598,6 +1658,18 @@ local LABELS_BY_LOCALE = {
         ["Copy settings to assigned profile..."] = "Copiar ajustes al perfil asignado...", ["Swap assignments..."] = "Intercambiar asignaciones...",
         ["Reset active profile..."] = "Restablecer perfil activo...", ["Delete profile..."] = "Eliminar perfil...",
         ["Forget character..."] = "Olvidar personaje...", ["Confirm"] = "Confirmar",
+        ["Selected character"] = "Personaje seleccionado", ["%s - %d known specs"] = "%s – %d especializaciones conocidas",
+        ["Future new contexts"] = "Nuevos contextos futuros", ["Tank: %s"] = "Tanque: %s",
+        ["Healer: %s"] = "Sanador: %s", ["Damage: %s"] = "Daño: %s",
+        ["Tank"] = "Tanque", ["Healer"] = "Sanador", ["Damage"] = "Daño",
+        ["Use profile for all known specs..."] = "Usar en todas las especializaciones conocidas...",
+        ["Make shared specs independent..."] = "Independizar especializaciones compartidas...",
+        ["Set future role template..."] = "Definir plantilla de rol futura...", ["Choose a role"] = "Elige un rol",
+        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "¿Usar «%s» para las %d especializaciones conocidas de «%s»? Se conservarán los perfiles y ajustes existentes.",
+        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "¿Independizar %d especializaciones compartidas de «%s»? Cada una recibirá una copia distinta; los perfiles existentes no cambiarán.",
+        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Tanque? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
+        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Sanador? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
+        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Daño? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
         ["Unused"] = "Sin usar", ["Unused profile"] = "Perfil sin usar", ["New Profile"] = "Perfil nuevo",
         ["%s Copy"] = "Copia de %s", ["Choose a replacement profile"] = "Elige un perfil de reemplazo",
         ["Choose a context"] = "Elige un contexto", ["%d assigned specs, %d other references"] = "%d especializaciones asignadas, %d referencias más",
@@ -1707,6 +1779,18 @@ local LABELS_BY_LOCALE = {
         ["Copy settings to assigned profile..."] = "Copia impostazioni nel profilo assegnato...", ["Swap assignments..."] = "Scambia assegnazioni...",
         ["Reset active profile..."] = "Ripristina profilo attivo...", ["Delete profile..."] = "Elimina profilo...",
         ["Forget character..."] = "Dimentica personaggio...", ["Confirm"] = "Conferma",
+        ["Selected character"] = "Personaggio selezionato", ["%s - %d known specs"] = "%s – %d specializzazioni note",
+        ["Future new contexts"] = "Nuovi contesti futuri", ["Tank: %s"] = "Difensore: %s",
+        ["Healer: %s"] = "Guaritore: %s", ["Damage: %s"] = "Assaltatore: %s",
+        ["Tank"] = "Difensore", ["Healer"] = "Guaritore", ["Damage"] = "Assaltatore",
+        ["Use profile for all known specs..."] = "Usa per tutte le specializzazioni note...",
+        ["Make shared specs independent..."] = "Rendi indipendenti le specializzazioni condivise...",
+        ["Set future role template..."] = "Imposta modello ruolo futuro...", ["Choose a role"] = "Scegli un ruolo",
+        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "Usare «%s» per tutte le %d specializzazioni note di «%s»? I profili e le impostazioni esistenti verranno conservati.",
+        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "Rendere indipendenti %d specializzazioni condivise di «%s»? Ognuna riceverà una copia separata; i profili esistenti resteranno invariati.",
+        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usare «%s» come origine per i futuri contesti Difensore? Le assegnazioni esistenti non cambieranno; ogni nuovo contesto riceverà una copia indipendente.",
+        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usare «%s» come origine per i futuri contesti Guaritore? Le assegnazioni esistenti non cambieranno; ogni nuovo contesto riceverà una copia indipendente.",
+        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usare «%s» come origine per i futuri contesti Assaltatore? Le assegnazioni esistenti non cambieranno; ogni nuovo contesto riceverà una copia indipendente.",
         ["Unused"] = "Inutilizzato", ["Unused profile"] = "Profilo inutilizzato", ["New Profile"] = "Nuovo profilo",
         ["%s Copy"] = "Copia di %s", ["Choose a replacement profile"] = "Scegli un profilo sostitutivo",
         ["Choose a context"] = "Scegli un contesto", ["%d assigned specs, %d other references"] = "%d specializzazioni assegnate, %d altri riferimenti",
@@ -1815,6 +1899,18 @@ local LABELS_BY_LOCALE = {
         ["Copy settings to assigned profile..."] = "Copiar configurações para o perfil atribuído...", ["Swap assignments..."] = "Trocar atribuições...",
         ["Reset active profile..."] = "Redefinir perfil ativo...", ["Delete profile..."] = "Excluir perfil...",
         ["Forget character..."] = "Esquecer personagem...", ["Confirm"] = "Confirmar",
+        ["Selected character"] = "Personagem selecionado", ["%s - %d known specs"] = "%s – %d especializações conhecidas",
+        ["Future new contexts"] = "Novos contextos futuros", ["Tank: %s"] = "Tanque: %s",
+        ["Healer: %s"] = "Cura: %s", ["Damage: %s"] = "Dano: %s",
+        ["Tank"] = "Tanque", ["Healer"] = "Cura", ["Damage"] = "Dano",
+        ["Use profile for all known specs..."] = "Usar em todas as especializações conhecidas...",
+        ["Make shared specs independent..."] = "Tornar especializações compartilhadas independentes...",
+        ["Set future role template..."] = "Definir modelo de função futura...", ["Choose a role"] = "Escolha uma função",
+        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "Usar «%s» em todas as %d especializações conhecidas de «%s»? Os perfis e ajustes existentes serão mantidos.",
+        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "Tornar independentes %d especializações compartilhadas de «%s»? Cada uma receberá uma cópia separada; os perfis existentes permanecerão inalterados.",
+        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usar «%s» como origem para futuros contextos de Tanque? As atribuições existentes não mudarão; cada novo contexto receberá uma cópia independente.",
+        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usar «%s» como origem para futuros contextos de Cura? As atribuições existentes não mudarão; cada novo contexto receberá uma cópia independente.",
+        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usar «%s» como origem para futuros contextos de Dano? As atribuições existentes não mudarão; cada novo contexto receberá uma cópia independente.",
         ["Unused"] = "Não usado", ["Unused profile"] = "Perfil não usado", ["New Profile"] = "Novo perfil",
         ["%s Copy"] = "Cópia de %s", ["Choose a replacement profile"] = "Escolha um perfil substituto",
         ["Choose a context"] = "Escolha um contexto", ["%d assigned specs, %d other references"] = "%d especializações atribuídas, %d outras referências",
@@ -1930,6 +2026,18 @@ local LABELS_BY_LOCALE = {
         ["Copy settings to assigned profile..."] = "할당된 프로필에 설정 복사...", ["Swap assignments..."] = "할당 교환...",
         ["Reset active profile..."] = "활성 프로필 초기화...", ["Delete profile..."] = "프로필 삭제...",
         ["Forget character..."] = "캐릭터 기록 삭제...", ["Confirm"] = "확인",
+        ["Selected character"] = "선택한 캐릭터", ["%s - %d known specs"] = "%s – 알려진 전문화 %d개",
+        ["Future new contexts"] = "향후 새 컨텍스트", ["Tank: %s"] = "방어 전담: %s",
+        ["Healer: %s"] = "치유 전담: %s", ["Damage: %s"] = "공격 전담: %s",
+        ["Tank"] = "방어 전담", ["Healer"] = "치유 전담", ["Damage"] = "공격 전담",
+        ["Use profile for all known specs..."] = "알려진 모든 전문화에 프로필 사용...",
+        ["Make shared specs independent..."] = "공유 전문화를 독립 프로필로 분리...",
+        ["Set future role template..."] = "향후 역할 템플릿 설정...", ["Choose a role"] = "역할 선택",
+        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "%s 프로필을 알려진 전문화 %d개 모두에 적용하시겠습니까? 대상 캐릭터: %s. 기존 프로필과 설정은 유지됩니다.",
+        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "%d개의 공유 전문화를 ‘%s’에서 독립시키시겠습니까? 각 전문화에 별도 복사본이 생성되며 기존 프로필은 변경되지 않습니다.",
+        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "%s 프로필을 향후 방어 전담 컨텍스트의 원본으로 사용하시겠습니까? 기존 할당은 바뀌지 않으며 새 컨텍스트마다 독립 복사본이 생성됩니다.",
+        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "%s 프로필을 향후 치유 전담 컨텍스트의 원본으로 사용하시겠습니까? 기존 할당은 바뀌지 않으며 새 컨텍스트마다 독립 복사본이 생성됩니다.",
+        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "%s 프로필을 향후 공격 전담 컨텍스트의 원본으로 사용하시겠습니까? 기존 할당은 바뀌지 않으며 새 컨텍스트마다 독립 복사본이 생성됩니다.",
         ["Unused"] = "미사용", ["Unused profile"] = "사용하지 않는 프로필", ["New Profile"] = "새 프로필",
         ["%s Copy"] = "%s 복사본", ["Choose a replacement profile"] = "대체 프로필 선택",
         ["Choose a context"] = "항목 선택", ["%d assigned specs, %d other references"] = "할당된 전문화 %d개, 기타 참조 %d개",
@@ -2038,6 +2146,18 @@ local LABELS_BY_LOCALE = {
         ["Copy settings to assigned profile..."] = "复制设置到已分配配置...", ["Swap assignments..."] = "交换分配...",
         ["Reset active profile..."] = "重置当前配置...", ["Delete profile..."] = "删除配置...",
         ["Forget character..."] = "移除角色记录...", ["Confirm"] = "确认",
+        ["Selected character"] = "所选角色", ["%s - %d known specs"] = "%s – %d 个已知专精",
+        ["Future new contexts"] = "未来新环境", ["Tank: %s"] = "坦克：%s",
+        ["Healer: %s"] = "治疗：%s", ["Damage: %s"] = "输出：%s",
+        ["Tank"] = "坦克", ["Healer"] = "治疗", ["Damage"] = "输出",
+        ["Use profile for all known specs..."] = "用于所有已知专精...",
+        ["Make shared specs independent..."] = "将共享专精设为独立...",
+        ["Set future role template..."] = "设置未来职责模板...", ["Choose a role"] = "选择职责",
+        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "将“%s”用于全部 %d 个已知专精（角色：“%s”）？现有配置和设置将保留。",
+        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "将 %d 个共享专精设为独立（角色：“%s”）？每个受影响专精都会获得单独副本；现有配置保持不变。",
+        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "将“%s”作为未来坦克环境的来源？现有分配不会改变；每个新环境都会获得独立副本。",
+        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "将“%s”作为未来治疗环境的来源？现有分配不会改变；每个新环境都会获得独立副本。",
+        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "将“%s”作为未来输出环境的来源？现有分配不会改变；每个新环境都会获得独立副本。",
         ["Unused"] = "未使用", ["Unused profile"] = "未使用的配置", ["New Profile"] = "新配置",
         ["%s Copy"] = "%s 副本", ["Choose a replacement profile"] = "选择替代配置",
         ["Choose a context"] = "选择项目", ["%d assigned specs, %d other references"] = "已分配专精 %d 个，其他引用 %d 个",
@@ -2146,6 +2266,18 @@ local LABELS_BY_LOCALE = {
         ["Copy settings to assigned profile..."] = "複製設定到已指派設定檔...", ["Swap assignments..."] = "交換指派...",
         ["Reset active profile..."] = "重設目前設定檔...", ["Delete profile..."] = "刪除設定檔...",
         ["Forget character..."] = "移除角色記錄...", ["Confirm"] = "確認",
+        ["Selected character"] = "所選角色", ["%s - %d known specs"] = "%s – %d 個已知專精",
+        ["Future new contexts"] = "未來新環境", ["Tank: %s"] = "坦克：%s",
+        ["Healer: %s"] = "治療：%s", ["Damage: %s"] = "輸出：%s",
+        ["Tank"] = "坦克", ["Healer"] = "治療", ["Damage"] = "輸出",
+        ["Use profile for all known specs..."] = "用於所有已知專精...",
+        ["Make shared specs independent..."] = "將共用專精設為獨立...",
+        ["Set future role template..."] = "設定未來職責範本...", ["Choose a role"] = "選擇職責",
+        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "將「%s」用於全部 %d 個已知專精（角色：「%s」）？現有設定檔和設定將保留。",
+        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "將 %d 個共用專精設為獨立（角色：「%s」）？每個受影響專精都會取得獨立副本；現有設定檔保持不變。",
+        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "將「%s」作為未來坦克環境的來源？現有指派不會變更；每個新環境都會取得獨立副本。",
+        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "將「%s」作為未來治療環境的來源？現有指派不會變更；每個新環境都會取得獨立副本。",
+        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "將「%s」作為未來輸出環境的來源？現有指派不會變更；每個新環境都會取得獨立副本。",
         ["Unused"] = "未使用", ["Unused profile"] = "未使用的設定檔", ["New Profile"] = "新設定檔",
         ["%s Copy"] = "%s 副本", ["Choose a replacement profile"] = "選擇替代設定檔",
         ["Choose a context"] = "選擇項目", ["%d assigned specs, %d other references"] = "已指派專精 %d 個，其他參照 %d 個",
@@ -2809,6 +2941,8 @@ addon.profileOps = {
     operationCount = 0,
     maxNameCodepoints = 40,
     testFailureStage = nil,
+    roleOrder = { "TANK", "HEALER", "DAMAGER" },
+    roleKeys = { TANK = true, HEALER = true, DAMAGER = true },
     positionKeys = {
         "point", "relativePoint", "xOfs", "yOfs",
         "defensive_point", "defensive_relativePoint",
@@ -2850,6 +2984,30 @@ function addon.profileUI.RefreshSafe()
     if type(refresh) == "function" then pcall(refresh) end
 end
 
+function addon.profileOps.CountSpecAssignments(root)
+    local counts = {}
+    for _, character in pairs(root.characters or {}) do
+        for _, profileID in pairs(character.specProfiles or {}) do
+            counts[profileID] = (counts[profileID] or 0) + 1
+        end
+    end
+    return counts
+end
+
+function addon.profileOps.CountSharedCharacterSpecs(root, guid, assignmentCounts)
+    local character = root.characters and root.characters[guid] or nil
+    if type(character) ~= "table" or not addon.dbRuntime.IsCleanTable(character) then return 0 end
+    local specProfiles = rawget(character, "specProfiles")
+    if type(specProfiles) ~= "table"
+        or not addon.dbRuntime.IsCleanTable(specProfiles) then return 0 end
+    local counts = assignmentCounts or addon.profileOps.CountSpecAssignments(root)
+    local shared = 0
+    for _, profileID in pairs(specProfiles) do
+        if (counts[profileID] or 0) > 1 then shared = shared + 1 end
+    end
+    return shared
+end
+
 function addon.profileUI.BuildViewModel()
     local root = addon.dbRuntime.Refresh()
     local runtime = addon.profileRuntime
@@ -2870,6 +3028,7 @@ function addon.profileUI.BuildViewModel()
         activeProfileName = nil,
         activeSharedCount = 0,
         accountDefaultProfileID = nil,
+        roleTemplates = {},
         characters = {},
         profiles = {},
     }
@@ -2878,11 +3037,15 @@ function addon.profileUI.BuildViewModel()
     model.accountDefaultProfileID = root.account.defaultProfileID
     model.canMutate = combat == false and not pending
         and not runtime.transitioning and not addon.profileOps.inProgress
-    local assignmentCounts = {}
-    for _, character in pairs(root.characters) do
-        for _, profileID in pairs(character.specProfiles or {}) do
-            assignmentCounts[profileID] = (assignmentCounts[profileID] or 0) + 1
-        end
+    local assignmentCounts = addon.profileOps.CountSpecAssignments(root)
+    for _, role in ipairs(addon.profileOps.roleOrder) do
+        local profileID = root.roleTemplates[role]
+        local profile = root.profiles[profileID]
+        model.roleTemplates[role] = {
+            role = role,
+            profileID = profileID,
+            profileName = profile and profile.name or "",
+        }
     end
 
     local activeProfile = root.profiles[model.activeProfileID]
@@ -2901,6 +3064,9 @@ function addon.profileUI.BuildViewModel()
             defaultProfileID = character.defaultProfileID,
             defaultProfileName = nil,
             defaultSharedCount = assignmentCounts[character.defaultProfileID] or 0,
+            knownSpecCount = 0,
+            sharedSpecCount = addon.profileOps.CountSharedCharacterSpecs(
+                root, guid, assignmentCounts),
             specs = {},
         }
         local defaultProfile = character.defaultProfileID
@@ -2917,6 +3083,7 @@ function addon.profileUI.BuildViewModel()
                 isActive = guid == model.activeGUID and specID == model.activeSpecID
                     and profileID == model.activeProfileID,
             }
+            characterModel.knownSpecCount = characterModel.knownSpecCount + 1
         end
         table.sort(characterModel.specs, function(left, right)
             if left.isActive ~= right.isActive then return left.isActive end
@@ -4086,6 +4253,9 @@ function addon.profileOps.CheckExpected(root, expected)
     if type(expected) ~= "table" then return true end
     if expected.rootRef and not rawequal(root, expected.rootRef) then return false end
     if expected.generation and expected.generation ~= addon.dbRuntime.generation then return false end
+    if expected.profilesRef and not rawequal(root.profiles, expected.profilesRef) then return false end
+    if expected.roleTemplatesRef
+        and not rawequal(root.roleTemplates, expected.roleTemplatesRef) then return false end
     if expected.activeProfileID
         and expected.activeProfileID ~= addon.dbRuntime.activeProfileID then return false end
     if expected.profileID and expected.profileRef
@@ -4095,6 +4265,8 @@ function addon.profileOps.CheckExpected(root, expected)
             ~= expected.assignmentID then
         return false
     end
+    if expected.guid and expected.characterRef
+        and not rawequal(root.characters[expected.guid], expected.characterRef) then return false end
     return true
 end
 
@@ -4422,14 +4594,15 @@ function addon.profileOps.Assign(guid, specID, profileID, expected)
         if not oldAssignment then return nil, "missing-context" end
         if oldAssignment == profileID then return nil, "same-profile" end
         local changedCharacter, copied = addon.dbRuntime.CloneSerializable(character)
-        if not copied or type(changedCharacter) ~= "table" then
+        if not copied or type(changedCharacter) ~= "table"
+            or not addon.dbRuntime.IsCleanTable(changedCharacter) then
             return nil, "clone-failed"
         end
         if specID == nil then
             changedCharacter.defaultProfileID = profileID
         else
-            local specProfiles = changedCharacter.specProfiles
-            if type(specProfiles) ~= "table"
+            local specProfiles = rawget(changedCharacter, "specProfiles")
+            if type(specProfiles) ~= "table" or not addon.dbRuntime.IsCleanTable(specProfiles)
                 or not specProfiles[specID] then return nil, "missing-context" end
             specProfiles[specID] = profileID
         end
@@ -4442,6 +4615,147 @@ function addon.profileOps.Assign(guid, specID, profileID, expected)
             reapply = active,
             activeProfileID = active and profileID or addon.dbRuntime.activeProfileID,
         }, profileID
+    end)
+end
+
+function addon.profileOps.UseProfileForKnownSpecs(guid, profileID, expected)
+    return addon.profileOps.Execute(expected, function(root)
+        if not addon.dbRuntime.IsCleanType(guid, "string") or guid == "" then
+            return nil, "missing-context"
+        end
+        if not addon.dbRuntime.IsCleanType(profileID, "string")
+            or not root.profiles[profileID] then return nil, "missing-profile" end
+        local character = root.characters[guid]
+        if type(character) ~= "table"
+            or not addon.dbRuntime.IsCleanTable(character) then return nil, "missing-context" end
+        local sourceSpecProfiles = rawget(character, "specProfiles")
+        if type(sourceSpecProfiles) ~= "table"
+            or not addon.dbRuntime.IsCleanTable(sourceSpecProfiles) then return nil, "missing-context" end
+        local changedCharacter, copied = addon.dbRuntime.CloneSerializable(character)
+        if not copied or type(changedCharacter) ~= "table"
+            or not addon.dbRuntime.IsCleanTable(changedCharacter) then
+            return nil, "clone-failed"
+        end
+        local specProfiles = rawget(changedCharacter, "specProfiles")
+        if type(specProfiles) ~= "table"
+            or not addon.dbRuntime.IsCleanTable(specProfiles) then return nil, "clone-failed" end
+        local knownCount, changedCount = 0, 0
+        for specID, assignedProfileID in pairs(specProfiles) do
+            knownCount = knownCount + 1
+            if assignedProfileID ~= profileID then
+                specProfiles[specID] = profileID
+                changedCount = changedCount + 1
+            end
+        end
+        if knownCount == 0 then return nil, "missing-context" end
+        if changedCount == 0 then return nil, "no-change" end
+        local characters = addon.profileRuntime.ShallowCopy(root.characters)
+        characters[guid] = changedCharacter
+        local transaction = addon.profileOps.NewTransaction(root)
+        transaction.characters = characters
+        return transaction, { reapply = guid == addon.profileRuntime.activeGUID }, {
+            profileID = profileID,
+            changedCount = changedCount,
+        }
+    end)
+end
+
+function addon.profileOps.MakeKnownSpecsIndependent(guid, expected)
+    return addon.profileOps.Execute(expected, function(root)
+        if not addon.dbRuntime.IsCleanType(guid, "string") or guid == "" then
+            return nil, "missing-context"
+        end
+        local character = root.characters[guid]
+        if type(character) ~= "table" or not addon.dbRuntime.IsCleanTable(character) then
+            return nil, "missing-context"
+        end
+        local sourceSpecProfiles = rawget(character, "specProfiles")
+        if type(sourceSpecProfiles) ~= "table"
+            or not addon.dbRuntime.IsCleanTable(sourceSpecProfiles) then return nil, "missing-context" end
+        local assignmentCounts = addon.profileOps.CountSpecAssignments(root)
+        local affectedSpecs = {}
+        for specID, sourceProfileID in pairs(sourceSpecProfiles) do
+            if (assignmentCounts[sourceProfileID] or 0) > 1 then
+                affectedSpecs[#affectedSpecs + 1] = specID
+            end
+        end
+        table.sort(affectedSpecs)
+        if #affectedSpecs == 0 then return nil, "no-change" end
+
+        local account, accountCopied = addon.dbRuntime.CloneSerializable(root.account)
+        local changedCharacter, characterCopied = addon.dbRuntime.CloneSerializable(character)
+        if not accountCopied or type(account) ~= "table"
+            or not addon.dbRuntime.IsCleanTable(account)
+            or not characterCopied or type(changedCharacter) ~= "table"
+            or not addon.dbRuntime.IsCleanTable(changedCharacter) then
+            return nil, "clone-failed"
+        end
+        local changedSpecProfiles = rawget(changedCharacter, "specProfiles")
+        if type(changedSpecProfiles) ~= "table"
+            or not addon.dbRuntime.IsCleanTable(changedSpecProfiles) then
+            return nil, "clone-failed"
+        end
+        local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
+        local assignments = {}
+        local changedCount = 0
+        for _, specID in ipairs(affectedSpecs) do
+            local sourceProfileID = changedSpecProfiles[specID]
+            local sourceProfile = profiles[sourceProfileID]
+            if type(sourceProfile) ~= "table"
+                or not addon.dbRuntime.IsCleanTable(sourceProfile) then
+                return nil, "missing-profile"
+            end
+            local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
+            if not profileID then return nil, "id-exhausted" end
+            local context = {
+                displayName = character.displayName,
+                specID = specID,
+                specName = addon.profileRuntime.knownSpecNames[specID],
+            }
+            local name = addon.profileRuntime.ProfileName(context, "spec")
+            for _, profile in pairs(profiles) do
+                if profile.name == name then
+                    name = name .. " [" .. profileID .. "]"
+                    break
+                end
+            end
+            local clone = addon.profileRuntime.CloneProfile(sourceProfile, name)
+            if type(clone) ~= "table"
+                or not addon.dbRuntime.IsCleanTable(clone) then return nil, "clone-failed" end
+            profiles[profileID] = clone
+            changedSpecProfiles[specID] = profileID
+            assignments[specID] = profileID
+            changedCount = changedCount + 1
+        end
+        if changedCount ~= #affectedSpecs then return nil, "clone-failed" end
+        local characters = addon.profileRuntime.ShallowCopy(root.characters)
+        characters[guid] = changedCharacter
+        local transaction = addon.profileOps.NewTransaction(root)
+        transaction.account = account
+        transaction.profiles = profiles
+        transaction.characters = characters
+        return transaction, { reapply = guid == addon.profileRuntime.activeGUID }, {
+            assignments = assignments,
+            changedCount = changedCount,
+        }
+    end)
+end
+
+function addon.profileOps.SetRoleTemplate(role, profileID, expected)
+    return addon.profileOps.Execute(expected, function(root)
+        if not addon.dbRuntime.IsCleanType(role, "string")
+            or not addon.profileOps.roleKeys[role] then return nil, "invalid-role" end
+        if not addon.dbRuntime.IsCleanType(profileID, "string")
+            or not root.profiles[profileID] then return nil, "missing-profile" end
+        if root.roleTemplates[role] == profileID then return nil, "no-change" end
+        local roleTemplates = addon.profileRuntime.ShallowCopy(root.roleTemplates)
+        roleTemplates[role] = profileID
+        local transaction = addon.profileOps.NewTransaction(root)
+        transaction.roleTemplates = roleTemplates
+        return transaction, { reapply = false }, {
+            role = role,
+            profileID = profileID,
+        }
     end)
 end
 
@@ -4534,7 +4848,8 @@ function addon.profileOps.DeleteWithReplacement(profileID, replacementProfileID,
         transaction.profiles = profiles
         if references.accountDefault > 0 then
             local account, copied = addon.dbRuntime.CloneSerializable(root.account)
-            if not copied then return nil, "clone-failed" end
+            if not copied or type(account) ~= "table"
+                or not addon.dbRuntime.IsCleanTable(account) then return nil, "clone-failed" end
             account.defaultProfileID = replacementProfileID
             transaction.account = account
         end
@@ -4556,14 +4871,18 @@ function addon.profileOps.DeleteWithReplacement(profileID, replacementProfileID,
                 end
                 if needsClone then
                     local changedCharacter, copied = addon.dbRuntime.CloneSerializable(character)
-                    if not copied or type(changedCharacter) ~= "table" then
+                    if not copied or type(changedCharacter) ~= "table"
+                        or not addon.dbRuntime.IsCleanTable(changedCharacter) then
                         return nil, "clone-failed"
                     end
                     if changedCharacter.defaultProfileID == profileID then
                         changedCharacter.defaultProfileID = replacementProfileID
                     end
-                    local specProfiles = changedCharacter.specProfiles
-                    if type(specProfiles) ~= "table" then return nil, "clone-failed" end
+                    local specProfiles = rawget(changedCharacter, "specProfiles")
+                    if type(specProfiles) ~= "table"
+                        or not addon.dbRuntime.IsCleanTable(specProfiles) then
+                        return nil, "clone-failed"
+                    end
                     for specID, assignedProfileID in pairs(specProfiles) do
                         if assignedProfileID == profileID then
                             specProfiles[specID] = replacementProfileID
@@ -7667,7 +7986,7 @@ end
 -- file-scope or global; configRefreshers / RefreshConfigLocalization no-op safely
 -- when settings UI has never been opened (empty arrays at file scope).
 local function ResetToDefaults()
-    addon.profileRuntime.CloseOwnedSettingsModals()
+    if not addon.profileRuntime.CloseOwnedSettingsModals() then return false end
     local db = addon.dbRuntime.GetWritableSettings(true)
     if not db then return false end
     -- Account-wide language/update cadence are intentionally outside profile Reset.
@@ -7910,6 +8229,10 @@ function addon.legacyImport.Request()
         return
     end
 
+    if not addon.profileRuntime.CloseOwnedSettingsModals() then
+        PrintMsg(L("SwiftStats import failed; current StatsPro settings were preserved."))
+        return
+    end
     addon.legacyImport.pending = candidate
     local definition = _G.StaticPopupDialogs["STATSPRO_IMPORT_SWIFTSTATS"]
     definition.text = L("Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload.")
@@ -7972,12 +8295,36 @@ function addon.profileUI.ContextLabel(character, spec)
     return character.displayName .. " / " .. L("Character default")
 end
 
+function addon.profileUI.RoleLabel(role)
+    if role == "TANK" then return L("Tank") end
+    if role == "HEALER" then return L("Healer") end
+    if role == "DAMAGER" then return L("Damage") end
+    return role or ""
+end
+
+function addon.profileUI.RoleTemplateChoices(model)
+    local choices = {}
+    for _, role in ipairs(addon.profileOps.roleOrder) do
+        local template = model and model.roleTemplates and model.roleTemplates[role] or nil
+        choices[#choices + 1] = {
+            kind = "role",
+            role = role,
+            profileID = template and template.profileID or nil,
+            label = addon.profileUI.RoleLabel(role) .. " - "
+                .. (template and template.profileName or ""),
+        }
+    end
+    return choices
+end
+
 function addon.profileUI.CaptureExpected(guid, specID, profileID)
     local root = addon.dbRuntime.Refresh()
     local expected = {
         rootRef = root,
         generation = addon.dbRuntime.generation,
         activeProfileID = addon.dbRuntime.activeProfileID,
+        profilesRef = root.profiles,
+        roleTemplatesRef = root.roleTemplates,
     }
     if profileID and root.profiles and root.profiles[profileID] then
         expected.profileID = profileID
@@ -7987,6 +8334,7 @@ function addon.profileUI.CaptureExpected(guid, specID, profileID)
         expected.guid = guid
         expected.specID = specID
         expected.assignmentID = addon.profileOps.ResolveAssignment(root, guid, specID)
+        expected.characterRef = root.characters and root.characters[guid] or nil
     end
     return expected
 end
@@ -8020,7 +8368,7 @@ function addon.profileUI.BuildOperationUI(manager)
     actionScroll:SetPoint("TOPLEFT", 258, -176)
     actionScroll:SetPoint("BOTTOMRIGHT", -34, 88)
     local actionChild = CreateFrame("Frame", nil, actionScroll)
-    actionChild:SetSize(318, 366)
+    actionChild:SetSize(318, 590)
     actionScroll:SetScrollChild(actionChild)
 
     local managedLabel = actionChild:CreateFontString(nil, "OVERLAY")
@@ -8078,6 +8426,50 @@ function addon.profileUI.BuildOperationUI(manager)
         "StatsProProfileDeleteButton", "Delete profile...", -300)
     local forgetButton = createAction(
         "StatsProProfileForgetButton", "Forget character...", -328)
+
+    local selectedCharacterTitle = actionChild:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(selectedCharacterTitle, 11, "OUTLINE")
+    selectedCharacterTitle:SetPoint("TOPLEFT", 8, -366)
+    PushLocalizedLabel(function()
+        selectedCharacterTitle:SetText(L("Selected character"))
+    end)
+
+    local selectedCharacterSummary = actionChild:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(selectedCharacterSummary, 10)
+    selectedCharacterSummary:SetPoint("TOPLEFT", 8, -384)
+    selectedCharacterSummary:SetPoint("TOPRIGHT", -12, -384)
+    selectedCharacterSummary:SetJustifyH("LEFT")
+    selectedCharacterSummary:SetWordWrap(false)
+    selectedCharacterSummary:SetMaxLines(1)
+    selectedCharacterSummary:SetTextColor(0.7, 0.75, 0.72, 1)
+
+    local useAllSpecsButton = createAction(
+        "StatsProProfileUseAllSpecsButton", "Use profile for all known specs...", -406)
+    local independentButton = createAction(
+        "StatsProProfileMakeIndependentButton", "Make shared specs independent...", -434)
+
+    local futureContextsTitle = actionChild:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(futureContextsTitle, 11, "OUTLINE")
+    futureContextsTitle:SetPoint("TOPLEFT", 8, -470)
+    PushLocalizedLabel(function()
+        futureContextsTitle:SetText(L("Future new contexts"))
+    end)
+
+    local roleTemplateSummary = {}
+    for index, role in ipairs(addon.profileOps.roleOrder) do
+        local line = actionChild:CreateFontString(nil, "OVERLAY")
+        RegisterConfigFont(line, 10)
+        line:SetPoint("TOPLEFT", 8, -472 - (index * 18))
+        line:SetPoint("TOPRIGHT", -12, -472 - (index * 18))
+        line:SetJustifyH("LEFT")
+        line:SetWordWrap(false)
+        line:SetMaxLines(1)
+        line:SetTextColor(0.7, 0.75, 0.72, 1)
+        roleTemplateSummary[role] = line
+    end
+
+    local roleTemplateButton = createAction(
+        "StatsProProfileRoleTemplateButton", "Set future role template...", -550)
 
     local blocker = CreateFrame("Frame", "StatsProProfileOperationBlocker", UIParent)
     blocker:SetAllPoints(UIParent)
@@ -8178,7 +8570,14 @@ function addon.profileUI.BuildOperationUI(manager)
         reset = resetButton,
         delete = deleteButton,
         forget = forgetButton,
+        useAllSpecs = useAllSpecsButton,
+        independent = independentButton,
+        roleTemplate = roleTemplateButton,
     }
+    ui.selectedCharacterTitle = selectedCharacterTitle
+    ui.selectedCharacterSummary = selectedCharacterSummary
+    ui.futureContextsTitle = futureContextsTitle
+    ui.roleTemplateSummary = roleTemplateSummary
     ui.operationDialog = dialog
     ui.operationBlocker = blocker
     ui.operationDialogTitle = dialogTitle
@@ -8396,6 +8795,33 @@ function addon.profileUI.BuildOperationUI(manager)
             ui.HandleOperationResult(ok, result, false)
             return
         end
+        if pending.kind == "role-template" then
+            local payload = pending.payload
+            local profile = ui.FindProfile(model, payload.profileID)
+            local template = model.roleTemplates and model.roleTemplates[choice.role] or nil
+            if not profile or not template or not addon.profileOps.roleKeys[choice.role] then
+                ui.HandleOperationResult(false, "stale", false)
+                return
+            end
+            if template.profileID == profile.profileID then
+                ui.HandleOperationResult(false, "no-change", false)
+                return
+            end
+            local messageKey
+            if choice.role == "TANK" then
+                messageKey = "Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."
+            elseif choice.role == "HEALER" then
+                messageKey = "Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."
+            else
+                messageKey = "Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."
+            end
+            ui.ShowConfirmation("set-role-template", L("Set future role template..."),
+                string.format(L(messageKey), profile.name), {
+                    role = choice.role,
+                    profileID = profile.profileID,
+                }, pending.expected)
+            return
+        end
         if pending.kind == "copy-scope" then
             local payload = pending.payload
             local source = ui.FindProfile(model, payload.sourceProfileID)
@@ -8504,6 +8930,24 @@ function addon.profileUI.BuildOperationUI(manager)
         elseif pending.kind == "forget" then
             ok, result = addon.profileOps.ForgetCharacter(payload.guid, pending.expected)
             if ok then ui.selectedGUID, ui.selectedSpecID, ui.selectedProfileID = nil, nil, nil end
+        elseif pending.kind == "use-profile-for-specs" then
+            ok, result = addon.profileOps.UseProfileForKnownSpecs(
+                payload.guid, payload.profileID, pending.expected)
+            if ok then ui.selectedProfileID = payload.profileID end
+        elseif pending.kind == "make-specs-independent" then
+            ok, result = addon.profileOps.MakeKnownSpecsIndependent(
+                payload.guid, pending.expected)
+            if ok and type(result) == "table" and type(result.assignments) == "table" then
+                local preferredSpecID = payload.selectedSpecID
+                if not preferredSpecID and payload.guid == addon.profileRuntime.activeGUID then
+                    preferredSpecID = addon.profileRuntime.activeSpecID
+                end
+                ui.selectedProfileID = result.assignments[preferredSpecID]
+                    or ui.selectedProfileID
+            end
+        elseif pending.kind == "set-role-template" then
+            ok, result = addon.profileOps.SetRoleTemplate(
+                payload.role, payload.profileID, pending.expected)
         end
         ui.HandleOperationResult(ok, result, false)
     end
@@ -8529,6 +8973,21 @@ function addon.profileUI.BuildOperationUI(manager)
         end
         operationStatus:SetText(ui.lastOperationStatus or "")
 
+        if character then
+            selectedCharacterSummary:SetText(string.format(
+                L("%s - %d known specs"), character.displayName,
+                character.knownSpecCount or #(character.specs or {})))
+        else
+            selectedCharacterSummary:SetText("")
+        end
+        for _, role in ipairs(addon.profileOps.roleOrder) do
+            local template = model.roleTemplates and model.roleTemplates[role] or nil
+            local formatKey = role == "TANK" and "Tank: %s"
+                or role == "HEALER" and "Healer: %s" or "Damage: %s"
+            roleTemplateSummary[role]:SetText(template
+                and string.format(L(formatKey), template.profileName) or "")
+        end
+
         if #(model.profiles or {}) > 0 then profileSelector:Enable() else profileSelector:Disable() end
         local mutable = model.canMutate == true
         local hasContext = character ~= nil and assignedProfile ~= nil
@@ -8550,6 +9009,24 @@ function addon.profileUI.BuildOperationUI(manager)
         else deleteButton:Disable() end
         if mutable and character and not character.isCurrent then forgetButton:Enable()
         else forgetButton:Disable() end
+        local knownSpecCount = character and (character.knownSpecCount or #(character.specs or {})) or 0
+        local allUseManaged = knownSpecCount > 0 and hasManaged
+        if allUseManaged then
+            for _, knownSpec in ipairs(character.specs) do
+                if knownSpec.profileID ~= managedProfile.profileID then
+                    allUseManaged = false
+                    break
+                end
+            end
+        end
+        if mutable and character and hasManaged and knownSpecCount > 0 and not allUseManaged then
+            useAllSpecsButton:Enable()
+        else useAllSpecsButton:Disable() end
+        if mutable and character and (character.sharedSpecCount or 0) > 0 then
+            independentButton:Enable()
+        else independentButton:Disable() end
+        if mutable and hasManaged then roleTemplateButton:Enable()
+        else roleTemplateButton:Disable() end
 
         if dialog:IsShown() and (not mutable
             or not addon.profileOps.CheckExpected(addon.dbRuntime.Refresh(),
@@ -8660,6 +9137,43 @@ function addon.profileUI.BuildOperationUI(manager)
         ui.ShowConfirmation("forget", L("Forget character..."), message, {
             guid = character.guid,
         }, ui.CaptureExpected(character.guid, ui.selectedSpecID))
+    end)
+
+    useAllSpecsButton:SetScript("OnClick", function()
+        local character = ui.selectedCharacterModel
+        local profile = ui.selectedManagedProfile
+        if not character or not profile or (character.knownSpecCount or 0) == 0 then return end
+        local message = string.format(
+            L("Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."),
+            profile.name, character.knownSpecCount, character.displayName)
+        ui.ShowConfirmation("use-profile-for-specs",
+            L("Use profile for all known specs..."), message, {
+                guid = character.guid,
+                profileID = profile.profileID,
+            }, ui.CaptureExpected(character.guid, nil, profile.profileID))
+    end)
+
+    independentButton:SetScript("OnClick", function()
+        local character = ui.selectedCharacterModel
+        if not character or (character.sharedSpecCount or 0) == 0 then return end
+        local message = string.format(
+            L("Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."),
+            character.sharedSpecCount, character.displayName)
+        ui.ShowConfirmation("make-specs-independent",
+            L("Make shared specs independent..."), message, {
+                guid = character.guid,
+                selectedSpecID = ui.selectedSpecID,
+            }, ui.CaptureExpected(character.guid, nil))
+    end)
+
+    roleTemplateButton:SetScript("OnClick", function()
+        local model = ui.currentModel or ui.BuildViewModel()
+        local profile = ui.selectedManagedProfile
+        if not profile then return end
+        ui.ShowChoices("role-template", L("Choose a role"),
+            ui.RoleTemplateChoices(model), {
+                profileID = profile.profileID,
+            }, ui.CaptureExpected(nil, nil, profile.profileID))
     end)
 
     nameInput:SetScript("OnTextChanged", ui.RefreshNameValidation)
@@ -10891,6 +11405,9 @@ if addon and addon.__statsproSmoke == true then
             rename = addon.profileOps.Rename,
             copySettings = addon.profileOps.CopySettings,
             assign = addon.profileOps.Assign,
+            useProfileForKnownSpecs = addon.profileOps.UseProfileForKnownSpecs,
+            makeKnownSpecsIndependent = addon.profileOps.MakeKnownSpecsIndependent,
+            setRoleTemplate = addon.profileOps.SetRoleTemplate,
             swap = addon.profileOps.Swap,
             resetCurrent = addon.profileOps.ResetCurrent,
             deleteWithReplacement = addon.profileOps.DeleteWithReplacement,
@@ -10954,6 +11471,13 @@ if addon and addon.__statsproSmoke == true then
                 managedProfile = ui.profileSelector and ui.profileSelector:GetText() or nil,
                 managedProfileEnabled = ui.profileSelector and ui.profileSelector:IsEnabled() or false,
                 managedImpact = ui.managedImpact and ui.managedImpact:GetText() or nil,
+                selectedCharacterSummary = ui.selectedCharacterSummary
+                    and ui.selectedCharacterSummary:GetText() or nil,
+                roleTemplateSummary = ui.roleTemplateSummary and {
+                    TANK = ui.roleTemplateSummary.TANK:GetText(),
+                    HEALER = ui.roleTemplateSummary.HEALER:GetText(),
+                    DAMAGER = ui.roleTemplateSummary.DAMAGER:GetText(),
+                } or nil,
                 operationStatus = ui.operationStatus and ui.operationStatus:GetText() or nil,
                 actions = actions,
                 operationDialogShown = ui.operationDialog and ui.operationDialog:IsShown() or false,
@@ -11307,6 +11831,7 @@ Settings.RegisterAddOnCategory(launcherCategory)
 SLASH_STATSPRO1 = "/ss"
 SLASH_STATSPRO2 = "/statspro"
 local function SetVisible(visible)
+    if not addon.profileRuntime.CloseOwnedSettingsModals() then return false end
     local db = addon.dbRuntime.GetWritableSettings(true)
     if not db then
         local cb = _G["StatsProVisibleCheck"]

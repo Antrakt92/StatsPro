@@ -438,9 +438,17 @@ local definition = _G.StaticPopupDialogs["STATSPRO_FIXTURE"]
 definition.button1 = definition.buton1
 local globalTypo = _G.StatsProFontPickre
 local maxSchoolsTypo = _G.MAX_SPELL_SCHOOL
+local snapshotOptions = _G.StatsProTargetSnapshotDropdownOptions
+local snapshotValue = _G.StatsProGetTargetSnapshotDropdownValue
+local snapshotSelect = _G.StatsProSelectTargetSnapshotDropdownValue
+local snapshotOptionsTypo = _G.StatsProTargetSnapshotDropdownOption
+local snapshotValueTypo = _G.StatsProGetTargetSnapshotDropdownValu
+local snapshotSelectTypo = _G.StatsProSelectTargetSnapshotDropdownValu
 local suffix = "Text"
 local dynamic = _G["StatsProVisibleCheck" .. suffix]
-return state.retrySchedueld or globalTypo or maxSchoolsTypo or dynamic
+return state.retrySchedueld or globalTypo or maxSchoolsTypo
+    or snapshotOptions or snapshotValue or snapshotSelect
+    or snapshotOptionsTypo or snapshotValueTypo or snapshotSelectTypo or dynamic
 '@ -Encoding UTF8
         $fieldCheck = Invoke-LuaLanguageServerCheck `
             -ServerPath $luaLanguageServer `
@@ -450,15 +458,18 @@ return state.retrySchedueld or globalTypo or maxSchoolsTypo or dynamic
             -Description "undefined-field regression fixture"
         $undefinedFieldDiagnostics = @($fieldCheck.Diagnostics | Where-Object { $_.Code -eq "undefined-field" })
         $fieldMessages = $undefinedFieldDiagnostics.Message -join "`n"
-        if ($fieldCheck.ExitCode -eq 0 -or $fieldCheck.Diagnostics.Count -ne 5 -or
-            $undefinedFieldDiagnostics.Count -ne 5 -or
+        if ($fieldCheck.ExitCode -eq 0 -or $fieldCheck.Diagnostics.Count -ne 8 -or
+            $undefinedFieldDiagnostics.Count -ne 8 -or
             $fieldMessages -notmatch "retrySchedueld" -or
             $fieldMessages -notmatch "StatsProFontPickre" -or
             $fieldMessages -notmatch "MAX_SPELL_SCHOOL" -or
             $fieldMessages -notmatch "IsShwon" -or
-            $fieldMessages -notmatch "buton1") {
+            $fieldMessages -notmatch "buton1" -or
+            $fieldMessages -notmatch "StatsProTargetSnapshotDropdownOption" -or
+            $fieldMessages -notmatch "StatsProGetTargetSnapshotDropdownValu" -or
+            $fieldMessages -notmatch "StatsProSelectTargetSnapshotDropdownValu") {
             $summary = @($fieldCheck.Diagnostics | ForEach-Object { "$($_.Code): $($_.Message)" }) -join " | "
-            throw "LuaLS field-typo fixture must report only the five intentional field typos; exit=$($fieldCheck.ExitCode), diagnostics=$summary"
+            throw "LuaLS field-typo fixture must report only the eight intentional field typos; exit=$($fieldCheck.ExitCode), diagnostics=$summary"
         }
     }
     finally {

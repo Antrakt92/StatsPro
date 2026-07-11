@@ -3368,6 +3368,79 @@ do
 end
 
 do
+    local staleEnv, _, staleTest = loadStatsPro("enUS", withProfileIdentity())
+    fireEvent("appearance.presets.stale.pew", staleEnv, "PLAYER_ENTERING_WORLD")
+    local service = staleTest.appearancePresets
+    local ok = service.startPreview("midnight")
+    eq("appearance.presets.stale.in_place_preview", ok, true)
+    local settings = staleTest.profileState().settings
+    settings.textAlpha = 65
+    local result, reason = service.applyPreview()
+    eq("appearance.presets.stale.in_place_rejected", result, false)
+    eq("appearance.presets.stale.in_place_reason", reason, "stale")
+    eq("appearance.presets.stale.in_place_preserved", settings.textAlpha, 65)
+    eq("appearance.presets.stale.in_place_closed", service.state().active, false)
+
+    ok = service.startPreview("midnight")
+    eq("appearance.presets.stale.replacement_preview", ok, true)
+    local state = staleTest.profileState()
+    local replacement = deepCopy(state.settings)
+    state.root.profiles[state.profileID].settings = replacement
+    result, reason = service.applyPreview()
+    eq("appearance.presets.stale.replacement_rejected", result, false)
+    eq("appearance.presets.stale.replacement_reason", reason, "stale")
+    eq("appearance.presets.stale.replacement_preserved",
+        state.root.profiles[state.profileID].settings, replacement)
+
+    local restoreEnv, restoreAddon, restoreTest = loadStatsPro("enUS", withProfileIdentity())
+    fireEvent("appearance.presets.restore.pew", restoreEnv, "PLAYER_ENTERING_WORLD")
+    service = restoreTest.appearancePresets
+    ok = service.startPreview("midnight")
+    eq("appearance.presets.restore.preview", ok, true)
+    service.setRuntimeFailureCount(1)
+    result, reason = service.cancelPreview()
+    eq("appearance.presets.restore.cancel_rejected", result, false)
+    eq("appearance.presets.restore.cancel_reason", reason, "restore-failed")
+    eq("appearance.presets.restore.session_preserved", service.state().active, true)
+    eq("appearance.presets.restore.retry", service.cancelPreview(), true)
+    ok = service.startPreview("midnight")
+    eq("appearance.presets.restore.baseline_click_preview", ok, true)
+    service.setRuntimeFailureCount(1)
+    result, reason = service.startPreview("classic")
+    eq("appearance.presets.restore.baseline_click_rejected", result, false)
+    eq("appearance.presets.restore.baseline_click_reason", reason, "restore-failed")
+    eq("appearance.presets.restore.baseline_click_session", service.state().active, true)
+    eq("appearance.presets.restore.baseline_click_retry", service.cancelPreview(), true)
+    ok = service.startPreview("midnight")
+    eq("appearance.presets.restore.modal_preview", ok, true)
+    service.setRuntimeFailureCount(1)
+    result, reason = service.startPreview("monochrome")
+    eq("appearance.presets.restore.modal_close_rejected", result, false)
+    eq("appearance.presets.restore.modal_close_reason", reason, "close-failed")
+    eq("appearance.presets.restore.modal_session", service.state().active, true)
+    eq("appearance.presets.restore.modal_retry", service.cancelPreview(), true)
+    restoreAddon:OpenConfigMenu()
+    ok = service.startPreview("high-contrast")
+    eq("appearance.presets.restore.manual_preview", ok, true)
+    local settingsBeforeManual = deepCopy(restoreTest.profileState().settings)
+    service.setRuntimeFailureCount(1)
+    restoreEnv.StatsProFontSlider:SetValue(15)
+    userInteract("appearance.presets.restore.manual_change",
+        restoreEnv.StatsProFontSlider, "OnValueChanged", 15)
+    assertDeepEqual("appearance.presets.restore.manual_zero_writes",
+        restoreTest.profileState().settings, settingsBeforeManual)
+    eq("appearance.presets.restore.manual_session", service.state().active, true)
+    eq("appearance.presets.restore.manual_retry", service.cancelPreview(), true)
+    ok = service.startPreview("midnight")
+    eq("appearance.presets.restore.config_hide_preview", ok, true)
+    service.setRuntimeFailureCount(1)
+    restoreEnv.StatsProConfigFrame:Hide()
+    eq("appearance.presets.restore.config_hide_forced", service.state().active, false)
+    assertDeepEqual("appearance.presets.restore.config_hide_zero_writes",
+        restoreTest.profileState().settings, settingsBeforeManual)
+end
+
+do
     local inCombat = false
     local editEnv, editAddon, editTest = loadStatsPro("enUS", {
         inCombatLockdown = function() return inCombat end,
@@ -7353,7 +7426,29 @@ do
         eq(prefix .. ".swatch_count", counts.swatch, 18)
         eq(prefix .. ".slider_count", counts.slider, 5)
         eq(prefix .. ".dropdown_count", counts.dropdown, 6)
-        eq(prefix .. ".button_count", counts.button, 20)
+        eq(prefix .. ".button_count", counts.button, 22)
+        local presetUI = localeAddon.appearancePresets.ui
+        for _, presetID in ipairs({
+            "classic", "clean-dark", "midnight", "monochrome", "high-contrast",
+        }) do
+            local button = presetUI.buttons[presetID]
+            check(prefix .. ".preset_card_fit." .. presetID,
+                button.statsProText:GetStringWidth() <= button.statsProText:GetWidth(),
+                "localized preset card label overflows")
+        end
+        check(prefix .. ".preset_cancel_fit",
+            presetUI.cancel.statsProText:GetStringWidth()
+                <= presetUI.cancel:GetWidth() - 16,
+            "localized Cancel preview label overflows")
+        check(prefix .. ".preset_apply_fit",
+            presetUI.apply.statsProText:GetStringWidth()
+                <= presetUI.apply:GetWidth() - 16,
+            "localized Apply label overflows")
+        eq(prefix .. ".preset_note_wrap", presetUI.note.wordWrap, true)
+        eq(prefix .. ".preset_note_width", presetUI.note:GetWidth(), 426)
+        eq(prefix .. ".preset_note_height", presetUI.note:GetHeight(), 52)
+        eq(prefix .. ".preset_warning_width", presetUI.warning:GetWidth(), 426)
+        eq(prefix .. ".preset_warning_height", presetUI.warning:GetHeight(), 36)
 
         for index, frame in ipairs(localeEnv.__frames) do
             local kind = frame.statsProControlKind
@@ -11227,6 +11322,15 @@ do
         if scope == "stats" then
             root.profiles.p3.settings.showStagger = nil
             root.profiles.p2.settings.showStagger = true
+        elseif scope == "appearance" then
+            local definition = test.appearancePresets.definitions().midnight
+            for key in pairs(test.appearancePresets.allowlist()) do
+                root.profiles.p3.settings[key] = deepCopy(definition[key])
+            end
+            root.profiles.p3.settings.appearancePresetID = "midnight"
+            root.profiles.p2.settings.matchValueColorToStat = true
+            root.profiles.p2.settings.useAutoColorDurability = false
+            root.profiles.p2.settings.colors.crit = { r = 0.91, g = 0.92, b = 0.93 }
         end
         local targetBefore = deepCopy(root.profiles.p2.settings)
         local ok = test.profileOps.copySettings("p3", "p2", scope)
@@ -11251,9 +11355,28 @@ do
                 root.profiles.p2.settings.fontSize, targetBefore.fontSize)
         else
             eq("profiles.ops.copy.scope.appearance.value",
-                root.profiles.p2.settings.fontSize, 19)
+                root.profiles.p2.settings.fontSize,
+                root.profiles.p3.settings.fontSize)
             eq("profiles.ops.copy.scope.appearance.alpha",
-                root.profiles.p2.settings.textAlpha, 55)
+                root.profiles.p2.settings.textAlpha,
+                root.profiles.p3.settings.textAlpha)
+            eq("profiles.ops.copy.scope.appearance.marker",
+                root.profiles.p2.settings.appearancePresetID, "midnight")
+            eq("profiles.ops.copy.scope.appearance.current_id",
+                test.appearancePresets.currentID(root.profiles.p2.settings), "midnight")
+            eq("profiles.ops.copy.scope.appearance.match_color",
+                root.profiles.p2.settings.matchValueColorToStat,
+                root.profiles.p3.settings.matchValueColorToStat)
+            eq("profiles.ops.copy.scope.appearance.auto_durability",
+                root.profiles.p2.settings.useAutoColorDurability,
+                root.profiles.p3.settings.useAutoColorDurability)
+            assertDeepEqual("profiles.ops.copy.scope.appearance.colors",
+                root.profiles.p2.settings.colors, root.profiles.p3.settings.colors)
+            eq("profiles.ops.copy.scope.appearance.colors_detached",
+                rawequal(root.profiles.p2.settings.colors,
+                    root.profiles.p3.settings.colors), false)
+            assertNoSharedTables("profiles.ops.copy.scope.appearance.colors_isolated",
+                root.profiles.p3.settings.colors, root.profiles.p2.settings.colors)
             eq("profiles.ops.copy.scope.appearance.stats_preserved",
                 root.profiles.p2.settings.showDefensive, targetBefore.showDefensive)
             eq("profiles.ops.copy.scope.appearance.layout_preserved",
@@ -12447,7 +12570,8 @@ do
             selectedFontRows = selectedFontRows + 1
         end
     end
-    eq("config.control_design.font_selected_row", selectedFontRows, 1)
+    -- One selected font row plus the committed appearance-preset row.
+    eq("config.control_design.font_and_preset_selected_rows", selectedFontRows, 2)
     local fontRows = {}
     for _, frame in ipairs(env.__frames) do
         if frame.fontPath and frame.statsProControlKind == "listRow" then
@@ -12560,6 +12684,365 @@ do
             end
         end
     end
+end
+
+do
+    local presetEnv, presetAddon, presetTest = loadStatsPro("enUS", withProfileIdentity())
+    fireEvent("appearance.presets.pew", presetEnv, "PLAYER_ENTERING_WORLD")
+    local service = presetTest.appearancePresets
+    local expectedOrder = {
+        "classic", "clean-dark", "midnight", "monochrome", "high-contrast",
+    }
+    assertDeepEqual("appearance.presets.registry.order", service.order(), expectedOrder)
+    local allowlist = service.allowlist()
+    assertDeepEqual("appearance.presets.registry.allowlist", allowlist, {
+        fontSize=true, textAlpha=true, panelBackgroundAlpha=true,
+        textOutlineStyle=true, matchValueColorToStat=true,
+        useAutoColorDurability=true, colors=true,
+    })
+    local definitions = service.definitions()
+    local defaults = presetTest.copyDefaults()
+    local colorCount = 0
+    for key in pairs(defaults.colors) do colorCount = colorCount + 1 end
+    eq("appearance.presets.registry.default_marker", defaults.appearancePresetID, "classic")
+    for _, presetID in ipairs(expectedOrder) do
+        local definition = exists("appearance.presets.registry." .. presetID, definitions[presetID])
+        local actualColorCount = 0
+        for key, color in pairs(definition.colors or {}) do
+            actualColorCount = actualColorCount + 1
+            check("appearance.presets.registry." .. presetID .. ".known_color." .. key,
+                defaults.colors[key] ~= nil)
+            check("appearance.presets.registry." .. presetID .. ".finite_color." .. key,
+                isFiniteNumber(color.r) and isFiniteNumber(color.g) and isFiniteNumber(color.b)
+                    and color.r >= 0 and color.r <= 1 and color.g >= 0 and color.g <= 1
+                    and color.b >= 0 and color.b <= 1)
+        end
+        eq("appearance.presets.registry." .. presetID .. ".complete_colors",
+            actualColorCount, colorCount)
+        for key in pairs(allowlist) do
+            check("appearance.presets.registry." .. presetID .. ".required." .. key,
+                definition[key] ~= nil)
+            if key ~= "colors" then
+                eq("appearance.presets.registry." .. presetID .. ".type." .. key,
+                    type(definition[key]), type(defaults[key]))
+            end
+        end
+        for key in pairs(definition) do
+            check("appearance.presets.registry." .. presetID .. ".allowed_key." .. key,
+                key == "label" or allowlist[key] == true)
+        end
+        check("appearance.presets.registry." .. presetID .. ".font_size_range",
+            definition.fontSize >= 8 and definition.fontSize <= 32)
+        check("appearance.presets.registry." .. presetID .. ".text_alpha_range",
+            definition.textAlpha >= 25 and definition.textAlpha <= 100)
+        check("appearance.presets.registry." .. presetID .. ".background_range",
+            definition.panelBackgroundAlpha >= 0
+                and definition.panelBackgroundAlpha <= 80)
+        check("appearance.presets.registry." .. presetID .. ".outline_enum",
+            definition.textOutlineStyle == "none"
+                or definition.textOutlineStyle == "outline"
+                or definition.textOutlineStyle == "thick")
+    end
+    local classicPayload = deepCopy(definitions.classic)
+    classicPayload.label = nil
+    local defaultPayload = {}
+    for key in pairs(allowlist) do defaultPayload[key] = deepCopy(defaults[key]) end
+    assertDeepEqual("appearance.presets.registry.classic_matches_defaults",
+        classicPayload, defaultPayload)
+
+    local state = presetTest.profileState()
+    local activeProfileID = state.profileID
+    local settings = state.settings
+    settings.showCrit = false
+    settings.displayMode = "split"
+    settings.scale = 1.3
+    local rootRef, profilesRef, settingsRef = state.root, state.profiles, settings
+    local beforePreview = deepCopy(settings)
+    local beforeRuntime = presetTest.cachedAppearanceState()
+    local beforeVisual = presetTest.panelVisualState()
+    local accountBefore = deepCopy(state.root.account)
+    local charactersBefore = deepCopy(state.root.characters)
+    local roleTemplatesBefore = deepCopy(state.root.roleTemplates)
+    local otherProfilesBefore, otherProfileRefs = {}, {}
+    for profileID, profile in pairs(state.profiles) do
+        if profileID ~= state.profileID then
+            otherProfilesBefore[profileID] = deepCopy(profile)
+            otherProfileRefs[profileID] = profile
+        end
+    end
+    local forbiddenKeys = {
+        "font", "fontBeforeAutoSwitch", "isVisible", "isLocked", "displayMode",
+        "labelStyle", "scale", "updateInterval", "forceLocale", "point",
+        "relativePoint", "xOfs", "yOfs", "defensive_point",
+        "defensive_relativePoint", "defensive_xOfs", "defensive_yOfs",
+        "showCrit", "showHaste", "showMastery", "showVersatility",
+        "showDefensive", "showDurability", "showRepairCost", "splitOffensive",
+        "splitDefensive", "targetSnapshot",
+    }
+    local forbiddenBefore = {}
+    for _, key in ipairs(forbiddenKeys) do forbiddenBefore[key] = settings[key] end
+    eq("appearance.presets.fresh_is_classic", service.currentID(), "classic")
+
+    local ok, reason = service.startPreview("high-contrast")
+    eq("appearance.presets.preview.starts", ok, true)
+    eq("appearance.presets.preview.reason", reason, nil)
+    eq("appearance.presets.preview.id", service.state().presetID, "high-contrast")
+    local previewRuntime = presetTest.cachedAppearanceState()
+    eq("appearance.presets.preview.runtime_font_size", previewRuntime.fontSize, 16)
+    near("appearance.presets.preview.runtime_text_alpha", previewRuntime.textAlpha, 1)
+    near("appearance.presets.preview.runtime_background",
+        previewRuntime.panelBackgroundAlpha, 0.75)
+    eq("appearance.presets.preview.runtime_outline",
+        previewRuntime.textOutlineStyle, "thick")
+    eq("appearance.presets.preview.runtime_match_color",
+        previewRuntime.matchValueColorToStat, true)
+    eq("appearance.presets.preview.runtime_auto_durability",
+        previewRuntime.useAutoColorDurability, true)
+    check("appearance.presets.preview.runtime_palette_changed",
+        previewRuntime.colorStrings.crit ~= beforeRuntime.colorStrings.crit)
+    local previewVisual = presetTest.panelVisualState()
+    eq("appearance.presets.preview.rendered_outline", previewVisual.mainLabelFlags,
+        "THICKOUTLINE")
+    near("appearance.presets.preview.rendered_alpha", previewVisual.mainLabelAlpha, 1)
+    near("appearance.presets.preview.rendered_background",
+        previewVisual.mainBackgroundTextureAlpha, 0.75)
+    assertDeepEqual("appearance.presets.preview.zero_db_writes", settings, beforePreview)
+    eq("appearance.presets.preview.root_identity", presetTest.profileState().root, rootRef)
+    eq("appearance.presets.preview.profiles_identity", presetTest.profileState().profiles, profilesRef)
+    eq("appearance.presets.preview.settings_identity", presetTest.profileState().settings, settingsRef)
+
+    ok = service.startPreview("midnight")
+    eq("appearance.presets.preview.switches", ok, true)
+    assertDeepEqual("appearance.presets.preview.switch_keeps_db", settings, beforePreview)
+    eq("appearance.presets.preview.switch_id", service.state().presetID, "midnight")
+    near("appearance.presets.preview.switch_runtime_background",
+        presetTest.cachedAppearanceState().panelBackgroundAlpha, 0.35)
+    eq("appearance.presets.preview.cancel", service.cancelPreview(), true)
+    assertDeepEqual("appearance.presets.preview.cancel_exact", settings, beforePreview)
+    eq("appearance.presets.preview.cancel_inactive", service.state().active, false)
+    assertDeepEqual("appearance.presets.preview.cancel_runtime_exact",
+        presetTest.cachedAppearanceState(), beforeRuntime)
+    local restoredVisual = presetTest.panelVisualState()
+    eq("appearance.presets.preview.cancel_rendered_outline",
+        restoredVisual.mainLabelFlags, beforeVisual.mainLabelFlags)
+    near("appearance.presets.preview.cancel_rendered_alpha",
+        restoredVisual.mainLabelAlpha, beforeVisual.mainLabelAlpha)
+    near("appearance.presets.preview.cancel_rendered_background",
+        restoredVisual.mainBackgroundTextureAlpha,
+        beforeVisual.mainBackgroundTextureAlpha)
+
+    ok = service.startPreview("high-contrast")
+    eq("appearance.presets.apply.preview", ok, true)
+    ok, reason = service.applyPreview()
+    eq("appearance.presets.apply.success", ok, true)
+    eq("appearance.presets.apply.result", reason, activeProfileID)
+    local applied = presetTest.profileState()
+    eq("appearance.presets.apply.root_identity", applied.root, rootRef)
+    check("appearance.presets.apply.profiles_replaced", applied.profiles ~= profilesRef)
+    check("appearance.presets.apply.settings_replaced", applied.settings ~= settingsRef)
+    eq("appearance.presets.apply.marker", applied.settings.appearancePresetID, "high-contrast")
+    eq("appearance.presets.apply.current_id", service.currentID(), "high-contrast")
+    ok, reason = service.startPreview("high-contrast")
+    eq("appearance.presets.current_click_noop", ok, false)
+    eq("appearance.presets.current_click_reason", reason, "no-change")
+    eq("appearance.presets.current_click_no_session", service.state().active, false)
+    eq("appearance.presets.apply.protected_visibility", applied.settings.showCrit, false)
+    eq("appearance.presets.apply.protected_layout", applied.settings.displayMode, "split")
+    near("appearance.presets.apply.protected_scale", applied.settings.scale, 1.3)
+    eq("appearance.presets.apply.protected_position",
+        applied.settings.point, beforePreview.point)
+    for _, key in ipairs(forbiddenKeys) do
+        eq("appearance.presets.apply.forbidden." .. key,
+            applied.settings[key], forbiddenBefore[key])
+    end
+    assertDeepEqual("appearance.presets.apply.account_unchanged",
+        applied.root.account, accountBefore)
+    assertDeepEqual("appearance.presets.apply.characters_unchanged",
+        applied.root.characters, charactersBefore)
+    assertDeepEqual("appearance.presets.apply.role_templates_unchanged",
+        applied.root.roleTemplates, roleTemplatesBefore)
+    for profileID, profile in pairs(otherProfilesBefore) do
+        eq("appearance.presets.apply.other_identity." .. profileID,
+            applied.profiles[profileID], otherProfileRefs[profileID])
+        assertDeepEqual("appearance.presets.apply.other_unchanged." .. profileID,
+            applied.profiles[profileID], profile)
+    end
+    assertNoSharedTables("appearance.presets.apply.detached_definition",
+        definitions["high-contrast"].colors, applied.settings.colors)
+
+    local appliedSettings = applied.settings
+    ok = service.startPreview("monochrome")
+    eq("appearance.presets.rollback.preview", ok, true)
+    presetTest.profileOps.setFailureStage("commit")
+    ok, reason = service.applyPreview()
+    eq("appearance.presets.rollback.rejected", ok, false)
+    eq("appearance.presets.rollback.reason", reason, "commit-failed")
+    presetTest.profileOps.setFailureStage(nil)
+    eq("appearance.presets.rollback.settings_identity",
+        presetTest.profileState().settings, appliedSettings)
+    eq("appearance.presets.rollback.marker",
+        presetTest.profileState().settings.appearancePresetID, "high-contrast")
+    eq("appearance.presets.rollback.preview_resumed", service.state().active, true)
+    eq("appearance.presets.rollback.cancel_resumed", service.cancelPreview(), true)
+
+    for _, stage in ipairs({ "validate", "apply" }) do
+        ok = service.startPreview("monochrome")
+        eq("appearance.presets.failure." .. stage .. ".preview", ok, true)
+        presetTest.profileOps.setFailureStage(stage)
+        ok, reason = service.applyPreview()
+        eq("appearance.presets.failure." .. stage .. ".rejected", ok, false)
+        eq("appearance.presets.failure." .. stage .. ".reason",
+            reason, stage .. "-failed")
+        eq("appearance.presets.failure." .. stage .. ".preview_resumed",
+            service.state().active, true)
+        eq("appearance.presets.failure." .. stage .. ".cancel",
+            service.cancelPreview(), true)
+        eq("appearance.presets.failure." .. stage .. ".marker",
+            presetTest.profileState().settings.appearancePresetID, "high-contrast")
+    end
+    ok = service.startPreview("monochrome")
+    eq("appearance.presets.failure.busy.preview", ok, true)
+    presetTest.profileOps.setTransitioning(true)
+    ok, reason = service.applyPreview()
+    eq("appearance.presets.failure.busy.rejected", ok, false)
+    eq("appearance.presets.failure.busy.reason", reason, "busy")
+    eq("appearance.presets.failure.busy.preview_closed", service.state().active, false)
+    presetTest.profileOps.setTransitioning(false)
+
+    local configOK, configErr = pcall(function() presetAddon:OpenConfigMenu() end)
+    check("appearance.presets.ui.opens", configOK, configErr)
+    for _, presetID in ipairs(expectedOrder) do
+        exists("appearance.presets.ui.button." .. presetID,
+            presetEnv["StatsProAppearancePreset" .. presetID:gsub("[^%w]", "")])
+    end
+    local runtime = presetTest.profileRuntimeState()
+    local uiRoot = presetTest.profileState().root
+    uiRoot.characters[runtime.activeGUID].specProfiles[999] = activeProfileID
+    userInteract("appearance.presets.ui.preview_button",
+        presetEnv.StatsProAppearancePresetmidnight, "OnClick")
+    eq("appearance.presets.ui.preview_wired", service.state().presetID, "midnight")
+    eq("appearance.presets.ui.preview_tile_selected",
+        presetEnv.StatsProAppearancePresetmidnight.statsProSelected, true)
+    local presetUI = presetAddon.appearancePresets.ui
+    eq("appearance.presets.ui.apply_visible", presetUI.apply:IsShown(), true)
+    eq("appearance.presets.ui.cancel_visible", presetUI.cancel:IsShown(), true)
+    eq("appearance.presets.ui.shared_warning_visible", presetUI.warning:IsShown(), true)
+    check("appearance.presets.ui.shared_warning_text",
+        presetUI.warning:GetText():find("2", 1, true) ~= nil)
+    presetEnv.StatsProConfigFrame:Hide()
+    eq("appearance.presets.ui.config_hide_cancels", service.state().active, false)
+    eq("appearance.presets.ui.config_hide_zero_writes",
+        presetTest.profileState().settings.appearancePresetID, "high-contrast")
+
+    presetEnv.StatsProConfigFrame:Show()
+    presetEnv.StatsProFontSlider:SetValue(15)
+    userInteract("appearance.presets.manual_slider.change",
+        presetEnv.StatsProFontSlider, "OnValueChanged", 15)
+    eq("appearance.presets.manual_slider_marks_custom",
+        presetTest.profileState().settings.appearancePresetID, "custom")
+    check("appearance.presets.manual_slider_refreshes_status",
+        presetUI.status:GetText():find("Custom", 1, true) ~= nil)
+    ok = service.startPreview("high-contrast")
+    eq("appearance.presets.nonvisual.prepare_preview", ok, true)
+    ok = service.applyPreview()
+    eq("appearance.presets.nonvisual.prepare_apply", ok, true)
+    presetEnv.StatsProScaleSlider:SetValue(1.2)
+    userInteract("appearance.presets.nonvisual_slider.change",
+        presetEnv.StatsProScaleSlider, "OnValueChanged", 1.2)
+    eq("appearance.presets.nonvisual_slider_preserves_marker",
+        presetTest.profileState().settings.appearancePresetID, "high-contrast")
+
+    presetEnv.StatsProMatchColorCheck:SetChecked(false)
+    userInteract("appearance.presets.manual_checkbox.change",
+        presetEnv.StatsProMatchColorCheck, "OnClick")
+    eq("appearance.presets.manual_checkbox_marks_custom",
+        presetTest.profileState().settings.appearancePresetID, "custom")
+    check("appearance.presets.manual_checkbox_refreshes_status",
+        presetUI.status:GetText():find("Custom", 1, true) ~= nil)
+    ok = service.startPreview("high-contrast")
+    eq("appearance.presets.manual_outline.prepare_preview", ok, true)
+    ok = service.applyPreview()
+    eq("appearance.presets.manual_outline.prepare_apply", ok, true)
+    selectDropdownValue("appearance.presets.manual_outline.change",
+        presetEnv.StatsProTextOutlineDropdown, "none")
+    eq("appearance.presets.manual_outline_marks_custom",
+        presetTest.profileState().settings.appearancePresetID, "custom")
+    check("appearance.presets.manual_outline_refreshes_status",
+        presetUI.status:GetText():find("Custom", 1, true) ~= nil)
+    ok = service.startPreview("high-contrast")
+    eq("appearance.presets.color.prepare_preview", ok, true)
+    ok = service.applyPreview()
+    eq("appearance.presets.color.prepare_apply", ok, true)
+
+    local critSwatch
+    for _, frame in ipairs(presetEnv.__frames) do
+        if frame.statsProColorKey == "crit" then critSwatch = frame break end
+    end
+    exists("appearance.presets.color.swatch", critSwatch)
+    local colorBefore = deepCopy(presetTest.profileState().settings.colors.crit)
+    userInteract("appearance.presets.color.cancel.open", critSwatch, "OnClick")
+    presetEnv.__setColorPickerRGB(0.41, 0.42, 0.43)
+    presetEnv.ColorPickerFrame.colorPickerOptions.swatchFunc()
+    eq("appearance.presets.color.preview_keeps_marker",
+        presetTest.profileState().settings.appearancePresetID, "high-contrast")
+    presetEnv.__cancelColorPicker()
+    eq("appearance.presets.color.cancel_keeps_marker",
+        presetTest.profileState().settings.appearancePresetID, "high-contrast")
+    assertDeepEqual("appearance.presets.color.cancel_restores",
+        presetTest.profileState().settings.colors.crit, colorBefore)
+    userInteract("appearance.presets.color.accept.open", critSwatch, "OnClick")
+    presetEnv.__setColorPickerRGB(0.51, 0.52, 0.53)
+    presetEnv.ColorPickerFrame.colorPickerOptions.swatchFunc()
+    presetEnv.__acceptColorPicker()
+    eq("appearance.presets.color.accept_marks_custom",
+        presetTest.profileState().settings.appearancePresetID, "custom")
+    check("appearance.presets.color.accept_refreshes_status",
+        presetUI.status:GetText():find("Custom", 1, true) ~= nil)
+
+    ok = service.startPreview("midnight")
+    eq("appearance.presets.manager.preview", ok, true)
+    userInteract("appearance.presets.manager.open",
+        presetEnv.StatsProManageProfilesButton, "OnClick")
+    eq("appearance.presets.manager.cancels_preview", service.state().active, false)
+
+    service.markCustom(presetTest.profileState().settings)
+    eq("appearance.presets.manual_edit_custom", service.currentID(), "custom")
+    presetTest.profileState().settings.scale = 1.1
+    eq("appearance.presets.nonvisual_stays_custom",
+        presetTest.profileState().settings.appearancePresetID, "custom")
+
+    local legacyEnv, _, legacyTest = loadStatsPro("enUS", withProfileIdentity())
+    fireEvent("appearance.presets.legacy.pew", legacyEnv, "PLAYER_ENTERING_WORLD")
+    legacyTest.profileState().settings.appearancePresetID = nil
+    eq("appearance.presets.legacy_missing_marker_custom",
+        legacyTest.appearancePresets.currentID(), "custom")
+    eq("appearance.presets.legacy_zero_write",
+        rawget(legacyTest.profileState().settings, "appearancePresetID"), nil)
+end
+
+do
+    local inCombat = false
+    local gateEnv, _, gateTest = loadStatsPro("enUS", withProfileIdentity({
+        inCombatLockdown = function() return inCombat end,
+    }))
+    fireEvent("appearance.presets.gates.pew", gateEnv, "PLAYER_ENTERING_WORLD")
+    local service = gateTest.appearancePresets
+    local before = deepCopy(gateTest.profileState().root)
+    inCombat = true
+    local ok, reason = service.startPreview("midnight")
+    eq("appearance.presets.gates.combat_rejected", ok, false)
+    eq("appearance.presets.gates.combat_reason", reason, "combat")
+    assertDeepEqual("appearance.presets.gates.combat_zero_writes",
+        gateTest.profileState().root, before)
+    inCombat = false
+    ok = service.startPreview("midnight")
+    eq("appearance.presets.gates.preview_before_combat", ok, true)
+    inCombat = true
+    service.setRuntimeFailureCount(1)
+    fireEvent("appearance.presets.gates.combat_event", gateEnv, "PLAYER_REGEN_DISABLED")
+    eq("appearance.presets.gates.combat_auto_cancel", service.state().active, false)
+    assertDeepEqual("appearance.presets.gates.cancel_in_combat_zero_writes",
+        gateTest.profileState().root, before)
 end
 
 print(string.format("StatsPro smoke: PASS (%d assertions)", assertionCount))

@@ -298,6 +298,9 @@ local defaults = {
     panelBackgroundAlpha = 0,
     -- Text outline style: "none" | "outline" | "thick". Default preserves current OUTLINE text.
     textOutlineStyle = "outline",
+    -- Optional provenance only: old profiles intentionally resolve to Custom without
+    -- a schema migration or any write during load. Fresh/reset profiles start Classic.
+    appearancePresetID = "classic",
     -- WHY LocaleAwareDefaultFont: Blizzard's locale-aware default-font global resolves
     -- to the right TTF for the current WoW client locale (CJK-supporting on zhCN/zhTW/
     -- koKR; Latin/Cyrillic-supporting elsewhere). Hardcoding FRIZQT would render
@@ -477,6 +480,106 @@ local OFFENSIVE_STATS = {
     { statKey = "haste",   label = "Haste",   api = GetHaste,         ratingCR = CR_HASTE_MELEE, colorKey = "haste",   showKey = "showHaste"   },
     { statKey = "mastery", label = "Mastery", api = GetMasteryEffect, ratingCR = CR_MASTERY,     colorKey = "mastery", showKey = "showMastery" },
     -- versatility handled specially (dual-source: rating + flat); gated by showVersatility
+}
+
+-- Appearance presets deliberately exclude font, layout, visibility, routing, scale,
+-- locale, refresh rate, positions, and assignments. Every color palette is complete so
+-- applying a preset never inherits a partially customized table by accident.
+addon.appearancePresets = {
+    order = { "classic", "clean-dark", "midnight", "monochrome", "high-contrast" },
+    allowlist = {
+        fontSize = true,
+        textAlpha = true,
+        panelBackgroundAlpha = true,
+        textOutlineStyle = true,
+        matchValueColorToStat = true,
+        useAutoColorDurability = true,
+        colors = true,
+    },
+    definitions = {
+        classic = {
+            label = "Classic", fontSize = 14, textAlpha = 100,
+            panelBackgroundAlpha = 0, textOutlineStyle = "outline",
+            matchValueColorToStat = false, useAutoColorDurability = true,
+            colors = {
+                crit={r=1,g=0,b=0}, haste={r=0,g=.5,b=1}, mastery={r=0,g=1,b=0},
+                versatility={r=1,g=1,b=0}, rating={r=.7,g=.7,b=.7},
+                percentage={r=1,g=1,b=1}, leech={r=.8,g=.2,b=.8},
+                avoidance={r=.2,g=.8,b=.8}, speed={r=1,g=.65,b=0},
+                mainStat={r=1,g=.84,b=0}, stamina={r=.5,g=1,b=.5},
+                itemLevel={r=.55,g=.85,b=1}, dodge={r=.4,g=.7,b=1},
+                parry={r=1,g=.4,b=.2}, block={r=.7,g=.5,b=.3},
+                armor={r=.6,g=.6,b=.7}, stagger={r=.3,g=.8,b=.5},
+                durability={r=1,g=1,b=1},
+            },
+        },
+        ["clean-dark"] = {
+            label = "Clean Dark", fontSize = 14, textAlpha = 100,
+            panelBackgroundAlpha = 55, textOutlineStyle = "outline",
+            matchValueColorToStat = false, useAutoColorDurability = true,
+            colors = {
+                crit={r=.95,g=.36,b=.36}, haste={r=.38,g=.70,b=1},
+                mastery={r=.35,g=.90,b=.62}, versatility={r=.92,g=.78,b=.35},
+                rating={r=.68,g=.72,b=.70}, percentage={r=.96,g=.98,b=.97},
+                leech={r=.78,g=.48,b=.88}, avoidance={r=.35,g=.78,b=.80},
+                speed={r=.96,g=.68,b=.32}, mainStat={r=.95,g=.82,b=.42},
+                stamina={r=.55,g=.85,b=.62}, itemLevel={r=.50,g=.78,b=.95},
+                dodge={r=.42,g=.68,b=.90}, parry={r=.90,g=.48,b=.35},
+                block={r=.72,g=.58,b=.42}, armor={r=.67,g=.69,b=.75},
+                stagger={r=.40,g=.78,b=.58}, durability={r=.92,g=.94,b=.93},
+            },
+        },
+        midnight = {
+            label = "Midnight", fontSize = 14, textAlpha = 100,
+            panelBackgroundAlpha = 35, textOutlineStyle = "outline",
+            matchValueColorToStat = false, useAutoColorDurability = true,
+            colors = {
+                crit={r=.95,g=.38,b=.48}, haste={r=.18,g=.72,b=.92},
+                mastery={r=.10,g=.82,b=.48}, versatility={r=.62,g=.55,b=.95},
+                rating={r=.48,g=.63,b=.72}, percentage={r=.90,g=.96,b=1},
+                leech={r=.70,g=.40,b=.90}, avoidance={r=.20,g=.75,b=.78},
+                speed={r=.30,g=.82,b=.68}, mainStat={r=.20,g=.78,b=.92},
+                stamina={r=.35,g=.90,b=.66}, itemLevel={r=.35,g=.68,b=1},
+                dodge={r=.28,g=.68,b=.95}, parry={r=.88,g=.42,b=.60},
+                block={r=.55,g=.55,b=.80}, armor={r=.50,g=.62,b=.72},
+                stagger={r=.15,g=.82,b=.55}, durability={r=.82,g=.90,b=.95},
+            },
+        },
+        monochrome = {
+            label = "Monochrome", fontSize = 14, textAlpha = 95,
+            panelBackgroundAlpha = 30, textOutlineStyle = "none",
+            matchValueColorToStat = false, useAutoColorDurability = false,
+            colors = {
+                crit={r=.82,g=.82,b=.82}, haste={r=.76,g=.76,b=.76},
+                mastery={r=.88,g=.88,b=.88}, versatility={r=.72,g=.72,b=.72},
+                rating={r=.62,g=.62,b=.62}, percentage={r=.96,g=.96,b=.96},
+                leech={r=.78,g=.78,b=.78}, avoidance={r=.74,g=.74,b=.74},
+                speed={r=.84,g=.84,b=.84}, mainStat={r=.92,g=.92,b=.92},
+                stamina={r=.80,g=.80,b=.80}, itemLevel={r=.86,g=.86,b=.86},
+                dodge={r=.76,g=.76,b=.76}, parry={r=.82,g=.82,b=.82},
+                block={r=.68,g=.68,b=.68}, armor={r=.64,g=.64,b=.64},
+                stagger={r=.72,g=.72,b=.72}, durability={r=.90,g=.90,b=.90},
+            },
+        },
+        ["high-contrast"] = {
+            label = "High Contrast", fontSize = 16, textAlpha = 100,
+            panelBackgroundAlpha = 75, textOutlineStyle = "thick",
+            matchValueColorToStat = true, useAutoColorDurability = true,
+            colors = {
+                crit={r=1,g=.18,b=.18}, haste={r=.12,g=.72,b=1},
+                mastery={r=.12,g=1,b=.30}, versatility={r=1,g=.88,b=.10},
+                rating={r=.72,g=.78,b=.84}, percentage={r=1,g=1,b=1},
+                leech={r=1,g=.28,b=1}, avoidance={r=.10,g=1,b=1},
+                speed={r=1,g=.62,b=.05}, mainStat={r=1,g=.86,b=.10},
+                stamina={r=.35,g=1,b=.35}, itemLevel={r=.25,g=.80,b=1},
+                dodge={r=.20,g=.65,b=1}, parry={r=1,g=.30,b=.12},
+                block={r=1,g=.62,b=.18}, armor={r=.72,g=.75,b=.90},
+                stagger={r=.18,g=1,b=.45}, durability={r=1,g=1,b=1},
+            },
+        },
+    },
+    session = nil,
+    ui = nil,
 }
 
 -- Primary stat label + unitStatId mapping. Used by BuildCharacterLines via the
@@ -974,6 +1077,12 @@ local LABELS_BY_LOCALE = {
         ["Value Display"] = "Value Display",
         ["Frame & Position"] = "Frame & Position",
         ["Typography"] = "Typography",
+        ["Appearance Presets"] = "Appearance Presets", ["Preset:"] = "Preset:",
+        ["Classic"] = "Classic", ["Clean Dark"] = "Clean Dark", ["Midnight"] = "Midnight",
+        ["Monochrome"] = "Monochrome", ["High Contrast"] = "High Contrast", ["Custom"] = "Custom",
+        ["Previewing: %s"] = "Previewing: %s", ["Apply"] = "Apply", ["Cancel preview"] = "Cancel preview",
+        ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate.",
+        ["This profile is shared by %d specs and %d other references. Applying changes all of them."] = "This profile is shared by %d specs and %d other references. Applying changes all of them.",
         ["Readability"] = "Readability",
         ["Localization"] = "Localization",
         ["Offensive Stats"] = "Offensive Stats",
@@ -1108,6 +1217,12 @@ local LABELS_BY_LOCALE = {
         ["Value Display"] = "Отображение значений",
         ["Frame & Position"] = "Окно и позиция",
         ["Typography"] = "Типографика",
+        ["Appearance Presets"] = "Пресеты оформления", ["Preset:"] = "Пресет:",
+        ["Classic"] = "Классика", ["Clean Dark"] = "Чистый тёмный", ["Midnight"] = "Полночь",
+        ["Monochrome"] = "Монохром", ["High Contrast"] = "Высокий контраст", ["Custom"] = "Свой",
+        ["Previewing: %s"] = "Предпросмотр: %s", ["Apply"] = "Применить", ["Cancel preview"] = "Отменить просмотр",
+        ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "Пресеты меняют размер, прозрачность, обводку, фон, цвета HUD и поведение цветов. Гарнитура, макет, видимые статы, масштаб, язык и частота сохраняются.",
+        ["This profile is shared by %d specs and %d other references. Applying changes all of them."] = "Профиль используют %d специализаций и ещё %d привязок. Изменения затронут их все.",
         ["Readability"] = "Читаемость",
         ["Localization"] = "Локализация",
         ["Offensive Stats"] = "Атакующие характеристики",
@@ -1241,6 +1356,12 @@ local LABELS_BY_LOCALE = {
         ["Value Display"] = "Werteanzeige",
         ["Frame & Position"] = "Fenster & Position",
         ["Typography"] = "Typografie",
+        ["Appearance Presets"] = "Darstellungsvorlagen", ["Preset:"] = "Vorlage:",
+        ["Classic"] = "Klassisch", ["Clean Dark"] = "Klar Dunkel", ["Midnight"] = "Mitternacht",
+        ["Monochrome"] = "Monochrom", ["High Contrast"] = "Hoher Kontrast", ["Custom"] = "Benutzerdefiniert",
+        ["Previewing: %s"] = "Vorschau: %s", ["Apply"] = "Anwenden", ["Cancel preview"] = "Vorschau abbrechen",
+        ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "Vorlagen ändern Schriftgröße, Deckkraft, Kontur, Panelhintergrund, HUD-Farben und Farbverhalten. Schriftart, Layout, sichtbare Werte, Skalierung, Sprache und Aktualisierungsrate bleiben erhalten.",
+        ["This profile is shared by %d specs and %d other references. Applying changes all of them."] = "Dieses Profil wird von %d Spezialisierungen und %d weiteren Verweisen geteilt. Anwenden ändert alle.",
         ["Readability"] = "Lesbarkeit",
         ["Localization"] = "Lokalisierung",
         ["Offensive Stats"] = "Offensivwerte",
@@ -1365,6 +1486,12 @@ local LABELS_BY_LOCALE = {
         ["Value Display"] = "Affichage des valeurs",
         ["Frame & Position"] = "Cadre & Position",
         ["Typography"] = "Typographie",
+        ["Appearance Presets"] = "Préréglages d'apparence", ["Preset:"] = "Préréglage :",
+        ["Classic"] = "Classique", ["Clean Dark"] = "Sombre épuré", ["Midnight"] = "Minuit",
+        ["Monochrome"] = "Monochrome", ["High Contrast"] = "Contraste élevé", ["Custom"] = "Personnalisé",
+        ["Previewing: %s"] = "Aperçu : %s", ["Apply"] = "Appliquer", ["Cancel preview"] = "Annuler l'aperçu",
+        ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "Les préréglages changent taille, opacité, contour, fond, couleurs du HUD et comportement des couleurs. Police, disposition, statistiques visibles, échelle, langue et fréquence restent inchangées.",
+        ["This profile is shared by %d specs and %d other references. Applying changes all of them."] = "Ce profil est partagé par %d spécialisations et %d autres références. L'application les modifie toutes.",
         ["Readability"] = "Lisibilité",
         ["Localization"] = "Localisation",
         ["Offensive Stats"] = "Stats Offensives",
@@ -1490,6 +1617,12 @@ local LABELS_BY_LOCALE = {
         ["Value Display"] = "Valores",
         ["Frame & Position"] = "Marco y Posición",
         ["Typography"] = "Tipografía",
+        ["Appearance Presets"] = "Preajustes de apariencia", ["Preset:"] = "Preajuste:",
+        ["Classic"] = "Clásico", ["Clean Dark"] = "Oscuro limpio", ["Midnight"] = "Medianoche",
+        ["Monochrome"] = "Monocromo", ["High Contrast"] = "Alto contraste", ["Custom"] = "Personalizado",
+        ["Previewing: %s"] = "Vista previa: %s", ["Apply"] = "Aplicar", ["Cancel preview"] = "Cancelar vista previa",
+        ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "Los preajustes cambian tamaño, opacidad, contorno, fondo, colores del HUD y comportamiento del color. Conservan tipografía, diseño, estadísticas visibles, escala, idioma y frecuencia.",
+        ["This profile is shared by %d specs and %d other references. Applying changes all of them."] = "Este perfil se comparte entre %d especializaciones y %d referencias más. Aplicar las cambia todas.",
         ["Readability"] = "Legibilidad",
         ["Localization"] = "Localización",
         ["Offensive Stats"] = "Stats Ofensivas",
@@ -1614,6 +1747,12 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "Marco y Posición",
         ["Typography"] = "Tipografía",
         ["Readability"] = "Legibilidad",
+        ["Appearance Presets"] = "Preajustes de apariencia", ["Preset:"] = "Preajuste:",
+        ["Classic"] = "Clásico", ["Clean Dark"] = "Oscuro limpio", ["Midnight"] = "Medianoche",
+        ["Monochrome"] = "Monocromo", ["High Contrast"] = "Alto contraste", ["Custom"] = "Personalizado",
+        ["Previewing: %s"] = "Vista previa: %s", ["Apply"] = "Aplicar", ["Cancel preview"] = "Cancelar vista previa",
+        ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "Los preajustes cambian tamaño, opacidad, contorno, fondo, colores del HUD y comportamiento del color. Conservan tipografía, diseño, estadísticas visibles, escala, idioma y frecuencia.",
+        ["This profile is shared by %d specs and %d other references. Applying changes all of them."] = "Este perfil se comparte entre %d especializaciones y %d referencias más. Aplicar las cambia todas.",
         ["Localization"] = "Localización",
         ["Offensive Stats"] = "Stats Ofensivas",
         ["Tertiary Stats"] = "Stats Terciarias",
@@ -1738,6 +1877,12 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "Cornice e Posizione",
         ["Typography"] = "Tipografia",
         ["Readability"] = "Leggibilità",
+        ["Appearance Presets"] = "Preimpostazioni aspetto", ["Preset:"] = "Preimpostazione:",
+        ["Classic"] = "Classico", ["Clean Dark"] = "Scuro pulito", ["Midnight"] = "Mezzanotte",
+        ["Monochrome"] = "Monocromatico", ["High Contrast"] = "Alto contrasto", ["Custom"] = "Personalizzato",
+        ["Previewing: %s"] = "Anteprima: %s", ["Apply"] = "Applica", ["Cancel preview"] = "Annulla anteprima",
+        ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "Le preimpostazioni cambiano dimensione, opacità, contorno, sfondo, colori HUD e comportamento colore. Mantengono carattere, layout, statistiche visibili, scala, lingua e frequenza.",
+        ["This profile is shared by %d specs and %d other references. Applying changes all of them."] = "Questo profilo è condiviso da %d specializzazioni e %d altri riferimenti. L'applicazione li modifica tutti.",
         ["Localization"] = "Localizzazione",
         ["Offensive Stats"] = "Stat Offensive",
         ["Tertiary Stats"] = "Stat Terziarie",
@@ -1861,6 +2006,12 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "Janela e Posição",
         ["Typography"] = "Tipografia",
         ["Readability"] = "Legibilidade",
+        ["Appearance Presets"] = "Predefinições de aparência", ["Preset:"] = "Predefinição:",
+        ["Classic"] = "Clássico", ["Clean Dark"] = "Escuro limpo", ["Midnight"] = "Meia-noite",
+        ["Monochrome"] = "Monocromático", ["High Contrast"] = "Alto contraste", ["Custom"] = "Personalizado",
+        ["Previewing: %s"] = "Prévia: %s", ["Apply"] = "Aplicar", ["Cancel preview"] = "Cancelar prévia",
+        ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "As predefinições alteram tamanho, opacidade, contorno, fundo, cores do HUD e comportamento das cores. Mantêm fonte, layout, atributos visíveis, escala, idioma e atualização.",
+        ["This profile is shared by %d specs and %d other references. Applying changes all of them."] = "Este perfil é compartilhado por %d especializações e %d outras referências. Aplicar altera todas.",
         ["Localization"] = "Localização",
         ["Offensive Stats"] = "Atributos Ofensivos",
         ["Tertiary Stats"] = "Atributos Terciários",
@@ -1991,6 +2142,12 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "창 및 위치",
         ["Typography"] = "글꼴",
         ["Readability"] = "가독성",
+        ["Appearance Presets"] = "외형 프리셋", ["Preset:"] = "프리셋:",
+        ["Classic"] = "클래식", ["Clean Dark"] = "깔끔한 어둠", ["Midnight"] = "한밤",
+        ["Monochrome"] = "단색", ["High Contrast"] = "고대비", ["Custom"] = "사용자 지정",
+        ["Previewing: %s"] = "미리 보기: %s", ["Apply"] = "적용", ["Cancel preview"] = "미리 보기 취소",
+        ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "프리셋은 글꼴 크기, 투명도, 외곽선, 배경, HUD 색상과 색상 동작을 변경합니다. 글꼴 종류, 배치, 표시 능력치, 크기, 언어와 갱신 주기는 유지합니다.",
+        ["This profile is shared by %d specs and %d other references. Applying changes all of them."] = "이 프로필은 %d개 전문화와 기타 %d개 참조가 공유합니다. 적용하면 모두 변경됩니다.",
         ["Localization"] = "현지화",
         ["Offensive Stats"] = "공격 능력치",
         ["Tertiary Stats"] = "3차 능력치",
@@ -2114,6 +2271,12 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "窗口与位置",
         ["Typography"] = "字体",
         ["Readability"] = "可读性",
+        ["Appearance Presets"] = "外观预设", ["Preset:"] = "预设：",
+        ["Classic"] = "经典", ["Clean Dark"] = "简洁深色", ["Midnight"] = "午夜",
+        ["Monochrome"] = "单色", ["High Contrast"] = "高对比度", ["Custom"] = "自定义",
+        ["Previewing: %s"] = "正在预览：%s", ["Apply"] = "应用", ["Cancel preview"] = "取消预览",
+        ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "预设会更改字号、透明度、描边、面板背景、HUD颜色和颜色行为。字体、布局、可见属性、缩放、语言和刷新频率保持不变。",
+        ["This profile is shared by %d specs and %d other references. Applying changes all of them."] = "此配置由%d个专精和%d个其他引用共享。应用会更改全部引用。",
         ["Localization"] = "本地化",
         ["Offensive Stats"] = "进攻属性",
         ["Tertiary Stats"] = "三级属性",
@@ -2237,6 +2400,12 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "視窗與位置",
         ["Typography"] = "字型",
         ["Readability"] = "可讀性",
+        ["Appearance Presets"] = "外觀預設", ["Preset:"] = "預設：",
+        ["Classic"] = "經典", ["Clean Dark"] = "簡潔深色", ["Midnight"] = "午夜",
+        ["Monochrome"] = "單色", ["High Contrast"] = "高對比", ["Custom"] = "自訂",
+        ["Previewing: %s"] = "預覽中：%s", ["Apply"] = "套用", ["Cancel preview"] = "取消預覽",
+        ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "預設會變更字號、透明度、外框、面板背景、HUD顏色與顏色行為。字型、版面、顯示屬性、縮放、語言與更新頻率維持不變。",
+        ["This profile is shared by %d specs and %d other references. Applying changes all of them."] = "此設定檔由%d個專精與%d個其他參照共用。套用會變更全部參照。",
         ["Localization"] = "在地化",
         ["Offensive Stats"] = "進攻屬性",
         ["Tertiary Stats"] = "三級屬性",
@@ -2344,15 +2513,25 @@ local function GetDB(key)
     local db = addon.dbRuntime.GetSettingStore(key)
     local v = db[key]
     local secretOK, secret = pcall(issecretvalue, v)
-    if not secretOK or secret then return defaults[key] end
-    if v == nil then return defaults[key] end
+    if not secretOK or secret or v == nil then v = defaults[key] end
+    if addon.appearancePresets and addon.appearancePresets.ResolveValue then
+        return addon.appearancePresets.ResolveValue(key, v)
+    end
     return v
 end
 
 local function GetBoolDB(key)
     local db = addon.dbRuntime.GetSettingStore(key)
-    if addon.dbRuntime.IsCleanType(db[key], "boolean") then return db[key] end
-    return defaults[key] == true
+    local value
+    if addon.dbRuntime.IsCleanType(db[key], "boolean") then
+        value = db[key]
+    else
+        value = defaults[key] == true
+    end
+    if addon.appearancePresets and addon.appearancePresets.ResolveValue then
+        return addon.appearancePresets.ResolveValue(key, value) == true
+    end
+    return value
 end
 
 local function GetFontDB()
@@ -2436,6 +2615,9 @@ local function GetNumberDB(key)
     local secretOK, secret = pcall(issecretvalue, v)
     if not secretOK or secret then v = nil end
     if v == nil then v = defaults[key] end
+    if addon.appearancePresets and addon.appearancePresets.ResolveValue then
+        v = addon.appearancePresets.ResolveValue(key, v)
+    end
     return NormalizeNumberSetting(key, v)
 end
 
@@ -3010,7 +3192,9 @@ addon.profileOps = {
         appearance = {
             font = true, fontSize = true, textAlpha = true,
             panelBackgroundAlpha = true, textOutlineStyle = true,
-            fontBeforeAutoSwitch = true,
+            fontBeforeAutoSwitch = true, appearancePresetID = true,
+            matchValueColorToStat = true, useAutoColorDurability = true,
+            colors = true,
         },
     },
 }
@@ -3021,6 +3205,9 @@ function addon.profileUI.RefreshSafe()
     local design = addon.settingsDesign
     if design and type(design.RefreshMutationControls) == "function" then
         pcall(design.RefreshMutationControls)
+    end
+    if addon.appearancePresets and type(addon.appearancePresets.RefreshUI) == "function" then
+        pcall(addon.appearancePresets.RefreshUI)
     end
 end
 
@@ -4300,6 +4487,10 @@ function addon.profileOps.CheckExpected(root, expected)
         and expected.activeProfileID ~= addon.dbRuntime.activeProfileID then return false end
     if expected.profileID and expected.profileRef
         and not rawequal(root.profiles[expected.profileID], expected.profileRef) then return false end
+    if expected.profileID and expected.settingsRef
+        and (not root.profiles[expected.profileID]
+            or not rawequal(root.profiles[expected.profileID].settings,
+                expected.settingsRef)) then return false end
     if expected.guid and expected.assignmentID
         and addon.profileOps.ResolveAssignment(root, expected.guid, expected.specID)
             ~= expected.assignmentID then
@@ -4718,6 +4909,9 @@ function addon.profileOps.CopySettings(sourceProfileID, targetProfileID, scope, 
                         if not valueCopied then return nil, "clone-failed" end
                         settings[key] = copiedValue
                     end
+                end
+                if scope == "stats" then
+                    settings.appearancePresetID = "custom"
                 end
             end
         end
@@ -5186,6 +5380,7 @@ local function CacheSettings()
     -- fallbacks throughout the render pipeline.
     local db = addon.dbRuntime.GetActiveSettings()
     local userColors = type(db.colors) == "table" and db.colors or {}
+    userColors = addon.appearancePresets.ResolveValue("colors", userColors)
     for name, defaultColor in pairs(defaults.colors) do
         local r, g, b = NormalizeColor(userColors[name], defaultColor)
         cached.colorStrings[name] = RGBToHex(r, g, b)
@@ -5508,6 +5703,7 @@ function addon.legacyImport.BuildPublicCandidate(source)
     end
     if not found then return nil, false end
     if not MigrateDB(candidate) then return nil, false end
+    candidate.appearancePresetID = "custom"
     return candidate, true
 end
 
@@ -5558,6 +5754,7 @@ function addon.legacyImport.BuildLocalCandidate(source)
     end
     if not found then return nil, "empty" end
     if not MigrateDB(candidate) then return nil, "invalid" end
+    candidate.appearancePresetID = "custom"
     return candidate, "ready"
 end
 
@@ -6659,6 +6856,10 @@ end
 addon.readabilityConfig.getTextOutlineStyle = addon.readabilityConfig.getTextOutlineStyleDB
 
 addon.readabilityConfig.selectTextOutlineStyle = function(value, opt, dropdown)
+    if not addon.appearancePresets.BeforeManualEdit("textOutlineStyle") then
+        CloseDropDownMenus()
+        return false
+    end
     local previous = addon.readabilityConfig.getTextOutlineStyleDB()
     local db = addon.dbRuntime.GetWritableSettings(true)
     if not db then
@@ -6683,6 +6884,7 @@ addon.readabilityConfig.selectTextOutlineStyle = function(value, opt, dropdown)
         return false
     end
     UIDropDownMenu_SetText(dropdown, L(opt.label))
+    if selected ~= previous then addon.appearancePresets.MarkCustom(db) end
     CloseDropDownMenus()
     ReflowAllPanels()
     return true
@@ -7546,6 +7748,7 @@ local EVENT_HANDLERS = {
         addon.profileUI.RefreshSafe()
     end,
     PLAYER_REGEN_DISABLED       = function()
+        addon.appearancePresets.ForceCancelPreview()
         addon.panelEditRuntime.Refresh(true)
         addon.profileUI.RefreshSafe()
     end,
@@ -7703,6 +7906,7 @@ local CONFIG_DROPDOWN_Y_OFFSET = 2
 local function GetColor(statName)
     local db = addon.dbRuntime.GetActiveSettings()
     local colors = type(db.colors) == "table" and db.colors or {}
+    colors = addon.appearancePresets.ResolveValue("colors", colors)
     local r, g, b = NormalizeColor(colors[statName], defaults.colors[statName])
     return { r = r, g = g, b = b }
 end
@@ -7733,12 +7937,20 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
     cb:SetChecked(GetBoolDB(dbKey))
     addon.settingsDesign.StyleCheckbox(cb, text)
     cb:SetScript("OnClick", function(self)
+        if not addon.appearancePresets.BeforeManualEdit(dbKey) then
+            self:SetChecked(GetBoolDB(dbKey))
+            return
+        end
         local db = addon.dbRuntime.GetWritableSettings(true, dbKey)
         if not db then
             self:SetChecked(GetBoolDB(dbKey))
             return
         end
+        local previous = db[dbKey]
         db[dbKey] = self:GetChecked()
+        if previous ~= db[dbKey] and addon.appearancePresets.allowlist[dbKey] then
+            addon.appearancePresets.MarkCustom(db)
+        end
         CacheSettings()
         if onChange then onChange(self:GetChecked()) end
         addon:RunUpdateStatsSafe()
@@ -7807,6 +8019,7 @@ end
 function COLOR_PICKER_STATE.OnOkayPreClick()
     local session = COLOR_PICKER_STATE.active
     if session and session.acceptBoundary and COLOR_PICKER_STATE.OwnsFrame(session) then
+        if session.acceptFunc then session.acceptFunc() end
         session.accepted = true
     end
 end
@@ -7894,6 +8107,7 @@ end
 StatsProCloseColorPicker = COLOR_PICKER_STATE.Close
 
 local function OpenColorPicker(btn, statName)
+    if not addon.appearancePresets.BeforeManualEdit("colors") then return end
     local db = addon.dbRuntime.GetWritableSettings(true)
     if not db then return end
     COLOR_PICKER_STATE.EnsureFrameHook()
@@ -7920,6 +8134,7 @@ local function OpenColorPicker(btn, statName)
         accepted = false,
         acceptBoundary = COLOR_PICKER_STATE.hideHooked == true
             and COLOR_PICKER_STATE.acceptHooked == true,
+        changed = false,
     }
 
     local function OnColorSelect()
@@ -7932,6 +8147,7 @@ local function OpenColorPicker(btn, statName)
         end
         if type(writableDB.colors) ~= "table" then writableDB.colors = {} end
         local r, g, b = ColorPickerFrame:GetColorRGB()
+        session.changed = r ~= snapshot.r or g ~= snapshot.g or b ~= snapshot.b
         addon.settingsDesign.SetSwatchColor(btn, r, g, b)
         writableDB.colors[statName] = { r = r, g = g, b = b }
         CacheSettings()
@@ -7957,6 +8173,11 @@ local function OpenColorPicker(btn, statName)
     end
     session.swatchFunc = OnColorSelect
     session.cancelFunc = OnCancel
+    session.acceptFunc = function()
+        if not session.changed or session.generation ~= addon.dbRuntime.generation then return end
+        local writableDB = addon.dbRuntime.GetWritableSettings(false)
+        if writableDB then addon.appearancePresets.MarkCustom(writableDB) end
+    end
     ColorPickerFrame:SetupColorPickerAndShow({
         r = snapshot.r, g = snapshot.g, b = snapshot.b,
         opacity = 1, hasOpacity = false,
@@ -9094,6 +9315,15 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
     local reverting = false
     slider:SetScript("OnValueChanged", function(self, value)
         if reverting then return end
+        if not addon.appearancePresets.BeforeManualEdit(dbKey) then
+            local current = NUMBER_SETTING_META[dbKey]
+                and GetNumberDB(dbKey) or GetDB(dbKey)
+            reverting = true
+            self:SetValue(current)
+            reverting = false
+            _G[self:GetName() .. "Text"]:SetText(string.format(valueFmt, current))
+            return
+        end
         local previous = NUMBER_SETTING_META[dbKey] and GetNumberDB(dbKey) or GetDB(dbKey)
         local normalized = NUMBER_SETTING_META[dbKey] and NormalizeNumberSetting(dbKey, value) or value
         local db = addon.dbRuntime.GetWritableSettings(true, dbKey)
@@ -9113,6 +9343,8 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
             self:SetValue(previous)
             reverting = false
             _G[self:GetName() .. "Text"]:SetText(string.format(valueFmt, previous))
+        elseif normalized ~= previous and addon.appearancePresets.allowlist[dbKey] then
+            addon.appearancePresets.MarkCustom(db)
         end
     end)
 
@@ -9129,6 +9361,303 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
     return slider
 end
 
+function addon.appearancePresets.ValuesEqual(left, right, seen)
+    if type(left) ~= type(right) then return false end
+    if type(left) ~= "table" then return left == right end
+    seen = seen or {}
+    if seen[left] == right then return true end
+    seen[left] = right
+    for key, value in pairs(left) do
+        if not addon.appearancePresets.ValuesEqual(value, right[key], seen) then
+            return false
+        end
+    end
+    for key in pairs(right) do
+        if left[key] == nil then return false end
+    end
+    return true
+end
+
+function addon.appearancePresets.Clone(value)
+    local copied, ok = addon.dbRuntime.CloneSerializable(value)
+    if not ok then return nil end
+    return copied
+end
+
+function addon.appearancePresets.CapturePayload(settings)
+    local payload = {}
+    for key in pairs(addon.appearancePresets.allowlist) do
+        local value = settings and rawget(settings, key) or nil
+        if value == nil then value = defaults[key] end
+        payload[key] = addon.appearancePresets.Clone(value)
+        if payload[key] == nil and value ~= nil then return nil end
+    end
+    return payload
+end
+
+function addon.appearancePresets.ResolveValue(key, persisted)
+    local session = addon.appearancePresets.session
+    if session and addon.appearancePresets.allowlist[key]
+        and session.candidate and session.candidate[key] ~= nil then
+        return session.candidate[key]
+    end
+    return persisted
+end
+
+function addon.appearancePresets.CurrentID(settings)
+    settings = settings or addon.dbRuntime.GetActiveSettings()
+    local marker = settings and rawget(settings, "appearancePresetID") or nil
+    local definition = addon.appearancePresets.definitions[marker]
+    if not definition then return "custom" end
+    local payload = addon.appearancePresets.CapturePayload(settings)
+    local expected = addon.appearancePresets.Clone(definition)
+    if expected then expected.label = nil end
+    if payload and expected and addon.appearancePresets.ValuesEqual(payload, expected) then
+        return marker
+    end
+    return "custom"
+end
+
+function addon.appearancePresets.MarkCustom(settings)
+    settings = settings or addon.dbRuntime.GetWritableSettings(false)
+    if settings then
+        settings.appearancePresetID = "custom"
+        addon.appearancePresets.RefreshUI()
+    end
+end
+
+function addon.appearancePresets.ApplyRuntime()
+    if (addon.appearancePresets.testRuntimeFailureCount or 0) > 0 then
+        addon.appearancePresets.testRuntimeFailureCount =
+            addon.appearancePresets.testRuntimeFailureCount - 1
+        return false
+    end
+    CacheSettings()
+    local applied = ApplyTextStyleToAllPanels(
+        addon.fontRuntime.currentPath(), GetNumberDB("fontSize"), false)
+    if not applied then return false end
+    ApplyTextAlphaToAllPanels(cached.textAlpha)
+    addon.readabilityConfig.applyPanelBackgroundAlphaToAllPanels(
+        cached.panelBackgroundAlpha)
+    ReflowAllPanels()
+    for _, refresh in ipairs(configRefreshers) do
+        local ok = pcall(refresh)
+        if not ok then PrintMsg("Settings control refresh failed.") end
+    end
+    return addon:RunUpdateStatsSafe()
+end
+
+function addon.appearancePresets.RestoreCommittedRuntime()
+    local session = addon.appearancePresets.session
+    addon.appearancePresets.session = nil
+    if addon.appearancePresets.ApplyRuntime() then return true end
+    addon.appearancePresets.session = session
+    addon.appearancePresets.ApplyRuntime()
+    return false
+end
+
+function addon.appearancePresets.SessionIsCurrent(session, ignoreGeneration)
+    if not session then return false end
+    local root = addon.dbRuntime.Refresh()
+    if ignoreGeneration then
+        local expected = session.expected
+        if not rawequal(root, expected.rootRef)
+            or not rawequal(root.profiles, expected.profilesRef)
+            or not rawequal(root.roleTemplates, expected.roleTemplatesRef)
+            or not rawequal(root.profiles[session.profileID], expected.profileRef) then
+            return false
+        end
+    elseif not addon.profileOps.CheckExpected(root, session.expected) then
+        return false
+    end
+    local profile = root.profiles and root.profiles[session.profileID]
+    if not profile or not addon.dbRuntime.IsCleanTable(profile.settings)
+        or not rawequal(profile.settings, session.settingsRef) then return false end
+    local payload = addon.appearancePresets.CapturePayload(profile.settings)
+    return payload ~= nil
+        and rawget(profile.settings, "appearancePresetID") == session.baselineMarker
+        and addon.appearancePresets.ValuesEqual(payload, session.baseline)
+end
+
+function addon.appearancePresets.RefreshUI()
+    local ui = addon.appearancePresets.ui
+    if not ui then return end
+    local session = addon.appearancePresets.session
+    local currentID = addon.appearancePresets.CurrentID()
+    local displayID = session and session.presetID or currentID
+    local definition = addon.appearancePresets.definitions[displayID]
+    local displayLabel = definition and L(definition.label) or L("Custom")
+    if session then
+        ui.status:SetText(string.format(L("Previewing: %s"), displayLabel))
+    else
+        ui.status:SetText(L("Preset:") .. " " .. displayLabel)
+    end
+    for presetID, button in pairs(ui.buttons) do
+        addon.settingsDesign.SetListRowSelected(button, presetID == displayID)
+        button.statsProActive = session and presetID == displayID or false
+        addon.settingsDesign.RefreshControl(button)
+    end
+    if session then
+        ui.apply:Show()
+        ui.cancel:Show()
+        local root = addon.dbRuntime.Refresh()
+        local counts = addon.profileOps.CountReferences(root,
+            addon.dbRuntime.activeProfileID)
+        if counts.total > 1 then
+            ui.warning:SetText(string.format(L(
+                "This profile is shared by %d specs and %d other references. Applying changes all of them."),
+                counts.specs, counts.total - counts.specs))
+            addon.settingsDesign.SetWarningVisible(ui.warning, true)
+        else
+            ui.warning:SetText("")
+            addon.settingsDesign.SetWarningVisible(ui.warning, false)
+        end
+    else
+        ui.apply:Hide()
+        ui.cancel:Hide()
+        ui.warning:SetText("")
+        addon.settingsDesign.SetWarningVisible(ui.warning, false)
+    end
+end
+
+function addon.appearancePresets.CancelPreview(silent)
+    if not addon.appearancePresets.session then return false end
+    if not addon.appearancePresets.RestoreCommittedRuntime() then
+        addon.appearancePresets.RefreshUI()
+        return false, "restore-failed"
+    end
+    addon.appearancePresets.RefreshUI()
+    if not silent then addon.profileUI.RefreshSafe() end
+    return true
+end
+
+function addon.appearancePresets.StartPreview(presetID)
+    local definition = addon.appearancePresets.definitions[presetID]
+    if not definition then return false, "invalid-preset" end
+    local currentID = addon.appearancePresets.CurrentID()
+    if addon.appearancePresets.session and currentID == presetID then
+        local cancelled, reason = addon.appearancePresets.CancelPreview()
+        return cancelled, cancelled and "cancelled" or reason
+    end
+    if not addon.appearancePresets.session and currentID == presetID then
+        return false, "no-change"
+    end
+    if not addon.profileRuntime.CloseOwnedSettingsModals() then
+        return false, "close-failed"
+    end
+    local root, reason = addon.profileOps.Gate(nil, false)
+    if not root then return false, reason end
+    local profileID = addon.dbRuntime.activeProfileID
+    local profile = root.profiles and root.profiles[profileID]
+    if not profile or not addon.dbRuntime.IsCleanTable(profile.settings) then
+        return false, "missing-profile"
+    end
+    local candidate = addon.appearancePresets.Clone(definition)
+    local baseline = addon.appearancePresets.CapturePayload(profile.settings)
+    if not candidate or not baseline then return false, "clone-failed" end
+    candidate.label = nil
+    addon.appearancePresets.session = {
+        presetID = presetID,
+        candidate = candidate,
+        baseline = baseline,
+        expected = addon.profileUI.CaptureExpected(nil, nil, profileID),
+        profileID = profileID,
+        settingsRef = profile.settings,
+        baselineMarker = rawget(profile.settings, "appearancePresetID"),
+    }
+    addon.appearancePresets.session.expected.settingsRef = profile.settings
+    if not addon.appearancePresets.ApplyRuntime() then
+        local restored = addon.appearancePresets.RestoreCommittedRuntime()
+        addon.appearancePresets.RefreshUI()
+        return false, restored and "preview-failed" or "restore-failed"
+    end
+    addon.appearancePresets.RefreshUI()
+    addon.profileUI.RefreshSafe()
+    return true
+end
+
+function addon.appearancePresets.ApplyPreview()
+    local session = addon.appearancePresets.session
+    if not session then return false, "no-preview" end
+    if not addon.appearancePresets.SessionIsCurrent(session) then
+        local cancelled, reason = addon.appearancePresets.CancelPreview(true)
+        addon.appearancePresets.RefreshUI()
+        return false, cancelled and "stale" or reason
+    end
+    local presetID, profileID = session.presetID, session.profileID
+    local candidate = addon.appearancePresets.Clone(session.candidate)
+    local expected = session.expected
+    if not candidate then return false, "clone-failed" end
+    if not addon.appearancePresets.RestoreCommittedRuntime() then
+        addon.appearancePresets.RefreshUI()
+        return false, "restore-failed"
+    end
+    local ok, result = addon.profileOps.Execute(expected, function(root)
+        local profile = root.profiles[profileID]
+        if not profile or not addon.dbRuntime.IsCleanTable(profile.settings) then
+            return nil, "missing-profile"
+        end
+        local settings = addon.appearancePresets.Clone(profile.settings)
+        if not settings then return nil, "clone-failed" end
+        for key in pairs(addon.appearancePresets.allowlist) do
+            settings[key] = addon.appearancePresets.Clone(candidate[key])
+            if settings[key] == nil and candidate[key] ~= nil then
+                return nil, "clone-failed"
+            end
+        end
+        settings.appearancePresetID = presetID
+        local changedProfile = addon.profileRuntime.ShallowCopy(profile)
+        changedProfile.settings = settings
+        local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
+        profiles[profileID] = changedProfile
+        local transaction = addon.profileOps.NewTransaction(root)
+        transaction.profiles = profiles
+        return transaction, { reapply = true, activeProfileID = profileID }, profileID
+    end)
+    local retryable = result == "validate-failed" or result == "commit-failed"
+        or result == "apply-failed"
+    if not ok and retryable
+        and addon.appearancePresets.SessionIsCurrent(session, true) then
+        addon.appearancePresets.session = session
+        if not addon.appearancePresets.ApplyRuntime() then
+            addon.appearancePresets.ForceCancelPreview()
+            result = "preview-resume-failed"
+        end
+    end
+    addon.appearancePresets.RefreshUI()
+    return ok, result
+end
+
+function addon.appearancePresets.BeforeManualEdit(key)
+    if addon.appearancePresets.allowlist[key]
+        and addon.appearancePresets.session then
+        return addon.appearancePresets.CancelPreview(true) == true
+    end
+    return true
+end
+
+function addon.appearancePresets.ForceCancelPreview()
+    if not addon.appearancePresets.session then return true end
+    addon.appearancePresets.session = nil
+    if addon.appearancePresets.ApplyRuntime() then
+        addon.appearancePresets.RefreshUI()
+        return true
+    end
+    -- A close/combat transition cannot leave a hidden retry UI with candidate
+    -- overrides active. Retry committed runtime once, then hand recovery to the
+    -- existing profile reapply coordinator if the client boundary is still unsafe.
+    if addon.appearancePresets.ApplyRuntime() then
+        addon.appearancePresets.RefreshUI()
+        return true
+    end
+    addon.profileRuntime.forceReapply = true
+    addon.profileRuntime.forceReapplyRetryCount = 0
+    addon.profileRuntime.pendingResolution = true
+    addon.profileRuntime.RequestResolution(false)
+    addon.appearancePresets.RefreshUI()
+    return false
+end
+
 -- Footer Reset and /ss reset share the same confirmed, transactional active-profile
 -- operation. The implementation lives on addon.resetRuntime to avoid another broad
 -- closure in this near-limit Lua 5.1 chunk.
@@ -9137,6 +9666,11 @@ local function ResetToDefaults()
 end
 
 addon.profileRuntime.closeOwnedSettingsModals = function()
+    if addon.appearancePresets and addon.appearancePresets.session
+        and type(addon.appearancePresets.CancelPreview) == "function" then
+        local restored = addon.appearancePresets.CancelPreview(true)
+        if not restored then error("appearance preview restore failed") end
+    end
     if type(addon.profileUI.CloseOperationDialog) == "function" then
         addon.profileUI.CloseOperationDialog()
     end
@@ -10810,6 +11344,8 @@ function addon.profileUI.BuildSettingsUI(owner)
     ui.refreshAll = ui.RefreshAll
 
     function ui.OpenManager(selectActive)
+        if addon.appearancePresets.session
+            and not addon.appearancePresets.CancelPreview(true) then return end
         if selectActive then
             ui.selectedGUID = addon.profileRuntime.activeGUID
             ui.selectedSpecID = addon.profileRuntime.activeSpecID
@@ -10977,6 +11513,7 @@ function addon:OpenConfigMenu()
     -- to trigger DropDownList1:OnHide → CancelLanguagePreview).
     configFrame:HookScript("OnHide", function()
         self.panelEditRuntime.SetRequested(false)
+        self.appearancePresets.ForceCancelPreview()
         CloseDropDownMenus()  -- closes any active Blizzard dropdown; fires its OnHide → CancelLanguagePreview
         if StatsProCloseColorPicker then StatsProCloseColorPicker() end
         if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
@@ -11312,6 +11849,91 @@ function addon:OpenConfigMenu()
 
     --[[ ===== APPEARANCE TAB (Lua var: displayTab) ===== ]]
     cd = NewCursor(displayTab, 12, -8)
+
+    CursorSection(cd, "Appearance Presets")
+    do
+        local presetUI = { buttons = {} }
+        local status = displayTab:CreateFontString(nil, "OVERLAY")
+        self.settingsDesign.ApplyTextRole(status, "body")
+        status:SetPoint("TOPLEFT", cd.padX, cd.y)
+        status:SetSize(426, 20)
+        status:SetJustifyH("LEFT")
+        presetUI.status = status
+        cd.y = cd.y - 26
+
+        for index, presetID in ipairs(self.appearancePresets.order) do
+            local definition = self.appearancePresets.definitions[presetID]
+            local button = CreateFrame("Button", "StatsProAppearancePreset"
+                .. presetID:gsub("[^%w]", ""), displayTab)
+            local column = (index - 1) % 2
+            local row = math.floor((index - 1) / 2)
+            button:SetPoint("TOPLEFT", cd.padX + column * 217, cd.y - row * 40)
+            button:SetSize(209, 36)
+            local label = button:CreateFontString(nil, "OVERLAY")
+            self.settingsDesign.ApplyTextRole(label, "body")
+            label:SetPoint("LEFT", 10, 0)
+            label:SetPoint("RIGHT", -10, 0)
+            label:SetJustifyH("LEFT")
+            label:SetWordWrap(false)
+            label:SetMaxLines(1)
+            PushLocalizedLabel(function() label:SetText(L(definition.label)) end)
+            self.settingsDesign.StyleListRow(button, label)
+            self.settingsDesign.RegisterMutationControl(button)
+            button:SetScript("OnClick", function()
+                local ok, reason = self.appearancePresets.StartPreview(presetID)
+                if not ok then PrintMsg(self.profileUI.OperationErrorText(reason)) end
+            end)
+            presetUI.buttons[presetID] = button
+        end
+        cd.y = cd.y - 120
+
+        local note = displayTab:CreateFontString(nil, "OVERLAY")
+        self.settingsDesign.ApplyTextRole(note, "metadata")
+        note:SetPoint("TOPLEFT", cd.padX, cd.y)
+        note:SetSize(426, 52)
+        note:SetJustifyH("LEFT")
+        note:SetJustifyV("TOP")
+        note:SetWordWrap(true)
+        PushLocalizedLabel(function()
+            note:SetText(L("Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."))
+        end)
+        presetUI.note = note
+        cd.y = cd.y - 58
+
+        local warning = displayTab:CreateFontString(nil, "OVERLAY")
+        warning:SetPoint("TOPLEFT", cd.padX, cd.y)
+        warning:SetSize(426, 36)
+        warning:SetJustifyH("LEFT")
+        warning:SetJustifyV("TOP")
+        warning:SetWordWrap(true)
+        self.settingsDesign.StyleWarning(displayTab, warning, "warning")
+        self.settingsDesign.SetWarningVisible(warning, false)
+        presetUI.warning = warning
+        cd.y = cd.y - 42
+
+        local cancel = self.settingsDesign.CreateShellButton(displayTab, nil, "field")
+        cancel:SetPoint("TOPRIGHT", -140, cd.y)
+        cancel:SetSize(160, 28)
+        PushLocalizedLabel(function() cancel:SetText(L("Cancel preview")) end)
+        cancel:SetScript("OnClick", function() self.appearancePresets.CancelPreview() end)
+        presetUI.cancel = cancel
+
+        local apply = self.settingsDesign.CreateShellButton(displayTab, nil, "primary")
+        apply:SetPoint("TOPRIGHT", -12, cd.y)
+        apply:SetSize(120, 28)
+        PushLocalizedLabel(function() apply:SetText(L("Apply")) end)
+        self.settingsDesign.RegisterMutationControl(apply)
+        apply:SetScript("OnClick", function()
+            local ok, reason = self.appearancePresets.ApplyPreview()
+            if not ok then PrintMsg(self.profileUI.OperationErrorText(reason)) end
+        end)
+        presetUI.apply = apply
+        cd.y = cd.y - 36
+
+        self.appearancePresets.ui = presetUI
+        self.appearancePresets.RefreshUI()
+        PushRefresher(self.appearancePresets.RefreshUI)
+    end
 
     -- Typography section: text rendering (font face + size).
     CursorSection(cd, "Typography")
@@ -12704,6 +13326,28 @@ if addon and addon.__statsproSmoke == true then
                 updateCount = updateCount,
             }
         end,
+        appearancePresets = {
+            order = function() return CopyTable(addon.appearancePresets.order) end,
+            definitions = function() return CopyTable(addon.appearancePresets.definitions) end,
+            allowlist = function() return CopyTable(addon.appearancePresets.allowlist) end,
+            currentID = addon.appearancePresets.CurrentID,
+            startPreview = addon.appearancePresets.StartPreview,
+            cancelPreview = addon.appearancePresets.CancelPreview,
+            applyPreview = addon.appearancePresets.ApplyPreview,
+            markCustom = addon.appearancePresets.MarkCustom,
+            setRuntimeFailureCount = function(count)
+                addon.appearancePresets.testRuntimeFailureCount = count or 0
+            end,
+            state = function()
+                local session = addon.appearancePresets.session
+                return {
+                    active = session ~= nil,
+                    presetID = session and session.presetID or nil,
+                    candidate = session and CopyTable(session.candidate) or nil,
+                    baseline = session and CopyTable(session.baseline) or nil,
+                }
+            end,
+        },
         profileViewModel = addon.profileUI.BuildViewModel,
         profileOps = {
             validateName = addon.profileOps.ValidateName,
@@ -12844,6 +13488,17 @@ if addon and addon.__statsproSmoke == true then
         cachedUpdateInterval = function() return cached.updateInterval end,
         cachedTextAlpha = function() return cached.textAlpha end,
         cachedPanelBackgroundAlpha = function() return cached.panelBackgroundAlpha end,
+        cachedAppearanceState = function()
+            return {
+                fontSize = mainPanel.appliedSize,
+                textAlpha = cached.textAlpha,
+                panelBackgroundAlpha = cached.panelBackgroundAlpha,
+                textOutlineStyle = cached.textOutlineStyle,
+                matchValueColorToStat = cached.matchValueColorToStat,
+                useAutoColorDurability = cached.useAutoColorDurability,
+                colorStrings = CopyTable(cached.colorStrings),
+            }
+        end,
         cachedTargetSnapshot = function() return cached.targetSnapshot end,
         currentRelease = function() return CURRENT_RELEASE end,
         addonVersion = function() return ADDON_VERSION end,
@@ -13040,6 +13695,9 @@ if addon and addon.__statsproSmoke == true then
                 mainRenderedValueW = mainPanel.lastRenderedValueW,
                 mainRenderedRepairW = mainPanel.lastRenderedRepairW,
                 mainLabelText = mainPanel.labelText:GetText(),
+                mainLabelAlpha = mainPanel.labelText:GetAlpha(),
+                mainRatingAlpha = mainPanel.ratingText:GetAlpha(),
+                mainValueAlpha = mainPanel.valueText:GetAlpha(),
                 mainRatingText = mainPanel.ratingText:GetText(),
                 mainValueText = mainPanel.valueText:GetText(),
                 mainRatingPoints = mainPanel.ratingText.points,

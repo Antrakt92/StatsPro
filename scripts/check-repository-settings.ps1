@@ -1,5 +1,7 @@
 param(
     [string]$Repository = "Antrakt92/StatsPro",
+    [switch]$ImmutableReleasePolicyOnly,
+    [switch]$RequireExplicitToken,
     [switch]$SelfTest
 )
 
@@ -79,6 +81,67 @@ function Assert-ExactStringSet {
     if ($actualUnique.Count -ne $expectedUnique.Count -or (Compare-Object -ReferenceObject $expectedUnique -DifferenceObject $actualUnique)) {
         throw "$Description is '$($actualUnique -join ', ')'; expected '$($expectedUnique -join ', ')'."
     }
+}
+
+function Assert-ImmutableReleasePolicy {
+    param([object]$Policy)
+
+    if ($null -eq $Policy -or $Policy -is [System.Array]) {
+        throw "Immutable release policy response must be one JSON object."
+    }
+    $enabled = $Policy.PSObject.Properties["enabled"]
+    if (-not $enabled -or $enabled.Value -isnot [bool]) {
+        throw "Immutable release policy response must contain a boolean enabled field."
+    }
+    if (-not $enabled.Value) {
+        throw "Immutable releases are not enabled for this repository."
+    }
+    $enforcedByOwner = $Policy.PSObject.Properties["enforced_by_owner"]
+    if (-not $enforcedByOwner -or $enforcedByOwner.Value -isnot [bool]) {
+        throw "Immutable release policy response must contain a boolean enforced_by_owner field."
+    }
+}
+
+function Get-ImmutableReleasePolicy {
+    param(
+        [string]$Repository,
+        [scriptblock]$RunGh,
+        [switch]$RequireExplicitToken,
+        [AllowNull()][string]$Token = $env:GH_TOKEN
+    )
+
+    if ($RequireExplicitToken -and [string]::IsNullOrWhiteSpace($Token)) {
+        throw "Immutable release policy verification requires an explicit GH_TOKEN."
+    }
+    $arguments = @(
+        "api", "--method", "GET",
+        "-H", "Accept: application/vnd.github+json",
+        "-H", "X-GitHub-Api-Version: 2026-03-10",
+        "repos/$Repository/immutable-releases"
+    )
+    $result = if ($RunGh) {
+        & $RunGh $arguments
+    }
+    else {
+        Invoke-NativeCapture -FilePath "gh" -Arguments $arguments
+    }
+    if ($null -eq $result -or $result.ExitCode -ne 0) {
+        $exitCode = if ($null -eq $result) { "<no result>" } else { [string]$result.ExitCode }
+        throw "Could not verify immutable release policy; GitHub API request failed with code $exitCode."
+    }
+
+    $json = @($result.Output) -join "`n"
+    if ([string]::IsNullOrWhiteSpace($json)) {
+        throw "Immutable release policy response was empty."
+    }
+    try {
+        $policy = ConvertFrom-JsonCompat $json
+    }
+    catch {
+        throw "Immutable release policy response was not valid JSON."
+    }
+    Assert-ImmutableReleasePolicy -Policy $policy
+    return $policy
 }
 
 function Assert-ActionsWorkflowPermissions {
@@ -209,6 +272,128 @@ function Invoke-SelfTest {
     Assert-MinimalHistoryRuleset -Rulesets $rulesets -Name "Protect main history" -Target "branch" -IncludedRef "refs/heads/main"
     Assert-MinimalHistoryRuleset -Rulesets $rulesets -Name "Protect release tags" -Target "tag" -IncludedRef "refs/tags/v*"
 
+    Assert-ImmutableReleasePolicy -Policy ([pscustomobject]@{
+        enabled = $true
+        enforced_by_owner = $false
+    })
+    Assert-ImmutableReleasePolicy -Policy ([pscustomobject]@{
+        enabled = $true
+        enforced_by_owner = $true
+    })
+    Assert-ThrowsMatch "disabled immutable releases rejected" {
+        Assert-ImmutableReleasePolicy -Policy ([pscustomobject]@{
+            enabled = $false
+            enforced_by_owner = $false
+        })
+    } "not enabled"
+    Assert-ThrowsMatch "missing immutable enabled field rejected" {
+        Assert-ImmutableReleasePolicy -Policy ([pscustomobject]@{ enforced_by_owner = $false })
+    } "boolean enabled"
+    Assert-ThrowsMatch "null immutable enabled field rejected" {
+        Assert-ImmutableReleasePolicy -Policy ([pscustomobject]@{
+            enabled = $null
+            enforced_by_owner = $false
+        })
+    } "boolean enabled"
+    Assert-ThrowsMatch "numeric immutable enabled field rejected" {
+        Assert-ImmutableReleasePolicy -Policy ([pscustomobject]@{
+            enabled = 1
+            enforced_by_owner = $false
+        })
+    } "boolean enabled"
+    Assert-ThrowsMatch "string immutable enabled field rejected" {
+        Assert-ImmutableReleasePolicy -Policy ([pscustomobject]@{
+            enabled = "true"
+            enforced_by_owner = $false
+        })
+    } "boolean enabled"
+    Assert-ThrowsMatch "missing immutable owner enforcement rejected" {
+        Assert-ImmutableReleasePolicy -Policy ([pscustomobject]@{ enabled = $true })
+    } "boolean enforced_by_owner"
+    Assert-ThrowsMatch "malformed immutable owner enforcement rejected" {
+        Assert-ImmutableReleasePolicy -Policy ([pscustomobject]@{
+            enabled = $true
+            enforced_by_owner = "false"
+        })
+    } "boolean enforced_by_owner"
+    Assert-ThrowsMatch "array immutable policy rejected" {
+        Assert-ImmutableReleasePolicy -Policy @([pscustomobject]@{ enabled = $true })
+    } "one JSON object"
+
+    $immutableCalls = [System.Collections.Generic.List[string]]::new()
+    $immutablePolicy = Get-ImmutableReleasePolicy -Repository "owner/repo" -RunGh {
+        param([string[]]$Arguments)
+        $immutableCalls.Add(($Arguments -join " ")) | Out-Null
+        return @{
+            ExitCode = 0
+            Output = @('{"enabled":true,"enforced_by_owner":false}')
+        }
+    }
+    if (-not $immutablePolicy.enabled -or
+        $immutableCalls.Count -ne 1 -or
+        $immutableCalls[0] -notmatch '^api --method GET ' -or
+        $immutableCalls[0] -notmatch '-H Accept: application/vnd\.github\+json ' -or
+        $immutableCalls[0] -notmatch '-H X-GitHub-Api-Version: 2026-03-10 ' -or
+        $immutableCalls[0] -match '(?i)\b(?:POST|PUT|PATCH|DELETE)\b' -or
+        $immutableCalls[0] -notmatch 'repos/owner/repo/immutable-releases$') {
+        throw "Immutable release policy request must use the exact read-only repository endpoint."
+    }
+    foreach ($status in @(401, 403, 404, 429, 500, 503)) {
+        Assert-ThrowsMatch "HTTP $status immutable policy rejected" {
+            [void](Get-ImmutableReleasePolicy -Repository "owner/repo" -RunGh {
+                param([string[]]$Arguments)
+                return @{ ExitCode = 1; Output = @("HTTP $status") }
+            })
+        } "request failed"
+    }
+    Assert-ThrowsMatch "malformed immutable JSON rejected" {
+        [void](Get-ImmutableReleasePolicy -Repository "owner/repo" -RunGh {
+            param([string[]]$Arguments)
+            return @{ ExitCode = 0; Output = @("not-json") }
+        })
+    } "not valid JSON"
+    Assert-ThrowsMatch "empty immutable response rejected" {
+        [void](Get-ImmutableReleasePolicy -Repository "owner/repo" -RunGh {
+            param([string[]]$Arguments)
+            return @{ ExitCode = 0; Output = @() }
+        })
+    } "was empty"
+    $explicitTokenRunnerCalls = [System.Collections.Generic.List[string]]::new()
+    Assert-ThrowsMatch "missing explicit immutable policy token rejected" {
+        [void](Get-ImmutableReleasePolicy `
+            -Repository "owner/repo" `
+            -RequireExplicitToken `
+            -Token "  " `
+            -RunGh {
+                param([string[]]$Arguments)
+                $explicitTokenRunnerCalls.Add(($Arguments -join " ")) | Out-Null
+                return @{ ExitCode = 0; Output = @('{"enabled":true,"enforced_by_owner":false}') }
+            })
+    } "requires an explicit GH_TOKEN"
+    if ($explicitTokenRunnerCalls.Count -ne 0) {
+        throw "Missing explicit immutable policy token must fail before invoking gh."
+    }
+    $sentinelToken = "STATSPRO_IMMUTABLE_POLICY_SENTINEL"
+    try {
+        [void](Get-ImmutableReleasePolicy `
+            -Repository "owner/repo" `
+            -RequireExplicitToken `
+            -Token $sentinelToken `
+            -RunGh {
+                param([string[]]$Arguments)
+                return @{ ExitCode = 1; Output = @("authentication failed") }
+            })
+        throw "Immutable policy failure redaction self-test should have failed."
+    }
+    catch {
+        if ($_.Exception.Message.Contains($sentinelToken)) {
+            throw "Immutable policy failure exposed the token value."
+        }
+        if ($_.Exception.Message -notmatch "request failed") {
+            throw
+        }
+    }
+
     Assert-ThrowsMatch "write-default Actions permissions rejected" {
         Assert-ActionsWorkflowPermissions -Settings ([pscustomobject]@{
             default_workflow_permissions = "write"
@@ -275,6 +460,14 @@ $headers = @(
     "-H", "Accept: application/vnd.github+json",
     "-H", "X-GitHub-Api-Version: 2026-03-10"
 )
+[void](Get-ImmutableReleasePolicy `
+    -Repository $Repository `
+    -RequireExplicitToken:$RequireExplicitToken `
+    -Token $env:GH_TOKEN)
+if ($ImmutableReleasePolicyOnly) {
+    Write-Host "StatsPro immutable release policy check passed."
+    return
+}
 $actionsSettings = Invoke-GhJson -Arguments (@("api") + $headers + @("repos/$Repository/actions/permissions/workflow"))
 $rulesetSummaries = @(Invoke-GhJson -Arguments (@("api", "--paginate", "--slurp") + $headers + @("repos/$Repository/rulesets?per_page=100&includes_parents=false")))
 $rulesets = @($rulesetSummaries | ForEach-Object {

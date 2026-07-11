@@ -1240,15 +1240,15 @@ function Invoke-SelfTest {
         Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '\./scripts/check-marketplace-versions\.ps1', './scripts/check-marketplace-versions.ps1 -SelfTest')
     } "exact fail-closed checker"
     Assert-ThrowsMatch "fallible marketplace credential step rejected" {
-        $mutated = $workflowText.Replace(
-            '        shell: pwsh' + "`n" + '        env:' + "`n" + '          CF_API_KEY: ${{ secrets.CF_API_KEY }}',
-            '        continue-on-error: true' + "`n" + '        shell: pwsh' + "`n" + '        env:' + "`n" + '          CF_API_KEY: ${{ secrets.CF_API_KEY }}')
+        $mutated = $workflowText -replace `
+            '(?m)^(\s{6}- name: Verify marketplace release credentials and versions)\s*$', `
+            "`$1`n        continue-on-error: true"
         Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
     } "mandatory pwsh step"
     foreach ($marketplaceSecretName in @('CF_API_KEY', 'WAGO_API_TOKEN', 'WOWI_API_TOKEN')) {
         Assert-ThrowsMatch "missing $marketplaceSecretName preflight binding rejected" {
-            $canonicalLine = "          ${marketplaceSecretName}: `${{ secrets.${marketplaceSecretName} }}`n"
-            $mutatedBlock = $marketplaceCredentialBlock.Value.Replace($canonicalLine, '')
+            $canonicalLinePattern = "(?m)^\s{10}${marketplaceSecretName}:\s*\`$\{\{\s*secrets\.${marketplaceSecretName}\s*\}\}\s*\r?\n"
+            $mutatedBlock = [regex]::Replace($marketplaceCredentialBlock.Value, $canonicalLinePattern, '')
             $mutated = $workflowText.Remove(
                 $marketplaceCredentialBlock.Index,
                 $marketplaceCredentialBlock.Length).Insert(
@@ -1359,8 +1359,8 @@ function Invoke-SelfTest {
     $postPublishMarker = "      - name: Validate marketplace archive and create release metadata"
     foreach ($marketplaceSecretName in @('CF_API_KEY', 'WAGO_API_TOKEN', 'WOWI_API_TOKEN')) {
         Assert-ThrowsMatch "missing $marketplaceSecretName publishing binding rejected" {
-            $canonicalLine = "          ${marketplaceSecretName}: `${{ secrets.${marketplaceSecretName} }}`n"
-            $mutatedPublishBlock = $publishBlock.Value.Replace($canonicalLine, '')
+            $canonicalLinePattern = "(?m)^\s{10}${marketplaceSecretName}:\s*\`$\{\{\s*secrets\.${marketplaceSecretName}\s*\}\}\s*\r?\n"
+            $mutatedPublishBlock = [regex]::Replace($publishBlock.Value, $canonicalLinePattern, '')
             $mutated = $workflowText.Remove($publishBlock.Index, $publishBlock.Length).Insert(
                 $publishBlock.Index,
                 $mutatedPublishBlock)

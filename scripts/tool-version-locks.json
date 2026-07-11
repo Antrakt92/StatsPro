@@ -1,8 +1,14 @@
 {
   "chocolatey": {
-    "lua51": "5.1.5",
     "lua-language-server": "3.18.1",
     "luarocks": "2.4.4"
+  },
+  "portable": {
+    "lua51": {
+      "version": "5.1.5",
+      "url": "https://downloads.sourceforge.net/project/luabinaries/5.1.5/Tools%20Executables/lua-5.1.5_Win64_bin.zip",
+      "sha256": "5f34cf7d40a20a587ea351482a4207d93b92ef6f1983e910a13338253819fe93"
+    }
   },
   "luarocks": {
     "luacheck": "1.2.0-1",

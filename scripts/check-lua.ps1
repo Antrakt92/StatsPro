@@ -488,6 +488,7 @@ if ($SelfTest) {
 Set-Location $RepoRoot
 
 $LuacCandidates = @(
+    if ($env:STATSPRO_PINNED_LUA_ROOT) { Join-Path $env:STATSPRO_PINNED_LUA_ROOT "luac5.1.exe" }
     (Get-Command luac5.1 -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
     (Get-Command luac -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
     "C:\ProgramData\chocolatey\lib\lua51\tools\luac5.1.exe"
@@ -495,10 +496,11 @@ $LuacCandidates = @(
 
 $Luac = $LuacCandidates | Select-Object -First 1
 if (-not $Luac) {
-    throw "Missing luac 5.1. Install with: choco install lua51 -y"
+    throw "Missing luac 5.1. Install the pinned toolchain with: .\scripts\install-check-tools.ps1 -Install"
 }
 
 $LuaCandidates = @(
+    if ($env:STATSPRO_PINNED_LUA_ROOT) { Join-Path $env:STATSPRO_PINNED_LUA_ROOT "lua5.1.exe" }
     (Get-Command lua5.1 -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
     (Get-Command lua -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
     "C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe"
@@ -506,7 +508,7 @@ $LuaCandidates = @(
 
 $Lua = $LuaCandidates | Select-Object -First 1
 if (-not $Lua) {
-    throw "Missing lua 5.1 runtime. Install with: choco install lua51 -y"
+    throw "Missing lua 5.1 runtime. Install the pinned toolchain with: .\scripts\install-check-tools.ps1 -Install"
 }
 $LuaVersionResult = Invoke-NativeCapture -FilePath $Lua -Arguments @("-v") -TimeoutSeconds 10 -Description "lua -v"
 $LuaVersion = $LuaVersionResult.Output -join "`n"

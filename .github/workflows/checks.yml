@@ -31,6 +31,7 @@ jobs:
         shell: pwsh
         run: |
           .\scripts\install-check-tools.ps1 -SelfTest
+          .\scripts\install-check-tools.ps1 -PinnedLuaIntegrationTest
           .\scripts\report-ci-action-refs.ps1 -SelfTest
           .\scripts\check-metadata.ps1 -SelfTest
           .\scripts\check-marketplace-versions.ps1 -SelfTest

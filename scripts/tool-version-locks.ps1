@@ -34,6 +34,23 @@ function Get-StatsProLockedChocolateyVersion {
     return Get-StatsProLockProperty -Object $Locks.chocolatey -Name $PackageName -Context "chocolatey"
 }
 
+function Get-StatsProLockedPortableTool {
+    param($Locks, [string]$ToolName)
+    if ($null -eq $Locks -or $null -eq $Locks.portable) {
+        throw "Missing tool lock section: portable"
+    }
+    $property = $Locks.portable.PSObject.Properties[$ToolName]
+    if (-not $property -or $null -eq $property.Value) {
+        throw "Missing tool lock for portable.$ToolName"
+    }
+    $entry = $property.Value
+    return [pscustomobject]@{
+        Version = Get-StatsProLockProperty -Object $entry -Name "version" -Context "portable.$ToolName"
+        Url = Get-StatsProLockProperty -Object $entry -Name "url" -Context "portable.$ToolName"
+        Sha256 = Get-StatsProLockProperty -Object $entry -Name "sha256" -Context "portable.$ToolName"
+    }
+}
+
 function Get-StatsProLockedLuarocksVersion {
     param($Locks, [string]$PackageName)
     return Get-StatsProLockProperty -Object $Locks.luarocks -Name $PackageName -Context "luarocks"
@@ -46,14 +63,45 @@ function Get-StatsProLockedCommandPattern {
 
 function Get-StatsProChocoInstallArguments {
     param([string]$PackageName, [string]$Version)
-    $args = @("install", $PackageName, "--version", $Version, "-y", "--no-progress")
-    if ($PackageName -eq "lua51") {
-        # WHY: Chocolatey's legacy lua51 package downloads the old LuaBinaries
-        # payload without a package checksum. We still enforce the installed
-        # package and command versions immediately after install.
-        $args += "--allow-empty-checksums"
+    return @("install", $PackageName, "--version", $Version, "-y", "--no-progress")
+}
+
+function Assert-StatsProHttpsDownloadUri {
+    param([string]$Uri)
+    $parsed = $null
+    if (-not [System.Uri]::TryCreate($Uri, [System.UriKind]::Absolute, [ref]$parsed) -or
+        $parsed.Scheme -ne [System.Uri]::UriSchemeHttps) {
+        throw "Pinned tool download URI must use HTTPS: $Uri"
     }
-    return $args
+    return $parsed.AbsoluteUri
+}
+
+function Get-StatsProPinnedCurlArguments {
+    param([string]$Uri, [string]$OutputPath)
+    $safeUri = Assert-StatsProHttpsDownloadUri -Uri $Uri
+    return @(
+        "--fail", "--location", "--silent", "--show-error",
+        "--proto", "=https", "--proto-redir", "=https",
+        "--retry", "3", "--retry-delay", "2", "--retry-all-errors",
+        "--connect-timeout", "15", "--max-time", "120",
+        "--output", $OutputPath, $safeUri
+    )
+}
+
+function Assert-StatsProPinnedArchive {
+    param([string]$Path, [string]$ExpectedSha256)
+    if ($ExpectedSha256 -notmatch '^[0-9a-fA-F]{64}$') {
+        throw "Pinned SHA-256 must contain exactly 64 hexadecimal characters."
+    }
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Pinned tool archive not found: $Path"
+    }
+    $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    $expected = $ExpectedSha256.ToLowerInvariant()
+    if (-not [System.StringComparer]::Ordinal.Equals($actual, $expected)) {
+        throw "Pinned tool archive checksum mismatch."
+    }
+    return (Resolve-Path -LiteralPath $Path).Path
 }
 
 function Get-StatsProLuarocksInstallArguments {

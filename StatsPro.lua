@@ -13,7 +13,7 @@ addon.durabilityRuntime = {
 --[[ ============================================================
     1. CONSTANTS
 ============================================================ ]]
-local CURRENT_DB_VERSION = 9
+local CURRENT_DB_VERSION = 10
 
 local DURABILITY_SLOT_MIN = 1
 local DURABILITY_SLOT_MAX = 19
@@ -1776,20 +1776,22 @@ local LABELS_BY_LOCALE = {
 
 -- WARNING: must precede ResolveActiveLocale — forward-ref to GetDB resolves as _G.GetDB at parse time.
 local function GetDB(key)
-    local db = EnsureStatsProDBTable()
+    local db = addon.dbRuntime.GetSettingStore(key)
     local v = db[key]
+    local secretOK, secret = pcall(issecretvalue, v)
+    if not secretOK or secret then return defaults[key] end
     if v == nil then return defaults[key] end
     return v
 end
 
 local function GetBoolDB(key)
-    local db = EnsureStatsProDBTable()
-    if type(db[key]) == "boolean" then return db[key] end
+    local db = addon.dbRuntime.GetSettingStore(key)
+    if addon.dbRuntime.IsCleanType(db[key], "boolean") then return db[key] end
     return defaults[key] == true
 end
 
 local function GetFontDB()
-    local db = EnsureStatsProDBTable()
+    local db = addon.dbRuntime.GetActiveSettings()
     local usable = addon.fontRuntime.usablePath and addon.fontRuntime.usablePath(db.font)
     if usable then return usable end
     if addon.fontRuntime.safeDefaultPath then return addon.fontRuntime.safeDefaultPath() end
@@ -1797,7 +1799,7 @@ local function GetFontDB()
 end
 
 local function GetSavedAutoFontDB()
-    local db = EnsureStatsProDBTable()
+    local db = addon.dbRuntime.GetActiveSettings()
     if not addon.fontRuntime.usablePath then return nil end
     return addon.fontRuntime.usablePath(db.fontBeforeAutoSwitch)
 end
@@ -1864,8 +1866,10 @@ local function NormalizeNumberSetting(key, value)
 end
 
 local function GetNumberDB(key)
-    local db = EnsureStatsProDBTable()
+    local db = addon.dbRuntime.GetSettingStore(key)
     local v = db[key]
+    local secretOK, secret = pcall(issecretvalue, v)
+    if not secretOK or secret then v = nil end
     if v == nil then v = defaults[key] end
     return NormalizeNumberSetting(key, v)
 end
@@ -2325,31 +2329,532 @@ local function PrintMsg(text)
     print("|cff00ff7f[StatsPro]|r " .. text)
 end
 
--- One dynamic write boundary for the live SavedVariables root. A downgraded addon
--- may read a newer schema through defaults/runtime normalization, but must never write
--- any field back: even a harmless-looking position or modal-cancel write can destroy
--- data the older code does not understand. Re-evaluate on every attempted mutation so
--- a modal opened under the current schema cannot write after the root becomes future.
-addon.dbRuntime = { readOnly = false, version = 0, versionDisplay = "0", warned = false }
+-- One dynamic boundary owns every SavedVariables read/write. Schema v10 leaves the
+-- old flat fields untouched at the root as a one-generation downgrade shadow, while
+-- current code reads profile settings and the two account-wide settings only through
+-- these accessors. Re-evaluate every attempted mutation so root/version/profile changes
+-- invalidate stale modal callbacks before they can write into a different payload.
+addon.dbRuntime = {
+    readOnly = false,
+    mode = "legacy",
+    version = 0,
+    versionDisplay = "0",
+    warned = false,
+    rootRef = nil,
+    activeAccount = nil,
+    activeSettings = nil,
+    activeProfileID = nil,
+    registryReady = false,
+    generation = 0,
+    validationCount = 0,
+    migrationFailedRoot = nil,
+    validatedRootRef = nil,
+    validatedAccountRef = nil,
+    validatedProfilesRef = nil,
+    validatedRoleTemplatesRef = nil,
+    validatedCharactersRef = nil,
+    validatedDefaultProfileID = nil,
+    validatedDefaultProfileRef = nil,
+    validatedActiveProfileRef = nil,
+    readFallback = {},
+    maxProfileNumber = 99999999999999,
+    accountSettingKeys = { forceLocale = true, updateInterval = true },
+    registryRootKeys = {
+        dbVersion = true,
+        account = true,
+        profiles = true,
+        roleTemplates = true,
+        characters = true,
+    },
+    legacySettingKeys = {
+        useLocalizedLabels = true,
+        showStrength = true,
+        showAgility = true,
+        showIntellect = true,
+        fontBeforeAutoSwitch = true,
+    },
+}
 
-function addon.dbRuntime.Refresh()
-    local db = EnsureStatsProDBTable()
-    local version, versionReadable = NormalizeDBVersion(db.dbVersion)
-    addon.dbRuntime.version = version
-    addon.dbRuntime.versionDisplay = versionReadable and string.format("%d", version) or "<unavailable>"
-    addon.dbRuntime.readOnly = version > CURRENT_DB_VERSION
-    if not addon.dbRuntime.readOnly then addon.dbRuntime.warned = false end
-    return db
+function addon.dbRuntime.IsCleanType(value, expectedType)
+    local secretOK, secret = pcall(issecretvalue, value)
+    return secretOK and not secret and type(value) == expectedType
 end
 
-function addon.dbRuntime.GetWritableSettings(showGuidance)
-    local db = addon.dbRuntime.Refresh()
-    if not addon.dbRuntime.readOnly then return db end
+function addon.dbRuntime.IsCleanTable(value)
+    if not addon.dbRuntime.IsCleanType(value, "table") then return false end
+    if type(_G.issecrettable) == "function" then
+        local ok, secret = pcall(_G.issecrettable, value)
+        if not ok or secret then return false end
+    end
+    return pcall(next, value, nil)
+end
+
+-- Serializable clone with ancestry-only cycle detection. Repeated source tables are
+-- copied independently, so profile payloads cannot retain aliases from hand-edited or
+-- legacy SavedVariables. Cycles/secret/unsupported values fail before inspection.
+function addon.dbRuntime.CloneSerializable(value, ancestors)
+    local secretOK, secret = pcall(issecretvalue, value)
+    if not secretOK or secret then return nil, false end
+    local valueType = type(value)
+    if valueType == "nil" or valueType == "boolean"
+        or valueType == "number" or valueType == "string" then
+        return value, true
+    end
+    if valueType ~= "table" or not addon.dbRuntime.IsCleanTable(value) then return nil, false end
+    ancestors = ancestors or {}
+    if ancestors[value] then return nil, false end
+    ancestors[value] = true
+    local copy = {}
+    local key = nil
+    while true do
+        local nextOK, nextKey, nextValue = pcall(next, value, key)
+        if not nextOK then
+            ancestors[value] = nil
+            return nil, false
+        end
+        if type(nextKey) == "nil" then break end
+        local keyType = type(nextKey)
+        local cleanKey = addon.dbRuntime.IsCleanType(nextKey, keyType)
+        if not cleanKey or (keyType ~= "string" and keyType ~= "number") then
+            ancestors[value] = nil
+            return nil, false
+        end
+        local clonedValue, cloned = addon.dbRuntime.CloneSerializable(nextValue, ancestors)
+        if not cloned then
+            ancestors[value] = nil
+            return nil, false
+        end
+        copy[nextKey] = clonedValue
+        key = nextKey
+    end
+    ancestors[value] = nil
+    return copy, true
+end
+
+-- Validate a serializable table graph and optionally reject all repeated table
+-- references. A separate forbidden set protects the flat downgrade shadow from
+-- becoming writable through any registry/profile path.
+function addon.dbRuntime.CollectTableReferences(value, seen, ancestors, rejectAliases, forbidden)
+    local secretOK, secret = pcall(issecretvalue, value)
+    if not secretOK or secret then return false end
+    local valueType = type(value)
+    if valueType == "nil" or valueType == "boolean"
+        or valueType == "number" or valueType == "string" then
+        return true
+    end
+    if valueType ~= "table" or not addon.dbRuntime.IsCleanTable(value) then return false end
+    ancestors = ancestors or {}
+    if ancestors[value] or (forbidden and forbidden[value]) then return false end
+    if seen[value] then return not rejectAliases end
+    seen[value] = true
+    ancestors[value] = true
+    local key = nil
+    while true do
+        local nextOK, nextKey, nextValue = pcall(next, value, key)
+        if not nextOK then
+            ancestors[value] = nil
+            return false
+        end
+        if type(nextKey) == "nil" then break end
+        local keyType = type(nextKey)
+        if (keyType ~= "string" and keyType ~= "number")
+            or not addon.dbRuntime.IsCleanType(nextKey, keyType)
+            or not addon.dbRuntime.CollectTableReferences(
+                nextValue, seen, ancestors, rejectAliases, forbidden) then
+            ancestors[value] = nil
+            return false
+        end
+        key = nextKey
+    end
+    ancestors[value] = nil
+    return true
+end
+
+-- Rollback-shadow data is never read or written by current code, so unsupported or
+-- secret legacy extras may remain there. Collect only table identities that can be
+-- observed safely; this is enough to forbid registry aliases without interpreting
+-- opaque shadow content.
+function addon.dbRuntime.CollectShadowTableReferences(value, references, visited)
+    if type(value) ~= "table" then return end
+    references[value] = true
+    visited = visited or {}
+    if visited[value] then return end
+    visited[value] = true
+    local secretOK, secret = pcall(issecretvalue, value)
+    if not secretOK or secret then return end
+    if type(_G.issecrettable) == "function" then
+        local tableOK, secretTable = pcall(_G.issecrettable, value)
+        if not tableOK or secretTable then return end
+    end
+    local key = nil
+    while true do
+        local nextOK, nextKey, nextValue = pcall(next, value, key)
+        if not nextOK or type(nextKey) == "nil" then return end
+        addon.dbRuntime.CollectShadowTableReferences(nextValue, references, visited)
+        key = nextKey
+    end
+end
+
+function addon.dbRuntime.IsMigrationSettingKey(key)
+    return type(key) == "string"
+        and (type(defaults[key]) ~= "nil" or addon.dbRuntime.legacySettingKeys[key] == true)
+end
+
+-- Clone flat fields independently. A malformed known setting blocks migration,
+-- while an unknown non-serializable field remains only in the untouched rollback
+-- shadow. Clean unknown fields are preserved in the new profile.
+function addon.dbRuntime.CloneMigrationWork(source, dbVersion)
+    if not addon.dbRuntime.IsCleanTable(source) then return nil end
+    local copy = {}
+    local key = nil
+    while true do
+        local nextOK, nextKey, nextValue = pcall(next, source, key)
+        if not nextOK then return nil end
+        if type(nextKey) == "nil" then break end
+        local keyType = type(nextKey)
+        if (keyType ~= "string" and keyType ~= "number")
+            or not addon.dbRuntime.IsCleanType(nextKey, keyType) then
+            return nil
+        end
+        if keyType == "string" and not addon.dbRuntime.registryRootKeys[nextKey] then
+            local clonedValue, cloned = addon.dbRuntime.CloneSerializable(nextValue)
+            if cloned then
+                copy[nextKey] = clonedValue
+            elseif addon.dbRuntime.IsMigrationSettingKey(nextKey) then
+                return nil
+            end
+        end
+        key = nextKey
+    end
+    copy.dbVersion = dbVersion
+    return copy
+end
+
+function addon.dbRuntime.ValidateRegistry(root)
+    addon.dbRuntime.validationCount = addon.dbRuntime.validationCount + 1
+    if not addon.dbRuntime.IsCleanTable(root) then return false end
+    local account = rawget(root, "account")
+    local profiles = rawget(root, "profiles")
+    local roleTemplates = rawget(root, "roleTemplates")
+    local characters = rawget(root, "characters")
+    if not addon.dbRuntime.IsCleanTable(account)
+        or not addon.dbRuntime.IsCleanTable(profiles)
+        or not addon.dbRuntime.IsCleanTable(roleTemplates)
+        or not addon.dbRuntime.IsCleanTable(characters) then
+        return false
+    end
+
+    local shadowReferences, shadowVisited = {}, {}
+    local rootKey = nil
+    while true do
+        local nextOK, nextKey, nextValue = pcall(next, root, rootKey)
+        if not nextOK then return false end
+        if type(nextKey) == "nil" then break end
+        if not addon.dbRuntime.IsCleanType(nextKey, "string")
+            or not addon.dbRuntime.registryRootKeys[nextKey] then
+            addon.dbRuntime.CollectShadowTableReferences(
+                nextValue, shadowReferences, shadowVisited)
+        end
+        rootKey = nextKey
+    end
+    local registryReferences = {}
+    for _, value in ipairs({ account, profiles, roleTemplates, characters }) do
+        if not addon.dbRuntime.CollectTableReferences(
+            value, registryReferences, nil, true, shadowReferences) then
+            return false
+        end
+    end
+
+    local profileID = account.defaultProfileID
+    if not addon.dbRuntime.IsCleanType(profileID, "string") or profileID == "" then
+        return false
+    end
+    if not addon.dbRuntime.IsCleanType(account.forceLocale, "string")
+        or addon.NormalizeForceLocale(account.forceLocale) ~= account.forceLocale
+        or not addon.dbRuntime.IsCleanType(account.updateInterval, "number")
+        or not IsFiniteNumber(account.updateInterval)
+        or account.updateInterval < NUMBER_SETTING_META.updateInterval.min
+        or account.updateInterval > NUMBER_SETTING_META.updateInterval.max then
+        return false
+    end
+    local nextProfileID = account.nextProfileID
+    if not addon.dbRuntime.IsCleanType(nextProfileID, "number")
+        or not IsFiniteNumber(nextProfileID) or nextProfileID < 2
+        or nextProfileID > addon.dbRuntime.maxProfileNumber
+        or nextProfileID ~= math.floor(nextProfileID) then
+        return false
+    end
+
+    local highestProfileNumber = 0
+    local profileCount = 0
+    for candidateID, profile in pairs(profiles) do
+        if not addon.dbRuntime.IsCleanType(candidateID, "string") then return false end
+        local suffix = candidateID:match("^p([1-9]%d*)$")
+        local numericID = suffix and tonumber(suffix) or nil
+        if not numericID or numericID > addon.dbRuntime.maxProfileNumber
+            or not addon.dbRuntime.IsCleanTable(profile)
+            or not addon.dbRuntime.IsCleanType(profile.name, "string") or profile.name == ""
+            or not addon.dbRuntime.IsCleanTable(profile.settings)
+            or rawget(profile.settings, "forceLocale") ~= nil
+            or rawget(profile.settings, "updateInterval") ~= nil then
+            return false
+        end
+        profileCount = profileCount + 1
+        if numericID > highestProfileNumber then highestProfileNumber = numericID end
+    end
+    if profileCount == 0 or nextProfileID <= highestProfileNumber
+        or rawget(profiles, "p" .. tostring(nextProfileID)) ~= nil then
+        return false
+    end
+    local profile = profiles[profileID]
+    if not addon.dbRuntime.IsCleanTable(profile) then return false end
+
+    for _, role in ipairs({ "TANK", "HEALER", "DAMAGER" }) do
+        local roleProfileID = roleTemplates[role]
+        local roleProfile = addon.dbRuntime.IsCleanType(roleProfileID, "string")
+            and profiles[roleProfileID] or nil
+        if not addon.dbRuntime.IsCleanType(roleProfileID, "string")
+            or not addon.dbRuntime.IsCleanTable(roleProfile) then
+            return false
+        end
+    end
+
+    for guid, character in pairs(characters) do
+        if not addon.dbRuntime.IsCleanType(guid, "string") or guid == ""
+            or not addon.dbRuntime.IsCleanTable(character) then
+            return false
+        end
+        if type(character.displayName) ~= "nil"
+            and (not addon.dbRuntime.IsCleanType(character.displayName, "string")
+                or character.displayName == "") then
+            return false
+        end
+        if type(character.classID) ~= "nil"
+            and (not addon.dbRuntime.IsCleanType(character.classID, "number")
+                or not IsFiniteNumber(character.classID) or character.classID <= 0
+                or character.classID ~= math.floor(character.classID)) then
+            return false
+        end
+        if type(character.lastSeen) ~= "nil"
+            and (not addon.dbRuntime.IsCleanType(character.lastSeen, "number")
+                or not IsFiniteNumber(character.lastSeen)) then
+            return false
+        end
+        if type(character.defaultProfileID) ~= "nil"
+            and (not addon.dbRuntime.IsCleanType(character.defaultProfileID, "string")
+                or not addon.dbRuntime.IsCleanTable(profiles[character.defaultProfileID])) then
+            return false
+        end
+        if type(character.specProfiles) ~= "nil" then
+            if not addon.dbRuntime.IsCleanTable(character.specProfiles) then return false end
+            for specID, assignedProfileID in pairs(character.specProfiles) do
+                if not addon.dbRuntime.IsCleanType(specID, "number")
+                    or not IsFiniteNumber(specID) or specID <= 0
+                    or specID ~= math.floor(specID)
+                    or not addon.dbRuntime.IsCleanType(assignedProfileID, "string")
+                    or not addon.dbRuntime.IsCleanTable(profiles[assignedProfileID]) then
+                    return false
+                end
+            end
+        end
+    end
+    return true, account, profileID, profile.settings
+end
+
+function addon.dbRuntime.Invalidate()
+    addon.dbRuntime.rootRef = nil
+    addon.dbRuntime.validatedRootRef = nil
+end
+
+function addon.dbRuntime.CacheValidatedRegistry(root, account, defaultProfileID)
+    addon.dbRuntime.validatedRootRef = root
+    addon.dbRuntime.validatedAccountRef = account
+    addon.dbRuntime.validatedProfilesRef = rawget(root, "profiles")
+    addon.dbRuntime.validatedRoleTemplatesRef = rawget(root, "roleTemplates")
+    addon.dbRuntime.validatedCharactersRef = rawget(root, "characters")
+    addon.dbRuntime.validatedDefaultProfileID = defaultProfileID
+    addon.dbRuntime.validatedDefaultProfileRef = addon.dbRuntime.validatedProfilesRef[defaultProfileID]
+end
+
+-- Frequent UI mutations only need to prove that the already-validated registry
+-- boundaries and active payload identities did not move. Structural profile/character
+-- operations must call Invalidate(), which forces the full graph validator once.
+function addon.dbRuntime.CanReuseRegistryValidation(root, activeProfileID, activeSettings)
+    if not rawequal(root, addon.dbRuntime.validatedRootRef) then return false end
+    local account = rawget(root, "account")
+    local profiles = rawget(root, "profiles")
+    if not rawequal(account, addon.dbRuntime.validatedAccountRef)
+        or not rawequal(profiles, addon.dbRuntime.validatedProfilesRef)
+        or not rawequal(rawget(root, "roleTemplates"), addon.dbRuntime.validatedRoleTemplatesRef)
+        or not rawequal(rawget(root, "characters"), addon.dbRuntime.validatedCharactersRef) then
+        return false
+    end
+    local idOK, defaultUnchanged = pcall(function()
+        return account.defaultProfileID == addon.dbRuntime.validatedDefaultProfileID
+    end)
+    if not idOK or not defaultUnchanged
+        or not rawequal(profiles[addon.dbRuntime.validatedDefaultProfileID],
+            addon.dbRuntime.validatedDefaultProfileRef) then
+        return false
+    end
+    local activeProfile = activeProfileID and profiles[activeProfileID] or nil
+    return type(activeProfile) == "table"
+        and rawequal(activeProfile, addon.dbRuntime.validatedActiveProfileRef)
+        and rawequal(activeProfile.settings, activeSettings)
+end
+
+function addon.dbRuntime.Refresh()
+    local root = EnsureStatsProDBTable()
+    local previousRoot = addon.dbRuntime.rootRef
+    local previousSettings = addon.dbRuntime.activeSettings
+    local previousProfileID = addon.dbRuntime.activeProfileID
+    local version, versionReadable = NormalizeDBVersion(root.dbVersion)
+    local valid, account, defaultProfileID
+
+    addon.dbRuntime.version = version
+    addon.dbRuntime.versionDisplay = versionReadable and string.format("%d", version) or "<unavailable>"
+    addon.dbRuntime.mode = version > CURRENT_DB_VERSION and "future" or "legacy"
+    addon.dbRuntime.readOnly = version > CURRENT_DB_VERSION
+    addon.dbRuntime.registryReady = false
+    addon.dbRuntime.activeAccount = root
+    addon.dbRuntime.activeSettings = root
+    addon.dbRuntime.activeProfileID = nil
+
+    if rawequal(addon.dbRuntime.migrationFailedRoot, root) then
+        addon.dbRuntime.mode = "corrupt"
+        addon.dbRuntime.readOnly = true
+    elseif version == CURRENT_DB_VERSION then
+        if addon.dbRuntime.CanReuseRegistryValidation(root, previousProfileID, previousSettings) then
+            valid = true
+            account = addon.dbRuntime.validatedAccountRef
+            defaultProfileID = addon.dbRuntime.validatedDefaultProfileID
+        else
+            valid, account, defaultProfileID = addon.dbRuntime.ValidateRegistry(root)
+            if valid then
+                addon.dbRuntime.CacheValidatedRegistry(root, account, defaultProfileID)
+            else
+                addon.dbRuntime.migrationFailedRoot = root
+            end
+        end
+        if valid then
+            local requestedProfileID = previousProfileID
+            local requestedProfile = requestedProfileID and root.profiles[requestedProfileID] or nil
+            addon.dbRuntime.activeProfileID = type(requestedProfile) == "table"
+                and type(requestedProfile.settings) == "table" and requestedProfileID or defaultProfileID
+            local activeProfile = root.profiles[addon.dbRuntime.activeProfileID]
+            addon.dbRuntime.activeAccount = account
+            addon.dbRuntime.activeSettings = activeProfile.settings
+            addon.dbRuntime.validatedActiveProfileRef = activeProfile
+            addon.dbRuntime.registryReady = true
+            addon.dbRuntime.mode = "current"
+            addon.dbRuntime.readOnly = false
+        else
+            addon.dbRuntime.mode = "corrupt"
+            addon.dbRuntime.readOnly = true
+        end
+    end
+
+    addon.dbRuntime.rootRef = root
+    if not rawequal(previousRoot, root)
+        or not rawequal(previousSettings, addon.dbRuntime.activeSettings)
+        or previousProfileID ~= addon.dbRuntime.activeProfileID then
+        addon.dbRuntime.generation = addon.dbRuntime.generation + 1
+    end
+    if not addon.dbRuntime.readOnly then addon.dbRuntime.warned = false end
+    return root
+end
+
+function addon.dbRuntime.GetRoot()
+    local root = EnsureStatsProDBTable()
+    if not rawequal(root, addon.dbRuntime.rootRef) then addon.dbRuntime.Refresh() end
+    return root
+end
+
+function addon.dbRuntime.GetActiveSettings()
+    local root = EnsureStatsProDBTable()
+    if not rawequal(root, addon.dbRuntime.rootRef) then addon.dbRuntime.Refresh() end
+    if addon.dbRuntime.readOnly then return addon.dbRuntime.readFallback end
+    return addon.dbRuntime.activeSettings or root
+end
+
+function addon.dbRuntime.GetAccount()
+    local root = EnsureStatsProDBTable()
+    if not rawequal(root, addon.dbRuntime.rootRef) then addon.dbRuntime.Refresh() end
+    if addon.dbRuntime.readOnly then return addon.dbRuntime.readFallback end
+    return addon.dbRuntime.activeAccount or root
+end
+
+function addon.dbRuntime.GetSettingStore(key)
+    if addon.dbRuntime.accountSettingKeys[key] then return addon.dbRuntime.GetAccount() end
+    return addon.dbRuntime.GetActiveSettings()
+end
+
+function addon.dbRuntime.ShowReadOnlyGuidance(showGuidance)
     if showGuidance == true and not addon.dbRuntime.warned then
         addon.dbRuntime.warned = true
         PrintMsg(L("Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."))
     end
+end
+
+function addon.dbRuntime.GetWritableRoot(showGuidance)
+    local root = addon.dbRuntime.Refresh()
+    if not addon.dbRuntime.readOnly then return root end
+    addon.dbRuntime.ShowReadOnlyGuidance(showGuidance)
     return nil
+end
+
+function addon.dbRuntime.GetWritableSettings(showGuidance, key)
+    addon.dbRuntime.Refresh()
+    if not addon.dbRuntime.readOnly then return addon.dbRuntime.GetSettingStore(key) end
+    addon.dbRuntime.ShowReadOnlyGuidance(showGuidance)
+    return nil
+end
+
+function addon.dbRuntime.GetWritableAccount(showGuidance)
+    addon.dbRuntime.Refresh()
+    if not addon.dbRuntime.readOnly then return addon.dbRuntime.GetAccount() end
+    addon.dbRuntime.ShowReadOnlyGuidance(showGuidance)
+    return nil
+end
+
+function addon.dbRuntime.ReplaceTableContents(target, source)
+    for key in pairs(target) do target[key] = nil end
+    for key, value in pairs(source) do target[key] = value end
+end
+
+function addon.dbRuntime.BuildRegistry(flat)
+    local settings = {}
+    for key, value in pairs(flat) do
+        if type(key) == "string"
+            and not addon.dbRuntime.registryRootKeys[key]
+            and not addon.dbRuntime.accountSettingKeys[key]
+            and not addon.dbRuntime.legacySettingKeys[key] then
+            local cloned, clonedOK = addon.dbRuntime.CloneSerializable(value)
+            if not clonedOK then return nil end
+            settings[key] = cloned
+        end
+    end
+    if type(flat.fontBeforeAutoSwitch) ~= "nil" then
+        local savedFont, savedOK = addon.dbRuntime.CloneSerializable(flat.fontBeforeAutoSwitch)
+        if not savedOK then return nil end
+        settings.fontBeforeAutoSwitch = savedFont
+    end
+    local registry = {
+        dbVersion = CURRENT_DB_VERSION,
+        account = {
+            forceLocale = addon.NormalizeForceLocale(flat.forceLocale),
+            updateInterval = NormalizeNumberSetting("updateInterval", flat.updateInterval),
+            defaultProfileID = "p1",
+            nextProfileID = 2,
+        },
+        profiles = {
+            p1 = { name = "Default", settings = settings },
+        },
+        roleTemplates = { TANK = "p1", HEALER = "p1", DAMAGER = "p1" },
+        characters = {},
+    }
+    if not addon.dbRuntime.ValidateRegistry(registry) then return nil end
+    return registry
 end
 
 --[[ ============================================================
@@ -2382,7 +2887,7 @@ local function CacheSettings()
     -- Color → hex string lookup. Iterate defaults.colors (single source of truth) to
     -- guarantee non-nil colorStrings for every key — eliminates the need for `or "ffffff"`
     -- fallbacks throughout the render pipeline.
-    local db = EnsureStatsProDBTable()
+    local db = addon.dbRuntime.GetActiveSettings()
     local userColors = type(db.colors) == "table" and db.colors or {}
     for name, defaultColor in pairs(defaults.colors) do
         local r, g, b = NormalizeColor(userColors[name], defaultColor)
@@ -2391,9 +2896,33 @@ local function CacheSettings()
 end
 
 local function MigrateDB(dbOverride)
-    local db = dbOverride or EnsureStatsProDBTable()
-    local dbVersion = NormalizeDBVersion(db.dbVersion)
-    if dbVersion > CURRENT_DB_VERSION then return end
+    local destination = dbOverride or EnsureStatsProDBTable()
+    local dbVersion = NormalizeDBVersion(destination.dbVersion)
+    if dbVersion > CURRENT_DB_VERSION then return false end
+    if dbVersion == CURRENT_DB_VERSION then
+        local valid = addon.dbRuntime.ValidateRegistry(destination)
+        if rawequal(destination, EnsureStatsProDBTable()) then
+            if valid then
+                addon.dbRuntime.migrationFailedRoot = nil
+            else
+                addon.dbRuntime.migrationFailedRoot = destination
+            end
+            addon.dbRuntime.Invalidate()
+        end
+        return valid == true
+    end
+
+    -- Build every legacy transformation and the complete registry off to the side.
+    -- The live flat root remains the exact downgrade shadow; only reserved registry
+    -- fields are attached after validation, with dbVersion committed last.
+    local db = addon.dbRuntime.CloneMigrationWork(destination, dbVersion)
+    if type(db) ~= "table" then
+        if rawequal(destination, EnsureStatsProDBTable()) then
+            addon.dbRuntime.migrationFailedRoot = destination
+            addon.dbRuntime.Invalidate()
+        end
+        return false
+    end
 
     local preDefaultShowDurability = db.showDurability
     local preDefaultShowRepairCost = db.showRepairCost
@@ -2418,8 +2947,6 @@ local function MigrateDB(dbOverride)
         and not FontPathKey(db.fontBeforeAutoSwitch) then
         db.fontBeforeAutoSwitch = nil
     end
-
-    if dbVersion == CURRENT_DB_VERSION then return end
 
     -- v2 → v3: default textAlign changed "LEFT" → "RIGHT". Upgrade only users still on
     -- the old default; preserve any explicit user choice (CENTER/RIGHT untouched).
@@ -2533,7 +3060,29 @@ local function MigrateDB(dbOverride)
         end
     end
 
-    db.dbVersion = CURRENT_DB_VERSION
+    -- The detached working copy now represents the effective v9 flat settings.
+    -- BuildRegistry deep-copies known profile fields again, preventing aliases with
+    -- both the live downgrade shadow and the migration work table.
+    db.dbVersion = 9
+    local registry = addon.dbRuntime.BuildRegistry(db)
+    if not registry then
+        if rawequal(destination, EnsureStatsProDBTable()) then
+            addon.dbRuntime.migrationFailedRoot = destination
+            addon.dbRuntime.Invalidate()
+        end
+        return false
+    end
+
+    destination.account = registry.account
+    destination.profiles = registry.profiles
+    destination.roleTemplates = registry.roleTemplates
+    destination.characters = registry.characters
+    destination.dbVersion = CURRENT_DB_VERSION
+    if rawequal(destination, EnsureStatsProDBTable()) then
+        addon.dbRuntime.migrationFailedRoot = nil
+        addon.dbRuntime.Invalidate()
+    end
+    return true
 end
 
 -- SwiftStats migration is intentionally field-driven. Legacy SavedVariables are
@@ -2661,7 +3210,7 @@ function addon.legacyImport.BuildPublicCandidate(source)
         if addon.legacyImport.CopyColor(sourceColors, candidate, key) then found = true end
     end
     if not found then return nil, false end
-    MigrateDB(candidate)
+    if not MigrateDB(candidate) then return nil, false end
     return candidate, true
 end
 
@@ -2711,7 +3260,7 @@ function addon.legacyImport.BuildLocalCandidate(source)
         if addon.legacyImport.CopyColor(sourceColors, candidate, key) then found = true end
     end
     if not found then return nil, "empty" end
-    MigrateDB(candidate)
+    if not MigrateDB(candidate) then return nil, "invalid" end
     return candidate, "ready"
 end
 
@@ -2733,7 +3282,7 @@ function addon.legacyImport.FindCandidate()
 end
 
 function addon.legacyImport.ImportFreshIfAvailable()
-    local db = addon.dbRuntime.GetWritableSettings(false)
+    local db = addon.dbRuntime.GetWritableRoot(false)
     if not db then return false end
     if next(db) ~= nil then return false end
     local candidate = addon.legacyImport.FindCandidate()
@@ -3078,7 +3627,7 @@ function Panel:SavePosition()
 end
 
 function Panel:LoadPosition()
-    local db = EnsureStatsProDBTable()
+    local db = addon.dbRuntime.GetActiveSettings()
     local pointKey         = self:DBKey("point")
     local relativePointKey = self:DBKey("relativePoint")
     local xOfsKey          = self:DBKey("xOfs")
@@ -3793,9 +4342,9 @@ local ApplyConfigFont
 --      Russian users from needing an LSM addon for clean rendering).
 --   3. Client-shipped/LSM scan (catches CJK / installed Cyrillic fonts).
 
--- Caller must set StatsProDB.forceLocale + run CacheSettings BEFORE calling.
+-- Caller must set the account-wide forceLocale + run CacheSettings BEFORE calling.
 local function MaybeAutoSwitchFont()
-    local db = EnsureStatsProDBTable()
+    local db = addon.dbRuntime.GetActiveSettings()
     local writableDB = addon.dbRuntime.GetWritableSettings(false)
     local active = ResolveActiveLocale()
     local req    = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
@@ -4739,7 +5288,7 @@ local CONFIG_DROPDOWN_Y_OFFSET = 2
 -- deliberately pure: opening Settings under a newer schema must not lazily create a
 -- colors table and thereby mutate data owned by the newer addon version.
 local function GetColor(statName)
-    local db = EnsureStatsProDBTable()
+    local db = addon.dbRuntime.GetActiveSettings()
     local colors = type(db.colors) == "table" and db.colors or {}
     local r, g, b = NormalizeColor(colors[statName], defaults.colors[statName])
     return { r = r, g = g, b = b }
@@ -4770,7 +5319,7 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
     text:SetMaxLines(1)
     cb:SetChecked(GetBoolDB(dbKey))
     cb:SetScript("OnClick", function(self)
-        local db = addon.dbRuntime.GetWritableSettings(true)
+        local db = addon.dbRuntime.GetWritableSettings(true, dbKey)
         if not db then
             self:SetChecked(GetBoolDB(dbKey))
             return
@@ -4953,6 +5502,7 @@ local function OpenColorPicker(btn, statName)
         statName = statName,
         hadExplicitColor = hadExplicitColor,
         snapshot = snapshot,
+        generation = addon.dbRuntime.generation,
         accepted = false,
         acceptBoundary = COLOR_PICKER_STATE.hideHooked == true
             and COLOR_PICKER_STATE.acceptHooked == true,
@@ -4961,7 +5511,7 @@ local function OpenColorPicker(btn, statName)
     local function OnColorSelect()
         if not COLOR_PICKER_STATE.IsActive(session) then return end
         local writableDB = addon.dbRuntime.GetWritableSettings(true)
-        if not writableDB then
+        if not writableDB or session.generation ~= addon.dbRuntime.generation then
             local persisted = GetColor(statName)
             btn:SetBackdropColor(persisted.r, persisted.g, persisted.b, 1)
             return
@@ -4976,7 +5526,7 @@ local function OpenColorPicker(btn, statName)
     local function OnCancel()
         if not COLOR_PICKER_STATE.IsActive(session) then return end
         local writableDB = addon.dbRuntime.GetWritableSettings(true)
-        if writableDB then
+        if writableDB and session.generation == addon.dbRuntime.generation then
             if type(writableDB.colors) ~= "table" then writableDB.colors = {} end
             btn:SetBackdropColor(snapshot.r, snapshot.g, snapshot.b, 1)
             writableDB.colors[statName] = hadExplicitColor
@@ -5300,7 +5850,7 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
         if reverting then return end
         local previous = NUMBER_SETTING_META[dbKey] and GetNumberDB(dbKey) or GetDB(dbKey)
         local normalized = NUMBER_SETTING_META[dbKey] and NormalizeNumberSetting(dbKey, value) or value
-        local db = addon.dbRuntime.GetWritableSettings(true)
+        local db = addon.dbRuntime.GetWritableSettings(true, dbKey)
         if not db then
             reverting = true
             self:SetValue(previous)
@@ -5337,8 +5887,8 @@ end
 local function ResetToDefaults()
     local db = addon.dbRuntime.GetWritableSettings(true)
     if not db then return false end
-    -- Preserve the user's current output language for the confirmation, because
-    -- reset itself restores forceLocale to "auto" before the final chat message.
+    -- Account-wide language/update cadence are intentionally outside profile Reset.
+    -- Capture the localized confirmation before changing the active payload.
     local resetMessage = L("Settings reset to defaults")
 
     -- Step 1: close any open modal BEFORE touching DB.
@@ -5355,9 +5905,10 @@ local function ResetToDefaults()
     end
     COLOR_PICKER_STATE.Close()
 
-    -- Step 2: reset DB scalars + colors to defaults.
+    -- Step 2: reset profile-owned scalars + colors to defaults. Account settings,
+    -- registry metadata, other profiles, and the flat downgrade shadow stay untouched.
     for k, v in pairs(defaults) do
-        if type(v) ~= "table" then db[k] = v end
+        if not addon.dbRuntime.accountSettingKeys[k] and type(v) ~= "table" then db[k] = v end
     end
     -- Explicit cleanup of fields not in defaults (the loop above only writes present-key
     -- defaults). These would linger in DB across Reset otherwise:
@@ -5366,18 +5917,17 @@ local function ResetToDefaults()
     db.useLocalizedLabels = nil
     db.fontBeforeAutoSwitch = nil
     db.colors = CopyTable(defaults.colors)
-    db.dbVersion = CURRENT_DB_VERSION
 
     -- Step 3: re-cache + re-apply panel-level visual state.
     CacheSettings()
-    addon.fontRuntime.applyCommittedTextStyle(defaults.font, defaults.fontSize, false, true)
+    local runtimeFont = MaybeAutoSwitchFont()
+    addon.fontRuntime.applyCommittedTextStyle(
+        runtimeFont or defaults.font, defaults.fontSize, false, true)
     ApplyTextAlphaToAllPanels(cached.textAlpha)
     addon.readabilityConfig.applyPanelBackgroundAlphaToAllPanels(cached.panelBackgroundAlpha)
-    -- Sync settings-UI font to the fresh default-locale state. Without this, a Reset
-    -- performed while forceLocale was a non-baseline locale (e.g. ruRU on enUS — UI was
-    -- in ARIALN via prior MaybeAutoSwitchFont) would leave currentConfigFont stuck on
-    -- ARIALN even though forceLocale just reset to "auto" → enUS. Idempotent — no-op
-    -- when font is already the locale-correct baseline.
+    -- Account locale survives profile Reset. Re-resolve the settings font after the
+    -- default profile font is restored so a forced non-client locale keeps full glyph
+    -- coverage instead of falling back to the client's Latin-only default.
     ApplyConfigFont(ResolveConfigFont(ResolveActiveLocale()))
     SetAllPanelsScale(defaults.scale)
     LoadAllPositions()
@@ -5392,10 +5942,9 @@ local function ResetToDefaults()
         local ok, err = pcall(fn)
         if not ok then PrintMsg("refresher error: " .. tostring(err)) end
     end
-    -- WHY also RefreshConfigLocalization: Reset writes forceLocale=auto, so L() now
-    -- resolves to a (potentially) different locale. Stat color picker labels need to
-    -- re-set + groups re-align to match. configRefreshers above only re-sync checkbox
-    -- states / swatch colors / dropdown text, not L()-using labels. No-op when
+    -- Refreshing localization remains harmless and keeps every visible config control
+    -- synchronized. configRefreshers above only re-sync checkbox states / swatch colors
+    -- / dropdown text, not L()-using labels. No-op when
     -- localizedConfigLabels and alignmentGroups are empty (slash called pre-config-open).
     RefreshConfigLocalization()
 
@@ -5418,8 +5967,12 @@ function addon.legacyImport.AcceptPending()
         PrintMsg(L("SwiftStats import is unavailable during combat. Try again after combat."))
         return
     end
-    local currentDB = addon.dbRuntime.GetWritableSettings(false)
-    if not currentDB then
+    local currentSettings = addon.dbRuntime.GetWritableSettings(false)
+    local currentAccount = addon.dbRuntime.GetWritableAccount(false)
+    local candidateValid, candidateAccount, _, candidateSettings = addon.dbRuntime.ValidateRegistry(candidate)
+    if type(currentSettings) ~= "table" or type(currentAccount) ~= "table"
+        or not candidateValid or type(candidateAccount) ~= "table"
+        or type(candidateSettings) ~= "table" then
         PrintMsg(L("These settings use a newer schema and cannot be imported by this StatsPro version."))
         return
     end
@@ -5429,13 +5982,31 @@ function addon.legacyImport.AcceptPending()
         return
     end
 
+    local previousSettings, settingsCopied = addon.dbRuntime.CloneSerializable(currentSettings)
+    local importedSettings, importCopied = addon.dbRuntime.CloneSerializable(candidateSettings)
+    if not settingsCopied or not importCopied then
+        PrintMsg(L("SwiftStats import failed; current StatsPro settings were preserved."))
+        return
+    end
+    local previousLocale = currentAccount.forceLocale
+    local previousInterval = currentAccount.updateInterval
+
+    -- Keep the registry, assignments, other profiles, and flat downgrade shadow in
+    -- place. A future profile-manager operation can promote imports into a separately
+    -- named/assigned profile; this compatibility transaction replaces only the active
+    -- payload plus the two account settings that the old whole-root import carried.
+    addon.dbRuntime.ReplaceTableContents(currentSettings, importedSettings)
+    currentAccount.forceLocale = candidateAccount.forceLocale
+    currentAccount.updateInterval = candidateAccount.updateInterval
+
     -- WHY load anchors before ReloadUI: PLAYER_LOGOUT fires during reload and saves
     -- live frame anchors. Without this step it would write the old on-screen position
     -- over the newly imported offsets before SavedVariables flush.
-    _G.StatsProDB = candidate
     local applied = pcall(LoadAllPositions)
     if not applied then
-        _G.StatsProDB = currentDB
+        addon.dbRuntime.ReplaceTableContents(currentSettings, previousSettings)
+        currentAccount.forceLocale = previousLocale
+        currentAccount.updateInterval = previousInterval
         pcall(LoadAllPositions)
         PrintMsg(L("SwiftStats import failed; current StatsPro settings were preserved."))
         return
@@ -5447,7 +6018,9 @@ function addon.legacyImport.AcceptPending()
         PrintMsg(L("SwiftStats settings imported. Reloading the UI."))
         return
     end
-    _G.StatsProDB = currentDB
+    addon.dbRuntime.ReplaceTableContents(currentSettings, previousSettings)
+    currentAccount.forceLocale = previousLocale
+    currentAccount.updateInterval = previousInterval
     pcall(LoadAllPositions)
     PrintMsg(L("SwiftStats import failed; current StatsPro settings were preserved."))
 end
@@ -6535,7 +7108,7 @@ function addon:OpenConfigMenu()
                 info.value = opt.value
                 info.checked = (current == opt.value)
                 info.func = function()
-                    local db = self.dbRuntime.GetWritableSettings(true)
+                    local db = self.dbRuntime.GetWritableSettings(true, "forceLocale")
                     if not db then
                         CloseDropDownMenus()
                         CancelLanguagePreview()
@@ -6848,7 +7421,7 @@ function addon:PrintDebugDump()
         ADDON_VERSION,
         addon.dbRuntime.versionDisplay,
         CURRENT_DB_VERSION,
-        addon.dbRuntime.readOnly and "read-only" or "current",
+        addon.dbRuntime.readOnly and ("read-only/" .. addon.dbRuntime.mode) or "current",
         tostring(isLoaded), tostring(durabilityDirty),
         math.floor(collectgarbage("count"))))
 
@@ -6873,8 +7446,10 @@ function addon:PrintDebugDump()
     PrintMsg(string.format("locale: client=%s force=%s active=%s",
         GetLocale(), tostring(GetDB("forceLocale")), active))
     local savedFont = GetSavedAutoFontDB()
+    local activeSettings = addon.dbRuntime.readOnly
+        and addon.dbRuntime.activeSettings or addon.dbRuntime.GetActiveSettings()
     local savedFontText = savedFont
-        or (type(StatsProDB.fontBeforeAutoSwitch) == "nil" and "nil" or "<unavailable>")
+        or (type(activeSettings.fontBeforeAutoSwitch) == "nil" and "nil" or "<unavailable>")
     PrintMsg(string.format("font: path=%s glyphReq=%s supports=%s saved=%s",
         tostring(addon.fontRuntime.currentPath() or "?"),
         req,
@@ -7271,8 +7846,24 @@ if addon and addon.__statsproSmoke == true then
             addon.dbRuntime.Refresh()
             return {
                 readOnly = addon.dbRuntime.readOnly,
+                mode = addon.dbRuntime.mode,
                 version = addon.dbRuntime.version,
                 warned = addon.dbRuntime.warned,
+                generation = addon.dbRuntime.generation,
+            }
+        end,
+        dbValidationCount = function() return addon.dbRuntime.validationCount end,
+        profileState = function()
+            local root = addon.dbRuntime.Refresh()
+            return {
+                root = root,
+                account = addon.dbRuntime.activeAccount,
+                settings = addon.dbRuntime.activeSettings,
+                profileID = addon.dbRuntime.activeProfileID,
+                profiles = root.profiles,
+                roleTemplates = root.roleTemplates,
+                characters = root.characters,
+                generation = addon.dbRuntime.generation,
             }
         end,
         cachedUpdateInterval = function() return cached.updateInterval end,
@@ -7285,6 +7876,7 @@ if addon and addon.__statsproSmoke == true then
         registrySnapshot = function()
             return {
                 cachedBoolKeys = CopyTable(CACHED_BOOL_KEYS),
+                accountSettingKeys = CopyTable(addon.dbRuntime.accountSettingKeys),
                 numberSettingMeta = CopyTable(NUMBER_SETTING_META),
                 languageOptions = CopyTable(LANGUAGE_OPTIONS),
                 localeGlyphReq = CopyTable(LOCALE_GLYPH_REQ),
@@ -7293,7 +7885,10 @@ if addon and addon.__statsproSmoke == true then
         end,
         migrateDB = MigrateDB,
         cacheSettings = CacheSettings,
+        getDB = GetDB,
         getBoolDB = GetBoolDB,
+        getNumberDB = GetNumberDB,
+        getColor = GetColor,
         normalizeNumberSetting = NormalizeNumberSetting,
         fontPathKey = FontPathKey,
         sameFontPath = SameFontPath,

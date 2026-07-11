@@ -7435,6 +7435,27 @@ do
         end
     end
 
+    local warningTemplate =
+        "|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."
+    local oldWarningTemplate =
+        "|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."
+    local requirementLabelKeys = {
+        "Western European text", "Russian text", "Korean text",
+        "Simplified Chinese text", "Traditional Chinese text",
+        "text for the selected language",
+    }
+    for locale in pairs(explicitLocales) do
+        local labels = registry.labelsByLocale[locale]
+        eq("registry.language_warning.old_key_removed." .. locale,
+            labels[oldWarningTemplate], nil)
+        check("registry.language_warning.template." .. locale,
+            type(labels[warningTemplate]) == "string" and labels[warningTemplate] ~= "")
+        for _, key in ipairs(requirementLabelKeys) do
+            check("registry.language_warning.label." .. locale .. "." .. key,
+                type(labels[key]) == "string" and labels[key] ~= "")
+        end
+    end
+
     eq("registry.colors.defaults_type", type(defaults.colors), "table")
     assertSameSet("registry.color_defaults_swatches",
         tableKeySet(defaults.colors), colorControls)
@@ -7752,6 +7773,65 @@ do
         accountSettings(invalidEnv).forceLocale, "auto")
     eq("config.language_enGB_not_accepted_as_explicit.shadow_unchanged",
         invalidEnv.StatsProDB.forceLocale, "enGB")
+end
+
+do
+    local warningTemplate =
+        "|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."
+    local cases = {
+        { locale = "ruRU", requirement = "Cyrillic", labelKey = "Russian text" },
+        { locale = "koKR", requirement = "Hangul", labelKey = "Korean text" },
+        { locale = "zhCN", requirement = "Hans", labelKey = "Simplified Chinese text" },
+        { locale = "zhTW", requirement = "Hant", labelKey = "Traditional Chinese text" },
+    }
+    local registry = test.registrySnapshot()
+    local coveredLocales, requiredLocales = {}, {}
+    for locale, requirement in pairs(registry.localeGlyphReq) do
+        if requirement ~= "Latin" then requiredLocales[locale] = true end
+    end
+    for _, case in ipairs(cases) do coveredLocales[case.locale] = true end
+    for locale in pairs(requiredLocales) do
+        eq("config.language_warning_copy.non_latin_matrix.required." .. locale,
+            coveredLocales[locale], true)
+    end
+    for locale in pairs(coveredLocales) do
+        eq("config.language_warning_copy.non_latin_matrix.covered." .. locale,
+            requiredLocales[locale], true)
+    end
+
+    local internalTokens = { "Cyrillic", "Hangul", "Hans", "Hant" }
+    for _, case in ipairs(cases) do
+        local warningEnv, warningAddon, warningTest = loadStatsPro("enUS", {
+            statsProDB = {
+                forceLocale = case.locale,
+                font = "Fonts\\FRIZQT__.TTF",
+            },
+        })
+        warningTest.cacheSettings()
+        eq("config.language_warning_copy.precondition." .. case.locale,
+            warningTest.fontSupports("Fonts\\FRIZQT__.TTF", case.requirement), false)
+        eq("config.language_warning_copy.mapping." .. case.locale,
+            warningAddon.fontRuntime.GlyphRequirementLabelKey(case.requirement), case.labelKey)
+        local ok, err = pcall(function() warningAddon:OpenConfigMenu() end)
+        check("config.language_warning_copy.open." .. case.locale, ok, err)
+        local warning = exists("config.language_warning_copy.warning." .. case.locale,
+            warningEnv.StatsProConfigFrame.languageWarning)
+        local labels = warningTest.registrySnapshot().labelsByLocale[case.locale]
+        local expected = string.format(labels[warningTemplate], labels[case.labelKey])
+        eq("config.language_warning_copy.exact." .. case.locale, warning:GetText(), expected)
+        eq("config.language_warning_copy.surface." .. case.locale,
+            warning.statsProWarningSurface:IsShown(), true)
+        eq("config.language_warning_copy.rail." .. case.locale,
+            warning.statsProWarningRail:IsShown(), true)
+        for _, token in ipairs(internalTokens) do
+            eq("config.language_warning_copy.no_internal_token."
+                .. case.locale .. "." .. token,
+                string.find(warning:GetText(), token, 1, true), nil)
+        end
+    end
+    eq("config.language_warning_copy.unknown_fallback",
+        addon.fontRuntime.GlyphRequirementLabelKey("FutureGlyphRequirement"),
+        "text for the selected language")
 end
 
 do

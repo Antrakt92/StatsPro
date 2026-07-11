@@ -34,6 +34,19 @@ local ITEM_LEVEL_DANGER_COLOR = "ff3333"
 local GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL, GLYPH_HANS, GLYPH_HANT =
     "Latin", "Cyrillic", "Hangul", "Hans", "Hant"
 
+addon.fontRuntime.glyphRequirementLabelKeys = {
+    [GLYPH_LATIN] = "Western European text",
+    [GLYPH_CYR] = "Russian text",
+    [GLYPH_HANGUL] = "Korean text",
+    [GLYPH_HANS] = "Simplified Chinese text",
+    [GLYPH_HANT] = "Traditional Chinese text",
+}
+
+function addon.fontRuntime.GlyphRequirementLabelKey(requirement)
+    return addon.fontRuntime.glyphRequirementLabelKeys[requirement]
+        or "text for the selected language"
+end
+
 -- WHY early: font paths can come from SavedVariables or external media catalogs.
 -- Reject secret-tagged values before any path normalization or SetFont call.
 local issecretvalue = _G.issecretvalue or function() return false end
@@ -1187,7 +1200,13 @@ local LABELS_BY_LOCALE = {
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Forget \"%s\"? Its character record will be removed, but profile settings will be kept.",
         -- Templates:
         ["Auto (current: %s)"] = "Auto (current: %s)",
-        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage.",
+        ["Western European text"] = "Western European text",
+        ["Russian text"] = "Russian text",
+        ["Korean text"] = "Korean text",
+        ["Simplified Chinese text"] = "Simplified Chinese text",
+        ["Traditional Chinese text"] = "Traditional Chinese text",
+        ["text for the selected language"] = "text for the selected language",
+        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage.",
         -- Launcher description:
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window.",
     },
@@ -1327,7 +1346,13 @@ local LABELS_BY_LOCALE = {
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Забыть «%s»? Запись персонажа будет удалена, но настройки профилей сохранятся.",
         -- Templates:
         ["Auto (current: %s)"] = "Авто (сейчас: %s)",
-        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Шрифт может не отображать символы %s. Выберите шрифт SharedMedia с нужным покрытием.",
+        ["Western European text"] = "западноевропейский текст",
+        ["Russian text"] = "русский текст",
+        ["Korean text"] = "корейский текст",
+        ["Simplified Chinese text"] = "текст на упрощённом китайском",
+        ["Traditional Chinese text"] = "текст на традиционном китайском",
+        ["text for the selected language"] = "текст выбранного языка",
+        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Шрифт может некорректно отображать %s. Выберите шрифт SharedMedia с нужным покрытием.",
         -- Launcher description:
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD характеристик и экипировки: уровень предметов, прочность, стоимость ремонта и цели характеристик Archon. Нажмите ниже, чтобы открыть окно настроек.",
     },
@@ -1460,7 +1485,13 @@ local LABELS_BY_LOCALE = {
         ["Delete unused profile \"%s\"?"] = "Ungenutztes Profil „%s“ löschen?",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "„%s“ vergessen? Der Charaktereintrag wird entfernt, die Profileinstellungen bleiben erhalten.",
         ["Auto (current: %s)"] = "Auto (aktuell: %s)",
-        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Schrift unterstützt %s eventuell nicht. Wähle eine SharedMedia-Schrift mit Glyphenabdeckung.",
+        ["Western European text"] = "westeuropäischen Text",
+        ["Russian text"] = "russischen Text",
+        ["Korean text"] = "koreanischen Text",
+        ["Simplified Chinese text"] = "vereinfachtes Chinesisch",
+        ["Traditional Chinese text"] = "traditionelles Chinesisch",
+        ["text for the selected language"] = "Text der ausgewählten Sprache",
+        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Die Schrift stellt %s möglicherweise nicht korrekt dar. Wähle eine SharedMedia-Schrift mit passender Zeichenabdeckung.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD für Werte und Ausrüstung: Gegenstandsstufe, Haltbarkeit, Reparaturkosten und Archon-Stat-Ziele. Klicke unten, um die vollständigen Einstellungen zu öffnen.",
     },
 
@@ -1590,7 +1621,13 @@ local LABELS_BY_LOCALE = {
         ["Delete unused profile \"%s\"?"] = "Supprimer le profil inutilisé « %s » ?",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Oublier « %s » ? Sa fiche de personnage sera supprimée, mais les réglages des profils seront conservés.",
         ["Auto (current: %s)"] = "Auto (actuel : %s)",
-        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La police peut ne pas afficher les glyphes %s. Choisissez une police SharedMedia avec couverture appropriée.",
+        ["Western European text"] = "le texte d’Europe occidentale",
+        ["Russian text"] = "le texte russe",
+        ["Korean text"] = "le texte coréen",
+        ["Simplified Chinese text"] = "le chinois simplifié",
+        ["Traditional Chinese text"] = "le chinois traditionnel",
+        ["text for the selected language"] = "le texte de la langue sélectionnée",
+        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La police sélectionnée peut ne pas afficher correctement %s. Choisissez une police SharedMedia avec une couverture adaptée.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD de caractéristiques et d'équipement : niveau d'objet, durabilité, coût de réparation et objectifs de caractéristiques Archon. Cliquez ci-dessous pour ouvrir la fenêtre de paramètres complète.",
     },
 
@@ -1721,7 +1758,13 @@ local LABELS_BY_LOCALE = {
         ["Delete unused profile \"%s\"?"] = "¿Eliminar el perfil sin usar «%s»?",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "¿Olvidar a «%s»? Se eliminará su registro de personaje, pero se conservarán los ajustes de perfiles.",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
-        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La fuente puede no mostrar glifos %s. Elige una fuente SharedMedia con cobertura.",
+        ["Western European text"] = "texto de Europa occidental",
+        ["Russian text"] = "texto ruso",
+        ["Korean text"] = "texto coreano",
+        ["Simplified Chinese text"] = "chino simplificado",
+        ["Traditional Chinese text"] = "chino tradicional",
+        ["text for the selected language"] = "texto del idioma seleccionado",
+        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La fuente seleccionada puede no mostrar correctamente %s. Elige una fuente SharedMedia con la cobertura adecuada.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD de estadísticas y equipo: nivel de objeto, durabilidad, coste de reparación y objetivos de estadísticas de Archon. Haz clic abajo para abrir la ventana de ajustes.",
     },
 
@@ -1850,7 +1893,13 @@ local LABELS_BY_LOCALE = {
         ["Delete unused profile \"%s\"?"] = "¿Eliminar el perfil sin usar «%s»?",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "¿Olvidar a «%s»? Se eliminará su registro de personaje, pero se conservarán los ajustes de perfiles.",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
-        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La fuente puede no mostrar glifos %s. Elige una fuente SharedMedia con cobertura.",
+        ["Western European text"] = "texto de Europa occidental",
+        ["Russian text"] = "texto ruso",
+        ["Korean text"] = "texto coreano",
+        ["Simplified Chinese text"] = "chino simplificado",
+        ["Traditional Chinese text"] = "chino tradicional",
+        ["text for the selected language"] = "texto del idioma seleccionado",
+        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La fuente seleccionada puede no mostrar correctamente %s. Elige una fuente SharedMedia con la cobertura adecuada.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD de estadísticas y equipo: nivel de objeto, durabilidad, costo de reparación y objetivos de estadísticas de Archon. Da clic abajo para abrir la ventana de configuración.",
     },
 
@@ -1980,7 +2029,13 @@ local LABELS_BY_LOCALE = {
         ["Delete unused profile \"%s\"?"] = "Eliminare il profilo inutilizzato «%s»?",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Dimenticare «%s»? Il record del personaggio verrà rimosso, ma le impostazioni dei profili saranno conservate.",
         ["Auto (current: %s)"] = "Auto (attuale: %s)",
-        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Il font potrebbe non visualizzare i glifi %s. Scegli un font SharedMedia con copertura adeguata.",
+        ["Western European text"] = "testo dell’Europa occidentale",
+        ["Russian text"] = "testo russo",
+        ["Korean text"] = "testo coreano",
+        ["Simplified Chinese text"] = "cinese semplificato",
+        ["Traditional Chinese text"] = "cinese tradizionale",
+        ["text for the selected language"] = "testo della lingua selezionata",
+        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Il font selezionato potrebbe non visualizzare correttamente %s. Scegli un font SharedMedia con copertura adeguata.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD di statistiche ed equipaggiamento: livello oggetto, durabilità, costo di riparazione e obiettivi statistiche Archon. Clicca sotto per aprire le impostazioni complete.",
     },
 
@@ -2109,7 +2164,13 @@ local LABELS_BY_LOCALE = {
         ["Delete unused profile \"%s\"?"] = "Excluir o perfil não usado “%s”?",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Esquecer “%s”? O registro do personagem será removido, mas as configurações dos perfis serão mantidas.",
         ["Auto (current: %s)"] = "Auto (atual: %s)",
-        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r A fonte pode não exibir glifos %s. Escolha uma fonte SharedMedia com cobertura.",
+        ["Western European text"] = "texto da Europa Ocidental",
+        ["Russian text"] = "texto russo",
+        ["Korean text"] = "texto coreano",
+        ["Simplified Chinese text"] = "chinês simplificado",
+        ["Traditional Chinese text"] = "chinês tradicional",
+        ["text for the selected language"] = "texto do idioma selecionado",
+        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r A fonte selecionada pode não exibir corretamente %s. Escolha uma fonte SharedMedia com cobertura adequada.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD de atributos e equipamento: nível de item, durabilidade, custo de reparo e metas de atributos do Archon. Clique abaixo para abrir a janela de configurações.",
     },
 
@@ -2245,7 +2306,13 @@ local LABELS_BY_LOCALE = {
         ["Delete unused profile \"%s\"?"] = "사용하지 않는 프로필 \"%s\"을(를) 삭제하시겠습니까?",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "\"%s\"의 기록을 삭제하시겠습니까? 캐릭터 기록만 제거되고 프로필 설정은 유지됩니다.",
         ["Auto (current: %s)"] = "자동 (현재: %s)",
-        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 이 글꼴은 %s 글리프를 표시하지 못할 수 있습니다. SharedMedia에서 적합한 글꼴을 선택하세요.",
+        ["Western European text"] = "서유럽 언어 텍스트",
+        ["Russian text"] = "러시아어 텍스트",
+        ["Korean text"] = "한국어 텍스트",
+        ["Simplified Chinese text"] = "중국어 간체",
+        ["Traditional Chinese text"] = "중국어 번체",
+        ["text for the selected language"] = "선택한 언어의 텍스트",
+        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 선택한 글꼴이 %s을(를) 올바르게 표시하지 못할 수 있습니다. SharedMedia에서 적합한 글꼴을 선택하세요.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "능력치·장비 HUD: 아이템 레벨, 내구도, 수리 비용, Archon 능력치 목표. 아래를 눌러 전체 설정 창을 엽니다.",
     },
 
@@ -2374,7 +2441,13 @@ local LABELS_BY_LOCALE = {
         ["Delete unused profile \"%s\"?"] = "删除未使用的配置“%s”？",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "移除“%s”的记录？角色记录将被删除，但配置设置会保留。",
         ["Auto (current: %s)"] = "自动（当前: %s）",
-        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 字体可能无法显示 %s 字形。请从 SharedMedia 选择合适的字体。",
+        ["Western European text"] = "西欧语言文本",
+        ["Russian text"] = "俄语文本",
+        ["Korean text"] = "韩语文本",
+        ["Simplified Chinese text"] = "简体中文",
+        ["Traditional Chinese text"] = "繁体中文",
+        ["text for the selected language"] = "所选语言的文本",
+        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 所选字体可能无法正确显示%s。请从 SharedMedia 选择覆盖完整的字体。",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "属性与装备 HUD：装等、耐久度、修理费用及 Archon 属性目标。点击下方打开完整设置窗口。",
     },
 
@@ -2503,7 +2576,13 @@ local LABELS_BY_LOCALE = {
         ["Delete unused profile \"%s\"?"] = "刪除未使用的設定檔「%s」？",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "移除「%s」的記錄？角色記錄將被刪除，但設定檔內容會保留。",
         ["Auto (current: %s)"] = "自動（目前: %s）",
-        ["|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 字型可能無法顯示 %s 字形。請從 SharedMedia 選擇合適的字型。",
+        ["Western European text"] = "西歐語言文字",
+        ["Russian text"] = "俄語文字",
+        ["Korean text"] = "韓語文字",
+        ["Simplified Chinese text"] = "簡體中文",
+        ["Traditional Chinese text"] = "繁體中文",
+        ["text for the selected language"] = "所選語言的文字",
+        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 所選字型可能無法正確顯示%s。請從 SharedMedia 選擇涵蓋完整的字型。",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "屬性與裝備 HUD：裝等、耐久度、修理費用及 Archon 屬性目標。點擊下方開啟完整設定視窗。",
     },
 }
@@ -12702,16 +12781,17 @@ function addon:OpenConfigMenu()
                 langWarn:SetText("")
                 addon.settingsDesign.SetWarningVisible(langWarn, false)
             else
+                local requirementLabel = L(
+                    addon.fontRuntime.GlyphRequirementLabelKey(req))
                 langWarn:SetText(string.format(L(
-                    "|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."
-                ), req))
+                    "|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."
+                ), requirementLabel))
                 addon.settingsDesign.SetWarningVisible(langWarn, true)
             end
         end
-        -- WHY register as localized: warning text changes on language switch (req glyph
-        -- tag stays raw — it's a script name, not a translatable phrase). Setter replays
-        -- from RefreshConfigLocalization so wording tracks active locale; RefreshLanguageWarning
-        -- is also called from the language dropdown's commit handler for the immediate recheck.
+        -- WHY register as localized: warning wording and the presentation-only requirement
+        -- label both change with the output locale. Internal font-coverage tokens never cross
+        -- this UI boundary. The language commit handler also calls this for an immediate recheck.
         PushLocalizedLabel(function() RefreshLanguageWarning() end)
         -- WHY fixed two-line reservation: localized warnings wrap inside the padded
         -- scroll content. Avoid GetStringHeight arithmetic because the measurement can

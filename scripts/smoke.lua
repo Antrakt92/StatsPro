@@ -662,7 +662,13 @@ local function makeEnv(locale, opts)
         env.__closedDropdowns = env.__closedDropdowns + 1
         if env.DropDownList1 then env.DropDownList1:Hide() end
     end
-    env.UIDropDownMenu_SetText = function(frame, text) if frame then frame.dropdownText = text end end
+    env.UIDropDownMenu_SetText = function(frame, text)
+        if not frame then return end
+        frame.dropdownText = text
+        if frame.statsProTrigger and frame.statsProTrigger.statsProText then
+            frame.statsProTrigger.statsProText:SetText(text)
+        end
+    end
     env.UIDropDownMenu_SetWidth = function(frame, width)
         if frame then frame.dropdownWidth = width end
     end
@@ -1349,6 +1355,9 @@ do
 end
 
 local function assertRGBA(name, color, r, g, b, a)
+    if type(r) == "table" then
+        r, g, b, a = r[1], r[2], r[3], r[4]
+    end
     assertColor(name, color, r, g, b)
     near(name .. ".a", color.a, a)
 end
@@ -6245,7 +6254,13 @@ do
         eq("launcher.copy_registry_" .. locale, labelsByLocale[locale][launcherKey], expected)
 
         local launcherEnv, _, launcherTest = loadStatsPro("enUS", {
-            statsProDB = { forceLocale = locale },
+            statsProDB = {
+                forceLocale = locale,
+                showOffensive = true,
+                showTertiary = true,
+                showDefensive = true,
+                displayMode = "split",
+            },
         })
         fireEvent("launcher.localized_" .. locale .. ".fire", launcherEnv, "PLAYER_ENTERING_WORLD")
         eq("launcher.localized_" .. locale .. ".text", launcherTest.launcherDescriptionText(), expected)
@@ -7312,6 +7327,102 @@ do
 end
 
 do
+    for _, locale in ipairs({
+        "enUS", "deDE", "esES", "esMX", "frFR", "itIT",
+        "koKR", "ptBR", "ruRU", "zhCN", "zhTW",
+    }) do
+        local localeEnv, localeAddon, localeTest = loadStatsPro("enUS", {
+            statsProDB = { forceLocale = locale },
+            uiParentWidth = 500,
+            uiParentHeight = 260,
+        })
+        local prefix = "config.control_locale_matrix." .. locale
+        fireEvent(prefix .. ".pew", localeEnv, "PLAYER_ENTERING_WORLD")
+        local ok, err = pcall(function() localeAddon:OpenConfigMenu() end)
+        check(prefix .. ".open", ok, err)
+
+        local counts = {}
+        for _, control in ipairs(localeTest.settingsControlState()) do
+            counts[control.kind] = (counts[control.kind] or 0) + 1
+            check(prefix .. ".hit_target." .. tostring(control.kind)
+                    .. "." .. tostring(control.name or _),
+                control.width >= 24 and control.height >= 24,
+                "localized control is smaller than 24x24px")
+        end
+        eq(prefix .. ".checkbox_count", counts.checkbox, 37)
+        eq(prefix .. ".swatch_count", counts.swatch, 18)
+        eq(prefix .. ".slider_count", counts.slider, 5)
+        eq(prefix .. ".dropdown_count", counts.dropdown, 6)
+        eq(prefix .. ".button_count", counts.button, 20)
+
+        for index, frame in ipairs(localeEnv.__frames) do
+            local kind = frame.statsProControlKind
+            if kind == "checkbox" then
+                local text = exists(prefix .. ".checkbox_text." .. index, frame.statsProText)
+                check(prefix .. ".checkbox_nonempty." .. index, text:GetText() ~= "")
+                eq(prefix .. ".checkbox_one_line." .. index, text.maxLines, 1)
+                eq(prefix .. ".checkbox_no_wrap." .. index, text.wordWrap, false)
+                if text:GetStringWidth() > text:GetWidth() then
+                    local tooltip = frame.statsProTooltipProvider(frame)
+                    check(prefix .. ".checkbox_overflow_tooltip." .. index,
+                        type(tooltip) == "string" and tooltip ~= "",
+                        "overflowing checkbox has no tooltip")
+                    if frame:IsEnabled() then
+                        eq(prefix .. ".checkbox_overflow_text." .. index,
+                            tooltip, text:GetText())
+                    end
+                end
+            elseif kind == "slider" then
+                check(prefix .. ".slider_label_nonempty." .. index,
+                    frame.statsProLabel:GetText() ~= "")
+                check(prefix .. ".slider_value_nonempty." .. index,
+                    frame.statsProValueText:GetText() ~= "")
+                check(prefix .. ".slider_bounds_nonempty." .. index,
+                    frame.statsProLowText:GetText() ~= ""
+                        and frame.statsProHighText:GetText() ~= "")
+            elseif kind == "dropdown" then
+                check(prefix .. ".dropdown_caption_nonempty." .. index,
+                    frame.statsProText:GetText() ~= "")
+                check(prefix .. ".dropdown_label_nonempty." .. index,
+                    frame.statsProDropdown.statsProLabel:GetText() ~= "")
+                check(prefix .. ".dropdown_label_cap." .. index,
+                    frame.statsProDropdown.statsProLabel:GetWidth() <= 210,
+                    "dropdown label exceeds the two-column cap")
+                if frame.statsProText:GetStringWidth() > frame.statsProText:GetWidth() then
+                    eq(prefix .. ".dropdown_overflow_tooltip." .. index,
+                        frame.statsProTooltipProvider(frame), frame.statsProText:GetText())
+                end
+            elseif kind == "button" and frame.statsProText then
+                check(prefix .. ".button_nonempty." .. index,
+                    frame.statsProText:GetText() ~= "")
+                eq(prefix .. ".button_one_line." .. index,
+                    frame.statsProText.maxLines, 1)
+                eq(prefix .. ".button_no_wrap." .. index,
+                    frame.statsProText.wordWrap, false)
+            end
+        end
+
+        localeEnv.StatsProOffensiveCheck:SetChecked(false)
+        userInteract(prefix .. ".dependency_disable",
+            localeEnv.StatsProOffensiveCheck, "OnClick")
+        userInteract(prefix .. ".dependency_tooltip",
+            localeEnv.StatsProCritCheck, "OnEnter")
+        local registry = localeTest.registrySnapshot()
+        local labels = registry.labelsByLocale[locale]
+        eq(prefix .. ".dependency_tooltip_text",
+            localeEnv.GameTooltip.lines[1].left,
+            string.format(labels["Requires %s."], labels["Show Offensive Stats"]))
+        userInteract(prefix .. ".dependency_tooltip_leave",
+            localeEnv.StatsProCritCheck, "OnLeave")
+
+        eq(prefix .. ".min_height", localeEnv.StatsProConfigFrame:GetHeight(), 260)
+        check(prefix .. ".warning_reserved_fit",
+            localeEnv.StatsProConfigFrame.languageWarning:GetWidth() <= 426,
+            "localized warning exceeds minimum viewport width")
+    end
+end
+
+do
     local enGBEnv, enGBAddon, enGBTest = loadStatsPro("enGB", {
         statsProDB = {
             forceLocale = "auto",
@@ -7419,6 +7530,8 @@ do
         warning.statsProWarningRail.colorTexture,
         warningTokens.colors.warning[1], warningTokens.colors.warning[2],
         warningTokens.colors.warning[3])
+    near("config.language_warning_layout.rail_color.a",
+        warning.statsProWarningRail.colorTexture.a, warningTokens.colors.warning[4])
     eq("config.language_warning_layout.word_wrap", warning.wordWrap, true)
     eq("config.language_warning_layout.max_lines", warning.maxLines, 2)
     eq("config.language_warning_layout.two_line_height", warning:GetHeight(), 40)
@@ -7536,6 +7649,8 @@ do
             env.DropDownList1Button1.hooks.OnEnter and env.DropDownList1Button1.hooks.OnEnter[1])
         local enEnter = exists("config.language_hover_restore.en_hook",
             env.DropDownList1Button2.hooks.OnEnter and env.DropDownList1Button2.hooks.OnEnter[1])
+        local languageHoverRoot = env.StatsProDB
+        local languageHoverBefore = deepCopy(languageHoverRoot)
 
         ok, err = pcall(ruEnter, env.DropDownList1Button1)
         check("config.language_hover_restore.preview_ru", ok, err)
@@ -7544,6 +7659,10 @@ do
             afterRuPreview.mainLabelFont ~= defaultFont,
             "ruRU hover did not exercise fallback-font preview")
         eq("config.language_hover_restore.ru_snapshot_month_preview", test.formatSnapshotDate("2026-05-15"), "15-май-26")
+        assertDeepEqual("config.language_hover_restore.ru_zero_writes",
+            env.StatsProDB, languageHoverBefore)
+        eq("config.language_hover_restore.ru_root_identity",
+            rawequal(env.StatsProDB, languageHoverRoot), true)
 
         test.setPanelAppliedStyleForSmoke(defaultFont, 14)
         ok, err = pcall(enEnter, env.DropDownList1Button2)
@@ -7552,9 +7671,13 @@ do
         eq("config.language_hover_restore.forces_main_font", afterEnPreview.mainLabelFont, defaultFont)
         eq("config.language_hover_restore.forces_side_font", afterEnPreview.sideLabelFont, defaultFont)
         eq("config.language_hover_restore.en_snapshot_month_preview", test.formatSnapshotDate("2026-05-15"), "15-May-26")
+        assertDeepEqual("config.language_hover_restore.en_zero_writes",
+            env.StatsProDB, languageHoverBefore)
 
         env.DropDownList1:Hide()
         env.UIDROPDOWNMENU_OPEN_MENU = nil
+        assertDeepEqual("config.language_hover_restore.close_zero_writes",
+            env.StatsProDB, languageHoverBefore)
     end
 
     selectDropdownValue("config.dropdown_display_mode_split_writes_db", env.StatsProDisplayModeDropdown, "split")
@@ -12139,6 +12262,9 @@ do
     assertColor("config.control_design.checkbox_pressed_fill",
         env.StatsProOffensiveCheck.statsProStateTexture.colorTexture,
         tokens.colors.rowPressed[1], tokens.colors.rowPressed[2], tokens.colors.rowPressed[3])
+    near("config.control_design.checkbox_pressed_fill.a",
+        env.StatsProOffensiveCheck.statsProStateTexture.colorTexture.a,
+        tokens.colors.rowPressed[4])
     userInteract("config.control_design.checkbox_release", env.StatsProOffensiveCheck, "OnMouseUp")
     userInteract("config.control_design.checkbox_leave", env.StatsProOffensiveCheck, "OnLeave")
     assertDeepEqual("config.control_design.hover_zero_writes", env.StatsProDB, dbBeforeHover)
@@ -12157,12 +12283,17 @@ do
         env.StatsProCritCheck.statsProText.textColor,
         tokens.colors.textDisabled[1], tokens.colors.textDisabled[2],
         tokens.colors.textDisabled[3])
+    near("config.control_design.disabled_checkbox_text.a",
+        env.StatsProCritCheck.statsProText.textColor.a, tokens.colors.textDisabled[4])
     eq("config.control_design.disabled_reason",
         env.StatsProCritCheck.statsProDisabledReasonKey, "Show Offensive Stats")
     local critSwatch = exists("config.control_design.disabled_swatch",
         env.StatsProCritCheck.statsProSwatch)
     eq("config.control_design.disabled_swatch_enabled", critSwatch:IsEnabled(), false)
     eq("config.control_design.disabled_swatch_alpha", critSwatch:GetAlpha(), 0.35)
+    assertRGBA("config.control_design.disabled_swatch_border",
+        critSwatch.statsProSurface.statsProBorders[1].colorTexture,
+        tokens.colors.textDisabled)
     userInteract("config.control_design.disabled_tooltip", env.StatsProCritCheck, "OnEnter")
     eq("config.control_design.disabled_tooltip_owner", env.GameTooltip:GetOwner(),
         env.StatsProCritCheck)
@@ -12186,8 +12317,28 @@ do
         env.GameTooltip.lines[1].left, "Foreign tooltip")
     env.GameTooltip:Hide()
 
+    env.StatsProOffensiveCheck:SetChecked(true)
+    userInteract("config.control_design.reenable_master", env.StatsProOffensiveCheck, "OnClick")
+    eq("config.control_design.reenabled_swatch", critSwatch:IsEnabled(), true)
     local hoverSurfacesBefore = deepCopy(env.StatsProDB)
     userInteract("config.control_design.swatch_hover", critSwatch, "OnEnter")
+    assertRGBA("config.control_design.swatch_hover_border",
+        critSwatch.statsProSurface.statsProBorders[1].colorTexture,
+        tokens.colors.borderStrong)
+    userInteract("config.control_design.swatch_pressed", critSwatch, "OnMouseDown")
+    assertRGBA("config.control_design.swatch_pressed_border",
+        critSwatch.statsProSurface.statsProBorders[1].colorTexture,
+        tokens.colors.accent)
+    userInteract("config.control_design.swatch_released", critSwatch, "OnMouseUp")
+    userInteract("config.control_design.swatch_open", critSwatch, "OnClick")
+    eq("config.control_design.swatch_active", critSwatch.statsProActive, true)
+    assertRGBA("config.control_design.swatch_active_border",
+        critSwatch.statsProSurface.statsProBorders[1].colorTexture,
+        tokens.colors.accent)
+    env.__cancelColorPicker()
+    eq("config.control_design.swatch_cancel_inactive", critSwatch.statsProActive, false)
+    assertRGBA("config.control_design.swatch_well",
+        critSwatch.statsProColorWell.colorTexture, { 1, 0, 0, 1 })
     userInteract("config.control_design.swatch_leave", critSwatch, "OnLeave")
 
     userInteract("config.control_design.slider_hover", env.StatsProScaleSlider, "OnEnter")
@@ -12199,9 +12350,13 @@ do
         env.StatsProScaleSlider.statsProThumb.vertexColor,
         tokens.colors.textPrimary[1], tokens.colors.textPrimary[2],
         tokens.colors.textPrimary[3])
+    near("config.control_design.slider_hover_thumb.a",
+        env.StatsProScaleSlider.statsProThumb.vertexColor.a, 0.86)
     assertColor("config.control_design.slider_track_color",
         env.StatsProScaleSlider.statsProTrack.colorTexture,
         tokens.colors.track[1], tokens.colors.track[2], tokens.colors.track[3])
+    near("config.control_design.slider_track_color.a",
+        env.StatsProScaleSlider.statsProTrack.colorTexture.a, tokens.colors.track[4])
     userInteract("config.control_design.slider_leave", env.StatsProScaleSlider, "OnLeave")
 
     local dropdownTrigger = exists("config.control_design.dropdown_trigger",
@@ -12217,6 +12372,9 @@ do
         dropdownTrigger.statsProSurface.statsProBorders[1].colorTexture,
         tokens.colors.borderStrong[1], tokens.colors.borderStrong[2],
         tokens.colors.borderStrong[3])
+    near("config.control_design.dropdown_hover_border.a",
+        dropdownTrigger.statsProSurface.statsProBorders[1].colorTexture.a,
+        tokens.colors.borderStrong[4])
     userInteract("config.control_design.dropdown_leave", dropdownTrigger, "OnLeave")
 
     eq("config.control_design.destructive_role",
@@ -12229,6 +12387,8 @@ do
     assertColor("config.control_design.destructive_hover_fill",
         env.StatsProProfileResetButton.backdropColor,
         destructiveHoverColor[1], destructiveHoverColor[2], destructiveHoverColor[3])
+    near("config.control_design.destructive_hover_fill.a",
+        env.StatsProProfileResetButton.backdropColor.a, destructiveHoverColor[4])
     userInteract("config.control_design.destructive_press",
         env.StatsProProfileResetButton, "OnMouseDown")
     env.StatsProProfileResetButton:Disable()
@@ -12247,6 +12407,32 @@ do
         env.StatsProDB, hoverSurfacesBefore)
     eq("config.control_design.non_edit_controls_preserve_chat_focus",
         env.__focusedFrame, chatInput)
+
+    env.StatsProOffensiveCheck:SetChecked(false)
+    userInteract("config.control_design.pending_dependency_setup",
+        env.StatsProOffensiveCheck, "OnClick")
+    test.setSettingsContextBlockedForSmoke(true)
+    eq("config.control_design.pending_slider_disabled",
+        env.StatsProScaleSlider:IsEnabled(), false)
+    eq("config.control_design.pending_dropdown_disabled",
+        env.StatsProLanguageDropdownButton:IsEnabled(), false)
+    eq("config.control_design.pending_dependency_disabled",
+        env.StatsProCritCheck:IsEnabled(), false)
+    local pendingBefore = deepCopy(env.StatsProDB)
+    eq("config.control_design.pending_preview_suppressed",
+        userInteract("config.control_design.pending_font_click",
+            env.StatsProFontDropdownButton, "OnClick"), false)
+    assertDeepEqual("config.control_design.pending_zero_writes", env.StatsProDB, pendingBefore)
+    test.setSettingsContextBlockedForSmoke(false)
+    eq("config.control_design.pending_slider_restored",
+        env.StatsProScaleSlider:IsEnabled(), true)
+    eq("config.control_design.pending_dropdown_restored",
+        env.StatsProLanguageDropdownButton:IsEnabled(), true)
+    eq("config.control_design.pending_dependency_preserved",
+        env.StatsProCritCheck:IsEnabled(), false)
+    env.StatsProOffensiveCheck:SetChecked(true)
+    userInteract("config.control_design.pending_dependency_restore",
+        env.StatsProOffensiveCheck, "OnClick")
 
     env.StatsProConfigFrame.SwitchToTab(3)
     userInteract("config.control_design.font_picker_open",
@@ -12282,8 +12468,13 @@ do
     local fontHoverBefore = deepCopy(env.StatsProDB)
     local fontRow = findFrame("config.control_design.font_row", env, function(frame)
         return frame.fontPath ~= nil and frame.statsProControlKind == "listRow"
+            and frame.statsProSelected == true
     end)
+    assertRGBA("config.control_design.font_selected_fill",
+        fontRow.statsProStateTexture.colorTexture, tokens.colors.selected)
     userInteract("config.control_design.font_row_hover", fontRow, "OnEnter")
+    assertRGBA("config.control_design.font_hover_fill",
+        fontRow.statsProStateTexture.colorTexture, tokens.colors.rowHover)
     userInteract("config.control_design.font_row_leave", fontRow, "OnLeave")
     flushTimers("config.control_design.font_hover_timer", env, 0, 1)
     assertDeepEqual("config.control_design.font_hover_zero_writes",
@@ -12312,6 +12503,8 @@ do
     end)
     local choiceHoverBefore = deepCopy(env.StatsProDB)
     userInteract("config.control_design.choice_row_hover", choiceRow, "OnEnter")
+    assertRGBA("config.control_design.choice_hover_fill",
+        choiceRow.statsProStateTexture.colorTexture, tokens.colors.rowHover)
     userInteract("config.control_design.choice_row_leave", choiceRow, "OnLeave")
     assertDeepEqual("config.control_design.choice_hover_zero_writes",
         env.StatsProDB, choiceHoverBefore)
@@ -12330,6 +12523,9 @@ do
     assertColor("config.control_design.name_focus_border_color",
         env.StatsProProfileNameInput.statsProSurface.statsProBorders[1].colorTexture,
         tokens.colors.accent[1], tokens.colors.accent[2], tokens.colors.accent[3])
+    near("config.control_design.name_focus_border_color.a",
+        env.StatsProProfileNameInput.statsProSurface.statsProBorders[1].colorTexture.a,
+        tokens.colors.accent[4])
     env.StatsProProfileNameInput:SetText("")
     userInteract("config.control_design.name_invalid", env.StatsProProfileNameInput, "OnTextChanged")
     eq("config.control_design.name_invalid_state",
@@ -12339,6 +12535,9 @@ do
     assertColor("config.control_design.name_invalid_border_color",
         env.StatsProProfileNameInput.statsProSurface.statsProBorders[1].colorTexture,
         tokens.colors.danger[1], tokens.colors.danger[2], tokens.colors.danger[3])
+    near("config.control_design.name_invalid_border_color.a",
+        env.StatsProProfileNameInput.statsProSurface.statsProBorders[1].colorTexture.a,
+        tokens.colors.danger[4])
     userInteract("config.control_design.name_escape", env.StatsProProfileNameInput, "OnEscapePressed")
     eq("config.control_design.name_focus_cleared", env.StatsProProfileNameInput:HasFocus(), false)
     eq("config.control_design.name_focus_owner_cleared", env.__focusedFrame, nil)

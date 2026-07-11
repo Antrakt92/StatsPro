@@ -8376,6 +8376,20 @@ function addon.settingsDesign.DisabledControlTooltip(control)
     return L(blocker.key)
 end
 
+function addon.settingsDesign.ControlTextTooltip(control)
+    local blockedTitle, blockedDetail = addon.settingsDesign.DisabledControlTooltip(control)
+    if blockedTitle then return blockedTitle, blockedDetail end
+    local textRegion = control.statsProText
+    if not textRegion then return nil end
+    local constrainedWidth = textRegion:GetWidth()
+    if not constrainedWidth or constrainedWidth <= 0 then return nil end
+    textRegion:SetWidth(10000)
+    local naturalWidth = textRegion:GetStringWidth()
+    textRegion:SetWidth(constrainedWidth)
+    if naturalWidth > constrainedWidth then return textRegion:GetText() end
+    return nil
+end
+
 function addon.settingsDesign.RefreshControl(control)
     local kind = control.statsProControlKind
     local enabled = addon.settingsDesign.IsControlEnabled(control)
@@ -8528,7 +8542,7 @@ function addon.settingsDesign.RegisterMutationControl(control)
     control.statsProMutatesSettings = true
     addon.settingsDesign.mutationControls = addon.settingsDesign.mutationControls or {}
     tinsert(addon.settingsDesign.mutationControls, control)
-    addon.settingsDesign.AttachTooltip(control, addon.settingsDesign.DisabledControlTooltip)
+    addon.settingsDesign.AttachTooltip(control, addon.settingsDesign.ControlTextTooltip)
 end
 
 function addon.settingsDesign.RefreshMutationControls()
@@ -8668,19 +8682,7 @@ function addon.settingsDesign.StyleDropdown(dropdown, label)
     addon.settingsDesign.RegisterMutationControl(button)
     addon.settingsDesign.HookControl(button)
     button:HookScript("OnClick", addon.settingsDesign.RefreshControl)
-    addon.settingsDesign.AttachTooltip(button, function(trigger)
-        local blockedTitle, blockedDetail = addon.settingsDesign.DisabledControlTooltip(trigger)
-        if blockedTitle then return blockedTitle, blockedDetail end
-        local textRegion = trigger.statsProText
-        local constrainedWidth = textRegion:GetWidth()
-        textRegion:SetWidth(10000)
-        local naturalWidth = textRegion:GetStringWidth()
-        textRegion:SetWidth(constrainedWidth)
-        if naturalWidth > constrainedWidth then
-            return textRegion:GetText()
-        end
-        return nil
-    end)
+    addon.settingsDesign.AttachTooltip(button, addon.settingsDesign.ControlTextTooltip)
     addon.settingsDesign.RefreshControl(button)
 end
 
@@ -8695,6 +8697,7 @@ function addon.settingsDesign.StyleListRow(row, text)
     addon.settingsDesign.ApplyTextRole(text, "controlMetadata")
     addon.settingsDesign.RegisterControl(row, "listRow")
     addon.settingsDesign.HookControl(row)
+    addon.settingsDesign.AttachTooltip(row, addon.settingsDesign.ControlTextTooltip)
     addon.settingsDesign.RefreshControl(row)
 end
 
@@ -8838,6 +8841,7 @@ function addon.settingsDesign.CreateShellButton(parent, name, roleName, textRole
     button:HookScript("OnEnable", addon.settingsDesign.RefreshShellButton)
     button:HookScript("OnDisable", addon.settingsDesign.OnButtonDisabled)
     addon.settingsDesign.RegisterControl(button, "button")
+    addon.settingsDesign.AttachTooltip(button, addon.settingsDesign.ControlTextTooltip)
     addon.settingsDesign.RefreshShellButton(button)
     return button
 end
@@ -12882,6 +12886,11 @@ if addon and addon.__statsproSmoke == true then
                 }
             end
             return controls
+        end,
+        setSettingsContextBlockedForSmoke = function(blocked)
+            addon.profileRuntime.pendingResolution = blocked == true
+            addon.profileRuntime.scheduledToken = nil
+            addon.settingsDesign.RefreshMutationControls()
         end,
         settingsShellState = function()
             if not configFrame then return nil end

@@ -7819,6 +7819,9 @@ end
 -- but if the user reloads/quits via a path that bypasses our drag handler (rare),
 -- this guarantees the latest GetPoint() is what hits disk.
 local function OnPlayerLogout()
+    -- Restore any unaccepted StatsPro-owned color preview before SavedVariables
+    -- flush. The ownership check inside Close leaves a foreign picker untouched.
+    if StatsProCloseColorPicker then StatsProCloseColorPicker(true) end
     addon.dbRuntime.Refresh()
     if addon.dbRuntime.readOnly then return end
     if addon.profileRuntime.pendingResolution and addon.profileRuntime.activeGUID == nil then return end
@@ -8210,15 +8213,22 @@ function COLOR_PICKER_STATE.EnsureFrameHook()
     end
 end
 
-function COLOR_PICKER_STATE.Close()
+function COLOR_PICKER_STATE.Close(forLogout)
     local session = COLOR_PICKER_STATE.active
     if not session then return end
-    if not ColorPickerFrame or not ColorPickerFrame:IsShown() then
+    local pickerShown = ColorPickerFrame and ColorPickerFrame:IsShown()
+    if not pickerShown then
+        -- Without a proven OnHide hook, a hidden frame may be a valid accepted
+        -- fallback. Preserve the selected RGB and only retire the stale session.
         COLOR_PICKER_STATE.Clear(session)
         return
     end
     local ownsFrame = COLOR_PICKER_STATE.OwnsFrame(session)
-    COLOR_PICKER_STATE.RestoreSnapshot(session)
+    if forLogout and session.restoreForLogout then
+        session.restoreForLogout()
+    else
+        COLOR_PICKER_STATE.RestoreSnapshot(session)
+    end
     if ownsFrame then
         ColorPickerFrame:Hide()
     end
@@ -8249,6 +8259,8 @@ local function OpenColorPicker(btn, statName)
         statName = statName,
         hadExplicitColor = hadExplicitColor,
         snapshot = snapshot,
+        root = addon.dbRuntime.rootRef,
+        settings = db,
         generation = addon.dbRuntime.generation,
         accepted = false,
         acceptBoundary = COLOR_PICKER_STATE.hideHooked == true
@@ -8272,26 +8284,49 @@ local function OpenColorPicker(btn, statName)
         CacheSettings()
         addon:RunUpdateStatsSafe()
     end
-    local function OnCancel()
-        if not COLOR_PICKER_STATE.IsActive(session) then return end
-        local writableDB = addon.dbRuntime.GetWritableSettings(true)
-        if writableDB and session.generation == addon.dbRuntime.generation then
-            if type(writableDB.colors) ~= "table" then writableDB.colors = {} end
-            addon.settingsDesign.SetSwatchColor(btn, snapshot.r, snapshot.g, snapshot.b)
-            writableDB.colors[statName] = hadExplicitColor
-                and { r = snapshot.r, g = snapshot.g, b = snapshot.b } or nil
-        else
-            local persisted = GetColor(statName)
-            addon.settingsDesign.SetSwatchColor(btn, persisted.r, persisted.g, persisted.b)
-        end
+    local function RestoreSnapshotToSettings(settings)
+        if type(settings.colors) ~= "table" then settings.colors = {} end
+        addon.settingsDesign.SetSwatchColor(btn, snapshot.r, snapshot.g, snapshot.b)
+        settings.colors[statName] = hadExplicitColor
+            and { r = snapshot.r, g = snapshot.g, b = snapshot.b } or nil
+    end
+    local function FinishCancel()
         if not addon.profileRuntime.suppressIntermediateRefresh then
             CacheSettings()
             addon:RunUpdateStatsSafe()
         end
         COLOR_PICKER_STATE.Clear(session)
     end
+    local function OnCancel()
+        if not COLOR_PICKER_STATE.IsActive(session) then return end
+        local writableDB = addon.dbRuntime.GetWritableSettings(true)
+        if writableDB and session.generation == addon.dbRuntime.generation then
+            RestoreSnapshotToSettings(writableDB)
+        else
+            local persisted = GetColor(statName)
+            addon.settingsDesign.SetSwatchColor(btn, persisted.r, persisted.g, persisted.b)
+        end
+        FinishCancel()
+    end
     session.swatchFunc = OnColorSelect
     session.cancelFunc = OnCancel
+    session.restoreForLogout = function()
+        if not COLOR_PICKER_STATE.IsActive(session) then return end
+        local rootVersion = session.root and NormalizeDBVersion(rawget(session.root, "dbVersion"))
+            or CURRENT_DB_VERSION + 1
+        if session.generation == addon.dbRuntime.generation
+            and rootVersion == CURRENT_DB_VERSION
+            and rawequal(addon.dbRuntime.rootRef, session.root)
+            and rawequal(addon.dbRuntime.activeSettings, session.settings)
+            and addon.dbRuntime.IsCleanTable(session.settings) then
+            -- Pending profile resolution blocks ordinary writes, but rollback is safe
+            -- for the exact settings table that received this session's preview.
+            RestoreSnapshotToSettings(session.settings)
+            FinishCancel()
+        else
+            OnCancel()
+        end
+    end
     session.acceptFunc = function()
         if not session.changed or session.generation ~= addon.dbRuntime.generation then return end
         local writableDB = addon.dbRuntime.GetWritableSettings(false)

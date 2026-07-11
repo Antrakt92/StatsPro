@@ -9469,6 +9469,135 @@ do
 end
 
 do
+    local function openCritPicker(prefix, env)
+        slash(prefix .. ".open_config", env, "")
+        local swatch = findFrame(prefix .. ".crit_swatch", env, function(frame)
+            return frame.statsProColorKey == "crit"
+        end)
+        callScript(prefix .. ".open_picker", swatch, "OnClick")
+        return swatch
+    end
+
+    local explicitEnv = loadStatsPro("enUS", {
+        statsProDB = { colors = { crit = { r = 0.2, g = 0.3, b = 0.4 } } },
+    })
+    fireEvent("config.color_picker.logout_explicit.fire", explicitEnv, "PLAYER_ENTERING_WORLD")
+    openCritPicker("config.color_picker.logout_explicit", explicitEnv)
+    explicitEnv.__setColorPickerRGB(0.6, 0.7, 0.8)
+    local ok, err = pcall(explicitEnv.ColorPickerFrame.colorPickerOptions.swatchFunc)
+    check("config.color_picker.logout_explicit.preview", ok, err)
+    explicitEnv.StatsProFrame:ClearAllPoints()
+    explicitEnv.StatsProFrame:SetPoint("TOPLEFT", explicitEnv.UIParent, "TOPLEFT", 111, -222)
+    explicitEnv.StatsProDefensiveFrame:ClearAllPoints()
+    explicitEnv.StatsProDefensiveFrame:SetPoint("BOTTOMRIGHT", explicitEnv.UIParent, "BOTTOMRIGHT", -333, 444)
+    fireEvent("config.color_picker.logout_explicit.logout", explicitEnv, "PLAYER_LOGOUT")
+    local explicitSettings = activeSettings(explicitEnv)
+    assertColor("config.color_picker.logout_explicit.restores_snapshot",
+        explicitSettings.colors.crit, 0.2, 0.3, 0.4)
+    eq("config.color_picker.logout_explicit.closes_owned", explicitEnv.ColorPickerFrame:IsShown(), false)
+    eq("config.color_picker.logout_explicit.main_point", explicitSettings.point, "TOPLEFT")
+    eq("config.color_picker.logout_explicit.main_relative", explicitSettings.relativePoint, "TOPLEFT")
+    eq("config.color_picker.logout_explicit.main_x", explicitSettings.xOfs, 111)
+    eq("config.color_picker.logout_explicit.main_y", explicitSettings.yOfs, -222)
+    eq("config.color_picker.logout_explicit.side_point", explicitSettings.defensive_point, "BOTTOMRIGHT")
+    eq("config.color_picker.logout_explicit.side_relative", explicitSettings.defensive_relativePoint, "BOTTOMRIGHT")
+    eq("config.color_picker.logout_explicit.side_x", explicitSettings.defensive_xOfs, -333)
+    eq("config.color_picker.logout_explicit.side_y", explicitSettings.defensive_yOfs, 444)
+
+    local defaultEnv = loadStatsPro("enUS")
+    fireEvent("config.color_picker.logout_default.fire", defaultEnv, "PLAYER_ENTERING_WORLD")
+    activeSettings(defaultEnv).colors.crit = nil
+    openCritPicker("config.color_picker.logout_default", defaultEnv)
+    defaultEnv.__setColorPickerRGB(0.7, 0.8, 0.9)
+    ok, err = pcall(defaultEnv.ColorPickerFrame.colorPickerOptions.swatchFunc)
+    check("config.color_picker.logout_default.preview", ok, err)
+    fireEvent("config.color_picker.logout_default.logout", defaultEnv, "PLAYER_LOGOUT")
+    eq("config.color_picker.logout_default.restores_nil", activeSettings(defaultEnv).colors.crit, nil)
+    eq("config.color_picker.logout_default.closes_owned", defaultEnv.ColorPickerFrame:IsShown(), false)
+
+    local acceptedEnv = loadStatsPro("enUS", {
+        statsProDB = { colors = { crit = { r = 0.2, g = 0.3, b = 0.4 } } },
+    })
+    fireEvent("config.color_picker.logout_accepted.fire", acceptedEnv, "PLAYER_ENTERING_WORLD")
+    openCritPicker("config.color_picker.logout_accepted", acceptedEnv)
+    acceptedEnv.__setColorPickerRGB(0.6, 0.7, 0.8)
+    ok, err = pcall(acceptedEnv.ColorPickerFrame.colorPickerOptions.swatchFunc)
+    check("config.color_picker.logout_accepted.preview", ok, err)
+    acceptedEnv.__acceptColorPicker()
+    fireEvent("config.color_picker.logout_accepted.logout", acceptedEnv, "PLAYER_LOGOUT")
+    assertColor("config.color_picker.logout_accepted.preserves_commit",
+        activeSettings(acceptedEnv).colors.crit, 0.6, 0.7, 0.8)
+    eq("config.color_picker.logout_accepted.stays_closed", acceptedEnv.ColorPickerFrame:IsShown(), false)
+
+    local noHideHookEnv = loadStatsPro("enUS", {
+        statsProDB = { colors = { crit = { r = 0.2, g = 0.3, b = 0.4 } } },
+    })
+    noHideHookEnv.ColorPickerFrame.HookScript = nil
+    fireEvent("config.color_picker.logout_accepted_no_hide_hook.fire",
+        noHideHookEnv, "PLAYER_ENTERING_WORLD")
+    openCritPicker("config.color_picker.logout_accepted_no_hide_hook", noHideHookEnv)
+    noHideHookEnv.__setColorPickerRGB(0.6, 0.7, 0.8)
+    ok, err = pcall(noHideHookEnv.ColorPickerFrame.colorPickerOptions.swatchFunc)
+    check("config.color_picker.logout_accepted_no_hide_hook.preview", ok, err)
+    noHideHookEnv.__acceptColorPicker()
+    eq("config.color_picker.logout_accepted_no_hide_hook.hidden",
+        noHideHookEnv.ColorPickerFrame:IsShown(), false)
+    fireEvent("config.color_picker.logout_accepted_no_hide_hook.logout",
+        noHideHookEnv, "PLAYER_LOGOUT")
+    assertColor("config.color_picker.logout_accepted_no_hide_hook.preserves_commit",
+        activeSettings(noHideHookEnv).colors.crit, 0.6, 0.7, 0.8)
+
+    local foreignEnv = loadStatsPro("enUS")
+    fireEvent("config.color_picker.logout_foreign.fire", foreignEnv, "PLAYER_ENTERING_WORLD")
+    local foreignCanceled = false
+    local foreignToken = {}
+    foreignEnv.ColorPickerFrame:SetupColorPickerAndShow({
+        r = 0.1, g = 0.2, b = 0.3,
+        extraInfo = foreignToken,
+        cancelFunc = function() foreignCanceled = true end,
+    })
+    foreignEnv.StatsProFrame:ClearAllPoints()
+    foreignEnv.StatsProFrame:SetPoint("CENTER", foreignEnv.UIParent, "CENTER", 555, -666)
+    fireEvent("config.color_picker.logout_foreign.logout", foreignEnv, "PLAYER_LOGOUT")
+    eq("config.color_picker.logout_foreign.owner", foreignEnv.ColorPickerFrame:GetExtraInfo(), foreignToken)
+    eq("config.color_picker.logout_foreign.stays_open", foreignEnv.ColorPickerFrame:IsShown(), true)
+    eq("config.color_picker.logout_foreign.not_canceled", foreignCanceled, false)
+    eq("config.color_picker.logout_foreign.position_saved", activeSettings(foreignEnv).xOfs, 555)
+
+    local takeoverEnv = loadStatsPro("enUS", {
+        statsProDB = { colors = { crit = { r = 0.2, g = 0.3, b = 0.4 } } },
+    })
+    fireEvent("config.color_picker.logout_takeover.fire", takeoverEnv, "PLAYER_ENTERING_WORLD")
+    openCritPicker("config.color_picker.logout_takeover", takeoverEnv)
+    takeoverEnv.__setColorPickerRGB(0.6, 0.7, 0.8)
+    ok, err = pcall(takeoverEnv.ColorPickerFrame.colorPickerOptions.swatchFunc)
+    check("config.color_picker.logout_takeover.preview", ok, err)
+    local takeoverCanceled = false
+    takeoverEnv.ColorPickerFrame.swatchFunc = function() end
+    takeoverEnv.ColorPickerFrame.cancelFunc = function() takeoverCanceled = true end
+    fireEvent("config.color_picker.logout_takeover.logout", takeoverEnv, "PLAYER_LOGOUT")
+    assertColor("config.color_picker.logout_takeover.restores_snapshot",
+        activeSettings(takeoverEnv).colors.crit, 0.2, 0.3, 0.4)
+    eq("config.color_picker.logout_takeover.foreign_stays_open",
+        takeoverEnv.ColorPickerFrame:IsShown(), true)
+    eq("config.color_picker.logout_takeover.foreign_not_canceled", takeoverCanceled, false)
+
+    local pendingEnv, _, pendingTest = loadStatsPro("enUS", {
+        statsProDB = { colors = { crit = { r = 0.2, g = 0.3, b = 0.4 } } },
+    })
+    fireEvent("config.color_picker.logout_pending.fire", pendingEnv, "PLAYER_ENTERING_WORLD")
+    openCritPicker("config.color_picker.logout_pending", pendingEnv)
+    pendingEnv.__setColorPickerRGB(0.6, 0.7, 0.8)
+    ok, err = pcall(pendingEnv.ColorPickerFrame.colorPickerOptions.swatchFunc)
+    check("config.color_picker.logout_pending.preview", ok, err)
+    pendingTest.setSettingsContextBlockedForSmoke(true)
+    fireEvent("config.color_picker.logout_pending.logout", pendingEnv, "PLAYER_LOGOUT")
+    assertColor("config.color_picker.logout_pending.restores_same_settings",
+        activeSettings(pendingEnv).colors.crit, 0.2, 0.3, 0.4)
+    eq("config.color_picker.logout_pending.closes_owned", pendingEnv.ColorPickerFrame:IsShown(), false)
+end
+
+do
     local secret = setmetatable({}, {
         __tostring = function() error("secret tostring inspected", 2) end,
     })

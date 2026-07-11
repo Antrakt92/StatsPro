@@ -6553,9 +6553,12 @@ function addon:OpenConfigMenu()
         CursorAdvance(cs, 22)
         -- WHY: onChange forces recompute via dirty flag; otherwise display stays stale
         -- until the next equipment event (which may be far off).
+        -- WHY: this is a full-width row with no right-column peer. The normal 200px
+        -- checkbox bound truncates longer translations; 400px still fits the 450px
+        -- scroll child after the 12px row padding and 22px checkbox chrome.
         CreateCheckbox(statsTab, "StatsProWorstDurCheck",
             "Use Worst Slot (instead of average)", "useWorstDurability", cs.padX, cs.y,
-            function() addon.durabilityRuntime.MarkDirty() end)
+            function() addon.durabilityRuntime.MarkDirty() end, 400)
         CursorAdvance(cs, 22)
     end
 

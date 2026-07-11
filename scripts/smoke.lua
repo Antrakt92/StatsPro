@@ -5744,11 +5744,27 @@ do
                 label.width <= 160,
                 "color checkbox label width exceeds cap")
         end
+
+        local worstSlotLabel = exists(
+            "config.checkbox_label_guard." .. locale .. ".worst_slot_width",
+            guardEnv.StatsProWorstDurCheckText)
+        eq("config.checkbox_label_guard." .. locale .. ".worst_slot_width.full_row",
+            worstSlotLabel:GetWidth(), 400)
+        check("config.checkbox_label_guard." .. locale .. ".worst_slot_width.fits_text",
+            worstSlotLabel:GetStringWidth() <= worstSlotLabel:GetWidth(),
+            "localized Worst Slot label exceeds its full-row width")
+        eq("config.checkbox_label_guard." .. locale .. ".two_column_width.offensive",
+            guardEnv.StatsProOffensiveCheckText:GetWidth(), 200)
+        eq("config.checkbox_label_guard." .. locale .. ".two_column_width.hide_zero",
+            guardEnv.StatsProHideZeroOffCheckText:GetWidth(), 200)
     end
 
-    assertLocalizedCheckboxGuards("ruRU")
-    assertLocalizedCheckboxGuards("deDE")
-    assertLocalizedCheckboxGuards("frFR")
+    for _, locale in ipairs({
+        "enUS", "deDE", "esES", "esMX", "frFR", "itIT",
+        "koKR", "ptBR", "ruRU", "zhCN", "zhTW",
+    }) do
+        assertLocalizedCheckboxGuards(locale)
+    end
 end
 
 do

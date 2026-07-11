@@ -272,8 +272,6 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetDesaturated(value) self.desaturated = value ~= false end
     function frame:SetBlendMode(mode) self.blendMode = mode end
     function frame:SetTexture(texture) self.texture = texture end
-    function frame:SetAtlas(atlas) self.atlas = atlas end
-    function frame:SetTexCoord(...) self.texCoords = { ... } end
     function frame:SetFont(font, size, flags)
         if type(font) ~= "string" then error("SetFont font must be a string", 2) end
         if not isFiniteNumber(size) then error("SetFont size must be a finite number", 2) end
@@ -426,7 +424,6 @@ local function makeFrame(name, setFontResult, parent)
         self.focused = true
         runFrameHandlers(self, "OnEditFocusGained")
     end
-    function frame:HighlightText() self.highlightedText = self:GetText() end
     function frame:ClearFocus()
         if not self.focused then return end
         self.focused = false
@@ -552,24 +549,11 @@ local function makeEnv(locale, opts)
     env.UISpecialFrames = {}
     env.StaticPopupDialogs = {}
     env.CANCEL = "Cancel"
-    env.StaticPopup_Show = function(key, textArg1, textArg2, data)
+    env.StaticPopup_Show = function(key)
         local definition = env.StaticPopupDialogs[key]
         if type(definition) ~= "table" then error("missing static popup " .. tostring(key), 2) end
         env.__staticPopupShows = env.__staticPopupShows + 1
-        local popup = makeFrame(nil, opts.setFontResult, env.UIParent)
-        popup.key = key
-        popup.definition = definition
-        popup.textArg1 = textArg1
-        popup.textArg2 = textArg2
-        popup.data = data
-        if definition.hasEditBox then
-            popup.EditBox = makeFrame(nil, opts.setFontResult, popup)
-            function popup:GetEditBox() return self.EditBox end
-        end
-        env.__lastStaticPopup = popup
-        if type(definition.OnShow) == "function" then
-            definition.OnShow(popup, data)
-        end
+        env.__lastStaticPopup = { key = key, definition = definition }
         return env.__lastStaticPopup
     end
     env.StaticPopup_Hide = function(key)
@@ -7370,7 +7354,6 @@ do
         eq(prefix .. ".slider_count", counts.slider, 5)
         eq(prefix .. ".dropdown_count", counts.dropdown, 6)
         eq(prefix .. ".button_count", counts.button, 20)
-        eq(prefix .. ".developer_link_count", counts.developerLink, 2)
 
         for index, frame in ipairs(localeEnv.__frames) do
             local kind = frame.statsProControlKind
@@ -7983,40 +7966,6 @@ do
         detached.geometry.shellButtonHeight)
     eq("config.shell.footer.close_width", shell.closeButton:GetWidth(),
         detached.geometry.closeButtonWidth)
-    eq("config.shell.footer.links_parent", shell.developerLinkGroup:GetParent(), config)
-    eq("config.shell.footer.links_height", shell.developerLinkGroup:GetHeight(),
-        detached.geometry.minHitTarget)
-    eq("config.shell.footer.links_left_anchor", shell.developerLinkGroup.points[1][1], "LEFT")
-    eq("config.shell.footer.links_left_relative", shell.developerLinkGroup.points[1][2],
-        shell.resetButton)
-    eq("config.shell.footer.links_left_relative_point",
-        shell.developerLinkGroup.points[1][3], "RIGHT")
-    eq("config.shell.footer.links_right_anchor", shell.developerLinkGroup.points[2][1], "RIGHT")
-    eq("config.shell.footer.links_right_relative", shell.developerLinkGroup.points[2][2],
-        shell.closeButton)
-    eq("config.shell.footer.links_right_relative_point",
-        shell.developerLinkGroup.points[2][3], "LEFT")
-    eq("config.shell.footer.kofi_parent", shell.koFiLinkButton:GetParent(),
-        shell.developerLinkGroup)
-    eq("config.shell.footer.github_parent", shell.gitHubLinkButton:GetParent(),
-        shell.developerLinkGroup)
-    eq("config.shell.footer.kofi_width", shell.koFiLinkButton:GetWidth(),
-        detached.geometry.minHitTarget)
-    eq("config.shell.footer.kofi_height", shell.koFiLinkButton:GetHeight(),
-        detached.geometry.minHitTarget)
-    eq("config.shell.footer.github_width", shell.gitHubLinkButton:GetWidth(),
-        detached.geometry.minHitTarget)
-    eq("config.shell.footer.github_height", shell.gitHubLinkButton:GetHeight(),
-        detached.geometry.minHitTarget)
-    eq("config.shell.footer.kofi_center_gap", shell.koFiLinkButton.points[1][4], -4)
-    eq("config.shell.footer.github_center_gap", shell.gitHubLinkButton.points[1][4], 4)
-    eq("config.shell.footer.kofi_texture", shell.koFiLinkButton.statsProIcon.texture,
-        "Interface\\COMMON\\friendship-heart")
-    assertDeepEqual("config.shell.footer.kofi_texcoords",
-        shell.koFiLinkButton.statsProIcon.texCoords,
-        { 0.21875, 0.78125, 0.09375, 0.6875 })
-    eq("config.shell.footer.github_atlas", shell.gitHubLinkButton.statsProIcon.atlas,
-        "transmog-icon-chat")
     eq("config.shell.footer.reset_role", shell.resetButton.statsProButtonRole, "destructive")
     eq("config.shell.footer.close_role", shell.closeButton.statsProButtonRole, "primary")
 
@@ -8124,51 +8073,6 @@ do
     assertRGBA("config.shell.close.normal_border", shell.closeButton.backdropBorderColor,
         detached.colors.accentMuted[1], detached.colors.accentMuted[2],
         detached.colors.accentMuted[3], detached.colors.accentMuted[4])
-
-    local linksDBBefore = deepCopy(shellEnv.StatsProDB)
-    runFrameHandlers(shell.koFiLinkButton, "OnEnter")
-    eq("config.shell.footer.kofi_hover_surface", shell.koFiLinkButton.statsProHover:IsShown(), true)
-    eq("config.shell.footer.kofi_hover_alpha", shell.koFiLinkButton.statsProIcon:GetAlpha(), 1)
-    eq("config.shell.footer.kofi_tooltip_owner", shellEnv.GameTooltip:GetOwner(),
-        shell.koFiLinkButton)
-    eq("config.shell.footer.kofi_tooltip_title", shellEnv.GameTooltip.lines[1].left, "Ko-fi")
-    eq("config.shell.footer.kofi_tooltip_detail", shellEnv.GameTooltip.lines[2].left,
-        "Click to copy the link.")
-    runFrameHandlers(shell.koFiLinkButton, "OnLeave")
-    eq("config.shell.footer.kofi_leave_surface", shell.koFiLinkButton.statsProHover:IsShown(), false)
-    near("config.shell.footer.kofi_leave_alpha", shell.koFiLinkButton.statsProIcon:GetAlpha(), 0.76)
-
-    callScript("config.shell.footer.kofi_click", shell.koFiLinkButton, "OnClick")
-    local linkPopup = exists("config.shell.footer.kofi_popup", shellEnv.__lastStaticPopup)
-    eq("config.shell.footer.kofi_popup_key", linkPopup.key, "STATSPRO_COPY_DEVELOPER_LINK")
-    eq("config.shell.footer.kofi_popup_message", linkPopup.textArg1,
-        "StatsPro — Ko-fi\nCopy the link below (Ctrl+C).")
-    eq("config.shell.footer.kofi_popup_url", linkPopup.data.url,
-        "https://ko-fi.com/antrakt92")
-    eq("config.shell.footer.kofi_editbox_url", linkPopup.EditBox:GetText(),
-        "https://ko-fi.com/antrakt92")
-    eq("config.shell.footer.kofi_editbox_selected", linkPopup.EditBox.highlightedText,
-        "https://ko-fi.com/antrakt92")
-    eq("config.shell.footer.kofi_editbox_focus", linkPopup.EditBox:HasFocus(), true)
-    eq("config.shell.footer.popup_close_label", linkPopup.definition.button1, "Close")
-    linkPopup.definition.EditBoxOnEnterPressed(linkPopup:GetEditBox())
-    eq("config.shell.footer.kofi_enter_hides_popup", linkPopup:IsShown(), false)
-
-    callScript("config.shell.footer.github_click", shell.gitHubLinkButton, "OnClick")
-    linkPopup = exists("config.shell.footer.github_popup", shellEnv.__lastStaticPopup)
-    eq("config.shell.footer.github_popup_message", linkPopup.textArg1,
-        "StatsPro — GitHub\nCopy the link below (Ctrl+C).")
-    eq("config.shell.footer.github_popup_url", linkPopup.data.url,
-        "https://github.com/Antrakt92/StatsPro")
-    eq("config.shell.footer.github_editbox_url", linkPopup.EditBox:GetText(),
-        "https://github.com/Antrakt92/StatsPro")
-    check("config.shell.footer.github_no_stale_kofi_url",
-        not string.find(linkPopup.EditBox:GetText(), "ko%-fi"),
-        "GitHub popup retained stale Ko-fi URL")
-    linkPopup.definition.EditBoxOnEscapePressed(linkPopup:GetEditBox())
-    eq("config.shell.footer.github_escape_hides_popup", linkPopup:IsShown(), false)
-    assertDeepEqual("config.shell.footer.links_zero_writes", shellEnv.StatsProDB, linksDBBefore)
-    shellEnv.StaticPopup_Hide("STATSPRO_COPY_DEVELOPER_LINK")
 
     callScript("config.shell.drag.start", config, "OnDragStart")
     eq("config.shell.drag.start_count", config.startMovingCalls, 1)
@@ -12328,7 +12232,6 @@ do
     eq("config.control_design.dropdown_trigger_count", counts.dropdown, 6)
     check("config.control_design.button_count", (counts.button or 0) >= 18,
         "shared shell buttons are not registered")
-    eq("config.control_design.developer_link_count", counts.developerLink, 2)
     eq("config.control_design.empty_warning_surface_hidden",
         env.StatsProConfigFrame.languageWarning.statsProWarningSurface:IsShown(), false)
     eq("config.control_design.empty_warning_rail_hidden",

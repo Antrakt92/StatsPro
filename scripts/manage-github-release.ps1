@@ -137,7 +137,16 @@ function Get-GitHubReleaseByTag {
     if ($result.ExitCode -ne 0) {
         throw "Could not list release markers for $ExpectedTag`: $($result.Output -join ' ')"
     }
-    $releases = @(ConvertFrom-JsonCompat ($result.Output -join "`n"))
+    $paginated = ConvertFrom-JsonCompat ($result.Output -join "`n")
+    $releases = @()
+    foreach ($page in @($paginated)) {
+        if ($page -is [System.Array]) {
+            $releases += @($page)
+        }
+        elseif ($null -ne $page) {
+            $releases += $page
+        }
+    }
     return Select-GitHubReleaseByTag -Releases $releases -ExpectedTag $ExpectedTag
 }
 
@@ -547,6 +556,131 @@ function Assert-ReleaseGitHubTokenScope {
     }
 }
 
+function Test-ContainsMarketplaceTokenReference {
+    param([string]$Text)
+
+    foreach ($secretName in @('CF_API_KEY', 'WAGO_API_TOKEN', 'WOWI_API_TOKEN')) {
+        if (Test-ContainsSecretReference -Text $Text -SecretName $secretName) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Assert-CanonicalMarketplaceEnvironment {
+    param(
+        [System.Text.RegularExpressions.Match]$StepBlock,
+        [string]$StepName
+    )
+
+    $expectedNames = @('CF_API_KEY', 'WAGO_API_TOKEN', 'WOWI_API_TOKEN')
+    $actualNames = @(
+        [regex]::Matches($StepBlock.Value, '(?m)^\s{10}([A-Z][A-Z0-9_]+):') |
+            ForEach-Object { $_.Groups[1].Value } |
+            Sort-Object
+    )
+    if ($actualNames.Count -ne $expectedNames.Count -or
+        (Compare-Object -ReferenceObject ($expectedNames | Sort-Object) -DifferenceObject $actualNames)) {
+        throw "Marketplace step '$StepName' must expose exactly the three marketplace token environment keys."
+    }
+
+    $withoutCanonicalReferences = $StepBlock.Value
+    foreach ($name in $expectedNames) {
+        $linePattern = "(?m)^\s{10}${name}:\s*\`$\{\{\s*secrets\.${name}\s*\}\}\s*`$"
+        $lines = @([regex]::Matches($withoutCanonicalReferences, $linePattern))
+        if ($lines.Count -ne 1) {
+            throw "Marketplace step '$StepName' must bind $name exactly once to secrets.$name."
+        }
+        $withoutCanonicalReferences = $withoutCanonicalReferences.Remove($lines[0].Index, $lines[0].Length)
+    }
+    if (Test-ContainsMarketplaceTokenReference -Text $withoutCanonicalReferences) {
+        throw "Marketplace step '$StepName' contains a non-canonical marketplace secret reference."
+    }
+}
+
+function Assert-ReleaseMarketplaceTokenScope {
+    param([string]$WorkflowText)
+
+    $allowedStepNames = @(
+        'Verify marketplace release credentials and versions',
+        'Publish package to marketplaces'
+    )
+    $stepBlocks = @([regex]::Matches($WorkflowText, '(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)'))
+    $allowedBlocks = [System.Collections.Generic.List[System.Text.RegularExpressions.Match]]::new()
+    foreach ($stepName in $allowedStepNames) {
+        $matches = @($stepBlocks | Where-Object { (Get-WorkflowStepName -StepBlock $_) -eq $stepName })
+        if ($matches.Count -ne 1) {
+            throw "Release workflow must contain exactly one marketplace step '$stepName'."
+        }
+        Assert-CanonicalMarketplaceEnvironment -StepBlock $matches[0] -StepName $stepName
+        $allowedBlocks.Add($matches[0])
+    }
+
+    $outsideAllowedSteps = $WorkflowText
+    foreach ($block in @($allowedBlocks | Sort-Object Index -Descending)) {
+        $outsideAllowedSteps = $outsideAllowedSteps.Remove($block.Index, $block.Length)
+    }
+    if ((Test-ContainsMarketplaceTokenReference -Text $outsideAllowedSteps) -or
+        $outsideAllowedSteps -match '(?m)^\s*(?:CF_API_KEY|WAGO_API_TOKEN|WOWI_API_TOKEN):') {
+        throw "Marketplace tokens must not be exposed outside the approved preflight and publishing steps."
+    }
+}
+
+function Assert-MarketplaceCredentialWorkflowBoundary {
+    param([string]$WorkflowText)
+
+    Assert-WorkflowCheckoutCredentialBoundary -WorkflowText $WorkflowText -JobNames @('preflight')
+
+    $triggerBlock = [regex]::Match($WorkflowText, '(?ms)^on:\s*$.*?(?=^permissions:\s*$)')
+    $normalizedTrigger = if ($triggerBlock.Success) {
+        ($triggerBlock.Value -replace "`r", '').Trim()
+    }
+    else {
+        ''
+    }
+    if ($normalizedTrigger -ne "on:`n  workflow_dispatch:") {
+        throw "Marketplace credential workflow must be manual workflow_dispatch only."
+    }
+    $permissionsBlock = [regex]::Match($WorkflowText, '(?ms)^permissions:\s*$.*?(?=^jobs:\s*$)')
+    $normalizedPermissions = if ($permissionsBlock.Success) {
+        ($permissionsBlock.Value -replace "`r", '').Trim()
+    }
+    else {
+        ''
+    }
+    if ($normalizedPermissions -ne "permissions:`n  contents: read") {
+        throw "Marketplace credential workflow must have contents: read as its only permission."
+    }
+    if ($WorkflowText -match 'BigWigsMods/packager@' -or
+        $WorkflowText -match '(?i)manage-github-release\.ps1.+CreateDraft' -or
+        $WorkflowText -match '(?m)^\s+args:\s*.*(?:^|\s)-o(?:\s|$)') {
+        throw "Marketplace credential workflow must not execute Packager, draft creation, or upload commands."
+    }
+
+    $stepBlocks = @([regex]::Matches($WorkflowText, '(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)'))
+    $credentialSteps = @($stepBlocks | Where-Object {
+        (Get-WorkflowStepName -StepBlock $_) -eq 'Verify marketplace release credentials and versions'
+    })
+    if ($credentialSteps.Count -ne 1) {
+        throw "Marketplace credential workflow must contain exactly one credential preflight step."
+    }
+    $credentialStep = $credentialSteps[0]
+    Assert-CanonicalMarketplaceEnvironment `
+        -StepBlock $credentialStep `
+        -StepName 'Verify marketplace release credentials and versions'
+    if ($credentialStep.Value -notmatch '(?m)^\s{8}shell:\s*pwsh\s*$' -or
+        $credentialStep.Value -notmatch '(?m)^\s{8}run:\s*\./scripts/check-marketplace-versions\.ps1\s*$' -or
+        $credentialStep.Value -match '(?m)^\s{8}(?:if|continue-on-error|uses):') {
+        throw "Marketplace credential workflow must execute the exact mandatory pwsh checker."
+    }
+
+    $outsideCredentialStep = $WorkflowText.Remove($credentialStep.Index, $credentialStep.Length)
+    if ((Test-ContainsMarketplaceTokenReference -Text $outsideCredentialStep) -or
+        $outsideCredentialStep -match '(?m)^\s*(?:CF_API_KEY|WAGO_API_TOKEN|WOWI_API_TOKEN):') {
+        throw "Marketplace credential workflow tokens must be scoped to its checker step."
+    }
+}
+
 function Assert-ReleaseWorkflowBoundary {
     param([string]$WorkflowText)
 
@@ -554,10 +688,12 @@ function Assert-ReleaseWorkflowBoundary {
         -WorkflowText $WorkflowText `
         -JobNames @('preflight', 'release')
     Assert-ReleaseGitHubTokenScope -WorkflowText $WorkflowText
+    Assert-ReleaseMarketplaceTokenScope -WorkflowText $WorkflowText
 
     $orderedSteps = @(
         "- name: Refuse existing release marker",
         "- name: Verify immutable release policy",
+        "- name: Verify marketplace release credentials and versions",
         "- name: Recheck release ancestry before final package build",
         "- name: Rebuild package without publishing",
         "- name: Compare rebuilt package and validate again",
@@ -609,9 +745,33 @@ function Assert-ReleaseWorkflowBoundary {
     if ($refuseStep.Count -ne 1 -or $refuseStep[0].Index + $refuseStep[0].Length -ne $policyStep.Index) {
         throw "Immutable release policy gate must run immediately after refusing existing releases."
     }
+    $credentialSteps = @($stepBlocks | Where-Object {
+        (Get-WorkflowStepName -StepBlock $_) -eq 'Verify marketplace release credentials and versions'
+    })
+    if ($credentialSteps.Count -ne 1) {
+        throw "Release workflow must contain exactly one marketplace credential preflight."
+    }
+    $credentialStep = $credentialSteps[0]
+    if ($credentialStep.Value -notmatch '(?m)^\s{8}shell:\s*pwsh\s*$' -or
+        $credentialStep.Value -notmatch '(?m)^\s{8}run:\s*\./scripts/check-marketplace-versions\.ps1\s*$' -or
+        $credentialStep.Value -match '(?m)^\s{8}(?:if|continue-on-error|uses):') {
+        throw "Marketplace credential preflight must execute the exact fail-closed checker as a mandatory pwsh step."
+    }
+    if ($policyStep.Index + $policyStep.Length -ne $credentialStep.Index) {
+        throw "Marketplace credential preflight must run immediately after the immutable release policy gate."
+    }
     $allPackagerSteps = @($stepBlocks | Where-Object { $_.Value -match 'BigWigsMods/packager@' })
     if ($allPackagerSteps.Count -eq 0 -or @($allPackagerSteps | Where-Object { $_.Index -lt $policyStep.Index }).Count -ne 0) {
         throw "Immutable release policy gate must run before every Packager step."
+    }
+    if (@($allPackagerSteps | Where-Object { $_.Index -lt $credentialStep.Index }).Count -ne 0) {
+        throw "Marketplace credential preflight must run before every Packager step."
+    }
+    $draftSteps = @($stepBlocks | Where-Object {
+        (Get-WorkflowStepName -StepBlock $_) -eq 'Create draft release marker'
+    })
+    if ($draftSteps.Count -ne 1 -or $draftSteps[0].Index -lt $credentialStep.Index) {
+        throw "Marketplace credential preflight must run before the single draft-creation step."
     }
     $publishingPackagerSteps = @($stepBlocks | Where-Object {
         $_.Value -match "BigWigsMods/packager@" -and
@@ -884,6 +1044,45 @@ function Invoke-SelfTest {
     Assert-WorkflowCheckoutCredentialBoundary `
         -WorkflowText $checksWorkflowText `
         -JobNames @('checks', 'package-contract')
+    $marketplaceWorkflowPath = Join-Path (Join-Path $PSScriptRoot "..") ".github\workflows\marketplace-credential-preflight.yml"
+    $marketplaceWorkflowText = Get-Content -LiteralPath $marketplaceWorkflowPath -Raw -Encoding UTF8
+    Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText
+    Assert-ThrowsMatch "non-manual marketplace credential workflow rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
+            '  workflow_dispatch:',
+            '  push:')
+    } "workflow_dispatch only"
+    Assert-ThrowsMatch "swapped manual marketplace secret bindings rejected" {
+        $mutated = $marketplaceWorkflowText.Replace(
+            'secrets.CF_API_KEY',
+            'secrets.TEMP_MARKETPLACE_TOKEN').Replace(
+                'secrets.WAGO_API_TOKEN',
+                'secrets.CF_API_KEY').Replace(
+                    'secrets.TEMP_MARKETPLACE_TOKEN',
+                    'secrets.WAGO_API_TOKEN')
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $mutated
+    } "bind CF_API_KEY|bind WAGO_API_TOKEN|non-canonical"
+    Assert-ThrowsMatch "job-level manual marketplace secret rejected" {
+        $mutated = $marketplaceWorkflowText.Replace(
+            '  preflight:',
+            "  preflight:`n    env:`n      WAGO_API_TOKEN: `${{ secrets.WAGO_API_TOKEN }}")
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $mutated
+    } "scoped to its checker step"
+    Assert-ThrowsMatch "fallible manual marketplace checker rejected" {
+        $mutated = $marketplaceWorkflowText.Replace(
+            '      - name: Verify marketplace release credentials and versions',
+            "      - name: Verify marketplace release credentials and versions`n        continue-on-error: true")
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $mutated
+    } "exact mandatory pwsh checker"
+    Assert-ThrowsMatch "Packager in manual marketplace workflow rejected" {
+        $mutated = $marketplaceWorkflowText.Replace(
+            '      - name: Verify marketplace release credentials and versions',
+            "      - name: Unexpected Packager`n        uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28`n        with:`n          args: -d`n`n      - name: Verify marketplace release credentials and versions")
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $mutated
+    } "must not execute Packager"
+    Assert-ThrowsMatch "manual marketplace self-test substitution rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText ($marketplaceWorkflowText -replace '\./scripts/check-marketplace-versions\.ps1', './scripts/check-marketplace-versions.ps1 -SelfTest')
+    } "exact mandatory pwsh checker"
 
     foreach ($reference in @(
         '${{ secrets.GITHUB_TOKEN }}',
@@ -979,6 +1178,10 @@ function Invoke-SelfTest {
         $workflowText,
         '(?ms)^\s{6}- name: Verify immutable release policy\s*$.*?(?=^\s{6}- name:|\z)'
     )
+    $marketplaceCredentialBlock = [regex]::Match(
+        $workflowText,
+        '(?ms)^\s{6}- name: Verify marketplace release credentials and versions\s*$.*?(?=^\s{6}- name:|\z)'
+    )
     Assert-ThrowsMatch "missing immutable policy step rejected" {
         $mutated = $workflowText.Remove($immutablePolicyBlock.Index, $immutablePolicyBlock.Length)
         Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
@@ -1014,6 +1217,84 @@ function Invoke-SelfTest {
     Assert-ThrowsMatch "bracket immutable token in marketplace Packager rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "WOWI_API_TOKEN: \$\{\{ secrets\.WOWI_API_TOKEN \}\}", "WOWI_API_TOKEN: $bracketImmutableTokenExpression")
     } "outside its approved shell step"
+    Assert-ThrowsMatch "missing marketplace credential preflight rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Remove(
+            $marketplaceCredentialBlock.Index,
+            $marketplaceCredentialBlock.Length)
+    } "marketplace step|credential preflight|missing required step"
+    Assert-ThrowsMatch "duplicate marketplace credential preflight rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            '      - name: Trim release changelog',
+            $marketplaceCredentialBlock.Value + '      - name: Trim release changelog')
+    } "exactly one marketplace step|exactly one marketplace credential"
+    Assert-ThrowsMatch "marketplace credential preflight after first Packager rejected" {
+        $withoutCredential = $workflowText.Remove(
+            $marketplaceCredentialBlock.Index,
+            $marketplaceCredentialBlock.Length)
+        $mutated = $withoutCredential.Replace(
+            '      - name: Validate package artifact',
+            $marketplaceCredentialBlock.Value + '      - name: Validate package artifact')
+        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+    } "immediately after|before every Packager|out of the required"
+    Assert-ThrowsMatch "marketplace credential self-test substitution rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '\./scripts/check-marketplace-versions\.ps1', './scripts/check-marketplace-versions.ps1 -SelfTest')
+    } "exact fail-closed checker"
+    Assert-ThrowsMatch "fallible marketplace credential step rejected" {
+        $mutated = $workflowText.Replace(
+            '        shell: pwsh' + "`n" + '        env:' + "`n" + '          CF_API_KEY: ${{ secrets.CF_API_KEY }}',
+            '        continue-on-error: true' + "`n" + '        shell: pwsh' + "`n" + '        env:' + "`n" + '          CF_API_KEY: ${{ secrets.CF_API_KEY }}')
+        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+    } "mandatory pwsh step"
+    foreach ($marketplaceSecretName in @('CF_API_KEY', 'WAGO_API_TOKEN', 'WOWI_API_TOKEN')) {
+        Assert-ThrowsMatch "missing $marketplaceSecretName preflight binding rejected" {
+            $canonicalLine = "          ${marketplaceSecretName}: `${{ secrets.${marketplaceSecretName} }}`n"
+            $mutatedBlock = $marketplaceCredentialBlock.Value.Replace($canonicalLine, '')
+            $mutated = $workflowText.Remove(
+                $marketplaceCredentialBlock.Index,
+                $marketplaceCredentialBlock.Length).Insert(
+                    $marketplaceCredentialBlock.Index,
+                    $mutatedBlock)
+            Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+        } "exactly the three marketplace|bind $marketplaceSecretName"
+        Assert-ThrowsMatch "wrong $marketplaceSecretName preflight source rejected" {
+            $mutatedBlock = $marketplaceCredentialBlock.Value.Replace(
+                "secrets.${marketplaceSecretName}",
+                "secrets.${marketplaceSecretName}_BACKUP")
+            $mutated = $workflowText.Remove(
+                $marketplaceCredentialBlock.Index,
+                $marketplaceCredentialBlock.Length).Insert(
+                    $marketplaceCredentialBlock.Index,
+                    $mutatedBlock)
+            Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+        } "bind $marketplaceSecretName|non-canonical"
+    }
+    Assert-ThrowsMatch "swapped marketplace preflight sources rejected" {
+        $mutatedBlock = $marketplaceCredentialBlock.Value.Replace(
+            'secrets.CF_API_KEY',
+            'secrets.TEMP_MARKETPLACE_TOKEN').Replace(
+                'secrets.WAGO_API_TOKEN',
+                'secrets.CF_API_KEY').Replace(
+                    'secrets.TEMP_MARKETPLACE_TOKEN',
+                    'secrets.WAGO_API_TOKEN')
+        $mutated = $workflowText.Remove(
+            $marketplaceCredentialBlock.Index,
+            $marketplaceCredentialBlock.Length).Insert(
+                $marketplaceCredentialBlock.Index,
+                $mutatedBlock)
+        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+    } "bind CF_API_KEY|bind WAGO_API_TOKEN|non-canonical"
+    Assert-ThrowsMatch "marketplace secret in first Packager rejected" {
+        $mutated = $workflowText.Replace(
+            '      - name: Build package without publishing',
+            "      - name: Build package without publishing`n        env:`n          CF_API_KEY: `${{ secrets.CF_API_KEY }}")
+        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+    } "outside the approved preflight"
+    Assert-ThrowsMatch "job-level marketplace secret rejected" {
+        $replacement = $releaseJobBlock.Value.Replace(
+            '  release:',
+            "  release:`n    env:`n      WAGO_API_TOKEN: `${{ secrets.WAGO_API_TOKEN }}")
+        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
+    } "outside the approved preflight"
     Assert-ThrowsMatch "job-level GitHub token rejected" {
         $replacement = $releaseJobBlock.Value.Replace(
             '  release:',
@@ -1076,11 +1357,34 @@ function Invoke-SelfTest {
         Assert-ReleaseWorkflowBoundary -WorkflowText $swappedWorkflow
     } "out of the required"
     $postPublishMarker = "      - name: Validate marketplace archive and create release metadata"
+    foreach ($marketplaceSecretName in @('CF_API_KEY', 'WAGO_API_TOKEN', 'WOWI_API_TOKEN')) {
+        Assert-ThrowsMatch "missing $marketplaceSecretName publishing binding rejected" {
+            $canonicalLine = "          ${marketplaceSecretName}: `${{ secrets.${marketplaceSecretName} }}`n"
+            $mutatedPublishBlock = $publishBlock.Value.Replace($canonicalLine, '')
+            $mutated = $workflowText.Remove($publishBlock.Index, $publishBlock.Length).Insert(
+                $publishBlock.Index,
+                $mutatedPublishBlock)
+            Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+        } "exactly the three marketplace|bind $marketplaceSecretName"
+    }
+    Assert-ThrowsMatch "swapped publishing marketplace sources rejected" {
+        $mutatedPublishBlock = $publishBlock.Value.Replace(
+            'secrets.CF_API_KEY',
+            'secrets.TEMP_MARKETPLACE_TOKEN').Replace(
+                'secrets.WAGO_API_TOKEN',
+                'secrets.CF_API_KEY').Replace(
+                    'secrets.TEMP_MARKETPLACE_TOKEN',
+                    'secrets.WAGO_API_TOKEN')
+        $mutated = $workflowText.Remove($publishBlock.Index, $publishBlock.Length).Insert(
+            $publishBlock.Index,
+            $mutatedPublishBlock)
+        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+    } "bind CF_API_KEY|bind WAGO_API_TOKEN|non-canonical"
     Assert-ThrowsMatch "duplicate publishing Packager step rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
             $postPublishMarker,
             $publishBlock.Value + $postPublishMarker)
-    } "exactly one publishing Packager step"
+    } "exactly one publishing Packager step|exactly one marketplace step"
     Assert-ThrowsMatch "wrong pre-upload Packager output binding rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace 'steps\.rebuild-package\.outputs\.project_version', 'steps.build-package.outputs.project_version')
     } "immediate pre-upload step"

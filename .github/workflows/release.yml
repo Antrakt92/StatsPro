@@ -85,6 +85,14 @@ jobs:
         shell: pwsh
         run: ./scripts/check-repository-settings.ps1 -Repository $env:GITHUB_REPOSITORY -ImmutableReleasePolicyOnly -RequireExplicitToken
 
+      - name: Verify marketplace release credentials and versions
+        shell: pwsh
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
+        run: ./scripts/check-marketplace-versions.ps1
+
       - name: Trim release changelog
         shell: pwsh
         run: ./scripts/check-release-version.ps1 -Tag $env:GITHUB_REF_NAME -EnforceSemVer -ExportTopChangelogPath CHANGELOG.md
@@ -119,12 +127,6 @@ jobs:
             -ArchonMaxAgeDays 3 `
             -RequireExactPackagerProjectVersion `
             -EnforceToolLocks
-
-      - name: Check marketplace versions
-        shell: pwsh
-        env:
-          CF_API_KEY: ${{ secrets.CF_API_KEY }}
-        run: ./scripts/check-marketplace-versions.ps1
 
       - name: Recheck release ancestry before final package build
         shell: pwsh

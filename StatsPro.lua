@@ -1002,6 +1002,7 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats has no supported settings to import.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "These settings use a newer schema and cannot be imported by this StatsPro version.",
+        ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "SwiftStats import is unavailable during combat. Try again after combat.",
         ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload.",
         ["Import"] = "Import",
@@ -1085,6 +1086,7 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Настройки SwiftStats не загружены. Включите SwiftStats на один вход в игру, выполните /reload, затем снова введите /statspro import.",
         ["SwiftStats has no supported settings to import."] = "В SwiftStats нет поддерживаемых настроек для импорта.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Эти настройки используют более новую схему и не могут быть импортированы этой версией StatsPro.",
+        ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Настройки доступны только для чтения, поскольку они сохранены более новой версией StatsPro. Обновите StatsPro, чтобы изменять их.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "Импорт SwiftStats недоступен в бою. Повторите после боя.",
         ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Заменить текущие настройки StatsPro совместимыми настройками SwiftStats? Параметры только для StatsPro будут сброшены, данные SwiftStats останутся без изменений, а интерфейс перезагрузится.",
         ["Import"] = "Импорт",
@@ -1163,6 +1165,7 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats-Einstellungen sind nicht geladen. Aktiviere SwiftStats für eine Anmeldung, führe /reload aus und gib danach erneut /statspro import ein.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats enthält keine unterstützten Einstellungen zum Importieren.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Diese Einstellungen verwenden ein neueres Schema und können von dieser StatsPro-Version nicht importiert werden.",
+        ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Die Einstellungen sind schreibgeschützt, da sie mit einer neueren StatsPro-Version gespeichert wurden. Aktualisiere StatsPro, um sie zu ändern.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "Der SwiftStats-Import ist im Kampf nicht verfügbar. Versuche es nach dem Kampf erneut.",
         ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Aktuelle StatsPro-Einstellungen durch kompatible SwiftStats-Einstellungen ersetzen? StatsPro-spezifische Optionen werden zurückgesetzt, SwiftStats-Daten bleiben unverändert und die Benutzeroberfläche wird neu geladen.",
         ["Import"] = "Importieren",
@@ -1236,6 +1239,7 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Les réglages de SwiftStats ne sont pas chargés. Activez SwiftStats pour une connexion, exécutez /reload, puis relancez /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats ne contient aucun réglage pris en charge à importer.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Ces réglages utilisent un schéma plus récent et ne peuvent pas être importés par cette version de StatsPro.",
+        ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Les paramètres sont en lecture seule, car ils ont été enregistrés par une version plus récente de StatsPro. Mettez StatsPro à jour pour les modifier.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "L’importation SwiftStats est indisponible en combat. Réessayez après le combat.",
         ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Remplacer les réglages StatsPro actuels par les réglages SwiftStats compatibles ? Les options propres à StatsPro seront réinitialisées, les données SwiftStats resteront intactes et l’interface sera rechargée.",
         ["Import"] = "Importer",
@@ -1310,6 +1314,7 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Los ajustes de SwiftStats no están cargados. Activa SwiftStats durante un inicio de sesión, ejecuta /reload y vuelve a usar /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats no tiene ajustes compatibles para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Estos ajustes usan un esquema más reciente y esta versión de StatsPro no puede importarlos.",
+        ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Los ajustes son de solo lectura porque se guardaron con una versión más reciente de StatsPro. Actualiza StatsPro para modificarlos.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "La importación de SwiftStats no está disponible en combate. Inténtalo de nuevo después.",
         ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "¿Reemplazar los ajustes actuales de StatsPro por los ajustes compatibles de SwiftStats? Las opciones exclusivas de StatsPro volverán a sus valores predeterminados, los datos de SwiftStats no cambiarán y la interfaz se recargará.",
         ["Import"] = "Importar",
@@ -1382,6 +1387,7 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "La configuración de SwiftStats no está cargada. Activa SwiftStats durante un inicio de sesión, ejecuta /reload y vuelve a usar /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats no tiene opciones compatibles para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Esta configuración usa un esquema más reciente y esta versión de StatsPro no puede importarla.",
+        ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "La configuración es de solo lectura porque se guardó con una versión más reciente de StatsPro. Actualiza StatsPro para modificarla.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "La importación de SwiftStats no está disponible en combate. Inténtalo de nuevo al terminar.",
         ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "¿Reemplazar la configuración actual de StatsPro por la configuración compatible de SwiftStats? Las opciones exclusivas de StatsPro volverán a sus valores predeterminados, los datos de SwiftStats no cambiarán y la interfaz se recargará.",
         ["Import"] = "Importar",
@@ -1455,6 +1461,7 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Le impostazioni di SwiftStats non sono caricate. Abilita SwiftStats per un accesso, esegui /reload, quindi usa di nuovo /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats non contiene impostazioni supportate da importare.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Queste impostazioni usano uno schema più recente e non possono essere importate da questa versione di StatsPro.",
+        ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Le impostazioni sono in sola lettura perché sono state salvate da una versione più recente di StatsPro. Aggiorna StatsPro per modificarle.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "L’importazione di SwiftStats non è disponibile in combattimento. Riprova al termine.",
         ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Sostituire le impostazioni StatsPro attuali con quelle compatibili di SwiftStats? Le opzioni specifiche di StatsPro torneranno ai valori predefiniti, i dati di SwiftStats resteranno invariati e l’interfaccia verrà ricaricata.",
         ["Import"] = "Importa",
@@ -1527,6 +1534,7 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "As configurações do SwiftStats não estão carregadas. Ative o SwiftStats por um login, execute /reload e use /statspro import novamente.",
         ["SwiftStats has no supported settings to import."] = "O SwiftStats não tem configurações compatíveis para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Estas configurações usam um esquema mais recente e não podem ser importadas por esta versão do StatsPro.",
+        ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "As configurações estão somente para leitura porque foram salvas por uma versão mais recente do StatsPro. Atualize o StatsPro para alterá-las.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "A importação do SwiftStats não está disponível em combate. Tente novamente depois.",
         ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Substituir as configurações atuais do StatsPro pelas configurações compatíveis do SwiftStats? As opções exclusivas do StatsPro voltarão ao padrão, os dados do SwiftStats permanecerão intactos e a interface será recarregada.",
         ["Import"] = "Importar",
@@ -1606,6 +1614,7 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats 설정이 로드되지 않았습니다. 한 번 로그인하는 동안 SwiftStats를 활성화하고 /reload 후 /statspro import를 다시 실행하세요.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats에 가져올 수 있는 지원 설정이 없습니다.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "이 설정은 더 새로운 스키마를 사용하므로 현재 StatsPro 버전에서 가져올 수 없습니다.",
+        ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "더 최신 StatsPro 버전에서 저장한 설정이므로 읽기 전용입니다. 설정을 변경하려면 StatsPro를 업데이트하세요.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "전투 중에는 SwiftStats 설정을 가져올 수 없습니다. 전투 후 다시 시도하세요.",
         ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "현재 StatsPro 설정을 호환되는 SwiftStats 설정으로 바꾸시겠습니까? StatsPro 전용 옵션은 기본값으로 초기화되고 SwiftStats 데이터는 변경되지 않으며 UI가 다시 로드됩니다.",
         ["Import"] = "가져오기",
@@ -1678,6 +1687,7 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "未加载 SwiftStats 设置。请启用 SwiftStats 登录一次，执行 /reload，然后再次运行 /statspro import。",
         ["SwiftStats has no supported settings to import."] = "SwiftStats 中没有可导入的受支持设置。",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "这些设置使用较新的数据结构，当前版本的 StatsPro 无法导入。",
+        ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "这些设置由较新版本的 StatsPro 保存，因此当前为只读。请更新 StatsPro 后再进行修改。",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "战斗中无法导入 SwiftStats 设置。请在战斗结束后重试。",
         ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "要用兼容的 SwiftStats 设置替换当前 StatsPro 设置吗？StatsPro 专属选项将恢复默认值，SwiftStats 数据不会改变，界面将重新加载。",
         ["Import"] = "导入",
@@ -1750,6 +1760,7 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "未載入 SwiftStats 設定。請啟用 SwiftStats 登入一次，執行 /reload，然後再次輸入 /statspro import。",
         ["SwiftStats has no supported settings to import."] = "SwiftStats 中沒有可匯入的支援設定。",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "這些設定使用較新的資料結構，目前版本的 StatsPro 無法匯入。",
+        ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "這些設定由較新版本的 StatsPro 儲存，因此目前為唯讀。請更新 StatsPro 後再進行修改。",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "戰鬥中無法匯入 SwiftStats 設定。請在戰鬥結束後重試。",
         ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "要用相容的 SwiftStats 設定取代目前的 StatsPro 設定嗎？StatsPro 專屬選項將恢復預設值，SwiftStats 資料不會變更，介面將重新載入。",
         ["Import"] = "匯入",
@@ -1823,11 +1834,11 @@ local function NormalizeDBVersion(value)
     local secretOK, secret = pcall(issecretvalue, value)
     -- WARNING: an unreadable/secret schema marker must block mutation like a
     -- future version; treating it as version 0 would run destructive migrations.
-    if not secretOK or secret then return CURRENT_DB_VERSION + 1 end
+    if not secretOK or secret then return CURRENT_DB_VERSION + 1, false end
     local numberOK, n = pcall(tonumber, value)
-    if not numberOK then return 0 end
-    if not IsFiniteNumber(n) then return 0 end
-    return math.floor(n)
+    if not numberOK then return 0, true end
+    if not IsFiniteNumber(n) then return 0, true end
+    return math.floor(n), true
 end
 
 local NUMBER_SETTING_META = {
@@ -2314,6 +2325,33 @@ local function PrintMsg(text)
     print("|cff00ff7f[StatsPro]|r " .. text)
 end
 
+-- One dynamic write boundary for the live SavedVariables root. A downgraded addon
+-- may read a newer schema through defaults/runtime normalization, but must never write
+-- any field back: even a harmless-looking position or modal-cancel write can destroy
+-- data the older code does not understand. Re-evaluate on every attempted mutation so
+-- a modal opened under the current schema cannot write after the root becomes future.
+addon.dbRuntime = { readOnly = false, version = 0, versionDisplay = "0", warned = false }
+
+function addon.dbRuntime.Refresh()
+    local db = EnsureStatsProDBTable()
+    local version, versionReadable = NormalizeDBVersion(db.dbVersion)
+    addon.dbRuntime.version = version
+    addon.dbRuntime.versionDisplay = versionReadable and string.format("%d", version) or "<unavailable>"
+    addon.dbRuntime.readOnly = version > CURRENT_DB_VERSION
+    if not addon.dbRuntime.readOnly then addon.dbRuntime.warned = false end
+    return db
+end
+
+function addon.dbRuntime.GetWritableSettings(showGuidance)
+    local db = addon.dbRuntime.Refresh()
+    if not addon.dbRuntime.readOnly then return db end
+    if showGuidance == true and not addon.dbRuntime.warned then
+        addon.dbRuntime.warned = true
+        PrintMsg(L("Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."))
+    end
+    return nil
+end
+
 --[[ ============================================================
     8. CACHE UTILITIES
 ============================================================ ]]
@@ -2695,7 +2733,8 @@ function addon.legacyImport.FindCandidate()
 end
 
 function addon.legacyImport.ImportFreshIfAvailable()
-    local db = EnsureStatsProDBTable()
+    local db = addon.dbRuntime.GetWritableSettings(false)
+    if not db then return false end
     if next(db) ~= nil then return false end
     local candidate = addon.legacyImport.FindCandidate()
     if not candidate then return false end
@@ -3030,10 +3069,12 @@ function Panel:SavePosition()
     -- nil. Writing nil deletes the key — next load would fall back to defaults and the
     -- previously-saved position would be lost.
     if not point then return end
-    StatsProDB[self:DBKey("point")] = point
-    StatsProDB[self:DBKey("relativePoint")] = relativePoint
-    StatsProDB[self:DBKey("xOfs")] = xOfs
-    StatsProDB[self:DBKey("yOfs")] = yOfs
+    local db = addon.dbRuntime.GetWritableSettings(false)
+    if not db then return end
+    db[self:DBKey("point")] = point
+    db[self:DBKey("relativePoint")] = relativePoint
+    db[self:DBKey("xOfs")] = xOfs
+    db[self:DBKey("yOfs")] = yOfs
 end
 
 function Panel:LoadPosition()
@@ -3616,10 +3657,8 @@ function addon.fontRuntime.applyCommittedTextStyle(font, size, force, allowFontF
     if not applied then return false end
 
     addon.fontRuntime.committedFont = effectiveFont
-    local db = EnsureStatsProDBTable()
-    if NormalizeDBVersion(db.dbVersion) <= CURRENT_DB_VERSION then
-        db.font = effectiveFont
-    end
+    local db = addon.dbRuntime.GetWritableSettings(false)
+    if db then db.font = effectiveFont end
     if addon.fontRuntime.refreshCaption then addon.fontRuntime.refreshCaption() end
     return true, effectiveFont, effectiveOutline, effectiveFlags
 end
@@ -3629,8 +3668,8 @@ function addon.fontRuntime.currentPath()
 end
 
 function addon.fontRuntime.repairSavedPaths()
-    local db = EnsureStatsProDBTable()
-    if NormalizeDBVersion(db.dbVersion) > CURRENT_DB_VERSION then return end
+    local db = addon.dbRuntime.GetWritableSettings(false)
+    if not db then return end
 
     local current = addon.fontRuntime.usablePath(db.font)
     if not current then
@@ -3646,15 +3685,12 @@ function addon.fontRuntime.repairSavedPaths()
 end
 
 function addon.fontRuntime.clearSavedAutoFont()
-    local db = EnsureStatsProDBTable()
-    if NormalizeDBVersion(db.dbVersion) <= CURRENT_DB_VERSION then
-        db.fontBeforeAutoSwitch = nil
-    end
+    local db = addon.dbRuntime.GetWritableSettings(false)
+    if db then db.fontBeforeAutoSwitch = nil end
 end
 
-function addon.fontRuntime.canMutateDB()
-    local db = EnsureStatsProDBTable()
-    return NormalizeDBVersion(db.dbVersion) <= CURRENT_DB_VERSION
+function addon.fontRuntime.canMutateDB(showGuidance)
+    return addon.dbRuntime.GetWritableSettings(showGuidance) ~= nil
 end
 
 function Panel:ApplyBackgroundAlpha(alpha)
@@ -3686,13 +3722,18 @@ addon.readabilityConfig.getTextOutlineStyle = addon.readabilityConfig.getTextOut
 
 addon.readabilityConfig.selectTextOutlineStyle = function(value, opt, dropdown)
     local previous = addon.readabilityConfig.getTextOutlineStyleDB()
+    local db = addon.dbRuntime.GetWritableSettings(true)
+    if not db then
+        CloseDropDownMenus()
+        return false
+    end
     local selected = addon.readabilityConfig.normalizeTextOutlineStyle(value)
-    StatsProDB.textOutlineStyle = selected
+    db.textOutlineStyle = selected
     CacheSettings()
     local applied = addon.fontRuntime.applyCommittedTextStyle(
         addon.fontRuntime.currentPath(), GetNumberDB("fontSize"), false, true)
     if not applied then
-        StatsProDB.textOutlineStyle = previous
+        db.textOutlineStyle = previous
         CacheSettings()
         for _, previousOpt in ipairs(addon.readabilityConfig.textOutlineOptions) do
             if previousOpt.value == previous then
@@ -3755,22 +3796,22 @@ local ApplyConfigFont
 -- Caller must set StatsProDB.forceLocale + run CacheSettings BEFORE calling.
 local function MaybeAutoSwitchFont()
     local db = EnsureStatsProDBTable()
-    local canMutateDB = NormalizeDBVersion(db.dbVersion) <= CURRENT_DB_VERSION
+    local writableDB = addon.dbRuntime.GetWritableSettings(false)
     local active = ResolveActiveLocale()
     local req    = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
     local cur    = GetFontDB()
 
     if FontSupports(cur, req) then
         local saved = GetSavedAutoFontDB()
-        if canMutateDB and type(db.fontBeforeAutoSwitch) ~= "nil" and not saved then
-            db.fontBeforeAutoSwitch = nil
+        if writableDB and type(db.fontBeforeAutoSwitch) ~= "nil" and not saved then
+            writableDB.fontBeforeAutoSwitch = nil
         end
         if saved and not SameFontPath(saved, cur) and FontSupports(saved, req) then
             local applied, effectiveFont = addon.fontRuntime.applyCommittedTextStyle(
                 saved, GetNumberDB("fontSize"), false, false)
             if applied then
                 cur = effectiveFont
-                if canMutateDB then db.fontBeforeAutoSwitch = nil end
+                if writableDB then writableDB.fontBeforeAutoSwitch = nil end
             end
         end
         if not SameFontPath(cur, addon.fontRuntime.currentPath()) then
@@ -3789,7 +3830,7 @@ local function MaybeAutoSwitchFont()
             fallback, GetNumberDB("fontSize"), false, false)
         if applied then
             cur = effectiveFont
-            if canMutateDB then db.fontBeforeAutoSwitch = saved end
+            if writableDB then writableDB.fontBeforeAutoSwitch = saved end
         end
     end
     ApplyConfigFont(ResolveConfigFont(active))
@@ -4481,6 +4522,7 @@ local function OnPlayerEnteringWorld()
         -- without the explicit `/statspro import` confirmation path.
         addon.legacyImport.ImportFreshIfAvailable()
         MigrateDB()
+        addon.dbRuntime.Refresh()
         addon.fontRuntime.repairSavedPaths()
         CacheSettings()
         if RefreshPersistentLocalization then RefreshPersistentLocalization() end
@@ -4693,13 +4735,13 @@ local CONFIG_DROPDOWN_Y_OFFSET = 2
 -- can occasionally overflow at 100px — accepted: rare, names truncate to "Long Name..." and
 -- the user can hover the dropdown for full text via Blizzard's tooltip.
 
--- Single source of truth for "DB color or fallback to default". Used by every
--- color-related helper + their refreshers; lazily initializes the colors table
--- (StatsProDB may not have it yet on a fresh install).
+-- Single source of truth for "DB color or fallback to default". This read path is
+-- deliberately pure: opening Settings under a newer schema must not lazily create a
+-- colors table and thereby mutate data owned by the newer addon version.
 local function GetColor(statName)
     local db = EnsureStatsProDBTable()
-    if type(db.colors) ~= "table" then db.colors = {} end
-    local r, g, b = NormalizeColor(db.colors[statName], defaults.colors[statName])
+    local colors = type(db.colors) == "table" and db.colors or {}
+    local r, g, b = NormalizeColor(colors[statName], defaults.colors[statName])
     return { r = r, g = g, b = b }
 end
 
@@ -4728,7 +4770,12 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
     text:SetMaxLines(1)
     cb:SetChecked(GetBoolDB(dbKey))
     cb:SetScript("OnClick", function(self)
-        StatsProDB[dbKey] = self:GetChecked()
+        local db = addon.dbRuntime.GetWritableSettings(true)
+        if not db then
+            self:SetChecked(GetBoolDB(dbKey))
+            return
+        end
+        db[dbKey] = self:GetChecked()
         CacheSettings()
         if onChange then onChange(self:GetChecked()) end
         addon:RunUpdateStatsSafe()
@@ -4884,6 +4931,8 @@ end
 StatsProCloseColorPicker = COLOR_PICKER_STATE.Close
 
 local function OpenColorPicker(btn, statName)
+    local db = addon.dbRuntime.GetWritableSettings(true)
+    if not db then return end
     COLOR_PICKER_STATE.EnsureFrameHook()
     COLOR_PICKER_STATE.Close()
     -- The Blizzard picker is a shared singleton. Do not overwrite a foreign
@@ -4892,8 +4941,8 @@ local function OpenColorPicker(btn, statName)
     -- WHY: capture "uses default" state so cancel can restore exactly that — writing
     -- the resolved-default tuple back would convert unset → explicit-default in DB
     -- (visible only between cancel and the next /reload, but the invariant is correct).
-    if type(StatsProDB.colors) ~= "table" then StatsProDB.colors = {} end
-    local hadExplicitColor = IsCompleteColor(StatsProDB.colors[statName])
+    if type(db.colors) ~= "table" then db.colors = {} end
+    local hadExplicitColor = IsCompleteColor(db.colors[statName])
     local current = GetColor(statName)
     local snapshot = { r = current.r, g = current.g, b = current.b }
 
@@ -4911,16 +4960,31 @@ local function OpenColorPicker(btn, statName)
 
     local function OnColorSelect()
         if not COLOR_PICKER_STATE.IsActive(session) then return end
+        local writableDB = addon.dbRuntime.GetWritableSettings(true)
+        if not writableDB then
+            local persisted = GetColor(statName)
+            btn:SetBackdropColor(persisted.r, persisted.g, persisted.b, 1)
+            return
+        end
+        if type(writableDB.colors) ~= "table" then writableDB.colors = {} end
         local r, g, b = ColorPickerFrame:GetColorRGB()
         btn:SetBackdropColor(r, g, b, 1)
-        StatsProDB.colors[statName] = { r = r, g = g, b = b }
+        writableDB.colors[statName] = { r = r, g = g, b = b }
         CacheSettings()
         addon:RunUpdateStatsSafe()
     end
     local function OnCancel()
         if not COLOR_PICKER_STATE.IsActive(session) then return end
-        btn:SetBackdropColor(snapshot.r, snapshot.g, snapshot.b, 1)
-        StatsProDB.colors[statName] = hadExplicitColor and { r = snapshot.r, g = snapshot.g, b = snapshot.b } or nil
+        local writableDB = addon.dbRuntime.GetWritableSettings(true)
+        if writableDB then
+            if type(writableDB.colors) ~= "table" then writableDB.colors = {} end
+            btn:SetBackdropColor(snapshot.r, snapshot.g, snapshot.b, 1)
+            writableDB.colors[statName] = hadExplicitColor
+                and { r = snapshot.r, g = snapshot.g, b = snapshot.b } or nil
+        else
+            local persisted = GetColor(statName)
+            btn:SetBackdropColor(persisted.r, persisted.g, persisted.b, 1)
+        end
         CacheSettings()
         addon:RunUpdateStatsSafe()
         COLOR_PICKER_STATE.Clear(session)
@@ -5236,11 +5300,19 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
         if reverting then return end
         local previous = NUMBER_SETTING_META[dbKey] and GetNumberDB(dbKey) or GetDB(dbKey)
         local normalized = NUMBER_SETTING_META[dbKey] and NormalizeNumberSetting(dbKey, value) or value
+        local db = addon.dbRuntime.GetWritableSettings(true)
+        if not db then
+            reverting = true
+            self:SetValue(previous)
+            reverting = false
+            _G[self:GetName() .. "Text"]:SetText(string.format(valueFmt, previous))
+            return
+        end
         _G[self:GetName() .. "Text"]:SetText(string.format(valueFmt, normalized))
-        StatsProDB[dbKey] = normalized
+        db[dbKey] = normalized
         local accepted = onChange and onChange(normalized, previous)
         if accepted == false then
-            StatsProDB[dbKey] = previous
+            db[dbKey] = previous
             reverting = true
             self:SetValue(previous)
             reverting = false
@@ -5263,6 +5335,8 @@ end
 -- file-scope or global; configRefreshers / RefreshConfigLocalization no-op safely
 -- when settings UI has never been opened (empty arrays at file scope).
 local function ResetToDefaults()
+    local db = addon.dbRuntime.GetWritableSettings(true)
+    if not db then return false end
     -- Preserve the user's current output language for the confirmation, because
     -- reset itself restores forceLocale to "auto" before the final chat message.
     local resetMessage = L("Settings reset to defaults")
@@ -5283,16 +5357,16 @@ local function ResetToDefaults()
 
     -- Step 2: reset DB scalars + colors to defaults.
     for k, v in pairs(defaults) do
-        if type(v) ~= "table" then StatsProDB[k] = v end
+        if type(v) ~= "table" then db[k] = v end
     end
     -- Explicit cleanup of fields not in defaults (the loop above only writes present-key
     -- defaults). These would linger in DB across Reset otherwise:
     --   - useLocalizedLabels: dropped in v4→v5 migration; legacy users may still have it
     --   - fontBeforeAutoSwitch: transient runtime state set when MaybeAutoSwitchFont fires
-    StatsProDB.useLocalizedLabels = nil
-    StatsProDB.fontBeforeAutoSwitch = nil
-    StatsProDB.colors = CopyTable(defaults.colors)
-    StatsProDB.dbVersion = CURRENT_DB_VERSION
+    db.useLocalizedLabels = nil
+    db.fontBeforeAutoSwitch = nil
+    db.colors = CopyTable(defaults.colors)
+    db.dbVersion = CURRENT_DB_VERSION
 
     -- Step 3: re-cache + re-apply panel-level visual state.
     CacheSettings()
@@ -5344,8 +5418,8 @@ function addon.legacyImport.AcceptPending()
         PrintMsg(L("SwiftStats import is unavailable during combat. Try again after combat."))
         return
     end
-    local currentDB = EnsureStatsProDBTable()
-    if NormalizeDBVersion(currentDB.dbVersion) > CURRENT_DB_VERSION then
+    local currentDB = addon.dbRuntime.GetWritableSettings(false)
+    if not currentDB then
         PrintMsg(L("These settings use a newer schema and cannot be imported by this StatsPro version."))
         return
     end
@@ -5401,8 +5475,7 @@ function addon.legacyImport.Request()
         PrintMsg(L("SwiftStats import is unavailable during combat. Try again after combat."))
         return
     end
-    local db = EnsureStatsProDBTable()
-    if NormalizeDBVersion(db.dbVersion) > CURRENT_DB_VERSION then
+    if not addon.dbRuntime.GetWritableSettings(false) then
         PrintMsg(L("These settings use a newer schema and cannot be imported by this StatsPro version."))
         return
     end
@@ -5435,7 +5508,12 @@ function addon.archonTargets.GetTargetSnapshotDropdownValue()
 end
 
 function addon.archonTargets.SelectTargetSnapshotDropdownValue(value, opt, dropdown)
-    StatsProDB.targetSnapshot = addon.archonTargets.NormalizeSnapshotKey(value)
+    local db = addon.dbRuntime.GetWritableSettings(true)
+    if not db then
+        CloseDropDownMenus()
+        return false
+    end
+    db.targetSnapshot = addon.archonTargets.NormalizeSnapshotKey(value)
     CacheSettings()
     UIDropDownMenu_SetText(dropdown, L(opt.label))
     CloseDropDownMenus()
@@ -5448,6 +5526,9 @@ _G.StatsProGetTargetSnapshotDropdownValue = addon.archonTargets.GetTargetSnapsho
 _G.StatsProSelectTargetSnapshotDropdownValue = addon.archonTargets.SelectTargetSnapshotDropdownValue
 
 function addon:OpenConfigMenu()
+    -- Settings remains inspectable under a future schema, but the shared write gate
+    -- explains once per session why every mutating control is read-only.
+    self.dbRuntime.GetWritableSettings(true)
     if configFrame then
         if configFrame:IsShown() then
             configFrame:Hide()
@@ -5750,7 +5831,12 @@ function addon:OpenConfigMenu()
             cd,
             function() return GetDB("displayMode") end,
             function(value, opt, dropdown)
-                StatsProDB.displayMode = value
+                local db = self.dbRuntime.GetWritableSettings(true)
+                if not db then
+                    CloseDropDownMenus()
+                    return false
+                end
+                db.displayMode = value
                 CacheSettings()
                 UIDropDownMenu_SetText(dropdown, L(opt.label))
                 ApplySplitBlockChecksEnabled()
@@ -5843,7 +5929,12 @@ function addon:OpenConfigMenu()
             cd,
             function() return NormalizeLabelStyle(GetDB("labelStyle")) end,
             function(value, opt, dropdown)
-                StatsProDB.labelStyle = value
+                local db = self.dbRuntime.GetWritableSettings(true)
+                if not db then
+                    CloseDropDownMenus()
+                    return false
+                end
+                db.labelStyle = value
                 CacheSettings()
                 UIDropDownMenu_SetText(dropdown, L(opt.label))
                 CloseDropDownMenus()
@@ -5981,7 +6072,7 @@ function addon:OpenConfigMenu()
             ReflowAllPanels()
         end
         local function PickFont(f)
-            if not self.fontRuntime.canMutateDB() then return false end
+            if not self.fontRuntime.canMutateDB(true) then return false end
             local applied = self.fontRuntime.applyCommittedTextStyle(
                 f.path, GetNumberDB("fontSize"), false, false)
             if not applied then return false end
@@ -6444,9 +6535,15 @@ function addon:OpenConfigMenu()
                 info.value = opt.value
                 info.checked = (current == opt.value)
                 info.func = function()
+                    local db = self.dbRuntime.GetWritableSettings(true)
+                    if not db then
+                        CloseDropDownMenus()
+                        CancelLanguagePreview()
+                        return false
+                    end
                     -- Commit supersedes any in-flight hover preview. MaybeAutoSwitchFont
                     -- is the authoritative font owner from this point on.
-                    StatsProDB.forceLocale = opt.value
+                    db.forceLocale = opt.value
                     CacheSettings()
                     MaybeAutoSwitchFont()
                     -- WHY conditional restore AFTER MAS: hover preview may have swapped
@@ -6746,10 +6843,12 @@ end
 -- Self-serve diagnostics: dump runtime state to chat for bug reports. Each group is
 -- a separate PrintMsg so restricted values cannot poison unrelated diagnostic lines.
 function addon:PrintDebugDump()
-    PrintMsg(string.format("debug v%s  dbVer %s/%d  isLoaded=%s  durDirty=%s  mem=%dKB",
+    addon.dbRuntime.Refresh()
+    PrintMsg(string.format("debug v%s  dbVer %s/%d  dbMode=%s  isLoaded=%s  durDirty=%s  mem=%dKB",
         ADDON_VERSION,
-        tostring(StatsProDB.dbVersion or "?"),
+        addon.dbRuntime.versionDisplay,
         CURRENT_DB_VERSION,
+        addon.dbRuntime.readOnly and "read-only" or "current",
         tostring(isLoaded), tostring(durabilityDirty),
         math.floor(collectgarbage("count"))))
 
@@ -7168,6 +7267,14 @@ end
 if addon and addon.__statsproSmoke == true then
     addon.__test = {
         currentDBVersion = function() return CURRENT_DB_VERSION end,
+        dbCompatibilityState = function()
+            addon.dbRuntime.Refresh()
+            return {
+                readOnly = addon.dbRuntime.readOnly,
+                version = addon.dbRuntime.version,
+                warned = addon.dbRuntime.warned,
+            }
+        end,
         cachedUpdateInterval = function() return cached.updateInterval end,
         cachedTextAlpha = function() return cached.textAlpha end,
         cachedPanelBackgroundAlpha = function() return cached.panelBackgroundAlpha end,
@@ -7458,13 +7565,19 @@ Settings.RegisterAddOnCategory(launcherCategory)
 SLASH_STATSPRO1 = "/ss"
 SLASH_STATSPRO2 = "/statspro"
 local function SetVisible(visible)
-    local db = EnsureStatsProDBTable()
+    local db = addon.dbRuntime.GetWritableSettings(true)
+    if not db then
+        local cb = _G["StatsProVisibleCheck"]
+        if cb then cb:SetChecked(GetBoolDB("isVisible")) end
+        return false
+    end
     db.isVisible = visible
     CacheSettings()
     addon:RunUpdateStatsSafe()
     -- WHY: master Visible checkbox in config menu may be open; sync its state.
     local cb = _G["StatsProVisibleCheck"]
     if cb then cb:SetChecked(visible) end
+    return true
 end
 SlashCmdList["STATSPRO"] = function(msg)
     local input = (msg or ""):lower()
@@ -7472,15 +7585,14 @@ SlashCmdList["STATSPRO"] = function(msg)
     arg = arg or ""
     rest = rest or ""
     if arg == "show" then
-        SetVisible(true)
-        PrintMsg(L("Stats panel shown"))
+        if SetVisible(true) then PrintMsg(L("Stats panel shown")) end
     elseif arg == "hide" then
-        SetVisible(false)
-        PrintMsg(L("Stats panel hidden"))
+        if SetVisible(false) then PrintMsg(L("Stats panel hidden")) end
     elseif arg == "toggle" then
         local newState = not GetBoolDB("isVisible")
-        SetVisible(newState)
-        PrintMsg(L(newState and "Stats panel shown" or "Stats panel hidden"))
+        if SetVisible(newState) then
+            PrintMsg(L(newState and "Stats panel shown" or "Stats panel hidden"))
+        end
     elseif arg == "reset" then
         ResetToDefaults()
     elseif arg == "import" then

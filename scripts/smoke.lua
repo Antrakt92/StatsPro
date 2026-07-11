@@ -38,6 +38,26 @@ local function deepCopy(value, seen)
     return out
 end
 
+local function deepEqual(actual, expected, seen)
+    if rawequal(actual, expected) then return true end
+    if type(actual) ~= type(expected) or type(actual) ~= "table" then return false end
+    seen = seen or {}
+    seen[actual] = seen[actual] or {}
+    if seen[actual][expected] then return true end
+    seen[actual][expected] = true
+    for key, value in pairs(actual) do
+        if not deepEqual(value, expected[key], seen) then return false end
+    end
+    for key in pairs(expected) do
+        if actual[key] == nil then return false end
+    end
+    return true
+end
+
+local function assertDeepEqual(name, actual, expected)
+    check(name, deepEqual(actual, expected), "tables differ")
+end
+
 local function wipeTable(t)
     for k in pairs(t) do
         t[k] = nil
@@ -6515,6 +6535,152 @@ do
     slash("config.reset_closes_color_picker", env, "reset")
     eq("config.reset_closes_color_picker.hidden", env.ColorPickerFrame:IsShown(), false)
     assertColor("config.reset_closes_color_picker.default_color", env.StatsProDB.colors.crit, 1, 0, 0)
+end
+
+do
+    local readOnlyMessage = "Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."
+    local futureDB = {
+        dbVersion = test.currentDBVersion() + 5,
+        isVisible = true,
+        isLocked = false,
+        displayMode = "sectioned",
+        labelStyle = "full",
+        targetSnapshot = "mythicPlus",
+        scale = 1,
+        updateInterval = 0.5,
+        font = "Fonts\\ARIALN.TTF",
+        fontSize = 14,
+        textAlpha = 100,
+        panelBackgroundAlpha = 0,
+        textOutlineStyle = "outline",
+        forceLocale = "ruRU",
+        point = "CENTER",
+        relativePoint = "CENTER",
+        xOfs = 0,
+        yOfs = 0,
+        defensive_point = "CENTER",
+        defensive_relativePoint = "CENTER",
+        defensive_xOfs = 0,
+        defensive_yOfs = -100,
+        futureOnly = { nested = { keep = true }, revision = 42 },
+    }
+    local before = deepCopy(futureDB)
+    local futureEnv, futureAddon, futureTest = loadStatsPro("enUS", {
+        statsProDB = futureDB,
+        swiftStatsDB = { fontSize = 17 },
+    })
+    local function assertRootUnchanged(name)
+        eq(name .. ".same_root", rawequal(futureEnv.StatsProDB, futureDB), true)
+        assertDeepEqual(name .. ".deep", futureEnv.StatsProDB, before)
+    end
+    fireEvent("db_compat.future_read_only.pew", futureEnv, "PLAYER_ENTERING_WORLD")
+    assertRootUnchanged("db_compat.future_read_only.pew_unchanged")
+    local compatibility = futureTest.dbCompatibilityState()
+    eq("db_compat.future_read_only.state", compatibility.readOnly, true)
+    eq("db_compat.future_read_only.version", compatibility.version, before.dbVersion)
+
+    local ok, err = pcall(function() futureAddon:OpenConfigMenu() end)
+    check("db_compat.future_read_only.config_open", ok, err)
+    assertRootUnchanged("db_compat.future_read_only.config_open_unchanged")
+    ok, err = pcall(function() futureAddon:OpenConfigMenu() end)
+    check("db_compat.future_read_only.config_close", ok, err)
+    assertRootUnchanged("db_compat.future_read_only.config_close_unchanged")
+    futureAddon:OpenConfigMenu()
+
+    clickCheckbox("db_compat.future_read_only.checkbox", futureEnv.StatsProVisibleCheck, false)
+    changeSlider("db_compat.future_read_only.slider", futureEnv.StatsProScaleSlider, 1.7)
+    selectDropdownValue("db_compat.future_read_only.display_mode", futureEnv.StatsProDisplayModeDropdown, "split")
+    selectDropdownValue("db_compat.future_read_only.target_snapshot", futureEnv.StatsProTargetSnapshotDropdown, "raid")
+    selectDropdownValue("db_compat.future_read_only.label_style", futureEnv.StatsProLabelStyleDropdown, "hidden")
+    selectDropdownValue("db_compat.future_read_only.outline", futureEnv.StatsProTextOutlineDropdown, "none")
+    selectDropdownValue("db_compat.future_read_only.language", futureEnv.StatsProLanguageDropdown, "deDE")
+    assertRootUnchanged("db_compat.future_read_only.controls_unchanged")
+
+    runScript("db_compat.future_read_only.font_picker_open", futureEnv.StatsProFontDropdownButton,
+        "OnClick", futureEnv.StatsProFontDropdownButton)
+    local fontButton = findFrame("db_compat.future_read_only.font_button", futureEnv, function(frame)
+        return frame.fontPath and frame.fontPath ~= before.font and type(frame.scripts.OnClick) == "function"
+    end)
+    callScript("db_compat.future_read_only.font_commit", fontButton, "OnClick")
+    futureEnv.StatsProFontPicker:Hide()
+    assertRootUnchanged("db_compat.future_read_only.font_modal_unchanged")
+
+    local critSwatch = findFrame("db_compat.future_read_only.crit_swatch", futureEnv, function(frame)
+        return frame.statsProColorKey == "crit"
+    end)
+    callScript("db_compat.future_read_only.color_open", critSwatch, "OnClick")
+    eq("db_compat.future_read_only.color_modal_blocked", futureEnv.ColorPickerFrame:IsShown(), false)
+    assertRootUnchanged("db_compat.future_read_only.color_open_unchanged")
+
+    slash("db_compat.future_read_only.slash_show", futureEnv, "show")
+    slash("db_compat.future_read_only.slash_hide", futureEnv, "hide")
+    slash("db_compat.future_read_only.slash_toggle", futureEnv, "toggle")
+    slash("db_compat.future_read_only.slash_reset", futureEnv, "reset")
+    slash("db_compat.future_read_only.slash_import", futureEnv, "import")
+    eq("db_compat.future_read_only.import_no_popup", futureEnv.__staticPopupShows, 0)
+    assertRootUnchanged("db_compat.future_read_only.slash_unchanged")
+
+    futureEnv.StatsProFrame:ClearAllPoints()
+    futureEnv.StatsProFrame:SetPoint("TOPLEFT", futureEnv.UIParent, "TOPLEFT", 41, -42)
+    futureEnv.StatsProDefensiveFrame:ClearAllPoints()
+    futureEnv.StatsProDefensiveFrame:SetPoint("BOTTOMRIGHT", futureEnv.UIParent, "BOTTOMRIGHT", -17, 23)
+    fireEvent("db_compat.future_read_only.logout", futureEnv, "PLAYER_LOGOUT")
+    assertRootUnchanged("db_compat.future_read_only.logout_unchanged")
+    eq("db_compat.future_read_only.localized_guidance",
+        printContains(futureEnv, "только для чтения"), true)
+
+    local labelsByLocale = futureTest.registrySnapshot().labelsByLocale
+    for locale, labels in pairs(labelsByLocale) do
+        check("db_compat.future_read_only.localized_key." .. locale,
+            type(labels[readOnlyMessage]) == "string" and labels[readOnlyMessage] ~= "",
+            "missing localized read-only guidance")
+    end
+end
+
+do
+    local secretVersion = setmetatable({}, {
+        __tostring = function() error("secret dbVersion inspected", 2) end,
+    })
+    local secretDB = {
+        dbVersion = secretVersion,
+        isVisible = true,
+        futureOnly = { keep = true },
+    }
+    local before = deepCopy(secretDB)
+    local secretEnv = loadStatsPro("enUS", {
+        statsProDB = secretDB,
+        issecretvalue = function(value) return value == secretVersion end,
+    })
+    fireEvent("db_compat.secret_version.pew", secretEnv, "PLAYER_ENTERING_WORLD")
+    clearPrints(secretEnv)
+    slash("db_compat.secret_version.debug", secretEnv, "debug")
+    eq("db_compat.secret_version.debug_redacted",
+        printContains(secretEnv, "dbVer <unavailable>"), true)
+    eq("db_compat.secret_version.debug_read_only",
+        printContains(secretEnv, "dbMode=read-only"), true)
+    eq("db_compat.secret_version.same_root", rawequal(secretEnv.StatsProDB, secretDB), true)
+    assertDeepEqual("db_compat.secret_version.unchanged", secretEnv.StatsProDB, before)
+end
+
+do
+    local transitionDB = {
+        dbVersion = test.currentDBVersion(),
+        colors = { crit = { r = 0.2, g = 0.3, b = 0.4 } },
+    }
+    local transitionEnv = loadStatsPro("enUS", { statsProDB = transitionDB })
+    fireEvent("db_compat.modal_transition.pew", transitionEnv, "PLAYER_ENTERING_WORLD")
+    slash("db_compat.modal_transition.config", transitionEnv, "")
+    local critSwatch = findFrame("db_compat.modal_transition.crit_swatch", transitionEnv, function(frame)
+        return frame.statsProColorKey == "crit"
+    end)
+    callScript("db_compat.modal_transition.open", critSwatch, "OnClick")
+    transitionEnv.__setColorPickerRGB(0.6, 0.7, 0.8)
+    local ok, err = pcall(transitionEnv.ColorPickerFrame.colorPickerOptions.swatchFunc)
+    check("db_compat.modal_transition.preview", ok, err)
+    transitionDB.dbVersion = test.currentDBVersion() + 1
+    local beforeCancel = deepCopy(transitionDB)
+    transitionEnv.__cancelColorPicker()
+    assertDeepEqual("db_compat.modal_transition.cancel_unchanged", transitionDB, beforeCancel)
 end
 
 do

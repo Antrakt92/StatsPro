@@ -1937,6 +1937,28 @@ local function blockDumpContains(blocks, needle)
     return false
 end
 
+local function countValue(t, value)
+    local count = 0
+    for _, item in ipairs(t) do
+        if item == value then count = count + 1 end
+    end
+    return count
+end
+
+local function closeSpecialWindows(env)
+    local closed = false
+    -- Match Blizzard UIParentPanelManager exactly: Escape walks the live shared
+    -- table. OnHide mutations therefore remain observable during this loop.
+    for _, name in pairs(env.UISpecialFrames) do
+        local frame = env[name]
+        if frame and frame:IsShown() then
+            frame:Hide()
+            closed = true
+        end
+    end
+    return closed
+end
+
 local function findFontString(name, env, predicate)
     for _, fontString in ipairs(env.__fontStrings) do
         if predicate(fontString) then return fontString end
@@ -8789,6 +8811,49 @@ do
         env.StatsProProfileOperationCancelButton, "OnClick")
     eq("profiles.ui.header_button.dialog_closed",
         profileTest.profileUIState().operationDialogShown, false)
+    flushTimers("profiles.ui.header_button.restore_manager", env, 0, 1)
+
+    eq("profiles.ui.escape.manager_only.config_removed",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 0)
+    eq("profiles.ui.escape.manager_only.manager_once",
+        countValue(env.UISpecialFrames, "StatsProProfileManager"), 1)
+    callScript("profiles.ui.escape.dialog.open", env.StatsProActiveProfileButton, "OnClick")
+    eq("profiles.ui.escape.dialog_only.manager_removed",
+        countValue(env.UISpecialFrames, "StatsProProfileManager"), 0)
+    eq("profiles.ui.escape.dialog_only.dialog_once",
+        countValue(env.UISpecialFrames, "StatsProProfileOperationDialog"), 1)
+    local foreignSpecial = env.CreateFrame(
+        "Frame", "StatsProEscapeForeignSpecialFrame", env.UIParent)
+    foreignSpecial:Show()
+    table.insert(env.UISpecialFrames, "StatsProEscapeForeignSpecialFrame")
+    eq("profiles.ui.escape.dialog.close", closeSpecialWindows(env), true)
+    eq("profiles.ui.escape.dialog.closed",
+        profileTest.profileUIState().operationDialogShown, false)
+    eq("profiles.ui.escape.dialog.manager_preserved", manager:IsShown(), true)
+    eq("profiles.ui.escape.dialog.config_preserved", config:IsShown(), true)
+    eq("profiles.ui.escape.dialog.manager_not_restored_inside_live_walk",
+        countValue(env.UISpecialFrames, "StatsProProfileManager"), 0)
+    eq("profiles.ui.escape.dialog.config_not_restored_inside_live_walk",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 0)
+    flushTimers("profiles.ui.escape.dialog.restore_manager", env, 0, 1)
+    eq("profiles.ui.escape.dialog.manager_restored_once",
+        countValue(env.UISpecialFrames, "StatsProProfileManager"), 1)
+    eq("profiles.ui.escape.dialog.config_still_suspended",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 0)
+    eq("profiles.ui.escape.manager.close", closeSpecialWindows(env), true)
+    eq("profiles.ui.escape.manager.closed", manager:IsShown(), false)
+    eq("profiles.ui.escape.manager.config_preserved", config:IsShown(), true)
+    eq("profiles.ui.escape.manager.config_not_restored_inside_live_walk",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 0)
+    flushTimers("profiles.ui.escape.manager.restore_config", env, 0, 1)
+    eq("profiles.ui.escape.config_only.config_once",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 1)
+    eq("profiles.ui.escape.config.close", closeSpecialWindows(env), true)
+    eq("profiles.ui.escape.config.closed", config:IsShown(), false)
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.escape.reopen_manager", env.StatsProManageProfilesButton, "OnClick")
+    eq("profiles.ui.escape.reopen_config", config:IsShown(), true)
+    eq("profiles.ui.escape.reopen_manager_shown", manager:IsShown(), true)
 
     local alphaCharacterRow = findFrame("profiles.ui.manager.alpha_character_row", env, function(frame)
         return type(frame.profileContext) == "table"

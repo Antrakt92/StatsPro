@@ -8361,6 +8361,41 @@ function addon.profileUI.OperationErrorText(reason)
     return L("Profile operation failed. Review the selection and try again.")
 end
 
+function addon.profileUI.RemoveSpecialFrame(frameName)
+    for index = #UISpecialFrames, 1, -1 do
+        if UISpecialFrames[index] == frameName then
+            tremove(UISpecialFrames, index)
+        end
+    end
+end
+
+function addon.profileUI.CancelSpecialFrameRestore(frameName)
+    local tokens = addon.profileUI.specialFrameRestoreTokens
+    if type(tokens) ~= "table" then
+        tokens = {}
+        addon.profileUI.specialFrameRestoreTokens = tokens
+    end
+    tokens[frameName] = (tokens[frameName] or 0) + 1
+    return tokens[frameName]
+end
+
+function addon.profileUI.PushSpecialFrame(frameName)
+    addon.profileUI.CancelSpecialFrameRestore(frameName)
+    addon.profileUI.RemoveSpecialFrame(frameName)
+    tinsert(UISpecialFrames, frameName)
+end
+
+function addon.profileUI.DeferSpecialFrameRestore(frameName, shouldRestore)
+    addon.profileUI.RemoveSpecialFrame(frameName)
+    local token = addon.profileUI.CancelSpecialFrameRestore(frameName)
+    C_Timer.After(0, function()
+        local tokens = addon.profileUI.specialFrameRestoreTokens
+        if type(tokens) ~= "table" or tokens[frameName] ~= token then return end
+        if type(shouldRestore) ~= "function" or shouldRestore() ~= true then return end
+        addon.profileUI.PushSpecialFrame(frameName)
+    end)
+end
+
 function addon.profileUI.BuildOperationUI(manager)
     local ui = addon.profileUI
     local actionScroll = CreateFrame(
@@ -8612,6 +8647,9 @@ function addon.profileUI.BuildOperationUI(manager)
         choiceScroll:Hide()
         primaryButton:Show()
         primaryButton:Enable()
+        ui.CancelSpecialFrameRestore("StatsProProfileManager")
+        ui.RemoveSpecialFrame("StatsProProfileManager")
+        ui.PushSpecialFrame("StatsProProfileOperationDialog")
         blocker:Show()
         dialog:Show()
     end
@@ -9185,13 +9223,21 @@ function addon.profileUI.BuildOperationUI(manager)
     dialog:SetScript("OnHide", function()
         blocker:Hide()
         ui.pendingAction = nil
+        ui.RemoveSpecialFrame("StatsProProfileOperationDialog")
+        -- WARNING: Blizzard iterates the live UISpecialFrames table while handling
+        -- Escape. Re-inserting Manager synchronously here can make the same iteration
+        -- hide Manager and Settings too. Restore it on the next tick after the iterator
+        -- has finished, guarded against a meanwhile-hidden or reopened dialog.
+        if manager:IsShown() then
+            ui.DeferSpecialFrameRestore("StatsProProfileManager", function()
+                return manager:IsShown() and not dialog:IsShown()
+            end)
+        else
+            ui.CancelSpecialFrameRestore("StatsProProfileManager")
+            ui.RemoveSpecialFrame("StatsProProfileManager")
+        end
     end)
     dialog:Hide()
-
-    if not ui.operationSpecialFrameRegistered then
-        tinsert(UISpecialFrames, "StatsProProfileOperationDialog")
-        ui.operationSpecialFrameRegistered = true
-    end
 end
 
 function addon.profileUI.BuildSettingsUI(owner, ownerWidth)
@@ -9266,13 +9312,11 @@ function addon.profileUI.BuildSettingsUI(owner, ownerWidth)
     ui.ApplyManagerSize()
     manager:HookScript("OnShow", function()
         ui.ApplyManagerSize()
+        ui.CancelSpecialFrameRestore("StatsProConfigFrame")
+        ui.RemoveSpecialFrame("StatsProConfigFrame")
+        ui.PushSpecialFrame("StatsProProfileManager")
         ui.RefreshSafe()
     end)
-
-    if not ui.managerSpecialFrameRegistered then
-        tinsert(UISpecialFrames, "StatsProProfileManager")
-        ui.managerSpecialFrameRegistered = true
-    end
 
     local managerTitle = manager:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(managerTitle, 16, "OUTLINE")
@@ -9386,6 +9430,17 @@ function addon.profileUI.BuildSettingsUI(owner, ownerWidth)
 
     manager:HookScript("OnHide", function()
         ui.CloseOperationDialog()
+        ui.RemoveSpecialFrame("StatsProProfileManager")
+        -- See the dialog OnHide warning: restoring Settings synchronously can make one
+        -- Escape close every visible StatsPro layer during Blizzard's live-table walk.
+        if owner:IsShown() then
+            ui.DeferSpecialFrameRestore("StatsProConfigFrame", function()
+                return owner:IsShown() and not manager:IsShown()
+            end)
+        else
+            ui.CancelSpecialFrameRestore("StatsProConfigFrame")
+            ui.RemoveSpecialFrame("StatsProConfigFrame")
+        end
     end)
 
     function ui.EnsureManagerRow(index)
@@ -9701,11 +9756,16 @@ function addon:OpenConfigMenu()
     -- OpenConfigMenu already ensures this body runs once per session, but the flag
     -- means even a re-entrant rebuild wouldn't double-add to UISpecialFrames.
     if not configSpecialFrameRegistered then
-        tinsert(UISpecialFrames, "StatsProConfigFrame")
+        self.profileUI.PushSpecialFrame("StatsProConfigFrame")
         configSpecialFrameRegistered = true
     end
 
-    configFrame:HookScript("OnShow", ApplyConfigFrameSize)
+    configFrame:HookScript("OnShow", function()
+        ApplyConfigFrameSize()
+        if not self.profileUI.manager or not self.profileUI.manager:IsShown() then
+            self.profileUI.PushSpecialFrame("StatsProConfigFrame")
+        end
+    end)
 
     -- Auto-close font picker + Blizzard dropdown lists when Settings UI hides (e.g., /ss
     -- toggle, click X, Esc). Both are parented to UIParent (NOT configFrame) so neither

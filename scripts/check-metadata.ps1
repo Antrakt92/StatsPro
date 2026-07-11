@@ -71,6 +71,67 @@ function Assert-TocNotesContract {
     }
 }
 
+function Assert-BugReportTemplateContract {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Missing GitHub bug report template: $Path"
+    }
+
+    $text = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+    $frontMatter = [regex]::Match(
+        $text,
+        "\A---\r?\n(?<front>.*?)\r?\n---\r?\n",
+        [System.Text.RegularExpressions.RegexOptions]::Singleline)
+    if (-not $frontMatter.Success) {
+        throw "GitHub bug report template must begin with a closed YAML front-matter block."
+    }
+
+    $front = $frontMatter.Groups["front"].Value
+    $frontMatterFields = [ordered]@{
+        "name"   = "(?m)^name:\s*Bug report\s*$"
+        "about"  = "(?m)^about:\s*\S.+$"
+        "title"  = '(?m)^title:\s*"\[bug\] "\s*$'
+        "labels" = "(?m)^labels:\s*bug\s*$"
+    }
+    foreach ($field in $frontMatterFields.Keys) {
+        if (-not [regex]::IsMatch($front, $frontMatterFields[$field])) {
+            throw "GitHub bug report template has invalid or missing '$field' front matter."
+        }
+    }
+
+    $body = $text.Substring($frontMatter.Length)
+    if ([regex]::IsMatch($body, "(?<![A-Za-z0-9])v?\d+\.\d+\.\d+(?![A-Za-z0-9])")) {
+        throw "GitHub bug report template must not contain a hard-coded SemVer example."
+    }
+
+    $requiredBodyContracts = [ordered]@{
+        "What happened heading"      = "(?m)^## What happened\s*$"
+        "How to reproduce heading"   = "(?m)^## How to reproduce\s*$"
+        "Environment heading"        = "(?m)^## Environment\s*$"
+        "Debug output heading"       = "(?m)^## Debug output\s*$"
+        "Screenshot heading"         = "(?m)^## Screenshot or error output\s*$"
+        "Privacy heading"            = "(?m)^## Privacy\s*$"
+        "WoW client version"         = "WoW client version/build"
+        "WoW client locale"          = "WoW client locale"
+        "neutral addon version"      = "vX\.Y\.Z"
+        "Settings version source"    = "Settings window header"
+        "unique debug alias"         = "/statspro debug"
+        "short debug alias"          = "/ss debug"
+        "unique live debug alias"    = "/statspro debug live"
+        "short live debug alias"     = "/ss debug live"
+        "combat/Archon live guidance" = "(?is)combat stat.*Archon-hover.*?/ss debug live"
+        "visual evidence guidance"   = "(?is)screenshot.*visual.*layout.*localization"
+        "error output guidance"      = "BugSack"
+        "public issue warning"       = "GitHub issues are public"
+    }
+    foreach ($contract in $requiredBodyContracts.Keys) {
+        if (-not [regex]::IsMatch($body, $requiredBodyContracts[$contract], [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
+            throw "GitHub bug report template is missing $contract."
+        }
+    }
+}
+
 function Get-PkgmetaListItems {
     param(
         [string]$Path,
@@ -463,6 +524,57 @@ function Invoke-SelfTest {
             Assert-TocNotesContract -Metadata $notesFixture -TocPath $notesPath
         } "TOC Notes is .* expected"
 
+        $validBugReportTemplate = @"
+---
+name: Bug report
+about: Something does not work
+title: "[bug] "
+labels: bug
+---
+
+## What happened
+## How to reproduce
+## Environment
+- WoW client version/build:
+- WoW client locale:
+- StatsPro version: vX.Y.Z from the Settings window header or /statspro debug (/ss debug).
+## Debug output
+For combat stat or Archon-hover issues, include /statspro debug live (/ss debug live).
+## Screenshot or error output
+Attach a screenshot for visual, layout, and localization problems. Include BugSack output.
+## Privacy
+GitHub issues are public.
+"@
+        $bugReportPath = Join-Path $root "bug-report.md"
+        Set-Content -LiteralPath $bugReportPath -Value $validBugReportTemplate -Encoding UTF8
+        Assert-BugReportTemplateContract -Path $bugReportPath
+
+        Set-Content -LiteralPath $bugReportPath `
+            -Value $validBugReportTemplate.Replace("vX.Y.Z", "1.3.2") -Encoding UTF8
+        Assert-ThrowsMatch "hard-coded bug-report version rejected" {
+            Assert-BugReportTemplateContract -Path $bugReportPath
+        } "hard-coded SemVer"
+
+        $missingLiveDebug = $validBugReportTemplate.Replace("/statspro debug live", "live diagnostics").Replace("/ss debug live", "live diagnostics")
+        Set-Content -LiteralPath $bugReportPath -Value $missingLiveDebug -Encoding UTF8
+        Assert-ThrowsMatch "missing live debug guidance rejected" {
+            Assert-BugReportTemplateContract -Path $bugReportPath
+        } "live debug"
+
+        $missingVisualEvidence = $validBugReportTemplate.Replace(
+            "Attach a screenshot for visual, layout, and localization problems. Include BugSack output.",
+            "Include BugSack output.")
+        Set-Content -LiteralPath $bugReportPath -Value $missingVisualEvidence -Encoding UTF8
+        Assert-ThrowsMatch "missing visual evidence guidance rejected" {
+            Assert-BugReportTemplateContract -Path $bugReportPath
+        } "visual evidence"
+
+        $unclosedFrontMatter = $validBugReportTemplate -replace "(?m)^---\r?\n\r?\n## What happened", "## What happened"
+        Set-Content -LiteralPath $bugReportPath -Value $unclosedFrontMatter -Encoding UTF8
+        Assert-ThrowsMatch "unclosed bug-report front matter rejected" {
+            Assert-BugReportTemplateContract -Path $bugReportPath
+        } "closed YAML front-matter"
+
         Set-TestToc -Root $root -Refs @(
             "libs/LibStub/LibStub.lua",
             "libs/CallbackHandler-1.0/CallbackHandler-1.0.lua",
@@ -691,6 +803,7 @@ try {
     }
 
     Assert-TocNotesContract -Metadata $contract.Metadata -TocPath $contract.TocPath
+    Assert-BugReportTemplateContract -Path (Join-Path $RepoRoot ".github\ISSUE_TEMPLATE\bug_report.md")
 
     $LegacyCategory = Get-SingleRegexMatch `
         -Path $contract.TocPath `

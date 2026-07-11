@@ -7,17 +7,43 @@ labels: bug
 
 ## What happened
 
-<!-- What you saw vs. what you expected. -->
+<!-- What did you see, and what did you expect instead? -->
 
 ## How to reproduce
 
-<!-- Step-by-step. Include slash commands you ran, settings you changed,
-     events that triggered it (zoning, combat, gear swap, /reload). -->
+1.
+2.
+3.
+
+<!-- Include relevant settings, slash commands, and whether this happens after
+     zoning, combat, a gear/spec change, or /reload. -->
 
 ## Environment
 
+- WoW client version/build:
+- StatsPro version: <!-- Copy vX.Y.Z from the Settings window header, or the first line of /statspro debug (/ss debug). -->
 - WoW client locale: <!-- enUS / ruRU / koKR / zhCN / etc. -->
-- StatsPro version: <!-- e.g. 1.3.2 — see TOC or /ss debug -->
-- Other addons that touch fonts or stat display, if any: <!-- ElvUI, BigWigs, ChonkyCharacterSheet, etc. -->
+- Class/spec, if this affects stats or Archon targets:
+- Other relevant UI/font/stat addons:
 
-## Screenshot or BugSack output (optional)
+## Debug output
+
+<!-- Paste /statspro debug (or /ss debug) below. For combat stat or Archon-hover
+     issues, reproduce the problem and also paste /statspro debug live
+     (/ss debug live) while it is occurring. -->
+
+```text
+Paste debug output here
+```
+
+## Screenshot or error output
+
+<!-- Attach a screenshot for visual, layout, font, or localization problems.
+     For Archon issues, capture the open hover tooltip. Paste BugSack/BugGrabber
+     errors as text when available. -->
+
+## Privacy
+
+<!-- GitHub issues are public. Crop or redact character/realm names, BattleTags,
+     chat, guild/group details, and personal file paths. Do not upload WTF/Account
+     folders, SavedVariables, API keys, or tokens. Review debug/error text before posting. -->

@@ -250,8 +250,11 @@ relevant call sites.
 ## Bug reports / feature requests
 
 Open an issue on [GitHub Issues](https://github.com/Antrakt92/StatsPro/issues).
-Helpful to include: WoW client version, addon version (visible in the settings
-window header), exact reproduction steps, and a screenshot if the issue is visual.
+Helpful details include the WoW build, class/spec when relevant, the addon version
+from the Settings header or `/statspro debug`, exact reproduction steps, and a
+screenshot for visual, layout, font, or localization issues. For combat-stat or
+Archon-hover problems, also capture the open hover and include
+`/statspro debug live` from the failing state.
 
 ## Support
 

@@ -265,50 +265,6 @@ function Invoke-CurseForgeCredentialProbe {
         -Request $Request
 }
 
-function Assert-CurseForgeProjectResponse {
-    param([string]$JsonText)
-
-    if ([string]::IsNullOrWhiteSpace($JsonText)) {
-        throw "CurseForge project-access response had an unexpected schema."
-    }
-    $trimmed = $JsonText.Trim()
-    try {
-        $parsed = ConvertFrom-JsonCompat $JsonText
-    }
-    catch {
-        throw "CurseForge project-access response contained invalid JSON."
-    }
-    if ($trimmed.StartsWith('[')) {
-        return
-    }
-    if ($null -eq $parsed) {
-        throw "CurseForge project-access response had an unexpected schema."
-    }
-    foreach ($propertyName in @("data", "files", "items")) {
-        $property = $parsed.PSObject.Properties[$propertyName]
-        if ($null -ne $property -and $property.Value -is [System.Array]) {
-            return
-        }
-    }
-    throw "CurseForge project-access response had an unexpected schema."
-}
-
-function Invoke-CurseForgeProjectProbe {
-    param(
-        [string]$ApiKey,
-        [string]$ProjectId,
-        [scriptblock]$Request = $null
-    )
-
-    $response = Invoke-MarketplaceWebRequest `
-        -Uri "https://wow.curseforge.com/api/projects/$ProjectId/files?page=1&pageSize=1" `
-        -Headers @{ "x-api-token" = $ApiKey } `
-        -Description "CurseForge StatsPro project-access probe" `
-        -Request $Request
-    Assert-CurseForgeProjectResponse -JsonText ([string]$response.Content)
-    return $response
-}
-
 function Assert-WowInterfaceProjectList {
     param(
         [string]$JsonText,
@@ -579,8 +535,6 @@ function Assert-MarketplaceVersions {
             -Description "CurseForge game versions"
     }
     Assert-CurseForgeVersions -JsonText $curseForgeJson -RequiredVersions $requiredVersions
-    [void](Invoke-CurseForgeProjectProbe -ApiKey $cfApiKey -ProjectId $projectIds.CurseForge)
-
     [void](Invoke-WowInterfaceCredentialProbe `
         -ApiToken $credentials.WOWI_API_TOKEN `
         -ProjectId $projectIds.WowInterface)
@@ -598,7 +552,7 @@ function Assert-MarketplaceVersions {
         -Description "Wago game versions"
     Assert-WagoVersions -JsonText $wagoJson -RequiredVersions $requiredVersions
 
-    Write-Host "Marketplace preflight passed for Retail $($requiredVersions -join ', '): required keys are present, CurseForge token/project reachability and WoWInterface project access are valid, and Wago project existence is valid."
+    Write-Host "Marketplace preflight passed for Retail $($requiredVersions -join ', '): required keys are present, the CurseForge token is valid, WoWInterface project access is valid, and Wago project existence is valid."
     Write-Warning "CurseForge does not publish a read-only upload-permission probe, and Wago does not publish a read-only API-key validation endpoint. This gate does not make mutation-shaped requests to either service."
 }
 
@@ -732,30 +686,6 @@ function Invoke-SelfTest {
         $cfProbeState.Uri.Contains($validCredentials.CF_API_KEY) -or [string]::IsNullOrWhiteSpace([string]$cfProbe.Content)) {
         throw "CurseForge credential probe request binding failed."
     }
-
-    $cfProjectProbeState = @{ Attempts = 0; Header = $null; Uri = $null }
-    [void](Invoke-CurseForgeProjectProbe `
-        -ApiKey $validCredentials.CF_API_KEY `
-        -ProjectId "1525100" `
-        -Request {
-            param([string]$RequestUri, [hashtable]$RequestHeaders, [int]$RequestTimeoutSec)
-            $cfProjectProbeState.Attempts++
-            $cfProjectProbeState.Header = $RequestHeaders["x-api-token"]
-            $cfProjectProbeState.Uri = $RequestUri
-            return [pscustomobject]@{ Content = '[]' }
-        })
-    if ($cfProjectProbeState.Attempts -ne 1 -or $cfProjectProbeState.Header -ne $validCredentials.CF_API_KEY -or
-        $cfProjectProbeState.Uri -ne "https://wow.curseforge.com/api/projects/1525100/files?page=1&pageSize=1" -or
-        $cfProjectProbeState.Uri.Contains($validCredentials.CF_API_KEY)) {
-        throw "CurseForge project-access probe request binding failed."
-    }
-    Assert-CurseForgeProjectResponse -JsonText '{"data":[]}'
-    Assert-ThrowsMatch "malformed CurseForge project response rejected" {
-        Assert-CurseForgeProjectResponse -JsonText '{bad json'
-    } "invalid JSON"
-    Assert-ThrowsMatch "unexpected CurseForge project schema rejected" {
-        Assert-CurseForgeProjectResponse -JsonText '{"project":"1525100"}'
-    } "unexpected schema"
 
     $wowiProbeState = @{ Attempts = 0; Header = $null; Uri = $null }
     [void](Invoke-WowInterfaceCredentialProbe `

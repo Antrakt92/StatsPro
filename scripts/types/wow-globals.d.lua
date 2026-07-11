@@ -7,6 +7,9 @@
 ---@field IsShown fun(self: StatsProFontPickerFrame): boolean
 ---@field Hide fun(self: StatsProFontPickerFrame)
 
+---@class (exact) StatsProDropdownFrame
+---@field GetName fun(self: StatsProDropdownFrame): string?
+
 ---@class (exact) StatsProStaticPopupDefinition
 ---@field text string
 ---@field button1 string
@@ -52,6 +55,9 @@ function issecretvalue(value) return false end
 
 ---@type StatsProFontPickerFrame?
 StatsProFontPicker = nil
+
+---@type StatsProDropdownFrame?
+UIDROPDOWNMENU_OPEN_MENU = nil
 
 ---@type table?
 SwiftStatsDB = nil

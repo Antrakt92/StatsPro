@@ -144,7 +144,8 @@ suggested correction — single-row fixes ship in the next patch.
 | `/ss show` | Show stats panel |
 | `/ss hide` | Hide stats panel |
 | `/ss toggle` | Toggle visibility |
-| `/ss reset` | Reset all settings to defaults (without opening the window) |
+| `/ss reset` | Confirm and reset only the active profile to defaults |
+| `/ss wipe` or `/ss reset all` | Confirm and reset every StatsPro profile, assignment, and account setting |
 | `/statspro import` | Import compatible SwiftStats settings after confirmation |
 | `/ss debug` | Dump runtime state to chat (for bug reports) |
 | `/ss help` | List commands in chat |
@@ -170,12 +171,13 @@ started without SwiftStats enabled, the import remains recoverable:
 1. Enable SwiftStats and StatsPro together for one login.
 2. Run `/reload` so both SavedVariables files are loaded.
 3. Run `/statspro import` (use this full command because SwiftStats also owns `/ss`).
-4. Review and confirm the replacement; StatsPro reloads the UI automatically.
+4. Review and confirm the import; StatsPro creates and applies a new profile immediately.
 5. Disable or uninstall SwiftStats after checking the imported layout.
 
-The confirmed import replaces current StatsPro settings with compatible SwiftStats
-values. StatsPro-only options reset to their defaults, unknown/source-only fields are
-ignored, and the original `SwiftStatsDB` remains untouched.
+The confirmed import creates an independent `SwiftStats Import` profile and assigns it
+only to the current character and specialization. Existing profiles, other assignments,
+account settings, and the original `SwiftStatsDB` remain untouched. StatsPro-only options
+start at their defaults, while unknown or source-only fields are ignored.
 
 ## Configuration
 

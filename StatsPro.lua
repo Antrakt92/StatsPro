@@ -5,6 +5,8 @@
 local _, addon = ...
 addon.fontRuntime = {}
 addon.panelEditRuntime = { requested = false }
+addon.resetRuntime = { pending = nil }
+addon.wipeRuntime = { pending = nil }
 addon.durabilityRuntime = {
     generation = 0,
     attemptedGeneration = nil,
@@ -1011,16 +1013,18 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Last known comparison", ["Source:"] = "Source:",
         ["Stats panel shown"] = "Stats panel shown", ["Stats panel hidden"] = "Stats panel hidden",
         ["Settings reset to defaults"] = "Settings reset to defaults",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats has no supported settings to import.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "These settings use a newer schema and cannot be imported by this StatsPro version.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "SwiftStats import is unavailable during combat. Try again after combat.",
-        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload.",
+        ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged.",
         ["Import"] = "Import",
-        ["SwiftStats settings imported. Reloading the UI."] = "SwiftStats settings imported. Reloading the UI.",
-        ["SwiftStats import failed; current StatsPro settings were preserved."] = "SwiftStats import failed; current StatsPro settings were preserved.",
+        ["SwiftStats settings imported into new profile \"%s\"."] = "SwiftStats settings imported into new profile \"%s\".",
+        ["SwiftStats import failed; profiles and assignments were preserved."] = "SwiftStats import failed; profiles and assignments were preserved.",
+        ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged.",
+        ["All StatsPro data reset to defaults."] = "All StatsPro data reset to defaults.",
         -- Buttons + title:
         ["Reset to Defaults"] = "Reset to Defaults", ["Close"] = "Close",
         ["Open Settings"] = "Open Settings", ["Settings"] = "Settings",
@@ -1142,16 +1146,18 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Последнее известное сравнение", ["Source:"] = "Источник:",
         ["Stats panel shown"] = "Панель статов показана", ["Stats panel hidden"] = "Панель статов скрыта",
         ["Settings reset to defaults"] = "Настройки сброшены по умолчанию",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Настройки SwiftStats не загружены. Включите SwiftStats на один вход в игру, выполните /reload, затем снова введите /statspro import.",
         ["SwiftStats has no supported settings to import."] = "В SwiftStats нет поддерживаемых настроек для импорта.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Эти настройки используют более новую схему и не могут быть импортированы этой версией StatsPro.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Настройки доступны только для чтения, поскольку они сохранены более новой версией StatsPro. Обновите StatsPro, чтобы изменять их.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "Импорт SwiftStats недоступен в бою. Повторите после боя.",
-        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Заменить текущие настройки StatsPro совместимыми настройками SwiftStats? Параметры только для StatsPro будут сброшены, данные SwiftStats останутся без изменений, а интерфейс перезагрузится.",
+        ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "Импортировать совместимые настройки SwiftStats в новый профиль для текущего персонажа и специализации? Существующие профили, другие назначения, настройки аккаунта и данные SwiftStats останутся без изменений.",
         ["Import"] = "Импорт",
-        ["SwiftStats settings imported. Reloading the UI."] = "Настройки SwiftStats импортированы. Интерфейс перезагружается.",
-        ["SwiftStats import failed; current StatsPro settings were preserved."] = "Не удалось импортировать SwiftStats; текущие настройки StatsPro сохранены.",
+        ["SwiftStats settings imported into new profile \"%s\"."] = "Настройки SwiftStats импортированы в новый профиль «%s».",
+        ["SwiftStats import failed; profiles and assignments were preserved."] = "Не удалось импортировать SwiftStats; профили и назначения сохранены.",
+        ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "Сбросить все данные StatsPro? Это безвозвратно удалит все профили, назначения персонажей и специализаций, шаблоны ролей, настройки аккаунта и сохранённые позиции. Данные SwiftStats останутся без изменений.",
+        ["All StatsPro data reset to defaults."] = "Все данные StatsPro сброшены до значений по умолчанию.",
         -- Buttons + title:
         ["Reset to Defaults"] = "Сбросить настройки", ["Close"] = "Закрыть",
         ["Open Settings"] = "Открыть настройки", ["Settings"] = "Настройки",
@@ -1268,16 +1274,18 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Letzter bekannter Vergleich", ["Source:"] = "Quelle:",
         ["Stats panel shown"] = "Statpanel angezeigt", ["Stats panel hidden"] = "Statpanel ausgeblendet",
         ["Settings reset to defaults"] = "Einstellungen auf Standard zurückgesetzt",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Befehle: /ss oder /statspro (Einstellungen), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Befehle: /ss oder /statspro (Einstellungen), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats-Einstellungen sind nicht geladen. Aktiviere SwiftStats für eine Anmeldung, führe /reload aus und gib danach erneut /statspro import ein.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats enthält keine unterstützten Einstellungen zum Importieren.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Diese Einstellungen verwenden ein neueres Schema und können von dieser StatsPro-Version nicht importiert werden.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Die Einstellungen sind schreibgeschützt, da sie mit einer neueren StatsPro-Version gespeichert wurden. Aktualisiere StatsPro, um sie zu ändern.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "Der SwiftStats-Import ist im Kampf nicht verfügbar. Versuche es nach dem Kampf erneut.",
-        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Aktuelle StatsPro-Einstellungen durch kompatible SwiftStats-Einstellungen ersetzen? StatsPro-spezifische Optionen werden zurückgesetzt, SwiftStats-Daten bleiben unverändert und die Benutzeroberfläche wird neu geladen.",
+        ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "Kompatible SwiftStats-Einstellungen in ein neues Profil für den aktuellen Charakter und die aktuelle Spezialisierung importieren? Bestehende Profile, andere Zuweisungen, Kontoeinstellungen und SwiftStats-Daten bleiben unverändert.",
         ["Import"] = "Importieren",
-        ["SwiftStats settings imported. Reloading the UI."] = "SwiftStats-Einstellungen importiert. Benutzeroberfläche wird neu geladen.",
-        ["SwiftStats import failed; current StatsPro settings were preserved."] = "SwiftStats-Import fehlgeschlagen; die aktuellen StatsPro-Einstellungen wurden beibehalten.",
+        ["SwiftStats settings imported into new profile \"%s\"."] = "SwiftStats-Einstellungen wurden in das neue Profil „%s“ importiert.",
+        ["SwiftStats import failed; profiles and assignments were preserved."] = "SwiftStats-Import fehlgeschlagen; Profile und Zuweisungen wurden beibehalten.",
+        ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "Alle StatsPro-Daten zurücksetzen? Dadurch werden dauerhaft alle Profile, Charakter- und Spezialisierungszuweisungen, Rollenvorlagen, Kontoeinstellungen und gespeicherten Positionen entfernt. SwiftStats-Daten bleiben unverändert.",
+        ["All StatsPro data reset to defaults."] = "Alle StatsPro-Daten wurden auf die Standardwerte zurückgesetzt.",
         ["Reset to Defaults"] = "Auf Standard", ["Close"] = "Schließen",
         ["Open Settings"] = "Einstellungen öffnen", ["Settings"] = "Einstellungen",
         ["Profile:"] = "Profil:", ["Manage"] = "Verwalten", ["Profile Manager"] = "Profilverwaltung",
@@ -1389,16 +1397,18 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Dernière comparaison connue", ["Source:"] = "Source :",
         ["Stats panel shown"] = "Panneau de stats affiché", ["Stats panel hidden"] = "Panneau de stats masqué",
         ["Settings reset to defaults"] = "Paramètres réinitialisés",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Commandes : /ss ou /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Commandes : /ss ou /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Les réglages de SwiftStats ne sont pas chargés. Activez SwiftStats pour une connexion, exécutez /reload, puis relancez /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats ne contient aucun réglage pris en charge à importer.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Ces réglages utilisent un schéma plus récent et ne peuvent pas être importés par cette version de StatsPro.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Les paramètres sont en lecture seule, car ils ont été enregistrés par une version plus récente de StatsPro. Mettez StatsPro à jour pour les modifier.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "L’importation SwiftStats est indisponible en combat. Réessayez après le combat.",
-        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Remplacer les réglages StatsPro actuels par les réglages SwiftStats compatibles ? Les options propres à StatsPro seront réinitialisées, les données SwiftStats resteront intactes et l’interface sera rechargée.",
+        ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "Importer les réglages SwiftStats compatibles dans un nouveau profil pour le personnage et la spécialisation actuels ? Les profils existants, les autres affectations, les paramètres du compte et les données SwiftStats resteront inchangés.",
         ["Import"] = "Importer",
-        ["SwiftStats settings imported. Reloading the UI."] = "Réglages SwiftStats importés. Rechargement de l’interface.",
-        ["SwiftStats import failed; current StatsPro settings were preserved."] = "Échec de l’importation SwiftStats ; les réglages StatsPro actuels ont été conservés.",
+        ["SwiftStats settings imported into new profile \"%s\"."] = "Réglages SwiftStats importés dans le nouveau profil « %s ».",
+        ["SwiftStats import failed; profiles and assignments were preserved."] = "Échec de l’importation SwiftStats ; les profils et les affectations ont été conservés.",
+        ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "Réinitialiser toutes les données StatsPro ? Cela supprimera définitivement tous les profils, les affectations de personnages et de spécialisations, les modèles de rôle, les paramètres du compte et les positions enregistrées. Les données SwiftStats resteront inchangées.",
+        ["All StatsPro data reset to defaults."] = "Toutes les données StatsPro ont été réinitialisées aux valeurs par défaut.",
         ["Reset to Defaults"] = "Par défaut", ["Close"] = "Fermer",
         ["Open Settings"] = "Ouvrir les paramètres", ["Settings"] = "Paramètres",
         ["Profile:"] = "Profil :", ["Manage"] = "Gérer", ["Profile Manager"] = "Gestionnaire de profils",
@@ -1511,16 +1521,18 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Última comparación conocida", ["Source:"] = "Fuente:",
         ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
         ["Settings reset to defaults"] = "Ajustes restablecidos",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Los ajustes de SwiftStats no están cargados. Activa SwiftStats durante un inicio de sesión, ejecuta /reload y vuelve a usar /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats no tiene ajustes compatibles para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Estos ajustes usan un esquema más reciente y esta versión de StatsPro no puede importarlos.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Los ajustes son de solo lectura porque se guardaron con una versión más reciente de StatsPro. Actualiza StatsPro para modificarlos.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "La importación de SwiftStats no está disponible en combate. Inténtalo de nuevo después.",
-        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "¿Reemplazar los ajustes actuales de StatsPro por los ajustes compatibles de SwiftStats? Las opciones exclusivas de StatsPro volverán a sus valores predeterminados, los datos de SwiftStats no cambiarán y la interfaz se recargará.",
+        ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "¿Importar la configuración compatible de SwiftStats en un perfil nuevo para el personaje y la especialización actuales? Los perfiles existentes, las demás asignaciones, la configuración de la cuenta y los datos de SwiftStats no cambiarán.",
         ["Import"] = "Importar",
-        ["SwiftStats settings imported. Reloading the UI."] = "Ajustes de SwiftStats importados. Recargando la interfaz.",
-        ["SwiftStats import failed; current StatsPro settings were preserved."] = "La importación de SwiftStats falló; se conservaron los ajustes actuales de StatsPro.",
+        ["SwiftStats settings imported into new profile \"%s\"."] = "La configuración de SwiftStats se importó al perfil nuevo «%s».",
+        ["SwiftStats import failed; profiles and assignments were preserved."] = "La importación de SwiftStats falló; se conservaron los perfiles y las asignaciones.",
+        ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "¿Restablecer todos los datos de StatsPro? Esto eliminará permanentemente todos los perfiles, las asignaciones de personajes y especializaciones, las plantillas de rol, la configuración de la cuenta y las posiciones guardadas. Los datos de SwiftStats no cambiarán.",
+        ["All StatsPro data reset to defaults."] = "Todos los datos de StatsPro se restablecieron a los valores predeterminados.",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
         ["Open Settings"] = "Abrir ajustes", ["Settings"] = "Ajustes",
         ["Profile:"] = "Perfil:", ["Manage"] = "Gestionar", ["Profile Manager"] = "Gestor de perfiles",
@@ -1631,16 +1643,18 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Última comparación conocida", ["Source:"] = "Fuente:",
         ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
         ["Settings reset to defaults"] = "Configuración restablecida",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "La configuración de SwiftStats no está cargada. Activa SwiftStats durante un inicio de sesión, ejecuta /reload y vuelve a usar /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats no tiene opciones compatibles para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Esta configuración usa un esquema más reciente y esta versión de StatsPro no puede importarla.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "La configuración es de solo lectura porque se guardó con una versión más reciente de StatsPro. Actualiza StatsPro para modificarla.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "La importación de SwiftStats no está disponible en combate. Inténtalo de nuevo al terminar.",
-        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "¿Reemplazar la configuración actual de StatsPro por la configuración compatible de SwiftStats? Las opciones exclusivas de StatsPro volverán a sus valores predeterminados, los datos de SwiftStats no cambiarán y la interfaz se recargará.",
+        ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "¿Importar los ajustes compatibles de SwiftStats en un perfil nuevo para el personaje y la especialización actuales? Los perfiles existentes, las demás asignaciones, los ajustes de la cuenta y los datos de SwiftStats no cambiarán.",
         ["Import"] = "Importar",
-        ["SwiftStats settings imported. Reloading the UI."] = "Configuración de SwiftStats importada. Recargando la interfaz.",
-        ["SwiftStats import failed; current StatsPro settings were preserved."] = "La importación de SwiftStats falló; se conservó la configuración actual de StatsPro.",
+        ["SwiftStats settings imported into new profile \"%s\"."] = "Los ajustes de SwiftStats se importaron al nuevo perfil «%s».",
+        ["SwiftStats import failed; profiles and assignments were preserved."] = "La importación de SwiftStats falló; se conservaron los perfiles y las asignaciones.",
+        ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "¿Restablecer todos los datos de StatsPro? Esto eliminará permanentemente todos los perfiles, las asignaciones de personajes y especializaciones, las plantillas de rol, los ajustes de la cuenta y las posiciones guardadas. Los datos de SwiftStats no cambiarán.",
+        ["All StatsPro data reset to defaults."] = "Todos los datos de StatsPro se restablecieron a los valores predeterminados.",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
         ["Open Settings"] = "Abrir configuración", ["Settings"] = "Configuración",
         ["Profile:"] = "Perfil:", ["Manage"] = "Administrar", ["Profile Manager"] = "Administrador de perfiles",
@@ -1752,16 +1766,18 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Ultimo confronto noto", ["Source:"] = "Fonte:",
         ["Stats panel shown"] = "Pannello statistiche mostrato", ["Stats panel hidden"] = "Pannello statistiche nascosto",
         ["Settings reset to defaults"] = "Impostazioni ripristinate",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandi: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandi: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Le impostazioni di SwiftStats non sono caricate. Abilita SwiftStats per un accesso, esegui /reload, quindi usa di nuovo /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats non contiene impostazioni supportate da importare.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Queste impostazioni usano uno schema più recente e non possono essere importate da questa versione di StatsPro.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Le impostazioni sono in sola lettura perché sono state salvate da una versione più recente di StatsPro. Aggiorna StatsPro per modificarle.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "L’importazione di SwiftStats non è disponibile in combattimento. Riprova al termine.",
-        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Sostituire le impostazioni StatsPro attuali con quelle compatibili di SwiftStats? Le opzioni specifiche di StatsPro torneranno ai valori predefiniti, i dati di SwiftStats resteranno invariati e l’interfaccia verrà ricaricata.",
+        ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "Importare le impostazioni SwiftStats compatibili in un nuovo profilo per il personaggio e la specializzazione attuali? I profili esistenti, le altre assegnazioni, le impostazioni dell’account e i dati SwiftStats resteranno invariati.",
         ["Import"] = "Importa",
-        ["SwiftStats settings imported. Reloading the UI."] = "Impostazioni SwiftStats importate. Ricaricamento dell’interfaccia.",
-        ["SwiftStats import failed; current StatsPro settings were preserved."] = "Importazione di SwiftStats non riuscita; le impostazioni StatsPro attuali sono state conservate.",
+        ["SwiftStats settings imported into new profile \"%s\"."] = "Impostazioni SwiftStats importate nel nuovo profilo «%s».",
+        ["SwiftStats import failed; profiles and assignments were preserved."] = "Importazione di SwiftStats non riuscita; profili e assegnazioni sono stati conservati.",
+        ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "Ripristinare tutti i dati di StatsPro? Verranno rimossi definitivamente tutti i profili, le assegnazioni di personaggi e specializzazioni, i modelli di ruolo, le impostazioni dell’account e le posizioni salvate. I dati SwiftStats resteranno invariati.",
+        ["All StatsPro data reset to defaults."] = "Tutti i dati di StatsPro sono stati ripristinati ai valori predefiniti.",
         ["Reset to Defaults"] = "Predefiniti", ["Close"] = "Chiudi",
         ["Open Settings"] = "Apri impostazioni", ["Settings"] = "Impostazioni",
         ["Profile:"] = "Profilo:", ["Manage"] = "Gestisci", ["Profile Manager"] = "Gestione profili",
@@ -1872,16 +1888,18 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Última comparação conhecida", ["Source:"] = "Fonte:",
         ["Stats panel shown"] = "Painel de atributos mostrado", ["Stats panel hidden"] = "Painel de atributos oculto",
         ["Settings reset to defaults"] = "Configurações restauradas",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandos: /ss ou /statspro (configurações), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandos: /ss ou /statspro (configurações), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "As configurações do SwiftStats não estão carregadas. Ative o SwiftStats por um login, execute /reload e use /statspro import novamente.",
         ["SwiftStats has no supported settings to import."] = "O SwiftStats não tem configurações compatíveis para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Estas configurações usam um esquema mais recente e não podem ser importadas por esta versão do StatsPro.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "As configurações estão somente para leitura porque foram salvas por uma versão mais recente do StatsPro. Atualize o StatsPro para alterá-las.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "A importação do SwiftStats não está disponível em combate. Tente novamente depois.",
-        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "Substituir as configurações atuais do StatsPro pelas configurações compatíveis do SwiftStats? As opções exclusivas do StatsPro voltarão ao padrão, os dados do SwiftStats permanecerão intactos e a interface será recarregada.",
+        ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "Importar as configurações compatíveis do SwiftStats para um novo perfil do personagem e da especialização atuais? Os perfis existentes, as outras atribuições, as configurações da conta e os dados do SwiftStats permanecerão inalterados.",
         ["Import"] = "Importar",
-        ["SwiftStats settings imported. Reloading the UI."] = "Configurações do SwiftStats importadas. Recarregando a interface.",
-        ["SwiftStats import failed; current StatsPro settings were preserved."] = "Falha ao importar o SwiftStats; as configurações atuais do StatsPro foram preservadas.",
+        ["SwiftStats settings imported into new profile \"%s\"."] = "Configurações do SwiftStats importadas para o novo perfil “%s”.",
+        ["SwiftStats import failed; profiles and assignments were preserved."] = "Falha ao importar o SwiftStats; os perfis e as atribuições foram preservados.",
+        ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "Redefinir todos os dados do StatsPro? Isso removerá permanentemente todos os perfis, as atribuições de personagens e especializações, os modelos de função, as configurações da conta e as posições salvas. Os dados do SwiftStats permanecerão inalterados.",
+        ["All StatsPro data reset to defaults."] = "Todos os dados do StatsPro foram redefinidos para os padrões.",
         ["Reset to Defaults"] = "Restaurar", ["Close"] = "Fechar",
         ["Open Settings"] = "Abrir configurações", ["Settings"] = "Configurações",
         ["Profile:"] = "Perfil:", ["Manage"] = "Gerenciar", ["Profile Manager"] = "Gerenciador de perfis",
@@ -1999,16 +2017,18 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "마지막으로 확인된 비교", ["Source:"] = "출처:",
         ["Stats panel shown"] = "능력치 패널 표시됨", ["Stats panel hidden"] = "능력치 패널 숨김",
         ["Settings reset to defaults"] = "설정이 기본값으로 초기화되었습니다",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "명령어: /ss 또는 /statspro (설정), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "명령어: /ss 또는 /statspro (설정), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats 설정이 로드되지 않았습니다. 한 번 로그인하는 동안 SwiftStats를 활성화하고 /reload 후 /statspro import를 다시 실행하세요.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats에 가져올 수 있는 지원 설정이 없습니다.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "이 설정은 더 새로운 스키마를 사용하므로 현재 StatsPro 버전에서 가져올 수 없습니다.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "더 최신 StatsPro 버전에서 저장한 설정이므로 읽기 전용입니다. 설정을 변경하려면 StatsPro를 업데이트하세요.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "전투 중에는 SwiftStats 설정을 가져올 수 없습니다. 전투 후 다시 시도하세요.",
-        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "현재 StatsPro 설정을 호환되는 SwiftStats 설정으로 바꾸시겠습니까? StatsPro 전용 옵션은 기본값으로 초기화되고 SwiftStats 데이터는 변경되지 않으며 UI가 다시 로드됩니다.",
+        ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "현재 캐릭터와 전문화용 새 프로필로 호환되는 SwiftStats 설정을 가져오시겠습니까? 기존 프로필, 다른 할당, 계정 설정 및 SwiftStats 데이터는 변경되지 않습니다.",
         ["Import"] = "가져오기",
-        ["SwiftStats settings imported. Reloading the UI."] = "SwiftStats 설정을 가져왔습니다. UI를 다시 로드합니다.",
-        ["SwiftStats import failed; current StatsPro settings were preserved."] = "SwiftStats 설정 가져오기에 실패했습니다. 현재 StatsPro 설정은 유지되었습니다.",
+        ["SwiftStats settings imported into new profile \"%s\"."] = "SwiftStats 설정을 새 프로필 \"%s\"에 가져왔습니다.",
+        ["SwiftStats import failed; profiles and assignments were preserved."] = "SwiftStats 설정 가져오기에 실패했습니다. 프로필과 할당은 유지되었습니다.",
+        ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "모든 StatsPro 데이터를 초기화하시겠습니까? 모든 프로필, 캐릭터 및 전문화 할당, 역할 템플릿, 계정 설정, 저장된 위치가 영구적으로 삭제됩니다. SwiftStats 데이터는 변경되지 않습니다.",
+        ["All StatsPro data reset to defaults."] = "모든 StatsPro 데이터를 기본값으로 초기화했습니다.",
         ["Reset to Defaults"] = "기본값", ["Close"] = "닫기",
         ["Open Settings"] = "설정 열기", ["Settings"] = "설정",
         ["Profile:"] = "프로필:", ["Manage"] = "관리", ["Profile Manager"] = "프로필 관리",
@@ -2119,16 +2139,18 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "上次已知对比", ["Source:"] = "来源:",
         ["Stats panel shown"] = "属性面板已显示", ["Stats panel hidden"] = "属性面板已隐藏",
         ["Settings reset to defaults"] = "设置已恢复默认",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "命令: /ss 或 /statspro (设置), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "命令: /ss 或 /statspro (设置), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "未加载 SwiftStats 设置。请启用 SwiftStats 登录一次，执行 /reload，然后再次运行 /statspro import。",
         ["SwiftStats has no supported settings to import."] = "SwiftStats 中没有可导入的受支持设置。",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "这些设置使用较新的数据结构，当前版本的 StatsPro 无法导入。",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "这些设置由较新版本的 StatsPro 保存，因此当前为只读。请更新 StatsPro 后再进行修改。",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "战斗中无法导入 SwiftStats 设置。请在战斗结束后重试。",
-        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "要用兼容的 SwiftStats 设置替换当前 StatsPro 设置吗？StatsPro 专属选项将恢复默认值，SwiftStats 数据不会改变，界面将重新加载。",
+        ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "要将兼容的 SwiftStats 设置导入到当前角色和专精的新配置中吗？现有配置、其他分配、账号设置和 SwiftStats 数据均不会更改。",
         ["Import"] = "导入",
-        ["SwiftStats settings imported. Reloading the UI."] = "已导入 SwiftStats 设置。正在重新加载界面。",
-        ["SwiftStats import failed; current StatsPro settings were preserved."] = "SwiftStats 导入失败；当前 StatsPro 设置已保留。",
+        ["SwiftStats settings imported into new profile \"%s\"."] = "SwiftStats 设置已导入新配置“%s”。",
+        ["SwiftStats import failed; profiles and assignments were preserved."] = "SwiftStats 导入失败；配置和分配已保留。",
+        ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "要重置所有 StatsPro 数据吗？这将永久删除所有配置、角色和专精分配、职责模板、账号设置及保存的位置。SwiftStats 数据不会更改。",
+        ["All StatsPro data reset to defaults."] = "所有 StatsPro 数据已重置为默认值。",
         ["Reset to Defaults"] = "恢复默认", ["Close"] = "关闭",
         ["Open Settings"] = "打开设置", ["Settings"] = "设置",
         ["Profile:"] = "配置：", ["Manage"] = "管理", ["Profile Manager"] = "配置管理",
@@ -2239,16 +2261,18 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "上次已知比較", ["Source:"] = "來源:",
         ["Stats panel shown"] = "屬性面板已顯示", ["Stats panel hidden"] = "屬性面板已隱藏",
         ["Settings reset to defaults"] = "設定已恢復預設",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "指令: /ss 或 /statspro (設定), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "指令: /ss 或 /statspro (設定), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "未載入 SwiftStats 設定。請啟用 SwiftStats 登入一次，執行 /reload，然後再次輸入 /statspro import。",
         ["SwiftStats has no supported settings to import."] = "SwiftStats 中沒有可匯入的支援設定。",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "這些設定使用較新的資料結構，目前版本的 StatsPro 無法匯入。",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "這些設定由較新版本的 StatsPro 儲存，因此目前為唯讀。請更新 StatsPro 後再進行修改。",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "戰鬥中無法匯入 SwiftStats 設定。請在戰鬥結束後重試。",
-        ["Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload."] = "要用相容的 SwiftStats 設定取代目前的 StatsPro 設定嗎？StatsPro 專屬選項將恢復預設值，SwiftStats 資料不會變更，介面將重新載入。",
+        ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "要將相容的 SwiftStats 設定匯入目前角色與專精的新設定檔嗎？現有設定檔、其他指派、帳號設定和 SwiftStats 資料都不會變更。",
         ["Import"] = "匯入",
-        ["SwiftStats settings imported. Reloading the UI."] = "已匯入 SwiftStats 設定。正在重新載入介面。",
-        ["SwiftStats import failed; current StatsPro settings were preserved."] = "SwiftStats 匯入失敗；目前的 StatsPro 設定已保留。",
+        ["SwiftStats settings imported into new profile \"%s\"."] = "SwiftStats 設定已匯入新設定檔「%s」。",
+        ["SwiftStats import failed; profiles and assignments were preserved."] = "SwiftStats 匯入失敗；設定檔和指派已保留。",
+        ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "要重設所有 StatsPro 資料嗎？這將永久刪除所有設定檔、角色與專精指派、職責範本、帳號設定和已儲存的位置。SwiftStats 資料不會變更。",
+        ["All StatsPro data reset to defaults."] = "所有 StatsPro 資料已重設為預設值。",
         ["Reset to Defaults"] = "恢復預設", ["Close"] = "關閉",
         ["Open Settings"] = "開啟設定", ["Settings"] = "設定",
         ["Profile:"] = "設定檔：", ["Manage"] = "管理", ["Profile Manager"] = "設定檔管理",
@@ -4474,6 +4498,118 @@ function addon.profileOps.Execute(expected, builder)
     return finish(true, result)
 end
 
+-- Full wipe is intentionally a root-pointer transaction rather than a component
+-- swap. Replacing only account/profiles/characters would leave the v9 flat downgrade
+-- shadow and any unknown root fields behind, so it would not actually erase all
+-- StatsPro data. The old root stays untouched and can be restored by identity if
+-- activation or runtime application fails.
+function addon.profileOps.ExecuteRootReplacement(expected, builder)
+    local root, gateReason = addon.profileOps.Gate(expected, false)
+    if not root then return false, gateReason end
+    addon.profileOps.inProgress = true
+
+    local function finish(ok, result)
+        addon.profileOps.inProgress = false
+        addon.profileRuntime.transitioning = false
+        addon.profileUI.RefreshSafe()
+        return ok, result
+    end
+
+    if not addon.profileRuntime.CloseOwnedSettingsModals() then
+        return finish(false, "close-failed")
+    end
+    root, gateReason = addon.profileOps.Gate(expected, true)
+    if not root then return finish(false, gateReason) end
+
+    local oldRoot = root
+    local oldProfileID = addon.dbRuntime.activeProfileID
+    local oldSettings = addon.dbRuntime.activeSettings
+    local positionSnapshot = addon.profileOps.CapturePositionFields(oldSettings)
+    if type(addon.profileRuntime.saveActivePositions) == "function"
+        and not pcall(addon.profileRuntime.saveActivePositions, oldSettings) then
+        addon.profileOps.RestorePositionFields(oldSettings, positionSnapshot)
+        return finish(false, "position-failed")
+    end
+
+    local built, freshRoot, buildStatus, result = pcall(builder, oldRoot)
+    if not built or not freshRoot then
+        addon.profileOps.RestorePositionFields(oldSettings, positionSnapshot)
+        return finish(false, built and buildStatus or "prepare-failed")
+    end
+    local valid, _, desiredProfileID = addon.dbRuntime.ValidateRegistry(freshRoot)
+    if not valid or not desiredProfileID or addon.profileOps.ShouldFail("validate") then
+        addon.profileOps.RestorePositionFields(oldSettings, positionSnapshot)
+        return finish(false, "validate-failed")
+    end
+
+    local function publishFreshRoot()
+        _G.StatsProDB = freshRoot
+        addon.dbRuntime.Invalidate()
+        addon.dbRuntime.Refresh()
+    end
+
+    local function restoreOldRoot(reapply)
+        _G.StatsProDB = oldRoot
+        addon.dbRuntime.Invalidate()
+        addon.dbRuntime.Refresh()
+        addon.profileOps.RestorePositionFields(oldSettings, positionSnapshot)
+        if not addon.dbRuntime.ActivateProfile(oldProfileID) then return false end
+        if not reapply then return true end
+        local rollbackJournal = addon.profileOps.CaptureMutationJournal(oldSettings)
+        local rollbackApplied = type(addon.profileRuntime.applyActiveSettings) == "function"
+            and pcall(addon.profileRuntime.applyActiveSettings)
+        if rollbackApplied then return true end
+        addon.profileOps.RestoreMutationJournal(rollbackJournal)
+        addon.profileRuntime.forceReapply = true
+        addon.profileRuntime.forceReapplyRetryCount = 0
+        addon.profileRuntime.pendingResolution = true
+        addon.profileRuntime.transitioning = false
+        addon.profileRuntime.RequestResolution(false)
+        return false
+    end
+
+    addon.profileRuntime.transitioning = true
+    if addon.profileOps.ShouldFail("commit") then
+        publishFreshRoot()
+        restoreOldRoot(false)
+        return finish(false, "commit-failed")
+    end
+
+    publishFreshRoot()
+    addon.profileRuntime.structuralCommitCount =
+        addon.profileRuntime.structuralCommitCount + 1
+    if not addon.dbRuntime.ActivateProfile(desiredProfileID) then
+        restoreOldRoot(false)
+        return finish(false, "activate-failed")
+    end
+    local applied = not addon.profileOps.ShouldFail("apply")
+        and type(addon.profileRuntime.applyActiveSettings) == "function"
+        and pcall(addon.profileRuntime.applyActiveSettings)
+    if not applied then
+        if not restoreOldRoot(true) then
+            return finish(false, "rollback-apply-failed")
+        end
+        return finish(false, "apply-failed")
+    end
+
+    addon.profileRuntime.forceReapply = false
+    addon.profileRuntime.forceReapplyRetryCount = 0
+    addon.profileRuntime.pendingResolution = false
+    addon.profileOps.operationCount = addon.profileOps.operationCount + 1
+    return finish(true, result)
+end
+
+function addon.profileOps.UniqueProfileName(baseName, profiles)
+    local name = addon.profileOps.ValidateName(baseName, profiles)
+    if name then return name end
+    for suffix = 2, 9999 do
+        local candidate = baseName .. " " .. suffix
+        name = addon.profileOps.ValidateName(candidate, profiles)
+        if name then return name end
+    end
+    return nil
+end
+
 function addon.profileOps.Create(name, expected)
     return addon.profileOps.Execute(expected, function(root)
         local normalized, nameStatus = addon.profileOps.ValidateName(name, root.profiles)
@@ -4821,6 +4957,93 @@ function addon.profileOps.ResetCurrent(expectedActiveProfileID, expected)
         local transaction = addon.profileOps.NewTransaction(root)
         transaction.profiles = profiles
         return transaction, { reapply = true, activeProfileID = profileID }, profileID
+    end)
+end
+
+function addon.profileOps.ImportAndAssign(importedSettings, expected)
+    return addon.profileOps.Execute(expected, function(root)
+        local guid = addon.profileRuntime.activeGUID
+        local specID = addon.profileRuntime.activeSpecID
+        if type(guid) ~= "string" or not addon.dbRuntime.IsCleanType(guid, "string")
+            or guid == "" or type(specID) ~= "number"
+            or not addon.dbRuntime.IsCleanType(specID, "number")
+            or not IsFiniteNumber(specID) or specID <= 0
+            or specID ~= math.floor(specID) then
+            return nil, "missing-context"
+        end
+        local character = root.characters[guid]
+        if type(character) ~= "table" or not addon.dbRuntime.IsCleanTable(character) then
+            return nil, "missing-context"
+        end
+        local changedCharacter, characterCopied =
+            addon.dbRuntime.CloneSerializable(character)
+        local account, accountCopied = addon.dbRuntime.CloneSerializable(root.account)
+        local settings, settingsCopied = addon.dbRuntime.CloneSerializable(importedSettings)
+        if not characterCopied or type(changedCharacter) ~= "table"
+            or not addon.dbRuntime.IsCleanTable(changedCharacter)
+            or not accountCopied or type(account) ~= "table"
+            or not addon.dbRuntime.IsCleanTable(account)
+            or not settingsCopied or type(settings) ~= "table"
+            or not addon.dbRuntime.IsCleanTable(settings) then
+            return nil, "clone-failed"
+        end
+        local specProfiles = rawget(changedCharacter, "specProfiles")
+        if type(specProfiles) ~= "table" then return nil, "missing-context" end
+        if not addon.dbRuntime.IsCleanTable(specProfiles)
+            or not specProfiles[specID] then return nil, "missing-context" end
+
+        -- Account locale/update cadence belong to StatsPro as a whole, not to the
+        -- imported character/spec profile. Candidate extraction can carry them only
+        -- in its detached account record; never leak them into profile settings.
+        settings.forceLocale = nil
+        settings.updateInterval = nil
+        local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
+        local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
+        if not profileID then return nil, "id-exhausted" end
+        local name = addon.profileOps.UniqueProfileName("SwiftStats Import", profiles)
+        if not name then return nil, "duplicate-name" end
+        profiles[profileID] = { name = name, settings = settings }
+        specProfiles[specID] = profileID
+        local characters = addon.profileRuntime.ShallowCopy(root.characters)
+        characters[guid] = changedCharacter
+        local transaction = addon.profileOps.NewTransaction(root)
+        transaction.account = account
+        transaction.profiles = profiles
+        transaction.characters = characters
+        return transaction, {
+            reapply = true,
+            activeProfileID = profileID,
+        }, { profileID = profileID, name = name }
+    end)
+end
+
+function addon.profileOps.FullWipe(expected)
+    return addon.profileOps.ExecuteRootReplacement(expected, function()
+        local guid = addon.profileRuntime.activeGUID
+        local specID = addon.profileRuntime.activeSpecID
+        if type(guid) ~= "string" or not addon.dbRuntime.IsCleanType(guid, "string")
+            or guid == "" or type(specID) ~= "number"
+            or not addon.dbRuntime.IsCleanType(specID, "number")
+            or not IsFiniteNumber(specID) or specID <= 0
+            or specID ~= math.floor(specID) then
+            return nil, "missing-context"
+        end
+        local freshRoot = addon.dbRuntime.BuildRegistry(defaults)
+        if type(freshRoot) ~= "table" or not addon.dbRuntime.IsCleanTable(freshRoot) then
+            return nil, "clone-failed"
+        end
+        local character = {
+            defaultProfileID = "p1",
+            specProfiles = { [specID] = "p1" },
+        }
+        if addon.dbRuntime.IsCleanType(addon.profileRuntime.activeDisplayName, "string") then
+            character.displayName = addon.profileRuntime.activeDisplayName
+        end
+        freshRoot.characters[guid] = character
+        if not addon.dbRuntime.ValidateRegistry(freshRoot) then
+            return nil, "validate-failed"
+        end
+        return freshRoot, nil, "p1"
     end)
 end
 
@@ -8077,76 +8300,11 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
     return slider
 end
 
--- Reset all settings to defaults — callable from both the resetBtn:OnClick (in
--- OpenConfigMenu) and the /ss reset slash command (section 17). All deps are
--- file-scope or global; configRefreshers / RefreshConfigLocalization no-op safely
--- when settings UI has never been opened (empty arrays at file scope).
+-- Footer Reset and /ss reset share the same confirmed, transactional active-profile
+-- operation. The implementation lives on addon.resetRuntime to avoid another broad
+-- closure in this near-limit Lua 5.1 chunk.
 local function ResetToDefaults()
-    if not addon.profileRuntime.CloseOwnedSettingsModals() then return false end
-    local db = addon.dbRuntime.GetWritableSettings(true)
-    if not db then return false end
-    -- Account-wide language/update cadence are intentionally outside profile Reset.
-    -- Capture the localized confirmation before changing the active payload.
-    local resetMessage = L("Settings reset to defaults")
-
-    -- Step 1: close any open modal BEFORE touching DB.
-    -- WHY: StatsPro's color picker close path explicitly restores its snapshot
-    -- before hiding the Blizzard singleton; ColorPickerFrame:Hide() alone does
-    -- not call cancelFunc on current retail clients. If
-    -- we did DB reset first, that cancelFunc would clobber the just-reset default.
-    -- Closing first means cancelFunc writes to a (soon-overwritten) DB — irrelevant.
-    -- Custom font picker is NOT a Blizzard dropdown so CloseDropDownMenus doesn't reach it;
-    -- explicit Hide triggers its OnHide which forcibly re-syncs panels with DB.font.
-    CloseDropDownMenus()
-    if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
-        _G.StatsProFontPicker:Hide()
-    end
-    COLOR_PICKER_STATE.Close()
-
-    -- Step 2: reset profile-owned scalars + colors to defaults. Account settings,
-    -- registry metadata, other profiles, and the flat downgrade shadow stay untouched.
-    for k, v in pairs(defaults) do
-        if not addon.dbRuntime.accountSettingKeys[k] and type(v) ~= "table" then db[k] = v end
-    end
-    -- Explicit cleanup of fields not in defaults (the loop above only writes present-key
-    -- defaults). These would linger in DB across Reset otherwise:
-    --   - useLocalizedLabels: dropped in v4→v5 migration; legacy users may still have it
-    --   - fontBeforeAutoSwitch: transient runtime state set when MaybeAutoSwitchFont fires
-    db.useLocalizedLabels = nil
-    db.fontBeforeAutoSwitch = nil
-    db.colors = CopyTable(defaults.colors)
-
-    -- Step 3: re-cache + re-apply panel-level visual state.
-    CacheSettings()
-    local runtimeFont = MaybeAutoSwitchFont()
-    addon.fontRuntime.applyCommittedTextStyle(
-        runtimeFont or defaults.font, defaults.fontSize, false, true)
-    ApplyTextAlphaToAllPanels(cached.textAlpha)
-    addon.readabilityConfig.applyPanelBackgroundAlphaToAllPanels(cached.panelBackgroundAlpha)
-    -- Account locale survives profile Reset. Re-resolve the settings font after the
-    -- default profile font is restored so a forced non-client locale keeps full glyph
-    -- coverage instead of falling back to the client's Latin-only default.
-    ApplyConfigFont(ResolveConfigFont(ResolveActiveLocale()))
-    SetAllPanelsScale(defaults.scale)
-    LoadAllPositions()
-    SetAllPanelsLockState(defaults.isLocked)
-    addon:RunUpdateStatsSafe()
-
-    -- Step 4: re-sync config widget visuals from freshly-reset DB.
-    -- WHY pcall: a buggy refresher should not break the entire walk. Print error
-    -- context instead of silent fail.
-    -- No-op when configRefreshers is empty (slash called pre-config-open).
-    for _, fn in ipairs(configRefreshers) do
-        local ok, err = pcall(fn)
-        if not ok then PrintMsg("refresher error: " .. tostring(err)) end
-    end
-    -- Refreshing localization remains harmless and keeps every visible config control
-    -- synchronized. configRefreshers above only re-sync checkbox states / swatch colors
-    -- / dropdown text, not L()-using labels. No-op when
-    -- localizedConfigLabels and alignmentGroups are empty (slash called pre-config-open).
-    RefreshConfigLocalization()
-
-    PrintMsg(resetMessage)
+    return addon.resetRuntime.Request()
 end
 
 addon.profileRuntime.closeOwnedSettingsModals = function()
@@ -8175,6 +8333,18 @@ addon.profileRuntime.closeOwnedSettingsModals = function()
             pcall(_G.StaticPopup_Hide, "STATSPRO_IMPORT_SWIFTSTATS")
         end
         addon.legacyImport.CancelPending()
+    end
+    if addon.resetRuntime.pending then
+        if type(_G.StaticPopup_Hide) == "function" then
+            pcall(_G.StaticPopup_Hide, "STATSPRO_RESET_ACTIVE_PROFILE")
+        end
+        addon.resetRuntime.CancelPending()
+    end
+    if addon.wipeRuntime.pending then
+        if type(_G.StaticPopup_Hide) == "function" then
+            pcall(_G.StaticPopup_Hide, "STATSPRO_WIPE_ALL_DATA")
+        end
+        addon.wipeRuntime.CancelPending()
     end
 end
 
@@ -8221,69 +8391,23 @@ addon.profileRuntime.applyActiveSettings = function()
 end
 
 function addon.legacyImport.AcceptPending()
-    local candidate = addon.legacyImport.pending
+    local pending = addon.legacyImport.pending
     addon.legacyImport.pending = nil
-    if not candidate then return end
-    if InCombatLockdown() then
-        PrintMsg(L("SwiftStats import is unavailable during combat. Try again after combat."))
+    if not pending then return end
+    local ok, result = addon.profileOps.ImportAndAssign(
+        pending.settings, pending.expected)
+    if ok and type(result) == "table"
+        and addon.dbRuntime.IsCleanType(result.name, "string") then
+        PrintMsg(string.format(
+            L("SwiftStats settings imported into new profile \"%s\"."), result.name))
         return
     end
-    local currentSettings = addon.dbRuntime.GetWritableSettings(false)
-    local currentAccount = addon.dbRuntime.GetWritableAccount(false)
-    local candidateValid, candidateAccount, _, candidateSettings = addon.dbRuntime.ValidateRegistry(candidate)
-    if type(currentSettings) ~= "table" or type(currentAccount) ~= "table"
-        or not candidateValid or type(candidateAccount) ~= "table"
-        or type(candidateSettings) ~= "table" then
-        PrintMsg(L("These settings use a newer schema and cannot be imported by this StatsPro version."))
-        return
+    if result == "combat" or result == "read-only" or result == "pending"
+        or result == "busy" or result == "unsafe-context" or result == "stale" then
+        PrintMsg(addon.profileUI.OperationErrorText(result))
+    else
+        PrintMsg(L("SwiftStats import failed; profiles and assignments were preserved."))
     end
-    local closeOK = pcall(addon.legacyImport.CloseOwnedSettingsModals)
-    if not closeOK or type(_G.ReloadUI) ~= "function" then
-        PrintMsg(L("SwiftStats import failed; current StatsPro settings were preserved."))
-        return
-    end
-
-    local previousSettings, settingsCopied = addon.dbRuntime.CloneSerializable(currentSettings)
-    local importedSettings, importCopied = addon.dbRuntime.CloneSerializable(candidateSettings)
-    if not settingsCopied or not importCopied then
-        PrintMsg(L("SwiftStats import failed; current StatsPro settings were preserved."))
-        return
-    end
-    local previousLocale = currentAccount.forceLocale
-    local previousInterval = currentAccount.updateInterval
-
-    -- Keep the registry, assignments, other profiles, and flat downgrade shadow in
-    -- place. A future profile-manager operation can promote imports into a separately
-    -- named/assigned profile; this compatibility transaction replaces only the active
-    -- payload plus the two account settings that the old whole-root import carried.
-    addon.dbRuntime.ReplaceTableContents(currentSettings, importedSettings)
-    currentAccount.forceLocale = candidateAccount.forceLocale
-    currentAccount.updateInterval = candidateAccount.updateInterval
-
-    -- WHY load anchors before ReloadUI: PLAYER_LOGOUT fires during reload and saves
-    -- live frame anchors. Without this step it would write the old on-screen position
-    -- over the newly imported offsets before SavedVariables flush.
-    local applied = pcall(LoadAllPositions)
-    if not applied then
-        addon.dbRuntime.ReplaceTableContents(currentSettings, previousSettings)
-        currentAccount.forceLocale = previousLocale
-        currentAccount.updateInterval = previousInterval
-        pcall(LoadAllPositions)
-        PrintMsg(L("SwiftStats import failed; current StatsPro settings were preserved."))
-        return
-    end
-    local reloadOK = pcall(_G.ReloadUI)
-    if reloadOK then
-        -- ReloadUI does not normally return; this branch is useful to test the
-        -- completed transaction in the standalone smoke harness.
-        PrintMsg(L("SwiftStats settings imported. Reloading the UI."))
-        return
-    end
-    addon.dbRuntime.ReplaceTableContents(currentSettings, previousSettings)
-    currentAccount.forceLocale = previousLocale
-    currentAccount.updateInterval = previousInterval
-    pcall(LoadAllPositions)
-    PrintMsg(L("SwiftStats import failed; current StatsPro settings were preserved."))
 end
 
 function addon.legacyImport.CancelPending()
@@ -8305,12 +8429,17 @@ _G.StaticPopupDialogs["STATSPRO_IMPORT_SWIFTSTATS"] = {
 
 function addon.legacyImport.Request()
     addon.legacyImport.pending = nil
-    if InCombatLockdown() then
-        PrintMsg(L("SwiftStats import is unavailable during combat. Try again after combat."))
+    if not addon.profileRuntime.CloseOwnedSettingsModals() then
+        PrintMsg(L("SwiftStats import failed; profiles and assignments were preserved."))
         return
     end
-    if not addon.dbRuntime.GetWritableSettings(false) then
-        PrintMsg(L("These settings use a newer schema and cannot be imported by this StatsPro version."))
+    local root, gateReason = addon.profileOps.Gate(nil, false)
+    if not root then
+        if gateReason == "combat" then
+            PrintMsg(L("SwiftStats import is unavailable during combat. Try again after combat."))
+        else
+            PrintMsg(addon.profileUI.OperationErrorText(gateReason))
+        end
         return
     end
     local candidate, status = addon.legacyImport.FindCandidate()
@@ -8324,21 +8453,162 @@ function addon.legacyImport.Request()
         end
         return
     end
-
-    if not addon.profileRuntime.CloseOwnedSettingsModals() then
-        PrintMsg(L("SwiftStats import failed; current StatsPro settings were preserved."))
+    local candidateValid, _, _, candidateSettings =
+        addon.dbRuntime.ValidateRegistry(candidate)
+    local guid = addon.profileRuntime.activeGUID
+    local specID = addon.profileRuntime.activeSpecID
+    local activeProfileID = addon.dbRuntime.activeProfileID
+    if not candidateValid or not addon.dbRuntime.IsCleanTable(candidateSettings)
+        or not addon.dbRuntime.IsCleanType(guid, "string") or guid == ""
+        or not addon.dbRuntime.IsCleanType(specID, "number")
+        or not addon.dbRuntime.IsCleanType(activeProfileID, "string") then
+        PrintMsg(L("SwiftStats import failed; profiles and assignments were preserved."))
         return
     end
-    addon.legacyImport.pending = candidate
+    addon.legacyImport.pending = {
+        settings = candidateSettings,
+        expected = addon.profileUI.CaptureExpected(guid, specID, activeProfileID),
+    }
     local definition = _G.StaticPopupDialogs["STATSPRO_IMPORT_SWIFTSTATS"]
-    definition.text = L("Replace current StatsPro settings with compatible SwiftStats settings? StatsPro-only options will reset to defaults, SwiftStats data will stay untouched, and the UI will reload.")
+    definition.text = L("Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged.")
     definition.button1 = L("Import")
     definition.button2 = _G.CANCEL
     local ok, popup = pcall(_G.StaticPopup_Show, "STATSPRO_IMPORT_SWIFTSTATS")
     if not ok or not popup then
         addon.legacyImport.pending = nil
-        PrintMsg(L("SwiftStats import failed; current StatsPro settings were preserved."))
+        PrintMsg(L("SwiftStats import failed; profiles and assignments were preserved."))
     end
+end
+
+function addon.resetRuntime.AcceptPending()
+    local pending = addon.resetRuntime.pending
+    addon.resetRuntime.pending = nil
+    if not pending then return end
+    local ok, result = addon.profileOps.ResetCurrent(
+        pending.profileID, pending.expected)
+    if ok then
+        PrintMsg(L("Settings reset to defaults"))
+    else
+        PrintMsg(addon.profileUI.OperationErrorText(result))
+    end
+end
+
+function addon.resetRuntime.CancelPending()
+    addon.resetRuntime.pending = nil
+end
+
+_G.StaticPopupDialogs["STATSPRO_RESET_ACTIVE_PROFILE"] = {
+    text = "",
+    button1 = "",
+    button2 = _G.CANCEL,
+    OnAccept = addon.resetRuntime.AcceptPending,
+    OnCancel = addon.resetRuntime.CancelPending,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    exclusive = true,
+    preferredIndex = 3,
+}
+
+function addon.resetRuntime.Request()
+    addon.resetRuntime.pending = nil
+    if not addon.profileRuntime.CloseOwnedSettingsModals() then return false end
+    local root, gateReason = addon.profileOps.Gate(nil, false)
+    if not root then
+        PrintMsg(addon.profileUI.OperationErrorText(gateReason))
+        return false
+    end
+    local profileID = addon.dbRuntime.activeProfileID
+    local profile = profileID and root.profiles[profileID] or nil
+    local guid = addon.profileRuntime.activeGUID
+    local specID = addon.profileRuntime.activeSpecID
+    if not profile or not addon.dbRuntime.IsCleanType(guid, "string")
+        or not addon.dbRuntime.IsCleanType(specID, "number") then
+        PrintMsg(addon.profileUI.OperationErrorText("missing-context"))
+        return false
+    end
+    local references = addon.profileOps.CountReferences(root, profileID)
+    local otherReferences = references.characterDefaults
+        + references.accountDefault + references.roleTemplates
+    addon.resetRuntime.pending = {
+        profileID = profileID,
+        expected = addon.profileUI.CaptureExpected(guid, specID, profileID),
+    }
+    local definition = _G.StaticPopupDialogs["STATSPRO_RESET_ACTIVE_PROFILE"]
+    definition.text = string.format(
+        L("Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."),
+        profile.name, references.specs, otherReferences)
+    definition.button1 = L("Confirm")
+    definition.button2 = _G.CANCEL
+    local ok, popup = pcall(_G.StaticPopup_Show, "STATSPRO_RESET_ACTIVE_PROFILE")
+    if not ok or not popup then
+        addon.resetRuntime.pending = nil
+        PrintMsg(addon.profileUI.OperationErrorText("open-failed"))
+        return false
+    end
+    return true
+end
+
+function addon.wipeRuntime.AcceptPending()
+    local pending = addon.wipeRuntime.pending
+    addon.wipeRuntime.pending = nil
+    if not pending then return end
+    local ok, result = addon.profileOps.FullWipe(pending.expected)
+    if ok then
+        PrintMsg(L("All StatsPro data reset to defaults."))
+    else
+        PrintMsg(addon.profileUI.OperationErrorText(result))
+    end
+end
+
+function addon.wipeRuntime.CancelPending()
+    addon.wipeRuntime.pending = nil
+end
+
+_G.StaticPopupDialogs["STATSPRO_WIPE_ALL_DATA"] = {
+    text = "",
+    button1 = "",
+    button2 = _G.CANCEL,
+    OnAccept = addon.wipeRuntime.AcceptPending,
+    OnCancel = addon.wipeRuntime.CancelPending,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    exclusive = true,
+    preferredIndex = 3,
+}
+
+function addon.wipeRuntime.Request()
+    addon.wipeRuntime.pending = nil
+    if not addon.profileRuntime.CloseOwnedSettingsModals() then return false end
+    local root, gateReason = addon.profileOps.Gate(nil, false)
+    if not root then
+        PrintMsg(addon.profileUI.OperationErrorText(gateReason))
+        return false
+    end
+    local profileID = addon.dbRuntime.activeProfileID
+    local guid = addon.profileRuntime.activeGUID
+    local specID = addon.profileRuntime.activeSpecID
+    if not addon.dbRuntime.IsCleanType(profileID, "string")
+        or not addon.dbRuntime.IsCleanType(guid, "string")
+        or not addon.dbRuntime.IsCleanType(specID, "number") then
+        PrintMsg(addon.profileUI.OperationErrorText("missing-context"))
+        return false
+    end
+    addon.wipeRuntime.pending = {
+        expected = addon.profileUI.CaptureExpected(guid, specID, profileID),
+    }
+    local definition = _G.StaticPopupDialogs["STATSPRO_WIPE_ALL_DATA"]
+    definition.text = L("Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged.")
+    definition.button1 = L("Confirm")
+    definition.button2 = _G.CANCEL
+    local ok, popup = pcall(_G.StaticPopup_Show, "STATSPRO_WIPE_ALL_DATA")
+    if not ok or not popup then
+        addon.wipeRuntime.pending = nil
+        PrintMsg(addon.profileUI.OperationErrorText("open-failed"))
+        return false
+    end
+    return true
 end
 
 function addon.archonTargets.GetTargetSnapshotDropdownValue()
@@ -9923,8 +10193,8 @@ function addon:OpenConfigMenu()
 
     local resetBtn = CreateFrame("Button", nil, configFrame, "GameMenuButtonTemplate")
     resetBtn:SetPoint("BOTTOMLEFT", 18, 14)
-    resetBtn:SetSize(160, 26)
-    PushLocalizedLabel(function() resetBtn:SetText(L("Reset to Defaults")) end)
+    resetBtn:SetSize(200, 26)
+    PushLocalizedLabel(function() resetBtn:SetText(L("Reset active profile...")) end)
     resetBtn:SetNormalFontObject("GameFontNormal")
     resetBtn:SetHighlightFontObject("GameFontHighlight")
 
@@ -11571,6 +11841,8 @@ if addon and addon.__statsproSmoke == true then
             setRoleTemplate = addon.profileOps.SetRoleTemplate,
             swap = addon.profileOps.Swap,
             resetCurrent = addon.profileOps.ResetCurrent,
+            importAndAssign = addon.profileOps.ImportAndAssign,
+            fullWipe = addon.profileOps.FullWipe,
             deleteWithReplacement = addon.profileOps.DeleteWithReplacement,
             forgetCharacter = addon.profileOps.ForgetCharacter,
             setFailureStage = function(stage) addon.profileOps.testFailureStage = stage end,
@@ -11583,6 +11855,13 @@ if addon and addon.__statsproSmoke == true then
                 }
             end,
         },
+        destructivePromptState = function()
+            return {
+                importPending = addon.legacyImport.pending ~= nil,
+                resetPending = addon.resetRuntime.pending ~= nil,
+                wipePending = addon.wipeRuntime.pending ~= nil,
+            }
+        end,
         profileUIState = function()
             local ui = addon.profileUI
             local rows = {}
@@ -12058,7 +12337,13 @@ SlashCmdList["STATSPRO"] = function(msg)
             PrintMsg(L(newState and "Stats panel shown" or "Stats panel hidden"))
         end
     elseif arg == "reset" then
-        ResetToDefaults()
+        if rest == "all" then
+            addon.wipeRuntime.Request()
+        else
+            ResetToDefaults()
+        end
+    elseif arg == "wipe" then
+        addon.wipeRuntime.Request()
     elseif arg == "import" then
         addon.legacyImport.Request()
     elseif arg == "debug" then

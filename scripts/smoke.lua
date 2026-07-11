@@ -799,6 +799,17 @@ local function loadStatsPro(locale, opts)
     return env, addon, addon.__test
 end
 
+local function withProfileIdentity(opts)
+    opts = opts or {}
+    opts.unitGUID = opts.unitGUID or function() return "Player-1-IMPORT" end
+    opts.getSpecialization = opts.getSpecialization or function() return 1 end
+    opts.specID = opts.specID or 73
+    opts.specName = opts.specName or "Protection"
+    opts.specRole = opts.specRole or "TANK"
+    opts.primaryStat = opts.primaryStat or 1
+    return opts
+end
+
 local function loadArchonValidatorModule()
     local previous = _G.__STATSPRO_ARCHON_TARGETS_MODULE
     _G.__STATSPRO_ARCHON_TARGETS_MODULE = true
@@ -2770,17 +2781,18 @@ end
 
 do
     local secretColors = { crit = { r = 0.2, g = 0.3, b = 0.4 } }
-    local nestedSecretEnv = loadStatsPro("enUS", {
+    local nestedSecretEnv, _, nestedSecretTest = loadStatsPro("enUS", withProfileIdentity({
         statsProDB = { fontSize = 20 },
         swiftStatsDB = { fontSize = 18, colors = secretColors },
         issecrettable = function(value) return value == secretColors end,
-    })
+    }))
     fireEvent("legacy_import.secret_nested_table.pew", nestedSecretEnv, "PLAYER_ENTERING_WORLD")
     slash("legacy_import.secret_nested_table.request", nestedSecretEnv, "import")
     nestedSecretEnv.__acceptStaticPopup()
-    eq("legacy_import.secret_nested_table.scalar_imported", activeSettings(nestedSecretEnv).fontSize, 18)
+    eq("legacy_import.secret_nested_table.scalar_imported",
+        nestedSecretTest.profileState().settings.fontSize, 18)
     assertColor("legacy_import.secret_nested_table.color_rejected",
-        activeSettings(nestedSecretEnv).colors.crit, 1, 0, 0)
+        nestedSecretTest.profileState().settings.colors.crit, 1, 0, 0)
 end
 
 do
@@ -2803,11 +2815,13 @@ do
     source.unknownCycle = {}
     source.unknownCycle.self = source.unknownCycle
     setmetatable(source, { __index = function() error("legacy source __index must not run") end })
-    local lateEnv = loadStatsPro("enUS", { statsProDB = {} })
+    local lateEnv, _, lateTest = loadStatsPro(
+        "enUS", withProfileIdentity({ statsProDB = {} }))
     fireEvent("legacy_import.late.pew_without_source", lateEnv, "PLAYER_ENTERING_WORLD")
     eq("legacy_import.late.defaults_initialized", activeSettings(lateEnv).fontSize, 14)
     lateEnv.SwiftStatsDB = source
     fireEvent("legacy_import.late.second_pew", lateEnv, "PLAYER_ENTERING_WORLD")
+    lateEnv.__flushTimers(0.1)
     eq("legacy_import.late.second_pew_no_auto_overwrite", activeSettings(lateEnv).fontSize, 14)
 
     slash("legacy_import.late.request_cancel", lateEnv, "import")
@@ -2818,10 +2832,16 @@ do
     eq("legacy_import.late.cancel_no_reload", lateEnv.__reloadUICalls, 0)
 
     local rootRef = lateEnv.StatsProDB
-    local profilesRef = rootRef.profiles
-    local accountRef = rootRef.account
+    local oldActive = lateTest.profileState()
+    local oldProfileID = oldActive.profileID
+    local oldProfileRef = rootRef.profiles[oldProfileID]
+    local oldSettingsBefore = deepCopy(oldProfileRef.settings)
+    local nextProfileIDBefore = rootRef.account.nextProfileID
+    local accountDefaultBefore = rootRef.account.defaultProfileID
+    local accountLocaleBefore = rootRef.account.forceLocale
+    local accountIntervalBefore = rootRef.account.updateInterval
     local rolesRef = rootRef.roleTemplates
-    local charactersRef = rootRef.characters
+    local assignmentBefore = rootRef.characters["Player-1-IMPORT"].specProfiles[73]
     local shadowFontSize = rawget(rootRef, "fontSize")
     local shadowColors = rawget(rootRef, "colors")
     slash("legacy_import.late.request_accept", lateEnv, "import")
@@ -2830,30 +2850,48 @@ do
     source.xOfs = 999
     source.colors.primary.r = 0.9
     lateEnv.__acceptStaticPopup()
-    eq("legacy_import.late.accept_reload", lateEnv.__reloadUICalls, 1)
-    eq("legacy_import.late.accept_snapshot_font_size", activeSettings(lateEnv).fontSize, 19)
-    eq("legacy_import.late.accept_snapshot_x", activeSettings(lateEnv).xOfs, 123)
-    eq("legacy_import.late.accept_primary_toggle_migrated", activeSettings(lateEnv).showMainStat, true)
+    local imported = lateTest.profileState()
+    eq("legacy_import.late.accept_no_reload", lateEnv.__reloadUICalls, 0)
+    check("legacy_import.late.accept_new_profile", imported.profileID ~= oldProfileID)
+    eq("legacy_import.late.accept_new_profile_name",
+        rootRef.profiles[imported.profileID].name, "SwiftStats Import")
+    eq("legacy_import.late.accept_current_assignment",
+        rootRef.characters["Player-1-IMPORT"].specProfiles[73], imported.profileID)
+    eq("legacy_import.late.accept_old_assignment_was_active", assignmentBefore, oldProfileID)
+    eq("legacy_import.late.accept_old_profile_identity",
+        rawequal(rootRef.profiles[oldProfileID], oldProfileRef), true)
+    assertDeepEqual("legacy_import.late.accept_old_profile_unchanged",
+        oldProfileRef.settings, oldSettingsBefore)
+    eq("legacy_import.late.accept_snapshot_font_size", imported.settings.fontSize, 19)
+    eq("legacy_import.late.accept_snapshot_x", imported.settings.xOfs, 123)
+    eq("legacy_import.late.accept_primary_toggle_migrated", imported.settings.showMainStat, true)
     assertColor("legacy_import.late.accept_primary_color_migrated",
-        activeSettings(lateEnv).colors.mainStat, 0.2, 0.3, 0.4)
-    assertColor("legacy_import.late.accept_crit_color", activeSettings(lateEnv).colors.crit, 0.4, 0.5, 0.6)
-    eq("legacy_import.late.accept_unknown_ignored", activeSettings(lateEnv).unknown, nil)
-    eq("legacy_import.late.accept_minimap_ignored", activeSettings(lateEnv).minimapPos, nil)
-    eq("legacy_import.late.accept_transient_ignored", activeSettings(lateEnv).fontBeforeAutoSwitch, nil)
-    eq("legacy_import.late.accept_unknown_color_ignored", activeSettings(lateEnv).colors.evil, nil)
-    eq("legacy_import.late.accept_current_version", lateEnv.StatsProDB.dbVersion, test.currentDBVersion())
+        imported.settings.colors.mainStat, 0.2, 0.3, 0.4)
+    assertColor("legacy_import.late.accept_crit_color",
+        imported.settings.colors.crit, 0.4, 0.5, 0.6)
+    eq("legacy_import.late.accept_unknown_ignored", imported.settings.unknown, nil)
+    eq("legacy_import.late.accept_minimap_ignored", imported.settings.minimapPos, nil)
+    eq("legacy_import.late.accept_transient_ignored", imported.settings.fontBeforeAutoSwitch, nil)
+    eq("legacy_import.late.accept_unknown_color_ignored", imported.settings.colors.evil, nil)
+    eq("legacy_import.late.accept_account_id_advanced",
+        rootRef.account.nextProfileID, nextProfileIDBefore + 1)
+    eq("legacy_import.late.accept_account_default_unchanged",
+        rootRef.account.defaultProfileID, accountDefaultBefore)
+    eq("legacy_import.late.accept_account_locale_unchanged",
+        rootRef.account.forceLocale, accountLocaleBefore)
+    near("legacy_import.late.accept_account_interval_unchanged",
+        rootRef.account.updateInterval, accountIntervalBefore)
+    eq("legacy_import.late.accept_current_version",
+        lateEnv.StatsProDB.dbVersion, lateTest.currentDBVersion())
     eq("legacy_import.late.accept_keeps_root", rawequal(lateEnv.StatsProDB, rootRef), true)
-    eq("legacy_import.late.accept_keeps_profiles", rawequal(rootRef.profiles, profilesRef), true)
-    eq("legacy_import.late.accept_keeps_account", rawequal(rootRef.account, accountRef), true)
     eq("legacy_import.late.accept_keeps_roles", rawequal(rootRef.roleTemplates, rolesRef), true)
-    eq("legacy_import.late.accept_keeps_characters", rawequal(rootRef.characters, charactersRef), true)
     eq("legacy_import.late.accept_keeps_shadow_font", rawget(rootRef, "fontSize"), shadowFontSize)
     eq("legacy_import.late.accept_keeps_shadow_colors", rawget(rootRef, "colors"), shadowColors)
     local loadedPoint = lateEnv.StatsProFrame.points[1]
     eq("legacy_import.late.accept_position_loaded.point", loadedPoint[1], "TOPLEFT")
     eq("legacy_import.late.accept_position_loaded.x", loadedPoint[4], 123)
     fireEvent("legacy_import.late.logout_preserves_imported_position", lateEnv, "PLAYER_LOGOUT")
-    eq("legacy_import.late.logout_position_x", activeSettings(lateEnv).xOfs, 123)
+    eq("legacy_import.late.logout_position_x", imported.settings.xOfs, 123)
 end
 
 do
@@ -2867,7 +2905,8 @@ do
     slash("legacy_import.future_destination.request", futureEnv, "import")
     eq("legacy_import.future_destination.no_popup", futureEnv.__staticPopupShows, 0)
     eq("legacy_import.future_destination.no_mutation", activeSettings(futureEnv).fontSize, 23)
-    eq("legacy_import.future_destination.message", printContains(futureEnv, "newer schema"), true)
+    eq("legacy_import.future_destination.message",
+        printContains(futureEnv, "read-only"), true)
 end
 
 do
@@ -2907,15 +2946,16 @@ do
     eq("legacy_import.secret_destination.no_popup", secretDestinationEnv.__staticPopupShows, 0)
     eq("legacy_import.secret_destination.no_mutation", activeSettings(secretDestinationEnv).fontSize, 23)
     eq("legacy_import.secret_destination.no_tonumber", secretTonumberCalls, 0)
-    eq("legacy_import.secret_destination.message", printContains(secretDestinationEnv, "newer schema"), true)
+    eq("legacy_import.secret_destination.message",
+        printContains(secretDestinationEnv, "read-only"), true)
 
     secretTonumberCalls = 0
-    local acceptEnv = loadStatsPro("enUS", {
+    local acceptEnv = loadStatsPro("enUS", withProfileIdentity({
         statsProDB = { fontSize = 23 },
         swiftStatsDB = { fontSize = 17 },
         issecretvalue = function(value) return value == secretVersion end,
         tonumber = guardedTonumber,
-    })
+    }))
     fireEvent("legacy_import.secret_destination_accept.pew", acceptEnv, "PLAYER_ENTERING_WORLD")
     slash("legacy_import.secret_destination_accept.request", acceptEnv, "import")
     acceptEnv.StatsProDB.dbVersion = secretVersion
@@ -2924,12 +2964,12 @@ do
     eq("legacy_import.secret_destination_accept.no_reload", acceptEnv.__reloadUICalls, 0)
     eq("legacy_import.secret_destination_accept.no_mutation", activeSettings(acceptEnv).fontSize, 23)
     eq("legacy_import.secret_destination_accept.no_tonumber", secretTonumberCalls, 0)
-    eq("legacy_import.secret_destination_accept.message", printContains(acceptEnv, "newer schema"), true)
+    eq("legacy_import.secret_destination_accept.message",
+        printContains(acceptEnv, "read-only"), true)
 end
 
 do
-    local reloadCalls = 0
-    local reloadFailureEnv = loadStatsPro("enUS", {
+    local applyFailureEnv, _, applyFailureTest = loadStatsPro("enUS", withProfileIdentity({
         statsProDB = {
             dbVersion = 9,
             forceLocale = "enUS",
@@ -2954,59 +2994,47 @@ do
                 crit = { r = 0.9, g = 0.8, b = 0.7 },
             },
         },
-        reloadUI = function()
-            reloadCalls = reloadCalls + 1
-            error("ReloadUI unavailable")
-        end,
-    })
-    fireEvent("legacy_import.reload_failure.pew", reloadFailureEnv, "PLAYER_ENTERING_WORLD")
-    local root = reloadFailureEnv.StatsProDB
-    local settings = activeSettings(root)
-    root.profiles.p2 = { name = "Other", settings = deepCopy(settings) }
-    root.profiles.p2.settings.fontSize = 24
-    root.account.nextProfileID = 3
+    }))
+    fireEvent("legacy_import.apply_failure.pew", applyFailureEnv, "PLAYER_ENTERING_WORLD")
+    local root = applyFailureEnv.StatsProDB
+    local state = applyFailureTest.profileState()
+    local settings = state.settings
     local rootRef = root
     local accountRef = root.account
     local profilesRef = root.profiles
     local settingsRef = settings
-    local otherProfileRef = root.profiles.p2
     local rolesRef = root.roleTemplates
     local charactersRef = root.characters
     local shadowColorsRef = root.colors
     local shadowUnknownRef = root.rollbackUnknown
     local before = deepCopy(root)
     local settingsBefore = deepCopy(settings)
-    local accountBefore = deepCopy(root.account)
-    local otherBefore = deepCopy(root.profiles.p2)
-    slash("legacy_import.reload_failure.request", reloadFailureEnv, "import")
-    clearPrints(reloadFailureEnv)
-    reloadFailureEnv.__acceptStaticPopup()
-    eq("legacy_import.reload_failure.attempted_once", reloadCalls, 1)
-    eq("legacy_import.reload_failure.root_identity", rawequal(reloadFailureEnv.StatsProDB, rootRef), true)
-    eq("legacy_import.reload_failure.account_identity", rawequal(root.account, accountRef), true)
-    eq("legacy_import.reload_failure.profiles_identity", rawequal(root.profiles, profilesRef), true)
-    eq("legacy_import.reload_failure.settings_identity", rawequal(activeSettings(root), settingsRef), true)
-    eq("legacy_import.reload_failure.other_profile_identity",
-        rawequal(root.profiles.p2, otherProfileRef), true)
-    eq("legacy_import.reload_failure.roles_identity", rawequal(root.roleTemplates, rolesRef), true)
-    eq("legacy_import.reload_failure.characters_identity", rawequal(root.characters, charactersRef), true)
-    eq("legacy_import.reload_failure.shadow_colors_identity", rawequal(root.colors, shadowColorsRef), true)
-    eq("legacy_import.reload_failure.shadow_unknown_identity",
+    local activeProfileID = state.profileID
+    slash("legacy_import.apply_failure.request", applyFailureEnv, "import")
+    applyFailureTest.profileOps.setFailureStage("apply")
+    clearPrints(applyFailureEnv)
+    applyFailureEnv.__acceptStaticPopup()
+    eq("legacy_import.apply_failure.no_reload", applyFailureEnv.__reloadUICalls, 0)
+    eq("legacy_import.apply_failure.root_identity", rawequal(applyFailureEnv.StatsProDB, rootRef), true)
+    eq("legacy_import.apply_failure.account_identity", rawequal(root.account, accountRef), true)
+    eq("legacy_import.apply_failure.profiles_identity", rawequal(root.profiles, profilesRef), true)
+    eq("legacy_import.apply_failure.settings_identity",
+        rawequal(applyFailureTest.profileState().settings, settingsRef), true)
+    eq("legacy_import.apply_failure.roles_identity", rawequal(root.roleTemplates, rolesRef), true)
+    eq("legacy_import.apply_failure.characters_identity", rawequal(root.characters, charactersRef), true)
+    eq("legacy_import.apply_failure.shadow_colors_identity", rawequal(root.colors, shadowColorsRef), true)
+    eq("legacy_import.apply_failure.shadow_unknown_identity",
         rawequal(root.rollbackUnknown, shadowUnknownRef), true)
-    assertDeepEqual("legacy_import.reload_failure.full_root_restored", root, before)
-    assertDeepEqual("legacy_import.reload_failure.settings_restored", activeSettings(root), settingsBefore)
-    assertDeepEqual("legacy_import.reload_failure.account_restored", root.account, accountBefore)
-    assertDeepEqual("legacy_import.reload_failure.other_profile_restored", root.profiles.p2, otherBefore)
-    eq("legacy_import.reload_failure.locale_restored", root.account.forceLocale, "enUS")
-    near("legacy_import.reload_failure.interval_restored", root.account.updateInterval, 0.85)
-    assertColor("legacy_import.reload_failure.color_restored",
-        activeSettings(root).colors.crit, 0.15, 0.25, 0.35)
-    eq("legacy_import.reload_failure.position_restored",
-        reloadFailureEnv.StatsProFrame.points[1][1], "BOTTOM")
-    eq("legacy_import.reload_failure.failure_message",
-        printContains(reloadFailureEnv, "current StatsPro settings were preserved"), true)
-    eq("legacy_import.reload_failure.no_success_message",
-        printContains(reloadFailureEnv, "settings imported"), false)
+    assertDeepEqual("legacy_import.apply_failure.full_root_restored", root, before)
+    assertDeepEqual("legacy_import.apply_failure.settings_restored", settings, settingsBefore)
+    eq("legacy_import.apply_failure.active_profile_restored",
+        applyFailureTest.profileState().profileID, activeProfileID)
+    eq("legacy_import.apply_failure.position_restored",
+        applyFailureEnv.StatsProFrame.points[1][1], "BOTTOM")
+    eq("legacy_import.apply_failure.failure_message",
+        printContains(applyFailureEnv, "profiles and assignments were preserved"), true)
+    eq("legacy_import.apply_failure.no_success_message",
+        printContains(applyFailureEnv, "settings imported"), false)
 end
 
 do
@@ -3082,7 +3110,7 @@ do
 end
 
 do
-    local resetEnv = loadStatsPro("enUS", {
+    local resetEnv, _, resetTest = loadStatsPro("enUS", withProfileIdentity({
         statsProDB = {
             dbVersion = 9,
             forceLocale = "ruRU",
@@ -3091,13 +3119,15 @@ do
             scale = 1.7,
             colors = { crit = { r = 0.2, g = 0.3, b = 0.4 } },
         },
-    })
+    }))
     fireEvent("profiles.reset.pew", resetEnv, "PLAYER_ENTERING_WORLD")
     local root = resetEnv.StatsProDB
-    root.profiles.p2 = { name = "Other", settings = deepCopy(activeSettings(resetEnv)) }
-    root.account.nextProfileID = 3
-    root.profiles.p2.settings.scale = 1.3
-    local otherBefore = deepCopy(root.profiles.p2)
+    local activeProfileID = resetTest.profileState().profileID
+    local active = resetTest.profileState().settings
+    root.profiles.p4 = { name = "Other", settings = deepCopy(active) }
+    root.account.nextProfileID = 5
+    root.profiles.p4.settings.scale = 1.3
+    local otherBefore = deepCopy(root.profiles.p4)
     local accountBefore = deepCopy(root.account)
     local shadowBefore = {
         forceLocale = root.forceLocale,
@@ -3106,11 +3136,25 @@ do
         scale = root.scale,
         colors = root.colors,
     }
+    local beforeRequest = deepCopy(root)
+    slash("profiles.reset.request", resetEnv, "reset")
+    eq("profiles.reset.request_popup", resetEnv.__staticPopupShows, 1)
+    assertDeepEqual("profiles.reset.request_zero_writes", root, beforeRequest)
+    check("profiles.reset.shared_warning_name",
+        resetEnv.__lastStaticPopup.definition.text:find(
+            root.profiles[activeProfileID].name, 1, true) ~= nil)
+    resetEnv.__cancelStaticPopup()
+    assertDeepEqual("profiles.reset.cancel_zero_writes", root, beforeRequest)
+
     slash("profiles.reset.active_only", resetEnv, "reset")
-    eq("profiles.reset.active_visible_default", activeSettings(resetEnv).isVisible, true)
-    near("profiles.reset.active_scale_default", activeSettings(resetEnv).scale, 1)
-    assertColor("profiles.reset.active_color_default", activeSettings(resetEnv).colors.crit, 1, 0, 0)
-    assertDeepEqual("profiles.reset.other_profile_unchanged", root.profiles.p2, otherBefore)
+    resetEnv.__acceptStaticPopup()
+    local resetSettings = resetTest.profileState().settings
+    eq("profiles.reset.active_id_preserved",
+        resetTest.profileState().profileID, activeProfileID)
+    eq("profiles.reset.active_visible_default", resetSettings.isVisible, true)
+    near("profiles.reset.active_scale_default", resetSettings.scale, 1)
+    assertColor("profiles.reset.active_color_default", resetSettings.colors.crit, 1, 0, 0)
+    assertDeepEqual("profiles.reset.other_profile_unchanged", root.profiles.p4, otherBefore)
     assertDeepEqual("profiles.reset.account_unchanged", root.account, accountBefore)
     eq("profiles.reset.shadow_locale", root.forceLocale, shadowBefore.forceLocale)
     eq("profiles.reset.shadow_interval", root.updateInterval, shadowBefore.updateInterval)
@@ -3314,50 +3358,55 @@ do
 end
 
 do
-    local slashEnv = loadStatsPro("enUS")
+    local slashEnv, _, slashTest = loadStatsPro("enUS", withProfileIdentity())
     fireEvent("slash.pew", slashEnv, "PLAYER_ENTERING_WORLD")
+    local slashSettings = slashTest.profileState().settings
     slash("slash.default_opens_config", slashEnv, "")
     exists("slash.default_opens_config.frame", slashEnv.StatsProConfigFrame)
     clearPrints(slashEnv)
     slash("slash.hide", slashEnv, "hide")
-    eq("slash.hide.visible", activeSettings(slashEnv).isVisible, false)
+    eq("slash.hide.visible", slashSettings.isVisible, false)
     eq("slash.hide.checkbox_synced", slashEnv.StatsProVisibleCheck:GetChecked(), false)
     eq("slash.hide.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Stats panel hidden")
     clearPrints(slashEnv)
     slash("slash.show", slashEnv, "show")
-    eq("slash.show.visible", activeSettings(slashEnv).isVisible, true)
+    eq("slash.show.visible", slashSettings.isVisible, true)
     eq("slash.show.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Stats panel shown")
     clearPrints(slashEnv)
     slash("slash.toggle", slashEnv, "toggle")
-    eq("slash.toggle.visible", activeSettings(slashEnv).isVisible, false)
+    eq("slash.toggle.visible", slashSettings.isVisible, false)
     eq("slash.toggle.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Stats panel hidden")
     clearPrints(slashEnv)
     slash("slash.help", slashEnv, "help")
-    eq("slash.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help")
-    activeSettings(slashEnv).fontBeforeAutoSwitch = "Fonts\\ARIALN.TTF"
-    activeSettings(slashEnv).useLocalizedLabels = false
-    activeSettings(slashEnv).panelBackgroundAlpha = 55
-    activeSettings(slashEnv).textOutlineStyle = "thick"
-    activeSettings(slashEnv).targetSnapshot = "raid"
-    activeSettings(slashEnv).colors.crit = { r = 0.4, g = 0.5, b = 0.6 }
+    eq("slash.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help")
+    slashSettings.fontBeforeAutoSwitch = "Fonts\\ARIALN.TTF"
+    slashSettings.useLocalizedLabels = false
+    slashSettings.panelBackgroundAlpha = 55
+    slashSettings.textOutlineStyle = "thick"
+    slashSettings.targetSnapshot = "raid"
+    slashSettings.colors.crit = { r = 0.4, g = 0.5, b = 0.6 }
     clearPrints(slashEnv)
     slash("slash.reset_restores_defaults", slashEnv, "reset")
-    eq("slash.reset_restores_defaults.visible", activeSettings(slashEnv).isVisible, true)
-    eq("slash.reset_restores_defaults.panel_background_alpha", activeSettings(slashEnv).panelBackgroundAlpha, 0)
-    eq("slash.reset_restores_defaults.text_outline_style", activeSettings(slashEnv).textOutlineStyle, "outline")
-    eq("slash.reset_restores_defaults.target_snapshot", activeSettings(slashEnv).targetSnapshot, "mythicPlus")
-    eq("slash.reset_restores_defaults.transient_font", activeSettings(slashEnv).fontBeforeAutoSwitch, nil)
-    eq("slash.reset_restores_defaults.legacy_locale", activeSettings(slashEnv).useLocalizedLabels, nil)
+    eq("slash.reset_confirmation_open", slashEnv.__lastStaticPopup.key,
+        "STATSPRO_RESET_ACTIVE_PROFILE")
+    slashEnv.__acceptStaticPopup()
+    slashSettings = slashTest.profileState().settings
+    eq("slash.reset_restores_defaults.visible", slashSettings.isVisible, true)
+    eq("slash.reset_restores_defaults.panel_background_alpha", slashSettings.panelBackgroundAlpha, 0)
+    eq("slash.reset_restores_defaults.text_outline_style", slashSettings.textOutlineStyle, "outline")
+    eq("slash.reset_restores_defaults.target_snapshot", slashSettings.targetSnapshot, "mythicPlus")
+    eq("slash.reset_restores_defaults.transient_font", slashSettings.fontBeforeAutoSwitch, nil)
+    eq("slash.reset_restores_defaults.legacy_locale", slashSettings.useLocalizedLabels, nil)
     eq("slash.reset_restores_defaults.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Settings reset to defaults")
-    assertColor("slash.reset_restores_defaults.crit", activeSettings(slashEnv).colors.crit, 1, 0, 0)
+    assertColor("slash.reset_restores_defaults.crit", slashSettings.colors.crit, 1, 0, 0)
 end
 
 do
-    local slashEnv, _, slashTest = loadStatsPro("enUS", {
+    local slashEnv, _, slashTest = loadStatsPro("enUS", withProfileIdentity({
         statsProDB = {
             forceLocale = "ruRU",
         },
-    })
+    }))
     fireEvent("slash.localized_ruRU.pew", slashEnv, "PLAYER_ENTERING_WORLD")
     clearPrints(slashEnv)
     slash("slash.localized_ruRU.hide", slashEnv, "hide")
@@ -3370,7 +3419,7 @@ do
     eq("slash.localized_ruRU.toggle.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Панель статов скрыта")
     clearPrints(slashEnv)
     slash("slash.localized_ruRU.help", slashEnv, "help")
-    eq("slash.localized_ruRU.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help")
+    eq("slash.localized_ruRU.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help")
     clearPrints(slashEnv)
     slash("slash.localized_ruRU.debug", slashEnv, "debug")
     eq("slash.localized_ruRU.debug_english", printContains(slashEnv, "debug v"), true)
@@ -3393,13 +3442,16 @@ do
     slash("slash.localized_ruRU.debug_labelstyle", slashEnv, "debug labelstyle")
     eq("slash.localized_ruRU.debug_labelstyle_english", printContains(slashEnv, "debug labelstyle:"), true)
     accountSettings(slashEnv).forceLocale = "ruRU"
-    activeSettings(slashEnv).fontBeforeAutoSwitch = "Fonts\\ARIALN.TTF"
-    activeSettings(slashEnv).useLocalizedLabels = false
+    local localizedSettings = slashTest.profileState().settings
+    localizedSettings.fontBeforeAutoSwitch = "Fonts\\ARIALN.TTF"
+    localizedSettings.useLocalizedLabels = false
     clearPrints(slashEnv)
     slash("slash.localized_ruRU.reset", slashEnv, "reset")
+    slashEnv.__acceptStaticPopup()
+    localizedSettings = slashTest.profileState().settings
     eq("slash.localized_ruRU.reset.keeps_account_locale", accountSettings(slashEnv).forceLocale, "ruRU")
     eq("slash.localized_ruRU.reset.keeps_glyph_font",
-        activeSettings(slashEnv).font, "Fonts\\ARIALN.TTF")
+        localizedSettings.font, "Fonts\\ARIALN.TTF")
     eq("slash.localized_ruRU.reset.panel_keeps_glyph_font",
         slashTest.panelFontState().mainAppliedFont, "Fonts\\ARIALN.TTF")
     eq("slash.localized_ruRU.reset.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Настройки сброшены по умолчанию")
@@ -7478,7 +7530,8 @@ do
         activeSettings(env).colors.crit, 0.4, 0.5, 0.6)
     slash("config.reset_closes_color_picker", env, "reset")
     eq("config.reset_closes_color_picker.hidden", env.ColorPickerFrame:IsShown(), false)
-    assertColor("config.reset_closes_color_picker.default_color", activeSettings(env).colors.crit, 1, 0, 0)
+    eq("config.reset_closes_color_picker.restores_unaccepted_preview",
+        activeSettings(env).colors.crit, nil)
     eq("config.mutation_gate.reuses_full_validation",
         test.dbValidationCount(), validationCountBeforeUIWrites)
 end
@@ -7949,9 +8002,23 @@ do
     slash("db_compat.future_read_only.slash_hide", futureEnv, "hide")
     slash("db_compat.future_read_only.slash_toggle", futureEnv, "toggle")
     slash("db_compat.future_read_only.slash_reset", futureEnv, "reset")
+    slash("db_compat.future_read_only.slash_reset_all", futureEnv, "reset all")
+    slash("db_compat.future_read_only.slash_wipe", futureEnv, "wipe")
     slash("db_compat.future_read_only.slash_import", futureEnv, "import")
     eq("db_compat.future_read_only.import_no_popup", futureEnv.__staticPopupShows, 0)
     assertRootUnchanged("db_compat.future_read_only.slash_unchanged")
+
+    for name, invoke in pairs({
+        import = function() return futureTest.profileOps.importAndAssign({}) end,
+        reset = function() return futureTest.profileOps.resetCurrent("future-p7") end,
+        wipe = function() return futureTest.profileOps.fullWipe() end,
+    }) do
+        local invoked, result, reason = pcall(invoke)
+        check("db_compat.future_read_only.direct." .. name .. ".call", invoked, result)
+        eq("db_compat.future_read_only.direct." .. name .. ".rejected", result, false)
+        eq("db_compat.future_read_only.direct." .. name .. ".reason", reason, "read-only")
+        assertRootUnchanged("db_compat.future_read_only.direct." .. name .. ".unchanged")
+    end
 
     futureEnv.StatsProFrame:ClearAllPoints()
     futureEnv.StatsProFrame:SetPoint("TOPLEFT", futureEnv.UIParent, "TOPLEFT", 41, -42)
@@ -9499,6 +9566,8 @@ local function makeProfileOpsFixture(options)
             return identity.specID, identity.specName, nil, nil, identity.role, 1
         end,
         statsProArchonTargets = options.statsProArchonTargets,
+        swiftStatsDB = options.swiftStatsDB,
+        swiftStatsLocalDB = options.swiftStatsLocalDB,
         getCombatRating = options.getCombatRating,
         inCombatLockdown = function()
             if identity.combatValue ~= nil then return identity.combatValue end
@@ -9583,6 +9652,313 @@ local function assertRegistryIdentities(name, root, snapshot)
         eq(name .. ".specs." .. guid,
             rawequal(root.characters[guid].specProfiles, snapshot.characterSpecs[guid]), true)
     end
+end
+
+do
+    local env, addonContext, test, root = makeProfileOpsFixture()
+    addonContext:OpenConfigMenu()
+    local footerReset = findFrame("profiles.compat.reset.footer_button", env, function(frame)
+        return frame:GetParent() == env.StatsProConfigFrame
+            and frame:GetName() == nil
+            and frame:GetText() == "Reset active profile..."
+            and type(frame.scripts.OnClick) == "function"
+    end)
+    local before = deepCopy(root)
+    callScript("profiles.compat.reset.footer_request", footerReset, "OnClick")
+    eq("profiles.compat.reset.footer_popup", env.__lastStaticPopup.key,
+        "STATSPRO_RESET_ACTIVE_PROFILE")
+    local labels = test.registrySnapshot().labelsByLocale.enUS
+    eq("profiles.compat.reset.footer_shared_warning",
+        env.__lastStaticPopup.definition.text,
+        string.format(
+            labels["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."],
+            "Tank shared", 3, 2))
+    assertDeepEqual("profiles.compat.reset.footer_request_zero_writes", root, before)
+    env.__cancelStaticPopup()
+    assertDeepEqual("profiles.compat.reset.footer_cancel_zero_writes", root, before)
+end
+
+do
+    local source = {
+        fontSize = 19,
+        point = "TOPLEFT", relativePoint = "TOPLEFT", xOfs = 123, yOfs = -234,
+        colors = { crit = { r = 0.41, g = 0.42, b = 0.43 } },
+    }
+    local env, _, test, root = makeProfileOpsFixture({ swiftStatsDB = source })
+    local oldActive = test.profileState()
+    local oldProfileID = oldActive.profileID
+    local oldProfileRef = root.profiles[oldProfileID]
+    local oldSettingsRef = oldProfileRef.settings
+    local oldSettings = deepCopy(oldSettingsRef)
+    local oldRolesRef = root.roleTemplates
+    local oldRoles = deepCopy(root.roleTemplates)
+    local oldCharacters = deepCopy(root.characters)
+    local oldAccountDefault = root.account.defaultProfileID
+    local oldLocale = root.account.forceLocale
+    local oldInterval = root.account.updateInterval
+    local nextBefore = root.account.nextProfileID
+    local runtimeBefore = test.profileRuntimeState()
+    local requestBefore = deepCopy(root)
+    local requestIdentities = captureRegistryIdentities(root)
+
+    slash("profiles.compat.import.cancel.request", env, "import")
+    eq("profiles.compat.import.cancel.popup", env.__lastStaticPopup.key,
+        "STATSPRO_IMPORT_SWIFTSTATS")
+    eq("profiles.compat.import.cancel.pending",
+        test.destructivePromptState().importPending, true)
+    assertDeepEqual("profiles.compat.import.cancel.request_zero_writes", root, requestBefore)
+    assertRegistryIdentities(
+        "profiles.compat.import.cancel.request_identities", root, requestIdentities)
+    env.__cancelStaticPopup()
+    eq("profiles.compat.import.cancel.pending_cleared",
+        test.destructivePromptState().importPending, false)
+    assertDeepEqual("profiles.compat.import.cancel.zero_writes", root, requestBefore)
+    assertRegistryIdentities(
+        "profiles.compat.import.cancel.identities", root, requestIdentities)
+
+    slash("profiles.compat.import.accept.request", env, "import")
+    source.fontSize = 8
+    source.xOfs = 999
+    source.colors.crit.r = 0.99
+    env.__acceptStaticPopup()
+    local imported = test.profileState()
+    eq("profiles.compat.import.accept.id", imported.profileID, "p5")
+    eq("profiles.compat.import.accept.name", root.profiles.p5.name, "SwiftStats Import")
+    eq("profiles.compat.import.accept.next", root.account.nextProfileID, nextBefore + 1)
+    eq("profiles.compat.import.accept.current_assignment",
+        root.characters["Player-1-OPS-A"].specProfiles[73], "p5")
+    eq("profiles.compat.import.accept.current_other_spec",
+        root.characters["Player-1-OPS-A"].specProfiles[71],
+        oldCharacters["Player-1-OPS-A"].specProfiles[71])
+    eq("profiles.compat.import.accept.current_default",
+        root.characters["Player-1-OPS-A"].defaultProfileID,
+        oldCharacters["Player-1-OPS-A"].defaultProfileID)
+    assertDeepEqual("profiles.compat.import.accept.other_character_b",
+        root.characters["Player-1-OPS-B"], oldCharacters["Player-1-OPS-B"])
+    assertDeepEqual("profiles.compat.import.accept.other_character_c",
+        root.characters["Player-1-OPS-C"], oldCharacters["Player-1-OPS-C"])
+    eq("profiles.compat.import.accept.old_profile_identity",
+        rawequal(root.profiles[oldProfileID], oldProfileRef), true)
+    eq("profiles.compat.import.accept.old_settings_identity",
+        rawequal(root.profiles[oldProfileID].settings, oldSettingsRef), true)
+    assertDeepEqual("profiles.compat.import.accept.old_profile_unchanged",
+        root.profiles[oldProfileID].settings, oldSettings)
+    eq("profiles.compat.import.accept.roles_identity",
+        rawequal(root.roleTemplates, oldRolesRef), true)
+    assertDeepEqual("profiles.compat.import.accept.roles", root.roleTemplates, oldRoles)
+    eq("profiles.compat.import.accept.account_default",
+        root.account.defaultProfileID, oldAccountDefault)
+    eq("profiles.compat.import.accept.account_locale", root.account.forceLocale, oldLocale)
+    near("profiles.compat.import.accept.account_interval",
+        root.account.updateInterval, oldInterval)
+    eq("profiles.compat.import.accept.snapshot_font", imported.settings.fontSize, 19)
+    eq("profiles.compat.import.accept.snapshot_x", imported.settings.xOfs, 123)
+    assertColor("profiles.compat.import.accept.snapshot_color",
+        imported.settings.colors.crit, 0.41, 0.42, 0.43)
+    assertNoSharedTables("profiles.compat.import.accept.source_detached",
+        source, imported.settings)
+    assertNoSharedTables("profiles.compat.import.accept.old_profile_detached",
+        oldSettingsRef, imported.settings)
+    eq("profiles.compat.import.accept.no_reload", env.__reloadUICalls, 0)
+    eq("profiles.compat.import.accept.apply_count",
+        test.profileRuntimeState().applyCount, runtimeBefore.applyCount + 1)
+    eq("profiles.compat.import.accept.commit_count",
+        test.profileRuntimeState().structuralCommitCount,
+        runtimeBefore.structuralCommitCount + 1)
+    eq("profiles.compat.import.accept.main_position",
+        env.StatsProFrame.points[1][1], "TOPLEFT")
+    eq("profiles.compat.import.accept.main_position_x",
+        env.StatsProFrame.points[1][4], 123)
+
+    source.fontSize = 21
+    slash("profiles.compat.import.unique.request", env, "import")
+    env.__acceptStaticPopup()
+    eq("profiles.compat.import.unique.id", test.profileState().profileID, "p6")
+    eq("profiles.compat.import.unique.name", root.profiles.p6.name, "SwiftStats Import 2")
+    eq("profiles.compat.import.unique.previous_kept", root.profiles.p5.settings.fontSize, 19)
+    eq("profiles.compat.import.unique.current_assignment",
+        root.characters["Player-1-OPS-A"].specProfiles[73], "p6")
+end
+
+for _, stage in ipairs({ "validate", "commit", "apply" }) do
+    local env, _, test, root = makeProfileOpsFixture()
+    local settings = test.copyDefaults()
+    settings.fontSize = 22
+    settings.point = "TOPLEFT"
+    settings.relativePoint = "TOPLEFT"
+    settings.xOfs = 222
+    settings.yOfs = -223
+    settings.colors.crit = { r = 0.8, g = 0.7, b = 0.6 }
+    local before = deepCopy(root)
+    local identities = captureRegistryIdentities(root)
+    local runtime = test.profileRuntimeState()
+    local point = deepCopy(env.StatsProFrame.points[1])
+    test.profileOps.setFailureStage(stage)
+    local ok, reason = test.profileOps.importAndAssign(settings)
+    eq("profiles.compat.import.failure." .. stage .. ".ok", ok, false)
+    eq("profiles.compat.import.failure." .. stage .. ".reason",
+        reason, stage .. "-failed")
+    assertDeepEqual("profiles.compat.import.failure." .. stage .. ".root", root, before)
+    assertRegistryIdentities(
+        "profiles.compat.import.failure." .. stage .. ".identities", root, identities)
+    eq("profiles.compat.import.failure." .. stage .. ".active",
+        test.profileState().profileID, "p2")
+    eq("profiles.compat.import.failure." .. stage .. ".guid",
+        test.profileRuntimeState().activeGUID, runtime.activeGUID)
+    eq("profiles.compat.import.failure." .. stage .. ".spec",
+        test.profileRuntimeState().activeSpecID, runtime.activeSpecID)
+    assertDeepEqual("profiles.compat.import.failure." .. stage .. ".live_position",
+        env.StatsProFrame.points[1], point)
+    eq("profiles.compat.import.failure." .. stage .. ".not_busy",
+        test.profileOps.state().inProgress, false)
+end
+
+do
+    local _, _, test, root = makeProfileOpsFixture()
+    root.account.nextProfileID = 99999999999999
+    local before = deepCopy(root)
+    local identities = captureRegistryIdentities(root)
+    local ok, reason = test.profileOps.importAndAssign(test.copyDefaults())
+    eq("profiles.compat.import.id_exhausted.ok", ok, false)
+    eq("profiles.compat.import.id_exhausted.reason", reason, "id-exhausted")
+    assertDeepEqual("profiles.compat.import.id_exhausted.root", root, before)
+    assertRegistryIdentities(
+        "profiles.compat.import.id_exhausted.identities", root, identities)
+end
+
+do
+    local source = { fontSize = 19 }
+    local env, _, test, root = makeProfileOpsFixture({ swiftStatsDB = source })
+    slash("profiles.compat.import.stale.request", env, "import")
+    local staleAccept = env.__lastStaticPopup.definition.OnAccept
+    local ok = test.profileOps.setRoleTemplate("HEALER", "p4")
+    eq("profiles.compat.import.stale.setup", ok, true)
+    local afterSetup = deepCopy(root)
+    eq("profiles.compat.import.stale.pending_cleared",
+        test.destructivePromptState().importPending, false)
+    staleAccept()
+    assertDeepEqual("profiles.compat.import.stale.callback_zero_writes", root, afterSetup)
+    eq("profiles.compat.import.stale.no_new_profile", root.profiles.p5, nil)
+end
+
+for _, stage in ipairs({ "validate", "commit", "apply" }) do
+    local env, _, test, root = makeProfileOpsFixture()
+    local before = deepCopy(root)
+    local identities = captureRegistryIdentities(root)
+    local point = deepCopy(env.StatsProFrame.points[1])
+    test.profileOps.setFailureStage(stage)
+    local ok, reason = test.profileOps.resetCurrent("p2")
+    eq("profiles.compat.reset.failure." .. stage .. ".ok", ok, false)
+    eq("profiles.compat.reset.failure." .. stage .. ".reason",
+        reason, stage .. "-failed")
+    assertDeepEqual("profiles.compat.reset.failure." .. stage .. ".root", root, before)
+    assertRegistryIdentities(
+        "profiles.compat.reset.failure." .. stage .. ".identities", root, identities)
+    eq("profiles.compat.reset.failure." .. stage .. ".active",
+        test.profileState().profileID, "p2")
+    assertDeepEqual("profiles.compat.reset.failure." .. stage .. ".live_position",
+        env.StatsProFrame.points[1], point)
+end
+
+do
+    local swiftSource = { fontSize = 18, colors = { crit = { r = 0.2, g = 0.3, b = 0.4 } } }
+    local env, _, test, root = makeProfileOpsFixture({ swiftStatsDB = swiftSource })
+    root.shadowSetting = { child = { keepUntilWipe = true } }
+    root.fontSize = 37
+    local before = deepCopy(root)
+    local identities = captureRegistryIdentities(root)
+    slash("profiles.compat.wipe.cancel.request", env, "wipe")
+    eq("profiles.compat.wipe.cancel.popup", env.__lastStaticPopup.key,
+        "STATSPRO_WIPE_ALL_DATA")
+    eq("profiles.compat.wipe.cancel.pending",
+        test.destructivePromptState().wipePending, true)
+    assertDeepEqual("profiles.compat.wipe.cancel.request_zero_writes", root, before)
+    env.__cancelStaticPopup()
+    assertDeepEqual("profiles.compat.wipe.cancel.zero_writes", root, before)
+    assertRegistryIdentities("profiles.compat.wipe.cancel.identities", root, identities)
+
+    slash("profiles.compat.wipe.accept.request", env, "reset all")
+    env.__acceptStaticPopup()
+    local freshRoot = env.StatsProDB
+    local freshState = test.profileState()
+    eq("profiles.compat.wipe.accept.root_replaced", rawequal(freshRoot, root), false)
+    eq("profiles.compat.wipe.accept.current_version",
+        freshRoot.dbVersion, test.currentDBVersion())
+    eq("profiles.compat.wipe.accept.account_default", freshRoot.account.defaultProfileID, "p1")
+    eq("profiles.compat.wipe.accept.next", freshRoot.account.nextProfileID, 2)
+    eq("profiles.compat.wipe.accept.locale", freshRoot.account.forceLocale, "auto")
+    near("profiles.compat.wipe.accept.interval", freshRoot.account.updateInterval, 0.5)
+    eq("profiles.compat.wipe.accept.only_p1", next(freshRoot.profiles, "p1"), nil)
+    eq("profiles.compat.wipe.accept.active", freshState.profileID, "p1")
+    eq("profiles.compat.wipe.accept.current_assignment",
+        freshRoot.characters["Player-1-OPS-A"].specProfiles[73], "p1")
+    eq("profiles.compat.wipe.accept.character_default",
+        freshRoot.characters["Player-1-OPS-A"].defaultProfileID, "p1")
+    eq("profiles.compat.wipe.accept.roles_tank", freshRoot.roleTemplates.TANK, "p1")
+    eq("profiles.compat.wipe.accept.roles_healer", freshRoot.roleTemplates.HEALER, "p1")
+    eq("profiles.compat.wipe.accept.roles_damage", freshRoot.roleTemplates.DAMAGER, "p1")
+    eq("profiles.compat.wipe.accept.shadow_removed", freshRoot.shadowSetting, nil)
+    eq("profiles.compat.wipe.accept.flat_shadow_removed", freshRoot.fontSize, nil)
+    near("profiles.compat.wipe.accept.default_scale", freshState.settings.scale, 1)
+    eq("profiles.compat.wipe.accept.default_point", freshState.settings.point, "CENTER")
+    eq("profiles.compat.wipe.accept.live_point", env.StatsProFrame.points[1][1], "CENTER")
+    eq("profiles.compat.wipe.accept.source_untouched", swiftSource.fontSize, 18)
+    assertColor("profiles.compat.wipe.accept.source_color_untouched",
+        swiftSource.colors.crit, 0.2, 0.3, 0.4)
+end
+
+for _, stage in ipairs({ "validate", "commit", "apply" }) do
+    local env, _, test, root = makeProfileOpsFixture()
+    root.shadowSetting = { child = { preserve = true } }
+    local before = deepCopy(root)
+    local identities = captureRegistryIdentities(root)
+    local point = deepCopy(env.StatsProFrame.points[1])
+    test.profileOps.setFailureStage(stage)
+    local ok, reason = test.profileOps.fullWipe()
+    eq("profiles.compat.wipe.failure." .. stage .. ".ok", ok, false)
+    eq("profiles.compat.wipe.failure." .. stage .. ".reason",
+        reason, stage .. "-failed")
+    eq("profiles.compat.wipe.failure." .. stage .. ".root_pointer",
+        rawequal(env.StatsProDB, root), true)
+    assertDeepEqual("profiles.compat.wipe.failure." .. stage .. ".root", root, before)
+    assertRegistryIdentities(
+        "profiles.compat.wipe.failure." .. stage .. ".identities", root, identities)
+    eq("profiles.compat.wipe.failure." .. stage .. ".active",
+        test.profileState().profileID, "p2")
+    assertDeepEqual("profiles.compat.wipe.failure." .. stage .. ".live_position",
+        env.StatsProFrame.points[1], point)
+end
+
+do
+    local env, _, test, root = makeProfileOpsFixture()
+    root.shadowSetting = { child = { preserve = true } }
+    local before = deepCopy(root)
+    local identities = captureRegistryIdentities(root)
+    local oldSetPoint = env.StatsProFrame.SetPoint
+    rawset(env.StatsProFrame, "SetPoint", function()
+        error("injected full-wipe target and rollback apply failure")
+    end)
+    local ok, reason = test.profileOps.fullWipe()
+    eq("profiles.compat.wipe.rollback_apply.ok", ok, false)
+    eq("profiles.compat.wipe.rollback_apply.reason", reason, "rollback-apply-failed")
+    eq("profiles.compat.wipe.rollback_apply.root_pointer",
+        rawequal(env.StatsProDB, root), true)
+    assertDeepEqual("profiles.compat.wipe.rollback_apply.root", root, before)
+    assertRegistryIdentities(
+        "profiles.compat.wipe.rollback_apply.identities", root, identities)
+    eq("profiles.compat.wipe.rollback_apply.active", test.profileState().profileID, "p2")
+    eq("profiles.compat.wipe.rollback_apply.force",
+        test.profileRuntimeState().forceReapply, true)
+    eq("profiles.compat.wipe.rollback_apply.pending",
+        test.profileRuntimeState().pendingResolution, true)
+    rawset(env.StatsProFrame, "SetPoint", oldSetPoint)
+    env.__flushTimers(0)
+    eq("profiles.compat.wipe.rollback_apply.recovered_force",
+        test.profileRuntimeState().forceReapply, false)
+    eq("profiles.compat.wipe.rollback_apply.recovered_pending",
+        test.profileRuntimeState().pendingResolution, false)
+    eq("profiles.compat.wipe.rollback_apply.recovered_active",
+        test.profileState().profileID, "p2")
 end
 
 do
@@ -10561,6 +10937,8 @@ do
                 { guid = "Player-1-OPS-A", specID = 73 },
                 { guid = "Player-1-OPS-B", specID = 72 }) end,
             function() return ops.resetCurrent("p2") end,
+            function() return ops.importAndAssign({}) end,
+            function() return ops.fullWipe() end,
             function() return ops.deleteWithReplacement("p2", "p3") end,
             function() return ops.forgetCharacter("Player-1-OPS-B") end,
         }
@@ -10685,6 +11063,8 @@ do
         function() return test.profileOps.swap(
             { guid = "a", specID = 73 }, { guid = "b", specID = 72 }) end,
         function() return test.profileOps.resetCurrent("p1") end,
+        function() return test.profileOps.importAndAssign({}) end,
+        function() return test.profileOps.fullWipe() end,
         function() return test.profileOps.deleteWithReplacement("p1", "p2") end,
         function() return test.profileOps.forgetCharacter("guid") end,
     }
@@ -10868,6 +11248,9 @@ do
         env.StatsProProfileResetButton, "OnClick")
     local staleResetConfirm = env.StatsProProfileOperationConfirmButton.scripts.OnClick
     slash("profiles.ui.slash_modal.reset.run", env, "reset")
+    eq("profiles.ui.slash_modal.reset.popup_open",
+        env.__lastStaticPopup.key, "STATSPRO_RESET_ACTIVE_PROFILE")
+    env.__acceptStaticPopup()
     state = test.profileUIState()
     eq("profiles.ui.slash_modal.reset.dialog_closed", state.operationDialogShown, false)
     eq("profiles.ui.slash_modal.reset.blocker_closed", state.operationBlockerShown, false)

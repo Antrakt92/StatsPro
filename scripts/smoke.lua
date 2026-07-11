@@ -310,8 +310,14 @@ local function makeFrame(name, setFontResult)
     function frame:SetChecked(value) self.checked = value end
     function frame:GetChecked() return self.checked end
     function frame:GetName() return self.name end
-    function frame:StartMoving() end
-    function frame:StopMovingOrSizing() end
+    function frame:StartMoving()
+        self.startMovingCalls = (self.startMovingCalls or 0) + 1
+        self.moving = true
+    end
+    function frame:StopMovingOrSizing()
+        self.stopMovingCalls = (self.stopMovingCalls or 0) + 1
+        self.moving = false
+    end
     function frame:SetMinMaxValues(minValue, maxValue) self.minValue, self.maxValue = minValue, maxValue end
     function frame:SetValueStep(step) self.valueStep = step end
     function frame:SetObeyStepOnDrag() end
@@ -3993,6 +3999,244 @@ do
     local recoveredMeta = recoveredBlocks[2].targetRows[1]
     eq("render.target_hover_clean_secret_clean.recovered_state", recoveredMeta.comparisonState, "exact")
     eq("render.target_hover_clean_secret_clean.recovered_current", recoveredMeta.current, 830)
+end
+
+do
+    local function forbiddenSecretOperation(operation)
+        return function()
+            error("hostile secret rating reached " .. operation, 0)
+        end
+    end
+
+    local secretRating = setmetatable({}, {
+        __add = forbiddenSecretOperation("addition"),
+        __concat = forbiddenSecretOperation("concatenation"),
+        __eq = forbiddenSecretOperation("comparison"),
+        __le = forbiddenSecretOperation("comparison"),
+        __lt = forbiddenSecretOperation("comparison"),
+        __sub = forbiddenSecretOperation("subtraction"),
+        __tostring = forbiddenSecretOperation("formatting"),
+        __unm = forbiddenSecretOperation("negation"),
+    })
+    local restricted = true
+    local cleanRatings = {}
+    local conversionArgs = {}
+    local targetHoverFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(targetHoverFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 1000, haste = 600, mastery = 900, versatility = 500 })
+
+    local hoverEnv, hoverAddon, hoverTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        inCombatLockdown = function() return true end,
+        statsProDB = {
+            displayMode = "flat",
+            labelStyle = "full",
+            isLocked = false,
+            showMainStat = false,
+            showStamina = false,
+            showOffensive = true,
+            showCrit = true,
+            showHaste = true,
+            showMastery = true,
+            showVersatility = true,
+            showTertiary = false,
+            showDefensive = false,
+            showItemLevel = false,
+            showDurability = false,
+            showRepairCost = false,
+            showRating = false,
+            showPercentage = true,
+            hideZeroOffensive = false,
+        },
+        statsProArchonTargets = targetHoverFixture,
+        getCritChance = function() return 20 end,
+        getHaste = function() return 15 end,
+        getMasteryEffect = function() return 25 end,
+        getCombatRatingBonus = function() return 10 end,
+        getVersatilityBonus = function() return 2 end,
+        getCombatRating = function(ratingCR)
+            if restricted then return secretRating end
+            return cleanRatings[ratingCR]
+        end,
+        getCombatRatingBonusForCombatRatingValue = function(_, value)
+            if rawequal(value, secretRating) then
+                error("hostile secret rating reached conversion", 0)
+            end
+            conversionArgs[#conversionArgs + 1] = value
+            return value / 100
+        end,
+        issecretvalue = function(value) return rawequal(value, secretRating) end,
+    })
+    cleanRatings[hoverEnv.CR_CRIT_MELEE] = 800
+    cleanRatings[hoverEnv.CR_HASTE_MELEE] = 500
+    cleanRatings[hoverEnv.CR_MASTERY] = 700
+    cleanRatings[hoverEnv.CR_VERSATILITY_DAMAGE_DONE] = 400
+
+    local function assertPanelTargets(name, panelName, expectedState)
+        local state = hoverTest.panelTooltipState(panelName)
+        local targetCount = 0
+        for index, meta in ipairs(state.lastTargetRows or {}) do
+            if type(meta) == "table" then
+                targetCount = targetCount + 1
+                eq(name .. ".state." .. index, meta.comparisonState, expectedState)
+                eq(name .. ".shown." .. index, state.shown[index], true)
+                eq(name .. ".on_enter." .. index, state.hasOnEnter[index], true)
+            end
+        end
+        eq(name .. ".target_count", targetCount, 4)
+        return state
+    end
+
+    fireEvent("render.target_hover_lifecycle.cold.fire", hoverEnv, "PLAYER_ENTERING_WORLD")
+    local savedAfterLoad = deepCopy(hoverEnv.StatsProDB)
+    local coldState = assertPanelTargets("render.target_hover_lifecycle.cold", "main", "targetOnly")
+    eq("render.target_hover_lifecycle.cold.cache_empty",
+        next(hoverTest.archonComparisonCache().entries), nil)
+    for index, meta in ipairs(coldState.lastTargetRows) do
+        if type(meta) == "table" then
+            hoverTest.firePanelTooltipOverlayForSmoke("main", index, "OnEnter")
+            eq("render.target_hover_lifecycle.cold.tooltip_lines." .. index,
+                #hoverEnv.GameTooltip.lines, 4)
+            eq("render.target_hover_lifecycle.cold.tooltip_target." .. index,
+                hoverEnv.GameTooltip.lines[2].left, "Target:")
+            eq("render.target_hover_lifecycle.cold.tooltip_snapshot." .. index,
+                hoverEnv.GameTooltip.lines[3].left, "Snapshot:")
+            eq("render.target_hover_lifecycle.cold.tooltip_source." .. index,
+                hoverEnv.GameTooltip.lines[4].left, "Source:")
+        end
+    end
+
+    local ticker = findFrame("render.target_hover_lifecycle.ticker", hoverEnv, function(frame)
+        return frame.scripts and type(frame.scripts.OnUpdate) == "function"
+    end)
+    for tick = 1, 3 do
+        callScript("render.target_hover_lifecycle.cold.tick." .. tick, ticker, "OnUpdate", 999)
+        assertPanelTargets("render.target_hover_lifecycle.cold.after_tick." .. tick,
+            "main", "targetOnly")
+        eq("render.target_hover_lifecycle.cold.open_tooltip_survives_tick." .. tick,
+            hoverEnv.GameTooltip:IsShown(), true)
+    end
+
+    local beforeCombatDrag = hoverTest.panelTooltipState("main")
+    hoverTest.firePanelTooltipOverlayForSmoke("main", 1, "OnDragStart")
+    callScript("render.target_hover_lifecycle.combat.panel_drag", hoverEnv.StatsProFrame, "OnDragStart")
+    hoverTest.firePanelTooltipOverlayForSmoke("main", 1, "OnMouseUp", "RightButton")
+    local afterCombatDrag = hoverTest.panelTooltipState("main")
+    eq("render.target_hover_lifecycle.combat.overlay_drag_blocked",
+        afterCombatDrag.startMovingCalls, beforeCombatDrag.startMovingCalls)
+    eq("render.target_hover_lifecycle.combat.panel_drag_blocked",
+        hoverEnv.StatsProFrame.startMovingCalls or 0, 0)
+    eq("render.target_hover_lifecycle.combat.was_dragging_false", afterCombatDrag.wasDragging, false)
+    eq("render.target_hover_lifecycle.combat.settings_blocked", hoverEnv.StatsProConfigFrame, nil)
+
+    restricted = false
+    check("render.target_hover_lifecycle.recovery.update", hoverAddon:RunUpdateStatsSafe())
+    local exactState = assertPanelTargets("render.target_hover_lifecycle.recovery", "main", "exact")
+    local expectedCurrentByStat = {
+        crit = 800,
+        haste = 500,
+        mastery = 700,
+        versatility = 400,
+    }
+    for _, meta in ipairs(exactState.lastTargetRows) do
+        if type(meta) == "table" then
+            eq("render.target_hover_lifecycle.recovery.current." .. meta.statKey,
+                meta.current, expectedCurrentByStat[meta.statKey])
+        end
+    end
+
+    restricted = true
+    for tick = 1, 3 do
+        callScript("render.target_hover_lifecycle.last_known.tick." .. tick, ticker, "OnUpdate", 999)
+        assertPanelTargets("render.target_hover_lifecycle.last_known.after_tick." .. tick,
+            "main", "lastKnown")
+    end
+    local lastKnownState = hoverTest.panelTooltipState("main")
+    for index, meta in ipairs(lastKnownState.lastTargetRows) do
+        if type(meta) == "table" then
+            hoverTest.firePanelTooltipOverlayForSmoke("main", index, "OnEnter")
+            eq("render.target_hover_lifecycle.last_known.tooltip_lines." .. index,
+                #hoverEnv.GameTooltip.lines, 7)
+            eq("render.target_hover_lifecycle.last_known.notice." .. index,
+                hoverEnv.GameTooltip.lines[2].left, "Last known comparison")
+        end
+    end
+    local cachedAfterRestriction = hoverTest.archonComparisonCache()
+    for statKey, expectedCurrent in pairs(expectedCurrentByStat) do
+        eq("render.target_hover_lifecycle.last_known.cache." .. statKey,
+            cachedAfterRestriction.entries[statKey].current, expectedCurrent)
+    end
+
+    restricted = false
+    for ratingCR, value in pairs(cleanRatings) do cleanRatings[ratingCR] = value + 11 end
+    check("render.target_hover_lifecycle.clean_return.update", hoverAddon:RunUpdateStatsSafe())
+    local returnedState = assertPanelTargets(
+        "render.target_hover_lifecycle.clean_return", "main", "exact")
+    for _, meta in ipairs(returnedState.lastTargetRows) do
+        if type(meta) == "table" then
+            eq("render.target_hover_lifecycle.clean_return.current." .. meta.statKey,
+                meta.current, expectedCurrentByStat[meta.statKey] + 11)
+        end
+    end
+    assertDeepEqual("render.target_hover_lifecycle.transient_cache_not_persisted",
+        hoverEnv.StatsProDB, savedAfterLoad)
+    check("render.target_hover_lifecycle.conversion_exercised",
+        #conversionArgs >= 8, "expected target conversion calls from both tooltip states")
+    for index, value in ipairs(conversionArgs) do
+        check("render.target_hover_lifecycle.clean_conversion_arg." .. index,
+            type(value) == "number", "non-numeric conversion argument")
+    end
+
+    local settings = activeSettings(hoverEnv)
+    settings.displayMode = "sectioned"
+    settings.labelStyle = "full"
+    hoverTest.cacheSettings()
+    check("render.target_hover_routing.sectioned.update", hoverAddon:RunUpdateStatsSafe())
+    local sectionedState = assertPanelTargets(
+        "render.target_hover_routing.sectioned", "main", "exact")
+    eq("render.target_hover_routing.sectioned.header_meta",
+        sectionedState.lastTargetRows[1], false)
+    eq("render.target_hover_routing.sectioned.header_overlay_hidden",
+        sectionedState.shown[1], false)
+    eq("render.target_hover_routing.sectioned.header_on_enter_cleared",
+        sectionedState.hasOnEnter[1], false)
+
+    settings.labelStyle = "hidden"
+    hoverTest.cacheSettings()
+    check("render.target_hover_routing.hidden.update", hoverAddon:RunUpdateStatsSafe())
+    assertPanelTargets("render.target_hover_routing.hidden", "main", "exact")
+    eq("render.target_hover_routing.hidden.labels", hoverTest.panelVisualState().mainLabelText, "")
+
+    settings.displayMode = "split"
+    settings.splitOffensive = true
+    settings.labelStyle = "full"
+    hoverTest.cacheSettings()
+    check("render.target_hover_routing.split.update", hoverAddon:RunUpdateStatsSafe())
+    local splitState = assertPanelTargets("render.target_hover_routing.split", "side", "exact")
+    eq("render.target_hover_routing.split.main_targets",
+        hoverTest.panelTooltipState("main").lastTargetRows, nil)
+    for index, meta in ipairs(splitState.lastTargetRows) do
+        if type(meta) == "table" then
+            hoverTest.firePanelTooltipOverlayForSmoke("side", index, "OnEnter")
+            eq("render.target_hover_routing.split.tooltip_shown." .. index,
+                hoverEnv.GameTooltip:IsShown(), true)
+        end
+    end
+
+    settings.displayMode = "flat"
+    settings.splitOffensive = false
+    settings.showRating = true
+    settings.showPercentage = false
+    hoverTest.cacheSettings()
+    check("render.target_hover_routing.rating_only.update", hoverAddon:RunUpdateStatsSafe())
+    assertPanelTargets("render.target_hover_routing.rating_only", "main", "exact")
+    local ratingOnlyVisual = hoverTest.panelVisualState()
+    eq("render.target_hover_routing.rating_only.value_column", ratingOnlyVisual.mainValueText, "")
+    check("render.target_hover_routing.rating_only.rating_column",
+        ratingOnlyVisual.mainRatingText:find("811", 1, true) ~= nil,
+        ratingOnlyVisual.mainRatingText)
 end
 
 do
@@ -8954,6 +9198,8 @@ local function makeProfileOpsFixture(options)
         getSpecializationInfo = function()
             return identity.specID, identity.specName, nil, nil, identity.role, 1
         end,
+        statsProArchonTargets = options.statsProArchonTargets,
+        getCombatRating = options.getCombatRating,
         inCombatLockdown = function()
             if identity.combatValue ~= nil then return identity.combatValue end
             return identity.combat
@@ -8962,6 +9208,34 @@ local function makeProfileOpsFixture(options)
     })
     fireEvent("profiles.ops.fixture.activate", env, "PLAYER_ENTERING_WORLD")
     return env, addonContext, test, root, identity
+end
+
+do
+    local restricted = false
+    local targetFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(targetFixture, "mythicPlus", "WARRIOR", "protection",
+        { crit = 1000, haste = 600, mastery = 900, versatility = 500 })
+    local env, _, profileTest = makeProfileOpsFixture({
+        statsProArchonTargets = targetFixture,
+        getCombatRating = function() return restricted and -1 or 700 end,
+        issecretvalue = function(value) return value == -1 end,
+    })
+    local exactMeta = profileTest.buildArchonTargetMeta("crit", 700, env.CR_CRIT_MELEE, 20)
+    eq("profiles.ops.archon_cache_invalidation.prime_state",
+        exactMeta.comparisonState, "exact")
+    eq("profiles.ops.archon_cache_invalidation.prime_current",
+        profileTest.archonComparisonCache().entries.crit.current, 700)
+
+    restricted = true
+    local ok, reason = profileTest.profileOps.assign("Player-1-OPS-A", 73, "p3")
+    eq("profiles.ops.archon_cache_invalidation.assign", ok, true)
+    eq("profiles.ops.archon_cache_invalidation.assigned_profile", reason, "p3")
+    local restrictedMeta = profileTest.buildArchonTargetMeta(
+        "crit", -1, env.CR_CRIT_MELEE, 20)
+    eq("profiles.ops.archon_cache_invalidation.restricted_state",
+        restrictedMeta.comparisonState, "targetOnly")
+    eq("profiles.ops.archon_cache_invalidation.no_stale_current",
+        restrictedMeta.current, nil)
 end
 
 local function captureRegistryIdentities(root)

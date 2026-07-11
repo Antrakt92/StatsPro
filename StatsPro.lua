@@ -11216,8 +11216,31 @@ if addon and addon.__statsproSmoke == true then
                 lastTargetRows = mainPanel.lastTargetRows,
             }
         end,
+        panelTooltipState = function(panelName)
+            local panel = panelName == "side" and defensivePanel or mainPanel
+            local shown, hasOnEnter = {}, {}
+            for i, overlay in ipairs(panel.tooltipOverlays or {}) do
+                shown[i] = overlay:IsShown()
+                hasOnEnter[i] = type(overlay.scripts and overlay.scripts.OnEnter) == "function"
+            end
+            return {
+                overlayCount = #(panel.tooltipOverlays or {}),
+                shown = shown,
+                hasOnEnter = hasOnEnter,
+                lastTargetRows = panel.lastTargetRows,
+                wasDragging = panel.frame.wasDragging == true,
+                startMovingCalls = rawget(panel.frame, "startMovingCalls") or 0,
+                stopMovingCalls = rawget(panel.frame, "stopMovingCalls") or 0,
+            }
+        end,
         fireMainPanelTooltipOverlayForSmoke = function(index, scriptName, ...)
             local overlay = mainPanel.tooltipOverlays and mainPanel.tooltipOverlays[index]
+            local script = overlay and overlay.scripts and overlay.scripts[scriptName]
+            if script then script(overlay, ...) end
+        end,
+        firePanelTooltipOverlayForSmoke = function(panelName, index, scriptName, ...)
+            local panel = panelName == "side" and defensivePanel or mainPanel
+            local overlay = panel.tooltipOverlays and panel.tooltipOverlays[index]
             local script = overlay and overlay.scripts and overlay.scripts[scriptName]
             if script then script(overlay, ...) end
         end,

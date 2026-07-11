@@ -4,6 +4,7 @@
 -- for full attribution.
 local _, addon = ...
 addon.fontRuntime = {}
+addon.panelEditRuntime = { requested = false }
 addon.durabilityRuntime = {
     generation = 0,
     attemptedGeneration = nil,
@@ -5515,6 +5516,41 @@ function Panel:New(globalName, dbKeyPrefix)
     frame:SetBackdropColor(0, 0, 0, 0)
     frame:SetBackdropBorderColor(0, 0, 0, 0)
 
+    -- Runtime-only edit chrome is a UIParent sibling, not a child of the content
+    -- frame. Split/Flat routing can legitimately hide either panel; a child outline
+    -- would disappear with that hidden frame and leave an empty panel impossible to
+    -- locate. The outline itself is click-through so row tooltips keep ownership;
+    -- only the small top handle accepts drag input while Settings is open.
+    local editOutline = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    editOutline:SetPoint("TOPLEFT", frame, "TOPLEFT", -5, 5)
+    editOutline:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 5, -5)
+    editOutline:SetFrameStrata("LOW")
+    editOutline:SetFrameLevel(frame:GetFrameLevel() + 1)
+    editOutline:EnableMouse(false)
+    editOutline:SetBackdrop({
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        edgeSize = 12,
+        insets = { left = 0, right = 0, top = 0, bottom = 0 },
+    })
+    editOutline:SetBackdropColor(0, 0, 0, 0)
+    editOutline:SetBackdropBorderColor(1, 0.82, 0.2, 0.72)
+    editOutline:Hide()
+
+    local editHandle = CreateFrame("Frame", nil, editOutline, "BackdropTemplate")
+    editHandle:SetSize(42, 12)
+    editHandle:SetPoint("TOP", editOutline, "TOP", 0, 5)
+    editHandle:SetFrameLevel(editOutline:GetFrameLevel() + 1)
+    editHandle:EnableMouse(true)
+    editHandle:RegisterForDrag("LeftButton")
+    editHandle:SetBackdrop({
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 8, edgeSize = 8,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    editHandle:SetBackdropColor(0, 0, 0, 0.82)
+    editHandle:SetBackdropBorderColor(1, 0.82, 0.2, 0.9)
+
     local backgroundTexture = frame:CreateTexture(nil, "BACKGROUND")
     backgroundTexture:SetPoint("TOPLEFT", frame, "TOPLEFT", -4, 4)
     backgroundTexture:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 4, -4)
@@ -5627,6 +5663,22 @@ function Panel:New(globalName, dbKeyPrefix)
     panel.makeTooltipOverlay = makeTooltipOverlay
     panel.lastTargetRows = nil
     panel.backgroundTexture = backgroundTexture
+    panel.editOutline = editOutline
+    panel.editHandle = editHandle
+    panel.editAffordanceShown = false
+    panel.editDragging = false
+
+    editHandle:SetScript("OnDragStart", function()
+        if not panel.editAffordanceShown or cached.isLocked then return end
+        if addon.profileRuntime.ReadCombatState() ~= false then return end
+        if not addon.dbRuntime.GetWritableSettings(false) then return end
+        panel.editDragging = true
+        frame.wasDragging = true
+        frame:StartMoving()
+    end)
+    editHandle:SetScript("OnDragStop", function()
+        panel:FinishEditDrag()
+    end)
     local initialRegions = { labelText, ratingText, valueText, repairText, repairLabelText }
     local fontApplied, appliedFont, appliedFlags = addon.fontRuntime.applyExact(
         initialRegions, font, fontSize, fontFlags)
@@ -5680,6 +5732,26 @@ function Panel:SavePositionTo(db)
     db[self:DBKey("relativePoint")] = relativePoint
     db[self:DBKey("xOfs")] = xOfs
     db[self:DBKey("yOfs")] = yOfs
+end
+
+function Panel:FinishEditDrag()
+    if not self.editDragging then return end
+    self.frame:StopMovingOrSizing()
+    self:SavePosition()
+    self.editDragging = false
+    C_Timer.After(0.1, function() self.frame.wasDragging = false end)
+end
+
+function Panel:SetEditAffordanceVisible(show)
+    show = show == true
+    if self.editAffordanceShown == show then return end
+    self.editAffordanceShown = show
+    if show then
+        self.editOutline:Show()
+    else
+        self:FinishEditDrag()
+        self.editOutline:Hide()
+    end
 end
 
 function Panel:SavePosition()
@@ -6478,6 +6550,7 @@ local function SetAllPanelsLockState(locked)
         mainPanel:Unlock()
         defensivePanel:Unlock()
     end
+    if addon.panelEditRuntime.Refresh then addon.panelEditRuntime.Refresh() end
 end
 
 local function SetAllPanelsScale(scale)
@@ -7227,12 +7300,17 @@ local EVENT_HANDLERS = {
     PLAYER_REGEN_ENABLED        = function()
         addon.profileRuntime.ResolvePending()
         SetAllPanelsLockState(GetBoolDB("isLocked"))
+        -- The event is authoritative even if InCombatLockdown() lags by one frame.
+        addon.panelEditRuntime.Refresh(false)
         if cached.showRepairCost and cached.repairCostComplete == false then
             addon.durabilityRuntime.MarkDirty()
         end
         addon.profileUI.RefreshSafe()
     end,
-    PLAYER_REGEN_DISABLED       = function() addon.profileUI.RefreshSafe() end,
+    PLAYER_REGEN_DISABLED       = function()
+        addon.panelEditRuntime.Refresh(true)
+        addon.profileUI.RefreshSafe()
+    end,
 }
 
 local eventFrame = CreateFrame("Frame")
@@ -7796,6 +7874,24 @@ local fontDropdown
 local CurrentFontName
 
 local configFrame
+
+addon.panelEditRuntime.Refresh = function(combatOverride)
+    local combat = combatOverride
+    if type(combat) ~= "boolean" then
+        combat = addon.profileRuntime.ReadCombatState()
+    end
+    local show = addon.panelEditRuntime.requested == true
+        and cached.isLocked == false
+        and combat == false
+    if show and not addon.dbRuntime.GetWritableSettings(false) then show = false end
+    mainPanel:SetEditAffordanceVisible(show)
+    defensivePanel:SetEditAffordanceVisible(show)
+end
+
+addon.panelEditRuntime.SetRequested = function(requested)
+    addon.panelEditRuntime.requested = requested == true
+    addon.panelEditRuntime.Refresh()
+end
 local configSpecialFrameRegistered = false
 
 -- Layout cursor: stateful y-position tracker; eliminates manual `y = y - 25` math
@@ -9762,6 +9858,7 @@ function addon:OpenConfigMenu()
 
     configFrame:HookScript("OnShow", function()
         ApplyConfigFrameSize()
+        self.panelEditRuntime.SetRequested(true)
         if not self.profileUI.manager or not self.profileUI.manager:IsShown() then
             self.profileUI.PushSpecialFrame("StatsProConfigFrame")
         end
@@ -9773,6 +9870,7 @@ function addon:OpenConfigMenu()
     -- orphan dropdown list above (and a stale langPreview state until user clicks elsewhere
     -- to trigger DropDownList1:OnHide → CancelLanguagePreview).
     configFrame:HookScript("OnHide", function()
+        self.panelEditRuntime.SetRequested(false)
         CloseDropDownMenus()  -- closes any active Blizzard dropdown; fires its OnHide → CancelLanguagePreview
         if StatsProCloseColorPicker then StatsProCloseColorPicker() end
         if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
@@ -10983,6 +11081,9 @@ function addon:OpenConfigMenu()
 
     --[[ ===== Initial state ===== ]]
     SwitchToTab(1)
+    -- CreateFrame starts shown, before the OnShow hook above exists. Explicitly seed
+    -- the first-open state; later opens are handled by the hook.
+    self.panelEditRuntime.SetRequested(true)
 end
 
 -- Self-serve diagnostics: dump runtime state to chat for bug reports. Each group is
@@ -11770,6 +11871,42 @@ if addon and addon.__statsproSmoke == true then
                 sideRepairFlags = defensivePanel.repairText.fontFlags,
                 sideRepairLabelFlags = defensivePanel.repairLabelText.fontFlags,
             }
+        end,
+        panelEditAffordanceState = function()
+            local function Snapshot(panel)
+                local border = panel.editOutline.backdropBorderColor
+                local handleBorder = panel.editHandle.backdropBorderColor
+                return {
+                    shown = panel.editOutline:IsShown(),
+                    visible = type(panel.editOutline.IsVisible) ~= "function"
+                        or panel.editOutline:IsVisible(),
+                    parentIsUIParent = panel.editOutline:GetParent() == UIParent,
+                    outlineMouseEnabled = panel.editOutline.mouseEnabled == true,
+                    handleMouseEnabled = panel.editHandle.mouseEnabled == true,
+                    borderAlpha = border and border.a or nil,
+                    handleBorderAlpha = handleBorder and handleBorder.a or nil,
+                    dragging = panel.editDragging == true,
+                    outlinePoints = CopyTable(panel.editOutline.points or {}),
+                    frameShown = panel.frame:IsShown(),
+                    frameWidth = panel.frame:GetWidth(),
+                    frameHeight = panel.frame:GetHeight(),
+                    startMovingCalls = rawget(panel.frame, "startMovingCalls") or 0,
+                    stopMovingCalls = rawget(panel.frame, "stopMovingCalls") or 0,
+                }
+            end
+            return {
+                requested = addon.panelEditRuntime.requested == true,
+                configShown = configFrame and configFrame:IsShown() or false,
+                locked = cached.isLocked,
+                combat = addon.profileRuntime.ReadCombatState(),
+                main = Snapshot(mainPanel),
+                side = Snapshot(defensivePanel),
+            }
+        end,
+        firePanelEditHandleForSmoke = function(panelName, scriptName, ...)
+            local panel = panelName == "side" and defensivePanel or mainPanel
+            local script = panel.editHandle.scripts and panel.editHandle.scripts[scriptName]
+            if script then script(panel.editHandle, ...) end
         end,
         renderMainPanelForSmoke = function(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr, targetRows)
             mainPanel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, repairLabelStr, targetRows)

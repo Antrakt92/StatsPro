@@ -193,9 +193,10 @@ local function runFrameHandlers(frame, event, ...)
     end
 end
 
-local function makeFrame(name, setFontResult)
+local function makeFrame(name, setFontResult, parent)
     local frame = {
         name = name,
+        parent = parent,
         shown = true,
         width = 100,
         height = 20,
@@ -217,11 +218,11 @@ local function makeFrame(name, setFontResult)
     function frame:SetWidth(w) self.width = w end
     function frame:SetHeight(h) self.height = h end
     function frame:SetMovable() end
-    function frame:EnableMouse() end
+    function frame:EnableMouse(value) self.mouseEnabled = value ~= false end
     function frame:SetClampedToScreen() end
     function frame:SetBackdrop(backdrop) self.backdrop = backdrop end
     function frame:SetBackdropColor(r, g, b, a) self.backdropColor = { r = r, g = g, b = b, a = a } end
-    function frame:SetBackdropBorderColor() end
+    function frame:SetBackdropBorderColor(r, g, b, a) self.backdropBorderColor = { r = r, g = g, b = b, a = a } end
     function frame:SetColorTexture(r, g, b, a) self.colorTexture = { r = r, g = g, b = b, a = a } end
     function frame:SetVertexColor() end
     function frame:SetBlendMode() end
@@ -273,6 +274,14 @@ local function makeFrame(name, setFontResult)
         runFrameHandlers(self, "OnShow")
     end
     function frame:IsShown() return self.shown end
+    function frame:IsVisible()
+        if not self.shown then return false end
+        if self.parent and type(self.parent.IsVisible) == "function" then
+            return self.parent:IsVisible()
+        end
+        return true
+    end
+    function frame:GetParent() return self.parent end
     function frame:Enable() self.enabled = true end
     function frame:Disable() self.enabled = false end
     function frame:IsEnabled() return self.enabled end
@@ -293,7 +302,7 @@ local function makeFrame(name, setFontResult)
     function frame:GetFrameStrata() return self.frameStrata end
     function frame:SetFrameLevel(level) self.frameLevel = level end
     function frame:GetFrameLevel() return self.frameLevel end
-    function frame:SetAllPoints() end
+    function frame:SetAllPoints(target) self.allPointsTarget = target end
     function frame:SetScrollChild(child) self.scrollChild = child end
     function frame:SetVerticalScroll(value) self.verticalScroll = value or 0 end
     function frame:GetVerticalScroll() return self.verticalScroll end
@@ -668,8 +677,8 @@ local function makeEnv(locale, opts)
         return env.Mixin({}, ...)
     end
 
-    env.CreateFrame = function(_, name)
-        local frame = makeFrame(name, opts.setFontResult)
+    env.CreateFrame = function(_, name, parent)
+        local frame = makeFrame(name, opts.setFontResult, parent)
         frame.CreateFontString = function()
             local fontString = makeFrame(nil, opts.setFontResult)
             env.__fontStrings[#env.__fontStrings + 1] = fontString
@@ -3120,6 +3129,167 @@ do
     flushTimers("lifecycle.drag_guard.timer_flush", dragEnv, 0.11, 1)
     callScript("lifecycle.drag_guard.right_click_after_timer", dragEnv.StatsProFrame, "OnMouseUp", "RightButton")
     exists("lifecycle.drag_guard.config_opened", dragEnv.StatsProConfigFrame)
+end
+
+do
+    local inCombat = false
+    local editEnv, editAddon, editTest = loadStatsPro("enUS", {
+        inCombatLockdown = function() return inCombat end,
+    })
+    fireEvent("panel.edit.pew", editEnv, "PLAYER_ENTERING_WORLD")
+    local initialRoot = deepCopy(editEnv.StatsProDB)
+    local initialVisual = editTest.panelVisualState()
+    local state = editTest.panelEditAffordanceState()
+    eq("panel.edit.closed.requested", state.requested, false)
+    eq("panel.edit.closed.main_hidden", state.main.visible, false)
+    eq("panel.edit.closed.side_hidden", state.side.visible, false)
+    eq("panel.edit.closed.side_content_hidden", state.side.frameShown, false)
+
+    editAddon:OpenConfigMenu()
+    state = editTest.panelEditAffordanceState()
+    eq("panel.edit.first_open.config_shown", state.configShown, true)
+    eq("panel.edit.first_open.requested", state.requested, true)
+    eq("panel.edit.first_open.main_visible", state.main.visible, true)
+    eq("panel.edit.first_open.side_visible_when_content_hidden", state.side.visible, true)
+    eq("panel.edit.first_open.side_content_stays_hidden", state.side.frameShown, false)
+    eq("panel.edit.first_open.main_parent", state.main.parentIsUIParent, true)
+    eq("panel.edit.first_open.side_parent", state.side.parentIsUIParent, true)
+    eq("panel.edit.first_open.main_outline_clickthrough", state.main.outlineMouseEnabled, false)
+    eq("panel.edit.first_open.side_outline_clickthrough", state.side.outlineMouseEnabled, false)
+    eq("panel.edit.first_open.main_handle_mouse", state.main.handleMouseEnabled, true)
+    eq("panel.edit.first_open.side_handle_mouse", state.side.handleMouseEnabled, true)
+    check("panel.edit.first_open.main_border_visible", (state.main.borderAlpha or 0) > 0)
+    check("panel.edit.first_open.side_border_visible", (state.side.borderAlpha or 0) > 0)
+    local openVisual = editTest.panelVisualState()
+    near("panel.edit.zero_background.main", openVisual.mainBackgroundTextureAlpha, 0)
+    near("panel.edit.zero_background.side", openVisual.sideBackgroundTextureAlpha, 0)
+    near("panel.edit.decoration_keeps_main_width", state.main.frameWidth, initialVisual.mainFrameWidth)
+    near("panel.edit.decoration_keeps_main_height", state.main.frameHeight, initialVisual.mainFrameHeight)
+    near("panel.edit.decoration_keeps_side_width", state.side.frameWidth, initialVisual.sideFrameWidth)
+    near("panel.edit.decoration_keeps_side_height", state.side.frameHeight, initialVisual.sideFrameHeight)
+    assertDeepEqual("panel.edit.open_no_db_write", editEnv.StatsProDB, initialRoot)
+
+    editAddon:OpenConfigMenu()
+    state = editTest.panelEditAffordanceState()
+    eq("panel.edit.toggle_close.config_hidden", state.configShown, false)
+    eq("panel.edit.toggle_close.main_hidden", state.main.visible, false)
+    eq("panel.edit.toggle_close.side_hidden", state.side.visible, false)
+    assertDeepEqual("panel.edit.close_no_db_write", editEnv.StatsProDB, initialRoot)
+
+    editAddon:OpenConfigMenu()
+    state = editTest.panelEditAffordanceState()
+    eq("panel.edit.reopen.main_visible", state.main.visible, true)
+    eq("panel.edit.reopen.side_visible", state.side.visible, true)
+
+    local beforeLock = deepCopy(editEnv.StatsProDB)
+    clickCheckbox("panel.edit.lock_on", editEnv.StatsProLockCheck, true)
+    state = editTest.panelEditAffordanceState()
+    eq("panel.edit.lock_on.cached", state.locked, true)
+    eq("panel.edit.lock_on.main_hidden", state.main.visible, false)
+    eq("panel.edit.lock_on.side_hidden", state.side.visible, false)
+    local expectedLocked = deepCopy(beforeLock)
+    activeSettings(expectedLocked).isLocked = true
+    assertDeepEqual("panel.edit.lock_on_only_intentional_write", editEnv.StatsProDB, expectedLocked)
+
+    clickCheckbox("panel.edit.lock_off", editEnv.StatsProLockCheck, false)
+    state = editTest.panelEditAffordanceState()
+    eq("panel.edit.lock_off.cached", state.locked, false)
+    eq("panel.edit.lock_off.main_visible", state.main.visible, true)
+    eq("panel.edit.lock_off.side_visible", state.side.visible, true)
+    assertDeepEqual("panel.edit.lock_roundtrip", editEnv.StatsProDB, beforeLock)
+
+    local settings = activeSettings(editEnv)
+    settings.displayMode = "split"
+    settings.splitCharacter = false
+    settings.splitItemLevel = false
+    settings.splitOffensive = false
+    settings.splitTertiary = false
+    settings.splitDefensive = false
+    settings.splitDurability = false
+    settings.splitRepairCost = false
+    editTest.cacheSettings()
+    editAddon:RunUpdateStatsSafe()
+    state = editTest.panelEditAffordanceState()
+    eq("panel.edit.split_empty_side.content_hidden", state.side.frameShown, false)
+    eq("panel.edit.split_empty_side.affordance_visible", state.side.visible, true)
+    eq("panel.edit.split.main_affordance_visible", state.main.visible, true)
+
+    settings.displayMode = "flat"
+    settings.splitItemLevel = true
+    settings.splitDefensive = true
+    settings.splitDurability = true
+    settings.splitRepairCost = true
+    editTest.cacheSettings()
+    editAddon:RunUpdateStatsSafe()
+    state = editTest.panelEditAffordanceState()
+    eq("panel.edit.flat.side_content_hidden", state.side.frameShown, false)
+    eq("panel.edit.flat.side_affordance_visible", state.side.visible, true)
+
+    settings.isVisible = false
+    editTest.cacheSettings()
+    editAddon:RunUpdateStatsSafe()
+    state = editTest.panelEditAffordanceState()
+    eq("panel.edit.master_hidden.main_content", state.main.frameShown, false)
+    eq("panel.edit.master_hidden.side_content", state.side.frameShown, false)
+    eq("panel.edit.master_hidden.main_affordance", state.main.visible, true)
+    eq("panel.edit.master_hidden.side_affordance", state.side.visible, true)
+    settings.isVisible = true
+    editTest.cacheSettings()
+    editAddon:RunUpdateStatsSafe()
+
+    local beforeCombat = deepCopy(editEnv.StatsProDB)
+    inCombat = true
+    fireEvent("panel.edit.combat_enter", editEnv, "PLAYER_REGEN_DISABLED")
+    state = editTest.panelEditAffordanceState()
+    eq("panel.edit.combat_enter.config_stays_open", state.configShown, true)
+    eq("panel.edit.combat_enter.main_hidden", state.main.visible, false)
+    eq("panel.edit.combat_enter.side_hidden", state.side.visible, false)
+    local startCalls = state.main.startMovingCalls
+    editTest.firePanelEditHandleForSmoke("main", "OnDragStart")
+    state = editTest.panelEditAffordanceState()
+    eq("panel.edit.combat_direct_drag_blocked", state.main.startMovingCalls, startCalls)
+    fireEvent("panel.edit.combat_enter_idempotent", editEnv, "PLAYER_REGEN_DISABLED")
+    inCombat = false
+    fireEvent("panel.edit.combat_leave", editEnv, "PLAYER_REGEN_ENABLED")
+    state = editTest.panelEditAffordanceState()
+    eq("panel.edit.combat_leave.main_visible", state.main.visible, true)
+    eq("panel.edit.combat_leave.side_visible", state.side.visible, true)
+    assertDeepEqual("panel.edit.combat_roundtrip_no_db_write", editEnv.StatsProDB, beforeCombat)
+
+    startCalls = state.main.startMovingCalls
+    local stopCalls = state.main.stopMovingCalls
+    editTest.firePanelEditHandleForSmoke("main", "OnDragStart")
+    state = editTest.panelEditAffordanceState()
+    eq("panel.edit.handle_drag_started", state.main.dragging, true)
+    eq("panel.edit.handle_drag_moves_panel", state.main.startMovingCalls, startCalls + 1)
+    inCombat = true
+    fireEvent("panel.edit.combat_stops_drag", editEnv, "PLAYER_REGEN_DISABLED")
+    state = editTest.panelEditAffordanceState()
+    eq("panel.edit.combat_stops_drag.dragging", state.main.dragging, false)
+    eq("panel.edit.combat_stops_drag.stop_call", state.main.stopMovingCalls, stopCalls + 1)
+    eq("panel.edit.combat_stops_drag.affordance_hidden", state.main.visible, false)
+
+    editEnv.StatsProConfigFrame:Hide()
+    inCombat = false
+    fireEvent("panel.edit.closed_combat_leave", editEnv, "PLAYER_REGEN_ENABLED")
+    state = editTest.panelEditAffordanceState()
+    eq("panel.edit.closed_combat_leave.requested", state.requested, false)
+    eq("panel.edit.closed_combat_leave.main_hidden", state.main.visible, false)
+    eq("panel.edit.closed_combat_leave.side_hidden", state.side.visible, false)
+
+    inCombat = true
+    editAddon:OpenConfigMenu()
+    state = editTest.panelEditAffordanceState()
+    eq("panel.edit.open_in_combat.requested", state.requested, true)
+    eq("panel.edit.open_in_combat.main_hidden", state.main.visible, false)
+    eq("panel.edit.open_in_combat.side_hidden", state.side.visible, false)
+    inCombat = false
+    fireEvent("panel.edit.open_combat_leave", editEnv, "PLAYER_REGEN_ENABLED")
+    state = editTest.panelEditAffordanceState()
+    eq("panel.edit.open_combat_leave.main_visible", state.main.visible, true)
+    eq("panel.edit.open_combat_leave.side_visible", state.side.visible, true)
+    editEnv.StatsProConfigFrame:Hide()
+    assertDeepEqual("panel.edit.lifecycle_preserves_db", editEnv.StatsProDB, initialRoot)
 end
 
 do

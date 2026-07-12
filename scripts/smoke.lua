@@ -7860,7 +7860,7 @@ do
         eq(prefix .. ".swatch_count", counts.swatch, 18)
         eq(prefix .. ".slider_count", counts.slider, 5)
         eq(prefix .. ".dropdown_count", counts.dropdown, 6)
-        eq(prefix .. ".button_count", counts.button, 22)
+        eq(prefix .. ".button_count", counts.button, 21)
         eq(prefix .. ".developer_link_count", counts.developerLink, 2)
         local presetUI = localeAddon.appearancePresets.ui
         for _, presetID in ipairs({
@@ -8506,13 +8506,10 @@ do
     eq("config.shell.title.role", shell.titleSurface.statsProSurfaceRole, "raised")
     eq("config.shell.profile.role", shell.profileHeader.statsProSurfaceRole, "profile")
     eq("config.shell.viewport.role", shell.viewport.statsProSurfaceRole, "viewport")
-    eq("config.shell.footer.role", shell.footer.statsProSurfaceRole, "raised")
     eq("config.shell.title.parent_owned_region", shell.titleSurface:GetParent(), config)
     eq("config.shell.viewport.parent_owned_region", shell.viewport:GetParent(), config)
-    eq("config.shell.footer.parent_owned_region", shell.footer:GetParent(), config)
     eq("config.shell.title.region_type", shell.titleSurface.regionType, "Texture")
     eq("config.shell.viewport.region_type", shell.viewport.regionType, "Texture")
-    eq("config.shell.footer.region_type", shell.footer.regionType, "Texture")
     eq("config.shell.title.surface_height", shell.titleSurface:GetHeight(),
         detached.geometry.titleSurfaceHeight)
     eq("config.shell.profile.top", shell.profileHeader.points[1][3],
@@ -8525,7 +8522,10 @@ do
     eq("config.shell.viewport.bottom", shell.viewport.points[2][3], detached.geometry.viewportBottom)
     eq("config.shell.scroll.top", shell.scroll.points[1][3], -detached.geometry.scrollTop)
     eq("config.shell.scroll.bottom", shell.scroll.points[2][3], detached.geometry.scrollBottom)
-    eq("config.shell.footer.height", shell.footer:GetHeight(), detached.geometry.footerSurfaceHeight)
+    eq("config.shell.viewport.reclaims_footer", detached.geometry.viewportBottom,
+        detached.geometry.viewportInset)
+    eq("config.shell.scroll.reclaims_footer", detached.geometry.scrollBottom,
+        detached.geometry.scrollLeft)
     eq("config.shell.scroll.child", shell.scroll.scrollChild, shell.scrollChild)
     eq("config.shell.scroll.child_width", shell.scrollChild:GetWidth(), detached.geometry.contentWidth)
     eq("config.shell.scroll.styled", shell.scroll.statsProScrollbarStyled, true)
@@ -8572,41 +8572,46 @@ do
         "BOTTOMLEFT")
     eq("config.shell.profile.reset_gap", shell.resetButton.points[1][5],
         -detached.geometry.profileActionGap)
-    eq("config.shell.footer.close_height", shell.closeButton:GetHeight(),
-        detached.geometry.shellButtonHeight)
-    eq("config.shell.footer.close_width", shell.closeButton:GetWidth(),
-        detached.geometry.closeButtonWidth)
-    eq("config.shell.footer.links_parent", shell.footerLinkGroup:GetParent(), config)
-    eq("config.shell.footer.links_height", shell.footerLinkGroup:GetHeight(),
+    eq("config.shell.header.close_parent", shell.closeX:GetParent(), config)
+    eq("config.shell.header.links_parent", shell.headerLinkGroup:GetParent(), config)
+    eq("config.shell.header.links_width", shell.headerLinkGroup:GetWidth(),
+        detached.geometry.minHitTarget * 2 + detached.spacing.xs)
+    eq("config.shell.header.links_height", shell.headerLinkGroup:GetHeight(),
         detached.geometry.minHitTarget)
-    eq("config.shell.footer.links_left_relative", shell.footerLinkGroup.points[1][2], config)
-    eq("config.shell.footer.links_right_relative", shell.footerLinkGroup.points[2][2],
-        shell.closeButton)
-    eq("config.shell.footer.links_bottom", shell.footerLinkGroup.points[3][5],
-        detached.geometry.footerButtonBottom + 2)
-    eq("config.shell.footer.kofi_parent", shell.koFiButton:GetParent(),
-        shell.footerLinkGroup)
-    eq("config.shell.footer.contact_parent", shell.contactButton:GetParent(),
-        shell.footerLinkGroup)
-    eq("config.shell.footer.kofi_width", shell.koFiButton:GetWidth(),
+    eq("config.shell.header.links_relative", shell.headerLinkGroup.points[1][2], shell.closeX)
+    eq("config.shell.header.links_relative_point", shell.headerLinkGroup.points[1][3], "LEFT")
+    eq("config.shell.header.links_gap", shell.headerLinkGroup.points[1][4],
+        -detached.spacing.xxs)
+    eq("config.shell.header.metadata_right_relative", shell.titleMetadata.points[2][2],
+        shell.headerLinkGroup)
+    eq("config.shell.header.metadata_right_gap", shell.titleMetadata.points[2][4],
+        -detached.spacing.sm)
+    eq("config.shell.header.kofi_parent", shell.koFiButton:GetParent(),
+        shell.headerLinkGroup)
+    eq("config.shell.header.contact_parent", shell.contactButton:GetParent(),
+        shell.headerLinkGroup)
+    eq("config.shell.header.kofi_width", shell.koFiButton:GetWidth(),
         detached.geometry.minHitTarget)
-    eq("config.shell.footer.kofi_height", shell.koFiButton:GetHeight(),
+    eq("config.shell.header.kofi_height", shell.koFiButton:GetHeight(),
         detached.geometry.minHitTarget)
-    eq("config.shell.footer.contact_width", shell.contactButton:GetWidth(),
+    eq("config.shell.header.contact_width", shell.contactButton:GetWidth(),
         detached.geometry.minHitTarget)
-    eq("config.shell.footer.contact_height", shell.contactButton:GetHeight(),
+    eq("config.shell.header.contact_height", shell.contactButton:GetHeight(),
         detached.geometry.minHitTarget)
-    eq("config.shell.footer.kofi_center_gap", shell.koFiButton.points[1][4], -4)
-    eq("config.shell.footer.contact_center_gap", shell.contactButton.points[1][4], 4)
-    eq("config.shell.footer.kofi_texture", shell.koFiButton.statsProIcon.texture,
+    eq("config.shell.header.contact_right_relative", shell.contactButton.points[1][2],
+        shell.headerLinkGroup)
+    eq("config.shell.header.kofi_right_relative", shell.koFiButton.points[1][2],
+        shell.contactButton)
+    eq("config.shell.header.kofi_gap", shell.koFiButton.points[1][4],
+        -detached.spacing.xs)
+    eq("config.shell.header.kofi_texture", shell.koFiButton.statsProIcon.texture,
         "Interface\\COMMON\\friendship-heart")
-    assertDeepEqual("config.shell.footer.kofi_texcoords",
+    assertDeepEqual("config.shell.header.kofi_texcoords",
         shell.koFiButton.statsProIcon.texCoords,
         { 0.21875, 0.78125, 0.09375, 0.6875 })
-    eq("config.shell.footer.contact_atlas", shell.contactButton.statsProIcon.atlas,
+    eq("config.shell.header.contact_atlas", shell.contactButton.statsProIcon.atlas,
         "transmog-icon-chat")
     eq("config.shell.profile.reset_role", shell.resetButton.statsProButtonRole, "destructive")
-    eq("config.shell.footer.close_role", shell.closeButton.statsProButtonRole, "primary")
 
     local selectedTabs = 0
     for index, tab in ipairs(state.tabs) do
@@ -8702,76 +8707,65 @@ do
     assertRGBA("config.shell.reset.normal_border", shell.resetButton.backdropBorderColor,
         detached.colors.borderSoft[1], detached.colors.borderSoft[2],
         detached.colors.borderSoft[3], detached.colors.borderSoft[4])
-    runFrameHandlers(shell.closeButton, "OnEnter")
-    eq("config.shell.close.hover_state", shell.closeButton.statsProButtonState, "hover")
-    assertRGBA("config.shell.close.hover_border", shell.closeButton.backdropBorderColor,
-        detached.colors.accent[1], detached.colors.accent[2], detached.colors.accent[3],
-        detached.colors.accent[4])
-    runFrameHandlers(shell.closeButton, "OnLeave")
-    eq("config.shell.close.normal_state", shell.closeButton.statsProButtonState, "normal")
-    assertRGBA("config.shell.close.normal_border", shell.closeButton.backdropBorderColor,
-        detached.colors.accentMuted[1], detached.colors.accentMuted[2],
-        detached.colors.accentMuted[3], detached.colors.accentMuted[4])
-
     local linksDBBefore = deepCopy(shellEnv.StatsProDB)
-    userInteract("config.shell.footer.kofi_hover", shell.koFiButton, "OnEnter")
-    eq("config.shell.footer.kofi_hover_surface", shell.koFiButton.statsProHover:IsShown(), true)
-    eq("config.shell.footer.kofi_hover_alpha", shell.koFiButton.statsProIcon:GetAlpha(), 1)
-    eq("config.shell.footer.kofi_tooltip_owner", shellEnv.GameTooltip:GetOwner(),
+    userInteract("config.shell.header.kofi_hover", shell.koFiButton, "OnEnter")
+    eq("config.shell.header.kofi_hover_surface", shell.koFiButton.statsProHover:IsShown(), true)
+    eq("config.shell.header.kofi_hover_alpha", shell.koFiButton.statsProIcon:GetAlpha(), 1)
+    eq("config.shell.header.kofi_tooltip_owner", shellEnv.GameTooltip:GetOwner(),
         shell.koFiButton)
-    eq("config.shell.footer.kofi_tooltip_title", shellEnv.GameTooltip.lines[1].left,
+    eq("config.shell.header.kofi_tooltip_title", shellEnv.GameTooltip.lines[1].left,
         "Ko-fi")
-    eq("config.shell.footer.kofi_tooltip_detail", shellEnv.GameTooltip.lines[2].left,
+    eq("config.shell.header.kofi_tooltip_detail", shellEnv.GameTooltip.lines[2].left,
         "Click to copy the link.")
-    userInteract("config.shell.footer.kofi_leave", shell.koFiButton, "OnLeave")
-    eq("config.shell.footer.kofi_leave_surface", shell.koFiButton.statsProHover:IsShown(), false)
-    near("config.shell.footer.kofi_leave_alpha", shell.koFiButton.statsProIcon:GetAlpha(), 0.76)
-    userInteract("config.shell.footer.kofi_click", shell.koFiButton, "OnClick")
-    local linkPopup = exists("config.shell.footer.kofi_popup", shellEnv.__lastStaticPopup)
-    eq("config.shell.footer.kofi_popup_key", linkPopup.key,
+    userInteract("config.shell.header.kofi_leave", shell.koFiButton, "OnLeave")
+    eq("config.shell.header.kofi_leave_surface", shell.koFiButton.statsProHover:IsShown(), false)
+    near("config.shell.header.kofi_leave_alpha", shell.koFiButton.statsProIcon:GetAlpha(), 0.76)
+    userInteract("config.shell.header.kofi_click", shell.koFiButton, "OnClick")
+    local linkPopup = exists("config.shell.header.kofi_popup", shellEnv.__lastStaticPopup)
+    eq("config.shell.header.kofi_popup_key", linkPopup.key,
         "STATSPRO_COPY_DEVELOPER_LINK")
-    eq("config.shell.footer.kofi_popup_message", linkPopup.textArg1,
+    eq("config.shell.header.kofi_popup_message", linkPopup.textArg1,
         "StatsPro — Ko-fi\nCopy the link below (Ctrl+C).")
-    eq("config.shell.footer.kofi_popup_url", linkPopup.data.url,
+    eq("config.shell.header.kofi_popup_url", linkPopup.data.url,
         "https://ko-fi.com/antrakt92")
-    eq("config.shell.footer.kofi_editbox_url", linkPopup.EditBox:GetText(),
+    eq("config.shell.header.kofi_editbox_url", linkPopup.EditBox:GetText(),
         "https://ko-fi.com/antrakt92")
-    eq("config.shell.footer.kofi_editbox_selected", linkPopup.EditBox.highlightedText,
+    eq("config.shell.header.kofi_editbox_selected", linkPopup.EditBox.highlightedText,
         "https://ko-fi.com/antrakt92")
-    eq("config.shell.footer.kofi_editbox_focus", linkPopup.EditBox:HasFocus(), true)
+    eq("config.shell.header.kofi_editbox_focus", linkPopup.EditBox:HasFocus(), true)
     linkPopup.definition.EditBoxOnEnterPressed(linkPopup:GetEditBox())
-    eq("config.shell.footer.kofi_enter_hides_popup", linkPopup:IsShown(), false)
+    eq("config.shell.header.kofi_enter_hides_popup", linkPopup:IsShown(), false)
 
-    userInteract("config.shell.footer.contact_hover", shell.contactButton, "OnEnter")
-    eq("config.shell.footer.contact_tooltip_owner", shellEnv.GameTooltip:GetOwner(),
+    userInteract("config.shell.header.contact_hover", shell.contactButton, "OnEnter")
+    eq("config.shell.header.contact_tooltip_owner", shellEnv.GameTooltip:GetOwner(),
         shell.contactButton)
-    eq("config.shell.footer.contact_tooltip_title", shellEnv.GameTooltip.lines[1].left,
+    eq("config.shell.header.contact_tooltip_title", shellEnv.GameTooltip.lines[1].left,
         "Contact")
-    eq("config.shell.footer.contact_tooltip_detail", shellEnv.GameTooltip.lines[2].left,
+    eq("config.shell.header.contact_tooltip_detail", shellEnv.GameTooltip.lines[2].left,
         "Click to copy the link.")
-    userInteract("config.shell.footer.contact_leave", shell.contactButton, "OnLeave")
-    userInteract("config.shell.footer.contact_click", shell.contactButton, "OnClick")
-    linkPopup = exists("config.shell.footer.contact_popup", shellEnv.__lastStaticPopup)
-    eq("config.shell.footer.contact_popup_key", linkPopup.key,
+    userInteract("config.shell.header.contact_leave", shell.contactButton, "OnLeave")
+    userInteract("config.shell.header.contact_click", shell.contactButton, "OnClick")
+    linkPopup = exists("config.shell.header.contact_popup", shellEnv.__lastStaticPopup)
+    eq("config.shell.header.contact_popup_key", linkPopup.key,
         "STATSPRO_COPY_DEVELOPER_LINK")
-    eq("config.shell.footer.contact_popup_message", linkPopup.textArg1,
+    eq("config.shell.header.contact_popup_message", linkPopup.textArg1,
         "StatsPro — Contact\nCopy the link below (Ctrl+C).")
-    eq("config.shell.footer.contact_popup_url", linkPopup.data.url,
+    eq("config.shell.header.contact_popup_url", linkPopup.data.url,
         "https://github.com/Antrakt92/StatsPro/issues")
-    eq("config.shell.footer.contact_editbox_url", linkPopup.EditBox:GetText(),
+    eq("config.shell.header.contact_editbox_url", linkPopup.EditBox:GetText(),
         "https://github.com/Antrakt92/StatsPro/issues")
-    eq("config.shell.footer.contact_editbox_selected", linkPopup.EditBox.highlightedText,
+    eq("config.shell.header.contact_editbox_selected", linkPopup.EditBox.highlightedText,
         "https://github.com/Antrakt92/StatsPro/issues")
-    eq("config.shell.footer.contact_editbox_focus", linkPopup.EditBox:HasFocus(), true)
-    eq("config.shell.footer.popup_close_label", linkPopup.definition.button1, "Close")
+    eq("config.shell.header.contact_editbox_focus", linkPopup.EditBox:HasFocus(), true)
+    eq("config.shell.header.popup_close_label", linkPopup.definition.button1, "Close")
     linkPopup.definition.EditBoxOnEnterPressed(linkPopup:GetEditBox())
-    eq("config.shell.footer.contact_enter_hides_popup", linkPopup:IsShown(), false)
-    userInteract("config.shell.footer.contact_reopen", shell.contactButton, "OnClick")
-    linkPopup = exists("config.shell.footer.contact_popup_reopened", shellEnv.__lastStaticPopup)
+    eq("config.shell.header.contact_enter_hides_popup", linkPopup:IsShown(), false)
+    userInteract("config.shell.header.contact_reopen", shell.contactButton, "OnClick")
+    linkPopup = exists("config.shell.header.contact_popup_reopened", shellEnv.__lastStaticPopup)
     config:Hide()
-    eq("config.shell.footer.contact_config_hide_closes_popup",
+    eq("config.shell.header.contact_config_hide_closes_popup",
         shellEnv.__lastStaticPopup, nil)
-    assertDeepEqual("config.shell.footer.links_zero_writes", shellEnv.StatsProDB,
+    assertDeepEqual("config.shell.header.links_zero_writes", shellEnv.StatsProDB,
         linksDBBefore)
     config:Show()
 
@@ -8887,17 +8881,14 @@ do
         config:GetHeight() - geometry.scrollTop - geometry.scrollBottom > 0)
     check("config.live_resize.minimum.viewport_reachable",
         config:GetHeight() - geometry.viewportTop - geometry.viewportBottom > 0)
-    check("config.live_resize.minimum.footer_reachable",
-        geometry.footerSurfaceInset + geometry.footerSurfaceHeight < config:GetHeight())
-    local footerTop = geometry.footerSurfaceInset + geometry.footerSurfaceHeight
-    local buttonTop = geometry.footerButtonBottom + geometry.shellButtonHeight
-    check("config.live_resize.minimum.buttons_inside_footer",
-        geometry.footerButtonBottom >= geometry.footerSurfaceInset and buttonTop <= footerTop)
-    check("config.live_resize.minimum.scroll_above_footer", geometry.scrollBottom >= footerTop)
-    eq("config.live_resize.minimum.footer_parent", shell.footer:GetParent(), config)
+    eq("config.live_resize.minimum.viewport_bottom_inset", geometry.viewportBottom,
+        geometry.viewportInset)
+    eq("config.live_resize.minimum.scroll_bottom_inset", geometry.scrollBottom,
+        geometry.scrollLeft)
     eq("config.live_resize.minimum.reset_parent", shell.resetButton:GetParent(),
         shell.profileHeader)
-    eq("config.live_resize.minimum.close_parent", shell.closeButton:GetParent(), config)
+    eq("config.live_resize.minimum.close_parent", shell.closeX:GetParent(), config)
+    eq("config.live_resize.minimum.header_links_parent", shell.headerLinkGroup:GetParent(), config)
 
     local stableHeight = config:GetHeight()
     resizeEnv.UIParent.height = math.huge
@@ -11092,11 +11083,9 @@ do
             string.find(shellState.shell.titleMetadata:GetText(), labels["Settings"], 1, true) ~= nil)
         check("profiles.ui.locales.title_metadata_fit." .. locale,
             shellState.shell.titleMetadata:GetStringWidth() <= 320,
-            "title metadata approaches the close button")
+            "title metadata approaches the header actions")
         eq("profiles.ui.locales.reset_text." .. locale,
             shellState.shell.resetButton:GetText(), labels["Reset"])
-        eq("profiles.ui.locales.close_text." .. locale,
-            shellState.shell.closeButton:GetText(), labels["Close"])
         check("profiles.ui.locales.manage_fit." .. locale,
             env.StatsProManageProfilesButton.statsProText:GetStringWidth()
                 <= env.StatsProManageProfilesButton:GetWidth() - 16,
@@ -11105,10 +11094,8 @@ do
             shellState.shell.resetButton.statsProText:GetStringWidth()
                 <= shellState.shell.resetButton:GetWidth() - 16,
             "Reset label exceeds its inset text region")
-        check("profiles.ui.locales.close_fit." .. locale,
-            shellState.shell.closeButton.statsProText:GetStringWidth()
-                <= shellState.shell.closeButton:GetWidth() - 16,
-            "Close label exceeds its inset text region")
+        eq("profiles.ui.locales.header_link_width." .. locale,
+            shellState.shell.headerLinkGroup:GetWidth(), 52)
         local profileLabelFrame = findFontString(
             "profiles.ui.locales.profile_label_frame." .. locale, env,
             function(fontString)

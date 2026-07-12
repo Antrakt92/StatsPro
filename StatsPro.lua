@@ -8618,11 +8618,9 @@ addon.settingsDesign = {
             profileFieldInset = 68, profileFieldWidth = 286, manageWidth = 100,
             profileActionGap = 3,
             tabInset = 18, tabTop = 116, tabHeight = 28, tabGap = 4, tabWidth = 152,
-            viewportInset = 12, viewportTop = 152, viewportBottom = 62,
-            scrollLeft = 16, scrollRight = 32, scrollTop = 156, scrollBottom = 66,
+            viewportInset = 12, viewportTop = 152, viewportBottom = 12,
+            scrollLeft = 16, scrollRight = 32, scrollTop = 156, scrollBottom = 16,
             contentWidth = 450,
-            footerSurfaceInset = 5, footerSurfaceHeight = 51, footerHeight = 56,
-            footerButtonInset = 18, footerButtonBottom = 14,
             closeButtonWidth = 100,
             shellButtonHeight = 28, minHitTarget = 24,
             sectionHeaderHeight = 22, scrollbarGutter = 16,
@@ -11826,8 +11824,8 @@ function addon:OpenConfigMenu()
     -- UIParent height must not leave the already-shown frame at its default geometry.
     configFrame:SetSize(configFrameWidth, shellGeometry.minHeight)
 
-    -- WARNING: cap by parent so footer (Reset/Close at BOTTOM y=14) stays on-screen.
-    -- The 260px floor leaves a positive viewport after the 140px header and 66px footer.
+    -- WARNING: cap by parent so the title, profile actions, and scroll viewport stay on-screen.
+    -- The 260px floor leaves a positive viewport below the fixed 156px shell header.
     local function ApplyConfigFrameSize()
         local parentHeight = addon.settingsDesign.ReadUIParentHeight()
         if not parentHeight then return false end
@@ -11908,6 +11906,32 @@ function addon:OpenConfigMenu()
     local closeX = CreateFrame("Button", nil, configFrame, "UIPanelCloseButton")
     closeX:SetPoint("TOPRIGHT", -4, -4)
 
+    -- Compact project links share the title bar with the existing close affordance.
+    -- Keeping them here avoids a second, redundant close row and returns 50px to content.
+    local headerLinkGroup = CreateFrame("Frame", nil, configFrame)
+    headerLinkGroup:SetPoint("RIGHT", closeX, "LEFT", -self.settingsDesign.tokens.spacing.xxs, 0)
+    headerLinkGroup:SetSize(shellGeometry.minHitTarget * 2
+        + self.settingsDesign.tokens.spacing.xs, shellGeometry.minHitTarget)
+
+    local contactButton = self.settingsDesign.CreateDeveloperLinkButton(
+        headerLinkGroup, "StatsProContactLinkButton", "contact",
+        { atlas = "transmog-icon-chat" }, self.settingsDesign.Color("accent"))
+    contactButton:SetPoint("RIGHT", headerLinkGroup, "RIGHT", 0, 0)
+
+    local koFiButton = self.settingsDesign.CreateDeveloperLinkButton(
+        headerLinkGroup, "StatsProKoFiLinkButton", "koFi", {
+            texture = "Interface\\COMMON\\friendship-heart",
+            texCoords = { 0.21875, 0.78125, 0.09375, 0.6875 },
+        }, { 1, 0.36, 0.35, 1 })
+    koFiButton:SetPoint("RIGHT", contactButton, "LEFT",
+        -self.settingsDesign.tokens.spacing.xs, 0)
+
+    titleMetadata:SetPoint("RIGHT", headerLinkGroup, "LEFT",
+        -self.settingsDesign.tokens.spacing.sm, 0)
+    titleMetadata:SetJustifyH("LEFT")
+    titleMetadata:SetWordWrap(false)
+    titleMetadata:SetMaxLines(1)
+
     -- Header separator
     local headerLine = configFrame:CreateTexture(nil, "ARTWORK")
     headerLine:SetPoint("TOPLEFT", shellGeometry.outerInset, -shellGeometry.titleHeight)
@@ -11933,47 +11957,6 @@ function addon:OpenConfigMenu()
         -(shellGeometry.tabTop + shellGeometry.tabHeight + shellGeometry.tabGap))
     tabsLine:SetHeight(1)
     self.settingsDesign.ApplySeparator(tabsLine)
-
-    --[[ ===== Footer (Contact + Close) ===== ]]
-    local footerSurface = self.settingsDesign.CreateTextureSurface(configFrame, "raised")
-    footerSurface:SetPoint("BOTTOMLEFT", shellGeometry.footerSurfaceInset,
-        shellGeometry.footerSurfaceInset)
-    footerSurface:SetPoint("BOTTOMRIGHT", -shellGeometry.footerSurfaceInset,
-        shellGeometry.footerSurfaceInset)
-    footerSurface:SetHeight(shellGeometry.footerSurfaceHeight)
-
-    local footerLine = configFrame:CreateTexture(nil, "ARTWORK")
-    footerLine:SetPoint("BOTTOMLEFT", shellGeometry.outerInset, shellGeometry.footerHeight)
-    footerLine:SetPoint("BOTTOMRIGHT", -shellGeometry.outerInset, shellGeometry.footerHeight)
-    footerLine:SetHeight(1)
-    self.settingsDesign.ApplySeparator(footerLine)
-
-    local closeBtn = self.settingsDesign.CreateShellButton(configFrame, nil, "primary")
-    closeBtn:SetPoint("BOTTOMRIGHT", -shellGeometry.footerButtonInset,
-        shellGeometry.footerButtonBottom)
-    closeBtn:SetSize(shellGeometry.closeButtonWidth, shellGeometry.shellButtonHeight)
-    PushLocalizedLabel(function() closeBtn:SetText(L("Close")) end)
-    closeBtn:SetScript("OnClick", function() configFrame:Hide() end)
-
-    local footerLinkGroup = CreateFrame("Frame", nil, configFrame)
-    footerLinkGroup:SetPoint("LEFT", configFrame, "LEFT",
-        shellGeometry.footerButtonInset, 0)
-    footerLinkGroup:SetPoint("RIGHT", closeBtn, "LEFT", 0, 0)
-    footerLinkGroup:SetPoint("BOTTOM", configFrame, "BOTTOM", 0,
-        shellGeometry.footerButtonBottom + 2)
-    footerLinkGroup:SetHeight(shellGeometry.minHitTarget)
-
-    local koFiButton = self.settingsDesign.CreateDeveloperLinkButton(
-        footerLinkGroup, "StatsProKoFiLinkButton", "koFi", {
-            texture = "Interface\\COMMON\\friendship-heart",
-            texCoords = { 0.21875, 0.78125, 0.09375, 0.6875 },
-        }, { 1, 0.36, 0.35, 1 })
-    koFiButton:SetPoint("RIGHT", footerLinkGroup, "CENTER", -4, 0)
-
-    local contactButton = self.settingsDesign.CreateDeveloperLinkButton(
-        footerLinkGroup, "StatsProContactLinkButton", "contact",
-        { atlas = "transmog-icon-chat" }, self.settingsDesign.Color("accent"))
-    contactButton:SetPoint("LEFT", footerLinkGroup, "CENTER", 4, 0)
 
     --[[ ===== ScrollFrame for tab content ===== ]]
     local viewportSurface = self.settingsDesign.CreateTextureSurface(configFrame, "viewport")
@@ -12058,10 +12041,9 @@ function addon:OpenConfigMenu()
             viewport = viewportSurface,
             scroll = scrollFrame,
             scrollChild = scrollChild,
-            footer = footerSurface,
+            closeX = closeX,
+            headerLinkGroup = headerLinkGroup,
             resetButton = configFrame.profileResetButton,
-            closeButton = closeBtn,
-            footerLinkGroup = footerLinkGroup,
             koFiButton = koFiButton,
             contactButton = contactButton,
         }

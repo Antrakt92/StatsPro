@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.10.0 - 12-Jul-2026 — Profiles and Settings overhaul
+## 1.10.0 - 12-Jul-2026 — Profiles, presets, and Settings overhaul
 
 ### Added
 
@@ -11,7 +11,7 @@
 - **Six appearance presets—Default, Classic, Clean Dark, Midnight, Monochrome, and High Contrast—support live preview, Apply, and Cancel without changing layout, visible stats, language, or assignments.** Default matches the new 14px, full-opacity, outlined, 15%-background HUD style with per-stat value colors.
 - **Fresh and reset profiles now use the Default presentation:** rating and percentage values, full labels, Mythic+ tooltip targets, and stat-matched value colors.
 - **When frames are unlocked, opening Settings shows clear panel outlines and drag handles outside combat, making panel placement easier.**
-- **Settings now provides two compact title-bar icons for copying the Ko-fi and project contact links.**
+- **Settings now provides two compact title-bar icons that open copy-ready Ko-fi and project contact links.**
 
 ### Improved
 
@@ -24,11 +24,11 @@
 
 - **Crit now matches Blizzard's paper-doll aggregation, Versatility no longer shows partial totals, and Armor uses the documented effectiveness API.**
 - **Item level refreshes from Blizzard's authoritative event and floors equipped and overall values like the Character panel, including correct warning thresholds.**
-- **Missing or invalid fonts recover safely; enGB uses English presentation; font-coverage warnings wrap correctly and use localized language names instead of internal script codes.**
+- **Missing or invalid fonts recover safely; enGB and localized AddOn-list summaries use the correct presentation; font-coverage warnings wrap correctly and use localized language names instead of internal script codes.**
 - **Repair cost retries are bounded when item data is incomplete, avoiding endless refresh work while preserving later recovery.**
 - **Color previews no longer interfere with another addon's picker or persist when cancelled, closing Settings, reloading, or logging out.**
 - **Newer-schema SavedVariables remain inspectable but read-only, preventing an older StatsPro build from overwriting newer data.**
-- **Profile dialogs preserve the expected Escape order, and truncated Settings controls expose their full localized text.**
+- **Profile dialogs preserve the expected Escape order; long localized controls such as Worst Slot fit cleanly, and any truncated Settings text remains available through its tooltip.**
 - **The Appearance tab now removes unused preview space, keeping Typography directly below presets until preview actions are actually needed.**
 - **Profile Manager now shows Blizzard's localized specialization names for offline characters instead of raw numeric spec IDs.**
 - **Checkbox labels now keep a clear visual gap from their checked-state icons throughout Settings.**

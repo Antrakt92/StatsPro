@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.10.0 - 12-Jul-2026 — Profiles and Settings overhaul
+
+### Added
+
+- **Profiles now follow each character and specialization automatically.** Existing settings migrate safely, while each spec can keep its own visible stats, layout, colors, and defensive choices.
+- **A new Profile Manager supports creating, duplicating, renaming, assigning, swapping, copying selected setting groups, resetting, deleting, and reviewing profiles across visited characters.**
+- **Role templates and bulk actions can seed future Tank, Healer, and Damage profiles, reuse one profile across known specs, or split shared specs into independent copies.**
+- **SwiftStats import now creates an independent profile for the current character and spec.** `/ss reset` resets only the active profile, while `/ss wipe` and `/ss reset all` explicitly reset all StatsPro data.
+- **Five appearance presets—Classic, Clean Dark, Midnight, Monochrome, and High Contrast—support live preview, Apply, and Cancel without changing layout, visible stats, language, or assignments.**
+- **When frames are unlocked, opening Settings shows clear panel outlines and drag handles outside combat, making panel placement easier.**
+
+### Improved
+
+- **Settings has been rebuilt with a polished three-tab shell, consistent controls, clearer states and tooltips, localized labels, and a responsive footer and scroll area.** It adapts live to resolution or UI-scale changes and keeps long labels reachable.
+- **Archon target hovers remain useful when Midnight restricts live stat values.** They retain target metadata, show a clearly labelled last-known comparison when available, and recover exact comparisons when clean reads return.
+- **Section headers are brighter, cold-combat panel geometry stays readable, and wide-screen panel positions are preserved.**
+
+### Fixed
+
+- **Crit now matches Blizzard's paper-doll aggregation, Versatility no longer shows partial totals, and Armor uses the documented effectiveness API.**
+- **Item level refreshes from Blizzard's authoritative event and floors equipped and overall values like the Character panel, including correct warning thresholds.**
+- **Missing or invalid fonts recover safely; enGB uses English presentation; font-coverage warnings wrap correctly and use localized language names instead of internal script codes.**
+- **Repair cost retries are bounded when item data is incomplete, avoiding endless refresh work while preserving later recovery.**
+- **Color previews no longer interfere with another addon's picker or persist when cancelled, closing Settings, reloading, or logging out.**
+- **Newer-schema SavedVariables remain inspectable but read-only, preventing an older StatsPro build from overwriting newer data.**
+- **Profile dialogs preserve the expected Escape order, and truncated Settings controls expose their full localized text.**
+
+### Updated
+
+- **Bundled M+ High Keys and Raid Mythic All Bosses target ratings were refreshed from 11-Jul-2026 Archon data.**
+
 ## 1.9.59 - 10-Jul-2026 — Archon target refresh
 
 ### Updated

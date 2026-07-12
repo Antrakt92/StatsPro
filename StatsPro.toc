@@ -12,7 +12,7 @@
 ## Notes-zhCN: 属性与装备 HUD：装等、耐久度、修理费用及 Archon 属性目标。
 ## Notes-zhTW: 屬性與裝備 HUD：裝等、耐久度、修理費用及 Archon 屬性目標。
 ## Author: Antrakt
-## Version: 1.9.59
+## Version: 1.10.0
 ## IconTexture: Interface\AddOns\StatsPro\textures\logo.png
 ## SavedVariables: StatsProDB
 ## Category: Combat

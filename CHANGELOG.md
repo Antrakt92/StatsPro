@@ -11,12 +11,12 @@
 - **Six appearance presets—Default, Classic, Clean Dark, Midnight, Monochrome, and High Contrast—support live preview, Apply, and Cancel without changing layout, visible stats, language, or assignments.** Default matches the new 14px, full-opacity, outlined, 15%-background HUD style with per-stat value colors.
 - **Fresh and reset profiles now use the Default presentation:** rating and percentage values, full labels, Mythic+ tooltip targets, and stat-matched value colors.
 - **When frames are unlocked, opening Settings shows clear panel outlines and drag handles outside combat, making panel placement easier.**
-- **Settings now keeps a subtle localized “Made with ♥” signature visible and provides a neutral Contact action for copying the project issue link.**
+- **Settings now provides two compact footer icons for copying the Ko-fi and project contact links.**
 
 ### Improved
 
 - **Settings has been rebuilt with a polished three-tab shell, consistent controls, clearer states and tooltips, localized labels, and a responsive footer and scroll area.** It adapts live to resolution or UI-scale changes and keeps long labels reachable.
-- **Reset now sits directly below Manage in the active-profile header, making profile actions easier to find and leaving the footer focused on Contact and Close.**
+- **Reset now sits directly below Manage in the active-profile header, making profile actions easier to find and leaving the footer focused on Ko-fi, Contact, and Close.**
 - **Archon target hovers remain useful when Midnight restricts live stat values.** They retain target metadata, show a clearly labelled last-known comparison when available, and recover exact comparisons when clean reads return.
 - **Section headers are brighter, cold-combat panel geometry stays readable, and wide-screen panel positions are preserved.**
 

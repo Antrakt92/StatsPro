@@ -403,7 +403,6 @@ function Assert-StatsProNoInGameSolicitation {
         throw "Package root not found: $Root"
     }
     $rules = [ordered]@{
-        "Ko-fi" = "\bko-?fi\b"
         "Sponsors" = "github\.com/sponsors|\bsponsors?\b"
         "Donate" = "\bdonat(?:e|ion|ions)\b"
         "Support-development" = "support\s+(?:development|the\s+developer)"
@@ -572,10 +571,12 @@ steps:
         $runtimePath = Join-Path $packageRoot "StatsPro.lua"
         Set-Content -LiteralPath $runtimePath -Value 'local contact = "https://github.com/example/issues"' -Encoding UTF8
         Assert-StatsProNoInGameSolicitation -Root $packageRoot
-        Set-Content -LiteralPath $runtimePath -Value 'local solicitation = "https://ko-fi.com/example"' -Encoding UTF8
-        Assert-ThrowsMatch "in-game solicitation rejected" {
+        Set-Content -LiteralPath $runtimePath -Value 'local approvedLink = "https://ko-fi.com/example"' -Encoding UTF8
+        Assert-StatsProNoInGameSolicitation -Root $packageRoot
+        Set-Content -LiteralPath $runtimePath -Value 'local solicitation = "Donate to the developer"' -Encoding UTF8
+        Assert-ThrowsMatch "coercive in-game solicitation rejected" {
             Assert-StatsProNoInGameSolicitation -Root $packageRoot
-        } "forbidden solicitation token 'Ko-fi'"
+        } "forbidden solicitation token 'Donate'"
         Remove-Item -LiteralPath $runtimePath
 
         $releaseRoot = Join-Path $tempDir "release"

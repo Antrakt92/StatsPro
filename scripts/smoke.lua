@@ -272,6 +272,8 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetDesaturated(value) self.desaturated = value ~= false end
     function frame:SetBlendMode(mode) self.blendMode = mode end
     function frame:SetTexture(texture) self.texture = texture end
+    function frame:SetAtlas(atlas) self.atlas = atlas end
+    function frame:SetTexCoord(...) self.texCoords = { ... } end
     function frame:SetFont(font, size, flags)
         if type(font) ~= "string" then error("SetFont font must be a string", 2) end
         if not isFiniteNumber(size) then error("SetFont size must be a finite number", 2) end
@@ -7858,18 +7860,8 @@ do
         eq(prefix .. ".swatch_count", counts.swatch, 18)
         eq(prefix .. ".slider_count", counts.slider, 5)
         eq(prefix .. ".dropdown_count", counts.dropdown, 6)
-        eq(prefix .. ".button_count", counts.button, 23)
-        eq(prefix .. ".footer_signature_text",
-            localeEnv.StatsProConfigFrame.settingsShell.footerSignature:GetText(),
-            localeTest.registrySnapshot().labelsByLocale[locale]["Made with"])
-        check(prefix .. ".footer_signature_fit",
-            localeEnv.StatsProConfigFrame.settingsShell.footerSignature:GetStringWidth()
-                <= localeEnv.StatsProConfigFrame.settingsShell.footerSignature:GetWidth(),
-            "localized footer signature overflows")
-        check(prefix .. ".footer_contact_fit",
-            localeEnv.StatsProContactLinkButton.statsProText:GetStringWidth()
-                <= localeEnv.StatsProContactLinkButton.statsProText:GetWidth(),
-            "localized Contact label overflows")
+        eq(prefix .. ".button_count", counts.button, 22)
+        eq(prefix .. ".developer_link_count", counts.developerLink, 2)
         local presetUI = localeAddon.appearancePresets.ui
         for _, presetID in ipairs({
             "default", "classic", "clean-dark", "midnight", "monochrome", "high-contrast",
@@ -8584,27 +8576,35 @@ do
         detached.geometry.shellButtonHeight)
     eq("config.shell.footer.close_width", shell.closeButton:GetWidth(),
         detached.geometry.closeButtonWidth)
-    eq("config.shell.footer.contact_group_parent", shell.footerContactGroup:GetParent(), config)
-    eq("config.shell.footer.contact_group_height", shell.footerContactGroup:GetHeight(),
-        detached.geometry.footerSurfaceHeight)
-    eq("config.shell.footer.signature_parent", shell.footerSignature:GetParent(),
-        shell.footerContactGroup)
-    eq("config.shell.footer.signature_text", shell.footerSignature:GetText(), "Made with")
-    eq("config.shell.footer.signature_mouse_passthrough",
-        shell.footerSignature:IsMouseEnabled(), false)
-    eq("config.shell.footer.heart_parent", shell.footerHeart:GetParent(),
-        shell.footerContactGroup)
-    eq("config.shell.footer.heart_text", shell.footerHeart:GetText(), "♥")
-    eq("config.shell.footer.heart_font", shell.footerHeart.font, "Fonts\\ARIALN.TTF")
-    assertRGBA("config.shell.footer.heart_color", shell.footerHeart.textColor,
-        detached.colors.danger[1], detached.colors.danger[2],
-        detached.colors.danger[3], detached.colors.danger[4])
+    eq("config.shell.footer.links_parent", shell.footerLinkGroup:GetParent(), config)
+    eq("config.shell.footer.links_height", shell.footerLinkGroup:GetHeight(),
+        detached.geometry.minHitTarget)
+    eq("config.shell.footer.links_left_relative", shell.footerLinkGroup.points[1][2], config)
+    eq("config.shell.footer.links_right_relative", shell.footerLinkGroup.points[2][2],
+        shell.closeButton)
+    eq("config.shell.footer.links_bottom", shell.footerLinkGroup.points[3][5],
+        detached.geometry.footerButtonBottom + 2)
+    eq("config.shell.footer.kofi_parent", shell.koFiButton:GetParent(),
+        shell.footerLinkGroup)
     eq("config.shell.footer.contact_parent", shell.contactButton:GetParent(),
-        shell.footerContactGroup)
-    eq("config.shell.footer.contact_width", shell.contactButton:GetWidth(), 104)
+        shell.footerLinkGroup)
+    eq("config.shell.footer.kofi_width", shell.koFiButton:GetWidth(),
+        detached.geometry.minHitTarget)
+    eq("config.shell.footer.kofi_height", shell.koFiButton:GetHeight(),
+        detached.geometry.minHitTarget)
+    eq("config.shell.footer.contact_width", shell.contactButton:GetWidth(),
+        detached.geometry.minHitTarget)
     eq("config.shell.footer.contact_height", shell.contactButton:GetHeight(),
         detached.geometry.minHitTarget)
-    eq("config.shell.footer.contact_role", shell.contactButton.statsProButtonRole, "field")
+    eq("config.shell.footer.kofi_center_gap", shell.koFiButton.points[1][4], -4)
+    eq("config.shell.footer.contact_center_gap", shell.contactButton.points[1][4], 4)
+    eq("config.shell.footer.kofi_texture", shell.koFiButton.statsProIcon.texture,
+        "Interface\\COMMON\\friendship-heart")
+    assertDeepEqual("config.shell.footer.kofi_texcoords",
+        shell.koFiButton.statsProIcon.texCoords,
+        { 0.21875, 0.78125, 0.09375, 0.6875 })
+    eq("config.shell.footer.contact_atlas", shell.contactButton.statsProIcon.atlas,
+        "transmog-icon-chat")
     eq("config.shell.profile.reset_role", shell.resetButton.statsProButtonRole, "destructive")
     eq("config.shell.footer.close_role", shell.closeButton.statsProButtonRole, "primary")
 
@@ -8713,38 +8713,66 @@ do
         detached.colors.accentMuted[1], detached.colors.accentMuted[2],
         detached.colors.accentMuted[3], detached.colors.accentMuted[4])
 
-    local contactDBBefore = deepCopy(shellEnv.StatsProDB)
+    local linksDBBefore = deepCopy(shellEnv.StatsProDB)
+    userInteract("config.shell.footer.kofi_hover", shell.koFiButton, "OnEnter")
+    eq("config.shell.footer.kofi_hover_surface", shell.koFiButton.statsProHover:IsShown(), true)
+    eq("config.shell.footer.kofi_hover_alpha", shell.koFiButton.statsProIcon:GetAlpha(), 1)
+    eq("config.shell.footer.kofi_tooltip_owner", shellEnv.GameTooltip:GetOwner(),
+        shell.koFiButton)
+    eq("config.shell.footer.kofi_tooltip_title", shellEnv.GameTooltip.lines[1].left,
+        "Ko-fi")
+    eq("config.shell.footer.kofi_tooltip_detail", shellEnv.GameTooltip.lines[2].left,
+        "Click to copy the link.")
+    userInteract("config.shell.footer.kofi_leave", shell.koFiButton, "OnLeave")
+    eq("config.shell.footer.kofi_leave_surface", shell.koFiButton.statsProHover:IsShown(), false)
+    near("config.shell.footer.kofi_leave_alpha", shell.koFiButton.statsProIcon:GetAlpha(), 0.76)
+    userInteract("config.shell.footer.kofi_click", shell.koFiButton, "OnClick")
+    local linkPopup = exists("config.shell.footer.kofi_popup", shellEnv.__lastStaticPopup)
+    eq("config.shell.footer.kofi_popup_key", linkPopup.key,
+        "STATSPRO_COPY_DEVELOPER_LINK")
+    eq("config.shell.footer.kofi_popup_message", linkPopup.textArg1,
+        "StatsPro — Ko-fi\nCopy the link below (Ctrl+C).")
+    eq("config.shell.footer.kofi_popup_url", linkPopup.data.url,
+        "https://ko-fi.com/antrakt92")
+    eq("config.shell.footer.kofi_editbox_url", linkPopup.EditBox:GetText(),
+        "https://ko-fi.com/antrakt92")
+    eq("config.shell.footer.kofi_editbox_selected", linkPopup.EditBox.highlightedText,
+        "https://ko-fi.com/antrakt92")
+    eq("config.shell.footer.kofi_editbox_focus", linkPopup.EditBox:HasFocus(), true)
+    linkPopup.definition.EditBoxOnEnterPressed(linkPopup:GetEditBox())
+    eq("config.shell.footer.kofi_enter_hides_popup", linkPopup:IsShown(), false)
+
     userInteract("config.shell.footer.contact_hover", shell.contactButton, "OnEnter")
     eq("config.shell.footer.contact_tooltip_owner", shellEnv.GameTooltip:GetOwner(),
         shell.contactButton)
     eq("config.shell.footer.contact_tooltip_title", shellEnv.GameTooltip.lines[1].left,
         "Contact")
     eq("config.shell.footer.contact_tooltip_detail", shellEnv.GameTooltip.lines[2].left,
-        "Click to copy the project contact link.")
+        "Click to copy the link.")
     userInteract("config.shell.footer.contact_leave", shell.contactButton, "OnLeave")
     userInteract("config.shell.footer.contact_click", shell.contactButton, "OnClick")
-    local contactPopup = exists("config.shell.footer.contact_popup", shellEnv.__lastStaticPopup)
-    eq("config.shell.footer.contact_popup_key", contactPopup.key,
-        "STATSPRO_COPY_CONTACT_LINK")
-    eq("config.shell.footer.contact_popup_message", contactPopup.textArg1,
+    linkPopup = exists("config.shell.footer.contact_popup", shellEnv.__lastStaticPopup)
+    eq("config.shell.footer.contact_popup_key", linkPopup.key,
+        "STATSPRO_COPY_DEVELOPER_LINK")
+    eq("config.shell.footer.contact_popup_message", linkPopup.textArg1,
         "StatsPro — Contact\nCopy the link below (Ctrl+C).")
-    eq("config.shell.footer.contact_popup_url", contactPopup.data.url,
+    eq("config.shell.footer.contact_popup_url", linkPopup.data.url,
         "https://github.com/Antrakt92/StatsPro/issues")
-    eq("config.shell.footer.contact_editbox_url", contactPopup.EditBox:GetText(),
+    eq("config.shell.footer.contact_editbox_url", linkPopup.EditBox:GetText(),
         "https://github.com/Antrakt92/StatsPro/issues")
-    eq("config.shell.footer.contact_editbox_selected", contactPopup.EditBox.highlightedText,
+    eq("config.shell.footer.contact_editbox_selected", linkPopup.EditBox.highlightedText,
         "https://github.com/Antrakt92/StatsPro/issues")
-    eq("config.shell.footer.contact_editbox_focus", contactPopup.EditBox:HasFocus(), true)
-    eq("config.shell.footer.contact_popup_close_label", contactPopup.definition.button1, "Close")
-    contactPopup.definition.EditBoxOnEnterPressed(contactPopup:GetEditBox())
-    eq("config.shell.footer.contact_enter_hides_popup", contactPopup:IsShown(), false)
+    eq("config.shell.footer.contact_editbox_focus", linkPopup.EditBox:HasFocus(), true)
+    eq("config.shell.footer.popup_close_label", linkPopup.definition.button1, "Close")
+    linkPopup.definition.EditBoxOnEnterPressed(linkPopup:GetEditBox())
+    eq("config.shell.footer.contact_enter_hides_popup", linkPopup:IsShown(), false)
     userInteract("config.shell.footer.contact_reopen", shell.contactButton, "OnClick")
-    contactPopup = exists("config.shell.footer.contact_popup_reopened", shellEnv.__lastStaticPopup)
+    linkPopup = exists("config.shell.footer.contact_popup_reopened", shellEnv.__lastStaticPopup)
     config:Hide()
     eq("config.shell.footer.contact_config_hide_closes_popup",
         shellEnv.__lastStaticPopup, nil)
-    assertDeepEqual("config.shell.footer.contact_zero_writes", shellEnv.StatsProDB,
-        contactDBBefore)
+    assertDeepEqual("config.shell.footer.links_zero_writes", shellEnv.StatsProDB,
+        linksDBBefore)
     config:Show()
 
     callScript("config.shell.drag.start", config, "OnDragStart")
@@ -13272,6 +13300,7 @@ do
     eq("config.control_design.dropdown_trigger_count", counts.dropdown, 6)
     check("config.control_design.button_count", (counts.button or 0) >= 18,
         "shared shell buttons are not registered")
+    eq("config.control_design.developer_link_count", counts.developerLink, 2)
     eq("config.control_design.empty_warning_surface_hidden",
         env.StatsProConfigFrame.languageWarning.statsProWarningSurface:IsShown(), false)
     eq("config.control_design.empty_warning_rail_hidden",

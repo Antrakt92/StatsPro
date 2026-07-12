@@ -14,16 +14,32 @@
 ---@field value "mythicPlus"|"raid"
 ---@field label string
 
+---@class (exact) StatsProStaticPopupEditBox
+---@field SetText fun(self: StatsProStaticPopupEditBox, text: string)
+---@field GetText fun(self: StatsProStaticPopupEditBox): string
+---@field HighlightText fun(self: StatsProStaticPopupEditBox)
+---@field SetFocus fun(self: StatsProStaticPopupEditBox)
+---@field GetParent fun(self: StatsProStaticPopupEditBox): StatsProStaticPopupDialog
+
+---@class (exact) StatsProStaticPopupDialog
+---@field Hide fun(self: StatsProStaticPopupDialog)
+---@field GetEditBox fun(self: StatsProStaticPopupDialog): StatsProStaticPopupEditBox
+
 ---@class (exact) StatsProStaticPopupDefinition
 ---@field text string
 ---@field button1 string
----@field button2 string
----@field OnAccept fun()
----@field OnCancel fun()
+---@field button2? string
+---@field OnAccept? fun()
+---@field OnCancel? fun()
+---@field hasEditBox? boolean
+---@field editBoxWidth? number
+---@field OnShow? fun(self: StatsProStaticPopupDialog, data: any)
+---@field EditBoxOnEnterPressed? fun(editBox: StatsProStaticPopupEditBox)
+---@field EditBoxOnEscapePressed? fun(editBox: StatsProStaticPopupEditBox)
 ---@field timeout number
 ---@field whileDead boolean
 ---@field hideOnEscape boolean
----@field exclusive boolean
+---@field exclusive? boolean
 ---@field preferredIndex number
 
 ---@type string

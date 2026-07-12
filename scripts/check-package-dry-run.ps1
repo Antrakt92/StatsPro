@@ -396,6 +396,31 @@ function Save-StatsProPackageManifest {
         Set-Content -LiteralPath $Path -Encoding UTF8
 }
 
+function Assert-StatsProNoInGameSolicitation {
+    param([string]$Root)
+
+    if (-not (Test-Path -LiteralPath $Root -PathType Container)) {
+        throw "Package root not found: $Root"
+    }
+    $rules = [ordered]@{
+        "Ko-fi" = "\bko-?fi\b"
+        "Sponsors" = "github\.com/sponsors|\bsponsors?\b"
+        "Donate" = "\bdonat(?:e|ion|ions)\b"
+        "Support-development" = "support\s+(?:development|the\s+developer)"
+    }
+    $runtimeFiles = @(Get-ChildItem -LiteralPath $Root -Recurse -File |
+        Where-Object { $_.Extension -in ".lua", ".toc" })
+    foreach ($file in $runtimeFiles) {
+        $text = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
+        foreach ($rule in $rules.GetEnumerator()) {
+            if ($text -match $rule.Value) {
+                $relative = [System.IO.Path]::GetRelativePath($Root, $file.FullName) -replace "\\", "/"
+                throw "Packaged in-game surface contains forbidden solicitation token '$($rule.Key)' in '$relative'."
+            }
+        }
+    }
+}
+
 function Invoke-StatsProPackageArtifactCheck {
     param(
         [string]$ZipPath,
@@ -544,6 +569,15 @@ steps:
             Assert-StatsProPackageManifestMatches -Root $packageRoot -ExpectedManifestPath $manifest
         } "not repeatable"
 
+        $runtimePath = Join-Path $packageRoot "StatsPro.lua"
+        Set-Content -LiteralPath $runtimePath -Value 'local contact = "https://github.com/example/issues"' -Encoding UTF8
+        Assert-StatsProNoInGameSolicitation -Root $packageRoot
+        Set-Content -LiteralPath $runtimePath -Value 'local solicitation = "https://ko-fi.com/example"' -Encoding UTF8
+        Assert-ThrowsMatch "in-game solicitation rejected" {
+            Assert-StatsProNoInGameSolicitation -Root $packageRoot
+        } "forbidden solicitation token 'Ko-fi'"
+        Remove-Item -LiteralPath $runtimePath
+
         $releaseRoot = Join-Path $tempDir "release"
         New-Item -ItemType Directory -Path $releaseRoot | Out-Null
         $singleZip = Join-Path $releaseRoot "StatsPro-v1.2.3-4-gabcdef0.zip"
@@ -597,8 +631,10 @@ Invoke-StatsProPackageArtifactCheck `
     -CheckToolLocks:$EnforceToolLocks.IsPresent `
     -RequireExactPackagerProjectVersion:$RequireExactPackagerProjectVersion.IsPresent
 
+$resolvedPackageRoot = (Resolve-Path -LiteralPath $PackageRoot).Path
+Assert-StatsProNoInGameSolicitation -Root $resolvedPackageRoot
+
 if (-not [string]::IsNullOrWhiteSpace($ManifestPath) -or -not [string]::IsNullOrWhiteSpace($CompareManifestPath)) {
-    $resolvedPackageRoot = (Resolve-Path -LiteralPath $PackageRoot).Path
     if (-not [string]::IsNullOrWhiteSpace($ManifestPath)) {
         Save-StatsProPackageManifest -Root $resolvedPackageRoot -Path $ManifestPath
         Write-Host "StatsPro package manifest saved to $ManifestPath."

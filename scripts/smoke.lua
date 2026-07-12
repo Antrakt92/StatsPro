@@ -424,6 +424,7 @@ local function makeFrame(name, setFontResult, parent)
         self.focused = true
         runFrameHandlers(self, "OnEditFocusGained")
     end
+    function frame:HighlightText() self.highlightedText = self:GetText() end
     function frame:ClearFocus()
         if not self.focused then return end
         self.focused = false
@@ -549,11 +550,24 @@ local function makeEnv(locale, opts)
     env.UISpecialFrames = {}
     env.StaticPopupDialogs = {}
     env.CANCEL = "Cancel"
-    env.StaticPopup_Show = function(key)
+    env.StaticPopup_Show = function(key, textArg1, textArg2, data)
         local definition = env.StaticPopupDialogs[key]
         if type(definition) ~= "table" then error("missing static popup " .. tostring(key), 2) end
         env.__staticPopupShows = env.__staticPopupShows + 1
-        env.__lastStaticPopup = { key = key, definition = definition }
+        local popup = makeFrame(nil, opts.setFontResult, env.UIParent)
+        popup.key = key
+        popup.definition = definition
+        popup.textArg1 = textArg1
+        popup.textArg2 = textArg2
+        popup.data = data
+        if definition.hasEditBox then
+            popup.EditBox = makeFrame(nil, opts.setFontResult, popup)
+            function popup:GetEditBox() return self.EditBox end
+        end
+        env.__lastStaticPopup = popup
+        if type(definition.OnShow) == "function" then
+            definition.OnShow(popup, data)
+        end
         return env.__lastStaticPopup
     end
     env.StaticPopup_Hide = function(key)
@@ -7743,7 +7757,18 @@ do
         eq(prefix .. ".swatch_count", counts.swatch, 18)
         eq(prefix .. ".slider_count", counts.slider, 5)
         eq(prefix .. ".dropdown_count", counts.dropdown, 6)
-        eq(prefix .. ".button_count", counts.button, 22)
+        eq(prefix .. ".button_count", counts.button, 23)
+        eq(prefix .. ".footer_signature_text",
+            localeEnv.StatsProConfigFrame.settingsShell.footerSignature:GetText(),
+            localeTest.registrySnapshot().labelsByLocale[locale]["Made with"])
+        check(prefix .. ".footer_signature_fit",
+            localeEnv.StatsProConfigFrame.settingsShell.footerSignature:GetStringWidth()
+                <= localeEnv.StatsProConfigFrame.settingsShell.footerSignature:GetWidth(),
+            "localized footer signature overflows")
+        check(prefix .. ".footer_contact_fit",
+            localeEnv.StatsProContactLinkButton.statsProText:GetStringWidth()
+                <= localeEnv.StatsProContactLinkButton.statsProText:GetWidth(),
+            "localized Contact label overflows")
         local presetUI = localeAddon.appearancePresets.ui
         for _, presetID in ipairs({
             "classic", "clean-dark", "midnight", "monochrome", "high-contrast",
@@ -8443,6 +8468,27 @@ do
         detached.geometry.shellButtonHeight)
     eq("config.shell.footer.close_width", shell.closeButton:GetWidth(),
         detached.geometry.closeButtonWidth)
+    eq("config.shell.footer.contact_group_parent", shell.footerContactGroup:GetParent(), config)
+    eq("config.shell.footer.contact_group_height", shell.footerContactGroup:GetHeight(),
+        detached.geometry.footerSurfaceHeight)
+    eq("config.shell.footer.signature_parent", shell.footerSignature:GetParent(),
+        shell.footerContactGroup)
+    eq("config.shell.footer.signature_text", shell.footerSignature:GetText(), "Made with")
+    eq("config.shell.footer.signature_mouse_passthrough",
+        shell.footerSignature:IsMouseEnabled(), false)
+    eq("config.shell.footer.heart_parent", shell.footerHeart:GetParent(),
+        shell.footerContactGroup)
+    eq("config.shell.footer.heart_text", shell.footerHeart:GetText(), "♥")
+    eq("config.shell.footer.heart_font", shell.footerHeart.font, "Fonts\\ARIALN.TTF")
+    assertRGBA("config.shell.footer.heart_color", shell.footerHeart.textColor,
+        detached.colors.danger[1], detached.colors.danger[2],
+        detached.colors.danger[3], detached.colors.danger[4])
+    eq("config.shell.footer.contact_parent", shell.contactButton:GetParent(),
+        shell.footerContactGroup)
+    eq("config.shell.footer.contact_width", shell.contactButton:GetWidth(), 104)
+    eq("config.shell.footer.contact_height", shell.contactButton:GetHeight(),
+        detached.geometry.minHitTarget)
+    eq("config.shell.footer.contact_role", shell.contactButton.statsProButtonRole, "field")
     eq("config.shell.footer.reset_role", shell.resetButton.statsProButtonRole, "destructive")
     eq("config.shell.footer.close_role", shell.closeButton.statsProButtonRole, "primary")
 
@@ -8550,6 +8596,40 @@ do
     assertRGBA("config.shell.close.normal_border", shell.closeButton.backdropBorderColor,
         detached.colors.accentMuted[1], detached.colors.accentMuted[2],
         detached.colors.accentMuted[3], detached.colors.accentMuted[4])
+
+    local contactDBBefore = deepCopy(shellEnv.StatsProDB)
+    userInteract("config.shell.footer.contact_hover", shell.contactButton, "OnEnter")
+    eq("config.shell.footer.contact_tooltip_owner", shellEnv.GameTooltip:GetOwner(),
+        shell.contactButton)
+    eq("config.shell.footer.contact_tooltip_title", shellEnv.GameTooltip.lines[1].left,
+        "Contact")
+    eq("config.shell.footer.contact_tooltip_detail", shellEnv.GameTooltip.lines[2].left,
+        "Click to copy the project contact link.")
+    userInteract("config.shell.footer.contact_leave", shell.contactButton, "OnLeave")
+    userInteract("config.shell.footer.contact_click", shell.contactButton, "OnClick")
+    local contactPopup = exists("config.shell.footer.contact_popup", shellEnv.__lastStaticPopup)
+    eq("config.shell.footer.contact_popup_key", contactPopup.key,
+        "STATSPRO_COPY_CONTACT_LINK")
+    eq("config.shell.footer.contact_popup_message", contactPopup.textArg1,
+        "StatsPro — Contact\nCopy the link below (Ctrl+C).")
+    eq("config.shell.footer.contact_popup_url", contactPopup.data.url,
+        "https://github.com/Antrakt92/StatsPro/issues")
+    eq("config.shell.footer.contact_editbox_url", contactPopup.EditBox:GetText(),
+        "https://github.com/Antrakt92/StatsPro/issues")
+    eq("config.shell.footer.contact_editbox_selected", contactPopup.EditBox.highlightedText,
+        "https://github.com/Antrakt92/StatsPro/issues")
+    eq("config.shell.footer.contact_editbox_focus", contactPopup.EditBox:HasFocus(), true)
+    eq("config.shell.footer.contact_popup_close_label", contactPopup.definition.button1, "Close")
+    contactPopup.definition.EditBoxOnEnterPressed(contactPopup:GetEditBox())
+    eq("config.shell.footer.contact_enter_hides_popup", contactPopup:IsShown(), false)
+    userInteract("config.shell.footer.contact_reopen", shell.contactButton, "OnClick")
+    contactPopup = exists("config.shell.footer.contact_popup_reopened", shellEnv.__lastStaticPopup)
+    config:Hide()
+    eq("config.shell.footer.contact_config_hide_closes_popup",
+        shellEnv.__lastStaticPopup, nil)
+    assertDeepEqual("config.shell.footer.contact_zero_writes", shellEnv.StatsProDB,
+        contactDBBefore)
+    config:Show()
 
     callScript("config.shell.drag.start", config, "OnDragStart")
     eq("config.shell.drag.start_count", config.startMovingCalls, 1)

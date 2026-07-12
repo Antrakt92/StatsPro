@@ -10,6 +10,7 @@
 - **SwiftStats import now creates an independent profile for the current character and spec.** `/ss reset` resets only the active profile, while `/ss wipe` and `/ss reset all` explicitly reset all StatsPro data.
 - **Five appearance presets—Classic, Clean Dark, Midnight, Monochrome, and High Contrast—support live preview, Apply, and Cancel without changing layout, visible stats, language, or assignments.**
 - **When frames are unlocked, opening Settings shows clear panel outlines and drag handles outside combat, making panel placement easier.**
+- **Settings now keeps a subtle localized “Made with ♥” signature visible and provides a neutral Contact action for copying the project issue link.**
 
 ### Improved
 

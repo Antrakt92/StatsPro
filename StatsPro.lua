@@ -7,6 +7,10 @@ addon.fontRuntime = {}
 addon.panelEditRuntime = { requested = false }
 addon.resetRuntime = { pending = nil }
 addon.wipeRuntime = { pending = nil }
+addon.contactLink = {
+    popupKey = "STATSPRO_COPY_CONTACT_LINK",
+    url = "https://github.com/Antrakt92/StatsPro/issues",
+}
 addon.durabilityRuntime = {
     generation = 0,
     attemptedGeneration = nil,
@@ -1150,6 +1154,9 @@ local LABELS_BY_LOCALE = {
         ["All StatsPro data reset to defaults."] = "All StatsPro data reset to defaults.",
         -- Buttons + title:
         ["Reset to Defaults"] = "Reset to Defaults", ["Close"] = "Close",
+        ["Made with"] = "Made with", ["Contact"] = "Contact",
+        ["Click to copy the project contact link."] = "Click to copy the project contact link.",
+        ["Copy the link below (Ctrl+C)."] = "Copy the link below (Ctrl+C).",
         ["Open Settings"] = "Open Settings", ["Settings"] = "Settings",
         ["Profile:"] = "Profile:", ["Manage"] = "Manage", ["Profile Manager"] = "Profile Manager",
         ["Automatic - %s / %s"] = "Automatic - %s / %s", ["Shared by %d specs"] = "Shared by %d specs",
@@ -1296,6 +1303,9 @@ local LABELS_BY_LOCALE = {
         ["All StatsPro data reset to defaults."] = "Все данные StatsPro сброшены до значений по умолчанию.",
         -- Buttons + title:
         ["Reset to Defaults"] = "Сбросить настройки", ["Close"] = "Закрыть",
+        ["Made with"] = "С любовью", ["Contact"] = "Связаться",
+        ["Click to copy the project contact link."] = "Нажмите, чтобы скопировать ссылку для связи с проектом.",
+        ["Copy the link below (Ctrl+C)."] = "Скопируйте ссылку ниже (Ctrl+C).",
         ["Open Settings"] = "Открыть настройки", ["Settings"] = "Настройки",
         ["Profile:"] = "Профиль:", ["Manage"] = "Управление", ["Profile Manager"] = "Управление профилями",
         ["Automatic - %s / %s"] = "Автоматически — %s / %s", ["Shared by %d specs"] = "Общий для специализаций: %d",
@@ -1436,6 +1446,9 @@ local LABELS_BY_LOCALE = {
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "Alle StatsPro-Daten zurücksetzen? Dadurch werden dauerhaft alle Profile, Charakter- und Spezialisierungszuweisungen, Rollenvorlagen, Kontoeinstellungen und gespeicherten Positionen entfernt. SwiftStats-Daten bleiben unverändert.",
         ["All StatsPro data reset to defaults."] = "Alle StatsPro-Daten wurden auf die Standardwerte zurückgesetzt.",
         ["Reset to Defaults"] = "Auf Standard", ["Close"] = "Schließen",
+        ["Made with"] = "Mit Liebe", ["Contact"] = "Kontakt",
+        ["Click to copy the project contact link."] = "Klicken, um den Kontaktlink des Projekts zu kopieren.",
+        ["Copy the link below (Ctrl+C)."] = "Kopiere den Link unten (Strg+C).",
         ["Open Settings"] = "Einstellungen öffnen", ["Settings"] = "Einstellungen",
         ["Profile:"] = "Profil:", ["Manage"] = "Verwalten", ["Profile Manager"] = "Profilverwaltung",
         ["Automatic - %s / %s"] = "Automatisch – %s / %s", ["Shared by %d specs"] = "Von %d Spezialisierungen geteilt",
@@ -1572,6 +1585,9 @@ local LABELS_BY_LOCALE = {
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "Réinitialiser toutes les données StatsPro ? Cela supprimera définitivement tous les profils, les affectations de personnages et de spécialisations, les modèles de rôle, les paramètres du compte et les positions enregistrées. Les données SwiftStats resteront inchangées.",
         ["All StatsPro data reset to defaults."] = "Toutes les données StatsPro ont été réinitialisées aux valeurs par défaut.",
         ["Reset to Defaults"] = "Par défaut", ["Close"] = "Fermer",
+        ["Made with"] = "Avec amour", ["Contact"] = "Contact",
+        ["Click to copy the project contact link."] = "Cliquez pour copier le lien de contact du projet.",
+        ["Copy the link below (Ctrl+C)."] = "Copiez le lien ci-dessous (Ctrl+C).",
         ["Open Settings"] = "Ouvrir les paramètres", ["Settings"] = "Paramètres",
         ["Profile:"] = "Profil :", ["Manage"] = "Gérer", ["Profile Manager"] = "Gestionnaire de profils",
         ["Automatic - %s / %s"] = "Automatique – %s / %s", ["Shared by %d specs"] = "Partagé par %d spécialisations",
@@ -1709,6 +1725,9 @@ local LABELS_BY_LOCALE = {
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "¿Restablecer todos los datos de StatsPro? Esto eliminará permanentemente todos los perfiles, las asignaciones de personajes y especializaciones, las plantillas de rol, la configuración de la cuenta y las posiciones guardadas. Los datos de SwiftStats no cambiarán.",
         ["All StatsPro data reset to defaults."] = "Todos los datos de StatsPro se restablecieron a los valores predeterminados.",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
+        ["Made with"] = "Con cariño", ["Contact"] = "Contacto",
+        ["Click to copy the project contact link."] = "Haz clic para copiar el enlace de contacto del proyecto.",
+        ["Copy the link below (Ctrl+C)."] = "Copia el enlace de abajo (Ctrl+C).",
         ["Open Settings"] = "Abrir ajustes", ["Settings"] = "Ajustes",
         ["Profile:"] = "Perfil:", ["Manage"] = "Gestionar", ["Profile Manager"] = "Gestor de perfiles",
         ["Automatic - %s / %s"] = "Automático – %s / %s", ["Shared by %d specs"] = "Compartido por %d especializaciones",
@@ -1844,6 +1863,9 @@ local LABELS_BY_LOCALE = {
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "¿Restablecer todos los datos de StatsPro? Esto eliminará permanentemente todos los perfiles, las asignaciones de personajes y especializaciones, las plantillas de rol, los ajustes de la cuenta y las posiciones guardadas. Los datos de SwiftStats no cambiarán.",
         ["All StatsPro data reset to defaults."] = "Todos los datos de StatsPro se restablecieron a los valores predeterminados.",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
+        ["Made with"] = "Con cariño", ["Contact"] = "Contacto",
+        ["Click to copy the project contact link."] = "Haz clic para copiar el enlace de contacto del proyecto.",
+        ["Copy the link below (Ctrl+C)."] = "Copia el enlace de abajo (Ctrl+C).",
         ["Open Settings"] = "Abrir configuración", ["Settings"] = "Configuración",
         ["Profile:"] = "Perfil:", ["Manage"] = "Administrar", ["Profile Manager"] = "Administrador de perfiles",
         ["Automatic - %s / %s"] = "Automático – %s / %s", ["Shared by %d specs"] = "Compartido por %d especializaciones",
@@ -1980,6 +2002,9 @@ local LABELS_BY_LOCALE = {
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "Ripristinare tutti i dati di StatsPro? Verranno rimossi definitivamente tutti i profili, le assegnazioni di personaggi e specializzazioni, i modelli di ruolo, le impostazioni dell’account e le posizioni salvate. I dati SwiftStats resteranno invariati.",
         ["All StatsPro data reset to defaults."] = "Tutti i dati di StatsPro sono stati ripristinati ai valori predefiniti.",
         ["Reset to Defaults"] = "Predefiniti", ["Close"] = "Chiudi",
+        ["Made with"] = "Con amore", ["Contact"] = "Contatti",
+        ["Click to copy the project contact link."] = "Fai clic per copiare il link di contatto del progetto.",
+        ["Copy the link below (Ctrl+C)."] = "Copia il link qui sotto (Ctrl+C).",
         ["Open Settings"] = "Apri impostazioni", ["Settings"] = "Impostazioni",
         ["Profile:"] = "Profilo:", ["Manage"] = "Gestisci", ["Profile Manager"] = "Gestione profili",
         ["Automatic - %s / %s"] = "Automatico – %s / %s", ["Shared by %d specs"] = "Condiviso da %d specializzazioni",
@@ -2115,6 +2140,9 @@ local LABELS_BY_LOCALE = {
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "Redefinir todos os dados do StatsPro? Isso removerá permanentemente todos os perfis, as atribuições de personagens e especializações, os modelos de função, as configurações da conta e as posições salvas. Os dados do SwiftStats permanecerão inalterados.",
         ["All StatsPro data reset to defaults."] = "Todos os dados do StatsPro foram redefinidos para os padrões.",
         ["Reset to Defaults"] = "Restaurar", ["Close"] = "Fechar",
+        ["Made with"] = "Com carinho", ["Contact"] = "Contato",
+        ["Click to copy the project contact link."] = "Clique para copiar o link de contato do projeto.",
+        ["Copy the link below (Ctrl+C)."] = "Copie o link abaixo (Ctrl+C).",
         ["Open Settings"] = "Abrir configurações", ["Settings"] = "Configurações",
         ["Profile:"] = "Perfil:", ["Manage"] = "Gerenciar", ["Profile Manager"] = "Gerenciador de perfis",
         ["Automatic - %s / %s"] = "Automático – %s / %s", ["Shared by %d specs"] = "Compartilhado por %d especializações",
@@ -2257,6 +2285,9 @@ local LABELS_BY_LOCALE = {
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "모든 StatsPro 데이터를 초기화하시겠습니까? 모든 프로필, 캐릭터 및 전문화 할당, 역할 템플릿, 계정 설정, 저장된 위치가 영구적으로 삭제됩니다. SwiftStats 데이터는 변경되지 않습니다.",
         ["All StatsPro data reset to defaults."] = "모든 StatsPro 데이터를 기본값으로 초기화했습니다.",
         ["Reset to Defaults"] = "기본값", ["Close"] = "닫기",
+        ["Made with"] = "사랑을 담아", ["Contact"] = "문의",
+        ["Click to copy the project contact link."] = "프로젝트 문의 링크를 복사하려면 클릭하세요.",
+        ["Copy the link below (Ctrl+C)."] = "아래 링크를 복사하세요 (Ctrl+C).",
         ["Open Settings"] = "설정 열기", ["Settings"] = "설정",
         ["Profile:"] = "프로필:", ["Manage"] = "관리", ["Profile Manager"] = "프로필 관리",
         ["Automatic - %s / %s"] = "자동 – %s / %s", ["Shared by %d specs"] = "전문화 %d개에서 공유",
@@ -2392,6 +2423,9 @@ local LABELS_BY_LOCALE = {
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "要重置所有 StatsPro 数据吗？这将永久删除所有配置、角色和专精分配、职责模板、账号设置及保存的位置。SwiftStats 数据不会更改。",
         ["All StatsPro data reset to defaults."] = "所有 StatsPro 数据已重置为默认值。",
         ["Reset to Defaults"] = "恢复默认", ["Close"] = "关闭",
+        ["Made with"] = "用心制作", ["Contact"] = "联系",
+        ["Click to copy the project contact link."] = "点击复制项目联系链接。",
+        ["Copy the link below (Ctrl+C)."] = "复制下方链接（Ctrl+C）。",
         ["Open Settings"] = "打开设置", ["Settings"] = "设置",
         ["Profile:"] = "配置：", ["Manage"] = "管理", ["Profile Manager"] = "配置管理",
         ["Automatic - %s / %s"] = "自动 – %s / %s", ["Shared by %d specs"] = "被 %d 个专精共享",
@@ -2527,6 +2561,9 @@ local LABELS_BY_LOCALE = {
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "要重設所有 StatsPro 資料嗎？這將永久刪除所有設定檔、角色與專精指派、職責範本、帳號設定和已儲存的位置。SwiftStats 資料不會變更。",
         ["All StatsPro data reset to defaults."] = "所有 StatsPro 資料已重設為預設值。",
         ["Reset to Defaults"] = "恢復預設", ["Close"] = "關閉",
+        ["Made with"] = "用心製作", ["Contact"] = "聯絡",
+        ["Click to copy the project contact link."] = "點擊複製專案聯絡連結。",
+        ["Copy the link below (Ctrl+C)."] = "複製下方連結（Ctrl+C）。",
         ["Open Settings"] = "開啟設定", ["Settings"] = "設定",
         ["Profile:"] = "設定檔：", ["Manage"] = "管理", ["Profile Manager"] = "設定檔管理",
         ["Automatic - %s / %s"] = "自動 – %s / %s", ["Shared by %d specs"] = "由 %d 個專精共用",
@@ -9958,6 +9995,49 @@ function addon.legacyImport.CancelPending()
     addon.legacyImport.pending = nil
 end
 
+function addon.contactLink.Tooltip()
+    return L("Contact"), L("Click to copy the project contact link.")
+end
+
+_G.StaticPopupDialogs[addon.contactLink.popupKey] = {
+    text = "%s",
+    button1 = "",
+    hasEditBox = true,
+    editBoxWidth = 340,
+    OnShow = function(self, data)
+        if type(data) ~= "table" or data.url ~= addon.contactLink.url then
+            self:Hide()
+            return
+        end
+        local editBox = self:GetEditBox()
+        editBox:SetText(data.url)
+        editBox:HighlightText()
+        editBox:SetFocus()
+    end,
+    EditBoxOnEnterPressed = function(editBox)
+        editBox:GetParent():Hide()
+    end,
+    EditBoxOnEscapePressed = function(editBox)
+        editBox:GetParent():Hide()
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    exclusive = true,
+    preferredIndex = 3,
+}
+
+function addon.contactLink.Show()
+    local definition = _G.StaticPopupDialogs[addon.contactLink.popupKey]
+    definition.button1 = L("Close")
+    pcall(_G.StaticPopup_Hide, addon.contactLink.popupKey)
+    local message = "StatsPro — " .. L("Contact") .. "\n"
+        .. L("Copy the link below (Ctrl+C).")
+    local ok, popup = pcall(_G.StaticPopup_Show,
+        addon.contactLink.popupKey, message, nil, { url = addon.contactLink.url })
+    return ok and popup ~= nil
+end
+
 _G.StaticPopupDialogs["STATSPRO_IMPORT_SWIFTSTATS"] = {
     text = "",
     button1 = "",
@@ -11705,6 +11785,7 @@ function addon:OpenConfigMenu()
     configFrame:HookScript("OnHide", function()
         self.panelEditRuntime.SetRequested(false)
         self.appearancePresets.ForceCancelPreview()
+        pcall(_G.StaticPopup_Hide, self.contactLink.popupKey)
         CloseDropDownMenus()  -- closes any active Blizzard dropdown; fires its OnHide → CancelLanguagePreview
         if StatsProCloseColorPicker then StatsProCloseColorPicker() end
         if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
@@ -11790,6 +11871,40 @@ function addon:OpenConfigMenu()
     closeBtn:SetSize(shellGeometry.closeButtonWidth, shellGeometry.shellButtonHeight)
     PushLocalizedLabel(function() closeBtn:SetText(L("Close")) end)
     closeBtn:SetScript("OnClick", function() configFrame:Hide() end)
+
+    local footerContactGroup = CreateFrame("Frame", nil, configFrame)
+    footerContactGroup:SetPoint("LEFT", resetBtn, "RIGHT", 0, 0)
+    footerContactGroup:SetPoint("RIGHT", closeBtn, "LEFT", 0, 0)
+    footerContactGroup:SetPoint("BOTTOM", configFrame, "BOTTOM", 0,
+        shellGeometry.footerSurfaceInset)
+    footerContactGroup:SetHeight(shellGeometry.footerSurfaceHeight)
+
+    local footerSignature = footerContactGroup:CreateFontString(nil, "OVERLAY")
+    self.settingsDesign.ApplyTextRole(footerSignature, "controlMetadata")
+    footerSignature:SetPoint("BOTTOMRIGHT", footerContactGroup, "BOTTOM", -2, 35)
+    footerSignature:SetSize(58, 12)
+    footerSignature:SetJustifyH("RIGHT")
+    footerSignature:SetWordWrap(false)
+    footerSignature:SetMaxLines(1)
+    PushLocalizedLabel(function() footerSignature:SetText(L("Made with")) end)
+
+    local footerHeart = footerContactGroup:CreateFontString(nil, "OVERLAY")
+    if not footerHeart:SetFont("Fonts\\ARIALN.TTF", 10, "OUTLINE") then
+        RegisterConfigFont(footerHeart, 10, "OUTLINE")
+    end
+    footerHeart:SetPoint("BOTTOMLEFT", footerContactGroup, "BOTTOM", 2, 35)
+    footerHeart:SetSize(12, 12)
+    footerHeart:SetJustifyH("LEFT")
+    footerHeart:SetText("♥")
+    self.settingsDesign.SetRegionColor(footerHeart, "danger")
+
+    local contactButton = self.settingsDesign.CreateShellButton(
+        footerContactGroup, "StatsProContactLinkButton", "field", "controlMetadata")
+    contactButton:SetPoint("BOTTOM", footerContactGroup, "BOTTOM", 0, 8)
+    contactButton:SetSize(104, shellGeometry.minHitTarget)
+    PushLocalizedLabel(function() contactButton:SetText(L("Contact")) end)
+    self.settingsDesign.AttachTooltip(contactButton, self.contactLink.Tooltip)
+    contactButton:SetScript("OnClick", self.contactLink.Show)
 
     --[[ ===== ScrollFrame for tab content ===== ]]
     local viewportSurface = self.settingsDesign.CreateTextureSurface(configFrame, "viewport")
@@ -11877,6 +11992,10 @@ function addon:OpenConfigMenu()
             footer = footerSurface,
             resetButton = resetBtn,
             closeButton = closeBtn,
+            footerContactGroup = footerContactGroup,
+            footerSignature = footerSignature,
+            footerHeart = footerHeart,
+            contactButton = contactButton,
         }
     end
 

@@ -7747,7 +7747,7 @@ end
 
 do
     local function assertLocalizedCheckboxGuards(locale)
-        local guardEnv, guardAddon = loadStatsPro("enUS", {
+        local guardEnv, guardAddon, guardTest = loadStatsPro("enUS", {
             statsProDB = { forceLocale = locale },
         })
         fireEvent("config.checkbox_label_guard." .. locale .. ".fire", guardEnv, "PLAYER_ENTERING_WORLD")
@@ -7771,7 +7771,7 @@ do
         }) do
             local label = exists("config.checkbox_label_guard." .. locale .. "." .. name .. ".width", guardEnv[name])
             check("config.checkbox_label_guard." .. locale .. "." .. name .. ".width_cap",
-                label.width <= 160,
+                label.width <= 146,
                 "color checkbox label width exceeds cap")
         end
 
@@ -7784,9 +7784,43 @@ do
             worstSlotLabel:GetStringWidth() <= worstSlotLabel:GetWidth(),
             "localized Worst Slot label exceeds its full-row width")
         eq("config.checkbox_label_guard." .. locale .. ".two_column_width.offensive",
-            guardEnv.StatsProOffensiveCheckText:GetWidth(), 200)
+            guardEnv.StatsProOffensiveCheckText:GetWidth(), 176)
         eq("config.checkbox_label_guard." .. locale .. ".two_column_width.hide_zero",
-            guardEnv.StatsProHideZeroOffCheckText:GetWidth(), 200)
+            guardEnv.StatsProHideZeroOffCheckText:GetWidth(), 176)
+
+        local geometry = guardTest.settingsDesignSnapshot().geometry
+        local function controlLeft(control)
+            local point = control.points[1] or {}
+            return #point == 3 and point[2] or point[4] or 0
+        end
+        local function labelRight(control)
+            local _, _, _, gap = control.statsProText:GetPoint()
+            return controlLeft(control) + control:GetWidth() + gap
+                + control.statsProText:GetWidth()
+        end
+        local function swatchRight(control)
+            local swatch = exists("config.checkbox_label_guard." .. locale
+                .. ".swatch", control.statsProSwatch)
+            local _, _, _, swatchGap = swatch:GetPoint()
+            return labelRight(control) + swatchGap + swatch:GetWidth()
+        end
+        local contentRight = geometry.contentWidth - 12
+        local rightPlainX = controlLeft(guardEnv.StatsProHideZeroOffCheck)
+        check("config.checkbox_label_guard." .. locale .. ".plain_columns_separated",
+            labelRight(guardEnv.StatsProOffensiveCheck)
+                <= rightPlainX - geometry.checkboxLabelGap,
+            "left checkbox label enters the right control column")
+        check("config.checkbox_label_guard." .. locale .. ".plain_right_inside_content",
+            labelRight(guardEnv.StatsProHideZeroOffCheck) <= contentRight,
+            "right checkbox label exceeds the content boundary")
+        local rightColorX = controlLeft(guardEnv.StatsProHasteCheck)
+        check("config.checkbox_label_guard." .. locale .. ".swatch_columns_separated",
+            swatchRight(guardEnv.StatsProCritCheck)
+                <= rightColorX - geometry.checkboxLabelGap,
+            "left color swatch enters the right control column")
+        check("config.checkbox_label_guard." .. locale .. ".right_swatch_inside_content",
+            swatchRight(guardEnv.StatsProHasteCheck) <= contentRight,
+            "right color swatch exceeds the content boundary")
     end
 
     for _, locale in ipairs({
@@ -7869,6 +7903,14 @@ do
             local kind = frame.statsProControlKind
             if kind == "checkbox" then
                 local text = exists(prefix .. ".checkbox_text." .. index, frame.statsProText)
+                local point, relativeTo, relativePoint, xOffset, yOffset = text:GetPoint()
+                eq(prefix .. ".checkbox_label_point." .. index, point, "LEFT")
+                eq(prefix .. ".checkbox_label_relative_to_control." .. index,
+                    relativeTo, frame)
+                eq(prefix .. ".checkbox_label_relative_point." .. index,
+                    relativePoint, "RIGHT")
+                eq(prefix .. ".checkbox_label_gap." .. index, xOffset, 6)
+                eq(prefix .. ".checkbox_label_y_offset." .. index, yOffset, 0)
                 check(prefix .. ".checkbox_nonempty." .. index, text:GetText() ~= "")
                 eq(prefix .. ".checkbox_one_line." .. index, text.maxLines, 1)
                 eq(prefix .. ".checkbox_no_wrap." .. index, text.wordWrap, false)
@@ -13204,6 +13246,10 @@ do
     slash("config.control_design.open", env, "")
 
     local tokens = test.settingsDesignSnapshot()
+    eq("config.control_design.checkbox_label_gap", tokens.geometry.checkboxLabelGap, 6)
+    eq("config.control_design.checkbox_label_width", tokens.geometry.checkboxLabelWidth, 176)
+    eq("config.control_design.checkbox_color_label_max_width",
+        tokens.geometry.checkboxColorLabelMaxWidth, 146)
     local controls = test.settingsControlState()
     local counts = {}
     for _, control in ipairs(controls) do

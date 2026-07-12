@@ -30,6 +30,7 @@
 - **Profile dialogs preserve the expected Escape order, and truncated Settings controls expose their full localized text.**
 - **The Appearance tab now removes unused preview space, keeping Typography directly below presets until preview actions are actually needed.**
 - **Profile Manager now shows Blizzard's localized specialization names for offline characters instead of raw numeric spec IDs.**
+- **Checkbox labels now keep a clear visual gap from their checked-state icons throughout Settings.**
 
 ### Updated
 

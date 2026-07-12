@@ -8443,7 +8443,7 @@ local function CreateCheckboxColor(parent, name, label, dbKey, colorKey, x, y, o
         -- Override the 140-bound width with actual text rendering width — swatch needs
         -- to hug the text end, not the right edge of the 140px reservation. Cap the
         -- width so verbose localized labels clip instead of pushing into the next column.
-        text.statsProMaxWidth = 160
+        text.statsProMaxWidth = addon.settingsDesign.tokens.geometry.checkboxColorLabelMaxWidth
         text:SetWidth(math.min(text:GetStringWidth(), text.statsProMaxWidth))
         swatch = CreateColorSwatch(parent, colorKey, 0, 0)
         swatch:ClearAllPoints()
@@ -8629,7 +8629,9 @@ addon.settingsDesign = {
             sectionHeaderHeight = 22, scrollbarGutter = 16,
             scrollbarTrackWidth = 4, scrollbarArrowInset = 18,
             controlRowHeight = 28, controlHitTarget = 24,
-            checkboxLabelWidth = 200, checkboxColorLabelWidth = 140,
+            checkboxLabelGap = 6,
+            checkboxLabelWidth = 176, checkboxColorLabelWidth = 140,
+            checkboxColorLabelMaxWidth = 146,
             swatchSize = 24, swatchWellWidth = 18, swatchWellHeight = 14,
             sliderHeight = 24, sliderWidth = 420, sliderTrackHeight = 4,
             dropdownWidth = 180, dropdownLabelMaxWidth = 210,
@@ -8997,6 +8999,8 @@ end
 function addon.settingsDesign.StyleCheckbox(control, text)
     local geometry = addon.settingsDesign.tokens.geometry
     control:SetSize(geometry.controlHitTarget, geometry.controlHitTarget)
+    text:ClearAllPoints()
+    text:SetPoint("LEFT", control, "RIGHT", geometry.checkboxLabelGap, 0)
     addon.settingsDesign.ApplyTextRole(text, "body")
     local state = control:CreateTexture(nil, "BACKGROUND")
     state:SetAllPoints(control)

@@ -150,6 +150,49 @@ function Get-GitHubReleaseByTag {
     return Select-GitHubReleaseByTag -Releases $releases -ExpectedTag $ExpectedTag
 }
 
+function Wait-GitHubReleaseState {
+    param(
+        [string]$Repository,
+        [string]$ExpectedTag,
+        [int]$Attempts,
+        [scriptblock]$AssertState,
+        [scriptblock]$GetRelease = $null,
+        [scriptblock]$Wait = $null
+    )
+
+    if ($Attempts -lt 1) {
+        throw "Release state attempts must be at least 1."
+    }
+    if ($null -eq $GetRelease) {
+        $GetRelease = {
+            param([string]$RepoName, [string]$TagName)
+            Get-GitHubReleaseByTag -Repository $RepoName -ExpectedTag $TagName
+        }
+    }
+    if ($null -eq $Wait) {
+        $Wait = {
+            param([int]$Seconds)
+            Start-Sleep -Seconds $Seconds
+        }
+    }
+
+    $lastError = $null
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        try {
+            $release = & $GetRelease $Repository $ExpectedTag
+            & $AssertState $release
+            return $release
+        }
+        catch {
+            $lastError = $_
+            if ($attempt -lt $Attempts) {
+                & $Wait ([Math]::Min(30, 5 * $attempt))
+            }
+        }
+    }
+    throw "GitHub release state for $ExpectedTag did not converge after $Attempts attempt(s): $($lastError.Exception.Message)"
+}
+
 function Get-GitHubRemoteTagCommitSha {
     param(
         [string]$Repository,
@@ -956,6 +999,45 @@ function Invoke-SelfTest {
         $prerelease.prerelease = $true
         Assert-PublishedImmutableRelease -Release $prerelease -ExpectedTag $tag
     } "must not be a prerelease"
+
+    $eventualLookup = [pscustomobject]@{ Count = 0 }
+    $eventualWaits = [System.Collections.Generic.List[int]]::new()
+    $eventualDraft = Wait-GitHubReleaseState `
+        -Repository "owner/repo" `
+        -ExpectedTag $tag `
+        -Attempts 3 `
+        -AssertState {
+            param([object]$Release)
+            Assert-DraftRelease -Release $Release -ExpectedTag $tag -ExpectedAssets @()
+        } `
+        -GetRelease {
+            param([string]$Repository, [string]$ExpectedTag)
+            $eventualLookup.Count++
+            if ($eventualLookup.Count -eq 1) {
+                return $null
+            }
+            return $draftEmpty
+        } `
+        -Wait {
+            param([int]$Seconds)
+            $eventualWaits.Add($Seconds)
+        }
+    if ($eventualDraft -ne $draftEmpty -or $eventualLookup.Count -ne 2 -or
+        $eventualWaits.Count -ne 1 -or $eventualWaits[0] -ne 5) {
+        throw "Eventual release visibility retry did not preserve the expected state."
+    }
+    Assert-ThrowsMatch "release visibility exhaustion rejected" {
+        [void](Wait-GitHubReleaseState `
+            -Repository "owner/repo" `
+            -ExpectedTag $tag `
+            -Attempts 2 `
+            -AssertState {
+                param([object]$Release)
+                Assert-DraftRelease -Release $Release -ExpectedTag $tag -ExpectedAssets @()
+            } `
+            -GetRelease { param([string]$Repository, [string]$ExpectedTag) return $null } `
+            -Wait { param([int]$Seconds) })
+    } "did not converge after 2 attempt"
     Assert-ThrowsMatch "malformed repository rejected" {
         Assert-RepositoryName "missing-owner"
     } "owner/name"
@@ -1481,8 +1563,14 @@ switch ($Mode) {
         Assert-NoExistingRelease -Release $release -ExpectedTag $ExpectedTag
         Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
         [void](Invoke-Gh -Arguments (Get-CreateDraftGhArguments -Repository $Repository -ExpectedTag $ExpectedTag -NotesPath $notes))
-        $created = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
-        Assert-DraftRelease -Release $created -ExpectedTag $ExpectedTag -ExpectedAssets @()
+        [void](Wait-GitHubReleaseState `
+            -Repository $Repository `
+            -ExpectedTag $ExpectedTag `
+            -Attempts $AttestationAttempts `
+            -AssertState {
+                param([object]$Release)
+                Assert-DraftRelease -Release $Release -ExpectedTag $ExpectedTag -ExpectedAssets @()
+            })
         Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
         Write-Host "Draft release marker created for $ExpectedTag."
     }
@@ -1491,8 +1579,18 @@ switch ($Mode) {
         $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
         Assert-DraftRelease -Release $release -ExpectedTag $ExpectedTag -ExpectedAssets @()
         [void](Invoke-Gh -Arguments (Get-AttachAssetsGhArguments -Repository $Repository -ExpectedTag $ExpectedTag -ArchivePath $paths.Archive -ReleaseJsonPath $paths.ReleaseJson))
-        $updated = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
-        Assert-DraftAssetsMatchLocalFiles -Release $updated -ExpectedTag $ExpectedTag -ArchivePath $paths.Archive -ReleaseJsonPath $paths.ReleaseJson
+        [void](Wait-GitHubReleaseState `
+            -Repository $Repository `
+            -ExpectedTag $ExpectedTag `
+            -Attempts $AttestationAttempts `
+            -AssertState {
+                param([object]$Release)
+                Assert-DraftAssetsMatchLocalFiles `
+                    -Release $Release `
+                    -ExpectedTag $ExpectedTag `
+                    -ArchivePath $paths.Archive `
+                    -ReleaseJsonPath $paths.ReleaseJson
+            })
         Write-Host "Validated release assets attached to draft $ExpectedTag."
     }
     "Publish" {

@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.10.1 - 12-Jul-2026 — Profiles, presets, and Settings overhaul
+## 1.10.2 - 12-Jul-2026 — Profiles, presets, and Settings overhaul
 
 ### Added
 

@@ -7766,6 +7766,12 @@ do
         eq(prefix .. ".preset_note_height", presetUI.note:GetHeight(), 52)
         eq(prefix .. ".preset_warning_width", presetUI.warning:GetWidth(), 426)
         eq(prefix .. ".preset_warning_height", presetUI.warning:GetHeight(), 36)
+        local _, _, _, _, compactBodyY = presetUI.lowerBody:GetPoint()
+        eq(prefix .. ".preset_compact_body_y", compactBodyY,
+            presetUI.compactBodyTop)
+        eq(prefix .. ".preset_compact_content_height",
+            localeEnv.StatsProConfigFrame.appearanceTab.contentHeight,
+            math.abs(compactBodyY) + presetUI.lowerBody.contentHeight)
 
         for index, frame in ipairs(localeEnv.__frames) do
             local kind = frame.statsProControlKind
@@ -13576,6 +13582,17 @@ do
     eq("appearance.presets.ui.shared_warning_visible", presetUI.warning:IsShown(), true)
     check("appearance.presets.ui.shared_warning_text",
         presetUI.warning:GetText():find("2", 1, true) ~= nil)
+    local _, _, _, _, sharedBodyY = presetUI.lowerBody:GetPoint()
+    eq("appearance.presets.ui.shared_preview_body_y", sharedBodyY,
+        presetUI.warningY - 42 - 32)
+    presetUI.refreshLayout(true, false)
+    local _, _, _, _, unsharedBodyY = presetUI.lowerBody:GetPoint()
+    eq("appearance.presets.ui.unshared_preview_body_y", unsharedBodyY,
+        presetUI.warningY - 32)
+    presetAddon.appearancePresets.RefreshUI()
+    local _, _, _, _, restoredSharedBodyY = presetUI.lowerBody:GetPoint()
+    eq("appearance.presets.ui.shared_preview_layout_restored",
+        restoredSharedBodyY, sharedBodyY)
     presetEnv.StatsProConfigFrame:Hide()
     eq("appearance.presets.ui.config_hide_cancels", service.state().active, false)
     eq("appearance.presets.ui.config_hide_zero_writes",

@@ -9673,6 +9673,7 @@ function addon.appearancePresets.RefreshUI()
         button.statsProActive = session and presetID == displayID or false
         addon.settingsDesign.RefreshControl(button)
     end
+    local warningVisible = false
     if session then
         ui.apply:Show()
         ui.cancel:Show()
@@ -9680,6 +9681,7 @@ function addon.appearancePresets.RefreshUI()
         local counts = addon.profileOps.CountReferences(root,
             addon.dbRuntime.activeProfileID)
         if counts.total > 1 then
+            warningVisible = true
             ui.warning:SetText(string.format(L(
                 "This profile is shared by %d specs and %d other references. Applying changes all of them."),
                 counts.specs, counts.total - counts.specs))
@@ -9693,6 +9695,9 @@ function addon.appearancePresets.RefreshUI()
         ui.cancel:Hide()
         ui.warning:SetText("")
         addon.settingsDesign.SetWarningVisible(ui.warning, false)
+    end
+    if ui.refreshLayout then
+        ui.refreshLayout(session ~= nil, warningVisible)
     end
 end
 
@@ -12085,6 +12090,7 @@ function addon:OpenConfigMenu()
         end)
         presetUI.note = note
         cd.y = cd.y - 58
+        presetUI.compactBodyTop = cd.y
 
         local warning = displayTab:CreateFontString(nil, "OVERLAY")
         warning:SetPoint("TOPLEFT", cd.padX, cd.y)
@@ -12095,6 +12101,7 @@ function addon:OpenConfigMenu()
         self.settingsDesign.StyleWarning(displayTab, warning, "warning")
         self.settingsDesign.SetWarningVisible(warning, false)
         presetUI.warning = warning
+        presetUI.warningY = cd.y
         cd.y = cd.y - 42
 
         local cancel = self.settingsDesign.CreateShellButton(displayTab, nil, "field")
@@ -12121,12 +12128,21 @@ function addon:OpenConfigMenu()
         PushRefresher(self.appearancePresets.RefreshUI)
     end
 
+    -- Hidden preview actions must not reserve a permanent hole in the Appearance tab.
+    -- The lower body moves only when a live preview actually needs actions and, for a
+    -- shared profile, its warning. Keeping the body under one parent preserves every
+    -- Typography/Readability/Localization relative anchor during the reflow.
+    local appearanceBody = CreateFrame("Frame", nil, displayTab)
+    appearanceBody:SetPoint("TOPLEFT", displayTab, "TOPLEFT", 0, 0)
+    appearanceBody:SetPoint("TOPRIGHT", displayTab, "TOPRIGHT", 0, 0)
+    cd = NewCursor(appearanceBody, 12, -4)
+
     -- Typography section: text rendering (font face + size).
     CursorSection(cd, "Typography")
     do
         local rowY = cd.y
 
-        local fontLabel = displayTab:CreateFontString(nil, "OVERLAY")
+        local fontLabel = appearanceBody:CreateFontString(nil, "OVERLAY")
         RegisterConfigFont(fontLabel, CONFIG_FONT_SIZE)
         fontLabel:SetPoint("TOPLEFT", cd.padX, rowY)
         PushLocalizedLabel(function() fontLabel:SetText(L("Font:")) end)
@@ -12192,7 +12208,7 @@ function addon:OpenConfigMenu()
         -- Assignment to forward-declared upvalue (section 15 prelude); language-dropdown
         -- info.func captures fontDropdown / CurrentFontName to sync caption after
         -- MaybeAutoSwitchFont silently changes db.font on a locale switch.
-        fontDropdown = CreateFrame("Frame", "StatsProFontDropdown", displayTab, "UIDropDownMenuTemplate")
+        fontDropdown = CreateFrame("Frame", "StatsProFontDropdown", appearanceBody, "UIDropDownMenuTemplate")
         -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after the Appearance-tab dropdown rows build.
         fontDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
         UIDropDownMenu_SetWidth(fontDropdown, addon.settingsDesign.tokens.geometry.dropdownWidth)
@@ -12520,7 +12536,7 @@ function addon:OpenConfigMenu()
         tinsert(displayDropdownRows, {
             text = fontLabel, dropdown = fontDropdown,
             maxTextWidth = addon.settingsDesign.tokens.geometry.dropdownLabelMaxWidth,
-            dropdownX_base = cd.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = displayTab,
+            dropdownX_base = cd.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = appearanceBody,
         })
 
         -- WHY no text-alignment control: three-column rendering pins labels RIGHT,
@@ -12537,7 +12553,7 @@ function addon:OpenConfigMenu()
     -- step-tick during drag (8→9→...→32 = up to 25 events), intentionally preserving
     -- live visual preview because this control is adjusted rarely but benefits hugely
     -- from immediate feedback.
-    CreateConfigSlider(displayTab, "StatsProFontSlider", "Font Size:", "fontSize", cd,
+    CreateConfigSlider(appearanceBody, "StatsProFontSlider", "Font Size:", "fontSize", cd,
         8, 32, 1, "8", "32", "%d",
         function()
             local applied = self.fontRuntime.applyCommittedTextStyle(
@@ -12549,7 +12565,7 @@ function addon:OpenConfigMenu()
     -- Text Opacity slider — adjust panel text transparency. Stored as INT 25-100 in DB
     -- (matches CreateConfigSlider's format-string contract); cached as float 0.25-1.0
     -- for SetAlpha. Default 100 = zero behavior change for existing users.
-    CreateConfigSlider(displayTab, "StatsProTextAlphaSlider", "Text Opacity:", "textAlpha", cd,
+    CreateConfigSlider(appearanceBody, "StatsProTextAlphaSlider", "Text Opacity:", "textAlpha", cd,
         25, 100, 5, "25%", "100%", "%d%%",
         function(value)
             cached.textAlpha = value / 100
@@ -12559,7 +12575,7 @@ function addon:OpenConfigMenu()
     CursorGap(cd, 4)
     CursorSection(cd, "Readability")
     CreateSimpleDropdownRow(
-        displayTab,
+        appearanceBody,
         displayDropdownRows,
         "StatsProTextOutlineDropdown",
         "Text Outline:",
@@ -12568,7 +12584,7 @@ function addon:OpenConfigMenu()
         self.readabilityConfig.getTextOutlineStyle,
         self.readabilityConfig.selectTextOutlineStyle)
 
-    CreateConfigSlider(displayTab, "StatsProPanelBackgroundSlider", "Panel Background:", "panelBackgroundAlpha", cd,
+    CreateConfigSlider(appearanceBody, "StatsProPanelBackgroundSlider", "Panel Background:", "panelBackgroundAlpha", cd,
         0, 80, 5, "0%", "80%", "%d%%",
         self.readabilityConfig.changePanelBackgroundAlpha)
 
@@ -12581,7 +12597,7 @@ function addon:OpenConfigMenu()
     do
         local rowY = cd.y
 
-        local langLabel = displayTab:CreateFontString(nil, "OVERLAY")
+        local langLabel = appearanceBody:CreateFontString(nil, "OVERLAY")
         RegisterConfigFont(langLabel, CONFIG_FONT_SIZE)
         langLabel:SetPoint("TOPLEFT", cd.padX, rowY)
         PushLocalizedLabel(function() langLabel:SetText(L("Language:")) end)
@@ -12715,7 +12731,7 @@ function addon:OpenConfigMenu()
         self.profileRuntime.previewLanguage = PreviewLanguage
         self.profileRuntime.cancelLanguagePreview = CancelLanguagePreview
 
-        local langDropdown = CreateFrame("Frame", "StatsProLanguageDropdown", displayTab, "UIDropDownMenuTemplate")
+        local langDropdown = CreateFrame("Frame", "StatsProLanguageDropdown", appearanceBody, "UIDropDownMenuTemplate")
         -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after the Appearance-tab dropdown rows build.
         langDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
         UIDropDownMenu_SetWidth(langDropdown, addon.settingsDesign.tokens.geometry.dropdownWidth)
@@ -12797,7 +12813,7 @@ function addon:OpenConfigMenu()
         -- 24 + cd.gap (6) = 30 effective; matches Display Mode dropdown row pattern.
         CursorAdvance(cd, 24)
 
-        local langWarn = displayTab:CreateFontString(nil, "OVERLAY")
+        local langWarn = appearanceBody:CreateFontString(nil, "OVERLAY")
         local langWarnHeight = addon.settingsDesign.tokens.geometry.warningHeight
         RegisterConfigFont(langWarn, 11)
         langWarn:SetPoint("TOPLEFT", cd.padX, cd.y)
@@ -12808,7 +12824,7 @@ function addon:OpenConfigMenu()
         langWarn:SetWordWrap(true)
         langWarn:SetMaxLines(2)
         langWarn:SetText("")
-        addon.settingsDesign.StyleWarning(displayTab, langWarn, "warning")
+        addon.settingsDesign.StyleWarning(appearanceBody, langWarn, "warning")
         if self.__statsproSmoke == true then configFrame.languageWarning = langWarn end
 
         -- Assignment to file-scope upvalue declared in section 15 prelude (NOT a global).
@@ -12845,7 +12861,7 @@ function addon:OpenConfigMenu()
         tinsert(displayDropdownRows, {
             text = langLabel, dropdown = langDropdown,
             maxTextWidth = addon.settingsDesign.tokens.geometry.dropdownLabelMaxWidth,
-            dropdownX_base = cd.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = displayTab,
+            dropdownX_base = cd.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = appearanceBody,
         })
     end
 
@@ -12854,8 +12870,52 @@ function addon:OpenConfigMenu()
     -- automatically widen or shrink the column.
     AlignSwatchColumn(displayDropdownRows, CONFIG_DROPDOWN_GAP)
 
-    displayTab.contentHeight = CursorUsed(cd)
-    displayTab:SetHeight(displayTab.contentHeight)
+    appearanceBody.contentHeight = CursorUsed(cd)
+    appearanceBody:SetHeight(appearanceBody.contentHeight)
+    -- SYNC: shell/localization verification reads the tab-level section registry.
+    -- The movable body owns these surfaces visually, but the tab remains their logical
+    -- settings section owner.
+    for _, section in ipairs(appearanceBody.statsProSections or {}) do
+        tinsert(displayTab.statsProSections, section)
+    end
+    do
+        local presetUI = self.appearancePresets.ui
+        local cancel = presetUI and presetUI.cancel
+        local apply = presetUI and presetUI.apply
+        local warningY = presetUI and presetUI.warningY
+        local compactBodyTop = presetUI and presetUI.compactBodyTop
+        if not presetUI or not cancel or not apply
+            or type(warningY) ~= "number" or type(compactBodyTop) ~= "number" then
+            error("StatsPro appearance preset layout is incomplete")
+        end
+        presetUI.lowerBody = appearanceBody
+        presetUI.refreshLayout = function(hasSession, warningVisible)
+            local actionY = warningY
+            if hasSession and warningVisible then
+                actionY = actionY - 42
+            end
+
+            cancel:ClearAllPoints()
+            cancel:SetPoint("TOPRIGHT", displayTab, "TOPRIGHT", -140, actionY)
+            apply:ClearAllPoints()
+            apply:SetPoint("TOPRIGHT", displayTab, "TOPRIGHT", -12, actionY)
+
+            local bodyTop = compactBodyTop
+            if hasSession then
+                bodyTop = actionY - 32
+            end
+            appearanceBody:ClearAllPoints()
+            appearanceBody:SetPoint("TOPLEFT", displayTab, "TOPLEFT", 0, bodyTop)
+            appearanceBody:SetPoint("TOPRIGHT", displayTab, "TOPRIGHT", 0, bodyTop)
+
+            displayTab.contentHeight = math.abs(bodyTop) + appearanceBody.contentHeight
+            displayTab:SetHeight(displayTab.contentHeight)
+            if configFrame.activeTabIndex == 3 then
+                scrollChild:SetHeight(displayTab.contentHeight)
+            end
+        end
+        self.appearancePresets.RefreshUI()
+    end
 
     --[[ ===== STATS TAB ===== ]]
     local cs = NewCursor(statsTab, 12, -8)

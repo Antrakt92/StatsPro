@@ -26,6 +26,7 @@
 - **Color previews no longer interfere with another addon's picker or persist when cancelled, closing Settings, reloading, or logging out.**
 - **Newer-schema SavedVariables remain inspectable but read-only, preventing an older StatsPro build from overwriting newer data.**
 - **Profile dialogs preserve the expected Escape order, and truncated Settings controls expose their full localized text.**
+- **The Appearance tab now removes unused preview space, keeping Typography directly below presets until preview actions are actually needed.**
 
 ### Updated
 

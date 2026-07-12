@@ -141,7 +141,7 @@ function Get-CommitBump {
             $hasMinor = $true
             continue
         }
-        if ($subject -match "^(fix|perf|refactor|chore|ci|docs|style|test)(?:\([^)]+\))?:") {
+        if ($subject -match "^(fix|perf|refactor|chore|ci|docs|style|test|revert)(?:\([^)]+\))?:") {
             continue
         }
         $unknownSubjects += $subject
@@ -150,7 +150,7 @@ function Get-CommitBump {
         throw (
             "Cannot derive SemVer bump from non-conventional commit subject(s): " +
             ($unknownSubjects -join "; ") +
-            ". Use feat/fix/perf/refactor/chore/ci/docs/style/test or an explicit breaking marker."
+            ". Use feat/fix/perf/refactor/chore/ci/docs/style/test/revert or an explicit breaking marker."
         )
     }
     if ($hasMinor) {
@@ -515,6 +515,10 @@ function Invoke-SelfTest {
         $ciBump = Get-CommitBump -CommitRecords @("ci: update workflow action")
         if ($ciBump -ne "patch") {
             throw "ci prefix should require patch bump, got $ciBump."
+        }
+        $revertBump = Get-CommitBump -CommitRecords @("revert(config): remove a feature safely")
+        if ($revertBump -ne "patch") {
+            throw "revert prefix should require patch bump, got $revertBump."
         }
     }
     finally {

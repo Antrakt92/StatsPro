@@ -8569,10 +8569,17 @@ do
         detached.geometry.manageWidth)
     eq("config.shell.profile.button_height", shellEnv.StatsProActiveProfileButton:GetHeight(),
         detached.geometry.minHitTarget)
-    eq("config.shell.footer.reset_height", shell.resetButton:GetHeight(),
-        detached.geometry.shellButtonHeight)
-    eq("config.shell.footer.reset_width", shell.resetButton:GetWidth(),
-        detached.geometry.resetButtonWidth)
+    eq("config.shell.profile.reset_parent", shell.resetButton:GetParent(), shell.profileHeader)
+    eq("config.shell.profile.reset_height", shell.resetButton:GetHeight(),
+        detached.geometry.minHitTarget)
+    eq("config.shell.profile.reset_width", shell.resetButton:GetWidth(),
+        detached.geometry.manageWidth)
+    eq("config.shell.profile.reset_anchor", shell.resetButton.points[1][2],
+        shellEnv.StatsProManageProfilesButton)
+    eq("config.shell.profile.reset_relative_point", shell.resetButton.points[1][3],
+        "BOTTOMLEFT")
+    eq("config.shell.profile.reset_gap", shell.resetButton.points[1][5],
+        -detached.geometry.profileActionGap)
     eq("config.shell.footer.close_height", shell.closeButton:GetHeight(),
         detached.geometry.shellButtonHeight)
     eq("config.shell.footer.close_width", shell.closeButton:GetWidth(),
@@ -8598,7 +8605,7 @@ do
     eq("config.shell.footer.contact_height", shell.contactButton:GetHeight(),
         detached.geometry.minHitTarget)
     eq("config.shell.footer.contact_role", shell.contactButton.statsProButtonRole, "field")
-    eq("config.shell.footer.reset_role", shell.resetButton.statsProButtonRole, "destructive")
+    eq("config.shell.profile.reset_role", shell.resetButton.statsProButtonRole, "destructive")
     eq("config.shell.footer.close_role", shell.closeButton.statsProButtonRole, "primary")
 
     local selectedTabs = 0
@@ -8860,7 +8867,8 @@ do
         geometry.footerButtonBottom >= geometry.footerSurfaceInset and buttonTop <= footerTop)
     check("config.live_resize.minimum.scroll_above_footer", geometry.scrollBottom >= footerTop)
     eq("config.live_resize.minimum.footer_parent", shell.footer:GetParent(), config)
-    eq("config.live_resize.minimum.reset_parent", shell.resetButton:GetParent(), config)
+    eq("config.live_resize.minimum.reset_parent", shell.resetButton:GetParent(),
+        shell.profileHeader)
     eq("config.live_resize.minimum.close_parent", shell.closeButton:GetParent(), config)
 
     local stableHeight = config:GetHeight()
@@ -10545,11 +10553,11 @@ do
     eq("profiles.ui.minimum.manager_width", manager:GetWidth(), 620)
     eq("profiles.ui.minimum.manager_height", manager:GetHeight(), 440)
     eq("profiles.ui.minimum.header_top", header.points[1][3], -44)
-    eq("profiles.ui.minimum.header_height", header:GetHeight(), 48)
-    eq("profiles.ui.minimum.tab_top", config.tabStrip.points[1][3], -100)
-    eq("profiles.ui.minimum.scroll_top", env.StatsProConfigScroll.points[1][3], -140)
+    eq("profiles.ui.minimum.header_height", header:GetHeight(), 64)
+    eq("profiles.ui.minimum.tab_top", config.tabStrip.points[1][3], -116)
+    eq("profiles.ui.minimum.scroll_top", env.StatsProConfigScroll.points[1][3], -156)
     check("profiles.ui.minimum.scroll_viewport_positive",
-        config:GetHeight() - 140 - 66 > 0)
+        config:GetHeight() - 156 - 66 > 0)
 
     local state = profileTest.profileUIState()
     eq("profiles.ui.header.label", state.headerLabel, "Profile:")
@@ -10978,7 +10986,7 @@ do
         "Profile to manage:", "Choose a profile", "Assign to selected context",
         "New from defaults...", "Duplicate profile...", "Rename profile...",
         "Copy settings to assigned profile...", "Swap assignments...",
-        "Reset active profile...", "Delete profile...", "Forget character...",
+        "Reset", "Reset active profile...", "Delete profile...", "Forget character...",
         "Confirm", "Unused", "Unused profile", "New Profile",
         "Choose a replacement profile", "Choose a context",
         "All settings", "Stat and gear settings", "Layout settings",
@@ -11058,7 +11066,7 @@ do
             shellState.shell.titleMetadata:GetStringWidth() <= 320,
             "title metadata approaches the close button")
         eq("profiles.ui.locales.reset_text." .. locale,
-            shellState.shell.resetButton:GetText(), labels["Reset active profile..."])
+            shellState.shell.resetButton:GetText(), labels["Reset"])
         eq("profiles.ui.locales.close_text." .. locale,
             shellState.shell.closeButton:GetText(), labels["Close"])
         check("profiles.ui.locales.manage_fit." .. locale,
@@ -11337,25 +11345,24 @@ end
 do
     local env, addonContext, test, root = makeProfileOpsFixture()
     addonContext:OpenConfigMenu()
-    local footerReset = findFrame("profiles.compat.reset.footer_button", env, function(frame)
-        return frame:GetParent() == env.StatsProConfigFrame
-            and frame:GetName() == nil
-            and frame:GetText() == "Reset active profile..."
-            and type(frame.scripts.OnClick) == "function"
-    end)
+    local headerReset = exists("profiles.compat.reset.header_button",
+        env.StatsProResetActiveProfileButton)
+    eq("profiles.compat.reset.header_parent", headerReset:GetParent(),
+        env.StatsProProfileHeader)
+    eq("profiles.compat.reset.header_text", headerReset:GetText(), "Reset")
     local before = deepCopy(root)
-    callScript("profiles.compat.reset.footer_request", footerReset, "OnClick")
-    eq("profiles.compat.reset.footer_popup", env.__lastStaticPopup.key,
+    callScript("profiles.compat.reset.header_request", headerReset, "OnClick")
+    eq("profiles.compat.reset.header_popup", env.__lastStaticPopup.key,
         "STATSPRO_RESET_ACTIVE_PROFILE")
     local labels = test.registrySnapshot().labelsByLocale.enUS
-    eq("profiles.compat.reset.footer_shared_warning",
+    eq("profiles.compat.reset.header_shared_warning",
         env.__lastStaticPopup.definition.text,
         string.format(
             labels["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."],
             "Tank shared", 3, 2))
-    assertDeepEqual("profiles.compat.reset.footer_request_zero_writes", root, before)
+    assertDeepEqual("profiles.compat.reset.header_request_zero_writes", root, before)
     env.__cancelStaticPopup()
-    assertDeepEqual("profiles.compat.reset.footer_cancel_zero_writes", root, before)
+    assertDeepEqual("profiles.compat.reset.header_cancel_zero_writes", root, before)
 end
 
 do

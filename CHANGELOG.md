@@ -16,6 +16,7 @@
 ### Improved
 
 - **Settings has been rebuilt with a polished three-tab shell, consistent controls, clearer states and tooltips, localized labels, and a responsive footer and scroll area.** It adapts live to resolution or UI-scale changes and keeps long labels reachable.
+- **Reset now sits directly below Manage in the active-profile header, making profile actions easier to find and leaving the footer focused on Contact and Close.**
 - **Archon target hovers remain useful when Midnight restricts live stat values.** They retain target metadata, show a clearly labelled last-known comparison when available, and recover exact comparisons when clean reads return.
 - **Section headers are brighter, cold-combat panel geometry stays readable, and wide-screen panel positions are preserved.**
 

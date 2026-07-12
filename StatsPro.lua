@@ -1174,7 +1174,7 @@ local LABELS_BY_LOCALE = {
         ["Click to copy the project contact link."] = "Click to copy the project contact link.",
         ["Copy the link below (Ctrl+C)."] = "Copy the link below (Ctrl+C).",
         ["Open Settings"] = "Open Settings", ["Settings"] = "Settings",
-        ["Profile:"] = "Profile:", ["Manage"] = "Manage", ["Profile Manager"] = "Profile Manager",
+        ["Profile:"] = "Profile:", ["Manage"] = "Manage", ["Reset"] = "Reset", ["Profile Manager"] = "Profile Manager",
         ["Automatic - %s / %s"] = "Automatic - %s / %s", ["Shared by %d specs"] = "Shared by %d specs",
         ["Switch pending until combat ends"] = "Switch pending until combat ends", ["Account default profile"] = "Account default profile",
         ["Current"] = "Current", ["Active"] = "Active", ["Character default"] = "Character default",
@@ -1323,7 +1323,7 @@ local LABELS_BY_LOCALE = {
         ["Click to copy the project contact link."] = "Нажмите, чтобы скопировать ссылку для связи с проектом.",
         ["Copy the link below (Ctrl+C)."] = "Скопируйте ссылку ниже (Ctrl+C).",
         ["Open Settings"] = "Открыть настройки", ["Settings"] = "Настройки",
-        ["Profile:"] = "Профиль:", ["Manage"] = "Управление", ["Profile Manager"] = "Управление профилями",
+        ["Profile:"] = "Профиль:", ["Manage"] = "Управление", ["Reset"] = "Сброс", ["Profile Manager"] = "Управление профилями",
         ["Automatic - %s / %s"] = "Автоматически — %s / %s", ["Shared by %d specs"] = "Общий для специализаций: %d",
         ["Switch pending until combat ends"] = "Переключение после окончания боя", ["Account default profile"] = "Профиль аккаунта по умолчанию",
         ["Current"] = "Текущий", ["Active"] = "Активно", ["Character default"] = "По умолчанию для персонажа",
@@ -1466,7 +1466,7 @@ local LABELS_BY_LOCALE = {
         ["Click to copy the project contact link."] = "Klicken, um den Kontaktlink des Projekts zu kopieren.",
         ["Copy the link below (Ctrl+C)."] = "Kopiere den Link unten (Strg+C).",
         ["Open Settings"] = "Einstellungen öffnen", ["Settings"] = "Einstellungen",
-        ["Profile:"] = "Profil:", ["Manage"] = "Verwalten", ["Profile Manager"] = "Profilverwaltung",
+        ["Profile:"] = "Profil:", ["Manage"] = "Verwalten", ["Reset"] = "Zurücksetzen", ["Profile Manager"] = "Profilverwaltung",
         ["Automatic - %s / %s"] = "Automatisch – %s / %s", ["Shared by %d specs"] = "Von %d Spezialisierungen geteilt",
         ["Switch pending until combat ends"] = "Wechsel nach Kampfende", ["Account default profile"] = "Standardprofil des Accounts",
         ["Current"] = "Aktuell", ["Active"] = "Aktiv", ["Character default"] = "Charakterstandard",
@@ -1605,7 +1605,7 @@ local LABELS_BY_LOCALE = {
         ["Click to copy the project contact link."] = "Cliquez pour copier le lien de contact du projet.",
         ["Copy the link below (Ctrl+C)."] = "Copiez le lien ci-dessous (Ctrl+C).",
         ["Open Settings"] = "Ouvrir les paramètres", ["Settings"] = "Paramètres",
-        ["Profile:"] = "Profil :", ["Manage"] = "Gérer", ["Profile Manager"] = "Gestionnaire de profils",
+        ["Profile:"] = "Profil :", ["Manage"] = "Gérer", ["Reset"] = "Réinitialiser", ["Profile Manager"] = "Gestionnaire de profils",
         ["Automatic - %s / %s"] = "Automatique – %s / %s", ["Shared by %d specs"] = "Partagé par %d spécialisations",
         ["Switch pending until combat ends"] = "Changement après le combat", ["Account default profile"] = "Profil de compte par défaut",
         ["Current"] = "Actuel", ["Active"] = "Actif", ["Character default"] = "Profil de personnage par défaut",
@@ -1745,7 +1745,7 @@ local LABELS_BY_LOCALE = {
         ["Click to copy the project contact link."] = "Haz clic para copiar el enlace de contacto del proyecto.",
         ["Copy the link below (Ctrl+C)."] = "Copia el enlace de abajo (Ctrl+C).",
         ["Open Settings"] = "Abrir ajustes", ["Settings"] = "Ajustes",
-        ["Profile:"] = "Perfil:", ["Manage"] = "Gestionar", ["Profile Manager"] = "Gestor de perfiles",
+        ["Profile:"] = "Perfil:", ["Manage"] = "Gestionar", ["Reset"] = "Restablecer", ["Profile Manager"] = "Gestor de perfiles",
         ["Automatic - %s / %s"] = "Automático – %s / %s", ["Shared by %d specs"] = "Compartido por %d especializaciones",
         ["Switch pending until combat ends"] = "Cambio al terminar el combate", ["Account default profile"] = "Perfil de cuenta predeterminado",
         ["Current"] = "Actual", ["Active"] = "Activo", ["Character default"] = "Predeterminado del personaje",
@@ -1883,7 +1883,7 @@ local LABELS_BY_LOCALE = {
         ["Click to copy the project contact link."] = "Haz clic para copiar el enlace de contacto del proyecto.",
         ["Copy the link below (Ctrl+C)."] = "Copia el enlace de abajo (Ctrl+C).",
         ["Open Settings"] = "Abrir configuración", ["Settings"] = "Configuración",
-        ["Profile:"] = "Perfil:", ["Manage"] = "Administrar", ["Profile Manager"] = "Administrador de perfiles",
+        ["Profile:"] = "Perfil:", ["Manage"] = "Administrar", ["Reset"] = "Restablecer", ["Profile Manager"] = "Administrador de perfiles",
         ["Automatic - %s / %s"] = "Automático – %s / %s", ["Shared by %d specs"] = "Compartido por %d especializaciones",
         ["Switch pending until combat ends"] = "Cambio al terminar el combate", ["Account default profile"] = "Perfil predeterminado de la cuenta",
         ["Current"] = "Actual", ["Active"] = "Activo", ["Character default"] = "Predeterminado del personaje",
@@ -2022,7 +2022,7 @@ local LABELS_BY_LOCALE = {
         ["Click to copy the project contact link."] = "Fai clic per copiare il link di contatto del progetto.",
         ["Copy the link below (Ctrl+C)."] = "Copia il link qui sotto (Ctrl+C).",
         ["Open Settings"] = "Apri impostazioni", ["Settings"] = "Impostazioni",
-        ["Profile:"] = "Profilo:", ["Manage"] = "Gestisci", ["Profile Manager"] = "Gestione profili",
+        ["Profile:"] = "Profilo:", ["Manage"] = "Gestisci", ["Reset"] = "Ripristina", ["Profile Manager"] = "Gestione profili",
         ["Automatic - %s / %s"] = "Automatico – %s / %s", ["Shared by %d specs"] = "Condiviso da %d specializzazioni",
         ["Switch pending until combat ends"] = "Cambio dopo il combattimento", ["Account default profile"] = "Profilo account predefinito",
         ["Current"] = "Attuale", ["Active"] = "Attivo", ["Character default"] = "Predefinito del personaggio",
@@ -2160,7 +2160,7 @@ local LABELS_BY_LOCALE = {
         ["Click to copy the project contact link."] = "Clique para copiar o link de contato do projeto.",
         ["Copy the link below (Ctrl+C)."] = "Copie o link abaixo (Ctrl+C).",
         ["Open Settings"] = "Abrir configurações", ["Settings"] = "Configurações",
-        ["Profile:"] = "Perfil:", ["Manage"] = "Gerenciar", ["Profile Manager"] = "Gerenciador de perfis",
+        ["Profile:"] = "Perfil:", ["Manage"] = "Gerenciar", ["Reset"] = "Redefinir", ["Profile Manager"] = "Gerenciador de perfis",
         ["Automatic - %s / %s"] = "Automático – %s / %s", ["Shared by %d specs"] = "Compartilhado por %d especializações",
         ["Switch pending until combat ends"] = "Troca após o combate", ["Account default profile"] = "Perfil padrão da conta",
         ["Current"] = "Atual", ["Active"] = "Ativo", ["Character default"] = "Padrão do personagem",
@@ -2305,7 +2305,7 @@ local LABELS_BY_LOCALE = {
         ["Click to copy the project contact link."] = "프로젝트 문의 링크를 복사하려면 클릭하세요.",
         ["Copy the link below (Ctrl+C)."] = "아래 링크를 복사하세요 (Ctrl+C).",
         ["Open Settings"] = "설정 열기", ["Settings"] = "설정",
-        ["Profile:"] = "프로필:", ["Manage"] = "관리", ["Profile Manager"] = "프로필 관리",
+        ["Profile:"] = "프로필:", ["Manage"] = "관리", ["Reset"] = "초기화", ["Profile Manager"] = "프로필 관리",
         ["Automatic - %s / %s"] = "자동 – %s / %s", ["Shared by %d specs"] = "전문화 %d개에서 공유",
         ["Switch pending until combat ends"] = "전투 종료 후 전환", ["Account default profile"] = "계정 기본 프로필",
         ["Current"] = "현재", ["Active"] = "활성", ["Character default"] = "캐릭터 기본값",
@@ -2443,7 +2443,7 @@ local LABELS_BY_LOCALE = {
         ["Click to copy the project contact link."] = "点击复制项目联系链接。",
         ["Copy the link below (Ctrl+C)."] = "复制下方链接（Ctrl+C）。",
         ["Open Settings"] = "打开设置", ["Settings"] = "设置",
-        ["Profile:"] = "配置：", ["Manage"] = "管理", ["Profile Manager"] = "配置管理",
+        ["Profile:"] = "配置：", ["Manage"] = "管理", ["Reset"] = "重置", ["Profile Manager"] = "配置管理",
         ["Automatic - %s / %s"] = "自动 – %s / %s", ["Shared by %d specs"] = "被 %d 个专精共享",
         ["Switch pending until combat ends"] = "战斗结束后切换", ["Account default profile"] = "账号默认配置",
         ["Current"] = "当前", ["Active"] = "激活", ["Character default"] = "角色默认配置",
@@ -2581,7 +2581,7 @@ local LABELS_BY_LOCALE = {
         ["Click to copy the project contact link."] = "點擊複製專案聯絡連結。",
         ["Copy the link below (Ctrl+C)."] = "複製下方連結（Ctrl+C）。",
         ["Open Settings"] = "開啟設定", ["Settings"] = "設定",
-        ["Profile:"] = "設定檔：", ["Manage"] = "管理", ["Profile Manager"] = "設定檔管理",
+        ["Profile:"] = "設定檔：", ["Manage"] = "管理", ["Reset"] = "重設", ["Profile Manager"] = "設定檔管理",
         ["Automatic - %s / %s"] = "自動 – %s / %s", ["Shared by %d specs"] = "由 %d 個專精共用",
         ["Switch pending until combat ends"] = "戰鬥結束後切換", ["Account default profile"] = "帳號預設設定檔",
         ["Current"] = "目前", ["Active"] = "啟用", ["Character default"] = "角色預設設定檔",
@@ -8616,15 +8616,16 @@ addon.settingsDesign = {
             parentHeightRatio = 0.90, outerInset = 12,
             titleSurfaceInset = 5, titleSurfaceHeight = 35, titleHeight = 40,
             titleTextInset = 16, titleTextTop = 11,
-            profileInset = 14, profileTop = 44, profileHeight = 48,
+            profileInset = 14, profileTop = 44, profileHeight = 64,
             profileFieldInset = 68, profileFieldWidth = 286, manageWidth = 100,
-            tabInset = 18, tabTop = 100, tabHeight = 28, tabGap = 4, tabWidth = 152,
-            viewportInset = 12, viewportTop = 136, viewportBottom = 62,
-            scrollLeft = 16, scrollRight = 32, scrollTop = 140, scrollBottom = 66,
+            profileActionGap = 3,
+            tabInset = 18, tabTop = 116, tabHeight = 28, tabGap = 4, tabWidth = 152,
+            viewportInset = 12, viewportTop = 152, viewportBottom = 62,
+            scrollLeft = 16, scrollRight = 32, scrollTop = 156, scrollBottom = 66,
             contentWidth = 450,
             footerSurfaceInset = 5, footerSurfaceHeight = 51, footerHeight = 56,
             footerButtonInset = 18, footerButtonBottom = 14,
-            resetButtonWidth = 240, closeButtonWidth = 100,
+            closeButtonWidth = 100,
             shellButtonHeight = 28, minHitTarget = 24,
             sectionHeaderHeight = 22, scrollbarGutter = 16,
             scrollbarTrackWidth = 4, scrollbarArrowInset = 18,
@@ -9897,7 +9898,7 @@ function addon.appearancePresets.ForceCancelPreview()
     return false
 end
 
--- Footer Reset and /ss reset share the same confirmed, transactional active-profile
+-- Header Reset and /ss reset share the same confirmed, transactional active-profile
 -- operation. The implementation lives on addon.resetRuntime to avoid another broad
 -- closure in this near-limit Lua 5.1 chunk.
 local function ResetToDefaults()
@@ -11301,10 +11302,19 @@ function addon.profileUI.BuildSettingsUI(owner)
     manageButton:SetSize(geometry.manageWidth, geometry.minHitTarget)
     PushLocalizedLabel(function() manageButton:SetText(L("Manage")) end)
 
+    local resetButton = addon.settingsDesign.CreateShellButton(
+        header, "StatsProResetActiveProfileButton", "destructive")
+    resetButton:SetPoint("TOPLEFT", manageButton, "BOTTOMLEFT", 0,
+        -geometry.profileActionGap)
+    resetButton:SetSize(geometry.manageWidth, geometry.minHitTarget)
+    PushLocalizedLabel(function() resetButton:SetText(L("Reset")) end)
+    addon.settingsDesign.RegisterMutationControl(resetButton)
+    resetButton:SetScript("OnClick", function() ResetToDefaults() end)
+
     local subtitle = header:CreateFontString(nil, "OVERLAY")
     addon.settingsDesign.ApplyTextRole(subtitle, "metadata")
-    subtitle:SetPoint("BOTTOMLEFT", 10, 7)
-    subtitle:SetPoint("BOTTOMRIGHT", -10, 7)
+    subtitle:SetPoint("TOPLEFT", 10, -37)
+    subtitle:SetPoint("TOPRIGHT", -(geometry.manageWidth + 18), -37)
     subtitle:SetJustifyH("LEFT")
     subtitle:SetWordWrap(false)
     subtitle:SetMaxLines(1)
@@ -11673,6 +11683,7 @@ function addon.profileUI.BuildSettingsUI(owner)
     end
 
     owner.profileHeader = header
+    owner.profileResetButton = resetButton
     owner.profileManager = manager
     PushLocalizedLabel(function() ui.RefreshSafe() end)
     PushRefresher(ui.RefreshSafe)
@@ -11876,7 +11887,7 @@ function addon:OpenConfigMenu()
     tabsLine:SetHeight(1)
     self.settingsDesign.ApplySeparator(tabsLine)
 
-    --[[ ===== Footer (Reset + Close) ===== ]]
+    --[[ ===== Footer (Contact + Close) ===== ]]
     local footerSurface = self.settingsDesign.CreateTextureSurface(configFrame, "raised")
     footerSurface:SetPoint("BOTTOMLEFT", shellGeometry.footerSurfaceInset,
         shellGeometry.footerSurfaceInset)
@@ -11890,13 +11901,6 @@ function addon:OpenConfigMenu()
     footerLine:SetHeight(1)
     self.settingsDesign.ApplySeparator(footerLine)
 
-    local resetBtn = self.settingsDesign.CreateShellButton(configFrame, nil, "destructive")
-    resetBtn:SetPoint("BOTTOMLEFT", shellGeometry.footerButtonInset,
-        shellGeometry.footerButtonBottom)
-    resetBtn:SetSize(shellGeometry.resetButtonWidth, shellGeometry.shellButtonHeight)
-    PushLocalizedLabel(function() resetBtn:SetText(L("Reset active profile...")) end)
-    self.settingsDesign.RegisterMutationControl(resetBtn)
-
     local closeBtn = self.settingsDesign.CreateShellButton(configFrame, nil, "primary")
     closeBtn:SetPoint("BOTTOMRIGHT", -shellGeometry.footerButtonInset,
         shellGeometry.footerButtonBottom)
@@ -11905,7 +11909,8 @@ function addon:OpenConfigMenu()
     closeBtn:SetScript("OnClick", function() configFrame:Hide() end)
 
     local footerContactGroup = CreateFrame("Frame", nil, configFrame)
-    footerContactGroup:SetPoint("LEFT", resetBtn, "RIGHT", 0, 0)
+    footerContactGroup:SetPoint("LEFT", configFrame, "LEFT",
+        shellGeometry.footerButtonInset, 0)
     footerContactGroup:SetPoint("RIGHT", closeBtn, "LEFT", 0, 0)
     footerContactGroup:SetPoint("BOTTOM", configFrame, "BOTTOM", 0,
         shellGeometry.footerSurfaceInset)
@@ -12022,7 +12027,7 @@ function addon:OpenConfigMenu()
             scroll = scrollFrame,
             scrollChild = scrollChild,
             footer = footerSurface,
-            resetButton = resetBtn,
+            resetButton = configFrame.profileResetButton,
             closeButton = closeBtn,
             footerContactGroup = footerContactGroup,
             footerSignature = footerSignature,
@@ -13241,9 +13246,6 @@ function addon:OpenConfigMenu()
 
     statsTab.contentHeight = CursorUsed(cs)
     statsTab:SetHeight(statsTab.contentHeight)
-
-    --[[ ===== Reset action (in-place widget refresh, no frame rebuild) ===== ]]
-    resetBtn:SetScript("OnClick", function() ResetToDefaults() end)
 
     --[[ ===== Initial state ===== ]]
     self.settingsDesign.RefreshMutationControls()

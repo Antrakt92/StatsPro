@@ -43,8 +43,8 @@ rating and percentage columns stay aligned, and Split mode lets you move selecte
 blocks to a separate panel.
 
 <p align="center">
-  <img src="screenshots/settings-overview-v1.10.2.png" alt="StatsPro Settings with current Stats controls" width="390">
-  <img src="screenshots/layout-settings-v1.10.2.png" alt="StatsPro Layout settings with display mode and panel routing controls" width="390">
+  <img src="screenshots/settings-overview-v1.10.2.jpg" alt="StatsPro Settings with current Stats controls" width="390">
+  <img src="screenshots/layout-settings-v1.10.2.jpg" alt="StatsPro Layout settings with display mode and panel routing controls" width="390">
 </p>
 
 ## Profiles and appearance
@@ -70,8 +70,8 @@ panels are unlocked, Settings shows temporary outlines and drag handles so their
 positions are clear; this editing chrome never becomes part of the saved HUD.
 
 <p align="center">
-  <img src="screenshots/appearance-presets-v1.10.2.png" alt="StatsPro Appearance settings with six presets" width="390">
-  <img src="screenshots/profile-manager-v1.10.2.png" alt="StatsPro Profile Manager for character and specialization assignments" width="390">
+  <img src="screenshots/appearance-presets-v1.10.2.jpg" alt="StatsPro Appearance settings with six presets" width="390">
+  <img src="screenshots/profile-manager-v1.10.2.jpg" alt="StatsPro Profile Manager for character and specialization assignments" width="390">
 </p>
 
 ## Stats and gear rows

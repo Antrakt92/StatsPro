@@ -291,6 +291,15 @@ function Assert-StatsProWorkflowPackageVersionPolicy {
     $checksPath = Join-Path (Join-Path $Root ".github\workflows") "checks.yml"
     $releaseText = Get-Content -LiteralPath $releasePath -Raw -Encoding UTF8
     $checksText = Get-Content -LiteralPath $checksPath -Raw -Encoding UTF8
+    if ($releaseText -match 'steps\.(?:build-package|rebuild-package|publish-package)\.outputs\.' -or
+        $checksText -match 'steps\.package\.outputs\.') {
+        throw "Workflows must not read undeclared outputs directly from the BigWigs Packager action."
+    }
+    if ($checksText -notmatch '(?m)^\s{8}run: \./scripts/resolve-packager-output\.ps1 -OutputPath \$env:GITHUB_OUTPUT\s*$' -or
+        $checksText.IndexOf('STATSPRO_ARCHIVE_PATH: ${{ steps.package-output.outputs.archive_path }}', [System.StringComparison]::Ordinal) -lt 0 -or
+        $checksText.IndexOf('STATSPRO_PROJECT_VERSION: ${{ steps.package-output.outputs.project_version }}', [System.StringComparison]::Ordinal) -lt 0) {
+        throw "checks.yml must resolve the generated Packager artifact before validating it."
+    }
     $releaseCommands = @(Get-StatsProWorkflowCommands -Text $releaseText -ScriptName "check-package-dry-run.ps1")
     $checksCommands = @(Get-StatsProWorkflowCommands -Text $checksText -ScriptName "check-package-dry-run.ps1")
 

@@ -44,6 +44,7 @@ jobs:
           .\scripts\check-curseforge-diagnostics.ps1 -SelfTest
           .\scripts\check-release-artifact.ps1 -SelfTest
           .\scripts\check-package-dry-run.ps1 -SelfTest
+          .\scripts\resolve-packager-output.ps1 -SelfTest
           .\scripts\manage-github-release.ps1 -SelfTest
           .\scripts\check-repository-settings.ps1 -SelfTest
           .\scripts\check-lua.ps1 -SelfTest
@@ -89,11 +90,16 @@ jobs:
         with:
           args: -d
 
+      - name: Resolve package output
+        id: package-output
+        shell: pwsh
+        run: ./scripts/resolve-packager-output.ps1 -OutputPath $env:GITHUB_OUTPUT
+
       - name: Validate package contract
         shell: pwsh
         env:
-          STATSPRO_ARCHIVE_PATH: ${{ steps.package.outputs.archive_path }}
-          STATSPRO_PROJECT_VERSION: ${{ steps.package.outputs.project_version }}
+          STATSPRO_ARCHIVE_PATH: ${{ steps.package-output.outputs.archive_path }}
+          STATSPRO_PROJECT_VERSION: ${{ steps.package-output.outputs.project_version }}
         run: |
           ./scripts/check-package-dry-run.ps1 `
             -ArchivePath $env:STATSPRO_ARCHIVE_PATH `

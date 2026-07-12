@@ -112,11 +112,16 @@ jobs:
         with:
           args: -d
 
+      - name: Resolve initial package output
+        id: build-package-output
+        shell: pwsh
+        run: ./scripts/resolve-packager-output.ps1 -ExpectedTag $env:GITHUB_REF_NAME -OutputPath $env:GITHUB_OUTPUT
+
       - name: Validate package artifact
         shell: pwsh
         env:
-          STATSPRO_ARCHIVE_PATH: ${{ steps.build-package.outputs.archive_path }}
-          STATSPRO_PROJECT_VERSION: ${{ steps.build-package.outputs.project_version }}
+          STATSPRO_ARCHIVE_PATH: ${{ steps.build-package-output.outputs.archive_path }}
+          STATSPRO_PROJECT_VERSION: ${{ steps.build-package-output.outputs.project_version }}
         run: |
           ./scripts/check-package-dry-run.ps1 `
             -ArchivePath $env:STATSPRO_ARCHIVE_PATH `
@@ -138,11 +143,16 @@ jobs:
         with:
           args: -e -d
 
+      - name: Resolve rebuilt package output
+        id: rebuild-package-output
+        shell: pwsh
+        run: ./scripts/resolve-packager-output.ps1 -ExpectedTag $env:GITHUB_REF_NAME -OutputPath $env:GITHUB_OUTPUT
+
       - name: Compare rebuilt package and validate again
         shell: pwsh
         env:
-          STATSPRO_ARCHIVE_PATH: ${{ steps.rebuild-package.outputs.archive_path }}
-          STATSPRO_PROJECT_VERSION: ${{ steps.rebuild-package.outputs.project_version }}
+          STATSPRO_ARCHIVE_PATH: ${{ steps.rebuild-package-output.outputs.archive_path }}
+          STATSPRO_PROJECT_VERSION: ${{ steps.rebuild-package-output.outputs.project_version }}
         run: |
           ./scripts/check-package-dry-run.ps1 `
             -ArchivePath $env:STATSPRO_ARCHIVE_PATH `
@@ -169,8 +179,8 @@ jobs:
       - name: Validate exact package immediately before marketplace upload
         shell: pwsh
         env:
-          STATSPRO_ARCHIVE_PATH: ${{ steps.rebuild-package.outputs.archive_path }}
-          STATSPRO_PROJECT_VERSION: ${{ steps.rebuild-package.outputs.project_version }}
+          STATSPRO_ARCHIVE_PATH: ${{ steps.rebuild-package-output.outputs.archive_path }}
+          STATSPRO_PROJECT_VERSION: ${{ steps.rebuild-package-output.outputs.project_version }}
         run: |
           $head = (git rev-parse HEAD).Trim()
           $tagCommit = (git rev-parse "refs/tags/$env:GITHUB_REF_NAME^{commit}").Trim()
@@ -201,11 +211,16 @@ jobs:
         with:
           args: -c -e -o
 
+      - name: Resolve published package output
+        id: publish-package-output
+        shell: pwsh
+        run: ./scripts/resolve-packager-output.ps1 -ExpectedTag $env:GITHUB_REF_NAME -OutputPath $env:GITHUB_OUTPUT
+
       - name: Validate marketplace archive and create release metadata
         shell: pwsh
         env:
-          STATSPRO_ARCHIVE_PATH: ${{ steps.publish-package.outputs.archive_path }}
-          STATSPRO_PROJECT_VERSION: ${{ steps.publish-package.outputs.project_version }}
+          STATSPRO_ARCHIVE_PATH: ${{ steps.publish-package-output.outputs.archive_path }}
+          STATSPRO_PROJECT_VERSION: ${{ steps.publish-package-output.outputs.project_version }}
         run: |
           $releaseJsonPath = Join-Path ".release" "release.json"
           ./scripts/check-package-dry-run.ps1 `

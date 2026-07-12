@@ -767,6 +767,46 @@ function Assert-ReleaseWorkflowBoundary {
     if (@($allPackagerSteps | Where-Object { $_.Index -lt $credentialStep.Index }).Count -ne 0) {
         throw "Marketplace credential preflight must run before every Packager step."
     }
+    $packagerOutputContracts = @(
+        [pscustomobject]@{
+            PackagerName = "Build package without publishing"
+            ResolverName = "Resolve initial package output"
+            ResolverId = "build-package-output"
+        },
+        [pscustomobject]@{
+            PackagerName = "Rebuild package without publishing"
+            ResolverName = "Resolve rebuilt package output"
+            ResolverId = "rebuild-package-output"
+        },
+        [pscustomobject]@{
+            PackagerName = "Publish package to marketplaces"
+            ResolverName = "Resolve published package output"
+            ResolverId = "publish-package-output"
+        }
+    )
+    if ($allPackagerSteps.Count -ne $packagerOutputContracts.Count) {
+        throw "Release workflow must contain exactly $($packagerOutputContracts.Count) Packager steps; found $($allPackagerSteps.Count)."
+    }
+    foreach ($contract in $packagerOutputContracts) {
+        $packagerMatches = @($allPackagerSteps | Where-Object {
+            (Get-WorkflowStepName -StepBlock $_) -eq $contract.PackagerName
+        })
+        $resolverMatches = @($stepBlocks | Where-Object {
+            (Get-WorkflowStepName -StepBlock $_) -eq $contract.ResolverName
+        })
+        if ($packagerMatches.Count -ne 1 -or $resolverMatches.Count -ne 1) {
+            throw "Release workflow must contain one '$($contract.PackagerName)' step and one '$($contract.ResolverName)' step."
+        }
+        $packagerStep = $packagerMatches[0]
+        $resolverStep = $resolverMatches[0]
+        if ($packagerStep.Index + $packagerStep.Length -ne $resolverStep.Index -or
+            $resolverStep.Value -notmatch "(?m)^\s{8}id: $([regex]::Escape($contract.ResolverId))\s*$" -or
+            $resolverStep.Value -notmatch '(?m)^\s{8}shell: pwsh\s*$' -or
+            $resolverStep.Value -notmatch '(?m)^\s{8}run: \./scripts/resolve-packager-output\.ps1 -ExpectedTag \$env:GITHUB_REF_NAME -OutputPath \$env:GITHUB_OUTPUT\s*$' -or
+            $resolverStep.Value -match '(?m)^\s{8}(?:if|continue-on-error|env|uses|with):') {
+            throw "Packager step '$($contract.PackagerName)' must be followed immediately by its exact artifact-output resolver."
+        }
+    }
     $draftSteps = @($stepBlocks | Where-Object {
         (Get-WorkflowStepName -StepBlock $_) -eq 'Create draft release marker'
     })
@@ -812,8 +852,8 @@ function Assert-ReleaseWorkflowBoundary {
         $preUploadStep.Value -notmatch '(?m)^\s+-RequireExactPackagerProjectVersion\s+\x60\s*$' -or
         $preUploadStep.Value -notmatch "git rev-parse HEAD" -or
         $preUploadStep.Value -notmatch "GITHUB_SHA" -or
-        $preUploadStep.Value.IndexOf('STATSPRO_ARCHIVE_PATH: ${{ steps.rebuild-package.outputs.archive_path }}', [System.StringComparison]::Ordinal) -lt 0 -or
-        $preUploadStep.Value.IndexOf('STATSPRO_PROJECT_VERSION: ${{ steps.rebuild-package.outputs.project_version }}', [System.StringComparison]::Ordinal) -lt 0) {
+        $preUploadStep.Value.IndexOf('STATSPRO_ARCHIVE_PATH: ${{ steps.rebuild-package-output.outputs.archive_path }}', [System.StringComparison]::Ordinal) -lt 0 -or
+        $preUploadStep.Value.IndexOf('STATSPRO_PROJECT_VERSION: ${{ steps.rebuild-package-output.outputs.project_version }}', [System.StringComparison]::Ordinal) -lt 0) {
         throw "The immediate pre-upload step must bind the exact Packager output, package manifest, tag checkout, and GITHUB_SHA."
     }
     if ($preUploadStep.Index + $preUploadStep.Length -ne $marketplaceStep.Index) {
@@ -1386,8 +1426,19 @@ function Invoke-SelfTest {
             $publishBlock.Value + $postPublishMarker)
     } "exactly one publishing Packager step|exactly one marketplace step"
     Assert-ThrowsMatch "wrong pre-upload Packager output binding rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace 'steps\.rebuild-package\.outputs\.project_version', 'steps.build-package.outputs.project_version')
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace 'steps\.rebuild-package-output\.outputs\.project_version', 'steps.build-package-output.outputs.project_version')
     } "immediate pre-upload step"
+    Assert-ThrowsMatch "missing Packager artifact resolver rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace 'resolve-packager-output\.ps1', 'missing-packager-output.ps1')
+    } "artifact-output resolver"
+    Assert-ThrowsMatch "conditional Packager artifact resolver rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^(\s{8}id: build-package-output\s*)$', "`$1`n        if: always()")
+    } "artifact-output resolver"
+    Assert-ThrowsMatch "extra Packager step rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            $publishMarker,
+            "      - name: Unexpected dry run`n        uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28`n        with:`n          args: -d`n`n$publishMarker")
+    } "exactly 3 Packager steps"
     Assert-ThrowsMatch "GitHub token in marketplace step rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "WOWI_API_TOKEN: \$\{\{ secrets\.WOWI_API_TOKEN \}\}", 'GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}')
     } "outside its approved shell step"

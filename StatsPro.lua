@@ -10278,6 +10278,17 @@ function addon.profileUI.FormatSpecName(specID, explicitName)
     if addon.dbRuntime.IsCleanType(explicitName, "string") and explicitName ~= "" then
         return explicitName
     end
+    local fn = _G.GetSpecializationInfoByID
+    if type(fn) == "function"
+        and addon.dbRuntime.IsCleanType(specID, "number") then
+        local ok, resolvedID, resolvedName = pcall(fn, specID)
+        if ok and addon.dbRuntime.IsCleanType(resolvedID, "number")
+            and resolvedID == specID
+            and addon.dbRuntime.IsCleanType(resolvedName, "string")
+            and resolvedName ~= "" then
+            return resolvedName
+        end
+    end
     return string.format(L("Spec %d"), specID)
 end
 
@@ -13732,6 +13743,7 @@ if addon and addon.__statsproSmoke == true then
             end,
         },
         profileViewModel = addon.profileUI.BuildViewModel,
+        formatProfileSpecName = addon.profileUI.FormatSpecName,
         profileOps = {
             validateName = addon.profileOps.ValidateName,
             countReferences = addon.profileOps.CountReferences,

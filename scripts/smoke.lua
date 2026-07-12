@@ -924,6 +924,7 @@ local function makeEnv(locale, opts)
     env.UnitSex = function() return 2 end
     env.GetSpecialization = function() return nil end
     env.GetSpecializationInfo = function() return nil end
+    env.GetSpecializationInfoByID = opts.getSpecializationInfoByID
     env.GetSpecializationRole = function() return nil end
     env.C_SpecializationInfo = {
         GetSpecialization = opts.getSpecialization or function() return opts.specIndex end,
@@ -10451,6 +10452,11 @@ do
         getSpecializationInfo = function()
             return identity.specID, identity.specName, nil, nil, identity.role, 1
         end,
+        getSpecializationInfoByID = function(specID)
+            local names = { [71] = "Arms", [72] = "Fury", [73] = "Protection" }
+            if not names[specID] then return nil end
+            return specID, names[specID]
+        end,
         inCombatLockdown = function() return identity.combat end,
     })
     fireEvent("profiles.ui.activate", env, "PLAYER_ENTERING_WORLD")
@@ -10533,6 +10539,10 @@ do
     eq("profiles.ui.manager.current_badge", state.rows[1].badge, "Current")
     eq("profiles.ui.manager.active_row", state.rows[2].context.specID, 73)
     eq("profiles.ui.manager.active_badge", state.rows[2].badge, "Active")
+    eq("profiles.ui.manager.current_offspec_name", state.rows[3].text, "   Arms")
+    eq("profiles.ui.manager.offline_spec_name", state.rows[5].text, "   Fury")
+    eq("profiles.ui.manager.offline_second_spec_name", state.rows[6].text, "   Protection")
+    eq("profiles.ui.manager.offline_last_spec_name", state.rows[8].text, "   Fury")
     local shownRows = 0
     for _, row in ipairs(state.rows) do
         if row.shown then shownRows = shownRows + 1 end
@@ -10620,6 +10630,7 @@ do
     eq("profiles.ui.manager.selection_guid", state.selectedGUID, "Player-1-BRAVO")
     eq("profiles.ui.manager.selection_spec", state.selectedSpecID, 73)
     eq("profiles.ui.manager.selection_detail", state.detailCharacter, "Bravo-Realm")
+    eq("profiles.ui.manager.selection_spec_name", state.detailContext, "Protection")
     eq("profiles.ui.manager.selection_profile", state.detailProfile, "Tank shared")
     assertDeepEqual("profiles.ui.navigation.no_writes", root, beforeUI)
     eq("profiles.ui.navigation.account_identity", rawequal(root.account, accountRef), true)
@@ -10678,6 +10689,60 @@ do
     addonContext:OpenConfigMenu()
     eq("profiles.ui.reopen.first_tab", config.activeTabIndex, 1)
     eq("profiles.ui.reopen.header_visible", header:IsShown(), true)
+end
+
+do
+    local apiMode = "valid"
+    local secretName = "Secret Blood"
+    local secretResolvedID = {}
+    local _, _, specNameTest = loadStatsPro("enUS", {
+        getSpecializationInfoByID = function(specID)
+            if apiMode == "error" then error("specialization API unavailable") end
+            if apiMode == "mismatch" then return 252, "Unholy" end
+            if apiMode == "nil" then return nil end
+            if apiMode == "empty" then return specID, "" end
+            if apiMode == "wrong-type" then return tostring(specID), 7 end
+            if apiMode == "secret-id" then return secretResolvedID, "Blood" end
+            if apiMode == "secret" then return specID, secretName end
+            return specID, "Blood"
+        end,
+        issecretvalue = function(value)
+            return (apiMode == "secret" and value == secretName)
+                or (apiMode == "secret-id" and value == secretResolvedID)
+        end,
+    })
+    eq("profiles.ui.spec_name.api_localized",
+        specNameTest.formatProfileSpecName(250), "Blood")
+    apiMode = "mismatch"
+    eq("profiles.ui.spec_name.mismatched_id_falls_back",
+        specNameTest.formatProfileSpecName(250), "Spec 250")
+    apiMode = "error"
+    eq("profiles.ui.spec_name.api_error_falls_back",
+        specNameTest.formatProfileSpecName(250), "Spec 250")
+    apiMode = "nil"
+    eq("profiles.ui.spec_name.nil_result_falls_back",
+        specNameTest.formatProfileSpecName(250), "Spec 250")
+    apiMode = "empty"
+    eq("profiles.ui.spec_name.empty_name_falls_back",
+        specNameTest.formatProfileSpecName(250), "Spec 250")
+    apiMode = "wrong-type"
+    eq("profiles.ui.spec_name.wrong_types_fall_back",
+        specNameTest.formatProfileSpecName(250), "Spec 250")
+    apiMode = "secret-id"
+    eq("profiles.ui.spec_name.secret_id_falls_back",
+        specNameTest.formatProfileSpecName(250), "Spec 250")
+    apiMode = "secret"
+    eq("profiles.ui.spec_name.secret_name_falls_back",
+        specNameTest.formatProfileSpecName(250), "Spec 250")
+    eq("profiles.ui.spec_name.explicit_clean_name_wins",
+        specNameTest.formatProfileSpecName(250, "Saved Blood"), "Saved Blood")
+
+    local missingEnv, _, missingTest = loadStatsPro("enUS", withProfileIdentity({
+        statsProDB = { forceLocale = "ruRU" },
+    }))
+    fireEvent("profiles.ui.spec_name.forced_locale.pew", missingEnv, "PLAYER_ENTERING_WORLD")
+    eq("profiles.ui.spec_name.missing_api_uses_localized_fallback",
+        missingTest.formatProfileSpecName(250), "Специализация 250")
 end
 
 do

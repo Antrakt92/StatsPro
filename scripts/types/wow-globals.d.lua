@@ -60,6 +60,17 @@ function StaticPopup_Hide(which) end
 
 function ReloadUI() end
 
+---@param specID number
+---@param gender? number
+---@return number? specID
+---@return string? name
+---@return string? description
+---@return number? icon
+---@return string? role
+---@return string? classFile
+---@return string? className
+function GetSpecializationInfoByID(specID, gender) end
+
 ---@param target any
 ---@param method string
 ---@param hook function

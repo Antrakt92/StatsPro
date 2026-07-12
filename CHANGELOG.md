@@ -29,6 +29,7 @@
 - **Newer-schema SavedVariables remain inspectable but read-only, preventing an older StatsPro build from overwriting newer data.**
 - **Profile dialogs preserve the expected Escape order, and truncated Settings controls expose their full localized text.**
 - **The Appearance tab now removes unused preview space, keeping Typography directly below presets until preview actions are actually needed.**
+- **Profile Manager now shows Blizzard's localized specialization names for offline characters instead of raw numeric spec IDs.**
 
 ### Updated
 

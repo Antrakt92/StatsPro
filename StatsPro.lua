@@ -311,13 +311,13 @@ local defaults = {
     -- WHY int-percent (not float 0..1): format-string compat with CreateConfigSlider's "%d%%".
     textAlpha = 100,
     -- Panel background alpha: stored as INT 0-80 (percentage) in DB, divided by 100 on apply.
-    -- Default 0 preserves the original fully transparent HUD.
-    panelBackgroundAlpha = 0,
+    -- A light 15% backing keeps the HUD readable without feeling like a solid panel.
+    panelBackgroundAlpha = 15,
     -- Text outline style: "none" | "outline" | "thick". Default preserves current OUTLINE text.
     textOutlineStyle = "outline",
     -- Optional provenance only: old profiles intentionally resolve to Custom without
-    -- a schema migration or any write during load. Fresh/reset profiles start Classic.
-    appearancePresetID = "classic",
+    -- a schema migration or any write during load. Fresh/reset profiles start Default.
+    appearancePresetID = "default",
     -- WHY LocaleAwareDefaultFont: Blizzard's locale-aware default-font global resolves
     -- to the right TTF for the current WoW client locale (CJK-supporting on zhCN/zhTW/
     -- koKR; Latin/Cyrillic-supporting elsewhere). Hardcoding FRIZQT would render
@@ -362,9 +362,9 @@ local defaults = {
     defensive_yOfs = -100,
 
     -- Display formatting
-    showRating = false,
+    showRating = true,
     showPercentage = true,
-    matchValueColorToStat = false,
+    matchValueColorToStat = true,
     targetSnapshot = "mythicPlus",
 
     -- Tertiary stats
@@ -503,7 +503,7 @@ local OFFENSIVE_STATS = {
 -- locale, refresh rate, positions, and assignments. Every color palette is complete so
 -- applying a preset never inherits a partially customized table by accident.
 addon.appearancePresets = {
-    order = { "classic", "clean-dark", "midnight", "monochrome", "high-contrast" },
+    order = { "default", "classic", "clean-dark", "midnight", "monochrome", "high-contrast" },
     allowlist = {
         fontSize = true,
         textAlpha = true,
@@ -514,6 +514,22 @@ addon.appearancePresets = {
         colors = true,
     },
     definitions = {
+        default = {
+            label = "Default", fontSize = 14, textAlpha = 100,
+            panelBackgroundAlpha = 15, textOutlineStyle = "outline",
+            matchValueColorToStat = true, useAutoColorDurability = true,
+            colors = {
+                crit={r=1,g=0,b=0}, haste={r=0,g=.5,b=1}, mastery={r=0,g=1,b=0},
+                versatility={r=1,g=1,b=0}, rating={r=.7,g=.7,b=.7},
+                percentage={r=1,g=1,b=1}, leech={r=.8,g=.2,b=.8},
+                avoidance={r=.2,g=.8,b=.8}, speed={r=1,g=.65,b=0},
+                mainStat={r=1,g=.84,b=0}, stamina={r=.5,g=1,b=.5},
+                itemLevel={r=.55,g=.85,b=1}, dodge={r=.4,g=.7,b=1},
+                parry={r=1,g=.4,b=.2}, block={r=.7,g=.5,b=.3},
+                armor={r=.6,g=.6,b=.7}, stagger={r=.3,g=.8,b=.5},
+                durability={r=1,g=1,b=1},
+            },
+        },
         classic = {
             label = "Classic", fontSize = 14, textAlpha = 100,
             panelBackgroundAlpha = 0, textOutlineStyle = "outline",
@@ -1095,7 +1111,7 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "Frame & Position",
         ["Typography"] = "Typography",
         ["Appearance Presets"] = "Appearance Presets", ["Preset:"] = "Preset:",
-        ["Classic"] = "Classic", ["Clean Dark"] = "Clean Dark", ["Midnight"] = "Midnight",
+        ["Default"] = "Default", ["Classic"] = "Classic", ["Clean Dark"] = "Clean Dark", ["Midnight"] = "Midnight",
         ["Monochrome"] = "Monochrome", ["High Contrast"] = "High Contrast", ["Custom"] = "Custom",
         ["Previewing: %s"] = "Previewing: %s", ["Apply"] = "Apply", ["Cancel preview"] = "Cancel preview",
         ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate.",
@@ -1244,7 +1260,7 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "Окно и позиция",
         ["Typography"] = "Типографика",
         ["Appearance Presets"] = "Пресеты оформления", ["Preset:"] = "Пресет:",
-        ["Classic"] = "Классика", ["Clean Dark"] = "Чистый тёмный", ["Midnight"] = "Полночь",
+        ["Default"] = "По умолчанию", ["Classic"] = "Классика", ["Clean Dark"] = "Чистый тёмный", ["Midnight"] = "Полночь",
         ["Monochrome"] = "Монохром", ["High Contrast"] = "Высокий контраст", ["Custom"] = "Свой",
         ["Previewing: %s"] = "Предпросмотр: %s", ["Apply"] = "Применить", ["Cancel preview"] = "Отменить просмотр",
         ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "Пресеты меняют размер, прозрачность, обводку, фон, цвета HUD и поведение цветов. Гарнитура, макет, видимые статы, масштаб, язык и частота сохраняются.",
@@ -1392,7 +1408,7 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "Fenster & Position",
         ["Typography"] = "Typografie",
         ["Appearance Presets"] = "Darstellungsvorlagen", ["Preset:"] = "Vorlage:",
-        ["Classic"] = "Klassisch", ["Clean Dark"] = "Klar Dunkel", ["Midnight"] = "Mitternacht",
+        ["Default"] = "Standard", ["Classic"] = "Klassisch", ["Clean Dark"] = "Klar Dunkel", ["Midnight"] = "Mitternacht",
         ["Monochrome"] = "Monochrom", ["High Contrast"] = "Hoher Kontrast", ["Custom"] = "Benutzerdefiniert",
         ["Previewing: %s"] = "Vorschau: %s", ["Apply"] = "Anwenden", ["Cancel preview"] = "Vorschau abbrechen",
         ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "Vorlagen ändern Schriftgröße, Deckkraft, Kontur, Panelhintergrund, HUD-Farben und Farbverhalten. Schriftart, Layout, sichtbare Werte, Skalierung, Sprache und Aktualisierungsrate bleiben erhalten.",
@@ -1531,7 +1547,7 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "Cadre & Position",
         ["Typography"] = "Typographie",
         ["Appearance Presets"] = "Préréglages d'apparence", ["Preset:"] = "Préréglage :",
-        ["Classic"] = "Classique", ["Clean Dark"] = "Sombre épuré", ["Midnight"] = "Minuit",
+        ["Default"] = "Par défaut", ["Classic"] = "Classique", ["Clean Dark"] = "Sombre épuré", ["Midnight"] = "Minuit",
         ["Monochrome"] = "Monochrome", ["High Contrast"] = "Contraste élevé", ["Custom"] = "Personnalisé",
         ["Previewing: %s"] = "Aperçu : %s", ["Apply"] = "Appliquer", ["Cancel preview"] = "Annuler l'aperçu",
         ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "Les préréglages changent taille, opacité, contour, fond, couleurs du HUD et comportement des couleurs. Police, disposition, statistiques visibles, échelle, langue et fréquence restent inchangées.",
@@ -1671,7 +1687,7 @@ local LABELS_BY_LOCALE = {
         ["Frame & Position"] = "Marco y Posición",
         ["Typography"] = "Tipografía",
         ["Appearance Presets"] = "Preajustes de apariencia", ["Preset:"] = "Preajuste:",
-        ["Classic"] = "Clásico", ["Clean Dark"] = "Oscuro limpio", ["Midnight"] = "Medianoche",
+        ["Default"] = "Predeterminado", ["Classic"] = "Clásico", ["Clean Dark"] = "Oscuro limpio", ["Midnight"] = "Medianoche",
         ["Monochrome"] = "Monocromo", ["High Contrast"] = "Alto contraste", ["Custom"] = "Personalizado",
         ["Previewing: %s"] = "Vista previa: %s", ["Apply"] = "Aplicar", ["Cancel preview"] = "Cancelar vista previa",
         ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "Los preajustes cambian tamaño, opacidad, contorno, fondo, colores del HUD y comportamiento del color. Conservan tipografía, diseño, estadísticas visibles, escala, idioma y frecuencia.",
@@ -1810,7 +1826,7 @@ local LABELS_BY_LOCALE = {
         ["Typography"] = "Tipografía",
         ["Readability"] = "Legibilidad",
         ["Appearance Presets"] = "Preajustes de apariencia", ["Preset:"] = "Preajuste:",
-        ["Classic"] = "Clásico", ["Clean Dark"] = "Oscuro limpio", ["Midnight"] = "Medianoche",
+        ["Default"] = "Predeterminado", ["Classic"] = "Clásico", ["Clean Dark"] = "Oscuro limpio", ["Midnight"] = "Medianoche",
         ["Monochrome"] = "Monocromo", ["High Contrast"] = "Alto contraste", ["Custom"] = "Personalizado",
         ["Previewing: %s"] = "Vista previa: %s", ["Apply"] = "Aplicar", ["Cancel preview"] = "Cancelar vista previa",
         ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "Los preajustes cambian tamaño, opacidad, contorno, fondo, colores del HUD y comportamiento del color. Conservan tipografía, diseño, estadísticas visibles, escala, idioma y frecuencia.",
@@ -1949,7 +1965,7 @@ local LABELS_BY_LOCALE = {
         ["Typography"] = "Tipografia",
         ["Readability"] = "Leggibilità",
         ["Appearance Presets"] = "Preimpostazioni aspetto", ["Preset:"] = "Preimpostazione:",
-        ["Classic"] = "Classico", ["Clean Dark"] = "Scuro pulito", ["Midnight"] = "Mezzanotte",
+        ["Default"] = "Predefinito", ["Classic"] = "Classico", ["Clean Dark"] = "Scuro pulito", ["Midnight"] = "Mezzanotte",
         ["Monochrome"] = "Monocromatico", ["High Contrast"] = "Alto contrasto", ["Custom"] = "Personalizzato",
         ["Previewing: %s"] = "Anteprima: %s", ["Apply"] = "Applica", ["Cancel preview"] = "Annulla anteprima",
         ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "Le preimpostazioni cambiano dimensione, opacità, contorno, sfondo, colori HUD e comportamento colore. Mantengono carattere, layout, statistiche visibili, scala, lingua e frequenza.",
@@ -2087,7 +2103,7 @@ local LABELS_BY_LOCALE = {
         ["Typography"] = "Tipografia",
         ["Readability"] = "Legibilidade",
         ["Appearance Presets"] = "Predefinições de aparência", ["Preset:"] = "Predefinição:",
-        ["Classic"] = "Clássico", ["Clean Dark"] = "Escuro limpo", ["Midnight"] = "Meia-noite",
+        ["Default"] = "Padrão", ["Classic"] = "Clássico", ["Clean Dark"] = "Escuro limpo", ["Midnight"] = "Meia-noite",
         ["Monochrome"] = "Monocromático", ["High Contrast"] = "Alto contraste", ["Custom"] = "Personalizado",
         ["Previewing: %s"] = "Prévia: %s", ["Apply"] = "Aplicar", ["Cancel preview"] = "Cancelar prévia",
         ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "As predefinições alteram tamanho, opacidade, contorno, fundo, cores do HUD e comportamento das cores. Mantêm fonte, layout, atributos visíveis, escala, idioma e atualização.",
@@ -2232,7 +2248,7 @@ local LABELS_BY_LOCALE = {
         ["Typography"] = "글꼴",
         ["Readability"] = "가독성",
         ["Appearance Presets"] = "외형 프리셋", ["Preset:"] = "프리셋:",
-        ["Classic"] = "클래식", ["Clean Dark"] = "깔끔한 어둠", ["Midnight"] = "한밤",
+        ["Default"] = "기본", ["Classic"] = "클래식", ["Clean Dark"] = "깔끔한 어둠", ["Midnight"] = "한밤",
         ["Monochrome"] = "단색", ["High Contrast"] = "고대비", ["Custom"] = "사용자 지정",
         ["Previewing: %s"] = "미리 보기: %s", ["Apply"] = "적용", ["Cancel preview"] = "미리 보기 취소",
         ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "프리셋은 글꼴 크기, 투명도, 외곽선, 배경, HUD 색상과 색상 동작을 변경합니다. 글꼴 종류, 배치, 표시 능력치, 크기, 언어와 갱신 주기는 유지합니다.",
@@ -2370,7 +2386,7 @@ local LABELS_BY_LOCALE = {
         ["Typography"] = "字体",
         ["Readability"] = "可读性",
         ["Appearance Presets"] = "外观预设", ["Preset:"] = "预设：",
-        ["Classic"] = "经典", ["Clean Dark"] = "简洁深色", ["Midnight"] = "午夜",
+        ["Default"] = "默认", ["Classic"] = "经典", ["Clean Dark"] = "简洁深色", ["Midnight"] = "午夜",
         ["Monochrome"] = "单色", ["High Contrast"] = "高对比度", ["Custom"] = "自定义",
         ["Previewing: %s"] = "正在预览：%s", ["Apply"] = "应用", ["Cancel preview"] = "取消预览",
         ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "预设会更改字号、透明度、描边、面板背景、HUD颜色和颜色行为。字体、布局、可见属性、缩放、语言和刷新频率保持不变。",
@@ -2508,7 +2524,7 @@ local LABELS_BY_LOCALE = {
         ["Typography"] = "字型",
         ["Readability"] = "可讀性",
         ["Appearance Presets"] = "外觀預設", ["Preset:"] = "預設：",
-        ["Classic"] = "經典", ["Clean Dark"] = "簡潔深色", ["Midnight"] = "午夜",
+        ["Default"] = "預設", ["Classic"] = "經典", ["Clean Dark"] = "簡潔深色", ["Midnight"] = "午夜",
         ["Monochrome"] = "單色", ["High Contrast"] = "高對比", ["Custom"] = "自訂",
         ["Previewing: %s"] = "預覽中：%s", ["Apply"] = "套用", ["Cancel preview"] = "取消預覽",
         ["Presets change font size, opacity, outline, panel background, HUD colors, and color behavior. They keep font face, layout, visible stats, scale, language, and refresh rate."] = "預設會變更字號、透明度、外框、面板背景、HUD顏色與顏色行為。字型、版面、顯示屬性、縮放、語言與更新頻率維持不變。",
@@ -9600,7 +9616,8 @@ end
 function addon.appearancePresets.CapturePayload(settings)
     local payload = {}
     for key in pairs(addon.appearancePresets.allowlist) do
-        local value = settings and rawget(settings, key) or nil
+        local value
+        if settings then value = rawget(settings, key) end
         if value == nil then value = defaults[key] end
         payload[key] = addon.appearancePresets.Clone(value)
         if payload[key] == nil and value ~= nil then return nil end

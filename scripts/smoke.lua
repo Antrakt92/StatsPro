@@ -1773,6 +1773,7 @@ do
         unitClassToken = "MAGE",
         specIndex = 1,
         specID = 64,
+        statsProDB = { matchValueColorToStat = false },
         statsProArchonTargets = targetFixture,
         inCombatLockdown = function() return true end,
         getCombatRating = function() return -1 end,
@@ -2553,9 +2554,17 @@ do
     local db = activeSettings(root)
     eq("db.empty_default_population.version", root.dbVersion, test.currentDBVersion())
     eq("db.empty_default_population.force_locale", accountSettings(root).forceLocale, "auto")
+    eq("db.empty_default_population.font", db.font, test.copyDefaults().font)
     eq("db.empty_default_population.font_size", db.fontSize, 14)
-    eq("db.empty_default_population.panel_background_alpha", db.panelBackgroundAlpha, 0)
+    eq("db.empty_default_population.text_alpha", db.textAlpha, 100)
+    eq("db.empty_default_population.panel_background_alpha", db.panelBackgroundAlpha, 15)
     eq("db.empty_default_population.text_outline_style", db.textOutlineStyle, "outline")
+    eq("db.empty_default_population.appearance_preset", db.appearancePresetID, "default")
+    eq("db.empty_default_population.show_rating", db.showRating, true)
+    eq("db.empty_default_population.show_percentage", db.showPercentage, true)
+    eq("db.empty_default_population.match_value_color", db.matchValueColorToStat, true)
+    eq("db.empty_default_population.label_style", db.labelStyle, "full")
+    eq("db.empty_default_population.target_snapshot", db.targetSnapshot, "mythicPlus")
     eq("db.empty_default_population.split_item_level", db.splitItemLevel, true)
     eq("db.empty_default_population.show_stagger", db.showStagger, false)
     check("db.empty_default_population.colors", type(db.colors) == "table", "colors table missing")
@@ -2692,7 +2701,7 @@ do
     eq("numbers.nan_falls_back.font_size", test.normalizeNumberSetting("fontSize", nan), 14)
     near("numbers.nan_falls_back.scale", test.normalizeNumberSetting("scale", nan), 1)
     eq("numbers.nan_falls_back.text_alpha", test.normalizeNumberSetting("textAlpha", nan), 100)
-    eq("numbers.nan_falls_back.panel_background_alpha", test.normalizeNumberSetting("panelBackgroundAlpha", nan), 0)
+    eq("numbers.nan_falls_back.panel_background_alpha", test.normalizeNumberSetting("panelBackgroundAlpha", nan), 15)
     near("numbers.nan_falls_back.update_interval", test.normalizeNumberSetting("updateInterval", nan), 0.5)
 end
 
@@ -2702,8 +2711,8 @@ do
     eq("numbers.inf_handled.font_size_neg", test.normalizeNumberSetting("fontSize", -inf), 14)
     near("numbers.inf_handled.scale_pos", test.normalizeNumberSetting("scale", inf), 1)
     near("numbers.inf_handled.scale_neg", test.normalizeNumberSetting("scale", -inf), 1)
-    eq("numbers.inf_handled.panel_background_alpha_pos", test.normalizeNumberSetting("panelBackgroundAlpha", inf), 0)
-    eq("numbers.inf_handled.panel_background_alpha_neg", test.normalizeNumberSetting("panelBackgroundAlpha", -inf), 0)
+    eq("numbers.inf_handled.panel_background_alpha_pos", test.normalizeNumberSetting("panelBackgroundAlpha", inf), 15)
+    eq("numbers.inf_handled.panel_background_alpha_neg", test.normalizeNumberSetting("panelBackgroundAlpha", -inf), 15)
 end
 
 do
@@ -3581,7 +3590,7 @@ do
     ok = service.startPreview("midnight")
     eq("appearance.presets.restore.baseline_click_preview", ok, true)
     service.setRuntimeFailureCount(1)
-    result, reason = service.startPreview("classic")
+    result, reason = service.startPreview("default")
     eq("appearance.presets.restore.baseline_click_rejected", result, false)
     eq("appearance.presets.restore.baseline_click_reason", reason, "restore-failed")
     eq("appearance.presets.restore.baseline_click_session", service.state().active, true)
@@ -3616,8 +3625,40 @@ do
 end
 
 do
+    local defaultEnv, _, defaultTest = loadStatsPro("enUS", withProfileIdentity())
+    fireEvent("appearance.presets.default_round_trip.pew", defaultEnv, "PLAYER_ENTERING_WORLD")
+    local service = defaultTest.appearancePresets
+    local settings = defaultTest.profileState().settings
+    settings.showRating = false
+    settings.showPercentage = false
+    settings.labelStyle = "short"
+    settings.targetSnapshot = "raid"
+    local ok = service.startPreview("midnight")
+    eq("appearance.presets.default_round_trip.midnight_preview", ok, true)
+    ok = service.applyPreview()
+    eq("appearance.presets.default_round_trip.midnight_apply", ok, true)
+    eq("appearance.presets.default_round_trip.midnight_current", service.currentID(), "midnight")
+    ok = service.startPreview("default")
+    eq("appearance.presets.default_round_trip.default_preview", ok, true)
+    ok = service.applyPreview()
+    eq("appearance.presets.default_round_trip.default_apply", ok, true)
+    settings = defaultTest.profileState().settings
+    eq("appearance.presets.default_round_trip.default_current", service.currentID(), "default")
+    eq("appearance.presets.default_round_trip.font_size", settings.fontSize, 14)
+    eq("appearance.presets.default_round_trip.text_alpha", settings.textAlpha, 100)
+    eq("appearance.presets.default_round_trip.panel_background", settings.panelBackgroundAlpha, 15)
+    eq("appearance.presets.default_round_trip.outline", settings.textOutlineStyle, "outline")
+    eq("appearance.presets.default_round_trip.match_value_color", settings.matchValueColorToStat, true)
+    eq("appearance.presets.default_round_trip.preserve_rating", settings.showRating, false)
+    eq("appearance.presets.default_round_trip.preserve_percentage", settings.showPercentage, false)
+    eq("appearance.presets.default_round_trip.preserve_label_style", settings.labelStyle, "short")
+    eq("appearance.presets.default_round_trip.preserve_target_snapshot", settings.targetSnapshot, "raid")
+end
+
+do
     local inCombat = false
     local editEnv, editAddon, editTest = loadStatsPro("enUS", {
+        statsProDB = { panelBackgroundAlpha = 0 },
         inCombatLockdown = function() return inCombat end,
     })
     fireEvent("panel.edit.pew", editEnv, "PLAYER_ENTERING_WORLD")
@@ -3821,8 +3862,16 @@ do
     eq("slash.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help")
     slashSettings.fontBeforeAutoSwitch = "Fonts\\ARIALN.TTF"
     slashSettings.useLocalizedLabels = false
+    slashSettings.font = "Fonts\\ARIALN.TTF"
+    slashSettings.fontSize = 22
+    slashSettings.textAlpha = 50
     slashSettings.panelBackgroundAlpha = 55
     slashSettings.textOutlineStyle = "thick"
+    slashSettings.appearancePresetID = "custom"
+    slashSettings.showRating = false
+    slashSettings.showPercentage = false
+    slashSettings.matchValueColorToStat = false
+    slashSettings.labelStyle = "short"
     slashSettings.targetSnapshot = "raid"
     slashSettings.colors.crit = { r = 0.4, g = 0.5, b = 0.6 }
     clearPrints(slashEnv)
@@ -3832,8 +3881,16 @@ do
     slashEnv.__acceptStaticPopup()
     slashSettings = slashTest.profileState().settings
     eq("slash.reset_restores_defaults.visible", slashSettings.isVisible, true)
-    eq("slash.reset_restores_defaults.panel_background_alpha", slashSettings.panelBackgroundAlpha, 0)
+    eq("slash.reset_restores_defaults.font", slashSettings.font, slashTest.copyDefaults().font)
+    eq("slash.reset_restores_defaults.font_size", slashSettings.fontSize, 14)
+    eq("slash.reset_restores_defaults.text_alpha", slashSettings.textAlpha, 100)
+    eq("slash.reset_restores_defaults.panel_background_alpha", slashSettings.panelBackgroundAlpha, 15)
     eq("slash.reset_restores_defaults.text_outline_style", slashSettings.textOutlineStyle, "outline")
+    eq("slash.reset_restores_defaults.appearance_preset", slashSettings.appearancePresetID, "default")
+    eq("slash.reset_restores_defaults.show_rating", slashSettings.showRating, true)
+    eq("slash.reset_restores_defaults.show_percentage", slashSettings.showPercentage, true)
+    eq("slash.reset_restores_defaults.match_value_color", slashSettings.matchValueColorToStat, true)
+    eq("slash.reset_restores_defaults.label_style", slashSettings.labelStyle, "full")
     eq("slash.reset_restores_defaults.target_snapshot", slashSettings.targetSnapshot, "mythicPlus")
     eq("slash.reset_restores_defaults.transient_font", slashSettings.fontBeforeAutoSwitch, nil)
     eq("slash.reset_restores_defaults.legacy_locale", slashSettings.useLocalizedLabels, nil)
@@ -4125,6 +4182,7 @@ do
     local critEnv, _, critTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = true,
+            showRating = false,
             hideZeroOffensive = false,
             showCrit = true,
             showHaste = false,
@@ -4147,6 +4205,7 @@ do
     local critEnv, _, critTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = true,
+            showRating = false,
             hideZeroOffensive = false,
             showCrit = true,
             showHaste = false,
@@ -4169,6 +4228,7 @@ do
     local hasteEnv, _, hasteTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = true,
+            showRating = false,
             hideZeroOffensive = false,
             showCrit = false,
             showHaste = true,
@@ -4189,6 +4249,7 @@ do
     local critEnv, _, critTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = true,
+            showRating = false,
             hideZeroOffensive = false,
             showCrit = true,
             showHaste = false,
@@ -4941,6 +5002,7 @@ do
         statsProDB = {
             showOffensive = false,
             showTertiary = true,
+            showRating = false,
             hideZeroTertiary = false,
             showLeech = true,
             showAvoidance = false,
@@ -5523,6 +5585,7 @@ do
     local versEnv, _, versTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = true,
+            showRating = false,
             hideZeroOffensive = true,
             showCrit = false,
             showHaste = false,
@@ -5544,6 +5607,7 @@ do
     local versEnv, _, versTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = true,
+            showRating = false,
             hideZeroOffensive = false,
             showCrit = false,
             showHaste = false,
@@ -5898,6 +5962,7 @@ do
             showOffensive = true,
             showRating = true,
             showPercentage = true,
+            matchValueColorToStat = false,
             hideZeroOffensive = true,
             showCrit = false,
             showHaste = false,
@@ -6252,6 +6317,7 @@ do
     local ilvlEnv, _, ilvlTest = loadStatsPro("enUS", {
         statsProDB = {
             displayMode = "sectioned",
+            panelBackgroundAlpha = 0,
             showOffensive = false,
             showItemLevel = true,
             showDurability = false,
@@ -7771,7 +7837,7 @@ do
             "localized Contact label overflows")
         local presetUI = localeAddon.appearancePresets.ui
         for _, presetID in ipairs({
-            "classic", "clean-dark", "midnight", "monochrome", "high-contrast",
+            "default", "classic", "clean-dark", "midnight", "monochrome", "high-contrast",
         }) do
             local button = presetUI.buttons[presetID]
             check(prefix .. ".preset_card_fit." .. presetID,
@@ -13424,7 +13490,7 @@ do
     fireEvent("appearance.presets.pew", presetEnv, "PLAYER_ENTERING_WORLD")
     local service = presetTest.appearancePresets
     local expectedOrder = {
-        "classic", "clean-dark", "midnight", "monochrome", "high-contrast",
+        "default", "classic", "clean-dark", "midnight", "monochrome", "high-contrast",
     }
     assertDeepEqual("appearance.presets.registry.order", service.order(), expectedOrder)
     local allowlist = service.allowlist()
@@ -13437,7 +13503,7 @@ do
     local defaults = presetTest.copyDefaults()
     local colorCount = 0
     for key in pairs(defaults.colors) do colorCount = colorCount + 1 end
-    eq("appearance.presets.registry.default_marker", defaults.appearancePresetID, "classic")
+    eq("appearance.presets.registry.default_marker", defaults.appearancePresetID, "default")
     for _, presetID in ipairs(expectedOrder) do
         local definition = exists("appearance.presets.registry." .. presetID, definitions[presetID])
         local actualColorCount = 0
@@ -13476,17 +13542,30 @@ do
                 or definition.textOutlineStyle == "outline"
                 or definition.textOutlineStyle == "thick")
     end
-    local classicPayload = deepCopy(definitions.classic)
-    classicPayload.label = nil
+    local defaultPresetPayload = deepCopy(definitions.default)
+    defaultPresetPayload.label = nil
     local defaultPayload = {}
     for key in pairs(allowlist) do defaultPayload[key] = deepCopy(defaults[key]) end
-    assertDeepEqual("appearance.presets.registry.classic_matches_defaults",
-        classicPayload, defaultPayload)
+    assertDeepEqual("appearance.presets.registry.default_matches_defaults",
+        defaultPresetPayload, defaultPayload)
+    eq("appearance.presets.registry.classic_keeps_transparent_background",
+        definitions.classic.panelBackgroundAlpha, 0)
+    eq("appearance.presets.registry.classic_keeps_separate_value_colors",
+        definitions.classic.matchValueColorToStat, false)
+    local classicSettings = deepCopy(defaults)
+    for key in pairs(allowlist) do
+        classicSettings[key] = deepCopy(definitions.classic[key])
+    end
+    classicSettings.appearancePresetID = "classic"
+    eq("appearance.presets.registry.false_value_survives_capture",
+        service.currentID(classicSettings), "classic")
 
     local state = presetTest.profileState()
     local activeProfileID = state.profileID
     local settings = state.settings
     settings.showCrit = false
+    settings.showRating = false
+    settings.showPercentage = false
     settings.displayMode = "split"
     settings.scale = 1.3
     local rootRef, profilesRef, settingsRef = state.root, state.profiles, settings
@@ -13508,13 +13587,13 @@ do
         "labelStyle", "scale", "updateInterval", "forceLocale", "point",
         "relativePoint", "xOfs", "yOfs", "defensive_point",
         "defensive_relativePoint", "defensive_xOfs", "defensive_yOfs",
-        "showCrit", "showHaste", "showMastery", "showVersatility",
+        "showRating", "showPercentage", "showCrit", "showHaste", "showMastery", "showVersatility",
         "showDefensive", "showDurability", "showRepairCost", "splitOffensive",
         "splitDefensive", "targetSnapshot",
     }
     local forbiddenBefore = {}
     for _, key in ipairs(forbiddenKeys) do forbiddenBefore[key] = settings[key] end
-    eq("appearance.presets.fresh_is_classic", service.currentID(), "classic")
+    eq("appearance.presets.fresh_is_default", service.currentID(), "default")
 
     local ok, reason = service.startPreview("high-contrast")
     eq("appearance.presets.preview.starts", ok, true)

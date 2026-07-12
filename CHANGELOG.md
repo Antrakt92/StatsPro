@@ -8,7 +8,8 @@
 - **A new Profile Manager supports creating, duplicating, renaming, assigning, swapping, copying selected setting groups, resetting, deleting, and reviewing profiles across visited characters.**
 - **Role templates and bulk actions can seed future Tank, Healer, and Damage profiles, reuse one profile across known specs, or split shared specs into independent copies.**
 - **SwiftStats import now creates an independent profile for the current character and spec.** `/ss reset` resets only the active profile, while `/ss wipe` and `/ss reset all` explicitly reset all StatsPro data.
-- **Five appearance presets—Classic, Clean Dark, Midnight, Monochrome, and High Contrast—support live preview, Apply, and Cancel without changing layout, visible stats, language, or assignments.**
+- **Six appearance presets—Default, Classic, Clean Dark, Midnight, Monochrome, and High Contrast—support live preview, Apply, and Cancel without changing layout, visible stats, language, or assignments.** Default matches the new 14px, full-opacity, outlined, 15%-background HUD style with per-stat value colors.
+- **Fresh and reset profiles now use the Default presentation:** rating and percentage values, full labels, Mythic+ tooltip targets, and stat-matched value colors.
 - **When frames are unlocked, opening Settings shows clear panel outlines and drag handles outside combat, making panel placement easier.**
 - **Settings now keeps a subtle localized “Made with ♥” signature visible and provides a neutral Contact action for copying the project issue link.**
 

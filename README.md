@@ -42,7 +42,10 @@ Choose **Flat**, **Sectioned**, or **Split**. Panels resize around enabled rows,
 rating and percentage columns stay aligned, and Split mode lets you move selected
 blocks to a separate panel.
 
-![StatsPro display modes: compact flat, rating and percentage, defensives, repair cost, and split panels](screenshots/display-modes.png)
+<p align="center">
+  <img src="screenshots/settings-overview-v1.10.2.png" alt="StatsPro Settings with current Stats controls" width="390">
+  <img src="screenshots/layout-settings-v1.10.2.png" alt="StatsPro Layout settings with display mode and panel routing controls" width="390">
+</p>
 
 ## Profiles and appearance
 
@@ -65,6 +68,11 @@ Preset preview changes presentation only. It does not change visible stats, pane
 routing, positions, scale, language, refresh rate, or profile assignments. When
 panels are unlocked, Settings shows temporary outlines and drag handles so their
 positions are clear; this editing chrome never becomes part of the saved HUD.
+
+<p align="center">
+  <img src="screenshots/appearance-presets-v1.10.2.png" alt="StatsPro Appearance settings with six presets" width="390">
+  <img src="screenshots/profile-manager-v1.10.2.png" alt="StatsPro Profile Manager for character and specialization assignments" width="390">
+</p>
 
 ## Stats and gear rows
 
@@ -176,7 +184,8 @@ for visual problems. For combat-stat or target-hover issues, also include
 `/statspro debug live` from the affected state.
 
 Developer setup, verification commands, and architecture notes live in
-[`CONTRIBUTING.md`](CONTRIBUTING.md).
+[`CONTRIBUTING.md`](CONTRIBUTING.md). User-visible release history is in
+[`CHANGELOG.md`](CHANGELOG.md).
 
 StatsPro is free and MIT-licensed. Optional support is available through
 [Ko-fi](https://ko-fi.com/antrakt92) or [GitHub Sponsors](https://github.com/sponsors/Antrakt92).

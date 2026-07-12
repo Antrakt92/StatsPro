@@ -9,6 +9,7 @@ ignore:
   - .gitattributes
   - .gitignore
   - README.md
+  - CONTRIBUTING.md
   - .pkgmeta
   - .luacheckrc
   - .luarc.json

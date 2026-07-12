@@ -6,285 +6,194 @@
 
 <p align="center">
   <a href="https://github.com/Antrakt92/StatsPro/releases/latest"><img src="https://img.shields.io/github/v/release/Antrakt92/StatsPro?label=release&color=brightgreen" alt="Latest release"></a>
-  <a href="https://www.curseforge.com/wow/addons/statspro"><img src="https://img.shields.io/curseforge/dt/1525100?label=curseforge&color=orange" alt="CurseForge"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/Antrakt92/StatsPro" alt="License: MIT"></a>
+  <a href="https://www.curseforge.com/wow/addons/statspro"><img src="https://img.shields.io/curseforge/dt/1525100?label=downloads&color=orange" alt="CurseForge downloads"></a>
   <img src="https://img.shields.io/badge/WoW-Retail%2012.x-blueviolet" alt="WoW Retail 12.x">
-  <a href="https://ko-fi.com/antrakt92"><img src="https://img.shields.io/badge/Ko--fi-Support-FF5E5B?logo=ko-fi&logoColor=white" alt="Support on Ko-fi"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Antrakt92/StatsPro" alt="MIT License"></a>
 </p>
 
 <p align="center">
-  A clean, colorful stat HUD for World of Warcraft Retail / Midnight 12.x.
-  Secondary stats, Archon targets, item level, defensives, durability, and repair
-  cost in draggable panels — without the bloat of a full framework.
+  A standalone stats and gear HUD for World of Warcraft Retail: Midnight (12.x).
+  Keep the numbers you use visible in clean, draggable panels, with per-character
+  and per-specialization profiles plus bundled Archon M+ and Raid reference snapshots.
 </p>
 
 <p align="center">
-  <strong>Actively maintained.</strong> <span style="color: red;"><strong>Feedback and suggestions are very welcome.</strong></span>
+  <img src="screenshots/09-flat-in-game.jpg" alt="StatsPro showing character stats beside the action bars during normal play">
 </p>
 
-<p align="center">
-  <img src="screenshots/09-flat-in-game.jpg" alt="StatsPro — full flat panel sitting next to the action bars during real-world play">
-</p>
+## Why players use StatsPro
 
-> Originally inspired by [SwiftStats by TaylorSay](https://www.curseforge.com/wow/addons/swiftstats)
-> (MIT) — substantially rewritten and extended. The side-panel layout, durability and
-> repair-cost system, configurable multi-panel routing, auto-aligning column rendering, 12.x retail
-> secret-value handling, and the three-tab settings UI are all original work; some
-> upstream boilerplate, color defaults, and the basic stat list remain. See
-> [`CHANGELOG.md`](CHANGELOG.md) for the full list of additions per version.
+- **See the useful numbers without opening the Character panel.** Show secondary
+  stats, item level, defensives, durability, and repair cost directly on the HUD.
+- **Compare ratings with current context.** Hover Crit, Haste, Mastery, or
+  Versatility for bundled Archon M+ High Keys or Raid Mythic reference snapshots.
+- **Switch characters or specs without rebuilding the HUD.** Assigned profiles
+  activate automatically and can be shared intentionally when that is useful.
+- **Start with a finished look.** Preview six appearance presets, then keep the
+  preset or adjust individual fonts, colors, opacity, outline, and background.
+- **Use only the space you want.** Build a compact secondary-stat strip, a tank
+  dashboard, or two independently movable panels.
+- **Designed for Retail 12.x.** StatsPro handles Midnight's restricted values and
+  modern tooltip data without a companion app or in-game network access.
 
-## At a glance
+## Flexible layouts
 
-- **Secondary stat HUD** — Crit, Haste, Mastery, Versatility with rating, percentage, or both.
-- **Archon target hovers** — compare your current rating to generated M+ High Keys or Raid Mythic All Bosses targets.
-- **Defensive and gear rows** — Dodge, Parry, Block, Brewmaster Stagger, Armor DR, durability, repair cost, item level, and stamina.
-- **Readable layouts** — Flat, Sectioned, or Split panels with auto-aligning columns and optional background/outline.
-- **Live localization** — HUD, settings, target hovers, and slash confirmations follow your chosen output language.
-- **Retail 12.x safety** — built around modern secret-value and tooltip API traps.
+Choose **Flat**, **Sectioned**, or **Split**. Panels resize around enabled rows,
+rating and percentage columns stay aligned, and Split mode lets you move selected
+blocks to a separate panel.
 
-## What StatsPro shows
+![StatsPro display modes: compact flat, rating and percentage, defensives, repair cost, and split panels](screenshots/display-modes.png)
 
-| Area | Rows |
+## Profiles and appearance
+
+Every visited character and specialization can use its own profile, or share one
+with another context. The Profile Manager can create, duplicate, rename, assign,
+swap, reset, and delete profiles, as well as copy only **Stats**, **Layout**, or
+**Appearance** settings. Tank, Healer, and Damage role templates can seed future
+specializations, and bulk actions help organize already visited characters.
+
+Six appearance presets are included:
+
+- **Default**
+- **Classic**
+- **Clean Dark**
+- **Midnight**
+- **Monochrome**
+- **High Contrast**
+
+Preset preview changes presentation only. It does not change visible stats, panel
+routing, positions, scale, language, refresh rate, or profile assignments. When
+panels are unlocked, Settings shows temporary outlines and drag handles so their
+positions are clear; this editing chrome never becomes part of the saved HUD.
+
+## Stats and gear rows
+
+| Area | Available rows |
 |---|---|
 | **Offensive** | Crit, Haste, Mastery, Versatility |
-| **Character** | Main stat auto-detect, Stamina |
+| **Character** | Main stat (automatic), Stamina |
 | **Tertiary** | Leech, Avoidance, Movement |
 | **Defensive** | Dodge, Parry, Block, Brewmaster Stagger, Armor damage reduction |
-| **Gear** | Item Level, Durability, worst-slot durability, live vendor-format repair cost |
+| **Gear** | Equipped / overall item level, durability, worst-slot durability, repair cost |
 
-Everything is optional. Keep a tiny secondary-stat strip, build a tank dashboard,
-or split gear/defensive rows into a second movable panel.
+Every row is optional. Rated stats can show rating, percentage, or both. Repair
+cost uses the same gold / silver / copper presentation as the vendor UI.
 
-## How it looks
+## Archon reference snapshots
 
-Layouts auto-fit to enabled stats, drag panels anywhere, no awkward gaps when
-toggling columns. Top: **Flat** (enabled rows in one compact panel) and **Rating + Percentage**
-(both columns side by side). Middle: **With Defensives** (Dodge / Parry / Block /
-Brewmaster Stagger / Armor damage reduction) and **Repair Cost at Vendor** (vendor-format coin
-string with inline gold / silver / copper icons). Bottom: **Split Mode** —
-two independently draggable panels whose side-panel contents can be customized
-from Character / Offensive / Tertiary / Defensive / Item Level / Durability / Repair.
+Choose one of two bundled datasets:
 
-![StatsPro display modes — flat, rating + percentage, with defensives, repair cost at vendor, and split mode](screenshots/display-modes.png)
+- **Mythic+** — High Keys / All Dungeons / This Week
+- **Raid** — Mythic / All Bosses
 
-## Archon target tooltips
+Hover a secondary-stat row to see the reference target and snapshot date. When a
+clean live or cached comparison is available, the tooltip also shows the current
+rating and its **Missing**, **Over**, or **Matched** delta. During restricted
+combat states, StatsPro can keep the target visible without presenting an unsafe
+live comparison.
 
-Hover any secondary stat row to see how your current rating compares to generated
-Archon targets for your active spec.
+The snapshots cover all 40 current Retail specializations and ship inside the
+addon. They are useful reference context, not hard stat caps or a replacement for
+simulating your own character.
 
-- Choose **Mythic+** or **Raid** targets in `/ss` → **Layout** → **Value Display** → **Tooltip Targets**
-- See **Target**, **Current**, **Missing / Over / Matched**, approximate percentage impact, and snapshot date
-- Current values can inherit your stat colors when **Match Value Color to Stat** is enabled
-- Data ships with the addon — no web scraping, network calls, or external API access in game
-- Snapshot coverage includes all 40 current Retail specs, including Demon Hunter Devourer
+## Getting started
 
-## Why StatsPro feels different
+Install StatsPro from any supported channel:
 
-- **Reads at a glance** — labels and values stay aligned whether you show rating,
-  percentage, or both.
-- **Adapts to your spec** — main stat and Archon target hovers follow your active
-  spec without per-character setup.
-- **More than secondary stats** — tertiaries, defensives, durability, item level,
-  and vendor-format repair cost can live in the same HUD.
-- **M+ and Raid target context** — compare your current rating to generated Archon
-  targets without any in-game network calls.
-- **Built for Midnight (12.x)** — guarded stat reads and modern tooltip APIs keep
-  the HUD stable where older stat addons can break.
+- [CurseForge](https://www.curseforge.com/wow/addons/statspro)
+- [Wago Addons](https://addons.wago.io/addons/statspro)
+- [WoWInterface](https://www.wowinterface.com/downloads/info27130-StatsPro.html)
+- [GitHub Releases](https://github.com/Antrakt92/StatsPro/releases/latest)
 
-## Built for Midnight (12.x)
+For a manual install, extract the `StatsPro` folder into
+`World of Warcraft\_retail_\Interface\AddOns\`.
 
-Blizzard quietly turned many stat-API returns (`GetCombatRating`, `UnitArmor`, even
-`FontString:GetStringWidth`) into "secret values" in modern Retail, and the
-protection has only tightened in Midnight (12.x). Read them naively in combat
-and you get `[secret]` placeholders in the UI, or — worse — silently leak taint
-into action bars, macros, and other addons.
+1. Type `/ss` to open Settings.
+2. Choose the rows, layout, and appearance you want.
+3. Unlock the panels and drag them into place.
+4. Hover a secondary stat for its selected Archon reference snapshot.
 
-StatsPro defends against this end-to-end:
-
-- Stat reads that can return secret values are guarded with `pcall + issecretvalue` before display
-- FontString widths are cached when non-secret, so the auto-fit layout stays stable
-  mid-pull instead of collapsing to zero
-- Repair cost uses the modern `C_TooltipInfo.GetInventoryItem` API (the legacy
-  `GameTooltip:SetInventoryItem` returns the cost as a secret value in 12.x — a lot
-  of older HUD-style addons broke quietly because of this)
-
-If you're not sure whether your current stat addon is Midnight-safe, run a heavy
-pull and check whether the numbers stay correct throughout the fight.
+Out of combat, right-click the HUD to reopen Settings. Right-click is ignored in
+combat. To bind visibility to a key, create a macro containing `/ss toggle` and
+bind that macro in WoW's keybindings.
 
 ## Localization
 
-Stat labels render in your WoW client's language by default — no setup required.
-Curated short-form translations across all current WoW addon locales keep the HUD
-compact and readable, including the same `rating | percentage`, defensive stat,
-item level, durability, and repair rows shown in game:
+The HUD, Settings, profile tools, target hovers, snapshot dates, and normal slash
+confirmations follow the selected output language. `Auto` uses the WoW client
+locale; every current Retail addon locale is supported.
 
-![StatsPro localization preview — live HUD label examples with rating and percentage values, defensives, item level, durability, and coin-style repair cost across current WoW addon locales](screenshots/localization.png)
+![StatsPro localization preview across current Retail addon locales](screenshots/localization.png)
 
-To pick a different language for stat labels, open `/ss` → **Appearance**
-tab → **Localization** → use the **Language** dropdown. "Auto" follows your
-WoW client locale. To change how compact the labels look, open `/ss` →
-**Layout** tab → **Value Display** → **Label Style** and choose **Full**,
-**Short**, or **Hidden**. These settings persist across `/reload` and across
-all characters on the account. The settings window, target hovers, snapshot
-month names, and normal slash-command confirmations update with the selected
-output language.
+Language and refresh rate are account-wide. Labels, visible rows, layout, colors,
+and the rest of the HUD presentation follow the active assigned profile.
 
-The in-game AddOn list (Esc → Options → AddOns) also shows StatsPro's
-description in your client language — a localized one-liner per `## Notes-<locale>`
-TOC field is shipped for every non-English WoW addon locale.
-
-If a label reads oddly to you as a native speaker, please open an issue with the
-suggested correction — single-row fixes ship in the next patch.
-
-## Slash commands
+## Commands
 
 | Command | Action |
 |---|---|
-| `/ss` or `/statspro` | Open settings window |
-| `/ss show` | Show stats panel |
-| `/ss hide` | Hide stats panel |
+| `/ss` or `/statspro` | Open Settings |
+| `/ss show` | Show the HUD |
+| `/ss hide` | Hide the HUD |
 | `/ss toggle` | Toggle visibility |
-| `/ss reset` | Confirm and reset only the active profile to defaults |
-| `/ss wipe` or `/ss reset all` | Confirm and reset every StatsPro profile, assignment, and account setting |
-| `/statspro import` | Import compatible SwiftStats settings after confirmation |
-| `/ss debug` | Dump runtime state to chat (for bug reports) |
-| `/ss help` | List commands in chat |
+| `/ss reset` | Confirm and reset the active profile; shared assignments are identified in the warning |
+| `/ss wipe` or `/ss reset all` | Confirm and reset all profiles, assignments, role templates, account settings, and saved positions |
+| `/statspro import` | Import compatible SwiftStats settings into a new profile |
+| `/ss debug` | Print support state for a bug report |
+| `/ss help` | Show the command summary |
 
-**Tip:** Out of combat, right-click anywhere on the stats panel to open Settings — the same window as `/ss`. Right-click is intentionally ignored during combat. To bind a key for toggling visibility, create a macro running `/ss toggle` and bind it from Esc → Options → Keybindings → Macros.
-
-> Note: many users add `/ss` as a screenshot macro. If you have one, use the
-> `/statspro` alias instead — it's an equivalent built-in command.
-
-## Installation
-
-- **CurseForge:** [StatsPro on CurseForge](https://www.curseforge.com/wow/addons/statspro)
-- **Wago Addons:** [StatsPro on Wago](https://addons.wago.io/addons/statspro)
-- **WoWInterface:** [StatsPro on WoWInterface](https://www.wowinterface.com/downloads/info27130-StatsPro.html)
-- **Manual:** download the latest zip from [GitHub Releases](https://github.com/Antrakt92/StatsPro/releases/latest), then extract the `StatsPro` folder into `World of Warcraft\_retail_\Interface\AddOns\`.
+If an existing macro already owns `/ss`, use the equivalent `/statspro` command.
 
 ## Moving from SwiftStats
 
-On a fresh install, StatsPro automatically carries forward compatible SwiftStats
-settings when both addons are loaded for the first login. If StatsPro was already
-started without SwiftStats enabled, the import remains recoverable:
+On a fresh install, StatsPro carries forward compatible SwiftStats settings when
+both addons are loaded for the first login. If StatsPro has already started:
 
-1. Enable SwiftStats and StatsPro together for one login.
-2. Run `/reload` so both SavedVariables files are loaded.
-3. Run `/statspro import` (use this full command because SwiftStats also owns `/ss`).
-4. Review and confirm the import; StatsPro creates and applies a new profile immediately.
-5. Disable or uninstall SwiftStats after checking the imported layout.
+1. Enable SwiftStats and StatsPro together.
+2. Log in and run `/reload` so both SavedVariables files are available.
+3. Run `/statspro import` and confirm the import.
+4. Check the new `SwiftStats Import` profile, then disable or uninstall SwiftStats.
 
-The confirmed import creates an independent `SwiftStats Import` profile and assigns it
-only to the current character and specialization. Existing profiles, other assignments,
-account settings, and the original `SwiftStatsDB` remain untouched. StatsPro-only options
-start at their defaults, while unknown or source-only fields are ignored.
-
-## Configuration
-
-Type `/ss` or click the StatsPro entry in the Blizzard AddOns settings panel to
-open the configuration window. Three tabs (`Stats | Layout | Appearance`) cover
-everything:
-
-![StatsPro settings — Gear rows, Archon tooltip targets, label style, value colors, text outline, panel background, and localization across the Stats, Layout, and Appearance tabs](screenshots/settings-tabs.png)
-
-| Tab | What lives here |
-|---|---|
-| **Stats** | Character rows (Show Main Stat, Stamina), Offensive, Tertiary, Defensive, and Gear toggles, including Item Level, with inline color swatches |
-| **Layout** | Visibility / Lock, Display Mode, **Side Panel Contains** routing for Split mode, **Value Display** controls (Tooltip Targets, Show Rating / Show Percentage / Label Style / Match Value Color to Stat), Scale, Refresh Rate |
-| **Appearance** | Typography (Font / Font Size / Text Opacity), Readability (Text Outline / Panel Background), Localization (Language picker + font-coverage warning) |
+The import assigns the new profile only to the current character and
+specialization. Existing StatsPro profiles, other assignments, account settings,
+and the original `SwiftStatsDB` remain unchanged.
 
 ## Compatibility
 
-- **WoW Retail Midnight** — Interface `120007, 120100` (Retail 12.0.7 and PTR 12.1.0)
-- Classic / TBC / MoP Classic — not supported (Retail-only at this time)
+- **Supported:** World of Warcraft Retail — Midnight 12.0.7 and 12.1.0
+- **Not supported:** Classic Era, Cataclysm Classic, Mists of Pandaria Classic,
+  and other non-Retail clients
 
-## Local checks
+StatsPro does not make web requests in game. Archon data is collected ahead of
+release and bundled as a local snapshot.
 
-For addon code changes, run the Lua syntax, smoke, luacheck, and static
-diagnostics wrapper from the repository root:
+## Help, feedback, and development
 
-```powershell
-.\scripts\check-lua.ps1 -EnforceToolLocks
-```
+Open a [GitHub issue](https://github.com/Antrakt92/StatsPro/issues) for bugs,
+translation corrections, or feature requests. For a useful bug report, include
+the WoW build, StatsPro version, class/spec, reproduction steps, and a screenshot
+for visual problems. For combat-stat or target-hover issues, also include
+`/statspro debug live` from the affected state.
 
-It uses `luac5.1` for Lua 5.1 syntax, `lua5.1` for the pure-Lua smoke harness,
-`luacheck` with the repository's `.luacheckrc`, and `lua-language-server` with
-the repository's `.luarc.json` to catch accidental globals and other
-warning-level Lua diagnostics without linting vendored libraries.
+Developer setup, verification commands, and architecture notes live in
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-On a fresh Windows machine, bootstrap the local check tools with:
-
-```powershell
-.\scripts\install-check-tools.ps1 -Install -EnforceToolLocks
-```
-
-## Architecture (contributors / forks)
-
-Core addon logic lives in [`StatsPro.lua`](StatsPro.lua):
-
-- **`Panel:SetTextSafe`** — three-FontString rendering (label / rating / value), each
-  with its own `JustifyH` for column alignment, plus two more for the dedicated
-  repair row (label + coin). Caches non-secret widths per render to survive in-combat
-  measurement taint.
-- **`FmtRatingPct` / `FmtPctOnly` / `RouteValueOnly`** — column-routing helpers.
-  Dual-column mode = both display toggles on; otherwise everything stacks in the
-  rating column. `IsDualColMode()` is the single source of truth for that decision.
-- **`UpdateStats`** — drives the per-frame OnUpdate, builds logical render blocks
-  (Character / Offensive / Tertiary / Defensive / Item Level / Durability / Repair),
-  routes them by display mode, and gates value-column joining on `IsDualColMode()`.
-- **`LABELS_BY_LOCALE` + `L()` + `GetStyledLabelText()` + `FormatLabel()` + `PushLocalizedLabel`** — i18n
-  and label-presentation layer. One table indexed by locale; `L()` resolves the
-  active locale, `GetStyledLabelText()` applies the `Full / Short / Hidden`
-  label-style rule with UTF-8-safe short labels, and `FormatLabel()` composes
-  that with row color in a single call. `PushLocalizedLabel` registers
-  settings-UI setter closures so labels update live when the user picks a new
-  locale via the Language dropdown — no `/reload` required. Identity-fast-path
-  on enUS (no allocation, no table read).
-- **`MigrateDB`** — DB schema versioning. Bump `CURRENT_DB_VERSION` and add a
-  conditional `vN-1 → vN` clause when changing a default value, so existing users
-  on the old default upgrade automatically while explicit user choices are preserved.
-
-The repository's [`CHANGELOG.md`](CHANGELOG.md) documents what shipped per version
-and why. Tricky 12.x retail API behavior (secret-value handling, FontString taint,
-layout ordering quirks) is annotated as `WHY:` / `WARNING:` comments at the
-relevant call sites.
-
-## Bug reports / feature requests
-
-Open an issue on [GitHub Issues](https://github.com/Antrakt92/StatsPro/issues).
-Helpful details include the WoW build, class/spec when relevant, the addon version
-from the Settings header or `/statspro debug`, exact reproduction steps, and a
-screenshot for visual, layout, font, or localization issues. For combat-stat or
-Archon-hover problems, also capture the open hover and include
-`/statspro debug live` from the failing state.
-
-## Support
-
-StatsPro is free and MIT-licensed. If it saves you time and you'd like to support
-continued addon work:
-
-- **Ko-fi** — [ko-fi.com/antrakt92](https://ko-fi.com/antrakt92) (one-time or recurring)
-- **GitHub Sponsors** — the **❤ Sponsor** button at the top of this repo
-
-Bug reports and PRs remain the highest-leverage way to help — open an
-[issue](https://github.com/Antrakt92/StatsPro/issues) any time.
+StatsPro is free and MIT-licensed. Optional support is available through
+[Ko-fi](https://ko-fi.com/antrakt92) or [GitHub Sponsors](https://github.com/sponsors/Antrakt92).
 
 ## Acknowledgements
 
-- **[@tflo](https://github.com/tflo)** — auto main stat, text opacity, item level,
-  stamina, right-click-to-settings, label style modes, Stagger, Block visibility,
-  gear grouping, and background HUD layering feedback (issues #1–#5).
-- **[TaylorSay](https://www.curseforge.com/members/taylorsay)** — author of the
-  original [SwiftStats](https://www.curseforge.com/wow/addons/swiftstats) addon
-  (MIT), the project that inspired StatsPro and from which the initial defaults
-  and color scheme are derived.
-- **[LibSharedMedia-3.0](https://www.curseforge.com/wow/addons/libsharedmedia-3-0)** — font selection support.
+- **[@tflo](https://github.com/tflo)** — product and UX feedback across stats,
+  layout, settings, labels, and gear presentation.
+- **[TaylorSay](https://www.curseforge.com/members/taylorsay)** — author of
+  [SwiftStats](https://www.curseforge.com/wow/addons/swiftstats), the MIT-licensed
+  project that originally inspired StatsPro.
+- **[LibSharedMedia-3.0](https://www.curseforge.com/wow/addons/libsharedmedia-3-0)** —
+  font selection support.
 
 ## License
 
-[MIT](LICENSE). Original SwiftStats portions (boilerplate, color defaults, basic
-stat list) © TaylorSay; all StatsPro extensions © Antrakt. See [`LICENSE`](LICENSE)
-for the full text. Bundled runtime libraries keep their upstream terms:
-LibSharedMedia-3.0 (`LGPL-2.1-only`), CallbackHandler-1.0 (`BSD-2-Clause`), and
-LibStub (Public Domain). Full license texts, pinned revisions, provenance, and
-hashes are in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+[MIT](LICENSE). Original SwiftStats portions are © TaylorSay; StatsPro extensions
+are © Antrakt. Bundled libraries retain their upstream licenses. Exact notices,
+versions, provenance, and hashes are listed in
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

@@ -506,6 +506,8 @@ local function makeEnv(locale, opts)
     env.__prints = {}
     env.__staticPopupShows = 0
     env.__lastStaticPopup = nil
+    env.__staticPopups = {}
+    env.__staticPopupHideKeys = {}
     env.__reloadUICalls = 0
     env.print = function(text)
         env.__prints[#env.__prints + 1] = text
@@ -567,30 +569,46 @@ local function makeEnv(locale, opts)
             popup.EditBox = makeFrame(nil, opts.setFontResult, popup)
             function popup:GetEditBox() return self.EditBox end
         end
+        env.__staticPopups[key] = popup
         env.__lastStaticPopup = popup
         if type(definition.OnShow) == "function" then
             definition.OnShow(popup, data)
         end
-        return env.__lastStaticPopup
+        return popup
     end
     env.StaticPopup_Hide = function(key)
-        local popup = env.__lastStaticPopup
-        if not popup or popup.key ~= key then return end
-        env.__lastStaticPopup = nil
-        if type(popup.definition.OnCancel) == "function" then popup.definition.OnCancel() end
+        env.__staticPopupHideKeys[#env.__staticPopupHideKeys + 1] = key
+        local popup = env.__staticPopups[key]
+        if not popup then return end
+        env.__staticPopups[key] = nil
+        if env.__lastStaticPopup == popup then env.__lastStaticPopup = nil end
+        popup:Hide()
+        if type(popup.definition.OnCancel) == "function" then
+            popup.definition.OnCancel(popup, popup.data)
+        end
     end
     env.__acceptStaticPopup = function()
         local popup = env.__lastStaticPopup
+        if not popup then return end
+        if env.__staticPopups[popup.key] == popup then
+            env.__staticPopups[popup.key] = nil
+        end
         env.__lastStaticPopup = nil
-        if popup and type(popup.definition.OnAccept) == "function" then
-            popup.definition.OnAccept()
+        popup:Hide()
+        if type(popup.definition.OnAccept) == "function" then
+            popup.definition.OnAccept(popup, popup.data)
         end
     end
     env.__cancelStaticPopup = function()
         local popup = env.__lastStaticPopup
+        if not popup then return end
+        if env.__staticPopups[popup.key] == popup then
+            env.__staticPopups[popup.key] = nil
+        end
         env.__lastStaticPopup = nil
-        if popup and type(popup.definition.OnCancel) == "function" then
-            popup.definition.OnCancel()
+        popup:Hide()
+        if type(popup.definition.OnCancel) == "function" then
+            popup.definition.OnCancel(popup, popup.data)
         end
     end
     env.ReloadUI = opts.reloadUI or function()
@@ -11890,6 +11908,228 @@ do
     assertDeepEqual("profiles.compat.reset.header_request_zero_writes", root, before)
     env.__cancelStaticPopup()
     assertDeepEqual("profiles.compat.reset.header_cancel_zero_writes", root, before)
+end
+
+local function assertMutationPopupCombatCancellation(case)
+    local fixtureOptions = case.swiftStatsDB and { swiftStatsDB = case.swiftStatsDB } or nil
+    local env, addonContext, test, root, identity = makeProfileOpsFixture(fixtureOptions)
+    if case.settings then addonContext:OpenConfigMenu() end
+    case.open(env)
+
+    local popup = exists(case.name .. ".popup", env.__lastStaticPopup)
+    eq(case.name .. ".key", popup.key, case.key)
+    local popupData = exists(case.name .. ".data", popup.data)
+    local staleAccept = popup.definition.OnAccept
+    local staleCancel = popup.definition.OnCancel
+    local before = deepCopy(root)
+    local identities = captureRegistryIdentities(root)
+    local runtimeBefore = test.profileRuntimeState()
+    local showsBefore = env.__staticPopupShows
+
+    identity.combat = true
+    if case.laggingCombatAPI then identity.combatValue = false end
+    fireEvent(case.name .. ".combat_event", env, "PLAYER_REGEN_DISABLED")
+
+    local promptState = test.destructivePromptState()
+    eq(case.name .. ".pending_cleared", promptState[case.pendingField], false)
+    eq(case.name .. ".owned_popup_removed", env.__staticPopups[case.key], nil)
+    eq(case.name .. ".last_popup_cleared", env.__lastStaticPopup, nil)
+    eq(case.name .. ".exact_hide_key",
+        env.__staticPopupHideKeys[#env.__staticPopupHideKeys], case.key)
+    eq(case.name .. ".root_pointer", env.StatsProDB, root)
+    assertDeepEqual(case.name .. ".combat_zero_writes", root, before)
+    assertRegistryIdentities(case.name .. ".combat_identities", root, identities)
+    eq(case.name .. ".no_apply", test.profileRuntimeState().applyCount, runtimeBefore.applyCount)
+    eq(case.name .. ".no_commit", test.profileRuntimeState().structuralCommitCount,
+        runtimeBefore.structuralCommitCount)
+
+    staleAccept(popup, popupData)
+    staleCancel(popup, popupData)
+    assertDeepEqual(case.name .. ".stale_callbacks_zero_writes", root, before)
+    assertRegistryIdentities(case.name .. ".stale_callback_identities", root, identities)
+
+    fireEvent(case.name .. ".repeat_combat_event", env, "PLAYER_REGEN_DISABLED")
+    identity.combatValue = nil
+    case.open(env)
+    eq(case.name .. ".combat_retry_no_popup", env.__staticPopupShows, showsBefore)
+    eq(case.name .. ".combat_retry_no_pending",
+        test.destructivePromptState()[case.pendingField], false)
+
+    identity.combat = false
+    identity.combatValue = nil
+    fireEvent(case.name .. ".combat_end", env, "PLAYER_REGEN_ENABLED")
+    env.__flushTimers()
+    eq(case.name .. ".no_automatic_reopen", env.__staticPopupShows, showsBefore)
+    eq(case.name .. ".no_automatic_pending",
+        test.destructivePromptState()[case.pendingField], false)
+    assertDeepEqual(case.name .. ".final_zero_writes", root, before)
+end
+
+for _, case in ipairs({
+    {
+        name = "profiles.compat.combat_cancel.import_slash",
+        key = "STATSPRO_IMPORT_SWIFTSTATS",
+        pendingField = "importPending",
+        swiftStatsDB = { fontSize = 19 },
+        open = function(env) slash("profiles.compat.combat_cancel.import_slash.open", env, "import") end,
+    },
+    {
+        name = "profiles.compat.combat_cancel.reset_slash",
+        key = "STATSPRO_RESET_ACTIVE_PROFILE",
+        pendingField = "resetPending",
+        open = function(env) slash("profiles.compat.combat_cancel.reset_slash.open", env, "reset") end,
+    },
+    {
+        name = "profiles.compat.combat_cancel.reset_settings",
+        key = "STATSPRO_RESET_ACTIVE_PROFILE",
+        pendingField = "resetPending",
+        settings = true,
+        laggingCombatAPI = true,
+        open = function(env)
+            callScript("profiles.compat.combat_cancel.reset_settings.open",
+                env.StatsProResetActiveProfileButton, "OnClick")
+        end,
+    },
+    {
+        name = "profiles.compat.combat_cancel.wipe_slash",
+        key = "STATSPRO_WIPE_ALL_DATA",
+        pendingField = "wipePending",
+        open = function(env) slash("profiles.compat.combat_cancel.wipe_slash.open", env, "wipe") end,
+    },
+}) do
+    assertMutationPopupCombatCancellation(case)
+end
+
+for _, case in ipairs({
+    {
+        name = "import",
+        key = "STATSPRO_IMPORT_SWIFTSTATS",
+        pendingField = "importPending",
+        fixture = { swiftStatsDB = { fontSize = 19 } },
+        open = function(env, suffix)
+            slash("profiles.compat.combat_cancel.stale_reopen.import." .. suffix, env, "import")
+        end,
+    },
+    {
+        name = "reset",
+        key = "STATSPRO_RESET_ACTIVE_PROFILE",
+        pendingField = "resetPending",
+        open = function(env, suffix)
+            slash("profiles.compat.combat_cancel.stale_reopen.reset." .. suffix, env, "reset")
+        end,
+    },
+    {
+        name = "wipe",
+        key = "STATSPRO_WIPE_ALL_DATA",
+        pendingField = "wipePending",
+        open = function(env, suffix)
+            slash("profiles.compat.combat_cancel.stale_reopen.wipe." .. suffix, env, "wipe")
+        end,
+    },
+}) do
+    local prefix = "profiles.compat.combat_cancel.stale_reopen." .. case.name
+    local env, _, test, root, identity = makeProfileOpsFixture(case.fixture)
+    case.open(env, "first")
+    local oldPopup = env.__lastStaticPopup
+    local oldData = oldPopup.data
+    local staleAccept = oldPopup.definition.OnAccept
+    local staleCancel = oldPopup.definition.OnCancel
+    local before = deepCopy(root)
+    local identities = captureRegistryIdentities(root)
+    identity.combat = true
+    fireEvent(prefix .. ".combat", env, "PLAYER_REGEN_DISABLED")
+    identity.combat = false
+    fireEvent(prefix .. ".combat_end", env, "PLAYER_REGEN_ENABLED")
+    case.open(env, "second")
+    local newPopup = env.__lastStaticPopup
+    check(prefix .. ".new_record",
+        newPopup and newPopup.data and not rawequal(newPopup.data, oldData))
+    staleAccept(oldPopup, oldData)
+    staleCancel(oldPopup, oldData)
+    eq(prefix .. ".pending_preserved",
+        test.destructivePromptState()[case.pendingField], true)
+    eq(prefix .. ".popup_preserved", env.__staticPopups[case.key], newPopup)
+    eq(prefix .. ".data_preserved", newPopup.data, env.__staticPopups[case.key].data)
+    eq(prefix .. ".last_preserved", env.__lastStaticPopup, newPopup)
+    assertDeepEqual(prefix .. ".zero_writes", root, before)
+    assertRegistryIdentities(prefix .. ".identities", root, identities)
+    env.__cancelStaticPopup()
+end
+
+do
+    local env, _, test, root, identity = makeProfileOpsFixture({
+        swiftStatsDB = { fontSize = 19 },
+    })
+    local foreignCancelCount = 0
+    env.StaticPopupDialogs.STATSPRO_FOREIGN_TEST = {
+        OnCancel = function() foreignCancelCount = foreignCancelCount + 1 end,
+    }
+    slash("profiles.compat.combat_cancel.foreign.open_owned", env, "import")
+    local ownedPopup = env.__staticPopups.STATSPRO_IMPORT_SWIFTSTATS
+    local foreignData = {}
+    local foreignPopup = env.StaticPopup_Show("STATSPRO_FOREIGN_TEST", nil, nil, foreignData)
+    local before = deepCopy(root)
+    identity.combat = true
+    fireEvent("profiles.compat.combat_cancel.foreign.combat", env, "PLAYER_REGEN_DISABLED")
+    eq("profiles.compat.combat_cancel.foreign.owned_removed",
+        env.__staticPopups.STATSPRO_IMPORT_SWIFTSTATS, nil)
+    eq("profiles.compat.combat_cancel.foreign.owned_hidden", ownedPopup:IsShown(), false)
+    eq("profiles.compat.combat_cancel.foreign.pending_cleared",
+        test.destructivePromptState().importPending, false)
+    eq("profiles.compat.combat_cancel.foreign.mapping_preserved",
+        env.__staticPopups.STATSPRO_FOREIGN_TEST, foreignPopup)
+    eq("profiles.compat.combat_cancel.foreign.last_preserved", env.__lastStaticPopup, foreignPopup)
+    eq("profiles.compat.combat_cancel.foreign.still_shown", foreignPopup:IsShown(), true)
+    eq("profiles.compat.combat_cancel.foreign.cancel_not_called", foreignCancelCount, 0)
+    eq("profiles.compat.combat_cancel.foreign.data_preserved", foreignPopup.data, foreignData)
+    assertDeepEqual("profiles.compat.combat_cancel.foreign.zero_writes", root, before)
+    env.__cancelStaticPopup()
+end
+
+do
+    local env, _, test, root, identity = makeProfileOpsFixture({
+        swiftStatsDB = { fontSize = 19 },
+    })
+    slash("profiles.compat.combat_cancel.hide_failure.open", env, "import")
+    local popup = env.__lastStaticPopup
+    local before = deepCopy(root)
+    local originalHide = env.StaticPopup_Hide
+    env.StaticPopup_Hide = function(key)
+        if key == popup.key then error("injected hide failure") end
+        return originalHide(key)
+    end
+    identity.combat = true
+    fireEvent("profiles.compat.combat_cancel.hide_failure.combat", env, "PLAYER_REGEN_DISABLED")
+    eq("profiles.compat.combat_cancel.hide_failure.pending_cleared",
+        test.destructivePromptState().importPending, false)
+    popup.definition.OnAccept(popup, popup.data)
+    popup.definition.OnCancel(popup, popup.data)
+    assertDeepEqual("profiles.compat.combat_cancel.hide_failure.stale_zero_writes", root, before)
+    env.StaticPopup_Hide = originalHide
+    fireEvent("profiles.compat.combat_cancel.hide_failure.retry", env, "PLAYER_REGEN_DISABLED")
+    eq("profiles.compat.combat_cancel.hide_failure.retry_removed",
+        env.__staticPopups[popup.key], nil)
+    eq("profiles.compat.combat_cancel.hide_failure.retry_hidden", popup:IsShown(), false)
+    eq("profiles.compat.combat_cancel.hide_failure.retry_no_pending",
+        test.destructivePromptState().importPending, false)
+    assertDeepEqual("profiles.compat.combat_cancel.hide_failure.retry_zero_writes", root, before)
+end
+
+do
+    local env, addonContext, test, root = makeProfileOpsFixture()
+    addonContext:OpenConfigMenu()
+    callScript("profiles.compat.config_close.reset.open",
+        env.StatsProResetActiveProfileButton, "OnClick")
+    local popup = env.__lastStaticPopup
+    local before = deepCopy(root)
+    env.StatsProConfigFrame:Hide()
+    eq("profiles.compat.config_close.reset.pending_cleared",
+        test.destructivePromptState().resetPending, false)
+    eq("profiles.compat.config_close.reset.popup_removed",
+        env.__staticPopups.STATSPRO_RESET_ACTIVE_PROFILE, nil)
+    popup.definition.OnAccept(popup, popup.data)
+    popup.definition.OnCancel(popup, popup.data)
+    assertDeepEqual("profiles.compat.config_close.reset.stale_zero_writes", root, before)
 end
 
 do

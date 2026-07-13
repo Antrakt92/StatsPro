@@ -5,8 +5,14 @@
 local _, addon = ...
 addon.fontRuntime = {}
 addon.panelEditRuntime = { requested = false }
-addon.resetRuntime = { pending = nil }
-addon.wipeRuntime = { pending = nil }
+addon.resetRuntime = {
+    pending = nil,
+    popupKey = "STATSPRO_RESET_ACTIVE_PROFILE",
+}
+addon.wipeRuntime = {
+    pending = nil,
+    popupKey = "STATSPRO_WIPE_ALL_DATA",
+}
 addon.developerLinks = {
     popupKey = "STATSPRO_COPY_DEVELOPER_LINK",
     koFi = {
@@ -5926,6 +5932,7 @@ end
 -- external input: never iterate their keys or retain their tables, because unknown
 -- fields, cyclic tables, and later source-addon mutations must not enter StatsProDB.
 addon.legacyImport = {
+    popupKey = "STATSPRO_IMPORT_SWIFTSTATS",
     publicBooleanKeys = {
         "isVisible", "isLocked", "showRating", "showPercentage",
         "showTertiary", "hideZeroTertiary", "showLeech", "showAvoidance",
@@ -8114,6 +8121,7 @@ local EVENT_HANDLERS = {
         addon.profileUI.RefreshSafe()
     end,
     PLAYER_REGEN_DISABLED       = function()
+        addon.profileRuntime.CancelOwnedMutationPopups()
         addon.appearancePresets.ForceCancelPreview()
         addon.panelEditRuntime.Refresh(true)
         addon.profileUI.RefreshSafe()
@@ -10141,7 +10149,28 @@ local function ResetToDefaults()
     return addon.resetRuntime.Request()
 end
 
+function addon.profileRuntime.CancelOwnedMutationPopups()
+    for _, runtime in ipairs({
+        addon.legacyImport, addon.resetRuntime, addon.wipeRuntime,
+    }) do
+        local pending = runtime.pending
+        if pending then
+            -- WHY: invalidate ownership before StaticPopup_Hide synchronously invokes
+            -- OnCancel. Old accept/cancel callbacks can never consume a newer record.
+            runtime.pending = nil
+            runtime.hideRetry = true
+        end
+        if runtime.hideRetry and type(_G.StaticPopup_Hide) == "function" then
+            local hidden = pcall(_G.StaticPopup_Hide, runtime.popupKey)
+            if hidden then runtime.hideRetry = false end
+        end
+    end
+end
+
 addon.profileRuntime.closeOwnedSettingsModals = function()
+    -- Destructive prompts are invalidated first. A later preview/modal restore
+    -- failure must not leave an old confirmation capable of committing.
+    addon.profileRuntime.CancelOwnedMutationPopups()
     if addon.appearancePresets and addon.appearancePresets.session
         and type(addon.appearancePresets.CancelPreview) == "function" then
         local restored = addon.appearancePresets.CancelPreview(true)
@@ -10167,24 +10196,6 @@ addon.profileRuntime.closeOwnedSettingsModals = function()
         _G.StatsProFontPicker:Hide()
     end
     COLOR_PICKER_STATE.Close()
-    if addon.legacyImport.pending then
-        if type(_G.StaticPopup_Hide) == "function" then
-            pcall(_G.StaticPopup_Hide, "STATSPRO_IMPORT_SWIFTSTATS")
-        end
-        addon.legacyImport.CancelPending()
-    end
-    if addon.resetRuntime.pending then
-        if type(_G.StaticPopup_Hide) == "function" then
-            pcall(_G.StaticPopup_Hide, "STATSPRO_RESET_ACTIVE_PROFILE")
-        end
-        addon.resetRuntime.CancelPending()
-    end
-    if addon.wipeRuntime.pending then
-        if type(_G.StaticPopup_Hide) == "function" then
-            pcall(_G.StaticPopup_Hide, "STATSPRO_WIPE_ALL_DATA")
-        end
-        addon.wipeRuntime.CancelPending()
-    end
 end
 
 function addon.legacyImport.CloseOwnedSettingsModals()
@@ -10229,10 +10240,10 @@ addon.profileRuntime.applyActiveSettings = function()
     addon.profileRuntime.applyCount = addon.profileRuntime.applyCount + 1
 end
 
-function addon.legacyImport.AcceptPending()
+function addon.legacyImport.AcceptPending(_, popupData)
     local pending = addon.legacyImport.pending
+    if not pending or not rawequal(pending, popupData) then return end
     addon.legacyImport.pending = nil
-    if not pending then return end
     local ok, result = addon.profileOps.ImportAndAssign(
         pending.settings, pending.expected)
     if ok and type(result) == "table"
@@ -10249,8 +10260,10 @@ function addon.legacyImport.AcceptPending()
     end
 end
 
-function addon.legacyImport.CancelPending()
+function addon.legacyImport.CancelPending(_, popupData)
+    if not rawequal(addon.legacyImport.pending, popupData) then return false end
     addon.legacyImport.pending = nil
+    return true
 end
 
 _G.StaticPopupDialogs[addon.developerLinks.popupKey] = {
@@ -10296,7 +10309,7 @@ function addon.developerLinks.Show(linkKey)
     return ok and popup ~= nil
 end
 
-_G.StaticPopupDialogs["STATSPRO_IMPORT_SWIFTSTATS"] = {
+_G.StaticPopupDialogs[addon.legacyImport.popupKey] = {
     text = "",
     button1 = "",
     button2 = _G.CANCEL,
@@ -10310,7 +10323,6 @@ _G.StaticPopupDialogs["STATSPRO_IMPORT_SWIFTSTATS"] = {
 }
 
 function addon.legacyImport.Request()
-    addon.legacyImport.pending = nil
     if not addon.profileRuntime.CloseOwnedSettingsModals() then
         PrintMsg(L("SwiftStats import failed; profiles and assignments were preserved."))
         return
@@ -10351,21 +10363,22 @@ function addon.legacyImport.Request()
         settings = candidateSettings,
         expected = addon.profileUI.CaptureExpected(guid, specID, activeProfileID),
     }
-    local definition = _G.StaticPopupDialogs["STATSPRO_IMPORT_SWIFTSTATS"]
+    local definition = _G.StaticPopupDialogs[addon.legacyImport.popupKey]
     definition.text = L("Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged.")
     definition.button1 = L("Import")
     definition.button2 = _G.CANCEL
-    local ok, popup = pcall(_G.StaticPopup_Show, "STATSPRO_IMPORT_SWIFTSTATS")
+    local ok, popup = pcall(_G.StaticPopup_Show,
+        addon.legacyImport.popupKey, nil, nil, addon.legacyImport.pending)
     if not ok or not popup then
         addon.legacyImport.pending = nil
         PrintMsg(L("SwiftStats import failed; profiles and assignments were preserved."))
     end
 end
 
-function addon.resetRuntime.AcceptPending()
+function addon.resetRuntime.AcceptPending(_, popupData)
     local pending = addon.resetRuntime.pending
+    if not pending or not rawequal(pending, popupData) then return end
     addon.resetRuntime.pending = nil
-    if not pending then return end
     local ok, result = addon.profileOps.ResetCurrent(
         pending.profileID, pending.expected)
     if ok then
@@ -10375,11 +10388,13 @@ function addon.resetRuntime.AcceptPending()
     end
 end
 
-function addon.resetRuntime.CancelPending()
+function addon.resetRuntime.CancelPending(_, popupData)
+    if not rawequal(addon.resetRuntime.pending, popupData) then return false end
     addon.resetRuntime.pending = nil
+    return true
 end
 
-_G.StaticPopupDialogs["STATSPRO_RESET_ACTIVE_PROFILE"] = {
+_G.StaticPopupDialogs[addon.resetRuntime.popupKey] = {
     text = "",
     button1 = "",
     button2 = _G.CANCEL,
@@ -10393,7 +10408,6 @@ _G.StaticPopupDialogs["STATSPRO_RESET_ACTIVE_PROFILE"] = {
 }
 
 function addon.resetRuntime.Request()
-    addon.resetRuntime.pending = nil
     if not addon.profileRuntime.CloseOwnedSettingsModals() then return false end
     local root, gateReason = addon.profileOps.Gate(nil, false)
     if not root then
@@ -10416,13 +10430,14 @@ function addon.resetRuntime.Request()
         profileID = profileID,
         expected = addon.profileUI.CaptureExpected(guid, specID, profileID),
     }
-    local definition = _G.StaticPopupDialogs["STATSPRO_RESET_ACTIVE_PROFILE"]
+    local definition = _G.StaticPopupDialogs[addon.resetRuntime.popupKey]
     definition.text = string.format(
         L("Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."),
         profile.name, references.specs, otherReferences)
     definition.button1 = L("Confirm")
     definition.button2 = _G.CANCEL
-    local ok, popup = pcall(_G.StaticPopup_Show, "STATSPRO_RESET_ACTIVE_PROFILE")
+    local ok, popup = pcall(_G.StaticPopup_Show,
+        addon.resetRuntime.popupKey, nil, nil, addon.resetRuntime.pending)
     if not ok or not popup then
         addon.resetRuntime.pending = nil
         PrintMsg(addon.profileUI.OperationErrorText("open-failed"))
@@ -10431,10 +10446,10 @@ function addon.resetRuntime.Request()
     return true
 end
 
-function addon.wipeRuntime.AcceptPending()
+function addon.wipeRuntime.AcceptPending(_, popupData)
     local pending = addon.wipeRuntime.pending
+    if not pending or not rawequal(pending, popupData) then return end
     addon.wipeRuntime.pending = nil
-    if not pending then return end
     local ok, result = addon.profileOps.FullWipe(pending.expected)
     if ok then
         PrintMsg(L("All StatsPro data reset to defaults."))
@@ -10443,11 +10458,13 @@ function addon.wipeRuntime.AcceptPending()
     end
 end
 
-function addon.wipeRuntime.CancelPending()
+function addon.wipeRuntime.CancelPending(_, popupData)
+    if not rawequal(addon.wipeRuntime.pending, popupData) then return false end
     addon.wipeRuntime.pending = nil
+    return true
 end
 
-_G.StaticPopupDialogs["STATSPRO_WIPE_ALL_DATA"] = {
+_G.StaticPopupDialogs[addon.wipeRuntime.popupKey] = {
     text = "",
     button1 = "",
     button2 = _G.CANCEL,
@@ -10461,7 +10478,6 @@ _G.StaticPopupDialogs["STATSPRO_WIPE_ALL_DATA"] = {
 }
 
 function addon.wipeRuntime.Request()
-    addon.wipeRuntime.pending = nil
     if not addon.profileRuntime.CloseOwnedSettingsModals() then return false end
     local root, gateReason = addon.profileOps.Gate(nil, false)
     if not root then
@@ -10480,11 +10496,12 @@ function addon.wipeRuntime.Request()
     addon.wipeRuntime.pending = {
         expected = addon.profileUI.CaptureExpected(guid, specID, profileID),
     }
-    local definition = _G.StaticPopupDialogs["STATSPRO_WIPE_ALL_DATA"]
+    local definition = _G.StaticPopupDialogs[addon.wipeRuntime.popupKey]
     definition.text = L("Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged.")
     definition.button1 = L("Confirm")
     definition.button2 = _G.CANCEL
-    local ok, popup = pcall(_G.StaticPopup_Show, "STATSPRO_WIPE_ALL_DATA")
+    local ok, popup = pcall(_G.StaticPopup_Show,
+        addon.wipeRuntime.popupKey, nil, nil, addon.wipeRuntime.pending)
     if not ok or not popup then
         addon.wipeRuntime.pending = nil
         PrintMsg(addon.profileUI.OperationErrorText("open-failed"))
@@ -12083,6 +12100,7 @@ function addon:OpenConfigMenu()
     -- to trigger DropDownList1:OnHide → CancelLanguagePreview).
     configFrame:HookScript("OnHide", function()
         self.panelEditRuntime.SetRequested(false)
+        self.profileRuntime.CancelOwnedMutationPopups()
         self.appearancePresets.ForceCancelPreview()
         pcall(_G.StaticPopup_Hide, self.developerLinks.popupKey)
         CloseDropDownMenus()  -- closes any active Blizzard dropdown; fires its OnHide → CancelLanguagePreview

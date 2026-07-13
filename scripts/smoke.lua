@@ -7480,6 +7480,7 @@ do
     eq("repair.pending_hides_partial_known_cost", state.repairCost, nil)
     eq("repair.pending_marks_cost_incomplete", state.repairCostComplete, false)
     eq("repair.pending_secret_waits_for_event", state.retryScheduled, false)
+    eq("repair.pending_secret_uses_no_backoff_attempt", state.retryAttempt, 0)
     eq("repair.pending_secret_has_no_timer", #repairEnv.__timers, 0)
     local repairBlock = findBlockBySplitKey("repair.pending_secret.block",
         repairTest.buildRenderBlocks(), "splitRepairCost")
@@ -7492,6 +7493,200 @@ do
     eq("repair.pending_secret_regen_recovers_cost", state.repairCost, 500)
     eq("repair.pending_secret_regen_recovers_complete", state.repairCostComplete, true)
     eq("repair.pending_secret_regen_no_timer", #repairEnv.__timers, 0)
+end
+
+do
+    local tooltipCalls = 0
+    local retryDelays = { 1, 3, 8, 15 }
+    local repairEnv, repairAddon, repairTest = loadStatsPro("enUS", {
+        statsProDB = { showDurability = true, showRepairCost = true },
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then return 50, 100 end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function()
+            tooltipCalls = tooltipCalls + 1
+            if tooltipCalls >= 5 then return { repairCost = 300 } end
+            return nil
+        end,
+    })
+    fireEvent("repair.backoff_late_ready.enter", repairEnv, "PLAYER_ENTERING_WORLD")
+    local state = repairTest.durabilityState()
+    eq("repair.backoff_late_ready.initial_unknown", state.repairCostComplete, false)
+    eq("repair.backoff_late_ready.retry_limit", state.retryLimit, 4)
+    eq("repair.backoff_late_ready.initial_attempt", state.retryAttempt, 1)
+    for attempt, delay in ipairs(retryDelays) do
+        eq("repair.backoff_late_ready.timer_count." .. attempt, #repairEnv.__timers, 1)
+        eq("repair.backoff_late_ready.delay." .. attempt, repairEnv.__timers[1].delay, delay)
+        local callsBeforeTimer = tooltipCalls
+        flushTimers("repair.backoff_late_ready.timer." .. attempt, repairEnv, delay, 1)
+        eq("repair.backoff_late_ready.callback_defers_scan." .. attempt,
+            tooltipCalls, callsBeforeTimer)
+        eq("repair.backoff_late_ready.callback_marks_dirty." .. attempt,
+            repairTest.durabilityState().dirty, true)
+        check("repair.backoff_late_ready.update." .. attempt, repairAddon:RunUpdateStatsSafe())
+        state = repairTest.durabilityState()
+        if attempt < #retryDelays then
+            eq("repair.backoff_late_ready.still_pending." .. attempt,
+                state.repairCostComplete, false)
+            eq("repair.backoff_late_ready.next_attempt." .. attempt,
+                state.retryAttempt, attempt + 1)
+        end
+    end
+    state = repairTest.durabilityState()
+    eq("repair.backoff_late_ready.total_calls", tooltipCalls, 5)
+    eq("repair.backoff_late_ready.cost", state.repairCost, 300)
+    eq("repair.backoff_late_ready.complete", state.repairCostComplete, true)
+    eq("repair.backoff_late_ready.clean", state.dirty, false)
+    eq("repair.backoff_late_ready.no_timer", #repairEnv.__timers, 0)
+    eq("repair.backoff_late_ready.no_scheduled_attempt", state.scheduledAttempt, nil)
+end
+
+do
+    local tooltipCalls = 0
+    local retryDelays = { 1, 3, 8, 15 }
+    local repairEnv, repairAddon, repairTest = loadStatsPro("enUS", {
+        statsProDB = { showDurability = true, showRepairCost = true },
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then return 50, 100 end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function()
+            tooltipCalls = tooltipCalls + 1
+            return nil
+        end,
+    })
+    fireEvent("repair.backoff_bound.enter", repairEnv, "PLAYER_ENTERING_WORLD")
+    for attempt, delay in ipairs(retryDelays) do
+        flushTimers("repair.backoff_bound.timer." .. attempt, repairEnv, delay, 1)
+        check("repair.backoff_bound.update." .. attempt, repairAddon:RunUpdateStatsSafe())
+    end
+    local state = repairTest.durabilityState()
+    eq("repair.backoff_bound.total_calls", tooltipCalls, 5)
+    eq("repair.backoff_bound.exhausted_attempt", state.retryAttempt, 4)
+    eq("repair.backoff_bound.stays_unknown", state.repairCostComplete, false)
+    eq("repair.backoff_bound.no_timer", #repairEnv.__timers, 0)
+    eq("repair.backoff_bound.clean_after_exhaustion", state.dirty, false)
+    check("repair.backoff_bound.idle_update", repairAddon:RunUpdateStatsSafe())
+    eq("repair.backoff_bound.no_sixth_call", tooltipCalls, 5)
+    eq("repair.backoff_bound.no_late_timer", #repairEnv.__timers, 0)
+
+    fireEvent("repair.backoff_bound.inventory_reset", repairEnv, "UPDATE_INVENTORY_DURABILITY")
+    eq("repair.backoff_bound.reset_attempt_before_scan",
+        repairTest.durabilityState().retryAttempt, 0)
+    check("repair.backoff_bound.reset_update", repairAddon:RunUpdateStatsSafe())
+    state = repairTest.durabilityState()
+    eq("repair.backoff_bound.reset_one_scan", tooltipCalls, 6)
+    eq("repair.backoff_bound.reset_first_attempt", state.retryAttempt, 1)
+    eq("repair.backoff_bound.reset_one_timer", #repairEnv.__timers, 1)
+    eq("repair.backoff_bound.reset_first_delay", repairEnv.__timers[1].delay, 1)
+end
+
+do
+    local tooltipCalls = 0
+    local repairEnv, _, repairTest = loadStatsPro("enUS", {
+        statsProDB = { showDurability = true, showRepairCost = true },
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then return 50, 100 end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function()
+            tooltipCalls = tooltipCalls + 1
+            return nil
+        end,
+    })
+    repairTest.cacheSettings()
+    repairTest.refreshDurabilityCache()
+    eq("repair.backoff_disable.initial_call", tooltipCalls, 1)
+    eq("repair.backoff_disable.initial_timer", #repairEnv.__timers, 1)
+
+    activeSettings(repairEnv).showRepairCost = false
+    repairTest.cacheSettings()
+    repairTest.refreshDurabilityCache()
+    local state = repairTest.durabilityState()
+    eq("repair.backoff_disable.no_more_tooltip_calls", tooltipCalls, 1)
+    eq("repair.backoff_disable.logical_cancel", state.retryScheduled, false)
+    eq("repair.backoff_disable.old_timer_still_queued", #repairEnv.__timers, 1)
+    flushTimers("repair.backoff_disable.old_callback", repairEnv, 1, 1)
+    state = repairTest.durabilityState()
+    eq("repair.backoff_disable.old_callback_no_dirty", state.dirty, false)
+    eq("repair.backoff_disable.no_timer", #repairEnv.__timers, 0)
+end
+
+do
+    local mode = "pending"
+    local repairEnv, _, repairTest = loadStatsPro("enUS", {
+        statsProDB = { showDurability = true, showRepairCost = true },
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then return 50, 100 end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function()
+            if mode == "known" then return { repairCost = 300 } end
+            return nil
+        end,
+    })
+    repairTest.cacheSettings()
+    repairTest.refreshDurabilityCache()
+    eq("repair.same_generation_cancel.initial_timer", #repairEnv.__timers, 1)
+    eq("repair.same_generation_cancel.initial_attempt",
+        repairTest.durabilityState().scheduledAttempt, 1)
+
+    mode = "known"
+    repairTest.refreshDurabilityCache()
+    local state = repairTest.durabilityState()
+    eq("repair.same_generation_cancel.complete", state.repairCostComplete, true)
+    eq("repair.same_generation_cancel.logical_cancel", state.retryScheduled, false)
+    eq("repair.same_generation_cancel.old_timer_still_queued", #repairEnv.__timers, 1)
+
+    mode = "pending"
+    repairTest.refreshDurabilityCache()
+    state = repairTest.durabilityState()
+    eq("repair.same_generation_cancel.second_attempt", state.scheduledAttempt, 2)
+    eq("repair.same_generation_cancel.overlapping_timers", #repairEnv.__timers, 2)
+    eq("repair.same_generation_cancel.old_callback_fires", repairEnv.__flushNextTimer(1), true)
+    state = repairTest.durabilityState()
+    eq("repair.same_generation_cancel.old_callback_no_dirty", state.dirty, false)
+    eq("repair.same_generation_cancel.old_callback_preserves_new_token",
+        state.scheduledAttempt, 2)
+    eq("repair.same_generation_cancel.new_timer_remains", #repairEnv.__timers, 1)
+    flushTimers("repair.same_generation_cancel.new_callback", repairEnv, 3, 1)
+    eq("repair.same_generation_cancel.new_callback_marks_dirty",
+        repairTest.durabilityState().dirty, true)
+end
+
+do
+    local mode = "pending"
+    local repairEnv, repairAddon, repairTest = loadStatsPro("enUS", {
+        statsProDB = { showDurability = true, showRepairCost = true },
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then return 50, 100 end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function()
+            if mode == "known" then return { repairCost = 300 } end
+            return nil
+        end,
+    })
+    fireEvent("repair.stale_generation.enter", repairEnv, "PLAYER_ENTERING_WORLD")
+    eq("repair.stale_generation.old_timer", #repairEnv.__timers, 1)
+    fireEvent("repair.stale_generation.new_event", repairEnv, "MERCHANT_SHOW")
+    check("repair.stale_generation.new_update", repairAddon:RunUpdateStatsSafe())
+    eq("repair.stale_generation.overlapping_timers", #repairEnv.__timers, 2)
+    eq("repair.stale_generation.old_callback_fires", repairEnv.__flushNextTimer(1), true)
+    local state = repairTest.durabilityState()
+    eq("repair.stale_generation.old_callback_no_dirty", state.dirty, false)
+    eq("repair.stale_generation.old_callback_preserves_new_timer", state.retryScheduled, true)
+    eq("repair.stale_generation.old_callback_preserves_new_attempt", state.scheduledAttempt, 1)
+    eq("repair.stale_generation.new_timer_remains", #repairEnv.__timers, 1)
+    flushTimers("repair.stale_generation.new_callback", repairEnv, 1, 1)
+    eq("repair.stale_generation.new_callback_marks_dirty",
+        repairTest.durabilityState().dirty, true)
+    mode = "known"
+    check("repair.stale_generation.recovery_update", repairAddon:RunUpdateStatsSafe())
+    state = repairTest.durabilityState()
+    eq("repair.stale_generation.recovered_cost", state.repairCost, 300)
+    eq("repair.stale_generation.recovered_complete", state.repairCostComplete, true)
 end
 
 do
@@ -7525,10 +7720,12 @@ do
     eq("repair.pending_all_nil_one_timer", #repairEnv.__timers, 1)
     repairTest.refreshDurabilityCache()
     eq("repair.pending_all_nil_no_duplicate_timer", #repairEnv.__timers, 1)
-    flushTimers("repair.pending_all_nil_retry_timer", repairEnv, 3, 1)
+    flushTimers("repair.pending_all_nil_retry_timer", repairEnv, 1, 1)
     eq("repair.pending_all_nil_retry_marks_dirty", repairTest.durabilityState().dirty, true)
     repairTest.refreshDurabilityCache()
-    eq("repair.pending_all_nil_stops_after_retry", #repairEnv.__timers, 0)
+    eq("repair.pending_all_nil_schedules_second_retry", #repairEnv.__timers, 1)
+    eq("repair.pending_all_nil_second_attempt",
+        repairTest.durabilityState().scheduledAttempt, 2)
     mode = "known"
     fireEvent("repair.pending_all_nil_merchant_update", repairEnv, "MERCHANT_SHOW")
     eq("repair.pending_all_nil_merchant_marks_dirty", repairTest.durabilityState().dirty, true)
@@ -7536,6 +7733,9 @@ do
     state = repairTest.durabilityState()
     eq("repair.pending_all_nil_merchant_recovers_cost", state.repairCost, 300)
     eq("repair.pending_all_nil_merchant_recovers_complete", state.repairCostComplete, true)
+    flushTimers("repair.pending_all_nil_stale_second_retry", repairEnv, 3, 1)
+    eq("repair.pending_all_nil_stale_second_retry_no_dirty",
+        repairTest.durabilityState().dirty, false)
     mode = "pending"
     fireEvent("repair.pending_all_nil_event_reset", repairEnv, "UPDATE_INVENTORY_DURABILITY")
     eq("repair.pending_all_nil_event_marks_dirty", repairTest.durabilityState().dirty, true)
@@ -7677,9 +7877,13 @@ do
     eq("repair.surface_failure_is_unknown", state.repairCostComplete, false)
     eq("repair.surface_failure_hides_total", state.repairCost, nil)
     eq("repair.surface_failure_one_retry", #repairEnv.__timers, 1)
-    flushTimers("repair.surface_failure_retry", repairEnv, 3, 1)
-    repairTest.refreshDurabilityCache()
+    for attempt, delay in ipairs({ 1, 3, 8, 15 }) do
+        flushTimers("repair.surface_failure_retry." .. attempt, repairEnv, delay, 1)
+        repairTest.refreshDurabilityCache()
+    end
     eq("repair.surface_failure_retry_is_bounded", #repairEnv.__timers, 0)
+    eq("repair.surface_failure_retry_exhausted",
+        repairTest.durabilityState().retryAttempt, 4)
 end
 
 do

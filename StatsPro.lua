@@ -28,8 +28,11 @@ addon.developerLinks = {
 }
 addon.durabilityRuntime = {
     generation = 0,
-    attemptedGeneration = nil,
+    retryGeneration = 0,
+    retryAttempt = 0,
+    retryDelays = { 1, 3, 8, 15 },
     scheduledGeneration = nil,
+    scheduledAttempt = nil,
 }
 
 --[[ ============================================================
@@ -1054,11 +1057,16 @@ cached = {
 -- Dirty flag for event-driven cache refresh (durability scan is per-19-slot, not free)
 local durabilityDirty = true
 
--- External inventory/config events open one fresh delayed-retry generation. Timer
--- callbacks never reset this budget, so a stable nil/secret tooltip state cannot
--- create an endless three-second scan loop.
+-- External inventory/config events open one fresh bounded-retry generation.
+-- Timer callbacks never reset this budget, so stable nil tooltip data cannot
+-- create an endless polling loop.
 function addon.durabilityRuntime.MarkDirty()
-    addon.durabilityRuntime.generation = addon.durabilityRuntime.generation + 1
+    local runtime = addon.durabilityRuntime
+    runtime.generation = runtime.generation + 1
+    runtime.retryGeneration = runtime.generation
+    runtime.retryAttempt = 0
+    runtime.scheduledGeneration = nil
+    runtime.scheduledAttempt = nil
     durabilityDirty = true
 end
 -- Dirty flag for item-level refresh (overall iLvl can change from gear or bags)
@@ -6266,8 +6274,8 @@ end
 -- WARNING: repairCost can lag behind durability: C_TooltipInfo may return nil
 -- post-login, or return data with repairCost still nil/secret until item/vendor
 -- info catches up. No durability event fires for plain data-load, so each external
--- dirty generation gets one delayed re-scan. A generation token makes older timers
--- harmless after a newer inventory/config event.
+-- dirty generation gets a short bounded backoff. Generation + attempt tokens make
+-- older timers harmless after a newer inventory/config event or retry step.
 
 local function RefreshDurabilityCache()
     local avg, mn, durabilityComplete, cost,
@@ -6284,20 +6292,37 @@ local function RefreshDurabilityCache()
     cached.repairCost = cached.repairCostComplete and cost or nil
     durabilityDirty = false
 
-    local retryGeneration = addon.durabilityRuntime.generation
-    if repairCostPending and repairCostRetryable
-            and addon.durabilityRuntime.attemptedGeneration ~= retryGeneration then
-        addon.durabilityRuntime.attemptedGeneration = retryGeneration
-        addon.durabilityRuntime.scheduledGeneration = retryGeneration
-        C_Timer.After(3, function()
-            if addon.durabilityRuntime.scheduledGeneration == retryGeneration then
-                addon.durabilityRuntime.scheduledGeneration = nil
-            end
-            if addon.durabilityRuntime.generation == retryGeneration
-                    and cached.repairCostComplete == false then
-                durabilityDirty = true
-            end
-        end)
+    local runtime = addon.durabilityRuntime
+    local retryGeneration = runtime.generation
+    if runtime.retryGeneration ~= retryGeneration then
+        runtime.retryGeneration = retryGeneration
+        runtime.retryAttempt = 0
+    end
+    local retryNeeded = repairCostPending and repairCostRetryable
+    if not retryNeeded and runtime.scheduledGeneration == retryGeneration then
+        runtime.scheduledGeneration = nil
+        runtime.scheduledAttempt = nil
+    elseif retryNeeded
+            and runtime.scheduledGeneration ~= retryGeneration then
+        local retryAttempt = runtime.retryAttempt + 1
+        local retryDelay = runtime.retryDelays[retryAttempt]
+        if retryDelay then
+            runtime.retryAttempt = retryAttempt
+            runtime.scheduledGeneration = retryGeneration
+            runtime.scheduledAttempt = retryAttempt
+            C_Timer.After(retryDelay, function()
+                if runtime.generation ~= retryGeneration
+                        or runtime.retryGeneration ~= retryGeneration
+                        or runtime.retryAttempt ~= retryAttempt
+                        or runtime.scheduledGeneration ~= retryGeneration
+                        or runtime.scheduledAttempt ~= retryAttempt then return end
+                runtime.scheduledGeneration = nil
+                runtime.scheduledAttempt = nil
+                if cached.showRepairCost and cached.repairCostComplete == false then
+                    durabilityDirty = true
+                end
+            end)
+        end
     end
 end
 
@@ -14314,6 +14339,9 @@ if addon and addon.__statsproSmoke == true then
                 repairCost = cached.repairCost,
                 repairCostComplete = cached.repairCostComplete,
                 dirty = durabilityDirty,
+                retryAttempt = addon.durabilityRuntime.retryAttempt,
+                retryLimit = #addon.durabilityRuntime.retryDelays,
+                scheduledAttempt = addon.durabilityRuntime.scheduledAttempt,
                 retryScheduled = addon.durabilityRuntime.scheduledGeneration
                     == addon.durabilityRuntime.generation,
             }

@@ -293,7 +293,7 @@ end
 -- when metadata is invalid); a package uses its exact project version, including the
 -- branch build suffix in CI dry runs.
 -- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
-local CURRENT_RELEASE = "1.10.2"
+local CURRENT_RELEASE = "1.10.3"
 
 function addon.ResolveAddonVersion(packagerProjectVersion, metadataVersion, sourceVersion)
     if type(packagerProjectVersion) == "string" then

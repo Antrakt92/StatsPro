@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.10.3 - 13-Jul-2026 — Reliability and release hardening
+
+### Fixed
+
+- **Profile switching now recovers safely after interrupted specialization or context changes.** Automatically generated profile names stay within their limits, and invisible Unicode line or paragraph separators are rejected.
+- **Restricted durability keeps the last complete reading instead of replacing it with partial data.** Late item-tooltip hydration also uses bounded retries so Repair Cost can recover without endless refresh work.
+- **The font picker receives the first Escape keypress, while profile and Settings confirmations close before combat can make them unsafe.**
+
+### Improved
+
+- **Distribution updates are now more reliable across GitHub, CurseForge, Wago, and WoWInterface, including interrupted-release recovery and exact platform-version checks.**
+- **The public guide and screenshot gallery now reflect the current Profile Manager, appearance presets, and Settings layout.**
+
 ## 1.10.2 - 12-Jul-2026 — Profiles, presets, and Settings overhaul
 
 ### Added

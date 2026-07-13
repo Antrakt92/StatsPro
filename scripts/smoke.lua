@@ -8831,6 +8831,151 @@ do
 end
 
 do
+    local env, addonContext, test = loadStatsPro("enUS")
+    fireEvent("config.font_picker.escape.pew", env, "PLAYER_ENTERING_WORLD")
+    addonContext:OpenConfigMenu()
+    local config = exists("config.font_picker.escape.config", env.StatsProConfigFrame)
+    local root = env.StatsProDB
+    local before = deepCopy(root)
+    local rootRef = root
+    local accountRef = root.account
+    local profilesRef = root.profiles
+    local charactersRef = root.characters
+    local settingsRef = activeSettings(env)
+    local runtimeBefore = test.profileRuntimeState()
+    local foreign = env.CreateFrame(
+        "Frame", "StatsProFontPickerForeignSpecialFrame", env.UIParent)
+    foreign:Hide()
+    table.insert(env.UISpecialFrames, "StatsProFontPickerForeignSpecialFrame")
+
+    eq("config.font_picker.escape.initial.config_once",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 1)
+    eq("config.font_picker.escape.initial.picker_absent",
+        countValue(env.UISpecialFrames, "StatsProFontPicker"), 0)
+
+    -- Seed stale duplicates to prove the coordinator collapses every owned entry
+    -- without touching another addon's special-frame registration.
+    table.insert(env.UISpecialFrames, "StatsProConfigFrame")
+    table.insert(env.UISpecialFrames, "StatsProConfigFrame")
+    table.insert(env.UISpecialFrames, "StatsProFontPicker")
+    table.insert(env.UISpecialFrames, "StatsProFontPicker")
+    callScript("config.font_picker.escape.initial.open",
+        env.StatsProFontDropdownButton, "OnClick")
+    local picker = exists("config.font_picker.escape.picker", env.StatsProFontPicker)
+    local catcher = exists("config.font_picker.escape.catcher", picker.statsProCatcher)
+    eq("config.font_picker.escape.initial.config_shown", config:IsShown(), true)
+    eq("config.font_picker.escape.initial.picker_shown", picker:IsShown(), true)
+    eq("config.font_picker.escape.initial.catcher_shown", catcher:IsShown(), true)
+    eq("config.font_picker.escape.initial.config_suspended",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 0)
+    eq("config.font_picker.escape.initial.picker_once",
+        countValue(env.UISpecialFrames, "StatsProFontPicker"), 1)
+    eq("config.font_picker.escape.initial.foreign_preserved",
+        countValue(env.UISpecialFrames, "StatsProFontPickerForeignSpecialFrame"), 1)
+    eq("config.font_picker.escape.initial.trigger_active",
+        env.StatsProFontDropdownButton.statsProActive, true)
+
+    local committedFont = settingsRef.font
+    test.previewFontForSmoke("Fonts\\MORPHEUS.TTF")
+    eq("config.font_picker.escape.first.close", closeSpecialWindows(env), true)
+    eq("config.font_picker.escape.first.picker_closed", picker:IsShown(), false)
+    eq("config.font_picker.escape.first.catcher_closed", catcher:IsShown(), false)
+    eq("config.font_picker.escape.first.config_preserved", config:IsShown(), true)
+    eq("config.font_picker.escape.first.no_sync_config_restore",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 0)
+    eq("config.font_picker.escape.first.picker_removed",
+        countValue(env.UISpecialFrames, "StatsProFontPicker"), 0)
+    eq("config.font_picker.escape.first.trigger_inactive",
+        env.StatsProFontDropdownButton.statsProActive, false)
+    eq("config.font_picker.escape.first.preview_restored",
+        test.panelFontState().mainAppliedFont, committedFont)
+    flushTimers("config.font_picker.escape.first.restore", env, 0, 1)
+    eq("config.font_picker.escape.first.config_restored_once",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 1)
+    eq("config.font_picker.escape.first.foreign_still_preserved",
+        countValue(env.UISpecialFrames, "StatsProFontPickerForeignSpecialFrame"), 1)
+
+    eq("config.font_picker.escape.second.close", closeSpecialWindows(env), true)
+    eq("config.font_picker.escape.second.config_closed", config:IsShown(), false)
+    eq("config.font_picker.escape.second.config_removed",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 0)
+    eq("config.font_picker.escape.third.noop", closeSpecialWindows(env), false)
+    config:Show()
+    eq("config.font_picker.escape.reopen_config.once",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 1)
+
+    callScript("config.font_picker.escape.stale_restore.open",
+        env.StatsProFontDropdownButton, "OnClick")
+    picker:Hide()
+    eq("config.font_picker.escape.stale_restore.pending_config_absent",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 0)
+    callScript("config.font_picker.escape.stale_restore.reopen",
+        env.StatsProFontDropdownButton, "OnClick")
+    eq("config.font_picker.escape.stale_restore.same_picker", env.StatsProFontPicker, picker)
+    eq("config.font_picker.escape.stale_restore.same_catcher", picker.statsProCatcher, catcher)
+    flushTimers("config.font_picker.escape.stale_restore.flush", env, 0, 1)
+    eq("config.font_picker.escape.stale_restore.config_stays_suspended",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 0)
+    eq("config.font_picker.escape.stale_restore.picker_once",
+        countValue(env.UISpecialFrames, "StatsProFontPicker"), 1)
+    eq("config.font_picker.escape.stale_restore.picker_shown", picker:IsShown(), true)
+
+    callScript("config.font_picker.escape.catcher.close", catcher, "OnMouseDown")
+    eq("config.font_picker.escape.catcher.picker_closed", picker:IsShown(), false)
+    eq("config.font_picker.escape.catcher.catcher_closed", catcher:IsShown(), false)
+    eq("config.font_picker.escape.catcher.config_preserved", config:IsShown(), true)
+    eq("config.font_picker.escape.catcher.no_sync_restore",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 0)
+    flushTimers("config.font_picker.escape.catcher.restore", env, 0, 1)
+    eq("config.font_picker.escape.catcher.config_once",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 1)
+
+    for cycle = 1, 3 do
+        callScript("config.font_picker.escape.cycle.open." .. cycle,
+            env.StatsProFontDropdownButton, "OnClick")
+        eq("config.font_picker.escape.cycle.config_suspended." .. cycle,
+            countValue(env.UISpecialFrames, "StatsProConfigFrame"), 0)
+        eq("config.font_picker.escape.cycle.picker_once." .. cycle,
+            countValue(env.UISpecialFrames, "StatsProFontPicker"), 1)
+        callScript("config.font_picker.escape.cycle.toggle_close." .. cycle,
+            env.StatsProFontDropdownButton, "OnClick")
+        flushTimers("config.font_picker.escape.cycle.restore." .. cycle, env, 0, 1)
+        eq("config.font_picker.escape.cycle.config_once." .. cycle,
+            countValue(env.UISpecialFrames, "StatsProConfigFrame"), 1)
+        eq("config.font_picker.escape.cycle.picker_absent." .. cycle,
+            countValue(env.UISpecialFrames, "StatsProFontPicker"), 0)
+    end
+
+    callScript("config.font_picker.escape.config_close.open",
+        env.StatsProFontDropdownButton, "OnClick")
+    config:Hide()
+    eq("config.font_picker.escape.config_close.config_hidden", config:IsShown(), false)
+    eq("config.font_picker.escape.config_close.picker_hidden", picker:IsShown(), false)
+    eq("config.font_picker.escape.config_close.catcher_hidden", catcher:IsShown(), false)
+    eq("config.font_picker.escape.config_close.config_absent",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 0)
+    eq("config.font_picker.escape.config_close.picker_absent",
+        countValue(env.UISpecialFrames, "StatsProFontPicker"), 0)
+    flushTimers("config.font_picker.escape.config_close.no_restore", env, 0, 0)
+    config:Show()
+    eq("config.font_picker.escape.config_reopen.config_once",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 1)
+    eq("config.font_picker.escape.config_reopen.picker_stays_closed", picker:IsShown(), false)
+
+    assertDeepEqual("config.font_picker.escape.zero_writes", root, before)
+    eq("config.font_picker.escape.root_identity", env.StatsProDB, rootRef)
+    eq("config.font_picker.escape.account_identity", root.account, accountRef)
+    eq("config.font_picker.escape.profiles_identity", root.profiles, profilesRef)
+    eq("config.font_picker.escape.characters_identity", root.characters, charactersRef)
+    eq("config.font_picker.escape.settings_identity", activeSettings(env), settingsRef)
+    eq("config.font_picker.escape.no_apply",
+        test.profileRuntimeState().applyCount, runtimeBefore.applyCount)
+    eq("config.font_picker.escape.no_commit",
+        test.profileRuntimeState().structuralCommitCount,
+        runtimeBefore.structuralCommitCount)
+end
+
+do
     local secretHeight
     local resizeEnv, resizeAddon, resizeTest = loadStatsPro("enUS", {
         uiParentWidth = 1024,

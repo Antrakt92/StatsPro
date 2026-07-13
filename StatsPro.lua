@@ -9662,7 +9662,6 @@ addon.panelEditRuntime.SetRequested = function(requested)
     addon.panelEditRuntime.requested = requested == true
     addon.panelEditRuntime.Refresh()
 end
-local configSpecialFrameRegistered = false
 
 -- Layout cursor: stateful y-position tracker; eliminates manual `y = y - 25` math
 local function NewCursor(parent, padX, startY, gap)
@@ -12077,13 +12076,7 @@ function addon:OpenConfigMenu()
     configFrame:SetScript("OnDragStop", configFrame.StopMovingOrSizing)
     configFrame:SetClampedToScreen(true)
     configFrame:SetFrameStrata("DIALOG")
-    -- WHY: guarded as a one-shot for symmetry — the early-return at the top of
-    -- OpenConfigMenu already ensures this body runs once per session, but the flag
-    -- means even a re-entrant rebuild wouldn't double-add to UISpecialFrames.
-    if not configSpecialFrameRegistered then
-        self.profileUI.PushSpecialFrame("StatsProConfigFrame")
-        configSpecialFrameRegistered = true
-    end
+    self.profileUI.PushSpecialFrame("StatsProConfigFrame")
 
     configFrame:HookScript("OnShow", function()
         ApplyConfigFrameSize()
@@ -12099,6 +12092,8 @@ function addon:OpenConfigMenu()
     -- orphan dropdown list above (and a stale langPreview state until user clicks elsewhere
     -- to trigger DropDownList1:OnHide → CancelLanguagePreview).
     configFrame:HookScript("OnHide", function()
+        self.profileUI.CancelSpecialFrameRestore("StatsProConfigFrame")
+        self.profileUI.RemoveSpecialFrame("StatsProConfigFrame")
         self.panelEditRuntime.SetRequested(false)
         self.profileRuntime.CancelOwnedMutationPopups()
         self.appearancePresets.ForceCancelPreview()
@@ -12736,6 +12731,7 @@ function addon:OpenConfigMenu()
             fontPickerCatcher:EnableMouse(true)
             fontPickerCatcher:Hide()
             fontPickerCatcher:SetScript("OnMouseDown", HideFontPicker)
+            fontPickerFrame.statsProCatcher = fontPickerCatcher
 
             local pickerSurface = self.settingsDesign.CreateTextureSurface(fontPickerFrame, "viewport")
             pickerSurface:SetPoint("TOPLEFT", FONT_PICKER_PAD - 2, -(FONT_PICKER_PAD - 2))
@@ -12759,17 +12755,33 @@ function addon:OpenConfigMenu()
             -- through CancelFontPreview's forced DB-font sync. PickFont writes DB first,
             -- so the commit path still lands on the chosen font when Hide fires.
             fontPickerFrame:SetScript("OnHide", function()
+                self.profileUI.RemoveSpecialFrame("StatsProFontPicker")
                 if fontPickerCatcher then fontPickerCatcher:Hide() end
                 if fontDropdown and fontDropdown.statsProTrigger then
                     fontDropdown.statsProTrigger.statsProActive = false
                     addon.settingsDesign.RefreshControl(fontDropdown.statsProTrigger)
                 end
                 CancelFontPreview()
+                if configFrame and configFrame:IsShown()
+                    and not (self.profileUI.manager and self.profileUI.manager:IsShown())
+                    and not (self.profileUI.operationDialog
+                        and self.profileUI.operationDialog:IsShown()) then
+                    -- WARNING: restoring Settings synchronously can let one Escape
+                    -- close both layers during Blizzard's live special-frame walk.
+                    self.profileUI.DeferSpecialFrameRestore(
+                        "StatsProConfigFrame", function()
+                            return configFrame:IsShown()
+                                and not fontPickerFrame:IsShown()
+                                and not (self.profileUI.manager
+                                    and self.profileUI.manager:IsShown())
+                                and not (self.profileUI.operationDialog
+                                    and self.profileUI.operationDialog:IsShown())
+                        end)
+                else
+                    self.profileUI.CancelSpecialFrameRestore("StatsProConfigFrame")
+                    self.profileUI.RemoveSpecialFrame("StatsProConfigFrame")
+                end
             end)
-
-            -- Esc-to-close. UISpecialFrames pops top-most special frame on Esc — picker added
-            -- AFTER configFrame so picker closes first.
-            tinsert(UISpecialFrames, "StatsProFontPicker")
         end
 
         local function PopulateFontPicker()
@@ -12889,6 +12901,11 @@ function addon:OpenConfigMenu()
             else
                 fontPickerFrame:SetPoint("TOPLEFT", fontDropdown, "BOTTOMLEFT", 16, -2)
             end
+            -- Font Picker exclusively owns the next Escape. Settings is restored from
+            -- OnHide on a later tick so Blizzard cannot close both in one live walk.
+            self.profileUI.CancelSpecialFrameRestore("StatsProConfigFrame")
+            self.profileUI.RemoveSpecialFrame("StatsProConfigFrame")
+            self.profileUI.PushSpecialFrame("StatsProFontPicker")
             fontPickerCatcher:Show()
             fontPickerFrame:Show()
             if fontDropdown.statsProTrigger then

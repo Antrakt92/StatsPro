@@ -10790,12 +10790,13 @@ do
 end
 
 do
-    -- Old current-schema registries may already contain duplicate or overlong names.
+    -- Old current-schema registries may already contain duplicate, overlong, or
+    -- pre-contract separator-bearing names.
     -- They stay writable and untouched; only newly generated names use the new contract.
     local seed = loadStatsPro("enUS")
     fireEvent("profiles.context.legacy_name.seed", seed, "PLAYER_ENTERING_WORLD")
     local root = deepCopy(seed.StatsProDB)
-    local legacyName = string.rep("界", 41)
+    local legacyName = string.rep("界", 41) .. string.char(0xE3, 0x80, 0x80)
     root.profiles.p2 = { name = legacyName, settings = deepCopy(root.profiles.p1.settings) }
     root.profiles.p3 = { name = legacyName, settings = deepCopy(root.profiles.p1.settings) }
     root.account.nextProfileID = 4
@@ -13383,6 +13384,62 @@ do
     local normalized, count = ops.validateName("  Танк 配置 😀  ", root.profiles)
     eq("profiles.ops.name.trim", normalized, "Танк 配置 😀")
     eq("profiles.ops.name.codepoints", count, 9)
+    local decomposedName = "Cafe" .. string.char(0xCC, 0x81) .. " 配置"
+    normalized, count = ops.validateName(decomposedName, root.profiles)
+    eq("profiles.ops.name.decomposed_localized_preserved", normalized, decomposedName)
+    eq("profiles.ops.name.decomposed_localized_codepoints", count, 8)
+    local mongolianShapingName = string.char(
+        0xE1, 0xA0, 0xAE, 0xE1, 0xA0, 0x8E, 0xE1, 0xA0, 0xA3)
+    normalized, count = ops.validateName(mongolianShapingName, root.profiles)
+    eq("profiles.ops.name.mongolian_shaping_preserved", normalized, mongolianShapingName)
+    eq("profiles.ops.name.mongolian_shaping_codepoints", count, 3)
+    local separatorCases = {
+        { key = "u1680", value = string.char(0xE1, 0x9A, 0x80) },
+        { key = "u202f", value = string.char(0xE2, 0x80, 0xAF) },
+        { key = "u205f", value = string.char(0xE2, 0x81, 0x9F) },
+        { key = "u3000", value = string.char(0xE3, 0x80, 0x80) },
+    }
+    for tail = 0x80, 0x8A do
+        separatorCases[#separatorCases + 1] = {
+            key = string.format("u%04x", 0x2000 + tail - 0x80),
+            value = string.char(0xE2, 0x80, tail),
+        }
+    end
+    local separatorBefore = deepCopy(root)
+    local separatorIdentities = captureRegistryIdentities(root)
+    local separatorOperationBefore = ops.state().operationCount
+    local separatorGenerationBefore = test.profileState().generation
+    local separatorRuntimeBefore = test.profileRuntimeState()
+    local localizedName = "Танк 配置 😀"
+    for _, separatorCase in ipairs(separatorCases) do
+        local shapes = {
+            { key = "only", value = separatorCase.value },
+            { key = "ascii_wrapped", value = "  " .. separatorCase.value .. "  " },
+            { key = "leading", value = separatorCase.value .. localizedName },
+            { key = "trailing", value = localizedName .. separatorCase.value },
+            { key = "internal", value = localizedName .. separatorCase.value .. "Raid" },
+        }
+        for _, shape in ipairs(shapes) do
+            local rejected, status = ops.validateName(shape.value, root.profiles)
+            local prefix = "profiles.ops.name.separator." .. separatorCase.key
+                .. "." .. shape.key
+            eq(prefix .. ".rejected", rejected, nil)
+            eq(prefix .. ".status", status, "invalid-name")
+        end
+    end
+    assertDeepEqual("profiles.ops.name.separator.no_writes", root, separatorBefore)
+    assertRegistryIdentities(
+        "profiles.ops.name.separator.identity", root, separatorIdentities)
+    eq("profiles.ops.name.separator.operation_count",
+        ops.state().operationCount, separatorOperationBefore)
+    eq("profiles.ops.name.separator.generation",
+        test.profileState().generation, separatorGenerationBefore)
+    local separatorRuntimeAfter = test.profileRuntimeState()
+    eq("profiles.ops.name.separator.structural_commits",
+        separatorRuntimeAfter.structuralCommitCount,
+        separatorRuntimeBefore.structuralCommitCount)
+    eq("profiles.ops.name.separator.apply_count",
+        separatorRuntimeAfter.applyCount, separatorRuntimeBefore.applyCount)
     normalized, count = ops.validateName(string.rep("界", 40), root.profiles)
     eq("profiles.ops.name.limit.accept", normalized, string.rep("界", 40))
     eq("profiles.ops.name.limit.count", count, 40)
@@ -13495,6 +13552,35 @@ do
     eq("profiles.ops.create.invalid_next", root.account.nextProfileID, nextBeforeInvalid)
     assertDeepEqual("profiles.ops.create.invalid_no_writes", root, invalidBefore)
 
+    local invalidCreateNames = {
+        { key = "separator_only", value = string.char(0xE1, 0x9A, 0x80) },
+        { key = "separator_leading", value = string.char(0xE2, 0x80, 0x80) .. "Новый 配置" },
+        { key = "separator_trailing", value = "Новый 配置" .. string.char(0xE3, 0x80, 0x80) },
+    }
+    for _, invalidCase in ipairs(invalidCreateNames) do
+        local prefix = "profiles.ops.create." .. invalidCase.key
+        local before = deepCopy(root)
+        local identities = captureRegistryIdentities(root)
+        local operationBefore = ops.state().operationCount
+        local generationBefore = test.profileState().generation
+        local runtimeBefore = test.profileRuntimeState()
+        local reason
+        ok, reason = ops.create(invalidCase.value)
+        eq(prefix .. ".rejected", ok, false)
+        eq(prefix .. ".reason", reason, "invalid-name")
+        assertDeepEqual(prefix .. ".no_writes", root, before)
+        assertRegistryIdentities(prefix .. ".identity", root, identities)
+        eq(prefix .. ".next_profile_id", root.account.nextProfileID,
+            before.account.nextProfileID)
+        eq(prefix .. ".operation_count", ops.state().operationCount, operationBefore)
+        eq(prefix .. ".generation", test.profileState().generation, generationBefore)
+        local runtimeAfter = test.profileRuntimeState()
+        eq(prefix .. ".structural_commits", runtimeAfter.structuralCommitCount,
+            runtimeBefore.structuralCommitCount)
+        eq(prefix .. ".apply_count", runtimeAfter.applyCount, runtimeBefore.applyCount)
+        eq(prefix .. ".no_profile", root.profiles.p6, nil)
+    end
+
     ok = ops.deleteWithReplacement("p5", nil)
     eq("profiles.ops.create.delete_unused", ok, true)
     eq("profiles.ops.create.deleted", root.profiles.p5, nil)
@@ -13545,6 +13631,33 @@ do
     assertDeepEqual("profiles.ops.rename.assignments", root.characters, charactersBeforeRename)
     eq("profiles.ops.rename.active_id", test.profileState().profileID, "p2")
     eq("profiles.ops.rename.no_apply", test.profileRuntimeState().applyCount, applyBefore)
+
+    local invalidRenameNames = {
+        { key = "separator_only", value = string.char(0xE2, 0x80, 0xAF) },
+        { key = "separator_leading", value = string.char(0xE2, 0x81, 0x9F) .. "Танк 配置 é" },
+        { key = "separator_trailing", value = "Танк 配置 é" .. string.char(0xE2, 0x80, 0x8A) },
+    }
+    for _, invalidCase in ipairs(invalidRenameNames) do
+        local prefix = "profiles.ops.rename." .. invalidCase.key
+        local before = deepCopy(root)
+        local identities = captureRegistryIdentities(root)
+        local operationBefore = ops.state().operationCount
+        local generationBefore = test.profileState().generation
+        local runtimeBefore = test.profileRuntimeState()
+        local reason
+        ok, reason = ops.rename("p2", invalidCase.value)
+        eq(prefix .. ".rejected", ok, false)
+        eq(prefix .. ".reason", reason, "invalid-name")
+        assertDeepEqual(prefix .. ".no_writes", root, before)
+        assertRegistryIdentities(prefix .. ".identity", root, identities)
+        eq(prefix .. ".name", root.profiles.p2.name, before.profiles.p2.name)
+        eq(prefix .. ".operation_count", ops.state().operationCount, operationBefore)
+        eq(prefix .. ".generation", test.profileState().generation, generationBefore)
+        local runtimeAfter = test.profileRuntimeState()
+        eq(prefix .. ".structural_commits", runtimeAfter.structuralCommitCount,
+            runtimeBefore.structuralCommitCount)
+        eq(prefix .. ".apply_count", runtimeAfter.applyCount, runtimeBefore.applyCount)
+    end
 
     local renameBefore = deepCopy(root)
     ok = ops.rename("p2", "Damage solo")

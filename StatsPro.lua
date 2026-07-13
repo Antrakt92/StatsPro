@@ -3321,6 +3321,7 @@ addon.profileOps = {
     inProgress = false,
     operationCount = 0,
     maxNameCodepoints = 40,
+    maxUniqueNameCandidates = 9999,
     testFailureStage = nil,
     roleOrder = { "TANK", "HEALER", "DAMAGER" },
     roleKeys = { TANK = true, HEALER = true, DAMAGER = true },
@@ -4102,10 +4103,33 @@ function addon.profileRuntime.AllocateProfileID(account, profiles)
     return profileID
 end
 
-function addon.profileRuntime.ProfileName(context, suffix)
-    local base = context.displayName or "Character"
-    if suffix == "default" then return base .. " - Default" end
-    return base .. " - " .. (context.specName or string.format("Spec %d", context.specID))
+function addon.profileRuntime.ProfileName(context, suffix, profiles)
+    local displayName = addon.dbRuntime.IsCleanType(context.displayName, "string")
+        and context.displayName or L("Character")
+    local fallbackLabel = suffix == "default" and L("Default")
+        or string.format(L("Spec %d"), context.specID)
+    local label = suffix == "default" and L("Default")
+        or (addon.dbRuntime.IsCleanType(context.specName, "string")
+            and context.specName or fallbackLabel)
+    local maxCodepoints = addon.profileOps.maxNameCodepoints
+    local safeLabel, labelCount = addon.profileOps.NormalizeNameShape(
+        label, maxCodepoints - 4, true)
+    if not safeLabel then
+        safeLabel, labelCount = addon.profileOps.NormalizeNameShape(
+            fallbackLabel, maxCodepoints - 4, true)
+    end
+    if not safeLabel then return nil, "invalid-name" end
+    local displayLimit = maxCodepoints - labelCount - 3
+    local safeDisplay = addon.profileOps.NormalizeNameShape(
+        displayName, displayLimit, true)
+    if not safeDisplay then
+        safeDisplay = addon.profileOps.NormalizeNameShape(
+            L("Character"), displayLimit, true)
+    end
+    if not safeDisplay then return nil, "invalid-name" end
+    local fallback = L("Character") .. " - " .. fallbackLabel
+    return addon.profileOps.UniqueProfileName(
+        safeDisplay .. " - " .. safeLabel, profiles, fallback)
 end
 
 function addon.profileRuntime.CloneProfile(sourceProfile, name)
@@ -4167,11 +4191,12 @@ function addon.profileRuntime.PrepareContextTransaction(context)
         if not characterCopied or type(character) ~= "table" then return nil, nil end
     else
         local defaultSource = profiles[account.defaultProfileID]
+        local defaultName = addon.profileRuntime.ProfileName(context, "default", profiles)
+        if not defaultName then return nil, nil end
         local defaultProfileID = addon.profileRuntime.AllocateProfileID(account, profiles)
         if type(defaultProfileID) ~= "string"
             or not addon.dbRuntime.IsCleanType(defaultProfileID, "string") then return nil, nil end
-        local defaultProfile = addon.profileRuntime.CloneProfile(
-            defaultSource, addon.profileRuntime.ProfileName(context, "default"))
+        local defaultProfile = addon.profileRuntime.CloneProfile(defaultSource, defaultName)
         if type(defaultProfile) ~= "table" then return nil, nil end
         profiles[defaultProfileID] = defaultProfile
         character = { defaultProfileID = defaultProfileID, specProfiles = {} }
@@ -4183,11 +4208,12 @@ function addon.profileRuntime.PrepareContextTransaction(context)
     if type(sourceProfileID) ~= "string" then sourceProfileID = account.defaultProfileID end
     local sourceProfile = profiles[sourceProfileID]
     if type(sourceProfile) ~= "table" then return nil, nil end
+    local specName = addon.profileRuntime.ProfileName(context, "spec", profiles)
+    if not specName then return nil, nil end
     local specProfileID = addon.profileRuntime.AllocateProfileID(account, profiles)
     if type(specProfileID) ~= "string"
         or not addon.dbRuntime.IsCleanType(specProfileID, "string") then return nil, nil end
-    local specProfile = addon.profileRuntime.CloneProfile(
-        sourceProfile, addon.profileRuntime.ProfileName(context, "spec"))
+    local specProfile = addon.profileRuntime.CloneProfile(sourceProfile, specName)
     if type(specProfile) ~= "table" then return nil, nil end
     profiles[specProfileID] = specProfile
     character.specProfiles[context.specID] = specProfileID
@@ -4605,12 +4631,16 @@ function addon.profileOps.ShouldFail(stage)
     return true
 end
 
-function addon.profileOps.ValidateName(rawName, profiles, exceptProfileID)
+function addon.profileOps.NormalizeNameShape(rawName, maxCodepoints, truncate)
     if not addon.dbRuntime.IsCleanType(rawName, "string") then return nil, "invalid-name" end
     local name = rawName:match("^ *(.-) *$")
     if name == "" then return nil, "invalid-name" end
+    if not addon.dbRuntime.IsCleanType(maxCodepoints, "number")
+        or maxCodepoints < 1 or maxCodepoints ~= math.floor(maxCodepoints) then
+        return nil, "invalid-name"
+    end
 
-    local index, byteCount, codepoints = 1, #name, 0
+    local index, byteCount, codepoints, prefixEnd = 1, #name, 0, 0
     while index <= byteCount do
         local first = string.byte(name, index)
         local length, secondMin, secondMax = 1, nil, nil
@@ -4671,11 +4701,21 @@ function addon.profileOps.ValidateName(rawName, profiles, exceptProfileID)
         end
         index = index + length
         codepoints = codepoints + 1
-        if codepoints > addon.profileOps.maxNameCodepoints then
-            return nil, "name-too-long"
-        end
+        if codepoints <= maxCodepoints then prefixEnd = index - 1 end
     end
+    if codepoints > maxCodepoints then
+        if not truncate then return nil, "name-too-long" end
+        name = string.sub(name, 1, prefixEnd):match("^(.-) *$")
+        if name == "" then return nil, "invalid-name" end
+        codepoints = maxCodepoints
+    end
+    return name, codepoints
+end
 
+function addon.profileOps.ValidateName(rawName, profiles, exceptProfileID)
+    local name, codepoints = addon.profileOps.NormalizeNameShape(
+        rawName, addon.profileOps.maxNameCodepoints, false)
+    if not name then return nil, codepoints end
     for profileID, profile in pairs(profiles or {}) do
         if profileID ~= exceptProfileID and profile.name == name then
             return nil, "duplicate-name"
@@ -5094,15 +5134,35 @@ function addon.profileOps.ExecuteRootReplacement(expected, builder)
     return finish(true, result)
 end
 
-function addon.profileOps.UniqueProfileName(baseName, profiles)
-    local name = addon.profileOps.ValidateName(baseName, profiles)
-    if name then return name end
-    for suffix = 2, 9999 do
-        local candidate = baseName .. " " .. suffix
-        name = addon.profileOps.ValidateName(candidate, profiles)
-        if name then return name end
+function addon.profileOps.UniqueProfileName(baseName, profiles, fallbackName)
+    local base, status = addon.profileOps.NormalizeNameShape(
+        baseName, addon.profileOps.maxNameCodepoints, true)
+    if not base then
+        base, status = addon.profileOps.NormalizeNameShape(
+            fallbackName or L("Character"), addon.profileOps.maxNameCodepoints, true)
     end
-    return nil
+    if not base then
+        base, status = addon.profileOps.NormalizeNameShape(
+            L("Character"), addon.profileOps.maxNameCodepoints, true)
+    end
+    if not base then return nil, status end
+    local usedNames = {}
+    for _, profile in pairs(profiles or {}) do
+        if addon.dbRuntime.IsCleanTable(profile)
+            and addon.dbRuntime.IsCleanType(profile.name, "string") then
+            usedNames[profile.name] = true
+        end
+    end
+    for attempt = 1, addon.profileOps.maxUniqueNameCandidates do
+        local suffix = attempt == 1 and "" or " " .. tostring(attempt)
+        local prefix = addon.profileOps.NormalizeNameShape(
+            base, addon.profileOps.maxNameCodepoints - #suffix, true)
+        local candidate = prefix and prefix .. suffix or nil
+        local name = candidate and addon.profileOps.NormalizeNameShape(
+            candidate, addon.profileOps.maxNameCodepoints, false) or nil
+        if name and not usedNames[name] then return name end
+    end
+    return nil, "name-exhausted"
 end
 
 function addon.profileOps.Create(name, expected)
@@ -5340,20 +5400,16 @@ function addon.profileOps.MakeKnownSpecsIndependent(guid, expected)
                 or not addon.dbRuntime.IsCleanTable(sourceProfile) then
                 return nil, "missing-profile"
             end
-            local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
-            if not profileID then return nil, "id-exhausted" end
             local context = {
                 displayName = character.displayName,
                 specID = specID,
                 specName = addon.profileRuntime.knownSpecNames[specID],
             }
-            local name = addon.profileRuntime.ProfileName(context, "spec")
-            for _, profile in pairs(profiles) do
-                if profile.name == name then
-                    name = name .. " [" .. profileID .. "]"
-                    break
-                end
-            end
+            local name, nameStatus = addon.profileRuntime.ProfileName(
+                context, "spec", profiles)
+            if not name then return nil, nameStatus or "name-exhausted" end
+            local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
+            if not profileID then return nil, "id-exhausted" end
             local clone = addon.profileRuntime.CloneProfile(sourceProfile, name)
             if type(clone) ~= "table"
                 or not addon.dbRuntime.IsCleanTable(clone) then return nil, "clone-failed" end
@@ -11513,10 +11569,12 @@ function addon.profileUI.BuildSettingsUI(owner)
     manager:SetFrameLevel((owner:GetFrameLevel() or 100) + 20)
     manager:Hide()
 
+    local detailProfile
     function ui.ApplyManagerSize()
         local width = math.max(430, math.min(620, UIParent:GetWidth() * 0.9))
         local height = math.max(300, math.min(440, UIParent:GetHeight() * 0.85))
         manager:SetSize(width, height)
+        if detailProfile then detailProfile:SetWidth(math.max(1, width - 286)) end
     end
     ui.ApplyManagerSize()
     manager:HookScript("OnShow", function()
@@ -11595,12 +11653,24 @@ function addon.profileUI.BuildSettingsUI(owner)
     assignedLabel:SetPoint("TOPLEFT", detailContext, "BOTTOMLEFT", 0, -24)
     PushLocalizedLabel(function() assignedLabel:SetText(L("Assigned profile:")) end)
 
-    local detailProfile = manager:CreateFontString(nil, "OVERLAY")
+    detailProfile = manager:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(detailProfile, 15, "OUTLINE")
     detailProfile:SetPoint("TOPLEFT", assignedLabel, "BOTTOMLEFT", 0, -8)
-    detailProfile:SetPoint("TOPRIGHT", manager, "TOPRIGHT", -20, -138)
+    detailProfile:SetWidth(math.max(1, manager:GetWidth() - 286))
+    detailProfile:SetHeight(20)
     detailProfile:SetJustifyH("LEFT")
+    detailProfile:SetWordWrap(false)
+    detailProfile:SetNonSpaceWrap(false)
+    detailProfile:SetMaxLines(1)
     addon.settingsDesign.SetRegionColor(detailProfile, "accent")
+
+    local detailProfileHitArea = CreateFrame(
+        "Frame", "StatsProProfileDetailNameHitbox", manager)
+    detailProfileHitArea:SetAllPoints(detailProfile)
+    detailProfileHitArea:EnableMouse(true)
+    detailProfileHitArea.statsProText = detailProfile
+    addon.settingsDesign.AttachTooltip(
+        detailProfileHitArea, addon.settingsDesign.ControlTextTooltip)
 
     local detailSharing = manager:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(detailSharing, 12)
@@ -11641,6 +11711,7 @@ function addon.profileUI.BuildSettingsUI(owner)
     ui.detailCharacter = detailCharacter
     ui.detailContext = detailContext
     ui.detailProfile = detailProfile
+    ui.detailProfileHitArea = detailProfileHitArea
     ui.detailSharing = detailSharing
     ui.detailNotice = detailNotice
     ui.BuildOperationUI(manager)
@@ -11806,6 +11877,11 @@ function addon.profileUI.BuildSettingsUI(owner)
             detailContext:SetText("")
             detailProfile:SetText(model.activeProfileName or L("Account default profile"))
             detailSharing:SetText("")
+        end
+        if GameTooltip:IsShown() and type(GameTooltip.GetOwner) == "function"
+            and GameTooltip:GetOwner() == detailProfileHitArea then
+            GameTooltip:Hide()
+            addon.settingsDesign.ShowControlTooltip(detailProfileHitArea)
         end
 
         if model.readOnly then
@@ -13908,6 +13984,8 @@ if addon and addon.__statsproSmoke == true then
         formatProfileSpecName = addon.profileUI.FormatSpecName,
         profileOps = {
             validateName = addon.profileOps.ValidateName,
+            uniqueName = addon.profileOps.UniqueProfileName,
+            profileName = addon.profileRuntime.ProfileName,
             countReferences = addon.profileOps.CountReferences,
             create = addon.profileOps.Create,
             duplicate = addon.profileOps.Duplicate,
@@ -13930,7 +14008,11 @@ if addon and addon.__statsproSmoke == true then
                     inProgress = addon.profileOps.inProgress,
                     operationCount = addon.profileOps.operationCount,
                     maxNameCodepoints = addon.profileOps.maxNameCodepoints,
+                    maxUniqueNameCandidates = addon.profileOps.maxUniqueNameCandidates,
                 }
+            end,
+            setMaxUniqueNameCandidates = function(value)
+                addon.profileOps.maxUniqueNameCandidates = value
             end,
         },
         destructivePromptState = function()
@@ -13994,6 +14076,11 @@ if addon and addon.__statsproSmoke == true then
                 detailCharacter = ui.detailCharacter and ui.detailCharacter:GetText() or nil,
                 detailContext = ui.detailContext and ui.detailContext:GetText() or nil,
                 detailProfile = ui.detailProfile and ui.detailProfile:GetText() or nil,
+                detailProfileWidth = ui.detailProfile and ui.detailProfile:GetWidth() or nil,
+                detailProfileWordWrap = ui.detailProfile and ui.detailProfile.wordWrap,
+                detailProfileNonSpaceWrap = ui.detailProfile
+                    and ui.detailProfile.nonSpaceWrap,
+                detailProfileMaxLines = ui.detailProfile and ui.detailProfile.maxLines or nil,
                 detailSharing = ui.detailSharing and ui.detailSharing:GetText() or nil,
                 detailNotice = ui.detailNotice and ui.detailNotice:GetText() or nil,
                 managedProfile = ui.profileSelector and ui.profileSelector:GetText() or nil,

@@ -439,6 +439,7 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetNumeric() end
     function frame:SetTextInsets() end
     function frame:SetWordWrap(value) self.wordWrap = value end
+    function frame:SetNonSpaceWrap(value) self.nonSpaceWrap = value end
     function frame:GetStringWidth()
         if self.statsProWidthOverride ~= nil then return self.statsProWidthOverride end
         return utf8VisualUnits(self.text or "") * ((self.fontSize or 12) * 0.5)
@@ -10158,6 +10159,153 @@ do
 end
 
 do
+    -- First-seen default/spec names use the same evolving unique-name registry and
+    -- remain bounded without splitting CJK codepoints.
+    local seed, _, seedTest = loadStatsPro("enUS")
+    fireEvent("profiles.context.auto_name.seed", seed, "PLAYER_ENTERING_WORLD")
+    local root = deepCopy(seed.StatsProDB)
+    local playerName = string.rep("界", 25)
+    local realmName = string.rep("界", 2)
+    local displayName = playerName .. "-" .. realmName
+    local specName = string.rep("Ж", 25)
+    local context = { displayName = displayName, specID = 999, specName = specName }
+    local nextID = root.account.nextProfileID
+    local defaultCollision = seedTest.profileOps.profileName(
+        context, "default", root.profiles)
+    root.profiles["p" .. tostring(nextID)] = {
+        name = defaultCollision,
+        settings = deepCopy(root.profiles.p1.settings),
+    }
+    nextID = nextID + 1
+    root.account.nextProfileID = nextID
+    local specCollision = seedTest.profileOps.profileName(context, "spec", root.profiles)
+    root.profiles["p" .. tostring(nextID)] = {
+        name = specCollision,
+        settings = deepCopy(root.profiles.p1.settings),
+    }
+    nextID = nextID + 1
+    root.account.nextProfileID = nextID
+
+    local env, _, test = loadStatsPro("enUS", {
+        statsProDB = root,
+        unitGUID = function() return "Player-1-AUTO-NAME" end,
+        unitFullName = function() return playerName, realmName end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return 999, specName, nil, nil, "TANK", 1
+        end,
+    })
+    fireEvent("profiles.context.auto_name.activate", env, "PLAYER_ENTERING_WORLD")
+    local character = root.characters["Player-1-AUTO-NAME"]
+    local defaultID = character.defaultProfileID
+    local specID = character.specProfiles[999]
+    local defaultName = root.profiles[defaultID].name
+    local generatedSpecName = root.profiles[specID].name
+    local normalized, count = test.profileOps.validateName(
+        defaultName, root.profiles, defaultID)
+    eq("profiles.context.auto_name.default_valid", normalized, defaultName)
+    eq("profiles.context.auto_name.default_bounded", count <= 40, true)
+    normalized, count = test.profileOps.validateName(
+        generatedSpecName, root.profiles, specID)
+    eq("profiles.context.auto_name.spec_valid", normalized, generatedSpecName)
+    eq("profiles.context.auto_name.spec_bounded", count <= 40, true)
+    eq("profiles.context.auto_name.default_collision_resolved",
+        defaultName ~= defaultCollision, true)
+    eq("profiles.context.auto_name.spec_collision_resolved",
+        generatedSpecName ~= specCollision, true)
+    eq("profiles.context.auto_name.distinct", defaultName ~= generatedSpecName, true)
+    eq("profiles.context.auto_name.two_allocations", root.account.nextProfileID, nextID + 2)
+    eq("profiles.context.auto_name.no_orphan",
+        root.profiles["p" .. tostring(nextID + 2)], nil)
+end
+
+do
+    -- Name-space exhaustion during first visit is preparation-only: no ID, profile,
+    -- character assignment, or runtime activation can leak into the live registry.
+    local seed, _, seedTest = loadStatsPro("enUS")
+    fireEvent("profiles.context.auto_name_exhausted.seed", seed, "PLAYER_ENTERING_WORLD")
+    local root = deepCopy(seed.StatsProDB)
+    local context = { displayName = "Collision-Realm", specID = 999, specName = "Collision" }
+    local collisionName = seedTest.profileOps.profileName(context, "default", root.profiles)
+    local collisionID = "p" .. tostring(root.account.nextProfileID)
+    root.profiles[collisionID] = {
+        name = collisionName,
+        settings = deepCopy(root.profiles.p1.settings),
+    }
+    root.account.nextProfileID = root.account.nextProfileID + 1
+    local env, _, test = loadStatsPro("enUS", {
+        statsProDB = root,
+        unitGUID = function() return "Player-1-AUTO-NAME-EXHAUSTED" end,
+        unitFullName = function() return "Collision", "Realm" end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return 999, "Collision", nil, nil, "TANK", 1
+        end,
+    })
+    test.profileOps.setMaxUniqueNameCandidates(1)
+    local before = deepCopy(root)
+    local accountRef, profilesRef, charactersRef = root.account, root.profiles, root.characters
+    fireEvent("profiles.context.auto_name_exhausted.activate", env, "PLAYER_ENTERING_WORLD")
+    assertDeepEqual("profiles.context.auto_name_exhausted.no_writes", root, before)
+    eq("profiles.context.auto_name_exhausted.account_identity", root.account, accountRef)
+    eq("profiles.context.auto_name_exhausted.profiles_identity", root.profiles, profilesRef)
+    eq("profiles.context.auto_name_exhausted.characters_identity", root.characters, charactersRef)
+    eq("profiles.context.auto_name_exhausted.no_character",
+        root.characters["Player-1-AUTO-NAME-EXHAUSTED"], nil)
+    eq("profiles.context.auto_name_exhausted.no_activation",
+        test.profileRuntimeState().activationCount, 0)
+    eq("profiles.context.auto_name_exhausted.pending",
+        test.profileRuntimeState().pendingResolution, true)
+    test.profileOps.setMaxUniqueNameCandidates(9999)
+end
+
+do
+    -- Old current-schema registries may already contain duplicate or overlong names.
+    -- They stay writable and untouched; only newly generated names use the new contract.
+    local seed = loadStatsPro("enUS")
+    fireEvent("profiles.context.legacy_name.seed", seed, "PLAYER_ENTERING_WORLD")
+    local root = deepCopy(seed.StatsProDB)
+    local legacyName = string.rep("界", 41)
+    root.profiles.p2 = { name = legacyName, settings = deepCopy(root.profiles.p1.settings) }
+    root.profiles.p3 = { name = legacyName, settings = deepCopy(root.profiles.p1.settings) }
+    root.account.nextProfileID = 4
+    root.characters["Player-1-LEGACY-NAME"] = {
+        displayName = "Legacy-Realm",
+        classID = 1,
+        lastSeen = 1,
+        defaultProfileID = "p1",
+        specProfiles = { [73] = "p1" },
+    }
+    local before = deepCopy(root)
+    local accountRef, profilesRef, p2Ref, p3Ref =
+        root.account, root.profiles, root.profiles.p2, root.profiles.p3
+    local env, _, test = loadStatsPro("enUS", {
+        statsProDB = root,
+        unitGUID = function() return "Player-1-LEGACY-NAME" end,
+        unitFullName = function() return "Legacy", "Realm" end,
+        getServerTime = function() return 1 end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return 73, "Protection", nil, nil, "TANK", 1
+        end,
+    })
+    fireEvent("profiles.context.legacy_name.load", env, "PLAYER_ENTERING_WORLD")
+    eq("profiles.context.legacy_name.mode", test.dbCompatibilityState().mode, "current")
+    eq("profiles.context.legacy_name.writable", test.dbCompatibilityState().readOnly, false)
+    assertDeepEqual("profiles.context.legacy_name.unchanged", root, before)
+    eq("profiles.context.legacy_name.account_identity", root.account, accountRef)
+    eq("profiles.context.legacy_name.profiles_identity", root.profiles, profilesRef)
+    eq("profiles.context.legacy_name.p2_identity", root.profiles.p2, p2Ref)
+    eq("profiles.context.legacy_name.p3_identity", root.profiles.p3, p3Ref)
+    local ok, profileID = test.profileOps.create("Fresh profile")
+    check("profiles.context.legacy_name.create_ok", ok, profileID)
+    eq("profiles.context.legacy_name.create_name",
+        root.profiles[profileID].name, "Fresh profile")
+    eq("profiles.context.legacy_name.old_duplicate_preserved",
+        root.profiles.p2.name, legacyName)
+end
+
+do
     local seed = loadStatsPro("enUS")
     fireEvent("profiles.context.invalid.seed", seed, "PLAYER_ENTERING_WORLD")
     local cleanRoot = deepCopy(seed.StatsProDB)
@@ -11585,6 +11733,68 @@ local function makeProfileOpsFixture(options)
 end
 
 do
+    local env, addonContext, test, root = makeProfileOpsFixture()
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.detail_overflow.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    local state = test.profileUIState()
+    eq("profiles.ui.detail_overflow.short_text", state.detailProfile, "Tank shared")
+    eq("profiles.ui.detail_overflow.word_wrap", state.detailProfileWordWrap, false)
+    eq("profiles.ui.detail_overflow.non_space_wrap", state.detailProfileNonSpaceWrap, false)
+    eq("profiles.ui.detail_overflow.max_lines", state.detailProfileMaxLines, 1)
+    eq("profiles.ui.detail_overflow.dynamic_width", state.detailProfileWidth, 334)
+    local sharingBefore = state.detailSharing
+    local hitArea = exists("profiles.ui.detail_overflow.hit_area",
+        env.StatsProProfileDetailNameHitbox)
+    eq("profiles.ui.detail_overflow.hit_target",
+        hitArea.allPointsTarget, addonContext.profileUI.detailProfile)
+    userInteract("profiles.ui.detail_overflow.short_hover", hitArea, "OnEnter")
+    eq("profiles.ui.detail_overflow.short_no_tooltip", env.GameTooltip:IsShown(), false)
+
+    local longName = string.rep("界", 40)
+    root.profiles.p2.name = longName
+    addonContext.profileUI.RefreshSafe()
+    state = test.profileUIState()
+    eq("profiles.ui.detail_overflow.cjk_text_exact", state.detailProfile, longName)
+    eq("profiles.ui.detail_overflow.cjk_sharing_stable", state.detailSharing, sharingBefore)
+    userInteract("profiles.ui.detail_overflow.cjk_hover", hitArea, "OnEnter")
+    eq("profiles.ui.detail_overflow.tooltip_owner", env.GameTooltip:GetOwner(), hitArea)
+    eq("profiles.ui.detail_overflow.tooltip_full_text",
+        env.GameTooltip.lines[1].left, longName)
+    local refreshedLongName = string.rep("新", 40)
+    root.profiles.p2.name = refreshedLongName
+    addonContext.profileUI.RefreshSafe()
+    eq("profiles.ui.detail_overflow.tooltip_refresh_owner",
+        env.GameTooltip:GetOwner(), hitArea)
+    eq("profiles.ui.detail_overflow.tooltip_refresh_text",
+        env.GameTooltip.lines[1].left, refreshedLongName)
+    root.profiles.p2.name = "Short"
+    addonContext.profileUI.RefreshSafe()
+    eq("profiles.ui.detail_overflow.tooltip_short_refresh_hides",
+        env.GameTooltip:IsShown(), false)
+    root.profiles.p2.name = longName
+    addonContext.profileUI.RefreshSafe()
+    userInteract("profiles.ui.detail_overflow.cjk_reenter", hitArea, "OnEnter")
+    userInteract("profiles.ui.detail_overflow.cjk_leave", hitArea, "OnLeave")
+    eq("profiles.ui.detail_overflow.tooltip_hidden", env.GameTooltip:IsShown(), false)
+    root.profiles.p2.name = refreshedLongName
+    addonContext.profileUI.RefreshSafe()
+    eq("profiles.ui.detail_overflow.hidden_tooltip_not_resurrected",
+        env.GameTooltip:IsShown(), false)
+
+    local foreignOwner = env.CreateFrame("Frame", "StatsProProfileForeignTooltip", env.UIParent)
+    env.GameTooltip:SetOwner(foreignOwner, "ANCHOR_LEFT")
+    env.GameTooltip:AddLine("Foreign tooltip")
+    env.GameTooltip:Show()
+    userInteract("profiles.ui.detail_overflow.foreign_leave", hitArea, "OnLeave")
+    eq("profiles.ui.detail_overflow.foreign_preserved", env.GameTooltip:IsShown(), true)
+    eq("profiles.ui.detail_overflow.foreign_owner", env.GameTooltip:GetOwner(), foreignOwner)
+    eq("profiles.ui.detail_overflow.foreign_text",
+        env.GameTooltip.lines[1].left, "Foreign tooltip")
+    env.GameTooltip:Hide()
+end
+
+do
     local restricted = false
     local targetFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(targetFixture, "mythicPlus", "WARRIOR", "protection",
@@ -12193,6 +12403,7 @@ do
     local sourceSettingsRef = sourceRef.settings
     local sourceBefore = deepCopy(sourceSettingsRef)
     local p3Ref = root.profiles.p3
+    root.characters["Player-1-OPS-A"].displayName = string.rep("界", 35)
     local defaultBefore = root.characters["Player-1-OPS-A"].defaultProfileID
     local applyBefore = test.profileRuntimeState().applyCount
     local ok, result = ops.makeKnownSpecsIndependent("Player-1-OPS-A")
@@ -12219,6 +12430,12 @@ do
             sourceSettingsRef, root.profiles[profileID].settings)
         eq("profiles.automation.independent.single_spec_ref." .. specID,
             ops.countReferences(root, profileID).specs, 1)
+        local normalizedName, nameCount = ops.validateName(
+            root.profiles[profileID].name, root.profiles, profileID)
+        eq("profiles.automation.independent.name_valid." .. specID,
+            normalizedName, root.profiles[profileID].name)
+        eq("profiles.automation.independent.name_bounded." .. specID,
+            nameCount <= 40, true)
     end
     assertNoSharedTables("profiles.automation.independent.sibling_isolation",
         root.profiles.p5.settings, root.profiles.p6.settings)
@@ -12271,6 +12488,28 @@ do
         exhaustedRoot, beforeExhausted)
     assertRegistryIdentities("profiles.automation.independent.exhausted.identities",
         exhaustedRoot, exhaustedIdentities)
+
+    local _, _, nameExhaustedTest, nameExhaustedRoot = makeProfileOpsFixture({
+        mutateRoot = function(candidate)
+            candidate.characters["Player-1-OPS-A"].specProfiles[72] = "p2"
+            candidate.profiles.p5 = {
+                name = "Alpha-Realm - Protection",
+                settings = deepCopy(candidate.profiles.p1.settings),
+            }
+            candidate.account.nextProfileID = 6
+        end,
+    })
+    local nameExhaustedBefore = deepCopy(nameExhaustedRoot)
+    local nameExhaustedIdentities = captureRegistryIdentities(nameExhaustedRoot)
+    nameExhaustedTest.profileOps.setMaxUniqueNameCandidates(1)
+    ok, reason = nameExhaustedTest.profileOps.makeKnownSpecsIndependent("Player-1-OPS-A")
+    eq("profiles.automation.independent.name_exhausted.rejected", ok, false)
+    eq("profiles.automation.independent.name_exhausted.reason", reason, "name-exhausted")
+    assertDeepEqual("profiles.automation.independent.name_exhausted.no_writes",
+        nameExhaustedRoot, nameExhaustedBefore)
+    assertRegistryIdentities("profiles.automation.independent.name_exhausted.identities",
+        nameExhaustedRoot, nameExhaustedIdentities)
+    nameExhaustedTest.profileOps.setMaxUniqueNameCandidates(9999)
 
     for _, stage in ipairs({ "validate", "commit", "apply" }) do
         local _, _, test, root = makeProfileOpsFixture()
@@ -12419,6 +12658,57 @@ do
     eq("profiles.ops.name.arabic_mark.reject",
         ops.validateName(string.char(0xD8, 0x9C), root.profiles), nil)
     eq("profiles.ops.name.duplicate.reject", ops.validateName("Tank shared", root.profiles), nil)
+    eq("profiles.ops.name.unique_bound", ops.state().maxUniqueNameCandidates, 9999)
+
+    local longBase = string.rep("界", 50)
+    local unique = ops.uniqueName(longBase, {})
+    normalized, count = ops.validateName(unique, {})
+    eq("profiles.ops.name.unique_long_utf8_valid", normalized, unique)
+    eq("profiles.ops.name.unique_long_utf8_count", count, 40)
+    local collidingBase = string.rep("界", 40)
+    local collisions = {}
+    for attempt = 1, 10 do
+        local suffix = attempt == 1 and "" or " " .. tostring(attempt)
+        local prefix = string.rep("界", 40 - #suffix)
+        collisions["p" .. tostring(attempt)] = {
+            name = prefix .. suffix,
+            settings = {},
+        }
+    end
+    unique = ops.uniqueName(collidingBase, collisions)
+    eq("profiles.ops.name.unique_digit_boundary",
+        unique, string.rep("界", 37) .. " 11")
+    normalized, count = ops.validateName(unique, collisions)
+    eq("profiles.ops.name.unique_digit_boundary_valid", normalized, unique)
+    eq("profiles.ops.name.unique_digit_boundary_count", count, 40)
+
+    ops.setMaxUniqueNameCandidates(3)
+    local exhaustedNames = {
+        p1 = { name = "Bounded", settings = {} },
+        p2 = { name = "Bounded 2", settings = {} },
+        p3 = { name = "Bounded 3", settings = {} },
+    }
+    local exhaustedName, exhaustedStatus = ops.uniqueName("Bounded", exhaustedNames)
+    eq("profiles.ops.name.unique_exhausted", exhaustedName, nil)
+    eq("profiles.ops.name.unique_exhausted_status", exhaustedStatus, "name-exhausted")
+    ops.setMaxUniqueNameCandidates(9999)
+
+    local automatic = ops.profileName({
+        displayName = "Bad|Name",
+        specID = 73,
+        specName = "Protection",
+    }, "spec", {})
+    eq("profiles.ops.name.automatic_invalid_fallback", automatic, "Character - Protection")
+    automatic = ops.profileName({ displayName = "Hero", specID = 999 }, "spec", {})
+    eq("profiles.ops.name.automatic_numeric_spec", automatic, "Hero - Spec 999")
+    automatic = ops.profileName({
+        displayName = string.rep("Ж", 35),
+        specID = 73,
+        specName = string.rep("界", 25),
+    }, "spec", {})
+    normalized, count = ops.validateName(automatic, {})
+    eq("profiles.ops.name.automatic_mixed_valid", normalized, automatic)
+    eq("profiles.ops.name.automatic_mixed_bounded", count, 40)
 
     local charactersBefore = deepCopy(root.characters)
     local rolesBefore = deepCopy(root.roleTemplates)

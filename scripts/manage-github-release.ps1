@@ -14,6 +14,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 
 function Invoke-NativeCapture {
     param(
@@ -67,9 +68,7 @@ function Assert-ThrowsMatch {
 function Assert-ReleaseTag {
     param([string]$Value)
 
-    if ($Value -cnotmatch "^v\d+\.\d+\.\d+$") {
-        throw "Malformed release tag '$Value'. Expected vX.Y.Z."
-    }
+    Assert-StatsProReleaseTag -Value $Value
 }
 
 function Assert-CommitSha {
@@ -1500,6 +1499,13 @@ function Invoke-WithTemporaryReleaseBody {
 }
 
 function Invoke-SelfTest {
+    Assert-StatsProReleaseTagContractSelfTest
+    foreach ($invalidTag in @("v01.2.3", "V1.2.3", ("v1.2.3" + [char]10))) {
+        Assert-ThrowsMatch "release manager rejects noncanonical tag '$invalidTag'" {
+            Assert-ReleaseTag -Value $invalidTag
+        } "Malformed StatsPro release tag"
+    }
+
     $tag = "v1.2.3"
     $commit = "0123456789abcdef0123456789abcdef01234567"
     $draftEmpty = [pscustomobject]@{
@@ -1688,7 +1694,7 @@ function Invoke-SelfTest {
     }
     Assert-ThrowsMatch "uppercase release tag rejected" {
         Assert-ReleaseTag 'V1.2.3'
-    } "Malformed release tag"
+    } "Malformed StatsPro release tag"
     if ($null -ne (Select-GitHubReleaseByTag -Releases @([pscustomobject]@{ tag_name = 'V1.2.3' }) -ExpectedTag $tag)) {
         throw "Release lookup must use ordinal tag identity."
     }
@@ -1725,6 +1731,11 @@ function Invoke-SelfTest {
     Assert-ThrowsMatch "wrong-case protocol phase rejected" {
         [void](Read-ReleaseStateMarker -Body ("<!-- statspro-release-state:$(ConvertTo-Base64Url -Text $wrongPhaseJson) -->`n`n$protocolNotes"))
     } "unsupported phase"
+    $leadingZeroTagState = $preparedState.PSObject.Copy()
+    $leadingZeroTagState.tag = 'v01.2.3'
+    Assert-ThrowsMatch "leading-zero protocol marker tag rejected" {
+        [void](Read-ReleaseStateMarker -Body (Get-ReleaseBody -State $leadingZeroTagState -CanonicalNotes $protocolNotes))
+    } "Malformed StatsPro release tag"
     $wrongTransaction = $preparedState.PSObject.Copy()
     $wrongTransaction.transactionId = '0' * 64
     Assert-ThrowsMatch "wrong transaction digest rejected" {

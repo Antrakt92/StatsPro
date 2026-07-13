@@ -9,6 +9,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "release-tag-contract.ps1")
+
 function Invoke-Git {
     param(
         [string[]]$Arguments,
@@ -39,14 +41,7 @@ function Normalize-ReleaseTagName {
     if ([string]::IsNullOrWhiteSpace($Value)) {
         throw "Missing release tag. Pass -Tag vX.Y.Z or set GITHUB_REF_NAME."
     }
-    $tagName = $Value.Trim()
-    if ($tagName -match "^refs/tags/(.+)$") {
-        $tagName = $Matches[1]
-    }
-    if ($tagName -notmatch "^v\d+\.\d+\.\d+$") {
-        throw "Malformed release tag '$Value'. Expected vX.Y.Z or refs/tags/vX.Y.Z."
-    }
-    return $tagName
+    return ConvertTo-StatsProReleaseTagName -Value $Value -AllowFullRef
 }
 
 function Resolve-TagCommit {
@@ -155,6 +150,16 @@ function Assert-ThrowsMatch {
 }
 
 function Invoke-SelfTest {
+    Assert-StatsProReleaseTagContractSelfTest
+    if ((Normalize-ReleaseTagName "refs/tags/v1.2.3") -cne "v1.2.3") {
+        throw "Release ancestry tag adapter did not preserve canonical full refs."
+    }
+    foreach ($invalidTag in @("v01.2.3", "refs/tags/v1.02.3", "V1.2.3", ("v1.2.3" + [char]10))) {
+        Assert-ThrowsMatch "noncanonical ancestry tag rejected" {
+            [void](Normalize-ReleaseTagName $invalidTag)
+        } "Malformed StatsPro release tag"
+    }
+
     $root = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-ancestry-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $root | Out-Null
     try {
@@ -187,7 +192,7 @@ function Invoke-SelfTest {
 
             Assert-ThrowsMatch "malformed tag rejected" {
                 [void](Normalize-ReleaseTagName "release-1.0.0")
-            } "Malformed release tag"
+            } "Malformed StatsPro release tag"
         }
         finally {
             Pop-Location

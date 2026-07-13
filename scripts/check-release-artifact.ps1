@@ -18,6 +18,7 @@ $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "tool-version-locks.ps1")
 . (Join-Path $PSScriptRoot "third-party-contract.ps1")
+. (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 
 function Invoke-NativeCapture {
     param(
@@ -71,9 +72,7 @@ function Assert-ThrowsMatch {
 function Assert-ReleaseTag {
     param([string]$Value)
 
-    if ($Value -notmatch "^v\d+\.\d+\.\d+$") {
-        throw "Malformed release tag '$Value'. Expected vX.Y.Z."
-    }
+    Assert-StatsProReleaseTag -Value $Value
 }
 
 function Normalize-StatsProZipEntryPath {
@@ -293,9 +292,7 @@ function Assert-PackagedStatsProVersionMetadata {
 function Assert-PackagerProjectVersion {
     param([string]$Value)
 
-    if ($Value -notmatch '^v\d+\.\d+\.\d+(?:-\d+-g[0-9a-fA-F]{7,40})?$') {
-        throw "Malformed Packager project version '$Value'. Expected vX.Y.Z or vX.Y.Z-N-gHASH."
-    }
+    Assert-StatsProPackagerProjectVersion -Value $Value
 }
 
 function ConvertTo-StatsProNormalizedText {
@@ -917,10 +914,12 @@ function Get-SourceVersionTag {
 
     $tocText = Get-Content -LiteralPath (Join-Path $Root "StatsPro.toc") -Raw -Encoding UTF8
     $version = Get-SingleRegexMatchFromText -Text $tocText -Pattern "^##\s+Version:\s*([0-9]+\.[0-9]+\.[0-9]+)\s*$" -Description "TOC Version"
+    Assert-StatsProReleaseVersion -Value $version
     return "v$version"
 }
 
 function Invoke-SelfTest {
+    Assert-StatsProReleaseTagContractSelfTest
     $sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
     $tag = Get-SourceVersionTag -Root $sourceRoot
     $interfaces = @(Get-TocInterfaceValues -TocPath (Join-Path $sourceRoot "StatsPro.toc"))
@@ -935,6 +934,12 @@ function Invoke-SelfTest {
         $zip = Join-Path $tempDir "StatsPro-$tag.zip"
         New-TestPackageZip -SourceRoot $sourceRoot -ZipPath $zip -PackagerProjectVersion $tag
         $jsonPath = Join-Path $tempDir "release.json"
+        Assert-ThrowsMatch "leading-zero artifact tag rejected" {
+            Assert-StatsProReleaseArtifact -ZipPath $zip -ExpectedTag "v01.2.3" -PackagerProjectVersion $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$true -WithReleaseJson:$false
+        } "Malformed StatsPro release tag"
+        Assert-ThrowsMatch "leading-zero artifact Packager base rejected" {
+            Assert-StatsProReleaseArtifact -ZipPath $zip -ExpectedTag $tag -PackagerProjectVersion "v1.02.3-4-gabcdef0" -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$true -WithReleaseJson:$false
+        } "Malformed StatsPro Packager project version"
         Assert-StatsProReleaseArtifact -ZipPath $zip -ReleaseJsonPath $jsonPath -ExpectedTag $tag -PackagerProjectVersion $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -RequireExactPackagerProjectVersion:$true -PackageOnly:$false -WithReleaseJson:$true -WriteReleaseJson:$true
         $expectedJson = New-StatsProReleaseJsonText -ExpectedTag $tag -Interfaces $interfaces
         if ((Get-Content -LiteralPath $jsonPath -Raw -Encoding UTF8).Trim() -ne $expectedJson) {

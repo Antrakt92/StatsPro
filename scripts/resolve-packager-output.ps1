@@ -6,6 +6,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 
 function Assert-ThrowsMatch {
     param([string]$Name, [scriptblock]$Script, [string]$Pattern)
@@ -28,9 +29,7 @@ function Assert-ThrowsMatch {
 function Assert-ReleaseTag {
     param([string]$Value)
 
-    if ($Value -notmatch '^v\d+\.\d+\.\d+$') {
-        throw "Malformed release tag '$Value'. Expected vX.Y.Z."
-    }
+    Assert-StatsProReleaseTag -Value $Value
 }
 
 function Resolve-StatsProPackagerOutput {
@@ -55,10 +54,12 @@ function Resolve-StatsProPackagerOutput {
     }
 
     $archive = $archives[0]
-    if ($archive.BaseName -notmatch '^StatsPro-(v\d+\.\d+\.\d+(?:-\d+-g[0-9a-fA-F]{7,40})?)$') {
+    $archivePrefix = 'StatsPro-'
+    if (-not $archive.BaseName.StartsWith($archivePrefix, [System.StringComparison]::Ordinal)) {
         throw "Malformed Packager archive name '$($archive.Name)'."
     }
-    $projectVersion = $Matches[1]
+    $projectVersion = $archive.BaseName.Substring($archivePrefix.Length)
+    Assert-StatsProPackagerProjectVersion -Value $projectVersion
 
     if (-not [string]::IsNullOrWhiteSpace($Tag)) {
         $expectedName = "StatsPro-$Tag.zip"
@@ -91,6 +92,7 @@ function Export-StatsProPackagerOutput {
 }
 
 function Invoke-SelfTest {
+    Assert-StatsProReleaseTagContractSelfTest
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-packager-output-test-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path (Join-Path $tempRoot "StatsPro") -Force | Out-Null
     try {
@@ -112,6 +114,7 @@ function Invoke-SelfTest {
         }
 
         Rename-Item -LiteralPath $archivePath -NewName "StatsPro-v1.2.3-4-gabcdef0.zip"
+        $branchPath = Join-Path $tempRoot "StatsPro-v1.2.3-4-gabcdef0.zip"
         $branch = Resolve-StatsProPackagerOutput -Root $tempRoot -Tag ""
         if ($branch.ProjectVersion -ne "v1.2.3-4-gabcdef0") {
             throw "Branch Packager output was not resolved correctly."
@@ -121,7 +124,19 @@ function Invoke-SelfTest {
         } "does not exactly match"
         Assert-ThrowsMatch "malformed expected tag rejected" {
             [void](Resolve-StatsProPackagerOutput -Root $tempRoot -Tag "1.2.3")
-        } "Malformed release tag"
+        } "Malformed StatsPro release tag"
+        Assert-ThrowsMatch "leading-zero expected tag rejected" {
+            [void](Resolve-StatsProPackagerOutput -Root $tempRoot -Tag "v01.2.3")
+        } "Malformed StatsPro release tag"
+
+        Remove-Item -LiteralPath $branchPath -Force
+        $malformedBranchPath = Join-Path $tempRoot "StatsPro-v01.2.3-4-gabcdef0.zip"
+        Set-Content -LiteralPath $malformedBranchPath -Value "fixture" -Encoding UTF8
+        Assert-ThrowsMatch "leading-zero Packager archive rejected" {
+            [void](Resolve-StatsProPackagerOutput -Root $tempRoot -Tag "")
+        } "Malformed StatsPro Packager project version"
+        Remove-Item -LiteralPath $malformedBranchPath -Force
+        Set-Content -LiteralPath $branchPath -Value "fixture" -Encoding UTF8
         Assert-ThrowsMatch "blank GitHub output path rejected" {
             Export-StatsProPackagerOutput -Output $branch -Path " "
         } "Missing GitHub output path"

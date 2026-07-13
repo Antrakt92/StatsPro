@@ -15,6 +15,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "release-tag-contract.ps1")
+
 function Assert-ThrowsMatch {
     param([string]$Name, [scriptblock]$Script, [string]$Pattern)
 
@@ -42,9 +44,7 @@ function Assert-PowerShell7OrNewer {
 function Assert-ReleaseTag {
     param([string]$Value)
 
-    if ($Value -notmatch "^v\d+\.\d+\.\d+$") {
-        throw "Malformed release tag '$Value'. Expected vX.Y.Z."
-    }
+    Assert-StatsProReleaseTag -Value $Value
 }
 
 function Get-SingleRegexMatchFromText {
@@ -74,6 +74,7 @@ function Get-StatsProSourceVersionTag {
     }
     $tocText = Get-Content -LiteralPath $tocPath -Raw -Encoding UTF8
     $version = Get-SingleRegexMatchFromText -Text $tocText -Pattern "^##\s+Version:\s*([0-9]+\.[0-9]+\.[0-9]+)\s*$" -Description "TOC Version"
+    Assert-StatsProReleaseVersion -Value $version
     return "v$version"
 }
 
@@ -85,14 +86,6 @@ function Resolve-StatsProExpectedTag {
     }
     Assert-ReleaseTag $Value
     return $Value
-}
-
-function Assert-StatsProPackagerProjectVersion {
-    param([string]$Value)
-
-    if ($Value -notmatch '^v\d+\.\d+\.\d+(?:-\d+-g[0-9a-fA-F]{7,40})?$') {
-        throw "Malformed Packager project version '$Value'. Expected vX.Y.Z or vX.Y.Z-N-gHASH."
-    }
 }
 
 function Resolve-StatsProPackagerProjectVersion {
@@ -469,14 +462,19 @@ function Invoke-StatsProPackageArtifactCheck {
 }
 
 function Invoke-SelfTest {
+    Assert-StatsProReleaseTagContractSelfTest
     $sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
     $tag = Get-StatsProSourceVersionTag -Root $sourceRoot
-    if ($tag -notmatch "^v\d+\.\d+\.\d+$") {
-        throw "Source version tag must be vX.Y.Z."
-    }
+    Assert-ReleaseTag $tag
+    Assert-ThrowsMatch "leading-zero expected tag rejected" {
+        [void](Resolve-StatsProExpectedTag -Value "v01.2.3" -Root $sourceRoot)
+    } "Malformed StatsPro release tag"
     if ((Resolve-StatsProPackagerProjectVersion -Value "v1.2.3-4-gabcdef0" -Root $sourceRoot) -ne "v1.2.3-4-gabcdef0") {
         throw "Explicit Packager project version was not preserved."
     }
+    Assert-ThrowsMatch "leading-zero Packager base rejected" {
+        [void](Resolve-StatsProPackagerProjectVersion -Value "v1.02.3-4-gabcdef0" -Root $sourceRoot)
+    } "Malformed StatsPro Packager project version"
     Assert-ThrowsMatch "malformed Packager project version rejected" {
         [void](Resolve-StatsProPackagerProjectVersion -Value "1.2.3" -Root $sourceRoot)
     } "Malformed"
@@ -562,6 +560,13 @@ steps:
     $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-package-dry-run-test-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $tempDir | Out-Null
     try {
+        $invalidSource = Join-Path $tempDir "invalid-source"
+        New-Item -ItemType Directory -Path $invalidSource | Out-Null
+        Set-Content -LiteralPath (Join-Path $invalidSource "StatsPro.toc") -Value "## Version: 01.2.3" -Encoding UTF8
+        Assert-ThrowsMatch "leading-zero TOC fallback rejected" {
+            [void](Get-StatsProSourceVersionTag -Root $invalidSource)
+        } "Malformed StatsPro release version"
+
         $packageRoot = Join-Path $tempDir "StatsPro"
         New-Item -ItemType Directory -Path (Join-Path $packageRoot "nested") -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $packageRoot "a.txt") -Value "one" -Encoding UTF8

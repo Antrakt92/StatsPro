@@ -8,6 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "third-party-contract.ps1")
+. (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 
 function Get-SingleRegexMatch {
     param(
@@ -153,10 +154,18 @@ function Assert-PublicChangelogContract {
     if ($versionHeadings.Count -eq 0) {
         throw "CHANGELOG.md must contain at least one version heading."
     }
-    $versionHeadingPattern = "^##\s+\d+\.\d+\.\d+\s+-\s+\d{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{4}\s+—\s+\S.+$"
+    $versionPattern = (Get-StatsProReleaseTagContract).VersionPattern
+    $versionHeadingPattern = "^##\s+(?<version>$versionPattern)\s+-\s+\d{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{4}\s+—\s+\S.+$"
     foreach ($heading in $versionHeadings) {
-        if (-not [regex]::IsMatch($heading.Value, $versionHeadingPattern)) {
+        $headingMatch = [regex]::Match($heading.Value, $versionHeadingPattern)
+        if (-not $headingMatch.Success) {
             throw "Invalid historical changelog version heading: $($heading.Value)"
+        }
+        try {
+            Assert-StatsProReleaseVersion -Value $headingMatch.Groups['version'].Value
+        }
+        catch {
+            throw "Invalid historical changelog version heading: $($heading.Value) $($_.Exception.Message)"
         }
     }
 
@@ -514,6 +523,7 @@ function Write-TestThirdPartyNotices {
 }
 
 function Invoke-SelfTest {
+    Assert-StatsProReleaseTagContractSelfTest
     $root = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-metadata-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $root | Out-Null
     try {
@@ -649,6 +659,22 @@ GitHub issues are public.
             "## v1.0.0 (01-Jan-2026) — Initial release")
         Set-Content -LiteralPath $changelogPath -Value $malformedHistoricalHeading -Encoding UTF8
         Assert-ThrowsMatch "malformed historical changelog heading rejected" {
+            Assert-PublicChangelogContract -ChangelogPath $changelogPath -ReadmePath $readmePath
+        } "version heading"
+
+        $leadingZeroHistoricalHeading = $validChangelog.Replace(
+            "## 1.0.0 - 01-Jan-2026 — Initial release",
+            "## 01.0.0 - 01-Jan-2026 — Initial release")
+        Set-Content -LiteralPath $changelogPath -Value $leadingZeroHistoricalHeading -Encoding UTF8
+        Assert-ThrowsMatch "leading-zero historical changelog heading rejected" {
+            Assert-PublicChangelogContract -ChangelogPath $changelogPath -ReadmePath $readmePath
+        } "version heading"
+
+        $overflowHistoricalHeading = $validChangelog.Replace(
+            "## 1.0.0 - 01-Jan-2026 — Initial release",
+            "## 2147483648.0.0 - 01-Jan-2026 — Initial release")
+        Set-Content -LiteralPath $changelogPath -Value $overflowHistoricalHeading -Encoding UTF8
+        Assert-ThrowsMatch "overflow historical changelog heading rejected" {
             Assert-PublicChangelogContract -ChangelogPath $changelogPath -ReadmePath $readmePath
         } "version heading"
 

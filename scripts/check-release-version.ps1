@@ -9,6 +9,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 
 function Get-SingleRegexMatch {
     param(
@@ -58,35 +59,23 @@ function Normalize-ReleaseTagName {
     if ([string]::IsNullOrWhiteSpace($Value)) {
         throw "Missing release tag. Pass -Tag vX.Y.Z or set GITHUB_REF_NAME."
     }
-    $tagName = $Value.Trim()
-    if ($tagName -match "^refs/tags/(.+)$") {
-        $tagName = $Matches[1]
-    }
-    if ($tagName -notmatch "^v?\d+\.\d+\.\d+$") {
-        throw "Malformed release tag '$Value'. Expected vX.Y.Z or X.Y.Z."
-    }
-    if (-not $tagName.StartsWith("v")) {
-        $tagName = "v$tagName"
-    }
-    return $tagName
+    return ConvertTo-StatsProReleaseTagName -Value $Value -AllowFullRef -AllowBareVersion
 }
 
 function Get-ReleaseVersionFromTag {
     param([string]$TagName)
 
-    return $TagName.Substring(1)
+    return (ConvertTo-StatsProReleaseTagParts -Value $TagName).Version
 }
 
 function ConvertTo-SemVerParts {
     param([string]$Version)
 
-    if ($Version -notmatch "^(\d+)\.(\d+)\.(\d+)$") {
-        throw "Malformed SemVer '$Version'. Expected X.Y.Z."
-    }
+    $parts = ConvertTo-StatsProReleaseVersionParts -Value $Version
     return @{
-        Major = [int]$Matches[1]
-        Minor = [int]$Matches[2]
-        Patch = [int]$Matches[3]
+        Major = $parts.Major
+        Minor = $parts.Minor
+        Patch = $parts.Patch
     }
 }
 
@@ -114,10 +103,19 @@ function Get-NextSemVer {
 
     $parts = ConvertTo-SemVerParts $PreviousVersion
     if ($Bump -eq "major") {
+        if ($parts.Major -eq [int]::MaxValue) {
+            throw "Cannot apply major bump to $PreviousVersion because the major component is already at the supported maximum."
+        }
         return "$($parts.Major + 1).0.0"
     }
     if ($Bump -eq "minor") {
+        if ($parts.Minor -eq [int]::MaxValue) {
+            throw "Cannot apply minor bump to $PreviousVersion because the minor component is already at the supported maximum."
+        }
         return "$($parts.Major).$($parts.Minor + 1).0"
+    }
+    if ($parts.Patch -eq [int]::MaxValue) {
+        throw "Cannot apply patch bump to $PreviousVersion because the patch component is already at the supported maximum."
     }
     return "$($parts.Major).$($parts.Minor).$($parts.Patch + 1)"
 }
@@ -159,20 +157,38 @@ function Get-CommitBump {
     return "patch"
 }
 
+function Assert-AllReleaseTagsCanonical {
+    $result = Invoke-Git -Arguments @("tag", "--list", "v*")
+    foreach ($tag in $result.Output) {
+        $name = $tag.Trim()
+        if (-not (Test-StatsProReleaseTag -Value $name)) {
+            throw "Repository tag '$name' is not a canonical StatsPro release tag."
+        }
+    }
+}
+
 function Get-PreviousReleaseTag {
     param([string]$CurrentTagName)
 
+    Assert-AllReleaseTagsCanonical
     $result = Invoke-Git -Arguments @(
         "tag",
         "--merged",
         "HEAD",
         "--list",
-        "v[0-9]*.[0-9]*.[0-9]*",
+        "v*",
         "--sort=-v:refname"
     )
+    $names = @()
     foreach ($tag in $result.Output) {
         $name = $tag.Trim()
-        if ($name -match "^v\d+\.\d+\.\d+$" -and $name -ne $CurrentTagName) {
+        if (-not (Test-StatsProReleaseTag -Value $name)) {
+            throw "Reachable tag '$name' is not a canonical StatsPro release tag."
+        }
+        $names += $name
+    }
+    foreach ($name in $names) {
+        if ($name -cne $CurrentTagName) {
             return $name
         }
     }
@@ -180,19 +196,25 @@ function Get-PreviousReleaseTag {
 }
 
 function Get-LatestReachableReleaseTag {
+    Assert-AllReleaseTagsCanonical
     $result = Invoke-Git -Arguments @(
         "tag",
         "--merged",
         "HEAD",
         "--list",
-        "v[0-9]*.[0-9]*.[0-9]*",
+        "v*",
         "--sort=-v:refname"
     )
+    $names = @()
     foreach ($tag in $result.Output) {
         $name = $tag.Trim()
-        if ($name -match "^v\d+\.\d+\.\d+$") {
-            return $name
+        if (-not (Test-StatsProReleaseTag -Value $name)) {
+            throw "Reachable tag '$name' is not a canonical StatsPro release tag."
         }
+        $names += $name
+    }
+    if ($names.Count -gt 0) {
+        return $names[0]
     }
     return $null
 }
@@ -444,6 +466,26 @@ function Assert-ThrowsMatch {
 }
 
 function Invoke-SelfTest {
+    Assert-StatsProReleaseTagContractSelfTest
+    if ((Normalize-ReleaseTagName -Value "refs/tags/v1.2.3") -cne "v1.2.3" -or
+        (Normalize-ReleaseTagName -Value "1.2.3") -cne "v1.2.3") {
+        throw "Release version tag adapters did not preserve canonical inputs."
+    }
+    foreach ($invalidTag in @("v01.2.3", "V1.2.3", ("v1.2.3" + [char]10))) {
+        Assert-ThrowsMatch "release version rejects noncanonical tag '$invalidTag'" {
+            [void](Normalize-ReleaseTagName -Value $invalidTag)
+        } "Malformed StatsPro release tag"
+    }
+    Assert-ThrowsMatch "major bump overflow rejected" {
+        [void](Get-NextSemVer -PreviousVersion "2147483647.0.0" -Bump major)
+    } "major component.*maximum"
+    Assert-ThrowsMatch "minor bump overflow rejected" {
+        [void](Get-NextSemVer -PreviousVersion "1.2147483647.0" -Bump minor)
+    } "minor component.*maximum"
+    Assert-ThrowsMatch "patch bump overflow rejected" {
+        [void](Get-NextSemVer -PreviousVersion "1.2.2147483647" -Bump patch)
+    } "patch component.*maximum"
+
     $root = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-version-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $root | Out-Null
     Push-Location $root
@@ -464,13 +506,24 @@ function Invoke-SelfTest {
         Set-Content -Path "CHANGELOG.md" -Value "# Changelog`n`n## 1.0.1 - 02-Jan-2026 $([char]0x2014) Fix`n`n### Fixed`n`n- Release gate regression.`n`n## 1.0.0 - 01-Jan-2026 $([char]0x2014) Initial`n" -Encoding UTF8
         [void](Invoke-Git -Arguments @("add", "."))
         [void](Invoke-Git -Arguments @("commit", "-m", "fix: repair release gate"))
+        $fixtureTree = (Invoke-Git -Arguments @("write-tree")).Output[0]
+        $unreachableCommit = (Invoke-Git -Arguments @("commit-tree", $fixtureTree, "-m", "unreachable invalid-tag fixture")).Output[0]
+        [void](Invoke-Git -Arguments @("tag", "v01.0.0", $unreachableCommit))
+        Assert-ThrowsMatch "previous release discovery rejects noncanonical unreachable tag" {
+            [void](Get-PreviousReleaseTag -CurrentTagName "v1.0.1")
+        } "not a canonical StatsPro release tag"
+        Assert-ThrowsMatch "latest release discovery rejects noncanonical unreachable tag" {
+            [void](Get-LatestReachableReleaseTag)
+        } "not a canonical StatsPro release tag"
+        [void](Invoke-Git -Arguments @("tag", "-d", "v01.0.0"))
         $topChangelogPath = Join-Path $root "TOP-CHANGELOG.md"
         Assert-ReleaseVersion -TagValue "v1.0.1" -ShouldEnforceSemVer:$false -ShouldEnforceSemVerWhenAhead:$true -PermitSemVerMismatch:$false -ExportTopChangelogPath $topChangelogPath
         $topChangelog = Get-Content -Path $topChangelogPath -Raw -Encoding UTF8
         if (-not $topChangelog.StartsWith("# Changelog`n`n## 1.0.1 - 02-Jan-2026 $([char]0x2014) Fix")) {
             throw "exported top changelog must preserve the H1 and current release heading, got: $topChangelog"
         }
-        if ([regex]::Matches($topChangelog, "(?m)^##\s+\d+\.\d+\.\d+\s+-\s+").Count -ne 1) {
+        $topHeadingPattern = "(?m)^##\s+$((Get-StatsProReleaseTagContract).VersionPattern)\s+-\s+"
+        if ([regex]::Matches($topChangelog, $topHeadingPattern).Count -ne 1) {
             throw "exported top changelog must contain exactly one version heading, got: $topChangelog"
         }
         Assert-ReleaseVersion -TagValue "v1.0.1" -ShouldEnforceSemVer:$true -PermitSemVerMismatch:$false

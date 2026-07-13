@@ -1,7 +1,7 @@
 name: Package and release
 
 on:
-  # Publishing is tag-only. Existing releases are refused before marketplace upload.
+  # Publishing is tag-only. Only a protocol-owned empty pre-upload draft may resume.
   push:
     tags:
       - 'v*'
@@ -73,11 +73,21 @@ jobs:
         shell: pwsh
         run: ./scripts/check-anonymous-checkout.ps1
 
-      - name: Refuse existing release marker
+      - name: Trim release changelog
+        shell: pwsh
+        run: ./scripts/check-release-version.ps1 -Tag $env:GITHUB_REF_NAME -EnforceSemVer -ExportTopChangelogPath CHANGELOG.md
+
+      - name: Validate interrupted release state
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
-        run: ./scripts/manage-github-release.ps1 -Mode RefuseExisting -Repository $env:GITHUB_REPOSITORY -ExpectedTag $env:GITHUB_REF_NAME
+        run: |
+          ./scripts/manage-github-release.ps1 `
+            -Mode ValidateStart `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -NotesPath CHANGELOG.md
 
       - name: Verify immutable release policy
         env:
@@ -92,10 +102,6 @@ jobs:
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
           WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
         run: ./scripts/check-marketplace-versions.ps1
-
-      - name: Trim release changelog
-        shell: pwsh
-        run: ./scripts/check-release-version.ps1 -Tag $env:GITHUB_REF_NAME -EnforceSemVer -ExportTopChangelogPath CHANGELOG.md
 
       - name: Check CI action refs
         shell: pwsh
@@ -164,18 +170,6 @@ jobs:
             -RequireExactPackagerProjectVersion `
             -EnforceToolLocks
 
-      - name: Create draft release marker
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          ./scripts/manage-github-release.ps1 `
-            -Mode CreateDraft `
-            -Repository $env:GITHUB_REPOSITORY `
-            -ExpectedTag $env:GITHUB_REF_NAME `
-            -ExpectedCommitSha $env:GITHUB_SHA `
-            -NotesPath CHANGELOG.md
-
       - name: Validate exact package immediately before marketplace upload
         shell: pwsh
         env:
@@ -200,6 +194,34 @@ jobs:
             -ArchonMaxAgeDays 3 `
             -RequireExactPackagerProjectVersion `
             -EnforceToolLocks
+
+      - name: Prepare resumable draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./scripts/manage-github-release.ps1 `
+            -Mode CreateDraft `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -ExpectedRunId $env:GITHUB_RUN_ID `
+            -NotesPath CHANGELOG.md `
+            -ManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256")
+
+      - name: Mark marketplace publication started
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./scripts/manage-github-release.ps1 `
+            -Mode MarkMarketplaceStarted `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -ExpectedRunId $env:GITHUB_RUN_ID `
+            -NotesPath CHANGELOG.md `
+            -ManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256")
 
       - name: Publish package to marketplaces
         id: publish-package
@@ -254,8 +276,12 @@ jobs:
             -Mode AttachAssets `
             -Repository $env:GITHUB_REPOSITORY `
             -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -ExpectedRunId $env:GITHUB_RUN_ID `
             -ArchivePath $env:STATSPRO_RELEASE_ARCHIVE `
-            -ReleaseJsonPath $env:STATSPRO_RELEASE_JSON
+            -ReleaseJsonPath $env:STATSPRO_RELEASE_JSON `
+            -NotesPath CHANGELOG.md `
+            -ManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256")
 
       - name: Publish immutable GitHub release
         shell: pwsh
@@ -267,8 +293,11 @@ jobs:
             -Repository $env:GITHUB_REPOSITORY `
             -ExpectedTag $env:GITHUB_REF_NAME `
             -ExpectedCommitSha $env:GITHUB_SHA `
+            -ExpectedRunId $env:GITHUB_RUN_ID `
             -ArchivePath $env:STATSPRO_RELEASE_ARCHIVE `
-            -ReleaseJsonPath $env:STATSPRO_RELEASE_JSON
+            -ReleaseJsonPath $env:STATSPRO_RELEASE_JSON `
+            -NotesPath CHANGELOG.md `
+            -ManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256")
 
       - name: Validate published immutable release assets
         shell: pwsh

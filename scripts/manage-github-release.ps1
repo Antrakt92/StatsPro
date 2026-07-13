@@ -1,12 +1,14 @@
 param(
-    [ValidateSet("RefuseExisting", "CreateDraft", "AttachAssets", "Publish")]
+    [ValidateSet("RefuseExisting", "ValidateStart", "CreateDraft", "MarkMarketplaceStarted", "AttachAssets", "Publish", "RetirePrepared")]
     [string]$Mode,
     [string]$Repository,
     [string]$ExpectedTag,
     [string]$ExpectedCommitSha,
+    [string]$ExpectedRunId,
     [string]$ArchivePath,
     [string]$ReleaseJsonPath,
     [string]$NotesPath,
+    [string]$ManifestPath,
     [int]$AttestationAttempts = 6,
     [switch]$SelfTest
 )
@@ -65,7 +67,7 @@ function Assert-ThrowsMatch {
 function Assert-ReleaseTag {
     param([string]$Value)
 
-    if ($Value -notmatch "^v\d+\.\d+\.\d+$") {
+    if ($Value -cnotmatch "^v\d+\.\d+\.\d+$") {
         throw "Malformed release tag '$Value'. Expected vX.Y.Z."
     }
 }
@@ -73,7 +75,7 @@ function Assert-ReleaseTag {
 function Assert-CommitSha {
     param([string]$Value)
 
-    if ($Value -notmatch "^[0-9a-f]{40}$") {
+    if ($Value -cnotmatch "^[0-9a-f]{40}$") {
         throw "Malformed expected commit SHA '$Value'. Expected 40 lowercase hex characters."
     }
 }
@@ -83,6 +85,205 @@ function Assert-RepositoryName {
 
     if ($Value -notmatch "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$") {
         throw "Malformed GitHub repository '$Value'. Expected owner/name."
+    }
+}
+
+function Assert-RunId {
+    param([string]$Value)
+
+    if ($Value -notmatch "^[1-9][0-9]*$") {
+        throw "Malformed GitHub Actions run ID '$Value'. Expected a positive decimal integer."
+    }
+}
+
+function Get-CanonicalFileText {
+    param(
+        [string]$Path,
+        [string]$Description
+    )
+
+    $resolved = Resolve-RequiredFile -Path $Path -Description $Description
+    $text = [System.IO.File]::ReadAllText($resolved)
+    $normalized = ($text -replace "`r`n", "`n") -replace "`r", "`n"
+    return $normalized.TrimEnd([char[]]"`n")
+}
+
+function Get-LowercaseTextSha256 {
+    param([string]$Text)
+
+    $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($Text)
+    $hash = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return ([System.BitConverter]::ToString($hash.ComputeHash($bytes)) -replace "-", "").ToLowerInvariant()
+    }
+    finally {
+        $hash.Dispose()
+    }
+}
+
+function ConvertTo-Base64Url {
+    param([string]$Text)
+
+    return [Convert]::ToBase64String([System.Text.UTF8Encoding]::new($false).GetBytes($Text)).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+}
+
+function ConvertFrom-Base64Url {
+    param([string]$Value)
+
+    if ($Value -notmatch '^[A-Za-z0-9_-]+$') {
+        throw "Release state marker payload is not canonical base64url."
+    }
+    $padded = $Value.Replace('-', '+').Replace('_', '/')
+    switch ($padded.Length % 4) {
+        0 { }
+        2 { $padded += '==' }
+        3 { $padded += '=' }
+        default { throw "Release state marker payload has invalid base64url length." }
+    }
+    try {
+        return [System.Text.UTF8Encoding]::new($false, $true).GetString([Convert]::FromBase64String($padded))
+    }
+    catch {
+        throw "Release state marker payload is not valid UTF-8 base64url: $($_.Exception.Message)"
+    }
+}
+
+function Get-ReleaseTransactionId {
+    param(
+        [string]$Repository,
+        [string]$ExpectedTag,
+        [string]$ExpectedCommitSha,
+        [string]$NotesSha256,
+        [string]$ManifestSha256
+    )
+
+    return Get-LowercaseTextSha256 -Text ("statspro-release-transaction-v1`n$Repository`n$ExpectedTag`n$ExpectedCommitSha`n$NotesSha256`n$ManifestSha256")
+}
+
+function Get-ReleaseStateData {
+    param(
+        [ValidateSet('prepared', 'marketplace-started')]
+        [string]$Phase,
+        [string]$Repository,
+        [string]$ExpectedTag,
+        [string]$ExpectedCommitSha,
+        [string]$ExpectedRunId,
+        [string]$NotesSha256,
+        [string]$ManifestSha256
+    )
+
+    Assert-RepositoryName $Repository
+    Assert-ReleaseTag $ExpectedTag
+    Assert-CommitSha $ExpectedCommitSha
+    Assert-RunId $ExpectedRunId
+    foreach ($digest in @($NotesSha256, $ManifestSha256)) {
+        if ($digest -cnotmatch '^[0-9a-f]{64}$') {
+            throw "Release state digest '$digest' must be 64 lowercase hex characters."
+        }
+    }
+    return [pscustomobject][ordered]@{
+        schemaVersion  = 1
+        kind           = 'statspro-release-transaction'
+        phase          = $Phase
+        repository     = $Repository
+        tag            = $ExpectedTag
+        commitSha      = $ExpectedCommitSha
+        runId          = $ExpectedRunId
+        notesSha256    = $NotesSha256
+        manifestSha256 = $ManifestSha256
+        transactionId  = Get-ReleaseTransactionId `
+            -Repository $Repository `
+            -ExpectedTag $ExpectedTag `
+            -ExpectedCommitSha $ExpectedCommitSha `
+            -NotesSha256 $NotesSha256 `
+            -ManifestSha256 $ManifestSha256
+    }
+}
+
+function Get-ReleaseStateMarkerLine {
+    param([object]$State)
+
+    $json = $State | ConvertTo-Json -Compress
+    return "<!-- statspro-release-state:$(ConvertTo-Base64Url -Text $json) -->"
+}
+
+function Get-ReleaseBody {
+    param(
+        [object]$State,
+        [string]$CanonicalNotes
+    )
+
+    return "$(Get-ReleaseStateMarkerLine -State $State)`n`n$CanonicalNotes"
+}
+
+function Read-ReleaseStateMarker {
+    param([string]$Body)
+
+    $normalizedBody = (($Body -replace "`r`n", "`n") -replace "`r", "`n").TrimEnd([char[]]"`n")
+    $markerPrefix = '<!-- statspro-release-state:'
+    if ([regex]::Matches($normalizedBody, [regex]::Escape($markerPrefix)).Count -ne 1) {
+        throw "Release body must contain exactly one StatsPro release state marker."
+    }
+    $match = [regex]::Match($normalizedBody, '\A<!-- statspro-release-state:([A-Za-z0-9_-]+) -->\n\n')
+    if (-not $match.Success) {
+        throw "Release state marker must be the canonical first line followed by one blank line."
+    }
+    $encoded = $match.Groups[1].Value
+    $json = ConvertFrom-Base64Url -Value $encoded
+    try {
+        $state = ConvertFrom-JsonCompat $json
+    }
+    catch {
+        throw "Release state marker is not valid JSON: $($_.Exception.Message)"
+    }
+    $expectedKeys = @('schemaVersion', 'kind', 'phase', 'repository', 'tag', 'commitSha', 'runId', 'notesSha256', 'manifestSha256', 'transactionId') | Sort-Object
+    $actualKeys = @($state.PSObject.Properties.Name | Sort-Object)
+    if ($actualKeys.Count -ne $expectedKeys.Count -or (Compare-Object -ReferenceObject $expectedKeys -DifferenceObject $actualKeys)) {
+        throw "Release state marker fields are not the exact schema."
+    }
+    if ([int]$state.schemaVersion -ne 1 -or -not [System.StringComparer]::Ordinal.Equals([string]$state.kind, 'statspro-release-transaction')) {
+        throw "Release state marker has an unsupported schema or kind."
+    }
+    if (-not (Test-ContainsOrdinal -Values @('prepared', 'marketplace-started') -Expected ([string]$state.phase))) {
+        throw "Release state marker has unsupported phase '$($state.phase)'."
+    }
+    Assert-RepositoryName ([string]$state.repository)
+    Assert-ReleaseTag ([string]$state.tag)
+    Assert-CommitSha ([string]$state.commitSha)
+    Assert-RunId ([string]$state.runId)
+    foreach ($name in @('notesSha256', 'manifestSha256', 'transactionId')) {
+        if ([string]$state.$name -cnotmatch '^[0-9a-f]{64}$') {
+            throw "Release state marker field '$name' is not a lowercase SHA-256 digest."
+        }
+    }
+    $expectedTransaction = Get-ReleaseTransactionId `
+        -Repository ([string]$state.repository) `
+        -ExpectedTag ([string]$state.tag) `
+        -ExpectedCommitSha ([string]$state.commitSha) `
+        -NotesSha256 ([string]$state.notesSha256) `
+        -ManifestSha256 ([string]$state.manifestSha256)
+    if (-not [System.StringComparer]::Ordinal.Equals([string]$state.transactionId, $expectedTransaction)) {
+        throw "Release state marker transaction ID does not match its identity fields."
+    }
+    $canonicalMarker = Get-ReleaseStateMarkerLine -State (Get-ReleaseStateData `
+        -Phase ([string]$state.phase) `
+        -Repository ([string]$state.repository) `
+        -ExpectedTag ([string]$state.tag) `
+        -ExpectedCommitSha ([string]$state.commitSha) `
+        -ExpectedRunId ([string]$state.runId) `
+        -NotesSha256 ([string]$state.notesSha256) `
+        -ManifestSha256 ([string]$state.manifestSha256))
+    if (-not [System.StringComparer]::Ordinal.Equals($match.Value.Substring(0, $match.Value.Length - 2), $canonicalMarker)) {
+        throw "Release state marker encoding is not canonical."
+    }
+    $notes = $normalizedBody.Substring($match.Length)
+    if (-not [System.StringComparer]::Ordinal.Equals((Get-LowercaseTextSha256 -Text $notes), [string]$state.notesSha256)) {
+        throw "Release notes do not match the release state marker digest."
+    }
+    return [pscustomobject]@{
+        State = $state
+        Notes = $notes
+        Body  = $normalizedBody
     }
 }
 
@@ -102,7 +303,7 @@ function Select-GitHubReleaseByTag {
         [string]$ExpectedTag
     )
 
-    $matches = @($Releases | Where-Object { [string]$_.tag_name -eq $ExpectedTag })
+    $matches = @($Releases | Where-Object { [System.StringComparer]::Ordinal.Equals([string]$_.tag_name, $ExpectedTag) })
     if ($matches.Count -gt 1) {
         throw "Found multiple GitHub release markers for $ExpectedTag."
     }
@@ -240,7 +441,7 @@ function Assert-RemoteTagCommit {
         }
     }
     $actual = [string](& $ResolveTagCommit $Repository $ExpectedTag)
-    if ($actual -ne $ExpectedCommitSha) {
+    if (-not [System.StringComparer]::Ordinal.Equals($actual, $ExpectedCommitSha)) {
         throw "Remote tag $ExpectedTag points to $actual, expected event commit $ExpectedCommitSha."
     }
 }
@@ -255,6 +456,29 @@ function Get-ExpectedReleaseAssetNames {
     return @("StatsPro-$ExpectedTag.zip", "release.json")
 }
 
+function Test-ContainsOrdinal {
+    param([string[]]$Values, [string]$Expected)
+
+    foreach ($value in $Values) {
+        if ([System.StringComparer]::Ordinal.Equals($value, $Expected)) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Get-OrdinalStringSet {
+    param([string[]]$Values)
+
+    $set = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($value in $Values) {
+        if (-not $set.Add($value)) {
+            throw "Release contains duplicate asset name '$value'."
+        }
+    }
+    return ,$set
+}
+
 function Assert-ExactAssetSet {
     param(
         [object]$Release,
@@ -262,13 +486,10 @@ function Assert-ExactAssetSet {
     )
 
     $actual = @(Get-ReleaseAssetNames -Release $Release)
-    $actualUnique = @($actual | Sort-Object -Unique)
-    $expectedUnique = @($ExpectedNames | Sort-Object -Unique)
-    if ($actual.Count -ne $actualUnique.Count) {
-        throw "Release contains duplicate asset names: $($actual -join ', ')"
-    }
-    if ($actualUnique.Count -ne $expectedUnique.Count -or (Compare-Object -ReferenceObject $expectedUnique -DifferenceObject $actualUnique)) {
-        throw "Release assets are '$($actualUnique -join ', ')'; expected '$($expectedUnique -join ', ')'."
+    $actualSet = Get-OrdinalStringSet -Values $actual
+    $expectedSet = Get-OrdinalStringSet -Values $ExpectedNames
+    if (-not $actualSet.SetEquals($expectedSet)) {
+        throw "Release assets are '$($actual -join ', ')'; expected '$($ExpectedNames -join ', ')'."
     }
 }
 
@@ -281,7 +502,7 @@ function Assert-ReleaseCoreState {
     if ($null -eq $Release) {
         throw "Release marker $ExpectedTag does not exist."
     }
-    if ([string]$Release.tag_name -ne $ExpectedTag) {
+    if (-not [System.StringComparer]::Ordinal.Equals([string]$Release.tag_name, $ExpectedTag)) {
         throw "Release marker tag is '$($Release.tag_name)', expected '$ExpectedTag'."
     }
     if ([bool]$Release.prerelease) {
@@ -316,6 +537,155 @@ function Assert-DraftRelease {
         throw "Draft release $ExpectedTag unexpectedly reports immutable state."
     }
     Assert-ExactAssetSet -Release $Release -ExpectedNames $ExpectedAssets
+}
+
+function Assert-ReleaseMarkerIdentity {
+    param(
+        [object]$Release,
+        [string]$Repository,
+        [string]$ExpectedTag,
+        [string]$ExpectedCommitSha,
+        [string]$ExpectedPhase,
+        [AllowEmptyString()][string]$ExpectedRunId,
+        [AllowEmptyString()][string]$ExpectedNotes,
+        [AllowEmptyString()][string]$ExpectedManifestSha256
+    )
+
+    Assert-ReleaseCoreState -Release $Release -ExpectedTag $ExpectedTag
+    if (-not [System.StringComparer]::Ordinal.Equals([string]$Release.name, $ExpectedTag)) {
+        throw "Release title is '$($Release.name)', expected '$ExpectedTag'."
+    }
+    # WHY: GitHub reports target_commitish as the default branch for releases
+    # created from existing tags. The peeled remote tag check is authoritative.
+    $parsed = Read-ReleaseStateMarker -Body ([string]$Release.body)
+    $state = $parsed.State
+    if (-not [System.StringComparer]::Ordinal.Equals([string]$state.repository, $Repository) -or
+        -not [System.StringComparer]::Ordinal.Equals([string]$state.tag, $ExpectedTag) -or
+        -not [System.StringComparer]::Ordinal.Equals([string]$state.commitSha, $ExpectedCommitSha)) {
+        throw "Release state marker identity does not match repository, tag, and commit."
+    }
+    if (-not [string]::IsNullOrEmpty($ExpectedPhase) -and -not [System.StringComparer]::Ordinal.Equals([string]$state.phase, $ExpectedPhase)) {
+        throw "Release state phase is '$($state.phase)', expected '$ExpectedPhase'."
+    }
+    if (-not [string]::IsNullOrEmpty($ExpectedRunId) -and -not [System.StringComparer]::Ordinal.Equals([string]$state.runId, $ExpectedRunId)) {
+        throw "Release state belongs to run '$($state.runId)', expected '$ExpectedRunId'."
+    }
+    if ($PSBoundParameters.ContainsKey('ExpectedNotes') -and
+        -not [System.StringComparer]::Ordinal.Equals((Get-LowercaseTextSha256 -Text $ExpectedNotes), [string]$state.notesSha256)) {
+        throw "Release state notes digest does not match the current release notes."
+    }
+    if (-not [string]::IsNullOrEmpty($ExpectedManifestSha256) -and
+        -not [System.StringComparer]::Ordinal.Equals([string]$state.manifestSha256, $ExpectedManifestSha256)) {
+        throw "Release state manifest digest does not match the validated package tree."
+    }
+    return $parsed
+}
+
+function Assert-ReleaseProtocolIdentity {
+    param(
+        [object]$Release,
+        [string]$Repository,
+        [string]$ExpectedTag,
+        [string]$ExpectedCommitSha,
+        [string]$ExpectedPhase,
+        [AllowEmptyString()][string]$ExpectedRunId,
+        [AllowEmptyString()][string]$ExpectedNotes,
+        [AllowEmptyString()][string]$ExpectedManifestSha256
+    )
+
+    if ($null -eq $Release) {
+        throw "Release marker $ExpectedTag does not exist."
+    }
+    if (-not [bool]$Release.draft) {
+        throw "Release $ExpectedTag is already published; marketplace replay is forbidden."
+    }
+    if ([bool]$Release.immutable) {
+        throw "Draft release $ExpectedTag unexpectedly reports immutable state."
+    }
+    return Assert-ReleaseMarkerIdentity @PSBoundParameters
+}
+
+function Assert-ReleaseStartState {
+    param(
+        [AllowNull()][object]$Release,
+        [string]$Repository,
+        [string]$ExpectedTag,
+        [string]$ExpectedCommitSha,
+        [string]$ExpectedNotes
+    )
+
+    if ($null -eq $Release) {
+        return 'fresh'
+    }
+    $parsed = Assert-ReleaseProtocolIdentity `
+        -Release $Release `
+        -Repository $Repository `
+        -ExpectedTag $ExpectedTag `
+        -ExpectedCommitSha $ExpectedCommitSha `
+        -ExpectedPhase 'prepared' `
+        -ExpectedNotes $ExpectedNotes
+    Assert-ExactAssetSet -Release $Release -ExpectedNames @()
+    return "prepared:$($parsed.State.runId)"
+}
+
+function Assert-PublishedProtocolIdentity {
+    param(
+        [object]$Release,
+        [string]$Repository,
+        [string]$ExpectedTag,
+        [string]$ExpectedCommitSha,
+        [AllowEmptyString()][string]$ExpectedRunId,
+        [string]$ExpectedNotes,
+        [string]$ExpectedManifestSha256
+    )
+
+    Assert-PublishedImmutableRelease -Release $Release -ExpectedTag $ExpectedTag
+    if (-not [System.StringComparer]::Ordinal.Equals([string]$Release.name, $ExpectedTag)) {
+        throw "Published release title does not match the release transaction."
+    }
+    $parsed = Assert-ReleaseMarkerIdentity `
+        -Release $Release `
+        -Repository $Repository `
+        -ExpectedTag $ExpectedTag `
+        -ExpectedCommitSha $ExpectedCommitSha `
+        -ExpectedPhase 'marketplace-started' `
+        -ExpectedRunId $ExpectedRunId `
+        -ExpectedNotes $ExpectedNotes `
+        -ExpectedManifestSha256 $ExpectedManifestSha256
+    $state = $parsed.State
+    if (-not [System.StringComparer]::Ordinal.Equals([string]$state.phase, 'marketplace-started')) {
+        throw "Published release state marker does not match the expected transaction."
+    }
+    return $parsed
+}
+
+function Assert-ReleaseAssetSubsetMatchesLocalFiles {
+    param(
+        [object]$Release,
+        [hashtable]$LocalFiles
+    )
+
+    $expectedNames = @($LocalFiles.Keys)
+    $actualNames = @(Get-ReleaseAssetNames -Release $Release)
+    [void](Get-OrdinalStringSet -Values $actualNames)
+    foreach ($name in $actualNames) {
+        if (-not (Test-ContainsOrdinal -Values $expectedNames -Expected $name)) {
+            throw "Release contains unexpected asset '$name'."
+        }
+        $asset = @($Release.assets | Where-Object { [System.StringComparer]::Ordinal.Equals([string]$_.name, $name) })[0]
+        $path = $LocalFiles[$name]
+        if (-not [System.StringComparer]::Ordinal.Equals([string]$asset.state, 'uploaded')) {
+            throw "Draft asset $name is in state '$($asset.state)', expected 'uploaded'."
+        }
+        $expectedSize = (Get-Item -LiteralPath $path).Length
+        if ([long]$asset.size -ne $expectedSize) {
+            throw "Draft asset $name size is $($asset.size), expected $expectedSize."
+        }
+        $expectedDigest = "sha256:$(Get-LowercaseFileSha256 -Path $path)"
+        if (-not [System.StringComparer]::Ordinal.Equals([string]$asset.digest, $expectedDigest)) {
+            throw "Draft asset $name digest is '$($asset.digest)', expected '$expectedDigest'."
+        }
+    }
 }
 
 function Assert-PublishedImmutableRelease {
@@ -355,7 +725,7 @@ function Assert-DraftAssetsMatchLocalFiles {
     foreach ($asset in @($Release.assets)) {
         $name = [string]$asset.name
         $path = $localFiles[$name]
-        if ([string]$asset.state -ne "uploaded") {
+        if (-not [System.StringComparer]::Ordinal.Equals([string]$asset.state, "uploaded")) {
             throw "Draft asset $name is in state '$($asset.state)', expected 'uploaded'."
         }
         $expectedSize = (Get-Item -LiteralPath $path).Length
@@ -363,10 +733,84 @@ function Assert-DraftAssetsMatchLocalFiles {
             throw "Draft asset $name size is $($asset.size), expected $expectedSize."
         }
         $expectedDigest = "sha256:$(Get-LowercaseFileSha256 -Path $path)"
-        if ([string]$asset.digest -ne $expectedDigest) {
+        if (-not [System.StringComparer]::Ordinal.Equals([string]$asset.digest, $expectedDigest)) {
             throw "Draft asset $name digest is '$($asset.digest)', expected '$expectedDigest'."
         }
     }
+}
+
+function Invoke-GitHubMutationAndAttest {
+    param(
+        [string]$Description,
+        [string[]]$Arguments,
+        [string]$Repository,
+        [string]$ExpectedTag,
+        [int]$Attempts,
+        [scriptblock]$AssertState,
+        [scriptblock]$Mutate = $null,
+        [scriptblock]$GetRelease = $null,
+        [scriptblock]$Wait = $null
+    )
+
+    if ($null -eq $Mutate) {
+        $Mutate = { param([string[]]$GhArguments) [void](Invoke-Gh -Arguments $GhArguments) }
+    }
+    $mutationError = $null
+    try {
+        & $Mutate $Arguments
+    }
+    catch {
+        $mutationError = $_
+    }
+    try {
+        $release = Wait-GitHubReleaseState `
+            -Repository $Repository `
+            -ExpectedTag $ExpectedTag `
+            -Attempts $Attempts `
+            -AssertState $AssertState `
+            -GetRelease $GetRelease `
+            -Wait $Wait
+    }
+    catch {
+        if ($null -ne $mutationError) {
+            throw "$Description returned an error and the desired state was not observed: $($mutationError.Exception.Message); attestation: $($_.Exception.Message)"
+        }
+        throw
+    }
+    if ($null -ne $mutationError) {
+        Write-Warning "$Description returned an ambiguous error, but read-only attestation confirmed the desired state: $($mutationError.Exception.Message)"
+    }
+    return $release
+}
+
+function Invoke-BoundedReadOnlyCheck {
+    param(
+        [string]$Description,
+        [int]$Attempts,
+        [scriptblock]$Check,
+        [scriptblock]$Wait = $null
+    )
+
+    if ($Attempts -lt 1) {
+        throw "$Description attempts must be at least 1."
+    }
+    if ($null -eq $Wait) {
+        $Wait = { param([int]$Seconds) Start-Sleep -Seconds $Seconds }
+    }
+    $lastError = $null
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        try {
+            & $Check
+            return
+        }
+        catch {
+            $lastError = $_
+            if ($attempt -lt $Attempts) {
+                & $Wait ([Math]::Min(30, 5 * $attempt))
+            }
+        }
+    }
+    throw "$Description did not pass after $Attempts attempt(s): $($lastError.Exception.Message)"
 }
 
 function Resolve-RequiredFile {
@@ -390,10 +834,10 @@ function Assert-ReleaseAssetPaths {
 
     $archive = Resolve-RequiredFile -Path $ArchivePath -Description "StatsPro archive"
     $releaseJson = Resolve-RequiredFile -Path $ReleaseJsonPath -Description "release.json"
-    if ([System.IO.Path]::GetFileName($archive) -ne "StatsPro-$ExpectedTag.zip") {
+    if (-not [System.StringComparer]::Ordinal.Equals([System.IO.Path]::GetFileName($archive), "StatsPro-$ExpectedTag.zip")) {
         throw "Archive filename must be StatsPro-$ExpectedTag.zip."
     }
-    if ([System.IO.Path]::GetFileName($releaseJson) -ne "release.json") {
+    if (-not [System.StringComparer]::Ordinal.Equals([System.IO.Path]::GetFileName($releaseJson), "release.json")) {
         throw "Release metadata filename must be release.json."
     }
     return [pscustomobject]@{
@@ -467,6 +911,20 @@ function Get-WorkflowStepName {
         throw "Could not resolve a workflow step name."
     }
     return $name.Groups[1].Value
+}
+
+function Assert-WorkflowParameterBinding {
+    param(
+        [System.Text.RegularExpressions.Match]$StepBlock,
+        [string]$StepName,
+        [string]$ParameterName,
+        [string]$ValuePattern
+    )
+
+    $pattern = "(?m)^\s+-$([regex]::Escape($ParameterName))\s+$ValuePattern(?:\s+\x60)?\s*`$"
+    if ([regex]::Matches($StepBlock.Value, $pattern).Count -ne 1) {
+        throw "Workflow step '$StepName' must bind -$ParameterName exactly once."
+    }
 }
 
 function Test-ContainsSecretReference {
@@ -550,9 +1008,10 @@ function Assert-ReleaseGitHubTokenScope {
     param([string]$WorkflowText)
 
     $allowedStepTokens = [ordered]@{
-        'Refuse existing release marker' = 'GITHUB_TOKEN'
+        'Validate interrupted release state' = 'GITHUB_TOKEN'
         'Verify immutable release policy' = 'IMMUTABLE_RELEASES_READ_TOKEN'
-        'Create draft release marker' = 'GITHUB_TOKEN'
+        'Prepare resumable draft release' = 'GITHUB_TOKEN'
+        'Mark marketplace publication started' = 'GITHUB_TOKEN'
         'Attach validated assets to draft' = 'GITHUB_TOKEN'
         'Publish immutable GitHub release' = 'GITHUB_TOKEN'
         'Validate published immutable release assets' = 'GITHUB_TOKEN'
@@ -734,14 +1193,16 @@ function Assert-ReleaseWorkflowBoundary {
     Assert-ReleaseMarketplaceTokenScope -WorkflowText $WorkflowText
 
     $orderedSteps = @(
-        "- name: Refuse existing release marker",
+        "- name: Trim release changelog",
+        "- name: Validate interrupted release state",
         "- name: Verify immutable release policy",
         "- name: Verify marketplace release credentials and versions",
         "- name: Recheck release ancestry before final package build",
         "- name: Rebuild package without publishing",
         "- name: Compare rebuilt package and validate again",
-        "- name: Create draft release marker",
         "- name: Validate exact package immediately before marketplace upload",
+        "- name: Prepare resumable draft release",
+        "- name: Mark marketplace publication started",
         "- name: Publish package to marketplaces",
         "- name: Validate marketplace archive and create release metadata",
         "- name: Attach validated assets to draft",
@@ -782,11 +1243,32 @@ function Assert-ReleaseWorkflowBoundary {
         $policyStep.Value -notmatch '(?m)^\s{8}run:\s*\./scripts/check-repository-settings\.ps1 -Repository \$env:GITHUB_REPOSITORY -ImmutableReleasePolicyOnly -RequireExplicitToken\s*$') {
         throw "Immutable release policy gate must execute the exact fail-closed read-only checker."
     }
-    $refuseStep = @($stepBlocks | Where-Object {
-        (Get-WorkflowStepName -StepBlock $_) -eq 'Refuse existing release marker'
+    $startStateSteps = @($stepBlocks | Where-Object {
+        (Get-WorkflowStepName -StepBlock $_) -eq 'Validate interrupted release state'
     })
-    if ($refuseStep.Count -ne 1 -or $refuseStep[0].Index + $refuseStep[0].Length -ne $policyStep.Index) {
-        throw "Immutable release policy gate must run immediately after refusing existing releases."
+    if ($startStateSteps.Count -ne 1 -or $startStateSteps[0].Index + $startStateSteps[0].Length -ne $policyStep.Index) {
+        throw "Immutable release policy gate must run immediately after validating interrupted release state."
+    }
+    $startStateStep = $startStateSteps[0]
+    $trimSteps = @($stepBlocks | Where-Object {
+        (Get-WorkflowStepName -StepBlock $_) -eq 'Trim release changelog'
+    })
+    if ($trimSteps.Count -ne 1 -or
+        $trimSteps[0].Index + $trimSteps[0].Length -ne $startStateStep.Index -or
+        $trimSteps[0].Value -notmatch '(?m)^\s{8}run:\s*\./scripts/check-release-version\.ps1 -Tag \$env:GITHUB_REF_NAME -EnforceSemVer -ExportTopChangelogPath CHANGELOG\.md\s*$') {
+        throw "Canonical release notes must be prepared immediately before interrupted-state validation."
+    }
+    foreach ($binding in @(
+        [pscustomobject]@{ Name = 'Mode'; Pattern = 'ValidateStart' },
+        [pscustomobject]@{ Name = 'Repository'; Pattern = '\$env:GITHUB_REPOSITORY' },
+        [pscustomobject]@{ Name = 'ExpectedTag'; Pattern = '\$env:GITHUB_REF_NAME' },
+        [pscustomobject]@{ Name = 'ExpectedCommitSha'; Pattern = '\$env:GITHUB_SHA' },
+        [pscustomobject]@{ Name = 'NotesPath'; Pattern = 'CHANGELOG\.md' }
+    )) {
+        Assert-WorkflowParameterBinding -StepBlock $startStateStep -StepName 'Validate interrupted release state' -ParameterName $binding.Name -ValuePattern $binding.Pattern
+    }
+    if ($startStateStep.Value -match '(?m)^\s{8}(?:if|continue-on-error):') {
+        throw "Interrupted release validation must be mandatory."
     }
     $credentialSteps = @($stepBlocks | Where-Object {
         (Get-WorkflowStepName -StepBlock $_) -eq 'Verify marketplace release credentials and versions'
@@ -851,10 +1333,10 @@ function Assert-ReleaseWorkflowBoundary {
         }
     }
     $draftSteps = @($stepBlocks | Where-Object {
-        (Get-WorkflowStepName -StepBlock $_) -eq 'Create draft release marker'
+        (Get-WorkflowStepName -StepBlock $_) -eq 'Prepare resumable draft release'
     })
     if ($draftSteps.Count -ne 1 -or $draftSteps[0].Index -lt $credentialStep.Index) {
-        throw "Marketplace credential preflight must run before the single draft-creation step."
+        throw "Marketplace credential preflight must run before the single resumable draft preparation step."
     }
     $publishingPackagerSteps = @($stepBlocks | Where-Object {
         $_.Value -match "BigWigsMods/packager@" -and
@@ -899,8 +1381,60 @@ function Assert-ReleaseWorkflowBoundary {
         $preUploadStep.Value.IndexOf('STATSPRO_PROJECT_VERSION: ${{ steps.rebuild-package-output.outputs.project_version }}', [System.StringComparison]::Ordinal) -lt 0) {
         throw "The immediate pre-upload step must bind the exact Packager output, package manifest, tag checkout, and GITHUB_SHA."
     }
-    if ($preUploadStep.Index + $preUploadStep.Length -ne $marketplaceStep.Index) {
-        throw "The exact package boundary must be the final workflow step before marketplace publication."
+    $prepareStep = $draftSteps[0]
+    $markStartedSteps = @($stepBlocks | Where-Object {
+        (Get-WorkflowStepName -StepBlock $_) -eq 'Mark marketplace publication started'
+    })
+    if ($markStartedSteps.Count -ne 1) {
+        throw "Release workflow must contain exactly one marketplace-started marker step."
+    }
+    $markStartedStep = $markStartedSteps[0]
+    if ($preUploadStep.Index + $preUploadStep.Length -ne $prepareStep.Index -or
+        $prepareStep.Index + $prepareStep.Length -ne $markStartedStep.Index -or
+        $markStartedStep.Index + $markStartedStep.Length -ne $marketplaceStep.Index) {
+        throw "The exact package boundary, resumable draft preparation, and durable marketplace marker must be consecutive immediately before marketplace publication."
+    }
+    foreach ($contract in @(
+        [pscustomobject]@{ Step = $prepareStep; Mode = 'CreateDraft' },
+        [pscustomobject]@{ Step = $markStartedStep; Mode = 'MarkMarketplaceStarted' }
+    )) {
+        foreach ($binding in @(
+            [pscustomobject]@{ Name = 'Mode'; Pattern = [regex]::Escape($contract.Mode) },
+            [pscustomobject]@{ Name = 'Repository'; Pattern = '\$env:GITHUB_REPOSITORY' },
+            [pscustomobject]@{ Name = 'ExpectedTag'; Pattern = '\$env:GITHUB_REF_NAME' },
+            [pscustomobject]@{ Name = 'ExpectedCommitSha'; Pattern = '\$env:GITHUB_SHA' },
+            [pscustomobject]@{ Name = 'ExpectedRunId'; Pattern = '\$env:GITHUB_RUN_ID' },
+            [pscustomobject]@{ Name = 'NotesPath'; Pattern = 'CHANGELOG\.md' },
+            [pscustomobject]@{ Name = 'ManifestPath'; Pattern = '\(Join-Path \$env:RUNNER_TEMP "statspro-package-tree\.before\.sha256"\)' }
+        )) {
+            Assert-WorkflowParameterBinding -StepBlock $contract.Step -StepName $contract.Mode -ParameterName $binding.Name -ValuePattern $binding.Pattern
+        }
+        if ($contract.Step.Value -match '(?m)^\s{8}(?:if|continue-on-error):') {
+            throw "Release transaction step '$($contract.Mode)' must be mandatory."
+        }
+    }
+    foreach ($contract in @(
+        [pscustomobject]@{ Name = 'Attach validated assets to draft'; Mode = 'AttachAssets' },
+        [pscustomobject]@{ Name = 'Publish immutable GitHub release'; Mode = 'Publish' }
+    )) {
+        $stepMatches = @($stepBlocks | Where-Object { (Get-WorkflowStepName -StepBlock $_) -eq $contract.Name })
+        if ($stepMatches.Count -ne 1) {
+            throw "Release workflow must contain exactly one '$($contract.Name)' step."
+        }
+        foreach ($binding in @(
+            [pscustomobject]@{ Name = 'Mode'; Pattern = [regex]::Escape($contract.Mode) },
+            [pscustomobject]@{ Name = 'Repository'; Pattern = '\$env:GITHUB_REPOSITORY' },
+            [pscustomobject]@{ Name = 'ExpectedTag'; Pattern = '\$env:GITHUB_REF_NAME' },
+            [pscustomobject]@{ Name = 'ExpectedCommitSha'; Pattern = '\$env:GITHUB_SHA' },
+            [pscustomobject]@{ Name = 'ExpectedRunId'; Pattern = '\$env:GITHUB_RUN_ID' },
+            [pscustomobject]@{ Name = 'NotesPath'; Pattern = 'CHANGELOG\.md' },
+            [pscustomobject]@{ Name = 'ManifestPath'; Pattern = '\(Join-Path \$env:RUNNER_TEMP "statspro-package-tree\.before\.sha256"\)' }
+        )) {
+            Assert-WorkflowParameterBinding -StepBlock $stepMatches[0] -StepName $contract.Mode -ParameterName $binding.Name -ValuePattern $binding.Pattern
+        }
+        if ($stepMatches[0].Value -match '(?m)^\s{8}(?:if|continue-on-error):') {
+            throw "Release transaction step '$($contract.Mode)' must be mandatory."
+        }
     }
     $actualEnvironmentKeys = @(
         [regex]::Matches($marketplaceStep.Value, "(?m)^\s{10}([A-Z][A-Z0-9_]+):") |
@@ -925,12 +1459,16 @@ function Get-CreateDraftGhArguments {
     )
 }
 
+function Get-EditDraftBodyGhArguments {
+    param([string]$Repository, [string]$ExpectedTag, [string]$NotesPath)
+    return @("release", "edit", $ExpectedTag, "--repo", $Repository, "--notes-file", $NotesPath)
+}
+
 function Get-AttachAssetsGhArguments {
-    param([string]$Repository, [string]$ExpectedTag, [string]$ArchivePath, [string]$ReleaseJsonPath)
+    param([string]$Repository, [string]$ExpectedTag, [string]$AssetPath)
     return @(
         "release", "upload", $ExpectedTag,
-        $ArchivePath,
-        $ReleaseJsonPath,
+        $AssetPath,
         "--repo", $Repository
     )
 }
@@ -938,6 +1476,27 @@ function Get-AttachAssetsGhArguments {
 function Get-PublishGhArguments {
     param([string]$Repository, [string]$ExpectedTag)
     return @("release", "edit", $ExpectedTag, "--repo", $Repository, "--draft=false", "--latest")
+}
+
+function Get-RetirePreparedGhArguments {
+    param([string]$Repository, [string]$ExpectedTag)
+    return @("release", "delete", $ExpectedTag, "--repo", $Repository, "--yes")
+}
+
+function Invoke-WithTemporaryReleaseBody {
+    param(
+        [string]$Body,
+        [scriptblock]$Action
+    )
+
+    $path = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-release-body-" + [System.Guid]::NewGuid().ToString('N') + '.md')
+    try {
+        [System.IO.File]::WriteAllText($path, $Body + "`n", [System.Text.UTF8Encoding]::new($false))
+        return & $Action $path
+    }
+    finally {
+        Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Invoke-SelfTest {
@@ -1079,16 +1638,195 @@ function Invoke-SelfTest {
     } "expected event commit"
 
     $createArguments = Get-CreateDraftGhArguments -Repository "owner/repo" -ExpectedTag $tag -NotesPath "notes.md"
-    if ($createArguments -notcontains "--draft" -or $createArguments -notcontains "--verify-tag") {
+    if ($createArguments -notcontains "--draft" -or $createArguments -notcontains "--verify-tag" -or $createArguments -contains "--target") {
         throw "CreateDraft gh arguments must create a draft for an existing tag."
     }
-    $attachArguments = Get-AttachAssetsGhArguments -Repository "owner/repo" -ExpectedTag $tag -ArchivePath "StatsPro-$tag.zip" -ReleaseJsonPath "release.json"
+    $attachArguments = Get-AttachAssetsGhArguments -Repository "owner/repo" -ExpectedTag $tag -AssetPath "StatsPro-$tag.zip"
     if ($attachArguments -contains "--clobber") {
         throw "AttachAssets gh arguments must never clobber a draft asset."
     }
     $publishArguments = Get-PublishGhArguments -Repository "owner/repo" -ExpectedTag $tag
     if ($publishArguments -notcontains "--draft=false") {
         throw "Publish gh arguments must publish the prepared draft."
+    }
+    $retireArguments = Get-RetirePreparedGhArguments -Repository "owner/repo" -ExpectedTag $tag
+    if ($retireArguments -notcontains "--yes" -or $retireArguments -contains "--cleanup-tag") {
+        throw "RetirePrepared must delete only the proven-safe draft and preserve its tag."
+    }
+
+    $protocolNotes = "## StatsPro $tag`n`nSafe release notes."
+    $protocolManifest = "0123456789abcdef  StatsPro/StatsPro.lua"
+    $protocolManifestSha = Get-LowercaseTextSha256 -Text $protocolManifest
+    $protocolRunId = '12345'
+    $preparedState = Get-ReleaseStateData `
+        -Phase 'prepared' `
+        -Repository 'owner/repo' `
+        -ExpectedTag $tag `
+        -ExpectedCommitSha $commit `
+        -ExpectedRunId $protocolRunId `
+        -NotesSha256 (Get-LowercaseTextSha256 -Text $protocolNotes) `
+        -ManifestSha256 $protocolManifestSha
+    $preparedBody = Get-ReleaseBody -State $preparedState -CanonicalNotes $protocolNotes
+    $newProtocolRelease = {
+        param([string]$Phase, [string]$RunId, [object[]]$Assets, [bool]$Draft = $true, [bool]$Immutable = $false)
+        $state = Get-ReleaseStateData -Phase $Phase -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedRunId $RunId -NotesSha256 (Get-LowercaseTextSha256 -Text $protocolNotes) -ManifestSha256 $protocolManifestSha
+        return [pscustomobject]@{
+            tag_name = $tag
+            name = $tag
+            target_commitish = $commit
+            draft = $Draft
+            prerelease = $false
+            immutable = $Immutable
+            body = Get-ReleaseBody -State $state -CanonicalNotes $protocolNotes
+            assets = @($Assets)
+        }
+    }
+    $preparedProtocolRelease = & $newProtocolRelease 'prepared' $protocolRunId @()
+    $parsedPrepared = Read-ReleaseStateMarker -Body $preparedBody
+    if ([string]$parsedPrepared.State.transactionId -ne [string]$preparedState.transactionId -or $parsedPrepared.Notes -ne $protocolNotes) {
+        throw "Canonical release marker round trip failed."
+    }
+    Assert-ThrowsMatch "uppercase release tag rejected" {
+        Assert-ReleaseTag 'V1.2.3'
+    } "Malformed release tag"
+    if ($null -ne (Select-GitHubReleaseByTag -Releases @([pscustomobject]@{ tag_name = 'V1.2.3' }) -ExpectedTag $tag)) {
+        throw "Release lookup must use ordinal tag identity."
+    }
+    if ((Assert-ReleaseStartState -Release $null -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedNotes $protocolNotes) -ne 'fresh') {
+        throw "Absent release must classify as fresh."
+    }
+    if ((Assert-ReleaseStartState -Release $preparedProtocolRelease -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedNotes $protocolNotes) -ne "prepared:$protocolRunId") {
+        throw "Exact empty prepared release must be resumable."
+    }
+    $recoverableProtocolRelease = & $newProtocolRelease 'prepared' '98765' @()
+    if ((Assert-ReleaseStartState -Release $recoverableProtocolRelease -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedNotes $protocolNotes) -ne 'prepared:98765') {
+        throw "A protocol-owned empty prepared release from another run must be safely claimable."
+    }
+    Assert-ThrowsMatch "marketplace-started interruption rejected" {
+        [void](Assert-ReleaseStartState -Release (& $newProtocolRelease 'marketplace-started' $protocolRunId @()) -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedNotes $protocolNotes)
+    } "phase"
+    Assert-ThrowsMatch "prepared release with assets rejected" {
+        [void](Assert-ReleaseStartState -Release (& $newProtocolRelease 'prepared' $protocolRunId @([pscustomobject]@{ name = "StatsPro-$tag.zip" })) -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedNotes $protocolNotes)
+    } "expected"
+    Assert-ThrowsMatch "published interruption rejected" {
+        [void](Assert-ReleaseStartState -Release (& $newProtocolRelease 'marketplace-started' $protocolRunId @() $false $true) -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedNotes $protocolNotes)
+    } "already published"
+    Assert-ThrowsMatch "duplicate protocol marker rejected" {
+        [void](Read-ReleaseStateMarker -Body ($preparedBody + "`n" + (Get-ReleaseStateMarkerLine -State $preparedState)))
+    } "exactly one"
+    Assert-ThrowsMatch "release notes spoof rejected" {
+        [void](Read-ReleaseStateMarker -Body ($preparedBody + 'changed'))
+    } "notes"
+    $extraJson = ($preparedState | ConvertTo-Json -Compress).TrimEnd('}') + ',"extra":true}'
+    Assert-ThrowsMatch "unknown protocol field rejected" {
+        [void](Read-ReleaseStateMarker -Body ("<!-- statspro-release-state:$(ConvertTo-Base64Url -Text $extraJson) -->`n`n$protocolNotes"))
+    } "exact schema"
+    $wrongPhaseJson = ($preparedState | ConvertTo-Json -Compress).Replace('"phase":"prepared"', '"phase":"Prepared"')
+    Assert-ThrowsMatch "wrong-case protocol phase rejected" {
+        [void](Read-ReleaseStateMarker -Body ("<!-- statspro-release-state:$(ConvertTo-Base64Url -Text $wrongPhaseJson) -->`n`n$protocolNotes"))
+    } "unsupported phase"
+    $wrongTransaction = $preparedState.PSObject.Copy()
+    $wrongTransaction.transactionId = '0' * 64
+    Assert-ThrowsMatch "wrong transaction digest rejected" {
+        [void](Read-ReleaseStateMarker -Body (Get-ReleaseBody -State $wrongTransaction -CanonicalNotes $protocolNotes))
+    } "transaction ID"
+    Assert-ThrowsMatch "wrong protocol owner rejected" {
+        [void](Assert-ReleaseProtocolIdentity -Release $preparedProtocolRelease -Repository 'other/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'prepared' -ExpectedNotes $protocolNotes)
+    } "identity"
+    Assert-ThrowsMatch "wrong run owner rejected after claim" {
+        [void](Assert-ReleaseProtocolIdentity -Release $preparedProtocolRelease -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'prepared' -ExpectedRunId '99999' -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha)
+    } "belongs to run"
+    Assert-ThrowsMatch "wrong package manifest rejected" {
+        [void](Assert-ReleaseProtocolIdentity -Release $preparedProtocolRelease -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'prepared' -ExpectedRunId $protocolRunId -ExpectedNotes $protocolNotes -ExpectedManifestSha256 ('f' * 64))
+    } "manifest digest"
+
+    $ambiguousCounters = [pscustomobject]@{ Mutations = 0; Reads = 0 }
+    [void](Invoke-GitHubMutationAndAttest `
+        -Description 'self-test ambiguous mutation' `
+        -Arguments @('release', 'edit') `
+        -Repository 'owner/repo' `
+        -ExpectedTag $tag `
+        -Attempts 2 `
+        -AssertState { param([object]$Observed) if ($Observed -ne $preparedProtocolRelease) { throw 'not visible' } } `
+        -Mutate { param([string[]]$Arguments) $ambiguousCounters.Mutations++; throw 'lost response' } `
+        -GetRelease { param([string]$Repository, [string]$ExpectedTag) $ambiguousCounters.Reads++; return $preparedProtocolRelease } `
+        -Wait { param([int]$Seconds) })
+    if ($ambiguousCounters.Mutations -ne 1 -or $ambiguousCounters.Reads -ne 1) {
+        throw "Ambiguous mutation recovery must mutate once and then use read-only attestation."
+    }
+    $failedMutationCounter = [pscustomobject]@{ Mutations = 0 }
+    Assert-ThrowsMatch "unconfirmed ambiguous mutation rejected" {
+        [void](Invoke-GitHubMutationAndAttest `
+            -Description 'self-test failed mutation' `
+            -Arguments @('release', 'edit') `
+            -Repository 'owner/repo' `
+            -ExpectedTag $tag `
+            -Attempts 2 `
+            -AssertState { param([AllowNull()][object]$Observed) throw 'not visible' } `
+            -Mutate { param([string[]]$Arguments) $failedMutationCounter.Mutations++; throw 'lost response' } `
+            -GetRelease { param([string]$Repository, [string]$ExpectedTag) return $null } `
+            -Wait { param([int]$Seconds) })
+    } "returned an error and the desired state was not observed"
+    if ($failedMutationCounter.Mutations -ne 1) {
+        throw "Failed ambiguous mutation must not be retried."
+    }
+    $startedProtocolRelease = & $newProtocolRelease 'marketplace-started' $protocolRunId @()
+    foreach ($boundary in @(
+        [pscustomobject]@{
+            Name = 'draft creation'
+            Observed = $preparedProtocolRelease
+            Assert = {
+                param([object]$Observed)
+                [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'prepared' -ExpectedRunId $protocolRunId -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha)
+                Assert-ExactAssetSet -Release $Observed -ExpectedNames @()
+            }
+        },
+        [pscustomobject]@{
+            Name = 'marketplace-started transition'
+            Observed = $startedProtocolRelease
+            Assert = {
+                param([object]$Observed)
+                [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'marketplace-started' -ExpectedRunId $protocolRunId -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha)
+                Assert-ExactAssetSet -Release $Observed -ExpectedNames @()
+            }
+        },
+        [pscustomobject]@{
+            Name = 'prepared draft retirement'
+            Observed = $null
+            Assert = {
+                param([AllowNull()][object]$Observed)
+                if ($null -ne $Observed) { throw 'draft still visible' }
+            }
+        }
+    )) {
+        $boundaryCounters = [pscustomobject]@{ Mutations = 0; Reads = 0 }
+        [void](Invoke-GitHubMutationAndAttest `
+            -Description "self-test $($boundary.Name)" `
+            -Arguments @('release', 'mutation') `
+            -Repository 'owner/repo' `
+            -ExpectedTag $tag `
+            -Attempts 2 `
+            -AssertState $boundary.Assert `
+            -Mutate { param([string[]]$Arguments) $boundaryCounters.Mutations++; throw 'lost response' } `
+            -GetRelease { param([string]$Repository, [string]$ExpectedTag) $boundaryCounters.Reads++; return $boundary.Observed } `
+            -Wait { param([int]$Seconds) })
+        if ($boundaryCounters.Mutations -ne 1 -or $boundaryCounters.Reads -ne 1) {
+            throw "Boundary '$($boundary.Name)' must mutate once and then converge read-only."
+        }
+    }
+    $readOnlyRetry = [pscustomobject]@{ Checks = 0; Waits = 0 }
+    Invoke-BoundedReadOnlyCheck `
+        -Description 'self-test post-publish attestation' `
+        -Attempts 3 `
+        -Check {
+            $readOnlyRetry.Checks++
+            if ($readOnlyRetry.Checks -lt 3) {
+                throw 'not visible yet'
+            }
+        } `
+        -Wait { param([int]$Seconds) $readOnlyRetry.Waits++ }
+    if ($readOnlyRetry.Checks -ne 3 -or $readOnlyRetry.Waits -ne 2) {
+        throw "Post-publish attestation retry must remain bounded and read-only."
     }
 
     $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-release-manager-test-" + [System.Guid]::NewGuid().ToString("N"))
@@ -1119,6 +1857,97 @@ function Invoke-SelfTest {
             )
         }
         Assert-DraftAssetsMatchLocalFiles -Release $draftWithDigests -ExpectedTag $tag -ArchivePath $archivePath -ReleaseJsonPath $releaseJsonPath
+        $publishedProtocolRelease = & $newProtocolRelease 'marketplace-started' $protocolRunId @($draftWithDigests.assets) $false $true
+        [void](Assert-PublishedProtocolIdentity -Release $publishedProtocolRelease -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedRunId $protocolRunId -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha)
+        $localFiles = @{
+            "StatsPro-$tag.zip" = $archivePath
+            'release.json' = $releaseJsonPath
+        }
+        $partialProtocol = & $newProtocolRelease 'marketplace-started' $protocolRunId @($draftWithDigests.assets[0])
+        Assert-ReleaseAssetSubsetMatchesLocalFiles -Release $partialProtocol -LocalFiles $localFiles
+        Assert-ThrowsMatch "partial post-marketplace rerun rejected" {
+            [void](Assert-ReleaseStartState -Release $partialProtocol -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedNotes $protocolNotes)
+        } "phase"
+        foreach ($boundary in @(
+            [pscustomobject]@{
+                Name = 'single asset upload'
+                Observed = $partialProtocol
+                Assert = {
+                    param([object]$Observed)
+                    [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'marketplace-started' -ExpectedRunId $protocolRunId -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha)
+                    Assert-ReleaseAssetSubsetMatchesLocalFiles -Release $Observed -LocalFiles $localFiles
+                    if (-not (Test-ContainsOrdinal -Values @(Get-ReleaseAssetNames -Release $Observed) -Expected "StatsPro-$tag.zip")) { throw 'asset missing' }
+                }
+            },
+            [pscustomobject]@{
+                Name = 'immutable publish'
+                Observed = $publishedProtocolRelease
+                Assert = {
+                    param([object]$Observed)
+                    [void](Assert-PublishedProtocolIdentity -Release $Observed -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedRunId $protocolRunId -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha)
+                }
+            }
+        )) {
+            $boundaryCounters = [pscustomobject]@{ Mutations = 0; Reads = 0 }
+            [void](Invoke-GitHubMutationAndAttest `
+                -Description "self-test $($boundary.Name)" `
+                -Arguments @('release', 'mutation') `
+                -Repository 'owner/repo' `
+                -ExpectedTag $tag `
+                -Attempts 2 `
+                -AssertState $boundary.Assert `
+                -Mutate { param([string[]]$Arguments) $boundaryCounters.Mutations++; throw 'lost response' } `
+                -GetRelease { param([string]$Repository, [string]$ExpectedTag) $boundaryCounters.Reads++; return $boundary.Observed } `
+                -Wait { param([int]$Seconds) })
+            if ($boundaryCounters.Mutations -ne 1 -or $boundaryCounters.Reads -ne 1) {
+                throw "Boundary '$($boundary.Name)' must mutate once and then converge read-only."
+            }
+        }
+        foreach ($subset in @(
+            @(),
+            @($draftWithDigests.assets[1]),
+            @($draftWithDigests.assets)
+        )) {
+            Assert-ReleaseAssetSubsetMatchesLocalFiles -Release (& $newProtocolRelease 'marketplace-started' $protocolRunId $subset) -LocalFiles $localFiles
+        }
+        Assert-ThrowsMatch "duplicate partial asset rejected" {
+            Assert-ReleaseAssetSubsetMatchesLocalFiles -Release (& $newProtocolRelease 'marketplace-started' $protocolRunId @($draftWithDigests.assets[0], $draftWithDigests.assets[0])) -LocalFiles $localFiles
+        } "duplicate asset"
+        foreach ($mutation in @(
+            [pscustomobject]@{ Field = 'state'; Value = 'new'; Pattern = 'state' },
+            [pscustomobject]@{ Field = 'size'; Value = 999; Pattern = 'size' },
+            [pscustomobject]@{ Field = 'digest'; Value = "sha256:$('0' * 64)"; Pattern = 'digest' }
+        )) {
+            $badAsset = $draftWithDigests.assets[1].PSObject.Copy()
+            $badAsset.($mutation.Field) = $mutation.Value
+            Assert-ThrowsMatch "partial asset $($mutation.Field) rejected" {
+                Assert-ReleaseAssetSubsetMatchesLocalFiles -Release (& $newProtocolRelease 'marketplace-started' $protocolRunId @($badAsset)) -LocalFiles $localFiles
+            } $mutation.Pattern
+        }
+        $unexpectedProtocol = & $newProtocolRelease 'marketplace-started' $protocolRunId @([pscustomobject]@{ name = 'unexpected.txt'; state = 'uploaded'; size = 1; digest = 'sha256:' + ('0' * 64) })
+        Assert-ThrowsMatch "unexpected partial asset rejected" {
+            Assert-ReleaseAssetSubsetMatchesLocalFiles -Release $unexpectedProtocol -LocalFiles $localFiles
+        } "unexpected asset"
+        $wrongCaseProtocol = & $newProtocolRelease 'marketplace-started' $protocolRunId @([pscustomobject]@{
+            name = "statspro-$tag.zip"
+            state = 'uploaded'
+            size = (Get-Item -LiteralPath $archivePath).Length
+            digest = "sha256:$(Get-LowercaseFileSha256 -Path $archivePath)"
+        })
+        Assert-ThrowsMatch "wrong-case partial asset rejected" {
+            Assert-ReleaseAssetSubsetMatchesLocalFiles -Release $wrongCaseProtocol -LocalFiles $localFiles
+        } "unexpected asset"
+        $wrongCaseFull = $draftWithDigests.PSObject.Copy()
+        $wrongCaseFull.assets = @($draftWithDigests.assets | ForEach-Object { $_.PSObject.Copy() })
+        $wrongCaseFull.assets[0].name = "statspro-$tag.zip"
+        Assert-ThrowsMatch "wrong-case exact asset rejected" {
+            Assert-DraftAssetsMatchLocalFiles -Release $wrongCaseFull -ExpectedTag $tag -ArchivePath $archivePath -ReleaseJsonPath $releaseJsonPath
+        } "expected"
+        $wrongCaseArchivePath = Join-Path $tempDir "statspro-$tag.zip"
+        [System.IO.File]::WriteAllBytes($wrongCaseArchivePath, [byte[]](1, 2, 3, 4))
+        Assert-ThrowsMatch "wrong-case local archive rejected" {
+            [void](Assert-ReleaseAssetPaths -ArchivePath $wrongCaseArchivePath -ReleaseJsonPath $releaseJsonPath -ExpectedTag $tag)
+        } "Archive filename"
         $swapped = $draftWithDigests.PSObject.Copy()
         $swapped.assets = @($draftWithDigests.assets | ForEach-Object { $_.PSObject.Copy() })
         $swapped.assets[0].digest = "sha256:$('0' * 64)"
@@ -1462,6 +2291,27 @@ function Invoke-SelfTest {
     Assert-ThrowsMatch "disabled exact pre-upload switch rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "-RequireExactPackagerProjectVersion", '-RequireExactPackagerProjectVersion:$false')
     } "immediate pre-upload step"
+    Assert-ThrowsMatch "run attempt substituted for stable run ID rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '\$env:GITHUB_RUN_ID', '$env:GITHUB_RUN_ATTEMPT')
+    } "ExpectedRunId"
+    Assert-ThrowsMatch "wrong release repository binding rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '\$env:GITHUB_REPOSITORY', '$env:OTHER_REPOSITORY')
+    } "Repository|exact fail-closed"
+    Assert-ThrowsMatch "wrong release tag binding rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '\$env:GITHUB_REF_NAME', '$env:OTHER_TAG')
+    } "ExpectedTag|exact fail-closed|Canonical release notes"
+    Assert-ThrowsMatch "conditional interrupted-state validation rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^(\s{6}- name: Validate interrupted release state\s*)$', "`$1`n        if: always()")
+    } "must be mandatory"
+    Assert-ThrowsMatch "missing durable marketplace-started transition rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '-Mode MarkMarketplaceStarted', '-Mode CreateDraft')
+    } "MarkMarketplaceStarted"
+    Assert-ThrowsMatch "noncanonical interrupted-state notes rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '-ExportTopChangelogPath CHANGELOG\.md', '-ExportTopChangelogPath release-notes.md')
+    } "Canonical release notes"
+    Assert-ThrowsMatch "conditional draft preparation rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^(\s{6}- name: Prepare resumable draft release\s*)$', "`$1`n        if: always()")
+    } "must be mandatory"
     Assert-ThrowsMatch "marketplace tree reuse flags rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "args: -c -e -o", "args: -c -e")
     } "reusing the validated tree"
@@ -1469,7 +2319,7 @@ function Invoke-SelfTest {
     $insertedStep = "      - name: Unexpected intervening step`n        run: echo changed`n`n"
     Assert-ThrowsMatch "intervening pre-upload step rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace($publishMarker, $insertedStep + $publishMarker)
-    } "final workflow step"
+    } "must be consecutive"
     $preUploadBlock = [regex]::Match($workflowText, "(?ms)^\s{6}- name: Validate exact package immediately before marketplace upload\s*$.*?(?=^\s{6}- name:|\z)")
     $publishBlock = [regex]::Match($workflowText, "(?ms)^\s{6}- name: Publish package to marketplaces\s*$.*?(?=^\s{6}- name:|\z)")
     $swappedWorkflow = $workflowText.Substring(0, $preUploadBlock.Index) +
@@ -1477,7 +2327,7 @@ function Invoke-SelfTest {
         $workflowText.Substring($publishBlock.Index + $publishBlock.Length)
     Assert-ThrowsMatch "pre-upload validation after marketplace publish rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText $swappedWorkflow
-    } "out of the required"
+    } "out of the required|exactly one GitHub-management step"
     $postPublishMarker = "      - name: Validate marketplace archive and create release metadata"
     foreach ($marketplaceSecretName in @('CF_API_KEY', 'WAGO_API_TOKEN', 'WOWI_API_TOKEN')) {
         Assert-ThrowsMatch "missing $marketplaceSecretName publishing binding rejected" {
@@ -1537,12 +2387,15 @@ if ($SelfTest) {
 }
 
 if ([string]::IsNullOrWhiteSpace($Mode)) {
-    throw "Missing -Mode RefuseExisting|CreateDraft|AttachAssets|Publish."
+    throw "Missing release-management -Mode."
 }
 Assert-RepositoryName $Repository
 Assert-ReleaseTag $ExpectedTag
-if ($Mode -in @("CreateDraft", "Publish")) {
+if ($Mode -ne "RefuseExisting") {
     Assert-CommitSha $ExpectedCommitSha
+}
+if ($Mode -in @("CreateDraft", "MarkMarketplaceStarted", "AttachAssets", "Publish")) {
+    Assert-RunId $ExpectedRunId
 }
 if ($AttestationAttempts -lt 1) {
     throw "-AttestationAttempts must be at least 1."
@@ -1557,73 +2410,186 @@ switch ($Mode) {
         Assert-NoExistingRelease -Release $release -ExpectedTag $ExpectedTag
         Write-Host "No existing GitHub release marker found for $ExpectedTag."
     }
-    "CreateDraft" {
-        $notes = Resolve-RequiredFile -Path $NotesPath -Description "release notes"
+    "ValidateStart" {
+        $notesText = Get-CanonicalFileText -Path $NotesPath -Description "release notes"
         $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
-        Assert-NoExistingRelease -Release $release -ExpectedTag $ExpectedTag
-        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
-        [void](Invoke-Gh -Arguments (Get-CreateDraftGhArguments -Repository $Repository -ExpectedTag $ExpectedTag -NotesPath $notes))
-        [void](Wait-GitHubReleaseState `
+        $state = Assert-ReleaseStartState `
+            -Release $release `
             -Repository $Repository `
             -ExpectedTag $ExpectedTag `
-            -Attempts $AttestationAttempts `
-            -AssertState {
-                param([object]$Release)
-                Assert-DraftRelease -Release $Release -ExpectedTag $ExpectedTag -ExpectedAssets @()
-            })
+            -ExpectedCommitSha $ExpectedCommitSha `
+            -ExpectedNotes $notesText
         Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
-        Write-Host "Draft release marker created for $ExpectedTag."
+        Write-Host "Release start state for $ExpectedTag is $state."
+    }
+    "CreateDraft" {
+        $notesText = Get-CanonicalFileText -Path $NotesPath -Description "release notes"
+        $manifestText = Get-CanonicalFileText -Path $ManifestPath -Description "validated package manifest"
+        $manifestSha256 = Get-LowercaseTextSha256 -Text $manifestText
+        $desiredState = Get-ReleaseStateData `
+            -Phase 'prepared' `
+            -Repository $Repository `
+            -ExpectedTag $ExpectedTag `
+            -ExpectedCommitSha $ExpectedCommitSha `
+            -ExpectedRunId $ExpectedRunId `
+            -NotesSha256 (Get-LowercaseTextSha256 -Text $notesText) `
+            -ManifestSha256 $manifestSha256
+        $desiredBody = Get-ReleaseBody -State $desiredState -CanonicalNotes $notesText
+        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
+        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
+        if ($null -eq $release) {
+            Invoke-WithTemporaryReleaseBody -Body $desiredBody -Action {
+                param([string]$BodyPath)
+                [void](Invoke-GitHubMutationAndAttest `
+                    -Description "Draft creation for $ExpectedTag" `
+                    -Arguments (Get-CreateDraftGhArguments -Repository $Repository -ExpectedTag $ExpectedTag -NotesPath $BodyPath) `
+                    -Repository $Repository `
+                    -ExpectedTag $ExpectedTag `
+                    -Attempts $AttestationAttempts `
+                    -AssertState {
+                        param([object]$Observed)
+                        [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'prepared' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+                        Assert-ExactAssetSet -Release $Observed -ExpectedNames @()
+                    })
+            }
+            Write-Host "Prepared draft release marker created for $ExpectedTag."
+        }
+        else {
+            $parsed = Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'prepared' -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256
+            Assert-ExactAssetSet -Release $release -ExpectedNames @()
+            if ([string]$parsed.State.runId -eq $ExpectedRunId) {
+                Write-Host "Prepared draft release marker already belongs to run $ExpectedRunId; no mutation needed."
+            }
+            else {
+                Invoke-WithTemporaryReleaseBody -Body $desiredBody -Action {
+                    param([string]$BodyPath)
+                    [void](Invoke-GitHubMutationAndAttest `
+                        -Description "Prepared draft claim for $ExpectedTag" `
+                        -Arguments (Get-EditDraftBodyGhArguments -Repository $Repository -ExpectedTag $ExpectedTag -NotesPath $BodyPath) `
+                        -Repository $Repository `
+                        -ExpectedTag $ExpectedTag `
+                        -Attempts $AttestationAttempts `
+                        -AssertState {
+                            param([object]$Observed)
+                            [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'prepared' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+                            Assert-ExactAssetSet -Release $Observed -ExpectedNames @()
+                        })
+                }
+                Write-Host "Prepared draft release marker safely claimed by run $ExpectedRunId."
+            }
+        }
+        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
+    }
+    "MarkMarketplaceStarted" {
+        $notesText = Get-CanonicalFileText -Path $NotesPath -Description "release notes"
+        $manifestSha256 = Get-LowercaseTextSha256 -Text (Get-CanonicalFileText -Path $ManifestPath -Description "validated package manifest")
+        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
+        [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'prepared' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+        Assert-ExactAssetSet -Release $release -ExpectedNames @()
+        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
+        $startedState = Get-ReleaseStateData -Phase 'marketplace-started' -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedRunId $ExpectedRunId -NotesSha256 (Get-LowercaseTextSha256 -Text $notesText) -ManifestSha256 $manifestSha256
+        $startedBody = Get-ReleaseBody -State $startedState -CanonicalNotes $notesText
+        Invoke-WithTemporaryReleaseBody -Body $startedBody -Action {
+            param([string]$BodyPath)
+            [void](Invoke-GitHubMutationAndAttest `
+                -Description "Marketplace-started marker for $ExpectedTag" `
+                -Arguments (Get-EditDraftBodyGhArguments -Repository $Repository -ExpectedTag $ExpectedTag -NotesPath $BodyPath) `
+                -Repository $Repository `
+                -ExpectedTag $ExpectedTag `
+                -Attempts $AttestationAttempts `
+                -AssertState {
+                    param([object]$Observed)
+                    [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+                    Assert-ExactAssetSet -Release $Observed -ExpectedNames @()
+                })
+        }
+        Write-Host "Marketplace publication boundary durably marked for $ExpectedTag."
     }
     "AttachAssets" {
         $paths = Assert-ReleaseAssetPaths -ArchivePath $ArchivePath -ReleaseJsonPath $ReleaseJsonPath -ExpectedTag $ExpectedTag
-        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
-        Assert-DraftRelease -Release $release -ExpectedTag $ExpectedTag -ExpectedAssets @()
-        [void](Invoke-Gh -Arguments (Get-AttachAssetsGhArguments -Repository $Repository -ExpectedTag $ExpectedTag -ArchivePath $paths.Archive -ReleaseJsonPath $paths.ReleaseJson))
-        [void](Wait-GitHubReleaseState `
-            -Repository $Repository `
-            -ExpectedTag $ExpectedTag `
-            -Attempts $AttestationAttempts `
-            -AssertState {
-                param([object]$Release)
-                Assert-DraftAssetsMatchLocalFiles `
-                    -Release $Release `
+        $notesText = Get-CanonicalFileText -Path $NotesPath -Description "release notes"
+        $manifestSha256 = Get-LowercaseTextSha256 -Text (Get-CanonicalFileText -Path $ManifestPath -Description "validated package manifest")
+        $localFiles = @{
+            "StatsPro-$ExpectedTag.zip" = $paths.Archive
+            "release.json"              = $paths.ReleaseJson
+        }
+        foreach ($assetName in @("StatsPro-$ExpectedTag.zip", "release.json")) {
+            $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
+            [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+            Assert-ReleaseAssetSubsetMatchesLocalFiles -Release $release -LocalFiles $localFiles
+            if (-not (Test-ContainsOrdinal -Values @(Get-ReleaseAssetNames -Release $release) -Expected $assetName)) {
+                [void](Invoke-GitHubMutationAndAttest `
+                    -Description "Asset upload '$assetName' for $ExpectedTag" `
+                    -Arguments (Get-AttachAssetsGhArguments -Repository $Repository -ExpectedTag $ExpectedTag -AssetPath $localFiles[$assetName]) `
+                    -Repository $Repository `
                     -ExpectedTag $ExpectedTag `
-                    -ArchivePath $paths.Archive `
-                    -ReleaseJsonPath $paths.ReleaseJson
-            })
+                    -Attempts $AttestationAttempts `
+                    -AssertState {
+                        param([object]$Observed)
+                        [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+                        Assert-ReleaseAssetSubsetMatchesLocalFiles -Release $Observed -LocalFiles $localFiles
+                        if (-not (Test-ContainsOrdinal -Values @(Get-ReleaseAssetNames -Release $Observed) -Expected $assetName)) {
+                            throw "Uploaded asset '$assetName' is not visible."
+                        }
+                    })
+            }
+        }
+        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
+        [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+        Assert-DraftAssetsMatchLocalFiles -Release $release -ExpectedTag $ExpectedTag -ArchivePath $paths.Archive -ReleaseJsonPath $paths.ReleaseJson
         Write-Host "Validated release assets attached to draft $ExpectedTag."
     }
     "Publish" {
         $paths = Assert-ReleaseAssetPaths -ArchivePath $ArchivePath -ReleaseJsonPath $ReleaseJsonPath -ExpectedTag $ExpectedTag
+        $notesText = Get-CanonicalFileText -Path $NotesPath -Description "release notes"
+        $manifestSha256 = Get-LowercaseTextSha256 -Text (Get-CanonicalFileText -Path $ManifestPath -Description "validated package manifest")
         $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
+        [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
         Assert-DraftAssetsMatchLocalFiles -Release $release -ExpectedTag $ExpectedTag -ArchivePath $paths.Archive -ReleaseJsonPath $paths.ReleaseJson
         Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
         $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
+        [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
         Assert-DraftAssetsMatchLocalFiles -Release $release -ExpectedTag $ExpectedTag -ArchivePath $paths.Archive -ReleaseJsonPath $paths.ReleaseJson
-        [void](Invoke-Gh -Arguments (Get-PublishGhArguments -Repository $Repository -ExpectedTag $ExpectedTag))
-
-        $lastError = $null
-        for ($attempt = 1; $attempt -le $AttestationAttempts; $attempt++) {
-            try {
+        [void](Invoke-GitHubMutationAndAttest `
+            -Description "Immutable publication for $ExpectedTag" `
+            -Arguments (Get-PublishGhArguments -Repository $Repository -ExpectedTag $ExpectedTag) `
+            -Repository $Repository `
+            -ExpectedTag $ExpectedTag `
+            -Attempts $AttestationAttempts `
+            -AssertState {
+                param([object]$Observed)
+                [void](Assert-PublishedProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+            })
+        Invoke-BoundedReadOnlyCheck `
+            -Description "Published immutable release attestation for $ExpectedTag" `
+            -Attempts $AttestationAttempts `
+            -Check {
                 $published = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
-                Assert-PublishedImmutableRelease -Release $published -ExpectedTag $ExpectedTag
+                [void](Assert-PublishedProtocolIdentity -Release $published -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
                 Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
-                Invoke-ImmutableReleaseAttestationChecks `
-                    -Repository $Repository `
-                    -ExpectedTag $ExpectedTag `
-                    -ExpectedCommitSha $ExpectedCommitSha `
-                    -ArchivePath $paths.Archive `
-                    -ReleaseJsonPath $paths.ReleaseJson
-                Write-Host "Immutable GitHub release published and attested for $ExpectedTag."
-                return
+                Invoke-ImmutableReleaseAttestationChecks -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ArchivePath $paths.Archive -ReleaseJsonPath $paths.ReleaseJson
             }
-            catch {
-                $lastError = $_
-                if ($attempt -lt $AttestationAttempts) {
-                    Start-Sleep -Seconds ([Math]::Min(30, 5 * $attempt))
+        Write-Host "Immutable GitHub release published and attested for $ExpectedTag."
+    }
+    "RetirePrepared" {
+        $notesText = Get-CanonicalFileText -Path $NotesPath -Description "release notes"
+        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
+        [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'prepared' -ExpectedNotes $notesText)
+        Assert-ExactAssetSet -Release $release -ExpectedNames @()
+        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
+        [void](Invoke-GitHubMutationAndAttest `
+            -Description "Prepared draft retirement for $ExpectedTag" `
+            -Arguments (Get-RetirePreparedGhArguments -Repository $Repository -ExpectedTag $ExpectedTag) `
+            -Repository $Repository `
+            -ExpectedTag $ExpectedTag `
+            -Attempts $AttestationAttempts `
+            -AssertState {
+                param([AllowNull()][object]$Observed)
+                if ($null -ne $Observed) {
+                    throw "Prepared draft $ExpectedTag still exists after retirement."
                 }
-            }
-        }
-        throw "Published release $ExpectedTag did not pass immutable attestation checks: $($lastError.Exception.Message)"
+            })
+        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
+        Write-Host "Safely retired empty prepared draft $ExpectedTag; tag was preserved."
     }
 }

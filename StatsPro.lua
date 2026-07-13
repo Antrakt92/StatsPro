@@ -3291,6 +3291,10 @@ addon.profileRuntime = {
     forceReapply = false,
     forceReapplyRetryCount = 0,
     forceReapplyRetryToken = nil,
+    contextRetryCount = 0,
+    contextRetryToken = nil,
+    contextRetryPositionSettings = nil,
+    contextRetryPositionSnapshot = nil,
     pendingResolution = false,
     scheduledToken = nil,
     noSpecRetryToken = nil,
@@ -3398,7 +3402,7 @@ function addon.profileUI.BuildViewModel()
     local root = addon.dbRuntime.Refresh()
     local runtime = addon.profileRuntime
     local pending = runtime.pendingResolution or runtime.scheduledToken ~= nil
-        or runtime.noSpecRetryToken ~= nil
+        or runtime.noSpecRetryToken ~= nil or runtime.contextRetryToken ~= nil
     local combat = runtime.ReadCombatState()
     local model = {
         mode = addon.dbRuntime.mode,
@@ -3489,7 +3493,8 @@ end
 function addon.profileRuntime.BlocksUserWrites()
     return not addon.profileRuntime.transitioning
         and (addon.profileRuntime.pendingResolution
-            or addon.profileRuntime.scheduledToken ~= nil)
+            or addon.profileRuntime.scheduledToken ~= nil
+            or addon.profileRuntime.contextRetryToken ~= nil)
 end
 
 function addon.dbRuntime.IsCleanType(value, expectedType)
@@ -4238,6 +4243,73 @@ function addon.profileRuntime.CloseOwnedSettingsModals()
     return ok
 end
 
+function addon.profileRuntime.ResetContextRetry()
+    addon.profileRuntime.contextRetryCount = 0
+    addon.profileRuntime.contextRetryToken = nil
+end
+
+function addon.profileRuntime.ClearContextRetryPositions()
+    addon.profileRuntime.contextRetryPositionSettings = nil
+    addon.profileRuntime.contextRetryPositionSnapshot = nil
+end
+
+function addon.profileRuntime.RememberContextRetryPositions(settings)
+    if not addon.dbRuntime.IsCleanTable(settings) then return false end
+    addon.profileRuntime.contextRetryPositionSettings = settings
+    addon.profileRuntime.contextRetryPositionSnapshot =
+        addon.profileOps.CapturePositionFields(settings)
+    return true
+end
+
+function addon.profileRuntime.RestoreContextRetryPositionFrames()
+    local runtime = addon.profileRuntime
+    local settings = runtime.contextRetryPositionSettings
+    local snapshot = runtime.contextRetryPositionSnapshot
+    if not settings or not snapshot then return true end
+    if not rawequal(settings, addon.dbRuntime.activeSettings)
+        or type(runtime.restoreActivePositions) ~= "function" then
+        return false
+    end
+    local committed = addon.profileOps.CapturePositionFields(settings)
+    addon.profileOps.RestorePositionFields(settings, snapshot)
+    local restored = pcall(runtime.restoreActivePositions)
+    addon.profileOps.RestorePositionFields(settings, committed)
+    return restored
+end
+
+function addon.profileRuntime.CommitContextRetryPositions()
+    local runtime = addon.profileRuntime
+    local settings = runtime.contextRetryPositionSettings
+    local snapshot = runtime.contextRetryPositionSnapshot
+    if not settings or not snapshot then return true end
+    if not rawequal(settings, addon.dbRuntime.activeSettings) then return false end
+    addon.profileOps.RestorePositionFields(settings, snapshot)
+    runtime.ClearContextRetryPositions()
+    return true
+end
+
+function addon.profileRuntime.ScheduleContextRetry()
+    local runtime = addon.profileRuntime
+    runtime.pendingResolution = true
+    if runtime.contextRetryToken ~= nil then return true end
+    if runtime.contextRetryCount >= 3 then
+        addon.profileUI.RefreshSafe()
+        return false
+    end
+    runtime.contextRetryCount = runtime.contextRetryCount + 1
+    local retryToken = {}
+    local requestGeneration = runtime.requestGeneration
+    runtime.contextRetryToken = retryToken
+    C_Timer.After(math.min(0.25 * runtime.contextRetryCount, 1), function()
+        if runtime.contextRetryToken ~= retryToken then return end
+        runtime.contextRetryToken = nil
+        if runtime.requestGeneration ~= requestGeneration then return end
+        runtime.ResolveCurrent(false)
+    end)
+    addon.profileUI.RefreshSafe()
+    return true
+end
+
 function addon.profileRuntime.ActivateResolvedContext(context, transaction, profileID, initializing)
     local runtime = addon.profileRuntime
     local oldProfileID = addon.dbRuntime.activeProfileID
@@ -4245,6 +4317,7 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
     local oldGUID, oldSpecID = runtime.activeGUID, runtime.activeSpecID
     local oldDisplayName, oldSpecName, oldRole =
         runtime.activeDisplayName, runtime.activeSpecName, runtime.activeRole
+    local oldSettingsJournal = addon.profileOps.CaptureMutationJournal(oldSettings)
 
     runtime.transitioning = true
     runtime.suppressIntermediateRefresh = true
@@ -4252,14 +4325,22 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
         local saveOK = type(runtime.saveActivePositions) ~= "function"
             or pcall(runtime.saveActivePositions, oldSettings)
         if not saveOK then
+            addon.profileOps.RestoreMutationJournal(oldSettingsJournal)
             runtime.suppressIntermediateRefresh = false
             runtime.transitioning = false
+            runtime.ScheduleContextRetry()
             addon.profileUI.RefreshSafe()
             return false
         end
+        runtime.RememberContextRetryPositions(oldSettings)
         if not runtime.CloseOwnedSettingsModals() then
+            addon.profileOps.RestoreMutationJournal(oldSettingsJournal)
+            runtime.forceReapply = true
+            runtime.forceReapplyRetryCount = 0
+            runtime.forceReapplyRetryToken = nil
             runtime.suppressIntermediateRefresh = false
             runtime.transitioning = false
+            runtime.ScheduleContextRetry()
             addon.profileUI.RefreshSafe()
             return false
         end
@@ -4270,18 +4351,35 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
     local activated = addon.dbRuntime.ActivateProfile(profileID)
     if not activated then
         runtime.RollbackTransaction(transaction)
+        addon.profileOps.RestoreMutationJournal(oldSettingsJournal)
         addon.dbRuntime.ActivateProfile(oldProfileID)
+        runtime.activeGUID, runtime.activeSpecID = oldGUID, oldSpecID
+        runtime.activeDisplayName, runtime.activeSpecName, runtime.activeRole =
+            oldDisplayName, oldSpecName, oldRole
+        runtime.forceReapply = true
+        runtime.forceReapplyRetryCount = 0
+        runtime.forceReapplyRetryToken = nil
         runtime.transitioning = false
+        runtime.ScheduleContextRetry()
         addon.profileUI.RefreshSafe()
         return false
     end
 
     local targetSettings = addon.dbRuntime.activeSettings
-    local targetSnapshot, copied = addon.dbRuntime.CloneSerializable(targetSettings)
-    if not copied then
+    local targetJournal = addon.dbRuntime.IsCleanTable(targetSettings)
+        and addon.profileOps.CaptureMutationJournal(targetSettings) or nil
+    if not targetJournal then
         runtime.RollbackTransaction(transaction)
+        addon.profileOps.RestoreMutationJournal(oldSettingsJournal)
         addon.dbRuntime.ActivateProfile(oldProfileID)
+        runtime.activeGUID, runtime.activeSpecID = oldGUID, oldSpecID
+        runtime.activeDisplayName, runtime.activeSpecName, runtime.activeRole =
+            oldDisplayName, oldSpecName, oldRole
+        runtime.forceReapply = true
+        runtime.forceReapplyRetryCount = 0
+        runtime.forceReapplyRetryToken = nil
         runtime.transitioning = false
+        runtime.ScheduleContextRetry()
         addon.profileUI.RefreshSafe()
         return false
     end
@@ -4291,20 +4389,27 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
         applied = pcall(runtime.applyActiveSettings)
     end
     if not applied then
-        if targetSnapshot and addon.dbRuntime.IsCleanTable(targetSettings) then
-            wipe(targetSettings)
-            for key, value in pairs(targetSnapshot) do targetSettings[key] = value end
-            addon.dbRuntime.Invalidate()
-        end
+        addon.profileOps.RestoreMutationJournal(targetJournal)
         runtime.RollbackTransaction(transaction)
+        addon.profileOps.RestoreMutationJournal(oldSettingsJournal)
         addon.dbRuntime.ActivateProfile(oldProfileID)
         runtime.activeGUID, runtime.activeSpecID = oldGUID, oldSpecID
         runtime.activeDisplayName, runtime.activeSpecName, runtime.activeRole =
             oldDisplayName, oldSpecName, oldRole
+        local rollbackJournal = addon.dbRuntime.IsCleanTable(oldSettings)
+            and addon.profileOps.CaptureMutationJournal(oldSettings) or nil
+        local rollbackApplied = false
         if type(runtime.applyActiveSettings) == "function" then
-            pcall(runtime.applyActiveSettings)
+            rollbackApplied = pcall(runtime.applyActiveSettings)
+        end
+        if not rollbackApplied then
+            addon.profileOps.RestoreMutationJournal(rollbackJournal)
+            runtime.forceReapply = true
+            runtime.forceReapplyRetryCount = 0
+            runtime.forceReapplyRetryToken = nil
         end
         runtime.transitioning = false
+        runtime.ScheduleContextRetry()
         addon.profileUI.RefreshSafe()
         return false
     end
@@ -4323,6 +4428,8 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
     runtime.forceReapply = false
     runtime.forceReapplyRetryCount = 0
     runtime.forceReapplyRetryToken = nil
+    runtime.ResetContextRetry()
+    runtime.ClearContextRetryPositions()
     runtime.pendingResolution = false
     runtime.activationCount = runtime.activationCount + 1
     runtime.transitioning = false
@@ -4370,46 +4477,63 @@ function addon.profileRuntime.ResolveCurrent(initializing)
         addon.profileUI.RefreshSafe()
         return false
     end
+    if runtime.forceReapply then
+        runtime.transitioning = true
+        local activeSettings = addon.dbRuntime.activeSettings
+        local journal = addon.dbRuntime.IsCleanTable(activeSettings)
+            and addon.profileOps.CaptureMutationJournal(activeSettings) or nil
+        local applied = journal and type(runtime.applyActiveSettings) == "function"
+            and pcall(runtime.applyActiveSettings)
+        if not applied and journal then addon.profileOps.RestoreMutationJournal(journal) end
+        runtime.transitioning = false
+        if not applied then
+            runtime.pendingResolution = true
+            runtime.forceReapplyRetryCount = runtime.forceReapplyRetryCount + 1
+            if runtime.forceReapplyRetryCount <= 3
+                and runtime.forceReapplyRetryToken == nil then
+                local retryToken = {}
+                local requestGeneration = runtime.requestGeneration
+                runtime.forceReapplyRetryToken = retryToken
+                C_Timer.After(math.min(0.25 * runtime.forceReapplyRetryCount, 1), function()
+                    if runtime.forceReapplyRetryToken ~= retryToken then return end
+                    runtime.forceReapplyRetryToken = nil
+                    if runtime.requestGeneration ~= requestGeneration then return end
+                    runtime.ResolveCurrent(false)
+                end)
+            end
+            addon.profileUI.RefreshSafe()
+            return false
+        end
+        runtime.forceReapply = false
+        runtime.forceReapplyRetryCount = 0
+        runtime.forceReapplyRetryToken = nil
+    end
+
+    if not runtime.RestoreContextRetryPositionFrames() then
+        runtime.forceReapply = true
+        runtime.forceReapplyRetryCount = 0
+        runtime.forceReapplyRetryToken = nil
+        runtime.ScheduleContextRetry()
+        addon.profileUI.RefreshSafe()
+        return false
+    end
+
     local character = root.characters and root.characters[context.guid]
     local mappedProfileID = character and character.specProfiles
         and character.specProfiles[context.specID] or nil
     if runtime.activeGUID == context.guid and runtime.activeSpecID == context.specID
         and addon.dbRuntime.activeProfileID == mappedProfileID then
-        if runtime.forceReapply then
-            runtime.transitioning = true
-            local journal = addon.profileOps.CaptureMutationJournal(addon.dbRuntime.activeSettings)
-            local applied = journal and type(runtime.applyActiveSettings) == "function"
-                and pcall(runtime.applyActiveSettings)
-            if not applied and journal then addon.profileOps.RestoreMutationJournal(journal) end
-            runtime.transitioning = false
-            if not applied then
-                runtime.pendingResolution = true
-                runtime.forceReapplyRetryCount = runtime.forceReapplyRetryCount + 1
-                if runtime.forceReapplyRetryCount <= 3
-                    and runtime.forceReapplyRetryToken == nil then
-                    local retryToken = {}
-                    runtime.forceReapplyRetryToken = retryToken
-                    C_Timer.After(math.min(0.25 * runtime.forceReapplyRetryCount, 1), function()
-                        if runtime.forceReapplyRetryToken ~= retryToken then return end
-                        runtime.forceReapplyRetryToken = nil
-                        runtime.ResolveCurrent(false)
-                    end)
-                end
-                addon.profileUI.RefreshSafe()
-                return false
-            end
-            runtime.forceReapply = false
-            runtime.forceReapplyRetryCount = 0
-            runtime.forceReapplyRetryToken = nil
-            runtime.pendingResolution = false
-            addon.profileUI.RefreshSafe()
-            return true
-        end
         -- A same-context event is still allowed to enrich late character/spec metadata.
         -- Do not reapply the profile payload or disturb open settings controls.
         local transaction, profileID = runtime.PrepareContextTransaction(context)
         if profileID ~= mappedProfileID then
             runtime.pendingResolution = true
+            addon.profileUI.RefreshSafe()
+            return false
+        end
+        if not runtime.CommitContextRetryPositions() then
+            runtime.pendingResolution = true
+            runtime.ScheduleContextRetry()
             addon.profileUI.RefreshSafe()
             return false
         end
@@ -4421,6 +4545,7 @@ function addon.profileRuntime.ResolveCurrent(initializing)
         runtime.activeSpecName = context.specName or runtime.activeSpecName
         runtime.activeRole = context.role or runtime.activeRole
         if context.specName then runtime.knownSpecNames[context.specID] = context.specName end
+        runtime.ResetContextRetry()
         runtime.pendingResolution = false
         addon.profileUI.RefreshSafe()
         return true
@@ -4437,6 +4562,8 @@ end
 
 function addon.profileRuntime.RequestResolution(immediate)
     local runtime = addon.profileRuntime
+    runtime.ResetContextRetry()
+    runtime.forceReapplyRetryToken = nil
     if type(UnitGUID) ~= "function" then
         runtime.pendingResolution = false
         addon.profileUI.RefreshSafe()
@@ -4460,7 +4587,10 @@ end
 
 function addon.profileRuntime.ResolvePending()
     local runtime = addon.profileRuntime
-    if not runtime.pendingResolution and runtime.scheduledToken == nil then return false end
+    if not runtime.pendingResolution and runtime.scheduledToken == nil
+        and runtime.contextRetryToken == nil then return false end
+    runtime.ResetContextRetry()
+    runtime.forceReapplyRetryToken = nil
     runtime.requestGeneration = runtime.requestGeneration + 1
     runtime.scheduledToken = nil
     runtime.noSpecRetryToken = nil
@@ -4672,7 +4802,7 @@ function addon.profileOps.Gate(expected, internal)
         return nil, "read-only"
     end
     if runtime.pendingResolution or runtime.scheduledToken ~= nil
-        or runtime.noSpecRetryToken ~= nil then
+        or runtime.noSpecRetryToken ~= nil or runtime.contextRetryToken ~= nil then
         return nil, "pending"
     end
     if not addon.profileOps.CheckExpected(root, expected) then return nil, "stale" end
@@ -6922,6 +7052,11 @@ local defensivePanel = Panel:New("StatsProDefensiveFrame", "defensive_")
 addon.profileRuntime.saveActivePositions = function(settings)
     mainPanel:SavePositionTo(settings)
     defensivePanel:SavePositionTo(settings)
+end
+
+addon.profileRuntime.restoreActivePositions = function()
+    mainPanel:LoadPosition()
+    defensivePanel:LoadPosition()
 end
 
 local function ApplyTextStyleToAllPanels(font, size, force)
@@ -13728,9 +13863,17 @@ if addon and addon.__statsproSmoke == true then
                 activeSpecID = runtime.activeSpecID,
                 activeDisplayName = runtime.activeDisplayName,
                 activeSpecName = runtime.activeSpecName,
+                activeRole = runtime.activeRole,
                 forceReapply = runtime.forceReapply,
+                forceReapplyRetryCount = runtime.forceReapplyRetryCount,
+                forceReapplyRetryScheduled = runtime.forceReapplyRetryToken ~= nil,
+                contextRetryCount = runtime.contextRetryCount,
+                contextRetryScheduled = runtime.contextRetryToken ~= nil,
                 pendingResolution = runtime.pendingResolution,
                 scheduled = runtime.scheduledToken ~= nil,
+                transitioning = runtime.transitioning,
+                suppressIntermediateRefresh = runtime.suppressIntermediateRefresh,
+                requestGeneration = runtime.requestGeneration,
                 activationCount = runtime.activationCount,
                 applyCount = runtime.applyCount,
                 configRefreshCount = runtime.configRefreshCount,

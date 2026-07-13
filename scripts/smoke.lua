@@ -10394,6 +10394,253 @@ do
         rawequal(root.profiles[oldProfileID].settings.colors, oldColorsRef), true)
     eq("profiles.context.rollback.no_orphan_profile", root.profiles["p" .. tostring(nextID)], nil)
     eq("profiles.context.rollback.registry_current", rollbackTest.dbCompatibilityState().mode, "current")
+    eq("profiles.context.rollback.retry_count",
+        rollbackTest.profileRuntimeState().contextRetryCount, 1)
+    eq("profiles.context.rollback.retry_scheduled",
+        rollbackTest.profileRuntimeState().contextRetryScheduled, true)
+    env.__flushTimers(0.25)
+    eq("profiles.context.rollback.retry_active_spec",
+        rollbackTest.profileRuntimeState().activeSpecID, 999)
+    eq("profiles.context.rollback.retry_allocated_once",
+        root.characters["Player-1-ROLLBACK"].specProfiles[999], "p" .. tostring(nextID))
+    eq("profiles.context.rollback.retry_next_id", root.account.nextProfileID, nextID + 1)
+    eq("profiles.context.rollback.retry_no_duplicate",
+        root.profiles["p" .. tostring(nextID + 1)], nil)
+    eq("profiles.context.rollback.retry_cleared",
+        rollbackTest.profileRuntimeState().contextRetryCount, 0)
+    eq("profiles.context.rollback.retry_not_scheduled",
+        rollbackTest.profileRuntimeState().contextRetryScheduled, false)
+    eq("profiles.context.rollback.retry_not_pending",
+        rollbackTest.profileRuntimeState().pendingResolution, false)
+end
+
+do
+    -- A partial position save must be atomic. The delayed retry must re-read the
+    -- live context rather than publishing the transaction built for the failed spec.
+    local seed = loadStatsPro("enUS")
+    fireEvent("profiles.context.position_retry.seed", seed, "PLAYER_ENTERING_WORLD")
+    local root = deepCopy(seed.StatsProDB)
+    local identity = { specID = 73 }
+    local env, _, test = loadStatsPro("enUS", {
+        statsProDB = root,
+        unitGUID = function() return "Player-1-POSITION-RETRY" end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return identity.specID, "Spec " .. tostring(identity.specID), nil, nil, "TANK", 1
+        end,
+    })
+    fireEvent("profiles.context.position_retry.activate", env, "PLAYER_ENTERING_WORLD")
+    local state = test.profileState()
+    local oldProfileID = state.profileID
+    local oldSettings = state.settings
+    local oldColors = oldSettings.colors
+    local runtimeBefore = test.profileRuntimeState()
+    local rootBefore = deepCopy(root)
+    local accountRef, profilesRef, charactersRef = root.account, root.profiles, root.characters
+    local nextID = root.account.nextProfileID
+    env.StatsProFrame:ClearAllPoints()
+    env.StatsProFrame:SetPoint("TOPLEFT", env.UIParent, "TOPLEFT", 321, -123)
+    local oldSideGetPoint = env.StatsProDefensiveFrame.GetPoint
+    local sideCalls = 0
+    env.StatsProDefensiveFrame.GetPoint = function()
+        sideCalls = sideCalls + 1
+        error("injected partial position save failure")
+    end
+    identity.specID = 999
+    fireEvent("profiles.context.position_retry.switch",
+        env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    assertDeepEqual("profiles.context.position_retry.atomic_root", root, rootBefore)
+    eq("profiles.context.position_retry.account_identity", root.account, accountRef)
+    eq("profiles.context.position_retry.profiles_identity", root.profiles, profilesRef)
+    eq("profiles.context.position_retry.characters_identity", root.characters, charactersRef)
+    eq("profiles.context.position_retry.settings_identity",
+        test.profileState().settings, oldSettings)
+    eq("profiles.context.position_retry.colors_identity", oldSettings.colors, oldColors)
+    eq("profiles.context.position_retry.active_profile", test.profileState().profileID, oldProfileID)
+    eq("profiles.context.position_retry.active_guid",
+        test.profileRuntimeState().activeGUID, runtimeBefore.activeGUID)
+    eq("profiles.context.position_retry.active_spec",
+        test.profileRuntimeState().activeSpecID, runtimeBefore.activeSpecID)
+    eq("profiles.context.position_retry.active_name",
+        test.profileRuntimeState().activeDisplayName, runtimeBefore.activeDisplayName)
+    eq("profiles.context.position_retry.active_spec_name",
+        test.profileRuntimeState().activeSpecName, runtimeBefore.activeSpecName)
+    eq("profiles.context.position_retry.active_role",
+        test.profileRuntimeState().activeRole, runtimeBefore.activeRole)
+    eq("profiles.context.position_retry.not_transitioning",
+        test.profileRuntimeState().transitioning, false)
+    eq("profiles.context.position_retry.not_suppressing",
+        test.profileRuntimeState().suppressIntermediateRefresh, false)
+    eq("profiles.context.position_retry.retry_count",
+        test.profileRuntimeState().contextRetryCount, 1)
+    eq("profiles.context.position_retry.retry_scheduled",
+        test.profileRuntimeState().contextRetryScheduled, true)
+    eq("profiles.context.position_retry.one_attempt", sideCalls, 1)
+
+    identity.specID = 998
+    env.StatsProDefensiveFrame.GetPoint = oldSideGetPoint
+    env.__flushTimers(0.25)
+    local latestProfileID = root.characters["Player-1-POSITION-RETRY"].specProfiles[998]
+    eq("profiles.context.position_retry.latest_context", test.profileRuntimeState().activeSpecID, 998)
+    eq("profiles.context.position_retry.stale_context_unassigned",
+        root.characters["Player-1-POSITION-RETRY"].specProfiles[999], nil)
+    eq("profiles.context.position_retry.one_profile_allocated", latestProfileID,
+        "p" .. tostring(nextID))
+    eq("profiles.context.position_retry.no_duplicate_allocation",
+        root.account.nextProfileID, nextID + 1)
+    eq("profiles.context.position_retry.saved_main_point", oldSettings.point, "TOPLEFT")
+    eq("profiles.context.position_retry.saved_main_x", oldSettings.xOfs, 321)
+    eq("profiles.context.position_retry.saved_main_y", oldSettings.yOfs, -123)
+    eq("profiles.context.position_retry.retry_cleared",
+        test.profileRuntimeState().contextRetryCount, 0)
+    eq("profiles.context.position_retry.pending_cleared",
+        test.profileRuntimeState().pendingResolution, false)
+end
+
+do
+    -- Exhaustion is fail-closed: initial attempt plus exactly three delayed retries.
+    -- A later authoritative event owns a fresh budget and can recover normally.
+    local seed = loadStatsPro("enUS")
+    fireEvent("profiles.context.retry_bound.seed", seed, "PLAYER_ENTERING_WORLD")
+    local root = deepCopy(seed.StatsProDB)
+    local identity = { specID = 73 }
+    local env, _, test = loadStatsPro("enUS", {
+        statsProDB = root,
+        unitGUID = function() return "Player-1-RETRY-BOUND" end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return identity.specID, "Spec", nil, nil, "TANK", 1
+        end,
+    })
+    fireEvent("profiles.context.retry_bound.activate", env, "PLAYER_ENTERING_WORLD")
+    local rootBefore = deepCopy(root)
+    local nextID = root.account.nextProfileID
+    local oldSideGetPoint = env.StatsProDefensiveFrame.GetPoint
+    local calls = 0
+    env.StatsProDefensiveFrame.GetPoint = function()
+        calls = calls + 1
+        error("injected persistent position save failure")
+    end
+    identity.specID = 999
+    fireEvent("profiles.context.retry_bound.switch",
+        env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    env.__flushTimers(0.25)
+    env.__flushTimers(0.5)
+    env.__flushTimers(0.75)
+    eq("profiles.context.retry_bound.attempts", calls, 4)
+    eq("profiles.context.retry_bound.count", test.profileRuntimeState().contextRetryCount, 3)
+    eq("profiles.context.retry_bound.no_timer",
+        test.profileRuntimeState().contextRetryScheduled, false)
+    eq("profiles.context.retry_bound.pending", test.profileRuntimeState().pendingResolution, true)
+    eq("profiles.context.retry_bound.no_allocation", root.account.nextProfileID, nextID)
+    assertDeepEqual("profiles.context.retry_bound.no_writes", root, rootBefore)
+
+    fireEvent("profiles.context.retry_bound.new_request",
+        env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    eq("profiles.context.retry_bound.fresh_budget",
+        test.profileRuntimeState().contextRetryCount, 1)
+    eq("profiles.context.retry_bound.fifth_attempt", calls, 5)
+    env.StatsProDefensiveFrame.GetPoint = oldSideGetPoint
+    env.__flushTimers(0.25)
+    eq("profiles.context.retry_bound.eventual_success",
+        test.profileRuntimeState().activeSpecID, 999)
+    eq("profiles.context.retry_bound.single_allocation",
+        root.account.nextProfileID, nextID + 1)
+    eq("profiles.context.retry_bound.cleared",
+        test.profileRuntimeState().contextRetryCount, 0)
+end
+
+do
+    -- Closing owned UI can fail after position saving and after preview state starts
+    -- unwinding. Roll back DB writes, recover committed runtime first, then retry.
+    local seed = loadStatsPro("enUS")
+    fireEvent("profiles.context.modal_retry.seed", seed, "PLAYER_ENTERING_WORLD")
+    local root = deepCopy(seed.StatsProDB)
+    local identity = { specID = 73 }
+    local env, addonContext, test = loadStatsPro("enUS", {
+        statsProDB = root,
+        unitGUID = function() return "Player-1-MODAL-RETRY" end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return identity.specID, "Spec", nil, nil, "TANK", 1
+        end,
+    })
+    fireEvent("profiles.context.modal_retry.activate", env, "PLAYER_ENTERING_WORLD")
+    addonContext:OpenConfigMenu()
+    callScript("profiles.context.modal_retry.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    callScript("profiles.context.modal_retry.open_dialog",
+        env.StatsProProfileResetButton, "OnClick")
+    eq("profiles.context.modal_retry.dialog_open",
+        test.profileUIState().operationDialogShown, true)
+    local rootBefore = deepCopy(root)
+    local oldSettings = test.profileState().settings
+    local oldSettingsRef = oldSettings
+    local runtimeBefore = test.profileRuntimeState()
+    local nextID = root.account.nextProfileID
+    env.StatsProFrame:ClearAllPoints()
+    env.StatsProFrame:SetPoint("TOPRIGHT", env.UIParent, "TOPRIGHT", -222, -111)
+    local oldHide = env.StatsProProfileOperationDialog.Hide
+    local hideCalls = 0
+    env.StatsProProfileOperationDialog.Hide = function()
+        hideCalls = hideCalls + 1
+        error("injected context modal close failure")
+    end
+    identity.specID = 999
+    fireEvent("profiles.context.modal_retry.switch",
+        env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    assertDeepEqual("profiles.context.modal_retry.atomic_root", root, rootBefore)
+    eq("profiles.context.modal_retry.position_rolled_back",
+        oldSettings.point, rootBefore.profiles[test.profileState().profileID].settings.point)
+    eq("profiles.context.modal_retry.settings_identity",
+        test.profileState().settings, oldSettingsRef)
+    eq("profiles.context.modal_retry.active_guid",
+        test.profileRuntimeState().activeGUID, runtimeBefore.activeGUID)
+    eq("profiles.context.modal_retry.active_spec",
+        test.profileRuntimeState().activeSpecID, runtimeBefore.activeSpecID)
+    eq("profiles.context.modal_retry.active_name",
+        test.profileRuntimeState().activeDisplayName, runtimeBefore.activeDisplayName)
+    eq("profiles.context.modal_retry.active_spec_name",
+        test.profileRuntimeState().activeSpecName, runtimeBefore.activeSpecName)
+    eq("profiles.context.modal_retry.active_role",
+        test.profileRuntimeState().activeRole, runtimeBefore.activeRole)
+    eq("profiles.context.modal_retry.not_transitioning",
+        test.profileRuntimeState().transitioning, false)
+    eq("profiles.context.modal_retry.not_suppressing",
+        test.profileRuntimeState().suppressIntermediateRefresh, false)
+    eq("profiles.context.modal_retry.dialog_preserved",
+        test.profileUIState().operationDialogShown, true)
+    eq("profiles.context.modal_retry.blocker_preserved",
+        test.profileUIState().operationBlockerShown, true)
+    eq("profiles.context.modal_retry.force_reapply",
+        test.profileRuntimeState().forceReapply, true)
+    eq("profiles.context.modal_retry.retry_scheduled",
+        test.profileRuntimeState().contextRetryScheduled, true)
+    check("profiles.context.modal_retry.close_attempted", hideCalls > 0)
+
+    env.StatsProProfileOperationDialog.Hide = oldHide
+    env.__flushTimers(0.25)
+    eq("profiles.context.modal_retry.latest_spec",
+        test.profileRuntimeState().activeSpecID, 999)
+    eq("profiles.context.modal_retry.one_allocation",
+        root.account.nextProfileID, nextID + 1)
+    eq("profiles.context.modal_retry.dialog_closed",
+        test.profileUIState().operationDialogShown, false)
+    eq("profiles.context.modal_retry.blocker_closed",
+        test.profileUIState().operationBlockerShown, false)
+    eq("profiles.context.modal_retry.force_cleared",
+        test.profileRuntimeState().forceReapply, false)
+    eq("profiles.context.modal_retry.retry_cleared",
+        test.profileRuntimeState().contextRetryCount, 0)
+    eq("profiles.context.modal_retry.pending_cleared",
+        test.profileRuntimeState().pendingResolution, false)
+    eq("profiles.context.modal_retry.outgoing_point_preserved", oldSettings.point, "TOPRIGHT")
+    eq("profiles.context.modal_retry.outgoing_x_preserved", oldSettings.xOfs, -222)
+    eq("profiles.context.modal_retry.outgoing_y_preserved", oldSettings.yOfs, -111)
 end
 
 do
@@ -10437,17 +10684,28 @@ do
     })
     fireEvent("profiles.context.metadata_rollback.activate", env, "PLAYER_ENTERING_WORLD")
     local rootBefore = deepCopy(root)
+    local oldProfileRef = root.profiles.p1
+    local oldSettingsRef = oldProfileRef.settings
+    local oldColorsRef = oldSettingsRef.colors
+    local oldCritRef = oldColorsRef.crit
     local targetProfileRef = root.profiles.p2
     local targetSettingsRef = targetProfileRef.settings
+    local targetColorsRef = targetSettingsRef.colors
+    local targetCritRef = targetColorsRef.crit
     local runtimeBefore = profileTest.profileRuntimeState()
     local oldSetPoint = env.StatsProFrame.SetPoint
-    local failNextApply = true
+    local applyFailures = 0
+    local failedProfiles = {}
     env.StatsProFrame.SetPoint = function(frame, ...)
-        if failNextApply then
-            failNextApply = false
-            root.profiles.p2.settings.showDefensive = false
-            root.profiles.p2.settings.colors.crit.r = 0.123
-            error("injected existing-target apply failure")
+        local activeProfileID = profileTest.profileState().profileID
+        if profileTest.profileRuntimeState().transitioning
+            and not failedProfiles[activeProfileID] then
+            failedProfiles[activeProfileID] = true
+            applyFailures = applyFailures + 1
+            local active = profileTest.profileState().settings
+            active.showDefensive = not active.showDefensive
+            active.colors.crit.r = applyFailures == 1 and 0.123 or 0.456
+            error("injected target or rollback apply failure")
         end
         return oldSetPoint(frame, ...)
     end
@@ -10455,18 +10713,62 @@ do
     fireEvent("profiles.context.metadata_rollback.switch",
         env, "PLAYER_SPECIALIZATION_CHANGED", "player")
     env.__flushTimers(0)
-    env.StatsProFrame.SetPoint = oldSetPoint
     assertDeepEqual("profiles.context.metadata_rollback.full_root", root, rootBefore)
+    eq("profiles.context.metadata_rollback.old_profile_identity",
+        root.profiles.p1, oldProfileRef)
+    eq("profiles.context.metadata_rollback.old_settings_identity",
+        root.profiles.p1.settings, oldSettingsRef)
+    eq("profiles.context.metadata_rollback.old_colors_identity",
+        root.profiles.p1.settings.colors, oldColorsRef)
+    eq("profiles.context.metadata_rollback.old_crit_identity",
+        root.profiles.p1.settings.colors.crit, oldCritRef)
     eq("profiles.context.metadata_rollback.profile_identity",
         rawequal(root.profiles.p2, targetProfileRef), true)
     eq("profiles.context.metadata_rollback.settings_identity",
         rawequal(root.profiles.p2.settings, targetSettingsRef), true)
+    eq("profiles.context.metadata_rollback.colors_identity",
+        root.profiles.p2.settings.colors, targetColorsRef)
+    eq("profiles.context.metadata_rollback.crit_identity",
+        root.profiles.p2.settings.colors.crit, targetCritRef)
     eq("profiles.context.metadata_rollback.active_guid",
         profileTest.profileRuntimeState().activeGUID, runtimeBefore.activeGUID)
+    eq("profiles.context.metadata_rollback.active_spec",
+        profileTest.profileRuntimeState().activeSpecID, runtimeBefore.activeSpecID)
+    eq("profiles.context.metadata_rollback.active_name",
+        profileTest.profileRuntimeState().activeDisplayName, runtimeBefore.activeDisplayName)
+    eq("profiles.context.metadata_rollback.active_spec_name",
+        profileTest.profileRuntimeState().activeSpecName, runtimeBefore.activeSpecName)
+    eq("profiles.context.metadata_rollback.active_role",
+        profileTest.profileRuntimeState().activeRole, runtimeBefore.activeRole)
+    eq("profiles.context.metadata_rollback.not_transitioning",
+        profileTest.profileRuntimeState().transitioning, false)
+    eq("profiles.context.metadata_rollback.not_suppressing",
+        profileTest.profileRuntimeState().suppressIntermediateRefresh, false)
     eq("profiles.context.metadata_rollback.active_profile",
         profileTest.profileState().profileID, "p1")
     eq("profiles.context.metadata_rollback.pending",
         profileTest.profileRuntimeState().pendingResolution, true)
+    eq("profiles.context.metadata_rollback.two_failures", applyFailures, 2)
+    eq("profiles.context.metadata_rollback.force_reapply",
+        profileTest.profileRuntimeState().forceReapply, true)
+    eq("profiles.context.metadata_rollback.retry_scheduled",
+        profileTest.profileRuntimeState().contextRetryScheduled, true)
+    env.__flushTimers(0.25)
+    env.StatsProFrame.SetPoint = oldSetPoint
+    eq("profiles.context.metadata_rollback.eventual_guid",
+        profileTest.profileRuntimeState().activeGUID, "Player-1-META-B")
+    eq("profiles.context.metadata_rollback.eventual_profile",
+        profileTest.profileState().profileID, "p2")
+    eq("profiles.context.metadata_rollback.force_cleared",
+        profileTest.profileRuntimeState().forceReapply, false)
+    eq("profiles.context.metadata_rollback.retry_cleared",
+        profileTest.profileRuntimeState().contextRetryCount, 0)
+    eq("profiles.context.metadata_rollback.pending_cleared",
+        profileTest.profileRuntimeState().pendingResolution, false)
+    eq("profiles.context.metadata_rollback.target_identity_after_success",
+        profileTest.profileState().settings, targetSettingsRef)
+    eq("profiles.context.metadata_rollback.target_colors_after_success",
+        profileTest.profileState().settings.colors, targetColorsRef)
 end
 
 do

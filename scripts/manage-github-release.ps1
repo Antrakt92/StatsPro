@@ -1007,6 +1007,7 @@ function Assert-ReleaseGitHubTokenScope {
     param([string]$WorkflowText)
 
     $allowedStepTokens = [ordered]@{
+        'Check release version' = 'GITHUB_TOKEN'
         'Validate interrupted release state' = 'GITHUB_TOKEN'
         'Verify immutable release policy' = 'IMMUTABLE_RELEASES_READ_TOKEN'
         'Prepare resumable draft release' = 'GITHUB_TOKEN'
@@ -1190,6 +1191,24 @@ function Assert-ReleaseWorkflowBoundary {
         -JobNames @('preflight', 'release')
     Assert-ReleaseGitHubTokenScope -WorkflowText $WorkflowText
     Assert-ReleaseMarketplaceTokenScope -WorkflowText $WorkflowText
+
+    $preflightJob = Get-WorkflowJobBlock -WorkflowText $WorkflowText -JobName 'preflight'
+    if ($preflightJob.Value -notmatch '(?m)^    permissions:\s*\r?\n      contents: read\s*$') {
+        throw "Release preflight must have contents: read as its only permission."
+    }
+    $preflightSteps = @([regex]::Matches($preflightJob.Value, "(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)"))
+    $releaseVersionSteps = @($preflightSteps | Where-Object {
+        (Get-WorkflowStepName -StepBlock $_) -eq 'Check release version'
+    })
+    if ($releaseVersionSteps.Count -ne 1 -or
+        $releaseVersionSteps[0].Value -notmatch '(?m)^\s{8}run:\s*\.\\scripts\\check-release-version\.ps1 -Tag \$env:GITHUB_REF_NAME -EnforceSemVer -VerifyPublishedChangelog -Repository \$env:GITHUB_REPOSITORY\s*$') {
+        throw "Release preflight must verify published changelog parity before publication."
+    }
+
+    $releaseJob = Get-WorkflowJobBlock -WorkflowText $WorkflowText -JobName 'release'
+    if ($releaseJob.Value -notmatch '(?m)^    needs: preflight\s*$') {
+        throw "Release publication must depend on the read-only preflight job."
+    }
 
     $orderedSteps = @(
         "- name: Trim release changelog",
@@ -2119,6 +2138,12 @@ function Invoke-SelfTest {
             '      - name: Credential check removed')
         Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
     } "verify checkout credentials immediately"
+    Assert-ThrowsMatch "write-capable release preflight rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace 'contents: read', 'contents: write')
+    } "preflight must have contents: read"
+    Assert-ThrowsMatch "release job without preflight dependency rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^    needs: preflight\s*\r?\n', '')
+    } "publication must depend on the read-only preflight"
 
     $checksPackageJob = Get-WorkflowJobBlock -WorkflowText $checksWorkflowText -JobName 'package-contract'
     Assert-ThrowsMatch "checks package checkout persistence rejected" {
@@ -2281,13 +2306,13 @@ function Invoke-SelfTest {
             "      - name: Rebuild package without publishing`n        env:`n          GH_TOKEN: $githubTokenExpression")
         Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
     } "outside its approved shell step"
-    Assert-ThrowsMatch "GitHub token in non-management shell step rejected" {
+    Assert-ThrowsMatch "GitHub token in changelog trim step rejected" {
         $mutated = $workflowText.Replace(
             '      - name: Trim release changelog',
             "      - name: Trim release changelog`n        env:`n          GH_TOKEN: $githubTokenExpression")
         Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
     } "outside its approved shell step"
-    Assert-ThrowsMatch "bracket GitHub context token in non-management step rejected" {
+    Assert-ThrowsMatch "bracket GitHub context token in changelog trim step rejected" {
         $mutated = $workflowText.Replace(
             '      - name: Trim release changelog',
             "      - name: Trim release changelog`n        env:`n          GH_TOKEN: $bracketContextTokenExpression")
@@ -2307,10 +2332,10 @@ function Invoke-SelfTest {
     } "ExpectedRunId"
     Assert-ThrowsMatch "wrong release repository binding rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '\$env:GITHUB_REPOSITORY', '$env:OTHER_REPOSITORY')
-    } "Repository|exact fail-closed"
+    } "Repository|exact fail-closed|published changelog parity"
     Assert-ThrowsMatch "wrong release tag binding rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '\$env:GITHUB_REF_NAME', '$env:OTHER_TAG')
-    } "ExpectedTag|exact fail-closed|Canonical release notes"
+    } "ExpectedTag|exact fail-closed|Canonical release notes|published changelog parity"
     Assert-ThrowsMatch "conditional interrupted-state validation rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^(\s{6}- name: Validate interrupted release state\s*)$', "`$1`n        if: always()")
     } "must be mandatory"

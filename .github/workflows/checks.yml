@@ -53,13 +53,15 @@ jobs:
           lua5.1 .\scripts\check-archon-targets.lua --self-test
 
       - name: Check release metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
           $toc = Get-Content -Path StatsPro.toc -Raw
           if ($toc -notmatch '(?m)^##\s+Version:\s*([0-9]+\.[0-9]+\.[0-9]+)\s*$') {
             throw 'Missing TOC Version.'
           }
-          .\scripts\check-release-version.ps1 -Tag "v$($Matches[1])" -EnforceSemVerWhenAhead
+          .\scripts\check-release-version.ps1 -Tag "v$($Matches[1])" -EnforceSemVerWhenAhead -VerifyPublishedChangelog -Repository $env:GITHUB_REPOSITORY
 
       - name: Lua checks
         shell: pwsh

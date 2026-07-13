@@ -5,6 +5,8 @@ param(
     [switch]$AllowSemVerMismatch,
     [switch]$SelfTest,
     [string]$ExportTopChangelogPath,
+    [switch]$VerifyPublishedChangelog,
+    [string]$Repository = $env:GITHUB_REPOSITORY,
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot ".."))
 )
 
@@ -339,6 +341,197 @@ function Get-ChangelogHeadingPattern {
     return "^##\s+([0-9]+\.[0-9]+\.[0-9]+)\s+-\s+([0-9]{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-[0-9]{4})\s+$HeadingDash\s+\S.*$"
 }
 
+function ConvertFrom-GhSlurpReleasePages {
+    param([string]$Json)
+
+    try {
+        $parsed = ConvertFrom-Json $Json
+    }
+    catch {
+        throw "GitHub release inventory contained invalid JSON."
+    }
+
+    $items = @()
+    foreach ($page in @($parsed)) {
+        if ($null -eq $page) {
+            throw "GitHub release inventory contains a null page."
+        }
+        if ($null -ne $page.PSObject.Properties["tag_name"]) {
+            $items += $page
+            continue
+        }
+        if ($page -isnot [System.Array]) {
+            throw "GitHub release inventory contains a malformed page."
+        }
+        $items += @($page)
+    }
+    return @($items)
+}
+
+function Get-GitHubReleaseInventory {
+    param([string]$RepositoryName)
+
+    if ([string]::IsNullOrWhiteSpace($RepositoryName) -or $RepositoryName -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
+        throw "Published changelog verification requires a canonical owner/repository name."
+    }
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+        throw "Published changelog verification requires GitHub CLI (gh)."
+    }
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $output = @(& gh api --paginate --slurp `
+            -H "Accept: application/vnd.github+json" `
+            -H "X-GitHub-Api-Version: 2026-03-10" `
+            "repos/$RepositoryName/releases?per_page=100" 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($exitCode -ne 0) {
+        throw "Could not fetch the paginated GitHub release inventory for $RepositoryName (gh exit $exitCode)."
+    }
+    return @(ConvertFrom-GhSlurpReleasePages -Json ($output -join "`n"))
+}
+
+function ConvertTo-PublishedReleaseDate {
+    param(
+        $Value,
+        [string]$TagName
+    )
+
+    $publishedAt = [DateTimeOffset]::MinValue
+    if ($Value -is [DateTimeOffset]) {
+        $publishedAt = $Value
+    }
+    elseif ($Value -is [DateTime]) {
+        $publishedAt = [DateTimeOffset]$Value
+    }
+    elseif (-not [DateTimeOffset]::TryParse(
+        [string]$Value,
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [System.Globalization.DateTimeStyles]::AllowWhiteSpaces -bor [System.Globalization.DateTimeStyles]::AssumeUniversal,
+        [ref]$publishedAt
+    )) {
+        throw "Published release $TagName has an invalid published_at value."
+    }
+    return $publishedAt.UtcDateTime.ToString(
+        "dd-MMM-yyyy",
+        [System.Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Assert-PublishedChangelogReleaseParity {
+    param(
+        [string]$ChangelogText,
+        [object[]]$Releases,
+        [string]$AllowedUnpublishedTag
+    )
+
+    $normalized = ($ChangelogText -replace "`r`n", "`n") -replace "`r", "`n"
+    if (-not $normalized.StartsWith("# Changelog`n`n", [System.StringComparison]::Ordinal)) {
+        throw "CHANGELOG.md must begin with the canonical changelog heading."
+    }
+
+    $headingPattern = Get-ChangelogHeadingPattern
+    $allHeadings = @([regex]::Matches($normalized, '(?m)^##(?!#)\s+.*$'))
+    $canonicalHeadings = @([regex]::Matches(
+        $normalized,
+        $headingPattern,
+        [System.Text.RegularExpressions.RegexOptions]::Multiline))
+    if ($canonicalHeadings.Count -eq 0 -or $canonicalHeadings.Count -ne $allHeadings.Count) {
+        throw "CHANGELOG.md contains a missing or malformed release heading."
+    }
+
+    $headingByTag = @{}
+    $headingRecords = @()
+    $previousVersion = $null
+    foreach ($heading in $canonicalHeadings) {
+        $version = $heading.Groups[1].Value
+        $tagName = ConvertTo-StatsProReleaseTagName -Value "v$version"
+        if ($headingByTag.ContainsKey($tagName)) {
+            throw "CHANGELOG.md contains duplicate release heading $tagName."
+        }
+        if ($null -ne $previousVersion -and (Compare-SemVer -Left $version -Right $previousVersion) -ne -1) {
+            throw "CHANGELOG.md release headings must be unique and strictly descending; found $tagName after v$previousVersion."
+        }
+        $record = [pscustomobject]@{
+            Tag = $tagName
+            Version = $version
+            Date = $heading.Groups[2].Value
+        }
+        $headingByTag[$tagName] = $record
+        $headingRecords += $record
+        $previousVersion = $version
+    }
+
+    $allowedTag = $null
+    if (-not [string]::IsNullOrWhiteSpace($AllowedUnpublishedTag)) {
+        $allowedTag = ConvertTo-StatsProReleaseTagName -Value $AllowedUnpublishedTag
+        if ($headingRecords[0].Tag -ne $allowedTag) {
+            throw "Allowed unpublished tag $allowedTag must match the top changelog heading $($headingRecords[0].Tag)."
+        }
+    }
+
+    $publishedByTag = @{}
+    foreach ($release in @($Releases)) {
+        if ($null -eq $release) {
+            throw "GitHub release inventory contains a null release."
+        }
+        $draftProperty = $release.PSObject.Properties["draft"]
+        $prereleaseProperty = $release.PSObject.Properties["prerelease"]
+        if ($null -eq $draftProperty -or $draftProperty.Value -isnot [bool] -or
+            $null -eq $prereleaseProperty -or $prereleaseProperty.Value -isnot [bool]) {
+            throw "GitHub release inventory contains a release with malformed draft/prerelease state."
+        }
+        if ($draftProperty.Value -or $prereleaseProperty.Value) {
+            continue
+        }
+
+        $tagProperty = $release.PSObject.Properties["tag_name"]
+        $publishedProperty = $release.PSObject.Properties["published_at"]
+        if ($null -eq $tagProperty -or $tagProperty.Value -isnot [string] -or
+            [string]::IsNullOrWhiteSpace($tagProperty.Value) -or $null -eq $publishedProperty) {
+            throw "GitHub release inventory contains malformed published release metadata."
+        }
+        $tagName = ConvertTo-StatsProReleaseTagName -Value $tagProperty.Value
+        if (-not [System.StringComparer]::Ordinal.Equals($tagName, $tagProperty.Value)) {
+            throw "Published release tag '$($tagProperty.Value)' is not canonical."
+        }
+        if ($publishedByTag.ContainsKey($tagName)) {
+            throw "GitHub release inventory contains duplicate published release $tagName."
+        }
+        $publishedByTag[$tagName] = ConvertTo-PublishedReleaseDate `
+            -Value $publishedProperty.Value `
+            -TagName $tagName
+    }
+    if ($publishedByTag.Count -eq 0) {
+        throw "GitHub release inventory contains no published stable releases."
+    }
+
+    foreach ($tagName in $publishedByTag.Keys) {
+        if (-not $headingByTag.ContainsKey($tagName)) {
+            throw "Published release $tagName has no changelog heading."
+        }
+    }
+    foreach ($record in $headingRecords) {
+        if ($publishedByTag.ContainsKey($record.Tag)) {
+            $publishedDate = [string]$publishedByTag[$record.Tag]
+            if ($record.Date -ne $publishedDate) {
+                throw "Changelog heading $($record.Tag) uses $($record.Date), expected published date $publishedDate."
+            }
+            continue
+        }
+        if ($record -eq $headingRecords[0] -and $record.Tag -eq $allowedTag) {
+            continue
+        }
+        throw "Unpublished historical changelog heading $($record.Tag) must be reassigned to the recovery release that actually ships it."
+    }
+
+    Write-Host "Published changelog parity passed: $($publishedByTag.Count) stable release(s), $($headingRecords.Count) heading(s)."
+}
+
 function Get-TopChangelogEntry {
     param([string]$Path)
 
@@ -383,7 +576,9 @@ function Assert-ReleaseVersion {
         [bool]$ShouldEnforceSemVer,
         [bool]$ShouldEnforceSemVerWhenAhead,
         [bool]$PermitSemVerMismatch,
-        [string]$ExportTopChangelogPath
+        [string]$ExportTopChangelogPath,
+        [bool]$ShouldVerifyPublishedChangelog = $false,
+        [string]$RepositoryName = $null
     )
 
     $TagName = Normalize-ReleaseTagName $TagValue
@@ -427,6 +622,15 @@ function Assert-ReleaseVersion {
 
     if ($Errors.Count -gt 0) {
         throw ($Errors -join "`n")
+    }
+
+    if ($ShouldVerifyPublishedChangelog) {
+        $releases = @(Get-GitHubReleaseInventory -RepositoryName $RepositoryName)
+        $changelogText = Get-Content -Path "CHANGELOG.md" -Raw -Encoding UTF8
+        Assert-PublishedChangelogReleaseParity `
+            -ChangelogText $changelogText `
+            -Releases $releases `
+            -AllowedUnpublishedTag $TagName
     }
 
     if ($ShouldEnforceSemVer) {
@@ -485,6 +689,122 @@ function Invoke-SelfTest {
     Assert-ThrowsMatch "patch bump overflow rejected" {
         [void](Get-NextSemVer -PreviousVersion "1.2.2147483647" -Bump patch)
     } "patch component.*maximum"
+
+    $publishedReleases = @([pscustomobject]@{
+        tag_name = "v1.0.0"
+        draft = $false
+        prerelease = $false
+        published_at = "2026-01-01T12:00:00Z"
+    })
+    $publishedChangelog = "# Changelog`n`n## 1.0.0 - 01-Jan-2026 $([char]0x2014) Initial`n"
+    Assert-PublishedChangelogReleaseParity `
+        -ChangelogText $publishedChangelog `
+        -Releases $publishedReleases `
+        -AllowedUnpublishedTag "v1.0.0"
+
+    $reassignedRecoveryChangelog = "# Changelog`n`n## 1.0.2 - 03-Jan-2026 $([char]0x2014) Recovery`n`n## 1.0.0 - 01-Jan-2026 $([char]0x2014) Initial`n"
+    Assert-PublishedChangelogReleaseParity `
+        -ChangelogText $reassignedRecoveryChangelog `
+        -Releases $publishedReleases `
+        -AllowedUnpublishedTag "v1.0.2"
+
+    $duplicatedFailedHeading = "# Changelog`n`n## 1.0.2 - 03-Jan-2026 $([char]0x2014) Recovery`n`n## 1.0.1 - 02-Jan-2026 $([char]0x2014) Failed`n`n## 1.0.0 - 01-Jan-2026 $([char]0x2014) Initial`n"
+    Assert-ThrowsMatch "failed prepared heading must be reassigned instead of duplicated" {
+        Assert-PublishedChangelogReleaseParity `
+            -ChangelogText $duplicatedFailedHeading `
+            -Releases $publishedReleases `
+            -AllowedUnpublishedTag "v1.0.2"
+    } "unpublished historical changelog heading.*v1\.0\.1"
+
+    $draftState = @($publishedReleases) + [pscustomobject]@{
+        tag_name = "v1.0.1"
+        draft = $true
+        prerelease = $false
+        published_at = $null
+    }
+    Assert-ThrowsMatch "draft release does not legitimize a changelog heading" {
+        Assert-PublishedChangelogReleaseParity `
+            -ChangelogText $duplicatedFailedHeading `
+            -Releases $draftState `
+            -AllowedUnpublishedTag "v1.0.2"
+    } "unpublished historical changelog heading.*v1\.0\.1"
+
+    $missingHeadingState = @($publishedReleases) + [pscustomobject]@{
+        tag_name = "v0.9.0"
+        draft = $false
+        prerelease = $false
+        published_at = "2025-12-31T12:00:00Z"
+    }
+    Assert-ThrowsMatch "published release without changelog heading rejected" {
+        Assert-PublishedChangelogReleaseParity `
+            -ChangelogText $publishedChangelog `
+            -Releases $missingHeadingState `
+            -AllowedUnpublishedTag "v1.0.0"
+    } "published release.*v0\.9\.0.*has no changelog heading"
+
+    $wrongDateChangelog = $publishedChangelog.Replace("01-Jan-2026", "02-Jan-2026")
+    Assert-ThrowsMatch "published release date mismatch rejected" {
+        Assert-PublishedChangelogReleaseParity `
+            -ChangelogText $wrongDateChangelog `
+            -Releases $publishedReleases `
+            -AllowedUnpublishedTag "v1.0.0"
+    } "v1\.0\.0.*02-Jan-2026.*01-Jan-2026"
+
+    $ignoredNonStableState = @($publishedReleases) + @(
+        [pscustomobject]@{ tag_name = "v1.0.1"; draft = $true; prerelease = $false; published_at = $null },
+        [pscustomobject]@{ tag_name = "v1.1.0"; draft = $false; prerelease = $true; published_at = "2026-01-04T12:00:00Z" }
+    )
+    Assert-PublishedChangelogReleaseParity `
+        -ChangelogText $publishedChangelog `
+        -Releases $ignoredNonStableState `
+        -AllowedUnpublishedTag "v1.0.0"
+
+    Assert-ThrowsMatch "duplicate published release rejected" {
+        Assert-PublishedChangelogReleaseParity `
+            -ChangelogText $publishedChangelog `
+            -Releases (@($publishedReleases) + @($publishedReleases)) `
+            -AllowedUnpublishedTag "v1.0.0"
+    } "duplicate published release v1\.0\.0"
+
+    $stringDraftState = @([pscustomobject]@{
+        tag_name = "v1.0.0"
+        draft = "false"
+        prerelease = $false
+        published_at = "2026-01-01T12:00:00Z"
+    })
+    Assert-ThrowsMatch "non-boolean release state rejected" {
+        Assert-PublishedChangelogReleaseParity `
+            -ChangelogText $publishedChangelog `
+            -Releases $stringDraftState `
+            -AllowedUnpublishedTag "v1.0.0"
+    } "malformed draft/prerelease state"
+
+    $duplicateHeadingChangelog = $publishedChangelog + "`n## 1.0.0 - 01-Jan-2026 $([char]0x2014) Duplicate`n"
+    Assert-ThrowsMatch "duplicate changelog heading rejected" {
+        Assert-PublishedChangelogReleaseParity `
+            -ChangelogText $duplicateHeadingChangelog `
+            -Releases $publishedReleases `
+            -AllowedUnpublishedTag "v1.0.0"
+    } "duplicate release heading v1\.0\.0"
+
+    $ascendingChangelog = "# Changelog`n`n## 1.0.0 - 01-Jan-2026 $([char]0x2014) Initial`n`n## 1.0.1 - 02-Jan-2026 $([char]0x2014) Later`n"
+    Assert-ThrowsMatch "non-descending changelog rejected" {
+        Assert-PublishedChangelogReleaseParity `
+            -ChangelogText $ascendingChangelog `
+            -Releases $publishedReleases `
+            -AllowedUnpublishedTag "v1.0.0"
+    } "strictly descending"
+
+    $pageOne = @(1..100 | ForEach-Object { [pscustomobject]@{ tag_name = "v1.0.$_" } })
+    $pageTwo = @([pscustomobject]@{ tag_name = "v1.1.0" })
+    $pageList = [System.Collections.Generic.List[object]]::new()
+    $pageList.Add($pageOne)
+    $pageList.Add($pageTwo)
+    $slurpJson = ConvertTo-Json -InputObject $pageList.ToArray() -Depth 4 -Compress
+    $slurpReleases = @(ConvertFrom-GhSlurpReleasePages -Json $slurpJson)
+    if ($slurpReleases.Count -ne 101) {
+        throw "Paginated GitHub release inventory must retain every page; expected 101 releases, got $($slurpReleases.Count)."
+    }
 
     $root = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-version-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $root | Out-Null
@@ -596,7 +916,9 @@ try {
         -ShouldEnforceSemVer:$EnforceSemVer.IsPresent `
         -ShouldEnforceSemVerWhenAhead:$EnforceSemVerWhenAhead.IsPresent `
         -PermitSemVerMismatch:$AllowSemVerMismatch.IsPresent `
-        -ExportTopChangelogPath $ExportTopChangelogPath
+        -ExportTopChangelogPath $ExportTopChangelogPath `
+        -ShouldVerifyPublishedChangelog:$VerifyPublishedChangelog.IsPresent `
+        -RepositoryName $Repository
 }
 finally {
     Pop-Location

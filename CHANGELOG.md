@@ -49,12 +49,6 @@
 
 - **Bundled M+ High Keys and Raid Mythic All Bosses target ratings were refreshed from latest Archon data.**
 
-## 1.9.57 - 09-Jul-2026 — Archon target refresh
-
-### Updated
-
-- **Bundled M+ High Keys and Raid Mythic All Bosses target ratings were refreshed from latest Archon data.**
-
 ## 1.9.56 - 08-Jul-2026 — Archon target refresh
 
 ### Updated
@@ -126,8 +120,6 @@
 ### Fixed
 
 - **PTR compatibility now publishes through marketplaces while WoWInterface still exposes only Midnight aggregate metadata.** The addon still advertises Retail 12.0.7 and PTR 12.1.0 in its TOC.
-
-## 1.9.44 - 25-Jun-2026 — PTR compatibility
 
 ### Changed
 
@@ -333,7 +325,7 @@
 
 - **Bundled M+ High Keys and Raid Mythic All Bosses target ratings were refreshed from latest Archon data.**
 
-## 1.9.11 - 21-May-2026 — Combat crit fallback hardening
+## 1.9.11 - 22-May-2026 — Combat crit fallback hardening
 
 ### Fixed
 

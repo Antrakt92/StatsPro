@@ -9,6 +9,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 
 function Assert-ThrowsMatch {
     param([string]$Name, [scriptblock]$Script, [string]$Pattern)
@@ -165,9 +166,15 @@ function Test-CurseForgeFileVersionMatch {
         [string]$Version
     )
 
+    Assert-StatsProReleaseTag -Value $Version
+    $escapedVersion = [regex]::Escape($Version)
+    $versionTokenPattern = "(?<![\p{L}\p{M}\p{N}\p{Cs}])$escapedVersion(?![\p{L}\p{M}\p{N}\p{Cs}]|\.[\p{N}\p{Cs}])"
     foreach ($property in @("displayName", "fileName", "name")) {
         $value = $File.$property
-        if ($null -ne $value -and ([string]$value).IndexOf($Version, [System.StringComparison]::Ordinal) -ge 0) {
+        if ($null -ne $value -and [regex]::IsMatch(
+                [string]$value,
+                $versionTokenPattern,
+                [System.Text.RegularExpressions.RegexOptions]::CultureInvariant)) {
             return $true
         }
     }
@@ -254,6 +261,7 @@ function Invoke-CurseForgeDiagnostics {
     )
 
     if ([string]::IsNullOrWhiteSpace($Version)) { throw "Missing version label. Pass -Version vX.Y.Z or set STATSPRO_VERSION." }
+    Assert-StatsProReleaseTag -Value $Version
     if ([string]::IsNullOrWhiteSpace($ProjectId)) { throw "Missing CurseForge project id." }
     if ([string]::IsNullOrWhiteSpace($ApiKey)) { throw "CF_API_KEY secret is not set." }
     if ($TimeoutSec -le 0) { throw "TimeoutSec must be positive." }
@@ -330,6 +338,7 @@ function Invoke-CurseForgeDiagnostics {
 }
 
 function Invoke-SelfTest {
+    Assert-StatsProReleaseTagContractSelfTest
     $blankTokenState = @{ Attempts = 0 }
     Assert-ThrowsMatch "blank token rejected before request" {
         Invoke-CurseForgeDiagnostics `
@@ -345,9 +354,55 @@ function Invoke-SelfTest {
         throw "Blank CF_API_KEY should fail before any request."
     }
 
+    $malformedVersionState = @{ Attempts = 0 }
+    Assert-ThrowsMatch "noncanonical version rejected before request" {
+        Invoke-CurseForgeDiagnostics `
+            -Version "v01.2.3" `
+            -ProjectId "1525100" `
+            -ApiKey "secret-value" `
+            -Request {
+                $malformedVersionState.Attempts = [int]$malformedVersionState.Attempts + 1
+                return [pscustomobject]@{ StatusCode = 200; Content = "[]" }
+            }
+    } "Malformed StatsPro release tag"
+    if ($malformedVersionState.Attempts -ne 0) {
+        throw "Noncanonical version must fail before any CurseForge request."
+    }
+
+    foreach ($positive in @(
+            @{ Property = "displayName"; Value = "StatsPro-v1.2.3.zip" },
+            @{ Property = "fileName"; Value = "StatsPro_v1.2.3-release.zip" },
+            @{ Property = "name"; Value = "StatsPro v1.2.3 [hotfix]" })) {
+        $file = [pscustomobject]@{ displayName = $null; fileName = $null; name = $null }
+        $file.($positive.Property) = $positive.Value
+        if (-not (Test-CurseForgeFileVersionMatch -File $file -Version "v1.2.3")) {
+            throw "Canonical version token was not matched in $($positive.Property): $($positive.Value)"
+        }
+    }
+    foreach ($negative in @(
+            "StatsPro-v1.2.30.zip",
+            "StatsPro-v1.2.3.1.zip",
+            "StatsPro-v1.2.3beta.zip",
+            "StatsProv1.2.3.zip",
+            ("StatsPro-v1.2.3" + [char]0x0664 + ".zip"),
+            ("StatsPro-v1.2.3" + [char]0x00B2 + ".zip"),
+            ("StatsPro-" + [char]0x2163 + "v1.2.3.zip"),
+            ("StatsPro-v1.2.3" + [char]::ConvertFromUtf32(0x11F50) + ".zip"),
+            ("StatsPro-" + [char]::ConvertFromUtf32(0x11F50) + "v1.2.3.zip"),
+            ("StatsPro-v1.2.3." + [char]::ConvertFromUtf32(0x11F50) + ".zip"),
+            "StatsPro-V1.2.3.zip")) {
+        foreach ($property in @("displayName", "fileName", "name")) {
+            $file = [pscustomobject]@{ displayName = $null; fileName = $null; name = $null }
+            $file.$property = $negative
+            if (Test-CurseForgeFileVersionMatch -File $file -Version "v1.2.3") {
+                throw "Non-token version match was accepted in ${property}: $negative"
+            }
+        }
+    }
+
     $literalState = @{ Attempts = 0; SawTokenHeader = $false }
     Invoke-CurseForgeDiagnostics `
-        -Version "v1.2.3[hotfix]" `
+        -Version "v1.2.3" `
         -ProjectId "1525100" `
         -ApiKey "secret-value" `
         -RetryDelaySeconds 0 `
@@ -367,6 +422,25 @@ function Invoke-SelfTest {
     }
     if (-not $literalState.SawTokenHeader) {
         throw "Diagnostics request should pass the API token header to transport."
+    }
+
+    $numericPrefixState = @{ Attempts = 0 }
+    Assert-ThrowsMatch "longer numeric-prefix versions rejected as not found" {
+        Invoke-CurseForgeDiagnostics `
+            -Version "v1.2.3" `
+            -ProjectId "1525100" `
+            -ApiKey "secret-value" `
+            -RetryDelaySeconds 0 `
+            -Request {
+                $numericPrefixState.Attempts = [int]$numericPrefixState.Attempts + 1
+                return [pscustomobject]@{
+                    StatusCode = 200
+                    Content = '[{"displayName":"StatsPro-v1.2.30.zip","fileName":"StatsPro-v1.2.3.1.zip","name":"StatsPro-v1.2.3beta"}]'
+                }
+            }
+    } "was not found"
+    if ($numericPrefixState.Attempts -ne 3) {
+        throw "Numeric-prefix mismatch should inspect all three listing endpoints, got $($numericPrefixState.Attempts)."
     }
 
     $dataState = @{ Attempts = 0 }

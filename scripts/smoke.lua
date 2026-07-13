@@ -7245,6 +7245,166 @@ do
 end
 
 do
+    local secretDurability = setmetatable({}, {
+        __tostring = function() error("secret durability inspected", 2) end,
+    })
+    local mode = "clean"
+    local scanCount, tooltipCalls = 0, 0
+    local durabilityEnv, durabilityAddon, durabilityTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showDurability = true,
+            showRepairCost = false,
+            useWorstDurability = false,
+        },
+        issecretvalue = function(value) return value == secretDurability end,
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then scanCount = scanCount + 1 end
+            if mode == "clean" then
+                if slot == 1 then return 50, 100 end
+                if slot == 2 then return 80, 100 end
+            elseif mode == "secret" then
+                if slot == 1 or slot == 2 then return secretDurability, secretDurability end
+            elseif mode == "partial" then
+                if slot == 1 then return 10, 100 end
+                if slot == 2 then return secretDurability, secretDurability end
+            elseif mode == "recovered" then
+                if slot == 1 then return 90, 100 end
+                if slot == 2 then return 60, 100 end
+            end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function()
+            tooltipCalls = tooltipCalls + 1
+            return { repairCost = 999 }
+        end,
+    })
+    fireEvent("durability.complete_average.enter", durabilityEnv, "PLAYER_ENTERING_WORLD")
+    local state = durabilityTest.durabilityState()
+    eq("durability.complete_average.complete", state.durabilityComplete, true)
+    near("durability.complete_average.value", state.durabilityValue, 65)
+    near("durability.complete_average.cached_average", state.durabilityLastCompleteAverage, 65)
+    near("durability.complete_average.cached_worst", state.durabilityLastCompleteWorst, 50)
+    local durabilityBlock = findBlockBySplitKey("durability.complete_average.block",
+        durabilityTest.buildRenderBlocks(), "splitDurability")
+    eq("durability.complete_average.rendered",
+        blockDumpContains({ durabilityBlock }, "65.0%"), true)
+
+    mode = "secret"
+    local ok, err = pcall(durabilityTest.refreshDurabilityCache)
+    check("durability.warm_all_secret.no_error", ok, err)
+    state = durabilityTest.durabilityState()
+    eq("durability.warm_all_secret.incomplete", state.durabilityComplete, false)
+    near("durability.warm_all_secret.preserved_average", state.durabilityLastCompleteAverage, 65)
+    near("durability.warm_all_secret.preserved_worst", state.durabilityLastCompleteWorst, 50)
+    near("durability.warm_all_secret.selected_average", state.durabilityValue, 65)
+    eq("durability.warm_all_secret.no_retry", state.retryScheduled, false)
+    eq("durability.warm_all_secret.no_timer", #durabilityEnv.__timers, 0)
+
+    local settings = activeSettings(durabilityEnv)
+    settings.useWorstDurability = true
+    durabilityTest.cacheSettings()
+    durabilityTest.refreshDurabilityCache()
+    state = durabilityTest.durabilityState()
+    eq("durability.warm_all_secret_worst.incomplete", state.durabilityComplete, false)
+    near("durability.warm_all_secret_worst.selected_worst", state.durabilityValue, 50)
+
+    settings.useWorstDurability = false
+    durabilityTest.cacheSettings()
+    mode = "partial"
+    durabilityTest.refreshDurabilityCache()
+    state = durabilityTest.durabilityState()
+    eq("durability.partial_secret.incomplete", state.durabilityComplete, false)
+    near("durability.partial_secret.preserved_average", state.durabilityLastCompleteAverage, 65)
+    near("durability.partial_secret.preserved_worst", state.durabilityLastCompleteWorst, 50)
+    near("durability.partial_secret.rejects_biased_subset", state.durabilityValue, 65)
+    eq("durability.partial_secret.clears_dirty", state.dirty, false)
+    eq("durability.partial_secret.no_timer", #durabilityEnv.__timers, 0)
+    eq("durability.repair_hidden.no_tooltip_reads", tooltipCalls, 0)
+
+    mode = "recovered"
+    local scansBeforeRegen = scanCount
+    fireEvent("durability.repair_hidden.regen", durabilityEnv, "PLAYER_REGEN_ENABLED")
+    eq("durability.repair_hidden.regen_marks_dirty", durabilityTest.durabilityState().dirty, true)
+    eq("durability.repair_hidden.regen_defers_scan", scanCount, scansBeforeRegen)
+    check("durability.repair_hidden.update", durabilityAddon:RunUpdateStatsSafe())
+    state = durabilityTest.durabilityState()
+    eq("durability.repair_hidden.recovered_complete", state.durabilityComplete, true)
+    near("durability.repair_hidden.recovered_average", state.durabilityLastCompleteAverage, 75)
+    near("durability.repair_hidden.recovered_worst", state.durabilityLastCompleteWorst, 60)
+    near("durability.repair_hidden.recovered_selected", state.durabilityValue, 75)
+    eq("durability.repair_hidden.one_recovery_scan", scanCount, scansBeforeRegen + 1)
+    eq("durability.repair_hidden.recovery_clears_dirty", state.dirty, false)
+    check("durability.repair_hidden.clean_update", durabilityAddon:RunUpdateStatsSafe())
+    eq("durability.repair_hidden.no_redundant_scan", scanCount, scansBeforeRegen + 1)
+    eq("durability.repair_hidden.still_no_tooltip_reads", tooltipCalls, 0)
+end
+
+do
+    local secretDurability = setmetatable({}, {
+        __tostring = function() error("cold secret durability inspected", 2) end,
+    })
+    local mode = "nil"
+    local coldEnv, _, coldTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showDurability = true,
+            showRepairCost = false,
+        },
+        issecretvalue = function(value) return value == secretDurability end,
+        getInventoryItemDurability = function(slot)
+            if mode == "secret" and (slot == 1 or slot == 2) then
+                return secretDurability, secretDurability
+            end
+            return nil, nil
+        end,
+    })
+    coldTest.cacheSettings()
+    coldTest.refreshDurabilityCache()
+    local state = coldTest.durabilityState()
+    eq("durability.cold_nil.incomplete", state.durabilityComplete, false)
+    eq("durability.cold_nil.no_average", state.durabilityLastCompleteAverage, nil)
+    eq("durability.cold_nil.no_worst", state.durabilityLastCompleteWorst, nil)
+    eq("durability.cold_nil.no_selected_value", state.durabilityValue, nil)
+    local nilBlocks = coldTest.buildRenderBlocks()
+    local nilDurabilityBlock = findBlockBySplitKey("durability.cold_nil.block",
+        nilBlocks, "splitDurability")
+    eq("durability.cold_nil.rendered_unknown",
+        countValue(nilDurabilityBlock.ratings, "?") + countValue(nilDurabilityBlock.values, "?"), 1)
+    eq("durability.cold_nil.no_fabricated_full",
+        blockDumpContains({ nilDurabilityBlock }, "100.0%"), false)
+
+    mode = "secret"
+    local ok, err = pcall(coldTest.refreshDurabilityCache)
+    check("durability.cold_secret.no_error", ok, err)
+    state = coldTest.durabilityState()
+    eq("durability.cold_secret.incomplete", state.durabilityComplete, false)
+    eq("durability.cold_secret.no_selected_value", state.durabilityValue, nil)
+    eq("durability.cold_secret.no_retry", state.retryScheduled, false)
+    eq("durability.cold_secret.no_timer", #coldEnv.__timers, 0)
+
+    local blocks = coldTest.buildRenderBlocks()
+    local durabilityBlock = findBlockBySplitKey("durability.cold_secret.block",
+        blocks, "splitDurability")
+    eq("durability.cold_secret.rendered_unknown",
+        countValue(durabilityBlock.ratings, "?") + countValue(durabilityBlock.values, "?"), 1)
+    eq("durability.cold_secret.no_fabricated_full",
+        blockDumpContains({ durabilityBlock }, "100.0%"), false)
+
+    local flatMain = coldTest.routeRenderBlocks(blocks, "flat", nil, "full")
+    eq("durability.cold_secret.flat_routes_unknown",
+        blockDumpContains({ flatMain }, "?"), true)
+    local sectionedMain = coldTest.routeRenderBlocks(blocks, "sectioned", nil, "full")
+    eq("durability.cold_secret.sectioned_routes_unknown",
+        blockDumpContains({ sectionedMain }, "?"), true)
+    local splitMain, splitSide = coldTest.routeRenderBlocks(blocks, "split", {
+        splitDurability = true,
+    }, "full")
+    eq("durability.cold_secret.split_main_has_no_unknown",
+        blockDumpContains({ splitMain }, "?"), false)
+    eq("durability.cold_secret.split_side_routes_unknown",
+        blockDumpContains({ splitSide }, "?"), true)
+end
+
+do
     local tooltipCalls, surfaceCalls = {}, 0
     local costs = { [1] = 100, [2] = 200, [4] = 999, [18] = 999 }
     local _, _, repairTest = loadStatsPro("enUS", {
@@ -7274,6 +7434,8 @@ do
     repairTest.refreshDurabilityCache()
     local state = repairTest.durabilityState()
     near("repair.scan_avg_percent", state.durabilityValue, 37.5)
+    eq("repair.scan_durability_complete", state.durabilityComplete, true)
+    near("repair.scan_cached_worst", state.durabilityLastCompleteWorst, 25)
     eq("repair.scan_cost_sums_damaged_slots", state.repairCost, 300)
     eq("repair.scan_cost_complete", state.repairCostComplete, true)
     eq("repair.scan_skips_shirt_and_ranged.calls", table.concat(tooltipCalls, ","), "1,2")
@@ -7314,6 +7476,7 @@ do
     check("repair.pending_secret_cost_no_error", ok, err)
     local state = repairTest.durabilityState()
     near("repair.pending_worst_percent", state.durabilityValue, 50)
+    eq("repair.pending_secret_cost_durability_complete", state.durabilityComplete, true)
     eq("repair.pending_hides_partial_known_cost", state.repairCost, nil)
     eq("repair.pending_marks_cost_incomplete", state.repairCostComplete, false)
     eq("repair.pending_secret_waits_for_event", state.retryScheduled, false)

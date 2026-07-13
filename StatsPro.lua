@@ -1031,7 +1031,10 @@ cached = {
     armorDR = nil,
     itemLevelOverall = nil,
     itemLevelEquipped = nil,
-    durabilityValue = 100,  -- holds avg or min depending on cached.useWorstDurability
+    durabilityValue = nil,  -- selected projection of the last complete aggregate
+    durabilityLastCompleteAverage = nil,
+    durabilityLastCompleteWorst = nil,
+    durabilityComplete = false, -- completeness of the latest scan, not cache freshness
     repairCost = nil,       -- exact live repair cost; nil while any damaged slot is unresolved
     repairCostComplete = false,
     -- WARNING: GetUnitSpeed returns secret values in combat → arithmetic taints. Cache OOC.
@@ -6193,31 +6196,44 @@ end
 local function ScanDurabilityAndCost()
     local sum, count, totalCost = 0, 0, 0
     local minPct
+    local durabilityIncomplete = false
     local repairCostPending = false
     local repairCostRetryable = false
     for slot = DURABILITY_SLOT_MIN, DURABILITY_SLOT_MAX do
         if not DURABILITY_SKIP_SLOTS[slot] then
             local cur, max = GetInventoryItemDurability(slot)
-            if SAFE_NUM.IsCleanFiniteNumber(cur) and SAFE_NUM.IsCleanFiniteNumber(max) and max > 0 then
-                local pct = (cur / max) * 100
-                sum = sum + pct
-                count = count + 1
-                if not minPct or pct < minPct then minPct = pct end
-                if cached.showRepairCost and cur < max then
-                    if C_TooltipInfo and C_TooltipInfo.GetInventoryItem then
-                        local okData, data = pcall(C_TooltipInfo.GetInventoryItem, "player", slot)
-                        if okData and data then
-                            local surfaced = true
-                            if TooltipUtil and TooltipUtil.SurfaceArgs then
-                                surfaced = pcall(TooltipUtil.SurfaceArgs, data)
-                            end
-                            if surfaced then
-                                local okCost, cost = pcall(function() return data.repairCost end)
-                                if okCost and IsCleanNonNegativeNumber(cost) then
-                                    totalCost = totalCost + cost
+            local curSecret = issecretvalue(cur)
+            local maxSecret = issecretvalue(max)
+            if curSecret or maxSecret then
+                durabilityIncomplete = true
+                if cached.showRepairCost then repairCostPending = true end
+            elseif cur ~= nil or max ~= nil then
+                -- Empty and non-durable inventory slots use the same nil/nil shape.
+                if SAFE_NUM.IsCleanFiniteNumber(cur) and SAFE_NUM.IsCleanFiniteNumber(max)
+                        and max > 0 and cur >= 0 and cur <= max then
+                    local pct = (cur / max) * 100
+                    sum = sum + pct
+                    count = count + 1
+                    if not minPct or pct < minPct then minPct = pct end
+                    if cached.showRepairCost and cur < max then
+                        if C_TooltipInfo and C_TooltipInfo.GetInventoryItem then
+                            local okData, data = pcall(C_TooltipInfo.GetInventoryItem, "player", slot)
+                            if okData and data then
+                                local surfaced = true
+                                if TooltipUtil and TooltipUtil.SurfaceArgs then
+                                    surfaced = pcall(TooltipUtil.SurfaceArgs, data)
+                                end
+                                if surfaced then
+                                    local okCost, cost = pcall(function() return data.repairCost end)
+                                    if okCost and IsCleanNonNegativeNumber(cost) then
+                                        totalCost = totalCost + cost
+                                    else
+                                        repairCostPending = true
+                                        if not okCost or not issecretvalue(cost) then repairCostRetryable = true end
+                                    end
                                 else
                                     repairCostPending = true
-                                    if not okCost or not issecretvalue(cost) then repairCostRetryable = true end
+                                    repairCostRetryable = true
                                 end
                             else
                                 repairCostPending = true
@@ -6225,19 +6241,26 @@ local function ScanDurabilityAndCost()
                             end
                         else
                             repairCostPending = true
-                            repairCostRetryable = true
                         end
-                    else
+                    end
+                elseif not (SAFE_NUM.IsCleanFiniteNumber(cur)
+                        and SAFE_NUM.IsCleanFiniteNumber(max) and cur == 0 and max == 0) then
+                    -- A clean 0/0 is a non-durable slot. Any other half/malformed pair
+                    -- makes the aggregate non-authoritative and may recover on an event.
+                    durabilityIncomplete = true
+                    if cached.showRepairCost then
                         repairCostPending = true
+                        repairCostRetryable = true
                     end
                 end
-            elseif cached.showRepairCost and (issecretvalue(cur) or issecretvalue(max)) then
-                repairCostPending = true
             end
         end
     end
-    if count == 0 then return 100, 100, 0, repairCostPending, repairCostRetryable end
-    return sum / count, minPct, totalCost, repairCostPending, repairCostRetryable
+    local durabilityComplete = count > 0 and not durabilityIncomplete
+    local average = durabilityComplete and (sum / count) or nil
+    local worst = durabilityComplete and minPct or nil
+    return average, worst, durabilityComplete,
+        totalCost, repairCostPending, repairCostRetryable
 end
 
 -- WARNING: repairCost can lag behind durability: C_TooltipInfo may return nil
@@ -6247,8 +6270,16 @@ end
 -- harmless after a newer inventory/config event.
 
 local function RefreshDurabilityCache()
-    local avg, mn, cost, repairCostPending, repairCostRetryable = ScanDurabilityAndCost()
-    cached.durabilityValue = cached.useWorstDurability and mn or avg
+    local avg, mn, durabilityComplete, cost,
+        repairCostPending, repairCostRetryable = ScanDurabilityAndCost()
+    if durabilityComplete then
+        cached.durabilityLastCompleteAverage = avg
+        cached.durabilityLastCompleteWorst = mn
+    end
+    cached.durabilityComplete = durabilityComplete
+    cached.durabilityValue = cached.useWorstDurability
+        and cached.durabilityLastCompleteWorst
+        or cached.durabilityLastCompleteAverage
     cached.repairCostComplete = not repairCostPending
     cached.repairCost = cached.repairCostComplete and cost or nil
     durabilityDirty = false
@@ -7740,10 +7771,15 @@ local function BuildDurabilityLines(labels, ratings, values)
     if not cached.showDurability then return labels, ratings, values end
     local cs = cached.colorStrings
     local pct = cached.durabilityValue
-    if not SAFE_NUM.IsCleanFiniteNumber(pct) then pct = 100 end
+    local durStr = cs.durability
+    if not SAFE_NUM.IsCleanFiniteNumber(pct) then
+        local rCol, vCol = RouteValueOnly("?")
+        PushRow(labels, ratings, values,
+            FormatLabel(durStr, "Durability"), rCol, vCol)
+        return labels, ratings, values
+    end
     if pct < 0 then pct = 0 end
     if pct > 100 then pct = 100 end
-    local durStr = cs.durability
     local valueColor
     if cached.useAutoColorDurability then
         valueColor = RGBToHex(ComputeDurabilityColor(pct))
@@ -8115,7 +8151,8 @@ local EVENT_HANDLERS = {
         SetAllPanelsLockState(GetBoolDB("isLocked"))
         -- The event is authoritative even if InCombatLockdown() lags by one frame.
         addon.panelEditRuntime.Refresh(false)
-        if cached.showRepairCost and cached.repairCostComplete == false then
+        if (cached.showDurability and cached.durabilityComplete == false)
+            or (cached.showRepairCost and cached.repairCostComplete == false) then
             addon.durabilityRuntime.MarkDirty()
         end
         addon.profileUI.RefreshSafe()
@@ -13600,12 +13637,13 @@ local function PrintDebugPerf()
         tostring(cached.displayMode),
         tostring(mainPanel:IsShown()),
         tostring(defensivePanel:IsShown())))
-    PrintMsg(string.format("debug perf: dirty durability=%s itemLevel=%s repairCost=%s complete=%s durability=%.1f",
+    PrintMsg(string.format("debug perf: dirty durability=%s itemLevel=%s repairCost=%s repairComplete=%s durability=%s durabilityComplete=%s",
         tostring(durabilityDirty),
         tostring(itemLevelDirty),
         SAFE_NUM.DumpNumber(cached.repairCost, "%d", "?"),
         tostring(cached.repairCostComplete),
-        cached.durabilityValue or 0))
+        SAFE_NUM.DumpNumber(cached.durabilityValue, "%.1f", "?"),
+        tostring(cached.durabilityComplete)))
     PrintMsg(string.format("debug perf: itemLevel enabled=%s equipped=%s overall=%s",
         tostring(cached.showItemLevel),
         tostring(cached.itemLevelEquipped or "?"),
@@ -14270,6 +14308,9 @@ if addon and addon.__statsproSmoke == true then
         durabilityState = function()
             return {
                 durabilityValue = cached.durabilityValue,
+                durabilityLastCompleteAverage = cached.durabilityLastCompleteAverage,
+                durabilityLastCompleteWorst = cached.durabilityLastCompleteWorst,
+                durabilityComplete = cached.durabilityComplete,
                 repairCost = cached.repairCost,
                 repairCostComplete = cached.repairCostComplete,
                 dirty = durabilityDirty,

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.5 - 14-Jul-2026 — Archon target refresh
+
+### Updated
+
+- **Bundled M+ High Keys and Raid Mythic All Bosses target ratings were refreshed from latest Archon data.**
+
 ## 1.10.4 - 13-Jul-2026 — Archon target refresh
 
 ### Updated

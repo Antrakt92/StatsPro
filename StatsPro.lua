@@ -28,11 +28,21 @@ addon.developerLinks = {
 }
 addon.durabilityRuntime = {
     generation = 0,
-    retryGeneration = 0,
-    retryAttempt = 0,
     retryDelays = { 1, 3, 8, 15 },
-    scheduledGeneration = nil,
-    scheduledAttempt = nil,
+    retryStates = {
+        durability = {
+            generation = 0,
+            attempt = 0,
+            scheduledGeneration = nil,
+            scheduledAttempt = nil,
+        },
+        repair = {
+            generation = 0,
+            attempt = 0,
+            scheduledGeneration = nil,
+            scheduledAttempt = nil,
+        },
+    },
 }
 
 --[[ ============================================================
@@ -1063,11 +1073,64 @@ local durabilityDirty = true
 function addon.durabilityRuntime.MarkDirty()
     local runtime = addon.durabilityRuntime
     runtime.generation = runtime.generation + 1
-    runtime.retryGeneration = runtime.generation
-    runtime.retryAttempt = 0
-    runtime.scheduledGeneration = nil
-    runtime.scheduledAttempt = nil
+    local durabilityRetry = runtime.retryStates.durability
+    durabilityRetry.generation = runtime.generation
+    durabilityRetry.attempt = 0
+    durabilityRetry.scheduledGeneration = nil
+    durabilityRetry.scheduledAttempt = nil
+    local repairRetry = runtime.retryStates.repair
+    repairRetry.generation = runtime.generation
+    repairRetry.attempt = 0
+    repairRetry.scheduledGeneration = nil
+    repairRetry.scheduledAttempt = nil
     durabilityDirty = true
+end
+
+-- Durability and repair share one slot scan but own independent retry budgets.
+-- WHY: durability can be entirely unavailable while equipment hydrates, so it must
+-- not consume the later tooltip-repair attempts once equipped slots become readable.
+function addon.durabilityRuntime.ScheduleRetry(kind, pending)
+    local runtime = addon.durabilityRuntime
+    local state = runtime.retryStates[kind]
+    local generation = runtime.generation
+    if state.generation ~= generation then
+        state.generation = generation
+        state.attempt = 0
+        state.scheduledGeneration = nil
+        state.scheduledAttempt = nil
+    end
+    if not pending then
+        if state.scheduledGeneration == generation then
+            state.scheduledGeneration = nil
+            state.scheduledAttempt = nil
+        end
+        return
+    end
+    if state.scheduledGeneration == generation then return end
+
+    local attempt = state.attempt + 1
+    local delay = runtime.retryDelays[attempt]
+    if not delay then return end
+    state.attempt = attempt
+    state.scheduledGeneration = generation
+    state.scheduledAttempt = attempt
+    C_Timer.After(delay, function()
+        if runtime.generation ~= generation
+                or state.generation ~= generation
+                or state.attempt ~= attempt
+                or state.scheduledGeneration ~= generation
+                or state.scheduledAttempt ~= attempt then return end
+        state.scheduledGeneration = nil
+        state.scheduledAttempt = nil
+        local shouldRetry
+        if kind == "durability" then
+            shouldRetry = cached.showDurability
+                and cached.durabilityComplete == false and not InCombatLockdown()
+        else
+            shouldRetry = cached.showRepairCost and cached.repairCostComplete == false
+        end
+        if shouldRetry then durabilityDirty = true end
+    end)
 end
 -- Dirty flag for item-level refresh (overall iLvl can change from gear or bags)
 local itemLevelDirty = true
@@ -6274,11 +6337,12 @@ local function ScanDurabilityAndCost()
         totalCost, repairCostPending, repairCostRetryable
 end
 
--- WARNING: repairCost can lag behind durability: C_TooltipInfo may return nil
--- post-login, or return data with repairCost still nil/secret until item/vendor
--- info catches up. No durability event fires for plain data-load, so each external
--- dirty generation gets a short bounded backoff. Generation + attempt tokens make
--- older timers harmless after a newer inventory/config event or retry step.
+-- WARNING: both durability and repairCost can lag after login. Durability APIs may
+-- briefly return no complete equipped-slot aggregate, while C_TooltipInfo may return
+-- nil or a repairCost that is still nil/secret until item/vendor info catches up.
+-- No durability event is guaranteed for plain data-load, so each external dirty
+-- generation gets a short bounded backoff. Generation + attempt tokens make older
+-- timers harmless after a newer inventory/config event or retry step.
 
 local function RefreshDurabilityCache()
     local avg, mn, durabilityComplete, cost,
@@ -6295,38 +6359,14 @@ local function RefreshDurabilityCache()
     cached.repairCost = cached.repairCostComplete and cost or nil
     durabilityDirty = false
 
-    local runtime = addon.durabilityRuntime
-    local retryGeneration = runtime.generation
-    if runtime.retryGeneration ~= retryGeneration then
-        runtime.retryGeneration = retryGeneration
-        runtime.retryAttempt = 0
-    end
-    local retryNeeded = repairCostPending and repairCostRetryable
-    if not retryNeeded and runtime.scheduledGeneration == retryGeneration then
-        runtime.scheduledGeneration = nil
-        runtime.scheduledAttempt = nil
-    elseif retryNeeded
-            and runtime.scheduledGeneration ~= retryGeneration then
-        local retryAttempt = runtime.retryAttempt + 1
-        local retryDelay = runtime.retryDelays[retryAttempt]
-        if retryDelay then
-            runtime.retryAttempt = retryAttempt
-            runtime.scheduledGeneration = retryGeneration
-            runtime.scheduledAttempt = retryAttempt
-            C_Timer.After(retryDelay, function()
-                if runtime.generation ~= retryGeneration
-                        or runtime.retryGeneration ~= retryGeneration
-                        or runtime.retryAttempt ~= retryAttempt
-                        or runtime.scheduledGeneration ~= retryGeneration
-                        or runtime.scheduledAttempt ~= retryAttempt then return end
-                runtime.scheduledGeneration = nil
-                runtime.scheduledAttempt = nil
-                if cached.showRepairCost and cached.repairCostComplete == false then
-                    durabilityDirty = true
-                end
-            end)
-        end
-    end
+    -- A cold/incomplete out-of-combat durability read must recover without requiring
+    -- a vendor, gear swap, or combat transition. Restricted combat reads keep the
+    -- last complete aggregate and rely on PLAYER_REGEN_ENABLED instead of polling.
+    local durabilityRetryPending = cached.showDurability
+        and not durabilityComplete and not InCombatLockdown()
+    local repairRetryPending = repairCostPending and repairCostRetryable
+    addon.durabilityRuntime.ScheduleRetry("durability", durabilityRetryPending)
+    addon.durabilityRuntime.ScheduleRetry("repair", repairRetryPending)
 end
 
 --[[ ============================================================
@@ -13652,6 +13692,8 @@ function addon:PrintDebugDump()
 end
 
 local function PrintDebugPerf()
+    local durabilityRetry = addon.durabilityRuntime.retryStates.durability
+    local repairRetry = addon.durabilityRuntime.retryStates.repair
     PrintMsg(string.format("debug perf: mem=%dKB updates=%d refresh=%.2fs elapsed=%.2fs",
         math.floor(collectgarbage("count")),
         updateCount,
@@ -13672,6 +13714,13 @@ local function PrintDebugPerf()
         tostring(cached.repairCostComplete),
         SAFE_NUM.DumpNumber(cached.durabilityValue, "%.1f", "?"),
         tostring(cached.durabilityComplete)))
+    PrintMsg(string.format("debug perf: retry durability=%d/%d scheduled=%s repair=%d/%d scheduled=%s",
+        durabilityRetry.attempt,
+        #addon.durabilityRuntime.retryDelays,
+        tostring(durabilityRetry.scheduledGeneration == addon.durabilityRuntime.generation),
+        repairRetry.attempt,
+        #addon.durabilityRuntime.retryDelays,
+        tostring(repairRetry.scheduledGeneration == addon.durabilityRuntime.generation)))
     PrintMsg(string.format("debug perf: itemLevel enabled=%s equipped=%s overall=%s",
         tostring(cached.showItemLevel),
         tostring(cached.itemLevelEquipped or "?"),
@@ -14334,6 +14383,8 @@ if addon and addon.__statsproSmoke == true then
         formatRepairCost = FormatRepairCost,
         refreshDurabilityCache = RefreshDurabilityCache,
         durabilityState = function()
+            local durabilityRetry = addon.durabilityRuntime.retryStates.durability
+            local repairRetry = addon.durabilityRuntime.retryStates.repair
             return {
                 durabilityValue = cached.durabilityValue,
                 durabilityLastCompleteAverage = cached.durabilityLastCompleteAverage,
@@ -14342,10 +14393,14 @@ if addon and addon.__statsproSmoke == true then
                 repairCost = cached.repairCost,
                 repairCostComplete = cached.repairCostComplete,
                 dirty = durabilityDirty,
-                retryAttempt = addon.durabilityRuntime.retryAttempt,
                 retryLimit = #addon.durabilityRuntime.retryDelays,
-                scheduledAttempt = addon.durabilityRuntime.scheduledAttempt,
-                retryScheduled = addon.durabilityRuntime.scheduledGeneration
+                durabilityRetryAttempt = durabilityRetry.attempt,
+                durabilityScheduledAttempt = durabilityRetry.scheduledAttempt,
+                durabilityRetryScheduled = durabilityRetry.scheduledGeneration
+                    == addon.durabilityRuntime.generation,
+                repairRetryAttempt = repairRetry.attempt,
+                repairScheduledAttempt = repairRetry.scheduledAttempt,
+                repairRetryScheduled = repairRetry.scheduledGeneration
                     == addon.durabilityRuntime.generation,
             }
         end,

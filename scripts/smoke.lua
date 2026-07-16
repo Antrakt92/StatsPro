@@ -7249,6 +7249,7 @@ do
         __tostring = function() error("secret durability inspected", 2) end,
     })
     local mode = "clean"
+    local inCombat = false
     local scanCount, tooltipCalls = 0, 0
     local durabilityEnv, durabilityAddon, durabilityTest = loadStatsPro("enUS", {
         statsProDB = {
@@ -7257,6 +7258,7 @@ do
             useWorstDurability = false,
         },
         issecretvalue = function(value) return value == secretDurability end,
+        inCombatLockdown = function() return inCombat end,
         getInventoryItemDurability = function(slot)
             if slot == 1 then scanCount = scanCount + 1 end
             if mode == "clean" then
@@ -7290,6 +7292,7 @@ do
         blockDumpContains({ durabilityBlock }, "65.0%"), true)
 
     mode = "secret"
+    inCombat = true
     local ok, err = pcall(durabilityTest.refreshDurabilityCache)
     check("durability.warm_all_secret.no_error", ok, err)
     state = durabilityTest.durabilityState()
@@ -7297,7 +7300,7 @@ do
     near("durability.warm_all_secret.preserved_average", state.durabilityLastCompleteAverage, 65)
     near("durability.warm_all_secret.preserved_worst", state.durabilityLastCompleteWorst, 50)
     near("durability.warm_all_secret.selected_average", state.durabilityValue, 65)
-    eq("durability.warm_all_secret.no_retry", state.retryScheduled, false)
+    eq("durability.warm_all_secret.no_retry", state.durabilityRetryScheduled, false)
     eq("durability.warm_all_secret.no_timer", #durabilityEnv.__timers, 0)
 
     local settings = activeSettings(durabilityEnv)
@@ -7322,6 +7325,7 @@ do
     eq("durability.repair_hidden.no_tooltip_reads", tooltipCalls, 0)
 
     mode = "recovered"
+    inCombat = false
     local scansBeforeRegen = scanCount
     fireEvent("durability.repair_hidden.regen", durabilityEnv, "PLAYER_REGEN_ENABLED")
     eq("durability.repair_hidden.regen_marks_dirty", durabilityTest.durabilityState().dirty, true)
@@ -7344,7 +7348,7 @@ do
         __tostring = function() error("cold secret durability inspected", 2) end,
     })
     local mode = "nil"
-    local coldEnv, _, coldTest = loadStatsPro("enUS", {
+    local coldEnv, coldAddon, coldTest = loadStatsPro("enUS", {
         statsProDB = {
             showDurability = true,
             showRepairCost = false,
@@ -7353,12 +7357,14 @@ do
         getInventoryItemDurability = function(slot)
             if mode == "secret" and (slot == 1 or slot == 2) then
                 return secretDurability, secretDurability
+            elseif mode == "recovered" then
+                if slot == 1 then return 90, 100 end
+                if slot == 2 then return 60, 100 end
             end
             return nil, nil
         end,
     })
-    coldTest.cacheSettings()
-    coldTest.refreshDurabilityCache()
+    fireEvent("durability.cold_nil.enter", coldEnv, "PLAYER_ENTERING_WORLD")
     local state = coldTest.durabilityState()
     eq("durability.cold_nil.incomplete", state.durabilityComplete, false)
     eq("durability.cold_nil.no_average", state.durabilityLastCompleteAverage, nil)
@@ -7371,6 +7377,9 @@ do
         countValue(nilDurabilityBlock.ratings, "?") + countValue(nilDurabilityBlock.values, "?"), 1)
     eq("durability.cold_nil.no_fabricated_full",
         blockDumpContains({ nilDurabilityBlock }, "100.0%"), false)
+    eq("durability.cold_nil.retry_scheduled", state.durabilityRetryScheduled, true)
+    eq("durability.cold_nil.one_timer", #coldEnv.__timers, 1)
+    eq("durability.cold_nil.first_delay", coldEnv.__timers[1].delay, 1)
 
     mode = "secret"
     local ok, err = pcall(coldTest.refreshDurabilityCache)
@@ -7378,8 +7387,8 @@ do
     state = coldTest.durabilityState()
     eq("durability.cold_secret.incomplete", state.durabilityComplete, false)
     eq("durability.cold_secret.no_selected_value", state.durabilityValue, nil)
-    eq("durability.cold_secret.no_retry", state.retryScheduled, false)
-    eq("durability.cold_secret.no_timer", #coldEnv.__timers, 0)
+    eq("durability.cold_secret.keeps_retry", state.durabilityRetryScheduled, true)
+    eq("durability.cold_secret.no_duplicate_timer", #coldEnv.__timers, 1)
 
     local blocks = coldTest.buildRenderBlocks()
     local durabilityBlock = findBlockBySplitKey("durability.cold_secret.block",
@@ -7388,6 +7397,21 @@ do
         countValue(durabilityBlock.ratings, "?") + countValue(durabilityBlock.values, "?"), 1)
     eq("durability.cold_secret.no_fabricated_full",
         blockDumpContains({ durabilityBlock }, "100.0%"), false)
+
+    mode = "recovered"
+    eq("durability.cold_retry.timer_runs", coldEnv.__flushNextTimer(), true)
+    eq("durability.cold_retry.marks_dirty", coldTest.durabilityState().dirty, true)
+    check("durability.cold_retry.update", coldAddon:RunUpdateStatsSafe())
+    state = coldTest.durabilityState()
+    eq("durability.cold_retry.complete", state.durabilityComplete, true)
+    near("durability.cold_retry.average", state.durabilityLastCompleteAverage, 75)
+    near("durability.cold_retry.worst", state.durabilityLastCompleteWorst, 60)
+    near("durability.cold_retry.selected", state.durabilityValue, 75)
+    eq("durability.cold_retry.no_timer", #coldEnv.__timers, 0)
+    local recoveredBlock = findBlockBySplitKey("durability.cold_retry.block",
+        coldTest.buildRenderBlocks(), "splitDurability")
+    eq("durability.cold_retry.rendered_current",
+        blockDumpContains({ recoveredBlock }, "75.0%"), true)
 
     local flatMain = coldTest.routeRenderBlocks(blocks, "flat", nil, "full")
     eq("durability.cold_secret.flat_routes_unknown",
@@ -7402,6 +7426,97 @@ do
         blockDumpContains({ splitMain }, "?"), false)
     eq("durability.cold_secret.split_side_routes_unknown",
         blockDumpContains({ splitSide }, "?"), true)
+end
+
+do
+    local inCombat = false
+    local mode = "nil"
+    local combatEnv, combatAddon, combatTest = loadStatsPro("enUS", {
+        statsProDB = { showDurability = true, showRepairCost = false },
+        inCombatLockdown = function() return inCombat end,
+        getInventoryItemDurability = function(slot)
+            if mode == "recovered" and slot == 1 then return 80, 100 end
+            return nil, nil
+        end,
+    })
+    fireEvent("durability.retry_combat.enter", combatEnv, "PLAYER_ENTERING_WORLD")
+    eq("durability.retry_combat.initial_timer", #combatEnv.__timers, 1)
+    inCombat = true
+    flushTimers("durability.retry_combat.timer", combatEnv, 1, 1)
+    local state = combatTest.durabilityState()
+    eq("durability.retry_combat.callback_no_dirty", state.dirty, false)
+    eq("durability.retry_combat.logical_cancel", state.durabilityRetryScheduled, false)
+    eq("durability.retry_combat.no_timer", #combatEnv.__timers, 0)
+
+    mode = "recovered"
+    inCombat = false
+    fireEvent("durability.retry_combat.regen", combatEnv, "PLAYER_REGEN_ENABLED")
+    eq("durability.retry_combat.regen_dirty", combatTest.durabilityState().dirty, true)
+    check("durability.retry_combat.recovery_update", combatAddon:RunUpdateStatsSafe())
+    state = combatTest.durabilityState()
+    eq("durability.retry_combat.recovered_complete", state.durabilityComplete, true)
+    near("durability.retry_combat.recovered_value", state.durabilityValue, 80)
+end
+
+do
+    local disabledEnv, _, disabledTest = loadStatsPro("enUS", {
+        statsProDB = { showDurability = true, showRepairCost = false },
+        getInventoryItemDurability = function() return nil, nil end,
+    })
+    fireEvent("durability.retry_disable.enter", disabledEnv, "PLAYER_ENTERING_WORLD")
+    eq("durability.retry_disable.initial_timer", #disabledEnv.__timers, 1)
+    activeSettings(disabledEnv).showDurability = false
+    disabledTest.cacheSettings()
+    disabledTest.refreshDurabilityCache()
+    local state = disabledTest.durabilityState()
+    eq("durability.retry_disable.logical_cancel", state.durabilityRetryScheduled, false)
+    eq("durability.retry_disable.old_timer_queued", #disabledEnv.__timers, 1)
+    flushTimers("durability.retry_disable.old_timer", disabledEnv, 1, 1)
+    state = disabledTest.durabilityState()
+    eq("durability.retry_disable.old_callback_no_dirty", state.dirty, false)
+    eq("durability.retry_disable.no_timer", #disabledEnv.__timers, 0)
+end
+
+do
+    local mode = "durability_pending"
+    local tooltipCalls = 0
+    local independentEnv, independentAddon, independentTest = loadStatsPro("enUS", {
+        statsProDB = { showDurability = true, showRepairCost = true },
+        getInventoryItemDurability = function(slot)
+            if mode ~= "durability_pending" and slot == 1 then return 50, 100 end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function()
+            tooltipCalls = tooltipCalls + 1
+            if mode == "repair_ready" then return { repairCost = 300 } end
+            return nil
+        end,
+    })
+    fireEvent("durability.repair_independent.enter", independentEnv, "PLAYER_ENTERING_WORLD")
+    local state = independentTest.durabilityState()
+    eq("durability.repair_independent.durability_attempt", state.durabilityRetryAttempt, 1)
+    eq("durability.repair_independent.repair_not_started", state.repairRetryAttempt, 0)
+    eq("durability.repair_independent.one_durability_timer", #independentEnv.__timers, 1)
+
+    flushTimers("durability.repair_independent.durability_timer", independentEnv, 1, 1)
+    mode = "repair_pending"
+    check("durability.repair_independent.durability_update", independentAddon:RunUpdateStatsSafe())
+    state = independentTest.durabilityState()
+    eq("durability.repair_independent.durability_complete", state.durabilityComplete, true)
+    eq("durability.repair_independent.durability_budget_preserved", state.durabilityRetryAttempt, 1)
+    eq("durability.repair_independent.repair_starts_first_attempt", state.repairRetryAttempt, 1)
+    eq("durability.repair_independent.repair_scheduled", state.repairRetryScheduled, true)
+    eq("durability.repair_independent.one_repair_timer", #independentEnv.__timers, 1)
+    eq("durability.repair_independent.repair_first_delay", independentEnv.__timers[1].delay, 1)
+
+    mode = "repair_ready"
+    flushTimers("durability.repair_independent.repair_timer", independentEnv, 1, 1)
+    check("durability.repair_independent.repair_update", independentAddon:RunUpdateStatsSafe())
+    state = independentTest.durabilityState()
+    eq("durability.repair_independent.repair_complete", state.repairCostComplete, true)
+    eq("durability.repair_independent.repair_cost", state.repairCost, 300)
+    eq("durability.repair_independent.tooltip_calls", tooltipCalls, 2)
+    eq("durability.repair_independent.no_timer", #independentEnv.__timers, 0)
 end
 
 do
@@ -7440,7 +7555,7 @@ do
     eq("repair.scan_cost_complete", state.repairCostComplete, true)
     eq("repair.scan_skips_shirt_and_ranged.calls", table.concat(tooltipCalls, ","), "1,2")
     eq("repair.scan_surfaces_tooltip_args", surfaceCalls, 2)
-    eq("repair.scan_no_retry_when_complete", state.retryScheduled, false)
+    eq("repair.scan_no_retry_when_complete", state.repairRetryScheduled, false)
     local repairBlock = findBlockBySplitKey("repair.scan_complete.block",
         repairTest.buildRenderBlocks(), "splitRepairCost")
     check("repair.scan_complete_row_visible", repairBlock.repairStr ~= "", "missing repair value")
@@ -7479,8 +7594,8 @@ do
     eq("repair.pending_secret_cost_durability_complete", state.durabilityComplete, true)
     eq("repair.pending_hides_partial_known_cost", state.repairCost, nil)
     eq("repair.pending_marks_cost_incomplete", state.repairCostComplete, false)
-    eq("repair.pending_secret_waits_for_event", state.retryScheduled, false)
-    eq("repair.pending_secret_uses_no_backoff_attempt", state.retryAttempt, 0)
+    eq("repair.pending_secret_waits_for_event", state.repairRetryScheduled, false)
+    eq("repair.pending_secret_uses_no_backoff_attempt", state.repairRetryAttempt, 0)
     eq("repair.pending_secret_has_no_timer", #repairEnv.__timers, 0)
     local repairBlock = findBlockBySplitKey("repair.pending_secret.block",
         repairTest.buildRenderBlocks(), "splitRepairCost")
@@ -7514,7 +7629,7 @@ do
     local state = repairTest.durabilityState()
     eq("repair.backoff_late_ready.initial_unknown", state.repairCostComplete, false)
     eq("repair.backoff_late_ready.retry_limit", state.retryLimit, 4)
-    eq("repair.backoff_late_ready.initial_attempt", state.retryAttempt, 1)
+    eq("repair.backoff_late_ready.initial_attempt", state.repairRetryAttempt, 1)
     for attempt, delay in ipairs(retryDelays) do
         eq("repair.backoff_late_ready.timer_count." .. attempt, #repairEnv.__timers, 1)
         eq("repair.backoff_late_ready.delay." .. attempt, repairEnv.__timers[1].delay, delay)
@@ -7530,7 +7645,7 @@ do
             eq("repair.backoff_late_ready.still_pending." .. attempt,
                 state.repairCostComplete, false)
             eq("repair.backoff_late_ready.next_attempt." .. attempt,
-                state.retryAttempt, attempt + 1)
+                state.repairRetryAttempt, attempt + 1)
         end
     end
     state = repairTest.durabilityState()
@@ -7539,7 +7654,7 @@ do
     eq("repair.backoff_late_ready.complete", state.repairCostComplete, true)
     eq("repair.backoff_late_ready.clean", state.dirty, false)
     eq("repair.backoff_late_ready.no_timer", #repairEnv.__timers, 0)
-    eq("repair.backoff_late_ready.no_scheduled_attempt", state.scheduledAttempt, nil)
+    eq("repair.backoff_late_ready.no_scheduled_attempt", state.repairScheduledAttempt, nil)
 end
 
 do
@@ -7563,7 +7678,7 @@ do
     end
     local state = repairTest.durabilityState()
     eq("repair.backoff_bound.total_calls", tooltipCalls, 5)
-    eq("repair.backoff_bound.exhausted_attempt", state.retryAttempt, 4)
+    eq("repair.backoff_bound.exhausted_attempt", state.repairRetryAttempt, 4)
     eq("repair.backoff_bound.stays_unknown", state.repairCostComplete, false)
     eq("repair.backoff_bound.no_timer", #repairEnv.__timers, 0)
     eq("repair.backoff_bound.clean_after_exhaustion", state.dirty, false)
@@ -7573,11 +7688,11 @@ do
 
     fireEvent("repair.backoff_bound.inventory_reset", repairEnv, "UPDATE_INVENTORY_DURABILITY")
     eq("repair.backoff_bound.reset_attempt_before_scan",
-        repairTest.durabilityState().retryAttempt, 0)
+        repairTest.durabilityState().repairRetryAttempt, 0)
     check("repair.backoff_bound.reset_update", repairAddon:RunUpdateStatsSafe())
     state = repairTest.durabilityState()
     eq("repair.backoff_bound.reset_one_scan", tooltipCalls, 6)
-    eq("repair.backoff_bound.reset_first_attempt", state.retryAttempt, 1)
+    eq("repair.backoff_bound.reset_first_attempt", state.repairRetryAttempt, 1)
     eq("repair.backoff_bound.reset_one_timer", #repairEnv.__timers, 1)
     eq("repair.backoff_bound.reset_first_delay", repairEnv.__timers[1].delay, 1)
 end
@@ -7605,7 +7720,7 @@ do
     repairTest.refreshDurabilityCache()
     local state = repairTest.durabilityState()
     eq("repair.backoff_disable.no_more_tooltip_calls", tooltipCalls, 1)
-    eq("repair.backoff_disable.logical_cancel", state.retryScheduled, false)
+    eq("repair.backoff_disable.logical_cancel", state.repairRetryScheduled, false)
     eq("repair.backoff_disable.old_timer_still_queued", #repairEnv.__timers, 1)
     flushTimers("repair.backoff_disable.old_callback", repairEnv, 1, 1)
     state = repairTest.durabilityState()
@@ -7630,25 +7745,25 @@ do
     repairTest.refreshDurabilityCache()
     eq("repair.same_generation_cancel.initial_timer", #repairEnv.__timers, 1)
     eq("repair.same_generation_cancel.initial_attempt",
-        repairTest.durabilityState().scheduledAttempt, 1)
+        repairTest.durabilityState().repairScheduledAttempt, 1)
 
     mode = "known"
     repairTest.refreshDurabilityCache()
     local state = repairTest.durabilityState()
     eq("repair.same_generation_cancel.complete", state.repairCostComplete, true)
-    eq("repair.same_generation_cancel.logical_cancel", state.retryScheduled, false)
+    eq("repair.same_generation_cancel.logical_cancel", state.repairRetryScheduled, false)
     eq("repair.same_generation_cancel.old_timer_still_queued", #repairEnv.__timers, 1)
 
     mode = "pending"
     repairTest.refreshDurabilityCache()
     state = repairTest.durabilityState()
-    eq("repair.same_generation_cancel.second_attempt", state.scheduledAttempt, 2)
+    eq("repair.same_generation_cancel.second_attempt", state.repairScheduledAttempt, 2)
     eq("repair.same_generation_cancel.overlapping_timers", #repairEnv.__timers, 2)
     eq("repair.same_generation_cancel.old_callback_fires", repairEnv.__flushNextTimer(1), true)
     state = repairTest.durabilityState()
     eq("repair.same_generation_cancel.old_callback_no_dirty", state.dirty, false)
     eq("repair.same_generation_cancel.old_callback_preserves_new_token",
-        state.scheduledAttempt, 2)
+        state.repairScheduledAttempt, 2)
     eq("repair.same_generation_cancel.new_timer_remains", #repairEnv.__timers, 1)
     flushTimers("repair.same_generation_cancel.new_callback", repairEnv, 3, 1)
     eq("repair.same_generation_cancel.new_callback_marks_dirty",
@@ -7676,8 +7791,8 @@ do
     eq("repair.stale_generation.old_callback_fires", repairEnv.__flushNextTimer(1), true)
     local state = repairTest.durabilityState()
     eq("repair.stale_generation.old_callback_no_dirty", state.dirty, false)
-    eq("repair.stale_generation.old_callback_preserves_new_timer", state.retryScheduled, true)
-    eq("repair.stale_generation.old_callback_preserves_new_attempt", state.scheduledAttempt, 1)
+    eq("repair.stale_generation.old_callback_preserves_new_timer", state.repairRetryScheduled, true)
+    eq("repair.stale_generation.old_callback_preserves_new_attempt", state.repairScheduledAttempt, 1)
     eq("repair.stale_generation.new_timer_remains", #repairEnv.__timers, 1)
     flushTimers("repair.stale_generation.new_callback", repairEnv, 1, 1)
     eq("repair.stale_generation.new_callback_marks_dirty",
@@ -7716,7 +7831,7 @@ do
     local repairBlock = findBlockBySplitKey("repair.pending_all_nil.block",
         repairTest.buildRenderBlocks(), "splitRepairCost")
     eq("repair.pending_all_nil_renders_unknown", repairBlock.repairStr, "?")
-    eq("repair.pending_all_nil_schedules_retry", state.retryScheduled, true)
+    eq("repair.pending_all_nil_schedules_retry", state.repairRetryScheduled, true)
     eq("repair.pending_all_nil_one_timer", #repairEnv.__timers, 1)
     repairTest.refreshDurabilityCache()
     eq("repair.pending_all_nil_no_duplicate_timer", #repairEnv.__timers, 1)
@@ -7725,7 +7840,7 @@ do
     repairTest.refreshDurabilityCache()
     eq("repair.pending_all_nil_schedules_second_retry", #repairEnv.__timers, 1)
     eq("repair.pending_all_nil_second_attempt",
-        repairTest.durabilityState().scheduledAttempt, 2)
+        repairTest.durabilityState().repairScheduledAttempt, 2)
     mode = "known"
     fireEvent("repair.pending_all_nil_merchant_update", repairEnv, "MERCHANT_SHOW")
     eq("repair.pending_all_nil_merchant_marks_dirty", repairTest.durabilityState().dirty, true)
@@ -7769,7 +7884,7 @@ do
     local state = repairTest.durabilityState()
     eq("repair.pending_all_secret_clears_prior_cost", state.repairCost, nil)
     eq("repair.pending_all_secret_marks_incomplete", state.repairCostComplete, false)
-    eq("repair.pending_all_secret_uses_events", state.retryScheduled, false)
+    eq("repair.pending_all_secret_uses_events", state.repairRetryScheduled, false)
 end
 
 do
@@ -7798,7 +7913,7 @@ do
     local state = repairTest.durabilityState()
     eq("repair.pending_partial_hides_lower_bound", state.repairCost, nil)
     eq("repair.pending_partial_marks_incomplete", state.repairCostComplete, false)
-    eq("repair.pending_partial_still_schedules_retry", state.retryScheduled, true)
+    eq("repair.pending_partial_still_schedules_retry", state.repairRetryScheduled, true)
     local repairBlock = findBlockBySplitKey("repair.pending_partial.block",
         repairTest.buildRenderBlocks(), "splitRepairCost")
     eq("repair.pending_partial_renders_unknown", repairBlock.repairStr, "?")
@@ -7828,7 +7943,7 @@ do
     local state = repairTest.durabilityState()
     eq("repair.clean_zero_clears_prior_cost", state.repairCost, 0)
     eq("repair.clean_zero_is_complete", state.repairCostComplete, true)
-    eq("repair.clean_zero_no_retry", state.retryScheduled, false)
+    eq("repair.clean_zero_no_retry", state.repairRetryScheduled, false)
 end
 
 do
@@ -7883,7 +7998,7 @@ do
     end
     eq("repair.surface_failure_retry_is_bounded", #repairEnv.__timers, 0)
     eq("repair.surface_failure_retry_exhausted",
-        repairTest.durabilityState().retryAttempt, 4)
+        repairTest.durabilityState().repairRetryAttempt, 4)
 end
 
 do

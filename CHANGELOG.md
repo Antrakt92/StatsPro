@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.10.8 - 16-Jul-2026 — Durability login recovery
+
+### Fixed
+
+- **Durability now recovers automatically when equipped-item data is still loading after login or reload.** It no longer stays at `?` until visiting a vendor, changing equipment, or leaving combat.
+- **Durability and Repair Cost now recover independently.** Delayed durability data no longer consumes the retry budget needed for repair-cost loading.
+
 ## 1.10.7 - 16-Jul-2026 — Archon target refresh
 
 ### Updated

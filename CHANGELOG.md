@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.9 - 19-Jul-2026 — Archon target refresh
+
+### Updated
+
+- **Refreshed M+ High Keys and Raid Mythic All Bosses target ratings from latest Archon data.**
+
 ## 1.10.8 - 16-Jul-2026 — Durability login recovery
 
 ### Fixed

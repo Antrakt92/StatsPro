@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.10.9 - 19-Jul-2026 — Archon target refresh
+## 1.10.10 - 20-Jul-2026 — Archon target refresh
 
 ### Updated
 

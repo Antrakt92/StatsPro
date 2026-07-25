@@ -6035,7 +6035,10 @@ function addon.profileOps.DeleteWithReplacement(profileID, replacementProfileID,
                         changedCharacter.defaultProfileID = replacementProfileID
                     end
                     local specProfiles = rawget(changedCharacter, "specProfiles")
-                    if type(specProfiles) ~= "table"
+                    if type(specProfiles) == "nil" then
+                        specProfiles = {}
+                        changedCharacter.specProfiles = specProfiles
+                    elseif type(specProfiles) ~= "table"
                         or not addon.dbRuntime.IsCleanTable(specProfiles) then
                         return nil, "clone-failed"
                     end

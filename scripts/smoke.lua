@@ -15605,6 +15605,133 @@ end
 do
     local _, _, test, root = makeProfileOpsFixture({
         mutateRoot = function(candidate)
+            candidate.profiles.p5 = {
+                name = "Optional default only",
+                settings = deepCopy(candidate.profiles.p4.settings),
+            }
+            candidate.account.nextProfileID = 6
+            candidate.characters["Player-1-OPS-NO-SPECS"] = {
+                displayName = "NoSpecs-Realm",
+                lastSeen = 70,
+                defaultProfileID = "p5",
+            }
+            candidate.characters["Player-1-OPS-NO-SPECS-2"] = {
+                displayName = "NoSpecsTwo-Realm",
+                lastSeen = 60,
+                defaultProfileID = "p5",
+            }
+        end,
+    })
+    local ops = test.profileOps
+    local character = root.characters["Player-1-OPS-NO-SPECS"]
+    local secondCharacter = root.characters["Player-1-OPS-NO-SPECS-2"]
+    local unrelatedCharacterRef = root.characters["Player-1-OPS-A"]
+    local replacementRef = root.profiles.p3
+    local replacementSettingsRef = replacementRef.settings
+    eq("profiles.ops.delete.optional_specs.registry_current",
+        test.dbCompatibilityState().mode, "current")
+    eq("profiles.ops.delete.optional_specs.absent_before",
+        rawget(character, "specProfiles"), nil)
+    local references = ops.countReferences(root, "p5")
+    eq("profiles.ops.delete.optional_specs.default_reference", references.characterDefaults, 2)
+    eq("profiles.ops.delete.optional_specs.zero_spec_references", references.specs, 0)
+
+    local missingReplacementBefore = deepCopy(root)
+    local missingReplacementIdentities = captureRegistryIdentities(root)
+    local missingReplacementOperationBefore = ops.state().operationCount
+    local missingReplacementRuntimeBefore = test.profileRuntimeState()
+    local missingReplacementOK, missingReplacementReason =
+        ops.deleteWithReplacement("p5", nil)
+    eq("profiles.ops.delete.optional_specs.replacement_required",
+        missingReplacementOK, false)
+    eq("profiles.ops.delete.optional_specs.replacement_required_reason",
+        missingReplacementReason, "replacement-required")
+    assertDeepEqual("profiles.ops.delete.optional_specs.replacement_required_no_writes",
+        root, missingReplacementBefore)
+    assertRegistryIdentities(
+        "profiles.ops.delete.optional_specs.replacement_required_identity",
+        root, missingReplacementIdentities)
+    eq("profiles.ops.delete.optional_specs.replacement_required_first_absent",
+        rawget(character, "specProfiles"), nil)
+    eq("profiles.ops.delete.optional_specs.replacement_required_second_absent",
+        rawget(secondCharacter, "specProfiles"), nil)
+    eq("profiles.ops.delete.optional_specs.replacement_required_profile_preserved",
+        root.profiles.p5 ~= nil, true)
+    eq("profiles.ops.delete.optional_specs.replacement_required_no_operation",
+        ops.state().operationCount, missingReplacementOperationBefore)
+    eq("profiles.ops.delete.optional_specs.replacement_required_no_apply",
+        test.profileRuntimeState().applyCount, missingReplacementRuntimeBefore.applyCount)
+    eq("profiles.ops.delete.optional_specs.replacement_required_no_commit",
+        test.profileRuntimeState().structuralCommitCount,
+        missingReplacementRuntimeBefore.structuralCommitCount)
+
+    for _, stage in ipairs({ "validate", "commit" }) do
+        local before = deepCopy(root)
+        local identities = captureRegistryIdentities(root)
+        ops.setFailureStage(stage)
+        local ok, reason = ops.deleteWithReplacement("p5", "p3")
+        eq("profiles.ops.delete.optional_specs.failure_rejected." .. stage, ok, false)
+        eq("profiles.ops.delete.optional_specs.failure_reason." .. stage,
+            reason, stage .. "-failed")
+        assertDeepEqual("profiles.ops.delete.optional_specs.failure_no_writes." .. stage,
+            root, before)
+        assertRegistryIdentities("profiles.ops.delete.optional_specs.failure_identity." .. stage,
+            root, identities)
+        eq("profiles.ops.delete.optional_specs.failure_keeps_absent." .. stage,
+            rawget(character, "specProfiles"), nil)
+        eq("profiles.ops.delete.optional_specs.failure_keeps_second_absent." .. stage,
+            rawget(secondCharacter, "specProfiles"), nil)
+    end
+
+    ops.setFailureStage(nil)
+    local applyBefore = test.profileRuntimeState().applyCount
+    local ok, reason = ops.deleteWithReplacement("p5", "p3")
+    eq("profiles.ops.delete.optional_specs.ok", ok, true)
+    eq("profiles.ops.delete.optional_specs.result", reason, "p3")
+    eq("profiles.ops.delete.optional_specs.removed", root.profiles.p5, nil)
+    local changedCharacter = root.characters["Player-1-OPS-NO-SPECS"]
+    local changedSecondCharacter = root.characters["Player-1-OPS-NO-SPECS-2"]
+    eq("profiles.ops.delete.optional_specs.first_character_replaced",
+        rawequal(changedCharacter, character), false)
+    eq("profiles.ops.delete.optional_specs.second_character_replaced",
+        rawequal(changedSecondCharacter, secondCharacter), false)
+    eq("profiles.ops.delete.optional_specs.first_source_unchanged",
+        rawget(character, "specProfiles"), nil)
+    eq("profiles.ops.delete.optional_specs.second_source_unchanged",
+        rawget(secondCharacter, "specProfiles"), nil)
+    eq("profiles.ops.delete.optional_specs.default_replaced",
+        changedCharacter.defaultProfileID, "p3")
+    eq("profiles.ops.delete.optional_specs.normalized_type",
+        type(changedCharacter.specProfiles), "table")
+    eq("profiles.ops.delete.optional_specs.normalized_empty",
+        next(changedCharacter.specProfiles), nil)
+    eq("profiles.ops.delete.optional_specs.second_default_replaced",
+        changedSecondCharacter.defaultProfileID, "p3")
+    eq("profiles.ops.delete.optional_specs.second_normalized_type",
+        type(changedSecondCharacter.specProfiles), "table")
+    eq("profiles.ops.delete.optional_specs.second_normalized_empty",
+        next(changedSecondCharacter.specProfiles), nil)
+    eq("profiles.ops.delete.optional_specs.normalized_tables_independent",
+        rawequal(changedCharacter.specProfiles, changedSecondCharacter.specProfiles), false)
+    eq("profiles.ops.delete.optional_specs.first_metadata_preserved",
+        changedCharacter.displayName, "NoSpecs-Realm")
+    eq("profiles.ops.delete.optional_specs.second_metadata_preserved",
+        changedSecondCharacter.displayName, "NoSpecsTwo-Realm")
+    eq("profiles.ops.delete.optional_specs.offline_no_apply",
+        test.profileRuntimeState().applyCount, applyBefore)
+    eq("profiles.ops.delete.optional_specs.unrelated_character_identity",
+        rawequal(root.characters["Player-1-OPS-A"], unrelatedCharacterRef), true)
+    eq("profiles.ops.delete.optional_specs.replacement_identity",
+        rawequal(root.profiles.p3, replacementRef), true)
+    eq("profiles.ops.delete.optional_specs.replacement_settings_identity",
+        rawequal(root.profiles.p3.settings, replacementSettingsRef), true)
+    eq("profiles.ops.delete.optional_specs.registry_after",
+        test.dbCompatibilityState().mode, "current")
+end
+
+do
+    local _, _, test, root = makeProfileOpsFixture({
+        mutateRoot = function(candidate)
             candidate.profiles = { p1 = candidate.profiles.p1 }
             candidate.account.defaultProfileID = "p1"
             candidate.account.nextProfileID = 5

@@ -6,6 +6,63 @@ local function fail(name, detail)
     error(string.format("%s: %s", name, detail or "assertion failed"), 0)
 end
 
+local smokeReachability = {
+    expected = {
+        "core-panel-persistence",
+        "runtime-rendering",
+        "fonts",
+        "durability-repair",
+        "settings-compatibility",
+        "profile-context",
+        "profile-ui",
+        "profile-mutations",
+        "control-design",
+        "appearance-presets",
+    },
+    seen = {},
+    suiteCount = 0,
+    assignedAssertions = 0,
+}
+
+function smokeReachability:complete(name)
+    local index = self.suiteCount + 1
+    local expected = self.expected[index]
+    if expected == nil then
+        fail("smoke.reachability.unexpected_suite", name)
+    end
+    if name ~= expected then
+        fail("smoke.reachability.out_of_order", string.format("expected %s, got %s", expected, tostring(name)))
+    end
+    if self.seen[name] then
+        fail("smoke.reachability.duplicate_suite", name)
+    end
+    local completedAssertions = assertionCount - self.assignedAssertions
+    if completedAssertions <= 0 then
+        fail("smoke.reachability.empty_suite", name)
+    end
+    self.seen[name] = true
+    self.suiteCount = index
+    self.assignedAssertions = assertionCount
+    print(string.format(
+        "STATSPRO_SMOKE_SUITE protocol=1 index=%d name=%s assertions=%d",
+        index, name, completedAssertions))
+end
+
+function smokeReachability:finish()
+    if self.suiteCount ~= #self.expected then
+        fail("smoke.reachability.incomplete", string.format(
+            "completed %d of %d suites", self.suiteCount, #self.expected))
+    end
+    if self.assignedAssertions ~= assertionCount then
+        fail("smoke.reachability.unassigned_assertions", string.format(
+            "%d assertions were not assigned to a suite", assertionCount - self.assignedAssertions))
+    end
+    print(string.format(
+        "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=%d assertions=%d",
+        self.suiteCount, assertionCount))
+    print(string.format("StatsPro smoke: PASS (%d assertions)", assertionCount))
+end
+
 local function check(name, ok, detail)
     assertionCount = assertionCount + 1
     if not ok then fail(name, detail) end
@@ -3871,6 +3928,8 @@ do
     assertDeepEqual("panel.edit.lifecycle_preserves_db", editEnv.StatsProDB, initialRoot)
 end
 
+smokeReachability:complete("core-panel-persistence")
+
 do
     local combatClickEnv = loadStatsPro("enUS", {
         inCombatLockdown = function() return true end,
@@ -7275,6 +7334,8 @@ do
     eq("launcher.localized_enGB_fallback.text", enGBTest.launcherDescriptionText(), launcherDescriptionCases[1][2])
 end
 
+smokeReachability:complete("runtime-rendering")
+
 eq("fonts.path_key_slash_case", test.fontPathKey("Fonts/ARIALN.TTF"), "fonts\\arialn.ttf")
 eq("fonts.path_same_slash_case", test.sameFontPath("Fonts/ARIALN.TTF", "fonts\\arialn.ttf"), true)
 eq("fonts.blizzard_path_detection.true", test.isBlizzardFontPath("Fonts\\ARIALN.TTF"), true)
@@ -7765,6 +7826,8 @@ do
     eq("fonts.future_schema_picker_baseline.caption_matches_runtime",
         futureEnv.StatsProFontDropdown.dropdownText, "Friz Quadrata TT")
 end
+
+smokeReachability:complete("fonts")
 
 do
     runMigrate({ fontSize = "15.4" })
@@ -8531,6 +8594,8 @@ do
     eq("repair.surface_failure_retry_exhausted",
         repairTest.durabilityState().repairRetryAttempt, 4)
 end
+
+smokeReachability:complete("durability-repair")
 
 do
     local r, g, b = test.normalizeColor({ r = "2", g = "-1", b = "bad" }, { r = 0.25, g = 0.5, b = 0.75 })
@@ -11734,6 +11799,8 @@ do
     eq("debug.bucket_secret_sanitizer_env_loaded", secretEnv ~= nil, true)
 end
 
+smokeReachability:complete("settings-compatibility")
+
 do
     -- Character/spec profile activation is exercised against one shared SavedVariables
     -- root so switches have the same identity and aliasing hazards as real relogs.
@@ -12988,6 +13055,8 @@ do
         profileTest.profileState().settings.colors, targetColorsRef)
 end
 
+smokeReachability:complete("profile-context")
+
 do
     -- The profile manager shell is intentionally read-only until transactional profile
     -- operations land. This block proves that navigation cannot mutate the
@@ -13753,6 +13822,8 @@ do
             string.format(labels["Automatic - %s / %s"], "Alpha-Realm", "Arms"))
     end
 end
+
+smokeReachability:complete("profile-ui")
 
 local function makeProfileOpsFixture(options)
     options = options or {}
@@ -16284,6 +16355,8 @@ do
     })
 end
 
+smokeReachability:complete("profile-mutations")
+
 do
     local env, _, test = loadStatsPro("enUS")
     local function pointOffsets(frame)
@@ -16645,6 +16718,8 @@ do
         end
     end
 end
+
+smokeReachability:complete("control-design")
 
 do
     local presetEnv, presetAddon, presetTest = loadStatsPro("enUS", withProfileIdentity())
@@ -17029,4 +17104,5 @@ do
         gateTest.profileState().root, before)
 end
 
-print(string.format("StatsPro smoke: PASS (%d assertions)", assertionCount))
+smokeReachability:complete("appearance-presets")
+smokeReachability:finish()

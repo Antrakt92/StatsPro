@@ -4,6 +4,7 @@ param(
     [switch]$AllowStaleArchonTargets,
     [string]$ToolLockPath = (Join-Path $PSScriptRoot "tool-version-locks.json"),
     [switch]$EnforceToolLocks,
+    [switch]$UpdateSmokeContract,
     [switch]$SelfTest
 )
 
@@ -13,6 +14,12 @@ $ErrorActionPreference = "Stop"
 
 if ($ArchonMaxAgeDays -lt 0) {
     throw "-ArchonMaxAgeDays must be a non-negative integer."
+}
+if ($UpdateSmokeContract -and ($SelfTest -or $Release)) {
+    throw "-UpdateSmokeContract cannot be combined with -SelfTest or -Release."
+}
+if ($UpdateSmokeContract -and -not $EnforceToolLocks) {
+    throw "-UpdateSmokeContract requires -EnforceToolLocks so the baseline comes from the locked toolchain."
 }
 
 function Format-NativeArgument {
@@ -340,15 +347,373 @@ function Assert-ThrowsMatch {
     }
 }
 
+function ConvertTo-SmokeContractPositiveInteger {
+    param([object]$Value, [string]$Label)
+
+    if ($null -eq $Value) {
+        throw "$Label must be a positive integer."
+    }
+    $integerTypes = @(
+        [System.TypeCode]::Byte,
+        [System.TypeCode]::SByte,
+        [System.TypeCode]::Int16,
+        [System.TypeCode]::UInt16,
+        [System.TypeCode]::Int32,
+        [System.TypeCode]::UInt32,
+        [System.TypeCode]::Int64,
+        [System.TypeCode]::UInt64
+    )
+    if ([System.Type]::GetTypeCode($Value.GetType()) -notin $integerTypes) {
+        throw "$Label must be a positive integer."
+    }
+    $number = [int64]$Value
+    if ($number -le 0 -or $number -gt [int]::MaxValue) {
+        throw "$Label must be between 1 and $([int]::MaxValue)."
+    }
+    return [int]$number
+}
+
+function ConvertFrom-SmokeProtocolInteger {
+    param([string]$Value, [string]$Label)
+
+    $number = 0L
+    if (-not [int64]::TryParse($Value, [ref]$number) -or
+        $number -le 0 -or $number -gt [int]::MaxValue) {
+        throw "$Label must be a positive 32-bit integer."
+    }
+    return [int]$number
+}
+
+function Read-SmokeContract {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Missing smoke reachability contract: $Path"
+    }
+    try {
+        $raw = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+        $parsed = $raw | ConvertFrom-Json
+    }
+    catch {
+        throw "Could not parse smoke reachability contract ${Path}: $($_.Exception.Message)"
+    }
+    if ($null -eq $parsed) {
+        throw "Smoke reachability contract is empty: $Path"
+    }
+
+    $rootNames = @($parsed.PSObject.Properties.Name)
+    foreach ($required in @("schemaVersion", "minimumTotalAssertions", "suites")) {
+        if ($rootNames -cnotcontains $required) {
+            throw "Smoke reachability contract is missing '$required'."
+        }
+    }
+    foreach ($property in $rootNames) {
+        if ($property -cnotin @("schemaVersion", "minimumTotalAssertions", "suites")) {
+            throw "Smoke reachability contract has unsupported root property '$property'."
+        }
+    }
+    $schemaVersion = ConvertTo-SmokeContractPositiveInteger $parsed.schemaVersion "Smoke contract schemaVersion"
+    if ($schemaVersion -ne 1) {
+        throw "Unsupported smoke reachability contract schemaVersion $schemaVersion; expected 1."
+    }
+    $minimumTotal = ConvertTo-SmokeContractPositiveInteger `
+        $parsed.minimumTotalAssertions `
+        "Smoke contract minimumTotalAssertions"
+    $suiteRows = @($parsed.suites)
+    if ($suiteRows.Count -eq 0) {
+        throw "Smoke reachability contract must define at least one suite."
+    }
+
+    $seen = @{}
+    $suites = @()
+    $floorSum = 0L
+    foreach ($suite in $suiteRows) {
+        if ($null -eq $suite) {
+            throw "Smoke reachability contract contains an empty suite entry."
+        }
+        $suiteNames = @($suite.PSObject.Properties.Name)
+        foreach ($required in @("name", "minimumAssertions")) {
+            if ($suiteNames -cnotcontains $required) {
+                throw "Smoke reachability contract suite is missing '$required'."
+            }
+        }
+        foreach ($property in $suiteNames) {
+            if ($property -cnotin @("name", "minimumAssertions")) {
+                throw "Smoke reachability contract suite has unsupported property '$property'."
+            }
+        }
+        if ($suite.name -isnot [string] -or $suite.name -cnotmatch '^[a-z0-9][a-z0-9-]*$') {
+            throw "Smoke reachability suite names must match ^[a-z0-9][a-z0-9-]*$; got '$($suite.name)'."
+        }
+        if ($seen.ContainsKey($suite.name)) {
+            throw "Smoke reachability contract repeats suite '$($suite.name)'."
+        }
+        $seen[$suite.name] = $true
+        $minimumAssertions = ConvertTo-SmokeContractPositiveInteger `
+            $suite.minimumAssertions `
+            "Smoke suite '$($suite.name)' minimumAssertions"
+        $floorSum += $minimumAssertions
+        if ($floorSum -gt [int]::MaxValue) {
+            throw "Smoke reachability contract assertion floors exceed the supported range."
+        }
+        $suites += [pscustomobject]@{
+            Name = $suite.name
+            MinimumAssertions = $minimumAssertions
+        }
+    }
+    if ($floorSum -ne $minimumTotal) {
+        throw "Smoke reachability contract minimumTotalAssertions $minimumTotal does not equal suite floor sum $floorSum."
+    }
+
+    return [pscustomobject]@{
+        SchemaVersion = $schemaVersion
+        MinimumTotalAssertions = $minimumTotal
+        Suites = $suites
+    }
+}
+
+function Read-SmokeOutputSummary {
+    param([object[]]$Output)
+
+    $suitePrefix = "STATSPRO_SMOKE_SUITE"
+    $summaryPrefix = "STATSPRO_SMOKE_SUMMARY"
+    $suitePattern = '^STATSPRO_SMOKE_SUITE protocol=1 index=([0-9]+) name=([a-z0-9][a-z0-9-]*) assertions=([0-9]+)$'
+    $summaryPattern = '^STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=([0-9]+) assertions=([0-9]+)$'
+    $suites = @()
+    $seen = @{}
+    $summary = $null
+
+    foreach ($item in @($Output)) {
+        $line = "$item"
+        if ($line.StartsWith($suitePrefix, [System.StringComparison]::Ordinal)) {
+            if ($null -ne $summary) {
+                throw "Smoke suite sentinel appeared after the terminal summary."
+            }
+            if ($line -cnotmatch $suitePattern) {
+                throw "Malformed smoke suite sentinel: $line"
+            }
+            $index = ConvertFrom-SmokeProtocolInteger $Matches[1] "Smoke suite index"
+            $name = $Matches[2]
+            $assertions = ConvertFrom-SmokeProtocolInteger $Matches[3] "Smoke suite '$name' assertion count"
+            $expectedIndex = $suites.Count + 1
+            if ($index -ne $expectedIndex) {
+                throw "Smoke suite '$name' has index $index; expected $expectedIndex."
+            }
+            if ($seen.ContainsKey($name)) {
+                throw "Smoke output repeats suite '$name'."
+            }
+            $seen[$name] = $true
+            $suites += [pscustomobject]@{
+                Index = $index
+                Name = $name
+                Assertions = $assertions
+            }
+        }
+        elseif ($line.StartsWith($summaryPrefix, [System.StringComparison]::Ordinal)) {
+            if ($line -cnotmatch $summaryPattern) {
+                throw "Malformed smoke terminal summary: $line"
+            }
+            if ($null -ne $summary) {
+                throw "Smoke output contains more than one terminal summary."
+            }
+            $summary = [pscustomobject]@{
+                SuiteCount = ConvertFrom-SmokeProtocolInteger $Matches[1] "Smoke terminal suite count"
+                TotalAssertions = ConvertFrom-SmokeProtocolInteger $Matches[2] "Smoke terminal assertion count"
+            }
+        }
+    }
+
+    if ($null -eq $summary) {
+        throw "Smoke output is missing the terminal STATSPRO_SMOKE_SUMMARY line."
+    }
+    if ($suites.Count -eq 0) {
+        throw "Smoke output is missing STATSPRO_SMOKE_SUITE sentinels."
+    }
+    if ($summary.SuiteCount -ne $suites.Count) {
+        throw "Smoke terminal summary reports $($summary.SuiteCount) suites, but $($suites.Count) completed suite sentinels were emitted."
+    }
+    $sum = 0L
+    foreach ($suite in $suites) {
+        $sum += $suite.Assertions
+    }
+    if ($sum -ne $summary.TotalAssertions) {
+        throw "Smoke suite assertions sum to $sum, but the terminal summary reports $($summary.TotalAssertions)."
+    }
+
+    return [pscustomobject]@{
+        Suites = $suites
+        SuiteCount = $summary.SuiteCount
+        TotalAssertions = $summary.TotalAssertions
+    }
+}
+
+function Assert-SmokeContract {
+    param(
+        [object]$Summary,
+        [object]$Contract
+    )
+
+    if ($Summary.SuiteCount -ne $Contract.Suites.Count) {
+        throw "Smoke completed $($Summary.SuiteCount) suites; the contract requires $($Contract.Suites.Count)."
+    }
+    for ($index = 0; $index -lt $Contract.Suites.Count; $index++) {
+        $observed = $Summary.Suites[$index]
+        $expected = $Contract.Suites[$index]
+        if ($observed.Name -cne $expected.Name) {
+            throw "Smoke suite $($index + 1) is '$($observed.Name)'; the contract requires '$($expected.Name)'."
+        }
+        if ($observed.Assertions -lt $expected.MinimumAssertions) {
+            throw "Smoke suite '$($expected.Name)' completed $($observed.Assertions) assertions; the contract requires at least $($expected.MinimumAssertions)."
+        }
+    }
+    if ($Summary.TotalAssertions -lt $Contract.MinimumTotalAssertions) {
+        throw "Smoke completed $($Summary.TotalAssertions) assertions; the contract requires at least $($Contract.MinimumTotalAssertions)."
+    }
+}
+
+function ConvertTo-SmokeContractJson {
+    param([object]$Summary)
+
+    $suiteRows = @($Summary.Suites | ForEach-Object {
+        [ordered]@{
+            name = $_.Name
+            minimumAssertions = [int]$_.Assertions
+        }
+    })
+    $document = [ordered]@{
+        schemaVersion = 1
+        minimumTotalAssertions = [int]$Summary.TotalAssertions
+        suites = $suiteRows
+    }
+    return ($document | ConvertTo-Json -Depth 4)
+}
+
+function Write-SmokeContract {
+    param(
+        [string]$Path,
+        [object]$Summary
+    )
+
+    $directory = Split-Path -Parent $Path
+    $temporary = Join-Path $directory ("smoke-contract." + [System.Guid]::NewGuid().ToString("N") + ".tmp")
+    try {
+        $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+        [System.IO.File]::WriteAllText($temporary, (ConvertTo-SmokeContractJson $Summary) + "`n", $utf8NoBom)
+        $roundTrip = Read-SmokeContract -Path $temporary
+        Assert-SmokeContract -Summary $Summary -Contract $roundTrip
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            [System.IO.File]::Replace($temporary, $Path, $null)
+        }
+        else {
+            [System.IO.File]::Move($temporary, $Path)
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $temporary) {
+            Remove-Item -LiteralPath $temporary -Force
+        }
+    }
+}
+
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $ArchonTargetsFile = Join-Path $RepoRoot "StatsPro_ArchonTargets.lua"
 $SmokeFile = Join-Path $RepoRoot "scripts\smoke.lua"
+$SmokeContractFile = Join-Path $RepoRoot "scripts\smoke-contract.json"
 $MetadataCheck = Join-Path $RepoRoot "scripts\check-metadata.ps1"
 $ArchonTargetsCheck = Join-Path $RepoRoot "scripts\check-archon-targets.lua"
 $LuaGlobalStub = Join-Path $RepoRoot "scripts\types\wow-globals.d.lua"
 
 function Invoke-SelfTest {
     & $MetadataCheck -SelfTest
+
+    $smokeFixtureContract = [pscustomobject]@{
+        SchemaVersion = 1
+        MinimumTotalAssertions = 5
+        Suites = @(
+            [pscustomobject]@{ Name = "alpha"; MinimumAssertions = 2 },
+            [pscustomobject]@{ Name = "beta"; MinimumAssertions = 3 }
+        )
+    }
+    $validSmokeOutput = @(
+        "unrelated diagnostic output",
+        "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=alpha assertions=2",
+        "STATSPRO_SMOKE_SUITE protocol=1 index=2 name=beta assertions=3",
+        "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=2 assertions=5",
+        "StatsPro smoke: PASS (5 assertions)"
+    )
+    $validSmokeSummary = Read-SmokeOutputSummary -Output $validSmokeOutput
+    Assert-SmokeContract -Summary $validSmokeSummary -Contract $smokeFixtureContract
+
+    $growthSmokeSummary = Read-SmokeOutputSummary -Output @(
+        "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=alpha assertions=4",
+        "STATSPRO_SMOKE_SUITE protocol=1 index=2 name=beta assertions=6",
+        "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=2 assertions=10"
+    )
+    Assert-SmokeContract -Summary $growthSmokeSummary -Contract $smokeFixtureContract
+
+    Assert-ThrowsMatch "missing smoke suite rejected" {
+        $summary = Read-SmokeOutputSummary -Output @(
+            "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=alpha assertions=5",
+            "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=1 assertions=5"
+        )
+        Assert-SmokeContract -Summary $summary -Contract $smokeFixtureContract
+    } "contract requires 2"
+    Assert-ThrowsMatch "truncated smoke output rejected" {
+        [void](Read-SmokeOutputSummary -Output @(
+            "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=alpha assertions=2",
+            "STATSPRO_SMOKE_SUITE protocol=1 index=2 name=beta assertions=3"
+        ))
+    } "missing the terminal"
+    Assert-ThrowsMatch "smoke suite floor rejected" {
+        $summary = Read-SmokeOutputSummary -Output @(
+            "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=alpha assertions=1",
+            "STATSPRO_SMOKE_SUITE protocol=1 index=2 name=beta assertions=3",
+            "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=2 assertions=4"
+        )
+        Assert-SmokeContract -Summary $summary -Contract $smokeFixtureContract
+    } "requires at least 2"
+    Assert-ThrowsMatch "duplicate smoke suite rejected" {
+        [void](Read-SmokeOutputSummary -Output @(
+            "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=alpha assertions=2",
+            "STATSPRO_SMOKE_SUITE protocol=1 index=2 name=alpha assertions=3",
+            "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=2 assertions=5"
+        ))
+    } "repeats suite"
+    Assert-ThrowsMatch "reordered smoke suite rejected" {
+        $summary = Read-SmokeOutputSummary -Output @(
+            "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=beta assertions=3",
+            "STATSPRO_SMOKE_SUITE protocol=1 index=2 name=alpha assertions=2",
+            "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=2 assertions=5"
+        )
+        Assert-SmokeContract -Summary $summary -Contract $smokeFixtureContract
+    } "contract requires 'alpha'"
+    Assert-ThrowsMatch "smoke suite sum mismatch rejected" {
+        [void](Read-SmokeOutputSummary -Output @(
+            "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=alpha assertions=2",
+            "STATSPRO_SMOKE_SUITE protocol=1 index=2 name=beta assertions=3",
+            "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=2 assertions=6"
+        ))
+    } "sum to 5"
+    Assert-ThrowsMatch "legacy smoke summary alone rejected" {
+        [void](Read-SmokeOutputSummary -Output @("StatsPro smoke: PASS (5 assertions)"))
+    } "missing the terminal"
+    Assert-ThrowsMatch "uppercase smoke suite name rejected" {
+        [void](Read-SmokeOutputSummary -Output @(
+            "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=Alpha assertions=2",
+            "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=1 assertions=2"
+        ))
+    } "Malformed smoke suite sentinel"
+    Assert-ThrowsMatch "lowercase smoke status rejected" {
+        [void](Read-SmokeOutputSummary -Output @(
+            "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=alpha assertions=2",
+            "STATSPRO_SMOKE_SUMMARY protocol=1 status=pass suites=1 assertions=2"
+        ))
+    } "Malformed smoke terminal summary"
+
+    $realSmokeContract = Read-SmokeContract -Path $SmokeContractFile
+    if ($realSmokeContract.Suites.Count -lt 2) {
+        throw "Tracked smoke reachability contract must contain multiple named suites."
+    }
 
     $root = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lua-check-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $root | Out-Null
@@ -729,6 +1094,12 @@ $SmokeResult.Output | ForEach-Object { Write-Host $_ }
 if ($SmokeResult.ExitCode -ne 0) {
     throw "Lua smoke exited with code $($SmokeResult.ExitCode)"
 }
+$SmokeSummary = Read-SmokeOutputSummary -Output $SmokeResult.Output
+if (-not $UpdateSmokeContract) {
+    $SmokeContract = Read-SmokeContract -Path $SmokeContractFile
+    Assert-SmokeContract -Summary $SmokeSummary -Contract $SmokeContract
+    Write-Host "Smoke reachability contract passed: $($SmokeSummary.SuiteCount) suites, $($SmokeSummary.TotalAssertions) assertions."
+}
 
 $StaticAnalysisFiles = @(
     $RuntimeLuaRefs |
@@ -765,6 +1136,11 @@ $LuaLanguageServerResult = Invoke-LuaLanguageServerCheck `
 Assert-NoLuaDiagnostics `
     -Diagnostics @($LuaLanguageServerResult.Diagnostics) `
     -ExitCode $LuaLanguageServerResult.ExitCode
+
+if ($UpdateSmokeContract) {
+    Write-SmokeContract -Path $SmokeContractFile -Summary $SmokeSummary
+    Write-Host "Updated smoke reachability contract after the full gate passed: $SmokeContractFile"
+}
 
 Write-Host "All Lua checks passed."
 }

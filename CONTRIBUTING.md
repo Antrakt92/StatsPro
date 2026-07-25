@@ -17,6 +17,19 @@ exact locked artifacts into an isolated temporary tool root, verifies their
 checksums, and executes those owned paths without selecting an ambient `PATH`
 match.
 
+The smoke harness has a tracked reachability contract in
+[`scripts/smoke-contract.json`](scripts/smoke-contract.json). New assertions may
+raise the observed counts without changing that file. After an intentional test
+removal or suite-boundary change, regenerate the floors only with:
+
+```powershell
+.\scripts\check-lua.ps1 -UpdateSmokeContract -EnforceToolLocks
+```
+
+The update is written only after the complete verification gate passes. Review
+the contract diff, then rerun the normal `-EnforceToolLocks` command before
+committing.
+
 For user-visible changes, also test in the Retail client after `/reload`.
 Include screenshots for layout, Settings, font, color, or localization changes.
 

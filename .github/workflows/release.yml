@@ -55,6 +55,7 @@ jobs:
 
   release:
     needs: preflight
+    environment: marketplace-release
     # WARNING: BigWigs Packager uploads to public marketplaces and is not
     # idempotent there. Re-running an old tag can create duplicate
     # CurseForge/Wago/WoWI files even if the GitHub Release already existed.

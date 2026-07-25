@@ -912,6 +912,43 @@ function Get-WorkflowStepName {
     return $name.Groups[1].Value
 }
 
+function Assert-ExactWorkflowKeySet {
+    param(
+        [string]$Text,
+        [int]$Indent,
+        [string[]]$ExpectedKeys,
+        [string]$Description
+    )
+
+    $prefix = " " * $Indent
+    $actualKeys = @(
+        [regex]::Matches($Text, "(?m)^$([regex]::Escape($prefix))([A-Za-z][A-Za-z0-9_-]*):") |
+            ForEach-Object { $_.Groups[1].Value }
+    )
+    $actualUnique = @($actualKeys | Sort-Object -Unique)
+    $expectedUnique = @($ExpectedKeys | Sort-Object -Unique)
+    if ($actualKeys.Count -ne $actualUnique.Count -or
+        $ExpectedKeys.Count -ne $expectedUnique.Count -or
+        $actualUnique.Count -ne $expectedUnique.Count -or
+        (Compare-Object -ReferenceObject $expectedUnique -DifferenceObject $actualUnique)) {
+        throw "$Description keys are '$($actualKeys -join ', ')'; expected '$($ExpectedKeys -join ', ')'."
+    }
+}
+
+function Assert-ExactWorkflowBlock {
+    param(
+        [string]$Actual,
+        [string]$Expected,
+        [string]$Description
+    )
+
+    $normalizedActual = (($Actual -replace "`r", '')).Trim()
+    $normalizedExpected = (($Expected -replace "`r", '')).Trim()
+    if (-not [System.StringComparer]::Ordinal.Equals($normalizedActual, $normalizedExpected)) {
+        throw "$Description must match its exact canonical YAML block."
+    }
+}
+
 function Assert-WorkflowParameterBinding {
     param(
         [System.Text.RegularExpressions.Match]$StepBlock,
@@ -935,6 +972,12 @@ function Test-ContainsSecretReference {
 \bsecrets\s*(?:\.\s*__SECRET__\b|\[\s*['"]\s*__SECRET__\s*['"]\s*\])
 '@
     return $Text -match $pattern.Replace('__SECRET__', $escapedSecretName)
+}
+
+function Test-ContainsAnySecretReference {
+    param([string]$Text)
+
+    return $Text -match '(?i)\bsecrets\b'
 }
 
 function Test-ContainsGitHubTokenReference {
@@ -1095,8 +1138,8 @@ function Assert-CanonicalMarketplaceEnvironment {
         }
         $withoutCanonicalReferences = $withoutCanonicalReferences.Remove($lines[0].Index, $lines[0].Length)
     }
-    if (Test-ContainsMarketplaceTokenReference -Text $withoutCanonicalReferences) {
-        throw "Marketplace step '$StepName' contains a non-canonical marketplace secret reference."
+    if (Test-ContainsAnySecretReference -Text $withoutCanonicalReferences) {
+        throw "Marketplace step '$StepName' contains a non-canonical secret reference."
     }
 }
 
@@ -1128,10 +1171,34 @@ function Assert-ReleaseMarketplaceTokenScope {
     }
 }
 
-function Assert-MarketplaceCredentialWorkflowBoundary {
-    param([string]$WorkflowText)
+function Assert-TrustedManualWorkflowBoundary {
+    param(
+        [string]$WorkflowText,
+        [string]$JobName,
+        [string]$ExpectedTrigger,
+        [string]$ExpectedWorkflowName
+    )
 
-    Assert-WorkflowCheckoutCredentialBoundary -WorkflowText $WorkflowText -JobNames @('preflight')
+    Assert-WorkflowCheckoutCredentialBoundary -WorkflowText $WorkflowText -JobNames @($JobName)
+
+    if ($WorkflowText -match '(?m)^\s*(?:"[^"\r\n]+"|''[^''\r\n]+''|<<|\?[^:\r\n]*):') {
+        throw "Trusted manual workflow must not use quoted, merged, or explicit mapping keys."
+    }
+    if ($WorkflowText -match '(?m)^\s*[A-Za-z][A-Za-z0-9_-]*[ \t]+:') {
+        throw "Trusted manual workflow mapping keys must not contain whitespace before the colon."
+    }
+    if ($WorkflowText -match '(?m)^\s*(?:\?\s+|:\s+)') {
+        throw "Trusted manual workflow must not use multi-line explicit mapping keys."
+    }
+    Assert-ExactWorkflowKeySet `
+        -Text $WorkflowText `
+        -Indent 0 `
+        -ExpectedKeys @('name', 'on', 'permissions', 'jobs') `
+        -Description "Trusted manual workflow"
+    $nameLines = @([regex]::Matches($WorkflowText, '(?m)^name:\s*(.*?)\s*$'))
+    if ($nameLines.Count -ne 1 -or $nameLines[0].Groups[1].Value -ne $ExpectedWorkflowName) {
+        throw "Trusted manual workflow name must remain '$ExpectedWorkflowName'."
+    }
 
     $triggerBlock = [regex]::Match($WorkflowText, '(?ms)^on:\s*$.*?(?=^permissions:\s*$)')
     $normalizedTrigger = if ($triggerBlock.Success) {
@@ -1140,8 +1207,8 @@ function Assert-MarketplaceCredentialWorkflowBoundary {
     else {
         ''
     }
-    if ($normalizedTrigger -ne "on:`n  workflow_dispatch:") {
-        throw "Marketplace credential workflow must be manual workflow_dispatch only."
+    if ($normalizedTrigger -ne (($ExpectedTrigger -replace "`r", '').Trim())) {
+        throw "Trusted manual workflow must keep its exact workflow_dispatch trigger and inputs."
     }
     $permissionsBlock = [regex]::Match($WorkflowText, '(?ms)^permissions:\s*$.*?(?=^jobs:\s*$)')
     $normalizedPermissions = if ($permissionsBlock.Success) {
@@ -1151,8 +1218,104 @@ function Assert-MarketplaceCredentialWorkflowBoundary {
         ''
     }
     if ($normalizedPermissions -ne "permissions:`n  contents: read") {
-        throw "Marketplace credential workflow must have contents: read as its only permission."
+        throw "Trusted manual workflow must have contents: read as its only workflow permission."
     }
+
+    $jobBlock = Get-WorkflowJobBlock -WorkflowText $WorkflowText -JobName $JobName
+    Assert-ExactWorkflowKeySet `
+        -Text $jobBlock.Value `
+        -Indent 4 `
+        -ExpectedKeys @('if', 'environment', 'runs-on', 'steps') `
+        -Description "Trusted manual job '$JobName'"
+    $runsOnLines = @([regex]::Matches($jobBlock.Value, '(?m)^    runs-on:\s*(.*?)\s*$'))
+    if ($runsOnLines.Count -ne 1 -or $runsOnLines[0].Groups[1].Value -ne 'ubuntu-latest') {
+        throw "Trusted manual job '$JobName' must run only on ubuntu-latest."
+    }
+    $expectedIf = '${{ github.ref == ''refs/heads/main'' }}'
+    $ifLines = @([regex]::Matches(
+        $jobBlock.Value,
+        "(?m)^    if:\s*$([regex]::Escape($expectedIf))\s*`$"
+    ))
+    if ($ifLines.Count -ne 1) {
+        throw "Trusted manual job '$JobName' must require the exact main ref as defense in depth."
+    }
+    $environmentLines = @([regex]::Matches($jobBlock.Value, '(?m)^    environment:\s*(.*?)\s*$'))
+    if ($environmentLines.Count -ne 1 -or $environmentLines[0].Groups[1].Value -ne 'marketplace-manual') {
+        throw "Trusted manual job '$JobName' must bind exactly environment marketplace-manual."
+    }
+    $stepBlocks = @([regex]::Matches($jobBlock.Value, '(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)'))
+    $rawStepStarts = @([regex]::Matches($jobBlock.Value, '(?m)^\s{6}-\s+'))
+    if ($rawStepStarts.Count -ne $stepBlocks.Count) {
+        throw "Trusted manual job '$JobName' must use named steps only."
+    }
+    $checkoutSteps = @($stepBlocks | Where-Object {
+        $_.Value -match '(?m)^\s{8}uses:\s*actions/checkout@[0-9a-f]{40}\s*$'
+    })
+    if ($checkoutSteps.Count -ne 1) {
+        throw "Trusted manual job '$JobName' must contain exactly one SHA-pinned checkout step."
+    }
+    $checkoutStep = $checkoutSteps[0]
+    Assert-ExactWorkflowKeySet `
+        -Text $checkoutStep.Value `
+        -Indent 8 `
+        -ExpectedKeys @('uses', 'with') `
+        -Description "Trusted manual job '$JobName' checkout step"
+    Assert-ExactWorkflowKeySet `
+        -Text $checkoutStep.Value `
+        -Indent 10 `
+        -ExpectedKeys @('ref', 'fetch-depth', 'persist-credentials') `
+        -Description "Trusted manual job '$JobName' checkout inputs"
+    $expectedCheckoutStep = @'
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+'@
+    $expectedCheckoutRef = '${{ github.sha }}'
+    $checkoutRefs = @([regex]::Matches($checkoutStep.Value, '(?m)^\s{10}ref:\s*(.*?)\s*$'))
+    if ($checkoutRefs.Count -ne 1 -or $checkoutRefs[0].Groups[1].Value -ne $expectedCheckoutRef) {
+        throw "Trusted manual job '$JobName' checkout must bind the exact dispatched commit with ref: `${{ github.sha }}."
+    }
+    if ($checkoutStep.Value -match '(?m)^\s{10}(?:repository|path|submodules):') {
+        throw "Trusted manual job '$JobName' checkout must not redirect repository content."
+    }
+    Assert-ExactWorkflowBlock `
+        -Actual $checkoutStep.Value `
+        -Expected $expectedCheckoutStep `
+        -Description "Trusted manual job '$JobName' checkout step"
+
+    $checkoutOrdinal = [array]::IndexOf($stepBlocks, $checkoutStep)
+    if ($checkoutOrdinal -lt 0 -or $checkoutOrdinal + 1 -ge $stepBlocks.Count) {
+        throw "Trusted manual job '$JobName' must verify checkout credentials immediately after checkout."
+    }
+    $anonymousStep = $stepBlocks[$checkoutOrdinal + 1]
+    Assert-ExactWorkflowKeySet `
+        -Text $anonymousStep.Value `
+        -Indent 8 `
+        -ExpectedKeys @('shell', 'run') `
+        -Description "Trusted manual job '$JobName' anonymous checkout step"
+    $expectedAnonymousStep = @'
+      - name: Verify anonymous checkout boundary
+        shell: pwsh
+        run: ./scripts/check-anonymous-checkout.ps1
+'@
+    Assert-ExactWorkflowBlock `
+        -Actual $anonymousStep.Value `
+        -Expected $expectedAnonymousStep `
+        -Description "Trusted manual job '$JobName' anonymous checkout step"
+}
+
+function Assert-MarketplaceCredentialWorkflowBoundary {
+    param([string]$WorkflowText)
+
+    Assert-TrustedManualWorkflowBoundary `
+        -WorkflowText $WorkflowText `
+        -JobName 'preflight' `
+        -ExpectedTrigger "on:`n  workflow_dispatch:" `
+        -ExpectedWorkflowName 'Marketplace credential preflight'
+
     if ($WorkflowText -match 'BigWigsMods/packager@' -or
         $WorkflowText -match '(?i)manage-github-release\.ps1.+CreateDraft' -or
         $WorkflowText -match '(?m)^\s+args:\s*.*(?:^|\s)-o(?:\s|$)') {
@@ -1160,6 +1323,13 @@ function Assert-MarketplaceCredentialWorkflowBoundary {
     }
 
     $stepBlocks = @([regex]::Matches($WorkflowText, '(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)'))
+    $stepNames = @($stepBlocks | ForEach-Object { Get-WorkflowStepName -StepBlock $_ })
+    if ($stepNames.Count -ne 3 -or
+        $stepNames[0] -ne 'Checkout' -or
+        $stepNames[1] -ne 'Verify anonymous checkout boundary' -or
+        $stepNames[2] -ne 'Verify marketplace release credentials and versions') {
+        throw "Marketplace credential workflow must contain only checkout, anonymous verification, and the credential checker in that order."
+    }
     $credentialSteps = @($stepBlocks | Where-Object {
         (Get-WorkflowStepName -StepBlock $_) -eq 'Verify marketplace release credentials and versions'
     })
@@ -1167,6 +1337,25 @@ function Assert-MarketplaceCredentialWorkflowBoundary {
         throw "Marketplace credential workflow must contain exactly one credential preflight step."
     }
     $credentialStep = $credentialSteps[0]
+    Assert-ExactWorkflowKeySet `
+        -Text $credentialStep.Value `
+        -Indent 8 `
+        -ExpectedKeys @('shell', 'env', 'run') `
+        -Description "Marketplace credential checker step"
+    Assert-ExactWorkflowKeySet `
+        -Text $credentialStep.Value `
+        -Indent 10 `
+        -ExpectedKeys @('CF_API_KEY', 'WAGO_API_TOKEN', 'WOWI_API_TOKEN') `
+        -Description "Marketplace credential checker environment"
+    $expectedCredentialStep = @'
+      - name: Verify marketplace release credentials and versions
+        shell: pwsh
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
+        run: ./scripts/check-marketplace-versions.ps1
+'@
     Assert-CanonicalMarketplaceEnvironment `
         -StepBlock $credentialStep `
         -StepName 'Verify marketplace release credentials and versions'
@@ -1175,12 +1364,188 @@ function Assert-MarketplaceCredentialWorkflowBoundary {
         $credentialStep.Value -match '(?m)^\s{8}(?:if|continue-on-error|uses):') {
         throw "Marketplace credential workflow must execute the exact mandatory pwsh checker."
     }
+    Assert-ExactWorkflowBlock `
+        -Actual $credentialStep.Value `
+        -Expected $expectedCredentialStep `
+        -Description "Marketplace credential checker step"
 
     $outsideCredentialStep = $WorkflowText.Remove($credentialStep.Index, $credentialStep.Length)
-    if ((Test-ContainsMarketplaceTokenReference -Text $outsideCredentialStep) -or
+    if ((Test-ContainsAnySecretReference -Text $outsideCredentialStep) -or
         $outsideCredentialStep -match '(?m)^\s*(?:CF_API_KEY|WAGO_API_TOKEN|WOWI_API_TOKEN):') {
-        throw "Marketplace credential workflow tokens must be scoped to its checker step."
+        throw "Marketplace credential workflow secrets must be scoped to its checker step."
     }
+    $expectedWorkflow = @'
+name: Marketplace credential preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    environment: marketplace-manual
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify anonymous checkout boundary
+        shell: pwsh
+        run: ./scripts/check-anonymous-checkout.ps1
+
+      - name: Verify marketplace release credentials and versions
+        shell: pwsh
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
+        run: ./scripts/check-marketplace-versions.ps1
+'@
+    Assert-ExactWorkflowBlock `
+        -Actual $WorkflowText `
+        -Expected $expectedWorkflow `
+        -Description "Marketplace credential workflow"
+}
+
+function Assert-CurseForgeDiagnosticsWorkflowBoundary {
+    param([string]$WorkflowText)
+
+    $expectedTrigger = @'
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version label to search for, such as vX.Y.Z
+        required: true
+'@
+    Assert-TrustedManualWorkflowBoundary `
+        -WorkflowText $WorkflowText `
+        -JobName 'files' `
+        -ExpectedTrigger $expectedTrigger `
+        -ExpectedWorkflowName 'CurseForge diagnostics'
+
+    $stepBlocks = @([regex]::Matches($WorkflowText, '(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)'))
+    $stepNames = @($stepBlocks | ForEach-Object { Get-WorkflowStepName -StepBlock $_ })
+    if ($stepNames.Count -ne 3 -or
+        $stepNames[0] -ne 'Checkout' -or
+        $stepNames[1] -ne 'Verify anonymous checkout boundary' -or
+        $stepNames[2] -ne 'Query CurseForge legacy API') {
+        throw "CurseForge diagnostics workflow must contain only checkout, anonymous verification, and the query in that order."
+    }
+    $querySteps = @($stepBlocks | Where-Object {
+        (Get-WorkflowStepName -StepBlock $_) -eq 'Query CurseForge legacy API'
+    })
+    if ($querySteps.Count -ne 1) {
+        throw "CurseForge diagnostics workflow must contain exactly one query step."
+    }
+    $queryStep = $querySteps[0]
+    Assert-ExactWorkflowKeySet `
+        -Text $queryStep.Value `
+        -Indent 8 `
+        -ExpectedKeys @('shell', 'env', 'run') `
+        -Description "CurseForge diagnostics query step"
+    Assert-ExactWorkflowKeySet `
+        -Text $queryStep.Value `
+        -Indent 10 `
+        -ExpectedKeys @('CF_API_KEY', 'STATSPRO_CF_PROJECT_ID', 'STATSPRO_VERSION') `
+        -Description "CurseForge diagnostics query environment"
+    $expectedQueryStep = @'
+      - name: Query CurseForge legacy API
+        shell: pwsh
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          STATSPRO_CF_PROJECT_ID: "1525100"
+          STATSPRO_VERSION: ${{ inputs.version }}
+        run: ./scripts/check-curseforge-diagnostics.ps1
+'@
+    $actualNames = @(
+        [regex]::Matches($queryStep.Value, '(?m)^\s{10}([A-Z][A-Z0-9_]+):') |
+            ForEach-Object { $_.Groups[1].Value } |
+            Sort-Object
+    )
+    $expectedNames = @('CF_API_KEY', 'STATSPRO_CF_PROJECT_ID', 'STATSPRO_VERSION')
+    if ($actualNames.Count -ne $expectedNames.Count -or
+        (Compare-Object -ReferenceObject ($expectedNames | Sort-Object) -DifferenceObject $actualNames)) {
+        throw "CurseForge diagnostics query must expose only its exact three environment keys."
+    }
+    $canonicalPatterns = @(
+        '(?m)^\s{10}CF_API_KEY:\s*\$\{\{\s*secrets\.CF_API_KEY\s*\}\}\s*$',
+        '(?m)^\s{10}STATSPRO_CF_PROJECT_ID:\s*"1525100"\s*$',
+        '(?m)^\s{10}STATSPRO_VERSION:\s*\$\{\{\s*inputs\.version\s*\}\}\s*$'
+    )
+    $withoutCanonicalBindings = $queryStep.Value
+    foreach ($pattern in $canonicalPatterns) {
+        $matches = @([regex]::Matches($withoutCanonicalBindings, $pattern))
+        if ($matches.Count -ne 1) {
+            throw "CurseForge diagnostics query must keep its exact secret, project, and version bindings."
+        }
+        $withoutCanonicalBindings = $withoutCanonicalBindings.Remove($matches[0].Index, $matches[0].Length)
+    }
+    if ((Test-ContainsAnySecretReference -Text $withoutCanonicalBindings) -or
+        $queryStep.Value -notmatch '(?m)^\s{8}shell:\s*pwsh\s*$' -or
+        $queryStep.Value -notmatch '(?m)^\s{8}run:\s*\./scripts/check-curseforge-diagnostics\.ps1\s*$' -or
+        $queryStep.Value -match '(?m)^\s{8}(?:if|continue-on-error|uses):') {
+        throw "CurseForge diagnostics must execute the exact mandatory pwsh checker with no extra secret source."
+    }
+    Assert-ExactWorkflowBlock `
+        -Actual $queryStep.Value `
+        -Expected $expectedQueryStep `
+        -Description "CurseForge diagnostics query step"
+
+    $outsideQueryStep = $WorkflowText.Remove($queryStep.Index, $queryStep.Length)
+    if ((Test-ContainsAnySecretReference -Text $outsideQueryStep) -or
+        $outsideQueryStep -match '(?m)^\s*CF_API_KEY:') {
+        throw "CurseForge diagnostics secret must be scoped to its query step."
+    }
+    $expectedWorkflow = @'
+name: CurseForge diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version label to search for, such as vX.Y.Z
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  files:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    environment: marketplace-manual
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify anonymous checkout boundary
+        shell: pwsh
+        run: ./scripts/check-anonymous-checkout.ps1
+
+      - name: Query CurseForge legacy API
+        shell: pwsh
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          STATSPRO_CF_PROJECT_ID: "1525100"
+          STATSPRO_VERSION: ${{ inputs.version }}
+        run: ./scripts/check-curseforge-diagnostics.ps1
+'@
+    Assert-ExactWorkflowBlock `
+        -Actual $WorkflowText `
+        -Expected $expectedWorkflow `
+        -Description "CurseForge diagnostics workflow"
 }
 
 function Assert-ReleaseWorkflowBoundary {
@@ -1208,6 +1573,10 @@ function Assert-ReleaseWorkflowBoundary {
     $releaseJob = Get-WorkflowJobBlock -WorkflowText $WorkflowText -JobName 'release'
     if ($releaseJob.Value -notmatch '(?m)^    needs: preflight\s*$') {
         throw "Release publication must depend on the read-only preflight job."
+    }
+    $releaseEnvironments = @([regex]::Matches($releaseJob.Value, '(?m)^    environment:\s*(.*?)\s*$'))
+    if ($releaseEnvironments.Count -ne 1 -or $releaseEnvironments[0].Groups[1].Value -ne 'marketplace-release') {
+        throw "Release publication must bind exactly environment marketplace-release."
     }
 
     $orderedSteps = @(
@@ -2032,7 +2401,72 @@ function Invoke-SelfTest {
         Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
             '  workflow_dispatch:',
             '  push:')
-    } "workflow_dispatch only"
+    } "exact workflow_dispatch trigger"
+    Assert-ThrowsMatch "marketplace credential working-directory redirect rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
+            'name: Marketplace credential preflight',
+            "name: Marketplace credential preflight`n`ndefaults:`n  run:`n    working-directory: attacker-controlled")
+    } "Trusted manual workflow keys"
+    Assert-ThrowsMatch "spaced marketplace credential working-directory redirect rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
+            'name: Marketplace credential preflight',
+            "name: Marketplace credential preflight`n`ndefaults :`n  run:`n    working-directory: attacker-controlled")
+    } "whitespace before the colon"
+    Assert-ThrowsMatch "non-main marketplace credential dispatch rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
+            "github.ref == 'refs/heads/main'",
+            "github.ref == 'refs/heads/feature'")
+    } "exact main ref"
+    Assert-ThrowsMatch "wrong marketplace credential environment rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
+            'environment: marketplace-manual',
+            'environment: marketplace-release')
+    } "environment marketplace-manual"
+    Assert-ThrowsMatch "dynamic marketplace credential checkout rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
+            'ref: ${{ github.sha }}',
+            'ref: ${{ github.ref }}')
+    } "exact dispatched commit"
+    Assert-ThrowsMatch "self-hosted marketplace credential runner rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
+            'runs-on: ubuntu-latest',
+            'runs-on: self-hosted')
+    } "run only on ubuntu-latest"
+    Assert-ThrowsMatch "job permission override in marketplace credential workflow rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
+            '  preflight:',
+            "  preflight:`n    permissions:`n      contents: write")
+    } "Trusted manual job 'preflight' keys"
+    Assert-ThrowsMatch "marketplace credential container interception rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
+            '    runs-on: ubuntu-latest',
+            "    runs-on: ubuntu-latest`n    container: attacker/image")
+    } "Trusted manual job 'preflight' keys"
+    Assert-ThrowsMatch "quoted marketplace credential container interception rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
+            '    runs-on: ubuntu-latest',
+            "    runs-on: ubuntu-latest`n    `"container`": attacker/image")
+    } "quoted, merged, or explicit mapping keys"
+    Assert-ThrowsMatch "spaced marketplace credential container interception rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
+            '    runs-on: ubuntu-latest',
+            "    runs-on: ubuntu-latest`n    container : attacker/image")
+    } "whitespace before the colon"
+    Assert-ThrowsMatch "explicit marketplace credential container interception rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
+            '    runs-on: ubuntu-latest',
+            "    runs-on: ubuntu-latest`n    ? container`n    : attacker/image")
+    } "multi-line explicit mapping keys"
+    Assert-ThrowsMatch "tagged marketplace credential container interception rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
+            '    runs-on: ubuntu-latest',
+            "    runs-on: ubuntu-latest`n    !!str container: attacker/image")
+    } "Marketplace credential workflow.*canonical YAML block"
+    Assert-ThrowsMatch "intervening marketplace credential step rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
+            '      - name: Verify marketplace release credentials and versions',
+            "      - name: Mutate checker`n        run: echo changed`n`n      - name: Verify marketplace release credentials and versions")
+    } "must contain only checkout"
     Assert-ThrowsMatch "swapped manual marketplace secret bindings rejected" {
         $mutated = $marketplaceWorkflowText.Replace(
             'secrets.CF_API_KEY',
@@ -2048,13 +2482,13 @@ function Invoke-SelfTest {
             '  preflight:',
             "  preflight:`n    env:`n      WAGO_API_TOKEN: `${{ secrets.WAGO_API_TOKEN }}")
         Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $mutated
-    } "scoped to its checker step"
+    } "Trusted manual job 'preflight' keys|scoped to its checker step"
     Assert-ThrowsMatch "fallible manual marketplace checker rejected" {
         $mutated = $marketplaceWorkflowText.Replace(
             '      - name: Verify marketplace release credentials and versions',
             "      - name: Verify marketplace release credentials and versions`n        continue-on-error: true")
         Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $mutated
-    } "exact mandatory pwsh checker"
+    } "checker step keys|exact mandatory pwsh checker"
     Assert-ThrowsMatch "Packager in manual marketplace workflow rejected" {
         $mutated = $marketplaceWorkflowText.Replace(
             '      - name: Verify marketplace release credentials and versions',
@@ -2064,6 +2498,115 @@ function Invoke-SelfTest {
     Assert-ThrowsMatch "manual marketplace self-test substitution rejected" {
         Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText ($marketplaceWorkflowText -replace '\./scripts/check-marketplace-versions\.ps1', './scripts/check-marketplace-versions.ps1 -SelfTest')
     } "exact mandatory pwsh checker"
+    Assert-ThrowsMatch "bare marketplace secrets context rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
+            '          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}',
+            "          WAGO_API_TOKEN: `${{ secrets.WAGO_API_TOKEN }}`n          payload: `${{ toJSON(secrets) }}")
+    } "checker environment keys|non-canonical secret"
+    Assert-ThrowsMatch "continued marketplace checker command rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
+            '        run: ./scripts/check-marketplace-versions.ps1',
+            "        run: ./scripts/check-marketplace-versions.ps1`n          ; Write-Host `$env:CF_API_KEY")
+    } "canonical YAML block"
+    Assert-ThrowsMatch "continued marketplace anonymous-check command rejected" {
+        Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText.Replace(
+            '        run: ./scripts/check-anonymous-checkout.ps1',
+            "        run: ./scripts/check-anonymous-checkout.ps1`n          ; Write-Host changed")
+    } "canonical YAML block"
+
+    $diagnosticsWorkflowPath = Join-Path (Join-Path $PSScriptRoot "..") ".github\workflows\curseforge-diagnostics.yml"
+    $diagnosticsWorkflowText = Get-Content -LiteralPath $diagnosticsWorkflowPath -Raw -Encoding UTF8
+    Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText
+    Assert-ThrowsMatch "non-manual CurseForge diagnostics workflow rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            '  workflow_dispatch:',
+            '  pull_request_target:')
+    } "exact workflow_dispatch trigger"
+    Assert-ThrowsMatch "CurseForge diagnostics working-directory redirect rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            'name: CurseForge diagnostics',
+            "name: CurseForge diagnostics`n`ndefaults:`n  run:`n    working-directory: attacker-controlled")
+    } "Trusted manual workflow keys"
+    Assert-ThrowsMatch "spaced CurseForge diagnostics container interception rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            '    runs-on: ubuntu-latest',
+            "    runs-on: ubuntu-latest`n    container : attacker/image")
+    } "whitespace before the colon"
+    Assert-ThrowsMatch "non-main CurseForge diagnostics dispatch rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            "github.ref == 'refs/heads/main'",
+            "github.ref == 'refs/tags/main'")
+    } "exact main ref"
+    Assert-ThrowsMatch "wrong CurseForge diagnostics environment rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            'environment: marketplace-manual',
+            'environment: marketplace-release')
+    } "environment marketplace-manual"
+    Assert-ThrowsMatch "dynamic CurseForge diagnostics checkout rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            'ref: ${{ github.sha }}',
+            'ref: ${{ github.ref }}')
+    } "exact dispatched commit"
+    Assert-ThrowsMatch "self-hosted CurseForge diagnostics runner rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            'runs-on: ubuntu-latest',
+            'runs-on: self-hosted')
+    } "run only on ubuntu-latest"
+    Assert-ThrowsMatch "persisted CurseForge diagnostics checkout credentials rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            'persist-credentials: false',
+            'persist-credentials: true')
+    } "literal persist-credentials: false"
+    Assert-ThrowsMatch "missing CurseForge diagnostics anonymous check rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            '      - name: Verify anonymous checkout boundary',
+            '      - name: Credential boundary removed')
+    } "verify checkout credentials immediately"
+    Assert-ThrowsMatch "CurseForge diagnostics checker drift rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            './scripts/check-curseforge-diagnostics.ps1',
+            './scripts/check-curseforge-diagnostics.ps1 -SelfTest')
+    } "exact mandatory pwsh checker"
+    Assert-ThrowsMatch "CurseForge diagnostics version input drift rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            '${{ inputs.version }}',
+            '${{ github.ref_name }}')
+    } "exact secret, project, and version bindings"
+    Assert-ThrowsMatch "job-level CurseForge diagnostics secret rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            '  files:',
+            "  files:`n    env:`n      CF_API_KEY: `${{ secrets.CF_API_KEY }}")
+    } "Trusted manual job 'files' keys|scoped to its query step"
+    Assert-ThrowsMatch "extra CurseForge diagnostics secret rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            '          STATSPRO_VERSION: ${{ inputs.version }}',
+            "          STATSPRO_VERSION: `${{ inputs.version }}`n          EXTRA_TOKEN: `${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}")
+    } "query environment keys|exact three environment keys|extra secret source"
+    Assert-ThrowsMatch "bare CurseForge diagnostics secrets context rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            '          STATSPRO_VERSION: ${{ inputs.version }}',
+            "          STATSPRO_VERSION: `${{ inputs.version }}`n          payload: `${{ toJSON(secrets) }}")
+    } "query environment keys|extra secret source"
+    Assert-ThrowsMatch "intervening CurseForge diagnostics step rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            '      - name: Query CurseForge legacy API',
+            "      - name: Mutate checker`n        run: echo changed`n`n      - name: Query CurseForge legacy API")
+    } "must contain only checkout"
+    Assert-ThrowsMatch "duplicate CurseForge diagnostics run key rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            '        run: ./scripts/check-curseforge-diagnostics.ps1',
+            "        run: ./scripts/check-curseforge-diagnostics.ps1`n        run: echo leaked")
+    } "query step keys"
+    Assert-ThrowsMatch "continued CurseForge diagnostics command rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            '        run: ./scripts/check-curseforge-diagnostics.ps1',
+            "        run: ./scripts/check-curseforge-diagnostics.ps1`n          ; Write-Host `$env:CF_API_KEY")
+    } "canonical YAML block"
+    Assert-ThrowsMatch "continued diagnostics anonymous-check command rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            '        run: ./scripts/check-anonymous-checkout.ps1',
+            "        run: ./scripts/check-anonymous-checkout.ps1`n          ; Write-Host changed")
+    } "canonical YAML block"
 
     foreach ($reference in @(
         '${{ secrets.GITHUB_TOKEN }}',
@@ -2108,6 +2651,16 @@ function Invoke-SelfTest {
             $releaseJobBlock.Index,
             $Replacement)
     }
+    Assert-ThrowsMatch "missing release credential environment rejected" {
+        $replacement = $releaseJobBlock.Value -replace '(?m)^\s{4}environment:\s*marketplace-release\s*\r?\n', ''
+        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
+    } "environment marketplace-release"
+    Assert-ThrowsMatch "wrong release credential environment rejected" {
+        $replacement = $releaseJobBlock.Value.Replace(
+            '    environment: marketplace-release',
+            '    environment: marketplace-manual')
+        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
+    } "environment marketplace-release"
     Assert-ThrowsMatch "missing checkout persistence boundary rejected" {
         $replacement = $releaseJobBlock.Value -replace '(?m)^\s{10}persist-credentials:\s*false\s*\r?\n', ''
         Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)

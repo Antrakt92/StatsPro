@@ -216,6 +216,117 @@ function Assert-MinimalHistoryRuleset {
         -Expected @("deletion", "non_fast_forward")
 }
 
+function Assert-CredentialEnvironment {
+    param(
+        [object]$Environment,
+        [object[]]$Policies,
+        [object[]]$Secrets,
+        [string]$ExpectedName,
+        [string]$ExpectedPolicyName,
+        [string]$ExpectedPolicyType,
+        [string[]]$ExpectedSecretNames,
+        [AllowEmptyString()][string]$ExpectedReviewerLogin = ""
+    )
+
+    if ($null -eq $Environment -or $Environment -is [System.Array] -or
+        [string]$Environment.name -ne $ExpectedName) {
+        throw "Credential environment '$ExpectedName' must exist as one exact environment."
+    }
+    if ($Environment.PSObject.Properties.Name -notcontains "can_admins_bypass" -or
+        $Environment.can_admins_bypass -isnot [bool] -or
+        [bool]$Environment.can_admins_bypass) {
+        throw "Credential environment '$ExpectedName' must disable administrator bypass."
+    }
+    $deploymentPolicy = $Environment.PSObject.Properties["deployment_branch_policy"]
+    if (-not $deploymentPolicy -or $null -eq $deploymentPolicy.Value -or
+        $deploymentPolicy.Value.protected_branches -isnot [bool] -or
+        $deploymentPolicy.Value.custom_branch_policies -isnot [bool] -or
+        [bool]$deploymentPolicy.Value.protected_branches -or
+        -not [bool]$deploymentPolicy.Value.custom_branch_policies) {
+        throw "Credential environment '$ExpectedName' must use custom deployment branch policies only."
+    }
+
+    if ($Policies.Count -ne 1 -or
+        [string]$Policies[0].name -ne $ExpectedPolicyName -or
+        [string]$Policies[0].type -ne $ExpectedPolicyType) {
+        throw "Credential environment '$ExpectedName' must allow only $ExpectedPolicyType '$ExpectedPolicyName'."
+    }
+    Assert-ExactStringSet `
+        -Description "Credential environment '$ExpectedName' secrets" `
+        -Actual @($Secrets | ForEach-Object { [string]$_.name }) `
+        -Expected $ExpectedSecretNames
+
+    $protectionRules = @($Environment.protection_rules)
+    $expectedRuleTypes = if ([string]::IsNullOrWhiteSpace($ExpectedReviewerLogin)) {
+        @("branch_policy")
+    }
+    else {
+        @("branch_policy", "required_reviewers")
+    }
+    Assert-ExactStringSet `
+        -Description "Credential environment '$ExpectedName' protection rule types" `
+        -Actual @($protectionRules | ForEach-Object { [string]$_.type }) `
+        -Expected $expectedRuleTypes
+
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedReviewerLogin)) {
+        $reviewRules = @($protectionRules | Where-Object { [string]$_.type -eq "required_reviewers" })
+        if ($reviewRules.Count -ne 1 -or
+            $reviewRules[0].prevent_self_review -isnot [bool] -or
+            [bool]$reviewRules[0].prevent_self_review) {
+            throw "Credential environment '$ExpectedName' must require an owner review with self-review allowed for the sole owner."
+        }
+        $reviewers = @($reviewRules[0].reviewers)
+        if ($reviewers.Count -ne 1 -or
+            [string]$reviewers[0].type -ne "User" -or
+            [string]$reviewers[0].reviewer.login -ne $ExpectedReviewerLogin) {
+            throw "Credential environment '$ExpectedName' reviewer must be repository owner '$ExpectedReviewerLogin'."
+        }
+    }
+}
+
+function Assert-CredentialEnvironmentSettings {
+    param(
+        [object[]]$Environments,
+        [object]$ManualEnvironment,
+        [object[]]$ManualPolicies,
+        [object[]]$ManualSecrets,
+        [object]$ReleaseEnvironment,
+        [object[]]$ReleasePolicies,
+        [object[]]$ReleaseSecrets,
+        [object[]]$RepositorySecrets,
+        [string]$RepositoryOwner
+    )
+
+    $marketplaceSecrets = @("CF_API_KEY", "WAGO_API_TOKEN", "WOWI_API_TOKEN")
+    $protectedSecrets = @($marketplaceSecrets + "IMMUTABLE_RELEASES_READ_TOKEN")
+    Assert-ExactStringSet `
+        -Description "Repository credential environment names" `
+        -Actual @($Environments | ForEach-Object { [string]$_.name }) `
+        -Expected @("marketplace-manual", "marketplace-release")
+    Assert-CredentialEnvironment `
+        -Environment $ManualEnvironment `
+        -Policies $ManualPolicies `
+        -Secrets $ManualSecrets `
+        -ExpectedName "marketplace-manual" `
+        -ExpectedPolicyName "main" `
+        -ExpectedPolicyType "branch" `
+        -ExpectedSecretNames $marketplaceSecrets
+    Assert-CredentialEnvironment `
+        -Environment $ReleaseEnvironment `
+        -Policies $ReleasePolicies `
+        -Secrets $ReleaseSecrets `
+        -ExpectedName "marketplace-release" `
+        -ExpectedPolicyName "v*" `
+        -ExpectedPolicyType "tag" `
+        -ExpectedSecretNames $protectedSecrets `
+        -ExpectedReviewerLogin $RepositoryOwner
+
+    if ($RepositorySecrets.Count -ne 0) {
+        $repositorySecretNames = @($RepositorySecrets | ForEach-Object { [string]$_.name } | Sort-Object)
+        throw "Repository-level Actions secrets must be empty; found: $($repositorySecretNames -join ', ')."
+    }
+}
+
 function Assert-ReleaseWorkflowKeepsExplicitWritePermission {
     param([string]$WorkflowText)
 
@@ -434,6 +545,150 @@ function Invoke-SelfTest {
         Assert-MinimalHistoryRuleset -Rulesets @($updateBlocked) -Name "Protect main history" -Target "branch" -IncludedRef "refs/heads/main"
     } "rule types"
 
+    $newEnvironmentFixture = {
+        param([string]$Name, [switch]$RequireReviewer)
+        $rules = @([pscustomobject]@{ type = "branch_policy" })
+        if ($RequireReviewer) {
+            $rules += [pscustomobject]@{
+                type = "required_reviewers"
+                prevent_self_review = $false
+                reviewers = @([pscustomobject]@{
+                    type = "User"
+                    reviewer = [pscustomobject]@{ login = "owner" }
+                })
+            }
+        }
+        return [pscustomobject]@{
+            name = $Name
+            can_admins_bypass = $false
+            protection_rules = $rules
+            deployment_branch_policy = [pscustomobject]@{
+                protected_branches = $false
+                custom_branch_policies = $true
+            }
+        }
+    }
+    $manualEnvironment = & $newEnvironmentFixture "marketplace-manual"
+    $releaseEnvironment = & $newEnvironmentFixture "marketplace-release" -RequireReviewer
+    $manualPolicies = @([pscustomobject]@{ name = "main"; type = "branch" })
+    $releasePolicies = @([pscustomobject]@{ name = "v*"; type = "tag" })
+    $manualSecrets = @("CF_API_KEY", "WAGO_API_TOKEN", "WOWI_API_TOKEN") |
+        ForEach-Object { [pscustomobject]@{ name = $_ } }
+    $releaseSecrets = @("CF_API_KEY", "IMMUTABLE_RELEASES_READ_TOKEN", "WAGO_API_TOKEN", "WOWI_API_TOKEN") |
+        ForEach-Object { [pscustomobject]@{ name = $_ } }
+    Assert-CredentialEnvironmentSettings `
+        -Environments @($manualEnvironment, $releaseEnvironment) `
+        -ManualEnvironment $manualEnvironment `
+        -ManualPolicies $manualPolicies `
+        -ManualSecrets $manualSecrets `
+        -ReleaseEnvironment $releaseEnvironment `
+        -ReleasePolicies $releasePolicies `
+        -ReleaseSecrets $releaseSecrets `
+        -RepositorySecrets @() `
+        -RepositoryOwner "owner"
+
+    $bypassEnvironment = & $newEnvironmentFixture "marketplace-manual"
+    $bypassEnvironment.can_admins_bypass = $true
+    Assert-ThrowsMatch "credential environment admin bypass rejected" {
+        Assert-CredentialEnvironment `
+            -Environment $bypassEnvironment `
+            -Policies $manualPolicies `
+            -Secrets $manualSecrets `
+            -ExpectedName "marketplace-manual" `
+            -ExpectedPolicyName "main" `
+            -ExpectedPolicyType "branch" `
+            -ExpectedSecretNames @("CF_API_KEY", "WAGO_API_TOKEN", "WOWI_API_TOKEN")
+    } "disable administrator bypass"
+    Assert-ThrowsMatch "wildcard manual credential policy rejected" {
+        Assert-CredentialEnvironment `
+            -Environment $manualEnvironment `
+            -Policies @([pscustomobject]@{ name = "*"; type = "branch" }) `
+            -Secrets $manualSecrets `
+            -ExpectedName "marketplace-manual" `
+            -ExpectedPolicyName "main" `
+            -ExpectedPolicyType "branch" `
+            -ExpectedSecretNames @("CF_API_KEY", "WAGO_API_TOKEN", "WOWI_API_TOKEN")
+    } "allow only branch 'main'"
+    Assert-ThrowsMatch "manual tag credential policy rejected" {
+        Assert-CredentialEnvironment `
+            -Environment $manualEnvironment `
+            -Policies @([pscustomobject]@{ name = "main"; type = "tag" }) `
+            -Secrets $manualSecrets `
+            -ExpectedName "marketplace-manual" `
+            -ExpectedPolicyName "main" `
+            -ExpectedPolicyType "branch" `
+            -ExpectedSecretNames @("CF_API_KEY", "WAGO_API_TOKEN", "WOWI_API_TOKEN")
+    } "allow only branch 'main'"
+    Assert-ThrowsMatch "missing manual environment secret rejected" {
+        Assert-CredentialEnvironment `
+            -Environment $manualEnvironment `
+            -Policies $manualPolicies `
+            -Secrets @($manualSecrets | Where-Object { $_.name -ne "WAGO_API_TOKEN" }) `
+            -ExpectedName "marketplace-manual" `
+            -ExpectedPolicyName "main" `
+            -ExpectedPolicyType "branch" `
+            -ExpectedSecretNames @("CF_API_KEY", "WAGO_API_TOKEN", "WOWI_API_TOKEN")
+    } "secrets is"
+    $releaseWithoutReviewer = & $newEnvironmentFixture "marketplace-release"
+    Assert-ThrowsMatch "missing release environment reviewer rejected" {
+        Assert-CredentialEnvironment `
+            -Environment $releaseWithoutReviewer `
+            -Policies $releasePolicies `
+            -Secrets $releaseSecrets `
+            -ExpectedName "marketplace-release" `
+            -ExpectedPolicyName "v*" `
+            -ExpectedPolicyType "tag" `
+            -ExpectedSecretNames @("CF_API_KEY", "IMMUTABLE_RELEASES_READ_TOKEN", "WAGO_API_TOKEN", "WOWI_API_TOKEN") `
+            -ExpectedReviewerLogin "owner"
+    } "protection rule types"
+    Assert-ThrowsMatch "wrong release environment reviewer rejected" {
+        Assert-CredentialEnvironment `
+            -Environment $releaseEnvironment `
+            -Policies $releasePolicies `
+            -Secrets $releaseSecrets `
+            -ExpectedName "marketplace-release" `
+            -ExpectedPolicyName "v*" `
+            -ExpectedPolicyType "tag" `
+            -ExpectedSecretNames @("CF_API_KEY", "IMMUTABLE_RELEASES_READ_TOKEN", "WAGO_API_TOKEN", "WOWI_API_TOKEN") `
+            -ExpectedReviewerLogin "someone-else"
+    } "reviewer must be repository owner"
+    Assert-ThrowsMatch "repository credential fallback rejected" {
+        Assert-CredentialEnvironmentSettings `
+            -Environments @($manualEnvironment, $releaseEnvironment) `
+            -ManualEnvironment $manualEnvironment `
+            -ManualPolicies $manualPolicies `
+            -ManualSecrets $manualSecrets `
+            -ReleaseEnvironment $releaseEnvironment `
+            -ReleasePolicies $releasePolicies `
+            -ReleaseSecrets $releaseSecrets `
+            -RepositorySecrets @([pscustomobject]@{ name = "CF_API_KEY" }) `
+            -RepositoryOwner "owner"
+    } "Repository-level Actions secrets must be empty"
+    Assert-ThrowsMatch "renamed repository credential fallback rejected" {
+        Assert-CredentialEnvironmentSettings `
+            -Environments @($manualEnvironment, $releaseEnvironment) `
+            -ManualEnvironment $manualEnvironment `
+            -ManualPolicies $manualPolicies `
+            -ManualSecrets $manualSecrets `
+            -ReleaseEnvironment $releaseEnvironment `
+            -ReleasePolicies $releasePolicies `
+            -ReleaseSecrets $releaseSecrets `
+            -RepositorySecrets @([pscustomobject]@{ name = "UNEXPECTED_TOKEN" }) `
+            -RepositoryOwner "owner"
+    } "Repository-level Actions secrets must be empty"
+    Assert-ThrowsMatch "extra credential environment rejected" {
+        Assert-CredentialEnvironmentSettings `
+            -Environments @($manualEnvironment, $releaseEnvironment, [pscustomobject]@{ name = "unrestricted" }) `
+            -ManualEnvironment $manualEnvironment `
+            -ManualPolicies $manualPolicies `
+            -ManualSecrets $manualSecrets `
+            -ReleaseEnvironment $releaseEnvironment `
+            -ReleasePolicies $releasePolicies `
+            -ReleaseSecrets $releaseSecrets `
+            -RepositorySecrets @() `
+            -RepositoryOwner "owner"
+    } "credential environment names"
+
     $workflowPath = Join-Path (Join-Path $PSScriptRoot "..") ".github\workflows\release.yml"
     $workflowText = Get-Content -LiteralPath $workflowPath -Raw -Encoding UTF8
     Assert-ReleaseWorkflowKeepsExplicitWritePermission -WorkflowText $workflowText
@@ -473,11 +728,29 @@ $rulesetSummaries = @(Invoke-GhJson -Arguments (@("api", "--paginate", "--slurp"
 $rulesets = @($rulesetSummaries | ForEach-Object {
     Invoke-GhJson -Arguments (@("api") + $headers + @("repos/$Repository/rulesets/$($_.id)?includes_parents=false"))
 })
+$environmentResponse = Invoke-GhJson -Arguments (@("api") + $headers + @("repos/$Repository/environments?per_page=100"))
+$manualEnvironment = Invoke-GhJson -Arguments (@("api") + $headers + @("repos/$Repository/environments/marketplace-manual"))
+$manualPolicyResponse = Invoke-GhJson -Arguments (@("api") + $headers + @("repos/$Repository/environments/marketplace-manual/deployment-branch-policies"))
+$manualSecretResponse = Invoke-GhJson -Arguments (@("api") + $headers + @("repos/$Repository/environments/marketplace-manual/secrets?per_page=100"))
+$releaseEnvironment = Invoke-GhJson -Arguments (@("api") + $headers + @("repos/$Repository/environments/marketplace-release"))
+$releasePolicyResponse = Invoke-GhJson -Arguments (@("api") + $headers + @("repos/$Repository/environments/marketplace-release/deployment-branch-policies"))
+$releaseSecretResponse = Invoke-GhJson -Arguments (@("api") + $headers + @("repos/$Repository/environments/marketplace-release/secrets?per_page=100"))
+$repositorySecretResponse = Invoke-GhJson -Arguments (@("api") + $headers + @("repos/$Repository/actions/secrets?per_page=100"))
 
 Assert-ActionsWorkflowPermissions -Settings $actionsSettings
 Assert-RepositoryRulesetInventory -Rulesets $rulesets
 Assert-MinimalHistoryRuleset -Rulesets $rulesets -Name "Protect main history" -Target "branch" -IncludedRef "refs/heads/main"
 Assert-MinimalHistoryRuleset -Rulesets $rulesets -Name "Protect release tags" -Target "tag" -IncludedRef "refs/tags/v*"
+Assert-CredentialEnvironmentSettings `
+    -Environments @($environmentResponse.environments) `
+    -ManualEnvironment $manualEnvironment `
+    -ManualPolicies @($manualPolicyResponse.branch_policies) `
+    -ManualSecrets @($manualSecretResponse.secrets) `
+    -ReleaseEnvironment $releaseEnvironment `
+    -ReleasePolicies @($releasePolicyResponse.branch_policies) `
+    -ReleaseSecrets @($releaseSecretResponse.secrets) `
+    -RepositorySecrets @($repositorySecretResponse.secrets) `
+    -RepositoryOwner ($Repository.Split('/')[0])
 $workflowPath = Join-Path (Join-Path $PSScriptRoot "..") ".github\workflows\release.yml"
 Assert-ReleaseWorkflowKeepsExplicitWritePermission -WorkflowText (Get-Content -LiteralPath $workflowPath -Raw -Encoding UTF8)
 

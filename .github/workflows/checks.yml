@@ -54,9 +54,11 @@ jobs:
           .\scripts\check-release-ancestry.ps1 -SelfTest
           lua5.1 .\scripts\check-archon-targets.lua --self-test
 
-      - name: Check release process helper on Windows PowerShell 5.1
+      - name: Check process helpers on Windows PowerShell 5.1
         shell: powershell
-        run: .\scripts\manage-github-release.ps1 -SelfTest
+        run: |
+          .\scripts\install-check-tools.ps1 -SelfTest
+          .\scripts\manage-github-release.ps1 -SelfTest
 
       - name: Check release metadata
         env:

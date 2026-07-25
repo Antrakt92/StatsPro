@@ -11,6 +11,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "tool-version-locks.ps1")
+. (Join-Path $PSScriptRoot "native-process.ps1")
 
 if ($ArchonMaxAgeDays -lt 0) {
     throw "-ArchonMaxAgeDays must be a non-negative integer."
@@ -20,66 +21,6 @@ if ($UpdateSmokeContract -and ($SelfTest -or $Release)) {
 }
 if ($UpdateSmokeContract -and -not $EnforceToolLocks) {
     throw "-UpdateSmokeContract requires -EnforceToolLocks so the baseline comes from the locked toolchain."
-}
-
-function Format-NativeArgument {
-    param([AllowNull()][string]$Argument)
-
-    if ($null -eq $Argument -or $Argument -eq "") {
-        return '""'
-    }
-    if ($Argument -notmatch '[\s"]') {
-        return $Argument
-    }
-
-    $slash = [string][char]92
-    $builder = [System.Text.StringBuilder]::new()
-    [void]$builder.Append('"')
-    $pendingSlashes = 0
-    foreach ($char in $Argument.ToCharArray()) {
-        if ($char -eq [char]92) {
-            $pendingSlashes++
-            continue
-        }
-        if ($char -eq '"') {
-            if ($pendingSlashes -gt 0) {
-                [void]$builder.Append($slash * ($pendingSlashes * 2))
-                $pendingSlashes = 0
-            }
-            [void]$builder.Append($slash)
-            [void]$builder.Append('"')
-            continue
-        }
-        if ($pendingSlashes -gt 0) {
-            [void]$builder.Append($slash * $pendingSlashes)
-            $pendingSlashes = 0
-        }
-        [void]$builder.Append($char)
-    }
-    if ($pendingSlashes -gt 0) {
-        [void]$builder.Append($slash * ($pendingSlashes * 2))
-    }
-    [void]$builder.Append('"')
-    return $builder.ToString()
-}
-
-function Split-NativeOutput {
-    param([AllowNull()][string]$Text)
-
-    if ([string]::IsNullOrEmpty($Text)) {
-        return @()
-    }
-    return @($Text -split "\r?\n" | Where-Object { $_ -ne "" })
-}
-
-function Format-VersionOutput {
-    param([object[]]$Output)
-
-    $lines = @($Output | ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne "" })
-    if ($lines.Count -eq 0) {
-        return "<no version output>"
-    }
-    return ($lines -join " | ")
 }
 
 function Invoke-NativeCapture {
@@ -92,81 +33,13 @@ function Invoke-NativeCapture {
         [hashtable]$Environment = @{}
     )
 
-    if (-not $FilePath) {
-        throw "Native process path is required."
-    }
-    if ($TimeoutSeconds -lt 0) {
-        throw "TimeoutSeconds must be non-negative."
-    }
-
-    $effectiveFilePath = $FilePath
-    $effectiveArguments = @($Arguments)
-    $extension = [System.IO.Path]::GetExtension($FilePath)
-    if ($extension -in @(".bat", ".cmd")) {
-        if (-not $env:ComSpec) {
-            throw "Cannot run ${FilePath}: ComSpec is not set."
-        }
-        $effectiveFilePath = $env:ComSpec
-        $effectiveArguments = @("/d", "/c", "call", $FilePath) + @($Arguments)
-    }
-
-    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $effectiveFilePath
-    $startInfo.WorkingDirectory = (Get-Location).Path
-    $startInfo.Arguments = (@($effectiveArguments) | ForEach-Object { Format-NativeArgument $_ }) -join " "
-    $startInfo.UseShellExecute = $false
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-    $startInfo.CreateNoWindow = $true
-    if ($IsolateLuaEnvironment) {
-        Set-StatsProIsolatedLuaProcessEnvironment -StartInfo $startInfo -Environment $Environment
-    }
-
-    $process = [System.Diagnostics.Process]::new()
-    $process.StartInfo = $startInfo
-    $displayName = if ($Description) { $Description } else { "$FilePath $($Arguments -join ' ')" }
-    try {
-        [void]$process.Start()
-        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-        $stderrTask = $process.StandardError.ReadToEndAsync()
-        if ($TimeoutSeconds -gt 0) {
-            $completed = $process.WaitForExit($TimeoutSeconds * 1000)
-        }
-        else {
-            $process.WaitForExit()
-            $completed = $true
-        }
-        if (-not $completed) {
-            try {
-                $process.Kill()
-            }
-            catch {
-                # Preserve the timeout failure below; the process may have exited between WaitForExit and Kill.
-            }
-            [void]$process.WaitForExit(5000)
-            $timeoutOutput = @()
-            if ($stdoutTask.Wait(1000)) { $timeoutOutput += Split-NativeOutput $stdoutTask.Result }
-            if ($stderrTask.Wait(1000)) { $timeoutOutput += Split-NativeOutput $stderrTask.Result }
-            $details = if ($timeoutOutput.Count -gt 0) { " Output: $($timeoutOutput -join ' ')" } else { "" }
-            throw "Timed out after $TimeoutSeconds second(s): $displayName.$details"
-        }
-        if (-not $stdoutTask.Wait(5000)) {
-            throw "Timed out reading stdout from $displayName."
-        }
-        if (-not $stderrTask.Wait(5000)) {
-            throw "Timed out reading stderr from $displayName."
-        }
-        $output = @()
-        $output += Split-NativeOutput $stdoutTask.Result
-        $output += Split-NativeOutput $stderrTask.Result
-        return @{
-            ExitCode = $process.ExitCode
-            Output = $output
-        }
-    }
-    finally {
-        $process.Dispose()
-    }
+    return Invoke-StatsProNativeCapture `
+        -FilePath $FilePath `
+        -Arguments $Arguments `
+        -TimeoutSeconds $TimeoutSeconds `
+        -Description $Description `
+        -IsolateLuaEnvironment:$IsolateLuaEnvironment.IsPresent `
+        -Environment $Environment
 }
 
 function Write-ToolVersionReport {
@@ -181,10 +54,10 @@ function Write-ToolVersionReport {
     Write-Host "${Label}: $Path"
     $result = Invoke-NativeCapture -FilePath $Path -Arguments $Arguments -TimeoutSeconds 30 -Description "$Label version" -IsolateLuaEnvironment:$IsolateLuaEnvironment.IsPresent -Environment $Environment
     if ($result.ExitCode -eq 0) {
-        Write-Host "${Label} version: $(Format-VersionOutput $result.Output)"
+        Write-Host "${Label} version: $(Format-StatsProVersionOutput $result.Output)"
     }
     else {
-        Write-Warning "${Label} version command exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
+        Write-Warning "${Label} version command exited with code $($result.ExitCode): $(Format-StatsProVersionOutput $result.Output)"
     }
 }
 
@@ -199,7 +72,7 @@ function Assert-ToolCommandVersion {
     )
     $result = Invoke-NativeCapture -FilePath $Path -Arguments $Arguments -TimeoutSeconds 30 -Description "$Label version" -IsolateLuaEnvironment:$IsolateLuaEnvironment.IsPresent -Environment $Environment
     if ($result.ExitCode -ne 0) {
-        throw "$Label version command exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
+        throw "$Label version command exited with code $($result.ExitCode): $(Format-StatsProVersionOutput $result.Output)"
     }
     Assert-StatsProCommandVersionText -Label $Label -Text ($result.Output -join "`n") -Pattern $Pattern
 }
@@ -719,13 +592,59 @@ function Invoke-SelfTest {
     New-Item -ItemType Directory -Path $root | Out-Null
     try {
         $cmd = Get-Command cmd.exe -ErrorAction Stop | Select-Object -First 1 -ExpandProperty Source
-        $nativeCapture = Invoke-NativeCapture -FilePath $cmd -Arguments @("/d", "/c", "echo stdout-line && echo stderr-line 1>&2 && exit /b 7") -TimeoutSeconds 10 -Description "native capture self-test"
+        $nativeCapture = Invoke-NativeCapture -FilePath $cmd -Arguments @("/d", "/c", "echo stdout-line&&echo stderr-line>&2&&exit /b 7") -TimeoutSeconds 10 -Description "native capture self-test"
         if ($nativeCapture.ExitCode -ne 7) {
             throw "native capture should preserve nonzero exit code 7, got $($nativeCapture.ExitCode)"
         }
-        $nativeOutput = $nativeCapture.Output -join "`n"
-        if ($nativeOutput -notmatch "stdout-line" -or $nativeOutput -notmatch "stderr-line") {
-            throw "native capture should include stdout and stderr, got: $nativeOutput"
+        if (($nativeCapture.Output -join "|") -ne "stdout-line|stderr-line") {
+            throw "native capture should return stdout before stderr, got: $($nativeCapture.Output -join '|')"
+        }
+
+        $argumentFixture = Join-Path $root "native argument fixture.ps1"
+        [System.IO.File]::WriteAllText($argumentFixture, @'
+param([string]$Value, [AllowEmptyString()][string]$EmptyValue)
+[Console]::Out.WriteLine("value:" + $Value)
+[Console]::Out.WriteLine("")
+[Console]::Out.WriteLine("empty:" + $EmptyValue.Length)
+'@)
+        $hostExecutable = (Get-Process -Id $PID).MainModule.FileName
+        $argumentValue = 'space "quote" trailing\'
+        $argumentCapture = Invoke-NativeCapture `
+            -FilePath $hostExecutable `
+            -Arguments @(
+                "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $argumentFixture,
+                "-Value", $argumentValue, "-EmptyValue", ""
+            ) `
+            -TimeoutSeconds 10 `
+            -Description "native argument self-test"
+        if (($argumentCapture.Output -join "|") -ne "value:$argumentValue|empty:0") {
+            throw "native capture did not preserve quoted, trailing-backslash, or empty arguments, or did not remove empty output lines: $($argumentCapture.Output -join '|')"
+        }
+
+        $oldNativeLuaInit = [Environment]::GetEnvironmentVariable("LUA_INIT", "Process")
+        try {
+            [Environment]::SetEnvironmentVariable("LUA_INIT", "ambient-native-canary", "Process")
+            $inheritedEnvironment = Invoke-NativeCapture `
+                -FilePath $cmd `
+                -Arguments @("/d", "/c", "echo %LUA_INIT%") `
+                -TimeoutSeconds 10 `
+                -Description "inherited Lua environment self-test"
+            if (($inheritedEnvironment.Output -join "|") -ne "ambient-native-canary") {
+                throw "native capture without isolation did not preserve the ambient Lua environment"
+            }
+            $overrideEnvironment = Invoke-NativeCapture `
+                -FilePath $cmd `
+                -Arguments @("/d", "/c", "echo %LUA_INIT%") `
+                -TimeoutSeconds 10 `
+                -Description "isolated Lua environment override self-test" `
+                -IsolateLuaEnvironment `
+                -Environment @{ LUA_INIT = "explicit-native-override" }
+            if (($overrideEnvironment.Output -join "|") -ne "explicit-native-override") {
+                throw "native capture isolation did not apply the explicit Lua environment override"
+            }
+        }
+        finally {
+            [Environment]::SetEnvironmentVariable("LUA_INIT", $oldNativeLuaInit, "Process")
         }
 
         $selfTestLocks = Read-StatsProToolLocks -Path $ToolLockPath

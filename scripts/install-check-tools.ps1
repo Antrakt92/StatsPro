@@ -11,56 +11,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "tool-version-locks.ps1")
-
-function Format-NativeArgument {
-    param([AllowNull()][string]$Argument)
-
-    if ($null -eq $Argument -or $Argument -eq "") {
-        return '""'
-    }
-    if ($Argument -notmatch '[\s"]') {
-        return $Argument
-    }
-
-    $slash = [string][char]92
-    $builder = [System.Text.StringBuilder]::new()
-    [void]$builder.Append('"')
-    $pendingSlashes = 0
-    foreach ($char in $Argument.ToCharArray()) {
-        if ($char -eq [char]92) {
-            $pendingSlashes++
-            continue
-        }
-        if ($char -eq '"') {
-            if ($pendingSlashes -gt 0) {
-                [void]$builder.Append($slash * ($pendingSlashes * 2))
-                $pendingSlashes = 0
-            }
-            [void]$builder.Append($slash)
-            [void]$builder.Append('"')
-            continue
-        }
-        if ($pendingSlashes -gt 0) {
-            [void]$builder.Append($slash * $pendingSlashes)
-            $pendingSlashes = 0
-        }
-        [void]$builder.Append($char)
-    }
-    if ($pendingSlashes -gt 0) {
-        [void]$builder.Append($slash * ($pendingSlashes * 2))
-    }
-    [void]$builder.Append('"')
-    return $builder.ToString()
-}
-
-function Split-NativeOutput {
-    param([AllowNull()][string]$Text)
-
-    if ([string]::IsNullOrEmpty($Text)) {
-        return @()
-    }
-    return @($Text -split "\r?\n" | Where-Object { $_ -ne "" })
-}
+. (Join-Path $PSScriptRoot "native-process.ps1")
 
 function Invoke-NativeCapture {
     param(
@@ -71,79 +22,13 @@ function Invoke-NativeCapture {
         [hashtable]$Environment = @{}
     )
 
-    if (-not $FilePath) {
-        throw "Native process path is required."
-    }
-    if ($TimeoutSeconds -lt 0) {
-        throw "TimeoutSeconds must be non-negative."
-    }
-
-    $effectiveFilePath = $FilePath
-    $effectiveArguments = @($Arguments)
-    $extension = [System.IO.Path]::GetExtension($FilePath)
-    if ($extension -in @(".bat", ".cmd")) {
-        if (-not $env:ComSpec) {
-            throw "Cannot run ${FilePath}: ComSpec is not set."
-        }
-        $effectiveFilePath = $env:ComSpec
-        $effectiveArguments = @("/d", "/c", "call", $FilePath) + @($Arguments)
-    }
-
-    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $effectiveFilePath
-    $startInfo.WorkingDirectory = (Get-Location).Path
-    $startInfo.Arguments = (@($effectiveArguments) | ForEach-Object { Format-NativeArgument $_ }) -join " "
-    $startInfo.UseShellExecute = $false
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-    $startInfo.CreateNoWindow = $true
-    Set-StatsProIsolatedLuaProcessEnvironment -StartInfo $startInfo -Environment $Environment
-
-    $process = [System.Diagnostics.Process]::new()
-    $process.StartInfo = $startInfo
-    $displayName = if ($Description) { $Description } else { "$FilePath $($Arguments -join ' ')" }
-    try {
-        [void]$process.Start()
-        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-        $stderrTask = $process.StandardError.ReadToEndAsync()
-        if ($TimeoutSeconds -gt 0) {
-            $completed = $process.WaitForExit($TimeoutSeconds * 1000)
-        }
-        else {
-            $process.WaitForExit()
-            $completed = $true
-        }
-        if (-not $completed) {
-            try {
-                $process.Kill()
-            }
-            catch {
-                # Preserve the timeout failure below; the process may have exited between WaitForExit and Kill.
-            }
-            [void]$process.WaitForExit(5000)
-            $timeoutOutput = @()
-            if ($stdoutTask.Wait(1000)) { $timeoutOutput += Split-NativeOutput $stdoutTask.Result }
-            if ($stderrTask.Wait(1000)) { $timeoutOutput += Split-NativeOutput $stderrTask.Result }
-            $details = if ($timeoutOutput.Count -gt 0) { " Output: $($timeoutOutput -join ' ')" } else { "" }
-            throw "Timed out after $TimeoutSeconds second(s): $displayName.$details"
-        }
-        if (-not $stdoutTask.Wait(5000)) {
-            throw "Timed out reading stdout from $displayName."
-        }
-        if (-not $stderrTask.Wait(5000)) {
-            throw "Timed out reading stderr from $displayName."
-        }
-        $output = @()
-        $output += Split-NativeOutput $stdoutTask.Result
-        $output += Split-NativeOutput $stderrTask.Result
-        return @{
-            ExitCode = $process.ExitCode
-            Output = $output
-        }
-    }
-    finally {
-        $process.Dispose()
-    }
+    return Invoke-StatsProNativeCapture `
+        -FilePath $FilePath `
+        -Arguments $Arguments `
+        -TimeoutSeconds $TimeoutSeconds `
+        -Description $Description `
+        -IsolateLuaEnvironment `
+        -Environment $Environment
 }
 
 function Resolve-Tool {
@@ -546,7 +431,7 @@ function Install-PinnedLuaRocksBundle {
             Pop-Location
         }
         if ($installResult.ExitCode -ne 0) {
-            throw "Pinned LuaRocks installer exited with code $($installResult.ExitCode): $(Format-VersionOutput $installResult.Output)"
+            throw "Pinned LuaRocks installer exited with code $($installResult.ExitCode): $(Format-StatsProVersionOutput $installResult.Output)"
         }
 
         $luaRocks = Join-Path $DestinationRoot "luarocks.bat"
@@ -560,7 +445,7 @@ function Install-PinnedLuaRocksBundle {
                 -TimeoutSeconds 120 `
                 -Description "pinned $($package.Name) install"
             if ($result.ExitCode -ne 0) {
-                throw "Pinned $($package.Name) install exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
+                throw "Pinned $($package.Name) install exited with code $($result.ExitCode): $(Format-StatsProVersionOutput $result.Output)"
             }
         }
         return Assert-LuaRocksBundle -Layout $Layout -Locks $Locks
@@ -581,16 +466,6 @@ function Install-PinnedLuaRocksBundle {
     }
 }
 
-function Format-VersionOutput {
-    param([object[]]$Output)
-
-    $lines = @($Output | ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne "" })
-    if ($lines.Count -eq 0) {
-        return "<no version output>"
-    }
-    return ($lines -join " | ")
-}
-
 function Write-ToolVersionReport {
     param(
         [string]$Label,
@@ -601,10 +476,10 @@ function Write-ToolVersionReport {
 
     $result = Invoke-NativeCapture -FilePath $Path -Arguments $Arguments -TimeoutSeconds 30 -Description "$Label version" -Environment $Environment
     if ($result.ExitCode -eq 0) {
-        Write-Host "${Label} version: $(Format-VersionOutput $result.Output)"
+        Write-Host "${Label} version: $(Format-StatsProVersionOutput $result.Output)"
     }
     else {
-        Write-Warning "${Label} version command exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
+        Write-Warning "${Label} version command exited with code $($result.ExitCode): $(Format-StatsProVersionOutput $result.Output)"
     }
 }
 
@@ -616,10 +491,10 @@ function Write-LuarocksPackageReport {
 
     $result = Invoke-NativeCapture -FilePath $LuarocksPath -Arguments @("list", "--porcelain", $PackageName) -TimeoutSeconds 30 -Description "luarocks list $PackageName"
     if ($result.ExitCode -eq 0 -and $result.Output.Count -gt 0) {
-        Write-Host "luarocks package ${PackageName}: $(Format-VersionOutput $result.Output)"
+        Write-Host "luarocks package ${PackageName}: $(Format-StatsProVersionOutput $result.Output)"
     }
     else {
-        Write-Warning "luarocks package ${PackageName} version not listed: $(Format-VersionOutput $result.Output)"
+        Write-Warning "luarocks package ${PackageName} version not listed: $(Format-StatsProVersionOutput $result.Output)"
     }
 }
 
@@ -627,7 +502,7 @@ function Assert-LuarocksPackageVersion {
     param([string]$LuarocksPath, [string]$PackageName, [string]$ExpectedVersion)
     $result = Invoke-NativeCapture -FilePath $LuarocksPath -Arguments @("list", "--porcelain", $PackageName) -TimeoutSeconds 30 -Description "luarocks list $PackageName"
     if ($result.ExitCode -ne 0) {
-        throw "luarocks list $PackageName exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
+        throw "luarocks list $PackageName exited with code $($result.ExitCode): $(Format-StatsProVersionOutput $result.Output)"
     }
     Assert-StatsProPackageVersionLine -Label $PackageName -Output $result.Output -ExpectedVersion $ExpectedVersion
 }
@@ -642,7 +517,7 @@ function Assert-ToolCommandVersion {
     )
     $result = Invoke-NativeCapture -FilePath $Path -Arguments $Arguments -TimeoutSeconds 30 -Description "$Label version" -Environment $Environment
     if ($result.ExitCode -ne 0) {
-        throw "$Label version command exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
+        throw "$Label version command exited with code $($result.ExitCode): $(Format-StatsProVersionOutput $result.Output)"
     }
     Assert-StatsProCommandVersionText -Label $Label -Text ($result.Output -join "`n") -Pattern $Pattern
 }
@@ -660,8 +535,8 @@ function Assert-Equal {
 }
 
 function Invoke-SelfTest {
-    Assert-Equal "version output collapses lines" (Format-VersionOutput @(" Tool 1.2.3 ", "", "Lua 5.1 ")) "Tool 1.2.3 | Lua 5.1"
-    Assert-Equal "version output empty fallback" (Format-VersionOutput @("", "   ")) "<no version output>"
+    Assert-Equal "version output collapses lines" (Format-StatsProVersionOutput @(" Tool 1.2.3 ", "", "Lua 5.1 ")) "Tool 1.2.3 | Lua 5.1"
+    Assert-Equal "version output empty fallback" (Format-StatsProVersionOutput @("", "   ")) "<no version output>"
 
     $locks = Read-StatsProToolLocks -Path (Join-Path $PSScriptRoot "tool-version-locks.json")
     $luaLock = Get-StatsProLockedPortableTool -Locks $locks -ToolName "lua51"

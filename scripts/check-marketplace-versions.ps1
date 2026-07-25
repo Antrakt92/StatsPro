@@ -9,11 +9,7 @@ param(
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "marketplace-version-contract.ps1")
 
-$ExpectedMarketplaceProjectIds = [ordered]@{
-    "X-Curse-Project-ID" = "1525100"
-    "X-Wago-ID" = "EGPemEN1"
-    "X-WoWI-ID" = "27130"
-}
+$ExpectedMarketplaceProjectIds = Get-StatsProExpectedMarketplaceProjectIdMap
 
 function Get-RequiredTocMetadataValue {
     param(
@@ -45,9 +41,9 @@ function Get-MarketplaceProjectIds {
 
     $tocText = Get-Content -LiteralPath (Resolve-Path $Path).Path -Raw -Encoding UTF8
     return [ordered]@{
-        CurseForge = Get-RequiredTocMetadataValue -TocText $tocText -Key "X-Curse-Project-ID" -ExpectedValue $ExpectedMarketplaceProjectIds["X-Curse-Project-ID"] -ValuePattern '^\d+$'
-        Wago = Get-RequiredTocMetadataValue -TocText $tocText -Key "X-Wago-ID" -ExpectedValue $ExpectedMarketplaceProjectIds["X-Wago-ID"] -ValuePattern '^[A-Za-z0-9]{8}$'
-        WowInterface = Get-RequiredTocMetadataValue -TocText $tocText -Key "X-WoWI-ID" -ExpectedValue $ExpectedMarketplaceProjectIds["X-WoWI-ID"] -ValuePattern '^\d+$'
+        CurseForge = Get-RequiredTocMetadataValue -TocText $tocText -Key "X-Curse-Project-ID" -ExpectedValue $ExpectedMarketplaceProjectIds.CurseForge -ValuePattern '^\d+$'
+        Wago = Get-RequiredTocMetadataValue -TocText $tocText -Key "X-Wago-ID" -ExpectedValue $ExpectedMarketplaceProjectIds.Wago -ValuePattern '^[A-Za-z0-9]{8}$'
+        WowInterface = Get-RequiredTocMetadataValue -TocText $tocText -Key "X-WoWI-ID" -ExpectedValue $ExpectedMarketplaceProjectIds.WowInterface -ValuePattern '^\d+$'
     }
 }
 
@@ -77,16 +73,6 @@ function Get-RequiredMarketplaceCredentials {
         $credentials[$name] = $value
     }
     return $credentials
-}
-
-function ConvertFrom-JsonCompat {
-    param([string]$Json)
-
-    $command = Get-Command ConvertFrom-Json
-    if ($command.Parameters.ContainsKey("Depth")) {
-        return ($Json | ConvertFrom-Json -Depth 100)
-    }
-    return ($Json | ConvertFrom-Json)
 }
 
 function Assert-ThrowsMatch {
@@ -266,26 +252,6 @@ function Invoke-CurseForgeCredentialProbe {
         -Request $Request
 }
 
-function Assert-WowInterfaceProjectList {
-    param(
-        [string]$JsonText,
-        [string]$ExpectedProjectId
-    )
-
-    try {
-        $items = @(ConvertFrom-JsonCompat $JsonText)
-    }
-    catch {
-        throw "WoWInterface project-access response contained invalid JSON."
-    }
-    $matches = @($items | Where-Object {
-        $null -ne $_.id -and [System.StringComparer]::Ordinal.Equals([string]$_.id, $ExpectedProjectId)
-    })
-    if ($matches.Count -ne 1) {
-        throw "WoWInterface credential must expose exactly one StatsPro project '$ExpectedProjectId'; found $($matches.Count)."
-    }
-}
-
 function Invoke-WowInterfaceCredentialProbe {
     param(
         [string]$ApiToken,
@@ -298,20 +264,8 @@ function Invoke-WowInterfaceCredentialProbe {
         -Headers @{ "x-api-token" = $ApiToken } `
         -Description "WoWInterface credential and project-access probe" `
         -Request $Request
-    Assert-WowInterfaceProjectList -JsonText ([string]$response.Content) -ExpectedProjectId $ProjectId
+    Assert-StatsProWowInterfaceProjectAccess -Json ([string]$response.Content) -ExpectedProjectId $ProjectId
     return $response
-}
-
-function Assert-WagoProjectPage {
-    param(
-        [string]$Html,
-        [string]$ExpectedProjectId
-    )
-
-    $expectedCanonical = 'content="https://addons.wago.io/addons/' + [regex]::Escape($ExpectedProjectId) + '"'
-    if ([string]::IsNullOrWhiteSpace($Html) -or $Html -notmatch $expectedCanonical) {
-        throw "Wago public project page does not identify StatsPro project '$ExpectedProjectId'."
-    }
 }
 
 function Invoke-WagoProjectExistenceProbe {
@@ -324,7 +278,7 @@ function Invoke-WagoProjectExistenceProbe {
         -Uri "https://addons.wago.io/addons/$ProjectId" `
         -Description "Wago public project existence probe" `
         -Request $Request
-    Assert-WagoProjectPage -Html ([string]$response.Content) -ExpectedProjectId $ProjectId
+    Assert-StatsProWagoProjectPage -Html ([string]$response.Content) -ExpectedProjectId $ProjectId
     return $response
 }
 
@@ -346,106 +300,6 @@ function Read-JsonTextOrFetch {
     }
     catch {
         throw "Failed to fetch $Description from $Uri`: $($_.Exception.Message)"
-    }
-}
-
-function Assert-CurseForgeVersions {
-    param(
-        [string]$JsonText,
-        [string[]]$RequiredVersions
-    )
-
-    $items = @(ConvertFrom-JsonCompat $JsonText)
-    foreach ($version in $RequiredVersions) {
-        $matches = @($items | Where-Object {
-            [string]$_.name -eq $version -and [int]$_.gameVersionTypeID -eq 517
-        })
-        if ($matches.Count -ne 1) {
-            throw "CurseForge must expose exactly one Retail game version '$version' with gameVersionTypeID 517; found $($matches.Count)."
-        }
-        try {
-            $id = [int]$matches[0].id
-        }
-        catch {
-            throw "CurseForge version '$version' has a non-numeric id '$($matches[0].id)'."
-        }
-        if ($id -le 0) {
-            throw "CurseForge version '$version' has invalid id '$($matches[0].id)'."
-        }
-    }
-}
-
-function Assert-WowInterfaceVersions {
-    param(
-        [string]$JsonText,
-        [string[]]$RequiredVersions
-    )
-
-    $items = @(ConvertFrom-JsonCompat $JsonText)
-    $availableVersions = @($items | Where-Object {
-        [string]$_.game -ceq "Retail"
-    } | ForEach-Object { [string]$_.id })
-    [void](Resolve-StatsProWowInterfaceVersions `
-        -AvailableVersions $availableVersions `
-        -RequiredVersions $RequiredVersions)
-}
-
-function Assert-WagoVersions {
-    param(
-        [string]$JsonText,
-        [string[]]$RequiredVersions
-    )
-
-    # SYNC: BigWigs Packager release.sh::upload_wago reads patches.retail from this endpoint.
-    $data = ConvertFrom-JsonCompat $JsonText
-    if ($null -eq $data -or $null -eq $data.patches) {
-        throw "Wago game data must contain a patches object."
-    }
-    $retailProperty = $data.patches.PSObject.Properties["retail"]
-    if ($null -eq $retailProperty) {
-        throw "Wago game data is missing patches.retail; Packager would ignore Retail versions."
-    }
-
-    $retailVersions = @($retailProperty.Value)
-    if ($retailVersions.Count -eq 0) {
-        throw "Wago patches.retail is empty; Packager would ignore Retail versions."
-    }
-    $seen = @{}
-    foreach ($item in $retailVersions) {
-        $versionText = [string]$item
-        if ($versionText -notmatch "^\d+\.\d+\.\d+$") {
-            throw "Wago patches.retail contains malformed version '$versionText'."
-        }
-        if ($seen.ContainsKey($versionText)) {
-            throw "Wago patches.retail contains duplicate version '$versionText'."
-        }
-        $seen[$versionText] = $true
-    }
-
-    foreach ($version in $RequiredVersions) {
-        $acceptedVersions = @(Get-StatsProAcceptedMarketplaceVersions -Version $version)
-        $matches = @($acceptedVersions | Where-Object { $seen.ContainsKey($_) })
-        if ($matches.Count -eq 0) {
-            throw "Wago must expose Retail patch '$version' or accepted aggregate '$($acceptedVersions -join ', ')'; found none."
-        }
-        if ($seen.ContainsKey($version)) {
-            continue
-        }
-
-        $packagerFallback = Select-StatsProOrdinalMarketplaceVersion `
-            -AvailableVersions $retailVersions `
-            -RequestedVersion $version
-        $allowedFallbacks = @(Get-StatsProAcceptedMarketplaceVersions `
-            -Version $version `
-            -RequiredVersions $RequiredVersions `
-            -AllowEarlierRequiredVersions)
-        if (-not (Test-StatsProMarketplaceVersionSelection `
-                -RequestedVersion $version `
-                -SelectedVersion $packagerFallback `
-                -RequiredVersions $RequiredVersions `
-                -AllowEarlierRequiredVersions)) {
-            throw "Wago Packager would replace Retail patch '$version' with unexpected fallback '$packagerFallback'; allowed: $($allowedFallbacks -join ', ')."
-        }
     }
 }
 
@@ -477,7 +331,7 @@ function Assert-MarketplaceVersions {
             -Uri "https://wow.curseforge.com/api/game/wow/versions" `
             -Description "CurseForge game versions"
     }
-    Assert-CurseForgeVersions -JsonText $curseForgeJson -RequiredVersions $requiredVersions
+    [void](Resolve-StatsProCurseForgeVersionIdMap -Json $curseForgeJson -RequiredVersions $requiredVersions)
     [void](Invoke-WowInterfaceCredentialProbe `
         -ApiToken $credentials.WOWI_API_TOKEN `
         -ProjectId $projectIds.WowInterface)
@@ -487,13 +341,13 @@ function Assert-MarketplaceVersions {
         -Path $WowInterfaceVersionsJsonPath `
         -Uri "https://api.wowinterface.com/addons/compatible.json" `
         -Description "WoWInterface compatibility versions"
-    Assert-WowInterfaceVersions -JsonText $wowInterfaceJson -RequiredVersions $requiredVersions
+    [void](Resolve-StatsProWowInterfaceVersionsFromJson -Json $wowInterfaceJson -RequiredVersions $requiredVersions)
 
     $wagoJson = Read-JsonTextOrFetch `
         -Path $WagoVersionsJsonPath `
         -Uri "https://addons.wago.io/api/data/game" `
         -Description "Wago game versions"
-    Assert-WagoVersions -JsonText $wagoJson -RequiredVersions $requiredVersions
+    [void](Resolve-StatsProWagoVersionSelection -Json $wagoJson -RequiredVersions $requiredVersions -RequireDirectCompatibilityMatch)
 
     Write-Host "Marketplace preflight passed for Retail $($requiredVersions -join ', '): required keys are present, the CurseForge token is valid, WoWInterface project access is valid, and Wago project existence is valid."
     Write-Warning "CurseForge does not publish a read-only upload-permission probe, and Wago does not publish a read-only API-key validation endpoint. This gate does not make mutation-shaped requests to either service."
@@ -646,15 +500,15 @@ function Invoke-SelfTest {
         $wowiProbeState.Uri.Contains($validCredentials.WOWI_API_TOKEN)) {
         throw "WoWInterface credential probe request binding failed."
     }
-    Assert-WowInterfaceProjectList -JsonText '[{"id":27130}]' -ExpectedProjectId "27130"
+    Assert-StatsProWowInterfaceProjectAccess -Json '[{"id":27130}]' -ExpectedProjectId "27130"
     Assert-ThrowsMatch "missing WoWInterface project access rejected" {
-        Assert-WowInterfaceProjectList -JsonText '[{"id":"12345"}]' -ExpectedProjectId "27130"
+        Assert-StatsProWowInterfaceProjectAccess -Json '[{"id":"12345"}]' -ExpectedProjectId "27130"
     } "found 0"
     Assert-ThrowsMatch "duplicate WoWInterface project access rejected" {
-        Assert-WowInterfaceProjectList -JsonText '[{"id":"27130"},{"id":27130}]' -ExpectedProjectId "27130"
+        Assert-StatsProWowInterfaceProjectAccess -Json '[{"id":"27130"},{"id":27130}]' -ExpectedProjectId "27130"
     } "found 2"
     Assert-ThrowsMatch "malformed WoWInterface access response rejected" {
-        Assert-WowInterfaceProjectList -JsonText '{bad json' -ExpectedProjectId "27130"
+        Assert-StatsProWowInterfaceProjectAccess -Json '{bad json' -ExpectedProjectId "27130"
     } "invalid JSON"
 
     $wagoProbeState = @{ Attempts = 0; HeaderCount = -1; Uri = $null }
@@ -673,54 +527,65 @@ function Invoke-SelfTest {
         throw "Wago non-mutating project-existence probe request binding failed."
     }
     Assert-ThrowsMatch "wrong Wago project page rejected" {
-        Assert-WagoProjectPage `
+        Assert-StatsProWagoProjectPage `
             -Html '<meta property="og:url" content="https://addons.wago.io/addons/notstats" />' `
             -ExpectedProjectId "EGPemEN1"
     } "does not identify"
-    Assert-CurseForgeVersions -JsonText $cfValid -RequiredVersions $versions
-    Assert-WowInterfaceVersions -JsonText $wowiExactValid -RequiredVersions $versions
-    Assert-WowInterfaceVersions -JsonText $wowiAggregateValid -RequiredVersions $versions
-    Assert-WagoVersions -JsonText $wagoExactValid -RequiredVersions $versions
-    Assert-WagoVersions -JsonText $wagoAggregateValid -RequiredVersions $versions
-    Assert-WagoVersions -JsonText $wagoRequestedVersionFallbackValid -RequiredVersions $versions
+    $curseForgeIds = @(Resolve-StatsProCurseForgeVersionIdMap -Json $cfValid -RequiredVersions $versions)
+    if (($curseForgeIds -join ',') -ne '1007,120100') {
+        throw "CurseForge version mapping returned unexpected IDs '$($curseForgeIds -join ',')'."
+    }
+    [void](Resolve-StatsProWowInterfaceVersionsFromJson -Json $wowiExactValid -RequiredVersions $versions)
+    [void](Resolve-StatsProWowInterfaceVersionsFromJson -Json $wowiAggregateValid -RequiredVersions $versions)
+    [void](Resolve-StatsProWagoVersionSelection -Json $wagoExactValid -RequiredVersions $versions -RequireDirectCompatibilityMatch)
+    [void](Resolve-StatsProWagoVersionSelection -Json $wagoAggregateValid -RequiredVersions $versions -RequireDirectCompatibilityMatch)
+    [void](Resolve-StatsProWagoVersionSelection -Json $wagoRequestedVersionFallbackValid -RequiredVersions $versions -RequireDirectCompatibilityMatch)
 
     Assert-ThrowsMatch "missing CurseForge version rejected" {
-        Assert-CurseForgeVersions -JsonText '[{"id":1,"gameVersionTypeID":517,"name":"12.0.7"}]' -RequiredVersions $versions
+        [void](Resolve-StatsProCurseForgeVersionIdMap -Json '[{"id":1,"gameVersionTypeID":517,"name":"12.0.7"}]' -RequiredVersions $versions)
     } "12\.1\.0"
     Assert-ThrowsMatch "duplicate CurseForge version rejected" {
-        Assert-CurseForgeVersions -JsonText '[{"id":1,"gameVersionTypeID":517,"name":"12.0.7"},{"id":2,"gameVersionTypeID":517,"name":"12.0.7"},{"id":3,"gameVersionTypeID":517,"name":"12.1.0"}]' -RequiredVersions $versions
+        [void](Resolve-StatsProCurseForgeVersionIdMap -Json '[{"id":1,"gameVersionTypeID":517,"name":"12.0.7"},{"id":2,"gameVersionTypeID":517,"name":"12.0.7"},{"id":3,"gameVersionTypeID":517,"name":"12.1.0"}]' -RequiredVersions $versions)
     } "12\.0\.7"
+    foreach ($invalidId in @('1.5', 'true', '1e3')) {
+        Assert-ThrowsMatch "non-Int32 CurseForge version id '$invalidId' rejected" {
+            [void](Resolve-StatsProCurseForgeVersionIdMap `
+                -Json "[{`"id`":$invalidId,`"gameVersionTypeID`":517,`"name`":`"12.0.7`"}]" `
+                -RequiredVersions @('12.0.7'))
+        } "invalid positive Int32 id"
+    }
     Assert-ThrowsMatch "WoWInterface missing exact and aggregate rejected" {
-        Assert-WowInterfaceVersions -JsonText '[{"game":"Retail","id":"11.0.0"}]' -RequiredVersions $versions
+        [void](Resolve-StatsProWowInterfaceVersionsFromJson -Json '[{"game":"Retail","id":"11.0.0"}]' -RequiredVersions $versions)
     } "12\.0\.7"
     Assert-ThrowsMatch "duplicate WoWInterface aggregate rejected" {
-        Assert-WowInterfaceVersions -JsonText '[{"game":"Retail","id":"12.0.0"},{"game":"Retail","id":"12.0.0"}]' -RequiredVersions $versions
+        [void](Resolve-StatsProWowInterfaceVersionsFromJson -Json '[{"game":"Retail","id":"12.0.0"},{"game":"Retail","id":"12.0.0"}]' -RequiredVersions $versions)
     } "12\.0\.0"
     Assert-ThrowsMatch "duplicate exact WoWInterface version rejected" {
-        Assert-WowInterfaceVersions -JsonText '[{"game":"Retail","id":"12.0.7"},{"game":"Retail","id":"12.0.7"},{"game":"Retail","id":"12.1.0"}]' -RequiredVersions $versions
+        [void](Resolve-StatsProWowInterfaceVersionsFromJson -Json '[{"game":"Retail","id":"12.0.7"},{"game":"Retail","id":"12.0.7"},{"game":"Retail","id":"12.1.0"}]' -RequiredVersions $versions)
     } "12\.0\.7.*duplicated"
     Assert-ThrowsMatch "malformed WoWInterface version after exact match rejected" {
-        Assert-WowInterfaceVersions -JsonText '[{"game":"Retail","id":"12.0.7"},{"game":"Retail","id":"bad"},{"game":"Retail","id":"12.1.0"}]' -RequiredVersions $versions
+        [void](Resolve-StatsProWowInterfaceVersionsFromJson -Json '[{"game":"Retail","id":"12.0.7"},{"game":"Retail","id":"bad"},{"game":"Retail","id":"12.1.0"}]' -RequiredVersions $versions)
     } "malformed version 'bad'"
     Assert-ThrowsMatch "lowercase WoWInterface game label ignored like upstream" {
-        Assert-WowInterfaceVersions -JsonText '[{"game":"retail","id":"12.0.7"},{"game":"Retail","id":"12.1.0"}]' -RequiredVersions $versions
+        [void](Resolve-StatsProWowInterfaceVersionsFromJson -Json '[{"game":"retail","id":"12.0.7"},{"game":"Retail","id":"12.1.0"}]' -RequiredVersions $versions)
     } "unsupported fallback '12\.1\.0'"
     Assert-ThrowsMatch "higher unapproved WoWInterface predecessor rejected" {
-        Assert-WowInterfaceVersions `
-            -JsonText '[{"game":"Retail","id":"12.0.6"},{"game":"Retail","id":"12.0.0"},{"game":"Retail","id":"12.1.0"}]' `
+        [void](Resolve-StatsProWowInterfaceVersionsFromJson `
+            -Json '[{"game":"Retail","id":"12.0.6"},{"game":"Retail","id":"12.0.0"},{"game":"Retail","id":"12.1.0"}]' `
             -RequiredVersions $versions
+        )
     } "unsupported fallback '12\.0\.6'"
     Assert-ThrowsMatch "missing Wago version and aggregate rejected" {
-        Assert-WagoVersions -JsonText '{"patches":{"retail":["12.0.7"]}}' -RequiredVersions $versions
+        [void](Resolve-StatsProWagoVersionSelection -Json '{"patches":{"retail":["12.0.7"]}}' -RequiredVersions $versions -RequireDirectCompatibilityMatch)
     } "12\.1\.0"
     Assert-ThrowsMatch "ignored Wago Retail versions rejected" {
-        Assert-WagoVersions -JsonText '{"patches":{"retail":[]}}' -RequiredVersions $versions
+        [void](Resolve-StatsProWagoVersionSelection -Json '{"patches":{"retail":[]}}' -RequiredVersions $versions -RequireDirectCompatibilityMatch)
     } "ignore Retail"
     Assert-ThrowsMatch "duplicate Wago version rejected" {
-        Assert-WagoVersions -JsonText '{"patches":{"retail":["12.0.7","12.0.7","12.1.0"]}}' -RequiredVersions $versions
+        [void](Resolve-StatsProWagoVersionSelection -Json '{"patches":{"retail":["12.0.7","12.0.7","12.1.0"]}}' -RequiredVersions $versions -RequireDirectCompatibilityMatch)
     } "duplicate version '12\.0\.7'"
     Assert-ThrowsMatch "unexpected Wago Packager fallback rejected" {
-        Assert-WagoVersions -JsonText '{"patches":{"retail":["12.0.9","12.0.7","12.0.0"]}}' -RequiredVersions $versions
+        [void](Resolve-StatsProWagoVersionSelection -Json '{"patches":{"retail":["12.0.9","12.0.7","12.0.0"]}}' -RequiredVersions $versions -RequireDirectCompatibilityMatch)
     } "unexpected fallback '12\.0\.9'"
     Assert-ThrowsMatch "bad interface rejected" {
         [void](Get-RequiredRetailVersionsFromInterfaces -Interfaces @("12005"))

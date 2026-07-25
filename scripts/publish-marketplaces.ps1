@@ -14,21 +14,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 . (Join-Path $PSScriptRoot "marketplace-version-contract.ps1")
 
-$ExpectedProjectIds = [ordered]@{
-    CurseForge = "1525100"
-    Wago = "EGPemEN1"
-    WowInterface = "27130"
-}
-
-function ConvertFrom-JsonCompat {
-    param([string]$Json)
-
-    $command = Get-Command ConvertFrom-Json
-    if ($command.Parameters.ContainsKey("Depth")) {
-        return ($Json | ConvertFrom-Json -Depth 100)
-    }
-    return ($Json | ConvertFrom-Json)
-}
+$ExpectedProjectIds = Get-StatsProExpectedMarketplaceProjectIdMap
 
 function Assert-ThrowsMatch {
     param([string]$Name, [scriptblock]$Script, [string]$Pattern)
@@ -212,55 +198,6 @@ function Get-TocUploadContract {
     }
 }
 
-function Get-CurseForgeVersionIds {
-    param([string]$Json, [string[]]$RequiredVersions)
-
-    $items = @(ConvertFrom-JsonCompat $Json)
-    $ids = @()
-    foreach ($version in $RequiredVersions) {
-        $matches = @($items | Where-Object { [string]$_.name -eq $version -and [int]$_.gameVersionTypeID -eq 517 })
-        if ($matches.Count -ne 1) {
-            throw "CurseForge must expose exactly one Retail game version '$version'."
-        }
-        $id = 0
-        if (-not [int]::TryParse([string]$matches[0].id, [ref]$id) -or $id -le 0) {
-            throw "CurseForge game version '$version' has an invalid ID."
-        }
-        $ids += $id
-    }
-    return $ids
-}
-
-function Get-WagoVersions {
-    param([string]$Json, [string[]]$RequiredVersions)
-
-    $data = ConvertFrom-JsonCompat $Json
-    $property = if ($null -ne $data -and $null -ne $data.patches) { $data.patches.PSObject.Properties['retail'] } else { $null }
-    if ($null -eq $property) {
-        throw "Wago game data is missing patches.retail."
-    }
-    $available = @($property.Value | ForEach-Object { [string]$_ })
-    $selected = @()
-    foreach ($version in $RequiredVersions) {
-        $chosen = Select-StatsProOrdinalMarketplaceVersion `
-            -AvailableVersions $available `
-            -RequestedVersion $version
-        $allowed = @(Get-StatsProAcceptedMarketplaceVersions `
-            -Version $version `
-            -RequiredVersions $RequiredVersions `
-            -AllowEarlierRequiredVersions)
-        if (-not (Test-StatsProMarketplaceVersionSelection `
-                -RequestedVersion $version `
-                -SelectedVersion $chosen `
-                -RequiredVersions $RequiredVersions `
-                -AllowEarlierRequiredVersions)) {
-            throw "Wago would select unsupported fallback '$chosen' for '$version'; allowed: $($allowed -join ', ')."
-        }
-        if ($selected -notcontains $chosen) { $selected += $chosen }
-    }
-    return @($selected | Sort-Object { [version]$_ } -Descending)
-}
-
 function Invoke-JsonRead {
     param([string]$Uri, [hashtable]$Headers, [scriptblock]$Request)
 
@@ -273,31 +210,6 @@ function Invoke-JsonRead {
     }
     catch {
         throw "Marketplace compatibility read failed for $Uri`: $($_.Exception.GetType().Name)."
-    }
-}
-
-# SYNC: These non-mutating ownership/existence checks mirror the canonical
-# preflight in check-marketplace-versions.ps1 and must run before any upload.
-function Assert-WowInterfaceProjectList {
-    param([string]$Json, [string]$ExpectedProjectId)
-
-    try { $items = @(ConvertFrom-JsonCompat $Json) }
-    catch { throw "WoWInterface project-access response contained invalid JSON." }
-    $matches = @($items | Where-Object {
-        $null -ne $_.id -and
-        [System.StringComparer]::Ordinal.Equals([string]$_.id, $ExpectedProjectId)
-    })
-    if ($matches.Count -ne 1) {
-        throw "WoWInterface credential must expose exactly one StatsPro project '$ExpectedProjectId'; found $($matches.Count)."
-    }
-}
-
-function Assert-WagoProjectPage {
-    param([string]$Html, [string]$ExpectedProjectId)
-
-    $expectedCanonical = 'content="https://addons.wago.io/addons/' + [regex]::Escape($ExpectedProjectId) + '"'
-    if ([string]::IsNullOrWhiteSpace($Html) -or $Html -notmatch $expectedCanonical) {
-        throw "Wago public project page does not identify StatsPro project '$ExpectedProjectId'."
     }
 }
 
@@ -361,9 +273,9 @@ function New-MarketplacePlan {
     $context = Get-MarketplaceArchiveContext -Archive $Archive -Tag $Tag -Sha256 $Sha256 -CredentialValues $CredentialValues
     $cfJson = Invoke-JsonRead -Uri 'https://wow.curseforge.com/api/game/wow/versions' -Headers @{ 'x-api-token' = $context.Credentials.CF_API_KEY } -Request $ReadRequest
     $wowiProjectsJson = Invoke-JsonRead -Uri 'https://api.wowinterface.com/addons/list.json' -Headers @{ 'x-api-token' = $context.Credentials.WOWI_API_TOKEN } -Request $ReadRequest
-    Assert-WowInterfaceProjectList -Json $wowiProjectsJson -ExpectedProjectId $context.Contract.ProjectIds.WowInterface
+    Assert-StatsProWowInterfaceProjectAccess -Json $wowiProjectsJson -ExpectedProjectId $context.Contract.ProjectIds.WowInterface
     $wagoProjectHtml = Invoke-JsonRead -Uri "https://addons.wago.io/addons/$($context.Contract.ProjectIds.Wago)" -Headers @{} -Request $ReadRequest
-    Assert-WagoProjectPage -Html $wagoProjectHtml -ExpectedProjectId $context.Contract.ProjectIds.Wago
+    Assert-StatsProWagoProjectPage -Html $wagoProjectHtml -ExpectedProjectId $context.Contract.ProjectIds.Wago
     $wowiJson = Invoke-JsonRead -Uri 'https://api.wowinterface.com/addons/compatible.json' -Headers @{} -Request $ReadRequest
     $wagoJson = Invoke-JsonRead -Uri 'https://addons.wago.io/api/data/game' -Headers @{} -Request $ReadRequest
     return [pscustomobject][ordered]@{
@@ -372,11 +284,9 @@ function New-MarketplacePlan {
         tag = $Tag
         archiveSha256 = $Sha256
         retailVersions = @($context.Contract.RetailVersions)
-        curseForgeGameVersionIds = @(Get-CurseForgeVersionIds -Json $cfJson -RequiredVersions $context.Contract.RetailVersions)
-        wowInterfaceVersions = @(Resolve-StatsProWowInterfaceVersions `
-            -AvailableVersions @(@(ConvertFrom-JsonCompat $wowiJson) | Where-Object { [string]$_.game -ceq 'Retail' } | ForEach-Object { [string]$_.id }) `
-            -RequiredVersions $context.Contract.RetailVersions)
-        wagoVersions = @(Get-WagoVersions -Json $wagoJson -RequiredVersions $context.Contract.RetailVersions)
+        curseForgeGameVersionIds = @(Resolve-StatsProCurseForgeVersionIdMap -Json $cfJson -RequiredVersions $context.Contract.RetailVersions)
+        wowInterfaceVersions = @(Resolve-StatsProWowInterfaceVersionsFromJson -Json $wowiJson -RequiredVersions $context.Contract.RetailVersions)
+        wagoVersions = @(Resolve-StatsProWagoVersionSelection -Json $wagoJson -RequiredVersions $context.Contract.RetailVersions)
     }
 }
 
@@ -425,7 +335,7 @@ function Read-MarketplacePlan {
     if (-not [System.StringComparer]::Ordinal.Equals($actualSha, $ExpectedSha256)) {
         throw "Marketplace plan SHA-256 is '$actualSha', expected '$ExpectedSha256'."
     }
-    try { $plan = ConvertFrom-JsonCompat ([System.IO.File]::ReadAllText($resolved)) }
+    try { $plan = ConvertFrom-StatsProMarketplaceJson ([System.IO.File]::ReadAllText($resolved)) }
     catch { throw "Marketplace plan contains invalid JSON: $($_.Exception.Message)" }
     Assert-ExactPropertySet -Value $plan -Expected @(
         'schemaVersion', 'kind', 'tag', 'archiveSha256', 'retailVersions',
@@ -677,7 +587,7 @@ function Invoke-SelfTest {
                 throw "Marketplace upload did not bind the exact archive file."
             }
         }
-        $cfPayload = ConvertFrom-JsonCompat ([string]$calls[1].Form.metadata)
+        $cfPayload = ConvertFrom-StatsProMarketplaceJson ([string]$calls[1].Form.metadata)
         if ($calls[1].Headers.Count -ne 1 -or $calls[1].Headers['x-api-token'] -ne $credentials.CF_API_KEY -or
             $calls[1].Form.Count -ne 2 -or $cfPayload.displayName -ne $tag -or $cfPayload.releaseType -ne 'release' -or
             $cfPayload.changelogType -ne 'markdown' -or $cfPayload.changelog -ne "## 1.2.3`n`n- Fixed.`n" -or
@@ -689,7 +599,7 @@ function Invoke-SelfTest {
             $calls[2].Form.compatible -ne '12.1.0,12.0.7' -or $calls[2].Form.changelog -ne "## 1.2.3`n`n- Fixed.`n") {
             throw "WoWInterface payload self-test failed."
         }
-        $wagoPayload = ConvertFrom-JsonCompat ([string]$calls[0].Form.metadata)
+        $wagoPayload = ConvertFrom-StatsProMarketplaceJson ([string]$calls[0].Form.metadata)
         if ($calls[0].Headers.Count -ne 2 -or $calls[0].Headers.authorization -ne "Bearer $($credentials.WAGO_API_TOKEN)" -or
             $calls[0].Headers.accept -ne 'application/json' -or $calls[0].Form.Count -ne 2 -or
             $wagoPayload.label -ne $tag -or $wagoPayload.stability -ne 'stable' -or
@@ -872,6 +782,10 @@ function Invoke-SelfTest {
 
         if ((Select-StatsProOrdinalMarketplaceVersion -AvailableVersions @('12.0.9', '12.0.10') -RequestedVersion '12.1.0') -cne '12.0.9') {
             throw "Marketplace fallback selection must use the greatest ordinal predecessor."
+        }
+        $earlierWago = @(Resolve-StatsProWagoVersionSelection -Json '{"patches":{"retail":["12.0.7"]}}' -RequiredVersions @('12.0.7', '12.1.0'))
+        if (($earlierWago -join ',') -ne '12.0.7') {
+            throw "Marketplace publisher must preserve the allowed earlier required Wago fallback."
         }
 
         Write-Host "Marketplace publisher self-test passed."

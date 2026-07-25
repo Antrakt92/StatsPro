@@ -1,3 +1,21 @@
+function ConvertFrom-StatsProMarketplaceJson {
+    param([string]$Json)
+
+    $command = Get-Command ConvertFrom-Json
+    if ($command.Parameters.ContainsKey("Depth")) {
+        return ($Json | ConvertFrom-Json -Depth 100)
+    }
+    return ($Json | ConvertFrom-Json)
+}
+
+function Get-StatsProExpectedMarketplaceProjectIdMap {
+    return [ordered]@{
+        CurseForge = "1525100"
+        Wago = "EGPemEN1"
+        WowInterface = "27130"
+    }
+}
+
 function Get-StatsProAcceptedMarketplaceVersions {
     param(
         [Parameter(Mandatory = $true)]
@@ -126,4 +144,130 @@ function Resolve-StatsProWowInterfaceVersions {
     }
 
     return @($selected | Sort-Object { [version]$_ } -Descending)
+}
+
+function Resolve-StatsProCurseForgeVersionIdMap {
+    param([string]$Json, [string[]]$RequiredVersions)
+
+    $items = @(ConvertFrom-StatsProMarketplaceJson $Json)
+    $ids = @()
+    foreach ($version in @($RequiredVersions)) {
+        $versionMatches = @($items | Where-Object {
+            [string]$_.name -eq $version -and [int]$_.gameVersionTypeID -eq 517
+        })
+        if ($versionMatches.Count -ne 1) {
+            throw "CurseForge must expose exactly one Retail game version '$version' with gameVersionTypeID 517; found $($versionMatches.Count)."
+        }
+
+        $rawId = $versionMatches[0].id
+        $isString = $rawId -is [string]
+        $typeCode = if ($null -eq $rawId) { [System.TypeCode]::Empty } else { [System.Type]::GetTypeCode($rawId.GetType()) }
+        $isInteger = $typeCode -ge [System.TypeCode]::SByte -and $typeCode -le [System.TypeCode]::UInt64
+        $id = 0
+        if ((-not $isString -and -not $isInteger) -or
+            -not [int]::TryParse([string]$rawId, [ref]$id) -or
+            $id -le 0) {
+            throw "CurseForge version '$version' has an invalid positive Int32 id."
+        }
+        $ids += $id
+    }
+    return @($ids)
+}
+
+function Resolve-StatsProWowInterfaceVersionsFromJson {
+    param([string]$Json, [string[]]$RequiredVersions)
+
+    $items = @(ConvertFrom-StatsProMarketplaceJson $Json)
+    $availableVersions = @($items | Where-Object {
+        [string]$_.game -ceq "Retail"
+    } | ForEach-Object { [string]$_.id })
+    return @(Resolve-StatsProWowInterfaceVersions `
+        -AvailableVersions $availableVersions `
+        -RequiredVersions $RequiredVersions)
+}
+
+function Resolve-StatsProWagoVersionSelection {
+    param([string]$Json, [string[]]$RequiredVersions, [switch]$RequireDirectCompatibilityMatch)
+
+    # SYNC: BigWigs Packager release.sh::upload_wago reads patches.retail from this endpoint.
+    $data = ConvertFrom-StatsProMarketplaceJson $Json
+    if ($null -eq $data -or $null -eq $data.patches) {
+        throw "Wago game data must contain a patches object."
+    }
+    $retailProperty = $data.patches.PSObject.Properties["retail"]
+    if ($null -eq $retailProperty) {
+        throw "Wago game data is missing patches.retail; Packager would ignore Retail versions."
+    }
+
+    $retailVersions = @($retailProperty.Value | ForEach-Object { [string]$_ })
+    if ($retailVersions.Count -eq 0) {
+        throw "Wago patches.retail is empty; Packager would ignore Retail versions."
+    }
+    $seen = @{}
+    foreach ($versionText in $retailVersions) {
+        if ($versionText -notmatch "^\d+\.\d+\.\d+$") {
+            throw "Wago patches.retail contains malformed version '$versionText'."
+        }
+        if ($seen.ContainsKey($versionText)) {
+            throw "Wago patches.retail contains duplicate version '$versionText'."
+        }
+        $seen[$versionText] = $true
+    }
+
+    $selected = @()
+    foreach ($version in @($RequiredVersions)) {
+        if ($RequireDirectCompatibilityMatch) {
+            $acceptedVersions = @(Get-StatsProAcceptedMarketplaceVersions -Version $version)
+            $directMatches = @($acceptedVersions | Where-Object { $seen.ContainsKey($_) })
+            if ($directMatches.Count -eq 0) {
+                throw "Wago must expose Retail patch '$version' or accepted aggregate '$($acceptedVersions -join ', ')'; found none."
+            }
+        }
+
+        $packagerFallback = Select-StatsProOrdinalMarketplaceVersion `
+            -AvailableVersions $retailVersions `
+            -RequestedVersion $version
+        $allowedFallbacks = @(Get-StatsProAcceptedMarketplaceVersions `
+            -Version $version `
+            -RequiredVersions $RequiredVersions `
+            -AllowEarlierRequiredVersions)
+        if (-not (Test-StatsProMarketplaceVersionSelection `
+                -RequestedVersion $version `
+                -SelectedVersion $packagerFallback `
+                -RequiredVersions $RequiredVersions `
+                -AllowEarlierRequiredVersions)) {
+            throw "Wago Packager would replace Retail patch '$version' with unexpected fallback '$packagerFallback'; allowed: $($allowedFallbacks -join ', ')."
+        }
+        if ($selected -notcontains $packagerFallback) {
+            $selected += $packagerFallback
+        }
+    }
+
+    return @($selected | Sort-Object { [version]$_ } -Descending)
+}
+
+function Assert-StatsProWowInterfaceProjectAccess {
+    param([string]$Json, [string]$ExpectedProjectId)
+
+    try {
+        $items = @(ConvertFrom-StatsProMarketplaceJson $Json)
+    }
+    catch {
+        throw "WoWInterface project-access response contained invalid JSON."
+    }
+    $projectMatches = @($items | Where-Object {
+        $null -ne $_.id -and [System.StringComparer]::Ordinal.Equals([string]$_.id, $ExpectedProjectId)
+    })
+    if ($projectMatches.Count -ne 1) {
+        throw "WoWInterface credential must expose exactly one StatsPro project '$ExpectedProjectId'; found $($projectMatches.Count)."
+    }
+}
+
+function Assert-StatsProWagoProjectPage {
+    param([string]$Html, [string]$ExpectedProjectId)
+
+    $expectedCanonical = 'content="https://addons.wago.io/addons/' + [regex]::Escape($ExpectedProjectId) + '"'
+    if ([string]::IsNullOrWhiteSpace($Html) -or $Html -notmatch $expectedCanonical) {
+        throw "Wago public project page does not identify StatsPro project '$ExpectedProjectId'."
+    }
 }

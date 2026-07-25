@@ -10149,7 +10149,7 @@ do
         local invoked, result, reason = pcall(invoke)
         check("db_compat.corrupt_registry.ops.no_error." .. index, invoked, result)
         eq("db_compat.corrupt_registry.ops.rejected." .. index, result, false)
-        eq("db_compat.corrupt_registry.ops.reason." .. index, reason, "read-only")
+        eq("db_compat.corrupt_registry.ops.reason." .. index, reason, "corrupt")
     end
     local ok, err = pcall(function() corruptAddon:OpenConfigMenu() end)
     check("db_compat.corrupt_registry.config", ok, err)
@@ -10475,6 +10475,302 @@ do
 end
 
 do
+    local corruptGuidance = "StatsPro saved data is corrupted and remains read-only. Use /ss wipe outside combat to reset it."
+    local corruptControlCopy = "Corrupted data - profiles are read-only. Use /ss wipe to reset."
+    local corruptPrompt = "Reset corrupted StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position."
+    local futureGuidance = "Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."
+
+    local function newCorruptRoot()
+        return {
+            dbVersion = test.currentDBVersion(),
+            account = {
+                forceLocale = "auto",
+                updateInterval = 0.5,
+                defaultProfileID = "missing",
+                nextProfileID = 2,
+            },
+            roleTemplates = { TANK = "missing", HEALER = "missing", DAMAGER = "missing" },
+            characters = {},
+            damagedPayload = { keep = true },
+        }
+    end
+
+    local function loadCorruptRoot()
+        local root = newCorruptRoot()
+        local combat = { value = false }
+        local env, addonContext, corruptTest = loadStatsPro("enUS", {
+            statsProDB = root,
+            inCombatLockdown = function() return combat.value end,
+        })
+        fireEvent("db_compat.corrupt_recovery.pew", env, "PLAYER_ENTERING_WORLD")
+        return env, addonContext, corruptTest, root, combat
+    end
+
+    local function expectedFreshRoot(corruptTest)
+        local settings = corruptTest.copyDefaults()
+        local forceLocale = settings.forceLocale
+        local updateInterval = settings.updateInterval
+        settings.forceLocale = nil
+        settings.updateInterval = nil
+        return {
+            dbVersion = corruptTest.currentDBVersion(),
+            account = {
+                forceLocale = forceLocale,
+                updateInterval = updateInterval,
+                defaultProfileID = "p1",
+                nextProfileID = 2,
+            },
+            profiles = { p1 = { name = "Default", settings = settings } },
+            roleTemplates = { TANK = "p1", HEALER = "p1", DAMAGER = "p1" },
+            characters = {},
+        }
+    end
+
+    do
+        local env, addonContext, corruptTest, root, combat = loadCorruptRoot()
+        local before = deepCopy(root)
+        local operationBefore = corruptTest.profileOps.state().operationCount
+        local structuralBefore = corruptTest.profileRuntimeState().structuralCommitCount
+
+        clearPrints(env)
+        slash("db_compat.corrupt_recovery.guidance", env, "show")
+        eq("db_compat.corrupt_recovery.guidance_specific",
+            printContains(env, corruptGuidance), true)
+        eq("db_compat.corrupt_recovery.guidance_not_future",
+            printContains(env, futureGuidance), false)
+        eq("db_compat.corrupt_recovery.warned_mode",
+            corruptTest.dbCompatibilityState().warnedMode, "corrupt")
+        local configOK, configError = pcall(function() addonContext:OpenConfigMenu() end)
+        check("db_compat.corrupt_recovery.config_open", configOK, configError)
+        eq("db_compat.corrupt_recovery.config_copy",
+            corruptTest.profileUIState().headerSubtitle, corruptControlCopy)
+        addonContext:OpenConfigMenu()
+
+        slash("db_compat.corrupt_recovery.cancel.request", env, "wipe")
+        eq("db_compat.corrupt_recovery.cancel.popup", env.__lastStaticPopup.key,
+            "STATSPRO_WIPE_ALL_DATA")
+        eq("db_compat.corrupt_recovery.cancel.prompt",
+            env.__lastStaticPopup.definition.text, corruptPrompt)
+        eq("db_compat.corrupt_recovery.cancel.pending",
+            corruptTest.destructivePromptState().wipePending, true)
+        eq("db_compat.corrupt_recovery.cancel.kind",
+            corruptTest.destructivePromptState().wipeCorruptRecovery, true)
+        assertDeepEqual("db_compat.corrupt_recovery.cancel.request_zero_writes", root, before)
+        env.__cancelStaticPopup()
+        eq("db_compat.corrupt_recovery.cancel.pending_cleared",
+            corruptTest.destructivePromptState().wipePending, false)
+        assertDeepEqual("db_compat.corrupt_recovery.cancel.zero_writes", root, before)
+
+        slash("db_compat.corrupt_recovery.accept_combat.request", env, "wipe")
+        combat.value = true
+        env.__acceptStaticPopup()
+        eq("db_compat.corrupt_recovery.accept_combat.same_root",
+            rawequal(env.StatsProDB, root), true)
+        eq("db_compat.corrupt_recovery.accept_combat.mode",
+            corruptTest.dbCompatibilityState().mode, "corrupt")
+        assertDeepEqual("db_compat.corrupt_recovery.accept_combat.zero_writes", root, before)
+
+        local popupCount = env.__staticPopupShows
+        slash("db_compat.corrupt_recovery.combat", env, "wipe")
+        eq("db_compat.corrupt_recovery.combat.no_popup",
+            env.__staticPopupShows, popupCount)
+        eq("db_compat.corrupt_recovery.combat.no_pending",
+            corruptTest.destructivePromptState().wipePending, false)
+        assertDeepEqual("db_compat.corrupt_recovery.combat.zero_writes", root, before)
+
+        combat.value = false
+        slash("db_compat.corrupt_recovery.accept.request", env, "wipe")
+        assertDeepEqual("db_compat.corrupt_recovery.accept.request_zero_writes", root, before)
+        env.__acceptStaticPopup()
+        local freshRoot = env.StatsProDB
+        eq("db_compat.corrupt_recovery.accept.root_replaced", rawequal(freshRoot, root), false)
+        assertDeepEqual("db_compat.corrupt_recovery.accept.old_root_untouched", root, before)
+        assertDeepEqual("db_compat.corrupt_recovery.accept.exact_defaults",
+            freshRoot, expectedFreshRoot(corruptTest))
+        local recovered = corruptTest.dbCompatibilityState()
+        eq("db_compat.corrupt_recovery.accept.mode", recovered.mode, "current")
+        eq("db_compat.corrupt_recovery.accept.writable", recovered.readOnly, false)
+        eq("db_compat.corrupt_recovery.accept.warning_cleared", recovered.warnedMode, nil)
+        eq("db_compat.corrupt_recovery.accept.operation_count",
+            corruptTest.profileOps.state().operationCount, operationBefore + 1)
+        eq("db_compat.corrupt_recovery.accept.structural_count",
+            corruptTest.profileRuntimeState().structuralCommitCount, structuralBefore + 1)
+        eq("db_compat.corrupt_recovery.accept.no_pending",
+            corruptTest.destructivePromptState().wipePending, false)
+    end
+
+    do
+        local secretCombat = {}
+        local root = newCorruptRoot()
+        local before = deepCopy(root)
+        local env, _, corruptTest = loadStatsPro("enUS", {
+            statsProDB = root,
+            inCombatLockdown = function() return secretCombat end,
+            issecretvalue = function(value) return rawequal(value, secretCombat) end,
+        })
+        fireEvent("db_compat.corrupt_recovery.unknown_combat.pew",
+            env, "PLAYER_ENTERING_WORLD")
+        slash("db_compat.corrupt_recovery.unknown_combat.request", env, "wipe")
+        eq("db_compat.corrupt_recovery.unknown_combat.no_popup",
+            env.__staticPopupShows, 0)
+        eq("db_compat.corrupt_recovery.unknown_combat.no_pending",
+            corruptTest.destructivePromptState().wipePending, false)
+        assertDeepEqual("db_compat.corrupt_recovery.unknown_combat.zero_writes", root, before)
+    end
+
+    do
+        local env, _, corruptTest, root = loadCorruptRoot()
+        local oldBefore = deepCopy(root)
+        slash("db_compat.corrupt_recovery.stale_root.request", env, "wipe")
+        local replacement = newCorruptRoot()
+        local replacementBefore = deepCopy(replacement)
+        env.StatsProDB = replacement
+        env.__acceptStaticPopup()
+        eq("db_compat.corrupt_recovery.stale_root.old_identity",
+            rawequal(env.StatsProDB, root), false)
+        assertDeepEqual("db_compat.corrupt_recovery.stale_root.old_unchanged", root, oldBefore)
+        assertDeepEqual("db_compat.corrupt_recovery.stale_root.new_unchanged",
+            replacement, replacementBefore)
+        eq("db_compat.corrupt_recovery.stale_root.mode",
+            corruptTest.dbCompatibilityState().mode, "corrupt")
+    end
+
+    do
+        local env, _, corruptTest, root = loadCorruptRoot()
+        clearPrints(env)
+        slash("db_compat.corrupt_recovery.future_transition.guidance", env, "show")
+        eq("db_compat.corrupt_recovery.future_transition.warned_corrupt",
+            corruptTest.dbCompatibilityState().warnedMode, "corrupt")
+        slash("db_compat.corrupt_recovery.future_transition.request", env, "wipe")
+        root.dbVersion = corruptTest.currentDBVersion() + 1
+        local futureBefore = deepCopy(root)
+        env.__acceptStaticPopup()
+        eq("db_compat.corrupt_recovery.future_transition.same_root",
+            rawequal(env.StatsProDB, root), true)
+        assertDeepEqual("db_compat.corrupt_recovery.future_transition.zero_writes",
+            root, futureBefore)
+        eq("db_compat.corrupt_recovery.future_transition.mode",
+            corruptTest.dbCompatibilityState().mode, "future")
+        clearPrints(env)
+        slash("db_compat.corrupt_recovery.future_transition.show", env, "show")
+        eq("db_compat.corrupt_recovery.future_transition.future_guidance",
+            printContains(env, futureGuidance), true)
+        eq("db_compat.corrupt_recovery.future_transition.warned_future",
+            corruptTest.dbCompatibilityState().warnedMode, "future")
+        local popupCount = env.__staticPopupShows
+        slash("db_compat.corrupt_recovery.future_transition.wipe_blocked", env, "wipe")
+        eq("db_compat.corrupt_recovery.future_transition.no_new_popup",
+            env.__staticPopupShows, popupCount)
+        assertDeepEqual("db_compat.corrupt_recovery.future_transition.still_unchanged",
+            root, futureBefore)
+    end
+
+    for _, stage in ipairs({ "validate", "commit", "apply" }) do
+        local env, _, corruptTest, root = loadCorruptRoot()
+        local before = deepCopy(root)
+        local operationBefore = corruptTest.profileOps.state().operationCount
+        corruptTest.profileOps.setFailureStage(stage)
+        slash("db_compat.corrupt_recovery.failure." .. stage .. ".request", env, "wipe")
+        env.__acceptStaticPopup()
+        eq("db_compat.corrupt_recovery.failure." .. stage .. ".root_identity",
+            rawequal(env.StatsProDB, root), true)
+        assertDeepEqual("db_compat.corrupt_recovery.failure." .. stage .. ".rollback",
+            root, before)
+        local failedState = corruptTest.dbCompatibilityState()
+        eq("db_compat.corrupt_recovery.failure." .. stage .. ".mode",
+            failedState.mode, "corrupt")
+        eq("db_compat.corrupt_recovery.failure." .. stage .. ".read_only",
+            failedState.readOnly, true)
+        eq("db_compat.corrupt_recovery.failure." .. stage .. ".operation_count",
+            corruptTest.profileOps.state().operationCount, operationBefore)
+
+        slash("db_compat.corrupt_recovery.failure." .. stage .. ".retry", env, "wipe")
+        env.__acceptStaticPopup()
+        eq("db_compat.corrupt_recovery.failure." .. stage .. ".retry_mode",
+            corruptTest.dbCompatibilityState().mode, "current")
+        assertDeepEqual("db_compat.corrupt_recovery.failure." .. stage .. ".retry_defaults",
+            env.StatsProDB, expectedFreshRoot(corruptTest))
+    end
+
+    do
+        local env, _, corruptTest, root, combat = loadCorruptRoot()
+        local before = deepCopy(root)
+        local oldSetPoint = env.StatsProFrame.SetPoint
+        rawset(env.StatsProFrame, "SetPoint", function()
+            error("injected corrupt recovery target and rollback apply failure")
+        end)
+        slash("db_compat.corrupt_recovery.rollback_retry.request", env, "wipe")
+        env.__acceptStaticPopup()
+        local failed = corruptTest.profileRuntimeState()
+        eq("db_compat.corrupt_recovery.rollback_retry.same_root",
+            rawequal(env.StatsProDB, root), true)
+        assertDeepEqual("db_compat.corrupt_recovery.rollback_retry.root", root, before)
+        eq("db_compat.corrupt_recovery.rollback_retry.force", failed.forceReapply, true)
+        eq("db_compat.corrupt_recovery.rollback_retry.scheduled",
+            failed.corruptRollbackRetryScheduled, true)
+        eq("db_compat.corrupt_recovery.rollback_retry.count_before_timer",
+            failed.corruptRollbackRetryCount, 0)
+        eq("db_compat.corrupt_recovery.rollback_retry.root_tracked",
+            rawequal(failed.corruptRollbackRoot, root), true)
+
+        combat.value = true
+        env.__flushTimers(1)
+        local deferred = corruptTest.profileRuntimeState()
+        eq("db_compat.corrupt_recovery.rollback_retry.combat_not_scheduled",
+            deferred.corruptRollbackRetryScheduled, false)
+        eq("db_compat.corrupt_recovery.rollback_retry.combat_not_consumed",
+            deferred.corruptRollbackRetryCount, 0)
+        eq("db_compat.corrupt_recovery.rollback_retry.combat_force",
+            deferred.forceReapply, true)
+        assertDeepEqual("db_compat.corrupt_recovery.rollback_retry.combat_root", root, before)
+
+        rawset(env.StatsProFrame, "SetPoint", oldSetPoint)
+        combat.value = false
+        fireEvent("db_compat.corrupt_recovery.rollback_retry.regen",
+            env, "PLAYER_REGEN_ENABLED")
+        env.__flushTimers(1)
+        local recovered = corruptTest.profileRuntimeState()
+        eq("db_compat.corrupt_recovery.rollback_retry.recovered_force",
+            recovered.forceReapply, false)
+        eq("db_compat.corrupt_recovery.rollback_retry.recovered_scheduled",
+            recovered.corruptRollbackRetryScheduled, false)
+        eq("db_compat.corrupt_recovery.rollback_retry.recovered_count",
+            recovered.corruptRollbackRetryCount, 0)
+        eq("db_compat.corrupt_recovery.rollback_retry.recovered_root",
+            recovered.corruptRollbackRoot, nil)
+        eq("db_compat.corrupt_recovery.rollback_retry.still_corrupt",
+            corruptTest.dbCompatibilityState().mode, "corrupt")
+        assertDeepEqual("db_compat.corrupt_recovery.rollback_retry.old_root_untouched",
+            root, before)
+    end
+
+    do
+        local env, _, corruptTest, root = loadCorruptRoot()
+        local before = deepCopy(root)
+        local oldSetPoint = env.StatsProFrame.SetPoint
+        rawset(env.StatsProFrame, "SetPoint", function()
+            error("injected persistent corrupt rollback apply failure")
+        end)
+        slash("db_compat.corrupt_recovery.rollback_exhaustion.request", env, "wipe")
+        env.__acceptStaticPopup()
+        env.__flushTimers(1)
+        local exhausted = corruptTest.profileRuntimeState()
+        eq("db_compat.corrupt_recovery.rollback_exhaustion.count",
+            exhausted.corruptRollbackRetryCount, 3)
+        eq("db_compat.corrupt_recovery.rollback_exhaustion.not_scheduled",
+            exhausted.corruptRollbackRetryScheduled, false)
+        eq("db_compat.corrupt_recovery.rollback_exhaustion.force",
+            exhausted.forceReapply, true)
+        eq("db_compat.corrupt_recovery.rollback_exhaustion.root_tracked",
+            rawequal(exhausted.corruptRollbackRoot, root), true)
+        eq("db_compat.corrupt_recovery.rollback_exhaustion.same_root",
+            rawequal(env.StatsProDB, root), true)
+        assertDeepEqual("db_compat.corrupt_recovery.rollback_exhaustion.root", root, before)
+        rawset(env.StatsProFrame, "SetPoint", oldSetPoint)
+    end
+end
+
+do
     local function makeRegistry()
         return {
             dbVersion = test.currentDBVersion(),
@@ -10600,7 +10896,7 @@ do
         deepCurrentTest.dbCompatibilityState().readOnly, true)
     local wipeOK, wipeReason = deepCurrentTest.profileOps.fullWipe()
     eq("db_compat.graph_budget.current_depth.wipe_rejected", wipeOK, false)
-    eq("db_compat.graph_budget.current_depth.wipe_reason", wipeReason, "read-only")
+    eq("db_compat.graph_budget.current_depth.wipe_reason", wipeReason, "corrupt")
     eq("db_compat.graph_budget.current_depth.root_identity",
         rawequal(deepCurrentEnv.StatsProDB, deepCurrentDB), true)
     eq("db_compat.graph_budget.current_depth.account_identity",
@@ -10612,6 +10908,16 @@ do
     eq("db_compat.graph_budget.current_depth.value_identity",
         rawequal(deepCurrentDB.profiles.p1.settings.deepUnknown, deepCurrentValueRef), true)
     assertDeepEqual("db_compat.graph_budget.current_depth.no_writes",
+        deepCurrentDB, deepCurrentBefore)
+    slash("db_compat.graph_budget.current_depth.recovery_request", deepCurrentEnv, "wipe")
+    eq("db_compat.graph_budget.current_depth.recovery_pending",
+        deepCurrentTest.destructivePromptState().wipeCorruptRecovery, true)
+    deepCurrentEnv.__acceptStaticPopup()
+    eq("db_compat.graph_budget.current_depth.recovery_mode",
+        deepCurrentTest.dbCompatibilityState().mode, "current")
+    eq("db_compat.graph_budget.current_depth.recovery_root_replaced",
+        rawequal(deepCurrentEnv.StatsProDB, deepCurrentDB), false)
+    assertDeepEqual("db_compat.graph_budget.current_depth.recovery_old_untouched",
         deepCurrentDB, deepCurrentBefore)
 
     local deepLegacyDB = { dbVersion = 1 }
@@ -10831,6 +11137,9 @@ end
 
 do
     local readOnlyMessage = "Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."
+    local corruptGuidance = "StatsPro saved data is corrupted and remains read-only. Use /ss wipe outside combat to reset it."
+    local corruptControlCopy = "Corrupted data - profiles are read-only. Use /ss wipe to reset."
+    local corruptPrompt = "Reset corrupted StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position."
     local futureDB = {
         dbVersion = test.currentDBVersion() + 5,
         isVisible = true,
@@ -11012,6 +11321,15 @@ do
         check("db_compat.future_read_only.localized_key." .. locale,
             type(labels[readOnlyMessage]) == "string" and labels[readOnlyMessage] ~= "",
             "missing localized read-only guidance")
+        check("db_compat.corrupt_recovery.localized_guidance." .. locale,
+            type(labels[corruptGuidance]) == "string" and labels[corruptGuidance] ~= "",
+            "missing localized corrupt-data guidance")
+        check("db_compat.corrupt_recovery.localized_control." .. locale,
+            type(labels[corruptControlCopy]) == "string" and labels[corruptControlCopy] ~= "",
+            "missing localized corrupt-data control copy")
+        check("db_compat.corrupt_recovery.localized_prompt." .. locale,
+            type(labels[corruptPrompt]) == "string" and labels[corruptPrompt] ~= "",
+            "missing localized corrupt-data reset prompt")
     end
 end
 

@@ -1250,12 +1250,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats has no supported settings to import."] = "SwiftStats has no supported settings to import.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "These settings use a newer schema and cannot be imported by this StatsPro version.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them.",
+        ["StatsPro saved data is corrupted and remains read-only. Use /ss wipe outside combat to reset it."] = "StatsPro saved data is corrupted and remains read-only. Use /ss wipe outside combat to reset it.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "SwiftStats import is unavailable during combat. Try again after combat.",
         ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged.",
         ["Import"] = "Import",
         ["SwiftStats settings imported into new profile \"%s\"."] = "SwiftStats settings imported into new profile \"%s\".",
         ["SwiftStats import failed; profiles and assignments were preserved."] = "SwiftStats import failed; profiles and assignments were preserved.",
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged.",
+        ["Reset corrupted StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position."] = "Reset corrupted StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position.",
         ["All StatsPro data reset to defaults."] = "All StatsPro data reset to defaults.",
         -- Buttons + title:
         ["Reset to Defaults"] = "Reset to Defaults", ["Close"] = "Close",
@@ -1270,6 +1272,7 @@ local LABELS_BY_LOCALE = {
         ["Spec %d"] = "Spec %d", ["Profile changes are unavailable during combat."] = "Profile changes are unavailable during combat.",
         ["Waiting for a safe profile context."] = "Waiting for a safe profile context.",
         ["Compatibility mode - profiles are read-only."] = "Compatibility mode - profiles are read-only.",
+        ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "Corrupted data - profiles are read-only. Use /ss wipe to reset.",
         ["Profile to manage:"] = "Profile to manage:", ["Choose a profile"] = "Choose a profile",
         ["All settings"] = "All settings", ["Stat and gear settings"] = "Stat and gear settings", ["Layout settings"] = "Layout settings", ["Appearance settings"] = "Appearance settings", ["Choose settings to copy"] = "Choose settings to copy",
         ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references.",
@@ -1398,12 +1401,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats has no supported settings to import."] = "В SwiftStats нет поддерживаемых настроек для импорта.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Эти настройки используют более новую схему и не могут быть импортированы этой версией StatsPro.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Настройки доступны только для чтения, поскольку они сохранены более новой версией StatsPro. Обновите StatsPro, чтобы изменять их.",
+        ["StatsPro saved data is corrupted and remains read-only. Use /ss wipe outside combat to reset it."] = "Сохранённые данные StatsPro повреждены и остаются доступными только для чтения. Используйте /ss wipe вне боя, чтобы сбросить их.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "Импорт SwiftStats недоступен в бою. Повторите после боя.",
         ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "Импортировать совместимые настройки SwiftStats в новый профиль для текущего персонажа и специализации? Существующие профили, другие назначения, настройки аккаунта и данные SwiftStats останутся без изменений.",
         ["Import"] = "Импорт",
         ["SwiftStats settings imported into new profile \"%s\"."] = "Настройки SwiftStats импортированы в новый профиль «%s».",
         ["SwiftStats import failed; profiles and assignments were preserved."] = "Не удалось импортировать SwiftStats; профили и назначения сохранены.",
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "Сбросить все данные StatsPro? Это безвозвратно удалит все профили, назначения персонажей и специализаций, шаблоны ролей, настройки аккаунта и сохранённые позиции. Данные SwiftStats останутся без изменений.",
+        ["Reset corrupted StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position."] = "Сбросить повреждённые данные StatsPro? Это безвозвратно удалит все профили, назначения персонажей и специализаций, шаблоны ролей, настройки аккаунта и сохранённые позиции.",
         ["All StatsPro data reset to defaults."] = "Все данные StatsPro сброшены до значений по умолчанию.",
         -- Buttons + title:
         ["Reset to Defaults"] = "Сбросить настройки", ["Close"] = "Закрыть",
@@ -1418,6 +1423,7 @@ local LABELS_BY_LOCALE = {
         ["Spec %d"] = "Специализация %d", ["Profile changes are unavailable during combat."] = "Изменение профилей недоступно в бою.",
         ["Waiting for a safe profile context."] = "Ожидание безопасного контекста профиля.",
         ["Compatibility mode - profiles are read-only."] = "Режим совместимости — профили доступны только для чтения.",
+        ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "Данные повреждены — профили доступны только для чтения. Используйте /ss wipe для сброса.",
         ["Profile to manage:"] = "Профиль для управления:", ["Choose a profile"] = "Выберите профиль",
         ["All settings"] = "Все настройки", ["Stat and gear settings"] = "Показатели и экипировка", ["Layout settings"] = "Расположение", ["Appearance settings"] = "Внешний вид", ["Choose settings to copy"] = "Выберите настройки для копирования",
         ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "Копировать раздел «%s» из «%s» в «%s»? Будут изменены специализации: %d, другие ссылки: %d.",
@@ -1541,12 +1547,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats has no supported settings to import."] = "SwiftStats enthält keine unterstützten Einstellungen zum Importieren.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Diese Einstellungen verwenden ein neueres Schema und können von dieser StatsPro-Version nicht importiert werden.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Die Einstellungen sind schreibgeschützt, da sie mit einer neueren StatsPro-Version gespeichert wurden. Aktualisiere StatsPro, um sie zu ändern.",
+        ["StatsPro saved data is corrupted and remains read-only. Use /ss wipe outside combat to reset it."] = "Gespeicherte StatsPro-Daten sind beschädigt und bleiben schreibgeschützt. Verwende außerhalb des Kampfes /ss wipe, um sie zurückzusetzen.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "Der SwiftStats-Import ist im Kampf nicht verfügbar. Versuche es nach dem Kampf erneut.",
         ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "Kompatible SwiftStats-Einstellungen in ein neues Profil für den aktuellen Charakter und die aktuelle Spezialisierung importieren? Bestehende Profile, andere Zuweisungen, Kontoeinstellungen und SwiftStats-Daten bleiben unverändert.",
         ["Import"] = "Importieren",
         ["SwiftStats settings imported into new profile \"%s\"."] = "SwiftStats-Einstellungen wurden in das neue Profil „%s“ importiert.",
         ["SwiftStats import failed; profiles and assignments were preserved."] = "SwiftStats-Import fehlgeschlagen; Profile und Zuweisungen wurden beibehalten.",
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "Alle StatsPro-Daten zurücksetzen? Dadurch werden dauerhaft alle Profile, Charakter- und Spezialisierungszuweisungen, Rollenvorlagen, Kontoeinstellungen und gespeicherten Positionen entfernt. SwiftStats-Daten bleiben unverändert.",
+        ["Reset corrupted StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position."] = "Beschädigte StatsPro-Daten zurücksetzen? Dadurch werden dauerhaft alle Profile, Charakter- und Spezialisierungszuweisungen, Rollenvorlagen, Kontoeinstellungen und gespeicherten Positionen entfernt.",
         ["All StatsPro data reset to defaults."] = "Alle StatsPro-Daten wurden auf die Standardwerte zurückgesetzt.",
         ["Reset to Defaults"] = "Auf Standard", ["Close"] = "Schließen",
         ["Contact"] = "Kontakt", ["Click to copy the link."] = "Klicken, um den Link zu kopieren.",
@@ -1560,6 +1568,7 @@ local LABELS_BY_LOCALE = {
         ["Spec %d"] = "Spezialisierung %d", ["Profile changes are unavailable during combat."] = "Profiländerungen sind im Kampf nicht verfügbar.",
         ["Waiting for a safe profile context."] = "Warten auf einen sicheren Profilkontext.",
         ["Compatibility mode - profiles are read-only."] = "Kompatibilitätsmodus – Profile sind schreibgeschützt.",
+        ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "Beschädigte Daten – Profile sind schreibgeschützt. Mit /ss wipe zurücksetzen.",
         ["Profile to manage:"] = "Zu verwaltendes Profil:", ["Choose a profile"] = "Profil auswählen",
         ["All settings"] = "Alle Einstellungen", ["Stat and gear settings"] = "Werte und Ausrüstung", ["Layout settings"] = "Layout-Einstellungen", ["Appearance settings"] = "Darstellung", ["Choose settings to copy"] = "Zu kopierende Einstellungen auswählen",
         ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "%s von „%s“ nach „%s“ kopieren? Geändert werden %d zugewiesene Spezialisierungen und %d weitere Verweise.",
@@ -1679,12 +1688,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats has no supported settings to import."] = "SwiftStats ne contient aucun réglage pris en charge à importer.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Ces réglages utilisent un schéma plus récent et ne peuvent pas être importés par cette version de StatsPro.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Les paramètres sont en lecture seule, car ils ont été enregistrés par une version plus récente de StatsPro. Mettez StatsPro à jour pour les modifier.",
+        ["StatsPro saved data is corrupted and remains read-only. Use /ss wipe outside combat to reset it."] = "Les données enregistrées de StatsPro sont corrompues et restent en lecture seule. Utilisez /ss wipe hors combat pour les réinitialiser.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "L’importation SwiftStats est indisponible en combat. Réessayez après le combat.",
         ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "Importer les réglages SwiftStats compatibles dans un nouveau profil pour le personnage et la spécialisation actuels ? Les profils existants, les autres affectations, les paramètres du compte et les données SwiftStats resteront inchangés.",
         ["Import"] = "Importer",
         ["SwiftStats settings imported into new profile \"%s\"."] = "Réglages SwiftStats importés dans le nouveau profil « %s ».",
         ["SwiftStats import failed; profiles and assignments were preserved."] = "Échec de l’importation SwiftStats ; les profils et les affectations ont été conservés.",
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "Réinitialiser toutes les données StatsPro ? Cela supprimera définitivement tous les profils, les affectations de personnages et de spécialisations, les modèles de rôle, les paramètres du compte et les positions enregistrées. Les données SwiftStats resteront inchangées.",
+        ["Reset corrupted StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position."] = "Réinitialiser les données StatsPro corrompues ? Cela supprimera définitivement tous les profils, les affectations de personnages et de spécialisations, les modèles de rôle, les paramètres du compte et les positions enregistrées.",
         ["All StatsPro data reset to defaults."] = "Toutes les données StatsPro ont été réinitialisées aux valeurs par défaut.",
         ["Reset to Defaults"] = "Par défaut", ["Close"] = "Fermer",
         ["Contact"] = "Contact", ["Click to copy the link."] = "Cliquez pour copier le lien.",
@@ -1698,6 +1709,7 @@ local LABELS_BY_LOCALE = {
         ["Spec %d"] = "Spécialisation %d", ["Profile changes are unavailable during combat."] = "Les changements de profil sont indisponibles en combat.",
         ["Waiting for a safe profile context."] = "En attente d’un contexte de profil sûr.",
         ["Compatibility mode - profiles are read-only."] = "Mode de compatibilité – les profils sont en lecture seule.",
+        ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "Données corrompues – les profils sont en lecture seule. Utilisez /ss wipe pour réinitialiser.",
         ["Profile to manage:"] = "Profil à gérer :", ["Choose a profile"] = "Choisir un profil",
         ["All settings"] = "Tous les réglages", ["Stat and gear settings"] = "Caractéristiques et équipement", ["Layout settings"] = "Disposition", ["Appearance settings"] = "Apparence", ["Choose settings to copy"] = "Choisir les réglages à copier",
         ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "Copier « %s » de « %s » vers « %s » ? Cela modifie %d spécialisations attribuées et %d autres références.",
@@ -1818,12 +1830,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats has no supported settings to import."] = "SwiftStats no tiene ajustes compatibles para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Estos ajustes usan un esquema más reciente y esta versión de StatsPro no puede importarlos.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Los ajustes son de solo lectura porque se guardaron con una versión más reciente de StatsPro. Actualiza StatsPro para modificarlos.",
+        ["StatsPro saved data is corrupted and remains read-only. Use /ss wipe outside combat to reset it."] = "Los datos guardados de StatsPro están dañados y permanecen en modo de solo lectura. Usa /ss wipe fuera de combate para restablecerlos.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "La importación de SwiftStats no está disponible en combate. Inténtalo de nuevo después.",
         ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "¿Importar la configuración compatible de SwiftStats en un perfil nuevo para el personaje y la especialización actuales? Los perfiles existentes, las demás asignaciones, la configuración de la cuenta y los datos de SwiftStats no cambiarán.",
         ["Import"] = "Importar",
         ["SwiftStats settings imported into new profile \"%s\"."] = "La configuración de SwiftStats se importó al perfil nuevo «%s».",
         ["SwiftStats import failed; profiles and assignments were preserved."] = "La importación de SwiftStats falló; se conservaron los perfiles y las asignaciones.",
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "¿Restablecer todos los datos de StatsPro? Esto eliminará permanentemente todos los perfiles, las asignaciones de personajes y especializaciones, las plantillas de rol, la configuración de la cuenta y las posiciones guardadas. Los datos de SwiftStats no cambiarán.",
+        ["Reset corrupted StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position."] = "¿Restablecer los datos dañados de StatsPro? Esto eliminará permanentemente todos los perfiles, las asignaciones de personajes y especializaciones, las plantillas de rol, la configuración de la cuenta y las posiciones guardadas.",
         ["All StatsPro data reset to defaults."] = "Todos los datos de StatsPro se restablecieron a los valores predeterminados.",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
         ["Contact"] = "Contacto", ["Click to copy the link."] = "Haz clic para copiar el enlace.",
@@ -1837,6 +1851,7 @@ local LABELS_BY_LOCALE = {
         ["Spec %d"] = "Especialización %d", ["Profile changes are unavailable during combat."] = "Los cambios de perfil no están disponibles en combate.",
         ["Waiting for a safe profile context."] = "Esperando un contexto de perfil seguro.",
         ["Compatibility mode - profiles are read-only."] = "Modo de compatibilidad: los perfiles son de solo lectura.",
+        ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "Datos dañados: los perfiles son de solo lectura. Usa /ss wipe para restablecerlos.",
         ["Profile to manage:"] = "Perfil que gestionar:", ["Choose a profile"] = "Elige un perfil",
         ["All settings"] = "Todos los ajustes", ["Stat and gear settings"] = "Estadísticas y equipo", ["Layout settings"] = "Diseño", ["Appearance settings"] = "Apariencia", ["Choose settings to copy"] = "Elige los ajustes que copiar",
         ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "¿Copiar «%s» de «%s» a «%s»? Esto cambia %d especializaciones asignadas y %d referencias más.",
@@ -1955,12 +1970,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats has no supported settings to import."] = "SwiftStats no tiene opciones compatibles para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Esta configuración usa un esquema más reciente y esta versión de StatsPro no puede importarla.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "La configuración es de solo lectura porque se guardó con una versión más reciente de StatsPro. Actualiza StatsPro para modificarla.",
+        ["StatsPro saved data is corrupted and remains read-only. Use /ss wipe outside combat to reset it."] = "Los datos guardados de StatsPro están dañados y permanecen en modo de solo lectura. Usa /ss wipe fuera de combate para restablecerlos.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "La importación de SwiftStats no está disponible en combate. Inténtalo de nuevo al terminar.",
         ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "¿Importar los ajustes compatibles de SwiftStats en un perfil nuevo para el personaje y la especialización actuales? Los perfiles existentes, las demás asignaciones, los ajustes de la cuenta y los datos de SwiftStats no cambiarán.",
         ["Import"] = "Importar",
         ["SwiftStats settings imported into new profile \"%s\"."] = "Los ajustes de SwiftStats se importaron al nuevo perfil «%s».",
         ["SwiftStats import failed; profiles and assignments were preserved."] = "La importación de SwiftStats falló; se conservaron los perfiles y las asignaciones.",
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "¿Restablecer todos los datos de StatsPro? Esto eliminará permanentemente todos los perfiles, las asignaciones de personajes y especializaciones, las plantillas de rol, los ajustes de la cuenta y las posiciones guardadas. Los datos de SwiftStats no cambiarán.",
+        ["Reset corrupted StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position."] = "¿Restablecer los datos dañados de StatsPro? Esto eliminará permanentemente todos los perfiles, las asignaciones de personajes y especializaciones, las plantillas de rol, los ajustes de la cuenta y las posiciones guardadas.",
         ["All StatsPro data reset to defaults."] = "Todos los datos de StatsPro se restablecieron a los valores predeterminados.",
         ["Reset to Defaults"] = "Restablecer", ["Close"] = "Cerrar",
         ["Contact"] = "Contacto", ["Click to copy the link."] = "Haz clic para copiar el enlace.",
@@ -1974,6 +1991,7 @@ local LABELS_BY_LOCALE = {
         ["Spec %d"] = "Especialización %d", ["Profile changes are unavailable during combat."] = "Los cambios de perfil no están disponibles en combate.",
         ["Waiting for a safe profile context."] = "Esperando un contexto de perfil seguro.",
         ["Compatibility mode - profiles are read-only."] = "Modo de compatibilidad: los perfiles son de solo lectura.",
+        ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "Datos dañados: los perfiles son de solo lectura. Usa /ss wipe para restablecerlos.",
         ["Profile to manage:"] = "Perfil que administrar:", ["Choose a profile"] = "Elige un perfil",
         ["All settings"] = "Todos los ajustes", ["Stat and gear settings"] = "Estadísticas y equipo", ["Layout settings"] = "Diseño", ["Appearance settings"] = "Apariencia", ["Choose settings to copy"] = "Elige los ajustes que copiar",
         ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "¿Copiar «%s» de «%s» a «%s»? Esto cambia %d especializaciones asignadas y %d referencias más.",
@@ -2093,12 +2111,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats has no supported settings to import."] = "SwiftStats non contiene impostazioni supportate da importare.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Queste impostazioni usano uno schema più recente e non possono essere importate da questa versione di StatsPro.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "Le impostazioni sono in sola lettura perché sono state salvate da una versione più recente di StatsPro. Aggiorna StatsPro per modificarle.",
+        ["StatsPro saved data is corrupted and remains read-only. Use /ss wipe outside combat to reset it."] = "I dati salvati di StatsPro sono danneggiati e restano in sola lettura. Usa /ss wipe fuori dal combattimento per ripristinarli.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "L’importazione di SwiftStats non è disponibile in combattimento. Riprova al termine.",
         ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "Importare le impostazioni SwiftStats compatibili in un nuovo profilo per il personaggio e la specializzazione attuali? I profili esistenti, le altre assegnazioni, le impostazioni dell’account e i dati SwiftStats resteranno invariati.",
         ["Import"] = "Importa",
         ["SwiftStats settings imported into new profile \"%s\"."] = "Impostazioni SwiftStats importate nel nuovo profilo «%s».",
         ["SwiftStats import failed; profiles and assignments were preserved."] = "Importazione di SwiftStats non riuscita; profili e assegnazioni sono stati conservati.",
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "Ripristinare tutti i dati di StatsPro? Verranno rimossi definitivamente tutti i profili, le assegnazioni di personaggi e specializzazioni, i modelli di ruolo, le impostazioni dell’account e le posizioni salvate. I dati SwiftStats resteranno invariati.",
+        ["Reset corrupted StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position."] = "Ripristinare i dati danneggiati di StatsPro? Verranno rimossi definitivamente tutti i profili, le assegnazioni di personaggi e specializzazioni, i modelli di ruolo, le impostazioni dell’account e le posizioni salvate.",
         ["All StatsPro data reset to defaults."] = "Tutti i dati di StatsPro sono stati ripristinati ai valori predefiniti.",
         ["Reset to Defaults"] = "Predefiniti", ["Close"] = "Chiudi",
         ["Contact"] = "Contatti", ["Click to copy the link."] = "Fai clic per copiare il link.",
@@ -2112,6 +2132,7 @@ local LABELS_BY_LOCALE = {
         ["Spec %d"] = "Specializzazione %d", ["Profile changes are unavailable during combat."] = "Le modifiche ai profili non sono disponibili in combattimento.",
         ["Waiting for a safe profile context."] = "In attesa di un contesto profilo sicuro.",
         ["Compatibility mode - profiles are read-only."] = "Modalità compatibilità – i profili sono in sola lettura.",
+        ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "Dati danneggiati – i profili sono in sola lettura. Usa /ss wipe per ripristinare.",
         ["Profile to manage:"] = "Profilo da gestire:", ["Choose a profile"] = "Scegli un profilo",
         ["All settings"] = "Tutte le impostazioni", ["Stat and gear settings"] = "Statistiche ed equipaggiamento", ["Layout settings"] = "Disposizione", ["Appearance settings"] = "Aspetto", ["Choose settings to copy"] = "Scegli le impostazioni da copiare",
         ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "Copiare «%s» da «%s» a «%s»? Verranno modificate %d specializzazioni assegnate e %d altri riferimenti.",
@@ -2230,12 +2251,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats has no supported settings to import."] = "O SwiftStats não tem configurações compatíveis para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Estas configurações usam um esquema mais recente e não podem ser importadas por esta versão do StatsPro.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "As configurações estão somente para leitura porque foram salvas por uma versão mais recente do StatsPro. Atualize o StatsPro para alterá-las.",
+        ["StatsPro saved data is corrupted and remains read-only. Use /ss wipe outside combat to reset it."] = "Os dados salvos do StatsPro estão corrompidos e permanecem somente leitura. Use /ss wipe fora de combate para redefini-los.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "A importação do SwiftStats não está disponível em combate. Tente novamente depois.",
         ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "Importar as configurações compatíveis do SwiftStats para um novo perfil do personagem e da especialização atuais? Os perfis existentes, as outras atribuições, as configurações da conta e os dados do SwiftStats permanecerão inalterados.",
         ["Import"] = "Importar",
         ["SwiftStats settings imported into new profile \"%s\"."] = "Configurações do SwiftStats importadas para o novo perfil “%s”.",
         ["SwiftStats import failed; profiles and assignments were preserved."] = "Falha ao importar o SwiftStats; os perfis e as atribuições foram preservados.",
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "Redefinir todos os dados do StatsPro? Isso removerá permanentemente todos os perfis, as atribuições de personagens e especializações, os modelos de função, as configurações da conta e as posições salvas. Os dados do SwiftStats permanecerão inalterados.",
+        ["Reset corrupted StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position."] = "Redefinir os dados corrompidos do StatsPro? Isso removerá permanentemente todos os perfis, as atribuições de personagens e especializações, os modelos de função, as configurações da conta e as posições salvas.",
         ["All StatsPro data reset to defaults."] = "Todos os dados do StatsPro foram redefinidos para os padrões.",
         ["Reset to Defaults"] = "Restaurar", ["Close"] = "Fechar",
         ["Contact"] = "Contato", ["Click to copy the link."] = "Clique para copiar o link.",
@@ -2249,6 +2272,7 @@ local LABELS_BY_LOCALE = {
         ["Spec %d"] = "Especialização %d", ["Profile changes are unavailable during combat."] = "Alterações de perfil não estão disponíveis em combate.",
         ["Waiting for a safe profile context."] = "Aguardando um contexto de perfil seguro.",
         ["Compatibility mode - profiles are read-only."] = "Modo de compatibilidade – os perfis são somente leitura.",
+        ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "Dados corrompidos – os perfis são somente leitura. Use /ss wipe para redefinir.",
         ["Profile to manage:"] = "Perfil para gerenciar:", ["Choose a profile"] = "Escolha um perfil",
         ["All settings"] = "Todas as configurações", ["Stat and gear settings"] = "Atributos e equipamento", ["Layout settings"] = "Layout", ["Appearance settings"] = "Aparência", ["Choose settings to copy"] = "Escolha as configurações para copiar",
         ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "Copiar “%s” de “%s” para “%s”? Isso altera %d especializações atribuídas e %d outras referências.",
@@ -2374,12 +2398,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats has no supported settings to import."] = "SwiftStats에 가져올 수 있는 지원 설정이 없습니다.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "이 설정은 더 새로운 스키마를 사용하므로 현재 StatsPro 버전에서 가져올 수 없습니다.",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "더 최신 StatsPro 버전에서 저장한 설정이므로 읽기 전용입니다. 설정을 변경하려면 StatsPro를 업데이트하세요.",
+        ["StatsPro saved data is corrupted and remains read-only. Use /ss wipe outside combat to reset it."] = "저장된 StatsPro 데이터가 손상되어 읽기 전용 상태입니다. 전투 중이 아닐 때 /ss wipe로 초기화하세요.",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "전투 중에는 SwiftStats 설정을 가져올 수 없습니다. 전투 후 다시 시도하세요.",
         ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "현재 캐릭터와 전문화용 새 프로필로 호환되는 SwiftStats 설정을 가져오시겠습니까? 기존 프로필, 다른 할당, 계정 설정 및 SwiftStats 데이터는 변경되지 않습니다.",
         ["Import"] = "가져오기",
         ["SwiftStats settings imported into new profile \"%s\"."] = "SwiftStats 설정을 새 프로필 \"%s\"에 가져왔습니다.",
         ["SwiftStats import failed; profiles and assignments were preserved."] = "SwiftStats 설정 가져오기에 실패했습니다. 프로필과 할당은 유지되었습니다.",
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "모든 StatsPro 데이터를 초기화하시겠습니까? 모든 프로필, 캐릭터 및 전문화 할당, 역할 템플릿, 계정 설정, 저장된 위치가 영구적으로 삭제됩니다. SwiftStats 데이터는 변경되지 않습니다.",
+        ["Reset corrupted StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position."] = "손상된 StatsPro 데이터를 초기화하시겠습니까? 모든 프로필, 캐릭터 및 전문화 할당, 역할 템플릿, 계정 설정, 저장된 위치가 영구적으로 삭제됩니다.",
         ["All StatsPro data reset to defaults."] = "모든 StatsPro 데이터를 기본값으로 초기화했습니다.",
         ["Reset to Defaults"] = "기본값", ["Close"] = "닫기",
         ["Contact"] = "문의", ["Click to copy the link."] = "클릭하여 링크를 복사하세요.",
@@ -2393,6 +2419,7 @@ local LABELS_BY_LOCALE = {
         ["Spec %d"] = "전문화 %d", ["Profile changes are unavailable during combat."] = "전투 중에는 프로필을 변경할 수 없습니다.",
         ["Waiting for a safe profile context."] = "안전한 프로필 상태를 기다리는 중입니다.",
         ["Compatibility mode - profiles are read-only."] = "호환 모드 – 프로필이 읽기 전용입니다.",
+        ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "데이터 손상 – 프로필이 읽기 전용입니다. /ss wipe로 초기화하세요.",
         ["Profile to manage:"] = "관리할 프로필:", ["Choose a profile"] = "프로필 선택",
         ["All settings"] = "모든 설정", ["Stat and gear settings"] = "능력치 및 장비 설정", ["Layout settings"] = "배치 설정", ["Appearance settings"] = "외형 설정", ["Choose settings to copy"] = "복사할 설정 선택",
         ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "\"%s\"을(를) \"%s\"에서 \"%s\"(으)로 복사하시겠습니까? 할당된 전문화 %d개와 기타 참조 %d개가 변경됩니다.",
@@ -2511,12 +2538,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats has no supported settings to import."] = "SwiftStats 中没有可导入的受支持设置。",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "这些设置使用较新的数据结构，当前版本的 StatsPro 无法导入。",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "这些设置由较新版本的 StatsPro 保存，因此当前为只读。请更新 StatsPro 后再进行修改。",
+        ["StatsPro saved data is corrupted and remains read-only. Use /ss wipe outside combat to reset it."] = "StatsPro 保存的数据已损坏，当前保持只读。请在非战斗状态下使用 /ss wipe 重置。",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "战斗中无法导入 SwiftStats 设置。请在战斗结束后重试。",
         ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "要将兼容的 SwiftStats 设置导入到当前角色和专精的新配置中吗？现有配置、其他分配、账号设置和 SwiftStats 数据均不会更改。",
         ["Import"] = "导入",
         ["SwiftStats settings imported into new profile \"%s\"."] = "SwiftStats 设置已导入新配置“%s”。",
         ["SwiftStats import failed; profiles and assignments were preserved."] = "SwiftStats 导入失败；配置和分配已保留。",
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "要重置所有 StatsPro 数据吗？这将永久删除所有配置、角色和专精分配、职责模板、账号设置及保存的位置。SwiftStats 数据不会更改。",
+        ["Reset corrupted StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position."] = "要重置损坏的 StatsPro 数据吗？这将永久删除所有配置、角色和专精分配、职责模板、账号设置及保存的位置。",
         ["All StatsPro data reset to defaults."] = "所有 StatsPro 数据已重置为默认值。",
         ["Reset to Defaults"] = "恢复默认", ["Close"] = "关闭",
         ["Contact"] = "联系", ["Click to copy the link."] = "点击复制链接。",
@@ -2530,6 +2559,7 @@ local LABELS_BY_LOCALE = {
         ["Spec %d"] = "专精 %d", ["Profile changes are unavailable during combat."] = "战斗中无法更改配置。",
         ["Waiting for a safe profile context."] = "正在等待安全的配置环境。",
         ["Compatibility mode - profiles are read-only."] = "兼容模式 – 配置为只读。",
+        ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "数据已损坏 – 配置为只读。请使用 /ss wipe 重置。",
         ["Profile to manage:"] = "要管理的配置：", ["Choose a profile"] = "选择配置",
         ["All settings"] = "所有设置", ["Stat and gear settings"] = "属性与装备设置", ["Layout settings"] = "布局设置", ["Appearance settings"] = "外观设置", ["Choose settings to copy"] = "选择要复制的设置",
         ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "将“%s”从“%s”复制到“%s”？这会更改 %d 个已分配专精和 %d 个其他引用。",
@@ -2648,12 +2678,14 @@ local LABELS_BY_LOCALE = {
         ["SwiftStats has no supported settings to import."] = "SwiftStats 中沒有可匯入的支援設定。",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "這些設定使用較新的資料結構，目前版本的 StatsPro 無法匯入。",
         ["Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."] = "這些設定由較新版本的 StatsPro 儲存，因此目前為唯讀。請更新 StatsPro 後再進行修改。",
+        ["StatsPro saved data is corrupted and remains read-only. Use /ss wipe outside combat to reset it."] = "StatsPro 儲存的資料已損壞，目前維持唯讀。請在非戰鬥狀態下使用 /ss wipe 重設。",
         ["SwiftStats import is unavailable during combat. Try again after combat."] = "戰鬥中無法匯入 SwiftStats 設定。請在戰鬥結束後重試。",
         ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "要將相容的 SwiftStats 設定匯入目前角色與專精的新設定檔嗎？現有設定檔、其他指派、帳號設定和 SwiftStats 資料都不會變更。",
         ["Import"] = "匯入",
         ["SwiftStats settings imported into new profile \"%s\"."] = "SwiftStats 設定已匯入新設定檔「%s」。",
         ["SwiftStats import failed; profiles and assignments were preserved."] = "SwiftStats 匯入失敗；設定檔和指派已保留。",
         ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "要重設所有 StatsPro 資料嗎？這將永久刪除所有設定檔、角色與專精指派、職責範本、帳號設定和已儲存的位置。SwiftStats 資料不會變更。",
+        ["Reset corrupted StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position."] = "要重設損壞的 StatsPro 資料嗎？這將永久刪除所有設定檔、角色與專精指派、職責範本、帳號設定和已儲存的位置。",
         ["All StatsPro data reset to defaults."] = "所有 StatsPro 資料已重設為預設值。",
         ["Reset to Defaults"] = "恢復預設", ["Close"] = "關閉",
         ["Contact"] = "聯絡", ["Click to copy the link."] = "點擊複製連結。",
@@ -2667,6 +2699,7 @@ local LABELS_BY_LOCALE = {
         ["Spec %d"] = "專精 %d", ["Profile changes are unavailable during combat."] = "戰鬥中無法變更設定檔。",
         ["Waiting for a safe profile context."] = "正在等待安全的設定檔環境。",
         ["Compatibility mode - profiles are read-only."] = "相容模式 – 設定檔為唯讀。",
+        ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "資料已損壞 – 設定檔為唯讀。請使用 /ss wipe 重設。",
         ["Profile to manage:"] = "要管理的設定檔：", ["Choose a profile"] = "選擇設定檔",
         ["All settings"] = "所有設定", ["Stat and gear settings"] = "屬性與裝備設定", ["Layout settings"] = "版面設定", ["Appearance settings"] = "外觀設定", ["Choose settings to copy"] = "選擇要複製的設定",
         ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "將「%s」從「%s」複製到「%s」？這會變更 %d 個已指派專精和 %d 個其他參照。",
@@ -3326,6 +3359,7 @@ addon.dbRuntime = {
     version = 0,
     versionDisplay = "0",
     warned = false,
+    warnedMode = nil,
     rootRef = nil,
     activeAccount = nil,
     activeSettings = nil,
@@ -3373,6 +3407,9 @@ addon.profileRuntime = {
     forceReapply = false,
     forceReapplyRetryCount = 0,
     forceReapplyRetryToken = nil,
+    corruptRollbackRetryCount = 0,
+    corruptRollbackRetryToken = nil,
+    corruptRollbackRoot = nil,
     contextRetryCount = 0,
     contextRetryToken = nil,
     contextRetryPositionSettings = nil,
@@ -4029,7 +4066,10 @@ function addon.dbRuntime.Refresh()
     addon.dbRuntime.activeSettings = root
     addon.dbRuntime.activeProfileID = nil
 
-    if rawequal(addon.dbRuntime.migrationFailedRoot, root) then
+    -- Future and unreadable schema markers stay in the compatibility state set
+    -- above, even if this table previously failed current-schema validation.
+    if version <= CURRENT_DB_VERSION
+        and rawequal(addon.dbRuntime.migrationFailedRoot, root) then
         addon.dbRuntime.mode = "corrupt"
         addon.dbRuntime.readOnly = true
     elseif version == CURRENT_DB_VERSION then
@@ -4069,7 +4109,10 @@ function addon.dbRuntime.Refresh()
         or previousProfileID ~= addon.dbRuntime.activeProfileID then
         addon.dbRuntime.generation = addon.dbRuntime.generation + 1
     end
-    if not addon.dbRuntime.readOnly then addon.dbRuntime.warned = false end
+    if not addon.dbRuntime.readOnly then
+        addon.dbRuntime.warned = false
+        addon.dbRuntime.warnedMode = nil
+    end
     return root
 end
 
@@ -4122,9 +4165,15 @@ function addon.dbRuntime.GetSettingStore(key)
 end
 
 function addon.dbRuntime.ShowReadOnlyGuidance(showGuidance)
-    if showGuidance == true and not addon.dbRuntime.warned then
+    local mode = addon.dbRuntime.mode
+    if showGuidance == true and addon.dbRuntime.warnedMode ~= mode then
         addon.dbRuntime.warned = true
-        PrintMsg(L("Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."))
+        addon.dbRuntime.warnedMode = mode
+        if mode == "corrupt" then
+            PrintMsg(L("StatsPro saved data is corrupted and remains read-only. Use /ss wipe outside combat to reset it."))
+        else
+            PrintMsg(L("Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."))
+        end
     end
 end
 
@@ -4537,6 +4586,58 @@ function addon.profileRuntime.ScheduleContextRetry()
     end)
     addon.profileUI.RefreshSafe()
     return true
+end
+
+function addon.profileRuntime.ClearCorruptRollbackRetry()
+    local runtime = addon.profileRuntime
+    runtime.corruptRollbackRetryToken = nil
+    runtime.corruptRollbackRetryCount = 0
+    runtime.corruptRollbackRoot = nil
+end
+
+function addon.profileRuntime.ScheduleCorruptRollbackApply(root)
+    local runtime = addon.profileRuntime
+    if not rawequal(root, addon.dbRuntime.rootRef)
+        or addon.dbRuntime.mode ~= "corrupt" then return false end
+    runtime.corruptRollbackRoot = root
+    if runtime.corruptRollbackRetryToken ~= nil then return true end
+    if runtime.corruptRollbackRetryCount >= 3 then return false end
+
+    local token = {}
+    runtime.corruptRollbackRetryToken = token
+    C_Timer.After(math.min(0.25 * (runtime.corruptRollbackRetryCount + 1), 1), function()
+        if runtime.corruptRollbackRetryToken ~= token then return end
+        runtime.corruptRollbackRetryToken = nil
+        local currentRoot = addon.dbRuntime.Refresh()
+        if not rawequal(currentRoot, root) or addon.dbRuntime.mode ~= "corrupt" then
+            runtime.corruptRollbackRetryCount = 0
+            runtime.corruptRollbackRoot = nil
+            addon.profileUI.RefreshSafe()
+            return
+        end
+        if runtime.ReadCombatState() ~= false then
+            addon.profileUI.RefreshSafe()
+            return
+        end
+
+        runtime.corruptRollbackRetryCount = runtime.corruptRollbackRetryCount + 1
+        local applied = type(runtime.applyActiveSettings) == "function"
+            and pcall(runtime.applyActiveSettings)
+        if applied then
+            runtime.forceReapply = false
+            runtime.ClearCorruptRollbackRetry()
+        else
+            runtime.ScheduleCorruptRollbackApply(root)
+        end
+        addon.profileUI.RefreshSafe()
+    end)
+    return true
+end
+
+function addon.profileRuntime.ResumeCorruptRollbackApply()
+    local runtime = addon.profileRuntime
+    if not runtime.forceReapply then return false end
+    return runtime.ScheduleCorruptRollbackApply(runtime.corruptRollbackRoot)
 end
 
 function addon.profileRuntime.ActivateResolvedContext(context, transaction, profileID, initializing)
@@ -5045,13 +5146,31 @@ function addon.profileOps.Gate(expected, internal)
     if combat ~= false then return nil, "unsafe-context" end
     local root = addon.dbRuntime.Refresh()
     if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady then
-        return nil, "read-only"
+        return nil, addon.dbRuntime.mode == "corrupt" and "corrupt" or "read-only"
     end
     if runtime.pendingResolution or runtime.scheduledToken ~= nil
         or runtime.noSpecRetryToken ~= nil or runtime.contextRetryToken ~= nil then
         return nil, "pending"
     end
     if not addon.profileOps.CheckExpected(root, expected) then return nil, "stale" end
+    return root
+end
+
+function addon.profileOps.GateCorruptRecovery(expected, internal)
+    local runtime = addon.profileRuntime
+    if addon.profileOps.inProgress and not internal then return nil, "busy" end
+    if runtime.transitioning then return nil, "busy" end
+    local combat = runtime.ReadCombatState()
+    if combat == true then return nil, "combat" end
+    if combat ~= false then return nil, "unsafe-context" end
+    local root = addon.dbRuntime.Refresh()
+    if addon.dbRuntime.mode ~= "corrupt" or addon.dbRuntime.readOnly ~= true then
+        return nil, "stale"
+    end
+    if type(expected) ~= "table" or not rawequal(root, expected.rootRef)
+        or expected.generation ~= addon.dbRuntime.generation then
+        return nil, "stale"
+    end
     return root
 end
 
@@ -5244,8 +5363,10 @@ end
 -- shadow and any unknown root fields behind, so it would not actually erase all
 -- StatsPro data. The old root stays untouched and can be restored by identity if
 -- activation or runtime application fails.
-function addon.profileOps.ExecuteRootReplacement(expected, builder)
-    local root, gateReason = addon.profileOps.Gate(expected, false)
+function addon.profileOps.ExecuteRootReplacement(expected, builder, corruptRecovery)
+    local gate = corruptRecovery and addon.profileOps.GateCorruptRecovery
+        or addon.profileOps.Gate
+    local root, gateReason = gate(expected, false)
     if not root then return false, gateReason end
     addon.profileOps.inProgress = true
 
@@ -5259,14 +5380,15 @@ function addon.profileOps.ExecuteRootReplacement(expected, builder)
     if not addon.profileRuntime.CloseOwnedSettingsModals() then
         return finish(false, "close-failed")
     end
-    root, gateReason = addon.profileOps.Gate(expected, true)
+    root, gateReason = gate(expected, true)
     if not root then return finish(false, gateReason) end
 
     local oldRoot = root
     local oldProfileID = addon.dbRuntime.activeProfileID
     local oldSettings = addon.dbRuntime.activeSettings
-    local positionSnapshot = addon.profileOps.CapturePositionFields(oldSettings)
-    if type(addon.profileRuntime.saveActivePositions) == "function"
+    local positionSnapshot = not corruptRecovery
+        and addon.profileOps.CapturePositionFields(oldSettings) or nil
+    if not corruptRecovery and type(addon.profileRuntime.saveActivePositions) == "function"
         and not pcall(addon.profileRuntime.saveActivePositions, oldSettings) then
         addon.profileOps.RestorePositionFields(oldSettings, positionSnapshot)
         return finish(false, "position-failed")
@@ -5294,6 +5416,22 @@ function addon.profileOps.ExecuteRootReplacement(expected, builder)
         addon.dbRuntime.Invalidate()
         addon.dbRuntime.Refresh()
         addon.profileOps.RestorePositionFields(oldSettings, positionSnapshot)
+        if corruptRecovery then
+            if not reapply then return true end
+            local rollbackApplied = type(addon.profileRuntime.applyActiveSettings) == "function"
+                and pcall(addon.profileRuntime.applyActiveSettings)
+            if rollbackApplied then
+                addon.profileRuntime.forceReapply = false
+                addon.profileRuntime.ClearCorruptRollbackRetry()
+                return true
+            end
+            addon.profileRuntime.forceReapply = true
+            addon.profileRuntime.forceReapplyRetryCount = 0
+            addon.profileRuntime.pendingResolution = true
+            addon.profileRuntime.transitioning = false
+            addon.profileRuntime.ScheduleCorruptRollbackApply(oldRoot)
+            return false
+        end
         if not addon.dbRuntime.ActivateProfile(oldProfileID) then return false end
         if not reapply then return true end
         local rollbackJournal = addon.profileOps.CaptureMutationJournal(oldSettings)
@@ -5335,7 +5473,16 @@ function addon.profileOps.ExecuteRootReplacement(expected, builder)
 
     addon.profileRuntime.forceReapply = false
     addon.profileRuntime.forceReapplyRetryCount = 0
-    addon.profileRuntime.pendingResolution = false
+    addon.profileRuntime.ClearCorruptRollbackRetry()
+    if corruptRecovery then
+        -- The rejected root must remain the corruption marker until the replacement
+        -- has validated, published, activated, and applied successfully.
+        addon.dbRuntime.migrationFailedRoot = nil
+        addon.profileRuntime.ClearContextRetryPositions()
+        addon.profileRuntime.RequestResolution(false)
+    else
+        addon.profileRuntime.pendingResolution = false
+    end
     addon.profileOps.operationCount = addon.profileOps.operationCount + 1
     return finish(true, result)
 end
@@ -5821,6 +5968,19 @@ function addon.profileOps.FullWipe(expected)
         end
         return freshRoot, nil, "p1"
     end)
+end
+
+function addon.profileOps.RecoverCorruptRoot(expected)
+    return addon.profileOps.ExecuteRootReplacement(expected, function()
+        local freshRoot = addon.dbRuntime.BuildRegistry(defaults)
+        if type(freshRoot) ~= "table" or not addon.dbRuntime.IsCleanTable(freshRoot) then
+            return nil, "clone-failed"
+        end
+        if not addon.dbRuntime.ValidateRegistry(freshRoot) then
+            return nil, "validate-failed"
+        end
+        return freshRoot, nil, "p1"
+    end, true)
 end
 
 function addon.profileOps.DeleteWithReplacement(profileID, replacementProfileID, expected)
@@ -8426,6 +8586,7 @@ local EVENT_HANDLERS = {
     -- enabled permanently so right-click Settings works even while locked; Panel:Lock /
     -- Panel:Unlock are no-op stubs kept behind this semantic wrapper.
     PLAYER_REGEN_ENABLED        = function()
+        addon.profileRuntime.ResumeCorruptRollbackApply()
         addon.profileRuntime.ResolvePending()
         SetAllPanelsLockState(GetBoolDB("isLocked"))
         -- The event is authoritative even if InCombatLockdown() lags by one frame.
@@ -9492,10 +9653,13 @@ end
 function addon.settingsDesign.RefreshMutationControls()
     addon.dbRuntime.Refresh()
     local schemaBlocked = addon.dbRuntime.readOnly == true
+    local schemaReason = addon.dbRuntime.mode == "corrupt"
+        and "Corrupted data - profiles are read-only. Use /ss wipe to reset."
+        or "Compatibility mode - profiles are read-only."
     local contextBlocked = addon.profileRuntime.BlocksUserWrites() == true
     for _, control in ipairs(addon.settingsDesign.mutationControls or {}) do
         addon.settingsDesign.SetControlBlocked(control, "schema", schemaBlocked,
-            "message", "Compatibility mode - profiles are read-only.")
+            "message", schemaReason)
         addon.settingsDesign.SetControlBlocked(control, "context", contextBlocked,
             "message", "Waiting for a safe profile context.")
     end
@@ -10765,7 +10929,12 @@ function addon.wipeRuntime.AcceptPending(_, popupData)
     local pending = addon.wipeRuntime.pending
     if not pending or not rawequal(pending, popupData) then return end
     addon.wipeRuntime.pending = nil
-    local ok, result = addon.profileOps.FullWipe(pending.expected)
+    local ok, result
+    if pending.corruptRecovery then
+        ok, result = addon.profileOps.RecoverCorruptRoot(pending.expected)
+    else
+        ok, result = addon.profileOps.FullWipe(pending.expected)
+    end
     if ok then
         PrintMsg(L("All StatsPro data reset to defaults."))
     else
@@ -10794,25 +10963,46 @@ _G.StaticPopupDialogs[addon.wipeRuntime.popupKey] = {
 
 function addon.wipeRuntime.Request()
     if not addon.profileRuntime.CloseOwnedSettingsModals() then return false end
-    local root, gateReason = addon.profileOps.Gate(nil, false)
-    if not root then
-        PrintMsg(addon.profileUI.OperationErrorText(gateReason))
-        return false
+    local root = addon.dbRuntime.Refresh()
+    local prompt
+    if addon.dbRuntime.mode == "corrupt" then
+        local combat = addon.profileRuntime.ReadCombatState()
+        if combat ~= false then
+            PrintMsg(addon.profileUI.OperationErrorText(
+                combat == true and "combat" or "unsafe-context"))
+            return false
+        end
+        addon.wipeRuntime.pending = {
+            corruptRecovery = true,
+            expected = {
+                rootRef = root,
+                generation = addon.dbRuntime.generation,
+            },
+        }
+        prompt = L("Reset corrupted StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position.")
+    else
+        local gateReason
+        root, gateReason = addon.profileOps.Gate(nil, false)
+        if not root then
+            PrintMsg(addon.profileUI.OperationErrorText(gateReason))
+            return false
+        end
+        local profileID = addon.dbRuntime.activeProfileID
+        local guid = addon.profileRuntime.activeGUID
+        local specID = addon.profileRuntime.activeSpecID
+        if not addon.dbRuntime.IsCleanType(profileID, "string")
+            or not addon.dbRuntime.IsCleanType(guid, "string")
+            or not addon.dbRuntime.IsCleanType(specID, "number") then
+            PrintMsg(addon.profileUI.OperationErrorText("missing-context"))
+            return false
+        end
+        addon.wipeRuntime.pending = {
+            expected = addon.profileUI.CaptureExpected(guid, specID, profileID),
+        }
+        prompt = L("Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged.")
     end
-    local profileID = addon.dbRuntime.activeProfileID
-    local guid = addon.profileRuntime.activeGUID
-    local specID = addon.profileRuntime.activeSpecID
-    if not addon.dbRuntime.IsCleanType(profileID, "string")
-        or not addon.dbRuntime.IsCleanType(guid, "string")
-        or not addon.dbRuntime.IsCleanType(specID, "number") then
-        PrintMsg(addon.profileUI.OperationErrorText("missing-context"))
-        return false
-    end
-    addon.wipeRuntime.pending = {
-        expected = addon.profileUI.CaptureExpected(guid, specID, profileID),
-    }
     local definition = _G.StaticPopupDialogs[addon.wipeRuntime.popupKey]
-    definition.text = L("Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged.")
+    definition.text = prompt
     definition.button1 = L("Confirm")
     definition.button2 = _G.CANCEL
     local ok, popup = pcall(_G.StaticPopup_Show,
@@ -10939,6 +11129,9 @@ function addon.profileUI.OperationErrorText(reason)
     if reason == "duplicate-name" then return L("A profile with this name already exists.") end
     if reason == "stale" then return L("Profiles changed; review and try again.") end
     if reason == "combat" then return L("Profile changes are unavailable during combat.") end
+    if reason == "corrupt" then
+        return L("Corrupted data - profiles are read-only. Use /ss wipe to reset.")
+    end
     if reason == "read-only" then return L("Compatibility mode - profiles are read-only.") end
     if reason == "pending" or reason == "busy" or reason == "unsafe-context" then
         return L("Waiting for a safe profile context.")
@@ -12107,7 +12300,9 @@ function addon.profileUI.BuildSettingsUI(owner)
 
         profileButton:SetText(model.activeProfileName or L("Account default profile"))
         if model.readOnly then
-            subtitle:SetText(L("Compatibility mode - profiles are read-only."))
+            subtitle:SetText(L(model.mode == "corrupt"
+                and "Corrupted data - profiles are read-only. Use /ss wipe to reset."
+                or "Compatibility mode - profiles are read-only."))
             addon.settingsDesign.SetRegionColor(subtitle, "warning")
         elseif model.pending then
             subtitle:SetText(L("Switch pending until combat ends"))
@@ -12217,7 +12412,9 @@ function addon.profileUI.BuildSettingsUI(owner)
         end
 
         if model.readOnly then
-            detailNotice:SetText(L("Compatibility mode - profiles are read-only."))
+            detailNotice:SetText(L(model.mode == "corrupt"
+                and "Corrupted data - profiles are read-only. Use /ss wipe to reset."
+                or "Compatibility mode - profiles are read-only."))
         elseif model.combat == true then
             detailNotice:SetText(L("Profile changes are unavailable during combat."))
         elseif model.pending or model.combat == nil then
@@ -14266,6 +14463,7 @@ if addon and addon.__statsproSmoke == true then
                 mode = addon.dbRuntime.mode,
                 version = addon.dbRuntime.version,
                 warned = addon.dbRuntime.warned,
+                warnedMode = addon.dbRuntime.warnedMode,
                 generation = addon.dbRuntime.generation,
             }
         end,
@@ -14301,6 +14499,9 @@ if addon and addon.__statsproSmoke == true then
                 forceReapply = runtime.forceReapply,
                 forceReapplyRetryCount = runtime.forceReapplyRetryCount,
                 forceReapplyRetryScheduled = runtime.forceReapplyRetryToken ~= nil,
+                corruptRollbackRetryCount = runtime.corruptRollbackRetryCount,
+                corruptRollbackRetryScheduled = runtime.corruptRollbackRetryToken ~= nil,
+                corruptRollbackRoot = runtime.corruptRollbackRoot,
                 contextRetryCount = runtime.contextRetryCount,
                 contextRetryScheduled = runtime.contextRetryToken ~= nil,
                 pendingResolution = runtime.pendingResolution,
@@ -14378,6 +14579,8 @@ if addon and addon.__statsproSmoke == true then
                 importPending = addon.legacyImport.pending ~= nil,
                 resetPending = addon.resetRuntime.pending ~= nil,
                 wipePending = addon.wipeRuntime.pending ~= nil,
+                wipeCorruptRecovery = addon.wipeRuntime.pending ~= nil
+                    and addon.wipeRuntime.pending.corruptRecovery == true,
             }
         end,
         profileUIState = function()

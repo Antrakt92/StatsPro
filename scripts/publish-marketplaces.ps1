@@ -12,6 +12,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
+. (Join-Path $PSScriptRoot "marketplace-version-contract.ps1")
 
 $ExpectedProjectIds = [ordered]@{
     CurseForge = "1525100"
@@ -211,43 +212,6 @@ function Get-TocUploadContract {
     }
 }
 
-function Get-AcceptedCompatibilityVersions {
-    param([string]$Version)
-
-    $parsed = [version]$Version
-    $accepted = @($Version)
-    $minor = "$($parsed.Major).$($parsed.Minor).0"
-    if ($accepted -notcontains $minor) { $accepted += $minor }
-    if ($parsed.Minor -gt 0 -and $parsed.Build -eq 0) {
-        $expansion = "$($parsed.Major).0.0"
-        if ($accepted -notcontains $expansion) { $accepted += $expansion }
-    }
-    return $accepted
-}
-
-function Select-OrdinalFallback {
-    param([string[]]$Available, [string]$Requested)
-
-    $comparer = [System.StringComparer]::Ordinal
-    $exact = @($Available | Where-Object { $comparer.Equals($_, $Requested) })
-    if ($exact.Count -eq 1) { return $Requested }
-    if ($exact.Count -gt 1) { throw "Marketplace version '$Requested' is duplicated." }
-    $bestLower = $null
-    $bestAny = $null
-    foreach ($candidate in $Available) {
-        if ($null -eq $candidate) { continue }
-        if ($null -eq $bestAny -or $comparer.Compare($candidate, $bestAny) -gt 0) {
-            $bestAny = $candidate
-        }
-        if ($comparer.Compare($candidate, $Requested) -lt 0 -and
-            ($null -eq $bestLower -or $comparer.Compare($candidate, $bestLower) -gt 0)) {
-            $bestLower = $candidate
-        }
-    }
-    if ($null -ne $bestLower) { return $bestLower }
-    return $bestAny
-}
-
 function Get-CurseForgeVersionIds {
     param([string]$Json, [string[]]$RequiredVersions)
 
@@ -267,23 +231,6 @@ function Get-CurseForgeVersionIds {
     return $ids
 }
 
-function Get-WowInterfaceVersions {
-    param([string]$Json, [string[]]$RequiredVersions)
-
-    $items = @(ConvertFrom-JsonCompat $Json)
-    $available = @($items | Where-Object { [string]$_.game -eq 'Retail' } | ForEach-Object { [string]$_.id })
-    $selected = @()
-    foreach ($version in $RequiredVersions) {
-        $chosen = Select-OrdinalFallback -Available $available -Requested $version
-        $allowed = @(Get-AcceptedCompatibilityVersions -Version $version)
-        if ([string]::IsNullOrWhiteSpace($chosen) -or $allowed -notcontains $chosen) {
-            throw "WoWInterface would select unsupported fallback '$chosen' for '$version'; allowed: $($allowed -join ', ')."
-        }
-        if ($selected -notcontains $chosen) { $selected += $chosen }
-    }
-    return @($selected | Sort-Object { [version]$_ } -Descending)
-}
-
 function Get-WagoVersions {
     param([string]$Json, [string[]]$RequiredVersions)
 
@@ -295,16 +242,18 @@ function Get-WagoVersions {
     $available = @($property.Value | ForEach-Object { [string]$_ })
     $selected = @()
     foreach ($version in $RequiredVersions) {
-        $chosen = Select-OrdinalFallback -Available $available -Requested $version
-        $allowed = @(Get-AcceptedCompatibilityVersions -Version $version)
-        $requestedParsed = [version]$version
-        foreach ($required in $RequiredVersions) {
-            $parsed = [version]$required
-            if ($parsed.Major -eq $requestedParsed.Major -and $parsed -le $requestedParsed -and $allowed -notcontains $required) {
-                $allowed += $required
-            }
-        }
-        if ([string]::IsNullOrWhiteSpace($chosen) -or $allowed -notcontains $chosen) {
+        $chosen = Select-StatsProOrdinalMarketplaceVersion `
+            -AvailableVersions $available `
+            -RequestedVersion $version
+        $allowed = @(Get-StatsProAcceptedMarketplaceVersions `
+            -Version $version `
+            -RequiredVersions $RequiredVersions `
+            -AllowEarlierRequiredVersions)
+        if (-not (Test-StatsProMarketplaceVersionSelection `
+                -RequestedVersion $version `
+                -SelectedVersion $chosen `
+                -RequiredVersions $RequiredVersions `
+                -AllowEarlierRequiredVersions)) {
             throw "Wago would select unsupported fallback '$chosen' for '$version'; allowed: $($allowed -join ', ')."
         }
         if ($selected -notcontains $chosen) { $selected += $chosen }
@@ -424,7 +373,9 @@ function New-MarketplacePlan {
         archiveSha256 = $Sha256
         retailVersions = @($context.Contract.RetailVersions)
         curseForgeGameVersionIds = @(Get-CurseForgeVersionIds -Json $cfJson -RequiredVersions $context.Contract.RetailVersions)
-        wowInterfaceVersions = @(Get-WowInterfaceVersions -Json $wowiJson -RequiredVersions $context.Contract.RetailVersions)
+        wowInterfaceVersions = @(Resolve-StatsProWowInterfaceVersions `
+            -AvailableVersions @(@(ConvertFrom-JsonCompat $wowiJson) | Where-Object { [string]$_.game -ceq 'Retail' } | ForEach-Object { [string]$_.id }) `
+            -RequiredVersions $context.Contract.RetailVersions)
         wagoVersions = @(Get-WagoVersions -Json $wagoJson -RequiredVersions $context.Contract.RetailVersions)
     }
 }
@@ -908,7 +859,18 @@ function Invoke-SelfTest {
             } -UploadRequest { throw 'should not upload' }
         } "WoWInterface would select unsupported fallback"
 
-        if ((Select-OrdinalFallback -Available @('12.0.7', '12.0.9') -Requested '12.1.0') -cne '12.0.9') {
+        Assert-ThrowsMatch "lowercase WoWInterface game label is ignored like upstream" {
+            Publish-ExactMarketplaceArchive -Archive $archive -Tag $tag -Sha256 $sha -CredentialValues $credentials -ReadRequest {
+                param($uri, $headers)
+                if ($uri -match 'curseforge') { return '[{"id":120007,"name":"12.0.7","gameVersionTypeID":517},{"id":120100,"name":"12.1.0","gameVersionTypeID":517}]' }
+                if ($uri -eq 'https://api.wowinterface.com/addons/list.json') { return '[{"id":27130,"title":"StatsPro"}]' }
+                if ($uri -eq 'https://api.wowinterface.com/addons/compatible.json') { return '[{"id":"12.0.7","game":"retail"},{"id":"12.1.0","game":"Retail"}]' }
+                if ($uri -eq 'https://addons.wago.io/addons/EGPemEN1') { return '<meta property="og:url" content="https://addons.wago.io/addons/EGPemEN1" />' }
+                return '{"patches":{"retail":["12.0.7","12.1.0"]}}'
+            } -UploadRequest { throw 'should not upload' }
+        } "WoWInterface would select unsupported fallback '12\.1\.0'"
+
+        if ((Select-StatsProOrdinalMarketplaceVersion -AvailableVersions @('12.0.9', '12.0.10') -RequestedVersion '12.1.0') -cne '12.0.9') {
             throw "Marketplace fallback selection must use the greatest ordinal predecessor."
         }
 

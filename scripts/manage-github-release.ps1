@@ -1548,9 +1548,50 @@ jobs:
         -Description "CurseForge diagnostics workflow"
 }
 
+function Assert-ReleaseEventBoundary {
+    param([string]$WorkflowText)
+
+    if ($WorkflowText -match '(?m)^(?:"[^"\r\n]+"|''[^''\r\n]+''|<<|\?[^:\r\n]*):' -or
+        $WorkflowText -match '(?m)^[A-Za-z][A-Za-z0-9_-]*[ \t]+:' -or
+        $WorkflowText -match '(?m)^(?:\?\s+|:\s+)') {
+        throw "Release workflow must use plain canonical top-level mapping keys."
+    }
+    Assert-ExactWorkflowKeySet `
+        -Text $WorkflowText `
+        -Indent 0 `
+        -ExpectedKeys @('name', 'on', 'concurrency', 'jobs') `
+        -Description "Release workflow"
+
+    $triggerBlock = [regex]::Match($WorkflowText, '(?ms)^on:\s*$.*?(?=^concurrency:\s*$)')
+    $normalizedTrigger = if ($triggerBlock.Success) {
+        $withoutComments = $triggerBlock.Value -replace '(?m)^\s*#.*(?:\r?\n|$)', ''
+        (($withoutComments -replace '(?m)^\s*$\r?\n', '') -replace "`r", '').Trim()
+    }
+    else {
+        ''
+    }
+    $expectedTrigger = "on:`n  push:`n    tags:`n      - 'v*'"
+    if (-not [System.StringComparer]::Ordinal.Equals($normalizedTrigger, $expectedTrigger)) {
+        throw "Release workflow must keep the exact tag-only push trigger."
+    }
+
+    $expectedGuard = '${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}'
+    foreach ($jobName in @('preflight', 'release')) {
+        $jobBlock = Get-WorkflowJobBlock -WorkflowText $WorkflowText -JobName $jobName
+        $guardLines = @([regex]::Matches($jobBlock.Value, '(?m)^    if:\s*(.*?)\s*$'))
+        if ($guardLines.Count -ne 1 -or
+            -not [System.StringComparer]::Ordinal.Equals($guardLines[0].Groups[1].Value, $expectedGuard)) {
+            throw "Release job '$jobName' must keep the exact first-created, non-forced, non-deleted event guard."
+        }
+    }
+}
+
 function Assert-ReleaseWorkflowBoundary {
     param([string]$WorkflowText)
 
+    # Event admission is the first boundary: reject drift before inspecting any
+    # credential-bearing or third-party publishing step.
+    Assert-ReleaseEventBoundary -WorkflowText $WorkflowText
     Assert-WorkflowCheckoutCredentialBoundary `
         -WorkflowText $WorkflowText `
         -JobNames @('preflight', 'release')
@@ -2389,6 +2430,38 @@ function Invoke-SelfTest {
     $workflowPath = Join-Path (Join-Path $PSScriptRoot "..") ".github\workflows\release.yml"
     $workflowText = Get-Content -LiteralPath $workflowPath -Raw -Encoding UTF8
     Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText
+    Assert-ThrowsMatch "workflow_dispatch release trigger rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^  push:\s*$', "  workflow_dispatch:`n  push:")
+    } "exact tag-only push trigger"
+    Assert-ThrowsMatch "broadened release tag trigger rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace("      - 'v*'", "      - '*'")
+    } "exact tag-only push trigger"
+    Assert-ThrowsMatch "missing preflight event guard rejected" {
+        $preflight = Get-WorkflowJobBlock -WorkflowText $workflowText -JobName 'preflight'
+        $replacement = $preflight.Value -replace '(?m)^    if:.*\r?\n', ''
+        $mutated = $workflowText.Remove($preflight.Index, $preflight.Length).Insert($preflight.Index, $replacement)
+        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+    } "preflight.*first-created, non-forced, non-deleted"
+    Assert-ThrowsMatch "weakened release event guard rejected" {
+        $release = Get-WorkflowJobBlock -WorkflowText $workflowText -JobName 'release'
+        $replacement = $release.Value.Replace(
+            'github.event.created == true && github.event.forced == false && github.event.deleted == false',
+            'github.event.created == true && github.event.deleted == false')
+        $mutated = $workflowText.Remove($release.Index, $release.Length).Insert($release.Index, $replacement)
+        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+    } "release.*first-created, non-forced, non-deleted"
+    Assert-ThrowsMatch "both release event guards weakened together rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            'github.event.created == true && github.event.forced == false && github.event.deleted == false',
+            'github.event.created == true')
+    } "preflight.*first-created, non-forced, non-deleted"
+    Assert-ThrowsMatch "combined release trigger and guard drift rejected at admission" {
+        $mutated = $workflowText.Replace("      - 'v*'", "      - '*'")
+        $mutated = $mutated.Replace(
+            'github.event.created == true && github.event.forced == false && github.event.deleted == false',
+            'github.event.deleted == false')
+        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+    } "exact tag-only push trigger"
     $checksWorkflowPath = Join-Path (Join-Path $PSScriptRoot "..") ".github\workflows\checks.yml"
     $checksWorkflowText = Get-Content -LiteralPath $checksWorkflowPath -Raw -Encoding UTF8
     Assert-WorkflowCheckoutCredentialBoundary `

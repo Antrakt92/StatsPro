@@ -1125,6 +1125,38 @@ end
 
 local env, addon, test = loadStatsPro("enUS")
 
+function test.makeRegistryFixture()
+    return {
+        dbVersion = test.currentDBVersion(),
+        isVisible = false,
+        colors = { crit = { r = 0.1, g = 0.2, b = 0.3 } },
+        account = {
+            forceLocale = "auto",
+            updateInterval = 0.5,
+            defaultProfileID = "p1",
+            nextProfileID = 3,
+        },
+        profiles = {
+            p1 = {
+                name = "Default",
+                settings = {
+                    isVisible = false,
+                    colors = { crit = { r = 0.4, g = 0.5, b = 0.6 } },
+                },
+            },
+            p2 = {
+                name = "Other",
+                settings = {
+                    isVisible = true,
+                    colors = { crit = { r = 0.7, g = 0.8, b = 0.9 } },
+                },
+            },
+        },
+        roleTemplates = { TANK = "p1", HEALER = "p1", DAMAGER = "p2" },
+        characters = {},
+    }
+end
+
 eq("api.surface.db_get_root_removed", addon.dbRuntime.GetRoot, nil)
 eq("api.surface.db_get_writable_account_removed", addon.dbRuntime.GetWritableAccount, nil)
 eq("api.surface.replace_table_contents_removed", addon.dbRuntime.ReplaceTableContents, nil)
@@ -10250,39 +10282,10 @@ do
 end
 
 do
-    local function makeRegistry()
-        return {
-            dbVersion = test.currentDBVersion(),
-            isVisible = false,
-            colors = { crit = { r = 0.1, g = 0.2, b = 0.3 } },
-            account = {
-                forceLocale = "auto",
-                updateInterval = 0.5,
-                defaultProfileID = "p1",
-                nextProfileID = 3,
-            },
-            profiles = {
-                p1 = {
-                    name = "Default",
-                    settings = {
-                        isVisible = false,
-                        colors = { crit = { r = 0.4, g = 0.5, b = 0.6 } },
-                    },
-                },
-                p2 = {
-                    name = "Other",
-                    settings = {
-                        isVisible = true,
-                        colors = { crit = { r = 0.7, g = 0.8, b = 0.9 } },
-                    },
-                },
-            },
-            roleTemplates = { TANK = "p1", HEALER = "p1", DAMAGER = "p2" },
-            characters = {},
-        }
-    end
+    assertNoSharedTables("db_compat.registry_fixture.fresh_graph",
+        test.makeRegistryFixture(), test.makeRegistryFixture())
 
-    local validCharacterDB = makeRegistry()
+    local validCharacterDB = test.makeRegistryFixture()
     validCharacterDB.characters["Player-1-00000001"] = {
         displayName = "Tester-Realm",
         classID = 10,
@@ -10353,7 +10356,7 @@ do
         },
     }
     for _, case in ipairs(cases) do
-        local db = makeRegistry()
+        local db = test.makeRegistryFixture()
         case.mutate(db)
         local before = deepCopy(db)
         local rootRef = db
@@ -10459,7 +10462,7 @@ do
         },
     }
     for _, boundary in ipairs(boundaryCases) do
-        local db = makeRegistry()
+        local db = test.makeRegistryFixture()
         local boundaryEnv, _, boundaryTest = loadStatsPro("enUS", { statsProDB = db })
         fireEvent("db_compat.validation_cache." .. boundary.name .. ".pew",
             boundaryEnv, "PLAYER_ENTERING_WORLD")
@@ -10475,7 +10478,7 @@ do
             boundaryTest.dbValidationCount(), countBefore + 1)
     end
 
-    local malformedDB = makeRegistry()
+    local malformedDB = test.makeRegistryFixture()
     local malformedEnv, _, malformedTest = loadStatsPro("enUS", { statsProDB = malformedDB })
     fireEvent("db_compat.validation_cache.malformed.pew", malformedEnv, "PLAYER_ENTERING_WORLD")
     local malformedCount = malformedTest.dbValidationCount()
@@ -10490,7 +10493,7 @@ do
         malformedDB, malformedBeforeWrite)
 
     local secretLocale = "secret-locale"
-    local secretAccountDB = makeRegistry()
+    local secretAccountDB = test.makeRegistryFixture()
     secretAccountDB.account.forceLocale = secretLocale
     local secretAccountBefore = deepCopy(secretAccountDB)
     local secretAccountRef = secretAccountDB.account
@@ -10523,7 +10526,7 @@ do
         secretAccountDB, secretAccountBefore)
 
     local secretColors = {}
-    local secretNestedDB = makeRegistry()
+    local secretNestedDB = test.makeRegistryFixture()
     secretNestedDB.profiles.p1.settings.colors = secretColors
     local secretNestedBefore = deepCopy(secretNestedDB)
     local secretNestedAccountRef = secretNestedDB.account
@@ -10852,40 +10855,9 @@ do
 end
 
 do
-    local function makeRegistry()
-        return {
-            dbVersion = test.currentDBVersion(),
-            isVisible = false,
-            colors = { crit = { r = 0.1, g = 0.2, b = 0.3 } },
-            account = {
-                forceLocale = "auto",
-                updateInterval = 0.5,
-                defaultProfileID = "p1",
-                nextProfileID = 3,
-            },
-            profiles = {
-                p1 = {
-                    name = "Default",
-                    settings = {
-                        isVisible = false,
-                        colors = { crit = { r = 0.4, g = 0.5, b = 0.6 } },
-                    },
-                },
-                p2 = {
-                    name = "Other",
-                    settings = {
-                        isVisible = true,
-                        colors = { crit = { r = 0.7, g = 0.8, b = 0.9 } },
-                    },
-                },
-            },
-            roleTemplates = { TANK = "p1", HEALER = "p1", DAMAGER = "p2" },
-            characters = {},
-        }
-    end
     local ok, err
 
-    local secretCurrentRoot = makeRegistry()
+    local secretCurrentRoot = test.makeRegistryFixture()
     local secretCurrentBefore = deepCopy(secretCurrentRoot)
     local secretCurrentAccountRef = secretCurrentRoot.account
     local secretCurrentProfilesRef = secretCurrentRoot.profiles
@@ -10955,7 +10927,7 @@ do
     eq("db_compat.graph_budget.secret_beyond_depth_rejected", secretBeyondDepthOK, false)
     eq("db_compat.graph_budget.secret_beyond_depth_not_inspected", secretBeyondDepthCalls, 0)
 
-    local deepCurrentDB = makeRegistry()
+    local deepCurrentDB = test.makeRegistryFixture()
     local deepCurrentValue = {}
     for _ = 1, graphLimits.maxDepth do
         deepCurrentValue = { child = deepCurrentValue }
@@ -11055,7 +11027,7 @@ do
     assertDeepEqual("db_compat.graph_budget.legacy_unknown.no_writes",
         unknownLegacyDB, unknownLegacyBefore)
 
-    local aggregateDB = makeRegistry()
+    local aggregateDB = test.makeRegistryFixture()
     local aggregateSize = math.floor(graphLimits.maxNodes / 4) + 100
     aggregateDB.shadowA = makeWideTable(aggregateSize)
     aggregateDB.shadowB = makeWideTable(aggregateSize)
@@ -11092,7 +11064,7 @@ do
         rawequal(aggregateDB.opaqueShadow, opaqueShadow), true)
     assertDeepEqual("db_compat.graph_budget.aggregate.no_writes", aggregateDB, aggregateBefore)
 
-    local componentControlDB = makeRegistry()
+    local componentControlDB = test.makeRegistryFixture()
     componentControlDB.account.padding = makeWideTable(aggregateSize)
     local componentControlEnv, _, componentControlTest = loadStatsPro("enUS", {
         statsProDB = componentControlDB,
@@ -11102,7 +11074,7 @@ do
     eq("db_compat.graph_budget.registry_components.control.current",
         componentControlTest.dbCompatibilityState().mode, "current")
 
-    local componentAggregateDB = makeRegistry()
+    local componentAggregateDB = test.makeRegistryFixture()
     componentAggregateDB.account.padding = makeWideTable(aggregateSize)
     componentAggregateDB.profiles.p1.settings.padding = makeWideTable(aggregateSize)
     local componentAggregateBefore = deepCopy(componentAggregateDB)
@@ -11128,7 +11100,7 @@ do
     assertDeepEqual("db_compat.graph_budget.registry_components.no_writes",
         componentAggregateDB, componentAggregateBefore)
 
-    local iteratorDB = makeRegistry()
+    local iteratorDB = test.makeRegistryFixture()
     local iteratorAlias = iteratorDB.profiles.p1.settings.colors
     local iteratorShadow = { first = true, hidden = iteratorAlias }
     iteratorDB.iteratorShadow = iteratorShadow
@@ -11163,7 +11135,7 @@ do
     assertDeepEqual("db_compat.graph_budget.shadow_iterator.no_writes",
         iteratorDB, iteratorBefore)
 
-    local transactionDB = makeRegistry()
+    local transactionDB = test.makeRegistryFixture()
     transactionDB.profiles.p1.settings.largePayload = makeWideTable(3000)
     transactionDB.characters["Player-1-IMPORT"] = {
         displayName = "Tester-Realm",

@@ -211,6 +211,21 @@ function Write-CurseForgeFileSummary {
     Write-Host (ConvertTo-JsonCompat -InputObject $summary)
 }
 
+function Invoke-CurseForgeWebRequest {
+    param(
+        [string]$RequestUri,
+        [hashtable]$RequestHeaders,
+        [int]$RequestTimeoutSec
+    )
+
+    Invoke-WebRequest `
+        -Uri $RequestUri `
+        -Headers $RequestHeaders `
+        -UseBasicParsing `
+        -TimeoutSec $RequestTimeoutSec `
+        -MaximumRedirection 0
+}
+
 function Invoke-CurseForgeEndpointRequest {
     param(
         [string]$Uri,
@@ -257,7 +272,8 @@ function Invoke-CurseForgeDiagnostics {
         [int]$MaxAttempts = 3,
         [int]$RetryDelaySeconds = 5,
         [scriptblock]$Request = $null,
-        [scriptblock]$Sleep = $null
+        [scriptblock]$Sleep = $null,
+        [scriptblock]$GetEndpoints = $null
     )
 
     if ([string]::IsNullOrWhiteSpace($Version)) { throw "Missing version label. Pass -Version vX.Y.Z or set STATSPRO_VERSION." }
@@ -269,10 +285,7 @@ function Invoke-CurseForgeDiagnostics {
     if ($RetryDelaySeconds -lt 0) { throw "RetryDelaySeconds must be non-negative." }
 
     if ($null -eq $Request) {
-        $Request = {
-            param([string]$RequestUri, [hashtable]$RequestHeaders, [int]$RequestTimeoutSec)
-            Invoke-WebRequest -Uri $RequestUri -Headers $RequestHeaders -UseBasicParsing -TimeoutSec $RequestTimeoutSec
-        }
+        $Request = ${function:Invoke-CurseForgeWebRequest}
     }
     if ($null -eq $Sleep) {
         $Sleep = {
@@ -280,12 +293,15 @@ function Invoke-CurseForgeDiagnostics {
             Start-Sleep -Seconds $Seconds
         }
     }
+    if ($null -eq $GetEndpoints) {
+        $GetEndpoints = ${function:Get-CurseForgeDiagnosticEndpoints}
+    }
 
     $headers = @{ "x-api-token" = $ApiKey }
     $successfulListings = 0
     $endpointFailures = @()
 
-    foreach ($endpoint in Get-CurseForgeDiagnosticEndpoints -ProjectId $ProjectId) {
+    foreach ($endpoint in & $GetEndpoints $ProjectId) {
         Write-Host "== GET $endpoint =="
         try {
             $response = Invoke-CurseForgeEndpointRequest `
@@ -337,8 +353,176 @@ function Invoke-CurseForgeDiagnostics {
     throw "Could not read CurseForge project $ProjectId file listings.$details"
 }
 
+function Invoke-CurseForgeRedirectTransportSelfTest {
+    $secretCanary = "T2-105-REDIRECT-SECRET-CANARY"
+    $serverJob = Start-Job -ScriptBlock {
+        function Read-RequestHeaders {
+            param([System.Net.Sockets.TcpClient]$Client)
+
+            $stream = $Client.GetStream()
+            $stream.ReadTimeout = 5000
+            $reader = [System.IO.StreamReader]::new(
+                $stream,
+                [System.Text.Encoding]::ASCII,
+                $false,
+                1024,
+                $true)
+            $headers = @()
+            while (($line = $reader.ReadLine()) -ne "") {
+                if ($null -eq $line) { break }
+                $headers += $line
+            }
+            return @($headers)
+        }
+
+        function Write-HttpResponse {
+            param(
+                [System.Net.Sockets.TcpClient]$Client,
+                [string]$Status,
+                [string[]]$Headers = @(),
+                [string]$Body = ""
+            )
+
+            $stream = $Client.GetStream()
+            $bodyBytes = [System.Text.Encoding]::UTF8.GetBytes($Body)
+            $headerLines = @("HTTP/1.1 $Status") + @($Headers) + @(
+                "Content-Length: $($bodyBytes.Length)",
+                "Connection: close",
+                "",
+                "")
+            $headerBytes = [System.Text.Encoding]::ASCII.GetBytes(($headerLines -join "`r`n"))
+            $stream.Write($headerBytes, 0, $headerBytes.Length)
+            if ($bodyBytes.Length -gt 0) {
+                $stream.Write($bodyBytes, 0, $bodyBytes.Length)
+            }
+            $stream.Flush()
+            $Client.Close()
+        }
+
+        $redirectListener = [System.Net.Sockets.TcpListener]::new(
+            [System.Net.IPAddress]::Loopback,
+            0)
+        $targetListener = [System.Net.Sockets.TcpListener]::new(
+            [System.Net.IPAddress]::Loopback,
+            0)
+        try {
+            $redirectListener.Start()
+            $targetListener.Start()
+            $redirectPort = ([System.Net.IPEndPoint]$redirectListener.LocalEndpoint).Port
+            $targetPort = ([System.Net.IPEndPoint]$targetListener.LocalEndpoint).Port
+            "READY:$redirectPort`:$targetPort"
+
+            $initialClient = $redirectListener.AcceptTcpClient()
+            $initialHeaders = @(Read-RequestHeaders -Client $initialClient)
+            Write-HttpResponse `
+                -Client $initialClient `
+                -Status "302 Found" `
+                -Headers @("Location: http://127.0.0.1:$targetPort/capture")
+
+            $targetReached = $false
+            $targetHeaders = @()
+            $deadline = [DateTime]::UtcNow.AddSeconds(2)
+            while ([DateTime]::UtcNow -lt $deadline) {
+                if ($targetListener.Pending()) {
+                    $targetReached = $true
+                    $targetClient = $targetListener.AcceptTcpClient()
+                    $targetHeaders = @(Read-RequestHeaders -Client $targetClient)
+                    Write-HttpResponse -Client $targetClient -Status "200 OK" -Body "OK"
+                    break
+                }
+                Start-Sleep -Milliseconds 20
+            }
+
+            [pscustomobject]@{
+                Kind = "Result"
+                InitialHeaders = @($initialHeaders)
+                TargetReached = $targetReached
+                TargetHeaders = @($targetHeaders)
+            }
+        }
+        finally {
+            $redirectListener.Stop()
+            $targetListener.Stop()
+        }
+    }
+
+    try {
+        $readyDeadline = [DateTime]::UtcNow.AddSeconds(10)
+        do {
+            $events = @(Receive-Job -Job $serverJob -Keep)
+            $readyEvents = @($events | Where-Object { $_ -is [string] -and $_ -match '^READY:\d+:\d+$' })
+            if ($readyEvents.Count -eq 1) {
+                break
+            }
+            if ($serverJob.State -eq "Failed") {
+                throw "Redirect transport self-test server failed: $($serverJob.ChildJobs[0].JobStateInfo.Reason)"
+            }
+            Start-Sleep -Milliseconds 25
+        } while ([DateTime]::UtcNow -lt $readyDeadline)
+        if ($readyEvents.Count -ne 1) {
+            throw "Redirect transport self-test server did not become ready."
+        }
+        $readyMatch = [regex]::Match($readyEvents[0], '^READY:(\d+):(\d+)$')
+        $redirectPort = [int]$readyMatch.Groups[1].Value
+
+        $endpointProvider = {
+            param([string]$ProjectId)
+            return @("http://127.0.0.1:$redirectPort/start")
+        }.GetNewClosure()
+        $redirectRejected = $false
+        try {
+            Invoke-CurseForgeDiagnostics `
+                -Version "v1.2.3" `
+                -ProjectId "1525100" `
+                -ApiKey $secretCanary `
+                -TimeoutSec 5 `
+                -MaxAttempts 1 `
+                -RetryDelaySeconds 0 `
+                -GetEndpoints $endpointProvider
+        }
+        catch {
+            $redirectRejected = $true
+            if ($_.Exception.Message -notmatch 'Could not read CurseForge project' -or
+                $_.Exception.Message -notmatch '(HTTP 302|maximum redirection|current state of the object)') {
+                throw "Redirect transport self-test failed unexpectedly: $($_.Exception.Message)"
+            }
+        }
+        if (-not $redirectRejected) {
+            throw "CurseForge diagnostics accepted a redirect response."
+        }
+
+        [void](Wait-Job -Job $serverJob -Timeout 10)
+        if ($serverJob.State -ne "Completed") {
+            throw "Redirect transport self-test server did not complete."
+        }
+        $events = @(Receive-Job -Job $serverJob -Keep)
+        $results = @($events | Where-Object { $_.Kind -eq "Result" })
+        if ($results.Count -ne 1) {
+            throw "Redirect transport self-test produced $($results.Count) result(s)."
+        }
+
+        $initialTokenHeaders = @($results[0].InitialHeaders | Where-Object {
+                $_ -ceq "x-api-token: $secretCanary"
+            })
+        if ($initialTokenHeaders.Count -ne 1) {
+            throw "Redirect transport self-test did not observe the token on the allowlisted initial request."
+        }
+        if ($results[0].TargetReached -or
+            @($results[0].TargetHeaders | Where-Object { $_ -match [regex]::Escape($secretCanary) }).Count -gt 0) {
+            throw "CurseForge diagnostics forwarded CF_API_KEY to a redirect target."
+        }
+    }
+    finally {
+        if ($serverJob.State -notin @("Completed", "Failed", "Stopped")) {
+            Stop-Job -Job $serverJob
+        }
+        Remove-Job -Job $serverJob -Force
+    }
+}
+
 function Invoke-SelfTest {
     Assert-StatsProReleaseTagContractSelfTest
+    Invoke-CurseForgeRedirectTransportSelfTest
     $blankTokenState = @{ Attempts = 0 }
     Assert-ThrowsMatch "blank token rejected before request" {
         Invoke-CurseForgeDiagnostics `

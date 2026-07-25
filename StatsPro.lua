@@ -1051,6 +1051,11 @@ cached = {
     -- Last clean hide-zero decision per stat row. Secret combat reads cannot be safely
     -- compared to 0, so they reuse this instead of making absent rows appear.
     cleanRowVisibility = {},
+    -- Last clean numeric display value per stat dimension. Restricted combat reads
+    -- reuse these values so the HUD stays useful without inspecting, formatting, or
+    -- deriving metadata from a secret number. A cold secret read still renders as
+    -- explicit unknown until that exact row has produced one clean value.
+    cleanStatValues = {},
     updateErrorCount = 0,
     lastUpdateError = nil,
     displayMode = "flat",
@@ -3131,8 +3136,8 @@ local function SectionHeader(labelKey)
 end
 
 -- pcall every stat API so 12.x failures stay nil rather than rendering fake values.
--- Secret returns may drive only the guarded visibility path; display formatting
--- accepts clean finite numbers and otherwise emits an explicit unknown marker.
+-- Callers resolve secret returns through the row-specific last-clean cache before
+-- formatting; only a cold secret read reaches the explicit unknown path.
 local function safeCall(fn, ...)
     local ok, val = pcall(fn, ...)
     if ok then return val end
@@ -3151,17 +3156,28 @@ function SAFE_NUM.IsRenderableNumberValue(value)
     return SAFE_NUM.IsCleanFiniteNumber(value)
 end
 
-function SAFE_NUM.SafeDisplayPercent(fn, ...)
-    local value = safeCall(fn, ...)
-    if SAFE_NUM.IsRenderableNumberValue(value) then return value end
-    return nil
+function SAFE_NUM.ResolveLastCleanNumber(cacheKey, value, requireNonNegative)
+    if issecretvalue(value) then
+        local lastClean = cacheKey and cached.cleanStatValues[cacheKey]
+        if lastClean ~= nil then return lastClean, nil end
+        return value, nil
+    end
+    if not SAFE_NUM.IsCleanFiniteNumber(value)
+        or (requireNonNegative and value < 0) then
+        return nil, nil
+    end
+    if cacheKey then cached.cleanStatValues[cacheKey] = value end
+    return value, value
 end
 
-function SAFE_NUM.ReadRatingValue(fn, ...)
+function SAFE_NUM.SafeDisplayPercent(cacheKey, fn, ...)
     local value = safeCall(fn, ...)
-    if issecretvalue(value) then return value, nil end
-    if SAFE_NUM.IsCleanFiniteNumber(value) and value >= 0 then return value, value end
-    return nil, nil
+    return SAFE_NUM.ResolveLastCleanNumber(cacheKey, value, false)
+end
+
+function SAFE_NUM.ReadRatingValue(cacheKey, fn, ...)
+    local value = safeCall(fn, ...)
+    return SAFE_NUM.ResolveLastCleanNumber(cacheKey, value, true)
 end
 
 -- WHY dedicated helper for UnitStat: the API returns FOUR values
@@ -7566,7 +7582,8 @@ local function PushPrimaryStatRow(labels, ratings, values, colorKey, statId, lab
     local cs = cached.colorStrings
     local statStr = cs[colorKey]
     local valueColor = (cached.matchValueColorToStat and statStr) or cs.rating
-    local val = GetEffectiveStat(statId)
+    local val = SAFE_NUM.ResolveLastCleanNumber(
+        "primary:" .. statId, GetEffectiveStat(statId), false)
     if not SAFE_NUM.IsRenderableNumberValue(val) then return end
     local value = SAFE_NUM.FormatColorNumber(valueColor, val, "%d") or ("|cff" .. valueColor .. "?|r")
     local rCol, vCol = RouteValueOnly(value)
@@ -7660,26 +7677,32 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
     local needTargetRating = targetRows ~= nil
     for _, def in ipairs(OFFENSIVE_STATS) do
         if cached[def.showKey] then
-            local val = SAFE_NUM.SafeDisplayPercent(def.api)
+            local cachePrefix = "offensive:" .. def.statKey
+            local val, currentPercent = SAFE_NUM.SafeDisplayPercent(
+                cachePrefix .. ":percent", def.api)
             local ratingDisplay, targetRating
             local ratingRead = false
             local visible = shouldShow(def.showKey, val, cached.hideZeroOffensive)
             if cached.showRating then
-                ratingDisplay, targetRating = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
+                ratingDisplay, targetRating = SAFE_NUM.ReadRatingValue(
+                    cachePrefix .. ":rating", GetCombatRating, def.ratingCR)
                 ratingRead = true
                 local ratingVisible = shouldShow(def.showKey .. "Rating", ratingDisplay, cached.hideZeroOffensive)
                 visible = visible or ratingVisible
             end
             if visible then
                 if (cached.showRating or needTargetRating) and not ratingRead then
-                    ratingDisplay, targetRating = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
+                    ratingDisplay, targetRating = SAFE_NUM.ReadRatingValue(
+                        cachePrefix .. ":rating", GetCombatRating, def.ratingCR)
                 end
                 local rating
                 if cached.showRating then rating = ratingDisplay end
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtRatingPct(rating, val, statColor)
                 if targetRows then
-                    targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta(def.statKey, targetRating, def.ratingCR, val, def.colorKey) or false
+                    targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta(
+                        def.statKey, targetRating, def.ratingCR, currentPercent,
+                        def.colorKey) or false
                 end
                 PushRow(labels, ratings, values,
                     FormatLabel(statColor, def.label),
@@ -7720,7 +7743,9 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
             end
         end
         if cached.showRating or needTargetRating then
-            versRatingDisplay, targetVersRating = SAFE_NUM.ReadRatingValue(GetCombatRating, CR_VERSATILITY_DAMAGE_DONE)
+            versRatingDisplay, targetVersRating = SAFE_NUM.ReadRatingValue(
+                "offensive:versatility:rating", GetCombatRating,
+                CR_VERSATILITY_DAMAGE_DONE)
             if targetVersRating then
                 cached.versTotalRating = targetVersRating
             end
@@ -7762,19 +7787,22 @@ local function BuildTertiaryLines(labels, ratings, values)
     local needRating = cached.showRating
     for _, def in ipairs(TERTIARY_STATS) do
         if cached[def.showKey] then
-            local val = SAFE_NUM.SafeDisplayPercent(def.api)
+            local cachePrefix = "tertiary:" .. def.showKey
+            local val = SAFE_NUM.SafeDisplayPercent(cachePrefix .. ":percent", def.api)
             local ratingDisplay
             local ratingRead = false
             local visible = shouldShow(def.showKey, val, cached.hideZeroTertiary)
             if needRating then
-                ratingDisplay = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
+                ratingDisplay = SAFE_NUM.ReadRatingValue(
+                    cachePrefix .. ":rating", GetCombatRating, def.ratingCR)
                 ratingRead = true
                 local ratingVisible = shouldShow(def.showKey .. "Rating", ratingDisplay, cached.hideZeroTertiary)
                 visible = visible or ratingVisible
             end
             if visible then
                 if needRating and not ratingRead then
-                    ratingDisplay = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
+                    ratingDisplay = SAFE_NUM.ReadRatingValue(
+                        cachePrefix .. ":rating", GetCombatRating, def.ratingCR)
                 end
                 local rating
                 if needRating then rating = ratingDisplay end
@@ -7818,7 +7846,8 @@ local function BuildTertiaryLines(labels, ratings, values)
             cached.speedPct = speedPct
         end
         local speed = cached.speedPct
-        local speedRatingDisplay = needRating and SAFE_NUM.ReadRatingValue(GetCombatRating, CR_SPEED) or nil
+        local speedRatingDisplay = needRating and SAFE_NUM.ReadRatingValue(
+            "tertiary:showSpeed:rating", GetCombatRating, CR_SPEED) or nil
         local speedRating
         if needRating then speedRating = speedRatingDisplay end
         local speedVisible = shouldShow("showSpeed", speed, cached.hideZeroTertiary)
@@ -7844,7 +7873,8 @@ local function BuildDefensiveLines(labels, ratings, values)
     -- Dodge / Parry / Block / Stagger (table-driven)
     for _, def in ipairs(DEFENSIVE_STATS) do
         if cached[def.showKey] and (not def.appliesFn or def.appliesFn()) then
-            local val = safeCall(def.api)
+            local val = SAFE_NUM.ResolveLastCleanNumber(
+                "defensive:" .. def.showKey .. ":percent", safeCall(def.api), false)
             if IsRenderablePercentValue(val) and shouldShow(def.showKey, val, cached.hideZeroDefensive) then
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtPctOnly(val, statColor)

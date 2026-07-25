@@ -5330,6 +5330,8 @@ do
         statsProDB = {
             showOffensive = false,
             showTertiary = true,
+            showRating = false,
+            showPercentage = true,
             hideZeroTertiary = true,
             showLeech = true,
             showAvoidance = false,
@@ -5348,7 +5350,10 @@ do
     ok, blocks = pcall(leechTest.buildRenderBlocks)
     check("render.hide_zero_secret_preserves_visible_nonzero.secret_no_error", ok, blocks)
     eq("render.hide_zero_secret_preserves_visible_nonzero.secret_row", blockDumpContains(blocks, "Leech:"), true)
-    eq("render.hide_zero_secret_preserves_visible_nonzero.explicit_unknown", blockDumpContains(blocks, "?"), true)
+    eq("render.hide_zero_secret_preserves_visible_nonzero.last_clean",
+        blockDumpContains(blocks, "4.0%"), true)
+    eq("render.hide_zero_secret_preserves_visible_nonzero.no_unknown",
+        blockDumpContains(blocks, "?"), false)
 end
 
 do
@@ -5387,8 +5392,10 @@ do
     local ok, err = pcall(ticker.scripts.OnUpdate, ticker, 999)
     check("render.update_ticker_secret_numeric.no_bubble", ok, err)
     local state = updateTest.panelVisualState()
-    check("render.update_ticker_secret_numeric.explicit_unknown",
-        state.mainRatingText:find("?", 1, true) ~= nil, state.mainRatingText)
+    check("render.update_ticker_secret_numeric.last_clean_value",
+        state.mainRatingText:find("10.0%", 1, true) ~= nil, state.mainRatingText)
+    eq("render.update_ticker_secret_numeric.no_unknown",
+        state.mainRatingText:find("?", 1, true), nil)
     clearPrints(updateEnv)
     slash("render.update_ticker_secret_numeric.debug_perf", updateEnv, "debug perf")
     eq("render.update_ticker_secret_numeric.debug_reports_zero_errors",
@@ -5607,6 +5614,24 @@ do
     eq("render.secret_numeric_matrix.clean_side_has_no_unknown",
         ((state.sideRatingText or "") .. (state.sideValueText or "")):find("?", 1, true), nil)
     eq("render.secret_numeric_matrix.recovery_format_guard", forbiddenFormatCalls, 0)
+
+    local cleanState = state
+    phase = "secret"
+    check("render.secret_numeric_matrix.warm_combat_update", poisonAddon:RunUpdateStatsSafe())
+    state = poisonTest.panelVisualState()
+    eq("render.secret_numeric_matrix.warm_combat_main_rating",
+        state.mainRatingText, cleanState.mainRatingText)
+    eq("render.secret_numeric_matrix.warm_combat_main_value",
+        state.mainValueText, cleanState.mainValueText)
+    eq("render.secret_numeric_matrix.warm_combat_side_rating",
+        state.sideRatingText, cleanState.sideRatingText)
+    eq("render.secret_numeric_matrix.warm_combat_side_value",
+        state.sideValueText, cleanState.sideValueText)
+    eq("render.secret_numeric_matrix.warm_combat_main_no_unknown",
+        ((state.mainRatingText or "") .. (state.mainValueText or "")):find("?", 1, true), nil)
+    eq("render.secret_numeric_matrix.warm_combat_side_no_unknown",
+        ((state.sideRatingText or "") .. (state.sideValueText or "")):find("?", 1, true), nil)
+    eq("render.secret_numeric_matrix.warm_combat_format_guard", forbiddenFormatCalls, 0)
 end
 
 do
@@ -7068,7 +7093,9 @@ do
 end
 
 do
-    local staggerEnv = loadStatsPro("enUS", {
+    local staggerPhase = "clean"
+    local secretStagger = {}
+    local staggerEnv, _, staggerTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = false,
             showDefensive = true,
@@ -7082,12 +7109,33 @@ do
         unitClassToken = "MONK",
         specIndex = 1,
         specID = 268,
-        getStaggerPercentage = function() return 37.5, 37.5 end,
+        getStaggerPercentage = function()
+            if staggerPhase == "secret" then return secretStagger end
+            if staggerPhase == "clean2" then return 42.5 end
+            return 37.5
+        end,
+        issecretvalue = function(value) return rawequal(value, secretStagger) end,
     })
     fireEvent("defensive.stagger_renders_for_brewmaster.fire", staggerEnv, "PLAYER_ENTERING_WORLD")
     slash("defensive.stagger_renders_for_brewmaster.dump", staggerEnv, "debug bucket")
     eq("defensive.stagger_renders_for_brewmaster.row", printContains(staggerEnv, "Stagger:"), true)
     eq("defensive.stagger_renders_for_brewmaster.value", printContains(staggerEnv, "37.5%"), true)
+
+    staggerPhase = "secret"
+    local ok, blocks = pcall(staggerTest.buildRenderBlocks)
+    check("defensive.stagger_warm_secret.no_error", ok, blocks)
+    eq("defensive.stagger_warm_secret.last_clean", blockDumpContains(blocks, "37.5%"), true)
+    eq("defensive.stagger_warm_secret.no_unknown", blockDumpContains(blocks, "?"), false)
+
+    staggerPhase = "clean2"
+    ok, blocks = pcall(staggerTest.buildRenderBlocks)
+    check("defensive.stagger_clean_recovery.no_error", ok, blocks)
+    eq("defensive.stagger_clean_recovery.new_value", blockDumpContains(blocks, "42.5%"), true)
+    staggerPhase = "secret"
+    ok, blocks = pcall(staggerTest.buildRenderBlocks)
+    check("defensive.stagger_second_secret.no_error", ok, blocks)
+    eq("defensive.stagger_second_secret.latest_clean", blockDumpContains(blocks, "42.5%"), true)
+    eq("defensive.stagger_second_secret.no_stale_value", blockDumpContains(blocks, "37.5%"), false)
 end
 
 do

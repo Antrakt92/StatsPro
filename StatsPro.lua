@@ -13,13 +13,11 @@ addon.wipeRuntime = {
     pending = nil,
     popupKey = "STATSPRO_WIPE_ALL_DATA",
 }
-addon.developerLinks = {
+addon.contactLink = {
     popupKey = "STATSPRO_COPY_DEVELOPER_LINK",
-    contact = {
-        key = "contact",
-        labelKey = "Contact",
-        url = "https://github.com/Antrakt92/StatsPro/issues",
-    },
+    labelKey = "Contact",
+    url = "https://github.com/Antrakt92/StatsPro/issues",
+    atlas = "transmog-icon-chat",
 }
 addon.durabilityRuntime = {
     generation = 0,
@@ -9986,18 +9984,14 @@ function addon.settingsDesign.CreateShellButton(parent, name, roleName, textRole
     return button
 end
 
-function addon.settingsDesign.DeveloperLinkTooltip(control)
-    local link = addon.developerLinks[control.statsProLinkKey]
-    if not link then return nil end
-    return link.labelKey and L(link.labelKey) or link.label, L("Click to copy the link.")
+function addon.settingsDesign.ContactLinkTooltip()
+    return L(addon.contactLink.labelKey), L("Click to copy the link.")
 end
 
-function addon.settingsDesign.CreateDeveloperLinkButton(parent, name, linkKey,
-        iconAsset, tint)
+function addon.settingsDesign.CreateContactLinkButton(parent, name, tint)
     local geometry = addon.settingsDesign.tokens.geometry
     local button = CreateFrame("Button", name, parent)
     button:SetSize(geometry.minHitTarget, geometry.minHitTarget)
-    button.statsProLinkKey = linkKey
 
     local hover = button:CreateTexture(nil, "BACKGROUND")
     hover:SetAllPoints(button)
@@ -10008,12 +10002,7 @@ function addon.settingsDesign.CreateDeveloperLinkButton(parent, name, linkKey,
     local icon = button:CreateTexture(nil, "ARTWORK")
     icon:SetPoint("CENTER")
     icon:SetSize(16, 16)
-    if iconAsset.atlas then
-        icon:SetAtlas(iconAsset.atlas)
-    else
-        icon:SetTexture(iconAsset.texture)
-        if iconAsset.texCoords then icon:SetTexCoord(unpack(iconAsset.texCoords)) end
-    end
+    icon:SetAtlas(addon.contactLink.atlas)
     if tint then icon:SetVertexColor(tint[1], tint[2], tint[3], tint[4] or 1) end
     icon:SetAlpha(0.76)
 
@@ -10027,11 +10016,11 @@ function addon.settingsDesign.CreateDeveloperLinkButton(parent, name, linkKey,
         control.statsProHover:Hide()
         control.statsProIcon:SetAlpha(0.76)
     end)
-    button:SetScript("OnClick", function(control)
-        addon.developerLinks.Show(control.statsProLinkKey)
+    button:SetScript("OnClick", function()
+        addon.contactLink.Show()
     end)
     addon.settingsDesign.RegisterControl(button, "developerLink")
-    addon.settingsDesign.AttachTooltip(button, addon.settingsDesign.DeveloperLinkTooltip)
+    addon.settingsDesign.AttachTooltip(button, addon.settingsDesign.ContactLinkTooltip)
     return button
 end
 
@@ -10763,13 +10752,13 @@ function addon.legacyImport.CancelPending(_, popupData)
     return true
 end
 
-_G.StaticPopupDialogs[addon.developerLinks.popupKey] = {
+_G.StaticPopupDialogs[addon.contactLink.popupKey] = {
     text = "%s",
     button1 = "",
     hasEditBox = true,
     editBoxWidth = 340,
     OnShow = function(self, data)
-        if type(data) ~= "table" or addon.developerLinks[data.key] ~= data then
+        if type(data) ~= "table" or not rawequal(data, addon.contactLink) then
             self:Hide()
             return
         end
@@ -10791,18 +10780,14 @@ _G.StaticPopupDialogs[addon.developerLinks.popupKey] = {
     preferredIndex = 3,
 }
 
-function addon.developerLinks.Show(linkKey)
-    local link = addon.developerLinks[linkKey]
-    if type(link) ~= "table" or type(link.url) ~= "string" then return false end
-    local label = link.labelKey and L(link.labelKey) or link.label
-    if type(label) ~= "string" then return false end
-    local definition = _G.StaticPopupDialogs[addon.developerLinks.popupKey]
+function addon.contactLink.Show()
+    local definition = _G.StaticPopupDialogs[addon.contactLink.popupKey]
     definition.button1 = L("Close")
-    pcall(_G.StaticPopup_Hide, addon.developerLinks.popupKey)
-    local message = "StatsPro — " .. label .. "\n"
+    pcall(_G.StaticPopup_Hide, addon.contactLink.popupKey)
+    local message = "StatsPro — " .. L(addon.contactLink.labelKey) .. "\n"
         .. L("Copy the link below (Ctrl+C).")
     local ok, popup = pcall(_G.StaticPopup_Show,
-        addon.developerLinks.popupKey, message, nil, link)
+        addon.contactLink.popupKey, message, nil, addon.contactLink)
     return ok and popup ~= nil
 end
 
@@ -12632,7 +12617,7 @@ function addon:OpenConfigMenu()
         self.panelEditRuntime.SetRequested(false)
         self.profileRuntime.CancelOwnedMutationPopups()
         self.appearancePresets.ForceCancelPreview()
-        pcall(_G.StaticPopup_Hide, self.developerLinks.popupKey)
+        pcall(_G.StaticPopup_Hide, self.contactLink.popupKey)
         CloseDropDownMenus()  -- closes any active Blizzard dropdown; fires its OnHide → CancelLanguagePreview
         if StatsProCloseColorPicker then StatsProCloseColorPicker() end
         if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
@@ -12671,9 +12656,8 @@ function addon:OpenConfigMenu()
     headerLinkGroup:SetPoint("RIGHT", closeX, "LEFT", -self.settingsDesign.tokens.spacing.xxs, 0)
     headerLinkGroup:SetSize(shellGeometry.minHitTarget, shellGeometry.minHitTarget)
 
-    local contactButton = self.settingsDesign.CreateDeveloperLinkButton(
-        headerLinkGroup, "StatsProContactLinkButton", "contact",
-        { atlas = "transmog-icon-chat" }, self.settingsDesign.Color("accent"))
+    local contactButton = self.settingsDesign.CreateContactLinkButton(
+        headerLinkGroup, "StatsProContactLinkButton", self.settingsDesign.Color("accent"))
     contactButton:SetPoint("RIGHT", headerLinkGroup, "RIGHT", 0, 0)
 
     titleMetadata:SetPoint("RIGHT", headerLinkGroup, "LEFT",

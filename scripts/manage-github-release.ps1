@@ -593,14 +593,14 @@ function Invoke-UnixProcessGroupSignal {
     $signalInfo.CreateNoWindow = $true
     $signalInfo.RedirectStandardOutput = $true
     $signalInfo.RedirectStandardError = $true
-    $signal = [System.Diagnostics.Process]::new()
-    $signal.StartInfo = $signalInfo
+    $signalProcess = [System.Diagnostics.Process]::new()
+    $signalProcess.StartInfo = $signalInfo
     try {
-        [void]$signal.Start()
-        $stdoutTask = $signal.StandardOutput.ReadToEndAsync()
-        $stderrTask = $signal.StandardError.ReadToEndAsync()
-        if (-not $signal.WaitForExit($remainingMilliseconds)) {
-            try { $signal.Kill() } catch {}
+        [void]$signalProcess.Start()
+        $stdoutTask = $signalProcess.StandardOutput.ReadToEndAsync()
+        $stderrTask = $signalProcess.StandardError.ReadToEndAsync()
+        if (-not $signalProcess.WaitForExit($remainingMilliseconds)) {
+            try { $signalProcess.Kill() } catch {}
             throw "kill -$Signal exceeded its cleanup bound."
         }
         $remainingMilliseconds = Get-DeadlineRemainingMilliseconds -Deadline $Deadline
@@ -610,13 +610,13 @@ function Invoke-UnixProcessGroupSignal {
             throw "kill -$Signal output did not drain before the process-group cleanup deadline."
         }
         return [pscustomobject]@{
-            ExitCode = $signal.ExitCode
+            ExitCode = $signalProcess.ExitCode
             StdOut   = [string]$stdoutTask.Result
             StdErr   = [string]$stderrTask.Result
         }
     }
     finally {
-        $signal.Dispose()
+        $signalProcess.Dispose()
     }
 }
 
@@ -691,18 +691,6 @@ function Stop-NativeProcessTree {
         return "Windows Job Object"
     }
 
-    if ($null -eq $RunUnixProcessGroupSignal) {
-        $RunUnixProcessGroupSignal = {
-            param([object]$SignalContainment, [string]$SignalName, [datetime]$SignalDeadline)
-            Invoke-UnixProcessGroupSignal -Containment $SignalContainment -Signal $SignalName -Deadline $SignalDeadline
-        }
-    }
-    if ($null -eq $VerifyUnixProcessGroupAbsent) {
-        $VerifyUnixProcessGroupAbsent = {
-            param([object]$ProbeContainment, [datetime]$ProbeDeadline, [string]$ProbeDescription)
-            Assert-UnixProcessGroupAbsent -Containment $ProbeContainment -Deadline $ProbeDeadline -Description $ProbeDescription
-        }
-    }
     if ($null -eq $KillUnixRoot) {
         $KillUnixRoot = {
             param([System.Diagnostics.Process]$RootProcess)
@@ -713,7 +701,15 @@ function Stop-NativeProcessTree {
     $cleanupDeadline = (Get-Date).AddMilliseconds($CleanupMilliseconds)
     $termError = $null
     try {
-        $termResult = & $RunUnixProcessGroupSignal $Containment "TERM" $cleanupDeadline
+        $termResult = if ($null -eq $RunUnixProcessGroupSignal) {
+            Invoke-UnixProcessGroupSignal `
+                -Containment $Containment `
+                -Signal "TERM" `
+                -Deadline $cleanupDeadline
+        }
+        else {
+            & $RunUnixProcessGroupSignal $Containment "TERM" $cleanupDeadline
+        }
         if ($termResult.ExitCode -ne 0 -and -not (Test-UnixProcessGroupMissingResult -Result $termResult)) {
             $termError = "TERM failed: $($termResult.StdErr.Trim())"
         }
@@ -749,7 +745,15 @@ function Stop-NativeProcessTree {
 
     $groupKillError = $null
     try {
-        $killResult = & $RunUnixProcessGroupSignal $Containment "KILL" $cleanupDeadline
+        $killResult = if ($null -eq $RunUnixProcessGroupSignal) {
+            Invoke-UnixProcessGroupSignal `
+                -Containment $Containment `
+                -Signal "KILL" `
+                -Deadline $cleanupDeadline
+        }
+        else {
+            & $RunUnixProcessGroupSignal $Containment "KILL" $cleanupDeadline
+        }
         if ($killResult.ExitCode -ne 0 -and -not (Test-UnixProcessGroupMissingResult -Result $killResult)) {
             $groupKillError = "KILL failed: $($killResult.StdErr.Trim())"
         }
@@ -759,7 +763,15 @@ function Stop-NativeProcessTree {
     }
     $absenceError = $null
     try {
-        & $VerifyUnixProcessGroupAbsent $Containment $cleanupDeadline $Description
+        if ($null -eq $VerifyUnixProcessGroupAbsent) {
+            Assert-UnixProcessGroupAbsent `
+                -Containment $Containment `
+                -Deadline $cleanupDeadline `
+                -Description $Description
+        }
+        else {
+            & $VerifyUnixProcessGroupAbsent $Containment $cleanupDeadline $Description
+        }
     }
     catch {
         $absenceError = $_.Exception.Message
@@ -1014,6 +1026,11 @@ function Invoke-NativeCaptureSelfTest {
     New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
     $treePids = [System.Collections.Generic.List[int]]::new()
     try {
+        $unixSignalHelperText = ${function:Invoke-UnixProcessGroupSignal}.ToString()
+        if ($unixSignalHelperText -match '(?im)^\s*\$signal\s*=') {
+            throw "Unix signal helper must not shadow its case-insensitive Signal parameter with a local variable."
+        }
+
         $powerShellPath = (Get-Process -Id $PID).MainModule.FileName
         if ([string]::IsNullOrWhiteSpace($powerShellPath) -or -not (Test-Path -LiteralPath $powerShellPath -PathType Leaf)) {
             throw "Native capture self-test could not resolve the current PowerShell executable."
@@ -1160,13 +1177,14 @@ param([string]$SentinelPath)
         $parentScript = Join-Path $fixtureRoot "parent.ps1"
         $parentPidPath = Join-Path $fixtureRoot "parent.pid"
         $grandchildPidPath = Join-Path $fixtureRoot "grandchild.pid"
+        $treeReadyPath = Join-Path $fixtureRoot "tree-ready.txt"
         $lateSentinel = Join-Path $fixtureRoot "grandchild-survived.txt"
         [System.IO.File]::WriteAllText($grandchildScript, @'
-param([string]$PidPath, [string]$SentinelPath)
+param([string]$PidPath, [string]$SentinelPath, [int]$SentinelDelaySeconds)
 [System.IO.File]::WriteAllText($PidPath, [string]$PID)
 [Console]::Out.WriteLine("grandchild-stdout-marker")
 [Console]::Error.WriteLine("grandchild-stderr-marker")
-Start-Sleep -Seconds 5
+Start-Sleep -Seconds $SentinelDelaySeconds
 [System.IO.File]::WriteAllText($SentinelPath, "survived")
 while ($true) { Start-Sleep -Seconds 1 }
 '@, [System.Text.UTF8Encoding]::new($false))
@@ -1176,6 +1194,7 @@ param(
     [string]$GrandchildPath,
     [string]$ParentPidPath,
     [string]$GrandchildPidPath,
+    [string]$TreeReadyPath,
     [string]$SentinelPath,
     [string]$Secret
 )
@@ -1183,15 +1202,26 @@ param(
 $arguments = @(
     "-NoLogo", "-NoProfile", "-File", $GrandchildPath,
     "-PidPath", $GrandchildPidPath,
-    "-SentinelPath", $SentinelPath
+    "-SentinelPath", $SentinelPath,
+    "-SentinelDelaySeconds", "30"
 )
 [void](Start-Process -FilePath $PowerShellPath -ArgumentList $arguments -PassThru)
+$readinessDeadline = [DateTime]::UtcNow.AddSeconds(10)
+while (-not (Test-Path -LiteralPath $GrandchildPidPath -PathType Leaf) -and
+    [DateTime]::UtcNow -lt $readinessDeadline) {
+    Start-Sleep -Milliseconds 100
+}
+if (-not (Test-Path -LiteralPath $GrandchildPidPath -PathType Leaf)) {
+    throw "Grandchild did not become ready within the bounded fixture window."
+}
+[System.IO.File]::WriteAllText($TreeReadyPath, "ready")
 [Console]::Out.WriteLine("parent-stdout-marker")
 [Console]::Error.WriteLine("parent-stderr-marker")
 while ($true) { Start-Sleep -Seconds 1 }
 '@, [System.Text.UTF8Encoding]::new($false))
 
         $secret = "must-not-appear-$([System.Guid]::NewGuid().ToString('N'))"
+        $treeTimeoutSeconds = if ($env:OS -eq "Windows_NT") { 15 } else { 8 }
         $timeoutMessage = ""
         try {
             [void](Invoke-NativeCapture `
@@ -1202,10 +1232,11 @@ while ($true) { Start-Sleep -Seconds 1 }
                     "-GrandchildPath", $grandchildScript,
                     "-ParentPidPath", $parentPidPath,
                     "-GrandchildPidPath", $grandchildPidPath,
+                    "-TreeReadyPath", $treeReadyPath,
                     "-SentinelPath", $lateSentinel,
                     "-Secret", $secret
                 ) `
-                -Deadline (Get-Date).AddSeconds(3) `
+                -Deadline (Get-Date).AddSeconds($treeTimeoutSeconds) `
                 -Description "hung process-tree self-test")
             throw "Hung native process tree should have timed out."
         }
@@ -1219,6 +1250,9 @@ while ($true) { Start-Sleep -Seconds 1 }
             throw "Native timeout diagnostics must preserve stdout/stderr without exposing raw arguments. Got: $timeoutMessage"
         }
 
+        if (-not (Test-Path -LiteralPath $treeReadyPath -PathType Leaf)) {
+            throw "Hung process-tree self-test timed out before its bounded readiness gate completed."
+        }
         foreach ($pidPath in @($parentPidPath, $grandchildPidPath)) {
             if (-not (Test-Path -LiteralPath $pidPath -PathType Leaf)) {
                 throw "Hung process-tree self-test did not record '$pidPath'."
@@ -1312,7 +1346,7 @@ param(
 )
 $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
 $startInfo.FileName = $PowerShellPath
-$startInfo.Arguments = "-NoLogo -NoProfile -File `"$GrandchildPath`" -PidPath `"$GrandchildPidPath`" -SentinelPath `"$SentinelPath`""
+$startInfo.Arguments = "-NoLogo -NoProfile -File `"$GrandchildPath`" -PidPath `"$GrandchildPidPath`" -SentinelPath `"$SentinelPath`" -SentinelDelaySeconds 30"
 $startInfo.UseShellExecute = $false
 $startInfo.CreateNoWindow = $true
 $child = [System.Diagnostics.Process]::new()
@@ -1322,6 +1356,7 @@ $child.Dispose()
 [Console]::Out.WriteLine("orphan-parent-exited")
 '@, [System.Text.UTF8Encoding]::new($false))
         $orphanMessage = ""
+        $orphanTimeoutSeconds = if ($env:OS -eq "Windows_NT") { 10 } else { 5 }
         try {
             [void](Invoke-NativeCapture `
                 -FilePath $powerShellPath `
@@ -1332,7 +1367,7 @@ $child.Dispose()
                     "-GrandchildPidPath", $orphanPidPath,
                     "-SentinelPath", $orphanSentinel
                 ) `
-                -Deadline (Get-Date).AddSeconds(2) `
+                -Deadline (Get-Date).AddSeconds($orphanTimeoutSeconds) `
                 -Description "inherited output handle self-test")
             throw "A descendant-held output handle should not produce silent success."
         }

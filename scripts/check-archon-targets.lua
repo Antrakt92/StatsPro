@@ -3,6 +3,7 @@ local args = { ... }
 local DEFAULT_PATH = "StatsPro_ArchonTargets.lua"
 local DEFAULT_STATSPRO_LUA_PATH = "StatsPro.lua"
 local REQUIRED_STATS = { "crit", "haste", "mastery", "versatility" }
+local MAX_TARGET_VALUE = 100000
 
 local SPECS = {
     { specID = 250, classToken = "DEATHKNIGHT", classSlug = "death-knight", specKey = "blood", specSlug = "blood" },
@@ -189,8 +190,14 @@ local function contains_exactly_required_stats(tbl, context)
     expect_type(tbl, "table", context)
     expect_equal(count_keys(tbl), #REQUIRED_STATS, context .. " key count")
     for _, key in ipairs(REQUIRED_STATS) do
-        if not is_finite_positive_integer(tbl[key]) then
-            fail(context .. "." .. key .. " must be a positive finite integer")
+        local value = tbl[key]
+        local valueContext = context .. "." .. key
+        if not is_finite_positive_integer(value) then
+            fail(valueContext .. " must be a positive finite integer")
+        end
+        if value > MAX_TARGET_VALUE then
+            fail(valueContext .. " value " .. tostring(value)
+                .. " exceeds ceiling " .. tostring(MAX_TARGET_VALUE))
         end
     end
 end
@@ -820,6 +827,22 @@ local function run_self_test(parsedOptions)
     assert_throws("fractional target", function()
         validate_snapshot(fractionalTarget, nil, options)
     end, "positive finite integer")
+
+    local maximumTarget = clone(make_valid_fixture("2026-05-16"))
+    maximumTarget.snapshots.raid.specs.MAGE.frost.targets.mastery = MAX_TARGET_VALUE
+    validate_snapshot(maximumTarget, nil, options)
+
+    local overMaximumTarget = clone(make_valid_fixture("2026-05-16"))
+    overMaximumTarget.snapshots.raid.specs.MAGE.frost.targets.mastery = MAX_TARGET_VALUE + 1
+    assert_throws("target above ceiling", function()
+        validate_snapshot(overMaximumTarget, nil, options)
+    end, "snapshots.raid.specs.MAGE.frost.targets.mastery value 100001 exceeds ceiling 100000")
+
+    local int32MaximumTarget = clone(make_valid_fixture("2026-05-16"))
+    int32MaximumTarget.snapshots.raid.specs.MAGE.frost.targets.mastery = 2147483647
+    assert_throws("Int32 maximum target", function()
+        validate_snapshot(int32MaximumTarget, nil, options)
+    end, "snapshots.raid.specs.MAGE.frost.targets.mastery value 2147483647 exceeds ceiling 100000")
 
     local badOrder = clone(make_valid_fixture("2026-05-16"))
     badOrder.snapshots.raid.specs.MAGE.frost.order = { "crit", "crit", "haste", "mastery" }

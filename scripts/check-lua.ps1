@@ -80,7 +80,9 @@ function Invoke-NativeCapture {
         [string]$FilePath,
         [string[]]$Arguments = @(),
         [int]$TimeoutSeconds = 0,
-        [string]$Description = $null
+        [string]$Description = $null,
+        [switch]$IsolateLuaEnvironment,
+        [hashtable]$Environment = @{}
     )
 
     if (-not $FilePath) {
@@ -109,6 +111,9 @@ function Invoke-NativeCapture {
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
     $startInfo.CreateNoWindow = $true
+    if ($IsolateLuaEnvironment) {
+        Set-StatsProIsolatedLuaProcessEnvironment -StartInfo $startInfo -Environment $Environment
+    }
 
     $process = [System.Diagnostics.Process]::new()
     $process.StartInfo = $startInfo
@@ -161,11 +166,13 @@ function Write-ToolVersionReport {
     param(
         [string]$Label,
         [string]$Path,
-        [string[]]$Arguments
+        [string[]]$Arguments,
+        [switch]$IsolateLuaEnvironment,
+        [hashtable]$Environment = @{}
     )
 
     Write-Host "${Label}: $Path"
-    $result = Invoke-NativeCapture -FilePath $Path -Arguments $Arguments -TimeoutSeconds 30 -Description "$Label version"
+    $result = Invoke-NativeCapture -FilePath $Path -Arguments $Arguments -TimeoutSeconds 30 -Description "$Label version" -IsolateLuaEnvironment:$IsolateLuaEnvironment.IsPresent -Environment $Environment
     if ($result.ExitCode -eq 0) {
         Write-Host "${Label} version: $(Format-VersionOutput $result.Output)"
     }
@@ -175,8 +182,15 @@ function Write-ToolVersionReport {
 }
 
 function Assert-ToolCommandVersion {
-    param([string]$Label, [string]$Path, [string[]]$Arguments, [string]$Pattern)
-    $result = Invoke-NativeCapture -FilePath $Path -Arguments $Arguments -TimeoutSeconds 30 -Description "$Label version"
+    param(
+        [string]$Label,
+        [string]$Path,
+        [string[]]$Arguments,
+        [string]$Pattern,
+        [switch]$IsolateLuaEnvironment,
+        [hashtable]$Environment = @{}
+    )
+    $result = Invoke-NativeCapture -FilePath $Path -Arguments $Arguments -TimeoutSeconds 30 -Description "$Label version" -IsolateLuaEnvironment:$IsolateLuaEnvironment.IsPresent -Environment $Environment
     if ($result.ExitCode -ne 0) {
         throw "$Label version command exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
     }
@@ -241,7 +255,8 @@ function Invoke-LuaLanguageServerCheck {
         [string]$Root,
         [string]$ConfigPath,
         [int]$TimeoutSeconds = 180,
-        [string]$Description = "lua-language-server diagnostics"
+        [string]$Description = "lua-language-server diagnostics",
+        [switch]$IsolateLuaEnvironment
     )
 
     $logPath = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lls-" + [System.Guid]::NewGuid().ToString("N"))
@@ -254,7 +269,7 @@ function Invoke-LuaLanguageServerCheck {
             "--checklevel=Warning",
             "--configpath=$ConfigPath",
             "--logpath=$logPath"
-        ) -TimeoutSeconds $TimeoutSeconds -Description $Description
+        ) -TimeoutSeconds $TimeoutSeconds -Description $Description -IsolateLuaEnvironment:$IsolateLuaEnvironment.IsPresent
         return [pscustomobject]@{
             ExitCode    = $result.ExitCode
             Diagnostics = @(Read-LuaLanguageServerDiagnostics -JsonPath $jsonPath)
@@ -348,6 +363,90 @@ function Invoke-SelfTest {
             throw "native capture should include stdout and stderr, got: $nativeOutput"
         }
 
+        $selfTestLocks = Read-StatsProToolLocks -Path $ToolLockPath
+        $selfTestOwnedTools = Read-StatsProOwnedToolManifest -Locks $selfTestLocks
+        $wrongShadowRoot = Join-Path $root "wrong-version-shadow"
+        $sameShadowRoot = Join-Path $root "same-version-shadow"
+        $wrongShadowMarker = Join-Path $root "wrong-version.marker"
+        $sameShadowMarker = Join-Path $root "same-version.marker"
+        New-Item -ItemType Directory -Path $wrongShadowRoot, $sameShadowRoot -Force | Out-Null
+        [System.IO.File]::WriteAllText(
+            (Join-Path $wrongShadowRoot "lua-language-server.cmd"),
+            "@echo off`r`n> `"$wrongShadowMarker`" echo wrong`r`necho 3.18.2-dev`r`n")
+        [System.IO.File]::WriteAllText(
+            (Join-Path $sameShadowRoot "lua-language-server.cmd"),
+            "@echo off`r`n> `"$sameShadowMarker`" echo same`r`necho 3.18.1`r`n")
+        $oldPath = $env:PATH
+        try {
+            foreach ($shadowRoot in @($wrongShadowRoot, $sameShadowRoot)) {
+                $env:PATH = $shadowRoot + [System.IO.Path]::PathSeparator + $oldPath
+                $resolvedOwned = Read-StatsProOwnedToolManifest -Locks $selfTestLocks
+                $versionResult = Invoke-NativeCapture `
+                    -FilePath $resolvedOwned.LuaLanguageServerPath `
+                    -Arguments @("--version") `
+                    -TimeoutSeconds 30 `
+                    -Description "owned LuaLS shadow regression" `
+                    -IsolateLuaEnvironment
+                if ($versionResult.ExitCode -ne 0 -or
+                    ($versionResult.Output -join "`n") -notmatch '^3\.18\.1(?:\s|$)' -or
+                    (Test-Path -LiteralPath $wrongShadowMarker) -or
+                    (Test-Path -LiteralPath $sameShadowMarker)) {
+                    throw "canonical enforced resolution executed an ambient LuaLS shadow"
+                }
+            }
+        }
+        finally {
+            $env:PATH = $oldPath
+        }
+
+        $ambientInitMarker = Join-Path $root "ambient-init.marker"
+        $ambientModuleMarker = Join-Path $root "ambient-module.marker"
+        $ambientInit = Join-Path $root "ambient-init.lua"
+        $ambientModules = Join-Path $root "ambient-modules"
+        $ambientLuacheck = Join-Path $ambientModules "luacheck"
+        New-Item -ItemType Directory -Path $ambientLuacheck -Force | Out-Null
+        [System.IO.File]::WriteAllText(
+            $ambientInit,
+            "local f=assert(io.open([[$ambientInitMarker]], [[w]])); f:write([[leak]]); f:close()")
+        [System.IO.File]::WriteAllText(
+            (Join-Path $ambientLuacheck "main.lua"),
+            "local f=assert(io.open([[$ambientModuleMarker]], [[w]])); f:write([[leak]]); f:close(); os.exit(0)")
+        $oldLuaInit = $env:LUA_INIT
+        $oldLuaPath = $env:LUA_PATH
+        $oldLuaCPath = $env:LUA_CPATH
+        try {
+            $env:LUA_INIT = "@$ambientInit"
+            $env:LUA_PATH = (Join-Path $ambientModules "?.lua")
+            $env:LUA_CPATH = (Join-Path $ambientModules "?.dll")
+            $luaCanaryResult = Invoke-NativeCapture `
+                -FilePath $selfTestOwnedTools.LuaPath `
+                -Arguments @("-v") `
+                -TimeoutSeconds 30 `
+                -Description "owned Lua environment regression" `
+                -IsolateLuaEnvironment
+            if ($luaCanaryResult.ExitCode -ne 0 -or (Test-Path -LiteralPath $ambientInitMarker)) {
+                throw "owned Lua executed ambient LUA_INIT"
+            }
+            $luacheckCanaryResult = Invoke-NativeCapture `
+                -FilePath $selfTestOwnedTools.LuaRocksLuaPath `
+                -Arguments @($selfTestOwnedTools.LuacheckScriptPath, "--version") `
+                -TimeoutSeconds 30 `
+                -Description "owned luacheck environment regression" `
+                -IsolateLuaEnvironment `
+                -Environment $selfTestOwnedTools.LuacheckEnvironment
+            if ($luacheckCanaryResult.ExitCode -ne 0 -or
+                ($luacheckCanaryResult.Output -join "`n") -notmatch '^Luacheck:\s+1\.2\.0' -or
+                (Test-Path -LiteralPath $ambientInitMarker) -or
+                (Test-Path -LiteralPath $ambientModuleMarker)) {
+                throw "owned luacheck executed an ambient Lua init or module"
+            }
+        }
+        finally {
+            $env:LUA_INIT = $oldLuaInit
+            $env:LUA_PATH = $oldLuaPath
+            $env:LUA_CPATH = $oldLuaCPath
+        }
+
         Push-Location -Path $root
         try {
             $cwdCapture = Invoke-NativeCapture -FilePath $cmd -Arguments @("/d", "/c", "cd") -TimeoutSeconds 10 -Description "native working-directory self-test"
@@ -416,8 +515,7 @@ function Invoke-SelfTest {
             throw "Missing LuaLS WoW/global definition file: $LuaGlobalStub"
         }
         Assert-UndefinedFieldDiagnosticsEnabled -ConfigPath (Join-Path $RepoRoot ".luarc.json")
-        $luaLanguageServer = Get-Command lua-language-server -ErrorAction Stop |
-            Select-Object -First 1 -ExpandProperty Source
+        $luaLanguageServer = $selfTestOwnedTools.LuaLanguageServerPath
         $fieldFixtureRoot = Join-Path $root "undefined-field"
         $fieldFixtureTypes = Join-Path $fieldFixtureRoot "scripts\types"
         New-Item -ItemType Directory -Path $fieldFixtureTypes -Force | Out-Null
@@ -458,7 +556,8 @@ return state.retrySchedueld or globalTypo or maxSchoolsTypo
             -Root $fieldFixtureRoot `
             -ConfigPath (Join-Path $fieldFixtureRoot ".luarc.json") `
             -TimeoutSeconds 60 `
-            -Description "undefined-field regression fixture"
+            -Description "undefined-field regression fixture" `
+            -IsolateLuaEnvironment
         $undefinedFieldDiagnostics = @($fieldCheck.Diagnostics | Where-Object { $_.Code -eq "undefined-field" })
         $fieldMessages = $undefinedFieldDiagnostics.Message -join "`n"
         if ($fieldCheck.ExitCode -eq 0 -or $fieldCheck.Diagnostics.Count -ne 9 -or
@@ -489,32 +588,73 @@ if ($SelfTest) {
     return
 }
 
+$GateOwnedToolRoot = if ($EnforceToolLocks) { New-StatsProOwnedToolInvocationRoot } else { $null }
+try {
 Set-Location $RepoRoot
 
-$LuacCandidates = @(
-    if ($env:STATSPRO_PINNED_LUA_ROOT) { Join-Path $env:STATSPRO_PINNED_LUA_ROOT "luac5.1.exe" }
-    (Get-Command luac5.1 -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
-    (Get-Command luac -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
-    "C:\ProgramData\chocolatey\lib\lua51\tools\luac5.1.exe"
-) | Where-Object { $_ -and (Test-Path $_) }
+$ToolLocks = $null
+$OwnedLayout = $null
+if ($EnforceToolLocks) {
+    & (Join-Path $PSScriptRoot "install-check-tools.ps1") `
+        -Install `
+        -EnforceToolLocks `
+        -ToolLockPath $ToolLockPath `
+        -OwnedToolRoot $GateOwnedToolRoot `
+        -EphemeralOwnedToolRoot
+    $ToolLocks = Read-StatsProToolLocks -Path $ToolLockPath
+    $OwnedLayout = Get-StatsProOwnedToolLayout -Locks $ToolLocks -ToolRoot $GateOwnedToolRoot
+    $OwnedTools = Read-StatsProOwnedToolManifest -Locks $ToolLocks -Layout $OwnedLayout
+    $Lua = $OwnedTools.LuaPath
+    $Luac = $OwnedTools.LuacPath
+    $LuaLanguageServer = $OwnedTools.LuaLanguageServerPath
+    $Luacheck = $OwnedTools.LuacheckScriptPath
+    $LuacheckCommand = $OwnedTools.LuaRocksLuaPath
+    $LuacheckArgumentsPrefix = @($Luacheck)
+    $LuacheckEnvironment = $OwnedTools.LuacheckEnvironment
+}
+else {
+    $LuacCandidates = @(
+        if ($env:STATSPRO_PINNED_LUA_ROOT) { Join-Path $env:STATSPRO_PINNED_LUA_ROOT "luac5.1.exe" }
+        (Get-Command luac5.1 -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
+        (Get-Command luac -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
+        "C:\ProgramData\chocolatey\lib\lua51\tools\luac5.1.exe"
+    ) | Where-Object { $_ -and (Test-Path $_) }
+    $Luac = $LuacCandidates | Select-Object -First 1
+    if (-not $Luac) {
+        throw "Missing luac 5.1. Install the pinned toolchain with: .\scripts\install-check-tools.ps1 -Install"
+    }
 
-$Luac = $LuacCandidates | Select-Object -First 1
-if (-not $Luac) {
-    throw "Missing luac 5.1. Install the pinned toolchain with: .\scripts\install-check-tools.ps1 -Install"
+    $LuaCandidates = @(
+        if ($env:STATSPRO_PINNED_LUA_ROOT) { Join-Path $env:STATSPRO_PINNED_LUA_ROOT "lua5.1.exe" }
+        (Get-Command lua5.1 -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
+        (Get-Command lua -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
+        "C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe"
+    ) | Where-Object { $_ -and (Test-Path $_) }
+    $Lua = $LuaCandidates | Select-Object -First 1
+    if (-not $Lua) {
+        throw "Missing lua 5.1 runtime. Install the pinned toolchain with: .\scripts\install-check-tools.ps1 -Install"
+    }
+
+    $LuaLanguageServer = Get-Command lua-language-server -ErrorAction SilentlyContinue |
+        Select-Object -First 1 -ExpandProperty Source
+    if (-not $LuaLanguageServer) {
+        throw "Missing lua-language-server. Run: .\scripts\install-check-tools.ps1 -Install"
+    }
+
+    $LuacheckCandidates = @(
+        (Get-Command luacheck -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
+        "C:\ProgramData\chocolatey\lib\luarocks\luarocks-2.4.4-win32\systree\bin\luacheck.bat"
+    ) | Where-Object { $_ -and (Test-Path $_) }
+    $Luacheck = $LuacheckCandidates | Select-Object -First 1
+    if (-not $Luacheck) {
+        throw "Missing luacheck. Run: .\scripts\install-check-tools.ps1 -Install"
+    }
+    $LuacheckCommand = $Luacheck
+    $LuacheckArgumentsPrefix = @()
+    $LuacheckEnvironment = @{}
 }
 
-$LuaCandidates = @(
-    if ($env:STATSPRO_PINNED_LUA_ROOT) { Join-Path $env:STATSPRO_PINNED_LUA_ROOT "lua5.1.exe" }
-    (Get-Command lua5.1 -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
-    (Get-Command lua -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
-    "C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe"
-) | Where-Object { $_ -and (Test-Path $_) }
-
-$Lua = $LuaCandidates | Select-Object -First 1
-if (-not $Lua) {
-    throw "Missing lua 5.1 runtime. Install the pinned toolchain with: .\scripts\install-check-tools.ps1 -Install"
-}
-$LuaVersionResult = Invoke-NativeCapture -FilePath $Lua -Arguments @("-v") -TimeoutSeconds 10 -Description "lua -v"
+$LuaVersionResult = Invoke-NativeCapture -FilePath $Lua -Arguments @("-v") -TimeoutSeconds 10 -Description "lua -v" -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
 $LuaVersion = $LuaVersionResult.Output -join "`n"
 if ($LuaVersionResult.ExitCode -ne 0) {
     throw "lua -v exited with code $($LuaVersionResult.ExitCode): $LuaVersion"
@@ -523,34 +663,17 @@ if ($LuaVersion -notmatch "Lua\s+5\.1") {
     throw "StatsPro smoke requires Lua 5.1 because it uses setfenv; found: $LuaVersion"
 }
 
-$LuaLanguageServer = Get-Command lua-language-server -ErrorAction SilentlyContinue |
-    Select-Object -First 1 -ExpandProperty Source
-if (-not $LuaLanguageServer) {
-    throw "Missing lua-language-server. Install with: choco install lua-language-server -y"
-}
-
-$LuacheckCandidates = @(
-    (Get-Command luacheck -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
-    "C:\ProgramData\chocolatey\lib\luarocks\luarocks-2.4.4-win32\systree\bin\luacheck.bat"
-) | Where-Object { $_ -and (Test-Path $_) }
-
-$Luacheck = $LuacheckCandidates | Select-Object -First 1
-if (-not $Luacheck) {
-    throw "Missing luacheck. Run: .\scripts\install-check-tools.ps1 -Install"
-}
-
 Write-Host "== Tool versions =="
-Write-ToolVersionReport -Label "lua" -Path $Lua -Arguments @("-v")
-Write-ToolVersionReport -Label "luac" -Path $Luac -Arguments @("-v")
-Write-ToolVersionReport -Label "lua-language-server" -Path $LuaLanguageServer -Arguments @("--version")
-Write-ToolVersionReport -Label "luacheck" -Path $Luacheck -Arguments @("--version")
+Write-ToolVersionReport -Label "lua" -Path $Lua -Arguments @("-v") -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
+Write-ToolVersionReport -Label "luac" -Path $Luac -Arguments @("-v") -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
+Write-ToolVersionReport -Label "lua-language-server" -Path $LuaLanguageServer -Arguments @("--version") -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
+Write-ToolVersionReport -Label "luacheck" -Path $LuacheckCommand -Arguments ($LuacheckArgumentsPrefix + @("--version")) -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent -Environment $LuacheckEnvironment
 
 if ($EnforceToolLocks) {
-    $ToolLocks = Read-StatsProToolLocks -Path $ToolLockPath
-    Assert-ToolCommandVersion -Label "lua" -Path $Lua -Arguments @("-v") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "lua5.1")
-    Assert-ToolCommandVersion -Label "luac" -Path $Luac -Arguments @("-v") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "luac5.1")
-    Assert-ToolCommandVersion -Label "lua-language-server" -Path $LuaLanguageServer -Arguments @("--version") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "lua-language-server")
-    Assert-ToolCommandVersion -Label "luacheck" -Path $Luacheck -Arguments @("--version") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "luacheck")
+    Assert-ToolCommandVersion -Label "lua" -Path $Lua -Arguments @("-v") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "lua5.1") -IsolateLuaEnvironment
+    Assert-ToolCommandVersion -Label "luac" -Path $Luac -Arguments @("-v") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "luac5.1") -IsolateLuaEnvironment
+    Assert-ToolCommandVersion -Label "lua-language-server" -Path $LuaLanguageServer -Arguments @("--version") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "lua-language-server") -IsolateLuaEnvironment
+    Assert-ToolCommandVersion -Label "luacheck" -Path $LuacheckCommand -Arguments ($LuacheckArgumentsPrefix + @("--version")) -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "luacheck") -IsolateLuaEnvironment -Environment $LuacheckEnvironment
     Write-Host "Tool command version locks enforced."
 }
 
@@ -562,9 +685,15 @@ Write-Host "== Lua syntax =="
 $SyntaxFiles = @($RuntimeLuaRefs | ForEach-Object { $_.FullPath })
 if (Test-Path $ArchonTargetsCheck) { $SyntaxFiles += $ArchonTargetsCheck }
 $SyntaxFiles += $SmokeFile
-& $Luac -p @SyntaxFiles
-if ($LASTEXITCODE -ne 0) {
-    throw "luac exited with code $LASTEXITCODE"
+$SyntaxResult = Invoke-NativeCapture `
+    -FilePath $Luac `
+    -Arguments (@("-p") + $SyntaxFiles) `
+    -TimeoutSeconds 60 `
+    -Description "Lua syntax" `
+    -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
+$SyntaxResult.Output | ForEach-Object { Write-Host $_ }
+if ($SyntaxResult.ExitCode -ne 0) {
+    throw "luac exited with code $($SyntaxResult.ExitCode)"
 }
 
 if (Test-Path $ArchonTargetsFile) {
@@ -582,7 +711,7 @@ if (Test-Path $ArchonTargetsFile) {
             $ArchonArgs += @("--max-age-days", $ArchonMaxAgeDays)
         }
     }
-    $ArchonResult = Invoke-NativeCapture -FilePath $Lua -Arguments $ArchonArgs -TimeoutSeconds 30 -Description "Archon target snapshot check"
+    $ArchonResult = Invoke-NativeCapture -FilePath $Lua -Arguments $ArchonArgs -TimeoutSeconds 30 -Description "Archon target snapshot check" -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
     $ArchonResult.Output | ForEach-Object { Write-Host $_ }
     if ($ArchonResult.ExitCode -ne 0) {
         throw "Archon target snapshot check exited with code $($ArchonResult.ExitCode)"
@@ -590,9 +719,15 @@ if (Test-Path $ArchonTargetsFile) {
 }
 
 Write-Host "== Lua smoke =="
-& $Lua $SmokeFile
-if ($LASTEXITCODE -ne 0) {
-    throw "Lua smoke exited with code $LASTEXITCODE"
+$SmokeResult = Invoke-NativeCapture `
+    -FilePath $Lua `
+    -Arguments @($SmokeFile) `
+    -TimeoutSeconds 180 `
+    -Description "Lua smoke" `
+    -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
+$SmokeResult.Output | ForEach-Object { Write-Host $_ }
+if ($SmokeResult.ExitCode -ne 0) {
+    throw "Lua smoke exited with code $($SmokeResult.ExitCode)"
 }
 
 $StaticAnalysisFiles = @(
@@ -605,9 +740,16 @@ if ($StaticAnalysisFiles.Count -eq 0) {
 }
 
 Write-Host "== Luacheck =="
-& $Luacheck @StaticAnalysisFiles
-if ($LASTEXITCODE -ne 0) {
-    throw "luacheck exited with code $LASTEXITCODE"
+$LuacheckResult = Invoke-NativeCapture `
+    -FilePath $LuacheckCommand `
+    -Arguments ($LuacheckArgumentsPrefix + $StaticAnalysisFiles) `
+    -TimeoutSeconds 180 `
+    -Description "luacheck" `
+    -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent `
+    -Environment $LuacheckEnvironment
+$LuacheckResult.Output | ForEach-Object { Write-Host $_ }
+if ($LuacheckResult.ExitCode -ne 0) {
+    throw "luacheck exited with code $($LuacheckResult.ExitCode)"
 }
 
 Write-Host "== Lua diagnostics =="
@@ -618,9 +760,16 @@ $LuaLanguageServerResult = Invoke-LuaLanguageServerCheck `
     -Root $RepoRoot `
     -ConfigPath (Join-Path $RepoRoot ".luarc.json") `
     -TimeoutSeconds 180 `
-    -Description "lua-language-server diagnostics for $RepoRoot"
+    -Description "lua-language-server diagnostics for $RepoRoot" `
+    -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
 Assert-NoLuaDiagnostics `
     -Diagnostics @($LuaLanguageServerResult.Diagnostics) `
     -ExitCode $LuaLanguageServerResult.ExitCode
 
 Write-Host "All Lua checks passed."
+}
+finally {
+    if ($GateOwnedToolRoot) {
+        Remove-StatsProOwnedToolInvocationRoot -Path $GateOwnedToolRoot
+    }
+}

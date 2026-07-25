@@ -12,12 +12,10 @@ From the repository root, run:
 ```
 
 The wrapper runs Lua 5.1 syntax checks, the pure-Lua smoke harness, luacheck,
-and Lua Language Server diagnostics. On a fresh Windows machine, install the
-pinned local tools with:
-
-```powershell
-.\scripts\install-check-tools.ps1 -Install -EnforceToolLocks
-```
+and Lua Language Server diagnostics. In enforced mode it first installs the
+exact locked artifacts into an isolated temporary tool root, verifies their
+checksums, and executes those owned paths without selecting an ambient `PATH`
+match.
 
 For user-visible changes, also test in the Retail client after `/reload`.
 Include screenshots for layout, Settings, font, color, or localization changes.

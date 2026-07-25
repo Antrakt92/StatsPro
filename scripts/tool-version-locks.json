@@ -1,19 +1,43 @@
 {
-  "chocolatey": {
-    "lua-language-server": "3.18.1",
-    "luarocks": "2.4.4"
-  },
   "portable": {
     "lua51": {
       "version": "5.1.5",
       "url": "https://downloads.sourceforge.net/project/luabinaries/5.1.5/Tools%20Executables/lua-5.1.5_Win64_bin.zip",
+      "fileName": "lua-5.1.5_Win64_bin.zip",
       "sha256": "5f34cf7d40a20a587ea351482a4207d93b92ef6f1983e910a13338253819fe93"
+    },
+    "luaLanguageServer": {
+      "version": "3.18.1",
+      "url": "https://github.com/LuaLS/lua-language-server/releases/download/3.18.1/lua-language-server-3.18.1-win32-x64.zip",
+      "fileName": "lua-language-server-3.18.1-win32-x64.zip",
+      "sha256": "0b0c4ac671629269b847e13239b70ac7271a562e0253c789f590c8a8985addea"
+    },
+    "luaRocks": {
+      "version": "2.4.4",
+      "url": "https://luarocks.github.io/luarocks/releases/luarocks-2.4.4-win32.zip",
+      "fileName": "luarocks-2.4.4-win32.zip",
+      "sha256": "763d2fbe301b5f941dd5ea4aea485fb35e75cbbdceca8cc2f18726b75f9895c1"
     }
   },
-  "luarocks": {
-    "luacheck": "1.2.0-1",
-    "argparse": "0.7.2-1",
-    "luafilesystem": "1.6.0-1"
+  "rocks": {
+    "luacheck": {
+      "version": "1.2.0-1",
+      "url": "https://luarocks.org/manifests/lunarmodules/luacheck-1.2.0-1.src.rock",
+      "fileName": "luacheck-1.2.0-1.src.rock",
+      "sha256": "b1428283951e2a5f5f4011a0f57ce819af394421be631c910aa76c97ebad624f"
+    },
+    "argparse": {
+      "version": "0.7.2-1",
+      "url": "https://luarocks.org/manifests/argparse/argparse-0.7.2-1.src.rock",
+      "fileName": "argparse-0.7.2-1.src.rock",
+      "sha256": "c122a25224876e93bd380ceb51af28cd8a72296e098b2eed4f06d85f54f1a0b4"
+    },
+    "luafilesystem": {
+      "version": "1.6.0-1",
+      "url": "https://luarocks.org/manifests/luarocks/luafilesystem-1.6.0-1.win32-x86.rock",
+      "fileName": "luafilesystem-1.6.0-1.win32-x86.rock",
+      "sha256": "3b9d1d0d9bdd1102a64fc89a8ce008820da5c499e40380befbf3714fc5ba8d48"
+    }
   },
   "commands": {
     "lua5.1": "Lua\\s+5\\.1\\.5",

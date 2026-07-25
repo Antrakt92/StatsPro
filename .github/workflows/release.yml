@@ -39,10 +39,6 @@ jobs:
         shell: pwsh
         run: .\scripts\check-release-ancestry.ps1 -Tag $env:GITHUB_REF_NAME
 
-      - name: Install check tools
-        shell: pwsh
-        run: .\scripts\install-check-tools.ps1 -Install -EnforceToolLocks
-
       - name: Check release version
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

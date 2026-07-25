@@ -1,6 +1,8 @@
 param(
     [switch]$Install,
     [string]$ToolLockPath = (Join-Path $PSScriptRoot "tool-version-locks.json"),
+    [string]$OwnedToolRoot,
+    [switch]$EphemeralOwnedToolRoot,
     [switch]$EnforceToolLocks,
     [switch]$SelfTest,
     [switch]$PinnedLuaIntegrationTest
@@ -9,8 +11,6 @@ param(
 $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "tool-version-locks.ps1")
-
-$LuacheckFallback = "C:\ProgramData\chocolatey\lib\luarocks\luarocks-2.4.4-win32\systree\bin\luacheck.bat"
 
 function Format-NativeArgument {
     param([AllowNull()][string]$Argument)
@@ -67,7 +67,8 @@ function Invoke-NativeCapture {
         [string]$FilePath,
         [string[]]$Arguments = @(),
         [int]$TimeoutSeconds = 0,
-        [string]$Description = $null
+        [string]$Description = $null,
+        [hashtable]$Environment = @{}
     )
 
     if (-not $FilePath) {
@@ -96,6 +97,7 @@ function Invoke-NativeCapture {
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
     $startInfo.CreateNoWindow = $true
+    Set-StatsProIsolatedLuaProcessEnvironment -StartInfo $startInfo -Environment $Environment
 
     $process = [System.Diagnostics.Process]::new()
     $process.StartInfo = $startInfo
@@ -161,26 +163,9 @@ function Resolve-Tool {
     return $null
 }
 
-function Get-PortableToolRoot {
-    $base = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
-    return [System.IO.Path]::GetFullPath((Join-Path $base "statspro-tools"))
-}
-
-function Get-PortableLuaRoot {
-    param($Lock)
-    if ($Lock.Version -notmatch '^\d+\.\d+\.\d+$') {
-        throw "Pinned Lua version must be a three-part numeric version."
-    }
-    if ($Lock.Sha256 -notmatch '^[0-9a-fA-F]{64}$') {
-        throw "Pinned Lua SHA-256 is missing or malformed."
-    }
-    $toolRoot = Get-PortableToolRoot
-    $hashPrefix = $Lock.Sha256.Substring(0, 12).ToLowerInvariant()
-    return [System.IO.Path]::GetFullPath((Join-Path $toolRoot "lua-$($Lock.Version)-$hashPrefix"))
-}
-
 function Add-ToolPath {
     param([string]$Path)
+
     $resolved = (Resolve-Path -LiteralPath $Path).Path
     $parts = @($env:PATH -split [System.IO.Path]::PathSeparator)
     if (-not ($parts | Where-Object { [System.StringComparer]::OrdinalIgnoreCase.Equals($_, $resolved) })) {
@@ -189,10 +174,16 @@ function Add-ToolPath {
     if ($env:GITHUB_PATH) {
         Add-Content -LiteralPath $env:GITHUB_PATH -Value $resolved -Encoding utf8
     }
-    $env:STATSPRO_PINNED_LUA_ROOT = $resolved
+}
+
+function Publish-StatsProOwnedToolRoot {
+    param($Layout)
+
+    [Environment]::SetEnvironmentVariable("STATSPRO_OWNED_TOOL_ROOT", $Layout.ToolRoot, "Process")
     if ($env:GITHUB_ENV) {
-        Add-Content -LiteralPath $env:GITHUB_ENV -Value "STATSPRO_PINNED_LUA_ROOT=$resolved" -Encoding utf8
+        Add-Content -LiteralPath $env:GITHUB_ENV -Value "STATSPRO_OWNED_TOOL_ROOT=$($Layout.ToolRoot)" -Encoding utf8
     }
+    Add-ToolPath -Path $Layout.LuaRoot
 }
 
 function Assert-Lua51Pair {
@@ -218,6 +209,46 @@ function Assert-Lua51Pair {
     return $Root
 }
 
+function Save-PinnedArtifact {
+    param(
+        $Lock,
+        [string]$DestinationPath
+    )
+
+    $safeUri = Assert-StatsProHttpsDownloadUri -Uri $Lock.Url
+    if ($Lock.Sha256 -notmatch '^[0-9a-fA-F]{64}$') {
+        throw "Pinned artifact SHA-256 is missing or malformed."
+    }
+    if ([string]::IsNullOrWhiteSpace($Lock.FileName)) {
+        throw "Pinned artifact file name is missing."
+    }
+    $uriFileName = [System.Uri]::UnescapeDataString(
+        [System.IO.Path]::GetFileName(([uri]$safeUri).AbsolutePath))
+    if (-not [System.StringComparer]::Ordinal.Equals($uriFileName, [string]$Lock.FileName)) {
+        throw "Pinned artifact URL file '$uriFileName' does not match lock file '$($Lock.FileName)'."
+    }
+    $windowsRoot = [Environment]::GetFolderPath([Environment+SpecialFolder]::Windows)
+    if ([string]::IsNullOrWhiteSpace($windowsRoot)) {
+        throw "Cannot resolve the Windows directory for the pinned artifact downloader."
+    }
+    $systemCurl = [System.IO.Path]::GetFullPath((Join-Path $windowsRoot "System32\curl.exe"))
+    if (-not (Test-Path -LiteralPath $systemCurl -PathType Leaf)) {
+        throw "Missing the Windows system curl executable: $systemCurl"
+    }
+
+    $arguments = Get-StatsProPinnedCurlArguments -Uri $safeUri -OutputPath $DestinationPath
+    if ([System.IO.File]::Exists($DestinationPath)) {
+        [System.IO.File]::Delete($DestinationPath)
+    }
+    & $systemCurl @arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Pinned artifact download failed with curl exit code $LASTEXITCODE."
+    }
+    return Assert-StatsProPinnedArchive `
+        -Path $DestinationPath `
+        -ExpectedSha256 $Lock.Sha256
+}
+
 function Install-PinnedLua51 {
     param(
         $Lock,
@@ -227,7 +258,7 @@ function Install-PinnedLua51 {
         [string]$ArchivePathOverride,
         [switch]$SkipPathMutation
     )
-    $safeUri = Assert-StatsProHttpsDownloadUri -Uri $Lock.Url
+    [void](Assert-StatsProHttpsDownloadUri -Uri $Lock.Url)
     if ($Lock.Version -notmatch '^\d+\.\d+\.\d+$') {
         throw "Pinned Lua version must be a three-part numeric version."
     }
@@ -259,13 +290,7 @@ function Install-PinnedLua51 {
     $staging = Join-Path $allowedFull "lua-$nonce"
     try {
         if (-not $ArchivePathOverride) {
-            $curl = Resolve-Tool -Names @("curl.exe", "curl")
-            if (-not $curl) { throw "Missing curl; cannot fetch the pinned Lua archive." }
-            $arguments = Get-StatsProPinnedCurlArguments -Uri $safeUri -OutputPath $archive
-            & $curl @arguments
-            if ($LASTEXITCODE -ne 0) {
-                throw "Pinned Lua download failed with exit code $LASTEXITCODE."
-            }
+            [void](Save-PinnedArtifact -Lock $Lock -DestinationPath $archive)
         }
         [void](Assert-StatsProPinnedArchive -Path $archive -ExpectedSha256 $Lock.Sha256)
 
@@ -301,75 +326,257 @@ function Install-PinnedLua51 {
     }
 }
 
-function Install-ChocoPackage {
-    param(
-        [string]$PackageName,
-        [string]$Version
-    )
-
-    $Choco = Resolve-Tool -Names @("choco")
-    if (-not $Choco) {
-        throw "Missing Chocolatey; cannot install $PackageName automatically."
-    }
-    Write-Host "Installing $PackageName $Version with Chocolatey..."
-    & $Choco @(Get-StatsProChocoInstallArguments -PackageName $PackageName -Version $Version) | ForEach-Object { Write-Host $_ }
-    if ($LASTEXITCODE -ne 0) {
-        throw "choco install $PackageName $Version exited with code $LASTEXITCODE"
-    }
-}
-
 function Require-Tool {
     param(
         [string]$Label,
-        [string[]]$Names,
-        [string]$ChocoPackage,
-        [string]$ChocoVersion
+        [string[]]$Names
     )
 
     $Path = Resolve-Tool -Names $Names
-    if (-not $Path -and $Install -and $ChocoPackage) {
-        Install-ChocoPackage -PackageName $ChocoPackage -Version $ChocoVersion
-        $Path = Resolve-Tool -Names $Names
-    }
     if (-not $Path) {
-        $installHint = if ($ChocoPackage) {
-            "Re-run with -Install, or install $ChocoPackage with Chocolatey."
-        }
-        else {
-            "Re-run with -Install."
-        }
-        throw "Missing $Label. $installHint"
+        throw "Missing $Label. Re-run with -Install."
     }
     Write-Host "${Label}: $Path"
     return $Path
 }
 
+function Assert-OwnedDestinationRoot {
+    param([string]$DestinationRoot, [string]$AllowedToolRoot, [string]$Label)
+
+    $allowedFull = [System.IO.Path]::GetFullPath($AllowedToolRoot).TrimEnd('\', '/')
+    $destinationFull = [System.IO.Path]::GetFullPath($DestinationRoot)
+    $allowedPrefix = $allowedFull + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $destinationFull.StartsWith($allowedPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "$Label destination escaped its tool root."
+    }
+    if (Test-Path -LiteralPath $allowedFull) {
+        $allowedItem = Get-Item -LiteralPath $allowedFull -Force
+        if (($allowedItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "StatsPro tool root cannot be a reparse point."
+        }
+    }
+    if (Test-Path -LiteralPath $destinationFull) {
+        $destinationItem = Get-Item -LiteralPath $destinationFull -Force
+        if (($destinationItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "$Label destination cannot be a reparse point."
+        }
+    }
+    return $destinationFull
+}
+
+function Remove-OwnedToolDirectory {
+    param([string]$DestinationRoot, [string]$AllowedToolRoot, [string]$Label)
+
+    $destinationFull = Assert-OwnedDestinationRoot `
+        -DestinationRoot $DestinationRoot `
+        -AllowedToolRoot $AllowedToolRoot `
+        -Label $Label
+    if ([System.IO.Directory]::Exists($destinationFull)) {
+        [System.IO.Directory]::Delete($destinationFull, $true)
+    }
+}
+
+function Assert-LuaLanguageServerRoot {
+    param([string]$Root, $Locks)
+
+    $server = Join-Path $Root "bin\lua-language-server.exe"
+    if (-not (Test-Path -LiteralPath $server -PathType Leaf)) {
+        throw "Pinned LuaLS archive is missing bin\lua-language-server.exe."
+    }
+    Assert-ToolCommandVersion `
+        -Label "lua-language-server" `
+        -Path $server `
+        -Arguments @("--version") `
+        -Pattern (Get-StatsProLockedCommandPattern -Locks $Locks -CommandName "lua-language-server")
+    return (Resolve-Path -LiteralPath $server).Path
+}
+
+function Install-PinnedLuaLanguageServer {
+    param(
+        $Lock,
+        $Locks,
+        [string]$DestinationRoot,
+        [string]$AllowedToolRoot,
+        [string]$ArchivePathOverride
+    )
+
+    [void](Assert-OwnedDestinationRoot `
+            -DestinationRoot $DestinationRoot `
+            -AllowedToolRoot $AllowedToolRoot `
+            -Label "Pinned LuaLS")
+    $nonce = [System.Guid]::NewGuid().ToString("N")
+    $archive = if ($ArchivePathOverride) {
+        [System.IO.Path]::GetFullPath($ArchivePathOverride)
+    }
+    else {
+        Join-Path ([System.IO.Path]::GetTempPath()) "statspro-luals-$nonce.zip"
+    }
+    $ownsArchive = -not $ArchivePathOverride
+    $staging = Join-Path ([System.IO.Path]::GetFullPath($AllowedToolRoot)) "luals-$nonce"
+    try {
+        if ($ArchivePathOverride) {
+            [void](Assert-StatsProPinnedArchive -Path $archive -ExpectedSha256 $Lock.Sha256)
+        }
+        else {
+            [void](Save-PinnedArtifact -Lock $Lock -DestinationPath $archive)
+        }
+
+        New-Item -ItemType Directory -Path $AllowedToolRoot -Force | Out-Null
+        [void](Assert-OwnedDestinationRoot `
+                -DestinationRoot $DestinationRoot `
+                -AllowedToolRoot $AllowedToolRoot `
+                -Label "Pinned LuaLS")
+        Expand-Archive -LiteralPath $archive -DestinationPath $staging -Force
+        [void](Assert-LuaLanguageServerRoot -Root $staging -Locks $Locks)
+        Remove-OwnedToolDirectory `
+            -DestinationRoot $DestinationRoot `
+            -AllowedToolRoot $AllowedToolRoot `
+            -Label "Pinned LuaLS"
+        Move-Item -LiteralPath $staging -Destination $DestinationRoot
+        return Assert-LuaLanguageServerRoot -Root $DestinationRoot -Locks $Locks
+    }
+    finally {
+        if ($ownsArchive -and [System.IO.File]::Exists($archive)) {
+            [System.IO.File]::Delete($archive)
+        }
+        if ([System.IO.Directory]::Exists($staging)) {
+            [System.IO.Directory]::Delete($staging, $true)
+        }
+    }
+}
+
 function Get-LuacheckInstallPlan {
     param($Locks)
-    $luacheckVersion = Get-StatsProLockedLuarocksVersion -Locks $Locks -PackageName "luacheck"
-    $argparseVersion = Get-StatsProLockedLuarocksVersion -Locks $Locks -PackageName "argparse"
-    $luafilesystemVersion = Get-StatsProLockedLuarocksVersion -Locks $Locks -PackageName "luafilesystem"
 
     return @(
-        [pscustomobject]@{ Name = "argparse"; Version = $argparseVersion; DepsModeNone = $false },
-        [pscustomobject]@{ Name = "luafilesystem"; Version = $luafilesystemVersion; DepsModeNone = $false },
-        [pscustomobject]@{ Name = "luacheck"; Version = $luacheckVersion; DepsModeNone = $true }
+        [pscustomobject]@{ Name = "argparse"; Lock = Get-StatsProLockedRock -Locks $Locks -PackageName "argparse" },
+        [pscustomobject]@{ Name = "luafilesystem"; Lock = Get-StatsProLockedRock -Locks $Locks -PackageName "luafilesystem" },
+        [pscustomobject]@{ Name = "luacheck"; Lock = Get-StatsProLockedRock -Locks $Locks -PackageName "luacheck" }
     )
 }
 
-function Install-Luacheck {
+function Assert-LuaRocksBundle {
     param(
-        [string]$LuarocksPath,
+        $Layout,
         $Locks
     )
 
+    foreach ($tool in @($Layout.LuaRocksPath, $Layout.LuacheckScriptPath)) {
+        if (-not (Test-Path -LiteralPath $tool -PathType Leaf)) {
+            throw "Pinned LuaRocks bundle is missing $tool."
+        }
+    }
+    Assert-ToolCommandVersion `
+        -Label "luarocks" `
+        -Path $Layout.LuaRocksPath `
+        -Arguments @("--version") `
+        -Pattern (Get-StatsProLockedCommandPattern -Locks $Locks -CommandName "luarocks")
+    $luacheckEnvironment = Get-StatsProOwnedLuacheckEnvironment -Layout $Layout
+    Assert-ToolCommandVersion `
+        -Label "luacheck" `
+        -Path $Layout.LuaRocksLuaPath `
+        -Arguments @($Layout.LuacheckScriptPath, "--version") `
+        -Pattern (Get-StatsProLockedCommandPattern -Locks $Locks -CommandName "luacheck") `
+        -Environment $luacheckEnvironment
     foreach ($package in @(Get-LuacheckInstallPlan -Locks $Locks)) {
-        Write-Host "Installing $($package.Name) $($package.Version) with LuaRocks..."
-        $installArgs = Get-StatsProLuarocksInstallArguments -PackageName $package.Name -Version $package.Version -DepsModeNone:([bool]$package.DepsModeNone)
-        & $LuarocksPath @installArgs | ForEach-Object { Write-Host $_ }
-        if ($LASTEXITCODE -ne 0) {
-            $depsMessage = if ($package.DepsModeNone) { " --deps-mode=none" } else { "" }
-            throw "luarocks install $($package.Name) $($package.Version)$depsMessage exited with code $LASTEXITCODE"
+        Assert-LuarocksPackageVersion `
+            -LuarocksPath $Layout.LuaRocksPath `
+            -PackageName $package.Name `
+            -ExpectedVersion $package.Lock.Version
+    }
+    return [pscustomobject]@{
+        LuaRocksPath = (Resolve-Path -LiteralPath $Layout.LuaRocksPath).Path
+        LuacheckScriptPath = (Resolve-Path -LiteralPath $Layout.LuacheckScriptPath).Path
+    }
+}
+
+function Install-PinnedLuaRocksBundle {
+    param(
+        $Locks,
+        $Layout
+    )
+
+    $DestinationRoot = $Layout.LuaRocksRoot
+    $AllowedToolRoot = $Layout.ToolRoot
+    $luaRocksLock = Get-StatsProLockedPortableTool -Locks $Locks -ToolName "luaRocks"
+    [void](Assert-OwnedDestinationRoot `
+            -DestinationRoot $DestinationRoot `
+            -AllowedToolRoot $AllowedToolRoot `
+            -Label "Pinned LuaRocks")
+    $nonce = [System.Guid]::NewGuid().ToString("N")
+    $downloadRoot = [System.IO.Path]::GetFullPath((Join-Path ([System.IO.Path]::GetTempPath()) "statspro-luarocks-$nonce"))
+    $tempPrefix = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\', '/') +
+        [System.IO.Path]::DirectorySeparatorChar + "statspro-luarocks-"
+    if (-not $downloadRoot.StartsWith($tempPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Pinned LuaRocks staging escaped the temporary directory."
+    }
+    [System.IO.Directory]::CreateDirectory($downloadRoot) | Out-Null
+    try {
+        $archive = Join-Path $downloadRoot $luaRocksLock.FileName
+        [void](Save-PinnedArtifact -Lock $luaRocksLock -DestinationPath $archive)
+        $rockPaths = @{}
+        foreach ($package in @(Get-LuacheckInstallPlan -Locks $Locks)) {
+            $rockPath = Join-Path $downloadRoot $package.Lock.FileName
+            [void](Save-PinnedArtifact -Lock $package.Lock -DestinationPath $rockPath)
+            $rockPaths[$package.Name] = $rockPath
+        }
+
+        $sourceRoot = Join-Path $downloadRoot "source"
+        Expand-Archive -LiteralPath $archive -DestinationPath $sourceRoot -Force
+        $installerRoot = Join-Path $sourceRoot "luarocks-$($luaRocksLock.Version)-win32"
+        $installer = Join-Path $installerRoot "install.bat"
+        if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
+            throw "Pinned LuaRocks archive is missing its exact installer path."
+        }
+
+        New-Item -ItemType Directory -Path $AllowedToolRoot -Force | Out-Null
+        Remove-OwnedToolDirectory `
+            -DestinationRoot $DestinationRoot `
+            -AllowedToolRoot $AllowedToolRoot `
+            -Label "Pinned LuaRocks"
+        Push-Location $installerRoot
+        try {
+            $installResult = Invoke-NativeCapture `
+                -FilePath $installer `
+                -Arguments @("/NOADMIN", "/SELFCONTAINED", "/L", "/Q", "/P", $DestinationRoot) `
+                -TimeoutSeconds 120 `
+                -Description "pinned LuaRocks installer"
+        }
+        finally {
+            Pop-Location
+        }
+        if ($installResult.ExitCode -ne 0) {
+            throw "Pinned LuaRocks installer exited with code $($installResult.ExitCode): $(Format-VersionOutput $installResult.Output)"
+        }
+
+        $luaRocks = Join-Path $DestinationRoot "luarocks.bat"
+        $tree = Join-Path $DestinationRoot "systree"
+        foreach ($package in @(Get-LuacheckInstallPlan -Locks $Locks)) {
+            Write-Host "Installing pinned $($package.Name) $($package.Lock.Version) into the owned rock tree..."
+            $installArgs = @("install", $rockPaths[$package.Name], "--tree", $tree, "--deps-mode=none")
+            $result = Invoke-NativeCapture `
+                -FilePath $luaRocks `
+                -Arguments $installArgs `
+                -TimeoutSeconds 120 `
+                -Description "pinned $($package.Name) install"
+            if ($result.ExitCode -ne 0) {
+                throw "Pinned $($package.Name) install exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
+            }
+        }
+        return Assert-LuaRocksBundle -Layout $Layout -Locks $Locks
+    }
+    catch {
+        if (Test-Path -LiteralPath $DestinationRoot) {
+            Remove-OwnedToolDirectory `
+                -DestinationRoot $DestinationRoot `
+                -AllowedToolRoot $AllowedToolRoot `
+                -Label "Pinned LuaRocks"
+        }
+        throw
+    }
+    finally {
+        if ([System.IO.Directory]::Exists($downloadRoot)) {
+            [System.IO.Directory]::Delete($downloadRoot, $true)
         }
     }
 }
@@ -388,30 +595,16 @@ function Write-ToolVersionReport {
     param(
         [string]$Label,
         [string]$Path,
-        [string[]]$Arguments
+        [string[]]$Arguments,
+        [hashtable]$Environment = @{}
     )
 
-    $result = Invoke-NativeCapture -FilePath $Path -Arguments $Arguments -TimeoutSeconds 30 -Description "$Label version"
+    $result = Invoke-NativeCapture -FilePath $Path -Arguments $Arguments -TimeoutSeconds 30 -Description "$Label version" -Environment $Environment
     if ($result.ExitCode -eq 0) {
         Write-Host "${Label} version: $(Format-VersionOutput $result.Output)"
     }
     else {
         Write-Warning "${Label} version command exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
-    }
-}
-
-function Write-ChocoPackageReport {
-    param(
-        [string]$ChocoPath,
-        [string]$PackageName
-    )
-
-    $result = Invoke-NativeCapture -FilePath $ChocoPath -Arguments @("list", "--exact", $PackageName, "--limit-output") -TimeoutSeconds 30 -Description "choco list $PackageName"
-    if ($result.ExitCode -eq 0 -and $result.Output.Count -gt 0) {
-        Write-Host "choco package ${PackageName}: $(Format-VersionOutput $result.Output)"
-    }
-    else {
-        Write-Warning "choco package ${PackageName} version not listed: $(Format-VersionOutput $result.Output)"
     }
 }
 
@@ -430,27 +623,24 @@ function Write-LuarocksPackageReport {
     }
 }
 
-function Assert-ChocoPackageVersion {
-    param([string]$ChocoPath, [string]$PackageName, [string]$ExpectedVersion)
-    $result = Invoke-NativeCapture -FilePath $ChocoPath -Arguments @("list", "--exact", $PackageName, "--limit-output") -TimeoutSeconds 30 -Description "choco list $PackageName"
-    if ($result.ExitCode -ne 0) {
-        throw "choco list $PackageName exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
-    }
-    Assert-StatsProPackageVersionLine -Label $PackageName -Output $result.Output -ExpectedVersion $ExpectedVersion -Format "choco"
-}
-
 function Assert-LuarocksPackageVersion {
     param([string]$LuarocksPath, [string]$PackageName, [string]$ExpectedVersion)
     $result = Invoke-NativeCapture -FilePath $LuarocksPath -Arguments @("list", "--porcelain", $PackageName) -TimeoutSeconds 30 -Description "luarocks list $PackageName"
     if ($result.ExitCode -ne 0) {
         throw "luarocks list $PackageName exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
     }
-    Assert-StatsProPackageVersionLine -Label $PackageName -Output $result.Output -ExpectedVersion $ExpectedVersion -Format "luarocks"
+    Assert-StatsProPackageVersionLine -Label $PackageName -Output $result.Output -ExpectedVersion $ExpectedVersion
 }
 
 function Assert-ToolCommandVersion {
-    param([string]$Label, [string]$Path, [string[]]$Arguments, [string]$Pattern)
-    $result = Invoke-NativeCapture -FilePath $Path -Arguments $Arguments -TimeoutSeconds 30 -Description "$Label version"
+    param(
+        [string]$Label,
+        [string]$Path,
+        [string[]]$Arguments,
+        [string]$Pattern,
+        [hashtable]$Environment = @{}
+    )
+    $result = Invoke-NativeCapture -FilePath $Path -Arguments $Arguments -TimeoutSeconds 30 -Description "$Label version" -Environment $Environment
     if ($result.ExitCode -ne 0) {
         throw "$Label version command exited with code $($result.ExitCode): $(Format-VersionOutput $result.Output)"
     }
@@ -477,26 +667,61 @@ function Invoke-SelfTest {
     $luaLock = Get-StatsProLockedPortableTool -Locks $locks -ToolName "lua51"
     Assert-Equal "locked Lua version" $luaLock.Version "5.1.5"
     Assert-Equal "locked Lua URL scheme" ([uri]$luaLock.Url).Scheme "https"
+    Assert-Equal "locked Lua file name" $luaLock.FileName "lua-5.1.5_Win64_bin.zip"
     Assert-Equal "locked Lua SHA-256" $luaLock.Sha256 "5f34cf7d40a20a587ea351482a4207d93b92ef6f1983e910a13338253819fe93"
+    $curlArguments = Get-StatsProPinnedCurlArguments `
+        -Uri $luaLock.Url `
+        -OutputPath "C:\pinned\lua.zip"
+    Assert-Equal "pinned downloader requires HTTPS source" $curlArguments[-1] $luaLock.Url
+    Assert-Equal "pinned downloader fixes output path" $curlArguments[-2] "C:\pinned\lua.zip"
+    Assert-Equal "pinned downloader restricts redirect protocol" `
+        (($curlArguments -join " ") -match "--proto-redir =https") $true
     $malformedVersionFailed = $false
     try {
-        [void](Get-PortableLuaRoot -Lock ([pscustomobject]@{
-            Version = '..\..\victim'
-            Sha256 = $luaLock.Sha256
-        }))
+        [void](Get-StatsProContentAddressedToolRoot `
+                -ToolRoot "C:\owned-tools" `
+                -Prefix "lua" `
+                -Lock ([pscustomobject]@{
+                    Version = '..\..\victim'
+                    Sha256 = $luaLock.Sha256
+                }))
     }
     catch { $malformedVersionFailed = $true }
     Assert-Equal "malformed Lua version cannot shape tool path" $malformedVersionFailed $true
-    Assert-Equal "locked LuaLS choco version" (Get-StatsProLockedChocolateyVersion -Locks $locks -PackageName "lua-language-server") "3.18.1"
+    $luaLsLock = Get-StatsProLockedPortableTool -Locks $locks -ToolName "luaLanguageServer"
+    Assert-Equal "locked LuaLS version" $luaLsLock.Version "3.18.1"
+    Assert-Equal "locked LuaLS URL scheme" ([uri]$luaLsLock.Url).Scheme "https"
+    Assert-Equal "locked LuaLS file name" $luaLsLock.FileName "lua-language-server-3.18.1-win32-x64.zip"
+    Assert-Equal "locked LuaLS SHA-256" $luaLsLock.Sha256 "0b0c4ac671629269b847e13239b70ac7271a562e0253c789f590c8a8985addea"
+    $luaRocksLock = Get-StatsProLockedPortableTool -Locks $locks -ToolName "luaRocks"
+    Assert-Equal "locked LuaRocks version" $luaRocksLock.Version "2.4.4"
+    Assert-Equal "locked LuaRocks URL scheme" ([uri]$luaRocksLock.Url).Scheme "https"
+    Assert-Equal "locked LuaRocks file name" $luaRocksLock.FileName "luarocks-2.4.4-win32.zip"
+    Assert-Equal "locked LuaRocks SHA-256" $luaRocksLock.Sha256 "763d2fbe301b5f941dd5ea4aea485fb35e75cbbdceca8cc2f18726b75f9895c1"
     Assert-Equal "locked luacheck rock version" (Get-StatsProLockedLuarocksVersion -Locks $locks -PackageName "luacheck") "1.2.0-1"
-    Assert-Equal "locked choco install args" ((Get-StatsProChocoInstallArguments -PackageName "lua-language-server" -Version "3.18.1") -join " ") "install lua-language-server --version 3.18.1 -y --no-progress"
-    Assert-Equal "pinned curl protocol gate" ((Get-StatsProPinnedCurlArguments -Uri $luaLock.Url -OutputPath "lua.zip") -join " ") "--fail --location --silent --show-error --proto =https --proto-redir =https --retry 3 --retry-delay 2 --retry-all-errors --connect-timeout 15 --max-time 120 --output lua.zip $($luaLock.Url)"
-    Assert-Equal "locked luarocks install args" ((Get-StatsProLuarocksInstallArguments -PackageName "luacheck" -Version "1.2.0-1") -join " ") "install luacheck 1.2.0-1"
-    Assert-Equal "locked luarocks no-deps install args" ((Get-StatsProLuarocksInstallArguments -PackageName "luacheck" -Version "1.2.0-1" -DepsModeNone) -join " ") "install luacheck 1.2.0-1 --deps-mode=none"
     $luacheckPlan = @(Get-LuacheckInstallPlan -Locks $locks)
     Assert-Equal "locked luacheck install plan count" $luacheckPlan.Count 3
     Assert-Equal "locked luacheck install plan order" (($luacheckPlan | ForEach-Object { $_.Name }) -join " ") "argparse luafilesystem luacheck"
-    Assert-Equal "locked luacheck installs without auto deps" $luacheckPlan[2].DepsModeNone $true
+    Assert-Equal "locked rock file names are unique" (($luacheckPlan | ForEach-Object { $_.Lock.FileName } | Sort-Object -Unique).Count) 3
+    foreach ($package in $luacheckPlan) {
+        Assert-Equal "locked $($package.Name) URL scheme" ([uri]$package.Lock.Url).Scheme "https"
+        Assert-Equal "locked $($package.Name) SHA-256 length" $package.Lock.Sha256.Length 64
+    }
+    $bundleRoot = Get-StatsProPortableLuaRocksRoot -Locks $locks -ToolRoot "C:\owned-tools"
+    if ($bundleRoot -notmatch 'luarocks-2\.4\.4-[0-9a-f]{12}$') {
+        throw "Owned LuaRocks root must include the version and complete bundle fingerprint."
+    }
+    $ownedLayout = Get-StatsProOwnedToolLayout -Locks $locks -ToolRoot "C:\owned-tools"
+    Assert-Equal "owned layout Lua path" $ownedLayout.LuaPath `
+        (Join-Path $ownedLayout.LuaRoot "lua5.1.exe")
+    Assert-Equal "owned layout LuaLS path" $ownedLayout.LuaLanguageServerPath `
+        (Join-Path $ownedLayout.LuaLanguageServerRoot "bin\lua-language-server.exe")
+    Assert-Equal "owned layout luacheck script path" $ownedLayout.LuacheckScriptPath `
+        (Join-Path $ownedLayout.LuaRocksRoot "systree\lib\luarocks\rocks\luacheck\1.2.0-1\bin\luacheck")
+    $invocationRootOne = New-StatsProOwnedToolInvocationRoot
+    $invocationRootTwo = New-StatsProOwnedToolInvocationRoot
+    Assert-Equal "concurrent invocations receive distinct owned roots" `
+        ([System.StringComparer]::OrdinalIgnoreCase.Equals($invocationRootOne, $invocationRootTwo)) $false
     $selfTestRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-tool-selftest-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $selfTestRoot | Out-Null
     try {
@@ -513,16 +738,102 @@ function Invoke-SelfTest {
         Assert-Equal "tampered archive rejected" $tamperedFailed $true
         Assert-Equal "tampered archive leaves PATH unchanged" $env:PATH $pathBefore
 
+        $manifestLayout = Get-StatsProOwnedToolLayout `
+            -Locks $locks `
+            -ToolRoot (Join-Path $selfTestRoot "manifest-owned")
+        $manifestInputs = @(
+            $manifestLayout.LuaPath,
+            $manifestLayout.LuacPath,
+            $manifestLayout.LuaLanguageServerPath,
+            $manifestLayout.LuaRocksPath,
+            $manifestLayout.LuaRocksLuaPath,
+            $manifestLayout.LuacheckScriptPath,
+            (Join-Path $manifestLayout.LuacheckShareRoot "luacheck\main.lua"),
+            (Join-Path $manifestLayout.LuacheckShareRoot "argparse.lua"),
+            (Join-Path $manifestLayout.LuacheckCPathRoot "lfs.dll")
+        )
+        foreach ($path in $manifestInputs) {
+            New-Item -ItemType Directory -Path ([System.IO.Path]::GetDirectoryName($path)) -Force | Out-Null
+            [System.IO.File]::WriteAllText($path, "owned")
+        }
+        Copy-Item -LiteralPath $env:ComSpec -Destination $manifestLayout.LuaLanguageServerPath -Force
+        [System.IO.File]::WriteAllText(
+            $manifestLayout.LuaRocksPath, "@echo off`r`necho owned-luarocks`r`n")
+        [void](Write-StatsProOwnedToolManifest -Locks $locks -Layout $manifestLayout)
+
+        $wrongMarker = Join-Path $selfTestRoot "wrong-version.marker"
+        $sameMarker = Join-Path $selfTestRoot "same-version.marker"
+        $wrongRoot = Join-Path $selfTestRoot "wrong-version-shadow"
+        $sameRoot = Join-Path $selfTestRoot "same-version-shadow"
+        New-Item -ItemType Directory -Path $wrongRoot, $sameRoot -Force | Out-Null
+        [System.IO.File]::WriteAllText(
+            (Join-Path $wrongRoot "lua-language-server.cmd"),
+            "@echo off`r`n> `"$wrongMarker`" echo wrong`r`necho 3.18.2-dev`r`n")
+        [System.IO.File]::WriteAllText(
+            (Join-Path $wrongRoot "luarocks.cmd"),
+            "@echo off`r`n> `"$wrongMarker`" echo wrong`r`necho 3.0.0`r`n")
+        [System.IO.File]::WriteAllText(
+            (Join-Path $sameRoot "lua-language-server.cmd"),
+            "@echo off`r`n> `"$sameMarker`" echo same`r`necho 3.18.1`r`n")
+        [System.IO.File]::WriteAllText(
+            (Join-Path $sameRoot "luarocks.cmd"),
+            "@echo off`r`n> `"$sameMarker`" echo same`r`necho 2.4.4`r`n")
+        foreach ($shadowRoot in @($wrongRoot, $sameRoot)) {
+            try {
+                $env:PATH = $shadowRoot + [System.IO.Path]::PathSeparator + $pathBefore
+                $resolvedManifest = Read-StatsProOwnedToolManifest -Locks $locks -Layout $manifestLayout
+                $result = Invoke-NativeCapture `
+                    -FilePath $resolvedManifest.LuaLanguageServerPath `
+                    -Arguments @("/d", "/c", "echo owned") `
+                    -TimeoutSeconds 10 `
+                    -Description "owned manifest execution"
+                Assert-Equal "owned manifest command exit" $result.ExitCode 0
+                Assert-Equal "owned manifest command executed" (($result.Output -join "`n") -match '^owned$') $true
+                $luaRocksResult = Invoke-NativeCapture `
+                    -FilePath $resolvedManifest.LuaRocksPath `
+                    -Arguments @("--version") `
+                    -TimeoutSeconds 10 `
+                    -Description "owned LuaRocks manifest execution"
+                Assert-Equal "owned LuaRocks manifest command exit" $luaRocksResult.ExitCode 0
+                Assert-Equal "owned LuaRocks manifest command executed" (($luaRocksResult.Output -join "`n") -match '^owned-luarocks$') $true
+                Assert-Equal "wrong-version PATH shadow not executed" (Test-Path -LiteralPath $wrongMarker) $false
+                Assert-Equal "same-version PATH shadow not executed" (Test-Path -LiteralPath $sameMarker) $false
+            }
+            finally {
+                $env:PATH = $pathBefore
+            }
+        }
+
+        $oldLuaEnvironment = @{}
+        foreach ($name in @("LUA_INIT", "LUA_INIT_5_1", "LUA_PATH", "LUA_PATH_5_1", "LUA_CPATH", "LUA_CPATH_5_1")) {
+            $oldLuaEnvironment[$name] = [Environment]::GetEnvironmentVariable($name)
+            [Environment]::SetEnvironmentVariable($name, "self-test-canary", "Process")
+        }
+        $luaEnvironmentMarker = Join-Path $selfTestRoot "lua-environment.marker"
+        try {
+            $environmentResult = Invoke-NativeCapture `
+                -FilePath $env:ComSpec `
+                -Arguments @("/d", "/c", "if defined LUA_INIT (> `"$luaEnvironmentMarker`" echo leak) else if defined LUA_INIT_5_1 (> `"$luaEnvironmentMarker`" echo leak) else if defined LUA_PATH (> `"$luaEnvironmentMarker`" echo leak) else if defined LUA_PATH_5_1 (> `"$luaEnvironmentMarker`" echo leak) else if defined LUA_CPATH (> `"$luaEnvironmentMarker`" echo leak) else if defined LUA_CPATH_5_1 (> `"$luaEnvironmentMarker`" echo leak)") `
+                -TimeoutSeconds 10 `
+                -Description "isolated Lua environment"
+            Assert-Equal "isolated Lua environment command exit" $environmentResult.ExitCode 0
+            Assert-Equal "ambient Lua environment removed" (Test-Path -LiteralPath $luaEnvironmentMarker) $false
+        }
+        finally {
+            foreach ($name in $oldLuaEnvironment.Keys) {
+                [Environment]::SetEnvironmentVariable($name, $oldLuaEnvironment[$name], "Process")
+            }
+        }
+
+        [System.IO.File]::WriteAllText(
+            (Join-Path $manifestLayout.LuacheckShareRoot "argparse.lua"), "tampered")
+        $manifestTamperFailed = $false
+        try { [void](Read-StatsProOwnedToolManifest -Locks $locks -Layout $manifestLayout) }
+        catch { $manifestTamperFailed = $true }
+        Assert-Equal "owned manifest rejects replaced runtime module" $manifestTamperFailed $true
+
         $installRoot = Join-Path $selfTestRoot "tool-root"
         $installDestination = Join-Path $installRoot "lua-5.1.5-test"
-        $githubPath = Join-Path $selfTestRoot "github-path.txt"
-        $githubEnv = Join-Path $selfTestRoot "github-env.txt"
-        [System.IO.File]::WriteAllText($githubPath, "before-path")
-        [System.IO.File]::WriteAllText($githubEnv, "before-env")
-        $oldGithubPath = $env:GITHUB_PATH
-        $oldGithubEnv = $env:GITHUB_ENV
-        $env:GITHUB_PATH = $githubPath
-        $env:GITHUB_ENV = $githubEnv
         $installerFailed = $false
         try {
             Install-PinnedLua51 `
@@ -533,21 +844,15 @@ function Invoke-SelfTest {
                 -ArchivePathOverride $bad | Out-Null
         }
         catch { $installerFailed = $true }
-        finally {
-            $env:GITHUB_PATH = $oldGithubPath
-            $env:GITHUB_ENV = $oldGithubEnv
-        }
         Assert-Equal "tampered installer rejected" $installerFailed $true
         Assert-Equal "tampered installer leaves destination absent" (Test-Path -LiteralPath $installDestination) $false
         Assert-Equal "tampered installer leaves tool root absent" (Test-Path -LiteralPath $installRoot) $false
         Assert-Equal "tampered installer leaves PATH unchanged" $env:PATH $pathBefore
-        Assert-Equal "tampered installer leaves GITHUB_PATH unchanged" ([System.IO.File]::ReadAllText($githubPath)) "before-path"
-        Assert-Equal "tampered installer leaves GITHUB_ENV unchanged" ([System.IO.File]::ReadAllText($githubEnv)) "before-env"
     }
     finally {
         [System.IO.Directory]::Delete($selfTestRoot, $true)
     }
-    Assert-StatsProPackageVersionLine -Label "luacheck" -Output @("luacheck`t1.2.0-1`tinstalled`tC:/rocks") -ExpectedVersion "1.2.0-1" -Format "luarocks"
+    Assert-StatsProPackageVersionLine -Label "luacheck" -Output @("luacheck`t1.2.0-1`tinstalled`tC:/rocks") -ExpectedVersion "1.2.0-1"
 
     Write-Host "Install check tools self-test passed."
 }
@@ -559,14 +864,32 @@ if ($SelfTest) {
 
 if ($PinnedLuaIntegrationTest) {
     $integrationLocks = Read-StatsProToolLocks -Path $ToolLockPath
-    $integrationLock = Get-StatsProLockedPortableTool -Locks $integrationLocks -ToolName "lua51"
     $integrationToolRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
-        "statspro-pinned-lua-tool-root-" + [System.Guid]::NewGuid().ToString("N"))
-    $integrationRoot = Join-Path $integrationToolRoot "lua-$($integrationLock.Version)"
+        "statspro-pinned-toolchain-root-" + [System.Guid]::NewGuid().ToString("N"))
+    $integrationLuaLock = Get-StatsProLockedPortableTool -Locks $integrationLocks -ToolName "lua51"
+    $integrationLuaLsLock = Get-StatsProLockedPortableTool -Locks $integrationLocks -ToolName "luaLanguageServer"
+    $integrationLayout = Get-StatsProOwnedToolLayout -Locks $integrationLocks -ToolRoot $integrationToolRoot
     try {
-        [void](Install-PinnedLua51 -Lock $integrationLock -Locks $integrationLocks -DestinationRoot $integrationRoot -AllowedToolRoot $integrationToolRoot -SkipPathMutation)
-        [void](Assert-Lua51Pair -Root $integrationRoot -Locks $integrationLocks)
-        Write-Host "Pinned Lua integration test passed."
+        [void](Install-PinnedLua51 `
+                -Lock $integrationLuaLock `
+                -Locks $integrationLocks `
+                -DestinationRoot $integrationLayout.LuaRoot `
+                -AllowedToolRoot $integrationToolRoot `
+                -SkipPathMutation)
+        [void](Install-PinnedLuaLanguageServer `
+                -Lock $integrationLuaLsLock `
+                -Locks $integrationLocks `
+                -DestinationRoot $integrationLayout.LuaLanguageServerRoot `
+                -AllowedToolRoot $integrationToolRoot)
+        [void](Install-PinnedLuaRocksBundle `
+                -Locks $integrationLocks `
+                -Layout $integrationLayout)
+        [void](Assert-Lua51Pair -Root $integrationLayout.LuaRoot -Locks $integrationLocks)
+        [void](Assert-LuaLanguageServerRoot -Root $integrationLayout.LuaLanguageServerRoot -Locks $integrationLocks)
+        [void](Assert-LuaRocksBundle -Layout $integrationLayout -Locks $integrationLocks)
+        [void](Write-StatsProOwnedToolManifest -Locks $integrationLocks -Layout $integrationLayout)
+        [void](Read-StatsProOwnedToolManifest -Locks $integrationLocks -Layout $integrationLayout)
+        Write-Host "Pinned toolchain integration test passed."
     }
     finally {
         if (Test-Path -LiteralPath $integrationToolRoot -PathType Container) {
@@ -578,37 +901,89 @@ if ($PinnedLuaIntegrationTest) {
 
 $ToolLocks = Read-StatsProToolLocks -Path $ToolLockPath
 if ($EnforceToolLocks -and -not $Install) {
-    throw "Enforcing tool locks requires -Install so the pinned Lua archive is freshly verified."
+    throw "Enforcing tool locks requires -Install so every owned artifact is freshly verified."
+}
+if ($EphemeralOwnedToolRoot -and ([string]::IsNullOrWhiteSpace($OwnedToolRoot) -or -not $Install)) {
+    throw "Ephemeral owned tool roots require both -OwnedToolRoot and -Install."
 }
 
+if ([string]::IsNullOrWhiteSpace($OwnedToolRoot)) {
+    $OwnedToolRoot = if ($Install) {
+        New-StatsProOwnedToolInvocationRoot
+    }
+    else {
+        Get-StatsProPortableToolRoot
+    }
+}
+$OwnedToolRoot = [System.IO.Path]::GetFullPath($OwnedToolRoot)
+
 $PortableLuaLock = Get-StatsProLockedPortableTool -Locks $ToolLocks -ToolName "lua51"
-$PortableToolRoot = Get-PortableToolRoot
-$PortableLuaRoot = Get-PortableLuaRoot -Lock $PortableLuaLock
+$PortableLuaLsLock = Get-StatsProLockedPortableTool -Locks $ToolLocks -ToolName "luaLanguageServer"
+$OwnedLayout = Get-StatsProOwnedToolLayout -Locks $ToolLocks -ToolRoot $OwnedToolRoot
+$PortableToolRoot = $OwnedLayout.ToolRoot
+$PortableLuaRoot = $OwnedLayout.LuaRoot
+$PortableLuaLsRoot = $OwnedLayout.LuaLanguageServerRoot
+$PortableLuaRocksRoot = $OwnedLayout.LuaRocksRoot
+$PortableLuaLsPath = $OwnedLayout.LuaLanguageServerPath
+$PortableLuaRocksPath = $OwnedLayout.LuaRocksPath
+$PortableLuacheckPath = $OwnedLayout.GeneratedLuacheckPath
+$PortableLuaPath = $OwnedLayout.LuaPath
+$PortableLuacPath = $OwnedLayout.LuacPath
 $luaCandidates = @((Join-Path $PortableLuaRoot "lua5.1.exe"), "lua5.1", "C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe")
 $luacCandidates = @((Join-Path $PortableLuaRoot "luac5.1.exe"), "luac5.1", "C:\ProgramData\chocolatey\lib\lua51\tools\luac5.1.exe")
 if ($Install) {
-    [void](Install-PinnedLua51 -Lock $PortableLuaLock -Locks $ToolLocks -DestinationRoot $PortableLuaRoot -AllowedToolRoot $PortableToolRoot)
+    [void](Install-PinnedLua51 `
+            -Lock $PortableLuaLock `
+            -Locks $ToolLocks `
+            -DestinationRoot $PortableLuaRoot `
+            -AllowedToolRoot $PortableToolRoot `
+            -SkipPathMutation)
+    $PortableLuaLsPath = Install-PinnedLuaLanguageServer `
+        -Lock $PortableLuaLsLock `
+        -Locks $ToolLocks `
+        -DestinationRoot $PortableLuaLsRoot `
+        -AllowedToolRoot $PortableToolRoot
+    $bundle = Install-PinnedLuaRocksBundle `
+        -Locks $ToolLocks `
+        -Layout $OwnedLayout
+    $PortableLuaRocksPath = $bundle.LuaRocksPath
+    [void](Write-StatsProOwnedToolManifest -Locks $ToolLocks -Layout $OwnedLayout)
+    if (-not $EphemeralOwnedToolRoot) {
+        Publish-StatsProOwnedToolRoot -Layout $OwnedLayout
+    }
 }
 
-$Lua = Require-Tool `
-    -Label "lua5.1" `
-    -Names $luaCandidates
-
-$Luac = Require-Tool `
-    -Label "luac5.1" `
-    -Names $luacCandidates
-
-$LuaLanguageServer = Require-Tool `
-    -Label "lua-language-server" `
-    -Names @("lua-language-server") `
-    -ChocoPackage "lua-language-server" `
-    -ChocoVersion (Get-StatsProLockedChocolateyVersion -Locks $ToolLocks -PackageName "lua-language-server")
-
-$Luarocks = Require-Tool `
-    -Label "luarocks" `
-    -Names @("luarocks") `
-    -ChocoPackage "luarocks" `
-    -ChocoVersion (Get-StatsProLockedChocolateyVersion -Locks $ToolLocks -PackageName "luarocks")
+if ($EnforceToolLocks) {
+    $OwnedTools = Read-StatsProOwnedToolManifest -Locks $ToolLocks -Layout $OwnedLayout
+    $Lua = $OwnedTools.LuaPath
+    $Luac = $OwnedTools.LuacPath
+    $LuaLanguageServer = $OwnedTools.LuaLanguageServerPath
+    $Luarocks = $OwnedTools.LuaRocksPath
+    $Luacheck = $OwnedTools.LuacheckScriptPath
+    $LuacheckCommand = $OwnedTools.LuaRocksLuaPath
+    $LuacheckArgumentsPrefix = @($Luacheck)
+    $LuacheckEnvironment = $OwnedTools.LuacheckEnvironment
+}
+else {
+    $Lua = Require-Tool `
+        -Label "lua5.1" `
+        -Names $luaCandidates
+    $Luac = Require-Tool `
+        -Label "luac5.1" `
+        -Names $luacCandidates
+    $LuaLanguageServer = Require-Tool `
+        -Label "lua-language-server" `
+        -Names @($PortableLuaLsPath, "lua-language-server")
+    $Luarocks = Require-Tool `
+        -Label "luarocks" `
+        -Names @($PortableLuaRocksPath, "luarocks")
+    $Luacheck = Require-Tool `
+        -Label "luacheck" `
+        -Names @($PortableLuacheckPath, "luacheck")
+    $LuacheckCommand = $Luacheck
+    $LuacheckArgumentsPrefix = @()
+    $LuacheckEnvironment = @{}
+}
 
 $LuaVersionResult = Invoke-NativeCapture -FilePath $Lua -Arguments @("-v")
 $LuaVersion = $LuaVersionResult.Output -join "`n"
@@ -619,32 +994,14 @@ if ($LuaVersion -notmatch "Lua\s+5\.1") {
     throw "StatsPro smoke requires Lua 5.1 because it uses setfenv; found: $LuaVersion"
 }
 
-$Luacheck = Resolve-Tool -Names @("luacheck", $LuacheckFallback)
-if (-not $Luacheck -and $Install) {
-    Install-Luacheck -LuarocksPath $Luarocks -Locks $ToolLocks
-    $Luacheck = Resolve-Tool -Names @("luacheck", $LuacheckFallback)
-}
-if (-not $Luacheck) {
-    throw "Missing luacheck. Re-run with -Install, or install it with LuaRocks. On Windows, the wrapper also checks $LuacheckFallback."
-}
-Write-Host "luacheck: $Luacheck"
+Write-Host "luacheck script: $Luacheck"
 
 Write-Host "== Tool versions =="
 Write-ToolVersionReport -Label "lua5.1" -Path $Lua -Arguments @("-v")
 Write-ToolVersionReport -Label "luac5.1" -Path $Luac -Arguments @("-v")
 Write-ToolVersionReport -Label "lua-language-server" -Path $LuaLanguageServer -Arguments @("--version")
 Write-ToolVersionReport -Label "luarocks" -Path $Luarocks -Arguments @("--version")
-Write-ToolVersionReport -Label "luacheck" -Path $Luacheck -Arguments @("--version")
-
-$Choco = Resolve-Tool -Names @("choco")
-if ($Choco) {
-    Write-ToolVersionReport -Label "choco" -Path $Choco -Arguments @("--version")
-    Write-ChocoPackageReport -ChocoPath $Choco -PackageName "lua-language-server"
-    Write-ChocoPackageReport -ChocoPath $Choco -PackageName "luarocks"
-}
-else {
-    Write-Warning "Chocolatey is not available for package version reporting."
-}
+Write-ToolVersionReport -Label "luacheck" -Path $LuacheckCommand -Arguments ($LuacheckArgumentsPrefix + @("--version")) -Environment $LuacheckEnvironment
 
 Write-LuarocksPackageReport -LuarocksPath $Luarocks -PackageName "luacheck"
 Write-LuarocksPackageReport -LuarocksPath $Luarocks -PackageName "argparse"
@@ -655,14 +1012,8 @@ if ($EnforceToolLocks) {
     Assert-ToolCommandVersion -Label "luac5.1" -Path $Luac -Arguments @("-v") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "luac5.1")
     Assert-ToolCommandVersion -Label "lua-language-server" -Path $LuaLanguageServer -Arguments @("--version") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "lua-language-server")
     Assert-ToolCommandVersion -Label "luarocks" -Path $Luarocks -Arguments @("--version") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "luarocks")
-    Assert-ToolCommandVersion -Label "luacheck" -Path $Luacheck -Arguments @("--version") -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "luacheck")
+    Assert-ToolCommandVersion -Label "luacheck" -Path $LuacheckCommand -Arguments ($LuacheckArgumentsPrefix + @("--version")) -Pattern (Get-StatsProLockedCommandPattern -Locks $ToolLocks -CommandName "luacheck") -Environment $LuacheckEnvironment
 
-    $ChocoForAssert = Resolve-Tool -Names @("choco")
-    if (-not $ChocoForAssert) {
-        throw "Chocolatey is required to enforce Chocolatey package locks."
-    }
-    Assert-ChocoPackageVersion -ChocoPath $ChocoForAssert -PackageName "lua-language-server" -ExpectedVersion (Get-StatsProLockedChocolateyVersion -Locks $ToolLocks -PackageName "lua-language-server")
-    Assert-ChocoPackageVersion -ChocoPath $ChocoForAssert -PackageName "luarocks" -ExpectedVersion (Get-StatsProLockedChocolateyVersion -Locks $ToolLocks -PackageName "luarocks")
     Assert-LuarocksPackageVersion -LuarocksPath $Luarocks -PackageName "luacheck" -ExpectedVersion (Get-StatsProLockedLuarocksVersion -Locks $ToolLocks -PackageName "luacheck")
     Assert-LuarocksPackageVersion -LuarocksPath $Luarocks -PackageName "argparse" -ExpectedVersion (Get-StatsProLockedLuarocksVersion -Locks $ToolLocks -PackageName "argparse")
     Assert-LuarocksPackageVersion -LuarocksPath $Luarocks -PackageName "luafilesystem" -ExpectedVersion (Get-StatsProLockedLuarocksVersion -Locks $ToolLocks -PackageName "luafilesystem")

@@ -630,6 +630,7 @@ local function makeEnv(locale, opts)
         self.ownerPoint = point
         self.lines = {}
     end
+    function env.GameTooltip:ClearLines() self.lines = {} end
     function env.GameTooltip:AddLine(text)
         self.lines[#self.lines + 1] = { left = text }
     end
@@ -4896,6 +4897,9 @@ do
                 hoverEnv.GameTooltip.lines[4].left, "Source:")
         end
     end
+    hoverTest.firePanelTooltipOverlayForSmoke("main", 1, "OnEnter")
+    local heldOwner = hoverEnv.GameTooltip:GetOwner()
+    eq("render.target_hover_lifecycle.cold.held_line_count", #hoverEnv.GameTooltip.lines, 4)
 
     local ticker = findFrame("render.target_hover_lifecycle.ticker", hoverEnv, function(frame)
         return frame.scripts and type(frame.scripts.OnUpdate) == "function"
@@ -4906,7 +4910,19 @@ do
             "main", "targetOnly")
         eq("render.target_hover_lifecycle.cold.open_tooltip_survives_tick." .. tick,
             hoverEnv.GameTooltip:IsShown(), true)
+        eq("render.target_hover_lifecycle.cold.owner_survives_tick." .. tick,
+            hoverEnv.GameTooltip:GetOwner(), heldOwner)
+        eq("render.target_hover_lifecycle.cold.lines_stay_target_only." .. tick,
+            #hoverEnv.GameTooltip.lines, 4)
     end
+    hoverTest.firePanelTooltipOverlayForSmoke("main", 1, "OnLeave")
+    eq("render.target_hover_lifecycle.cold.leave_hides",
+        hoverEnv.GameTooltip:IsShown(), false)
+    check("render.target_hover_lifecycle.cold.hidden_update", hoverAddon:RunUpdateStatsSafe())
+    eq("render.target_hover_lifecycle.cold.hidden_not_resurrected",
+        hoverEnv.GameTooltip:IsShown(), false)
+    hoverTest.firePanelTooltipOverlayForSmoke("main", 1, "OnEnter")
+    heldOwner = hoverEnv.GameTooltip:GetOwner()
 
     local beforeCombatDrag = hoverTest.panelTooltipState("main")
     hoverTest.firePanelTooltipOverlayForSmoke("main", 1, "OnDragStart")
@@ -4923,6 +4939,13 @@ do
     restricted = false
     check("render.target_hover_lifecycle.recovery.update", hoverAddon:RunUpdateStatsSafe())
     local exactState = assertPanelTargets("render.target_hover_lifecycle.recovery", "main", "exact")
+    eq("render.target_hover_lifecycle.recovery.held_owner",
+        hoverEnv.GameTooltip:GetOwner(), heldOwner)
+    eq("render.target_hover_lifecycle.recovery.held_lines_refreshed",
+        #hoverEnv.GameTooltip.lines, 6)
+    check("render.target_hover_lifecycle.recovery.held_current_refreshed",
+        hoverEnv.GameTooltip.lines[3].right:find("800", 1, true) ~= nil,
+        hoverEnv.GameTooltip.lines[3].right)
     local expectedCurrentByStat = {
         crit = 800,
         haste = 500,
@@ -4942,6 +4965,15 @@ do
         assertPanelTargets("render.target_hover_lifecycle.last_known.after_tick." .. tick,
             "main", "lastKnown")
     end
+    eq("render.target_hover_lifecycle.last_known.held_owner",
+        hoverEnv.GameTooltip:GetOwner(), heldOwner)
+    eq("render.target_hover_lifecycle.last_known.held_lines_refreshed",
+        #hoverEnv.GameTooltip.lines, 7)
+    eq("render.target_hover_lifecycle.last_known.held_notice_refreshed",
+        hoverEnv.GameTooltip.lines[2].left, "Last known comparison")
+    check("render.target_hover_lifecycle.last_known.held_current_preserved",
+        hoverEnv.GameTooltip.lines[4].right:find("800", 1, true) ~= nil,
+        hoverEnv.GameTooltip.lines[4].right)
     local lastKnownState = hoverTest.panelTooltipState("main")
     for index, meta in ipairs(lastKnownState.lastTargetRows) do
         if type(meta) == "table" then
@@ -4957,12 +4989,21 @@ do
         eq("render.target_hover_lifecycle.last_known.cache." .. statKey,
             cachedAfterRestriction.entries[statKey].current, expectedCurrent)
     end
+    hoverTest.firePanelTooltipOverlayForSmoke("main", 1, "OnEnter")
+    heldOwner = hoverEnv.GameTooltip:GetOwner()
 
     restricted = false
     for ratingCR, value in pairs(cleanRatings) do cleanRatings[ratingCR] = value + 11 end
     check("render.target_hover_lifecycle.clean_return.update", hoverAddon:RunUpdateStatsSafe())
     local returnedState = assertPanelTargets(
         "render.target_hover_lifecycle.clean_return", "main", "exact")
+    eq("render.target_hover_lifecycle.clean_return.held_owner",
+        hoverEnv.GameTooltip:GetOwner(), heldOwner)
+    eq("render.target_hover_lifecycle.clean_return.held_lines_refreshed",
+        #hoverEnv.GameTooltip.lines, 6)
+    check("render.target_hover_lifecycle.clean_return.held_current_refreshed",
+        hoverEnv.GameTooltip.lines[3].right:find("811", 1, true) ~= nil,
+        hoverEnv.GameTooltip.lines[3].right)
     for _, meta in ipairs(returnedState.lastTargetRows) do
         if type(meta) == "table" then
             eq("render.target_hover_lifecycle.clean_return.current." .. meta.statKey,
@@ -4979,10 +5020,88 @@ do
     end
 
     local settings = activeSettings(hoverEnv)
+    local account = accountSettings(hoverEnv)
+    account.forceLocale = "ruRU"
+    hoverTest.cacheSettings()
+    check("render.target_hover_lifecycle.locale_ru.update", hoverAddon:RunUpdateStatsSafe())
+    eq("render.target_hover_lifecycle.locale_ru.held_owner",
+        hoverEnv.GameTooltip:GetOwner(), heldOwner)
+    eq("render.target_hover_lifecycle.locale_ru.title",
+        hoverEnv.GameTooltip.lines[1].left, "StatsPro Цель M+")
+    eq("render.target_hover_lifecycle.locale_ru.target",
+        hoverEnv.GameTooltip.lines[2].left, "Цель:")
+    eq("render.target_hover_lifecycle.locale_ru.current",
+        hoverEnv.GameTooltip.lines[3].left, "Сейчас:")
+
+    account.forceLocale = "enUS"
+    restricted = true
+    settings.targetSnapshot = "raid"
+    hoverTest.cacheSettings()
+    check("render.target_hover_lifecycle.snapshot_raid.update", hoverAddon:RunUpdateStatsSafe())
+    eq("render.target_hover_lifecycle.snapshot_raid.held_owner",
+        hoverEnv.GameTooltip:GetOwner(), heldOwner)
+    eq("render.target_hover_lifecycle.snapshot_raid.title",
+        hoverEnv.GameTooltip.lines[1].left, "StatsPro Raid Target")
+    eq("render.target_hover_lifecycle.snapshot_raid.target",
+        hoverEnv.GameTooltip.lines[2].left, "Target:")
+    eq("render.target_hover_lifecycle.snapshot_raid.target_only_lines",
+        #hoverEnv.GameTooltip.lines, 4)
+
+    restricted = false
+    check("render.target_hover_lifecycle.snapshot_raid.recovery_update",
+        hoverAddon:RunUpdateStatsSafe())
+    eq("render.target_hover_lifecycle.snapshot_raid.recovery_owner",
+        hoverEnv.GameTooltip:GetOwner(), heldOwner)
+    eq("render.target_hover_lifecycle.snapshot_raid.recovery_lines",
+        #hoverEnv.GameTooltip.lines, 6)
+    check("render.target_hover_lifecycle.snapshot_raid.recovery_current",
+        hoverEnv.GameTooltip.lines[3].right:find("811", 1, true) ~= nil,
+        hoverEnv.GameTooltip.lines[3].right)
+
+    settings.targetSnapshot = "mythicPlus"
+    hoverTest.cacheSettings()
+    check("render.target_hover_lifecycle.snapshot_mplus.update", hoverAddon:RunUpdateStatsSafe())
+    eq("render.target_hover_lifecycle.snapshot_mplus.held_owner",
+        hoverEnv.GameTooltip:GetOwner(), heldOwner)
+    eq("render.target_hover_lifecycle.snapshot_mplus.title",
+        hoverEnv.GameTooltip.lines[1].left, "StatsPro M+ Target")
+
+    settings.showCrit = false
+    hoverTest.cacheSettings()
+    check("render.target_hover_routing.rebind_to_haste.update", hoverAddon:RunUpdateStatsSafe())
+    eq("render.target_hover_routing.rebind_to_haste.closes_tooltip",
+        hoverEnv.GameTooltip:IsShown(), false)
+    eq("render.target_hover_routing.rebind_to_haste.new_binding",
+        hoverTest.panelTooltipState("main").lastTargetRows[1].statKey, "haste")
+    settings.showCrit = true
+    hoverTest.cacheSettings()
+    check("render.target_hover_routing.restore_crit.update", hoverAddon:RunUpdateStatsSafe())
+    eq("render.target_hover_routing.restore_crit.no_auto_open",
+        hoverEnv.GameTooltip:IsShown(), false)
+    hoverTest.firePanelTooltipOverlayForSmoke("main", 1, "OnEnter")
+    heldOwner = hoverEnv.GameTooltip:GetOwner()
+
+    settings.labelStyle = "hidden"
+    hoverTest.cacheSettings()
+    check("render.target_hover_routing.flat_hidden.update", hoverAddon:RunUpdateStatsSafe())
+    eq("render.target_hover_routing.flat_hidden.held_owner",
+        hoverEnv.GameTooltip:GetOwner(), heldOwner)
+    eq("render.target_hover_routing.flat_hidden.stays_shown",
+        hoverEnv.GameTooltip:IsShown(), true)
+    eq("render.target_hover_routing.flat_hidden.lines",
+        #hoverEnv.GameTooltip.lines, 6)
+    settings.labelStyle = "full"
+    hoverTest.cacheSettings()
+    check("render.target_hover_routing.flat_full_restore.update", hoverAddon:RunUpdateStatsSafe())
+    eq("render.target_hover_routing.flat_full_restore.stays_shown",
+        hoverEnv.GameTooltip:IsShown(), true)
+
     settings.displayMode = "sectioned"
     settings.labelStyle = "full"
     hoverTest.cacheSettings()
     check("render.target_hover_routing.sectioned.update", hoverAddon:RunUpdateStatsSafe())
+    eq("render.target_hover_routing.sectioned.held_row_moved_closes_tooltip",
+        hoverEnv.GameTooltip:IsShown(), false)
     local sectionedState = assertPanelTargets(
         "render.target_hover_routing.sectioned", "main", "exact")
     eq("render.target_hover_routing.sectioned.header_meta",
@@ -4998,12 +5117,17 @@ do
     assertPanelTargets("render.target_hover_routing.hidden", "main", "exact")
     eq("render.target_hover_routing.hidden.labels", hoverTest.panelVisualState().mainLabelText, "")
 
+    hoverTest.firePanelTooltipOverlayForSmoke("main", 1, "OnEnter")
+    eq("render.target_hover_routing.split.before_move_shown",
+        hoverEnv.GameTooltip:IsShown(), true)
     settings.displayMode = "split"
     settings.splitOffensive = true
     settings.labelStyle = "full"
     hoverTest.cacheSettings()
     check("render.target_hover_routing.split.update", hoverAddon:RunUpdateStatsSafe())
     local splitState = assertPanelTargets("render.target_hover_routing.split", "side", "exact")
+    eq("render.target_hover_routing.split.moved_row_closes_tooltip",
+        hoverEnv.GameTooltip:IsShown(), false)
     eq("render.target_hover_routing.split.main_targets",
         hoverTest.panelTooltipState("main").lastTargetRows, nil)
     for index, meta in ipairs(splitState.lastTargetRows) do
@@ -5014,18 +5138,39 @@ do
         end
     end
 
+    local foreignTooltipOwner = makeFrame("TargetHoverForeignTooltipOwner")
+    hoverEnv.GameTooltip:SetOwner(foreignTooltipOwner, "ANCHOR_LEFT")
+    hoverEnv.GameTooltip:AddLine("Foreign tooltip")
+    hoverEnv.GameTooltip:Show()
+    hoverTest.firePanelTooltipOverlayForSmoke("side", 1, "OnLeave")
+    eq("render.target_hover_routing.foreign_on_leave_preserved",
+        hoverEnv.GameTooltip:IsShown(), true)
+    eq("render.target_hover_routing.foreign_on_leave_owner",
+        hoverEnv.GameTooltip:GetOwner(), foreignTooltipOwner)
+
     settings.displayMode = "flat"
     settings.splitOffensive = false
     settings.showRating = true
     settings.showPercentage = false
     hoverTest.cacheSettings()
     check("render.target_hover_routing.rating_only.update", hoverAddon:RunUpdateStatsSafe())
+    eq("render.target_hover_routing.foreign_update_preserved",
+        hoverEnv.GameTooltip:IsShown(), true)
+    eq("render.target_hover_routing.foreign_update_owner",
+        hoverEnv.GameTooltip:GetOwner(), foreignTooltipOwner)
+    eq("render.target_hover_routing.foreign_update_text",
+        hoverEnv.GameTooltip.lines[1].left, "Foreign tooltip")
+    hoverEnv.GameTooltip:Hide()
     assertPanelTargets("render.target_hover_routing.rating_only", "main", "exact")
     local ratingOnlyVisual = hoverTest.panelVisualState()
     eq("render.target_hover_routing.rating_only.value_column", ratingOnlyVisual.mainValueText, "")
     check("render.target_hover_routing.rating_only.rating_column",
         ratingOnlyVisual.mainRatingText:find("811", 1, true) ~= nil,
         ratingOnlyVisual.mainRatingText)
+    clearPrints(hoverEnv)
+    slash("render.target_hover_lifecycle.debug_perf", hoverEnv, "debug perf")
+    eq("render.target_hover_lifecycle.zero_update_errors",
+        printContains(hoverEnv, "updateErrors=0"), true)
 end
 
 do
@@ -6354,6 +6499,7 @@ do
         capturedAt = "2026-05-15",
         snapshotKey = "mythicPlus",
     }
+    versEnv.GameTooltip:Hide()
     versTest.renderMainPanelForSmoke("Vers:", "700", "12.0%", 1, nil, nil, { cleanMeta })
     versTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("render.versatility_clean_percent_tooltip.target_projected_total",
@@ -6366,6 +6512,7 @@ do
 
     conversionMode = "missing-current"
     conversionCalls = 0
+    versEnv.GameTooltip:Hide()
     versTest.renderMainPanelForSmoke("Vers:", "700", "12.0%", 1, nil, nil, { cleanMeta })
     versTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("render.versatility_partial_conversion_tooltip.target_raw",

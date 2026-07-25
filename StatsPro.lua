@@ -6518,9 +6518,14 @@ function Panel:New(globalName, dbKeyPrefix)
                 addon:OpenConfigMenu()
             end
         end)
-        overlay:SetScript("OnLeave", function()
-            GameTooltip:Hide()
+        overlay:SetScript("OnLeave", function(f)
+            -- Another UI surface may take GameTooltip ownership before this overlay's
+            -- delayed OnLeave fires. Never hide a tooltip StatsPro no longer owns.
+            if type(GameTooltip.GetOwner) ~= "function" or GameTooltip:GetOwner() == f then
+                GameTooltip:Hide()
+            end
         end)
+        overlay.statsProTargetMeta = nil
         return overlay
     end
 
@@ -6801,7 +6806,9 @@ function addon.archonTargets.FormatSnapshotDate(capturedAt)
 end
 
 function addon.archonTargets.ShowTooltip(anchor, meta)
-    if type(meta) ~= "table" or not SAFE_NUM.IsCleanFiniteNumber(meta.target) or meta.target < 0 then return end
+    if type(meta) ~= "table" or not SAFE_NUM.IsCleanFiniteNumber(meta.target) or meta.target < 0 then
+        return false
+    end
     local comparisonState = meta.comparisonState
     local hasCleanComparison = SAFE_NUM.IsCleanFiniteNumber(meta.current) and meta.current >= 0
         and SAFE_NUM.IsCleanFiniteNumber(meta.delta)
@@ -6833,6 +6840,9 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     end
     local valueColor = addon.archonTargets.GetTooltipValueColor(meta)
     GameTooltip:SetOwner(anchor, "ANCHOR_RIGHT")
+    -- SetOwner resets lines on current clients, but an owner-preserving refresh must
+    -- not depend on that undocumented side effect or accumulate stale state rows.
+    if type(GameTooltip.ClearLines) == "function" then GameTooltip:ClearLines() end
     GameTooltip:AddLine("StatsPro " .. addon.archonTargets.GetLocalizedSnapshotTitle(meta.snapshotKey), 1, 0.82, 0)
     if comparisonState == "lastKnown" then
         GameTooltip:AddLine(L("Last known comparison"), 0.7, 0.7, 0.7)
@@ -6856,12 +6866,21 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
         GameTooltip:AddDoubleLine(L("Source:"), "Archon", 0.7, 0.7, 0.7, 0.85, 0.85, 0.85)
     end
     GameTooltip:Show()
+    return true
 end
 
 function Panel:ApplyTooltipRows(targetRows, lineCount)
     self.lastTargetRows = targetRows
     local rowHeight = self.lastLineH or GetNumberDB("fontSize")
     if not SAFE_NUM.IsCleanFiniteNumber(rowHeight) or rowHeight <= 0 then rowHeight = 1 end
+    -- Refresh only the tooltip that is both visible and still owned by one of this
+    -- panel's overlays. Hide() may retain GetOwner(), so ownership alone would reopen
+    -- a tooltip after the cursor left. Semantic stat identity prevents a row-index
+    -- shift (headers, toggles, Split routing) from silently switching Crit to Haste.
+    local openOwner
+    if GameTooltip:IsShown() and type(GameTooltip.GetOwner) == "function" then
+        openOwner = GameTooltip:GetOwner()
+    end
     for i = 1, math.max(#(targetRows or {}), #(self.tooltipOverlays or {})) do
         local overlay = self.tooltipOverlays[i]
         if not overlay then
@@ -6869,7 +6888,9 @@ function Panel:ApplyTooltipRows(targetRows, lineCount)
             self.tooltipOverlays[i] = overlay
         end
         local meta = targetRows and targetRows[i] or nil
-        if meta and i <= (lineCount or 0) then
+        local previousMeta = overlay.statsProTargetMeta
+        local ownedOpen = openOwner == overlay
+        if type(meta) == "table" and i <= (lineCount or 0) then
             overlay:ClearAllPoints()
             overlay:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, -((i - 1) * rowHeight))
             overlay:SetPoint("RIGHT", self.frame, "RIGHT", 0, 0)
@@ -6877,10 +6898,20 @@ function Panel:ApplyTooltipRows(targetRows, lineCount)
             overlay:SetScript("OnEnter", function(f)
                 addon.archonTargets.ShowTooltip(f, meta)
             end)
+            overlay.statsProTargetMeta = meta
             overlay:Show()
+            if ownedOpen then
+                local sameStat = type(previousMeta) == "table"
+                    and previousMeta.statKey == meta.statKey
+                if not sameStat or not addon.archonTargets.ShowTooltip(overlay, meta) then
+                    GameTooltip:Hide()
+                end
+            end
         else
+            if ownedOpen then GameTooltip:Hide() end
             overlay:Hide()
             overlay:SetScript("OnEnter", nil)
+            overlay.statsProTargetMeta = nil
         end
     end
 end

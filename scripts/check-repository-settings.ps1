@@ -330,12 +330,59 @@ function Assert-CredentialEnvironmentSettings {
 function Assert-ReleaseWorkflowKeepsExplicitWritePermission {
     param([string]$WorkflowText)
 
-    $releaseJob = [regex]::Match($WorkflowText, "(?ms)^  release:\s*$.*?(?=^  [A-Za-z0-9_-]+:\s*$|\z)")
-    if (-not $releaseJob.Success) {
-        throw "Could not find the release job in release.yml."
+    $jobsMatch = [regex]::Match($WorkflowText, "(?ms)^jobs:\s*$\r?\n(?<body>.*)\z")
+    if (-not $jobsMatch.Success) {
+        throw "Could not find the jobs mapping in release.yml."
     }
-    if ($releaseJob.Value -notmatch "(?ms)^    permissions:\s*\r?\n      contents: write\s*$") {
-        throw "Release job must keep explicit contents: write permission."
+
+    $workflowHeader = $WorkflowText.Substring(0, $jobsMatch.Index)
+    if ($workflowHeader -match "(?m)^permissions:\s*") {
+        throw "release.yml must not grant workflow-level permissions."
+    }
+
+    $expectedPermissions = [ordered]@{
+        "preflight" = "read"
+        "package" = "read"
+        "github-prepare" = "write"
+        "marketplace-upload" = "write"
+        "github-finalize" = "write"
+        "verify" = "read"
+    }
+    $jobMatches = [regex]::Matches(
+        $jobsMatch.Groups["body"].Value,
+        "(?ms)^  (?<name>[A-Za-z0-9_-]+):\s*\r?\n(?<body>.*?)(?=^  [A-Za-z0-9_-]+:\s*$|\z)"
+    )
+    $jobs = @{}
+    foreach ($jobMatch in $jobMatches) {
+        $jobName = $jobMatch.Groups["name"].Value
+        if ($jobs.ContainsKey($jobName)) {
+            throw "release.yml contains duplicate job '$jobName'."
+        }
+        $jobs[$jobName] = $jobMatch.Groups["body"].Value
+    }
+
+    $actualJobNames = @($jobs.Keys | Sort-Object)
+    $expectedJobNames = @($expectedPermissions.Keys | Sort-Object)
+    if (($actualJobNames -join "`n") -cne ($expectedJobNames -join "`n")) {
+        throw "release.yml must contain exactly the permission-audited jobs: $($expectedJobNames -join ', ')."
+    }
+
+    foreach ($jobName in $expectedPermissions.Keys) {
+        $permissionMatches = [regex]::Matches(
+            $jobs[$jobName],
+            "(?ms)^    permissions:\s*\r?\n(?<body>(?:^      [^\r\n]*\r?\n?)*)"
+        )
+        if ($permissionMatches.Count -ne 1) {
+            throw "Release job '$jobName' must declare exactly one permissions block."
+        }
+        $permissionLines = @(
+            $permissionMatches[0].Groups["body"].Value -split "\r?\n" |
+                Where-Object { $_.Length -gt 0 }
+        )
+        $expectedLine = "      contents: $($expectedPermissions[$jobName])"
+        if ($permissionLines.Count -ne 1 -or $permissionLines[0] -cne $expectedLine) {
+            throw "Release job '$jobName' permissions must be exactly 'contents: $($expectedPermissions[$jobName])'."
+        }
     }
 }
 
@@ -694,7 +741,20 @@ function Invoke-SelfTest {
     Assert-ReleaseWorkflowKeepsExplicitWritePermission -WorkflowText $workflowText
     Assert-ThrowsMatch "missing release write permission rejected" {
         Assert-ReleaseWorkflowKeepsExplicitWritePermission -WorkflowText ($workflowText -replace "contents: write", "contents: read")
-    } "contents: write"
+    } "github-prepare.*contents: write"
+    Assert-ThrowsMatch "read-only job write permission rejected" {
+        $mutated = $workflowText -replace "(?ms)(^  preflight:.*?^      contents:) read\s*$", '$1 write'
+        Assert-ReleaseWorkflowKeepsExplicitWritePermission -WorkflowText $mutated
+    } "preflight.*contents: read"
+    Assert-ThrowsMatch "extra permission scope rejected" {
+        $replacement = '$1' + "`r`n      actions: write"
+        $mutated = $workflowText -replace "(?m)^(      contents: read)\s*$", $replacement
+        Assert-ReleaseWorkflowKeepsExplicitWritePermission -WorkflowText $mutated
+    } "permissions must be exactly"
+    Assert-ThrowsMatch "workflow-level permission rejected" {
+        $mutated = $workflowText -replace "(?m)^jobs:\s*$", "permissions: read-all`r`n`r`njobs:"
+        Assert-ReleaseWorkflowKeepsExplicitWritePermission -WorkflowText $mutated
+    } "workflow-level permissions"
 
     Write-Host "Repository settings self-test passed."
 }

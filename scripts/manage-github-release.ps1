@@ -5,6 +5,9 @@ param(
     [string]$ExpectedTag,
     [string]$ExpectedCommitSha,
     [string]$ExpectedRunId,
+    [string]$ExpectedRunAttempt,
+    [string]$ExpectedArchiveSha256,
+    [string]$ExpectedCandidateSha256,
     [string]$ArchivePath,
     [string]$ReleaseJsonPath,
     [string]$NotesPath,
@@ -95,6 +98,22 @@ function Assert-RunId {
     }
 }
 
+function Assert-RunAttempt {
+    param([string]$Value)
+
+    if ($Value -notmatch "^[1-9][0-9]*$") {
+        throw "Malformed GitHub Actions run attempt '$Value'. Expected a positive decimal integer."
+    }
+}
+
+function Assert-LowercaseSha256 {
+    param([string]$Value, [string]$Description)
+
+    if ($Value -cnotmatch '^[0-9a-f]{64}$') {
+        throw "$Description must be 64 lowercase hex characters."
+    }
+}
+
 function Get-CanonicalFileText {
     param(
         [string]$Path,
@@ -149,53 +168,99 @@ function ConvertFrom-Base64Url {
 
 function Get-ReleaseTransactionId {
     param(
+        [ValidateSet(1, 2)]
+        [int]$SchemaVersion,
         [string]$Repository,
         [string]$ExpectedTag,
         [string]$ExpectedCommitSha,
+        [string]$ExpectedRunId,
+        [AllowEmptyString()][string]$ExpectedRunAttempt,
         [string]$NotesSha256,
-        [string]$ManifestSha256
+        [string]$ManifestSha256,
+        [AllowEmptyString()][string]$ArchiveSha256,
+        [AllowEmptyString()][string]$CandidateSha256
     )
 
-    return Get-LowercaseTextSha256 -Text ("statspro-release-transaction-v1`n$Repository`n$ExpectedTag`n$ExpectedCommitSha`n$NotesSha256`n$ManifestSha256")
+    if ($SchemaVersion -eq 1) {
+        return Get-LowercaseTextSha256 -Text ("statspro-release-transaction-v1`n$Repository`n$ExpectedTag`n$ExpectedCommitSha`n$NotesSha256`n$ManifestSha256")
+    }
+    return Get-LowercaseTextSha256 -Text ("statspro-release-transaction-v2`n$Repository`n$ExpectedTag`n$ExpectedCommitSha`n$ExpectedRunId`n$ExpectedRunAttempt`n$NotesSha256`n$ManifestSha256`n$ArchiveSha256`n$CandidateSha256")
 }
 
 function Get-ReleaseStateData {
     param(
+        [ValidateSet(1, 2)]
+        [int]$SchemaVersion = 1,
         [ValidateSet('prepared', 'marketplace-started')]
         [string]$Phase,
         [string]$Repository,
         [string]$ExpectedTag,
         [string]$ExpectedCommitSha,
         [string]$ExpectedRunId,
+        [AllowEmptyString()][string]$ExpectedRunAttempt,
         [string]$NotesSha256,
-        [string]$ManifestSha256
+        [string]$ManifestSha256,
+        [AllowEmptyString()][string]$ArchiveSha256,
+        [AllowEmptyString()][string]$CandidateSha256
     )
 
     Assert-RepositoryName $Repository
     Assert-ReleaseTag $ExpectedTag
     Assert-CommitSha $ExpectedCommitSha
     Assert-RunId $ExpectedRunId
-    foreach ($digest in @($NotesSha256, $ManifestSha256)) {
-        if ($digest -cnotmatch '^[0-9a-f]{64}$') {
-            throw "Release state digest '$digest' must be 64 lowercase hex characters."
+    Assert-LowercaseSha256 -Value $NotesSha256 -Description 'Release notes digest'
+    Assert-LowercaseSha256 -Value $ManifestSha256 -Description 'Release manifest digest'
+    if ($SchemaVersion -eq 1) {
+        return [pscustomobject][ordered]@{
+            schemaVersion  = 1
+            kind           = 'statspro-release-transaction'
+            phase          = $Phase
+            repository     = $Repository
+            tag            = $ExpectedTag
+            commitSha      = $ExpectedCommitSha
+            runId          = $ExpectedRunId
+            notesSha256    = $NotesSha256
+            manifestSha256 = $ManifestSha256
+            transactionId  = Get-ReleaseTransactionId `
+                -SchemaVersion 1 `
+                -Repository $Repository `
+                -ExpectedTag $ExpectedTag `
+                -ExpectedCommitSha $ExpectedCommitSha `
+                -ExpectedRunId $ExpectedRunId `
+                -ExpectedRunAttempt '' `
+                -NotesSha256 $NotesSha256 `
+                -ManifestSha256 $ManifestSha256 `
+                -ArchiveSha256 '' `
+                -CandidateSha256 ''
         }
     }
+    Assert-RunAttempt $ExpectedRunAttempt
+    Assert-LowercaseSha256 -Value $ArchiveSha256 -Description 'Release archive digest'
+    Assert-LowercaseSha256 -Value $CandidateSha256 -Description 'Release candidate digest'
     return [pscustomobject][ordered]@{
-        schemaVersion  = 1
+        schemaVersion  = 2
         kind           = 'statspro-release-transaction'
         phase          = $Phase
         repository     = $Repository
         tag            = $ExpectedTag
         commitSha      = $ExpectedCommitSha
         runId          = $ExpectedRunId
+        runAttempt     = $ExpectedRunAttempt
         notesSha256    = $NotesSha256
         manifestSha256 = $ManifestSha256
+        archiveSha256  = $ArchiveSha256
+        candidateSha256 = $CandidateSha256
         transactionId  = Get-ReleaseTransactionId `
+            -SchemaVersion 2 `
             -Repository $Repository `
             -ExpectedTag $ExpectedTag `
             -ExpectedCommitSha $ExpectedCommitSha `
+            -ExpectedRunId $ExpectedRunId `
+            -ExpectedRunAttempt $ExpectedRunAttempt `
             -NotesSha256 $NotesSha256 `
-            -ManifestSha256 $ManifestSha256
+            -ManifestSha256 $ManifestSha256 `
+            -ArchiveSha256 $ArchiveSha256 `
+            -CandidateSha256 $CandidateSha256
     }
 }
 
@@ -235,12 +300,21 @@ function Read-ReleaseStateMarker {
     catch {
         throw "Release state marker is not valid JSON: $($_.Exception.Message)"
     }
-    $expectedKeys = @('schemaVersion', 'kind', 'phase', 'repository', 'tag', 'commitSha', 'runId', 'notesSha256', 'manifestSha256', 'transactionId') | Sort-Object
+    $schemaVersion = [int]$state.schemaVersion
+    $expectedKeys = if ($schemaVersion -eq 1) {
+        @('schemaVersion', 'kind', 'phase', 'repository', 'tag', 'commitSha', 'runId', 'notesSha256', 'manifestSha256', 'transactionId') | Sort-Object
+    }
+    elseif ($schemaVersion -eq 2) {
+        @('schemaVersion', 'kind', 'phase', 'repository', 'tag', 'commitSha', 'runId', 'runAttempt', 'notesSha256', 'manifestSha256', 'archiveSha256', 'candidateSha256', 'transactionId') | Sort-Object
+    }
+    else {
+        throw "Release state marker has an unsupported schema or kind."
+    }
     $actualKeys = @($state.PSObject.Properties.Name | Sort-Object)
     if ($actualKeys.Count -ne $expectedKeys.Count -or (Compare-Object -ReferenceObject $expectedKeys -DifferenceObject $actualKeys)) {
         throw "Release state marker fields are not the exact schema."
     }
-    if ([int]$state.schemaVersion -ne 1 -or -not [System.StringComparer]::Ordinal.Equals([string]$state.kind, 'statspro-release-transaction')) {
+    if (-not [System.StringComparer]::Ordinal.Equals([string]$state.kind, 'statspro-release-transaction')) {
         throw "Release state marker has an unsupported schema or kind."
     }
     if (-not (Test-ContainsOrdinal -Values @('prepared', 'marketplace-started') -Expected ([string]$state.phase))) {
@@ -250,28 +324,44 @@ function Read-ReleaseStateMarker {
     Assert-ReleaseTag ([string]$state.tag)
     Assert-CommitSha ([string]$state.commitSha)
     Assert-RunId ([string]$state.runId)
-    foreach ($name in @('notesSha256', 'manifestSha256', 'transactionId')) {
+    if ($schemaVersion -eq 2) {
+        Assert-RunAttempt ([string]$state.runAttempt)
+    }
+    $digestNames = @('notesSha256', 'manifestSha256', 'transactionId')
+    if ($schemaVersion -eq 2) {
+        $digestNames += @('archiveSha256', 'candidateSha256')
+    }
+    foreach ($name in $digestNames) {
         if ([string]$state.$name -cnotmatch '^[0-9a-f]{64}$') {
             throw "Release state marker field '$name' is not a lowercase SHA-256 digest."
         }
     }
     $expectedTransaction = Get-ReleaseTransactionId `
+        -SchemaVersion $schemaVersion `
         -Repository ([string]$state.repository) `
         -ExpectedTag ([string]$state.tag) `
         -ExpectedCommitSha ([string]$state.commitSha) `
+        -ExpectedRunId ([string]$state.runId) `
+        -ExpectedRunAttempt $(if ($schemaVersion -eq 2) { [string]$state.runAttempt } else { '' }) `
         -NotesSha256 ([string]$state.notesSha256) `
-        -ManifestSha256 ([string]$state.manifestSha256)
+        -ManifestSha256 ([string]$state.manifestSha256) `
+        -ArchiveSha256 $(if ($schemaVersion -eq 2) { [string]$state.archiveSha256 } else { '' }) `
+        -CandidateSha256 $(if ($schemaVersion -eq 2) { [string]$state.candidateSha256 } else { '' })
     if (-not [System.StringComparer]::Ordinal.Equals([string]$state.transactionId, $expectedTransaction)) {
         throw "Release state marker transaction ID does not match its identity fields."
     }
     $canonicalMarker = Get-ReleaseStateMarkerLine -State (Get-ReleaseStateData `
+        -SchemaVersion $schemaVersion `
         -Phase ([string]$state.phase) `
         -Repository ([string]$state.repository) `
         -ExpectedTag ([string]$state.tag) `
         -ExpectedCommitSha ([string]$state.commitSha) `
         -ExpectedRunId ([string]$state.runId) `
+        -ExpectedRunAttempt $(if ($schemaVersion -eq 2) { [string]$state.runAttempt } else { '' }) `
         -NotesSha256 ([string]$state.notesSha256) `
-        -ManifestSha256 ([string]$state.manifestSha256))
+        -ManifestSha256 ([string]$state.manifestSha256) `
+        -ArchiveSha256 $(if ($schemaVersion -eq 2) { [string]$state.archiveSha256 } else { '' }) `
+        -CandidateSha256 $(if ($schemaVersion -eq 2) { [string]$state.candidateSha256 } else { '' }))
     if (-not [System.StringComparer]::Ordinal.Equals($match.Value.Substring(0, $match.Value.Length - 2), $canonicalMarker)) {
         throw "Release state marker encoding is not canonical."
     }
@@ -546,8 +636,11 @@ function Assert-ReleaseMarkerIdentity {
         [string]$ExpectedCommitSha,
         [string]$ExpectedPhase,
         [AllowEmptyString()][string]$ExpectedRunId,
+        [AllowEmptyString()][string]$ExpectedRunAttempt,
         [AllowEmptyString()][string]$ExpectedNotes,
-        [AllowEmptyString()][string]$ExpectedManifestSha256
+        [AllowEmptyString()][string]$ExpectedManifestSha256,
+        [AllowEmptyString()][string]$ExpectedArchiveSha256,
+        [AllowEmptyString()][string]$ExpectedCandidateSha256
     )
 
     Assert-ReleaseCoreState -Release $Release -ExpectedTag $ExpectedTag
@@ -569,6 +662,10 @@ function Assert-ReleaseMarkerIdentity {
     if (-not [string]::IsNullOrEmpty($ExpectedRunId) -and -not [System.StringComparer]::Ordinal.Equals([string]$state.runId, $ExpectedRunId)) {
         throw "Release state belongs to run '$($state.runId)', expected '$ExpectedRunId'."
     }
+    if (-not [string]::IsNullOrEmpty($ExpectedRunAttempt) -and
+        -not [System.StringComparer]::Ordinal.Equals([string]$state.runAttempt, $ExpectedRunAttempt)) {
+        throw "Release state belongs to run attempt '$($state.runAttempt)', expected '$ExpectedRunAttempt'."
+    }
     if ($PSBoundParameters.ContainsKey('ExpectedNotes') -and
         -not [System.StringComparer]::Ordinal.Equals((Get-LowercaseTextSha256 -Text $ExpectedNotes), [string]$state.notesSha256)) {
         throw "Release state notes digest does not match the current release notes."
@@ -576,6 +673,14 @@ function Assert-ReleaseMarkerIdentity {
     if (-not [string]::IsNullOrEmpty($ExpectedManifestSha256) -and
         -not [System.StringComparer]::Ordinal.Equals([string]$state.manifestSha256, $ExpectedManifestSha256)) {
         throw "Release state manifest digest does not match the validated package tree."
+    }
+    if (-not [string]::IsNullOrEmpty($ExpectedArchiveSha256) -and
+        -not [System.StringComparer]::Ordinal.Equals([string]$state.archiveSha256, $ExpectedArchiveSha256)) {
+        throw "Release state archive digest does not match the attested archive."
+    }
+    if (-not [string]::IsNullOrEmpty($ExpectedCandidateSha256) -and
+        -not [System.StringComparer]::Ordinal.Equals([string]$state.candidateSha256, $ExpectedCandidateSha256)) {
+        throw "Release state candidate digest does not match the attested handoff."
     }
     return $parsed
 }
@@ -588,8 +693,11 @@ function Assert-ReleaseProtocolIdentity {
         [string]$ExpectedCommitSha,
         [string]$ExpectedPhase,
         [AllowEmptyString()][string]$ExpectedRunId,
+        [AllowEmptyString()][string]$ExpectedRunAttempt,
         [AllowEmptyString()][string]$ExpectedNotes,
-        [AllowEmptyString()][string]$ExpectedManifestSha256
+        [AllowEmptyString()][string]$ExpectedManifestSha256,
+        [AllowEmptyString()][string]$ExpectedArchiveSha256,
+        [AllowEmptyString()][string]$ExpectedCandidateSha256
     )
 
     if ($null -eq $Release) {
@@ -627,6 +735,33 @@ function Assert-ReleaseStartState {
     return "prepared:$($parsed.State.runId)"
 }
 
+function Get-PreparedDraftClaimDisposition {
+    param(
+        [object]$Release,
+        [string]$Repository,
+        [string]$ExpectedTag,
+        [string]$ExpectedCommitSha,
+        [string]$ExpectedNotes,
+        [string]$ExpectedManifestSha256,
+        [string]$DesiredBody
+    )
+
+    [void](Assert-ReleaseProtocolIdentity `
+        -Release $Release `
+        -Repository $Repository `
+        -ExpectedTag $ExpectedTag `
+        -ExpectedCommitSha $ExpectedCommitSha `
+        -ExpectedPhase 'prepared' `
+        -ExpectedNotes $ExpectedNotes `
+        -ExpectedManifestSha256 $ExpectedManifestSha256)
+    Assert-ExactAssetSet -Release $Release -ExpectedNames @()
+    $existingBody = (([string]$Release.body -replace "`r`n", "`n") -replace "`r", "`n").TrimEnd([char[]]"`n")
+    if ([System.StringComparer]::Ordinal.Equals($existingBody, $DesiredBody)) {
+        return 'already-current'
+    }
+    return 'rebind'
+}
+
 function Assert-PublishedProtocolIdentity {
     param(
         [object]$Release,
@@ -634,8 +769,11 @@ function Assert-PublishedProtocolIdentity {
         [string]$ExpectedTag,
         [string]$ExpectedCommitSha,
         [AllowEmptyString()][string]$ExpectedRunId,
+        [AllowEmptyString()][string]$ExpectedRunAttempt,
         [string]$ExpectedNotes,
-        [string]$ExpectedManifestSha256
+        [string]$ExpectedManifestSha256,
+        [AllowEmptyString()][string]$ExpectedArchiveSha256,
+        [AllowEmptyString()][string]$ExpectedCandidateSha256
     )
 
     Assert-PublishedImmutableRelease -Release $Release -ExpectedTag $ExpectedTag
@@ -649,8 +787,11 @@ function Assert-PublishedProtocolIdentity {
         -ExpectedCommitSha $ExpectedCommitSha `
         -ExpectedPhase 'marketplace-started' `
         -ExpectedRunId $ExpectedRunId `
+        -ExpectedRunAttempt $ExpectedRunAttempt `
         -ExpectedNotes $ExpectedNotes `
-        -ExpectedManifestSha256 $ExpectedManifestSha256
+        -ExpectedManifestSha256 $ExpectedManifestSha256 `
+        -ExpectedArchiveSha256 $ExpectedArchiveSha256 `
+        -ExpectedCandidateSha256 $ExpectedCandidateSha256
     $state = $parsed.State
     if (-not [System.StringComparer]::Ordinal.Equals([string]$state.phase, 'marketplace-started')) {
         throw "Published release state marker does not match the expected transaction."
@@ -706,6 +847,18 @@ function Assert-PublishedImmutableRelease {
 function Get-LowercaseFileSha256 {
     param([string]$Path)
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Assert-LocalArchiveSha256 {
+    param([string]$Path, [string]$ExpectedSha256)
+
+    Assert-LowercaseSha256 -Value $ExpectedSha256 -Description 'Expected release archive digest'
+    $resolved = Resolve-RequiredFile -Path $Path -Description 'release archive'
+    $actual = Get-LowercaseFileSha256 -Path $resolved
+    if (-not [System.StringComparer]::Ordinal.Equals($actual, $ExpectedSha256)) {
+        throw "Release archive digest is '$actual', expected '$ExpectedSha256'."
+    }
+    return $resolved
 }
 
 function Assert-DraftAssetsMatchLocalFiles {
@@ -1576,7 +1729,7 @@ function Assert-ReleaseEventBoundary {
     }
 
     $expectedGuard = '${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}'
-    foreach ($jobName in @('preflight', 'release')) {
+    foreach ($jobName in @('preflight', 'package', 'github-prepare', 'marketplace-upload', 'github-finalize', 'verify')) {
         $jobBlock = Get-WorkflowJobBlock -WorkflowText $WorkflowText -JobName $jobName
         $guardLines = @([regex]::Matches($jobBlock.Value, '(?m)^    if:\s*(.*?)\s*$'))
         if ($guardLines.Count -ne 1 -or
@@ -1589,292 +1742,658 @@ function Assert-ReleaseEventBoundary {
 function Assert-ReleaseWorkflowBoundary {
     param([string]$WorkflowText)
 
-    # Event admission is the first boundary: reject drift before inspecting any
-    # credential-bearing or third-party publishing step.
     Assert-ReleaseEventBoundary -WorkflowText $WorkflowText
-    Assert-WorkflowCheckoutCredentialBoundary `
-        -WorkflowText $WorkflowText `
-        -JobNames @('preflight', 'release')
-    Assert-ReleaseGitHubTokenScope -WorkflowText $WorkflowText
-    Assert-ReleaseMarketplaceTokenScope -WorkflowText $WorkflowText
 
-    $preflightJob = Get-WorkflowJobBlock -WorkflowText $WorkflowText -JobName 'preflight'
-    if ($preflightJob.Value -notmatch '(?m)^    permissions:\s*\r?\n      contents: read\s*$') {
-        throw "Release preflight must have contents: read as its only permission."
+    if ($WorkflowText -match '(?m)^\s*(?:"(?:uses|permissions|environment|needs)"|''(?:uses|permissions|environment|needs)''|(?:uses|permissions|environment|needs)\s+):' -or
+        $WorkflowText -match '(?m)^\s*(?:<<|\?\s+|:\s+)') {
+        throw "Release workflow must use canonical plain mapping keys without aliases."
     }
-    $preflightSteps = @([regex]::Matches($preflightJob.Value, "(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)"))
-    $releaseVersionSteps = @($preflightSteps | Where-Object {
-        (Get-WorkflowStepName -StepBlock $_) -eq 'Check release version'
-    })
-    if ($releaseVersionSteps.Count -ne 1 -or
-        $releaseVersionSteps[0].Value -notmatch '(?m)^\s{8}run:\s*\.\\scripts\\check-release-version\.ps1 -Tag \$env:GITHUB_REF_NAME -EnforceSemVer -VerifyPublishedChangelog -Repository \$env:GITHUB_REPOSITORY\s*$') {
-        throw "Release preflight must verify published changelog parity before publication."
+    if ($WorkflowText -match '(?m)^        (?:if|continue-on-error):') {
+        throw "Every release step must be named, mandatory, and fail closed."
     }
 
-    $releaseJob = Get-WorkflowJobBlock -WorkflowText $WorkflowText -JobName 'release'
-    if ($releaseJob.Value -notmatch '(?m)^    needs: preflight\s*$') {
-        throw "Release publication must depend on the read-only preflight job."
-    }
-    $releaseEnvironments = @([regex]::Matches($releaseJob.Value, '(?m)^    environment:\s*(.*?)\s*$'))
-    if ($releaseEnvironments.Count -ne 1 -or $releaseEnvironments[0].Groups[1].Value -ne 'marketplace-release') {
-        throw "Release publication must bind exactly environment marketplace-release."
-    }
-
-    $orderedSteps = @(
-        "- name: Trim release changelog",
-        "- name: Validate interrupted release state",
-        "- name: Verify immutable release policy",
-        "- name: Verify marketplace release credentials and versions",
-        "- name: Recheck release ancestry before final package build",
-        "- name: Rebuild package without publishing",
-        "- name: Compare rebuilt package and validate again",
-        "- name: Validate exact package immediately before marketplace upload",
-        "- name: Prepare resumable draft release",
-        "- name: Mark marketplace publication started",
-        "- name: Publish package to marketplaces",
-        "- name: Validate marketplace archive and create release metadata",
-        "- name: Attach validated assets to draft",
-        "- name: Publish immutable GitHub release",
-        "- name: Validate published immutable release assets"
-    )
-
-    $concurrencyBlock = [regex]::Match($WorkflowText, "(?ms)^concurrency:\s*$.*?(?=^jobs:\s*$)")
+    $concurrencyBlock = [regex]::Match($WorkflowText, '(?ms)^concurrency:\s*$.*?(?=^jobs:\s*$)')
     if (-not $concurrencyBlock.Success -or
-        $concurrencyBlock.Value -notmatch "(?m)^  group: statspro-release-publication\s*$" -or
-        $concurrencyBlock.Value -notmatch "(?m)^  queue: max\s*$") {
-        throw "Release workflow must use the shared statspro-release-publication queue with queue: max."
-    }
-    if ($concurrencyBlock.Value -match "(?m)^\s+cancel-in-progress:") {
-        throw "Release publication concurrency must not cancel in-progress runs."
-    }
-    $previousIndex = -1
-    foreach ($step in $orderedSteps) {
-        $index = $WorkflowText.IndexOf($step, [System.StringComparison]::Ordinal)
-        if ($index -lt 0) {
-            throw "Release workflow is missing required step '$step'."
-        }
-        if ($index -le $previousIndex) {
-            throw "Release workflow step '$step' is out of the required draft-first order."
-        }
-        $previousIndex = $index
+        $concurrencyBlock.Value -notmatch '(?m)^  group: statspro-release-publication\s*$' -or
+        $concurrencyBlock.Value -notmatch '(?m)^  queue: max\s*$' -or
+        $concurrencyBlock.Value -match '(?m)^\s+cancel-in-progress:') {
+        throw "Release workflow must use the shared non-cancelling queue with queue: max."
     }
 
-    $stepBlocks = @([regex]::Matches($WorkflowText, "(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)"))
-    $policySteps = @($stepBlocks | Where-Object {
-        (Get-WorkflowStepName -StepBlock $_) -eq 'Verify immutable release policy'
-    })
-    if ($policySteps.Count -ne 1) {
-        throw "Release workflow must contain exactly one immutable release policy gate."
+    $jobsBlock = [regex]::Match($WorkflowText, '(?ms)^jobs:\s*$.*\z')
+    $jobNames = @(
+        [regex]::Matches($jobsBlock.Value, '(?m)^  ([a-z][a-z0-9-]*):\s*$') |
+            ForEach-Object { $_.Groups[1].Value }
+    )
+    $expectedJobNames = @('preflight', 'package', 'github-prepare', 'marketplace-upload', 'github-finalize', 'verify')
+    if ($jobNames.Count -ne $expectedJobNames.Count -or
+        (Compare-Object -ReferenceObject ($expectedJobNames | Sort-Object) -DifferenceObject ($jobNames | Sort-Object))) {
+        throw "Release workflow job inventory must be exactly '$($expectedJobNames -join ', ')'."
     }
-    $policyStep = $policySteps[0]
-    if ($policyStep.Value -notmatch '(?m)^\s{8}shell:\s*pwsh\s*$' -or
-        $policyStep.Value -notmatch '(?m)^\s{8}run:\s*\./scripts/check-repository-settings\.ps1 -Repository \$env:GITHUB_REPOSITORY -ImmutableReleasePolicyOnly -RequireExplicitToken\s*$') {
-        throw "Immutable release policy gate must execute the exact fail-closed read-only checker."
+
+    Assert-WorkflowCheckoutCredentialBoundary -WorkflowText $WorkflowText -JobNames $expectedJobNames
+
+    $jobs = @{}
+    foreach ($jobName in $expectedJobNames) {
+        $jobs[$jobName] = Get-WorkflowJobBlock -WorkflowText $WorkflowText -JobName $jobName
+        if ($jobs[$jobName].Value -match '(?m)^      - (?!name:)') {
+            throw "Every release step must be named, mandatory, and fail closed."
+        }
     }
-    $startStateSteps = @($stepBlocks | Where-Object {
-        (Get-WorkflowStepName -StepBlock $_) -eq 'Validate interrupted release state'
-    })
-    if ($startStateSteps.Count -ne 1 -or $startStateSteps[0].Index + $startStateSteps[0].Length -ne $policyStep.Index) {
-        throw "Immutable release policy gate must run immediately after validating interrupted release state."
+
+    $expectedJobKeys = @{
+        preflight = @('if', 'runs-on', 'permissions', 'steps')
+        package = @('needs', 'if', 'runs-on', 'permissions', 'outputs', 'steps')
+        'github-prepare' = @('needs', 'if', 'runs-on', 'permissions', 'steps')
+        'marketplace-upload' = @('needs', 'environment', 'if', 'runs-on', 'permissions', 'steps')
+        'github-finalize' = @('needs', 'if', 'runs-on', 'permissions', 'steps')
+        verify = @('needs', 'if', 'runs-on', 'permissions', 'steps')
     }
-    $startStateStep = $startStateSteps[0]
-    $trimSteps = @($stepBlocks | Where-Object {
-        (Get-WorkflowStepName -StepBlock $_) -eq 'Trim release changelog'
-    })
-    if ($trimSteps.Count -ne 1 -or
-        $trimSteps[0].Index + $trimSteps[0].Length -ne $startStateStep.Index -or
-        $trimSteps[0].Value -notmatch '(?m)^\s{8}run:\s*\./scripts/check-release-version\.ps1 -Tag \$env:GITHUB_REF_NAME -EnforceSemVer -ExportTopChangelogPath CHANGELOG\.md\s*$') {
-        throw "Canonical release notes must be prepared immediately before interrupted-state validation."
+    foreach ($jobName in $expectedJobNames) {
+        Assert-ExactWorkflowKeySet -Text $jobs[$jobName].Value -Indent 4 -ExpectedKeys $expectedJobKeys[$jobName] -Description "Release job '$jobName'"
     }
-    foreach ($binding in @(
-        [pscustomobject]@{ Name = 'Mode'; Pattern = 'ValidateStart' },
-        [pscustomobject]@{ Name = 'Repository'; Pattern = '\$env:GITHUB_REPOSITORY' },
-        [pscustomobject]@{ Name = 'ExpectedTag'; Pattern = '\$env:GITHUB_REF_NAME' },
-        [pscustomobject]@{ Name = 'ExpectedCommitSha'; Pattern = '\$env:GITHUB_SHA' },
-        [pscustomobject]@{ Name = 'NotesPath'; Pattern = 'CHANGELOG\.md' }
+
+    $permissionContract = @{
+        preflight = 'read'
+        package = 'read'
+        'github-prepare' = 'write'
+        'marketplace-upload' = 'write'
+        'github-finalize' = 'write'
+        verify = 'read'
+    }
+    foreach ($jobName in $expectedJobNames) {
+        $permissionBlocks = @([regex]::Matches($jobs[$jobName].Value, '(?m)^    permissions:\s*\r?\n      contents:\s*(read|write)\s*$'))
+        if ($permissionBlocks.Count -ne 1 -or
+            -not [System.StringComparer]::Ordinal.Equals($permissionBlocks[0].Groups[1].Value, $permissionContract[$jobName])) {
+            throw "Release job '$jobName' must have exactly contents: $($permissionContract[$jobName])."
+        }
+    }
+
+    $needsContract = @{
+        package = 'preflight'
+        'github-prepare' = 'package'
+        'marketplace-upload' = '[package, github-prepare]'
+        'github-finalize' = '[package, marketplace-upload]'
+        verify = 'github-finalize'
+    }
+    foreach ($jobName in $needsContract.Keys) {
+        $needsLines = @([regex]::Matches($jobs[$jobName].Value, '(?m)^    needs:\s*(.*?)\s*$'))
+        if ($needsLines.Count -ne 1 -or
+            -not [System.StringComparer]::Ordinal.Equals($needsLines[0].Groups[1].Value, $needsContract[$jobName])) {
+            throw "Release job '$jobName' has the wrong dependency boundary."
+        }
+    }
+
+    foreach ($jobName in $expectedJobNames) {
+        $environmentLines = @([regex]::Matches($jobs[$jobName].Value, '(?m)^    environment:\s*(.*?)\s*$'))
+        $expectsEnvironment = $jobName -eq 'marketplace-upload'
+        if ($expectsEnvironment) {
+            if ($environmentLines.Count -ne 1 -or $environmentLines[0].Groups[1].Value -ne 'marketplace-release') {
+                throw "Release job '$jobName' must bind exactly environment marketplace-release."
+            }
+        }
+        elseif ($environmentLines.Count -ne 0) {
+            throw "Release job '$jobName' must not bind a credential environment."
+        }
+    }
+
+    $actionContract = @{
+        preflight = @('actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10')
+        package = @(
+            'actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10',
+            'BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28',
+            'BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28',
+            'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
+        )
+        'github-prepare' = @(
+            'actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10',
+            'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
+        )
+        'marketplace-upload' = @(
+            'actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10',
+            'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
+        )
+        'github-finalize' = @(
+            'actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10',
+            'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
+        )
+        verify = @('actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10')
+    }
+    foreach ($jobName in $expectedJobNames) {
+        $actualActions = @([regex]::Matches($jobs[$jobName].Value, '(?m)^\s{8}uses:\s*(\S+)\s*$') | ForEach-Object { $_.Groups[1].Value })
+        $expectedActions = $actionContract[$jobName]
+        if ($actualActions.Count -ne $expectedActions.Count) {
+            throw "Release job '$jobName' has the wrong action count."
+        }
+        for ($index = 0; $index -lt $expectedActions.Count; $index++) {
+            if (-not [System.StringComparer]::Ordinal.Equals($actualActions[$index], $expectedActions[$index])) {
+                throw "Release job '$jobName' action '$($actualActions[$index])' is outside its exact allowlist."
+            }
+        }
+    }
+
+    $allSteps = @()
+    foreach ($jobName in $expectedJobNames) {
+        foreach ($step in @([regex]::Matches($jobs[$jobName].Value, '(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)'))) {
+            $allSteps += [pscustomobject]@{ Job = $jobName; Name = Get-WorkflowStepName -StepBlock $step; Block = $step }
+        }
+    }
+    $getStep = {
+        param([string]$Job, [string]$Name)
+        $matches = @($allSteps | Where-Object { $_.Job -eq $Job -and $_.Name -eq $Name })
+        if ($matches.Count -ne 1) {
+            throw "Release workflow must contain exactly one '$Name' step in '$Job'."
+        }
+        return $matches[0]
+    }
+
+    $stepInventory = [ordered]@{
+        preflight = @(
+            'Checkout',
+            'Verify anonymous checkout boundary',
+            'Check CI action refs',
+            'Check release ancestry',
+            'Check release version',
+            'Lua checks',
+            'Trim release changelog',
+            'Validate interrupted release state'
+        )
+        package = @(
+            'Checkout',
+            'Verify anonymous checkout boundary',
+            'Trim release changelog',
+            'Install release validation tools',
+            'Build package without publishing',
+            'Resolve initial package output',
+            'Validate initial package artifact',
+            'Recheck release ancestry before final package build',
+            'Rebuild package without publishing',
+            'Resolve final package output',
+            'Compare and validate final package artifact',
+            'Create and validate release metadata',
+            'Create exact release candidate',
+            'Upload exact release candidate'
+        )
+        'github-prepare' = @(
+            'Checkout',
+            'Verify anonymous checkout boundary',
+            'Download exact release candidate',
+            'Verify exact release candidate',
+            'Prepare resumable draft release'
+        )
+        'marketplace-upload' = @(
+            'Checkout',
+            'Verify anonymous checkout boundary',
+            'Download exact release candidate',
+            'Verify exact release candidate',
+            'Require fresh package attempt before marketplace publication',
+            'Verify immutable release policy',
+            'Prepare exact marketplace publication plan',
+            'Mark marketplace publication started',
+            'Publish exact archive to marketplaces'
+        )
+        'github-finalize' = @(
+            'Checkout',
+            'Verify anonymous checkout boundary',
+            'Download exact release candidate',
+            'Verify exact release candidate',
+            'Attach validated assets to draft',
+            'Publish immutable GitHub release'
+        )
+        verify = @(
+            'Checkout',
+            'Verify anonymous checkout boundary',
+            'Install release validation tools',
+            'Validate published immutable release assets'
+        )
+    }
+    foreach ($jobName in $stepInventory.Keys) {
+        $actualNames = @($allSteps | Where-Object { $_.Job -eq $jobName } | ForEach-Object Name)
+        $expectedNames = @($stepInventory[$jobName])
+        if ($actualNames.Count -ne $expectedNames.Count -or
+            -not [System.StringComparer]::Ordinal.Equals(($actualNames -join "`n"), ($expectedNames -join "`n"))) {
+            throw "Release job '$jobName' step inventory must remain exact and ordered."
+        }
+    }
+
+    $expectedCheckoutStep = @'
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+'@
+    $expectedAnonymousStep = @'
+      - name: Verify anonymous checkout boundary
+        shell: pwsh
+        run: ./scripts/check-anonymous-checkout.ps1
+'@
+    foreach ($jobName in $expectedJobNames) {
+        Assert-ExactWorkflowBlock `
+            -Actual (& $getStep $jobName 'Checkout').Block.Value `
+            -Expected $expectedCheckoutStep `
+            -Description "Release job '$jobName' checkout step"
+        Assert-ExactWorkflowBlock `
+            -Actual (& $getStep $jobName 'Verify anonymous checkout boundary').Block.Value `
+            -Expected $expectedAnonymousStep `
+            -Description "Release job '$jobName' anonymous checkout step"
+    }
+    $expectedConsumerVerifySteps = [ordered]@{
+        'github-prepare' = @'
+      - name: Verify exact release candidate
+        id: verify-candidate
+        shell: pwsh
+        run: |
+          ./scripts/release-candidate.ps1 `
+            -Mode Verify `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -ExpectedRunId $env:GITHUB_RUN_ID `
+            -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
+            -ExpectedProjectVersion '${{ needs.package.outputs.project_version }}' `
+            -CandidatePath (Join-Path ".release" "handoff" "statspro-release-candidate.json") `
+            -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
+            -OutputPath $env:GITHUB_OUTPUT
+'@
+        'marketplace-upload' = @'
+      - name: Verify exact release candidate
+        id: verify-candidate
+        shell: pwsh
+        run: |
+          ./scripts/release-candidate.ps1 `
+            -Mode Verify `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -ExpectedRunId $env:GITHUB_RUN_ID `
+            -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
+            -ExpectedProjectVersion '${{ needs.package.outputs.project_version }}' `
+            -CandidatePath (Join-Path ".release" "handoff" "statspro-release-candidate.json") `
+            -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
+            -ArchonMaxAgeDays 3 `
+            -OutputPath $env:GITHUB_OUTPUT
+'@
+        'github-finalize' = @'
+      - name: Verify exact release candidate
+        id: verify-candidate
+        shell: pwsh
+        run: |
+          ./scripts/release-candidate.ps1 `
+            -Mode Verify `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -ExpectedRunId $env:GITHUB_RUN_ID `
+            -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
+            -ExpectedProjectVersion '${{ needs.package.outputs.project_version }}' `
+            -CandidatePath (Join-Path ".release" "handoff" "statspro-release-candidate.json") `
+            -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
+            -OutputPath $env:GITHUB_OUTPUT
+'@
+    }
+    foreach ($jobName in $expectedConsumerVerifySteps.Keys) {
+        Assert-ExactWorkflowBlock `
+            -Actual (& $getStep $jobName 'Verify exact release candidate').Block.Value `
+            -Expected $expectedConsumerVerifySteps[$jobName] `
+            -Description "Release candidate verification step '$jobName'"
+    }
+    $expectedFreshAttemptStep = @'
+      - name: Require fresh package attempt before marketplace publication
+        shell: pwsh
+        env:
+          STATSPRO_PACKAGE_RUN_ATTEMPT: ${{ needs.package.outputs.run_attempt }}
+        run: |
+          if ($env:GITHUB_RUN_ATTEMPT -cne $env:STATSPRO_PACKAGE_RUN_ATTEMPT) {
+            throw "Marketplace publication cannot reuse a package from an earlier run attempt. Re-run all jobs to create a fresh candidate."
+          }
+'@
+    Assert-ExactWorkflowBlock `
+        -Actual (& $getStep 'marketplace-upload' 'Require fresh package attempt before marketplace publication').Block.Value `
+        -Expected $expectedFreshAttemptStep `
+        -Description 'Marketplace fresh-attempt guard step'
+
+    $approvedSecrets = @{
+        GITHUB_TOKEN = @(
+            'preflight/Check release version',
+            'preflight/Validate interrupted release state',
+            'github-prepare/Prepare resumable draft release',
+            'marketplace-upload/Mark marketplace publication started',
+            'github-finalize/Attach validated assets to draft',
+            'github-finalize/Publish immutable GitHub release',
+            'verify/Validate published immutable release assets'
+        )
+        IMMUTABLE_RELEASES_READ_TOKEN = @('marketplace-upload/Verify immutable release policy')
+        CF_API_KEY = @('marketplace-upload/Prepare exact marketplace publication plan', 'marketplace-upload/Publish exact archive to marketplaces')
+        WAGO_API_TOKEN = @('marketplace-upload/Prepare exact marketplace publication plan', 'marketplace-upload/Publish exact archive to marketplaces')
+        WOWI_API_TOKEN = @('marketplace-upload/Prepare exact marketplace publication plan', 'marketplace-upload/Publish exact archive to marketplaces')
+    }
+    $withoutApprovedSecrets = $WorkflowText
+    foreach ($secretName in $approvedSecrets.Keys) {
+        $pattern = '\$\{\{\s*secrets\.' + [regex]::Escape($secretName) + '\s*\}\}'
+        $matches = @([regex]::Matches($WorkflowText, $pattern))
+        if ($matches.Count -ne $approvedSecrets[$secretName].Count) {
+            throw "Release secret '$secretName' must appear only in its exact approved steps."
+        }
+        foreach ($approvedLocation in $approvedSecrets[$secretName]) {
+            $parts = $approvedLocation.Split('/', 2)
+            $step = & $getStep $parts[0] $parts[1]
+            if (@([regex]::Matches($step.Block.Value, $pattern)).Count -ne 1) {
+                throw "Release secret '$secretName' is missing from '$approvedLocation'."
+            }
+        }
+        $withoutApprovedSecrets = [regex]::Replace($withoutApprovedSecrets, $pattern, '')
+    }
+    if ((Test-ContainsAnySecretReference -Text $withoutApprovedSecrets) -or
+        (Test-ContainsGitHubTokenReference -Text $withoutApprovedSecrets)) {
+        throw "Release workflow contains an unapproved or non-canonical secret or github.token reference."
+    }
+
+    $sensitiveStepContracts = @(
+        [pscustomobject]@{ Job = 'preflight'; Name = 'Check release version'; Block = @'
+      - name: Check release version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: .\scripts\check-release-version.ps1 -Tag $env:GITHUB_REF_NAME -EnforceSemVer -VerifyPublishedChangelog -Repository $env:GITHUB_REPOSITORY
+'@ },
+        [pscustomobject]@{ Job = 'preflight'; Name = 'Validate interrupted release state'; Block = @'
+      - name: Validate interrupted release state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          .\scripts\manage-github-release.ps1 `
+            -Mode ValidateStart `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -NotesPath CHANGELOG.md
+'@ },
+        [pscustomobject]@{ Job = 'github-prepare'; Name = 'Prepare resumable draft release'; Block = @'
+      - name: Prepare resumable draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./scripts/manage-github-release.ps1 `
+            -Mode CreateDraft `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -ExpectedRunId $env:GITHUB_RUN_ID `
+            -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
+            -ExpectedArchiveSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
+            -NotesPath '${{ steps.verify-candidate.outputs.notes_path }}' `
+            -ManifestPath '${{ steps.verify-candidate.outputs.manifest_path }}'
+'@ },
+        [pscustomobject]@{ Job = 'marketplace-upload'; Name = 'Verify immutable release policy'; Block = @'
+      - name: Verify immutable release policy
+        env:
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
+        shell: pwsh
+        run: ./scripts/check-repository-settings.ps1 -Repository $env:GITHUB_REPOSITORY -ImmutableReleasePolicyOnly -RequireExplicitToken
+'@ },
+        [pscustomobject]@{ Job = 'marketplace-upload'; Name = 'Prepare exact marketplace publication plan'; Block = @'
+      - name: Prepare exact marketplace publication plan
+        id: prepare-marketplace
+        shell: pwsh
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
+        run: |
+          ./scripts/publish-marketplaces.ps1 `
+            -Mode Prepare `
+            -ArchivePath '${{ steps.verify-candidate.outputs.archive_path }}' `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -PlanPath (Join-Path ".release" "handoff" "statspro-marketplace-plan.json") `
+            -OutputPath $env:GITHUB_OUTPUT
+'@ },
+        [pscustomobject]@{ Job = 'marketplace-upload'; Name = 'Mark marketplace publication started'; Block = @'
+      - name: Mark marketplace publication started
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./scripts/manage-github-release.ps1 `
+            -Mode MarkMarketplaceStarted `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -ExpectedRunId $env:GITHUB_RUN_ID `
+            -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
+            -ExpectedArchiveSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
+            -NotesPath '${{ steps.verify-candidate.outputs.notes_path }}' `
+            -ManifestPath '${{ steps.verify-candidate.outputs.manifest_path }}'
+'@ },
+        [pscustomobject]@{ Job = 'marketplace-upload'; Name = 'Publish exact archive to marketplaces'; Block = @'
+      - name: Publish exact archive to marketplaces
+        shell: pwsh
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
+        run: |
+          ./scripts/publish-marketplaces.ps1 `
+            -Mode Publish `
+            -ArchivePath '${{ steps.verify-candidate.outputs.archive_path }}' `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -PlanPath '${{ steps.prepare-marketplace.outputs.plan_path }}' `
+            -ExpectedPlanSha256 '${{ steps.prepare-marketplace.outputs.plan_sha256 }}'
+'@ },
+        [pscustomobject]@{ Job = 'github-finalize'; Name = 'Attach validated assets to draft'; Block = @'
+      - name: Attach validated assets to draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./scripts/manage-github-release.ps1 `
+            -Mode AttachAssets `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -ExpectedRunId $env:GITHUB_RUN_ID `
+            -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
+            -ExpectedArchiveSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
+            -ArchivePath '${{ steps.verify-candidate.outputs.archive_path }}' `
+            -ReleaseJsonPath '${{ steps.verify-candidate.outputs.release_json_path }}' `
+            -NotesPath '${{ steps.verify-candidate.outputs.notes_path }}' `
+            -ManifestPath '${{ steps.verify-candidate.outputs.manifest_path }}'
+'@ },
+        [pscustomobject]@{ Job = 'github-finalize'; Name = 'Publish immutable GitHub release'; Block = @'
+      - name: Publish immutable GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./scripts/manage-github-release.ps1 `
+            -Mode Publish `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -ExpectedRunId $env:GITHUB_RUN_ID `
+            -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
+            -ExpectedArchiveSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
+            -ArchivePath '${{ steps.verify-candidate.outputs.archive_path }}' `
+            -ReleaseJsonPath '${{ steps.verify-candidate.outputs.release_json_path }}' `
+            -NotesPath '${{ steps.verify-candidate.outputs.notes_path }}' `
+            -ManifestPath '${{ steps.verify-candidate.outputs.manifest_path }}'
+'@ },
+        [pscustomobject]@{ Job = 'verify'; Name = 'Validate published immutable release assets'; Block = @'
+      - name: Validate published immutable release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $assetDir = Join-Path $env:RUNNER_TEMP "statspro-release-assets"
+          New-Item -ItemType Directory -Path $assetDir -Force | Out-Null
+
+          function Save-ReleaseAsset {
+            param([string]$Name)
+
+            $path = Join-Path $assetDir $Name
+            for ($attempt = 1; $attempt -le 6; $attempt++) {
+              $output = @(gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern $Name --dir $assetDir --clobber 2>&1)
+              if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $path -PathType Leaf)) {
+                return $path
+              }
+              Write-Host "Release asset $Name not ready on attempt $attempt`: $($output -join ' ')"
+              if ($attempt -lt 6) {
+                Start-Sleep -Seconds ([Math]::Min(60, 5 * [Math]::Pow(2, $attempt - 1)))
+              }
+            }
+            throw "Release asset $Name was not downloadable after retries."
+          }
+
+          $zipPath = Save-ReleaseAsset -Name "StatsPro-$tag.zip"
+          $releaseJsonPath = Save-ReleaseAsset -Name "release.json"
+          ./scripts/check-release-artifact.ps1 `
+            -ZipPath $zipPath `
+            -ReleaseJsonPath $releaseJsonPath `
+            -ExpectedTag $tag `
+            -PackagerProjectVersion $tag `
+            -RequireExactPackagerProjectVersion `
+            -WithReleaseJson `
+            -ArchonMaxAgeDays 3 `
+            -EnforceToolLocks
+'@ }
+    )
+    foreach ($contract in $sensitiveStepContracts) {
+        Assert-ExactWorkflowBlock `
+            -Actual (& $getStep $contract.Job $contract.Name).Block.Value `
+            -Expected $contract.Block `
+            -Description "Release sensitive step '$($contract.Job)/$($contract.Name)'"
+    }
+
+    $packageJob = $jobs['package'].Value
+    if ($packageJob -match '(?i)secrets|github\.token|GITHUB_TOKEN' -or
+        @([regex]::Matches($packageJob, '(?m)^\s{10}args:\s*-d\s*$')).Count -ne 1 -or
+        @([regex]::Matches($packageJob, '(?m)^\s{10}args:\s*-e -d\s*$')).Count -ne 1 -or
+        $packageJob -match '(?m)^\s{10}args:.*(?:^|\s)-(?:c|o)(?:\s|$)') {
+        throw "The package job must be secret-free and use exactly two non-publishing Packager runs."
+    }
+
+    $candidateCreate = & $getStep 'package' 'Create exact release candidate'
+    $artifactUpload = & $getStep 'package' 'Upload exact release candidate'
+    if ($candidateCreate.Block.Value -notmatch '(?m)^\s+id:\s*create-candidate\s*$' -or
+        $candidateCreate.Block.Value -notmatch '(?m)^\s+-Mode Create\s*' -or
+        $candidateCreate.Block.Value -notmatch '-ExpectedRunAttempt \$env:GITHUB_RUN_ATTEMPT' -or
+        $candidateCreate.Block.Value -notmatch '-ExpectedProjectVersion \$env:STATSPRO_PROJECT_VERSION' -or
+        $candidateCreate.Block.Index -ge $artifactUpload.Block.Index) {
+        throw "Release candidate creation must validate and bind the final package before artifact upload."
+    }
+    foreach ($requiredUploadPattern in @(
+        '(?m)^\s{8}id:\s*upload-candidate\s*$',
+        '(?m)^\s{10}name:\s*statspro-release-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}\s*$',
+        '(?m)^\s{10}if-no-files-found:\s*error\s*$',
+        '(?m)^\s{10}compression-level:\s*0\s*$',
+        '(?m)^\s{10}overwrite:\s*false\s*$',
+        '(?m)^\s{10}include-hidden-files:\s*true\s*$',
+        '(?m)^\s{10}retention-days:\s*35\s*$'
     )) {
-        Assert-WorkflowParameterBinding -StepBlock $startStateStep -StepName 'Validate interrupted release state' -ParameterName $binding.Name -ValuePattern $binding.Pattern
-    }
-    if ($startStateStep.Value -match '(?m)^\s{8}(?:if|continue-on-error):') {
-        throw "Interrupted release validation must be mandatory."
-    }
-    $credentialSteps = @($stepBlocks | Where-Object {
-        (Get-WorkflowStepName -StepBlock $_) -eq 'Verify marketplace release credentials and versions'
-    })
-    if ($credentialSteps.Count -ne 1) {
-        throw "Release workflow must contain exactly one marketplace credential preflight."
-    }
-    $credentialStep = $credentialSteps[0]
-    if ($credentialStep.Value -notmatch '(?m)^\s{8}shell:\s*pwsh\s*$' -or
-        $credentialStep.Value -notmatch '(?m)^\s{8}run:\s*\./scripts/check-marketplace-versions\.ps1\s*$' -or
-        $credentialStep.Value -match '(?m)^\s{8}(?:if|continue-on-error|uses):') {
-        throw "Marketplace credential preflight must execute the exact fail-closed checker as a mandatory pwsh step."
-    }
-    if ($policyStep.Index + $policyStep.Length -ne $credentialStep.Index) {
-        throw "Marketplace credential preflight must run immediately after the immutable release policy gate."
-    }
-    $allPackagerSteps = @($stepBlocks | Where-Object { $_.Value -match 'BigWigsMods/packager@' })
-    if ($allPackagerSteps.Count -eq 0 -or @($allPackagerSteps | Where-Object { $_.Index -lt $policyStep.Index }).Count -ne 0) {
-        throw "Immutable release policy gate must run before every Packager step."
-    }
-    if (@($allPackagerSteps | Where-Object { $_.Index -lt $credentialStep.Index }).Count -ne 0) {
-        throw "Marketplace credential preflight must run before every Packager step."
-    }
-    $packagerOutputContracts = @(
-        [pscustomobject]@{
-            PackagerName = "Build package without publishing"
-            ResolverName = "Resolve initial package output"
-            ResolverId = "build-package-output"
-        },
-        [pscustomobject]@{
-            PackagerName = "Rebuild package without publishing"
-            ResolverName = "Resolve rebuilt package output"
-            ResolverId = "rebuild-package-output"
-        },
-        [pscustomobject]@{
-            PackagerName = "Publish package to marketplaces"
-            ResolverName = "Resolve published package output"
-            ResolverId = "publish-package-output"
-        }
-    )
-    if ($allPackagerSteps.Count -ne $packagerOutputContracts.Count) {
-        throw "Release workflow must contain exactly $($packagerOutputContracts.Count) Packager steps; found $($allPackagerSteps.Count)."
-    }
-    foreach ($contract in $packagerOutputContracts) {
-        $packagerMatches = @($allPackagerSteps | Where-Object {
-            (Get-WorkflowStepName -StepBlock $_) -eq $contract.PackagerName
-        })
-        $resolverMatches = @($stepBlocks | Where-Object {
-            (Get-WorkflowStepName -StepBlock $_) -eq $contract.ResolverName
-        })
-        if ($packagerMatches.Count -ne 1 -or $resolverMatches.Count -ne 1) {
-            throw "Release workflow must contain one '$($contract.PackagerName)' step and one '$($contract.ResolverName)' step."
-        }
-        $packagerStep = $packagerMatches[0]
-        $resolverStep = $resolverMatches[0]
-        if ($packagerStep.Index + $packagerStep.Length -ne $resolverStep.Index -or
-            $resolverStep.Value -notmatch "(?m)^\s{8}id: $([regex]::Escape($contract.ResolverId))\s*$" -or
-            $resolverStep.Value -notmatch '(?m)^\s{8}shell: pwsh\s*$' -or
-            $resolverStep.Value -notmatch '(?m)^\s{8}run: \./scripts/resolve-packager-output\.ps1 -ExpectedTag \$env:GITHUB_REF_NAME -OutputPath \$env:GITHUB_OUTPUT\s*$' -or
-            $resolverStep.Value -match '(?m)^\s{8}(?:if|continue-on-error|env|uses|with):') {
-            throw "Packager step '$($contract.PackagerName)' must be followed immediately by its exact artifact-output resolver."
+        if ($artifactUpload.Block.Value -notmatch $requiredUploadPattern) {
+            throw "Release artifact upload is missing an exact immutable handoff setting."
         }
     }
-    $draftSteps = @($stepBlocks | Where-Object {
-        (Get-WorkflowStepName -StepBlock $_) -eq 'Prepare resumable draft release'
-    })
-    if ($draftSteps.Count -ne 1 -or $draftSteps[0].Index -lt $credentialStep.Index) {
-        throw "Marketplace credential preflight must run before the single resumable draft preparation step."
+    foreach ($outputName in @('archive_path', 'release_json_path', 'manifest_path', 'candidate_path')) {
+        if (@([regex]::Matches($artifactUpload.Block.Value, [regex]::Escape("steps.create-candidate.outputs.$outputName"))).Count -ne 1) {
+            throw "Release artifact upload must include exact candidate output '$outputName'."
+        }
     }
-    $publishingPackagerSteps = @($stepBlocks | Where-Object {
-        $_.Value -match "BigWigsMods/packager@" -and
-        $_.Value -notmatch '(?m)^\s+args:.*(?:^|\s)-d(?:\s|$)'
-    })
-    if ($publishingPackagerSteps.Count -ne 1) {
-        throw "Release workflow must contain exactly one publishing Packager step; found $($publishingPackagerSteps.Count)."
-    }
-    $marketplaceStep = $publishingPackagerSteps[0]
-    if (-not $marketplaceStep.Success) {
-        throw "Could not isolate the marketplace Packager step."
-    }
-    if ($marketplaceStep.Value -notmatch "(?m)^\s{6}- name: Publish package to marketplaces\s*$" -or
-        $marketplaceStep.Value -notmatch "(?m)^\s{10}args: -c -e -o\s*$" -or
-        $marketplaceStep.Value -notmatch "CF_API_KEY:" -or
-        $marketplaceStep.Value -notmatch "WAGO_API_TOKEN:" -or
-        $marketplaceStep.Value -notmatch "WOWI_API_TOKEN:") {
-        throw "Marketplace publication must be the single named Packager step reusing the validated tree with -c -e -o."
-    }
-
-    $ancestryStep = [regex]::Match(
-        $WorkflowText,
-        "(?ms)^\s{6}- name: Recheck release ancestry before final package build\s*$.*?(?=^\s{6}- name:|\z)"
-    )
-    if (-not $ancestryStep.Success -or $ancestryStep.Value -notmatch "check-release-ancestry\.ps1") {
-        throw "Release workflow must run the executable fresh ancestry gate before the final package build."
-    }
-
-    $preUploadStep = [regex]::Match(
-        $WorkflowText,
-        "(?ms)^\s{6}- name: Validate exact package immediately before marketplace upload\s*$.*?(?=^\s{6}- name:|\z)"
-    )
-    if (-not $preUploadStep.Success -or
-        $preUploadStep.Value -notmatch "check-package-dry-run\.ps1" -or
-        $preUploadStep.Value -notmatch '(?m)^\s+-ExpectedTag \$env:GITHUB_REF_NAME\s+\x60\s*$' -or
-        $preUploadStep.Value -notmatch '(?m)^\s+-PackagerProjectVersion \$env:STATSPRO_PROJECT_VERSION\s+\x60\s*$' -or
-        $preUploadStep.Value -notmatch '(?m)^\s+-CompareManifestPath .+statspro-package-tree\.before\.sha256.+\x60\s*$' -or
-        $preUploadStep.Value -notmatch '(?m)^\s+-RequireExactPackagerProjectVersion\s+\x60\s*$' -or
-        $preUploadStep.Value -notmatch "git rev-parse HEAD" -or
-        $preUploadStep.Value -notmatch "GITHUB_SHA" -or
-        $preUploadStep.Value.IndexOf('STATSPRO_ARCHIVE_PATH: ${{ steps.rebuild-package-output.outputs.archive_path }}', [System.StringComparison]::Ordinal) -lt 0 -or
-        $preUploadStep.Value.IndexOf('STATSPRO_PROJECT_VERSION: ${{ steps.rebuild-package-output.outputs.project_version }}', [System.StringComparison]::Ordinal) -lt 0) {
-        throw "The immediate pre-upload step must bind the exact Packager output, package manifest, tag checkout, and GITHUB_SHA."
-    }
-    $prepareStep = $draftSteps[0]
-    $markStartedSteps = @($stepBlocks | Where-Object {
-        (Get-WorkflowStepName -StepBlock $_) -eq 'Mark marketplace publication started'
-    })
-    if ($markStartedSteps.Count -ne 1) {
-        throw "Release workflow must contain exactly one marketplace-started marker step."
-    }
-    $markStartedStep = $markStartedSteps[0]
-    if ($preUploadStep.Index + $preUploadStep.Length -ne $prepareStep.Index -or
-        $prepareStep.Index + $prepareStep.Length -ne $markStartedStep.Index -or
-        $markStartedStep.Index + $markStartedStep.Length -ne $marketplaceStep.Index) {
-        throw "The exact package boundary, resumable draft preparation, and durable marketplace marker must be consecutive immediately before marketplace publication."
-    }
-    foreach ($contract in @(
-        [pscustomobject]@{ Step = $prepareStep; Mode = 'CreateDraft' },
-        [pscustomobject]@{ Step = $markStartedStep; Mode = 'MarkMarketplaceStarted' }
+    $packageOutputs = [regex]::Match($packageJob, '(?ms)^    outputs:\s*$.*?(?=^    steps:\s*$)')
+    foreach ($outputPattern in @(
+        'artifact_id:\s*\$\{\{ steps\.upload-candidate\.outputs\.artifact-id \}\}',
+        'artifact_digest:\s*\$\{\{ steps\.upload-candidate\.outputs\.artifact-digest \}\}',
+        'archive_sha256:\s*\$\{\{ steps\.create-candidate\.outputs\.archive_sha256 \}\}',
+        'candidate_sha256:\s*\$\{\{ steps\.create-candidate\.outputs\.candidate_sha256 \}\}',
+        'project_version:\s*\$\{\{ steps\.rebuild-package-output\.outputs\.project_version \}\}',
+        'run_attempt:\s*\$\{\{ github\.run_attempt \}\}'
     )) {
+        if (-not $packageOutputs.Success -or $packageOutputs.Value -notmatch $outputPattern) {
+            throw "Release package outputs must bind artifact identity and inner candidate hashes."
+        }
+    }
+
+    foreach ($consumerJob in @('github-prepare', 'marketplace-upload', 'github-finalize')) {
+        $download = & $getStep $consumerJob 'Download exact release candidate'
+        if ($download.Block.Value -notmatch '(?m)^\s{10}artifact-ids:\s*\$\{\{ needs\.package\.outputs\.artifact_id \}\}\s*$' -or
+            $download.Block.Value -notmatch '(?m)^\s{10}path:\s*\.release/handoff\s*$' -or
+            $download.Block.Value -notmatch '(?m)^\s{10}digest-mismatch:\s*error\s*$' -or
+            $download.Block.Value -match '(?m)^\s{10}(?:name|pattern|merge-multiple|github-token|repository|run-id):') {
+            throw "Release consumer '$consumerJob' must download the exact current-run artifact ID and fail on digest mismatch."
+        }
+        $verifyCandidate = & $getStep $consumerJob 'Verify exact release candidate'
+        if ($verifyCandidate.Block.Value -notmatch '(?m)^\s+-Mode Verify\s*' -or
+            $verifyCandidate.Block.Value -notmatch '-ExpectedCandidateSha256 ''\$\{\{ needs\.package\.outputs\.candidate_sha256 \}\}''' -or
+            $verifyCandidate.Block.Value -notmatch '-ExpectedProjectVersion ''\$\{\{ needs\.package\.outputs\.project_version \}\}''' -or
+            $verifyCandidate.Block.Value -notmatch '-ExpectedRunAttempt ''\$\{\{ needs\.package\.outputs\.run_attempt \}\}''' -or
+            $download.Block.Index -ge $verifyCandidate.Block.Index) {
+            throw "Release consumer '$consumerJob' must verify the exact candidate before using it."
+        }
+    }
+
+    $prepareCandidate = & $getStep 'github-prepare' 'Verify exact release candidate'
+    $prepareDraft = & $getStep 'github-prepare' 'Prepare resumable draft release'
+    if ($prepareCandidate.Block.Index -ge $prepareDraft.Block.Index -or
+        $prepareDraft.Block.Value -notmatch '-Mode CreateDraft') {
+        throw "GitHub preparation must verify and prepare the exact candidate in order."
+    }
+
+    $marketplaceVerify = & $getStep 'marketplace-upload' 'Verify exact release candidate'
+    $freshAttempt = & $getStep 'marketplace-upload' 'Require fresh package attempt before marketplace publication'
+    $immutablePolicy = & $getStep 'marketplace-upload' 'Verify immutable release policy'
+    $credentialCheck = & $getStep 'marketplace-upload' 'Prepare exact marketplace publication plan'
+    $markStarted = & $getStep 'marketplace-upload' 'Mark marketplace publication started'
+    $marketplacePublish = & $getStep 'marketplace-upload' 'Publish exact archive to marketplaces'
+    if (-not ($marketplaceVerify.Block.Index -lt $freshAttempt.Block.Index -and
+        $freshAttempt.Block.Index -lt $immutablePolicy.Block.Index -and
+        $immutablePolicy.Block.Index -lt $credentialCheck.Block.Index -and
+        $credentialCheck.Block.Index -lt $markStarted.Block.Index -and
+        $markStarted.Block.Index -lt $marketplacePublish.Block.Index) -or
+        $markStarted.Block.Value -notmatch '-Mode MarkMarketplaceStarted' -or
+        $credentialCheck.Block.Value -notmatch '-Mode Prepare' -or
+        $marketplacePublish.Block.Value -notmatch '(?m)^\s+\./scripts/publish-marketplaces\.ps1\s+\x60\s*$' -or
+        $marketplacePublish.Block.Value -notmatch '-Mode Publish' -or
+        $marketplacePublish.Block.Value -notmatch '-ArchivePath ''\$\{\{ steps\.verify-candidate\.outputs\.archive_path \}\}''' -or
+        $marketplacePublish.Block.Value -notmatch '-ExpectedSha256 ''\$\{\{ needs\.package\.outputs\.archive_sha256 \}\}''' -or
+        $marketplacePublish.Block.Value -notmatch '-PlanPath ''\$\{\{ steps\.prepare-marketplace\.outputs\.plan_path \}\}''' -or
+        $marketplacePublish.Block.Value -notmatch '-ExpectedPlanSha256 ''\$\{\{ steps\.prepare-marketplace\.outputs\.plan_sha256 \}\}''') {
+        throw "Marketplace publication must upload only the already verified exact archive."
+    }
+
+    $finalizeVerify = & $getStep 'github-finalize' 'Verify exact release candidate'
+    $attach = & $getStep 'github-finalize' 'Attach validated assets to draft'
+    $publish = & $getStep 'github-finalize' 'Publish immutable GitHub release'
+    if (-not ($finalizeVerify.Block.Index -lt $attach.Block.Index -and $attach.Block.Index -lt $publish.Block.Index) -or
+        $attach.Block.Value -notmatch '-Mode AttachAssets' -or $publish.Block.Value -notmatch '-Mode Publish') {
+        throw "GitHub finalization must verify, attach, and publish the exact candidate in order."
+    }
+
+    foreach ($managementStep in @($prepareDraft, $markStarted, $attach, $publish)) {
         foreach ($binding in @(
-            [pscustomobject]@{ Name = 'Mode'; Pattern = [regex]::Escape($contract.Mode) },
-            [pscustomobject]@{ Name = 'Repository'; Pattern = '\$env:GITHUB_REPOSITORY' },
-            [pscustomobject]@{ Name = 'ExpectedTag'; Pattern = '\$env:GITHUB_REF_NAME' },
-            [pscustomobject]@{ Name = 'ExpectedCommitSha'; Pattern = '\$env:GITHUB_SHA' },
-            [pscustomobject]@{ Name = 'ExpectedRunId'; Pattern = '\$env:GITHUB_RUN_ID' },
-            [pscustomobject]@{ Name = 'NotesPath'; Pattern = 'CHANGELOG\.md' },
-            [pscustomobject]@{ Name = 'ManifestPath'; Pattern = '\(Join-Path \$env:RUNNER_TEMP "statspro-package-tree\.before\.sha256"\)' }
+            '-ExpectedRunId \$env:GITHUB_RUN_ID',
+            '-ExpectedRunAttempt ''\$\{\{ needs\.package\.outputs\.run_attempt \}\}''',
+            '-ExpectedArchiveSha256 ''\$\{\{ needs\.package\.outputs\.archive_sha256 \}\}''',
+            '-ExpectedCandidateSha256 ''\$\{\{ needs\.package\.outputs\.candidate_sha256 \}\}'''
         )) {
-            Assert-WorkflowParameterBinding -StepBlock $contract.Step -StepName $contract.Mode -ParameterName $binding.Name -ValuePattern $binding.Pattern
-        }
-        if ($contract.Step.Value -match '(?m)^\s{8}(?:if|continue-on-error):') {
-            throw "Release transaction step '$($contract.Mode)' must be mandatory."
+            if ($managementStep.Block.Value -notmatch $binding) {
+                throw "GitHub release mutation '$($managementStep.Name)' is missing exact candidate identity '$binding'."
+            }
         }
     }
-    foreach ($contract in @(
-        [pscustomobject]@{ Name = 'Attach validated assets to draft'; Mode = 'AttachAssets' },
-        [pscustomobject]@{ Name = 'Publish immutable GitHub release'; Mode = 'Publish' }
-    )) {
-        $stepMatches = @($stepBlocks | Where-Object { (Get-WorkflowStepName -StepBlock $_) -eq $contract.Name })
-        if ($stepMatches.Count -ne 1) {
-            throw "Release workflow must contain exactly one '$($contract.Name)' step."
-        }
-        foreach ($binding in @(
-            [pscustomobject]@{ Name = 'Mode'; Pattern = [regex]::Escape($contract.Mode) },
-            [pscustomobject]@{ Name = 'Repository'; Pattern = '\$env:GITHUB_REPOSITORY' },
-            [pscustomobject]@{ Name = 'ExpectedTag'; Pattern = '\$env:GITHUB_REF_NAME' },
-            [pscustomobject]@{ Name = 'ExpectedCommitSha'; Pattern = '\$env:GITHUB_SHA' },
-            [pscustomobject]@{ Name = 'ExpectedRunId'; Pattern = '\$env:GITHUB_RUN_ID' },
-            [pscustomobject]@{ Name = 'NotesPath'; Pattern = 'CHANGELOG\.md' },
-            [pscustomobject]@{ Name = 'ManifestPath'; Pattern = '\(Join-Path \$env:RUNNER_TEMP "statspro-package-tree\.before\.sha256"\)' }
-        )) {
-            Assert-WorkflowParameterBinding -StepBlock $stepMatches[0] -StepName $contract.Mode -ParameterName $binding.Name -ValuePattern $binding.Pattern
-        }
-        if ($stepMatches[0].Value -match '(?m)^\s{8}(?:if|continue-on-error):') {
-            throw "Release transaction step '$($contract.Mode)' must be mandatory."
-        }
-    }
-    $actualEnvironmentKeys = @(
-        [regex]::Matches($marketplaceStep.Value, "(?m)^\s{10}([A-Z][A-Z0-9_]+):") |
-            ForEach-Object { $_.Groups[1].Value } |
-            Sort-Object -Unique
-    )
-    $expectedEnvironmentKeys = @("CF_API_KEY", "WAGO_API_TOKEN", "WOWI_API_TOKEN") | Sort-Object
-    if ($actualEnvironmentKeys.Count -ne $expectedEnvironmentKeys.Count -or (Compare-Object -ReferenceObject $expectedEnvironmentKeys -DifferenceObject $actualEnvironmentKeys)) {
-        throw "Marketplace Packager environment must contain only marketplace tokens. Found: $($actualEnvironmentKeys -join ', ')"
+
+    if ($immutablePolicy.Block.Value -notmatch '(?m)^\s{8}run:\s*\./scripts/check-repository-settings\.ps1 -Repository \$env:GITHUB_REPOSITORY -ImmutableReleasePolicyOnly -RequireExplicitToken\s*$') {
+        throw "Marketplace publication must run the exact immutable-policy checker before planning or upload."
     }
 }
-
 function Get-CreateDraftGhArguments {
     param([string]$Repository, [string]$ExpectedTag, [string]$NotesPath)
     return @(
@@ -2093,6 +2612,9 @@ function Invoke-SelfTest {
     $protocolManifest = "0123456789abcdef  StatsPro/StatsPro.lua"
     $protocolManifestSha = Get-LowercaseTextSha256 -Text $protocolManifest
     $protocolRunId = '12345'
+    $protocolRunAttempt = '2'
+    $protocolArchiveSha = 'a' * 64
+    $protocolCandidateSha = 'b' * 64
     $preparedState = Get-ReleaseStateData `
         -Phase 'prepared' `
         -Repository 'owner/repo' `
@@ -2102,9 +2624,22 @@ function Invoke-SelfTest {
         -NotesSha256 (Get-LowercaseTextSha256 -Text $protocolNotes) `
         -ManifestSha256 $protocolManifestSha
     $preparedBody = Get-ReleaseBody -State $preparedState -CanonicalNotes $protocolNotes
+    $preparedV2State = Get-ReleaseStateData `
+        -SchemaVersion 2 `
+        -Phase 'prepared' `
+        -Repository 'owner/repo' `
+        -ExpectedTag $tag `
+        -ExpectedCommitSha $commit `
+        -ExpectedRunId $protocolRunId `
+        -ExpectedRunAttempt $protocolRunAttempt `
+        -NotesSha256 (Get-LowercaseTextSha256 -Text $protocolNotes) `
+        -ManifestSha256 $protocolManifestSha `
+        -ArchiveSha256 $protocolArchiveSha `
+        -CandidateSha256 $protocolCandidateSha
+    $preparedV2Body = Get-ReleaseBody -State $preparedV2State -CanonicalNotes $protocolNotes
     $newProtocolRelease = {
         param([string]$Phase, [string]$RunId, [object[]]$Assets, [bool]$Draft = $true, [bool]$Immutable = $false)
-        $state = Get-ReleaseStateData -Phase $Phase -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedRunId $RunId -NotesSha256 (Get-LowercaseTextSha256 -Text $protocolNotes) -ManifestSha256 $protocolManifestSha
+        $state = Get-ReleaseStateData -SchemaVersion 2 -Phase $Phase -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedRunId $RunId -ExpectedRunAttempt $protocolRunAttempt -NotesSha256 (Get-LowercaseTextSha256 -Text $protocolNotes) -ManifestSha256 $protocolManifestSha -ArchiveSha256 $protocolArchiveSha -CandidateSha256 $protocolCandidateSha
         return [pscustomobject]@{
             tag_name = $tag
             name = $tag
@@ -2117,10 +2652,80 @@ function Invoke-SelfTest {
         }
     }
     $preparedProtocolRelease = & $newProtocolRelease 'prepared' $protocolRunId @()
+    $preparedLegacyRelease = [pscustomobject]@{
+        tag_name = $tag
+        name = $tag
+        target_commitish = $commit
+        draft = $true
+        prerelease = $false
+        immutable = $false
+        body = $preparedBody
+        assets = @()
+    }
     $parsedPrepared = Read-ReleaseStateMarker -Body $preparedBody
     if ([string]$parsedPrepared.State.transactionId -ne [string]$preparedState.transactionId -or $parsedPrepared.Notes -ne $protocolNotes) {
         throw "Canonical release marker round trip failed."
     }
+    $parsedPreparedV2 = Read-ReleaseStateMarker -Body $preparedV2Body
+    if ([int]$parsedPreparedV2.State.schemaVersion -ne 2 -or
+        $parsedPreparedV2.State.runAttempt -ne $protocolRunAttempt -or
+        $parsedPreparedV2.State.archiveSha256 -ne $protocolArchiveSha -or
+        $parsedPreparedV2.State.candidateSha256 -ne $protocolCandidateSha) {
+        throw "Canonical v2 release marker round trip failed."
+    }
+    $preparedV2Release = [pscustomobject]@{
+        tag_name = $tag
+        name = $tag
+        target_commitish = $commit
+        draft = $true
+        prerelease = $false
+        immutable = $false
+        body = $preparedV2Body
+        assets = @()
+    }
+    [void](Assert-ReleaseProtocolIdentity -Release $preparedV2Release -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'prepared' -ExpectedRunId $protocolRunId -ExpectedRunAttempt $protocolRunAttempt -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha -ExpectedArchiveSha256 $protocolArchiveSha -ExpectedCandidateSha256 $protocolCandidateSha)
+    if ((Get-PreparedDraftClaimDisposition -Release $preparedV2Release -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha -DesiredBody $preparedV2Body) -ne 'already-current') {
+        throw "Exact v2 prepared draft must not be rewritten."
+    }
+    if ((Get-PreparedDraftClaimDisposition -Release $preparedLegacyRelease -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha -DesiredBody $preparedV2Body) -ne 'rebind') {
+        throw "Safe empty v1 prepared draft must be claimable as v2."
+    }
+    $stalePreparedV2State = Get-ReleaseStateData `
+        -SchemaVersion 2 `
+        -Phase 'prepared' `
+        -Repository 'owner/repo' `
+        -ExpectedTag $tag `
+        -ExpectedCommitSha $commit `
+        -ExpectedRunId '98765' `
+        -ExpectedRunAttempt '3' `
+        -NotesSha256 (Get-LowercaseTextSha256 -Text $protocolNotes) `
+        -ManifestSha256 $protocolManifestSha `
+        -ArchiveSha256 ('c' * 64) `
+        -CandidateSha256 ('d' * 64)
+    $stalePreparedV2Release = [pscustomobject]@{
+        tag_name = $tag
+        name = $tag
+        target_commitish = $commit
+        draft = $true
+        prerelease = $false
+        immutable = $false
+        body = Get-ReleaseBody -State $stalePreparedV2State -CanonicalNotes $protocolNotes
+        assets = @()
+    }
+    if ((Get-PreparedDraftClaimDisposition -Release $stalePreparedV2Release -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha -DesiredBody $preparedV2Body) -ne 'rebind') {
+        throw "Safe stale v2 prepared draft must be claimable by the current candidate."
+    }
+    Assert-ThrowsMatch "v1 marker rejected at v2 transition" {
+        [void](Assert-ReleaseProtocolIdentity -Release $preparedLegacyRelease -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'prepared' -ExpectedRunId $protocolRunId -ExpectedRunAttempt $protocolRunAttempt -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha -ExpectedArchiveSha256 $protocolArchiveSha -ExpectedCandidateSha256 $protocolCandidateSha)
+    } "run attempt"
+    Assert-ThrowsMatch "wrong v2 archive digest rejected" {
+        [void](Assert-ReleaseProtocolIdentity -Release $preparedV2Release -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'prepared' -ExpectedRunId $protocolRunId -ExpectedRunAttempt $protocolRunAttempt -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha -ExpectedArchiveSha256 ('c' * 64) -ExpectedCandidateSha256 $protocolCandidateSha)
+    } "archive digest"
+    $staleV2Transaction = $preparedV2State.PSObject.Copy()
+    $staleV2Transaction.runAttempt = '3'
+    Assert-ThrowsMatch "stale v2 transaction rejected" {
+        [void](Read-ReleaseStateMarker -Body (Get-ReleaseBody -State $staleV2Transaction -CanonicalNotes $protocolNotes))
+    } "transaction ID"
     Assert-ThrowsMatch "uppercase release tag rejected" {
         Assert-ReleaseTag 'V1.2.3'
     } "Malformed StatsPro release tag"
@@ -2171,13 +2776,13 @@ function Invoke-SelfTest {
         [void](Read-ReleaseStateMarker -Body (Get-ReleaseBody -State $wrongTransaction -CanonicalNotes $protocolNotes))
     } "transaction ID"
     Assert-ThrowsMatch "wrong protocol owner rejected" {
-        [void](Assert-ReleaseProtocolIdentity -Release $preparedProtocolRelease -Repository 'other/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'prepared' -ExpectedNotes $protocolNotes)
+        [void](Assert-ReleaseProtocolIdentity -Release $preparedProtocolRelease -Repository 'other/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'prepared' -ExpectedRunId $protocolRunId -ExpectedRunAttempt $protocolRunAttempt -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha -ExpectedArchiveSha256 $protocolArchiveSha -ExpectedCandidateSha256 $protocolCandidateSha)
     } "identity"
     Assert-ThrowsMatch "wrong run owner rejected after claim" {
-        [void](Assert-ReleaseProtocolIdentity -Release $preparedProtocolRelease -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'prepared' -ExpectedRunId '99999' -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha)
+        [void](Assert-ReleaseProtocolIdentity -Release $preparedProtocolRelease -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'prepared' -ExpectedRunId '99999' -ExpectedRunAttempt $protocolRunAttempt -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha -ExpectedArchiveSha256 $protocolArchiveSha -ExpectedCandidateSha256 $protocolCandidateSha)
     } "belongs to run"
     Assert-ThrowsMatch "wrong package manifest rejected" {
-        [void](Assert-ReleaseProtocolIdentity -Release $preparedProtocolRelease -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'prepared' -ExpectedRunId $protocolRunId -ExpectedNotes $protocolNotes -ExpectedManifestSha256 ('f' * 64))
+        [void](Assert-ReleaseProtocolIdentity -Release $preparedProtocolRelease -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'prepared' -ExpectedRunId $protocolRunId -ExpectedRunAttempt $protocolRunAttempt -ExpectedNotes $protocolNotes -ExpectedManifestSha256 ('f' * 64) -ExpectedArchiveSha256 $protocolArchiveSha -ExpectedCandidateSha256 $protocolCandidateSha)
     } "manifest digest"
 
     $ambiguousCounters = [pscustomobject]@{ Mutations = 0; Reads = 0 }
@@ -2217,7 +2822,7 @@ function Invoke-SelfTest {
             Observed = $preparedProtocolRelease
             Assert = {
                 param([object]$Observed)
-                [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'prepared' -ExpectedRunId $protocolRunId -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha)
+                [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'prepared' -ExpectedRunId $protocolRunId -ExpectedRunAttempt $protocolRunAttempt -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha -ExpectedArchiveSha256 $protocolArchiveSha -ExpectedCandidateSha256 $protocolCandidateSha)
                 Assert-ExactAssetSet -Release $Observed -ExpectedNames @()
             }
         },
@@ -2226,7 +2831,7 @@ function Invoke-SelfTest {
             Observed = $startedProtocolRelease
             Assert = {
                 param([object]$Observed)
-                [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'marketplace-started' -ExpectedRunId $protocolRunId -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha)
+                [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'marketplace-started' -ExpectedRunId $protocolRunId -ExpectedRunAttempt $protocolRunAttempt -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha -ExpectedArchiveSha256 $protocolArchiveSha -ExpectedCandidateSha256 $protocolCandidateSha)
                 Assert-ExactAssetSet -Release $Observed -ExpectedNames @()
             }
         },
@@ -2298,7 +2903,7 @@ function Invoke-SelfTest {
         }
         Assert-DraftAssetsMatchLocalFiles -Release $draftWithDigests -ExpectedTag $tag -ArchivePath $archivePath -ReleaseJsonPath $releaseJsonPath
         $publishedProtocolRelease = & $newProtocolRelease 'marketplace-started' $protocolRunId @($draftWithDigests.assets) $false $true
-        [void](Assert-PublishedProtocolIdentity -Release $publishedProtocolRelease -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedRunId $protocolRunId -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha)
+        [void](Assert-PublishedProtocolIdentity -Release $publishedProtocolRelease -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedRunId $protocolRunId -ExpectedRunAttempt $protocolRunAttempt -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha -ExpectedArchiveSha256 $protocolArchiveSha -ExpectedCandidateSha256 $protocolCandidateSha)
         $localFiles = @{
             "StatsPro-$tag.zip" = $archivePath
             'release.json' = $releaseJsonPath
@@ -2314,7 +2919,7 @@ function Invoke-SelfTest {
                 Observed = $partialProtocol
                 Assert = {
                     param([object]$Observed)
-                    [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'marketplace-started' -ExpectedRunId $protocolRunId -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha)
+                    [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedPhase 'marketplace-started' -ExpectedRunId $protocolRunId -ExpectedRunAttempt $protocolRunAttempt -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha -ExpectedArchiveSha256 $protocolArchiveSha -ExpectedCandidateSha256 $protocolCandidateSha)
                     Assert-ReleaseAssetSubsetMatchesLocalFiles -Release $Observed -LocalFiles $localFiles
                     if (-not (Test-ContainsOrdinal -Values @(Get-ReleaseAssetNames -Release $Observed) -Expected "StatsPro-$tag.zip")) { throw 'asset missing' }
                 }
@@ -2324,7 +2929,7 @@ function Invoke-SelfTest {
                 Observed = $publishedProtocolRelease
                 Assert = {
                     param([object]$Observed)
-                    [void](Assert-PublishedProtocolIdentity -Release $Observed -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedRunId $protocolRunId -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha)
+                    [void](Assert-PublishedProtocolIdentity -Release $Observed -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedRunId $protocolRunId -ExpectedRunAttempt $protocolRunAttempt -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha -ExpectedArchiveSha256 $protocolArchiveSha -ExpectedCandidateSha256 $protocolCandidateSha)
                 }
             }
         )) {
@@ -2442,14 +3047,14 @@ function Invoke-SelfTest {
         $mutated = $workflowText.Remove($preflight.Index, $preflight.Length).Insert($preflight.Index, $replacement)
         Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
     } "preflight.*first-created, non-forced, non-deleted"
-    Assert-ThrowsMatch "weakened release event guard rejected" {
-        $release = Get-WorkflowJobBlock -WorkflowText $workflowText -JobName 'release'
-        $replacement = $release.Value.Replace(
+    Assert-ThrowsMatch "weakened package event guard rejected" {
+        $packageReleaseJob = Get-WorkflowJobBlock -WorkflowText $workflowText -JobName 'package'
+        $replacement = $packageReleaseJob.Value.Replace(
             'github.event.created == true && github.event.forced == false && github.event.deleted == false',
             'github.event.created == true && github.event.deleted == false')
-        $mutated = $workflowText.Remove($release.Index, $release.Length).Insert($release.Index, $replacement)
+        $mutated = $workflowText.Remove($packageReleaseJob.Index, $packageReleaseJob.Length).Insert($packageReleaseJob.Index, $replacement)
         Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-    } "release.*first-created, non-forced, non-deleted"
+    } "package.*first-created, non-forced, non-deleted"
     Assert-ThrowsMatch "both release event guards weakened together rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
             'github.event.created == true && github.event.forced == false && github.event.deleted == false',
@@ -2717,329 +3322,210 @@ function Invoke-SelfTest {
         throw "Immutable policy token detector matched a longer secret name."
     }
 
-    $releaseJobBlock = Get-WorkflowJobBlock -WorkflowText $workflowText -JobName 'release'
-    $replaceReleaseJob = {
-        param([string]$Replacement)
-        return $workflowText.Remove($releaseJobBlock.Index, $releaseJobBlock.Length).Insert(
-            $releaseJobBlock.Index,
-            $Replacement)
+    $replaceJob = {
+        param([string]$JobName, [scriptblock]$Mutation)
+        $job = Get-WorkflowJobBlock -WorkflowText $workflowText -JobName $JobName
+        $replacement = & $Mutation $job.Value
+        return $workflowText.Remove($job.Index, $job.Length).Insert($job.Index, $replacement)
     }
-    Assert-ThrowsMatch "missing release credential environment rejected" {
-        $replacement = $releaseJobBlock.Value -replace '(?m)^\s{4}environment:\s*marketplace-release\s*\r?\n', ''
-        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
-    } "environment marketplace-release"
-    Assert-ThrowsMatch "wrong release credential environment rejected" {
-        $replacement = $releaseJobBlock.Value.Replace(
-            '    environment: marketplace-release',
-            '    environment: marketplace-manual')
-        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
-    } "environment marketplace-release"
-    Assert-ThrowsMatch "missing checkout persistence boundary rejected" {
-        $replacement = $releaseJobBlock.Value -replace '(?m)^\s{10}persist-credentials:\s*false\s*\r?\n', ''
-        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
-    } "persist-credentials: false"
-    Assert-ThrowsMatch "enabled checkout persistence rejected" {
-        $replacement = $releaseJobBlock.Value -replace '(?m)^(\s{10}persist-credentials:)\s*false\s*$', '$1 true'
-        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
-    } "persist-credentials: false"
-    Assert-ThrowsMatch "dynamic checkout persistence rejected" {
-        $replacement = $releaseJobBlock.Value -replace '(?m)^(\s{10}persist-credentials:)\s*false\s*$', '$1 ${{ always() }}'
-        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
-    } "literal persist-credentials: false"
-    Assert-ThrowsMatch "duplicate checkout persistence setting rejected" {
-        $replacement = $releaseJobBlock.Value.Replace(
-            '          persist-credentials: false',
-            "          persist-credentials: false`n          persist-credentials: false")
-        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
-    } "exactly one literal persist-credentials: false"
-    Assert-ThrowsMatch "explicit checkout token rejected" {
-        $replacement = $releaseJobBlock.Value.Replace(
-            '          persist-credentials: false',
-            "          persist-credentials: false`n          token: `${{ secrets.GITHUB_TOKEN }}")
-        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
-    } "must not receive explicit credentials"
-    Assert-ThrowsMatch "missing post-checkout credential verification rejected" {
-        $replacement = $releaseJobBlock.Value.Replace(
-            '      - name: Verify anonymous checkout boundary',
-            '      - name: Credential check removed')
-        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
-    } "verify checkout credentials immediately"
-    Assert-ThrowsMatch "write-capable release preflight rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace 'contents: read', 'contents: write')
-    } "preflight must have contents: read"
-    Assert-ThrowsMatch "release job without preflight dependency rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^    needs: preflight\s*\r?\n', '')
-    } "publication must depend on the read-only preflight"
 
-    $checksPackageJob = Get-WorkflowJobBlock -WorkflowText $checksWorkflowText -JobName 'package-contract'
-    Assert-ThrowsMatch "checks package checkout persistence rejected" {
-        $replacement = $checksPackageJob.Value -replace '(?m)^\s{10}persist-credentials:\s*false\s*\r?\n', ''
-        $mutated = $checksWorkflowText.Remove($checksPackageJob.Index, $checksPackageJob.Length).Insert(
-            $checksPackageJob.Index,
-            $replacement)
-        Assert-WorkflowCheckoutCredentialBoundary `
-            -WorkflowText $mutated `
-            -JobNames @('checks', 'package-contract')
-    } "persist-credentials: false"
+    Assert-ThrowsMatch "missing release job rejected" {
+        $job = Get-WorkflowJobBlock -WorkflowText $workflowText -JobName 'marketplace-upload'
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Remove($job.Index, $job.Length)
+    } "job inventory|missing job"
 
-    $githubTokenExpression = '${{ secrets.GITHUB_TOKEN }}'
-    $bracketSecretTokenExpression = '${{ secrets[''GITHUB_TOKEN''] }}'
-    $bracketContextTokenExpression = '${{ github["token"] }}'
-    $immutableTokenExpression = '${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}'
-    $bracketImmutableTokenExpression = '${{ secrets[''IMMUTABLE_RELEASES_READ_TOKEN''] }}'
-    $immutablePolicyBlock = [regex]::Match(
-        $workflowText,
-        '(?ms)^\s{6}- name: Verify immutable release policy\s*$.*?(?=^\s{6}- name:|\z)'
-    )
-    $marketplaceCredentialBlock = [regex]::Match(
-        $workflowText,
-        '(?ms)^\s{6}- name: Verify marketplace release credentials and versions\s*$.*?(?=^\s{6}- name:|\z)'
-    )
-    Assert-ThrowsMatch "missing immutable policy step rejected" {
-        $mutated = $workflowText.Remove($immutablePolicyBlock.Index, $immutablePolicyBlock.Length)
+    Assert-ThrowsMatch "package write permission rejected" {
+        $mutated = & $replaceJob 'package' { param($value) $value.Replace('      contents: read', '      contents: write') }
         Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-    } "Verify immutable release policy|exactly one"
-    Assert-ThrowsMatch "duplicate immutable policy step rejected" {
-        $mutated = $workflowText.Replace(
-            '      - name: Trim release changelog',
-            $immutablePolicyBlock.Value + '      - name: Trim release changelog')
+    } "package.*contents: read"
+
+    Assert-ThrowsMatch "verify write permission rejected" {
+        $mutated = & $replaceJob 'verify' { param($value) $value.Replace('      contents: read', '      contents: write') }
         Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-    } "exactly one GitHub-management step|exactly one immutable"
-    Assert-ThrowsMatch "immutable policy after Packager rejected" {
-        $withoutPolicy = $workflowText.Remove($immutablePolicyBlock.Index, $immutablePolicyBlock.Length)
-        $mutated = $withoutPolicy.Replace(
-            '      - name: Validate package artifact',
-            $immutablePolicyBlock.Value + '      - name: Validate package artifact')
+    } "verify.*contents: read"
+
+    Assert-ThrowsMatch "marketplace read permission rejected" {
+        $mutated = & $replaceJob 'marketplace-upload' { param($value) $value.Replace('      contents: write', '      contents: read') }
         Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-    } "immediately after refusing|before every Packager|out of the required"
-    Assert-ThrowsMatch "immutable policy self-test substitution rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '-ImmutableReleasePolicyOnly -RequireExplicitToken', '-SelfTest')
-    } "exact fail-closed read-only checker"
-    Assert-ThrowsMatch "immutable policy without explicit token gate rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace ' -RequireExplicitToken', '')
-    } "exact fail-closed read-only checker"
-    Assert-ThrowsMatch "automatic GitHub token for immutable policy rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace 'secrets\.IMMUTABLE_RELEASES_READ_TOKEN', 'secrets.GITHUB_TOKEN')
-    } "expected step-local GH_TOKEN source"
-    Assert-ThrowsMatch "immutable policy token in first Packager rejected" {
-        $mutated = $workflowText.Replace(
-            '      - name: Build package without publishing',
-            "      - name: Build package without publishing`n        env:`n          POLICY_TOKEN: $immutableTokenExpression")
+    } "marketplace-upload.*contents: write"
+
+    Assert-ThrowsMatch "third-party action in write job rejected" {
+        $mutated = & $replaceJob 'github-prepare' {
+            param($value)
+            $value.Replace(
+                'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c',
+                'BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28')
+        }
         Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-    } "outside its approved shell step"
-    Assert-ThrowsMatch "bracket immutable token in marketplace Packager rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "WOWI_API_TOKEN: \$\{\{ secrets\.WOWI_API_TOKEN \}\}", "WOWI_API_TOKEN: $bracketImmutableTokenExpression")
-    } "outside its approved shell step"
-    Assert-ThrowsMatch "missing marketplace credential preflight rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Remove(
-            $marketplaceCredentialBlock.Index,
-            $marketplaceCredentialBlock.Length)
-    } "marketplace step|credential preflight|missing required step"
-    Assert-ThrowsMatch "duplicate marketplace credential preflight rejected" {
+    } "allowlist"
+
+    Assert-ThrowsMatch "credential environment on write job rejected" {
+        $mutated = & $replaceJob 'github-finalize' { param($value) $value.Replace('    runs-on:', "    environment: marketplace-release`n    runs-on:") }
+        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+    } "keys|must not bind a credential environment"
+
+    Assert-ThrowsMatch "wrong job dependency rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
-            '      - name: Trim release changelog',
-            $marketplaceCredentialBlock.Value + '      - name: Trim release changelog')
-    } "exactly one marketplace step|exactly one marketplace credential"
-    Assert-ThrowsMatch "marketplace credential preflight after first Packager rejected" {
-        $withoutCredential = $workflowText.Remove(
-            $marketplaceCredentialBlock.Index,
-            $marketplaceCredentialBlock.Length)
-        $mutated = $withoutCredential.Replace(
-            '      - name: Validate package artifact',
-            $marketplaceCredentialBlock.Value + '      - name: Validate package artifact')
+            '    needs: [package, marketplace-upload]',
+            '    needs: marketplace-upload')
+    } "wrong dependency boundary"
+
+    Assert-ThrowsMatch "missing credential environment rejected" {
+        $mutated = & $replaceJob 'marketplace-upload' { param($value) $value -replace '(?m)^    environment: marketplace-release\s*\r?\n', '' }
         Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-    } "immediately after|before every Packager|out of the required"
-    Assert-ThrowsMatch "marketplace credential self-test substitution rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '\./scripts/check-marketplace-versions\.ps1', './scripts/check-marketplace-versions.ps1 -SelfTest')
-    } "exact fail-closed checker"
-    Assert-ThrowsMatch "fallible marketplace credential step rejected" {
-        $mutated = $workflowText -replace `
-            '(?m)^(\s{6}- name: Verify marketplace release credentials and versions)\s*$', `
-            "`$1`n        continue-on-error: true"
-        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-    } "mandatory pwsh step"
-    foreach ($marketplaceSecretName in @('CF_API_KEY', 'WAGO_API_TOKEN', 'WOWI_API_TOKEN')) {
-        Assert-ThrowsMatch "missing $marketplaceSecretName preflight binding rejected" {
-            $canonicalLinePattern = "(?m)^\s{10}${marketplaceSecretName}:\s*\`$\{\{\s*secrets\.${marketplaceSecretName}\s*\}\}\s*\r?\n"
-            $mutatedBlock = [regex]::Replace($marketplaceCredentialBlock.Value, $canonicalLinePattern, '')
-            $mutated = $workflowText.Remove(
-                $marketplaceCredentialBlock.Index,
-                $marketplaceCredentialBlock.Length).Insert(
-                    $marketplaceCredentialBlock.Index,
-                    $mutatedBlock)
-            Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-        } "exactly the three marketplace|bind $marketplaceSecretName"
-        Assert-ThrowsMatch "wrong $marketplaceSecretName preflight source rejected" {
-            $mutatedBlock = $marketplaceCredentialBlock.Value.Replace(
-                "secrets.${marketplaceSecretName}",
-                "secrets.${marketplaceSecretName}_BACKUP")
-            $mutated = $workflowText.Remove(
-                $marketplaceCredentialBlock.Index,
-                $marketplaceCredentialBlock.Length).Insert(
-                    $marketplaceCredentialBlock.Index,
-                    $mutatedBlock)
-            Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-        } "bind $marketplaceSecretName|non-canonical"
-    }
-    Assert-ThrowsMatch "swapped marketplace preflight sources rejected" {
-        $mutatedBlock = $marketplaceCredentialBlock.Value.Replace(
-            'secrets.CF_API_KEY',
-            'secrets.TEMP_MARKETPLACE_TOKEN').Replace(
-                'secrets.WAGO_API_TOKEN',
-                'secrets.CF_API_KEY').Replace(
-                    'secrets.TEMP_MARKETPLACE_TOKEN',
-                    'secrets.WAGO_API_TOKEN')
-        $mutated = $workflowText.Remove(
-            $marketplaceCredentialBlock.Index,
-            $marketplaceCredentialBlock.Length).Insert(
-                $marketplaceCredentialBlock.Index,
-                $mutatedBlock)
-        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-    } "bind CF_API_KEY|bind WAGO_API_TOKEN|non-canonical"
-    Assert-ThrowsMatch "marketplace secret in first Packager rejected" {
+    } "keys|environment marketplace-release"
+
+    Assert-ThrowsMatch "marketplace secret in package job rejected" {
         $mutated = $workflowText.Replace(
             '      - name: Build package without publishing',
             "      - name: Build package without publishing`n        env:`n          CF_API_KEY: `${{ secrets.CF_API_KEY }}")
         Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-    } "outside the approved preflight"
-    Assert-ThrowsMatch "job-level marketplace secret rejected" {
-        $replacement = $releaseJobBlock.Value.Replace(
-            '  release:',
-            "  release:`n    env:`n      WAGO_API_TOKEN: `${{ secrets.WAGO_API_TOKEN }}")
-        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
-    } "outside the approved preflight"
-    Assert-ThrowsMatch "job-level GitHub token rejected" {
-        $replacement = $releaseJobBlock.Value.Replace(
-            '  release:',
-            "  release:`n    env:`n      GH_TOKEN: $githubTokenExpression")
-        Assert-ReleaseWorkflowBoundary -WorkflowText (& $replaceReleaseJob $replacement)
-    } "outside its approved shell step"
-    Assert-ThrowsMatch "GitHub token in first Packager rejected" {
-        $mutated = $workflowText.Replace(
-            '      - name: Build package without publishing',
-            "      - name: Build package without publishing`n        env:`n          GH_TOKEN: $githubTokenExpression")
-        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-    } "outside its approved shell step"
-    Assert-ThrowsMatch "bracket GitHub secret in first Packager rejected" {
-        $mutated = $workflowText.Replace(
-            '      - name: Build package without publishing',
-            "      - name: Build package without publishing`n        env:`n          GH_TOKEN: $bracketSecretTokenExpression")
-        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-    } "outside its approved shell step"
-    Assert-ThrowsMatch "GitHub token in rebuild Packager rejected" {
-        $mutated = $workflowText.Replace(
-            '      - name: Rebuild package without publishing',
-            "      - name: Rebuild package without publishing`n        env:`n          GH_TOKEN: $githubTokenExpression")
-        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-    } "outside its approved shell step"
-    Assert-ThrowsMatch "GitHub token in changelog trim step rejected" {
-        $mutated = $workflowText.Replace(
-            '      - name: Trim release changelog',
-            "      - name: Trim release changelog`n        env:`n          GH_TOKEN: $githubTokenExpression")
-        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-    } "outside its approved shell step"
-    Assert-ThrowsMatch "bracket GitHub context token in changelog trim step rejected" {
-        $mutated = $workflowText.Replace(
-            '      - name: Trim release changelog',
-            "      - name: Trim release changelog`n        env:`n          GH_TOKEN: $bracketContextTokenExpression")
-        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-    } "outside its approved shell step"
-    Assert-ThrowsMatch "single-pending release queue rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "queue: max", "queue: single")
-    } "queue: max"
-    Assert-ThrowsMatch "missing publication ancestry recheck rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "check-release-ancestry\.ps1", "echo ancestry-skipped")
-    } "fresh ancestry gate"
-    Assert-ThrowsMatch "disabled exact pre-upload switch rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "-RequireExactPackagerProjectVersion", '-RequireExactPackagerProjectVersion:$false')
-    } "immediate pre-upload step"
-    Assert-ThrowsMatch "run attempt substituted for stable run ID rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '\$env:GITHUB_RUN_ID', '$env:GITHUB_RUN_ATTEMPT')
-    } "ExpectedRunId"
-    Assert-ThrowsMatch "wrong release repository binding rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '\$env:GITHUB_REPOSITORY', '$env:OTHER_REPOSITORY')
-    } "Repository|exact fail-closed|published changelog parity"
-    Assert-ThrowsMatch "wrong release tag binding rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '\$env:GITHUB_REF_NAME', '$env:OTHER_TAG')
-    } "ExpectedTag|exact fail-closed|Canonical release notes|published changelog parity"
-    Assert-ThrowsMatch "conditional interrupted-state validation rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^(\s{6}- name: Validate interrupted release state\s*)$', "`$1`n        if: always()")
-    } "must be mandatory"
-    Assert-ThrowsMatch "missing durable marketplace-started transition rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '-Mode MarkMarketplaceStarted', '-Mode CreateDraft')
-    } "MarkMarketplaceStarted"
-    Assert-ThrowsMatch "noncanonical interrupted-state notes rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '-ExportTopChangelogPath CHANGELOG\.md', '-ExportTopChangelogPath release-notes.md')
-    } "Canonical release notes"
-    Assert-ThrowsMatch "conditional draft preparation rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^(\s{6}- name: Prepare resumable draft release\s*)$', "`$1`n        if: always()")
-    } "must be mandatory"
-    Assert-ThrowsMatch "marketplace tree reuse flags rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "args: -c -e -o", "args: -c -e")
-    } "reusing the validated tree"
-    $publishMarker = "      - name: Publish package to marketplaces"
-    $insertedStep = "      - name: Unexpected intervening step`n        run: echo changed`n`n"
-    Assert-ThrowsMatch "intervening pre-upload step rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace($publishMarker, $insertedStep + $publishMarker)
-    } "must be consecutive"
-    $preUploadBlock = [regex]::Match($workflowText, "(?ms)^\s{6}- name: Validate exact package immediately before marketplace upload\s*$.*?(?=^\s{6}- name:|\z)")
-    $publishBlock = [regex]::Match($workflowText, "(?ms)^\s{6}- name: Publish package to marketplaces\s*$.*?(?=^\s{6}- name:|\z)")
-    $swappedWorkflow = $workflowText.Substring(0, $preUploadBlock.Index) +
-        $publishBlock.Value + $preUploadBlock.Value +
-        $workflowText.Substring($publishBlock.Index + $publishBlock.Length)
-    Assert-ThrowsMatch "pre-upload validation after marketplace publish rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText $swappedWorkflow
-    } "out of the required|exactly one GitHub-management step"
-    $postPublishMarker = "      - name: Validate marketplace archive and create release metadata"
-    foreach ($marketplaceSecretName in @('CF_API_KEY', 'WAGO_API_TOKEN', 'WOWI_API_TOKEN')) {
-        Assert-ThrowsMatch "missing $marketplaceSecretName publishing binding rejected" {
-            $canonicalLinePattern = "(?m)^\s{10}${marketplaceSecretName}:\s*\`$\{\{\s*secrets\.${marketplaceSecretName}\s*\}\}\s*\r?\n"
-            $mutatedPublishBlock = [regex]::Replace($publishBlock.Value, $canonicalLinePattern, '')
-            $mutated = $workflowText.Remove($publishBlock.Index, $publishBlock.Length).Insert(
-                $publishBlock.Index,
-                $mutatedPublishBlock)
-            Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-        } "exactly the three marketplace|bind $marketplaceSecretName"
-    }
-    Assert-ThrowsMatch "swapped publishing marketplace sources rejected" {
-        $mutatedPublishBlock = $publishBlock.Value.Replace(
-            'secrets.CF_API_KEY',
-            'secrets.TEMP_MARKETPLACE_TOKEN').Replace(
-                'secrets.WAGO_API_TOKEN',
-                'secrets.CF_API_KEY').Replace(
-                    'secrets.TEMP_MARKETPLACE_TOKEN',
-                    'secrets.WAGO_API_TOKEN')
-        $mutated = $workflowText.Remove($publishBlock.Index, $publishBlock.Length).Insert(
-            $publishBlock.Index,
-            $mutatedPublishBlock)
-        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
-    } "bind CF_API_KEY|bind WAGO_API_TOKEN|non-canonical"
-    Assert-ThrowsMatch "duplicate publishing Packager step rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
-            $postPublishMarker,
-            $publishBlock.Value + $postPublishMarker)
-    } "exactly one publishing Packager step|exactly one marketplace step"
-    Assert-ThrowsMatch "wrong pre-upload Packager output binding rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace 'steps\.rebuild-package-output\.outputs\.project_version', 'steps.build-package-output.outputs.project_version')
-    } "immediate pre-upload step"
-    Assert-ThrowsMatch "missing Packager artifact resolver rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace 'resolve-packager-output\.ps1', 'missing-packager-output.ps1')
-    } "artifact-output resolver"
-    Assert-ThrowsMatch "conditional Packager artifact resolver rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^(\s{8}id: build-package-output\s*)$', "`$1`n        if: always()")
-    } "artifact-output resolver"
-    Assert-ThrowsMatch "extra Packager step rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
-            $publishMarker,
-            "      - name: Unexpected dry run`n        uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28`n        with:`n          args: -d`n`n$publishMarker")
-    } "exactly 3 Packager steps"
-    Assert-ThrowsMatch "GitHub token in marketplace step rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "WOWI_API_TOKEN: \$\{\{ secrets\.WOWI_API_TOKEN \}\}", 'GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}')
-    } "outside its approved shell step"
-    Assert-ThrowsMatch "bracket GitHub token in marketplace Packager rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace "WOWI_API_TOKEN: \$\{\{ secrets\.WOWI_API_TOKEN \}\}", "WOWI_API_TOKEN: $bracketSecretTokenExpression")
-    } "outside its approved shell step"
+    } "secret.*approved|secret-free"
 
+    Assert-ThrowsMatch "publishing Packager flags rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace('          args: -e -d', '          args: -c -e -o')
+    } "non-publishing Packager"
+
+    Assert-ThrowsMatch "artifact overwrite rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace('          overwrite: false', '          overwrite: true')
+    } "immutable handoff setting"
+
+    Assert-ThrowsMatch "hidden candidate exclusion rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace('          include-hidden-files: true', '          include-hidden-files: false')
+    } "immutable handoff setting"
+
+    Assert-ThrowsMatch "artifact download by name rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace 'artifact-ids: \$\{\{ needs\.package\.outputs\.artifact_id \}\}', 'name: release-candidate')
+    } "exact current-run artifact ID"
+
+    Assert-ThrowsMatch "foreign artifact run rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            '          digest-mismatch: error',
+            "          digest-mismatch: error`n          run-id: 123")
+    } "exact current-run artifact ID"
+
+    Assert-ThrowsMatch "artifact digest mismatch warning rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace('          digest-mismatch: error', '          digest-mismatch: warn')
+    } "fail on digest mismatch"
+
+    Assert-ThrowsMatch "wrong candidate hash source rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            "needs.package.outputs.candidate_sha256",
+            "needs.package.outputs.archive_sha256")
+    } "exact candidate|candidate identity|canonical YAML block"
+
+    Assert-ThrowsMatch "wrong run-attempt binding rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            '-ExpectedRunAttempt ''${{ needs.package.outputs.run_attempt }}''',
+            '-ExpectedRunAttempt $env:GITHUB_RUN_ATTEMPT')
+    } "candidate identity|canonical YAML block"
+
+    Assert-ThrowsMatch "missing inner archive hash output rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^\s{6}archive_sha256:.*\r?\n', '')
+    } "artifact identity and inner candidate hashes"
+
+    Assert-ThrowsMatch "missing package attempt output rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^\s{6}run_attempt:.*\r?\n', '')
+    } "artifact identity and inner candidate hashes"
+
+    Assert-ThrowsMatch "preliminary project version output rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            'steps.rebuild-package-output.outputs.project_version',
+            'steps.build-package-output.outputs.project_version')
+    } "artifact identity and inner candidate hashes"
+
+    $packageJob = Get-WorkflowJobBlock -WorkflowText $workflowText -JobName 'package'
+    $createBlock = [regex]::Match($packageJob.Value, '(?ms)^\s{6}- name: Create exact release candidate\s*$.*?(?=^\s{6}- name:|\z)')
+    $uploadBlock = [regex]::Match($packageJob.Value, '(?ms)^\s{6}- name: Upload exact release candidate\s*$.*?(?=^\s{6}- name:|\z)')
+    $swappedPackage = $packageJob.Value.Substring(0, $createBlock.Index) +
+        $uploadBlock.Value + $createBlock.Value +
+        $packageJob.Value.Substring($uploadBlock.Index + $uploadBlock.Length)
+    Assert-ThrowsMatch "candidate attestation after artifact upload rejected" {
+        $mutated = $workflowText.Remove($packageJob.Index, $packageJob.Length).Insert($packageJob.Index, $swappedPackage)
+        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+    } "before artifact upload|step inventory"
+
+    Assert-ThrowsMatch "wrong marketplace archive hash rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            '-ExpectedSha256 ''${{ needs.package.outputs.archive_sha256 }}''',
+            '-ExpectedSha256 ''${{ needs.package.outputs.candidate_sha256 }}''')
+    } "already verified exact archive|canonical YAML block"
+
+    Assert-ThrowsMatch "marketplace plan hash bypass rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            '-ExpectedPlanSha256 ''${{ steps.prepare-marketplace.outputs.plan_sha256 }}''',
+            '-ExpectedPlanSha256 ''${{ needs.package.outputs.candidate_sha256 }}''')
+    } "canonical YAML block|already verified exact archive"
+
+    Assert-ThrowsMatch "missing marketplace credential binding rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^\s{10}WOWI_API_TOKEN:\s*\$\{\{ secrets\.WOWI_API_TOKEN \}\}\s*\r?\n', '')
+    } "secret 'WOWI_API_TOKEN'"
+
+    Assert-ThrowsMatch "unknown secret reference rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            'secrets.WOWI_API_TOKEN',
+            'secrets.WOWI_API_TOKEN_BACKUP')
+    } "secret 'WOWI_API_TOKEN'|unapproved"
+
+    Assert-ThrowsMatch "github token context injection rejected" {
+        $replacement = '$1' + "`n        env:`n          GH_TOKEN: `${{ github.token }}"
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^(\s{8}id: verify-candidate\s*)$', $replacement)
+    } "github.token reference|candidate verification step.*canonical YAML block"
+
+    Assert-ThrowsMatch "checkout repository redirect rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            '          fetch-depth: 0',
+            "          repository: attacker/controlled`n          fetch-depth: 0")
+    } "checkout step"
+
+    Assert-ThrowsMatch "privileged command injection rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            '            -Mode CreateDraft `',
+            "          Write-Host `$env:GH_TOKEN`n            -Mode CreateDraft ``")
+    } "sensitive step|step inventory"
+
+    Assert-ThrowsMatch "upstream publisher script rewrite rejected" {
+        $mutated = & $replaceJob 'github-prepare' {
+            param($value)
+            $value.Replace(
+                '            -OutputPath $env:GITHUB_OUTPUT',
+                "            -OutputPath `$env:GITHUB_OUTPUT`n          Set-Content ./scripts/manage-github-release.ps1 'Write-Host replaced'")
+        }
+        Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
+    } "candidate verification step.*canonical YAML block"
+
+    Assert-ThrowsMatch "missing fresh marketplace attempt guard rejected" {
+        $step = [regex]::Match(
+            (Get-WorkflowJobBlock -WorkflowText $workflowText -JobName 'marketplace-upload').Value,
+            '(?ms)^\s{6}- name: Require fresh package attempt before marketplace publication\s*$.*?(?=^\s{6}- name:|\z)')
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Remove($step.Index + (Get-WorkflowJobBlock -WorkflowText $workflowText -JobName 'marketplace-upload').Index, $step.Length)
+    } "step inventory"
+
+    Assert-ThrowsMatch "unpinned official action rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c',
+            'actions/download-artifact@v8')
+    } "allowlist"
+
+    Assert-ThrowsMatch "alternate uses key rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            '        uses: actions/upload-artifact@',
+            '        uses : actions/upload-artifact@')
+    } "canonical plain mapping keys"
+
+    Assert-ThrowsMatch "unnamed action step rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            '      - name: Upload exact release candidate',
+            '      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a')
+    } "Every release step must be named"
+
+    Assert-ThrowsMatch "fallible candidate verification rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^(\s{6}- name: Verify exact release candidate\s*)$', "`$1`n        continue-on-error: true")
+    } "mandatory.*fail closed"
+
+    Assert-ThrowsMatch "single-pending release queue rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace('queue: max', 'queue: single')
+    } "queue: max"
     Write-Host "GitHub release management self-test passed."
 }
 
@@ -3058,6 +3544,9 @@ if ($Mode -ne "RefuseExisting") {
 }
 if ($Mode -in @("CreateDraft", "MarkMarketplaceStarted", "AttachAssets", "Publish")) {
     Assert-RunId $ExpectedRunId
+    Assert-RunAttempt $ExpectedRunAttempt
+    Assert-LowercaseSha256 -Value $ExpectedArchiveSha256 -Description 'Expected release archive digest'
+    Assert-LowercaseSha256 -Value $ExpectedCandidateSha256 -Description 'Expected release candidate digest'
 }
 if ($AttestationAttempts -lt 1) {
     throw "-AttestationAttempts must be at least 1."
@@ -3089,13 +3578,17 @@ switch ($Mode) {
         $manifestText = Get-CanonicalFileText -Path $ManifestPath -Description "validated package manifest"
         $manifestSha256 = Get-LowercaseTextSha256 -Text $manifestText
         $desiredState = Get-ReleaseStateData `
+            -SchemaVersion 2 `
             -Phase 'prepared' `
             -Repository $Repository `
             -ExpectedTag $ExpectedTag `
             -ExpectedCommitSha $ExpectedCommitSha `
             -ExpectedRunId $ExpectedRunId `
+            -ExpectedRunAttempt $ExpectedRunAttempt `
             -NotesSha256 (Get-LowercaseTextSha256 -Text $notesText) `
-            -ManifestSha256 $manifestSha256
+            -ManifestSha256 $manifestSha256 `
+            -ArchiveSha256 $ExpectedArchiveSha256 `
+            -CandidateSha256 $ExpectedCandidateSha256
         $desiredBody = Get-ReleaseBody -State $desiredState -CanonicalNotes $notesText
         $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
         Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
@@ -3110,17 +3603,23 @@ switch ($Mode) {
                     -Attempts $AttestationAttempts `
                     -AssertState {
                         param([object]$Observed)
-                        [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'prepared' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+                        [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'prepared' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
                         Assert-ExactAssetSet -Release $Observed -ExpectedNames @()
                     })
             }
             Write-Host "Prepared draft release marker created for $ExpectedTag."
         }
         else {
-            $parsed = Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'prepared' -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256
-            Assert-ExactAssetSet -Release $release -ExpectedNames @()
-            if ([string]$parsed.State.runId -eq $ExpectedRunId) {
-                Write-Host "Prepared draft release marker already belongs to run $ExpectedRunId; no mutation needed."
+            $claimDisposition = Get-PreparedDraftClaimDisposition `
+                -Release $release `
+                -Repository $Repository `
+                -ExpectedTag $ExpectedTag `
+                -ExpectedCommitSha $ExpectedCommitSha `
+                -ExpectedNotes $notesText `
+                -ExpectedManifestSha256 $manifestSha256 `
+                -DesiredBody $desiredBody
+            if ($claimDisposition -eq 'already-current') {
+                Write-Host "Prepared draft release marker already matches run $ExpectedRunId attempt $ExpectedRunAttempt; no mutation needed."
             }
             else {
                 Invoke-WithTemporaryReleaseBody -Body $desiredBody -Action {
@@ -3133,11 +3632,11 @@ switch ($Mode) {
                         -Attempts $AttestationAttempts `
                         -AssertState {
                             param([object]$Observed)
-                            [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'prepared' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+                            [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'prepared' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
                             Assert-ExactAssetSet -Release $Observed -ExpectedNames @()
                         })
                 }
-                Write-Host "Prepared draft release marker safely claimed by run $ExpectedRunId."
+                Write-Host "Prepared draft release marker safely rebound to run $ExpectedRunId attempt $ExpectedRunAttempt."
             }
         }
         Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
@@ -3146,10 +3645,10 @@ switch ($Mode) {
         $notesText = Get-CanonicalFileText -Path $NotesPath -Description "release notes"
         $manifestSha256 = Get-LowercaseTextSha256 -Text (Get-CanonicalFileText -Path $ManifestPath -Description "validated package manifest")
         $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
-        [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'prepared' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+        [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'prepared' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
         Assert-ExactAssetSet -Release $release -ExpectedNames @()
         Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
-        $startedState = Get-ReleaseStateData -Phase 'marketplace-started' -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedRunId $ExpectedRunId -NotesSha256 (Get-LowercaseTextSha256 -Text $notesText) -ManifestSha256 $manifestSha256
+        $startedState = Get-ReleaseStateData -SchemaVersion 2 -Phase 'marketplace-started' -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -NotesSha256 (Get-LowercaseTextSha256 -Text $notesText) -ManifestSha256 $manifestSha256 -ArchiveSha256 $ExpectedArchiveSha256 -CandidateSha256 $ExpectedCandidateSha256
         $startedBody = Get-ReleaseBody -State $startedState -CanonicalNotes $notesText
         Invoke-WithTemporaryReleaseBody -Body $startedBody -Action {
             param([string]$BodyPath)
@@ -3161,7 +3660,7 @@ switch ($Mode) {
                 -Attempts $AttestationAttempts `
                 -AssertState {
                     param([object]$Observed)
-                    [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+                    [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
                     Assert-ExactAssetSet -Release $Observed -ExpectedNames @()
                 })
         }
@@ -3169,6 +3668,7 @@ switch ($Mode) {
     }
     "AttachAssets" {
         $paths = Assert-ReleaseAssetPaths -ArchivePath $ArchivePath -ReleaseJsonPath $ReleaseJsonPath -ExpectedTag $ExpectedTag
+        [void](Assert-LocalArchiveSha256 -Path $paths.Archive -ExpectedSha256 $ExpectedArchiveSha256)
         $notesText = Get-CanonicalFileText -Path $NotesPath -Description "release notes"
         $manifestSha256 = Get-LowercaseTextSha256 -Text (Get-CanonicalFileText -Path $ManifestPath -Description "validated package manifest")
         $localFiles = @{
@@ -3176,8 +3676,9 @@ switch ($Mode) {
             "release.json"              = $paths.ReleaseJson
         }
         foreach ($assetName in @("StatsPro-$ExpectedTag.zip", "release.json")) {
+            [void](Assert-LocalArchiveSha256 -Path $paths.Archive -ExpectedSha256 $ExpectedArchiveSha256)
             $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
-            [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+            [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
             Assert-ReleaseAssetSubsetMatchesLocalFiles -Release $release -LocalFiles $localFiles
             if (-not (Test-ContainsOrdinal -Values @(Get-ReleaseAssetNames -Release $release) -Expected $assetName)) {
                 [void](Invoke-GitHubMutationAndAttest `
@@ -3188,7 +3689,7 @@ switch ($Mode) {
                     -Attempts $AttestationAttempts `
                     -AssertState {
                         param([object]$Observed)
-                        [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+                        [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
                         Assert-ReleaseAssetSubsetMatchesLocalFiles -Release $Observed -LocalFiles $localFiles
                         if (-not (Test-ContainsOrdinal -Values @(Get-ReleaseAssetNames -Release $Observed) -Expected $assetName)) {
                             throw "Uploaded asset '$assetName' is not visible."
@@ -3197,20 +3698,22 @@ switch ($Mode) {
             }
         }
         $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
-        [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+        [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
         Assert-DraftAssetsMatchLocalFiles -Release $release -ExpectedTag $ExpectedTag -ArchivePath $paths.Archive -ReleaseJsonPath $paths.ReleaseJson
         Write-Host "Validated release assets attached to draft $ExpectedTag."
     }
     "Publish" {
         $paths = Assert-ReleaseAssetPaths -ArchivePath $ArchivePath -ReleaseJsonPath $ReleaseJsonPath -ExpectedTag $ExpectedTag
+        [void](Assert-LocalArchiveSha256 -Path $paths.Archive -ExpectedSha256 $ExpectedArchiveSha256)
         $notesText = Get-CanonicalFileText -Path $NotesPath -Description "release notes"
         $manifestSha256 = Get-LowercaseTextSha256 -Text (Get-CanonicalFileText -Path $ManifestPath -Description "validated package manifest")
         $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
-        [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+        [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
         Assert-DraftAssetsMatchLocalFiles -Release $release -ExpectedTag $ExpectedTag -ArchivePath $paths.Archive -ReleaseJsonPath $paths.ReleaseJson
         Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
         $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
-        [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+        [void](Assert-LocalArchiveSha256 -Path $paths.Archive -ExpectedSha256 $ExpectedArchiveSha256)
+        [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
         Assert-DraftAssetsMatchLocalFiles -Release $release -ExpectedTag $ExpectedTag -ArchivePath $paths.Archive -ReleaseJsonPath $paths.ReleaseJson
         [void](Invoke-GitHubMutationAndAttest `
             -Description "Immutable publication for $ExpectedTag" `
@@ -3220,14 +3723,14 @@ switch ($Mode) {
             -Attempts $AttestationAttempts `
             -AssertState {
                 param([object]$Observed)
-                [void](Assert-PublishedProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+                [void](Assert-PublishedProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
             })
         Invoke-BoundedReadOnlyCheck `
             -Description "Published immutable release attestation for $ExpectedTag" `
             -Attempts $AttestationAttempts `
             -Check {
                 $published = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
-                [void](Assert-PublishedProtocolIdentity -Release $published -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedRunId $ExpectedRunId -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256)
+                [void](Assert-PublishedProtocolIdentity -Release $published -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
                 Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
                 Invoke-ImmutableReleaseAttestationChecks -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ArchivePath $paths.Archive -ReleaseJsonPath $paths.ReleaseJson
             }

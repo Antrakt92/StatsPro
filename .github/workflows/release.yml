@@ -14,8 +14,6 @@ concurrency:
 
 jobs:
   preflight:
-    # Keep this in sync with the publishing job gate: forced/deleted tag events
-    # must not run release machinery.
     if: ${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}
     runs-on: windows-latest
     permissions:
@@ -49,18 +47,35 @@ jobs:
         shell: pwsh
         run: .\scripts\check-lua.ps1 -Release -ArchonMaxAgeDays 3 -EnforceToolLocks
 
-  release:
+      - name: Trim release changelog
+        shell: pwsh
+        run: .\scripts\check-release-version.ps1 -Tag $env:GITHUB_REF_NAME -EnforceSemVer -ExportTopChangelogPath CHANGELOG.md
+
+      - name: Validate interrupted release state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          .\scripts\manage-github-release.ps1 `
+            -Mode ValidateStart `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -NotesPath CHANGELOG.md
+
+  package:
     needs: preflight
-    environment: marketplace-release
-    # WARNING: BigWigs Packager uploads to public marketplaces and is not
-    # idempotent there. Re-running an old tag can create duplicate
-    # CurseForge/Wago/WoWI files even if the GitHub Release already existed.
-    # A real release is the first creation of a v* tag; history rewrites,
-    # mirror pushes, and forced tag updates must not publish anything.
     if: ${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      artifact_id: ${{ steps.upload-candidate.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload-candidate.outputs.artifact-digest }}
+      archive_sha256: ${{ steps.create-candidate.outputs.archive_sha256 }}
+      candidate_sha256: ${{ steps.create-candidate.outputs.candidate_sha256 }}
+      project_version: ${{ steps.rebuild-package-output.outputs.project_version }}
+      run_attempt: ${{ github.run_attempt }}
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -75,36 +90,6 @@ jobs:
       - name: Trim release changelog
         shell: pwsh
         run: ./scripts/check-release-version.ps1 -Tag $env:GITHUB_REF_NAME -EnforceSemVer -ExportTopChangelogPath CHANGELOG.md
-
-      - name: Validate interrupted release state
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: pwsh
-        run: |
-          ./scripts/manage-github-release.ps1 `
-            -Mode ValidateStart `
-            -Repository $env:GITHUB_REPOSITORY `
-            -ExpectedTag $env:GITHUB_REF_NAME `
-            -ExpectedCommitSha $env:GITHUB_SHA `
-            -NotesPath CHANGELOG.md
-
-      - name: Verify immutable release policy
-        env:
-          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
-        shell: pwsh
-        run: ./scripts/check-repository-settings.ps1 -Repository $env:GITHUB_REPOSITORY -ImmutableReleasePolicyOnly -RequireExplicitToken
-
-      - name: Verify marketplace release credentials and versions
-        shell: pwsh
-        env:
-          CF_API_KEY: ${{ secrets.CF_API_KEY }}
-          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
-          WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
-        run: ./scripts/check-marketplace-versions.ps1
-
-      - name: Check CI action refs
-        shell: pwsh
-        run: ./scripts/report-ci-action-refs.ps1 -EnforcePinnedWorkflowRefs
 
       - name: Install release validation tools
         run: |
@@ -122,7 +107,7 @@ jobs:
         shell: pwsh
         run: ./scripts/resolve-packager-output.ps1 -ExpectedTag $env:GITHUB_REF_NAME -OutputPath $env:GITHUB_OUTPUT
 
-      - name: Validate package artifact
+      - name: Validate initial package artifact
         shell: pwsh
         env:
           STATSPRO_ARCHIVE_PATH: ${{ steps.build-package-output.outputs.archive_path }}
@@ -133,7 +118,7 @@ jobs:
             -ExpectedTag $env:GITHUB_REF_NAME `
             -PackagerProjectVersion $env:STATSPRO_PROJECT_VERSION `
             -PackageRoot (Join-Path ".release" "StatsPro") `
-            -ManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256") `
+            -ManifestPath (Join-Path ".release" "statspro-package-tree.sha256") `
             -ArchonMaxAgeDays 3 `
             -RequireExactPackagerProjectVersion `
             -EnforceToolLocks
@@ -148,12 +133,12 @@ jobs:
         with:
           args: -e -d
 
-      - name: Resolve rebuilt package output
+      - name: Resolve final package output
         id: rebuild-package-output
         shell: pwsh
         run: ./scripts/resolve-packager-output.ps1 -ExpectedTag $env:GITHUB_REF_NAME -OutputPath $env:GITHUB_OUTPUT
 
-      - name: Compare rebuilt package and validate again
+      - name: Compare and validate final package artifact
         shell: pwsh
         env:
           STATSPRO_ARCHIVE_PATH: ${{ steps.rebuild-package-output.outputs.archive_path }}
@@ -164,35 +149,104 @@ jobs:
             -ExpectedTag $env:GITHUB_REF_NAME `
             -PackagerProjectVersion $env:STATSPRO_PROJECT_VERSION `
             -PackageRoot (Join-Path ".release" "StatsPro") `
-            -CompareManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256") `
+            -CompareManifestPath (Join-Path ".release" "statspro-package-tree.sha256") `
             -ArchonMaxAgeDays 3 `
             -RequireExactPackagerProjectVersion `
             -EnforceToolLocks
 
-      - name: Validate exact package immediately before marketplace upload
+      - name: Create and validate release metadata
         shell: pwsh
         env:
           STATSPRO_ARCHIVE_PATH: ${{ steps.rebuild-package-output.outputs.archive_path }}
           STATSPRO_PROJECT_VERSION: ${{ steps.rebuild-package-output.outputs.project_version }}
         run: |
-          $head = (git rev-parse HEAD).Trim()
-          $tagCommit = (git rev-parse "refs/tags/$env:GITHUB_REF_NAME^{commit}").Trim()
-          if ($LASTEXITCODE -ne 0 -or $head -notmatch '^[0-9a-f]{40}$' -or $tagCommit -notmatch '^[0-9a-f]{40}$') {
-            throw "Could not resolve the release checkout boundary."
-          }
-          if (-not [System.StringComparer]::OrdinalIgnoreCase.Equals($head, $env:GITHUB_SHA) -or
-              -not [System.StringComparer]::OrdinalIgnoreCase.Equals($tagCommit, $env:GITHUB_SHA)) {
-            throw "Release checkout moved after final package validation."
-          }
-          ./scripts/check-package-dry-run.ps1 `
-            -ArchivePath $env:STATSPRO_ARCHIVE_PATH `
+          ./scripts/check-release-artifact.ps1 `
+            -ZipPath $env:STATSPRO_ARCHIVE_PATH `
+            -ReleaseJsonPath (Join-Path ".release" "release.json") `
             -ExpectedTag $env:GITHUB_REF_NAME `
             -PackagerProjectVersion $env:STATSPRO_PROJECT_VERSION `
-            -PackageRoot (Join-Path ".release" "StatsPro") `
-            -CompareManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256") `
-            -ArchonMaxAgeDays 3 `
             -RequireExactPackagerProjectVersion `
+            -WithReleaseJson `
+            -WriteReleaseJson `
+            -ArchonMaxAgeDays 3 `
             -EnforceToolLocks
+
+      - name: Create exact release candidate
+        id: create-candidate
+        shell: pwsh
+        env:
+          STATSPRO_ARCHIVE_PATH: ${{ steps.rebuild-package-output.outputs.archive_path }}
+          STATSPRO_PROJECT_VERSION: ${{ steps.rebuild-package-output.outputs.project_version }}
+        run: |
+          ./scripts/release-candidate.ps1 `
+            -Mode Create `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -ExpectedRunId $env:GITHUB_RUN_ID `
+            -ExpectedRunAttempt $env:GITHUB_RUN_ATTEMPT `
+            -ExpectedProjectVersion $env:STATSPRO_PROJECT_VERSION `
+            -ArchivePath $env:STATSPRO_ARCHIVE_PATH `
+            -ReleaseJsonPath (Join-Path ".release" "release.json") `
+            -ManifestPath (Join-Path ".release" "statspro-package-tree.sha256") `
+            -CandidatePath (Join-Path ".release" "statspro-release-candidate.json") `
+            -OutputPath $env:GITHUB_OUTPUT
+
+      - name: Upload exact release candidate
+        id: upload-candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: statspro-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.create-candidate.outputs.archive_path }}
+            ${{ steps.create-candidate.outputs.release_json_path }}
+            ${{ steps.create-candidate.outputs.manifest_path }}
+            ${{ steps.create-candidate.outputs.candidate_path }}
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: true
+          retention-days: 35
+
+  github-prepare:
+    needs: package
+    if: ${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify anonymous checkout boundary
+        shell: pwsh
+        run: ./scripts/check-anonymous-checkout.ps1
+
+      - name: Download exact release candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          artifact-ids: ${{ needs.package.outputs.artifact_id }}
+          path: .release/handoff
+          digest-mismatch: error
+
+      - name: Verify exact release candidate
+        id: verify-candidate
+        shell: pwsh
+        run: |
+          ./scripts/release-candidate.ps1 `
+            -Mode Verify `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -ExpectedRunId $env:GITHUB_RUN_ID `
+            -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
+            -ExpectedProjectVersion '${{ needs.package.outputs.project_version }}' `
+            -CandidatePath (Join-Path ".release" "handoff" "statspro-release-candidate.json") `
+            -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
+            -OutputPath $env:GITHUB_OUTPUT
 
       - name: Prepare resumable draft release
         shell: pwsh
@@ -205,8 +259,84 @@ jobs:
             -ExpectedTag $env:GITHUB_REF_NAME `
             -ExpectedCommitSha $env:GITHUB_SHA `
             -ExpectedRunId $env:GITHUB_RUN_ID `
-            -NotesPath CHANGELOG.md `
-            -ManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256")
+            -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
+            -ExpectedArchiveSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
+            -NotesPath '${{ steps.verify-candidate.outputs.notes_path }}' `
+            -ManifestPath '${{ steps.verify-candidate.outputs.manifest_path }}'
+
+  marketplace-upload:
+    needs: [package, github-prepare]
+    environment: marketplace-release
+    if: ${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify anonymous checkout boundary
+        shell: pwsh
+        run: ./scripts/check-anonymous-checkout.ps1
+
+      - name: Download exact release candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          artifact-ids: ${{ needs.package.outputs.artifact_id }}
+          path: .release/handoff
+          digest-mismatch: error
+
+      - name: Verify exact release candidate
+        id: verify-candidate
+        shell: pwsh
+        run: |
+          ./scripts/release-candidate.ps1 `
+            -Mode Verify `
+            -Repository $env:GITHUB_REPOSITORY `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -ExpectedRunId $env:GITHUB_RUN_ID `
+            -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
+            -ExpectedProjectVersion '${{ needs.package.outputs.project_version }}' `
+            -CandidatePath (Join-Path ".release" "handoff" "statspro-release-candidate.json") `
+            -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
+            -ArchonMaxAgeDays 3 `
+            -OutputPath $env:GITHUB_OUTPUT
+
+      - name: Require fresh package attempt before marketplace publication
+        shell: pwsh
+        env:
+          STATSPRO_PACKAGE_RUN_ATTEMPT: ${{ needs.package.outputs.run_attempt }}
+        run: |
+          if ($env:GITHUB_RUN_ATTEMPT -cne $env:STATSPRO_PACKAGE_RUN_ATTEMPT) {
+            throw "Marketplace publication cannot reuse a package from an earlier run attempt. Re-run all jobs to create a fresh candidate."
+          }
+
+      - name: Verify immutable release policy
+        env:
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
+        shell: pwsh
+        run: ./scripts/check-repository-settings.ps1 -Repository $env:GITHUB_REPOSITORY -ImmutableReleasePolicyOnly -RequireExplicitToken
+
+      - name: Prepare exact marketplace publication plan
+        id: prepare-marketplace
+        shell: pwsh
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
+        run: |
+          ./scripts/publish-marketplaces.ps1 `
+            -Mode Prepare `
+            -ArchivePath '${{ steps.verify-candidate.outputs.archive_path }}' `
+            -ExpectedTag $env:GITHUB_REF_NAME `
+            -ExpectedSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -PlanPath (Join-Path ".release" "handoff" "statspro-marketplace-plan.json") `
+            -OutputPath $env:GITHUB_OUTPUT
 
       - name: Mark marketplace publication started
         shell: pwsh
@@ -219,52 +349,66 @@ jobs:
             -ExpectedTag $env:GITHUB_REF_NAME `
             -ExpectedCommitSha $env:GITHUB_SHA `
             -ExpectedRunId $env:GITHUB_RUN_ID `
-            -NotesPath CHANGELOG.md `
-            -ManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256")
+            -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
+            -ExpectedArchiveSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
+            -NotesPath '${{ steps.verify-candidate.outputs.notes_path }}' `
+            -ManifestPath '${{ steps.verify-candidate.outputs.manifest_path }}'
 
-      - name: Publish package to marketplaces
-        id: publish-package
-        uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28
+      - name: Publish exact archive to marketplaces
+        shell: pwsh
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
           WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
-        with:
-          args: -c -e -o
-
-      - name: Resolve published package output
-        id: publish-package-output
-        shell: pwsh
-        run: ./scripts/resolve-packager-output.ps1 -ExpectedTag $env:GITHUB_REF_NAME -OutputPath $env:GITHUB_OUTPUT
-
-      - name: Validate marketplace archive and create release metadata
-        shell: pwsh
-        env:
-          STATSPRO_ARCHIVE_PATH: ${{ steps.publish-package-output.outputs.archive_path }}
-          STATSPRO_PROJECT_VERSION: ${{ steps.publish-package-output.outputs.project_version }}
         run: |
-          $releaseJsonPath = Join-Path ".release" "release.json"
-          ./scripts/check-package-dry-run.ps1 `
-            -ArchivePath $env:STATSPRO_ARCHIVE_PATH `
+          ./scripts/publish-marketplaces.ps1 `
+            -Mode Publish `
+            -ArchivePath '${{ steps.verify-candidate.outputs.archive_path }}' `
             -ExpectedTag $env:GITHUB_REF_NAME `
-            -PackagerProjectVersion $env:STATSPRO_PROJECT_VERSION `
-            -PackageRoot (Join-Path ".release" "StatsPro") `
-            -CompareManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256") `
-            -ArchonMaxAgeDays 3 `
-            -RequireExactPackagerProjectVersion `
-            -EnforceToolLocks
-          ./scripts/check-release-artifact.ps1 `
-            -ZipPath $env:STATSPRO_ARCHIVE_PATH `
-            -ReleaseJsonPath $releaseJsonPath `
+            -ExpectedSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -PlanPath '${{ steps.prepare-marketplace.outputs.plan_path }}' `
+            -ExpectedPlanSha256 '${{ steps.prepare-marketplace.outputs.plan_sha256 }}'
+
+  github-finalize:
+    needs: [package, marketplace-upload]
+    if: ${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify anonymous checkout boundary
+        shell: pwsh
+        run: ./scripts/check-anonymous-checkout.ps1
+
+      - name: Download exact release candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          artifact-ids: ${{ needs.package.outputs.artifact_id }}
+          path: .release/handoff
+          digest-mismatch: error
+
+      - name: Verify exact release candidate
+        id: verify-candidate
+        shell: pwsh
+        run: |
+          ./scripts/release-candidate.ps1 `
+            -Mode Verify `
+            -Repository $env:GITHUB_REPOSITORY `
             -ExpectedTag $env:GITHUB_REF_NAME `
-            -PackagerProjectVersion $env:STATSPRO_PROJECT_VERSION `
-            -RequireExactPackagerProjectVersion `
-            -WithReleaseJson `
-            -WriteReleaseJson `
-            -ArchonMaxAgeDays 3 `
-            -EnforceToolLocks
-          "STATSPRO_RELEASE_ARCHIVE=$((Resolve-Path -LiteralPath $env:STATSPRO_ARCHIVE_PATH).Path)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "STATSPRO_RELEASE_JSON=$((Resolve-Path -LiteralPath $releaseJsonPath).Path)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            -ExpectedCommitSha $env:GITHUB_SHA `
+            -ExpectedRunId $env:GITHUB_RUN_ID `
+            -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
+            -ExpectedProjectVersion '${{ needs.package.outputs.project_version }}' `
+            -CandidatePath (Join-Path ".release" "handoff" "statspro-release-candidate.json") `
+            -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
+            -OutputPath $env:GITHUB_OUTPUT
 
       - name: Attach validated assets to draft
         shell: pwsh
@@ -277,10 +421,13 @@ jobs:
             -ExpectedTag $env:GITHUB_REF_NAME `
             -ExpectedCommitSha $env:GITHUB_SHA `
             -ExpectedRunId $env:GITHUB_RUN_ID `
-            -ArchivePath $env:STATSPRO_RELEASE_ARCHIVE `
-            -ReleaseJsonPath $env:STATSPRO_RELEASE_JSON `
-            -NotesPath CHANGELOG.md `
-            -ManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256")
+            -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
+            -ExpectedArchiveSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
+            -ArchivePath '${{ steps.verify-candidate.outputs.archive_path }}' `
+            -ReleaseJsonPath '${{ steps.verify-candidate.outputs.release_json_path }}' `
+            -NotesPath '${{ steps.verify-candidate.outputs.notes_path }}' `
+            -ManifestPath '${{ steps.verify-candidate.outputs.manifest_path }}'
 
       - name: Publish immutable GitHub release
         shell: pwsh
@@ -293,10 +440,35 @@ jobs:
             -ExpectedTag $env:GITHUB_REF_NAME `
             -ExpectedCommitSha $env:GITHUB_SHA `
             -ExpectedRunId $env:GITHUB_RUN_ID `
-            -ArchivePath $env:STATSPRO_RELEASE_ARCHIVE `
-            -ReleaseJsonPath $env:STATSPRO_RELEASE_JSON `
-            -NotesPath CHANGELOG.md `
-            -ManifestPath (Join-Path $env:RUNNER_TEMP "statspro-package-tree.before.sha256")
+            -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
+            -ExpectedArchiveSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
+            -ArchivePath '${{ steps.verify-candidate.outputs.archive_path }}' `
+            -ReleaseJsonPath '${{ steps.verify-candidate.outputs.release_json_path }}' `
+            -NotesPath '${{ steps.verify-candidate.outputs.notes_path }}' `
+            -ManifestPath '${{ steps.verify-candidate.outputs.manifest_path }}'
+
+  verify:
+    needs: github-finalize
+    if: ${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify anonymous checkout boundary
+        shell: pwsh
+        run: ./scripts/check-anonymous-checkout.ps1
+
+      - name: Install release validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.1
 
       - name: Validate published immutable release assets
         shell: pwsh

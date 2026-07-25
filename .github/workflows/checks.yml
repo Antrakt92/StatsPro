@@ -46,6 +46,8 @@ jobs:
           .\scripts\check-package-dry-run.ps1 -SelfTest
           .\scripts\resolve-packager-output.ps1 -SelfTest
           .\scripts\manage-github-release.ps1 -SelfTest
+          .\scripts\release-candidate.ps1 -SelfTest
+          .\scripts\publish-marketplaces.ps1 -SelfTest
           .\scripts\check-repository-settings.ps1 -SelfTest
           .\scripts\check-lua.ps1 -SelfTest
           .\scripts\check-release-version.ps1 -SelfTest

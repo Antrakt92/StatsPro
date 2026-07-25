@@ -19,6 +19,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "tool-version-locks.ps1")
 . (Join-Path $PSScriptRoot "third-party-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
+. (Join-Path $PSScriptRoot "saved-variables-contract.ps1")
 
 function Invoke-NativeCapture {
     param(
@@ -532,6 +533,16 @@ function Get-PackagedRuntimeLuaPathsFromToc {
     return @($refs)
 }
 
+function Assert-PackagedStatsProSavedVariablesContract {
+    param([string]$PackageRoot)
+
+    $tocPath = Join-Path $PackageRoot "StatsPro.toc"
+    $tocText = ConvertTo-StatsProNormalizedText -Path $tocPath -ContractPath "StatsPro/StatsPro.toc"
+    Assert-StatsProSavedVariablesContract `
+        -TocText $tocText `
+        -Description "Packaged StatsPro.toc"
+}
+
 function Resolve-Luac51 {
     $candidates = @(
         if ($env:STATSPRO_PINNED_LUA_ROOT) { Join-Path $env:STATSPRO_PINNED_LUA_ROOT "luac5.1.exe" }
@@ -835,6 +846,7 @@ function Assert-StatsProReleaseArtifact {
     try {
         $expanded = Expand-StatsProPackageToTemp -Path $zipFullPath
         $luac = Resolve-Luac51
+        Assert-PackagedStatsProSavedVariablesContract -PackageRoot $expanded.PackageRoot
         Assert-PackagedRuntimeLuaSyntax -PackageRoot $expanded.PackageRoot -LuacPath $luac -CheckToolLocks:$EnforceToolLocks.IsPresent
         Assert-StatsProPackageSourceFidelity -PackageRoot $expanded.PackageRoot -SourceRoot $sourceFullPath -ProjectVersion $PackagerProjectVersion
         $versionMetadata = Assert-PackagedStatsProVersionMetadata `
@@ -946,6 +958,80 @@ function Invoke-SelfTest {
             throw "Generated release.json is not deterministic."
         }
         Assert-StatsProReleaseArtifact -ZipPath $zip -ExpectedTag $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$true -WithReleaseJson:$false -WriteReleaseJson:$false
+        $writeMutatedTocZip = {
+            param([string]$Destination, [scriptblock]$Mutation)
+
+            Copy-Item -LiteralPath $zip -Destination $Destination
+            $archive = [System.IO.Compression.ZipFile]::Open(
+                $Destination,
+                [System.IO.Compression.ZipArchiveMode]::Update)
+            try {
+                $tocEntry = $archive.GetEntry("StatsPro/StatsPro.toc")
+                if ($null -eq $tocEntry) {
+                    throw "Self-test package is missing StatsPro/StatsPro.toc."
+                }
+                $reader = [System.IO.StreamReader]::new($tocEntry.Open(), [System.Text.Encoding]::UTF8, $true)
+                try {
+                    $packagedToc = $reader.ReadToEnd()
+                }
+                finally {
+                    $reader.Dispose()
+                }
+                $mutatedToc = & $Mutation $packagedToc
+                if ($mutatedToc -isnot [string]) {
+                    throw "Self-test TOC mutation did not return text."
+                }
+                $tocEntry.Delete()
+                $replacementEntry = $archive.CreateEntry("StatsPro/StatsPro.toc")
+                $writer = [System.IO.StreamWriter]::new(
+                    $replacementEntry.Open(),
+                    [System.Text.UTF8Encoding]::new($false))
+                try {
+                    $writer.Write($mutatedToc)
+                }
+                finally {
+                    $writer.Dispose()
+                }
+            }
+            finally {
+                $archive.Dispose()
+            }
+        }
+
+        $missingSavedVariablesZip = Join-Path $tempDir "StatsPro-$tag-missing-saved-variables.zip"
+        & $writeMutatedTocZip -Destination $missingSavedVariablesZip -Mutation {
+            param([string]$Text)
+            return [regex]::Replace(
+                $Text,
+                '(?m)^##[ \t]+SavedVariables[ \t]*:[^\r\n]*\r?\n?',
+                '')
+        }
+        Assert-ThrowsMatch "packaged TOC missing SavedVariables rejected" {
+            Assert-StatsProReleaseArtifact `
+                -ZipPath $missingSavedVariablesZip `
+                -ExpectedTag $tag `
+                -PackagerProjectVersion $tag `
+                -SourceRoot $sourceRoot `
+                -ArchonMaxAgeDays 99999 `
+                -PackageOnly:$true `
+                -WithReleaseJson:$false
+        } "Packaged StatsPro\.toc must contain exactly one SavedVariables directive; found 0"
+
+        $perCharacterSavedVariablesZip = Join-Path $tempDir "StatsPro-$tag-per-character-saved-variables.zip"
+        & $writeMutatedTocZip -Destination $perCharacterSavedVariablesZip -Mutation {
+            param([string]$Text)
+            return $Text + "## SavedVariablesPerCharacter: ExtraDB`r`n"
+        }
+        Assert-ThrowsMatch "packaged TOC per-character SavedVariables rejected" {
+            Assert-StatsProReleaseArtifact `
+                -ZipPath $perCharacterSavedVariablesZip `
+                -ExpectedTag $tag `
+                -PackagerProjectVersion $tag `
+                -SourceRoot $sourceRoot `
+                -ArchonMaxAgeDays 99999 `
+                -PackageOnly:$true `
+                -WithReleaseJson:$false
+        } "Packaged StatsPro\.toc must not contain a SavedVariablesPerCharacter directive"
         Assert-ThrowsMatch "missing explicit Packager version rejected in exact-tag mode" {
             Assert-StatsProReleaseArtifact -ZipPath $zip -ExpectedTag $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -RequireExactPackagerProjectVersion:$true -PackageOnly:$true -WithReleaseJson:$false
         } "explicit -PackagerProjectVersion"

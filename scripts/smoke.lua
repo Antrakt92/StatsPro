@@ -2796,6 +2796,29 @@ do
 end
 
 do
+    local toc = assert(io.open("StatsPro.toc", "rb"))
+    local text = toc:read("*a")
+    toc:close()
+    text = text:gsub("\r\n", "\n"):gsub("\r", "\n")
+    local count = 0
+    local perCharacterCount = 0
+    local value
+    for line in (text .. "\n"):gmatch("(.-)\n") do
+        local match = line:match("^##[ \t]+SavedVariables[ \t]*:[ \t]*(.-)[ \t]*$")
+        if match then
+            count = count + 1
+            value = match
+        end
+        if line:match("^##[ \t]+SavedVariablesPerCharacter[ \t]*:") then
+            perCharacterCount = perCharacterCount + 1
+        end
+    end
+    eq("toc.saved_variables.directive_count", count, 1)
+    eq("toc.saved_variables.exact_root", value, "StatsProDB")
+    eq("toc.saved_variables.no_per_character_root", perCharacterCount, 0)
+end
+
+do
     local wideEnv = loadStatsPro("enUS", {
         statsProDB = {},
         uiParentWidth = 7680,

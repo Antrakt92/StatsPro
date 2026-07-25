@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "third-party-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
+. (Join-Path $PSScriptRoot "saved-variables-contract.ps1")
 
 function Get-SingleRegexMatch {
     param(
@@ -354,6 +355,8 @@ function Get-TocRuntimeContract {
     $metadata = [ordered]@{}
     $loadRefs = @()
     $seenRefs = @{}
+    $tocText = Get-Content -LiteralPath $tocFullPath -Raw -Encoding UTF8
+    Assert-StatsProSavedVariablesContract -TocText $tocText -Description "StatsPro.toc"
     $lines = Get-Content -LiteralPath $tocFullPath -Encoding UTF8
 
     for ($index = 0; $index -lt $lines.Count; $index++) {
@@ -448,10 +451,11 @@ function New-TestRuntimeFiles {
 function Set-TestToc {
     param(
         [string]$Root,
-        [string[]]$Refs
+        [string[]]$Refs,
+        [string[]]$SavedVariablesLines = @("## SavedVariables: StatsProDB")
     )
 
-    $content = @("## Interface: 120007, 120100") + $Refs
+    $content = @("## Interface: 120007, 120100") + $SavedVariablesLines + $Refs
     Set-Content -Path (Join-Path $Root "StatsPro.toc") -Value ($content -join "`n") -Encoding UTF8
 }
 
@@ -547,6 +551,36 @@ function Invoke-SelfTest {
         if (-not $contract.RuntimeLuaRefs[3].IsGenerated) {
             throw "expected Archon target file to be marked generated"
         }
+
+        Set-TestToc -Root $root -Refs $validRefs -SavedVariablesLines @()
+        Assert-ThrowsMatch "missing SavedVariables directive rejected" {
+            [void](Get-TocRuntimeContract -RepoRoot $root -TocPath (Join-Path $root "StatsPro.toc"))
+        } "exactly one SavedVariables directive; found 0"
+        Set-TestToc -Root $root -Refs $validRefs -SavedVariablesLines @("## SavedVariables: StatsProData")
+        Assert-ThrowsMatch "renamed SavedVariables root rejected" {
+            [void](Get-TocRuntimeContract -RepoRoot $root -TocPath (Join-Path $root "StatsPro.toc"))
+        } "must name only StatsProDB"
+        Set-TestToc -Root $root -Refs $validRefs -SavedVariablesLines @(
+            "## SavedVariables: StatsProDB",
+            "## SavedVariables: StatsProDB")
+        Assert-ThrowsMatch "duplicate SavedVariables directive rejected" {
+            [void](Get-TocRuntimeContract -RepoRoot $root -TocPath (Join-Path $root "StatsPro.toc"))
+        } "exactly one SavedVariables directive; found 2"
+        Set-TestToc -Root $root -Refs $validRefs -SavedVariablesLines @("## SavedVariables: StatsProDB, ExtraDB")
+        Assert-ThrowsMatch "extra SavedVariables root rejected" {
+            [void](Get-TocRuntimeContract -RepoRoot $root -TocPath (Join-Path $root "StatsPro.toc"))
+        } "must name only StatsProDB"
+        Set-TestToc -Root $root -Refs $validRefs -SavedVariablesLines @(
+            "## SavedVariables: StatsProDB",
+            "## SavedVariablesPerCharacter: ExtraDB")
+        Assert-ThrowsMatch "per-character SavedVariables root rejected" {
+            [void](Get-TocRuntimeContract -RepoRoot $root -TocPath (Join-Path $root "StatsPro.toc"))
+        } "must not contain a SavedVariablesPerCharacter directive"
+        Set-TestToc -Root $root -Refs $validRefs -SavedVariablesLines @("## SavedVariables:`nStatsProDB")
+        Assert-ThrowsMatch "line-split SavedVariables directive rejected" {
+            [void](Get-TocRuntimeContract -RepoRoot $root -TocPath (Join-Path $root "StatsPro.toc"))
+        } "must name only StatsProDB"
+        Set-TestToc -Root $root -Refs $validRefs
 
         $expectedNotes = Get-ExpectedTocNotes
         $newNotesFixture = {

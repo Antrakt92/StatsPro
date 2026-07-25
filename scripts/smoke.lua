@@ -1125,6 +1125,19 @@ end
 
 local env, addon, test = loadStatsPro("enUS")
 
+eq("api.surface.db_get_root_removed", addon.dbRuntime.GetRoot, nil)
+eq("api.surface.db_get_writable_account_removed", addon.dbRuntime.GetWritableAccount, nil)
+eq("api.surface.replace_table_contents_removed", addon.dbRuntime.ReplaceTableContents, nil)
+eq("api.surface.legacy_modal_wrapper_removed", addon.legacyImport.CloseOwnedSettingsModals, nil)
+eq("api.surface.context_render_count_removed", addon.profileRuntime.contextRenderCount, nil)
+eq("api.surface.context_is_active_removed", addon.profileOps.ContextIsActive, nil)
+check("api.surface.writable_root_authoritative",
+    type(addon.dbRuntime.GetWritableRoot) == "function")
+check("api.surface.writable_settings_authoritative",
+    type(addon.dbRuntime.GetWritableSettings) == "function")
+check("api.surface.modal_close_authoritative",
+    type(addon.profileRuntime.CloseOwnedSettingsModals) == "function")
+
 do
     local archonFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(archonFixture, "mythicPlus", "MAGE", "frost",
@@ -15315,8 +15328,9 @@ do
     local accountBefore = deepCopy(root.account)
     local applyBefore = test.profileRuntimeState().applyCount
     local oldTargetSettings = root.profiles.p2.settings
-    local ok = ops.copySettings("p3", "p2")
+    local ok, result = ops.copySettings("p3", "p2")
     eq("profiles.ops.copy.active.ok", ok, true)
+    eq("profiles.ops.copy.active.result", result, "p2")
     eq("profiles.ops.copy.active.id", test.profileState().profileID, "p2")
     eq("profiles.ops.copy.active.new_settings",
         rawequal(root.profiles.p2.settings, oldTargetSettings), false)
@@ -15449,7 +15463,7 @@ do
     local applyBefore = test.profileRuntimeState().applyCount
     local alphaRef = root.characters["Player-1-OPS-A"]
     local bravoRef = root.characters["Player-1-OPS-B"]
-    local ok = ops.assign("Player-1-OPS-B", 72, "p3")
+    local ok, result = ops.assign("Player-1-OPS-B", 72, "p3")
     eq("profiles.ops.assign.offline.ok", ok, true)
     eq("profiles.ops.assign.offline.mapping",
         root.characters["Player-1-OPS-B"].specProfiles[72], "p3")
@@ -15462,8 +15476,9 @@ do
     env.StatsProFrame:ClearAllPoints()
     env.StatsProFrame:SetPoint("TOPLEFT", env.UIParent, "TOPLEFT", 111, -112)
     applyBefore = test.profileRuntimeState().applyCount
-    ok = ops.assign("Player-1-OPS-A", 73, "p3")
+    ok, result = ops.assign("Player-1-OPS-A", 73, "p3")
     eq("profiles.ops.assign.active.ok", ok, true)
+    eq("profiles.ops.assign.active.result", result, "p3")
     eq("profiles.ops.assign.active.mapping",
         root.characters["Player-1-OPS-A"].specProfiles[73], "p3")
     eq("profiles.ops.assign.active.profile", test.profileState().profileID, "p3")
@@ -15485,10 +15500,11 @@ do
         p3 = root.profiles.p3, p4 = root.profiles.p4,
     }
     local applyBefore = test.profileRuntimeState().applyCount
-    local ok = ops.swap(
+    local ok, result = ops.swap(
         { guid = "Player-1-OPS-A", specID = 73 },
         { guid = "Player-1-OPS-B", specID = 72 })
     eq("profiles.ops.swap.active.ok", ok, true)
+    assertDeepEqual("profiles.ops.swap.active.result", result, { left = "p4", right = "p2" })
     eq("profiles.ops.swap.active.left",
         root.characters["Player-1-OPS-A"].specProfiles[73], "p4")
     eq("profiles.ops.swap.active.right",

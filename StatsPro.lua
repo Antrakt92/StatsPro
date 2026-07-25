@@ -3426,7 +3426,6 @@ addon.profileRuntime = {
     activationCount = 0,
     applyCount = 0,
     configRefreshCount = 0,
-    contextRenderCount = 0,
     structuralCommitCount = 0,
     contextReadCount = 0,
 }
@@ -4119,12 +4118,6 @@ function addon.dbRuntime.Refresh()
     return root
 end
 
-function addon.dbRuntime.GetRoot()
-    local root = EnsureStatsProDBTable()
-    if not rawequal(root, addon.dbRuntime.rootRef) then addon.dbRuntime.Refresh() end
-    return root
-end
-
 function addon.dbRuntime.GetActiveSettings()
     local root = EnsureStatsProDBTable()
     if not rawequal(root, addon.dbRuntime.rootRef) then addon.dbRuntime.Refresh() end
@@ -4196,20 +4189,6 @@ function addon.dbRuntime.GetWritableSettings(showGuidance, key)
     end
     if addon.dbRuntime.readOnly then addon.dbRuntime.ShowReadOnlyGuidance(showGuidance) end
     return nil
-end
-
-function addon.dbRuntime.GetWritableAccount(showGuidance)
-    addon.dbRuntime.Refresh()
-    if not addon.dbRuntime.readOnly and not addon.profileRuntime.BlocksUserWrites() then
-        return addon.dbRuntime.GetAccount()
-    end
-    if addon.dbRuntime.readOnly then addon.dbRuntime.ShowReadOnlyGuidance(showGuidance) end
-    return nil
-end
-
-function addon.dbRuntime.ReplaceTableContents(target, source)
-    for key in pairs(target) do target[key] = nil end
-    for key, value in pairs(source) do target[key] = value end
 end
 
 function addon.dbRuntime.BuildRegistry(flat)
@@ -5141,11 +5120,6 @@ function addon.profileOps.ReadCurrentGUID()
     return guid
 end
 
-function addon.profileOps.ContextIsActive(guid, specID)
-    return guid == addon.profileRuntime.activeGUID
-        and specID ~= nil and specID == addon.profileRuntime.activeSpecID
-end
-
 function addon.profileOps.CheckExpected(root, expected)
     if type(expected) ~= "table" then return true end
     if expected.rootRef and not rawequal(root, expected.rootRef) then return false end
@@ -5288,6 +5262,9 @@ function addon.profileOps.ResolveCandidateActiveProfileID(transaction, fallbackP
     return nil
 end
 
+-- Successful builders return only transaction, result. The coordinator derives the
+-- active payload from the candidate mapping and settings identity so a parallel intent
+-- cannot silently disagree with the state that will actually be committed.
 function addon.profileOps.Execute(expected, builder)
     local root, gateReason = addon.profileOps.Gate(expected, false)
     if not root then return false, gateReason end
@@ -5315,10 +5292,10 @@ function addon.profileOps.Execute(expected, builder)
         return finish(false, "position-failed")
     end
 
-    local built, transaction, buildStatus, result = pcall(builder, root)
+    local built, transaction, result = pcall(builder, root)
     if not built or not transaction then
         addon.profileOps.RestorePositionFields(oldSettings, positionSnapshot)
-        return finish(false, built and buildStatus or "prepare-failed")
+        return finish(false, built and result or "prepare-failed")
     end
     local desiredProfileID = addon.profileOps.ResolveCandidateActiveProfileID(
         transaction, oldProfileID)
@@ -5570,7 +5547,7 @@ function addon.profileOps.Create(name, expected)
         local transaction = addon.profileOps.NewTransaction(root)
         transaction.account = account
         transaction.profiles = profiles
-        return transaction, { reapply = false }, profileID
+        return transaction, profileID
     end)
 end
 
@@ -5592,7 +5569,7 @@ function addon.profileOps.Duplicate(sourceProfileID, name, expected)
         local transaction = addon.profileOps.NewTransaction(root)
         transaction.account = account
         transaction.profiles = profiles
-        return transaction, { reapply = false }, profileID
+        return transaction, profileID
     end)
 end
 
@@ -5610,7 +5587,7 @@ function addon.profileOps.Rename(profileID, name, expected)
         profiles[profileID] = renamed
         local transaction = addon.profileOps.NewTransaction(root)
         transaction.profiles = profiles
-        return transaction, { reapply = false }, profileID
+        return transaction, profileID
     end)
 end
 
@@ -5668,10 +5645,7 @@ function addon.profileOps.CopySettings(sourceProfileID, targetProfileID, scope, 
         profiles[targetProfileID] = changedTarget
         local transaction = addon.profileOps.NewTransaction(root)
         transaction.profiles = profiles
-        return transaction, {
-            reapply = targetProfileID == addon.dbRuntime.activeProfileID,
-            activeProfileID = addon.dbRuntime.activeProfileID,
-        }, targetProfileID
+        return transaction, targetProfileID
     end)
 end
 
@@ -5700,11 +5674,7 @@ function addon.profileOps.Assign(guid, specID, profileID, expected)
         characters[guid] = changedCharacter
         local transaction = addon.profileOps.NewTransaction(root)
         transaction.characters = characters
-        local active = addon.profileOps.ContextIsActive(guid, specID)
-        return transaction, {
-            reapply = active,
-            activeProfileID = active and profileID or addon.dbRuntime.activeProfileID,
-        }, profileID
+        return transaction, profileID
     end)
 end
 
@@ -5743,7 +5713,7 @@ function addon.profileOps.UseProfileForKnownSpecs(guid, profileID, expected)
         characters[guid] = changedCharacter
         local transaction = addon.profileOps.NewTransaction(root)
         transaction.characters = characters
-        return transaction, { reapply = guid == addon.profileRuntime.activeGUID }, {
+        return transaction, {
             profileID = profileID,
             changedCount = changedCount,
         }
@@ -5823,7 +5793,7 @@ function addon.profileOps.MakeKnownSpecsIndependent(guid, expected)
         transaction.account = account
         transaction.profiles = profiles
         transaction.characters = characters
-        return transaction, { reapply = guid == addon.profileRuntime.activeGUID }, {
+        return transaction, {
             assignments = assignments,
             changedCount = changedCount,
         }
@@ -5841,7 +5811,7 @@ function addon.profileOps.SetRoleTemplate(role, profileID, expected)
         roleTemplates[role] = profileID
         local transaction = addon.profileOps.NewTransaction(root)
         transaction.roleTemplates = roleTemplates
-        return transaction, { reapply = false }, {
+        return transaction, {
             role = role,
             profileID = profileID,
         }
@@ -5884,15 +5854,7 @@ function addon.profileOps.Swap(left, right, expected)
         setAssignment(right, leftProfileID)
         local transaction = addon.profileOps.NewTransaction(root)
         transaction.characters = characters
-        local leftActive = addon.profileOps.ContextIsActive(left.guid, left.specID)
-        local rightActive = addon.profileOps.ContextIsActive(right.guid, right.specID)
-        local activeProfileID = addon.dbRuntime.activeProfileID
-        if leftActive then activeProfileID = rightProfileID end
-        if rightActive then activeProfileID = leftProfileID end
-        return transaction, {
-            reapply = leftActive or rightActive,
-            activeProfileID = activeProfileID,
-        }, { left = rightProfileID, right = leftProfileID }
+        return transaction, { left = rightProfileID, right = leftProfileID }
     end)
 end
 
@@ -5910,7 +5872,7 @@ function addon.profileOps.ResetCurrent(expectedActiveProfileID, expected)
         profiles[profileID] = resetProfile
         local transaction = addon.profileOps.NewTransaction(root)
         transaction.profiles = profiles
-        return transaction, { reapply = true, activeProfileID = profileID }, profileID
+        return transaction, profileID
     end)
 end
 
@@ -5967,10 +5929,7 @@ function addon.profileOps.ImportAndAssign(importedSettings, expected)
         transaction.account = account
         transaction.profiles = profiles
         transaction.characters = characters
-        return transaction, {
-            reapply = true,
-            activeProfileID = profileID,
-        }, { profileID = profileID, name = name }
+        return transaction, { profileID = profileID, name = name }
     end)
 end
 
@@ -6090,11 +6049,7 @@ function addon.profileOps.DeleteWithReplacement(profileID, replacementProfileID,
             end
             transaction.characters = characters
         end
-        local active = profileID == addon.dbRuntime.activeProfileID
-        return transaction, {
-            reapply = active,
-            activeProfileID = active and replacementProfileID or addon.dbRuntime.activeProfileID,
-        }, replacementProfileID
+        return transaction, replacementProfileID
     end)
 end
 
@@ -6108,7 +6063,7 @@ function addon.profileOps.ForgetCharacter(guid, expected)
         characters[guid] = nil
         local transaction = addon.profileOps.NewTransaction(root)
         transaction.characters = characters
-        return transaction, { reapply = false }, guid
+        return transaction, guid
     end)
 end
 
@@ -10647,7 +10602,7 @@ function addon.appearancePresets.ApplyPreview()
         profiles[profileID] = changedProfile
         local transaction = addon.profileOps.NewTransaction(root)
         transaction.profiles = profiles
-        return transaction, { reapply = true, activeProfileID = profileID }, profileID
+        return transaction, profileID
     end)
     local retryable = result == "validate-failed" or result == "commit-failed"
         or result == "apply-failed"
@@ -10747,10 +10702,6 @@ addon.profileRuntime.closeOwnedSettingsModals = function()
         _G.StatsProFontPicker:Hide()
     end
     COLOR_PICKER_STATE.Close()
-end
-
-function addon.legacyImport.CloseOwnedSettingsModals()
-    addon.profileRuntime.closeOwnedSettingsModals()
 end
 
 addon.profileRuntime.applyActiveSettings = function()

@@ -1035,7 +1035,7 @@ cached = {
     -- reuse cached value during combat. Vers starts unknown so cold-start
     -- secret/nil reads do not render as a real 0.0%.
     versTotal = nil,
-    versTotalRating = 0,
+    versTotalRating = nil,
     armorDR = nil,
     itemLevelOverall = nil,
     itemLevelEquipped = nil,
@@ -3130,9 +3130,9 @@ local function SectionHeader(labelKey)
     return string.format("|cffb3bdb8— %s —|r", L(labelKey))
 end
 
--- pcall every stat API so 12.x secret values never touch unsafe Lua logic.
--- Raw successful returns flow only into string.format/SetText paths that Blizzard
--- allows for secrets. API failures stay nil rather than rendering fake 0 values.
+-- pcall every stat API so 12.x failures stay nil rather than rendering fake values.
+-- Secret returns may drive only the guarded visibility path; display formatting
+-- accepts clean finite numbers and otherwise emits an explicit unknown marker.
 local function safeCall(fn, ...)
     local ok, val = pcall(fn, ...)
     if ok then return val end
@@ -3151,12 +3151,6 @@ function SAFE_NUM.IsRenderableNumberValue(value)
     return SAFE_NUM.IsCleanFiniteNumber(value)
 end
 
-function SAFE_NUM.NormalizeRatingValue(value)
-    if issecretvalue(value) then return value end
-    if not SAFE_NUM.IsCleanFiniteNumber(value) or value < 0 then return 0 end
-    return value
-end
-
 function SAFE_NUM.SafeDisplayPercent(fn, ...)
     local value = safeCall(fn, ...)
     if SAFE_NUM.IsRenderableNumberValue(value) then return value end
@@ -3170,29 +3164,24 @@ function SAFE_NUM.ReadRatingValue(fn, ...)
     return nil, nil
 end
 
-function SAFE_NUM.SafeRatingInt(fn, ...)
-    return SAFE_NUM.NormalizeRatingValue(safeCall(fn, ...))
-end
-
-function SAFE_NUM.CleanRatingInt(fn, ...)
-    local ok, value = pcall(fn, ...)
-    if not ok or not SAFE_NUM.IsCleanFiniteNumber(value) or value < 0 then return nil end
-    return value
-end
-
 -- WHY dedicated helper for UnitStat: the API returns FOUR values
 --   (stat, effectiveStat, posBuff, negBuff)
 -- where `stat` is base (level + items, no temporary buffs) and `effectiveStat`
 -- includes raid/food/flask/cooldown buffs. Blizzard's own CharacterFrame
 -- displays `effectiveStat`, so users expect the same. `safeCall` only returns
 -- the first value (stat), which would silently understate Primary stats for
--- any buffed player. Fall back chain: effectiveStat → stat → 0 covers a
--- hypothetical future API change that returns only one value.
+-- any buffed player. Fall back to base only when effectiveStat is genuinely nil;
+-- restricted or malformed values remain unavailable instead of becoming fake 0.
 local function GetEffectiveStat(statId)
     local ok, stat, effectiveStat = pcall(UnitStat, "player", statId)
     if not ok then return nil end
-    local value = effectiveStat or stat
-    if SAFE_NUM.IsRenderableNumberValue(value) then return value end
+    if issecretvalue(effectiveStat) then return effectiveStat end
+    if effectiveStat ~= nil then
+        if SAFE_NUM.IsCleanFiniteNumber(effectiveStat) then return effectiveStat end
+        return nil
+    end
+    if issecretvalue(stat) then return stat end
+    if SAFE_NUM.IsCleanFiniteNumber(stat) then return stat end
     return nil
 end
 
@@ -7474,9 +7463,20 @@ local function JoinValuesCol(values)
     return ""
 end
 
+-- Format only clean finite numbers. Secret values can be tagged even though Lua
+-- still reports their underlying type as number; converting them here would taint
+-- the entire update. A secret value keeps the row but renders as explicit unknown.
+-- Other unavailable/invalid values stay nil so callers can preserve intentional
+-- unsupported-API and pre-login row suppression.
+function SAFE_NUM.FormatColorNumber(colorHex, value, format)
+    if issecretvalue(value) then return "|cff" .. colorHex .. "?|r" end
+    if not SAFE_NUM.IsCleanFiniteNumber(value) then return nil end
+    return "|cff" .. colorHex .. string.format(format, value) .. "|r"
+end
+
 -- Compose colored "X.X%" string. 5-callsite hot path; centralizes precision.
 local function FmtColorPct(colorHex, pct)
-    return string.format("|cff%s%.1f%%|r", colorHex, pct)
+    return SAFE_NUM.FormatColorNumber(colorHex, pct, "%.1f%%")
 end
 
 -- Format a stat value (rating + percentage variants honoring user toggles).
@@ -7485,17 +7485,15 @@ local function FmtRatingPct(rating, pct, statColor)
     local cs = cached.colorStrings
     local rc = (cached.matchValueColorToStat and statColor) or cs.rating
     local pc = (cached.matchValueColorToStat and statColor) or cs.percentage
-    local ratingStr = string.format("|cff%s%d|r", rc, rating)
+    local ratingStr = SAFE_NUM.FormatColorNumber(rc, rating, "%d") or ("|cff" .. rc .. "?|r")
+    local pctStr = FmtColorPct(pc, pct)
     if IsDualColMode() then
-        if type(pct) == "number" then
-            return ratingStr .. " |cff808080|||r", FmtColorPct(pc, pct)
-        end
-        return ratingStr .. " |cff808080|||r", ""
+        return ratingStr .. " |cff808080|||r", pctStr or ""
     elseif cached.showRating then
         return ratingStr, ""
     else
         -- percent-only: route into rating col (single-column layout)
-        return FmtColorPct(pc, pct), ""
+        return pctStr or ("|cff" .. pc .. "?|r"), ""
     end
 end
 
@@ -7504,7 +7502,7 @@ end
 local function FmtPctOnly(pct, statColor)
     local cs = cached.colorStrings
     local pc = (cached.matchValueColorToStat and statColor) or cs.percentage
-    local pctStr = FmtColorPct(pc, pct)
+    local pctStr = FmtColorPct(pc, pct) or ("|cff" .. pc .. "?|r")
     if IsDualColMode() then return "", pctStr end
     return pctStr, ""
 end
@@ -7539,7 +7537,8 @@ local function PushPrimaryStatRow(labels, ratings, values, colorKey, statId, lab
     local valueColor = (cached.matchValueColorToStat and statStr) or cs.rating
     local val = GetEffectiveStat(statId)
     if not SAFE_NUM.IsRenderableNumberValue(val) then return end
-    local rCol, vCol = RouteValueOnly(string.format("|cff%s%d|r", valueColor, val))
+    local value = SAFE_NUM.FormatColorNumber(valueColor, val, "%d") or ("|cff" .. valueColor .. "?|r")
+    local rCol, vCol = RouteValueOnly(value)
     PushRow(labels, ratings, values, FormatLabel(statStr, labelKey), rCol, vCol)
 end
 
@@ -7644,7 +7643,8 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
                 if (cached.showRating or needTargetRating) and not ratingRead then
                     ratingDisplay, targetRating = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
                 end
-                local rating = cached.showRating and (ratingDisplay or 0) or 0
+                local rating
+                if cached.showRating then rating = ratingDisplay end
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtRatingPct(rating, val, statColor)
                 if targetRows then
@@ -7657,9 +7657,9 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
         end
     end
 
-    -- Versatility: dual-source (rating bonus + flat). Cache clean exact totals. A
-    -- secret component may render live only when the other clean component is zero;
-    -- otherwise retain the last complete total instead of showing a partial value.
+    -- Versatility: dual-source (rating bonus + flat). Cache clean exact totals.
+    -- Restricted components never render numerically; retain the last complete total
+    -- or use an opaque sentinel that the formatter turns into explicit unknown.
     if cached.showVersatility then
         local versFromRating = safeCall(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
         local versFlat       = safeCall(GetVersatilityBonus,  CR_VERSATILITY_DAMAGE_DONE)
@@ -7678,13 +7678,15 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
             cached.versTotal = versFromRating + versFlat
             versDisplay = cached.versTotal
             versClean = cached.versTotal
-        -- A secret component is the complete total only when its clean counterpart
-        -- is exactly zero. Otherwise keep the last clean total (or cold unknown)
-        -- instead of presenting one non-zero component as full Versatility.
-        elseif ratingIsSecret and flatIsClean and versFlat == 0 then
-            versDisplay = versFromRating
-        elseif flatIsSecret and ratingIsClean and versFromRating == 0 then
-            versDisplay = versFlat
+        -- Any restricted component makes the fresh total unknown. Keep an existing
+        -- last-clean total; on a cold read retain one opaque sentinel only so the
+        -- formatter emits "?" without presenting a readable component as the total.
+        elseif versDisplay == nil then
+            if ratingIsSecret then
+                versDisplay = versFromRating
+            elseif flatIsSecret then
+                versDisplay = versFlat
+            end
         end
         if cached.showRating or needTargetRating then
             versRatingDisplay, targetVersRating = SAFE_NUM.ReadRatingValue(GetCombatRating, CR_VERSATILITY_DAMAGE_DONE)
@@ -7699,7 +7701,16 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
         end
         if versVisible then
             local versStr = cs.versatility
-            local rating = cached.showRating and (versRatingDisplay or cached.versTotalRating or 0) or 0
+            local rating
+            if cached.showRating then
+                if SAFE_NUM.IsCleanFiniteNumber(versRatingDisplay) then
+                    rating = versRatingDisplay
+                elseif SAFE_NUM.IsCleanFiniteNumber(cached.versTotalRating) then
+                    rating = cached.versTotalRating
+                else
+                    rating = versRatingDisplay
+                end
+            end
             local vRatStr, vValStr = FmtRatingPct(rating, versDisplay, versStr)
             if targetRows then
                 targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta("versatility", targetVersRating, CR_VERSATILITY_DAMAGE_DONE, versClean, "versatility") or false
@@ -7734,7 +7745,8 @@ local function BuildTertiaryLines(labels, ratings, values)
                 if needRating and not ratingRead then
                     ratingDisplay = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
                 end
-                local rating = needRating and (ratingDisplay or 0) or 0
+                local rating
+                if needRating then rating = ratingDisplay end
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtRatingPct(rating, val, statColor)
                 PushRow(labels, ratings, values,
@@ -7776,7 +7788,8 @@ local function BuildTertiaryLines(labels, ratings, values)
         end
         local speed = cached.speedPct
         local speedRatingDisplay = needRating and SAFE_NUM.ReadRatingValue(GetCombatRating, CR_SPEED) or nil
-        local speedRating = needRating and (speedRatingDisplay or 0) or 0
+        local speedRating
+        if needRating then speedRating = speedRatingDisplay end
         local speedVisible = shouldShow("showSpeed", speed, cached.hideZeroTertiary)
         if needRating then
             local speedRatingVisible = shouldShow("showSpeedRating", speedRatingDisplay, cached.hideZeroTertiary)

@@ -13,30 +13,971 @@ param(
     [string]$NotesPath,
     [string]$ManifestPath,
     [int]$AttestationAttempts = 6,
+    [int]$TimeoutMinutes = 10,
     [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 
+function Format-NativeArgument {
+    param([AllowNull()][string]$Argument)
+
+    if ($null -eq $Argument -or $Argument -eq "") {
+        return '""'
+    }
+    if ($Argument -notmatch '[\s"]') {
+        return $Argument
+    }
+
+    $slash = [string][char]92
+    $builder = [System.Text.StringBuilder]::new()
+    [void]$builder.Append('"')
+    $pendingSlashes = 0
+    foreach ($char in $Argument.ToCharArray()) {
+        if ($char -eq [char]92) {
+            $pendingSlashes++
+            continue
+        }
+        if ($char -eq '"') {
+            if ($pendingSlashes -gt 0) {
+                [void]$builder.Append($slash * ($pendingSlashes * 2))
+                $pendingSlashes = 0
+            }
+            [void]$builder.Append($slash)
+            [void]$builder.Append('"')
+            continue
+        }
+        if ($pendingSlashes -gt 0) {
+            [void]$builder.Append($slash * $pendingSlashes)
+            $pendingSlashes = 0
+        }
+        [void]$builder.Append($char)
+    }
+    if ($pendingSlashes -gt 0) {
+        [void]$builder.Append($slash * ($pendingSlashes * 2))
+    }
+    [void]$builder.Append('"')
+    return $builder.ToString()
+}
+
+function Split-NativeOutput {
+    param([AllowNull()][string]$Text)
+
+    if ([string]::IsNullOrEmpty($Text)) {
+        return @()
+    }
+    return @($Text -split "\r?\n" | Where-Object { $_ -ne "" })
+}
+
+function Get-DeadlineRemainingMilliseconds {
+    param(
+        [datetime]$Deadline,
+        [scriptblock]$Now = $null
+    )
+
+    if ($null -eq $Now) {
+        $Now = { Get-Date }
+    }
+    $remaining = ($Deadline - (& $Now)).TotalMilliseconds
+    if ($remaining -le 0) {
+        return 0
+    }
+    return [int][Math]::Min([int]::MaxValue, [Math]::Ceiling($remaining))
+}
+
+function Get-BoundedNativeDiagnostic {
+    param(
+        [AllowNull()][string]$Text,
+        [int]$MaxCharacters = 4096
+    )
+
+    if ([string]::IsNullOrEmpty($Text)) {
+        return ""
+    }
+    $normalized = ($Text -replace "\r?\n", " | ").Trim()
+    if ($normalized.Length -le $MaxCharacters) {
+        return $normalized
+    }
+    return "<truncated> " + $normalized.Substring($normalized.Length - $MaxCharacters)
+}
+
+function Get-CompletedTaskText {
+    param([AllowNull()][object]$Task)
+
+    if ($null -eq $Task -or $Task.Status -ne [System.Threading.Tasks.TaskStatus]::RanToCompletion) {
+        return ""
+    }
+    return [string]$Task.Result
+}
+
+function Initialize-WindowsNativeJobType {
+    if ($null -ne ("StatsPro.ReleaseProcessJob" -as [type])) {
+        return
+    }
+
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+
+namespace StatsPro
+{
+    public static class ReleaseProcessJob
+    {
+        private const uint JobObjectExtendedLimitInformation = 9;
+        private const uint JobObjectLimitKillOnJobClose = 0x00002000;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct IoCounters
+        {
+            public ulong ReadOperationCount;
+            public ulong WriteOperationCount;
+            public ulong OtherOperationCount;
+            public ulong ReadTransferCount;
+            public ulong WriteTransferCount;
+            public ulong OtherTransferCount;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct BasicLimitInformation
+        {
+            public long PerProcessUserTimeLimit;
+            public long PerJobUserTimeLimit;
+            public uint LimitFlags;
+            public UIntPtr MinimumWorkingSetSize;
+            public UIntPtr MaximumWorkingSetSize;
+            public uint ActiveProcessLimit;
+            public UIntPtr Affinity;
+            public uint PriorityClass;
+            public uint SchedulingClass;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ExtendedLimitInformation
+        {
+            public BasicLimitInformation BasicLimitInformation;
+            public IoCounters IoInfo;
+            public UIntPtr ProcessMemoryLimit;
+            public UIntPtr JobMemoryLimit;
+            public UIntPtr PeakProcessMemoryUsed;
+            public UIntPtr PeakJobMemoryUsed;
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr CreateJobObject(IntPtr jobAttributes, string name);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool SetInformationJobObject(
+            IntPtr job,
+            uint informationClass,
+            IntPtr information,
+            uint informationLength);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool TerminateJobObject(IntPtr job, uint exitCode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr handle);
+
+        public static IntPtr CreateKillOnClose()
+        {
+            IntPtr job = CreateJobObject(IntPtr.Zero, null);
+            if (job == IntPtr.Zero)
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "CreateJobObject failed");
+            }
+
+            int size = Marshal.SizeOf(typeof(ExtendedLimitInformation));
+            IntPtr buffer = Marshal.AllocHGlobal(size);
+            try
+            {
+                ExtendedLimitInformation information = new ExtendedLimitInformation();
+                information.BasicLimitInformation.LimitFlags = JobObjectLimitKillOnJobClose;
+                Marshal.StructureToPtr(information, buffer, false);
+                if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation, buffer, (uint)size))
+                {
+                    int error = Marshal.GetLastWin32Error();
+                    CloseHandle(job);
+                    throw new Win32Exception(error, "SetInformationJobObject failed");
+                }
+                return job;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+
+        public static void Assign(IntPtr job, IntPtr process)
+        {
+            if (!AssignProcessToJobObject(job, process))
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "AssignProcessToJobObject failed");
+            }
+        }
+
+        public static void Terminate(IntPtr job)
+        {
+            if (!TerminateJobObject(job, 1))
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "TerminateJobObject failed");
+            }
+        }
+
+        public static void Close(IntPtr job)
+        {
+            if (job != IntPtr.Zero && !CloseHandle(job))
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "CloseHandle failed");
+            }
+        }
+    }
+}
+'@ -Language CSharp -ErrorAction Stop
+}
+
+function New-NativeProcessContainment {
+    param([string]$Description)
+
+    if ($env:OS -eq "Windows_NT") {
+        try {
+            Initialize-WindowsNativeJobType
+            $jobHandle = [StatsPro.ReleaseProcessJob]::CreateKillOnClose()
+            $gateName = "Local\StatsPro.ReleaseProcessGate.$([System.Guid]::NewGuid().ToString('N'))"
+            $gate = [System.Threading.EventWaitHandle]::new(
+                $false,
+                [System.Threading.EventResetMode]::ManualReset,
+                $gateName)
+        }
+        catch {
+            if ($jobHandle) {
+                try { [StatsPro.ReleaseProcessJob]::Close($jobHandle) } catch {}
+            }
+            throw "$Description cannot start because Windows Job Object containment is unavailable: $($_.Exception.Message)"
+        }
+        return [pscustomobject]@{
+            Kind           = "WindowsJob"
+            JobHandle      = $jobHandle
+            Gate           = $gate
+            GateName       = $gateName
+            ProcessGroupId = 0
+            KillPath       = $null
+            Terminated     = $false
+            Released       = $false
+        }
+    }
+
+    $setSid = Get-Command setsid -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    $kill = Get-Command kill -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $setSid -or -not $kill) {
+        throw "$Description cannot start because Unix process-group containment requires setsid and kill."
+    }
+    return [pscustomobject]@{
+        Kind           = "UnixProcessGroup"
+        SetSidPath     = $setSid.Source
+        KillPath       = $kill.Source
+        ProcessGroupId = 0
+        Terminated     = $false
+        Released       = $false
+    }
+}
+
+function Get-WindowsNativeGateEncodedCommand {
+    $wrapper = @'
+$ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
+
+Add-Type -TypeDefinition @"
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public static class StatsProNativeGateLauncher
+{
+    private const uint StartfUseStdHandles = 0x00000100;
+    private const uint CreateNoWindow = 0x08000000;
+    private const uint DuplicateSameAccess = 0x00000002;
+    private const uint Infinite = 0xFFFFFFFF;
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct StartupInfo
+    {
+        public uint cb;
+        public string lpReserved;
+        public string lpDesktop;
+        public string lpTitle;
+        public uint dwX;
+        public uint dwY;
+        public uint dwXSize;
+        public uint dwYSize;
+        public uint dwXCountChars;
+        public uint dwYCountChars;
+        public uint dwFillAttribute;
+        public uint dwFlags;
+        public short wShowWindow;
+        public short cbReserved2;
+        public IntPtr lpReserved2;
+        public IntPtr hStdInput;
+        public IntPtr hStdOutput;
+        public IntPtr hStdError;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProcessInformation
+    {
+        public IntPtr hProcess;
+        public IntPtr hThread;
+        public uint dwProcessId;
+        public uint dwThreadId;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr GetCurrentProcess();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr GetStdHandle(int standardHandle);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool DuplicateHandle(
+        IntPtr sourceProcess,
+        IntPtr sourceHandle,
+        IntPtr targetProcess,
+        out IntPtr targetHandle,
+        uint desiredAccess,
+        bool inheritHandle,
+        uint options);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool CreateProcess(
+        string applicationName,
+        StringBuilder commandLine,
+        IntPtr processAttributes,
+        IntPtr threadAttributes,
+        bool inheritHandles,
+        uint creationFlags,
+        IntPtr environment,
+        string currentDirectory,
+        ref StartupInfo startupInfo,
+        out ProcessInformation processInformation);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetExitCodeProcess(IntPtr process, out uint exitCode);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    private static IntPtr DuplicateStandardHandle(int standardHandle)
+    {
+        IntPtr source = GetStdHandle(standardHandle);
+        if (source == IntPtr.Zero || source == new IntPtr(-1))
+        {
+            return IntPtr.Zero;
+        }
+        IntPtr duplicate;
+        IntPtr current = GetCurrentProcess();
+        if (!DuplicateHandle(current, source, current, out duplicate, 0, true, DuplicateSameAccess))
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "DuplicateHandle failed");
+        }
+        return duplicate;
+    }
+
+    public static int Run(string commandLine, string workingDirectory)
+    {
+        IntPtr standardInput = IntPtr.Zero;
+        IntPtr standardOutput = IntPtr.Zero;
+        IntPtr standardError = IntPtr.Zero;
+        ProcessInformation process = new ProcessInformation();
+        try
+        {
+            standardInput = DuplicateStandardHandle(-10);
+            standardOutput = DuplicateStandardHandle(-11);
+            standardError = DuplicateStandardHandle(-12);
+            if (standardOutput == IntPtr.Zero || standardError == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("The native gate has no inheritable stdout/stderr handles.");
+            }
+
+            StartupInfo startup = new StartupInfo();
+            startup.cb = (uint)Marshal.SizeOf(typeof(StartupInfo));
+            startup.dwFlags = StartfUseStdHandles;
+            startup.hStdInput = standardInput;
+            startup.hStdOutput = standardOutput;
+            startup.hStdError = standardError;
+            StringBuilder mutableCommandLine = new StringBuilder(commandLine);
+            if (!CreateProcess(
+                null,
+                mutableCommandLine,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                true,
+                CreateNoWindow,
+                IntPtr.Zero,
+                workingDirectory,
+                ref startup,
+                out process))
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "CreateProcess failed");
+            }
+
+            uint waitResult = WaitForSingleObject(process.hProcess, Infinite);
+            if (waitResult != 0)
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "WaitForSingleObject failed");
+            }
+            uint exitCode;
+            if (!GetExitCodeProcess(process.hProcess, out exitCode))
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "GetExitCodeProcess failed");
+            }
+            return unchecked((int)exitCode);
+        }
+        finally
+        {
+            if (process.hThread != IntPtr.Zero) { CloseHandle(process.hThread); }
+            if (process.hProcess != IntPtr.Zero) { CloseHandle(process.hProcess); }
+            if (standardInput != IntPtr.Zero) { CloseHandle(standardInput); }
+            if (standardOutput != IntPtr.Zero) { CloseHandle(standardOutput); }
+            if (standardError != IntPtr.Zero) { CloseHandle(standardError); }
+        }
+    }
+}
+"@ -Language CSharp -ErrorAction Stop
+
+function Format-TargetArgument {
+    param([AllowNull()][string]$Argument)
+
+    if ($null -eq $Argument -or $Argument -eq "") { return '""' }
+    if ($Argument -notmatch '[\s"]') { return $Argument }
+    $slash = [string][char]92
+    $builder = [System.Text.StringBuilder]::new()
+    [void]$builder.Append('"')
+    $pendingSlashes = 0
+    foreach ($char in $Argument.ToCharArray()) {
+        if ($char -eq [char]92) { $pendingSlashes++; continue }
+        if ($char -eq '"') {
+            if ($pendingSlashes -gt 0) {
+                [void]$builder.Append($slash * ($pendingSlashes * 2))
+                $pendingSlashes = 0
+            }
+            [void]$builder.Append($slash)
+            [void]$builder.Append('"')
+            continue
+        }
+        if ($pendingSlashes -gt 0) {
+            [void]$builder.Append($slash * $pendingSlashes)
+            $pendingSlashes = 0
+        }
+        [void]$builder.Append($char)
+    }
+    if ($pendingSlashes -gt 0) { [void]$builder.Append($slash * ($pendingSlashes * 2)) }
+    [void]$builder.Append('"')
+    return $builder.ToString()
+}
+
+$gate = $null
+try {
+    $gateName = [Environment]::GetEnvironmentVariable("STATSPRO_NATIVE_GATE_NAME")
+    $payloadBase64 = [Environment]::GetEnvironmentVariable("STATSPRO_NATIVE_GATE_PAYLOAD")
+    if ([string]::IsNullOrWhiteSpace($gateName) -or [string]::IsNullOrWhiteSpace($payloadBase64)) {
+        throw "Native gate environment is incomplete."
+    }
+    $gate = [System.Threading.EventWaitHandle]::OpenExisting($gateName)
+    if (-not $gate.WaitOne()) { throw "Native gate wait failed." }
+
+    $payloadJson = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($payloadBase64))
+    $payload = $payloadJson | ConvertFrom-Json
+    [Environment]::SetEnvironmentVariable("STATSPRO_NATIVE_GATE_NAME", $null)
+    [Environment]::SetEnvironmentVariable("STATSPRO_NATIVE_GATE_PAYLOAD", $null)
+    $commandLine = @(
+        (Format-TargetArgument ([string]$payload.FilePath))
+        @($payload.Arguments | ForEach-Object { Format-TargetArgument ([string]$_) })
+    ) -join " "
+    exit [StatsProNativeGateLauncher]::Run($commandLine, [string]$payload.WorkingDirectory)
+}
+catch {
+    [Console]::Error.WriteLine("StatsPro native launch gate failed: " + $_.Exception.Message)
+    exit 125
+}
+finally {
+    if ($gate) { $gate.Dispose() }
+}
+'@
+    return [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($wrapper))
+}
+
+function Set-WindowsNativeGatePayload {
+    param(
+        [System.Diagnostics.ProcessStartInfo]$StartInfo,
+        [object]$Containment,
+        [string]$FilePath,
+        [string[]]$Arguments,
+        [string]$WorkingDirectory
+    )
+
+    $payload = [ordered]@{
+        FilePath         = $FilePath
+        Arguments        = @($Arguments)
+        WorkingDirectory = $WorkingDirectory
+    }
+    $payloadJson = $payload | ConvertTo-Json -Depth 4 -Compress
+    $payloadBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($payloadJson))
+    $StartInfo.EnvironmentVariables["STATSPRO_NATIVE_GATE_NAME"] = $Containment.GateName
+    $StartInfo.EnvironmentVariables["STATSPRO_NATIVE_GATE_PAYLOAD"] = $payloadBase64
+}
+
+function Set-NativeProcessContainment {
+    param(
+        [object]$Containment,
+        [System.Diagnostics.Process]$Process,
+        [string]$Description,
+        [datetime]$Deadline,
+        [scriptblock]$AssignWindowsJob = $null
+    )
+
+    if ($Containment.Kind -eq "WindowsJob") {
+        if ($null -eq $AssignWindowsJob) {
+            $AssignWindowsJob = {
+                param([object]$JobContainment, [System.Diagnostics.Process]$JobProcess)
+                [StatsPro.ReleaseProcessJob]::Assign($JobContainment.JobHandle, $JobProcess.Handle)
+            }
+        }
+        try {
+            & $AssignWindowsJob $Containment $Process
+        }
+        catch {
+            try { if (-not $Process.HasExited) { $Process.Kill() } } catch {}
+            throw "$Description started but could not be assigned to its Windows Job Object: $($_.Exception.Message)"
+        }
+        try {
+            if ((Get-DeadlineRemainingMilliseconds -Deadline $Deadline) -lt 1) {
+                throw [System.TimeoutException]::new("Deadline expired before signalling the contained Windows target launch gate.")
+            }
+            if (-not $Containment.Gate.Set()) {
+                throw "The native launch gate could not be signalled."
+            }
+        }
+        catch {
+            try { [StatsPro.ReleaseProcessJob]::Terminate($Containment.JobHandle) } catch {}
+            $Containment.Terminated = $true
+            throw "$Description was contained but its launch gate failed before target start: $($_.Exception.Message)"
+        }
+        return
+    }
+    $Containment.ProcessGroupId = $Process.Id
+}
+
+function Invoke-UnixProcessGroupSignal {
+    param(
+        [object]$Containment,
+        [ValidateSet("0", "TERM", "KILL")][string]$Signal,
+        [datetime]$Deadline
+    )
+
+    $remainingMilliseconds = Get-DeadlineRemainingMilliseconds -Deadline $Deadline
+    if ($remainingMilliseconds -lt 1) {
+        throw "kill -$Signal could not run before the process-group cleanup deadline."
+    }
+    $signalInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $signalInfo.FileName = $Containment.KillPath
+    $signalInfo.Arguments = "-$Signal -- -$($Containment.ProcessGroupId)"
+    $signalInfo.UseShellExecute = $false
+    $signalInfo.CreateNoWindow = $true
+    $signalInfo.RedirectStandardOutput = $true
+    $signalInfo.RedirectStandardError = $true
+    $signal = [System.Diagnostics.Process]::new()
+    $signal.StartInfo = $signalInfo
+    try {
+        [void]$signal.Start()
+        $stdoutTask = $signal.StandardOutput.ReadToEndAsync()
+        $stderrTask = $signal.StandardError.ReadToEndAsync()
+        if (-not $signal.WaitForExit($remainingMilliseconds)) {
+            try { $signal.Kill() } catch {}
+            throw "kill -$Signal exceeded its cleanup bound."
+        }
+        $remainingMilliseconds = Get-DeadlineRemainingMilliseconds -Deadline $Deadline
+        if ($remainingMilliseconds -lt 1 -or
+            -not $stdoutTask.Wait($remainingMilliseconds) -or
+            -not $stderrTask.Wait((Get-DeadlineRemainingMilliseconds -Deadline $Deadline))) {
+            throw "kill -$Signal output did not drain before the process-group cleanup deadline."
+        }
+        return [pscustomobject]@{
+            ExitCode = $signal.ExitCode
+            StdOut   = [string]$stdoutTask.Result
+            StdErr   = [string]$stderrTask.Result
+        }
+    }
+    finally {
+        $signal.Dispose()
+    }
+}
+
+function Test-UnixProcessGroupMissingResult {
+    param([object]$Result)
+
+    return $Result.ExitCode -ne 0 -and [string]$Result.StdErr -match '(?i)no such process'
+}
+
+function Assert-UnixProcessGroupAbsent {
+    param(
+        [object]$Containment,
+        [datetime]$Deadline,
+        [string]$Description
+    )
+
+    while ((Get-DeadlineRemainingMilliseconds -Deadline $Deadline) -gt 0) {
+        $probe = Invoke-UnixProcessGroupSignal -Containment $Containment -Signal "0" -Deadline $Deadline
+        if (Test-UnixProcessGroupMissingResult -Result $probe) {
+            return
+        }
+        if ($probe.ExitCode -ne 0) {
+            throw "$Description process-group absence probe failed: $($probe.StdErr.Trim())"
+        }
+        Start-Sleep -Milliseconds ([Math]::Min(50, (Get-DeadlineRemainingMilliseconds -Deadline $Deadline)))
+    }
+    throw "$Description Unix process group $($Containment.ProcessGroupId) still existed after bounded cleanup."
+}
+
+function Close-NativeProcessContainment {
+    param(
+        [AllowNull()][object]$Containment
+    )
+
+    if ($null -eq $Containment -or $Containment.Released) {
+        return
+    }
+    try {
+        if ($Containment.Kind -eq "WindowsJob") {
+            try { $Containment.Gate.Dispose() } finally {
+                [StatsPro.ReleaseProcessJob]::Close($Containment.JobHandle)
+            }
+        }
+    }
+    finally {
+        $Containment.Released = $true
+    }
+}
+
+function Stop-NativeProcessTree {
+    param(
+        [System.Diagnostics.Process]$Process,
+        [object]$Containment,
+        [string]$Description,
+        [int]$CleanupMilliseconds = 5000,
+        [scriptblock]$RunUnixProcessGroupSignal = $null,
+        [scriptblock]$VerifyUnixProcessGroupAbsent = $null,
+        [scriptblock]$KillUnixRoot = $null
+    )
+
+    if ($Containment.Kind -eq "WindowsJob") {
+        try {
+            [StatsPro.ReleaseProcessJob]::Terminate($Containment.JobHandle)
+        }
+        catch {
+            throw "$Description Windows Job Object termination failed: $($_.Exception.Message)"
+        }
+        $Containment.Terminated = $true
+        if (-not $Process.HasExited -and -not $Process.WaitForExit($CleanupMilliseconds)) {
+            throw "$Description root did not exit after Windows Job Object termination."
+        }
+        return "Windows Job Object"
+    }
+
+    if ($null -eq $RunUnixProcessGroupSignal) {
+        $RunUnixProcessGroupSignal = {
+            param([object]$SignalContainment, [string]$SignalName, [datetime]$SignalDeadline)
+            Invoke-UnixProcessGroupSignal -Containment $SignalContainment -Signal $SignalName -Deadline $SignalDeadline
+        }
+    }
+    if ($null -eq $VerifyUnixProcessGroupAbsent) {
+        $VerifyUnixProcessGroupAbsent = {
+            param([object]$ProbeContainment, [datetime]$ProbeDeadline, [string]$ProbeDescription)
+            Assert-UnixProcessGroupAbsent -Containment $ProbeContainment -Deadline $ProbeDeadline -Description $ProbeDescription
+        }
+    }
+    if ($null -eq $KillUnixRoot) {
+        $KillUnixRoot = {
+            param([System.Diagnostics.Process]$RootProcess)
+            $RootProcess.Kill()
+        }
+    }
+
+    $cleanupDeadline = (Get-Date).AddMilliseconds($CleanupMilliseconds)
+    $termError = $null
+    try {
+        $termResult = & $RunUnixProcessGroupSignal $Containment "TERM" $cleanupDeadline
+        if ($termResult.ExitCode -ne 0 -and -not (Test-UnixProcessGroupMissingResult -Result $termResult)) {
+            $termError = "TERM failed: $($termResult.StdErr.Trim())"
+        }
+    }
+    catch {
+        $termError = "TERM failed: $($_.Exception.Message)"
+    }
+    if (-not $Process.HasExited) {
+        $waitMilliseconds = [Math]::Min(250, (Get-DeadlineRemainingMilliseconds -Deadline $cleanupDeadline))
+        if ($waitMilliseconds -gt 0) {
+            [void]$Process.WaitForExit($waitMilliseconds)
+        }
+    }
+    $rootKillError = $null
+    if (-not $Process.HasExited) {
+        try {
+            & $KillUnixRoot $Process
+        }
+        catch {
+            $rootExitedAfterKillRace = $false
+            try { $rootExitedAfterKillRace = $Process.HasExited } catch {}
+            if (-not $rootExitedAfterKillRace) {
+                $rootKillError = $_.Exception.Message
+            }
+        }
+        if (-not $Process.HasExited) {
+            $remainingMilliseconds = Get-DeadlineRemainingMilliseconds -Deadline $cleanupDeadline
+            if ($remainingMilliseconds -gt 0) {
+                [void]$Process.WaitForExit([Math]::Min(250, $remainingMilliseconds))
+            }
+        }
+    }
+
+    $groupKillError = $null
+    try {
+        $killResult = & $RunUnixProcessGroupSignal $Containment "KILL" $cleanupDeadline
+        if ($killResult.ExitCode -ne 0 -and -not (Test-UnixProcessGroupMissingResult -Result $killResult)) {
+            $groupKillError = "KILL failed: $($killResult.StdErr.Trim())"
+        }
+    }
+    catch {
+        $groupKillError = "KILL failed: $($_.Exception.Message)"
+    }
+    $absenceError = $null
+    try {
+        & $VerifyUnixProcessGroupAbsent $Containment $cleanupDeadline $Description
+    }
+    catch {
+        $absenceError = $_.Exception.Message
+    }
+
+    if (-not $Process.HasExited) {
+        $remainingMilliseconds = Get-DeadlineRemainingMilliseconds -Deadline $cleanupDeadline
+        if ($remainingMilliseconds -gt 0) {
+            [void]$Process.WaitForExit($remainingMilliseconds)
+        }
+    }
+    $rootStillRunning = $false
+    try { $rootStillRunning = -not $Process.HasExited } catch {}
+    $blockingErrors = @()
+    foreach ($cleanupError in @($groupKillError, $absenceError)) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$cleanupError)) {
+            $blockingErrors += $cleanupError
+        }
+    }
+    if ($rootStillRunning) {
+        $rootDetail = if ($rootKillError) { $rootKillError } else { "root remained alive after final group KILL" }
+        $blockingErrors += "root cleanup failed: $rootDetail"
+    }
+    if ($blockingErrors.Count -gt 0) {
+        $context = @()
+        if (-not [string]::IsNullOrWhiteSpace([string]$termError)) {
+            $context += $termError
+        }
+        throw "$Description Unix process-tree cleanup failed: $(@($context + $blockingErrors) -join '; ')"
+    }
+    $Containment.Terminated = $true
+    return "Unix process group $($Containment.ProcessGroupId)"
+}
+
+function Throw-NativeDrainTimeout {
+    param(
+        [System.Diagnostics.Process]$Process,
+        [object]$Containment,
+        [string]$Description,
+        [ValidateSet("stdout", "stderr")][string]$StreamName,
+        [object]$StdOutTask,
+        [object]$StdErrTask
+    )
+
+    $treeResult = "not attempted"
+    $treeError = $null
+    try {
+        $treeResult = Stop-NativeProcessTree -Process $Process -Containment $Containment -Description $Description
+    }
+    catch {
+        $treeError = $_.Exception.Message
+        try { if (-not $Process.HasExited) { $Process.Kill() } } catch {}
+    }
+    [void]$StdOutTask.Wait(250)
+    [void]$StdErrTask.Wait(250)
+    $details = @()
+    $stdout = Get-BoundedNativeDiagnostic -Text (Get-CompletedTaskText -Task $StdOutTask)
+    $stderr = Get-BoundedNativeDiagnostic -Text (Get-CompletedTaskText -Task $StdErrTask)
+    if ($stdout) { $details += "stdout: $stdout" }
+    if ($stderr) { $details += "stderr: $stderr" }
+    if ($treeError) { $details += "tree cleanup: $treeError" } else { $details += "tree cleanup: $treeResult" }
+    throw [System.TimeoutException]::new(
+        "$Description exited but $StreamName did not drain before its absolute deadline (PID $($Process.Id)). $($details -join '; ')")
+}
+
 function Invoke-NativeCapture {
     param(
         [string]$FilePath,
-        [string[]]$Arguments = @()
+        [string[]]$Arguments = @(),
+        [datetime]$Deadline,
+        [string]$Description = $null,
+        [string]$WorkingDirectory = (Get-Location).Path,
+        [scriptblock]$AssignWindowsJob = $null
     )
 
-    $previousErrorActionPreference = $ErrorActionPreference
+    if ([string]::IsNullOrWhiteSpace($FilePath)) {
+        throw "Native process path is required."
+    }
+    $displayName = if ([string]::IsNullOrWhiteSpace($Description)) { "native process '$FilePath'" } else { $Description }
+    if ((Get-DeadlineRemainingMilliseconds -Deadline $Deadline) -lt 1) {
+        throw [System.TimeoutException]::new("Deadline expired before starting $displayName.")
+    }
+
+    $effectiveFilePath = $FilePath
+    $effectiveArguments = @($Arguments)
+    if ([System.IO.Path]::GetExtension($FilePath) -in @(".bat", ".cmd")) {
+        if ([string]::IsNullOrWhiteSpace($env:ComSpec)) {
+            throw "Cannot run $displayName because ComSpec is not set."
+        }
+        $effectiveFilePath = $env:ComSpec
+        $effectiveArguments = @("/d", "/c", "call", $FilePath) + @($Arguments)
+    }
+
+    $containment = $null
+    $process = $null
     try {
-        $ErrorActionPreference = "Continue"
-        $output = @(& $FilePath @Arguments 2>&1)
-        $exitCode = $LASTEXITCODE
+        $containment = New-NativeProcessContainment -Description $displayName
+        if ($containment.Kind -eq "UnixProcessGroup") {
+            $effectiveArguments = @("--", $effectiveFilePath) + @($effectiveArguments)
+            $effectiveFilePath = $containment.SetSidPath
+        }
+        else {
+            $targetFilePath = $effectiveFilePath
+            $targetArguments = @($effectiveArguments)
+            $hostExecutable = (Get-Process -Id $PID).MainModule.FileName
+            if ([string]::IsNullOrWhiteSpace($hostExecutable) -or
+                -not (Test-Path -LiteralPath $hostExecutable -PathType Leaf)) {
+                Close-NativeProcessContainment -Containment $containment
+                throw "$displayName cannot start because the Windows PowerShell gate host is unavailable."
+            }
+            $effectiveFilePath = $hostExecutable
+            $effectiveArguments = @(
+                "-NoLogo", "-NoProfile", "-NonInteractive",
+                "-EncodedCommand", (Get-WindowsNativeGateEncodedCommand)
+            )
+        }
+
+        $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+        $startInfo.FileName = $effectiveFilePath
+        $startInfo.WorkingDirectory = $WorkingDirectory
+        $startInfo.Arguments = (@($effectiveArguments) | ForEach-Object { Format-NativeArgument $_ }) -join " "
+        $startInfo.UseShellExecute = $false
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $startInfo.CreateNoWindow = $true
+        if ($containment.Kind -eq "WindowsJob") {
+            Set-WindowsNativeGatePayload `
+                -StartInfo $startInfo `
+                -Containment $containment `
+                -FilePath $targetFilePath `
+                -Arguments $targetArguments `
+                -WorkingDirectory $WorkingDirectory
+        }
+
+        $process = [System.Diagnostics.Process]::new()
+        $process.StartInfo = $startInfo
+        $stdoutTask = $null
+        $stderrTask = $null
+        if ((Get-DeadlineRemainingMilliseconds -Deadline $Deadline) -lt 1) {
+            throw [System.TimeoutException]::new("Deadline expired before starting $displayName after containment preparation.")
+        }
+        [void]$process.Start()
+        Set-NativeProcessContainment `
+            -Containment $containment `
+            -Process $process `
+            -Description $displayName `
+            -Deadline $Deadline `
+            -AssignWindowsJob $AssignWindowsJob
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+
+        $remainingMilliseconds = Get-DeadlineRemainingMilliseconds -Deadline $Deadline
+        $completed = $remainingMilliseconds -gt 0 -and $process.WaitForExit($remainingMilliseconds)
+        if ($completed -and $process.ExitTime -gt $Deadline) {
+            $completed = $false
+        }
+        if (-not $completed) {
+            $treeTermination = "not attempted"
+            $treeError = $null
+            try {
+                $treeTermination = Stop-NativeProcessTree -Process $process -Containment $containment -Description $displayName
+            }
+            catch {
+                $treeError = $_.Exception.Message
+                try { if (-not $process.HasExited) { $process.Kill() } } catch {}
+                [void]$process.WaitForExit(1000)
+            }
+            [void]$stdoutTask.Wait(1000)
+            [void]$stderrTask.Wait(1000)
+            $stdout = Get-BoundedNativeDiagnostic -Text (Get-CompletedTaskText -Task $stdoutTask)
+            $stderr = Get-BoundedNativeDiagnostic -Text (Get-CompletedTaskText -Task $stderrTask)
+            $details = @()
+            if ($stdout) { $details += "stdout: $stdout" }
+            if ($stderr) { $details += "stderr: $stderr" }
+            if ($treeError) { $details += "tree cleanup: $treeError" } else { $details += "tree cleanup: $treeTermination" }
+            $suffix = if ($details.Count -gt 0) { " " + ($details -join "; ") } else { "" }
+            throw [System.TimeoutException]::new("$displayName exceeded its absolute deadline (PID $($process.Id)).$suffix")
+        }
+
+        $remainingMilliseconds = Get-DeadlineRemainingMilliseconds -Deadline $Deadline
+        if ($remainingMilliseconds -lt 1 -or -not $stdoutTask.Wait($remainingMilliseconds)) {
+            Throw-NativeDrainTimeout `
+                -Process $process `
+                -Containment $containment `
+                -Description $displayName `
+                -StreamName "stdout" `
+                -StdOutTask $stdoutTask `
+                -StdErrTask $stderrTask
+        }
+        $remainingMilliseconds = Get-DeadlineRemainingMilliseconds -Deadline $Deadline
+        if ($remainingMilliseconds -lt 1 -or -not $stderrTask.Wait($remainingMilliseconds)) {
+            Throw-NativeDrainTimeout `
+                -Process $process `
+                -Containment $containment `
+                -Description $displayName `
+                -StreamName "stderr" `
+                -StdOutTask $stdoutTask `
+                -StdErrTask $stderrTask
+        }
+
+        $stdout = Split-NativeOutput $stdoutTask.Result
+        $stderr = Split-NativeOutput $stderrTask.Result
+        return @{
+            ExitCode = $process.ExitCode
+            StdOut   = $stdout
+            StdErr   = $stderr
+            Output   = @($stdout) + @($stderr)
+        }
     }
     finally {
-        $ErrorActionPreference = $previousErrorActionPreference
-    }
-    return @{
-        ExitCode = $exitCode
-        Output   = $output
+        try {
+            Close-NativeProcessContainment -Containment $containment
+        }
+        finally {
+            if ($process) {
+                $process.Dispose()
+            }
+        }
     }
 }
 
@@ -65,6 +1006,380 @@ function Assert-ThrowsMatch {
     }
     if ($completed) {
         throw "$Name should have failed."
+    }
+}
+
+function Invoke-NativeCaptureSelfTest {
+    $fixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-native-capture-test-" + [System.Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
+    $treePids = [System.Collections.Generic.List[int]]::new()
+    try {
+        $powerShellPath = (Get-Process -Id $PID).MainModule.FileName
+        if ([string]::IsNullOrWhiteSpace($powerShellPath) -or -not (Test-Path -LiteralPath $powerShellPath -PathType Leaf)) {
+            throw "Native capture self-test could not resolve the current PowerShell executable."
+        }
+
+        $floodScript = Join-Path $fixtureRoot "flood.ps1"
+        [System.IO.File]::WriteAllText($floodScript, @'
+param([string]$Value)
+for ($index = 0; $index -lt 6000; $index++) {
+    [Console]::Out.WriteLine("stdout-{0:D4}-xxxxxxxxxxxxxxxx" -f $index)
+    [Console]::Error.WriteLine("stderr-{0:D4}-yyyyyyyyyyyyyyyy" -f $index)
+}
+[Console]::Out.WriteLine("cwd:" + [Environment]::CurrentDirectory)
+[Console]::Out.WriteLine("argument:$Value")
+exit 7
+'@, [System.Text.UTF8Encoding]::new($false))
+        $argumentValue = 'space "quote" trailing\'
+        $floodResult = Invoke-NativeCapture `
+            -FilePath $powerShellPath `
+            -Arguments @("-NoLogo", "-NoProfile", "-File", $floodScript, "-Value", $argumentValue) `
+            -Deadline (Get-Date).AddSeconds(30) `
+            -Description "native dual-stream capture self-test" `
+            -WorkingDirectory $fixtureRoot
+        if ($floodResult.ExitCode -ne 7 -or
+            $floodResult.StdOut.Count -ne 6002 -or
+            $floodResult.StdErr.Count -ne 6000 -or
+            $floodResult.StdOut[-1] -ne "argument:$argumentValue" -or
+            -not [System.StringComparer]::OrdinalIgnoreCase.Equals($floodResult.StdOut[-2], "cwd:$fixtureRoot") -or
+            $floodResult.StdOut[0] -notmatch '^stdout-' -or
+            $floodResult.StdErr[0] -notmatch '^stderr-') {
+            throw "Native capture must drain both full streams, preserve arguments, and return the exact exit code. Exit=$($floodResult.ExitCode), stdout=$($floodResult.StdOut.Count), stderr=$($floodResult.StdErr.Count), firstErr='$($floodResult.StdErr[0])', lastErr='$($floodResult.StdErr[-1])', last='$($floodResult.StdOut[-1])'."
+        }
+
+        $expiredSentinel = Join-Path $fixtureRoot "expired-started.txt"
+        $sentinelScript = Join-Path $fixtureRoot "sentinel.ps1"
+        [System.IO.File]::WriteAllText($sentinelScript, @'
+param([string]$SentinelPath)
+[System.IO.File]::WriteAllText($SentinelPath, "started")
+'@, [System.Text.UTF8Encoding]::new($false))
+        Assert-ThrowsMatch "expired native deadline prevents process start" {
+            [void](Invoke-NativeCapture `
+                -FilePath $powerShellPath `
+                -Arguments @("-NoLogo", "-NoProfile", "-File", $sentinelScript, "-SentinelPath", $expiredSentinel) `
+                -Deadline (Get-Date).AddMilliseconds(-1) `
+                -Description "expired native process self-test")
+        } "Deadline expired before starting expired native process self-test"
+        if (Test-Path -LiteralPath $expiredSentinel) {
+            throw "An already-expired native deadline must not start the child process."
+        }
+
+        if ($env:OS -eq "Windows_NT") {
+            $assignmentFailureSentinel = Join-Path $fixtureRoot "assignment-failure-started.txt"
+            Assert-ThrowsMatch "Windows assignment failure prevents target start" {
+                [void](Invoke-NativeCapture `
+                    -FilePath $powerShellPath `
+                    -Arguments @("-NoLogo", "-NoProfile", "-File", $sentinelScript, "-SentinelPath", $assignmentFailureSentinel) `
+                    -Deadline (Get-Date).AddSeconds(10) `
+                    -Description "assignment failure native process self-test" `
+                    -AssignWindowsJob {
+                        param([object]$Containment, [System.Diagnostics.Process]$Process)
+                        $null = @($Containment, $Process)
+                        throw "injected assignment failure"
+                    })
+            } "could not be assigned to its Windows Job Object.*injected assignment failure"
+            Start-Sleep -Milliseconds 500
+            if (Test-Path -LiteralPath $assignmentFailureSentinel) {
+                throw "Windows Job Object assignment failure allowed the gated target to start."
+            }
+
+            $assignmentDeadlineSentinel = Join-Path $fixtureRoot "assignment-deadline-started.txt"
+            Assert-ThrowsMatch "Windows assignment cannot signal target after deadline" {
+                [void](Invoke-NativeCapture `
+                    -FilePath $powerShellPath `
+                    -Arguments @("-NoLogo", "-NoProfile", "-File", $sentinelScript, "-SentinelPath", $assignmentDeadlineSentinel) `
+                    -Deadline (Get-Date).AddSeconds(2) `
+                    -Description "assignment deadline native process self-test" `
+                    -AssignWindowsJob {
+                        param([object]$Containment, [System.Diagnostics.Process]$Process)
+                        [StatsPro.ReleaseProcessJob]::Assign($Containment.JobHandle, $Process.Handle)
+                        Start-Sleep -Milliseconds 2500
+                    })
+            } "launch gate failed before target start.*Deadline expired before signalling"
+            Start-Sleep -Milliseconds 500
+            if (Test-Path -LiteralPath $assignmentDeadlineSentinel) {
+                throw "An expired Windows assignment path signalled the gated target."
+            }
+        }
+
+        $rootRaceInfo = [System.Diagnostics.ProcessStartInfo]::new()
+        $rootRaceInfo.FileName = $powerShellPath
+        $rootRaceInfo.Arguments = (@(
+            "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 300"
+        ) | ForEach-Object { Format-NativeArgument $_ }) -join " "
+        $rootRaceInfo.UseShellExecute = $false
+        $rootRaceInfo.CreateNoWindow = $true
+        $rootRaceProcess = [System.Diagnostics.Process]::new()
+        $rootRaceProcess.StartInfo = $rootRaceInfo
+        $unixRaceSignals = [System.Collections.Generic.List[string]]::new()
+        $unixRaceState = [pscustomobject]@{ AbsenceChecks = 0 }
+        try {
+            [void]$rootRaceProcess.Start()
+            $treePids.Add($rootRaceProcess.Id)
+            $fakeUnixContainment = [pscustomobject]@{
+                Kind           = "UnixProcessGroup"
+                ProcessGroupId = 4242
+                Terminated     = $false
+            }
+            $raceCleanup = Stop-NativeProcessTree `
+                -Process $rootRaceProcess `
+                -Containment $fakeUnixContainment `
+                -Description "Unix root-exit race self-test" `
+                -CleanupMilliseconds 5000 `
+                -RunUnixProcessGroupSignal {
+                    param([object]$Containment, [string]$Signal, [datetime]$Deadline)
+                    $null = @($Containment, $Deadline)
+                    $unixRaceSignals.Add($Signal) | Out-Null
+                    return [pscustomobject]@{ ExitCode = 0; StdOut = ""; StdErr = "" }
+                } `
+                -KillUnixRoot {
+                    param([System.Diagnostics.Process]$RootProcess)
+                    $RootProcess.Kill()
+                    [void]$RootProcess.WaitForExit(5000)
+                    throw "injected root exited before Kill completed"
+                } `
+                -VerifyUnixProcessGroupAbsent {
+                    param([object]$Containment, [datetime]$Deadline, [string]$Description)
+                    $null = @($Containment, $Deadline, $Description)
+                    $unixRaceState.AbsenceChecks++
+                }
+            if ($raceCleanup -ne "Unix process group 4242" -or
+                ($unixRaceSignals -join ",") -ne "TERM,KILL" -or
+                $unixRaceState.AbsenceChecks -ne 1 -or
+                -not $fakeUnixContainment.Terminated -or
+                -not $rootRaceProcess.HasExited) {
+                throw "Unix root-exit race did not preserve final group KILL and absence verification."
+            }
+        }
+        finally {
+            try { if (-not $rootRaceProcess.HasExited) { $rootRaceProcess.Kill() } } catch {}
+            $rootRaceProcess.Dispose()
+        }
+
+        $grandchildScript = Join-Path $fixtureRoot "grandchild.ps1"
+        $parentScript = Join-Path $fixtureRoot "parent.ps1"
+        $parentPidPath = Join-Path $fixtureRoot "parent.pid"
+        $grandchildPidPath = Join-Path $fixtureRoot "grandchild.pid"
+        $lateSentinel = Join-Path $fixtureRoot "grandchild-survived.txt"
+        [System.IO.File]::WriteAllText($grandchildScript, @'
+param([string]$PidPath, [string]$SentinelPath)
+[System.IO.File]::WriteAllText($PidPath, [string]$PID)
+[Console]::Out.WriteLine("grandchild-stdout-marker")
+[Console]::Error.WriteLine("grandchild-stderr-marker")
+Start-Sleep -Seconds 5
+[System.IO.File]::WriteAllText($SentinelPath, "survived")
+while ($true) { Start-Sleep -Seconds 1 }
+'@, [System.Text.UTF8Encoding]::new($false))
+        [System.IO.File]::WriteAllText($parentScript, @'
+param(
+    [string]$PowerShellPath,
+    [string]$GrandchildPath,
+    [string]$ParentPidPath,
+    [string]$GrandchildPidPath,
+    [string]$SentinelPath,
+    [string]$Secret
+)
+[System.IO.File]::WriteAllText($ParentPidPath, [string]$PID)
+$arguments = @(
+    "-NoLogo", "-NoProfile", "-File", $GrandchildPath,
+    "-PidPath", $GrandchildPidPath,
+    "-SentinelPath", $SentinelPath
+)
+[void](Start-Process -FilePath $PowerShellPath -ArgumentList $arguments -PassThru)
+[Console]::Out.WriteLine("parent-stdout-marker")
+[Console]::Error.WriteLine("parent-stderr-marker")
+while ($true) { Start-Sleep -Seconds 1 }
+'@, [System.Text.UTF8Encoding]::new($false))
+
+        $secret = "must-not-appear-$([System.Guid]::NewGuid().ToString('N'))"
+        $timeoutMessage = ""
+        try {
+            [void](Invoke-NativeCapture `
+                -FilePath $powerShellPath `
+                -Arguments @(
+                    "-NoLogo", "-NoProfile", "-File", $parentScript,
+                    "-PowerShellPath", $powerShellPath,
+                    "-GrandchildPath", $grandchildScript,
+                    "-ParentPidPath", $parentPidPath,
+                    "-GrandchildPidPath", $grandchildPidPath,
+                    "-SentinelPath", $lateSentinel,
+                    "-Secret", $secret
+                ) `
+                -Deadline (Get-Date).AddSeconds(3) `
+                -Description "hung process-tree self-test")
+            throw "Hung native process tree should have timed out."
+        }
+        catch {
+            $timeoutMessage = $_.Exception.Message
+        }
+        if ($timeoutMessage -notmatch 'exceeded its absolute deadline' -or
+            $timeoutMessage -notmatch 'parent-stdout-marker' -or
+            $timeoutMessage -notmatch 'parent-stderr-marker' -or
+            $timeoutMessage.Contains($secret)) {
+            throw "Native timeout diagnostics must preserve stdout/stderr without exposing raw arguments. Got: $timeoutMessage"
+        }
+
+        foreach ($pidPath in @($parentPidPath, $grandchildPidPath)) {
+            if (-not (Test-Path -LiteralPath $pidPath -PathType Leaf)) {
+                throw "Hung process-tree self-test did not record '$pidPath'."
+            }
+            $childPid = 0
+            if (-not [int]::TryParse(([System.IO.File]::ReadAllText($pidPath)).Trim(), [ref]$childPid)) {
+                throw "Hung process-tree self-test recorded an invalid PID."
+            }
+            $treePids.Add($childPid)
+            if (Get-Process -Id $childPid -ErrorAction SilentlyContinue) {
+                throw "Native timeout left process $childPid running."
+            }
+        }
+        Start-Sleep -Seconds 3
+        if (Test-Path -LiteralPath $lateSentinel) {
+            throw "Native timeout left a grandchild alive long enough to write its delayed sentinel."
+        }
+
+        if ($env:OS -ne "Windows_NT") {
+            $shell = Get-Command sh -CommandType Application -ErrorAction Stop | Select-Object -First 1
+            $unixTreeScript = Join-Path $fixtureRoot "unix-process-group.sh"
+            $unixRootPidPath = Join-Path $fixtureRoot "unix-root.pid"
+            $unixChildPidPath = Join-Path $fixtureRoot "unix-child.pid"
+            $unixProcessGroupPath = Join-Path $fixtureRoot "unix-pgid.txt"
+            [System.IO.File]::WriteAllText($unixTreeScript, @'
+root_pid=$$
+root_pid_path=$1
+process_group_path=$2
+child_pid_path=$3
+set -- $(ps -o pgid= -p $$)
+process_group=$1
+printf '%s' "$root_pid" > "$root_pid_path"
+printf '%s' "$process_group" > "$process_group_path"
+sleep 300 &
+child_pid=$!
+printf '%s' "$child_pid" > "$child_pid_path"
+printf '%s\n' 'unix-pgid-ready'
+wait
+'@, [System.Text.UTF8Encoding]::new($false))
+            $unixTimeoutMessage = ""
+            try {
+                [void](Invoke-NativeCapture `
+                    -FilePath $shell.Source `
+                    -Arguments @(
+                        $unixTreeScript,
+                        $unixRootPidPath,
+                        $unixProcessGroupPath,
+                        $unixChildPidPath
+                    ) `
+                    -Deadline (Get-Date).AddSeconds(3) `
+                    -Description "Unix process-group self-test")
+                throw "Unix process-group fixture should have timed out."
+            }
+            catch {
+                $unixTimeoutMessage = $_.Exception.Message
+            }
+            if ($unixTimeoutMessage -notmatch 'exceeded its absolute deadline' -or
+                $unixTimeoutMessage -notmatch 'unix-pgid-ready' -or
+                $unixTimeoutMessage -notmatch 'tree cleanup: Unix process group') {
+                throw "Unix PGID timeout did not preserve output and verified cleanup: $unixTimeoutMessage"
+            }
+            foreach ($path in @($unixRootPidPath, $unixChildPidPath, $unixProcessGroupPath)) {
+                if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+                    throw "Unix PGID fixture did not write '$path'."
+                }
+            }
+            $unixRootPid = [int]([System.IO.File]::ReadAllText($unixRootPidPath).Trim())
+            $unixChildPid = [int]([System.IO.File]::ReadAllText($unixChildPidPath).Trim())
+            $unixProcessGroup = [int]([System.IO.File]::ReadAllText($unixProcessGroupPath).Trim())
+            $treePids.Add($unixRootPid)
+            $treePids.Add($unixChildPid)
+            if ($unixProcessGroup -ne $unixRootPid) {
+                throw "setsid did not establish the target PID $unixRootPid as PGID; got $unixProcessGroup."
+            }
+            foreach ($unixPid in @($unixRootPid, $unixChildPid)) {
+                if (Get-Process -Id $unixPid -ErrorAction SilentlyContinue) {
+                    throw "Unix process-group cleanup left process $unixPid running."
+                }
+            }
+        }
+
+        $orphanParentScript = Join-Path $fixtureRoot "orphan-parent.ps1"
+        $orphanPidPath = Join-Path $fixtureRoot "orphan.pid"
+        $orphanSentinel = Join-Path $fixtureRoot "orphan-survived.txt"
+        [System.IO.File]::WriteAllText($orphanParentScript, @'
+param(
+    [string]$PowerShellPath,
+    [string]$GrandchildPath,
+    [string]$GrandchildPidPath,
+    [string]$SentinelPath
+)
+$startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+$startInfo.FileName = $PowerShellPath
+$startInfo.Arguments = "-NoLogo -NoProfile -File `"$GrandchildPath`" -PidPath `"$GrandchildPidPath`" -SentinelPath `"$SentinelPath`""
+$startInfo.UseShellExecute = $false
+$startInfo.CreateNoWindow = $true
+$child = [System.Diagnostics.Process]::new()
+$child.StartInfo = $startInfo
+[void]$child.Start()
+$child.Dispose()
+[Console]::Out.WriteLine("orphan-parent-exited")
+'@, [System.Text.UTF8Encoding]::new($false))
+        $orphanMessage = ""
+        try {
+            [void](Invoke-NativeCapture `
+                -FilePath $powerShellPath `
+                -Arguments @(
+                    "-NoLogo", "-NoProfile", "-File", $orphanParentScript,
+                    "-PowerShellPath", $powerShellPath,
+                    "-GrandchildPath", $grandchildScript,
+                    "-GrandchildPidPath", $orphanPidPath,
+                    "-SentinelPath", $orphanSentinel
+                ) `
+                -Deadline (Get-Date).AddSeconds(2) `
+                -Description "inherited output handle self-test")
+            throw "A descendant-held output handle should not produce silent success."
+        }
+        catch {
+            $orphanMessage = $_.Exception.Message
+        }
+        if ($orphanMessage -notmatch 'did not drain before its absolute deadline' -or
+            $orphanMessage -notmatch 'tree cleanup: (Windows Job Object|Unix process group)') {
+            throw "Inherited output handle failure must be bounded and report successful containment cleanup. Got: $orphanMessage"
+        }
+        if (-not (Test-Path -LiteralPath $orphanPidPath -PathType Leaf)) {
+            throw "Inherited output handle self-test did not record its descendant PID."
+        }
+        $orphanPid = 0
+        if (-not [int]::TryParse(([System.IO.File]::ReadAllText($orphanPidPath)).Trim(), [ref]$orphanPid)) {
+            throw "Inherited output handle self-test recorded an invalid PID."
+        }
+        $treePids.Add($orphanPid)
+        $orphanStopped = $false
+        for ($attempt = 0; $attempt -lt 50; $attempt++) {
+            $orphanProcess = Get-Process -Id $orphanPid -ErrorAction SilentlyContinue
+            if (-not $orphanProcess) {
+                $orphanStopped = $true
+                break
+            }
+            $orphanProcess.Dispose()
+            Start-Sleep -Milliseconds 100
+        }
+        if (-not $orphanStopped) {
+            throw "Inherited output handle timeout left descendant process $orphanPid running."
+        }
+        Start-Sleep -Seconds 3
+        if (Test-Path -LiteralPath $orphanSentinel) {
+            throw "Inherited output handle timeout left its descendant alive long enough to write its delayed sentinel."
+        }
+    }
+    finally {
+        foreach ($treePid in $treePids) {
+            $leftover = Get-Process -Id $treePid -ErrorAction SilentlyContinue
+            if ($leftover) {
+                try { $leftover.Kill() } catch {}
+                $leftover.Dispose()
+            }
+        }
+        if (Test-Path -LiteralPath $fixtureRoot) {
+            Remove-Item -LiteralPath $fixtureRoot -Recurse -Force
+        }
     }
 }
 
@@ -376,14 +1691,27 @@ function Read-ReleaseStateMarker {
     }
 }
 
-function Invoke-Gh {
-    param([string[]]$Arguments)
+function Get-NativeStandardOutput {
+    param([object]$Result)
 
-    $result = Invoke-NativeCapture -FilePath "gh" -Arguments $Arguments
-    if ($result.ExitCode -ne 0) {
-        throw "gh $($Arguments -join ' ') failed with code $($result.ExitCode): $($result.Output -join ' ')"
+    if ($null -ne $Result -and $Result.PSObject.Properties["StdOut"]) {
+        return @($Result.StdOut)
     }
-    return @($result.Output)
+    return @($Result.Output)
+}
+
+function Invoke-Gh {
+    param(
+        [string[]]$Arguments,
+        [datetime]$Deadline,
+        [string]$Description = "GitHub CLI request"
+    )
+
+    $result = Invoke-NativeCapture -FilePath "gh" -Arguments $Arguments -Deadline $Deadline -Description $Description
+    if ($result.ExitCode -ne 0) {
+        throw "$Description failed with code $($result.ExitCode): $($result.Output -join ' ')"
+    }
+    return @(Get-NativeStandardOutput -Result $result)
 }
 
 function Select-GitHubReleaseByTag {
@@ -406,13 +1734,18 @@ function Get-GitHubReleaseByTag {
     param(
         [string]$Repository,
         [string]$ExpectedTag,
+        [datetime]$Deadline,
         [scriptblock]$RunGh = $null
     )
 
     if ($null -eq $RunGh) {
         $RunGh = {
-            param([string[]]$Arguments)
-            Invoke-NativeCapture -FilePath "gh" -Arguments $Arguments
+            param([string[]]$Arguments, [datetime]$RequestDeadline)
+            Invoke-NativeCapture `
+                -FilePath "gh" `
+                -Arguments $Arguments `
+                -Deadline $RequestDeadline `
+                -Description "GitHub release listing"
         }
     }
     $arguments = @(
@@ -423,11 +1756,11 @@ function Get-GitHubReleaseByTag {
         "-H", "X-GitHub-Api-Version: 2026-03-10",
         "repos/$Repository/releases?per_page=100"
     )
-    $result = & $RunGh $arguments
+    $result = & $RunGh $arguments $Deadline
     if ($result.ExitCode -ne 0) {
         throw "Could not list release markers for $ExpectedTag`: $($result.Output -join ' ')"
     }
-    $paginated = ConvertFrom-JsonCompat ($result.Output -join "`n")
+    $paginated = ConvertFrom-JsonCompat ((Get-NativeStandardOutput -Result $result) -join "`n")
     $releases = @()
     foreach ($page in @($paginated)) {
         if ($page -is [System.Array]) {
@@ -445,9 +1778,11 @@ function Wait-GitHubReleaseState {
         [string]$Repository,
         [string]$ExpectedTag,
         [int]$Attempts,
+        [datetime]$Deadline,
         [scriptblock]$AssertState,
         [scriptblock]$GetRelease = $null,
-        [scriptblock]$Wait = $null
+        [scriptblock]$Wait = $null,
+        [scriptblock]$Now = $null
     )
 
     if ($Attempts -lt 1) {
@@ -455,8 +1790,8 @@ function Wait-GitHubReleaseState {
     }
     if ($null -eq $GetRelease) {
         $GetRelease = {
-            param([string]$RepoName, [string]$TagName)
-            Get-GitHubReleaseByTag -Repository $RepoName -ExpectedTag $TagName
+            param([string]$RepoName, [string]$TagName, [datetime]$RequestDeadline)
+            Get-GitHubReleaseByTag -Repository $RepoName -ExpectedTag $TagName -Deadline $RequestDeadline
         }
     }
     if ($null -eq $Wait) {
@@ -465,18 +1800,35 @@ function Wait-GitHubReleaseState {
             Start-Sleep -Seconds $Seconds
         }
     }
+    if ($null -eq $Now) {
+        $Now = { Get-Date }
+    }
 
     $lastError = $null
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        if ((Get-DeadlineRemainingMilliseconds -Deadline $Deadline -Now $Now) -lt 1) {
+            throw "GitHub release state for $ExpectedTag exceeded its absolute deadline before attempt $attempt."
+        }
         try {
-            $release = & $GetRelease $Repository $ExpectedTag
+            $release = & $GetRelease $Repository $ExpectedTag $Deadline
             & $AssertState $release
+            if ((Get-DeadlineRemainingMilliseconds -Deadline $Deadline -Now $Now) -lt 1) {
+                throw "GitHub release state for $ExpectedTag converged after its absolute deadline."
+            }
             return $release
         }
         catch {
             $lastError = $_
             if ($attempt -lt $Attempts) {
-                & $Wait ([Math]::Min(30, 5 * $attempt))
+                $remainingMilliseconds = Get-DeadlineRemainingMilliseconds -Deadline $Deadline -Now $Now
+                if ($remainingMilliseconds -lt 1) {
+                    break
+                }
+                $waitSeconds = [Math]::Min([Math]::Min(30, 5 * $attempt), [int][Math]::Floor($remainingMilliseconds / 1000))
+                if ($waitSeconds -lt 1) {
+                    break
+                }
+                & $Wait $waitSeconds
             }
         }
     }
@@ -486,10 +1838,11 @@ function Wait-GitHubReleaseState {
 function Get-GitHubRemoteTagCommitSha {
     param(
         [string]$Repository,
-        [string]$ExpectedTag
+        [string]$ExpectedTag,
+        [datetime]$Deadline
     )
 
-    $reference = ConvertFrom-JsonCompat ((Invoke-Gh -Arguments @(
+    $reference = ConvertFrom-JsonCompat ((Invoke-Gh -Deadline $Deadline -Description "GitHub tag reference lookup" -Arguments @(
         "api",
         "-H", "Accept: application/vnd.github+json",
         "-H", "X-GitHub-Api-Version: 2026-03-10",
@@ -498,7 +1851,7 @@ function Get-GitHubRemoteTagCommitSha {
     $objectType = [string]$reference.object.type
     $objectSha = [string]$reference.object.sha
     for ($depth = 0; $depth -lt 5 -and $objectType -eq "tag"; $depth++) {
-        $tagObject = ConvertFrom-JsonCompat ((Invoke-Gh -Arguments @(
+        $tagObject = ConvertFrom-JsonCompat ((Invoke-Gh -Deadline $Deadline -Description "GitHub annotated tag lookup" -Arguments @(
             "api",
             "-H", "Accept: application/vnd.github+json",
             "-H", "X-GitHub-Api-Version: 2026-03-10",
@@ -519,17 +1872,21 @@ function Assert-RemoteTagCommit {
         [string]$Repository,
         [string]$ExpectedTag,
         [string]$ExpectedCommitSha,
+        [datetime]$Deadline,
         [scriptblock]$ResolveTagCommit = $null
     )
 
     Assert-CommitSha $ExpectedCommitSha
     if ($null -eq $ResolveTagCommit) {
         $ResolveTagCommit = {
-            param([string]$RepoName, [string]$TagName)
-            Get-GitHubRemoteTagCommitSha -Repository $RepoName -ExpectedTag $TagName
+            param([string]$RepoName, [string]$TagName, [datetime]$RequestDeadline)
+            Get-GitHubRemoteTagCommitSha -Repository $RepoName -ExpectedTag $TagName -Deadline $RequestDeadline
         }
     }
-    $actual = [string](& $ResolveTagCommit $Repository $ExpectedTag)
+    $actual = [string](& $ResolveTagCommit $Repository $ExpectedTag $Deadline)
+    if ((Get-DeadlineRemainingMilliseconds -Deadline $Deadline) -lt 1) {
+        throw "Remote tag verification for $ExpectedTag completed after its absolute deadline."
+    }
     if (-not [System.StringComparer]::Ordinal.Equals($actual, $ExpectedCommitSha)) {
         throw "Remote tag $ExpectedTag points to $actual, expected event commit $ExpectedCommitSha."
     }
@@ -898,18 +2255,40 @@ function Invoke-GitHubMutationAndAttest {
         [string]$Repository,
         [string]$ExpectedTag,
         [int]$Attempts,
+        [datetime]$Deadline,
         [scriptblock]$AssertState,
         [scriptblock]$Mutate = $null,
         [scriptblock]$GetRelease = $null,
-        [scriptblock]$Wait = $null
+        [scriptblock]$Wait = $null,
+        [scriptblock]$Now = $null
     )
 
     if ($null -eq $Mutate) {
-        $Mutate = { param([string[]]$GhArguments) [void](Invoke-Gh -Arguments $GhArguments) }
+        $Mutate = {
+            param([string[]]$GhArguments, [datetime]$RequestDeadline)
+            [void](Invoke-Gh -Arguments $GhArguments -Deadline $RequestDeadline -Description $Description)
+        }
+    }
+    if ($null -eq $Now) {
+        $Now = { Get-Date }
+    }
+    $attestationReserveSeconds = 30
+    $mutationMaximumSeconds = 60
+    $nowValue = & $Now
+    $reservedDeadline = $Deadline.AddSeconds(-$attestationReserveSeconds)
+    if ($nowValue -ge $reservedDeadline) {
+        throw "$Description cannot start because fewer than $attestationReserveSeconds second(s) remain for read-only attestation."
+    }
+    $mutationDeadline = $nowValue.AddSeconds($mutationMaximumSeconds)
+    if ($mutationDeadline -gt $reservedDeadline) {
+        $mutationDeadline = $reservedDeadline
     }
     $mutationError = $null
     try {
-        & $Mutate $Arguments
+        & $Mutate $Arguments $mutationDeadline
+        if ((& $Now) -ge $mutationDeadline) {
+            throw [System.TimeoutException]::new("$Description completed after its mutation deadline.")
+        }
     }
     catch {
         $mutationError = $_
@@ -919,9 +2298,11 @@ function Invoke-GitHubMutationAndAttest {
             -Repository $Repository `
             -ExpectedTag $ExpectedTag `
             -Attempts $Attempts `
+            -Deadline $Deadline `
             -AssertState $AssertState `
             -GetRelease $GetRelease `
-            -Wait $Wait
+            -Wait $Wait `
+            -Now $Now
     }
     catch {
         if ($null -ne $mutationError) {
@@ -939,8 +2320,10 @@ function Invoke-BoundedReadOnlyCheck {
     param(
         [string]$Description,
         [int]$Attempts,
+        [datetime]$Deadline,
         [scriptblock]$Check,
-        [scriptblock]$Wait = $null
+        [scriptblock]$Wait = $null,
+        [scriptblock]$Now = $null
     )
 
     if ($Attempts -lt 1) {
@@ -949,16 +2332,33 @@ function Invoke-BoundedReadOnlyCheck {
     if ($null -eq $Wait) {
         $Wait = { param([int]$Seconds) Start-Sleep -Seconds $Seconds }
     }
+    if ($null -eq $Now) {
+        $Now = { Get-Date }
+    }
     $lastError = $null
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        if ((Get-DeadlineRemainingMilliseconds -Deadline $Deadline -Now $Now) -lt 1) {
+            throw "$Description exceeded its absolute deadline before attempt $attempt."
+        }
         try {
-            & $Check
+            & $Check $Deadline
+            if ((Get-DeadlineRemainingMilliseconds -Deadline $Deadline -Now $Now) -lt 1) {
+                throw "$Description completed after its absolute deadline."
+            }
             return
         }
         catch {
             $lastError = $_
             if ($attempt -lt $Attempts) {
-                & $Wait ([Math]::Min(30, 5 * $attempt))
+                $remainingMilliseconds = Get-DeadlineRemainingMilliseconds -Deadline $Deadline -Now $Now
+                if ($remainingMilliseconds -lt 1) {
+                    break
+                }
+                $waitSeconds = [Math]::Min([Math]::Min(30, 5 * $attempt), [int][Math]::Floor($remainingMilliseconds / 1000))
+                if ($waitSeconds -lt 1) {
+                    break
+                }
+                & $Wait $waitSeconds
             }
         }
     }
@@ -1028,17 +2428,18 @@ function Invoke-ImmutableReleaseAttestationChecks {
         [string]$ExpectedTag,
         [string]$ExpectedCommitSha,
         [string]$ArchivePath,
-        [string]$ReleaseJsonPath
+        [string]$ReleaseJsonPath,
+        [datetime]$Deadline
     )
 
-    $attestationJson = (Invoke-Gh -Arguments @("release", "verify", $ExpectedTag, "--repo", $Repository, "--format", "json")) -join "`n"
+    $attestationJson = (Invoke-Gh -Deadline $Deadline -Description "GitHub release attestation" -Arguments @("release", "verify", $ExpectedTag, "--repo", $Repository, "--format", "json")) -join "`n"
     Assert-ReleaseAttestationCommit `
         -Attestation (ConvertFrom-JsonCompat $attestationJson) `
         -Repository $Repository `
         -ExpectedTag $ExpectedTag `
         -ExpectedCommitSha $ExpectedCommitSha
-    [void](Invoke-Gh -Arguments @("release", "verify-asset", $ExpectedTag, $ArchivePath, "--repo", $Repository))
-    [void](Invoke-Gh -Arguments @("release", "verify-asset", $ExpectedTag, $ReleaseJsonPath, "--repo", $Repository))
+    [void](Invoke-Gh -Deadline $Deadline -Description "GitHub archive asset attestation" -Arguments @("release", "verify-asset", $ExpectedTag, $ArchivePath, "--repo", $Repository))
+    [void](Invoke-Gh -Deadline $Deadline -Description "GitHub metadata asset attestation" -Arguments @("release", "verify-asset", $ExpectedTag, $ReleaseJsonPath, "--repo", $Repository))
 }
 
 function Get-WorkflowJobBlock {
@@ -1782,15 +3183,30 @@ function Assert-ReleaseWorkflowBoundary {
     }
 
     $expectedJobKeys = @{
-        preflight = @('if', 'runs-on', 'permissions', 'steps')
-        package = @('needs', 'if', 'runs-on', 'permissions', 'outputs', 'steps')
-        'github-prepare' = @('needs', 'if', 'runs-on', 'permissions', 'steps')
-        'marketplace-upload' = @('needs', 'environment', 'if', 'runs-on', 'permissions', 'steps')
-        'github-finalize' = @('needs', 'if', 'runs-on', 'permissions', 'steps')
-        verify = @('needs', 'if', 'runs-on', 'permissions', 'steps')
+        preflight = @('if', 'runs-on', 'timeout-minutes', 'permissions', 'steps')
+        package = @('needs', 'if', 'runs-on', 'timeout-minutes', 'permissions', 'outputs', 'steps')
+        'github-prepare' = @('needs', 'if', 'runs-on', 'timeout-minutes', 'permissions', 'steps')
+        'marketplace-upload' = @('needs', 'environment', 'if', 'runs-on', 'timeout-minutes', 'permissions', 'steps')
+        'github-finalize' = @('needs', 'if', 'runs-on', 'timeout-minutes', 'permissions', 'steps')
+        verify = @('needs', 'if', 'runs-on', 'timeout-minutes', 'permissions', 'steps')
     }
     foreach ($jobName in $expectedJobNames) {
         Assert-ExactWorkflowKeySet -Text $jobs[$jobName].Value -Indent 4 -ExpectedKeys $expectedJobKeys[$jobName] -Description "Release job '$jobName'"
+    }
+
+    $timeoutContract = @{
+        preflight = 30
+        package = 30
+        'github-prepare' = 30
+        'marketplace-upload' = 45
+        'github-finalize' = 30
+        verify = 30
+    }
+    foreach ($jobName in $expectedJobNames) {
+        $timeoutLines = @([regex]::Matches($jobs[$jobName].Value, '(?m)^    timeout-minutes:\s*([1-9][0-9]*)\s*$'))
+        if ($timeoutLines.Count -ne 1 -or [int]$timeoutLines[0].Groups[1].Value -ne $timeoutContract[$jobName]) {
+            throw "Release job '$jobName' must keep timeout-minutes: $($timeoutContract[$jobName])."
+        }
     }
 
     $permissionContract = @{
@@ -2448,6 +3864,8 @@ function Invoke-WithTemporaryReleaseBody {
 
 function Invoke-SelfTest {
     Assert-StatsProReleaseTagContractSelfTest
+    Invoke-NativeCaptureSelfTest
+    $selfTestDeadline = (Get-Date).AddMinutes(5)
     foreach ($invalidTag in @("v01.2.3", "V1.2.3", ("v1.2.3" + [char]10))) {
         Assert-ThrowsMatch "release manager rejects noncanonical tag '$invalidTag'" {
             Assert-ReleaseTag -Value $invalidTag
@@ -2519,6 +3937,7 @@ function Invoke-SelfTest {
         -Repository "owner/repo" `
         -ExpectedTag $tag `
         -Attempts 3 `
+        -Deadline $selfTestDeadline `
         -AssertState {
             param([object]$Release)
             Assert-DraftRelease -Release $Release -ExpectedTag $tag -ExpectedAssets @()
@@ -2544,6 +3963,7 @@ function Invoke-SelfTest {
             -Repository "owner/repo" `
             -ExpectedTag $tag `
             -Attempts 2 `
+            -Deadline $selfTestDeadline `
             -AssertState {
                 param([object]$Release)
                 Assert-DraftRelease -Release $Release -ExpectedTag $tag -ExpectedAssets @()
@@ -2551,12 +3971,47 @@ function Invoke-SelfTest {
             -GetRelease { param([string]$Repository, [string]$ExpectedTag) return $null } `
             -Wait { param([int]$Seconds) })
     } "did not converge after 2 attempt"
+    $lateStateClock = [pscustomobject]@{ Value = [datetime]"2026-01-01T00:00:00Z" }
+    Assert-ThrowsMatch "release state observed after deadline rejected" {
+        [void](Wait-GitHubReleaseState `
+            -Repository "owner/repo" `
+            -ExpectedTag $tag `
+            -Attempts 1 `
+            -Deadline $lateStateClock.Value.AddSeconds(1) `
+            -AssertState { param([object]$Release) Assert-DraftRelease -Release $Release -ExpectedTag $tag -ExpectedAssets @() } `
+            -GetRelease {
+                param([string]$Repository, [string]$ExpectedTag, [datetime]$Deadline)
+                $lateStateClock.Value = $lateStateClock.Value.AddSeconds(2)
+                return $draftEmpty
+            } `
+            -Now { $lateStateClock.Value })
+    } "converged after its absolute deadline"
+    $boundedWaitClock = [pscustomobject]@{ Value = [datetime]"2026-01-01T00:00:00Z" }
+    $boundedWaits = [System.Collections.Generic.List[int]]::new()
+    Assert-ThrowsMatch "release retry wait respects remaining deadline" {
+        [void](Wait-GitHubReleaseState `
+            -Repository "owner/repo" `
+            -ExpectedTag $tag `
+            -Attempts 2 `
+            -Deadline $boundedWaitClock.Value.AddSeconds(3) `
+            -AssertState { param([object]$Release) Assert-DraftRelease -Release $Release -ExpectedTag $tag -ExpectedAssets @() } `
+            -GetRelease { param([string]$Repository, [string]$ExpectedTag, [datetime]$Deadline) return $null } `
+            -Wait {
+                param([int]$Seconds)
+                $boundedWaits.Add($Seconds)
+                $boundedWaitClock.Value = $boundedWaitClock.Value.AddSeconds($Seconds)
+            } `
+            -Now { $boundedWaitClock.Value })
+    } "exceeded its absolute deadline before attempt 2"
+    if ($boundedWaits.Count -ne 1 -or $boundedWaits[0] -ne 3) {
+        throw "Release retry wait must clamp to the remaining absolute deadline."
+    }
     Assert-ThrowsMatch "malformed repository rejected" {
         Assert-RepositoryName "missing-owner"
     } "owner/name"
 
     $listCalls = [System.Collections.Generic.List[string]]::new()
-    $listedDraft = Get-GitHubReleaseByTag -Repository "owner/repo" -ExpectedTag $tag -RunGh {
+    $listedDraft = Get-GitHubReleaseByTag -Repository "owner/repo" -ExpectedTag $tag -Deadline $selfTestDeadline -RunGh {
         param([string[]]$Arguments)
         $listCalls.Add(($Arguments -join " ")) | Out-Null
         return @{
@@ -2571,7 +4026,7 @@ function Invoke-SelfTest {
         throw "Release lookup must use the paginated list endpoint so drafts are visible."
     }
     Assert-ThrowsMatch "duplicate release markers rejected" {
-        [void](Get-GitHubReleaseByTag -Repository "owner/repo" -ExpectedTag $tag -RunGh {
+        [void](Get-GitHubReleaseByTag -Repository "owner/repo" -ExpectedTag $tag -Deadline $selfTestDeadline -RunGh {
             param([string[]]$Arguments)
             return @{
                 ExitCode = 0
@@ -2580,12 +4035,12 @@ function Invoke-SelfTest {
         })
     } "multiple"
 
-    Assert-RemoteTagCommit -Repository "owner/repo" -ExpectedTag $tag -ExpectedCommitSha $commit -ResolveTagCommit {
+    Assert-RemoteTagCommit -Repository "owner/repo" -ExpectedTag $tag -ExpectedCommitSha $commit -Deadline $selfTestDeadline -ResolveTagCommit {
         param([string]$Repository, [string]$ExpectedTag)
         return $commit
     }
     Assert-ThrowsMatch "moved remote tag rejected" {
-        Assert-RemoteTagCommit -Repository "owner/repo" -ExpectedTag $tag -ExpectedCommitSha $commit -ResolveTagCommit {
+        Assert-RemoteTagCommit -Repository "owner/repo" -ExpectedTag $tag -ExpectedCommitSha $commit -Deadline $selfTestDeadline -ResolveTagCommit {
             param([string]$Repository, [string]$ExpectedTag)
             return "fedcba9876543210fedcba9876543210fedcba98"
         }
@@ -2792,12 +4247,59 @@ function Invoke-SelfTest {
         -Repository 'owner/repo' `
         -ExpectedTag $tag `
         -Attempts 2 `
+        -Deadline $selfTestDeadline `
         -AssertState { param([object]$Observed) if ($Observed -ne $preparedProtocolRelease) { throw 'not visible' } } `
         -Mutate { param([string[]]$Arguments) $ambiguousCounters.Mutations++; throw 'lost response' } `
         -GetRelease { param([string]$Repository, [string]$ExpectedTag) $ambiguousCounters.Reads++; return $preparedProtocolRelease } `
         -Wait { param([int]$Seconds) })
     if ($ambiguousCounters.Mutations -ne 1 -or $ambiguousCounters.Reads -ne 1) {
         throw "Ambiguous mutation recovery must mutate once and then use read-only attestation."
+    }
+    $timedMutationClock = [pscustomobject]@{ Value = [datetime]"2026-01-01T00:00:00Z" }
+    $timedMutationState = [pscustomobject]@{ Mutations = 0; Reads = 0; Deadline = [datetime]::MinValue }
+    [void](Invoke-GitHubMutationAndAttest `
+        -Description 'self-test timed-out mutation' `
+        -Arguments @('release', 'edit') `
+        -Repository 'owner/repo' `
+        -ExpectedTag $tag `
+        -Attempts 2 `
+        -Deadline $timedMutationClock.Value.AddMinutes(5) `
+        -AssertState { param([object]$Observed) if ($Observed -ne $preparedProtocolRelease) { throw 'not visible' } } `
+        -Mutate {
+            param([string[]]$Arguments, [datetime]$MutationDeadline)
+            $timedMutationState.Mutations++
+            $timedMutationState.Deadline = $MutationDeadline
+            throw [System.TimeoutException]::new('fixture mutation timed out')
+        } `
+        -GetRelease {
+            param([string]$Repository, [string]$ExpectedTag, [datetime]$Deadline)
+            $timedMutationState.Reads++
+            return $preparedProtocolRelease
+        } `
+        -Wait { param([int]$Seconds) } `
+        -Now { $timedMutationClock.Value })
+    if ($timedMutationState.Mutations -ne 1 -or
+        $timedMutationState.Reads -ne 1 -or
+        $timedMutationState.Deadline -ne $timedMutationClock.Value.AddSeconds(60)) {
+        throw "Timed-out mutation recovery must cap the mutation deadline and retain global attestation budget."
+    }
+    $nearExpiryMutations = [pscustomobject]@{ Count = 0 }
+    Assert-ThrowsMatch "mutation refuses to consume attestation reserve" {
+        [void](Invoke-GitHubMutationAndAttest `
+            -Description 'self-test near-expiry mutation' `
+            -Arguments @('release', 'edit') `
+            -Repository 'owner/repo' `
+            -ExpectedTag $tag `
+            -Attempts 2 `
+            -Deadline $timedMutationClock.Value.AddSeconds(20) `
+            -AssertState { param([object]$Observed) } `
+            -Mutate { param([string[]]$Arguments, [datetime]$MutationDeadline) $nearExpiryMutations.Count++ } `
+            -GetRelease { param([string]$Repository, [string]$ExpectedTag, [datetime]$Deadline) return $preparedProtocolRelease } `
+            -Wait { param([int]$Seconds) } `
+            -Now { $timedMutationClock.Value })
+    } "fewer than 30 second.*remain for read-only attestation"
+    if ($nearExpiryMutations.Count -ne 0) {
+        throw "Near-expiry mutation must fail before changing external state."
     }
     $failedMutationCounter = [pscustomobject]@{ Mutations = 0 }
     Assert-ThrowsMatch "unconfirmed ambiguous mutation rejected" {
@@ -2807,6 +4309,7 @@ function Invoke-SelfTest {
             -Repository 'owner/repo' `
             -ExpectedTag $tag `
             -Attempts 2 `
+            -Deadline $selfTestDeadline `
             -AssertState { param([AllowNull()][object]$Observed) throw 'not visible' } `
             -Mutate { param([string[]]$Arguments) $failedMutationCounter.Mutations++; throw 'lost response' } `
             -GetRelease { param([string]$Repository, [string]$ExpectedTag) return $null } `
@@ -2851,6 +4354,7 @@ function Invoke-SelfTest {
             -Repository 'owner/repo' `
             -ExpectedTag $tag `
             -Attempts 2 `
+            -Deadline $selfTestDeadline `
             -AssertState $boundary.Assert `
             -Mutate { param([string[]]$Arguments) $boundaryCounters.Mutations++; throw 'lost response' } `
             -GetRelease { param([string]$Repository, [string]$ExpectedTag) $boundaryCounters.Reads++; return $boundary.Observed } `
@@ -2863,6 +4367,7 @@ function Invoke-SelfTest {
     Invoke-BoundedReadOnlyCheck `
         -Description 'self-test post-publish attestation' `
         -Attempts 3 `
+        -Deadline $selfTestDeadline `
         -Check {
             $readOnlyRetry.Checks++
             if ($readOnlyRetry.Checks -lt 3) {
@@ -2940,6 +4445,7 @@ function Invoke-SelfTest {
                 -Repository 'owner/repo' `
                 -ExpectedTag $tag `
                 -Attempts 2 `
+                -Deadline $selfTestDeadline `
                 -AssertState $boundary.Assert `
                 -Mutate { param([string[]]$Arguments) $boundaryCounters.Mutations++; throw 'lost response' } `
                 -GetRelease { param([string]$Repository, [string]$ExpectedTag) $boundaryCounters.Reads++; return $boundary.Observed } `
@@ -3523,6 +5029,18 @@ function Invoke-SelfTest {
         Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^(\s{6}- name: Verify exact release candidate\s*)$', "`$1`n        continue-on-error: true")
     } "mandatory.*fail closed"
 
+    Assert-ThrowsMatch "ordinary release job timeout drift rejected" {
+        $preflightJob = Get-WorkflowJobBlock -WorkflowText $workflowText -JobName 'preflight'
+        $mutatedJob = $preflightJob.Value.Replace('    timeout-minutes: 30', '    timeout-minutes: 29')
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Remove($preflightJob.Index, $preflightJob.Length).Insert($preflightJob.Index, $mutatedJob)
+    } "preflight.*timeout-minutes: 30"
+
+    Assert-ThrowsMatch "marketplace release job timeout drift rejected" {
+        $marketplaceJob = Get-WorkflowJobBlock -WorkflowText $workflowText -JobName 'marketplace-upload'
+        $mutatedJob = $marketplaceJob.Value.Replace('    timeout-minutes: 45', '    timeout-minutes: 30')
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Remove($marketplaceJob.Index, $marketplaceJob.Length).Insert($marketplaceJob.Index, $mutatedJob)
+    } "marketplace-upload.*timeout-minutes: 45"
+
     Assert-ThrowsMatch "single-pending release queue rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace('queue: max', 'queue: single')
     } "queue: max"
@@ -3551,26 +5069,30 @@ if ($Mode -in @("CreateDraft", "MarkMarketplaceStarted", "AttachAssets", "Publis
 if ($AttestationAttempts -lt 1) {
     throw "-AttestationAttempts must be at least 1."
 }
+if ($TimeoutMinutes -lt 1) {
+    throw "-TimeoutMinutes must be at least 1."
+}
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     throw "GitHub CLI (gh) is required."
 }
+$deadline = (Get-Date).AddMinutes($TimeoutMinutes)
 
 switch ($Mode) {
     "RefuseExisting" {
-        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
+        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag -Deadline $deadline
         Assert-NoExistingRelease -Release $release -ExpectedTag $ExpectedTag
         Write-Host "No existing GitHub release marker found for $ExpectedTag."
     }
     "ValidateStart" {
         $notesText = Get-CanonicalFileText -Path $NotesPath -Description "release notes"
-        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
+        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag -Deadline $deadline
         $state = Assert-ReleaseStartState `
             -Release $release `
             -Repository $Repository `
             -ExpectedTag $ExpectedTag `
             -ExpectedCommitSha $ExpectedCommitSha `
             -ExpectedNotes $notesText
-        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
+        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -Deadline $deadline
         Write-Host "Release start state for $ExpectedTag is $state."
     }
     "CreateDraft" {
@@ -3590,8 +5112,8 @@ switch ($Mode) {
             -ArchiveSha256 $ExpectedArchiveSha256 `
             -CandidateSha256 $ExpectedCandidateSha256
         $desiredBody = Get-ReleaseBody -State $desiredState -CanonicalNotes $notesText
-        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
-        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
+        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag -Deadline $deadline
+        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -Deadline $deadline
         if ($null -eq $release) {
             Invoke-WithTemporaryReleaseBody -Body $desiredBody -Action {
                 param([string]$BodyPath)
@@ -3601,6 +5123,7 @@ switch ($Mode) {
                     -Repository $Repository `
                     -ExpectedTag $ExpectedTag `
                     -Attempts $AttestationAttempts `
+                    -Deadline $deadline `
                     -AssertState {
                         param([object]$Observed)
                         [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'prepared' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
@@ -3630,6 +5153,7 @@ switch ($Mode) {
                         -Repository $Repository `
                         -ExpectedTag $ExpectedTag `
                         -Attempts $AttestationAttempts `
+                        -Deadline $deadline `
                         -AssertState {
                             param([object]$Observed)
                             [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'prepared' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
@@ -3639,15 +5163,15 @@ switch ($Mode) {
                 Write-Host "Prepared draft release marker safely rebound to run $ExpectedRunId attempt $ExpectedRunAttempt."
             }
         }
-        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
+        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -Deadline $deadline
     }
     "MarkMarketplaceStarted" {
         $notesText = Get-CanonicalFileText -Path $NotesPath -Description "release notes"
         $manifestSha256 = Get-LowercaseTextSha256 -Text (Get-CanonicalFileText -Path $ManifestPath -Description "validated package manifest")
-        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
+        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag -Deadline $deadline
         [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'prepared' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
         Assert-ExactAssetSet -Release $release -ExpectedNames @()
-        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
+        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -Deadline $deadline
         $startedState = Get-ReleaseStateData -SchemaVersion 2 -Phase 'marketplace-started' -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -NotesSha256 (Get-LowercaseTextSha256 -Text $notesText) -ManifestSha256 $manifestSha256 -ArchiveSha256 $ExpectedArchiveSha256 -CandidateSha256 $ExpectedCandidateSha256
         $startedBody = Get-ReleaseBody -State $startedState -CanonicalNotes $notesText
         Invoke-WithTemporaryReleaseBody -Body $startedBody -Action {
@@ -3658,6 +5182,7 @@ switch ($Mode) {
                 -Repository $Repository `
                 -ExpectedTag $ExpectedTag `
                 -Attempts $AttestationAttempts `
+                -Deadline $deadline `
                 -AssertState {
                     param([object]$Observed)
                     [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
@@ -3677,7 +5202,7 @@ switch ($Mode) {
         }
         foreach ($assetName in @("StatsPro-$ExpectedTag.zip", "release.json")) {
             [void](Assert-LocalArchiveSha256 -Path $paths.Archive -ExpectedSha256 $ExpectedArchiveSha256)
-            $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
+            $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag -Deadline $deadline
             [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
             Assert-ReleaseAssetSubsetMatchesLocalFiles -Release $release -LocalFiles $localFiles
             if (-not (Test-ContainsOrdinal -Values @(Get-ReleaseAssetNames -Release $release) -Expected $assetName)) {
@@ -3687,6 +5212,7 @@ switch ($Mode) {
                     -Repository $Repository `
                     -ExpectedTag $ExpectedTag `
                     -Attempts $AttestationAttempts `
+                    -Deadline $deadline `
                     -AssertState {
                         param([object]$Observed)
                         [void](Assert-ReleaseProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
@@ -3697,7 +5223,7 @@ switch ($Mode) {
                     })
             }
         }
-        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
+        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag -Deadline $deadline
         [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
         Assert-DraftAssetsMatchLocalFiles -Release $release -ExpectedTag $ExpectedTag -ArchivePath $paths.Archive -ReleaseJsonPath $paths.ReleaseJson
         Write-Host "Validated release assets attached to draft $ExpectedTag."
@@ -3707,11 +5233,11 @@ switch ($Mode) {
         [void](Assert-LocalArchiveSha256 -Path $paths.Archive -ExpectedSha256 $ExpectedArchiveSha256)
         $notesText = Get-CanonicalFileText -Path $NotesPath -Description "release notes"
         $manifestSha256 = Get-LowercaseTextSha256 -Text (Get-CanonicalFileText -Path $ManifestPath -Description "validated package manifest")
-        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
+        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag -Deadline $deadline
         [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
         Assert-DraftAssetsMatchLocalFiles -Release $release -ExpectedTag $ExpectedTag -ArchivePath $paths.Archive -ReleaseJsonPath $paths.ReleaseJson
-        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
-        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
+        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -Deadline $deadline
+        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag -Deadline $deadline
         [void](Assert-LocalArchiveSha256 -Path $paths.Archive -ExpectedSha256 $ExpectedArchiveSha256)
         [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
         Assert-DraftAssetsMatchLocalFiles -Release $release -ExpectedTag $ExpectedTag -ArchivePath $paths.Archive -ReleaseJsonPath $paths.ReleaseJson
@@ -3721,6 +5247,7 @@ switch ($Mode) {
             -Repository $Repository `
             -ExpectedTag $ExpectedTag `
             -Attempts $AttestationAttempts `
+            -Deadline $deadline `
             -AssertState {
                 param([object]$Observed)
                 [void](Assert-PublishedProtocolIdentity -Release $Observed -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
@@ -3728,33 +5255,36 @@ switch ($Mode) {
         Invoke-BoundedReadOnlyCheck `
             -Description "Published immutable release attestation for $ExpectedTag" `
             -Attempts $AttestationAttempts `
+            -Deadline $deadline `
             -Check {
-                $published = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
+                param([datetime]$CheckDeadline)
+                $published = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag -Deadline $CheckDeadline
                 [void](Assert-PublishedProtocolIdentity -Release $published -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
-                Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
-                Invoke-ImmutableReleaseAttestationChecks -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ArchivePath $paths.Archive -ReleaseJsonPath $paths.ReleaseJson
+                Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -Deadline $CheckDeadline
+                Invoke-ImmutableReleaseAttestationChecks -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ArchivePath $paths.Archive -ReleaseJsonPath $paths.ReleaseJson -Deadline $CheckDeadline
             }
         Write-Host "Immutable GitHub release published and attested for $ExpectedTag."
     }
     "RetirePrepared" {
         $notesText = Get-CanonicalFileText -Path $NotesPath -Description "release notes"
-        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag
+        $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag -Deadline $deadline
         [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'prepared' -ExpectedNotes $notesText)
         Assert-ExactAssetSet -Release $release -ExpectedNames @()
-        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
+        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -Deadline $deadline
         [void](Invoke-GitHubMutationAndAttest `
             -Description "Prepared draft retirement for $ExpectedTag" `
             -Arguments (Get-RetirePreparedGhArguments -Repository $Repository -ExpectedTag $ExpectedTag) `
             -Repository $Repository `
             -ExpectedTag $ExpectedTag `
             -Attempts $AttestationAttempts `
+            -Deadline $deadline `
             -AssertState {
                 param([AllowNull()][object]$Observed)
                 if ($null -ne $Observed) {
                     throw "Prepared draft $ExpectedTag still exists after retirement."
                 }
             })
-        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha
+        Assert-RemoteTagCommit -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -Deadline $deadline
         Write-Host "Safely retired empty prepared draft $ExpectedTag; tag was preserved."
     }
 }

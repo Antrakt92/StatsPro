@@ -478,7 +478,7 @@ local function makeEnv(locale, opts)
         getmetatable = getmetatable,
         ipairs = ipairs,
         math = math,
-        next = next,
+        next = opts.next or next,
         pairs = pairs,
         pcall = pcall,
         print = print,
@@ -10220,6 +10220,18 @@ do
             mutate = function(db) db.profiles.p1.settings.colors = db.colors end,
         },
         {
+            name = "shadow_key_alias",
+            mutate = function(db)
+                db.shadowKey = { [db.profiles.p1.settings.colors] = true }
+            end,
+        },
+        {
+            name = "root_shadow_key_alias",
+            mutate = function(db)
+                db[db.profiles.p1.settings.colors] = true
+            end,
+        },
+        {
             name = "profile_nested_alias",
             mutate = function(db)
                 db.profiles.p2.settings.colors = db.profiles.p1.settings.colors
@@ -10275,6 +10287,7 @@ do
         local p2ColorsRef = db.profiles.p2.settings.colors
         local shadowColorsRef = db.colors
         local shadowCritRef = db.colors.crit
+        local shadowKeyRef = db.shadowKey
         local characterKey, characterRef = next(db.characters)
         local specProfilesRef = characterRef and characterRef.specProfiles or nil
         local envCase, _, caseTest = loadStatsPro("enUS", { statsProDB = db })
@@ -10315,7 +10328,25 @@ do
             eq("db_compat.registry_validation." .. case.name .. ".spec_profiles_identity",
                 rawequal(characterRef.specProfiles, specProfilesRef), true)
         end
-        assertDeepEqual("db_compat.registry_validation." .. case.name .. ".no_writes", db, before)
+        if case.name == "shadow_key_alias" then
+            local shadowAliasKey, shadowAliasValue = next(db.shadowKey)
+            eq("db_compat.registry_validation.shadow_key_alias.shadow_identity",
+                rawequal(db.shadowKey, shadowKeyRef), true)
+            eq("db_compat.registry_validation.shadow_key_alias.key_identity",
+                rawequal(shadowAliasKey, p1ColorsRef), true)
+            eq("db_compat.registry_validation.shadow_key_alias.value_unchanged",
+                shadowAliasValue, true)
+        elseif case.name == "root_shadow_key_alias" then
+            local rootAliasValue
+            for key, value in pairs(db) do
+                if rawequal(key, p1ColorsRef) then rootAliasValue = value; break end
+            end
+            eq("db_compat.registry_validation.root_shadow_key_alias.value_unchanged",
+                rootAliasValue, true)
+        else
+            assertDeepEqual("db_compat.registry_validation." .. case.name .. ".no_writes",
+                db, before)
+        end
     end
 
     local boundaryCases = {
@@ -10441,6 +10472,361 @@ do
         rawequal(secretNestedDB.characters, secretNestedCharactersRef), true)
     assertDeepEqual("db_compat.registry_validation.secret_nested.no_writes",
         secretNestedDB, secretNestedBefore)
+end
+
+do
+    local function makeRegistry()
+        return {
+            dbVersion = test.currentDBVersion(),
+            isVisible = false,
+            colors = { crit = { r = 0.1, g = 0.2, b = 0.3 } },
+            account = {
+                forceLocale = "auto",
+                updateInterval = 0.5,
+                defaultProfileID = "p1",
+                nextProfileID = 3,
+            },
+            profiles = {
+                p1 = {
+                    name = "Default",
+                    settings = {
+                        isVisible = false,
+                        colors = { crit = { r = 0.4, g = 0.5, b = 0.6 } },
+                    },
+                },
+                p2 = {
+                    name = "Other",
+                    settings = {
+                        isVisible = true,
+                        colors = { crit = { r = 0.7, g = 0.8, b = 0.9 } },
+                    },
+                },
+            },
+            roleTemplates = { TANK = "p1", HEALER = "p1", DAMAGER = "p2" },
+            characters = {},
+        }
+    end
+    local ok, err
+
+    local secretCurrentRoot = makeRegistry()
+    local secretCurrentBefore = deepCopy(secretCurrentRoot)
+    local secretCurrentAccountRef = secretCurrentRoot.account
+    local secretCurrentProfilesRef = secretCurrentRoot.profiles
+    local secretCurrentEnv, _, secretCurrentTest = loadStatsPro("enUS", {
+        statsProDB = secretCurrentRoot,
+        issecretvalue = function(value) return rawequal(value, secretCurrentRoot) end,
+    })
+    ok, err = pcall(secretCurrentEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("db_compat.registry_validation.secret_current_root.no_error", ok, err)
+    eq("db_compat.registry_validation.secret_current_root.mode",
+        secretCurrentTest.dbCompatibilityState().mode, "corrupt")
+    eq("db_compat.registry_validation.secret_current_root.root_identity",
+        rawequal(secretCurrentEnv.StatsProDB, secretCurrentRoot), true)
+    eq("db_compat.registry_validation.secret_current_root.account_identity",
+        rawequal(secretCurrentRoot.account, secretCurrentAccountRef), true)
+    eq("db_compat.registry_validation.secret_current_root.profiles_identity",
+        rawequal(secretCurrentRoot.profiles, secretCurrentProfilesRef), true)
+    assertDeepEqual("db_compat.registry_validation.secret_current_root.no_writes",
+        secretCurrentRoot, secretCurrentBefore)
+
+    local secretLegacyRoot = { dbVersion = 1, fontSize = 18 }
+    local secretLegacyBefore = deepCopy(secretLegacyRoot)
+    local secretLegacyEnv, _, secretLegacyTest = loadStatsPro("enUS", {
+        statsProDB = secretLegacyRoot,
+        issecretvalue = function(value) return rawequal(value, secretLegacyRoot) end,
+    })
+    ok, err = pcall(secretLegacyEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("db_compat.registry_validation.secret_legacy_root.no_error", ok, err)
+    eq("db_compat.registry_validation.secret_legacy_root.mode",
+        secretLegacyTest.dbCompatibilityState().mode, "corrupt")
+    eq("db_compat.registry_validation.secret_legacy_root.root_identity",
+        rawequal(secretLegacyEnv.StatsProDB, secretLegacyRoot), true)
+    assertDeepEqual("db_compat.registry_validation.secret_legacy_root.no_writes",
+        secretLegacyRoot, secretLegacyBefore)
+
+    local graphLimits = test.dbGraphLimits()
+    local function makeWideTable(size)
+        local value = {}
+        for index = 1, size do value[index] = index end
+        return value
+    end
+    local atDepthLimit = {}
+    for _ = 1, graphLimits.maxDepth do atDepthLimit = { child = atDepthLimit } end
+    local depthClone, depthCloneOK = test.cloneSerializable(atDepthLimit)
+    eq("db_compat.graph_budget.depth_limit_passes", depthCloneOK, true)
+    check("db_compat.graph_budget.depth_limit_result", type(depthClone) == "table")
+    local beyondDepthLimit = { child = atDepthLimit }
+    local _, beyondDepthOK = test.cloneSerializable(beyondDepthLimit)
+    eq("db_compat.graph_budget.depth_overflow_rejected", beyondDepthOK, false)
+
+    local secretBeyondDepth = {}
+    local secretBeyondDepthCalls = 0
+    local secretBeyondDepthRoot = secretBeyondDepth
+    for _ = 1, graphLimits.maxDepth + 1 do
+        secretBeyondDepthRoot = { child = secretBeyondDepthRoot }
+    end
+    local _, _, secretBudgetTest = loadStatsPro("enUS", {
+        issecretvalue = function(value)
+            if rawequal(value, secretBeyondDepth) then
+                secretBeyondDepthCalls = secretBeyondDepthCalls + 1
+                return true
+            end
+            return false
+        end,
+    })
+    local _, secretBeyondDepthOK = secretBudgetTest.cloneSerializable(secretBeyondDepthRoot)
+    eq("db_compat.graph_budget.secret_beyond_depth_rejected", secretBeyondDepthOK, false)
+    eq("db_compat.graph_budget.secret_beyond_depth_not_inspected", secretBeyondDepthCalls, 0)
+
+    local deepCurrentDB = makeRegistry()
+    local deepCurrentValue = {}
+    for _ = 1, graphLimits.maxDepth do
+        deepCurrentValue = { child = deepCurrentValue }
+    end
+    deepCurrentDB.profiles.p1.settings.deepUnknown = deepCurrentValue
+    local deepCurrentBefore = deepCopy(deepCurrentDB)
+    local deepCurrentAccountRef = deepCurrentDB.account
+    local deepCurrentProfilesRef = deepCurrentDB.profiles
+    local deepCurrentSettingsRef = deepCurrentDB.profiles.p1.settings
+    local deepCurrentValueRef = deepCurrentValue
+    local deepCurrentEnv, _, deepCurrentTest = loadStatsPro("enUS", {
+        statsProDB = deepCurrentDB,
+    })
+    ok, err = pcall(deepCurrentEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("db_compat.graph_budget.current_depth.no_error", ok, err)
+    eq("db_compat.graph_budget.current_depth.mode",
+        deepCurrentTest.dbCompatibilityState().mode, "corrupt")
+    eq("db_compat.graph_budget.current_depth.read_only",
+        deepCurrentTest.dbCompatibilityState().readOnly, true)
+    local wipeOK, wipeReason = deepCurrentTest.profileOps.fullWipe()
+    eq("db_compat.graph_budget.current_depth.wipe_rejected", wipeOK, false)
+    eq("db_compat.graph_budget.current_depth.wipe_reason", wipeReason, "read-only")
+    eq("db_compat.graph_budget.current_depth.root_identity",
+        rawequal(deepCurrentEnv.StatsProDB, deepCurrentDB), true)
+    eq("db_compat.graph_budget.current_depth.account_identity",
+        rawequal(deepCurrentDB.account, deepCurrentAccountRef), true)
+    eq("db_compat.graph_budget.current_depth.profiles_identity",
+        rawequal(deepCurrentDB.profiles, deepCurrentProfilesRef), true)
+    eq("db_compat.graph_budget.current_depth.settings_identity",
+        rawequal(deepCurrentDB.profiles.p1.settings, deepCurrentSettingsRef), true)
+    eq("db_compat.graph_budget.current_depth.value_identity",
+        rawequal(deepCurrentDB.profiles.p1.settings.deepUnknown, deepCurrentValueRef), true)
+    assertDeepEqual("db_compat.graph_budget.current_depth.no_writes",
+        deepCurrentDB, deepCurrentBefore)
+
+    local deepLegacyDB = { dbVersion = 1 }
+    local deepLegacyColors = {}
+    for _ = 1, graphLimits.maxDepth do
+        deepLegacyColors = { child = deepLegacyColors }
+    end
+    deepLegacyDB.colors = deepLegacyColors
+    local deepLegacyBefore = deepCopy(deepLegacyDB)
+    local deepLegacyColorsRef = deepLegacyColors
+    local deepLegacyEnv, _, deepLegacyTest = loadStatsPro("enUS", {
+        statsProDB = deepLegacyDB,
+    })
+    ok, err = pcall(deepLegacyEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("db_compat.graph_budget.legacy_depth.no_error", ok, err)
+    eq("db_compat.graph_budget.legacy_depth.mode",
+        deepLegacyTest.dbCompatibilityState().mode, "corrupt")
+    eq("db_compat.graph_budget.legacy_depth.root_identity",
+        rawequal(deepLegacyEnv.StatsProDB, deepLegacyDB), true)
+    eq("db_compat.graph_budget.legacy_depth.value_identity",
+        rawequal(deepLegacyDB.colors, deepLegacyColorsRef), true)
+    eq("db_compat.graph_budget.legacy_depth.no_account", deepLegacyDB.account, nil)
+    eq("db_compat.graph_budget.legacy_depth.version_unchanged", deepLegacyDB.dbVersion, 1)
+    assertDeepEqual("db_compat.graph_budget.legacy_depth.no_writes",
+        deepLegacyDB, deepLegacyBefore)
+
+    local opaqueLegacyUnknown = { hidden = true }
+    local deepLegacyUnknown = {}
+    for _ = 1, graphLimits.maxDepth do
+        deepLegacyUnknown = { child = deepLegacyUnknown }
+    end
+    local unknownLegacyDB = {
+        dbVersion = 1,
+        futureUnknown = deepLegacyUnknown,
+        opaqueUnknown = opaqueLegacyUnknown,
+    }
+    local unknownLegacyBefore = deepCopy(unknownLegacyDB)
+    local unknownLegacyDeepRef = deepLegacyUnknown
+    local unknownLegacyOpaqueRef = opaqueLegacyUnknown
+    local unknownLegacyEnv, _, unknownLegacyTest = loadStatsPro("enUS", {
+        statsProDB = unknownLegacyDB,
+        issecrettable = function(value) return rawequal(value, opaqueLegacyUnknown) end,
+    })
+    ok, err = pcall(unknownLegacyEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("db_compat.graph_budget.legacy_unknown.no_error", ok, err)
+    eq("db_compat.graph_budget.legacy_unknown.mode",
+        unknownLegacyTest.dbCompatibilityState().mode, "corrupt")
+    eq("db_compat.graph_budget.legacy_unknown.root_identity",
+        rawequal(unknownLegacyEnv.StatsProDB, unknownLegacyDB), true)
+    eq("db_compat.graph_budget.legacy_unknown.deep_identity",
+        rawequal(unknownLegacyDB.futureUnknown, unknownLegacyDeepRef), true)
+    eq("db_compat.graph_budget.legacy_unknown.opaque_identity",
+        rawequal(unknownLegacyDB.opaqueUnknown, unknownLegacyOpaqueRef), true)
+    assertDeepEqual("db_compat.graph_budget.legacy_unknown.no_writes",
+        unknownLegacyDB, unknownLegacyBefore)
+
+    local aggregateDB = makeRegistry()
+    local aggregateSize = math.floor(graphLimits.maxNodes / 4) + 100
+    aggregateDB.shadowA = makeWideTable(aggregateSize)
+    aggregateDB.shadowB = makeWideTable(aggregateSize)
+    local _, aggregateAOK = test.cloneSerializable(aggregateDB.shadowA)
+    local _, aggregateBOK = test.cloneSerializable(aggregateDB.shadowB)
+    eq("db_compat.graph_budget.aggregate.shadow_a_individually_valid", aggregateAOK, true)
+    eq("db_compat.graph_budget.aggregate.shadow_b_individually_valid", aggregateBOK, true)
+    local opaqueShadow = { hidden = true }
+    aggregateDB.opaqueShadow = opaqueShadow
+    local aggregateBefore = deepCopy(aggregateDB)
+    local aggregateAccountRef = aggregateDB.account
+    local aggregateProfilesRef = aggregateDB.profiles
+    local aggregateShadowARef = aggregateDB.shadowA
+    local aggregateShadowBRef = aggregateDB.shadowB
+    local aggregateEnv, _, aggregateTest = loadStatsPro("enUS", {
+        statsProDB = aggregateDB,
+        issecrettable = function(value) return rawequal(value, opaqueShadow) end,
+    })
+    ok, err = pcall(aggregateEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("db_compat.graph_budget.aggregate.no_error", ok, err)
+    eq("db_compat.graph_budget.aggregate.mode",
+        aggregateTest.dbCompatibilityState().mode, "corrupt")
+    eq("db_compat.graph_budget.aggregate.root_identity",
+        rawequal(aggregateEnv.StatsProDB, aggregateDB), true)
+    eq("db_compat.graph_budget.aggregate.account_identity",
+        rawequal(aggregateDB.account, aggregateAccountRef), true)
+    eq("db_compat.graph_budget.aggregate.profiles_identity",
+        rawequal(aggregateDB.profiles, aggregateProfilesRef), true)
+    eq("db_compat.graph_budget.aggregate.shadow_a_identity",
+        rawequal(aggregateDB.shadowA, aggregateShadowARef), true)
+    eq("db_compat.graph_budget.aggregate.shadow_b_identity",
+        rawequal(aggregateDB.shadowB, aggregateShadowBRef), true)
+    eq("db_compat.graph_budget.aggregate.opaque_identity",
+        rawequal(aggregateDB.opaqueShadow, opaqueShadow), true)
+    assertDeepEqual("db_compat.graph_budget.aggregate.no_writes", aggregateDB, aggregateBefore)
+
+    local componentControlDB = makeRegistry()
+    componentControlDB.account.padding = makeWideTable(aggregateSize)
+    local componentControlEnv, _, componentControlTest = loadStatsPro("enUS", {
+        statsProDB = componentControlDB,
+    })
+    fireEvent("db_compat.graph_budget.registry_components.control.pew",
+        componentControlEnv, "PLAYER_ENTERING_WORLD")
+    eq("db_compat.graph_budget.registry_components.control.current",
+        componentControlTest.dbCompatibilityState().mode, "current")
+
+    local componentAggregateDB = makeRegistry()
+    componentAggregateDB.account.padding = makeWideTable(aggregateSize)
+    componentAggregateDB.profiles.p1.settings.padding = makeWideTable(aggregateSize)
+    local componentAggregateBefore = deepCopy(componentAggregateDB)
+    local componentAggregateAccountRef = componentAggregateDB.account
+    local componentAggregateProfilesRef = componentAggregateDB.profiles
+    local componentAggregateSettingsRef = componentAggregateDB.profiles.p1.settings
+    local componentAggregateEnv, _, componentAggregateTest = loadStatsPro("enUS", {
+        statsProDB = componentAggregateDB,
+    })
+    ok, err = pcall(componentAggregateEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("db_compat.graph_budget.registry_components.no_error", ok, err)
+    eq("db_compat.graph_budget.registry_components.mode",
+        componentAggregateTest.dbCompatibilityState().mode, "corrupt")
+    eq("db_compat.graph_budget.registry_components.root_identity",
+        rawequal(componentAggregateEnv.StatsProDB, componentAggregateDB), true)
+    eq("db_compat.graph_budget.registry_components.account_identity",
+        rawequal(componentAggregateDB.account, componentAggregateAccountRef), true)
+    eq("db_compat.graph_budget.registry_components.profiles_identity",
+        rawequal(componentAggregateDB.profiles, componentAggregateProfilesRef), true)
+    eq("db_compat.graph_budget.registry_components.settings_identity",
+        rawequal(componentAggregateDB.profiles.p1.settings,
+            componentAggregateSettingsRef), true)
+    assertDeepEqual("db_compat.graph_budget.registry_components.no_writes",
+        componentAggregateDB, componentAggregateBefore)
+
+    local iteratorDB = makeRegistry()
+    local iteratorAlias = iteratorDB.profiles.p1.settings.colors
+    local iteratorShadow = { first = true, hidden = iteratorAlias }
+    iteratorDB.iteratorShadow = iteratorShadow
+    local iteratorBefore = deepCopy(iteratorDB)
+    local iteratorAccountRef = iteratorDB.account
+    local iteratorProfilesRef = iteratorDB.profiles
+    local iteratorSettingsRef = iteratorDB.profiles.p1.settings
+    local iteratorEnv, _, iteratorTest = loadStatsPro("enUS", {
+        statsProDB = iteratorDB,
+        next = function(value, key)
+            if rawequal(value, iteratorShadow) then
+                if key == nil then return "first", rawget(value, "first") end
+                error("forced shadow iterator failure")
+            end
+            return next(value, key)
+        end,
+    })
+    ok, err = pcall(iteratorEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("db_compat.graph_budget.shadow_iterator.no_error", ok, err)
+    eq("db_compat.graph_budget.shadow_iterator.mode",
+        iteratorTest.dbCompatibilityState().mode, "corrupt")
+    eq("db_compat.graph_budget.shadow_iterator.root_identity",
+        rawequal(iteratorEnv.StatsProDB, iteratorDB), true)
+    eq("db_compat.graph_budget.shadow_iterator.account_identity",
+        rawequal(iteratorDB.account, iteratorAccountRef), true)
+    eq("db_compat.graph_budget.shadow_iterator.profiles_identity",
+        rawequal(iteratorDB.profiles, iteratorProfilesRef), true)
+    eq("db_compat.graph_budget.shadow_iterator.settings_identity",
+        rawequal(iteratorDB.profiles.p1.settings, iteratorSettingsRef), true)
+    eq("db_compat.graph_budget.shadow_iterator.alias_identity",
+        rawequal(iteratorDB.iteratorShadow.hidden, iteratorAlias), true)
+    assertDeepEqual("db_compat.graph_budget.shadow_iterator.no_writes",
+        iteratorDB, iteratorBefore)
+
+    local transactionDB = makeRegistry()
+    transactionDB.profiles.p1.settings.largePayload = makeWideTable(3000)
+    transactionDB.characters["Player-1-IMPORT"] = {
+        displayName = "Tester-Realm",
+        classID = 1,
+        lastSeen = 12345,
+        defaultProfileID = "p1",
+        specProfiles = { [71] = "p1", [72] = "p1", [73] = "p1", [74] = "p1" },
+    }
+    local transactionEnv, _, transactionTest = loadStatsPro(
+        "enUS", withProfileIdentity({ statsProDB = transactionDB }))
+    fireEvent("db_compat.graph_budget.transaction.pew",
+        transactionEnv, "PLAYER_ENTERING_WORLD")
+    eq("db_compat.graph_budget.transaction.root_current",
+        transactionTest.dbCompatibilityState().mode, "current")
+    local _, singleProfileCloneOK = transactionTest.cloneSerializable(
+        transactionDB.profiles.p1.settings)
+    eq("db_compat.graph_budget.transaction.single_clone_valid", singleProfileCloneOK, true)
+    local transactionBefore = deepCopy(transactionDB)
+    local transactionAccountRef = transactionDB.account
+    local transactionProfilesRef = transactionDB.profiles
+    local transactionCharactersRef = transactionDB.characters
+    local transactionCharacterRef = transactionDB.characters["Player-1-IMPORT"]
+    local transactionSettingsRef = transactionDB.profiles.p1.settings
+    local operationCountBefore = transactionTest.profileOps.state().operationCount
+    local commitCountBefore = transactionTest.profileRuntimeState().structuralCommitCount
+    local nextProfileIDBefore = transactionDB.account.nextProfileID
+    local transactionOK, transactionReason =
+        transactionTest.profileOps.makeKnownSpecsIndependent("Player-1-IMPORT")
+    eq("db_compat.graph_budget.transaction.rejected", transactionOK, false)
+    eq("db_compat.graph_budget.transaction.reason", transactionReason, "clone-failed")
+    eq("db_compat.graph_budget.transaction.next_profile_id",
+        transactionDB.account.nextProfileID, nextProfileIDBefore)
+    eq("db_compat.graph_budget.transaction.operation_count",
+        transactionTest.profileOps.state().operationCount, operationCountBefore)
+    eq("db_compat.graph_budget.transaction.commit_count",
+        transactionTest.profileRuntimeState().structuralCommitCount, commitCountBefore)
+    eq("db_compat.graph_budget.transaction.root_identity",
+        rawequal(transactionEnv.StatsProDB, transactionDB), true)
+    eq("db_compat.graph_budget.transaction.account_identity",
+        rawequal(transactionDB.account, transactionAccountRef), true)
+    eq("db_compat.graph_budget.transaction.profiles_identity",
+        rawequal(transactionDB.profiles, transactionProfilesRef), true)
+    eq("db_compat.graph_budget.transaction.characters_identity",
+        rawequal(transactionDB.characters, transactionCharactersRef), true)
+    eq("db_compat.graph_budget.transaction.character_identity",
+        rawequal(transactionDB.characters["Player-1-IMPORT"], transactionCharacterRef), true)
+    eq("db_compat.graph_budget.transaction.settings_identity",
+        rawequal(transactionDB.profiles.p1.settings, transactionSettingsRef), true)
+    assertDeepEqual("db_compat.graph_budget.transaction.no_writes",
+        transactionDB, transactionBefore)
 end
 
 do

@@ -3344,6 +3344,8 @@ addon.dbRuntime = {
     validatedActiveProfileRef = nil,
     readFallback = {},
     maxProfileNumber = 99999999999999,
+    maxGraphDepth = 64,
+    maxGraphNodes = 20000,
     accountSettingKeys = { forceLocale = true, updateInterval = true },
     registryRootKeys = {
         dbVersion = true,
@@ -3592,18 +3594,67 @@ function addon.dbRuntime.IsCleanTable(value)
     return pcall(next, value, nil)
 end
 
--- Serializable clone with ancestry-only cycle detection. Repeated source tables are
--- copied independently, so profile payloads cannot retain aliases from hand-edited or
--- legacy SavedVariables. Cycles/secret/unsupported values fail before inspection.
-function addon.dbRuntime.CloneSerializable(value, ancestors)
+-- One budget spans all sibling traversals in a logical phase. Charging both table
+-- entries and visited values bounds wide scalar maps as well as recursive graphs.
+function addon.dbRuntime.NewGraphBudget()
+    return { nodes = 0, failure = nil }
+end
+
+function addon.dbRuntime.FailGraphBudget(budget, reason)
+    if budget and not budget.failure then budget.failure = reason end
+    return false
+end
+
+function addon.dbRuntime.ConsumeGraphBudget(budget, depth)
+    if not budget or depth > addon.dbRuntime.maxGraphDepth
+        or budget.nodes >= addon.dbRuntime.maxGraphNodes then
+        return addon.dbRuntime.FailGraphBudget(budget, "budget")
+    end
+    budget.nodes = budget.nodes + 1
+    return true
+end
+
+function addon.dbRuntime.IsInspectableGraphTable(value, budget)
+    if type(value) ~= "table" then return false end
     local secretOK, secret = pcall(issecretvalue, value)
-    if not secretOK or secret then return nil, false end
+    if not secretOK then
+        return addon.dbRuntime.FailGraphBudget(budget, "inspection")
+    end
+    if secret then return false end
+    if type(_G.issecrettable) == "function" then
+        local tableOK, secretTable = pcall(_G.issecrettable, value)
+        if not tableOK then
+            return addon.dbRuntime.FailGraphBudget(budget, "inspection")
+        end
+        if secretTable then return false end
+    end
+    local nextOK = pcall(next, value, nil)
+    if not nextOK then
+        return addon.dbRuntime.FailGraphBudget(budget, "iterator")
+    end
+    return true
+end
+
+-- Serializable clone with per-operation depth/work limits and ancestry-only cycle
+-- detection. Repeated source tables are copied independently, so profile payloads
+-- cannot retain aliases from hand-edited or legacy SavedVariables.
+function addon.dbRuntime.CloneSerializable(value, ancestors, budget, depth)
+    budget = budget or addon.dbRuntime.NewGraphBudget()
+    depth = depth or 0
+    if not addon.dbRuntime.ConsumeGraphBudget(budget, depth) then return nil, false end
+    local secretOK, secret = pcall(issecretvalue, value)
+    if not secretOK then
+        addon.dbRuntime.FailGraphBudget(budget, "inspection")
+        return nil, false
+    end
+    if secret then return nil, false end
     local valueType = type(value)
     if valueType == "nil" or valueType == "boolean"
         or valueType == "number" or valueType == "string" then
         return value, true
     end
-    if valueType ~= "table" or not addon.dbRuntime.IsCleanTable(value) then return nil, false end
+    if valueType ~= "table"
+        or not addon.dbRuntime.IsInspectableGraphTable(value, budget) then return nil, false end
     ancestors = ancestors or {}
     if ancestors[value] then return nil, false end
     ancestors[value] = true
@@ -3613,16 +3664,22 @@ function addon.dbRuntime.CloneSerializable(value, ancestors)
         local nextOK, nextKey, nextValue = pcall(next, value, key)
         if not nextOK then
             ancestors[value] = nil
+            addon.dbRuntime.FailGraphBudget(budget, "iterator")
             return nil, false
         end
         if type(nextKey) == "nil" then break end
+        if not addon.dbRuntime.ConsumeGraphBudget(budget, depth + 1) then
+            ancestors[value] = nil
+            return nil, false
+        end
         local keyType = type(nextKey)
         local cleanKey = addon.dbRuntime.IsCleanType(nextKey, keyType)
         if not cleanKey or (keyType ~= "string" and keyType ~= "number") then
             ancestors[value] = nil
             return nil, false
         end
-        local clonedValue, cloned = addon.dbRuntime.CloneSerializable(nextValue, ancestors)
+        local clonedValue, cloned = addon.dbRuntime.CloneSerializable(
+            nextValue, ancestors, budget, depth + 1)
         if not cloned then
             ancestors[value] = nil
             return nil, false
@@ -3637,15 +3694,23 @@ end
 -- Validate a serializable table graph and optionally reject all repeated table
 -- references. A separate forbidden set protects the flat downgrade shadow from
 -- becoming writable through any registry/profile path.
-function addon.dbRuntime.CollectTableReferences(value, seen, ancestors, rejectAliases, forbidden)
+function addon.dbRuntime.CollectTableReferences(
+    value, seen, ancestors, rejectAliases, forbidden, budget, depth)
+    budget = budget or addon.dbRuntime.NewGraphBudget()
+    depth = depth or 0
+    if not addon.dbRuntime.ConsumeGraphBudget(budget, depth) then return false end
     local secretOK, secret = pcall(issecretvalue, value)
-    if not secretOK or secret then return false end
+    if not secretOK then
+        return addon.dbRuntime.FailGraphBudget(budget, "inspection")
+    end
+    if secret then return false end
     local valueType = type(value)
     if valueType == "nil" or valueType == "boolean"
         or valueType == "number" or valueType == "string" then
         return true
     end
-    if valueType ~= "table" or not addon.dbRuntime.IsCleanTable(value) then return false end
+    if valueType ~= "table"
+        or not addon.dbRuntime.IsInspectableGraphTable(value, budget) then return false end
     ancestors = ancestors or {}
     if ancestors[value] or (forbidden and forbidden[value]) then return false end
     if seen[value] then return not rejectAliases end
@@ -3656,14 +3721,18 @@ function addon.dbRuntime.CollectTableReferences(value, seen, ancestors, rejectAl
         local nextOK, nextKey, nextValue = pcall(next, value, key)
         if not nextOK then
             ancestors[value] = nil
-            return false
+            return addon.dbRuntime.FailGraphBudget(budget, "iterator")
         end
         if type(nextKey) == "nil" then break end
+        if not addon.dbRuntime.ConsumeGraphBudget(budget, depth + 1) then
+            ancestors[value] = nil
+            return false
+        end
         local keyType = type(nextKey)
         if (keyType ~= "string" and keyType ~= "number")
             or not addon.dbRuntime.IsCleanType(nextKey, keyType)
             or not addon.dbRuntime.CollectTableReferences(
-                nextValue, seen, ancestors, rejectAliases, forbidden) then
+                nextValue, seen, ancestors, rejectAliases, forbidden, budget, depth + 1) then
             ancestors[value] = nil
             return false
         end
@@ -3675,25 +3744,43 @@ end
 
 -- Rollback-shadow data is never read or written by current code, so unsupported or
 -- secret legacy extras may remain there. Collect only table identities that can be
--- observed safely; this is enough to forbid registry aliases without interpreting
--- opaque shadow content.
-function addon.dbRuntime.CollectShadowTableReferences(value, references, visited)
-    if type(value) ~= "table" then return end
+-- observed safely, but fail closed on bounded-work or iterator failures so a partial
+-- scan cannot hide a registry alias.
+function addon.dbRuntime.CollectShadowTableReferences(
+    value, references, visited, budget, depth)
+    budget = budget or addon.dbRuntime.NewGraphBudget()
+    depth = depth or 0
+    if not addon.dbRuntime.ConsumeGraphBudget(budget, depth) then return false end
+    if type(value) ~= "table" then return true end
     references[value] = true
     visited = visited or {}
-    if visited[value] then return end
+    if visited[value] then return true end
     visited[value] = true
     local secretOK, secret = pcall(issecretvalue, value)
-    if not secretOK or secret then return end
+    if not secretOK then
+        return addon.dbRuntime.FailGraphBudget(budget, "inspection")
+    end
+    if secret then return true end
     if type(_G.issecrettable) == "function" then
         local tableOK, secretTable = pcall(_G.issecrettable, value)
-        if not tableOK or secretTable then return end
+        if not tableOK then
+            return addon.dbRuntime.FailGraphBudget(budget, "inspection")
+        end
+        if secretTable then return true end
     end
     local key = nil
     while true do
         local nextOK, nextKey, nextValue = pcall(next, value, key)
-        if not nextOK or type(nextKey) == "nil" then return end
-        addon.dbRuntime.CollectShadowTableReferences(nextValue, references, visited)
+        if not nextOK then
+            return addon.dbRuntime.FailGraphBudget(budget, "iterator")
+        end
+        if type(nextKey) == "nil" then return true end
+        if not addon.dbRuntime.CollectShadowTableReferences(
+                nextKey, references, visited, budget, depth + 1)
+            or not addon.dbRuntime.CollectShadowTableReferences(
+                nextValue, references, visited, budget, depth + 1) then
+            return false
+        end
         key = nextKey
     end
 end
@@ -3707,22 +3794,31 @@ end
 -- while an unknown non-serializable field remains only in the untouched rollback
 -- shadow. Clean unknown fields are preserved in the new profile.
 function addon.dbRuntime.CloneMigrationWork(source, dbVersion)
-    if not addon.dbRuntime.IsCleanTable(source) then return nil end
+    local budget = addon.dbRuntime.NewGraphBudget()
+    if not addon.dbRuntime.ConsumeGraphBudget(budget, 0)
+        or not addon.dbRuntime.IsInspectableGraphTable(source, budget) then return nil end
     local copy = {}
     local key = nil
     while true do
         local nextOK, nextKey, nextValue = pcall(next, source, key)
-        if not nextOK then return nil end
+        if not nextOK then
+            addon.dbRuntime.FailGraphBudget(budget, "iterator")
+            return nil
+        end
         if type(nextKey) == "nil" then break end
+        if not addon.dbRuntime.ConsumeGraphBudget(budget, 1) then return nil end
         local keyType = type(nextKey)
         if (keyType ~= "string" and keyType ~= "number")
             or not addon.dbRuntime.IsCleanType(nextKey, keyType) then
             return nil
         end
         if keyType == "string" and not addon.dbRuntime.registryRootKeys[nextKey] then
-            local clonedValue, cloned = addon.dbRuntime.CloneSerializable(nextValue)
+            local clonedValue, cloned = addon.dbRuntime.CloneSerializable(
+                nextValue, nil, budget, 1)
             if cloned then
                 copy[nextKey] = clonedValue
+            elseif budget.failure then
+                return nil
             elseif addon.dbRuntime.IsMigrationSettingKey(nextKey) then
                 return nil
             end
@@ -3735,7 +3831,9 @@ end
 
 function addon.dbRuntime.ValidateRegistry(root)
     addon.dbRuntime.validationCount = addon.dbRuntime.validationCount + 1
-    if not addon.dbRuntime.IsCleanTable(root) then return false end
+    local budget = addon.dbRuntime.NewGraphBudget()
+    if not addon.dbRuntime.ConsumeGraphBudget(budget, 0)
+        or not addon.dbRuntime.IsInspectableGraphTable(root, budget) then return false end
     local account = rawget(root, "account")
     local profiles = rawget(root, "profiles")
     local roleTemplates = rawget(root, "roleTemplates")
@@ -3751,19 +3849,27 @@ function addon.dbRuntime.ValidateRegistry(root)
     local rootKey = nil
     while true do
         local nextOK, nextKey, nextValue = pcall(next, root, rootKey)
-        if not nextOK then return false end
+        if not nextOK then
+            addon.dbRuntime.FailGraphBudget(budget, "iterator")
+            return false
+        end
         if type(nextKey) == "nil" then break end
-        if not addon.dbRuntime.IsCleanType(nextKey, "string")
-            or not addon.dbRuntime.registryRootKeys[nextKey] then
-            addon.dbRuntime.CollectShadowTableReferences(
-                nextValue, shadowReferences, shadowVisited)
+        local registryKey = addon.dbRuntime.IsCleanType(nextKey, "string")
+            and addon.dbRuntime.registryRootKeys[nextKey]
+        if registryKey then
+            if not addon.dbRuntime.ConsumeGraphBudget(budget, 1) then return false end
+        elseif not addon.dbRuntime.CollectShadowTableReferences(
+                nextKey, shadowReferences, shadowVisited, budget, 1)
+            or not addon.dbRuntime.CollectShadowTableReferences(
+                nextValue, shadowReferences, shadowVisited, budget, 1) then
+                return false
         end
         rootKey = nextKey
     end
     local registryReferences = {}
     for _, value in ipairs({ account, profiles, roleTemplates, characters }) do
         if not addon.dbRuntime.CollectTableReferences(
-            value, registryReferences, nil, true, shadowReferences) then
+            value, registryReferences, nil, true, shadowReferences, budget, 1) then
             return false
         end
     end
@@ -4055,19 +4161,29 @@ function addon.dbRuntime.ReplaceTableContents(target, source)
 end
 
 function addon.dbRuntime.BuildRegistry(flat)
+    local budget = addon.dbRuntime.NewGraphBudget()
+    if not addon.dbRuntime.ConsumeGraphBudget(budget, 0)
+        or not addon.dbRuntime.IsInspectableGraphTable(flat, budget) then return nil end
     local settings = {}
-    for key, value in pairs(flat) do
+    local key = nil
+    while true do
+        local nextOK, nextKey, value = pcall(next, flat, key)
+        if not nextOK then return nil end
+        if type(nextKey) == "nil" then break end
+        if not addon.dbRuntime.ConsumeGraphBudget(budget, 1) then return nil end
+        key = nextKey
         if type(key) == "string"
             and not addon.dbRuntime.registryRootKeys[key]
             and not addon.dbRuntime.accountSettingKeys[key]
             and not addon.dbRuntime.legacySettingKeys[key] then
-            local cloned, clonedOK = addon.dbRuntime.CloneSerializable(value)
+            local cloned, clonedOK = addon.dbRuntime.CloneSerializable(value, nil, budget, 1)
             if not clonedOK then return nil end
             settings[key] = cloned
         end
     end
     if type(flat.fontBeforeAutoSwitch) ~= "nil" then
-        local savedFont, savedOK = addon.dbRuntime.CloneSerializable(flat.fontBeforeAutoSwitch)
+        local savedFont, savedOK = addon.dbRuntime.CloneSerializable(
+            flat.fontBeforeAutoSwitch, nil, budget, 1)
         if not savedOK then return nil end
         settings.fontBeforeAutoSwitch = savedFont
     end
@@ -4212,12 +4328,13 @@ function addon.profileRuntime.ProfileName(context, suffix, profiles)
         safeDisplay .. " - " .. safeLabel, profiles, fallback)
 end
 
-function addon.profileRuntime.CloneProfile(sourceProfile, name)
+function addon.profileRuntime.CloneProfile(sourceProfile, name, budget)
     if not addon.dbRuntime.IsCleanTable(sourceProfile)
         or not addon.dbRuntime.IsCleanTable(sourceProfile.settings) then
         return nil
     end
-    local settings, copied = addon.dbRuntime.CloneSerializable(sourceProfile.settings)
+    local settings, copied = addon.dbRuntime.CloneSerializable(
+        sourceProfile.settings, nil, budget)
     if not copied then return nil end
     return { name = name, settings = settings }
 end
@@ -4234,7 +4351,9 @@ function addon.profileRuntime.PrepareContextTransaction(context)
             or (context.classID and context.classID ~= currentCharacter.classID)
             or (context.lastSeen and context.lastSeen ~= currentCharacter.lastSeen)
         if not metadataChanged then return nil, existingProfileID end
-        local character, copied = addon.dbRuntime.CloneSerializable(currentCharacter)
+        local cloneBudget = addon.dbRuntime.NewGraphBudget()
+        local character, copied = addon.dbRuntime.CloneSerializable(
+            currentCharacter, nil, cloneBudget)
         if not copied then return nil, nil end
         if context.displayName then character.displayName = context.displayName end
         if context.classID then character.classID = context.classID end
@@ -4255,7 +4374,9 @@ function addon.profileRuntime.PrepareContextTransaction(context)
         }, existingProfileID
     end
 
-    local account, accountCopied = addon.dbRuntime.CloneSerializable(root.account)
+    local cloneBudget = addon.dbRuntime.NewGraphBudget()
+    local account, accountCopied = addon.dbRuntime.CloneSerializable(
+        root.account, nil, cloneBudget)
     if not accountCopied or type(account) ~= "table"
         or not addon.dbRuntime.IsCleanTable(account)
         or type(account.defaultProfileID) ~= "string"
@@ -4267,7 +4388,8 @@ function addon.profileRuntime.PrepareContextTransaction(context)
     local character
     if currentCharacter then
         local characterCopied
-        character, characterCopied = addon.dbRuntime.CloneSerializable(currentCharacter)
+        character, characterCopied = addon.dbRuntime.CloneSerializable(
+            currentCharacter, nil, cloneBudget)
         if not characterCopied or type(character) ~= "table" then return nil, nil end
     else
         local defaultSource = profiles[account.defaultProfileID]
@@ -4276,7 +4398,8 @@ function addon.profileRuntime.PrepareContextTransaction(context)
         local defaultProfileID = addon.profileRuntime.AllocateProfileID(account, profiles)
         if type(defaultProfileID) ~= "string"
             or not addon.dbRuntime.IsCleanType(defaultProfileID, "string") then return nil, nil end
-        local defaultProfile = addon.profileRuntime.CloneProfile(defaultSource, defaultName)
+        local defaultProfile = addon.profileRuntime.CloneProfile(
+            defaultSource, defaultName, cloneBudget)
         if type(defaultProfile) ~= "table" then return nil, nil end
         profiles[defaultProfileID] = defaultProfile
         character = { defaultProfileID = defaultProfileID, specProfiles = {} }
@@ -4293,7 +4416,7 @@ function addon.profileRuntime.PrepareContextTransaction(context)
     local specProfileID = addon.profileRuntime.AllocateProfileID(account, profiles)
     if type(specProfileID) ~= "string"
         or not addon.dbRuntime.IsCleanType(specProfileID, "string") then return nil, nil end
-    local specProfile = addon.profileRuntime.CloneProfile(sourceProfile, specName)
+    local specProfile = addon.profileRuntime.CloneProfile(sourceProfile, specName, cloneBudget)
     if type(specProfile) ~= "table" then return nil, nil end
     profiles[specProfileID] = specProfile
     character.specProfiles[context.specID] = specProfileID
@@ -4807,8 +4930,8 @@ function addon.profileOps.ValidateName(rawName, profiles, exceptProfileID)
     return name, codepoints
 end
 
-function addon.profileOps.BuildDefaultSettings()
-    local settings, copied = addon.dbRuntime.CloneSerializable(defaults)
+function addon.profileOps.BuildDefaultSettings(budget)
+    local settings, copied = addon.dbRuntime.CloneSerializable(defaults, nil, budget)
     if not copied then return nil end
     settings.forceLocale = nil
     settings.updateInterval = nil
@@ -5252,13 +5375,15 @@ function addon.profileOps.Create(name, expected)
     return addon.profileOps.Execute(expected, function(root)
         local normalized, nameStatus = addon.profileOps.ValidateName(name, root.profiles)
         if not normalized then return nil, nameStatus end
-        local account, copied = addon.dbRuntime.CloneSerializable(root.account)
+        local cloneBudget = addon.dbRuntime.NewGraphBudget()
+        local account, copied = addon.dbRuntime.CloneSerializable(
+            root.account, nil, cloneBudget)
         if not copied or not addon.dbRuntime.IsCleanTable(account) then
             return nil, "clone-failed"
         end
         local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
         local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
-        local settings = addon.profileOps.BuildDefaultSettings()
+        local settings = addon.profileOps.BuildDefaultSettings(cloneBudget)
         if not profileID or not settings then return nil, "clone-failed" end
         profiles[profileID] = { name = normalized, settings = settings }
         local transaction = addon.profileOps.NewTransaction(root)
@@ -5274,8 +5399,10 @@ function addon.profileOps.Duplicate(sourceProfileID, name, expected)
         if not source then return nil, "missing-profile" end
         local normalized, nameStatus = addon.profileOps.ValidateName(name, root.profiles)
         if not normalized then return nil, nameStatus end
-        local account, copied = addon.dbRuntime.CloneSerializable(root.account)
-        local duplicate = addon.profileRuntime.CloneProfile(source, normalized)
+        local cloneBudget = addon.dbRuntime.NewGraphBudget()
+        local account, copied = addon.dbRuntime.CloneSerializable(
+            root.account, nil, cloneBudget)
+        local duplicate = addon.profileRuntime.CloneProfile(source, normalized, cloneBudget)
         if not copied or not duplicate then return nil, "clone-failed" end
         local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
         local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
@@ -5319,9 +5446,11 @@ function addon.profileOps.CopySettings(sourceProfileID, targetProfileID, scope, 
             or not addon.dbRuntime.IsCleanTable(target.settings) then
             return nil, "clone-failed"
         end
+        local cloneBudget = addon.dbRuntime.NewGraphBudget()
         local settings, copied
         if scope == "all" then
-            settings, copied = addon.dbRuntime.CloneSerializable(source.settings)
+            settings, copied = addon.dbRuntime.CloneSerializable(
+                source.settings, nil, cloneBudget)
             if copied and addon.dbRuntime.IsCleanTable(settings) then
                 settings.forceLocale = nil
                 settings.updateInterval = nil
@@ -5329,7 +5458,8 @@ function addon.profileOps.CopySettings(sourceProfileID, targetProfileID, scope, 
         else
             local scopeKeys = addon.profileOps.copyScopeKeys[scope]
             if not scopeKeys then return nil, "invalid-scope" end
-            settings, copied = addon.dbRuntime.CloneSerializable(target.settings)
+            settings, copied = addon.dbRuntime.CloneSerializable(
+                target.settings, nil, cloneBudget)
             if copied and addon.dbRuntime.IsCleanTable(settings) then
                 for key in pairs(scopeKeys) do
                     local sourceValue = source.settings[key]
@@ -5337,7 +5467,8 @@ function addon.profileOps.CopySettings(sourceProfileID, targetProfileID, scope, 
                         settings[key] = nil
                     else
                         local copiedValue, valueCopied =
-                            addon.dbRuntime.CloneSerializable(sourceValue)
+                            addon.dbRuntime.CloneSerializable(
+                                sourceValue, nil, cloneBudget)
                         if not valueCopied then return nil, "clone-failed" end
                         settings[key] = copiedValue
                     end
@@ -5460,8 +5591,11 @@ function addon.profileOps.MakeKnownSpecsIndependent(guid, expected)
         table.sort(affectedSpecs)
         if #affectedSpecs == 0 then return nil, "no-change" end
 
-        local account, accountCopied = addon.dbRuntime.CloneSerializable(root.account)
-        local changedCharacter, characterCopied = addon.dbRuntime.CloneSerializable(character)
+        local cloneBudget = addon.dbRuntime.NewGraphBudget()
+        local account, accountCopied = addon.dbRuntime.CloneSerializable(
+            root.account, nil, cloneBudget)
+        local changedCharacter, characterCopied = addon.dbRuntime.CloneSerializable(
+            character, nil, cloneBudget)
         if not accountCopied or type(account) ~= "table"
             or not addon.dbRuntime.IsCleanTable(account)
             or not characterCopied or type(changedCharacter) ~= "table"
@@ -5493,7 +5627,7 @@ function addon.profileOps.MakeKnownSpecsIndependent(guid, expected)
             if not name then return nil, nameStatus or "name-exhausted" end
             local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
             if not profileID then return nil, "id-exhausted" end
-            local clone = addon.profileRuntime.CloneProfile(sourceProfile, name)
+            local clone = addon.profileRuntime.CloneProfile(sourceProfile, name, cloneBudget)
             if type(clone) ~= "table"
                 or not addon.dbRuntime.IsCleanTable(clone) then return nil, "clone-failed" end
             profiles[profileID] = clone
@@ -5545,9 +5679,11 @@ function addon.profileOps.Swap(left, right, expected)
         if leftProfileID == rightProfileID then return nil, "same-profile" end
         local characters = addon.profileRuntime.ShallowCopy(root.characters)
         local changed = {}
+        local cloneBudget = addon.dbRuntime.NewGraphBudget()
         for _, context in ipairs({ left, right }) do
             if not changed[context.guid] then
-                local character, copied = addon.dbRuntime.CloneSerializable(root.characters[context.guid])
+                local character, copied = addon.dbRuntime.CloneSerializable(
+                    root.characters[context.guid], nil, cloneBudget)
                 if not copied or not addon.dbRuntime.IsCleanTable(character) then
                     return nil, "clone-failed"
                 end
@@ -5612,10 +5748,13 @@ function addon.profileOps.ImportAndAssign(importedSettings, expected)
         if type(character) ~= "table" or not addon.dbRuntime.IsCleanTable(character) then
             return nil, "missing-context"
         end
+        local cloneBudget = addon.dbRuntime.NewGraphBudget()
         local changedCharacter, characterCopied =
-            addon.dbRuntime.CloneSerializable(character)
-        local account, accountCopied = addon.dbRuntime.CloneSerializable(root.account)
-        local settings, settingsCopied = addon.dbRuntime.CloneSerializable(importedSettings)
+            addon.dbRuntime.CloneSerializable(character, nil, cloneBudget)
+        local account, accountCopied = addon.dbRuntime.CloneSerializable(
+            root.account, nil, cloneBudget)
+        local settings, settingsCopied = addon.dbRuntime.CloneSerializable(
+            importedSettings, nil, cloneBudget)
         if not characterCopied or type(changedCharacter) ~= "table"
             or not addon.dbRuntime.IsCleanTable(changedCharacter)
             or not accountCopied or type(account) ~= "table"
@@ -5704,11 +5843,13 @@ function addon.profileOps.DeleteWithReplacement(profileID, replacementProfileID,
         end
 
         local transaction = addon.profileOps.NewTransaction(root)
+        local cloneBudget = addon.dbRuntime.NewGraphBudget()
         local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
         profiles[profileID] = nil
         transaction.profiles = profiles
         if references.accountDefault > 0 then
-            local account, copied = addon.dbRuntime.CloneSerializable(root.account)
+            local account, copied = addon.dbRuntime.CloneSerializable(
+                root.account, nil, cloneBudget)
             if not copied or type(account) ~= "table"
                 or not addon.dbRuntime.IsCleanTable(account) then return nil, "clone-failed" end
             account.defaultProfileID = replacementProfileID
@@ -5731,7 +5872,8 @@ function addon.profileOps.DeleteWithReplacement(profileID, replacementProfileID,
                     end
                 end
                 if needsClone then
-                    local changedCharacter, copied = addon.dbRuntime.CloneSerializable(character)
+                    local changedCharacter, copied = addon.dbRuntime.CloneSerializable(
+                        character, nil, cloneBudget)
                     if not copied or type(changedCharacter) ~= "table"
                         or not addon.dbRuntime.IsCleanTable(changedCharacter) then
                         return nil, "clone-failed"
@@ -14128,6 +14270,13 @@ if addon and addon.__statsproSmoke == true then
             }
         end,
         dbValidationCount = function() return addon.dbRuntime.validationCount end,
+        dbGraphLimits = function()
+            return {
+                maxDepth = addon.dbRuntime.maxGraphDepth,
+                maxNodes = addon.dbRuntime.maxGraphNodes,
+            }
+        end,
+        cloneSerializable = addon.dbRuntime.CloneSerializable,
         profileState = function()
             local root = addon.dbRuntime.Refresh()
             return {

@@ -2621,6 +2621,73 @@ function Assert-WorkflowCheckoutCredentialBoundary {
     }
 }
 
+function Assert-ChecksWorkflowBoundary {
+    param([string]$WorkflowText)
+
+    $triggerBlock = [regex]::Match($WorkflowText, '(?ms)^on:\s*$.*?(?=^[A-Za-z][A-Za-z0-9_-]*:\s*|\z)')
+    if ($triggerBlock.Success -and $triggerBlock.Value -match '(?m)^  pull_request_target:\s*$') {
+        throw "Checks workflow must not use pull_request_target."
+    }
+    if (-not $triggerBlock.Success -or $triggerBlock.Value -notmatch '(?m)^  pull_request:\s*$') {
+        throw "Checks workflow must include the pull_request trigger."
+    }
+
+    $permissionsBlock = [regex]::Match($WorkflowText, '(?ms)^permissions:\s*$.*?(?=^[A-Za-z][A-Za-z0-9_-]*:\s*|\z)')
+    if (-not $permissionsBlock.Success -or
+        $permissionsBlock.Value -notmatch '(?m)^  contents:\s*read\s*$' -or
+        $permissionsBlock.Value -match '(?im)^  [A-Za-z][A-Za-z0-9_-]*:\s*write\s*$') {
+        throw "Checks workflow must grant contents: read without workflow-level write permissions."
+    }
+
+    $packageJob = Get-WorkflowJobBlock -WorkflowText $WorkflowText -JobName 'package-contract'
+    if ($packageJob.Value -match '(?m)^    if:\s*') {
+        throw "Checks package-contract job must not define a job-level pull request filter."
+    }
+    if ($packageJob.Value -match '(?im)^    permissions:\s*(?:write-all|\{[^}]*write)' -or
+        $packageJob.Value -match '(?im)^      [A-Za-z][A-Za-z0-9_-]*:\s*write\s*$') {
+        throw "Checks package-contract job must not escalate workflow permissions."
+    }
+    if ((Test-ContainsAnySecretReference -Text $packageJob.Value) -or
+        (Test-ContainsGitHubTokenReference -Text $packageJob.Value)) {
+        throw "Checks package-contract job must not reference secrets or a GitHub token."
+    }
+    Assert-WorkflowCheckoutCredentialBoundary -WorkflowText $WorkflowText -JobNames @('package-contract')
+
+    $stepBlocks = @([regex]::Matches($packageJob.Value, '(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)'))
+    $packagerSteps = @($stepBlocks | Where-Object { $_.Value -match '(?im)^\s{8}uses:\s*BigWigsMods/packager@' })
+    if ($packagerSteps.Count -ne 1 -or
+        $packagerSteps[0].Value -notmatch '(?m)^\s{8}uses:\s*BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28\s*$') {
+        throw "Checks package-contract job must use the exact pinned BigWigs Packager action once."
+    }
+    $packagerArgs = @([regex]::Matches($packagerSteps[0].Value, '(?m)^\s{10}args:\s*(.*?)\s*$'))
+    if ($packagerArgs.Count -ne 1 -or $packagerArgs[0].Groups[1].Value -ne '-d') {
+        throw "Checks package-contract Packager step must use literal args: -d without publication flags."
+    }
+
+    $resolverSteps = @($stepBlocks | Where-Object { $_.Value -match '(?i)resolve-packager-output\.ps1' })
+    $validatorSteps = @($stepBlocks | Where-Object { $_.Value -match '(?i)check-package-dry-run\.ps1' })
+    if ($resolverSteps.Count -ne 1 -or $validatorSteps.Count -ne 1) {
+        throw "Checks package-contract job must contain one package resolver and one package validator step."
+    }
+    if ($packagerSteps[0].Index -ge $resolverSteps[0].Index -or
+        $resolverSteps[0].Index -ge $validatorSteps[0].Index) {
+        throw "Checks package-contract must run Packager, resolver, and validator in that order."
+    }
+
+    $resolver = $resolverSteps[0].Value
+    $validator = $validatorSteps[0].Value
+    if ($resolver -notmatch '(?m)^\s{8}id:\s*package-output\s*$' -or
+        $resolver -notmatch '(?m)^\s{8}shell:\s*pwsh\s*$' -or
+        $resolver -notmatch '(?m)^\s{8}run:\s*\./scripts/resolve-packager-output\.ps1\s+-OutputPath\s+\$env:GITHUB_OUTPUT\s*$' -or
+        $validator -notmatch '(?m)^\s{8}shell:\s*pwsh\s*$' -or
+        $validator -notmatch '(?m)^\s{10}STATSPRO_ARCHIVE_PATH:\s*\$\{\{\s*steps\.package-output\.outputs\.archive_path\s*\}\}\s*$' -or
+        $validator -notmatch '(?m)^\s{10}STATSPRO_PROJECT_VERSION:\s*\$\{\{\s*steps\.package-output\.outputs\.project_version\s*\}\}\s*$' -or
+        $validator -notmatch '(?m)-ArchivePath\s+\$env:STATSPRO_ARCHIVE_PATH' -or
+        $validator -notmatch '(?m)-PackagerProjectVersion\s+\$env:STATSPRO_PROJECT_VERSION') {
+        throw "Checks package-contract must preserve the resolver-to-validator output handoff."
+    }
+}
+
 function Test-ContainsMarketplaceTokenReference {
     param([string]$Text)
 
@@ -4513,9 +4580,58 @@ function Invoke-SelfTest {
     } "exact tag-only push trigger"
     $checksWorkflowPath = Join-Path (Join-Path $PSScriptRoot "..") ".github\workflows\checks.yml"
     $checksWorkflowText = Get-Content -LiteralPath $checksWorkflowPath -Raw -Encoding UTF8
-    Assert-WorkflowCheckoutCredentialBoundary `
-        -WorkflowText $checksWorkflowText `
-        -JobNames @('checks', 'package-contract')
+    Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText
+    Assert-ThrowsMatch "missing pull_request checks trigger rejected" {
+        Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(
+            '  pull_request:',
+            '  schedule:')
+    } "must include the pull_request trigger"
+    Assert-ThrowsMatch "fork PR package-contract filter rejected" {
+        Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(
+            '  package-contract:',
+            "  package-contract:`n    if: `${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}")
+    } "must not define a job-level pull request filter"
+    Assert-ThrowsMatch "pull_request_target checks trigger rejected" {
+        Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(
+            '  pull_request:',
+            '  pull_request_target:')
+    } "must not use pull_request_target"
+    Assert-ThrowsMatch "write checks workflow permission rejected" {
+        Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(
+            '  contents: read',
+            '  contents: write')
+    } "contents: read without workflow-level write permissions"
+    Assert-ThrowsMatch "package-contract publication flags rejected" {
+        Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(
+            '          args: -d',
+            '          args: -d --publish')
+    } "literal args: -d without publication flags"
+    Assert-ThrowsMatch "reordered package-contract steps rejected" {
+        $packageJob = Get-WorkflowJobBlock -WorkflowText $checksWorkflowText -JobName 'package-contract'
+        $stepBlocks = @([regex]::Matches($packageJob.Value, '(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)'))
+        $packager = @($stepBlocks | Where-Object { $_.Value -match '(?i)BigWigsMods/packager@' })[0]
+        $resolver = @($stepBlocks | Where-Object { $_.Value -match '(?i)resolve-packager-output\.ps1' })[0]
+        $validator = @($stepBlocks | Where-Object { $_.Value -match '(?i)check-package-dry-run\.ps1' })[0]
+        $mutated = $checksWorkflowText.Replace(
+            ($packager.Value + $resolver.Value + $validator.Value),
+            ($resolver.Value + $packager.Value + $validator.Value))
+        Assert-ChecksWorkflowBoundary -WorkflowText $mutated
+    } "must run Packager, resolver, and validator in that order"
+    Assert-ThrowsMatch "package-contract GitHub token exposure rejected" {
+        Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(
+            '        uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28',
+            "        uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28`n        env:`n          GH_TOKEN: `${{ github.token }}")
+    } "must not reference secrets or a GitHub token"
+    Assert-ThrowsMatch "package-contract secret exposure rejected" {
+        Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(
+            '        uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28',
+            "        uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28`n        env:`n          CF_API_KEY: `${{ secrets.CF_API_KEY }}")
+    } "must not reference secrets or a GitHub token"
+    Assert-ThrowsMatch "package-contract output handoff drift rejected" {
+        Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(
+            '${{ steps.package-output.outputs.archive_path }}',
+            '${{ steps.package.outputs.archive_path }}')
+    } "preserve the resolver-to-validator output handoff"
     $marketplaceWorkflowPath = Join-Path (Join-Path $PSScriptRoot "..") ".github\workflows\marketplace-credential-preflight.yml"
     $marketplaceWorkflowText = Get-Content -LiteralPath $marketplaceWorkflowPath -Raw -Encoding UTF8
     Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $marketplaceWorkflowText

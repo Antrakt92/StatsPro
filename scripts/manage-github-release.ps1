@@ -2538,20 +2538,6 @@ function Assert-ExactWorkflowBlock {
     }
 }
 
-function Assert-WorkflowParameterBinding {
-    param(
-        [System.Text.RegularExpressions.Match]$StepBlock,
-        [string]$StepName,
-        [string]$ParameterName,
-        [string]$ValuePattern
-    )
-
-    $pattern = "(?m)^\s+-$([regex]::Escape($ParameterName))\s+$ValuePattern(?:\s+\x60)?\s*`$"
-    if ([regex]::Matches($StepBlock.Value, $pattern).Count -ne 1) {
-        throw "Workflow step '$StepName' must bind -$ParameterName exactly once."
-    }
-}
-
 function Test-ContainsSecretReference {
     param([string]$Text, [string]$SecretName)
 
@@ -2635,61 +2621,6 @@ function Assert-WorkflowCheckoutCredentialBoundary {
     }
 }
 
-function Assert-ReleaseGitHubTokenScope {
-    param([string]$WorkflowText)
-
-    $allowedStepTokens = [ordered]@{
-        'Check release version' = 'GITHUB_TOKEN'
-        'Validate interrupted release state' = 'GITHUB_TOKEN'
-        'Verify immutable release policy' = 'IMMUTABLE_RELEASES_READ_TOKEN'
-        'Prepare resumable draft release' = 'GITHUB_TOKEN'
-        'Mark marketplace publication started' = 'GITHUB_TOKEN'
-        'Attach validated assets to draft' = 'GITHUB_TOKEN'
-        'Publish immutable GitHub release' = 'GITHUB_TOKEN'
-        'Validate published immutable release assets' = 'GITHUB_TOKEN'
-    }
-    $stepBlocks = @([regex]::Matches($WorkflowText, '(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)'))
-    $allowedBlocks = [System.Collections.Generic.List[System.Text.RegularExpressions.Match]]::new()
-
-    foreach ($allowedName in $allowedStepTokens.Keys) {
-        $matchingBlocks = @($stepBlocks | Where-Object {
-            (Get-WorkflowStepName -StepBlock $_) -eq $allowedName
-        })
-        if ($matchingBlocks.Count -ne 1) {
-            throw "Release workflow must contain exactly one GitHub-management step '$allowedName'."
-        }
-        $block = $matchingBlocks[0]
-        $expectedSecretName = [string]$allowedStepTokens[$allowedName]
-        $escapedSecretName = [regex]::Escape($expectedSecretName)
-        $tokenLines = @([regex]::Matches(
-            $block.Value,
-            "(?m)^\s{10}GH_TOKEN:\s*\`$\{\{\s*secrets\.${escapedSecretName}\s*\}\}\s*`$"
-        ))
-        $blockWithoutCanonicalToken = if ($tokenLines.Count -eq 1) {
-            $block.Value.Remove($tokenLines[0].Index, $tokenLines[0].Length)
-        }
-        else {
-            $block.Value
-        }
-        if ($tokenLines.Count -ne 1 -or
-            $block.Value -match '(?m)^\s{10}(?:GITHUB_TOKEN|GITHUB_OAUTH):' -or
-            (Test-ContainsPrivilegedReleaseTokenReference -Text $blockWithoutCanonicalToken) -or
-            $block.Value -match '(?m)^\s{8}uses:') {
-            throw "Privileged GitHub token must use the expected step-local GH_TOKEN source in '$allowedName'."
-        }
-        $allowedBlocks.Add($block)
-    }
-
-    $outsideAllowedSteps = $WorkflowText
-    foreach ($block in @($allowedBlocks | Sort-Object Index -Descending)) {
-        $outsideAllowedSteps = $outsideAllowedSteps.Remove($block.Index, $block.Length)
-    }
-    if ((Test-ContainsPrivilegedReleaseTokenReference -Text $outsideAllowedSteps) -or
-        $outsideAllowedSteps -match '(?m)^\s*(?:GH_TOKEN|GITHUB_TOKEN|GITHUB_OAUTH):') {
-        throw "Privileged GitHub token must not be exposed outside its approved shell step."
-    }
-}
-
 function Test-ContainsMarketplaceTokenReference {
     param([string]$Text)
 
@@ -2729,34 +2660,6 @@ function Assert-CanonicalMarketplaceEnvironment {
     }
     if (Test-ContainsAnySecretReference -Text $withoutCanonicalReferences) {
         throw "Marketplace step '$StepName' contains a non-canonical secret reference."
-    }
-}
-
-function Assert-ReleaseMarketplaceTokenScope {
-    param([string]$WorkflowText)
-
-    $allowedStepNames = @(
-        'Verify marketplace release credentials and versions',
-        'Publish package to marketplaces'
-    )
-    $stepBlocks = @([regex]::Matches($WorkflowText, '(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)'))
-    $allowedBlocks = [System.Collections.Generic.List[System.Text.RegularExpressions.Match]]::new()
-    foreach ($stepName in $allowedStepNames) {
-        $matches = @($stepBlocks | Where-Object { (Get-WorkflowStepName -StepBlock $_) -eq $stepName })
-        if ($matches.Count -ne 1) {
-            throw "Release workflow must contain exactly one marketplace step '$stepName'."
-        }
-        Assert-CanonicalMarketplaceEnvironment -StepBlock $matches[0] -StepName $stepName
-        $allowedBlocks.Add($matches[0])
-    }
-
-    $outsideAllowedSteps = $WorkflowText
-    foreach ($block in @($allowedBlocks | Sort-Object Index -Descending)) {
-        $outsideAllowedSteps = $outsideAllowedSteps.Remove($block.Index, $block.Length)
-    }
-    if ((Test-ContainsMarketplaceTokenReference -Text $outsideAllowedSteps) -or
-        $outsideAllowedSteps -match '(?m)^\s*(?:CF_API_KEY|WAGO_API_TOKEN|WOWI_API_TOKEN):') {
-        throw "Marketplace tokens must not be exposed outside the approved preflight and publishing steps."
     }
 }
 

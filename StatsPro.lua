@@ -3414,6 +3414,8 @@ addon.profileRuntime = {
     contextRetryToken = nil,
     contextRetryPositionSettings = nil,
     contextRetryPositionSnapshot = nil,
+    bootstrapStarted = false,
+    bootstrapPending = false,
     pendingResolution = false,
     scheduledToken = nil,
     noSpecRetryToken = nil,
@@ -3542,6 +3544,7 @@ function addon.profileUI.BuildViewModel()
         characters = {},
         profiles = {},
     }
+    if runtime.bootstrapPending then model.activeProfileID = nil end
     if model.readOnly then return model end
 
     model.accountDefaultProfileID = root.account.defaultProfileID
@@ -4767,9 +4770,26 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
     return true
 end
 
-function addon.profileRuntime.ResolveCurrent(initializing)
+function addon.profileRuntime.ResolveCurrent(initializing, combatEnded)
     local runtime = addon.profileRuntime
-    local combat = runtime.ReadCombatState()
+    local root = addon.dbRuntime.Refresh()
+    if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady then
+        if runtime.bootstrapPending and type(runtime.CompleteBootstrap) == "function" then
+            runtime.pendingResolution = false
+            addon.profileUI.RefreshSafe()
+            return runtime.CompleteBootstrap()
+        end
+        runtime.pendingResolution = true
+        addon.profileUI.RefreshSafe()
+        return false
+    end
+    local combat
+    if combatEnded then
+        combat = false
+    else
+        combat = runtime.ReadCombatState()
+    end
+    initializing = runtime.bootstrapPending or initializing == true
     if combat ~= false then
         runtime.pendingResolution = true
         addon.profileUI.RefreshSafe()
@@ -4777,10 +4797,13 @@ function addon.profileRuntime.ResolveCurrent(initializing)
     end
     local context, contextStatus = runtime.ReadPlayerContext()
     if not context then
+        local terminal = false
         if contextStatus == "unavailable" then
             runtime.pendingResolution = false
+            terminal = true
         elseif contextStatus == "no-spec" and runtime.settlingNoSpec then
             runtime.pendingResolution = false
+            terminal = true
         else
             runtime.pendingResolution = true
             if contextStatus == "no-spec" and runtime.noSpecRetryToken == nil then
@@ -4794,19 +4817,19 @@ function addon.profileRuntime.ResolveCurrent(initializing)
                     runtime.ResolveCurrent(false)
                     runtime.settlingNoSpec = false
                 end)
+            elseif contextStatus == "unknown" then
+                runtime.ScheduleContextRetry()
             end
         end
         addon.profileUI.RefreshSafe()
+        if terminal and runtime.bootstrapPending
+            and type(runtime.CompleteBootstrap) == "function" then
+            return runtime.CompleteBootstrap()
+        end
         return false
     end
     runtime.noSpecRetryToken = nil
 
-    local root = addon.dbRuntime.Refresh()
-    if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady then
-        runtime.pendingResolution = true
-        addon.profileUI.RefreshSafe()
-        return false
-    end
     if runtime.forceReapply then
         runtime.transitioning = true
         local activeSettings = addon.dbRuntime.activeSettings
@@ -4878,6 +4901,9 @@ function addon.profileRuntime.ResolveCurrent(initializing)
         runtime.ResetContextRetry()
         runtime.pendingResolution = false
         addon.profileUI.RefreshSafe()
+        if runtime.bootstrapPending and type(runtime.CompleteBootstrap) == "function" then
+            return runtime.CompleteBootstrap()
+        end
         return true
     end
 
@@ -4887,7 +4913,12 @@ function addon.profileRuntime.ResolveCurrent(initializing)
         addon.profileUI.RefreshSafe()
         return false
     end
-    return runtime.ActivateResolvedContext(context, transaction, profileID, initializing)
+    local activated = runtime.ActivateResolvedContext(context, transaction, profileID, initializing)
+    if activated and runtime.bootstrapPending
+        and type(runtime.CompleteBootstrap) == "function" then
+        return runtime.CompleteBootstrap()
+    end
+    return activated
 end
 
 function addon.profileRuntime.RequestResolution(immediate)
@@ -4897,6 +4928,9 @@ function addon.profileRuntime.RequestResolution(immediate)
     if type(UnitGUID) ~= "function" then
         runtime.pendingResolution = false
         addon.profileUI.RefreshSafe()
+        if runtime.bootstrapPending and type(runtime.CompleteBootstrap) == "function" then
+            return runtime.CompleteBootstrap()
+        end
         return false
     end
     runtime.pendingResolution = true
@@ -4915,7 +4949,7 @@ function addon.profileRuntime.RequestResolution(immediate)
     return true
 end
 
-function addon.profileRuntime.ResolvePending()
+function addon.profileRuntime.ResolvePending(combatEnded)
     local runtime = addon.profileRuntime
     if not runtime.pendingResolution and runtime.scheduledToken == nil
         and runtime.contextRetryToken == nil then return false end
@@ -4924,7 +4958,7 @@ function addon.profileRuntime.ResolvePending()
     runtime.requestGeneration = runtime.requestGeneration + 1
     runtime.scheduledToken = nil
     runtime.noSpecRetryToken = nil
-    return runtime.ResolveCurrent(false)
+    return runtime.ResolveCurrent(false, combatEnded)
 end
 
 function addon.profileOps.ShouldFail(stage)
@@ -8476,6 +8510,7 @@ end
 local timeSinceLastUpdate = 0
 local tickerFrame = CreateFrame("Frame")
 tickerFrame:SetScript("OnUpdate", function(self, elapsed)
+    if not isLoaded then return end
     timeSinceLastUpdate = timeSinceLastUpdate + elapsed
     if timeSinceLastUpdate >= cached.updateInterval then
         addon:RunUpdateStatsSafe()
@@ -8490,44 +8525,63 @@ end)
 
 local RefreshPersistentLocalization
 
+addon.profileRuntime.CompleteBootstrap = function()
+    local runtime = addon.profileRuntime
+    if isLoaded then
+        runtime.bootstrapPending = false
+        return true
+    end
+    addon.fontRuntime.repairSavedPaths()
+    CacheSettings()
+    if RefreshPersistentLocalization then RefreshPersistentLocalization() end
+    -- WHY here: forceLocale is migrated + cached.activeLabels resolved; if active
+    -- locale needs glyphs db.font lacks, auto-switch before the first panel style pass.
+    local runtimeFont = MaybeAutoSwitchFont()
+    LoadAllPositions()
+    SetAllPanelsLockState(GetBoolDB("isLocked"))
+    SetAllPanelsScale(GetNumberDB("scale"))
+    addon.fontRuntime.applyCommittedTextStyle(
+        runtimeFont or GetFontDB(), GetNumberDB("fontSize"), false, true)
+    ApplyTextAlphaToAllPanels(cached.textAlpha)
+    addon.readabilityConfig.applyPanelBackgroundAlphaToAllPanels(cached.panelBackgroundAlpha)
+    isLoaded = true
+    runtime.bootstrapPending = false
+    if type(runtime.RefreshConfigControls) == "function" then
+        runtime.RefreshConfigControls()
+    end
+    if type(addon.panelEditRuntime.Refresh) == "function" then
+        addon.panelEditRuntime.Refresh(false)
+    end
+    addon.durabilityRuntime.MarkDirty()
+    itemLevelDirty = true
+    addon:RunUpdateStatsSafe()
+    addon.profileUI.RefreshSafe()
+    return true
+end
+
 local function OnPlayerEnteringWorld()
     if not isLoaded then
+        mainPanel:Hide()
+        defensivePanel:Hide()
         -- First-run carry-forward happens at PEW so the source SavedVariables globals
         -- are populated regardless of addon load order. The field-driven importer only
         -- runs against an empty StatsPro DB; established settings are never overwritten
         -- without the explicit `/statspro import` confirmation path.
-        addon.legacyImport.ImportFreshIfAvailable()
-        MigrateDB()
-        addon.dbRuntime.Refresh()
+        if not addon.profileRuntime.bootstrapStarted then
+            addon.legacyImport.ImportFreshIfAvailable()
+            MigrateDB()
+            addon.dbRuntime.Refresh()
+            addon.profileRuntime.bootstrapStarted = true
+        end
         -- Resolve the character/spec profile before the first cache/style/position
-        -- pass so the account-default profile never flashes on login.
+        -- pass. Combat/unknown identity keeps both frames hidden until a mapped
+        -- profile is authoritative; terminal no-spec/unavailable/read-only modes
+        -- retain the account-default compatibility fallback.
+        addon.profileRuntime.bootstrapPending = true
         addon.profileRuntime.RequestResolution(true)
-        addon.fontRuntime.repairSavedPaths()
-        CacheSettings()
-        if RefreshPersistentLocalization then RefreshPersistentLocalization() end
-        -- WHY here: forceLocale is migrated + cached.activeLabels resolved; if active
-        -- locale needs glyphs db.font lacks, auto-switch BEFORE the
-        -- ApplyTextStyleToAllPanels call below so the FontStrings load with the
-        -- correct font on the very first frame (no `?` boxes for one session).
-        local runtimeFont = MaybeAutoSwitchFont()
-        LoadAllPositions()
-        SetAllPanelsLockState(GetBoolDB("isLocked"))
-        SetAllPanelsScale(GetNumberDB("scale"))
-        -- Panel:New deliberately bootstraps with a verified client font and never
-        -- touches saved custom media at file scope. Apply the migrated/repaired
-        -- runtime choice only after every SavedVariable and media registration is
-        -- available; future-schema DBs keep that effective choice out of storage.
-        addon.fontRuntime.applyCommittedTextStyle(
-            runtimeFont or GetFontDB(), GetNumberDB("fontSize"), false, true)
-        -- WHY re-apply textAlpha at PEW: Panel:New runs at file scope before CacheSettings,
-        -- so cached.textAlpha is nil at FontString creation. This propagates the user's
-        -- saved alpha to FontStrings on the first frame.
-        ApplyTextAlphaToAllPanels(cached.textAlpha)
-        addon.readabilityConfig.applyPanelBackgroundAlphaToAllPanels(cached.panelBackgroundAlpha)
-        isLoaded = true
-    else
-        addon.profileRuntime.RequestResolution(false)
+        return
     end
+    addon.profileRuntime.RequestResolution(false)
     -- WHY: UpdateStats handles Show/Hide based on cached.isVisible + line content.
     addon.durabilityRuntime.MarkDirty()
     itemLevelDirty = true
@@ -8587,7 +8641,13 @@ local EVENT_HANDLERS = {
     -- Panel:Unlock are no-op stubs kept behind this semantic wrapper.
     PLAYER_REGEN_ENABLED        = function()
         addon.profileRuntime.ResumeCorruptRollbackApply()
-        addon.profileRuntime.ResolvePending()
+        local wasLoaded = isLoaded
+        addon.profileRuntime.ResolvePending(true)
+        if (addon.profileRuntime.bootstrapStarted and not isLoaded)
+            or (not wasLoaded and isLoaded) then
+            addon.profileUI.RefreshSafe()
+            return
+        end
         SetAllPanelsLockState(GetBoolDB("isLocked"))
         -- The event is authoritative even if InCombatLockdown() lags by one frame.
         addon.panelEditRuntime.Refresh(false)
@@ -9209,6 +9269,18 @@ local function RefreshConfigLocalization()
     for _, g in ipairs(alignmentGroups) do
         ReAlignGroupImpl(g.rows, g.gap)
     end
+end
+
+addon.profileRuntime.RefreshConfigControls = function()
+    if #configRefreshers == 0 then return true end
+    for _, refresh in ipairs(configRefreshers) do
+        local ok = pcall(refresh)
+        if not ok then PrintMsg("Settings control refresh failed.") end
+    end
+    local localized = pcall(RefreshConfigLocalization)
+    if not localized then PrintMsg("Settings localization refresh failed.") end
+    addon.profileRuntime.configRefreshCount = addon.profileRuntime.configRefreshCount + 1
+    return true
 end
 
 --[[ ============================================================
@@ -10705,15 +10777,7 @@ addon.profileRuntime.applyActiveSettings = function()
     comparison.snapshotKey = nil
     comparison.entries = {}
 
-    if #configRefreshers > 0 then
-        for _, refresh in ipairs(configRefreshers) do
-            local ok = pcall(refresh)
-            if not ok then PrintMsg("Settings control refresh failed.") end
-        end
-        local localized = pcall(RefreshConfigLocalization)
-        if not localized then PrintMsg("Settings localization refresh failed.") end
-        addon.profileRuntime.configRefreshCount = addon.profileRuntime.configRefreshCount + 1
-    end
+    addon.profileRuntime.RefreshConfigControls()
     timeSinceLastUpdate = 0
     if not addon:RunUpdateStatsSafe() then error("profile render failed") end
     addon.profileRuntime.applyCount = addon.profileRuntime.applyCount + 1
@@ -12298,14 +12362,18 @@ function addon.profileUI.BuildSettingsUI(owner)
         ui.currentModel = model
         ui.refreshCount = ui.refreshCount + 1
 
-        profileButton:SetText(model.activeProfileName or L("Account default profile"))
+        profileButton:SetText(model.activeProfileName
+            or (model.pending and L("Waiting for a safe profile context.")
+                or L("Account default profile")))
         if model.readOnly then
             subtitle:SetText(L(model.mode == "corrupt"
                 and "Corrupted data - profiles are read-only. Use /ss wipe to reset."
                 or "Compatibility mode - profiles are read-only."))
             addon.settingsDesign.SetRegionColor(subtitle, "warning")
         elseif model.pending then
-            subtitle:SetText(L("Switch pending until combat ends"))
+            subtitle:SetText(L(model.combat == true
+                and "Switch pending until combat ends"
+                or "Waiting for a safe profile context."))
             addon.settingsDesign.SetRegionColor(subtitle, "warning")
         elseif model.activeSharedCount > 1 then
             subtitle:SetText(string.format(L("Shared by %d specs"), model.activeSharedCount))
@@ -14504,8 +14572,11 @@ if addon and addon.__statsproSmoke == true then
                 corruptRollbackRoot = runtime.corruptRollbackRoot,
                 contextRetryCount = runtime.contextRetryCount,
                 contextRetryScheduled = runtime.contextRetryToken ~= nil,
+                bootstrapStarted = runtime.bootstrapStarted,
+                bootstrapPending = runtime.bootstrapPending,
                 pendingResolution = runtime.pendingResolution,
                 scheduled = runtime.scheduledToken ~= nil,
+                noSpecRetryScheduled = runtime.noSpecRetryToken ~= nil,
                 transitioning = runtime.transitioning,
                 suppressIntermediateRefresh = runtime.suppressIntermediateRefresh,
                 requestGeneration = runtime.requestGeneration,
@@ -14515,6 +14586,7 @@ if addon and addon.__statsproSmoke == true then
                 structuralCommitCount = runtime.structuralCommitCount,
                 contextReadCount = runtime.contextReadCount,
                 updateCount = updateCount,
+                isLoaded = isLoaded,
             }
         end,
         appearancePresets = {

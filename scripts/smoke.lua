@@ -11998,6 +11998,225 @@ do
 end
 
 do
+    -- Cold profile bootstrap must never expose the account default while player identity
+    -- is transient. Reuse a current-schema registry so every pre-resolution delta is a bug,
+    -- not expected migration work.
+    local function makeColdRoot(withMappedCharacter)
+        local seed = loadStatsPro("enUS")
+        fireEvent("profiles.bootstrap.seed", seed, "PLAYER_ENTERING_WORLD")
+        local root = deepCopy(seed.StatsProDB)
+        root.profiles.p1.settings.isVisible = false
+        root.profiles.p1.settings.isLocked = true
+        root.profiles.p1.settings.showDurability = false
+        root.profiles.p1.settings.showRepairCost = false
+        root.profiles.p2 = {
+            name = "Mapped profile",
+            settings = deepCopy(root.profiles.p1.settings),
+        }
+        root.profiles.p2.settings.isVisible = true
+        root.profiles.p2.settings.isLocked = false
+        root.profiles.p2.settings.showItemLevel = true
+        root.account.nextProfileID = 3
+        root.roleTemplates.TANK = "p2"
+        root.characters = {}
+        if withMappedCharacter then
+            root.characters["Player-1-COLD"] = {
+                displayName = "Cold-Realm",
+                classID = 1,
+                lastSeen = 1770000000,
+                defaultProfileID = "p1",
+                specProfiles = { [73] = "p2" },
+            }
+        end
+        return root
+    end
+
+    local combat = true
+    local combatRoot = makeColdRoot(true)
+    local combatBefore = deepCopy(combatRoot)
+    local combatEnv, combatAddon, combatTest = loadStatsPro("enUS", {
+        statsProDB = combatRoot,
+        unitGUID = function() return "Player-1-COLD" end,
+        unitFullName = function() return "Cold", "Realm" end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return 73, "Protection", nil, nil, "TANK", 1
+        end,
+        inCombatLockdown = function() return combat end,
+    })
+    fireEvent("profiles.bootstrap.combat.pending", combatEnv, "PLAYER_ENTERING_WORLD")
+    local runtime = combatTest.profileRuntimeState()
+    local visual = combatTest.panelVisualState()
+    eq("profiles.bootstrap.combat.not_loaded", runtime.isLoaded, false)
+    eq("profiles.bootstrap.combat.pending", runtime.pendingResolution, true)
+    eq("profiles.bootstrap.combat.bootstrap_pending", runtime.bootstrapPending, true)
+    eq("profiles.bootstrap.combat.no_apply", runtime.applyCount, 0)
+    eq("profiles.bootstrap.combat.no_render", runtime.updateCount, 0)
+    eq("profiles.bootstrap.combat.main_hidden", visual.mainShown, false)
+    eq("profiles.bootstrap.combat.side_hidden", visual.sideShown, false)
+    local coldTicker = findFrame("profiles.bootstrap.combat.ticker", combatEnv, function(frame)
+        return frame.scripts and type(frame.scripts.OnUpdate) == "function"
+    end)
+    callScript("profiles.bootstrap.combat.ticker_safe", coldTicker, "OnUpdate", 999)
+    eq("profiles.bootstrap.combat.ticker_no_render",
+        combatTest.profileRuntimeState().updateCount, 0)
+    eq("profiles.bootstrap.combat.no_claimed_active_profile",
+        combatTest.profileViewModel().activeProfileID, nil)
+    combatAddon:OpenConfigMenu()
+    eq("profiles.bootstrap.combat.waiting_header",
+        combatTest.profileUIState().headerProfile, "Waiting for a safe profile context.")
+    eq("profiles.bootstrap.combat.pending_edit_hidden",
+        combatTest.panelEditAffordanceState().main.shown, false)
+    slash("profiles.bootstrap.combat.blocks_write", combatEnv, "hide")
+    combatEnv.StatsProFrame:ClearAllPoints()
+    combatEnv.StatsProFrame:SetPoint("TOPLEFT", combatEnv.UIParent, "TOPLEFT", 444, -555)
+    fireEvent("profiles.bootstrap.combat.logout", combatEnv, "PLAYER_LOGOUT")
+    assertDeepEqual("profiles.bootstrap.combat.no_writes", combatRoot, combatBefore)
+
+    -- PLAYER_REGEN_ENABLED is authoritative even if the combat query lags for a frame.
+    fireEvent("profiles.bootstrap.combat.regen", combatEnv, "PLAYER_REGEN_ENABLED")
+    runtime = combatTest.profileRuntimeState()
+    visual = combatTest.panelVisualState()
+    eq("profiles.bootstrap.combat.loaded", runtime.isLoaded, true)
+    eq("profiles.bootstrap.combat.resolved", runtime.pendingResolution, false)
+    eq("profiles.bootstrap.combat.bootstrap_cleared", runtime.bootstrapPending, false)
+    eq("profiles.bootstrap.combat.exact_profile", combatTest.profileState().profileID, "p2")
+    eq("profiles.bootstrap.combat.one_activation", runtime.activationCount, 1)
+    eq("profiles.bootstrap.combat.cold_no_warm_apply", runtime.applyCount, 0)
+    eq("profiles.bootstrap.combat.one_render", runtime.updateCount, 1)
+    eq("profiles.bootstrap.combat.main_shown", visual.mainShown, true)
+    eq("profiles.bootstrap.combat.header_recovered",
+        combatTest.profileUIState().headerProfile, "Mapped profile")
+    eq("profiles.bootstrap.combat.control_refreshed",
+        combatEnv.StatsProVisibleCheck:GetChecked(), true)
+    eq("profiles.bootstrap.combat.config_refreshed_once", runtime.configRefreshCount, 1)
+    eq("profiles.bootstrap.combat.mapped_lock_applied",
+        combatTest.panelEditAffordanceState().locked, false)
+    eq("profiles.bootstrap.combat.edit_affordance_recovered",
+        combatTest.panelEditAffordanceState().main.shown, true)
+    local accountDefaultBeforeEdit = deepCopy(combatRoot.profiles.p1)
+    clickCheckbox("profiles.bootstrap.combat.target_control", combatEnv.StatsProVisibleCheck, false)
+    eq("profiles.bootstrap.combat.target_profile_written",
+        combatRoot.profiles.p2.settings.isVisible, false)
+    assertDeepEqual("profiles.bootstrap.combat.account_default_not_written",
+        combatRoot.profiles.p1, accountDefaultBeforeEdit)
+
+    local unknownReads = 0
+    local unknownRoot = makeColdRoot(true)
+    local unknownBefore = deepCopy(unknownRoot)
+    local unknownEnv, _, unknownTest = loadStatsPro("enUS", {
+        statsProDB = unknownRoot,
+        unitGUID = function()
+            unknownReads = unknownReads + 1
+            if unknownReads < 3 then return nil end
+            return "Player-1-COLD"
+        end,
+        unitFullName = function() return "Cold", "Realm" end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return 73, "Protection", nil, nil, "TANK", 1
+        end,
+    })
+    fireEvent("profiles.bootstrap.unknown.pending", unknownEnv, "PLAYER_ENTERING_WORLD")
+    runtime = unknownTest.profileRuntimeState()
+    eq("profiles.bootstrap.unknown.first_read", unknownReads, 1)
+    eq("profiles.bootstrap.unknown.retry_one", runtime.contextRetryCount, 1)
+    eq("profiles.bootstrap.unknown.retry_scheduled", runtime.contextRetryScheduled, true)
+    eq("profiles.bootstrap.unknown.not_loaded", runtime.isLoaded, false)
+    assertDeepEqual("profiles.bootstrap.unknown.no_initial_writes", unknownRoot, unknownBefore)
+    unknownEnv.__flushNextTimer(0.25)
+    runtime = unknownTest.profileRuntimeState()
+    eq("profiles.bootstrap.unknown.second_read", unknownReads, 2)
+    eq("profiles.bootstrap.unknown.retry_two", runtime.contextRetryCount, 2)
+    eq("profiles.bootstrap.unknown.still_hidden",
+        unknownTest.panelVisualState().mainShown, false)
+    assertDeepEqual("profiles.bootstrap.unknown.no_retry_writes", unknownRoot, unknownBefore)
+    unknownEnv.__flushNextTimer(0.5)
+    runtime = unknownTest.profileRuntimeState()
+    eq("profiles.bootstrap.unknown.third_read", unknownReads, 3)
+    eq("profiles.bootstrap.unknown.loaded", runtime.isLoaded, true)
+    eq("profiles.bootstrap.unknown.exact_profile", unknownTest.profileState().profileID, "p2")
+    eq("profiles.bootstrap.unknown.one_activation", runtime.activationCount, 1)
+    eq("profiles.bootstrap.unknown.retry_count_cleared", runtime.contextRetryCount, 0)
+    eq("profiles.bootstrap.unknown.retry_token_cleared", runtime.contextRetryScheduled, false)
+
+    local exhaustedReady = false
+    local exhaustedRoot = makeColdRoot(false)
+    local exhaustedBefore = deepCopy(exhaustedRoot)
+    local exhaustedNextID = exhaustedRoot.account.nextProfileID
+    local exhaustedEnv, _, exhaustedTest = loadStatsPro("enUS", {
+        statsProDB = exhaustedRoot,
+        unitGUID = function()
+            if exhaustedReady then return "Player-1-NEW-COLD" end
+            return nil
+        end,
+        unitFullName = function() return "NewCold", "Realm" end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return 73, "Protection", nil, nil, "TANK", 1
+        end,
+    })
+    fireEvent("profiles.bootstrap.exhausted.pending", exhaustedEnv, "PLAYER_ENTERING_WORLD")
+    exhaustedEnv.__flushTimers(1)
+    runtime = exhaustedTest.profileRuntimeState()
+    eq("profiles.bootstrap.exhausted.read_bound", runtime.contextReadCount, 4)
+    eq("profiles.bootstrap.exhausted.retry_bound", runtime.contextRetryCount, 3)
+    eq("profiles.bootstrap.exhausted.no_timer", runtime.contextRetryScheduled, false)
+    eq("profiles.bootstrap.exhausted.stays_pending", runtime.pendingResolution, true)
+    eq("profiles.bootstrap.exhausted.not_loaded", runtime.isLoaded, false)
+    assertDeepEqual("profiles.bootstrap.exhausted.no_writes", exhaustedRoot, exhaustedBefore)
+    exhaustedReady = true
+    fireEvent("profiles.bootstrap.exhausted.authoritative_retry",
+        exhaustedEnv, "PLAYER_REGEN_ENABLED")
+    runtime = exhaustedTest.profileRuntimeState()
+    eq("profiles.bootstrap.exhausted.loaded", runtime.isLoaded, true)
+    eq("profiles.bootstrap.exhausted.pending_cleared", runtime.pendingResolution, false)
+    eq("profiles.bootstrap.exhausted.retry_cleared", runtime.contextRetryCount, 0)
+    eq("profiles.bootstrap.exhausted.one_activation", runtime.activationCount, 1)
+    eq("profiles.bootstrap.exhausted.one_character",
+        exhaustedRoot.characters["Player-1-NEW-COLD"] ~= nil, true)
+    eq("profiles.bootstrap.exhausted.one_allocation_pair",
+        exhaustedRoot.account.nextProfileID, exhaustedNextID + 2)
+    local recoveredNextID = exhaustedRoot.account.nextProfileID
+    fireEvent("profiles.bootstrap.exhausted.same_context",
+        exhaustedEnv, "PLAYER_ENTERING_WORLD")
+    exhaustedEnv.__flushTimers(0)
+    eq("profiles.bootstrap.exhausted.no_duplicate_allocation",
+        exhaustedRoot.account.nextProfileID, recoveredNextID)
+    eq("profiles.bootstrap.exhausted.no_duplicate_activation",
+        exhaustedTest.profileRuntimeState().activationCount, 1)
+
+    local staleReady = false
+    local staleRoot = makeColdRoot(false)
+    local staleEnv, _, staleTest = loadStatsPro("enUS", {
+        statsProDB = staleRoot,
+        unitGUID = function()
+            if staleReady then return "Player-1-STALE-COLD" end
+            return nil
+        end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return 73, "Protection", nil, nil, "TANK", 1
+        end,
+    })
+    fireEvent("profiles.bootstrap.stale.pending", staleEnv, "PLAYER_ENTERING_WORLD")
+    local staleGeneration = staleTest.profileRuntimeState().requestGeneration
+    staleReady = true
+    fireEvent("profiles.bootstrap.stale.new_generation", staleEnv, "PLAYER_ENTERING_WORLD")
+    runtime = staleTest.profileRuntimeState()
+    local staleNextID = staleRoot.account.nextProfileID
+    eq("profiles.bootstrap.stale.newer_generation",
+        runtime.requestGeneration > staleGeneration, true)
+    eq("profiles.bootstrap.stale.one_activation", runtime.activationCount, 1)
+    staleEnv.__flushTimers(0.25)
+    runtime = staleTest.profileRuntimeState()
+    eq("profiles.bootstrap.stale.old_timer_no_activation", runtime.activationCount, 1)
+    eq("profiles.bootstrap.stale.old_timer_no_allocation",
+        staleRoot.account.nextProfileID, staleNextID)
+    eq("profiles.bootstrap.stale.pending_cleared", runtime.pendingResolution, false)
+end
+
+do
     -- First-seen default/spec names use the same evolving unique-name registry and
     -- remain bounded without splitting CJK codepoints.
     local seed, _, seedTest = loadStatsPro("enUS")
@@ -12214,27 +12433,37 @@ do
     futureRoot.dbVersion = invalidTest.currentDBVersion() + 1
     futureRoot.characters = "future-shape"
     local futureBefore = deepCopy(futureRoot)
-    local futureEnv = loadStatsPro("enUS", {
+    local futureEnv, _, futureTest = loadStatsPro("enUS", {
         statsProDB = futureRoot,
-        unitGUID = function() return "Player-1-FUTURE" end,
+        unitGUID = function() return nil end,
         getSpecialization = function() return 1 end,
         getSpecializationInfo = function() return 73, "Protection", nil, nil, "TANK", 1 end,
+        inCombatLockdown = function() return true end,
     })
     local ok, err = pcall(futureEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
     check("profiles.context.invalid.future.no_error", ok, err)
+    eq("profiles.context.invalid.future.loaded_before_identity",
+        futureTest.profileRuntimeState().isLoaded, true)
+    eq("profiles.context.invalid.future.bootstrap_cleared",
+        futureTest.profileRuntimeState().bootstrapPending, false)
     assertDeepEqual("profiles.context.invalid.future.no_writes", futureRoot, futureBefore)
 
     local corruptRoot = deepCopy(seed.StatsProDB)
     corruptRoot.characters = "corrupt-shape"
     local corruptBefore = deepCopy(corruptRoot)
-    local corruptEnv = loadStatsPro("enUS", {
+    local corruptEnv, _, corruptTest = loadStatsPro("enUS", {
         statsProDB = corruptRoot,
-        unitGUID = function() return "Player-1-CORRUPT" end,
+        unitGUID = function() return nil end,
         getSpecialization = function() return 1 end,
         getSpecializationInfo = function() return 73, "Protection", nil, nil, "TANK", 1 end,
+        inCombatLockdown = function() return true end,
     })
     ok, err = pcall(corruptEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
     check("profiles.context.invalid.corrupt.no_error", ok, err)
+    eq("profiles.context.invalid.corrupt.loaded_before_identity",
+        corruptTest.profileRuntimeState().isLoaded, true)
+    eq("profiles.context.invalid.corrupt.bootstrap_cleared",
+        corruptTest.profileRuntimeState().bootstrapPending, false)
     assertDeepEqual("profiles.context.invalid.corrupt.no_writes", corruptRoot, corruptBefore)
 
     local secretSpecID = {}
@@ -13187,6 +13416,15 @@ do
     local state = profileTest.profileUIState()
     eq("profiles.ui.unknown_combat.gated", model.canMutate, false)
     eq("profiles.ui.unknown_combat.pending", model.pending, true)
+    eq("profiles.ui.unknown_combat.not_loaded",
+        profileTest.profileRuntimeState().isLoaded, false)
+    eq("profiles.ui.unknown_combat.no_active_default", model.activeProfileID, nil)
+    eq("profiles.ui.unknown_combat.header_profile", state.headerProfile,
+        "Waiting for a safe profile context.")
+    eq("profiles.ui.unknown_combat.header_subtitle", state.headerSubtitle,
+        "Waiting for a safe profile context.")
+    eq("profiles.ui.unknown_combat.main_hidden",
+        profileTest.panelVisualState().mainShown, false)
     eq("profiles.ui.unknown_combat.notice", state.detailNotice,
         "Waiting for a safe profile context.")
     eq("profiles.ui.unknown_combat.root_identity", rawequal(env.StatsProDB, root), true)
@@ -13225,6 +13463,9 @@ do
     local state = profileTest.profileUIState()
     local model = profileTest.profileViewModel()
     eq("profiles.ui.compat.read_only", model.readOnly, true)
+    eq("profiles.ui.compat.loaded", profileTest.profileRuntimeState().isLoaded, true)
+    eq("profiles.ui.compat.bootstrap_cleared",
+        profileTest.profileRuntimeState().bootstrapPending, false)
     eq("profiles.ui.compat.no_characters", #model.characters, 0)
     eq("profiles.ui.compat.header", state.headerSubtitle,
         "Compatibility mode - profiles are read-only.")
@@ -13252,10 +13493,30 @@ do
         getSpecialization = function() return nil end,
     })
     fireEvent("profiles.ui.no_spec.activate", env, "PLAYER_ENTERING_WORLD")
+    eq("profiles.ui.no_spec.not_loaded_while_settling",
+        profileTest.profileRuntimeState().isLoaded, false)
+    eq("profiles.ui.no_spec.bootstrap_pending",
+        profileTest.profileRuntimeState().bootstrapPending, true)
+    eq("profiles.ui.no_spec.retry_owned",
+        profileTest.profileRuntimeState().noSpecRetryScheduled, true)
+    eq("profiles.ui.no_spec.main_hidden",
+        profileTest.panelVisualState().mainShown, false)
     addonContext:OpenConfigMenu()
     eq("profiles.ui.no_spec.pending", profileTest.profileUIState().headerSubtitle,
-        "Switch pending until combat ends")
+        "Waiting for a safe profile context.")
+    eq("profiles.ui.no_spec.pending_header", profileTest.profileUIState().headerProfile,
+        "Waiting for a safe profile context.")
     env.__flushTimers(0.1)
+    eq("profiles.ui.no_spec.loaded_after_settle",
+        profileTest.profileRuntimeState().isLoaded, true)
+    eq("profiles.ui.no_spec.bootstrap_cleared",
+        profileTest.profileRuntimeState().bootstrapPending, false)
+    eq("profiles.ui.no_spec.retry_cleared",
+        profileTest.profileRuntimeState().noSpecRetryScheduled, false)
+    eq("profiles.ui.no_spec.pending_cleared",
+        profileTest.profileRuntimeState().pendingResolution, false)
+    eq("profiles.ui.no_spec.fallback_writable",
+        profileTest.profileViewModel().canMutate, true)
     eq("profiles.ui.no_spec.fallback", profileTest.profileUIState().headerSubtitle,
         "Account default profile")
     callScript("profiles.ui.no_spec.open_manager", env.StatsProManageProfilesButton, "OnClick")

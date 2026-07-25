@@ -9501,8 +9501,11 @@ do
 
     ok, err = pcall(function() addon:OpenConfigMenu() end)
     check("config.reopen_toggle.hide", ok, err)
+    eq("config.reopen_toggle.hidden", env.StatsProConfigFrame:IsShown(), false)
     ok, err = pcall(function() addon:OpenConfigMenu() end)
     check("config.reopen_toggle.show", ok, err)
+    eq("config.reopen_toggle.shown", env.StatsProConfigFrame:IsShown(), true)
+    eq("config.reopen_toggle.first_tab", env.StatsProConfigFrame.activeTabIndex, 1)
 
     runScript("config.font_picker_lazy_scaffold.open", env.StatsProFontDropdownButton, "OnClick",
         env.StatsProFontDropdownButton)
@@ -14280,6 +14283,86 @@ do
     eq("profiles.compat.combat_cancel.hide_failure.retry_no_pending",
         test.destructivePromptState().importPending, false)
     assertDeepEqual("profiles.compat.combat_cancel.hide_failure.retry_zero_writes", root, before)
+end
+
+do
+    local env, _, test, root = makeProfileOpsFixture()
+    local launcherButton = exists("profiles.ui.launcher.button", test.launcherButton())
+    local before = deepCopy(root)
+    local identities = captureRegistryIdentities(root)
+    local operationBefore = test.profileOps.state().operationCount
+    local runtimeBefore = test.profileRuntimeState()
+
+    eq("profiles.ui.launcher.config_absent", env.StatsProConfigFrame, nil)
+    env.SettingsPanel:Show()
+    callScript("profiles.ui.launcher.closed_click", launcherButton, "OnClick")
+    local config = exists("profiles.ui.launcher.config_created", env.StatsProConfigFrame)
+    eq("profiles.ui.launcher.blizzard_closed", env.SettingsPanel:IsShown(), false)
+    eq("profiles.ui.launcher.config_shown", config:IsShown(), true)
+    eq("profiles.ui.launcher.first_tab", config.activeTabIndex, 1)
+    eq("profiles.ui.launcher.config_special_once",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 1)
+
+    config.SwitchToTab(3)
+    local refreshBefore = test.profileUIState().refreshCount
+    env.SettingsPanel:Show()
+    callScript("profiles.ui.launcher.open_click", launcherButton, "OnClick")
+    eq("profiles.ui.launcher.open_blizzard_closed", env.SettingsPanel:IsShown(), false)
+    eq("profiles.ui.launcher.open_config_identity", env.StatsProConfigFrame, config)
+    eq("profiles.ui.launcher.open_config_stays_shown", config:IsShown(), true)
+    eq("profiles.ui.launcher.open_tab_preserved", config.activeTabIndex, 3)
+    eq("profiles.ui.launcher.open_no_refresh",
+        test.profileUIState().refreshCount, refreshBefore)
+    eq("profiles.ui.launcher.open_config_special_once",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 1)
+
+    callScript("profiles.ui.launcher.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    callScript("profiles.ui.launcher.open_dialog",
+        env.StatsProProfileResetButton, "OnClick")
+    local transientBefore = test.profileUIState()
+    eq("profiles.ui.launcher.dialog_setup_manager", transientBefore.managerShown, true)
+    eq("profiles.ui.launcher.dialog_setup_dialog", transientBefore.operationDialogShown, true)
+    eq("profiles.ui.launcher.dialog_setup_blocker", transientBefore.operationBlockerShown, true)
+    eq("profiles.ui.launcher.dialog_setup_owner",
+        countValue(env.UISpecialFrames, "StatsProProfileOperationDialog"), 1)
+    eq("profiles.ui.launcher.dialog_setup_manager_suspended",
+        countValue(env.UISpecialFrames, "StatsProProfileManager"), 0)
+    eq("profiles.ui.launcher.dialog_setup_config_suspended",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 0)
+
+    env.SettingsPanel:Show()
+    callScript("profiles.ui.launcher.dialog_click", launcherButton, "OnClick")
+    local transientAfter = test.profileUIState()
+    eq("profiles.ui.launcher.dialog_blizzard_closed", env.SettingsPanel:IsShown(), false)
+    eq("profiles.ui.launcher.dialog_config_shown", config:IsShown(), true)
+    eq("profiles.ui.launcher.dialog_tab_preserved", config.activeTabIndex, 3)
+    eq("profiles.ui.launcher.dialog_manager_preserved", transientAfter.managerShown, true)
+    eq("profiles.ui.launcher.dialog_preserved", transientAfter.operationDialogShown, true)
+    eq("profiles.ui.launcher.dialog_blocker_preserved",
+        transientAfter.operationBlockerShown, true)
+    eq("profiles.ui.launcher.dialog_mode_preserved",
+        transientAfter.operationMode, transientBefore.operationMode)
+    eq("profiles.ui.launcher.dialog_kind_preserved",
+        transientAfter.operationKind, transientBefore.operationKind)
+    eq("profiles.ui.launcher.dialog_refresh_preserved",
+        transientAfter.refreshCount, transientBefore.refreshCount)
+    eq("profiles.ui.launcher.dialog_owner_once",
+        countValue(env.UISpecialFrames, "StatsProProfileOperationDialog"), 1)
+    eq("profiles.ui.launcher.dialog_manager_still_suspended",
+        countValue(env.UISpecialFrames, "StatsProProfileManager"), 0)
+    eq("profiles.ui.launcher.dialog_config_still_suspended",
+        countValue(env.UISpecialFrames, "StatsProConfigFrame"), 0)
+
+    assertDeepEqual("profiles.ui.launcher.zero_writes", root, before)
+    assertRegistryIdentities("profiles.ui.launcher.identities", root, identities)
+    eq("profiles.ui.launcher.no_operation",
+        test.profileOps.state().operationCount, operationBefore)
+    eq("profiles.ui.launcher.no_apply",
+        test.profileRuntimeState().applyCount, runtimeBefore.applyCount)
+    eq("profiles.ui.launcher.no_commit",
+        test.profileRuntimeState().structuralCommitCount,
+        runtimeBefore.structuralCommitCount)
 end
 
 do

@@ -14039,6 +14039,11 @@ function addon:OpenConfigMenu()
     self.panelEditRuntime.SetRequested(true)
 end
 
+function addon:ShowConfigMenu()
+    if configFrame and configFrame:IsShown() then return end
+    self:OpenConfigMenu()
+end
+
 -- Self-serve diagnostics: dump runtime state to chat for bug reports. Each group is
 -- a separate PrintMsg so restricted values cannot poison unrelated diagnostic lines.
 function addon:PrintDebugDump()
@@ -15137,8 +15142,12 @@ launcherBtn:SetScript("OnClick", function()
     if SettingsPanel and SettingsPanel:IsShown() then
         HideUIPanel(SettingsPanel)
     end
-    addon:OpenConfigMenu()
+    addon:ShowConfigMenu()
 end)
+
+if addon.__test then
+    addon.__test.launcherButton = function() return launcherBtn end
+end
 
 local launcherCategory = Settings.RegisterCanvasLayoutCategory(launcher, launcher.name)
 Settings.RegisterAddOnCategory(launcherCategory)

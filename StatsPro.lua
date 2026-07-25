@@ -15,11 +15,6 @@ addon.wipeRuntime = {
 }
 addon.developerLinks = {
     popupKey = "STATSPRO_COPY_DEVELOPER_LINK",
-    koFi = {
-        key = "koFi",
-        label = "Ko-fi",
-        url = "https://ko-fi.com/antrakt92",
-    },
     contact = {
         key = "contact",
         labelKey = "Contact",
@@ -12235,25 +12230,16 @@ function addon:OpenConfigMenu()
     local closeX = CreateFrame("Button", nil, configFrame, "UIPanelCloseButton")
     closeX:SetPoint("TOPRIGHT", -4, -4)
 
-    -- Compact project links share the title bar with the existing close affordance.
-    -- Keeping them here avoids a second, redundant close row and returns 50px to content.
+    -- The project contact link shares the title bar with the existing close affordance.
+    -- Keeping it here avoids a second, redundant close row and preserves content height.
     local headerLinkGroup = CreateFrame("Frame", nil, configFrame)
     headerLinkGroup:SetPoint("RIGHT", closeX, "LEFT", -self.settingsDesign.tokens.spacing.xxs, 0)
-    headerLinkGroup:SetSize(shellGeometry.minHitTarget * 2
-        + self.settingsDesign.tokens.spacing.xs, shellGeometry.minHitTarget)
+    headerLinkGroup:SetSize(shellGeometry.minHitTarget, shellGeometry.minHitTarget)
 
     local contactButton = self.settingsDesign.CreateDeveloperLinkButton(
         headerLinkGroup, "StatsProContactLinkButton", "contact",
         { atlas = "transmog-icon-chat" }, self.settingsDesign.Color("accent"))
     contactButton:SetPoint("RIGHT", headerLinkGroup, "RIGHT", 0, 0)
-
-    local koFiButton = self.settingsDesign.CreateDeveloperLinkButton(
-        headerLinkGroup, "StatsProKoFiLinkButton", "koFi", {
-            texture = "Interface\\COMMON\\friendship-heart",
-            texCoords = { 0.21875, 0.78125, 0.09375, 0.6875 },
-        }, { 1, 0.36, 0.35, 1 })
-    koFiButton:SetPoint("RIGHT", contactButton, "LEFT",
-        -self.settingsDesign.tokens.spacing.xs, 0)
 
     titleMetadata:SetPoint("RIGHT", headerLinkGroup, "LEFT",
         -self.settingsDesign.tokens.spacing.sm, 0)
@@ -12373,7 +12359,6 @@ function addon:OpenConfigMenu()
             closeX = closeX,
             headerLinkGroup = headerLinkGroup,
             resetButton = configFrame.profileResetButton,
-            koFiButton = koFiButton,
             contactButton = contactButton,
         }
     end

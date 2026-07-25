@@ -406,6 +406,10 @@ function Assert-StatsProNoInGameSolicitation {
     }
     $rules = [ordered]@{
         "Sponsors" = "github\.com/sponsors|\bsponsors?\b"
+        "Ko-fi" = "\bko(?:[\s-]?fi)\b|ko-fi\.com"
+        "Patreon" = "\bpatreon\b|patreon\.com"
+        "BuyMeACoffee" = "\bbuymeacoffee\b|buymeacoffee\.com"
+        "PayPal-donation-link" = "paypal\.me"
         "Donate" = "\bdonat(?:e|ion|ions)\b"
         "Support-development" = "support\s+(?:development|the\s+developer)"
     }
@@ -585,13 +589,34 @@ steps:
         $runtimePath = Join-Path $packageRoot "StatsPro.lua"
         Set-Content -LiteralPath $runtimePath -Value 'local contact = "https://github.com/example/issues"' -Encoding UTF8
         Assert-StatsProNoInGameSolicitation -Root $packageRoot
-        Set-Content -LiteralPath $runtimePath -Value 'local approvedLink = "https://ko-fi.com/example"' -Encoding UTF8
-        Assert-StatsProNoInGameSolicitation -Root $packageRoot
+        $donationPlatformSamples = @(
+            @{ Name = "Ko-fi brand"; Token = "Ko-fi"; Text = 'local label = "Ko-fi"' },
+            @{ Name = "KoFi brand"; Token = "Ko-fi"; Text = 'local label = "KoFi"' },
+            @{ Name = "kofi brand"; Token = "Ko-fi"; Text = 'local label = "kofi"' },
+            @{ Name = "Ko-fi URL"; Token = "Ko-fi"; Text = 'local url = "https://ko-fi.com/example"' },
+            @{ Name = "GitHub Sponsors URL"; Token = "Sponsors"; Text = 'local url = "https://github.com/sponsors/example"' },
+            @{ Name = "Patreon brand"; Token = "Patreon"; Text = 'local label = "Patreon"' },
+            @{ Name = "BuyMeACoffee URL"; Token = "BuyMeACoffee"; Text = 'local url = "https://buymeacoffee.com/example"' },
+            @{ Name = "PayPal donation URL"; Token = "PayPal-donation-link"; Text = 'local url = "https://paypal.me/example"' }
+        )
+        foreach ($sample in $donationPlatformSamples) {
+            Set-Content -LiteralPath $runtimePath -Value $sample.Text -Encoding UTF8
+            Assert-ThrowsMatch "$($sample.Name) rejected" {
+                Assert-StatsProNoInGameSolicitation -Root $packageRoot
+            } "forbidden solicitation token '$($sample.Token)'"
+        }
         Set-Content -LiteralPath $runtimePath -Value 'local solicitation = "Donate to the developer"' -Encoding UTF8
         Assert-ThrowsMatch "coercive in-game solicitation rejected" {
             Assert-StatsProNoInGameSolicitation -Root $packageRoot
         } "forbidden solicitation token 'Donate'"
         Remove-Item -LiteralPath $runtimePath
+
+        $tocPath = Join-Path $packageRoot "StatsPro.toc"
+        Set-Content -LiteralPath $tocPath -Value '## Notes: Support us on KoFi' -Encoding UTF8
+        Assert-ThrowsMatch "TOC donation platform rejected" {
+            Assert-StatsProNoInGameSolicitation -Root $packageRoot
+        } "forbidden solicitation token 'Ko-fi'"
+        Remove-Item -LiteralPath $tocPath
 
         $releaseRoot = Join-Path $tempDir "release"
         New-Item -ItemType Directory -Path $releaseRoot | Out-Null

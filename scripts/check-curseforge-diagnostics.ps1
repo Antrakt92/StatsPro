@@ -123,11 +123,13 @@ function Test-CurseForgeRetryableFailure {
 function Get-CurseForgeDiagnosticEndpoints {
     param([string]$ProjectId)
 
-    $apiBase = "https://wow.curseforge.com/api/projects/$ProjectId"
+    # SYNC: CurseForge's web frontend uses this read-only file-list surface.
+    # The legacy author API documents upload/update, not GET file listings.
+    $apiBase = "https://www.curseforge.com/api/v1/mods/$ProjectId/files"
     return @(
-        "$apiBase/files",
-        "$apiBase/files?sort=-id",
-        "$apiBase/files?page=1&pageSize=20"
+        "${apiBase}?pageIndex=0&pageSize=50",
+        "${apiBase}?pageIndex=0&pageSize=20",
+        $apiBase
     )
 }
 
@@ -523,6 +525,12 @@ function Invoke-CurseForgeRedirectTransportSelfTest {
 function Invoke-SelfTest {
     Assert-StatsProReleaseTagContractSelfTest
     Invoke-CurseForgeRedirectTransportSelfTest
+    $diagnosticEndpoints = @(Get-CurseForgeDiagnosticEndpoints -ProjectId "1525100")
+    if ($diagnosticEndpoints.Count -ne 3 -or @($diagnosticEndpoints | Where-Object {
+                $_ -notmatch '^https://www\.curseforge\.com/api/v1/mods/1525100/files(?:\?|$)'
+            }).Count -ne 0) {
+        throw "CurseForge diagnostics must use only the bounded official web file-list surface."
+    }
     $blankTokenState = @{ Attempts = 0 }
     Assert-ThrowsMatch "blank token rejected before request" {
         Invoke-CurseForgeDiagnostics `

@@ -398,7 +398,7 @@ function Save-StatsProPackageManifest {
         Set-Content -LiteralPath $Path -Encoding UTF8
 }
 
-function Assert-StatsProNoInGameSolicitation {
+function Assert-StatsProInGameSolicitationBoundary {
     param([string]$Root)
 
     if (-not (Test-Path -LiteralPath $Root -PathType Container)) {
@@ -415,11 +415,33 @@ function Assert-StatsProNoInGameSolicitation {
     }
     $runtimeFiles = @(Get-ChildItem -LiteralPath $Root -Recurse -File |
         Where-Object { $_.Extension -in ".lua", ".toc" })
+    $approvedKoFiBlock = @(
+        '    koFi = {'
+        '        key = "koFi",'
+        '        label = "Ko-fi",'
+        '        url = "https://ko-fi.com/antrakt92",'
+        '    },'
+    ) -join "`n"
+    $redactedKoFiBlock = @(
+        '    approvedLink = {'
+        '        key = "approvedLink",'
+        '        label = "Approved",'
+        '        url = "https://example.invalid",'
+        '    },'
+    ) -join "`n"
     foreach ($file in $runtimeFiles) {
         $text = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
+        $relative = [System.IO.Path]::GetRelativePath($Root, $file.FullName) -replace "\\", "/"
+        $scanText = $text -replace "\r\n?", "`n"
+        if ([System.StringComparer]::Ordinal.Equals($relative, "StatsPro.lua")) {
+            $approvedCount = [regex]::Matches(
+                $scanText, [regex]::Escape($approvedKoFiBlock)).Count
+            if ($approvedCount -eq 1) {
+                $scanText = $scanText.Replace($approvedKoFiBlock, $redactedKoFiBlock)
+            }
+        }
         foreach ($rule in $rules.GetEnumerator()) {
-            if ($text -match $rule.Value) {
-                $relative = [System.IO.Path]::GetRelativePath($Root, $file.FullName) -replace "\\", "/"
+            if ($scanText -match $rule.Value) {
                 throw "Packaged in-game surface contains forbidden solicitation token '$($rule.Key)' in '$relative'."
             }
         }
@@ -588,7 +610,22 @@ steps:
 
         $runtimePath = Join-Path $packageRoot "StatsPro.lua"
         Set-Content -LiteralPath $runtimePath -Value 'local contact = "https://github.com/example/issues"' -Encoding UTF8
-        Assert-StatsProNoInGameSolicitation -Root $packageRoot
+        Assert-StatsProInGameSolicitationBoundary -Root $packageRoot
+        $approvedKoFiSample = @(
+            'local links = {'
+            '    koFi = {'
+            '        key = "koFi",'
+            '        label = "Ko-fi",'
+            '        url = "https://ko-fi.com/antrakt92",'
+            '    },'
+            '}'
+        ) -join "`n"
+        Set-Content -LiteralPath $runtimePath -Value $approvedKoFiSample -Encoding UTF8
+        Assert-StatsProInGameSolicitationBoundary -Root $packageRoot
+        Set-Content -LiteralPath $runtimePath -Value ($approvedKoFiSample + "`n" + 'local extra = "Ko-fi"') -Encoding UTF8
+        Assert-ThrowsMatch "additional Ko-fi copy rejected" {
+            Assert-StatsProInGameSolicitationBoundary -Root $packageRoot
+        } "forbidden solicitation token 'Ko-fi'"
         $donationPlatformSamples = @(
             @{ Name = "Ko-fi brand"; Token = "Ko-fi"; Text = 'local label = "Ko-fi"' },
             @{ Name = "KoFi brand"; Token = "Ko-fi"; Text = 'local label = "KoFi"' },
@@ -602,19 +639,19 @@ steps:
         foreach ($sample in $donationPlatformSamples) {
             Set-Content -LiteralPath $runtimePath -Value $sample.Text -Encoding UTF8
             Assert-ThrowsMatch "$($sample.Name) rejected" {
-                Assert-StatsProNoInGameSolicitation -Root $packageRoot
+                Assert-StatsProInGameSolicitationBoundary -Root $packageRoot
             } "forbidden solicitation token '$($sample.Token)'"
         }
         Set-Content -LiteralPath $runtimePath -Value 'local solicitation = "Donate to the developer"' -Encoding UTF8
         Assert-ThrowsMatch "coercive in-game solicitation rejected" {
-            Assert-StatsProNoInGameSolicitation -Root $packageRoot
+            Assert-StatsProInGameSolicitationBoundary -Root $packageRoot
         } "forbidden solicitation token 'Donate'"
         Remove-Item -LiteralPath $runtimePath
 
         $tocPath = Join-Path $packageRoot "StatsPro.toc"
         Set-Content -LiteralPath $tocPath -Value '## Notes: Support us on KoFi' -Encoding UTF8
         Assert-ThrowsMatch "TOC donation platform rejected" {
-            Assert-StatsProNoInGameSolicitation -Root $packageRoot
+            Assert-StatsProInGameSolicitationBoundary -Root $packageRoot
         } "forbidden solicitation token 'Ko-fi'"
         Remove-Item -LiteralPath $tocPath
 
@@ -672,7 +709,7 @@ Invoke-StatsProPackageArtifactCheck `
     -RequireExactPackagerProjectVersion:$RequireExactPackagerProjectVersion.IsPresent
 
 $resolvedPackageRoot = (Resolve-Path -LiteralPath $PackageRoot).Path
-Assert-StatsProNoInGameSolicitation -Root $resolvedPackageRoot
+Assert-StatsProInGameSolicitationBoundary -Root $resolvedPackageRoot
 
 if (-not [string]::IsNullOrWhiteSpace($ManifestPath) -or -not [string]::IsNullOrWhiteSpace($CompareManifestPath)) {
     if (-not [string]::IsNullOrWhiteSpace($ManifestPath)) {

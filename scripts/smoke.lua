@@ -9125,7 +9125,7 @@ do
         eq(prefix .. ".slider_count", counts.slider, 5)
         eq(prefix .. ".dropdown_count", counts.dropdown, 6)
         eq(prefix .. ".button_count", counts.button, 20)
-        eq(prefix .. ".developer_link_count", counts.developerLink, 1)
+        eq(prefix .. ".developer_link_count", counts.developerLink, 2)
         local presetUI = localeAddon.appearancePresets.ui
         for _, presetID in ipairs({
             "default", "classic", "clean-dark", "midnight", "monochrome", "high-contrast",
@@ -9842,7 +9842,7 @@ do
     eq("config.shell.header.close_parent", shell.closeX:GetParent(), config)
     eq("config.shell.header.links_parent", shell.headerLinkGroup:GetParent(), config)
     eq("config.shell.header.links_width", shell.headerLinkGroup:GetWidth(),
-        detached.geometry.minHitTarget)
+        detached.geometry.minHitTarget * 2 + detached.spacing.xs)
     eq("config.shell.header.links_height", shell.headerLinkGroup:GetHeight(),
         detached.geometry.minHitTarget)
     eq("config.shell.header.links_relative", shell.headerLinkGroup.points[1][2], shell.closeX)
@@ -9853,16 +9853,29 @@ do
         shell.headerLinkGroup)
     eq("config.shell.header.metadata_right_gap", shell.titleMetadata.points[2][4],
         -detached.spacing.sm)
+    eq("config.shell.header.kofi_parent", shell.koFiButton:GetParent(),
+        shell.headerLinkGroup)
     eq("config.shell.header.contact_parent", shell.contactButton:GetParent(),
         shell.headerLinkGroup)
+    eq("config.shell.header.kofi_width", shell.koFiButton:GetWidth(),
+        detached.geometry.minHitTarget)
+    eq("config.shell.header.kofi_height", shell.koFiButton:GetHeight(),
+        detached.geometry.minHitTarget)
     eq("config.shell.header.contact_width", shell.contactButton:GetWidth(),
         detached.geometry.minHitTarget)
     eq("config.shell.header.contact_height", shell.contactButton:GetHeight(),
         detached.geometry.minHitTarget)
     eq("config.shell.header.contact_right_relative", shell.contactButton.points[1][2],
         shell.headerLinkGroup)
-    eq("config.shell.header.kofi_absent", shellEnv.StatsProKoFiLinkButton, nil)
-    eq("config.shell.header.kofi_smoke_surface_absent", shell.koFiButton, nil)
+    eq("config.shell.header.kofi_right_relative", shell.koFiButton.points[1][2],
+        shell.contactButton)
+    eq("config.shell.header.kofi_gap", shell.koFiButton.points[1][4],
+        -detached.spacing.xs)
+    eq("config.shell.header.kofi_texture", shell.koFiButton.statsProIcon.texture,
+        "Interface\\COMMON\\friendship-heart")
+    assertDeepEqual("config.shell.header.kofi_texcoords",
+        shell.koFiButton.statsProIcon.texCoords,
+        { 0.21875, 0.78125, 0.09375, 0.6875 })
     eq("config.shell.header.contact_atlas", shell.contactButton.statsProIcon.atlas,
         "transmog-icon-chat")
     eq("config.shell.profile.reset_role", shell.resetButton.statsProButtonRole, "destructive")
@@ -9962,6 +9975,34 @@ do
         detached.colors.borderSoft[1], detached.colors.borderSoft[2],
         detached.colors.borderSoft[3], detached.colors.borderSoft[4])
     local linksDBBefore = deepCopy(shellEnv.StatsProDB)
+    userInteract("config.shell.header.kofi_hover", shell.koFiButton, "OnEnter")
+    eq("config.shell.header.kofi_hover_surface", shell.koFiButton.statsProHover:IsShown(), true)
+    eq("config.shell.header.kofi_hover_alpha", shell.koFiButton.statsProIcon:GetAlpha(), 1)
+    eq("config.shell.header.kofi_tooltip_owner", shellEnv.GameTooltip:GetOwner(),
+        shell.koFiButton)
+    eq("config.shell.header.kofi_tooltip_title", shellEnv.GameTooltip.lines[1].left,
+        "Ko-fi")
+    eq("config.shell.header.kofi_tooltip_detail", shellEnv.GameTooltip.lines[2].left,
+        "Click to copy the link.")
+    userInteract("config.shell.header.kofi_leave", shell.koFiButton, "OnLeave")
+    eq("config.shell.header.kofi_leave_surface", shell.koFiButton.statsProHover:IsShown(), false)
+    near("config.shell.header.kofi_leave_alpha", shell.koFiButton.statsProIcon:GetAlpha(), 0.76)
+    userInteract("config.shell.header.kofi_click", shell.koFiButton, "OnClick")
+    local linkPopup = exists("config.shell.header.kofi_popup", shellEnv.__lastStaticPopup)
+    eq("config.shell.header.kofi_popup_key", linkPopup.key,
+        "STATSPRO_COPY_DEVELOPER_LINK")
+    eq("config.shell.header.kofi_popup_message", linkPopup.textArg1,
+        "StatsPro — Ko-fi\nCopy the link below (Ctrl+C).")
+    eq("config.shell.header.kofi_popup_url", linkPopup.data.url,
+        "https://ko-fi.com/antrakt92")
+    eq("config.shell.header.kofi_editbox_url", linkPopup.EditBox:GetText(),
+        "https://ko-fi.com/antrakt92")
+    eq("config.shell.header.kofi_editbox_selected", linkPopup.EditBox.highlightedText,
+        "https://ko-fi.com/antrakt92")
+    eq("config.shell.header.kofi_editbox_focus", linkPopup.EditBox:HasFocus(), true)
+    linkPopup.definition.EditBoxOnEnterPressed(linkPopup:GetEditBox())
+    eq("config.shell.header.kofi_enter_hides_popup", linkPopup:IsShown(), false)
+
     userInteract("config.shell.header.contact_hover", shell.contactButton, "OnEnter")
     eq("config.shell.header.contact_tooltip_owner", shellEnv.GameTooltip:GetOwner(),
         shell.contactButton)
@@ -9971,7 +10012,7 @@ do
         "Click to copy the link.")
     userInteract("config.shell.header.contact_leave", shell.contactButton, "OnLeave")
     userInteract("config.shell.header.contact_click", shell.contactButton, "OnClick")
-    local linkPopup = exists("config.shell.header.contact_popup", shellEnv.__lastStaticPopup)
+    linkPopup = exists("config.shell.header.contact_popup", shellEnv.__lastStaticPopup)
     eq("config.shell.header.contact_popup_key", linkPopup.key,
         "STATSPRO_COPY_DEVELOPER_LINK")
     eq("config.shell.header.contact_popup_message", linkPopup.textArg1,
@@ -14130,7 +14171,7 @@ do
                 <= shellState.shell.resetButton:GetWidth() - 16,
             "Reset label exceeds its inset text region")
         eq("profiles.ui.locales.header_link_width." .. locale,
-            shellState.shell.headerLinkGroup:GetWidth(), 24)
+            shellState.shell.headerLinkGroup:GetWidth(), 52)
         local profileLabelFrame = findFontString(
             "profiles.ui.locales.profile_label_frame." .. locale, env,
             function(fontString)
@@ -17085,7 +17126,7 @@ do
     eq("config.control_design.dropdown_trigger_count", counts.dropdown, 6)
     check("config.control_design.button_count", (counts.button or 0) >= 18,
         "shared shell buttons are not registered")
-    eq("config.control_design.developer_link_count", counts.developerLink, 1)
+    eq("config.control_design.developer_link_count", counts.developerLink, 2)
     eq("config.control_design.empty_warning_surface_hidden",
         env.StatsProConfigFrame.languageWarning.statsProWarningSurface:IsShown(), false)
     eq("config.control_design.empty_warning_rail_hidden",

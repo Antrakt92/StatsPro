@@ -97,8 +97,9 @@ Choose one of two bundled datasets:
 Hover a secondary-stat row to see the reference target and snapshot date. When a
 clean live or cached comparison is available, the tooltip also shows the current
 rating and its **Missing**, **Over**, or **Matched** delta. During restricted
-combat states, StatsPro can keep the target visible without presenting an unsafe
-live comparison.
+combat states, StatsPro keeps the target metadata visible. Without a clean
+comparison, the tooltip is target-only; cached comparisons are clearly marked
+**Last known**.
 
 The snapshots cover all 40 current Retail specializations and ship inside the
 addon. They are useful reference context, not hard stat caps or a replacement for

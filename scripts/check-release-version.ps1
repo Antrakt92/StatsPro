@@ -306,21 +306,6 @@ function Assert-SemVerWhenAhead {
         -PermitMismatch:$PermitMismatch
 }
 
-function Get-FirstRegexMatch {
-    param(
-        [string]$Path,
-        [string]$Pattern,
-        [string]$Description
-    )
-
-    $Text = Get-Content -Path $Path -Raw -Encoding UTF8
-    $Match = [regex]::Match($Text, $Pattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
-    if (-not $Match.Success) {
-        throw "Missing $Description in $Path"
-    }
-    return $Match.Groups[1].Value
-}
-
 function Get-FirstRegexObject {
     param(
         [string]$Path,

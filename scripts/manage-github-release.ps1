@@ -2688,17 +2688,6 @@ function Assert-ChecksWorkflowBoundary {
     }
 }
 
-function Test-ContainsMarketplaceTokenReference {
-    param([string]$Text)
-
-    foreach ($secretName in @('CF_API_KEY', 'WAGO_API_TOKEN', 'WOWI_API_TOKEN')) {
-        if (Test-ContainsSecretReference -Text $Text -SecretName $secretName) {
-            return $true
-        }
-    }
-    return $false
-}
-
 function Assert-CanonicalMarketplaceEnvironment {
     param(
         [System.Text.RegularExpressions.Match]$StepBlock,

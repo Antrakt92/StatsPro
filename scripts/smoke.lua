@@ -752,6 +752,11 @@ local function makeEnv(locale, opts)
     end
     env.issecretvalue = opts.issecretvalue or function() return false end
     env.issecrettable = opts.issecrettable
+    env.C_StringUtil = {
+        -- The live C API accepts secret numbers. The default harness stub avoids
+        -- inspecting opaque sentinels; focused tests provide exact display text.
+        RoundToNearestString = opts.roundToNearestString or function() return "secret" end,
+    }
     env.CopyTable = deepCopy
     env.tinsert = table.insert
     env.tremove = table.remove
@@ -3602,6 +3607,10 @@ do
         getRangedCritChance = function() return nil end,
         getSpellCritChance = function() return nil end,
         issecretvalue = function(value) return value == secretCrit end,
+        roundToNearestString = function(value)
+            if value == secretCrit then return "31" end
+            return "unexpected"
+        end,
     })
     local ok, err = pcall(pewEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
     check("lifecycle.pew_secret_numeric_update.no_bubble", ok, err)
@@ -3609,8 +3618,8 @@ do
     slash("lifecycle.pew_secret_numeric_update.debug_perf", pewEnv, "debug perf")
     eq("lifecycle.pew_secret_numeric_update.debug_reports_zero_errors",
         printContains(pewEnv, "updateErrors=0"), true)
-    eq("lifecycle.pew_secret_numeric_update.explicit_unknown",
-        blockDumpContains(pewTest.buildRenderBlocks(), "?"), true)
+    eq("lifecycle.pew_secret_numeric_update.live_secret_value",
+        blockDumpContains(pewTest.buildRenderBlocks(), "31%"), true)
 end
 
 do
@@ -5442,6 +5451,7 @@ do
         },
         getLifesteal = function() return leechValue end,
         issecretvalue = function(value) return secretMode and value == leechValue end,
+        roundToNearestString = function() return "0" end,
     })
     fireEvent("render.hide_zero_secret_preserves_hidden_zero.fire", leechEnv, "PLAYER_ENTERING_WORLD")
     local ok, blocks = pcall(leechTest.buildRenderBlocks)
@@ -5470,6 +5480,7 @@ do
         },
         getLifesteal = function() return leechValue end,
         issecretvalue = function(value) return secretMode and value == leechValue end,
+        roundToNearestString = function() return "0" end,
     })
     fireEvent("render.hide_zero_secret_preserves_visible_nonzero.fire", leechEnv, "PLAYER_ENTERING_WORLD")
     local ok, blocks = pcall(leechTest.buildRenderBlocks)
@@ -5480,8 +5491,10 @@ do
     ok, blocks = pcall(leechTest.buildRenderBlocks)
     check("render.hide_zero_secret_preserves_visible_nonzero.secret_no_error", ok, blocks)
     eq("render.hide_zero_secret_preserves_visible_nonzero.secret_row", blockDumpContains(blocks, "Leech:"), true)
-    eq("render.hide_zero_secret_preserves_visible_nonzero.last_clean",
-        blockDumpContains(blocks, "4.0%"), true)
+    eq("render.hide_zero_secret_preserves_visible_nonzero.live_secret_value",
+        blockDumpContains(blocks, "0%"), true)
+    eq("render.hide_zero_secret_preserves_visible_nonzero.no_stale_value",
+        blockDumpContains(blocks, "4.0%"), false)
     eq("render.hide_zero_secret_preserves_visible_nonzero.no_unknown",
         blockDumpContains(blocks, "?"), false)
 end
@@ -5508,6 +5521,10 @@ do
         getRangedCritChance = function() return nil end,
         getSpellCritChance = function() return nil end,
         issecretvalue = function(value) return value == secretCrit end,
+        roundToNearestString = function(value)
+            if value == secretCrit then return "22" end
+            return "unexpected"
+        end,
     })
     fireEvent("render.update_ticker_secret_numeric.fire", updateEnv, "PLAYER_ENTERING_WORLD")
     local ticker
@@ -5522,8 +5539,10 @@ do
     local ok, err = pcall(ticker.scripts.OnUpdate, ticker, 999)
     check("render.update_ticker_secret_numeric.no_bubble", ok, err)
     local state = updateTest.panelVisualState()
-    check("render.update_ticker_secret_numeric.last_clean_value",
-        state.mainRatingText:find("10.0%", 1, true) ~= nil, state.mainRatingText)
+    check("render.update_ticker_secret_numeric.live_secret_value",
+        state.mainRatingText:find("22%", 1, true) ~= nil, state.mainRatingText)
+    eq("render.update_ticker_secret_numeric.no_stale_clean_value",
+        state.mainRatingText:find("10.0%", 1, true), nil)
     eq("render.update_ticker_secret_numeric.no_unknown",
         state.mainRatingText:find("?", 1, true), nil)
     clearPrints(updateEnv)
@@ -5536,6 +5555,73 @@ do
     state = updateTest.panelVisualState()
     check("render.update_ticker_secret_numeric.clean_value",
         state.mainRatingText:find("10.0%", 1, true) ~= nil, state.mainRatingText)
+end
+
+do
+    local procHaste = {}
+    local bloodlustHaste = {}
+    local phase = "clean"
+    local hasteEnv, _, hasteTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = false,
+            showPercentage = true,
+            showCrit = false,
+            showHaste = true,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getHaste = function()
+            if phase == "proc" then return procHaste end
+            if phase == "bloodlust" then return bloodlustHaste end
+            return 22
+        end,
+        issecretvalue = function(value)
+            return rawequal(value, procHaste) or rawequal(value, bloodlustHaste)
+        end,
+        roundToNearestString = function(value)
+            if rawequal(value, procHaste) then return "34" end
+            if rawequal(value, bloodlustHaste) then return "64" end
+            return "unexpected"
+        end,
+    })
+    fireEvent("render.haste_secret_proc_bloodlust_updates.fire", hasteEnv, "PLAYER_ENTERING_WORLD")
+    local state = hasteTest.panelVisualState()
+    check("render.haste_secret_proc_bloodlust_updates.clean_baseline",
+        state.mainRatingText:find("22.0%", 1, true) ~= nil, state.mainRatingText)
+
+    local ticker
+    for _, frame in ipairs(hasteEnv.__frames) do
+        if frame.scripts and type(frame.scripts.OnUpdate) == "function" then
+            ticker = frame
+            break
+        end
+    end
+    exists("render.haste_secret_proc_bloodlust_updates.ticker", ticker)
+
+    phase = "proc"
+    local ok, err = pcall(ticker.scripts.OnUpdate, ticker, 999)
+    check("render.haste_secret_proc_bloodlust_updates.proc_no_error", ok, err)
+    state = hasteTest.panelVisualState()
+    check("render.haste_secret_proc_bloodlust_updates.proc_value",
+        state.mainRatingText:find("34%", 1, true) ~= nil, state.mainRatingText)
+    eq("render.haste_secret_proc_bloodlust_updates.proc_not_stale",
+        state.mainRatingText:find("22.0%", 1, true), nil)
+
+    phase = "bloodlust"
+    ok, err = pcall(ticker.scripts.OnUpdate, ticker, 999)
+    check("render.haste_secret_proc_bloodlust_updates.bloodlust_no_error", ok, err)
+    state = hasteTest.panelVisualState()
+    check("render.haste_secret_proc_bloodlust_updates.bloodlust_value",
+        state.mainRatingText:find("64%", 1, true) ~= nil, state.mainRatingText)
+    eq("render.haste_secret_proc_bloodlust_updates.bloodlust_not_stale",
+        state.mainRatingText:find("34%", 1, true), nil)
+    clearPrints(hasteEnv)
+    slash("render.haste_secret_proc_bloodlust_updates.debug_perf", hasteEnv, "debug perf")
+    eq("render.haste_secret_proc_bloodlust_updates.zero_update_errors",
+        printContains(hasteEnv, "updateErrors=0"), true)
 end
 
 do
@@ -5623,6 +5709,16 @@ do
         getDodgeChance = function() return phase == "secret" and secretDefensive or 9 end,
         getParryChance = function() return phase == "secret" and secretDefensive or 10 end,
         getBlockChance = function() return phase == "secret" and secretDefensive or 11 end,
+        roundToNearestString = function(value)
+            local formatted = {
+                [secretPrimaryEffective] = "91001",
+                [secretPrimaryBase] = "91002",
+                [secretPercent] = "91004",
+                [secretRating] = "91004",
+                [secretDefensive] = "91006",
+            }
+            return formatted[value] or "unexpected"
+        end,
     })
     local ok, err = pcall(poisonEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
     check("render.secret_numeric_matrix.pew_no_error", ok, err)
@@ -5632,24 +5728,24 @@ do
     check("render.secret_numeric_matrix.build_no_error", ok, blocks)
     local expectedRows = {
         {
-            { label = "Strength:", ratingUnknown = false, valueUnknown = true },
-            { label = "Stamina:", ratingUnknown = false, valueUnknown = true },
+            { label = "Strength:", ratingUnknown = false, valueUnknown = false },
+            { label = "Stamina:", ratingUnknown = false, valueUnknown = false },
         },
         {
-            { label = "Crit:", ratingUnknown = true, valueUnknown = true },
-            { label = "Haste:", ratingUnknown = true, valueUnknown = true },
-            { label = "Mastery:", ratingUnknown = true, valueUnknown = true },
-            { label = "Vers:", ratingUnknown = true, valueUnknown = true },
+            { label = "Crit:", ratingUnknown = false, valueUnknown = false },
+            { label = "Haste:", ratingUnknown = false, valueUnknown = false },
+            { label = "Mastery:", ratingUnknown = false, valueUnknown = false },
+            { label = "Vers:", ratingUnknown = false, valueUnknown = false },
         },
         {
-            { label = "Leech:", ratingUnknown = true, valueUnknown = true },
-            { label = "Avoidance:", ratingUnknown = true, valueUnknown = true },
-            { label = "Movement:", ratingUnknown = true, valueUnknown = false },
+            { label = "Leech:", ratingUnknown = false, valueUnknown = false },
+            { label = "Avoidance:", ratingUnknown = false, valueUnknown = false },
+            { label = "Movement:", ratingUnknown = false, valueUnknown = false },
         },
         {
-            { label = "Dodge:", ratingUnknown = false, valueUnknown = true },
-            { label = "Parry:", ratingUnknown = false, valueUnknown = true },
-            { label = "Block:", ratingUnknown = false, valueUnknown = true },
+            { label = "Dodge:", ratingUnknown = false, valueUnknown = false },
+            { label = "Parry:", ratingUnknown = false, valueUnknown = false },
+            { label = "Block:", ratingUnknown = false, valueUnknown = false },
         },
     }
     for blockIndex, expectedBlock in ipairs(expectedRows) do
@@ -5678,14 +5774,14 @@ do
     eq("render.secret_numeric_matrix.flat_rating_parity", #flatMain.labels, #flatMain.ratings)
     eq("render.secret_numeric_matrix.flat_value_parity", #flatMain.labels, #flatMain.values)
     eq("render.secret_numeric_matrix.flat_target_parity", #flatMain.labels, #flatMain.targetRows)
-    eq("render.secret_numeric_matrix.flat_unknown", blockDumpContains({ flatMain }, "?"), true)
+    eq("render.secret_numeric_matrix.flat_unknown", blockDumpContains({ flatMain }, "?"), false)
     local sectionedMain = poisonTest.routeRenderBlocks(blocks, "sectioned", nil, "full")
     eq("render.secret_numeric_matrix.sectioned_row_count", #sectionedMain.labels, 16)
     eq("render.secret_numeric_matrix.sectioned_rating_parity", #sectionedMain.labels, #sectionedMain.ratings)
     eq("render.secret_numeric_matrix.sectioned_value_parity", #sectionedMain.labels, #sectionedMain.values)
     eq("render.secret_numeric_matrix.sectioned_target_parity", #sectionedMain.labels, #sectionedMain.targetRows)
     eq("render.secret_numeric_matrix.sectioned_unknown",
-        blockDumpContains({ sectionedMain }, "?"), true)
+        blockDumpContains({ sectionedMain }, "?"), false)
     local splitMain, splitSide = poisonTest.routeRenderBlocks(blocks, "split", {
         splitCharacter = false,
         splitOffensive = false,
@@ -5701,9 +5797,9 @@ do
     eq("render.secret_numeric_matrix.split_side_value_parity", #splitSide.labels, #splitSide.values)
     eq("render.secret_numeric_matrix.split_side_target_parity", #splitSide.labels, #splitSide.targetRows)
     eq("render.secret_numeric_matrix.split_main_unknown",
-        blockDumpContains({ splitMain }, "?"), true)
+        blockDumpContains({ splitMain }, "?"), false)
     eq("render.secret_numeric_matrix.split_side_unknown",
-        blockDumpContains({ splitSide }, "?"), true)
+        blockDumpContains({ splitSide }, "?"), false)
     eq("render.secret_numeric_matrix.split_main_has_no_tertiary",
         blockDumpContains({ splitMain }, "Leech:"), false)
     eq("render.secret_numeric_matrix.split_side_has_no_offensive",
@@ -5715,9 +5811,8 @@ do
     poisonTest.cacheSettings()
     check("render.secret_numeric_matrix.sectioned_update", poisonAddon:RunUpdateStatsSafe())
     local state = poisonTest.panelVisualState()
-    check("render.secret_numeric_matrix.sectioned_panel_unknown",
-        ((state.mainRatingText or "") .. (state.mainValueText or "")):find("?", 1, true) ~= nil,
-        state.mainRatingText)
+    eq("render.secret_numeric_matrix.sectioned_panel_unknown",
+        ((state.mainRatingText or "") .. (state.mainValueText or "")):find("?", 1, true), nil)
 
     settings.displayMode = "split"
     settings.splitTertiary = true
@@ -5725,12 +5820,10 @@ do
     poisonTest.cacheSettings()
     check("render.secret_numeric_matrix.split_update", poisonAddon:RunUpdateStatsSafe())
     state = poisonTest.panelVisualState()
-    check("render.secret_numeric_matrix.split_main_panel_unknown",
-        ((state.mainRatingText or "") .. (state.mainValueText or "")):find("?", 1, true) ~= nil,
-        state.mainRatingText)
-    check("render.secret_numeric_matrix.split_side_panel_unknown",
-        ((state.sideRatingText or "") .. (state.sideValueText or "")):find("?", 1, true) ~= nil,
-        state.sideRatingText)
+    eq("render.secret_numeric_matrix.split_main_panel_unknown",
+        ((state.mainRatingText or "") .. (state.mainValueText or "")):find("?", 1, true), nil)
+    eq("render.secret_numeric_matrix.split_side_panel_unknown",
+        ((state.sideRatingText or "") .. (state.sideValueText or "")):find("?", 1, true), nil)
     clearPrints(poisonEnv)
     slash("render.secret_numeric_matrix.debug_perf", poisonEnv, "debug perf")
     eq("render.secret_numeric_matrix.zero_update_errors",
@@ -5749,14 +5842,18 @@ do
     phase = "secret"
     check("render.secret_numeric_matrix.warm_combat_update", poisonAddon:RunUpdateStatsSafe())
     state = poisonTest.panelVisualState()
-    eq("render.secret_numeric_matrix.warm_combat_main_rating",
-        state.mainRatingText, cleanState.mainRatingText)
-    eq("render.secret_numeric_matrix.warm_combat_main_value",
-        state.mainValueText, cleanState.mainValueText)
-    eq("render.secret_numeric_matrix.warm_combat_side_rating",
-        state.sideRatingText, cleanState.sideRatingText)
-    eq("render.secret_numeric_matrix.warm_combat_side_value",
-        state.sideValueText, cleanState.sideValueText)
+    check("render.secret_numeric_matrix.warm_combat_main_rating",
+        state.mainRatingText:find("91004", 1, true) ~= nil, state.mainRatingText)
+    check("render.secret_numeric_matrix.warm_combat_main_value",
+        state.mainValueText:find("91004%", 1, true) ~= nil, state.mainValueText)
+    check("render.secret_numeric_matrix.warm_combat_side_rating",
+        state.sideRatingText:find("91004", 1, true) ~= nil, state.sideRatingText)
+    check("render.secret_numeric_matrix.warm_combat_side_value",
+        state.sideValueText:find("91004%", 1, true) ~= nil, state.sideValueText)
+    check("render.secret_numeric_matrix.warm_combat_main_changed",
+        state.mainValueText ~= cleanState.mainValueText)
+    check("render.secret_numeric_matrix.warm_combat_side_changed",
+        state.sideValueText ~= cleanState.sideValueText)
     eq("render.secret_numeric_matrix.warm_combat_main_no_unknown",
         ((state.mainRatingText or "") .. (state.mainValueText or "")):find("?", 1, true), nil)
     eq("render.secret_numeric_matrix.warm_combat_side_no_unknown",
@@ -5820,6 +5917,10 @@ do
         getCombatRating = function() return secretValue end,
         getLifesteal = function() return secretValue end,
         getDodgeChance = function() return secretValue end,
+        roundToNearestString = function(value)
+            if rawequal(value, secretValue) then return "42" end
+            return "unexpected"
+        end,
     })
     local ok, err = pcall(hostileEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
     check("render.hostile_secret_matrix.pew_no_error", ok, err)
@@ -5830,8 +5931,10 @@ do
     for blockIndex = 1, 4 do
         eq("render.hostile_secret_matrix.block_" .. blockIndex .. ".row_count",
             #blocks[blockIndex].labels, expectedCounts[blockIndex])
-        eq("render.hostile_secret_matrix.block_" .. blockIndex .. ".explicit_unknown",
-            blockDumpContains({ blocks[blockIndex] }, "?"), true)
+        eq("render.hostile_secret_matrix.block_" .. blockIndex .. ".no_unknown",
+            blockDumpContains({ blocks[blockIndex] }, "?"), false)
+        eq("render.hostile_secret_matrix.block_" .. blockIndex .. ".live_value",
+            blockDumpContains({ blocks[blockIndex] }, "42"), true)
     end
     clearPrints(hostileEnv)
     slash("render.hostile_secret_matrix.debug_perf", hostileEnv, "debug perf")
@@ -6275,16 +6378,19 @@ do
             return 2
         end,
         issecretvalue = function(value) return secretMode and value == secretVersRatingBonus end,
+        roundToNearestString = function() return "15" end,
     })
-    fireEvent("render.versatility_secret_bonus_uses_last_clean.fire", versEnv, "PLAYER_ENTERING_WORLD")
+    fireEvent("render.versatility_secret_complete_bonus_renders_live.fire", versEnv, "PLAYER_ENTERING_WORLD")
     local ok, blocks = pcall(versTest.buildRenderBlocks)
-    check("render.versatility_secret_bonus_uses_last_clean.clean_no_error", ok, blocks)
-    eq("render.versatility_secret_bonus_uses_last_clean.clean_total", blockDumpContains(blocks, "12.0%"), true)
+    check("render.versatility_secret_complete_bonus_renders_live.clean_no_error", ok, blocks)
+    eq("render.versatility_secret_complete_bonus_renders_live.clean_total", blockDumpContains(blocks, "12.0%"), true)
     secretMode = true
     ok, blocks = pcall(versTest.buildRenderBlocks)
-    check("render.versatility_secret_bonus_uses_last_clean.secret_no_error", ok, blocks)
-    eq("render.versatility_secret_bonus_uses_last_clean.preserved_total", blockDumpContains(blocks, "12.0%"), true)
-    eq("render.versatility_secret_bonus_uses_last_clean.no_secret_format", blockDumpContains(blocks, "14.7%"), false)
+    check("render.versatility_secret_complete_bonus_renders_live.secret_no_error", ok, blocks)
+    eq("render.versatility_secret_complete_bonus_renders_live.live_complete_total",
+        blockDumpContains(blocks, "15%"), true)
+    eq("render.versatility_secret_complete_bonus_renders_live.no_stale_total",
+        blockDumpContains(blocks, "12.0%"), false)
 end
 
 do
@@ -6419,15 +6525,16 @@ do
         getCombatRatingBonus = function() return 0 end,
         getVersatilityBonus = function() return secretFlatBonus end,
         issecretvalue = function(value) return value == secretFlatBonus end,
+        roundToNearestString = function() return "3" end,
     })
-    fireEvent("render.versatility_secret_flat_with_zero_rating_is_unknown.fire", versEnv, "PLAYER_ENTERING_WORLD")
+    fireEvent("render.versatility_secret_flat_with_zero_rating_renders_live.fire", versEnv, "PLAYER_ENTERING_WORLD")
     local ok, blocks = pcall(versTest.buildRenderBlocks)
-    check("render.versatility_secret_flat_with_zero_rating_is_unknown.no_error", ok, blocks)
-    eq("render.versatility_secret_flat_with_zero_rating_is_unknown.explicit_unknown",
-        blockDumpContains(blocks, "?"), true)
-    eq("render.versatility_secret_flat_with_zero_rating_is_unknown.no_secret_format",
-        blockDumpContains(blocks, "3.3%"), false)
-    eq("render.versatility_secret_flat_with_zero_rating_is_unknown.clean_cache_unchanged",
+    check("render.versatility_secret_flat_with_zero_rating_renders_live.no_error", ok, blocks)
+    eq("render.versatility_secret_flat_with_zero_rating_renders_live.no_unknown",
+        blockDumpContains(blocks, "?"), false)
+    eq("render.versatility_secret_flat_with_zero_rating_renders_live.value",
+        blockDumpContains(blocks, "3%"), true)
+    eq("render.versatility_secret_flat_with_zero_rating_renders_live.clean_cache_unchanged",
         versTest.versatilityState().total, nil)
 end
 
@@ -6708,19 +6815,24 @@ do
         issecretvalue = function(value)
             return value == secretVersRatingBonus or value == secretVersRating
         end,
+        roundToNearestString = function(value)
+            if value == secretVersRatingBonus then return "15" end
+            if value == secretVersRating then return "888" end
+            return "unexpected"
+        end,
     })
-    fireEvent("render.versatility_secret_rating_uses_unknown_without_meta.fire", versEnv, "PLAYER_ENTERING_WORLD")
+    fireEvent("render.versatility_secret_rating_renders_without_meta.fire", versEnv, "PLAYER_ENTERING_WORLD")
     local ok, blocks = pcall(versTest.buildRenderBlocks)
-    check("render.versatility_secret_rating_uses_unknown_without_meta.no_error", ok, blocks)
-    eq("render.versatility_secret_rating_uses_unknown_without_meta.row", blockDumpContains(blocks, "Vers:"), true)
-    eq("render.versatility_secret_rating_uses_unknown_without_meta.unknown", blockDumpContains(blocks, "?"), true)
-    eq("render.versatility_secret_rating_uses_unknown_without_meta.no_rating_format", blockDumpContains(blocks, "888"), false)
-    eq("render.versatility_secret_rating_uses_unknown_without_meta.no_percent_format", blockDumpContains(blocks, "14.7%"), false)
+    check("render.versatility_secret_rating_renders_without_meta.no_error", ok, blocks)
+    eq("render.versatility_secret_rating_renders_without_meta.row", blockDumpContains(blocks, "Vers:"), true)
+    eq("render.versatility_secret_rating_renders_without_meta.unknown", blockDumpContains(blocks, "?"), false)
+    eq("render.versatility_secret_rating_renders_without_meta.rating", blockDumpContains(blocks, "888"), true)
+    eq("render.versatility_secret_rating_renders_without_meta.percent", blockDumpContains(blocks, "15%"), true)
     local targetOnlyMeta = blocks[2].targetRows[1]
-    check("render.versatility_secret_rating_uses_unknown_without_meta.target_meta", type(targetOnlyMeta) == "table", targetOnlyMeta)
-    eq("render.versatility_secret_rating_uses_unknown_without_meta.target_only_state", targetOnlyMeta.comparisonState, "targetOnly")
-    eq("render.versatility_secret_rating_uses_unknown_without_meta.no_current", targetOnlyMeta.current, nil)
-    eq("render.versatility_secret_rating_uses_unknown_without_meta.no_delta", targetOnlyMeta.delta, nil)
+    check("render.versatility_secret_rating_renders_without_meta.target_meta", type(targetOnlyMeta) == "table", targetOnlyMeta)
+    eq("render.versatility_secret_rating_renders_without_meta.target_only_state", targetOnlyMeta.comparisonState, "targetOnly")
+    eq("render.versatility_secret_rating_renders_without_meta.no_current", targetOnlyMeta.current, nil)
+    eq("render.versatility_secret_rating_renders_without_meta.no_delta", targetOnlyMeta.delta, nil)
 end
 
 do
@@ -7225,6 +7337,7 @@ end
 do
     local staggerPhase = "clean"
     local secretStagger = {}
+    local secretDisplay = "40"
     local staggerEnv, _, staggerTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = false,
@@ -7245,6 +7358,10 @@ do
             return 37.5
         end,
         issecretvalue = function(value) return rawequal(value, secretStagger) end,
+        roundToNearestString = function(value)
+            if rawequal(value, secretStagger) then return secretDisplay end
+            return "unexpected"
+        end,
     })
     fireEvent("defensive.stagger_renders_for_brewmaster.fire", staggerEnv, "PLAYER_ENTERING_WORLD")
     slash("defensive.stagger_renders_for_brewmaster.dump", staggerEnv, "debug bucket")
@@ -7254,7 +7371,8 @@ do
     staggerPhase = "secret"
     local ok, blocks = pcall(staggerTest.buildRenderBlocks)
     check("defensive.stagger_warm_secret.no_error", ok, blocks)
-    eq("defensive.stagger_warm_secret.last_clean", blockDumpContains(blocks, "37.5%"), true)
+    eq("defensive.stagger_warm_secret.live_value", blockDumpContains(blocks, "40%"), true)
+    eq("defensive.stagger_warm_secret.no_stale_value", blockDumpContains(blocks, "37.5%"), false)
     eq("defensive.stagger_warm_secret.no_unknown", blockDumpContains(blocks, "?"), false)
 
     staggerPhase = "clean2"
@@ -7262,10 +7380,11 @@ do
     check("defensive.stagger_clean_recovery.no_error", ok, blocks)
     eq("defensive.stagger_clean_recovery.new_value", blockDumpContains(blocks, "42.5%"), true)
     staggerPhase = "secret"
+    secretDisplay = "44"
     ok, blocks = pcall(staggerTest.buildRenderBlocks)
     check("defensive.stagger_second_secret.no_error", ok, blocks)
-    eq("defensive.stagger_second_secret.latest_clean", blockDumpContains(blocks, "42.5%"), true)
-    eq("defensive.stagger_second_secret.no_stale_value", blockDumpContains(blocks, "37.5%"), false)
+    eq("defensive.stagger_second_secret.live_value", blockDumpContains(blocks, "44%"), true)
+    eq("defensive.stagger_second_secret.no_stale_clean_value", blockDumpContains(blocks, "42.5%"), false)
 end
 
 do

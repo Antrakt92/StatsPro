@@ -45,6 +45,12 @@
 ---@type number
 MAX_SPELL_SCHOOLS = 7
 
+---@class (exact) StatsProStringUtil
+---@field RoundToNearestString fun(value: number): string
+
+---@type StatsProStringUtil?
+C_StringUtil = nil
+
 ---@type table<string, StatsProStaticPopupDefinition>
 StaticPopupDialogs = {}
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.10.16 - 26-Jul-2026 — Combat stats, profiles, and release hardening
+
+### Fixed
+
+- **Restricted combat stats now keep updating live.** Temporary Haste procs and Bloodlust no longer leave the HUD frozen on an older value, while unreadable composite values remain safe and honest.
+- **Held Archon tooltips now refresh with the current row state** and close safely when their row disappears or moves.
+- **Profile and SavedVariables recovery is more resilient** to malformed or interrupted state without weakening rollback or future-schema protections.
+- **Profile Manager now uses its footer space for content, resizes safely with the game window, and keeps localized fallback text in the selected output language.**
+- **The intentionally chosen Ko-fi heart is restored beside the Settings title-bar controls.**
+
+### Improved
+
+- **Release packaging and marketplace publication now use stricter credential, artifact, process, redirect, and version-boundary checks.**
+
 ## 1.10.15 - 25-Jul-2026 — Archon target refresh
 
 ### Updated

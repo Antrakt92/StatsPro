@@ -4645,23 +4645,7 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
 
     runtime.CommitTransaction(transaction)
     local activated = addon.dbRuntime.ActivateProfile(profileID)
-    if not activated then
-        runtime.RollbackTransaction(transaction)
-        addon.profileOps.RestoreMutationJournal(oldSettingsJournal)
-        addon.dbRuntime.ActivateProfile(oldProfileID)
-        runtime.activeGUID, runtime.activeSpecID = oldGUID, oldSpecID
-        runtime.activeDisplayName, runtime.activeSpecName, runtime.activeRole =
-            oldDisplayName, oldSpecName, oldRole
-        runtime.forceReapply = true
-        runtime.forceReapplyRetryCount = 0
-        runtime.forceReapplyRetryToken = nil
-        runtime.transitioning = false
-        runtime.ScheduleContextRetry()
-        addon.profileUI.RefreshSafe()
-        return false
-    end
-
-    local targetSettings = addon.dbRuntime.activeSettings
+    local targetSettings = activated and addon.dbRuntime.activeSettings or nil
     local targetJournal = addon.dbRuntime.IsCleanTable(targetSettings)
         and addon.profileOps.CaptureMutationJournal(targetSettings) or nil
     if not targetJournal then

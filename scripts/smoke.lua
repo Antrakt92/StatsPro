@@ -9124,7 +9124,7 @@ do
         eq(prefix .. ".swatch_count", counts.swatch, 18)
         eq(prefix .. ".slider_count", counts.slider, 5)
         eq(prefix .. ".dropdown_count", counts.dropdown, 6)
-        eq(prefix .. ".button_count", counts.button, 21)
+        eq(prefix .. ".button_count", counts.button, 20)
         eq(prefix .. ".developer_link_count", counts.developerLink, 1)
         local presetUI = localeAddon.appearancePresets.ui
         for _, presetID in ipairs({
@@ -13450,6 +13450,27 @@ do
     eq("profiles.ui.manager.list_surface_parent_owned", state.managerListSurfaceParentOwned, true)
     eq("profiles.ui.manager.detail_surface_role", state.managerDetailSurfaceRole, "raised")
     eq("profiles.ui.manager.detail_surface_parent_owned", state.managerDetailSurfaceParentOwned, true)
+    local managerTopCloseCount, managerBottomCloseCount = 0, 0
+    local managerTopClose
+    for _, frame in ipairs(env.__frames) do
+        if frame:GetParent() == manager then
+            if frame.template == "UIPanelCloseButton" then
+                managerTopCloseCount = managerTopCloseCount + 1
+                managerTopClose = frame
+            elseif frame.statsProButtonRole == "primary" then
+                managerBottomCloseCount = managerBottomCloseCount + 1
+            end
+        end
+    end
+    eq("profiles.ui.manager.single_top_close", managerTopCloseCount, 1)
+    eq("profiles.ui.manager.no_bottom_close", managerBottomCloseCount, 0)
+    eq("profiles.ui.manager.top_close_anchor", managerTopClose.points[1][1], "TOPRIGHT")
+    eq("profiles.ui.manager.top_close_x", managerTopClose.points[1][2], -4)
+    eq("profiles.ui.manager.top_close_y", managerTopClose.points[1][3], -4)
+    eq("profiles.ui.manager.list_scroll_bottom",
+        env.StatsProProfileManagerScroll.points[2][3], 16)
+    eq("profiles.ui.manager.actions_scroll_bottom",
+        env.StatsProProfileActionsScroll.points[2][3], 52)
     check("profiles.ui.manager.level", manager:GetFrameLevel() > config:GetFrameLevel())
     check("profiles.ui.manager.special_frame",
         contains(env.UISpecialFrames, "StatsProProfileManager"))

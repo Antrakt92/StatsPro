@@ -9333,7 +9333,6 @@ addon.settingsDesign = {
             viewportInset = 12, viewportTop = 152, viewportBottom = 12,
             scrollLeft = 16, scrollRight = 32, scrollTop = 156, scrollBottom = 16,
             contentWidth = 450,
-            closeButtonWidth = 100,
             shellButtonHeight = 28, minHitTarget = 24,
             sectionHeaderHeight = 22, scrollbarGutter = 16,
             scrollbarTrackWidth = 4, scrollbarArrowInset = 18,
@@ -11207,7 +11206,7 @@ function addon.profileUI.BuildOperationUI(manager)
     local actionScroll = CreateFrame(
         "ScrollFrame", "StatsProProfileActionsScroll", manager, "UIPanelScrollFrameTemplate")
     actionScroll:SetPoint("TOPLEFT", 258, -176)
-    actionScroll:SetPoint("BOTTOMRIGHT", -34, 88)
+    actionScroll:SetPoint("BOTTOMRIGHT", -34, 52)
     local actionChild = CreateFrame("Frame", nil, actionScroll)
     actionChild:SetSize(318, 590)
     actionScroll:SetScrollChild(actionChild)
@@ -12174,18 +12173,18 @@ function addon.profileUI.BuildSettingsUI(owner)
 
     local divider = manager:CreateTexture(nil, "ARTWORK")
     divider:SetPoint("TOPLEFT", 248, -52)
-    divider:SetPoint("BOTTOMLEFT", 248, 52)
+    divider:SetPoint("BOTTOMLEFT", 248, 14)
     divider:SetWidth(1)
     addon.settingsDesign.ApplySeparator(divider)
 
     local listSurface = addon.settingsDesign.CreateTextureSurface(manager, "viewport")
     listSurface:SetPoint("TOPLEFT", 12, -48)
-    listSurface:SetPoint("BOTTOMLEFT", 12, 50)
+    listSurface:SetPoint("BOTTOMLEFT", 12, 12)
     listSurface:SetWidth(230)
 
     local detailSurface = addon.settingsDesign.CreateTextureSurface(manager, "raised")
     detailSurface:SetPoint("TOPLEFT", 252, -48)
-    detailSurface:SetPoint("BOTTOMRIGHT", -12, 50)
+    detailSurface:SetPoint("BOTTOMRIGHT", -12, 12)
 
     local listTitle = manager:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(listTitle, 12, "OUTLINE")
@@ -12195,7 +12194,7 @@ function addon.profileUI.BuildSettingsUI(owner)
     local listScroll = CreateFrame(
         "ScrollFrame", "StatsProProfileManagerScroll", manager, "UIPanelScrollFrameTemplate")
     listScroll:SetPoint("TOPLEFT", 16, -76)
-    listScroll:SetPoint("BOTTOMLEFT", 16, 54)
+    listScroll:SetPoint("BOTTOMLEFT", 16, 16)
     listScroll:SetWidth(212)
     local listChild = CreateFrame("Frame", nil, listScroll)
     listChild:SetSize(190, 1)
@@ -12254,20 +12253,13 @@ function addon.profileUI.BuildSettingsUI(owner)
 
     local detailNotice = manager:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(detailNotice, 12)
-    detailNotice:SetPoint("BOTTOMLEFT", 266, 64)
-    detailNotice:SetPoint("BOTTOMRIGHT", -20, 64)
+    detailNotice:SetPoint("BOTTOMLEFT", 266, 20)
+    detailNotice:SetPoint("BOTTOMRIGHT", -20, 20)
     detailNotice:SetJustifyH("LEFT")
     detailNotice:SetJustifyV("BOTTOM")
     detailNotice:SetWordWrap(true)
     detailNotice:SetMaxLines(2)
     addon.settingsDesign.SetRegionColor(detailNotice, "warning")
-
-    local managerClose = addon.settingsDesign.CreateShellButton(manager, nil, "primary")
-    managerClose:SetPoint("BOTTOMRIGHT", -18, 18)
-    managerClose:SetSize(addon.settingsDesign.tokens.geometry.closeButtonWidth,
-        addon.settingsDesign.tokens.geometry.shellButtonHeight)
-    managerClose:SetScript("OnClick", function() manager:Hide() end)
-    PushLocalizedLabel(function() managerClose:SetText(L("Close")) end)
 
     ui.header = header
     ui.headerLabel = profileLabel

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "minimumTotalAssertions": 31788,
+  "minimumTotalAssertions": 31774,
   "suites": [
     {
       "name": "core-panel-persistence",
@@ -12,7 +12,7 @@
     },
     {
       "name": "fonts",
-      "minimumAssertions": 2644
+      "minimumAssertions": 2632
     },
     {
       "name": "durability-repair",
@@ -36,7 +36,7 @@
     },
     {
       "name": "control-design",
-      "minimumAssertions": 615
+      "minimumAssertions": 613
     },
     {
       "name": "appearance-presets",

@@ -144,8 +144,13 @@ function Resolve-StatsProWowInterfaceVersions {
             -AllowLegacyTwoComponentVersions
         if (-not (Test-StatsProMarketplaceVersionSelection `
                 -RequestedVersion $requiredVersion `
-                -SelectedVersion $chosen)) {
-            $allowed = @(Get-StatsProAcceptedMarketplaceVersions -Version $requiredVersion)
+                -SelectedVersion $chosen `
+                -RequiredVersions $RequiredVersions `
+                -AllowEarlierRequiredVersions)) {
+            $allowed = @(Get-StatsProAcceptedMarketplaceVersions `
+                -Version $requiredVersion `
+                -RequiredVersions $RequiredVersions `
+                -AllowEarlierRequiredVersions)
             throw "WoWInterface would select unsupported fallback '$chosen' for '$requiredVersion'; allowed: $($allowed -join ', ')."
         }
         if ($selected -notcontains $chosen) {

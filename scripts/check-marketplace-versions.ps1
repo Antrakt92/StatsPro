@@ -465,6 +465,12 @@ function Invoke-SelfTest {
   {"game": "Retail", "id": "12.1.0"}
 ]
 '@
+    $wowiRequiredFallbackValid = @'
+[
+  {"game": "Retail", "id": "6.2"},
+  {"game": "Retail", "id": "12.0.7"}
+]
+'@
     $wagoExactValid = @'
 {"patches":{"retail":["12.1.0","12.0.7"],"classic":["1.15.8"]}}
 '@
@@ -547,6 +553,10 @@ function Invoke-SelfTest {
     $wowiHistoricalSelection = @(Resolve-StatsProWowInterfaceVersionsFromJson -Json $wowiHistoricalValid -RequiredVersions $versions)
     if (($wowiHistoricalSelection -join ',') -ne '12.1.0,12.0.7') {
         throw "Historical WoWInterface versions changed the required selection: $($wowiHistoricalSelection -join ',')."
+    }
+    $wowiRequiredFallbackSelection = @(Resolve-StatsProWowInterfaceVersionsFromJson -Json $wowiRequiredFallbackValid -RequiredVersions $versions)
+    if (($wowiRequiredFallbackSelection -join ',') -ne '12.0.7') {
+        throw "WoWInterface did not reuse the earlier required version: $($wowiRequiredFallbackSelection -join ',')."
     }
     [void](Resolve-StatsProWagoVersionSelection -Json $wagoExactValid -RequiredVersions $versions -RequireDirectCompatibilityMatch)
     [void](Resolve-StatsProWagoVersionSelection -Json $wagoAggregateValid -RequiredVersions $versions -RequireDirectCompatibilityMatch)

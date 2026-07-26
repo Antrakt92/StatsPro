@@ -15141,6 +15141,8 @@ for _, stage in ipairs({ "validate", "commit", "apply" }) do
         "profiles.compat.wipe.failure." .. stage .. ".identities", root, identities)
     eq("profiles.compat.wipe.failure." .. stage .. ".active",
         test.profileState().profileID, "p2")
+    eq("profiles.compat.wipe.failure." .. stage .. ".not_busy",
+        test.profileOps.state().inProgress, false)
     assertDeepEqual("profiles.compat.wipe.failure." .. stage .. ".live_position",
         env.StatsProFrame.points[1], point)
 end

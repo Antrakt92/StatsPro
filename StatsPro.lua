@@ -5233,6 +5233,15 @@ function addon.profileOps.ResolveCandidateActiveProfileID(transaction, fallbackP
     return nil
 end
 
+-- Both transaction coordinators must release lifecycle gates and refresh the
+-- profile UI in the same order on every success and failure exit.
+function addon.profileOps.FinishOperation(ok, result)
+    addon.profileOps.inProgress = false
+    addon.profileRuntime.transitioning = false
+    addon.profileUI.RefreshSafe()
+    return ok, result
+end
+
 -- Successful builders return only transaction, result. The coordinator derives the
 -- active payload from the candidate mapping and settings identity so a parallel intent
 -- cannot silently disagree with the state that will actually be committed.
@@ -5240,13 +5249,7 @@ function addon.profileOps.Execute(expected, builder)
     local root, gateReason = addon.profileOps.Gate(expected, false)
     if not root then return false, gateReason end
     addon.profileOps.inProgress = true
-
-    local function finish(ok, result)
-        addon.profileOps.inProgress = false
-        addon.profileRuntime.transitioning = false
-        addon.profileUI.RefreshSafe()
-        return ok, result
-    end
+    local finish = addon.profileOps.FinishOperation
 
     if not addon.profileRuntime.CloseOwnedSettingsModals() then
         return finish(false, "close-failed")
@@ -5351,13 +5354,7 @@ function addon.profileOps.ExecuteRootReplacement(expected, builder, corruptRecov
     local root, gateReason = gate(expected, false)
     if not root then return false, gateReason end
     addon.profileOps.inProgress = true
-
-    local function finish(ok, result)
-        addon.profileOps.inProgress = false
-        addon.profileRuntime.transitioning = false
-        addon.profileUI.RefreshSafe()
-        return ok, result
-    end
+    local finish = addon.profileOps.FinishOperation
 
     if not addon.profileRuntime.CloseOwnedSettingsModals() then
         return finish(false, "close-failed")

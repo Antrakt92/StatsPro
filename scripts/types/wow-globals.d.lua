@@ -42,9 +42,6 @@
 ---@field exclusive? boolean
 ---@field preferredIndex number
 
----@type string
-CANCEL = ""
-
 ---@type number
 MAX_SPELL_SCHOOLS = 7
 

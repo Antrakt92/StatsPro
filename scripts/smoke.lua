@@ -617,7 +617,7 @@ local function makeEnv(locale, opts)
     env.SlashCmdList = {}
     env.UISpecialFrames = {}
     env.StaticPopupDialogs = {}
-    env.CANCEL = "Cancel"
+    env.CANCEL = "Client Cancel"
     env.StaticPopup_Show = function(key, textArg1, textArg2, data)
         local definition = env.StaticPopupDialogs[key]
         if type(definition) ~= "table" then error("missing static popup " .. tostring(key), 2) end
@@ -628,6 +628,9 @@ local function makeEnv(locale, opts)
         popup.textArg1 = textArg1
         popup.textArg2 = textArg2
         popup.data = data
+        popup.renderedText = definition.text
+        popup.renderedButton1 = definition.button1
+        popup.renderedButton2 = definition.button2
         if definition.hasEditBox then
             popup.EditBox = makeFrame(nil, opts.setFontResult, popup)
             function popup:GetEditBox() return self.EditBox end
@@ -13545,20 +13548,21 @@ do
     local seed = loadStatsPro("enUS")
     fireEvent("profiles.ui.late_metadata.seed", seed, "PLAYER_ENTERING_WORLD")
     local root = deepCopy(seed.StatsProDB)
+    root.account.forceLocale = "ruRU"
     root.characters = {
         ["Player-1-LATE"] = {
-            displayName = "Character",
             lastSeen = 1,
             defaultProfileID = "p1",
             specProfiles = { [73] = "p1" },
         },
     }
-    local metadata = { available = false }
+    local secretUnit = {}
+    local metadata = { available = false, name = "Late" }
     local env, addonContext, profileTest = loadStatsPro("enUS", {
         statsProDB = root,
         unitGUID = function() return "Player-1-LATE" end,
         unitFullName = function()
-            if metadata.available then return "Late", "Realm" end
+            if metadata.available then return metadata.name, "Realm" end
             return nil, nil
         end,
         getServerTime = function() return 1 end,
@@ -13567,31 +13571,161 @@ do
             return 73, metadata.available and "Protection" or nil,
                 nil, nil, "TANK", 1
         end,
+        issecretvalue = function(value) return value == secretUnit end,
     })
     fireEvent("profiles.ui.late_metadata.activate", env, "PLAYER_ENTERING_WORLD")
+    local labels = profileTest.registrySnapshot().labelsByLocale
+    local fallbackBefore = deepCopy(root)
+    local rootRef = env.StatsProDB
+    local accountRef = root.account
+    local profilesRef = root.profiles
+    local profileRef = root.profiles.p1
+    local settingsRef = root.profiles.p1.settings
+    local charactersRef = root.characters
+    local characterRef = root.characters["Player-1-LATE"]
+    local specsRef = characterRef.specProfiles
+    local roleTemplatesRef = root.roleTemplates
+    local nextProfileID = root.account.nextProfileID
     addonContext:OpenConfigMenu()
-    eq("profiles.ui.late_metadata.persisted_character_header",
-        profileTest.profileUIState().headerSubtitle, "Automatic - Character / Spec 73")
+    local state = profileTest.profileUIState()
+    eq("profiles.ui.late_metadata.localized_header", state.headerSubtitle,
+        string.format(labels.ruRU["Automatic - %s / %s"],
+            labels.ruRU["Character"], string.format(labels.ruRU["Spec %d"], 73)))
+    callScript("profiles.ui.late_metadata.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    state = profileTest.profileUIState()
+    eq("profiles.ui.late_metadata.localized_manager_row",
+        state.rows[1].text, labels.ruRU["Character"])
+    eq("profiles.ui.late_metadata.localized_manager_detail",
+        state.detailCharacter, labels.ruRU["Character"])
+    eq("profiles.ui.late_metadata.localized_manager_spec",
+        state.detailContext, string.format(labels.ruRU["Spec %d"], 73))
+    eq("profiles.ui.late_metadata.fallback_not_persisted",
+        rawget(characterRef, "displayName"), nil)
+    assertDeepEqual("profiles.ui.late_metadata.fallback_zero_writes", root, fallbackBefore)
+    eq("profiles.ui.late_metadata.fallback_root_identity", env.StatsProDB, rootRef)
+    eq("profiles.ui.late_metadata.fallback_account_identity", root.account, accountRef)
+    eq("profiles.ui.late_metadata.fallback_profiles_identity", root.profiles, profilesRef)
+    eq("profiles.ui.late_metadata.fallback_profile_identity", root.profiles.p1, profileRef)
+    eq("profiles.ui.late_metadata.fallback_settings_identity",
+        root.profiles.p1.settings, settingsRef)
+    eq("profiles.ui.late_metadata.fallback_characters_identity",
+        root.characters, charactersRef)
+    eq("profiles.ui.late_metadata.fallback_character_identity",
+        root.characters["Player-1-LATE"], characterRef)
+    eq("profiles.ui.late_metadata.fallback_specs_identity",
+        characterRef.specProfiles, specsRef)
+
+    addonContext.profileUI.HandleOperationResult(true, nil, false)
+    eq("profiles.ui.late_metadata.localized_status",
+        profileTest.profileUIState().operationStatus,
+        labels.ruRU["Profile changes saved."])
+    callScript("profiles.ui.late_metadata.open_dialog",
+        env.StatsProActiveProfileButton, "OnClick")
+    eq("profiles.ui.late_metadata.localized_cancel",
+        env.StatsProProfileOperationCancelButton:GetText(), labels.ruRU["Cancel"])
+    local selectedBefore = profileTest.profileUIState()
+    local managerRef = env.StatsProProfileManager
+    local dialogRef = env.StatsProProfileOperationDialog
+    local cancelRef = env.StatsProProfileOperationCancelButton
+    profileTest.previewLanguageForSmoke("deDE")
+    state = profileTest.profileUIState()
+    eq("profiles.ui.late_metadata.preview_header", state.headerSubtitle,
+        string.format(labels.deDE["Automatic - %s / %s"],
+            labels.deDE["Character"], string.format(labels.deDE["Spec %d"], 73)))
+    eq("profiles.ui.late_metadata.preview_manager_row",
+        state.rows[1].text, labels.deDE["Character"])
+    eq("profiles.ui.late_metadata.preview_manager_detail",
+        state.detailCharacter, labels.deDE["Character"])
+    eq("profiles.ui.late_metadata.preview_cancel",
+        env.StatsProProfileOperationCancelButton:GetText(), labels.deDE["Cancel"])
+    eq("profiles.ui.late_metadata.preview_status", state.operationStatus,
+        labels.deDE["Profile changes saved."])
+    eq("profiles.ui.late_metadata.preview_selection_guid",
+        state.selectedGUID, selectedBefore.selectedGUID)
+    eq("profiles.ui.late_metadata.preview_selection_spec",
+        state.selectedSpecID, selectedBefore.selectedSpecID)
+    eq("profiles.ui.late_metadata.preview_dialog_preserved",
+        state.operationKind, selectedBefore.operationKind)
+    eq("profiles.ui.late_metadata.preview_manager_identity",
+        env.StatsProProfileManager, managerRef)
+    eq("profiles.ui.late_metadata.preview_dialog_identity",
+        env.StatsProProfileOperationDialog, dialogRef)
+    eq("profiles.ui.late_metadata.preview_cancel_identity",
+        env.StatsProProfileOperationCancelButton, cancelRef)
+    assertDeepEqual("profiles.ui.late_metadata.preview_zero_writes", root, fallbackBefore)
+    addonContext.profileRuntime.cancelLanguagePreview()
+    state = profileTest.profileUIState()
+    eq("profiles.ui.late_metadata.preview_restore_character",
+        state.detailCharacter, labels.ruRU["Character"])
+    eq("profiles.ui.late_metadata.preview_restore_cancel",
+        env.StatsProProfileOperationCancelButton:GetText(), labels.ruRU["Cancel"])
+    eq("profiles.ui.late_metadata.preview_restore_status", state.operationStatus,
+        labels.ruRU["Profile changes saved."])
+    callScript("profiles.ui.late_metadata.close_dialog",
+        env.StatsProProfileOperationCancelButton, "OnClick")
+    env.__flushTimers(0)
+
+    local ignoredBefore = profileTest.profileRuntimeState()
+    fireEvent("profiles.ui.late_metadata.foreign_name_event",
+        env, "UNIT_NAME_UPDATE", "party1")
+    fireEvent("profiles.ui.late_metadata.malformed_name_event",
+        env, "UNIT_NAME_UPDATE", nil)
+    fireEvent("profiles.ui.late_metadata.secret_name_event",
+        env, "UNIT_NAME_UPDATE", secretUnit)
+    local ignoredAfter = profileTest.profileRuntimeState()
+    eq("profiles.ui.late_metadata.ignored_events_generation",
+        ignoredAfter.requestGeneration, ignoredBefore.requestGeneration)
+    eq("profiles.ui.late_metadata.ignored_events_reads",
+        ignoredAfter.contextReadCount, ignoredBefore.contextReadCount)
+    assertDeepEqual("profiles.ui.late_metadata.ignored_events_zero_writes",
+        root, fallbackBefore)
+
     local runtimeBefore = profileTest.profileRuntimeState()
     metadata.available = true
     fireEvent("profiles.ui.late_metadata.refresh", env,
-        "PLAYER_SPECIALIZATION_CHANGED", "player")
+        "UNIT_NAME_UPDATE", "player")
     env.__flushTimers(0)
-    local state = profileTest.profileUIState()
+    state = profileTest.profileUIState()
     local runtimeAfter = profileTest.profileRuntimeState()
     eq("profiles.ui.late_metadata.header", state.headerSubtitle,
-        "Automatic - Late-Realm / Protection")
+        string.format(labels.ruRU["Automatic - %s / %s"],
+            "Late-Realm", "Protection"))
     eq("profiles.ui.late_metadata.character_record",
         root.characters["Player-1-LATE"].displayName, "Late-Realm")
     eq("profiles.ui.late_metadata.no_activation",
         runtimeAfter.activationCount, runtimeBefore.activationCount)
     eq("profiles.ui.late_metadata.no_reapply", runtimeAfter.applyCount, runtimeBefore.applyCount)
-    callScript("profiles.ui.late_metadata.open_manager",
-        env.StatsProManageProfilesButton, "OnClick")
-    state = profileTest.profileUIState()
+    eq("profiles.ui.late_metadata.one_metadata_commit",
+        runtimeAfter.structuralCommitCount, runtimeBefore.structuralCommitCount + 1)
+    eq("profiles.ui.late_metadata.account_identity", root.account, accountRef)
+    eq("profiles.ui.late_metadata.profiles_identity", root.profiles, profilesRef)
+    eq("profiles.ui.late_metadata.profile_identity", root.profiles.p1, profileRef)
+    eq("profiles.ui.late_metadata.settings_identity", root.profiles.p1.settings, settingsRef)
+    eq("profiles.ui.late_metadata.roles_identity", root.roleTemplates, roleTemplatesRef)
+    eq("profiles.ui.late_metadata.next_profile_id", root.account.nextProfileID, nextProfileID)
+    eq("profiles.ui.late_metadata.manager_selection_guid",
+        state.selectedGUID, selectedBefore.selectedGUID)
+    eq("profiles.ui.late_metadata.manager_selection_spec",
+        state.selectedSpecID, selectedBefore.selectedSpecID)
     check("profiles.ui.late_metadata.manager_row",
         state.rows[1].text:find("Late-Realm", 1, true) ~= nil)
+    eq("profiles.ui.late_metadata.manager_detail", state.detailCharacter, "Late-Realm")
     eq("profiles.ui.late_metadata.spec_name", state.detailContext, "Protection")
+
+    slash("profiles.ui.late_metadata.stale_prompt.open", env, "wipe")
+    eq("profiles.ui.late_metadata.stale_prompt.pending",
+        profileTest.destructivePromptState().wipePending, true)
+    metadata.name = "Later"
+    fireEvent("profiles.ui.late_metadata.stale_prompt.refresh",
+        env, "UNIT_NAME_UPDATE", "player")
+    env.__flushTimers(0)
+    eq("profiles.ui.late_metadata.stale_prompt.closed", env.__lastStaticPopup, nil)
+    eq("profiles.ui.late_metadata.stale_prompt.pending_cleared",
+        profileTest.destructivePromptState().wipePending, false)
+    eq("profiles.ui.late_metadata.stale_prompt.no_wipe", root.profiles.p1, profileRef)
+    eq("profiles.ui.late_metadata.stale_prompt.metadata_updated",
+        root.characters["Player-1-LATE"].displayName, "Later-Realm")
 end
 
 do
@@ -13765,7 +13899,7 @@ do
         "New from defaults...", "Duplicate profile...", "Rename profile...",
         "Copy settings to assigned profile...", "Swap assignments...",
         "Reset", "Reset active profile...", "Delete profile...", "Forget character...",
-        "Confirm", "Unused", "Unused profile", "New Profile",
+        "Confirm", "Cancel", "Unused", "Unused profile", "New Profile",
         "Choose a replacement profile", "Choose a context",
         "All settings", "Stat and gear settings", "Layout settings",
         "Appearance settings", "Choose settings to copy",
@@ -13845,6 +13979,8 @@ do
             "title metadata approaches the header actions")
         eq("profiles.ui.locales.reset_text." .. locale,
             shellState.shell.resetButton:GetText(), labels["Reset"])
+        eq("profiles.ui.locales.operation_cancel." .. locale,
+            env.StatsProProfileOperationCancelButton:GetText(), labels["Cancel"])
         check("profiles.ui.locales.manage_fit." .. locale,
             env.StatsProManageProfilesButton.statsProText:GetStringWidth()
                 <= env.StatsProManageProfilesButton:GetWidth() - 16,
@@ -14041,6 +14177,79 @@ local function makeProfileOpsFixture(options)
     })
     fireEvent("profiles.ops.fixture.activate", env, "PLAYER_ENTERING_WORLD")
     return env, addonContext, test, root, identity
+end
+
+do
+    local env, _, test, root = makeProfileOpsFixture({
+        swiftStatsDB = { fontSize = 19 },
+        mutateRoot = function(candidate) candidate.account.forceLocale = "ruRU" end,
+    })
+    local labelsByLocale = test.registrySnapshot().labelsByLocale
+    check("profiles.prompts.locale.client_cancel_poisoned",
+        env.CANCEL ~= labelsByLocale.ruRU["Cancel"])
+
+    local function verifyPromptLocale(locale, suffix)
+        root.account.forceLocale = locale
+        test.cacheSettings()
+        local labels = labelsByLocale[locale]
+        local before = deepCopy(root)
+
+        slash("profiles.prompts.locale.import." .. suffix, env, "import")
+        local importPopup = exists(
+            "profiles.prompts.locale.import_popup." .. suffix, env.__lastStaticPopup)
+        eq("profiles.prompts.locale.import_text." .. suffix,
+            importPopup.renderedText,
+            labels["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."])
+        eq("profiles.prompts.locale.import_action." .. suffix,
+            importPopup.renderedButton1, labels["Import"])
+        eq("profiles.prompts.locale.import_cancel." .. suffix,
+            importPopup.renderedButton2, labels["Cancel"])
+        env.__cancelStaticPopup()
+        eq("profiles.prompts.locale.import_pending_cleared." .. suffix,
+            test.destructivePromptState().importPending, false)
+
+        slash("profiles.prompts.locale.reset." .. suffix, env, "reset")
+        local resetPopup = exists(
+            "profiles.prompts.locale.reset_popup." .. suffix, env.__lastStaticPopup)
+        local activeProfile = test.profileState()
+        local references = test.profileOps.countReferences(root, activeProfile.profileID)
+        eq("profiles.prompts.locale.reset_text." .. suffix,
+            resetPopup.renderedText,
+            string.format(
+                labels["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."],
+                root.profiles[activeProfile.profileID].name, references.specs,
+                references.characterDefaults + references.accountDefault + references.roleTemplates))
+        eq("profiles.prompts.locale.reset_action." .. suffix,
+            resetPopup.renderedButton1, labels["Confirm"])
+        eq("profiles.prompts.locale.reset_cancel." .. suffix,
+            resetPopup.renderedButton2, labels["Cancel"])
+        env.__cancelStaticPopup()
+        eq("profiles.prompts.locale.reset_pending_cleared." .. suffix,
+            test.destructivePromptState().resetPending, false)
+
+        slash("profiles.prompts.locale.wipe." .. suffix, env, "wipe")
+        local wipePopup = exists(
+            "profiles.prompts.locale.wipe_popup." .. suffix, env.__lastStaticPopup)
+        eq("profiles.prompts.locale.wipe_text." .. suffix,
+            wipePopup.renderedText,
+            labels["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."])
+        eq("profiles.prompts.locale.wipe_action." .. suffix,
+            wipePopup.renderedButton1, labels["Confirm"])
+        eq("profiles.prompts.locale.wipe_cancel." .. suffix,
+            wipePopup.renderedButton2, labels["Cancel"])
+        env.__cancelStaticPopup()
+        eq("profiles.prompts.locale.wipe_pending_cleared." .. suffix,
+            test.destructivePromptState().wipePending, false)
+        assertDeepEqual("profiles.prompts.locale.cancel_zero_writes." .. suffix,
+            root, before)
+        return importPopup.definition, resetPopup.definition, wipePopup.definition
+    end
+
+    local ruImport, ruReset, ruWipe = verifyPromptLocale("ruRU", "ruRU")
+    local deImport, deReset, deWipe = verifyPromptLocale("deDE", "deDE")
+    eq("profiles.prompts.locale.import_definition_reused", deImport, ruImport)
+    eq("profiles.prompts.locale.reset_definition_reused", deReset, ruReset)
+    eq("profiles.prompts.locale.wipe_definition_reused", deWipe, ruWipe)
 end
 
 do

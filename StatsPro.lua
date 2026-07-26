@@ -1278,7 +1278,7 @@ local LABELS_BY_LOCALE = {
         ["Duplicate profile..."] = "Duplicate profile...", ["Rename profile..."] = "Rename profile...",
         ["Copy settings to assigned profile..."] = "Copy settings to assigned profile...", ["Swap assignments..."] = "Swap assignments...",
         ["Reset active profile..."] = "Reset active profile...", ["Delete profile..."] = "Delete profile...",
-        ["Forget character..."] = "Forget character...", ["Confirm"] = "Confirm",
+        ["Forget character..."] = "Forget character...", ["Confirm"] = "Confirm", ["Cancel"] = "Cancel",
         ["Selected character"] = "Selected character", ["%s - %d known specs"] = "%s - %d known specs",
         ["Future new contexts"] = "Future new contexts", ["Tank: %s"] = "Tank: %s",
         ["Healer: %s"] = "Healer: %s", ["Damage: %s"] = "Damage: %s",
@@ -1429,7 +1429,7 @@ local LABELS_BY_LOCALE = {
         ["Duplicate profile..."] = "Дублировать профиль...", ["Rename profile..."] = "Переименовать профиль...",
         ["Copy settings to assigned profile..."] = "Копировать настройки в назначенный профиль...", ["Swap assignments..."] = "Поменять назначения местами...",
         ["Reset active profile..."] = "Сбросить активный профиль...", ["Delete profile..."] = "Удалить профиль...",
-        ["Forget character..."] = "Забыть персонажа...", ["Confirm"] = "Подтвердить",
+        ["Forget character..."] = "Забыть персонажа...", ["Confirm"] = "Подтвердить", ["Cancel"] = "Отмена",
         ["Selected character"] = "Выбранный персонаж", ["%s - %d known specs"] = "%s — %d известных специализаций",
         ["Future new contexts"] = "Будущие новые контексты", ["Tank: %s"] = "Танк: %s",
         ["Healer: %s"] = "Лекарь: %s", ["Damage: %s"] = "Урон: %s",
@@ -1574,7 +1574,7 @@ local LABELS_BY_LOCALE = {
         ["Duplicate profile..."] = "Profil duplizieren...", ["Rename profile..."] = "Profil umbenennen...",
         ["Copy settings to assigned profile..."] = "Einstellungen ins zugewiesene Profil kopieren...", ["Swap assignments..."] = "Zuweisungen tauschen...",
         ["Reset active profile..."] = "Aktives Profil zurücksetzen...", ["Delete profile..."] = "Profil löschen...",
-        ["Forget character..."] = "Charakter vergessen...", ["Confirm"] = "Bestätigen",
+        ["Forget character..."] = "Charakter vergessen...", ["Confirm"] = "Bestätigen", ["Cancel"] = "Abbrechen",
         ["Selected character"] = "Ausgewählter Charakter", ["%s - %d known specs"] = "%s – %d bekannte Spezialisierungen",
         ["Future new contexts"] = "Künftige neue Kontexte", ["Tank: %s"] = "Tank: %s",
         ["Healer: %s"] = "Heiler: %s", ["Damage: %s"] = "Schaden: %s",
@@ -1715,7 +1715,7 @@ local LABELS_BY_LOCALE = {
         ["Duplicate profile..."] = "Dupliquer le profil...", ["Rename profile..."] = "Renommer le profil...",
         ["Copy settings to assigned profile..."] = "Copier les réglages vers le profil attribué...", ["Swap assignments..."] = "Échanger les attributions...",
         ["Reset active profile..."] = "Réinitialiser le profil actif...", ["Delete profile..."] = "Supprimer le profil...",
-        ["Forget character..."] = "Oublier le personnage...", ["Confirm"] = "Confirmer",
+        ["Forget character..."] = "Oublier le personnage...", ["Confirm"] = "Confirmer", ["Cancel"] = "Annuler",
         ["Selected character"] = "Personnage sélectionné", ["%s - %d known specs"] = "%s – %d spécialisations connues",
         ["Future new contexts"] = "Nouveaux contextes futurs", ["Tank: %s"] = "Tank : %s",
         ["Healer: %s"] = "Soigneur : %s", ["Damage: %s"] = "Dégâts : %s",
@@ -1857,7 +1857,7 @@ local LABELS_BY_LOCALE = {
         ["Duplicate profile..."] = "Duplicar perfil...", ["Rename profile..."] = "Cambiar nombre del perfil...",
         ["Copy settings to assigned profile..."] = "Copiar ajustes al perfil asignado...", ["Swap assignments..."] = "Intercambiar asignaciones...",
         ["Reset active profile..."] = "Restablecer perfil activo...", ["Delete profile..."] = "Eliminar perfil...",
-        ["Forget character..."] = "Olvidar personaje...", ["Confirm"] = "Confirmar",
+        ["Forget character..."] = "Olvidar personaje...", ["Confirm"] = "Confirmar", ["Cancel"] = "Cancelar",
         ["Selected character"] = "Personaje seleccionado", ["%s - %d known specs"] = "%s – %d especializaciones conocidas",
         ["Future new contexts"] = "Nuevos contextos futuros", ["Tank: %s"] = "Tanque: %s",
         ["Healer: %s"] = "Sanador: %s", ["Damage: %s"] = "Daño: %s",
@@ -1997,7 +1997,7 @@ local LABELS_BY_LOCALE = {
         ["Duplicate profile..."] = "Duplicar perfil...", ["Rename profile..."] = "Cambiar nombre del perfil...",
         ["Copy settings to assigned profile..."] = "Copiar ajustes al perfil asignado...", ["Swap assignments..."] = "Intercambiar asignaciones...",
         ["Reset active profile..."] = "Restablecer perfil activo...", ["Delete profile..."] = "Eliminar perfil...",
-        ["Forget character..."] = "Olvidar personaje...", ["Confirm"] = "Confirmar",
+        ["Forget character..."] = "Olvidar personaje...", ["Confirm"] = "Confirmar", ["Cancel"] = "Cancelar",
         ["Selected character"] = "Personaje seleccionado", ["%s - %d known specs"] = "%s – %d especializaciones conocidas",
         ["Future new contexts"] = "Nuevos contextos futuros", ["Tank: %s"] = "Tanque: %s",
         ["Healer: %s"] = "Sanador: %s", ["Damage: %s"] = "Daño: %s",
@@ -2138,7 +2138,7 @@ local LABELS_BY_LOCALE = {
         ["Duplicate profile..."] = "Duplica profilo...", ["Rename profile..."] = "Rinomina profilo...",
         ["Copy settings to assigned profile..."] = "Copia impostazioni nel profilo assegnato...", ["Swap assignments..."] = "Scambia assegnazioni...",
         ["Reset active profile..."] = "Ripristina profilo attivo...", ["Delete profile..."] = "Elimina profilo...",
-        ["Forget character..."] = "Dimentica personaggio...", ["Confirm"] = "Conferma",
+        ["Forget character..."] = "Dimentica personaggio...", ["Confirm"] = "Conferma", ["Cancel"] = "Annulla",
         ["Selected character"] = "Personaggio selezionato", ["%s - %d known specs"] = "%s – %d specializzazioni note",
         ["Future new contexts"] = "Nuovi contesti futuri", ["Tank: %s"] = "Difensore: %s",
         ["Healer: %s"] = "Guaritore: %s", ["Damage: %s"] = "Assaltatore: %s",
@@ -2278,7 +2278,7 @@ local LABELS_BY_LOCALE = {
         ["Duplicate profile..."] = "Duplicar perfil...", ["Rename profile..."] = "Renomear perfil...",
         ["Copy settings to assigned profile..."] = "Copiar configurações para o perfil atribuído...", ["Swap assignments..."] = "Trocar atribuições...",
         ["Reset active profile..."] = "Redefinir perfil ativo...", ["Delete profile..."] = "Excluir perfil...",
-        ["Forget character..."] = "Esquecer personagem...", ["Confirm"] = "Confirmar",
+        ["Forget character..."] = "Esquecer personagem...", ["Confirm"] = "Confirmar", ["Cancel"] = "Cancelar",
         ["Selected character"] = "Personagem selecionado", ["%s - %d known specs"] = "%s – %d especializações conhecidas",
         ["Future new contexts"] = "Novos contextos futuros", ["Tank: %s"] = "Tanque: %s",
         ["Healer: %s"] = "Cura: %s", ["Damage: %s"] = "Dano: %s",
@@ -2425,7 +2425,7 @@ local LABELS_BY_LOCALE = {
         ["Duplicate profile..."] = "프로필 복제...", ["Rename profile..."] = "프로필 이름 변경...",
         ["Copy settings to assigned profile..."] = "할당된 프로필에 설정 복사...", ["Swap assignments..."] = "할당 교환...",
         ["Reset active profile..."] = "활성 프로필 초기화...", ["Delete profile..."] = "프로필 삭제...",
-        ["Forget character..."] = "캐릭터 기록 삭제...", ["Confirm"] = "확인",
+        ["Forget character..."] = "캐릭터 기록 삭제...", ["Confirm"] = "확인", ["Cancel"] = "취소",
         ["Selected character"] = "선택한 캐릭터", ["%s - %d known specs"] = "%s – 알려진 전문화 %d개",
         ["Future new contexts"] = "향후 새 컨텍스트", ["Tank: %s"] = "방어 전담: %s",
         ["Healer: %s"] = "치유 전담: %s", ["Damage: %s"] = "공격 전담: %s",
@@ -2565,7 +2565,7 @@ local LABELS_BY_LOCALE = {
         ["Duplicate profile..."] = "复制配置...", ["Rename profile..."] = "重命名配置...",
         ["Copy settings to assigned profile..."] = "复制设置到已分配配置...", ["Swap assignments..."] = "交换分配...",
         ["Reset active profile..."] = "重置当前配置...", ["Delete profile..."] = "删除配置...",
-        ["Forget character..."] = "移除角色记录...", ["Confirm"] = "确认",
+        ["Forget character..."] = "移除角色记录...", ["Confirm"] = "确认", ["Cancel"] = "取消",
         ["Selected character"] = "所选角色", ["%s - %d known specs"] = "%s – %d 个已知专精",
         ["Future new contexts"] = "未来新环境", ["Tank: %s"] = "坦克：%s",
         ["Healer: %s"] = "治疗：%s", ["Damage: %s"] = "输出：%s",
@@ -2705,7 +2705,7 @@ local LABELS_BY_LOCALE = {
         ["Duplicate profile..."] = "複製設定檔...", ["Rename profile..."] = "重新命名設定檔...",
         ["Copy settings to assigned profile..."] = "複製設定到已指派設定檔...", ["Swap assignments..."] = "交換指派...",
         ["Reset active profile..."] = "重設目前設定檔...", ["Delete profile..."] = "刪除設定檔...",
-        ["Forget character..."] = "移除角色記錄...", ["Confirm"] = "確認",
+        ["Forget character..."] = "移除角色記錄...", ["Confirm"] = "確認", ["Cancel"] = "取消",
         ["Selected character"] = "所選角色", ["%s - %d known specs"] = "%s – %d 個已知專精",
         ["Future new contexts"] = "未來新環境", ["Tank: %s"] = "坦克：%s",
         ["Healer: %s"] = "治療：%s", ["Damage: %s"] = "輸出：%s",
@@ -3568,7 +3568,7 @@ function addon.profileUI.BuildViewModel()
     for guid, character in pairs(root.characters) do
         local characterModel = {
             guid = guid,
-            displayName = character.displayName or "Character",
+            displayName = character.displayName or L("Character"),
             lastSeen = character.lastSeen or 0,
             isCurrent = guid == model.activeGUID,
             defaultProfileID = character.defaultProfileID,
@@ -4866,6 +4866,9 @@ function addon.profileRuntime.ResolveCurrent(initializing, combatEnded)
             runtime.ScheduleContextRetry()
             addon.profileUI.RefreshSafe()
             return false
+        end
+        if transaction and type(runtime.CancelOwnedMutationPopups) == "function" then
+            runtime.CancelOwnedMutationPopups()
         end
         runtime.CommitTransaction(transaction)
         local updatedCharacter = transaction and transaction.characters[context.guid] or character
@@ -8575,6 +8578,12 @@ local EVENT_HANDLERS = {
         if not addon.dbRuntime.IsCleanType(unit, "string") or unit ~= "player" then return end
         addon.profileRuntime.RequestResolution(false)
     end,
+    -- UnitFullName may be unavailable during the initial cache warmup; retry the
+    -- existing same-context metadata path when Blizzard reports the player name ready.
+    UNIT_NAME_UPDATE             = function(unit)
+        if not addon.dbRuntime.IsCleanType(unit, "string") or unit ~= "player" then return end
+        addon.profileRuntime.RequestResolution(false)
+    end,
     UPDATE_INVENTORY_DURABILITY = function() addon.durabilityRuntime.MarkDirty() end,
     PLAYER_EQUIPMENT_CHANGED    = function() addon.durabilityRuntime.MarkDirty(); itemLevelDirty = true end,
     BAG_UPDATE_DELAYED          = function() itemLevelDirty = true end,
@@ -10808,7 +10817,7 @@ end
 _G.StaticPopupDialogs[addon.legacyImport.popupKey] = {
     text = "",
     button1 = "",
-    button2 = _G.CANCEL,
+    button2 = "",
     OnAccept = addon.legacyImport.AcceptPending,
     OnCancel = addon.legacyImport.CancelPending,
     timeout = 0,
@@ -10862,7 +10871,7 @@ function addon.legacyImport.Request()
     local definition = _G.StaticPopupDialogs[addon.legacyImport.popupKey]
     definition.text = L("Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged.")
     definition.button1 = L("Import")
-    definition.button2 = _G.CANCEL
+    definition.button2 = L("Cancel")
     local ok, popup = pcall(_G.StaticPopup_Show,
         addon.legacyImport.popupKey, nil, nil, addon.legacyImport.pending)
     if not ok or not popup then
@@ -10893,7 +10902,7 @@ end
 _G.StaticPopupDialogs[addon.resetRuntime.popupKey] = {
     text = "",
     button1 = "",
-    button2 = _G.CANCEL,
+    button2 = "",
     OnAccept = addon.resetRuntime.AcceptPending,
     OnCancel = addon.resetRuntime.CancelPending,
     timeout = 0,
@@ -10931,7 +10940,7 @@ function addon.resetRuntime.Request()
         L("Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."),
         profile.name, references.specs, otherReferences)
     definition.button1 = L("Confirm")
-    definition.button2 = _G.CANCEL
+    definition.button2 = L("Cancel")
     local ok, popup = pcall(_G.StaticPopup_Show,
         addon.resetRuntime.popupKey, nil, nil, addon.resetRuntime.pending)
     if not ok or not popup then
@@ -10968,7 +10977,7 @@ end
 _G.StaticPopupDialogs[addon.wipeRuntime.popupKey] = {
     text = "",
     button1 = "",
-    button2 = _G.CANCEL,
+    button2 = "",
     OnAccept = addon.wipeRuntime.AcceptPending,
     OnCancel = addon.wipeRuntime.CancelPending,
     timeout = 0,
@@ -11021,7 +11030,7 @@ function addon.wipeRuntime.Request()
     local definition = _G.StaticPopupDialogs[addon.wipeRuntime.popupKey]
     definition.text = prompt
     definition.button1 = L("Confirm")
-    definition.button2 = _G.CANCEL
+    definition.button2 = L("Cancel")
     local ok, popup = pcall(_G.StaticPopup_Show,
         addon.wipeRuntime.popupKey, nil, nil, addon.wipeRuntime.pending)
     if not ok or not popup then
@@ -11385,7 +11394,7 @@ function addon.profileUI.BuildOperationUI(manager)
         dialog, "StatsProProfileOperationCancelButton", "field")
     cancelButton:SetPoint("BOTTOMRIGHT", -16, 18)
     cancelButton:SetSize(102, 26)
-    cancelButton:SetText(_G.CANCEL)
+    PushLocalizedLabel(function() cancelButton:SetText(L("Cancel")) end)
 
     ui.actionScroll = actionScroll
     ui.actionChild = actionChild
@@ -11423,11 +11432,23 @@ function addon.profileUI.BuildOperationUI(manager)
     ui.operationPrimaryButton = primaryButton
     ui.operationCancelButton = cancelButton
 
-    function ui.SetOperationStatus(message, failed)
-        ui.lastOperationStatus = message or ""
-        operationStatus:SetText(ui.lastOperationStatus)
+    function ui.RefreshOperationStatus()
+        local failed = ui.operationStatusKind == "error"
+        local message = ""
+        if ui.operationStatusKind == "success" then
+            message = L("Profile changes saved.")
+        elseif failed then
+            message = ui.OperationErrorText(ui.operationStatusReason)
+        end
+        operationStatus:SetText(message)
         addon.settingsDesign.SetRegionColor(
             operationStatus, failed and "danger" or "accent")
+    end
+
+    function ui.SetOperationStatus(kind, reason)
+        ui.operationStatusKind = kind
+        ui.operationStatusReason = reason
+        ui.RefreshOperationStatus()
     end
 
     function ui.CloseOperationDialog()
@@ -11602,12 +11623,12 @@ function addon.profileUI.BuildOperationUI(manager)
     function ui.HandleOperationResult(ok, result, selectResult)
         if ok then
             if selectResult and type(result) == "string" then ui.selectedProfileID = result end
-            ui.SetOperationStatus(L("Profile changes saved."), false)
+            ui.SetOperationStatus("success")
             ui.CloseOperationDialog()
             ui.RefreshSafe()
             return true
         end
-        ui.SetOperationStatus(ui.OperationErrorText(result), true)
+        ui.SetOperationStatus("error", result)
         ui.CloseOperationDialog()
         ui.RefreshSafe()
         return false
@@ -11815,7 +11836,7 @@ function addon.profileUI.BuildOperationUI(manager)
         else
             managedImpact:SetText("")
         end
-        operationStatus:SetText(ui.lastOperationStatus or "")
+        ui.RefreshOperationStatus()
 
         if character then
             selectedCharacterSummary:SetText(string.format(
@@ -12346,7 +12367,7 @@ function addon.profileUI.BuildSettingsUI(owner)
             subtitle:SetText(string.format(L("Shared by %d specs"), model.activeSharedCount))
             addon.settingsDesign.SetRegionColor(subtitle, "textSecondary")
         elseif model.activeGUID and model.activeSpecID then
-            local displayName = model.activeDisplayName or "Character"
+            local displayName = model.activeDisplayName or L("Character")
             local specName = ui.FormatSpecName(model.activeSpecID, model.activeSpecName)
             subtitle:SetText(string.format(L("Automatic - %s / %s"), displayName, specName))
             addon.settingsDesign.SetRegionColor(subtitle, "textSecondary")

@@ -265,16 +265,6 @@ local function count_target_lines(text)
     return count
 end
 
-local function count_line_pattern_occurrences(text, pattern)
-    local count = 0
-    for line in string.gmatch((text or "") .. "\n", "([^\n]*)\n") do
-        if string.match(line, pattern) then
-            count = count + 1
-        end
-    end
-    return count
-end
-
 local function validate_raw_text_shape(text)
     if not text then
         return

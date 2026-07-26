@@ -10061,15 +10061,21 @@ do
 end
 
 do
-    local secretHeight
-    local resizeEnv, resizeAddon, resizeTest = loadStatsPro("enUS", {
+    local secretDimension
+    local resizeEnv, resizeAddon, resizeTest = loadStatsPro("enUS", withProfileIdentity({
         uiParentWidth = 1024,
         uiParentHeight = 768,
         issecretvalue = function(value)
-            return secretHeight ~= nil and value == secretHeight
+            return secretDimension ~= nil and value == secretDimension
         end,
-    })
+    }))
     fireEvent("config.live_resize.pew", resizeEnv, "PLAYER_ENTERING_WORLD")
+    resizeEnv.StatsProDB.characters["Player-1-RESIZE-OFFLINE"] = {
+        displayName = "Offline-Realm",
+        lastSeen = 1,
+        defaultProfileID = resizeEnv.StatsProDB.account.defaultProfileID,
+        specProfiles = { [71] = resizeEnv.StatsProDB.account.defaultProfileID },
+    }
     local rootBefore = deepCopy(resizeEnv.StatsProDB)
     local rootRef = resizeEnv.StatsProDB
     local accountRef = rootRef.account
@@ -10090,11 +10096,41 @@ do
     resizeAddon:OpenConfigMenu()
     local config = exists("config.live_resize.frame", resizeEnv.StatsProConfigFrame)
     local shell = exists("config.live_resize.shell", resizeTest.settingsShellState().shell)
+    local manager = exists("config.live_resize.manager", resizeEnv.StatsProProfileManager)
     local geometry = resizeTest.settingsDesignSnapshot().geometry
     eq("config.live_resize.first_open_current_height", config:GetHeight(), 450)
+    eq("config.live_resize.manager.first_width", manager:GetWidth(), 620)
+    eq("config.live_resize.manager.first_height", manager:GetHeight(), 425)
 
     config.SwitchToTab(3)
     shell.scroll:SetVerticalScroll(87)
+    callScript("config.live_resize.manager.open",
+        resizeEnv.StatsProManageProfilesButton, "OnClick")
+    local managerActions = exists(
+        "config.live_resize.manager.actions", resizeEnv.StatsProProfileActionsScroll)
+    local offlineRow = findFrame("config.live_resize.manager.offline_selection", resizeEnv,
+        function(frame)
+            return type(frame.profileContext) == "table"
+                and frame.profileContext.guid == "Player-1-RESIZE-OFFLINE"
+                and frame.profileContext.specID == 71
+        end)
+    callScript("config.live_resize.manager.select_offline", offlineRow, "OnClick")
+    callScript("config.live_resize.manager.dialog",
+        resizeEnv.StatsProProfileNewButton, "OnClick")
+    resizeEnv.StatsProProfileNameInput:SetText("Resize draft")
+    callScript("config.live_resize.manager.dialog_input",
+        resizeEnv.StatsProProfileNameInput, "OnTextChanged")
+    managerActions:SetVerticalScroll(47)
+    local managerStateBefore = resizeTest.profileUIState()
+    eq("config.live_resize.manager.selection_setup_guid",
+        managerStateBefore.selectedGUID, "Player-1-RESIZE-OFFLINE")
+    eq("config.live_resize.manager.selection_setup_spec", managerStateBefore.selectedSpecID, 71)
+    check("config.live_resize.manager.action_scroll_reachable",
+        managerActions.scrollChild:GetHeight() - (manager:GetHeight() - 176 - 88) > 47)
+    local managerPointsBefore = deepCopy(manager.points)
+    local specialFramesBefore = deepCopy(resizeEnv.UISpecialFrames)
+    local dialogBefore = resizeEnv.StatsProProfileOperationDialog
+    local blockerBefore = resizeEnv.StatsProProfileOperationBlocker
     local pointsBefore = deepCopy(config.points)
     local originalSetSize = config.SetSize
     local resizeCalls = 0
@@ -10102,13 +10138,21 @@ do
         resizeCalls = resizeCalls + 1
         originalSetSize(frame, width, height)
     end
+    local originalManagerSetSize = manager.SetSize
+    local managerResizeCalls = 0
+    manager.SetSize = function(frame, width, height)
+        managerResizeCalls = managerResizeCalls + 1
+        originalManagerSetSize(frame, width, height)
+    end
 
     local burstTimersBefore = #resizeEnv.__timers
-    resizeEnv.UIParent:SetSize(1024, 520)
+    resizeEnv.UIParent:SetSize(700, 520)
     fireEvent("config.live_resize.burst.display", resizeEnv, "DISPLAY_SIZE_CHANGED")
-    resizeEnv.UIParent:SetSize(1024, 480)
+    resizeEnv.UIParent:SetSize(520, 480)
     fireEvent("config.live_resize.burst.scale", resizeEnv, "UI_SCALE_CHANGED")
     eq("config.live_resize.burst.deferred", config:GetHeight(), 450)
+    eq("config.live_resize.manager.burst_deferred_width", manager:GetWidth(), 620)
+    eq("config.live_resize.manager.burst_deferred_height", manager:GetHeight(), 425)
     eq("config.live_resize.burst.two_callbacks", #resizeEnv.__timers, burstTimersBefore + 2)
     flushTimers("config.live_resize.burst.flush", resizeEnv, 0, 2)
     eq("config.live_resize.burst.one_apply", resizeCalls, 1)
@@ -10119,9 +10163,41 @@ do
     eq("config.live_resize.burst.scroll_child_preserved", shell.scroll.scrollChild, shell.scrollChild)
     assertDeepEqual("config.live_resize.burst.position_preserved", config.points, pointsBefore)
     eq("config.live_resize.burst.stays_visible", config:IsShown(), true)
+    eq("config.live_resize.manager.burst.one_apply", managerResizeCalls, 1)
+    eq("config.live_resize.manager.burst.latest_width", manager:GetWidth(), 468)
+    eq("config.live_resize.manager.burst.latest_height", manager:GetHeight(), 408)
+    eq("config.live_resize.manager.burst.detail_width",
+        resizeTest.profileUIState().detailProfileWidth, 182)
+    local managerStateAfter = resizeTest.profileUIState()
+    eq("config.live_resize.manager.burst.stays_visible", managerStateAfter.managerShown, true)
+    eq("config.live_resize.manager.burst.selection_guid",
+        managerStateAfter.selectedGUID, managerStateBefore.selectedGUID)
+    eq("config.live_resize.manager.burst.selection_spec",
+        managerStateAfter.selectedSpecID, managerStateBefore.selectedSpecID)
+    eq("config.live_resize.manager.burst.selection_profile",
+        managerStateAfter.selectedProfileID, managerStateBefore.selectedProfileID)
+    eq("config.live_resize.manager.burst.dialog", managerStateAfter.operationDialogShown, true)
+    eq("config.live_resize.manager.burst.blocker", managerStateAfter.operationBlockerShown, true)
+    eq("config.live_resize.manager.burst.dialog_identity",
+        resizeEnv.StatsProProfileOperationDialog, dialogBefore)
+    eq("config.live_resize.manager.burst.blocker_identity",
+        resizeEnv.StatsProProfileOperationBlocker, blockerBefore)
+    eq("config.live_resize.manager.burst.dialog_mode",
+        managerStateAfter.operationMode, managerStateBefore.operationMode)
+    eq("config.live_resize.manager.burst.dialog_kind",
+        managerStateAfter.operationKind, managerStateBefore.operationKind)
+    eq("config.live_resize.manager.burst.dialog_input",
+        managerStateAfter.nameInput, managerStateBefore.nameInput)
+    eq("config.live_resize.manager.burst.refresh_count",
+        managerStateAfter.refreshCount, managerStateBefore.refreshCount)
+    eq("config.live_resize.manager.burst.action_scroll", managerActions:GetVerticalScroll(), 47)
+    assertDeepEqual("config.live_resize.manager.burst.position", manager.points, managerPointsBefore)
+    assertDeepEqual("config.live_resize.manager.burst.special_frames",
+        resizeEnv.UISpecialFrames, specialFramesBefore)
 
     resizeCalls = 0
-    resizeEnv.UIParent:SetSize(1024, 280)
+    managerResizeCalls = 0
+    resizeEnv.UIParent:SetSize(300, 200)
     fireEvent("config.live_resize.minimum.display", resizeEnv, "DISPLAY_SIZE_CHANGED")
     flushTimers("config.live_resize.minimum.flush", resizeEnv, 0, 1)
     eq("config.live_resize.minimum.one_apply", resizeCalls, 1)
@@ -10138,28 +10214,90 @@ do
         shell.profileHeader)
     eq("config.live_resize.minimum.close_parent", shell.closeX:GetParent(), config)
     eq("config.live_resize.minimum.header_links_parent", shell.headerLinkGroup:GetParent(), config)
+    eq("config.live_resize.manager.minimum.one_apply", managerResizeCalls, 1)
+    eq("config.live_resize.manager.minimum.width", manager:GetWidth(), 430)
+    eq("config.live_resize.manager.minimum.height", manager:GetHeight(), 300)
+    eq("config.live_resize.manager.minimum.detail_width",
+        resizeTest.profileUIState().detailProfileWidth, 144)
+    check("config.live_resize.manager.minimum.list_viewport",
+        manager:GetHeight() - 76 - 54 > 0)
+    check("config.live_resize.manager.minimum.action_viewport",
+        manager:GetHeight() - 176 - 88 > 0)
 
     local stableHeight = config:GetHeight()
+    local stableManagerWidth, stableManagerHeight = manager:GetWidth(), manager:GetHeight()
+    local stableDetailWidth = resizeTest.profileUIState().detailProfileWidth
+    managerResizeCalls = 0
+    resizeEnv.UIParent.width = math.huge
+    fireEvent("config.live_resize.invalid_width.request", resizeEnv, "DISPLAY_SIZE_CHANGED")
+    flushTimers("config.live_resize.invalid_width.flush", resizeEnv, 0, 1)
+    eq("config.live_resize.invalid_width.no_manager_apply", managerResizeCalls, 0)
+    eq("config.live_resize.invalid_width.manager_width", manager:GetWidth(), stableManagerWidth)
+    eq("config.live_resize.invalid_width.manager_height", manager:GetHeight(), stableManagerHeight)
+    eq("config.live_resize.invalid_width.detail_width",
+        resizeTest.profileUIState().detailProfileWidth, stableDetailWidth)
+
+    resizeEnv.UIParent.width = 1024
     resizeEnv.UIParent.height = math.huge
     fireEvent("config.live_resize.invalid_parent.request", resizeEnv, "DISPLAY_SIZE_CHANGED")
     flushTimers("config.live_resize.invalid_parent.flush", resizeEnv, 0, 1)
     eq("config.live_resize.invalid_parent.preserved", config:GetHeight(), stableHeight)
+    eq("config.live_resize.invalid_parent.manager_width", manager:GetWidth(), stableManagerWidth)
+    eq("config.live_resize.invalid_parent.manager_height", manager:GetHeight(), stableManagerHeight)
+    eq("config.live_resize.invalid_parent.detail_width",
+        resizeTest.profileUIState().detailProfileWidth, stableDetailWidth)
 
-    secretHeight = 777
-    resizeEnv.UIParent.height = secretHeight
+    resizeEnv.UIParent:SetSize(300, 200)
+    local cleanGetWidth = resizeEnv.UIParent.GetWidth
+    resizeEnv.UIParent.GetWidth = function() error("width unavailable") end
+    fireEvent("config.live_resize.width_error.request", resizeEnv, "DISPLAY_SIZE_CHANGED")
+    flushTimers("config.live_resize.width_error.flush", resizeEnv, 0, 1)
+    eq("config.live_resize.width_error.manager_width", manager:GetWidth(), stableManagerWidth)
+    eq("config.live_resize.width_error.manager_height", manager:GetHeight(), stableManagerHeight)
+    eq("config.live_resize.width_error.detail_width",
+        resizeTest.profileUIState().detailProfileWidth, stableDetailWidth)
+    resizeEnv.UIParent.GetWidth = cleanGetWidth
+
+    secretDimension = 777
+    resizeEnv.UIParent:SetSize(secretDimension, 280)
+    fireEvent("config.live_resize.secret_width.request", resizeEnv, "UI_SCALE_CHANGED")
+    flushTimers("config.live_resize.secret_width.flush", resizeEnv, 0, 1)
+    eq("config.live_resize.secret_width.manager_width", manager:GetWidth(), stableManagerWidth)
+    eq("config.live_resize.secret_width.manager_height", manager:GetHeight(), stableManagerHeight)
+    eq("config.live_resize.secret_width.detail_width",
+        resizeTest.profileUIState().detailProfileWidth, stableDetailWidth)
+
+    resizeEnv.UIParent:SetSize(1024, secretDimension)
     fireEvent("config.live_resize.secret_parent.request", resizeEnv, "UI_SCALE_CHANGED")
     flushTimers("config.live_resize.secret_parent.flush", resizeEnv, 0, 1)
     eq("config.live_resize.secret_parent.preserved", config:GetHeight(), stableHeight)
-    secretHeight = nil
+    eq("config.live_resize.secret_parent.manager_width", manager:GetWidth(), stableManagerWidth)
+    eq("config.live_resize.secret_parent.manager_height", manager:GetHeight(), stableManagerHeight)
+    eq("config.live_resize.secret_parent.detail_width",
+        resizeTest.profileUIState().detailProfileWidth, stableDetailWidth)
+    secretDimension = nil
 
     config:Hide()
     resizeEnv.UIParent:SetSize(2560, 1440)
+    managerResizeCalls = 0
     fireEvent("config.live_resize.hidden.request", resizeEnv, "DISPLAY_SIZE_CHANGED")
     flushTimers("config.live_resize.hidden.flush", resizeEnv, 0, 1)
     eq("config.live_resize.hidden.stays_hidden", config:IsShown(), false)
     eq("config.live_resize.hidden.current_height", config:GetHeight(), geometry.maxHeight)
+    eq("config.live_resize.manager.hidden.stays_hidden", manager:IsShown(), false)
+    eq("config.live_resize.manager.hidden.one_apply", managerResizeCalls, 1)
+    eq("config.live_resize.manager.hidden.width", manager:GetWidth(), 620)
+    eq("config.live_resize.manager.hidden.height", manager:GetHeight(), 440)
+    eq("config.live_resize.manager.hidden.detail_width",
+        resizeTest.profileUIState().detailProfileWidth, 334)
     config:Show()
     eq("config.live_resize.hidden.show_height", config:GetHeight(), geometry.maxHeight)
+    callScript("config.live_resize.manager.reopen",
+        resizeEnv.StatsProManageProfilesButton, "OnClick")
+    eq("config.live_resize.manager.reopen_shown", manager:IsShown(), true)
+    eq("config.live_resize.manager.reopen_width", manager:GetWidth(), 620)
+    eq("config.live_resize.manager.reopen_height", manager:GetHeight(), 440)
+    eq("config.live_resize.manager.reopen_no_duplicate_apply", managerResizeCalls, 1)
 
     local onUpdateAfter = 0
     for _, frame in ipairs(resizeEnv.__frames) do
@@ -10186,9 +10324,18 @@ do
     local rootBefore = deepCopy(firstReadEnv.StatsProDB)
     firstReadAddon:OpenConfigMenu()
     local config = exists("config.live_resize.first_secret.frame", firstReadEnv.StatsProConfigFrame)
+    local manager = exists(
+        "config.live_resize.first_secret.manager", firstReadEnv.StatsProProfileManager)
     local geometry = firstReadTest.settingsDesignSnapshot().geometry
     eq("config.live_resize.first_secret.safe_width", config:GetWidth(), geometry.windowWidth)
     eq("config.live_resize.first_secret.safe_height", config:GetHeight(), geometry.minHeight)
+    eq("config.live_resize.first_secret.manager_width",
+        manager:GetWidth(), geometry.managerMinWidth)
+    eq("config.live_resize.first_secret.manager_height",
+        manager:GetHeight(), geometry.managerMinHeight)
+    eq("config.live_resize.first_secret.manager_detail_width",
+        firstReadTest.profileUIState().detailProfileWidth,
+        geometry.managerMinWidth - geometry.managerDetailInset)
     check("config.live_resize.first_secret.scroll_reachable",
         config:GetHeight() - geometry.scrollTop - geometry.scrollBottom > 0)
 
@@ -10197,6 +10344,10 @@ do
     fireEvent("config.live_resize.first_secret.recover", firstReadEnv, "DISPLAY_SIZE_CHANGED")
     flushTimers("config.live_resize.first_secret.recover_flush", firstReadEnv, 0, 1)
     eq("config.live_resize.first_secret.recovered_height", config:GetHeight(), 450)
+    eq("config.live_resize.first_secret.manager_recovered_width", manager:GetWidth(), 620)
+    eq("config.live_resize.first_secret.manager_recovered_height", manager:GetHeight(), 425)
+    eq("config.live_resize.first_secret.manager_recovered_detail_width",
+        firstReadTest.profileUIState().detailProfileWidth, 334)
     assertDeepEqual("config.live_resize.first_secret.zero_writes", firstReadEnv.StatsProDB, rootBefore)
 end
 

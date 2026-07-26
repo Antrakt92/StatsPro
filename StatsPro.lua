@@ -8579,13 +8579,13 @@ local EVENT_HANDLERS = {
     PLAYER_EQUIPMENT_CHANGED    = function() addon.durabilityRuntime.MarkDirty(); itemLevelDirty = true end,
     BAG_UPDATE_DELAYED          = function() itemLevelDirty = true end,
     DISPLAY_SIZE_CHANGED        = function()
-        if type(addon.settingsDesign.RequestConfigFrameResize) == "function" then
-            addon.settingsDesign.RequestConfigFrameResize()
+        if type(addon.settingsDesign.RequestResponsiveFrameResize) == "function" then
+            addon.settingsDesign.RequestResponsiveFrameResize()
         end
     end,
     UI_SCALE_CHANGED            = function()
-        if type(addon.settingsDesign.RequestConfigFrameResize) == "function" then
-            addon.settingsDesign.RequestConfigFrameResize()
+        if type(addon.settingsDesign.RequestResponsiveFrameResize) == "function" then
+            addon.settingsDesign.RequestResponsiveFrameResize()
         end
     end,
     -- WHY: bag/equipment events can precede Blizzard's asynchronous average-iLvl
@@ -9316,6 +9316,9 @@ addon.settingsDesign = {
         geometry = {
             windowWidth = 500, minHeight = 260, maxHeight = 600,
             parentHeightRatio = 0.90, outerInset = 12,
+            managerMinWidth = 430, managerMaxWidth = 620, managerWidthRatio = 0.90,
+            managerMinHeight = 300, managerMaxHeight = 440, managerHeightRatio = 0.85,
+            managerDetailInset = 286,
             titleSurfaceInset = 5, titleSurfaceHeight = 35, titleHeight = 40,
             titleTextInset = 16, titleTextTop = 11,
             profileInset = 14, profileTop = 44, profileHeight = 64,
@@ -10239,24 +10242,35 @@ local function RunCoalesced(key, delay, fn)
     end)
 end
 
-function addon.settingsDesign.RequestConfigFrameResize()
-    if type(addon.settingsDesign.applyConfigFrameSize) ~= "function" then return end
-    RunCoalesced("configFrameSize", 0, function()
-        local apply = addon.settingsDesign.applyConfigFrameSize
-        if type(apply) == "function" then apply() end
+function addon.settingsDesign.RequestResponsiveFrameResize()
+    if type(addon.settingsDesign.applyConfigFrameSize) ~= "function"
+        and type(addon.profileUI.ApplyManagerSize) ~= "function" then return end
+    RunCoalesced("responsiveFrameSize", 0, function()
+        local applyConfig = addon.settingsDesign.applyConfigFrameSize
+        if type(applyConfig) == "function" then applyConfig() end
+        local applyManager = addon.profileUI.ApplyManagerSize
+        if type(applyManager) == "function" then applyManager() end
     end)
 end
 
-function addon.settingsDesign.ReadUIParentHeight()
-    local getter = UIParent and UIParent.GetHeight
+function addon.settingsDesign.ReadUIParentDimension(getterName)
+    local getter = UIParent and UIParent[getterName]
     if type(getter) ~= "function" then return nil end
-    local readOK, parentHeight = pcall(getter, UIParent)
+    local readOK, dimension = pcall(getter, UIParent)
     if not readOK then return nil end
-    local secretOK, secret = pcall(issecretvalue, parentHeight)
-    if not secretOK or secret or not IsFiniteNumber(parentHeight) or parentHeight <= 0 then
+    local secretOK, secret = pcall(issecretvalue, dimension)
+    if not secretOK or secret or not IsFiniteNumber(dimension) or dimension <= 0 then
         return nil
     end
-    return parentHeight
+    return dimension
+end
+
+function addon.settingsDesign.ReadUIParentHeight()
+    return addon.settingsDesign.ReadUIParentDimension("GetHeight")
+end
+
+function addon.settingsDesign.ReadUIParentWidth()
+    return addon.settingsDesign.ReadUIParentDimension("GetWidth")
 end
 
 -- CreateConfigSlider: standard label-on-top + horizontal slider pattern used across
@@ -12098,11 +12112,25 @@ function addon.profileUI.BuildSettingsUI(owner)
     manager:Hide()
 
     local detailProfile
+    manager:SetSize(geometry.managerMinWidth, geometry.managerMinHeight)
+    ui.managerWidth = geometry.managerMinWidth
+    ui.managerHeight = geometry.managerMinHeight
     function ui.ApplyManagerSize()
-        local width = math.max(430, math.min(620, UIParent:GetWidth() * 0.9))
-        local height = math.max(300, math.min(440, UIParent:GetHeight() * 0.85))
-        manager:SetSize(width, height)
-        if detailProfile then detailProfile:SetWidth(math.max(1, width - 286)) end
+        local parentWidth = addon.settingsDesign.ReadUIParentWidth()
+        local parentHeight = addon.settingsDesign.ReadUIParentHeight()
+        if not parentWidth or not parentHeight then return false end
+        local width = math.max(geometry.managerMinWidth,
+            math.min(geometry.managerMaxWidth, parentWidth * geometry.managerWidthRatio))
+        local height = math.max(geometry.managerMinHeight,
+            math.min(geometry.managerMaxHeight, parentHeight * geometry.managerHeightRatio))
+        if ui.managerWidth ~= width or ui.managerHeight ~= height then
+            manager:SetSize(width, height)
+            ui.managerWidth, ui.managerHeight = width, height
+        end
+        if detailProfile then
+            detailProfile:SetWidth(math.max(1, width - geometry.managerDetailInset))
+        end
+        return true
     end
     ui.ApplyManagerSize()
     manager:HookScript("OnShow", function()
@@ -12184,7 +12212,7 @@ function addon.profileUI.BuildSettingsUI(owner)
     detailProfile = manager:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(detailProfile, 15, "OUTLINE")
     detailProfile:SetPoint("TOPLEFT", assignedLabel, "BOTTOMLEFT", 0, -8)
-    detailProfile:SetWidth(math.max(1, manager:GetWidth() - 286))
+    detailProfile:SetWidth(math.max(1, ui.managerWidth - geometry.managerDetailInset))
     detailProfile:SetHeight(20)
     detailProfile:SetJustifyH("LEFT")
     detailProfile:SetWordWrap(false)

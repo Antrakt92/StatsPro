@@ -62,7 +62,8 @@ function Select-StatsProOrdinalMarketplaceVersion {
     param(
         [string[]]$AvailableVersions,
         [Parameter(Mandatory = $true)]
-        [string]$RequestedVersion
+        [string]$RequestedVersion,
+        [switch]$AllowLegacyTwoComponentVersions
     )
 
     if ($RequestedVersion -notmatch '^\d+\.\d+\.\d+$') {
@@ -71,11 +72,19 @@ function Select-StatsProOrdinalMarketplaceVersion {
 
     $comparer = [System.StringComparer]::Ordinal
     $seen = [System.Collections.Generic.HashSet[string]]::new($comparer)
+    # SYNC: BigWigs Packager compares the raw WoWInterface IDs ordinally. The
+    # compatibility endpoint retains historical two-component Retail IDs.
+    $availableVersionPattern = if ($AllowLegacyTwoComponentVersions) {
+        '^\d+\.\d+(?:\.\d+)?$'
+    }
+    else {
+        '^\d+\.\d+\.\d+$'
+    }
     $sawExact = $false
     $bestLower = $null
     $bestOverall = $null
     foreach ($candidate in @($AvailableVersions)) {
-        if ([string]::IsNullOrWhiteSpace($candidate) -or $candidate -notmatch '^\d+\.\d+\.\d+$') {
+        if ([string]::IsNullOrWhiteSpace($candidate) -or $candidate -notmatch $availableVersionPattern) {
             throw "Marketplace compatibility response contains malformed version '$candidate'."
         }
         if (-not $seen.Add($candidate)) {
@@ -131,7 +140,8 @@ function Resolve-StatsProWowInterfaceVersions {
     foreach ($requiredVersion in @($RequiredVersions)) {
         $chosen = Select-StatsProOrdinalMarketplaceVersion `
             -AvailableVersions $AvailableVersions `
-            -RequestedVersion $requiredVersion
+            -RequestedVersion $requiredVersion `
+            -AllowLegacyTwoComponentVersions
         if (-not (Test-StatsProMarketplaceVersionSelection `
                 -RequestedVersion $requiredVersion `
                 -SelectedVersion $chosen)) {

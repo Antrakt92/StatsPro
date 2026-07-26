@@ -14060,7 +14060,6 @@ do
         ["Delete profile \"%s\" and replace all references with \"%s\"? This affects %d assigned specs and %d other references."] = { "A", "B", 2, 3 },
         ["Swap \"%s\" and \"%s\"? Their profile settings stay unchanged."] = { "A", "B" },
         ["Rename shared profile \"%s\" to \"%s\"? This affects %d assigned specs and %d other references."] = { "A", "B", 2, 3 },
-        ["Copy settings from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = { "A", "B", 2, 3 },
         ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = { "Stats", "A", "B", 2, 3 },
         ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = { "A", 2, 3 },
         ["Delete unused profile \"%s\"?"] = { "A" },

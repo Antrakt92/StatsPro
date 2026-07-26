@@ -15,8 +15,8 @@ addon.wipeRuntime = {
 }
 addon.developerLinks = {
     popupKey = "STATSPRO_COPY_DEVELOPER_LINK",
-    koFi = {
-        key = "koFi",
+    koFiLink = {
+        key = "koFiLink",
         label = "Ko-fi",
         url = "https://ko-fi.com/antrakt92",
     },
@@ -12720,7 +12720,7 @@ function addon:OpenConfigMenu()
     contactButton:SetPoint("RIGHT", headerLinkGroup, "RIGHT", 0, 0)
 
     local koFiButton = self.settingsDesign.CreateDeveloperLinkButton(
-        headerLinkGroup, "StatsProKoFiLinkButton", "koFi", {
+        headerLinkGroup, "StatsProKoFiLinkButton", "koFiLink", {
             texture = "Interface\\COMMON\\friendship-heart",
             texCoords = { 0.21875, 0.78125, 0.09375, 0.6875 },
         }, { 1, 0.36, 0.35, 1 })

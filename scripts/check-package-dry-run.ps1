@@ -415,29 +415,21 @@ function Assert-StatsProInGameSolicitationBoundary {
     }
     $runtimeFiles = @(Get-ChildItem -LiteralPath $Root -Recurse -File |
         Where-Object { $_.Extension -in ".lua", ".toc" })
-    $approvedKoFiBlock = @(
-        '    koFi = {'
-        '        key = "koFi",'
-        '        label = "Ko-fi",'
-        '        url = "https://ko-fi.com/antrakt92",'
-        '    },'
-    ) -join "`n"
-    $redactedKoFiBlock = @(
-        '    approvedLink = {'
-        '        key = "approvedLink",'
-        '        label = "Approved",'
-        '        url = "https://example.invalid",'
-        '    },'
-    ) -join "`n"
+    $approvedKoFiLabel = 'label = "Ko-fi"'
+    $approvedKoFiUrl = 'url = "https://ko-fi.com/antrakt92"'
     foreach ($file in $runtimeFiles) {
         $text = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
         $relative = [System.IO.Path]::GetRelativePath($Root, $file.FullName) -replace "\\", "/"
         $scanText = $text -replace "\r\n?", "`n"
         if ([System.StringComparer]::Ordinal.Equals($relative, "StatsPro.lua")) {
-            $approvedCount = [regex]::Matches(
-                $scanText, [regex]::Escape($approvedKoFiBlock)).Count
-            if ($approvedCount -eq 1) {
-                $scanText = $scanText.Replace($approvedKoFiBlock, $redactedKoFiBlock)
+            $labelCount = [regex]::Matches(
+                $scanText, [regex]::Escape($approvedKoFiLabel)).Count
+            $urlCount = [regex]::Matches(
+                $scanText, [regex]::Escape($approvedKoFiUrl)).Count
+            if ($labelCount -eq 1 -and $urlCount -eq 1) {
+                $scanText = $scanText.Replace($approvedKoFiLabel, 'label = "Approved"')
+                $scanText = $scanText.Replace(
+                    $approvedKoFiUrl, 'url = "https://example.invalid"')
             }
         }
         foreach ($rule in $rules.GetEnumerator()) {
@@ -609,12 +601,14 @@ steps:
         } "not repeatable"
 
         $runtimePath = Join-Path $packageRoot "StatsPro.lua"
+        Copy-Item -LiteralPath (Join-Path $sourceRoot "StatsPro.lua") -Destination $runtimePath
+        Assert-StatsProInGameSolicitationBoundary -Root $packageRoot
         Set-Content -LiteralPath $runtimePath -Value 'local contact = "https://github.com/example/issues"' -Encoding UTF8
         Assert-StatsProInGameSolicitationBoundary -Root $packageRoot
         $approvedKoFiSample = @(
             'local links = {'
-            '    koFi = {'
-            '        key = "koFi",'
+            '    koFiLink = {'
+            '        key = "koFiLink",'
             '        label = "Ko-fi",'
             '        url = "https://ko-fi.com/antrakt92",'
             '    },'

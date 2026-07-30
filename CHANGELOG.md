@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.10.21 - 30-Jul-2026 — Settings, profiles, and font polish
+
+### Fixed
+
+- **Late-loading SharedMedia fonts now keep picker previews, tooltips, and ordering aligned as the catalogue fills in.** Thanks again to [@tflo](https://github.com/tflo) for the exceptionally detailed font report and diagnostics.
+- **Profile Manager actions now stay inside the available pane at narrow window sizes, and renamed profiles refresh their visible tooltips immediately.**
+- **Settings dialogs now release hidden text focus and close only StatsPro-owned dropdowns, avoiding stale input or interference with another addon's menu.**
+- **SwiftStats imports now keep account-wide choices separate and correctly mark imported appearance settings as custom.**
+
 ## 1.10.20 - 30-Jul-2026 — SharedMedia font startup recovery
 
 ### Fixed

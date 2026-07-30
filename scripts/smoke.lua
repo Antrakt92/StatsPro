@@ -340,6 +340,7 @@ local function makeFrame(name, setFontResult, parent)
         self.font, self.fontSize, self.fontFlags = font, size, flags
         return true
     end
+    function frame:GetFont() return self.font, self.fontSize, self.fontFlags end
     function frame:SetJustifyH(value) self.justifyH = value end
     function frame:SetJustifyV(value) self.justifyV = value end
     function frame:SetTextColor(r, g, b, a) self.textColor = { r = r, g = g, b = b, a = a } end
@@ -704,6 +705,9 @@ local function makeEnv(locale, opts)
             if field == "Version" then return addonMetadataVersion end
             return nil
         end,
+    }
+    env.C_UIFileAsset = {
+        IsKnownFile = opts.isKnownFontFile or function() return false end,
     }
     env.C_Timer = {
         After = function(delay, fn)
@@ -7515,6 +7519,162 @@ eq("fonts.unknown_path_latin_only.hangul", test.fontSupports("Interface\\AddOns\
 eq("fonts.uncataloged_path_is_not_usable", test.usableFontPath("Interface\\AddOns\\Media\\Mystery.ttf"), nil)
 
 do
+    local coldPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\FiraSans-Regular.ttf"
+    local coldEnv, coldAddon, coldTest = loadStatsPro("enUS", {
+        statsProDB = {
+            font = coldPath,
+            fontBeforeAutoSwitch = coldPath,
+        },
+        lsmFonts = { { name = "Fira Sans", path = coldPath } },
+        setFontResult = function(frame, font, size, flags)
+            if font == coldPath then
+                -- The client can report false for a loose font that GetFont already
+                -- exposes as the effective face on the FontString.
+                frame.font, frame.fontSize, frame.fontFlags = font, size, flags
+                return false
+            end
+            return true
+        end,
+    })
+    fireEvent("fonts.false_with_matching_readback.pew", coldEnv, "PLAYER_ENTERING_WORLD")
+    eq("fonts.false_with_matching_readback.preserves_db", activeSettings(coldEnv).font, coldPath)
+    eq("fonts.false_with_matching_readback.preserves_saved_font",
+        activeSettings(coldEnv).fontBeforeAutoSwitch, coldPath)
+    eq("fonts.false_with_matching_readback.runtime_font", coldTest.currentRuntimeFontPath(), coldPath)
+    eq("fonts.false_with_matching_readback.main_panel", coldTest.panelFontState().mainAppliedFont, coldPath)
+    local ok, err = pcall(function() coldAddon:OpenConfigMenu() end)
+    check("fonts.false_with_matching_readback.open", ok, err)
+    runScript("fonts.false_with_matching_readback.picker_open",
+        coldEnv.StatsProFontDropdownButton, "OnClick", coldEnv.StatsProFontDropdownButton)
+    eq("fonts.false_with_matching_readback.picker_entry",
+        countFrameField(coldEnv, "fontName", "Fira Sans"), 1)
+end
+
+do
+    local delayedPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\FiraSans-Medium.ttf"
+    local ready = false
+    local delayedEnv, delayedAddon, delayedTest = loadStatsPro("enUS", {
+        statsProDB = {
+            font = delayedPath,
+            fontBeforeAutoSwitch = delayedPath,
+        },
+        lsmFonts = { { name = "Fira Sans Medium", path = delayedPath } },
+        setFontResult = function(frame, font, size, flags)
+            if font == delayedPath then
+                if not ready then return false end
+                frame.font, frame.fontSize, frame.fontFlags = font, size, flags
+                return false
+            end
+            return true
+        end,
+    })
+    fireEvent("fonts.known_transient_false.pew", delayedEnv, "PLAYER_ENTERING_WORLD")
+    eq("fonts.known_transient_false.pending_saved_font",
+        delayedTest.fontRuntimeState().pendingSavedFont, delayedPath)
+    eq("fonts.known_transient_false.preserves_db", activeSettings(delayedEnv).font, delayedPath)
+    eq("fonts.known_transient_false.preserves_saved_font",
+        activeSettings(delayedEnv).fontBeforeAutoSwitch, delayedPath)
+    eq("fonts.known_transient_false.runtime_fallback",
+        delayedTest.currentRuntimeFontPath(), "Fonts\\FRIZQT__.TTF")
+    eq("fonts.known_transient_false.one_retry", #delayedEnv.__timers, 1)
+    eq("fonts.known_transient_false.first_delay", delayedEnv.__timers[1].delay, 0.2)
+
+    local ok, err = pcall(function() delayedAddon:OpenConfigMenu() end)
+    check("fonts.known_transient_false.open", ok, err)
+    runScript("fonts.known_transient_false.picker_pending_open",
+        delayedEnv.StatsProFontDropdownButton, "OnClick", delayedEnv.StatsProFontDropdownButton)
+    eq("fonts.known_transient_false.picker_omits_pending",
+        countFrameField(delayedEnv, "fontName", "Fira Sans Medium"), 0)
+    delayedEnv.StatsProFontPicker:Hide()
+
+    ready = true
+    flushTimers("fonts.known_transient_false.retry", delayedEnv, 0.2)
+    eq("fonts.known_transient_false.retry_db", activeSettings(delayedEnv).font, delayedPath)
+    eq("fonts.known_transient_false.retry_runtime", delayedTest.currentRuntimeFontPath(), delayedPath)
+    eq("fonts.known_transient_false.retry_main_panel", delayedTest.panelFontState().mainAppliedFont, delayedPath)
+    eq("fonts.known_transient_false.no_more_retries", #delayedEnv.__timers, 0)
+    runScript("fonts.known_transient_false.picker_recovered_open",
+        delayedEnv.StatsProFontDropdownButton, "OnClick", delayedEnv.StatsProFontDropdownButton)
+    eq("fonts.known_transient_false.picker_rebuilds_same_lsm_length",
+        countFrameField(delayedEnv, "fontName", "Fira Sans Medium"), 1)
+end
+
+do
+    local neverPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\NeverReady.ttf"
+    local neverEnv, _, neverTest = loadStatsPro("enUS", {
+        statsProDB = { font = neverPath },
+        lsmFonts = { { name = "Never Ready", path = neverPath } },
+        setFontResult = function(_, font)
+            if font == neverPath then return false end
+            return true
+        end,
+    })
+    fireEvent("fonts.pending_retry_bound.pew", neverEnv, "PLAYER_ENTERING_WORLD")
+    local retryDelays = { 0.2, 1, 3, 5 }
+    for attempt, delay in ipairs(retryDelays) do
+        eq("fonts.pending_retry_bound.timer_count." .. attempt, #neverEnv.__timers, 1)
+        eq("fonts.pending_retry_bound.delay." .. attempt, neverEnv.__timers[1].delay, delay)
+        flushTimers("fonts.pending_retry_bound.timer." .. attempt, neverEnv, delay, 1)
+    end
+    eq("fonts.pending_retry_bound.no_fifth_timer", #neverEnv.__timers, 0)
+    eq("fonts.pending_retry_bound.preserves_db", activeSettings(neverEnv).font, neverPath)
+    eq("fonts.pending_retry_bound.runtime_fallback",
+        neverTest.currentRuntimeFontPath(), "Fonts\\FRIZQT__.TTF")
+    eq("fonts.pending_retry_bound.attempts", neverTest.fontRuntimeState().pendingRetryAttempt, 4)
+    eq("fonts.pending_retry_bound.pending_saved_font",
+        neverTest.fontRuntimeState().pendingSavedFont, neverPath)
+end
+
+do
+    local stalePath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\StaleRetry.ttf"
+    local staleEnv, _, staleTest = loadStatsPro("enUS", {
+        statsProDB = { font = stalePath },
+        lsmFonts = { { name = "Stale Retry", path = stalePath } },
+        setFontResult = function(_, font)
+            if font == stalePath then return false end
+            return true
+        end,
+    })
+    fireEvent("fonts.pending_retry_cancel.pew", staleEnv, "PLAYER_ENTERING_WORLD")
+    eq("fonts.pending_retry_cancel.initial_timer", #staleEnv.__timers, 1)
+    local applied = staleTest.applyCommittedTextStyle("Fonts\\ARIALN.TTF", 14, true, false)
+    eq("fonts.pending_retry_cancel.new_font_applied", applied, true)
+    eq("fonts.pending_retry_cancel.new_font_saved",
+        activeSettings(staleEnv).font, "Fonts\\ARIALN.TTF")
+    eq("fonts.pending_retry_cancel.old_timer_still_queued", #staleEnv.__timers, 1)
+    flushTimers("fonts.pending_retry_cancel.old_timer", staleEnv, 0.2, 1)
+    eq("fonts.pending_retry_cancel.no_new_timer", #staleEnv.__timers, 0)
+    eq("fonts.pending_retry_cancel.db_unchanged",
+        activeSettings(staleEnv).font, "Fonts\\ARIALN.TTF")
+    eq("fonts.pending_retry_cancel.runtime_unchanged",
+        staleTest.currentRuntimeFontPath(), "Fonts\\ARIALN.TTF")
+    eq("fonts.pending_retry_cancel.pending_cleared",
+        staleTest.fontRuntimeState().pendingSavedFont, nil)
+end
+
+do
+    local guardedPath = "Fonts\\ColdGuarded.ttf"
+    local guardedEnv, _, guardedTest = loadStatsPro("enUS", {
+        statsProDB = { font = guardedPath },
+        standardTextFont = guardedPath,
+        isKnownFontFile = function()
+            error("synthetic C_UIFileAsset taint failure")
+        end,
+        setFontResult = function(_, font)
+            if font == guardedPath then return false end
+            return true
+        end,
+    })
+    fireEvent("fonts.known_asset_probe_failure.pew", guardedEnv, "PLAYER_ENTERING_WORLD")
+    eq("fonts.known_asset_probe_failure.preserves_db", activeSettings(guardedEnv).font, guardedPath)
+    eq("fonts.known_asset_probe_failure.runtime_fallback",
+        guardedTest.currentRuntimeFontPath(), "Fonts\\FRIZQT__.TTF")
+    eq("fonts.known_asset_probe_failure.pending",
+        guardedTest.fontRuntimeState().pendingSavedFont, guardedPath)
+    eq("fonts.known_asset_probe_failure.retry", #guardedEnv.__timers, 1)
+end
+
+do
     local dangling = "B – C"
     local danglingCalls = 0
     local coldEnv, _, coldTest = loadStatsPro("enUS", {
@@ -7649,9 +7809,11 @@ do
             return true
         end,
     })
-    fireEvent("fonts.cataloged_but_unloadable_saved_path.pew", savedEnv, "PLAYER_ENTERING_WORLD")
-    eq("fonts.cataloged_but_unloadable_saved_path.probed_once", brokenCalls, 1)
-    eq("fonts.cataloged_but_unloadable_saved_path.cleared", activeSettings(savedEnv).fontBeforeAutoSwitch, nil)
+    fireEvent("fonts.cataloged_false_saved_path.pew", savedEnv, "PLAYER_ENTERING_WORLD")
+    check("fonts.cataloged_false_saved_path.probed", brokenCalls > 0,
+        "expected the registered loose font to be probed")
+    eq("fonts.cataloged_false_saved_path.preserved",
+        activeSettings(savedEnv).fontBeforeAutoSwitch, brokenSaved)
 end
 
 do
@@ -7685,7 +7847,7 @@ do
     runScript("fonts.lsm_picker_open", lsmEnv.StatsProFontDropdownButton, "OnClick", lsmEnv.StatsProFontDropdownButton)
     eq("fonts.lsm_picker_includes_registered_name", countFrameField(lsmEnv, "fontName", "Noto Sans CJK"), 1)
     eq("fonts.lsm_picker_filters_unloadable_registration", countFrameField(lsmEnv, "fontName", "Broken Registration"), 0)
-    eq("fonts.lsm_picker_probes_unloadable_registration_once", brokenFontCalls, 1)
+    eq("fonts.lsm_picker_retries_ambiguous_registration", brokenFontCalls, 2)
     local lsmFontButton = findFrame("fonts.lsm_picker_registered_button", lsmEnv, function(frame)
         return frame.fontName == "Noto Sans CJK"
     end)
@@ -7957,14 +8119,27 @@ do
         staleEnv.StatsProFontDropdown.dropdownText, "Stale After Load")
     staleNow = true
     changeSlider("fonts.runtime_failure_fallback_caption.font_size", staleEnv.StatsProFontSlider, 18)
-    eq("fonts.runtime_failure_fallback_caption.db_font", activeSettings(staleEnv).font, "Fonts\\FRIZQT__.TTF")
+    eq("fonts.runtime_failure_fallback_caption.db_font_preserved", activeSettings(staleEnv).font, stalePath)
     eq("fonts.runtime_failure_fallback_caption.db_size", activeSettings(staleEnv).fontSize, 18)
     eq("fonts.runtime_failure_fallback_caption.runtime_font",
         staleTest.currentRuntimeFontPath(), "Fonts\\FRIZQT__.TTF")
     eq("fonts.runtime_failure_fallback_caption.panel_font",
         staleTest.panelFontState().mainAppliedFont, "Fonts\\FRIZQT__.TTF")
-    eq("fonts.runtime_failure_fallback_caption.caption",
-        staleEnv.StatsProFontDropdown.dropdownText, "Friz Quadrata TT")
+    eq("fonts.runtime_failure_fallback_caption.caption_preserves_preference",
+        staleEnv.StatsProFontDropdown.dropdownText, "Stale After Load")
+    eq("fonts.runtime_failure_fallback_caption.retry_count", #staleEnv.__timers, 1)
+    eq("fonts.runtime_failure_fallback_caption.retry_delay", staleEnv.__timers[1].delay, 0.2)
+
+    staleNow = false
+    flushTimers("fonts.runtime_failure_fallback_caption.retry", staleEnv, 0.2, 1)
+    eq("fonts.runtime_failure_fallback_caption.recovered_db", activeSettings(staleEnv).font, stalePath)
+    eq("fonts.runtime_failure_fallback_caption.recovered_runtime",
+        staleTest.currentRuntimeFontPath(), stalePath)
+    eq("fonts.runtime_failure_fallback_caption.recovered_panel",
+        staleTest.panelFontState().mainAppliedFont, stalePath)
+    eq("fonts.runtime_failure_fallback_caption.recovered_caption",
+        staleEnv.StatsProFontDropdown.dropdownText, "Stale After Load")
+    eq("fonts.runtime_failure_fallback_caption.no_more_retries", #staleEnv.__timers, 0)
 end
 
 do

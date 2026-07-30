@@ -32,7 +32,7 @@ read_globals = {
     -- Frame / UI
     "CreateFrame", "UIParent", "BackdropTemplateMixin",
     "SettingsPanel", "HideUIPanel", "Settings",
-    "C_Timer", "C_AddOns", "InCombatLockdown",
+    "C_Timer", "C_AddOns", "C_UIFileAsset", "InCombatLockdown",
     "UIDropDownMenu_SetText", "CloseDropDownMenus",
     "DurabilityFrame", "MERCHANT_SHOW", "PaperDollFrame_GetArmorReduction",
     "GameFontNormalLarge", "GameFontHighlight", "GameFontHighlightSmall",

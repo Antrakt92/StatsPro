@@ -2768,8 +2768,15 @@ end
 
 local function GetFontDB()
     local db = addon.dbRuntime.GetActiveSettings()
-    local usable = addon.fontRuntime.usablePath and addon.fontRuntime.usablePath(db.font)
+    local usable, status
+    if addon.fontRuntime.usablePath then
+        usable, status = addon.fontRuntime.usablePath(db.font)
+    end
     if usable then return usable end
+    if status == "pending" and addon.fontRuntime.catalogEntry then
+        local catalogPath = addon.fontRuntime.catalogEntry(db.font)
+        if catalogPath then return catalogPath end
+    end
     if addon.fontRuntime.safeDefaultPath then return addon.fontRuntime.safeDefaultPath() end
     return "Fonts\\FRIZQT__.TTF"
 end
@@ -2777,7 +2784,12 @@ end
 local function GetSavedAutoFontDB()
     local db = addon.dbRuntime.GetActiveSettings()
     if not addon.fontRuntime.usablePath then return nil end
-    return addon.fontRuntime.usablePath(db.fontBeforeAutoSwitch)
+    local usable, status = addon.fontRuntime.usablePath(db.fontBeforeAutoSwitch)
+    if usable then return usable end
+    if status == "pending" and addon.fontRuntime.catalogEntry then
+        return addon.fontRuntime.catalogEntry(db.fontBeforeAutoSwitch)
+    end
+    return nil
 end
 
 local function IsFiniteNumber(value)
@@ -2969,10 +2981,18 @@ end
 
 -- Font asset validity is separate from heuristic glyph coverage. LSM accepts
 -- arbitrary FONT data, and SavedVariables can retain paths after a media addon is
--- removed, so only a successful real SetFont probe proves that a path is usable.
+-- removed. The client can also return false after applying a loose font during a
+-- cold client start, so SetFont's boolean alone is not authoritative: read back the
+-- effective font and keep known-but-not-yet-applied assets pending instead of
+-- destructively replacing the user's saved preference.
 addon.fontRuntime.probeFontString = UIParent:CreateFontString(nil, "OVERLAY")
 addon.fontRuntime.probeFontString:Hide()
 addon.fontRuntime.probeResults = {}
+addon.fontRuntime.pendingSavedFont = nil
+addon.fontRuntime.pendingRetryAttempt = 0
+addon.fontRuntime.pendingRetryGeneration = 0
+addon.fontRuntime.pendingRetryScheduled = false
+addon.fontRuntime.pendingRetryDelays = { 0.2, 1, 3, 5 }
 
 function addon.fontRuntime.rawLSMPath(name)
     if not LSM then return nil end
@@ -3005,29 +3025,75 @@ function addon.fontRuntime.catalogEntry(fontPath)
     return nil, nil
 end
 
-function addon.fontRuntime.probe(fontPath, size, flags)
+function addon.fontRuntime.isKnownAsset(fontPath)
+    if type(C_UIFileAsset) ~= "table" or type(C_UIFileAsset.IsKnownFile) ~= "function" then
+        return nil
+    end
+    local ok, known = pcall(C_UIFileAsset.IsKnownFile, fontPath)
+    if not ok then return nil end
+    local secretOK, secret = pcall(issecretvalue, known)
+    if not secretOK or secret or type(known) ~= "boolean" then return nil end
+    return known
+end
+
+function addon.fontRuntime.matchesAppliedFont(region, fontPath, size, flags)
+    if not region or type(region.GetFont) ~= "function" then return false end
+    local ok, actualFont, actualSize, actualFlags = pcall(region.GetFont, region)
+    if not ok or not SameFontPath(actualFont, fontPath) then return false end
+    local sizeSecretOK, sizeSecret = pcall(issecretvalue, actualSize)
+    local flagsSecretOK, flagsSecret = pcall(issecretvalue, actualFlags)
+    if not sizeSecretOK or sizeSecret or not flagsSecretOK or flagsSecret then return false end
+    if not IsFiniteNumber(actualSize) or not IsFiniteNumber(size) then return false end
+    if math.abs(actualSize - size) > 0.01 then return false end
+    local actualNormalized = actualFlags == nil and "" or actualFlags
+    local expectedNormalized = flags == nil and "" or flags
+    return type(actualNormalized) == "string"
+        and type(expectedNormalized) == "string"
+        and actualNormalized == expectedNormalized
+end
+
+function addon.fontRuntime.trySetFont(region, fontPath, size, flags)
+    if not region or type(region.SetFont) ~= "function" then return "invalid" end
+    local ok, success = pcall(region.SetFont, region, fontPath, size, flags)
+    if not ok then return "invalid" end
+    local secretOK, secret = pcall(issecretvalue, success)
+    if secretOK and not secret and success == true then return "applied" end
+    if addon.fontRuntime.matchesAppliedFont(region, fontPath, size, flags) then return "applied" end
+    -- A missing Blizzard asset is definitive because its file table is fixed before
+    -- addons load. External loose files are different: IsKnownFile explicitly does
+    -- not prove existence/openability, and their cold-start state can settle later.
+    if IsBlizzardFontPath(fontPath) and addon.fontRuntime.isKnownAsset(fontPath) == false then
+        return "invalid"
+    end
+    return "pending"
+end
+
+function addon.fontRuntime.probeStatus(fontPath, size, flags)
     local key = FontPathKey(fontPath)
-    if not key then return false end
+    if not key then return "invalid" end
     local cacheKey = key .. "\031" .. (flags or "") .. "\031" .. tostring(size)
     local cachedResult = addon.fontRuntime.probeResults[cacheKey]
     if cachedResult ~= nil then return cachedResult end
-    local ok, success = pcall(addon.fontRuntime.probeFontString.SetFont,
+    local status = addon.fontRuntime.trySetFont(
         addon.fontRuntime.probeFontString, fontPath, size, flags)
-    local usable = ok and success == true
-    addon.fontRuntime.probeResults[cacheKey] = usable
-    return usable
+    -- A pending result is deliberately retried: cold loose-font availability can
+    -- settle later without any LSM catalogue-length change.
+    if status ~= "pending" then addon.fontRuntime.probeResults[cacheKey] = status end
+    return status
 end
 
 function addon.fontRuntime.usableCatalogPath(fontPath)
-    if not FontPathKey(fontPath) then return nil end
-    if addon.fontRuntime.probe(fontPath, defaults.fontSize, nil) then return fontPath end
-    return nil
+    if not FontPathKey(fontPath) then return nil, "invalid" end
+    local status = addon.fontRuntime.probeStatus(fontPath, defaults.fontSize, nil)
+    if status == "applied" then return fontPath, status end
+    return nil, status
 end
 
 function addon.fontRuntime.usablePath(fontPath)
-    if not FontPathKey(fontPath) then return nil end
+    if not FontPathKey(fontPath) then return nil, "invalid" end
     local catalogPath = addon.fontRuntime.catalogEntry(fontPath)
-    return catalogPath and addon.fontRuntime.usableCatalogPath(catalogPath) or nil
+    if not catalogPath then return nil, "invalid" end
+    return addon.fontRuntime.usableCatalogPath(catalogPath)
 end
 
 function addon.fontRuntime.safeDefaultPath()
@@ -3093,34 +3159,39 @@ local function FindCompatibleFont(currentFont, req)
 end
 
 function addon.fontRuntime.resolveUsableFlags(usable, size, requestedFlags)
-    if not FontPathKey(usable) then return nil, nil end
-    if requestedFlags and addon.fontRuntime.probe(usable, size, requestedFlags) then
-        return usable, requestedFlags
+    if not FontPathKey(usable) then return nil, nil, "invalid" end
+    local requestedStatus
+    if requestedFlags then
+        requestedStatus = addon.fontRuntime.probeStatus(usable, size, requestedFlags)
+        if requestedStatus == "applied" then return usable, requestedFlags, requestedStatus end
     end
-    if addon.fontRuntime.probe(usable, size, nil) then return usable, nil end
-    return nil, nil
+    local baseStatus = addon.fontRuntime.probeStatus(usable, size, nil)
+    if baseStatus == "applied" then return usable, nil, baseStatus end
+    if requestedStatus == "pending" or baseStatus == "pending" then return nil, nil, "pending" end
+    return nil, nil, "invalid"
 end
 
 function addon.fontRuntime.resolveFlags(fontPath, size, requestedFlags)
-    local usable = addon.fontRuntime.usablePath(fontPath)
-    if not usable then return nil, nil end
+    local usable, status = addon.fontRuntime.usablePath(fontPath)
+    if not usable then return nil, nil, status end
     return addon.fontRuntime.resolveUsableFlags(usable, size, requestedFlags)
 end
 
 function addon.fontRuntime.setRegionFont(region, fontPath, size, flags)
-    local ok, success = pcall(region.SetFont, region, fontPath, size, flags)
-    return ok and success == true
+    local status = addon.fontRuntime.trySetFont(region, fontPath, size, flags)
+    return status == "applied", status
 end
 
 function addon.fontRuntime.applyExact(regions, fontPath, size, requestedFlags)
-    local resolvedFont, effectiveFlags = addon.fontRuntime.resolveFlags(fontPath, size, requestedFlags)
-    if not resolvedFont then return false end
+    local resolvedFont, effectiveFlags, status = addon.fontRuntime.resolveFlags(fontPath, size, requestedFlags)
+    if not resolvedFont then return false, nil, nil, status end
     for _, region in ipairs(regions) do
-        if not addon.fontRuntime.setRegionFont(region, resolvedFont, size, effectiveFlags) then
-            return false
+        local applied, regionStatus = addon.fontRuntime.setRegionFont(region, resolvedFont, size, effectiveFlags)
+        if not applied then
+            return false, nil, nil, regionStatus
         end
     end
-    return true, resolvedFont, effectiveFlags
+    return true, resolvedFont, effectiveFlags, "applied"
 end
 
 function addon.fontRuntime.restore(regions, fontPath, size, flags)
@@ -7438,12 +7509,12 @@ function Panel:ApplyStyle(font, size, force, requestedOutlineStyle)
     local fontFlags = addon.readabilityConfig.textOutlineStyleToFontFlags(outlineStyle)
     local oldFont, oldSize, oldFlags = self.appliedFont, self.appliedSize, self.appliedFontFlags
     local regions = self:FontRegions()
-    local applied, effectiveFont, effectiveFlags = addon.fontRuntime.applyExact(
+    local applied, effectiveFont, effectiveFlags, status = addon.fontRuntime.applyExact(
         regions, font, size, fontFlags)
     if not applied then
         addon.fontRuntime.restore(regions, oldFont, oldSize, oldFlags)
         self:RestoreCachedText()
-        return false
+        return false, nil, nil, nil, status
     end
     self.appliedFont = effectiveFont
     self.appliedSize = size
@@ -7517,18 +7588,20 @@ end
 local function ApplyTextStyleToAllPanels(font, size, force)
     local oldMainFont, oldMainSize, oldMainOutline =
         mainPanel.appliedFont, mainPanel.appliedSize, mainPanel.appliedTextOutlineStyle
-    local applied, effectiveFont, effectiveOutline, effectiveFlags = mainPanel:ApplyStyle(font, size, force)
-    if not applied then return false end
-    local sideApplied = defensivePanel:ApplyStyle(effectiveFont, size, force, effectiveOutline)
+    local applied, effectiveFont, effectiveOutline, effectiveFlags, status =
+        mainPanel:ApplyStyle(font, size, force)
+    if not applied then return false, nil, nil, nil, status end
+    local sideApplied, _, _, _, sideStatus =
+        defensivePanel:ApplyStyle(effectiveFont, size, force, effectiveOutline)
     if not sideApplied then
         mainPanel:ApplyStyle(oldMainFont, oldMainSize, true, oldMainOutline)
-        return false
+        return false, nil, nil, nil, sideStatus
     end
-    return true, effectiveFont, effectiveOutline, effectiveFlags
+    return true, effectiveFont, effectiveOutline, effectiveFlags, "applied"
 end
 
 function addon.fontRuntime.applyCommittedTextStyle(font, size, force, allowFontFallback)
-    local applied, effectiveFont, effectiveOutline, effectiveFlags =
+    local applied, effectiveFont, effectiveOutline, effectiveFlags, requestedStatus =
         ApplyTextStyleToAllPanels(font, size, force)
     if not applied and allowFontFallback ~= false then
         local active = ResolveActiveLocale()
@@ -7539,34 +7612,107 @@ function addon.fontRuntime.applyCommittedTextStyle(font, size, force, allowFontF
                 ApplyTextStyleToAllPanels(fallback, size, true)
         end
     end
-    if not applied then return false end
+    if not applied then return false, nil, nil, nil, requestedStatus end
 
     addon.fontRuntime.committedFont = effectiveFont
     local db = addon.dbRuntime.GetWritableSettings(false)
-    if db then db.font = effectiveFont end
+    -- A known loose asset can be temporarily unavailable during a cold client
+    -- start. The runtime fallback is safe, but replacing the saved preference is
+    -- not; the bounded retry below will commit only after the requested face is
+    -- actually observable through GetFont.
+    local preservePending = db and requestedStatus == "pending"
+        and not SameFontPath(effectiveFont, font)
+    if preservePending then
+        if not SameFontPath(addon.fontRuntime.pendingSavedFont, font) then
+            addon.fontRuntime.pendingSavedFont = addon.fontRuntime.catalogEntry(font) or font
+            addon.fontRuntime.pendingRetryAttempt = 0
+            addon.fontRuntime.pendingRetryGeneration = addon.fontRuntime.pendingRetryGeneration + 1
+            addon.fontRuntime.pendingRetryScheduled = false
+        end
+        if isLoaded and type(addon.fontRuntime.schedulePendingSavedFontRetry) == "function" then
+            addon.fontRuntime.schedulePendingSavedFontRetry()
+        end
+    elseif db then
+        db.font = effectiveFont
+        if addon.fontRuntime.pendingSavedFont then
+            addon.fontRuntime.pendingSavedFont = nil
+            addon.fontRuntime.pendingRetryAttempt = 0
+            addon.fontRuntime.pendingRetryGeneration = addon.fontRuntime.pendingRetryGeneration + 1
+            addon.fontRuntime.pendingRetryScheduled = false
+        end
+    end
     if addon.fontRuntime.refreshCaption then addon.fontRuntime.refreshCaption() end
-    return true, effectiveFont, effectiveOutline, effectiveFlags
+    return true, effectiveFont, effectiveOutline, effectiveFlags, requestedStatus
 end
 
 function addon.fontRuntime.currentPath()
     return addon.fontRuntime.committedFont or GetFontDB()
 end
 
+function addon.fontRuntime.preferredPath()
+    return GetFontDB()
+end
+
 function addon.fontRuntime.repairSavedPaths()
     local db = addon.dbRuntime.GetWritableSettings(false)
     if not db then return end
 
-    local current = addon.fontRuntime.usablePath(db.font)
-    if not current then
+    addon.fontRuntime.pendingSavedFont = nil
+    addon.fontRuntime.pendingRetryAttempt = 0
+    addon.fontRuntime.pendingRetryGeneration = addon.fontRuntime.pendingRetryGeneration + 1
+    addon.fontRuntime.pendingRetryScheduled = false
+
+    local current, currentStatus = addon.fontRuntime.usablePath(db.font)
+    if currentStatus == "pending" then
+        addon.fontRuntime.pendingSavedFont = addon.fontRuntime.catalogEntry(db.font)
+    elseif not current then
         local active = ResolveActiveLocale()
         local req = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
         current = FindCompatibleFont(addon.fontRuntime.safeDefaultPath(), req)
     end
-    if current then db.font = current end
+    if currentStatus ~= "pending" and current then db.font = current end
 
     if type(db.fontBeforeAutoSwitch) ~= "nil" then
-        db.fontBeforeAutoSwitch = addon.fontRuntime.usablePath(db.fontBeforeAutoSwitch)
+        local saved, savedStatus = addon.fontRuntime.usablePath(db.fontBeforeAutoSwitch)
+        if savedStatus ~= "pending" then db.fontBeforeAutoSwitch = saved end
     end
+end
+
+function addon.fontRuntime.schedulePendingSavedFontRetry()
+    local pending = addon.fontRuntime.pendingSavedFont
+    if not pending or addon.fontRuntime.pendingRetryScheduled then return end
+    local nextAttempt = addon.fontRuntime.pendingRetryAttempt + 1
+    local delay = addon.fontRuntime.pendingRetryDelays[nextAttempt]
+    if not delay then return end
+
+    addon.fontRuntime.pendingRetryAttempt = nextAttempt
+    addon.fontRuntime.pendingRetryScheduled = true
+    local generation = addon.fontRuntime.pendingRetryGeneration
+    C_Timer.After(delay, function()
+        if generation ~= addon.fontRuntime.pendingRetryGeneration then return end
+        addon.fontRuntime.pendingRetryScheduled = false
+        local activeDB = addon.dbRuntime.GetActiveSettings()
+        local writableDB = addon.dbRuntime.GetWritableSettings(false)
+        if not writableDB or not SameFontPath(activeDB.font, pending) then
+            addon.fontRuntime.pendingSavedFont = nil
+            addon.fontRuntime.pendingRetryGeneration = addon.fontRuntime.pendingRetryGeneration + 1
+            return
+        end
+
+        local applied = addon.fontRuntime.applyCommittedTextStyle(
+            pending, GetNumberDB("fontSize"), true, false)
+        if applied then
+            addon.fontRuntime.pendingSavedFont = nil
+            addon.fontRuntime.pendingRetryAttempt = 0
+            addon.fontRuntime.pendingRetryGeneration = addon.fontRuntime.pendingRetryGeneration + 1
+            addon:RunUpdateStatsSafe()
+            if type(addon.profileRuntime.RefreshConfigControls) == "function" then
+                addon.profileRuntime.RefreshConfigControls()
+            end
+            return
+        end
+        addon.fontRuntime.schedulePendingSavedFontRetry()
+    end)
 end
 
 function addon.fontRuntime.clearSavedAutoFont()
@@ -7620,7 +7766,7 @@ addon.readabilityConfig.selectTextOutlineStyle = function(value, opt, dropdown)
     db.textOutlineStyle = selected
     CacheSettings()
     local applied = addon.fontRuntime.applyCommittedTextStyle(
-        addon.fontRuntime.currentPath(), GetNumberDB("fontSize"), false, true)
+        addon.fontRuntime.preferredPath(), GetNumberDB("fontSize"), false, true)
     if not applied then
         db.textOutlineStyle = previous
         CacheSettings()
@@ -8478,6 +8624,7 @@ addon.profileRuntime.CompleteBootstrap = function()
     addon.readabilityConfig.applyPanelBackgroundAlphaToAllPanels(cached.panelBackgroundAlpha)
     isLoaded = true
     runtime.bootstrapPending = false
+    addon.fontRuntime.schedulePendingSavedFontRetry()
     if type(runtime.RefreshConfigControls) == "function" then
         runtime.RefreshConfigControls()
     end
@@ -13099,17 +13246,21 @@ function addon:OpenConfigMenu()
         -- worst case a stale path until next /reload).
         local cachedFontsList
         local cachedFontsListLen = -1
-        local function BuildFontsList()
+        local cachedFontsListHasPending = false
+        local function BuildFontsList(retryPending)
             local lsmLen = LSM and #LSM:List(LSM.MediaType.FONT) or 0
-            if cachedFontsList and cachedFontsListLen == lsmLen then
+            if cachedFontsList and cachedFontsListLen == lsmLen
+                and not (retryPending and cachedFontsListHasPending) then
                 return cachedFontsList
             end
             local list
+            local hasPending = false
             if LSM then
                 list = {}
                 for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
                     local path = type(name) == "string" and addon.fontRuntime.rawLSMPath(name) or nil
-                    local usable = addon.fontRuntime.usableCatalogPath(path)
+                    local usable, status = addon.fontRuntime.usableCatalogPath(path)
+                    if status == "pending" then hasPending = true end
                     if usable then
                         list[#list + 1] = {
                             name = name,
@@ -13123,7 +13274,8 @@ function addon:OpenConfigMenu()
                 local clientLocale = GetLocale()
                 for _, f in ipairs(BLIZZARD_SHIPPED_FONTS) do
                     if not f.locale or f.locale == clientLocale then
-                        local usable = addon.fontRuntime.usableCatalogPath(f.path)
+                        local usable, status = addon.fontRuntime.usableCatalogPath(f.path)
+                        if status == "pending" then hasPending = true end
                         if usable then
                             list[#list + 1] = {
                                 name = f.name,
@@ -13140,8 +13292,12 @@ function addon:OpenConfigMenu()
             -- table.sort fires ~N log N compares for N=200 ≈ 1600 compares × 2 string.lower
             -- calls each becomes N + N log N compares against an already-lowered string.
             table.sort(list, function(a, b) return a.sortKey < b.sortKey end)
+            -- Keep ordinary caption refreshes cheap, but never freeze a cold-start
+            -- false into the picker: an explicit populate retries pending loose files
+            -- even when LSM catalogue length is unchanged.
             cachedFontsList = list
             cachedFontsListLen = lsmLen
+            cachedFontsListHasPending = hasPending
             return list
         end
 
@@ -13197,7 +13353,7 @@ function addon:OpenConfigMenu()
             previewedPath = nil
             if self.profileRuntime.suppressIntermediateRefresh then return end
             self.fontRuntime.applyCommittedTextStyle(
-                self.fontRuntime.currentPath(), GetNumberDB("fontSize"), true, true)
+                self.fontRuntime.preferredPath(), GetNumberDB("fontSize"), true, true)
             ReflowAllPanels()
         end
         self.profileRuntime.cancelFontPreview = CancelFontPreview
@@ -13332,8 +13488,8 @@ function addon:OpenConfigMenu()
         end
 
         local function PopulateFontPicker()
-            local fonts = BuildFontsList()
-            local currentPath = self.fontRuntime.currentPath()
+            local fonts = BuildFontsList(true)
+            local currentPath = self.fontRuntime.preferredPath()
             local rows = math.ceil(#fonts / FONT_PICKER_COLS)
             local currentRow = nil
 
@@ -13470,7 +13626,7 @@ function addon:OpenConfigMenu()
         end
 
         CurrentFontName = function()
-            local current = self.fontRuntime.currentPath()
+            local current = self.fontRuntime.preferredPath()
             for _, f in ipairs(BuildFontsList()) do
                 if SameFontPath(f.path, current) then return f.name end
             end
@@ -13519,7 +13675,7 @@ function addon:OpenConfigMenu()
         8, 32, 1, "8", "32", "%d",
         function()
             local applied = self.fontRuntime.applyCommittedTextStyle(
-                self.fontRuntime.currentPath(), GetNumberDB("fontSize"), false, true)
+                self.fontRuntime.preferredPath(), GetNumberDB("fontSize"), false, true)
             if applied then ReflowAllPanels() end
             return applied
         end)
@@ -13678,7 +13834,7 @@ function addon:OpenConfigMenu()
             cached.activeLabelsLocale = LABELS_BY_LOCALE[active] and active or "enUS"
             if langPreviewSwappedFnt then
                 local restored = self.fontRuntime.applyCommittedTextStyle(
-                    self.fontRuntime.currentPath(), GetNumberDB("fontSize"), true, true)
+                    self.fontRuntime.preferredPath(), GetNumberDB("fontSize"), true, true)
                 if restored then langPreviewSwappedFnt = false end
             end
             langPreviewActive = false
@@ -13731,7 +13887,7 @@ function addon:OpenConfigMenu()
                     -- UI doesn't share this asymmetry — panels are the only side affected.
                     if langPreviewSwappedFnt then
                         local restored = self.fontRuntime.applyCommittedTextStyle(
-                            self.fontRuntime.currentPath(), GetNumberDB("fontSize"), true, true)
+                            self.fontRuntime.preferredPath(), GetNumberDB("fontSize"), true, true)
                         if restored then langPreviewSwappedFnt = false end
                     end
                     langPreviewActive     = false
@@ -13793,7 +13949,7 @@ function addon:OpenConfigMenu()
         RefreshLanguageWarning = function()
             local active = ResolveActiveLocale()
             local req    = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
-            if FontSupports(self.fontRuntime.currentPath(), req) then
+            if FontSupports(self.fontRuntime.preferredPath(), req) then
                 langWarn:SetText("")
                 addon.settingsDesign.SetWarningVisible(langWarn, false)
             else
@@ -14843,6 +14999,13 @@ if addon and addon.__statsproSmoke == true then
         currentRuntimeFontPath = addon.fontRuntime.currentPath,
         repairSavedFontPaths = addon.fontRuntime.repairSavedPaths,
         applyCommittedTextStyle = addon.fontRuntime.applyCommittedTextStyle,
+        fontRuntimeState = function()
+            return {
+                pendingSavedFont = addon.fontRuntime.pendingSavedFont,
+                pendingRetryAttempt = addon.fontRuntime.pendingRetryAttempt,
+                pendingRetryScheduled = addon.fontRuntime.pendingRetryScheduled,
+            }
+        end,
         applyConfigFont = ApplyConfigFont,
         formatRepairCost = FormatRepairCost,
         refreshDurabilityCache = RefreshDurabilityCache,

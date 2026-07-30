@@ -51,6 +51,12 @@ MAX_SPELL_SCHOOLS = 7
 ---@type StatsProStringUtil?
 C_StringUtil = nil
 
+---@class (exact) StatsProUIFileAsset
+---@field IsKnownFile fun(filePath: string): boolean
+
+---@type StatsProUIFileAsset?
+C_UIFileAsset = nil
+
 ---@type table<string, StatsProStaticPopupDefinition>
 StaticPopupDialogs = {}
 

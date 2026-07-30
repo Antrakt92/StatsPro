@@ -798,12 +798,9 @@ $OwnedLayout = Get-StatsProOwnedToolLayout -Locks $ToolLocks -ToolRoot $OwnedToo
 $PortableToolRoot = $OwnedLayout.ToolRoot
 $PortableLuaRoot = $OwnedLayout.LuaRoot
 $PortableLuaLsRoot = $OwnedLayout.LuaLanguageServerRoot
-$PortableLuaRocksRoot = $OwnedLayout.LuaRocksRoot
 $PortableLuaLsPath = $OwnedLayout.LuaLanguageServerPath
 $PortableLuaRocksPath = $OwnedLayout.LuaRocksPath
 $PortableLuacheckPath = $OwnedLayout.GeneratedLuacheckPath
-$PortableLuaPath = $OwnedLayout.LuaPath
-$PortableLuacPath = $OwnedLayout.LuacPath
 $luaCandidates = @((Join-Path $PortableLuaRoot "lua5.1.exe"), "lua5.1", "C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe")
 $luacCandidates = @((Join-Path $PortableLuaRoot "luac5.1.exe"), "luac5.1", "C:\ProgramData\chocolatey\lib\lua51\tools\luac5.1.exe")
 if ($Install) {

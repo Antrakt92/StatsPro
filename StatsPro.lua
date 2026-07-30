@@ -122,11 +122,18 @@ local LOCALE_GLYPH_REQ = {
     koKR = GLYPH_HANGUL, zhCN = GLYPH_HANS, zhTW = GLYPH_HANT,
 }
 
+function addon.fontRuntime.asciiLower(value)
+    if type(value) ~= "string" then return nil end
+    -- WoW Lua 5.1 string casing is byte-based. Restrict folding to matched ASCII
+    -- bytes so localized font names and paths keep their UTF-8 sequences intact.
+    return (value:gsub("[A-Z]", string.lower))
+end
+
 local function FontPathKey(fontPath)
     if type(fontPath) ~= "string" then return nil end
     local ok, secret = pcall(issecretvalue, fontPath)
     if not ok or secret then return nil end
-    return (fontPath:gsub("/", "\\"):lower())
+    return addon.fontRuntime.asciiLower(fontPath:gsub("/", "\\"))
 end
 
 local function SameFontPath(a, b)
@@ -354,7 +361,6 @@ local defaults = {
     -- override STANDARD_TEXT_FONT to their own path — those would hijack our defaults
     -- otherwise. Falls back to FRIZQT for any non-Blizzard path.
     font = LocaleAwareDefaultFont(),
-    textAlign = "RIGHT", -- DEPRECATED: kept for DB compat (v1.0+ saves still contain key); no runtime reader
     updateInterval = 0.5,
     isVisible = true,
     isLocked = false,
@@ -1149,7 +1155,7 @@ local isLoaded = false
 -- "Cel" read as truncations rather than words and look unfinished).
 --
 -- Ships with current WoW addon locale tables:
---   enUS (canonical, identity map)
+--   enUS (canonical source table with a few intentional display-name aliases)
 --   ruRU (Russian native-speaker reviewed by maintainer)
 --   zhCN / zhTW (use official WoW Chinese client stat terminology — high confidence)
 --   deDE / frFR / esES / esMX / itIT / ptBR / koKR (deeper review pass against
@@ -1187,7 +1193,6 @@ local LABELS_BY_LOCALE = {
         Durability = "Durability", Repair = "Repair",
         Defensive = "Defensive",
         -- Settings UI words (config menu only, never appear on the panel itself):
-        Color = "Color",
         -- ===== Settings UI strings =====
         -- Tabs (Defensive reuses the existing key above):
         ["Stats"] = "Stats", ["Layout"] = "Layout", ["Appearance"] = "Appearance",
@@ -1195,7 +1200,7 @@ local LABELS_BY_LOCALE = {
         ["Character"] = "Character", ["Item Level"] = "Item Level",
         ["Offensive"] = "Offensive", ["Tertiary"] = "Tertiary",
         ["Gear"] = "Gear", ["Repair Cost"] = "Repair Cost",
-        ["Side Panel"] = "Side Panel", ["Side Panel Contains"] = "Side Panel Contains",
+        ["Side Panel Contains"] = "Side Panel Contains",
         ["Value Display"] = "Value Display",
         ["Frame & Position"] = "Frame & Position",
         ["Typography"] = "Typography",
@@ -1245,7 +1250,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Last known comparison", ["Source:"] = "Source:",
         ["Stats panel shown"] = "Stats panel shown", ["Stats panel hidden"] = "Stats panel hidden",
         ["Settings reset to defaults"] = "Settings reset to defaults",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats has no supported settings to import.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "These settings use a newer schema and cannot be imported by this StatsPro version.",
@@ -1337,7 +1342,6 @@ local LABELS_BY_LOCALE = {
         Leech = "Вамп",         Avoidance = "Избег",    Speed = "Движ",
         Durability = "Проч",    Repair = "Рем",
         Defensive = "Защита",
-        Color = "Цвет",
         -- ===== Settings UI =====
         -- Tabs (Defensive uses "Защита" via the existing key above):
         ["Stats"] = "Статы", ["Layout"] = "Макет", ["Appearance"] = "Внешний вид",
@@ -1345,7 +1349,7 @@ local LABELS_BY_LOCALE = {
         ["Character"] = "Персонаж", ["Item Level"] = "Уровень предметов",
         ["Offensive"] = "Атака", ["Tertiary"] = "Третичные",
         ["Gear"] = "Экипировка", ["Repair Cost"] = "Стоимость ремонта",
-        ["Side Panel"] = "Боковая панель", ["Side Panel Contains"] = "В боковой панели",
+        ["Side Panel Contains"] = "В боковой панели",
         ["Value Display"] = "Отображение значений",
         ["Frame & Position"] = "Окно и позиция",
         ["Typography"] = "Типографика",
@@ -1395,7 +1399,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Последнее известное сравнение", ["Source:"] = "Источник:",
         ["Stats panel shown"] = "Панель статов показана", ["Stats panel hidden"] = "Панель статов скрыта",
         ["Settings reset to defaults"] = "Настройки сброшены по умолчанию",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Настройки SwiftStats не загружены. Включите SwiftStats на один вход в игру, выполните /reload, затем снова введите /statspro import.",
         ["SwiftStats has no supported settings to import."] = "В SwiftStats нет поддерживаемых настроек для импорта.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Эти настройки используют более новую схему и не могут быть импортированы этой версией StatsPro.",
@@ -1487,14 +1491,13 @@ local LABELS_BY_LOCALE = {
         Leech = "Saug",         Avoidance = "Verm",     Speed = "Beweg",
         Durability = "Haltb",   Repair = "Repar",
         Defensive = "Defensiv",
-        Color = "Farbe",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         -- Movement checkbox uses the long form to disambiguate from Haste="Tempo".
         ["Stats"] = "Werte", ["Layout"] = "Layout", ["Appearance"] = "Darstellung",
         ["Character"] = "Charakter", ["Item Level"] = "Gegenstandsstufe",
         ["Offensive"] = "Offensiv", ["Tertiary"] = "Tertiär",
         ["Gear"] = "Ausrüstung", ["Repair Cost"] = "Reparaturkosten",
-        ["Side Panel"] = "Seitenpanel", ["Side Panel Contains"] = "Seitenpanel enthält",
+        ["Side Panel Contains"] = "Seitenpanel enthält",
         ["Value Display"] = "Werteanzeige",
         ["Frame & Position"] = "Fenster & Position",
         ["Typography"] = "Typografie",
@@ -1540,7 +1543,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Letzter bekannter Vergleich", ["Source:"] = "Quelle:",
         ["Stats panel shown"] = "Statpanel angezeigt", ["Stats panel hidden"] = "Statpanel ausgeblendet",
         ["Settings reset to defaults"] = "Einstellungen auf Standard zurückgesetzt",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Befehle: /ss oder /statspro (Einstellungen), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "Befehle: /ss oder /statspro (Einstellungen), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats-Einstellungen sind nicht geladen. Aktiviere SwiftStats für eine Anmeldung, führe /reload aus und gib danach erneut /statspro import ein.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats enthält keine unterstützten Einstellungen zum Importieren.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Diese Einstellungen verwenden ein neueres Schema und können von dieser StatsPro-Version nicht importiert werden.",
@@ -1628,13 +1631,12 @@ local LABELS_BY_LOCALE = {
         Leech = "Vamp",         Avoidance = "Évit",     Speed = "Dépl",
         Durability = "Dura",    Repair = "Rép",
         Defensive = "Défense",
-        Color = "Couleur",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         ["Stats"] = "Stats", ["Layout"] = "Disposition", ["Appearance"] = "Apparence",
         ["Character"] = "Personnage", ["Item Level"] = "Niveau d'objet",
         ["Offensive"] = "Offensif", ["Tertiary"] = "Tertiaire",
         ["Gear"] = "Équipement", ["Repair Cost"] = "Coût de réparation",
-        ["Side Panel"] = "Panneau latéral", ["Side Panel Contains"] = "Panneau latéral contient",
+        ["Side Panel Contains"] = "Panneau latéral contient",
         ["Value Display"] = "Affichage des valeurs",
         ["Frame & Position"] = "Cadre & Position",
         ["Typography"] = "Typographie",
@@ -1680,7 +1682,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Dernière comparaison connue", ["Source:"] = "Source :",
         ["Stats panel shown"] = "Panneau de stats affiché", ["Stats panel hidden"] = "Panneau de stats masqué",
         ["Settings reset to defaults"] = "Paramètres réinitialisés",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Commandes : /ss ou /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "Commandes : /ss ou /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Les réglages de SwiftStats ne sont pas chargés. Activez SwiftStats pour une connexion, exécutez /reload, puis relancez /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats ne contient aucun réglage pris en charge à importer.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Ces réglages utilisent un schéma plus récent et ne peuvent pas être importés par cette version de StatsPro.",
@@ -1769,13 +1771,12 @@ local LABELS_BY_LOCALE = {
         Leech = "Robo",         Avoidance = "Evit",     Speed = "Mov",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defensa",
-        Color = "Color",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         ["Stats"] = "Atributos", ["Layout"] = "Diseño", ["Appearance"] = "Apariencia",
         ["Character"] = "Personaje", ["Item Level"] = "Nivel de objeto",
         ["Offensive"] = "Ofensivo", ["Tertiary"] = "Terciario",
         ["Gear"] = "Equipo", ["Repair Cost"] = "Coste reparación",
-        ["Side Panel"] = "Panel lateral", ["Side Panel Contains"] = "Panel lateral contiene",
+        ["Side Panel Contains"] = "Panel lateral contiene",
         ["Value Display"] = "Valores",
         ["Frame & Position"] = "Marco y Posición",
         ["Typography"] = "Tipografía",
@@ -1821,7 +1822,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Última comparación conocida", ["Source:"] = "Fuente:",
         ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
         ["Settings reset to defaults"] = "Ajustes restablecidos",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Los ajustes de SwiftStats no están cargados. Activa SwiftStats durante un inicio de sesión, ejecuta /reload y vuelve a usar /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats no tiene ajustes compatibles para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Estos ajustes usan un esquema más reciente y esta versión de StatsPro no puede importarlos.",
@@ -1907,14 +1908,13 @@ local LABELS_BY_LOCALE = {
         Leech = "Robo",         Avoidance = "Evit",     Speed = "Mov",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defensa",
-        Color = "Color",
         -- ===== Settings UI (best-effort draft — mirrors esES with regional swaps:
         --   "ajustes" → "configuración" (esMX preferred); "haz clic" → "da clic".
         ["Stats"] = "Atributos", ["Layout"] = "Diseño", ["Appearance"] = "Apariencia",
         ["Character"] = "Personaje", ["Item Level"] = "Nivel de objeto",
         ["Offensive"] = "Ofensivo", ["Tertiary"] = "Terciario",
         ["Gear"] = "Equipo", ["Repair Cost"] = "Costo reparación",
-        ["Side Panel"] = "Panel lateral", ["Side Panel Contains"] = "Panel lateral contiene",
+        ["Side Panel Contains"] = "Panel lateral contiene",
         ["Value Display"] = "Valores",
         ["Frame & Position"] = "Marco y Posición",
         ["Typography"] = "Tipografía",
@@ -1960,7 +1960,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Última comparación conocida", ["Source:"] = "Fuente:",
         ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
         ["Settings reset to defaults"] = "Configuración restablecida",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "La configuración de SwiftStats no está cargada. Activa SwiftStats durante un inicio de sesión, ejecuta /reload y vuelve a usar /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats no tiene opciones compatibles para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Esta configuración usa un esquema más reciente y esta versión de StatsPro no puede importarla.",
@@ -2048,13 +2048,12 @@ local LABELS_BY_LOCALE = {
         Leech = "Vamp",         Avoidance = "Evit",     Speed = "Mov",
         Durability = "Durab",   Repair = "Ripa",
         Defensive = "Difesa",
-        Color = "Colore",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         ["Stats"] = "Stat", ["Layout"] = "Layout", ["Appearance"] = "Aspetto",
         ["Character"] = "Personaggio", ["Item Level"] = "Livello oggetto",
         ["Offensive"] = "Offensivo", ["Tertiary"] = "Terziario",
         ["Gear"] = "Equipaggiamento", ["Repair Cost"] = "Costo riparazione",
-        ["Side Panel"] = "Pannello laterale", ["Side Panel Contains"] = "Pannello laterale contiene",
+        ["Side Panel Contains"] = "Pannello laterale contiene",
         ["Value Display"] = "Valori",
         ["Frame & Position"] = "Cornice e Posizione",
         ["Typography"] = "Tipografia",
@@ -2100,7 +2099,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Ultimo confronto noto", ["Source:"] = "Fonte:",
         ["Stats panel shown"] = "Pannello statistiche mostrato", ["Stats panel hidden"] = "Pannello statistiche nascosto",
         ["Settings reset to defaults"] = "Impostazioni ripristinate",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandi: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "Comandi: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Le impostazioni di SwiftStats non sono caricate. Abilita SwiftStats per un accesso, esegui /reload, quindi usa di nuovo /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats non contiene impostazioni supportate da importare.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Queste impostazioni usano uno schema più recente e non possono essere importate da questa versione di StatsPro.",
@@ -2187,13 +2186,12 @@ local LABELS_BY_LOCALE = {
         Leech = "Vamp",         Avoidance = "Evit",     Speed = "Mov",
         Durability = "Durab",   Repair = "Rep",
         Defensive = "Defesa",
-        Color = "Cor",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         ["Stats"] = "Atributos", ["Layout"] = "Layout", ["Appearance"] = "Aparência",
         ["Character"] = "Personagem", ["Item Level"] = "Nível de item",
         ["Offensive"] = "Ofensivo", ["Tertiary"] = "Terciário",
         ["Gear"] = "Equipamento", ["Repair Cost"] = "Custo de reparo",
-        ["Side Panel"] = "Painel lateral", ["Side Panel Contains"] = "Painel lateral contém",
+        ["Side Panel Contains"] = "Painel lateral contém",
         ["Value Display"] = "Valores",
         ["Frame & Position"] = "Janela e Posição",
         ["Typography"] = "Tipografia",
@@ -2239,7 +2237,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Última comparação conhecida", ["Source:"] = "Fonte:",
         ["Stats panel shown"] = "Painel de atributos mostrado", ["Stats panel hidden"] = "Painel de atributos oculto",
         ["Settings reset to defaults"] = "Configurações restauradas",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "Comandos: /ss ou /statspro (configurações), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "Comandos: /ss ou /statspro (configurações), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "As configurações do SwiftStats não estão carregadas. Ative o SwiftStats por um login, execute /reload e use /statspro import novamente.",
         ["SwiftStats has no supported settings to import."] = "O SwiftStats não tem configurações compatíveis para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Estas configurações usam um esquema mais recente e não podem ser importadas por esta versão do StatsPro.",
@@ -2333,13 +2331,12 @@ local LABELS_BY_LOCALE = {
         Leech = "흡혈",         Avoidance = "광피",     Speed = "이동",
         Durability = "내구",    Repair = "수리",
         Defensive = "수비",
-        Color = "색상",
         -- ===== Settings UI (best-effort draft — native review welcomed via Issues) =====
         ["Stats"] = "능력치", ["Layout"] = "배치", ["Appearance"] = "외형",
         ["Character"] = "캐릭터", ["Item Level"] = "아이템 레벨",
         ["Offensive"] = "공격", ["Tertiary"] = "보조",
         ["Gear"] = "장비", ["Repair Cost"] = "수리 비용",
-        ["Side Panel"] = "보조 패널", ["Side Panel Contains"] = "보조 패널 포함",
+        ["Side Panel Contains"] = "보조 패널 포함",
         ["Value Display"] = "값 표시",
         ["Frame & Position"] = "창 및 위치",
         ["Typography"] = "글꼴",
@@ -2385,7 +2382,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "마지막으로 확인된 비교", ["Source:"] = "출처:",
         ["Stats panel shown"] = "능력치 패널 표시됨", ["Stats panel hidden"] = "능력치 패널 숨김",
         ["Settings reset to defaults"] = "설정이 기본값으로 초기화되었습니다",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "명령어: /ss 또는 /statspro (설정), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "명령어: /ss 또는 /statspro (설정), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats 설정이 로드되지 않았습니다. 한 번 로그인하는 동안 SwiftStats를 활성화하고 /reload 후 /statspro import를 다시 실행하세요.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats에 가져올 수 있는 지원 설정이 없습니다.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "이 설정은 더 새로운 스키마를 사용하므로 현재 StatsPro 버전에서 가져올 수 없습니다.",
@@ -2472,13 +2469,12 @@ local LABELS_BY_LOCALE = {
         Leech = "吸血",         Avoidance = "闪避",     Speed = "移动",
         Durability = "耐久",    Repair = "修理",
         Defensive = "防御",
-        Color = "颜色",
         -- ===== Settings UI (best-effort draft, native-speaker review welcome via Issues) =====
         ["Stats"] = "属性", ["Layout"] = "布局", ["Appearance"] = "外观",
         ["Character"] = "角色", ["Item Level"] = "装等",
         ["Offensive"] = "进攻", ["Tertiary"] = "第三属性",
         ["Gear"] = "装备", ["Repair Cost"] = "修理费用",
-        ["Side Panel"] = "侧面板", ["Side Panel Contains"] = "侧面板包含",
+        ["Side Panel Contains"] = "侧面板包含",
         ["Value Display"] = "数值显示",
         ["Frame & Position"] = "窗口与位置",
         ["Typography"] = "字体",
@@ -2524,7 +2520,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "上次已知对比", ["Source:"] = "来源:",
         ["Stats panel shown"] = "属性面板已显示", ["Stats panel hidden"] = "属性面板已隐藏",
         ["Settings reset to defaults"] = "设置已恢复默认",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "命令: /ss 或 /statspro (设置), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "命令: /ss 或 /statspro (设置), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "未加载 SwiftStats 设置。请启用 SwiftStats 登录一次，执行 /reload，然后再次运行 /statspro import。",
         ["SwiftStats has no supported settings to import."] = "SwiftStats 中没有可导入的受支持设置。",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "这些设置使用较新的数据结构，当前版本的 StatsPro 无法导入。",
@@ -2611,13 +2607,12 @@ local LABELS_BY_LOCALE = {
         Leech = "汲取",         Avoidance = "迴避",     Speed = "移動",
         Durability = "耐久",    Repair = "修理",
         Defensive = "防禦",
-        Color = "顏色",
         -- ===== Settings UI (best-effort draft, Traditional script) =====
         ["Stats"] = "屬性", ["Layout"] = "版面", ["Appearance"] = "外觀",
         ["Character"] = "角色", ["Item Level"] = "裝等",
         ["Offensive"] = "攻擊", ["Tertiary"] = "第三屬性",
         ["Gear"] = "裝備", ["Repair Cost"] = "修理費用",
-        ["Side Panel"] = "側面板", ["Side Panel Contains"] = "側面板包含",
+        ["Side Panel Contains"] = "側面板包含",
         ["Value Display"] = "數值顯示",
         ["Frame & Position"] = "視窗與位置",
         ["Typography"] = "字型",
@@ -2663,7 +2658,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "上次已知比較", ["Source:"] = "來源:",
         ["Stats panel shown"] = "屬性面板已顯示", ["Stats panel hidden"] = "屬性面板已隱藏",
         ["Settings reset to defaults"] = "設定已恢復預設",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"] = "指令: /ss 或 /statspro (設定), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "指令: /ss 或 /statspro (設定), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "未載入 SwiftStats 設定。請啟用 SwiftStats 登入一次，執行 /reload，然後再次輸入 /statspro import。",
         ["SwiftStats has no supported settings to import."] = "SwiftStats 中沒有可匯入的支援設定。",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "這些設定使用較新的資料結構，目前版本的 StatsPro 無法匯入。",
@@ -2962,7 +2957,8 @@ local function FontSupports(fontPath, glyph)
     local entry = FONT_GLYPH_SUPPORT[key]
     if not entry then
         -- WHY basename: anchor patterns to filename, not addon-folder substrings.
-        local lower = (string.match(fontPath, "[^\\/]+$") or fontPath):lower()
+        local lower = addon.fontRuntime.asciiLower(
+            string.match(fontPath, "[^\\/]+$") or fontPath)
         for _, p in ipairs(FONT_GLYPH_PATTERNS) do
             if string.find(lower, p.pattern) then entry = p.glyphs; break end
         end
@@ -3201,10 +3197,9 @@ function addon.fontRuntime.restore(regions, fontPath, size, flags)
     end
 end
 
--- WHY identity-fast-path remains: cached.activeLabels for enUS IS the identity map
--- (LABELS_BY_LOCALE.enUS where every key maps to itself). Pre-CacheSettings the table
--- is empty {} (see cached init in section 6) → nil lookup → "or englishKey" fallback
--- also yields identity. Both paths are O(1) single table access.
+-- WHY this stays a single lookup: enUS is the canonical source table, with a
+-- few intentional display aliases. Before CacheSettings the empty table falls
+-- through to the English key; both paths remain O(1).
 local function L(englishKey)
     return cached.activeLabels[englishKey] or englishKey
 end
@@ -3663,7 +3658,7 @@ function addon.profileUI.BuildViewModel()
         if left.lastSeen ~= right.lastSeen then return left.lastSeen > right.lastSeen end
         return left.guid < right.guid
     end)
-    model.profiles = addon.profileOps.BuildProfileCatalog(root, assignmentCounts)
+    model.profiles = addon.profileOps.BuildProfileCatalog(root)
     return model
 end
 
@@ -4684,7 +4679,7 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
     local oldGUID, oldSpecID = runtime.activeGUID, runtime.activeSpecID
     local oldDisplayName, oldSpecName, oldRole =
         runtime.activeDisplayName, runtime.activeSpecName, runtime.activeRole
-    local oldSettingsJournal = addon.profileOps.CaptureMutationJournal(oldSettings)
+    local preBoundaryJournal = addon.profileOps.CaptureMutationJournal(oldSettings)
 
     runtime.transitioning = true
     runtime.suppressIntermediateRefresh = true
@@ -4692,7 +4687,7 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
         local saveOK = type(runtime.saveActivePositions) ~= "function"
             or pcall(runtime.saveActivePositions, oldSettings)
         if not saveOK then
-            addon.profileOps.RestoreMutationJournal(oldSettingsJournal)
+            addon.profileOps.RestoreMutationJournal(preBoundaryJournal)
             runtime.suppressIntermediateRefresh = false
             runtime.transitioning = false
             runtime.ScheduleContextRetry()
@@ -4701,7 +4696,7 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
         end
         runtime.RememberContextRetryPositions(oldSettings)
         if not runtime.CloseOwnedSettingsModals() then
-            addon.profileOps.RestoreMutationJournal(oldSettingsJournal)
+            addon.profileOps.RestoreMutationJournal(preBoundaryJournal)
             runtime.forceReapply = true
             runtime.forceReapplyRetryCount = 0
             runtime.forceReapplyRetryToken = nil
@@ -4711,7 +4706,25 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
             addon.profileUI.RefreshSafe()
             return false
         end
+
+        -- The preflight candidate was built before the outgoing UI boundary was
+        -- settled. Rebuild from the now-committed source so a first-seen context
+        -- cannot clone a Color Picker preview or stale pre-save panel position.
+        local freshTransaction, freshProfileID = runtime.PrepareContextTransaction(context)
+        if not addon.dbRuntime.IsCleanType(freshProfileID, "string") then
+            runtime.forceReapply = true
+            runtime.forceReapplyRetryCount = 0
+            runtime.forceReapplyRetryToken = nil
+            runtime.pendingResolution = true
+            runtime.suppressIntermediateRefresh = false
+            runtime.transitioning = false
+            runtime.ScheduleContextRetry()
+            addon.profileUI.RefreshSafe()
+            return false
+        end
+        transaction, profileID = freshTransaction, freshProfileID
     end
+    local oldSettingsJournal = addon.profileOps.CaptureMutationJournal(oldSettings)
     runtime.suppressIntermediateRefresh = false
 
     runtime.CommitTransaction(transaction)
@@ -5121,15 +5134,13 @@ function addon.profileOps.CountReferences(root, profileID)
     return counts
 end
 
-function addon.profileOps.BuildProfileCatalog(root, assignmentCounts)
+function addon.profileOps.BuildProfileCatalog(root)
     local catalog = {}
     for profileID, profile in pairs(root.profiles) do
         local references = addon.profileOps.CountReferences(root, profileID)
         catalog[#catalog + 1] = {
             profileID = profileID,
             name = profile.name,
-            assignmentCount = assignmentCounts and assignmentCounts[profileID]
-                or references.specs,
             references = references,
             isActive = profileID == addon.dbRuntime.activeProfileID,
         }
@@ -5187,14 +5198,20 @@ function addon.profileOps.CheckExpected(root, expected)
     return true
 end
 
-function addon.profileOps.Gate(expected, internal)
+function addon.profileOps.AcquireOperationRoot(internal)
     local runtime = addon.profileRuntime
     if addon.profileOps.inProgress and not internal then return nil, "busy" end
     if runtime.transitioning then return nil, "busy" end
     local combat = runtime.ReadCombatState()
     if combat == true then return nil, "combat" end
     if combat ~= false then return nil, "unsafe-context" end
-    local root = addon.dbRuntime.Refresh()
+    return addon.dbRuntime.Refresh()
+end
+
+function addon.profileOps.Gate(expected, internal)
+    local runtime = addon.profileRuntime
+    local root, gateReason = addon.profileOps.AcquireOperationRoot(internal)
+    if not root then return nil, gateReason end
     if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady then
         return nil, addon.dbRuntime.mode == "corrupt" and "corrupt" or "read-only"
     end
@@ -5207,13 +5224,8 @@ function addon.profileOps.Gate(expected, internal)
 end
 
 function addon.profileOps.GateCorruptRecovery(expected, internal)
-    local runtime = addon.profileRuntime
-    if addon.profileOps.inProgress and not internal then return nil, "busy" end
-    if runtime.transitioning then return nil, "busy" end
-    local combat = runtime.ReadCombatState()
-    if combat == true then return nil, "combat" end
-    if combat ~= false then return nil, "unsafe-context" end
-    local root = addon.dbRuntime.Refresh()
+    local root, gateReason = addon.profileOps.AcquireOperationRoot(internal)
+    if not root then return nil, gateReason end
     if addon.dbRuntime.mode ~= "corrupt" or addon.dbRuntime.readOnly ~= true then
         return nil, "stale"
     end
@@ -5915,17 +5927,23 @@ function addon.profileOps.ResetCurrent(expectedActiveProfileID, expected)
     end)
 end
 
+function addon.profileOps.ReadCleanActiveContext()
+    local guid = addon.profileRuntime.activeGUID
+    local specID = addon.profileRuntime.activeSpecID
+    if type(guid) ~= "string" or not addon.dbRuntime.IsCleanType(guid, "string")
+        or guid == "" or type(specID) ~= "number"
+        or not addon.dbRuntime.IsCleanType(specID, "number")
+        or not IsFiniteNumber(specID) or specID <= 0
+        or specID ~= math.floor(specID) then
+        return nil
+    end
+    return guid, specID
+end
+
 function addon.profileOps.ImportAndAssign(importedSettings, expected)
     return addon.profileOps.Execute(expected, function(root)
-        local guid = addon.profileRuntime.activeGUID
-        local specID = addon.profileRuntime.activeSpecID
-        if type(guid) ~= "string" or not addon.dbRuntime.IsCleanType(guid, "string")
-            or guid == "" or type(specID) ~= "number"
-            or not addon.dbRuntime.IsCleanType(specID, "number")
-            or not IsFiniteNumber(specID) or specID <= 0
-            or specID ~= math.floor(specID) then
-            return nil, "missing-context"
-        end
+        local guid, specID = addon.profileOps.ReadCleanActiveContext()
+        if not guid or not specID then return nil, "missing-context" end
         local character = root.characters[guid]
         if type(character) ~= "table" or not addon.dbRuntime.IsCleanTable(character) then
             return nil, "missing-context"
@@ -5974,15 +5992,8 @@ end
 
 function addon.profileOps.FullWipe(expected)
     return addon.profileOps.ExecuteRootReplacement(expected, function()
-        local guid = addon.profileRuntime.activeGUID
-        local specID = addon.profileRuntime.activeSpecID
-        if type(guid) ~= "string" or not addon.dbRuntime.IsCleanType(guid, "string")
-            or guid == "" or type(specID) ~= "number"
-            or not addon.dbRuntime.IsCleanType(specID, "number")
-            or not IsFiniteNumber(specID) or specID <= 0
-            or specID ~= math.floor(specID) then
-            return nil, "missing-context"
-        end
+        local guid, specID = addon.profileOps.ReadCleanActiveContext()
+        if not guid or not specID then return nil, "missing-context" end
         local freshRoot = addon.dbRuntime.BuildRegistry(defaults)
         if type(freshRoot) ~= "table" or not addon.dbRuntime.IsCleanTable(freshRoot) then
             return nil, "clone-failed"
@@ -6180,10 +6191,8 @@ local function MigrateDB(dbOverride)
     local preDefaultShowDurability = db.showDurability
     local preDefaultShowRepairCost = db.showRepairCost
 
-    -- WHY runs before the current-version early-return: legacy migrants (from SwiftStats or the
-    -- earlier internal SwiftStatsLocal name) whose source DB carried a dbVersion equal
-    -- to ours would otherwise skip these loops and never get StatsPro's defaults
-    -- populated. Idempotent: only fills missing keys, never clobbers user prefs.
+    -- Populate the detached legacy candidate before registry construction. Idempotent:
+    -- only missing keys receive defaults, so existing user preferences stay intact.
     for k, v in pairs(defaults) do
         if db[k] == nil and type(v) ~= "table" then
             db[k] = v
@@ -6199,12 +6208,6 @@ local function MigrateDB(dbOverride)
     if type(db.fontBeforeAutoSwitch) ~= "nil"
         and not FontPathKey(db.fontBeforeAutoSwitch) then
         db.fontBeforeAutoSwitch = nil
-    end
-
-    -- v2 → v3: default textAlign changed "LEFT" → "RIGHT". Upgrade only users still on
-    -- the old default; preserve any explicit user choice (CENTER/RIGHT untouched).
-    if dbVersion == 2 and db.textAlign == "LEFT" then
-        db.textAlign = "RIGHT"
     end
 
     -- v3 → v4: default font changed from hardcoded `Fonts\FRIZQT__.TTF` to the
@@ -6450,6 +6453,15 @@ function addon.legacyImport.CopyFont(source, candidate)
     return true
 end
 
+function addon.legacyImport.FinalizeCandidate(candidate)
+    -- Synthetic provenance belongs to the imported profile. Feed it through the
+    -- flat-to-registry migration, then remove only its generated downgrade shadow.
+    candidate.appearancePresetID = "custom"
+    if not MigrateDB(candidate) then return false end
+    candidate.appearancePresetID = nil
+    return true
+end
+
 function addon.legacyImport.BuildPublicCandidate(source)
     if not addon.legacyImport.IsCleanType(source, "table") then return nil, false end
     local candidate, found = {}, false
@@ -6466,8 +6478,7 @@ function addon.legacyImport.BuildPublicCandidate(source)
         if addon.legacyImport.CopyColor(sourceColors, candidate, key) then found = true end
     end
     if not found then return nil, false end
-    if not MigrateDB(candidate) then return nil, false end
-    candidate.appearancePresetID = "custom"
+    if not addon.legacyImport.FinalizeCandidate(candidate) then return nil, false end
     return candidate, true
 end
 
@@ -6517,8 +6528,7 @@ function addon.legacyImport.BuildLocalCandidate(source)
         if addon.legacyImport.CopyColor(sourceColors, candidate, key) then found = true end
     end
     if not found then return nil, "empty" end
-    if not MigrateDB(candidate) then return nil, "invalid" end
-    candidate.appearancePresetID = "custom"
+    if not addon.legacyImport.FinalizeCandidate(candidate) then return nil, "invalid" end
     return candidate, "ready"
 end
 
@@ -7019,10 +7029,6 @@ function Panel:LoadPosition()
     end
     -- WHY: scale is set via SetAllPanelsScale (single ownership); not duplicated here
 end
-
--- WHY no-op: see Panel:New EnableMouse(true), drag gated by cached.isLocked
-function Panel:Lock() end
-function Panel:Unlock() end
 
 function Panel:Hide()
     if not self:IsShown() and self.lastLineCount == -1 and not self.lastRepairText then return end
@@ -7878,17 +7884,6 @@ local function LoadAllPositions()
     defensivePanel:LoadPosition()
 end
 
-local function SetAllPanelsLockState(locked)
-    if locked then
-        mainPanel:Lock()
-        defensivePanel:Lock()
-    else
-        mainPanel:Unlock()
-        defensivePanel:Unlock()
-    end
-    if addon.panelEditRuntime.Refresh then addon.panelEditRuntime.Refresh() end
-end
-
 local function SetAllPanelsScale(scale)
     scale = NormalizeNumberSetting("scale", scale)
     mainPanel.frame:SetScale(scale)
@@ -8230,7 +8225,7 @@ local function BuildTertiaryLines(labels, ratings, values)
         end
     end
 
-    -- Legacy Speed key: GetSpeed returns rating-derived %, GetUnitSpeed gives Movement yps.
+    -- Legacy persisted showSpeed key now controls Movement from GetUnitSpeed.
     -- Match Blizzard's paper-doll Movement stat: choose ground/swim/flight by
     -- current movement state instead of maxing every available mode.
     if cached.showSpeed then
@@ -8616,7 +8611,6 @@ addon.profileRuntime.CompleteBootstrap = function()
     -- locale needs glyphs db.font lacks, auto-switch before the first panel style pass.
     local runtimeFont = MaybeAutoSwitchFont()
     LoadAllPositions()
-    SetAllPanelsLockState(GetBoolDB("isLocked"))
     SetAllPanelsScale(GetNumberDB("scale"))
     addon.fontRuntime.applyCommittedTextStyle(
         runtimeFont or GetFontDB(), GetNumberDB("fontSize"), false, true)
@@ -8722,8 +8716,7 @@ local EVENT_HANDLERS = {
     PLAYER_AVG_ITEM_LEVEL_UPDATE = function() itemLevelDirty = true end,
     MERCHANT_SHOW               = function() addon.durabilityRuntime.MarkDirty() end,
     -- WHY: lock state is stored in cached.isLocked and read by OnDragStart. Mouse stays
-    -- enabled permanently so right-click Settings works even while locked; Panel:Lock /
-    -- Panel:Unlock are no-op stubs kept behind this semantic wrapper.
+    -- enabled permanently so right-click Settings works even while locked.
     PLAYER_REGEN_ENABLED        = function()
         addon.profileRuntime.ResumeCorruptRollbackApply()
         local wasLoaded = isLoaded
@@ -8733,7 +8726,6 @@ local EVENT_HANDLERS = {
             addon.profileUI.RefreshSafe()
             return
         end
-        SetAllPanelsLockState(GetBoolDB("isLocked"))
         -- The event is authoritative even if InCombatLockdown() lags by one frame.
         addon.panelEditRuntime.Refresh(false)
         if (cached.showDurability and cached.durabilityComplete == false)
@@ -8806,7 +8798,15 @@ end
 -- ApplyConfigFont can re-apply with a glyph-compatible font on language change without
 -- a UI rebuild. Initial set uses currentConfigFont (locale-correct via PEW MaybeAutoSwitchFont).
 local function RegisterConfigFont(fs, size, flags)
-    local entry = { fs = fs, size = size, flags = flags }
+    local entry = localizedConfigFonts[fs]
+    if not entry then
+        entry = { fs = fs }
+        localizedConfigFonts[fs] = entry
+        tinsert(localizedConfigFonts, entry)
+    end
+    entry.size = size
+    entry.flags = flags
+    local previousText = fs:GetText()
     local resolvedFont, effectiveFlags
     if addon.fontRuntime.configFontValidated then
         resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(currentConfigFont, size, flags)
@@ -8814,16 +8814,18 @@ local function RegisterConfigFont(fs, size, flags)
         resolvedFont, effectiveFlags = addon.fontRuntime.resolveFlags(currentConfigFont, size, flags)
     end
     if resolvedFont and addon.fontRuntime.setRegionFont(fs, resolvedFont, size, effectiveFlags) then
+        if previousText ~= nil then fs:SetText(previousText) end
         currentConfigFont = resolvedFont
         addon.fontRuntime.configFontValidated = true
         entry.appliedFont = resolvedFont
         entry.appliedSize = size
         entry.appliedFlags = effectiveFlags
-        tinsert(localizedConfigFonts, entry)
         return true
     end
 
-    tinsert(localizedConfigFonts, entry)
+    -- A failed SetFont may still clear the FontString on some clients. Restore
+    -- the label before the fallback path snapshots and reapplies it.
+    if previousText ~= nil then fs:SetText(previousText) end
     local active = ResolveActiveLocale()
     local req = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
     local fallback = FindCompatibleFont(addon.fontRuntime.safeDefaultPath(), req)
@@ -8969,7 +8971,7 @@ end
 -- WHY: shared snapshot/select/cancel handler used by every swatch (CreateColorSwatch
 -- buttons route OnClick here). Snapshot is taken at click time, not creation time, so
 -- cancelling a 2nd pick reverts to the user's prior color, not the original default.
-local COLOR_PICKER_STATE = { active = nil, token = 0 }
+local COLOR_PICKER_STATE = { active = nil }
 
 function COLOR_PICKER_STATE.IsActive(session)
     return COLOR_PICKER_STATE.active == session
@@ -9126,9 +9128,7 @@ local function OpenColorPicker(btn, statName)
     local current = GetColor(statName)
     local snapshot = { r = current.r, g = current.g, b = current.b }
 
-    COLOR_PICKER_STATE.token = COLOR_PICKER_STATE.token + 1
     local session = {
-        token = COLOR_PICKER_STATE.token,
         btn = btn,
         statName = statName,
         hadExplicitColor = hadExplicitColor,
@@ -9348,9 +9348,11 @@ end
 -- RefreshConfigLocalization: re-runs all SetText setters and re-aligns every registered group.
 -- Called from the Language dropdown's selection handler after CacheSettings() updates
 -- cached.activeLabels — all L() calls inside setters now resolve to the new locale.
-local function RefreshConfigLocalization()
+local function RefreshConfigLocalization(skipSetters)
     RefreshPersistentLocalization()
-    for _, setter in ipairs(localizedConfigLabels) do setter() end
+    for _, setter in ipairs(localizedConfigLabels) do
+        if not skipSetters or not skipSetters[setter] then setter() end
+    end
     for _, g in ipairs(alignmentGroups) do
         ReAlignGroupImpl(g.rows, g.gap)
     end
@@ -9358,11 +9360,13 @@ end
 
 addon.profileRuntime.RefreshConfigControls = function()
     if #configRefreshers == 0 then return true end
+    local refreshed = {}
     for _, refresh in ipairs(configRefreshers) do
         local ok = pcall(refresh)
         if not ok then PrintMsg("Settings control refresh failed.") end
+        refreshed[refresh] = true
     end
-    local localized = pcall(RefreshConfigLocalization)
+    local localized = pcall(RefreshConfigLocalization, refreshed)
     if not localized then PrintMsg("Settings localization refresh failed.") end
     addon.profileRuntime.configRefreshCount = addon.profileRuntime.configRefreshCount + 1
     return true
@@ -9439,9 +9443,8 @@ addon.settingsDesign = {
             value = { size = 12, flags = "OUTLINE", color = "textPrimary" },
             controlMetadata = { size = 10, color = "textSecondary" },
             warning = { size = 11, color = "warning" },
-            error = { size = 11, color = "danger" },
         },
-        spacing = { xxs = 2, xs = 4, sm = 8, md = 12, lg = 16, xl = 24 },
+        spacing = { xxs = 2, xs = 4, sm = 8, md = 12 },
         geometry = {
             windowWidth = 500, minHeight = 260, maxHeight = 600,
             parentHeightRatio = 0.90, outerInset = 12,
@@ -9457,8 +9460,8 @@ addon.settingsDesign = {
             viewportInset = 12, viewportTop = 152, viewportBottom = 12,
             scrollLeft = 16, scrollRight = 32, scrollTop = 156, scrollBottom = 16,
             contentWidth = 450,
-            shellButtonHeight = 28, minHitTarget = 24,
-            sectionHeaderHeight = 22, scrollbarGutter = 16,
+            minHitTarget = 24,
+            sectionHeaderHeight = 22,
             scrollbarTrackWidth = 4, scrollbarArrowInset = 18,
             controlRowHeight = 28, controlHitTarget = 24,
             checkboxLabelGap = 6,
@@ -9619,6 +9622,14 @@ function addon.settingsDesign.HideControlTooltip(control)
     end
 end
 
+function addon.settingsDesign.RefreshOwnedControlTooltip(control)
+    if not GameTooltip:IsShown() or type(GameTooltip.GetOwner) ~= "function"
+        or GameTooltip:GetOwner() ~= control then return false end
+    GameTooltip:Hide()
+    addon.settingsDesign.ShowControlTooltip(control)
+    return true
+end
+
 function addon.settingsDesign.AttachTooltip(control, provider)
     control.statsProTooltipProvider = provider
     if not control.statsProTooltipHooksAttached then
@@ -9754,6 +9765,13 @@ function addon.settingsDesign.OnControlLeave(control)
     addon.settingsDesign.RefreshControl(control)
 end
 
+function addon.settingsDesign.OnControlHide(control)
+    control.statsProHovered = false
+    control.statsProPressed = false
+    addon.settingsDesign.HideControlTooltip(control)
+    addon.settingsDesign.RefreshControl(control)
+end
+
 function addon.settingsDesign.OnControlDown(control)
     if addon.settingsDesign.IsControlEnabled(control) then control.statsProPressed = true end
     addon.settingsDesign.RefreshControl(control)
@@ -9776,6 +9794,7 @@ function addon.settingsDesign.HookControl(control)
     control:HookScript("OnLeave", addon.settingsDesign.OnControlLeave)
     control:HookScript("OnMouseDown", addon.settingsDesign.OnControlDown)
     control:HookScript("OnMouseUp", addon.settingsDesign.OnControlUp)
+    control:HookScript("OnHide", addon.settingsDesign.OnControlHide)
     control:HookScript("OnEnable", addon.settingsDesign.RefreshControl)
     control:HookScript("OnDisable", addon.settingsDesign.OnControlDisabled)
 end
@@ -9783,17 +9802,26 @@ end
 function addon.settingsDesign.RefreshEnabledState(control)
     local blockers = control.statsProControlBlockers
     local blocked = type(blockers) == "table" and next(blockers) ~= nil
-    if blocked then control:Disable() else control:Enable() end
-    if control.statsProControlKind == "button" then
-        addon.settingsDesign.RefreshShellButton(control)
-    else
-        addon.settingsDesign.RefreshControl(control)
+    local enabled = addon.settingsDesign.IsControlEnabled(control)
+    if blocked and enabled then
+        control:Disable()
+    elseif not blocked and not enabled then
+        control:Enable()
     end
+    addon.settingsDesign.RefreshOwnedControlTooltip(control)
 end
 
 function addon.settingsDesign.SetControlBlocked(control, source, blocked, mode, key)
     if not control then return end
     control.statsProControlBlockers = control.statsProControlBlockers or {}
+    local existing = control.statsProControlBlockers[source]
+    if blocked then
+        if type(existing) == "table" and existing.mode == mode and existing.key == key then
+            return
+        end
+    elseif existing == nil then
+        return
+    end
     control.statsProControlBlockers[source] = blocked and { mode = mode, key = key } or nil
     addon.settingsDesign.RefreshEnabledState(control)
     if control.statsProSwatch then
@@ -9864,7 +9892,6 @@ end
 function addon.settingsDesign.SetSwatchColor(control, r, g, b)
     if control and control.statsProColorWell then
         control.statsProColorWell:SetColorTexture(r, g, b, 1)
-        control.statsProDisplayedColor = { r = r, g = g, b = b }
     end
 end
 
@@ -9955,7 +9982,7 @@ function addon.settingsDesign.StyleDropdown(dropdown, label)
     addon.settingsDesign.RefreshControl(button)
 end
 
-function addon.settingsDesign.StyleListRow(row, text)
+function addon.settingsDesign.StyleListRow(row, text, textRole)
     local state = row.statsProStateTexture or row.background
     if not state then
         state = row:CreateTexture(nil, "BACKGROUND")
@@ -9963,7 +9990,7 @@ function addon.settingsDesign.StyleListRow(row, text)
     end
     row.statsProStateTexture = state
     row.statsProText = text
-    addon.settingsDesign.ApplyTextRole(text, "controlMetadata")
+    addon.settingsDesign.ApplyTextRole(text, textRole or "controlMetadata")
     addon.settingsDesign.RegisterControl(row, "listRow")
     addon.settingsDesign.HookControl(row)
     addon.settingsDesign.AttachTooltip(row, addon.settingsDesign.ControlTextTooltip)
@@ -9977,12 +10004,10 @@ end
 
 function addon.settingsDesign.StyleStatusText(text, roleName)
     addon.settingsDesign.ApplyTextRole(text, roleName or "controlMetadata")
-    text.statsProStatusRole = roleName or "controlMetadata"
 end
 
-function addon.settingsDesign.StyleWarning(parent, text, roleName)
-    local role = roleName or "warning"
-    addon.settingsDesign.ApplyTextRole(text, role)
+function addon.settingsDesign.StyleWarning(parent, text)
+    addon.settingsDesign.ApplyTextRole(text, "warning")
     local surface = addon.settingsDesign.CreateTextureSurface(parent, "raised")
     surface:SetPoint("TOPLEFT", text, "TOPLEFT", -8, 6)
     surface:SetPoint("BOTTOMRIGHT", text, "BOTTOMRIGHT", 8, -6)
@@ -9990,7 +10015,7 @@ function addon.settingsDesign.StyleWarning(parent, text, roleName)
     rail:SetPoint("TOPLEFT", surface, "TOPLEFT", 0, 0)
     rail:SetPoint("BOTTOMLEFT", surface, "BOTTOMLEFT", 0, 0)
     rail:SetWidth(2)
-    local color = addon.settingsDesign.Color(role == "error" and "danger" or "warning")
+    local color = addon.settingsDesign.Color("warning")
     rail:SetColorTexture(color[1], color[2], color[3], color[4])
     text.statsProWarningSurface = surface
     text.statsProWarningRail = rail
@@ -10090,6 +10115,13 @@ function addon.settingsDesign.OnButtonDisabled(button)
     addon.settingsDesign.RefreshShellButton(button)
 end
 
+function addon.settingsDesign.OnButtonHide(button)
+    button.statsProHovered = false
+    button.statsProPressed = false
+    addon.settingsDesign.HideControlTooltip(button)
+    addon.settingsDesign.RefreshShellButton(button)
+end
+
 function addon.settingsDesign.CreateShellButton(parent, name, roleName, textRole)
     local button = CreateFrame("Button", name, parent, "BackdropTemplate")
     addon.settingsDesign.ApplySurface(button, "raised")
@@ -10107,6 +10139,7 @@ function addon.settingsDesign.CreateShellButton(parent, name, roleName, textRole
     button:SetScript("OnLeave", addon.settingsDesign.OnButtonLeave)
     button:SetScript("OnMouseDown", addon.settingsDesign.OnButtonDown)
     button:SetScript("OnMouseUp", addon.settingsDesign.OnButtonUp)
+    button:HookScript("OnHide", addon.settingsDesign.OnButtonHide)
     button:HookScript("OnEnable", addon.settingsDesign.RefreshShellButton)
     button:HookScript("OnDisable", addon.settingsDesign.OnButtonDisabled)
     addon.settingsDesign.RegisterControl(button, "button")
@@ -10153,6 +10186,10 @@ function addon.settingsDesign.CreateDeveloperLinkButton(parent, name, linkKey,
         control.statsProIcon:SetAlpha(1)
     end)
     button:SetScript("OnLeave", function(control)
+        control.statsProHover:Hide()
+        control.statsProIcon:SetAlpha(0.76)
+    end)
+    button:HookScript("OnHide", function(control)
         control.statsProHover:Hide()
         control.statsProIcon:SetAlpha(0.76)
     end)
@@ -10816,6 +10853,18 @@ function addon.profileRuntime.CancelOwnedMutationPopups()
     end
 end
 
+function addon.profileRuntime.CloseOwnedDropdownMenus()
+    local openMenu = _G.UIDROPDOWNMENU_OPEN_MENU
+    local menuName
+    if openMenu and type(openMenu.GetName) == "function" then
+        local ok, value = pcall(openMenu.GetName, openMenu)
+        if ok and addon.dbRuntime.IsCleanType(value, "string") then menuName = value end
+    end
+    if not menuName or not menuName:match("^StatsPro") then return false end
+    CloseDropDownMenus()
+    return true
+end
+
 addon.profileRuntime.closeOwnedSettingsModals = function()
     -- Destructive prompts are invalidated first. A later preview/modal restore
     -- failure must not leave an old confirmation capable of committing.
@@ -10831,13 +10880,7 @@ addon.profileRuntime.closeOwnedSettingsModals = function()
     if type(addon.profileRuntime.cancelLanguagePreview) == "function" then
         addon.profileRuntime.cancelLanguagePreview()
     end
-    local openMenu = _G.UIDROPDOWNMENU_OPEN_MENU
-    local menuName
-    if openMenu and type(openMenu.GetName) == "function" then
-        local ok, value = pcall(openMenu.GetName, openMenu)
-        if ok and addon.dbRuntime.IsCleanType(value, "string") then menuName = value end
-    end
-    if menuName and menuName:match("^StatsPro") then CloseDropDownMenus() end
+    addon.profileRuntime.CloseOwnedDropdownMenus()
     if type(addon.profileRuntime.cancelFontPreview) == "function" then
         addon.profileRuntime.cancelFontPreview()
     end
@@ -10860,7 +10903,7 @@ addon.profileRuntime.applyActiveSettings = function()
     ApplyTextAlphaToAllPanels(cached.textAlpha)
     addon.readabilityConfig.applyPanelBackgroundAlphaToAllPanels(cached.panelBackgroundAlpha)
     LoadAllPositions()
-    SetAllPanelsLockState(GetBoolDB("isLocked"))
+    if addon.panelEditRuntime.Refresh then addon.panelEditRuntime.Refresh() end
     SetAllPanelsScale(GetNumberDB("scale"))
     addon.durabilityRuntime.MarkDirty()
     itemLevelDirty = true
@@ -11528,9 +11571,6 @@ function addon.profileUI.BuildOperationUI(manager)
     cancelButton:SetSize(102, 26)
     PushLocalizedLabel(function() cancelButton:SetText(L("Cancel")) end)
 
-    ui.actionScroll = actionScroll
-    ui.actionChild = actionChild
-    ui.managedLabel = managedLabel
     ui.profileSelector = profileSelector
     ui.managedImpact = managedImpact
     ui.operationStatus = operationStatus
@@ -11548,9 +11588,17 @@ function addon.profileUI.BuildOperationUI(manager)
         independent = independentButton,
         roleTemplate = roleTemplateButton,
     }
-    ui.selectedCharacterTitle = selectedCharacterTitle
+    function ui.ApplyOperationPaneWidth(managerWidth)
+        local availableWidth = math.max(1, managerWidth - 258 - 34)
+        local controlWidth = math.max(
+            addon.settingsDesign.tokens.geometry.minHitTarget,
+            math.min(addon.settingsDesign.tokens.geometry.actionWidth, availableWidth - 12))
+        actionChild:SetWidth(availableWidth)
+        profileSelector:SetWidth(controlWidth)
+        for _, button in pairs(ui.actionButtons) do button:SetWidth(controlWidth) end
+    end
+    ui.ApplyOperationPaneWidth(ui.managerWidth)
     ui.selectedCharacterSummary = selectedCharacterSummary
-    ui.futureContextsTitle = futureContextsTitle
     ui.roleTemplateSummary = roleTemplateSummary
     ui.operationDialog = dialog
     ui.operationBlocker = blocker
@@ -11558,11 +11606,8 @@ function addon.profileUI.BuildOperationUI(manager)
     ui.operationDialogMessage = dialogMessage
     ui.nameInput = nameInput
     ui.nameValidation = nameValidation
-    ui.choiceScroll = choiceScroll
-    ui.choiceChild = choiceChild
     ui.choiceRows = {}
     ui.operationPrimaryButton = primaryButton
-    ui.operationCancelButton = cancelButton
 
     function ui.RefreshOperationStatus()
         local failed = ui.operationStatusKind == "error"
@@ -11593,6 +11638,7 @@ function addon.profileUI.BuildOperationUI(manager)
         dialogTitle:SetText(title)
         dialogMessage:SetText("")
         nameValidation:SetText("")
+        if type(nameInput.ClearFocus) == "function" then nameInput:ClearFocus() end
         nameInput:Hide()
         nameValidation:Hide()
         choiceScroll:Hide()
@@ -11668,13 +11714,12 @@ function addon.profileUI.BuildOperationUI(manager)
         row = CreateFrame("Button", nil, choiceChild)
         row:SetSize(372, 26)
         local text = row:CreateFontString(nil, "OVERLAY")
-        RegisterConfigFont(text, 11)
         text:SetPoint("LEFT", 8, 0)
         text:SetPoint("RIGHT", -8, 0)
         text:SetJustifyH("LEFT")
         text:SetWordWrap(false)
         row.text = text
-        addon.settingsDesign.StyleListRow(row, text)
+        addon.settingsDesign.StyleListRow(row, text, "metadata")
         row:SetScript("OnClick", function(button)
             if button.choiceData then ui.HandleChoice(button.choiceData) end
         end)
@@ -11957,6 +12002,7 @@ function addon.profileUI.BuildOperationUI(manager)
         ui.selectedSpecModel = spec
         ui.selectedManagedProfile = managedProfile
         profileSelector:SetText(managedProfile and managedProfile.name or L("Choose a profile"))
+        addon.settingsDesign.RefreshOwnedControlTooltip(profileSelector)
         if managedProfile then
             local specs, other = ui.ReferenceImpact(managedProfile)
             if managedProfile.references.total == 0 then
@@ -12180,6 +12226,7 @@ function addon.profileUI.BuildOperationUI(manager)
     cancelButton:SetScript("OnClick", ui.CloseOperationDialog)
     dialogClose:SetScript("OnClick", ui.CloseOperationDialog)
     dialog:SetScript("OnHide", function()
+        if type(nameInput.ClearFocus) == "function" then nameInput:ClearFocus() end
         blocker:Hide()
         ui.pendingAction = nil
         ui.RemoveSpecialFrame("StatsProProfileOperationDialog")
@@ -12213,7 +12260,6 @@ function addon.profileUI.BuildSettingsUI(owner)
     profileRail:SetWidth(2)
     local accent = addon.settingsDesign.Color("accent")
     profileRail:SetColorTexture(accent[1], accent[2], accent[3], 0.55)
-    header.statsProRail = profileRail
 
     local profileLabel = header:CreateFontString(nil, "OVERLAY")
     addon.settingsDesign.ApplyTextRole(profileLabel, "metadata")
@@ -12282,6 +12328,9 @@ function addon.profileUI.BuildSettingsUI(owner)
         end
         if detailProfile then
             detailProfile:SetWidth(math.max(1, width - geometry.managerDetailInset))
+        end
+        if type(ui.ApplyOperationPaneWidth) == "function" then
+            ui.ApplyOperationPaneWidth(width)
         end
         return true
     end
@@ -12398,22 +12447,17 @@ function addon.profileUI.BuildSettingsUI(owner)
     detailNotice:SetMaxLines(2)
     addon.settingsDesign.SetRegionColor(detailNotice, "warning")
 
-    ui.header = header
     ui.headerLabel = profileLabel
     ui.headerProfileButton = profileButton
     ui.headerSubtitle = subtitle
-    ui.manageButton = manageButton
     ui.manager = manager
     ui.managerListSurface = listSurface
     ui.managerDetailSurface = detailSurface
     ui.managerTitle = managerTitle
     ui.managerRows = {}
-    ui.managerListChild = listChild
-    ui.managerEmptyText = emptyText
     ui.detailCharacter = detailCharacter
     ui.detailContext = detailContext
     ui.detailProfile = detailProfile
-    ui.detailProfileHitArea = detailProfileHitArea
     ui.detailSharing = detailSharing
     ui.detailNotice = detailNotice
     ui.BuildOperationUI(manager)
@@ -12442,7 +12486,6 @@ function addon.profileUI.BuildSettingsUI(owner)
         background:SetAllPoints(row)
         background:SetColorTexture(1, 1, 1, 0)
         local text = row:CreateFontString(nil, "OVERLAY")
-        RegisterConfigFont(text, 11)
         text:SetPoint("LEFT", 6, 0)
         local badge = row:CreateFontString(nil, "OVERLAY")
         RegisterConfigFont(badge, 10, "OUTLINE")
@@ -12457,7 +12500,7 @@ function addon.profileUI.BuildSettingsUI(owner)
         row.background = background
         row.text = text
         row.badge = badge
-        addon.settingsDesign.StyleListRow(row, text)
+        addon.settingsDesign.StyleListRow(row, text, "metadata")
         row:SetScript("OnClick", function(button)
             local context = button.profileContext
             if not context then return end
@@ -12478,6 +12521,7 @@ function addon.profileUI.BuildSettingsUI(owner)
         profileButton:SetText(model.activeProfileName
             or (model.pending and L("Waiting for a safe profile context.")
                 or L("Account default profile")))
+        addon.settingsDesign.RefreshOwnedControlTooltip(profileButton)
         if model.readOnly then
             subtitle:SetText(L(model.mode == "corrupt"
                 and "Corrupted data - profiles are read-only. Use /ss wipe to reset."
@@ -12542,6 +12586,7 @@ function addon.profileUI.BuildSettingsUI(owner)
             row.profileContext = { guid = character.guid, specID = nil }
             row.text:SetText(character.displayName)
             row.badge:SetText(character.isCurrent and L("Current") or "")
+            addon.settingsDesign.RefreshOwnedControlTooltip(row)
             local selected = character.guid == ui.selectedGUID and ui.selectedSpecID == nil
             addon.settingsDesign.SetListRowSelected(row, selected)
             row:Show()
@@ -12554,6 +12599,7 @@ function addon.profileUI.BuildSettingsUI(owner)
                 row.profileContext = { guid = character.guid, specID = spec.specID }
                 row.text:SetText("   " .. ui.FormatSpecName(spec.specID, spec.specName))
                 row.badge:SetText(spec.isActive and L("Active") or "")
+                addon.settingsDesign.RefreshOwnedControlTooltip(row)
                 selected = character.guid == ui.selectedGUID and ui.selectedSpecID == spec.specID
             addon.settingsDesign.SetListRowSelected(row, selected)
                 row:Show()
@@ -12586,11 +12632,7 @@ function addon.profileUI.BuildSettingsUI(owner)
             detailProfile:SetText(model.activeProfileName or L("Account default profile"))
             detailSharing:SetText("")
         end
-        if GameTooltip:IsShown() and type(GameTooltip.GetOwner) == "function"
-            and GameTooltip:GetOwner() == detailProfileHitArea then
-            GameTooltip:Hide()
-            addon.settingsDesign.ShowControlTooltip(detailProfileHitArea)
-        end
+        addon.settingsDesign.RefreshOwnedControlTooltip(detailProfileHitArea)
 
         if model.readOnly then
             detailNotice:SetText(L(model.mode == "corrupt"
@@ -12650,9 +12692,7 @@ function addon.profileUI.BuildSettingsUI(owner)
 
     owner.profileHeader = header
     owner.profileResetButton = resetButton
-    owner.profileManager = manager
     PushLocalizedLabel(function() ui.RefreshSafe() end)
-    PushRefresher(ui.RefreshSafe)
     return header, manager
 end
 
@@ -12792,7 +12832,7 @@ function addon:OpenConfigMenu()
         self.profileRuntime.CancelOwnedMutationPopups()
         self.appearancePresets.ForceCancelPreview()
         pcall(_G.StaticPopup_Hide, self.developerLinks.popupKey)
-        CloseDropDownMenus()  -- closes any active Blizzard dropdown; fires its OnHide → CancelLanguagePreview
+        self.profileRuntime.CloseOwnedDropdownMenus()
         if StatsProCloseColorPicker then StatsProCloseColorPicker() end
         if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
             _G.StatsProFontPicker:Hide()
@@ -12988,8 +13028,8 @@ function addon:OpenConfigMenu()
         CreateCheckbox(layoutTab, "StatsProVisibleCheck",
             "Show Stats Panel", "isVisible", cd.padX, rowY, nil, 140)
         CreateCheckbox(layoutTab, "StatsProLockCheck",
-            "Lock Frames", "isLocked", cd.padX + CONFIG_COL_OFFSET, rowY, function(checked)
-                SetAllPanelsLockState(checked)
+            "Lock Frames", "isLocked", cd.padX + CONFIG_COL_OFFSET, rowY, function()
+                addon.panelEditRuntime.Refresh()
             end, 140)
         cd.y = rowY - 26
 
@@ -13155,7 +13195,7 @@ function addon:OpenConfigMenu()
             label:SetWordWrap(false)
             label:SetMaxLines(1)
             PushLocalizedLabel(function() label:SetText(L(definition.label)) end)
-            self.settingsDesign.StyleListRow(button, label)
+            self.settingsDesign.StyleListRow(button, label, "body")
             self.settingsDesign.RegisterMutationControl(button)
             button:SetScript("OnClick", function()
                 local ok, reason = self.appearancePresets.StartPreview(presetID)
@@ -13185,7 +13225,7 @@ function addon:OpenConfigMenu()
         warning:SetJustifyH("LEFT")
         warning:SetJustifyV("TOP")
         warning:SetWordWrap(true)
-        self.settingsDesign.StyleWarning(displayTab, warning, "warning")
+        self.settingsDesign.StyleWarning(displayTab, warning)
         self.settingsDesign.SetWarningVisible(warning, false)
         presetUI.warning = warning
         presetUI.warningY = cd.y
@@ -13212,7 +13252,6 @@ function addon:OpenConfigMenu()
 
         self.appearancePresets.ui = presetUI
         self.appearancePresets.RefreshUI()
-        PushRefresher(self.appearancePresets.RefreshUI)
     end
 
     -- Hidden preview actions must not reserve a permanent hole in the Appearance tab.
@@ -13236,12 +13275,10 @@ function addon:OpenConfigMenu()
 
         -- WHY rebuilt on demand (not at load): LSM-registered fonts can appear after
         -- StatsPro loads (other addon registers later); static one-time build would miss
-        -- them until /reload. WHY cached across calls: BuildFontsList runs from the font
-        -- picker's PopulateFontPicker AND from CurrentFontName (called on Reset, on every
-        -- lang commit, and at initial picker setup) — that's 5-10× per session. The sort
-        -- inside is the dominant cost (each compare allocates two lowercased strings via
-        -- string.lower); on heavy LSM installs (~200 fonts) it runs ~16ms per uncached
-        -- call. Length-based signature catches the common LSM-add/remove invalidation case;
+        -- them until /reload. Cache ordinary caption refreshes because re-enumerating and
+        -- probing a large LSM catalog is unnecessary while its size is unchanged. Explicit
+        -- picker population still retries paths that were pending during a cold start.
+        -- Length-based signature catches the common LSM-add/remove invalidation case;
         -- same-name font swaps are accepted as a stale-cache edge (rare and harmless —
         -- worst case a stale path until next /reload).
         local cachedFontsList
@@ -13265,7 +13302,7 @@ function addon:OpenConfigMenu()
                         list[#list + 1] = {
                             name = name,
                             path = usable,
-                            sortKey = name:lower(),
+                            sortKey = addon.fontRuntime.asciiLower(name),
                         }
                     end
                 end
@@ -13280,7 +13317,7 @@ function addon:OpenConfigMenu()
                             list[#list + 1] = {
                                 name = f.name,
                                 path = usable,
-                                sortKey = f.name:lower(),
+                                sortKey = addon.fontRuntime.asciiLower(f.name),
                             }
                         end
                     end
@@ -13288,10 +13325,13 @@ function addon:OpenConfigMenu()
             end
             -- Stable sort independent of LSM internal ordering, so alphabetic bucketing below
             -- always matches user expectation (case-insensitive). Pre-computed sortKey
-            -- avoids the comparator allocating two lowercased strings per compare —
-            -- table.sort fires ~N log N compares for N=200 ≈ 1600 compares × 2 string.lower
-            -- calls each becomes N + N log N compares against an already-lowered string.
-            table.sort(list, function(a, b) return a.sortKey < b.sortKey end)
+            -- Precomputed ASCII-only sort keys avoid repeating path-safe casing work in
+            -- every comparator call while leaving localized UTF-8 font names byte-stable.
+            table.sort(list, function(a, b)
+                if a.sortKey ~= b.sortKey then return a.sortKey < b.sortKey end
+                if a.name ~= b.name then return a.name < b.name end
+                return FontPathKey(a.path) < FontPathKey(b.path)
+            end)
             -- Keep ordinary caption refreshes cheap, but never freeze a cold-start
             -- false into the picker: an explicit populate retries pending loose files
             -- even when LSM catalogue length is unchanged.
@@ -13386,8 +13426,9 @@ function addon:OpenConfigMenu()
         local FONT_PICKER_PAD          = 8
         local FONT_PICKER_SCROLLBAR_W  = 22
         local FONT_PICKER_VISIBLE_ROWS = 14
+        local FONT_PICKER_RETRY_DELAYS = { 0.2, 1, 3, 5 }
         local FONT_PICKER_FRAME_W      = FONT_PICKER_COLS * FONT_PICKER_BTN_W + FONT_PICKER_PAD * 2 + FONT_PICKER_SCROLLBAR_W  -- 518
-        local FONT_PICKER_FRAME_H      = FONT_PICKER_VISIBLE_ROWS * FONT_PICKER_BTN_H + FONT_PICKER_PAD * 2                    -- 324
+        local FONT_PICKER_FRAME_H      = FONT_PICKER_VISIBLE_ROWS * FONT_PICKER_BTN_H + FONT_PICKER_PAD * 2                    -- 352
 
         local fontPickerFrame
         local fontPickerScroll
@@ -13395,6 +13436,7 @@ function addon:OpenConfigMenu()
         local fontPickerCatcher
         local fontPickerButtons = {}   -- pool of font-button frames; reused across Populate calls
         local fontPickerInitialized = false
+        local fontPickerRetryGeneration = 0
 
         local function HideFontPicker()
             -- Single entry. picker:OnHide handler (set in Build) cancels active preview and
@@ -13458,6 +13500,7 @@ function addon:OpenConfigMenu()
             -- through CancelFontPreview's forced DB-font sync. PickFont writes DB first,
             -- so the commit path still lands on the chosen font when Hide fires.
             fontPickerFrame:SetScript("OnHide", function()
+                fontPickerRetryGeneration = fontPickerRetryGeneration + 1
                 self.profileUI.RemoveSpecialFrame("StatsProFontPicker")
                 if fontPickerCatcher then fontPickerCatcher:Hide() end
                 if fontDropdown and fontDropdown.statsProTrigger then
@@ -13492,6 +13535,7 @@ function addon:OpenConfigMenu()
             local currentPath = self.fontRuntime.preferredPath()
             local rows = math.ceil(#fonts / FONT_PICKER_COLS)
             local currentRow = nil
+            local hoveredVisibleButton = nil
 
             fontPickerContent:SetHeight(math.max(rows * FONT_PICKER_BTN_H, 1))
 
@@ -13507,7 +13551,6 @@ function addon:OpenConfigMenu()
                     btn.bg:SetColorTexture(0, 0, 0, 0)
 
                     btn.text = btn:CreateFontString(nil, "OVERLAY")
-                    RegisterConfigFont(btn.text, CONFIG_FONT_SIZE)
                     btn.text:SetPoint("LEFT", 6, 0)
                     btn.text:SetPoint("RIGHT", -4, 0)
                     btn.text:SetJustifyH("LEFT")
@@ -13515,7 +13558,7 @@ function addon:OpenConfigMenu()
                     -- the row-height grid. Single-line overflow visually clipped by FontString.
                     btn.text:SetWordWrap(false)
                     btn.text:SetMaxLines(1)
-                    addon.settingsDesign.StyleListRow(btn, btn.text)
+                    addon.settingsDesign.StyleListRow(btn, btn.text, "body")
 
                     -- hoverGen pattern: OnEnter bumps gen + applies preview; OnLeave captures
                     -- current gen and schedules a 0-tick deferred cancel. If the mouse moves
@@ -13561,11 +13604,24 @@ function addon:OpenConfigMenu()
                     addon.settingsDesign.SetListRowSelected(btn, false)
                 end
                 btn:Show()
+                if btn.statsProHovered == true then hoveredVisibleButton = btn end
             end
 
             -- Hide leftover buttons if list shrank (LSM addon disabled mid-session).
             for i = #fonts + 1, #fontPickerButtons do
                 fontPickerButtons[i]:Hide()
+            end
+
+            -- A visible retry can rebind a pooled button without firing leave/enter.
+            -- Keep both the tooltip and the live preview attached to what is now under
+            -- the pointer; if that row disappeared, restore the committed font.
+            if hoveredVisibleButton then
+                addon.settingsDesign.RefreshOwnedControlTooltip(hoveredVisibleButton)
+                if not SameFontPath(hoveredVisibleButton.fontPath, previewedPath) then
+                    PreviewFont(hoveredVisibleButton.fontPath)
+                end
+            elseif previewedPath then
+                CancelFontPreview()
             end
 
             -- Center current font in visible area; if in first half of viewport, scroll stays at 0.
@@ -13579,6 +13635,18 @@ function addon:OpenConfigMenu()
             end
         end
 
+        local function SchedulePendingFontPickerRetry(generation, attempt)
+            if not cachedFontsListHasPending or attempt > #FONT_PICKER_RETRY_DELAYS then return end
+            C_Timer.After(FONT_PICKER_RETRY_DELAYS[attempt], function()
+                if generation ~= fontPickerRetryGeneration
+                    or not fontPickerFrame or not fontPickerFrame:IsShown() then
+                    return
+                end
+                PopulateFontPicker()
+                SchedulePendingFontPickerRetry(generation, attempt + 1)
+            end)
+        end
+
         local function ShowFontPicker()
             if not fontPickerInitialized then
                 BuildFontPickerFrame()
@@ -13589,6 +13657,7 @@ function addon:OpenConfigMenu()
             -- previewedPath should already be nil from prior OnHide, but reset defensively.
             previewedPath = nil
             hoverGen = hoverGen + 1
+            fontPickerRetryGeneration = fontPickerRetryGeneration + 1
             PopulateFontPicker()  -- always refresh: picks up LSM-added fonts + current-marker drift
 
             -- Re-apply frame level — defensive against configFrame re-parenting.
@@ -13611,6 +13680,7 @@ function addon:OpenConfigMenu()
             self.profileUI.PushSpecialFrame("StatsProFontPicker")
             fontPickerCatcher:Show()
             fontPickerFrame:Show()
+            SchedulePendingFontPickerRetry(fontPickerRetryGeneration, 1)
             if fontDropdown.statsProTrigger then
                 fontDropdown.statsProTrigger.statsProActive = true
                 addon.settingsDesign.RefreshControl(fontDropdown.statsProTrigger)
@@ -13658,9 +13728,8 @@ function addon:OpenConfigMenu()
         })
 
         -- WHY no text-alignment control: three-column rendering pins labels RIGHT,
-        -- ratings RIGHT, values LEFT — there is no global alignment to adjust. The
-        -- defaults.textAlign field exists in DB purely so existing saves don't lose
-        -- the key on migration; nothing reads it at runtime.
+        -- ratings RIGHT, values LEFT. Legacy saves may still carry textAlign, but
+        -- migration preserves unknown fields and nothing reads it at runtime.
 
         cd.y = rowY - 32
     end
@@ -13942,7 +14011,7 @@ function addon:OpenConfigMenu()
         langWarn:SetWordWrap(true)
         langWarn:SetMaxLines(2)
         langWarn:SetText("")
-        addon.settingsDesign.StyleWarning(appearanceBody, langWarn, "warning")
+        addon.settingsDesign.StyleWarning(appearanceBody, langWarn)
         if self.__statsproSmoke == true then configFrame.languageWarning = langWarn end
 
         -- Assignment to file-scope upvalue declared in section 15 prelude (NOT a global).
@@ -13964,17 +14033,18 @@ function addon:OpenConfigMenu()
         -- WHY register as localized: warning wording and the presentation-only requirement
         -- label both change with the output locale. Internal font-coverage tokens never cross
         -- this UI boundary. The language commit handler also calls this for an immediate recheck.
-        PushLocalizedLabel(function() RefreshLanguageWarning() end)
+        local function RefreshLanguageControls()
+            UIDropDownMenu_SetText(langDropdown, CurrentLabel())
+            RefreshLanguageWarning()
+        end
+        PushLocalizedLabel(RefreshLanguageControls)
         -- WHY fixed two-line reservation: localized warnings wrap inside the padded
         -- scroll content. Avoid GetStringHeight arithmetic because the measurement can
         -- become secret-tainted when the active text contains restricted glyph data.
         CursorAdvance(cd, langWarnHeight)
 
         -- Reset button: re-syncs both dropdown SetText and warning state.
-        PushRefresher(function()
-            UIDropDownMenu_SetText(langDropdown, CurrentLabel())
-            RefreshLanguageWarning()
-        end)
+        PushRefresher(RefreshLanguageControls)
 
         tinsert(displayDropdownRows, {
             text = langLabel, dropdown = langDropdown,
@@ -14989,15 +15059,14 @@ if addon and addon.__statsproSmoke == true then
         getColor = GetColor,
         normalizeNumberSetting = NormalizeNumberSetting,
         fontPathKey = FontPathKey,
+        asciiLower = addon.fontRuntime.asciiLower,
         sameFontPath = SameFontPath,
         isBlizzardFontPath = IsBlizzardFontPath,
         fontSupports = FontSupports,
         findCompatibleFont = FindCompatibleFont,
-        getFontDB = GetFontDB,
         usableFontPath = addon.fontRuntime.usablePath,
         safeDefaultFontPath = addon.fontRuntime.safeDefaultPath,
         currentRuntimeFontPath = addon.fontRuntime.currentPath,
-        repairSavedFontPaths = addon.fontRuntime.repairSavedPaths,
         applyCommittedTextStyle = addon.fontRuntime.applyCommittedTextStyle,
         fontRuntimeState = function()
             return {
@@ -15094,6 +15163,7 @@ if addon and addon.__statsproSmoke == true then
             local entries = {}
             for i, entry in ipairs(localizedConfigFonts) do
                 entries[i] = {
+                    region = entry.fs,
                     requestedFlags = entry.flags,
                     appliedFont = entry.appliedFont,
                     appliedSize = entry.appliedSize,
@@ -15286,7 +15356,6 @@ if addon and addon.__statsproSmoke == true then
         end,
         isCleanFiniteNumber = SAFE_NUM.IsCleanFiniteNumber,
         stripDumpEscapes = StripDumpEscapes,
-        firstUTF8Char = FirstUTF8Char,
         getStyledLabelText = GetStyledLabelText,
         collectRenderRoutingSmokeFailures = CollectRenderRoutingSmokeFailures,
         collectLabelStyleSmokeFailures = CollectLabelStyleSmokeFailures,
@@ -15400,7 +15469,7 @@ SlashCmdList["STATSPRO"] = function(msg)
             addon:PrintDebugDump()
         end
     elseif arg == "help" or arg == "?" then
-        PrintMsg(L("Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /statspro import, /ss debug, /ss help"))
+        PrintMsg(L("Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"))
     else
         addon:OpenConfigMenu()
     end

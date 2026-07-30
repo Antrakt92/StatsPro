@@ -98,7 +98,6 @@ jobs:
           sudo apt-get install -y lua5.1
 
       - name: Build package without publishing
-        id: package
         uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28
         with:
           args: -d

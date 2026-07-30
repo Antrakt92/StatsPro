@@ -259,8 +259,6 @@ function New-ReleaseCandidate {
     Add-OutputValue -Path $GithubOutputPath -Name "manifest_path" -Value $resolved.Manifest
     Add-OutputValue -Path $GithubOutputPath -Name "candidate_path" -Value ([System.IO.Path]::GetFullPath($Destination))
     Add-OutputValue -Path $GithubOutputPath -Name "archive_sha256" -Value $candidate.files.archive.sha256
-    Add-OutputValue -Path $GithubOutputPath -Name "release_json_sha256" -Value $candidate.files.releaseJson.sha256
-    Add-OutputValue -Path $GithubOutputPath -Name "manifest_sha256" -Value $candidate.files.packageManifest.sha256
     Add-OutputValue -Path $GithubOutputPath -Name "candidate_sha256" -Value (Get-LowercaseFileSha256 -Path $Destination)
     return $candidate
 }
@@ -540,11 +538,7 @@ function Confirm-ReleaseCandidate {
     Add-OutputValue -Path $GithubOutputPath -Name "archive_path" -Value $resolvedPaths.archive
     Add-OutputValue -Path $GithubOutputPath -Name "release_json_path" -Value $resolvedPaths.release_json
     Add-OutputValue -Path $GithubOutputPath -Name "manifest_path" -Value $resolvedPaths.manifest
-    Add-OutputValue -Path $GithubOutputPath -Name "toc_path" -Value $archiveContracts.Toc
     Add-OutputValue -Path $GithubOutputPath -Name "notes_path" -Value $archiveContracts.Notes
-    Add-OutputValue -Path $GithubOutputPath -Name "archive_sha256" -Value ([string]$contract.files.archive.sha256)
-    Add-OutputValue -Path $GithubOutputPath -Name "release_json_sha256" -Value ([string]$contract.files.releaseJson.sha256)
-    Add-OutputValue -Path $GithubOutputPath -Name "manifest_sha256" -Value ([string]$contract.files.packageManifest.sha256)
     return $contract
 }
 

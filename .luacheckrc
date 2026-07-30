@@ -30,56 +30,48 @@ globals = {
 -- new APIs are referenced.
 read_globals = {
     -- Frame / UI
-    "CreateFrame", "UIParent", "BackdropTemplateMixin",
+    "CreateFrame", "UIParent",
     "SettingsPanel", "HideUIPanel", "Settings",
     "C_Timer", "C_AddOns", "C_UIFileAsset", "InCombatLockdown",
     "UIDropDownMenu_SetText", "CloseDropDownMenus",
-    "DurabilityFrame", "MERCHANT_SHOW", "PaperDollFrame_GetArmorReduction",
-    "GameFontNormalLarge", "GameFontHighlight", "GameFontHighlightSmall",
+    "PaperDollFrame_GetArmorReduction",
     -- Stat APIs (12.x retail)
     "GetCritChance", "GetSpellCritChance", "GetRangedCritChance",
-    "GetHaste", "GetMeleeHaste", "GetSpellHaste", "GetRangedHaste",
-    "GetMasteryEffect", "GetMastery",
+    "GetHaste", "GetMasteryEffect",
     "GetVersatilityBonus", "GetCombatRating", "GetCombatRatingBonus",
     "GetCombatRatingBonusForCombatRatingValue",
     "GetDodgeChance", "GetParryChance", "GetBlockChance",
-    "GetLifesteal", "GetAvoidance", "GetSpeed", "GetUnitSpeed",
+    "GetLifesteal", "GetAvoidance", "GetUnitSpeed",
     "IsSwimming", "IsFlying", "IsFalling",
     "GetAverageItemLevel",
-    "UnitStat", "UnitArmor", "UnitEffectiveLevel", "UnitClass", "UnitRace", "UnitSex",
+    "UnitStat", "UnitArmor", "UnitEffectiveLevel", "UnitClass",
     "UnitGUID", "UnitFullName", "GetServerTime",
     -- Spec / class
-    "GetSpecialization", "GetSpecializationInfo", "GetSpecializationRole",
+    "GetSpecialization", "GetSpecializationInfo",
     "C_PaperDollInfo", "C_SpecializationInfo",
     -- Inventory / tooltips
-    "GetInventoryItemDurability", "GetInventoryItemLink",
+    "GetInventoryItemDurability",
     "GameTooltip", "C_TooltipInfo", "TooltipUtil", "GetCoinTextureString",
     -- Combat ratings constants (CR_*)
-    "CR_CRIT_MELEE", "CR_CRIT_RANGED", "CR_CRIT_SPELL",
-    "CR_HASTE_MELEE", "CR_HASTE_RANGED", "CR_HASTE_SPELL",
-    "CR_MASTERY", "CR_VERSATILITY_DAMAGE_DONE", "CR_VERSATILITY_DAMAGE_TAKEN",
+    "CR_CRIT_MELEE", "CR_HASTE_MELEE",
+    "CR_MASTERY", "CR_VERSATILITY_DAMAGE_DONE",
     "CR_LIFESTEAL", "CR_AVOIDANCE", "CR_SPEED",
-    "CR_DODGE", "CR_PARRY", "CR_BLOCK",
-    -- Durability slot enum
-    "DURABILITY_SLOT_MIN", "DURABILITY_SLOT_MAX",
     -- Misc Blizzard globals
-    "GetLocale", "STANDARD_TEXT_FONT", "ITEM_QUALITY_COLORS",
-    "LibStub", "issecretvalue", "CopyTable",
-    "WrapTextInColorCode", "FONT_COLOR_CODE_CLOSE",
-    "Mixin", "CreateFromMixins",
+    "GetLocale", "STANDARD_TEXT_FONT",
+    "LibStub", "CopyTable",
     -- Blizzard table-helper aliases (faster than table.* in 12.x)
-    "tinsert", "tremove", "wipe", "tContains",
+    "tinsert", "tremove", "wipe",
     -- Sound API
-    "PlaySound", "SOUNDKIT", "PlaySoundFile",
-    -- Color picker (legacy global API)
-    "ColorPickerFrame", "OpenColorPicker",
+    "PlaySound", "SOUNDKIT",
+    -- Color picker
+    "ColorPickerFrame",
     -- UIDropDownMenu helpers (legacy template, still used in 12.x)
     "UIDropDownMenu_Initialize", "UIDropDownMenu_SetWidth",
     "UIDropDownMenu_JustifyText", "UIDropDownMenu_CreateInfo",
-    "UIDropDownMenu_AddButton", "UIDropDownMenu_SetSelectedValue",
+    "UIDropDownMenu_AddButton",
     "DropDownList1", "UIDROPDOWNMENU_OPEN_MENU", "UISpecialFrames",
     -- Legacy AddOn API (kept for older clients before C_AddOns)
-    "GetAddOnMetadata", "IsAddOnLoaded",
+    "GetAddOnMetadata",
     -- Math / string helpers usually in std but listed for safety
     "string", "math", "table", "tostring", "tonumber", "type", "pairs", "ipairs",
     "select", "pcall", "xpcall", "next", "unpack", "rawget", "rawset", "setmetatable",

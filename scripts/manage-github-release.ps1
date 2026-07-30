@@ -3721,7 +3721,6 @@ function Assert-ReleaseWorkflowBoundary {
     $packageOutputs = [regex]::Match($packageJob, '(?ms)^    outputs:\s*$.*?(?=^    steps:\s*$)')
     foreach ($outputPattern in @(
         'artifact_id:\s*\$\{\{ steps\.upload-candidate\.outputs\.artifact-id \}\}',
-        'artifact_digest:\s*\$\{\{ steps\.upload-candidate\.outputs\.artifact-digest \}\}',
         'archive_sha256:\s*\$\{\{ steps\.create-candidate\.outputs\.archive_sha256 \}\}',
         'candidate_sha256:\s*\$\{\{ steps\.create-candidate\.outputs\.candidate_sha256 \}\}',
         'project_version:\s*\$\{\{ steps\.rebuild-package-output\.outputs\.project_version \}\}',

@@ -469,13 +469,14 @@ function Write-SmokeContract {
 
     $directory = Split-Path -Parent $Path
     $temporary = Join-Path $directory ("smoke-contract." + [System.Guid]::NewGuid().ToString("N") + ".tmp")
+    $backup = Join-Path $directory ("smoke-contract." + [System.Guid]::NewGuid().ToString("N") + ".bak")
     try {
         $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
         [System.IO.File]::WriteAllText($temporary, (ConvertTo-SmokeContractJson $Summary) + "`n", $utf8NoBom)
         $roundTrip = Read-SmokeContract -Path $temporary
         Assert-SmokeContract -Summary $Summary -Contract $roundTrip
         if (Test-Path -LiteralPath $Path -PathType Leaf) {
-            [System.IO.File]::Replace($temporary, $Path, $null)
+            [System.IO.File]::Replace($temporary, $Path, $backup)
         }
         else {
             [System.IO.File]::Move($temporary, $Path)
@@ -484,6 +485,9 @@ function Write-SmokeContract {
     finally {
         if (Test-Path -LiteralPath $temporary) {
             Remove-Item -LiteralPath $temporary -Force
+        }
+        if (Test-Path -LiteralPath $backup) {
+            Remove-Item -LiteralPath $backup -Force
         }
     }
 }
@@ -591,6 +595,15 @@ function Invoke-SelfTest {
     $root = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-lua-check-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $root | Out-Null
     try {
+        $smokeContractFixturePath = Join-Path $root "smoke-contract.json"
+        Write-SmokeContract -Path $smokeContractFixturePath -Summary $validSmokeSummary
+        Write-SmokeContract -Path $smokeContractFixturePath -Summary $growthSmokeSummary
+        $writtenSmokeContract = Read-SmokeContract -Path $smokeContractFixturePath
+        Assert-SmokeContract -Summary $growthSmokeSummary -Contract $writtenSmokeContract
+        if ($writtenSmokeContract.MinimumTotalAssertions -ne 10) {
+            throw "atomic smoke contract replacement did not publish the updated summary"
+        }
+
         $cmd = Get-Command cmd.exe -ErrorAction Stop | Select-Object -First 1 -ExpandProperty Source
         $nativeCapture = Invoke-NativeCapture -FilePath $cmd -Arguments @("/d", "/c", "echo stdout-line&&echo stderr-line>&2&&exit /b 7") -TimeoutSeconds 10 -Description "native capture self-test"
         if ($nativeCapture.ExitCode -ne 7) {

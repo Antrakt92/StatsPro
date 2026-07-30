@@ -67,8 +67,6 @@ function StaticPopup_Show(which, ...) end
 ---@param which string
 function StaticPopup_Hide(which) end
 
-function ReloadUI() end
-
 ---@param specID number
 ---@param gender? number
 ---@return number? specID

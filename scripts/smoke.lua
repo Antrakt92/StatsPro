@@ -320,14 +320,12 @@ local function makeFrame(name, setFontResult, parent)
     function frame:IsMouseEnabled() return self.mouseEnabled == true end
     function frame:SetClampedToScreen(value) self.clamped = value ~= false end
     function frame:IsClampedToScreen() return self.clamped == true end
-    function frame:SetToplevel(value) self.toplevel = value ~= false end
     function frame:SetBackdrop(backdrop) self.backdrop = backdrop end
     function frame:SetBackdropColor(r, g, b, a) self.backdropColor = { r = r, g = g, b = b, a = a } end
     function frame:SetBackdropBorderColor(r, g, b, a) self.backdropBorderColor = { r = r, g = g, b = b, a = a } end
     function frame:SetColorTexture(r, g, b, a) self.colorTexture = { r = r, g = g, b = b, a = a } end
     function frame:SetVertexColor(r, g, b, a) self.vertexColor = { r = r, g = g, b = b, a = a } end
     function frame:SetDesaturated(value) self.desaturated = value ~= false end
-    function frame:SetBlendMode(mode) self.blendMode = mode end
     function frame:SetTexture(texture) self.texture = texture end
     function frame:SetAtlas(atlas) self.atlas = atlas end
     function frame:SetTexCoord(...) self.texCoords = { ... } end
@@ -345,7 +343,6 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetJustifyV(value) self.justifyV = value end
     function frame:SetTextColor(r, g, b, a) self.textColor = { r = r, g = g, b = b, a = a } end
     function frame:SetFontString(fontString) self.fontString = fontString end
-    function frame:GetFontString() return self.fontString end
     function frame:SetText(text)
         self.text = text or ""
         if self.fontString and self.fontString ~= self then self.fontString:SetText(self.text) end
@@ -360,7 +357,6 @@ local function makeFrame(name, setFontResult, parent)
         self.points[#self.points + 1] = args
     end
     function frame:ClearAllPoints() self.points = {} end
-    function frame:ClearPointState() self.points = {} end
     function frame:GetPoint()
         local p = self.points[1]
         if self.noPoint then return nil end
@@ -416,9 +412,6 @@ local function makeFrame(name, setFontResult, parent)
         self.events = self.events or {}
         self.events[event] = true
     end
-    function frame:RegisterUnitEvent(event)
-        self:RegisterEvent(event)
-    end
     function frame:SetFrameStrata(strata) self.frameStrata = strata end
     function frame:GetFrameStrata() return self.frameStrata end
     function frame:SetFrameLevel(level) self.frameLevel = level end
@@ -427,35 +420,12 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetScrollChild(child) self.scrollChild = child end
     function frame:SetVerticalScroll(value) self.verticalScroll = value or 0 end
     function frame:GetVerticalScroll() return self.verticalScroll end
-    function frame:GetVerticalScrollRange() return 0 end
-    function frame:SetNormalFontObject() end
-    function frame:SetHighlightFontObject() end
-    function frame:SetNormalTexture(texture)
-        self.normalTexture = type(texture) == "table" and texture
-            or self.normalTexture or makeFrame(nil, self.setFontResult, self)
-        if type(texture) == "string" then self.normalTexture.texture = texture end
-    end
     function frame:GetNormalTexture() return self.normalTexture end
-    function frame:SetHighlightTexture(texture)
-        self.highlightTexture = type(texture) == "table" and texture
-            or self.highlightTexture or makeFrame(nil, self.setFontResult, self)
-        if type(texture) == "string" then self.highlightTexture.texture = texture end
-    end
     function frame:GetHighlightTexture()
         self.highlightTexture = self.highlightTexture or makeFrame(nil, self.setFontResult, self)
         return self.highlightTexture
     end
-    function frame:SetPushedTexture(texture)
-        self.pushedTexture = type(texture) == "table" and texture
-            or self.pushedTexture or makeFrame(nil, self.setFontResult, self)
-        if type(texture) == "string" then self.pushedTexture.texture = texture end
-    end
     function frame:GetPushedTexture() return self.pushedTexture end
-    function frame:SetDisabledTexture(texture)
-        self.disabledTexture = type(texture) == "table" and texture
-            or self.disabledTexture or makeFrame(nil, self.setFontResult, self)
-        if type(texture) == "string" then self.disabledTexture.texture = texture end
-    end
     function frame:GetDisabledTexture() return self.disabledTexture end
     function frame:GetCheckedTexture() return self.checkedTexture end
     function frame:GetDisabledCheckedTexture() return self.disabledCheckedTexture end
@@ -476,8 +446,6 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetObeyStepOnDrag() end
     function frame:SetValue(value) self.value = value end
     function frame:GetValue() return self.value or 0 end
-    function frame:SetOrientation() end
-    function frame:EnableKeyboard(value) self.keyboardEnabled = value ~= false end
     function frame:IsKeyboardEnabled() return self.keyboardEnabled == true end
     function frame:SetAutoFocus(value) self.autoFocus = value ~= false end
     function frame:SetFocus()
@@ -491,11 +459,8 @@ local function makeFrame(name, setFontResult, parent)
         runFrameHandlers(self, "OnEditFocusLost")
     end
     function frame:HasFocus() return self.focused == true end
-    function frame:SetMultiLine() end
     function frame:SetMaxLetters() end
     function frame:SetMaxLines(value) self.maxLines = value end
-    function frame:SetNumeric() end
-    function frame:SetTextInsets() end
     function frame:SetWordWrap(value) self.wordWrap = value end
     function frame:SetNonSpaceWrap(value) self.nonSpaceWrap = value end
     function frame:GetStringWidth()
@@ -576,7 +541,6 @@ local function makeEnv(locale, opts)
     env.print = function(text)
         env.__prints[#env.__prints + 1] = text
     end
-    env.__setLocale = function(value) currentLocale = value end
     env.__lastCoinCall = function() return lastCoinCall end
     env.__fireEvent = function(event, ...)
         for _, frame in ipairs(env.__frames) do
@@ -678,7 +642,7 @@ local function makeEnv(locale, opts)
             popup.definition.OnCancel(popup, popup.data)
         end
     end
-    env.ReloadUI = opts.reloadUI or function()
+    env.ReloadUI = function()
         env.__reloadUICalls = env.__reloadUICalls + 1
     end
     env.UIParent = makeFrame("UIParent", opts.setFontResult)
@@ -765,7 +729,6 @@ local function makeEnv(locale, opts)
     env.tinsert = table.insert
     env.tremove = table.remove
     env.wipe = wipeTable
-    env.tContains = contains
     env.GetLocale = function() return currentLocale end
     env.GetAddOnMetadata = env.C_AddOns.GetAddOnMetadata
     env.InCombatLockdown = opts.inCombatLockdown or function() return false end
@@ -810,7 +773,6 @@ local function makeEnv(locale, opts)
             }
         end
     end
-    env.UIDropDownMenu_SetSelectedValue = function() end
     env.UIDROPDOWNMENU_OPEN_MENU = nil
     env.DropDownList1 = makeFrame("DropDownList1", opts.setFontResult)
     for i = 1, 8 do
@@ -868,7 +830,6 @@ local function makeEnv(locale, opts)
         picker:Hide()
         picker.colorPickerOptions = nil
     end
-    env.OpenColorPicker = function() end
     env.hooksecurefunc = function(target, methodName, hook)
         local original = target and target[methodName]
         if type(original) ~= "function" or type(hook) ~= "function" then return end
@@ -879,24 +840,7 @@ local function makeEnv(locale, opts)
         end
     end
     env.PlaySound = function() end
-    env.PlaySoundFile = function() end
     env.SOUNDKIT = {}
-    env.WrapTextInColorCode = function(text, color) return (color or "") .. (text or "") .. "|r" end
-    env.FONT_COLOR_CODE_CLOSE = "|r"
-    env.ITEM_QUALITY_COLORS = {}
-    env.BackdropTemplateMixin = {}
-    env.Mixin = function(target, ...)
-        for i = 1, select("#", ...) do
-            local source = select(i, ...)
-            if type(source) == "table" then
-                for k, v in pairs(source) do target[k] = v end
-            end
-        end
-        return target
-    end
-    env.CreateFromMixins = function(...)
-        return env.Mixin({}, ...)
-    end
 
     env.CreateFrame = function(frameType, name, parent, template)
         local frame = makeFrame(name, opts.setFontResult, parent)
@@ -986,11 +930,7 @@ local function makeEnv(locale, opts)
     env.GetRangedCritChance = opts.getRangedCritChance or zero
     env.MAX_SPELL_SCHOOLS = opts.maxSpellSchools or 7
     env.GetHaste = opts.getHaste or zero
-    env.GetMeleeHaste = opts.getMeleeHaste or zero
-    env.GetSpellHaste = opts.getSpellHaste or zero
-    env.GetRangedHaste = opts.getRangedHaste or zero
     env.GetMasteryEffect = opts.getMasteryEffect or zero
-    env.GetMastery = opts.getMastery or zero
     env.GetVersatilityBonus = opts.getVersatilityBonus or zero
     env.GetCombatRating = opts.getCombatRating or zero
     env.GetCombatRatingBonus = opts.getCombatRatingBonus or zero
@@ -1000,35 +940,30 @@ local function makeEnv(locale, opts)
     env.GetBlockChance = opts.getBlockChance or zero
     env.GetLifesteal = opts.getLifesteal or zero
     env.GetAvoidance = opts.getAvoidance or zero
-    env.GetSpeed = opts.getSpeed or zero
     env.GetUnitSpeed = opts.getUnitSpeed or function() return 0, 0, 0, 0 end
     env.IsSwimming = opts.isSwimming or function() return false end
     env.IsFlying = opts.isFlying or function() return false end
-    env.IsFalling = opts.isFalling or function() return false end
+    env.IsFalling = function() return false end
     env.GetAverageItemLevel = opts.getAverageItemLevel or function() return 0, 0 end
     env.UnitStat = opts.unitStat or function(_, statId) return 0, statId == 3 and 100 or 0 end
     env.UnitArmor = opts.unitArmor or function() return 0, 0 end
     env.UnitEffectiveLevel = opts.unitEffectiveLevel or function() return 80 end
     env.UnitGUID = opts.unitGUID
     env.UnitFullName = opts.unitFullName or function()
-        return opts.unitName or "Tester", opts.realmName or "TestRealm"
+        return "Tester", "TestRealm"
     end
     env.GetServerTime = opts.getServerTime or function() return 1770000000 end
-    env.UnitClass = opts.unitClass or function()
-        return opts.unitClassName or "Warrior", opts.unitClassToken or "WARRIOR", opts.classID or 1
+    env.UnitClass = function()
+        return "Warrior", opts.unitClassToken or "WARRIOR", opts.classID or 1
     end
-    env.UnitRace = function() return "Human", "Human" end
-    env.UnitSex = function() return 2 end
     env.GetSpecialization = function() return nil end
     env.GetSpecializationInfo = function() return nil end
     env.GetSpecializationInfoByID = opts.getSpecializationInfoByID
-    env.GetSpecializationRole = function() return nil end
     env.C_SpecializationInfo = {
         GetSpecialization = opts.getSpecialization or function() return opts.specIndex end,
         GetSpecializationInfo = opts.getSpecializationInfo or function()
             return opts.specID, opts.specName, nil, nil, opts.specRole, opts.primaryStat
         end,
-        GetSpecializationRole = function() return nil end,
     }
     env.C_PaperDollInfo = {
         GetStaggerPercentage = opts.getStaggerPercentage or function() return nil end,
@@ -1040,7 +975,6 @@ local function makeEnv(locale, opts)
         env.PaperDollFrame_GetArmorReduction = opts.paperDollFrameGetArmorReduction or zero
     end
     env.GetInventoryItemDurability = opts.getInventoryItemDurability or function() return nil, nil end
-    env.GetInventoryItemLink = function() return nil end
     env.C_TooltipInfo = {
         GetInventoryItem = opts.getTooltipInventoryItem or function() return nil end,
     }
@@ -1053,19 +987,11 @@ local function makeEnv(locale, opts)
     end
 
     local constants = {
-        "CR_CRIT_MELEE", "CR_CRIT_RANGED", "CR_CRIT_SPELL",
-        "CR_HASTE_MELEE", "CR_HASTE_RANGED", "CR_HASTE_SPELL",
-        "CR_MASTERY", "CR_VERSATILITY_DAMAGE_DONE", "CR_VERSATILITY_DAMAGE_TAKEN",
+        "CR_CRIT_MELEE", "CR_HASTE_MELEE",
+        "CR_MASTERY", "CR_VERSATILITY_DAMAGE_DONE",
         "CR_LIFESTEAL", "CR_AVOIDANCE", "CR_SPEED",
-        "CR_DODGE", "CR_PARRY", "CR_BLOCK",
     }
     for i, name in ipairs(constants) do env[name] = i end
-    env.DURABILITY_SLOT_MIN = 1
-    env.DURABILITY_SLOT_MAX = 19
-    env.MERCHANT_SHOW = "MERCHANT_SHOW"
-    env.GameFontNormalLarge = {}
-    env.GameFontHighlight = {}
-    env.GameFontHighlightSmall = {}
 
     return env
 end
@@ -2698,6 +2624,7 @@ do
     eq("db.empty_default_population.version", root.dbVersion, test.currentDBVersion())
     eq("db.empty_default_population.force_locale", accountSettings(root).forceLocale, "auto")
     eq("db.empty_default_population.font", db.font, test.copyDefaults().font)
+    eq("db.empty_default_population.no_dead_text_align", db.textAlign, nil)
     eq("db.empty_default_population.font_size", db.fontSize, 14)
     eq("db.empty_default_population.text_alpha", db.textAlpha, 100)
     eq("db.empty_default_population.panel_background_alpha", db.panelBackgroundAlpha, 15)
@@ -2713,6 +2640,12 @@ do
     check("db.empty_default_population.colors", type(db.colors) == "table", "colors table missing")
     assertColor("db.empty_default_population.crit", db.colors.crit, 1, 0, 0)
     assertColor("db.empty_default_population.stagger", db.colors.stagger, 0.3, 0.8, 0.5)
+end
+
+do
+    local root = runMigrate({ dbVersion = 2, textAlign = "LEFT" })
+    eq("db.legacy_text_align_preserved_unread",
+        activeSettings(root).textAlign, "LEFT")
 end
 
 do
@@ -3081,6 +3014,10 @@ do
     eq("lifecycle.pew_legacy_priority.runtime_flag_ignored", activeSettings(legacyEnv).updateNoticeShown, nil)
     eq("lifecycle.pew_legacy_priority.unknown_ignored", activeSettings(legacyEnv).privatePayload, nil)
     eq("lifecycle.pew_legacy_priority.unknown_color_ignored", activeSettings(legacyEnv).colors.unknown, nil)
+    eq("lifecycle.pew_legacy_priority.preset_marker",
+        activeSettings(legacyEnv).appearancePresetID, "custom")
+    eq("lifecycle.pew_legacy_priority.no_root_preset_shadow",
+        rawget(legacyEnv.StatsProDB, "appearancePresetID"), nil)
     legacySource.colors.crit.r = 0.9
     near("lifecycle.pew_legacy_priority.deep_copy", activeSettings(legacyEnv).colors.crit.r, 0.2)
 
@@ -3411,6 +3348,10 @@ do
         imported.settings.colors.mainStat, 0.2, 0.3, 0.4)
     assertColor("legacy_import.late.accept_crit_color",
         imported.settings.colors.crit, 0.4, 0.5, 0.6)
+    eq("legacy_import.late.accept_preset_marker",
+        imported.settings.appearancePresetID, "custom")
+    eq("legacy_import.late.accept_no_root_preset_shadow",
+        rawget(rootRef, "appearancePresetID"), nil)
     eq("legacy_import.late.accept_unknown_ignored", imported.settings.unknown, nil)
     eq("legacy_import.late.accept_minimap_ignored", imported.settings.minimapPos, nil)
     eq("legacy_import.late.accept_transient_ignored", imported.settings.fontBeforeAutoSwitch, nil)
@@ -7508,6 +7449,9 @@ end
 smokeReachability:complete("runtime-rendering")
 
 eq("fonts.path_key_slash_case", test.fontPathKey("Fonts/ARIALN.TTF"), "fonts\\arialn.ttf")
+eq("fonts.ascii_lower_preserves_utf8", test.asciiLower("ÉCOLE Ж FONT"), "École Ж font")
+eq("fonts.path_key_preserves_utf8", test.fontPathKey("Interface/AddOns/Медиа/ШРИФТ.TTF"),
+    "interface\\addons\\Медиа\\ШРИФТ.ttf")
 eq("fonts.path_same_slash_case", test.sameFontPath("Fonts/ARIALN.TTF", "fonts\\arialn.ttf"), true)
 eq("fonts.blizzard_path_detection.true", test.isBlizzardFontPath("Fonts\\ARIALN.TTF"), true)
 eq("fonts.blizzard_path_detection.false", test.isBlizzardFontPath("Interface\\AddOns\\Media\\font.ttf"), false)
@@ -7623,6 +7567,81 @@ do
     eq("fonts.pending_retry_bound.attempts", neverTest.fontRuntimeState().pendingRetryAttempt, 4)
     eq("fonts.pending_retry_bound.pending_saved_font",
         neverTest.fontRuntimeState().pendingSavedFont, neverPath)
+end
+
+
+do
+    local delayedPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\Later.ttf"
+    local readyPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\Zulu.ttf"
+    local delayedName = "ZZY Alpha Long Font Name"
+    local readyName = "ZZZ Zulu Long Font Name"
+    local ready = false
+    local delayedEnv, delayedAddon, delayedTest = loadStatsPro("enUS", {
+        lsmFonts = {
+            { name = delayedName, path = delayedPath },
+            { name = readyName, path = readyPath },
+        },
+        setFontResult = function(frame, font, size, flags)
+            if font == delayedPath then
+                if not ready then return false end
+                frame.font, frame.fontSize, frame.fontFlags = font, size, flags
+                return true
+            end
+            return true
+        end,
+    })
+    fireEvent("fonts.picker_pending_open.pew", delayedEnv, "PLAYER_ENTERING_WORLD")
+    check("fonts.picker_pending_open.config", pcall(function() delayedAddon:OpenConfigMenu() end))
+    runScript("fonts.picker_pending_open.show",
+        delayedEnv.StatsProFontDropdownButton, "OnClick", delayedEnv.StatsProFontDropdownButton)
+    eq("fonts.picker_pending_open.omits_unready",
+        countFrameField(delayedEnv, "fontName", delayedName), 0)
+    local hoveredButton = findFrame("fonts.picker_pending_open.ready_button", delayedEnv,
+        function(frame) return frame.fontName == readyName end)
+    hoveredButton.text:SetWidth(48)
+    userInteract("fonts.picker_pending_open.hover_ready", hoveredButton, "OnEnter")
+    eq("fonts.picker_pending_open.preview_ready",
+        delayedTest.panelFontState().mainAppliedFont, readyPath)
+    eq("fonts.picker_pending_open.tooltip_ready_owner",
+        delayedEnv.GameTooltip:GetOwner(), hoveredButton)
+    eq("fonts.picker_pending_open.tooltip_ready_text",
+        delayedEnv.GameTooltip.lines[1].left, readyName)
+    eq("fonts.picker_pending_open.one_retry", #delayedEnv.__timers, 1)
+    eq("fonts.picker_pending_open.first_delay", delayedEnv.__timers[1].delay, 0.2)
+    ready = true
+    flushTimers("fonts.picker_pending_open.retry", delayedEnv, 0.2, 1)
+    eq("fonts.picker_pending_open.refreshes_while_visible",
+        countFrameField(delayedEnv, "fontName", delayedName), 1)
+    eq("fonts.picker_pending_open.hovered_row_rebound", hoveredButton.fontName, delayedName)
+    eq("fonts.picker_pending_open.preview_rebound",
+        delayedTest.panelFontState().mainAppliedFont, delayedPath)
+    eq("fonts.picker_pending_open.tooltip_rebound_owner",
+        delayedEnv.GameTooltip:GetOwner(), hoveredButton)
+    eq("fonts.picker_pending_open.tooltip_rebound_text",
+        delayedEnv.GameTooltip.lines[1].left, delayedName)
+    eq("fonts.picker_pending_open.stops_after_ready", #delayedEnv.__timers, 0)
+end
+
+do
+    local pendingPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\HiddenPending.ttf"
+    local hiddenEnv, hiddenAddon = loadStatsPro("enUS", {
+        lsmFonts = { { name = "Hidden Pending", path = pendingPath } },
+        setFontResult = function(_, font)
+            if font == pendingPath then return false end
+            return true
+        end,
+    })
+    fireEvent("fonts.picker_pending_hidden.pew", hiddenEnv, "PLAYER_ENTERING_WORLD")
+    check("fonts.picker_pending_hidden.config", pcall(function() hiddenAddon:OpenConfigMenu() end))
+    runScript("fonts.picker_pending_hidden.show",
+        hiddenEnv.StatsProFontDropdownButton, "OnClick", hiddenEnv.StatsProFontDropdownButton)
+    eq("fonts.picker_pending_hidden.one_retry", #hiddenEnv.__timers, 1)
+    hiddenEnv.StatsProFontPicker:Hide()
+    eq("fonts.picker_pending_hidden.restore_and_retry_queued", #hiddenEnv.__timers, 2)
+    flushTimers("fonts.picker_pending_hidden.stale", hiddenEnv, 0.2, 2)
+    eq("fonts.picker_pending_hidden.no_reschedule", #hiddenEnv.__timers, 0)
+    eq("fonts.picker_pending_hidden.no_hidden_refresh",
+        countFrameField(hiddenEnv, "fontName", "Hidden Pending"), 0)
 end
 
 do
@@ -7973,8 +7992,19 @@ do
     fireEvent("fonts.config_registry.pew", configEnv, "PLAYER_ENTERING_WORLD")
     local ok, err = pcall(function() configAddon:OpenConfigMenu() end)
     check("fonts.config_registry.open", ok, err)
+    eq("fonts.config_registry.initial_checkbox_text",
+        configEnv.StatsProMainStatCheckText:GetText(), "Show Main Stat")
     local before = configTest.configFontState()
     check("fonts.config_registry.has_entries", #before.entries > 10, "expected populated config font registry")
+    local registeredRegions = {}
+    for i, entry in ipairs(before.entries) do
+        check("fonts.config_registry.unique_region." .. i,
+            registeredRegions[entry.region] == nil,
+            "duplicate settings FontString registration")
+        registeredRegions[entry.region] = true
+    end
+    local _, presetSize = configEnv.StatsProAppearancePresetdefault.statsProText:GetFont()
+    eq("fonts.config_registry.preset_size", presetSize, 12)
 
     local applied, effective = configTest.applyConfigFont(configTarget, true)
     eq("fonts.config_registry.flag_fallback_applies", applied, true)
@@ -9858,7 +9888,7 @@ do
     eq("config.font_picker_hover_restore_forces_side_font", fontState.sideLabelFont, defaultFont)
 
     local critSwatch = findFrame("config.color_picker.crit_swatch", env, function(frame)
-        local color = frame.statsProDisplayedColor
+        local color = frame.statsProColorWell and frame.statsProColorWell.colorTexture
         return frame.statsProColorKey == "crit" and type(frame.scripts.OnClick) == "function"
             and color and color.r == 1 and color.g == 0 and color.b == 0
     end)
@@ -10446,6 +10476,26 @@ do
         resizeEnv.StatsProManageProfilesButton, "OnClick")
     local managerActions = exists(
         "config.live_resize.manager.actions", resizeEnv.StatsProProfileActionsScroll)
+    local function assertActionPaneFits(prefix)
+        local child = exists(prefix .. ".child", managerActions.scrollChild)
+        local availableWidth = manager:GetWidth() - 258 - 34
+        eq(prefix .. ".child_width", child:GetWidth(), availableWidth)
+        for _, control in ipairs({
+            resizeEnv.StatsProManagedProfileButton,
+            resizeEnv.StatsProProfileAssignButton,
+            resizeEnv.StatsProProfileNewButton,
+            resizeEnv.StatsProProfileDuplicateButton,
+            resizeEnv.StatsProProfileRenameButton,
+            resizeEnv.StatsProProfileCopyButton,
+            resizeEnv.StatsProProfileSwapButton,
+            resizeEnv.StatsProProfileResetButton,
+            resizeEnv.StatsProProfileDeleteButton,
+            resizeEnv.StatsProProfileForgetButton,
+        }) do
+            check(prefix .. ".control_positive", control:GetWidth() >= geometry.minHitTarget)
+            check(prefix .. ".control_fits", 6 + control:GetWidth() <= child:GetWidth())
+        end
+    end
     local offlineRow = findFrame("config.live_resize.manager.offline_selection", resizeEnv,
         function(frame)
             return type(frame.profileContext) == "table"
@@ -10529,6 +10579,7 @@ do
     eq("config.live_resize.manager.burst.refresh_count",
         managerStateAfter.refreshCount, managerStateBefore.refreshCount)
     eq("config.live_resize.manager.burst.action_scroll", managerActions:GetVerticalScroll(), 47)
+    assertActionPaneFits("config.live_resize.manager.burst.action_pane")
     assertDeepEqual("config.live_resize.manager.burst.position", manager.points, managerPointsBefore)
     assertDeepEqual("config.live_resize.manager.burst.special_frames",
         resizeEnv.UISpecialFrames, specialFramesBefore)
@@ -10561,6 +10612,7 @@ do
         manager:GetHeight() - 76 - 54 > 0)
     check("config.live_resize.manager.minimum.action_viewport",
         manager:GetHeight() - 176 - 88 > 0)
+    assertActionPaneFits("config.live_resize.manager.minimum.action_pane")
 
     local stableHeight = config:GetHeight()
     local stableManagerWidth, stableManagerHeight = manager:GetWidth(), manager:GetHeight()
@@ -12542,6 +12594,83 @@ do
 end
 
 do
+    -- A first-seen context clones its role template. The outgoing profile must be
+    -- settled before that clone: Color Picker previews are transactional, while
+    -- the latest panel position is committed by the context switch itself.
+    local identity = {
+        guid = "Player-1-FIRST-SEEN",
+        specID = 71,
+        specName = "Arms",
+        role = "DAMAGER",
+    }
+    local env, addonContext, contextTest = loadStatsPro("enUS", {
+        unitGUID = function() return identity.guid end,
+        unitFullName = function() return "FirstSeen", "Realm" end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return identity.specID, identity.specName, nil, nil, identity.role, 1
+        end,
+    })
+    fireEvent("profiles.context.first_seen_modal.seed", env, "PLAYER_ENTERING_WORLD")
+    local root = env.StatsProDB
+    local sourceProfileID = contextTest.profileState().profileID
+    root.roleTemplates.DAMAGER = sourceProfileID
+    local nextProfileNumber = root.account.nextProfileID
+
+    addonContext:OpenConfigMenu()
+    local critSwatch = findFrame("profiles.context.first_seen_modal.crit", env, function(frame)
+        return frame.statsProColorKey == "crit" and type(frame.scripts.OnClick) == "function"
+    end)
+    local committedColor = deepCopy(root.profiles[sourceProfileID].settings.colors.crit)
+    callScript("profiles.context.first_seen_modal.open_color", critSwatch, "OnClick")
+    env.__setColorPickerRGB(0.123, 0.456, 0.789)
+    env.ColorPickerFrame.colorPickerOptions.swatchFunc()
+    env.StatsProFrame:ClearAllPoints()
+    env.StatsProFrame:SetPoint("TOPLEFT", env.UIParent, "TOPLEFT", 246, -135)
+
+    identity.specID, identity.specName = 72, "Fury"
+    fireEvent("profiles.context.first_seen_modal.switch",
+        env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+
+    local targetProfileID = root.characters[identity.guid].specProfiles[identity.specID]
+    check("profiles.context.first_seen_modal.new_profile", targetProfileID ~= sourceProfileID)
+    eq("profiles.context.first_seen_modal.one_allocation",
+        targetProfileID, "p" .. tostring(nextProfileNumber))
+    eq("profiles.context.first_seen_modal.next_profile_id",
+        root.account.nextProfileID, nextProfileNumber + 1)
+    check("profiles.context.first_seen_modal.detached_settings",
+        not rawequal(root.profiles[targetProfileID].settings,
+            root.profiles[sourceProfileID].settings))
+    check("profiles.context.first_seen_modal.detached_colors",
+        not rawequal(root.profiles[targetProfileID].settings.colors,
+            root.profiles[sourceProfileID].settings.colors))
+    eq("profiles.context.first_seen_modal.color_closed", env.ColorPickerFrame:IsShown(), false)
+    assertColor("profiles.context.first_seen_modal.source_color_restored",
+        root.profiles[sourceProfileID].settings.colors.crit,
+        committedColor.r, committedColor.g, committedColor.b)
+    assertColor("profiles.context.first_seen_modal.target_color_committed",
+        root.profiles[targetProfileID].settings.colors.crit,
+        committedColor.r, committedColor.g, committedColor.b)
+    eq("profiles.context.first_seen_modal.source_position_saved",
+        root.profiles[sourceProfileID].settings.xOfs, 246)
+    eq("profiles.context.first_seen_modal.target_position_current",
+        root.profiles[targetProfileID].settings.xOfs, 246)
+    eq("profiles.context.first_seen_modal.target_position_point",
+        root.profiles[targetProfileID].settings.point, "TOPLEFT")
+    eq("profiles.context.first_seen_modal.target_position_relative",
+        root.profiles[targetProfileID].settings.relativePoint, "TOPLEFT")
+    eq("profiles.context.first_seen_modal.target_position_y",
+        root.profiles[targetProfileID].settings.yOfs, -135)
+    local runtime = contextTest.profileRuntimeState()
+    eq("profiles.context.first_seen_modal.active_spec", runtime.activeSpecID, 72)
+    eq("profiles.context.first_seen_modal.active_profile",
+        contextTest.profileState().profileID, targetProfileID)
+    eq("profiles.context.first_seen_modal.not_pending", runtime.pendingResolution, false)
+    eq("profiles.context.first_seen_modal.no_force_reapply", runtime.forceReapply, false)
+end
+
+do
     -- Cold profile bootstrap must never expose the account default while player identity
     -- is transient. Reuse a current-schema registry so every pre-resolution delta is a bug,
     -- not expected migration work.
@@ -12588,11 +12717,11 @@ do
         end,
         inCombatLockdown = function() return combat end,
     })
-    fireEvent("profiles.bootstrap.combat.pending", combatEnv, "PLAYER_ENTERING_WORLD")
+    fireEvent("profiles.bootstrap.combat.pending.pew", combatEnv, "PLAYER_ENTERING_WORLD")
     local runtime = combatTest.profileRuntimeState()
     local visual = combatTest.panelVisualState()
     eq("profiles.bootstrap.combat.not_loaded", runtime.isLoaded, false)
-    eq("profiles.bootstrap.combat.pending", runtime.pendingResolution, true)
+    eq("profiles.bootstrap.combat.pending.state", runtime.pendingResolution, true)
     eq("profiles.bootstrap.combat.bootstrap_pending", runtime.bootstrapPending, true)
     eq("profiles.bootstrap.combat.no_apply", runtime.applyCount, 0)
     eq("profiles.bootstrap.combat.no_render", runtime.updateCount, 0)
@@ -14667,6 +14796,156 @@ do
     eq("profiles.ui.detail_overflow.foreign_text",
         env.GameTooltip.lines[1].left, "Foreign tooltip")
     env.GameTooltip:Hide()
+end
+
+do
+    local env, addonContext, _, root = makeProfileOpsFixture()
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.manager_row_tooltip.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    local row = findFrame("profiles.ui.manager_row_tooltip.alpha_row", env, function(frame)
+        return type(frame.profileContext) == "table"
+            and frame.profileContext.guid == "Player-1-OPS-A"
+            and frame.profileContext.specID == nil
+    end)
+    row.text:SetWidth(48)
+    userInteract("profiles.ui.manager_row_tooltip.hover", row, "OnEnter")
+    eq("profiles.ui.manager_row_tooltip.initial_owner", env.GameTooltip:GetOwner(), row)
+    eq("profiles.ui.manager_row_tooltip.initial_text",
+        env.GameTooltip.lines[1].left, "Alpha-Realm")
+
+    local refreshedName = "Renamed-Character-With-Long-Name"
+    root.characters["Player-1-OPS-A"].displayName = refreshedName
+    addonContext.profileUI.RefreshSafe()
+    eq("profiles.ui.manager_row_tooltip.refresh_owner", env.GameTooltip:GetOwner(), row)
+    eq("profiles.ui.manager_row_tooltip.refresh_text",
+        env.GameTooltip.lines[1].left, refreshedName)
+
+    local foreignOwner = env.CreateFrame(
+        "Frame", "StatsProManagerRowForeignTooltip", env.UIParent)
+    env.GameTooltip:SetOwner(foreignOwner, "ANCHOR_LEFT")
+    env.GameTooltip:AddLine("Foreign tooltip")
+    env.GameTooltip:Show()
+    root.characters["Player-1-OPS-A"].displayName = "Another-Long-Renamed-Character"
+    addonContext.profileUI.RefreshSafe()
+    eq("profiles.ui.manager_row_tooltip.foreign_preserved", env.GameTooltip:IsShown(), true)
+    eq("profiles.ui.manager_row_tooltip.foreign_owner",
+        env.GameTooltip:GetOwner(), foreignOwner)
+    eq("profiles.ui.manager_row_tooltip.foreign_text",
+        env.GameTooltip.lines[1].left, "Foreign tooltip")
+    env.GameTooltip:Hide()
+end
+
+do
+    local env, addonContext, test = makeProfileOpsFixture()
+    local originalRefreshPresetUI = addonContext.appearancePresets.RefreshUI
+    local presetRefreshCount = 0
+    addonContext.appearancePresets.RefreshUI = function(...)
+        presetRefreshCount = presetRefreshCount + 1
+        return originalRefreshPresetUI(...)
+    end
+    addonContext:OpenConfigMenu()
+    presetRefreshCount = 0
+    local profileRefreshBefore = test.profileUIState().refreshCount
+    addonContext.profileRuntime.RefreshConfigControls()
+    eq("profiles.ui.refresh_dedup.profile_once",
+        test.profileUIState().refreshCount - profileRefreshBefore, 1)
+    eq("profiles.ui.refresh_dedup.preset_once", presetRefreshCount, 1)
+    eq("profiles.ui.refresh_dedup.config_visible", env.StatsProConfigFrame:IsShown(), true)
+end
+
+do
+    local env, addonContext, _, root = makeProfileOpsFixture()
+    addonContext:OpenConfigMenu()
+    env.StatsProActiveProfileButton.statsProText:SetWidth(48)
+    userInteract("profiles.ui.dynamic_button_tooltip.header_hover",
+        env.StatsProActiveProfileButton, "OnEnter")
+    eq("profiles.ui.dynamic_button_tooltip.header_initial",
+        env.GameTooltip.lines[1].left, "Tank shared")
+    local headerName = "Renamed-Header-Profile-With-Long-Name"
+    root.profiles.p2.name = headerName
+    addonContext.profileUI.RefreshSafe()
+    eq("profiles.ui.dynamic_button_tooltip.header_text",
+        env.StatsProActiveProfileButton:GetText(), headerName)
+    eq("profiles.ui.dynamic_button_tooltip.header_refresh",
+        env.GameTooltip.lines[1].left, headerName)
+
+    callScript("profiles.ui.dynamic_button_tooltip.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    env.StatsProManagedProfileButton.statsProText:SetWidth(48)
+    userInteract("profiles.ui.dynamic_button_tooltip.selector_hover",
+        env.StatsProManagedProfileButton, "OnEnter")
+    eq("profiles.ui.dynamic_button_tooltip.selector_initial",
+        env.GameTooltip.lines[1].left, headerName)
+    local selectorName = "Renamed-Managed-Profile-With-Long-Name"
+    root.profiles.p2.name = selectorName
+    addonContext.profileUI.RefreshSafe()
+    eq("profiles.ui.dynamic_button_tooltip.selector_text",
+        env.StatsProManagedProfileButton:GetText(), selectorName)
+    eq("profiles.ui.dynamic_button_tooltip.selector_refresh",
+        env.GameTooltip.lines[1].left, selectorName)
+    env.GameTooltip:Hide()
+end
+
+do
+    local env, addonContext, test = makeProfileOpsFixture()
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.confirm_focus.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    callScript("profiles.ui.confirm_focus.open_rename",
+        env.StatsProProfileRenameButton, "OnClick")
+    env.StatsProProfileNameInput:SetText("Renamed Shared Profile")
+    callScript("profiles.ui.confirm_focus.validate",
+        env.StatsProProfileNameInput, "OnTextChanged")
+    eq("profiles.ui.confirm_focus.name_has_focus",
+        env.StatsProProfileNameInput:HasFocus(), true)
+    callScript("profiles.ui.confirm_focus.submit_name",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    eq("profiles.ui.confirm_focus.confirm_mode", test.profileUIState().operationMode, "confirm")
+    eq("profiles.ui.confirm_focus.name_hidden",
+        env.StatsProProfileNameInput:IsShown(), false)
+    eq("profiles.ui.confirm_focus.hidden_input_releases_focus",
+        env.StatsProProfileNameInput:HasFocus(), false)
+    callScript("profiles.ui.confirm_focus.cancel",
+        env.StatsProProfileOperationCancelButton, "OnClick")
+end
+
+do
+    local env, addonContext, test = makeProfileOpsFixture()
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.hidden_dialog_focus.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    callScript("profiles.ui.hidden_dialog_focus.open_name",
+        env.StatsProProfileNewButton, "OnClick")
+    eq("profiles.ui.hidden_dialog_focus.setup",
+        env.StatsProProfileNameInput:HasFocus(), true)
+    test.setSettingsContextBlockedForSmoke(true)
+    addonContext.profileUI.RefreshSafe()
+    eq("profiles.ui.hidden_dialog_focus.dialog_hidden",
+        env.StatsProProfileOperationDialog:IsShown(), false)
+    eq("profiles.ui.hidden_dialog_focus.input_released",
+        env.StatsProProfileNameInput:HasFocus(), false)
+end
+
+do
+    local env, addonContext = makeProfileOpsFixture()
+    addonContext:OpenConfigMenu()
+    local foreignMenu = makeFrame("OtherAddonDropdown")
+    env.UIDROPDOWNMENU_OPEN_MENU = foreignMenu
+    env.DropDownList1:Show()
+    local closedBefore = env.__closedDropdowns
+    env.StatsProConfigFrame:Hide()
+    eq("config.dropdown_ownership.foreign_not_closed", env.__closedDropdowns, closedBefore)
+    eq("config.dropdown_ownership.foreign_list_preserved", env.DropDownList1:IsShown(), true)
+    eq("config.dropdown_ownership.foreign_owner_preserved",
+        env.UIDROPDOWNMENU_OPEN_MENU, foreignMenu)
+
+    addonContext:OpenConfigMenu()
+    env.UIDROPDOWNMENU_OPEN_MENU = env.StatsProLanguageDropdown
+    env.DropDownList1:Show()
+    env.StatsProConfigFrame:Hide()
+    eq("config.dropdown_ownership.owned_closed", env.__closedDropdowns, closedBefore + 1)
+    eq("config.dropdown_ownership.owned_list_hidden", env.DropDownList1:IsShown(), false)
 end
 
 do
@@ -17339,6 +17618,43 @@ do
     userInteract("config.control_design.checkbox_release", env.StatsProOffensiveCheck, "OnMouseUp")
     userInteract("config.control_design.checkbox_leave", env.StatsProOffensiveCheck, "OnLeave")
     assertDeepEqual("config.control_design.hover_zero_writes", env.StatsProDB, dbBeforeHover)
+
+    userInteract("config.control_design.hide_reset.control_hover",
+        env.StatsProOffensiveCheck, "OnEnter")
+    userInteract("config.control_design.hide_reset.control_press",
+        env.StatsProOffensiveCheck, "OnMouseDown")
+    env.StatsProOffensiveCheck:Hide()
+    eq("config.control_design.hide_reset.control_hovered",
+        env.StatsProOffensiveCheck.statsProHovered, false)
+    eq("config.control_design.hide_reset.control_pressed",
+        env.StatsProOffensiveCheck.statsProPressed, false)
+    env.StatsProOffensiveCheck:Show()
+    eq("config.control_design.hide_reset.control_state",
+        env.StatsProOffensiveCheck.statsProControlState, "normal")
+
+    userInteract("config.control_design.hide_reset.button_hover",
+        env.StatsProProfileResetButton, "OnEnter")
+    userInteract("config.control_design.hide_reset.button_press",
+        env.StatsProProfileResetButton, "OnMouseDown")
+    env.StatsProProfileResetButton:Hide()
+    eq("config.control_design.hide_reset.button_hovered",
+        env.StatsProProfileResetButton.statsProHovered, false)
+    eq("config.control_design.hide_reset.button_pressed",
+        env.StatsProProfileResetButton.statsProPressed, false)
+    env.StatsProProfileResetButton:Show()
+    eq("config.control_design.hide_reset.button_state",
+        env.StatsProProfileResetButton.statsProButtonState, "normal")
+
+    userInteract("config.control_design.hide_reset.link_hover",
+        env.StatsProKoFiLinkButton, "OnEnter")
+    eq("config.control_design.hide_reset.link_hover_visible",
+        env.StatsProKoFiLinkButton.statsProHover:IsShown(), true)
+    env.StatsProKoFiLinkButton:Hide()
+    eq("config.control_design.hide_reset.link_hover_cleared",
+        env.StatsProKoFiLinkButton.statsProHover:IsShown(), false)
+    env.StatsProKoFiLinkButton:Show()
+    eq("config.control_design.hide_reset.link_icon_alpha",
+        env.StatsProKoFiLinkButton.statsProIcon:GetAlpha(), 0.76)
     local _, critY = pointOffsets(env.StatsProCritCheck)
     local _, masteryY = pointOffsets(env.StatsProMasteryCheck)
     check("config.control_design.checkbox_row_pitch",
@@ -17482,7 +17798,15 @@ do
     env.StatsProOffensiveCheck:SetChecked(false)
     userInteract("config.control_design.pending_dependency_setup",
         env.StatsProOffensiveCheck, "OnClick")
+    userInteract("config.control_design.blocker_tooltip_dependency",
+        env.StatsProCritCheck, "OnEnter")
+    eq("config.control_design.blocker_tooltip_dependency_title",
+        env.GameTooltip.lines[1].left, "Requires Show Offensive Stats.")
     test.setSettingsContextBlockedForSmoke(true)
+    eq("config.control_design.blocker_tooltip_context_title",
+        env.GameTooltip.lines[1].left, "Waiting for a safe profile context.")
+    userInteract("config.control_design.blocker_tooltip_leave",
+        env.StatsProCritCheck, "OnLeave")
     eq("config.control_design.pending_slider_disabled",
         env.StatsProScaleSlider:IsEnabled(), false)
     eq("config.control_design.pending_dropdown_disabled",
@@ -17504,6 +17828,35 @@ do
     env.StatsProOffensiveCheck:SetChecked(true)
     userInteract("config.control_design.pending_dependency_restore",
         env.StatsProOffensiveCheck, "OnClick")
+
+    local critEnable, critDisable, swatchEnable, swatchDisable = 0, 0, 0, 0
+    local trackColorWrites = 0
+    local track = env.StatsProScaleSlider.statsProTrack
+    local setTrackColor = track.SetColorTexture
+    track.SetColorTexture = function(self, ...)
+        trackColorWrites = trackColorWrites + 1
+        return setTrackColor(self, ...)
+    end
+    env.StatsProCritCheck:HookScript("OnEnable", function() critEnable = critEnable + 1 end)
+    env.StatsProCritCheck:HookScript("OnDisable", function() critDisable = critDisable + 1 end)
+    critSwatch:HookScript("OnEnable", function() swatchEnable = swatchEnable + 1 end)
+    critSwatch:HookScript("OnDisable", function() swatchDisable = swatchDisable + 1 end)
+    test.setSettingsContextBlockedForSmoke(false)
+    eq("config.control_design.blocker_idempotent.clean_checkbox_enable", critEnable, 0)
+    eq("config.control_design.blocker_idempotent.clean_swatch_enable", swatchEnable, 0)
+    test.setSettingsContextBlockedForSmoke(true)
+    eq("config.control_design.blocker_idempotent.block_checkbox_once", critDisable, 1)
+    eq("config.control_design.blocker_idempotent.block_swatch_once", swatchDisable, 1)
+    eq("config.control_design.blocker_idempotent.block_slider_one_refresh", trackColorWrites, 1)
+    test.setSettingsContextBlockedForSmoke(true)
+    eq("config.control_design.blocker_idempotent.repeat_checkbox_noop", critDisable, 1)
+    eq("config.control_design.blocker_idempotent.repeat_swatch_noop", swatchDisable, 1)
+    eq("config.control_design.blocker_idempotent.repeat_slider_noop", trackColorWrites, 1)
+    test.setSettingsContextBlockedForSmoke(false)
+    eq("config.control_design.blocker_idempotent.unblock_checkbox_once", critEnable, 1)
+    eq("config.control_design.blocker_idempotent.unblock_swatch_once", swatchEnable, 1)
+    eq("config.control_design.blocker_idempotent.unblock_slider_one_refresh", trackColorWrites, 2)
+    track.SetColorTexture = setTrackColor
 
     env.StatsProConfigFrame.SwitchToTab(3)
     userInteract("config.control_design.font_picker_open",

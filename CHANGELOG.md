@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.20 - 30-Jul-2026 — SharedMedia font startup recovery
+
+### Fixed
+
+- **SharedMedia fonts now survive cold client starts, and the font menu repopulates as late-loaded fonts become available.** Thanks to [@tflo](https://github.com/tflo) for the detailed report, diagnostics, and suggested fixes.
+
 ## 1.10.19 - 30-Jul-2026 — Archon target refresh
 
 ### Updated

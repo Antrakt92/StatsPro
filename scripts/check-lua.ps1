@@ -291,23 +291,23 @@ function Read-SmokeContract {
     }
 
     $rootNames = @($parsed.PSObject.Properties.Name)
-    foreach ($required in @("schemaVersion", "minimumTotalAssertions", "suites")) {
+    foreach ($required in @("schemaVersion", "totalAssertions", "suites")) {
         if ($rootNames -cnotcontains $required) {
             throw "Smoke reachability contract is missing '$required'."
         }
     }
     foreach ($property in $rootNames) {
-        if ($property -cnotin @("schemaVersion", "minimumTotalAssertions", "suites")) {
+        if ($property -cnotin @("schemaVersion", "totalAssertions", "suites")) {
             throw "Smoke reachability contract has unsupported root property '$property'."
         }
     }
     $schemaVersion = ConvertTo-SmokeContractPositiveInteger $parsed.schemaVersion "Smoke contract schemaVersion"
-    if ($schemaVersion -ne 1) {
-        throw "Unsupported smoke reachability contract schemaVersion $schemaVersion; expected 1."
+    if ($schemaVersion -ne 2) {
+        throw "Unsupported smoke reachability contract schemaVersion $schemaVersion; expected 2."
     }
-    $minimumTotal = ConvertTo-SmokeContractPositiveInteger `
-        $parsed.minimumTotalAssertions `
-        "Smoke contract minimumTotalAssertions"
+    $totalAssertions = ConvertTo-SmokeContractPositiveInteger `
+        $parsed.totalAssertions `
+        "Smoke contract totalAssertions"
     $suiteRows = @($parsed.suites)
     if ($suiteRows.Count -eq 0) {
         throw "Smoke reachability contract must define at least one suite."
@@ -321,13 +321,13 @@ function Read-SmokeContract {
             throw "Smoke reachability contract contains an empty suite entry."
         }
         $suiteNames = @($suite.PSObject.Properties.Name)
-        foreach ($required in @("name", "minimumAssertions")) {
+        foreach ($required in @("name", "assertions", "fingerprint")) {
             if ($suiteNames -cnotcontains $required) {
                 throw "Smoke reachability contract suite is missing '$required'."
             }
         }
         foreach ($property in $suiteNames) {
-            if ($property -cnotin @("name", "minimumAssertions")) {
+            if ($property -cnotin @("name", "assertions", "fingerprint")) {
                 throw "Smoke reachability contract suite has unsupported property '$property'."
             }
         }
@@ -338,25 +338,30 @@ function Read-SmokeContract {
             throw "Smoke reachability contract repeats suite '$($suite.name)'."
         }
         $seen[$suite.name] = $true
-        $minimumAssertions = ConvertTo-SmokeContractPositiveInteger `
-            $suite.minimumAssertions `
-            "Smoke suite '$($suite.name)' minimumAssertions"
-        $floorSum += $minimumAssertions
+        $assertions = ConvertTo-SmokeContractPositiveInteger `
+            $suite.assertions `
+            "Smoke suite '$($suite.name)' assertions"
+        if ($suite.fingerprint -isnot [string] -or
+            $suite.fingerprint -cnotmatch '^[0-9a-f]{8}$') {
+            throw "Smoke suite '$($suite.name)' fingerprint must be eight lowercase hexadecimal digits."
+        }
+        $floorSum += $assertions
         if ($floorSum -gt [int]::MaxValue) {
             throw "Smoke reachability contract assertion floors exceed the supported range."
         }
         $suites += [pscustomobject]@{
             Name = $suite.name
-            MinimumAssertions = $minimumAssertions
+            Assertions = $assertions
+            Fingerprint = $suite.fingerprint
         }
     }
-    if ($floorSum -ne $minimumTotal) {
-        throw "Smoke reachability contract minimumTotalAssertions $minimumTotal does not equal suite floor sum $floorSum."
+    if ($floorSum -ne $totalAssertions) {
+        throw "Smoke reachability contract totalAssertions $totalAssertions does not equal suite assertion sum $floorSum."
     }
 
     return [pscustomobject]@{
         SchemaVersion = $schemaVersion
-        MinimumTotalAssertions = $minimumTotal
+        TotalAssertions = $totalAssertions
         Suites = $suites
     }
 }
@@ -366,8 +371,8 @@ function Read-SmokeOutputSummary {
 
     $suitePrefix = "STATSPRO_SMOKE_SUITE"
     $summaryPrefix = "STATSPRO_SMOKE_SUMMARY"
-    $suitePattern = '^STATSPRO_SMOKE_SUITE protocol=1 index=([0-9]+) name=([a-z0-9][a-z0-9-]*) assertions=([0-9]+)$'
-    $summaryPattern = '^STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=([0-9]+) assertions=([0-9]+)$'
+    $suitePattern = '^STATSPRO_SMOKE_SUITE protocol=2 index=([0-9]+) name=([a-z0-9][a-z0-9-]*) assertions=([0-9]+) fingerprint=([0-9a-f]{8})$'
+    $summaryPattern = '^STATSPRO_SMOKE_SUMMARY protocol=2 status=PASS suites=([0-9]+) assertions=([0-9]+)$'
     $suites = @()
     $seen = @{}
     $summary = $null
@@ -384,6 +389,7 @@ function Read-SmokeOutputSummary {
             $index = ConvertFrom-SmokeProtocolInteger $Matches[1] "Smoke suite index"
             $name = $Matches[2]
             $assertions = ConvertFrom-SmokeProtocolInteger $Matches[3] "Smoke suite '$name' assertion count"
+            $fingerprint = $Matches[4]
             $expectedIndex = $suites.Count + 1
             if ($index -ne $expectedIndex) {
                 throw "Smoke suite '$name' has index $index; expected $expectedIndex."
@@ -396,6 +402,7 @@ function Read-SmokeOutputSummary {
                 Index = $index
                 Name = $name
                 Assertions = $assertions
+                Fingerprint = $fingerprint
             }
         }
         elseif ($line.StartsWith($summaryPrefix, [System.StringComparison]::Ordinal)) {
@@ -451,12 +458,15 @@ function Assert-SmokeContract {
         if ($observed.Name -cne $expected.Name) {
             throw "Smoke suite $($index + 1) is '$($observed.Name)'; the contract requires '$($expected.Name)'."
         }
-        if ($observed.Assertions -lt $expected.MinimumAssertions) {
-            throw "Smoke suite '$($expected.Name)' completed $($observed.Assertions) assertions; the contract requires at least $($expected.MinimumAssertions)."
+        if ($observed.Assertions -ne $expected.Assertions) {
+            throw "Smoke suite '$($expected.Name)' completed $($observed.Assertions) assertions; the contract requires exactly $($expected.Assertions)."
+        }
+        if ($observed.Fingerprint -cne $expected.Fingerprint) {
+            throw "Smoke suite '$($expected.Name)' assertion fingerprint '$($observed.Fingerprint)' does not match contract '$($expected.Fingerprint)'."
         }
     }
-    if ($Summary.TotalAssertions -lt $Contract.MinimumTotalAssertions) {
-        throw "Smoke completed $($Summary.TotalAssertions) assertions; the contract requires at least $($Contract.MinimumTotalAssertions)."
+    if ($Summary.TotalAssertions -ne $Contract.TotalAssertions) {
+        throw "Smoke completed $($Summary.TotalAssertions) assertions; the contract requires exactly $($Contract.TotalAssertions)."
     }
 }
 
@@ -466,12 +476,13 @@ function ConvertTo-SmokeContractJson {
     $suiteRows = @($Summary.Suites | ForEach-Object {
         [ordered]@{
             name = $_.Name
-            minimumAssertions = [int]$_.Assertions
+            assertions = [int]$_.Assertions
+            fingerprint = $_.Fingerprint
         }
     })
     $document = [ordered]@{
-        schemaVersion = 1
-        minimumTotalAssertions = [int]$Summary.TotalAssertions
+        schemaVersion = 2
+        totalAssertions = [int]$Summary.TotalAssertions
         suites = $suiteRows
     }
     return ($document | ConvertTo-Json -Depth 4)
@@ -530,71 +541,81 @@ function Invoke-SelfTest {
     } "requires Lua 5.1"
 
     $smokeFixtureContract = [pscustomobject]@{
-        SchemaVersion = 1
-        MinimumTotalAssertions = 5
+        SchemaVersion = 2
+        TotalAssertions = 5
         Suites = @(
-            [pscustomobject]@{ Name = "alpha"; MinimumAssertions = 2 },
-            [pscustomobject]@{ Name = "beta"; MinimumAssertions = 3 }
+            [pscustomobject]@{ Name = "alpha"; Assertions = 2; Fingerprint = "aaaaaaaa" },
+            [pscustomobject]@{ Name = "beta"; Assertions = 3; Fingerprint = "bbbbbbbb" }
         )
     }
     $validSmokeOutput = @(
         "unrelated diagnostic output",
-        "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=alpha assertions=2",
-        "STATSPRO_SMOKE_SUITE protocol=1 index=2 name=beta assertions=3",
-        "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=2 assertions=5",
+        "STATSPRO_SMOKE_SUITE protocol=2 index=1 name=alpha assertions=2 fingerprint=aaaaaaaa",
+        "STATSPRO_SMOKE_SUITE protocol=2 index=2 name=beta assertions=3 fingerprint=bbbbbbbb",
+        "STATSPRO_SMOKE_SUMMARY protocol=2 status=PASS suites=2 assertions=5",
         "StatsPro smoke: PASS (5 assertions)"
     )
     $validSmokeSummary = Read-SmokeOutputSummary -Output $validSmokeOutput
     Assert-SmokeContract -Summary $validSmokeSummary -Contract $smokeFixtureContract
 
     $growthSmokeSummary = Read-SmokeOutputSummary -Output @(
-        "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=alpha assertions=4",
-        "STATSPRO_SMOKE_SUITE protocol=1 index=2 name=beta assertions=6",
-        "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=2 assertions=10"
+        "STATSPRO_SMOKE_SUITE protocol=2 index=1 name=alpha assertions=4 fingerprint=cccccccc",
+        "STATSPRO_SMOKE_SUITE protocol=2 index=2 name=beta assertions=6 fingerprint=dddddddd",
+        "STATSPRO_SMOKE_SUMMARY protocol=2 status=PASS suites=2 assertions=10"
     )
-    Assert-SmokeContract -Summary $growthSmokeSummary -Contract $smokeFixtureContract
+    Assert-ThrowsMatch "smoke assertion growth requires contract update" {
+        Assert-SmokeContract -Summary $growthSmokeSummary -Contract $smokeFixtureContract
+    } "requires exactly 2"
 
     Assert-ThrowsMatch "missing smoke suite rejected" {
         $summary = Read-SmokeOutputSummary -Output @(
-            "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=alpha assertions=5",
-            "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=1 assertions=5"
+            "STATSPRO_SMOKE_SUITE protocol=2 index=1 name=alpha assertions=5 fingerprint=aaaaaaaa",
+            "STATSPRO_SMOKE_SUMMARY protocol=2 status=PASS suites=1 assertions=5"
         )
         Assert-SmokeContract -Summary $summary -Contract $smokeFixtureContract
     } "contract requires 2"
     Assert-ThrowsMatch "truncated smoke output rejected" {
         [void](Read-SmokeOutputSummary -Output @(
-            "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=alpha assertions=2",
-            "STATSPRO_SMOKE_SUITE protocol=1 index=2 name=beta assertions=3"
+            "STATSPRO_SMOKE_SUITE protocol=2 index=1 name=alpha assertions=2 fingerprint=aaaaaaaa",
+            "STATSPRO_SMOKE_SUITE protocol=2 index=2 name=beta assertions=3 fingerprint=bbbbbbbb"
         ))
     } "missing the terminal"
-    Assert-ThrowsMatch "smoke suite floor rejected" {
+    Assert-ThrowsMatch "smoke suite count mismatch rejected" {
         $summary = Read-SmokeOutputSummary -Output @(
-            "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=alpha assertions=1",
-            "STATSPRO_SMOKE_SUITE protocol=1 index=2 name=beta assertions=3",
-            "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=2 assertions=4"
+            "STATSPRO_SMOKE_SUITE protocol=2 index=1 name=alpha assertions=1 fingerprint=aaaaaaaa",
+            "STATSPRO_SMOKE_SUITE protocol=2 index=2 name=beta assertions=3 fingerprint=bbbbbbbb",
+            "STATSPRO_SMOKE_SUMMARY protocol=2 status=PASS suites=2 assertions=4"
         )
         Assert-SmokeContract -Summary $summary -Contract $smokeFixtureContract
-    } "requires at least 2"
+    } "requires exactly 2"
+    Assert-ThrowsMatch "smoke fingerprint mismatch rejected" {
+        $summary = Read-SmokeOutputSummary -Output @(
+            "STATSPRO_SMOKE_SUITE protocol=2 index=1 name=alpha assertions=2 fingerprint=cccccccc",
+            "STATSPRO_SMOKE_SUITE protocol=2 index=2 name=beta assertions=3 fingerprint=bbbbbbbb",
+            "STATSPRO_SMOKE_SUMMARY protocol=2 status=PASS suites=2 assertions=5"
+        )
+        Assert-SmokeContract -Summary $summary -Contract $smokeFixtureContract
+    } "fingerprint 'cccccccc' does not match"
     Assert-ThrowsMatch "duplicate smoke suite rejected" {
         [void](Read-SmokeOutputSummary -Output @(
-            "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=alpha assertions=2",
-            "STATSPRO_SMOKE_SUITE protocol=1 index=2 name=alpha assertions=3",
-            "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=2 assertions=5"
+            "STATSPRO_SMOKE_SUITE protocol=2 index=1 name=alpha assertions=2 fingerprint=aaaaaaaa",
+            "STATSPRO_SMOKE_SUITE protocol=2 index=2 name=alpha assertions=3 fingerprint=bbbbbbbb",
+            "STATSPRO_SMOKE_SUMMARY protocol=2 status=PASS suites=2 assertions=5"
         ))
     } "repeats suite"
     Assert-ThrowsMatch "reordered smoke suite rejected" {
         $summary = Read-SmokeOutputSummary -Output @(
-            "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=beta assertions=3",
-            "STATSPRO_SMOKE_SUITE protocol=1 index=2 name=alpha assertions=2",
-            "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=2 assertions=5"
+            "STATSPRO_SMOKE_SUITE protocol=2 index=1 name=beta assertions=3 fingerprint=bbbbbbbb",
+            "STATSPRO_SMOKE_SUITE protocol=2 index=2 name=alpha assertions=2 fingerprint=aaaaaaaa",
+            "STATSPRO_SMOKE_SUMMARY protocol=2 status=PASS suites=2 assertions=5"
         )
         Assert-SmokeContract -Summary $summary -Contract $smokeFixtureContract
     } "contract requires 'alpha'"
     Assert-ThrowsMatch "smoke suite sum mismatch rejected" {
         [void](Read-SmokeOutputSummary -Output @(
-            "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=alpha assertions=2",
-            "STATSPRO_SMOKE_SUITE protocol=1 index=2 name=beta assertions=3",
-            "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=2 assertions=6"
+            "STATSPRO_SMOKE_SUITE protocol=2 index=1 name=alpha assertions=2 fingerprint=aaaaaaaa",
+            "STATSPRO_SMOKE_SUITE protocol=2 index=2 name=beta assertions=3 fingerprint=bbbbbbbb",
+            "STATSPRO_SMOKE_SUMMARY protocol=2 status=PASS suites=2 assertions=6"
         ))
     } "sum to 5"
     Assert-ThrowsMatch "legacy smoke summary alone rejected" {
@@ -602,14 +623,14 @@ function Invoke-SelfTest {
     } "missing the terminal"
     Assert-ThrowsMatch "uppercase smoke suite name rejected" {
         [void](Read-SmokeOutputSummary -Output @(
-            "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=Alpha assertions=2",
-            "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=1 assertions=2"
+            "STATSPRO_SMOKE_SUITE protocol=2 index=1 name=Alpha assertions=2 fingerprint=aaaaaaaa",
+            "STATSPRO_SMOKE_SUMMARY protocol=2 status=PASS suites=1 assertions=2"
         ))
     } "Malformed smoke suite sentinel"
     Assert-ThrowsMatch "lowercase smoke status rejected" {
         [void](Read-SmokeOutputSummary -Output @(
-            "STATSPRO_SMOKE_SUITE protocol=1 index=1 name=alpha assertions=2",
-            "STATSPRO_SMOKE_SUMMARY protocol=1 status=pass suites=1 assertions=2"
+            "STATSPRO_SMOKE_SUITE protocol=2 index=1 name=alpha assertions=2 fingerprint=aaaaaaaa",
+            "STATSPRO_SMOKE_SUMMARY protocol=2 status=pass suites=1 assertions=2"
         ))
     } "Malformed smoke terminal summary"
 
@@ -626,7 +647,7 @@ function Invoke-SelfTest {
         Write-SmokeContract -Path $smokeContractFixturePath -Summary $growthSmokeSummary
         $writtenSmokeContract = Read-SmokeContract -Path $smokeContractFixturePath
         Assert-SmokeContract -Summary $growthSmokeSummary -Contract $writtenSmokeContract
-        if ($writtenSmokeContract.MinimumTotalAssertions -ne 10) {
+        if ($writtenSmokeContract.TotalAssertions -ne 10) {
             throw "atomic smoke contract replacement did not publish the updated summary"
         }
 

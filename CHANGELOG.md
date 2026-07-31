@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.11.1 - 31-Jul-2026 — Font startup follow-through and runtime fixes
+
+### Fixed
+
+- **SharedMedia fonts now activate through an attached FontObject and are accepted only after their effective font can be read back.** Saved loose-font choices remain intact while cold assets settle, pending fonts retry without poisoning the cache, and late registrations refresh the picker. Thanks again to [@tflo](https://github.com/tflo) for the outstanding investigation that identified the missing FontObject activation step.
+- **Settings no longer opens as an empty window after the typography cleanup.** Custom labels now receive their locale-aware font before their first text assignment, with a strict regression check matching Retail's actual FontString contract.
+- **Restricted-combat target tooltips now show live rating and percentage values when the client permits display, while clearly withholding Missing/Over comparisons that addon code cannot calculate safely.** Composite Crit shows an honest unknown value instead of choosing an arbitrary source.
+- **Item-level and durability caches now recover from transient empty API reads with bounded retries and clear genuinely stale gear values once an empty result is confirmed.**
+- **Preset checkboxes, language and font previews, and Profiles reopening now preserve the user's first action without duplicate refreshes or stale scroll state.**
+
 ## 1.11.0 - 31-Jul-2026 — Softer Settings, simpler sharing, and reliable fonts
 
 ### Changed

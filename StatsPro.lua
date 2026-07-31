@@ -44,6 +44,11 @@ addon.durabilityRuntime = {
         },
     },
 }
+addon.itemLevelRuntime = {
+    generation = 0,
+    attempt = 0,
+    maxAttempts = 4,
+}
 
 --[[ ============================================================
     1. CONSTANTS
@@ -310,7 +315,7 @@ end
 -- when metadata is invalid); a package uses its exact project version, including the
 -- branch build suffix in CI dry runs.
 -- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
-local CURRENT_RELEASE = "1.11.0"
+local CURRENT_RELEASE = "1.11.1"
 
 function addon.ResolveAddonVersion(packagerProjectVersion, metadataVersion, sourceVersion)
     if type(packagerProjectVersion) == "string" then
@@ -485,51 +490,40 @@ end
 
 function addon.GetBestCritChance()
     local function read(fn, ...)
-        if type(fn) ~= "function" then return nil end
+        if type(fn) ~= "function" then return nil, "unavailable" end
         local ok, value = pcall(fn, ...)
-        if ok then return value end
-        return nil
+        if not ok then return nil, "unavailable" end
+        local secretOK, secret = pcall(issecretvalue, value)
+        if not secretOK then return nil, "unavailable" end
+        if secret then return nil, "restricted" end
+        if not addon.IsCleanFiniteNumber(value) then return nil, "unavailable" end
+        return value, "clean"
     end
-    local function maxClean(...)
-        local best
-        for i = 1, select("#", ...) do
-            local value = select(i, ...)
-            if addon.IsCleanFiniteNumber(value) then
-                best = best and math.max(best, value) or value
-            end
-        end
-        return best
-    end
-    local melee = read(GetCritChance)
-    local ranged = read(GetRangedCritChance)
+    local melee, meleeState = read(GetCritChance)
+    local ranged, rangedState = read(GetRangedCritChance)
     local maxSpellSchool = addon.GetMaxSpellSchool()
-    local spell, secretSpell
-    local spellComplete, hasSecretSpell = true, false
+    local spellValues = {}
+    local restricted = meleeState == "restricted" or rangedState == "restricted"
+    local unavailable = meleeState == "unavailable" or rangedState == "unavailable"
     for school = 2, maxSpellSchool do
-        local value = read(GetSpellCritChance, school)
-        if issecretvalue(value) then
-            if not hasSecretSpell then
-                secretSpell = value
-                hasSecretSpell = true
-            end
-            spellComplete = false
-        elseif addon.IsCleanFiniteNumber(value) then
-            spell = spell and math.min(spell, value) or value
-        else
-            spellComplete = false
-        end
+        local value, state = read(GetSpellCritChance, school)
+        spellValues[#spellValues + 1] = value
+        if state == "restricted" then restricted = true end
+        if state == "unavailable" then unavailable = true end
     end
-    if not spellComplete then spell = nil end
-    local clean = maxClean(melee, ranged, spell)
-    if clean ~= nil then return clean end
-    if hasSecretSpell then return secretSpell end
-    if issecretvalue(ranged) then return ranged end
-    if issecretvalue(melee) then return melee end
-    return nil
+    -- Blizzard's paper doll takes min(spell schools), then max(spell/ranged/melee).
+    -- Addon Lua cannot compare a restricted operand, so returning any readable source
+    -- would claim an aggregate we did not actually compute.
+    if restricted then return nil, "restricted" end
+    if unavailable then return nil, "unavailable" end
+    local spell = spellValues[1]
+    for index = 2, #spellValues do spell = math.min(spell, spellValues[index]) end
+    return math.max(melee, ranged, spell), "exact"
 end
 
 local OFFENSIVE_STATS = {
-    { statKey = "crit",    label = "Crit",    api = addon.GetBestCritChance, ratingCR = CR_CRIT_MELEE,  colorKey = "crit",    showKey = "showCrit"    },
+    { statKey = "crit", label = "Crit", api = addon.GetBestCritChance,
+      ratingCR = CR_CRIT_MELEE, colorKey = "crit", showKey = "showCrit", composite = true },
     { statKey = "haste",   label = "Haste",   api = GetHaste,         ratingCR = CR_HASTE_MELEE, colorKey = "haste",   showKey = "showHaste"   },
     { statKey = "mastery", label = "Mastery", api = GetMasteryEffect, ratingCR = CR_MASTERY,     colorKey = "mastery", showKey = "showMastery" },
     -- versatility handled specially (dual-source: rating + flat); gated by showVersatility
@@ -866,8 +860,11 @@ function addon.archonTargets.GetStatTarget(statKey)
 end
 
 function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, currentPct,
-                                       colorKey, currentPctDisplay)
+                                       colorKey, currentPctDisplay, currentRatingDisplay)
     local hasCleanCurrent = addon.archonTargets.IsCleanFiniteNumber(currentRating) and currentRating >= 0
+    local ratingDisplaySecretOK, ratingDisplayIsSecret =
+        pcall(issecretvalue, currentRatingDisplay)
+    local hasLiveCurrentRating = ratingDisplaySecretOK and ratingDisplayIsSecret
     local displaySecretOK, displayIsSecret = pcall(issecretvalue, currentPctDisplay)
     local hasCurrentPctDisplay = displaySecretOK and (displayIsSecret
         or addon.archonTargets.IsCleanFiniteNumber(currentPctDisplay))
@@ -906,6 +903,16 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
                 classToken, specKey, snapshotKey, statKey, target, cleanRatingCR,
                 capturedAt, currentRating, displayPct, delta)
         end
+        return meta
+    end
+    if hasLiveCurrentRating then
+        -- A restricted rating may be rendered by the client but must never enter
+        -- addon arithmetic, ordering, or the clean comparison cache. Prefer the
+        -- live value over a stale last-known comparison and state the limitation
+        -- explicitly in the tooltip.
+        meta.comparisonState = "liveOnly"
+        meta.currentRatingDisplay = currentRatingDisplay
+        if hasCurrentPctDisplay then meta.currentPctDisplay = currentPctDisplay end
         return meta
     end
     local entry = addon.archonTargets.GetCachedComparison(
@@ -1016,10 +1023,12 @@ cached = {
     armorDR = nil,
     itemLevelOverall = nil,
     itemLevelEquipped = nil,
+    itemLevelComplete = false,
     durabilityValue = nil,  -- selected projection of the last complete aggregate
     durabilityLastCompleteAverage = nil,
     durabilityLastCompleteWorst = nil,
     durabilityComplete = false, -- completeness of the latest scan, not cache freshness
+    durabilityHasItems = false,
     repairCost = nil,       -- exact live repair cost; nil while any damaged slot is unresolved
     repairCostComplete = false,
     -- WARNING: GetUnitSpeed returns secret values in combat → arithmetic taints. Cache OOC.
@@ -1106,6 +1115,13 @@ function addon.durabilityRuntime.ScheduleRetry(kind, pending)
 end
 -- Dirty flag for item-level refresh (overall iLvl can change from gear or bags)
 local itemLevelDirty = true
+function addon.itemLevelRuntime.MarkDirty()
+    local runtime = addon.itemLevelRuntime
+    runtime.generation = runtime.generation + 1
+    runtime.attempt = 0
+    cached.itemLevelComplete = false
+    itemLevelDirty = true
+end
 -- Init guard: UpdateStats must not run before CacheSettings populates cached.colorStrings
 local isLoaded = false
 
@@ -1213,7 +1229,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "M+ High Keys", ["Raid Mythic All Bosses"] = "Raid Mythic All Bosses",
         ["Target:"] = "Target:", ["Current:"] = "Current:", ["Missing:"] = "Missing:",
         ["Over:"] = "Over:", ["Matched:"] = "Matched:", ["Snapshot:"] = "Snapshot:",
-        ["Last known comparison"] = "Last known comparison", ["Source:"] = "Source:",
+        ["Last known comparison"] = "Last known comparison", ["Live values; comparison unavailable"] = "Live values; comparison unavailable", ["Source:"] = "Source:",
         ["Stats panel shown"] = "Stats panel shown", ["Stats panel hidden"] = "Stats panel hidden",
         ["Settings reset to defaults"] = "Settings reset to defaults",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
@@ -1353,7 +1369,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "M+ высокие ключи", ["Raid Mythic All Bosses"] = "Эпох. рейд, все боссы",
         ["Target:"] = "Цель:", ["Current:"] = "Сейчас:", ["Missing:"] = "Не хватает:",
         ["Over:"] = "Сверх:", ["Matched:"] = "Совпало:", ["Snapshot:"] = "Снимок:",
-        ["Last known comparison"] = "Последнее известное сравнение", ["Source:"] = "Источник:",
+        ["Last known comparison"] = "Последнее известное сравнение", ["Live values; comparison unavailable"] = "Актуальные значения; сравнение недоступно", ["Source:"] = "Источник:",
         ["Stats panel shown"] = "Панель статов показана", ["Stats panel hidden"] = "Панель статов скрыта",
         ["Settings reset to defaults"] = "Настройки сброшены по умолчанию",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
@@ -1488,7 +1504,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "M+ hohe Schlüssel", ["Raid Mythic All Bosses"] = "Raid Mythisch alle Bosse",
         ["Target:"] = "Ziel:", ["Current:"] = "Aktuell:", ["Missing:"] = "Fehlt:",
         ["Over:"] = "Drüber:", ["Matched:"] = "Erreicht:", ["Snapshot:"] = "Datenstand:",
-        ["Last known comparison"] = "Letzter bekannter Vergleich", ["Source:"] = "Quelle:",
+        ["Last known comparison"] = "Letzter bekannter Vergleich", ["Live values; comparison unavailable"] = "Live-Werte; Vergleich nicht verfügbar", ["Source:"] = "Quelle:",
         ["Stats panel shown"] = "Statpanel angezeigt", ["Stats panel hidden"] = "Statpanel ausgeblendet",
         ["Settings reset to defaults"] = "Einstellungen auf Standard zurückgesetzt",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "Befehle: /ss oder /statspro (Einstellungen), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
@@ -1618,7 +1634,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "M+ hautes clés", ["Raid Mythic All Bosses"] = "Raid mythique tous les boss",
         ["Target:"] = "Cible :", ["Current:"] = "Actuel :", ["Missing:"] = "Manquant :",
         ["Over:"] = "Excès :", ["Matched:"] = "Atteint :", ["Snapshot:"] = "Instantané :",
-        ["Last known comparison"] = "Dernière comparaison connue", ["Source:"] = "Source :",
+        ["Last known comparison"] = "Dernière comparaison connue", ["Live values; comparison unavailable"] = "Valeurs en direct ; comparaison indisponible", ["Source:"] = "Source :",
         ["Stats panel shown"] = "Panneau de stats affiché", ["Stats panel hidden"] = "Panneau de stats masqué",
         ["Settings reset to defaults"] = "Paramètres réinitialisés",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "Commandes : /ss ou /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
@@ -1749,7 +1765,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "M+ llaves altas", ["Raid Mythic All Bosses"] = "Banda mítica todos los jefes",
         ["Target:"] = "Objetivo:", ["Current:"] = "Actual:", ["Missing:"] = "Falta:",
         ["Over:"] = "Exceso:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Captura:",
-        ["Last known comparison"] = "Última comparación conocida", ["Source:"] = "Fuente:",
+        ["Last known comparison"] = "Última comparación conocida", ["Live values; comparison unavailable"] = "Valores en vivo; comparación no disponible", ["Source:"] = "Fuente:",
         ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
         ["Settings reset to defaults"] = "Ajustes restablecidos",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
@@ -1878,7 +1894,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "M+ llaves altas", ["Raid Mythic All Bosses"] = "Banda mítica todos los jefes",
         ["Target:"] = "Objetivo:", ["Current:"] = "Actual:", ["Missing:"] = "Falta:",
         ["Over:"] = "Exceso:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Captura:",
-        ["Last known comparison"] = "Última comparación conocida", ["Source:"] = "Fuente:",
+        ["Last known comparison"] = "Última comparación conocida", ["Live values; comparison unavailable"] = "Valores en vivo; comparación no disponible", ["Source:"] = "Fuente:",
         ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
         ["Settings reset to defaults"] = "Configuración restablecida",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
@@ -2008,7 +2024,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "M+ chiavi alte", ["Raid Mythic All Bosses"] = "Incursione Mitica tutti i boss",
         ["Target:"] = "Bersaglio:", ["Current:"] = "Attuale:", ["Missing:"] = "Manca:",
         ["Over:"] = "Oltre:", ["Matched:"] = "Raggiunto:", ["Snapshot:"] = "Istantanea:",
-        ["Last known comparison"] = "Ultimo confronto noto", ["Source:"] = "Fonte:",
+        ["Last known comparison"] = "Ultimo confronto noto", ["Live values; comparison unavailable"] = "Valori in tempo reale; confronto non disponibile", ["Source:"] = "Fonte:",
         ["Stats panel shown"] = "Pannello statistiche mostrato", ["Stats panel hidden"] = "Pannello statistiche nascosto",
         ["Settings reset to defaults"] = "Impostazioni ripristinate",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "Comandi: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
@@ -2137,7 +2153,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "M+ chaves altas", ["Raid Mythic All Bosses"] = "Raide Mítico todos os chefes",
         ["Target:"] = "Alvo:", ["Current:"] = "Atual:", ["Missing:"] = "Falta:",
         ["Over:"] = "Acima:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Registro:",
-        ["Last known comparison"] = "Última comparação conhecida", ["Source:"] = "Fonte:",
+        ["Last known comparison"] = "Última comparação conhecida", ["Live values; comparison unavailable"] = "Valores em tempo real; comparação indisponível", ["Source:"] = "Fonte:",
         ["Stats panel shown"] = "Painel de atributos mostrado", ["Stats panel hidden"] = "Painel de atributos oculto",
         ["Settings reset to defaults"] = "Configurações restauradas",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "Comandos: /ss ou /statspro (configurações), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
@@ -2273,7 +2289,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "쐐기+ 고단", ["Raid Mythic All Bosses"] = "신화 공격대 모든 우두머리",
         ["Target:"] = "목표:", ["Current:"] = "현재:", ["Missing:"] = "부족:",
         ["Over:"] = "초과:", ["Matched:"] = "일치:", ["Snapshot:"] = "스냅샷:",
-        ["Last known comparison"] = "마지막으로 확인된 비교", ["Source:"] = "출처:",
+        ["Last known comparison"] = "마지막으로 확인된 비교", ["Live values; comparison unavailable"] = "실시간 값; 비교할 수 없음", ["Source:"] = "출처:",
         ["Stats panel shown"] = "능력치 패널 표시됨", ["Stats panel hidden"] = "능력치 패널 숨김",
         ["Settings reset to defaults"] = "설정이 기본값으로 초기화되었습니다",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "명령어: /ss 또는 /statspro (설정), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
@@ -2402,7 +2418,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "史诗+高层", ["Raid Mythic All Bosses"] = "史诗团队全部首领",
         ["Target:"] = "目标:", ["Current:"] = "当前:", ["Missing:"] = "缺少:",
         ["Over:"] = "超出:", ["Matched:"] = "已达成:", ["Snapshot:"] = "快照:",
-        ["Last known comparison"] = "上次已知对比", ["Source:"] = "来源:",
+        ["Last known comparison"] = "上次已知对比", ["Live values; comparison unavailable"] = "实时数值；无法比较", ["Source:"] = "来源:",
         ["Stats panel shown"] = "属性面板已显示", ["Stats panel hidden"] = "属性面板已隐藏",
         ["Settings reset to defaults"] = "设置已恢复默认",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "命令: /ss 或 /statspro (设置), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
@@ -2531,7 +2547,7 @@ local LABELS_BY_LOCALE = {
         ["M+ High Keys"] = "傳奇+高層", ["Raid Mythic All Bosses"] = "傳奇團隊全部首領",
         ["Target:"] = "目標:", ["Current:"] = "目前:", ["Missing:"] = "缺少:",
         ["Over:"] = "超出:", ["Matched:"] = "已達成:", ["Snapshot:"] = "快照:",
-        ["Last known comparison"] = "上次已知比較", ["Source:"] = "來源:",
+        ["Last known comparison"] = "上次已知比較", ["Live values; comparison unavailable"] = "即時數值；無法比較", ["Source:"] = "來源:",
         ["Stats panel shown"] = "屬性面板已顯示", ["Stats panel hidden"] = "屬性面板已隱藏",
         ["Settings reset to defaults"] = "設定已恢復預設",
         ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help"] = "指令: /ss 或 /statspro (設定), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help",
@@ -2851,9 +2867,9 @@ end
 addon.fontRuntime.probeFontString = UIParent:CreateFontString(nil, "OVERLAY")
 addon.fontRuntime.probeFontString:Hide()
 addon.fontRuntime.probeResults = {}
-addon.fontRuntime.fontActivatorInitialized = false
 addon.fontRuntime.fontActivatorObject = nil
 addon.fontRuntime.fontActivatorString = nil
+addon.fontRuntime.fontActivatorAttached = false
 addon.fontRuntime.pendingSavedFont = nil
 addon.fontRuntime.pendingRetryAttempt = 0
 addon.fontRuntime.pendingRetryGeneration = 0
@@ -2861,22 +2877,30 @@ addon.fontRuntime.pendingRetryScheduled = false
 addon.fontRuntime.pendingRetryDelays = { 0.2, 1, 3, 5 }
 
 function addon.fontRuntime.initializeFontActivator()
-    if addon.fontRuntime.fontActivatorInitialized then
+    if addon.fontRuntime.fontActivatorObject and addon.fontRuntime.fontActivatorAttached then
         return addon.fontRuntime.fontActivatorObject
     end
-    addon.fontRuntime.fontActivatorInitialized = true
-    if type(_G.CreateFont) ~= "function" then return nil end
 
-    local created, fontObject = pcall(_G.CreateFont, "StatsProFontAssetActivator")
-    if not created or not fontObject or type(fontObject.SetFont) ~= "function" then return nil end
-    local holder = UIParent:CreateFontString(nil, "OVERLAY")
-    if not holder or type(holder.SetFontObject) ~= "function" then return nil end
+    local fontObject = addon.fontRuntime.fontActivatorObject
+    if not fontObject then
+        if type(_G.CreateFont) ~= "function" then return nil end
+        local created
+        created, fontObject = pcall(_G.CreateFont, "StatsProFontAssetActivator")
+        if not created or not fontObject or type(fontObject.SetFont) ~= "function" then return nil end
+        addon.fontRuntime.fontActivatorObject = fontObject
+    end
+
+    local holder = addon.fontRuntime.fontActivatorString
+    if not holder then
+        holder = UIParent:CreateFontString(nil, "OVERLAY")
+        if not holder or type(holder.SetFontObject) ~= "function" then return nil end
+        addon.fontRuntime.fontActivatorString = holder
+    end
     local attached = pcall(holder.SetFontObject, holder, fontObject)
     if not attached then return nil end
     holder:Hide()
 
-    addon.fontRuntime.fontActivatorObject = fontObject
-    addon.fontRuntime.fontActivatorString = holder
+    addon.fontRuntime.fontActivatorAttached = true
     return fontObject
 end
 
@@ -2888,8 +2912,6 @@ function addon.fontRuntime.activateLooseFont(fontPath, size)
     -- probe below verifies the effective path, size, and flags.
     return pcall(fontObject.SetFont, fontObject, fontPath, size, "")
 end
-
-addon.fontRuntime.initializeFontActivator()
 
 function addon.fontRuntime.rawLSMPath(name)
     if not LSM then return nil end
@@ -2951,14 +2973,14 @@ end
 
 function addon.fontRuntime.trySetFont(region, fontPath, size, flags)
     if not region or type(region.SetFont) ~= "function" then return "invalid" end
-    local ok, success = pcall(region.SetFont, region, fontPath, size, flags)
+    local ok = pcall(region.SetFont, region, fontPath, size, flags)
     if not ok then return "invalid" end
-    local secretOK, secret = pcall(issecretvalue, success)
-    if secretOK and not secret and success == true then return "applied" end
+    -- SetFont's pseudo-return varies by client state and font source. Only the
+    -- effective path, size, and flags reported by GetFont prove application.
     if addon.fontRuntime.matchesAppliedFont(region, fontPath, size, flags) then return "applied" end
     -- A missing Blizzard asset is definitive because its file table is fixed before
-    -- addons load. External loose files are different: IsKnownFile explicitly does
-    -- not prove existence/openability, and their cold-start state can settle later.
+    -- addons load. External loose files are different: IsKnownFile does not prove
+    -- existence/openability or distinguish failure from an inconclusive cold readback.
     if IsBlizzardFontPath(fontPath) and addon.fontRuntime.isKnownAsset(fontPath) == false then
         return "invalid"
     end
@@ -2982,8 +3004,8 @@ function addon.fontRuntime.probeStatus(fontPath, size, flags)
         status = addon.fontRuntime.trySetFont(
             addon.fontRuntime.probeFontString, fontPath, size, flags)
     end
-    -- A pending result is deliberately retried: cold loose-font availability can
-    -- settle later without any LSM catalogue-length change.
+    -- A pending result is deliberately retried: a cold client can keep returning
+    -- an inconclusive SetFont/GetFont observation without any LSM catalogue change.
     if status ~= "pending" then addon.fontRuntime.probeResults[cacheKey] = status end
     return status
 end
@@ -3181,6 +3203,13 @@ function SAFE_NUM.SafeDisplayPercent(fn, ...)
     return SAFE_NUM.ResolveDisplayNumber(value, false)
 end
 
+function SAFE_NUM.SafeCompositePercent(fn, ...)
+    local ok, value, state = pcall(fn, ...)
+    if not ok then return nil, nil, "unavailable" end
+    local display, clean = SAFE_NUM.ResolveDisplayNumber(value, false)
+    return display, clean, state
+end
+
 function SAFE_NUM.ReadRatingValue(fn, ...)
     local value = safeCall(fn, ...)
     return SAFE_NUM.ResolveDisplayNumber(value, true)
@@ -3212,15 +3241,22 @@ local function IsCleanNonNegativeNumber(value)
 end
 
 local function RefreshItemLevelCache()
+    local runtime = addon.itemLevelRuntime
+    runtime.attempt = runtime.attempt + 1
     if not GetAverageItemLevel then
+        cached.itemLevelComplete = false
         itemLevelDirty = false
         return
     end
     local ok, overall, equipped = pcall(GetAverageItemLevel)
-    if not ok then return end
-    if not IsCleanNonNegativeNumber(overall) or not IsCleanNonNegativeNumber(equipped) then return end
+    if not ok or not IsCleanNonNegativeNumber(overall) or not IsCleanNonNegativeNumber(equipped) then
+        cached.itemLevelComplete = false
+        if runtime.attempt >= runtime.maxAttempts then itemLevelDirty = false end
+        return
+    end
     cached.itemLevelOverall = overall
     cached.itemLevelEquipped = equipped
+    cached.itemLevelComplete = true
     itemLevelDirty = false
 end
 
@@ -6346,10 +6382,11 @@ local function ScanDurabilityAndCost()
         end
     end
     local durabilityComplete = count > 0 and not durabilityIncomplete
+    local durabilityCleanEmpty = count == 0 and not durabilityIncomplete
     local average = durabilityComplete and (sum / count) or nil
     local worst = durabilityComplete and minPct or nil
     return average, worst, durabilityComplete,
-        totalCost, repairCostPending, repairCostRetryable
+        totalCost, repairCostPending, repairCostRetryable, durabilityCleanEmpty
 end
 
 -- WARNING: both durability and repairCost can lag after login. Durability APIs may
@@ -6361,10 +6398,11 @@ end
 
 local function RefreshDurabilityCache()
     local avg, mn, durabilityComplete, cost,
-        repairCostPending, repairCostRetryable = ScanDurabilityAndCost()
+        repairCostPending, repairCostRetryable, durabilityCleanEmpty = ScanDurabilityAndCost()
     if durabilityComplete then
         cached.durabilityLastCompleteAverage = avg
         cached.durabilityLastCompleteWorst = mn
+        cached.durabilityHasItems = true
     end
     cached.durabilityComplete = durabilityComplete
     cached.durabilityValue = cached.useWorstDurability
@@ -6382,6 +6420,21 @@ local function RefreshDurabilityCache()
     local repairRetryPending = repairCostPending and repairCostRetryable
     addon.durabilityRuntime.ScheduleRetry("durability", durabilityRetryPending)
     addon.durabilityRuntime.ScheduleRetry("repair", repairRetryPending)
+
+    -- nil/nil is also Blizzard's transient pre-cache shape, so a single empty scan
+    -- cannot erase a good value. Once this generation exhausts its bounded retries,
+    -- however, the repeated clean-empty result is authoritative (for example, after
+    -- the player removes every durable item) and must not leave stale wear on screen.
+    local durabilityRetry = addon.durabilityRuntime.retryStates.durability
+    if durabilityCleanEmpty and durabilityRetryPending
+            and durabilityRetry.attempt >= #addon.durabilityRuntime.retryDelays
+            and durabilityRetry.scheduledGeneration ~= addon.durabilityRuntime.generation then
+        cached.durabilityLastCompleteAverage = nil
+        cached.durabilityLastCompleteWorst = nil
+        cached.durabilityValue = nil
+        cached.durabilityHasItems = false
+        cached.durabilityComplete = true
+    end
 end
 
 --[[ ============================================================
@@ -6762,7 +6815,12 @@ function addon.archonTargets.FormatPercentBonus(value, signed)
 end
 
 function addon.archonTargets.FormatRatingWithBonus(rating, bonus, signedBonus)
-    local ratingText = tostring(rating)
+    local ratingText
+    if issecretvalue(rating) then
+        ratingText = SAFE_NUM.FormatDisplayNumber(rating, "%.0f", "")
+    else
+        ratingText = tostring(rating)
+    end
     local pctText = addon.archonTargets.FormatPercentBonus(bonus, signedBonus)
     if not pctText then return ratingText end
     return ratingText .. " (~" .. pctText .. ")"
@@ -6849,6 +6907,10 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     if comparisonState == nil and hasCleanComparison then comparisonState = "exact" end
     local hasComparison = (comparisonState == "exact" or comparisonState == "lastKnown")
         and hasCleanComparison
+    local liveRatingSecretOK, liveRatingIsSecret =
+        pcall(issecretvalue, meta.currentRatingDisplay)
+    local hasLiveCurrent = comparisonState == "liveOnly"
+        and liveRatingSecretOK and liveRatingIsSecret
     local hasCleanCurrentPct = SAFE_NUM.IsCleanFiniteNumber(meta.currentPct)
     local displaySecretOK, displayIsSecret = pcall(issecretvalue, meta.currentPctDisplay)
     local hasCurrentPctDisplay = displaySecretOK and (displayIsSecret
@@ -6869,7 +6931,8 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
         deltaBonus = targetBonus - currentBonus
     end
     local currentDisplayBonus
-    if comparisonState == "exact" and hasCurrentPctDisplay then
+    if (comparisonState == "exact" or comparisonState == "liveOnly")
+        and hasCurrentPctDisplay then
         currentDisplayBonus = meta.currentPctDisplay
     elseif hasCleanCurrentPct then
         currentDisplayBonus = meta.currentPct
@@ -6896,10 +6959,15 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     GameTooltip:AddLine("StatsPro " .. addon.archonTargets.GetLocalizedSnapshotTitle(meta.snapshotKey), 1, 0.82, 0)
     if comparisonState == "lastKnown" then
         GameTooltip:AddLine(L("Last known comparison"), 0.7, 0.7, 0.7)
+    elseif comparisonState == "liveOnly" then
+        GameTooltip:AddLine(L("Live values; comparison unavailable"), 0.7, 0.7, 0.7)
     end
     GameTooltip:AddDoubleLine(L("Target:"), addon.archonTargets.FormatRatingWithBonus(meta.target, targetDisplayBonus, false), 0.7, 0.7, 0.7, 1, 1, 1)
+    if hasComparison or hasLiveCurrent then
+        local currentRating = hasLiveCurrent and meta.currentRatingDisplay or meta.current
+        GameTooltip:AddDoubleLine(L("Current:"), addon.archonTargets.ColorTooltipValue(addon.archonTargets.FormatRatingWithBonus(currentRating, currentDisplayBonus, false), valueColor), 0.7, 0.7, 0.7, 1, 1, 1)
+    end
     if hasComparison then
-        GameTooltip:AddDoubleLine(L("Current:"), addon.archonTargets.ColorTooltipValue(addon.archonTargets.FormatRatingWithBonus(meta.current, currentDisplayBonus, false), valueColor), 0.7, 0.7, 0.7, 1, 1, 1)
         if meta.delta < 0 then
             GameTooltip:AddDoubleLine(L("Missing:"), addon.archonTargets.FormatRatingWithBonus(math.abs(meta.delta), deltaBonus, true), 1, 0.35, 0.35, 1, 0.35, 0.35)
         elseif meta.delta > 0 then
@@ -7787,10 +7855,17 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
     local needTargetRating = targetRows ~= nil
     for _, def in ipairs(OFFENSIVE_STATS) do
         if cached[def.showKey] then
-            local val, currentPercent = SAFE_NUM.SafeDisplayPercent(def.api)
+            local val, currentPercent, percentState
+            if def.composite then
+                val, currentPercent, percentState = SAFE_NUM.SafeCompositePercent(def.api)
+            else
+                val, currentPercent = SAFE_NUM.SafeDisplayPercent(def.api)
+            end
             local ratingDisplay, targetRating
             local ratingRead = false
-            local visible = shouldShow(def.showKey, val, cached.hideZeroOffensive)
+            local forceUnknownPercent = percentState == "restricted"
+            local visible = forceUnknownPercent
+                or shouldShow(def.showKey, val, cached.hideZeroOffensive)
             if cached.showRating then
                 ratingDisplay, targetRating = SAFE_NUM.ReadRatingValue(
                     GetCombatRating, def.ratingCR)
@@ -7806,11 +7881,12 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
                 local rating
                 if cached.showRating then rating = ratingDisplay end
                 local statColor = cs[def.colorKey]
-                local rStr, vStr = FmtRatingPct(rating, val, statColor)
+                local rStr, vStr = FmtRatingPct(
+                    rating, val, statColor, forceUnknownPercent)
                 if targetRows then
                     targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta(
                         def.statKey, targetRating, def.ratingCR, currentPercent,
-                        def.colorKey, val) or false
+                        def.colorKey, val, ratingDisplay) or false
                 end
                 PushRow(labels, ratings, values,
                     FormatLabel(statColor, def.label),
@@ -7887,7 +7963,8 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
             if targetRows then
                 targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta(
                     "versatility", targetVersRating, CR_VERSATILITY_DAMAGE_DONE,
-                    versClean, "versatility", versTooltipDisplay) or false
+                    versClean, "versatility", versTooltipDisplay,
+                    versRatingDisplay) or false
             end
             PushRow(labels, ratings, values,
                 FormatLabel(versStr, "Vers"),
@@ -8024,6 +8101,9 @@ end
 -- builder so users can show only durability without enabling the dodge/parry/block block.
 local function BuildDurabilityLines(labels, ratings, values)
     if not cached.showDurability then return labels, ratings, values end
+    if cached.durabilityComplete and not cached.durabilityHasItems then
+        return labels, ratings, values
+    end
     local cs = cached.colorStrings
     local pct = cached.durabilityValue
     local durStr = cs.durability
@@ -8335,7 +8415,7 @@ addon.profileRuntime.CompleteBootstrap = function()
         addon.panelEditRuntime.Refresh(false)
     end
     addon.durabilityRuntime.MarkDirty()
-    itemLevelDirty = true
+    addon.itemLevelRuntime.MarkDirty()
     addon:RunUpdateStatsSafe()
     addon.profileUI.RefreshSafe()
     return true
@@ -8366,7 +8446,7 @@ local function OnPlayerEnteringWorld()
     addon.profileRuntime.RequestResolution(false)
     -- WHY: UpdateStats handles Show/Hide based on cached.isVisible + line content.
     addon.durabilityRuntime.MarkDirty()
-    itemLevelDirty = true
+    addon.itemLevelRuntime.MarkDirty()
     addon:RunUpdateStatsSafe()
 end
 
@@ -8408,8 +8488,11 @@ local EVENT_HANDLERS = {
         addon.profileRuntime.RequestResolution(false)
     end,
     UPDATE_INVENTORY_DURABILITY = function() addon.durabilityRuntime.MarkDirty() end,
-    PLAYER_EQUIPMENT_CHANGED    = function() addon.durabilityRuntime.MarkDirty(); itemLevelDirty = true end,
-    BAG_UPDATE_DELAYED          = function() itemLevelDirty = true end,
+    PLAYER_EQUIPMENT_CHANGED    = function()
+        addon.durabilityRuntime.MarkDirty()
+        addon.itemLevelRuntime.MarkDirty()
+    end,
+    BAG_UPDATE_DELAYED          = function() addon.itemLevelRuntime.MarkDirty() end,
     DISPLAY_SIZE_CHANGED        = function()
         if type(addon.settingsDesign.RequestResponsiveFrameResize) == "function" then
             addon.settingsDesign.RequestResponsiveFrameResize()
@@ -8422,7 +8505,7 @@ local EVENT_HANDLERS = {
     end,
     -- WHY: bag/equipment events can precede Blizzard's asynchronous average-iLvl
     -- recompute. This authoritative follow-up reopens the cache for the coalesced ticker.
-    PLAYER_AVG_ITEM_LEVEL_UPDATE = function() itemLevelDirty = true end,
+    PLAYER_AVG_ITEM_LEVEL_UPDATE = function() addon.itemLevelRuntime.MarkDirty() end,
     MERCHANT_SHOW               = function() addon.durabilityRuntime.MarkDirty() end,
     -- WHY: lock state is stored in cached.isLocked and read by OnDragStart. Mouse stays
     -- enabled permanently so right-click Settings works even while locked.
@@ -8440,6 +8523,9 @@ local EVENT_HANDLERS = {
         if (cached.showDurability and cached.durabilityComplete == false)
             or (cached.showRepairCost and cached.repairCostComplete == false) then
             addon.durabilityRuntime.MarkDirty()
+        end
+        if cached.showItemLevel and cached.itemLevelComplete == false then
+            addon.itemLevelRuntime.MarkDirty()
         end
         addon.profileUI.RefreshSafe()
     end,
@@ -8491,8 +8577,7 @@ local function LocaleAwareConfigFont()
     return LocaleAwareDefaultFont()
 end
 
-local CONFIG_FONT       = LocaleAwareConfigFont()
-local CONFIG_FONT_SIZE  = 12
+local CONFIG_FONT = LocaleAwareConfigFont()
 
 -- Locale-aware settings UI font: same idea as MaybeAutoSwitchFont for stat panels,
 -- but for the config window's CreateFontString-based labels (title, tabs, section
@@ -8648,7 +8733,6 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
     cb:SetPoint("TOPLEFT", x, y)
     local text = _G[name .. "Text"]
     PushLocalizedLabel(function() text:SetText(L(label)) end)
-    RegisterConfigFont(text, CONFIG_FONT_SIZE)
     -- textWidth: 200 default for plain checkboxes; pass 140 for "checkbox + inline color"
     -- rows (CreateCheckboxColor overrides the bound width to actual text width post-call).
     text:SetWidth(textWidth or addon.settingsDesign.tokens.geometry.checkboxLabelWidth)
@@ -8658,6 +8742,10 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
     cb:SetChecked(GetBoolDB(dbKey))
     addon.settingsDesign.StyleCheckbox(cb, text)
     cb:SetScript("OnClick", function(self)
+        -- BeforeManualEdit may synchronously cancel an Appearance preset preview,
+        -- whose refreshers restore every checkbox from the committed baseline.
+        -- Preserve the state the user actually clicked before that restore runs.
+        local requestedChecked = self:GetChecked() == true
         if not addon.appearancePresets.BeforeManualEdit(dbKey) then
             self:SetChecked(GetBoolDB(dbKey))
             addon.settingsDesign.RefreshControl(self)
@@ -8670,12 +8758,13 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
             return
         end
         local previous = db[dbKey]
-        db[dbKey] = self:GetChecked()
+        db[dbKey] = requestedChecked
+        self:SetChecked(requestedChecked)
         if previous ~= db[dbKey] and addon.appearancePresets.allowlist[dbKey] then
             addon.appearancePresets.MarkCustom(db)
         end
         CacheSettings()
-        if onChange then onChange(self:GetChecked()) end
+        if onChange then onChange(requestedChecked) end
         addon:RunUpdateStatsSafe()
         -- Keep the custom row state in sync in the click handler itself.  The
         -- native check texture updates immediately; the surrounding hover/row
@@ -9626,7 +9715,6 @@ function addon.settingsDesign.StyleCheckbox(control, text)
     addon.settingsDesign.RegisterControl(control, "checkbox")
     addon.settingsDesign.RegisterMutationControl(control)
     addon.settingsDesign.HookControl(control)
-    control:HookScript("OnClick", addon.settingsDesign.RefreshControl)
     addon.settingsDesign.RefreshControl(control)
 end
 
@@ -10254,7 +10342,9 @@ end
 local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, maxVal, step, lowText, highText, valueFmt, onChange)
     local sliderY = cd.y
     local lbl = parent:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(lbl, CONFIG_FONT_SIZE)
+    -- WoW rejects SetText on a bare FontString. Register before the localized
+    -- setter runs; StyleSlider later reuses the same identity-keyed font entry.
+    RegisterConfigFont(lbl, 12)
     lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
     PushLocalizedLabel(function() lbl:SetText(L(labelText)) end)
 
@@ -10685,11 +10775,12 @@ addon.profileRuntime.closeOwnedSettingsModals = function()
         addon.profileRuntime.cancelLanguagePreview()
     end
     addon.profileRuntime.CloseOwnedDropdownMenus()
-    if type(addon.profileRuntime.cancelFontPreview) == "function" then
-        addon.profileRuntime.cancelFontPreview()
-    end
     if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
+        -- OnHide owns the forced restore. Calling cancel first would apply and
+        -- reflow the committed font twice for every modal close.
         _G.StatsProFontPicker:Hide()
+    elseif type(addon.profileRuntime.cancelFontPreview) == "function" then
+        addon.profileRuntime.cancelFontPreview()
     end
     COLOR_PICKER_STATE.Close()
 end
@@ -10710,7 +10801,7 @@ addon.profileRuntime.applyActiveSettings = function()
     if addon.panelEditRuntime.Refresh then addon.panelEditRuntime.Refresh() end
     SetAllPanelsScale(GetNumberDB("scale"))
     addon.durabilityRuntime.MarkDirty()
-    itemLevelDirty = true
+    addon.itemLevelRuntime.MarkDirty()
     -- Keep clean Archon comparisons across same-context profile/style applies.
     -- ActivateComparisonContext and GetCachedComparison already invalidate on every
     -- semantic boundary (class, spec, snapshot, target, rating type, or capture date).
@@ -11189,7 +11280,6 @@ function addon.profileUI.BuildOperationUI(manager)
     actionScroll:SetScrollChild(actionChild)
 
     local operationStatus = actionChild:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(operationStatus, 10)
     operationStatus:SetPoint("TOPLEFT", 8, -2)
     operationStatus:SetPoint("TOPRIGHT", -12, -2)
     operationStatus:SetJustifyH("LEFT")
@@ -12137,8 +12227,12 @@ function addon.profileUI.BuildSettingsUI(owner)
         if selectActive then
             ui.selectedGUID = addon.profileRuntime.activeGUID
             ui.selectedSpecID = addon.profileRuntime.activeSpecID
+            -- Current character/spec rows are sorted first. Reopening Profiles
+            -- must not retain a stale scroll offset that leaves that selection
+            -- outside the viewport.
+            listScroll:SetVerticalScroll(0)
         end
-        ui.RefreshSafe()
+        -- manager:OnShow performs the single authoritative refresh.
         manager:Show()
     end
 
@@ -12193,7 +12287,6 @@ function addon:OpenConfigMenu()
         local rowY = cursor.y
 
         local label = parent:CreateFontString(nil, "OVERLAY")
-        RegisterConfigFont(label, CONFIG_FONT_SIZE)
         label:SetPoint("TOPLEFT", cursor.padX, rowY - 4)
 
         local dropdown = CreateFrame("Frame", frameName, parent, "UIDropDownMenuTemplate")
@@ -12759,18 +12852,15 @@ function addon:OpenConfigMenu()
         local rowY = cd.y
 
         local fontLabel = appearanceBody:CreateFontString(nil, "OVERLAY")
-        RegisterConfigFont(fontLabel, CONFIG_FONT_SIZE)
+        RegisterConfigFont(fontLabel, 12)
         fontLabel:SetPoint("TOPLEFT", cd.padX, rowY)
         PushLocalizedLabel(function() fontLabel:SetText(L("Font:")) end)
 
         -- WHY rebuilt on demand (not at load): LSM-registered fonts can appear after
-        -- StatsPro loads (other addon registers later); static one-time build would miss
-        -- them until /reload. Cache ordinary caption refreshes because re-enumerating and
-        -- probing a large LSM catalog is unnecessary while its size is unchanged. Explicit
-        -- picker population still retries paths that were pending during a cold start.
-        -- Length-based signature catches the common LSM-add/remove invalidation case;
-        -- same-name font swaps are accepted as a stale-cache edge (rare and harmless —
-        -- worst case a stale path until next /reload).
+        -- StatsPro loads (another addon may register later). Cache ordinary caption
+        -- refreshes because re-enumerating and probing a large catalog is unnecessary
+        -- while it is unchanged. The LSM callback below also refreshes an already-open
+        -- picker when the catalog grows, without requiring /reload.
         local cachedFontsList
         local cachedFontsListLen = -1
         local cachedFontsListHasPending = false
@@ -12872,18 +12962,19 @@ function addon:OpenConfigMenu()
             ReflowAllPanels()
             return true
         end
-        -- WHY unconditional restore (no `previewedPath~=nil` gate): preview-state
-        -- tracking can desync against panel-applied state via three paths — OnLeave-timer
-        -- racing PickFont's nil-write, SetFont silent-fallback poisoning ApplyStyle's
-        -- appliedFont cache, and Frame:Hide → child OnLeave event ordering. Force the
-        -- restore so a poisoned appliedFont cache cannot leave the HUD stuck on the
-        -- last hovered preview when the picker closes without a font pick.
-        local function CancelFontPreview()
+        -- Ordinary callers avoid a needless style/reflow pass when no preview exists.
+        -- OnHide uses force=true because preview tracking can desync against the applied
+        -- panel font through SetFont fallback or child OnLeave ordering; that defensive
+        -- path always restores the committed DB font.
+        local function CancelFontPreview(force)
+            local hadPreview = previewedPath ~= nil
             previewedPath = nil
-            if self.profileRuntime.suppressIntermediateRefresh then return end
-            self.fontRuntime.applyCommittedTextStyle(
+            if self.profileRuntime.suppressIntermediateRefresh then return hadPreview end
+            if not force and not hadPreview then return false end
+            local restored = self.fontRuntime.applyCommittedTextStyle(
                 self.fontRuntime.preferredPath(), GetNumberDB("fontSize"), true, true)
             ReflowAllPanels()
+            return restored
         end
         self.profileRuntime.cancelFontPreview = CancelFontPreview
         local function PickFont(f)
@@ -12913,7 +13004,6 @@ function addon:OpenConfigMenu()
         local FONT_PICKER_PAD          = 8
         local FONT_PICKER_SCROLLBAR_W  = 22
         local FONT_PICKER_VISIBLE_ROWS = 14
-        local FONT_PICKER_RETRY_DELAYS = { 0.2, 1, 3, 5 }
         local FONT_PICKER_FRAME_W      = FONT_PICKER_COLS * FONT_PICKER_BTN_W + FONT_PICKER_PAD * 2 + FONT_PICKER_SCROLLBAR_W  -- 518
         local FONT_PICKER_FRAME_H      = FONT_PICKER_VISIBLE_ROWS * FONT_PICKER_BTN_H + FONT_PICKER_PAD * 2                    -- 352
 
@@ -12924,6 +13014,7 @@ function addon:OpenConfigMenu()
         local fontPickerButtons = {}   -- pool of font-button frames; reused across Populate calls
         local fontPickerInitialized = false
         local fontPickerRetryGeneration = 0
+        local fontPickerCatalogRefreshScheduled = false
 
         local function HideFontPicker()
             -- Single entry. picker:OnHide handler (set in Build) cancels active preview and
@@ -12994,7 +13085,7 @@ function addon:OpenConfigMenu()
                     fontDropdown.statsProTrigger.statsProActive = false
                     addon.settingsDesign.RefreshControl(fontDropdown.statsProTrigger)
                 end
-                CancelFontPreview()
+                CancelFontPreview(true)
                 if configFrame and configFrame:IsShown()
                     and not (self.profileUI.manager and self.profileUI.manager:IsShown())
                     and not (self.profileUI.operationDialog
@@ -13059,7 +13150,9 @@ function addon:OpenConfigMenu()
                     -- "fixating" on a random font in the user-facing report.
                     btn:SetScript("OnEnter", function(button)
                         hoverGen = hoverGen + 1
-                        PreviewFont(button.fontPath)
+                        if PreviewFont(button.fontPath) == false and previewedPath then
+                            CancelFontPreview()
+                        end
                     end)
                     btn:SetScript("OnLeave", function()
                         local myGen = hoverGen
@@ -13068,8 +13161,9 @@ function addon:OpenConfigMenu()
                         end)
                     end)
                     btn:SetScript("OnClick", function(button)
-                        PickFont({ name = button.fontName, path = button.fontPath })
-                        HideFontPicker()
+                        if PickFont({ name = button.fontName, path = button.fontPath }) then
+                            HideFontPicker()
+                        end
                     end)
 
                     fontPickerButtons[i] = btn
@@ -13094,7 +13188,8 @@ function addon:OpenConfigMenu()
                 if btn.statsProHovered == true then hoveredVisibleButton = btn end
             end
 
-            -- Hide leftover buttons if list shrank (LSM addon disabled mid-session).
+            -- Hide leftover pooled buttons defensively if a media provider returns a
+            -- shorter list than it did during an earlier population.
             for i = #fonts + 1, #fontPickerButtons do
                 fontPickerButtons[i]:Hide()
             end
@@ -13105,7 +13200,9 @@ function addon:OpenConfigMenu()
             if hoveredVisibleButton then
                 addon.settingsDesign.RefreshOwnedControlTooltip(hoveredVisibleButton)
                 if not SameFontPath(hoveredVisibleButton.fontPath, previewedPath) then
-                    PreviewFont(hoveredVisibleButton.fontPath)
+                    if PreviewFont(hoveredVisibleButton.fontPath) == false and previewedPath then
+                        CancelFontPreview()
+                    end
                 end
             elseif previewedPath then
                 CancelFontPreview()
@@ -13123,8 +13220,9 @@ function addon:OpenConfigMenu()
         end
 
         local function SchedulePendingFontPickerRetry(generation, attempt)
-            if not cachedFontsListHasPending or attempt > #FONT_PICKER_RETRY_DELAYS then return end
-            C_Timer.After(FONT_PICKER_RETRY_DELAYS[attempt], function()
+            local delays = addon.fontRuntime.pendingRetryDelays
+            if not cachedFontsListHasPending or attempt > #delays then return end
+            C_Timer.After(delays[attempt], function()
                 if generation ~= fontPickerRetryGeneration
                     or not fontPickerFrame or not fontPickerFrame:IsShown() then
                     return
@@ -13180,6 +13278,28 @@ function addon:OpenConfigMenu()
             else
                 ShowFontPicker()
             end
+        end
+
+        -- LSM is add-only in normal play, but registrations can arrive after Settings
+        -- was built. Invalidate synchronously, then coalesce a registration burst onto
+        -- one next-tick rebuild instead of probing the growing catalog once per font.
+        if LSM and type(LSM.RegisterCallback) == "function" then
+            LSM.RegisterCallback(self, "LibSharedMedia_Registered", function(_, mediaType)
+                if mediaType ~= LSM.MediaType.FONT then return end
+                cachedFontsList = nil
+                cachedFontsListLen = -1
+                cachedFontsListHasPending = false
+                if fontPickerCatalogRefreshScheduled then return end
+                fontPickerCatalogRefreshScheduled = true
+                C_Timer.After(0, function()
+                    fontPickerCatalogRefreshScheduled = false
+                    if self.fontRuntime.refreshCaption then self.fontRuntime.refreshCaption() end
+                    if not fontPickerFrame or not fontPickerFrame:IsShown() then return end
+                    fontPickerRetryGeneration = fontPickerRetryGeneration + 1
+                    PopulateFontPicker()
+                    SchedulePendingFontPickerRetry(fontPickerRetryGeneration, 1)
+                end)
+            end)
         end
 
         CurrentFontName = function()
@@ -13272,7 +13392,7 @@ function addon:OpenConfigMenu()
         local rowY = cd.y
 
         local langLabel = appearanceBody:CreateFontString(nil, "OVERLAY")
-        RegisterConfigFont(langLabel, CONFIG_FONT_SIZE)
+        RegisterConfigFont(langLabel, 12)
         langLabel:SetPoint("TOPLEFT", cd.padX, rowY)
         PushLocalizedLabel(function() langLabel:SetText(L("Language:")) end)
 
@@ -13447,6 +13567,7 @@ function addon:OpenConfigMenu()
                         if restored then langPreviewSwappedFnt = false end
                     end
                     langPreviewActive     = false
+                    langPreviewLocale     = nil
                     -- WHY: auto-switch may have changed db.font; PushRefresher only fires on Reset.
                     UIDropDownMenu_SetText(fontDropdown, CurrentFontName())
                     UIDropDownMenu_SetText(langDropdown, CompactLabel(opt))
@@ -13488,8 +13609,8 @@ function addon:OpenConfigMenu()
         CursorAdvance(cd, 24)
 
         local langWarn = appearanceBody:CreateFontString(nil, "OVERLAY")
-        local langWarnHeight = addon.settingsDesign.tokens.geometry.warningHeight
         RegisterConfigFont(langWarn, 11)
+        local langWarnHeight = addon.settingsDesign.tokens.geometry.warningHeight
         langWarn:SetPoint("TOPLEFT", cd.padX, cd.y)
         langWarn:SetWidth(scrollChildWidth - (cd.padX * 2))
         langWarn:SetHeight(langWarnHeight)
@@ -13517,6 +13638,7 @@ function addon:OpenConfigMenu()
                 addon.settingsDesign.SetWarningVisible(langWarn, true)
             end
         end
+
         -- WHY register as localized: warning wording and the presentation-only requirement
         -- label both change with the output locale. Internal font-coverage tokens never cross
         -- this UI boundary. The language commit handler also calls this for an immediate recheck.
@@ -13735,7 +13857,7 @@ function addon:OpenConfigMenu()
         local sw, txt
         _, sw, txt = CreateCheckboxColor(statsTab, "StatsProItemLevelCheck",
             "Show Item Level", "showItemLevel", "itemLevel", cs.padX, rowY,
-            function(checked) if checked then itemLevelDirty = true end end)
+            function(checked) if checked then addon.itemLevelRuntime.MarkDirty() end end)
         leftRows[#leftRows + 1] = { text = txt, swatch = sw }
         -- Durability swatch is the override color used when Auto Color is OFF.
         -- WHY: also mark dirty so re-enabling after a long off period gets fresh values
@@ -14539,6 +14661,7 @@ if addon and addon.__statsproSmoke == true then
         fontSupports = FontSupports,
         findCompatibleFont = FindCompatibleFont,
         usableFontPath = addon.fontRuntime.usablePath,
+        trySetFontForSmoke = addon.fontRuntime.trySetFont,
         safeDefaultFontPath = addon.fontRuntime.safeDefaultPath,
         currentRuntimeFontPath = addon.fontRuntime.currentPath,
         applyCommittedTextStyle = addon.fontRuntime.applyCommittedTextStyle,
@@ -14560,6 +14683,7 @@ if addon and addon.__statsproSmoke == true then
                 durabilityLastCompleteAverage = cached.durabilityLastCompleteAverage,
                 durabilityLastCompleteWorst = cached.durabilityLastCompleteWorst,
                 durabilityComplete = cached.durabilityComplete,
+                durabilityHasItems = cached.durabilityHasItems,
                 repairCost = cached.repairCost,
                 repairCostComplete = cached.repairCostComplete,
                 dirty = durabilityDirty,
@@ -14578,7 +14702,11 @@ if addon and addon.__statsproSmoke == true then
             return {
                 overall = cached.itemLevelOverall,
                 equipped = cached.itemLevelEquipped,
+                complete = cached.itemLevelComplete,
                 dirty = itemLevelDirty,
+                generation = addon.itemLevelRuntime.generation,
+                attempt = addon.itemLevelRuntime.attempt,
+                retryLimit = addon.itemLevelRuntime.maxAttempts,
             }
         end,
         versatilityState = function()

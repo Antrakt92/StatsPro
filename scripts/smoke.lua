@@ -1,6 +1,8 @@
 -- Pure Lua 5.1 smoke checks for StatsPro logic that can run without a WoW client.
 
 local assertionCount = 0
+local assertionNames = {}
+local assertionOrder = {}
 
 local function fail(name, detail)
     error(string.format("%s: %s", name, detail or "assertion failed"), 0)
@@ -24,6 +26,20 @@ local smokeReachability = {
     assignedAssertions = 0,
 }
 
+local function fingerprintAssertionNames(firstIndex, lastIndex)
+    local names = {}
+    for index = firstIndex, lastIndex do names[#names + 1] = assertionOrder[index] end
+    table.sort(names)
+    local hash = 0
+    for _, name in ipairs(names) do
+        for index = 1, #name do
+            hash = (hash * 131 + string.byte(name, index)) % 2147483647
+        end
+        hash = (hash * 131 + 10) % 2147483647
+    end
+    return string.format("%08x", hash)
+end
+
 function smokeReachability:complete(name)
     local index = self.suiteCount + 1
     local expected = self.expected[index]
@@ -42,10 +58,12 @@ function smokeReachability:complete(name)
     end
     self.seen[name] = true
     self.suiteCount = index
+    local fingerprint = fingerprintAssertionNames(
+        self.assignedAssertions + 1, assertionCount)
     self.assignedAssertions = assertionCount
     print(string.format(
-        "STATSPRO_SMOKE_SUITE protocol=1 index=%d name=%s assertions=%d",
-        index, name, completedAssertions))
+        "STATSPRO_SMOKE_SUITE protocol=2 index=%d name=%s assertions=%d fingerprint=%s",
+        index, name, completedAssertions, fingerprint))
 end
 
 function smokeReachability:finish()
@@ -58,25 +76,37 @@ function smokeReachability:finish()
             "%d assertions were not assigned to a suite", assertionCount - self.assignedAssertions))
     end
     print(string.format(
-        "STATSPRO_SMOKE_SUMMARY protocol=1 status=PASS suites=%d assertions=%d",
+        "STATSPRO_SMOKE_SUMMARY protocol=2 status=PASS suites=%d assertions=%d",
         self.suiteCount, assertionCount))
     print(string.format("StatsPro smoke: PASS (%d assertions)", assertionCount))
 end
 
-local function check(name, ok, detail)
+local function recordAssertion(name)
+    if type(name) ~= "string" or name == "" then
+        fail("smoke.assertions.invalid_name", tostring(name))
+    end
+    if assertionNames[name] then
+        fail("smoke.assertions.duplicate_name", name)
+    end
+    assertionNames[name] = true
+    assertionOrder[#assertionOrder + 1] = name
     assertionCount = assertionCount + 1
+end
+
+local function check(name, ok, detail)
+    recordAssertion(name)
     if not ok then fail(name, detail) end
 end
 
 local function eq(name, actual, expected)
-    assertionCount = assertionCount + 1
+    recordAssertion(name)
     if actual ~= expected then
         fail(name, string.format("expected %q, got %q", tostring(expected), tostring(actual)))
     end
 end
 
 local function near(name, actual, expected, epsilon)
-    assertionCount = assertionCount + 1
+    recordAssertion(name)
     epsilon = epsilon or 0.00001
     if type(actual) ~= "number" or math.abs(actual - expected) > epsilon then
         fail(name, string.format("expected %.6f, got %s", expected, tostring(actual)))
@@ -131,13 +161,18 @@ local function assertNoSharedTables(name, left, right)
     local leftIdentities = {}
     collectTableIdentities(left, leftIdentities)
     local visited = {}
+    local shared = false
     local function inspect(value)
-        if type(value) ~= "table" or visited[value] then return end
+        if shared or type(value) ~= "table" or visited[value] then return end
         visited[value] = true
-        check(name, leftIdentities[value] ~= true, "shared nested table")
+        if leftIdentities[value] then
+            shared = true
+            return
+        end
         for key, child in pairs(value) do inspect(key); inspect(child) end
     end
     inspect(right)
+    check(name, not shared, "shared nested table")
 end
 
 local function dbRoot(value)
@@ -307,6 +342,7 @@ local function makeFrame(name, setFontResult, parent)
         enabled = true,
         verticalScroll = 0,
         setFontResult = setFontResult,
+        setFontObjectResult = parent and parent.setFontObjectResult or nil,
     }
 
     function frame:SetSize(w, h) self.width, self.height = w, h end
@@ -349,6 +385,9 @@ local function makeFrame(name, setFontResult, parent)
         if type(fontObject) ~= "table" or type(fontObject.GetFont) ~= "function" then
             error("SetFontObject requires a FontObject", 2)
         end
+        if self.setFontObjectResult and self.setFontObjectResult(self, fontObject) == false then
+            error("synthetic SetFontObject failure", 2)
+        end
         self.fontObject = fontObject
         fontObject.attachCount = (fontObject.attachCount or 0) + 1
     end
@@ -362,6 +401,9 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetTextColor(r, g, b, a) self.textColor = { r = r, g = g, b = b, a = a } end
     function frame:SetFontString(fontString) self.fontString = fontString end
     function frame:SetText(text)
+        if self.regionType == "FontString" and not self.font and not self.fontObject then
+            error("FontString:SetText(): Font not set", 2)
+        end
         self.text = text or ""
         if self.fontString and self.fontString ~= self then self.fontString:SetText(self.text) end
     end
@@ -506,9 +548,13 @@ local function makeFrame(name, setFontResult, parent)
         local _, lines = text:gsub("\n", "\n")
         return (lines + 1) * (self.fontSize or 12) * (self.statsProStringHeightMultiplier or 1)
     end
-    function frame:CreateFontString()
+    function frame:CreateFontString(_, _, template)
         local region = makeFrame(nil, self.setFontResult, self)
         region.regionType = "FontString"
+        region.font, region.fontSize = nil, nil
+        if template then
+            region.font, region.fontSize = "Fonts\\FRIZQT__.TTF", 12
+        end
         return region
     end
     function frame:CreateTexture(_, drawLayer, _, sublevel)
@@ -680,6 +726,7 @@ local function makeEnv(locale, opts)
         env.__reloadUICalls = env.__reloadUICalls + 1
     end
     env.UIParent = makeFrame("UIParent", opts.setFontResult)
+    env.UIParent.setFontObjectResult = opts.setFontObjectResult
     env.UIParent:SetSize(opts.uiParentWidth or 1920, opts.uiParentHeight or 1080)
     env.GameTooltip = makeFrame("GameTooltip", opts.setFontResult)
     env.GameTooltip.shown = false
@@ -728,6 +775,7 @@ local function makeEnv(locale, opts)
     if opts.lsmFonts then
         local names = {}
         local paths = {}
+        local callbacks = {}
         for _, font in ipairs(opts.lsmFonts) do
             names[#names + 1] = font.name
             paths[font.name] = font.path
@@ -746,7 +794,18 @@ local function makeEnv(locale, opts)
                 if mediaType == "font" then return paths end
                 return {}
             end,
+            RegisterCallback = function(owner, eventName, callback)
+                callbacks[eventName] = callbacks[eventName] or {}
+                callbacks[eventName][owner] = callback
+            end,
         }
+        env.__registerLSMFont = function(name, path)
+            if paths[name] == nil then names[#names + 1] = name end
+            paths[name] = path
+            for _, callback in pairs(callbacks.LibSharedMedia_Registered or {}) do
+                callback("LibSharedMedia_Registered", "font", name)
+            end
+        end
     end
     env.LibStub = function(name)
         if name == "LibSharedMedia-3.0" then return lsm end
@@ -902,9 +961,13 @@ local function makeEnv(locale, opts)
         if frameType == "Button" or frameType == "CheckButton" or frameType == "Slider" then
             frame.mouseEnabled = true
         end
-        frame.CreateFontString = function()
+        frame.CreateFontString = function(_, _, _, fontTemplate)
             local fontString = makeFrame(nil, opts.setFontResult, frame)
             fontString.regionType = "FontString"
+            fontString.font, fontString.fontSize = nil, nil
+            if fontTemplate then
+                fontString.font, fontString.fontSize = "Fonts\\FRIZQT__.TTF", 12
+            end
             return fontString
         end
         frame.CreateTexture = function(_, _, drawLayer, _, sublevel)
@@ -2147,16 +2210,15 @@ end
 
 local function hasScript(name, frame, scriptName)
     frame = exists(name .. ".frame", frame)
-    check(name, type(frame.scripts) == "table" and type(frame.scripts[scriptName]) == "function",
+    check(name .. ".script", type(frame.scripts) == "table" and type(frame.scripts[scriptName]) == "function",
         "missing " .. scriptName .. " script")
     return frame.scripts[scriptName]
 end
 
 local function callScript(name, frame, scriptName, ...)
-    frame = exists(name .. ".frame", frame)
     hasScript(name, frame, scriptName)
     local ok, err = pcall(runFrameHandlers, frame, scriptName, ...)
-    check(name, ok, err)
+    check(name .. ".call", ok, err)
 end
 
 local function flushTimers(name, env, maxDelay, expectedCount)
@@ -2263,7 +2325,7 @@ end
 local function clickCheckbox(name, frame, checked)
     frame = exists(name .. ".frame", frame)
     frame:SetChecked(checked)
-    callScript(name, frame, "OnClick")
+    callScript(name .. ".on_click", frame, "OnClick")
 end
 
 local function changeSlider(name, frame, value)
@@ -3620,8 +3682,13 @@ do
     slash("lifecycle.pew_secret_numeric_update.debug_perf", pewEnv, "debug perf")
     eq("lifecycle.pew_secret_numeric_update.debug_reports_zero_errors",
         printContains(pewEnv, "updateErrors=0"), true)
-    eq("lifecycle.pew_secret_numeric_update.live_secret_value",
-        blockDumpContains(pewTest.buildRenderBlocks(), "31%"), true)
+    local restrictedBlocks = pewTest.buildRenderBlocks()
+    eq("lifecycle.pew_secret_numeric_update.restricted_row_visible",
+        blockDumpContains(restrictedBlocks, "Crit:"), true)
+    eq("lifecycle.pew_secret_numeric_update.restricted_aggregate_unknown",
+        blockDumpContains(restrictedBlocks, "?"), true)
+    eq("lifecycle.pew_secret_numeric_update.no_arbitrary_source",
+        blockDumpContains(restrictedBlocks, "31%"), false)
 end
 
 do
@@ -3822,6 +3889,54 @@ do
     eq("appearance.presets.default_round_trip.preserve_percentage", settings.showPercentage, false)
     eq("appearance.presets.default_round_trip.preserve_label_style", settings.labelStyle, "short")
     eq("appearance.presets.default_round_trip.preserve_target_snapshot", settings.targetSnapshot, "raid")
+end
+
+do
+    local mode = "equipped"
+    local emptyEnv, emptyAddon, emptyTest = loadStatsPro("enUS", {
+        statsProDB = { showDurability = true, showRepairCost = false },
+        getInventoryItemDurability = function(slot)
+            if mode == "equipped" and slot == 1 then return 80, 100 end
+            return nil, nil
+        end,
+    })
+    fireEvent("durability.clean_empty.enter", emptyEnv, "PLAYER_ENTERING_WORLD")
+    local state = emptyTest.durabilityState()
+    eq("durability.clean_empty.seed_complete", state.durabilityComplete, true)
+    eq("durability.clean_empty.seed_has_items", state.durabilityHasItems, true)
+    near("durability.clean_empty.seed_value", state.durabilityValue, 80)
+
+    mode = "empty"
+    fireEvent("durability.clean_empty.inventory_event", emptyEnv, "UPDATE_INVENTORY_DURABILITY")
+    check("durability.clean_empty.first_scan", emptyAddon:RunUpdateStatsSafe())
+    state = emptyTest.durabilityState()
+    eq("durability.clean_empty.pending", state.durabilityComplete, false)
+    near("durability.clean_empty.retains_during_retry", state.durabilityValue, 80)
+    eq("durability.clean_empty.first_retry", state.durabilityScheduledAttempt, 1)
+
+    for attempt = 1, state.retryLimit do
+        eq("durability.clean_empty.timer_" .. attempt, emptyEnv.__flushNextTimer(), true)
+        eq("durability.clean_empty.dirty_" .. attempt, emptyTest.durabilityState().dirty, true)
+        check("durability.clean_empty.scan_" .. attempt, emptyAddon:RunUpdateStatsSafe())
+    end
+    state = emptyTest.durabilityState()
+    eq("durability.clean_empty.exhausted_complete", state.durabilityComplete, true)
+    eq("durability.clean_empty.exhausted_has_no_items", state.durabilityHasItems, false)
+    eq("durability.clean_empty.clears_average", state.durabilityLastCompleteAverage, nil)
+    eq("durability.clean_empty.clears_worst", state.durabilityLastCompleteWorst, nil)
+    eq("durability.clean_empty.clears_selected", state.durabilityValue, nil)
+    eq("durability.clean_empty.no_more_timers", #emptyEnv.__timers, 0)
+    local emptyBlock = findBlockBySplitKey("durability.clean_empty.block",
+        emptyTest.buildRenderBlocks(), "splitDurability")
+    eq("durability.clean_empty.hides_stale_row", #emptyBlock.labels, 0)
+
+    mode = "equipped"
+    fireEvent("durability.clean_empty.requip_event", emptyEnv, "PLAYER_EQUIPMENT_CHANGED")
+    check("durability.clean_empty.requip_scan", emptyAddon:RunUpdateStatsSafe())
+    state = emptyTest.durabilityState()
+    eq("durability.clean_empty.requip_complete", state.durabilityComplete, true)
+    eq("durability.clean_empty.requip_has_items", state.durabilityHasItems, true)
+    near("durability.clean_empty.requip_value", state.durabilityValue, 80)
 end
 
 do
@@ -4168,9 +4283,10 @@ do
         getRangedCritChance = function() return 15 end,
         getSpellCritChance = function() return 20 end,
     })
-    local ok, value = pcall(critAddon.GetBestCritChance)
+    local ok, value, state = pcall(critAddon.GetBestCritChance)
     check("selector.best_crit_uses_best_clean_source.no_error", ok, value)
     eq("selector.best_crit_uses_best_clean_source.value", value, 20)
+    eq("selector.best_crit_uses_best_clean_source.state", state, "exact")
 end
 
 do
@@ -4180,9 +4296,10 @@ do
         getRangedCritChance = function() return 17 end,
         getSpellCritChance = function(school) return schoolCrit[school] end,
     })
-    local ok, value = pcall(critAddon.GetBestCritChance)
+    local ok, value, state = pcall(critAddon.GetBestCritChance)
     check("selector.best_crit_uses_minimum_spell_school.no_error", ok, value)
     eq("selector.best_crit_uses_minimum_spell_school.value", value, 17)
+    eq("selector.best_crit_uses_minimum_spell_school.state", state, "exact")
     slash("selector.best_crit_uses_minimum_spell_school.debug_live", critEnv, "debug live")
     eq("selector.best_crit_uses_minimum_spell_school.debug_schools",
         printContains(critEnv, "debug live crit schools: 2=25.00 3=20.00 4=19.00 5=18.00 6=22.00 7=15.00"), true)
@@ -4201,9 +4318,10 @@ do
         end,
         issecretvalue = function(value) return value == secretSpellCrit end,
     })
-    local ok, value = pcall(critAddon.GetBestCritChance)
+    local ok, value, state = pcall(critAddon.GetBestCritChance)
     check("selector.best_crit_secret_school_rejects_partial_spell.no_error", ok, value)
-    eq("selector.best_crit_secret_school_rejects_partial_spell.value", value, 18)
+    eq("selector.best_crit_secret_school_rejects_partial_spell.value", value, nil)
+    eq("selector.best_crit_secret_school_rejects_partial_spell.state", state, "restricted")
     for school = 2, 7 do
         eq("selector.best_crit_secret_school_rejects_partial_spell.school_" .. school, schoolCalls[school], 1)
     end
@@ -4225,9 +4343,11 @@ do
                 return 25
             end,
         })
-        local ok, value = pcall(critAddon.GetBestCritChance)
+        local ok, value, state = pcall(critAddon.GetBestCritChance)
         check("selector.best_crit_invalid_school_rejects_partial_spell." .. case.name .. ".no_error", ok, value)
-        eq("selector.best_crit_invalid_school_rejects_partial_spell." .. case.name .. ".value", value, 17)
+        eq("selector.best_crit_invalid_school_rejects_partial_spell." .. case.name .. ".value", value, nil)
+        eq("selector.best_crit_invalid_school_rejects_partial_spell." .. case.name .. ".state",
+            state, "unavailable")
     end
 end
 
@@ -4242,9 +4362,10 @@ do
             return 23.4
         end,
     })
-    local ok, value = pcall(critAddon.GetBestCritChance)
+    local ok, value, state = pcall(critAddon.GetBestCritChance)
     check("selector.best_crit_incomplete_spell_aggregate_is_rejected.no_error", ok, value)
     eq("selector.best_crit_incomplete_spell_aggregate_is_rejected.value", value, nil)
+    eq("selector.best_crit_incomplete_spell_aggregate_is_rejected.state", state, "unavailable")
     eq("selector.best_crit_incomplete_spell_aggregate_is_rejected.other_school_calls", otherSchoolCalls, 5)
 end
 
@@ -4254,9 +4375,10 @@ do
         getRangedCritChance = function() return 17 end,
         getSpellCritChance = function() return nil end,
     })
-    local ok, value = pcall(critAddon.GetBestCritChance)
+    local ok, value, state = pcall(critAddon.GetBestCritChance)
     check("selector.best_crit_ignores_malformed_sources.no_error", ok, value)
-    eq("selector.best_crit_ignores_malformed_sources.value", value, 17)
+    eq("selector.best_crit_ignores_malformed_sources.value", value, nil)
+    eq("selector.best_crit_ignores_malformed_sources.state", state, "unavailable")
 end
 
 do
@@ -4265,9 +4387,10 @@ do
         getRangedCritChance = function() return "bad" end,
         getSpellCritChance = function() return nil end,
     })
-    local ok, value = pcall(critAddon.GetBestCritChance)
+    local ok, value, state = pcall(critAddon.GetBestCritChance)
     check("selector.best_crit_returns_nil_when_no_renderable_source.no_error", ok, value)
     eq("selector.best_crit_returns_nil_when_no_renderable_source.value", value, nil)
+    eq("selector.best_crit_returns_nil_when_no_renderable_source.state", state, "unavailable")
 end
 
 do
@@ -4278,9 +4401,10 @@ do
         getSpellCritChance = function() return nil end,
         issecretvalue = function(value) return value == secretCrit end,
     })
-    local ok, value = pcall(critAddon.GetBestCritChance)
-    check("selector.best_crit_prefers_clean_value_over_secret.no_error", ok, value)
-    eq("selector.best_crit_prefers_clean_value_over_secret.value", value, 12)
+    local ok, value, state = pcall(critAddon.GetBestCritChance)
+    check("selector.best_crit_mixed_secret_is_restricted.no_error", ok, value)
+    eq("selector.best_crit_mixed_secret_is_restricted.value", value, nil)
+    eq("selector.best_crit_mixed_secret_is_restricted.state", state, "restricted")
 end
 
 do
@@ -4296,10 +4420,11 @@ do
         end,
         issecretvalue = function(value) return value == secretSpellCrit end,
     })
-    local ok, value = pcall(critAddon.GetBestCritChance)
-    check("selector.best_crit_secret_spell2_uses_clean_fallback.no_error", ok, value)
-    eq("selector.best_crit_secret_spell2_uses_clean_fallback.value", value, 18)
-    eq("selector.best_crit_secret_spell2_uses_clean_fallback.all_schools_seen", spellCalls, 6)
+    local ok, value, state = pcall(critAddon.GetBestCritChance)
+    check("selector.best_crit_secret_spell2_restricts_aggregate.no_error", ok, value)
+    eq("selector.best_crit_secret_spell2_restricts_aggregate.value", value, nil)
+    eq("selector.best_crit_secret_spell2_restricts_aggregate.state", state, "restricted")
+    eq("selector.best_crit_secret_spell2_restricts_aggregate.all_schools_seen", spellCalls, 6)
 end
 
 do
@@ -4314,10 +4439,11 @@ do
         end,
         issecretvalue = function(value) return value == secretSpellCrit end,
     })
-    local ok, value = pcall(critAddon.GetBestCritChance)
-    check("selector.best_crit_secret_spell2_returns_secret.no_error", ok, value)
-    eq("selector.best_crit_secret_spell2_returns_secret.value", value, secretSpellCrit)
-    eq("selector.best_crit_secret_spell2_returns_secret.all_schools_seen", spellCalls, 6)
+    local ok, value, state = pcall(critAddon.GetBestCritChance)
+    check("selector.best_crit_all_secret_returns_restricted.no_error", ok, value)
+    eq("selector.best_crit_all_secret_returns_restricted.value", value, nil)
+    eq("selector.best_crit_all_secret_returns_restricted.state", state, "restricted")
+    eq("selector.best_crit_all_secret_returns_restricted.all_schools_seen", spellCalls, 6)
 end
 
 do
@@ -4328,9 +4454,10 @@ do
         getSpellCritChance = function() return nil end,
         issecretvalue = function(value) return value == secretCrit end,
     })
-    local ok, value = pcall(critAddon.GetBestCritChance)
-    check("selector.best_crit_returns_secret_when_only_secret_source_exists.no_error", ok, value)
-    eq("selector.best_crit_returns_secret_when_only_secret_source_exists.value", value, secretCrit)
+    local ok, value, state = pcall(critAddon.GetBestCritChance)
+    check("selector.best_crit_only_secret_source_restricts_aggregate.no_error", ok, value)
+    eq("selector.best_crit_only_secret_source_restricts_aggregate.value", value, nil)
+    eq("selector.best_crit_only_secret_source_restricts_aggregate.state", state, "restricted")
 end
 
 do
@@ -4488,11 +4615,12 @@ do
         getRangedCritChance = function() return nil end,
         getSpellCritChance = function() return 23.4 end,
     })
-    fireEvent("render.crit_falls_back_to_spell_source.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    fireEvent("render.crit_incomplete_sources_are_unavailable.fire", critEnv, "PLAYER_ENTERING_WORLD")
     local ok, blocks = pcall(critTest.buildRenderBlocks)
-    check("render.crit_falls_back_to_spell_source.no_error", ok, blocks)
-    eq("render.crit_falls_back_to_spell_source.row", blockDumpContains(blocks, "Crit:"), true)
-    eq("render.crit_falls_back_to_spell_source.spell_value", blockDumpContains(blocks, "23.4%"), true)
+    check("render.crit_incomplete_sources_are_unavailable.no_error", ok, blocks)
+    eq("render.crit_incomplete_sources_are_unavailable.row", blockDumpContains(blocks, "Crit:"), true)
+    eq("render.crit_incomplete_sources_are_unavailable.no_partial_spell",
+        blockDumpContains(blocks, "23.4%"), false)
 end
 
 do
@@ -4518,12 +4646,14 @@ do
         end,
         issecretvalue = function(value) return value == secretSpellCrit end,
     })
-    fireEvent("render.crit_spell_secret_uses_best_clean_fallback.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    fireEvent("render.crit_spell_secret_restricts_aggregate.fire", critEnv, "PLAYER_ENTERING_WORLD")
     local ok, blocks = pcall(critTest.buildRenderBlocks)
-    check("render.crit_spell_secret_uses_best_clean_fallback.no_error", ok, blocks)
-    eq("render.crit_spell_secret_uses_best_clean_fallback.all_schools_seen", spellCalls, 12)
-    eq("render.crit_spell_secret_uses_best_clean_fallback.row", blockDumpContains(blocks, "Crit:"), true)
-    eq("render.crit_spell_secret_uses_best_clean_fallback.clean_fallback_value", blockDumpContains(blocks, "18.6%"), true)
+    check("render.crit_spell_secret_restricts_aggregate.no_error", ok, blocks)
+    eq("render.crit_spell_secret_restricts_aggregate.all_schools_seen", spellCalls, 12)
+    eq("render.crit_spell_secret_restricts_aggregate.row", blockDumpContains(blocks, "Crit:"), true)
+    eq("render.crit_spell_secret_restricts_aggregate.unknown", blockDumpContains(blocks, "?"), true)
+    eq("render.crit_spell_secret_restricts_aggregate.no_clean_fallback",
+        blockDumpContains(blocks, "18.6%"), false)
 end
 
 do
@@ -4553,6 +4683,9 @@ do
     check("render.crit_spell_secret_only_keeps_row.no_error", ok, blocks)
     eq("render.crit_spell_secret_only_keeps_row.all_schools_seen", spellCalls, 12)
     eq("render.crit_spell_secret_only_keeps_row.row", blockDumpContains(blocks, "Crit:"), true)
+    eq("render.crit_spell_secret_only_keeps_row.unknown", blockDumpContains(blocks, "?"), true)
+    eq("render.crit_spell_secret_only_keeps_row.no_arbitrary_source",
+        blockDumpContains(blocks, "24%"), false)
 end
 
 do
@@ -4672,8 +4805,8 @@ do
             showDefensive = false,
         },
         getCritChance = function() return percentValue end,
-        getRangedCritChance = function() return nil end,
-        getSpellCritChance = function() return nil end,
+        getRangedCritChance = function() return percentValue end,
+        getSpellCritChance = function() return percentValue end,
         getCombatRating = function() return ratingValue end,
         issecretvalue = function(value) return value == secretRating end,
     })
@@ -4843,12 +4976,14 @@ do
     eq("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.row_count", #(offensive.labels or {}), 1)
     eq("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.rating",
         offensive.ratings[1]:find("812", 1, true) ~= nil, true)
+    eq("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.unknown_aggregate",
+        offensive.values[1]:find("?", 1, true) ~= nil, true)
     local meta = offensive.targetRows[1]
     check("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.meta", type(meta) == "table", meta)
     eq("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.current", meta.current, 812)
     eq("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.current_pct", meta.currentPct, nil)
-    eq("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.live_display_pct",
-        critEnv.issecretvalue(meta.currentPctDisplay), true)
+    eq("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.no_arbitrary_display_pct",
+        meta.currentPctDisplay, nil)
     eq("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.target", meta.target, 1000)
 end
 
@@ -4894,6 +5029,7 @@ end
 
 do
     local liveRating = 812
+    local livePercent = 14
     local targetHoverFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(targetHoverFixture, "mythicPlus", "MAGE", "frost",
         { crit = 1000, haste = 200, mastery = 300, versatility = 400 })
@@ -4914,33 +5050,68 @@ do
             showDefensive = false,
         },
         statsProArchonTargets = targetHoverFixture,
-        getCritChance = function() return 12.5 end,
+        getCritChance = function() return livePercent end,
         getCombatRating = function() return liveRating end,
-        issecretvalue = function(value) return value == -1 end,
+        issecretvalue = function(value) return value == -1 or value == -2 end,
+        roundToNearestString = function(value)
+            if value == -1 then return "875" end
+            if value == -2 then return "900" end
+            return tostring(value)
+        end,
     })
-    fireEvent("render.target_hover_clean_secret_clean.fire", critEnv, "PLAYER_ENTERING_WORLD")
+    fireEvent("render.target_hover_clean_secret_secret_clean.fire", critEnv, "PLAYER_ENTERING_WORLD")
     local exactBlocks = critTest.buildRenderBlocks()
     local exactMeta = exactBlocks[2].targetRows[1]
-    eq("render.target_hover_clean_secret_clean.exact_state", exactMeta.comparisonState, "exact")
-    eq("render.target_hover_clean_secret_clean.exact_current", exactMeta.current, 812)
+    eq("render.target_hover_clean_secret_secret_clean.exact_state", exactMeta.comparisonState, "exact")
+    eq("render.target_hover_clean_secret_secret_clean.exact_current", exactMeta.current, 812)
 
     liveRating = -1
+    livePercent = 19
     local restrictedBlocks = critTest.buildRenderBlocks()
-    local lastKnownMeta = restrictedBlocks[2].targetRows[1]
-    eq("render.target_hover_clean_secret_clean.last_known_state", lastKnownMeta.comparisonState, "lastKnown")
-    eq("render.target_hover_clean_secret_clean.last_known_current", lastKnownMeta.current, 812)
-    eq("render.target_hover_clean_secret_clean.secret_not_stored", lastKnownMeta.current == -1, false)
+    local liveMeta = restrictedBlocks[2].targetRows[1]
+    eq("render.target_hover_clean_secret_secret_clean.live_state", liveMeta.comparisonState, "liveOnly")
+    eq("render.target_hover_clean_secret_secret_clean.no_stale_current", liveMeta.current, nil)
+    eq("render.target_hover_clean_secret_secret_clean.live_rating",
+        critEnv.issecretvalue(liveMeta.currentRatingDisplay), true)
     local cacheState = critTest.archonComparisonCache()
-    eq("render.target_hover_clean_secret_clean.cache_current_clean", cacheState.entries.crit.current, 812)
-    critTest.renderMainPanelForSmoke("Crit:", "12.5%", "", 1, nil, nil, { lastKnownMeta })
+    eq("render.target_hover_clean_secret_secret_clean.cache_current_clean", cacheState.entries.crit.current, 812)
+    critTest.renderMainPanelForSmoke("Crit:", "19%", "", 1, nil, nil, { liveMeta })
     critTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
-    eq("render.target_hover_clean_secret_clean.combat_overlay_shows", critEnv.GameTooltip:IsShown(), true)
+    eq("render.target_hover_clean_secret_secret_clean.combat_overlay_shows", critEnv.GameTooltip:IsShown(), true)
+    eq("render.target_hover_clean_secret_secret_clean.live_notice",
+        critEnv.GameTooltip.lines[2].left, "Live values; comparison unavailable")
+    eq("render.target_hover_clean_secret_secret_clean.live_current_label",
+        critEnv.GameTooltip.lines[4].left, "Current:")
+    check("render.target_hover_clean_secret_secret_clean.live_current_rating",
+        critEnv.GameTooltip.lines[4].right:find("875", 1, true) ~= nil,
+        critEnv.GameTooltip.lines[4].right)
+    check("render.target_hover_clean_secret_secret_clean.live_current_percent",
+        critEnv.GameTooltip.lines[4].right:find("19.0%", 1, true) ~= nil,
+        critEnv.GameTooltip.lines[4].right)
+
+    liveRating = -2
+    livePercent = 23
+    local secondRestrictedBlocks = critTest.buildRenderBlocks()
+    local secondLiveMeta = secondRestrictedBlocks[2].targetRows[1]
+    eq("render.target_hover_clean_secret_secret_clean.second_live_state",
+        secondLiveMeta.comparisonState, "liveOnly")
+    critTest.renderMainPanelForSmoke("Crit:", "23%", "", 1, nil, nil, { secondLiveMeta })
+    critTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    check("render.target_hover_clean_secret_secret_clean.second_live_current_rating",
+        critEnv.GameTooltip.lines[4].right:find("900", 1, true) ~= nil,
+        critEnv.GameTooltip.lines[4].right)
+    check("render.target_hover_clean_secret_secret_clean.second_live_current_percent",
+        critEnv.GameTooltip.lines[4].right:find("23.0%", 1, true) ~= nil,
+        critEnv.GameTooltip.lines[4].right)
+    eq("render.target_hover_clean_secret_secret_clean.cache_never_tainted",
+        critTest.archonComparisonCache().entries.crit.current, 812)
 
     liveRating = 830
+    livePercent = 15
     local recoveredBlocks = critTest.buildRenderBlocks()
     local recoveredMeta = recoveredBlocks[2].targetRows[1]
-    eq("render.target_hover_clean_secret_clean.recovered_state", recoveredMeta.comparisonState, "exact")
-    eq("render.target_hover_clean_secret_clean.recovered_current", recoveredMeta.current, 830)
+    eq("render.target_hover_clean_secret_secret_clean.recovered_state", recoveredMeta.comparisonState, "exact")
+    eq("render.target_hover_clean_secret_secret_clean.recovered_current", recoveredMeta.current, 830)
 end
 
 do
@@ -5033,25 +5204,27 @@ do
 
     fireEvent("render.target_hover_lifecycle.cold.fire", hoverEnv, "PLAYER_ENTERING_WORLD")
     local savedAfterLoad = deepCopy(hoverEnv.StatsProDB)
-    local coldState = assertPanelTargets("render.target_hover_lifecycle.cold", "main", "targetOnly")
+    local coldState = assertPanelTargets("render.target_hover_lifecycle.cold", "main", "liveOnly")
     eq("render.target_hover_lifecycle.cold.cache_empty",
         next(hoverTest.archonComparisonCache().entries), nil)
     for index, meta in ipairs(coldState.lastTargetRows) do
         if type(meta) == "table" then
             hoverTest.firePanelTooltipOverlayForSmoke("main", index, "OnEnter")
             eq("render.target_hover_lifecycle.cold.tooltip_lines." .. index,
-                #hoverEnv.GameTooltip.lines, 4)
+                #hoverEnv.GameTooltip.lines, 6)
             eq("render.target_hover_lifecycle.cold.tooltip_target." .. index,
-                hoverEnv.GameTooltip.lines[2].left, "Target:")
+                hoverEnv.GameTooltip.lines[3].left, "Target:")
+            eq("render.target_hover_lifecycle.cold.tooltip_current." .. index,
+                hoverEnv.GameTooltip.lines[4].left, "Current:")
             eq("render.target_hover_lifecycle.cold.tooltip_snapshot." .. index,
-                hoverEnv.GameTooltip.lines[3].left, "Snapshot:")
+                hoverEnv.GameTooltip.lines[5].left, "Snapshot:")
             eq("render.target_hover_lifecycle.cold.tooltip_source." .. index,
-                hoverEnv.GameTooltip.lines[4].left, "Source:")
+                hoverEnv.GameTooltip.lines[6].left, "Source:")
         end
     end
     hoverTest.firePanelTooltipOverlayForSmoke("main", 1, "OnEnter")
     local heldOwner = hoverEnv.GameTooltip:GetOwner()
-    eq("render.target_hover_lifecycle.cold.held_line_count", #hoverEnv.GameTooltip.lines, 4)
+    eq("render.target_hover_lifecycle.cold.held_line_count", #hoverEnv.GameTooltip.lines, 6)
 
     local ticker = findFrame("render.target_hover_lifecycle.ticker", hoverEnv, function(frame)
         return frame.scripts and type(frame.scripts.OnUpdate) == "function"
@@ -5059,13 +5232,13 @@ do
     for tick = 1, 3 do
         callScript("render.target_hover_lifecycle.cold.tick." .. tick, ticker, "OnUpdate", 999)
         assertPanelTargets("render.target_hover_lifecycle.cold.after_tick." .. tick,
-            "main", "targetOnly")
+            "main", "liveOnly")
         eq("render.target_hover_lifecycle.cold.open_tooltip_survives_tick." .. tick,
             hoverEnv.GameTooltip:IsShown(), true)
         eq("render.target_hover_lifecycle.cold.owner_survives_tick." .. tick,
             hoverEnv.GameTooltip:GetOwner(), heldOwner)
-        eq("render.target_hover_lifecycle.cold.lines_stay_target_only." .. tick,
-            #hoverEnv.GameTooltip.lines, 4)
+        eq("render.target_hover_lifecycle.cold.lines_stay_live_only." .. tick,
+            #hoverEnv.GameTooltip.lines, 6)
     end
     hoverTest.firePanelTooltipOverlayForSmoke("main", 1, "OnLeave")
     eq("render.target_hover_lifecycle.cold.leave_hides",
@@ -5113,32 +5286,32 @@ do
 
     restricted = true
     for tick = 1, 3 do
-        callScript("render.target_hover_lifecycle.last_known.tick." .. tick, ticker, "OnUpdate", 999)
-        assertPanelTargets("render.target_hover_lifecycle.last_known.after_tick." .. tick,
-            "main", "lastKnown")
+        callScript("render.target_hover_lifecycle.live_restricted.tick." .. tick, ticker, "OnUpdate", 999)
+        assertPanelTargets("render.target_hover_lifecycle.live_restricted.after_tick." .. tick,
+            "main", "liveOnly")
     end
-    eq("render.target_hover_lifecycle.last_known.held_owner",
+    eq("render.target_hover_lifecycle.live_restricted.held_owner",
         hoverEnv.GameTooltip:GetOwner(), heldOwner)
-    eq("render.target_hover_lifecycle.last_known.held_lines_refreshed",
-        #hoverEnv.GameTooltip.lines, 7)
-    eq("render.target_hover_lifecycle.last_known.held_notice_refreshed",
-        hoverEnv.GameTooltip.lines[2].left, "Last known comparison")
-    check("render.target_hover_lifecycle.last_known.held_current_preserved",
-        hoverEnv.GameTooltip.lines[4].right:find("800", 1, true) ~= nil,
+    eq("render.target_hover_lifecycle.live_restricted.held_lines_refreshed",
+        #hoverEnv.GameTooltip.lines, 6)
+    eq("render.target_hover_lifecycle.live_restricted.held_notice_refreshed",
+        hoverEnv.GameTooltip.lines[2].left, "Live values; comparison unavailable")
+    check("render.target_hover_lifecycle.live_restricted.held_current_is_live",
+        hoverEnv.GameTooltip.lines[4].right:find("secret", 1, true) ~= nil,
         hoverEnv.GameTooltip.lines[4].right)
-    local lastKnownState = hoverTest.panelTooltipState("main")
-    for index, meta in ipairs(lastKnownState.lastTargetRows) do
+    local liveRestrictedState = hoverTest.panelTooltipState("main")
+    for index, meta in ipairs(liveRestrictedState.lastTargetRows) do
         if type(meta) == "table" then
             hoverTest.firePanelTooltipOverlayForSmoke("main", index, "OnEnter")
-            eq("render.target_hover_lifecycle.last_known.tooltip_lines." .. index,
-                #hoverEnv.GameTooltip.lines, 7)
-            eq("render.target_hover_lifecycle.last_known.notice." .. index,
-                hoverEnv.GameTooltip.lines[2].left, "Last known comparison")
+            eq("render.target_hover_lifecycle.live_restricted.tooltip_lines." .. index,
+                #hoverEnv.GameTooltip.lines, 6)
+            eq("render.target_hover_lifecycle.live_restricted.notice." .. index,
+                hoverEnv.GameTooltip.lines[2].left, "Live values; comparison unavailable")
         end
     end
     local cachedAfterRestriction = hoverTest.archonComparisonCache()
     for statKey, expectedCurrent in pairs(expectedCurrentByStat) do
-        eq("render.target_hover_lifecycle.last_known.cache." .. statKey,
+        eq("render.target_hover_lifecycle.live_restricted.cache." .. statKey,
             cachedAfterRestriction.entries[statKey].current, expectedCurrent)
     end
     hoverTest.firePanelTooltipOverlayForSmoke("main", 1, "OnEnter")
@@ -5194,10 +5367,12 @@ do
         hoverEnv.GameTooltip:GetOwner(), heldOwner)
     eq("render.target_hover_lifecycle.snapshot_raid.title",
         hoverEnv.GameTooltip.lines[1].left, "StatsPro Raid Target")
+    eq("render.target_hover_lifecycle.snapshot_raid.live_notice",
+        hoverEnv.GameTooltip.lines[2].left, "Live values; comparison unavailable")
     eq("render.target_hover_lifecycle.snapshot_raid.target",
-        hoverEnv.GameTooltip.lines[2].left, "Target:")
-    eq("render.target_hover_lifecycle.snapshot_raid.target_only_lines",
-        #hoverEnv.GameTooltip.lines, 4)
+        hoverEnv.GameTooltip.lines[3].left, "Target:")
+    eq("render.target_hover_lifecycle.snapshot_raid.live_only_lines",
+        #hoverEnv.GameTooltip.lines, 6)
 
     restricted = false
     check("render.target_hover_lifecycle.snapshot_raid.recovery_update",
@@ -5515,6 +5690,10 @@ end
 do
     local secretCrit = {}
     local secretMode = false
+    local function currentCrit()
+        if secretMode then return secretCrit end
+        return 10
+    end
     local updateEnv, _, updateTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = true,
@@ -5527,12 +5706,9 @@ do
             showTertiary = false,
             showDefensive = false,
         },
-        getCritChance = function()
-            if secretMode then return secretCrit end
-            return 10
-        end,
-        getRangedCritChance = function() return nil end,
-        getSpellCritChance = function() return nil end,
+        getCritChance = currentCrit,
+        getRangedCritChance = currentCrit,
+        getSpellCritChance = currentCrit,
         issecretvalue = function(value) return value == secretCrit end,
         roundToNearestString = function(value)
             if value == secretCrit then return "22" end
@@ -5552,12 +5728,12 @@ do
     local ok, err = pcall(ticker.scripts.OnUpdate, ticker, 999)
     check("render.update_ticker_secret_numeric.no_bubble", ok, err)
     local state = updateTest.panelVisualState()
-    check("render.update_ticker_secret_numeric.live_secret_value",
-        state.mainRatingText:find("22%", 1, true) ~= nil, state.mainRatingText)
+    check("render.update_ticker_secret_numeric.restricted_aggregate_unknown",
+        state.mainRatingText:find("?", 1, true) ~= nil, state.mainRatingText)
     eq("render.update_ticker_secret_numeric.no_stale_clean_value",
         state.mainRatingText:find("10.0%", 1, true), nil)
-    eq("render.update_ticker_secret_numeric.no_unknown",
-        state.mainRatingText:find("?", 1, true), nil)
+    eq("render.update_ticker_secret_numeric.no_arbitrary_source",
+        state.mainRatingText:find("22%", 1, true), nil)
     clearPrints(updateEnv)
     slash("render.update_ticker_secret_numeric.debug_perf", updateEnv, "debug perf")
     eq("render.update_ticker_secret_numeric.debug_reports_zero_errors",
@@ -5812,7 +5988,7 @@ do
             { label = "Stamina:", ratingUnknown = false, valueUnknown = false },
         },
         {
-            { label = "Crit:", ratingUnknown = false, valueUnknown = false },
+            { label = "Crit:", ratingUnknown = false, valueUnknown = true },
             { label = "Haste:", ratingUnknown = false, valueUnknown = false },
             { label = "Mastery:", ratingUnknown = false, valueUnknown = false },
             { label = "Vers:", ratingUnknown = false, valueUnknown = false },
@@ -5854,14 +6030,15 @@ do
     eq("render.secret_numeric_matrix.flat_rating_parity", #flatMain.labels, #flatMain.ratings)
     eq("render.secret_numeric_matrix.flat_value_parity", #flatMain.labels, #flatMain.values)
     eq("render.secret_numeric_matrix.flat_target_parity", #flatMain.labels, #flatMain.targetRows)
-    eq("render.secret_numeric_matrix.flat_unknown", blockDumpContains({ flatMain }, "?"), false)
+    eq("render.secret_numeric_matrix.flat_has_composite_unknown",
+        blockDumpContains({ flatMain }, "?"), true)
     local sectionedMain = poisonTest.routeRenderBlocks(blocks, "sectioned", nil, "full")
     eq("render.secret_numeric_matrix.sectioned_row_count", #sectionedMain.labels, 16)
     eq("render.secret_numeric_matrix.sectioned_rating_parity", #sectionedMain.labels, #sectionedMain.ratings)
     eq("render.secret_numeric_matrix.sectioned_value_parity", #sectionedMain.labels, #sectionedMain.values)
     eq("render.secret_numeric_matrix.sectioned_target_parity", #sectionedMain.labels, #sectionedMain.targetRows)
-    eq("render.secret_numeric_matrix.sectioned_unknown",
-        blockDumpContains({ sectionedMain }, "?"), false)
+    eq("render.secret_numeric_matrix.sectioned_has_composite_unknown",
+        blockDumpContains({ sectionedMain }, "?"), true)
     local splitMain, splitSide = poisonTest.routeRenderBlocks(blocks, "split", {
         splitCharacter = false,
         splitOffensive = false,
@@ -5876,8 +6053,8 @@ do
     eq("render.secret_numeric_matrix.split_side_rating_parity", #splitSide.labels, #splitSide.ratings)
     eq("render.secret_numeric_matrix.split_side_value_parity", #splitSide.labels, #splitSide.values)
     eq("render.secret_numeric_matrix.split_side_target_parity", #splitSide.labels, #splitSide.targetRows)
-    eq("render.secret_numeric_matrix.split_main_unknown",
-        blockDumpContains({ splitMain }, "?"), false)
+    eq("render.secret_numeric_matrix.split_main_has_composite_unknown",
+        blockDumpContains({ splitMain }, "?"), true)
     eq("render.secret_numeric_matrix.split_side_unknown",
         blockDumpContains({ splitSide }, "?"), false)
     eq("render.secret_numeric_matrix.split_main_has_no_tertiary",
@@ -5891,8 +6068,9 @@ do
     poisonTest.cacheSettings()
     check("render.secret_numeric_matrix.sectioned_update", poisonAddon:RunUpdateStatsSafe())
     local state = poisonTest.panelVisualState()
-    eq("render.secret_numeric_matrix.sectioned_panel_unknown",
-        ((state.mainRatingText or "") .. (state.mainValueText or "")):find("?", 1, true), nil)
+    eq("render.secret_numeric_matrix.sectioned_panel_has_composite_unknown",
+        ((state.mainRatingText or "") .. (state.mainValueText or "")):find("?", 1, true) ~= nil,
+        true)
 
     settings.displayMode = "split"
     settings.splitTertiary = true
@@ -5900,8 +6078,9 @@ do
     poisonTest.cacheSettings()
     check("render.secret_numeric_matrix.split_update", poisonAddon:RunUpdateStatsSafe())
     state = poisonTest.panelVisualState()
-    eq("render.secret_numeric_matrix.split_main_panel_unknown",
-        ((state.mainRatingText or "") .. (state.mainValueText or "")):find("?", 1, true), nil)
+    eq("render.secret_numeric_matrix.split_main_panel_has_composite_unknown",
+        ((state.mainRatingText or "") .. (state.mainValueText or "")):find("?", 1, true) ~= nil,
+        true)
     eq("render.secret_numeric_matrix.split_side_panel_unknown",
         ((state.sideRatingText or "") .. (state.sideValueText or "")):find("?", 1, true), nil)
     clearPrints(poisonEnv)
@@ -5934,8 +6113,9 @@ do
         state.mainValueText ~= cleanState.mainValueText)
     check("render.secret_numeric_matrix.warm_combat_side_changed",
         state.sideValueText ~= cleanState.sideValueText)
-    eq("render.secret_numeric_matrix.warm_combat_main_no_unknown",
-        ((state.mainRatingText or "") .. (state.mainValueText or "")):find("?", 1, true), nil)
+    eq("render.secret_numeric_matrix.warm_combat_main_has_composite_unknown",
+        ((state.mainRatingText or "") .. (state.mainValueText or "")):find("?", 1, true) ~= nil,
+        true)
     eq("render.secret_numeric_matrix.warm_combat_side_no_unknown",
         ((state.sideRatingText or "") .. (state.sideValueText or "")):find("?", 1, true), nil)
     eq("render.secret_numeric_matrix.warm_combat_format_guard", forbiddenFormatCalls, 0)
@@ -6008,11 +6188,12 @@ do
     ok, blocks = pcall(hostileTest.buildRenderBlocks)
     check("render.hostile_secret_matrix.build_no_error", ok, blocks)
     local expectedCounts = { 2, 1, 1, 1 }
+    local expectedUnknown = { false, true, false, false }
     for blockIndex = 1, 4 do
         eq("render.hostile_secret_matrix.block_" .. blockIndex .. ".row_count",
             #blocks[blockIndex].labels, expectedCounts[blockIndex])
-        eq("render.hostile_secret_matrix.block_" .. blockIndex .. ".no_unknown",
-            blockDumpContains({ blocks[blockIndex] }, "?"), false)
+        eq("render.hostile_secret_matrix.block_" .. blockIndex .. ".unknown",
+            blockDumpContains({ blocks[blockIndex] }, "?"), expectedUnknown[blockIndex])
         eq("render.hostile_secret_matrix.block_" .. blockIndex .. ".live_value",
             blockDumpContains({ blocks[blockIndex] }, "42"), true)
     end
@@ -6908,11 +7089,20 @@ do
     eq("render.versatility_secret_rating_renders_without_meta.unknown", blockDumpContains(blocks, "?"), false)
     eq("render.versatility_secret_rating_renders_without_meta.rating", blockDumpContains(blocks, "888"), true)
     eq("render.versatility_secret_rating_renders_without_meta.percent", blockDumpContains(blocks, "15%"), true)
-    local targetOnlyMeta = blocks[2].targetRows[1]
-    check("render.versatility_secret_rating_renders_without_meta.target_meta", type(targetOnlyMeta) == "table", targetOnlyMeta)
-    eq("render.versatility_secret_rating_renders_without_meta.target_only_state", targetOnlyMeta.comparisonState, "targetOnly")
-    eq("render.versatility_secret_rating_renders_without_meta.no_current", targetOnlyMeta.current, nil)
-    eq("render.versatility_secret_rating_renders_without_meta.no_delta", targetOnlyMeta.delta, nil)
+    local liveMeta = blocks[2].targetRows[1]
+    check("render.versatility_secret_rating_renders_without_meta.target_meta", type(liveMeta) == "table", liveMeta)
+    eq("render.versatility_secret_rating_renders_without_meta.live_only_state", liveMeta.comparisonState, "liveOnly")
+    eq("render.versatility_secret_rating_renders_without_meta.no_clean_current", liveMeta.current, nil)
+    eq("render.versatility_secret_rating_renders_without_meta.no_delta", liveMeta.delta, nil)
+    eq("render.versatility_secret_rating_renders_without_meta.live_rating",
+        versEnv.issecretvalue(liveMeta.currentRatingDisplay), true)
+    versTest.renderMainPanelForSmoke("Vers:", "888", "15%", 1, nil, nil, { liveMeta })
+    versTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("render.versatility_secret_rating_renders_without_meta.tooltip_lines",
+        #versEnv.GameTooltip.lines, 6)
+    check("render.versatility_secret_rating_renders_without_meta.tooltip_current",
+        versEnv.GameTooltip.lines[4].right:find("888 (~15%)", 1, true) ~= nil,
+        versEnv.GameTooltip.lines[4].right)
 end
 
 do
@@ -7259,6 +7449,8 @@ end
 do
     local overall, equipped = 273, 271
     local reads = 0
+    local readMode = "clean"
+    local secretItemLevel = {}
     local ilvlEnv, _, ilvlTest = loadStatsPro("enUS", {
         statsProDB = {
             showRating = true,
@@ -7270,8 +7462,11 @@ do
             showDurability = false,
             showRepairCost = false,
         },
+        issecretvalue = function(value) return value == secretItemLevel end,
         getAverageItemLevel = function()
             reads = reads + 1
+            if readMode == "error" then error("item level temporarily unavailable") end
+            if readMode == "secret" then return secretItemLevel, secretItemLevel end
             return overall, equipped
         end,
     })
@@ -7279,6 +7474,7 @@ do
     local state = ilvlTest.itemLevelState()
     eq("lifecycle.item_level_authoritative_update.initial_overall", state.overall, 273)
     eq("lifecycle.item_level_authoritative_update.initial_equipped", state.equipped, 271)
+    eq("lifecycle.item_level_authoritative_update.initial_complete", state.complete, true)
     eq("lifecycle.item_level_authoritative_update.initial_clean", state.dirty, false)
     eq("lifecycle.item_level_authoritative_update.initial_read", reads, 1)
 
@@ -7300,6 +7496,7 @@ do
     state = ilvlTest.itemLevelState()
     eq("lifecycle.item_level_authoritative_update.refreshed_overall", state.overall, 281)
     eq("lifecycle.item_level_authoritative_update.refreshed_equipped", state.equipped, 279)
+    eq("lifecycle.item_level_authoritative_update.refreshed_complete", state.complete, true)
     eq("lifecycle.item_level_authoritative_update.refreshed_clean", state.dirty, false)
     eq("lifecycle.item_level_authoritative_update.coalesced_read_count", reads, 3)
     local visualState = ilvlTest.panelVisualState()
@@ -7307,6 +7504,46 @@ do
         visualState.mainRatingText:find("279", 1, true) ~= nil, true)
     eq("lifecycle.item_level_authoritative_update.rendered_overall",
         visualState.mainValueText:find("281", 1, true) ~= nil, true)
+
+    readMode = "error"
+    fireEvent("lifecycle.item_level_bounded_error.fire", ilvlEnv, "PLAYER_AVG_ITEM_LEVEL_UPDATE")
+    state = ilvlTest.itemLevelState()
+    eq("lifecycle.item_level_bounded_error.pending", state.dirty, true)
+    eq("lifecycle.item_level_bounded_error.incomplete", state.complete, false)
+    local readsBeforeFailure = reads
+    for attempt = 1, state.retryLimit do
+        callScript("lifecycle.item_level_bounded_error.tick_" .. attempt, ticker, "OnUpdate", 999)
+    end
+    state = ilvlTest.itemLevelState()
+    eq("lifecycle.item_level_bounded_error.attempts", state.attempt, state.retryLimit)
+    eq("lifecycle.item_level_bounded_error.read_count", reads, readsBeforeFailure + state.retryLimit)
+    eq("lifecycle.item_level_bounded_error.exhausted", state.dirty, false)
+    eq("lifecycle.item_level_bounded_error.retains_overall", state.overall, 281)
+    eq("lifecycle.item_level_bounded_error.retains_equipped", state.equipped, 279)
+    callScript("lifecycle.item_level_bounded_error.no_spin", ticker, "OnUpdate", 999)
+    eq("lifecycle.item_level_bounded_error.no_extra_read", reads, readsBeforeFailure + state.retryLimit)
+
+    readMode = "secret"
+    fireEvent("lifecycle.item_level_bounded_secret.fire", ilvlEnv, "PLAYER_AVG_ITEM_LEVEL_UPDATE")
+    local readsBeforeSecret = reads
+    for attempt = 1, state.retryLimit do
+        callScript("lifecycle.item_level_bounded_secret.tick_" .. attempt, ticker, "OnUpdate", 999)
+    end
+    state = ilvlTest.itemLevelState()
+    eq("lifecycle.item_level_bounded_secret.exhausted", state.dirty, false)
+    eq("lifecycle.item_level_bounded_secret.incomplete", state.complete, false)
+    eq("lifecycle.item_level_bounded_secret.read_count", reads, readsBeforeSecret + state.retryLimit)
+    eq("lifecycle.item_level_bounded_secret.retains_overall", state.overall, 281)
+    eq("lifecycle.item_level_bounded_secret.retains_equipped", state.equipped, 279)
+
+    readMode, overall, equipped = "clean", 285, 283
+    fireEvent("lifecycle.item_level_bounded_recovery.fire", ilvlEnv, "PLAYER_AVG_ITEM_LEVEL_UPDATE")
+    callScript("lifecycle.item_level_bounded_recovery.tick", ticker, "OnUpdate", 999)
+    state = ilvlTest.itemLevelState()
+    eq("lifecycle.item_level_bounded_recovery.complete", state.complete, true)
+    eq("lifecycle.item_level_bounded_recovery.clean", state.dirty, false)
+    eq("lifecycle.item_level_bounded_recovery.overall", state.overall, 285)
+    eq("lifecycle.item_level_bounded_recovery.equipped", state.equipped, 283)
 end
 
 do
@@ -7628,6 +7865,22 @@ end
 
 smokeReachability:complete("runtime-rendering")
 
+do
+    -- Retail rejects SetText on a custom FontString until SetFont/SetFontObject has
+    -- established its font. Keep the mock strict so Settings construction cannot
+    -- silently regress by moving a localized setter before font registration.
+    local parent = makeFrame("StrictFontParent")
+    local bare = parent:CreateFontString(nil, "OVERLAY")
+    local bareOK, bareError = pcall(bare.SetText, bare, "Scale:")
+    check("fonts.mock_requires_font_before_text",
+        not bareOK and type(bareError) == "string"
+            and string.find(bareError, "Font not set", 1, true) ~= nil,
+        bareError)
+    bare:SetFont("Fonts\\FRIZQT__.TTF", 12)
+    local configuredOK, configuredError = pcall(bare.SetText, bare, "Scale:")
+    check("fonts.mock_accepts_text_after_font", configuredOK, configuredError)
+end
+
 eq("fonts.path_key_slash_case", test.fontPathKey("Fonts/ARIALN.TTF"), "fonts\\arialn.ttf")
 eq("fonts.ascii_lower_preserves_utf8", test.asciiLower("ÉCOLE Ж FONT"), "École Ж font")
 eq("fonts.path_key_preserves_utf8", test.fontPathKey("Interface/AddOns/Медиа/ШРИФТ.TTF"),
@@ -7641,6 +7894,76 @@ eq("fonts.known_glyph_support.cjk", test.fontSupports("Fonts\\ARKai_T.ttf", "Han
 eq("fonts.unknown_path_latin_only.latin", test.fontSupports("Interface\\AddOns\\Media\\Mystery.ttf", "Latin"), true)
 eq("fonts.unknown_path_latin_only.hangul", test.fontSupports("Interface\\AddOns\\Media\\Mystery.ttf", "Hangul"), false)
 eq("fonts.uncataloged_path_is_not_usable", test.usableFontPath("Interface\\AddOns\\Media\\Mystery.ttf"), nil)
+
+do
+    local loosePath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\ReturnMatrix.ttf"
+    local secret = {}
+    local _, _, matrixTest = loadStatsPro("enUS", {
+        issecretvalue = function(value) return value == secret end,
+        isKnownFontFile = function() return secret end,
+    })
+    local trueButWrong = {
+        SetFont = function() return true end,
+        GetFont = function() return "Fonts\\ARIALN.TTF", 12, nil end,
+    }
+    eq("fonts.setfont_contract.true_requires_readback",
+        matrixTest.trySetFontForSmoke(trueButWrong, loosePath, 12, nil), "pending")
+
+    local nilButApplied = {
+        SetFont = function(self, font, size, flags)
+            self.font, self.size, self.flags = font, size, flags
+            return nil
+        end,
+        GetFont = function(self) return self.font, self.size, self.flags end,
+    }
+    eq("fonts.setfont_contract.nil_accepts_matching_readback",
+        matrixTest.trySetFontForSmoke(nilButApplied, loosePath, 12, "OUTLINE"), "applied")
+
+    local secretReturnApplied = {
+        SetFont = function(self, font, size, flags)
+            self.font, self.size, self.flags = font, size, flags
+            return secret
+        end,
+        GetFont = function(self) return self.font, self.size, self.flags end,
+    }
+    eq("fonts.setfont_contract.secret_return_ignored",
+        matrixTest.trySetFontForSmoke(secretReturnApplied, loosePath, 12, nil), "applied")
+
+    local getFontError = {
+        SetFont = function() return true end,
+        GetFont = function() error("synthetic GetFont error") end,
+    }
+    eq("fonts.setfont_contract.getfont_error_pending",
+        matrixTest.trySetFontForSmoke(getFontError, loosePath, 12, nil), "pending")
+
+    local secretSize = {
+        SetFont = function() return true end,
+        GetFont = function() return loosePath, secret, nil end,
+    }
+    eq("fonts.setfont_contract.secret_size_pending",
+        matrixTest.trySetFontForSmoke(secretSize, loosePath, 12, nil), "pending")
+
+    local secretFlags = {
+        SetFont = function() return true end,
+        GetFont = function() return loosePath, 12, secret end,
+    }
+    eq("fonts.setfont_contract.secret_flags_pending",
+        matrixTest.trySetFontForSmoke(secretFlags, loosePath, 12, nil), "pending")
+
+    local secretPath = {
+        SetFont = function() return true end,
+        GetFont = function() return secret, 12, nil end,
+    }
+    eq("fonts.setfont_contract.secret_path_pending",
+        matrixTest.trySetFontForSmoke(secretPath, loosePath, 12, nil), "pending")
+
+    local unknownBlizzard = {
+        SetFont = function() return false end,
+        GetFont = function() return "Fonts\\ARIALN.TTF", 12, nil end,
+    }
+    eq("fonts.setfont_contract.secret_known_file_is_inconclusive",
+        matrixTest.trySetFontForSmoke(unknownBlizzard, "Fonts\\UNKNOWN.TTF", 12, nil), "pending")
+end
 
 do
     local coldPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\FiraSans-Regular.ttf"
@@ -7693,6 +8016,7 @@ do
     local activatedPaths = {}
     local directCalls = 0
     local activationCalls = 0
+    local activationBeforeAttachment = 0
     local coldEnv, coldAddon, coldTest = loadStatsPro("enUS", {
         statsProDB = {
             font = selectedPath,
@@ -7711,9 +8035,13 @@ do
             end
             return true
         end,
-        fontObjectSetFontResult = function(_, font)
+        fontObjectSetFontResult = function(fontObject, font)
             if font == brokenPath then error("synthetic missing loose FontObject asset") end
             if catalogPaths[font] then
+                if fontObject.attachCount == 0 then
+                    activationBeforeAttachment = activationBeforeAttachment + 1
+                    return false
+                end
                 activationCalls = activationCalls + 1
                 activatedPaths[font] = true
             end
@@ -7724,6 +8052,8 @@ do
     fireEvent("fonts.cold_font_object_activation.pew", coldEnv, "PLAYER_ENTERING_WORLD")
     check("fonts.cold_font_object_activation.direct_probe", directCalls > 0)
     check("fonts.cold_font_object_activation.activator_used", activationCalls > 0)
+    eq("fonts.cold_font_object_activation.never_activates_before_attachment",
+        activationBeforeAttachment, 0)
     eq("fonts.cold_font_object_activation.one_object", #coldEnv.__fontObjects, 1)
     eq("fonts.cold_font_object_activation.object_attached", coldEnv.__fontObjects[1].attachCount, 1)
     eq("fonts.cold_font_object_activation.holder_keeps_inheritance",
@@ -7751,9 +8081,18 @@ do
     userInteract("fonts.cold_font_object_activation.picker_open",
         coldEnv.StatsProFontDropdownButton, "OnClick")
     local visibleFiraFonts = 0
-    for _, frame in ipairs(coldEnv.__frames) do
-        if catalogNames[frame.fontName] and frame:IsShown() then
-            visibleFiraFonts = visibleFiraFonts + 1
+    for _, expected in ipairs(catalog) do
+        if catalogNames[expected.name] then
+            local matches = 0
+            for _, frame in ipairs(coldEnv.__frames) do
+                if frame.fontName == expected.name and frame:IsShown() then
+                    matches = matches + 1
+                    eq("fonts.cold_font_object_activation.exact_path." .. expected.name,
+                        frame.fontPath, expected.path)
+                end
+            end
+            eq("fonts.cold_font_object_activation.unique_row." .. expected.name, matches, 1)
+            visibleFiraFonts = visibleFiraFonts + matches
         end
     end
     eq("fonts.cold_font_object_activation.complete_picker", visibleFiraFonts, 69)
@@ -7766,6 +8105,54 @@ do
         panelState.mainAppliedFont, selectedPath)
     eq("fonts.cold_font_object_activation.picker_does_not_retarget_side",
         panelState.sideAppliedFont, selectedPath)
+end
+
+do
+    local retryPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\AttachRetry.ttf"
+    local attachAttempts = 0
+    local allowAttach = false
+    local activated = false
+    local retryEnv, retryAddon, retryTest = loadStatsPro("enUS", {
+        statsProDB = { font = retryPath, fontBeforeAutoSwitch = retryPath },
+        lsmFonts = { { name = "Attach Retry", path = retryPath } },
+        setFontObjectResult = function()
+            attachAttempts = attachAttempts + 1
+            return allowAttach
+        end,
+        fontObjectSetFontResult = function(fontObject, font)
+            if font == retryPath and fontObject.attachCount > 0 then activated = true end
+            return true
+        end,
+        setFontResult = function(frame, font, size, flags)
+            if font == retryPath then
+                if not activated then return false end
+                frame.font, frame.fontSize, frame.fontFlags = font, size, flags
+                return false
+            end
+            return true
+        end,
+    })
+    eq("fonts.activator_attach_retry.lazy_before_use", attachAttempts, 0)
+    eq("fonts.activator_attach_retry.no_unused_object", #retryEnv.__fontObjects, 0)
+    fireEvent("fonts.activator_attach_retry.pew", retryEnv, "PLAYER_ENTERING_WORLD")
+    check("fonts.activator_attach_retry.initial_attempts", attachAttempts > 0)
+    eq("fonts.activator_attach_retry.one_object_after_failure", #retryEnv.__fontObjects, 1)
+    local originalHolder = retryAddon.fontRuntime.fontActivatorString
+    eq("fonts.activator_attach_retry.pending_after_failure",
+        retryTest.fontRuntimeState().pendingSavedFont, retryPath)
+    eq("fonts.activator_attach_retry.retry_scheduled", #retryEnv.__timers, 1)
+    local attemptsBeforeRetry = attachAttempts
+    allowAttach = true
+    flushTimers("fonts.activator_attach_retry.retry", retryEnv, 0.2, 1)
+    eq("fonts.activator_attach_retry.second_attempt", attachAttempts, attemptsBeforeRetry + 1)
+    eq("fonts.activator_attach_retry.reuses_object", #retryEnv.__fontObjects, 1)
+    eq("fonts.activator_attach_retry.reuses_holder",
+        retryAddon.fontRuntime.fontActivatorString, originalHolder)
+    eq("fonts.activator_attach_retry.attaches_once", retryEnv.__fontObjects[1].attachCount, 1)
+    eq("fonts.activator_attach_retry.applies_font",
+        retryTest.currentRuntimeFontPath(), retryPath)
+    eq("fonts.activator_attach_retry.no_pending",
+        retryTest.fontRuntimeState().pendingSavedFont, nil)
 end
 
 do
@@ -7982,6 +8369,120 @@ do
     eq("fonts.picker_pending_open.tooltip_rebound_text",
         delayedEnv.GameTooltip.lines[1].left, delayedName)
     eq("fonts.picker_pending_open.stops_after_ready", #delayedEnv.__timers, 0)
+end
+
+do
+    local registeredPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\RegisteredBeforePEW.ttf"
+    local registeredEnv, _, registeredTest = loadStatsPro("enUS", {
+        statsProDB = {
+            font = registeredPath,
+            fontBeforeAutoSwitch = registeredPath,
+        },
+        lsmFonts = {},
+    })
+    registeredEnv.__registerLSMFont("Registered Before PEW", registeredPath)
+    fireEvent("fonts.lsm_registration_before_pew.pew", registeredEnv, "PLAYER_ENTERING_WORLD")
+    eq("fonts.lsm_registration_before_pew.preserves_font",
+        activeSettings(registeredEnv).font, registeredPath)
+    eq("fonts.lsm_registration_before_pew.preserves_saved_font",
+        activeSettings(registeredEnv).fontBeforeAutoSwitch, registeredPath)
+    eq("fonts.lsm_registration_before_pew.applies_runtime",
+        registeredTest.currentRuntimeFontPath(), registeredPath)
+end
+
+do
+    local goodPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\ZuluGood.ttf"
+    local failingPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\AlphaFailing.ttf"
+    local mode = "pass"
+    local hoverEnv, hoverAddon, hoverTest = loadStatsPro("enUS", {
+        lsmFonts = {
+            { name = "Zulu Good", path = goodPath },
+            { name = "Beta Failing", path = failingPath },
+        },
+        setFontResult = function(_, font)
+            if font == failingPath and mode == "fail" then return false end
+            return true
+        end,
+    })
+    fireEvent("fonts.failed_hover_restore.pew", hoverEnv, "PLAYER_ENTERING_WORLD")
+    check("fonts.failed_hover_restore.config", pcall(function() hoverAddon:OpenConfigMenu() end))
+    userInteract("fonts.failed_hover_restore.show",
+        hoverEnv.StatsProFontDropdownButton, "OnClick")
+    local goodButton = findFrame("fonts.failed_hover_restore.good_button", hoverEnv,
+        function(frame) return frame.fontName == "Zulu Good" and frame:IsShown() end)
+    local failingButton = findFrame("fonts.failed_hover_restore.failing_button", hoverEnv,
+        function(frame) return frame.fontName == "Beta Failing" and frame:IsShown() end)
+    local committedFont = activeSettings(hoverEnv).font
+    userInteract("fonts.failed_hover_restore.good_hover", goodButton, "OnEnter")
+    eq("fonts.failed_hover_restore.good_preview",
+        hoverTest.panelFontState().mainAppliedFont, goodPath)
+    mode = "fail"
+    userInteract("fonts.failed_hover_restore.failing_hover", failingButton, "OnEnter")
+    eq("fonts.failed_hover_restore.committed_restored_immediately",
+        hoverTest.panelFontState().mainAppliedFont, committedFont)
+    eq("fonts.failed_hover_restore.db_unchanged", activeSettings(hoverEnv).font, committedFont)
+end
+
+do
+    local goodPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\ZuluRegistered.ttf"
+    local latePath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\AlphaRegistered.ttf"
+    local extraPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\OmegaRegistered.ttf"
+    local lateEnv, lateAddon, lateTest
+    lateEnv, lateAddon, lateTest = loadStatsPro("enUS", {
+        lsmFonts = { { name = "Zulu Registered", path = goodPath } },
+        setFontResult = function(frame, font, size, flags)
+            if font == latePath then
+                if lateAddon and frame == lateAddon.fontRuntime.probeFontString then
+                    frame.font, frame.fontSize, frame.fontFlags = font, size, flags
+                end
+                return false
+            end
+            return true
+        end,
+    })
+    fireEvent("fonts.lsm_registration_open_picker.pew", lateEnv, "PLAYER_ENTERING_WORLD")
+    check("fonts.lsm_registration_open_picker.config", pcall(function() lateAddon:OpenConfigMenu() end))
+    userInteract("fonts.lsm_registration_open_picker.show",
+        lateEnv.StatsProFontDropdownButton, "OnClick")
+    local pooledButton = findFrame("fonts.lsm_registration_open_picker.initial_button", lateEnv,
+        function(frame) return frame.fontName == "Zulu Registered" and frame:IsShown() end)
+    local committedFont = activeSettings(lateEnv).font
+    userInteract("fonts.lsm_registration_open_picker.initial_hover", pooledButton, "OnEnter")
+    eq("fonts.lsm_registration_open_picker.initial_preview",
+        lateTest.panelFontState().mainAppliedFont, goodPath)
+
+    lateEnv.__registerLSMFont("Alpha Registered", latePath)
+    lateEnv.__registerLSMFont("Omega Registered", extraPath)
+    eq("fonts.lsm_registration_open_picker.coalesces_burst", #lateEnv.__timers, 1)
+    eq("fonts.lsm_registration_open_picker.waits_one_tick",
+        countFrameField(lateEnv, "fontName", "Alpha Registered"), 0)
+    flushTimers("fonts.lsm_registration_open_picker.refresh", lateEnv, 0, 1)
+    eq("fonts.lsm_registration_open_picker.refreshed_row",
+        countFrameField(lateEnv, "fontName", "Alpha Registered"), 1)
+    eq("fonts.lsm_registration_open_picker.second_registered_row",
+        countFrameField(lateEnv, "fontName", "Omega Registered"), 1)
+    eq("fonts.lsm_registration_open_picker.rebinds_hovered_row",
+        pooledButton.fontName, "Alpha Registered")
+    eq("fonts.lsm_registration_open_picker.exact_path", pooledButton.fontPath, latePath)
+    eq("fonts.lsm_registration_open_picker.failed_rebind_restores_committed",
+        lateTest.panelFontState().mainAppliedFont, committedFont)
+    eq("fonts.lsm_registration_open_picker.db_unchanged",
+        activeSettings(lateEnv).font, committedFont)
+
+    lateEnv.StatsProFontPicker:Hide()
+    flushTimers("fonts.lsm_registration_open_picker.hide_restore", lateEnv, 0, 1)
+    local hiddenPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\BetaRegistered.ttf"
+    lateEnv.__registerLSMFont("Beta Registered", hiddenPath)
+    eq("fonts.lsm_registration_open_picker.hidden_refresh_scheduled", #lateEnv.__timers, 1)
+    flushTimers("fonts.lsm_registration_open_picker.hidden_refresh", lateEnv, 0, 1)
+    userInteract("fonts.lsm_registration_open_picker.reopen",
+        lateEnv.StatsProFontDropdownButton, "OnClick")
+    local hiddenButton = findFrame("fonts.lsm_registration_open_picker.hidden_button", lateEnv,
+        function(frame) return frame.fontName == "Beta Registered" and frame:IsShown() end)
+    eq("fonts.lsm_registration_open_picker.hidden_registration_unique",
+        countFrameField(lateEnv, "fontName", "Beta Registered"), 1)
+    eq("fonts.lsm_registration_open_picker.hidden_registration_path",
+        hiddenButton.fontPath, hiddenPath)
 end
 
 do
@@ -8472,6 +8973,34 @@ do
     local afterFailedPick = configTest.panelFontState()
     eq("fonts.picker_failed_commit.main_unchanged", afterFailedPick.mainAppliedFont, baselinePanel.mainAppliedFont)
     eq("fonts.picker_failed_commit.side_unchanged", afterFailedPick.sideAppliedFont, baselinePanel.sideAppliedFont)
+    eq("fonts.picker_failed_commit.stays_open",
+        configEnv.StatsProFontPicker:IsShown(), true)
+    mode = "pass"
+    callScript("fonts.picker_failed_commit.retry", pickerButton, "OnClick")
+    eq("fonts.picker_failed_commit.retry_closes",
+        configEnv.StatsProFontPicker:IsShown(), false)
+    eq("fonts.picker_failed_commit.retry_commits",
+        activeSettings(configEnv).font, pickerTarget)
+
+    local originalApplyCommitted = configAddon.fontRuntime.applyCommittedTextStyle
+    local committedApplyCount = 0
+    configAddon.fontRuntime.applyCommittedTextStyle = function(...)
+        committedApplyCount = committedApplyCount + 1
+        return originalApplyCommitted(...)
+    end
+    configAddon.profileRuntime.CloseOwnedSettingsModals()
+    eq("fonts.modal_close.inactive_zero_font_applies", committedApplyCount, 0)
+
+    userInteract("fonts.modal_close.preview_open",
+        configEnv.StatsProFontDropdownButton, "OnClick")
+    local configTargetButton = findFrame("fonts.modal_close.preview_button", configEnv,
+        function(frame) return frame.fontName == "Config Target" end)
+    callScript("fonts.modal_close.preview_hover", configTargetButton, "OnEnter")
+    committedApplyCount = 0
+    configAddon.profileRuntime.CloseOwnedSettingsModals()
+    eq("fonts.modal_close.preview_closed", configEnv.StatsProFontPicker:IsShown(), false)
+    eq("fonts.modal_close.preview_one_restore", committedApplyCount, 1)
+    configAddon.fontRuntime.applyCommittedTextStyle = originalApplyCommitted
 end
 
 do
@@ -9394,8 +9923,8 @@ do
     for _, frame in ipairs(registryEnv.__frames) do
         local dbKey = frame.statsProDBKey
         if dbKey then
-            eq("registry.config_binding.key_type", type(dbKey), "string")
-            check("registry.config_binding.key_nonempty", dbKey ~= "")
+            eq("registry.config_binding.key_type." .. dbKey, type(dbKey), "string")
+            check("registry.config_binding.key_nonempty." .. dbKey, dbKey ~= "")
             local expectedType = frame.statsProDBType
             check("registry.config_binding.expected_type." .. dbKey,
                 expectedType == "boolean" or expectedType == "number")
@@ -9414,8 +9943,8 @@ do
 
         local colorKey = frame.statsProColorKey
         if colorKey then
-            eq("registry.color_binding.key_type", type(colorKey), "string")
-            check("registry.color_binding.key_nonempty", colorKey ~= "")
+            eq("registry.color_binding.key_type." .. colorKey, type(colorKey), "string")
+            check("registry.color_binding.key_nonempty." .. colorKey, colorKey ~= "")
             eq("registry.color_controls.duplicate." .. colorKey,
                 colorControls[colorKey], nil)
             colorControls[colorKey] = true
@@ -9643,9 +10172,11 @@ do
             return controlLeft(control) + control:GetWidth() + gap
                 + control.statsProText:GetWidth()
         end
+        local inspectedSwatches = 0
         local function swatchRight(control)
+            inspectedSwatches = inspectedSwatches + 1
             local swatch = exists("config.checkbox_label_guard." .. locale
-                .. ".swatch", control.statsProSwatch)
+                .. ".swatch_" .. inspectedSwatches, control.statsProSwatch)
             local _, _, _, swatchGap = swatch:GetPoint()
             return labelRight(control) + swatchGap + swatch:GetWidth()
         end
@@ -10175,18 +10706,29 @@ do
         test.launcherDescriptionText(),
         "HUD характеристик и экипировки: уровень предметов, прочность, стоимость ремонта и цели характеристик Archon. Нажмите ниже, чтобы открыть окно настроек.")
 
-    for _, name in ipairs({
-        "StatsProOffensiveCheckText",
-        "StatsProCritCheckText",
-        "StatsProHideZeroOffCheckText",
-        "StatsProTertiaryCheckText",
-        "StatsProDefensiveCheckText",
-        "StatsProStaggerCheckText",
-        "StatsProWorstDurCheckText",
-    }) do
-        local label = exists("config.checkbox_label_guard.enUS." .. name, env[name])
-        eq("config.checkbox_label_guard.enUS." .. name .. ".word_wrap", label.wordWrap, false)
-        eq("config.checkbox_label_guard.enUS." .. name .. ".max_lines", label.maxLines, 1)
+    do
+        env.DropDownList1Button1.value = "ruRU"
+        env.UIDROPDOWNMENU_OPEN_MENU = env.StatsProLanguageDropdown
+        env.DropDownList1:Show()
+        local ruEnter = exists("config.language_hover_after_commit.ru_hook",
+            env.DropDownList1Button1.hooks.OnEnter
+                and env.DropDownList1Button1.hooks.OnEnter[1])
+        ruEnter(env.DropDownList1Button1)
+        selectDropdownValue("config.language_hover_after_commit.commit_previewed_ru",
+            env.StatsProLanguageDropdown, "ruRU")
+        selectDropdownValue("config.language_hover_after_commit.programmatic_en",
+            env.StatsProLanguageDropdown, "enUS")
+        env.UIDROPDOWNMENU_OPEN_MENU = env.StatsProLanguageDropdown
+        env.DropDownList1:Show()
+        ruEnter(env.DropDownList1Button1)
+        eq("config.language_hover_after_commit.preview_reapplied",
+            test.formatSnapshotDate("2026-05-15"), "15-май-26")
+        env.DropDownList1:Hide()
+        env.UIDROPDOWNMENU_OPEN_MENU = nil
+        eq("config.language_hover_after_commit.cancel_restores_en",
+            test.formatSnapshotDate("2026-05-15"), "15-May-26")
+        selectDropdownValue("config.language_hover_after_commit.restore_ru",
+            env.StatsProLanguageDropdown, "ruRU")
     end
 
     clickCheckbox("config.checkbox_visible_updates_db", env.StatsProVisibleCheck, false)
@@ -10905,7 +11447,7 @@ do
         local child = exists(prefix .. ".child", managerActions.scrollChild)
         local availableWidth = manager:GetWidth() - 258 - 34
         eq(prefix .. ".child_width", child:GetWidth(), availableWidth)
-        for _, control in ipairs({
+        for index, control in ipairs({
             resizeEnv.StatsProProfileCopyFromButton,
             resizeEnv.StatsProProfileUseSameButton,
             resizeEnv.StatsProProfileUseForButton,
@@ -10916,8 +11458,10 @@ do
             resizeEnv.StatsProProfileRoleTemplateButton,
             resizeEnv.StatsProProfileCleanupButton,
         }) do
-            check(prefix .. ".control_positive", control:GetWidth() >= geometry.minHitTarget)
-            check(prefix .. ".control_fits", 6 + control:GetWidth() <= child:GetWidth())
+            check(prefix .. ".control_positive." .. index,
+                control:GetWidth() >= geometry.minHitTarget)
+            check(prefix .. ".control_fits." .. index,
+                6 + control:GetWidth() <= child:GetWidth())
         end
     end
     local offlineRow = findFrame("config.live_resize.manager.offline_selection", resizeEnv,
@@ -11536,14 +12080,17 @@ do
         }
     end
 
+    local corruptLoadCount = 0
     local function loadCorruptRoot()
+        corruptLoadCount = corruptLoadCount + 1
         local root = newCorruptRoot()
         local combat = { value = false }
         local env, addonContext, corruptTest = loadStatsPro("enUS", {
             statsProDB = root,
             inCombatLockdown = function() return combat.value end,
         })
-        fireEvent("db_compat.corrupt_recovery.pew", env, "PLAYER_ENTERING_WORLD")
+        fireEvent("db_compat.corrupt_recovery.pew." .. corruptLoadCount,
+            env, "PLAYER_ENTERING_WORLD")
         return env, addonContext, corruptTest, root, combat
     end
 
@@ -13118,9 +13665,12 @@ do
     -- Cold profile bootstrap must never expose the account default while player identity
     -- is transient. Reuse a current-schema registry so every pre-resolution delta is a bug,
     -- not expected migration work.
+    local coldRootCount = 0
     local function makeColdRoot(withMappedCharacter)
+        coldRootCount = coldRootCount + 1
         local seed = loadStatsPro("enUS")
-        fireEvent("profiles.bootstrap.seed", seed, "PLAYER_ENTERING_WORLD")
+        fireEvent("profiles.bootstrap.seed." .. coldRootCount,
+            seed, "PLAYER_ENTERING_WORLD")
         local root = deepCopy(seed.StatsProDB)
         root.profiles.p1.settings.isVisible = false
         root.profiles.p1.settings.isLocked = true
@@ -14244,9 +14794,12 @@ do
         end
     end
 
+    local managerRefreshBeforeOpen = state.refreshCount
     callScript("profiles.ui.manager.open", env.StatsProManageProfilesButton, "OnClick")
     state = profileTest.profileUIState()
     eq("profiles.ui.manager.shown", state.managerShown, true)
+    eq("profiles.ui.manager.single_refresh_on_open",
+        state.refreshCount - managerRefreshBeforeOpen, 1)
     eq("profiles.ui.manager.strata", state.managerFrameStrata, "DIALOG")
     eq("profiles.ui.manager.list_surface_role", state.managerListSurfaceRole, "viewport")
     eq("profiles.ui.manager.list_surface_parent_owned", state.managerListSurfaceParentOwned, true)
@@ -14335,6 +14888,21 @@ do
         -profileTest.settingsDesignSnapshot().geometry.managerActionsTopShared)
     assertRGBA("profiles.ui.manager.detail_profile_shared_color",
         state.detailProfileColor, profileTest.settingsDesignSnapshot().colors.positive)
+
+    env.StatsProProfileManagerScroll:SetVerticalScroll(90)
+    callScript("profiles.ui.manager.scroll_reopen.close",
+        env.StatsProManageProfilesButton, "OnClick")
+    local refreshBeforeReopen = profileTest.profileUIState().refreshCount
+    callScript("profiles.ui.manager.scroll_reopen.open",
+        env.StatsProManageProfilesButton, "OnClick")
+    flushTimers("profiles.ui.manager.scroll_reopen.cancelled_restore", env, 0, 1)
+    state = profileTest.profileUIState()
+    eq("profiles.ui.manager.scroll_reopen.reset", env.StatsProProfileManagerScroll:GetVerticalScroll(), 0)
+    eq("profiles.ui.manager.scroll_reopen.single_refresh",
+        state.refreshCount - refreshBeforeReopen, 1)
+    eq("profiles.ui.manager.scroll_reopen.active_guid", state.selectedGUID, "Player-1-ALPHA")
+    eq("profiles.ui.manager.scroll_reopen.active_spec", state.selectedSpecID, 73)
+
     eq("profiles.ui.actions.copy_label", state.actions.copy.text, "Copy settings from...")
     eq("profiles.ui.actions.use_same_label", state.actions.useSame.text,
         "Use the same settings as...")
@@ -15049,10 +15617,13 @@ end
 
 smokeReachability:complete("profile-ui")
 
+local profileOpsFixtureCount = 0
 local function makeProfileOpsFixture(options)
+    profileOpsFixtureCount = profileOpsFixtureCount + 1
     options = options or {}
     local seed = loadStatsPro("enUS")
-    fireEvent("profiles.ops.fixture.seed", seed, "PLAYER_ENTERING_WORLD")
+    fireEvent("profiles.ops.fixture.seed." .. profileOpsFixtureCount,
+        seed, "PLAYER_ENTERING_WORLD")
     local root = deepCopy(seed.StatsProDB)
     local base = deepCopy(root.profiles.p1.settings)
     root.profiles.p1.name = "Default"
@@ -15128,7 +15699,8 @@ local function makeProfileOpsFixture(options)
         end,
         issecretvalue = options.issecretvalue,
     })
-    fireEvent("profiles.ops.fixture.activate", env, "PLAYER_ENTERING_WORLD")
+    fireEvent("profiles.ops.fixture.activate." .. profileOpsFixtureCount,
+        env, "PLAYER_ENTERING_WORLD")
     return env, addonContext, test, root, identity
 end
 
@@ -15447,7 +16019,7 @@ local function assertMutationPopupCombatCancellation(case)
     local fixtureOptions = case.swiftStatsDB and { swiftStatsDB = case.swiftStatsDB } or nil
     local env, addonContext, test, root, identity = makeProfileOpsFixture(fixtureOptions)
     if case.settings then addonContext:OpenConfigMenu() end
-    case.open(env)
+    case.open(env, "initial")
 
     local popup = exists(case.name .. ".popup", env.__lastStaticPopup)
     eq(case.name .. ".key", popup.key, case.key)
@@ -15483,7 +16055,7 @@ local function assertMutationPopupCombatCancellation(case)
 
     fireEvent(case.name .. ".repeat_combat_event", env, "PLAYER_REGEN_DISABLED")
     identity.combatValue = nil
-    case.open(env)
+    case.open(env, "combat_retry")
     eq(case.name .. ".combat_retry_no_popup", env.__staticPopupShows, showsBefore)
     eq(case.name .. ".combat_retry_no_pending",
         test.destructivePromptState()[case.pendingField], false)
@@ -15504,19 +16076,25 @@ for _, case in ipairs({
         key = "STATSPRO_IMPORT_SWIFTSTATS",
         pendingField = "importPending",
         swiftStatsDB = { fontSize = 19 },
-        open = function(env) slash("profiles.compat.combat_cancel.import_slash.open", env, "import") end,
+        open = function(env, suffix)
+            slash("profiles.compat.combat_cancel.import_slash.open." .. suffix, env, "import")
+        end,
     },
     {
         name = "profiles.compat.combat_cancel.reset_slash",
         key = "STATSPRO_RESET_ACTIVE_PROFILE",
         pendingField = "resetPending",
-        open = function(env) slash("profiles.compat.combat_cancel.reset_slash.open", env, "reset") end,
+        open = function(env, suffix)
+            slash("profiles.compat.combat_cancel.reset_slash.open." .. suffix, env, "reset")
+        end,
     },
     {
         name = "profiles.compat.combat_cancel.wipe_slash",
         key = "STATSPRO_WIPE_ALL_DATA",
         pendingField = "wipePending",
-        open = function(env) slash("profiles.compat.combat_cancel.wipe_slash.open", env, "wipe") end,
+        open = function(env, suffix)
+            slash("profiles.compat.combat_cancel.wipe_slash.open." .. suffix, env, "wipe")
+        end,
     },
 }) do
     assertMutationPopupCombatCancellation(case)
@@ -18120,6 +18698,32 @@ do
         presetEnv.StatsProScaleSlider, 1.2)
     eq("appearance.presets.nonvisual_slider_preserves_marker",
         presetTest.profileState().settings.appearancePresetID, "high-contrast")
+
+    ok = service.startPreview("default")
+    eq("appearance.presets.live_checkbox.preview_started", ok, true)
+    eq("appearance.presets.live_checkbox.preview_state",
+        presetEnv.StatsProMatchColorCheck:GetChecked(), true)
+    local checkboxRefreshCount = 0
+    local checkboxStateTexture = presetEnv.StatsProMatchColorCheck.statsProStateTexture
+    local originalSetCheckboxStateColor = checkboxStateTexture.SetColorTexture
+    checkboxStateTexture.SetColorTexture = function(self, ...)
+        checkboxRefreshCount = checkboxRefreshCount + 1
+        return originalSetCheckboxStateColor(self, ...)
+    end
+    presetEnv.StatsProMatchColorCheck:SetChecked(false)
+    userInteract("appearance.presets.live_checkbox.change",
+        presetEnv.StatsProMatchColorCheck, "OnClick")
+    checkboxStateTexture.SetColorTexture = originalSetCheckboxStateColor
+    eq("appearance.presets.live_checkbox.preview_cancelled", service.state().active, false)
+    eq("appearance.presets.live_checkbox.request_preserved",
+        presetTest.profileState().settings.matchValueColorToStat, false)
+    eq("appearance.presets.live_checkbox.control_preserved",
+        presetEnv.StatsProMatchColorCheck:GetChecked(), false)
+    eq("appearance.presets.live_checkbox_marks_custom",
+        presetTest.profileState().settings.appearancePresetID, "custom")
+    -- One baseline refresh from preview cancellation plus the click handler's
+    -- final state refresh. StyleCheckbox must not install a third OnClick hook.
+    eq("appearance.presets.live_checkbox.refresh_count", checkboxRefreshCount, 2)
 
     presetEnv.StatsProMatchColorCheck:SetChecked(false)
     userInteract("appearance.presets.manual_checkbox.change",

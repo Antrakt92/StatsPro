@@ -1,46 +1,56 @@
 {
-  "schemaVersion": 1,
-  "minimumTotalAssertions": 29248,
+  "schemaVersion": 2,
+  "totalAssertions": 29257,
   "suites": [
     {
       "name": "core-panel-persistence",
-      "minimumAssertions": 1160
+      "assertions": 1189,
+      "fingerprint": "6ee69e26"
     },
     {
       "name": "runtime-rendering",
-      "minimumAssertions": 1181
+      "assertions": 1248,
+      "fingerprint": "1620810a"
     },
     {
       "name": "fonts",
-      "minimumAssertions": 1957
+      "assertions": 2205,
+      "fingerprint": "58cd68d1"
     },
     {
       "name": "durability-repair",
-      "minimumAssertions": 301
+      "assertions": 301,
+      "fingerprint": "04cbeb78"
     },
     {
       "name": "settings-compatibility",
-      "minimumAssertions": 18434
+      "assertions": 18419,
+      "fingerprint": "35a3f75f"
     },
     {
       "name": "profile-context",
-      "minimumAssertions": 462
+      "assertions": 454,
+      "fingerprint": "2edc66e1"
     },
     {
       "name": "profile-ui",
-      "minimumAssertions": 1696
+      "assertions": 1682,
+      "fingerprint": "4c0656ac"
     },
     {
       "name": "profile-mutations",
-      "minimumAssertions": 2513
+      "assertions": 2178,
+      "fingerprint": "16fed350"
     },
     {
       "name": "control-design",
-      "minimumAssertions": 726
+      "assertions": 735,
+      "fingerprint": "3876cad5"
     },
     {
       "name": "appearance-presets",
-      "minimumAssertions": 818
+      "assertions": 846,
+      "fingerprint": "5ecd103b"
     }
   ]
 }

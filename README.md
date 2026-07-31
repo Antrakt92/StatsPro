@@ -49,11 +49,15 @@ blocks to a separate panel.
 
 ## Profiles and appearance
 
-Every visited character and specialization can use its own profile, or share one
-with another context. The Profile Manager can create, duplicate, rename, assign,
-swap, reset, and delete profiles, as well as copy only **Stats**, **Layout**, or
-**Appearance** settings. Tank, Healer, and Damage role templates can seed future
-specializations, and bulk actions help organize already visited characters.
+StatsPro keeps settings for each visited character and specialization
+automatically. Open **Profiles & sharing...** when you want to copy **Stats**, **Layout**,
+**Appearance**, or all settings from another specialization, or deliberately
+share one set of settings between two specializations. **Stop sharing** gives the
+selected specialization its own copy again.
+
+Less common maintenance stays under **Advanced**: reset the selected settings,
+forget an offline character, choose Tank, Healer, and Damage defaults for future
+specializations, or delete settings records that are no longer used.
 
 Six appearance presets are included:
 
@@ -71,7 +75,6 @@ positions are clear; this editing chrome never becomes part of the saved HUD.
 
 <p align="center">
   <img src="screenshots/appearance-presets-v1.10.2.jpg" alt="StatsPro Appearance settings with six presets" width="390">
-  <img src="screenshots/profile-manager-v1.10.2.jpg" alt="StatsPro Profile Manager for character and specialization assignments" width="390">
 </p>
 
 ## Stats and gear rows

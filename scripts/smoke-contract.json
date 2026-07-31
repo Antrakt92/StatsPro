@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "minimumTotalAssertions": 31806,
+  "minimumTotalAssertions": 29064,
   "suites": [
     {
       "name": "core-panel-persistence",
@@ -8,11 +8,11 @@
     },
     {
       "name": "runtime-rendering",
-      "minimumAssertions": 1137
+      "minimumAssertions": 1145
     },
     {
       "name": "fonts",
-      "minimumAssertions": 2153
+      "minimumAssertions": 2042
     },
     {
       "name": "durability-repair",
@@ -20,27 +20,27 @@
     },
     {
       "name": "settings-compatibility",
-      "minimumAssertions": 19585
+      "minimumAssertions": 18438
     },
     {
       "name": "profile-context",
-      "minimumAssertions": 441
+      "minimumAssertions": 442
     },
     {
       "name": "profile-ui",
-      "minimumAssertions": 2166
+      "minimumAssertions": 1652
     },
     {
       "name": "profile-mutations",
-      "minimumAssertions": 3643
+      "minimumAssertions": 2430
     },
     {
       "name": "control-design",
-      "minimumAssertions": 654
+      "minimumAssertions": 724
     },
     {
       "name": "appearance-presets",
-      "minimumAssertions": 579
+      "minimumAssertions": 743
     }
   ]
 }

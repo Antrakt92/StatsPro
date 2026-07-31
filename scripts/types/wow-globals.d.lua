@@ -10,6 +10,13 @@
 ---@class (exact) StatsProDropdownFrame
 ---@field GetName fun(self: StatsProDropdownFrame): string?
 
+-- GetThumbTexture returns a SimpleTexture assembled from texture and resizing
+-- interfaces; this structural type keeps those public methods visible to LuaLS.
+---@class (exact) StatsProSliderThumb
+---@field SetTexture fun(self: StatsProSliderThumb, texture: string)
+---@field SetSize fun(self: StatsProSliderThumb, width: number, height: number)
+---@field SetVertexColor fun(self: StatsProSliderThumb, r: number, g: number, b: number, a: number)
+
 ---@class (exact) StatsProTargetSnapshotDropdownOption
 ---@field value "mythicPlus"|"raid"
 ---@field label string

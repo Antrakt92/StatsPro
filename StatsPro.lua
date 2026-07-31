@@ -1269,52 +1269,43 @@ local LABELS_BY_LOCALE = {
         ["Contact"] = "Contact", ["Click to copy the link."] = "Click to copy the link.",
         ["Copy the link below (Ctrl+C)."] = "Copy the link below (Ctrl+C).",
         ["Open Settings"] = "Open Settings", ["Settings"] = "Settings",
-        ["Profile:"] = "Profile:", ["Manage"] = "Manage", ["Reset"] = "Reset", ["Profile Manager"] = "Profile Manager",
-        ["Automatic - %s / %s"] = "Automatic - %s / %s", ["Shared by %d specs"] = "Shared by %d specs",
+        ["Profiles & sharing..."] = "Profiles...", ["Profiles & sharing"] = "Profiles & sharing",
+        ["Shared with %d specializations"] = "Shared with %d specializations", ["Only this specialization"] = "Only this specialization",
+        ["Unknown specialization (%d)"] = "Unknown specialization (%d)",
+        ["Copy settings from..."] = "Copy settings from...", ["Use the same settings as..."] = "Use the same settings as...",
+        ["Use these settings for..."] = "Use these settings for...", ["Stop sharing..."] = "Stop sharing...",
+        ["Advanced..."] = "Advanced...", ["Hide advanced"] = "Hide advanced",
+        ["Reset these settings..."] = "Reset these settings...", ["Forget this character..."] = "Forget this character...",
+        ["Defaults for future specializations..."] = "Defaults for future specializations...", ["Delete unused settings..."] = "Delete unused settings...",
+        ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward.",
+        ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "Use the same settings for \"%s\" and \"%s\"? Future changes will affect both.",
+        ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d.",
+        ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations.",
+        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "Reset the settings used by \"%s\"? The same reset will affect %d specializations.",
+        ["Reset the settings used by \"%s\" to defaults?"] = "Reset the settings used by \"%s\" to defaults?",
+        ["This profile is also a default for future specializations; they will use the reset settings."] = "This profile is also a default for future specializations; they will use the reset settings.",
+        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept.",
         ["Switch pending until combat ends"] = "Switch pending until combat ends", ["Account default profile"] = "Account default profile",
-        ["Current"] = "Current", ["Active"] = "Active", ["Character default"] = "Character default",
-        ["Assigned profile:"] = "Assigned profile:", ["Independent"] = "Independent", ["No visited characters"] = "No visited characters",
+        ["Current"] = "Current", ["Active"] = "Active",
+        ["No visited characters"] = "No visited characters",
         ["Spec %d"] = "Spec %d", ["Profile changes are unavailable during combat."] = "Profile changes are unavailable during combat.",
         ["Waiting for a safe profile context."] = "Waiting for a safe profile context.",
         ["Compatibility mode - profiles are read-only."] = "Compatibility mode - profiles are read-only.",
         ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "Corrupted data - profiles are read-only. Use /ss wipe to reset.",
-        ["Profile to manage:"] = "Profile to manage:", ["Choose a profile"] = "Choose a profile",
         ["All settings"] = "All settings", ["Stat and gear settings"] = "Stat and gear settings", ["Layout settings"] = "Layout settings", ["Appearance settings"] = "Appearance settings", ["Choose settings to copy"] = "Choose settings to copy",
-        ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references.",
-        ["Assign to selected context"] = "Assign to selected context", ["New from defaults..."] = "New from defaults...",
-        ["Duplicate profile..."] = "Duplicate profile...", ["Rename profile..."] = "Rename profile...",
-        ["Copy settings to assigned profile..."] = "Copy settings to assigned profile...", ["Swap assignments..."] = "Swap assignments...",
-        ["Reset active profile..."] = "Reset active profile...", ["Delete profile..."] = "Delete profile...",
-        ["Forget character..."] = "Forget character...", ["Confirm"] = "Confirm", ["Cancel"] = "Cancel",
-        ["Selected character"] = "Selected character", ["%s - %d known specs"] = "%s - %d known specs",
-        ["Future new contexts"] = "Future new contexts", ["Tank: %s"] = "Tank: %s",
-        ["Healer: %s"] = "Healer: %s", ["Damage: %s"] = "Damage: %s",
+        ["Confirm"] = "Confirm", ["Cancel"] = "Cancel",
         ["Tank"] = "Tank", ["Healer"] = "Healer", ["Damage"] = "Damage",
-        ["Use profile for all known specs..."] = "Use profile for all known specs...",
-        ["Make shared specs independent..."] = "Make shared specs independent...",
-        ["Set future role template..."] = "Set future role template...", ["Choose a role"] = "Choose a role",
-        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept.",
-        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged.",
+        ["Choose a role"] = "Choose a role",
         ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy.",
         ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy.",
         ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy.",
-        ["Unused"] = "Unused", ["Unused profile"] = "Unused profile", ["New Profile"] = "New Profile",
-        ["%s Copy"] = "%s Copy", ["Choose a replacement profile"] = "Choose a replacement profile",
-        ["Choose a context"] = "Choose a context", ["%d assigned specs, %d other references"] = "%d assigned specs, %d other references",
         ["Profile changes saved."] = "Profile changes saved.", ["Enter a valid profile name."] = "Enter a valid profile name.",
-        ["Profile names can contain at most %d characters."] = "Profile names can contain at most %d characters.",
         ["A profile with this name already exists."] = "A profile with this name already exists.",
         ["Profiles changed; review and try again."] = "Profiles changed; review and try again.",
-        ["The last profile cannot be deleted."] = "The last profile cannot be deleted.",
-        ["Choose a replacement profile."] = "Choose a replacement profile.",
         ["The current character cannot be forgotten."] = "The current character cannot be forgotten.",
         ["Nothing changed."] = "Nothing changed.",
         ["Profile operation failed. Review the selection and try again."] = "Profile operation failed. Review the selection and try again.",
-        ["Delete profile \"%s\" and replace all references with \"%s\"? This affects %d assigned specs and %d other references."] = "Delete profile \"%s\" and replace all references with \"%s\"? This affects %d assigned specs and %d other references.",
-        ["Swap \"%s\" and \"%s\"? Their profile settings stay unchanged."] = "Swap \"%s\" and \"%s\"? Their profile settings stay unchanged.",
-        ["Rename shared profile \"%s\" to \"%s\"? This affects %d assigned specs and %d other references."] = "Rename shared profile \"%s\" to \"%s\"? This affects %d assigned specs and %d other references.",
         ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references.",
-        ["Delete unused profile \"%s\"?"] = "Delete unused profile \"%s\"?",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Forget \"%s\"? Its character record will be removed, but profile settings will be kept.",
         -- Templates:
         ["Auto (current: %s)"] = "Auto (current: %s)",
@@ -1418,52 +1409,43 @@ local LABELS_BY_LOCALE = {
         ["Contact"] = "Связаться", ["Click to copy the link."] = "Нажмите, чтобы скопировать ссылку.",
         ["Copy the link below (Ctrl+C)."] = "Скопируйте ссылку ниже (Ctrl+C).",
         ["Open Settings"] = "Открыть настройки", ["Settings"] = "Настройки",
-        ["Profile:"] = "Профиль:", ["Manage"] = "Управление", ["Reset"] = "Сброс", ["Profile Manager"] = "Управление профилями",
-        ["Automatic - %s / %s"] = "Автоматически — %s / %s", ["Shared by %d specs"] = "Общий для специализаций: %d",
+        ["Profiles & sharing..."] = "Профили...", ["Profiles & sharing"] = "Профили и общий доступ",
+        ["Shared with %d specializations"] = "Общие настройки для специализаций: %d", ["Only this specialization"] = "Только эта специализация",
+        ["Unknown specialization (%d)"] = "Неизвестная специализация (%d)",
+        ["Copy settings from..."] = "Скопировать настройки из...", ["Use the same settings as..."] = "Использовать общие настройки с...",
+        ["Use these settings for..."] = "Использовать эти настройки для...", ["Stop sharing..."] = "Отделить настройки...",
+        ["Advanced..."] = "Дополнительно...", ["Hide advanced"] = "Скрыть дополнительные",
+        ["Reset these settings..."] = "Сбросить эти настройки...", ["Forget this character..."] = "Забыть этого персонажа...",
+        ["Defaults for future specializations..."] = "Настройки для будущих специализаций...", ["Delete unused settings..."] = "Удалить неиспользуемые настройки...",
+        ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "Скопировать %s из «%s» в «%s»? После этого у назначения останутся собственные настройки.",
+        ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "Использовать общие настройки для «%s» и «%s»? Последующие изменения затронут обе специализации.",
+        ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "Использовать общие настройки из «%s» для «%s»? Их уже используют %d специализации; последующие изменения затронут все %d.",
+        ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "Создать для «%s» отдельную копию этих настроек? Последующие изменения больше не затронут другие специализации.",
+        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "Сбросить настройки, используемые «%s»? Этот же сброс затронет %d специализаций.",
+        ["Reset the settings used by \"%s\" to defaults?"] = "Сбросить настройки, используемые «%s», до стандартных?",
+        ["This profile is also a default for future specializations; they will use the reset settings."] = "Этот профиль также задан по умолчанию для будущих специализаций; после сброса они будут использовать сброшенные настройки.",
+        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "Удалить неиспользуемые записи настроек (%d)? Настройки специализаций и шаблоны для будущих специализаций будут сохранены.",
         ["Switch pending until combat ends"] = "Переключение после окончания боя", ["Account default profile"] = "Профиль аккаунта по умолчанию",
-        ["Current"] = "Текущий", ["Active"] = "Активно", ["Character default"] = "По умолчанию для персонажа",
-        ["Assigned profile:"] = "Назначенный профиль:", ["Independent"] = "Независимый", ["No visited characters"] = "Нет посещённых персонажей",
+        ["Current"] = "Текущий", ["Active"] = "Активно",
+        ["No visited characters"] = "Нет посещённых персонажей",
         ["Spec %d"] = "Специализация %d", ["Profile changes are unavailable during combat."] = "Изменение профилей недоступно в бою.",
         ["Waiting for a safe profile context."] = "Ожидание безопасного контекста профиля.",
         ["Compatibility mode - profiles are read-only."] = "Режим совместимости — профили доступны только для чтения.",
         ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "Данные повреждены — профили доступны только для чтения. Используйте /ss wipe для сброса.",
-        ["Profile to manage:"] = "Профиль для управления:", ["Choose a profile"] = "Выберите профиль",
         ["All settings"] = "Все настройки", ["Stat and gear settings"] = "Показатели и экипировка", ["Layout settings"] = "Расположение", ["Appearance settings"] = "Внешний вид", ["Choose settings to copy"] = "Выберите настройки для копирования",
-        ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "Копировать раздел «%s» из «%s» в «%s»? Будут изменены специализации: %d, другие ссылки: %d.",
-        ["Assign to selected context"] = "Назначить выбранному контексту", ["New from defaults..."] = "Новый из настроек по умолчанию...",
-        ["Duplicate profile..."] = "Дублировать профиль...", ["Rename profile..."] = "Переименовать профиль...",
-        ["Copy settings to assigned profile..."] = "Копировать настройки в назначенный профиль...", ["Swap assignments..."] = "Поменять назначения местами...",
-        ["Reset active profile..."] = "Сбросить активный профиль...", ["Delete profile..."] = "Удалить профиль...",
-        ["Forget character..."] = "Забыть персонажа...", ["Confirm"] = "Подтвердить", ["Cancel"] = "Отмена",
-        ["Selected character"] = "Выбранный персонаж", ["%s - %d known specs"] = "%s — %d известных специализаций",
-        ["Future new contexts"] = "Будущие новые контексты", ["Tank: %s"] = "Танк: %s",
-        ["Healer: %s"] = "Лекарь: %s", ["Damage: %s"] = "Урон: %s",
+        ["Confirm"] = "Подтвердить", ["Cancel"] = "Отмена",
         ["Tank"] = "Танк", ["Healer"] = "Лекарь", ["Damage"] = "Урон",
-        ["Use profile for all known specs..."] = "Для всех известных специализаций...",
-        ["Make shared specs independent..."] = "Разделить общие специализации...",
-        ["Set future role template..."] = "Шаблон для будущей роли...", ["Choose a role"] = "Выберите роль",
-        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "Использовать «%s» для всех %d известных специализаций персонажа «%s»? Существующие профили и настройки будут сохранены.",
-        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "Сделать %d общих специализаций персонажа «%s» независимыми? Каждая получит отдельную копию; существующие профили не изменятся.",
+        ["Choose a role"] = "Выберите роль",
         ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "Использовать «%s» как источник для будущих специализаций танка? Существующие назначения не изменятся; каждый новый контекст получит независимую копию.",
         ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "Использовать «%s» как источник для будущих специализаций лекаря? Существующие назначения не изменятся; каждый новый контекст получит независимую копию.",
         ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "Использовать «%s» как источник для будущих специализаций урона? Существующие назначения не изменятся; каждый новый контекст получит независимую копию.",
-        ["Unused"] = "Не используется", ["Unused profile"] = "Неиспользуемый профиль", ["New Profile"] = "Новый профиль",
-        ["%s Copy"] = "Копия %s", ["Choose a replacement profile"] = "Выберите профиль для замены",
-        ["Choose a context"] = "Выберите контекст", ["%d assigned specs, %d other references"] = "Назначено специализациям: %d, других ссылок: %d",
         ["Profile changes saved."] = "Изменения профилей сохранены.", ["Enter a valid profile name."] = "Введите допустимое имя профиля.",
-        ["Profile names can contain at most %d characters."] = "Имя профиля может содержать не более %d символов.",
         ["A profile with this name already exists."] = "Профиль с таким именем уже существует.",
         ["Profiles changed; review and try again."] = "Профили изменились. Проверьте выбор и повторите попытку.",
-        ["The last profile cannot be deleted."] = "Последний профиль нельзя удалить.",
-        ["Choose a replacement profile."] = "Выберите профиль для замены.",
         ["The current character cannot be forgotten."] = "Текущего персонажа нельзя забыть.",
         ["Nothing changed."] = "Ничего не изменилось.",
         ["Profile operation failed. Review the selection and try again."] = "Операция с профилем не выполнена. Проверьте выбор и повторите попытку.",
-        ["Delete profile \"%s\" and replace all references with \"%s\"? This affects %d assigned specs and %d other references."] = "Удалить профиль «%s» и заменить все ссылки профилем «%s»? Будут затронуты специализации: %d, другие ссылки: %d.",
-        ["Swap \"%s\" and \"%s\"? Their profile settings stay unchanged."] = "Поменять местами «%s» и «%s»? Настройки профилей не изменятся.",
-        ["Rename shared profile \"%s\" to \"%s\"? This affects %d assigned specs and %d other references."] = "Переименовать общий профиль «%s» в «%s»? Будут затронуты специализации: %d, другие ссылки: %d.",
         ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "Сбросить активный профиль «%s»? Будут изменены специализации: %d, другие ссылки: %d.",
-        ["Delete unused profile \"%s\"?"] = "Удалить неиспользуемый профиль «%s»?",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Забыть «%s»? Запись персонажа будет удалена, но настройки профилей сохранятся.",
         -- Templates:
         ["Auto (current: %s)"] = "Авто (сейчас: %s)",
@@ -1561,52 +1543,43 @@ local LABELS_BY_LOCALE = {
         ["Contact"] = "Kontakt", ["Click to copy the link."] = "Klicken, um den Link zu kopieren.",
         ["Copy the link below (Ctrl+C)."] = "Kopiere den Link unten (Strg+C).",
         ["Open Settings"] = "Einstellungen öffnen", ["Settings"] = "Einstellungen",
-        ["Profile:"] = "Profil:", ["Manage"] = "Verwalten", ["Reset"] = "Zurücksetzen", ["Profile Manager"] = "Profilverwaltung",
-        ["Automatic - %s / %s"] = "Automatisch – %s / %s", ["Shared by %d specs"] = "Von %d Spezialisierungen geteilt",
+        ["Profiles & sharing..."] = "Profile...", ["Profiles & sharing"] = "Profile und Freigabe",
+        ["Shared with %d specializations"] = "Mit %d Spezialisierungen geteilt", ["Only this specialization"] = "Nur diese Spezialisierung",
+        ["Unknown specialization (%d)"] = "Unbekannte Spezialisierung (%d)",
+        ["Copy settings from..."] = "Einstellungen kopieren von...", ["Use the same settings as..."] = "Dieselben Einstellungen verwenden wie...",
+        ["Use these settings for..."] = "Diese Einstellungen verwenden für...", ["Stop sharing..."] = "Freigabe beenden...",
+        ["Advanced..."] = "Erweitert...", ["Hide advanced"] = "Erweitert ausblenden",
+        ["Reset these settings..."] = "Diese Einstellungen zurücksetzen...", ["Forget this character..."] = "Diesen Charakter vergessen...",
+        ["Defaults for future specializations..."] = "Standardwerte für zukünftige Spezialisierungen...", ["Delete unused settings..."] = "Nicht verwendete Einstellungen löschen...",
+        ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "%s von „%s“ nach „%s“ kopieren? Das Ziel behält danach eigene Einstellungen.",
+        ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "Dieselben Einstellungen für „%s“ und „%s“ verwenden? Künftige Änderungen wirken sich auf beide aus.",
+        ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "Die geteilten Einstellungen von „%s“ für „%s“ verwenden? Sie werden bereits von %d Spezialisierungen verwendet; künftige Änderungen betreffen alle %d.",
+        ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "„%s“ eine eigene Kopie dieser Einstellungen geben? Künftige Änderungen wirken sich nicht mehr auf die anderen Spezialisierungen aus.",
+        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "Die von „%s“ verwendeten Einstellungen zurücksetzen? Derselbe Reset betrifft %d Spezialisierungen.",
+        ["Reset the settings used by \"%s\" to defaults?"] = "Die von „%s“ verwendeten Einstellungen auf Standardwerte zurücksetzen?",
+        ["This profile is also a default for future specializations; they will use the reset settings."] = "Dieses Profil ist auch ein Standardwert für zukünftige Spezialisierungen; sie verwenden danach die zurückgesetzten Einstellungen.",
+        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "%d nicht verwendete Einstellungsdatensätze löschen? Verwendete Einstellungen und Standardwerte für zukünftige Spezialisierungen bleiben erhalten.",
         ["Switch pending until combat ends"] = "Wechsel nach Kampfende", ["Account default profile"] = "Standardprofil des Accounts",
-        ["Current"] = "Aktuell", ["Active"] = "Aktiv", ["Character default"] = "Charakterstandard",
-        ["Assigned profile:"] = "Zugewiesenes Profil:", ["Independent"] = "Unabhängig", ["No visited characters"] = "Keine besuchten Charaktere",
+        ["Current"] = "Aktuell", ["Active"] = "Aktiv",
+        ["No visited characters"] = "Keine besuchten Charaktere",
         ["Spec %d"] = "Spezialisierung %d", ["Profile changes are unavailable during combat."] = "Profiländerungen sind im Kampf nicht verfügbar.",
         ["Waiting for a safe profile context."] = "Warten auf einen sicheren Profilkontext.",
         ["Compatibility mode - profiles are read-only."] = "Kompatibilitätsmodus – Profile sind schreibgeschützt.",
         ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "Beschädigte Daten – Profile sind schreibgeschützt. Mit /ss wipe zurücksetzen.",
-        ["Profile to manage:"] = "Zu verwaltendes Profil:", ["Choose a profile"] = "Profil auswählen",
         ["All settings"] = "Alle Einstellungen", ["Stat and gear settings"] = "Werte und Ausrüstung", ["Layout settings"] = "Layout-Einstellungen", ["Appearance settings"] = "Darstellung", ["Choose settings to copy"] = "Zu kopierende Einstellungen auswählen",
-        ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "%s von „%s“ nach „%s“ kopieren? Geändert werden %d zugewiesene Spezialisierungen und %d weitere Verweise.",
-        ["Assign to selected context"] = "Ausgewähltem Kontext zuweisen", ["New from defaults..."] = "Neu aus Standardwerten...",
-        ["Duplicate profile..."] = "Profil duplizieren...", ["Rename profile..."] = "Profil umbenennen...",
-        ["Copy settings to assigned profile..."] = "Einstellungen ins zugewiesene Profil kopieren...", ["Swap assignments..."] = "Zuweisungen tauschen...",
-        ["Reset active profile..."] = "Aktives Profil zurücksetzen...", ["Delete profile..."] = "Profil löschen...",
-        ["Forget character..."] = "Charakter vergessen...", ["Confirm"] = "Bestätigen", ["Cancel"] = "Abbrechen",
-        ["Selected character"] = "Ausgewählter Charakter", ["%s - %d known specs"] = "%s – %d bekannte Spezialisierungen",
-        ["Future new contexts"] = "Künftige neue Kontexte", ["Tank: %s"] = "Tank: %s",
-        ["Healer: %s"] = "Heiler: %s", ["Damage: %s"] = "Schaden: %s",
+        ["Confirm"] = "Bestätigen", ["Cancel"] = "Abbrechen",
         ["Tank"] = "Tank", ["Healer"] = "Heiler", ["Damage"] = "Schaden",
-        ["Use profile for all known specs..."] = "Profil für alle bekannten Spezialisierungen...",
-        ["Make shared specs independent..."] = "Geteilte Spezialisierungen unabhängig machen...",
-        ["Set future role template..."] = "Künftige Rollenvorlage festlegen...", ["Choose a role"] = "Rolle auswählen",
-        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "„%s“ für alle %d bekannten Spezialisierungen von „%s“ verwenden? Bestehende Profile und Einstellungen bleiben erhalten.",
-        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "%d geteilte Spezialisierungen von „%s“ unabhängig machen? Jede betroffene Spezialisierung erhält eine eigene Kopie; bestehende Profile bleiben unverändert.",
+        ["Choose a role"] = "Rolle auswählen",
         ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "„%s“ als Quelle für künftige Tank-Kontexte verwenden? Bestehende Zuweisungen ändern sich nicht; jeder neue Kontext erhält eine unabhängige Kopie.",
         ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "„%s“ als Quelle für künftige Heiler-Kontexte verwenden? Bestehende Zuweisungen ändern sich nicht; jeder neue Kontext erhält eine unabhängige Kopie.",
         ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "„%s“ als Quelle für künftige Schadenskontexte verwenden? Bestehende Zuweisungen ändern sich nicht; jeder neue Kontext erhält eine unabhängige Kopie.",
-        ["Unused"] = "Ungenutzt", ["Unused profile"] = "Ungenutztes Profil", ["New Profile"] = "Neues Profil",
-        ["%s Copy"] = "Kopie von %s", ["Choose a replacement profile"] = "Ersatzprofil auswählen",
-        ["Choose a context"] = "Kontext auswählen", ["%d assigned specs, %d other references"] = "%d zugewiesene Spezialisierungen, %d weitere Verweise",
         ["Profile changes saved."] = "Profiländerungen gespeichert.", ["Enter a valid profile name."] = "Gib einen gültigen Profilnamen ein.",
-        ["Profile names can contain at most %d characters."] = "Profilnamen dürfen höchstens %d Zeichen enthalten.",
         ["A profile with this name already exists."] = "Ein Profil mit diesem Namen existiert bereits.",
         ["Profiles changed; review and try again."] = "Die Profile wurden geändert. Prüfe die Auswahl und versuche es erneut.",
-        ["The last profile cannot be deleted."] = "Das letzte Profil kann nicht gelöscht werden.",
-        ["Choose a replacement profile."] = "Wähle ein Ersatzprofil aus.",
         ["The current character cannot be forgotten."] = "Der aktuelle Charakter kann nicht vergessen werden.",
         ["Nothing changed."] = "Es wurde nichts geändert.",
         ["Profile operation failed. Review the selection and try again."] = "Der Profilvorgang ist fehlgeschlagen. Prüfe die Auswahl und versuche es erneut.",
-        ["Delete profile \"%s\" and replace all references with \"%s\"? This affects %d assigned specs and %d other references."] = "Profil „%s“ löschen und alle Verweise durch „%s“ ersetzen? Betroffen: %d zugewiesene Spezialisierungen und %d weitere Verweise.",
-        ["Swap \"%s\" and \"%s\"? Their profile settings stay unchanged."] = "„%s“ und „%s“ tauschen? Ihre Profileinstellungen bleiben unverändert.",
-        ["Rename shared profile \"%s\" to \"%s\"? This affects %d assigned specs and %d other references."] = "Geteiltes Profil „%s“ in „%s“ umbenennen? Betroffen: %d zugewiesene Spezialisierungen und %d weitere Verweise.",
         ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "Aktives Profil „%s“ auf Standardwerte zurücksetzen? Geändert werden %d zugewiesene Spezialisierungen und %d weitere Verweise.",
-        ["Delete unused profile \"%s\"?"] = "Ungenutztes Profil „%s“ löschen?",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "„%s“ vergessen? Der Charaktereintrag wird entfernt, die Profileinstellungen bleiben erhalten.",
         ["Auto (current: %s)"] = "Auto (aktuell: %s)",
         ["Western European text"] = "westeuropäischen Text",
@@ -1700,52 +1673,43 @@ local LABELS_BY_LOCALE = {
         ["Contact"] = "Contact", ["Click to copy the link."] = "Cliquez pour copier le lien.",
         ["Copy the link below (Ctrl+C)."] = "Copiez le lien ci-dessous (Ctrl+C).",
         ["Open Settings"] = "Ouvrir les paramètres", ["Settings"] = "Paramètres",
-        ["Profile:"] = "Profil :", ["Manage"] = "Gérer", ["Reset"] = "Réinitialiser", ["Profile Manager"] = "Gestionnaire de profils",
-        ["Automatic - %s / %s"] = "Automatique – %s / %s", ["Shared by %d specs"] = "Partagé par %d spécialisations",
+        ["Profiles & sharing..."] = "Profils...", ["Profiles & sharing"] = "Profils et partage",
+        ["Shared with %d specializations"] = "Partagé avec %d spécialisations", ["Only this specialization"] = "Cette spécialisation uniquement",
+        ["Unknown specialization (%d)"] = "Spécialisation inconnue (%d)",
+        ["Copy settings from..."] = "Copier les réglages depuis...", ["Use the same settings as..."] = "Utiliser les mêmes réglages que...",
+        ["Use these settings for..."] = "Utiliser ces réglages pour...", ["Stop sharing..."] = "Arrêter le partage...",
+        ["Advanced..."] = "Avancé...", ["Hide advanced"] = "Masquer les options avancées",
+        ["Reset these settings..."] = "Réinitialiser ces réglages...", ["Forget this character..."] = "Oublier ce personnage...",
+        ["Defaults for future specializations..."] = "Réglages des futures spécialisations...", ["Delete unused settings..."] = "Supprimer les réglages inutilisés...",
+        ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "Copier %s de « %s » vers « %s » ? La destination conservera ensuite ses propres réglages.",
+        ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "Utiliser les mêmes réglages pour « %s » et « %s » ? Les futures modifications affecteront les deux.",
+        ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "Utiliser les réglages partagés de « %s » pour « %s » ? Ils sont déjà partagés par %d spécialisations ; les futures modifications affecteront les %d.",
+        ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "Donner à « %s » sa propre copie de ces réglages ? Les futures modifications n’affecteront plus les autres spécialisations.",
+        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "Réinitialiser les réglages utilisés par « %s » ? La même réinitialisation affectera %d spécialisations.",
+        ["Reset the settings used by \"%s\" to defaults?"] = "Réinitialiser les réglages utilisés par « %s » ?",
+        ["This profile is also a default for future specializations; they will use the reset settings."] = "Ce profil sert aussi de réglage par défaut aux futures spécialisations ; elles utiliseront les réglages réinitialisés.",
+        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "Supprimer %d ensembles de réglages inutilisés ? Les réglages utilisés et ceux des futures spécialisations seront conservés.",
         ["Switch pending until combat ends"] = "Changement après le combat", ["Account default profile"] = "Profil de compte par défaut",
-        ["Current"] = "Actuel", ["Active"] = "Actif", ["Character default"] = "Profil de personnage par défaut",
-        ["Assigned profile:"] = "Profil attribué :", ["Independent"] = "Indépendant", ["No visited characters"] = "Aucun personnage visité",
+        ["Current"] = "Actuel", ["Active"] = "Actif",
+        ["No visited characters"] = "Aucun personnage visité",
         ["Spec %d"] = "Spécialisation %d", ["Profile changes are unavailable during combat."] = "Les changements de profil sont indisponibles en combat.",
         ["Waiting for a safe profile context."] = "En attente d’un contexte de profil sûr.",
         ["Compatibility mode - profiles are read-only."] = "Mode de compatibilité – les profils sont en lecture seule.",
         ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "Données corrompues – les profils sont en lecture seule. Utilisez /ss wipe pour réinitialiser.",
-        ["Profile to manage:"] = "Profil à gérer :", ["Choose a profile"] = "Choisir un profil",
         ["All settings"] = "Tous les réglages", ["Stat and gear settings"] = "Caractéristiques et équipement", ["Layout settings"] = "Disposition", ["Appearance settings"] = "Apparence", ["Choose settings to copy"] = "Choisir les réglages à copier",
-        ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "Copier « %s » de « %s » vers « %s » ? Cela modifie %d spécialisations attribuées et %d autres références.",
-        ["Assign to selected context"] = "Attribuer au contexte sélectionné", ["New from defaults..."] = "Nouveau depuis les valeurs par défaut...",
-        ["Duplicate profile..."] = "Dupliquer le profil...", ["Rename profile..."] = "Renommer le profil...",
-        ["Copy settings to assigned profile..."] = "Copier les réglages vers le profil attribué...", ["Swap assignments..."] = "Échanger les attributions...",
-        ["Reset active profile..."] = "Réinitialiser le profil actif...", ["Delete profile..."] = "Supprimer le profil...",
-        ["Forget character..."] = "Oublier le personnage...", ["Confirm"] = "Confirmer", ["Cancel"] = "Annuler",
-        ["Selected character"] = "Personnage sélectionné", ["%s - %d known specs"] = "%s – %d spécialisations connues",
-        ["Future new contexts"] = "Nouveaux contextes futurs", ["Tank: %s"] = "Tank : %s",
-        ["Healer: %s"] = "Soigneur : %s", ["Damage: %s"] = "Dégâts : %s",
+        ["Confirm"] = "Confirmer", ["Cancel"] = "Annuler",
         ["Tank"] = "Tank", ["Healer"] = "Soigneur", ["Damage"] = "Dégâts",
-        ["Use profile for all known specs..."] = "Utiliser pour toutes les spécialisations...",
-        ["Make shared specs independent..."] = "Rendre indépendantes les spécialisations partagées...",
-        ["Set future role template..."] = "Définir le modèle de rôle futur...", ["Choose a role"] = "Choisir un rôle",
-        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "Utiliser « %s » pour les %d spécialisations connues de « %s » ? Les profils et réglages existants seront conservés.",
-        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "Rendre indépendantes %d spécialisations partagées de « %s » ? Chacune recevra une copie distincte ; les profils existants resteront inchangés.",
+        ["Choose a role"] = "Choisir un rôle",
         ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "Utiliser « %s » comme source des futurs contextes Tank ? Les attributions existantes ne changeront pas ; chaque nouveau contexte recevra une copie indépendante.",
         ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "Utiliser « %s » comme source des futurs contextes Soigneur ? Les attributions existantes ne changeront pas ; chaque nouveau contexte recevra une copie indépendante.",
         ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "Utiliser « %s » comme source des futurs contextes Dégâts ? Les attributions existantes ne changeront pas ; chaque nouveau contexte recevra une copie indépendante.",
-        ["Unused"] = "Inutilisé", ["Unused profile"] = "Profil inutilisé", ["New Profile"] = "Nouveau profil",
-        ["%s Copy"] = "Copie de %s", ["Choose a replacement profile"] = "Choisir un profil de remplacement",
-        ["Choose a context"] = "Choisir un contexte", ["%d assigned specs, %d other references"] = "%d spécialisations attribuées, %d autres références",
         ["Profile changes saved."] = "Modifications des profils enregistrées.", ["Enter a valid profile name."] = "Saisissez un nom de profil valide.",
-        ["Profile names can contain at most %d characters."] = "Les noms de profil peuvent contenir au maximum %d caractères.",
         ["A profile with this name already exists."] = "Un profil portant ce nom existe déjà.",
         ["Profiles changed; review and try again."] = "Les profils ont changé. Vérifiez la sélection et réessayez.",
-        ["The last profile cannot be deleted."] = "Le dernier profil ne peut pas être supprimé.",
-        ["Choose a replacement profile."] = "Choisissez un profil de remplacement.",
         ["The current character cannot be forgotten."] = "Le personnage actuel ne peut pas être oublié.",
         ["Nothing changed."] = "Aucune modification.",
         ["Profile operation failed. Review the selection and try again."] = "L’opération sur le profil a échoué. Vérifiez la sélection et réessayez.",
-        ["Delete profile \"%s\" and replace all references with \"%s\"? This affects %d assigned specs and %d other references."] = "Supprimer le profil « %s » et remplacer toutes les références par « %s » ? Cela affecte %d spécialisations attribuées et %d autres références.",
-        ["Swap \"%s\" and \"%s\"? Their profile settings stay unchanged."] = "Échanger « %s » et « %s » ? Leurs réglages de profil resteront inchangés.",
-        ["Rename shared profile \"%s\" to \"%s\"? This affects %d assigned specs and %d other references."] = "Renommer le profil partagé « %s » en « %s » ? Cela affecte %d spécialisations attribuées et %d autres références.",
         ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "Réinitialiser le profil actif « %s » ? Cela modifie %d spécialisations attribuées et %d autres références.",
-        ["Delete unused profile \"%s\"?"] = "Supprimer le profil inutilisé « %s » ?",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Oublier « %s » ? Sa fiche de personnage sera supprimée, mais les réglages des profils seront conservés.",
         ["Auto (current: %s)"] = "Auto (actuel : %s)",
         ["Western European text"] = "le texte d’Europe occidentale",
@@ -1840,52 +1804,43 @@ local LABELS_BY_LOCALE = {
         ["Contact"] = "Contacto", ["Click to copy the link."] = "Haz clic para copiar el enlace.",
         ["Copy the link below (Ctrl+C)."] = "Copia el enlace de abajo (Ctrl+C).",
         ["Open Settings"] = "Abrir ajustes", ["Settings"] = "Ajustes",
-        ["Profile:"] = "Perfil:", ["Manage"] = "Gestionar", ["Reset"] = "Restablecer", ["Profile Manager"] = "Gestor de perfiles",
-        ["Automatic - %s / %s"] = "Automático – %s / %s", ["Shared by %d specs"] = "Compartido por %d especializaciones",
+        ["Profiles & sharing..."] = "Perfiles...", ["Profiles & sharing"] = "Perfiles y uso compartido",
+        ["Shared with %d specializations"] = "Compartido con %d especializaciones", ["Only this specialization"] = "Solo esta especialización",
+        ["Unknown specialization (%d)"] = "Especialización desconocida (%d)",
+        ["Copy settings from..."] = "Copiar ajustes desde...", ["Use the same settings as..."] = "Usar los mismos ajustes que...",
+        ["Use these settings for..."] = "Usar estos ajustes para...", ["Stop sharing..."] = "Dejar de compartir...",
+        ["Advanced..."] = "Avanzado...", ["Hide advanced"] = "Ocultar opciones avanzadas",
+        ["Reset these settings..."] = "Restablecer estos ajustes...", ["Forget this character..."] = "Olvidar este personaje...",
+        ["Defaults for future specializations..."] = "Ajustes para futuras especializaciones...", ["Delete unused settings..."] = "Eliminar ajustes sin usar...",
+        ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "¿Copiar %s de «%s» a «%s»? El destino conservará sus propios ajustes después.",
+        ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "¿Usar los mismos ajustes para «%s» y «%s»? Los cambios futuros afectarán a ambos.",
+        ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "¿Usar los ajustes compartidos de «%s» para «%s»? Ya los comparten %d especializaciones; los cambios futuros afectarán a las %d.",
+        ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "¿Dar a «%s» su propia copia de estos ajustes? Los cambios futuros ya no afectarán a las otras especializaciones.",
+        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "¿Restablecer los ajustes que usa «%s»? El mismo restablecimiento afectará a %d especializaciones.",
+        ["Reset the settings used by \"%s\" to defaults?"] = "¿Restablecer los ajustes que usa «%s» a los valores predeterminados?",
+        ["This profile is also a default for future specializations; they will use the reset settings."] = "Este perfil también es predeterminado para futuras especializaciones; usarán los ajustes restablecidos.",
+        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "¿Eliminar %d conjuntos de ajustes sin usar? Se conservarán los ajustes usados y los predeterminados para futuras especializaciones.",
         ["Switch pending until combat ends"] = "Cambio al terminar el combate", ["Account default profile"] = "Perfil de cuenta predeterminado",
-        ["Current"] = "Actual", ["Active"] = "Activo", ["Character default"] = "Predeterminado del personaje",
-        ["Assigned profile:"] = "Perfil asignado:", ["Independent"] = "Independiente", ["No visited characters"] = "No hay personajes visitados",
+        ["Current"] = "Actual", ["Active"] = "Activo",
+        ["No visited characters"] = "No hay personajes visitados",
         ["Spec %d"] = "Especialización %d", ["Profile changes are unavailable during combat."] = "Los cambios de perfil no están disponibles en combate.",
         ["Waiting for a safe profile context."] = "Esperando un contexto de perfil seguro.",
         ["Compatibility mode - profiles are read-only."] = "Modo de compatibilidad: los perfiles son de solo lectura.",
         ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "Datos dañados: los perfiles son de solo lectura. Usa /ss wipe para restablecerlos.",
-        ["Profile to manage:"] = "Perfil que gestionar:", ["Choose a profile"] = "Elige un perfil",
         ["All settings"] = "Todos los ajustes", ["Stat and gear settings"] = "Estadísticas y equipo", ["Layout settings"] = "Diseño", ["Appearance settings"] = "Apariencia", ["Choose settings to copy"] = "Elige los ajustes que copiar",
-        ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "¿Copiar «%s» de «%s» a «%s»? Esto cambia %d especializaciones asignadas y %d referencias más.",
-        ["Assign to selected context"] = "Asignar al contexto seleccionado", ["New from defaults..."] = "Nuevo desde valores predeterminados...",
-        ["Duplicate profile..."] = "Duplicar perfil...", ["Rename profile..."] = "Cambiar nombre del perfil...",
-        ["Copy settings to assigned profile..."] = "Copiar ajustes al perfil asignado...", ["Swap assignments..."] = "Intercambiar asignaciones...",
-        ["Reset active profile..."] = "Restablecer perfil activo...", ["Delete profile..."] = "Eliminar perfil...",
-        ["Forget character..."] = "Olvidar personaje...", ["Confirm"] = "Confirmar", ["Cancel"] = "Cancelar",
-        ["Selected character"] = "Personaje seleccionado", ["%s - %d known specs"] = "%s – %d especializaciones conocidas",
-        ["Future new contexts"] = "Nuevos contextos futuros", ["Tank: %s"] = "Tanque: %s",
-        ["Healer: %s"] = "Sanador: %s", ["Damage: %s"] = "Daño: %s",
+        ["Confirm"] = "Confirmar", ["Cancel"] = "Cancelar",
         ["Tank"] = "Tanque", ["Healer"] = "Sanador", ["Damage"] = "Daño",
-        ["Use profile for all known specs..."] = "Usar en todas las especializaciones conocidas...",
-        ["Make shared specs independent..."] = "Independizar especializaciones compartidas...",
-        ["Set future role template..."] = "Definir plantilla de rol futura...", ["Choose a role"] = "Elige un rol",
-        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "¿Usar «%s» para las %d especializaciones conocidas de «%s»? Se conservarán los perfiles y ajustes existentes.",
-        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "¿Independizar %d especializaciones compartidas de «%s»? Cada una recibirá una copia distinta; los perfiles existentes no cambiarán.",
+        ["Choose a role"] = "Elige un rol",
         ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Tanque? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
         ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Sanador? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
         ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Daño? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
-        ["Unused"] = "Sin usar", ["Unused profile"] = "Perfil sin usar", ["New Profile"] = "Perfil nuevo",
-        ["%s Copy"] = "Copia de %s", ["Choose a replacement profile"] = "Elige un perfil de reemplazo",
-        ["Choose a context"] = "Elige un contexto", ["%d assigned specs, %d other references"] = "%d especializaciones asignadas, %d referencias más",
         ["Profile changes saved."] = "Cambios de perfiles guardados.", ["Enter a valid profile name."] = "Introduce un nombre de perfil válido.",
-        ["Profile names can contain at most %d characters."] = "Los nombres de perfil pueden tener un máximo de %d caracteres.",
         ["A profile with this name already exists."] = "Ya existe un perfil con este nombre.",
         ["Profiles changed; review and try again."] = "Los perfiles han cambiado. Revisa la selección e inténtalo de nuevo.",
-        ["The last profile cannot be deleted."] = "No se puede eliminar el último perfil.",
-        ["Choose a replacement profile."] = "Elige un perfil de reemplazo.",
         ["The current character cannot be forgotten."] = "No se puede olvidar al personaje actual.",
         ["Nothing changed."] = "No se ha cambiado nada.",
         ["Profile operation failed. Review the selection and try again."] = "La operación del perfil ha fallado. Revisa la selección e inténtalo de nuevo.",
-        ["Delete profile \"%s\" and replace all references with \"%s\"? This affects %d assigned specs and %d other references."] = "¿Eliminar el perfil «%s» y reemplazar todas las referencias por «%s»? Esto afecta a %d especializaciones asignadas y %d referencias más.",
-        ["Swap \"%s\" and \"%s\"? Their profile settings stay unchanged."] = "¿Intercambiar «%s» y «%s»? Sus ajustes de perfil no cambiarán.",
-        ["Rename shared profile \"%s\" to \"%s\"? This affects %d assigned specs and %d other references."] = "¿Cambiar el nombre del perfil compartido «%s» a «%s»? Esto afecta a %d especializaciones asignadas y %d referencias más.",
         ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "¿Restablecer el perfil activo «%s»? Esto cambia %d especializaciones asignadas y %d referencias más.",
-        ["Delete unused profile \"%s\"?"] = "¿Eliminar el perfil sin usar «%s»?",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "¿Olvidar a «%s»? Se eliminará su registro de personaje, pero se conservarán los ajustes de perfiles.",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
         ["Western European text"] = "texto de Europa occidental",
@@ -1978,52 +1933,43 @@ local LABELS_BY_LOCALE = {
         ["Contact"] = "Contacto", ["Click to copy the link."] = "Haz clic para copiar el enlace.",
         ["Copy the link below (Ctrl+C)."] = "Copia el enlace de abajo (Ctrl+C).",
         ["Open Settings"] = "Abrir configuración", ["Settings"] = "Configuración",
-        ["Profile:"] = "Perfil:", ["Manage"] = "Administrar", ["Reset"] = "Restablecer", ["Profile Manager"] = "Administrador de perfiles",
-        ["Automatic - %s / %s"] = "Automático – %s / %s", ["Shared by %d specs"] = "Compartido por %d especializaciones",
+        ["Profiles & sharing..."] = "Perfiles...", ["Profiles & sharing"] = "Perfiles y uso compartido",
+        ["Shared with %d specializations"] = "Compartido con %d especializaciones", ["Only this specialization"] = "Solo esta especialización",
+        ["Unknown specialization (%d)"] = "Especialización desconocida (%d)",
+        ["Copy settings from..."] = "Copiar ajustes desde...", ["Use the same settings as..."] = "Usar los mismos ajustes que...",
+        ["Use these settings for..."] = "Usar estos ajustes para...", ["Stop sharing..."] = "Dejar de compartir...",
+        ["Advanced..."] = "Avanzado...", ["Hide advanced"] = "Ocultar opciones avanzadas",
+        ["Reset these settings..."] = "Restablecer estos ajustes...", ["Forget this character..."] = "Olvidar este personaje...",
+        ["Defaults for future specializations..."] = "Ajustes para futuras especializaciones...", ["Delete unused settings..."] = "Eliminar ajustes sin usar...",
+        ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "¿Copiar %s de «%s» a «%s»? El destino conservará sus propios ajustes después.",
+        ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "¿Usar los mismos ajustes para «%s» y «%s»? Los cambios futuros afectarán a ambos.",
+        ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "¿Usar los ajustes compartidos de «%s» para «%s»? Ya los comparten %d especializaciones; los cambios futuros afectarán a las %d.",
+        ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "¿Dar a «%s» su propia copia de estos ajustes? Los cambios futuros ya no afectarán a las otras especializaciones.",
+        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "¿Restablecer los ajustes que usa «%s»? El mismo restablecimiento afectará a %d especializaciones.",
+        ["Reset the settings used by \"%s\" to defaults?"] = "¿Restablecer los ajustes que usa «%s» a los valores predeterminados?",
+        ["This profile is also a default for future specializations; they will use the reset settings."] = "Este perfil también es predeterminado para futuras especializaciones; usarán los ajustes restablecidos.",
+        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "¿Eliminar %d conjuntos de ajustes sin usar? Se conservarán los ajustes usados y los predeterminados para futuras especializaciones.",
         ["Switch pending until combat ends"] = "Cambio al terminar el combate", ["Account default profile"] = "Perfil predeterminado de la cuenta",
-        ["Current"] = "Actual", ["Active"] = "Activo", ["Character default"] = "Predeterminado del personaje",
-        ["Assigned profile:"] = "Perfil asignado:", ["Independent"] = "Independiente", ["No visited characters"] = "No hay personajes visitados",
+        ["Current"] = "Actual", ["Active"] = "Activo",
+        ["No visited characters"] = "No hay personajes visitados",
         ["Spec %d"] = "Especialización %d", ["Profile changes are unavailable during combat."] = "Los cambios de perfil no están disponibles en combate.",
         ["Waiting for a safe profile context."] = "Esperando un contexto de perfil seguro.",
         ["Compatibility mode - profiles are read-only."] = "Modo de compatibilidad: los perfiles son de solo lectura.",
         ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "Datos dañados: los perfiles son de solo lectura. Usa /ss wipe para restablecerlos.",
-        ["Profile to manage:"] = "Perfil que administrar:", ["Choose a profile"] = "Elige un perfil",
         ["All settings"] = "Todos los ajustes", ["Stat and gear settings"] = "Estadísticas y equipo", ["Layout settings"] = "Diseño", ["Appearance settings"] = "Apariencia", ["Choose settings to copy"] = "Elige los ajustes que copiar",
-        ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "¿Copiar «%s» de «%s» a «%s»? Esto cambia %d especializaciones asignadas y %d referencias más.",
-        ["Assign to selected context"] = "Asignar al contexto seleccionado", ["New from defaults..."] = "Nuevo desde valores predeterminados...",
-        ["Duplicate profile..."] = "Duplicar perfil...", ["Rename profile..."] = "Cambiar nombre del perfil...",
-        ["Copy settings to assigned profile..."] = "Copiar ajustes al perfil asignado...", ["Swap assignments..."] = "Intercambiar asignaciones...",
-        ["Reset active profile..."] = "Restablecer perfil activo...", ["Delete profile..."] = "Eliminar perfil...",
-        ["Forget character..."] = "Olvidar personaje...", ["Confirm"] = "Confirmar", ["Cancel"] = "Cancelar",
-        ["Selected character"] = "Personaje seleccionado", ["%s - %d known specs"] = "%s – %d especializaciones conocidas",
-        ["Future new contexts"] = "Nuevos contextos futuros", ["Tank: %s"] = "Tanque: %s",
-        ["Healer: %s"] = "Sanador: %s", ["Damage: %s"] = "Daño: %s",
+        ["Confirm"] = "Confirmar", ["Cancel"] = "Cancelar",
         ["Tank"] = "Tanque", ["Healer"] = "Sanador", ["Damage"] = "Daño",
-        ["Use profile for all known specs..."] = "Usar en todas las especializaciones conocidas...",
-        ["Make shared specs independent..."] = "Independizar especializaciones compartidas...",
-        ["Set future role template..."] = "Definir plantilla de rol futura...", ["Choose a role"] = "Elige un rol",
-        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "¿Usar «%s» para las %d especializaciones conocidas de «%s»? Se conservarán los perfiles y ajustes existentes.",
-        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "¿Independizar %d especializaciones compartidas de «%s»? Cada una recibirá una copia distinta; los perfiles existentes no cambiarán.",
+        ["Choose a role"] = "Elige un rol",
         ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Tanque? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
         ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Sanador? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
         ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Daño? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
-        ["Unused"] = "Sin usar", ["Unused profile"] = "Perfil sin usar", ["New Profile"] = "Perfil nuevo",
-        ["%s Copy"] = "Copia de %s", ["Choose a replacement profile"] = "Elige un perfil de reemplazo",
-        ["Choose a context"] = "Elige un contexto", ["%d assigned specs, %d other references"] = "%d especializaciones asignadas, %d referencias más",
         ["Profile changes saved."] = "Cambios de perfiles guardados.", ["Enter a valid profile name."] = "Ingresa un nombre de perfil válido.",
-        ["Profile names can contain at most %d characters."] = "Los nombres de perfil pueden tener un máximo de %d caracteres.",
         ["A profile with this name already exists."] = "Ya existe un perfil con este nombre.",
         ["Profiles changed; review and try again."] = "Los perfiles cambiaron. Revisa la selección e inténtalo de nuevo.",
-        ["The last profile cannot be deleted."] = "No se puede eliminar el último perfil.",
-        ["Choose a replacement profile."] = "Elige un perfil de reemplazo.",
         ["The current character cannot be forgotten."] = "No se puede olvidar al personaje actual.",
         ["Nothing changed."] = "No se cambió nada.",
         ["Profile operation failed. Review the selection and try again."] = "La operación del perfil falló. Revisa la selección e inténtalo de nuevo.",
-        ["Delete profile \"%s\" and replace all references with \"%s\"? This affects %d assigned specs and %d other references."] = "¿Eliminar el perfil «%s» y reemplazar todas las referencias por «%s»? Esto afecta a %d especializaciones asignadas y %d referencias más.",
-        ["Swap \"%s\" and \"%s\"? Their profile settings stay unchanged."] = "¿Intercambiar «%s» y «%s»? Sus ajustes de perfil no cambiarán.",
-        ["Rename shared profile \"%s\" to \"%s\"? This affects %d assigned specs and %d other references."] = "¿Cambiar el nombre del perfil compartido «%s» a «%s»? Esto afecta a %d especializaciones asignadas y %d referencias más.",
         ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "¿Restablecer el perfil activo «%s»? Esto cambia %d especializaciones asignadas y %d referencias más.",
-        ["Delete unused profile \"%s\"?"] = "¿Eliminar el perfil sin usar «%s»?",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "¿Olvidar a «%s»? Se eliminará su registro de personaje, pero se conservarán los ajustes de perfiles.",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
         ["Western European text"] = "texto de Europa occidental",
@@ -2117,52 +2063,43 @@ local LABELS_BY_LOCALE = {
         ["Contact"] = "Contatti", ["Click to copy the link."] = "Fai clic per copiare il link.",
         ["Copy the link below (Ctrl+C)."] = "Copia il link qui sotto (Ctrl+C).",
         ["Open Settings"] = "Apri impostazioni", ["Settings"] = "Impostazioni",
-        ["Profile:"] = "Profilo:", ["Manage"] = "Gestisci", ["Reset"] = "Ripristina", ["Profile Manager"] = "Gestione profili",
-        ["Automatic - %s / %s"] = "Automatico – %s / %s", ["Shared by %d specs"] = "Condiviso da %d specializzazioni",
+        ["Profiles & sharing..."] = "Profili...", ["Profiles & sharing"] = "Profili e condivisione",
+        ["Shared with %d specializations"] = "Condiviso con %d specializzazioni", ["Only this specialization"] = "Solo questa specializzazione",
+        ["Unknown specialization (%d)"] = "Specializzazione sconosciuta (%d)",
+        ["Copy settings from..."] = "Copia impostazioni da...", ["Use the same settings as..."] = "Usa le stesse impostazioni di...",
+        ["Use these settings for..."] = "Usa queste impostazioni per...", ["Stop sharing..."] = "Interrompi condivisione...",
+        ["Advanced..."] = "Avanzate...", ["Hide advanced"] = "Nascondi opzioni avanzate",
+        ["Reset these settings..."] = "Ripristina queste impostazioni...", ["Forget this character..."] = "Dimentica questo personaggio...",
+        ["Defaults for future specializations..."] = "Impostazioni per specializzazioni future...", ["Delete unused settings..."] = "Elimina impostazioni inutilizzate...",
+        ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "Copiare %s da «%s» a «%s»? La destinazione manterrà poi le proprie impostazioni.",
+        ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "Usare le stesse impostazioni per «%s» e «%s»? Le modifiche future influiranno su entrambe.",
+        ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "Usare le impostazioni condivise di «%s» per «%s»? Sono già condivise da %d specializzazioni; le modifiche future interesseranno tutte e %d.",
+        ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "Dare a «%s» una copia separata di queste impostazioni? Le modifiche future non influiranno più sulle altre specializzazioni.",
+        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "Ripristinare le impostazioni usate da «%s»? Lo stesso ripristino influirà su %d specializzazioni.",
+        ["Reset the settings used by \"%s\" to defaults?"] = "Ripristinare ai valori predefiniti le impostazioni usate da «%s»?",
+        ["This profile is also a default for future specializations; they will use the reset settings."] = "Questo profilo è anche predefinito per le specializzazioni future; useranno le impostazioni ripristinate.",
+        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "Eliminare %d gruppi di impostazioni inutilizzati? Le impostazioni in uso e quelle per le specializzazioni future saranno mantenute.",
         ["Switch pending until combat ends"] = "Cambio dopo il combattimento", ["Account default profile"] = "Profilo account predefinito",
-        ["Current"] = "Attuale", ["Active"] = "Attivo", ["Character default"] = "Predefinito del personaggio",
-        ["Assigned profile:"] = "Profilo assegnato:", ["Independent"] = "Indipendente", ["No visited characters"] = "Nessun personaggio visitato",
+        ["Current"] = "Attuale", ["Active"] = "Attivo",
+        ["No visited characters"] = "Nessun personaggio visitato",
         ["Spec %d"] = "Specializzazione %d", ["Profile changes are unavailable during combat."] = "Le modifiche ai profili non sono disponibili in combattimento.",
         ["Waiting for a safe profile context."] = "In attesa di un contesto profilo sicuro.",
         ["Compatibility mode - profiles are read-only."] = "Modalità compatibilità – i profili sono in sola lettura.",
         ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "Dati danneggiati – i profili sono in sola lettura. Usa /ss wipe per ripristinare.",
-        ["Profile to manage:"] = "Profilo da gestire:", ["Choose a profile"] = "Scegli un profilo",
         ["All settings"] = "Tutte le impostazioni", ["Stat and gear settings"] = "Statistiche ed equipaggiamento", ["Layout settings"] = "Disposizione", ["Appearance settings"] = "Aspetto", ["Choose settings to copy"] = "Scegli le impostazioni da copiare",
-        ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "Copiare «%s» da «%s» a «%s»? Verranno modificate %d specializzazioni assegnate e %d altri riferimenti.",
-        ["Assign to selected context"] = "Assegna al contesto selezionato", ["New from defaults..."] = "Nuovo dai valori predefiniti...",
-        ["Duplicate profile..."] = "Duplica profilo...", ["Rename profile..."] = "Rinomina profilo...",
-        ["Copy settings to assigned profile..."] = "Copia impostazioni nel profilo assegnato...", ["Swap assignments..."] = "Scambia assegnazioni...",
-        ["Reset active profile..."] = "Ripristina profilo attivo...", ["Delete profile..."] = "Elimina profilo...",
-        ["Forget character..."] = "Dimentica personaggio...", ["Confirm"] = "Conferma", ["Cancel"] = "Annulla",
-        ["Selected character"] = "Personaggio selezionato", ["%s - %d known specs"] = "%s – %d specializzazioni note",
-        ["Future new contexts"] = "Nuovi contesti futuri", ["Tank: %s"] = "Difensore: %s",
-        ["Healer: %s"] = "Guaritore: %s", ["Damage: %s"] = "Assaltatore: %s",
+        ["Confirm"] = "Conferma", ["Cancel"] = "Annulla",
         ["Tank"] = "Difensore", ["Healer"] = "Guaritore", ["Damage"] = "Assaltatore",
-        ["Use profile for all known specs..."] = "Usa per tutte le specializzazioni note...",
-        ["Make shared specs independent..."] = "Rendi indipendenti le specializzazioni condivise...",
-        ["Set future role template..."] = "Imposta modello ruolo futuro...", ["Choose a role"] = "Scegli un ruolo",
-        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "Usare «%s» per tutte le %d specializzazioni note di «%s»? I profili e le impostazioni esistenti verranno conservati.",
-        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "Rendere indipendenti %d specializzazioni condivise di «%s»? Ognuna riceverà una copia separata; i profili esistenti resteranno invariati.",
+        ["Choose a role"] = "Scegli un ruolo",
         ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usare «%s» come origine per i futuri contesti Difensore? Le assegnazioni esistenti non cambieranno; ogni nuovo contesto riceverà una copia indipendente.",
         ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usare «%s» come origine per i futuri contesti Guaritore? Le assegnazioni esistenti non cambieranno; ogni nuovo contesto riceverà una copia indipendente.",
         ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usare «%s» come origine per i futuri contesti Assaltatore? Le assegnazioni esistenti non cambieranno; ogni nuovo contesto riceverà una copia indipendente.",
-        ["Unused"] = "Inutilizzato", ["Unused profile"] = "Profilo inutilizzato", ["New Profile"] = "Nuovo profilo",
-        ["%s Copy"] = "Copia di %s", ["Choose a replacement profile"] = "Scegli un profilo sostitutivo",
-        ["Choose a context"] = "Scegli un contesto", ["%d assigned specs, %d other references"] = "%d specializzazioni assegnate, %d altri riferimenti",
         ["Profile changes saved."] = "Modifiche ai profili salvate.", ["Enter a valid profile name."] = "Inserisci un nome profilo valido.",
-        ["Profile names can contain at most %d characters."] = "I nomi dei profili possono contenere al massimo %d caratteri.",
         ["A profile with this name already exists."] = "Esiste già un profilo con questo nome.",
         ["Profiles changed; review and try again."] = "I profili sono cambiati. Controlla la selezione e riprova.",
-        ["The last profile cannot be deleted."] = "L'ultimo profilo non può essere eliminato.",
-        ["Choose a replacement profile."] = "Scegli un profilo sostitutivo.",
         ["The current character cannot be forgotten."] = "Il personaggio attuale non può essere dimenticato.",
         ["Nothing changed."] = "Nessuna modifica.",
         ["Profile operation failed. Review the selection and try again."] = "Operazione sul profilo non riuscita. Controlla la selezione e riprova.",
-        ["Delete profile \"%s\" and replace all references with \"%s\"? This affects %d assigned specs and %d other references."] = "Eliminare il profilo «%s» e sostituire tutti i riferimenti con «%s»? Verranno coinvolte %d specializzazioni assegnate e %d altri riferimenti.",
-        ["Swap \"%s\" and \"%s\"? Their profile settings stay unchanged."] = "Scambiare «%s» e «%s»? Le impostazioni dei profili resteranno invariate.",
-        ["Rename shared profile \"%s\" to \"%s\"? This affects %d assigned specs and %d other references."] = "Rinominare il profilo condiviso «%s» in «%s»? Verranno coinvolte %d specializzazioni assegnate e %d altri riferimenti.",
         ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "Ripristinare il profilo attivo «%s»? Verranno modificate %d specializzazioni assegnate e %d altri riferimenti.",
-        ["Delete unused profile \"%s\"?"] = "Eliminare il profilo inutilizzato «%s»?",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Dimenticare «%s»? Il record del personaggio verrà rimosso, ma le impostazioni dei profili saranno conservate.",
         ["Auto (current: %s)"] = "Auto (attuale: %s)",
         ["Western European text"] = "testo dell’Europa occidentale",
@@ -2255,52 +2192,43 @@ local LABELS_BY_LOCALE = {
         ["Contact"] = "Contato", ["Click to copy the link."] = "Clique para copiar o link.",
         ["Copy the link below (Ctrl+C)."] = "Copie o link abaixo (Ctrl+C).",
         ["Open Settings"] = "Abrir configurações", ["Settings"] = "Configurações",
-        ["Profile:"] = "Perfil:", ["Manage"] = "Gerenciar", ["Reset"] = "Redefinir", ["Profile Manager"] = "Gerenciador de perfis",
-        ["Automatic - %s / %s"] = "Automático – %s / %s", ["Shared by %d specs"] = "Compartilhado por %d especializações",
+        ["Profiles & sharing..."] = "Perfis...", ["Profiles & sharing"] = "Perfis e compartilhamento",
+        ["Shared with %d specializations"] = "Compartilhado com %d especializações", ["Only this specialization"] = "Somente esta especialização",
+        ["Unknown specialization (%d)"] = "Especialização desconhecida (%d)",
+        ["Copy settings from..."] = "Copiar configurações de...", ["Use the same settings as..."] = "Usar as mesmas configurações de...",
+        ["Use these settings for..."] = "Usar estas configurações para...", ["Stop sharing..."] = "Parar de compartilhar...",
+        ["Advanced..."] = "Avançado...", ["Hide advanced"] = "Ocultar opções avançadas",
+        ["Reset these settings..."] = "Redefinir estas configurações...", ["Forget this character..."] = "Esquecer este personagem...",
+        ["Defaults for future specializations..."] = "Configurações para especializações futuras...", ["Delete unused settings..."] = "Excluir configurações não usadas...",
+        ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "Copiar %s de “%s” para “%s”? O destino manterá suas próprias configurações depois.",
+        ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "Usar as mesmas configurações para “%s” e “%s”? Alterações futuras afetarão ambos.",
+        ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "Usar as configurações compartilhadas de “%s” para “%s”? Elas já são compartilhadas por %d especializações; alterações futuras afetarão todas as %d.",
+        ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "Dar a “%s” uma cópia própria destas configurações? Alterações futuras não afetarão mais as outras especializações.",
+        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "Redefinir as configurações usadas por “%s”? A mesma redefinição afetará %d especializações.",
+        ["Reset the settings used by \"%s\" to defaults?"] = "Redefinir as configurações usadas por “%s” para os padrões?",
+        ["This profile is also a default for future specializations; they will use the reset settings."] = "Este perfil também é padrão para especializações futuras; elas usarão as configurações redefinidas.",
+        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "Excluir %d conjuntos de configurações não usados? Configurações em uso e padrões para especializações futuras serão mantidos.",
         ["Switch pending until combat ends"] = "Troca após o combate", ["Account default profile"] = "Perfil padrão da conta",
-        ["Current"] = "Atual", ["Active"] = "Ativo", ["Character default"] = "Padrão do personagem",
-        ["Assigned profile:"] = "Perfil atribuído:", ["Independent"] = "Independente", ["No visited characters"] = "Nenhum personagem visitado",
+        ["Current"] = "Atual", ["Active"] = "Ativo",
+        ["No visited characters"] = "Nenhum personagem visitado",
         ["Spec %d"] = "Especialização %d", ["Profile changes are unavailable during combat."] = "Alterações de perfil não estão disponíveis em combate.",
         ["Waiting for a safe profile context."] = "Aguardando um contexto de perfil seguro.",
         ["Compatibility mode - profiles are read-only."] = "Modo de compatibilidade – os perfis são somente leitura.",
         ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "Dados corrompidos – os perfis são somente leitura. Use /ss wipe para redefinir.",
-        ["Profile to manage:"] = "Perfil para gerenciar:", ["Choose a profile"] = "Escolha um perfil",
         ["All settings"] = "Todas as configurações", ["Stat and gear settings"] = "Atributos e equipamento", ["Layout settings"] = "Layout", ["Appearance settings"] = "Aparência", ["Choose settings to copy"] = "Escolha as configurações para copiar",
-        ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "Copiar “%s” de “%s” para “%s”? Isso altera %d especializações atribuídas e %d outras referências.",
-        ["Assign to selected context"] = "Atribuir ao contexto selecionado", ["New from defaults..."] = "Novo a partir dos padrões...",
-        ["Duplicate profile..."] = "Duplicar perfil...", ["Rename profile..."] = "Renomear perfil...",
-        ["Copy settings to assigned profile..."] = "Copiar configurações para o perfil atribuído...", ["Swap assignments..."] = "Trocar atribuições...",
-        ["Reset active profile..."] = "Redefinir perfil ativo...", ["Delete profile..."] = "Excluir perfil...",
-        ["Forget character..."] = "Esquecer personagem...", ["Confirm"] = "Confirmar", ["Cancel"] = "Cancelar",
-        ["Selected character"] = "Personagem selecionado", ["%s - %d known specs"] = "%s – %d especializações conhecidas",
-        ["Future new contexts"] = "Novos contextos futuros", ["Tank: %s"] = "Tanque: %s",
-        ["Healer: %s"] = "Cura: %s", ["Damage: %s"] = "Dano: %s",
+        ["Confirm"] = "Confirmar", ["Cancel"] = "Cancelar",
         ["Tank"] = "Tanque", ["Healer"] = "Cura", ["Damage"] = "Dano",
-        ["Use profile for all known specs..."] = "Usar em todas as especializações conhecidas...",
-        ["Make shared specs independent..."] = "Tornar especializações compartilhadas independentes...",
-        ["Set future role template..."] = "Definir modelo de função futura...", ["Choose a role"] = "Escolha uma função",
-        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "Usar «%s» em todas as %d especializações conhecidas de «%s»? Os perfis e ajustes existentes serão mantidos.",
-        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "Tornar independentes %d especializações compartilhadas de «%s»? Cada uma receberá uma cópia separada; os perfis existentes permanecerão inalterados.",
+        ["Choose a role"] = "Escolha uma função",
         ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usar «%s» como origem para futuros contextos de Tanque? As atribuições existentes não mudarão; cada novo contexto receberá uma cópia independente.",
         ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usar «%s» como origem para futuros contextos de Cura? As atribuições existentes não mudarão; cada novo contexto receberá uma cópia independente.",
         ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usar «%s» como origem para futuros contextos de Dano? As atribuições existentes não mudarão; cada novo contexto receberá uma cópia independente.",
-        ["Unused"] = "Não usado", ["Unused profile"] = "Perfil não usado", ["New Profile"] = "Novo perfil",
-        ["%s Copy"] = "Cópia de %s", ["Choose a replacement profile"] = "Escolha um perfil substituto",
-        ["Choose a context"] = "Escolha um contexto", ["%d assigned specs, %d other references"] = "%d especializações atribuídas, %d outras referências",
         ["Profile changes saved."] = "Alterações de perfil salvas.", ["Enter a valid profile name."] = "Digite um nome de perfil válido.",
-        ["Profile names can contain at most %d characters."] = "Os nomes de perfil podem ter no máximo %d caracteres.",
         ["A profile with this name already exists."] = "Já existe um perfil com este nome.",
         ["Profiles changed; review and try again."] = "Os perfis mudaram. Revise a seleção e tente novamente.",
-        ["The last profile cannot be deleted."] = "O último perfil não pode ser excluído.",
-        ["Choose a replacement profile."] = "Escolha um perfil substituto.",
         ["The current character cannot be forgotten."] = "O personagem atual não pode ser esquecido.",
         ["Nothing changed."] = "Nada foi alterado.",
         ["Profile operation failed. Review the selection and try again."] = "A operação do perfil falhou. Revise a seleção e tente novamente.",
-        ["Delete profile \"%s\" and replace all references with \"%s\"? This affects %d assigned specs and %d other references."] = "Excluir o perfil “%s” e substituir todas as referências por “%s”? Isso afeta %d especializações atribuídas e %d outras referências.",
-        ["Swap \"%s\" and \"%s\"? Their profile settings stay unchanged."] = "Trocar “%s” e “%s”? As configurações dos perfis permanecerão inalteradas.",
-        ["Rename shared profile \"%s\" to \"%s\"? This affects %d assigned specs and %d other references."] = "Renomear o perfil compartilhado “%s” para “%s”? Isso afeta %d especializações atribuídas e %d outras referências.",
         ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "Redefinir o perfil ativo “%s” para os padrões? Isso altera %d especializações atribuídas e %d outras referências.",
-        ["Delete unused profile \"%s\"?"] = "Excluir o perfil não usado “%s”?",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Esquecer “%s”? O registro do personagem será removido, mas as configurações dos perfis serão mantidas.",
         ["Auto (current: %s)"] = "Auto (atual: %s)",
         ["Western European text"] = "texto da Europa Ocidental",
@@ -2400,52 +2328,43 @@ local LABELS_BY_LOCALE = {
         ["Contact"] = "문의", ["Click to copy the link."] = "클릭하여 링크를 복사하세요.",
         ["Copy the link below (Ctrl+C)."] = "아래 링크를 복사하세요 (Ctrl+C).",
         ["Open Settings"] = "설정 열기", ["Settings"] = "설정",
-        ["Profile:"] = "프로필:", ["Manage"] = "관리", ["Reset"] = "초기화", ["Profile Manager"] = "프로필 관리",
-        ["Automatic - %s / %s"] = "자동 – %s / %s", ["Shared by %d specs"] = "전문화 %d개에서 공유",
+        ["Profiles & sharing..."] = "프로필 및 공유...", ["Profiles & sharing"] = "프로필 및 공유",
+        ["Shared with %d specializations"] = "전문화 %d개와 공유", ["Only this specialization"] = "이 전문화만 사용",
+        ["Unknown specialization (%d)"] = "알 수 없는 전문화 (%d)",
+        ["Copy settings from..."] = "설정 복사 원본...", ["Use the same settings as..."] = "같은 설정 사용...",
+        ["Use these settings for..."] = "이 설정을 사용할 전문화...", ["Stop sharing..."] = "공유 중지...",
+        ["Advanced..."] = "고급...", ["Hide advanced"] = "고급 옵션 숨기기",
+        ["Reset these settings..."] = "이 설정 초기화...", ["Forget this character..."] = "이 캐릭터 기록 삭제...",
+        ["Defaults for future specializations..."] = "새 전문화의 기본 설정...", ["Delete unused settings..."] = "사용하지 않는 설정 삭제...",
+        ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "%s 설정을 “%s”에서 “%s”로 복사하시겠습니까? 대상은 이후 별도 설정을 유지합니다.",
+        ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "“%s”와 “%s”에 같은 설정을 사용하시겠습니까? 이후 변경 사항이 둘 다에 적용됩니다.",
+        ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "“%s”의 공유 설정을 “%s”에도 사용하시겠습니까? 이미 전문화 %d개가 공유 중이며 이후 변경 사항은 전문화 %d개 모두에 적용됩니다.",
+        ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "“%s”에 이 설정의 별도 사본을 만드시겠습니까? 이후 변경 사항은 다른 전문화에 영향을 주지 않습니다.",
+        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "“%s”이(가) 사용하는 설정을 초기화하시겠습니까? 같은 초기화가 전문화 %d개에 적용됩니다.",
+        ["Reset the settings used by \"%s\" to defaults?"] = "“%s”이(가) 사용하는 설정을 기본값으로 초기화하시겠습니까?",
+        ["This profile is also a default for future specializations; they will use the reset settings."] = "이 프로필은 향후 전문화의 기본 설정으로도 사용되며 초기화된 설정이 적용됩니다.",
+        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "사용하지 않는 설정 %d개를 삭제하시겠습니까? 현재 사용 중인 설정과 새 전문화의 기본 설정은 유지됩니다.",
         ["Switch pending until combat ends"] = "전투 종료 후 전환", ["Account default profile"] = "계정 기본 프로필",
-        ["Current"] = "현재", ["Active"] = "활성", ["Character default"] = "캐릭터 기본값",
-        ["Assigned profile:"] = "지정된 프로필:", ["Independent"] = "독립", ["No visited characters"] = "방문한 캐릭터 없음",
+        ["Current"] = "현재", ["Active"] = "활성",
+        ["No visited characters"] = "방문한 캐릭터 없음",
         ["Spec %d"] = "전문화 %d", ["Profile changes are unavailable during combat."] = "전투 중에는 프로필을 변경할 수 없습니다.",
         ["Waiting for a safe profile context."] = "안전한 프로필 상태를 기다리는 중입니다.",
         ["Compatibility mode - profiles are read-only."] = "호환 모드 – 프로필이 읽기 전용입니다.",
         ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "데이터 손상 – 프로필이 읽기 전용입니다. /ss wipe로 초기화하세요.",
-        ["Profile to manage:"] = "관리할 프로필:", ["Choose a profile"] = "프로필 선택",
         ["All settings"] = "모든 설정", ["Stat and gear settings"] = "능력치 및 장비 설정", ["Layout settings"] = "배치 설정", ["Appearance settings"] = "외형 설정", ["Choose settings to copy"] = "복사할 설정 선택",
-        ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "\"%s\"을(를) \"%s\"에서 \"%s\"(으)로 복사하시겠습니까? 할당된 전문화 %d개와 기타 참조 %d개가 변경됩니다.",
-        ["Assign to selected context"] = "선택한 항목에 할당", ["New from defaults..."] = "기본값으로 새로 만들기...",
-        ["Duplicate profile..."] = "프로필 복제...", ["Rename profile..."] = "프로필 이름 변경...",
-        ["Copy settings to assigned profile..."] = "할당된 프로필에 설정 복사...", ["Swap assignments..."] = "할당 교환...",
-        ["Reset active profile..."] = "활성 프로필 초기화...", ["Delete profile..."] = "프로필 삭제...",
-        ["Forget character..."] = "캐릭터 기록 삭제...", ["Confirm"] = "확인", ["Cancel"] = "취소",
-        ["Selected character"] = "선택한 캐릭터", ["%s - %d known specs"] = "%s – 알려진 전문화 %d개",
-        ["Future new contexts"] = "향후 새 컨텍스트", ["Tank: %s"] = "방어 전담: %s",
-        ["Healer: %s"] = "치유 전담: %s", ["Damage: %s"] = "공격 전담: %s",
+        ["Confirm"] = "확인", ["Cancel"] = "취소",
         ["Tank"] = "방어 전담", ["Healer"] = "치유 전담", ["Damage"] = "공격 전담",
-        ["Use profile for all known specs..."] = "알려진 모든 전문화에 프로필 사용...",
-        ["Make shared specs independent..."] = "공유 전문화를 독립 프로필로 분리...",
-        ["Set future role template..."] = "향후 역할 템플릿 설정...", ["Choose a role"] = "역할 선택",
-        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "%s 프로필을 알려진 전문화 %d개 모두에 적용하시겠습니까? 대상 캐릭터: %s. 기존 프로필과 설정은 유지됩니다.",
-        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "%d개의 공유 전문화를 ‘%s’에서 독립시키시겠습니까? 각 전문화에 별도 복사본이 생성되며 기존 프로필은 변경되지 않습니다.",
+        ["Choose a role"] = "역할 선택",
         ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "%s 프로필을 향후 방어 전담 컨텍스트의 원본으로 사용하시겠습니까? 기존 할당은 바뀌지 않으며 새 컨텍스트마다 독립 복사본이 생성됩니다.",
         ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "%s 프로필을 향후 치유 전담 컨텍스트의 원본으로 사용하시겠습니까? 기존 할당은 바뀌지 않으며 새 컨텍스트마다 독립 복사본이 생성됩니다.",
         ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "%s 프로필을 향후 공격 전담 컨텍스트의 원본으로 사용하시겠습니까? 기존 할당은 바뀌지 않으며 새 컨텍스트마다 독립 복사본이 생성됩니다.",
-        ["Unused"] = "미사용", ["Unused profile"] = "사용하지 않는 프로필", ["New Profile"] = "새 프로필",
-        ["%s Copy"] = "%s 복사본", ["Choose a replacement profile"] = "대체 프로필 선택",
-        ["Choose a context"] = "항목 선택", ["%d assigned specs, %d other references"] = "할당된 전문화 %d개, 기타 참조 %d개",
         ["Profile changes saved."] = "프로필 변경 사항을 저장했습니다.", ["Enter a valid profile name."] = "올바른 프로필 이름을 입력하세요.",
-        ["Profile names can contain at most %d characters."] = "프로필 이름은 최대 %d자까지 사용할 수 있습니다.",
         ["A profile with this name already exists."] = "같은 이름의 프로필이 이미 있습니다.",
         ["Profiles changed; review and try again."] = "프로필이 변경되었습니다. 선택을 확인하고 다시 시도하세요.",
-        ["The last profile cannot be deleted."] = "마지막 프로필은 삭제할 수 없습니다.",
-        ["Choose a replacement profile."] = "대체 프로필을 선택하세요.",
         ["The current character cannot be forgotten."] = "현재 캐릭터의 기록은 삭제할 수 없습니다.",
         ["Nothing changed."] = "변경된 내용이 없습니다.",
         ["Profile operation failed. Review the selection and try again."] = "프로필 작업에 실패했습니다. 선택을 확인하고 다시 시도하세요.",
-        ["Delete profile \"%s\" and replace all references with \"%s\"? This affects %d assigned specs and %d other references."] = "프로필 \"%s\"을(를) 삭제하고 모든 참조를 \"%s\"(으)로 바꾸시겠습니까? 할당된 전문화 %d개와 기타 참조 %d개에 영향을 줍니다.",
-        ["Swap \"%s\" and \"%s\"? Their profile settings stay unchanged."] = "\"%s\"과(와) \"%s\"을(를) 교환하시겠습니까? 프로필 설정은 변경되지 않습니다.",
-        ["Rename shared profile \"%s\" to \"%s\"? This affects %d assigned specs and %d other references."] = "공유 프로필 \"%s\"의 이름을 \"%s\"(으)로 바꾸시겠습니까? 할당된 전문화 %d개와 기타 참조 %d개에 영향을 줍니다.",
         ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "활성 프로필 \"%s\"을(를) 기본값으로 초기화하시겠습니까? 할당된 전문화 %d개와 기타 참조 %d개가 변경됩니다.",
-        ["Delete unused profile \"%s\"?"] = "사용하지 않는 프로필 \"%s\"을(를) 삭제하시겠습니까?",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "\"%s\"의 기록을 삭제하시겠습니까? 캐릭터 기록만 제거되고 프로필 설정은 유지됩니다.",
         ["Auto (current: %s)"] = "자동 (현재: %s)",
         ["Western European text"] = "서유럽 언어 텍스트",
@@ -2538,52 +2457,43 @@ local LABELS_BY_LOCALE = {
         ["Contact"] = "联系", ["Click to copy the link."] = "点击复制链接。",
         ["Copy the link below (Ctrl+C)."] = "复制下方链接（Ctrl+C）。",
         ["Open Settings"] = "打开设置", ["Settings"] = "设置",
-        ["Profile:"] = "配置：", ["Manage"] = "管理", ["Reset"] = "重置", ["Profile Manager"] = "配置管理",
-        ["Automatic - %s / %s"] = "自动 – %s / %s", ["Shared by %d specs"] = "被 %d 个专精共享",
+        ["Profiles & sharing..."] = "配置与共享...", ["Profiles & sharing"] = "配置与共享",
+        ["Shared with %d specializations"] = "与 %d 个专精共享", ["Only this specialization"] = "仅此专精",
+        ["Unknown specialization (%d)"] = "未知专精（%d）",
+        ["Copy settings from..."] = "复制设置自...", ["Use the same settings as..."] = "使用相同设置...",
+        ["Use these settings for..."] = "将这些设置用于...", ["Stop sharing..."] = "停止共享...",
+        ["Advanced..."] = "高级...", ["Hide advanced"] = "隐藏高级选项",
+        ["Reset these settings..."] = "重置这些设置...", ["Forget this character..."] = "忘记此角色...",
+        ["Defaults for future specializations..."] = "未来专精的默认设置...", ["Delete unused settings..."] = "删除未使用的设置...",
+        ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "将%s从“%s”复制到“%s”？之后目标将保留独立设置。",
+        ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "让“%s”和“%s”使用相同设置？今后的更改会同时影响两者。",
+        ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "让“%s”的共享设置也用于“%s”？已有 %d 个专精共享这些设置；今后的更改会影响全部 %d 个专精。",
+        ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "为“%s”创建这些设置的独立副本？今后的更改将不再影响其他专精。",
+        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "重置“%s”使用的设置？同一次重置会影响 %d 个专精。",
+        ["Reset the settings used by \"%s\" to defaults?"] = "将“%s”使用的设置重置为默认值？",
+        ["This profile is also a default for future specializations; they will use the reset settings."] = "此配置也是未来专精的默认配置；重置后它们将使用重置后的设置。",
+        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "删除 %d 组未使用的设置？正在使用的设置和未来专精的默认设置将保留。",
         ["Switch pending until combat ends"] = "战斗结束后切换", ["Account default profile"] = "账号默认配置",
-        ["Current"] = "当前", ["Active"] = "激活", ["Character default"] = "角色默认配置",
-        ["Assigned profile:"] = "已分配配置：", ["Independent"] = "独立", ["No visited characters"] = "没有已访问角色",
+        ["Current"] = "当前", ["Active"] = "激活",
+        ["No visited characters"] = "没有已访问角色",
         ["Spec %d"] = "专精 %d", ["Profile changes are unavailable during combat."] = "战斗中无法更改配置。",
         ["Waiting for a safe profile context."] = "正在等待安全的配置环境。",
         ["Compatibility mode - profiles are read-only."] = "兼容模式 – 配置为只读。",
         ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "数据已损坏 – 配置为只读。请使用 /ss wipe 重置。",
-        ["Profile to manage:"] = "要管理的配置：", ["Choose a profile"] = "选择配置",
         ["All settings"] = "所有设置", ["Stat and gear settings"] = "属性与装备设置", ["Layout settings"] = "布局设置", ["Appearance settings"] = "外观设置", ["Choose settings to copy"] = "选择要复制的设置",
-        ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "将“%s”从“%s”复制到“%s”？这会更改 %d 个已分配专精和 %d 个其他引用。",
-        ["Assign to selected context"] = "分配给所选项", ["New from defaults..."] = "从默认值新建...",
-        ["Duplicate profile..."] = "复制配置...", ["Rename profile..."] = "重命名配置...",
-        ["Copy settings to assigned profile..."] = "复制设置到已分配配置...", ["Swap assignments..."] = "交换分配...",
-        ["Reset active profile..."] = "重置当前配置...", ["Delete profile..."] = "删除配置...",
-        ["Forget character..."] = "移除角色记录...", ["Confirm"] = "确认", ["Cancel"] = "取消",
-        ["Selected character"] = "所选角色", ["%s - %d known specs"] = "%s – %d 个已知专精",
-        ["Future new contexts"] = "未来新环境", ["Tank: %s"] = "坦克：%s",
-        ["Healer: %s"] = "治疗：%s", ["Damage: %s"] = "输出：%s",
+        ["Confirm"] = "确认", ["Cancel"] = "取消",
         ["Tank"] = "坦克", ["Healer"] = "治疗", ["Damage"] = "输出",
-        ["Use profile for all known specs..."] = "用于所有已知专精...",
-        ["Make shared specs independent..."] = "将共享专精设为独立...",
-        ["Set future role template..."] = "设置未来职责模板...", ["Choose a role"] = "选择职责",
-        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "将“%s”用于全部 %d 个已知专精（角色：“%s”）？现有配置和设置将保留。",
-        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "将 %d 个共享专精设为独立（角色：“%s”）？每个受影响专精都会获得单独副本；现有配置保持不变。",
+        ["Choose a role"] = "选择职责",
         ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "将“%s”作为未来坦克环境的来源？现有分配不会改变；每个新环境都会获得独立副本。",
         ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "将“%s”作为未来治疗环境的来源？现有分配不会改变；每个新环境都会获得独立副本。",
         ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "将“%s”作为未来输出环境的来源？现有分配不会改变；每个新环境都会获得独立副本。",
-        ["Unused"] = "未使用", ["Unused profile"] = "未使用的配置", ["New Profile"] = "新配置",
-        ["%s Copy"] = "%s 副本", ["Choose a replacement profile"] = "选择替代配置",
-        ["Choose a context"] = "选择项目", ["%d assigned specs, %d other references"] = "已分配专精 %d 个，其他引用 %d 个",
         ["Profile changes saved."] = "配置更改已保存。", ["Enter a valid profile name."] = "请输入有效的配置名称。",
-        ["Profile names can contain at most %d characters."] = "配置名称最多可包含 %d 个字符。",
         ["A profile with this name already exists."] = "已存在同名配置。",
         ["Profiles changed; review and try again."] = "配置已发生变化。请检查选择后重试。",
-        ["The last profile cannot be deleted."] = "无法删除最后一个配置。",
-        ["Choose a replacement profile."] = "请选择替代配置。",
         ["The current character cannot be forgotten."] = "无法移除当前角色的记录。",
         ["Nothing changed."] = "没有任何更改。",
         ["Profile operation failed. Review the selection and try again."] = "配置操作失败。请检查选择后重试。",
-        ["Delete profile \"%s\" and replace all references with \"%s\"? This affects %d assigned specs and %d other references."] = "删除配置“%s”并将所有引用替换为“%s”？这会影响 %d 个已分配专精和 %d 个其他引用。",
-        ["Swap \"%s\" and \"%s\"? Their profile settings stay unchanged."] = "交换“%s”和“%s”？它们的配置设置不会改变。",
-        ["Rename shared profile \"%s\" to \"%s\"? This affects %d assigned specs and %d other references."] = "将共享配置“%s”重命名为“%s”？这会影响 %d 个已分配专精和 %d 个其他引用。",
         ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "将当前配置“%s”重置为默认值？这会更改 %d 个已分配专精和 %d 个其他引用。",
-        ["Delete unused profile \"%s\"?"] = "删除未使用的配置“%s”？",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "移除“%s”的记录？角色记录将被删除，但配置设置会保留。",
         ["Auto (current: %s)"] = "自动（当前: %s）",
         ["Western European text"] = "西欧语言文本",
@@ -2676,52 +2586,43 @@ local LABELS_BY_LOCALE = {
         ["Contact"] = "聯絡", ["Click to copy the link."] = "點擊複製連結。",
         ["Copy the link below (Ctrl+C)."] = "複製下方連結（Ctrl+C）。",
         ["Open Settings"] = "開啟設定", ["Settings"] = "設定",
-        ["Profile:"] = "設定檔：", ["Manage"] = "管理", ["Reset"] = "重設", ["Profile Manager"] = "設定檔管理",
-        ["Automatic - %s / %s"] = "自動 – %s / %s", ["Shared by %d specs"] = "由 %d 個專精共用",
+        ["Profiles & sharing..."] = "設定檔與共用...", ["Profiles & sharing"] = "設定檔與共用",
+        ["Shared with %d specializations"] = "與 %d 個專精共用", ["Only this specialization"] = "僅此專精",
+        ["Unknown specialization (%d)"] = "未知專精（%d）",
+        ["Copy settings from..."] = "複製設定自...", ["Use the same settings as..."] = "使用相同設定...",
+        ["Use these settings for..."] = "將這些設定用於...", ["Stop sharing..."] = "停止共用...",
+        ["Advanced..."] = "進階...", ["Hide advanced"] = "隱藏進階選項",
+        ["Reset these settings..."] = "重設這些設定...", ["Forget this character..."] = "忘記此角色...",
+        ["Defaults for future specializations..."] = "未來專精的預設設定...", ["Delete unused settings..."] = "刪除未使用的設定...",
+        ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "將%s從「%s」複製到「%s」？之後目標會保留獨立設定。",
+        ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "讓「%s」與「%s」使用相同設定？之後的變更會同時影響兩者。",
+        ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "讓「%s」的共用設定也用於「%s」？已有 %d 個專精共用這些設定；之後的變更會影響全部 %d 個專精。",
+        ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "為「%s」建立這些設定的獨立副本？之後的變更將不再影響其他專精。",
+        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "重設「%s」使用的設定？同一次重設會影響 %d 個專精。",
+        ["Reset the settings used by \"%s\" to defaults?"] = "將「%s」使用的設定重設為預設值？",
+        ["This profile is also a default for future specializations; they will use the reset settings."] = "此設定檔也是未來專精的預設設定檔；重設後它們會使用重設後的設定。",
+        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "刪除 %d 組未使用的設定？使用中的設定與未來專精的預設設定會保留。",
         ["Switch pending until combat ends"] = "戰鬥結束後切換", ["Account default profile"] = "帳號預設設定檔",
-        ["Current"] = "目前", ["Active"] = "啟用", ["Character default"] = "角色預設設定檔",
-        ["Assigned profile:"] = "已指派設定檔：", ["Independent"] = "獨立", ["No visited characters"] = "沒有已造訪角色",
+        ["Current"] = "目前", ["Active"] = "啟用",
+        ["No visited characters"] = "沒有已造訪角色",
         ["Spec %d"] = "專精 %d", ["Profile changes are unavailable during combat."] = "戰鬥中無法變更設定檔。",
         ["Waiting for a safe profile context."] = "正在等待安全的設定檔環境。",
         ["Compatibility mode - profiles are read-only."] = "相容模式 – 設定檔為唯讀。",
         ["Corrupted data - profiles are read-only. Use /ss wipe to reset."] = "資料已損壞 – 設定檔為唯讀。請使用 /ss wipe 重設。",
-        ["Profile to manage:"] = "要管理的設定檔：", ["Choose a profile"] = "選擇設定檔",
         ["All settings"] = "所有設定", ["Stat and gear settings"] = "屬性與裝備設定", ["Layout settings"] = "版面設定", ["Appearance settings"] = "外觀設定", ["Choose settings to copy"] = "選擇要複製的設定",
-        ["Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."] = "將「%s」從「%s」複製到「%s」？這會變更 %d 個已指派專精和 %d 個其他參照。",
-        ["Assign to selected context"] = "指派給所選項目", ["New from defaults..."] = "從預設值新增...",
-        ["Duplicate profile..."] = "複製設定檔...", ["Rename profile..."] = "重新命名設定檔...",
-        ["Copy settings to assigned profile..."] = "複製設定到已指派設定檔...", ["Swap assignments..."] = "交換指派...",
-        ["Reset active profile..."] = "重設目前設定檔...", ["Delete profile..."] = "刪除設定檔...",
-        ["Forget character..."] = "移除角色記錄...", ["Confirm"] = "確認", ["Cancel"] = "取消",
-        ["Selected character"] = "所選角色", ["%s - %d known specs"] = "%s – %d 個已知專精",
-        ["Future new contexts"] = "未來新環境", ["Tank: %s"] = "坦克：%s",
-        ["Healer: %s"] = "治療：%s", ["Damage: %s"] = "輸出：%s",
+        ["Confirm"] = "確認", ["Cancel"] = "取消",
         ["Tank"] = "坦克", ["Healer"] = "治療", ["Damage"] = "輸出",
-        ["Use profile for all known specs..."] = "用於所有已知專精...",
-        ["Make shared specs independent..."] = "將共用專精設為獨立...",
-        ["Set future role template..."] = "設定未來職責範本...", ["Choose a role"] = "選擇職責",
-        ["Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."] = "將「%s」用於全部 %d 個已知專精（角色：「%s」）？現有設定檔和設定將保留。",
-        ["Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."] = "將 %d 個共用專精設為獨立（角色：「%s」）？每個受影響專精都會取得獨立副本；現有設定檔保持不變。",
+        ["Choose a role"] = "選擇職責",
         ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "將「%s」作為未來坦克環境的來源？現有指派不會變更；每個新環境都會取得獨立副本。",
         ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "將「%s」作為未來治療環境的來源？現有指派不會變更；每個新環境都會取得獨立副本。",
         ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "將「%s」作為未來輸出環境的來源？現有指派不會變更；每個新環境都會取得獨立副本。",
-        ["Unused"] = "未使用", ["Unused profile"] = "未使用的設定檔", ["New Profile"] = "新設定檔",
-        ["%s Copy"] = "%s 副本", ["Choose a replacement profile"] = "選擇替代設定檔",
-        ["Choose a context"] = "選擇項目", ["%d assigned specs, %d other references"] = "已指派專精 %d 個，其他參照 %d 個",
         ["Profile changes saved."] = "設定檔變更已儲存。", ["Enter a valid profile name."] = "請輸入有效的設定檔名稱。",
-        ["Profile names can contain at most %d characters."] = "設定檔名稱最多可包含 %d 個字元。",
         ["A profile with this name already exists."] = "已有同名設定檔。",
         ["Profiles changed; review and try again."] = "設定檔已發生變更。請檢查選擇後再試一次。",
-        ["The last profile cannot be deleted."] = "無法刪除最後一個設定檔。",
-        ["Choose a replacement profile."] = "請選擇替代設定檔。",
         ["The current character cannot be forgotten."] = "無法移除目前角色的記錄。",
         ["Nothing changed."] = "沒有任何變更。",
         ["Profile operation failed. Review the selection and try again."] = "設定檔操作失敗。請檢查選擇後再試一次。",
-        ["Delete profile \"%s\" and replace all references with \"%s\"? This affects %d assigned specs and %d other references."] = "刪除設定檔「%s」並將所有參照替換為「%s」？這會影響 %d 個已指派專精和 %d 個其他參照。",
-        ["Swap \"%s\" and \"%s\"? Their profile settings stay unchanged."] = "交換「%s」與「%s」？兩者的設定檔內容不會變更。",
-        ["Rename shared profile \"%s\" to \"%s\"? This affects %d assigned specs and %d other references."] = "將共用設定檔「%s」重新命名為「%s」？這會影響 %d 個已指派專精和 %d 個其他參照。",
         ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "將目前設定檔「%s」重設為預設值？這會變更 %d 個已指派專精和 %d 個其他參照。",
-        ["Delete unused profile \"%s\"?"] = "刪除未使用的設定檔「%s」？",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "移除「%s」的記錄？角色記錄將被刪除，但設定檔內容會保留。",
         ["Auto (current: %s)"] = "自動（目前: %s）",
         ["Western European text"] = "西歐語言文字",
@@ -3484,7 +3385,6 @@ addon.profileUI = {
     refreshCount = 0,
     selectedGUID = nil,
     selectedSpecID = nil,
-    selectedProfileID = nil,
 }
 
 addon.profileOps = {
@@ -3555,20 +3455,6 @@ function addon.profileOps.CountSpecAssignments(root)
     return counts
 end
 
-function addon.profileOps.CountSharedCharacterSpecs(root, guid, assignmentCounts)
-    local character = root.characters and root.characters[guid] or nil
-    if type(character) ~= "table" or not addon.dbRuntime.IsCleanTable(character) then return 0 end
-    local specProfiles = rawget(character, "specProfiles")
-    if type(specProfiles) ~= "table"
-        or not addon.dbRuntime.IsCleanTable(specProfiles) then return 0 end
-    local counts = assignmentCounts or addon.profileOps.CountSpecAssignments(root)
-    local shared = 0
-    for _, profileID in pairs(specProfiles) do
-        if (counts[profileID] or 0) > 1 then shared = shared + 1 end
-    end
-    return shared
-end
-
 function addon.profileUI.BuildViewModel()
     local root = addon.dbRuntime.Refresh()
     local runtime = addon.profileRuntime
@@ -3586,9 +3472,7 @@ function addon.profileUI.BuildViewModel()
         activeDisplayName = runtime.activeDisplayName,
         activeSpecName = runtime.activeSpecName,
         activeProfileID = addon.dbRuntime.activeProfileID,
-        activeProfileName = nil,
-        activeSharedCount = 0,
-        accountDefaultProfileID = nil,
+        unusedProfileCount = 0,
         roleTemplates = {},
         characters = {},
         profiles = {},
@@ -3596,25 +3480,14 @@ function addon.profileUI.BuildViewModel()
     if runtime.bootstrapPending then model.activeProfileID = nil end
     if model.readOnly then return model end
 
-    model.accountDefaultProfileID = root.account.defaultProfileID
     model.canMutate = combat == false and not pending
         and not runtime.transitioning and not addon.profileOps.inProgress
     local assignmentCounts = addon.profileOps.CountSpecAssignments(root)
     for _, role in ipairs(addon.profileOps.roleOrder) do
         local profileID = root.roleTemplates[role]
-        local profile = root.profiles[profileID]
         model.roleTemplates[role] = {
-            role = role,
             profileID = profileID,
-            profileName = profile and profile.name or "",
         }
-    end
-
-    local activeProfile = root.profiles[model.activeProfileID]
-    if addon.dbRuntime.IsCleanTable(activeProfile)
-        and addon.dbRuntime.IsCleanType(activeProfile.name, "string") then
-        model.activeProfileName = activeProfile.name
-        model.activeSharedCount = assignmentCounts[model.activeProfileID] or 0
     end
 
     for guid, character in pairs(root.characters) do
@@ -3623,29 +3496,17 @@ function addon.profileUI.BuildViewModel()
             displayName = character.displayName or L("Character"),
             lastSeen = character.lastSeen or 0,
             isCurrent = guid == model.activeGUID,
-            defaultProfileID = character.defaultProfileID,
-            defaultProfileName = nil,
-            defaultSharedCount = assignmentCounts[character.defaultProfileID] or 0,
-            knownSpecCount = 0,
-            sharedSpecCount = addon.profileOps.CountSharedCharacterSpecs(
-                root, guid, assignmentCounts),
             specs = {},
         }
-        local defaultProfile = character.defaultProfileID
-            and root.profiles[character.defaultProfileID] or nil
-        if defaultProfile then characterModel.defaultProfileName = defaultProfile.name end
         for specID, profileID in pairs(character.specProfiles or {}) do
-            local profile = root.profiles[profileID]
             characterModel.specs[#characterModel.specs + 1] = {
                 specID = specID,
                 specName = runtime.knownSpecNames[specID],
                 profileID = profileID,
-                profileName = profile and profile.name or "",
                 sharedCount = assignmentCounts[profileID] or 0,
                 isActive = guid == model.activeGUID and specID == model.activeSpecID
                     and profileID == model.activeProfileID,
             }
-            characterModel.knownSpecCount = characterModel.knownSpecCount + 1
         end
         table.sort(characterModel.specs, function(left, right)
             if left.isActive ~= right.isActive then return left.isActive end
@@ -3658,7 +3519,13 @@ function addon.profileUI.BuildViewModel()
         if left.lastSeen ~= right.lastSeen then return left.lastSeen > right.lastSeen end
         return left.guid < right.guid
     end)
-    model.profiles = addon.profileOps.BuildProfileCatalog(root)
+    for profileID in pairs(root.profiles) do
+        local references = addon.profileOps.CountReferences(root, profileID)
+        model.profiles[profileID] = { profileID = profileID, references = references }
+        if references.total == 0 then
+            model.unusedProfileCount = model.unusedProfileCount + 1
+        end
+    end
     return model
 end
 
@@ -4286,12 +4153,19 @@ function addon.dbRuntime.BuildRegistry(flat)
     return registry
 end
 
-function addon.profileRuntime.ReadCombatState()
-    local ok, value = pcall(InCombatLockdown)
+function addon.profileRuntime.ReadBooleanDecision(fn, ...)
+    if type(fn) ~= "function" then return nil end
+    local ok, value = pcall(fn, ...)
     if not ok then return nil end
     local secretOK, secret = pcall(issecretvalue, value)
     if not secretOK or secret or type(value) ~= "boolean" then return nil end
-    return value
+    local compareOK, isTrue = pcall(function() return value == true end)
+    if not compareOK then return nil end
+    return isTrue
+end
+
+function addon.profileRuntime.ReadCombatState()
+    return addon.profileRuntime.ReadBooleanDecision(InCombatLockdown)
 end
 
 function addon.profileRuntime.ReadPlayerContext()
@@ -4935,6 +4809,11 @@ function addon.profileRuntime.ResolveCurrent(initializing, combatEnded)
         runtime.ResetContextRetry()
         runtime.pendingResolution = false
         addon.profileUI.RefreshSafe()
+        if addon.fontRuntime.pendingSavedFont
+            and not addon.fontRuntime.pendingRetryScheduled
+            and type(addon.fontRuntime.schedulePendingSavedFontRetry) == "function" then
+            addon.fontRuntime.schedulePendingSavedFontRetry()
+        end
         if runtime.bootstrapPending and type(runtime.CompleteBootstrap) == "function" then
             return runtime.CompleteBootstrap()
         end
@@ -5087,18 +4966,6 @@ function addon.profileOps.NormalizeNameShape(rawName, maxCodepoints, truncate)
     return name, codepoints
 end
 
-function addon.profileOps.ValidateName(rawName, profiles, exceptProfileID)
-    local name, codepoints = addon.profileOps.NormalizeNameShape(
-        rawName, addon.profileOps.maxNameCodepoints, false)
-    if not name then return nil, codepoints end
-    for profileID, profile in pairs(profiles or {}) do
-        if profileID ~= exceptProfileID and profile.name == name then
-            return nil, "duplicate-name"
-        end
-    end
-    return name, codepoints
-end
-
 function addon.profileOps.BuildDefaultSettings(budget)
     local settings, copied = addon.dbRuntime.CloneSerializable(defaults, nil, budget)
     if not copied then return nil end
@@ -5134,33 +5001,10 @@ function addon.profileOps.CountReferences(root, profileID)
     return counts
 end
 
-function addon.profileOps.BuildProfileCatalog(root)
-    local catalog = {}
-    for profileID, profile in pairs(root.profiles) do
-        local references = addon.profileOps.CountReferences(root, profileID)
-        catalog[#catalog + 1] = {
-            profileID = profileID,
-            name = profile.name,
-            references = references,
-            isActive = profileID == addon.dbRuntime.activeProfileID,
-        }
-    end
-    table.sort(catalog, function(left, right)
-        if left.name ~= right.name then return left.name < right.name end
-        local leftNumber = tonumber(left.profileID:match("^p(%d+)$")) or math.huge
-        local rightNumber = tonumber(right.profileID:match("^p(%d+)$")) or math.huge
-        return leftNumber < rightNumber
-    end)
-    return catalog
-end
-
 function addon.profileOps.ResolveAssignment(root, guid, specID)
     if not addon.dbRuntime.IsCleanType(guid, "string") or guid == "" then return nil end
     local character = root.characters[guid]
     if not addon.dbRuntime.IsCleanTable(character) then return nil end
-    if specID == nil then
-        return character.defaultProfileID or root.account.defaultProfileID
-    end
     if not addon.dbRuntime.IsCleanType(specID, "number") or not IsFiniteNumber(specID)
         or specID <= 0 or specID ~= math.floor(specID) then return nil end
     return character.specProfiles and character.specProfiles[specID] or nil
@@ -5580,123 +5424,118 @@ function addon.profileOps.UniqueProfileName(baseName, profiles, fallbackName)
     return nil, "name-exhausted"
 end
 
-function addon.profileOps.Create(name, expected)
-    return addon.profileOps.Execute(expected, function(root)
-        local normalized, nameStatus = addon.profileOps.ValidateName(name, root.profiles)
-        if not normalized then return nil, nameStatus end
-        local cloneBudget = addon.dbRuntime.NewGraphBudget()
-        local account, copied = addon.dbRuntime.CloneSerializable(
-            root.account, nil, cloneBudget)
-        if not copied or not addon.dbRuntime.IsCleanTable(account) then
-            return nil, "clone-failed"
-        end
-        local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
-        local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
-        local settings = addon.profileOps.BuildDefaultSettings(cloneBudget)
-        if not profileID or not settings then return nil, "clone-failed" end
-        profiles[profileID] = { name = normalized, settings = settings }
-        local transaction = addon.profileOps.NewTransaction(root)
-        transaction.account = account
-        transaction.profiles = profiles
-        return transaction, profileID
-    end)
-end
-
-function addon.profileOps.Duplicate(sourceProfileID, name, expected)
-    return addon.profileOps.Execute(expected, function(root)
-        local source = root.profiles[sourceProfileID]
-        if not source then return nil, "missing-profile" end
-        local normalized, nameStatus = addon.profileOps.ValidateName(name, root.profiles)
-        if not normalized then return nil, nameStatus end
-        local cloneBudget = addon.dbRuntime.NewGraphBudget()
-        local account, copied = addon.dbRuntime.CloneSerializable(
-            root.account, nil, cloneBudget)
-        local duplicate = addon.profileRuntime.CloneProfile(source, normalized, cloneBudget)
-        if not copied or not duplicate then return nil, "clone-failed" end
-        local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
-        local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
-        if not profileID then return nil, "id-exhausted" end
-        profiles[profileID] = duplicate
-        local transaction = addon.profileOps.NewTransaction(root)
-        transaction.account = account
-        transaction.profiles = profiles
-        return transaction, profileID
-    end)
-end
-
-function addon.profileOps.Rename(profileID, name, expected)
-    return addon.profileOps.Execute(expected, function(root)
-        local profile = root.profiles[profileID]
-        if not profile then return nil, "missing-profile" end
-        local normalized, nameStatus = addon.profileOps.ValidateName(
-            name, root.profiles, profileID)
-        if not normalized then return nil, nameStatus end
-        if profile.name == normalized then return nil, "no-change" end
-        local renamed = addon.profileRuntime.ShallowCopy(profile)
-        renamed.name = normalized
-        local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
-        profiles[profileID] = renamed
-        local transaction = addon.profileOps.NewTransaction(root)
-        transaction.profiles = profiles
-        return transaction, profileID
-    end)
-end
-
-function addon.profileOps.CopySettings(sourceProfileID, targetProfileID, scope, expected)
-    if type(scope) == "table" and expected == nil then
-        expected, scope = scope, "all"
+function addon.profileOps.BuildCopiedSettings(source, target, scope, cloneBudget)
+    if not addon.dbRuntime.IsCleanTable(source)
+        or not addon.dbRuntime.IsCleanTable(target)
+        or not addon.dbRuntime.IsCleanTable(source.settings)
+        or not addon.dbRuntime.IsCleanTable(target.settings) then
+        return nil, "clone-failed"
     end
     scope = scope or "all"
+    local settings, copied
+    if scope == "all" then
+        settings, copied = addon.dbRuntime.CloneSerializable(
+            source.settings, nil, cloneBudget)
+        if copied and addon.dbRuntime.IsCleanTable(settings) then
+            settings.forceLocale = nil
+            settings.updateInterval = nil
+        end
+    else
+        local scopeKeys = addon.profileOps.copyScopeKeys[scope]
+        if not scopeKeys then return nil, "invalid-scope" end
+        settings, copied = addon.dbRuntime.CloneSerializable(
+            target.settings, nil, cloneBudget)
+        if copied and addon.dbRuntime.IsCleanTable(settings) then
+            for key in pairs(scopeKeys) do
+                local sourceValue = source.settings[key]
+                if sourceValue == nil then
+                    settings[key] = nil
+                else
+                    local copiedValue, valueCopied = addon.dbRuntime.CloneSerializable(
+                        sourceValue, nil, cloneBudget)
+                    if not valueCopied then return nil, "clone-failed" end
+                    settings[key] = copiedValue
+                end
+            end
+            if scope == "stats" then settings.appearancePresetID = "custom" end
+        end
+    end
+    if not copied or not addon.dbRuntime.IsCleanTable(settings) then
+        return nil, "clone-failed"
+    end
+    return settings
+end
+
+function addon.profileOps.CloneContextAssignment(
+    root, character, specID, expectedProfileID, cloneBudget)
+    local account, accountCopied = addon.dbRuntime.CloneSerializable(
+        root.account, nil, cloneBudget)
+    local changedCharacter, characterCopied = addon.dbRuntime.CloneSerializable(
+        character, nil, cloneBudget)
+    if not accountCopied or type(account) ~= "table"
+        or not addon.dbRuntime.IsCleanTable(account)
+        or not characterCopied or type(changedCharacter) ~= "table"
+        or not addon.dbRuntime.IsCleanTable(changedCharacter) then
+        return nil
+    end
+    local changedSpecProfiles = rawget(changedCharacter, "specProfiles")
+    if type(changedSpecProfiles) ~= "table"
+        or not addon.dbRuntime.IsCleanTable(changedSpecProfiles)
+        or changedSpecProfiles[specID] ~= expectedProfileID then
+        return nil
+    end
+    return account, changedCharacter, changedSpecProfiles
+end
+
+function addon.profileOps.CopySettingsToContext(
+    sourceProfileID, guid, specID, scope, expected)
     return addon.profileOps.Execute(expected, function(root)
+        local character = root.characters[guid]
+        local targetProfileID = addon.profileOps.ResolveAssignment(root, guid, specID)
+        local source = root.profiles[sourceProfileID]
+        local target = targetProfileID and root.profiles[targetProfileID] or nil
         if sourceProfileID == targetProfileID then return nil, "same-profile" end
-        local source, target = root.profiles[sourceProfileID], root.profiles[targetProfileID]
-        if not source or not target then return nil, "missing-profile" end
-        if not addon.dbRuntime.IsCleanTable(source.settings)
-            or not addon.dbRuntime.IsCleanTable(target.settings) then
-            return nil, "clone-failed"
+        if not targetProfileID or not character or not source or not target
+            or not addon.dbRuntime.IsCleanType(specID, "number") then
+            return nil, "missing-context"
         end
         local cloneBudget = addon.dbRuntime.NewGraphBudget()
-        local settings, copied
-        if scope == "all" then
-            settings, copied = addon.dbRuntime.CloneSerializable(
-                source.settings, nil, cloneBudget)
-            if copied and addon.dbRuntime.IsCleanTable(settings) then
-                settings.forceLocale = nil
-                settings.updateInterval = nil
-            end
-        else
-            local scopeKeys = addon.profileOps.copyScopeKeys[scope]
-            if not scopeKeys then return nil, "invalid-scope" end
-            settings, copied = addon.dbRuntime.CloneSerializable(
-                target.settings, nil, cloneBudget)
-            if copied and addon.dbRuntime.IsCleanTable(settings) then
-                for key in pairs(scopeKeys) do
-                    local sourceValue = source.settings[key]
-                    if sourceValue == nil then
-                        settings[key] = nil
-                    else
-                        local copiedValue, valueCopied =
-                            addon.dbRuntime.CloneSerializable(
-                                sourceValue, nil, cloneBudget)
-                        if not valueCopied then return nil, "clone-failed" end
-                        settings[key] = copiedValue
-                    end
-                end
-                if scope == "stats" then
-                    settings.appearancePresetID = "custom"
-                end
-            end
-        end
-        if not copied or not addon.dbRuntime.IsCleanTable(settings) then
-            return nil, "clone-failed"
-        end
-        local changedTarget = addon.profileRuntime.ShallowCopy(target)
-        changedTarget.settings = settings
+        local settings, settingsStatus = addon.profileOps.BuildCopiedSettings(
+            source, target, scope, cloneBudget)
+        if not settings then return nil, settingsStatus end
+
+        local references = addon.profileOps.CountReferences(root, targetProfileID)
         local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
-        profiles[targetProfileID] = changedTarget
         local transaction = addon.profileOps.NewTransaction(root)
+        if references.total == 1 and references.specs == 1 then
+            local changedTarget = addon.profileRuntime.ShallowCopy(target)
+            changedTarget.settings = settings
+            profiles[targetProfileID] = changedTarget
+            transaction.profiles = profiles
+            return transaction, { profileID = targetProfileID, created = false }
+        end
+
+        local account, changedCharacter, changedSpecProfiles =
+            addon.profileOps.CloneContextAssignment(
+                root, character, specID, targetProfileID, cloneBudget)
+        if not account then return nil, "clone-failed" end
+        local context = {
+            displayName = character.displayName,
+            specID = specID,
+            specName = addon.profileRuntime.knownSpecNames[specID],
+        }
+        local name, nameStatus = addon.profileRuntime.ProfileName(context, "spec", profiles)
+        if not name then return nil, nameStatus or "name-exhausted" end
+        local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
+        if not profileID then return nil, "id-exhausted" end
+        profiles[profileID] = { name = name, settings = settings }
+        changedSpecProfiles[specID] = profileID
+        local characters = addon.profileRuntime.ShallowCopy(root.characters)
+        characters[guid] = changedCharacter
+        transaction.account = account
         transaction.profiles = profiles
-        return transaction, targetProfileID
+        transaction.characters = characters
+        return transaction, { profileID = profileID, created = true }
     end)
 end
 
@@ -5713,14 +5552,10 @@ function addon.profileOps.Assign(guid, specID, profileID, expected)
             or not addon.dbRuntime.IsCleanTable(changedCharacter) then
             return nil, "clone-failed"
         end
-        if specID == nil then
-            changedCharacter.defaultProfileID = profileID
-        else
-            local specProfiles = rawget(changedCharacter, "specProfiles")
-            if type(specProfiles) ~= "table" or not addon.dbRuntime.IsCleanTable(specProfiles)
-                or not specProfiles[specID] then return nil, "missing-context" end
-            specProfiles[specID] = profileID
-        end
+        local specProfiles = rawget(changedCharacter, "specProfiles")
+        if type(specProfiles) ~= "table" or not addon.dbRuntime.IsCleanTable(specProfiles)
+            or not specProfiles[specID] then return nil, "missing-context" end
+        specProfiles[specID] = profileID
         local characters = addon.profileRuntime.ShallowCopy(root.characters)
         characters[guid] = changedCharacter
         local transaction = addon.profileOps.NewTransaction(root)
@@ -5729,125 +5564,44 @@ function addon.profileOps.Assign(guid, specID, profileID, expected)
     end)
 end
 
-function addon.profileOps.UseProfileForKnownSpecs(guid, profileID, expected)
+function addon.profileOps.MakeContextIndependent(guid, specID, expected)
     return addon.profileOps.Execute(expected, function(root)
-        if not addon.dbRuntime.IsCleanType(guid, "string") or guid == "" then
-            return nil, "missing-context"
-        end
-        if not addon.dbRuntime.IsCleanType(profileID, "string")
-            or not root.profiles[profileID] then return nil, "missing-profile" end
         local character = root.characters[guid]
-        if type(character) ~= "table"
-            or not addon.dbRuntime.IsCleanTable(character) then return nil, "missing-context" end
-        local sourceSpecProfiles = rawget(character, "specProfiles")
-        if type(sourceSpecProfiles) ~= "table"
-            or not addon.dbRuntime.IsCleanTable(sourceSpecProfiles) then return nil, "missing-context" end
-        local changedCharacter, copied = addon.dbRuntime.CloneSerializable(character)
-        if not copied or type(changedCharacter) ~= "table"
-            or not addon.dbRuntime.IsCleanTable(changedCharacter) then
-            return nil, "clone-failed"
-        end
-        local specProfiles = rawget(changedCharacter, "specProfiles")
-        if type(specProfiles) ~= "table"
-            or not addon.dbRuntime.IsCleanTable(specProfiles) then return nil, "clone-failed" end
-        local knownCount, changedCount = 0, 0
-        for specID, assignedProfileID in pairs(specProfiles) do
-            knownCount = knownCount + 1
-            if assignedProfileID ~= profileID then
-                specProfiles[specID] = profileID
-                changedCount = changedCount + 1
-            end
-        end
-        if knownCount == 0 then return nil, "missing-context" end
-        if changedCount == 0 then return nil, "no-change" end
-        local characters = addon.profileRuntime.ShallowCopy(root.characters)
-        characters[guid] = changedCharacter
-        local transaction = addon.profileOps.NewTransaction(root)
-        transaction.characters = characters
-        return transaction, {
-            profileID = profileID,
-            changedCount = changedCount,
-        }
-    end)
-end
-
-function addon.profileOps.MakeKnownSpecsIndependent(guid, expected)
-    return addon.profileOps.Execute(expected, function(root)
-        if not addon.dbRuntime.IsCleanType(guid, "string") or guid == "" then
+        local sourceProfileID = addon.profileOps.ResolveAssignment(root, guid, specID)
+        local sourceProfile = sourceProfileID and root.profiles[sourceProfileID] or nil
+        if not character or not sourceProfile
+            or not addon.dbRuntime.IsCleanType(specID, "number") then
             return nil, "missing-context"
         end
-        local character = root.characters[guid]
-        if type(character) ~= "table" or not addon.dbRuntime.IsCleanTable(character) then
-            return nil, "missing-context"
-        end
-        local sourceSpecProfiles = rawget(character, "specProfiles")
-        if type(sourceSpecProfiles) ~= "table"
-            or not addon.dbRuntime.IsCleanTable(sourceSpecProfiles) then return nil, "missing-context" end
-        local assignmentCounts = addon.profileOps.CountSpecAssignments(root)
-        local affectedSpecs = {}
-        for specID, sourceProfileID in pairs(sourceSpecProfiles) do
-            if (assignmentCounts[sourceProfileID] or 0) > 1 then
-                affectedSpecs[#affectedSpecs + 1] = specID
-            end
-        end
-        table.sort(affectedSpecs)
-        if #affectedSpecs == 0 then return nil, "no-change" end
+        local references = addon.profileOps.CountReferences(root, sourceProfileID)
+        if references.total == 1 and references.specs == 1 then return nil, "no-change" end
 
         local cloneBudget = addon.dbRuntime.NewGraphBudget()
-        local account, accountCopied = addon.dbRuntime.CloneSerializable(
-            root.account, nil, cloneBudget)
-        local changedCharacter, characterCopied = addon.dbRuntime.CloneSerializable(
-            character, nil, cloneBudget)
-        if not accountCopied or type(account) ~= "table"
-            or not addon.dbRuntime.IsCleanTable(account)
-            or not characterCopied or type(changedCharacter) ~= "table"
-            or not addon.dbRuntime.IsCleanTable(changedCharacter) then
-            return nil, "clone-failed"
-        end
-        local changedSpecProfiles = rawget(changedCharacter, "specProfiles")
-        if type(changedSpecProfiles) ~= "table"
-            or not addon.dbRuntime.IsCleanTable(changedSpecProfiles) then
-            return nil, "clone-failed"
-        end
+        local account, changedCharacter, changedSpecProfiles =
+            addon.profileOps.CloneContextAssignment(
+                root, character, specID, sourceProfileID, cloneBudget)
+        if not account then return nil, "clone-failed" end
         local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
-        local assignments = {}
-        local changedCount = 0
-        for _, specID in ipairs(affectedSpecs) do
-            local sourceProfileID = changedSpecProfiles[specID]
-            local sourceProfile = profiles[sourceProfileID]
-            if type(sourceProfile) ~= "table"
-                or not addon.dbRuntime.IsCleanTable(sourceProfile) then
-                return nil, "missing-profile"
-            end
-            local context = {
-                displayName = character.displayName,
-                specID = specID,
-                specName = addon.profileRuntime.knownSpecNames[specID],
-            }
-            local name, nameStatus = addon.profileRuntime.ProfileName(
-                context, "spec", profiles)
-            if not name then return nil, nameStatus or "name-exhausted" end
-            local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
-            if not profileID then return nil, "id-exhausted" end
-            local clone = addon.profileRuntime.CloneProfile(sourceProfile, name, cloneBudget)
-            if type(clone) ~= "table"
-                or not addon.dbRuntime.IsCleanTable(clone) then return nil, "clone-failed" end
-            profiles[profileID] = clone
-            changedSpecProfiles[specID] = profileID
-            assignments[specID] = profileID
-            changedCount = changedCount + 1
-        end
-        if changedCount ~= #affectedSpecs then return nil, "clone-failed" end
+        local context = {
+            displayName = character.displayName,
+            specID = specID,
+            specName = addon.profileRuntime.knownSpecNames[specID],
+        }
+        local name, nameStatus = addon.profileRuntime.ProfileName(context, "spec", profiles)
+        if not name then return nil, nameStatus or "name-exhausted" end
+        local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
+        if not profileID then return nil, "id-exhausted" end
+        local clone = addon.profileRuntime.CloneProfile(sourceProfile, name, cloneBudget)
+        if not clone then return nil, "clone-failed" end
+        profiles[profileID] = clone
+        changedSpecProfiles[specID] = profileID
         local characters = addon.profileRuntime.ShallowCopy(root.characters)
         characters[guid] = changedCharacter
         local transaction = addon.profileOps.NewTransaction(root)
         transaction.account = account
         transaction.profiles = profiles
         transaction.characters = characters
-        return transaction, {
-            assignments = assignments,
-            changedCount = changedCount,
-        }
+        return transaction, profileID
     end)
 end
 
@@ -5869,50 +5623,8 @@ function addon.profileOps.SetRoleTemplate(role, profileID, expected)
     end)
 end
 
-function addon.profileOps.Swap(left, right, expected)
+function addon.profileOps.ResetProfile(profileID, expected)
     return addon.profileOps.Execute(expected, function(root)
-        if type(left) ~= "table" or type(right) ~= "table"
-            or (left.guid == right.guid and left.specID == right.specID) then
-            return nil, "same-context"
-        end
-        local leftProfileID = addon.profileOps.ResolveAssignment(root, left.guid, left.specID)
-        local rightProfileID = addon.profileOps.ResolveAssignment(root, right.guid, right.specID)
-        if not leftProfileID or not rightProfileID then return nil, "missing-context" end
-        if leftProfileID == rightProfileID then return nil, "same-profile" end
-        local characters = addon.profileRuntime.ShallowCopy(root.characters)
-        local changed = {}
-        local cloneBudget = addon.dbRuntime.NewGraphBudget()
-        for _, context in ipairs({ left, right }) do
-            if not changed[context.guid] then
-                local character, copied = addon.dbRuntime.CloneSerializable(
-                    root.characters[context.guid], nil, cloneBudget)
-                if not copied or not addon.dbRuntime.IsCleanTable(character) then
-                    return nil, "clone-failed"
-                end
-                changed[context.guid] = character
-                characters[context.guid] = character
-            end
-        end
-        local function setAssignment(context, profileID)
-            local character = changed[context.guid]
-            if context.specID == nil then
-                character.defaultProfileID = profileID
-            else
-                character.specProfiles[context.specID] = profileID
-            end
-        end
-        setAssignment(left, rightProfileID)
-        setAssignment(right, leftProfileID)
-        local transaction = addon.profileOps.NewTransaction(root)
-        transaction.characters = characters
-        return transaction, { left = rightProfileID, right = leftProfileID }
-    end)
-end
-
-function addon.profileOps.ResetCurrent(expectedActiveProfileID, expected)
-    return addon.profileOps.Execute(expected, function(root)
-        local profileID = addon.dbRuntime.activeProfileID
-        if profileID ~= expectedActiveProfileID then return nil, "stale" end
         local profile = root.profiles[profileID]
         if not profile then return nil, "missing-profile" end
         local settings = addon.profileOps.BuildDefaultSettings()
@@ -5924,6 +5636,23 @@ function addon.profileOps.ResetCurrent(expectedActiveProfileID, expected)
         local transaction = addon.profileOps.NewTransaction(root)
         transaction.profiles = profiles
         return transaction, profileID
+    end)
+end
+
+function addon.profileOps.DeleteUnusedProfiles(expected)
+    return addon.profileOps.Execute(expected, function(root)
+        local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
+        local deleted = 0
+        for profileID in pairs(root.profiles) do
+            if addon.profileOps.CountReferences(root, profileID).total == 0 then
+                profiles[profileID] = nil
+                deleted = deleted + 1
+            end
+        end
+        if deleted == 0 then return nil, "no-change" end
+        local transaction = addon.profileOps.NewTransaction(root)
+        transaction.profiles = profiles
+        return transaction, deleted
     end)
 end
 
@@ -6024,86 +5753,6 @@ function addon.profileOps.RecoverCorruptRoot(expected)
         end
         return freshRoot, nil, "p1"
     end, true)
-end
-
-function addon.profileOps.DeleteWithReplacement(profileID, replacementProfileID, expected)
-    return addon.profileOps.Execute(expected, function(root)
-        if not root.profiles[profileID] then return nil, "missing-profile" end
-        if replacementProfileID == profileID then return nil, "same-profile" end
-        local profileCount = 0
-        for _ in pairs(root.profiles) do profileCount = profileCount + 1 end
-        if profileCount <= 1 then return nil, "last-profile" end
-        local references = addon.profileOps.CountReferences(root, profileID)
-        if references.total > 0 then
-            if not root.profiles[replacementProfileID] then
-                return nil, "replacement-required"
-            end
-        elseif profileID == addon.dbRuntime.activeProfileID
-            and not root.profiles[replacementProfileID] then
-            return nil, "replacement-required"
-        elseif replacementProfileID ~= nil and not root.profiles[replacementProfileID] then
-            return nil, "missing-profile"
-        end
-
-        local transaction = addon.profileOps.NewTransaction(root)
-        local cloneBudget = addon.dbRuntime.NewGraphBudget()
-        local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
-        profiles[profileID] = nil
-        transaction.profiles = profiles
-        if references.accountDefault > 0 then
-            local account, copied = addon.dbRuntime.CloneSerializable(
-                root.account, nil, cloneBudget)
-            if not copied or type(account) ~= "table"
-                or not addon.dbRuntime.IsCleanTable(account) then return nil, "clone-failed" end
-            account.defaultProfileID = replacementProfileID
-            transaction.account = account
-        end
-        if references.roleTemplates > 0 then
-            local roleTemplates = addon.profileRuntime.ShallowCopy(root.roleTemplates)
-            for role, assignedProfileID in pairs(roleTemplates) do
-                if assignedProfileID == profileID then roleTemplates[role] = replacementProfileID end
-            end
-            transaction.roleTemplates = roleTemplates
-        end
-        if references.specs > 0 or references.characterDefaults > 0 then
-            local characters = addon.profileRuntime.ShallowCopy(root.characters)
-            for guid, character in pairs(root.characters) do
-                local needsClone = character.defaultProfileID == profileID
-                if not needsClone then
-                    for _, assignedProfileID in pairs(character.specProfiles or {}) do
-                        if assignedProfileID == profileID then needsClone = true; break end
-                    end
-                end
-                if needsClone then
-                    local changedCharacter, copied = addon.dbRuntime.CloneSerializable(
-                        character, nil, cloneBudget)
-                    if not copied or type(changedCharacter) ~= "table"
-                        or not addon.dbRuntime.IsCleanTable(changedCharacter) then
-                        return nil, "clone-failed"
-                    end
-                    if changedCharacter.defaultProfileID == profileID then
-                        changedCharacter.defaultProfileID = replacementProfileID
-                    end
-                    local specProfiles = rawget(changedCharacter, "specProfiles")
-                    if type(specProfiles) == "nil" then
-                        specProfiles = {}
-                        changedCharacter.specProfiles = specProfiles
-                    elseif type(specProfiles) ~= "table"
-                        or not addon.dbRuntime.IsCleanTable(specProfiles) then
-                        return nil, "clone-failed"
-                    end
-                    for specID, assignedProfileID in pairs(specProfiles) do
-                        if assignedProfileID == profileID then
-                            specProfiles[specID] = replacementProfileID
-                        end
-                    end
-                    characters[guid] = changedCharacter
-                end
-            end
-            transaction.characters = characters
-        end
-        return transaction, replacementProfileID
-    end)
 end
 
 function addon.profileOps.ForgetCharacter(guid, expected)
@@ -7699,7 +7348,17 @@ function addon.fontRuntime.schedulePendingSavedFontRetry()
         addon.fontRuntime.pendingRetryScheduled = false
         local activeDB = addon.dbRuntime.GetActiveSettings()
         local writableDB = addon.dbRuntime.GetWritableSettings(false)
-        if not writableDB or not SameFontPath(activeDB.font, pending) then
+        if not activeDB or not SameFontPath(activeDB.font, pending) then
+            addon.fontRuntime.pendingSavedFont = nil
+            addon.fontRuntime.pendingRetryGeneration = addon.fontRuntime.pendingRetryGeneration + 1
+            return
+        end
+        if not writableDB then
+            if not addon.dbRuntime.readOnly and addon.profileRuntime.BlocksUserWrites() then
+                addon.fontRuntime.pendingRetryAttempt = math.max(
+                    0, addon.fontRuntime.pendingRetryAttempt - 1)
+                return
+            end
             addon.fontRuntime.pendingSavedFont = nil
             addon.fontRuntime.pendingRetryGeneration = addon.fontRuntime.pendingRetryGeneration + 1
             return
@@ -8239,21 +7898,25 @@ local function BuildTertiaryLines(labels, ratings, values)
             local runPct = ((run or 0) / 7) * 100
             local flightPct = ((flight or 0) / 7) * 100
             local swimPct = ((swim or 0) / 7) * 100
-            local swimming = IsSwimming("player")
-            local speedPct = runPct
-            if swimming then
-                speedPct = swimPct
-            elseif IsFlying("player") then
-                speedPct = flightPct
+            local swimming = addon.profileRuntime.ReadBooleanDecision(IsSwimming, "player")
+            local flying = addon.profileRuntime.ReadBooleanDecision(IsFlying, "player")
+            local falling = addon.profileRuntime.ReadBooleanDecision(IsFalling, "player")
+            if swimming ~= nil and flying ~= nil and falling ~= nil then
+                local speedPct = runPct
+                if swimming then
+                    speedPct = swimPct
+                elseif flying then
+                    speedPct = flightPct
+                end
+                -- Blizzard keeps the swim value while falling out of water so Movement
+                -- does not flicker to ground speed during the jump/fall transition.
+                if falling then
+                    if cached.speedWasSwimming then speedPct = swimPct end
+                else
+                    cached.speedWasSwimming = swimming
+                end
+                cached.speedPct = speedPct
             end
-            -- Blizzard keeps the swim value while falling out of water so Movement
-            -- does not flicker to ground speed during the jump/fall transition.
-            if IsFalling("player") then
-                if cached.speedWasSwimming then speedPct = swimPct end
-            else
-                cached.speedWasSwimming = swimming
-            end
-            cached.speedPct = speedPct
         end
         local speed = cached.speedPct
         local speedRatingDisplay = needRating
@@ -8767,7 +8430,15 @@ local function PushRefresher(fn) tinsert(configRefreshers, fn) end
 -- miss one and ship inconsistent UI. CONFIG_FONT routes through LocaleAwareDefaultFont
 -- to dodge the FRIZQT-on-CJK rendering trap
 -- while resisting third-party-addon hijacks of the STANDARD_TEXT_FONT global.
-local CONFIG_FONT       = LocaleAwareDefaultFont()
+local function LocaleAwareConfigFont()
+    local locale = GetLocale()
+    if locale == "koKR" or locale == "zhCN" or locale == "zhTW" then
+        return LocaleAwareDefaultFont()
+    end
+    return "Fonts\\ARIALN.TTF"
+end
+
+local CONFIG_FONT       = LocaleAwareConfigFont()
 local CONFIG_FONT_SIZE  = 12
 
 -- Locale-aware settings UI font: same idea as MaybeAutoSwitchFont for stat panels,
@@ -9229,7 +8900,8 @@ local function CreateColorSwatch(parent, statName, x, y)
     local geometry = addon.settingsDesign.tokens.geometry
     btn:SetSize(geometry.swatchSize, geometry.swatchSize)
     local surface = addon.settingsDesign.CreateTextureSurface(btn, "raised")
-    surface:SetAllPoints(btn)
+    surface:SetPoint("TOPLEFT", btn, "TOPLEFT", 2, -2)
+    surface:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -2, 2)
     btn.statsProSurface = surface
     local well = btn:CreateTexture(nil, "ARTWORK")
     well:SetPoint("CENTER")
@@ -9405,32 +9077,34 @@ end
 -- The Settings shell uses one explicit visual vocabulary.  Keep this runtime-only:
 -- profile data and preview/commit semantics stay owned by their existing modules.
 -- WHY table methods instead of more locals: this file is close to Lua 5.1's local and
--- closure limits, and T2-85 can reuse the same roles without duplicating literals.
+-- closure limits, and shared controls can reuse the same roles without duplicating literals.
 addon.settingsDesign = {
     tokens = {
         colors = {
-            window = { 0.018, 0.022, 0.020, 0.96 },
-            raised = { 0.030, 0.038, 0.034, 0.97 },
-            profile = { 0.050, 0.064, 0.057, 0.92 },
-            viewport = { 0.014, 0.018, 0.016, 0.78 },
-            section = { 0.050, 0.064, 0.057, 0.72 },
-            borderStrong = { 0.24, 0.28, 0.26, 0.85 },
-            borderSoft = { 0.22, 0.25, 0.23, 0.38 },
-            separator = { 0.42, 0.46, 0.44, 0.28 },
-            accent = { 0.10, 0.82, 0.48, 1 },
-            accentMuted = { 0.10, 0.82, 0.48, 0.28 },
-            textPrimary = { 0.92, 0.94, 0.93, 1 },
-            textSecondary = { 0.70, 0.74, 0.72, 1 },
-            textMuted = { 0.49, 0.54, 0.51, 1 },
-            textDisabled = { 0.38, 0.41, 0.40, 1 },
-            warning = { 1, 0.68, 0.22, 1 },
-            danger = { 0.86, 0.28, 0.25, 1 },
-            hover = { 0.10, 0.13, 0.115, 0.92 },
-            pressed = { 0.10, 0.82, 0.48, 0.12 },
-            rowHover = { 1, 1, 1, 0.045 },
-            rowPressed = { 1, 1, 1, 0.075 },
-            selected = { 0.10, 0.82, 0.48, 0.16 },
-            track = { 0.22, 0.25, 0.23, 0.62 },
+            window = { 0.090, 0.102, 0.098, 0.995 },
+            raised = { 0.137, 0.157, 0.149, 0.99 },
+            profile = { 0.102, 0.176, 0.149, 0.985 },
+            viewport = { 0.071, 0.082, 0.078, 0.985 },
+            borderStrong = { 0.360, 0.400, 0.382, 0.80 },
+            borderSoft = { 0.235, 0.275, 0.255, 0.62 },
+            separator = { 0.420, 0.455, 0.438, 0.42 },
+            accent = { 0.200, 0.827, 0.604, 1 },
+            accentMuted = { 0.200, 0.827, 0.604, 0.20 },
+            positive = { 0.200, 0.827, 0.604, 1 },
+            positiveMuted = { 0.200, 0.827, 0.604, 0.18 },
+            textPrimary = { 0.945, 0.957, 0.951, 1 },
+            textSecondary = { 0.725, 0.760, 0.742, 1 },
+            textMuted = { 0.530, 0.575, 0.552, 1 },
+            textDisabled = { 0.390, 0.420, 0.405, 1 },
+            warning = { 0.960, 0.720, 0.300, 1 },
+            danger = { 0.920, 0.380, 0.350, 1 },
+            hover = { 0.155, 0.190, 0.174, 0.98 },
+            pressed = { 0.200, 0.827, 0.604, 0.14 },
+            rowHover = { 1, 1, 1, 0.055 },
+            rowPressed = { 0.200, 0.827, 0.604, 0.10 },
+            selected = { 0.200, 0.827, 0.604, 0.16 },
+            track = { 0.255, 0.292, 0.274, 0.80 },
+            transparent = { 0, 0, 0, 0 },
         },
         typography = {
             title = { size = 16, flags = "OUTLINE", color = "textPrimary" },
@@ -9453,12 +9127,11 @@ addon.settingsDesign = {
             managerDetailInset = 286,
             titleSurfaceInset = 5, titleSurfaceHeight = 35, titleHeight = 40,
             titleTextInset = 16, titleTextTop = 11,
-            profileInset = 14, profileTop = 44, profileHeight = 64,
-            profileFieldInset = 68, profileFieldWidth = 286, manageWidth = 100,
-            profileActionGap = 3,
-            tabInset = 18, tabTop = 116, tabHeight = 28, tabGap = 4, tabWidth = 152,
-            viewportInset = 12, viewportTop = 152, viewportBottom = 12,
-            scrollLeft = 16, scrollRight = 32, scrollTop = 156, scrollBottom = 16,
+            profileInset = 14, profileTop = 44, profileHeight = 34,
+            profileFieldInset = 8, profileFieldWidth = 316, manageWidth = 132,
+            tabInset = 18, tabTop = 86, tabHeight = 28, tabGap = 4, tabWidth = 152,
+            viewportInset = 12, viewportTop = 122, viewportBottom = 12,
+            scrollLeft = 16, scrollRight = 32, scrollTop = 126, scrollBottom = 16,
             contentWidth = 450,
             minHitTarget = 24,
             sectionHeaderHeight = 22,
@@ -9467,7 +9140,7 @@ addon.settingsDesign = {
             checkboxLabelGap = 6,
             checkboxLabelWidth = 176, checkboxColorLabelWidth = 140,
             checkboxColorLabelMaxWidth = 146,
-            swatchSize = 24, swatchWellWidth = 18, swatchWellHeight = 14,
+            swatchSize = 24, swatchWellWidth = 16, swatchWellHeight = 12,
             sliderHeight = 24, sliderWidth = 420, sliderTrackHeight = 4,
             dropdownWidth = 180, dropdownLabelMaxWidth = 210,
             actionWidth = 292, actionHeight = 26,
@@ -9480,7 +9153,6 @@ addon.settingsDesign = {
             raised = { color = "raised", border = "borderSoft" },
             profile = { color = "profile", border = "borderSoft" },
             viewport = { color = "viewport", border = "borderSoft" },
-            section = { color = "section", border = "borderSoft" },
         },
         buttons = {
             field = {
@@ -9488,6 +9160,12 @@ addon.settingsDesign = {
                 hover = { bg = "hover", border = "borderStrong", text = "textPrimary" },
                 pressed = { bg = "pressed", border = "accentMuted", text = "textPrimary" },
                 disabled = { bg = "raised", border = "borderSoft", text = "textDisabled" },
+            },
+            display = {
+                normal = { bg = "transparent", border = "transparent", text = "textPrimary" },
+                hover = { bg = "transparent", border = "transparent", text = "textPrimary" },
+                pressed = { bg = "transparent", border = "transparent", text = "textPrimary" },
+                disabled = { bg = "transparent", border = "transparent", text = "textDisabled" },
             },
             primary = {
                 normal = { bg = "raised", border = "accentMuted", text = "textPrimary" },
@@ -9680,20 +9358,17 @@ function addon.settingsDesign.RefreshControl(control)
         addon.settingsDesign.SetTextureSurfaceColor(control.statsProStateTexture, bgRole, bgAlpha)
         addon.settingsDesign.SetRegionColor(
             control.statsProText, enabled and "textPrimary" or "textDisabled")
-        local normalColor = addon.settingsDesign.Color(enabled and "borderStrong" or "textDisabled")
-        if control.statsProNormalTexture then
-            control.statsProNormalTexture:SetVertexColor(
-                normalColor[1], normalColor[2], normalColor[3], enabled and 0.82 or 0.35)
-        end
-        local checkColor = addon.settingsDesign.Color(enabled and "accent" or "textDisabled")
-        if control.statsProCheckedTexture then
-            control.statsProCheckedTexture:SetVertexColor(
-                checkColor[1], checkColor[2], checkColor[3], enabled and 0.92 or 0.35)
-        end
-        if control.statsProDisabledCheckedTexture then
-            control.statsProDisabledCheckedTexture:SetVertexColor(
-                checkColor[1], checkColor[2], checkColor[3], 0.35)
-        end
+        local boxRole = checked and "positiveMuted" or "raised"
+        addon.settingsDesign.SetTextureSurfaceColor(
+            control.statsProCheckboxSurface, boxRole)
+        local borderRole = not enabled and "textDisabled"
+            or (checked and "positive" or (hovered and "borderStrong" or "borderSoft"))
+        addon.settingsDesign.SetTextureSurfaceBorder(
+            control.statsProCheckboxSurface, borderRole)
+        local markColor = addon.settingsDesign.Color(enabled and "positive" or "textDisabled")
+        control.statsProCheckboxMark:SetColorTexture(
+            markColor[1], markColor[2], markColor[3],
+            checked and (enabled and 0.96 or 0.35) or 0)
     elseif kind == "swatch" then
         local borderRole = not enabled and "textDisabled"
             or (control.statsProActive and "accent"
@@ -9702,11 +9377,12 @@ function addon.settingsDesign.RefreshControl(control)
         control:SetAlpha(enabled and 1 or 0.35)
     elseif kind == "slider" then
         local thumbRole = not enabled and "textDisabled"
-            or (pressed and "accent" or (hovered and "textPrimary" or "textMuted"))
+            or ((pressed or hovered) and "textPrimary" or "accent")
         local thumbColor = addon.settingsDesign.Color(thumbRole)
         if control.statsProThumb then
             control.statsProThumb:SetVertexColor(
-                thumbColor[1], thumbColor[2], thumbColor[3], enabled and 0.86 or 0.35)
+                thumbColor[1], thumbColor[2], thumbColor[3],
+                enabled and (pressed and 1 or 0.86) or 0.35)
         end
         addon.settingsDesign.SetRegionColor(
             control.statsProLabel, enabled and "textPrimary" or "textDisabled")
@@ -9732,22 +9408,27 @@ function addon.settingsDesign.RefreshControl(control)
         addon.settingsDesign.SetTextureSurfaceBorder(control.statsProSurface, borderRole)
         addon.settingsDesign.SetRegionColor(
             control.statsProText, enabled and "textPrimary" or "textDisabled")
+        addon.settingsDesign.SetRegionColor(control.statsProChevron,
+            not enabled and "textDisabled"
+                or ((open or pressed) and "accent" or (hovered and "textPrimary" or "textMuted")))
         control:SetAlpha(enabled and 1 or 0.45)
         control.statsProOpen = open
     elseif kind == "listRow" then
-        local bgRole = pressed and "rowPressed" or (hovered and "rowHover"
-            or (control.statsProSelected and "selected" or "raised"))
-        local alpha = not enabled and 0 or (not hovered and not pressed
-            and not control.statsProSelected and 0 or addon.settingsDesign.Color(bgRole)[4])
-        addon.settingsDesign.SetTextureSurfaceColor(control.statsProStateTexture, bgRole, alpha)
-        addon.settingsDesign.SetRegionColor(control.statsProText,
-            not enabled and "textDisabled"
-                or ((hovered or pressed or control.statsProSelected) and "textPrimary"
-                    or "textSecondary"))
-    elseif kind == "editBox" then
-        local borderRole = control.statsProInvalid and "danger"
-            or (control.statsProFocused and "accent" or "borderSoft")
-        addon.settingsDesign.SetTextureSurfaceBorder(control.statsProSurface, borderRole)
+        if control.statsProHeading then
+            addon.settingsDesign.SetTextureSurfaceColor(
+                control.statsProStateTexture, "raised", 0)
+            addon.settingsDesign.SetRegionColor(control.statsProText, "textPrimary")
+        else
+            local bgRole = pressed and "rowPressed" or (hovered and "rowHover"
+                or (control.statsProSelected and "selected" or "raised"))
+            local alpha = not enabled and 0 or (not hovered and not pressed
+                and not control.statsProSelected and 0 or addon.settingsDesign.Color(bgRole)[4])
+            addon.settingsDesign.SetTextureSurfaceColor(control.statsProStateTexture, bgRole, alpha)
+            addon.settingsDesign.SetRegionColor(control.statsProText,
+                not enabled and "textDisabled"
+                    or ((hovered or pressed or control.statsProSelected) and "textPrimary"
+                        or "textSecondary"))
+        end
     end
     control.statsProControlState = not enabled and "disabled"
         or (pressed and "pressed" or (hovered and "hover"
@@ -9868,9 +9549,19 @@ function addon.settingsDesign.StyleCheckbox(control, text)
     local state = control:CreateTexture(nil, "BACKGROUND")
     state:SetAllPoints(control)
     control.statsProStateTexture = state
+    local box = addon.settingsDesign.CreateTextureSurface(control, "raised")
+    box:SetPoint("TOPLEFT", control, "TOPLEFT", 3, -3)
+    box:SetPoint("BOTTOMRIGHT", control, "BOTTOMRIGHT", -3, 3)
+    control.statsProCheckboxSurface = box
+    local mark = control:CreateTexture(nil, "ARTWORK")
+    mark:SetPoint("CENTER")
+    mark:SetSize(8, 8)
+    control.statsProCheckboxMark = mark
     control.statsProText = text
     control.statsProNormalTexture = type(control.GetNormalTexture) == "function"
         and control:GetNormalTexture() or nil
+    control.statsProPushedTexture = type(control.GetPushedTexture) == "function"
+        and control:GetPushedTexture() or nil
     control.statsProCheckedTexture = type(control.GetCheckedTexture) == "function"
         and control:GetCheckedTexture() or nil
     control.statsProDisabledCheckedTexture = type(control.GetDisabledCheckedTexture) == "function"
@@ -9878,9 +9569,9 @@ function addon.settingsDesign.StyleCheckbox(control, text)
     local highlight = type(control.GetHighlightTexture) == "function"
         and control:GetHighlightTexture() or nil
     if highlight then highlight:SetAlpha(0) end
-    for _, texture in pairs({ control.statsProNormalTexture, control.statsProCheckedTexture,
-        control.statsProDisabledCheckedTexture }) do
-        if texture and type(texture.SetDesaturated) == "function" then texture:SetDesaturated(true) end
+    for _, texture in pairs({ control.statsProNormalTexture, control.statsProPushedTexture,
+        control.statsProCheckedTexture, control.statsProDisabledCheckedTexture }) do
+        if texture then texture:SetAlpha(0) end
     end
     addon.settingsDesign.RegisterControl(control, "checkbox")
     addon.settingsDesign.RegisterMutationControl(control)
@@ -9914,8 +9605,14 @@ function addon.settingsDesign.StyleSlider(slider, label, valueText, lowText, hig
     track:SetPoint("RIGHT", 0, 0)
     track:SetHeight(geometry.sliderTrackHeight)
     slider.statsProTrack = track
-    slider.statsProThumb = type(slider.GetThumbTexture) == "function"
+    ---@type StatsProSliderThumb?
+    local thumb = type(slider.GetThumbTexture) == "function"
         and slider:GetThumbTexture() or nil
+    slider.statsProThumb = thumb
+    if thumb then
+        thumb:SetTexture("Interface\\Buttons\\WHITE8X8")
+        thumb:SetSize(8, 14)
+    end
     local name = slider:GetName()
     for _, suffix in ipairs({ "Left", "Middle", "Right" }) do
         local texture = name and _G[name .. suffix]
@@ -9957,11 +9654,16 @@ function addon.settingsDesign.StyleDropdown(dropdown, label)
         type(button.GetPushedTexture) == "function" and button:GetPushedTexture(),
         type(button.GetDisabledTexture) == "function" and button:GetDisabledTexture(),
     }) do
-        if texture and type(texture.SetDesaturated) == "function" then texture:SetDesaturated(true) end
+        if texture then texture:SetAlpha(0) end
     end
+    local chevron = dropdown:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(chevron, 12, "OUTLINE")
+    chevron:SetPoint("CENTER", button, "CENTER", -1, 1)
+    chevron:SetText("v")
     button.statsProDropdown = dropdown
     button.statsProSurface = surface
     button.statsProText = text
+    button.statsProChevron = chevron
     dropdown.statsProTrigger = button
     dropdown.statsProLabel = label
     addon.settingsDesign.dropdownTriggers = addon.settingsDesign.dropdownTriggers or {}
@@ -9999,11 +9701,11 @@ end
 
 function addon.settingsDesign.SetListRowSelected(row, selected)
     row.statsProSelected = selected == true
+    if row.statsProSelectionRail then
+        if row.statsProSelected then row.statsProSelectionRail:Show()
+        else row.statsProSelectionRail:Hide() end
+    end
     addon.settingsDesign.RefreshControl(row)
-end
-
-function addon.settingsDesign.StyleStatusText(text, roleName)
-    addon.settingsDesign.ApplyTextRole(text, roleName or "controlMetadata")
 end
 
 function addon.settingsDesign.StyleWarning(parent, text)
@@ -10037,31 +9739,66 @@ function addon.settingsDesign.SetWarningVisible(text, visible)
     end
 end
 
-function addon.settingsDesign.StyleEditBox(editBox)
-    local surface = addon.settingsDesign.CreateTextureSurface(editBox, "raised")
-    surface:SetAllPoints(editBox)
-    editBox.statsProSurface = surface
-    local name = editBox:GetName()
-    for _, suffix in ipairs({ "Left", "Middle", "Right" }) do
-        local texture = name and _G[name .. suffix]
-        if texture then texture:SetAlpha(0) end
-    end
-    addon.settingsDesign.RegisterControl(editBox, "editBox")
-    editBox:HookScript("OnEditFocusGained", function(box)
-        box.statsProFocused = true
-        addon.settingsDesign.RefreshControl(box)
-    end)
-    editBox:HookScript("OnEditFocusLost", function(box)
-        box.statsProFocused = false
-        addon.settingsDesign.RefreshControl(box)
-    end)
-    addon.settingsDesign.RefreshControl(editBox)
-end
-
 function addon.settingsDesign.ApplySeparator(texture)
     local color = addon.settingsDesign.Color("separator")
     texture:SetColorTexture(color[1], color[2], color[3], color[4])
     texture.statsProColorRole = "separator"
+end
+
+function addon.settingsDesign.StyleCloseButton(button)
+    for _, texture in pairs({
+        type(button.GetNormalTexture) == "function" and button:GetNormalTexture(),
+        type(button.GetHighlightTexture) == "function" and button:GetHighlightTexture(),
+        type(button.GetPushedTexture) == "function" and button:GetPushedTexture(),
+        type(button.GetDisabledTexture) == "function" and button:GetDisabledTexture(),
+    }) do
+        if texture then texture:SetAlpha(0) end
+    end
+    button:SetSize(addon.settingsDesign.tokens.geometry.minHitTarget,
+        addon.settingsDesign.tokens.geometry.minHitTarget)
+    local hover = button:CreateTexture(nil, "BACKGROUND")
+    hover:SetAllPoints(button)
+    local danger = addon.settingsDesign.Color("danger")
+    hover:SetColorTexture(danger[1], danger[2], danger[3], 0.14)
+    hover:Hide()
+    local text = button:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(text, 18)
+    text:SetPoint("CENTER", 0, 1)
+    text:SetText("×")
+    addon.settingsDesign.SetRegionColor(text, "textSecondary")
+    local function RefreshClose(control)
+        if control.statsProCloseHovered then control.statsProCloseHover:Show()
+        else control.statsProCloseHover:Hide() end
+        addon.settingsDesign.SetRegionColor(control.statsProCloseText,
+            control.statsProClosePressed and "textPrimary"
+                or (control.statsProCloseHovered and "danger" or "textSecondary"))
+    end
+    button.statsProCloseHover = hover
+    button.statsProCloseText = text
+    button.statsProRefreshClose = RefreshClose
+    button:SetScript("OnEnter", function(control)
+        control.statsProCloseHovered = true
+        RefreshClose(control)
+    end)
+    button:SetScript("OnLeave", function(control)
+        control.statsProCloseHovered = false
+        control.statsProClosePressed = false
+        RefreshClose(control)
+    end)
+    button:SetScript("OnMouseDown", function(control)
+        control.statsProClosePressed = true
+        RefreshClose(control)
+    end)
+    button:SetScript("OnMouseUp", function(control)
+        control.statsProClosePressed = false
+        RefreshClose(control)
+    end)
+    button:HookScript("OnHide", function(control)
+        control.statsProCloseHovered = false
+        control.statsProClosePressed = false
+        RefreshClose(control)
+    end)
+    button.statsProModernClose = true
 end
 
 function addon.settingsDesign.RefreshShellButton(button)
@@ -10206,10 +9943,8 @@ function addon.settingsDesign.RefreshTab(button)
     local pressed = button.statsProPressed == true
     local hovered = button.statsProHovered == true
     local fill = addon.settingsDesign.Color(pressed and "pressed"
-        or (hovered and "hover" or (selected and "accentMuted" or "raised")))
-    local fillAlpha = selected and not pressed and not hovered and fill[4]
-        or (not selected and not pressed and not hovered and 0 or fill[4])
-    button.statsProFill:SetColorTexture(fill[1], fill[2], fill[3], fillAlpha)
+        or (hovered and "hover" or (selected and "raised" or "transparent")))
+    button.statsProFill:SetColorTexture(fill[1], fill[2], fill[3], fill[4])
     if selected then button.statsProSelectedLine:Show() else button.statsProSelectedLine:Hide() end
     addon.settingsDesign.SetRegionColor(button.statsProText,
         (selected or hovered or pressed) and "textPrimary" or "textSecondary")
@@ -10383,25 +10118,38 @@ GetStyledLabelText = function(englishKey, labelStyle)
     end
     return base .. ":"
 end
--- CursorSection: localized casing is preserved; a calm inset band carries hierarchy
--- without forcing every heading through the accent color.
+-- CursorSection: localized casing is preserved. A short accent rail plus a quiet
+-- hairline carries hierarchy without another full-width card inside the viewport.
 local function CursorSection(c, label)
-    local band = CreateFrame("Frame", nil, c.parent, "BackdropTemplate")
+    local band = CreateFrame("Frame", nil, c.parent)
     band:SetPoint("TOPLEFT", c.parent, "TOPLEFT", c.padX, c.y + 4)
     band:SetPoint("TOPRIGHT", c.parent, "TOPRIGHT", -c.padX, c.y + 4)
     band:SetHeight(addon.settingsDesign.tokens.geometry.sectionHeaderHeight)
     band:EnableMouse(false)
-    addon.settingsDesign.ApplySurface(band, "section")
+    band.statsProSurfaceRole = "section"
+    local rail = band:CreateTexture(nil, "ARTWORK")
+    rail:SetPoint("LEFT", 0, 0)
+    rail:SetSize(2, 12)
+    local accent = addon.settingsDesign.Color("accent")
+    rail:SetColorTexture(accent[1], accent[2], accent[3], 0.92)
     local hdr = band:CreateFontString(nil, "OVERLAY")
     addon.settingsDesign.ApplyTextRole(hdr, "section")
-    hdr:SetPoint("LEFT", 8, 0)
-    hdr:SetPoint("RIGHT", -8, 0)
+    hdr:SetPoint("LEFT", rail, "RIGHT", 8, 0)
     hdr:SetJustifyH("LEFT")
     hdr:SetWordWrap(false)
     hdr:SetMaxLines(1)
     PushLocalizedLabel(function() hdr:SetText(L(label)) end)
+    local line = band:CreateTexture(nil, "ARTWORK")
+    line:SetPoint("LEFT", hdr, "RIGHT", 10, 0)
+    line:SetPoint("RIGHT", band, "RIGHT", -2, 0)
+    line:SetHeight(1)
+    addon.settingsDesign.ApplySeparator(line)
+    band.statsProSectionRail = rail
+    band.statsProSectionLine = line
     c.parent.statsProSections = c.parent.statsProSections or {}
-    tinsert(c.parent.statsProSections, { key = label, surface = band, text = hdr, y = c.y })
+    tinsert(c.parent.statsProSections, {
+        key = label, surface = band, text = hdr, rail = rail, line = line, y = c.y,
+    })
     c.y = c.y - 24 - c.gap
 end
 
@@ -10828,8 +10576,8 @@ function addon.appearancePresets.ForceCancelPreview()
     return false
 end
 
--- Header Reset and /ss reset share the same confirmed, transactional active-profile
--- operation. The implementation lives on addon.resetRuntime to avoid another broad
+-- /ss reset uses the same confirmed, transactional active-profile operation as the
+-- advanced profile manager. The implementation lives on addon.resetRuntime to avoid another broad
 -- closure in this near-limit Lua 5.1 chunk.
 local function ResetToDefaults()
     return addon.resetRuntime.Request()
@@ -11059,7 +10807,7 @@ function addon.resetRuntime.AcceptPending(_, popupData)
     local pending = addon.resetRuntime.pending
     if not pending or not rawequal(pending, popupData) then return end
     addon.resetRuntime.pending = nil
-    local ok, result = addon.profileOps.ResetCurrent(
+    local ok, result = addon.profileOps.ResetProfile(
         pending.profileID, pending.expected)
     if ok then
         PrintMsg(L("Settings reset to defaults"))
@@ -11253,28 +11001,17 @@ function addon.profileUI.FormatSpecName(specID, explicitName)
             return resolvedName
         end
     end
-    return string.format(L("Spec %d"), specID)
+    return string.format(L("Unknown specialization (%d)"), specID)
 end
 
 function addon.profileUI.FindProfile(model, profileID)
-    for _, profile in ipairs(model and model.profiles or {}) do
-        if profile.profileID == profileID then return profile end
-    end
-    return nil
-end
-
-function addon.profileUI.GetAssignedProfileID(model, character, spec)
-    if spec then return spec.profileID end
-    return character and (character.defaultProfileID or model.accountDefaultProfileID) or nil
+    return model and model.profiles and model.profiles[profileID] or nil
 end
 
 function addon.profileUI.ContextLabel(character, spec)
-    if not character then return "" end
-    if spec then
-        return character.displayName .. " / "
-            .. addon.profileUI.FormatSpecName(spec.specID, spec.specName)
-    end
-    return character.displayName .. " / " .. L("Character default")
+    if not character or not spec then return "" end
+    return character.displayName .. " / "
+        .. addon.profileUI.FormatSpecName(spec.specID, spec.specName)
 end
 
 function addon.profileUI.RoleLabel(role)
@@ -11292,8 +11029,7 @@ function addon.profileUI.RoleTemplateChoices(model)
             kind = "role",
             role = role,
             profileID = template and template.profileID or nil,
-            label = addon.profileUI.RoleLabel(role) .. " - "
-                .. (template and template.profileName or ""),
+            label = addon.profileUI.RoleLabel(role),
         }
     end
     return choices
@@ -11323,10 +11059,6 @@ end
 
 function addon.profileUI.OperationErrorText(reason)
     if reason == "invalid-name" then return L("Enter a valid profile name.") end
-    if reason == "name-too-long" then
-        return string.format(L("Profile names can contain at most %d characters."),
-            addon.profileOps.maxNameCodepoints)
-    end
     if reason == "duplicate-name" then return L("A profile with this name already exists.") end
     if reason == "stale" then return L("Profiles changed; review and try again.") end
     if reason == "combat" then return L("Profile changes are unavailable during combat.") end
@@ -11337,10 +11069,8 @@ function addon.profileUI.OperationErrorText(reason)
     if reason == "pending" or reason == "busy" or reason == "unsafe-context" then
         return L("Waiting for a safe profile context.")
     end
-    if reason == "last-profile" then return L("The last profile cannot be deleted.") end
-    if reason == "replacement-required" then return L("Choose a replacement profile.") end
     if reason == "current-character" then return L("The current character cannot be forgotten.") end
-    if reason == "same-profile" or reason == "same-context" or reason == "no-change" then
+    if reason == "same-profile" or reason == "no-change" then
         return L("Nothing changed.")
     end
     return L("Profile operation failed. Review the selection and try again.")
@@ -11385,38 +11115,20 @@ function addon.profileUI.BuildOperationUI(manager)
     local ui = addon.profileUI
     local actionScroll = CreateFrame(
         "ScrollFrame", "StatsProProfileActionsScroll", manager, "UIPanelScrollFrameTemplate")
-    actionScroll:SetPoint("TOPLEFT", 258, -176)
-    actionScroll:SetPoint("BOTTOMRIGHT", -34, 52)
+    actionScroll:SetPoint("TOPLEFT", 258, -146)
+    actionScroll:SetPoint("BOTTOMRIGHT", -34, 16)
     local actionChild = CreateFrame("Frame", nil, actionScroll)
-    actionChild:SetSize(318, 590)
+    actionChild:SetSize(318, 172)
     actionScroll:SetScrollChild(actionChild)
-
-    local managedLabel = actionChild:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(managedLabel, 11, "OUTLINE")
-    managedLabel:SetPoint("TOPLEFT", 8, -4)
-    PushLocalizedLabel(function() managedLabel:SetText(L("Profile to manage:")) end)
-
-    local profileSelector = addon.settingsDesign.CreateShellButton(
-        actionChild, "StatsProManagedProfileButton", "field")
-    profileSelector:SetPoint("TOPLEFT", 6, -22)
-    profileSelector:SetSize(addon.settingsDesign.tokens.geometry.actionWidth,
-        addon.settingsDesign.tokens.geometry.controlHitTarget)
-
-    local managedImpact = actionChild:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(managedImpact, 10)
-    managedImpact:SetPoint("TOPLEFT", 8, -50)
-    managedImpact:SetPoint("TOPRIGHT", -12, -50)
-    managedImpact:SetJustifyH("LEFT")
-    addon.settingsDesign.StyleStatusText(managedImpact)
 
     local operationStatus = actionChild:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(operationStatus, 10)
-    operationStatus:SetPoint("TOPLEFT", 8, -70)
-    operationStatus:SetPoint("TOPRIGHT", -12, -70)
+    operationStatus:SetPoint("TOPLEFT", 8, -2)
+    operationStatus:SetPoint("TOPRIGHT", -12, -2)
     operationStatus:SetJustifyH("LEFT")
     operationStatus:SetWordWrap(true)
     operationStatus:SetMaxLines(2)
-    addon.settingsDesign.StyleStatusText(operationStatus)
+    addon.settingsDesign.ApplyTextRole(operationStatus, "controlMetadata")
 
     local function createAction(name, labelKey, y, roleName)
         local button = addon.settingsDesign.CreateShellButton(
@@ -11428,68 +11140,36 @@ function addon.profileUI.BuildOperationUI(manager)
         return button
     end
 
-    local assignButton = createAction(
-        "StatsProProfileAssignButton", "Assign to selected context", -104, "primary")
-    local newButton = createAction(
-        "StatsProProfileNewButton", "New from defaults...", -132)
-    local duplicateButton = createAction(
-        "StatsProProfileDuplicateButton", "Duplicate profile...", -160)
-    local renameButton = createAction(
-        "StatsProProfileRenameButton", "Rename profile...", -188)
     local copyButton = createAction(
-        "StatsProProfileCopyButton", "Copy settings to assigned profile...", -216)
-    local swapButton = createAction(
-        "StatsProProfileSwapButton", "Swap assignments...", -244)
+        "StatsProProfileCopyFromButton", "Copy settings from...", -30)
+    local useSameButton = createAction(
+        "StatsProProfileUseSameButton", "Use the same settings as...", -58, "primary")
+    local useForButton = createAction(
+        "StatsProProfileUseForButton", "Use these settings for...", -86)
+    local stopSharingButton = createAction(
+        "StatsProProfileStopSharingButton", "Stop sharing...", -114)
+    local advancedButton = createAction(
+        "StatsProProfileAdvancedButton", "Advanced...", -150)
     local resetButton = createAction(
-        "StatsProProfileResetButton", "Reset active profile...", -272, "destructive")
-    local deleteButton = createAction(
-        "StatsProProfileDeleteButton", "Delete profile...", -300, "destructive")
+        "StatsProProfileResetButton", "Reset these settings...", -186, "destructive")
     local forgetButton = createAction(
-        "StatsProProfileForgetButton", "Forget character...", -328, "destructive")
-
-    local selectedCharacterTitle = actionChild:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(selectedCharacterTitle, 11, "OUTLINE")
-    selectedCharacterTitle:SetPoint("TOPLEFT", 8, -366)
-    PushLocalizedLabel(function()
-        selectedCharacterTitle:SetText(L("Selected character"))
-    end)
-
-    local selectedCharacterSummary = actionChild:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(selectedCharacterSummary, 10)
-    selectedCharacterSummary:SetPoint("TOPLEFT", 8, -384)
-    selectedCharacterSummary:SetPoint("TOPRIGHT", -12, -384)
-    selectedCharacterSummary:SetJustifyH("LEFT")
-    selectedCharacterSummary:SetWordWrap(false)
-    selectedCharacterSummary:SetMaxLines(1)
-    addon.settingsDesign.StyleStatusText(selectedCharacterSummary)
-
-    local useAllSpecsButton = createAction(
-        "StatsProProfileUseAllSpecsButton", "Use profile for all known specs...", -406)
-    local independentButton = createAction(
-        "StatsProProfileMakeIndependentButton", "Make shared specs independent...", -434)
-
-    local futureContextsTitle = actionChild:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(futureContextsTitle, 11, "OUTLINE")
-    futureContextsTitle:SetPoint("TOPLEFT", 8, -470)
-    PushLocalizedLabel(function()
-        futureContextsTitle:SetText(L("Future new contexts"))
-    end)
-
-    local roleTemplateSummary = {}
-    for index, role in ipairs(addon.profileOps.roleOrder) do
-        local line = actionChild:CreateFontString(nil, "OVERLAY")
-        RegisterConfigFont(line, 10)
-        line:SetPoint("TOPLEFT", 8, -472 - (index * 18))
-        line:SetPoint("TOPRIGHT", -12, -472 - (index * 18))
-        line:SetJustifyH("LEFT")
-        line:SetWordWrap(false)
-        line:SetMaxLines(1)
-        addon.settingsDesign.StyleStatusText(line)
-        roleTemplateSummary[role] = line
-    end
-
+        "StatsProProfileForgetButton", "Forget this character...", -214, "destructive")
     local roleTemplateButton = createAction(
-        "StatsProProfileRoleTemplateButton", "Set future role template...", -550)
+        "StatsProProfileRoleTemplateButton", "Defaults for future specializations...", -242)
+    local cleanupButton = createAction(
+        "StatsProProfileCleanupButton", "Delete unused settings...", -270, "destructive")
+
+    ui.advancedShown = false
+    function ui.SetAdvancedShown(shown)
+        ui.advancedShown = shown == true
+        advancedButton:SetText(L(ui.advancedShown and "Hide advanced" or "Advanced..."))
+        for _, button in ipairs({ resetButton, forgetButton, roleTemplateButton, cleanupButton }) do
+            if ui.advancedShown then button:Show() else button:Hide() end
+        end
+        actionChild:SetHeight(ui.advancedShown and 306 or 172)
+    end
+    PushLocalizedLabel(function() ui.SetAdvancedShown(ui.advancedShown) end)
+    ui.SetAdvancedShown(false)
 
     local blocker = CreateFrame("Frame", "StatsProProfileOperationBlocker", UIParent)
     blocker:SetAllPoints(UIParent)
@@ -11522,6 +11202,7 @@ function addon.profileUI.BuildOperationUI(manager)
 
     local dialogClose = CreateFrame("Button", nil, dialog, "UIPanelCloseButton")
     dialogClose:SetPoint("TOPRIGHT", -4, -4)
+    addon.settingsDesign.StyleCloseButton(dialogClose)
 
     local dialogMessage = dialog:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(dialogMessage, 12)
@@ -11532,24 +11213,6 @@ function addon.profileUI.BuildOperationUI(manager)
     dialogMessage:SetJustifyV("TOP")
     dialogMessage:SetWordWrap(true)
     dialogMessage:SetMaxLines(12)
-
-    local nameInput = CreateFrame(
-        "EditBox", "StatsProProfileNameInput", dialog, "InputBoxTemplate")
-    nameInput:SetPoint("TOPLEFT", 22, -92)
-    nameInput:SetPoint("TOPRIGHT", -22, -92)
-    nameInput:SetHeight(28)
-    nameInput:SetAutoFocus(false)
-    nameInput:SetMaxLetters(160)
-    addon.settingsDesign.StyleEditBox(nameInput)
-
-    local nameValidation = dialog:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(nameValidation, 11)
-    nameValidation:SetPoint("TOPLEFT", 22, -126)
-    nameValidation:SetPoint("TOPRIGHT", -22, -126)
-    nameValidation:SetJustifyH("LEFT")
-    nameValidation:SetWordWrap(true)
-    nameValidation:SetMaxLines(2)
-    addon.settingsDesign.SetRegionColor(nameValidation, "danger")
 
     local choiceScroll = CreateFrame(
         "ScrollFrame", "StatsProProfileChoiceScroll", dialog, "UIPanelScrollFrameTemplate")
@@ -11571,22 +11234,17 @@ function addon.profileUI.BuildOperationUI(manager)
     cancelButton:SetSize(102, 26)
     PushLocalizedLabel(function() cancelButton:SetText(L("Cancel")) end)
 
-    ui.profileSelector = profileSelector
-    ui.managedImpact = managedImpact
     ui.operationStatus = operationStatus
     ui.actionButtons = {
-        assign = assignButton,
-        create = newButton,
-        duplicate = duplicateButton,
-        rename = renameButton,
         copy = copyButton,
-        swap = swapButton,
+        useSame = useSameButton,
+        useFor = useForButton,
+        stopSharing = stopSharingButton,
+        advanced = advancedButton,
         reset = resetButton,
-        delete = deleteButton,
         forget = forgetButton,
-        useAllSpecs = useAllSpecsButton,
-        independent = independentButton,
         roleTemplate = roleTemplateButton,
+        cleanup = cleanupButton,
     }
     function ui.ApplyOperationPaneWidth(managerWidth)
         local availableWidth = math.max(1, managerWidth - 258 - 34)
@@ -11594,32 +11252,38 @@ function addon.profileUI.BuildOperationUI(manager)
             addon.settingsDesign.tokens.geometry.minHitTarget,
             math.min(addon.settingsDesign.tokens.geometry.actionWidth, availableWidth - 12))
         actionChild:SetWidth(availableWidth)
-        profileSelector:SetWidth(controlWidth)
         for _, button in pairs(ui.actionButtons) do button:SetWidth(controlWidth) end
     end
     ui.ApplyOperationPaneWidth(ui.managerWidth)
-    ui.selectedCharacterSummary = selectedCharacterSummary
-    ui.roleTemplateSummary = roleTemplateSummary
     ui.operationDialog = dialog
     ui.operationBlocker = blocker
-    ui.operationDialogTitle = dialogTitle
     ui.operationDialogMessage = dialogMessage
-    ui.nameInput = nameInput
-    ui.nameValidation = nameValidation
     ui.choiceRows = {}
-    ui.operationPrimaryButton = primaryButton
 
-    function ui.RefreshOperationStatus()
+    function ui.RefreshOperationStatus(model)
         local failed = ui.operationStatusKind == "error"
         local message = ""
-        if ui.operationStatusKind == "success" then
+        local colorRole = "accent"
+        if model and model.readOnly then
+            failed = model.mode == "corrupt"
+            message = L(failed
+                and "Corrupted data - profiles are read-only. Use /ss wipe to reset."
+                or "Compatibility mode - profiles are read-only.")
+            colorRole = failed and "danger" or "warning"
+        elseif model and model.combat == true then
+            message = L("Profile changes are unavailable during combat.")
+            colorRole = "warning"
+        elseif model and (model.pending or model.combat == nil) then
+            message = L("Waiting for a safe profile context.")
+            colorRole = "warning"
+        elseif ui.operationStatusKind == "success" then
             message = L("Profile changes saved.")
         elseif failed then
             message = ui.OperationErrorText(ui.operationStatusReason)
+            colorRole = "danger"
         end
         operationStatus:SetText(message)
-        addon.settingsDesign.SetRegionColor(
-            operationStatus, failed and "danger" or "accent")
+        addon.settingsDesign.SetRegionColor(operationStatus, colorRole)
     end
 
     function ui.SetOperationStatus(kind, reason)
@@ -11629,7 +11293,6 @@ function addon.profileUI.BuildOperationUI(manager)
     end
 
     function ui.CloseOperationDialog()
-        if type(nameInput.ClearFocus) == "function" then nameInput:ClearFocus() end
         if dialog:IsShown() then dialog:Hide() end
         blocker:Hide()
     end
@@ -11637,10 +11300,6 @@ function addon.profileUI.BuildOperationUI(manager)
     function ui.ShowDialogBase(title)
         dialogTitle:SetText(title)
         dialogMessage:SetText("")
-        nameValidation:SetText("")
-        if type(nameInput.ClearFocus) == "function" then nameInput:ClearFocus() end
-        nameInput:Hide()
-        nameValidation:Hide()
         choiceScroll:Hide()
         primaryButton:Show()
         primaryButton:Enable()
@@ -11653,56 +11312,12 @@ function addon.profileUI.BuildOperationUI(manager)
         dialog:Show()
     end
 
-    function ui.RefreshNameValidation()
-        local pending = ui.pendingAction
-        if not pending or pending.mode ~= "name" then return end
-        local root = addon.dbRuntime.Refresh()
-        if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady
-            or not addon.dbRuntime.IsCleanTable(root.profiles) then
-            pending.normalizedName = nil
-            pending.nameStatus = "read-only"
-            nameValidation:SetText(ui.OperationErrorText("read-only"))
-            primaryButton:Disable()
-            nameInput.statsProInvalid = true
-            addon.settingsDesign.RefreshControl(nameInput)
-            return
-        end
-        local exceptID = pending.kind == "rename" and pending.profileID or nil
-        local normalized, status = addon.profileOps.ValidateName(
-            nameInput:GetText(), root.profiles, exceptID)
-        pending.normalizedName = normalized
-        pending.nameStatus = status
-        if normalized then
-            nameValidation:SetText("")
-            primaryButton:Enable()
-            nameInput.statsProInvalid = false
-        else
-            nameValidation:SetText(addon.profileUI.OperationErrorText(status))
-            primaryButton:Disable()
-            nameInput.statsProInvalid = true
-        end
-        addon.settingsDesign.RefreshControl(nameInput)
-    end
-
-    function ui.ShowNameDialog(kind, title, initialName, profileID, expected)
-        ui.pendingAction = {
-            mode = "name", kind = kind, profileID = profileID, expected = expected,
-        }
-        ui.ShowDialogBase(title)
-        nameInput:Show()
-        nameValidation:Show()
-        nameInput:SetText(initialName or "")
-        if type(nameInput.SetFocus) == "function" then nameInput:SetFocus() end
-        if type(nameInput.HighlightText) == "function" then nameInput:HighlightText() end
-        ui.RefreshNameValidation()
-    end
-
     function ui.ShowConfirmation(kind, title, message, payload, expected)
         ui.pendingAction = {
             mode = "confirm", kind = kind, payload = payload, expected = expected,
         }
         ui.ShowDialogBase(title)
-        primaryButton.statsProButtonRole = (kind == "reset" or kind == "delete"
+        primaryButton.statsProButtonRole = (kind == "reset" or kind == "cleanup"
             or kind == "forget") and "destructive" or "primary"
         addon.settingsDesign.RefreshShellButton(primaryButton)
         dialogMessage:SetText(message)
@@ -11753,35 +11368,21 @@ function addon.profileUI.BuildOperationUI(manager)
         ui.PopulateChoices(choices)
     end
 
-    function ui.ProfileChoices(model, excludedProfileID)
+    function ui.SpecChoices(
+        model, excludedGUID, excludedSpecID, excludedProfileID, uniqueProfiles)
         local choices = {}
-        for _, profile in ipairs(model.profiles or {}) do
-            if profile.profileID ~= excludedProfileID then
-                local suffix = profile.references.total == 0 and "  [" .. L("Unused") .. "]" or ""
-                choices[#choices + 1] = {
-                    kind = "profile", profileID = profile.profileID,
-                    label = profile.name .. suffix,
-                }
-            end
-        end
-        return choices
-    end
-
-    function ui.ContextChoices(model, excludedGUID, excludedSpecID)
-        local choices = {}
+        local seenProfiles = {}
         for _, character in ipairs(model.characters or {}) do
-            if character.guid ~= excludedGUID or excludedSpecID ~= nil then
-                choices[#choices + 1] = {
-                    kind = "context", guid = character.guid, specID = nil,
-                    label = ui.ContextLabel(character, nil),
-                }
-            end
             for _, spec in ipairs(character.specs) do
-                if character.guid ~= excludedGUID or spec.specID ~= excludedSpecID then
+                if (character.guid ~= excludedGUID or spec.specID ~= excludedSpecID)
+                    and spec.profileID ~= excludedProfileID
+                    and (not uniqueProfiles or not seenProfiles[spec.profileID]) then
                     choices[#choices + 1] = {
                         kind = "context", guid = character.guid, specID = spec.specID,
+                        profileID = spec.profileID,
                         label = ui.ContextLabel(character, spec),
                     }
+                    seenProfiles[spec.profileID] = true
                 end
             end
         end
@@ -11797,9 +11398,8 @@ function addon.profileUI.BuildOperationUI(manager)
         }
     end
 
-    function ui.HandleOperationResult(ok, result, selectResult)
+    function ui.HandleOperationResult(ok, result)
         if ok then
-            if selectResult and type(result) == "string" then ui.selectedProfileID = result end
             ui.SetOperationStatus("success")
             ui.CloseOperationDialog()
             ui.RefreshSafe()
@@ -11811,30 +11411,74 @@ function addon.profileUI.BuildOperationUI(manager)
         return false
     end
 
-    function ui.ReferenceImpact(profile)
-        local refs = profile and profile.references or {
-            specs = 0, characterDefaults = 0, accountDefault = 0, roleTemplates = 0,
-        }
-        local other = refs.characterDefaults + refs.accountDefault + refs.roleTemplates
-        return refs.specs, other
-    end
-
     function ui.HandleChoice(choice)
         local pending = ui.pendingAction
         if not pending or pending.mode ~= "choice" then return end
         local model = ui.currentModel or ui.BuildViewModel()
-        if pending.kind == "select-profile" then
-            ui.selectedProfileID = choice.profileID
-            ui.CloseOperationDialog()
-            ui.RefreshSafe()
+        if pending.kind == "copy-source" then
+            local payload = pending.payload
+            local source = ui.FindProfile(model, choice.profileID)
+            local target = ui.FindProfile(model, payload.targetProfileID)
+            if not source or not target then
+                ui.HandleOperationResult(false, "stale")
+                return
+            end
+            ui.ShowChoices("copy-scope", L("Choose settings to copy"),
+                ui.CopyScopeChoices(), {
+                    sourceProfileID = source.profileID,
+                    sourceLabel = choice.label,
+                    targetProfileID = target.profileID,
+                    targetLabel = payload.targetLabel,
+                    guid = payload.guid,
+                    specID = payload.specID,
+                }, ui.CaptureExpected(payload.guid, payload.specID, target.profileID))
             return
         end
-        if pending.kind == "assign-profile" then
+        if pending.kind == "copy-scope" then
             local payload = pending.payload
-            local ok, result = addon.profileOps.Assign(
-                payload.guid, payload.specID, choice.profileID, pending.expected)
-            ui.selectedProfileID = choice.profileID
-            ui.HandleOperationResult(ok, result, false)
+            if not addon.profileOps.copyScopeKeys[choice.scope] and choice.scope ~= "all" then
+                ui.HandleOperationResult(false, "stale")
+                return
+            end
+            ui.ShowConfirmation("copy-context", L("Copy settings from..."),
+                string.format(
+                    L("Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."),
+                    choice.label, payload.sourceLabel, payload.targetLabel), {
+                    sourceProfileID = payload.sourceProfileID,
+                    guid = payload.guid,
+                    specID = payload.specID,
+                    scope = choice.scope,
+                }, pending.expected)
+            return
+        end
+        if pending.kind == "share-source" or pending.kind == "share-target" then
+            local payload = pending.payload
+            local sourceProfileID, guid, specID, sourceLabel, targetLabel
+            if pending.kind == "share-source" then
+                sourceProfileID = choice.profileID
+                guid, specID = payload.guid, payload.specID
+                sourceLabel, targetLabel = choice.label, payload.targetLabel
+            else
+                sourceProfileID = payload.sourceProfileID
+                guid, specID = choice.guid, choice.specID
+                sourceLabel, targetLabel = payload.sourceLabel, choice.label
+            end
+            local source = ui.FindProfile(model, sourceProfileID)
+            if not source then ui.HandleOperationResult(false, "stale"); return end
+            local sharedCount = source.references and source.references.specs or 0
+            local message = sharedCount > 1
+                and string.format(
+                    L("Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."),
+                    sourceLabel, targetLabel, sharedCount, sharedCount + 1)
+                or string.format(
+                    L("Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."),
+                    sourceLabel, targetLabel)
+            ui.ShowConfirmation("share-context", L("Use the same settings as..."),
+                message, {
+                    guid = guid,
+                    specID = specID,
+                    profileID = sourceProfileID,
+                }, ui.CaptureExpected(guid, specID, sourceProfileID))
             return
         end
         if pending.kind == "role-template" then
@@ -11842,234 +11486,90 @@ function addon.profileUI.BuildOperationUI(manager)
             local profile = ui.FindProfile(model, payload.profileID)
             local template = model.roleTemplates and model.roleTemplates[choice.role] or nil
             if not profile or not template or not addon.profileOps.roleKeys[choice.role] then
-                ui.HandleOperationResult(false, "stale", false)
+                ui.HandleOperationResult(false, "stale")
                 return
             end
             if template.profileID == profile.profileID then
-                ui.HandleOperationResult(false, "no-change", false)
+                ui.HandleOperationResult(false, "no-change")
                 return
             end
-            local messageKey
-            if choice.role == "TANK" then
-                messageKey = "Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."
-            elseif choice.role == "HEALER" then
-                messageKey = "Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."
-            else
-                messageKey = "Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."
-            end
-            ui.ShowConfirmation("set-role-template", L("Set future role template..."),
-                string.format(L(messageKey), profile.name), {
+            local messageKey = choice.role == "TANK"
+                and "Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."
+                or choice.role == "HEALER"
+                    and "Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."
+                    or "Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."
+            ui.ShowConfirmation("set-role-template",
+                L("Defaults for future specializations..."),
+                string.format(L(messageKey), payload.sourceLabel), {
                     role = choice.role,
                     profileID = profile.profileID,
                 }, pending.expected)
-            return
-        end
-        if pending.kind == "copy-scope" then
-            local payload = pending.payload
-            local source = ui.FindProfile(model, payload.sourceProfileID)
-            local target = ui.FindProfile(model, payload.targetProfileID)
-            if not source or not target or not addon.profileOps.copyScopeKeys[choice.scope]
-                and choice.scope ~= "all" then
-                ui.HandleOperationResult(false, "stale", false)
-                return
-            end
-            local specs, other = ui.ReferenceImpact(target)
-            local message = string.format(
-                L("Copy %s from \"%s\" to \"%s\"? This changes %d assigned specs and %d other references."),
-                choice.label, source.name, target.name, specs, other)
-            ui.ShowConfirmation("copy", L("Copy settings to assigned profile..."), message, {
-                sourceProfileID = source.profileID,
-                targetProfileID = target.profileID,
-                scope = choice.scope,
-            }, pending.expected)
-            return
-        end
-        if pending.kind == "delete-replacement" then
-            local payload = pending.payload
-            local profile = ui.FindProfile(model, payload.profileID)
-            local replacement = ui.FindProfile(model, choice.profileID)
-            if not profile or not replacement then
-                ui.HandleOperationResult(false, "stale", false)
-                return
-            end
-            local specs, other = ui.ReferenceImpact(profile)
-            local message = string.format(
-                L("Delete profile \"%s\" and replace all references with \"%s\"? This affects %d assigned specs and %d other references."),
-                profile.name, replacement.name, specs, other)
-            ui.ShowConfirmation("delete", L("Delete profile..."), message, {
-                profileID = profile.profileID,
-                replacementProfileID = replacement.profileID,
-            }, pending.expected)
-            return
-        end
-        if pending.kind == "swap-context" then
-            local payload = pending.payload
-            local leftLabel = payload.label
-            local rightLabel = choice.label
-            local message = string.format(
-                L("Swap \"%s\" and \"%s\"? Their profile settings stay unchanged."),
-                leftLabel, rightLabel)
-            ui.ShowConfirmation("swap", L("Swap assignments..."), message, {
-                left = { guid = payload.guid, specID = payload.specID },
-                right = { guid = choice.guid, specID = choice.specID },
-            }, pending.expected)
         end
     end
 
     function ui.RunPendingAction()
         local pending = ui.pendingAction
-        if not pending then return end
-        if pending.mode == "name" then
-            ui.RefreshNameValidation()
-            local name = pending.normalizedName
-            if not name then return end
-            if pending.kind == "create" then
-                local ok, result = addon.profileOps.Create(name, pending.expected)
-                ui.HandleOperationResult(ok, result, true)
-            elseif pending.kind == "duplicate" then
-                local ok, result = addon.profileOps.Duplicate(
-                    pending.profileID, name, pending.expected)
-                ui.HandleOperationResult(ok, result, true)
-            elseif pending.kind == "rename" then
-                local model = ui.currentModel or ui.BuildViewModel()
-                local profile = ui.FindProfile(model, pending.profileID)
-                if not profile then ui.HandleOperationResult(false, "stale", false); return end
-                if profile.references.total > 1 then
-                    local specs, other = ui.ReferenceImpact(profile)
-                    local message = string.format(
-                        L("Rename shared profile \"%s\" to \"%s\"? This affects %d assigned specs and %d other references."),
-                        profile.name, name, specs, other)
-                    ui.ShowConfirmation("rename", L("Rename profile..."), message, {
-                        profileID = pending.profileID, name = name,
-                    }, pending.expected)
-                else
-                    local ok, result = addon.profileOps.Rename(
-                        pending.profileID, name, pending.expected)
-                    ui.HandleOperationResult(ok, result, false)
-                end
-            end
-            return
-        end
-        if pending.mode ~= "confirm" then return end
+        if not pending or pending.mode ~= "confirm" then return end
         local payload = pending.payload or {}
         local ok, result
-        if pending.kind == "rename" then
-            ok, result = addon.profileOps.Rename(
-                payload.profileID, payload.name, pending.expected)
-        elseif pending.kind == "copy" then
-            ok, result = addon.profileOps.CopySettings(
-                payload.sourceProfileID, payload.targetProfileID,
+        if pending.kind == "copy-context" then
+            ok, result = addon.profileOps.CopySettingsToContext(
+                payload.sourceProfileID, payload.guid, payload.specID,
                 payload.scope, pending.expected)
-        elseif pending.kind == "swap" then
-            ok, result = addon.profileOps.Swap(payload.left, payload.right, pending.expected)
+        elseif pending.kind == "share-context" then
+            ok, result = addon.profileOps.Assign(
+                payload.guid, payload.specID, payload.profileID, pending.expected)
+        elseif pending.kind == "stop-sharing" then
+            ok, result = addon.profileOps.MakeContextIndependent(
+                payload.guid, payload.specID, pending.expected)
         elseif pending.kind == "reset" then
-            ok, result = addon.profileOps.ResetCurrent(
-                payload.activeProfileID, pending.expected)
-        elseif pending.kind == "delete" then
-            ok, result = addon.profileOps.DeleteWithReplacement(
-                payload.profileID, payload.replacementProfileID, pending.expected)
-            if ok then ui.selectedProfileID = payload.replacementProfileID end
+            ok, result = addon.profileOps.ResetProfile(payload.profileID, pending.expected)
         elseif pending.kind == "forget" then
             ok, result = addon.profileOps.ForgetCharacter(payload.guid, pending.expected)
-            if ok then ui.selectedGUID, ui.selectedSpecID, ui.selectedProfileID = nil, nil, nil end
-        elseif pending.kind == "use-profile-for-specs" then
-            ok, result = addon.profileOps.UseProfileForKnownSpecs(
-                payload.guid, payload.profileID, pending.expected)
-            if ok then ui.selectedProfileID = payload.profileID end
-        elseif pending.kind == "make-specs-independent" then
-            ok, result = addon.profileOps.MakeKnownSpecsIndependent(
-                payload.guid, pending.expected)
-            if ok and type(result) == "table" and type(result.assignments) == "table" then
-                local preferredSpecID = payload.selectedSpecID
-                if not preferredSpecID and payload.guid == addon.profileRuntime.activeGUID then
-                    preferredSpecID = addon.profileRuntime.activeSpecID
-                end
-                ui.selectedProfileID = result.assignments[preferredSpecID]
-                    or ui.selectedProfileID
-            end
+            if ok then ui.selectedGUID, ui.selectedSpecID = nil, nil end
+        elseif pending.kind == "cleanup" then
+            ok, result = addon.profileOps.DeleteUnusedProfiles(pending.expected)
         elseif pending.kind == "set-role-template" then
             ok, result = addon.profileOps.SetRoleTemplate(
                 payload.role, payload.profileID, pending.expected)
         end
-        ui.HandleOperationResult(ok, result, false)
+        ui.HandleOperationResult(ok, result)
     end
 
-    function ui.RefreshOperationControls(model, character, spec, managedProfile)
-        local assignedProfileID = ui.GetAssignedProfileID(model, character, spec)
+    function ui.RefreshOperationControls(model, character, spec)
+        local assignedProfileID = spec and spec.profileID or nil
         local assignedProfile = ui.FindProfile(model, assignedProfileID)
         ui.selectedAssignedProfileID = assignedProfileID
         ui.selectedCharacterModel = character
         ui.selectedSpecModel = spec
-        ui.selectedManagedProfile = managedProfile
-        profileSelector:SetText(managedProfile and managedProfile.name or L("Choose a profile"))
-        addon.settingsDesign.RefreshOwnedControlTooltip(profileSelector)
-        if managedProfile then
-            local specs, other = ui.ReferenceImpact(managedProfile)
-            if managedProfile.references.total == 0 then
-                managedImpact:SetText(L("Unused profile"))
-            else
-                managedImpact:SetText(string.format(
-                    L("%d assigned specs, %d other references"), specs, other))
-            end
-        else
-            managedImpact:SetText("")
-        end
-        ui.RefreshOperationStatus()
+        ui.RefreshOperationStatus(model)
 
-        if character then
-            selectedCharacterSummary:SetText(string.format(
-                L("%s - %d known specs"), character.displayName,
-                character.knownSpecCount or #(character.specs or {})))
-        else
-            selectedCharacterSummary:SetText("")
-        end
-        for _, role in ipairs(addon.profileOps.roleOrder) do
-            local template = model.roleTemplates and model.roleTemplates[role] or nil
-            local formatKey = role == "TANK" and "Tank: %s"
-                or role == "HEALER" and "Healer: %s" or "Damage: %s"
-            roleTemplateSummary[role]:SetText(template
-                and string.format(L(formatKey), template.profileName) or "")
-        end
-
-        if #(model.profiles or {}) > 0 then profileSelector:Enable() else profileSelector:Disable() end
         local mutable = model.canMutate == true
-        local hasContext = character ~= nil and assignedProfile ~= nil
-        local hasManaged = managedProfile ~= nil
-        if mutable and hasContext and hasManaged and managedProfile.profileID ~= assignedProfileID then
-            assignButton:Enable()
-        else assignButton:Disable() end
-        if mutable then newButton:Enable() else newButton:Disable() end
-        if mutable and hasManaged then duplicateButton:Enable(); renameButton:Enable()
-        else duplicateButton:Disable(); renameButton:Disable() end
-        if mutable and hasManaged and hasContext and managedProfile.profileID ~= assignedProfileID then
+        local hasContext = character ~= nil and spec ~= nil and assignedProfile ~= nil
+        local alternatives = hasContext
+            and ui.SpecChoices(
+                model, character.guid, spec.specID, assignedProfileID, true) or {}
+        local hasAlternative = #alternatives > 0
+        if mutable and hasContext and hasAlternative then
             copyButton:Enable()
-        else copyButton:Disable() end
-        if mutable and hasContext and #ui.ContextChoices(model, character.guid, spec and spec.specID) > 0 then
-            swapButton:Enable()
-        else swapButton:Disable() end
-        if mutable and model.activeProfileID then resetButton:Enable() else resetButton:Disable() end
-        if mutable and hasManaged and #model.profiles > 1 then deleteButton:Enable()
-        else deleteButton:Disable() end
+            useSameButton:Enable()
+            useForButton:Enable()
+        else
+            copyButton:Disable()
+            useSameButton:Disable()
+            useForButton:Disable()
+        end
+        if mutable and hasContext and (spec.sharedCount or 0) > 1 then
+            stopSharingButton:Enable()
+        else stopSharingButton:Disable() end
+        advancedButton:Enable()
+        if mutable and hasContext then resetButton:Enable() else resetButton:Disable() end
         if mutable and character and not character.isCurrent then forgetButton:Enable()
         else forgetButton:Disable() end
-        local knownSpecCount = character and (character.knownSpecCount or #(character.specs or {})) or 0
-        local allUseManaged = knownSpecCount > 0 and hasManaged
-        if allUseManaged then
-            for _, knownSpec in ipairs(character.specs) do
-                if knownSpec.profileID ~= managedProfile.profileID then
-                    allUseManaged = false
-                    break
-                end
-            end
-        end
-        if mutable and character and hasManaged and knownSpecCount > 0 and not allUseManaged then
-            useAllSpecsButton:Enable()
-        else useAllSpecsButton:Disable() end
-        if mutable and character and (character.sharedSpecCount or 0) > 0 then
-            independentButton:Enable()
-        else independentButton:Disable() end
-        if mutable and hasManaged then roleTemplateButton:Enable()
+        if mutable and hasContext then roleTemplateButton:Enable()
         else roleTemplateButton:Disable() end
+        if mutable and (model.unusedProfileCount or 0) > 0 then cleanupButton:Enable()
+        else cleanupButton:Disable() end
 
         if dialog:IsShown() and (not mutable
             or not addon.profileOps.CheckExpected(addon.dbRuntime.Refresh(),
@@ -12078,97 +11578,83 @@ function addon.profileUI.BuildOperationUI(manager)
         end
     end
 
-    profileSelector:SetScript("OnClick", function()
-        local model = ui.currentModel or ui.BuildViewModel()
-        ui.ShowChoices("select-profile", L("Choose a profile"),
-            ui.ProfileChoices(model), nil, ui.CaptureExpected())
-    end)
-
-    assignButton:SetScript("OnClick", function()
-        local character, spec, profile =
-            ui.selectedCharacterModel, ui.selectedSpecModel, ui.selectedManagedProfile
-        if not character or not profile then return end
-        local expected = ui.CaptureExpected(
-            character.guid, spec and spec.specID, profile.profileID)
-        local ok, result = addon.profileOps.Assign(
-            character.guid, spec and spec.specID, profile.profileID, expected)
-        ui.HandleOperationResult(ok, result, false)
-    end)
-
-    newButton:SetScript("OnClick", function()
-        ui.ShowNameDialog("create", L("New from defaults..."), L("New Profile"), nil,
-            ui.CaptureExpected())
-    end)
-
-    duplicateButton:SetScript("OnClick", function()
-        local profile = ui.selectedManagedProfile
-        if not profile then return end
-        ui.ShowNameDialog("duplicate", L("Duplicate profile..."),
-            string.format(L("%s Copy"), profile.name), profile.profileID,
-            ui.CaptureExpected(nil, nil, profile.profileID))
-    end)
-
-    renameButton:SetScript("OnClick", function()
-        local profile = ui.selectedManagedProfile
-        if not profile then return end
-        ui.ShowNameDialog("rename", L("Rename profile..."), profile.name,
-            profile.profileID, ui.CaptureExpected(nil, nil, profile.profileID))
-    end)
-
     copyButton:SetScript("OnClick", function()
         local model = ui.currentModel or ui.BuildViewModel()
-        local source = ui.selectedManagedProfile
+        local character, spec = ui.selectedCharacterModel, ui.selectedSpecModel
         local target = ui.FindProfile(model, ui.selectedAssignedProfileID)
-        if not source or not target or source.profileID == target.profileID then return end
-        ui.ShowChoices("copy-scope", L("Choose settings to copy"),
-            ui.CopyScopeChoices(), {
-            sourceProfileID = source.profileID, targetProfileID = target.profileID,
-        }, ui.CaptureExpected(
-            ui.selectedGUID, ui.selectedSpecID, target.profileID))
+        if not character or not spec or not target then return end
+        local targetLabel = ui.ContextLabel(character, spec)
+        ui.ShowChoices("copy-source", L("Copy settings from..."),
+            ui.SpecChoices(model, character.guid, spec.specID, target.profileID, true), {
+                guid = character.guid,
+                specID = spec.specID,
+                targetProfileID = target.profileID,
+                targetLabel = targetLabel,
+            }, ui.CaptureExpected(character.guid, spec.specID, target.profileID))
     end)
 
-    swapButton:SetScript("OnClick", function()
+    useSameButton:SetScript("OnClick", function()
         local model = ui.currentModel or ui.BuildViewModel()
         local character, spec = ui.selectedCharacterModel, ui.selectedSpecModel
-        if not character then return end
-        local payload = {
-            guid = character.guid, specID = spec and spec.specID,
-            label = ui.ContextLabel(character, spec),
-        }
-        ui.ShowChoices("swap-context", L("Choose a context"),
-            ui.ContextChoices(model, payload.guid, payload.specID), payload,
-            ui.CaptureExpected(payload.guid, payload.specID))
+        local target = ui.FindProfile(model, ui.selectedAssignedProfileID)
+        if not character or not spec or not target then return end
+        ui.ShowChoices("share-source", L("Use the same settings as..."),
+            ui.SpecChoices(model, character.guid, spec.specID, target.profileID, true), {
+                guid = character.guid,
+                specID = spec.specID,
+                targetLabel = ui.ContextLabel(character, spec),
+            }, ui.CaptureExpected(character.guid, spec.specID, target.profileID))
+    end)
+
+    useForButton:SetScript("OnClick", function()
+        local model = ui.currentModel or ui.BuildViewModel()
+        local character, spec = ui.selectedCharacterModel, ui.selectedSpecModel
+        local source = ui.FindProfile(model, ui.selectedAssignedProfileID)
+        if not character or not spec or not source then return end
+        ui.ShowChoices("share-target", L("Use these settings for..."),
+            ui.SpecChoices(model, character.guid, spec.specID, source.profileID), {
+                sourceProfileID = source.profileID,
+                sourceLabel = ui.ContextLabel(character, spec),
+            }, ui.CaptureExpected(character.guid, spec.specID, source.profileID))
+    end)
+
+    stopSharingButton:SetScript("OnClick", function()
+        local model = ui.currentModel or ui.BuildViewModel()
+        local character, spec = ui.selectedCharacterModel, ui.selectedSpecModel
+        local profile = ui.FindProfile(model, ui.selectedAssignedProfileID)
+        if not character or not spec or not profile or (spec.sharedCount or 0) <= 1 then return end
+        local label = ui.ContextLabel(character, spec)
+        ui.ShowConfirmation("stop-sharing", L("Stop sharing..."),
+            string.format(L("Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."), label), {
+                guid = character.guid,
+                specID = spec.specID,
+            }, ui.CaptureExpected(character.guid, spec.specID, profile.profileID))
+    end)
+
+    advancedButton:SetScript("OnClick", function()
+        ui.SetAdvancedShown(not ui.advancedShown)
+        if not ui.advancedShown then actionScroll:SetVerticalScroll(0) end
     end)
 
     resetButton:SetScript("OnClick", function()
         local model = ui.currentModel or ui.BuildViewModel()
-        local profile = ui.FindProfile(model, model.activeProfileID)
-        if not profile then return end
-        local specs, other = ui.ReferenceImpact(profile)
-        local message = string.format(
-            L("Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."),
-            profile.name, specs, other)
-        ui.ShowConfirmation("reset", L("Reset active profile..."), message, {
-            activeProfileID = profile.profileID,
-        }, ui.CaptureExpected(nil, nil, profile.profileID))
-    end)
-
-    deleteButton:SetScript("OnClick", function()
-        local model = ui.currentModel or ui.BuildViewModel()
-        local profile = ui.selectedManagedProfile
-        if not profile then return end
-        local expected = ui.CaptureExpected(nil, nil, profile.profileID)
-        if profile.references.total == 0 then
-            ui.ShowConfirmation("delete", L("Delete profile..."),
-                string.format(L("Delete unused profile \"%s\"?"), profile.name), {
-                    profileID = profile.profileID, replacementProfileID = nil,
-                }, expected)
-        else
-            ui.ShowChoices("delete-replacement", L("Choose a replacement profile"),
-                ui.ProfileChoices(model, profile.profileID), {
-                    profileID = profile.profileID,
-                }, expected)
+        local character, spec = ui.selectedCharacterModel, ui.selectedSpecModel
+        local profile = ui.FindProfile(model, ui.selectedAssignedProfileID)
+        if not character or not spec or not profile then return end
+        local label = ui.ContextLabel(character, spec)
+        local sharedCount = profile.references and profile.references.specs or 1
+        local message = sharedCount > 1
+            and string.format(L("Reset the settings used by \"%s\"? The same reset will affect %d specializations."), label, sharedCount)
+            or string.format(L("Reset the settings used by \"%s\" to defaults?"), label)
+        local futureReferences = profile.references
+            and profile.references.total - profile.references.specs or 0
+        if futureReferences > 0 then
+            message = message .. " " .. L(
+                "This profile is also a default for future specializations; they will use the reset settings.")
         end
+        ui.ShowConfirmation("reset", L("Reset these settings..."), message, {
+            profileID = profile.profileID,
+        }, ui.CaptureExpected(character.guid, spec.specID, profile.profileID))
     end)
 
     forgetButton:SetScript("OnClick", function()
@@ -12177,56 +11663,36 @@ function addon.profileUI.BuildOperationUI(manager)
         local message = string.format(
             L("Forget \"%s\"? Its character record will be removed, but profile settings will be kept."),
             character.displayName)
-        ui.ShowConfirmation("forget", L("Forget character..."), message, {
+        ui.ShowConfirmation("forget", L("Forget this character..."), message, {
             guid = character.guid,
         }, ui.CaptureExpected(character.guid, ui.selectedSpecID))
     end)
 
-    useAllSpecsButton:SetScript("OnClick", function()
-        local character = ui.selectedCharacterModel
-        local profile = ui.selectedManagedProfile
-        if not character or not profile or (character.knownSpecCount or 0) == 0 then return end
-        local message = string.format(
-            L("Use \"%s\" for all %d known specs of \"%s\"? Existing profiles and settings will be kept."),
-            profile.name, character.knownSpecCount, character.displayName)
-        ui.ShowConfirmation("use-profile-for-specs",
-            L("Use profile for all known specs..."), message, {
-                guid = character.guid,
-                profileID = profile.profileID,
-            }, ui.CaptureExpected(character.guid, nil, profile.profileID))
-    end)
-
-    independentButton:SetScript("OnClick", function()
-        local character = ui.selectedCharacterModel
-        if not character or (character.sharedSpecCount or 0) == 0 then return end
-        local message = string.format(
-            L("Make %d shared specs of \"%s\" independent? Each affected spec receives a separate copy; existing profiles stay unchanged."),
-            character.sharedSpecCount, character.displayName)
-        ui.ShowConfirmation("make-specs-independent",
-            L("Make shared specs independent..."), message, {
-                guid = character.guid,
-                selectedSpecID = ui.selectedSpecID,
-            }, ui.CaptureExpected(character.guid, nil))
-    end)
-
     roleTemplateButton:SetScript("OnClick", function()
         local model = ui.currentModel or ui.BuildViewModel()
-        local profile = ui.selectedManagedProfile
-        if not profile then return end
+        local character, spec = ui.selectedCharacterModel, ui.selectedSpecModel
+        local profile = ui.FindProfile(model, ui.selectedAssignedProfileID)
+        if not character or not spec or not profile then return end
         ui.ShowChoices("role-template", L("Choose a role"),
             ui.RoleTemplateChoices(model), {
                 profileID = profile.profileID,
+                sourceLabel = ui.ContextLabel(character, spec),
             }, ui.CaptureExpected(nil, nil, profile.profileID))
     end)
 
-    nameInput:SetScript("OnTextChanged", ui.RefreshNameValidation)
-    nameInput:SetScript("OnEnterPressed", ui.RunPendingAction)
-    nameInput:SetScript("OnEscapePressed", ui.CloseOperationDialog)
+    cleanupButton:SetScript("OnClick", function()
+        local model = ui.currentModel or ui.BuildViewModel()
+        local count = model.unusedProfileCount or 0
+        if count <= 0 then return end
+        ui.ShowConfirmation("cleanup", L("Delete unused settings..."),
+            string.format(L("Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."), count),
+            nil, ui.CaptureExpected())
+    end)
+
     primaryButton:SetScript("OnClick", ui.RunPendingAction)
     cancelButton:SetScript("OnClick", ui.CloseOperationDialog)
     dialogClose:SetScript("OnClick", ui.CloseOperationDialog)
     dialog:SetScript("OnHide", function()
-        if type(nameInput.ClearFocus) == "function" then nameInput:ClearFocus() end
         blocker:Hide()
         ui.pendingAction = nil
         ui.RemoveSpecialFrame("StatsProProfileOperationDialog")
@@ -12261,40 +11727,19 @@ function addon.profileUI.BuildSettingsUI(owner)
     local accent = addon.settingsDesign.Color("accent")
     profileRail:SetColorTexture(accent[1], accent[2], accent[3], 0.55)
 
-    local profileLabel = header:CreateFontString(nil, "OVERLAY")
-    addon.settingsDesign.ApplyTextRole(profileLabel, "metadata")
-    profileLabel:SetPoint("TOPLEFT", 10, -8)
-    profileLabel:SetWidth(50)
-    profileLabel:SetJustifyH("LEFT")
-    PushLocalizedLabel(function() profileLabel:SetText(L("Profile:")) end)
-
     local profileButton = addon.settingsDesign.CreateShellButton(
-        header, "StatsProActiveProfileButton", "field", "profile")
+        header, "StatsProActiveProfileButton", "display", "profile")
     profileButton:SetPoint("TOPLEFT", geometry.profileFieldInset, -5)
     profileButton:SetSize(geometry.profileFieldWidth, geometry.minHitTarget)
+    profileButton.statsProText:SetJustifyH("LEFT")
+    profileButton:EnableMouse(false)
 
     local manageButton = addon.settingsDesign.CreateShellButton(
         header, "StatsProManageProfilesButton", "field")
     manageButton:SetPoint("TOPRIGHT", -8, -5)
     manageButton:SetSize(geometry.manageWidth, geometry.minHitTarget)
-    PushLocalizedLabel(function() manageButton:SetText(L("Manage")) end)
-
-    local resetButton = addon.settingsDesign.CreateShellButton(
-        header, "StatsProResetActiveProfileButton", "destructive")
-    resetButton:SetPoint("TOPLEFT", manageButton, "BOTTOMLEFT", 0,
-        -geometry.profileActionGap)
-    resetButton:SetSize(geometry.manageWidth, geometry.minHitTarget)
-    PushLocalizedLabel(function() resetButton:SetText(L("Reset")) end)
-    addon.settingsDesign.RegisterMutationControl(resetButton)
-    resetButton:SetScript("OnClick", function() ResetToDefaults() end)
-
-    local subtitle = header:CreateFontString(nil, "OVERLAY")
-    addon.settingsDesign.ApplyTextRole(subtitle, "metadata")
-    subtitle:SetPoint("TOPLEFT", 10, -37)
-    subtitle:SetPoint("TOPRIGHT", -(geometry.manageWidth + 18), -37)
-    subtitle:SetJustifyH("LEFT")
-    subtitle:SetWordWrap(false)
-    subtitle:SetMaxLines(1)
+    profileButton:SetPoint("TOPRIGHT", manageButton, "TOPLEFT", -8, 0)
+    PushLocalizedLabel(function() manageButton:SetText(L("Profiles & sharing...")) end)
 
     local manager = CreateFrame(
         "Frame", "StatsProProfileManager", UIParent, "BackdropTemplate")
@@ -12346,10 +11791,11 @@ function addon.profileUI.BuildSettingsUI(owner)
     local managerTitle = manager:CreateFontString(nil, "OVERLAY")
     addon.settingsDesign.ApplyTextRole(managerTitle, "title")
     managerTitle:SetPoint("TOP", 0, -14)
-    PushLocalizedLabel(function() managerTitle:SetText(L("Profile Manager")) end)
+    PushLocalizedLabel(function() managerTitle:SetText(L("Profiles & sharing")) end)
 
     local managerCloseX = CreateFrame("Button", nil, manager, "UIPanelCloseButton")
     managerCloseX:SetPoint("TOPRIGHT", -4, -4)
+    addon.settingsDesign.StyleCloseButton(managerCloseX)
 
     local managerLine = manager:CreateTexture(nil, "ARTWORK")
     managerLine:SetPoint("TOPLEFT", 14, -42)
@@ -12406,14 +11852,9 @@ function addon.profileUI.BuildSettingsUI(owner)
     detailContext:SetJustifyH("LEFT")
     addon.settingsDesign.SetRegionColor(detailContext, "textSecondary")
 
-    local assignedLabel = manager:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(assignedLabel, 12, "OUTLINE")
-    assignedLabel:SetPoint("TOPLEFT", detailContext, "BOTTOMLEFT", 0, -24)
-    PushLocalizedLabel(function() assignedLabel:SetText(L("Assigned profile:")) end)
-
     detailProfile = manager:CreateFontString(nil, "OVERLAY")
     RegisterConfigFont(detailProfile, 15, "OUTLINE")
-    detailProfile:SetPoint("TOPLEFT", assignedLabel, "BOTTOMLEFT", 0, -8)
+    detailProfile:SetPoint("TOPLEFT", detailContext, "BOTTOMLEFT", 0, -18)
     detailProfile:SetWidth(math.max(1, ui.managerWidth - geometry.managerDetailInset))
     detailProfile:SetHeight(20)
     detailProfile:SetJustifyH("LEFT")
@@ -12422,34 +11863,7 @@ function addon.profileUI.BuildSettingsUI(owner)
     detailProfile:SetMaxLines(1)
     addon.settingsDesign.SetRegionColor(detailProfile, "accent")
 
-    local detailProfileHitArea = CreateFrame(
-        "Frame", "StatsProProfileDetailNameHitbox", manager)
-    detailProfileHitArea:SetAllPoints(detailProfile)
-    detailProfileHitArea:EnableMouse(true)
-    detailProfileHitArea.statsProText = detailProfile
-    addon.settingsDesign.AttachTooltip(
-        detailProfileHitArea, addon.settingsDesign.ControlTextTooltip)
-
-    local detailSharing = manager:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(detailSharing, 12)
-    detailSharing:SetPoint("TOPLEFT", detailProfile, "BOTTOMLEFT", 0, -10)
-    detailSharing:SetPoint("TOPRIGHT", -20, 0)
-    detailSharing:SetJustifyH("LEFT")
-    addon.settingsDesign.SetRegionColor(detailSharing, "textSecondary")
-
-    local detailNotice = manager:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(detailNotice, 12)
-    detailNotice:SetPoint("BOTTOMLEFT", 266, 20)
-    detailNotice:SetPoint("BOTTOMRIGHT", -20, 20)
-    detailNotice:SetJustifyH("LEFT")
-    detailNotice:SetJustifyV("BOTTOM")
-    detailNotice:SetWordWrap(true)
-    detailNotice:SetMaxLines(2)
-    addon.settingsDesign.SetRegionColor(detailNotice, "warning")
-
-    ui.headerLabel = profileLabel
     ui.headerProfileButton = profileButton
-    ui.headerSubtitle = subtitle
     ui.manager = manager
     ui.managerListSurface = listSurface
     ui.managerDetailSurface = detailSurface
@@ -12458,8 +11872,6 @@ function addon.profileUI.BuildSettingsUI(owner)
     ui.detailCharacter = detailCharacter
     ui.detailContext = detailContext
     ui.detailProfile = detailProfile
-    ui.detailSharing = detailSharing
-    ui.detailNotice = detailNotice
     ui.BuildOperationUI(manager)
 
     manager:HookScript("OnHide", function()
@@ -12492,7 +11904,7 @@ function addon.profileUI.BuildSettingsUI(owner)
         badge:SetPoint("RIGHT", -6, 0)
         badge:SetWidth(70)
         badge:SetJustifyH("RIGHT")
-        badge:SetTextColor(0, 1, 0.5, 1)
+        addon.settingsDesign.SetRegionColor(badge, "positive")
         text:SetPoint("RIGHT", badge, "LEFT", -4, 0)
         text:SetJustifyH("LEFT")
         text:SetWordWrap(false)
@@ -12506,7 +11918,6 @@ function addon.profileUI.BuildSettingsUI(owner)
             if not context then return end
             ui.selectedGUID = context.guid
             ui.selectedSpecID = context.specID
-            ui.selectedProfileID = nil
             ui.RefreshSafe()
         end)
         ui.managerRows[index] = row
@@ -12518,32 +11929,26 @@ function addon.profileUI.BuildSettingsUI(owner)
         ui.currentModel = model
         ui.refreshCount = ui.refreshCount + 1
 
-        profileButton:SetText(model.activeProfileName
-            or (model.pending and L("Waiting for a safe profile context.")
-                or L("Account default profile")))
-        addon.settingsDesign.RefreshOwnedControlTooltip(profileButton)
+        local warning = false
         if model.readOnly then
-            subtitle:SetText(L(model.mode == "corrupt"
+            profileButton:SetText(L(model.mode == "corrupt"
                 and "Corrupted data - profiles are read-only. Use /ss wipe to reset."
                 or "Compatibility mode - profiles are read-only."))
-            addon.settingsDesign.SetRegionColor(subtitle, "warning")
+            warning = true
         elseif model.pending then
-            subtitle:SetText(L(model.combat == true
+            profileButton:SetText(L(model.combat == true
                 and "Switch pending until combat ends"
                 or "Waiting for a safe profile context."))
-            addon.settingsDesign.SetRegionColor(subtitle, "warning")
-        elseif model.activeSharedCount > 1 then
-            subtitle:SetText(string.format(L("Shared by %d specs"), model.activeSharedCount))
-            addon.settingsDesign.SetRegionColor(subtitle, "textSecondary")
+            warning = true
         elseif model.activeGUID and model.activeSpecID then
-            local displayName = model.activeDisplayName or L("Character")
-            local specName = ui.FormatSpecName(model.activeSpecID, model.activeSpecName)
-            subtitle:SetText(string.format(L("Automatic - %s / %s"), displayName, specName))
-            addon.settingsDesign.SetRegionColor(subtitle, "textSecondary")
+            profileButton:SetText(ui.FormatSpecName(model.activeSpecID, model.activeSpecName)
+                .. " - " .. (model.activeDisplayName or L("Character")))
         else
-            subtitle:SetText(L("Account default profile"))
-            addon.settingsDesign.SetRegionColor(subtitle, "textSecondary")
+            profileButton:SetText(L("Account default profile"))
         end
+        addon.settingsDesign.RefreshOwnedControlTooltip(profileButton)
+        addon.settingsDesign.SetRegionColor(
+            profileButton.statsProText, warning and "warning" or "textPrimary")
 
         local selectedCharacter, selectedSpec
         for _, character in ipairs(model.characters) do
@@ -12557,25 +11962,37 @@ function addon.profileUI.BuildSettingsUI(owner)
                 break
             end
         end
-        if not selectedCharacter then
-            selectedCharacter = model.characters[1]
-            ui.selectedGUID = selectedCharacter and selectedCharacter.guid or nil
-            ui.selectedSpecID = selectedCharacter and model.activeGUID == selectedCharacter.guid
-                and model.activeSpecID or nil
-            if selectedCharacter and ui.selectedSpecID then
+        if selectedCharacter and not selectedSpec then
+            if selectedCharacter.guid == model.activeGUID then
                 for _, spec in ipairs(selectedCharacter.specs) do
-                    if spec.specID == ui.selectedSpecID then selectedSpec = spec; break end
+                    if spec.specID == model.activeSpecID then selectedSpec = spec; break end
                 end
             end
-        elseif ui.selectedSpecID ~= nil and not selectedSpec then
-            ui.selectedSpecID = nil
+            selectedSpec = selectedSpec or selectedCharacter.specs[1]
         end
-
-        local assignedProfileID = ui.GetAssignedProfileID(model, selectedCharacter, selectedSpec)
-        if not ui.FindProfile(model, ui.selectedProfileID) then
-            ui.selectedProfileID = assignedProfileID or model.activeProfileID
+        if not selectedCharacter then
+            for _, character in ipairs(model.characters) do
+                if character.guid == model.activeGUID then
+                    for _, spec in ipairs(character.specs) do
+                        if spec.specID == model.activeSpecID then
+                            selectedCharacter, selectedSpec = character, spec
+                            break
+                        end
+                    end
+                end
+                if selectedCharacter then break end
+            end
         end
-        local managedProfile = ui.FindProfile(model, ui.selectedProfileID)
+        if not selectedCharacter then
+            for _, character in ipairs(model.characters) do
+                if character.specs[1] then
+                    selectedCharacter, selectedSpec = character, character.specs[1]
+                    break
+                end
+            end
+        end
+        ui.selectedGUID = selectedCharacter and selectedCharacter.guid or nil
+        ui.selectedSpecID = selectedSpec and selectedSpec.specID or nil
 
         local rowIndex, y = 0, -2
         for _, character in ipairs(model.characters) do
@@ -12583,12 +12000,14 @@ function addon.profileUI.BuildSettingsUI(owner)
             local row = ui.EnsureManagerRow(rowIndex)
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", 0, y)
-            row.profileContext = { guid = character.guid, specID = nil }
+            row.profileContext = nil
+            row.statsProHeading = true
+            row:Enable()
+            row:EnableMouse(false)
             row.text:SetText(character.displayName)
             row.badge:SetText(character.isCurrent and L("Current") or "")
             addon.settingsDesign.RefreshOwnedControlTooltip(row)
-            local selected = character.guid == ui.selectedGUID and ui.selectedSpecID == nil
-            addon.settingsDesign.SetListRowSelected(row, selected)
+            addon.settingsDesign.SetListRowSelected(row, false)
             row:Show()
             y = y - 26
             for _, spec in ipairs(character.specs) do
@@ -12597,11 +12016,15 @@ function addon.profileUI.BuildSettingsUI(owner)
                 row:ClearAllPoints()
                 row:SetPoint("TOPLEFT", 0, y)
                 row.profileContext = { guid = character.guid, specID = spec.specID }
+                row.statsProHeading = false
+                row:Enable()
+                row:EnableMouse(true)
                 row.text:SetText("   " .. ui.FormatSpecName(spec.specID, spec.specName))
                 row.badge:SetText(spec.isActive and L("Active") or "")
                 addon.settingsDesign.RefreshOwnedControlTooltip(row)
-                selected = character.guid == ui.selectedGUID and ui.selectedSpecID == spec.specID
-            addon.settingsDesign.SetListRowSelected(row, selected)
+                local selected = character.guid == ui.selectedGUID
+                    and ui.selectedSpecID == spec.specID
+                addon.settingsDesign.SetListRowSelected(row, selected)
                 row:Show()
                 y = y - addon.settingsDesign.tokens.geometry.listRowHeight
             end
@@ -12611,46 +12034,23 @@ function addon.profileUI.BuildSettingsUI(owner)
         listChild:SetHeight(math.max(1, -y + 4))
         emptyText:SetText(#model.characters == 0 and L("No visited characters") or "")
 
-        if selectedCharacter then
-            detailCharacter:SetText(selectedCharacter.displayName)
-            if selectedSpec then
-                detailContext:SetText(ui.FormatSpecName(selectedSpec.specID, selectedSpec.specName))
-                detailProfile:SetText(selectedSpec.profileName)
-                detailSharing:SetText(selectedSpec.sharedCount > 1
-                    and string.format(L("Shared by %d specs"), selectedSpec.sharedCount)
-                    or L("Independent"))
-            else
-                detailContext:SetText(L("Character default"))
-                detailProfile:SetText(selectedCharacter.defaultProfileName or L("Account default profile"))
-                detailSharing:SetText(selectedCharacter.defaultSharedCount > 1
-                    and string.format(L("Shared by %d specs"), selectedCharacter.defaultSharedCount)
-                    or L("Independent"))
-            end
+        if selectedCharacter and selectedSpec then
+            detailCharacter:SetText(ui.FormatSpecName(selectedSpec.specID, selectedSpec.specName))
+            detailContext:SetText(selectedCharacter.displayName)
+            local isShared = selectedSpec.sharedCount > 1
+            detailProfile:SetText(isShared
+                and string.format(L("Shared with %d specializations"), selectedSpec.sharedCount)
+                or L("Only this specialization"))
+            addon.settingsDesign.SetRegionColor(
+                detailProfile, isShared and "positive" or "textSecondary")
         else
             detailCharacter:SetText(L("No visited characters"))
             detailContext:SetText("")
-            detailProfile:SetText(model.activeProfileName or L("Account default profile"))
-            detailSharing:SetText("")
+            detailProfile:SetText("")
+            addon.settingsDesign.SetRegionColor(detailProfile, "textSecondary")
         end
-        addon.settingsDesign.RefreshOwnedControlTooltip(detailProfileHitArea)
 
-        if model.readOnly then
-            detailNotice:SetText(L(model.mode == "corrupt"
-                and "Corrupted data - profiles are read-only. Use /ss wipe to reset."
-                or "Compatibility mode - profiles are read-only."))
-        elseif model.combat == true then
-            detailNotice:SetText(L("Profile changes are unavailable during combat."))
-        elseif model.pending or model.combat == nil then
-            detailNotice:SetText(L("Waiting for a safe profile context."))
-        else
-            detailNotice:SetText("")
-        end
-        if model.canMutate and model.activeGUID and model.activeSpecID then
-            profileButton:Enable()
-        else
-            profileButton:Disable()
-        end
-        ui.RefreshOperationControls(model, selectedCharacter, selectedSpec, managedProfile)
+        ui.RefreshOperationControls(model, selectedCharacter, selectedSpec)
     end
     ui.refreshAll = ui.RefreshAll
 
@@ -12660,7 +12060,6 @@ function addon.profileUI.BuildSettingsUI(owner)
         if selectActive then
             ui.selectedGUID = addon.profileRuntime.activeGUID
             ui.selectedSpecID = addon.profileRuntime.activeSpecID
-            ui.selectedProfileID = addon.dbRuntime.activeProfileID
         end
         ui.RefreshSafe()
         manager:Show()
@@ -12673,17 +12072,6 @@ function addon.profileUI.BuildSettingsUI(owner)
         end
         ui.OpenManager(true)
     end
-    profileButton:SetScript("OnClick", function()
-        local model = ui.BuildViewModel()
-        if not model.canMutate or not model.activeGUID or not model.activeSpecID then return end
-        ui.OpenManager(true)
-        model = ui.currentModel or ui.BuildViewModel()
-        ui.ShowChoices("assign-profile", L("Choose a profile"),
-            ui.ProfileChoices(model), {
-                guid = model.activeGUID,
-                specID = model.activeSpecID,
-            }, ui.CaptureExpected(model.activeGUID, model.activeSpecID))
-    end)
     manageButton:SetScript("OnClick", ToggleManager)
 
     function ui.HideManager()
@@ -12691,7 +12079,6 @@ function addon.profileUI.BuildSettingsUI(owner)
     end
 
     owner.profileHeader = header
-    owner.profileResetButton = resetButton
     PushLocalizedLabel(function() ui.RefreshSafe() end)
     return header, manager
 end
@@ -12863,6 +12250,7 @@ function addon:OpenConfigMenu()
 
     local closeX = CreateFrame("Button", nil, configFrame, "UIPanelCloseButton")
     closeX:SetPoint("TOPRIGHT", -4, -4)
+    self.settingsDesign.StyleCloseButton(closeX)
 
     -- Compact project links share the title bar with the existing close affordance.
     -- Keeping them here avoids a second, redundant close row and preserves content height.
@@ -13001,7 +12389,6 @@ function addon:OpenConfigMenu()
             scrollChild = scrollChild,
             closeX = closeX,
             headerLinkGroup = headerLinkGroup,
-            resetButton = configFrame.profileResetButton,
             koFiButton = koFiButton,
             contactButton = contactButton,
         }
@@ -13187,14 +12574,36 @@ function addon:OpenConfigMenu()
             local row = math.floor((index - 1) / 2)
             button:SetPoint("TOPLEFT", cd.padX + column * 217, cd.y - row * 40)
             button:SetSize(209, 36)
+            local baseSurface = self.settingsDesign.CreateTextureSurface(button, "raised")
+            baseSurface:SetAllPoints(button)
+            button.statsProPresetSurface = baseSurface
+            local selectionRail = button:CreateTexture(nil, "ARTWORK")
+            selectionRail:SetPoint("TOPLEFT", 0, -4)
+            selectionRail:SetPoint("BOTTOMLEFT", 0, 4)
+            selectionRail:SetWidth(2)
+            local selectionColor = self.settingsDesign.Color("accent")
+            selectionRail:SetColorTexture(
+                selectionColor[1], selectionColor[2], selectionColor[3], selectionColor[4])
+            selectionRail:Hide()
+            button.statsProSelectionRail = selectionRail
             local label = button:CreateFontString(nil, "OVERLAY")
             self.settingsDesign.ApplyTextRole(label, "body")
             label:SetPoint("LEFT", 10, 0)
-            label:SetPoint("RIGHT", -10, 0)
+            label:SetPoint("RIGHT", -58, 0)
             label:SetJustifyH("LEFT")
             label:SetWordWrap(false)
             label:SetMaxLines(1)
             PushLocalizedLabel(function() label:SetText(L(definition.label)) end)
+            local preview = {}
+            for previewIndex, colorKey in ipairs({ "crit", "haste", "mastery" }) do
+                local color = definition.colors[colorKey]
+                local swatch = button:CreateTexture(nil, "ARTWORK")
+                swatch:SetPoint("RIGHT", button, "RIGHT", -10 - (3 - previewIndex) * 12, 0)
+                swatch:SetSize(7, 7)
+                swatch:SetColorTexture(color.r, color.g, color.b, 1)
+                preview[previewIndex] = swatch
+            end
+            button.statsProPresetPreview = preview
             self.settingsDesign.StyleListRow(button, label, "body")
             self.settingsDesign.RegisterMutationControl(button)
             button:SetScript("OnClick", function()
@@ -14821,23 +14230,21 @@ if addon and addon.__statsproSmoke == true then
         profileViewModel = addon.profileUI.BuildViewModel,
         formatProfileSpecName = addon.profileUI.FormatSpecName,
         profileOps = {
-            validateName = addon.profileOps.ValidateName,
+            normalizeName = function(rawName)
+                return addon.profileOps.NormalizeNameShape(
+                    rawName, addon.profileOps.maxNameCodepoints, false)
+            end,
             uniqueName = addon.profileOps.UniqueProfileName,
             profileName = addon.profileRuntime.ProfileName,
             countReferences = addon.profileOps.CountReferences,
-            create = addon.profileOps.Create,
-            duplicate = addon.profileOps.Duplicate,
-            rename = addon.profileOps.Rename,
-            copySettings = addon.profileOps.CopySettings,
+            copySettingsToContext = addon.profileOps.CopySettingsToContext,
             assign = addon.profileOps.Assign,
-            useProfileForKnownSpecs = addon.profileOps.UseProfileForKnownSpecs,
-            makeKnownSpecsIndependent = addon.profileOps.MakeKnownSpecsIndependent,
+            makeContextIndependent = addon.profileOps.MakeContextIndependent,
             setRoleTemplate = addon.profileOps.SetRoleTemplate,
-            swap = addon.profileOps.Swap,
-            resetCurrent = addon.profileOps.ResetCurrent,
+            resetProfile = addon.profileOps.ResetProfile,
+            deleteUnusedProfiles = addon.profileOps.DeleteUnusedProfiles,
             importAndAssign = addon.profileOps.ImportAndAssign,
             fullWipe = addon.profileOps.FullWipe,
-            deleteWithReplacement = addon.profileOps.DeleteWithReplacement,
             forgetCharacter = addon.profileOps.ForgetCharacter,
             setFailureStage = function(stage) addon.profileOps.testFailureStage = stage end,
             setTransitioning = function(value) addon.profileRuntime.transitioning = value == true end,
@@ -14868,8 +14275,12 @@ if addon and addon.__statsproSmoke == true then
             for index, row in ipairs(ui.managerRows or {}) do
                 rows[index] = {
                     shown = row:IsShown(),
+                    enabled = row:IsEnabled(),
+                    mouseEnabled = row:IsMouseEnabled(),
                     text = row.text:GetText(),
                     badge = row.badge:GetText(),
+                    textColor = row.text.textColor and CopyTable(row.text.textColor) or nil,
+                    badgeColor = row.badge.textColor and CopyTable(row.badge.textColor) or nil,
                     context = row.profileContext and CopyTable(row.profileContext) or nil,
                 }
             end
@@ -14885,6 +14296,7 @@ if addon and addon.__statsproSmoke == true then
             for key, button in pairs(ui.actionButtons or {}) do
                 actions[key] = {
                     enabled = button:IsEnabled(),
+                    shown = button:IsShown(),
                     text = button:GetText(),
                 }
             end
@@ -14892,15 +14304,12 @@ if addon and addon.__statsproSmoke == true then
                 refreshCount = ui.refreshCount,
                 selectedGUID = ui.selectedGUID,
                 selectedSpecID = ui.selectedSpecID,
-                selectedProfileID = ui.selectedProfileID,
                 selectedAssignedProfileID = ui.selectedAssignedProfileID,
                 headerProfile = ui.headerProfileButton and ui.headerProfileButton:GetText() or nil,
-                headerProfileEnabled = ui.headerProfileButton
-                    and ui.headerProfileButton:IsEnabled() or false,
-                headerLabel = ui.headerLabel and ui.headerLabel:GetText() or nil,
-                headerSubtitle = ui.headerSubtitle and ui.headerSubtitle:GetText() or nil,
-                headerSubtitleColor = ui.headerSubtitle and ui.headerSubtitle.textColor
-                    and CopyTable(ui.headerSubtitle.textColor) or nil,
+                headerProfileColor = ui.headerProfileButton
+                    and ui.headerProfileButton.statsProText
+                    and ui.headerProfileButton.statsProText.textColor
+                    and CopyTable(ui.headerProfileButton.statsProText.textColor) or nil,
                 managerShown = ui.manager and ui.manager:IsShown() or false,
                 managerFrameStrata = ui.manager and ui.manager:GetFrameStrata() or nil,
                 managerListSurfaceRole = ui.managerListSurface
@@ -14916,44 +14325,27 @@ if addon and addon.__statsproSmoke == true then
                 detailCharacter = ui.detailCharacter and ui.detailCharacter:GetText() or nil,
                 detailContext = ui.detailContext and ui.detailContext:GetText() or nil,
                 detailProfile = ui.detailProfile and ui.detailProfile:GetText() or nil,
+                detailProfileColor = ui.detailProfile and ui.detailProfile.textColor
+                    and CopyTable(ui.detailProfile.textColor) or nil,
                 detailProfileWidth = ui.detailProfile and ui.detailProfile:GetWidth() or nil,
                 detailProfileWordWrap = ui.detailProfile and ui.detailProfile.wordWrap,
                 detailProfileNonSpaceWrap = ui.detailProfile
                     and ui.detailProfile.nonSpaceWrap,
                 detailProfileMaxLines = ui.detailProfile and ui.detailProfile.maxLines or nil,
-                detailSharing = ui.detailSharing and ui.detailSharing:GetText() or nil,
-                detailNotice = ui.detailNotice and ui.detailNotice:GetText() or nil,
-                managedProfile = ui.profileSelector and ui.profileSelector:GetText() or nil,
-                managedProfileEnabled = ui.profileSelector and ui.profileSelector:IsEnabled() or false,
-                managedImpact = ui.managedImpact and ui.managedImpact:GetText() or nil,
-                selectedCharacterSummary = ui.selectedCharacterSummary
-                    and ui.selectedCharacterSummary:GetText() or nil,
-                roleTemplateSummary = ui.roleTemplateSummary and {
-                    TANK = ui.roleTemplateSummary.TANK:GetText(),
-                    HEALER = ui.roleTemplateSummary.HEALER:GetText(),
-                    DAMAGER = ui.roleTemplateSummary.DAMAGER:GetText(),
-                } or nil,
                 operationStatus = ui.operationStatus and ui.operationStatus:GetText() or nil,
                 actions = actions,
+                advancedShown = ui.advancedShown == true,
                 operationDialogShown = ui.operationDialog and ui.operationDialog:IsShown() or false,
                 operationBlockerShown = ui.operationBlocker
                     and ui.operationBlocker:IsShown() or false,
                 operationBlockerLevel = ui.operationBlocker
                     and ui.operationBlocker:GetFrameLevel() or nil,
-                operationDialogStrata = ui.operationDialog
-                    and ui.operationDialog:GetFrameStrata() or nil,
                 operationDialogLevel = ui.operationDialog
                     and ui.operationDialog:GetFrameLevel() or nil,
-                operationDialogTitle = ui.operationDialogTitle
-                    and ui.operationDialogTitle:GetText() or nil,
                 operationDialogMessage = ui.operationDialogMessage
                     and ui.operationDialogMessage:GetText() or nil,
                 operationMode = ui.pendingAction and ui.pendingAction.mode or nil,
                 operationKind = ui.pendingAction and ui.pendingAction.kind or nil,
-                nameInput = ui.nameInput and ui.nameInput:GetText() or nil,
-                nameValidation = ui.nameValidation and ui.nameValidation:GetText() or nil,
-                operationConfirmEnabled = ui.operationPrimaryButton
-                    and ui.operationPrimaryButton:IsEnabled() or false,
                 choices = choices,
             }
         end,
@@ -15041,6 +14433,8 @@ if addon and addon.__statsproSmoke == true then
                         key = section.key,
                         surface = section.surface,
                         text = section.text,
+                        rail = section.rail,
+                        line = section.line,
                         y = section.y,
                     }
                 end

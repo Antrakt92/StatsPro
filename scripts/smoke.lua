@@ -16812,38 +16812,47 @@ do
 
     local dbBeforeHover = deepCopy(env.StatsProDB)
     local offensiveCheckbox = env.StatsProOffensiveCheck
-    local checkboxSurface = exists("config.control_design.checkbox_surface",
-        offensiveCheckbox.statsProCheckboxSurface)
-    local checkboxMark = exists("config.control_design.checkbox_mark",
-        offensiveCheckbox.statsProCheckboxMark)
-    eq("config.control_design.checkbox_surface_left_inset",
-        checkboxSurface.points[1][4], 3)
-    eq("config.control_design.checkbox_surface_top_inset",
-        checkboxSurface.points[1][5], -3)
-    eq("config.control_design.checkbox_surface_right_inset",
-        checkboxSurface.points[2][4], -3)
-    eq("config.control_design.checkbox_surface_bottom_inset",
-        checkboxSurface.points[2][5], 3)
-    eq("config.control_design.checkbox_mark_width", checkboxMark:GetWidth(), 8)
-    eq("config.control_design.checkbox_mark_height", checkboxMark:GetHeight(), 8)
-    eq("config.control_design.checkbox_native_normal_hidden",
-        offensiveCheckbox.statsProNormalTexture:GetAlpha(), 0)
-    eq("config.control_design.checkbox_native_pushed_hidden",
-        offensiveCheckbox.statsProPushedTexture:GetAlpha(), 0)
-    eq("config.control_design.checkbox_native_checked_hidden",
-        offensiveCheckbox.statsProCheckedTexture:GetAlpha(), 0)
-    eq("config.control_design.checkbox_native_disabled_checked_hidden",
-        offensiveCheckbox.statsProDisabledCheckedTexture:GetAlpha(), 0)
+    eq("config.control_design.checkbox_custom_surface_absent",
+        offensiveCheckbox.statsProCheckboxSurface, nil)
+    eq("config.control_design.checkbox_square_mark_absent",
+        offensiveCheckbox.statsProCheckboxMark, nil)
     eq("config.control_design.checkbox_native_highlight_hidden",
         offensiveCheckbox:GetHighlightTexture():GetAlpha(), 0)
     eq("config.control_design.checkbox_initial_checked", offensiveCheckbox:GetChecked(), true)
-    assertRGBA("config.control_design.checkbox_checked_surface",
-        checkboxSurface.colorTexture, tokens.colors.positiveMuted)
-    assertRGBA("config.control_design.checkbox_checked_border",
-        checkboxSurface.statsProBorders[1].colorTexture, tokens.colors.positive)
-    assertRGBA("config.control_design.checkbox_checked_mark",
-        checkboxMark.colorTexture, tokens.colors.positive[1], tokens.colors.positive[2],
-        tokens.colors.positive[3], 0.96)
+    eq("config.control_design.checkbox_native_normal_desaturated",
+        offensiveCheckbox.statsProNormalTexture.desaturated, true)
+    eq("config.control_design.checkbox_native_checked_desaturated",
+        offensiveCheckbox.statsProCheckedTexture.desaturated, true)
+    eq("config.control_design.checkbox_native_disabled_checked_desaturated",
+        offensiveCheckbox.statsProDisabledCheckedTexture.desaturated, true)
+    eq("config.control_design.checkbox_native_normal_visible",
+        offensiveCheckbox.statsProNormalTexture:GetAlpha(), 1)
+    eq("config.control_design.checkbox_native_checkmark_visible",
+        offensiveCheckbox.statsProCheckedTexture:GetAlpha(), 1)
+    assertRGBA("config.control_design.checkbox_native_normal_tint",
+        offensiveCheckbox.statsProNormalTexture.vertexColor,
+        tokens.colors.borderStrong[1], tokens.colors.borderStrong[2],
+        tokens.colors.borderStrong[3], 0.82)
+    assertRGBA("config.control_design.checkbox_native_checkmark_tint",
+        offensiveCheckbox.statsProCheckedTexture.vertexColor,
+        tokens.colors.accent[1], tokens.colors.accent[2], tokens.colors.accent[3], 0.92)
+    offensiveCheckbox:SetChecked(false)
+    callScript("config.control_design.checkbox_immediate_uncheck",
+        offensiveCheckbox, "OnClick")
+    eq("config.control_design.checkbox_immediate_uncheck_db",
+        test.profileState().settings.showOffensive, false)
+    near("config.control_design.checkbox_immediate_uncheck_fill",
+        offensiveCheckbox.statsProStateTexture.colorTexture.a, 0)
+    offensiveCheckbox:SetChecked(true)
+    callScript("config.control_design.checkbox_immediate_recheck",
+        offensiveCheckbox, "OnClick")
+    eq("config.control_design.checkbox_immediate_recheck_db",
+        test.profileState().settings.showOffensive, true)
+    near("config.control_design.checkbox_immediate_recheck_fill",
+        offensiveCheckbox.statsProStateTexture.colorTexture.a, tokens.colors.selected[4])
+    assertColor("config.control_design.checkbox_immediate_recheck_fill_color",
+        offensiveCheckbox.statsProStateTexture.colorTexture,
+        tokens.colors.selected[1], tokens.colors.selected[2], tokens.colors.selected[3])
     userInteract("config.control_design.checkbox_hover", env.StatsProOffensiveCheck, "OnEnter")
     eq("config.control_design.checkbox_hover_state",
         env.StatsProOffensiveCheck.statsProControlState, "hover")
@@ -16910,8 +16919,6 @@ do
 
     env.StatsProOffensiveCheck:SetChecked(false)
     userInteract("config.control_design.disable_master", env.StatsProOffensiveCheck, "OnClick")
-    near("config.control_design.checkbox_unchecked_mark_hidden",
-        env.StatsProOffensiveCheck.statsProCheckboxMark.colorTexture.a, 0)
     eq("config.control_design.disabled_checkbox", env.StatsProCritCheck:IsEnabled(), false)
     eq("config.control_design.disabled_checkbox_state",
         env.StatsProCritCheck.statsProControlState, "disabled")
@@ -16921,10 +16928,16 @@ do
         tokens.colors.textDisabled[3])
     near("config.control_design.disabled_checkbox_text.a",
         env.StatsProCritCheck.statsProText.textColor.a, tokens.colors.textDisabled[4])
-    assertRGBA("config.control_design.disabled_checkbox_mark",
-        env.StatsProCritCheck.statsProCheckboxMark.colorTexture,
+    assertRGBA("config.control_design.disabled_checkbox_checkmark",
+        env.StatsProCritCheck.statsProCheckedTexture.vertexColor,
         tokens.colors.textDisabled[1], tokens.colors.textDisabled[2],
         tokens.colors.textDisabled[3], 0.35)
+    assertRGBA("config.control_design.disabled_checkbox_native_border",
+        env.StatsProCritCheck.statsProNormalTexture.vertexColor,
+        tokens.colors.textDisabled[1], tokens.colors.textDisabled[2],
+        tokens.colors.textDisabled[3], 0.35)
+    eq("config.control_design.disabled_checkbox_native_checkmark_desaturated",
+        env.StatsProCritCheck.statsProDisabledCheckedTexture.desaturated, true)
     eq("config.control_design.disabled_reason",
         env.StatsProCritCheck.statsProDisabledReasonKey, "Show Offensive Stats")
     local critSwatch = exists("config.control_design.disabled_swatch",
@@ -16971,10 +16984,10 @@ do
 
     env.StatsProOffensiveCheck:SetChecked(true)
     userInteract("config.control_design.reenable_master", env.StatsProOffensiveCheck, "OnClick")
-    assertRGBA("config.control_design.checkbox_reenabled_mark",
-        env.StatsProOffensiveCheck.statsProCheckboxMark.colorTexture,
-        tokens.colors.positive[1], tokens.colors.positive[2],
-        tokens.colors.positive[3], 0.96)
+    assertRGBA("config.control_design.checkbox_reenabled_checkmark",
+        env.StatsProOffensiveCheck.statsProCheckedTexture.vertexColor,
+        tokens.colors.accent[1], tokens.colors.accent[2],
+        tokens.colors.accent[3], 0.92)
     eq("config.control_design.reenabled_swatch", critSwatch:IsEnabled(), true)
     local hoverSurfacesBefore = deepCopy(env.StatsProDB)
     userInteract("config.control_design.swatch_hover", critSwatch, "OnEnter")

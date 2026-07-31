@@ -8608,11 +8608,13 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
     cb:SetScript("OnClick", function(self)
         if not addon.appearancePresets.BeforeManualEdit(dbKey) then
             self:SetChecked(GetBoolDB(dbKey))
+            addon.settingsDesign.RefreshControl(self)
             return
         end
         local db = addon.dbRuntime.GetWritableSettings(true, dbKey)
         if not db then
             self:SetChecked(GetBoolDB(dbKey))
+            addon.settingsDesign.RefreshControl(self)
             return
         end
         local previous = db[dbKey]
@@ -8623,6 +8625,10 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
         CacheSettings()
         if onChange then onChange(self:GetChecked()) end
         addon:RunUpdateStatsSafe()
+        -- Keep the custom row state in sync in the click handler itself.  The
+        -- native check texture updates immediately; the surrounding hover/row
+        -- styling must not wait for OnLeave or rely on hook ordering.
+        addon.settingsDesign.RefreshControl(self)
     end)
     PushRefresher(function()
         cb:SetChecked(GetBoolDB(dbKey))
@@ -9358,17 +9364,20 @@ function addon.settingsDesign.RefreshControl(control)
         addon.settingsDesign.SetTextureSurfaceColor(control.statsProStateTexture, bgRole, bgAlpha)
         addon.settingsDesign.SetRegionColor(
             control.statsProText, enabled and "textPrimary" or "textDisabled")
-        local boxRole = checked and "positiveMuted" or "raised"
-        addon.settingsDesign.SetTextureSurfaceColor(
-            control.statsProCheckboxSurface, boxRole)
-        local borderRole = not enabled and "textDisabled"
-            or (checked and "positive" or (hovered and "borderStrong" or "borderSoft"))
-        addon.settingsDesign.SetTextureSurfaceBorder(
-            control.statsProCheckboxSurface, borderRole)
-        local markColor = addon.settingsDesign.Color(enabled and "positive" or "textDisabled")
-        control.statsProCheckboxMark:SetColorTexture(
-            markColor[1], markColor[2], markColor[3],
-            checked and (enabled and 0.96 or 0.35) or 0)
+        local normalColor = addon.settingsDesign.Color(enabled and "borderStrong" or "textDisabled")
+        if control.statsProNormalTexture then
+            control.statsProNormalTexture:SetVertexColor(
+                normalColor[1], normalColor[2], normalColor[3], enabled and 0.82 or 0.35)
+        end
+        local checkColor = addon.settingsDesign.Color(enabled and "accent" or "textDisabled")
+        if control.statsProCheckedTexture then
+            control.statsProCheckedTexture:SetVertexColor(
+                checkColor[1], checkColor[2], checkColor[3], enabled and 0.92 or 0.35)
+        end
+        if control.statsProDisabledCheckedTexture then
+            control.statsProDisabledCheckedTexture:SetVertexColor(
+                checkColor[1], checkColor[2], checkColor[3], 0.35)
+        end
     elseif kind == "swatch" then
         local borderRole = not enabled and "textDisabled"
             or (control.statsProActive and "accent"
@@ -9549,19 +9558,9 @@ function addon.settingsDesign.StyleCheckbox(control, text)
     local state = control:CreateTexture(nil, "BACKGROUND")
     state:SetAllPoints(control)
     control.statsProStateTexture = state
-    local box = addon.settingsDesign.CreateTextureSurface(control, "raised")
-    box:SetPoint("TOPLEFT", control, "TOPLEFT", 3, -3)
-    box:SetPoint("BOTTOMRIGHT", control, "BOTTOMRIGHT", -3, 3)
-    control.statsProCheckboxSurface = box
-    local mark = control:CreateTexture(nil, "ARTWORK")
-    mark:SetPoint("CENTER")
-    mark:SetSize(8, 8)
-    control.statsProCheckboxMark = mark
     control.statsProText = text
     control.statsProNormalTexture = type(control.GetNormalTexture) == "function"
         and control:GetNormalTexture() or nil
-    control.statsProPushedTexture = type(control.GetPushedTexture) == "function"
-        and control:GetPushedTexture() or nil
     control.statsProCheckedTexture = type(control.GetCheckedTexture) == "function"
         and control:GetCheckedTexture() or nil
     control.statsProDisabledCheckedTexture = type(control.GetDisabledCheckedTexture) == "function"
@@ -9569,9 +9568,9 @@ function addon.settingsDesign.StyleCheckbox(control, text)
     local highlight = type(control.GetHighlightTexture) == "function"
         and control:GetHighlightTexture() or nil
     if highlight then highlight:SetAlpha(0) end
-    for _, texture in pairs({ control.statsProNormalTexture, control.statsProPushedTexture,
-        control.statsProCheckedTexture, control.statsProDisabledCheckedTexture }) do
-        if texture then texture:SetAlpha(0) end
+    for _, texture in pairs({ control.statsProNormalTexture, control.statsProCheckedTexture,
+        control.statsProDisabledCheckedTexture }) do
+        if texture and type(texture.SetDesaturated) == "function" then texture:SetDesaturated(true) end
     end
     addon.settingsDesign.RegisterControl(control, "checkbox")
     addon.settingsDesign.RegisterMutationControl(control)

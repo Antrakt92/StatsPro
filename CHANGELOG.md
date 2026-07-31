@@ -10,6 +10,10 @@
 - **Item-level and durability caches now recover from transient empty API reads with bounded retries and clear genuinely stale gear values once an empty result is confirmed.**
 - **Preset checkboxes, language and font previews, and Profiles reopening now preserve the user's first action without duplicate refreshes or stale scroll state.**
 
+### Updated
+
+- **Bundled M+ High Keys and Raid Mythic All Bosses target ratings were refreshed from Archon on 31-Jul-2026.**
+
 ## 1.11.0 - 31-Jul-2026 — Softer Settings, simpler sharing, and reliable fonts
 
 ### Changed

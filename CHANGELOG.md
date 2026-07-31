@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.11.0 - 31-Jul-2026 — Softer Settings, simpler sharing, and reliable fonts
+
+### Changed
+
+- **Profiles & sharing now focuses on direct copy, share, and stop-sharing actions for each specialization, with less common reset, role-default, and cleanup tools under Advanced.**
+- **Settings now uses a softer blue theme and more readable typography.** Dropdowns open from the whole field without tiny arrows, and checkboxes use clear tick states with immediate feedback.
+
+### Fixed
+
+- **Loose SharedMedia fonts are now activated during cold startup, so saved custom fonts and the complete picker catalogue become available immediately while invalid or missing paths still fail safely.** Thanks to [@tflo](https://github.com/tflo) for the detailed testing and FontObject investigation.
+- **Archon tooltips now show the live externally buffed percentage in restricted combat instead of an older value**, without using protected values for target or delta calculations.
+- **Boxed-row hover fills, tabs, scrollbars, and title-bar icons now align and highlight consistently.** The empty Side-panel edit outline also no longer appears outside Split mode.
+- **New characters no longer allocate an unused hidden settings record, and single-specialization Profiles views no longer waste space on a redundant status line.**
+- **Appearance preset previews and programmatic checkbox changes now refresh cleanly without stale or duplicated visual state.**
+
+### Updated
+
+- **Bundled M+ High Keys and Raid Mythic All Bosses target ratings were refreshed from latest Archon data.**
+
 ## 1.10.21 - 30-Jul-2026 — Settings, profiles, and font polish
 
 ### Fixed

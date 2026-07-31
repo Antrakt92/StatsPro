@@ -464,6 +464,12 @@ local defaults = {
 --[[ ============================================================
     4. STAT DEFINITION TABLES (data-driven; UpdateStats iterates these)
 ============================================================ ]]
+function addon.IsCleanFiniteNumber(value)
+    if issecretvalue(value) then return false end
+    return type(value) == "number" and value == value
+        and value > -math.huge and value < math.huge
+end
+
 -- WHY: Blizzard's paper doll defines spell crit as the minimum across schools
 -- 2..MAX_SPELL_SCHOOLS, then chooses the best of spell/ranged/melee. In restricted
 -- content any school can be secret, so an incomplete spell aggregate must never
@@ -484,15 +490,11 @@ function addon.GetBestCritChance()
         if ok then return value end
         return nil
     end
-    local function isCleanFinite(value)
-        return not issecretvalue(value) and type(value) == "number" and value == value
-            and value > -math.huge and value < math.huge
-    end
     local function maxClean(...)
         local best
         for i = 1, select("#", ...) do
             local value = select(i, ...)
-            if isCleanFinite(value) then
+            if addon.IsCleanFiniteNumber(value) then
                 best = best and math.max(best, value) or value
             end
         end
@@ -511,7 +513,7 @@ function addon.GetBestCritChance()
                 hasSecretSpell = true
             end
             spellComplete = false
-        elseif isCleanFinite(value) then
+        elseif addon.IsCleanFiniteNumber(value) then
             spell = spell and math.min(spell, value) or value
         else
             spellComplete = false
@@ -548,37 +550,11 @@ addon.appearancePresets = {
         colors = true,
     },
     definitions = {
-        default = {
-            label = "Default", fontSize = 14, textAlpha = 100,
-            panelBackgroundAlpha = 15, textOutlineStyle = "outline",
-            matchValueColorToStat = true, useAutoColorDurability = true,
-            colors = {
-                crit={r=1,g=0,b=0}, haste={r=0,g=.5,b=1}, mastery={r=0,g=1,b=0},
-                versatility={r=1,g=1,b=0}, rating={r=.7,g=.7,b=.7},
-                percentage={r=1,g=1,b=1}, leech={r=.8,g=.2,b=.8},
-                avoidance={r=.2,g=.8,b=.8}, speed={r=1,g=.65,b=0},
-                mainStat={r=1,g=.84,b=0}, stamina={r=.5,g=1,b=.5},
-                itemLevel={r=.55,g=.85,b=1}, dodge={r=.4,g=.7,b=1},
-                parry={r=1,g=.4,b=.2}, block={r=.7,g=.5,b=.3},
-                armor={r=.6,g=.6,b=.7}, stagger={r=.3,g=.8,b=.5},
-                durability={r=1,g=1,b=1},
-            },
-        },
         classic = {
             label = "Classic", fontSize = 14, textAlpha = 100,
             panelBackgroundAlpha = 0, textOutlineStyle = "outline",
             matchValueColorToStat = false, useAutoColorDurability = true,
-            colors = {
-                crit={r=1,g=0,b=0}, haste={r=0,g=.5,b=1}, mastery={r=0,g=1,b=0},
-                versatility={r=1,g=1,b=0}, rating={r=.7,g=.7,b=.7},
-                percentage={r=1,g=1,b=1}, leech={r=.8,g=.2,b=.8},
-                avoidance={r=.2,g=.8,b=.8}, speed={r=1,g=.65,b=0},
-                mainStat={r=1,g=.84,b=0}, stamina={r=.5,g=1,b=.5},
-                itemLevel={r=.55,g=.85,b=1}, dodge={r=.4,g=.7,b=1},
-                parry={r=1,g=.4,b=.2}, block={r=.7,g=.5,b=.3},
-                armor={r=.6,g=.6,b=.7}, stagger={r=.3,g=.8,b=.5},
-                durability={r=1,g=1,b=1},
-            },
+            colors = CopyTable(defaults.colors),
         },
         ["clean-dark"] = {
             label = "Clean Dark", fontSize = 14, textAlpha = 100,
@@ -648,6 +624,11 @@ addon.appearancePresets = {
     session = nil,
     ui = nil,
 }
+addon.appearancePresets.definitions.default = { label = "Default" }
+for key in pairs(addon.appearancePresets.allowlist) do
+    addon.appearancePresets.definitions.default[key] = key == "colors"
+        and CopyTable(defaults.colors) or defaults[key]
+end
 
 -- Primary stat label + unitStatId mapping. Used by BuildCharacterLines via the
 -- PRIMARY_STATS_BY_ID O(1) lookup. label routes through L() for locale render.
@@ -751,10 +732,7 @@ function addon.archonTargets.GetCurrentSpecKey()
     return addon.archonTargets.specKeyByID[specID]
 end
 
-function addon.archonTargets.IsCleanFiniteNumber(value)
-    if issecretvalue(value) then return false end
-    return type(value) == "number" and value == value and value > -math.huge and value < math.huge
-end
+addon.archonTargets.IsCleanFiniteNumber = addon.IsCleanFiniteNumber
 
 function addon.archonTargets.IsCleanContextKey(value)
     return type(value) == "string" and not issecretvalue(value) and value ~= ""
@@ -856,22 +834,6 @@ function addon.archonTargets.GetRootSnapshot(snapshotKey)
     return nil
 end
 
-function addon.archonTargets.GetSnapshotLabel(snapshotRoot, snapshotKey)
-    if type(snapshotRoot) == "table" and type(snapshotRoot.label) == "string" and snapshotRoot.label ~= "" then
-        return snapshotRoot.label
-    end
-    if snapshotKey == "raid" then return "Raid Mythic All Bosses" end
-    return "M+ High Keys"
-end
-
-function addon.archonTargets.GetSnapshotTitle(snapshotRoot, snapshotKey)
-    if type(snapshotRoot) == "table" and type(snapshotRoot.title) == "string" and snapshotRoot.title ~= "" then
-        return snapshotRoot.title
-    end
-    if snapshotKey == "raid" then return "Raid Target" end
-    return "M+ Target"
-end
-
 function addon.archonTargets.GetSnapshot(classToken, specKey, snapshotKey)
     local snapshotRoot, root, normalizedKey = addon.archonTargets.GetRootSnapshot(snapshotKey)
     if not snapshotRoot then return nil end
@@ -903,8 +865,16 @@ function addon.archonTargets.GetStatTarget(statKey)
     return target, snapshot, snapshotRoot, root, snapshotKey, classToken, specKey
 end
 
-function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, currentPct, colorKey)
+function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, currentPct,
+                                       colorKey, currentPctDisplay)
     local hasCleanCurrent = addon.archonTargets.IsCleanFiniteNumber(currentRating) and currentRating >= 0
+    local displaySecretOK, displayIsSecret = pcall(issecretvalue, currentPctDisplay)
+    local hasCurrentPctDisplay = displaySecretOK and (displayIsSecret
+        or addon.archonTargets.IsCleanFiniteNumber(currentPctDisplay))
+    if not hasCurrentPctDisplay then
+        currentPctDisplay = currentPct
+        hasCurrentPctDisplay = addon.archonTargets.IsCleanFiniteNumber(currentPctDisplay)
+    end
     local target, snapshot, snapshotRoot, _, snapshotKey, classToken, specKey = addon.archonTargets.GetStatTarget(statKey)
     if not target then return nil end
     if type(snapshot) ~= "table" or type(snapshotRoot) ~= "table" then return nil end
@@ -919,14 +889,6 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
         sourceUrl = snapshot.sourceUrl,
         capturedAt = capturedAt,
         snapshotKey = snapshotKey,
-        snapshotLabel = addon.archonTargets.GetSnapshotLabel(snapshotRoot, snapshotKey),
-        snapshotTitle = addon.archonTargets.GetSnapshotTitle(snapshotRoot, snapshotKey),
-        activity = snapshotRoot.activity,
-        bracket = snapshotRoot.bracket,
-        dungeon = snapshotRoot.dungeon,
-        difficulty = snapshotRoot.difficulty,
-        boss = snapshotRoot.boss,
-        window = snapshotRoot.window,
     }
     if hasCleanCurrent then
         local displayPct = addon.archonTargets.IsCleanFiniteNumber(currentPct) and currentPct or nil
@@ -935,6 +897,10 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
             meta.comparisonState = "exact"
             meta.current = currentRating
             meta.currentPct = displayPct
+            -- Display-only: direct combat percentages may be secret while the rating
+            -- remains clean. Keep the raw value out of comparisons/caches and pass it
+            -- only to the same client formatter used by the live HUD.
+            if hasCurrentPctDisplay then meta.currentPctDisplay = currentPctDisplay end
             meta.delta = delta
             addon.archonTargets.StoreCleanComparison(
                 classToken, specKey, snapshotKey, statKey, target, cleanRatingCR,
@@ -1270,7 +1236,7 @@ local LABELS_BY_LOCALE = {
         ["Copy the link below (Ctrl+C)."] = "Copy the link below (Ctrl+C).",
         ["Open Settings"] = "Open Settings", ["Settings"] = "Settings",
         ["Profiles & sharing..."] = "Profiles...", ["Profiles & sharing"] = "Profiles & sharing",
-        ["Shared with %d specializations"] = "Shared with %d specializations", ["Only this specialization"] = "Only this specialization",
+        ["Shared with %d specializations"] = "Shared with %d specializations",
         ["Unknown specialization (%d)"] = "Unknown specialization (%d)",
         ["Copy settings from..."] = "Copy settings from...", ["Use the same settings as..."] = "Use the same settings as...",
         ["Use these settings for..."] = "Use these settings for...", ["Stop sharing..."] = "Stop sharing...",
@@ -1410,7 +1376,7 @@ local LABELS_BY_LOCALE = {
         ["Copy the link below (Ctrl+C)."] = "Скопируйте ссылку ниже (Ctrl+C).",
         ["Open Settings"] = "Открыть настройки", ["Settings"] = "Настройки",
         ["Profiles & sharing..."] = "Профили...", ["Profiles & sharing"] = "Профили и общий доступ",
-        ["Shared with %d specializations"] = "Общие настройки для специализаций: %d", ["Only this specialization"] = "Только эта специализация",
+        ["Shared with %d specializations"] = "Общие настройки для специализаций: %d",
         ["Unknown specialization (%d)"] = "Неизвестная специализация (%d)",
         ["Copy settings from..."] = "Скопировать настройки из...", ["Use the same settings as..."] = "Использовать общие настройки с...",
         ["Use these settings for..."] = "Использовать эти настройки для...", ["Stop sharing..."] = "Отделить настройки...",
@@ -1544,7 +1510,7 @@ local LABELS_BY_LOCALE = {
         ["Copy the link below (Ctrl+C)."] = "Kopiere den Link unten (Strg+C).",
         ["Open Settings"] = "Einstellungen öffnen", ["Settings"] = "Einstellungen",
         ["Profiles & sharing..."] = "Profile...", ["Profiles & sharing"] = "Profile und Freigabe",
-        ["Shared with %d specializations"] = "Mit %d Spezialisierungen geteilt", ["Only this specialization"] = "Nur diese Spezialisierung",
+        ["Shared with %d specializations"] = "Mit %d Spezialisierungen geteilt",
         ["Unknown specialization (%d)"] = "Unbekannte Spezialisierung (%d)",
         ["Copy settings from..."] = "Einstellungen kopieren von...", ["Use the same settings as..."] = "Dieselben Einstellungen verwenden wie...",
         ["Use these settings for..."] = "Diese Einstellungen verwenden für...", ["Stop sharing..."] = "Freigabe beenden...",
@@ -1674,7 +1640,7 @@ local LABELS_BY_LOCALE = {
         ["Copy the link below (Ctrl+C)."] = "Copiez le lien ci-dessous (Ctrl+C).",
         ["Open Settings"] = "Ouvrir les paramètres", ["Settings"] = "Paramètres",
         ["Profiles & sharing..."] = "Profils...", ["Profiles & sharing"] = "Profils et partage",
-        ["Shared with %d specializations"] = "Partagé avec %d spécialisations", ["Only this specialization"] = "Cette spécialisation uniquement",
+        ["Shared with %d specializations"] = "Partagé avec %d spécialisations",
         ["Unknown specialization (%d)"] = "Spécialisation inconnue (%d)",
         ["Copy settings from..."] = "Copier les réglages depuis...", ["Use the same settings as..."] = "Utiliser les mêmes réglages que...",
         ["Use these settings for..."] = "Utiliser ces réglages pour...", ["Stop sharing..."] = "Arrêter le partage...",
@@ -1805,7 +1771,7 @@ local LABELS_BY_LOCALE = {
         ["Copy the link below (Ctrl+C)."] = "Copia el enlace de abajo (Ctrl+C).",
         ["Open Settings"] = "Abrir ajustes", ["Settings"] = "Ajustes",
         ["Profiles & sharing..."] = "Perfiles...", ["Profiles & sharing"] = "Perfiles y uso compartido",
-        ["Shared with %d specializations"] = "Compartido con %d especializaciones", ["Only this specialization"] = "Solo esta especialización",
+        ["Shared with %d specializations"] = "Compartido con %d especializaciones",
         ["Unknown specialization (%d)"] = "Especialización desconocida (%d)",
         ["Copy settings from..."] = "Copiar ajustes desde...", ["Use the same settings as..."] = "Usar los mismos ajustes que...",
         ["Use these settings for..."] = "Usar estos ajustes para...", ["Stop sharing..."] = "Dejar de compartir...",
@@ -1934,7 +1900,7 @@ local LABELS_BY_LOCALE = {
         ["Copy the link below (Ctrl+C)."] = "Copia el enlace de abajo (Ctrl+C).",
         ["Open Settings"] = "Abrir configuración", ["Settings"] = "Configuración",
         ["Profiles & sharing..."] = "Perfiles...", ["Profiles & sharing"] = "Perfiles y uso compartido",
-        ["Shared with %d specializations"] = "Compartido con %d especializaciones", ["Only this specialization"] = "Solo esta especialización",
+        ["Shared with %d specializations"] = "Compartido con %d especializaciones",
         ["Unknown specialization (%d)"] = "Especialización desconocida (%d)",
         ["Copy settings from..."] = "Copiar ajustes desde...", ["Use the same settings as..."] = "Usar los mismos ajustes que...",
         ["Use these settings for..."] = "Usar estos ajustes para...", ["Stop sharing..."] = "Dejar de compartir...",
@@ -2064,7 +2030,7 @@ local LABELS_BY_LOCALE = {
         ["Copy the link below (Ctrl+C)."] = "Copia il link qui sotto (Ctrl+C).",
         ["Open Settings"] = "Apri impostazioni", ["Settings"] = "Impostazioni",
         ["Profiles & sharing..."] = "Profili...", ["Profiles & sharing"] = "Profili e condivisione",
-        ["Shared with %d specializations"] = "Condiviso con %d specializzazioni", ["Only this specialization"] = "Solo questa specializzazione",
+        ["Shared with %d specializations"] = "Condiviso con %d specializzazioni",
         ["Unknown specialization (%d)"] = "Specializzazione sconosciuta (%d)",
         ["Copy settings from..."] = "Copia impostazioni da...", ["Use the same settings as..."] = "Usa le stesse impostazioni di...",
         ["Use these settings for..."] = "Usa queste impostazioni per...", ["Stop sharing..."] = "Interrompi condivisione...",
@@ -2193,7 +2159,7 @@ local LABELS_BY_LOCALE = {
         ["Copy the link below (Ctrl+C)."] = "Copie o link abaixo (Ctrl+C).",
         ["Open Settings"] = "Abrir configurações", ["Settings"] = "Configurações",
         ["Profiles & sharing..."] = "Perfis...", ["Profiles & sharing"] = "Perfis e compartilhamento",
-        ["Shared with %d specializations"] = "Compartilhado com %d especializações", ["Only this specialization"] = "Somente esta especialização",
+        ["Shared with %d specializations"] = "Compartilhado com %d especializações",
         ["Unknown specialization (%d)"] = "Especialização desconhecida (%d)",
         ["Copy settings from..."] = "Copiar configurações de...", ["Use the same settings as..."] = "Usar as mesmas configurações de...",
         ["Use these settings for..."] = "Usar estas configurações para...", ["Stop sharing..."] = "Parar de compartilhar...",
@@ -2329,7 +2295,7 @@ local LABELS_BY_LOCALE = {
         ["Copy the link below (Ctrl+C)."] = "아래 링크를 복사하세요 (Ctrl+C).",
         ["Open Settings"] = "설정 열기", ["Settings"] = "설정",
         ["Profiles & sharing..."] = "프로필 및 공유...", ["Profiles & sharing"] = "프로필 및 공유",
-        ["Shared with %d specializations"] = "전문화 %d개와 공유", ["Only this specialization"] = "이 전문화만 사용",
+        ["Shared with %d specializations"] = "전문화 %d개와 공유",
         ["Unknown specialization (%d)"] = "알 수 없는 전문화 (%d)",
         ["Copy settings from..."] = "설정 복사 원본...", ["Use the same settings as..."] = "같은 설정 사용...",
         ["Use these settings for..."] = "이 설정을 사용할 전문화...", ["Stop sharing..."] = "공유 중지...",
@@ -2458,7 +2424,7 @@ local LABELS_BY_LOCALE = {
         ["Copy the link below (Ctrl+C)."] = "复制下方链接（Ctrl+C）。",
         ["Open Settings"] = "打开设置", ["Settings"] = "设置",
         ["Profiles & sharing..."] = "配置与共享...", ["Profiles & sharing"] = "配置与共享",
-        ["Shared with %d specializations"] = "与 %d 个专精共享", ["Only this specialization"] = "仅此专精",
+        ["Shared with %d specializations"] = "与 %d 个专精共享",
         ["Unknown specialization (%d)"] = "未知专精（%d）",
         ["Copy settings from..."] = "复制设置自...", ["Use the same settings as..."] = "使用相同设置...",
         ["Use these settings for..."] = "将这些设置用于...", ["Stop sharing..."] = "停止共享...",
@@ -2587,7 +2553,7 @@ local LABELS_BY_LOCALE = {
         ["Copy the link below (Ctrl+C)."] = "複製下方連結（Ctrl+C）。",
         ["Open Settings"] = "開啟設定", ["Settings"] = "設定",
         ["Profiles & sharing..."] = "設定檔與共用...", ["Profiles & sharing"] = "設定檔與共用",
-        ["Shared with %d specializations"] = "與 %d 個專精共用", ["Only this specialization"] = "僅此專精",
+        ["Shared with %d specializations"] = "與 %d 個專精共用",
         ["Unknown specialization (%d)"] = "未知專精（%d）",
         ["Copy settings from..."] = "複製設定自...", ["Use the same settings as..."] = "使用相同設定...",
         ["Use these settings for..."] = "將這些設定用於...", ["Stop sharing..."] = "停止共用...",
@@ -2878,18 +2844,52 @@ end
 
 -- Font asset validity is separate from heuristic glyph coverage. LSM accepts
 -- arbitrary FONT data, and SavedVariables can retain paths after a media addon is
--- removed. The client can also return false after applying a loose font during a
--- cold client start, so SetFont's boolean alone is not authoritative: read back the
--- effective font and keep known-but-not-yet-applied assets pending instead of
--- destructively replacing the user's saved preference.
+-- removed. On a cold client, a loose font can require activation through an attached
+-- FontObject before ordinary FontStrings expose it. SetFont's boolean alone is not
+-- authoritative: attempt activation, read back the effective font, and keep inconclusive
+-- assets pending instead of destructively replacing the user's saved preference.
 addon.fontRuntime.probeFontString = UIParent:CreateFontString(nil, "OVERLAY")
 addon.fontRuntime.probeFontString:Hide()
 addon.fontRuntime.probeResults = {}
+addon.fontRuntime.fontActivatorInitialized = false
+addon.fontRuntime.fontActivatorObject = nil
+addon.fontRuntime.fontActivatorString = nil
 addon.fontRuntime.pendingSavedFont = nil
 addon.fontRuntime.pendingRetryAttempt = 0
 addon.fontRuntime.pendingRetryGeneration = 0
 addon.fontRuntime.pendingRetryScheduled = false
 addon.fontRuntime.pendingRetryDelays = { 0.2, 1, 3, 5 }
+
+function addon.fontRuntime.initializeFontActivator()
+    if addon.fontRuntime.fontActivatorInitialized then
+        return addon.fontRuntime.fontActivatorObject
+    end
+    addon.fontRuntime.fontActivatorInitialized = true
+    if type(_G.CreateFont) ~= "function" then return nil end
+
+    local created, fontObject = pcall(_G.CreateFont, "StatsProFontAssetActivator")
+    if not created or not fontObject or type(fontObject.SetFont) ~= "function" then return nil end
+    local holder = UIParent:CreateFontString(nil, "OVERLAY")
+    if not holder or type(holder.SetFontObject) ~= "function" then return nil end
+    local attached = pcall(holder.SetFontObject, holder, fontObject)
+    if not attached then return nil end
+    holder:Hide()
+
+    addon.fontRuntime.fontActivatorObject = fontObject
+    addon.fontRuntime.fontActivatorString = holder
+    return fontObject
+end
+
+function addon.fontRuntime.activateLooseFont(fontPath, size)
+    local fontObject = addon.fontRuntime.initializeFontActivator()
+    if not fontObject then return false end
+    -- FontObject:SetFont is a void API. Its nil result is normal; pcall only
+    -- establishes that the client accepted the asset before the real FontString
+    -- probe below verifies the effective path, size, and flags.
+    return pcall(fontObject.SetFont, fontObject, fontPath, size, "")
+end
+
+addon.fontRuntime.initializeFontActivator()
 
 function addon.fontRuntime.rawLSMPath(name)
     if not LSM then return nil end
@@ -2973,6 +2973,15 @@ function addon.fontRuntime.probeStatus(fontPath, size, flags)
     if cachedResult ~= nil then return cachedResult end
     local status = addon.fontRuntime.trySetFont(
         addon.fontRuntime.probeFontString, fontPath, size, flags)
+    -- On a cold client, loose SharedMedia files can return false from a direct
+    -- FontString:SetFont until any attached FontObject has loaded that asset.
+    -- Keep the activator isolated: direct SetFont would break its inheritance,
+    -- and sharing it with HUD/config regions would couple unrelated sizes/flags.
+    if status == "pending" and not IsBlizzardFontPath(fontPath)
+        and addon.fontRuntime.activateLooseFont(fontPath, size) then
+        status = addon.fontRuntime.trySetFont(
+            addon.fontRuntime.probeFontString, fontPath, size, flags)
+    end
     -- A pending result is deliberately retried: cold loose-font availability can
     -- settle later without any LSM catalogue-length change.
     if status ~= "pending" then addon.fontRuntime.probeResults[cacheKey] = status end
@@ -3133,12 +3142,9 @@ local function safeCall(fn, ...)
     return nil
 end
 
-local SAFE_NUM = {}
-
-function SAFE_NUM.IsCleanFiniteNumber(value)
-    if issecretvalue(value) then return false end
-    return type(value) == "number" and value == value and value > -math.huge and value < math.huge
-end
+local SAFE_NUM = {
+    IsCleanFiniteNumber = addon.IsCleanFiniteNumber,
+}
 
 function SAFE_NUM.IsRenderableNumberValue(value)
     if issecretvalue(value) then return true end
@@ -3152,6 +3158,22 @@ function SAFE_NUM.ResolveDisplayNumber(value, requireNonNegative)
         return nil, nil
     end
     return value, value
+end
+
+-- One formatter for every display-only numeric path. Restricted values go only
+-- through Blizzard's C formatter; the returned clean flag is separate so callers
+-- never have to compare or branch on the possibly secret result string.
+function SAFE_NUM.FormatDisplayNumber(value, cleanFormat, secretSuffix)
+    if issecretvalue(value) then
+        if not _G.C_StringUtil
+            or type(_G.C_StringUtil.RoundToNearestString) ~= "function" then
+            return "?", true
+        end
+        return _G.C_StringUtil.RoundToNearestString(value)
+            .. (secretSuffix or ""), true
+    end
+    if not SAFE_NUM.IsCleanFiniteNumber(value) then return nil, false end
+    return string.format(cleanFormat, value), true
 end
 
 function SAFE_NUM.SafeDisplayPercent(fn, ...)
@@ -3445,14 +3467,42 @@ function addon.profileUI.RefreshSafe()
     end
 end
 
-function addon.profileOps.CountSpecAssignments(root)
-    local counts = {}
+function addon.profileOps.CountAllReferences(root)
+    local countsByProfile = {}
+    local function newCounts()
+        return {
+            specs = 0,
+            characterDefaults = 0,
+            accountDefault = 0,
+            roleTemplates = 0,
+            total = 0,
+        }
+    end
+    local function add(profileID, field)
+        if type(profileID) ~= "string" then return end
+        local counts = countsByProfile[profileID]
+        if not counts then
+            counts = newCounts()
+            countsByProfile[profileID] = counts
+        end
+        counts[field] = counts[field] + 1
+        counts.total = counts.total + 1
+    end
+
+    for profileID in pairs(root.profiles or {}) do
+        countsByProfile[profileID] = newCounts()
+    end
+    add(root.account and root.account.defaultProfileID, "accountDefault")
+    for _, profileID in pairs(root.roleTemplates or {}) do
+        add(profileID, "roleTemplates")
+    end
     for _, character in pairs(root.characters or {}) do
+        add(character.defaultProfileID, "characterDefaults")
         for _, profileID in pairs(character.specProfiles or {}) do
-            counts[profileID] = (counts[profileID] or 0) + 1
+            add(profileID, "specs")
         end
     end
-    return counts
+    return countsByProfile
 end
 
 function addon.profileUI.BuildViewModel()
@@ -3482,7 +3532,7 @@ function addon.profileUI.BuildViewModel()
 
     model.canMutate = combat == false and not pending
         and not runtime.transitioning and not addon.profileOps.inProgress
-    local assignmentCounts = addon.profileOps.CountSpecAssignments(root)
+    local referenceCounts = addon.profileOps.CountAllReferences(root)
     for _, role in ipairs(addon.profileOps.roleOrder) do
         local profileID = root.roleTemplates[role]
         model.roleTemplates[role] = {
@@ -3503,7 +3553,8 @@ function addon.profileUI.BuildViewModel()
                 specID = specID,
                 specName = runtime.knownSpecNames[specID],
                 profileID = profileID,
-                sharedCount = assignmentCounts[profileID] or 0,
+                sharedCount = referenceCounts[profileID]
+                    and referenceCounts[profileID].specs or 0,
                 isActive = guid == model.activeGUID and specID == model.activeSpecID
                     and profileID == model.activeProfileID,
             }
@@ -3520,7 +3571,7 @@ function addon.profileUI.BuildViewModel()
         return left.guid < right.guid
     end)
     for profileID in pairs(root.profiles) do
-        local references = addon.profileOps.CountReferences(root, profileID)
+        local references = referenceCounts[profileID]
         model.profiles[profileID] = { profileID = profileID, references = references }
         if references.total == 0 then
             model.unusedProfileCount = model.unusedProfileCount + 1
@@ -4254,14 +4305,12 @@ function addon.profileRuntime.AllocateProfileID(account, profiles)
     return profileID
 end
 
-function addon.profileRuntime.ProfileName(context, suffix, profiles)
+function addon.profileRuntime.SpecProfileName(context, profiles)
     local displayName = addon.dbRuntime.IsCleanType(context.displayName, "string")
         and context.displayName or L("Character")
-    local fallbackLabel = suffix == "default" and L("Default")
-        or string.format(L("Spec %d"), context.specID)
-    local label = suffix == "default" and L("Default")
-        or (addon.dbRuntime.IsCleanType(context.specName, "string")
-            and context.specName or fallbackLabel)
+    local fallbackLabel = string.format(L("Spec %d"), context.specID)
+    local label = addon.dbRuntime.IsCleanType(context.specName, "string")
+        and context.specName or fallbackLabel
     local maxCodepoints = addon.profileOps.maxNameCodepoints
     local safeLabel, labelCount = addon.profileOps.NormalizeNameShape(
         label, maxCodepoints - 4, true)
@@ -4347,17 +4396,7 @@ function addon.profileRuntime.PrepareContextTransaction(context)
             currentCharacter, nil, cloneBudget)
         if not characterCopied or type(character) ~= "table" then return nil, nil end
     else
-        local defaultSource = profiles[account.defaultProfileID]
-        local defaultName = addon.profileRuntime.ProfileName(context, "default", profiles)
-        if not defaultName then return nil, nil end
-        local defaultProfileID = addon.profileRuntime.AllocateProfileID(account, profiles)
-        if type(defaultProfileID) ~= "string"
-            or not addon.dbRuntime.IsCleanType(defaultProfileID, "string") then return nil, nil end
-        local defaultProfile = addon.profileRuntime.CloneProfile(
-            defaultSource, defaultName, cloneBudget)
-        if type(defaultProfile) ~= "table" then return nil, nil end
-        profiles[defaultProfileID] = defaultProfile
-        character = { defaultProfileID = defaultProfileID, specProfiles = {} }
+        character = { specProfiles = {} }
     end
     if not addon.dbRuntime.IsCleanTable(character) then return nil, nil end
     if type(character.specProfiles) ~= "table" then character.specProfiles = {} end
@@ -4366,7 +4405,7 @@ function addon.profileRuntime.PrepareContextTransaction(context)
     if type(sourceProfileID) ~= "string" then sourceProfileID = account.defaultProfileID end
     local sourceProfile = profiles[sourceProfileID]
     if type(sourceProfile) ~= "table" then return nil, nil end
-    local specName = addon.profileRuntime.ProfileName(context, "spec", profiles)
+    local specName = addon.profileRuntime.SpecProfileName(context, profiles)
     if not specName then return nil, nil end
     local specProfileID = addon.profileRuntime.AllocateProfileID(account, profiles)
     if type(specProfileID) ~= "string"
@@ -4975,30 +5014,14 @@ function addon.profileOps.BuildDefaultSettings(budget)
 end
 
 function addon.profileOps.CountReferences(root, profileID)
-    local counts = {
-        specs = 0,
-        characterDefaults = 0,
-        accountDefault = 0,
-        roleTemplates = 0,
-        total = 0,
-    }
-    if root.account.defaultProfileID == profileID then counts.accountDefault = 1 end
-    for _, assignedProfileID in pairs(root.roleTemplates) do
-        if assignedProfileID == profileID then
-            counts.roleTemplates = counts.roleTemplates + 1
-        end
-    end
-    for _, character in pairs(root.characters) do
-        if character.defaultProfileID == profileID then
-            counts.characterDefaults = counts.characterDefaults + 1
-        end
-        for _, assignedProfileID in pairs(character.specProfiles or {}) do
-            if assignedProfileID == profileID then counts.specs = counts.specs + 1 end
-        end
-    end
-    counts.total = counts.specs + counts.characterDefaults
-        + counts.accountDefault + counts.roleTemplates
-    return counts
+    return addon.profileOps.CountAllReferences(root)[profileID]
+        or {
+            specs = 0,
+            characterDefaults = 0,
+            accountDefault = 0,
+            roleTemplates = 0,
+            total = 0,
+        }
 end
 
 function addon.profileOps.ResolveAssignment(root, guid, specID)
@@ -5524,7 +5547,7 @@ function addon.profileOps.CopySettingsToContext(
             specID = specID,
             specName = addon.profileRuntime.knownSpecNames[specID],
         }
-        local name, nameStatus = addon.profileRuntime.ProfileName(context, "spec", profiles)
+        local name, nameStatus = addon.profileRuntime.SpecProfileName(context, profiles)
         if not name then return nil, nameStatus or "name-exhausted" end
         local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
         if not profileID then return nil, "id-exhausted" end
@@ -5587,7 +5610,7 @@ function addon.profileOps.MakeContextIndependent(guid, specID, expected)
             specID = specID,
             specName = addon.profileRuntime.knownSpecNames[specID],
         }
-        local name, nameStatus = addon.profileRuntime.ProfileName(context, "spec", profiles)
+        local name, nameStatus = addon.profileRuntime.SpecProfileName(context, profiles)
         if not name then return nil, nameStatus or "name-exhausted" end
         local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
         if not profileID then return nil, "id-exhausted" end
@@ -6723,6 +6746,12 @@ function addon.archonTargets.GetRatingBonusForValue(ratingCR, rating)
 end
 
 function addon.archonTargets.FormatPercentBonus(value, signed)
+    if issecretvalue(value) then
+        if signed then return nil end
+        local text, renderable = SAFE_NUM.FormatDisplayNumber(value, "%.1f%%", "%")
+        if renderable then return text end
+        return nil
+    end
     if not SAFE_NUM.IsCleanFiniteNumber(value) then return nil end
     if math.abs(value) < 0.05 then value = 0 end
     if signed then
@@ -6821,6 +6850,9 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     local hasComparison = (comparisonState == "exact" or comparisonState == "lastKnown")
         and hasCleanComparison
     local hasCleanCurrentPct = SAFE_NUM.IsCleanFiniteNumber(meta.currentPct)
+    local displaySecretOK, displayIsSecret = pcall(issecretvalue, meta.currentPctDisplay)
+    local hasCurrentPctDisplay = displaySecretOK and (displayIsSecret
+        or SAFE_NUM.IsCleanFiniteNumber(meta.currentPctDisplay))
     local currentBonus, targetBonus
     -- Versatility includes a flat component that rating conversion cannot recover.
     -- Without a clean complete currentPct, raw-rating percentages would be partial.
@@ -6836,11 +6868,25 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     if SAFE_NUM.IsCleanFiniteNumber(currentBonus) and SAFE_NUM.IsCleanFiniteNumber(targetBonus) then
         deltaBonus = targetBonus - currentBonus
     end
-    local currentDisplayBonus = hasCleanCurrentPct and meta.currentPct or currentBonus
+    local currentDisplayBonus
+    if comparisonState == "exact" and hasCurrentPctDisplay then
+        currentDisplayBonus = meta.currentPctDisplay
+    elseif hasCleanCurrentPct then
+        currentDisplayBonus = meta.currentPct
+    else
+        currentDisplayBonus = currentBonus
+    end
     local targetDisplayBonus = targetBonus
     if meta.statKey == "versatility" then targetDisplayBonus = nil end
     if hasCleanCurrentPct and SAFE_NUM.IsCleanFiniteNumber(deltaBonus) then
         targetDisplayBonus = meta.currentPct + deltaBonus
+    end
+    -- A restricted live percentage is displayable but cannot participate in Lua
+    -- arithmetic. Keep Target/Delta as honest rating comparisons instead of pairing
+    -- the live Current percent with percentages derived from a different clean state.
+    if comparisonState == "exact" and displayIsSecret then
+        targetDisplayBonus = nil
+        deltaBonus = nil
     end
     local valueColor = addon.archonTargets.GetTooltipValueColor(meta)
     GameTooltip:SetOwner(anchor, "ANCHOR_RIGHT")
@@ -7271,10 +7317,10 @@ function addon.fontRuntime.applyCommittedTextStyle(font, size, force, allowFontF
 
     addon.fontRuntime.committedFont = effectiveFont
     local db = addon.dbRuntime.GetWritableSettings(false)
-    -- A known loose asset can be temporarily unavailable during a cold client
-    -- start. The runtime fallback is safe, but replacing the saved preference is
-    -- not; the bounded retry below will commit only after the requested face is
-    -- actually observable through GetFont.
+    -- A cold loose asset can remain inconclusive even after the best-effort
+    -- FontObject activation. The runtime fallback is safe, but replacing the saved
+    -- preference is not; the bounded retry below commits only after the requested
+    -- face is actually observable through GetFont.
     local preservePending = db and requestedStatus == "pending"
         and not SameFontPath(effectiveFont, font)
     if preservePending then
@@ -7579,16 +7625,10 @@ end
 -- Other unavailable/invalid values stay nil so callers can preserve intentional
 -- unsupported-API and pre-login row suppression.
 function SAFE_NUM.FormatColorNumber(colorHex, value, format, secretSuffix)
-    if issecretvalue(value) then
-        if not _G.C_StringUtil or type(_G.C_StringUtil.RoundToNearestString) ~= "function" then
-            return "|cff" .. colorHex .. "?|r"
-        end
-        return "|cff" .. colorHex
-            .. _G.C_StringUtil.RoundToNearestString(value)
-            .. (secretSuffix or "") .. "|r"
-    end
-    if not SAFE_NUM.IsCleanFiniteNumber(value) then return nil end
-    return "|cff" .. colorHex .. string.format(format, value) .. "|r"
+    local text, renderable = SAFE_NUM.FormatDisplayNumber(
+        value, format, secretSuffix)
+    if not renderable then return nil end
+    return "|cff" .. colorHex .. text .. "|r"
 end
 
 -- Compose colored "X.X%" string. 5-callsite hot path; centralizes precision.
@@ -7770,7 +7810,7 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
                 if targetRows then
                     targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta(
                         def.statKey, targetRating, def.ratingCR, currentPercent,
-                        def.colorKey) or false
+                        def.colorKey, val) or false
                 end
                 PushRow(labels, ratings, values,
                     FormatLabel(statColor, def.label),
@@ -7791,6 +7831,7 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
         local versDisplayUnknown = false
         local versRatingDisplay
         local targetVersRating
+        local versTooltipDisplay
         -- WARNING: must check operands for secret state before arithmetic. Rating
         -- may be read for either the visible rating column or target-hover metadata;
         -- percent cache can still refresh independently.
@@ -7802,14 +7843,17 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
             cached.versTotal = versFromRating + versFlat
             versDisplay = cached.versTotal
             versClean = cached.versTotal
+            versTooltipDisplay = cached.versTotal
         -- A secret component is still the complete total when its clean counterpart
         -- is exactly zero, so it may use the same whitelisted display-only path as
         -- direct stat APIs. Otherwise retain only the last complete clean total; never
         -- present one non-zero component as full Versatility.
         elseif ratingIsSecret and flatIsClean and versFlat == 0 then
             versDisplay = versFromRating
+            versTooltipDisplay = versFromRating
         elseif flatIsSecret and ratingIsClean and versFromRating == 0 then
             versDisplay = versFlat
+            versTooltipDisplay = versFlat
         elseif versDisplay == nil and (ratingIsSecret or flatIsSecret) then
             versDisplayUnknown = true
         end
@@ -7841,7 +7885,9 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
             local vRatStr, vValStr = FmtRatingPct(
                 rating, versDisplay, versStr, versDisplayUnknown)
             if targetRows then
-                targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta("versatility", targetVersRating, CR_VERSATILITY_DAMAGE_DONE, versClean, "versatility") or false
+                targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta(
+                    "versatility", targetVersRating, CR_VERSATILITY_DAMAGE_DONE,
+                    versClean, "versatility", versTooltipDisplay) or false
             end
             PushRow(labels, ratings, values,
                 FormatLabel(versStr, "Vers"),
@@ -8426,16 +8472,23 @@ local configRefreshers = {}
 local function PushRefresher(fn) tinsert(configRefreshers, fn) end
 
 -- WHY centralized layout constants: a tweak (tighter swatch gap, wider columns) used
--- to require hunting ~10 callsites with hardcoded 6/220/12/"FRIZQT" literals — easy to
--- miss one and ship inconsistent UI. CONFIG_FONT routes through LocaleAwareDefaultFont
--- to dodge the FRIZQT-on-CJK rendering trap
--- while resisting third-party-addon hijacks of the STANDARD_TEXT_FONT global.
+-- to require hunting ~10 callsites with hardcoded 6/220/12/font literals — easy to
+-- miss one and ship inconsistent UI. Dense settings copy prefers a neutral readable
+-- SharedMedia face when available, then falls back to Blizzard's locale-aware UI font.
+addon.fontRuntime.configFontMediaPreferences = {
+    { name = "Noto Sans Medium",  glyphs = { GLYPH_LATIN, GLYPH_CYR } },
+    { name = "Noto Sans Regular", glyphs = { GLYPH_LATIN, GLYPH_CYR } },
+}
 local function LocaleAwareConfigFont()
-    local locale = GetLocale()
-    if locale == "koKR" or locale == "zhCN" or locale == "zhTW" then
-        return LocaleAwareDefaultFont()
+    local glyphRequirement = LOCALE_GLYPH_REQ[GetLocale()] or GLYPH_LATIN
+    for _, media in ipairs(addon.fontRuntime.configFontMediaPreferences) do
+        local path = addon.fontRuntime.rawLSMPath(media.name)
+        if path then
+            AddFontGlyphSupport(path, media.glyphs)
+            if FontSupports(path, glyphRequirement) then return path end
+        end
     end
-    return "Fonts\\ARIALN.TTF"
+    return LocaleAwareDefaultFont()
 end
 
 local CONFIG_FONT       = LocaleAwareConfigFont()
@@ -8562,11 +8615,11 @@ local CONFIG_DROPDOWN_GAP = 6   -- label.RIGHT → dropdown TOPLEFT x gap (match
 -- value lifts the dropdown 2px above rowY so the dropdown chrome visually centers around
 -- the label text. Shared across Display Mode / Language / Font so all 3 rows align identically.
 local CONFIG_DROPDOWN_Y_OFFSET = 2
--- Dropdown body width: 100px for all three (Display Mode / Language / Font). Long-content
+-- Dropdown body width is shared across Display Mode / Language / Font. Long-content
 -- labels (Language's "Auto (current: %s)" and Latin-with-parenthetical locale labels) get
 -- a CompactLabel transform that keeps short disambiguators where needed. Menu items
 -- keep the full label form for disambiguation when picking. Font names from SharedMedia
--- can occasionally overflow at 100px — accepted: rare, names truncate to "Long Name..." and
+-- can occasionally overflow — accepted: rare, names truncate to "Long Name..." and
 -- the user can hover the dropdown for full text via Blizzard's tooltip.
 
 -- Single source of truth for "DB color or fallback to default". This read path is
@@ -8593,7 +8646,6 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
         cb.statsProDBType = "boolean"
     end
     cb:SetPoint("TOPLEFT", x, y)
-    cb:SetSize(22, 22)
     local text = _G[name .. "Text"]
     PushLocalizedLabel(function() text:SetText(L(label)) end)
     RegisterConfigFont(text, CONFIG_FONT_SIZE)
@@ -9077,7 +9129,9 @@ addon.panelEditRuntime.Refresh = function(combatOverride)
         and combat == false
     if show and not addon.dbRuntime.GetWritableSettings(false) then show = false end
     mainPanel:SetEditAffordanceVisible(show)
-    defensivePanel:SetEditAffordanceVisible(show)
+    -- The second runtime panel participates only in Split mode. Showing its sibling
+    -- edit outline in Flat/Sectioned exposed an empty draggable box with no content.
+    defensivePanel:SetEditAffordanceVisible(show and cached.displayMode == "split")
 end
 
 -- The Settings shell uses one explicit visual vocabulary.  Keep this runtime-only:
@@ -9087,29 +9141,29 @@ end
 addon.settingsDesign = {
     tokens = {
         colors = {
-            window = { 0.090, 0.102, 0.098, 0.995 },
-            raised = { 0.137, 0.157, 0.149, 0.99 },
-            profile = { 0.102, 0.176, 0.149, 0.985 },
-            viewport = { 0.071, 0.082, 0.078, 0.985 },
-            borderStrong = { 0.360, 0.400, 0.382, 0.80 },
-            borderSoft = { 0.235, 0.275, 0.255, 0.62 },
-            separator = { 0.420, 0.455, 0.438, 0.42 },
-            accent = { 0.200, 0.827, 0.604, 1 },
-            accentMuted = { 0.200, 0.827, 0.604, 0.20 },
-            positive = { 0.200, 0.827, 0.604, 1 },
-            positiveMuted = { 0.200, 0.827, 0.604, 0.18 },
-            textPrimary = { 0.945, 0.957, 0.951, 1 },
-            textSecondary = { 0.725, 0.760, 0.742, 1 },
-            textMuted = { 0.530, 0.575, 0.552, 1 },
-            textDisabled = { 0.390, 0.420, 0.405, 1 },
-            warning = { 0.960, 0.720, 0.300, 1 },
-            danger = { 0.920, 0.380, 0.350, 1 },
-            hover = { 0.155, 0.190, 0.174, 0.98 },
-            pressed = { 0.200, 0.827, 0.604, 0.14 },
-            rowHover = { 1, 1, 1, 0.055 },
-            rowPressed = { 0.200, 0.827, 0.604, 0.10 },
-            selected = { 0.200, 0.827, 0.604, 0.16 },
-            track = { 0.255, 0.292, 0.274, 0.80 },
+            window = { 0.055, 0.065, 0.085, 0.995 },
+            raised = { 0.090, 0.120, 0.165, 0.99 },
+            profile = { 0.085, 0.155, 0.225, 0.985 },
+            viewport = { 0.040, 0.050, 0.070, 0.985 },
+            borderStrong = { 0.300, 0.500, 0.680, 0.84 },
+            borderSoft = { 0.160, 0.270, 0.390, 0.68 },
+            separator = { 0.250, 0.420, 0.580, 0.48 },
+            accent = { 0.420, 0.650, 0.820, 1 },
+            accentMuted = { 0.420, 0.650, 0.820, 0.28 },
+            positive = { 0.420, 0.650, 0.820, 1 },
+            textPrimary = { 0.930, 0.940, 0.965, 1 },
+            textSecondary = { 0.700, 0.750, 0.820, 1 },
+            textAccent = { 0.720, 0.820, 0.930, 1 },
+            textMuted = { 0.460, 0.530, 0.620, 1 },
+            textDisabled = { 0.320, 0.370, 0.440, 1 },
+            warning = { 0.860, 0.700, 0.390, 1 },
+            danger = { 0.840, 0.450, 0.420, 1 },
+            hover = { 0.105, 0.160, 0.230, 0.98 },
+            pressed = { 0.420, 0.650, 0.820, 0.18 },
+            rowHover = { 0.420, 0.650, 0.820, 0.08 },
+            rowPressed = { 0.420, 0.650, 0.820, 0.14 },
+            selected = { 0.420, 0.650, 0.820, 0.22 },
+            track = { 0.155, 0.240, 0.340, 0.85 },
             transparent = { 0, 0, 0, 0 },
         },
         typography = {
@@ -9117,7 +9171,7 @@ addon.settingsDesign = {
             metadata = { size = 11, color = "textSecondary" },
             profile = { size = 12, color = "textPrimary" },
             tab = { size = 13, flags = "OUTLINE", color = "textSecondary" },
-            section = { size = 12, flags = "OUTLINE", color = "textPrimary" },
+            section = { size = 12, flags = "OUTLINE", color = "textAccent" },
             button = { size = 12, color = "textPrimary" },
             body = { size = 12, color = "textPrimary" },
             value = { size = 12, flags = "OUTLINE", color = "textPrimary" },
@@ -9131,6 +9185,7 @@ addon.settingsDesign = {
             managerMinWidth = 430, managerMaxWidth = 620, managerWidthRatio = 0.90,
             managerMinHeight = 300, managerMaxHeight = 440, managerHeightRatio = 0.85,
             managerDetailInset = 286,
+            managerActionsTopShared = 146, managerActionsTopSolo = 112,
             titleSurfaceInset = 5, titleSurfaceHeight = 35, titleHeight = 40,
             titleTextInset = 16, titleTextTop = 11,
             profileInset = 14, profileTop = 44, profileHeight = 34,
@@ -9267,7 +9322,6 @@ function addon.settingsDesign.SetTextureSurfaceBorder(surface, colorName)
     for _, border in ipairs(surface.statsProBorders or {}) do
         border:SetColorTexture(color[1], color[2], color[3], color[4])
     end
-    surface.statsProBorderRole = colorName
 end
 
 function addon.settingsDesign.SetTextureSurfaceColor(surface, colorName, alpha)
@@ -9417,9 +9471,6 @@ function addon.settingsDesign.RefreshControl(control)
         addon.settingsDesign.SetTextureSurfaceBorder(control.statsProSurface, borderRole)
         addon.settingsDesign.SetRegionColor(
             control.statsProText, enabled and "textPrimary" or "textDisabled")
-        addon.settingsDesign.SetRegionColor(control.statsProChevron,
-            not enabled and "textDisabled"
-                or ((open or pressed) and "accent" or (hovered and "textPrimary" or "textMuted")))
         control:SetAlpha(enabled and 1 or 0.45)
         control.statsProOpen = open
     elseif kind == "listRow" then
@@ -9638,11 +9689,15 @@ function addon.settingsDesign.StyleDropdown(dropdown, label)
     surface:SetPoint("BOTTOMRIGHT", -8, 4)
     addon.settingsDesign.ApplyTextRole(label, "body")
     addon.settingsDesign.ApplyTextRole(text, "body")
-    text:SetWidth(geometry.dropdownWidth - 32)
+    text:SetWidth(geometry.dropdownWidth - 16)
     text:SetJustifyH("LEFT")
     text:SetWordWrap(false)
     text:SetMaxLines(1)
-    button:SetSize(geometry.controlHitTarget, geometry.controlRowHeight)
+    -- The visible field is the control: remove the tiny arrow-only hit target and
+    -- let users open the dropdown by clicking anywhere inside the bordered box.
+    button:ClearAllPoints()
+    button:SetPoint("TOPLEFT", dropdown, "TOPLEFT", 16, -4)
+    button:SetPoint("BOTTOMRIGHT", dropdown, "BOTTOMRIGHT", -8, 4)
     for _, suffix in ipairs({ "Left", "Middle", "Right" }) do
         local texture = name and _G[name .. suffix]
         if texture then texture:SetAlpha(0) end
@@ -9655,14 +9710,9 @@ function addon.settingsDesign.StyleDropdown(dropdown, label)
     }) do
         if texture then texture:SetAlpha(0) end
     end
-    local chevron = dropdown:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(chevron, 12, "OUTLINE")
-    chevron:SetPoint("CENTER", button, "CENTER", -1, 1)
-    chevron:SetText("v")
     button.statsProDropdown = dropdown
     button.statsProSurface = surface
     button.statsProText = text
-    button.statsProChevron = chevron
     dropdown.statsProTrigger = button
     dropdown.statsProLabel = label
     addon.settingsDesign.dropdownTriggers = addon.settingsDesign.dropdownTriggers or {}
@@ -9689,6 +9739,11 @@ function addon.settingsDesign.StyleListRow(row, text, textRole)
         state = row:CreateTexture(nil, "BACKGROUND")
         state:SetAllPoints(row)
     end
+    -- Some boxed rows also own a permanent BACKGROUND surface. Without an
+    -- explicit sublevel, WoW may draw this interactive fill underneath that
+    -- surface, leaving only the text hover visible. Keep every list-row fill
+    -- deterministically above base backgrounds and below BORDER/ARTWORK chrome.
+    state:SetDrawLayer("BACKGROUND", 1)
     row.statsProStateTexture = state
     row.statsProText = text
     addon.settingsDesign.ApplyTextRole(text, textRole or "controlMetadata")
@@ -9774,7 +9829,6 @@ function addon.settingsDesign.StyleCloseButton(button)
     end
     button.statsProCloseHover = hover
     button.statsProCloseText = text
-    button.statsProRefreshClose = RefreshClose
     button:SetScript("OnEnter", function(control)
         control.statsProCloseHovered = true
         RefreshClose(control)
@@ -9904,7 +9958,7 @@ function addon.settingsDesign.CreateDeveloperLinkButton(parent, name, linkKey,
     hover:Hide()
 
     local icon = button:CreateTexture(nil, "ARTWORK")
-    icon:SetPoint("CENTER")
+    icon:SetPoint("CENTER", iconAsset.offsetX or 0, iconAsset.offsetY or 0)
     icon:SetSize(16, 16)
     if iconAsset.atlas then
         icon:SetAtlas(iconAsset.atlas)
@@ -9942,7 +9996,7 @@ function addon.settingsDesign.RefreshTab(button)
     local pressed = button.statsProPressed == true
     local hovered = button.statsProHovered == true
     local fill = addon.settingsDesign.Color(pressed and "pressed"
-        or (hovered and "hover" or (selected and "raised" or "transparent")))
+        or (hovered and "hover" or (selected and "profile" or "transparent")))
     button.statsProFill:SetColorTexture(fill[1], fill[2], fill[3], fill[4])
     if selected then button.statsProSelectedLine:Show() else button.statsProSelectedLine:Hide() end
     addon.settingsDesign.SetRegionColor(button.statsProText,
@@ -10038,6 +10092,7 @@ function addon.settingsDesign.StyleScrollButton(button)
 end
 
 function addon.settingsDesign.StyleScrollFrame(scrollFrame)
+    if scrollFrame.statsProScrollbarStyled then return end
     local frameName = scrollFrame:GetName()
     local scrollBar = scrollFrame.ScrollBar
         or (frameName and _G[frameName .. "ScrollBar"])
@@ -10143,8 +10198,6 @@ local function CursorSection(c, label)
     line:SetPoint("RIGHT", band, "RIGHT", -2, 0)
     line:SetHeight(1)
     addon.settingsDesign.ApplySeparator(line)
-    band.statsProSectionRail = rail
-    band.statsProSectionLine = line
     c.parent.statsProSections = c.parent.statsProSections or {}
     tinsert(c.parent.statsProSections, {
         key = label, surface = band, text = hdr, rail = rail, line = line, y = c.y,
@@ -10214,7 +10267,6 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
     slider:SetMinMaxValues(minVal, maxVal)
     slider:SetValueStep(step)
     slider:SetObeyStepOnDrag(true)
-    slider:SetWidth(420)
     local initialValue = NUMBER_SETTING_META[dbKey] and GetNumberDB(dbKey) or GetDB(dbKey)
     slider:SetValue(initialValue)
     _G[name .. "Low"]:SetText(lowText)
@@ -10332,10 +10384,12 @@ end
 
 function addon.appearancePresets.MarkCustom(settings)
     settings = settings or addon.dbRuntime.GetWritableSettings(false)
-    if settings then
-        settings.appearancePresetID = "custom"
-        addon.appearancePresets.RefreshUI()
+    if not settings or rawget(settings, "appearancePresetID") == "custom" then
+        return false
     end
+    settings.appearancePresetID = "custom"
+    addon.appearancePresets.RefreshUI()
+    return true
 end
 
 function addon.appearancePresets.ApplyRuntime()
@@ -10406,8 +10460,6 @@ function addon.appearancePresets.RefreshUI()
     end
     for presetID, button in pairs(ui.buttons) do
         addon.settingsDesign.SetListRowSelected(button, presetID == displayID)
-        button.statsProActive = session and presetID == displayID or false
-        addon.settingsDesign.RefreshControl(button)
     end
     local warningVisible = false
     if session then
@@ -10443,14 +10495,21 @@ function addon.appearancePresets.CancelPreview(silent)
         addon.appearancePresets.RefreshUI()
         return false, "restore-failed"
     end
-    addon.appearancePresets.RefreshUI()
-    if not silent then addon.profileUI.RefreshSafe() end
+    if silent then
+        addon.appearancePresets.RefreshUI()
+    else
+        addon.profileUI.RefreshSafe()
+    end
     return true
 end
 
 function addon.appearancePresets.StartPreview(presetID)
     local definition = addon.appearancePresets.definitions[presetID]
     if not definition then return false, "invalid-preset" end
+    if addon.appearancePresets.session
+        and addon.appearancePresets.session.presetID == presetID then
+        return false, "no-change"
+    end
     local currentID = addon.appearancePresets.CurrentID()
     if addon.appearancePresets.session and currentID == presetID then
         local cancelled, reason = addon.appearancePresets.CancelPreview()
@@ -10488,7 +10547,6 @@ function addon.appearancePresets.StartPreview(presetID)
         addon.appearancePresets.RefreshUI()
         return false, restored and "preview-failed" or "restore-failed"
     end
-    addon.appearancePresets.RefreshUI()
     addon.profileUI.RefreshSafe()
     return true
 end
@@ -10498,7 +10556,6 @@ function addon.appearancePresets.ApplyPreview()
     if not session then return false, "no-preview" end
     if not addon.appearancePresets.SessionIsCurrent(session) then
         local cancelled, reason = addon.appearancePresets.CancelPreview(true)
-        addon.appearancePresets.RefreshUI()
         return false, cancelled and "stale" or reason
     end
     local presetID, profileID = session.presetID, session.profileID
@@ -10654,12 +10711,11 @@ addon.profileRuntime.applyActiveSettings = function()
     SetAllPanelsScale(GetNumberDB("scale"))
     addon.durabilityRuntime.MarkDirty()
     itemLevelDirty = true
-    local comparison = addon.archonTargets.comparisonCache
-    comparison.generation = comparison.generation + 1
-    comparison.classToken = nil
-    comparison.specKey = nil
-    comparison.snapshotKey = nil
-    comparison.entries = {}
+    -- Keep clean Archon comparisons across same-context profile/style applies.
+    -- ActivateComparisonContext and GetCachedComparison already invalidate on every
+    -- semantic boundary (class, spec, snapshot, target, rating type, or capture date).
+    -- Clearing here discarded Mastery's only safe Missing value when a dungeon buff
+    -- made the live rating secret immediately after an otherwise unrelated reapply.
 
     addon.profileRuntime.RefreshConfigControls()
     timeSinceLastUpdate = 0
@@ -11112,10 +11168,22 @@ end
 
 function addon.profileUI.BuildOperationUI(manager)
     local ui = addon.profileUI
+    local geometry = addon.settingsDesign.tokens.geometry
     local actionScroll = CreateFrame(
         "ScrollFrame", "StatsProProfileActionsScroll", manager, "UIPanelScrollFrameTemplate")
-    actionScroll:SetPoint("TOPLEFT", 258, -146)
-    actionScroll:SetPoint("BOTTOMRIGHT", -34, 16)
+    ui.sharingSummaryVisible = nil
+    function ui.SetSharingSummaryVisible(visible)
+        visible = visible == true
+        if ui.sharingSummaryVisible == visible then return end
+        ui.sharingSummaryVisible = visible
+        actionScroll:ClearAllPoints()
+        actionScroll:SetPoint("TOPLEFT", 258,
+            -(visible and geometry.managerActionsTopShared
+                or geometry.managerActionsTopSolo))
+        actionScroll:SetPoint("BOTTOMRIGHT", -34, 16)
+    end
+    ui.SetSharingSummaryVisible(false)
+    addon.settingsDesign.StyleScrollFrame(actionScroll)
     local actionChild = CreateFrame("Frame", nil, actionScroll)
     actionChild:SetSize(318, 172)
     actionScroll:SetScrollChild(actionChild)
@@ -11217,6 +11285,7 @@ function addon.profileUI.BuildOperationUI(manager)
         "ScrollFrame", "StatsProProfileChoiceScroll", dialog, "UIPanelScrollFrameTemplate")
     choiceScroll:SetPoint("TOPLEFT", 18, -52)
     choiceScroll:SetPoint("BOTTOMRIGHT", -38, 52)
+    addon.settingsDesign.StyleScrollFrame(choiceScroll)
     local choiceChild = CreateFrame("Frame", nil, choiceScroll)
     choiceChild:SetSize(376, 1)
     choiceScroll:SetScrollChild(choiceChild)
@@ -11349,6 +11418,7 @@ function addon.profileUI.BuildOperationUI(manager)
             row:SetPoint("TOPLEFT", 0, y)
             row.choiceData = choice
             row.text:SetText(choice.label)
+            addon.settingsDesign.RefreshOwnedControlTooltip(row)
             row:Show()
             y = y - 28
         end
@@ -11731,7 +11801,7 @@ function addon.profileUI.BuildSettingsUI(owner)
     profileButton:SetPoint("TOPLEFT", geometry.profileFieldInset, -5)
     profileButton:SetSize(geometry.profileFieldWidth, geometry.minHitTarget)
     profileButton.statsProText:SetJustifyH("LEFT")
-    profileButton:EnableMouse(false)
+    profileButton:EnableMouse(true)
 
     local manageButton = addon.settingsDesign.CreateShellButton(
         header, "StatsProManageProfilesButton", "field")
@@ -11827,6 +11897,7 @@ function addon.profileUI.BuildSettingsUI(owner)
     listScroll:SetPoint("TOPLEFT", 16, -76)
     listScroll:SetPoint("BOTTOMLEFT", 16, 16)
     listScroll:SetWidth(212)
+    addon.settingsDesign.StyleScrollFrame(listScroll)
     local listChild = CreateFrame("Frame", nil, listScroll)
     listChild:SetSize(190, 1)
     listScroll:SetScrollChild(listChild)
@@ -11861,6 +11932,7 @@ function addon.profileUI.BuildSettingsUI(owner)
     detailProfile:SetNonSpaceWrap(false)
     detailProfile:SetMaxLines(1)
     addon.settingsDesign.SetRegionColor(detailProfile, "accent")
+    detailProfile:Hide()
 
     ui.headerProfileButton = profileButton
     ui.manager = manager
@@ -12002,7 +12074,7 @@ function addon.profileUI.BuildSettingsUI(owner)
             row.profileContext = nil
             row.statsProHeading = true
             row:Enable()
-            row:EnableMouse(false)
+            row:EnableMouse(true)
             row.text:SetText(character.displayName)
             row.badge:SetText(character.isCurrent and L("Current") or "")
             addon.settingsDesign.RefreshOwnedControlTooltip(row)
@@ -12037,16 +12109,22 @@ function addon.profileUI.BuildSettingsUI(owner)
             detailCharacter:SetText(ui.FormatSpecName(selectedSpec.specID, selectedSpec.specName))
             detailContext:SetText(selectedCharacter.displayName)
             local isShared = selectedSpec.sharedCount > 1
-            detailProfile:SetText(isShared
-                and string.format(L("Shared with %d specializations"), selectedSpec.sharedCount)
-                or L("Only this specialization"))
-            addon.settingsDesign.SetRegionColor(
-                detailProfile, isShared and "positive" or "textSecondary")
+            if isShared then
+                detailProfile:SetText(string.format(
+                    L("Shared with %d specializations"), selectedSpec.sharedCount))
+                addon.settingsDesign.SetRegionColor(detailProfile, "positive")
+                detailProfile:Show()
+            else
+                detailProfile:SetText("")
+                detailProfile:Hide()
+            end
+            ui.SetSharingSummaryVisible(isShared)
         else
             detailCharacter:SetText(L("No visited characters"))
             detailContext:SetText("")
             detailProfile:SetText("")
-            addon.settingsDesign.SetRegionColor(detailProfile, "textSecondary")
+            detailProfile:Hide()
+            ui.SetSharingSummaryVisible(false)
         end
 
         ui.RefreshOperationControls(model, selectedCharacter, selectedSpec)
@@ -12267,6 +12345,9 @@ function addon:OpenConfigMenu()
         headerLinkGroup, "StatsProKoFiLinkButton", "koFiLink", {
             texture = "Interface\\COMMON\\friendship-heart",
             texCoords = { 0.21875, 0.78125, 0.09375, 0.6875 },
+            -- The cropped heart sits low inside its source texture. Compensate for
+            -- that transparent padding so its visible centre matches Chat and X.
+            offsetY = 3,
         }, { 1, 0.36, 0.35, 1 })
     koFiButton:SetPoint("RIGHT", contactButton, "LEFT",
         -self.settingsDesign.tokens.spacing.xs, 0)
@@ -12444,6 +12525,7 @@ function addon:OpenConfigMenu()
                 ApplySplitBlockChecksEnabled()
                 CloseDropDownMenus()
                 addon:RunUpdateStatsSafe()
+                addon.panelEditRuntime.Refresh()
             end)
     end
 
@@ -12575,7 +12657,7 @@ function addon:OpenConfigMenu()
             button:SetSize(209, 36)
             local baseSurface = self.settingsDesign.CreateTextureSurface(button, "raised")
             baseSurface:SetAllPoints(button)
-            button.statsProPresetSurface = baseSurface
+            button.statsProSurface = baseSurface
             local selectionRail = button:CreateTexture(nil, "ARTWORK")
             selectionRail:SetPoint("TOPLEFT", 0, -4)
             selectionRail:SetPoint("BOTTOMLEFT", 0, 4)
@@ -12731,9 +12813,8 @@ function addon:OpenConfigMenu()
                     end
                 end
             end
-            -- Stable sort independent of LSM internal ordering, so alphabetic bucketing below
-            -- always matches user expectation (case-insensitive). Pre-computed sortKey
-            -- Precomputed ASCII-only sort keys avoid repeating path-safe casing work in
+            -- Stable sort independent of LSM internal ordering. Precomputed ASCII-only
+            -- sort keys avoid repeating path-safe casing work in
             -- every comparator call while leaving localized UTF-8 font names byte-stable.
             table.sort(list, function(a, b)
                 if a.sortKey ~= b.sortKey then return a.sortKey < b.sortKey end
@@ -12819,8 +12900,6 @@ function addon:OpenConfigMenu()
             return true
         end
         self.profileRuntime.previewFont = PreviewFont
-        UIDropDownMenu_SetWidth(fontDropdown, addon.settingsDesign.tokens.geometry.dropdownWidth)
-        UIDropDownMenu_JustifyText(fontDropdown, "LEFT")
         -- NOTE: UIDropDownMenu_Initialize is intentionally NOT called — Blizzard's default
         -- popup is replaced by a custom multi-column picker (see Block B below). Without
         -- Initialize, the template's default OnClick would open an empty DropDownList1, but
@@ -13004,7 +13083,7 @@ function addon:OpenConfigMenu()
                 btn.fontPath = f.path
                 btn.text:SetText(f.name)
 
-                -- Current-committed font marker: subtle green-cyan tint.
+                -- Current committed font marker uses the shared selected-row tint.
                 if SameFontPath(f.path, currentPath) then
                     addon.settingsDesign.SetListRowSelected(btn, true)
                     currentRow = row
@@ -13225,7 +13304,7 @@ function addon:OpenConfigMenu()
         end
 
         -- CompactLabel: short form for the dropdown's collapsed current-text field, sized
-        -- for the 100px body while keeping locale variants distinguishable.
+        -- for the collapsed field while keeping locale variants distinguishable.
         local function CompactLabel(opt)
             if opt.value == "auto" then
                 local cur = addon.NormalizeOutputLocale(GetLocale())
@@ -13318,7 +13397,7 @@ function addon:OpenConfigMenu()
             langPreviewLocale = nil  -- next preview must always run a fresh apply
             -- Restore settings-UI font for the COMMITTED locale (mirrors stat-panel restore
             -- above): hover-ruRU-then-cancel on enUS must put our CreateFontStrings back to
-            -- the enUS-baseline CONFIG_FONT, otherwise they'd stay on ARIALN unnecessarily.
+            -- the committed locale's CONFIG_FONT instead of retaining a fallback face.
             ApplyConfigFont(ResolveConfigFont(active))
             RefreshConfigLocalization()
             addon:RunUpdateStatsSafe()
@@ -14234,7 +14313,7 @@ if addon and addon.__statsproSmoke == true then
                     rawName, addon.profileOps.maxNameCodepoints, false)
             end,
             uniqueName = addon.profileOps.UniqueProfileName,
-            profileName = addon.profileRuntime.ProfileName,
+            specProfileName = addon.profileRuntime.SpecProfileName,
             countReferences = addon.profileOps.CountReferences,
             copySettingsToContext = addon.profileOps.CopySettingsToContext,
             assign = addon.profileOps.Assign,
@@ -14324,6 +14403,8 @@ if addon and addon.__statsproSmoke == true then
                 detailCharacter = ui.detailCharacter and ui.detailCharacter:GetText() or nil,
                 detailContext = ui.detailContext and ui.detailContext:GetText() or nil,
                 detailProfile = ui.detailProfile and ui.detailProfile:GetText() or nil,
+                detailProfileShown = ui.detailProfile and ui.detailProfile:IsShown() or false,
+                sharingSummaryVisible = ui.sharingSummaryVisible == true,
                 detailProfileColor = ui.detailProfile and ui.detailProfile.textColor
                     and CopyTable(ui.detailProfile.textColor) or nil,
                 detailProfileWidth = ui.detailProfile and ui.detailProfile:GetWidth() or nil,
@@ -14809,7 +14890,10 @@ local function SetVisible(visible)
     local db = addon.dbRuntime.GetWritableSettings(true)
     if not db then
         local cb = _G["StatsProVisibleCheck"]
-        if cb then cb:SetChecked(GetBoolDB("isVisible")) end
+        if cb then
+            cb:SetChecked(GetBoolDB("isVisible"))
+            addon.settingsDesign.RefreshControl(cb)
+        end
         return false
     end
     db.isVisible = visible
@@ -14817,7 +14901,10 @@ local function SetVisible(visible)
     addon:RunUpdateStatsSafe()
     -- WHY: master Visible checkbox in config menu may be open; sync its state.
     local cb = _G["StatsProVisibleCheck"]
-    if cb then cb:SetChecked(visible) end
+    if cb then
+        cb:SetChecked(visible)
+        addon.settingsDesign.RefreshControl(cb)
+    end
     return true
 end
 SlashCmdList["STATSPRO"] = function(msg)

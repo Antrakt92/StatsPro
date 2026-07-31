@@ -77,6 +77,22 @@ function Assert-ToolCommandVersion {
     Assert-StatsProCommandVersionText -Label $Label -Text ($result.Output -join "`n") -Pattern $Pattern
 }
 
+function Assert-Lua51VersionResult {
+    param(
+        [string]$Label,
+        [object]$Result,
+        [string]$Purpose
+    )
+
+    $version = $Result.Output -join "`n"
+    if ($Result.ExitCode -ne 0) {
+        throw "$Label -v exited with code $($Result.ExitCode): $version"
+    }
+    if ($version -notmatch "Lua\s+5\.1\b") {
+        throw "$Purpose requires Lua 5.1; found: $version"
+    }
+}
+
 function Get-RuntimeLuaRefs {
     param([string]$MetadataCheckPath)
 
@@ -503,6 +519,16 @@ $LuaGlobalStub = Join-Path $RepoRoot "scripts\types\wow-globals.d.lua"
 function Invoke-SelfTest {
     & $MetadataCheck -SelfTest
 
+    $lua51Version = [pscustomobject]@{ ExitCode = 0; Output = @("Lua 5.1.5") }
+    Assert-Lua51VersionResult -Label "lua" -Result $lua51Version -Purpose "StatsPro smoke"
+    Assert-Lua51VersionResult -Label "luac" -Result $lua51Version -Purpose "StatsPro syntax check"
+    Assert-ThrowsMatch "non-5.1 luac rejected" {
+        Assert-Lua51VersionResult `
+            -Label "luac" `
+            -Result ([pscustomobject]@{ ExitCode = 0; Output = @("Lua 5.10.0") }) `
+            -Purpose "StatsPro syntax check"
+    } "requires Lua 5.1"
+
     $smokeFixtureContract = [pscustomobject]@{
         SchemaVersion = 1
         MinimumTotalAssertions = 5
@@ -886,8 +912,10 @@ if ($SelfTest) {
 }
 
 $GateOwnedToolRoot = if ($EnforceToolLocks) { New-StatsProOwnedToolInvocationRoot } else { $null }
+$LocationPushed = $false
 try {
-Set-Location $RepoRoot
+Push-Location -Path $RepoRoot
+$LocationPushed = $true
 
 $ToolLocks = $null
 $OwnedLayout = $null
@@ -952,13 +980,9 @@ else {
 }
 
 $LuaVersionResult = Invoke-NativeCapture -FilePath $Lua -Arguments @("-v") -TimeoutSeconds 10 -Description "lua -v" -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
-$LuaVersion = $LuaVersionResult.Output -join "`n"
-if ($LuaVersionResult.ExitCode -ne 0) {
-    throw "lua -v exited with code $($LuaVersionResult.ExitCode): $LuaVersion"
-}
-if ($LuaVersion -notmatch "Lua\s+5\.1") {
-    throw "StatsPro smoke requires Lua 5.1 because it uses setfenv; found: $LuaVersion"
-}
+Assert-Lua51VersionResult -Label "lua" -Result $LuaVersionResult -Purpose "StatsPro smoke"
+$LuacVersionResult = Invoke-NativeCapture -FilePath $Luac -Arguments @("-v") -TimeoutSeconds 10 -Description "luac -v" -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
+Assert-Lua51VersionResult -Label "luac" -Result $LuacVersionResult -Purpose "StatsPro syntax check"
 
 Write-Host "== Tool versions =="
 Write-ToolVersionReport -Label "lua" -Path $Lua -Arguments @("-v") -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
@@ -1077,7 +1101,14 @@ if ($UpdateSmokeContract) {
 Write-Host "All Lua checks passed."
 }
 finally {
-    if ($GateOwnedToolRoot) {
-        Remove-StatsProOwnedToolInvocationRoot -Path $GateOwnedToolRoot
+    try {
+        if ($LocationPushed) {
+            Pop-Location
+        }
+    }
+    finally {
+        if ($GateOwnedToolRoot) {
+            Remove-StatsProOwnedToolInvocationRoot -Path $GateOwnedToolRoot
+        }
     }
 }

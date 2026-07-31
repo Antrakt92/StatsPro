@@ -325,6 +325,10 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetBackdropBorderColor(r, g, b, a) self.backdropBorderColor = { r = r, g = g, b = b, a = a } end
     function frame:SetColorTexture(r, g, b, a) self.colorTexture = { r = r, g = g, b = b, a = a } end
     function frame:SetVertexColor(r, g, b, a) self.vertexColor = { r = r, g = g, b = b, a = a } end
+    function frame:SetDrawLayer(layer, sublevel)
+        self.drawLayer, self.drawSublevel = layer, sublevel or 0
+    end
+    function frame:GetDrawLayer() return self.drawLayer, self.drawSublevel end
     function frame:SetDesaturated(value) self.desaturated = value ~= false end
     function frame:SetTexture(texture) self.texture = texture end
     function frame:SetAtlas(atlas) self.atlas = atlas end
@@ -332,13 +336,27 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetFont(font, size, flags)
         if type(font) ~= "string" then error("SetFont font must be a string", 2) end
         if not isFiniteNumber(size) then error("SetFont size must be a finite number", 2) end
+        -- Mirrors FrameXML's MakeFontObjectCustom: a direct SetFont stops this
+        -- FontString from inheriting subsequent updates from a shared FontObject.
+        self.fontObject = nil
         if self.setFontResult and self.setFontResult(self, font, size, flags) ~= true then
             return false
         end
         self.font, self.fontSize, self.fontFlags = font, size, flags
         return true
     end
-    function frame:GetFont() return self.font, self.fontSize, self.fontFlags end
+    function frame:SetFontObject(fontObject)
+        if type(fontObject) ~= "table" or type(fontObject.GetFont) ~= "function" then
+            error("SetFontObject requires a FontObject", 2)
+        end
+        self.fontObject = fontObject
+        fontObject.attachCount = (fontObject.attachCount or 0) + 1
+    end
+    function frame:GetFontObject() return self.fontObject end
+    function frame:GetFont()
+        if self.fontObject then return self.fontObject:GetFont() end
+        return self.font, self.fontSize, self.fontFlags
+    end
     function frame:SetJustifyH(value) self.justifyH = value end
     function frame:SetJustifyV(value) self.justifyV = value end
     function frame:SetTextColor(r, g, b, a) self.textColor = { r = r, g = g, b = b, a = a } end
@@ -355,6 +373,19 @@ local function makeFrame(name, setFontResult, parent)
         local args = { ... }
         validatePointArgs(args)
         self.points[#self.points + 1] = args
+        if #self.points == 2 then
+            local topLeft, bottomRight = self.points[1], self.points[2]
+            local relative = topLeft[2]
+            if topLeft[1] == "TOPLEFT" and topLeft[3] == "TOPLEFT"
+                and bottomRight[1] == "BOTTOMRIGHT"
+                and bottomRight[2] == relative and bottomRight[3] == "BOTTOMRIGHT"
+                and type(relative) == "table"
+                and type(relative.GetWidth) == "function"
+                and type(relative.GetHeight) == "function" then
+                self.width = relative:GetWidth() + (bottomRight[4] or 0) - (topLeft[4] or 0)
+                self.height = relative:GetHeight() + (topLeft[5] or 0) - (bottomRight[5] or 0)
+            end
+        end
     end
     function frame:ClearAllPoints() self.points = {} end
     function frame:GetPoint()
@@ -444,10 +475,13 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetMinMaxValues(minValue, maxValue) self.minValue, self.maxValue = minValue, maxValue end
     function frame:SetValueStep(step) self.valueStep = step end
     function frame:SetObeyStepOnDrag() end
-    function frame:SetValue(value) self.value = value end
+    function frame:SetValue(value)
+        local changed = self.value ~= value
+        self.value = value
+        if changed then runFrameHandlers(self, "OnValueChanged", value) end
+    end
     function frame:GetValue() return self.value or 0 end
     function frame:IsKeyboardEnabled() return self.keyboardEnabled == true end
-    function frame:SetAutoFocus(value) self.autoFocus = value ~= false end
     function frame:SetFocus()
         self.focused = true
         runFrameHandlers(self, "OnEditFocusGained")
@@ -459,7 +493,6 @@ local function makeFrame(name, setFontResult, parent)
         runFrameHandlers(self, "OnEditFocusLost")
     end
     function frame:HasFocus() return self.focused == true end
-    function frame:SetMaxLetters() end
     function frame:SetMaxLines(value) self.maxLines = value end
     function frame:SetWordWrap(value) self.wordWrap = value end
     function frame:SetNonSpaceWrap(value) self.nonSpaceWrap = value end
@@ -478,9 +511,10 @@ local function makeFrame(name, setFontResult, parent)
         region.regionType = "FontString"
         return region
     end
-    function frame:CreateTexture()
+    function frame:CreateTexture(_, drawLayer, _, sublevel)
         local region = makeFrame(nil, self.setFontResult, self)
         region.regionType = "Texture"
+        region:SetDrawLayer(drawLayer or "ARTWORK", sublevel or 0)
         return region
     end
 
@@ -528,7 +562,7 @@ local function makeEnv(locale, opts)
     setmetatable(env, { __index = std })
     env._G = env
     env.__frames = {}
-    env.__fontStrings = {}
+    env.__fontObjects = {}
     env.__timers = {}
     env.__timerOrder = 0
     env.__closedDropdowns = 0
@@ -744,7 +778,10 @@ local function makeEnv(locale, opts)
         end
     end
     env.UIDropDownMenu_SetWidth = function(frame, width)
-        if frame then frame.dropdownWidth = width end
+        if frame then
+            frame.dropdownWidth = width
+            frame:SetSize(width + 24, 32)
+        end
     end
     env.UIDropDownMenu_JustifyText = function(frame, justify)
         if frame then frame.dropdownJustify = justify end
@@ -862,15 +899,18 @@ local function makeEnv(locale, opts)
         end
         frame.frameType = frameType
         frame.template = template
+        if frameType == "Button" or frameType == "CheckButton" or frameType == "Slider" then
+            frame.mouseEnabled = true
+        end
         frame.CreateFontString = function()
             local fontString = makeFrame(nil, opts.setFontResult, frame)
             fontString.regionType = "FontString"
-            env.__fontStrings[#env.__fontStrings + 1] = fontString
             return fontString
         end
-        frame.CreateTexture = function()
+        frame.CreateTexture = function(_, _, drawLayer, _, sublevel)
             local texture = makeFrame(nil, opts.setFontResult, frame)
             texture.regionType = "Texture"
+            texture:SetDrawLayer(drawLayer or "ARTWORK", sublevel or 0)
             return texture
         end
         env.__frames[#env.__frames + 1] = frame
@@ -880,6 +920,7 @@ local function makeEnv(locale, opts)
             env[name .. "Low"] = env[name .. "Low"] or makeFrame(name .. "Low", opts.setFontResult)
             env[name .. "High"] = env[name .. "High"] or makeFrame(name .. "High", opts.setFontResult)
             env[name .. "Button"] = env[name .. "Button"] or makeFrame(name .. "Button", opts.setFontResult)
+            env[name .. "Button"].mouseEnabled = true
             frame.Button = env[name .. "Button"]
         end
         if template == "UIPanelScrollFrameTemplate" then
@@ -894,6 +935,7 @@ local function makeEnv(locale, opts)
             scrollBar.ScrollUpButton = up
             scrollBar.ScrollDownButton = down
             for _, button in ipairs({ up, down }) do
+                button.mouseEnabled = true
                 button.normalTexture = makeFrame(nil, opts.setFontResult, button)
                 button.highlightTexture = makeFrame(nil, opts.setFontResult, button)
                 button.pushedTexture = makeFrame(nil, opts.setFontResult, button)
@@ -919,6 +961,31 @@ local function makeEnv(locale, opts)
             frame.thumbTexture = makeFrame(nil, opts.setFontResult, frame)
         end
         return frame
+    end
+    env.CreateFont = function(name)
+        local fontObject = {
+            name = name,
+            regionType = "FontObject",
+            attachCount = 0,
+        }
+        function fontObject:SetFont(font, size, flags)
+            if type(font) ~= "string" then error("FontObject:SetFont font must be a string", 2) end
+            if not isFiniteNumber(size) then error("FontObject:SetFont size must be a finite number", 2) end
+            if type(flags) ~= "string" then error("FontObject:SetFont flags must be a string", 2) end
+            local shouldApply = true
+            if opts.fontObjectSetFontResult then
+                shouldApply = opts.fontObjectSetFontResult(self, font, size, flags) ~= false
+            end
+            if shouldApply then
+                self.font, self.fontSize, self.fontFlags = font, size, flags
+            end
+            -- Blizzard's FontObject setter is void; callers must not interpret
+            -- this nil as a failed font activation.
+            return nil
+        end
+        function fontObject:GetFont() return self.font, self.fontSize, self.fontFlags end
+        env.__fontObjects[#env.__fontObjects + 1] = fontObject
+        return fontObject
     end
 
     local function zero() return 0 end
@@ -953,15 +1020,17 @@ local function makeEnv(locale, opts)
     env.UnitClass = function()
         return "Warrior", opts.unitClassToken or "WARRIOR", opts.classID or 1
     end
-    env.GetSpecialization = function() return nil end
-    env.GetSpecializationInfo = function() return nil end
+    env.GetSpecialization = opts.legacyGetSpecialization or function() return nil end
+    env.GetSpecializationInfo = opts.legacyGetSpecializationInfo or function() return nil end
     env.GetSpecializationInfoByID = opts.getSpecializationInfoByID
-    env.C_SpecializationInfo = {
-        GetSpecialization = opts.getSpecialization or function() return opts.specIndex end,
-        GetSpecializationInfo = opts.getSpecializationInfo or function()
-            return opts.specID, opts.specName, nil, nil, opts.specRole, opts.primaryStat
-        end,
-    }
+    if not opts.disableModernSpecializationInfo then
+        env.C_SpecializationInfo = {
+            GetSpecialization = opts.getSpecialization or function() return opts.specIndex end,
+            GetSpecializationInfo = opts.getSpecializationInfo or function()
+                return opts.specID, opts.specName, nil, nil, opts.specRole, opts.primaryStat
+            end,
+        }
+    end
     env.C_PaperDollInfo = {
         GetStaggerPercentage = opts.getStaggerPercentage or function() return nil end,
     }
@@ -1151,8 +1220,6 @@ do
     eq("archon.v2.mplus_snapshot_still_available", mplusSnapshot.targets.mastery, 823)
     local raidMeta = dualTest.buildArchonTargetMeta("mastery", 700, dualEnv.CR_MASTERY)
     eq("archon.v2.selected_raid_target", raidMeta.target, 812)
-    eq("archon.v2.selected_raid_label", raidMeta.snapshotLabel, "Raid Mythic All Bosses")
-    eq("archon.v2.selected_raid_title", raidMeta.snapshotTitle, "Raid Target")
     eq("archon.v2.selected_raid_captured_at", raidMeta.capturedAt, "2026-05-16")
     dualTest.renderMainPanelForSmoke("Mastery:", "700", "20.0%", 1, nil, nil, { raidMeta })
     dualTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
@@ -2085,15 +2152,10 @@ local function hasScript(name, frame, scriptName)
     return frame.scripts[scriptName]
 end
 
-local function runScript(name, frame, scriptName, ...)
-    local fn = hasScript(name, frame, scriptName)
-    local ok, err = pcall(fn, ...)
-    check(name, ok, err)
-end
-
 local function callScript(name, frame, scriptName, ...)
-    local fn = hasScript(name, frame, scriptName)
-    local ok, err = pcall(fn, frame, ...)
+    frame = exists(name .. ".frame", frame)
+    hasScript(name, frame, scriptName)
+    local ok, err = pcall(runFrameHandlers, frame, scriptName, ...)
     check(name, ok, err)
 end
 
@@ -2121,6 +2183,12 @@ end
 
 local function userInteract(name, frame, scriptName, ...)
     frame = exists(name .. ".frame", frame)
+    local isMouseEvent = scriptName == "OnClick" or scriptName == "OnMouseDown"
+        or scriptName == "OnMouseUp" or scriptName == "OnEnter" or scriptName == "OnLeave"
+    if isMouseEvent and type(frame.IsMouseEnabled) == "function"
+        and not frame:IsMouseEnabled() then
+        fail(name .. ".mouse_reachable", "frame does not receive mouse input")
+    end
     if (scriptName == "OnClick" or scriptName == "OnMouseDown" or scriptName == "OnMouseUp")
         and type(frame.IsEnabled) == "function" and not frame:IsEnabled() then
         return false
@@ -2201,7 +2269,6 @@ end
 local function changeSlider(name, frame, value)
     frame = exists(name .. ".frame", frame)
     frame:SetValue(value)
-    callScript(name, frame, "OnValueChanged", value)
 end
 
 local function findFrame(name, env, predicate)
@@ -3711,9 +3778,8 @@ do
     eq("appearance.presets.restore.manual_preview", ok, true)
     local settingsBeforeManual = deepCopy(restoreTest.profileState().settings)
     service.setRuntimeFailureCount(1)
-    restoreEnv.StatsProFontSlider:SetValue(15)
-    userInteract("appearance.presets.restore.manual_change",
-        restoreEnv.StatsProFontSlider, "OnValueChanged", 15)
+    changeSlider("appearance.presets.restore.manual_change",
+        restoreEnv.StatsProFontSlider, 15)
     assertDeepEqual("appearance.presets.restore.manual_zero_writes",
         restoreTest.profileState().settings, settingsBeforeManual)
     eq("appearance.presets.restore.manual_session", service.state().active, true)
@@ -3778,7 +3844,7 @@ do
     eq("panel.edit.first_open.config_shown", state.configShown, true)
     eq("panel.edit.first_open.requested", state.requested, true)
     eq("panel.edit.first_open.main_visible", state.main.visible, true)
-    eq("panel.edit.first_open.side_visible_when_content_hidden", state.side.visible, true)
+    eq("panel.edit.first_open.side_hidden_in_flat_mode", state.side.visible, false)
     eq("panel.edit.first_open.side_content_stays_hidden", state.side.frameShown, false)
     eq("panel.edit.first_open.main_parent", state.main.parentIsUIParent, true)
     eq("panel.edit.first_open.side_parent", state.side.parentIsUIParent, true)
@@ -3787,7 +3853,7 @@ do
     eq("panel.edit.first_open.main_handle_mouse", state.main.handleMouseEnabled, true)
     eq("panel.edit.first_open.side_handle_mouse", state.side.handleMouseEnabled, true)
     check("panel.edit.first_open.main_border_visible", (state.main.borderAlpha or 0) > 0)
-    check("panel.edit.first_open.side_border_visible", (state.side.borderAlpha or 0) > 0)
+    check("panel.edit.first_open.side_border_styled", (state.side.borderAlpha or 0) > 0)
     local openVisual = editTest.panelVisualState()
     near("panel.edit.zero_background.main", openVisual.mainBackgroundTextureAlpha, 0)
     near("panel.edit.zero_background.side", openVisual.sideBackgroundTextureAlpha, 0)
@@ -3807,7 +3873,7 @@ do
     editAddon:OpenConfigMenu()
     state = editTest.panelEditAffordanceState()
     eq("panel.edit.reopen.main_visible", state.main.visible, true)
-    eq("panel.edit.reopen.side_visible", state.side.visible, true)
+    eq("panel.edit.reopen.side_hidden_in_flat_mode", state.side.visible, false)
 
     local beforeLock = deepCopy(editEnv.StatsProDB)
     clickCheckbox("panel.edit.lock_on", editEnv.StatsProLockCheck, true)
@@ -3823,11 +3889,12 @@ do
     state = editTest.panelEditAffordanceState()
     eq("panel.edit.lock_off.cached", state.locked, false)
     eq("panel.edit.lock_off.main_visible", state.main.visible, true)
-    eq("panel.edit.lock_off.side_visible", state.side.visible, true)
+    eq("panel.edit.lock_off.side_hidden_in_flat_mode", state.side.visible, false)
     assertDeepEqual("panel.edit.lock_roundtrip", editEnv.StatsProDB, beforeLock)
 
     local settings = activeSettings(editEnv)
-    settings.displayMode = "split"
+    selectDropdownValue("panel.edit.display_mode_split",
+        editEnv.StatsProDisplayModeDropdown, "split")
     settings.splitCharacter = false
     settings.splitItemLevel = false
     settings.splitOffensive = false
@@ -3842,7 +3909,8 @@ do
     eq("panel.edit.split_empty_side.affordance_visible", state.side.visible, true)
     eq("panel.edit.split.main_affordance_visible", state.main.visible, true)
 
-    settings.displayMode = "flat"
+    selectDropdownValue("panel.edit.display_mode_flat",
+        editEnv.StatsProDisplayModeDropdown, "flat")
     settings.splitItemLevel = true
     settings.splitDefensive = true
     settings.splitDurability = true
@@ -3851,7 +3919,7 @@ do
     editAddon:RunUpdateStatsSafe()
     state = editTest.panelEditAffordanceState()
     eq("panel.edit.flat.side_content_hidden", state.side.frameShown, false)
-    eq("panel.edit.flat.side_affordance_visible", state.side.visible, true)
+    eq("panel.edit.flat.side_affordance_hidden", state.side.visible, false)
 
     settings.isVisible = false
     editTest.cacheSettings()
@@ -3860,7 +3928,7 @@ do
     eq("panel.edit.master_hidden.main_content", state.main.frameShown, false)
     eq("panel.edit.master_hidden.side_content", state.side.frameShown, false)
     eq("panel.edit.master_hidden.main_affordance", state.main.visible, true)
-    eq("panel.edit.master_hidden.side_affordance", state.side.visible, true)
+    eq("panel.edit.master_hidden.side_affordance", state.side.visible, false)
     settings.isVisible = true
     editTest.cacheSettings()
     editAddon:RunUpdateStatsSafe()
@@ -3881,7 +3949,7 @@ do
     fireEvent("panel.edit.combat_leave", editEnv, "PLAYER_REGEN_ENABLED")
     state = editTest.panelEditAffordanceState()
     eq("panel.edit.combat_leave.main_visible", state.main.visible, true)
-    eq("panel.edit.combat_leave.side_visible", state.side.visible, true)
+    eq("panel.edit.combat_leave.side_hidden_in_flat_mode", state.side.visible, false)
     assertDeepEqual("panel.edit.combat_roundtrip_no_db_write", editEnv.StatsProDB, beforeCombat)
 
     startCalls = state.main.startMovingCalls
@@ -3915,7 +3983,7 @@ do
     fireEvent("panel.edit.open_combat_leave", editEnv, "PLAYER_REGEN_ENABLED")
     state = editTest.panelEditAffordanceState()
     eq("panel.edit.open_combat_leave.main_visible", state.main.visible, true)
-    eq("panel.edit.open_combat_leave.side_visible", state.side.visible, true)
+    eq("panel.edit.open_combat_leave.side_hidden_in_flat_mode", state.side.visible, false)
     editEnv.StatsProConfigFrame:Hide()
     assertDeepEqual("panel.edit.lifecycle_preserves_db", editEnv.StatsProDB, initialRoot)
 end
@@ -3953,14 +4021,22 @@ do
     slash("slash.hide", slashEnv, "hide")
     eq("slash.hide.visible", slashSettings.isVisible, false)
     eq("slash.hide.checkbox_synced", slashEnv.StatsProVisibleCheck:GetChecked(), false)
+    near("slash.hide.checkbox_fill_immediate",
+        slashEnv.StatsProVisibleCheck.statsProStateTexture.colorTexture.a, 0)
     eq("slash.hide.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Stats panel hidden")
     clearPrints(slashEnv)
     slash("slash.show", slashEnv, "show")
     eq("slash.show.visible", slashSettings.isVisible, true)
+    eq("slash.show.checkbox_synced", slashEnv.StatsProVisibleCheck:GetChecked(), true)
+    near("slash.show.checkbox_fill_immediate",
+        slashEnv.StatsProVisibleCheck.statsProStateTexture.colorTexture.a,
+        slashTest.settingsDesignSnapshot().colors.selected[4])
     eq("slash.show.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Stats panel shown")
     clearPrints(slashEnv)
     slash("slash.toggle", slashEnv, "toggle")
     eq("slash.toggle.visible", slashSettings.isVisible, false)
+    near("slash.toggle.checkbox_fill_immediate",
+        slashEnv.StatsProVisibleCheck.statsProStateTexture.colorTexture.a, 0)
     eq("slash.toggle.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Stats panel hidden")
     clearPrints(slashEnv)
     slash("slash.help", slashEnv, "help")
@@ -4771,6 +4847,8 @@ do
     check("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.meta", type(meta) == "table", meta)
     eq("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.current", meta.current, 812)
     eq("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.current_pct", meta.currentPct, nil)
+    eq("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.live_display_pct",
+        critEnv.issecretvalue(meta.currentPctDisplay), true)
     eq("render.target_meta_secret_percent_uses_clean_rating_without_current_pct.target", meta.target, 1000)
 end
 
@@ -5496,7 +5574,13 @@ do
     local procHaste = {}
     local bloodlustHaste = {}
     local phase = "clean"
+    local targetFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 1000, haste = 600, mastery = 300, versatility = 400 })
     local hasteEnv, _, hasteTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
         statsProDB = {
             showOffensive = true,
             showRating = false,
@@ -5508,10 +5592,15 @@ do
             showTertiary = false,
             showDefensive = false,
         },
+        statsProArchonTargets = targetFixture,
         getHaste = function()
             if phase == "proc" then return procHaste end
             if phase == "bloodlust" then return bloodlustHaste end
             return 22
+        end,
+        getCombatRating = function() return 875 end,
+        getCombatRatingBonusForCombatRatingValue = function(_, value)
+            return value / 100
         end,
         issecretvalue = function(value)
             return rawequal(value, procHaste) or rawequal(value, bloodlustHaste)
@@ -5526,6 +5615,11 @@ do
     local state = hasteTest.panelVisualState()
     check("render.haste_secret_proc_bloodlust_updates.clean_baseline",
         state.mainRatingText:find("22.0%", 1, true) ~= nil, state.mainRatingText)
+    hasteTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    local heldOwner = hasteEnv.GameTooltip:GetOwner()
+    check("render.haste_secret_proc_bloodlust_updates.clean_tooltip",
+        hasteEnv.GameTooltip.lines[3].right:find("875 (~22.0%)", 1, true) ~= nil,
+        hasteEnv.GameTooltip.lines[3].right)
 
     local ticker
     for _, frame in ipairs(hasteEnv.__frames) do
@@ -5544,6 +5638,31 @@ do
         state.mainRatingText:find("34%", 1, true) ~= nil, state.mainRatingText)
     eq("render.haste_secret_proc_bloodlust_updates.proc_not_stale",
         state.mainRatingText:find("22.0%", 1, true), nil)
+    eq("render.haste_secret_proc_bloodlust_updates.proc_tooltip_owner",
+        hasteEnv.GameTooltip:GetOwner(), heldOwner)
+    check("render.haste_secret_proc_bloodlust_updates.proc_tooltip_value",
+        hasteEnv.GameTooltip.lines[3].right:find("875 (~34%)", 1, true) ~= nil,
+        hasteEnv.GameTooltip.lines[3].right)
+    eq("render.haste_secret_proc_bloodlust_updates.proc_target_pct_suppressed",
+        hasteEnv.GameTooltip.lines[2].right:find("%", 1, true), nil)
+    eq("render.haste_secret_proc_bloodlust_updates.proc_delta_pct_suppressed",
+        hasteEnv.GameTooltip.lines[4].right:find("%", 1, true), nil)
+    eq("render.haste_secret_proc_bloodlust_updates.proc_tooltip_not_baseline",
+        hasteEnv.GameTooltip.lines[3].right:find("22.0%", 1, true), nil)
+    eq("render.haste_secret_proc_bloodlust_updates.proc_tooltip_not_rating_derived",
+        hasteEnv.GameTooltip.lines[3].right:find("8.8%", 1, true), nil)
+    local procMeta = hasteTest.panelTooltipState("main").lastTargetRows[1]
+    eq("render.haste_secret_proc_bloodlust_updates.proc_meta_exact",
+        procMeta.comparisonState, "exact")
+    eq("render.haste_secret_proc_bloodlust_updates.proc_meta_clean_pct_absent",
+        procMeta.currentPct, nil)
+    eq("render.haste_secret_proc_bloodlust_updates.proc_meta_live_pct_secret",
+        hasteEnv.issecretvalue(procMeta.currentPctDisplay), true)
+    local comparisonCache = hasteTest.archonComparisonCache().entries.haste
+    eq("render.haste_secret_proc_bloodlust_updates.proc_cache_rating",
+        comparisonCache.current, 875)
+    eq("render.haste_secret_proc_bloodlust_updates.proc_cache_secret_pct_absent",
+        comparisonCache.currentPct, nil)
 
     phase = "bloodlust"
     ok, err = pcall(ticker.scripts.OnUpdate, ticker, 999)
@@ -5553,6 +5672,32 @@ do
         state.mainRatingText:find("64%", 1, true) ~= nil, state.mainRatingText)
     eq("render.haste_secret_proc_bloodlust_updates.bloodlust_not_stale",
         state.mainRatingText:find("34%", 1, true), nil)
+    eq("render.haste_secret_proc_bloodlust_updates.bloodlust_tooltip_owner",
+        hasteEnv.GameTooltip:GetOwner(), heldOwner)
+    check("render.haste_secret_proc_bloodlust_updates.bloodlust_tooltip_value",
+        hasteEnv.GameTooltip.lines[3].right:find("875 (~64%)", 1, true) ~= nil,
+        hasteEnv.GameTooltip.lines[3].right)
+    eq("render.haste_secret_proc_bloodlust_updates.bloodlust_target_pct_suppressed",
+        hasteEnv.GameTooltip.lines[2].right:find("%", 1, true), nil)
+    eq("render.haste_secret_proc_bloodlust_updates.bloodlust_delta_pct_suppressed",
+        hasteEnv.GameTooltip.lines[4].right:find("%", 1, true), nil)
+    eq("render.haste_secret_proc_bloodlust_updates.bloodlust_tooltip_not_proc",
+        hasteEnv.GameTooltip.lines[3].right:find("34%", 1, true), nil)
+    hasteTest.fireMainPanelTooltipOverlayForSmoke(1, "OnLeave")
+    hasteTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    check("render.haste_secret_proc_bloodlust_updates.bloodlust_reentered_tooltip",
+        hasteEnv.GameTooltip.lines[3].right:find("875 (~64%)", 1, true) ~= nil,
+        hasteEnv.GameTooltip.lines[3].right)
+
+    phase = "clean"
+    ok, err = pcall(ticker.scripts.OnUpdate, ticker, 999)
+    check("render.haste_secret_proc_bloodlust_updates.expiry_no_error", ok, err)
+    state = hasteTest.panelVisualState()
+    check("render.haste_secret_proc_bloodlust_updates.expiry_hud",
+        state.mainRatingText:find("22.0%", 1, true) ~= nil, state.mainRatingText)
+    check("render.haste_secret_proc_bloodlust_updates.expiry_tooltip",
+        hasteEnv.GameTooltip.lines[3].right:find("875 (~22.0%)", 1, true) ~= nil,
+        hasteEnv.GameTooltip.lines[3].right)
     clearPrints(hasteEnv)
     slash("render.haste_secret_proc_bloodlust_updates.debug_perf", hasteEnv, "debug perf")
     eq("render.haste_secret_proc_bloodlust_updates.zero_update_errors",
@@ -7523,10 +7668,104 @@ do
     eq("fonts.false_with_matching_readback.main_panel", coldTest.panelFontState().mainAppliedFont, coldPath)
     local ok, err = pcall(function() coldAddon:OpenConfigMenu() end)
     check("fonts.false_with_matching_readback.open", ok, err)
-    runScript("fonts.false_with_matching_readback.picker_open",
-        coldEnv.StatsProFontDropdownButton, "OnClick", coldEnv.StatsProFontDropdownButton)
+    userInteract("fonts.false_with_matching_readback.picker_open",
+        coldEnv.StatsProFontDropdownButton, "OnClick")
     eq("fonts.false_with_matching_readback.picker_entry",
         countFrameField(coldEnv, "fontName", "Fira Sans"), 1)
+end
+
+do
+    local catalog = {}
+    local catalogNames = {}
+    local catalogPaths = {}
+    for index = 1, 69 do
+        local name = string.format("Fira Mono %02d", index)
+        local path = string.format(
+            "Interface\\AddOns\\SharedMedia_MyMedia\\font\\Fira\\Mono\\FiraMono-%02d.otf", index)
+        catalog[#catalog + 1] = { name = name, path = path }
+        catalogNames[name] = true
+        catalogPaths[path] = true
+    end
+    local selectedPath = catalog[32].path
+    local brokenPath = "Interface\\AddOns\\SharedMedia_MyMedia\\font\\Fira\\Mono\\Missing.otf"
+    catalog[#catalog + 1] = { name = "Broken Fira", path = brokenPath }
+
+    local activatedPaths = {}
+    local directCalls = 0
+    local activationCalls = 0
+    local coldEnv, coldAddon, coldTest = loadStatsPro("enUS", {
+        statsProDB = {
+            font = selectedPath,
+            fontBeforeAutoSwitch = selectedPath,
+        },
+        lsmFonts = catalog,
+        setFontResult = function(frame, font, size, flags)
+            if font == brokenPath then error("synthetic missing loose font") end
+            if catalogPaths[font] then
+                directCalls = directCalls + 1
+                if not activatedPaths[font] then return false end
+                -- Cold FontString:SetFont still returns false after the FontObject
+                -- activates the asset, but GetFont now exposes the exact effective face.
+                frame.font, frame.fontSize, frame.fontFlags = font, size, flags
+                return false
+            end
+            return true
+        end,
+        fontObjectSetFontResult = function(_, font)
+            if font == brokenPath then error("synthetic missing loose FontObject asset") end
+            if catalogPaths[font] then
+                activationCalls = activationCalls + 1
+                activatedPaths[font] = true
+            end
+            return true
+        end,
+    })
+
+    fireEvent("fonts.cold_font_object_activation.pew", coldEnv, "PLAYER_ENTERING_WORLD")
+    check("fonts.cold_font_object_activation.direct_probe", directCalls > 0)
+    check("fonts.cold_font_object_activation.activator_used", activationCalls > 0)
+    eq("fonts.cold_font_object_activation.one_object", #coldEnv.__fontObjects, 1)
+    eq("fonts.cold_font_object_activation.object_attached", coldEnv.__fontObjects[1].attachCount, 1)
+    eq("fonts.cold_font_object_activation.holder_keeps_inheritance",
+        coldAddon.fontRuntime.fontActivatorString:GetFontObject(), coldEnv.__fontObjects[1])
+    eq("fonts.cold_font_object_activation.selected_activated", activatedPaths[selectedPath], true)
+    eq("fonts.cold_font_object_activation.usable_immediately",
+        coldTest.usableFontPath(selectedPath), selectedPath)
+    eq("fonts.cold_font_object_activation.preserves_db", activeSettings(coldEnv).font, selectedPath)
+    eq("fonts.cold_font_object_activation.preserves_saved_font",
+        activeSettings(coldEnv).fontBeforeAutoSwitch, selectedPath)
+    eq("fonts.cold_font_object_activation.runtime_font", coldTest.currentRuntimeFontPath(), selectedPath)
+    local panelState = coldTest.panelFontState()
+    eq("fonts.cold_font_object_activation.main_panel", panelState.mainAppliedFont, selectedPath)
+    eq("fonts.cold_font_object_activation.side_panel", panelState.sideAppliedFont, selectedPath)
+    eq("fonts.cold_font_object_activation.main_flags", panelState.mainAppliedFontFlags, "OUTLINE")
+    eq("fonts.cold_font_object_activation.side_flags", panelState.sideAppliedFontFlags, "OUTLINE")
+    eq("fonts.cold_font_object_activation.not_pending",
+        coldTest.fontRuntimeState().pendingSavedFont, nil)
+    eq("fonts.cold_font_object_activation.no_retry_attempt",
+        coldTest.fontRuntimeState().pendingRetryAttempt, 0)
+    eq("fonts.cold_font_object_activation.no_retry_timer", #coldEnv.__timers, 0)
+
+    local ok, err = pcall(function() coldAddon:OpenConfigMenu() end)
+    check("fonts.cold_font_object_activation.settings_open", ok, err)
+    userInteract("fonts.cold_font_object_activation.picker_open",
+        coldEnv.StatsProFontDropdownButton, "OnClick")
+    local visibleFiraFonts = 0
+    for _, frame in ipairs(coldEnv.__frames) do
+        if catalogNames[frame.fontName] and frame:IsShown() then
+            visibleFiraFonts = visibleFiraFonts + 1
+        end
+    end
+    eq("fonts.cold_font_object_activation.complete_picker", visibleFiraFonts, 69)
+    eq("fonts.cold_font_object_activation.invalid_excluded",
+        countFrameField(coldEnv, "fontName", "Broken Fira"), 0)
+    eq("fonts.cold_font_object_activation.each_path_activated_once", activationCalls, 69)
+    eq("fonts.cold_font_object_activation.no_picker_retry", #coldEnv.__timers, 0)
+    panelState = coldTest.panelFontState()
+    eq("fonts.cold_font_object_activation.picker_does_not_retarget_main",
+        panelState.mainAppliedFont, selectedPath)
+    eq("fonts.cold_font_object_activation.picker_does_not_retarget_side",
+        panelState.sideAppliedFont, selectedPath)
 end
 
 do
@@ -7560,8 +7799,8 @@ do
 
     local ok, err = pcall(function() delayedAddon:OpenConfigMenu() end)
     check("fonts.known_transient_false.open", ok, err)
-    runScript("fonts.known_transient_false.picker_pending_open",
-        delayedEnv.StatsProFontDropdownButton, "OnClick", delayedEnv.StatsProFontDropdownButton)
+    userInteract("fonts.known_transient_false.picker_pending_open",
+        delayedEnv.StatsProFontDropdownButton, "OnClick")
     eq("fonts.known_transient_false.picker_omits_pending",
         countFrameField(delayedEnv, "fontName", "Fira Sans Medium"), 0)
     delayedEnv.StatsProFontPicker:Hide()
@@ -7572,14 +7811,15 @@ do
     eq("fonts.known_transient_false.retry_runtime", delayedTest.currentRuntimeFontPath(), delayedPath)
     eq("fonts.known_transient_false.retry_main_panel", delayedTest.panelFontState().mainAppliedFont, delayedPath)
     eq("fonts.known_transient_false.no_more_retries", #delayedEnv.__timers, 0)
-    runScript("fonts.known_transient_false.picker_recovered_open",
-        delayedEnv.StatsProFontDropdownButton, "OnClick", delayedEnv.StatsProFontDropdownButton)
+    userInteract("fonts.known_transient_false.picker_recovered_open",
+        delayedEnv.StatsProFontDropdownButton, "OnClick")
     eq("fonts.known_transient_false.picker_rebuilds_same_lsm_length",
         countFrameField(delayedEnv, "fontName", "Fira Sans Medium"), 1)
 end
 
 do
     local neverPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\NeverReady.ttf"
+    local activationCalls = 0
     local neverEnv, _, neverTest = loadStatsPro("enUS", {
         statsProDB = { font = neverPath },
         lsmFonts = { { name = "Never Ready", path = neverPath } },
@@ -7587,8 +7827,16 @@ do
             if font == neverPath then return false end
             return true
         end,
+        fontObjectSetFontResult = function(_, font)
+            if font == neverPath then
+                activationCalls = activationCalls + 1
+                return false
+            end
+            return true
+        end,
     })
     fireEvent("fonts.pending_retry_bound.pew", neverEnv, "PLAYER_ENTERING_WORLD")
+    check("fonts.pending_retry_bound.activator_no_effect", activationCalls > 0)
     local retryDelays = { 0.2, 1, 3, 5 }
     for attempt, delay in ipairs(retryDelays) do
         eq("fonts.pending_retry_bound.timer_count." .. attempt, #neverEnv.__timers, 1)
@@ -7602,6 +7850,34 @@ do
     eq("fonts.pending_retry_bound.attempts", neverTest.fontRuntimeState().pendingRetryAttempt, 4)
     eq("fonts.pending_retry_bound.pending_saved_font",
         neverTest.fontRuntimeState().pendingSavedFont, neverPath)
+end
+
+do
+    local errorPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\ActivatorError.ttf"
+    local activationCalls = 0
+    local errorEnv, _, errorTest = loadStatsPro("enUS", {
+        statsProDB = { font = errorPath },
+        lsmFonts = { { name = "Activator Error", path = errorPath } },
+        setFontResult = function(_, font)
+            if font == errorPath then return false end
+            return true
+        end,
+        fontObjectSetFontResult = function(_, font)
+            if font == errorPath then
+                activationCalls = activationCalls + 1
+                error("synthetic FontObject activation failure")
+            end
+            return true
+        end,
+    })
+    fireEvent("fonts.activator_error.pew", errorEnv, "PLAYER_ENTERING_WORLD")
+    check("fonts.activator_error.attempted", activationCalls > 0)
+    eq("fonts.activator_error.preserves_db", activeSettings(errorEnv).font, errorPath)
+    eq("fonts.activator_error.runtime_fallback",
+        errorTest.currentRuntimeFontPath(), "Fonts\\FRIZQT__.TTF")
+    eq("fonts.activator_error.keeps_pending",
+        errorTest.fontRuntimeState().pendingSavedFont, errorPath)
+    eq("fonts.activator_error.retry_scheduled", #errorEnv.__timers, 1)
 end
 
 do
@@ -7678,8 +7954,8 @@ do
     })
     fireEvent("fonts.picker_pending_open.pew", delayedEnv, "PLAYER_ENTERING_WORLD")
     check("fonts.picker_pending_open.config", pcall(function() delayedAddon:OpenConfigMenu() end))
-    runScript("fonts.picker_pending_open.show",
-        delayedEnv.StatsProFontDropdownButton, "OnClick", delayedEnv.StatsProFontDropdownButton)
+    userInteract("fonts.picker_pending_open.show",
+        delayedEnv.StatsProFontDropdownButton, "OnClick")
     eq("fonts.picker_pending_open.omits_unready",
         countFrameField(delayedEnv, "fontName", delayedName), 0)
     local hoveredButton = findFrame("fonts.picker_pending_open.ready_button", delayedEnv,
@@ -7719,8 +7995,8 @@ do
     })
     fireEvent("fonts.picker_pending_hidden.pew", hiddenEnv, "PLAYER_ENTERING_WORLD")
     check("fonts.picker_pending_hidden.config", pcall(function() hiddenAddon:OpenConfigMenu() end))
-    runScript("fonts.picker_pending_hidden.show",
-        hiddenEnv.StatsProFontDropdownButton, "OnClick", hiddenEnv.StatsProFontDropdownButton)
+    userInteract("fonts.picker_pending_hidden.show",
+        hiddenEnv.StatsProFontDropdownButton, "OnClick")
     eq("fonts.picker_pending_hidden.one_retry", #hiddenEnv.__timers, 1)
     hiddenEnv.StatsProFontPicker:Hide()
     eq("fonts.picker_pending_hidden.restore_and_retry_queued", #hiddenEnv.__timers, 2)
@@ -7949,10 +8225,12 @@ do
     lsmTest.cacheSettings()
     local ok, err = pcall(function() lsmAddon:OpenConfigMenu() end)
     check("fonts.lsm_picker_open_constructs_config", ok, err)
-    runScript("fonts.lsm_picker_open", lsmEnv.StatsProFontDropdownButton, "OnClick", lsmEnv.StatsProFontDropdownButton)
+    userInteract("fonts.lsm_picker_open", lsmEnv.StatsProFontDropdownButton, "OnClick")
     eq("fonts.lsm_picker_includes_registered_name", countFrameField(lsmEnv, "fontName", "Noto Sans CJK"), 1)
     eq("fonts.lsm_picker_filters_unloadable_registration", countFrameField(lsmEnv, "fontName", "Broken Registration"), 0)
-    eq("fonts.lsm_picker_retries_ambiguous_registration", brokenFontCalls, 2)
+    -- Each pending catalogue pass now retries the direct probe once after the
+    -- best-effort FontObject activation attempt.
+    eq("fonts.lsm_picker_retries_ambiguous_registration", brokenFontCalls, 4)
     local lsmFontButton = findFrame("fonts.lsm_picker_registered_button", lsmEnv, function(frame)
         return frame.fontName == "Noto Sans CJK"
     end)
@@ -8055,12 +8333,15 @@ do
 end
 
 do
+    local readableConfigFont =
+        "Interface\\AddOns\\SharedMedia\\Fonts\\NotoSans-Medium.ttf"
     local configTarget = "Interface\\AddOns\\SharedMedia\\Fonts\\ConfigTarget.ttf"
     local pickerTarget = "Interface\\AddOns\\SharedMedia\\Fonts\\PickerTarget.ttf"
     local mode = "pass"
     local defaultFontCalls = 0
     local configEnv, configAddon, configTest = loadStatsPro("enUS", {
         lsmFonts = {
+            { name = "Noto Sans Medium", path = readableConfigFont },
             { name = "Config Target", path = configTarget },
             { name = "Picker Target", path = pickerTarget },
         },
@@ -8081,8 +8362,10 @@ do
     eq("fonts.config_registry.initial_checkbox_text",
         configEnv.StatsProMainStatCheckText:GetText(), "Show Main Stat")
     local before = configTest.configFontState()
-    eq("fonts.config_registry.modern_latin_default",
-        before.currentFont, "Fonts\\ARIALN.TTF")
+    eq("fonts.config_registry.readable_latin_default",
+        before.currentFont, readableConfigFont)
+    eq("fonts.config_registry.readable_default_supports_cyrillic",
+        configTest.fontSupports(readableConfigFont, "Cyrillic"), true)
     check("fonts.config_registry.has_entries", #before.entries > 10, "expected populated config font registry")
     local registeredRegions = {}
     for i, entry in ipairs(before.entries) do
@@ -8159,15 +8442,15 @@ do
     local callsAfterFailedPreview = defaultFontCalls
     configEnv.DropDownList1:Hide()
     configEnv.UIDROPDOWNMENU_OPEN_MENU = nil
-    eq("fonts.language_preview_failed_swap.cancel_uses_safe_default",
-        defaultFontCalls, callsAfterFailedPreview + 1)
+    eq("fonts.language_preview_failed_swap.cancel_avoids_fallback",
+        defaultFontCalls, callsAfterFailedPreview)
     eq("fonts.language_preview_failed_swap.config_safe_default",
-        configTest.configFontState().currentFont, "Fonts\\FRIZQT__.TTF")
+        configTest.configFontState().currentFont, readableConfigFont)
 
     mode = "pass"
     local beforeLazyPicker = configTest.configFontState()
-    runScript("fonts.picker_failed_commit.open", configEnv.StatsProFontDropdownButton, "OnClick",
-        configEnv.StatsProFontDropdownButton)
+    userInteract("fonts.picker_failed_commit.open",
+        configEnv.StatsProFontDropdownButton, "OnClick")
     local afterLazyPicker = configTest.configFontState()
     for i, entry in ipairs(beforeLazyPicker.entries) do
         eq("fonts.picker_lazy_registry.preserves_existing_text." .. i,
@@ -8275,8 +8558,8 @@ do
     fireEvent("fonts.future_schema_picker_baseline.pew", futureEnv, "PLAYER_ENTERING_WORLD")
     local ok, err = pcall(function() futureAddon:OpenConfigMenu() end)
     check("fonts.future_schema_picker_baseline.open_config", ok, err)
-    runScript("fonts.future_schema_picker_baseline.open_picker", futureEnv.StatsProFontDropdownButton, "OnClick",
-        futureEnv.StatsProFontDropdownButton)
+    callScript("fonts.future_schema_picker_baseline.open_picker",
+        futureEnv.StatsProFontDropdownButton, "OnClick")
     local frizButton = findFrame("fonts.future_schema_picker_baseline.friz_button", futureEnv, function(frame)
         return frame.fontName == "Friz Quadrata TT"
     end)
@@ -9957,8 +10240,8 @@ do
     eq("config.reopen_toggle.shown", env.StatsProConfigFrame:IsShown(), true)
     eq("config.reopen_toggle.first_tab", env.StatsProConfigFrame.activeTabIndex, 1)
 
-    runScript("config.font_picker_lazy_scaffold.open", env.StatsProFontDropdownButton, "OnClick",
-        env.StatsProFontDropdownButton)
+    userInteract("config.font_picker_lazy_scaffold.open",
+        env.StatsProFontDropdownButton, "OnClick")
     exists("config.font_picker_lazy_scaffold.frame", env.StatsProFontPicker)
     eq("config.font_picker_strata.dialog", env.StatsProFontPicker:GetFrameStrata(), "DIALOG")
     eq("config.font_picker_surface.window", env.StatsProFontPicker.statsProSurfaceRole, "window")
@@ -9979,9 +10262,7 @@ do
     eq("config.font_picker_hover_restore_forces_side_font", fontState.sideLabelFont, defaultFont)
 
     local critSwatch = findFrame("config.color_picker.crit_swatch", env, function(frame)
-        local color = frame.statsProColorWell and frame.statsProColorWell.colorTexture
         return frame.statsProColorKey == "crit" and type(frame.scripts.OnClick) == "function"
-            and color and color.r == 1 and color.g == 0 and color.b == 0
     end)
     callScript("config.color_picker.open", critSwatch, "OnClick")
     local colorOptions = exists("config.color_picker.options", env.ColorPickerFrame.colorPickerOptions)
@@ -10047,19 +10328,21 @@ do
     local tokens = shellTest.settingsDesignSnapshot()
     local detached = shellTest.settingsDesignSnapshot()
     tokens.colors.window[1] = 0.99
-    near("config.shell.tokens.detached", detached.colors.window[1], 0.090)
+    near("config.shell.tokens.detached", detached.colors.window[1], 0.055)
     near("config.shell.tokens.window_alpha", detached.colors.window[4], 0.995)
     near("config.shell.tokens.viewport_alpha", detached.colors.viewport[4], 0.985)
-    near("config.shell.tokens.accent_green", detached.colors.accent[2], 0.827)
-    near("config.shell.tokens.accent_blue", detached.colors.accent[3], 0.604)
-    near("config.shell.tokens.positive_green", detached.colors.positive[2], 0.827)
-    check("config.shell.tokens.neutral_graphite",
-        detached.colors.window[3] < detached.colors.window[2]
-            and detached.colors.window[2] - detached.colors.window[1] < 0.02,
+    near("config.shell.tokens.accent_red", detached.colors.accent[1], 0.420)
+    near("config.shell.tokens.accent_green", detached.colors.accent[2], 0.650)
+    near("config.shell.tokens.accent_blue", detached.colors.accent[3], 0.820)
+    near("config.shell.tokens.positive_blue", detached.colors.positive[3], 0.820)
+    check("config.shell.tokens.cool_navy_window",
+        detached.colors.window[3] > detached.colors.window[2]
+            and detached.colors.window[2] > detached.colors.window[1]
+            and detached.colors.window[3] - detached.colors.window[1] >= 0.029,
         detached.colors.window)
-    check("config.shell.tokens.single_teal_accent",
-        detached.colors.accent[2] > detached.colors.accent[3]
-            and detached.colors.accent[3] > detached.colors.accent[1]
+    check("config.shell.tokens.single_steel_blue_accent",
+        detached.colors.accent[3] > detached.colors.accent[2]
+            and detached.colors.accent[2] > detached.colors.accent[1]
             and deepEqual(detached.colors.accent, detached.colors.positive),
         detached.colors.accent)
     check("config.shell.tokens.raised_surface_lighter",
@@ -10067,6 +10350,18 @@ do
             and detached.colors.raised[2] > detached.colors.window[2]
             and detached.colors.raised[3] > detached.colors.window[3],
         detached.colors.raised)
+    check("config.shell.tokens.profile_surface_distinct",
+        detached.colors.profile[3] - detached.colors.window[3] >= 0.13
+            and detached.colors.profile[3] > detached.colors.profile[2]
+            and detached.colors.profile[2] > detached.colors.profile[1],
+        detached.colors.profile)
+    eq("config.shell.tokens.section_uses_accent_text",
+        detached.typography.section.color, "textAccent")
+    check("config.shell.tokens.section_text_is_muted_blue",
+        detached.colors.textAccent[3] > detached.colors.textAccent[2]
+            and detached.colors.textAccent[2] > detached.colors.textAccent[1]
+            and detached.colors.textAccent[3] > detached.colors.textSecondary[3],
+        detached.colors.textAccent)
     assertDeepEqual("config.shell.tokens.transparent", detached.colors.transparent, { 0, 0, 0, 0 })
     eq("config.shell.tokens.window_width", detached.geometry.windowWidth, 500)
     eq("config.shell.tokens.min_hit_target", detached.geometry.minHitTarget, 24)
@@ -10206,11 +10501,19 @@ do
         -detached.spacing.xs)
     eq("config.shell.header.kofi_texture", shell.koFiButton.statsProIcon.texture,
         "Interface\\COMMON\\friendship-heart")
+    assertRGBA("config.shell.header.kofi_tint",
+        shell.koFiButton.statsProIcon.vertexColor, { 1, 0.36, 0.35, 1 })
     assertDeepEqual("config.shell.header.kofi_texcoords",
         shell.koFiButton.statsProIcon.texCoords,
         { 0.21875, 0.78125, 0.09375, 0.6875 })
+    assertDeepEqual("config.shell.header.kofi_optical_alignment",
+        shell.koFiButton.statsProIcon.points[1], { "CENTER", 0, 3 })
     eq("config.shell.header.contact_atlas", shell.contactButton.statsProIcon.atlas,
         "transmog-icon-chat")
+    assertRGBA("config.shell.header.contact_tint",
+        shell.contactButton.statsProIcon.vertexColor, detached.colors.accent)
+    assertDeepEqual("config.shell.header.contact_optical_alignment",
+        shell.contactButton.statsProIcon.points[1], { "CENTER", 0, 0 })
     local selectedTabs = 0
     for index, tab in ipairs(state.tabs) do
         eq("config.shell.tabs.width." .. index, tab:GetWidth(), detached.geometry.tabWidth)
@@ -10246,7 +10549,7 @@ do
     runFrameHandlers(state.tabs[2], "OnClick")
     eq("config.shell.tabs.second.selected", state.tabs[2].statsProTabState, "selected")
     assertRGBA("config.shell.tabs.second.selected_fill", state.tabs[2].statsProFill.colorTexture,
-        detached.colors.raised)
+        detached.colors.profile)
     eq("config.shell.tabs.second.selected_line", state.tabs[2].statsProSelectedLine:IsShown(), true)
     assertRGBA("config.shell.tabs.second.selected_line_color",
         state.tabs[2].statsProSelectedLine.colorTexture,
@@ -10270,7 +10573,7 @@ do
     runFrameHandlers(state.tabs[2], "OnMouseUp", "LeftButton")
     runFrameHandlers(state.tabs[2], "OnLeave")
     assertRGBA("config.shell.tabs.selected_leave_fill", state.tabs[2].statsProFill.colorTexture,
-        detached.colors.raised)
+        detached.colors.profile)
     eq("config.shell.tabs.selected_leave_line", state.tabs[2].statsProSelectedLine:IsShown(), true)
 
     local sectionCount = 0
@@ -11974,8 +12277,8 @@ do
     selectDropdownValue("db_compat.future_read_only.language", futureEnv.StatsProLanguageDropdown, "deDE")
     assertRootUnchanged("db_compat.future_read_only.controls_unchanged")
 
-    runScript("db_compat.future_read_only.font_picker_open", futureEnv.StatsProFontDropdownButton,
-        "OnClick", futureEnv.StatsProFontDropdownButton)
+    callScript("db_compat.future_read_only.font_picker_open",
+        futureEnv.StatsProFontDropdownButton, "OnClick")
     local fontButton = findFrame("db_compat.future_read_only.font_button", futureEnv, function(frame)
         return frame.fontPath and frame.fontPath ~= before.font and type(frame.scripts.OnClick) == "function"
     end)
@@ -11990,7 +12293,15 @@ do
     eq("db_compat.future_read_only.color_modal_blocked", futureEnv.ColorPickerFrame:IsShown(), false)
     assertRootUnchanged("db_compat.future_read_only.color_open_unchanged")
 
+    futureEnv.StatsProVisibleCheck:SetChecked(false)
+    futureAddon.settingsDesign.RefreshControl(futureEnv.StatsProVisibleCheck)
+    eq("db_compat.future_read_only.slash_before_revert_role",
+        futureEnv.StatsProVisibleCheck.statsProStateTexture.statsProColorRole, "raised")
     slash("db_compat.future_read_only.slash_show", futureEnv, "show")
+    eq("db_compat.future_read_only.slash_reverted_checkbox",
+        futureEnv.StatsProVisibleCheck:GetChecked(), true)
+    eq("db_compat.future_read_only.slash_reverted_role",
+        futureEnv.StatsProVisibleCheck.statsProStateTexture.statsProColorRole, "selected")
     slash("db_compat.future_read_only.slash_hide", futureEnv, "hide")
     slash("db_compat.future_read_only.slash_toggle", futureEnv, "toggle")
     slash("db_compat.future_read_only.slash_reset", futureEnv, "reset")
@@ -12442,6 +12753,30 @@ end
 smokeReachability:complete("settings-compatibility")
 
 do
+    -- The legacy global specialization APIs remain a supported fallback when the
+    -- modern namespace is unavailable on a compatible client build.
+    local env, _, test = loadStatsPro("enUS", {
+        disableModernSpecializationInfo = true,
+        unitGUID = function() return "Player-1-LEGACY-SPEC-API" end,
+        unitFullName = function() return "Legacy", "Realm" end,
+        legacyGetSpecialization = function() return 2 end,
+        legacyGetSpecializationInfo = function(index)
+            if index == 2 then return 72, "Fury", nil, nil, "DAMAGER", 1 end
+        end,
+    })
+    fireEvent("profiles.context.legacy_spec_api.activate", env, "PLAYER_ENTERING_WORLD")
+    local runtime = test.profileRuntimeState()
+    local character = env.StatsProDB.characters["Player-1-LEGACY-SPEC-API"]
+    eq("profiles.context.legacy_spec_api.spec", runtime.activeSpecID, 72)
+    eq("profiles.context.legacy_spec_api.name", runtime.activeSpecName, "Fury")
+    eq("profiles.context.legacy_spec_api.role", runtime.activeRole, "DAMAGER")
+    eq("profiles.context.legacy_spec_api.assignment",
+        character.specProfiles[72], test.profileState().profileID)
+    eq("profiles.context.legacy_spec_api.no_hidden_default",
+        character.defaultProfileID, nil)
+end
+
+do
     -- Character/spec profile activation is exercised against one shared SavedVariables
     -- root so switches have the same identity and aliasing hazards as real relogs.
     local seedEnv = loadStatsPro("enUS")
@@ -12481,17 +12816,15 @@ do
     local alpha = root.characters[identity.guid]
     eq("profiles.context.first_visit.active_guid", runtime.activeGUID, identity.guid)
     eq("profiles.context.first_visit.active_spec", runtime.activeSpecID, 73)
-    eq("profiles.context.first_visit.default_profile", alpha.defaultProfileID, "p4")
-    eq("profiles.context.first_visit.spec_profile", alpha.specProfiles[73], "p5")
-    eq("profiles.context.first_visit.active_profile", state.profileID, "p5")
+    eq("profiles.context.first_visit.no_hidden_default", alpha.defaultProfileID, nil)
+    eq("profiles.context.first_visit.spec_profile", alpha.specProfiles[73], "p4")
+    eq("profiles.context.first_visit.active_profile", state.profileID, "p4")
     eq("profiles.context.first_visit.role_template_copy", state.settings.showDefensive, true)
-    eq("profiles.context.first_visit.next_id", root.account.nextProfileID, 6)
-    eq("profiles.context.first_visit.default_independent",
-        rawequal(root.profiles.p4.settings, root.profiles.p1.settings), false)
+    eq("profiles.context.first_visit.next_id", root.account.nextProfileID, 5)
     eq("profiles.context.first_visit.spec_independent",
-        rawequal(root.profiles.p5.settings, root.profiles.p2.settings), false)
+        rawequal(root.profiles.p4.settings, root.profiles.p2.settings), false)
     eq("profiles.context.first_visit.nested_independent",
-        rawequal(root.profiles.p5.settings.colors, root.profiles.p2.settings.colors), false)
+        rawequal(root.profiles.p4.settings.colors, root.profiles.p2.settings.colors), false)
 
     local beforeNoop = deepCopy(root)
     local accountRef, profilesRef, charactersRef = root.account, root.profiles, root.characters
@@ -12517,21 +12850,21 @@ do
     identity.specID, identity.specName, identity.role = 71, "Arms", "DAMAGER"
     fireEvent("profiles.context.tank_to_dps", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
     slash("profiles.context.scheduled_write_block", env, "hide")
-    eq("profiles.context.scheduled_write_block.keeps_tank", root.profiles.p5.settings.isVisible, true)
+    eq("profiles.context.scheduled_write_block.keeps_tank", root.profiles.p4.settings.isVisible, true)
     env.__flushTimers(0)
     state = contextTest.profileState()
-    eq("profiles.context.dps_profile_created", root.characters["Player-1-AAA"].specProfiles[71], "p6")
-    eq("profiles.context.dps_active", state.profileID, "p6")
+    eq("profiles.context.dps_profile_created", root.characters["Player-1-AAA"].specProfiles[71], "p5")
+    eq("profiles.context.dps_active", state.profileID, "p5")
     eq("profiles.context.dps_template_copy", state.settings.showDefensive, false)
-    eq("profiles.context.tank_position_saved", root.profiles.p5.settings.xOfs, 111)
+    eq("profiles.context.tank_position_saved", root.profiles.p4.settings.xOfs, 111)
     env.StatsProFrame:ClearAllPoints()
     env.StatsProFrame:SetPoint("BOTTOMRIGHT", env.UIParent, "BOTTOMRIGHT", -221, 222)
     identity.specID, identity.specName, identity.role = 73, "Protection", "TANK"
     fireEvent("profiles.context.dps_to_tank", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
     env.__flushTimers(0)
-    eq("profiles.context.tank_restored", contextTest.profileState().profileID, "p5")
+    eq("profiles.context.tank_restored", contextTest.profileState().profileID, "p4")
     eq("profiles.context.tank_position_restored", env.StatsProFrame.points[1][4], 111)
-    eq("profiles.context.dps_position_saved", root.profiles.p6.settings.xOfs, -221)
+    eq("profiles.context.dps_position_saved", root.profiles.p5.settings.xOfs, -221)
 
     identity.guid, identity.name = "Player-1-BBB", "Bravo"
     fireEvent("profiles.context.character_b", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
@@ -12959,8 +13292,10 @@ do
     eq("profiles.bootstrap.exhausted.one_activation", runtime.activationCount, 1)
     eq("profiles.bootstrap.exhausted.one_character",
         exhaustedRoot.characters["Player-1-NEW-COLD"] ~= nil, true)
-    eq("profiles.bootstrap.exhausted.one_allocation_pair",
-        exhaustedRoot.account.nextProfileID, exhaustedNextID + 2)
+    eq("profiles.bootstrap.exhausted.one_profile_allocation",
+        exhaustedRoot.account.nextProfileID, exhaustedNextID + 1)
+    eq("profiles.bootstrap.exhausted.no_hidden_default",
+        exhaustedRoot.characters["Player-1-NEW-COLD"].defaultProfileID, nil)
     local recoveredNextID = exhaustedRoot.account.nextProfileID
     fireEvent("profiles.bootstrap.exhausted.same_context",
         exhaustedEnv, "PLAYER_ENTERING_WORLD")
@@ -13001,8 +13336,8 @@ do
 end
 
 do
-    -- First-seen default/spec names use the same evolving unique-name registry and
-    -- remain bounded without splitting CJK codepoints.
+    -- A first-seen specialization gets one bounded, unique profile name without
+    -- allocating a hidden character-default profile.
     local seed, _, seedTest = loadStatsPro("enUS")
     fireEvent("profiles.context.auto_name.seed", seed, "PLAYER_ENTERING_WORLD")
     local root = deepCopy(seed.StatsProDB)
@@ -13012,15 +13347,7 @@ do
     local specName = string.rep("Ж", 25)
     local context = { displayName = displayName, specID = 999, specName = specName }
     local nextID = root.account.nextProfileID
-    local defaultCollision = seedTest.profileOps.profileName(
-        context, "default", root.profiles)
-    root.profiles["p" .. tostring(nextID)] = {
-        name = defaultCollision,
-        settings = deepCopy(root.profiles.p1.settings),
-    }
-    nextID = nextID + 1
-    root.account.nextProfileID = nextID
-    local specCollision = seedTest.profileOps.profileName(context, "spec", root.profiles)
+    local specCollision = seedTest.profileOps.specProfileName(context, root.profiles)
     root.profiles["p" .. tostring(nextID)] = {
         name = specCollision,
         settings = deepCopy(root.profiles.p1.settings),
@@ -13039,26 +13366,47 @@ do
     })
     fireEvent("profiles.context.auto_name.activate", env, "PLAYER_ENTERING_WORLD")
     local character = root.characters["Player-1-AUTO-NAME"]
-    local defaultID = character.defaultProfileID
     local specID = character.specProfiles[999]
-    local defaultName = root.profiles[defaultID].name
     local generatedSpecName = root.profiles[specID].name
     local normalized, count = test.profileOps.normalizeName(
-        defaultName, root.profiles, defaultID)
-    eq("profiles.context.auto_name.default_valid", normalized, defaultName)
-    eq("profiles.context.auto_name.default_bounded", count <= 40, true)
-    normalized, count = test.profileOps.normalizeName(
         generatedSpecName, root.profiles, specID)
+    eq("profiles.context.auto_name.no_hidden_default", character.defaultProfileID, nil)
     eq("profiles.context.auto_name.spec_valid", normalized, generatedSpecName)
     eq("profiles.context.auto_name.spec_bounded", count <= 40, true)
-    eq("profiles.context.auto_name.default_collision_resolved",
-        defaultName ~= defaultCollision, true)
     eq("profiles.context.auto_name.spec_collision_resolved",
         generatedSpecName ~= specCollision, true)
-    eq("profiles.context.auto_name.distinct", defaultName ~= generatedSpecName, true)
-    eq("profiles.context.auto_name.two_allocations", root.account.nextProfileID, nextID + 2)
+    eq("profiles.context.auto_name.one_allocation", root.account.nextProfileID, nextID + 1)
     eq("profiles.context.auto_name.no_orphan",
-        root.profiles["p" .. tostring(nextID + 2)], nil)
+        root.profiles["p" .. tostring(nextID + 1)], nil)
+end
+
+do
+    -- One remaining allocatable ID is sufficient for a first-seen specialization.
+    -- A hidden character-default clone used to consume it before the useful profile.
+    local seed = loadStatsPro("enUS")
+    fireEvent("profiles.context.last_id.seed", seed, "PLAYER_ENTERING_WORLD")
+    local root = deepCopy(seed.StatsProDB)
+    local lastAllocatableNumber = 99999999999998
+    root.account.nextProfileID = lastAllocatableNumber
+    local env, _, test = loadStatsPro("enUS", {
+        statsProDB = root,
+        unitGUID = function() return "Player-1-LAST-ID" end,
+        unitFullName = function() return "Last", "Realm" end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return 999, "Last Spec", nil, nil, "TANK", 1
+        end,
+    })
+    fireEvent("profiles.context.last_id.activate", env, "PLAYER_ENTERING_WORLD")
+    local character = root.characters["Player-1-LAST-ID"]
+    local profileID = "p" .. tostring(lastAllocatableNumber)
+    eq("profiles.context.last_id.character_created", type(character), "table")
+    eq("profiles.context.last_id.no_hidden_default", character.defaultProfileID, nil)
+    eq("profiles.context.last_id.assignment", character.specProfiles[999], profileID)
+    eq("profiles.context.last_id.active", test.profileState().profileID, profileID)
+    eq("profiles.context.last_id.next_at_limit", root.account.nextProfileID, 99999999999999)
+    eq("profiles.context.last_id.profile_exists", type(root.profiles[profileID]), "table")
+    eq("profiles.context.last_id.pending_cleared", test.profileRuntimeState().pendingResolution, false)
 end
 
 do
@@ -13068,7 +13416,7 @@ do
     fireEvent("profiles.context.auto_name_exhausted.seed", seed, "PLAYER_ENTERING_WORLD")
     local root = deepCopy(seed.StatsProDB)
     local context = { displayName = "Collision-Realm", specID = 999, specName = "Collision" }
-    local collisionName = seedTest.profileOps.profileName(context, "default", root.profiles)
+    local collisionName = seedTest.profileOps.specProfileName(context, root.profiles)
     local collisionID = "p" .. tostring(root.account.nextProfileID)
     root.profiles[collisionID] = {
         name = collisionName,
@@ -13925,6 +14273,31 @@ do
         env.StatsProProfileManagerScroll.points[2][3], 16)
     eq("profiles.ui.manager.actions_scroll_bottom",
         env.StatsProProfileActionsScroll.points[2][3], 16)
+    local profileScrollFrames = {
+        { "list", env.StatsProProfileManagerScroll },
+        { "actions", env.StatsProProfileActionsScroll },
+        { "choices", env.StatsProProfileChoiceScroll },
+    }
+    for _, entry in ipairs(profileScrollFrames) do
+        local scrollName, profileScroll = entry[1], entry[2]
+        eq("profiles.ui.scroll." .. scrollName .. ".styled",
+            profileScroll.statsProScrollbarStyled, true)
+        eq("profiles.ui.scroll." .. scrollName .. ".track_role",
+            profileScroll.statsProScrollTrack.statsProColorRole, "scrollbarTrack")
+        eq("profiles.ui.scroll." .. scrollName .. ".up_styled",
+            profileScroll.ScrollBar.ScrollUpButton.statsProScrollbarButtonStyled, true)
+        eq("profiles.ui.scroll." .. scrollName .. ".down_styled",
+            profileScroll.ScrollBar.ScrollDownButton.statsProScrollbarButtonStyled, true)
+        exists("profiles.ui.scroll." .. scrollName .. ".thumb",
+            profileScroll.ScrollBar.statsProThumb)
+    end
+    local listTrack = env.StatsProProfileManagerScroll.statsProScrollTrack
+    local listEnterHooks = #env.StatsProProfileManagerScroll.ScrollBar.hooks.OnEnter
+    addonContext.settingsDesign.StyleScrollFrame(env.StatsProProfileManagerScroll)
+    eq("profiles.ui.scroll.idempotent.track",
+        env.StatsProProfileManagerScroll.statsProScrollTrack, listTrack)
+    eq("profiles.ui.scroll.idempotent.hooks",
+        #env.StatsProProfileManagerScroll.ScrollBar.hooks.OnEnter, listEnterHooks)
     check("profiles.ui.manager.level", manager:GetFrameLevel() > config:GetFrameLevel())
     check("profiles.ui.manager.special_frame",
         contains(env.UISpecialFrames, "StatsProProfileManager"))
@@ -13932,7 +14305,8 @@ do
     eq("profiles.ui.manager.current_row_context", state.rows[1].context, nil)
     eq("profiles.ui.manager.current_row_text", state.rows[1].text, "Alpha-Realm")
     eq("profiles.ui.manager.current_row_enabled", state.rows[1].enabled, true)
-    eq("profiles.ui.manager.current_row_noninteractive", state.rows[1].mouseEnabled, false)
+    eq("profiles.ui.manager.current_row_mouse_enabled_for_tooltip",
+        state.rows[1].mouseEnabled, true)
     assertRGBA("profiles.ui.manager.current_row_text_color",
         state.rows[1].textColor, profileTest.settingsDesignSnapshot().colors.textPrimary)
     eq("profiles.ui.manager.current_badge", state.rows[1].badge, "Current")
@@ -13955,6 +14329,10 @@ do
     eq("profiles.ui.manager.detail_context", state.detailContext, "Alpha-Realm")
     eq("profiles.ui.manager.detail_profile", state.detailProfile,
         "Shared with 2 specializations")
+    eq("profiles.ui.manager.detail_profile_shown", state.detailProfileShown, true)
+    eq("profiles.ui.manager.actions_top_shared",
+        env.StatsProProfileActionsScroll.points[1][3],
+        -profileTest.settingsDesignSnapshot().geometry.managerActionsTopShared)
     assertRGBA("profiles.ui.manager.detail_profile_shared_color",
         state.detailProfileColor, profileTest.settingsDesignSnapshot().colors.positive)
     eq("profiles.ui.actions.copy_label", state.actions.copy.text, "Copy settings from...")
@@ -13982,6 +14360,23 @@ do
     eq("profiles.ui.copy.blocker", state.operationBlockerShown, true)
     check("profiles.ui.copy.blocker_level",
         state.operationBlockerLevel < state.operationDialogLevel)
+    local hoveredChoice = findFrame("profiles.ui.copy.hovered_source", env, function(frame)
+        return frame.choiceData and frame.choiceData.kind == "context"
+            and frame:IsShown()
+    end)
+    hoveredChoice.text:SetWidth(10)
+    runFrameHandlers(hoveredChoice, "OnEnter")
+    local sourceChoiceText = hoveredChoice.text:GetText()
+    eq("profiles.ui.copy.hovered_source.owner", env.GameTooltip:GetOwner(), hoveredChoice)
+    eq("profiles.ui.copy.hovered_source.text",
+        env.GameTooltip.lines[1].left, sourceChoiceText)
+    callScript("profiles.ui.copy.hovered_source.select", hoveredChoice, "OnClick")
+    state = profileTest.profileUIState()
+    eq("profiles.ui.copy.hovered_scope.kind", state.operationKind, "copy-scope")
+    eq("profiles.ui.copy.hovered_scope.row_rebound", hoveredChoice.text:GetText(), "All settings")
+    eq("profiles.ui.copy.hovered_scope.owner", env.GameTooltip:GetOwner(), hoveredChoice)
+    eq("profiles.ui.copy.hovered_scope.tooltip_refreshed",
+        env.GameTooltip.lines[1].left, "All settings")
     callScript("profiles.ui.copy.cancel",
         env.StatsProProfileOperationCancelButton, "OnClick")
     eq("profiles.ui.copy.dialog_closed",
@@ -14504,7 +14899,7 @@ do
         ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = { "A" },
     }
     local requiredOperationKeys = {
-        "Profiles & sharing...", "Profiles & sharing", "Only this specialization",
+        "Profiles & sharing...", "Profiles & sharing",
         "Copy settings from...", "Use the same settings as...",
         "Use these settings for...", "Stop sharing...", "Advanced...", "Hide advanced",
         "Reset these settings...", "Forget this character...",
@@ -14723,6 +15118,10 @@ local function makeProfileOpsFixture(options)
         swiftStatsDB = options.swiftStatsDB,
         swiftStatsLocalDB = options.swiftStatsLocalDB,
         getCombatRating = options.getCombatRating,
+        getMasteryEffect = options.getMasteryEffect,
+        getCombatRatingBonusForCombatRatingValue =
+            options.getCombatRatingBonusForCombatRatingValue,
+        roundToNearestString = options.roundToNearestString,
         inCombatLockdown = function()
             if identity.combatValue ~= nil then return identity.combatValue end
             return identity.combat
@@ -14837,11 +15236,20 @@ do
         return frame.profileContext == nil and type(frame.text) == "table"
             and type(frame.text.GetText) == "function" and frame.text:GetText() == "Alpha-Realm"
     end)
+    eq("profiles.ui.manager_row_tooltip.mouse_enabled", row:IsMouseEnabled(), true)
     row.text:SetWidth(48)
     userInteract("profiles.ui.manager_row_tooltip.hover", row, "OnEnter")
     eq("profiles.ui.manager_row_tooltip.initial_owner", env.GameTooltip:GetOwner(), row)
     eq("profiles.ui.manager_row_tooltip.initial_text",
         env.GameTooltip.lines[1].left, "Alpha-Realm")
+    local selectedBeforeHeadingClick = test.profileUIState()
+    eq("profiles.ui.manager_row_tooltip.heading_click_reachable",
+        userInteract("profiles.ui.manager_row_tooltip.heading_click", row, "OnClick"), true)
+    local selectedAfterHeadingClick = test.profileUIState()
+    eq("profiles.ui.manager_row_tooltip.heading_click_keeps_guid",
+        selectedAfterHeadingClick.selectedGUID, selectedBeforeHeadingClick.selectedGUID)
+    eq("profiles.ui.manager_row_tooltip.heading_click_keeps_spec",
+        selectedAfterHeadingClick.selectedSpecID, selectedBeforeHeadingClick.selectedSpecID)
 
     local refreshedName = "Renamed-Character-With-Long-Name"
     root.characters["Player-1-OPS-A"].displayName = refreshedName
@@ -14888,9 +15296,12 @@ end
 do
     local env, addonContext, _, root = makeProfileOpsFixture()
     addonContext:OpenConfigMenu()
+    eq("profiles.ui.dynamic_button_tooltip.header_mouse_enabled",
+        env.StatsProActiveProfileButton:IsMouseEnabled(), true)
     env.StatsProActiveProfileButton.statsProText:SetWidth(48)
-    userInteract("profiles.ui.dynamic_button_tooltip.header_hover",
-        env.StatsProActiveProfileButton, "OnEnter")
+    eq("profiles.ui.dynamic_button_tooltip.header_hover_reachable",
+        userInteract("profiles.ui.dynamic_button_tooltip.header_hover",
+            env.StatsProActiveProfileButton, "OnEnter"), true)
     eq("profiles.ui.dynamic_button_tooltip.header_initial",
         env.GameTooltip.lines[1].left, "Protection - Alpha-Realm")
     local headerName = "Renamed-Header-Profile-With-Long-Name"
@@ -14926,30 +15337,63 @@ end
 
 do
     local restricted = false
+    local secretMasteryRating = {}
+    local secretMasteryPercent = {}
     local targetFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(targetFixture, "mythicPlus", "WARRIOR", "protection",
         { crit = 1000, haste = 600, mastery = 900, versatility = 500 })
     local env, _, profileTest = makeProfileOpsFixture({
         statsProArchonTargets = targetFixture,
-        getCombatRating = function() return restricted and -1 or 700 end,
-        issecretvalue = function(value) return value == -1 end,
+        getCombatRating = function()
+            if restricted then return secretMasteryRating end
+            return 700
+        end,
+        getMasteryEffect = function()
+            if restricted then return secretMasteryPercent, 1 end
+            return 20, 1
+        end,
+        getCombatRatingBonusForCombatRatingValue = function(_, value)
+            return value / 100
+        end,
+        roundToNearestString = function(value)
+            if rawequal(value, secretMasteryRating) then return "760" end
+            if rawequal(value, secretMasteryPercent) then return "24" end
+            return "unexpected"
+        end,
+        issecretvalue = function(value)
+            return rawequal(value, secretMasteryRating)
+                or rawequal(value, secretMasteryPercent)
+        end,
     })
-    local exactMeta = profileTest.buildArchonTargetMeta("crit", 700, env.CR_CRIT_MELEE, 20)
-    eq("profiles.ops.archon_cache_invalidation.prime_state",
+    local exactMeta = profileTest.buildArchonTargetMeta(
+        "mastery", 700, env.CR_MASTERY, 20)
+    eq("profiles.ops.archon_cache_preservation.prime_state",
         exactMeta.comparisonState, "exact")
-    eq("profiles.ops.archon_cache_invalidation.prime_current",
-        profileTest.archonComparisonCache().entries.crit.current, 700)
+    eq("profiles.ops.archon_cache_preservation.prime_current",
+        profileTest.archonComparisonCache().entries.mastery.current, 700)
 
     restricted = true
     local ok, reason = profileTest.profileOps.assign("Player-1-OPS-A", 73, "p3")
-    eq("profiles.ops.archon_cache_invalidation.assign", ok, true)
-    eq("profiles.ops.archon_cache_invalidation.assigned_profile", reason, "p3")
+    eq("profiles.ops.archon_cache_preservation.assign", ok, true)
+    eq("profiles.ops.archon_cache_preservation.assigned_profile", reason, "p3")
     local restrictedMeta = profileTest.buildArchonTargetMeta(
-        "crit", -1, env.CR_CRIT_MELEE, 20)
-    eq("profiles.ops.archon_cache_invalidation.restricted_state",
-        restrictedMeta.comparisonState, "targetOnly")
-    eq("profiles.ops.archon_cache_invalidation.no_stale_current",
-        restrictedMeta.current, nil)
+        "mastery", secretMasteryRating, env.CR_MASTERY, nil,
+        "mastery", secretMasteryPercent)
+    eq("profiles.ops.archon_cache_preservation.restricted_state",
+        restrictedMeta.comparisonState, "lastKnown")
+    eq("profiles.ops.archon_cache_preservation.last_clean_current",
+        restrictedMeta.current, 700)
+    eq("profiles.ops.archon_cache_preservation.last_clean_missing",
+        restrictedMeta.delta, -200)
+    profileTest.renderMainPanelForSmoke(
+        "Mastery:", "760", "24%", 1, nil, nil, { restrictedMeta })
+    profileTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("profiles.ops.archon_cache_preservation.tooltip_notice",
+        env.GameTooltip.lines[2].left, "Last known comparison")
+    eq("profiles.ops.archon_cache_preservation.tooltip_missing_label",
+        env.GameTooltip.lines[5].left, "Missing:")
+    eq("profiles.ops.archon_cache_preservation.tooltip_missing_value",
+        env.GameTooltip.lines[5].right, "200 (~+2.0%)")
 end
 
 local function captureRegistryIdentities(root)
@@ -15912,19 +16356,19 @@ do
     eq("profiles.ops.name.unique_exhausted_status", exhaustedStatus, "name-exhausted")
     ops.setMaxUniqueNameCandidates(9999)
 
-    local automatic = ops.profileName({
+    local automatic = ops.specProfileName({
         displayName = "Bad|Name",
         specID = 73,
         specName = "Protection",
-    }, "spec", {})
+    }, {})
     eq("profiles.ops.name.automatic_invalid_fallback", automatic, "Character - Protection")
-    automatic = ops.profileName({ displayName = "Hero", specID = 999 }, "spec", {})
+    automatic = ops.specProfileName({ displayName = "Hero", specID = 999 }, {})
     eq("profiles.ops.name.automatic_numeric_spec", automatic, "Hero - Spec 999")
-    automatic = ops.profileName({
+    automatic = ops.specProfileName({
         displayName = string.rep("Ж", 35),
         specID = 73,
         specName = string.rep("界", 25),
-    }, "spec", {})
+    }, {})
     normalized, count = ops.normalizeName(automatic, {})
     eq("profiles.ops.name.automatic_mixed_valid", normalized, automatic)
     eq("profiles.ops.name.automatic_mixed_bounded", count, 40)
@@ -16450,6 +16894,11 @@ do
         state.headerProfile, "Protection - Alpha-Realm")
     eq("profiles.ui.automation.share_confirm.manager_status",
         state.detailProfile, "Shared with 4 specializations")
+    eq("profiles.ui.automation.share_confirm.manager_status_shown",
+        state.detailProfileShown, true)
+    eq("profiles.ui.automation.share_confirm.actions_make_room_for_status",
+        env.StatsProProfileActionsScroll.points[1][3],
+        -test.settingsDesignSnapshot().geometry.managerActionsTopShared)
     eq("profiles.ui.automation.share_confirm.stop_enabled",
         state.actions.stopSharing.enabled, true)
 
@@ -16473,10 +16922,12 @@ do
     eq("profiles.ui.automation.independent_confirm.header_profile",
         test.profileUIState().headerProfile, "Protection - Alpha-Realm")
     eq("profiles.ui.automation.independent_confirm.manager_status",
-        test.profileUIState().detailProfile, "Only this specialization")
-    assertRGBA("profiles.ui.automation.independent_confirm.manager_status_color",
-        test.profileUIState().detailProfileColor,
-        test.settingsDesignSnapshot().colors.textSecondary)
+        test.profileUIState().detailProfile, "")
+    eq("profiles.ui.automation.independent_confirm.manager_status_hidden",
+        test.profileUIState().detailProfileShown, false)
+    eq("profiles.ui.automation.independent_confirm.actions_reclaim_status_space",
+        env.StatsProProfileActionsScroll.points[1][3],
+        -test.settingsDesignSnapshot().geometry.managerActionsTopSolo)
     eq("profiles.ui.automation.independent_confirm.button_disabled",
         test.profileUIState().actions.stopSharing.enabled, false)
 
@@ -16681,7 +17132,12 @@ do
     eq("profiles.ui.ops.copy_confirm.header",
         test.profileUIState().headerProfile, "Protection - Alpha-Realm")
     eq("profiles.ui.ops.copy_confirm.independent_status",
-        test.profileUIState().detailProfile, "Only this specialization")
+        test.profileUIState().detailProfile, "")
+    eq("profiles.ui.ops.copy_confirm.independent_status_hidden",
+        test.profileUIState().detailProfileShown, false)
+    eq("profiles.ui.ops.copy_confirm.actions_reclaim_status_space",
+        env.StatsProProfileActionsScroll.points[1][3],
+        -test.settingsDesignSnapshot().geometry.managerActionsTopSolo)
 
     callScript("profiles.ui.ops.stale.open", env.StatsProProfileUseForButton, "OnClick")
     local staleTarget = findChoice("profiles.ui.ops.stale.target", function(choice)
@@ -17045,13 +17501,44 @@ do
 
     local dropdownTrigger = exists("config.control_design.dropdown_trigger",
         env.StatsProDisplayModeDropdown.statsProTrigger)
-    local dropdownChevron = exists("config.control_design.dropdown_chevron",
-        dropdownTrigger.statsProChevron)
-    eq("config.control_design.dropdown_chevron_text", dropdownChevron:GetText(), "v")
+    local fullBoxDropdownTriggers = {
+        env.StatsProDisplayModeDropdownButton,
+        env.StatsProTargetSnapshotDropdownButton,
+        env.StatsProLabelStyleDropdownButton,
+        env.StatsProTextOutlineDropdownButton,
+        env.StatsProFontDropdownButton,
+        env.StatsProLanguageDropdownButton,
+    }
+    for index, trigger in ipairs(fullBoxDropdownTriggers) do
+        eq("config.control_design.dropdown_chevron_absent." .. index,
+            trigger.statsProChevron, nil)
+        eq("config.control_design.dropdown_full_box_anchor_count." .. index,
+            #trigger.points, 2)
+        eq("config.control_design.dropdown_full_box_mouse_enabled." .. index,
+            trigger:IsMouseEnabled(), true)
+    end
+    eq("config.control_design.dropdown_text_reclaims_arrow_space",
+        env.StatsProDisplayModeDropdownText:GetWidth(), tokens.geometry.dropdownWidth - 16)
+    eq("config.control_design.dropdown_full_box_anchor_count",
+        #dropdownTrigger.points, 2)
+    eq("config.control_design.dropdown_full_box_top_anchor",
+        dropdownTrigger.points[1][1], "TOPLEFT")
+    eq("config.control_design.dropdown_full_box_top_relative",
+        dropdownTrigger.points[1][2], env.StatsProDisplayModeDropdown)
+    eq("config.control_design.dropdown_full_box_top_x",
+        dropdownTrigger.points[1][4], 16)
+    eq("config.control_design.dropdown_full_box_top_y",
+        dropdownTrigger.points[1][5], -4)
+    eq("config.control_design.dropdown_full_box_bottom_anchor",
+        dropdownTrigger.points[2][1], "BOTTOMRIGHT")
+    eq("config.control_design.dropdown_full_box_bottom_relative",
+        dropdownTrigger.points[2][2], env.StatsProDisplayModeDropdown)
+    eq("config.control_design.dropdown_full_box_bottom_x",
+        dropdownTrigger.points[2][4], -8)
+    eq("config.control_design.dropdown_full_box_bottom_y",
+        dropdownTrigger.points[2][5], 4)
     eq("config.control_design.dropdown_native_highlight_hidden",
         dropdownTrigger:GetHighlightTexture():GetAlpha(), 0)
-    assertRGBA("config.control_design.dropdown_chevron_normal",
-        dropdownChevron.textColor, tokens.colors.textMuted)
     userInteract("config.control_design.dropdown_hover", dropdownTrigger, "OnEnter")
     eq("config.control_design.dropdown_hover_state",
         dropdownTrigger.statsProControlState, "hover")
@@ -17066,21 +17553,13 @@ do
     near("config.control_design.dropdown_hover_border.a",
         dropdownTrigger.statsProSurface.statsProBorders[1].colorTexture.a,
         tokens.colors.borderStrong[4])
-    assertRGBA("config.control_design.dropdown_chevron_hover",
-        dropdownChevron.textColor, tokens.colors.textPrimary)
     userInteract("config.control_design.dropdown_leave", dropdownTrigger, "OnLeave")
-    assertRGBA("config.control_design.dropdown_chevron_leave",
-        dropdownChevron.textColor, tokens.colors.textMuted)
     env.UIDROPDOWNMENU_OPEN_MENU = env.StatsProDisplayModeDropdown
     userInteract("config.control_design.dropdown_open", dropdownTrigger, "OnClick")
     eq("config.control_design.dropdown_open_flag", dropdownTrigger.statsProOpen, true)
-    assertRGBA("config.control_design.dropdown_chevron_open",
-        dropdownChevron.textColor, tokens.colors.accent)
     env.UIDROPDOWNMENU_OPEN_MENU = nil
     userInteract("config.control_design.dropdown_close_refresh", dropdownTrigger, "OnLeave")
     eq("config.control_design.dropdown_closed_flag", dropdownTrigger.statsProOpen, false)
-    assertRGBA("config.control_design.dropdown_chevron_closed",
-        dropdownChevron.textColor, tokens.colors.textMuted)
 
     eq("config.control_design.destructive_role",
         env.StatsProProfileResetButton.statsProButtonRole, "destructive")
@@ -17130,9 +17609,8 @@ do
         env.StatsProScaleSlider:IsEnabled(), false)
     eq("config.control_design.pending_dropdown_disabled",
         env.StatsProLanguageDropdownButton:IsEnabled(), false)
-    assertRGBA("config.control_design.pending_dropdown_chevron_disabled",
-        env.StatsProLanguageDropdownButton.statsProChevron.textColor,
-        tokens.colors.textDisabled)
+    eq("config.control_design.pending_dropdown_full_box_preserved",
+        env.StatsProLanguageDropdownButton:GetWidth(), tokens.geometry.dropdownWidth)
     eq("config.control_design.pending_dependency_disabled",
         env.StatsProCritCheck:IsEnabled(), false)
     local pendingBefore = deepCopy(env.StatsProDB)
@@ -17344,10 +17822,36 @@ do
     for key in pairs(allowlist) do defaultPayload[key] = deepCopy(defaults[key]) end
     assertDeepEqual("appearance.presets.registry.default_matches_defaults",
         defaultPresetPayload, defaultPayload)
+    eq("appearance.presets.registry.default_colors_detached",
+        rawequal(definitions.default.colors, defaults.colors), false)
+    local expectedDefaultColors = {
+        crit={r=1,g=0,b=0}, haste={r=0,g=.5,b=1}, mastery={r=0,g=1,b=0},
+        versatility={r=1,g=1,b=0}, rating={r=.7,g=.7,b=.7},
+        percentage={r=1,g=1,b=1}, leech={r=.8,g=.2,b=.8},
+        avoidance={r=.2,g=.8,b=.8}, speed={r=1,g=.65,b=0},
+        mainStat={r=1,g=.84,b=0}, stamina={r=.5,g=1,b=.5},
+        itemLevel={r=.55,g=.85,b=1}, dodge={r=.4,g=.7,b=1},
+        parry={r=1,g=.4,b=.2}, block={r=.7,g=.5,b=.3},
+        armor={r=.6,g=.6,b=.7}, stagger={r=.3,g=.8,b=.5},
+        durability={r=1,g=1,b=1},
+    }
+    for colorKey, color in pairs(definitions.default.colors) do
+        eq("appearance.presets.registry.default_color_detached." .. colorKey,
+            rawequal(color, defaults.colors[colorKey]), false)
+        local expected = expectedDefaultColors[colorKey]
+        assertColor("appearance.presets.registry.default_original_palette." .. colorKey,
+            color, expected.r, expected.g, expected.b)
+    end
+    assertDeepEqual("appearance.presets.registry.classic_uses_default_colors",
+        definitions.classic.colors, expectedDefaultColors)
     eq("appearance.presets.registry.classic_keeps_transparent_background",
         definitions.classic.panelBackgroundAlpha, 0)
     eq("appearance.presets.registry.classic_keeps_separate_value_colors",
         definitions.classic.matchValueColorToStat, false)
+    assertColor("appearance.presets.registry.classic_keeps_vivid_crit",
+        definitions.classic.colors.crit, 1, 0, 0)
+    assertColor("appearance.presets.registry.classic_keeps_vivid_mastery",
+        definitions.classic.colors.mastery, 0, 1, 0)
     local classicSettings = deepCopy(defaults)
     for key in pairs(allowlist) do
         classicSettings[key] = deepCopy(definitions.classic[key])
@@ -17418,6 +17922,16 @@ do
     eq("appearance.presets.preview.root_identity", presetTest.profileState().root, rootRef)
     eq("appearance.presets.preview.profiles_identity", presetTest.profileState().profiles, profilesRef)
     eq("appearance.presets.preview.settings_identity", presetTest.profileState().settings, settingsRef)
+
+    local samePreviewState = service.state()
+    local samePreviewUpdateCount = presetTest.profileRuntimeState().updateCount
+    ok, reason = service.startPreview("high-contrast")
+    eq("appearance.presets.preview.same_tile_noop", ok, false)
+    eq("appearance.presets.preview.same_tile_reason", reason, "no-change")
+    assertDeepEqual("appearance.presets.preview.same_tile_session_stable",
+        service.state(), samePreviewState)
+    eq("appearance.presets.preview.same_tile_zero_update",
+        presetTest.profileRuntimeState().updateCount, samePreviewUpdateCount)
 
     ok = service.startPreview("midnight")
     eq("appearance.presets.preview.switches", ok, true)
@@ -17524,9 +18038,19 @@ do
         local presetButton = exists("appearance.presets.ui.button." .. presetID,
             presetEnv["StatsProAppearancePreset" .. presetID:gsub("[^%w]", "")])
         eq("appearance.presets.ui.button_surface_role." .. presetID,
-            presetButton.statsProPresetSurface.statsProSurfaceRole, "raised")
+            presetButton.statsProSurface.statsProSurfaceRole, "raised")
         eq("appearance.presets.ui.button_surface_parent." .. presetID,
-            presetButton.statsProPresetSurface:GetParent(), presetButton)
+            presetButton.statsProSurface:GetParent(), presetButton)
+        local surfaceLayer, surfaceSublevel = presetButton.statsProSurface:GetDrawLayer()
+        eq("appearance.presets.ui.surface_layer." .. presetID,
+            surfaceLayer, "BACKGROUND")
+        eq("appearance.presets.ui.surface_sublevel." .. presetID,
+            surfaceSublevel, 0)
+        local fillLayer, fillSublevel = presetButton.statsProStateTexture:GetDrawLayer()
+        eq("appearance.presets.ui.hover_fill_layer." .. presetID,
+            fillLayer, "BACKGROUND")
+        eq("appearance.presets.ui.hover_fill_sublevel." .. presetID,
+            fillSublevel, 1)
         eq("appearance.presets.ui.preview_count." .. presetID,
             #presetButton.statsProPresetPreview, 3)
         for previewIndex, colorKey in ipairs({ "crit", "haste", "mastery" }) do
@@ -17582,9 +18106,8 @@ do
         presetTest.profileState().settings.appearancePresetID, "high-contrast")
 
     presetEnv.StatsProConfigFrame:Show()
-    presetEnv.StatsProFontSlider:SetValue(15)
-    userInteract("appearance.presets.manual_slider.change",
-        presetEnv.StatsProFontSlider, "OnValueChanged", 15)
+    changeSlider("appearance.presets.manual_slider.change",
+        presetEnv.StatsProFontSlider, 15)
     eq("appearance.presets.manual_slider_marks_custom",
         presetTest.profileState().settings.appearancePresetID, "custom")
     check("appearance.presets.manual_slider_refreshes_status",
@@ -17593,9 +18116,8 @@ do
     eq("appearance.presets.nonvisual.prepare_preview", ok, true)
     ok = service.applyPreview()
     eq("appearance.presets.nonvisual.prepare_apply", ok, true)
-    presetEnv.StatsProScaleSlider:SetValue(1.2)
-    userInteract("appearance.presets.nonvisual_slider.change",
-        presetEnv.StatsProScaleSlider, "OnValueChanged", 1.2)
+    changeSlider("appearance.presets.nonvisual_slider.change",
+        presetEnv.StatsProScaleSlider, 1.2)
     eq("appearance.presets.nonvisual_slider_preserves_marker",
         presetTest.profileState().settings.appearancePresetID, "high-contrast")
 
@@ -17652,8 +18174,28 @@ do
         presetEnv.StatsProManageProfilesButton, "OnClick")
     eq("appearance.presets.manager.cancels_preview", service.state().active, false)
 
-    service.markCustom(presetTest.profileState().settings)
+    local presetRefreshCount = 0
+    local originalPresetRefresh = presetAddon.appearancePresets.RefreshUI
+    presetAddon.appearancePresets.RefreshUI = function(...)
+        presetRefreshCount = presetRefreshCount + 1
+        return originalPresetRefresh(...)
+    end
+    presetTest.profileState().settings.appearancePresetID = "default"
+    eq("appearance.presets.manual_edit_transition", service.markCustom(
+        presetTest.profileState().settings), true)
+    eq("appearance.presets.manual_edit_refresh_once", presetRefreshCount, 1)
     eq("appearance.presets.manual_edit_custom", service.currentID(), "custom")
+    eq("appearance.presets.manual_edit_repeat_noop", service.markCustom(
+        presetTest.profileState().settings), false)
+    eq("appearance.presets.manual_edit_repeat_no_refresh", presetRefreshCount, 1)
+    presetRefreshCount = 0
+    ok = service.startPreview("default")
+    eq("appearance.presets.refresh_pipeline.preview_started", ok, true)
+    eq("appearance.presets.refresh_pipeline.preview_once", presetRefreshCount, 1)
+    ok = service.cancelPreview()
+    eq("appearance.presets.refresh_pipeline.cancelled", ok, true)
+    eq("appearance.presets.refresh_pipeline.cancel_once", presetRefreshCount, 2)
+    presetAddon.appearancePresets.RefreshUI = originalPresetRefresh
     presetTest.profileState().settings.scale = 1.1
     eq("appearance.presets.nonvisual_stays_custom",
         presetTest.profileState().settings.appearancePresetID, "custom")

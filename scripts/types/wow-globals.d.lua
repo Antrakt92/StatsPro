@@ -64,6 +64,13 @@ C_StringUtil = nil
 ---@type StatsProUIFileAsset?
 C_UIFileAsset = nil
 
+---@class (exact) StatsProFontObject
+---@field SetFont fun(self: StatsProFontObject, fontFile: string, height: number, flags: string)
+
+---@param name string
+---@return StatsProFontObject
+function CreateFont(name) end
+
 ---@type table<string, StatsProStaticPopupDefinition>
 StaticPopupDialogs = {}
 

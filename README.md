@@ -29,7 +29,7 @@
   Versatility for bundled Archon M+ High Keys or Raid Mythic reference snapshots.
 - **Switch characters or specs without rebuilding the HUD.** Assigned profiles
   activate automatically and can be shared intentionally when that is useful.
-- **Start with a finished HUD.** Preview Compact, Full, or Tank, then keep that
+- **Start with a finished HUD.** Preview Compact, DPS, or Tank, then keep that
   layout or adjust individual rows and presentation.
 - **Use only the space you want.** Build a compact secondary-stat strip, a tank
   dashboard, or two independently movable panels.
@@ -39,12 +39,14 @@
 ## Quick Setup
 
 A genuinely fresh installation opens one small, non-blocking Quick Setup panel
-once. Choose **Compact** for the four secondary stats, **Full** for every stat
-group plus gear status, or **Tank** for offensive and defensive rows with gear
-status in a separate side panel. Clicking a card previews the real HUD before
-anything is saved; **Use this setup** applies it. Close the panel or press Escape
-to keep the current setup, and it will not interrupt a later login. The choice
-configures the current profile; profile assignments themselves stay unchanged.
+once. Choose **Compact** for the four secondary stats, **DPS** for secondary
+and tertiary stats with item level, durability, and repair, or
+**Tank** to add defensive stats to that same single-panel HUD. DPS and Tank keep
+the rows compact without category headers. Clicking a card previews the real HUD
+before anything is saved; **Use this setup** applies it.
+Close the panel or press Escape to keep the current setup, and it will not
+interrupt a later login. The choice configures the current profile; profile
+assignments themselves stay unchanged.
 
 Quick Setup remains available at the top of the **Stats** tab afterward. These
 presets change stat rows, value display, durability summary, and panel layout.
@@ -55,10 +57,11 @@ assignments stay unchanged.
 
 Choose **Flat**, **Sectioned**, or **Split**. Panels resize around enabled rows,
 rating and percentage columns stay aligned, and Split mode lets you move selected
-blocks to a separate panel.
+blocks to a separate panel. Fresh and reset panels start with a transparent
+background; the Appearance tab can add a darker backing when you want more contrast.
 
 <p align="center">
-  <img src="screenshots/settings-overview-v1.10.2.jpg" alt="StatsPro Settings with current Stats controls" width="390">
+  <img src="screenshots/settings-overview-v1.10.2.jpg" alt="StatsPro detailed Stats controls below Quick Setup" width="390">
   <img src="screenshots/layout-settings-v1.10.2.jpg" alt="StatsPro Layout settings with display mode and panel routing controls" width="390">
 </p>
 
@@ -113,6 +116,8 @@ positions are clear; this editing chrome never becomes part of the saved HUD.
 
 Every row is optional. Rated stats can show rating, percentage, or both. Repair
 cost uses the same gold / silver / copper presentation as the vendor UI.
+Movement shows actual current speed: 0% while stationary, about 100% at normal
+run speed, and live changes from slows, boosts, mounts, swimming, or flight.
 
 ## Archon reference snapshots
 
@@ -144,7 +149,7 @@ Install StatsPro from any supported channel:
 For a manual install, extract the `StatsPro` folder into
 `World of Warcraft\_retail_\Interface\AddOns\`.
 
-1. On a fresh install, preview **Compact**, **Full**, or **Tank** in Quick Setup.
+1. On a fresh install, preview **Compact**, **DPS**, or **Tank** in Quick Setup.
 2. Type `/ss` at any time to reopen Settings and fine-tune the HUD.
 3. Unlock the panels and drag them into place.
 4. Hover a secondary stat for its selected Archon reference snapshot.

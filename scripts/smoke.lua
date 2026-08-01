@@ -830,6 +830,25 @@ local function makeEnv(locale, opts)
     end
     env.issecretvalue = opts.issecretvalue or function() return false end
     env.issecrettable = opts.issecrettable
+    if not opts.disableCurveUtil then
+        env.C_CurveUtil = {
+            CreateCurve = function()
+                local curve = { points = {} }
+                function curve:AddPoint(x, y)
+                    self.points[#self.points + 1] = { x = x, y = y }
+                end
+                function curve:Evaluate(value)
+                    if opts.evaluateCurve then return opts.evaluateCurve(self, value) end
+                    local first = self.points[1]
+                    local last = self.points[#self.points]
+                    if not first or not last or first.x == last.x then return 0 end
+                    return first.y + ((value - first.x) / (last.x - first.x))
+                        * (last.y - first.y)
+                end
+                return curve
+            end,
+        }
+    end
     env.C_StringUtil = {
         -- The live C API accepts secret numbers. The default harness stub avoids
         -- inspecting opaque sentinels; focused tests provide exact display text.
@@ -1088,9 +1107,6 @@ local function makeEnv(locale, opts)
     env.GetLifesteal = opts.getLifesteal or zero
     env.GetAvoidance = opts.getAvoidance or zero
     env.GetUnitSpeed = opts.getUnitSpeed or function() return 0, 0, 0, 0 end
-    env.IsSwimming = opts.isSwimming or function() return false end
-    env.IsFlying = opts.isFlying or function() return false end
-    env.IsFalling = opts.isFalling or function() return false end
     env.GetAverageItemLevel = opts.getAverageItemLevel or function() return 0, 0 end
     env.UnitStat = opts.unitStat or function(_, statId) return 0, statId == 3 and 100 or 0 end
     env.UnitArmor = opts.unitArmor or function() return 0, 0 end
@@ -2193,6 +2209,38 @@ do
 end
 
 do
+    local secretRatingCR = -991
+    local converterCalls, masteryCalls = 0, 0
+    local secretCREnv, _, secretCRTest = loadStatsPro("enUS", {
+        issecretvalue = function(value) return value == secretRatingCR end,
+        getCombatRatingBonusForCombatRatingValue = function()
+            converterCalls = converterCalls + 1
+            return 1
+        end,
+        getMasteryEffect = function()
+            masteryCalls = masteryCalls + 1
+            return 26, 2
+        end,
+    })
+    secretCRTest.renderMainPanelForSmoke("Mastery:", "800", "26.0%", 1,
+        nil, nil, {
+            {
+                statKey = "mastery", ratingCR = secretRatingCR,
+                target = 1000, current = 800, currentPct = 26,
+                delta = -200, capturedAt = "2026-05-15",
+                comparisonState = "exact",
+            },
+        })
+    local ok, err = pcall(
+        secretCRTest.fireMainPanelTooltipOverlayForSmoke, 1, "OnEnter")
+    check("tooltip.secret_rating_cr.no_error", ok, err)
+    eq("tooltip.secret_rating_cr.no_converter_call", converterCalls, 0)
+    eq("tooltip.secret_rating_cr.no_mastery_call", masteryCalls, 0)
+    eq("tooltip.secret_rating_cr.target_rating_only",
+        secretCREnv.GameTooltip.lines[2].right, "1000")
+end
+
+do
     local meta = { statKey = "mastery", target = 1043, comparisonState = "targetOnly" }
     local blocks = {
         {
@@ -2770,7 +2818,7 @@ do
     eq("db.empty_default_population.no_dead_text_align", db.textAlign, nil)
     eq("db.empty_default_population.font_size", db.fontSize, 14)
     eq("db.empty_default_population.text_alpha", db.textAlpha, 100)
-    eq("db.empty_default_population.panel_background_alpha", db.panelBackgroundAlpha, 15)
+    eq("db.empty_default_population.panel_background_alpha", db.panelBackgroundAlpha, 0)
     eq("db.empty_default_population.text_outline_style", db.textOutlineStyle, "outline")
     eq("db.empty_default_population.appearance_preset", db.appearancePresetID, "default")
     eq("db.empty_default_population.show_rating", db.showRating, true)
@@ -2927,7 +2975,7 @@ do
     eq("numbers.nan_falls_back.font_size", test.normalizeNumberSetting("fontSize", nan), 14)
     near("numbers.nan_falls_back.scale", test.normalizeNumberSetting("scale", nan), 1)
     eq("numbers.nan_falls_back.text_alpha", test.normalizeNumberSetting("textAlpha", nan), 100)
-    eq("numbers.nan_falls_back.panel_background_alpha", test.normalizeNumberSetting("panelBackgroundAlpha", nan), 15)
+    eq("numbers.nan_falls_back.panel_background_alpha", test.normalizeNumberSetting("panelBackgroundAlpha", nan), 0)
     near("numbers.nan_falls_back.update_interval", test.normalizeNumberSetting("updateInterval", nan), 0.5)
 end
 
@@ -2937,8 +2985,8 @@ do
     eq("numbers.inf_handled.font_size_neg", test.normalizeNumberSetting("fontSize", -inf), 14)
     near("numbers.inf_handled.scale_pos", test.normalizeNumberSetting("scale", inf), 1)
     near("numbers.inf_handled.scale_neg", test.normalizeNumberSetting("scale", -inf), 1)
-    eq("numbers.inf_handled.panel_background_alpha_pos", test.normalizeNumberSetting("panelBackgroundAlpha", inf), 15)
-    eq("numbers.inf_handled.panel_background_alpha_neg", test.normalizeNumberSetting("panelBackgroundAlpha", -inf), 15)
+    eq("numbers.inf_handled.panel_background_alpha_pos", test.normalizeNumberSetting("panelBackgroundAlpha", inf), 0)
+    eq("numbers.inf_handled.panel_background_alpha_neg", test.normalizeNumberSetting("panelBackgroundAlpha", -inf), 0)
 end
 
 do
@@ -3930,7 +3978,7 @@ do
     eq("appearance.presets.default_round_trip.default_current", service.currentID(), "default")
     eq("appearance.presets.default_round_trip.font_size", settings.fontSize, 14)
     eq("appearance.presets.default_round_trip.text_alpha", settings.textAlpha, 100)
-    eq("appearance.presets.default_round_trip.panel_background", settings.panelBackgroundAlpha, 15)
+    eq("appearance.presets.default_round_trip.panel_background", settings.panelBackgroundAlpha, 0)
     eq("appearance.presets.default_round_trip.outline", settings.textOutlineStyle, "outline")
     eq("appearance.presets.default_round_trip.match_value_color", settings.matchValueColorToStat, true)
     eq("appearance.presets.default_round_trip.preserve_rating", settings.showRating, false)
@@ -4228,7 +4276,7 @@ do
     eq("slash.reset_restores_defaults.font", slashSettings.font, slashTest.copyDefaults().font)
     eq("slash.reset_restores_defaults.font_size", slashSettings.fontSize, 14)
     eq("slash.reset_restores_defaults.text_alpha", slashSettings.textAlpha, 100)
-    eq("slash.reset_restores_defaults.panel_background_alpha", slashSettings.panelBackgroundAlpha, 15)
+    eq("slash.reset_restores_defaults.panel_background_alpha", slashSettings.panelBackgroundAlpha, 0)
     eq("slash.reset_restores_defaults.text_outline_style", slashSettings.textOutlineStyle, "outline")
     eq("slash.reset_restores_defaults.appearance_preset", slashSettings.appearancePresetID, "default")
     eq("slash.reset_restores_defaults.show_rating", slashSettings.showRating, true)
@@ -5186,7 +5234,6 @@ do
     check("render.target_hover_clean_secret_secret_clean.live_current_percent",
         critEnv.GameTooltip.lines[4].right:find("19.0%", 1, true) ~= nil,
         critEnv.GameTooltip.lines[4].right)
-
     liveRating = -2
     livePercent = 23
     local secondRestrictedBlocks = critTest.buildRenderBlocks()
@@ -5210,6 +5257,287 @@ do
     local recoveredMeta = recoveredBlocks[2].targetRows[1]
     eq("render.target_hover_clean_secret_secret_clean.recovered_state", recoveredMeta.comparisonState, "exact")
     eq("render.target_hover_clean_secret_secret_clean.recovered_current", recoveredMeta.current, 830)
+end
+
+do
+    local coefficientCalls = 0
+    local masteryTargetFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(masteryTargetFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 100, haste = 200, mastery = 1000, versatility = 400 })
+    local coefficientEnv, _, coefficientTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProArchonTargets = masteryTargetFixture,
+        getCombatRatingBonusForCombatRatingValue = function(_, value)
+            return value / 100
+        end,
+        getMasteryEffect = function()
+            coefficientCalls = coefficientCalls + 1
+            return 26, coefficientCalls == 1 and 2 or 3
+        end,
+    })
+    local meta = coefficientTest.buildArchonTargetMeta(
+        "mastery", 800, coefficientEnv.CR_MASTERY, 26)
+    eq("render.mastery_target_pct_single_coefficient.value", meta.targetPct, 30)
+    eq("render.mastery_target_pct_single_coefficient.calls", coefficientCalls, 1)
+end
+
+do
+    local phase = "prime"
+    local secretCurrentBonus = -992
+    local masteryTargetFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(masteryTargetFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 100, haste = 200, mastery = 1000, versatility = 400 })
+    local mixedEnv, _, mixedTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProArchonTargets = masteryTargetFixture,
+        issecretvalue = function(value) return value == secretCurrentBonus end,
+        getCombatRatingBonusForCombatRatingValue = function(_, value)
+            if phase == "mixed" and value == 800 then return secretCurrentBonus end
+            return value / 100
+        end,
+        getMasteryEffect = function() return 26, 2 end,
+    })
+    local primed = mixedTest.buildArchonTargetMeta(
+        "mastery", 800, mixedEnv.CR_MASTERY, 26)
+    eq("render.mastery_mixed_bonus_missing_coefficient.primed", primed.targetPct, 30)
+    phase = "mixed"
+    mixedEnv.GetMasteryEffect = nil
+    local mixed = mixedTest.buildArchonTargetMeta(
+        "mastery", 800, mixedEnv.CR_MASTERY, 26)
+    eq("render.mastery_mixed_bonus_missing_coefficient.state",
+        mixed.comparisonState, "exact")
+    eq("render.mastery_mixed_bonus_missing_coefficient.cached_target_pct",
+        mixed.targetPct, 30)
+end
+
+do
+    local phase = "clean"
+    local masteryRating = 800
+    local masteryEffect = 26
+    local secretRating = -1
+    local secretEffect = -2
+    local secretCoefficient = -3
+    local masteryTargetFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(masteryTargetFixture, "mythicPlus", "MAGE", "frost",
+        { crit = 100, haste = 200, mastery = 1000, versatility = 400 })
+    local masteryEnv, _, masteryTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        inCombatLockdown = function()
+            return phase == "percentSecret" or phase == "allSecret"
+        end,
+        statsProDB = {
+            showOffensive = true,
+            showRating = true,
+            showPercentage = true,
+            showCrit = false,
+            showHaste = false,
+            showMastery = true,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        statsProArchonTargets = masteryTargetFixture,
+        getCombatRating = function()
+            return phase == "allSecret" and secretRating or masteryRating
+        end,
+        getMasteryEffect = function()
+            if phase == "unavailable" or phase == "tooltipUnavailable" then
+                return nil, 2
+            end
+            if phase ~= "clean" and phase ~= "bonusUnavailable" then
+                return secretEffect, secretCoefficient
+            end
+            return masteryEffect, 2
+        end,
+        getCombatRatingBonusForCombatRatingValue = function(_, value)
+            if phase == "bonusUnavailable" then
+                error("temporary rating conversion failure", 0)
+            end
+            if value == secretRating then error("secret rating reached target conversion", 0) end
+            return value / 100
+        end,
+        issecretvalue = function(value)
+            return value == secretRating or value == secretEffect
+                or value == secretCoefficient
+        end,
+        setFormattedText = function(_, format, value)
+            if (format == "%d" or format == "%.0f")
+                and value == secretRating then return "848" end
+            if format == "%.1f%%" and value == secretEffect then return "41.1%" end
+            error("unexpected mastery target formatter input", 0)
+        end,
+    })
+    fireEvent("render.mastery_target_pct_survives_restriction.fire", masteryEnv,
+        "PLAYER_ENTERING_WORLD")
+    local exactBlocks = masteryTest.buildRenderBlocks()
+    local exactMeta = exactBlocks[2].targetRows[1]
+    eq("render.mastery_target_pct_survives_restriction.exact_state",
+        exactMeta.comparisonState, "exact")
+    eq("render.mastery_target_pct_survives_restriction.exact_target_pct",
+        exactMeta.targetPct, 30)
+    eq("render.mastery_target_pct_survives_restriction.cached_target_pct",
+        masteryTest.archonComparisonCache().entries.mastery.targetPct, 30)
+
+    -- Hover consumes the canonical percentages already captured in metadata.
+    -- A transient API failure between render and hover cannot mix total Mastery
+    -- percentages with a rating-only conversion or make Missing lose its percent.
+    phase = "tooltipUnavailable"
+    masteryTest.renderMainPanelForSmoke(
+        "Mastery:", "800", "26.0%", 1, nil, nil, { exactMeta })
+    masteryTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("render.mastery_target_pct_survives_restriction.hover_api_failure_target",
+        masteryEnv.GameTooltip.lines[2].right, "1000 (~30.0%)")
+    check("render.mastery_target_pct_survives_restriction.hover_api_failure_current",
+        masteryEnv.GameTooltip.lines[3].right:find("800 (~26.0%)", 1, true) ~= nil,
+        masteryEnv.GameTooltip.lines[3].right)
+    eq("render.mastery_target_pct_survives_restriction.hover_api_failure_missing",
+        masteryEnv.GameTooltip.lines[4].right, "200 (~+4.0%)")
+
+    -- A malformed/nil clean update is not restriction. It must omit total
+    -- percentages rather than pairing a cached target with rating-only Current,
+    -- and preserve the prior fully clean cache for a later restricted read.
+    phase = "unavailable"
+    masteryRating = 850
+    local unavailableBlocks = masteryTest.buildRenderBlocks()
+    local unavailableMeta = unavailableBlocks[2].targetRows[1]
+    eq("render.mastery_target_pct_survives_restriction.unavailable_state",
+        unavailableMeta.comparisonState, "exact")
+    eq("render.mastery_target_pct_survives_restriction.unavailable_current",
+        unavailableMeta.current, 850)
+    eq("render.mastery_target_pct_survives_restriction.unavailable_current_pct",
+        unavailableMeta.currentPct, nil)
+    eq("render.mastery_target_pct_survives_restriction.unavailable_target_pct",
+        unavailableMeta.targetPct, nil)
+    eq("render.mastery_target_pct_survives_restriction.unavailable_cache_current_preserved",
+        masteryTest.archonComparisonCache().entries.mastery.current, 800)
+    eq("render.mastery_target_pct_survives_restriction.unavailable_cache_target_pct_preserved",
+        masteryTest.archonComparisonCache().entries.mastery.targetPct, 30)
+    masteryTest.renderMainPanelForSmoke(
+        "Mastery:", "850", "", 1, nil, nil, { unavailableMeta })
+    masteryTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("render.mastery_target_pct_survives_restriction.unavailable_tooltip_target",
+        masteryEnv.GameTooltip.lines[2].right, "1000")
+    check("render.mastery_target_pct_survives_restriction.unavailable_tooltip_current",
+        masteryEnv.GameTooltip.lines[3].right:find("850", 1, true) ~= nil,
+        masteryEnv.GameTooltip.lines[3].right)
+    eq("render.mastery_target_pct_survives_restriction.unavailable_tooltip_missing",
+        masteryEnv.GameTooltip.lines[4].right, "150")
+
+    -- A clean Mastery total plus a transient converter failure is still an
+    -- incomplete tuple. It must not replace the last fully projected Target %.
+    phase = "bonusUnavailable"
+    masteryEffect = 27
+    local bonusUnavailableBlocks = masteryTest.buildRenderBlocks()
+    local bonusUnavailableMeta = bonusUnavailableBlocks[2].targetRows[1]
+    eq("render.mastery_target_pct_survives_restriction.bonus_unavailable_current_pct",
+        bonusUnavailableMeta.currentPct, 27)
+    eq("render.mastery_target_pct_survives_restriction.bonus_unavailable_target_pct",
+        bonusUnavailableMeta.targetPct, nil)
+    eq("render.mastery_target_pct_survives_restriction.bonus_unavailable_cache_current_preserved",
+        masteryTest.archonComparisonCache().entries.mastery.current, 800)
+    eq("render.mastery_target_pct_survives_restriction.bonus_unavailable_cache_target_pct_preserved",
+        masteryTest.archonComparisonCache().entries.mastery.targetPct, 30)
+
+    phase = "percentSecret"
+    masteryRating = 820
+    local percentSecretBlocks = masteryTest.buildRenderBlocks()
+    local percentSecretMeta = percentSecretBlocks[2].targetRows[1]
+    eq("render.mastery_target_pct_survives_restriction.percent_secret_state",
+        percentSecretMeta.comparisonState, "exact")
+    eq("render.mastery_target_pct_survives_restriction.percent_secret_current",
+        percentSecretMeta.current, 820)
+    eq("render.mastery_target_pct_survives_restriction.percent_secret_clean_pct_absent",
+        percentSecretMeta.currentPct, nil)
+    eq("render.mastery_target_pct_survives_restriction.percent_secret_target_pct",
+        percentSecretMeta.targetPct, 30)
+    masteryTest.renderMainPanelForSmoke(
+        "Mastery:", "820", "41.1%", 1, nil, nil, { percentSecretMeta })
+    masteryTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("render.mastery_target_pct_survives_restriction.percent_secret_tooltip_target",
+        masteryEnv.GameTooltip.lines[2].right, "1000 (~30.0%)")
+    eq("render.mastery_target_pct_survives_restriction.percent_secret_missing_rating_only",
+        masteryEnv.GameTooltip.lines[4].right, "180")
+
+    phase = "allSecret"
+    local restrictedBlocks = masteryTest.buildRenderBlocks()
+    local liveMeta = restrictedBlocks[2].targetRows[1]
+    eq("render.mastery_target_pct_survives_restriction.live_state",
+        liveMeta.comparisonState, "liveOnly")
+    eq("render.mastery_target_pct_survives_restriction.live_current_not_cached",
+        liveMeta.current, nil)
+    eq("render.mastery_target_pct_survives_restriction.live_delta_not_cached",
+        liveMeta.delta, nil)
+    eq("render.mastery_target_pct_survives_restriction.live_target_pct",
+        liveMeta.targetPct, 30)
+    masteryTest.renderMainPanelForSmoke(
+        "Mastery:", "848", "41.1%", 1, nil, nil, { liveMeta })
+    masteryTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("render.mastery_target_pct_survives_restriction.tooltip_notice",
+        masteryEnv.GameTooltip.lines[2].left, "Live values; comparison unavailable")
+    eq("render.mastery_target_pct_survives_restriction.tooltip_target",
+        masteryEnv.GameTooltip.lines[3].right, "1000 (~30.0%)")
+    check("render.mastery_target_pct_survives_restriction.tooltip_current_is_live",
+        masteryEnv.GameTooltip.lines[4].right:find("848 (~41.1%)", 1, true) ~= nil,
+        masteryEnv.GameTooltip.lines[4].right)
+    eq("render.mastery_target_pct_survives_restriction.no_stale_missing",
+        masteryEnv.GameTooltip.lines[5].left, "Snapshot:")
+
+    local generationBeforeLevel = masteryTest.archonComparisonCache().generation
+    fireEvent("render.mastery_target_pct_survives_restriction.level_changed",
+        masteryEnv, "PLAYER_LEVEL_CHANGED", 80, 70, false)
+    eq("render.mastery_target_pct_survives_restriction.level_generation",
+        masteryTest.archonComparisonCache().generation, generationBeforeLevel + 1)
+    eq("render.mastery_target_pct_survives_restriction.level_cache_cleared",
+        next(masteryTest.archonComparisonCache().entries), nil)
+    local levelChangedBlocks = masteryTest.buildRenderBlocks()
+    local levelChangedMeta = levelChangedBlocks[2].targetRows[1]
+    eq("render.mastery_target_pct_survives_restriction.level_live_state",
+        levelChangedMeta.comparisonState, "liveOnly")
+    eq("render.mastery_target_pct_survives_restriction.level_target_pct_invalidated",
+        levelChangedMeta.targetPct, nil)
+    masteryTest.renderMainPanelForSmoke(
+        "Mastery:", "848", "41.1%", 1, nil, nil, { levelChangedMeta })
+    masteryTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("render.mastery_target_pct_survives_restriction.level_no_stale_pct",
+        masteryEnv.GameTooltip.lines[3].right, "1000")
+
+    phase = "clean"
+    masteryRating = 800
+    masteryEffect = 26
+    local rePrimedBlocks = masteryTest.buildRenderBlocks()
+    eq("render.mastery_target_pct_survives_restriction.level_reprime_target_pct",
+        rePrimedBlocks[2].targetRows[1].targetPct, 30)
+
+    phase = "allSecret"
+    masteryTargetFixture.snapshots.mythicPlus.specs.MAGE.frost.targets.mastery = 1100
+    local changedTargetBlocks = masteryTest.buildRenderBlocks()
+    local changedTargetMeta = changedTargetBlocks[2].targetRows[1]
+    eq("render.mastery_target_pct_survives_restriction.changed_target_live_state",
+        changedTargetMeta.comparisonState, "liveOnly")
+    eq("render.mastery_target_pct_survives_restriction.changed_target_pct_invalidated",
+        changedTargetMeta.targetPct, nil)
+    masteryTest.renderMainPanelForSmoke(
+        "Mastery:", "848", "41.1%", 1, nil, nil, { changedTargetMeta })
+    masteryTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("render.mastery_target_pct_survives_restriction.changed_target_no_stale_pct",
+        masteryEnv.GameTooltip.lines[3].right, "1100")
+
+    masteryTargetFixture.snapshots.mythicPlus.specs.MAGE.frost.targets.mastery = 1000
+    phase = "clean"
+    masteryRating = 800
+    masteryTest.buildRenderBlocks()
+    local lastKnownMeta = masteryTest.buildArchonTargetMeta(
+        "mastery", nil, masteryEnv.CR_MASTERY, nil)
+    eq("render.mastery_target_pct_survives_restriction.last_known_state",
+        lastKnownMeta.comparisonState, "lastKnown")
+    eq("render.mastery_target_pct_survives_restriction.last_known_target_pct",
+        lastKnownMeta.targetPct, 30)
 end
 
 do
@@ -7435,58 +7763,6 @@ do
 end
 
 do
-    local secretSpeed = {}
-    local speedEnv, _, speedTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showTertiary = true,
-            showRating = false,
-            showPercentage = true,
-            hideZeroTertiary = false,
-            showLeech = false,
-            showAvoidance = false,
-            showSpeed = true,
-            showDefensive = false,
-        },
-        getUnitSpeed = function() return 0, secretSpeed, secretSpeed, secretSpeed end,
-        issecretvalue = function(value) return value == secretSpeed end,
-    })
-    fireEvent("render.speed_cold_unknown_percent_only_no_row.fire", speedEnv, "PLAYER_ENTERING_WORLD")
-    local ok, blocks = pcall(speedTest.buildRenderBlocks)
-    check("render.speed_cold_unknown_percent_only_no_row.no_error", ok, blocks)
-    eq("render.speed_cold_unknown_percent_only_no_row.no_fake_zero",
-        blockDumpContains(blocks, "Movement:"), false)
-end
-
-do
-    local secretSpeed = {}
-    local speedEnv, _, speedTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showTertiary = true,
-            showRating = true,
-            showPercentage = true,
-            hideZeroTertiary = true,
-            showLeech = false,
-            showAvoidance = false,
-            showSpeed = true,
-            showDefensive = false,
-        },
-        getUnitSpeed = function() return 0, secretSpeed, secretSpeed, secretSpeed end,
-        getCombatRating = function() return 377 end,
-        issecretvalue = function(value) return value == secretSpeed end,
-    })
-    fireEvent("render.speed_cold_unknown_dual_rating_row_blank_value.fire", speedEnv, "PLAYER_ENTERING_WORLD")
-    local ok, blocks = pcall(speedTest.buildRenderBlocks)
-    check("render.speed_cold_unknown_dual_rating_row_blank_value.no_error", ok, blocks)
-    local tertiary = blocks[3]
-    eq("render.speed_cold_unknown_dual_rating_row_blank_value.row_count", #(tertiary.labels or {}), 1)
-    eq("render.speed_cold_unknown_dual_rating_row_blank_value.rating",
-        tertiary.ratings[1]:find("377", 1, true) ~= nil, true)
-    eq("render.speed_cold_unknown_dual_rating_row_blank_value.blank_value", tertiary.values[1], "")
-end
-
-do
     local speedEnv, _, speedTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = false,
@@ -7510,35 +7786,7 @@ do
 end
 
 do
-    local speedEnv, _, speedTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showTertiary = true,
-            showRating = true,
-            showPercentage = true,
-            hideZeroTertiary = true,
-            showLeech = false,
-            showAvoidance = false,
-            showSpeed = true,
-            showDefensive = false,
-        },
-        getUnitSpeed = function() return 0, 0, 0, 0 end,
-        getCombatRating = function() return 377 end,
-    })
-    fireEvent("render.speed_dual_zero_speed_uses_clean_rating.fire", speedEnv, "PLAYER_ENTERING_WORLD")
-    local ok, blocks = pcall(speedTest.buildRenderBlocks)
-    check("render.speed_dual_zero_speed_uses_clean_rating.no_error", ok, blocks)
-    local tertiary = blocks[3]
-    eq("render.speed_dual_zero_speed_uses_clean_rating.row_count", #(tertiary.labels or {}), 1)
-    eq("render.speed_dual_zero_speed_uses_clean_rating.label",
-        tertiary.labels[1]:find("Movement:", 1, true) ~= nil, true)
-    eq("render.speed_dual_zero_speed_uses_clean_rating.rating",
-        tertiary.ratings[1]:find("377", 1, true) ~= nil, true)
-    eq("render.speed_dual_zero_speed_uses_clean_rating.clean_zero_percent",
-        tertiary.values[1]:find("0.0%", 1, true) ~= nil, true)
-end
-
-do
+    local currentSpeed = 7.7
     local speedEnv, _, speedTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = false,
@@ -7551,52 +7799,44 @@ do
             showSpeed = true,
             showDefensive = false,
         },
-        getUnitSpeed = function() return 0, 15.4, 29.4, 7.7 end,
-        isSwimming = function() return false end,
-        isFlying = function() return false end,
+        -- The remaining returns deliberately disagree: the row must use only
+        -- currentSpeed, never the maximum ground/flight/swim capabilities.
+        getUnitSpeed = function() return currentSpeed, 15.4, 29.4, 7.7 end,
     })
-    fireEvent("render.speed_ground_mount_uses_run_not_flight.fire", speedEnv, "PLAYER_ENTERING_WORLD")
+    fireEvent("render.speed_instantaneous_clean.fire", speedEnv, "PLAYER_ENTERING_WORLD")
     local ok, blocks = pcall(speedTest.buildRenderBlocks)
-    check("render.speed_ground_mount_uses_run_not_flight.no_error", ok, blocks)
-    eq("render.speed_ground_mount_uses_run_not_flight.value",
-        blockDumpContains(blocks, "220.0%"), true)
-    eq("render.speed_ground_mount_uses_run_not_flight.no_flight_value",
-        blockDumpContains(blocks, "420.0%"), false)
-end
-
-do
-    local runYps = 7.7
-    local speedEnv, _, speedTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showTertiary = true,
-            showRating = false,
-            showPercentage = true,
-            hideZeroTertiary = false,
-            showLeech = false,
-            showAvoidance = false,
-            showSpeed = true,
-            showDefensive = false,
-        },
-        getUnitSpeed = function() return 0, runYps, 7.7, 7.7 end,
-    })
-    fireEvent("render.speed_ground_buff_tracks_run_speed.fire", speedEnv, "PLAYER_ENTERING_WORLD")
-    local ok, blocks = pcall(speedTest.buildRenderBlocks)
-    check("render.speed_ground_buff_tracks_run_speed.buff_no_error", ok, blocks)
-    eq("render.speed_ground_buff_tracks_run_speed.buff_value",
+    check("render.speed_instantaneous_clean.moving_no_error", ok, blocks)
+    eq("render.speed_instantaneous_clean.moving_value",
         blockDumpContains(blocks, "110.0%"), true)
+    eq("render.speed_instantaneous_clean.not_run_capability",
+        blockDumpContains(blocks, "220.0%"), false)
+    eq("render.speed_instantaneous_clean.not_flight_capability",
+        blockDumpContains(blocks, "420.0%"), false)
 
-    runYps = 7
+    currentSpeed = 0
     ok, blocks = pcall(speedTest.buildRenderBlocks)
-    check("render.speed_ground_buff_tracks_run_speed.unbuff_no_error", ok, blocks)
-    eq("render.speed_ground_buff_tracks_run_speed.unbuff_value",
-        blockDumpContains(blocks, "100.0%"), true)
+    check("render.speed_instantaneous_clean.stopped_no_error", ok, blocks)
+    eq("render.speed_instantaneous_clean.stopped_value",
+        blockDumpContains(blocks, "0.0%"), true)
+
+    currentSpeed = 10.5
+    ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_instantaneous_clean.boost_no_error", ok, blocks)
+    eq("render.speed_instantaneous_clean.boost_value",
+        blockDumpContains(blocks, "150.0%"), true)
 end
 
 do
-    local secretDecision = {}
-    local runYps = 15.4
-    local swimming = false
+    local secretSpeedA, secretSpeedB = {}, {}
+    local secretPercentA, secretPercentB = {}, {}
+    local phase = "clean"
+    local curveEvaluations = 0
+    local formatterInputs = {}
+    local formatterGets, formatterClears = 0, 0
+    local integerFallbackCalls = 0
+    local curveReturnedA, curveReturnedB = 0, 0
+    local curvePointCountOK, curveBasePointOK = true, true
+    local formatterFormatOK = true
     local speedEnv, _, speedTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = false,
@@ -7609,33 +7849,160 @@ do
             showSpeed = true,
             showDefensive = false,
         },
-        getUnitSpeed = function() return 0, runYps, 29.4, 7.7 end,
-        isSwimming = function() return swimming end,
-        isFlying = function() return false end,
-        isFalling = function() return false end,
-        issecretvalue = function(value) return value == secretDecision end,
+        getUnitSpeed = function()
+            if phase == "a" then return secretSpeedA, 7, 7, 7 end
+            if phase == "b" then return secretSpeedB, 7, 7, 7 end
+            return 7, 7, 7, 7
+        end,
+        issecretvalue = function(value)
+            return rawequal(value, secretSpeedA) or rawequal(value, secretSpeedB)
+                or rawequal(value, secretPercentA) or rawequal(value, secretPercentB)
+        end,
+        evaluateCurve = function(curve, value)
+            curveEvaluations = curveEvaluations + 1
+            curvePointCountOK = curvePointCountOK and #curve.points == 3
+            curveBasePointOK = curveBasePointOK
+                and curve.points[2].x == 7 and curve.points[2].y == 100
+            if rawequal(value, secretSpeedA) then
+                curveReturnedA = curveReturnedA + 1
+                return secretPercentA
+            end
+            if rawequal(value, secretSpeedB) then
+                curveReturnedB = curveReturnedB + 1
+                return secretPercentB
+            end
+            error("unexpected secret speed curve input", 0)
+        end,
+        setFormattedText = function(_, format, value)
+            formatterFormatOK = formatterFormatOK and format == "%.1f%%"
+            formatterInputs[#formatterInputs + 1] = value
+            if rawequal(value, secretPercentA) then return "125.0%" end
+            if rawequal(value, secretPercentB) then return "178.6%" end
+            error("raw speed bypassed the percent curve", 0)
+        end,
+        getFormattedText = function(holder)
+            formatterGets = formatterGets + 1
+            return holder.text
+        end,
+        clearFormattedText = function()
+            formatterClears = formatterClears + 1
+        end,
+        roundToNearestString = function()
+            integerFallbackCalls = integerFallbackCalls + 1
+            return "unexpected"
+        end,
     })
-    fireEvent("render.speed_secret_decision_preserves_last_clean.fire",
-        speedEnv, "PLAYER_ENTERING_WORLD")
+    fireEvent("render.speed_secret_live.fire", speedEnv, "PLAYER_ENTERING_WORLD")
     local ok, blocks = pcall(speedTest.buildRenderBlocks)
-    check("render.speed_secret_decision_preserves_last_clean.prime_no_error", ok, blocks)
-    eq("render.speed_secret_decision_preserves_last_clean.prime_value",
-        blockDumpContains(blocks, "220.0%"), true)
+    check("render.speed_secret_live.clean_no_error", ok, blocks)
+    eq("render.speed_secret_live.clean_value", blockDumpContains(blocks, "100.0%"), true)
 
-    runYps = 7
-    swimming = secretDecision
+    phase = "a"
     ok, blocks = pcall(speedTest.buildRenderBlocks)
-    check("render.speed_secret_decision_preserves_last_clean.secret_no_error", ok, blocks)
-    eq("render.speed_secret_decision_preserves_last_clean.keeps_value",
-        blockDumpContains(blocks, "220.0%"), true)
-    eq("render.speed_secret_decision_preserves_last_clean.no_false_ground_value",
+    check("render.speed_secret_live.first_no_error", ok, blocks)
+    eq("render.speed_secret_live.first_value", blockDumpContains(blocks, "125.0%"), true)
+    eq("render.speed_secret_live.first_not_stale", blockDumpContains(blocks, "100.0%"), false)
+
+    phase = "b"
+    ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_secret_live.second_no_error", ok, blocks)
+    eq("render.speed_secret_live.second_value", blockDumpContains(blocks, "178.6%"), true)
+    eq("render.speed_secret_live.second_not_stale", blockDumpContains(blocks, "125.0%"), false)
+    eq("render.speed_secret_live.curve_evaluations", curveEvaluations, 2)
+    eq("render.speed_secret_live.curve_first_input", curveReturnedA, 1)
+    eq("render.speed_secret_live.curve_second_input", curveReturnedB, 1)
+    eq("render.speed_secret_live.curve_point_count", curvePointCountOK, true)
+    eq("render.speed_secret_live.curve_base_point", curveBasePointOK, true)
+    eq("render.speed_secret_live.format", formatterFormatOK, true)
+    eq("render.speed_secret_live.formatter_calls", #formatterInputs, 2)
+    eq("render.speed_secret_live.formatter_gets", formatterGets, 2)
+    eq("render.speed_secret_live.formatter_clears", formatterClears, 4)
+    eq("render.speed_secret_live.first_formatter_receives_percent",
+        rawequal(formatterInputs[1], secretPercentA), true)
+    eq("render.speed_secret_live.second_formatter_receives_percent",
+        rawequal(formatterInputs[2], secretPercentB), true)
+    eq("render.speed_secret_live.no_integer_fallback", integerFallbackCalls, 0)
+end
+
+do
+    local secretSpeed = {}
+    local restricted = false
+    local speedEnv, _, speedTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            showRating = false,
+            showPercentage = true,
+            hideZeroTertiary = false,
+            showLeech = false,
+            showAvoidance = false,
+            showSpeed = true,
+            showDefensive = false,
+        },
+        disableCurveUtil = true,
+        getUnitSpeed = function()
+            return restricted and secretSpeed or 7, 7, 7, 7
+        end,
+        issecretvalue = function(value) return rawequal(value, secretSpeed) end,
+    })
+    fireEvent("render.speed_curve_unavailable.fire", speedEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_curve_unavailable.clean_no_error", ok, blocks)
+    eq("render.speed_curve_unavailable.clean_value", blockDumpContains(blocks, "100.0%"), true)
+    restricted = true
+    ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_curve_unavailable.secret_no_error", ok, blocks)
+    eq("render.speed_curve_unavailable.no_stale_value",
         blockDumpContains(blocks, "100.0%"), false)
+    eq("render.speed_curve_unavailable.no_false_percent_row",
+        blockDumpContains(blocks, "Movement:"), false)
+end
 
-    speedEnv.IsSwimming = function() error("synthetic movement decision failure") end
-    ok, blocks = pcall(speedTest.buildRenderBlocks)
-    check("render.speed_secret_decision_preserves_last_clean.error_no_error", ok, blocks)
-    eq("render.speed_secret_decision_preserves_last_clean.error_keeps_value",
-        blockDumpContains(blocks, "220.0%"), true)
+do
+    local leechA, leechB, avoidanceA, avoidanceB = {}, {}, {}, {}
+    local phase = "a"
+    local formatterFormatOK = true
+    local tertiaryEnv, _, tertiaryTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            showRating = false,
+            showPercentage = true,
+            hideZeroTertiary = false,
+            showLeech = true,
+            showAvoidance = true,
+            showSpeed = false,
+            showDefensive = false,
+        },
+        getLifesteal = function() return phase == "a" and leechA or leechB end,
+        getAvoidance = function() return phase == "a" and avoidanceA or avoidanceB end,
+        issecretvalue = function(value)
+            return rawequal(value, leechA) or rawequal(value, leechB)
+                or rawequal(value, avoidanceA) or rawequal(value, avoidanceB)
+        end,
+        setFormattedText = function(_, format, value)
+            formatterFormatOK = formatterFormatOK and format == "%.1f%%"
+            if rawequal(value, leechA) then return "3.5%" end
+            if rawequal(value, avoidanceA) then return "4.5%" end
+            if rawequal(value, leechB) then return "6.7%" end
+            if rawequal(value, avoidanceB) then return "8.9%" end
+            error("unexpected tertiary formatter input", 0)
+        end,
+    })
+    fireEvent("render.tertiary_secret_live.fire", tertiaryEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(tertiaryTest.buildRenderBlocks)
+    check("render.tertiary_secret_live.first_no_error", ok, blocks)
+    eq("render.tertiary_secret_live.first_leech", blockDumpContains(blocks, "3.5%"), true)
+    eq("render.tertiary_secret_live.first_avoidance", blockDumpContains(blocks, "4.5%"), true)
+
+    phase = "b"
+    ok, blocks = pcall(tertiaryTest.buildRenderBlocks)
+    check("render.tertiary_secret_live.second_no_error", ok, blocks)
+    eq("render.tertiary_secret_live.second_leech", blockDumpContains(blocks, "6.7%"), true)
+    eq("render.tertiary_secret_live.second_avoidance", blockDumpContains(blocks, "8.9%"), true)
+    eq("render.tertiary_secret_live.no_stale_leech", blockDumpContains(blocks, "3.5%"), false)
+    eq("render.tertiary_secret_live.no_stale_avoidance", blockDumpContains(blocks, "4.5%"), false)
+    eq("render.tertiary_secret_live.format", formatterFormatOK, true)
 end
 
 do
@@ -10529,7 +10896,7 @@ do
             math.abs(compactBodyY) + presetUI.lowerBody.contentHeight)
 
         local quickUI = localeEnv.StatsProConfigFrame.tabContents[1].quickSetupView
-        for _, presetID in ipairs({ "compact", "full", "tank" }) do
+        for _, presetID in ipairs({ "compact", "dps", "tank" }) do
             local button = quickUI.buttons[presetID]
             check(prefix .. ".quick_setup_label_fit." .. presetID,
                 button.statsProText:GetStringWidth()
@@ -16656,22 +17023,25 @@ do
     eq("profiles.ops.archon_cache_preservation.assigned_profile", reason, "p3")
     local restrictedMeta = profileTest.buildArchonTargetMeta(
         "mastery", secretMasteryRating, env.CR_MASTERY, nil,
-        "mastery", secretMasteryPercent)
+        "mastery", secretMasteryPercent, secretMasteryRating)
     eq("profiles.ops.archon_cache_preservation.restricted_state",
-        restrictedMeta.comparisonState, "lastKnown")
-    eq("profiles.ops.archon_cache_preservation.last_clean_current",
-        restrictedMeta.current, 700)
-    eq("profiles.ops.archon_cache_preservation.last_clean_missing",
-        restrictedMeta.delta, -200)
+        restrictedMeta.comparisonState, "liveOnly")
+    eq("profiles.ops.archon_cache_preservation.no_stale_current",
+        restrictedMeta.current, nil)
+    eq("profiles.ops.archon_cache_preservation.no_stale_missing",
+        restrictedMeta.delta, nil)
+    eq("profiles.ops.archon_cache_preservation.target_pct_preserved",
+        restrictedMeta.targetPct, 22)
     profileTest.renderMainPanelForSmoke(
         "Mastery:", "760", "24%", 1, nil, nil, { restrictedMeta })
     profileTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("profiles.ops.archon_cache_preservation.tooltip_notice",
-        env.GameTooltip.lines[2].left, "Last known comparison")
-    eq("profiles.ops.archon_cache_preservation.tooltip_missing_label",
-        env.GameTooltip.lines[5].left, "Missing:")
-    eq("profiles.ops.archon_cache_preservation.tooltip_missing_value",
-        env.GameTooltip.lines[5].right, "200 (~+2.0%)")
+        env.GameTooltip.lines[2].left, "Live values; comparison unavailable")
+    check("profiles.ops.archon_cache_preservation.tooltip_current_live",
+        env.GameTooltip.lines[4].right:find("760 (~24%)", 1, true) ~= nil,
+        env.GameTooltip.lines[4].right)
+    eq("profiles.ops.archon_cache_preservation.tooltip_no_stale_missing",
+        env.GameTooltip.lines[5].left, "Snapshot:")
 end
 
 local function captureRegistryIdentities(root)
@@ -19817,14 +20187,14 @@ do
 
     local ok = appearance.startPreview("midnight")
     eq("presets.coordination.appearance_started", ok, true)
-    ok = hud.startPreview("full")
+    ok = hud.startPreview("dps")
     eq("presets.coordination.hud_replaces_appearance", ok, true)
     eq("presets.coordination.appearance_cancelled", appearance.state().active, false)
     eq("presets.coordination.hud_active", hud.state().active, true)
     eq("presets.coordination.appearance_runtime_restored",
         presetTest.getNumberDB("fontSize"), 15)
     eq("presets.coordination.hud_runtime_active",
-        presetTest.getDB("displayMode"), "sectioned")
+        presetTest.getDB("displayMode"), "flat")
     assertDeepEqual("presets.coordination.first_switch_zero_writes",
         presetTest.profileState().root, before)
 
@@ -19844,7 +20214,7 @@ do
     eq("presets.coordination.failure_source_started", ok, true)
     appearance.setRuntimeFailureCount(2)
     local reason
-    ok, reason = hud.startPreview("full")
+    ok, reason = hud.startPreview("dps")
     eq("presets.coordination.restore_failure_rejected", ok, false)
     eq("presets.coordination.restore_failure_reason", reason, "restore-failed")
     eq("presets.coordination.restore_failure_source_preserved",
@@ -19871,7 +20241,7 @@ do
     fireEvent("hud.presets.pew", env, "PLAYER_ENTERING_WORLD")
     addonContext:OpenConfigMenu()
     local service = presetTest.hudPresets
-    local expectedOrder = { "compact", "full", "tank" }
+    local expectedOrder = { "compact", "dps", "tank" }
     assertDeepEqual("hud.presets.registry.order", service.order(), expectedOrder)
     local definitions = service.definitions()
     local allowlist = service.allowlist()
@@ -19900,30 +20270,70 @@ do
         eq("hud.presets.registry.preserved." .. preservedKey,
             allowlist[preservedKey], nil)
     end
+    for key in pairs(allowlist) do
+        if key ~= "showDefensive" then
+            eq("hud.presets.registry.tank_matches_dps." .. key,
+                definitions.tank.values[key], definitions.dps.values[key])
+        end
+    end
+    eq("hud.presets.registry.tank_values_detached",
+        rawequal(definitions.tank.values, definitions.dps.values), false)
+    eq("hud.presets.registry.dps_no_main_stat",
+        definitions.dps.values.showMainStat, false)
+    eq("hud.presets.registry.dps_no_stamina",
+        definitions.dps.values.showStamina, false)
+    eq("hud.presets.registry.tank_no_main_stat",
+        definitions.tank.values.showMainStat, false)
+    eq("hud.presets.registry.tank_no_stamina",
+        definitions.tank.values.showStamina, false)
+    eq("hud.presets.registry.dps_no_defensive",
+        definitions.dps.values.showDefensive, false)
+    eq("hud.presets.registry.tank_adds_defensive",
+        definitions.tank.values.showDefensive, true)
     eq("hud.presets.registry.default_is_compact", service.currentID(), "compact")
+    local legacyFull = deepCopy(definitions.dps.values)
+    legacyFull.showMainStat = true
+    legacyFull.showStamina = true
+    legacyFull.displayMode = "sectioned"
+    legacyFull.hideZeroTertiary = true
+    legacyFull.showDefensive = true
+    legacyFull.splitItemLevel = true
+    legacyFull.splitDefensive = true
+    legacyFull.splitDurability = true
+    legacyFull.splitRepairCost = true
+    local legacyFullBefore = deepCopy(legacyFull)
+    eq("hud.presets.registry.legacy_full_is_custom",
+        service.currentID(legacyFull), "custom")
+    assertDeepEqual("hud.presets.registry.legacy_full_unchanged",
+        legacyFull, legacyFullBefore)
 
     local rootBefore = deepCopy(presetTest.profileState().root)
     local settingsBefore = presetTest.profileState().settings
     local accountBefore = deepCopy(presetTest.profileState().account)
     local operationBefore = presetTest.profileOps.state().operationCount
-    local ok, reason = service.startPreview("full")
+    local ok, reason = service.startPreview("dps")
     eq("hud.presets.preview.started", ok, true)
     eq("hud.presets.preview.reason", reason, nil)
     eq("hud.presets.preview.active", service.state().active, true)
-    eq("hud.presets.preview.id", service.state().presetID, "full")
-    eq("hud.presets.preview.mode", presetTest.getDB("displayMode"), "sectioned")
-    eq("hud.presets.preview.defensive", presetTest.getBoolDB("showDefensive"), true)
+    eq("hud.presets.preview.id", service.state().presetID, "dps")
+    eq("hud.presets.preview.mode", presetTest.getDB("displayMode"), "flat")
+    eq("hud.presets.preview.no_defensive", presetTest.getBoolDB("showDefensive"), false)
     eq("hud.presets.preview.tertiary", presetTest.getBoolDB("showTertiary"), true)
     eq("hud.presets.preview.durability", presetTest.getBoolDB("showDurability"), true)
+    eq("hud.presets.preview.repair", presetTest.getBoolDB("showRepairCost"), true)
+    local previewVisual = presetTest.panelVisualState()
+    eq("hud.presets.preview.side_hidden", previewVisual.sideShown, false)
+    eq("hud.presets.preview.no_section_headers",
+        previewVisual.mainLabelText:find("—", 1, true), nil)
     assertDeepEqual("hud.presets.preview.zero_writes",
         presetTest.profileState().root, rootBefore)
     eq("hud.presets.preview.settings_identity",
         rawequal(presetTest.profileState().settings, settingsBefore), true)
     local config = env.StatsProConfigFrame
     local quickUI = config.tabContents[1].quickSetupView
-    eq("hud.presets.ui.status", quickUI.status:GetText(), "Previewing: Full")
-    eq("hud.presets.ui.full_selected",
-        quickUI.buttons.full.statsProSelectionRail:IsShown(), true)
+    eq("hud.presets.ui.status", quickUI.status:GetText(), "Previewing: DPS")
+    eq("hud.presets.ui.dps_selected",
+        quickUI.buttons.dps.statsProSelectionRail:IsShown(), true)
     eq("hud.presets.ui.compact_cleared",
         quickUI.buttons.compact.statsProSelectionRail:IsShown(), false)
     eq("hud.presets.ui.apply_visible", quickUI.apply:IsShown(), true)
@@ -19947,22 +20357,28 @@ do
     eq("hud.presets.cancel.content_height", config.tabContents[1].contentHeight,
         math.abs(compactBodyY) + config.tabContents[1].statsBody.contentHeight)
 
-    ok = service.startPreview("full")
+    ok = service.startPreview("dps")
     eq("hud.presets.apply.preview", ok, true)
     ok, reason = service.applyPreview()
     eq("hud.presets.apply.ok", ok, true)
     eq("hud.presets.apply.result", reason, presetTest.profileState().profileID)
     local settings = presetTest.profileState().settings
-    eq("hud.presets.apply.current", service.currentID(), "full")
-    eq("hud.presets.apply.mode", settings.displayMode, "sectioned")
-    eq("hud.presets.apply.main", settings.showMainStat, true)
-    eq("hud.presets.apply.stamina", settings.showStamina, true)
+    eq("hud.presets.apply.current", service.currentID(), "dps")
+    eq("hud.presets.apply.mode", settings.displayMode, "flat")
+    eq("hud.presets.apply.main", settings.showMainStat, false)
+    eq("hud.presets.apply.stamina", settings.showStamina, false)
     eq("hud.presets.apply.item_level", settings.showItemLevel, true)
     eq("hud.presets.apply.tertiary", settings.showTertiary, true)
-    eq("hud.presets.apply.defensive", settings.showDefensive, true)
+    eq("hud.presets.apply.no_defensive", settings.showDefensive, false)
     eq("hud.presets.apply.durability", settings.showDurability, true)
     eq("hud.presets.apply.repair", settings.showRepairCost, true)
     eq("hud.presets.apply.average_durability", settings.useWorstDurability, false)
+    eq("hud.presets.apply.single_panel",
+        settings.splitCharacter or settings.splitItemLevel
+            or settings.splitOffensive or settings.splitTertiary
+            or settings.splitDefensive or settings.splitDurability
+            or settings.splitRepairCost, false)
+    eq("hud.presets.apply.side_hidden", presetTest.panelVisualState().sideShown, false)
     eq("hud.presets.apply.preserve_font", settings.font, "Fonts\\ARIALN.TTF")
     near("hud.presets.apply.preserve_scale", settings.scale, 1.4)
     eq("hud.presets.apply.preserve_point", settings.point, "TOPLEFT")
@@ -19978,26 +20394,37 @@ do
 
     ok = service.startPreview("tank")
     eq("hud.presets.tank.preview", ok, true)
+    eq("hud.presets.tank.preview_flat", presetTest.getDB("displayMode"), "flat")
+    eq("hud.presets.tank.preview_tertiary", presetTest.getBoolDB("showTertiary"), true)
+    eq("hud.presets.tank.preview_defensive", presetTest.getBoolDB("showDefensive"), true)
+    local tankPreviewVisual = presetTest.panelVisualState()
+    eq("hud.presets.tank.preview_side_hidden", tankPreviewVisual.sideShown, false)
+    eq("hud.presets.tank.preview_no_section_headers",
+        tankPreviewVisual.mainLabelText:find("—", 1, true), nil)
     ok = service.applyPreview()
     eq("hud.presets.tank.apply", ok, true)
     settings = presetTest.profileState().settings
     eq("hud.presets.tank.current", service.currentID(), "tank")
-    eq("hud.presets.tank.split", settings.displayMode, "split")
-    eq("hud.presets.tank.no_tertiary", settings.showTertiary, false)
+    eq("hud.presets.tank.flat", settings.displayMode, "flat")
+    eq("hud.presets.tank.tertiary", settings.showTertiary, true)
     eq("hud.presets.tank.defensive", settings.showDefensive, true)
-    eq("hud.presets.tank.worst_durability", settings.useWorstDurability, true)
-    eq("hud.presets.tank.side_defensive", settings.splitDefensive, true)
-    eq("hud.presets.tank.side_gear",
-        settings.splitItemLevel and settings.splitDurability
-            and settings.splitRepairCost, true)
+    eq("hud.presets.tank.durability", settings.showDurability, true)
+    eq("hud.presets.tank.repair", settings.showRepairCost, true)
+    eq("hud.presets.tank.average_durability", settings.useWorstDurability, false)
+    eq("hud.presets.tank.single_panel",
+        settings.splitCharacter or settings.splitItemLevel
+            or settings.splitOffensive or settings.splitTertiary
+            or settings.splitDefensive or settings.splitDurability
+            or settings.splitRepairCost, false)
+    eq("hud.presets.tank.side_hidden", presetTest.panelVisualState().sideShown, false)
 
     ok = service.startPreview("compact")
     eq("hud.presets.manual.preview", ok, true)
-    env.StatsProTertiaryCheck:SetChecked(true)
-    userInteract("hud.presets.manual.checkbox", env.StatsProTertiaryCheck, "OnClick")
+    env.StatsProRepairCostCheck:SetChecked(false)
+    userInteract("hud.presets.manual.checkbox", env.StatsProRepairCostCheck, "OnClick")
     eq("hud.presets.manual.preview_cancelled", service.state().active, false)
     eq("hud.presets.manual.request_preserved",
-        presetTest.profileState().settings.showTertiary, true)
+        presetTest.profileState().settings.showRepairCost, false)
     eq("hud.presets.manual.custom", service.currentID(), "custom")
 end
 
@@ -20014,7 +20441,7 @@ do
     fireEvent("hud.presets.shared.pew", sharedEnv, "PLAYER_ENTERING_WORLD")
     sharedAddon:OpenConfigMenu()
     local service = sharedTest.hudPresets
-    local ok = service.startPreview("full")
+    local ok = service.startPreview("dps")
     eq("hud.presets.shared.preview", ok, true)
     local ui = sharedEnv.StatsProConfigFrame.tabContents[1].quickSetupView
     check("hud.presets.shared.warning_text",
@@ -20026,7 +20453,7 @@ do
     eq("hud.presets.shared.same_profile_reference",
         root.characters["Player-1-IMPORT"].specProfiles[72], profileID)
     eq("hud.presets.shared.updated_once", root.profiles[profileID].settings.displayMode,
-        "sectioned")
+        "flat")
 end
 
 do
@@ -20039,14 +20466,14 @@ do
     local service = presetTest.hudPresets
     local before = deepCopy(presetTest.profileState().root)
     inCombat = true
-    local ok, reason = service.startPreview("full")
+    local ok, reason = service.startPreview("dps")
     eq("hud.presets.gates.combat_rejected", ok, false)
     eq("hud.presets.gates.combat_reason", reason, "combat")
     assertDeepEqual("hud.presets.gates.combat_zero_writes",
         presetTest.profileState().root, before)
     inCombat = false
 
-    ok = service.startPreview("full")
+    ok = service.startPreview("dps")
     eq("hud.presets.gates.preview_before_combat", ok, true)
     inCombat = true
     service.setRuntimeFailureCount(1)
@@ -20059,14 +20486,14 @@ do
     inCombat = false
 
     service.setRuntimeFailureCount(1)
-    ok, reason = service.startPreview("full")
+    ok, reason = service.startPreview("dps")
     eq("hud.presets.gates.preview_failure", ok, false)
     eq("hud.presets.gates.preview_failure_reason", reason, "preview-failed")
     eq("hud.presets.gates.preview_failure_inactive", service.state().active, false)
     assertDeepEqual("hud.presets.gates.preview_failure_zero_writes",
         presetTest.profileState().root, before)
 
-    ok = service.startPreview("full")
+    ok = service.startPreview("dps")
     eq("hud.presets.gates.retryable_preview", ok, true)
     presetTest.profileOps.setFailureStage("apply")
     ok, reason = service.applyPreview()
@@ -20086,6 +20513,81 @@ do
     eq("hud.presets.gates.stale_rejected", ok, false)
     eq("hud.presets.gates.stale_reason", reason, "stale")
     eq("hud.presets.gates.stale_cancelled", service.state().active, false)
+end
+
+do
+    local inCombat = false
+    local combatEnv, _, combatTest = loadStatsPro("enUS", withProfileIdentity({
+        statsProDB = {},
+        testWelcomeEnabled = true,
+        inCombatLockdown = function() return inCombat end,
+    }))
+    fireEvent("hud.welcome.combat.pew", combatEnv, "PLAYER_ENTERING_WORLD")
+    local committedBefore = deepCopy(combatTest.profileState().root)
+    inCombat = true
+    eq("hud.welcome.combat.timer", combatEnv.__flushNextTimer(0.5), true)
+    eq("hud.welcome.combat.deferred",
+        combatTest.hudPresets.state().welcomeShown, false)
+    eq("hud.welcome.combat.marker_preserved",
+        combatTest.hudPresets.state().welcomeSeen, false)
+    assertDeepEqual("hud.welcome.combat.timer_zero_writes",
+        combatTest.profileState().root, committedBefore)
+
+    -- PLAYER_REGEN_ENABLED is authoritative even if InCombatLockdown lags for
+    -- the rest of this event callback.
+    fireEvent("hud.welcome.combat.regen", combatEnv, "PLAYER_REGEN_ENABLED")
+    local combatFrame = combatEnv.StatsProQuickSetupWelcome
+    eq("hud.welcome.combat.recovered", combatFrame:IsShown(), true)
+    eq("hud.welcome.combat.card_enabled_outside",
+        combatFrame.statsProView.buttons.tank:IsEnabled(), true)
+    eq("hud.welcome.combat.apply_enabled_outside",
+        combatFrame.statsProView.apply:IsEnabled(), true)
+    inCombat = false
+    eq("hud.welcome.combat.preview_started", userInteract(
+        "hud.welcome.combat.preview", combatFrame.statsProView.buttons.tank,
+        "OnClick"), true)
+    eq("hud.welcome.combat.preview_active",
+        combatTest.hudPresets.state().active, true)
+
+    inCombat = true
+    fireEvent("hud.welcome.combat.enter", combatEnv, "PLAYER_REGEN_DISABLED")
+    eq("hud.welcome.combat.preview_cancelled",
+        combatTest.hudPresets.state().active, false)
+    eq("hud.welcome.combat.hidden", combatFrame:IsShown(), false)
+    eq("hud.welcome.combat.marker_preserved_after_hide",
+        combatTest.hudPresets.state().welcomeSeen, false)
+    assertDeepEqual("hud.welcome.combat.cancel_zero_writes",
+        combatTest.profileState().root, committedBefore)
+
+    inCombat = false
+    fireEvent("hud.welcome.combat.leave", combatEnv, "PLAYER_REGEN_ENABLED")
+    eq("hud.welcome.combat.reshown", combatFrame:IsShown(), true)
+    eq("hud.welcome.combat.card_reenabled",
+        combatFrame.statsProView.buttons.tank:IsEnabled(), true)
+    eq("hud.welcome.combat.apply_reenabled",
+        combatFrame.statsProView.apply:IsEnabled(), true)
+    combatFrame:Hide()
+end
+
+do
+    local pendingEnv, _, pendingTest = loadStatsPro("enUS",
+        withProfileIdentity({ statsProDB = {}, testWelcomeEnabled = true }))
+    fireEvent("hud.welcome.pending_seen.pew", pendingEnv, "PLAYER_ENTERING_WORLD")
+    eq("hud.welcome.pending_seen.timer", pendingEnv.__flushNextTimer(0.5), true)
+    local pendingFrame = pendingEnv.StatsProQuickSetupWelcome
+    eq("hud.welcome.pending_seen.shown", pendingFrame:IsShown(), true)
+    fireEvent("hud.welcome.pending_seen.spec_change", pendingEnv,
+        "PLAYER_SPECIALIZATION_CHANGED", "player")
+    pendingFrame:Hide()
+    eq("hud.welcome.pending_seen.hidden", pendingFrame:IsShown(), false)
+    eq("hud.welcome.pending_seen.deferred",
+        pendingTest.hudPresets.state().welcomeSeen, false)
+    eq("hud.welcome.pending_seen.resolve_timer",
+        pendingEnv.__flushNextTimer(0), true)
+    eq("hud.welcome.pending_seen.committed_after_resolution",
+        pendingTest.hudPresets.state().welcomeSeen, true)
+    eq("hud.welcome.pending_seen.no_repeat",
+        pendingTest.hudPresets.maybeShowWelcome(), false)
 end
 
 do
@@ -20128,20 +20630,20 @@ do
     eq("hud.welcome.fresh.independent_starting_profile",
         welcomeModel.profiles[welcomeTest.profileState().profileID].references.total, 1)
 
-    userInteract("hud.welcome.preview.full",
-        frame.statsProView.buttons.full, "OnClick")
+    userInteract("hud.welcome.preview.dps",
+        frame.statsProView.buttons.dps, "OnClick")
     eq("hud.welcome.preview.active", welcomeTest.hudPresets.state().active, true)
-    eq("hud.welcome.preview.mode", welcomeTest.getDB("displayMode"), "sectioned")
+    eq("hud.welcome.preview.mode", welcomeTest.getDB("displayMode"), "flat")
     eq("hud.welcome.preview.zero_write_flag",
         welcomeTest.hudPresets.state().welcomeSeen, false)
     eq("hud.welcome.preview.no_technical_warning_text",
         frame.statsProView.warning:GetText(), "")
     eq("hud.welcome.preview.no_technical_warning_surface",
         frame.statsProView.warning.statsProWarningSurface:IsShown(), false)
-    userInteract("hud.welcome.apply.full", frame.statsProView.apply, "OnClick")
+    userInteract("hud.welcome.apply.dps", frame.statsProView.apply, "OnClick")
     eq("hud.welcome.apply.hidden", frame:IsShown(), false)
     eq("hud.welcome.apply.seen", welcomeTest.hudPresets.state().welcomeSeen, true)
-    eq("hud.welcome.apply.current", welcomeTest.hudPresets.currentID(), "full")
+    eq("hud.welcome.apply.current", welcomeTest.hudPresets.currentID(), "dps")
     eq("hud.welcome.apply.inactive", welcomeTest.hudPresets.state().active, false)
     eq("hud.welcome.apply.view_unregistered",
         frame.statsProView.statsProRegistered, false)

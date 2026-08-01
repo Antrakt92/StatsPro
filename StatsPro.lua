@@ -53,6 +53,12 @@ addon.critRuntime = {
     selectedSource = nil,
     selectedSpellSchool = nil,
 }
+addon.movementRuntime = {
+    percentCurve = nil,
+    baseSpeed = 7,
+    percentAtBaseSpeed = 100,
+    curveMaxBaseUnits = 1000,
+}
 
 --[[ ============================================================
     1. CONSTANTS
@@ -355,8 +361,9 @@ local defaults = {
     -- WHY int-percent (not float 0..1): format-string compat with CreateConfigSlider's "%d%%".
     textAlpha = 100,
     -- Panel background alpha: stored as INT 0-80 (percentage) in DB, divided by 100 on apply.
-    -- A light 15% backing keeps the HUD readable without feeling like a solid panel.
-    panelBackgroundAlpha = 15,
+    -- Outlined text keeps the fresh/reset HUD readable while a transparent backing
+    -- gives both panels the lightest default footprint. Saved profiles stay explicit.
+    panelBackgroundAlpha = 0,
     -- Text outline style: "none" | "outline" | "thick". Default preserves current OUTLINE text.
     textOutlineStyle = "outline",
     -- Optional provenance only: old profiles intentionally resolve to Custom without
@@ -480,6 +487,15 @@ function addon.IsCleanFiniteNumber(value)
     if issecretvalue(value) then return false end
     return type(value) == "number" and value == value
         and value > -math.huge and value < math.huge
+end
+
+-- One classification boundary for display-only numerics. The first result says
+-- whether Blizzard may render the value; the second is a clean restricted-state
+-- flag. Arithmetic still uses IsCleanFiniteNumber exclusively.
+function addon.ClassifyRenderableNumber(value)
+    local ok, secret = pcall(issecretvalue, value)
+    if not ok then return false, false end
+    return secret or addon.IsCleanFiniteNumber(value), secret
 end
 
 -- WHY: Blizzard's paper doll defines spell crit as the minimum across schools
@@ -668,7 +684,7 @@ end
 -- preserving appearance, scale, positions, locale, refresh rate, visibility,
 -- locking, Archon context, profile assignments, and account settings.
 addon.hudPresets = {
-    order = { "compact", "full", "tank" },
+    order = { "compact", "dps", "tank" },
     allowlist = {
         displayMode = true, labelStyle = true,
         showRating = true, showPercentage = true,
@@ -712,57 +728,44 @@ addon.hudPresets = {
                 splitRepairCost = true,
             },
         },
-        full = {
-            label = "Full",
-            summary = "All stat groups and gear status",
+        dps = {
+            label = "DPS",
+            summary = "DPS and tertiary stats with gear status",
             values = {
-                displayMode = "sectioned", labelStyle = "full",
+                displayMode = "flat", labelStyle = "full",
                 showRating = true, showPercentage = true,
-                showMainStat = true, showStamina = true, showItemLevel = true,
+                showMainStat = false, showStamina = false, showItemLevel = true,
                 showOffensive = true, hideZeroOffensive = false,
                 showCrit = true, showHaste = true,
                 showMastery = true, showVersatility = true,
-                showTertiary = true, hideZeroTertiary = true,
+                showTertiary = true, hideZeroTertiary = false,
                 showLeech = true, showAvoidance = true, showSpeed = true,
-                showDefensive = true, hideZeroDefensive = true,
+                showDefensive = false, hideZeroDefensive = true,
                 showDodge = true, showParry = true, showBlock = true,
                 showArmor = true, showStagger = true,
                 showDurability = true, showRepairCost = true,
                 useWorstDurability = false,
-                splitCharacter = false, splitItemLevel = true,
+                splitCharacter = false, splitItemLevel = false,
                 splitOffensive = false, splitTertiary = false,
-                splitDefensive = true, splitDurability = true,
-                splitRepairCost = true,
+                splitDefensive = false, splitDurability = false,
+                splitRepairCost = false,
             },
         },
         tank = {
             label = "Tank",
-            summary = "Defensives, secondary stats, and gear status",
-            values = {
-                displayMode = "split", labelStyle = "full",
-                showRating = true, showPercentage = true,
-                showMainStat = true, showStamina = true, showItemLevel = true,
-                showOffensive = true, hideZeroOffensive = false,
-                showCrit = true, showHaste = true,
-                showMastery = true, showVersatility = true,
-                showTertiary = false, hideZeroTertiary = true,
-                showLeech = true, showAvoidance = true, showSpeed = true,
-                showDefensive = true, hideZeroDefensive = true,
-                showDodge = true, showParry = true, showBlock = true,
-                showArmor = true, showStagger = true,
-                showDurability = true, showRepairCost = true,
-                useWorstDurability = true,
-                splitCharacter = false, splitItemLevel = true,
-                splitOffensive = false, splitTertiary = false,
-                splitDefensive = true, splitDurability = true,
-                splitRepairCost = true,
-            },
+            summary = "DPS, tertiary, and defensive stats with gear status",
         },
     },
     session = nil,
     views = {},
     settingsDiscovered = false,
+    combatState = nil,
 }
+-- WHY: Tank is the DPS setup plus defensive rows. Deriving a detached copy
+-- keeps that product contract exact without coupling either mutable table.
+addon.hudPresets.definitions.tank.values =
+    CopyTable(addon.hudPresets.definitions.dps.values)
+addon.hudPresets.definitions.tank.values.showDefensive = true
 
 -- Shared preview coordination keeps the two preset services mutually exclusive and
 -- gives DB reads a single override path. Service-specific definitions, runtime apply,
@@ -835,8 +838,8 @@ addon.archonTargets.snapshotOptions = {
     { value = "raid",       label = "Raid" },
 }
 -- Session-local by design: a character change reloads addon Lua, while zoning into
--- Mythic+ does not. Context changes clear entries so switching away and back cannot
--- revive a comparison captured before the switch.
+-- Mythic+ does not. Context and effective-level changes clear entries so switching
+-- away and back cannot revive a comparison captured before the transition.
 addon.archonTargets.comparisonCache = {
     generation = 0,
     entries = {},
@@ -878,17 +881,22 @@ function addon.archonTargets.IsCleanContextKey(value)
     return type(value) == "string" and not issecretvalue(value) and value ~= ""
 end
 
+function addon.archonTargets.InvalidateComparisonCache()
+    local cache = addon.archonTargets.comparisonCache
+    cache.generation = cache.generation + 1
+    cache.entries = {}
+end
+
 function addon.archonTargets.ActivateComparisonContext(classToken, specKey, snapshotKey)
     if not addon.archonTargets.IsCleanContextKey(classToken)
         or not addon.archonTargets.IsCleanContextKey(specKey)
         or not addon.archonTargets.IsCleanContextKey(snapshotKey) then return nil end
     local cache = addon.archonTargets.comparisonCache
     if cache.classToken ~= classToken or cache.specKey ~= specKey or cache.snapshotKey ~= snapshotKey then
-        cache.generation = cache.generation + 1
         cache.classToken = classToken
         cache.specKey = specKey
         cache.snapshotKey = snapshotKey
-        cache.entries = {}
+        addon.archonTargets.InvalidateComparisonCache()
     end
     return cache
 end
@@ -919,12 +927,17 @@ function addon.archonTargets.GetCachedComparison(classToken, specKey, snapshotKe
         cache.entries[statKey] = nil
         return nil
     end
+    if type(entry.targetPct) ~= "nil"
+        and not addon.IsCleanFiniteNumber(entry.targetPct) then
+        cache.entries[statKey] = nil
+        return nil
+    end
     return entry
 end
 
 function addon.archonTargets.StoreCleanComparison(classToken, specKey, snapshotKey, statKey,
                                                    target, ratingCR, capturedAt,
-                                                   current, currentPct, delta)
+                                                   current, currentPct, delta, targetPct)
     if not addon.archonTargets.IsCleanContextKey(statKey)
         or not addon.IsCleanFiniteNumber(target)
         or not addon.IsCleanFiniteNumber(ratingCR)
@@ -932,6 +945,7 @@ function addon.archonTargets.StoreCleanComparison(classToken, specKey, snapshotK
         or not addon.IsCleanFiniteNumber(delta)
         or type(capturedAt) ~= "string" or issecretvalue(capturedAt) then return end
     if currentPct ~= nil and not addon.IsCleanFiniteNumber(currentPct) then return end
+    if type(targetPct) ~= "nil" and not addon.IsCleanFiniteNumber(targetPct) then return end
     local cache = addon.archonTargets.ActivateComparisonContext(classToken, specKey, snapshotKey)
     if not cache then return end
     cache.entries[statKey] = {
@@ -946,6 +960,7 @@ function addon.archonTargets.StoreCleanComparison(classToken, specKey, snapshotK
         current = current,
         currentPct = currentPct,
         delta = delta,
+        targetPct = targetPct,
     }
 end
 
@@ -1005,15 +1020,32 @@ function addon.archonTargets.GetStatTarget(statKey)
     return target, snapshot, snapshotRoot, root, snapshotKey, classToken, specKey
 end
 
+function addon.archonTargets.CalculateMasteryTargetPercent(currentRating, currentPct, target)
+    if not addon.IsCleanFiniteNumber(currentRating) or currentRating < 0
+        or not addon.IsCleanFiniteNumber(currentPct)
+        or not addon.IsCleanFiniteNumber(target) or target < 0 then return nil end
+    local currentBonus, targetBonus, currentReason, targetReason =
+        addon.archonTargets.GetRatingBonusesForValues(
+            CR_MASTERY, currentRating, target)
+    if not addon.IsCleanFiniteNumber(currentBonus)
+        or not addon.IsCleanFiniteNumber(targetBonus) then
+        if currentReason == "restricted" or targetReason == "restricted" then
+            return nil, "restricted"
+        end
+        return nil, "unavailable"
+    end
+    local targetPct = currentPct + targetBonus - currentBonus
+    if not addon.IsCleanFiniteNumber(targetPct) then return nil end
+    return targetPct
+end
+
 function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, currentPct,
                                        colorKey, currentPctDisplay, currentRatingDisplay)
     local hasCleanCurrent = addon.IsCleanFiniteNumber(currentRating) and currentRating >= 0
-    local ratingDisplaySecretOK, ratingDisplayIsSecret =
-        pcall(issecretvalue, currentRatingDisplay)
-    local hasLiveCurrentRating = ratingDisplaySecretOK and ratingDisplayIsSecret
-    local displaySecretOK, displayIsSecret = pcall(issecretvalue, currentPctDisplay)
-    local hasCurrentPctDisplay = displaySecretOK and (displayIsSecret
-        or addon.IsCleanFiniteNumber(currentPctDisplay))
+    local _, ratingDisplayIsSecret = addon.ClassifyRenderableNumber(currentRatingDisplay)
+    local hasLiveCurrentRating = ratingDisplayIsSecret
+    local hasCurrentPctDisplay, displayIsSecret =
+        addon.ClassifyRenderableNumber(currentPctDisplay)
     if not hasCurrentPctDisplay then
         currentPctDisplay = currentPct
         hasCurrentPctDisplay = addon.IsCleanFiniteNumber(currentPctDisplay)
@@ -1037,20 +1069,51 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
         local displayPct = addon.IsCleanFiniteNumber(currentPct) and currentPct or nil
         local delta = currentRating - target
         if addon.IsCleanFiniteNumber(delta) then
+            local targetPct, targetPctReason
+            local cachedEntry
+            if statKey == "mastery" and cleanRatingCR == CR_MASTERY then
+                targetPct, targetPctReason = addon.archonTargets.CalculateMasteryTargetPercent(
+                    currentRating, displayPct, target)
+                if targetPct == nil and (displayIsSecret or targetPctReason == "restricted") then
+                    cachedEntry = addon.archonTargets.GetCachedComparison(
+                        classToken, specKey, snapshotKey, statKey,
+                        target, cleanRatingCR, capturedAt)
+                    if cachedEntry then targetPct = cachedEntry.targetPct end
+                end
+            end
             meta.comparisonState = "exact"
             meta.current = currentRating
             meta.currentPct = displayPct
+            meta.targetPct = targetPct
             -- Display-only: direct combat percentages may be secret while the rating
             -- remains clean. Keep the raw value out of comparisons/caches and pass it
             -- only to the same client formatter used by the live HUD.
             if hasCurrentPctDisplay then meta.currentPctDisplay = currentPctDisplay end
             meta.delta = delta
-            addon.archonTargets.StoreCleanComparison(
-                classToken, specKey, snapshotKey, statKey, target, cleanRatingCR,
-                capturedAt, currentRating, displayPct, delta)
+            -- A transient nil/error from Mastery APIs must not replace the last fully
+            -- clean percentage tuple with a rating-only one. Restricted live values
+            -- are different: the cached Target % is still valid and intentionally
+            -- travels with the fresh clean rating comparison.
+            local preserveCompleteMasteryCache = statKey == "mastery"
+                and targetPct == nil and not displayIsSecret
+                and targetPctReason ~= "restricted"
+            if preserveCompleteMasteryCache and cachedEntry == nil then
+                cachedEntry = addon.archonTargets.GetCachedComparison(
+                    classToken, specKey, snapshotKey, statKey,
+                    target, cleanRatingCR, capturedAt)
+            end
+            preserveCompleteMasteryCache = preserveCompleteMasteryCache
+                and cachedEntry ~= nil and cachedEntry.targetPct ~= nil
+            if not preserveCompleteMasteryCache then
+                addon.archonTargets.StoreCleanComparison(
+                    classToken, specKey, snapshotKey, statKey, target, cleanRatingCR,
+                    capturedAt, currentRating, displayPct, delta, targetPct)
+            end
         end
         return meta
     end
+    local entry = addon.archonTargets.GetCachedComparison(
+        classToken, specKey, snapshotKey, statKey, target, cleanRatingCR, capturedAt)
     if hasLiveCurrentRating then
         -- A restricted rating may be rendered by the client but must never enter
         -- addon arithmetic, ordering, or the clean comparison cache. Prefer the
@@ -1059,15 +1122,17 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
         meta.comparisonState = "liveOnly"
         meta.currentRatingDisplay = currentRatingDisplay
         if hasCurrentPctDisplay then meta.currentPctDisplay = currentPctDisplay end
+        -- Target % was captured during a clean update for this exact class/spec/
+        -- snapshot/target and player-level epoch. It does not reuse Current/Delta.
+        if entry then meta.targetPct = entry.targetPct end
         return meta
     end
-    local entry = addon.archonTargets.GetCachedComparison(
-        classToken, specKey, snapshotKey, statKey, target, cleanRatingCR, capturedAt)
     if entry then
         meta.comparisonState = "lastKnown"
         meta.current = entry.current
         meta.currentPct = entry.currentPct
         meta.delta = entry.delta
+        meta.targetPct = entry.targetPct
     end
     return meta
 end
@@ -1107,7 +1172,10 @@ local DEFENSIVE_STATS = {
 local TERTIARY_STATS = {
     { label = "Leech",     api = GetLifesteal, ratingCR = CR_LIFESTEAL, colorKey = "leech",     showKey = "showLeech"     },
     { label = "Avoidance", api = GetAvoidance, ratingCR = CR_AVOIDANCE, colorKey = "avoidance", showKey = "showAvoidance" },
-    -- speed handled specially (Movement % via GetUnitSpeed)
+    -- GetUnitSpeed returns yards/second, so only value resolution differs. Rating,
+    -- visibility, hide-zero, columns, colors and formatting stay on the shared path.
+    { label = "Speed", api = GetUnitSpeed, ratingCR = CR_SPEED, colorKey = "speed",
+      showKey = "showSpeed", valueKind = "movement" },
 }
 
 --[[ ============================================================
@@ -1177,9 +1245,6 @@ cached = {
     durabilityHasItems = false,
     repairCost = nil,       -- exact live repair cost; nil while any damaged slot is unresolved
     repairCostComplete = false,
-    -- WARNING: GetUnitSpeed returns secret values in combat → arithmetic taints. Cache OOC.
-    speedPct = nil,
-    speedWasSwimming = nil,
     -- Last clean hide-zero decision per stat row. Secret combat reads cannot be safely
     -- compared to 0, so they reuse this instead of making absent rows appear.
     cleanRowVisibility = {},
@@ -1300,7 +1365,7 @@ local isLoaded = false
 -- WARNING: keys MUST match exactly the English literals used at the call sites:
 --   - def.label values from OFFENSIVE_STATS / DEFENSIVE_STATS / PRIMARY_STATS /
 --     TERTIARY_STATS (section 4)
---   - hardcoded literal keys in special-case branches: "Vers" / "Speed" / "Armor"
+--   - hardcoded literal keys in special-case branches: "Vers" / "Armor"
 --     (additive rows for dual-source stats not in the loop tables)
 --   - "Durability" in BuildDurabilityLines / "Repair" in BuildRepairCostPayload
 --   - section keys used by SectionHeader(): Character / Offensive / Tertiary /
@@ -2982,9 +3047,10 @@ do
     enUS = {
         ["Quick Setup"] = "Quick Setup",
         ["Compact"] = "Compact",
+        ["DPS"] = "DPS",
         ["Secondary stats only"] = "Secondary stats only",
-        ["All stat groups and gear status"] = "All stat groups and gear status",
-        ["Defensives, secondary stats, and gear status"] = "Defensives, secondary stats, and gear status",
+        ["DPS and tertiary stats with gear status"] = "DPS and tertiary stats with gear status",
+        ["DPS, tertiary, and defensive stats with gear status"] = "DPS, tertiary, and defensive stats with gear status",
         ["Choose a finished HUD layout. Click a card to preview it."] = "Choose a finished HUD layout. Click a card to preview it.",
         ["Current setup: %s"] = "Current setup: %s",
         ["Use this setup"] = "Use this setup",
@@ -2994,9 +3060,10 @@ do
     ruRU = {
         ["Quick Setup"] = "Быстрая настройка",
         ["Compact"] = "Компактный",
+        ["DPS"] = "ДПС",
         ["Secondary stats only"] = "Только вторичные характеристики",
-        ["All stat groups and gear status"] = "Все характеристики и состояние экипировки",
-        ["Defensives, secondary stats, and gear status"] = "Защита, вторичные характеристики и экипировка",
+        ["DPS and tertiary stats with gear status"] = "ДПС, третичные характеристики и экипировка",
+        ["DPS, tertiary, and defensive stats with gear status"] = "ДПС, третичные, защитные характеристики и экипировка",
         ["Choose a finished HUD layout. Click a card to preview it."] = "Выберите готовую раскладку HUD. Нажмите карточку для предпросмотра.",
         ["Current setup: %s"] = "Текущая раскладка: %s",
         ["Use this setup"] = "Использовать",
@@ -3006,9 +3073,10 @@ do
     deDE = {
         ["Quick Setup"] = "Schnelleinrichtung",
         ["Compact"] = "Kompakt",
+        ["DPS"] = "DPS",
         ["Secondary stats only"] = "Nur Sekundärwerte",
-        ["All stat groups and gear status"] = "Alle Werte und Ausrüstungsstatus",
-        ["Defensives, secondary stats, and gear status"] = "Defensivwerte, Sekundärwerte und Ausrüstung",
+        ["DPS and tertiary stats with gear status"] = "DPS- und Tertiärwerte mit Ausrüstung",
+        ["DPS, tertiary, and defensive stats with gear status"] = "DPS-, Tertiär- und Defensivwerte mit Ausrüstung",
         ["Choose a finished HUD layout. Click a card to preview it."] = "Wähle ein fertiges HUD-Layout. Klicke auf eine Karte für die Vorschau.",
         ["Current setup: %s"] = "Aktuelles Layout: %s",
         ["Use this setup"] = "Dieses Layout verwenden",
@@ -3018,9 +3086,10 @@ do
     frFR = {
         ["Quick Setup"] = "Configuration rapide",
         ["Compact"] = "Compact",
+        ["DPS"] = "DPS",
         ["Secondary stats only"] = "Caractéristiques secondaires uniquement",
-        ["All stat groups and gear status"] = "Toutes les caractéristiques et l’état de l’équipement",
-        ["Defensives, secondary stats, and gear status"] = "Défense, caractéristiques secondaires et équipement",
+        ["DPS and tertiary stats with gear status"] = "DPS, tertiaires et état de l’équipement",
+        ["DPS, tertiary, and defensive stats with gear status"] = "DPS, tertiaires, défense et équipement",
         ["Choose a finished HUD layout. Click a card to preview it."] = "Choisissez une disposition HUD prête à l’emploi. Cliquez sur une carte pour l’aperçu.",
         ["Current setup: %s"] = "Disposition actuelle : %s",
         ["Use this setup"] = "Utiliser cette disposition",
@@ -3030,9 +3099,10 @@ do
     esES = {
         ["Quick Setup"] = "Configuración rápida",
         ["Compact"] = "Compacto",
+        ["DPS"] = "DPS",
         ["Secondary stats only"] = "Solo estadísticas secundarias",
-        ["All stat groups and gear status"] = "Todas las estadísticas y el estado del equipo",
-        ["Defensives, secondary stats, and gear status"] = "Defensas, estadísticas secundarias y equipo",
+        ["DPS and tertiary stats with gear status"] = "DPS, estadísticas terciarias y estado del equipo",
+        ["DPS, tertiary, and defensive stats with gear status"] = "DPS, terciarias, defensas y estado del equipo",
         ["Choose a finished HUD layout. Click a card to preview it."] = "Elige un diseño de HUD listo. Haz clic en una tarjeta para previsualizarlo.",
         ["Current setup: %s"] = "Diseño actual: %s",
         ["Use this setup"] = "Usar este diseño",
@@ -3042,9 +3112,10 @@ do
     itIT = {
         ["Quick Setup"] = "Configurazione rapida",
         ["Compact"] = "Compatto",
+        ["DPS"] = "DPS",
         ["Secondary stats only"] = "Solo statistiche secondarie",
-        ["All stat groups and gear status"] = "Tutte le statistiche e lo stato dell’equipaggiamento",
-        ["Defensives, secondary stats, and gear status"] = "Difese, statistiche secondarie ed equipaggiamento",
+        ["DPS and tertiary stats with gear status"] = "DPS, statistiche terziarie e stato equipaggiamento",
+        ["DPS, tertiary, and defensive stats with gear status"] = "DPS, terziarie, difese e stato equipaggiamento",
         ["Choose a finished HUD layout. Click a card to preview it."] = "Scegli un layout HUD completo. Fai clic su una scheda per l’anteprima.",
         ["Current setup: %s"] = "Layout attuale: %s",
         ["Use this setup"] = "Usa questo layout",
@@ -3054,9 +3125,10 @@ do
     ptBR = {
         ["Quick Setup"] = "Configuração rápida",
         ["Compact"] = "Compacto",
+        ["DPS"] = "DPS",
         ["Secondary stats only"] = "Somente atributos secundários",
-        ["All stat groups and gear status"] = "Todos os atributos e o estado do equipamento",
-        ["Defensives, secondary stats, and gear status"] = "Defesas, atributos secundários e equipamento",
+        ["DPS and tertiary stats with gear status"] = "DPS, atributos terciários e estado do equipamento",
+        ["DPS, tertiary, and defensive stats with gear status"] = "DPS, terciários, defesas e estado do equipamento",
         ["Choose a finished HUD layout. Click a card to preview it."] = "Escolha um layout de HUD pronto. Clique em um cartão para visualizar.",
         ["Current setup: %s"] = "Layout atual: %s",
         ["Use this setup"] = "Usar este layout",
@@ -3066,9 +3138,10 @@ do
     koKR = {
         ["Quick Setup"] = "빠른 설정",
         ["Compact"] = "간단히",
+        ["DPS"] = "공격",
         ["Secondary stats only"] = "보조 능력치만 표시",
-        ["All stat groups and gear status"] = "모든 능력치와 장비 상태",
-        ["Defensives, secondary stats, and gear status"] = "방어, 보조 능력치 및 장비 상태",
+        ["DPS and tertiary stats with gear status"] = "공격 및 3차 능력치와 장비 상태",
+        ["DPS, tertiary, and defensive stats with gear status"] = "공격, 3차 및 방어 능력치와 장비 상태",
         ["Choose a finished HUD layout. Click a card to preview it."] = "완성된 HUD 구성을 선택하세요. 카드를 클릭하면 미리 볼 수 있습니다.",
         ["Current setup: %s"] = "현재 구성: %s",
         ["Use this setup"] = "이 구성 사용",
@@ -3078,9 +3151,10 @@ do
     zhCN = {
         ["Quick Setup"] = "快速设置",
         ["Compact"] = "紧凑",
+        ["DPS"] = "输出",
         ["Secondary stats only"] = "仅显示次要属性",
-        ["All stat groups and gear status"] = "全部属性与装备状态",
-        ["Defensives, secondary stats, and gear status"] = "防御、次要属性与装备状态",
+        ["DPS and tertiary stats with gear status"] = "输出、第三属性和装备状态",
+        ["DPS, tertiary, and defensive stats with gear status"] = "输出、第三属性、防御属性和装备状态",
         ["Choose a finished HUD layout. Click a card to preview it."] = "选择一套完整的 HUD 布局。点击卡片即可预览。",
         ["Current setup: %s"] = "当前布局：%s",
         ["Use this setup"] = "使用此布局",
@@ -3090,9 +3164,10 @@ do
     zhTW = {
         ["Quick Setup"] = "快速設定",
         ["Compact"] = "精簡",
+        ["DPS"] = "輸出",
         ["Secondary stats only"] = "僅顯示次要屬性",
-        ["All stat groups and gear status"] = "全部屬性與裝備狀態",
-        ["Defensives, secondary stats, and gear status"] = "防禦、次要屬性與裝備狀態",
+        ["DPS and tertiary stats with gear status"] = "輸出、第三屬性和裝備狀態",
+        ["DPS, tertiary, and defensive stats with gear status"] = "輸出、第三屬性、防禦屬性和裝備狀態",
         ["Choose a finished HUD layout. Click a card to preview it."] = "選擇一套完整的 HUD 版面。點擊卡片即可預覽。",
         ["Current setup: %s"] = "目前版面：%s",
         ["Use this setup"] = "使用此版面",
@@ -3720,6 +3795,50 @@ end
 function SAFE_NUM.SafeDisplayPercent(fn, ...)
     local value = safeCall(fn, ...)
     return SAFE_NUM.ResolveDisplayNumber(value, false)
+end
+
+-- GetUnitSpeed's first return is the player's actual instantaneous speed in
+-- yards/second, not a percentage. Restricted combat makes that number secret,
+-- so Lua cannot divide it by the base run speed. A Blizzard curve performs the
+-- conversion inside the client and preserves the secret tag for the existing
+-- FontString-only display path. The wide final point keeps transport speeds in
+-- the same linear mapping rather than relying on out-of-range curve behavior.
+function addon.movementRuntime.CreatePercentCurve()
+    local curveUtil = _G.C_CurveUtil
+    if type(curveUtil) ~= "table" or type(curveUtil.CreateCurve) ~= "function" then
+        return nil
+    end
+    local ok, curve = pcall(curveUtil.CreateCurve)
+    if not ok or not curve or type(curve.AddPoint) ~= "function"
+        or type(curve.Evaluate) ~= "function" then
+        return nil
+    end
+    local baseSpeed = addon.movementRuntime.baseSpeed
+    local basePercent = addon.movementRuntime.percentAtBaseSpeed
+    local maxBaseUnits = addon.movementRuntime.curveMaxBaseUnits
+    if not pcall(curve.AddPoint, curve, 0, 0)
+        or not pcall(curve.AddPoint, curve, baseSpeed, basePercent)
+        or not pcall(curve.AddPoint, curve,
+            baseSpeed * maxBaseUnits, basePercent * maxBaseUnits) then
+        return nil
+    end
+    return curve
+end
+
+addon.movementRuntime.percentCurve = addon.movementRuntime.CreatePercentCurve()
+
+function addon.movementRuntime.ResolvePercent(currentSpeed)
+    local displaySpeed, cleanSpeed = SAFE_NUM.ResolveDisplayNumber(currentSpeed, true)
+    if cleanSpeed ~= nil then
+        return (cleanSpeed / addon.movementRuntime.baseSpeed)
+            * addon.movementRuntime.percentAtBaseSpeed
+    end
+    if not issecretvalue(displaySpeed) then return nil end
+    local curve = addon.movementRuntime.percentCurve
+    if not curve then return nil end
+    local ok, percent = pcall(curve.Evaluate, curve, displaySpeed)
+    if not ok or not SAFE_NUM.IsRenderableNumberValue(percent) then return nil end
+    return percent
 end
 
 function SAFE_NUM.SafeCompositePercent(fn, ...)
@@ -4487,6 +4606,10 @@ function addon.profileTransfer.BuildImportedSettings(targetSettings, package, se
 end
 
 function addon.profileUI.RefreshSafe()
+    if addon.hudPresets
+        and type(addon.hudPresets.FlushPendingWelcomeSeen) == "function" then
+        pcall(addon.hudPresets.FlushPendingWelcomeSeen)
+    end
     local refresh = addon.profileUI.refreshAll
     if type(refresh) == "function" then pcall(refresh) end
     local design = addon.settingsDesign
@@ -6078,10 +6201,11 @@ function addon.profileOps.ReadCurrentGUID()
     return guid
 end
 
-function addon.profileOps.CheckExpected(root, expected)
+function addon.profileOps.CheckExpected(root, expected, ignoreGeneration)
     if type(expected) ~= "table" then return true end
     if expected.rootRef and not rawequal(root, expected.rootRef) then return false end
-    if expected.generation and expected.generation ~= addon.dbRuntime.generation then return false end
+    if not ignoreGeneration and expected.generation
+        and expected.generation ~= addon.dbRuntime.generation then return false end
     if expected.profilesRef and not rawequal(root.profiles, expected.profilesRef) then return false end
     if expected.roleTemplatesRef
         and not rawequal(root.roleTemplates, expected.roleTemplatesRef) then return false end
@@ -7835,20 +7959,67 @@ function addon.archonTargets.FormatSignedRatingDelta(delta)
     return "-" .. tostring(math.abs(delta))
 end
 
-function addon.archonTargets.GetRatingBonusForValue(ratingCR, rating)
+function addon.archonTargets.GetRawRatingBonusForValue(ratingCR, rating)
     if type(GetCombatRatingBonusForCombatRatingValue) ~= "function" then return nil end
     if not SAFE_NUM.IsCleanFiniteNumber(ratingCR) or not SAFE_NUM.IsCleanFiniteNumber(rating) or rating < 0 then return nil end
     local okBonus, bonus = pcall(GetCombatRatingBonusForCombatRatingValue, ratingCR, rating)
     if not okBonus then return nil end
-    if not SAFE_NUM.IsCleanFiniteNumber(bonus) then return nil end
-    if ratingCR == CR_MASTERY then
-        if type(GetMasteryEffect) ~= "function" then return nil end
-        local ok, _, coefficient = pcall(GetMasteryEffect)
-        if not ok or not SAFE_NUM.IsCleanFiniteNumber(coefficient) then return nil end
-        bonus = bonus * coefficient
-    end
+    if issecretvalue(bonus) then return nil, "restricted" end
     if not SAFE_NUM.IsCleanFiniteNumber(bonus) then return nil end
     return bonus
+end
+
+-- Convert both sides of one comparison against a single Mastery coefficient.
+-- GetMasteryEffect can transition to a restricted value between API calls, so
+-- independently converting current and target ratings can mix two client states.
+function addon.archonTargets.GetRatingBonusesForValues(
+        ratingCR, currentRating, targetRating)
+    local isMastery = SAFE_NUM.IsCleanFiniteNumber(ratingCR)
+        and ratingCR == CR_MASTERY
+    local currentBonus, currentReason
+    local targetBonus, targetReason
+    if currentRating ~= nil then
+        currentBonus, currentReason =
+            addon.archonTargets.GetRawRatingBonusForValue(ratingCR, currentRating)
+    end
+    if targetRating ~= nil then
+        targetBonus, targetReason =
+            addon.archonTargets.GetRawRatingBonusForValue(ratingCR, targetRating)
+    end
+    if isMastery and (currentBonus ~= nil or targetBonus ~= nil) then
+        local coefficient, coefficientReason
+        if type(GetMasteryEffect) ~= "function" then
+            coefficientReason = "unavailable"
+        else
+            local ok, _, readCoefficient = pcall(GetMasteryEffect)
+            coefficient = readCoefficient
+            if not ok or not SAFE_NUM.IsCleanFiniteNumber(coefficient) then
+                coefficientReason = issecretvalue(coefficient)
+                    and "restricted" or "unavailable"
+            end
+        end
+        if currentBonus ~= nil then
+            if coefficientReason then
+                currentBonus, currentReason = nil, coefficientReason
+            else
+                currentBonus = currentBonus * coefficient
+                if not SAFE_NUM.IsCleanFiniteNumber(currentBonus) then
+                    currentBonus, currentReason = nil, "unavailable"
+                end
+            end
+        end
+        if targetBonus ~= nil then
+            if coefficientReason then
+                targetBonus, targetReason = nil, coefficientReason
+            else
+                targetBonus = targetBonus * coefficient
+                if not SAFE_NUM.IsCleanFiniteNumber(targetBonus) then
+                    targetBonus, targetReason = nil, "unavailable"
+                end
+            end
+        end
+    end
+    return currentBonus, targetBonus, currentReason, targetReason
 end
 
 function addon.archonTargets.FormatPercentBonus(value, signed)
@@ -7960,24 +8131,27 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     if comparisonState == nil and hasCleanComparison then comparisonState = "exact" end
     local hasComparison = (comparisonState == "exact" or comparisonState == "lastKnown")
         and hasCleanComparison
-    local liveRatingSecretOK, liveRatingIsSecret =
-        pcall(issecretvalue, meta.currentRatingDisplay)
+    local _, liveRatingIsSecret = addon.ClassifyRenderableNumber(meta.currentRatingDisplay)
     local hasLiveCurrent = comparisonState == "liveOnly"
-        and liveRatingSecretOK and liveRatingIsSecret
+        and liveRatingIsSecret
     local hasCleanCurrentPct = SAFE_NUM.IsCleanFiniteNumber(meta.currentPct)
-    local displaySecretOK, displayIsSecret = pcall(issecretvalue, meta.currentPctDisplay)
-    local hasCurrentPctDisplay = displaySecretOK and (displayIsSecret
-        or SAFE_NUM.IsCleanFiniteNumber(meta.currentPctDisplay))
-    local currentBonus, targetBonus
-    -- Versatility includes a flat component that rating conversion cannot recover.
-    -- Without a clean complete currentPct, raw-rating percentages would be partial.
-    if meta.statKey ~= "versatility" or hasCleanCurrentPct then
-        if hasComparison then
-            currentBonus = addon.archonTargets.GetRatingBonusForValue(meta.ratingCR, meta.current)
-        end
-        targetBonus = addon.archonTargets.GetRatingBonusForValue(meta.ratingCR, meta.target)
+    local hasCurrentPctDisplay, displayIsSecret =
+        addon.ClassifyRenderableNumber(meta.currentPctDisplay)
+    local hasTargetPct = SAFE_NUM.IsCleanFiniteNumber(meta.targetPct)
+    local currentBonus, targetBonus, deltaBonus
+    if hasTargetPct and hasCleanCurrentPct then
+        deltaBonus = meta.targetPct - meta.currentPct
     end
-    local deltaBonus
+    -- Versatility and Mastery include non-rating components that conversion cannot
+    -- recover. Without a clean complete currentPct, raw-rating percentages would
+    -- be partial values presented as totals.
+    if (meta.statKey ~= "versatility" and meta.statKey ~= "mastery")
+        or hasCleanCurrentPct then
+        currentBonus, targetBonus = addon.archonTargets.GetRatingBonusesForValues(
+            meta.ratingCR,
+            hasComparison and deltaBonus == nil and meta.current or nil,
+            not hasTargetPct and meta.target or nil)
+    end
     -- WHY: subtract converted total ratings, not converted `abs(delta)`, so DR brackets
     -- and hard caps are evaluated at the player's current/target stat positions.
     if SAFE_NUM.IsCleanFiniteNumber(currentBonus) and SAFE_NUM.IsCleanFiniteNumber(targetBonus) then
@@ -7992,16 +8166,17 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     else
         currentDisplayBonus = currentBonus
     end
-    local targetDisplayBonus = targetBonus
+    local targetDisplayBonus = hasTargetPct and meta.targetPct or targetBonus
     if meta.statKey == "versatility" then targetDisplayBonus = nil end
-    if hasCleanCurrentPct and SAFE_NUM.IsCleanFiniteNumber(deltaBonus) then
+    if not hasTargetPct and hasCleanCurrentPct
+        and SAFE_NUM.IsCleanFiniteNumber(deltaBonus) then
         targetDisplayBonus = meta.currentPct + deltaBonus
     end
     -- A restricted live percentage is displayable but cannot participate in Lua
     -- arithmetic. Keep Target/Delta as honest rating comparisons instead of pairing
     -- the live Current percent with percentages derived from a different clean state.
     if comparisonState == "exact" and displayIsSecret then
-        targetDisplayBonus = nil
+        if not hasTargetPct then targetDisplayBonus = nil end
         deltaBonus = nil
     end
     local valueColor = addon.archonTargets.GetTooltipValueColor(meta)
@@ -9035,20 +9210,20 @@ local function BuildTertiaryLines(labels, ratings, values)
     local needRating = cached.showRating
     for _, def in ipairs(TERTIARY_STATS) do
         if cached[def.showKey] then
-            local val = SAFE_NUM.SafeDisplayPercent(def.api)
+            local val
+            if def.valueKind == "movement" then
+                val = addon.movementRuntime.ResolvePercent(safeCall(def.api, "player"))
+            else
+                val = SAFE_NUM.SafeDisplayPercent(def.api)
+            end
             local ratingDisplay
-            local ratingRead = false
             local visible = shouldShow(def.showKey, val, cached.hideZeroTertiary)
             if needRating then
                 ratingDisplay = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
-                ratingRead = true
                 local ratingVisible = shouldShow(def.showKey .. "Rating", ratingDisplay, cached.hideZeroTertiary)
                 visible = visible or ratingVisible
             end
             if visible then
-                if needRating and not ratingRead then
-                    ratingDisplay = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
-                end
                 local rating
                 if needRating then rating = ratingDisplay end
                 local statColor = cs[def.colorKey]
@@ -9057,59 +9232,6 @@ local function BuildTertiaryLines(labels, ratings, values)
                     FormatLabel(statColor, def.label),
                     rStr, vStr)
             end
-        end
-    end
-
-    -- Legacy persisted showSpeed key now controls Movement from GetUnitSpeed.
-    -- Match Blizzard's paper-doll Movement stat: choose ground/swim/flight by
-    -- current movement state instead of maxing every available mode.
-    if cached.showSpeed then
-        local _, run, flight, swim = GetUnitSpeed("player")
-        -- WARNING: 12.x retail returns secrets from GetUnitSpeed in combat → arithmetic
-        -- triggers numeric conversion taint. Recompute OOC, reuse cached value in combat.
-        if not (issecretvalue(run) or issecretvalue(flight) or issecretvalue(swim))
-            and (run == nil or SAFE_NUM.IsCleanFiniteNumber(run))
-            and (flight == nil or SAFE_NUM.IsCleanFiniteNumber(flight))
-            and (swim == nil or SAFE_NUM.IsCleanFiniteNumber(swim)) then
-            local runPct = ((run or 0) / 7) * 100
-            local flightPct = ((flight or 0) / 7) * 100
-            local swimPct = ((swim or 0) / 7) * 100
-            local swimming = addon.profileRuntime.ReadBooleanDecision(IsSwimming, "player")
-            local flying = addon.profileRuntime.ReadBooleanDecision(IsFlying, "player")
-            local falling = addon.profileRuntime.ReadBooleanDecision(IsFalling, "player")
-            if swimming ~= nil and flying ~= nil and falling ~= nil then
-                local speedPct = runPct
-                if swimming then
-                    speedPct = swimPct
-                elseif flying then
-                    speedPct = flightPct
-                end
-                -- Blizzard keeps the swim value while falling out of water so Movement
-                -- does not flicker to ground speed during the jump/fall transition.
-                if falling then
-                    if cached.speedWasSwimming then speedPct = swimPct end
-                else
-                    cached.speedWasSwimming = swimming
-                end
-                cached.speedPct = speedPct
-            end
-        end
-        local speed = cached.speedPct
-        local speedRatingDisplay = needRating
-            and SAFE_NUM.ReadRatingValue(GetCombatRating, CR_SPEED) or nil
-        local speedRating
-        if needRating then speedRating = speedRatingDisplay end
-        local speedVisible = shouldShow("showSpeed", speed, cached.hideZeroTertiary)
-        if needRating then
-            local speedRatingVisible = shouldShow("showSpeedRating", speedRatingDisplay, cached.hideZeroTertiary)
-            speedVisible = speedVisible or speedRatingVisible
-        end
-        if speedVisible then
-            local statColor = cs.speed
-            local rStr, vStr = FmtRatingPct(speedRating, speed, statColor)
-            PushRow(labels, ratings, values,
-                FormatLabel(statColor, "Speed"),
-                rStr, vStr)
         end
     end
     return labels, ratings, values
@@ -9122,8 +9244,8 @@ local function BuildDefensiveLines(labels, ratings, values)
     -- Dodge / Parry / Block / Stagger (table-driven)
     for _, def in ipairs(DEFENSIVE_STATS) do
         if cached[def.showKey] and (not def.appliesFn or def.appliesFn()) then
-            local val = SAFE_NUM.ResolveDisplayNumber(safeCall(def.api), false)
-            if IsRenderablePercentValue(val) and shouldShow(def.showKey, val, cached.hideZeroDefensive) then
+            local val = SAFE_NUM.SafeDisplayPercent(def.api)
+            if shouldShow(def.showKey, val, cached.hideZeroDefensive) then
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtPctOnly(val, statColor)
                 PushRow(labels, ratings, values,
@@ -9511,8 +9633,9 @@ local function OnPlayerEnteringWorld()
 end
 
 -- WHY: Armor/DR refresh runs inline in UpdateStats out-of-combat (cheap), so we
--- don't need specialization/trait/level handlers. PLAYER_REGEN_ENABLED remains
--- useful for retrying repair costs that were secret while combat-restricted.
+-- don't need specialization/trait handlers. Level changes are handled below
+-- because Archon Mastery percentages reuse a clean, level-dependent conversion.
+-- PLAYER_REGEN_ENABLED remains useful for retrying repair costs that were secret.
 -- WHY MERCHANT_SHOW marks dirty: repairCost can surface after the old cached scan
 -- settled as unknown, and opening a vendor does not necessarily fire a durability event.
 -- The handler only flips the dirty flag; the OnUpdate path still coalesces the scan.
@@ -9540,6 +9663,11 @@ local EVENT_HANDLERS = {
     PLAYER_SPECIALIZATION_CHANGED = function(unit)
         if not addon.dbRuntime.IsCleanType(unit, "string") or unit ~= "player" then return end
         addon.profileRuntime.RequestResolution(false)
+    end,
+    -- Rating conversion is player-level dependent. PLAYER_LEVEL_CHANGED covers
+    -- both real and effective-level transitions in current Retail FrameXML.
+    PLAYER_LEVEL_CHANGED         = function()
+        addon.archonTargets.InvalidateComparisonCache()
     end,
     -- UnitFullName may be unavailable during the initial cache warmup; retry the
     -- existing same-context metadata path when Blizzard reports the player name ready.
@@ -9570,6 +9698,7 @@ local EVENT_HANDLERS = {
     -- WHY: lock state is stored in cached.isLocked and read by OnDragStart. Mouse stays
     -- enabled permanently so right-click Settings works even while locked.
     PLAYER_REGEN_ENABLED        = function()
+        addon.hudPresets.combatState = false
         addon.profileRuntime.ResumeCorruptRollbackApply()
         local wasLoaded = isLoaded
         addon.profileRuntime.ResolvePending(true)
@@ -9588,10 +9717,13 @@ local EVENT_HANDLERS = {
             addon.itemLevelRuntime.MarkDirty()
         end
         addon.profileUI.RefreshSafe()
+        addon.hudPresets.MaybeShowWelcome()
     end,
     PLAYER_REGEN_DISABLED       = function()
+        addon.hudPresets.combatState = true
         addon.profileRuntime.CancelOwnedMutationPopups()
         addon.presetRuntime.ForceCancelAllPreviews()
+        addon.hudPresets.SuspendWelcomeForCombat()
         addon.panelEditRuntime.Refresh(true)
         addon.profileUI.RefreshSafe()
     end,
@@ -10538,7 +10670,8 @@ end
 function addon.settingsDesign.DisabledControlTooltip(control)
     if addon.settingsDesign.IsControlEnabled(control) then return nil end
     local blockers = control.statsProControlBlockers
-    local blocker = blockers and (blockers.schema or blockers.context or blockers.dependency)
+    local blocker = blockers and (blockers.schema or blockers.context
+        or blockers.combat or blockers.dependency)
     if not blocker then return nil end
     if blocker.mode == "requires" then
         return string.format(L("Requires %s."), L(blocker.key))
@@ -10762,11 +10895,15 @@ function addon.settingsDesign.RefreshMutationControls()
         and "Corrupted data - profiles are read-only. Use /ss wipe to reset."
         or "Compatibility mode - profiles are read-only."
     local contextBlocked = addon.profileRuntime.BlocksUserWrites() == true
+    local combatBlocked = addon.hudPresets.CombatIsBlocked()
     for _, control in ipairs(addon.settingsDesign.mutationControls or {}) do
         addon.settingsDesign.SetControlBlocked(control, "schema", schemaBlocked,
             "message", schemaReason)
         addon.settingsDesign.SetControlBlocked(control, "context", contextBlocked,
             "message", "Waiting for a safe profile context.")
+        addon.settingsDesign.SetControlBlocked(control, "combat",
+            control.statsProBlocksInCombat == true and combatBlocked,
+            "message", "Profile changes are unavailable during combat.")
     end
 end
 
@@ -11535,10 +11672,9 @@ function addon.presetRuntime.CapturePayload(service, settings)
         local value
         if settings then value = rawget(settings, key) end
         if value == nil then value = defaults[key] end
-        payload[key] = addon.presetRuntime.Clone(value)
-        if payload[key] == nil and value ~= nil then return nil end
+        payload[key] = value
     end
-    return payload
+    return addon.presetRuntime.Clone(payload)
 end
 
 function addon.presetRuntime.ResolveValue(key, persisted)
@@ -11613,44 +11749,19 @@ function addon.presetRuntime.RestoreCommittedRuntime(service)
 end
 
 function addon.presetRuntime.SessionIsCurrent(service, session, ignoreGeneration)
-    if not session then return false end
+    if not session or type(session.expected) ~= "table" then return false end
     local root = addon.dbRuntime.Refresh()
-    if ignoreGeneration then
-        local expected = session.expected
-        if addon.dbRuntime.activeProfileID ~= session.profileID
-            or not rawequal(root, expected.rootRef)
-            or not rawequal(root.profiles, expected.profilesRef)
-            or not rawequal(root.roleTemplates, expected.roleTemplatesRef)
-            or not rawequal(root.profiles[session.profileID], expected.profileRef) then
-            return false
-        end
-    elseif not addon.profileOps.CheckExpected(root, session.expected) then
+    if not addon.profileOps.CheckExpected(root, session.expected, ignoreGeneration) then
         return false
     end
     local profile = root.profiles and root.profiles[session.profileID]
-    if not profile or not addon.dbRuntime.IsCleanTable(profile.settings)
-        or not rawequal(profile.settings, session.settingsRef) then return false end
+    if not profile or not addon.dbRuntime.IsCleanTable(profile.settings) then return false end
     local payload = addon.presetRuntime.CapturePayload(service, profile.settings)
     if not payload or not addon.presetRuntime.ValuesEqual(payload, session.baseline) then
         return false
     end
     return not service.markerKey
         or rawget(profile.settings, service.markerKey) == session.baselineMarker
-end
-
-function addon.presetRuntime.RefreshExpected(session)
-    if not session or addon.dbRuntime.activeProfileID ~= session.profileID then
-        return false
-    end
-    local root = addon.dbRuntime.Refresh()
-    local profile = root.profiles and root.profiles[session.profileID]
-    if not profile or not addon.dbRuntime.IsCleanTable(profile.settings)
-        or not rawequal(profile.settings, session.settingsRef) then
-        return false
-    end
-    session.expected = addon.profileUI.CaptureExpected(nil, nil, session.profileID)
-    session.expected.settingsRef = profile.settings
-    return true
 end
 
 function addon.presetRuntime.CancelPreview(service, silent)
@@ -11716,7 +11827,6 @@ function addon.presetRuntime.StartPreview(service, presetID)
         baseline = baseline,
         expected = addon.profileUI.CaptureExpected(nil, nil, profileID),
         profileID = profileID,
-        settingsRef = profile.settings,
         baselineMarker = service.markerKey
             and rawget(profile.settings, service.markerKey) or nil,
     }
@@ -11753,10 +11863,7 @@ function addon.presetRuntime.ApplyPreview(service)
         local settings = addon.presetRuntime.Clone(profile.settings)
         if not settings then return nil, "clone-failed" end
         for key in pairs(service.allowlist) do
-            settings[key] = addon.presetRuntime.Clone(candidate[key])
-            if settings[key] == nil and candidate[key] ~= nil then
-                return nil, "clone-failed"
-            end
+            settings[key] = candidate[key]
         end
         if service.markerKey then settings[service.markerKey] = presetID end
         local changedProfile = addon.profileRuntime.ShallowCopy(profile)
@@ -11771,11 +11878,10 @@ function addon.presetRuntime.ApplyPreview(service)
         or result == "apply-failed"
     if not ok and retryable
         and addon.presetRuntime.SessionIsCurrent(service, session, true) then
-        if addon.presetRuntime.RefreshExpected(session) then
-            service.session = session
-        else
-            result = "stale"
-        end
+        -- Rollback restored every identity checked above; only the DB generation
+        -- changed. Do not re-read and silently adopt a different transaction graph.
+        session.expected.generation = addon.dbRuntime.generation
+        service.session = session
         if service.session and not service.ApplyRuntime() then
             service.ForceCancelPreview()
             result = "preview-resume-failed"
@@ -11895,6 +12001,13 @@ end
 
 function addon.hudPresets.BuildCandidate(definition)
     return addon.presetRuntime.Clone(definition.values)
+end
+
+function addon.hudPresets.CombatIsBlocked()
+    if type(addon.hudPresets.combatState) == "boolean" then
+        return addon.hudPresets.combatState
+    end
+    return addon.profileRuntime.ReadCombatState() ~= false
 end
 
 function addon.hudPresets.CurrentID(settings)
@@ -12079,6 +12192,7 @@ function addon.hudPresets.BuildCardList(parent, x, y, width)
 
         button.statsProPresetSummary = summary
         addon.settingsDesign.StyleListRow(button, label, "button")
+        button.statsProBlocksInCombat = true
         addon.settingsDesign.RegisterMutationControl(button)
         ui.mutationControls[#ui.mutationControls + 1] = button
         button:SetScript("OnClick", function()
@@ -12119,8 +12233,34 @@ end
 function addon.hudPresets.MarkWelcomeSeen()
     local root = addon.dbRuntime.GetWritableRoot(false)
     local account = root and rawget(root, "account") or nil
-    if not addon.dbRuntime.IsCleanTable(account) then return false end
+    if not addon.dbRuntime.IsCleanTable(account) then
+        -- A spec/context transition blocks every normal write briefly. Remember a
+        -- deliberate dismissal, but never bypass future-schema/corrupt read-only mode.
+        if not addon.dbRuntime.readOnly
+            and addon.profileRuntime.BlocksUserWrites() then
+            addon.hudPresets.welcomeSeenPending = true
+        end
+        return false
+    end
     account.quickSetupSeen = true
+    addon.hudPresets.welcomeSeenPending = nil
+    return true
+end
+
+function addon.hudPresets.FlushPendingWelcomeSeen()
+    if addon.hudPresets.welcomeSeenPending ~= true
+        or addon.profileRuntime.BlocksUserWrites() then return false end
+    return addon.hudPresets.MarkWelcomeSeen()
+end
+
+function addon.hudPresets.SuspendWelcomeForCombat()
+    local frame = addon.hudPresets.welcome
+    if not frame or not frame:IsShown() then return false end
+    -- Combat temporarily owns the screen, but it is not a user dismissal. Preserve
+    -- the first-install marker so MaybeShowWelcome can restore the choice afterward.
+    frame.statsProCombatSuspend = true
+    frame:Hide()
+    frame.statsProCombatSuspend = nil
     return true
 end
 
@@ -12174,6 +12314,7 @@ function addon.hudPresets.BuildWelcome()
     local apply = addon.settingsDesign.CreateShellButton(frame, nil, "primary")
     apply:SetSize(188, 28)
     PushLocalizedLabel(function() apply:SetText(L("Use this setup")) end)
+    apply.statsProBlocksInCombat = true
     addon.settingsDesign.RegisterMutationControl(apply)
     ui.mutationControls[#ui.mutationControls + 1] = apply
     apply:SetScript("OnClick", function()
@@ -12209,7 +12350,7 @@ function addon.hudPresets.BuildWelcome()
         for _, control in ipairs(ui.mutationControls) do
             addon.settingsDesign.UnregisterMutationControl(control)
         end
-        if frame.statsProSettingsHandoff then return end
+        if frame.statsProSettingsHandoff or frame.statsProCombatSuspend then return end
         addon.hudPresets.MarkWelcomeSeen()
         addon.hudPresets.ForceCancelPreview()
     end)
@@ -12222,7 +12363,7 @@ function addon.hudPresets.MaybeShowWelcome()
     if addon.__statsproSmoke == true and addon.__testWelcomeEnabled ~= true then
         return false
     end
-    if addon.profileRuntime.ReadCombatState() ~= false then return false end
+    if addon.hudPresets.CombatIsBlocked() then return false end
     local root = addon.dbRuntime.Refresh()
     local account = root and rawget(root, "account") or nil
     if not addon.dbRuntime.IsCleanTable(account)
@@ -12319,10 +12460,10 @@ addon.profileRuntime.applyActiveSettings = function()
     addon.durabilityRuntime.MarkDirty()
     addon.itemLevelRuntime.MarkDirty()
     -- Keep clean Archon comparisons across same-context profile/style applies.
-    -- ActivateComparisonContext and GetCachedComparison already invalidate on every
-    -- semantic boundary (class, spec, snapshot, target, rating type, or capture date).
-    -- Clearing here discarded Mastery's only safe Missing value when a dungeon buff
-    -- made the live rating secret immediately after an otherwise unrelated reapply.
+    -- ActivateComparisonContext, GetCachedComparison, and PLAYER_LEVEL_CHANGED already
+    -- invalidate every semantic boundary (class, spec, snapshot, target, rating type,
+    -- capture date, or effective level). Clearing here discarded Mastery's safe cached
+    -- Target percentage after an otherwise unrelated profile/style reapply.
 
     addon.profileRuntime.RefreshConfigControls()
     timeSinceLastUpdate = 0
@@ -15677,6 +15818,7 @@ function addon:OpenConfigMenu()
     local setupApply = self.settingsDesign.CreateShellButton(statsTab, nil, "primary")
     setupApply:SetSize(120, 28)
     PushLocalizedLabel(function() setupApply:SetText(L("Apply")) end)
+    setupApply.statsProBlocksInCombat = true
     self.settingsDesign.RegisterMutationControl(setupApply)
     setupApply:SetScript("OnClick", function()
         local ok, reason = self.hudPresets.ApplyPreview()
@@ -16124,10 +16266,9 @@ local function PrintDebugBucketDump()
     if not isLoaded then PrintMsg("debug bucket: not loaded yet"); return end
 
     local mode = cached.displayMode or "flat"
-    PrintMsg(string.format("bucket: mode=%s labelStyle=%s dur=%s speed=%s armorDR=%s vers=%s cost=%s",
+    PrintMsg(string.format("bucket: mode=%s labelStyle=%s dur=%s armorDR=%s vers=%s cost=%s",
         tostring(mode), tostring(cached.labelStyle),
         SAFE_NUM.DumpNumber(cached.durabilityValue, "%.1f", "?"),
-        SAFE_NUM.DumpNumber(cached.speedPct, "%.1f", "?"),
         SAFE_NUM.DumpNumber(cached.armorDR, "%.1f", "?"),
         SAFE_NUM.DumpNumber(cached.versTotal, "%.1f", "?"),
         SAFE_NUM.DumpNumber(cached.repairCost, "%d", "?")))

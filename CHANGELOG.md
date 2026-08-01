@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.12.0 - 01-Aug-2026 — Quick Setup and live combat stats
+
+### Added
+
+- **New players can preview Compact, DPS, or Tank directly on the real HUD before saving anything.** DPS includes secondary and tertiary stats plus gear condition, while Tank adds defensive rows in the same compact panel.
+- **Profiles can now be exported and imported through a versioned, preview-first format.** Stats, Layout, and Appearance remain independently selectable, and every import creates a safe detached profile without overwriting existing assignments.
+
+### Fixed
+
+- **Crit, Haste, Mastery, and other permitted values now keep their live decimal display during restricted combat.** Crit follows its last verified paper-doll source, and Mastery target tooltips retain the clean percentage calculated by the game client.
+- **Movement now follows the player's actual current speed, including slows, boosts, mounts, swimming, and flight.** Secret tertiary values use the same display-only safety boundary as secondary stats.
+- **Quick Setup now survives combat transitions without saving a preview accidentally, and its DPS and Tank layouts stay compact without category headers or unnecessary primary-stat rows.** Fresh panel backgrounds are transparent by default.
+
 ## 1.11.1 - 31-Jul-2026 — Font startup follow-through and runtime fixes
 
 ### Fixed

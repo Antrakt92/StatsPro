@@ -19,7 +19,7 @@ local smokeReachability = {
         "profile-ui",
         "profile-mutations",
         "control-design",
-        "appearance-presets",
+        "presets-onboarding",
     },
     seen = {},
     suiteCount = 0,
@@ -407,7 +407,24 @@ local function makeFrame(name, setFontResult, parent)
         self.text = text or ""
         if self.fontString and self.fontString ~= self then self.fontString:SetText(self.text) end
     end
+    function frame:SetFormattedText(format, ...)
+        if self.regionType == "FontString" and not self.font and not self.fontObject then
+            error("FontString:SetFormattedText(): Font not set", 2)
+        end
+        if self.statsProSetFormattedText then
+            self.text = self.statsProSetFormattedText(self, format, ...)
+        else
+            -- Focused tests opt in to the PTR secret formatter contract. Other
+            -- fixtures deliberately exercise the legacy integer fallback.
+            error("secret SetFormattedText fixture not configured", 2)
+        end
+    end
+    function frame:ClearText()
+        if self.statsProClearText then self.statsProClearText(self) end
+        self.text = ""
+    end
     function frame:GetText()
+        if self.statsProGetText then return self.statsProGetText(self) end
         if self.fontString and self.fontString ~= self then return self.fontString:GetText() end
         return self.text
     end
@@ -965,6 +982,9 @@ local function makeEnv(locale, opts)
             local fontString = makeFrame(nil, opts.setFontResult, frame)
             fontString.regionType = "FontString"
             fontString.font, fontString.fontSize = nil, nil
+            fontString.statsProSetFormattedText = opts.setFormattedText
+            fontString.statsProGetText = opts.getFormattedText
+            fontString.statsProClearText = opts.clearFormattedText
             if fontTemplate then
                 fontString.font, fontString.fontSize = "Fonts\\FRIZQT__.TTF", 12
             end
@@ -1127,7 +1147,10 @@ end
 
 local function loadStatsPro(locale, opts)
     local env = makeEnv(locale, opts)
-    local addon = { __statsproSmoke = true }
+    local addon = {
+        __statsproSmoke = true,
+        __testWelcomeEnabled = opts and opts.testWelcomeEnabled == true,
+    }
     local chunk, loadErr = loadfile("StatsPro.lua")
     if not chunk then error(loadErr, 0) end
     setfenv(chunk, env)
@@ -2714,6 +2737,7 @@ do
     local defaults = test.copyDefaults()
     for key in pairs(defaults) do
         local expectedAccount = key == "forceLocale" or key == "updateInterval"
+            or key == "quickSetupSeen"
         eq("profiles.scope_classification." .. key,
             registry.accountSettingKeys[key] == true, expectedAccount)
     end
@@ -3865,6 +3889,23 @@ do
     eq("appearance.presets.restore.config_hide_forced", service.state().active, false)
     assertDeepEqual("appearance.presets.restore.config_hide_zero_writes",
         restoreTest.profileState().settings, settingsBeforeManual)
+
+    local retryEnv, _, retryTest = loadStatsPro("enUS", withProfileIdentity())
+    fireEvent("appearance.presets.apply_retry.pew", retryEnv, "PLAYER_ENTERING_WORLD")
+    service = retryTest.appearancePresets
+    local retryBefore = deepCopy(retryTest.profileState().root)
+    ok = service.startPreview("midnight")
+    eq("appearance.presets.apply_retry.preview", ok, true)
+    retryTest.profileOps.setFailureStage("apply")
+    result, reason = service.applyPreview()
+    eq("appearance.presets.apply_retry.failure", result, false)
+    eq("appearance.presets.apply_retry.reason", reason, "apply-failed")
+    eq("appearance.presets.apply_retry.resumed", service.state().active, true)
+    assertDeepEqual("appearance.presets.apply_retry.zero_writes",
+        retryTest.profileState().root, retryBefore)
+    retryTest.profileOps.setFailureStage(nil)
+    eq("appearance.presets.apply_retry.success", service.applyPreview(), true)
+    eq("appearance.presets.apply_retry.current", service.currentID(), "midnight")
 end
 
 do
@@ -4294,6 +4335,10 @@ do
     check("selector.best_crit_uses_best_clean_source.no_error", ok, value)
     eq("selector.best_crit_uses_best_clean_source.value", value, 20)
     eq("selector.best_crit_uses_best_clean_source.state", state, "exact")
+    eq("selector.best_crit_uses_best_clean_source.cached_source",
+        critAddon.critRuntime.selectedSource, "spell")
+    eq("selector.best_crit_uses_best_clean_source.cached_school",
+        critAddon.critRuntime.selectedSpellSchool, 2)
 end
 
 do
@@ -4307,9 +4352,55 @@ do
     check("selector.best_crit_uses_minimum_spell_school.no_error", ok, value)
     eq("selector.best_crit_uses_minimum_spell_school.value", value, 17)
     eq("selector.best_crit_uses_minimum_spell_school.state", state, "exact")
+    eq("selector.best_crit_uses_minimum_spell_school.cached_source",
+        critAddon.critRuntime.selectedSource, "ranged")
+    eq("selector.best_crit_uses_minimum_spell_school.cached_school",
+        critAddon.critRuntime.selectedSpellSchool, nil)
     slash("selector.best_crit_uses_minimum_spell_school.debug_live", critEnv, "debug live")
     eq("selector.best_crit_uses_minimum_spell_school.debug_schools",
         printContains(critEnv, "debug live crit schools: 2=25.00 3=20.00 4=19.00 5=18.00 6=22.00 7=15.00"), true)
+end
+
+do
+    local secretMelee = {}
+    local secretRanged = {}
+    local secretSpell = {}
+    local phase = "ranged"
+    local _, critAddon = loadStatsPro("enUS", {
+        getCritChance = function()
+            if phase == "restricted" then return secretMelee end
+            return phase == "melee" and 30 or 10
+        end,
+        getRangedCritChance = function()
+            if phase == "restricted" then return secretRanged end
+            return phase == "ranged" and 20 or 15
+        end,
+        getSpellCritChance = function()
+            if phase == "restricted" then return secretSpell end
+            return 12
+        end,
+        issecretvalue = function(value)
+            return rawequal(value, secretMelee)
+                or rawequal(value, secretRanged)
+                or rawequal(value, secretSpell)
+        end,
+    })
+    local value, state = critAddon.GetBestCritChance()
+    eq("selector.best_crit_clean_recovery.initial_value", value, 20)
+    eq("selector.best_crit_clean_recovery.initial_state", state, "exact")
+    eq("selector.best_crit_clean_recovery.initial_source",
+        critAddon.critRuntime.selectedSource, "ranged")
+    phase = "melee"
+    value, state = critAddon.GetBestCritChance()
+    eq("selector.best_crit_clean_recovery.changed_value", value, 30)
+    eq("selector.best_crit_clean_recovery.changed_state", state, "exact")
+    eq("selector.best_crit_clean_recovery.changed_source",
+        critAddon.critRuntime.selectedSource, "melee")
+    phase = "restricted"
+    value, state = critAddon.GetBestCritChance()
+    eq("selector.best_crit_clean_recovery.live_proxy_value",
+        rawequal(value, secretMelee), true)
+    eq("selector.best_crit_clean_recovery.live_proxy_state", state, "liveProxy")
 end
 
 do
@@ -5695,12 +5786,11 @@ do
 end
 
 do
-    local secretCrit = {}
-    local secretMode = false
-    local function currentCrit()
-        if secretMode then return secretCrit end
-        return 10
-    end
+    local secretMelee = {}
+    local secretRangedA = {}
+    local secretRangedB = {}
+    local secretSpell = {}
+    local phase = "clean"
     local updateEnv, _, updateTest = loadStatsPro("enUS", {
         statsProDB = {
             showOffensive = true,
@@ -5713,12 +5803,27 @@ do
             showTertiary = false,
             showDefensive = false,
         },
-        getCritChance = currentCrit,
-        getRangedCritChance = currentCrit,
-        getSpellCritChance = currentCrit,
-        issecretvalue = function(value) return value == secretCrit end,
+        getCritChance = function()
+            return phase == "clean" and 10 or secretMelee
+        end,
+        getRangedCritChance = function()
+            if phase == "clean" then return 20 end
+            return phase == "restrictedA" and secretRangedA or secretRangedB
+        end,
+        getSpellCritChance = function()
+            return phase == "clean" and 15 or secretSpell
+        end,
+        issecretvalue = function(value)
+            return rawequal(value, secretMelee)
+                or rawequal(value, secretRangedA)
+                or rawequal(value, secretRangedB)
+                or rawequal(value, secretSpell)
+        end,
         roundToNearestString = function(value)
-            if value == secretCrit then return "22" end
+            if rawequal(value, secretMelee) then return "11" end
+            if rawequal(value, secretRangedA) then return "22" end
+            if rawequal(value, secretRangedB) then return "31" end
+            if rawequal(value, secretSpell) then return "33" end
             return "unexpected"
         end,
     })
@@ -5731,32 +5836,48 @@ do
         end
     end
     exists("render.update_ticker_secret_numeric.ticker", ticker)
-    secretMode = true
+    phase = "restrictedA"
     local ok, err = pcall(ticker.scripts.OnUpdate, ticker, 999)
     check("render.update_ticker_secret_numeric.no_bubble", ok, err)
     local state = updateTest.panelVisualState()
-    check("render.update_ticker_secret_numeric.restricted_aggregate_unknown",
-        state.mainRatingText:find("?", 1, true) ~= nil, state.mainRatingText)
+    check("render.update_ticker_secret_numeric.live_proxy_value",
+        state.mainRatingText:find("22%", 1, true) ~= nil, state.mainRatingText)
     eq("render.update_ticker_secret_numeric.no_stale_clean_value",
         state.mainRatingText:find("10.0%", 1, true), nil)
-    eq("render.update_ticker_secret_numeric.no_arbitrary_source",
+    eq("render.update_ticker_secret_numeric.no_unknown",
+        state.mainRatingText:find("?", 1, true), nil)
+    eq("render.update_ticker_secret_numeric.no_nonwinning_melee",
+        state.mainRatingText:find("11%", 1, true), nil)
+    eq("render.update_ticker_secret_numeric.no_nonwinning_spell",
+        state.mainRatingText:find("33%", 1, true), nil)
+    phase = "restrictedB"
+    ok, err = pcall(ticker.scripts.OnUpdate, ticker, 999)
+    check("render.update_ticker_secret_numeric.second_live_proxy_no_bubble", ok, err)
+    state = updateTest.panelVisualState()
+    check("render.update_ticker_secret_numeric.second_live_proxy_value",
+        state.mainRatingText:find("31%", 1, true) ~= nil, state.mainRatingText)
+    eq("render.update_ticker_secret_numeric.second_live_proxy_not_stale",
         state.mainRatingText:find("22%", 1, true), nil)
     clearPrints(updateEnv)
     slash("render.update_ticker_secret_numeric.debug_perf", updateEnv, "debug perf")
     eq("render.update_ticker_secret_numeric.debug_reports_zero_errors",
         printContains(updateEnv, "updateErrors=0"), true)
-    secretMode = false
+    phase = "clean"
     ok, err = pcall(ticker.scripts.OnUpdate, ticker, 999)
     check("render.update_ticker_secret_numeric.recovers", ok, err)
     state = updateTest.panelVisualState()
     check("render.update_ticker_secret_numeric.clean_value",
-        state.mainRatingText:find("10.0%", 1, true) ~= nil, state.mainRatingText)
+        state.mainRatingText:find("20.0%", 1, true) ~= nil, state.mainRatingText)
 end
 
 do
     local procHaste = {}
     local bloodlustHaste = {}
     local phase = "clean"
+    local secretFormatterHolder
+    local secretFormatterFormats = {}
+    local secretFormatterClears = 0
+    local integerFallbackCalls = 0
     local targetFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
         { crit = 1000, haste = 600, mastery = 300, versatility = 400 })
@@ -5788,7 +5909,18 @@ do
         issecretvalue = function(value)
             return rawequal(value, procHaste) or rawequal(value, bloodlustHaste)
         end,
+        setFormattedText = function(holder, format, value)
+            secretFormatterHolder = holder
+            secretFormatterFormats[#secretFormatterFormats + 1] = format
+            if rawequal(value, procHaste) then return "34.4%" end
+            if rawequal(value, bloodlustHaste) then return "64.7%" end
+            error("unexpected secret formatter value", 0)
+        end,
+        clearFormattedText = function()
+            secretFormatterClears = secretFormatterClears + 1
+        end,
         roundToNearestString = function(value)
+            integerFallbackCalls = integerFallbackCalls + 1
             if rawequal(value, procHaste) then return "34" end
             if rawequal(value, bloodlustHaste) then return "64" end
             return "unexpected"
@@ -5818,13 +5950,13 @@ do
     check("render.haste_secret_proc_bloodlust_updates.proc_no_error", ok, err)
     state = hasteTest.panelVisualState()
     check("render.haste_secret_proc_bloodlust_updates.proc_value",
-        state.mainRatingText:find("34%", 1, true) ~= nil, state.mainRatingText)
+        state.mainRatingText:find("34.4%", 1, true) ~= nil, state.mainRatingText)
     eq("render.haste_secret_proc_bloodlust_updates.proc_not_stale",
         state.mainRatingText:find("22.0%", 1, true), nil)
     eq("render.haste_secret_proc_bloodlust_updates.proc_tooltip_owner",
         hasteEnv.GameTooltip:GetOwner(), heldOwner)
     check("render.haste_secret_proc_bloodlust_updates.proc_tooltip_value",
-        hasteEnv.GameTooltip.lines[3].right:find("875 (~34%)", 1, true) ~= nil,
+        hasteEnv.GameTooltip.lines[3].right:find("875 (~34.4%)", 1, true) ~= nil,
         hasteEnv.GameTooltip.lines[3].right)
     eq("render.haste_secret_proc_bloodlust_updates.proc_target_pct_suppressed",
         hasteEnv.GameTooltip.lines[2].right:find("%", 1, true), nil)
@@ -5852,24 +5984,24 @@ do
     check("render.haste_secret_proc_bloodlust_updates.bloodlust_no_error", ok, err)
     state = hasteTest.panelVisualState()
     check("render.haste_secret_proc_bloodlust_updates.bloodlust_value",
-        state.mainRatingText:find("64%", 1, true) ~= nil, state.mainRatingText)
+        state.mainRatingText:find("64.7%", 1, true) ~= nil, state.mainRatingText)
     eq("render.haste_secret_proc_bloodlust_updates.bloodlust_not_stale",
-        state.mainRatingText:find("34%", 1, true), nil)
+        state.mainRatingText:find("34.4%", 1, true), nil)
     eq("render.haste_secret_proc_bloodlust_updates.bloodlust_tooltip_owner",
         hasteEnv.GameTooltip:GetOwner(), heldOwner)
     check("render.haste_secret_proc_bloodlust_updates.bloodlust_tooltip_value",
-        hasteEnv.GameTooltip.lines[3].right:find("875 (~64%)", 1, true) ~= nil,
+        hasteEnv.GameTooltip.lines[3].right:find("875 (~64.7%)", 1, true) ~= nil,
         hasteEnv.GameTooltip.lines[3].right)
     eq("render.haste_secret_proc_bloodlust_updates.bloodlust_target_pct_suppressed",
         hasteEnv.GameTooltip.lines[2].right:find("%", 1, true), nil)
     eq("render.haste_secret_proc_bloodlust_updates.bloodlust_delta_pct_suppressed",
         hasteEnv.GameTooltip.lines[4].right:find("%", 1, true), nil)
     eq("render.haste_secret_proc_bloodlust_updates.bloodlust_tooltip_not_proc",
-        hasteEnv.GameTooltip.lines[3].right:find("34%", 1, true), nil)
+        hasteEnv.GameTooltip.lines[3].right:find("34.4%", 1, true), nil)
     hasteTest.fireMainPanelTooltipOverlayForSmoke(1, "OnLeave")
     hasteTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     check("render.haste_secret_proc_bloodlust_updates.bloodlust_reentered_tooltip",
-        hasteEnv.GameTooltip.lines[3].right:find("875 (~64%)", 1, true) ~= nil,
+        hasteEnv.GameTooltip.lines[3].right:find("875 (~64.7%)", 1, true) ~= nil,
         hasteEnv.GameTooltip.lines[3].right)
 
     phase = "clean"
@@ -5885,6 +6017,128 @@ do
     slash("render.haste_secret_proc_bloodlust_updates.debug_perf", hasteEnv, "debug perf")
     eq("render.haste_secret_proc_bloodlust_updates.zero_update_errors",
         printContains(hasteEnv, "updateErrors=0"), true)
+    exists("render.haste_secret_proc_bloodlust_updates.formatter_holder", secretFormatterHolder)
+    eq("render.haste_secret_proc_bloodlust_updates.formatter_cleared",
+        secretFormatterHolder.text, "")
+    check("render.haste_secret_proc_bloodlust_updates.formatter_used_repeatedly",
+        #secretFormatterFormats >= 4, #secretFormatterFormats)
+    for index, format in ipairs(secretFormatterFormats) do
+        eq("render.haste_secret_proc_bloodlust_updates.format_" .. index,
+            format, "%.1f%%")
+    end
+    check("render.haste_secret_proc_bloodlust_updates.clear_before_after_each_use",
+        secretFormatterClears >= #secretFormatterFormats * 2,
+        secretFormatterClears .. "/" .. #secretFormatterFormats)
+    eq("render.haste_secret_proc_bloodlust_updates.no_integer_fallback",
+        integerFallbackCalls, 0)
+end
+
+do
+    local secretHaste = {}
+    local integerFallbackCalls = 0
+    local dualEnv, _, dualTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = true,
+            showRating = true,
+            showPercentage = true,
+            showCrit = false,
+            showHaste = true,
+            showMastery = false,
+            showVersatility = false,
+            showTertiary = false,
+            showDefensive = false,
+        },
+        getHaste = function() return secretHaste end,
+        getCombatRating = function() return 621 end,
+        issecretvalue = function(value) return rawequal(value, secretHaste) end,
+        setFormattedText = function(_, format, value)
+            if format == "%.1f%%" and rawequal(value, secretHaste) then return "16.4%" end
+            error("unexpected dual-column formatter input", 0)
+        end,
+        roundToNearestString = function()
+            integerFallbackCalls = integerFallbackCalls + 1
+            return "16"
+        end,
+    })
+    local ok, err = pcall(dualEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("render.secret_decimal_dual_column.pew_no_error", ok, err)
+    local state = dualTest.panelVisualState()
+    check("render.secret_decimal_dual_column.rating",
+        state.mainRatingText:find("621", 1, true) ~= nil, state.mainRatingText)
+    check("render.secret_decimal_dual_column.percentage",
+        state.mainValueText:find("16.4%", 1, true) ~= nil, state.mainValueText)
+    eq("render.secret_decimal_dual_column.no_integer_fallback", integerFallbackCalls, 0)
+end
+
+do
+    for _, failureMode in ipairs({ "set", "get", "post_clear" }) do
+        local secretHaste = {}
+        local setCalls, getCalls, clearCalls, fallbackCalls = 0, 0, 0, 0
+        local formatterHolder
+        local fallbackEnv, _, fallbackTest = loadStatsPro("enUS", {
+            statsProDB = {
+                showOffensive = true,
+                showRating = false,
+                showPercentage = true,
+                showCrit = false,
+                showHaste = true,
+                showMastery = false,
+                showVersatility = false,
+                showTertiary = false,
+                showDefensive = false,
+            },
+            getHaste = function() return secretHaste end,
+            issecretvalue = function(value) return rawequal(value, secretHaste) end,
+            setFormattedText = function(holder, format, value)
+                if not formatterHolder then formatterHolder = holder end
+                if holder ~= formatterHolder then return holder.text end
+                setCalls = setCalls + 1
+                if failureMode == "set" then error("synthetic SetFormattedText failure", 0) end
+                if format ~= "%.1f%%" or not rawequal(value, secretHaste) then
+                    error("unexpected formatter input", 0)
+                end
+                return "24.6%"
+            end,
+            getFormattedText = function(holder)
+                if holder ~= formatterHolder then return holder.text end
+                getCalls = getCalls + 1
+                if failureMode == "get" then error("synthetic GetText failure", 0) end
+                return holder.text
+            end,
+            clearFormattedText = function(holder)
+                if not formatterHolder then formatterHolder = holder end
+                if holder ~= formatterHolder then return end
+                clearCalls = clearCalls + 1
+                if failureMode == "post_clear" and clearCalls == 2 then
+                    error("synthetic post-format ClearText failure", 0)
+                end
+            end,
+            roundToNearestString = function(value)
+                fallbackCalls = fallbackCalls + 1
+                if rawequal(value, secretHaste) then return "25" end
+                return "unexpected"
+            end,
+        })
+        local prefix = "render.secret_decimal_fallback_" .. failureMode
+        local ok, err = pcall(fallbackEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+        check(prefix .. ".pew_no_error", ok, err)
+        local state = fallbackTest.panelVisualState()
+        check(prefix .. ".integer_fallback_visible",
+            state.mainRatingText:find("25%", 1, true) ~= nil, state.mainRatingText)
+        eq(prefix .. ".decimal_not_exposed",
+            state.mainRatingText:find("24.6%", 1, true), nil)
+        local setCallsAfterFailure = setCalls
+        ok, err = pcall(fallbackTest.buildRenderBlocks)
+        check(prefix .. ".second_build_no_error", ok, err)
+        eq(prefix .. ".failed_holder_disabled", setCalls, setCallsAfterFailure)
+        check(prefix .. ".fallback_called", fallbackCalls >= 2, fallbackCalls)
+        check(prefix .. ".clear_attempted", clearCalls >= 1, clearCalls)
+        if failureMode == "set" then
+            eq(prefix .. ".get_not_called", getCalls, 0)
+        else
+            check(prefix .. ".get_called", getCalls >= 1, getCalls)
+        end
+    end
 end
 
 do
@@ -9913,7 +10167,9 @@ do
 
     local boolDefaults = {}
     for key, value in pairs(defaults) do
-        if type(value) == "boolean" then boolDefaults[key] = true end
+        if type(value) == "boolean" and not registry.accountSettingKeys[key] then
+            boolDefaults[key] = true
+        end
     end
 
     local cachedBoolKeys = {}
@@ -10241,7 +10497,7 @@ do
         eq(prefix .. ".swatch_count", counts.swatch, 18)
         eq(prefix .. ".slider_count", counts.slider, 5)
         eq(prefix .. ".dropdown_count", counts.dropdown, 6)
-        eq(prefix .. ".button_count", counts.button, 16)
+        eq(prefix .. ".button_count", counts.button, 18)
         eq(prefix .. ".developer_link_count", counts.developerLink, 2)
         local presetUI = localeAddon.appearancePresets.ui
         for _, presetID in ipairs({
@@ -10271,6 +10527,61 @@ do
         eq(prefix .. ".preset_compact_content_height",
             localeEnv.StatsProConfigFrame.appearanceTab.contentHeight,
             math.abs(compactBodyY) + presetUI.lowerBody.contentHeight)
+
+        local quickUI = localeEnv.StatsProConfigFrame.tabContents[1].quickSetupView
+        for _, presetID in ipairs({ "compact", "full", "tank" }) do
+            local button = quickUI.buttons[presetID]
+            check(prefix .. ".quick_setup_label_fit." .. presetID,
+                button.statsProText:GetStringWidth()
+                    <= button.statsProText:GetWidth(),
+                "localized Quick Setup label overflows")
+            check(prefix .. ".quick_setup_summary_fit." .. presetID,
+                button.statsProPresetSummary:GetStringWidth()
+                    <= button.statsProPresetSummary:GetWidth(),
+                "localized Quick Setup summary overflows")
+            check(prefix .. ".quick_setup_hit_target." .. presetID,
+                button:GetWidth() >= 24 and button:GetHeight() >= 44,
+                "Quick Setup card is too small")
+        end
+        check(prefix .. ".quick_setup_apply_fit",
+            quickUI.apply.statsProText:GetStringWidth()
+                <= quickUI.apply:GetWidth() - 16,
+            "localized Quick Setup Apply label overflows")
+        check(prefix .. ".quick_setup_cancel_fit",
+            quickUI.cancel.statsProText:GetStringWidth()
+                <= quickUI.cancel:GetWidth() - 16,
+            "localized Quick Setup Cancel label overflows")
+        eq(prefix .. ".quick_setup_intro_wrap", quickUI.intro.wordWrap, true)
+        eq(prefix .. ".quick_setup_intro_width", quickUI.intro:GetWidth(), 426)
+        eq(prefix .. ".quick_setup_note_wrap", quickUI.note.wordWrap, true)
+        eq(prefix .. ".quick_setup_note_width", quickUI.note:GetWidth(), 426)
+        eq(prefix .. ".quick_setup_warning_width", quickUI.warning:GetWidth(), 426)
+        eq(prefix .. ".quick_setup_compact_content_height",
+            localeEnv.StatsProConfigFrame.tabContents[1].contentHeight,
+            math.abs(quickUI.compactBodyTop)
+                + localeEnv.StatsProConfigFrame.tabContents[1].statsBody.contentHeight)
+
+        local welcomeEnv, _, welcomeTest = loadStatsPro(locale,
+            withProfileIdentity({ statsProDB = {}, testWelcomeEnabled = true }))
+        fireEvent(prefix .. ".welcome.pew", welcomeEnv, "PLAYER_ENTERING_WORLD")
+        eq(prefix .. ".welcome.timer", welcomeEnv.__flushNextTimer(0.5), true)
+        local welcome = exists(prefix .. ".welcome.frame",
+            welcomeEnv.StatsProQuickSetupWelcome)
+        local welcomeUI = exists(prefix .. ".welcome.view", welcome.statsProView)
+        check(prefix .. ".welcome.apply_fit",
+            welcomeUI.apply.statsProText:GetStringWidth()
+                <= welcomeUI.apply:GetWidth() - 16,
+            "localized Welcome Apply label overflows")
+        check(prefix .. ".welcome.settings_fit",
+            welcomeUI.cancel.statsProText:GetStringWidth()
+                <= welcomeUI.cancel:GetWidth() - 16,
+            "localized Welcome Settings label overflows")
+        eq(prefix .. ".welcome.note_wrap", welcomeUI.note.wordWrap, true)
+        check(prefix .. ".welcome.note_localized",
+            locale == "enUS" or welcomeUI.note:GetText()
+                ~= "This sets up the current profile. Appearance, scale, positions, language, and profile assignments stay unchanged.",
+            "Welcome note fell back to English")
+        welcome:Hide()
 
         for index, frame in ipairs(localeEnv.__frames) do
             local kind = frame.statsProControlKind
@@ -11842,6 +12153,10 @@ do
             mutate = function(db) db.profiles.p1.settings = db.account end,
         },
         {
+            name = "profile_account_setting",
+            mutate = function(db) db.profiles.p1.settings.quickSetupSeen = true end,
+        },
+        {
             name = "malformed_unreferenced_profile",
             mutate = function(db) db.profiles.p2.name = 42 end,
         },
@@ -12111,11 +12426,13 @@ do
         local updateInterval = settings.updateInterval
         settings.forceLocale = nil
         settings.updateInterval = nil
+        settings.quickSetupSeen = nil
         return {
             dbVersion = corruptTest.currentDBVersion(),
             account = {
                 forceLocale = forceLocale,
                 updateInterval = updateInterval,
+                quickSetupSeen = true,
                 defaultProfileID = "p1",
                 nextProfileID = 2,
             },
@@ -16837,6 +17154,28 @@ end
 
 do
     local _, _, test, root = makeProfileOpsFixture()
+    local settings = test.copyDefaults()
+    settings.forceLocale = "deDE"
+    settings.updateInterval = 0.1
+    settings.quickSetupSeen = false
+    local accountBefore = deepCopy(root.account)
+    accountBefore.nextProfileID = accountBefore.nextProfileID + 1
+    local ok, result = test.profileOps.importAndAssign(settings)
+    eq("profiles.compat.import.account_keys.ok", ok, true)
+    eq("profiles.compat.import.account_keys.profile", result.profileID, "p5")
+    local imported = root.profiles.p5.settings
+    eq("profiles.compat.import.account_keys.locale_absent",
+        rawget(imported, "forceLocale"), nil)
+    eq("profiles.compat.import.account_keys.interval_absent",
+        rawget(imported, "updateInterval"), nil)
+    eq("profiles.compat.import.account_keys.welcome_absent",
+        rawget(imported, "quickSetupSeen"), nil)
+    assertDeepEqual("profiles.compat.import.account_keys.account_preserved",
+        root.account, accountBefore)
+end
+
+do
+    local _, _, test, root = makeProfileOpsFixture()
     root.account.nextProfileID = 99999999999999
     local before = deepCopy(root)
     local identities = captureRegistryIdentities(root)
@@ -17446,6 +17785,7 @@ do
     local expectedDefaults = test.copyDefaults()
     expectedDefaults.forceLocale = nil
     expectedDefaults.updateInterval = nil
+    expectedDefaults.quickSetupSeen = nil
     assertDeepEqual("profiles.ops.reset.defaults", root.profiles.p2.settings, expectedDefaults)
     assertNoSharedTables("profiles.ops.reset.isolated",
         root.profiles.p1.settings, root.profiles.p2.settings)
@@ -19466,5 +19806,441 @@ do
         gateTest.profileState().root, before)
 end
 
-smokeReachability:complete("appearance-presets")
+do
+    local env, _, presetTest = loadStatsPro("enUS", withProfileIdentity({
+        statsProDB = { fontSize = 15 },
+    }))
+    fireEvent("presets.coordination.pew", env, "PLAYER_ENTERING_WORLD")
+    local appearance = presetTest.appearancePresets
+    local hud = presetTest.hudPresets
+    local before = deepCopy(presetTest.profileState().root)
+
+    local ok = appearance.startPreview("midnight")
+    eq("presets.coordination.appearance_started", ok, true)
+    ok = hud.startPreview("full")
+    eq("presets.coordination.hud_replaces_appearance", ok, true)
+    eq("presets.coordination.appearance_cancelled", appearance.state().active, false)
+    eq("presets.coordination.hud_active", hud.state().active, true)
+    eq("presets.coordination.appearance_runtime_restored",
+        presetTest.getNumberDB("fontSize"), 15)
+    eq("presets.coordination.hud_runtime_active",
+        presetTest.getDB("displayMode"), "sectioned")
+    assertDeepEqual("presets.coordination.first_switch_zero_writes",
+        presetTest.profileState().root, before)
+
+    ok = appearance.startPreview("high-contrast")
+    eq("presets.coordination.appearance_replaces_hud", ok, true)
+    eq("presets.coordination.hud_cancelled", hud.state().active, false)
+    eq("presets.coordination.appearance_active", appearance.state().active, true)
+    eq("presets.coordination.hud_runtime_restored",
+        presetTest.getDB("displayMode"), "flat")
+    eq("presets.coordination.appearance_runtime_active",
+        presetTest.getNumberDB("fontSize"), 16)
+    assertDeepEqual("presets.coordination.second_switch_zero_writes",
+        presetTest.profileState().root, before)
+    eq("presets.coordination.cleanup", appearance.cancelPreview(), true)
+
+    ok = appearance.startPreview("midnight")
+    eq("presets.coordination.failure_source_started", ok, true)
+    appearance.setRuntimeFailureCount(2)
+    local reason
+    ok, reason = hud.startPreview("full")
+    eq("presets.coordination.restore_failure_rejected", ok, false)
+    eq("presets.coordination.restore_failure_reason", reason, "restore-failed")
+    eq("presets.coordination.restore_failure_source_preserved",
+        appearance.state().active, true)
+    eq("presets.coordination.restore_failure_target_absent", hud.state().active, false)
+    assertDeepEqual("presets.coordination.restore_failure_zero_writes",
+        presetTest.profileState().root, before)
+    appearance.setRuntimeFailureCount(0)
+    eq("presets.coordination.failure_cleanup", appearance.cancelPreview(), true)
+end
+
+do
+    local env, addonContext, presetTest = loadStatsPro("enUS", withProfileIdentity({
+        statsProDB = {
+            font = "Fonts\\ARIALN.TTF",
+            scale = 1.4,
+            point = "TOPLEFT",
+            xOfs = 41,
+            targetSnapshot = "raid",
+            panelBackgroundAlpha = 55,
+            appearancePresetID = "clean-dark",
+        },
+    }))
+    fireEvent("hud.presets.pew", env, "PLAYER_ENTERING_WORLD")
+    addonContext:OpenConfigMenu()
+    local service = presetTest.hudPresets
+    local expectedOrder = { "compact", "full", "tank" }
+    assertDeepEqual("hud.presets.registry.order", service.order(), expectedOrder)
+    local definitions = service.definitions()
+    local allowlist = service.allowlist()
+    for _, presetID in ipairs(expectedOrder) do
+        local definition = exists("hud.presets.registry.definition." .. presetID,
+            definitions[presetID])
+        check("hud.presets.registry.label." .. presetID,
+            type(definition.label) == "string" and definition.label ~= "")
+        check("hud.presets.registry.summary." .. presetID,
+            type(definition.summary) == "string" and definition.summary ~= "")
+        for key in pairs(allowlist) do
+            check("hud.presets.registry.complete." .. presetID .. "." .. key,
+                definition.values[key] ~= nil, "preset is missing an allowlisted field")
+        end
+        for key in pairs(definition.values) do
+            eq("hud.presets.registry.allowed." .. presetID .. "." .. key,
+                allowlist[key], true)
+        end
+    end
+    for _, preservedKey in ipairs({
+        "font", "fontSize", "textAlpha", "panelBackgroundAlpha",
+        "textOutlineStyle", "appearancePresetID", "scale", "point",
+        "xOfs", "targetSnapshot", "isVisible", "isLocked", "forceLocale",
+        "updateInterval",
+    }) do
+        eq("hud.presets.registry.preserved." .. preservedKey,
+            allowlist[preservedKey], nil)
+    end
+    eq("hud.presets.registry.default_is_compact", service.currentID(), "compact")
+
+    local rootBefore = deepCopy(presetTest.profileState().root)
+    local settingsBefore = presetTest.profileState().settings
+    local accountBefore = deepCopy(presetTest.profileState().account)
+    local operationBefore = presetTest.profileOps.state().operationCount
+    local ok, reason = service.startPreview("full")
+    eq("hud.presets.preview.started", ok, true)
+    eq("hud.presets.preview.reason", reason, nil)
+    eq("hud.presets.preview.active", service.state().active, true)
+    eq("hud.presets.preview.id", service.state().presetID, "full")
+    eq("hud.presets.preview.mode", presetTest.getDB("displayMode"), "sectioned")
+    eq("hud.presets.preview.defensive", presetTest.getBoolDB("showDefensive"), true)
+    eq("hud.presets.preview.tertiary", presetTest.getBoolDB("showTertiary"), true)
+    eq("hud.presets.preview.durability", presetTest.getBoolDB("showDurability"), true)
+    assertDeepEqual("hud.presets.preview.zero_writes",
+        presetTest.profileState().root, rootBefore)
+    eq("hud.presets.preview.settings_identity",
+        rawequal(presetTest.profileState().settings, settingsBefore), true)
+    local config = env.StatsProConfigFrame
+    local quickUI = config.tabContents[1].quickSetupView
+    eq("hud.presets.ui.status", quickUI.status:GetText(), "Previewing: Full")
+    eq("hud.presets.ui.full_selected",
+        quickUI.buttons.full.statsProSelectionRail:IsShown(), true)
+    eq("hud.presets.ui.compact_cleared",
+        quickUI.buttons.compact.statsProSelectionRail:IsShown(), false)
+    eq("hud.presets.ui.apply_visible", quickUI.apply:IsShown(), true)
+    eq("hud.presets.ui.cancel_visible", quickUI.cancel:IsShown(), true)
+    local _, _, _, _, previewBodyY = config.tabContents[1].statsBody:GetPoint()
+    check("hud.presets.ui.preview_reflows_body",
+        previewBodyY < quickUI.compactBodyTop, "preview actions overlap the Stats body")
+    eq("hud.presets.ui.preview_content_height",
+        config.tabContents[1].contentHeight,
+        math.abs(previewBodyY) + config.tabContents[1].statsBody.contentHeight)
+
+    ok = service.cancelPreview()
+    eq("hud.presets.cancel.ok", ok, true)
+    eq("hud.presets.cancel.inactive", service.state().active, false)
+    eq("hud.presets.cancel.mode", presetTest.getDB("displayMode"), "flat")
+    assertDeepEqual("hud.presets.cancel.zero_writes",
+        presetTest.profileState().root, rootBefore)
+    local _, _, _, _, compactBodyY = config.tabContents[1].statsBody:GetPoint()
+    eq("hud.presets.cancel.compact_body", compactBodyY, quickUI.compactBodyTop)
+    eq("hud.presets.cancel.actions_hidden", quickUI.apply:IsShown(), false)
+    eq("hud.presets.cancel.content_height", config.tabContents[1].contentHeight,
+        math.abs(compactBodyY) + config.tabContents[1].statsBody.contentHeight)
+
+    ok = service.startPreview("full")
+    eq("hud.presets.apply.preview", ok, true)
+    ok, reason = service.applyPreview()
+    eq("hud.presets.apply.ok", ok, true)
+    eq("hud.presets.apply.result", reason, presetTest.profileState().profileID)
+    local settings = presetTest.profileState().settings
+    eq("hud.presets.apply.current", service.currentID(), "full")
+    eq("hud.presets.apply.mode", settings.displayMode, "sectioned")
+    eq("hud.presets.apply.main", settings.showMainStat, true)
+    eq("hud.presets.apply.stamina", settings.showStamina, true)
+    eq("hud.presets.apply.item_level", settings.showItemLevel, true)
+    eq("hud.presets.apply.tertiary", settings.showTertiary, true)
+    eq("hud.presets.apply.defensive", settings.showDefensive, true)
+    eq("hud.presets.apply.durability", settings.showDurability, true)
+    eq("hud.presets.apply.repair", settings.showRepairCost, true)
+    eq("hud.presets.apply.average_durability", settings.useWorstDurability, false)
+    eq("hud.presets.apply.preserve_font", settings.font, "Fonts\\ARIALN.TTF")
+    near("hud.presets.apply.preserve_scale", settings.scale, 1.4)
+    eq("hud.presets.apply.preserve_point", settings.point, "TOPLEFT")
+    eq("hud.presets.apply.preserve_x", settings.xOfs, 41)
+    eq("hud.presets.apply.preserve_target", settings.targetSnapshot, "raid")
+    eq("hud.presets.apply.preserve_background", settings.panelBackgroundAlpha, 55)
+    eq("hud.presets.apply.preserve_appearance_marker",
+        settings.appearancePresetID, "clean-dark")
+    assertDeepEqual("hud.presets.apply.preserve_account",
+        presetTest.profileState().account, accountBefore)
+    eq("hud.presets.apply.operation_count",
+        presetTest.profileOps.state().operationCount, operationBefore + 1)
+
+    ok = service.startPreview("tank")
+    eq("hud.presets.tank.preview", ok, true)
+    ok = service.applyPreview()
+    eq("hud.presets.tank.apply", ok, true)
+    settings = presetTest.profileState().settings
+    eq("hud.presets.tank.current", service.currentID(), "tank")
+    eq("hud.presets.tank.split", settings.displayMode, "split")
+    eq("hud.presets.tank.no_tertiary", settings.showTertiary, false)
+    eq("hud.presets.tank.defensive", settings.showDefensive, true)
+    eq("hud.presets.tank.worst_durability", settings.useWorstDurability, true)
+    eq("hud.presets.tank.side_defensive", settings.splitDefensive, true)
+    eq("hud.presets.tank.side_gear",
+        settings.splitItemLevel and settings.splitDurability
+            and settings.splitRepairCost, true)
+
+    ok = service.startPreview("compact")
+    eq("hud.presets.manual.preview", ok, true)
+    env.StatsProTertiaryCheck:SetChecked(true)
+    userInteract("hud.presets.manual.checkbox", env.StatsProTertiaryCheck, "OnClick")
+    eq("hud.presets.manual.preview_cancelled", service.state().active, false)
+    eq("hud.presets.manual.request_preserved",
+        presetTest.profileState().settings.showTertiary, true)
+    eq("hud.presets.manual.custom", service.currentID(), "custom")
+end
+
+do
+    local seedEnv, _, seedTest = loadStatsPro(
+        "enUS", withProfileIdentity({ statsProDB = { fontSize = 15 } }))
+    fireEvent("hud.presets.shared.seed", seedEnv, "PLAYER_ENTERING_WORLD")
+    local root = deepCopy(seedEnv.StatsProDB)
+    local profileID = seedTest.profileState().profileID
+    local character = root.characters["Player-1-IMPORT"]
+    character.specProfiles[72] = profileID
+    local sharedEnv, sharedAddon, sharedTest = loadStatsPro(
+        "enUS", withProfileIdentity({ statsProDB = root }))
+    fireEvent("hud.presets.shared.pew", sharedEnv, "PLAYER_ENTERING_WORLD")
+    sharedAddon:OpenConfigMenu()
+    local service = sharedTest.hudPresets
+    local ok = service.startPreview("full")
+    eq("hud.presets.shared.preview", ok, true)
+    local ui = sharedEnv.StatsProConfigFrame.tabContents[1].quickSetupView
+    check("hud.presets.shared.warning_text",
+        ui.warning:GetText():find("shared by 2 specs", 1, true) ~= nil)
+    local _, _, _, _, bodyY = sharedEnv.StatsProConfigFrame.tabContents[1].statsBody:GetPoint()
+    eq("hud.presets.shared.warning_reflow", bodyY, ui.warningY - 42 - 36)
+    ok = service.applyPreview()
+    eq("hud.presets.shared.apply", ok, true)
+    eq("hud.presets.shared.same_profile_reference",
+        root.characters["Player-1-IMPORT"].specProfiles[72], profileID)
+    eq("hud.presets.shared.updated_once", root.profiles[profileID].settings.displayMode,
+        "sectioned")
+end
+
+do
+    local inCombat = false
+    local env, _, presetTest = loadStatsPro("enUS", withProfileIdentity({
+        statsProDB = { fontSize = 15 },
+        inCombatLockdown = function() return inCombat end,
+    }))
+    fireEvent("hud.presets.gates.pew", env, "PLAYER_ENTERING_WORLD")
+    local service = presetTest.hudPresets
+    local before = deepCopy(presetTest.profileState().root)
+    inCombat = true
+    local ok, reason = service.startPreview("full")
+    eq("hud.presets.gates.combat_rejected", ok, false)
+    eq("hud.presets.gates.combat_reason", reason, "combat")
+    assertDeepEqual("hud.presets.gates.combat_zero_writes",
+        presetTest.profileState().root, before)
+    inCombat = false
+
+    ok = service.startPreview("full")
+    eq("hud.presets.gates.preview_before_combat", ok, true)
+    inCombat = true
+    service.setRuntimeFailureCount(1)
+    fireEvent("hud.presets.gates.combat_event", env, "PLAYER_REGEN_DISABLED")
+    eq("hud.presets.gates.combat_auto_cancel", service.state().active, false)
+    eq("hud.presets.gates.combat_runtime_restored",
+        presetTest.getDB("displayMode"), "flat")
+    assertDeepEqual("hud.presets.gates.cancel_in_combat_zero_writes",
+        presetTest.profileState().root, before)
+    inCombat = false
+
+    service.setRuntimeFailureCount(1)
+    ok, reason = service.startPreview("full")
+    eq("hud.presets.gates.preview_failure", ok, false)
+    eq("hud.presets.gates.preview_failure_reason", reason, "preview-failed")
+    eq("hud.presets.gates.preview_failure_inactive", service.state().active, false)
+    assertDeepEqual("hud.presets.gates.preview_failure_zero_writes",
+        presetTest.profileState().root, before)
+
+    ok = service.startPreview("full")
+    eq("hud.presets.gates.retryable_preview", ok, true)
+    presetTest.profileOps.setFailureStage("apply")
+    ok, reason = service.applyPreview()
+    eq("hud.presets.gates.apply_failure", ok, false)
+    eq("hud.presets.gates.apply_failure_reason", reason, "apply-failed")
+    eq("hud.presets.gates.apply_failure_resumes", service.state().active, true)
+    assertDeepEqual("hud.presets.gates.apply_failure_zero_writes",
+        presetTest.profileState().root, before)
+    presetTest.profileOps.setFailureStage(nil)
+    ok = service.applyPreview()
+    eq("hud.presets.gates.apply_retry", ok, true)
+
+    ok = service.startPreview("tank")
+    eq("hud.presets.gates.stale_preview", ok, true)
+    presetTest.profileState().settings.showTertiary = false
+    ok, reason = service.applyPreview()
+    eq("hud.presets.gates.stale_rejected", ok, false)
+    eq("hud.presets.gates.stale_reason", reason, "stale")
+    eq("hud.presets.gates.stale_cancelled", service.state().active, false)
+end
+
+do
+    local welcomeEnv, _, welcomeTest = loadStatsPro("enUS",
+        withProfileIdentity({ statsProDB = {}, testWelcomeEnabled = true }))
+    fireEvent("hud.welcome.fresh.pew", welcomeEnv, "PLAYER_ENTERING_WORLD")
+    eq("hud.welcome.fresh.flag", welcomeTest.hudPresets.state().welcomeSeen, false)
+    eq("hud.welcome.fresh.not_immediate",
+        welcomeTest.hudPresets.state().welcomeShown, false)
+    eq("hud.welcome.fresh.timer", welcomeEnv.__flushNextTimer(0.5), true)
+    local state = welcomeTest.hudPresets.state()
+    eq("hud.welcome.fresh.shown", state.welcomeShown, true)
+    local frame = welcomeEnv.StatsProQuickSetupWelcome
+    exists("hud.welcome.fresh.frame", frame)
+    eq("hud.welcome.fresh.width", frame:GetWidth(), 470)
+    eq("hud.welcome.fresh.height", frame:GetHeight(), 438)
+    eq("hud.welcome.fresh.strata", frame.frameStrata, "DIALOG")
+    eq("hud.welcome.fresh.no_overlay", frame:GetParent(), welcomeEnv.UIParent)
+    eq("hud.welcome.fresh.special_frame",
+        welcomeEnv.UISpecialFrames[#welcomeEnv.UISpecialFrames],
+        "StatsProQuickSetupWelcome")
+    eq("hud.welcome.fresh.current_status",
+        frame.statsProView.status:GetText(), "Current setup: Compact")
+    eq("hud.welcome.fresh.compact_selected",
+        frame.statsProView.buttons.compact.statsProSelectionRail:IsShown(), true)
+    eq("hud.welcome.fresh.view_registered",
+        frame.statsProView.statsProRegistered, true)
+    for index, control in ipairs(frame.statsProView.mutationControls) do
+        eq("hud.welcome.fresh.control_registered." .. index,
+            control.statsProMutationRegistered, true)
+    end
+    eq("hud.welcome.fresh.starting_copy",
+        frame.statsProView.note:GetText(),
+        "This sets up the current profile. Appearance, scale, positions, language, and profile assignments stay unchanged.")
+    local assignmentsBefore = {
+        roles = deepCopy(welcomeTest.profileState().root.roleTemplates),
+        characters = deepCopy(welcomeTest.profileState().root.characters),
+    }
+    local welcomeModel = welcomeTest.profileViewModel()
+    eq("hud.welcome.fresh.independent_starting_profile",
+        welcomeModel.profiles[welcomeTest.profileState().profileID].references.total, 1)
+
+    userInteract("hud.welcome.preview.full",
+        frame.statsProView.buttons.full, "OnClick")
+    eq("hud.welcome.preview.active", welcomeTest.hudPresets.state().active, true)
+    eq("hud.welcome.preview.mode", welcomeTest.getDB("displayMode"), "sectioned")
+    eq("hud.welcome.preview.zero_write_flag",
+        welcomeTest.hudPresets.state().welcomeSeen, false)
+    eq("hud.welcome.preview.no_technical_warning_text",
+        frame.statsProView.warning:GetText(), "")
+    eq("hud.welcome.preview.no_technical_warning_surface",
+        frame.statsProView.warning.statsProWarningSurface:IsShown(), false)
+    userInteract("hud.welcome.apply.full", frame.statsProView.apply, "OnClick")
+    eq("hud.welcome.apply.hidden", frame:IsShown(), false)
+    eq("hud.welcome.apply.seen", welcomeTest.hudPresets.state().welcomeSeen, true)
+    eq("hud.welcome.apply.current", welcomeTest.hudPresets.currentID(), "full")
+    eq("hud.welcome.apply.inactive", welcomeTest.hudPresets.state().active, false)
+    eq("hud.welcome.apply.view_unregistered",
+        frame.statsProView.statsProRegistered, false)
+    for index, control in ipairs(frame.statsProView.mutationControls) do
+        eq("hud.welcome.apply.control_unregistered." .. index,
+            control.statsProMutationRegistered, false)
+    end
+    assertDeepEqual("hud.welcome.apply.roles_preserved",
+        welcomeTest.profileState().root.roleTemplates, assignmentsBefore.roles)
+    assertDeepEqual("hud.welcome.apply.characters_preserved",
+        welcomeTest.profileState().root.characters, assignmentsBefore.characters)
+    eq("hud.welcome.apply.no_repeat", welcomeTest.hudPresets.maybeShowWelcome(), false)
+
+    local dismissEnv, _, dismissTest = loadStatsPro("enUS",
+        withProfileIdentity({ statsProDB = {}, testWelcomeEnabled = true }))
+    fireEvent("hud.welcome.dismiss.pew", dismissEnv, "PLAYER_ENTERING_WORLD")
+    eq("hud.welcome.dismiss.timer", dismissEnv.__flushNextTimer(0.5), true)
+    local dismissFrame = dismissEnv.StatsProQuickSetupWelcome
+    local dismissSettings = deepCopy(dismissTest.profileState().settings)
+    userInteract("hud.welcome.dismiss.preview",
+        dismissFrame.statsProView.buttons.tank, "OnClick")
+    dismissFrame:Hide()
+    eq("hud.welcome.dismiss.hidden", dismissFrame:IsShown(), false)
+    eq("hud.welcome.dismiss.seen", dismissTest.hudPresets.state().welcomeSeen, true)
+    eq("hud.welcome.dismiss.preview_cancelled",
+        dismissTest.hudPresets.state().active, false)
+    assertDeepEqual("hud.welcome.dismiss.settings_preserved",
+        dismissTest.profileState().settings, dismissSettings)
+    eq("hud.welcome.dismiss.no_repeat", dismissTest.hudPresets.maybeShowWelcome(), false)
+
+    local existingEnv, _, existingTest = loadStatsPro("enUS",
+        withProfileIdentity({
+            statsProDB = { fontSize = 15 },
+            testWelcomeEnabled = true,
+        }))
+    fireEvent("hud.welcome.existing.pew", existingEnv, "PLAYER_ENTERING_WORLD")
+    eq("hud.welcome.existing.seen", existingTest.hudPresets.state().welcomeSeen, true)
+    eq("hud.welcome.existing.no_timer", #existingEnv.__timers, 0)
+    eq("hud.welcome.existing.not_shown",
+        existingTest.hudPresets.state().welcomeShown, false)
+
+    local legacyRoot = deepCopy(existingEnv.StatsProDB)
+    legacyRoot.account.quickSetupSeen = nil
+    local missingEnv, _, missingTest = loadStatsPro("enUS",
+        withProfileIdentity({
+            statsProDB = legacyRoot,
+            testWelcomeEnabled = true,
+        }))
+    fireEvent("hud.welcome.missing_flag.pew", missingEnv, "PLAYER_ENTERING_WORLD")
+    eq("hud.welcome.missing_flag.no_timer", #missingEnv.__timers, 0)
+    eq("hud.welcome.missing_flag.not_shown",
+        missingTest.hudPresets.state().welcomeShown, false)
+
+    local discoveredEnv, discoveredAddon, discoveredTest = loadStatsPro("enUS",
+        withProfileIdentity({ statsProDB = {}, testWelcomeEnabled = true }))
+    fireEvent("hud.welcome.discovered.pew", discoveredEnv, "PLAYER_ENTERING_WORLD")
+    local discoveredBefore = deepCopy(discoveredTest.profileState().root)
+    discoveredAddon:OpenConfigMenu()
+    eq("hud.welcome.discovered.navigation_zero_write",
+        discoveredTest.hudPresets.state().welcomeSeen, false)
+    assertDeepEqual("hud.welcome.discovered.open_zero_writes",
+        discoveredTest.profileState().root, discoveredBefore)
+    discoveredAddon:OpenConfigMenu()
+    eq("hud.welcome.discovered.closed_before_timer",
+        discoveredEnv.StatsProConfigFrame:IsShown(), false)
+    assertDeepEqual("hud.welcome.discovered.close_zero_writes",
+        discoveredTest.profileState().root, discoveredBefore)
+    eq("hud.welcome.discovered.timer", discoveredEnv.__flushNextTimer(0.5), true)
+    eq("hud.welcome.discovered.marked_seen",
+        discoveredTest.hudPresets.state().welcomeSeen, true)
+    eq("hud.welcome.discovered.no_late_popup",
+        discoveredTest.hudPresets.state().welcomeShown, false)
+
+    local handoffEnv, handoffAddon, handoffTest = loadStatsPro("ruRU",
+        withProfileIdentity({ statsProDB = {}, testWelcomeEnabled = true }))
+    fireEvent("hud.welcome.handoff.pew", handoffEnv, "PLAYER_ENTERING_WORLD")
+    eq("hud.welcome.handoff.timer", handoffEnv.__flushNextTimer(0.5), true)
+    local handoff = handoffEnv.StatsProQuickSetupWelcome
+    eq("hud.welcome.handoff.localized_title",
+        handoff.statsProView.status:GetText(), "Текущая раскладка: Компактный")
+    userInteract("hud.welcome.handoff.preview",
+        handoff.statsProView.buttons.tank, "OnClick")
+    userInteract("hud.welcome.handoff.settings",
+        handoff.statsProView.cancel, "OnClick")
+    eq("hud.welcome.handoff.hidden", handoff:IsShown(), false)
+    eq("hud.welcome.handoff.view_unregistered",
+        handoff.statsProView.statsProRegistered, false)
+    eq("hud.welcome.handoff.seen", handoffTest.hudPresets.state().welcomeSeen, true)
+    eq("hud.welcome.handoff.preview_preserved",
+        handoffTest.hudPresets.state().active, true)
+    eq("hud.welcome.handoff.config_open",
+        handoffEnv.StatsProConfigFrame:IsShown(), true)
+    eq("hud.welcome.handoff.settings_status",
+        handoffEnv.StatsProConfigFrame.tabContents[1].quickSetupView.status:GetText(),
+        "Предпросмотр: Танк")
+    handoffAddon:OpenConfigMenu()
+    eq("hud.welcome.handoff.close_cancels_preview",
+        handoffTest.hudPresets.state().active, false)
+end
+
+smokeReachability:complete("presets-onboarding")
 smokeReachability:finish()

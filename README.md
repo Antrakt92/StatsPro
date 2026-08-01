@@ -29,12 +29,27 @@
   Versatility for bundled Archon M+ High Keys or Raid Mythic reference snapshots.
 - **Switch characters or specs without rebuilding the HUD.** Assigned profiles
   activate automatically and can be shared intentionally when that is useful.
-- **Start with a finished look.** Preview six appearance presets, then keep the
-  preset or adjust individual fonts, colors, opacity, outline, and background.
+- **Start with a finished HUD.** Preview Compact, Full, or Tank, then keep that
+  layout or adjust individual rows and presentation.
 - **Use only the space you want.** Build a compact secondary-stat strip, a tank
   dashboard, or two independently movable panels.
 - **Designed for Retail 12.x.** StatsPro handles Midnight's restricted values and
   modern tooltip data without a companion app or in-game network access.
+
+## Quick Setup
+
+A genuinely fresh installation opens one small, non-blocking Quick Setup panel
+once. Choose **Compact** for the four secondary stats, **Full** for every stat
+group plus gear status, or **Tank** for offensive and defensive rows with gear
+status in a separate side panel. Clicking a card previews the real HUD before
+anything is saved; **Use this setup** applies it. Close the panel or press Escape
+to keep the current setup, and it will not interrupt a later login. The choice
+configures the current profile; profile assignments themselves stay unchanged.
+
+Quick Setup remains available at the top of the **Stats** tab afterward. These
+presets change stat rows, value display, durability summary, and panel layout.
+Font, colors, scale, panel positions, language, refresh rate, and profile
+assignments stay unchanged.
 
 ## Flexible layouts
 
@@ -129,8 +144,8 @@ Install StatsPro from any supported channel:
 For a manual install, extract the `StatsPro` folder into
 `World of Warcraft\_retail_\Interface\AddOns\`.
 
-1. Type `/ss` to open Settings.
-2. Choose the rows, layout, and appearance you want.
+1. On a fresh install, preview **Compact**, **Full**, or **Tank** in Quick Setup.
+2. Type `/ss` at any time to reopen Settings and fine-tune the HUD.
 3. Unlock the panels and drag them into place.
 4. Hover a secondary stat for its selected Archon reference snapshot.
 

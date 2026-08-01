@@ -49,6 +49,10 @@ addon.itemLevelRuntime = {
     attempt = 0,
     maxAttempts = 4,
 }
+addon.critRuntime = {
+    selectedSource = nil,
+    selectedSpellSchool = nil,
+}
 
 --[[ ============================================================
     1. CONSTANTS
@@ -367,6 +371,9 @@ local defaults = {
     -- otherwise. Falls back to FRIZQT for any non-Blizzard path.
     font = LocaleAwareDefaultFont(),
     updateInterval = 0.5,
+    -- Account-only onboarding marker. Existing registries that predate the field
+    -- are treated as already seen; a truly empty install explicitly stores false.
+    quickSetupSeen = true,
     isVisible = true,
     isLocked = false,
 
@@ -476,9 +483,11 @@ function addon.IsCleanFiniteNumber(value)
 end
 
 -- WHY: Blizzard's paper doll defines spell crit as the minimum across schools
--- 2..MAX_SPELL_SCHOOLS, then chooses the best of spell/ranged/melee. In restricted
--- content any school can be secret, so an incomplete spell aggregate must never
--- masquerade as a clean partial min.
+-- 2..MAX_SPELL_SCHOOLS, then chooses the best of spell/ranged/melee. Addon Lua cannot
+-- repeat those comparisons once the PTR marks every operand secret. Cache only the
+-- winning source descriptor from a complete clean read, then pass that source's live
+-- secret value directly to the client formatter in combat. This is a live proxy rather
+-- than a guaranteed aggregate; a cold restricted start remains explicitly unknown.
 function addon.GetMaxSpellSchool()
     local value = _G.MAX_SPELL_SCHOOLS
     if issecretvalue(value) or type(value) ~= "number" or value ~= value
@@ -495,7 +504,7 @@ function addon.GetBestCritChance()
         if not ok then return nil, "unavailable" end
         local secretOK, secret = pcall(issecretvalue, value)
         if not secretOK then return nil, "unavailable" end
-        if secret then return nil, "restricted" end
+        if secret then return value, "restricted" end
         if not addon.IsCleanFiniteNumber(value) then return nil, "unavailable" end
         return value, "clean"
     end
@@ -503,22 +512,52 @@ function addon.GetBestCritChance()
     local ranged, rangedState = read(GetRangedCritChance)
     local maxSpellSchool = addon.GetMaxSpellSchool()
     local spellValues = {}
+    local spellStates = {}
     local restricted = meleeState == "restricted" or rangedState == "restricted"
     local unavailable = meleeState == "unavailable" or rangedState == "unavailable"
     for school = 2, maxSpellSchool do
         local value, state = read(GetSpellCritChance, school)
-        spellValues[#spellValues + 1] = value
+        spellValues[school] = value
+        spellStates[school] = state
         if state == "restricted" then restricted = true end
         if state == "unavailable" then unavailable = true end
     end
-    -- Blizzard's paper doll takes min(spell schools), then max(spell/ranged/melee).
-    -- Addon Lua cannot compare a restricted operand, so returning any readable source
-    -- would claim an aggregate we did not actually compute.
-    if restricted then return nil, "restricted" end
+    if restricted then
+        local runtime = addon.critRuntime
+        if runtime.selectedSource == "spell" then
+            local school = runtime.selectedSpellSchool
+            if spellStates[school] ~= "unavailable" then
+                return spellValues[school], "liveProxy"
+            end
+        elseif runtime.selectedSource == "ranged" and rangedState ~= "unavailable" then
+            return ranged, "liveProxy"
+        elseif runtime.selectedSource == "melee" and meleeState ~= "unavailable" then
+            return melee, "liveProxy"
+        end
+        return nil, "restricted"
+    end
     if unavailable then return nil, "unavailable" end
-    local spell = spellValues[1]
-    for index = 2, #spellValues do spell = math.min(spell, spellValues[index]) end
-    return math.max(melee, ranged, spell), "exact"
+    local spell = spellValues[2]
+    local spellSchool = 2
+    for school = 3, maxSpellSchool do
+        if spellValues[school] < spell then
+            spell = spellValues[school]
+            spellSchool = school
+        end
+    end
+    local runtime = addon.critRuntime
+    if spell >= ranged and spell >= melee then
+        runtime.selectedSource = "spell"
+        runtime.selectedSpellSchool = spellSchool
+        return spell, "exact"
+    elseif ranged >= melee then
+        runtime.selectedSource = "ranged"
+        runtime.selectedSpellSchool = nil
+        return ranged, "exact"
+    end
+    runtime.selectedSource = "melee"
+    runtime.selectedSpellSchool = nil
+    return melee, "exact"
 end
 
 local OFFENSIVE_STATS = {
@@ -623,6 +662,114 @@ for key in pairs(addon.appearancePresets.allowlist) do
     addon.appearancePresets.definitions.default[key] = key == "colors"
         and CopyTable(defaults.colors) or defaults[key]
 end
+
+-- Quick Setup presets are deliberately functional rather than visual. They own
+-- the complete row/routing shape required for a predictable result, while
+-- preserving appearance, scale, positions, locale, refresh rate, visibility,
+-- locking, Archon context, profile assignments, and account settings.
+addon.hudPresets = {
+    order = { "compact", "full", "tank" },
+    allowlist = {
+        displayMode = true, labelStyle = true,
+        showRating = true, showPercentage = true,
+        showMainStat = true, showStamina = true, showItemLevel = true,
+        showOffensive = true, hideZeroOffensive = true,
+        showCrit = true, showHaste = true,
+        showMastery = true, showVersatility = true,
+        showTertiary = true, hideZeroTertiary = true,
+        showLeech = true, showAvoidance = true, showSpeed = true,
+        showDefensive = true, hideZeroDefensive = true,
+        showDodge = true, showParry = true, showBlock = true,
+        showArmor = true, showStagger = true,
+        showDurability = true, showRepairCost = true,
+        useWorstDurability = true,
+        splitCharacter = true, splitItemLevel = true,
+        splitOffensive = true, splitTertiary = true,
+        splitDefensive = true, splitDurability = true,
+        splitRepairCost = true,
+    },
+    definitions = {
+        compact = {
+            label = "Compact",
+            summary = "Secondary stats only",
+            values = {
+                displayMode = "flat", labelStyle = "full",
+                showRating = true, showPercentage = true,
+                showMainStat = false, showStamina = false, showItemLevel = false,
+                showOffensive = true, hideZeroOffensive = false,
+                showCrit = true, showHaste = true,
+                showMastery = true, showVersatility = true,
+                showTertiary = false, hideZeroTertiary = true,
+                showLeech = true, showAvoidance = true, showSpeed = true,
+                showDefensive = false, hideZeroDefensive = true,
+                showDodge = true, showParry = true, showBlock = true,
+                showArmor = true, showStagger = false,
+                showDurability = false, showRepairCost = false,
+                useWorstDurability = false,
+                splitCharacter = false, splitItemLevel = true,
+                splitOffensive = false, splitTertiary = false,
+                splitDefensive = true, splitDurability = true,
+                splitRepairCost = true,
+            },
+        },
+        full = {
+            label = "Full",
+            summary = "All stat groups and gear status",
+            values = {
+                displayMode = "sectioned", labelStyle = "full",
+                showRating = true, showPercentage = true,
+                showMainStat = true, showStamina = true, showItemLevel = true,
+                showOffensive = true, hideZeroOffensive = false,
+                showCrit = true, showHaste = true,
+                showMastery = true, showVersatility = true,
+                showTertiary = true, hideZeroTertiary = true,
+                showLeech = true, showAvoidance = true, showSpeed = true,
+                showDefensive = true, hideZeroDefensive = true,
+                showDodge = true, showParry = true, showBlock = true,
+                showArmor = true, showStagger = true,
+                showDurability = true, showRepairCost = true,
+                useWorstDurability = false,
+                splitCharacter = false, splitItemLevel = true,
+                splitOffensive = false, splitTertiary = false,
+                splitDefensive = true, splitDurability = true,
+                splitRepairCost = true,
+            },
+        },
+        tank = {
+            label = "Tank",
+            summary = "Defensives, secondary stats, and gear status",
+            values = {
+                displayMode = "split", labelStyle = "full",
+                showRating = true, showPercentage = true,
+                showMainStat = true, showStamina = true, showItemLevel = true,
+                showOffensive = true, hideZeroOffensive = false,
+                showCrit = true, showHaste = true,
+                showMastery = true, showVersatility = true,
+                showTertiary = false, hideZeroTertiary = true,
+                showLeech = true, showAvoidance = true, showSpeed = true,
+                showDefensive = true, hideZeroDefensive = true,
+                showDodge = true, showParry = true, showBlock = true,
+                showArmor = true, showStagger = true,
+                showDurability = true, showRepairCost = true,
+                useWorstDurability = true,
+                splitCharacter = false, splitItemLevel = true,
+                splitOffensive = false, splitTertiary = false,
+                splitDefensive = true, splitDurability = true,
+                splitRepairCost = true,
+            },
+        },
+    },
+    session = nil,
+    views = {},
+    settingsDiscovered = false,
+}
+
+-- Shared preview coordination keeps the two preset services mutually exclusive and
+-- gives DB reads a single override path. Service-specific definitions, runtime apply,
+-- current-ID detection, and UI rendering stay on their owning service.
+addon.presetRuntime = {
+    services = { addon.appearancePresets, addon.hudPresets },
+}
 
 -- Primary stat label + unitStatId mapping. Used by BuildCharacterLines via the
 -- PRIMARY_STATS_BY_ID O(1) lookup. label routes through L() for locale render.
@@ -2828,14 +2975,145 @@ do
     end
 end
 
+-- Keep the small Quick Setup vocabulary together so every shipped locale gets
+-- the same first-run surface without expanding the already-large base tables.
+do
+    local quickSetupLabels = {
+    enUS = {
+        ["Quick Setup"] = "Quick Setup",
+        ["Compact"] = "Compact",
+        ["Secondary stats only"] = "Secondary stats only",
+        ["All stat groups and gear status"] = "All stat groups and gear status",
+        ["Defensives, secondary stats, and gear status"] = "Defensives, secondary stats, and gear status",
+        ["Choose a finished HUD layout. Click a card to preview it."] = "Choose a finished HUD layout. Click a card to preview it.",
+        ["Current setup: %s"] = "Current setup: %s",
+        ["Use this setup"] = "Use this setup",
+        ["Stat rows, value display, durability summary, and panel layout can change. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "Stat rows, value display, durability summary, and panel layout can change. Appearance, scale, positions, language, and profile assignments stay unchanged.",
+        ["This sets up the current profile. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "This sets up the current profile. Appearance, scale, positions, language, and profile assignments stay unchanged.",
+    },
+    ruRU = {
+        ["Quick Setup"] = "Быстрая настройка",
+        ["Compact"] = "Компактный",
+        ["Secondary stats only"] = "Только вторичные характеристики",
+        ["All stat groups and gear status"] = "Все характеристики и состояние экипировки",
+        ["Defensives, secondary stats, and gear status"] = "Защита, вторичные характеристики и экипировка",
+        ["Choose a finished HUD layout. Click a card to preview it."] = "Выберите готовую раскладку HUD. Нажмите карточку для предпросмотра.",
+        ["Current setup: %s"] = "Текущая раскладка: %s",
+        ["Use this setup"] = "Использовать",
+        ["Stat rows, value display, durability summary, and panel layout can change. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "Могут измениться строки характеристик, отображение значений, сводка прочности и раскладка панелей. Внешний вид, масштаб, позиции, язык и назначения профилей сохраняются.",
+        ["This sets up the current profile. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "Это настроит текущий профиль. Внешний вид, масштаб, позиции, язык и назначения профилей сохраняются.",
+    },
+    deDE = {
+        ["Quick Setup"] = "Schnelleinrichtung",
+        ["Compact"] = "Kompakt",
+        ["Secondary stats only"] = "Nur Sekundärwerte",
+        ["All stat groups and gear status"] = "Alle Werte und Ausrüstungsstatus",
+        ["Defensives, secondary stats, and gear status"] = "Defensivwerte, Sekundärwerte und Ausrüstung",
+        ["Choose a finished HUD layout. Click a card to preview it."] = "Wähle ein fertiges HUD-Layout. Klicke auf eine Karte für die Vorschau.",
+        ["Current setup: %s"] = "Aktuelles Layout: %s",
+        ["Use this setup"] = "Dieses Layout verwenden",
+        ["Stat rows, value display, durability summary, and panel layout can change. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "Wertezeilen, Wertanzeige, Haltbarkeitsübersicht und Panel-Layout können sich ändern. Aussehen, Skalierung, Positionen, Sprache und Profilzuweisungen bleiben unverändert.",
+        ["This sets up the current profile. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "Damit wird das aktuelle Profil eingerichtet. Aussehen, Skalierung, Positionen, Sprache und Profilzuweisungen bleiben unverändert.",
+    },
+    frFR = {
+        ["Quick Setup"] = "Configuration rapide",
+        ["Compact"] = "Compact",
+        ["Secondary stats only"] = "Caractéristiques secondaires uniquement",
+        ["All stat groups and gear status"] = "Toutes les caractéristiques et l’état de l’équipement",
+        ["Defensives, secondary stats, and gear status"] = "Défense, caractéristiques secondaires et équipement",
+        ["Choose a finished HUD layout. Click a card to preview it."] = "Choisissez une disposition HUD prête à l’emploi. Cliquez sur une carte pour l’aperçu.",
+        ["Current setup: %s"] = "Disposition actuelle : %s",
+        ["Use this setup"] = "Utiliser cette disposition",
+        ["Stat rows, value display, durability summary, and panel layout can change. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "Les lignes de caractéristiques, l’affichage des valeurs, le résumé de durabilité et la disposition peuvent changer. Apparence, échelle, positions, langue et affectations restent inchangées.",
+        ["This sets up the current profile. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "Cela configure le profil actuel. Apparence, échelle, positions, langue et affectations restent inchangées.",
+    },
+    esES = {
+        ["Quick Setup"] = "Configuración rápida",
+        ["Compact"] = "Compacto",
+        ["Secondary stats only"] = "Solo estadísticas secundarias",
+        ["All stat groups and gear status"] = "Todas las estadísticas y el estado del equipo",
+        ["Defensives, secondary stats, and gear status"] = "Defensas, estadísticas secundarias y equipo",
+        ["Choose a finished HUD layout. Click a card to preview it."] = "Elige un diseño de HUD listo. Haz clic en una tarjeta para previsualizarlo.",
+        ["Current setup: %s"] = "Diseño actual: %s",
+        ["Use this setup"] = "Usar este diseño",
+        ["Stat rows, value display, durability summary, and panel layout can change. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "Pueden cambiar las filas de estadísticas, los valores, el resumen de durabilidad y el diseño. La apariencia, escala, posiciones, idioma y asignaciones de perfil no cambian.",
+        ["This sets up the current profile. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "Esto configura el perfil actual. La apariencia, escala, posiciones, idioma y asignaciones de perfil no cambian.",
+    },
+    itIT = {
+        ["Quick Setup"] = "Configurazione rapida",
+        ["Compact"] = "Compatto",
+        ["Secondary stats only"] = "Solo statistiche secondarie",
+        ["All stat groups and gear status"] = "Tutte le statistiche e lo stato dell’equipaggiamento",
+        ["Defensives, secondary stats, and gear status"] = "Difese, statistiche secondarie ed equipaggiamento",
+        ["Choose a finished HUD layout. Click a card to preview it."] = "Scegli un layout HUD completo. Fai clic su una scheda per l’anteprima.",
+        ["Current setup: %s"] = "Layout attuale: %s",
+        ["Use this setup"] = "Usa questo layout",
+        ["Stat rows, value display, durability summary, and panel layout can change. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "Possono cambiare le righe delle statistiche, i valori, il riepilogo durabilità e il layout. Aspetto, scala, posizioni, lingua e assegnazioni restano invariati.",
+        ["This sets up the current profile. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "Questo configura il profilo attuale. Aspetto, scala, posizioni, lingua e assegnazioni restano invariati.",
+    },
+    ptBR = {
+        ["Quick Setup"] = "Configuração rápida",
+        ["Compact"] = "Compacto",
+        ["Secondary stats only"] = "Somente atributos secundários",
+        ["All stat groups and gear status"] = "Todos os atributos e o estado do equipamento",
+        ["Defensives, secondary stats, and gear status"] = "Defesas, atributos secundários e equipamento",
+        ["Choose a finished HUD layout. Click a card to preview it."] = "Escolha um layout de HUD pronto. Clique em um cartão para visualizar.",
+        ["Current setup: %s"] = "Layout atual: %s",
+        ["Use this setup"] = "Usar este layout",
+        ["Stat rows, value display, durability summary, and panel layout can change. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "As linhas de atributos, os valores, o resumo de durabilidade e o layout podem mudar. Aparência, escala, posições, idioma e atribuições de perfil não mudam.",
+        ["This sets up the current profile. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "Isso configura o perfil atual. Aparência, escala, posições, idioma e atribuições de perfil não mudam.",
+    },
+    koKR = {
+        ["Quick Setup"] = "빠른 설정",
+        ["Compact"] = "간단히",
+        ["Secondary stats only"] = "보조 능력치만 표시",
+        ["All stat groups and gear status"] = "모든 능력치와 장비 상태",
+        ["Defensives, secondary stats, and gear status"] = "방어, 보조 능력치 및 장비 상태",
+        ["Choose a finished HUD layout. Click a card to preview it."] = "완성된 HUD 구성을 선택하세요. 카드를 클릭하면 미리 볼 수 있습니다.",
+        ["Current setup: %s"] = "현재 구성: %s",
+        ["Use this setup"] = "이 구성 사용",
+        ["Stat rows, value display, durability summary, and panel layout can change. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "능력치 행, 값 표시, 내구도 요약 및 패널 배치가 변경될 수 있습니다. 외형, 크기, 위치, 언어 및 프로필 지정은 유지됩니다.",
+        ["This sets up the current profile. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "현재 프로필을 설정합니다. 외형, 크기, 위치, 언어 및 프로필 지정은 유지됩니다.",
+    },
+    zhCN = {
+        ["Quick Setup"] = "快速设置",
+        ["Compact"] = "紧凑",
+        ["Secondary stats only"] = "仅显示次要属性",
+        ["All stat groups and gear status"] = "全部属性与装备状态",
+        ["Defensives, secondary stats, and gear status"] = "防御、次要属性与装备状态",
+        ["Choose a finished HUD layout. Click a card to preview it."] = "选择一套完整的 HUD 布局。点击卡片即可预览。",
+        ["Current setup: %s"] = "当前布局：%s",
+        ["Use this setup"] = "使用此布局",
+        ["Stat rows, value display, durability summary, and panel layout can change. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "属性行、数值显示、耐久度汇总和面板布局可能会更改。外观、缩放、位置、语言和配置分配保持不变。",
+        ["This sets up the current profile. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "这会设置当前配置。外观、缩放、位置、语言和配置分配保持不变。",
+    },
+    zhTW = {
+        ["Quick Setup"] = "快速設定",
+        ["Compact"] = "精簡",
+        ["Secondary stats only"] = "僅顯示次要屬性",
+        ["All stat groups and gear status"] = "全部屬性與裝備狀態",
+        ["Defensives, secondary stats, and gear status"] = "防禦、次要屬性與裝備狀態",
+        ["Choose a finished HUD layout. Click a card to preview it."] = "選擇一套完整的 HUD 版面。點擊卡片即可預覽。",
+        ["Current setup: %s"] = "目前版面：%s",
+        ["Use this setup"] = "使用此版面",
+        ["Stat rows, value display, durability summary, and panel layout can change. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "屬性列、數值顯示、耐久度摘要和面板版面可能會變更。外觀、縮放、位置、語言和設定檔指派保持不變。",
+        ["This sets up the current profile. Appearance, scale, positions, language, and profile assignments stay unchanged."] = "這會設定目前的設定檔。外觀、縮放、位置、語言和設定檔指派保持不變。",
+    },
+}
+    quickSetupLabels.esMX = quickSetupLabels.esES
+    for locale, setupLabels in pairs(quickSetupLabels) do
+        for key, value in pairs(setupLabels) do LABELS_BY_LOCALE[locale][key] = value end
+    end
+end
+
 -- WARNING: must precede ResolveActiveLocale — forward-ref to GetDB resolves as _G.GetDB at parse time.
 local function GetDB(key)
     local db = addon.dbRuntime.GetSettingStore(key)
     local v = db[key]
     local secretOK, secret = pcall(issecretvalue, v)
     if not secretOK or secret or v == nil then v = defaults[key] end
-    if addon.appearancePresets and addon.appearancePresets.ResolveValue then
-        return addon.appearancePresets.ResolveValue(key, v)
+    if addon.presetRuntime and addon.presetRuntime.ResolveValue then
+        v = addon.presetRuntime.ResolveValue(key, v)
     end
     return v
 end
@@ -2848,10 +3126,10 @@ local function GetBoolDB(key)
     else
         value = defaults[key] == true
     end
-    if addon.appearancePresets and addon.appearancePresets.ResolveValue then
-        return addon.appearancePresets.ResolveValue(key, value) == true
+    if addon.presetRuntime and addon.presetRuntime.ResolveValue then
+        value = addon.presetRuntime.ResolveValue(key, value)
     end
-    return value
+    return value == true
 end
 
 local function GetFontDB()
@@ -2974,8 +3252,8 @@ local function GetNumberDB(key)
     local secretOK, secret = pcall(issecretvalue, v)
     if not secretOK or secret then v = nil end
     if v == nil then v = defaults[key] end
-    if addon.appearancePresets and addon.appearancePresets.ResolveValue then
-        v = addon.appearancePresets.ResolveValue(key, v)
+    if addon.presetRuntime and addon.presetRuntime.ResolveValue then
+        v = addon.presetRuntime.ResolveValue(key, v)
     end
     return NormalizeNumberSetting(key, v)
 end
@@ -3378,6 +3656,16 @@ local SAFE_NUM = {
     IsCleanFiniteNumber = addon.IsCleanFiniteNumber,
 }
 
+-- PTR stat APIs can return secret-tagged numbers in combat. FontString's C-side
+-- formatter is allowed to consume those values with normal printf precision, while
+-- Lua's string.format is not. This hidden scratch region is never shown or measured;
+-- its secret Text aspect is cleared before and after every use. If any part of that
+-- contract is unavailable, FormatDisplayNumber keeps the integer C_StringUtil path.
+SAFE_NUM.secretFormatterFrame = CreateFrame("Frame")
+SAFE_NUM.secretFormatterFrame:Hide()
+SAFE_NUM.secretFormatter = SAFE_NUM.secretFormatterFrame:CreateFontString(
+    nil, "OVERLAY", "GameFontNormal")
+
 function SAFE_NUM.IsRenderableNumberValue(value)
     if issecretvalue(value) then return true end
     return SAFE_NUM.IsCleanFiniteNumber(value)
@@ -3397,6 +3685,27 @@ end
 -- never have to compare or branch on the possibly secret result string.
 function SAFE_NUM.FormatDisplayNumber(value, cleanFormat, secretSuffix)
     if issecretvalue(value) then
+        local formatter = SAFE_NUM.secretFormatter
+        if formatter then
+            local preClearOK = pcall(formatter.ClearText, formatter)
+            local setOK, getOK, text = false, false, nil
+            if preClearOK then
+                setOK = pcall(formatter.SetFormattedText, formatter, cleanFormat, value)
+                if setOK then
+                    getOK, text = pcall(formatter.GetText, formatter)
+                end
+            end
+            local postClearOK = pcall(formatter.ClearText, formatter)
+            if not preClearOK or not setOK or not getOK or not postClearOK then
+                -- A failed holder is never reused this session: a sticky Text secret
+                -- aspect would make its later output and dimensions untrustworthy.
+                SAFE_NUM.secretFormatter = nil
+            elseif getOK then
+                -- WARNING: text may itself be secret. Do not inspect, compare, cache,
+                -- or reformat it; callers may only concatenate and pass it to SetText.
+                return text, true
+            end
+        end
         if not _G.C_StringUtil
             or type(_G.C_StringUtil.RoundToNearestString) ~= "function" then
             return "?", true
@@ -3569,7 +3878,7 @@ end
 
 -- One dynamic boundary owns every SavedVariables read/write. Schema v10 leaves the
 -- old flat fields untouched at the root as a one-generation downgrade shadow, while
--- current code reads profile settings and the two account-wide settings only through
+-- current code reads profile settings and account-wide settings only through
 -- these accessors. Re-evaluate every attempted mutation so root/version/profile changes
 -- invalidate stale modal callbacks before they can write into a different payload.
 addon.dbRuntime = {
@@ -3599,7 +3908,11 @@ addon.dbRuntime = {
     maxProfileNumber = 99999999999999,
     maxGraphDepth = 64,
     maxGraphNodes = 20000,
-    accountSettingKeys = { forceLocale = true, updateInterval = true },
+    accountSettingKeys = {
+        forceLocale = true,
+        updateInterval = true,
+        quickSetupSeen = true,
+    },
     registryRootKeys = {
         dbVersion = true,
         account = true,
@@ -4167,8 +4480,9 @@ function addon.profileTransfer.BuildImportedSettings(targetSettings, package, se
             end
         end
     end
-    settings.forceLocale = nil
-    settings.updateInterval = nil
+    if not addon.dbRuntime.StripAccountSettings(settings) then
+        return nil, "clone-failed"
+    end
     return settings, selected
 end
 
@@ -4181,6 +4495,9 @@ function addon.profileUI.RefreshSafe()
     end
     if addon.appearancePresets and type(addon.appearancePresets.RefreshUI) == "function" then
         pcall(addon.appearancePresets.RefreshUI)
+    end
+    if addon.hudPresets and type(addon.hudPresets.RefreshUI) == "function" then
+        pcall(addon.hudPresets.RefreshUI)
     end
 end
 
@@ -4323,6 +4640,20 @@ function addon.dbRuntime.IsCleanTable(value)
         if not ok or secret then return false end
     end
     return pcall(next, value, nil)
+end
+
+function addon.dbRuntime.StripAccountSettings(settings)
+    if not addon.dbRuntime.IsCleanTable(settings) then return false end
+    for key in pairs(addon.dbRuntime.accountSettingKeys) do settings[key] = nil end
+    return true
+end
+
+function addon.dbRuntime.ContainsAccountSettings(settings)
+    if not addon.dbRuntime.IsCleanTable(settings) then return false end
+    for key in pairs(addon.dbRuntime.accountSettingKeys) do
+        if rawget(settings, key) ~= nil then return true end
+    end
+    return false
 end
 
 -- One budget spans all sibling traversals in a logical phase. Charging both table
@@ -4614,7 +4945,9 @@ function addon.dbRuntime.ValidateRegistry(root)
         or not addon.dbRuntime.IsCleanType(account.updateInterval, "number")
         or not IsFiniteNumber(account.updateInterval)
         or account.updateInterval < NUMBER_SETTING_META.updateInterval.min
-        or account.updateInterval > NUMBER_SETTING_META.updateInterval.max then
+        or account.updateInterval > NUMBER_SETTING_META.updateInterval.max
+        or (type(account.quickSetupSeen) ~= "nil"
+            and not addon.dbRuntime.IsCleanType(account.quickSetupSeen, "boolean")) then
         return false
     end
     local nextProfileID = account.nextProfileID
@@ -4635,8 +4968,7 @@ function addon.dbRuntime.ValidateRegistry(root)
             or not addon.dbRuntime.IsCleanTable(profile)
             or not addon.dbRuntime.IsCleanType(profile.name, "string") or profile.name == ""
             or not addon.dbRuntime.IsCleanTable(profile.settings)
-            or rawget(profile.settings, "forceLocale") ~= nil
-            or rawget(profile.settings, "updateInterval") ~= nil then
+            or addon.dbRuntime.ContainsAccountSettings(profile.settings) then
             return false
         end
         profileCount = profileCount + 1
@@ -4883,7 +5215,7 @@ function addon.dbRuntime.GetWritableSettings(showGuidance, key)
     return nil
 end
 
-function addon.dbRuntime.BuildRegistry(flat)
+function addon.dbRuntime.BuildRegistry(flat, quickSetupSeen)
     local budget = addon.dbRuntime.NewGraphBudget()
     if not addon.dbRuntime.ConsumeGraphBudget(budget, 0)
         or not addon.dbRuntime.IsInspectableGraphTable(flat, budget) then return nil end
@@ -4915,6 +5247,9 @@ function addon.dbRuntime.BuildRegistry(flat)
         account = {
             forceLocale = addon.NormalizeForceLocale(flat.forceLocale),
             updateInterval = NormalizeNumberSetting("updateInterval", flat.updateInterval),
+            -- Missing means "existing install" for backward compatibility. Only
+            -- a truly empty first install passes false and receives onboarding.
+            quickSetupSeen = quickSetupSeen ~= false,
             defaultProfileID = "p1",
             nextProfileID = 2,
         },
@@ -5712,9 +6047,7 @@ end
 
 function addon.profileOps.BuildDefaultSettings(budget)
     local settings, copied = addon.dbRuntime.CloneSerializable(defaults, nil, budget)
-    if not copied then return nil end
-    settings.forceLocale = nil
-    settings.updateInterval = nil
+    if not copied or not addon.dbRuntime.StripAccountSettings(settings) then return nil end
     return settings
 end
 
@@ -6164,10 +6497,6 @@ function addon.profileOps.BuildCopiedSettings(source, target, scope, cloneBudget
     if scope == "all" then
         settings, copied = addon.dbRuntime.CloneSerializable(
             source.settings, nil, cloneBudget)
-        if copied and addon.dbRuntime.IsCleanTable(settings) then
-            settings.forceLocale = nil
-            settings.updateInterval = nil
-        end
     else
         local scopeKeys = addon.profileOps.copyScopeKeys[scope]
         if not scopeKeys then return nil, "invalid-scope" end
@@ -6189,6 +6518,9 @@ function addon.profileOps.BuildCopiedSettings(source, target, scope, cloneBudget
         end
     end
     if not copied or not addon.dbRuntime.IsCleanTable(settings) then
+        return nil, "clone-failed"
+    end
+    if not addon.dbRuntime.StripAccountSettings(settings) then
         return nil, "clone-failed"
     end
     return settings
@@ -6434,11 +6766,11 @@ function addon.profileOps.ImportAndAssign(importedSettings, expected)
             return nil, "clone-failed"
         end
 
-        -- Account locale/update cadence belong to StatsPro as a whole, not to the
-        -- imported character/spec profile. Candidate extraction can carry them only
-        -- in its detached account record; never leak them into profile settings.
-        settings.forceLocale = nil
-        settings.updateInterval = nil
+        -- Account settings belong to StatsPro as a whole, not to the imported
+        -- character/spec profile. Never leak them into profile settings.
+        if not addon.dbRuntime.StripAccountSettings(settings) then
+            return nil, "clone-failed"
+        end
         local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
         local transaction, profileID, profile =
             addon.profileOps.BuildAssignedProfileTransaction(
@@ -6580,7 +6912,7 @@ local function CacheSettings()
     -- fallbacks throughout the render pipeline.
     local db = addon.dbRuntime.GetActiveSettings()
     local userColors = type(db.colors) == "table" and db.colors or {}
-    userColors = addon.appearancePresets.ResolveValue("colors", userColors)
+    userColors = addon.presetRuntime.ResolveValue("colors", userColors)
     for name, defaultColor in pairs(defaults.colors) do
         local r, g, b = NormalizeColor(userColors[name], defaultColor)
         cached.colorStrings[name] = RGBToHex(r, g, b)
@@ -6589,6 +6921,7 @@ end
 
 local function MigrateDB(dbOverride)
     local destination = dbOverride or EnsureStatsProDBTable()
+    local freshInstall = next(destination) == nil
     local dbVersion = NormalizeDBVersion(destination.dbVersion)
     if dbVersion > CURRENT_DB_VERSION then return false end
     if dbVersion == CURRENT_DB_VERSION then
@@ -6748,7 +7081,7 @@ local function MigrateDB(dbOverride)
     -- BuildRegistry deep-copies known profile fields again, preventing aliases with
     -- both the live downgrade shadow and the migration work table.
     db.dbVersion = 9
-    local registry = addon.dbRuntime.BuildRegistry(db)
+    local registry = addon.dbRuntime.BuildRegistry(db, not freshInstall)
     if not registry then
         if rawequal(destination, EnsureStatsProDBTable()) then
             addon.dbRuntime.migrationFailedRoot = destination
@@ -8407,9 +8740,9 @@ local function JoinValuesCol(values)
 end
 
 -- Format clean values in Lua. Restricted combat values bypass every Lua numeric or
--- string formatter and use Blizzard's secret-safe C formatter before flowing only
--- through concatenation and FontString:SetText. The C formatter intentionally rounds
--- to the nearest integer, matching Blizzard's paper-doll Haste presentation.
+-- string formatter and use Blizzard's secret-safe FontString C formatter before
+-- flowing only through concatenation and FontString:SetText. If that formatter is not
+-- available, the C_StringUtil fallback intentionally rounds to the nearest integer.
 -- Other unavailable/invalid values stay nil so callers can preserve intentional
 -- unsupported-API and pre-login row suppression.
 function SAFE_NUM.FormatColorNumber(colorHex, value, format, secretSuffix)
@@ -9138,6 +9471,13 @@ addon.profileRuntime.CompleteBootstrap = function()
     addon.itemLevelRuntime.MarkDirty()
     addon:RunUpdateStatsSafe()
     addon.profileUI.RefreshSafe()
+    local account = addon.dbRuntime.GetAccount()
+    if account and rawget(account, "quickSetupSeen") == false
+        and (addon.__statsproSmoke ~= true or addon.__testWelcomeEnabled == true) then
+        C_Timer.After(0.5, function()
+            if isLoaded then addon.hudPresets.MaybeShowWelcome() end
+        end)
+    end
     return true
 end
 
@@ -9251,7 +9591,7 @@ local EVENT_HANDLERS = {
     end,
     PLAYER_REGEN_DISABLED       = function()
         addon.profileRuntime.CancelOwnedMutationPopups()
-        addon.appearancePresets.ForceCancelPreview()
+        addon.presetRuntime.ForceCancelAllPreviews()
         addon.panelEditRuntime.Refresh(true)
         addon.profileUI.RefreshSafe()
     end,
@@ -9433,7 +9773,7 @@ local CONFIG_DROPDOWN_Y_OFFSET = 2
 local function GetColor(statName)
     local db = addon.dbRuntime.GetActiveSettings()
     local colors = type(db.colors) == "table" and db.colors or {}
-    colors = addon.appearancePresets.ResolveValue("colors", colors)
+    colors = addon.presetRuntime.ResolveValue("colors", colors)
     local r, g, b = NormalizeColor(colors[statName], defaults.colors[statName])
     return { r = r, g = g, b = b }
 end
@@ -9471,6 +9811,11 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
             addon.settingsDesign.RefreshControl(self)
             return
         end
+        if not addon.hudPresets.BeforeManualEdit(dbKey) then
+            self:SetChecked(GetBoolDB(dbKey))
+            addon.settingsDesign.RefreshControl(self)
+            return
+        end
         local db = addon.dbRuntime.GetWritableSettings(true, dbKey)
         if not db then
             self:SetChecked(GetBoolDB(dbKey))
@@ -9486,6 +9831,9 @@ local function CreateCheckbox(parent, name, label, dbKey, x, y, onChange, textWi
         CacheSettings()
         if onChange then onChange(requestedChecked) end
         addon:RunUpdateStatsSafe()
+        if addon.hudPresets.allowlist[dbKey] then
+            addon.hudPresets.RefreshUI()
+        end
         -- Keep the custom row state in sync in the click handler itself.  The
         -- native check texture updates immediately; the surrounding hover/row
         -- styling must not wait for OnLeave or rely on hook ordering.
@@ -10381,10 +10729,30 @@ function addon.settingsDesign.SetControlBlocked(control, source, blocked, mode, 
 end
 
 function addon.settingsDesign.RegisterMutationControl(control)
+    if not control or control.statsProMutationRegistered == true then return false end
     control.statsProMutatesSettings = true
+    control.statsProMutationRegistered = true
     addon.settingsDesign.mutationControls = addon.settingsDesign.mutationControls or {}
     tinsert(addon.settingsDesign.mutationControls, control)
-    addon.settingsDesign.AttachTooltip(control, addon.settingsDesign.ControlTextTooltip)
+    if control.statsProMutationTooltipAttached ~= true then
+        addon.settingsDesign.AttachTooltip(control, addon.settingsDesign.ControlTextTooltip)
+        control.statsProMutationTooltipAttached = true
+    end
+    return true
+end
+
+function addon.settingsDesign.UnregisterMutationControl(control)
+    if not control or control.statsProMutationRegistered ~= true then return false end
+    local controls = addon.settingsDesign.mutationControls or {}
+    for index = #controls, 1, -1 do
+        if rawequal(controls[index], control) then
+            tremove(controls, index)
+            control.statsProMutationRegistered = false
+            return true
+        end
+    end
+    control.statsProMutationRegistered = false
+    return false
 end
 
 function addon.settingsDesign.RefreshMutationControls()
@@ -11138,14 +11506,14 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
     return slider
 end
 
-function addon.appearancePresets.ValuesEqual(left, right, seen)
+function addon.presetRuntime.ValuesEqual(left, right, seen)
     if type(left) ~= type(right) then return false end
     if type(left) ~= "table" then return left == right end
     seen = seen or {}
     if seen[left] == right then return true end
     seen[left] = right
     for key, value in pairs(left) do
-        if not addon.appearancePresets.ValuesEqual(value, right[key], seen) then
+        if not addon.presetRuntime.ValuesEqual(value, right[key], seen) then
             return false
         end
     end
@@ -11155,31 +11523,40 @@ function addon.appearancePresets.ValuesEqual(left, right, seen)
     return true
 end
 
-function addon.appearancePresets.Clone(value)
+function addon.presetRuntime.Clone(value)
     local copied, ok = addon.dbRuntime.CloneSerializable(value)
     if not ok then return nil end
     return copied
 end
 
-function addon.appearancePresets.CapturePayload(settings)
+function addon.presetRuntime.CapturePayload(service, settings)
     local payload = {}
-    for key in pairs(addon.appearancePresets.allowlist) do
+    for key in pairs(service.allowlist) do
         local value
         if settings then value = rawget(settings, key) end
         if value == nil then value = defaults[key] end
-        payload[key] = addon.appearancePresets.Clone(value)
+        payload[key] = addon.presetRuntime.Clone(value)
         if payload[key] == nil and value ~= nil then return nil end
     end
     return payload
 end
 
-function addon.appearancePresets.ResolveValue(key, persisted)
-    local session = addon.appearancePresets.session
-    if session and addon.appearancePresets.allowlist[key]
-        and session.candidate and session.candidate[key] ~= nil then
-        return session.candidate[key]
+function addon.presetRuntime.ResolveValue(key, persisted)
+    for _, service in ipairs(addon.presetRuntime.services) do
+        local session = service.session
+        if session and service.allowlist[key]
+            and session.candidate and session.candidate[key] ~= nil then
+            return session.candidate[key]
+        end
     end
     return persisted
+end
+
+addon.appearancePresets.markerKey = "appearancePresetID"
+function addon.appearancePresets.BuildCandidate(definition)
+    local candidate = addon.presetRuntime.Clone(definition)
+    if candidate then candidate.label = nil end
+    return candidate
 end
 
 function addon.appearancePresets.CurrentID(settings)
@@ -11187,10 +11564,9 @@ function addon.appearancePresets.CurrentID(settings)
     local marker = settings and rawget(settings, "appearancePresetID") or nil
     local definition = addon.appearancePresets.definitions[marker]
     if not definition then return "custom" end
-    local payload = addon.appearancePresets.CapturePayload(settings)
-    local expected = addon.appearancePresets.Clone(definition)
-    if expected then expected.label = nil end
-    if payload and expected and addon.appearancePresets.ValuesEqual(payload, expected) then
+    local payload = addon.presetRuntime.CapturePayload(addon.appearancePresets, settings)
+    local expected = addon.appearancePresets.BuildCandidate(definition)
+    if payload and expected and addon.presetRuntime.ValuesEqual(payload, expected) then
         return marker
     end
     return "custom"
@@ -11227,21 +11603,22 @@ function addon.appearancePresets.ApplyRuntime()
     return addon:RunUpdateStatsSafe()
 end
 
-function addon.appearancePresets.RestoreCommittedRuntime()
-    local session = addon.appearancePresets.session
-    addon.appearancePresets.session = nil
-    if addon.appearancePresets.ApplyRuntime() then return true end
-    addon.appearancePresets.session = session
-    addon.appearancePresets.ApplyRuntime()
+function addon.presetRuntime.RestoreCommittedRuntime(service)
+    local session = service.session
+    service.session = nil
+    if service.ApplyRuntime() then return true end
+    service.session = session
+    service.ApplyRuntime()
     return false
 end
 
-function addon.appearancePresets.SessionIsCurrent(session, ignoreGeneration)
+function addon.presetRuntime.SessionIsCurrent(service, session, ignoreGeneration)
     if not session then return false end
     local root = addon.dbRuntime.Refresh()
     if ignoreGeneration then
         local expected = session.expected
-        if not rawequal(root, expected.rootRef)
+        if addon.dbRuntime.activeProfileID ~= session.profileID
+            or not rawequal(root, expected.rootRef)
             or not rawequal(root.profiles, expected.profilesRef)
             or not rawequal(root.roleTemplates, expected.roleTemplatesRef)
             or not rawequal(root.profiles[session.profileID], expected.profileRef) then
@@ -11253,18 +11630,211 @@ function addon.appearancePresets.SessionIsCurrent(session, ignoreGeneration)
     local profile = root.profiles and root.profiles[session.profileID]
     if not profile or not addon.dbRuntime.IsCleanTable(profile.settings)
         or not rawequal(profile.settings, session.settingsRef) then return false end
-    local payload = addon.appearancePresets.CapturePayload(profile.settings)
-    return payload ~= nil
-        and rawget(profile.settings, "appearancePresetID") == session.baselineMarker
-        and addon.appearancePresets.ValuesEqual(payload, session.baseline)
+    local payload = addon.presetRuntime.CapturePayload(service, profile.settings)
+    if not payload or not addon.presetRuntime.ValuesEqual(payload, session.baseline) then
+        return false
+    end
+    return not service.markerKey
+        or rawget(profile.settings, service.markerKey) == session.baselineMarker
+end
+
+function addon.presetRuntime.RefreshExpected(session)
+    if not session or addon.dbRuntime.activeProfileID ~= session.profileID then
+        return false
+    end
+    local root = addon.dbRuntime.Refresh()
+    local profile = root.profiles and root.profiles[session.profileID]
+    if not profile or not addon.dbRuntime.IsCleanTable(profile.settings)
+        or not rawequal(profile.settings, session.settingsRef) then
+        return false
+    end
+    session.expected = addon.profileUI.CaptureExpected(nil, nil, session.profileID)
+    session.expected.settingsRef = profile.settings
+    return true
+end
+
+function addon.presetRuntime.CancelPreview(service, silent)
+    if not service.session then return false end
+    if not addon.presetRuntime.RestoreCommittedRuntime(service) then
+        service.RefreshUI()
+        return false, "restore-failed"
+    end
+    if silent then service.RefreshUI() else addon.profileUI.RefreshSafe() end
+    return true
+end
+
+function addon.presetRuntime.CancelOther(service)
+    for _, other in ipairs(addon.presetRuntime.services) do
+        if not rawequal(other, service) and other.session then
+            local restored, reason = other.CancelPreview(true)
+            if not restored then return false, reason end
+        end
+    end
+    return true
+end
+
+function addon.presetRuntime.CancelAllPreviews(silent)
+    for _, service in ipairs(addon.presetRuntime.services) do
+        if service.session then
+            local restored, reason = service.CancelPreview(silent)
+            if not restored then return false, reason end
+        end
+    end
+    return true
+end
+
+function addon.presetRuntime.StartPreview(service, presetID)
+    local definition = service.definitions[presetID]
+    if not definition then return false, "invalid-preset" end
+    local restored, restoreReason = addon.presetRuntime.CancelOther(service)
+    if not restored then return false, restoreReason end
+    if service.session and service.session.presetID == presetID then
+        return false, "no-change"
+    end
+    local currentID = service.CurrentID()
+    if service.session and currentID == presetID then
+        local cancelled, reason = service.CancelPreview()
+        return cancelled, cancelled and "cancelled" or reason
+    end
+    if not service.session and currentID == presetID then return false, "no-change" end
+    if not addon.profileRuntime.CloseOwnedSettingsModals() then
+        return false, "close-failed"
+    end
+    local root, reason = addon.profileOps.Gate(nil, false)
+    if not root then return false, reason end
+    local profileID = addon.dbRuntime.activeProfileID
+    local profile = root.profiles and root.profiles[profileID]
+    if not profile or not addon.dbRuntime.IsCleanTable(profile.settings) then
+        return false, "missing-profile"
+    end
+    local candidate = service.BuildCandidate(definition)
+    local baseline = addon.presetRuntime.CapturePayload(service, profile.settings)
+    if not candidate or not baseline then return false, "clone-failed" end
+    service.session = {
+        presetID = presetID,
+        candidate = candidate,
+        baseline = baseline,
+        expected = addon.profileUI.CaptureExpected(nil, nil, profileID),
+        profileID = profileID,
+        settingsRef = profile.settings,
+        baselineMarker = service.markerKey
+            and rawget(profile.settings, service.markerKey) or nil,
+    }
+    service.session.expected.settingsRef = profile.settings
+    if not service.ApplyRuntime() then
+        local runtimeRestored = addon.presetRuntime.RestoreCommittedRuntime(service)
+        service.RefreshUI()
+        return false, runtimeRestored and "preview-failed" or "restore-failed"
+    end
+    addon.profileUI.RefreshSafe()
+    return true
+end
+
+function addon.presetRuntime.ApplyPreview(service)
+    local session = service.session
+    if not session then return false, "no-preview" end
+    if not addon.presetRuntime.SessionIsCurrent(service, session) then
+        local cancelled, reason = service.CancelPreview(true)
+        return false, cancelled and "stale" or reason
+    end
+    local presetID, profileID = session.presetID, session.profileID
+    local candidate = addon.presetRuntime.Clone(session.candidate)
+    local expected = session.expected
+    if not candidate then return false, "clone-failed" end
+    if not addon.presetRuntime.RestoreCommittedRuntime(service) then
+        service.RefreshUI()
+        return false, "restore-failed"
+    end
+    local ok, result = addon.profileOps.Execute(expected, function(root)
+        local profile = root.profiles[profileID]
+        if not profile or not addon.dbRuntime.IsCleanTable(profile.settings) then
+            return nil, "missing-profile"
+        end
+        local settings = addon.presetRuntime.Clone(profile.settings)
+        if not settings then return nil, "clone-failed" end
+        for key in pairs(service.allowlist) do
+            settings[key] = addon.presetRuntime.Clone(candidate[key])
+            if settings[key] == nil and candidate[key] ~= nil then
+                return nil, "clone-failed"
+            end
+        end
+        if service.markerKey then settings[service.markerKey] = presetID end
+        local changedProfile = addon.profileRuntime.ShallowCopy(profile)
+        changedProfile.settings = settings
+        local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
+        profiles[profileID] = changedProfile
+        local transaction = addon.profileOps.NewTransaction(root)
+        transaction.profiles = profiles
+        return transaction, profileID
+    end)
+    local retryable = result == "validate-failed" or result == "commit-failed"
+        or result == "apply-failed"
+    if not ok and retryable
+        and addon.presetRuntime.SessionIsCurrent(service, session, true) then
+        if addon.presetRuntime.RefreshExpected(session) then
+            service.session = session
+        else
+            result = "stale"
+        end
+        if service.session and not service.ApplyRuntime() then
+            service.ForceCancelPreview()
+            result = "preview-resume-failed"
+        end
+    end
+    service.RefreshUI()
+    return ok, result
+end
+
+function addon.presetRuntime.BeforeManualEdit(service, key)
+    if service.allowlist[key] and service.session then
+        return service.CancelPreview(true) == true
+    end
+    return true
+end
+
+function addon.presetRuntime.ForceCancelPreview(service)
+    if not service.session then return true end
+    service.session = nil
+    if service.ApplyRuntime() then
+        service.RefreshUI()
+        return true
+    end
+    -- A close/combat transition cannot leave a hidden retry UI with candidate
+    -- overrides active. Retry committed runtime once, then hand recovery to the
+    -- existing profile reapply coordinator if the client boundary is still unsafe.
+    if service.ApplyRuntime() then
+        service.RefreshUI()
+        return true
+    end
+    addon.profileRuntime.forceReapply = true
+    addon.profileRuntime.forceReapplyRetryCount = 0
+    addon.profileRuntime.pendingResolution = true
+    addon.profileRuntime.RequestResolution(false)
+    service.RefreshUI()
+    return false
+end
+
+function addon.presetRuntime.ForceCancelAllPreviews()
+    local restored = true
+    for _, service in ipairs(addon.presetRuntime.services) do
+        if not addon.presetRuntime.ForceCancelPreview(service) then restored = false end
+    end
+    return restored
+end
+
+function addon.presetRuntime.ReportStartResult(ok, reason)
+    if not ok and reason ~= "no-change" and reason ~= "cancelled" then
+        PrintMsg(addon.profileUI.OperationErrorText(reason))
+    end
+    return ok, reason
 end
 
 function addon.appearancePresets.RefreshUI()
     local ui = addon.appearancePresets.ui
     if not ui then return end
     local session = addon.appearancePresets.session
-    local currentID = addon.appearancePresets.CurrentID()
-    local displayID = session and session.presetID or currentID
+    local displayID = session and session.presetID
+        or addon.appearancePresets.CurrentID()
     local definition = addon.appearancePresets.definitions[displayID]
     local displayLabel = definition and L(definition.label) or L("Custom")
     if session then
@@ -11304,146 +11874,370 @@ function addon.appearancePresets.RefreshUI()
 end
 
 function addon.appearancePresets.CancelPreview(silent)
-    if not addon.appearancePresets.session then return false end
-    if not addon.appearancePresets.RestoreCommittedRuntime() then
-        addon.appearancePresets.RefreshUI()
-        return false, "restore-failed"
-    end
-    if silent then
-        addon.appearancePresets.RefreshUI()
-    else
-        addon.profileUI.RefreshSafe()
-    end
-    return true
+    return addon.presetRuntime.CancelPreview(addon.appearancePresets, silent)
 end
 
 function addon.appearancePresets.StartPreview(presetID)
-    local definition = addon.appearancePresets.definitions[presetID]
-    if not definition then return false, "invalid-preset" end
-    if addon.appearancePresets.session
-        and addon.appearancePresets.session.presetID == presetID then
-        return false, "no-change"
-    end
-    local currentID = addon.appearancePresets.CurrentID()
-    if addon.appearancePresets.session and currentID == presetID then
-        local cancelled, reason = addon.appearancePresets.CancelPreview()
-        return cancelled, cancelled and "cancelled" or reason
-    end
-    if not addon.appearancePresets.session and currentID == presetID then
-        return false, "no-change"
-    end
-    if not addon.profileRuntime.CloseOwnedSettingsModals() then
-        return false, "close-failed"
-    end
-    local root, reason = addon.profileOps.Gate(nil, false)
-    if not root then return false, reason end
-    local profileID = addon.dbRuntime.activeProfileID
-    local profile = root.profiles and root.profiles[profileID]
-    if not profile or not addon.dbRuntime.IsCleanTable(profile.settings) then
-        return false, "missing-profile"
-    end
-    local candidate = addon.appearancePresets.Clone(definition)
-    local baseline = addon.appearancePresets.CapturePayload(profile.settings)
-    if not candidate or not baseline then return false, "clone-failed" end
-    candidate.label = nil
-    addon.appearancePresets.session = {
-        presetID = presetID,
-        candidate = candidate,
-        baseline = baseline,
-        expected = addon.profileUI.CaptureExpected(nil, nil, profileID),
-        profileID = profileID,
-        settingsRef = profile.settings,
-        baselineMarker = rawget(profile.settings, "appearancePresetID"),
-    }
-    addon.appearancePresets.session.expected.settingsRef = profile.settings
-    if not addon.appearancePresets.ApplyRuntime() then
-        local restored = addon.appearancePresets.RestoreCommittedRuntime()
-        addon.appearancePresets.RefreshUI()
-        return false, restored and "preview-failed" or "restore-failed"
-    end
-    addon.profileUI.RefreshSafe()
-    return true
+    return addon.presetRuntime.StartPreview(addon.appearancePresets, presetID)
 end
 
 function addon.appearancePresets.ApplyPreview()
-    local session = addon.appearancePresets.session
-    if not session then return false, "no-preview" end
-    if not addon.appearancePresets.SessionIsCurrent(session) then
-        local cancelled, reason = addon.appearancePresets.CancelPreview(true)
-        return false, cancelled and "stale" or reason
-    end
-    local presetID, profileID = session.presetID, session.profileID
-    local candidate = addon.appearancePresets.Clone(session.candidate)
-    local expected = session.expected
-    if not candidate then return false, "clone-failed" end
-    if not addon.appearancePresets.RestoreCommittedRuntime() then
-        addon.appearancePresets.RefreshUI()
-        return false, "restore-failed"
-    end
-    local ok, result = addon.profileOps.Execute(expected, function(root)
-        local profile = root.profiles[profileID]
-        if not profile or not addon.dbRuntime.IsCleanTable(profile.settings) then
-            return nil, "missing-profile"
-        end
-        local settings = addon.appearancePresets.Clone(profile.settings)
-        if not settings then return nil, "clone-failed" end
-        for key in pairs(addon.appearancePresets.allowlist) do
-            settings[key] = addon.appearancePresets.Clone(candidate[key])
-            if settings[key] == nil and candidate[key] ~= nil then
-                return nil, "clone-failed"
-            end
-        end
-        settings.appearancePresetID = presetID
-        local changedProfile = addon.profileRuntime.ShallowCopy(profile)
-        changedProfile.settings = settings
-        local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
-        profiles[profileID] = changedProfile
-        local transaction = addon.profileOps.NewTransaction(root)
-        transaction.profiles = profiles
-        return transaction, profileID
-    end)
-    local retryable = result == "validate-failed" or result == "commit-failed"
-        or result == "apply-failed"
-    if not ok and retryable
-        and addon.appearancePresets.SessionIsCurrent(session, true) then
-        addon.appearancePresets.session = session
-        if not addon.appearancePresets.ApplyRuntime() then
-            addon.appearancePresets.ForceCancelPreview()
-            result = "preview-resume-failed"
-        end
-    end
-    addon.appearancePresets.RefreshUI()
-    return ok, result
+    return addon.presetRuntime.ApplyPreview(addon.appearancePresets)
 end
 
 function addon.appearancePresets.BeforeManualEdit(key)
-    if addon.appearancePresets.allowlist[key]
-        and addon.appearancePresets.session then
-        return addon.appearancePresets.CancelPreview(true) == true
-    end
-    return true
+    return addon.presetRuntime.BeforeManualEdit(addon.appearancePresets, key)
 end
 
 function addon.appearancePresets.ForceCancelPreview()
-    if not addon.appearancePresets.session then return true end
-    addon.appearancePresets.session = nil
-    if addon.appearancePresets.ApplyRuntime() then
-        addon.appearancePresets.RefreshUI()
-        return true
+    return addon.presetRuntime.ForceCancelPreview(addon.appearancePresets)
+end
+
+function addon.hudPresets.BuildCandidate(definition)
+    return addon.presetRuntime.Clone(definition.values)
+end
+
+function addon.hudPresets.CurrentID(settings)
+    settings = settings or addon.dbRuntime.GetActiveSettings()
+    local payload = addon.presetRuntime.CapturePayload(addon.hudPresets, settings)
+    if not payload then return "custom" end
+    for _, presetID in ipairs(addon.hudPresets.order) do
+        local definition = addon.hudPresets.definitions[presetID]
+        if definition and addon.presetRuntime.ValuesEqual(
+            payload, definition.values) then
+            return presetID
+        end
     end
-    -- A close/combat transition cannot leave a hidden retry UI with candidate
-    -- overrides active. Retry committed runtime once, then hand recovery to the
-    -- existing profile reapply coordinator if the client boundary is still unsafe.
-    if addon.appearancePresets.ApplyRuntime() then
-        addon.appearancePresets.RefreshUI()
-        return true
+    return "custom"
+end
+
+function addon.hudPresets.ApplyRuntime()
+    if (addon.hudPresets.testRuntimeFailureCount or 0) > 0 then
+        addon.hudPresets.testRuntimeFailureCount =
+            addon.hudPresets.testRuntimeFailureCount - 1
+        return false
     end
-    addon.profileRuntime.forceReapply = true
-    addon.profileRuntime.forceReapplyRetryCount = 0
-    addon.profileRuntime.pendingResolution = true
-    addon.profileRuntime.RequestResolution(false)
-    addon.appearancePresets.RefreshUI()
+    CacheSettings()
+    ReflowAllPanels()
+    addon.durabilityRuntime.MarkDirty()
+    addon.itemLevelRuntime.MarkDirty()
+    if addon.panelEditRuntime.Refresh then addon.panelEditRuntime.Refresh() end
+    if type(addon.profileRuntime.RefreshConfigControls) == "function" then
+        addon.profileRuntime.RefreshConfigControls()
+    end
+    return addon:RunUpdateStatsSafe()
+end
+
+function addon.hudPresets.RefreshUI()
+    if #addon.hudPresets.views == 0 then return end
+    local session = addon.hudPresets.session
+    local displayID = session and session.presetID or addon.hudPresets.CurrentID()
+    local definition = addon.hudPresets.definitions[displayID]
+    local displayLabel = definition and L(definition.label) or L("Custom")
+    local warningVisible = false
+    local sharedCounts
+    if session then
+        local root = addon.dbRuntime.Refresh()
+        sharedCounts = addon.profileOps.CountReferences(root,
+            addon.dbRuntime.activeProfileID)
+        if sharedCounts.total > 1 then
+            warningVisible = true
+        end
+    end
+    for _, ui in ipairs(addon.hudPresets.views) do
+        if session then
+            ui.status:SetText(string.format(L("Previewing: %s"), displayLabel))
+        else
+            ui.status:SetText(string.format(L("Current setup: %s"), displayLabel))
+        end
+        for presetID, button in pairs(ui.buttons) do
+            addon.settingsDesign.SetListRowSelected(button, presetID == displayID)
+        end
+        if session and warningVisible then
+            ui.warning:SetText(string.format(L(
+                "This profile is shared by %d specs and %d other references. Applying changes all of them."),
+                sharedCounts.specs, sharedCounts.total - sharedCounts.specs))
+            addon.settingsDesign.SetWarningVisible(ui.warning, true)
+        else
+            ui.warning:SetText("")
+            addon.settingsDesign.SetWarningVisible(ui.warning, false)
+        end
+        if ui.alwaysShowActions or session then
+            ui.apply:Show()
+            ui.cancel:Show()
+        else
+            ui.apply:Hide()
+            ui.cancel:Hide()
+        end
+        if ui.refreshLayout then
+            ui.refreshLayout(session ~= nil, warningVisible)
+        end
+    end
+end
+
+function addon.hudPresets.RegisterView(ui)
+    if type(ui) ~= "table" or ui.statsProRegistered == true then return false end
+    ui.statsProRegistered = true
+    addon.hudPresets.views[#addon.hudPresets.views + 1] = ui
+    addon.hudPresets.RefreshUI()
+    return true
+end
+
+function addon.hudPresets.UnregisterView(ui)
+    if type(ui) ~= "table" or ui.statsProRegistered ~= true then return false end
+    for index = #addon.hudPresets.views, 1, -1 do
+        if rawequal(addon.hudPresets.views[index], ui) then
+            tremove(addon.hudPresets.views, index)
+            ui.statsProRegistered = false
+            return true
+        end
+    end
+    ui.statsProRegistered = false
     return false
+end
+
+function addon.hudPresets.CancelPreview(silent)
+    return addon.presetRuntime.CancelPreview(addon.hudPresets, silent)
+end
+
+function addon.hudPresets.StartPreview(presetID)
+    return addon.presetRuntime.StartPreview(addon.hudPresets, presetID)
+end
+
+function addon.hudPresets.ApplyPreview()
+    return addon.presetRuntime.ApplyPreview(addon.hudPresets)
+end
+
+function addon.hudPresets.BeforeManualEdit(key)
+    return addon.presetRuntime.BeforeManualEdit(addon.hudPresets, key)
+end
+
+function addon.hudPresets.ForceCancelPreview()
+    return addon.presetRuntime.ForceCancelPreview(addon.hudPresets)
+end
+
+function addon.hudPresets.BuildCardList(parent, x, y, width)
+    local ui = { buttons = {}, mutationControls = {} }
+    local status = parent:CreateFontString(nil, "OVERLAY")
+    addon.settingsDesign.ApplyTextRole(status, "body")
+    status:SetPoint("TOPLEFT", x, y)
+    status:SetSize(width, 20)
+    status:SetJustifyH("LEFT")
+    ui.status = status
+    y = y - 24
+
+    local intro = parent:CreateFontString(nil, "OVERLAY")
+    addon.settingsDesign.ApplyTextRole(intro, "metadata")
+    intro:SetPoint("TOPLEFT", x, y)
+    intro:SetSize(width, 28)
+    intro:SetJustifyH("LEFT")
+    intro:SetJustifyV("TOP")
+    intro:SetWordWrap(true)
+    PushLocalizedLabel(function()
+        intro:SetText(L("Choose a finished HUD layout. Click a card to preview it."))
+    end)
+    ui.intro = intro
+    y = y - 34
+
+    for _, presetID in ipairs(addon.hudPresets.order) do
+        local definition = addon.hudPresets.definitions[presetID]
+        local button = CreateFrame("Button", "StatsProHUDPreset"
+            .. presetID:gsub("[^%w]", "") .. (parent:GetName() or "View"),
+            parent)
+        button:SetPoint("TOPLEFT", x, y)
+        button:SetSize(width, 50)
+        local baseSurface = addon.settingsDesign.CreateTextureSurface(button, "raised")
+        baseSurface:SetAllPoints(button)
+        button.statsProSurface = baseSurface
+        local selectionRail = button:CreateTexture(nil, "ARTWORK")
+        selectionRail:SetPoint("TOPLEFT", 0, -4)
+        selectionRail:SetPoint("BOTTOMLEFT", 0, 4)
+        selectionRail:SetWidth(2)
+        local selectionColor = addon.settingsDesign.Color("accent")
+        selectionRail:SetColorTexture(
+            selectionColor[1], selectionColor[2], selectionColor[3], selectionColor[4])
+        selectionRail:Hide()
+        button.statsProSelectionRail = selectionRail
+
+        local label = button:CreateFontString(nil, "OVERLAY")
+        addon.settingsDesign.ApplyTextRole(label, "button")
+        label:SetPoint("TOPLEFT", 12, -8)
+        label:SetSize(width - 24, 16)
+        label:SetJustifyH("LEFT")
+        label:SetWordWrap(false)
+        label:SetMaxLines(1)
+        PushLocalizedLabel(function() label:SetText(L(definition.label)) end)
+
+        local summary = button:CreateFontString(nil, "OVERLAY")
+        addon.settingsDesign.ApplyTextRole(summary, "metadata")
+        summary:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -3)
+        summary:SetSize(width - 24, 14)
+        summary:SetJustifyH("LEFT")
+        summary:SetWordWrap(false)
+        summary:SetMaxLines(1)
+        PushLocalizedLabel(function() summary:SetText(L(definition.summary)) end)
+
+        button.statsProPresetSummary = summary
+        addon.settingsDesign.StyleListRow(button, label, "button")
+        addon.settingsDesign.RegisterMutationControl(button)
+        ui.mutationControls[#ui.mutationControls + 1] = button
+        button:SetScript("OnClick", function()
+            local ok, reason = addon.hudPresets.StartPreview(presetID)
+            addon.presetRuntime.ReportStartResult(ok, reason)
+        end)
+        ui.buttons[presetID] = button
+        y = y - 56
+    end
+
+    local note = parent:CreateFontString(nil, "OVERLAY")
+    addon.settingsDesign.ApplyTextRole(note, "metadata")
+    note:SetPoint("TOPLEFT", x, y)
+    note:SetSize(width, 40)
+    note:SetJustifyH("LEFT")
+    note:SetJustifyV("TOP")
+    note:SetWordWrap(true)
+    PushLocalizedLabel(function()
+        note:SetText(L("Stat rows, value display, durability summary, and panel layout can change. Appearance, scale, positions, language, and profile assignments stay unchanged."))
+    end)
+    ui.note = note
+    y = y - 46
+
+    local warning = parent:CreateFontString(nil, "OVERLAY")
+    warning:SetPoint("TOPLEFT", x, y)
+    warning:SetSize(width, 36)
+    warning:SetJustifyH("LEFT")
+    warning:SetJustifyV("TOP")
+    warning:SetWordWrap(true)
+    addon.settingsDesign.StyleWarning(parent, warning)
+    addon.settingsDesign.SetWarningVisible(warning, false)
+    ui.warning = warning
+    ui.warningY = y
+    ui.compactBodyTop = y
+    return ui
+end
+
+function addon.hudPresets.MarkWelcomeSeen()
+    local root = addon.dbRuntime.GetWritableRoot(false)
+    local account = root and rawget(root, "account") or nil
+    if not addon.dbRuntime.IsCleanTable(account) then return false end
+    account.quickSetupSeen = true
+    return true
+end
+
+function addon.hudPresets.BuildWelcome()
+    if addon.hudPresets.welcome then return addon.hudPresets.welcome end
+    local frame = CreateFrame("Frame", "StatsProQuickSetupWelcome", UIParent,
+        "BackdropTemplate")
+    frame:SetSize(470, 438)
+    frame:SetPoint("CENTER")
+    frame:SetClampedToScreen(true)
+    frame:SetFrameStrata("DIALOG")
+    frame:EnableMouse(true)
+    frame:SetMovable(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    addon.settingsDesign.ApplySurface(frame, "window")
+    frame:Hide()
+
+    local titleSurface = addon.settingsDesign.CreateTextureSurface(frame, "raised")
+    titleSurface:SetPoint("TOPLEFT", 6, -6)
+    titleSurface:SetPoint("TOPRIGHT", -6, -6)
+    titleSurface:SetHeight(42)
+
+    local title = frame:CreateFontString(nil, "OVERLAY")
+    addon.settingsDesign.ApplyTextRole(title, "title")
+    title:SetPoint("LEFT", titleSurface, "LEFT", 14, 0)
+    title:SetText("StatsPro")
+    addon.settingsDesign.SetRegionColor(title, "accent")
+
+    local metadata = frame:CreateFontString(nil, "OVERLAY")
+    addon.settingsDesign.ApplyTextRole(metadata, "metadata")
+    metadata:SetPoint("LEFT", title, "RIGHT", 8, 0)
+    PushLocalizedLabel(function() metadata:SetText(L("Quick Setup")) end)
+
+    local closeX = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    closeX:SetPoint("TOPRIGHT", -5, -5)
+    addon.settingsDesign.StyleCloseButton(closeX)
+
+    local ui = addon.hudPresets.BuildCardList(frame, 22, -62, 426)
+    ui.alwaysShowActions = true
+    PushLocalizedLabel(function()
+        ui.note:SetText(L("This sets up the current profile. Appearance, scale, positions, language, and profile assignments stay unchanged."))
+    end)
+    local cancel = addon.settingsDesign.CreateShellButton(frame, nil, "field")
+    cancel:SetSize(188, 28)
+    PushLocalizedLabel(function() cancel:SetText(L("Open Settings")) end)
+    cancel:SetScript("OnClick", function() addon:OpenConfigMenu() end)
+    ui.cancel = cancel
+
+    local apply = addon.settingsDesign.CreateShellButton(frame, nil, "primary")
+    apply:SetSize(188, 28)
+    PushLocalizedLabel(function() apply:SetText(L("Use this setup")) end)
+    addon.settingsDesign.RegisterMutationControl(apply)
+    ui.mutationControls[#ui.mutationControls + 1] = apply
+    apply:SetScript("OnClick", function()
+        if addon.hudPresets.session then
+            local ok, reason = addon.hudPresets.ApplyPreview()
+            if not ok then
+                PrintMsg(addon.profileUI.OperationErrorText(reason))
+                return
+            end
+        end
+        if addon.hudPresets.MarkWelcomeSeen() then frame:Hide() end
+    end)
+    ui.apply = apply
+    ui.refreshLayout = function(_, warningVisible)
+        local actionY = ui.warningY - (warningVisible and 42 or 0)
+        cancel:ClearAllPoints()
+        cancel:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -220, actionY)
+        apply:ClearAllPoints()
+        apply:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -22, actionY)
+    end
+
+    frame:HookScript("OnShow", function()
+        addon.profileUI.PushSpecialFrame("StatsProQuickSetupWelcome")
+        for _, control in ipairs(ui.mutationControls) do
+            addon.settingsDesign.RegisterMutationControl(control)
+        end
+        addon.hudPresets.RegisterView(ui)
+        addon.settingsDesign.RefreshMutationControls()
+    end)
+    frame:HookScript("OnHide", function()
+        addon.profileUI.RemoveSpecialFrame("StatsProQuickSetupWelcome")
+        addon.hudPresets.UnregisterView(ui)
+        for _, control in ipairs(ui.mutationControls) do
+            addon.settingsDesign.UnregisterMutationControl(control)
+        end
+        if frame.statsProSettingsHandoff then return end
+        addon.hudPresets.MarkWelcomeSeen()
+        addon.hudPresets.ForceCancelPreview()
+    end)
+    if addon.__statsproSmoke == true then frame.statsProView = ui end
+    addon.hudPresets.welcome = frame
+    return frame
+end
+
+function addon.hudPresets.MaybeShowWelcome()
+    if addon.__statsproSmoke == true and addon.__testWelcomeEnabled ~= true then
+        return false
+    end
+    if addon.profileRuntime.ReadCombatState() ~= false then return false end
+    local root = addon.dbRuntime.Refresh()
+    local account = root and rawget(root, "account") or nil
+    if not addon.dbRuntime.IsCleanTable(account)
+        or rawget(account, "quickSetupSeen") ~= false then return false end
+    if addon.hudPresets.settingsDiscovered == true then
+        addon.hudPresets.MarkWelcomeSeen()
+        return false
+    end
+    if configFrame and configFrame:IsShown() then
+        addon.hudPresets.MarkWelcomeSeen()
+        return false
+    end
+    local frame = addon.hudPresets.BuildWelcome()
+    frame:Show()
+    return true
 end
 
 -- /ss reset uses the same confirmed, transactional active-profile operation as the
@@ -11487,10 +12281,8 @@ addon.profileRuntime.closeOwnedSettingsModals = function()
     -- Destructive prompts are invalidated first. A later preview/modal restore
     -- failure must not leave an old confirmation capable of committing.
     addon.profileRuntime.CancelOwnedMutationPopups()
-    if addon.appearancePresets and addon.appearancePresets.session
-        and type(addon.appearancePresets.CancelPreview) == "function" then
-        local restored = addon.appearancePresets.CancelPreview(true)
-        if not restored then error("appearance preview restore failed") end
+    if not addon.presetRuntime.CancelAllPreviews(true) then
+        error("preset preview restore failed")
     end
     if type(addon.profileUI.CloseOperationDialog) == "function" then
         addon.profileUI.CloseOperationDialog()
@@ -13355,8 +14147,7 @@ function addon.profileUI.BuildSettingsUI(owner)
     ui.refreshAll = ui.RefreshAll
 
     function ui.OpenManager(selectActive)
-        if addon.appearancePresets.session
-            and not addon.appearancePresets.CancelPreview(true) then return end
+        if not addon.presetRuntime.CancelAllPreviews(true) then return end
         if selectActive then
             ui.selectedGUID = addon.profileRuntime.activeGUID
             ui.selectedSpecID = addon.profileRuntime.activeSpecID
@@ -13388,6 +14179,17 @@ function addon.profileUI.BuildSettingsUI(owner)
 end
 
 function addon:OpenConfigMenu()
+    -- Opening Settings is discovery enough. Keep navigation zero-write; the delayed
+    -- onboarding check commits the marker even if this happens before profile bootstrap
+    -- or Settings closes before the first-install timer fires.
+    self.hudPresets.settingsDiscovered = true
+    local welcome = self.hudPresets.welcome
+    if welcome and welcome:IsShown() then
+        welcome.statsProSettingsHandoff = true
+        self.hudPresets.MarkWelcomeSeen()
+        welcome:Hide()
+        welcome.statsProSettingsHandoff = nil
+    end
     -- Settings remains inspectable under a future schema, but the shared write gate
     -- explains once per session why every mutating control is read-only.
     self.dbRuntime.GetWritableSettings(true)
@@ -13520,7 +14322,7 @@ function addon:OpenConfigMenu()
         self.profileUI.RemoveSpecialFrame("StatsProConfigFrame")
         self.panelEditRuntime.SetRequested(false)
         self.profileRuntime.CancelOwnedMutationPopups()
-        self.appearancePresets.ForceCancelPreview()
+        self.presetRuntime.ForceCancelAllPreviews()
         pcall(_G.StaticPopup_Hide, self.developerLinks.popupKey)
         self.profileRuntime.CloseOwnedDropdownMenus()
         if StatsProCloseColorPicker then StatsProCloseColorPicker() end
@@ -13740,6 +14542,10 @@ function addon:OpenConfigMenu()
             cd,
             function() return GetDB("displayMode") end,
             function(value, opt, dropdown)
+                if not addon.hudPresets.BeforeManualEdit("displayMode") then
+                    CloseDropDownMenus()
+                    return false
+                end
                 local db = self.dbRuntime.GetWritableSettings(true)
                 if not db then
                     CloseDropDownMenus()
@@ -13752,6 +14558,7 @@ function addon:OpenConfigMenu()
                 CloseDropDownMenus()
                 addon:RunUpdateStatsSafe()
                 addon.panelEditRuntime.Refresh()
+                addon.hudPresets.RefreshUI()
             end)
     end
 
@@ -13839,6 +14646,10 @@ function addon:OpenConfigMenu()
             cd,
             function() return NormalizeLabelStyle(GetDB("labelStyle")) end,
             function(value, opt, dropdown)
+                if not addon.hudPresets.BeforeManualEdit("labelStyle") then
+                    CloseDropDownMenus()
+                    return false
+                end
                 local db = self.dbRuntime.GetWritableSettings(true)
                 if not db then
                     CloseDropDownMenus()
@@ -13849,6 +14660,7 @@ function addon:OpenConfigMenu()
                 UIDropDownMenu_SetText(dropdown, L(opt.label))
                 CloseDropDownMenus()
                 addon:RunUpdateStatsSafe()
+                addon.hudPresets.RefreshUI()
             end)
     end
     CreateCheckbox(layoutTab, "StatsProMatchColorCheck",
@@ -13915,7 +14727,7 @@ function addon:OpenConfigMenu()
             self.settingsDesign.RegisterMutationControl(button)
             button:SetScript("OnClick", function()
                 local ok, reason = self.appearancePresets.StartPreview(presetID)
-                if not ok then PrintMsg(self.profileUI.OperationErrorText(reason)) end
+                self.presetRuntime.ReportStartResult(ok, reason)
             end)
             presetUI.buttons[presetID] = button
         end
@@ -14850,6 +15662,55 @@ function addon:OpenConfigMenu()
     --[[ ===== STATS TAB ===== ]]
     local cs = NewCursor(statsTab, 12, -8)
 
+    CursorSection(cs, "Quick Setup")
+    local setupUI = self.hudPresets.BuildCardList(statsTab, cs.padX, cs.y, 426)
+    local statsBody = CreateFrame("Frame", nil, statsTab)
+    statsBody:SetPoint("TOPLEFT", statsTab, "TOPLEFT", 0, setupUI.compactBodyTop)
+    statsBody:SetPoint("TOPRIGHT", statsTab, "TOPRIGHT", 0, setupUI.compactBodyTop)
+
+    local setupCancel = self.settingsDesign.CreateShellButton(statsTab, nil, "field")
+    setupCancel:SetSize(160, 28)
+    PushLocalizedLabel(function() setupCancel:SetText(L("Cancel preview")) end)
+    setupCancel:SetScript("OnClick", function() self.hudPresets.CancelPreview() end)
+    setupUI.cancel = setupCancel
+
+    local setupApply = self.settingsDesign.CreateShellButton(statsTab, nil, "primary")
+    setupApply:SetSize(120, 28)
+    PushLocalizedLabel(function() setupApply:SetText(L("Apply")) end)
+    self.settingsDesign.RegisterMutationControl(setupApply)
+    setupApply:SetScript("OnClick", function()
+        local ok, reason = self.hudPresets.ApplyPreview()
+        if not ok then PrintMsg(self.profileUI.OperationErrorText(reason)) end
+    end)
+    setupUI.apply = setupApply
+    setupUI.refreshLayout = function(hasSession, warningVisible)
+        local actionY = setupUI.warningY
+        if hasSession and warningVisible then actionY = actionY - 42 end
+        setupCancel:ClearAllPoints()
+        setupCancel:SetPoint("TOPRIGHT", statsTab, "TOPRIGHT", -140, actionY)
+        setupApply:ClearAllPoints()
+        setupApply:SetPoint("TOPRIGHT", statsTab, "TOPRIGHT", -12, actionY)
+        local bodyTop = setupUI.compactBodyTop
+        if hasSession then bodyTop = actionY - 36 end
+        setupUI.bodyTop = bodyTop
+        statsBody:ClearAllPoints()
+        statsBody:SetPoint("TOPLEFT", statsTab, "TOPLEFT", 0, bodyTop)
+        statsBody:SetPoint("TOPRIGHT", statsTab, "TOPRIGHT", 0, bodyTop)
+        if statsBody.contentHeight then
+            statsTab.contentHeight = math.abs(bodyTop) + statsBody.contentHeight
+            statsTab:SetHeight(statsTab.contentHeight)
+            if configFrame.activeTabIndex == 1 then
+                scrollChild:SetHeight(statsTab.contentHeight)
+            end
+        end
+    end
+    if self.__statsproSmoke == true then
+        statsTab.quickSetupView = setupUI
+        statsTab.statsBody = statsBody
+    end
+
+    cs = NewCursor(statsBody, 12, -4)
+
     -- Character-sheet rows. Inline color swatches per row drive label color +
     -- matchValueColorToStat coloring.
     CursorSection(cs, "Character")
@@ -14857,10 +15718,10 @@ function addon:OpenConfigMenu()
         local rowY = cs.y
         local leftRows, rightRows = {}, {}
         local _, sw, txt
-        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProMainStatCheck",
+        _, sw, txt = CreateCheckboxColor(statsBody, "StatsProMainStatCheck",
             "Show Main Stat", "showMainStat", "mainStat", cs.padX,                       rowY)
         leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
-        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProStaminaCheck",
+        _, sw, txt = CreateCheckboxColor(statsBody, "StatsProStaminaCheck",
             "Show Stamina",   "showStamina",  "stamina",  cs.padX + CONFIG_COL_OFFSET, rowY)
         rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         AlignSwatchColumn(leftRows)
@@ -14880,22 +15741,22 @@ function addon:OpenConfigMenu()
             SetCheckboxEnabled(masteryCb, masterOn, "Show Offensive Stats")
             SetCheckboxEnabled(versCb,    masterOn, "Show Offensive Stats")
         end
-        CreateCheckbox(statsTab, "StatsProOffensiveCheck",  "Show Offensive Stats", "showOffensive",     cs.padX,       rowY,
+        CreateCheckbox(statsBody, "StatsProOffensiveCheck",  "Show Offensive Stats", "showOffensive",     cs.padX,       rowY,
             function(checked) ApplyOffensiveSubsEnabled(checked) end)
-        CreateCheckbox(statsTab, "StatsProHideZeroOffCheck", "Hide Zero Values",    "hideZeroOffensive", cs.padX + CONFIG_COL_OFFSET, rowY)
+        CreateCheckbox(statsBody, "StatsProHideZeroOffCheck", "Hide Zero Values",    "hideZeroOffensive", cs.padX + CONFIG_COL_OFFSET, rowY)
         cs.y = rowY - 26
         -- Inline color swatches per stat (mirrors Defensive dodge/parry/block/armor pattern).
         -- Two-column AlignSwatchColumn — left and right column widths measured independently.
         local leftRows, rightRows = {}, {}
         local sw, txt
-        critCb,    sw, txt = CreateCheckboxColor(statsTab, "StatsProCritCheck",    "Show Crit",        "showCrit",        "crit",        cs.padX,                       cs.y)
+        critCb,    sw, txt = CreateCheckboxColor(statsBody, "StatsProCritCheck",    "Show Crit",        "showCrit",        "crit",        cs.padX,                       cs.y)
         leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
-        hasteCb,   sw, txt = CreateCheckboxColor(statsTab, "StatsProHasteCheck",   "Show Haste",       "showHaste",       "haste",       cs.padX + CONFIG_COL_OFFSET, cs.y)
+        hasteCb,   sw, txt = CreateCheckboxColor(statsBody, "StatsProHasteCheck",   "Show Haste",       "showHaste",       "haste",       cs.padX + CONFIG_COL_OFFSET, cs.y)
         rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         CursorAdvance(cs, 22)
-        masteryCb, sw, txt = CreateCheckboxColor(statsTab, "StatsProMasteryCheck", "Show Mastery",     "showMastery",     "mastery",     cs.padX,                       cs.y)
+        masteryCb, sw, txt = CreateCheckboxColor(statsBody, "StatsProMasteryCheck", "Show Mastery",     "showMastery",     "mastery",     cs.padX,                       cs.y)
         leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
-        versCb,    sw, txt = CreateCheckboxColor(statsTab, "StatsProVersCheck",    "Show Versatility", "showVersatility", "versatility", cs.padX + CONFIG_COL_OFFSET, cs.y)
+        versCb,    sw, txt = CreateCheckboxColor(statsBody, "StatsProVersCheck",    "Show Versatility", "showVersatility", "versatility", cs.padX + CONFIG_COL_OFFSET, cs.y)
         rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         CursorAdvance(cs, 22)
         AlignSwatchColumn(leftRows)
@@ -14917,20 +15778,20 @@ function addon:OpenConfigMenu()
             SetCheckboxEnabled(avoidanceCb, masterOn, "Show Tertiary Stats")
             SetCheckboxEnabled(speedCb,     masterOn, "Show Tertiary Stats")
         end
-        CreateCheckbox(statsTab, "StatsProTertiaryCheck", "Show Tertiary Stats", "showTertiary", cs.padX, rowY,
+        CreateCheckbox(statsBody, "StatsProTertiaryCheck", "Show Tertiary Stats", "showTertiary", cs.padX, rowY,
             function(checked) ApplyTertiarySubsEnabled(checked) end)
-        CreateCheckbox(statsTab, "StatsProHideZeroCheck", "Hide Zero Values",    "hideZeroTertiary", cs.padX + CONFIG_COL_OFFSET, rowY)
+        CreateCheckbox(statsBody, "StatsProHideZeroCheck", "Hide Zero Values",    "hideZeroTertiary", cs.padX + CONFIG_COL_OFFSET, rowY)
         cs.y = rowY - 26
         -- Two-column grid matches Offensive/Defensive sections. With 3 stats the right
         -- side of row 2 is empty; left/right columns align via independent AlignSwatchColumn.
         local leftRows, rightRows = {}, {}
         local sw, txt
-        leechCb,     sw, txt = CreateCheckboxColor(statsTab, "StatsProLeechCheck",     "Show Leech",     "showLeech",     "leech",     cs.padX,                       cs.y)
+        leechCb,     sw, txt = CreateCheckboxColor(statsBody, "StatsProLeechCheck",     "Show Leech",     "showLeech",     "leech",     cs.padX,                       cs.y)
         leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
-        avoidanceCb, sw, txt = CreateCheckboxColor(statsTab, "StatsProAvoidanceCheck", "Show Avoidance", "showAvoidance", "avoidance", cs.padX + CONFIG_COL_OFFSET, cs.y)
+        avoidanceCb, sw, txt = CreateCheckboxColor(statsBody, "StatsProAvoidanceCheck", "Show Avoidance", "showAvoidance", "avoidance", cs.padX + CONFIG_COL_OFFSET, cs.y)
         rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         CursorAdvance(cs, 22)
-        speedCb,     sw, txt = CreateCheckboxColor(statsTab, "StatsProSpeedCheck",     "Show Speed",     "showSpeed",     "speed",     cs.padX,                       cs.y)
+        speedCb,     sw, txt = CreateCheckboxColor(statsBody, "StatsProSpeedCheck",     "Show Speed",     "showSpeed",     "speed",     cs.padX,                       cs.y)
         leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
         CursorAdvance(cs, 22)
         AlignSwatchColumn(leftRows)
@@ -14953,26 +15814,26 @@ function addon:OpenConfigMenu()
             SetCheckboxEnabled(armorCb, masterOn, "Show Defensive Stats")
             SetCheckboxEnabled(staggerCb, masterOn, "Show Defensive Stats")
         end
-        CreateCheckbox(statsTab, "StatsProDefensiveCheck",   "Show Defensive Stats", "showDefensive",     cs.padX,       rowY,
+        CreateCheckbox(statsBody, "StatsProDefensiveCheck",   "Show Defensive Stats", "showDefensive",     cs.padX,       rowY,
             function(checked) ApplyDefensiveSubsEnabled(checked) end)
-        CreateCheckbox(statsTab, "StatsProHideZeroDefCheck", "Hide Zero Values",     "hideZeroDefensive", cs.padX + CONFIG_COL_OFFSET, rowY)
+        CreateCheckbox(statsBody, "StatsProHideZeroDefCheck", "Hide Zero Values",     "hideZeroDefensive", cs.padX + CONFIG_COL_OFFSET, rowY)
         cs.y = rowY - 26
         -- Each defensive stat with its own inline color swatch. Two balanced columns;
         -- aligned per-column via AlignSwatchColumn so left swatches share an x and right
         -- swatches share an x (each column's max GetStringWidth measured independently).
         local leftRows, rightRows = {}, {}
         local sw, txt
-        dodgeCb, sw, txt = CreateCheckboxColor(statsTab, "StatsProDodgeCheck", "Show Dodge", "showDodge", "dodge", cs.padX,                       cs.y)
+        dodgeCb, sw, txt = CreateCheckboxColor(statsBody, "StatsProDodgeCheck", "Show Dodge", "showDodge", "dodge", cs.padX,                       cs.y)
         leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
-        parryCb, sw, txt = CreateCheckboxColor(statsTab, "StatsProParryCheck", "Show Parry", "showParry", "parry", cs.padX + CONFIG_COL_OFFSET, cs.y)
+        parryCb, sw, txt = CreateCheckboxColor(statsBody, "StatsProParryCheck", "Show Parry", "showParry", "parry", cs.padX + CONFIG_COL_OFFSET, cs.y)
         rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         CursorAdvance(cs, 22)
-        blockCb, sw, txt = CreateCheckboxColor(statsTab, "StatsProBlockCheck", "Show Block", "showBlock", "block", cs.padX,                       cs.y)
+        blockCb, sw, txt = CreateCheckboxColor(statsBody, "StatsProBlockCheck", "Show Block", "showBlock", "block", cs.padX,                       cs.y)
         leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
-        armorCb, sw, txt = CreateCheckboxColor(statsTab, "StatsProArmorCheck", "Show Armor", "showArmor", "armor", cs.padX + CONFIG_COL_OFFSET, cs.y)
+        armorCb, sw, txt = CreateCheckboxColor(statsBody, "StatsProArmorCheck", "Show Armor", "showArmor", "armor", cs.padX + CONFIG_COL_OFFSET, cs.y)
         rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         CursorAdvance(cs, 22)
-        staggerCb, sw, txt = CreateCheckboxColor(statsTab, "StatsProStaggerCheck", "Show Stagger", "showStagger", "stagger", cs.padX, cs.y)
+        staggerCb, sw, txt = CreateCheckboxColor(statsBody, "StatsProStaggerCheck", "Show Stagger", "showStagger", "stagger", cs.padX, cs.y)
         leftRows[#leftRows + 1] = { text = txt, swatch = sw }
         CursorAdvance(cs, 22)
         AlignSwatchColumn(leftRows)
@@ -14988,23 +15849,23 @@ function addon:OpenConfigMenu()
         local rowY = cs.y
         local leftRows, rightRows = {}, {}
         local sw, txt
-        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProItemLevelCheck",
+        _, sw, txt = CreateCheckboxColor(statsBody, "StatsProItemLevelCheck",
             "Show Item Level", "showItemLevel", "itemLevel", cs.padX, rowY,
             function(checked) if checked then addon.itemLevelRuntime.MarkDirty() end end)
         leftRows[#leftRows + 1] = { text = txt, swatch = sw }
         -- Durability swatch is the override color used when Auto Color is OFF.
         -- WHY: also mark dirty so re-enabling after a long off period gets fresh values
         -- on the next tick, not whatever was cached when last enabled.
-        _, sw, txt = CreateCheckboxColor(statsTab, "StatsProDurabilityCheck", "Show Durability",  "showDurability", "durability", cs.padX + CONFIG_COL_OFFSET, rowY,
+        _, sw, txt = CreateCheckboxColor(statsBody, "StatsProDurabilityCheck", "Show Durability",  "showDurability", "durability", cs.padX + CONFIG_COL_OFFSET, rowY,
             function() addon.durabilityRuntime.MarkDirty() end)
         rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         AlignSwatchColumn(leftRows)
         AlignSwatchColumn(rightRows)
         cs.y = rowY - 26
-        CreateCheckbox(statsTab, "StatsProRepairCostCheck", "Show Repair Cost", "showRepairCost", cs.padX, cs.y,
+        CreateCheckbox(statsBody, "StatsProRepairCostCheck", "Show Repair Cost", "showRepairCost", cs.padX, cs.y,
             function() addon.durabilityRuntime.MarkDirty() end)
         CursorAdvance(cs, 22)
-        CreateCheckbox(statsTab, "StatsProAutoColorCheck",
+        CreateCheckbox(statsBody, "StatsProAutoColorCheck",
             "Auto Color by Threshold", "useAutoColorDurability", cs.padX, cs.y)
         CursorAdvance(cs, 22)
         -- WHY: onChange forces recompute via dirty flag; otherwise display stays stale
@@ -15012,14 +15873,21 @@ function addon:OpenConfigMenu()
         -- WHY: this is a full-width row with no right-column peer. The normal 200px
         -- checkbox bound truncates longer translations; 400px still fits the 450px
         -- scroll child after the 12px row padding and 22px checkbox chrome.
-        CreateCheckbox(statsTab, "StatsProWorstDurCheck",
+        CreateCheckbox(statsBody, "StatsProWorstDurCheck",
             "Use Worst Slot (instead of average)", "useWorstDurability", cs.padX, cs.y,
             function() addon.durabilityRuntime.MarkDirty() end, 400)
         CursorAdvance(cs, 22)
     end
 
-    statsTab.contentHeight = CursorUsed(cs)
+    statsBody.contentHeight = CursorUsed(cs)
+    statsBody:SetHeight(statsBody.contentHeight)
+    for _, section in ipairs(statsBody.statsProSections or {}) do
+        tinsert(statsTab.statsProSections, section)
+    end
+    statsTab.contentHeight = math.abs(setupUI.bodyTop or setupUI.compactBodyTop)
+        + statsBody.contentHeight
     statsTab:SetHeight(statsTab.contentHeight)
+    self.hudPresets.RegisterView(setupUI)
 
     --[[ ===== Initial state ===== ]]
     self.settingsDesign.RefreshMutationControls()
@@ -15553,6 +16421,30 @@ if addon and addon.__statsproSmoke == true then
                     presetID = session and session.presetID or nil,
                     candidate = session and CopyTable(session.candidate) or nil,
                     baseline = session and CopyTable(session.baseline) or nil,
+                }
+            end,
+        },
+        hudPresets = {
+            order = function() return CopyTable(addon.hudPresets.order) end,
+            definitions = function() return CopyTable(addon.hudPresets.definitions) end,
+            allowlist = function() return CopyTable(addon.hudPresets.allowlist) end,
+            currentID = addon.hudPresets.CurrentID,
+            startPreview = addon.hudPresets.StartPreview,
+            cancelPreview = addon.hudPresets.CancelPreview,
+            applyPreview = addon.hudPresets.ApplyPreview,
+            maybeShowWelcome = addon.hudPresets.MaybeShowWelcome,
+            setRuntimeFailureCount = function(count)
+                addon.hudPresets.testRuntimeFailureCount = count or 0
+            end,
+            state = function()
+                local session = addon.hudPresets.session
+                local account = addon.dbRuntime.GetAccount()
+                return {
+                    active = session ~= nil,
+                    presetID = session and session.presetID or nil,
+                    welcomeSeen = account and rawget(account, "quickSetupSeen"),
+                    welcomeShown = addon.hudPresets.welcome
+                        and addon.hudPresets.welcome:IsShown() or false,
                 }
             end,
         },

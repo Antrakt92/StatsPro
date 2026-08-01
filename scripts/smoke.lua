@@ -2761,6 +2761,13 @@ do
     assertColor("db.empty_default_population.stagger", db.colors.stagger, 0.3, 0.8, 0.5)
 end
 
+local function findChoiceFrame(name, env, predicate)
+    return findFrame(name, env, function(frame)
+        return frame:IsShown() and type(frame.choiceData) == "table"
+            and predicate(frame.choiceData)
+    end)
+end
+
 do
     local root = runMigrate({ dbVersion = 2, textAlign = "LEFT" })
     eq("db.legacy_text_align_preserved_unread",
@@ -10230,11 +10237,11 @@ do
                 control.width >= 24 and control.height >= 24,
                 "localized control is smaller than 24x24px")
         end
-        eq(prefix .. ".checkbox_count", counts.checkbox, 37)
+        eq(prefix .. ".checkbox_count", counts.checkbox, 40)
         eq(prefix .. ".swatch_count", counts.swatch, 18)
         eq(prefix .. ".slider_count", counts.slider, 5)
         eq(prefix .. ".dropdown_count", counts.dropdown, 6)
-        eq(prefix .. ".button_count", counts.button, 15)
+        eq(prefix .. ".button_count", counts.button, 16)
         eq(prefix .. ".developer_link_count", counts.developerLink, 2)
         local presetUI = localeAddon.appearancePresets.ui
         for _, presetID in ipairs({
@@ -11757,6 +11764,10 @@ do
         function() return corruptTest.profileOps.resetProfile("p1") end,
         function() return corruptTest.profileOps.deleteUnusedProfiles() end,
         function() return corruptTest.profileOps.importAndAssign({}) end,
+        function()
+            return corruptTest.profileOps.importTransferToContext(
+                {}, {}, "guid", 73)
+        end,
         function() return corruptTest.profileOps.forgetCharacter("guid") end,
     }
     for index, invoke in ipairs(corruptOps) do
@@ -12860,6 +12871,10 @@ do
 
     for name, invoke in pairs({
         import = function() return futureTest.profileOps.importAndAssign({}) end,
+        transfer = function()
+            return futureTest.profileOps.importTransferToContext(
+                {}, {}, "Player-1-FUTURE", 73)
+        end,
         reset = function() return futureTest.profileOps.resetProfile("future-p7") end,
         wipe = function() return futureTest.profileOps.fullWipe() end,
     }) do
@@ -15465,11 +15480,23 @@ do
         ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = { "A" },
         ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = { "A" },
         ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = { "A" },
+        ["StatsPro profile: %s"] = { "A" },
+        ["Format version: %d"] = { 1 },
+        ["Included: %s"] = { "A" },
+        ["Import selected sections as a new independent profile for \"%s\"? Existing profiles and unselected settings will stay unchanged."] = { "A" },
+        ["Imported profile \"%s\" was created."] = { "A" },
     }
     local requiredOperationKeys = {
         "Profiles & sharing...", "Profiles & sharing",
         "Copy settings from...", "Use the same settings as...",
-        "Use these settings for...", "Stop sharing...", "Advanced...", "Hide advanced",
+        "Use these settings for...", "Stop sharing...", "Export / import profile...",
+        "Export this profile", "Import into a new profile", "Export profile",
+        "Import profile", "Select all", "Preview", "Imported profile",
+        "Export string ready. Select it, then press Ctrl+C to copy.",
+        "Paste a StatsPro profile string, then preview it before importing.",
+        "Choose at least one section.", "The profile string is invalid or damaged.",
+        "This profile string uses a newer unsupported format.",
+        "Advanced...", "Hide advanced",
         "Reset these settings...", "Forget this character...",
         "Defaults for future specializations...", "Delete unused settings...",
         "Confirm", "Cancel",
@@ -15592,6 +15619,7 @@ do
         local actionKeys = {
             copy = "Copy settings from...", useSame = "Use the same settings as...",
             useFor = "Use these settings for...", stopSharing = "Stop sharing...",
+            transfer = "Export / import profile...",
             advanced = "Advanced...", reset = "Reset these settings...",
             forget = "Forget this character...",
             roleTemplate = "Defaults for future specializations...",
@@ -15618,13 +15646,16 @@ end
 smokeReachability:complete("profile-ui")
 
 local profileOpsFixtureCount = 0
+local profileOpsFixtureSeedRoot
 local function makeProfileOpsFixture(options)
     profileOpsFixtureCount = profileOpsFixtureCount + 1
     options = options or {}
-    local seed = loadStatsPro("enUS")
-    fireEvent("profiles.ops.fixture.seed." .. profileOpsFixtureCount,
-        seed, "PLAYER_ENTERING_WORLD")
-    local root = deepCopy(seed.StatsProDB)
+    if not profileOpsFixtureSeedRoot then
+        local seed = loadStatsPro("enUS")
+        fireEvent("profiles.ops.fixture.seed", seed, "PLAYER_ENTERING_WORLD")
+        profileOpsFixtureSeedRoot = deepCopy(seed.StatsProDB)
+    end
+    local root = deepCopy(profileOpsFixtureSeedRoot)
     local base = deepCopy(root.profiles.p1.settings)
     root.profiles.p1.name = "Default"
     root.profiles.p2 = { name = "Tank shared", settings = deepCopy(base) }
@@ -15702,6 +15733,364 @@ local function makeProfileOpsFixture(options)
     fireEvent("profiles.ops.fixture.activate." .. profileOpsFixtureCount,
         env, "PLAYER_ENTERING_WORLD")
     return env, addonContext, test, root, identity
+end
+
+do
+    local _, _, test, root = makeProfileOpsFixture({
+        mutateRoot = function(candidate)
+            candidate.profiles.p5 = {
+                name = "Unused one",
+                settings = deepCopy(candidate.profiles.p1.settings),
+            }
+            candidate.profiles.p6 = {
+                name = "Unused two",
+                settings = deepCopy(candidate.profiles.p1.settings),
+            }
+            candidate.account.nextProfileID = 7
+        end,
+    })
+    local accountRef = root.account
+    local roleTemplatesRef = root.roleTemplates
+    local charactersRef = root.characters
+    local usedProfileRefs = {
+        p1 = root.profiles.p1,
+        p2 = root.profiles.p2,
+        p3 = root.profiles.p3,
+        p4 = root.profiles.p4,
+    }
+    local ok, deleted = test.profileOps.deleteUnusedProfiles()
+    eq("profiles.cleanup.multiple.success", ok, true)
+    eq("profiles.cleanup.multiple.count", deleted, 2)
+    eq("profiles.cleanup.multiple.first_removed", root.profiles.p5, nil)
+    eq("profiles.cleanup.multiple.second_removed", root.profiles.p6, nil)
+    for profileID, profileRef in pairs(usedProfileRefs) do
+        eq("profiles.cleanup.multiple.used_identity." .. profileID,
+            root.profiles[profileID], profileRef)
+    end
+    eq("profiles.cleanup.multiple.account_identity", root.account, accountRef)
+    eq("profiles.cleanup.multiple.roles_identity", root.roleTemplates, roleTemplatesRef)
+    eq("profiles.cleanup.multiple.characters_identity", root.characters, charactersRef)
+end
+
+do
+    local _, _, test, root = makeProfileOpsFixture()
+    local transfer = test.profileTransfer
+    local source = root.profiles.p3
+    local sections = { layout = true, appearance = true }
+    local encoded, encodeReason = transfer.serialize(
+        "Жена 配置", source.settings, sections)
+    check("profiles.transfer.serialize.success", type(encoded) == "string", encodeReason)
+    check("profiles.transfer.serialize.prefix", string.sub(encoded, 1, 5) == "SPP1:")
+    check("profiles.transfer.serialize.bounded", #encoded < 16384)
+    eq("profiles.transfer.serialize.deterministic",
+        transfer.serialize("Жена 配置", source.settings, sections), encoded)
+
+    local goldenFile = assert(io.open(
+        "scripts/fixtures/profile-transfer-v1-layout.spp", "rb"))
+    local golden = goldenFile:read("*a")
+    goldenFile:close()
+    golden = golden:gsub("[\r\n]+$", "")
+    local goldenPackage, goldenReason, goldenDetail = transfer.parse(golden)
+    check("profiles.transfer.golden.parse", type(goldenPackage) == "table",
+        tostring(goldenReason) .. " " .. tostring(goldenDetail))
+    eq("profiles.transfer.golden.version", goldenPackage.formatVersion, 1)
+    eq("profiles.transfer.golden.name", goldenPackage.profileName, "SPP1 compatibility")
+    eq("profiles.transfer.golden.layout", goldenPackage.sections.layout, true)
+    eq("profiles.transfer.golden.stats_absent", goldenPackage.sections.stats, nil)
+    eq("profiles.transfer.golden.appearance_absent",
+        goldenPackage.sections.appearance, nil)
+    eq("profiles.transfer.golden.anchor", goldenPackage.values.point, "CENTER")
+    eq("profiles.transfer.golden.offset", goldenPackage.values.xOfs, 301)
+    eq("profiles.transfer.golden.scale", goldenPackage.values.scale, 1.3)
+    eq("profiles.transfer.golden.boolean", goldenPackage.values.isLocked, false)
+    eq("profiles.transfer.golden.enum", goldenPackage.values.displayMode, "flat")
+    eq("profiles.transfer.golden.writer",
+        transfer.serialize("SPP1 compatibility", source.settings, { layout = true }),
+        golden)
+
+    local package, parseReason, parseDetail = transfer.parse("  " .. encoded .. "  ")
+    check("profiles.transfer.parse.success", type(package) == "table",
+        tostring(parseReason) .. " " .. tostring(parseDetail)
+            .. " " .. string.sub(encoded, 1, 24))
+    eq("profiles.transfer.parse.version", package.formatVersion, 1)
+    eq("profiles.transfer.parse.name", package.profileName, "Жена 配置")
+    eq("profiles.transfer.parse.stats_absent", package.sections.stats, nil)
+    eq("profiles.transfer.parse.layout", package.sections.layout, true)
+    eq("profiles.transfer.parse.appearance", package.sections.appearance, true)
+    eq("profiles.transfer.parse.layout_scale", package.values.scale, 1.3)
+    eq("profiles.transfer.parse.appearance_color", package.values["colors.crit.r"], 0.31)
+    eq("profiles.transfer.parse.account_locale_absent", package.values.forceLocale, nil)
+    eq("profiles.transfer.parse.account_interval_absent", package.values.updateInterval, nil)
+
+    local expectedSchema = {
+        stats = {
+            "showRating", "showPercentage", "targetSnapshot", "showTertiary",
+            "hideZeroTertiary", "showLeech", "showAvoidance", "showSpeed",
+            "showMainStat", "showStamina", "showItemLevel", "showDefensive",
+            "hideZeroDefensive", "showDodge", "showParry", "showBlock",
+            "showArmor", "showStagger", "showOffensive", "hideZeroOffensive",
+            "showCrit", "showHaste", "showMastery", "showVersatility",
+            "showDurability", "showRepairCost", "useWorstDurability",
+        },
+        layout = {
+            "point", "relativePoint", "xOfs", "yOfs", "defensive_point",
+            "defensive_relativePoint", "defensive_xOfs", "defensive_yOfs",
+            "scale", "isVisible", "isLocked", "displayMode", "labelStyle",
+            "splitCharacter", "splitItemLevel", "splitOffensive", "splitTertiary",
+            "splitDefensive", "splitDurability", "splitRepairCost",
+        },
+        appearance = {
+            "font", "fontSize", "textAlpha", "panelBackgroundAlpha",
+            "textOutlineStyle", "appearancePresetID", "matchValueColorToStat",
+            "useAutoColorDurability",
+        },
+    }
+    for _, colorName in ipairs({
+        "crit", "haste", "mastery", "versatility", "rating", "percentage",
+        "leech", "avoidance", "speed", "mainStat", "stamina", "itemLevel",
+        "dodge", "parry", "block", "armor", "stagger", "durability",
+    }) do
+        for _, channel in ipairs({ "r", "g", "b" }) do
+            expectedSchema.appearance[#expectedSchema.appearance + 1] =
+                "colors." .. colorName .. "." .. channel
+        end
+    end
+    for _, section in ipairs({ "stats", "layout", "appearance" }) do
+        local sectionString = transfer.serialize(
+            "SPP1 schema", source.settings, { [section] = true })
+        local payload = transfer.decodePayload(sectionString)
+        check("profiles.transfer.schema." .. section .. ".payload", payload ~= nil)
+        local actualFields = {}
+        for line in (payload .. "\n"):gmatch("([^\n]*)\n") do
+            local fieldID = line:match("^([%w_%.]+)=")
+            if fieldID and fieldID ~= "name" and fieldID ~= "sections" then
+                actualFields[#actualFields + 1] = fieldID
+            end
+        end
+        assertDeepEqual("profiles.transfer.schema." .. section .. ".v1",
+            actualFields, expectedSchema[section])
+    end
+
+    local middle = math.floor(#encoded / 2)
+    local originalByte = string.sub(encoded, middle, middle)
+    local replacement = originalByte == "A" and "B" or "A"
+    local tampered = string.sub(encoded, 1, middle - 1)
+        .. replacement .. string.sub(encoded, middle + 1)
+    local rejected, rejectedReason = transfer.parse(tampered)
+    eq("profiles.transfer.parse.tamper_rejected", rejected, nil)
+    eq("profiles.transfer.parse.tamper_reason", rejectedReason, "invalid")
+    rejected, rejectedReason = transfer.parse("SPP2:00000000:AAAA")
+    eq("profiles.transfer.parse.future_rejected", rejected, nil)
+    eq("profiles.transfer.parse.future_reason", rejectedReason, "future-format")
+    rejected, rejectedReason = transfer.parse("SPP0:00000000:AAAA")
+    eq("profiles.transfer.parse.old_version_rejected", rejected, nil)
+    eq("profiles.transfer.parse.old_version_reason", rejectedReason, "invalid")
+    rejected = transfer.parse("return setmetatable({}, { __index = _G })")
+    eq("profiles.transfer.parse.lua_never_evaluated", rejected, nil)
+    local oversized = string.rep(" ", 16385)
+    local oversizedDetail
+    rejected, rejectedReason, oversizedDetail = transfer.parse(oversized)
+    eq("profiles.transfer.parse.oversized_rejected", rejected, nil)
+    eq("profiles.transfer.parse.oversized_reason", rejectedReason, "invalid")
+    eq("profiles.transfer.parse.oversized_detail", oversizedDetail, "size")
+    local invalidName = transfer.serialize("bad|name", source.settings, sections)
+    eq("profiles.transfer.serialize.invalid_name", invalidName, nil)
+
+    local layoutString = transfer.serialize(
+        "Malicious fixture", source.settings, { layout = true })
+    local layoutPayload = transfer.decodePayload(layoutString)
+    local appearanceString = transfer.serialize(
+        "Malicious fixture", source.settings, { appearance = true })
+    local appearancePayload = transfer.decodePayload(appearanceString)
+    local function rejectRewrittenPayload(name, payload, pattern, replacement)
+        local rewritten, replacements = payload:gsub(pattern, replacement, 1)
+        eq(name .. ".fixture", replacements, 1)
+        local parsed, reason = transfer.parse(transfer.encodePayload(rewritten))
+        eq(name .. ".rejected", parsed, nil)
+        eq(name .. ".reason", reason, "invalid")
+    end
+    rejectRewrittenPayload("profiles.transfer.parse.account_key", layoutPayload,
+        "\nscale=", "\nforceLocale=enUS\nscale=")
+    local duplicate, duplicateReason = transfer.parse(
+        transfer.encodePayload(layoutPayload .. "\nscale=1.3"))
+    eq("profiles.transfer.parse.duplicate_field_rejected", duplicate, nil)
+    eq("profiles.transfer.parse.duplicate_field_reason", duplicateReason, "invalid")
+    rejectRewrittenPayload("profiles.transfer.parse.missing_field", layoutPayload,
+        "\nscale=[^\n]+", "")
+    rejectRewrittenPayload("profiles.transfer.parse.wrong_section", layoutPayload,
+        "\nscale=[^\n]+", "\nfont=466F6E74735C415249414C4E2E545446")
+    rejectRewrittenPayload("profiles.transfer.parse.invalid_enum", layoutPayload,
+        "\ndisplayMode=[^\n]+", "\ndisplayMode=bogus")
+    rejectRewrittenPayload("profiles.transfer.parse.invalid_color", appearancePayload,
+        "\ncolors%.crit%.r=[^\n]+", "\ncolors.crit.r=2")
+    rejectRewrittenPayload("profiles.transfer.parse.invalid_font", appearancePayload,
+        "\nfont=[^\n]+", "\nfont=00")
+
+    local paddedExport
+    for suffixLength = 0, 2 do
+        local candidate = transfer.serialize(
+            "Padding" .. string.rep("x", suffixLength), source.settings, sections)
+        if candidate and string.sub(candidate, -1) == "=" then
+            paddedExport = candidate
+            break
+        end
+    end
+    check("profiles.transfer.parse.padding_fixture", paddedExport ~= nil)
+    local envelope, base64 = paddedExport:match(
+        "^(SPP1:[0-9a-f]+:)([A-Za-z0-9+/=]+)$")
+    local paddingPosition = string.sub(base64, -2) == "=="
+        and #base64 - 2 or #base64 - 1
+    local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    local paddingCharacter = string.sub(base64, paddingPosition, paddingPosition)
+    local paddingValue = string.find(alphabet, paddingCharacter, 1, true) - 1
+    local replacementValue = paddingValue % 2 == 0
+        and paddingValue + 1 or paddingValue - 1
+    local noncanonical = envelope
+        .. string.sub(base64, 1, paddingPosition - 1)
+        .. string.sub(alphabet, replacementValue + 1, replacementValue + 1)
+        .. string.sub(base64, paddingPosition + 1)
+    rejected, rejectedReason = transfer.parse(noncanonical)
+    eq("profiles.transfer.parse.noncanonical_padding_rejected", rejected, nil)
+    eq("profiles.transfer.parse.noncanonical_padding_reason", rejectedReason, "invalid")
+
+    local accountBefore = deepCopy(root.account)
+    local rolesBefore = deepCopy(root.roleTemplates)
+    local charactersBefore = deepCopy(root.characters)
+    local profilesBefore = deepCopy(root.profiles)
+    local targetRef, targetSettingsRef = root.profiles.p2, root.profiles.p2.settings
+    local sourceRef, sourceSettingsRef = root.profiles.p3, root.profiles.p3.settings
+    local ok, result = test.profileOps.importTransferToContext(
+        package, sections, "Player-1-OPS-A", 73)
+    eq("profiles.transfer.import.success", ok, true)
+    eq("profiles.transfer.import.profile_id", result.profileID, "p5")
+    eq("profiles.transfer.import.unique_name", result.name, "Жена 配置")
+    eq("profiles.transfer.import.previous_profile", result.previousProfileID, "p2")
+    eq("profiles.transfer.import.assignment",
+        root.characters["Player-1-OPS-A"].specProfiles[73], "p5")
+    eq("profiles.transfer.import.layout_applied", root.profiles.p5.settings.scale, 1.3)
+    eq("profiles.transfer.import.position_applied", root.profiles.p5.settings.xOfs, 301)
+    eq("profiles.transfer.import.appearance_applied",
+        root.profiles.p5.settings.colors.crit.r, 0.31)
+    eq("profiles.transfer.import.unselected_stats_preserved",
+        root.profiles.p5.settings.showDefensive, true)
+    local accountExpected = deepCopy(accountBefore)
+    accountExpected.nextProfileID = accountExpected.nextProfileID + 1
+    assertDeepEqual("profiles.transfer.import.account_only_allocated",
+        root.account, accountExpected)
+    assertDeepEqual("profiles.transfer.import.roles_unchanged", root.roleTemplates, rolesBefore)
+    eq("profiles.transfer.import.other_assignment_unchanged",
+        root.characters["Player-1-OPS-B"].specProfiles[73],
+        charactersBefore["Player-1-OPS-B"].specProfiles[73])
+    eq("profiles.transfer.import.target_identity", root.profiles.p2, targetRef)
+    eq("profiles.transfer.import.target_settings_identity",
+        root.profiles.p2.settings, targetSettingsRef)
+    eq("profiles.transfer.import.source_identity", root.profiles.p3, sourceRef)
+    eq("profiles.transfer.import.source_settings_identity",
+        root.profiles.p3.settings, sourceSettingsRef)
+    assertDeepEqual("profiles.transfer.import.target_unchanged", root.profiles.p2,
+        profilesBefore.p2)
+    assertDeepEqual("profiles.transfer.import.source_unchanged", root.profiles.p3,
+        profilesBefore.p3)
+    check("profiles.transfer.import.settings_detached",
+        root.profiles.p5.settings ~= targetSettingsRef
+            and root.profiles.p5.settings ~= sourceSettingsRef)
+
+    local beforeInvalidScope = deepCopy(root)
+    ok, result = test.profileOps.importTransferToContext(
+        package, { stats = true }, "Player-1-OPS-A", 73)
+    eq("profiles.transfer.import.unavailable_scope_rejected", ok, false)
+    eq("profiles.transfer.import.unavailable_scope_reason", result, "invalid-sections")
+    assertDeepEqual("profiles.transfer.import.unavailable_scope_no_writes",
+        root, beforeInvalidScope)
+
+    local parsedValues = package.values
+    local parsedVisibility = parsedValues.isVisible
+    parsedValues.isVisible = nil
+    local beforeMissingBoolean = deepCopy(root)
+    local missingOK, missingReason = test.profileOps.importTransferToContext(
+        package, sections, "Player-1-OPS-A", 73)
+    eq("profiles.transfer.import.missing_boolean_rejected", missingOK, false)
+    eq("profiles.transfer.import.missing_boolean_reason", missingReason, "invalid")
+    assertDeepEqual("profiles.transfer.import.missing_boolean_no_writes",
+        root, beforeMissingBoolean)
+    parsedValues.isVisible = parsedVisibility
+
+    package.values = nil
+    local beforeMalformedPackage = deepCopy(root)
+    local callOK, malformedOK, malformedReason = pcall(
+        test.profileOps.importTransferToContext,
+        package, sections, "Player-1-OPS-A", 73)
+    eq("profiles.transfer.import.malformed_package_safe", callOK, true)
+    eq("profiles.transfer.import.malformed_package_rejected", malformedOK, false)
+    eq("profiles.transfer.import.malformed_package_reason", malformedReason, "invalid")
+    assertDeepEqual("profiles.transfer.import.malformed_package_no_writes",
+        root, beforeMalformedPackage)
+    package.values = parsedValues
+end
+
+do
+    local _, _, test, root = makeProfileOpsFixture({
+        mutateRoot = function(candidate)
+            local settings = candidate.profiles.p3.settings
+            settings.showRating = false
+            settings.showPercentage = false
+            settings.showTertiary = true
+            settings.targetSnapshot = "raid"
+        end,
+    })
+    local sourceBefore = deepCopy(root.profiles.p3)
+    local targetBefore = deepCopy(root.profiles.p2)
+    eq("profiles.transfer.stats_only.source_rating",
+        root.profiles.p3.settings.showRating, false)
+    local encoded = test.profileTransfer.serialize(
+        root.profiles.p3.name, root.profiles.p3.settings, { stats = true })
+    local payload = test.profileTransfer.decodePayload(encoded)
+    check("profiles.transfer.stats_only.payload_rating",
+        string.find(payload, "\nshowRating=0\n", 1, true) ~= nil, payload)
+    local package = test.profileTransfer.parse(encoded)
+    eq("profiles.transfer.stats_only.package_rating", package.values.showRating, false)
+    eq("profiles.transfer.stats_only.package_percentage",
+        package.values.showPercentage, false)
+    eq("profiles.transfer.stats_only.package_tertiary", package.values.showTertiary, true)
+    eq("profiles.transfer.stats_only.package_snapshot", package.values.targetSnapshot, "raid")
+    local ok, result = test.profileOps.importTransferToContext(
+        package, package.sections, "Player-1-OPS-A", 73)
+    eq("profiles.transfer.stats_only.success", ok, true)
+    eq("profiles.transfer.stats_only.profile_id", result.profileID, "p5")
+    local imported = root.profiles.p5.settings
+    eq("profiles.transfer.stats_only.rating", imported.showRating, false)
+    eq("profiles.transfer.stats_only.percentage", imported.showPercentage, false)
+    eq("profiles.transfer.stats_only.tertiary", imported.showTertiary, true)
+    eq("profiles.transfer.stats_only.snapshot", imported.targetSnapshot, "raid")
+    eq("profiles.transfer.stats_only.layout_preserved", imported.scale,
+        targetBefore.settings.scale)
+    assertDeepEqual("profiles.transfer.stats_only.appearance_preserved",
+        imported.colors, targetBefore.settings.colors)
+    assertDeepEqual("profiles.transfer.stats_only.source_unchanged",
+        root.profiles.p3, sourceBefore)
+    assertDeepEqual("profiles.transfer.stats_only.target_unchanged",
+        root.profiles.p2, targetBefore)
+    check("profiles.transfer.stats_only.detached",
+        imported ~= root.profiles.p2.settings and imported ~= root.profiles.p3.settings)
+end
+
+for _, failure in ipairs({
+    { stage = "validate", reason = "validate-failed" },
+    { stage = "commit", reason = "commit-failed" },
+    { stage = "apply", reason = "apply-failed" },
+}) do
+    local _, _, test, root = makeProfileOpsFixture()
+    local encoded = test.profileTransfer.serialize(
+        root.profiles.p3.name, root.profiles.p3.settings,
+        { stats = true, layout = true, appearance = true })
+    local package = test.profileTransfer.parse(encoded)
+    local before = deepCopy(root)
+    test.profileOps.setFailureStage(failure.stage)
+    local ok, reason = test.profileOps.importTransferToContext(
+        package, package.sections, "Player-1-OPS-A", 73)
+    eq("profiles.transfer.rollback." .. failure.stage .. ".rejected", ok, false)
+    eq("profiles.transfer.rollback." .. failure.stage .. ".reason", reason, failure.reason)
+    assertDeepEqual("profiles.transfer.rollback." .. failure.stage .. ".root", root, before)
 end
 
 do
@@ -17216,6 +17605,10 @@ do
             function() return ops.resetProfile("p2") end,
             function() return ops.deleteUnusedProfiles() end,
             function() return ops.importAndAssign({}) end,
+            function()
+                return ops.importTransferToContext(
+                    {}, {}, "Player-1-OPS-A", 73)
+            end,
             function() return ops.fullWipe() end,
             function() return ops.forgetCharacter("Player-1-OPS-B") end,
         }
@@ -17411,16 +17804,10 @@ do
     eq("profiles.ui.automation.stop_enabled", state.actions.stopSharing.enabled, true)
     eq("profiles.ui.automation.role_enabled", state.actions.roleTemplate.enabled, true)
 
-    local function findChoice(name, predicate)
-        return findFrame(name, env, function(frame)
-            return frame:IsShown() and type(frame.choiceData) == "table"
-                and predicate(frame.choiceData)
-        end)
-    end
     local function chooseRole(name, role)
         callScript(name .. ".open", env.StatsProProfileRoleTemplateButton, "OnClick")
         eq(name .. ".choice_mode", test.profileUIState().operationKind, "role-template")
-        local row = findChoice(name .. ".choice", function(choice)
+        local row = findChoiceFrame(name .. ".choice", env, function(choice)
             return choice.role == role
         end)
         callScript(name .. ".choose", row, "OnClick")
@@ -17440,7 +17827,7 @@ do
     local assignmentsBeforeShare = deepCopy(root.characters)
     callScript("profiles.ui.automation.share_cancel.open",
         env.StatsProProfileUseForButton, "OnClick")
-    local shareTarget = findChoice("profiles.ui.automation.share_cancel.target",
+    local shareTarget = findChoiceFrame("profiles.ui.automation.share_cancel.target", env,
         function(choice)
             return choice.guid == "Player-1-OPS-A" and choice.specID == 71
         end)
@@ -17456,7 +17843,7 @@ do
         root.characters, assignmentsBeforeShare)
     callScript("profiles.ui.automation.share_confirm.open",
         env.StatsProProfileUseForButton, "OnClick")
-    shareTarget = findChoice("profiles.ui.automation.share_confirm.target",
+    shareTarget = findChoiceFrame("profiles.ui.automation.share_confirm.target", env,
         function(choice)
             return choice.guid == "Player-1-OPS-A" and choice.specID == 71
         end)
@@ -17526,7 +17913,7 @@ do
     fireEvent("profiles.ui.automation.combat_end", env, "PLAYER_REGEN_ENABLED")
 
     callScript("profiles.ui.automation.stale.open", env.StatsProProfileUseForButton, "OnClick")
-    local staleTarget = findChoice("profiles.ui.automation.stale.target",
+    local staleTarget = findChoiceFrame("profiles.ui.automation.stale.target", env,
         function(choice)
             return choice.guid == "Player-1-OPS-B" and choice.specID == 72
         end)
@@ -17598,10 +17985,9 @@ do
     root.profiles.p2.settings.showDefensive = true
     callScript("profiles.ui.slash_modal.import.open_role",
         env.StatsProProfileRoleTemplateButton, "OnClick")
-    local healerChoice = findFrame("profiles.ui.slash_modal.import.healer_choice", env,
-        function(frame)
-            return frame:IsShown() and type(frame.choiceData) == "table"
-                and frame.choiceData.role == "HEALER"
+    local healerChoice = findChoiceFrame(
+        "profiles.ui.slash_modal.import.healer_choice", env, function(choice)
+            return choice.role == "HEALER"
         end)
     callScript("profiles.ui.slash_modal.import.choose_role", healerChoice, "OnClick")
     local staleImportConfirm = env.StatsProProfileOperationConfirmButton.scripts.OnClick
@@ -17650,7 +18036,7 @@ do
     eq("profiles.ui.ops.selector_assigned", state.selectedAssignedProfileID, "p2")
     local actionCount = 0
     for _ in pairs(state.actions) do actionCount = actionCount + 1 end
-    eq("profiles.ui.ops.action_count", actionCount, 9)
+    eq("profiles.ui.ops.action_count", actionCount, 10)
     eq("profiles.ui.ops.copy_enabled", state.actions.copy.enabled, true)
     eq("profiles.ui.ops.use_same_enabled", state.actions.useSame.enabled, true)
     eq("profiles.ui.ops.use_for_enabled", state.actions.useFor.enabled, true)
@@ -17663,26 +18049,122 @@ do
     eq("profiles.ui.ops.advanced_shown", state.advancedShown, true)
     eq("profiles.ui.ops.reset_visible", state.actions.reset.shown, true)
 
-    local function findChoice(name, predicate)
-        return findFrame(name, env, function(frame)
-            return frame:IsShown() and type(frame.choiceData) == "table"
-                and predicate(frame.choiceData)
-        end)
-    end
     local function chooseCopyStats(prefix)
         callScript(prefix .. ".open", env.StatsProProfileCopyFromButton, "OnClick")
         eq(prefix .. ".source_mode", test.profileUIState().operationKind, "copy-source")
-        local source = findChoice(prefix .. ".source", function(choice)
+        local source = findChoiceFrame(prefix .. ".source", env, function(choice)
             return choice.profileID == "p3"
         end)
         callScript(prefix .. ".choose_source", source, "OnClick")
         eq(prefix .. ".scope_mode", test.profileUIState().operationKind, "copy-scope")
-        local scope = findChoice(prefix .. ".scope", function(choice)
+        local scope = findChoiceFrame(prefix .. ".scope", env, function(choice)
             return choice.scope == "stats"
         end)
         callScript(prefix .. ".choose_scope", scope, "OnClick")
         eq(prefix .. ".confirm_mode", test.profileUIState().operationKind, "copy-context")
     end
+
+    local transferRootBefore = deepCopy(root)
+    callScript("profiles.ui.transfer.open", env.StatsProProfileTransferButton, "OnClick")
+    eq("profiles.ui.transfer.direction_mode",
+        test.profileUIState().operationKind, "transfer-direction")
+    local exportChoice = findChoiceFrame("profiles.ui.transfer.export_choice", env, function(choice)
+        return choice.direction == "export"
+    end)
+    local importChoice = findChoiceFrame("profiles.ui.transfer.import_choice", env, function(choice)
+        return choice.direction == "import"
+    end)
+    check("profiles.ui.transfer.both_directions", exportChoice and importChoice)
+    callScript("profiles.ui.transfer.export_choose", exportChoice, "OnClick")
+    state = test.profileUIState()
+    eq("profiles.ui.transfer.export_kind", state.transferKind, "export")
+    check("profiles.ui.transfer.export_prefix",
+        string.sub(state.transferText, 1, 5) == "SPP1:")
+    eq("profiles.ui.transfer.export_selected", state.transferTextSelected, state.transferText)
+    eq("profiles.ui.transfer.export_focused", state.transferTextFocused, true)
+    eq("profiles.ui.transfer.export_stats_checked", state.transferSections.stats.checked, true)
+    eq("profiles.ui.transfer.export_layout_checked", state.transferSections.layout.checked, true)
+    eq("profiles.ui.transfer.export_appearance_checked",
+        state.transferSections.appearance.checked, true)
+    local canonicalExport = state.transferText
+    env.StatsProProfileTransferEditBox.highlightedText = nil
+    env.StatsProProfileTransferEditBox:SetText("accidental edit")
+    callScript("profiles.ui.transfer.export_edit_changed",
+        env.StatsProProfileTransferEditBox, "OnTextChanged")
+    state = test.profileUIState()
+    eq("profiles.ui.transfer.export_edit_restored", state.transferText, canonicalExport)
+    eq("profiles.ui.transfer.export_edit_reselected",
+        state.transferTextSelected, canonicalExport)
+    local statsCheck = findFrame("profiles.ui.transfer.stats_check", env, function(frame)
+        return frame.statsProTransferSection == "stats"
+    end)
+    statsCheck:SetChecked(false)
+    callScript("profiles.ui.transfer.stats_uncheck", statsCheck, "OnClick")
+    state = test.profileUIState()
+    local transferString = state.transferText
+    local previewPackage = test.profileTransfer.parse(transferString)
+    eq("profiles.ui.transfer.export_stats_removed", previewPackage.sections.stats, nil)
+    eq("profiles.ui.transfer.export_layout_kept", previewPackage.sections.layout, true)
+    eq("profiles.ui.transfer.export_appearance_kept",
+        previewPackage.sections.appearance, true)
+    check("profiles.ui.transfer.export_summary",
+        string.find(state.transferSummary, "Layout settings", 1, true) ~= nil
+            and string.find(state.transferSummary, "Appearance settings", 1, true) ~= nil)
+    callScript("profiles.ui.transfer.export_close",
+        env.StatsProProfileOperationCancelButton, "OnClick")
+    assertDeepEqual("profiles.ui.transfer.export_no_writes", root, transferRootBefore)
+
+    callScript("profiles.ui.transfer.import_open",
+        env.StatsProProfileTransferButton, "OnClick")
+    importChoice = findChoiceFrame("profiles.ui.transfer.import_rechoose", env, function(choice)
+        return choice.direction == "import"
+    end)
+    callScript("profiles.ui.transfer.import_choose", importChoice, "OnClick")
+    eq("profiles.ui.transfer.import_entry_kind",
+        test.profileUIState().transferKind, "import-entry")
+    env.StatsProProfileTransferEditBox:SetText(transferString)
+    callScript("profiles.ui.transfer.import_preview",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    state = test.profileUIState()
+    eq("profiles.ui.transfer.import_preview_kind", state.transferKind, "import-preview")
+    check("profiles.ui.transfer.import_preview_name",
+        string.find(state.transferSummary, "Tank shared", 1, true) ~= nil)
+    eq("profiles.ui.transfer.import_unavailable_stats", state.transferSections.stats.enabled, false)
+    eq("profiles.ui.transfer.import_layout_selected", state.transferSections.layout.checked, true)
+    eq("profiles.ui.transfer.import_appearance_selected",
+        state.transferSections.appearance.checked, true)
+    local appearanceCheck = findFrame(
+        "profiles.ui.transfer.appearance_check", env, function(frame)
+            return frame.statsProTransferSection == "appearance"
+        end)
+    local layoutCheck = findFrame(
+        "profiles.ui.transfer.layout_check", env, function(frame)
+            return frame.statsProTransferSection == "layout"
+        end)
+    appearanceCheck:SetChecked(false)
+    callScript("profiles.ui.transfer.appearance_uncheck", appearanceCheck, "OnClick")
+    layoutCheck:SetChecked(false)
+    callScript("profiles.ui.transfer.layout_uncheck_last", layoutCheck, "OnClick")
+    state = test.profileUIState()
+    eq("profiles.ui.transfer.last_section_stays_preview",
+        state.transferKind, "import-preview")
+    eq("profiles.ui.transfer.last_section_import_disabled",
+        env.StatsProProfileOperationConfirmButton:IsEnabled(), false)
+    check("profiles.ui.transfer.last_section_hint",
+        string.find(state.transferHint, "Choose at least one", 1, true) ~= nil)
+    callScript("profiles.ui.transfer.last_section_guarded_click",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    eq("profiles.ui.transfer.last_section_no_confirmation",
+        test.profileUIState().operationKind, "transfer-import-preview")
+    layoutCheck:SetChecked(true)
+    callScript("profiles.ui.transfer.layout_recheck", layoutCheck, "OnClick")
+    callScript("profiles.ui.transfer.import_prepare_confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    eq("profiles.ui.transfer.import_confirm_kind",
+        test.profileUIState().operationKind, "transfer-import-confirm")
+    callScript("profiles.ui.transfer.import_cancel",
+        env.StatsProProfileOperationCancelButton, "OnClick")
+    assertDeepEqual("profiles.ui.transfer.import_cancel_no_writes", root, transferRootBefore)
 
     local beforeCopyCancel = deepCopy(root)
     chooseCopyStats("profiles.ui.ops.copy_cancel")
@@ -17718,7 +18200,7 @@ do
         -test.settingsDesignSnapshot().geometry.managerActionsTopSolo)
 
     callScript("profiles.ui.ops.stale.open", env.StatsProProfileUseForButton, "OnClick")
-    local staleTarget = findChoice("profiles.ui.ops.stale.target", function(choice)
+    local staleTarget = findChoiceFrame("profiles.ui.ops.stale.target", env, function(choice)
         return choice.guid == "Player-1-OPS-B" and choice.specID == 72
     end)
     callScript("profiles.ui.ops.stale.choose", staleTarget, "OnClick")
@@ -17781,9 +18263,155 @@ do
     end
     eq("profiles.ui.ops.combat.advanced_available",
         state.actions.advanced.enabled, true)
+    eq("profiles.ui.ops.combat.transfer_export_available",
+        state.actions.transfer.enabled, true)
+    callScript("profiles.ui.ops.combat.transfer_open",
+        env.StatsProProfileTransferButton, "OnClick")
+    local combatExport = findChoiceFrame(
+        "profiles.ui.ops.combat.transfer_export", env, function(choice)
+        return choice.direction == "export"
+    end)
+    local combatImportCount = 0
+    for _, choiceState in ipairs(test.profileUIState().choices) do
+        if choiceState.shown and choiceState.data
+            and choiceState.data.direction == "import" then
+            combatImportCount = combatImportCount + 1
+        end
+    end
+    check("profiles.ui.ops.combat.transfer_export_choice", combatExport ~= nil)
+    eq("profiles.ui.ops.combat.transfer_import_hidden", combatImportCount, 0)
+    callScript("profiles.ui.ops.combat.transfer_close",
+        env.StatsProProfileOperationCancelButton, "OnClick")
     identity.combat = false
     fireEvent("profiles.ui.ops.combat_resume", env, "PLAYER_REGEN_ENABLED")
     eq("profiles.ui.ops.combat_resume.mutable", test.profileViewModel().canMutate, true)
+end
+
+do
+    local env, addonContext, test, root = makeProfileOpsFixture({
+        mutateRoot = function(candidate) candidate.dbVersion = 999999 end,
+    })
+    local before = deepCopy(root)
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.future_export.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    local state = test.profileUIState()
+    eq("profiles.ui.future_export.action_enabled", state.actions.transfer.enabled, true)
+    callScript("profiles.ui.future_export.open_direction",
+        env.StatsProProfileTransferButton, "OnClick")
+    state = test.profileUIState()
+    local exportCount, importCount = 0, 0
+    for _, choiceState in ipairs(state.choices) do
+        if choiceState.shown and choiceState.data then
+            if choiceState.data.direction == "export" then exportCount = exportCount + 1 end
+            if choiceState.data.direction == "import" then importCount = importCount + 1 end
+        end
+    end
+    eq("profiles.ui.future_export.one_export_choice", exportCount, 1)
+    eq("profiles.ui.future_export.no_import_choice", importCount, 0)
+    local exportChoice = findChoiceFrame(
+        "profiles.ui.future_export.choice", env, function(choice)
+            return choice.direction == "export"
+        end)
+    callScript("profiles.ui.future_export.choose", exportChoice, "OnClick")
+    state = test.profileUIState()
+    eq("profiles.ui.future_export.kind", state.transferKind, "export")
+    local package, parseReason = test.profileTransfer.parse(state.transferText)
+    check("profiles.ui.future_export.valid_string", type(package) == "table", parseReason)
+    local transferCheckCount = 0
+    for _, frame in ipairs(env.__frames) do
+        if frame.statsProTransferSection then
+            transferCheckCount = transferCheckCount + 1
+            eq("profiles.ui.future_export.section_enabled."
+                .. frame.statsProTransferSection, frame:IsEnabled(), true)
+            check("profiles.ui.future_export.section_nonmutating."
+                .. frame.statsProTransferSection,
+                frame.statsProMutatesSettings ~= true)
+        end
+    end
+    eq("profiles.ui.future_export.section_count", transferCheckCount, 3)
+    callScript("profiles.ui.future_export.close",
+        env.StatsProProfileOperationCancelButton, "OnClick")
+    assertDeepEqual("profiles.ui.future_export.no_writes", root, before)
+end
+
+do
+    local env, addonContext, test, root = makeProfileOpsFixture()
+    local transferString = test.profileTransfer.serialize(
+        root.profiles.p3.name, root.profiles.p3.settings,
+        { layout = true, appearance = true })
+    local before = deepCopy(root)
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.transfer_commit.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+
+    local function chooseImport(prefix)
+        callScript(prefix .. ".open", env.StatsProProfileTransferButton, "OnClick")
+        local row = findChoiceFrame(prefix .. ".choice", env, function(choice)
+            return choice.direction == "import"
+        end)
+        callScript(prefix .. ".choose", row, "OnClick")
+    end
+
+    chooseImport("profiles.ui.transfer_commit.invalid")
+    env.StatsProProfileTransferEditBox:SetText("SPP2:00000000:AAAA")
+    callScript("profiles.ui.transfer_commit.invalid_preview",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    local state = test.profileUIState()
+    eq("profiles.ui.transfer_commit.invalid_stays_entry", state.transferKind, "import-entry")
+    check("profiles.ui.transfer_commit.invalid_future_hint",
+        string.find(state.transferHint, "newer unsupported", 1, true) ~= nil)
+    assertDeepEqual("profiles.ui.transfer_commit.invalid_no_writes", root, before)
+    callScript("profiles.ui.transfer_commit.invalid_close",
+        env.StatsProProfileOperationCancelButton, "OnClick")
+
+    chooseImport("profiles.ui.transfer_commit.valid")
+    env.StatsProProfileTransferEditBox:SetText(transferString)
+    callScript("profiles.ui.transfer_commit.preview",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    state = test.profileUIState()
+    eq("profiles.ui.transfer_commit.preview_kind", state.transferKind, "import-preview")
+    env.StatsProProfileTransferEditBox:SetText(transferString .. " ")
+    callScript("profiles.ui.transfer_commit.edit_after_preview",
+        env.StatsProProfileTransferEditBox, "OnTextChanged")
+    state = test.profileUIState()
+    eq("profiles.ui.transfer_commit.edit_returns_entry",
+        state.transferKind, "import-entry")
+    eq("profiles.ui.transfer_commit.edit_clears_layout",
+        state.transferSections.layout.checked, false)
+    eq("profiles.ui.transfer_commit.edit_disables_layout",
+        state.transferSections.layout.enabled, false)
+    assertDeepEqual("profiles.ui.transfer_commit.edit_no_writes", root, before)
+    callScript("profiles.ui.transfer_commit.repreview",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    eq("profiles.ui.transfer_commit.repreview_kind",
+        test.profileUIState().transferKind, "import-preview")
+    local layoutCheck = findFrame("profiles.ui.transfer_commit.layout", env, function(frame)
+        return frame.statsProTransferSection == "layout"
+    end)
+    layoutCheck:SetChecked(false)
+    callScript("profiles.ui.transfer_commit.layout_uncheck", layoutCheck, "OnClick")
+    callScript("profiles.ui.transfer_commit.prepare",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    eq("profiles.ui.transfer_commit.confirm_kind",
+        test.profileUIState().operationKind, "transfer-import-confirm")
+    callScript("profiles.ui.transfer_commit.confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    eq("profiles.ui.transfer_commit.assignment",
+        root.characters["Player-1-OPS-A"].specProfiles[73], "p5")
+    eq("profiles.ui.transfer_commit.name", root.profiles.p5.name, "Damage solo 2")
+    eq("profiles.ui.transfer_commit.appearance_applied",
+        root.profiles.p5.settings.colors.crit.r, 0.31)
+    eq("profiles.ui.transfer_commit.layout_preserved",
+        root.profiles.p5.settings.scale, 1.1)
+    eq("profiles.ui.transfer_commit.stats_preserved",
+        root.profiles.p5.settings.showDefensive, true)
+    assertDeepEqual("profiles.ui.transfer_commit.source_unchanged",
+        root.profiles.p3, before.profiles.p3)
+    assertDeepEqual("profiles.ui.transfer_commit.target_unchanged",
+        root.profiles.p2, before.profiles.p2)
+    check("profiles.ui.transfer_commit.message",
+        printContains(env, "Imported profile \"Damage solo 2\" was created."))
 end
 
 smokeReachability:complete("profile-mutations")
@@ -17814,7 +18442,7 @@ do
             control.height >= 24 and control.width >= 24,
             "interactive control is smaller than 24x24px")
     end
-    eq("config.control_design.checkbox_count", counts.checkbox, 37)
+    eq("config.control_design.checkbox_count", counts.checkbox, 40)
     eq("config.control_design.swatch_count", counts.swatch, 18)
     eq("config.control_design.slider_count", counts.slider, 5)
     eq("config.control_design.dropdown_trigger_count", counts.dropdown, 6)

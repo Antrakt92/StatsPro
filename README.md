@@ -55,6 +55,15 @@ automatically. Open **Profiles & sharing...** when you want to copy **Stats**, *
 share one set of settings between two specializations. **Stop sharing** gives the
 selected specialization its own copy again.
 
+**Export / import profile...** creates a versioned `SPP1:` string for any
+combination of **Stats**, **Layout**, and **Appearance**. Import always shows the
+profile name, format version, and included sections before it can write. You can
+leave sections unchecked; those settings are inherited from the selected
+specialization, and the imported sections are saved as a new independent profile.
+Existing profiles, other specialization assignments, account language, and refresh
+rate are not overwritten. A custom font must also be installed on the receiving
+client for the exact typeface to render; StatsPro keeps its normal safe fallback.
+
 Less common maintenance stays under **Advanced**: reset the selected settings,
 forget an offline character, choose Tank, Healer, and Damage defaults for future
 specializations, or delete settings records that are no longer used.

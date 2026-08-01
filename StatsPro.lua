@@ -726,7 +726,6 @@ function addon.archonTargets.GetCurrentSpecKey()
     return addon.archonTargets.specKeyByID[specID]
 end
 
-addon.archonTargets.IsCleanFiniteNumber = addon.IsCleanFiniteNumber
 
 function addon.archonTargets.IsCleanContextKey(value)
     return type(value) == "string" and not issecretvalue(value) and value ~= ""
@@ -750,8 +749,8 @@ end
 function addon.archonTargets.GetCachedComparison(classToken, specKey, snapshotKey, statKey,
                                                   target, ratingCR, capturedAt)
     if not addon.archonTargets.IsCleanContextKey(statKey)
-        or not addon.archonTargets.IsCleanFiniteNumber(target)
-        or not addon.archonTargets.IsCleanFiniteNumber(ratingCR)
+        or not addon.IsCleanFiniteNumber(target)
+        or not addon.IsCleanFiniteNumber(ratingCR)
         or type(capturedAt) ~= "string" or issecretvalue(capturedAt) then return nil end
     local cache = addon.archonTargets.ActivateComparisonContext(classToken, specKey, snapshotKey)
     if not cache then return nil end
@@ -764,12 +763,12 @@ function addon.archonTargets.GetCachedComparison(classToken, specKey, snapshotKe
         cache.entries[statKey] = nil
         return nil
     end
-    if not addon.archonTargets.IsCleanFiniteNumber(entry.current)
-        or not addon.archonTargets.IsCleanFiniteNumber(entry.delta) then
+    if not addon.IsCleanFiniteNumber(entry.current)
+        or not addon.IsCleanFiniteNumber(entry.delta) then
         cache.entries[statKey] = nil
         return nil
     end
-    if entry.currentPct ~= nil and not addon.archonTargets.IsCleanFiniteNumber(entry.currentPct) then
+    if entry.currentPct ~= nil and not addon.IsCleanFiniteNumber(entry.currentPct) then
         cache.entries[statKey] = nil
         return nil
     end
@@ -780,12 +779,12 @@ function addon.archonTargets.StoreCleanComparison(classToken, specKey, snapshotK
                                                    target, ratingCR, capturedAt,
                                                    current, currentPct, delta)
     if not addon.archonTargets.IsCleanContextKey(statKey)
-        or not addon.archonTargets.IsCleanFiniteNumber(target)
-        or not addon.archonTargets.IsCleanFiniteNumber(ratingCR)
-        or not addon.archonTargets.IsCleanFiniteNumber(current)
-        or not addon.archonTargets.IsCleanFiniteNumber(delta)
+        or not addon.IsCleanFiniteNumber(target)
+        or not addon.IsCleanFiniteNumber(ratingCR)
+        or not addon.IsCleanFiniteNumber(current)
+        or not addon.IsCleanFiniteNumber(delta)
         or type(capturedAt) ~= "string" or issecretvalue(capturedAt) then return end
-    if currentPct ~= nil and not addon.archonTargets.IsCleanFiniteNumber(currentPct) then return end
+    if currentPct ~= nil and not addon.IsCleanFiniteNumber(currentPct) then return end
     local cache = addon.archonTargets.ActivateComparisonContext(classToken, specKey, snapshotKey)
     if not cache then return end
     cache.entries[statKey] = {
@@ -861,21 +860,21 @@ end
 
 function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, currentPct,
                                        colorKey, currentPctDisplay, currentRatingDisplay)
-    local hasCleanCurrent = addon.archonTargets.IsCleanFiniteNumber(currentRating) and currentRating >= 0
+    local hasCleanCurrent = addon.IsCleanFiniteNumber(currentRating) and currentRating >= 0
     local ratingDisplaySecretOK, ratingDisplayIsSecret =
         pcall(issecretvalue, currentRatingDisplay)
     local hasLiveCurrentRating = ratingDisplaySecretOK and ratingDisplayIsSecret
     local displaySecretOK, displayIsSecret = pcall(issecretvalue, currentPctDisplay)
     local hasCurrentPctDisplay = displaySecretOK and (displayIsSecret
-        or addon.archonTargets.IsCleanFiniteNumber(currentPctDisplay))
+        or addon.IsCleanFiniteNumber(currentPctDisplay))
     if not hasCurrentPctDisplay then
         currentPctDisplay = currentPct
-        hasCurrentPctDisplay = addon.archonTargets.IsCleanFiniteNumber(currentPctDisplay)
+        hasCurrentPctDisplay = addon.IsCleanFiniteNumber(currentPctDisplay)
     end
     local target, snapshot, snapshotRoot, _, snapshotKey, classToken, specKey = addon.archonTargets.GetStatTarget(statKey)
     if not target then return nil end
     if type(snapshot) ~= "table" or type(snapshotRoot) ~= "table" then return nil end
-    local cleanRatingCR = addon.archonTargets.IsCleanFiniteNumber(ratingCR) and ratingCR or nil
+    local cleanRatingCR = addon.IsCleanFiniteNumber(ratingCR) and ratingCR or nil
     local capturedAt = snapshotRoot.capturedAt
     local meta = {
         statKey = statKey,
@@ -888,9 +887,9 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
         snapshotKey = snapshotKey,
     }
     if hasCleanCurrent then
-        local displayPct = addon.archonTargets.IsCleanFiniteNumber(currentPct) and currentPct or nil
+        local displayPct = addon.IsCleanFiniteNumber(currentPct) and currentPct or nil
         local delta = currentRating - target
-        if addon.archonTargets.IsCleanFiniteNumber(delta) then
+        if addon.IsCleanFiniteNumber(delta) then
             meta.comparisonState = "exact"
             meta.current = currentRating
             meta.currentPct = displayPct
@@ -2618,6 +2617,217 @@ local LABELS_BY_LOCALE = {
     },
 }
 
+-- Profile-transfer copy is kept as a compact overlay so the versioned exchange
+-- vocabulary stays reviewable as one unit across all shipped locales.
+do
+    local profileTransferLabels = {
+    enUS = {
+        ["Export / import profile..."] = "Export / import profile...",
+        ["Export this profile"] = "Export this profile",
+        ["Import into a new profile"] = "Import into a new profile",
+        ["Export profile"] = "Export profile",
+        ["Import profile"] = "Import profile",
+        ["Select all"] = "Select all",
+        ["Preview"] = "Preview",
+        ["Imported profile"] = "Imported profile",
+        ["Export string ready. Select it, then press Ctrl+C to copy."] = "Export string ready. Select it, then press Ctrl+C to copy.",
+        ["Paste a StatsPro profile string, then preview it before importing."] = "Paste a StatsPro profile string, then preview it before importing.",
+        ["StatsPro profile: %s"] = "StatsPro profile: %s",
+        ["Format version: %d"] = "Format version: %d",
+        ["Included: %s"] = "Included: %s",
+        ["Choose at least one section."] = "Choose at least one section.",
+        ["The profile string is invalid or damaged."] = "The profile string is invalid or damaged.",
+        ["This profile string uses a newer unsupported format."] = "This profile string uses a newer unsupported format.",
+        ["Import selected sections as a new independent profile for \"%s\"? Existing profiles and unselected settings will stay unchanged."] = "Import selected sections as a new independent profile for \"%s\"? Existing profiles and unselected settings will stay unchanged.",
+        ["Imported profile \"%s\" was created."] = "Imported profile \"%s\" was created.",
+    },
+    ruRU = {
+        ["Export / import profile..."] = "Экспорт / импорт профиля...",
+        ["Export this profile"] = "Экспортировать этот профиль",
+        ["Import into a new profile"] = "Импортировать в новый профиль",
+        ["Export profile"] = "Экспорт профиля",
+        ["Import profile"] = "Импорт профиля",
+        ["Select all"] = "Выделить всё",
+        ["Preview"] = "Предпросмотр",
+        ["Imported profile"] = "Импортированный профиль",
+        ["Export string ready. Select it, then press Ctrl+C to copy."] = "Строка готова. Выделите её и нажмите Ctrl+C.",
+        ["Paste a StatsPro profile string, then preview it before importing."] = "Вставьте строку профиля StatsPro и проверьте её перед импортом.",
+        ["StatsPro profile: %s"] = "Профиль StatsPro: %s",
+        ["Format version: %d"] = "Версия формата: %d",
+        ["Included: %s"] = "Включено: %s",
+        ["Choose at least one section."] = "Выберите хотя бы один раздел.",
+        ["The profile string is invalid or damaged."] = "Строка профиля недействительна или повреждена.",
+        ["This profile string uses a newer unsupported format."] = "Строка создана в более новой неподдерживаемой версии формата.",
+        ["Import selected sections as a new independent profile for \"%s\"? Existing profiles and unselected settings will stay unchanged."] = "Импортировать выбранные разделы как новый независимый профиль для «%s»? Существующие профили и невыбранные настройки не изменятся.",
+        ["Imported profile \"%s\" was created."] = "Импортированный профиль «%s» создан.",
+    },
+    deDE = {
+        ["Export / import profile..."] = "Profil exportieren / importieren...",
+        ["Export this profile"] = "Dieses Profil exportieren",
+        ["Import into a new profile"] = "In ein neues Profil importieren",
+        ["Export profile"] = "Profil exportieren",
+        ["Import profile"] = "Profil importieren",
+        ["Select all"] = "Alles markieren",
+        ["Preview"] = "Vorschau",
+        ["Imported profile"] = "Importiertes Profil",
+        ["Export string ready. Select it, then press Ctrl+C to copy."] = "Exportzeichenfolge ist bereit. Markiere sie und drücke Strg+C.",
+        ["Paste a StatsPro profile string, then preview it before importing."] = "Füge eine StatsPro-Profilzeichenfolge ein und prüfe sie vor dem Import.",
+        ["StatsPro profile: %s"] = "StatsPro-Profil: %s",
+        ["Format version: %d"] = "Formatversion: %d",
+        ["Included: %s"] = "Enthalten: %s",
+        ["Choose at least one section."] = "Wähle mindestens einen Bereich.",
+        ["The profile string is invalid or damaged."] = "Die Profilzeichenfolge ist ungültig oder beschädigt.",
+        ["This profile string uses a newer unsupported format."] = "Diese Profilzeichenfolge verwendet ein neueres, nicht unterstütztes Format.",
+        ["Import selected sections as a new independent profile for \"%s\"? Existing profiles and unselected settings will stay unchanged."] = "Ausgewählte Bereiche als neues unabhängiges Profil für „%s“ importieren? Bestehende Profile und nicht ausgewählte Einstellungen bleiben unverändert.",
+        ["Imported profile \"%s\" was created."] = "Das importierte Profil „%s“ wurde erstellt.",
+    },
+    frFR = {
+        ["Export / import profile..."] = "Exporter / importer un profil...",
+        ["Export this profile"] = "Exporter ce profil",
+        ["Import into a new profile"] = "Importer dans un nouveau profil",
+        ["Export profile"] = "Exporter le profil",
+        ["Import profile"] = "Importer le profil",
+        ["Select all"] = "Tout sélectionner",
+        ["Preview"] = "Aperçu",
+        ["Imported profile"] = "Profil importé",
+        ["Export string ready. Select it, then press Ctrl+C to copy."] = "La chaîne est prête. Sélectionnez-la puis appuyez sur Ctrl+C.",
+        ["Paste a StatsPro profile string, then preview it before importing."] = "Collez une chaîne de profil StatsPro puis vérifiez-la avant l’importation.",
+        ["StatsPro profile: %s"] = "Profil StatsPro : %s",
+        ["Format version: %d"] = "Version du format : %d",
+        ["Included: %s"] = "Inclus : %s",
+        ["Choose at least one section."] = "Sélectionnez au moins une section.",
+        ["The profile string is invalid or damaged."] = "La chaîne de profil est invalide ou endommagée.",
+        ["This profile string uses a newer unsupported format."] = "Cette chaîne utilise un format plus récent non pris en charge.",
+        ["Import selected sections as a new independent profile for \"%s\"? Existing profiles and unselected settings will stay unchanged."] = "Importer les sections sélectionnées dans un nouveau profil indépendant pour « %s » ? Les profils existants et les réglages non sélectionnés resteront inchangés.",
+        ["Imported profile \"%s\" was created."] = "Le profil importé « %s » a été créé.",
+    },
+    esES = {
+        ["Export / import profile..."] = "Exportar / importar perfil...",
+        ["Export this profile"] = "Exportar este perfil",
+        ["Import into a new profile"] = "Importar a un perfil nuevo",
+        ["Export profile"] = "Exportar perfil",
+        ["Import profile"] = "Importar perfil",
+        ["Select all"] = "Seleccionar todo",
+        ["Preview"] = "Vista previa",
+        ["Imported profile"] = "Perfil importado",
+        ["Export string ready. Select it, then press Ctrl+C to copy."] = "La cadena está lista. Selecciónala y pulsa Ctrl+C.",
+        ["Paste a StatsPro profile string, then preview it before importing."] = "Pega una cadena de perfil de StatsPro y revísala antes de importarla.",
+        ["StatsPro profile: %s"] = "Perfil de StatsPro: %s",
+        ["Format version: %d"] = "Versión del formato: %d",
+        ["Included: %s"] = "Incluye: %s",
+        ["Choose at least one section."] = "Elige al menos una sección.",
+        ["The profile string is invalid or damaged."] = "La cadena de perfil no es válida o está dañada.",
+        ["This profile string uses a newer unsupported format."] = "Esta cadena usa un formato más reciente no compatible.",
+        ["Import selected sections as a new independent profile for \"%s\"? Existing profiles and unselected settings will stay unchanged."] = "¿Importar las secciones seleccionadas como un perfil independiente nuevo para «%s»? Los perfiles existentes y los ajustes no seleccionados no cambiarán.",
+        ["Imported profile \"%s\" was created."] = "Se ha creado el perfil importado «%s».",
+    },
+    itIT = {
+        ["Export / import profile..."] = "Esporta / importa profilo...",
+        ["Export this profile"] = "Esporta questo profilo",
+        ["Import into a new profile"] = "Importa in un nuovo profilo",
+        ["Export profile"] = "Esporta profilo",
+        ["Import profile"] = "Importa profilo",
+        ["Select all"] = "Seleziona tutto",
+        ["Preview"] = "Anteprima",
+        ["Imported profile"] = "Profilo importato",
+        ["Export string ready. Select it, then press Ctrl+C to copy."] = "La stringa è pronta. Selezionala e premi Ctrl+C.",
+        ["Paste a StatsPro profile string, then preview it before importing."] = "Incolla una stringa profilo StatsPro e controllala prima di importarla.",
+        ["StatsPro profile: %s"] = "Profilo StatsPro: %s",
+        ["Format version: %d"] = "Versione formato: %d",
+        ["Included: %s"] = "Incluso: %s",
+        ["Choose at least one section."] = "Scegli almeno una sezione.",
+        ["The profile string is invalid or damaged."] = "La stringa del profilo non è valida o è danneggiata.",
+        ["This profile string uses a newer unsupported format."] = "Questa stringa usa un formato più recente non supportato.",
+        ["Import selected sections as a new independent profile for \"%s\"? Existing profiles and unselected settings will stay unchanged."] = "Importare le sezioni selezionate come nuovo profilo indipendente per «%s»? I profili esistenti e le impostazioni non selezionate resteranno invariati.",
+        ["Imported profile \"%s\" was created."] = "Il profilo importato «%s» è stato creato.",
+    },
+    ptBR = {
+        ["Export / import profile..."] = "Exportar / importar perfil...",
+        ["Export this profile"] = "Exportar este perfil",
+        ["Import into a new profile"] = "Importar para um novo perfil",
+        ["Export profile"] = "Exportar perfil",
+        ["Import profile"] = "Importar perfil",
+        ["Select all"] = "Selecionar tudo",
+        ["Preview"] = "Prévia",
+        ["Imported profile"] = "Perfil importado",
+        ["Export string ready. Select it, then press Ctrl+C to copy."] = "A string está pronta. Selecione-a e pressione Ctrl+C.",
+        ["Paste a StatsPro profile string, then preview it before importing."] = "Cole uma string de perfil do StatsPro e confira antes de importar.",
+        ["StatsPro profile: %s"] = "Perfil do StatsPro: %s",
+        ["Format version: %d"] = "Versão do formato: %d",
+        ["Included: %s"] = "Incluído: %s",
+        ["Choose at least one section."] = "Escolha pelo menos uma seção.",
+        ["The profile string is invalid or damaged."] = "A string do perfil é inválida ou está danificada.",
+        ["This profile string uses a newer unsupported format."] = "Esta string usa um formato mais recente sem suporte.",
+        ["Import selected sections as a new independent profile for \"%s\"? Existing profiles and unselected settings will stay unchanged."] = "Importar as seções selecionadas como um novo perfil independente para “%s”? Os perfis existentes e as configurações não selecionadas permanecerão inalterados.",
+        ["Imported profile \"%s\" was created."] = "O perfil importado “%s” foi criado.",
+    },
+    koKR = {
+        ["Export / import profile..."] = "프로필 내보내기 / 가져오기...",
+        ["Export this profile"] = "이 프로필 내보내기",
+        ["Import into a new profile"] = "새 프로필로 가져오기",
+        ["Export profile"] = "프로필 내보내기",
+        ["Import profile"] = "프로필 가져오기",
+        ["Select all"] = "모두 선택",
+        ["Preview"] = "미리 보기",
+        ["Imported profile"] = "가져온 프로필",
+        ["Export string ready. Select it, then press Ctrl+C to copy."] = "내보내기 문자열이 준비되었습니다. 선택한 뒤 Ctrl+C를 누르세요.",
+        ["Paste a StatsPro profile string, then preview it before importing."] = "StatsPro 프로필 문자열을 붙여넣고 가져오기 전에 확인하세요.",
+        ["StatsPro profile: %s"] = "StatsPro 프로필: %s",
+        ["Format version: %d"] = "형식 버전: %d",
+        ["Included: %s"] = "포함: %s",
+        ["Choose at least one section."] = "하나 이상의 섹션을 선택하세요.",
+        ["The profile string is invalid or damaged."] = "프로필 문자열이 잘못되었거나 손상되었습니다.",
+        ["This profile string uses a newer unsupported format."] = "이 문자열은 지원되지 않는 새 형식을 사용합니다.",
+        ["Import selected sections as a new independent profile for \"%s\"? Existing profiles and unselected settings will stay unchanged."] = "선택한 섹션을 “%s”의 새 독립 프로필로 가져오시겠습니까? 기존 프로필과 선택하지 않은 설정은 변경되지 않습니다.",
+        ["Imported profile \"%s\" was created."] = "가져온 프로필 “%s”을(를) 만들었습니다.",
+    },
+    zhCN = {
+        ["Export / import profile..."] = "导出 / 导入配置...",
+        ["Export this profile"] = "导出此配置",
+        ["Import into a new profile"] = "导入为新配置",
+        ["Export profile"] = "导出配置",
+        ["Import profile"] = "导入配置",
+        ["Select all"] = "全选",
+        ["Preview"] = "预览",
+        ["Imported profile"] = "导入的配置",
+        ["Export string ready. Select it, then press Ctrl+C to copy."] = "导出字符串已就绪。选中后按 Ctrl+C 复制。",
+        ["Paste a StatsPro profile string, then preview it before importing."] = "粘贴 StatsPro 配置字符串，并在导入前预览。",
+        ["StatsPro profile: %s"] = "StatsPro 配置：%s",
+        ["Format version: %d"] = "格式版本：%d",
+        ["Included: %s"] = "包含：%s",
+        ["Choose at least one section."] = "请至少选择一个部分。",
+        ["The profile string is invalid or damaged."] = "配置字符串无效或已损坏。",
+        ["This profile string uses a newer unsupported format."] = "此字符串使用了尚不支持的新版格式。",
+        ["Import selected sections as a new independent profile for \"%s\"? Existing profiles and unselected settings will stay unchanged."] = "将所选部分作为“%s”的新独立配置导入？现有配置和未选设置不会改变。",
+        ["Imported profile \"%s\" was created."] = "已创建导入配置“%s”。",
+    },
+    zhTW = {
+        ["Export / import profile..."] = "匯出 / 匯入設定檔...",
+        ["Export this profile"] = "匯出此設定檔",
+        ["Import into a new profile"] = "匯入為新設定檔",
+        ["Export profile"] = "匯出設定檔",
+        ["Import profile"] = "匯入設定檔",
+        ["Select all"] = "全選",
+        ["Preview"] = "預覽",
+        ["Imported profile"] = "匯入的設定檔",
+        ["Export string ready. Select it, then press Ctrl+C to copy."] = "匯出字串已就緒。選取後按 Ctrl+C 複製。",
+        ["Paste a StatsPro profile string, then preview it before importing."] = "貼上 StatsPro 設定檔字串，並在匯入前預覽。",
+        ["StatsPro profile: %s"] = "StatsPro 設定檔：%s",
+        ["Format version: %d"] = "格式版本：%d",
+        ["Included: %s"] = "包含：%s",
+        ["Choose at least one section."] = "請至少選擇一個區段。",
+        ["The profile string is invalid or damaged."] = "設定檔字串無效或已損毀。",
+        ["This profile string uses a newer unsupported format."] = "此字串使用尚未支援的新版格式。",
+        ["Import selected sections as a new independent profile for \"%s\"? Existing profiles and unselected settings will stay unchanged."] = "將所選區段作為「%s」的新獨立設定檔匯入？現有設定檔與未選設定不會變更。",
+        ["Imported profile \"%s\" was created."] = "已建立匯入的設定檔「%s」。",
+    },
+}
+    profileTransferLabels.esMX = profileTransferLabels.esES
+    for locale, transferLabels in pairs(profileTransferLabels) do
+        for key, value in pairs(transferLabels) do LABELS_BY_LOCALE[locale][key] = value end
+    end
+end
+
 -- WARNING: must precede ResolveActiveLocale — forward-ref to GetDB resolves as _G.GetDB at parse time.
 local function GetDB(key)
     local db = addon.dbRuntime.GetSettingStore(key)
@@ -3491,6 +3701,477 @@ addon.profileOps = {
     },
 }
 
+-- Profile strings are deliberately field-driven. They never serialize arbitrary
+-- SavedVariables tables and are never evaluated as Lua, so pasted text cannot add
+-- unknown keys, aliases, functions, or account-wide settings. Format v1 is a
+-- canonical payload wrapped in Base64 plus Adler-32 for accidental-damage detection.
+addon.profileTransfer = {
+    formatVersion = 1,
+    prefix = "SPP1:",
+    maxEncodedBytes = 16384,
+    maxPayloadBytes = 12000,
+    maxFontBytes = 512,
+    validationToken = {},
+    sectionOrder = { "stats", "layout", "appearance" },
+    sectionLabelKeys = {
+        stats = "Stat and gear settings",
+        layout = "Layout settings",
+        appearance = "Appearance settings",
+    },
+    allowedStrings = {
+        targetSnapshot = { mythicPlus = true, raid = true },
+        displayMode = { flat = true, sectioned = true, split = true },
+        labelStyle = { full = true, short = true, hidden = true },
+        textOutlineStyle = { none = true, outline = true, thick = true },
+    },
+    fields = {
+        { id="showRating", section="stats", kind="boolean" },
+        { id="showPercentage", section="stats", kind="boolean" },
+        { id="targetSnapshot", section="stats", kind="enum" },
+        { id="showTertiary", section="stats", kind="boolean" },
+        { id="hideZeroTertiary", section="stats", kind="boolean" },
+        { id="showLeech", section="stats", kind="boolean" },
+        { id="showAvoidance", section="stats", kind="boolean" },
+        { id="showSpeed", section="stats", kind="boolean" },
+        { id="showMainStat", section="stats", kind="boolean" },
+        { id="showStamina", section="stats", kind="boolean" },
+        { id="showItemLevel", section="stats", kind="boolean" },
+        { id="showDefensive", section="stats", kind="boolean" },
+        { id="hideZeroDefensive", section="stats", kind="boolean" },
+        { id="showDodge", section="stats", kind="boolean" },
+        { id="showParry", section="stats", kind="boolean" },
+        { id="showBlock", section="stats", kind="boolean" },
+        { id="showArmor", section="stats", kind="boolean" },
+        { id="showStagger", section="stats", kind="boolean" },
+        { id="showOffensive", section="stats", kind="boolean" },
+        { id="hideZeroOffensive", section="stats", kind="boolean" },
+        { id="showCrit", section="stats", kind="boolean" },
+        { id="showHaste", section="stats", kind="boolean" },
+        { id="showMastery", section="stats", kind="boolean" },
+        { id="showVersatility", section="stats", kind="boolean" },
+        { id="showDurability", section="stats", kind="boolean" },
+        { id="showRepairCost", section="stats", kind="boolean" },
+        { id="useWorstDurability", section="stats", kind="boolean" },
+
+        { id="point", section="layout", kind="anchor" },
+        { id="relativePoint", section="layout", kind="anchor" },
+        { id="xOfs", section="layout", kind="offset", axis="x" },
+        { id="yOfs", section="layout", kind="offset", axis="y" },
+        { id="defensive_point", section="layout", kind="anchor" },
+        { id="defensive_relativePoint", section="layout", kind="anchor" },
+        { id="defensive_xOfs", section="layout", kind="offset", axis="x" },
+        { id="defensive_yOfs", section="layout", kind="offset", axis="y" },
+        { id="scale", section="layout", kind="number-setting" },
+        { id="isVisible", section="layout", kind="boolean" },
+        { id="isLocked", section="layout", kind="boolean" },
+        { id="displayMode", section="layout", kind="enum" },
+        { id="labelStyle", section="layout", kind="enum" },
+        { id="splitCharacter", section="layout", kind="boolean" },
+        { id="splitItemLevel", section="layout", kind="boolean" },
+        { id="splitOffensive", section="layout", kind="boolean" },
+        { id="splitTertiary", section="layout", kind="boolean" },
+        { id="splitDefensive", section="layout", kind="boolean" },
+        { id="splitDurability", section="layout", kind="boolean" },
+        { id="splitRepairCost", section="layout", kind="boolean" },
+
+        { id="font", section="appearance", kind="font" },
+        { id="fontSize", section="appearance", kind="number-setting" },
+        { id="textAlpha", section="appearance", kind="number-setting" },
+        { id="panelBackgroundAlpha", section="appearance", kind="number-setting" },
+        { id="textOutlineStyle", section="appearance", kind="enum" },
+        { id="appearancePresetID", section="appearance", kind="preset" },
+        { id="matchValueColorToStat", section="appearance", kind="boolean" },
+        { id="useAutoColorDurability", section="appearance", kind="boolean" },
+    },
+}
+
+do
+    local transfer = addon.profileTransfer
+    transfer.fieldByID = {}
+    transfer.sectionFieldCounts = { stats = 0, layout = 0, appearance = 0 }
+    transfer.base64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    transfer.base64Reverse = {}
+    for index = 1, #transfer.base64Alphabet do
+        transfer.base64Reverse[string.sub(transfer.base64Alphabet, index, index)] = index - 1
+    end
+    for _, colorName in ipairs({
+        "crit", "haste", "mastery", "versatility", "rating", "percentage",
+        "leech", "avoidance", "speed", "mainStat", "stamina", "itemLevel",
+        "dodge", "parry", "block", "armor", "stagger", "durability",
+    }) do
+        for _, channel in ipairs({ "r", "g", "b" }) do
+            transfer.fields[#transfer.fields + 1] = {
+                id = "colors." .. colorName .. "." .. channel,
+                section = "appearance",
+                kind = "color",
+                color = colorName,
+                channel = channel,
+            }
+        end
+    end
+    for _, field in ipairs(transfer.fields) do
+        transfer.fieldByID[field.id] = field
+        transfer.sectionFieldCounts[field.section] =
+            transfer.sectionFieldCounts[field.section] + 1
+    end
+end
+
+function addon.profileTransfer.Adler32(value)
+    local a, b = 1, 0
+    for index = 1, #value do
+        a = (a + string.byte(value, index)) % 65521
+        b = (b + a) % 65521
+    end
+    return string.format("%08x", b * 65536 + a)
+end
+
+function addon.profileTransfer.Base64Encode(value)
+    local alphabet = addon.profileTransfer.base64Alphabet
+    local out = {}
+    for index = 1, #value, 3 do
+        local a = string.byte(value, index)
+        local b = string.byte(value, index + 1)
+        local c = string.byte(value, index + 2)
+        local combined = a * 65536 + (b or 0) * 256 + (c or 0)
+        local first = math.floor(combined / 262144) % 64
+        local second = math.floor(combined / 4096) % 64
+        local third = math.floor(combined / 64) % 64
+        local fourth = combined % 64
+        out[#out + 1] = string.sub(alphabet, first + 1, first + 1)
+        out[#out + 1] = string.sub(alphabet, second + 1, second + 1)
+        out[#out + 1] = b and string.sub(alphabet, third + 1, third + 1) or "="
+        out[#out + 1] = c and string.sub(alphabet, fourth + 1, fourth + 1) or "="
+    end
+    return table.concat(out)
+end
+
+function addon.profileTransfer.Base64Decode(value)
+    if type(value) ~= "string" or #value == 0 or #value % 4 ~= 0
+        or #value > addon.profileTransfer.maxEncodedBytes then
+        return nil
+    end
+    local reverse = addon.profileTransfer.base64Reverse
+    local out = {}
+    for index = 1, #value, 4 do
+        local c1, c2 = string.sub(value, index, index), string.sub(value, index + 1, index + 1)
+        local c3, c4 = string.sub(value, index + 2, index + 2), string.sub(value, index + 3, index + 3)
+        local v1, v2, v3, v4 = reverse[c1], reverse[c2], reverse[c3], reverse[c4]
+        local finalBlock = index + 3 == #value
+        if v1 == nil or v2 == nil or (c3 ~= "=" and v3 == nil)
+            or (c4 ~= "=" and v4 == nil) or (c3 == "=" and c4 ~= "=")
+            or ((c3 == "=" or c4 == "=") and not finalBlock) then
+            return nil
+        end
+        -- Reject alternate spellings of the same bytes. Unused Base64 pad bits
+        -- must be zero so every v1 payload has one canonical wire form.
+        if (c3 == "=" and v2 % 16 ~= 0)
+            or (c4 == "=" and c3 ~= "=" and v3 % 4 ~= 0) then
+            return nil
+        end
+        local combined = v1 * 262144 + v2 * 4096 + (v3 or 0) * 64 + (v4 or 0)
+        out[#out + 1] = string.char(math.floor(combined / 65536) % 256)
+        if c3 ~= "=" then out[#out + 1] = string.char(math.floor(combined / 256) % 256) end
+        if c4 ~= "=" then out[#out + 1] = string.char(combined % 256) end
+        if #out > addon.profileTransfer.maxPayloadBytes then return nil end
+    end
+    local decoded = table.concat(out)
+    if #decoded > addon.profileTransfer.maxPayloadBytes then return nil end
+    return decoded
+end
+
+function addon.profileTransfer.HexEncode(value)
+    return (value:gsub(".", function(byte)
+        return string.format("%02X", string.byte(byte))
+    end))
+end
+
+function addon.profileTransfer.HexDecode(value)
+    if type(value) ~= "string" or #value % 2 ~= 0 or value:find("[^0-9A-Fa-f]") then
+        return nil
+    end
+    local out = {}
+    for index = 1, #value, 2 do
+        out[#out + 1] = string.char(tonumber(string.sub(value, index, index + 1), 16))
+    end
+    return table.concat(out)
+end
+
+function addon.profileTransfer.ReadField(settings, field)
+    local value
+    if field.kind == "color" then
+        local colors = addon.dbRuntime.IsCleanTable(settings) and rawget(settings, "colors") or nil
+        local color = addon.dbRuntime.IsCleanTable(colors) and rawget(colors, field.color) or nil
+        value = addon.dbRuntime.IsCleanTable(color) and rawget(color, field.channel) or nil
+        if not addon.IsCleanFiniteNumber(value) or value < 0 or value > 1 then
+            value = defaults.colors[field.color][field.channel]
+        end
+        return value
+    end
+    if addon.dbRuntime.IsCleanTable(settings) then
+        value = rawget(settings, field.id)
+    end
+    if field.kind == "boolean" then
+        if not addon.dbRuntime.IsCleanType(value, "boolean") then value = defaults[field.id] == true end
+    elseif field.kind == "number-setting" then
+        value = NormalizeNumberSetting(field.id, value)
+    elseif field.kind == "offset" then
+        value = NormalizePositionOffset(value, defaults[field.id], field.axis)
+    elseif field.kind == "anchor" then
+        value = NormalizeAnchorPoint(value, defaults[field.id])
+    elseif field.kind == "enum" then
+        local allowed = addon.profileTransfer.allowedStrings[field.id]
+        if not addon.dbRuntime.IsCleanType(value, "string") or not allowed[value] then
+            value = defaults[field.id]
+        end
+    elseif field.kind == "preset" then
+        value = addon.appearancePresets.CurrentID(settings)
+    elseif field.kind == "font" then
+        if not addon.dbRuntime.IsCleanType(value, "string") or #value > addon.profileTransfer.maxFontBytes
+            or value:find("[%z\1-\31\127]") or not FontPathKey(value) then
+            value = defaults.font
+        end
+    end
+    return value
+end
+
+function addon.profileTransfer.EncodeFieldValue(field, value)
+    if field.kind == "boolean" then return value and "1" or "0" end
+    if field.kind == "number-setting" or field.kind == "offset" or field.kind == "color" then
+        return string.format("%.17g", value)
+    end
+    if field.kind == "font" then return addon.profileTransfer.HexEncode(value) end
+    return value
+end
+
+function addon.profileTransfer.DecodeFieldValue(field, encoded)
+    if field.kind == "boolean" then
+        if encoded == "1" then return true, true end
+        if encoded == "0" then return false, true end
+        return nil, false
+    end
+    if field.kind == "number-setting" or field.kind == "offset" or field.kind == "color" then
+        local value = tonumber(encoded)
+        if not addon.IsCleanFiniteNumber(value) then return nil, false end
+        if field.kind == "number-setting" then
+            local normalized = NormalizeNumberSetting(field.id, value)
+            if math.abs(normalized - value) > 0.0000001 then return nil, false end
+            return normalized, true
+        end
+        if field.kind == "offset" then
+            if math.abs(value) > 100000 then return nil, false end
+            return NormalizePositionOffset(value, defaults[field.id], field.axis), true
+        end
+        if value < 0 or value > 1 then return nil, false end
+        return value, true
+    end
+    if field.kind == "font" then
+        local value = addon.profileTransfer.HexDecode(encoded)
+        if not value or #value == 0 or #value > addon.profileTransfer.maxFontBytes
+            or value:find("[%z\1-\31\127]") or not FontPathKey(value) then
+            return nil, false
+        end
+        return value, true
+    end
+    if field.kind == "anchor" then
+        return encoded, VALID_ANCHOR_POINTS[encoded] == true
+    end
+    if field.kind == "enum" then
+        local allowed = addon.profileTransfer.allowedStrings[field.id]
+        return encoded, allowed and allowed[encoded] == true
+    end
+    if field.kind == "preset" then
+        if encoded == "custom" then return encoded, true end
+        for _, presetID in ipairs(addon.appearancePresets.order) do
+            if encoded == presetID then return encoded, true end
+        end
+        -- The concrete appearance fields remain authoritative when a newer preset
+        -- name reaches an older v1 reader.
+        if encoded:match("^[a-z0-9%-]+$") and #encoded <= 32 then return "custom", true end
+    end
+    return nil, false
+end
+
+function addon.profileTransfer.NormalizeSections(sections, available)
+    local normalized, count = {}, 0
+    if type(sections) ~= "table" then return nil end
+    for _, section in ipairs(addon.profileTransfer.sectionOrder) do
+        if sections[section] == true then
+            if available and available[section] ~= true then return nil end
+            normalized[section] = true
+            count = count + 1
+        end
+    end
+    if count == 0 then return nil end
+    for section, selected in pairs(sections) do
+        if selected and not addon.profileTransfer.sectionLabelKeys[section] then return nil end
+    end
+    return normalized
+end
+
+function addon.profileTransfer.Serialize(profileName, settings, sections)
+    local normalizedName = addon.profileOps.NormalizeNameShape(
+        profileName, addon.profileOps.maxNameCodepoints, false)
+    local selected = addon.profileTransfer.NormalizeSections(sections)
+    if not normalizedName or not selected or not addon.dbRuntime.IsCleanTable(settings) then
+        return nil, "invalid"
+    end
+    local sectionNames = {}
+    for _, section in ipairs(addon.profileTransfer.sectionOrder) do
+        if selected[section] then sectionNames[#sectionNames + 1] = section end
+    end
+    local lines = {
+        "name=" .. addon.profileTransfer.HexEncode(normalizedName),
+        "sections=" .. table.concat(sectionNames, ","),
+    }
+    for _, field in ipairs(addon.profileTransfer.fields) do
+        if selected[field.section] then
+            local value = addon.profileTransfer.ReadField(settings, field)
+            local encoded = addon.profileTransfer.EncodeFieldValue(field, value)
+            if type(encoded) ~= "string" or encoded:find("[\r\n]") then return nil, "invalid" end
+            lines[#lines + 1] = field.id .. "=" .. encoded
+        end
+    end
+    local payload = table.concat(lines, "\n")
+    if #payload > addon.profileTransfer.maxPayloadBytes then return nil, "too-large" end
+    local encoded = addon.profileTransfer.Base64Encode(payload)
+    local result = addon.profileTransfer.prefix
+        .. addon.profileTransfer.Adler32(payload) .. ":" .. encoded
+    if #result > addon.profileTransfer.maxEncodedBytes then return nil, "too-large" end
+    return result
+end
+
+function addon.profileTransfer.Parse(value)
+    if not addon.dbRuntime.IsCleanType(value, "string") then return nil, "invalid", "type" end
+    if #value == 0 or #value > addon.profileTransfer.maxEncodedBytes then
+        return nil, "invalid", "size"
+    end
+    value = value:match("^%s*(.-)%s*$")
+    if value == "" then return nil, "invalid", "size" end
+    local version = value:match("^SPP(%d+):")
+    if version then
+        local numericVersion = tonumber(version)
+        if numericVersion and numericVersion > addon.profileTransfer.formatVersion then
+            return nil, "future-format"
+        end
+        if numericVersion ~= addon.profileTransfer.formatVersion then
+            return nil, "invalid", "version"
+        end
+    end
+    local checksum, encoded = value:match("^SPP1:([0-9A-Fa-f]+):([A-Za-z0-9+/=]+)$")
+    if not checksum or #checksum ~= 8 then return nil, "invalid", "envelope" end
+    local payload = addon.profileTransfer.Base64Decode(encoded)
+    if not payload or addon.profileTransfer.Adler32(payload) ~= string.lower(checksum)
+        or payload:find("[\r%z]") then
+        return nil, "invalid", "checksum"
+    end
+    local lines = {}
+    for line in (payload .. "\n"):gmatch("([^\n]*)\n") do lines[#lines + 1] = line end
+    if #lines < 3 or #lines > #addon.profileTransfer.fields + 2 then
+        return nil, "invalid", "line-count"
+    end
+    local nameHex = lines[1]:match("^name=([0-9A-Fa-f]+)$")
+    local sectionText = lines[2]:match("^sections=([a-z,]+)$")
+    local profileName = nameHex and addon.profileTransfer.HexDecode(nameHex) or nil
+    profileName = profileName and addon.profileOps.NormalizeNameShape(
+        profileName, addon.profileOps.maxNameCodepoints, false) or nil
+    if not profileName or not sectionText then return nil, "invalid", "header" end
+
+    local sections, canonicalSections = {}, {}
+    for section in sectionText:gmatch("[^,]+") do
+        if not addon.profileTransfer.sectionLabelKeys[section] or sections[section] then
+            return nil, "invalid", "section"
+        end
+        sections[section] = true
+    end
+    for _, section in ipairs(addon.profileTransfer.sectionOrder) do
+        if sections[section] then canonicalSections[#canonicalSections + 1] = section end
+    end
+    if table.concat(canonicalSections, ",") ~= sectionText
+        or not addon.profileTransfer.NormalizeSections(sections) then
+        return nil, "invalid", "section-order"
+    end
+
+    local package = {
+        formatVersion = addon.profileTransfer.formatVersion,
+        profileName = profileName,
+        sections = sections,
+        values = {},
+        originalString = value,
+        validationToken = addon.profileTransfer.validationToken,
+    }
+    local seen, fieldCount = {}, 0
+    for index = 3, #lines do
+        local fieldID, encodedValue = lines[index]:match("^([%w_%.]+)=(.*)$")
+        local field = fieldID and addon.profileTransfer.fieldByID[fieldID] or nil
+        if not field or seen[fieldID] or not sections[field.section] then
+            return nil, "invalid", "field:" .. tostring(fieldID)
+        end
+        local decoded, valid = addon.profileTransfer.DecodeFieldValue(field, encodedValue)
+        if not valid then return nil, "invalid", "value:" .. tostring(fieldID) end
+        package.values[fieldID] = decoded
+        seen[fieldID] = true
+        fieldCount = fieldCount + 1
+    end
+    local expectedCount = 0
+    for _, section in ipairs(addon.profileTransfer.sectionOrder) do
+        if sections[section] then
+            expectedCount = expectedCount + addon.profileTransfer.sectionFieldCounts[section]
+        end
+    end
+    if fieldCount ~= expectedCount then return nil, "invalid", "field-count" end
+    for _, field in ipairs(addon.profileTransfer.fields) do
+        if sections[field.section] and not seen[field.id] then
+            return nil, "invalid", "missing:" .. field.id
+        end
+    end
+    return package
+end
+
+function addon.profileTransfer.BuildImportedSettings(targetSettings, package, sections, cloneBudget)
+    if type(package) ~= "table"
+        or not rawequal(package.validationToken, addon.profileTransfer.validationToken)
+        or package.formatVersion ~= addon.profileTransfer.formatVersion
+        or type(package.values) ~= "table"
+        or not addon.dbRuntime.IsCleanTable(package.values) then
+        return nil, "invalid"
+    end
+    local selected = addon.profileTransfer.NormalizeSections(sections, package.sections)
+    if not selected then return nil, "invalid-sections" end
+    local settings, copied = addon.dbRuntime.CloneSerializable(
+        targetSettings, nil, cloneBudget)
+    if not copied or not addon.dbRuntime.IsCleanTable(settings) then return nil, "clone-failed" end
+    for _, field in ipairs(addon.profileTransfer.fields) do
+        if selected[field.section] then
+            local fieldID = field.id
+            if type(fieldID) ~= "string" then return nil, "invalid" end
+            local value = rawget(package.values, fieldID)
+            if value == nil then return nil, "invalid" end
+            if field.kind == "color" then
+                local colorName, channel = field.color, field.channel
+                if type(colorName) ~= "string" or type(channel) ~= "string" then
+                    return nil, "invalid"
+                end
+                local colors = rawget(settings, "colors")
+                if type(colors) ~= "table" or not addon.dbRuntime.IsCleanTable(colors) then
+                    colors = {}
+                    settings.colors = colors
+                end
+                local color = rawget(colors, colorName)
+                if type(color) ~= "table" or not addon.dbRuntime.IsCleanTable(color) then
+                    color = {}
+                    colors[colorName] = color
+                end
+                color[channel] = value
+            else
+                settings[fieldID] = value
+            end
+        end
+    end
+    settings.forceLocale = nil
+    settings.updateInterval = nil
+    return settings, selected
+end
+
 function addon.profileUI.RefreshSafe()
     local refresh = addon.profileUI.refreshAll
     if type(refresh) == "function" then pcall(refresh) end
@@ -3564,9 +4245,16 @@ function addon.profileUI.BuildViewModel()
         profiles = {},
     }
     if runtime.bootstrapPending then model.activeProfileID = nil end
-    if model.readOnly then return model end
+    local registryReadable = addon.dbRuntime.registryReady
+    if not registryReadable and model.mode == "future" then
+        -- Future roots remain globally unactivated and immutable. A root that still
+        -- satisfies the complete current registry contract can nevertheless be
+        -- projected read-only so its known profile fields can be exported.
+        registryReadable = addon.dbRuntime.ValidateRegistry(root) == true
+    end
+    if not registryReadable then return model end
 
-    model.canMutate = combat == false and not pending
+    model.canMutate = not model.readOnly and combat == false and not pending
         and not runtime.transitioning and not addon.profileOps.inProgress
     local referenceCounts = addon.profileOps.CountAllReferences(root)
     for _, role in ipairs(addon.profileOps.roleOrder) do
@@ -4400,18 +5088,13 @@ function addon.profileRuntime.PrepareContextTransaction(context)
         if context.lastSeen then character.lastSeen = context.lastSeen end
         local characters = addon.profileRuntime.ShallowCopy(root.characters)
         characters[context.guid] = character
-        local candidate = addon.profileRuntime.ShallowCopy(root)
-        candidate.characters = characters
-        if not addon.dbRuntime.ValidateRegistry(candidate) then return nil, nil end
-        return {
-            root = root,
-            oldAccount = root.account,
-            oldProfiles = root.profiles,
-            oldCharacters = root.characters,
-            account = root.account,
-            profiles = root.profiles,
-            characters = characters,
-        }, existingProfileID
+        local transaction = addon.profileOps.NewTransaction(root)
+        transaction.characters = characters
+        if not addon.dbRuntime.ValidateRegistry(
+            addon.profileOps.BuildCandidate(transaction)) then
+            return nil, nil
+        end
+        return transaction, existingProfileID
     end
 
     local cloneBudget = addon.dbRuntime.NewGraphBudget()
@@ -4424,7 +5107,6 @@ function addon.profileRuntime.PrepareContextTransaction(context)
         return nil, nil
     end
     local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
-    local characters = addon.profileRuntime.ShallowCopy(root.characters)
     local character
     if currentCharacter then
         local characterCopied
@@ -4443,33 +5125,20 @@ function addon.profileRuntime.PrepareContextTransaction(context)
     if type(sourceProfile) ~= "table" then return nil, nil end
     local specName = addon.profileRuntime.SpecProfileName(context, profiles)
     if not specName then return nil, nil end
-    local specProfileID = addon.profileRuntime.AllocateProfileID(account, profiles)
-    if type(specProfileID) ~= "string"
-        or not addon.dbRuntime.IsCleanType(specProfileID, "string") then return nil, nil end
-    local specProfile = addon.profileRuntime.CloneProfile(sourceProfile, specName, cloneBudget)
-    if type(specProfile) ~= "table" then return nil, nil end
-    profiles[specProfileID] = specProfile
-    character.specProfiles[context.specID] = specProfileID
     if context.displayName then character.displayName = context.displayName end
     if context.classID then character.classID = context.classID end
     if context.lastSeen then character.lastSeen = context.lastSeen end
-    characters[context.guid] = character
-
-    local candidate = addon.profileRuntime.ShallowCopy(root)
-    candidate.account = account
-    candidate.profiles = profiles
-    candidate.characters = characters
-    local valid = addon.dbRuntime.ValidateRegistry(candidate)
+    local transaction, specProfileID = addon.profileOps.BuildAssignedProfileTransaction(
+        root, account, profiles, character, character.specProfiles,
+        context.guid, context.specID, function()
+            return addon.profileRuntime.CloneProfile(
+                sourceProfile, specName, cloneBudget), "clone-failed"
+        end)
+    if not transaction then return nil, nil end
+    local valid = addon.dbRuntime.ValidateRegistry(
+        addon.profileOps.BuildCandidate(transaction))
     if not valid then return nil, nil end
-    return {
-        root = root,
-        oldAccount = root.account,
-        oldProfiles = root.profiles,
-        oldCharacters = root.characters,
-        account = account,
-        profiles = profiles,
-        characters = characters,
-    }, specProfileID
+    return transaction, specProfileID
 end
 
 function addon.profileRuntime.CommitTransaction(transaction)
@@ -5546,6 +6215,26 @@ function addon.profileOps.CloneContextAssignment(
     return account, changedCharacter, changedSpecProfiles
 end
 
+function addon.profileOps.BuildAssignedProfileTransaction(
+    root, account, profiles, changedCharacter, changedSpecProfiles,
+    guid, specID, buildProfile)
+    local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
+    if not profileID then return nil, "id-exhausted" end
+    local profile, profileStatus = buildProfile(profiles)
+    if type(profile) ~= "table" or not addon.dbRuntime.IsCleanTable(profile) then
+        return nil, profileStatus or "clone-failed"
+    end
+    profiles[profileID] = profile
+    changedSpecProfiles[specID] = profileID
+    local characters = addon.profileRuntime.ShallowCopy(root.characters)
+    characters[guid] = changedCharacter
+    local transaction = addon.profileOps.NewTransaction(root)
+    transaction.account = account
+    transaction.profiles = profiles
+    transaction.characters = characters
+    return transaction, profileID, profile
+end
+
 function addon.profileOps.CopySettingsToContext(
     sourceProfileID, guid, specID, scope, expected)
     return addon.profileOps.Execute(expected, function(root)
@@ -5565,11 +6254,11 @@ function addon.profileOps.CopySettingsToContext(
 
         local references = addon.profileOps.CountReferences(root, targetProfileID)
         local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
-        local transaction = addon.profileOps.NewTransaction(root)
         if references.total == 1 and references.specs == 1 then
             local changedTarget = addon.profileRuntime.ShallowCopy(target)
             changedTarget.settings = settings
             profiles[targetProfileID] = changedTarget
+            local transaction = addon.profileOps.NewTransaction(root)
             transaction.profiles = profiles
             return transaction, { profileID = targetProfileID, created = false }
         end
@@ -5585,16 +6274,14 @@ function addon.profileOps.CopySettingsToContext(
         }
         local name, nameStatus = addon.profileRuntime.SpecProfileName(context, profiles)
         if not name then return nil, nameStatus or "name-exhausted" end
-        local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
-        if not profileID then return nil, "id-exhausted" end
-        profiles[profileID] = { name = name, settings = settings }
-        changedSpecProfiles[specID] = profileID
-        local characters = addon.profileRuntime.ShallowCopy(root.characters)
-        characters[guid] = changedCharacter
-        transaction.account = account
-        transaction.profiles = profiles
-        transaction.characters = characters
-        return transaction, { profileID = profileID, created = true }
+        local createdTransaction, profileID =
+            addon.profileOps.BuildAssignedProfileTransaction(
+                root, account, profiles, changedCharacter, changedSpecProfiles,
+                guid, specID, function()
+                    return { name = name, settings = settings }
+                end)
+        if not createdTransaction then return nil, profileID end
+        return createdTransaction, { profileID = profileID, created = true }
     end)
 end
 
@@ -5648,18 +6335,13 @@ function addon.profileOps.MakeContextIndependent(guid, specID, expected)
         }
         local name, nameStatus = addon.profileRuntime.SpecProfileName(context, profiles)
         if not name then return nil, nameStatus or "name-exhausted" end
-        local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
-        if not profileID then return nil, "id-exhausted" end
-        local clone = addon.profileRuntime.CloneProfile(sourceProfile, name, cloneBudget)
-        if not clone then return nil, "clone-failed" end
-        profiles[profileID] = clone
-        changedSpecProfiles[specID] = profileID
-        local characters = addon.profileRuntime.ShallowCopy(root.characters)
-        characters[guid] = changedCharacter
-        local transaction = addon.profileOps.NewTransaction(root)
-        transaction.account = account
-        transaction.profiles = profiles
-        transaction.characters = characters
+        local transaction, profileID = addon.profileOps.BuildAssignedProfileTransaction(
+            root, account, profiles, changedCharacter, changedSpecProfiles,
+            guid, specID, function()
+                return addon.profileRuntime.CloneProfile(
+                    sourceProfile, name, cloneBudget), "clone-failed"
+            end)
+        if not transaction then return nil, profileID end
         return transaction, profileID
     end)
 end
@@ -5701,9 +6383,11 @@ end
 function addon.profileOps.DeleteUnusedProfiles(expected)
     return addon.profileOps.Execute(expected, function(root)
         local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
+        local referenceCounts = addon.profileOps.CountAllReferences(root)
         local deleted = 0
         for profileID in pairs(root.profiles) do
-            if addon.profileOps.CountReferences(root, profileID).total == 0 then
+            local references = referenceCounts[profileID]
+            if not references or references.total == 0 then
                 profiles[profileID] = nil
                 deleted = deleted + 1
             end
@@ -5733,28 +6417,22 @@ function addon.profileOps.ImportAndAssign(importedSettings, expected)
         local guid, specID = addon.profileOps.ReadCleanActiveContext()
         if not guid or not specID then return nil, "missing-context" end
         local character = root.characters[guid]
-        if type(character) ~= "table" or not addon.dbRuntime.IsCleanTable(character) then
+        local targetProfileID = addon.profileOps.ResolveAssignment(root, guid, specID)
+        if not targetProfileID or type(character) ~= "table"
+            or not addon.dbRuntime.IsCleanTable(character) then
             return nil, "missing-context"
         end
         local cloneBudget = addon.dbRuntime.NewGraphBudget()
-        local changedCharacter, characterCopied =
-            addon.dbRuntime.CloneSerializable(character, nil, cloneBudget)
-        local account, accountCopied = addon.dbRuntime.CloneSerializable(
-            root.account, nil, cloneBudget)
+        local account, changedCharacter, specProfiles =
+            addon.profileOps.CloneContextAssignment(
+                root, character, specID, targetProfileID, cloneBudget)
         local settings, settingsCopied = addon.dbRuntime.CloneSerializable(
             importedSettings, nil, cloneBudget)
-        if not characterCopied or type(changedCharacter) ~= "table"
-            or not addon.dbRuntime.IsCleanTable(changedCharacter)
-            or not accountCopied or type(account) ~= "table"
-            or not addon.dbRuntime.IsCleanTable(account)
+        if not account or not changedCharacter or not specProfiles
             or not settingsCopied or type(settings) ~= "table"
             or not addon.dbRuntime.IsCleanTable(settings) then
             return nil, "clone-failed"
         end
-        local specProfiles = rawget(changedCharacter, "specProfiles")
-        if type(specProfiles) ~= "table" then return nil, "missing-context" end
-        if not addon.dbRuntime.IsCleanTable(specProfiles)
-            or not specProfiles[specID] then return nil, "missing-context" end
 
         -- Account locale/update cadence belong to StatsPro as a whole, not to the
         -- imported character/spec profile. Candidate extraction can carry them only
@@ -5762,19 +6440,61 @@ function addon.profileOps.ImportAndAssign(importedSettings, expected)
         settings.forceLocale = nil
         settings.updateInterval = nil
         local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
-        local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
-        if not profileID then return nil, "id-exhausted" end
-        local name = addon.profileOps.UniqueProfileName("SwiftStats Import", profiles)
-        if not name then return nil, "duplicate-name" end
-        profiles[profileID] = { name = name, settings = settings }
-        specProfiles[specID] = profileID
-        local characters = addon.profileRuntime.ShallowCopy(root.characters)
-        characters[guid] = changedCharacter
-        local transaction = addon.profileOps.NewTransaction(root)
-        transaction.account = account
-        transaction.profiles = profiles
-        transaction.characters = characters
-        return transaction, { profileID = profileID, name = name }
+        local transaction, profileID, profile =
+            addon.profileOps.BuildAssignedProfileTransaction(
+            root, account, profiles, changedCharacter, specProfiles,
+            guid, specID, function(candidateProfiles)
+                local name = addon.profileOps.UniqueProfileName(
+                    "SwiftStats Import", candidateProfiles)
+                if not name then return nil, "duplicate-name" end
+                return { name = name, settings = settings }
+            end)
+        if not transaction then return nil, profileID end
+        if type(profile) ~= "table" then return nil, "clone-failed" end
+        return transaction, { profileID = profileID, name = profile.name }
+    end)
+end
+
+function addon.profileOps.ImportTransferToContext(
+    package, sections, guid, specID, expected)
+    return addon.profileOps.Execute(expected, function(root)
+        local character = root.characters[guid]
+        local targetProfileID = addon.profileOps.ResolveAssignment(root, guid, specID)
+        local target = targetProfileID and root.profiles[targetProfileID] or nil
+        if not targetProfileID or not target or not character
+            or not addon.dbRuntime.IsCleanType(specID, "number") then
+            return nil, "missing-context"
+        end
+        local cloneBudget = addon.dbRuntime.NewGraphBudget()
+        local settings, selected = addon.profileTransfer.BuildImportedSettings(
+            target.settings, package, sections, cloneBudget)
+        if not settings then return nil, selected end
+
+        local account, changedCharacter, specProfiles =
+            addon.profileOps.CloneContextAssignment(
+                root, character, specID, targetProfileID, cloneBudget)
+        if not account or not changedCharacter or not specProfiles then
+            return nil, "clone-failed"
+        end
+
+        local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
+        local transaction, profileID, profile =
+            addon.profileOps.BuildAssignedProfileTransaction(
+            root, account, profiles, changedCharacter, specProfiles,
+            guid, specID, function(candidateProfiles)
+                local name, nameStatus = addon.profileOps.UniqueProfileName(
+                    package.profileName, candidateProfiles, L("Imported profile"))
+                if not name then return nil, nameStatus end
+                return { name = name, settings = settings }
+            end)
+        if not transaction then return nil, profileID end
+        if type(profile) ~= "table" then return nil, "clone-failed" end
+        return transaction, {
+            profileID = profileID,
+            name = profile.name,
+            sections = selected,
+            previousProfileID = targetProfileID,
+        }
     end)
 end
 
@@ -9689,7 +10409,7 @@ function addon.settingsDesign.SetControlEnabled(control, enabled, reasonKey)
         control, "dependency", not enabled, "requires", reasonKey)
 end
 
-function addon.settingsDesign.StyleCheckbox(control, text)
+function addon.settingsDesign.StyleCheckbox(control, text, nonMutating)
     local geometry = addon.settingsDesign.tokens.geometry
     control:SetSize(geometry.controlHitTarget, geometry.controlHitTarget)
     text:ClearAllPoints()
@@ -9713,7 +10433,11 @@ function addon.settingsDesign.StyleCheckbox(control, text)
         if texture and type(texture.SetDesaturated) == "function" then texture:SetDesaturated(true) end
     end
     addon.settingsDesign.RegisterControl(control, "checkbox")
-    addon.settingsDesign.RegisterMutationControl(control)
+    if nonMutating == true then
+        addon.settingsDesign.AttachTooltip(control, addon.settingsDesign.ControlTextTooltip)
+    else
+        addon.settingsDesign.RegisterMutationControl(control)
+    end
     addon.settingsDesign.HookControl(control)
     addon.settingsDesign.RefreshControl(control)
 end
@@ -11305,16 +12029,18 @@ function addon.profileUI.BuildOperationUI(manager)
         "StatsProProfileUseForButton", "Use these settings for...", -86)
     local stopSharingButton = createAction(
         "StatsProProfileStopSharingButton", "Stop sharing...", -114)
+    local transferButton = createAction(
+        "StatsProProfileTransferButton", "Export / import profile...", -142, "primary")
     local advancedButton = createAction(
-        "StatsProProfileAdvancedButton", "Advanced...", -150)
+        "StatsProProfileAdvancedButton", "Advanced...", -178)
     local resetButton = createAction(
-        "StatsProProfileResetButton", "Reset these settings...", -186, "destructive")
+        "StatsProProfileResetButton", "Reset these settings...", -214, "destructive")
     local forgetButton = createAction(
-        "StatsProProfileForgetButton", "Forget this character...", -214, "destructive")
+        "StatsProProfileForgetButton", "Forget this character...", -242, "destructive")
     local roleTemplateButton = createAction(
-        "StatsProProfileRoleTemplateButton", "Defaults for future specializations...", -242)
+        "StatsProProfileRoleTemplateButton", "Defaults for future specializations...", -270)
     local cleanupButton = createAction(
-        "StatsProProfileCleanupButton", "Delete unused settings...", -270, "destructive")
+        "StatsProProfileCleanupButton", "Delete unused settings...", -298, "destructive")
 
     ui.advancedShown = false
     function ui.SetAdvancedShown(shown)
@@ -11323,7 +12049,7 @@ function addon.profileUI.BuildOperationUI(manager)
         for _, button in ipairs({ resetButton, forgetButton, roleTemplateButton, cleanupButton }) do
             if ui.advancedShown then button:Show() else button:Hide() end
         end
-        actionChild:SetHeight(ui.advancedShown and 306 or 172)
+        actionChild:SetHeight(ui.advancedShown and 334 or 200)
     end
     PushLocalizedLabel(function() ui.SetAdvancedShown(ui.advancedShown) end)
     ui.SetAdvancedShown(false)
@@ -11392,12 +12118,79 @@ function addon.profileUI.BuildOperationUI(manager)
     cancelButton:SetSize(102, 26)
     PushLocalizedLabel(function() cancelButton:SetText(L("Cancel")) end)
 
+    local transferSummary = dialog:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(transferSummary, 12)
+    addon.settingsDesign.SetRegionColor(transferSummary, "textPrimary")
+    transferSummary:SetPoint("TOPLEFT", 20, -56)
+    transferSummary:SetPoint("TOPRIGHT", -20, -56)
+    transferSummary:SetHeight(64)
+    transferSummary:SetJustifyH("LEFT")
+    transferSummary:SetJustifyV("TOP")
+    transferSummary:SetWordWrap(true)
+
+    local transferChecks = {}
+    local transferCheckY = { stats = -126, layout = -154, appearance = -182 }
+    for _, section in ipairs(addon.profileTransfer.sectionOrder) do
+        local check = CreateFrame(
+            "CheckButton", "StatsProProfileTransfer" .. section .. "Check", dialog,
+            "UICheckButtonTemplate")
+        check:SetPoint("TOPLEFT", 22, transferCheckY[section])
+        check:SetSize(24, 24)
+        local label = check:CreateFontString(nil, "OVERLAY")
+        RegisterConfigFont(label, 12)
+        addon.settingsDesign.StyleCheckbox(check, label, true)
+        label:SetPoint("RIGHT", dialog, "RIGHT", -20, 0)
+        label:SetJustifyH("LEFT")
+        label:SetWordWrap(false)
+        label:SetMaxLines(1)
+        local transferLabelKey = addon.profileTransfer.sectionLabelKeys[section]
+        PushLocalizedLabel(function() label:SetText(L(transferLabelKey)) end)
+        check.statsProTransferLabel = label
+        check.statsProTransferSection = section
+        check:SetScript("OnClick", function(button)
+            if type(ui.OnTransferSectionChanged) == "function" then
+                ui.OnTransferSectionChanged(
+                    button.statsProTransferSection, button:GetChecked() == true)
+            end
+        end)
+        transferChecks[section] = check
+    end
+
+    local transferInputSurface = CreateFrame(
+        "Frame", "StatsProProfileTransferInputSurface", dialog, "BackdropTemplate")
+    transferInputSurface:SetSize(400, 34)
+    addon.settingsDesign.ApplySurface(transferInputSurface, "raised")
+    local transferEditBox = CreateFrame(
+        "EditBox", "StatsProProfileTransferEditBox", transferInputSurface, "InputBoxTemplate")
+    transferEditBox:SetPoint("TOPLEFT", 8, -6)
+    transferEditBox:SetPoint("BOTTOMRIGHT", -8, 6)
+    if type(transferEditBox.SetAutoFocus) == "function" then transferEditBox:SetAutoFocus(false) end
+    if type(transferEditBox.SetMaxLetters) == "function" then
+        transferEditBox:SetMaxLetters(addon.profileTransfer.maxEncodedBytes)
+    end
+    RegisterConfigFont(transferEditBox, 11)
+
+    local transferHint = dialog:CreateFontString(nil, "OVERLAY")
+    RegisterConfigFont(transferHint, 10)
+    transferHint:SetPoint("TOPLEFT", 20, -266)
+    transferHint:SetPoint("TOPRIGHT", -20, -266)
+    transferHint:SetHeight(34)
+    transferHint:SetJustifyH("LEFT")
+    transferHint:SetJustifyV("TOP")
+    transferHint:SetWordWrap(true)
+
+    ui.transferSummary = transferSummary
+    ui.transferChecks = transferChecks
+    ui.transferEditBox = transferEditBox
+    ui.transferHint = transferHint
+
     ui.operationStatus = operationStatus
     ui.actionButtons = {
         copy = copyButton,
         useSame = useSameButton,
         useFor = useForButton,
         stopSharing = stopSharingButton,
+        transfer = transferButton,
         advanced = advancedButton,
         reset = resetButton,
         forget = forgetButton,
@@ -11450,6 +12243,153 @@ function addon.profileUI.BuildOperationUI(manager)
         ui.RefreshOperationStatus()
     end
 
+    function ui.TransferSectionSummary(sections)
+        local labels = {}
+        for _, section in ipairs(addon.profileTransfer.sectionOrder) do
+            if sections and sections[section] then
+                labels[#labels + 1] = L(addon.profileTransfer.sectionLabelKeys[section])
+            end
+        end
+        return table.concat(labels, " + ")
+    end
+
+    function ui.HideTransferControls()
+        transferSummary:Hide()
+        transferInputSurface:Hide()
+        transferHint:Hide()
+        for _, check in pairs(transferChecks) do
+            check:Hide()
+            check.statsProTransferLabel:Hide()
+        end
+    end
+
+    function ui.ReadTransferSections()
+        local selected = {}
+        for _, section in ipairs(addon.profileTransfer.sectionOrder) do
+            local check = transferChecks[section]
+            if check:IsShown() and check:IsEnabled() and check:GetChecked() == true then
+                selected[section] = true
+            end
+        end
+        return addon.profileTransfer.NormalizeSections(selected)
+    end
+
+    function ui.SetTransferSections(available, selected, shown)
+        for _, section in ipairs(addon.profileTransfer.sectionOrder) do
+            local check = transferChecks[section]
+            local label = check.statsProTransferLabel
+            label:SetText(L(addon.profileTransfer.sectionLabelKeys[section]))
+            check:SetChecked(selected and selected[section] == true)
+            if available and available[section] then check:Enable() else check:Disable() end
+            if shown then check:Show(); label:Show() else check:Hide(); label:Hide() end
+        end
+    end
+
+    function ui.SetTransferText(value, selectAll)
+        ui.transferUpdatingText = true
+        transferEditBox:SetText(value or "")
+        ui.transferUpdatingText = false
+        if selectAll then
+            transferEditBox:HighlightText()
+            transferEditBox:SetFocus()
+        end
+    end
+
+    function ui.TransferErrorText(reason)
+        if reason == "future-format" then
+            return L("This profile string uses a newer unsupported format.")
+        end
+        if reason == "invalid-sections" then return L("Choose at least one section.") end
+        return L("The profile string is invalid or damaged.")
+    end
+
+    function ui.RefreshTransferDialog()
+        local state = ui.transferState
+        if not state then return end
+        ui.HideTransferControls()
+        transferSummary:Show()
+        transferInputSurface:Show()
+        transferHint:Show()
+        dialogMessage:Hide()
+        choiceScroll:Hide()
+        primaryButton:Show()
+        cancelButton:SetText(L(state.kind == "export" and "Close" or "Cancel"))
+        addon.settingsDesign.SetRegionColor(transferHint,
+            state.error and "danger" or "textSecondary")
+
+        if state.kind == "export" then
+            dialogTitle:SetText(L("Export profile"))
+            ui.SetTransferSections(state.available, state.selected, true)
+            local sections = ui.ReadTransferSections()
+            if sections then
+                local transferString, reason = addon.profileTransfer.Serialize(
+                    state.profileName, state.settings, sections)
+                if transferString then
+                    state.transferString = transferString
+                    state.error = nil
+                    ui.SetTransferText(transferString, state.selectText == true)
+                    state.selectText = false
+                else
+                    state.transferString = nil
+                    state.error = reason
+                    ui.SetTransferText("")
+                end
+            else
+                state.transferString = nil
+                state.error = "invalid-sections"
+                ui.SetTransferText("")
+            end
+            transferSummary:SetText(
+                string.format(L("StatsPro profile: %s"), state.profileName) .. "\n"
+                .. string.format(L("Format version: %d"), addon.profileTransfer.formatVersion)
+                .. "\n" .. string.format(L("Included: %s"),
+                    sections and ui.TransferSectionSummary(sections) or "—"))
+            transferInputSurface:ClearAllPoints()
+            transferInputSurface:SetPoint("TOP", dialog, "TOP", 0, -220)
+            transferHint:SetText(state.error and ui.TransferErrorText(state.error)
+                or L("Export string ready. Select it, then press Ctrl+C to copy."))
+            primaryButton:SetText(L("Select all"))
+            if state.transferString then primaryButton:Enable() else primaryButton:Disable() end
+            return
+        end
+
+        dialogTitle:SetText(L("Import profile"))
+        if state.kind == "import-entry" then
+            ui.SetTransferSections(nil, nil, false)
+            transferSummary:SetText(
+                L("Paste a StatsPro profile string, then preview it before importing."))
+            transferInputSurface:ClearAllPoints()
+            transferInputSurface:SetPoint("TOP", dialog, "TOP", 0, -134)
+            transferHint:SetText(state.error and ui.TransferErrorText(state.error) or "")
+            primaryButton:SetText(L("Preview"))
+            if transferEditBox:GetText() ~= "" then primaryButton:Enable()
+            else primaryButton:Disable() end
+            return
+        end
+
+        local package = state.package
+        ui.SetTransferSections(package.sections, state.selected, true)
+        local selected = ui.ReadTransferSections()
+        transferSummary:SetText(
+            string.format(L("StatsPro profile: %s"), package.profileName) .. "\n"
+            .. string.format(L("Format version: %d"), package.formatVersion) .. "\n"
+            .. string.format(L("Included: %s"), ui.TransferSectionSummary(package.sections)))
+        transferInputSurface:ClearAllPoints()
+        transferInputSurface:SetPoint("TOP", dialog, "TOP", 0, -220)
+        transferHint:SetText(state.error and ui.TransferErrorText(state.error)
+            or (selected and "" or L("Choose at least one section.")))
+        primaryButton:SetText(L("Import"))
+        if selected then primaryButton:Enable() else primaryButton:Disable() end
+    end
+
+    function ui.OnTransferSectionChanged(section, selected)
+        local state = ui.transferState
+        if not state or not state.available or not state.available[section] then return end
+        state.selected[section] = selected == true
+        state.error = nil
+        ui.RefreshTransferDialog()
+    end
+
     function ui.CloseOperationDialog()
         if dialog:IsShown() then dialog:Hide() end
         blocker:Hide()
@@ -11458,9 +12398,15 @@ function addon.profileUI.BuildOperationUI(manager)
     function ui.ShowDialogBase(title)
         dialogTitle:SetText(title)
         dialogMessage:SetText("")
+        dialogMessage:Show()
         choiceScroll:Hide()
+        ui.HideTransferControls()
+        transferEditBox:ClearFocus()
+        ui.transferState = nil
         primaryButton:Show()
         primaryButton:Enable()
+        primaryButton:SetText(L("Confirm"))
+        cancelButton:SetText(L("Cancel"))
         primaryButton.statsProButtonRole = "primary"
         addon.settingsDesign.RefreshShellButton(primaryButton)
         ui.CancelSpecialFrameRestore("StatsProProfileManager")
@@ -11527,6 +12473,134 @@ function addon.profileUI.BuildOperationUI(manager)
         ui.PopulateChoices(choices)
     end
 
+    function ui.ShowTransferExport(payload, expected)
+        local root = addon.dbRuntime.Refresh()
+        local profile = payload and root.profiles and root.profiles[payload.profileID] or nil
+        if not profile or not addon.profileOps.CheckExpected(root, expected)
+            or not addon.dbRuntime.IsCleanType(profile.name, "string")
+            or not addon.dbRuntime.IsCleanTable(profile.settings) then
+            ui.HandleOperationResult(false, "stale")
+            return
+        end
+        ui.ShowDialogBase(L("Export profile"))
+        ui.pendingAction = {
+            mode = "transfer", kind = "transfer-export",
+            payload = payload, expected = expected,
+        }
+        ui.transferState = {
+            kind = "export",
+            profileName = profile.name,
+            settings = profile.settings,
+            available = { stats = true, layout = true, appearance = true },
+            selected = { stats = true, layout = true, appearance = true },
+            selectText = true,
+        }
+        ui.RefreshTransferDialog()
+    end
+
+    function ui.ShowTransferImportEntry(payload, expected)
+        ui.ShowDialogBase(L("Import profile"))
+        ui.pendingAction = {
+            mode = "transfer", kind = "transfer-import-entry",
+            payload = payload, expected = expected,
+        }
+        ui.transferState = { kind = "import-entry" }
+        ui.SetTransferText("")
+        ui.RefreshTransferDialog()
+        transferEditBox:SetFocus()
+    end
+
+    function ui.PreviewTransferImport()
+        local state = ui.transferState
+        if not state or state.kind ~= "import-entry" then return false end
+        local package, reason = addon.profileTransfer.Parse(transferEditBox:GetText())
+        if not package then
+            state.error = reason
+            ui.RefreshTransferDialog()
+            return false
+        end
+        state.kind = "import-preview"
+        state.package = package
+        state.available = package.sections
+        state.selected = {}
+        for section in pairs(package.sections) do state.selected[section] = true end
+        state.error = nil
+        ui.pendingAction.kind = "transfer-import-preview"
+        ui.RefreshTransferDialog()
+        return true
+    end
+
+    function ui.PrepareTransferImportConfirmation()
+        local state = ui.transferState
+        local pending = ui.pendingAction
+        if not state or state.kind ~= "import-preview" or not pending then return false end
+        local package, reason = addon.profileTransfer.Parse(transferEditBox:GetText())
+        local sections = ui.ReadTransferSections()
+        if not package then
+            state.error = reason
+            state.kind = "import-entry"
+            state.package = nil
+            ui.pendingAction.kind = "transfer-import-entry"
+            ui.RefreshTransferDialog()
+            return false
+        end
+        if not sections then
+            state.error = "invalid-sections"
+            ui.RefreshTransferDialog()
+            return false
+        end
+        local payload = pending.payload or {}
+        ui.ShowConfirmation("transfer-import-confirm", L("Import profile"),
+            string.format(
+                L("Import selected sections as a new independent profile for \"%s\"? Existing profiles and unselected settings will stay unchanged."),
+                payload.targetLabel or L("Character")), {
+                transferString = package.originalString,
+                sections = sections,
+                guid = payload.guid,
+                specID = payload.specID,
+            }, pending.expected)
+        return true
+    end
+
+    function ui.RunTransferAction()
+        local state = ui.transferState
+        if not state then return end
+        if state.kind == "export" then
+            transferEditBox:HighlightText()
+            transferEditBox:SetFocus()
+        elseif state.kind == "import-entry" then
+            ui.PreviewTransferImport()
+        elseif state.kind == "import-preview" then
+            ui.PrepareTransferImportConfirmation()
+        end
+    end
+
+    transferEditBox:SetScript("OnTextChanged", function()
+        if ui.transferUpdatingText then return end
+        local state = ui.transferState
+        if not state then return end
+        if state.kind == "export" then
+            if transferEditBox:GetText() ~= (state.transferString or "") then
+                ui.SetTransferText(state.transferString or "", true)
+            end
+            return
+        end
+        if state.kind == "import-preview" then
+            state.kind = "import-entry"
+            state.package = nil
+            state.available = nil
+            state.selected = nil
+            if ui.pendingAction then ui.pendingAction.kind = "transfer-import-entry" end
+        end
+        state.error = nil
+        ui.RefreshTransferDialog()
+    end)
+    transferEditBox:SetScript("OnEnterPressed", function() ui.RunTransferAction() end)
+    transferEditBox:SetScript("OnEscapePressed", function(box) box:ClearFocus() end)
+    PushLocalizedLabel(function()
+        if dialog:IsShown() and ui.transferState then ui.RefreshTransferDialog() end
+    end)
+
     function ui.SpecChoices(
         model, excludedGUID, excludedSpecID, excludedProfileID, uniqueProfiles)
         local choices = {}
@@ -11574,6 +12648,17 @@ function addon.profileUI.BuildOperationUI(manager)
         local pending = ui.pendingAction
         if not pending or pending.mode ~= "choice" then return end
         local model = ui.currentModel or ui.BuildViewModel()
+        if pending.kind == "transfer-direction" then
+            local payload = pending.payload or {}
+            if choice.direction == "export" then
+                ui.ShowTransferExport(payload, pending.expected)
+            elseif choice.direction == "import" and payload.canImport == true then
+                ui.ShowTransferImportEntry(payload, pending.expected)
+            else
+                ui.HandleOperationResult(false, "stale")
+            end
+            return
+        end
         if pending.kind == "copy-source" then
             local payload = pending.payload
             local source = ui.FindProfile(model, choice.profileID)
@@ -11668,7 +12753,12 @@ function addon.profileUI.BuildOperationUI(manager)
 
     function ui.RunPendingAction()
         local pending = ui.pendingAction
-        if not pending or pending.mode ~= "confirm" then return end
+        if not pending then return end
+        if pending.mode == "transfer" then
+            ui.RunTransferAction()
+            return
+        end
+        if pending.mode ~= "confirm" then return end
         local payload = pending.payload or {}
         local ok, result
         if pending.kind == "copy-context" then
@@ -11691,6 +12781,18 @@ function addon.profileUI.BuildOperationUI(manager)
         elseif pending.kind == "set-role-template" then
             ok, result = addon.profileOps.SetRoleTemplate(
                 payload.role, payload.profileID, pending.expected)
+        elseif pending.kind == "transfer-import-confirm" then
+            local package, parseReason = addon.profileTransfer.Parse(payload.transferString)
+            if not package then
+                ok, result = false, parseReason
+            else
+                ok, result = addon.profileOps.ImportTransferToContext(
+                    package, payload.sections, payload.guid, payload.specID,
+                    pending.expected)
+                if ok and result and result.name then
+                    PrintMsg(string.format(L("Imported profile \"%s\" was created."), result.name))
+                end
+            end
         end
         ui.HandleOperationResult(ok, result)
     end
@@ -11721,6 +12823,7 @@ function addon.profileUI.BuildOperationUI(manager)
         if mutable and hasContext and (spec.sharedCount or 0) > 1 then
             stopSharingButton:Enable()
         else stopSharingButton:Disable() end
+        if hasContext then transferButton:Enable() else transferButton:Disable() end
         advancedButton:Enable()
         if mutable and hasContext then resetButton:Enable() else resetButton:Disable() end
         if mutable and character and not character.isCurrent then forgetButton:Enable()
@@ -11730,7 +12833,12 @@ function addon.profileUI.BuildOperationUI(manager)
         if mutable and (model.unusedProfileCount or 0) > 0 then cleanupButton:Enable()
         else cleanupButton:Disable() end
 
-        if dialog:IsShown() and (not mutable
+        local exportOnlyDialog = ui.pendingAction
+            and (ui.pendingAction.kind == "transfer-export"
+                or (ui.pendingAction.kind == "transfer-direction"
+                    and ui.pendingAction.payload
+                    and ui.pendingAction.payload.canImport ~= true))
+        if dialog:IsShown() and ((not mutable and not exportOnlyDialog)
             or not addon.profileOps.CheckExpected(addon.dbRuntime.Refresh(),
                 ui.pendingAction and ui.pendingAction.expected)) then
             dialog:Hide()
@@ -11788,6 +12896,29 @@ function addon.profileUI.BuildOperationUI(manager)
                 guid = character.guid,
                 specID = spec.specID,
             }, ui.CaptureExpected(character.guid, spec.specID, profile.profileID))
+    end)
+
+    transferButton:SetScript("OnClick", function()
+        local model = ui.currentModel or ui.BuildViewModel()
+        local character, spec = ui.selectedCharacterModel, ui.selectedSpecModel
+        local profile = ui.FindProfile(model, ui.selectedAssignedProfileID)
+        if not character or not spec or not profile then return end
+        local choices = {
+            { kind = "transfer", direction = "export", label = L("Export this profile") },
+        }
+        if model.canMutate == true then
+            choices[#choices + 1] = {
+                kind = "transfer", direction = "import",
+                label = L("Import into a new profile"),
+            }
+        end
+        ui.ShowChoices("transfer-direction", L("Export / import profile..."), choices, {
+            guid = character.guid,
+            specID = spec.specID,
+            profileID = profile.profileID,
+            targetLabel = ui.ContextLabel(character, spec),
+            canImport = model.canMutate == true,
+        }, ui.CaptureExpected(character.guid, spec.specID, profile.profileID))
     end)
 
     advancedButton:SetScript("OnClick", function()
@@ -11854,6 +12985,8 @@ function addon.profileUI.BuildOperationUI(manager)
     dialog:SetScript("OnHide", function()
         blocker:Hide()
         ui.pendingAction = nil
+        ui.transferState = nil
+        transferEditBox:ClearFocus()
         ui.RemoveSpecialFrame("StatsProProfileOperationDialog")
         -- WARNING: Blizzard iterates the live UISpecialFrames table while handling
         -- Escape. Re-inserting Manager synchronously here can make the same iteration
@@ -14346,7 +15479,6 @@ if addon and addon.__statsproSmoke == true then
                 readOnly = addon.dbRuntime.readOnly,
                 mode = addon.dbRuntime.mode,
                 version = addon.dbRuntime.version,
-                warned = addon.dbRuntime.warned,
                 warnedMode = addon.dbRuntime.warnedMode,
                 generation = addon.dbRuntime.generation,
             }
@@ -14381,14 +15513,11 @@ if addon and addon.__statsproSmoke == true then
                 activeSpecName = runtime.activeSpecName,
                 activeRole = runtime.activeRole,
                 forceReapply = runtime.forceReapply,
-                forceReapplyRetryCount = runtime.forceReapplyRetryCount,
-                forceReapplyRetryScheduled = runtime.forceReapplyRetryToken ~= nil,
                 corruptRollbackRetryCount = runtime.corruptRollbackRetryCount,
                 corruptRollbackRetryScheduled = runtime.corruptRollbackRetryToken ~= nil,
                 corruptRollbackRoot = runtime.corruptRollbackRoot,
                 contextRetryCount = runtime.contextRetryCount,
                 contextRetryScheduled = runtime.contextRetryToken ~= nil,
-                bootstrapStarted = runtime.bootstrapStarted,
                 bootstrapPending = runtime.bootstrapPending,
                 pendingResolution = runtime.pendingResolution,
                 scheduled = runtime.scheduledToken ~= nil,
@@ -14444,6 +15573,7 @@ if addon and addon.__statsproSmoke == true then
             resetProfile = addon.profileOps.ResetProfile,
             deleteUnusedProfiles = addon.profileOps.DeleteUnusedProfiles,
             importAndAssign = addon.profileOps.ImportAndAssign,
+            importTransferToContext = addon.profileOps.ImportTransferToContext,
             fullWipe = addon.profileOps.FullWipe,
             forgetCharacter = addon.profileOps.ForgetCharacter,
             setFailureStage = function(stage) addon.profileOps.testFailureStage = stage end,
@@ -14452,12 +15582,27 @@ if addon and addon.__statsproSmoke == true then
                 return {
                     inProgress = addon.profileOps.inProgress,
                     operationCount = addon.profileOps.operationCount,
-                    maxNameCodepoints = addon.profileOps.maxNameCodepoints,
                     maxUniqueNameCandidates = addon.profileOps.maxUniqueNameCandidates,
                 }
             end,
             setMaxUniqueNameCandidates = function(value)
                 addon.profileOps.maxUniqueNameCandidates = value
+            end,
+        },
+        profileTransfer = {
+            serialize = addon.profileTransfer.Serialize,
+            parse = addon.profileTransfer.Parse,
+            decodePayload = function(value)
+                if type(value) ~= "string" then return nil end
+                local encoded = value:match(
+                    "^SPP1:[0-9A-Fa-f]+:([A-Za-z0-9+/=]+)$")
+                return encoded and addon.profileTransfer.Base64Decode(encoded) or nil
+            end,
+            encodePayload = function(payload)
+                if type(payload) ~= "string" then return nil end
+                return addon.profileTransfer.prefix
+                    .. addon.profileTransfer.Adler32(payload) .. ":"
+                    .. addon.profileTransfer.Base64Encode(payload)
             end,
         },
         destructivePromptState = function()
@@ -14526,7 +15671,6 @@ if addon and addon.__statsproSmoke == true then
                 detailContext = ui.detailContext and ui.detailContext:GetText() or nil,
                 detailProfile = ui.detailProfile and ui.detailProfile:GetText() or nil,
                 detailProfileShown = ui.detailProfile and ui.detailProfile:IsShown() or false,
-                sharingSummaryVisible = ui.sharingSummaryVisible == true,
                 detailProfileColor = ui.detailProfile and ui.detailProfile.textColor
                     and CopyTable(ui.detailProfile.textColor) or nil,
                 detailProfileWidth = ui.detailProfile and ui.detailProfile:GetWidth() or nil,
@@ -14548,6 +15692,24 @@ if addon and addon.__statsproSmoke == true then
                     and ui.operationDialogMessage:GetText() or nil,
                 operationMode = ui.pendingAction and ui.pendingAction.mode or nil,
                 operationKind = ui.pendingAction and ui.pendingAction.kind or nil,
+                transferKind = ui.transferState and ui.transferState.kind or nil,
+                transferText = ui.transferEditBox and ui.transferEditBox:GetText() or nil,
+                transferTextSelected = ui.transferEditBox
+                    and ui.transferEditBox.highlightedText or nil,
+                transferTextFocused = ui.transferEditBox
+                    and ui.transferEditBox:HasFocus() or false,
+                transferSummary = ui.transferSummary and ui.transferSummary:GetText() or nil,
+                transferHint = ui.transferHint and ui.transferHint:GetText() or nil,
+                transferSections = (function()
+                    local sections = {}
+                    for section, check in pairs(ui.transferChecks or {}) do
+                        sections[section] = {
+                            enabled = check:IsEnabled(),
+                            checked = check:GetChecked() == true,
+                        }
+                    end
+                    return sections
+                end)(),
                 choices = choices,
             }
         end,
@@ -14597,9 +15759,6 @@ if addon and addon.__statsproSmoke == true then
         settingsControlState = function()
             local controls = {}
             for index, control in ipairs(addon.settingsDesign.testControls or {}) do
-                local border = control.statsProSurface
-                    and control.statsProSurface.statsProBorders
-                    and control.statsProSurface.statsProBorders[1] or nil
                 controls[index] = {
                     kind = control.statsProControlKind,
                     name = control:GetName(),
@@ -14608,12 +15767,8 @@ if addon and addon.__statsproSmoke == true then
                     width = control:GetWidth(),
                     height = control:GetHeight(),
                     role = control.statsProButtonRole,
-                    disabledReasonKey = control.statsProDisabledReasonKey,
                     mutatesSettings = control.statsProMutatesSettings == true,
                     selected = control.statsProSelected == true,
-                    fill = control.statsProStateTexture
-                        and CopyTable(control.statsProStateTexture.colorTexture) or nil,
-                    border = border and CopyTable(border.colorTexture) or nil,
                     textColor = control.statsProText
                         and CopyTable(control.statsProText.textColor) or nil,
                 }
@@ -14714,7 +15869,6 @@ if addon and addon.__statsproSmoke == true then
                 total = cached.versTotal,
                 rating = cached.versTotalRating,
                 percentVisible = cached.cleanRowVisibility.showVersatility,
-                ratingVisible = cached.cleanRowVisibility.showVersatilityRating,
             }
         end,
         normalizeColor = NormalizeColor,
@@ -14766,12 +15920,9 @@ if addon and addon.__statsproSmoke == true then
             for i, entry in ipairs(localizedConfigFonts) do
                 entries[i] = {
                     region = entry.fs,
-                    requestedFlags = entry.flags,
                     appliedFont = entry.appliedFont,
-                    appliedSize = entry.appliedSize,
                     appliedFlags = entry.appliedFlags,
                     actualFont = entry.fs.font,
-                    actualSize = entry.fs.fontSize,
                     actualFlags = entry.fs.fontFlags,
                     actualText = entry.fs:GetText(),
                 }
@@ -14801,23 +15952,17 @@ if addon and addon.__statsproSmoke == true then
                 mainRenderedRepairW = mainPanel.lastRenderedRepairW,
                 mainLabelText = mainPanel.labelText:GetText(),
                 mainLabelAlpha = mainPanel.labelText:GetAlpha(),
-                mainRatingAlpha = mainPanel.ratingText:GetAlpha(),
-                mainValueAlpha = mainPanel.valueText:GetAlpha(),
                 mainRatingText = mainPanel.ratingText:GetText(),
                 mainValueText = mainPanel.valueText:GetText(),
                 mainRatingPoints = mainPanel.ratingText.points,
                 mainValuePoints = mainPanel.valueText.points,
-                mainBackgroundAlpha = mainPanel.frame.backdropColor and mainPanel.frame.backdropColor.a or nil,
                 mainBackgroundTextureAlpha = mainPanel.backgroundTexture and mainPanel.backgroundTexture.colorTexture and mainPanel.backgroundTexture.colorTexture.a or nil,
                 mainBackgroundTexturePoints = mainPanel.backgroundTexture and mainPanel.backgroundTexture.points or nil,
                 mainRepairPoints = mainPanel.repairText.points,
-                mainRepairLabelPoints = mainPanel.repairLabelText.points,
                 mainRepairShown = mainPanel.repairText:IsShown(),
                 mainRepairLabelShown = mainPanel.repairLabelText:IsShown(),
                 mainRepairLabelWidth = mainPanel.repairLabelText:GetWidth(),
                 mainFirstOverlayHeight = firstOverlay and firstOverlay:GetHeight() or nil,
-                mainFirstOverlayPoints = firstOverlay and firstOverlay.points or nil,
-                mainSecondOverlayHeight = secondOverlay and secondOverlay:GetHeight() or nil,
                 mainSecondOverlayPoints = secondOverlay and secondOverlay.points or nil,
                 mainLabelFlags = mainPanel.labelText.fontFlags,
                 mainRatingFlags = mainPanel.ratingText.fontFlags,
@@ -14827,27 +15972,15 @@ if addon and addon.__statsproSmoke == true then
                 sideShown = defensivePanel:IsShown(),
                 sideFrameWidth = defensivePanel.frame:GetWidth(),
                 sideFrameHeight = defensivePanel.frame:GetHeight(),
-                sideLastLineH = defensivePanel.lastLineH,
-                sideCachedLabelW = defensivePanel.cachedLabelW,
                 sideCachedRatingW = defensivePanel.cachedRatingW,
                 sideCachedValueW = defensivePanel.cachedValueW,
-                sideCachedLabelH = defensivePanel.cachedLabelH,
-                sideCachedRatingH = defensivePanel.cachedRatingH,
-                sideCachedValueH = defensivePanel.cachedValueH,
-                sideCachedRepairW = defensivePanel.cachedRepairW,
-                sideCachedRepairLabelW = defensivePanel.cachedRepairLabelW,
-                sideRenderedLabelW = defensivePanel.lastRenderedLabelW,
                 sideRenderedRatingW = defensivePanel.lastRenderedRatingW,
                 sideRenderedValueW = defensivePanel.lastRenderedValueW,
-                sideRenderedRepairW = defensivePanel.lastRenderedRepairW,
                 sideLabelText = defensivePanel.labelText:GetText(),
                 sideRatingText = defensivePanel.ratingText:GetText(),
                 sideValueText = defensivePanel.valueText:GetText(),
                 sideRatingPoints = defensivePanel.ratingText.points,
-                sideValuePoints = defensivePanel.valueText.points,
-                sideBackgroundAlpha = defensivePanel.frame.backdropColor and defensivePanel.frame.backdropColor.a or nil,
                 sideBackgroundTextureAlpha = defensivePanel.backgroundTexture and defensivePanel.backgroundTexture.colorTexture and defensivePanel.backgroundTexture.colorTexture.a or nil,
-                sideBackgroundTexturePoints = defensivePanel.backgroundTexture and defensivePanel.backgroundTexture.points or nil,
                 sideLabelFlags = defensivePanel.labelText.fontFlags,
                 sideRatingFlags = defensivePanel.ratingText.fontFlags,
                 sideValueFlags = defensivePanel.valueText.fontFlags,
@@ -14858,7 +15991,6 @@ if addon and addon.__statsproSmoke == true then
         panelEditAffordanceState = function()
             local function Snapshot(panel)
                 local border = panel.editOutline.backdropBorderColor
-                local handleBorder = panel.editHandle.backdropBorderColor
                 return {
                     shown = panel.editOutline:IsShown(),
                     visible = type(panel.editOutline.IsVisible) ~= "function"
@@ -14867,9 +15999,7 @@ if addon and addon.__statsproSmoke == true then
                     outlineMouseEnabled = panel.editOutline.mouseEnabled == true,
                     handleMouseEnabled = panel.editHandle.mouseEnabled == true,
                     borderAlpha = border and border.a or nil,
-                    handleBorderAlpha = handleBorder and handleBorder.a or nil,
                     dragging = panel.editDragging == true,
-                    outlinePoints = CopyTable(panel.editOutline.points or {}),
                     frameShown = panel.frame:IsShown(),
                     frameWidth = panel.frame:GetWidth(),
                     frameHeight = panel.frame:GetHeight(),

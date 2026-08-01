@@ -3430,6 +3430,8 @@ end
 addon.fontRuntime.probeFontString = UIParent:CreateFontString(nil, "OVERLAY")
 addon.fontRuntime.probeFontString:Hide()
 addon.fontRuntime.probeResults = {}
+addon.fontRuntime.ownedFontObjects = {}
+addon.fontRuntime.ownedFontObjectSequence = 0
 addon.fontRuntime.fontActivatorObject = nil
 addon.fontRuntime.fontActivatorString = nil
 addon.fontRuntime.fontActivatorAttached = false
@@ -3548,6 +3550,63 @@ function addon.fontRuntime.trySetFont(region, fontPath, size, flags)
         return "invalid"
     end
     return "pending"
+end
+
+function addon.fontRuntime.getOwnedFontObject(ownerKey)
+    if type(ownerKey) ~= "string" or ownerKey == "" then return nil end
+    local existing = addon.fontRuntime.ownedFontObjects[ownerKey]
+    if existing then return existing end
+    if type(_G.CreateFont) ~= "function" then return nil end
+
+    addon.fontRuntime.ownedFontObjectSequence = addon.fontRuntime.ownedFontObjectSequence + 1
+    local objectName = "StatsProOwnedFont" .. addon.fontRuntime.ownedFontObjectSequence
+    local created, fontObject = pcall(_G.CreateFont, objectName)
+    if not created or not fontObject
+        or type(fontObject.SetFont) ~= "function"
+        or type(fontObject.GetFont) ~= "function" then
+        return nil
+    end
+    addon.fontRuntime.ownedFontObjects[ownerKey] = fontObject
+    return fontObject
+end
+
+function addon.fontRuntime.attachOwnedFontObject(region, fontObject)
+    if not region
+        or type(region.SetFontObject) ~= "function"
+        or type(region.GetFontObject) ~= "function"
+        or not fontObject then
+        return false
+    end
+    local attached = pcall(region.SetFontObject, region, fontObject)
+    if not attached then return false end
+    local readOK, actualObject = pcall(region.GetFontObject, region)
+    if not readOK or not rawequal(actualObject, fontObject) then return false end
+    return true
+end
+
+function addon.fontRuntime.ownedRegionsMatch(regions, fontObject, fontPath, size, flags)
+    for _, region in ipairs(regions) do
+        if type(region.GetFontObject) ~= "function" then return false end
+        local readOK, actualObject = pcall(region.GetFontObject, region)
+        if not readOK or not rawequal(actualObject, fontObject) then return false end
+        if not addon.fontRuntime.matchesAppliedFont(region, fontPath, size, flags) then
+            return false
+        end
+    end
+    return true
+end
+
+function addon.fontRuntime.setOwnedFont(fontObject, regions, fontPath, size, flags)
+    if not fontObject then return false, "invalid" end
+    -- SimpleFont:SetFont is void and requires a non-nil TBFFlags value. Effective
+    -- object state plus every attached region's inherited state are authoritative.
+    local status = addon.fontRuntime.trySetFont(fontObject, fontPath, size, flags or "")
+    if status ~= "applied" then return false, status end
+    if regions and not addon.fontRuntime.ownedRegionsMatch(
+            regions, fontObject, fontPath, size, flags) then
+        return false, "pending"
+    end
+    return true, "applied"
 end
 
 function addon.fontRuntime.probeStatus(fontPath, size, flags)
@@ -3685,11 +3744,25 @@ function addon.fontRuntime.applyExact(regions, fontPath, size, requestedFlags)
     return true, resolvedFont, effectiveFlags, "applied"
 end
 
+function addon.fontRuntime.applyOwnedExact(fontObject, regions, fontPath, size, requestedFlags)
+    local resolvedFont, effectiveFlags, status =
+        addon.fontRuntime.resolveFlags(fontPath, size, requestedFlags)
+    if not resolvedFont then return false, nil, nil, status end
+    local applied, objectStatus = addon.fontRuntime.setOwnedFont(
+        fontObject, regions, resolvedFont, size, effectiveFlags)
+    if not applied then return false, nil, nil, objectStatus end
+    return true, resolvedFont, effectiveFlags, "applied"
+end
+
 function addon.fontRuntime.restore(regions, fontPath, size, flags)
-    if not fontPath then return end
+    if not fontPath then return false end
+    local restored = true
     for _, region in ipairs(regions) do
-        addon.fontRuntime.setRegionFont(region, fontPath, size, flags)
+        if not addon.fontRuntime.setRegionFont(region, fontPath, size, flags) then
+            restored = false
+        end
     end
+    return restored
 end
 
 -- WHY this stays a single lookup: enUS is the canonical source table, with a
@@ -3716,6 +3789,11 @@ local function SectionHeader(labelKey)
     -- Reuse the Settings secondary-text neutral: brighter than the old gray,
     -- still subordinate to stat colors, with the default outline helping on terrain.
     return string.format("|cffb3bdb8— %s —|r", L(labelKey))
+end
+
+function addon.fontRuntime.restoreOwned(fontObject, regions, fontPath, size, flags)
+    if not fontPath then return false end
+    return addon.fontRuntime.setOwnedFont(fontObject, regions, fontPath, size, flags)
 end
 
 -- pcall every stat API so 12.x failures stay nil rather than rendering fake values.
@@ -7709,9 +7787,6 @@ function Panel:New(globalName, dbKeyPrefix)
     local fontFlags = addon.readabilityConfig.textOutlineStyleToFontFlags(outlineStyle)
 
     local labelText = frame:CreateFontString(nil, "OVERLAY")
-    labelText:SetJustifyH("RIGHT")
-    labelText:SetJustifyV("TOP")
-    labelText:SetTextColor(1, 1, 1, 1)
     labelText:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
     labelText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
 
@@ -7720,16 +7795,10 @@ function Panel:New(globalName, dbKeyPrefix)
     -- column starts. Offset is recomputed each SetTextSafe once valueW is measured.
     -- Initial offset 0; first render repositions it.
     local ratingText = frame:CreateFontString(nil, "OVERLAY")
-    ratingText:SetJustifyH("RIGHT")
-    ratingText:SetJustifyV("TOP")
-    ratingText:SetTextColor(1, 1, 1, 1)
     ratingText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
     ratingText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
 
     local valueText = frame:CreateFontString(nil, "OVERLAY")
-    valueText:SetJustifyH("LEFT")
-    valueText:SetJustifyV("TOP")
-    valueText:SetTextColor(1, 1, 1, 1)
     valueText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
     valueText:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
 
@@ -7743,8 +7812,6 @@ function Panel:New(globalName, dbKeyPrefix)
     -- icons inflate that line's height (`:14:14:2:0|t` yoffset=0 puts texture top above
     -- glyph top), causing cumulative drift vs labelText's pure-text rows.
     local repairText = frame:CreateFontString(nil, "OVERLAY")
-    repairText:SetJustifyH("RIGHT")
-    repairText:SetTextColor(1, 1, 1, 1)
     repairText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)  -- y repositioned per render
     repairText:Hide()
 
@@ -7753,8 +7820,6 @@ function Panel:New(globalName, dbKeyPrefix)
     -- row sits on its own visual row below stats (visual separation), and so coin can't
     -- overlap stat-row content. Width set per-render = stats labelW for column alignment.
     local repairLabelText = frame:CreateFontString(nil, "OVERLAY")
-    repairLabelText:SetJustifyH("RIGHT")  -- match labelText alignment
-    repairLabelText:SetTextColor(1, 1, 1, 1)
     repairLabelText:Hide()  -- shown only when hasRepair
 
     local tooltipOverlays = {}
@@ -7817,8 +7882,73 @@ function Panel:New(globalName, dbKeyPrefix)
         panel:FinishEditDrag()
     end)
     local initialRegions = { labelText, ratingText, valueText, repairText, repairLabelText }
-    local fontApplied, appliedFont, appliedFlags = addon.fontRuntime.applyExact(
-        initialRegions, font, fontSize, fontFlags)
+    local fontObject = addon.fontRuntime.getOwnedFontObject("panel:" .. globalName)
+    local ownedRegions, directRegions = {}, {}
+    local ownedApplied, appliedFont, appliedFlags = true, font, fontFlags
+    if fontObject then
+        ownedApplied, appliedFont, appliedFlags = addon.fontRuntime.applyOwnedExact(
+            fontObject, nil, font, fontSize, fontFlags)
+        if ownedApplied then
+            for _, region in ipairs(initialRegions) do
+                if addon.fontRuntime.attachOwnedFontObject(region, fontObject) then
+                    tinsert(ownedRegions, region)
+                else
+                    tinsert(directRegions, region)
+                end
+            end
+        end
+    end
+    if not fontObject or not ownedApplied then
+        fontObject = nil
+        ownedRegions = {}
+        directRegions = initialRegions
+        ownedApplied = true
+    elseif #ownedRegions == 0 then
+        fontObject = nil
+        directRegions = initialRegions
+    end
+
+    local directApplied, directFont, directFlags = true, appliedFont, appliedFlags
+    if #directRegions > 0 then
+        if fontObject then
+            for _, region in ipairs(directRegions) do
+                directApplied = addon.fontRuntime.setRegionFont(
+                    region, appliedFont, fontSize, appliedFlags)
+                if not directApplied then break end
+            end
+        else
+            directApplied, directFont, directFlags = addon.fontRuntime.applyExact(
+                directRegions, font, fontSize, fontFlags)
+        end
+        if directApplied and not fontObject then
+            appliedFont, appliedFlags = directFont, directFlags
+        end
+    end
+
+    -- FontObjects also carry justification and colour. Attach first, then keep the
+    -- panel's per-column presentation as explicit region-local overrides.
+    labelText:SetJustifyH("RIGHT")
+    labelText:SetJustifyV("TOP")
+    ratingText:SetJustifyH("RIGHT")
+    ratingText:SetJustifyV("TOP")
+    valueText:SetJustifyH("LEFT")
+    valueText:SetJustifyV("TOP")
+    repairText:SetJustifyH("RIGHT")
+    repairLabelText:SetJustifyH("RIGHT")
+    for _, region in ipairs(initialRegions) do region:SetTextColor(1, 1, 1, 1) end
+    if fontObject and not addon.fontRuntime.ownedRegionsMatch(
+            ownedRegions, fontObject, appliedFont, fontSize, appliedFlags) then
+        for _, region in ipairs(ownedRegions) do tinsert(directRegions, region) end
+        ownedRegions = {}
+        fontObject = nil
+        directApplied, appliedFont, appliedFlags = addon.fontRuntime.applyExact(
+            directRegions, font, fontSize, fontFlags)
+    end
+
+    local fontApplied = ownedApplied and directApplied
+    panel.fontObject = fontObject
+    panel.fontObjectRegions = ownedRegions
+    panel.directFontRegions = directRegions
     panel.appliedFont = fontApplied and appliedFont or nil
     panel.appliedSize = fontApplied and fontSize or nil
     panel.appliedTextOutlineStyle = fontApplied and outlineStyle or nil
@@ -8488,11 +8618,25 @@ function Panel:RestoreCachedText()
     end
 end
 
+function Panel:RestoreFontState(font, size, flags)
+    if not font then return false end
+    local restored = true
+    if self.fontObject and #self.fontObjectRegions > 0 then
+        restored = addon.fontRuntime.restoreOwned(
+            self.fontObject, self.fontObjectRegions, font, size, flags) and restored
+    end
+    if #self.directFontRegions > 0 then
+        restored = addon.fontRuntime.restore(
+            self.directFontRegions, font, size, flags) and restored
+    end
+    return restored
+end
+
 function Panel:ApplyStyle(font, size, force, requestedOutlineStyle)
     -- WHY idempotency: ApplyStyle is hot — fires from PEW (after MAS may have already
     -- applied), Reset, font/locale preview-cancel, lang commit's conditional restore,
-    -- and the Font Size slider's OnValueChanged. Same-args calls cost 10 SetFont +
-    -- 10 SetText + cache invalidations + a follow-up UpdateStats re-measure pass.
+    -- and the Font Size slider's OnValueChanged. Same-args calls still cause shared
+    -- object mutation, text restoration, cache invalidation, and a re-measure pass.
     -- Early return saves all of that whenever the panel is already at (font,size,outline).
     local outlineStyle = requestedOutlineStyle
         or cached.textOutlineStyle
@@ -8505,11 +8649,33 @@ function Panel:ApplyStyle(font, size, force, requestedOutlineStyle)
     end
     local fontFlags = addon.readabilityConfig.textOutlineStyleToFontFlags(outlineStyle)
     local oldFont, oldSize, oldFlags = self.appliedFont, self.appliedSize, self.appliedFontFlags
-    local regions = self:FontRegions()
-    local applied, effectiveFont, effectiveFlags, status = addon.fontRuntime.applyExact(
-        regions, font, size, fontFlags)
+    local effectiveFont, effectiveFlags, status =
+        addon.fontRuntime.resolveFlags(font, size, fontFlags)
+    local applied = effectiveFont ~= nil
+    if applied and self.fontObject and #self.fontObjectRegions > 0 then
+        applied, status = addon.fontRuntime.setOwnedFont(
+            self.fontObject, self.fontObjectRegions, effectiveFont, size, effectiveFlags)
+    end
+    if applied and #self.directFontRegions > 0 then
+        for _, region in ipairs(self.directFontRegions) do
+            local directApplied, directStatus = addon.fontRuntime.setRegionFont(
+                region, effectiveFont, size, effectiveFlags)
+            if not directApplied then
+                applied = false
+                status = directStatus
+                break
+            end
+        end
+    end
     if not applied then
-        addon.fontRuntime.restore(regions, oldFont, oldSize, oldFlags)
+        local restored = self:RestoreFontState(oldFont, oldSize, oldFlags)
+        if not restored then
+            self.appliedFont = nil
+            self.appliedSize = nil
+            self.appliedTextOutlineStyle = nil
+            self.appliedFontFlags = nil
+            status = "rollback-failed"
+        end
         self:RestoreCachedText()
         return false, nil, nil, nil, status
     end
@@ -8517,7 +8683,8 @@ function Panel:ApplyStyle(font, size, force, requestedOutlineStyle)
     self.appliedSize = size
     self.appliedTextOutlineStyle = outlineStyle
     self.appliedFontFlags = effectiveFlags
-    -- WHY: Blizzard quirk - SetFont clears text; re-apply if we have one.
+    -- Font mutation may clear text on some clients. Re-apply cached payloads without
+    -- inspecting them; rating/value strings can remain secret-tagged in combat.
     self:RestoreCachedText()
     -- Force re-measure on next SetTextSafe: cachedLabelH=nil drops the previous
     -- glyph-height read; heightDirty=true makes the height-gate fire even when
@@ -8535,7 +8702,7 @@ end
 -- |cffRRGGBB...|r in text content override the SetTextColor RGB, but alpha is
 -- a separate region-level prop applied after color resolution. SetAlpha is the
 -- canonical Blizzard pattern for transparent text with inline color escapes.
--- WHY no defensive re-call from Panel:ApplyStyle: SetFont clears text only, not
+-- WHY no defensive re-call from Panel:ApplyStyle: font mutation affects text, not
 -- region transforms — alpha survives. Re-calling here would defeat ApplyStyle's
 -- idempotency early-return optimization for no benefit.
 function Panel:ApplyTextAlpha(alpha)
@@ -8591,7 +8758,9 @@ local function ApplyTextStyleToAllPanels(font, size, force)
     local sideApplied, _, _, _, sideStatus =
         defensivePanel:ApplyStyle(effectiveFont, size, force, effectiveOutline)
     if not sideApplied then
-        mainPanel:ApplyStyle(oldMainFont, oldMainSize, true, oldMainOutline)
+        local mainRestored = mainPanel:ApplyStyle(
+            oldMainFont, oldMainSize, true, oldMainOutline)
+        if not mainRestored then sideStatus = "rollback-failed" end
         return false, nil, nil, nil, sideStatus
     end
     return true, effectiveFont, effectiveOutline, effectiveFlags, "applied"
@@ -9775,13 +9944,71 @@ local CONFIG_FONT = LocaleAwareConfigFont()
 -- but for the config window's CreateFontString-based labels (title, tabs, section
 -- headers, checkboxes, sliders, dropdown captions, font picker rows, langWarn).
 -- Blizzard FontObjects (GameFontNormal etc. used by buttons) carry built-in OS
--- fallback so they render Cyrillic/CJK acceptably; explicit SetFont(CONFIG_FONT, ...)
--- does NOT — without this swap, ruRU/zhCN previews on enUS clients render as boxes
--- even though stat panels next to them render correctly. RegisterConfigFont collects
--- every settings-UI FontString + its (size, flags) at creation time so ApplyConfigFont
--- can re-apply with a glyph-compatible font on language change without rebuilding.
+-- fallback so they render Cyrillic/CJK acceptably. StatsPro's owned FontObjects still
+-- need an explicit locale-compatible face; without this swap, ruRU/zhCN previews on
+-- enUS clients render as boxes. RegisterConfigFont attaches each real region to a
+-- semantic typography group that ApplyConfigFont can mutate without rebuilding.
 local currentConfigFont    = CONFIG_FONT
 local localizedConfigFonts = {}
+
+local function ConfigFontGroupKey(roleKey, size, flags)
+    if type(roleKey) ~= "string" or roleKey == "" then return nil end
+    return roleKey .. "\031" .. size .. "\031" .. (flags or "")
+end
+
+local function ConfigFontGroupRegions(group)
+    local regions = {}
+    for _, entry in ipairs(group.entries) do tinsert(regions, entry.fs) end
+    return regions
+end
+
+local function RemoveConfigFontEntry(group, entry)
+    if not group then return end
+    for index = #group.entries, 1, -1 do
+        if rawequal(group.entries[index], entry) then
+            tremove(group.entries, index)
+            break
+        end
+    end
+    if #group.entries == 0 then
+        local groups = localizedConfigFonts.groups or {}
+        local groupOrder = localizedConfigFonts.groupOrder or {}
+        groups[group.key] = nil
+        for index = #groupOrder, 1, -1 do
+            if rawequal(groupOrder[index], group) then
+                tremove(groupOrder, index)
+                break
+            end
+        end
+    end
+end
+
+local function GetConfigFontGroup(groupKey, size, flags)
+    if not groupKey then return nil end
+    local groups = localizedConfigFonts.groups
+    local groupOrder = localizedConfigFonts.groupOrder
+    if not groups then
+        groups = {}
+        groupOrder = {}
+        localizedConfigFonts.groups = groups
+        localizedConfigFonts.groupOrder = groupOrder
+    end
+    local group = groups[groupKey]
+    if group then return group end
+
+    local fontObject = addon.fontRuntime.getOwnedFontObject("settings:" .. groupKey)
+    if not fontObject then return nil end
+    group = {
+        key = groupKey,
+        size = size,
+        flags = flags,
+        object = fontObject,
+        entries = {},
+    }
+    groups[groupKey] = group
+    tinsert(groupOrder, group)
+    return group
+end
 
 -- Pure resolver mirroring ResolveActiveLocale → MaybeAutoSwitchFont's FindCompatibleFont
 -- pattern, but with CONFIG_FONT as baseline (settings UI default) instead of db.font.
@@ -9795,16 +10022,23 @@ ResolveConfigFont = function(activeLocale)
     return FindCompatibleFont(CONFIG_FONT, req) or CONFIG_FONT
 end
 
--- Settings-UI font register: collects every settings FontString + its (size, flags) so
--- ApplyConfigFont can re-apply with a glyph-compatible font on language change without
--- a UI rebuild. Initial set uses currentConfigFont (locale-correct via PEW MaybeAutoSwitchFont).
-local function RegisterConfigFont(fs, size, flags)
+-- Settings-UI font register: real regions inherit from stable addon-owned FontObjects.
+-- Semantic role is part of the ownership key so independently styled surfaces never
+-- become coupled merely because they currently share a size and outline.
+local function RegisterConfigFont(fs, size, flags, roleKey)
     local entry = localizedConfigFonts[fs]
     if not entry then
         entry = { fs = fs }
         localizedConfigFonts[fs] = entry
         tinsert(localizedConfigFonts, entry)
     end
+    local normalizedRole = roleKey
+    local groupKey = ConfigFontGroupKey(normalizedRole, size, flags)
+    if entry.group and entry.group.key ~= groupKey then
+        RemoveConfigFontEntry(entry.group, entry)
+        entry.group = nil
+    end
+    entry.roleKey = normalizedRole
     entry.size = size
     entry.flags = flags
     local previousText = fs:GetText()
@@ -9814,8 +10048,75 @@ local function RegisterConfigFont(fs, size, flags)
     else
         resolvedFont, effectiveFlags = addon.fontRuntime.resolveFlags(currentConfigFont, size, flags)
     end
+    local group = resolvedFont and GetConfigFontGroup(groupKey, size, flags) or nil
+    local inherited = false
+    local groupRollbackFailed = false
+    if group then
+        local oldGroupFont, oldGroupSize, oldGroupFlags =
+            group.appliedFont, group.appliedSize, group.appliedFlags
+        local objectReady = addon.fontRuntime.matchesAppliedFont(
+            group.object, resolvedFont, size, effectiveFlags)
+        if not objectReady then
+            objectReady = addon.fontRuntime.setOwnedFont(
+                group.object, ConfigFontGroupRegions(group), resolvedFont, size, effectiveFlags)
+            if not objectReady and oldGroupFont then
+                local restored = addon.fontRuntime.restoreOwned(
+                    group.object, ConfigFontGroupRegions(group),
+                    oldGroupFont, oldGroupSize, oldGroupFlags)
+                if not restored then
+                    groupRollbackFailed = true
+                    group.appliedFont = nil
+                    group.appliedSize = nil
+                    group.appliedFlags = nil
+                    for _, groupEntry in ipairs(group.entries) do
+                        groupEntry.appliedFont = nil
+                        groupEntry.appliedSize = nil
+                        groupEntry.appliedFlags = nil
+                    end
+                    currentConfigFont = nil
+                    addon.fontRuntime.configFontValidated = false
+                end
+            end
+        end
+        if objectReady then
+            inherited = entry.group == group
+                or addon.fontRuntime.attachOwnedFontObject(fs, group.object)
+            if inherited then
+                inherited = addon.fontRuntime.ownedRegionsMatch(
+                    { fs }, group.object, resolvedFont, size, effectiveFlags)
+            end
+        end
+    end
+
+    if inherited and group then
+        if entry.group ~= group then
+            entry.group = group
+            tinsert(group.entries, entry)
+        end
+        if previousText ~= nil then fs:SetText(previousText) end
+        currentConfigFont = resolvedFont
+        addon.fontRuntime.configFontValidated = true
+        group.appliedFont = resolvedFont
+        group.appliedSize = size
+        group.appliedFlags = effectiveFlags
+        entry.appliedFont = resolvedFont
+        entry.appliedSize = size
+        entry.appliedFlags = effectiveFlags
+        return true
+    end
+
+    -- Direct SetFont is retained only as a compatibility fallback. It also detaches
+    -- a partially attached FontObject if SetFontObject failed after changing state.
+    if entry.group then RemoveConfigFontEntry(entry.group, entry) end
+    entry.group = nil
     if resolvedFont and addon.fontRuntime.setRegionFont(fs, resolvedFont, size, effectiveFlags) then
         if previousText ~= nil then fs:SetText(previousText) end
+        if groupRollbackFailed then
+            entry.appliedFont = resolvedFont
+            entry.appliedSize = size
+            entry.appliedFlags = effectiveFlags
+            return ApplyConfigFont(resolvedFont, true)
+        end
         currentConfigFont = resolvedFont
         addon.fontRuntime.configFontValidated = true
         entry.appliedFont = resolvedFont
@@ -9838,7 +10139,10 @@ end
 -- fast-path skips work when currentConfigFont already matches (covers PEW + back-to-
 -- default-locale scenarios). WHY no `local`: assigns the forward-decl'd upvalue.
 ApplyConfigFont = function(font, force)
-    if not force and SameFontPath(font, currentConfigFont) then return true, currentConfigFont end
+    if not force and addon.fontRuntime.configFontValidated
+        and SameFontPath(font, currentConfigFont) then
+        return true, currentConfigFont
+    end
     local usable = addon.fontRuntime.usablePath(font)
     if not usable then return false end
     if #localizedConfigFonts == 0 then
@@ -9847,38 +10151,127 @@ ApplyConfigFont = function(font, force)
         return true, usable
     end
 
-    local plans, previousText = {}, {}
-    for i, e in ipairs(localizedConfigFonts) do
-        local resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(usable, e.size, e.flags)
-        if not resolvedFont then return false end
-        plans[i] = { font = resolvedFont, flags = effectiveFlags }
-        previousText[i] = e.fs:GetText()
-    end
-
-    for i, e in ipairs(localizedConfigFonts) do
-        local plan = plans[i]
-        if not addon.fontRuntime.setRegionFont(e.fs, plan.font, e.size, plan.flags) then
-            for restoreIndex = 1, i do
-                local old = localizedConfigFonts[restoreIndex]
-                if old.appliedFont then
-                    addon.fontRuntime.setRegionFont(
-                        old.fs, old.appliedFont, old.appliedSize, old.appliedFlags)
-                end
-                if previousText[restoreIndex] ~= nil then
-                    old.fs:SetText(previousText[restoreIndex])
-                end
-            end
-            return false
+    local groupPlans, directPlans, previousText = {}, {}, {}
+    local groupOrder = localizedConfigFonts.groupOrder or {}
+    for _, group in ipairs(groupOrder) do
+        if #group.entries > 0 then
+            local resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(
+                usable, group.size, group.flags)
+            if not resolvedFont then return false end
+            tinsert(groupPlans, {
+                group = group,
+                font = resolvedFont,
+                flags = effectiveFlags,
+                oldFont = group.appliedFont,
+                oldSize = group.appliedSize,
+                oldFlags = group.appliedFlags,
+            })
         end
-        if previousText[i] ~= nil then e.fs:SetText(previousText[i]) end
+    end
+    for i, e in ipairs(localizedConfigFonts) do
+        previousText[i] = e.fs:GetText()
+        if not e.group then
+            local resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(
+                usable, e.size, e.flags)
+            if not resolvedFont then return false end
+            tinsert(directPlans, {
+                entry = e,
+                font = resolvedFont,
+                flags = effectiveFlags,
+                oldFont = e.appliedFont,
+                oldSize = e.appliedSize,
+                oldFlags = e.appliedFlags,
+            })
+        end
     end
 
-    currentConfigFont = plans[1].font
+    local changedGroups, changedDirect = {}, {}
+    local function RestoreConfigFonts()
+        local restored = true
+        for index = #changedDirect, 1, -1 do
+            local plan = changedDirect[index]
+            if not plan.oldFont or not addon.fontRuntime.restore(
+                    { plan.entry.fs }, plan.oldFont, plan.oldSize, plan.oldFlags) then
+                restored = false
+            end
+        end
+        for index = #changedGroups, 1, -1 do
+            local plan = changedGroups[index]
+            if not plan.oldFont or not addon.fontRuntime.restoreOwned(
+                    plan.group.object, ConfigFontGroupRegions(plan.group),
+                    plan.oldFont, plan.oldSize, plan.oldFlags) then
+                restored = false
+            end
+        end
+        for index, e in ipairs(localizedConfigFonts) do
+            if previousText[index] ~= nil then e.fs:SetText(previousText[index]) end
+        end
+        return restored
+    end
+    local function ClearConfigFontMetadata()
+        currentConfigFont = nil
+        addon.fontRuntime.configFontValidated = false
+        for _, group in ipairs(groupOrder) do
+            group.appliedFont = nil
+            group.appliedSize = nil
+            group.appliedFlags = nil
+        end
+        for _, entry in ipairs(localizedConfigFonts) do
+            entry.appliedFont = nil
+            entry.appliedSize = nil
+            entry.appliedFlags = nil
+        end
+    end
+
+    for _, plan in ipairs(groupPlans) do
+        tinsert(changedGroups, plan)
+        local groupApplied, groupStatus = addon.fontRuntime.setOwnedFont(
+            plan.group.object, ConfigFontGroupRegions(plan.group),
+            plan.font, plan.group.size, plan.flags)
+        if not groupApplied then
+            if not RestoreConfigFonts() then
+                ClearConfigFontMetadata()
+                groupStatus = "rollback-failed"
+            end
+            return false, nil, groupStatus
+        end
+    end
+    for _, plan in ipairs(directPlans) do
+        tinsert(changedDirect, plan)
+        local directApplied, directStatus = addon.fontRuntime.setRegionFont(
+            plan.entry.fs, plan.font, plan.entry.size, plan.flags)
+        if not directApplied then
+            if not RestoreConfigFonts() then
+                ClearConfigFontMetadata()
+                directStatus = "rollback-failed"
+            end
+            return false, nil, directStatus
+        end
+    end
+    for index, e in ipairs(localizedConfigFonts) do
+        if previousText[index] ~= nil then e.fs:SetText(previousText[index]) end
+    end
+
+    currentConfigFont = groupPlans[1] and groupPlans[1].font
+        or directPlans[1] and directPlans[1].font
+        or usable
     addon.fontRuntime.configFontValidated = true
-    for i, e in ipairs(localizedConfigFonts) do
-        e.appliedFont = plans[i].font
-        e.appliedSize = e.size
-        e.appliedFlags = plans[i].flags
+    for _, plan in ipairs(groupPlans) do
+        local group = plan.group
+        group.appliedFont = plan.font
+        group.appliedSize = group.size
+        group.appliedFlags = plan.flags
+        for _, entry in ipairs(group.entries) do
+            entry.appliedFont = plan.font
+            entry.appliedSize = entry.size
+            entry.appliedFlags = plan.flags
+        end
+    end
+    for _, plan in ipairs(directPlans) do
+        local entry = plan.entry
+        entry.appliedFont = plan.font
+        entry.appliedSize = entry.size
+        entry.appliedFlags = plan.flags
     end
     return true, currentConfigFont
 end
@@ -10545,7 +10938,7 @@ end
 function addon.settingsDesign.ApplyTextRole(region, roleName)
     local role = addon.settingsDesign.tokens.typography[roleName]
     if not role then return end
-    RegisterConfigFont(region, role.size, role.flags)
+    RegisterConfigFont(region, role.size, role.flags, "role:" .. roleName)
     addon.settingsDesign.SetRegionColor(region, role.color)
     region.statsProTextRole = roleName
 end
@@ -11133,7 +11526,7 @@ function addon.settingsDesign.StyleCloseButton(button)
     hover:SetColorTexture(danger[1], danger[2], danger[3], 0.14)
     hover:Hide()
     local text = button:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(text, 18)
+    RegisterConfigFont(text, 18, nil, "close")
     text:SetPoint("CENTER", 0, 1)
     text:SetText("×")
     addon.settingsDesign.SetRegionColor(text, "textSecondary")
@@ -11573,7 +11966,7 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
     local lbl = parent:CreateFontString(nil, "OVERLAY")
     -- WoW rejects SetText on a bare FontString. Register before the localized
     -- setter runs; StyleSlider later reuses the same identity-keyed font entry.
-    RegisterConfigFont(lbl, 12)
+    RegisterConfigFont(lbl, 12, nil, "role:body")
     lbl:SetPoint("TOPLEFT", cd.padX, sliderY)
     PushLocalizedLabel(function() lbl:SetText(L(labelText)) end)
 
@@ -12173,7 +12566,7 @@ function addon.hudPresets.BuildCardList(parent, x, y, width)
         button.statsProSelectionRail = selectionRail
 
         local label = button:CreateFontString(nil, "OVERLAY")
-        addon.settingsDesign.ApplyTextRole(label, "button")
+        addon.settingsDesign.StyleListRow(button, label, "button")
         label:SetPoint("TOPLEFT", 12, -8)
         label:SetSize(width - 24, 16)
         label:SetJustifyH("LEFT")
@@ -12191,7 +12584,6 @@ function addon.hudPresets.BuildCardList(parent, x, y, width)
         PushLocalizedLabel(function() summary:SetText(L(definition.summary)) end)
 
         button.statsProPresetSummary = summary
-        addon.settingsDesign.StyleListRow(button, label, "button")
         button.statsProBlocksInCombat = true
         addon.settingsDesign.RegisterMutationControl(button)
         ui.mutationControls[#ui.mutationControls + 1] = button
@@ -13021,7 +13413,7 @@ function addon.profileUI.BuildOperationUI(manager)
     addon.settingsDesign.StyleCloseButton(dialogClose)
 
     local dialogMessage = dialog:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(dialogMessage, 12)
+    RegisterConfigFont(dialogMessage, 12, nil, "dialogBody")
     addon.settingsDesign.SetRegionColor(dialogMessage, "textPrimary")
     dialogMessage:SetPoint("TOPLEFT", 20, -54)
     dialogMessage:SetPoint("TOPRIGHT", -20, -54)
@@ -13052,7 +13444,7 @@ function addon.profileUI.BuildOperationUI(manager)
     PushLocalizedLabel(function() cancelButton:SetText(L("Cancel")) end)
 
     local transferSummary = dialog:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(transferSummary, 12)
+    RegisterConfigFont(transferSummary, 12, nil, "transferSummary")
     addon.settingsDesign.SetRegionColor(transferSummary, "textPrimary")
     transferSummary:SetPoint("TOPLEFT", 20, -56)
     transferSummary:SetPoint("TOPRIGHT", -20, -56)
@@ -13070,7 +13462,6 @@ function addon.profileUI.BuildOperationUI(manager)
         check:SetPoint("TOPLEFT", 22, transferCheckY[section])
         check:SetSize(24, 24)
         local label = check:CreateFontString(nil, "OVERLAY")
-        RegisterConfigFont(label, 12)
         addon.settingsDesign.StyleCheckbox(check, label, true)
         label:SetPoint("RIGHT", dialog, "RIGHT", -20, 0)
         label:SetJustifyH("LEFT")
@@ -13101,10 +13492,10 @@ function addon.profileUI.BuildOperationUI(manager)
     if type(transferEditBox.SetMaxLetters) == "function" then
         transferEditBox:SetMaxLetters(addon.profileTransfer.maxEncodedBytes)
     end
-    RegisterConfigFont(transferEditBox, 11)
+    RegisterConfigFont(transferEditBox, 11, nil, "transferInput")
 
     local transferHint = dialog:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(transferHint, 10)
+    RegisterConfigFont(transferHint, 10, nil, "role:controlMetadata")
     transferHint:SetPoint("TOPLEFT", 20, -266)
     transferHint:SetPoint("TOPRIGHT", -20, -266)
     transferHint:SetHeight(34)
@@ -13368,10 +13759,10 @@ function addon.profileUI.BuildOperationUI(manager)
         local text = row:CreateFontString(nil, "OVERLAY")
         text:SetPoint("LEFT", 8, 0)
         text:SetPoint("RIGHT", -8, 0)
-        text:SetJustifyH("LEFT")
         text:SetWordWrap(false)
         row.text = text
         addon.settingsDesign.StyleListRow(row, text, "metadata")
+        text:SetJustifyH("LEFT")
         row:SetScript("OnClick", function(button)
             if button.choiceData then ui.HandleChoice(button.choiceData) end
         end)
@@ -14044,7 +14435,7 @@ function addon.profileUI.BuildSettingsUI(owner)
     detailSurface:SetPoint("BOTTOMRIGHT", -12, 12)
 
     local listTitle = manager:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(listTitle, 12, "OUTLINE")
+    RegisterConfigFont(listTitle, 12, "OUTLINE", "managerListTitle")
     listTitle:SetPoint("TOPLEFT", 20, -54)
     PushLocalizedLabel(function() listTitle:SetText(L("Character")) end)
 
@@ -14059,27 +14450,27 @@ function addon.profileUI.BuildSettingsUI(owner)
     listScroll:SetScrollChild(listChild)
 
     local emptyText = listChild:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(emptyText, 12)
+    RegisterConfigFont(emptyText, 12, nil, "managerEmpty")
     emptyText:SetPoint("TOPLEFT", 6, -8)
     emptyText:SetWidth(178)
     emptyText:SetJustifyH("LEFT")
     addon.settingsDesign.SetRegionColor(emptyText, "textMuted")
 
     local detailCharacter = manager:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(detailCharacter, 16, "OUTLINE")
+    RegisterConfigFont(detailCharacter, 16, "OUTLINE", "managerCharacter")
     detailCharacter:SetPoint("TOPLEFT", 266, -58)
     detailCharacter:SetPoint("TOPRIGHT", -20, -58)
     detailCharacter:SetJustifyH("LEFT")
 
     local detailContext = manager:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(detailContext, 12)
+    RegisterConfigFont(detailContext, 12, nil, "managerContext")
     detailContext:SetPoint("TOPLEFT", detailCharacter, "BOTTOMLEFT", 0, -8)
     detailContext:SetPoint("TOPRIGHT", detailCharacter, "BOTTOMRIGHT", 0, -8)
     detailContext:SetJustifyH("LEFT")
     addon.settingsDesign.SetRegionColor(detailContext, "textSecondary")
 
     detailProfile = manager:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(detailProfile, 15, "OUTLINE")
+    RegisterConfigFont(detailProfile, 15, "OUTLINE", "managerProfile")
     detailProfile:SetPoint("TOPLEFT", detailContext, "BOTTOMLEFT", 0, -18)
     detailProfile:SetWidth(math.max(1, ui.managerWidth - geometry.managerDetailInset))
     detailProfile:SetHeight(20)
@@ -14127,19 +14518,19 @@ function addon.profileUI.BuildSettingsUI(owner)
         local text = row:CreateFontString(nil, "OVERLAY")
         text:SetPoint("LEFT", 6, 0)
         local badge = row:CreateFontString(nil, "OVERLAY")
-        RegisterConfigFont(badge, 10, "OUTLINE")
+        RegisterConfigFont(badge, 10, "OUTLINE", "managerBadge")
         badge:SetPoint("RIGHT", -6, 0)
         badge:SetWidth(70)
         badge:SetJustifyH("RIGHT")
         addon.settingsDesign.SetRegionColor(badge, "positive")
         text:SetPoint("RIGHT", badge, "LEFT", -4, 0)
-        text:SetJustifyH("LEFT")
         text:SetWordWrap(false)
         text:SetMaxLines(1)
         row.background = background
         row.text = text
         row.badge = badge
         addon.settingsDesign.StyleListRow(row, text, "metadata")
+        text:SetJustifyH("LEFT")
         row:SetScript("OnClick", function(button)
             local context = button.profileContext
             if not context then return end
@@ -14847,7 +15238,7 @@ function addon:OpenConfigMenu()
             selectionRail:Hide()
             button.statsProSelectionRail = selectionRail
             local label = button:CreateFontString(nil, "OVERLAY")
-            self.settingsDesign.ApplyTextRole(label, "body")
+            self.settingsDesign.StyleListRow(button, label, "body")
             label:SetPoint("LEFT", 10, 0)
             label:SetPoint("RIGHT", -58, 0)
             label:SetJustifyH("LEFT")
@@ -14864,7 +15255,6 @@ function addon:OpenConfigMenu()
                 preview[previewIndex] = swatch
             end
             button.statsProPresetPreview = preview
-            self.settingsDesign.StyleListRow(button, label, "body")
             self.settingsDesign.RegisterMutationControl(button)
             button:SetScript("OnClick", function()
                 local ok, reason = self.appearancePresets.StartPreview(presetID)
@@ -14938,7 +15328,7 @@ function addon:OpenConfigMenu()
         local rowY = cd.y
 
         local fontLabel = appearanceBody:CreateFontString(nil, "OVERLAY")
-        RegisterConfigFont(fontLabel, 12)
+        RegisterConfigFont(fontLabel, 12, nil, "role:body")
         fontLabel:SetPoint("TOPLEFT", cd.padX, rowY)
         PushLocalizedLabel(function() fontLabel:SetText(L("Font:")) end)
 
@@ -15217,12 +15607,12 @@ function addon:OpenConfigMenu()
                     btn.text = btn:CreateFontString(nil, "OVERLAY")
                     btn.text:SetPoint("LEFT", 6, 0)
                     btn.text:SetPoint("RIGHT", -4, 0)
-                    btn.text:SetJustifyH("LEFT")
                     -- WHY no-wrap: long font names (>25 char) would wrap to a 2nd line, breaking
                     -- the row-height grid. Single-line overflow visually clipped by FontString.
                     btn.text:SetWordWrap(false)
                     btn.text:SetMaxLines(1)
                     addon.settingsDesign.StyleListRow(btn, btn.text, "body")
+                    btn.text:SetJustifyH("LEFT")
 
                     -- hoverGen pattern: OnEnter bumps gen + applies preview; OnLeave captures
                     -- current gen and schedules a 0-tick deferred cancel. If the mouse moves
@@ -15478,7 +15868,7 @@ function addon:OpenConfigMenu()
         local rowY = cd.y
 
         local langLabel = appearanceBody:CreateFontString(nil, "OVERLAY")
-        RegisterConfigFont(langLabel, 12)
+        RegisterConfigFont(langLabel, 12, nil, "role:body")
         langLabel:SetPoint("TOPLEFT", cd.padX, rowY)
         PushLocalizedLabel(function() langLabel:SetText(L("Language:")) end)
 
@@ -15543,7 +15933,7 @@ function addon:OpenConfigMenu()
                 and addon.NormalizeOutputLocale(GetLocale()) or value
             -- Dedup: hovering the SAME locale row twice in succession (mouse jitter,
             -- entering then exiting then re-entering same item) repeats the heavy work
-            -- (ApplyTextStyleToAllPanels + ApplyConfigFont walking 10 FontStrings +
+            -- (ApplyTextStyleToAllPanels + ApplyConfigFont mutating typography groups +
             -- RefreshConfigLocalization replaying ~60 setters + alignment re-measure +
             -- UpdateStats full panel rebuild). Bail when nothing actually changed.
             if locale == langPreviewLocale then return end
@@ -15695,7 +16085,7 @@ function addon:OpenConfigMenu()
         CursorAdvance(cd, 24)
 
         local langWarn = appearanceBody:CreateFontString(nil, "OVERLAY")
-        RegisterConfigFont(langWarn, 11)
+        addon.settingsDesign.StyleWarning(appearanceBody, langWarn)
         local langWarnHeight = addon.settingsDesign.tokens.geometry.warningHeight
         langWarn:SetPoint("TOPLEFT", cd.padX, cd.y)
         langWarn:SetWidth(scrollChildWidth - (cd.padX * 2))
@@ -15705,7 +16095,6 @@ function addon:OpenConfigMenu()
         langWarn:SetWordWrap(true)
         langWarn:SetMaxLines(2)
         langWarn:SetText("")
-        addon.settingsDesign.StyleWarning(appearanceBody, langWarn)
         if self.__statsproSmoke == true then configFrame.languageWarning = langWarn end
 
         -- Assignment to file-scope upvalue declared in section 15 prelude (NOT a global).
@@ -16480,6 +16869,12 @@ local function RunLabelStyleSmokeCheck()
 end
 
 if addon and addon.__statsproSmoke == true then
+    local function SmokeFontState(region)
+        local font, size, flags = region:GetFont()
+        if flags == "" then flags = nil end
+        return font, size, flags, region:GetFontObject()
+    end
+
     addon.__test = {
         currentDBVersion = function() return CURRENT_DB_VERSION end,
         dbCompatibilityState = function()
@@ -16861,6 +17256,7 @@ if addon and addon.__statsproSmoke == true then
             }
         end,
         applyConfigFont = ApplyConfigFont,
+        registerConfigFont = RegisterConfigFont,
         formatRepairCost = FormatRepairCost,
         refreshDurabilityCache = RefreshDurabilityCache,
         durabilityState = function()
@@ -16915,48 +17311,90 @@ if addon and addon.__statsproSmoke == true then
         bucketHasContent = BucketHasContent,
         applyTextStyleToAllPanels = ApplyTextStyleToAllPanels,
         panelFontState = function()
+            local mainLabelFont, mainLabelSize, mainLabelFlags, mainLabelObject =
+                SmokeFontState(mainPanel.labelText)
+            local mainRatingFont, _, mainRatingFlags, mainRatingObject =
+                SmokeFontState(mainPanel.ratingText)
+            local mainValueFont, _, mainValueFlags, mainValueObject =
+                SmokeFontState(mainPanel.valueText)
+            local mainRepairFont, _, mainRepairFlags, mainRepairObject =
+                SmokeFontState(mainPanel.repairText)
+            local mainRepairLabelFont, _, mainRepairLabelFlags, mainRepairLabelObject =
+                SmokeFontState(mainPanel.repairLabelText)
+            local sideLabelFont, sideLabelSize, sideLabelFlags, sideLabelObject =
+                SmokeFontState(defensivePanel.labelText)
+            local sideRatingFont, _, sideRatingFlags, sideRatingObject =
+                SmokeFontState(defensivePanel.ratingText)
+            local sideValueFont, _, sideValueFlags, sideValueObject =
+                SmokeFontState(defensivePanel.valueText)
+            local sideRepairFont, _, sideRepairFlags, sideRepairObject =
+                SmokeFontState(defensivePanel.repairText)
+            local sideRepairLabelFont, _, sideRepairLabelFlags, sideRepairLabelObject =
+                SmokeFontState(defensivePanel.repairLabelText)
             return {
                 mainAppliedFont = mainPanel.appliedFont,
                 mainAppliedSize = mainPanel.appliedSize,
                 mainAppliedTextOutlineStyle = mainPanel.appliedTextOutlineStyle,
                 mainAppliedFontFlags = mainPanel.appliedFontFlags,
-                mainLabelFont = mainPanel.labelText.font,
-                mainLabelSize = mainPanel.labelText.fontSize,
-                mainLabelFlags = mainPanel.labelText.fontFlags,
-                mainRatingFont = mainPanel.ratingText.font,
-                mainRatingFlags = mainPanel.ratingText.fontFlags,
-                mainValueFont = mainPanel.valueText.font,
-                mainValueFlags = mainPanel.valueText.fontFlags,
-                mainRepairFont = mainPanel.repairText.font,
-                mainRepairFlags = mainPanel.repairText.fontFlags,
-                mainRepairLabelFont = mainPanel.repairLabelText.font,
-                mainRepairLabelFlags = mainPanel.repairLabelText.fontFlags,
+                mainOwnedFontObject = mainPanel.fontObject,
+                mainOwnedRegionCount = #mainPanel.fontObjectRegions,
+                mainDirectRegionCount = #mainPanel.directFontRegions,
+                mainLabelFont = mainLabelFont,
+                mainLabelSize = mainLabelSize,
+                mainLabelFlags = mainLabelFlags,
+                mainLabelObject = mainLabelObject,
+                mainRatingFont = mainRatingFont,
+                mainRatingFlags = mainRatingFlags,
+                mainRatingObject = mainRatingObject,
+                mainValueFont = mainValueFont,
+                mainValueFlags = mainValueFlags,
+                mainValueObject = mainValueObject,
+                mainRepairFont = mainRepairFont,
+                mainRepairFlags = mainRepairFlags,
+                mainRepairObject = mainRepairObject,
+                mainRepairLabelFont = mainRepairLabelFont,
+                mainRepairLabelFlags = mainRepairLabelFlags,
+                mainRepairLabelObject = mainRepairLabelObject,
+                mainFontRegions = mainPanel:FontRegions(),
                 sideAppliedFont = defensivePanel.appliedFont,
                 sideAppliedSize = defensivePanel.appliedSize,
                 sideAppliedTextOutlineStyle = defensivePanel.appliedTextOutlineStyle,
                 sideAppliedFontFlags = defensivePanel.appliedFontFlags,
-                sideLabelFont = defensivePanel.labelText.font,
-                sideLabelSize = defensivePanel.labelText.fontSize,
-                sideLabelFlags = defensivePanel.labelText.fontFlags,
-                sideRatingFont = defensivePanel.ratingText.font,
-                sideRatingFlags = defensivePanel.ratingText.fontFlags,
-                sideValueFont = defensivePanel.valueText.font,
-                sideValueFlags = defensivePanel.valueText.fontFlags,
-                sideRepairFont = defensivePanel.repairText.font,
-                sideRepairFlags = defensivePanel.repairText.fontFlags,
-                sideRepairLabelFont = defensivePanel.repairLabelText.font,
-                sideRepairLabelFlags = defensivePanel.repairLabelText.fontFlags,
+                sideOwnedFontObject = defensivePanel.fontObject,
+                sideOwnedRegionCount = #defensivePanel.fontObjectRegions,
+                sideDirectRegionCount = #defensivePanel.directFontRegions,
+                sideLabelFont = sideLabelFont,
+                sideLabelSize = sideLabelSize,
+                sideLabelFlags = sideLabelFlags,
+                sideLabelObject = sideLabelObject,
+                sideRatingFont = sideRatingFont,
+                sideRatingFlags = sideRatingFlags,
+                sideRatingObject = sideRatingObject,
+                sideValueFont = sideValueFont,
+                sideValueFlags = sideValueFlags,
+                sideValueObject = sideValueObject,
+                sideRepairFont = sideRepairFont,
+                sideRepairFlags = sideRepairFlags,
+                sideRepairObject = sideRepairObject,
+                sideRepairLabelFont = sideRepairLabelFont,
+                sideRepairLabelFlags = sideRepairLabelFlags,
+                sideRepairLabelObject = sideRepairLabelObject,
+                sideFontRegions = defensivePanel:FontRegions(),
             }
         end,
         configFontState = function()
             local entries = {}
             for i, entry in ipairs(localizedConfigFonts) do
+                local actualFont, _, actualFlags, actualObject = SmokeFontState(entry.fs)
                 entries[i] = {
                     region = entry.fs,
                     appliedFont = entry.appliedFont,
                     appliedFlags = entry.appliedFlags,
-                    actualFont = entry.fs.font,
-                    actualFlags = entry.fs.fontFlags,
+                    actualFont = actualFont,
+                    actualFlags = actualFlags,
+                    actualObject = actualObject,
+                    ownedObject = entry.group and entry.group.object or nil,
+                    roleKey = entry.roleKey,
                     actualText = entry.fs:GetText(),
                 }
             end
@@ -16997,11 +17435,11 @@ if addon and addon.__statsproSmoke == true then
                 mainRepairLabelWidth = mainPanel.repairLabelText:GetWidth(),
                 mainFirstOverlayHeight = firstOverlay and firstOverlay:GetHeight() or nil,
                 mainSecondOverlayPoints = secondOverlay and secondOverlay.points or nil,
-                mainLabelFlags = mainPanel.labelText.fontFlags,
-                mainRatingFlags = mainPanel.ratingText.fontFlags,
-                mainValueFlags = mainPanel.valueText.fontFlags,
-                mainRepairFlags = mainPanel.repairText.fontFlags,
-                mainRepairLabelFlags = mainPanel.repairLabelText.fontFlags,
+                mainLabelFlags = select(3, SmokeFontState(mainPanel.labelText)),
+                mainRatingFlags = select(3, SmokeFontState(mainPanel.ratingText)),
+                mainValueFlags = select(3, SmokeFontState(mainPanel.valueText)),
+                mainRepairFlags = select(3, SmokeFontState(mainPanel.repairText)),
+                mainRepairLabelFlags = select(3, SmokeFontState(mainPanel.repairLabelText)),
                 sideShown = defensivePanel:IsShown(),
                 sideFrameWidth = defensivePanel.frame:GetWidth(),
                 sideFrameHeight = defensivePanel.frame:GetHeight(),
@@ -17014,11 +17452,11 @@ if addon and addon.__statsproSmoke == true then
                 sideValueText = defensivePanel.valueText:GetText(),
                 sideRatingPoints = defensivePanel.ratingText.points,
                 sideBackgroundTextureAlpha = defensivePanel.backgroundTexture and defensivePanel.backgroundTexture.colorTexture and defensivePanel.backgroundTexture.colorTexture.a or nil,
-                sideLabelFlags = defensivePanel.labelText.fontFlags,
-                sideRatingFlags = defensivePanel.ratingText.fontFlags,
-                sideValueFlags = defensivePanel.valueText.fontFlags,
-                sideRepairFlags = defensivePanel.repairText.fontFlags,
-                sideRepairLabelFlags = defensivePanel.repairLabelText.fontFlags,
+                sideLabelFlags = select(3, SmokeFontState(defensivePanel.labelText)),
+                sideRatingFlags = select(3, SmokeFontState(defensivePanel.ratingText)),
+                sideValueFlags = select(3, SmokeFontState(defensivePanel.valueText)),
+                sideRepairFlags = select(3, SmokeFontState(defensivePanel.repairText)),
+                sideRepairLabelFlags = select(3, SmokeFontState(defensivePanel.repairLabelText)),
             }
         end,
         panelEditAffordanceState = function()

@@ -372,9 +372,20 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetFont(font, size, flags)
         if type(font) ~= "string" then error("SetFont font must be a string", 2) end
         if not isFiniteNumber(size) then error("SetFont size must be a finite number", 2) end
-        -- Mirrors FrameXML's MakeFontObjectCustom: a direct SetFont stops this
-        -- FontString from inheriting subsequent updates from a shared FontObject.
-        self.fontObject = nil
+        -- Direct SimpleFont mutation switches this region to a private font object,
+        -- matching FrameXML's MakeFontObjectCustom ownership model.
+        self.setFontCalls = (self.setFontCalls or 0) + 1
+        if not self.privateFontObject then
+            local owner = self
+            self.privateFontObject = {
+                isPrivateFontObject = true,
+                GetFont = function() return owner.font, owner.fontSize, owner.fontFlags end,
+                SetFont = function(_, newFont, newSize, newFlags)
+                    owner.font, owner.fontSize, owner.fontFlags = newFont, newSize, newFlags
+                end,
+            }
+        end
+        self.fontObject = self.privateFontObject
         if self.setFontResult and self.setFontResult(self, font, size, flags) ~= true then
             return false
         end
@@ -388,6 +399,7 @@ local function makeFrame(name, setFontResult, parent)
         if self.setFontObjectResult and self.setFontObjectResult(self, fontObject) == false then
             error("synthetic SetFontObject failure", 2)
         end
+        if self.fontObject == fontObject then return end
         self.fontObject = fontObject
         fontObject.attachCount = (fontObject.attachCount or 0) + 1
     end
@@ -557,13 +569,15 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetNonSpaceWrap(value) self.nonSpaceWrap = value end
     function frame:GetStringWidth()
         if self.statsProWidthOverride ~= nil then return self.statsProWidthOverride end
-        return utf8VisualUnits(self.text or "") * ((self.fontSize or 12) * 0.5)
+        local _, size = self:GetFont()
+        return utf8VisualUnits(self.text or "") * ((size or 12) * 0.5)
     end
     function frame:GetStringHeight()
         if self.statsProHeightOverride ~= nil then return self.statsProHeightOverride end
         local text = self.text or ""
         local _, lines = text:gsub("\n", "\n")
-        return (lines + 1) * (self.fontSize or 12) * (self.statsProStringHeightMultiplier or 1)
+        local _, size = self:GetFont()
+        return (lines + 1) * (size or 12) * (self.statsProStringHeightMultiplier or 1)
     end
     function frame:CreateFontString(_, _, template)
         local region = makeFrame(nil, self.setFontResult, self)
@@ -626,6 +640,7 @@ local function makeEnv(locale, opts)
     env._G = env
     env.__frames = {}
     env.__fontObjects = {}
+    env.__fontObjectsByName = {}
     env.__timers = {}
     env.__timerOrder = 0
     env.__closedDropdowns = 0
@@ -1065,6 +1080,9 @@ local function makeEnv(locale, opts)
         return frame
     end
     env.CreateFont = function(name)
+        if env.__fontObjectsByName[name] then
+            error("CreateFont name must be unique: " .. tostring(name), 2)
+        end
         local fontObject = {
             name = name,
             regionType = "FontObject",
@@ -1074,9 +1092,12 @@ local function makeEnv(locale, opts)
             if type(font) ~= "string" then error("FontObject:SetFont font must be a string", 2) end
             if not isFiniteNumber(size) then error("FontObject:SetFont size must be a finite number", 2) end
             if type(flags) ~= "string" then error("FontObject:SetFont flags must be a string", 2) end
+            self.setFontCalls = (self.setFontCalls or 0) + 1
             local shouldApply = true
             if opts.fontObjectSetFontResult then
                 shouldApply = opts.fontObjectSetFontResult(self, font, size, flags) ~= false
+            elseif opts.setFontResult then
+                shouldApply = opts.setFontResult(self, font, size, flags) ~= false
             end
             if shouldApply then
                 self.font, self.fontSize, self.fontFlags = font, size, flags
@@ -1087,8 +1108,10 @@ local function makeEnv(locale, opts)
         end
         function fontObject:GetFont() return self.font, self.fontSize, self.fontFlags end
         env.__fontObjects[#env.__fontObjects + 1] = fontObject
+        env.__fontObjectsByName[name] = fontObject
         return fontObject
     end
+    if opts.createFontAvailable == false then env.CreateFont = nil end
 
     local function zero() return 0 end
     env.GetCritChance = opts.getCritChance or zero
@@ -8509,6 +8532,383 @@ do
     check("fonts.mock_accepts_text_after_font", configuredOK, configuredError)
 end
 
+do
+    local ownedEnv, ownedAddon, ownedTest = loadStatsPro("enUS")
+    local before = ownedTest.panelFontState()
+    eq("fonts.owned_panels.object_count", #ownedEnv.__fontObjects, 2)
+    exists("fonts.owned_panels.main_object", before.mainLabelObject)
+    exists("fonts.owned_panels.side_object", before.sideLabelObject)
+    eq("fonts.owned_panels.main_owner", before.mainOwnedFontObject, before.mainLabelObject)
+    eq("fonts.owned_panels.side_owner", before.sideOwnedFontObject, before.sideLabelObject)
+    eq("fonts.owned_panels.main_owned_count", before.mainOwnedRegionCount, 5)
+    eq("fonts.owned_panels.side_owned_count", before.sideOwnedRegionCount, 5)
+    eq("fonts.owned_panels.main_direct_count", before.mainDirectRegionCount, 0)
+    eq("fonts.owned_panels.side_direct_count", before.sideDirectRegionCount, 0)
+    check("fonts.owned_panels.objects_are_distinct",
+        before.mainLabelObject ~= before.sideLabelObject)
+    for _, key in ipairs({
+        "mainRatingObject", "mainValueObject", "mainRepairObject", "mainRepairLabelObject",
+    }) do
+        eq("fonts.owned_panels.main_shared." .. key, before[key], before.mainLabelObject)
+    end
+    for _, key in ipairs({
+        "sideRatingObject", "sideValueObject", "sideRepairObject", "sideRepairLabelObject",
+    }) do
+        eq("fonts.owned_panels.side_shared." .. key, before[key], before.sideLabelObject)
+    end
+    eq("fonts.owned_panels.main_attached_once_each", before.mainLabelObject.attachCount, 5)
+    eq("fonts.owned_panels.side_attached_once_each", before.sideLabelObject.attachCount, 5)
+    for index, region in ipairs(before.mainFontRegions) do
+        eq("fonts.owned_panels.main_no_direct_setfont." .. index, region.setFontCalls or 0, 0)
+    end
+    for index, region in ipairs(before.sideFontRegions) do
+        eq("fonts.owned_panels.side_no_direct_setfont." .. index, region.setFontCalls or 0, 0)
+    end
+
+    local mainObjectCalls = before.mainLabelObject.setFontCalls
+    local sideObjectCalls = before.sideLabelObject.setFontCalls
+    local applied = ownedTest.applyTextStyleToAllPanels("Fonts\\ARIALN.TTF", 18, true)
+    eq("fonts.owned_panels.apply", applied, true)
+    local after = ownedTest.panelFontState()
+    eq("fonts.owned_panels.main_identity_stable", after.mainLabelObject, before.mainLabelObject)
+    eq("fonts.owned_panels.side_identity_stable", after.sideLabelObject, before.sideLabelObject)
+    eq("fonts.owned_panels.main_object_mutated_once",
+        after.mainLabelObject.setFontCalls, mainObjectCalls + 1)
+    eq("fonts.owned_panels.side_object_mutated_once",
+        after.sideLabelObject.setFontCalls, sideObjectCalls + 1)
+    for index, region in ipairs(after.mainFontRegions) do
+        eq("fonts.owned_panels.main_still_no_direct_setfont." .. index, region.setFontCalls or 0, 0)
+        local font, size = region:GetFont()
+        eq("fonts.owned_panels.main_inherited_font." .. index, font, "Fonts\\ARIALN.TTF")
+        eq("fonts.owned_panels.main_inherited_size." .. index, size, 18)
+    end
+    for index, region in ipairs(after.sideFontRegions) do
+        eq("fonts.owned_panels.side_still_no_direct_setfont." .. index, region.setFontCalls or 0, 0)
+        local font, size = region:GetFont()
+        eq("fonts.owned_panels.side_inherited_font." .. index, font, "Fonts\\ARIALN.TTF")
+        eq("fonts.owned_panels.side_inherited_size." .. index, size, 18)
+    end
+
+    local ok, err = pcall(function() ownedAddon:OpenConfigMenu() end)
+    check("fonts.owned_settings.open", ok, err)
+    local configBefore = ownedTest.configFontState()
+    local roleObjects = {}
+    local appearance = {}
+    for index, entry in ipairs(configBefore.entries) do
+        exists("fonts.owned_settings.object." .. index, entry.actualObject)
+        local prior = roleObjects[entry.roleKey]
+        if prior then
+            eq("fonts.owned_settings.semantic_role_shared." .. index,
+                entry.actualObject, prior)
+        else
+            roleObjects[entry.roleKey] = entry.actualObject
+        end
+        appearance[entry.region] = {
+            textColor = deepCopy(entry.region.textColor),
+            justifyH = entry.region.justifyH,
+            justifyV = entry.region.justifyV,
+            directCalls = entry.region.setFontCalls or 0,
+            object = entry.actualObject,
+        }
+    end
+    exists("fonts.owned_settings.body_role", roleObjects["role:body"])
+    exists("fonts.owned_settings.manager_empty_role", roleObjects.managerEmpty)
+    check("fonts.owned_settings.same_metrics_different_semantics",
+        roleObjects["role:body"] ~= roleObjects.managerEmpty)
+
+    applied = ownedTest.applyConfigFont("Fonts\\ARIALN.TTF", true)
+    eq("fonts.owned_settings.apply", applied, true)
+    local configAfter = ownedTest.configFontState()
+    eq("fonts.owned_settings.count_stable", #configAfter.entries, #configBefore.entries)
+    for index, entry in ipairs(configAfter.entries) do
+        local old = appearance[entry.region]
+        eq("fonts.owned_settings.identity_stable." .. index, entry.actualObject, old.object)
+        eq("fonts.owned_settings.inherited_font." .. index, entry.actualFont, "Fonts\\ARIALN.TTF")
+        eq("fonts.owned_settings.no_direct_setfont." .. index,
+            entry.region.setFontCalls or 0, old.directCalls)
+        assertDeepEqual("fonts.owned_settings.color_preserved." .. index,
+            entry.region.textColor, old.textColor)
+        eq("fonts.owned_settings.justify_h_preserved." .. index,
+            entry.region.justifyH, old.justifyH)
+        eq("fonts.owned_settings.justify_v_preserved." .. index,
+            entry.region.justifyV, old.justifyV)
+    end
+end
+
+do
+    local fallbackEnv, fallbackAddon, fallbackTest = loadStatsPro("enUS", {
+        createFontAvailable = false,
+    })
+    local panelState = fallbackTest.panelFontState()
+    eq("fonts.owned_fallback.no_objects", #fallbackEnv.__fontObjects, 0)
+    eq("fonts.owned_fallback.main_owner", panelState.mainOwnedFontObject, nil)
+    eq("fonts.owned_fallback.side_owner", panelState.sideOwnedFontObject, nil)
+    eq("fonts.owned_fallback.main_direct_count", panelState.mainDirectRegionCount, 5)
+    eq("fonts.owned_fallback.side_direct_count", panelState.sideDirectRegionCount, 5)
+    for index, region in ipairs(panelState.mainFontRegions) do
+        eq("fonts.owned_fallback.main_direct_setfont." .. index, region.setFontCalls, 1)
+        eq("fonts.owned_fallback.main_private_object." .. index,
+            region:GetFontObject().isPrivateFontObject, true)
+    end
+    for index, region in ipairs(panelState.sideFontRegions) do
+        eq("fonts.owned_fallback.side_direct_setfont." .. index, region.setFontCalls, 1)
+        eq("fonts.owned_fallback.side_private_object." .. index,
+            region:GetFontObject().isPrivateFontObject, true)
+    end
+    local applied = fallbackTest.applyTextStyleToAllPanels("Fonts\\ARIALN.TTF", 17, true)
+    eq("fonts.owned_fallback.panel_apply", applied, true)
+    local ok, err = pcall(function() fallbackAddon:OpenConfigMenu() end)
+    check("fonts.owned_fallback.settings_open", ok, err)
+    local configState = fallbackTest.configFontState()
+    for index, entry in ipairs(configState.entries) do
+        eq("fonts.owned_fallback.settings_owned_object." .. index, entry.ownedObject, nil)
+        eq("fonts.owned_fallback.settings_private_object." .. index,
+            entry.actualObject.isPrivateFontObject, true)
+    end
+    applied = fallbackTest.applyConfigFont("Fonts\\ARIALN.TTF", true)
+    eq("fonts.owned_fallback.settings_apply", applied, true)
+end
+
+do
+    local mainObject, sideObject
+    local targetFont = "Fonts\\ARIALN.TTF"
+    local poisonFont = "Fonts\\MORPHEUS.TTF"
+    local active = false
+    local _, _, rollbackTest = loadStatsPro("enUS", {
+        fontObjectSetFontResult = function(fontObject, font, size, flags)
+            if active and fontObject == sideObject and font == targetFont then
+                fontObject.font, fontObject.fontSize, fontObject.fontFlags =
+                    poisonFont, size, flags
+                return false
+            end
+            if active and fontObject == mainObject and font == "Fonts\\FRIZQT__.TTF" then
+                return false
+            end
+            return true
+        end,
+    })
+    local baseline = rollbackTest.panelFontState()
+    mainObject, sideObject = baseline.mainOwnedFontObject, baseline.sideOwnedFontObject
+    active = true
+    local applied, _, _, _, status = rollbackTest.applyTextStyleToAllPanels(
+        targetFont, 18, true)
+    eq("fonts.owned_panel_rollback_failure.result", applied, false)
+    eq("fonts.owned_panel_rollback_failure.status", status, "rollback-failed")
+    local after = rollbackTest.panelFontState()
+    eq("fonts.owned_panel_rollback_failure.main_metadata_coherent",
+        after.mainAppliedFont, targetFont)
+    eq("fonts.owned_panel_rollback_failure.main_actual_coherent",
+        after.mainLabelFont, targetFont)
+    eq("fonts.owned_panel_rollback_failure.side_restored_metadata",
+        after.sideAppliedFont, baseline.sideAppliedFont)
+    eq("fonts.owned_panel_rollback_failure.side_restored_actual",
+        after.sideLabelFont, baseline.sideLabelFont)
+    active = false
+    applied = rollbackTest.applyTextStyleToAllPanels(
+        baseline.mainAppliedFont, baseline.mainAppliedSize, true)
+    eq("fonts.owned_panel_rollback_failure.recovery", applied, true)
+    after = rollbackTest.panelFontState()
+    eq("fonts.owned_panel_rollback_failure.recovery_main",
+        after.mainAppliedFont, baseline.mainAppliedFont)
+    eq("fonts.owned_panel_rollback_failure.recovery_side",
+        after.sideAppliedFont, baseline.sideAppliedFont)
+end
+
+do
+    local targetFont = "Fonts\\ARIALN.TTF"
+    local panelRegions = {}
+    local targetCalls = 0
+    local active = false
+    local _, _, rollbackTest = loadStatsPro("enUS", {
+        createFontAvailable = false,
+        setFontResult = function(frame, font)
+            if active and panelRegions[frame] and font == targetFont then
+                targetCalls = targetCalls + 1
+                if targetCalls == 3 then return false end
+            end
+            return true
+        end,
+    })
+    local baseline = rollbackTest.panelFontState()
+    for _, region in ipairs(baseline.mainFontRegions) do panelRegions[region] = true end
+    for _, region in ipairs(baseline.sideFontRegions) do panelRegions[region] = true end
+    active = true
+    local applied = rollbackTest.applyTextStyleToAllPanels(targetFont, 18, true)
+    eq("fonts.direct_panel_partial_failure.result", applied, false)
+    eq("fonts.direct_panel_partial_failure.third_region_reached", targetCalls, 3)
+    local after = rollbackTest.panelFontState()
+    eq("fonts.direct_panel_partial_failure.main_metadata",
+        after.mainAppliedFont, baseline.mainAppliedFont)
+    eq("fonts.direct_panel_partial_failure.side_metadata",
+        after.sideAppliedFont, baseline.sideAppliedFont)
+    for index, region in ipairs(after.mainFontRegions) do
+        local font = region:GetFont()
+        eq("fonts.direct_panel_partial_failure.main_restored." .. index,
+            font, baseline.mainAppliedFont)
+    end
+end
+
+do
+    local targetFont = "Fonts\\ARIALN.TTF"
+    local poisonFont = "Fonts\\MORPHEUS.TTF"
+    local active = false
+    local targetCalls = 0
+    local failedObject
+    local _, rollbackAddon, rollbackTest = loadStatsPro("enUS", {
+        fontObjectSetFontResult = function(fontObject, font, size, flags)
+            if active and font == targetFont then
+                targetCalls = targetCalls + 1
+                if targetCalls == 2 then
+                    failedObject = fontObject
+                    fontObject.font, fontObject.fontSize, fontObject.fontFlags =
+                        poisonFont, size, flags
+                    return false
+                end
+            elseif active and fontObject == failedObject then
+                return false
+            end
+            return true
+        end,
+    })
+    local ok, err = pcall(function() rollbackAddon:OpenConfigMenu() end)
+    check("fonts.owned_config_rollback_failure.open", ok, err)
+    active = true
+    local applied, effective, status = rollbackTest.applyConfigFont(targetFont, true)
+    eq("fonts.owned_config_rollback_failure.result", applied, false)
+    eq("fonts.owned_config_rollback_failure.effective", effective, nil)
+    eq("fonts.owned_config_rollback_failure.status", status, "rollback-failed")
+    exists("fonts.owned_config_rollback_failure.failed_object", failedObject)
+    local state = rollbackTest.configFontState()
+    eq("fonts.owned_config_rollback_failure.current_cleared", state.currentFont, nil)
+    for index, entry in ipairs(state.entries) do
+        eq("fonts.owned_config_rollback_failure.metadata_cleared." .. index,
+            entry.appliedFont, nil)
+    end
+    active = false
+    applied = rollbackTest.applyConfigFont("Fonts\\FRIZQT__.TTF", true)
+    eq("fonts.owned_config_rollback_failure.recovery", applied, true)
+    state = rollbackTest.configFontState()
+    eq("fonts.owned_config_rollback_failure.recovery_current",
+        state.currentFont, "Fonts\\FRIZQT__.TTF")
+    for index, entry in ipairs(state.entries) do
+        eq("fonts.owned_config_rollback_failure.recovery_metadata." .. index,
+            entry.appliedFont, "Fonts\\FRIZQT__.TTF")
+    end
+end
+
+do
+    local partialEnv, _, partialTest = loadStatsPro("enUS", {
+        setFontObjectResult = function(_, fontObject)
+            if fontObject.name == "StatsProOwnedFont1" and fontObject.attachCount >= 2 then
+                return false
+            end
+            return true
+        end,
+    })
+    local state = partialTest.panelFontState()
+    exists("fonts.owned_partial.main_keeps_owner", state.mainOwnedFontObject)
+    exists("fonts.owned_partial.side_stays_owned", state.sideOwnedFontObject)
+    eq("fonts.owned_partial.main_owned_count", state.mainOwnedRegionCount, 2)
+    eq("fonts.owned_partial.main_direct_count", state.mainDirectRegionCount, 3)
+    for index, region in ipairs(state.mainFontRegions) do
+        if index <= 2 then
+            eq("fonts.owned_partial.main_attached." .. index,
+                region:GetFontObject(), state.mainOwnedFontObject)
+            eq("fonts.owned_partial.main_owned_no_direct." .. index, region.setFontCalls or 0, 0)
+        else
+            eq("fonts.owned_partial.main_private." .. index,
+                region:GetFontObject().isPrivateFontObject, true)
+            eq("fonts.owned_partial.main_direct_setfont." .. index, region.setFontCalls, 1)
+        end
+    end
+    eq("fonts.owned_partial.object_registry_stable", #partialEnv.__fontObjects, 2)
+end
+
+do
+    local active = false
+    local mutationCalls = 0
+    local bodyObject
+    local poisonFont = "Fonts\\MORPHEUS.TTF"
+    local lateEnv, lateAddon, lateTest = loadStatsPro("enUS", {
+        fontObjectSetFontResult = function(fontObject, font, size, flags)
+            if active and fontObject == bodyObject then
+                mutationCalls = mutationCalls + 1
+                if mutationCalls <= 2 then
+                    fontObject.font, fontObject.fontSize, fontObject.fontFlags =
+                        poisonFont, size, flags
+                    return false
+                end
+            end
+            return true
+        end,
+    })
+    local ok, err = pcall(function() lateAddon:OpenConfigMenu() end)
+    check("fonts.owned_late_register_recovery.open", ok, err)
+    local before = lateTest.configFontState()
+    for _, entry in ipairs(before.entries) do
+        if entry.roleKey == "role:body" then
+            bodyObject = entry.ownedObject
+            break
+        end
+    end
+    exists("fonts.owned_late_register_recovery.body_object", bodyObject)
+    bodyObject.font = poisonFont
+    active = true
+    local lateRegion = lateEnv.UIParent:CreateFontString(nil, "OVERLAY")
+    local registered, effective = lateTest.registerConfigFont(
+        lateRegion, 12, nil, "role:body")
+    eq("fonts.owned_late_register_recovery.registered", registered, true)
+    eq("fonts.owned_late_register_recovery.effective", effective, before.currentFont)
+    eq("fonts.owned_late_register_recovery.double_failure_then_full_apply",
+        mutationCalls, 3)
+    local after = lateTest.configFontState()
+    eq("fonts.owned_late_register_recovery.current", after.currentFont, before.currentFont)
+    for index, entry in ipairs(after.entries) do
+        eq("fonts.owned_late_register_recovery.metadata." .. index,
+            entry.appliedFont, before.currentFont)
+        eq("fonts.owned_late_register_recovery.actual." .. index,
+            entry.actualFont, before.currentFont)
+    end
+    local callsBeforeFastPath = mutationCalls
+    registered = lateTest.applyConfigFont(before.currentFont, false)
+    eq("fonts.owned_late_register_recovery.valid_fast_path", registered, true)
+    eq("fonts.owned_late_register_recovery.fast_path_no_mutation",
+        mutationCalls, callsBeforeFastPath)
+end
+
+do
+    local outlineAttempts = 0
+    local unknownAssetState = {}
+    local _, _, transientTest = loadStatsPro("enUS", {
+        issecretvalue = function(value) return value == unknownAssetState end,
+        isKnownFontFile = function() return unknownAssetState end,
+        setFontObjectResult = function(_, fontObject)
+            if fontObject.name == "StatsProOwnedFont1" and fontObject.attachCount >= 2 then
+                return false
+            end
+            return true
+        end,
+        setFontResult = function(_, _, _, flags)
+            if flags == "OUTLINE" then
+                outlineAttempts = outlineAttempts + 1
+                if outlineAttempts == 1 then return false end
+            end
+            return true
+        end,
+    })
+    local state = transientTest.panelFontState()
+    eq("fonts.owned_partial_transient.main_owned_count", state.mainOwnedRegionCount, 2)
+    eq("fonts.owned_partial_transient.main_direct_count", state.mainDirectRegionCount, 3)
+    eq("fonts.owned_partial_transient.effective_flags", state.mainAppliedFontFlags, nil)
+    for index, region in ipairs(state.mainFontRegions) do
+        local flags = select(3, region:GetFont())
+        if flags == "" then flags = nil end
+        eq("fonts.owned_partial_transient.same_flags." .. index, flags, nil)
+    end
+    check("fonts.owned_partial_transient.retry_would_recover",
+        outlineAttempts > 1, "expected a later outline probe to recover")
+end
+
 eq("fonts.path_key_slash_case", test.fontPathKey("Fonts/ARIALN.TTF"), "fonts\\arialn.ttf")
 eq("fonts.ascii_lower_preserves_utf8", test.asciiLower("ÉCOLE Ж FONT"), "École Ж font")
 eq("fonts.path_key_preserves_utf8", test.fontPathKey("Interface/AddOns/Медиа/ШРИФТ.TTF"),
@@ -8666,12 +9066,16 @@ do
         fontObjectSetFontResult = function(fontObject, font)
             if font == brokenPath then error("synthetic missing loose FontObject asset") end
             if catalogPaths[font] then
-                if fontObject.attachCount == 0 then
-                    activationBeforeAttachment = activationBeforeAttachment + 1
-                    return false
+                if fontObject.name == "StatsProFontAssetActivator" then
+                    if fontObject.attachCount == 0 then
+                        activationBeforeAttachment = activationBeforeAttachment + 1
+                        return false
+                    end
+                    activationCalls = activationCalls + 1
+                    activatedPaths[font] = true
+                    return true
                 end
-                activationCalls = activationCalls + 1
-                activatedPaths[font] = true
+                return activatedPaths[font] == true
             end
             return true
         end,
@@ -8682,10 +9086,12 @@ do
     check("fonts.cold_font_object_activation.activator_used", activationCalls > 0)
     eq("fonts.cold_font_object_activation.never_activates_before_attachment",
         activationBeforeAttachment, 0)
-    eq("fonts.cold_font_object_activation.one_object", #coldEnv.__fontObjects, 1)
-    eq("fonts.cold_font_object_activation.object_attached", coldEnv.__fontObjects[1].attachCount, 1)
+    eq("fonts.cold_font_object_activation.three_objects", #coldEnv.__fontObjects, 3)
+    local activatorObject = coldEnv.__fontObjectsByName.StatsProFontAssetActivator
+    exists("fonts.cold_font_object_activation.activator_object", activatorObject)
+    eq("fonts.cold_font_object_activation.object_attached", activatorObject.attachCount, 1)
     eq("fonts.cold_font_object_activation.holder_keeps_inheritance",
-        coldAddon.fontRuntime.fontActivatorString:GetFontObject(), coldEnv.__fontObjects[1])
+        coldAddon.fontRuntime.fontActivatorString:GetFontObject(), activatorObject)
     eq("fonts.cold_font_object_activation.selected_activated", activatedPaths[selectedPath], true)
     eq("fonts.cold_font_object_activation.usable_immediately",
         coldTest.usableFontPath(selectedPath), selectedPath)
@@ -8743,12 +9149,19 @@ do
     local retryEnv, retryAddon, retryTest = loadStatsPro("enUS", {
         statsProDB = { font = retryPath, fontBeforeAutoSwitch = retryPath },
         lsmFonts = { { name = "Attach Retry", path = retryPath } },
-        setFontObjectResult = function()
+        setFontObjectResult = function(_, fontObject)
+            if fontObject.name ~= "StatsProFontAssetActivator" then return true end
             attachAttempts = attachAttempts + 1
             return allowAttach
         end,
         fontObjectSetFontResult = function(fontObject, font)
-            if font == retryPath and fontObject.attachCount > 0 then activated = true end
+            if font == retryPath then
+                if fontObject.name == "StatsProFontAssetActivator" then
+                    if fontObject.attachCount > 0 then activated = true end
+                    return true
+                end
+                return activated
+            end
             return true
         end,
         setFontResult = function(frame, font, size, flags)
@@ -8761,10 +9174,10 @@ do
         end,
     })
     eq("fonts.activator_attach_retry.lazy_before_use", attachAttempts, 0)
-    eq("fonts.activator_attach_retry.no_unused_object", #retryEnv.__fontObjects, 0)
+    eq("fonts.activator_attach_retry.only_panel_objects_before_use", #retryEnv.__fontObjects, 2)
     fireEvent("fonts.activator_attach_retry.pew", retryEnv, "PLAYER_ENTERING_WORLD")
     check("fonts.activator_attach_retry.initial_attempts", attachAttempts > 0)
-    eq("fonts.activator_attach_retry.one_object_after_failure", #retryEnv.__fontObjects, 1)
+    eq("fonts.activator_attach_retry.activator_added_after_failure", #retryEnv.__fontObjects, 3)
     local originalHolder = retryAddon.fontRuntime.fontActivatorString
     eq("fonts.activator_attach_retry.pending_after_failure",
         retryTest.fontRuntimeState().pendingSavedFont, retryPath)
@@ -8773,10 +9186,11 @@ do
     allowAttach = true
     flushTimers("fonts.activator_attach_retry.retry", retryEnv, 0.2, 1)
     eq("fonts.activator_attach_retry.second_attempt", attachAttempts, attemptsBeforeRetry + 1)
-    eq("fonts.activator_attach_retry.reuses_object", #retryEnv.__fontObjects, 1)
+    eq("fonts.activator_attach_retry.reuses_object", #retryEnv.__fontObjects, 3)
     eq("fonts.activator_attach_retry.reuses_holder",
         retryAddon.fontRuntime.fontActivatorString, originalHolder)
-    eq("fonts.activator_attach_retry.attaches_once", retryEnv.__fontObjects[1].attachCount, 1)
+    eq("fonts.activator_attach_retry.attaches_once",
+        retryEnv.__fontObjectsByName.StatsProFontAssetActivator.attachCount, 1)
     eq("fonts.activator_attach_retry.applies_font",
         retryTest.currentRuntimeFontPath(), retryPath)
     eq("fonts.activator_attach_retry.no_pending",
@@ -9357,9 +9771,9 @@ do
     userInteract("fonts.lsm_picker_open", lsmEnv.StatsProFontDropdownButton, "OnClick")
     eq("fonts.lsm_picker_includes_registered_name", countFrameField(lsmEnv, "fontName", "Noto Sans CJK"), 1)
     eq("fonts.lsm_picker_filters_unloadable_registration", countFrameField(lsmEnv, "fontName", "Broken Registration"), 0)
-    -- Each pending catalogue pass now retries the direct probe once after the
-    -- best-effort FontObject activation attempt.
-    eq("fonts.lsm_picker_retries_ambiguous_registration", brokenFontCalls, 4)
+    -- Two catalogue passes each exercise direct probe/retry plus the activator's
+    -- object mutation; the owned-panel objects never receive this rejected face.
+    eq("fonts.lsm_picker_retries_ambiguous_registration", brokenFontCalls, 6)
     local lsmFontButton = findFrame("fonts.lsm_picker_registered_button", lsmEnv, function(frame)
         return frame.fontName == "Noto Sans CJK"
     end)
@@ -9385,7 +9799,7 @@ do
         lsmFonts = { { name = "No Outline", path = outlineFallbackPath } },
         setFontResult = function(_, _, _, flags)
             setFontCalls = setFontCalls + 1
-            if flags ~= nil then return false end
+            if flags ~= nil and flags ~= "" then return false end
             return true
         end,
     })
@@ -9436,6 +9850,9 @@ do
         "sideAppliedTextOutlineStyle", "sideAppliedFontFlags", "sideLabelFont", "sideLabelSize",
         "sideLabelFlags", "sideRatingFont", "sideRatingFlags", "sideValueFont", "sideValueFlags",
         "sideRepairFont", "sideRepairFlags", "sideRepairLabelFont", "sideRepairLabelFlags",
+        "mainLabelObject", "mainRatingObject", "mainValueObject", "mainRepairObject",
+        "mainRepairLabelObject", "sideLabelObject", "sideRatingObject", "sideValueObject",
+        "sideRepairObject", "sideRepairLabelObject",
     }
     local function assertPanelState(name, actual, expected)
         for _, key in ipairs(stateKeys) do eq(name .. "." .. key, actual[key], expected[key]) end
@@ -9531,6 +9948,8 @@ do
     for i, entry in ipairs(falseState.entries) do
         eq("fonts.config_registry.false.applied_font." .. i, entry.appliedFont, defaultState.entries[i].appliedFont)
         eq("fonts.config_registry.false.actual_font." .. i, entry.actualFont, defaultState.entries[i].actualFont)
+        eq("fonts.config_registry.false.object_identity." .. i,
+            entry.actualObject, defaultState.entries[i].actualObject)
         eq("fonts.config_registry.false.actual_text." .. i, entry.actualText, defaultState.entries[i].actualText)
     end
 
@@ -9548,6 +9967,8 @@ do
     for i, entry in ipairs(errorState.entries) do
         eq("fonts.config_registry.error.applied_font." .. i, entry.appliedFont, beforeError.entries[i].appliedFont)
         eq("fonts.config_registry.error.actual_font." .. i, entry.actualFont, beforeError.entries[i].actualFont)
+        eq("fonts.config_registry.error.object_identity." .. i,
+            entry.actualObject, beforeError.entries[i].actualObject)
         eq("fonts.config_registry.error.actual_text." .. i, entry.actualText, beforeError.entries[i].actualText)
     end
 

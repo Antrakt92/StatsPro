@@ -76,6 +76,7 @@ C_UIFileAsset = nil
 
 ---@class (exact) StatsProFontObject
 ---@field SetFont fun(self: StatsProFontObject, fontFile: string, height: number, flags: string)
+---@field GetFont fun(self: StatsProFontObject): fontFile: string?, height: number?, flags: string?
 
 ---@param name string
 ---@return StatsProFontObject

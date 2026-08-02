@@ -120,6 +120,36 @@ function New-StatsProOwnedToolInvocationRoot {
     return $root
 }
 
+function Remove-StatsProDirectoryWithRetry {
+    param(
+        [string]$Path,
+        [int]$MaxAttempts = 10
+    )
+
+    if ($MaxAttempts -lt 1) {
+        throw "Directory cleanup requires at least one attempt."
+    }
+    $directory = [System.IO.Path]::GetFullPath($Path)
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        if (-not [System.IO.Directory]::Exists($directory)) {
+            return
+        }
+        try {
+            [System.IO.Directory]::Delete($directory, $true)
+            return
+        }
+        catch [System.UnauthorizedAccessException], [System.IO.IOException] {
+            if (-not [System.IO.Directory]::Exists($directory)) {
+                return
+            }
+            if ($attempt -eq $MaxAttempts) {
+                throw
+            }
+            Start-Sleep -Milliseconds (50 * $attempt)
+        }
+    }
+}
+
 function Remove-StatsProOwnedToolInvocationRoot {
     param([string]$Path)
 
@@ -143,7 +173,7 @@ function Remove-StatsProOwnedToolInvocationRoot {
             throw "Refusing to remove an owned tool root containing a reparse point: $($item.FullName)"
         }
     }
-    [System.IO.Directory]::Delete($root, $true)
+    Remove-StatsProDirectoryWithRetry -Path $root
 }
 
 function Get-StatsProContentAddressedToolRoot {

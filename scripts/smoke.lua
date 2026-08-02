@@ -11656,6 +11656,61 @@ do
     check("config.open_constructs_frame", ok, err)
     local validationCountBeforeUIWrites = test.dbValidationCount()
 
+    local settingsUI = exists("config.builders.namespace", addon.settingsUI)
+    for _, methodName in ipairs({
+        "ApplyFrameSize", "BuildShell", "BuildLayoutTab", "BuildAppearanceTab",
+        "BuildStatsTab", "BuildDependentStatGroup",
+    }) do
+        eq("config.builders.method." .. methodName, type(settingsUI[methodName]), "function")
+        local info = debug.getinfo(settingsUI[methodName], "u")
+        check("config.builders.upvalue_budget." .. methodName,
+            info and info.nups <= 45, info and info.nups or "missing debug info")
+    end
+    local coordinatorInfo = debug.getinfo(addon.OpenConfigMenu, "u")
+    check("config.builders.upvalue_budget.OpenConfigMenu",
+        coordinatorInfo and coordinatorInfo.nups <= 20,
+        coordinatorInfo and coordinatorInfo.nups or "missing debug info")
+    eq("config.builders.font_picker_namespace", type(settingsUI.fontPicker), "table")
+    for _, methodName in ipairs({
+        "BuildFontsList", "CurrentFontName", "RefreshCaption", "Preview",
+        "CancelPreview", "Pick", "Hide", "BuildFrame", "Populate",
+        "SchedulePendingRetry", "Show", "Toggle", "RegisterLSMCallback", "Initialize",
+    }) do
+        eq("config.builders.font_picker_method." .. methodName,
+            type(settingsUI.fontPicker[methodName]), "function")
+        local info = debug.getinfo(settingsUI.fontPicker[methodName], "u")
+        check("config.builders.font_picker_upvalue_budget." .. methodName,
+            info and info.nups <= 20, info and info.nups or "missing debug info")
+    end
+    eq("config.builders.localization_namespace", type(settingsUI.localization), "table")
+    for _, methodName in ipairs({ "Preview", "CancelPreview", "CommitPreview" }) do
+        eq("config.builders.localization_method." .. methodName,
+            type(settingsUI.localization[methodName]), "function")
+        local info = debug.getinfo(settingsUI.localization[methodName], "u")
+        check("config.builders.localization_upvalue_budget." .. methodName,
+            info and info.nups <= 30, info and info.nups or "missing debug info")
+    end
+    eq("config.builders.frame_owner", settingsUI.frame, env.StatsProConfigFrame)
+    eq("config.builders.context_owner", settingsUI.context.frame, env.StatsProConfigFrame)
+    for _, bridgeName in ipairs({
+        "previewFont", "cancelFontPreview", "previewLanguage", "cancelLanguagePreview",
+    }) do
+        eq("config.builders.no_profile_runtime_bridge." .. bridgeName,
+            rawget(addon.profileRuntime, bridgeName), nil)
+    end
+    eq("config.builders.no_font_runtime_bridge",
+        rawget(addon.fontRuntime, "refreshCaption"), nil)
+    eq("config.builders.no_resize_bridge",
+        rawget(addon.settingsDesign, "applyConfigFrameSize"), nil)
+    eq("config.builders.no_target_options_global",
+        rawget(env, "StatsProTargetSnapshotDropdownOptions"), nil)
+    eq("config.builders.no_target_value_global",
+        rawget(env, "StatsProGetTargetSnapshotDropdownValue"), nil)
+    eq("config.builders.no_target_select_global",
+        rawget(env, "StatsProSelectTargetSnapshotDropdownValue"), nil)
+    eq("config.builders.no_color_picker_close_global",
+        rawget(env, "StatsProCloseColorPicker"), nil)
+
     exists("config.frame_registered.frame", env.StatsProConfigFrame)
     eq("config.frame_strata.dialog", env.StatsProConfigFrame:GetFrameStrata(), "DIALOG")
     exists("config.frame_registered.scroll", env.StatsProConfigScroll)
@@ -11689,17 +11744,78 @@ do
 
     local statsControls = {
         "StatsProMainStatCheck",
-        "StatsProItemLevelCheck",
+        "StatsProStaminaCheck",
         "StatsProOffensiveCheck",
+        "StatsProHideZeroOffCheck",
         "StatsProCritCheck",
+        "StatsProHasteCheck",
+        "StatsProMasteryCheck",
+        "StatsProVersCheck",
         "StatsProTertiaryCheck",
+        "StatsProHideZeroCheck",
+        "StatsProLeechCheck",
+        "StatsProAvoidanceCheck",
+        "StatsProSpeedCheck",
         "StatsProDefensiveCheck",
+        "StatsProHideZeroDefCheck",
+        "StatsProDodgeCheck",
+        "StatsProParryCheck",
+        "StatsProBlockCheck",
+        "StatsProArmorCheck",
         "StatsProStaggerCheck",
+        "StatsProItemLevelCheck",
         "StatsProDurabilityCheck",
         "StatsProRepairCostCheck",
+        "StatsProAutoColorCheck",
+        "StatsProWorstDurCheck",
     }
     for _, name in ipairs(statsControls) do
         exists("config.stats_controls_exist." .. name, env[name])
+    end
+    local function ControlPoint(frame)
+        local _, relativeTo, relativePoint, x, y = frame:GetPoint()
+        -- The WoW API accepts both SetPoint(point, x, y) and the expanded
+        -- SetPoint(point, relativeTo, relativePoint, x, y) form. The smoke frame
+        -- preserves the original argument shape, so normalize both before comparing.
+        if x == nil and y == nil
+            and type(relativeTo) == "number" and type(relativePoint) == "number" then
+            x, y = relativeTo, relativePoint
+        end
+        return x, y
+    end
+    for _, pair in ipairs({
+        { "offensive_row_1", env.StatsProCritCheck, env.StatsProHasteCheck },
+        { "offensive_row_2", env.StatsProMasteryCheck, env.StatsProVersCheck },
+        { "tertiary_row_1", env.StatsProLeechCheck, env.StatsProAvoidanceCheck },
+        { "defensive_row_1", env.StatsProDodgeCheck, env.StatsProParryCheck },
+        { "defensive_row_2", env.StatsProBlockCheck, env.StatsProArmorCheck },
+    }) do
+        local _, leftY = ControlPoint(pair[2])
+        local _, rightY = ControlPoint(pair[3])
+        eq("config.stats_grid.same_y." .. pair[1], rightY, leftY)
+    end
+    local offensiveLeftX = ControlPoint(env.StatsProCritCheck)
+    local tertiaryOddX = ControlPoint(env.StatsProSpeedCheck)
+    local defensiveOddX = ControlPoint(env.StatsProStaggerCheck)
+    eq("config.stats_grid.tertiary_odd_left", tertiaryOddX, offensiveLeftX)
+    eq("config.stats_grid.defensive_odd_left", defensiveOddX, offensiveLeftX)
+    for _, group in ipairs({
+        { "offensive", env.StatsProOffensiveCheck,
+            { env.StatsProCritCheck, env.StatsProMasteryCheck } },
+        { "tertiary", env.StatsProTertiaryCheck,
+            { env.StatsProLeechCheck, env.StatsProSpeedCheck } },
+        { "defensive", env.StatsProDefensiveCheck,
+            { env.StatsProDodgeCheck, env.StatsProBlockCheck, env.StatsProStaggerCheck } },
+    }) do
+        local _, masterY = ControlPoint(group[2])
+        local previousY = masterY
+        for rowIndex, control in ipairs(group[3]) do
+            local _, rowY = ControlPoint(control)
+            local expectedPitch = rowIndex == 1 and 26 or 28
+            eq("config.stats_grid.pitch." .. group[1] .. "." .. rowIndex,
+                previousY - rowY, expectedPitch)
+            previousY = rowY
+        end
     end
 
     local appearanceControls = {
@@ -11839,14 +11955,78 @@ do
 
     clickCheckbox("config.checkbox_visible_updates_db", env.StatsProVisibleCheck, false)
     eq("config.checkbox_visible_updates_db.value", activeSettings(env).isVisible, false)
-    clickCheckbox("config.checkbox_tertiary_master_enables_dependents", env.StatsProTertiaryCheck, true)
-    eq("config.checkbox_tertiary_master_enables_dependents.leech", env.StatsProLeechCheck:IsEnabled(), true)
-    clickCheckbox("config.checkbox_tertiary_master_disables_dependents", env.StatsProTertiaryCheck, false)
-    eq("config.checkbox_tertiary_master_disables_dependents.leech", env.StatsProLeechCheck:IsEnabled(), false)
-    clickCheckbox("config.checkbox_defensive_master_enables_dependents", env.StatsProDefensiveCheck, true)
-    eq("config.checkbox_defensive_master_enables_dependents.stagger", env.StatsProStaggerCheck:IsEnabled(), true)
-    clickCheckbox("config.checkbox_defensive_master_disables_dependents", env.StatsProDefensiveCheck, false)
-    eq("config.checkbox_defensive_master_disables_dependents.stagger", env.StatsProStaggerCheck:IsEnabled(), false)
+    local dependentStatGroups = {
+        {
+            key = "offensive",
+            master = env.StatsProOffensiveCheck,
+            masterDBKey = "showOffensive",
+            hideZero = env.StatsProHideZeroOffCheck,
+            hideZeroDBKey = "hideZeroOffensive",
+            children = {
+                { control = env.StatsProCritCheck, dbKey = "showCrit", colorKey = "crit" },
+                { control = env.StatsProHasteCheck, dbKey = "showHaste", colorKey = "haste" },
+                { control = env.StatsProMasteryCheck, dbKey = "showMastery", colorKey = "mastery" },
+                { control = env.StatsProVersCheck, dbKey = "showVersatility", colorKey = "versatility" },
+            },
+        },
+        {
+            key = "tertiary",
+            master = env.StatsProTertiaryCheck,
+            masterDBKey = "showTertiary",
+            hideZero = env.StatsProHideZeroCheck,
+            hideZeroDBKey = "hideZeroTertiary",
+            children = {
+                { control = env.StatsProLeechCheck, dbKey = "showLeech", colorKey = "leech" },
+                { control = env.StatsProAvoidanceCheck, dbKey = "showAvoidance", colorKey = "avoidance" },
+                { control = env.StatsProSpeedCheck, dbKey = "showSpeed", colorKey = "speed" },
+            },
+        },
+        {
+            key = "defensive",
+            master = env.StatsProDefensiveCheck,
+            masterDBKey = "showDefensive",
+            hideZero = env.StatsProHideZeroDefCheck,
+            hideZeroDBKey = "hideZeroDefensive",
+            children = {
+                { control = env.StatsProDodgeCheck, dbKey = "showDodge", colorKey = "dodge" },
+                { control = env.StatsProParryCheck, dbKey = "showParry", colorKey = "parry" },
+                { control = env.StatsProBlockCheck, dbKey = "showBlock", colorKey = "block" },
+                { control = env.StatsProArmorCheck, dbKey = "showArmor", colorKey = "armor" },
+                { control = env.StatsProStaggerCheck, dbKey = "showStagger", colorKey = "stagger" },
+            },
+        },
+    }
+    for _, group in ipairs(dependentStatGroups) do
+        local prefix = "config.checkbox_group." .. group.key
+        eq(prefix .. ".master_binding", group.master.statsProDBKey, group.masterDBKey)
+        eq(prefix .. ".hide_zero_binding", group.hideZero.statsProDBKey, group.hideZeroDBKey)
+        local originalMaster = activeSettings(env)[group.masterDBKey] == true
+        local childValues = {}
+        for index, child in ipairs(group.children) do
+            eq(prefix .. ".child_binding." .. index,
+                child.control.statsProDBKey, child.dbKey)
+            eq(prefix .. ".child_color_binding." .. index,
+                child.control.statsProSwatch.statsProColorKey, child.colorKey)
+            childValues[index] = activeSettings(env)[child.dbKey]
+        end
+
+        clickCheckbox(prefix .. ".disable", group.master, false)
+        eq(prefix .. ".hide_zero_stays_enabled", group.hideZero:IsEnabled(), true)
+        for index, child in ipairs(group.children) do
+            eq(prefix .. ".child_disabled." .. index, child.control:IsEnabled(), false)
+            eq(prefix .. ".child_value_preserved_disabled." .. index,
+                activeSettings(env)[child.dbKey], childValues[index])
+        end
+
+        clickCheckbox(prefix .. ".enable", group.master, true)
+        eq(prefix .. ".hide_zero_still_enabled", group.hideZero:IsEnabled(), true)
+        for index, child in ipairs(group.children) do
+            eq(prefix .. ".child_enabled." .. index, child.control:IsEnabled(), true)
+            eq(prefix .. ".child_value_preserved_enabled." .. index,
+                activeSettings(env)[child.dbKey], childValues[index])
+        end
+        clickCheckbox(prefix .. ".restore", group.master, originalMaster)
+    end
     clickCheckbox("config.checkbox_repair_cost_updates_db", env.StatsProRepairCostCheck, true)
     eq("config.checkbox_repair_cost_updates_db.value", activeSettings(env).showRepairCost, true)
 
@@ -11920,7 +12100,7 @@ do
     ok, err = pcall(env.__acceptColorPicker)
     check("config.color_picker.select_commit", ok, err)
     assertColor("config.color_picker.select_db", activeSettings(env).colors.crit, 0.2, 0.3, 0.4)
-    ok, err = pcall(env.StatsProCloseColorPicker)
+    ok, err = pcall(addon.settingsUI.CloseColorPicker)
     check("config.color_picker.accept_clears_owned_session", ok, err)
     assertColor("config.color_picker.accept_preserves_commit", activeSettings(env).colors.crit, 0.2, 0.3, 0.4)
 
@@ -14579,12 +14759,23 @@ do
     eq("profiles.context.combat_resume.latest_spec", contextTest.profileRuntimeState().activeSpecID, 71)
     eq("profiles.context.combat_resume.one_apply", contextTest.profileRuntimeState().pendingResolution, false)
 
+    local bravoDpsID = root.characters["Player-1-BBB"].specProfiles[71]
+    root.profiles[bravoDpsID].settings.showDefensive = true
     addonContext:OpenConfigMenu()
     identity.specID, identity.specName, identity.role = 73, "Protection", "TANK"
     fireEvent("profiles.context.open_settings_switch", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
     env.__flushTimers(0)
     eq("profiles.context.open_settings.control_refresh",
         env.StatsProDefensiveCheck:GetChecked(), root.profiles[bravoTankID].settings.showDefensive)
+    for _, control in ipairs({
+        env.StatsProDodgeCheck, env.StatsProParryCheck, env.StatsProBlockCheck,
+        env.StatsProArmorCheck, env.StatsProStaggerCheck,
+    }) do
+        eq("profiles.context.open_settings.dependent_disabled." .. control:GetName(),
+            control:IsEnabled(), false)
+        eq("profiles.context.open_settings.swatch_disabled." .. control:GetName(),
+            control.statsProSwatch:IsEnabled(), false)
+    end
     local validationBeforeRefreshWrite = contextTest.dbValidationCount()
     callScript("profiles.context.open_settings.write", env.StatsProDefensiveCheck, "OnClick")
     eq("profiles.context.open_settings.write_targets_active",
@@ -14592,7 +14783,6 @@ do
     eq("profiles.context.open_settings.cached_validation",
         contextTest.dbValidationCount(), validationBeforeRefreshWrite)
 
-    local bravoDpsID = root.characters["Player-1-BBB"].specProfiles[71]
     root.profiles[bravoDpsID].settings.font = "Fonts\\ARIALN.TTF"
     callScript("profiles.context.font_modal.open", env.StatsProFontDropdownButton, "OnClick")
     eq("profiles.context.font_modal.shown", env.StatsProFontPicker:IsShown(), true)
@@ -14603,6 +14793,15 @@ do
     eq("profiles.context.font_modal.closed", env.StatsProFontPicker:IsShown(), false)
     eq("profiles.context.font_modal.target_font_applied",
         contextTest.panelFontState().mainAppliedFont, "Fonts\\ARIALN.TTF")
+    for _, control in ipairs({
+        env.StatsProDodgeCheck, env.StatsProParryCheck, env.StatsProBlockCheck,
+        env.StatsProArmorCheck, env.StatsProStaggerCheck,
+    }) do
+        eq("profiles.context.open_settings.dependent_enabled." .. control:GetName(),
+            control:IsEnabled(), true)
+        eq("profiles.context.open_settings.swatch_enabled." .. control:GetName(),
+            control.statsProSwatch:IsEnabled(), true)
+    end
     identity.specID, identity.specName, identity.role = 73, "Protection", "TANK"
     fireEvent("profiles.context.font_modal.restore_tank", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
     env.__flushTimers(0)
@@ -16357,7 +16556,7 @@ do
     eq("profiles.ui.late_metadata.preview_cancel_identity",
         env.StatsProProfileOperationCancelButton, cancelRef)
     assertDeepEqual("profiles.ui.late_metadata.preview_zero_writes", root, fallbackBefore)
-    addonContext.profileRuntime.cancelLanguagePreview()
+    addonContext.settingsUI.localization.CancelPreview(addonContext)
     state = profileTest.profileUIState()
     eq("profiles.ui.late_metadata.preview_restore_character",
         state.detailCharacter, string.format(labels.ruRU["Unknown specialization (%d)"], 73))

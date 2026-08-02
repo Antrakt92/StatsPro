@@ -17,10 +17,6 @@
 ---@field SetSize fun(self: StatsProSliderThumb, width: number, height: number)
 ---@field SetVertexColor fun(self: StatsProSliderThumb, r: number, g: number, b: number, a: number)
 
----@class (exact) StatsProTargetSnapshotDropdownOption
----@field value "mythicPlus"|"raid"
----@field label string
-
 ---@class (exact) StatsProStaticPopupEditBox
 ---@field SetText fun(self: StatsProStaticPopupEditBox, text: string)
 ---@field GetText fun(self: StatsProStaticPopupEditBox): string
@@ -121,18 +117,6 @@ StatsProFontPicker = nil
 
 ---@type StatsProDropdownFrame?
 UIDROPDOWNMENU_OPEN_MENU = nil
-
----@type StatsProTargetSnapshotDropdownOption[]
-StatsProTargetSnapshotDropdownOptions = {}
-
----@return string
-function StatsProGetTargetSnapshotDropdownValue() return "" end
-
----@param value string
----@param option StatsProTargetSnapshotDropdownOption
----@param dropdown StatsProDropdownFrame
----@return boolean?
-function StatsProSelectTargetSnapshotDropdownValue(value, option, dropdown) end
 
 ---@type table?
 SwiftStatsDB = nil

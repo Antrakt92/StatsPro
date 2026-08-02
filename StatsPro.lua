@@ -218,8 +218,8 @@ do
     AddFontGlyphSupport("Fonts\\FRIZQT__.TTF", LOCALE_NATIVE_GLYPHS[GetLocale()] or { GLYPH_LATIN })
 end
 
--- Per-client-shipped Blizzard font paths (drives BuildFontsList no-LSM fallback +
--- CurrentFontName reverse-lookup). FONT_GLYPH_SUPPORT above answers "what glyphs
+-- Per-client-shipped Blizzard font paths (drives the picker no-LSM fallback and
+-- current-name reverse lookup). FONT_GLYPH_SUPPORT above answers "what glyphs
 -- at this path?"; this table answers the orthogonal "does THIS client install
 -- physically ship a working file at this path?". locale=nil → universal entry
 -- (every client). locale=<L> → only on the matching client install (gated by
@@ -4163,6 +4163,28 @@ addon.profileUI = {
     refreshCount = 0,
     selectedGUID = nil,
     selectedSpecID = nil,
+}
+
+addon.settingsUI = {
+    frame = nil,
+    context = nil,
+    fontPicker = {
+        buttons = {},
+        cachedFontsList = nil,
+        cachedFontsListLen = -1,
+        cachedFontsListHasPending = false,
+        initialized = false,
+        retryGeneration = 0,
+        catalogRefreshScheduled = false,
+        lsmCallbackRegistered = false,
+        previewedPath = nil,
+        hoverGeneration = 0,
+    },
+    localization = {
+        previewActive = false,
+        previewSwappedFont = false,
+        previewLocale = nil,
+    },
 }
 
 addon.profileOps = {
@@ -8807,7 +8829,8 @@ function addon.fontRuntime.applyCommittedTextStyle(font, size, force, allowFontF
             addon.fontRuntime.pendingRetryScheduled = false
         end
     end
-    if addon.fontRuntime.refreshCaption then addon.fontRuntime.refreshCaption() end
+    local picker = addon.settingsUI.fontPicker
+    if type(picker.RefreshCaption) == "function" then picker.RefreshCaption(addon) end
     return true, effectiveFont, effectiveOutline, effectiveFlags, requestedStatus
 end
 
@@ -8968,7 +8991,7 @@ addon.readabilityConfig.changePanelBackgroundAlpha = function(value)
 end
 
 -- Forward-decl: both helpers are defined in section 14 alongside their companions
--- but are called from MaybeAutoSwitchFont below + PreviewLanguage/CancelLanguagePreview
+-- but are called from MaybeAutoSwitchFont below and the Settings language preview
 -- much later. Without forward-decl, the function body captures `ResolveConfigFont` /
 -- `ApplyConfigFont` as global lookups (resolution at definition time) and crashes
 -- with "attempt to call a nil value" at PEW when a later-defined helper is
@@ -8995,10 +9018,10 @@ local ApplyConfigFont
 -- `currentFont`. It may use the hidden probe FontString, but never writes DB or HUD
 -- state. Callsites:
 --   1. MaybeAutoSwitchFont (commit path) — wraps with DB mutations + ApplyTextStyle.
---   2. PreviewLanguage hover (Localization do-block) — visual-only preview, no DB writes.
+--   2. Settings localization hover preview — visual-only preview, no DB writes.
 -- Returns currentFont if already compatible (caller can use this to detect "no swap needed").
 -- Returns nil if no compatible font found anywhere in the 3-tier fallback chain
--- (caller should leave font alone — RefreshLanguageWarning will surface the issue).
+-- (caller should leave font alone — the Settings locale warning surfaces the issue).
 -- Three-tier fallback:
 --   1. LocaleAwareDefaultFont (Blizzard-shipped STANDARD_TEXT_FONT, hijack-guarded).
 --   2. ARIALN (Blizzard ships Latin+Cyrillic universally — saves cross-locale
@@ -9815,7 +9838,7 @@ end
 local function OnPlayerLogout()
     -- Restore any unaccepted StatsPro-owned color preview before SavedVariables
     -- flush. The ownership check inside Close leaves a foreign picker untouched.
-    if StatsProCloseColorPicker then StatsProCloseColorPicker(true) end
+    if addon.settingsUI.CloseColorPicker then addon.settingsUI.CloseColorPicker(true) end
     addon.dbRuntime.Refresh()
     if addon.dbRuntime.readOnly then return end
     if addon.profileRuntime.pendingResolution and addon.profileRuntime.activeGUID == nil then return end
@@ -10135,7 +10158,7 @@ local function RegisterConfigFont(fs, size, flags, roleKey)
     return ApplyConfigFont(fallback, true)
 end
 
--- Called from MaybeAutoSwitchFont and PreviewLanguage/CancelLanguagePreview. Idempotent
+-- Called from MaybeAutoSwitchFont and the Settings language preview. Idempotent
 -- fast-path skips work when currentConfigFont already matches (covers PEW + back-to-
 -- default-locale scenarios). WHY no `local`: assigns the forward-decl'd upvalue.
 ApplyConfigFont = function(font, force)
@@ -10303,7 +10326,8 @@ local function GetColor(statName)
     return { r = r, g = g, b = b }
 end
 
--- WHY forward-decl: CreateCheckbox / CursorSection / CreateConfigSlider / CreateTabButton
+-- WHY forward-decl: CreateCheckbox / CursorSection / CreateConfigSlider /
+-- addon.settingsDesign.CreateTab
 -- below all register a setter via PushLocalizedLabel, but the function body lives further
 -- down in the file (it depends on localizedConfigLabels declared lower). Upvalue resolution
 -- is at call time — assignment happens before any helper is invoked from OpenConfigMenu.
@@ -10520,7 +10544,7 @@ function COLOR_PICKER_STATE.Close(forLogout)
         ColorPickerFrame:Hide()
     end
 end
-StatsProCloseColorPicker = COLOR_PICKER_STATE.Close
+addon.settingsUI.CloseColorPicker = COLOR_PICKER_STATE.Close
 
 local function OpenColorPicker(btn, statName)
     if not addon.appearancePresets.BeforeManualEdit("colors") then return end
@@ -10787,20 +10811,6 @@ end
 --[[ ============================================================
     15. CONFIG MENU (tabs: Stats / Layout / Appearance)
 ============================================================ ]]
--- Forward-decls — assigned during OpenConfigMenu's Appearance-tab build pass
--- (the Lua frame variable is `displayTab`; UI label is "Appearance").
--- RefreshLanguageWarning: assigned in Localization section; captured by font dropdown's
--- PickFont closure to refresh the inline warning when the user picks a font that may not
--- cover the active locale's glyphs.
--- fontDropdown / CurrentFontName: assigned in Typography section (which builds AFTER
--- Localization in the source); captured by language-dropdown info.func to keep the font
--- dropdown caption in sync after MaybeAutoSwitchFont silently changes db.font.
-local RefreshLanguageWarning
-local fontDropdown
-local CurrentFontName
-
-local configFrame
-
 addon.panelEditRuntime.Refresh = function(combatOverride)
     local combat = combatOverride
     if type(combat) ~= "boolean" then
@@ -11927,11 +11937,10 @@ local function RunCoalesced(key, delay, fn)
 end
 
 function addon.settingsDesign.RequestResponsiveFrameResize()
-    if type(addon.settingsDesign.applyConfigFrameSize) ~= "function"
+    if not addon.settingsUI.frame
         and type(addon.profileUI.ApplyManagerSize) ~= "function" then return end
     RunCoalesced("responsiveFrameSize", 0, function()
-        local applyConfig = addon.settingsDesign.applyConfigFrameSize
-        if type(applyConfig) == "function" then applyConfig() end
+        if addon.settingsUI.frame then addon.settingsUI.ApplyFrameSize(addon) end
         local applyManager = addon.profileUI.ApplyManagerSize
         if type(applyManager) == "function" then applyManager() end
     end)
@@ -12764,7 +12773,8 @@ function addon.hudPresets.MaybeShowWelcome()
         addon.hudPresets.MarkWelcomeSeen()
         return false
     end
-    if configFrame and configFrame:IsShown() then
+    local settingsFrame = addon.settingsUI.frame
+    if settingsFrame and settingsFrame:IsShown() then
         addon.hudPresets.MarkWelcomeSeen()
         return false
     end
@@ -12820,16 +12830,18 @@ addon.profileRuntime.closeOwnedSettingsModals = function()
     if type(addon.profileUI.CloseOperationDialog) == "function" then
         addon.profileUI.CloseOperationDialog()
     end
-    if type(addon.profileRuntime.cancelLanguagePreview) == "function" then
-        addon.profileRuntime.cancelLanguagePreview()
+    local localization = addon.settingsUI.localization
+    if type(localization.CancelPreview) == "function" then
+        localization.CancelPreview(addon)
     end
     addon.profileRuntime.CloseOwnedDropdownMenus()
-    if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
+    local picker = addon.settingsUI.fontPicker
+    if picker.frame and picker.frame:IsShown() then
         -- OnHide owns the forced restore. Calling cancel first would apply and
         -- reflow the committed font twice for every modal close.
-        _G.StatsProFontPicker:Hide()
-    elseif type(addon.profileRuntime.cancelFontPreview) == "function" then
-        addon.profileRuntime.cancelFontPreview()
+        picker.Hide(addon)
+    elseif type(picker.CancelPreview) == "function" then
+        picker.CancelPreview(addon)
     end
     COLOR_PICKER_STATE.Close()
 end
@@ -13175,11 +13187,6 @@ function addon.archonTargets.SelectTargetSnapshotDropdownValue(value, opt, dropd
     CloseDropDownMenus()
     addon:RunUpdateStatsSafe()
 end
--- WARNING: OpenConfigMenu is already near Lua 5.1's 60-upvalue function limit.
--- Keep these as global bridge references instead of local upvalues inside the builder.
-_G.StatsProTargetSnapshotDropdownOptions = addon.archonTargets.snapshotOptions
-_G.StatsProGetTargetSnapshotDropdownValue = addon.archonTargets.GetTargetSnapshotDropdownValue
-_G.StatsProSelectTargetSnapshotDropdownValue = addon.archonTargets.SelectTargetSnapshotDropdownValue
 
 function addon.profileUI.FormatSpecName(specID, explicitName)
     if addon.dbRuntime.IsCleanType(explicitName, "string") and explicitName ~= "" then
@@ -14710,99 +14717,81 @@ function addon.profileUI.BuildSettingsUI(owner)
     return header, manager
 end
 
-function addon:OpenConfigMenu()
-    -- Opening Settings is discovery enough. Keep navigation zero-write; the delayed
-    -- onboarding check commits the marker even if this happens before profile bootstrap
-    -- or Settings closes before the first-install timer fires.
-    self.hudPresets.settingsDiscovered = true
-    local welcome = self.hudPresets.welcome
-    if welcome and welcome:IsShown() then
-        welcome.statsProSettingsHandoff = true
-        self.hudPresets.MarkWelcomeSeen()
-        welcome:Hide()
-        welcome.statsProSettingsHandoff = nil
-    end
-    -- Settings remains inspectable under a future schema, but the shared write gate
-    -- explains once per session why every mutating control is read-only.
-    self.dbRuntime.GetWritableSettings(true)
-    if configFrame then
-        if configFrame:IsShown() then
-            configFrame:Hide()
-        else
-            configFrame:Show()
-            -- Always reopen on the first tab (Stats) — predictable UX, matches initial open.
-            if configFrame.SwitchToTab then configFrame.SwitchToTab(1) end
-            self.profileUI.RefreshSafe()
+function addon.settingsUI.CreateSimpleDropdownRow(parent, rows, frameName, labelKey,
+        options, cursor, getValue, onSelect)
+    local rowY = cursor.y
+
+    local label = parent:CreateFontString(nil, "OVERLAY")
+    label:SetPoint("TOPLEFT", cursor.padX, rowY - 4)
+
+    local dropdown = CreateFrame("Frame", frameName, parent, "UIDropDownMenuTemplate")
+    -- Placeholder anchor; AlignSwatchColumn re-anchors after every row is built.
+    dropdown:SetPoint("TOPLEFT", cursor.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
+    UIDropDownMenu_SetWidth(dropdown, addon.settingsDesign.tokens.geometry.dropdownWidth)
+    UIDropDownMenu_JustifyText(dropdown, "LEFT")
+    addon.settingsDesign.StyleDropdown(dropdown, label)
+
+    local function ResolveOption(value)
+        for _, opt in ipairs(options) do
+            if opt.value == value then return opt end
         end
-        return
+        return options[1]
     end
 
-    -- WHY: future-proofing — body below runs exactly once per session due to
-    -- the early-return guard above, but if anyone makes this re-entrant the
-    -- refresher list would duplicate every entry. Cheap insurance.
-    wipe(configRefreshers)
-    wipe(alignmentGroups)
-    wipe(localizedConfigLabels)
-    wipe(localizedConfigFonts)
-    -- Function-local: collected during the Appearance tab build, aligned once at end of
-    -- the Typography section via AlignSwatchColumn(displayDropdownRows, CONFIG_DROPDOWN_GAP).
-    -- Table reference retained via alignmentGroups after registration so RefreshConfigLocalization
-    -- can re-run alignment when locale-driven label widths shift.
-    local layoutDropdownRows = {}
-    local displayDropdownRows = {}
-    local function CreateSimpleDropdownRow(parent, rows, frameName, labelKey, options, cursor, getValue, onSelect)
-        local rowY = cursor.y
+    local function RefreshDropdownText()
+        label:SetText(L(labelKey))
+        UIDropDownMenu_SetText(dropdown, L(ResolveOption(getValue()).label))
+        addon.settingsDesign.RefreshControl(dropdown.statsProTrigger)
+    end
 
-        local label = parent:CreateFontString(nil, "OVERLAY")
-        label:SetPoint("TOPLEFT", cursor.padX, rowY - 4)
-
-        local dropdown = CreateFrame("Frame", frameName, parent, "UIDropDownMenuTemplate")
-        -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after all dropdown rows build.
-        dropdown:SetPoint("TOPLEFT", cursor.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
-        UIDropDownMenu_SetWidth(dropdown, addon.settingsDesign.tokens.geometry.dropdownWidth)
-        UIDropDownMenu_JustifyText(dropdown, "LEFT")
-        addon.settingsDesign.StyleDropdown(dropdown, label)
-
-        local function ResolveOption(value)
-            for _, opt in ipairs(options) do
-                if opt.value == value then return opt end
+    UIDropDownMenu_Initialize(dropdown, function()
+        local current = ResolveOption(getValue())
+        for _, opt in ipairs(options) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = L(opt.label)
+            info.value = opt.value
+            info.checked = (current.value == opt.value)
+            info.func = function()
+                onSelect(opt.value, ResolveOption(opt.value), dropdown)
             end
-            return options[1]
+            UIDropDownMenu_AddButton(info)
         end
+    end)
 
-        local function RefreshDropdownText()
-            label:SetText(L(labelKey))
-            UIDropDownMenu_SetText(dropdown, L(ResolveOption(getValue()).label))
-            addon.settingsDesign.RefreshControl(dropdown.statsProTrigger)
-        end
+    PushLocalizedLabel(RefreshDropdownText)
+    PushRefresher(RefreshDropdownText)
+    tinsert(rows, {
+        text = label, dropdown = dropdown,
+        maxTextWidth = addon.settingsDesign.tokens.geometry.dropdownLabelMaxWidth,
+        dropdownX_base = cursor.padX,
+        dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET,
+        dropdownParent = parent,
+    })
+    cursor.y = rowY - 30
+    return dropdown, label
+end
 
-        UIDropDownMenu_Initialize(dropdown, function()
-            local current = ResolveOption(getValue())
-            for _, opt in ipairs(options) do
-                local info = UIDropDownMenu_CreateInfo()
-                info.text = L(opt.label)
-                info.value = opt.value
-                info.checked = (current.value == opt.value)
-                info.func = function()
-                    onSelect(opt.value, ResolveOption(opt.value), dropdown)
-                end
-                UIDropDownMenu_AddButton(info)
-            end
-        end)
-
-        PushLocalizedLabel(RefreshDropdownText)
-        PushRefresher(RefreshDropdownText)
-        tinsert(rows, {
-            text = label, dropdown = dropdown,
-            maxTextWidth = addon.settingsDesign.tokens.geometry.dropdownLabelMaxWidth,
-            dropdownX_base = cursor.padX, dropdownY = rowY + CONFIG_DROPDOWN_Y_OFFSET, dropdownParent = parent,
-        })
-        cursor.y = rowY - 30
-        return dropdown, label
+function addon.settingsUI.ApplyFrameSize(self)
+    local frame = self.settingsUI.frame
+    if not frame then return false end
+    local geometry = self.settingsDesign.tokens.geometry
+    local frameWidth = geometry.windowWidth
+    local parentHeight = self.settingsDesign.ReadUIParentHeight()
+    if not parentHeight then return false end
+    local maxHeight = math.max(geometry.minHeight,
+        math.min(geometry.maxHeight, parentHeight * geometry.parentHeightRatio))
+    if frame:GetWidth() == frameWidth and frame:GetHeight() == maxHeight then
+        return true
     end
+    frame:SetSize(frameWidth, maxHeight)
+    return true
+end
 
+function addon.settingsUI.BuildShell(self)
     --[[ ===== Frame ===== ]]
-    configFrame = CreateFrame("Frame", "StatsProConfigFrame", UIParent, "BackdropTemplate")
+    local configFrame = CreateFrame("Frame", "StatsProConfigFrame", UIParent,
+        "BackdropTemplate")
+    self.settingsUI.frame = configFrame
     local shellGeometry = self.settingsDesign.tokens.geometry
     local configFrameWidth = shellGeometry.windowWidth
     -- Seed a usable shell before the first parent read. A transient secret/invalid
@@ -14811,19 +14800,7 @@ function addon:OpenConfigMenu()
 
     -- WARNING: cap by parent so the title, profile actions, and scroll viewport stay on-screen.
     -- The 260px floor leaves a positive viewport below the fixed 156px shell header.
-    local function ApplyConfigFrameSize()
-        local parentHeight = addon.settingsDesign.ReadUIParentHeight()
-        if not parentHeight then return false end
-        local maxH = math.max(shellGeometry.minHeight,
-            math.min(shellGeometry.maxHeight, parentHeight * shellGeometry.parentHeightRatio))
-        if configFrame:GetWidth() == configFrameWidth and configFrame:GetHeight() == maxH then
-            return true
-        end
-        configFrame:SetSize(configFrameWidth, maxH)
-        return true
-    end
-    self.settingsDesign.applyConfigFrameSize = ApplyConfigFrameSize
-    ApplyConfigFrameSize()
+    self.settingsUI.ApplyFrameSize(self)
 
     configFrame:SetPoint("CENTER")
     self.settingsDesign.ApplySurface(configFrame, "window")
@@ -14837,7 +14814,7 @@ function addon:OpenConfigMenu()
     self.profileUI.PushSpecialFrame("StatsProConfigFrame")
 
     configFrame:HookScript("OnShow", function()
-        ApplyConfigFrameSize()
+        self.settingsUI.ApplyFrameSize(self)
         self.panelEditRuntime.SetRequested(true)
         if not self.profileUI.manager or not self.profileUI.manager:IsShown() then
             self.profileUI.PushSpecialFrame("StatsProConfigFrame")
@@ -14847,8 +14824,8 @@ function addon:OpenConfigMenu()
     -- Auto-close font picker + Blizzard dropdown lists when Settings UI hides (e.g., /ss
     -- toggle, click X, Esc). Both are parented to UIParent (NOT configFrame) so neither
     -- auto-hides via parent — without these calls Esc-while-langDropdown-open leaves an
-    -- orphan dropdown list above (and a stale langPreview state until user clicks elsewhere
-    -- to trigger DropDownList1:OnHide → CancelLanguagePreview).
+    -- orphan dropdown list above (and stale language-preview state until user clicks elsewhere
+    -- to trigger DropDownList1:OnHide and restore the committed locale).
     configFrame:HookScript("OnHide", function()
         self.profileUI.CancelSpecialFrameRestore("StatsProConfigFrame")
         self.profileUI.RemoveSpecialFrame("StatsProConfigFrame")
@@ -14857,10 +14834,8 @@ function addon:OpenConfigMenu()
         self.presetRuntime.ForceCancelAllPreviews()
         pcall(_G.StaticPopup_Hide, self.developerLinks.popupKey)
         self.profileRuntime.CloseOwnedDropdownMenus()
-        if StatsProCloseColorPicker then StatsProCloseColorPicker() end
-        if _G.StatsProFontPicker and _G.StatsProFontPicker:IsShown() then
-            _G.StatsProFontPicker:Hide()
-        end
+        if self.settingsUI.CloseColorPicker then self.settingsUI.CloseColorPicker() end
+        self.settingsUI.fontPicker.Hide(self)
         self.profileUI.HideManager()
     end)
 
@@ -15034,7 +15009,25 @@ function addon:OpenConfigMenu()
         }
     end
 
+    local context = {
+        frame = configFrame,
+        scrollChild = scrollChild,
+        scrollChildWidth = scrollChildWidth,
+        displayTab = displayTab,
+        statsTab = statsTab,
+        layoutTab = layoutTab,
+        switchToTab = SwitchToTab,
+        layoutDropdownRows = {},
+        displayDropdownRows = {},
+    }
+    self.settingsUI.context = context
+    return context
+end
+
+function addon.settingsUI.BuildLayoutTab(self, context)
     --[[ ===== LAYOUT TAB ===== ]]
+    local layoutTab = context.layoutTab
+    local layoutDropdownRows = context.layoutDropdownRows
     local cd = NewCursor(layoutTab, 12, -8)
     local splitBlockChecks = {}
     local function ApplySplitBlockChecksEnabled()
@@ -15065,7 +15058,7 @@ function addon:OpenConfigMenu()
             { value = "sectioned", label = "Sectioned" },
             { value = "split",     label = "Split" },
         }
-        CreateSimpleDropdownRow(
+        self.settingsUI.CreateSimpleDropdownRow(
             layoutTab,
             layoutDropdownRows,
             "StatsProDisplayModeDropdown",
@@ -15142,15 +15135,15 @@ function addon:OpenConfigMenu()
     -- Value Display covers rated-stat column visibility plus label presentation for all
     -- normal HUD rows.
     CursorSection(cd, "Value Display")
-    CreateSimpleDropdownRow(
+    self.settingsUI.CreateSimpleDropdownRow(
         layoutTab,
         layoutDropdownRows,
         "StatsProTargetSnapshotDropdown",
         "Tooltip Targets:",
-        _G.StatsProTargetSnapshotDropdownOptions,
+        self.archonTargets.snapshotOptions,
         cd,
-        _G.StatsProGetTargetSnapshotDropdownValue,
-        _G.StatsProSelectTargetSnapshotDropdownValue)
+        self.archonTargets.GetTargetSnapshotDropdownValue,
+        self.archonTargets.SelectTargetSnapshotDropdownValue)
     do
         local rowY = cd.y
         local leftRows, rightRows = {}, {}
@@ -15169,7 +15162,7 @@ function addon:OpenConfigMenu()
             { value = "short",  label = "Short" },
             { value = "hidden", label = "Hidden" },
         }
-        CreateSimpleDropdownRow(
+        self.settingsUI.CreateSimpleDropdownRow(
             layoutTab,
             layoutDropdownRows,
             "StatsProLabelStyleDropdown",
@@ -15202,9 +15195,473 @@ function addon:OpenConfigMenu()
     AlignSwatchColumn(layoutDropdownRows, CONFIG_DROPDOWN_GAP)
     layoutTab.contentHeight = CursorUsed(cd)
     layoutTab:SetHeight(layoutTab.contentHeight)
+end
 
+function addon.settingsUI.fontPicker.BuildFontsList(self, retryPending)
+    local picker = self.settingsUI.fontPicker
+    local lsmLen = LSM and #LSM:List(LSM.MediaType.FONT) or 0
+    if picker.cachedFontsList and picker.cachedFontsListLen == lsmLen
+        and not (retryPending and picker.cachedFontsListHasPending) then
+        return picker.cachedFontsList
+    end
+
+    local list = {}
+    local hasPending = false
+    if LSM then
+        for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
+            local path = type(name) == "string" and self.fontRuntime.rawLSMPath(name) or nil
+            local usable, status = self.fontRuntime.usableCatalogPath(path)
+            if status == "pending" then hasPending = true end
+            if usable then
+                list[#list + 1] = {
+                    name = name,
+                    path = usable,
+                    sortKey = self.fontRuntime.asciiLower(name),
+                }
+            end
+        end
+    else
+        local clientLocale = GetLocale()
+        for _, font in ipairs(BLIZZARD_SHIPPED_FONTS) do
+            if not font.locale or font.locale == clientLocale then
+                local usable, status = self.fontRuntime.usableCatalogPath(font.path)
+                if status == "pending" then hasPending = true end
+                if usable then
+                    list[#list + 1] = {
+                        name = font.name,
+                        path = usable,
+                        sortKey = self.fontRuntime.asciiLower(font.name),
+                    }
+                end
+            end
+        end
+    end
+
+    -- Stable sort independent of LSM internal ordering. ASCII-only sort keys leave
+    -- localized UTF-8 font names byte-stable while avoiding repeated casing work.
+    table.sort(list, function(left, right)
+        if left.sortKey ~= right.sortKey then return left.sortKey < right.sortKey end
+        if left.name ~= right.name then return left.name < right.name end
+        return FontPathKey(left.path) < FontPathKey(right.path)
+    end)
+    -- Ordinary caption refreshes reuse the catalogue, but an explicit populate retries
+    -- pending loose files even when the LSM list length has not changed.
+    picker.cachedFontsList = list
+    picker.cachedFontsListLen = lsmLen
+    picker.cachedFontsListHasPending = hasPending
+    return list
+end
+
+function addon.settingsUI.fontPicker.CurrentFontName(self)
+    local current = self.fontRuntime.preferredPath()
+    for _, font in ipairs(self.settingsUI.fontPicker.BuildFontsList(self)) do
+        if SameFontPath(font.path, current) then return font.name end
+    end
+    return self.fontRuntime.catalogName(current)
+end
+
+function addon.settingsUI.fontPicker.RefreshCaption(self)
+    local picker = self.settingsUI.fontPicker
+    if picker.dropdown then
+        UIDropDownMenu_SetText(picker.dropdown, picker.CurrentFontName(self))
+    end
+end
+
+function addon.settingsUI.fontPicker.Preview(self, path)
+    local picker = self.settingsUI.fontPicker
+    if SameFontPath(path, picker.previewedPath) then return end
+    local applied, effectiveFont = ApplyTextStyleToAllPanels(path, GetNumberDB("fontSize"))
+    if not applied then return false end
+    picker.previewedPath = effectiveFont
+    ReflowAllPanels()
+    return true
+end
+
+function addon.settingsUI.fontPicker.CancelPreview(self, force)
+    local picker = self.settingsUI.fontPicker
+    local hadPreview = picker.previewedPath ~= nil
+    picker.previewedPath = nil
+    if self.profileRuntime.suppressIntermediateRefresh then return hadPreview end
+    if not force and not hadPreview then return false end
+    local restored = self.fontRuntime.applyCommittedTextStyle(
+        self.fontRuntime.preferredPath(), GetNumberDB("fontSize"), true, true)
+    ReflowAllPanels()
+    return restored
+end
+
+function addon.settingsUI.fontPicker.Pick(self, font)
+    local picker = self.settingsUI.fontPicker
+    if not self.fontRuntime.canMutateDB(true) then return false end
+    local applied = self.fontRuntime.applyCommittedTextStyle(
+        font.path, GetNumberDB("fontSize"), false, false)
+    if not applied then return false end
+    self.fontRuntime.clearSavedAutoFont()
+    ReflowAllPanels()
+    picker.previewedPath = nil
+    picker.RefreshCaption(self)
+    CloseDropDownMenus()
+    local context = self.settingsUI.context
+    if context and type(context.refreshLanguageWarning) == "function" then
+        context.refreshLanguageWarning()
+    end
+    return true
+end
+
+function addon.settingsUI.fontPicker.Hide(self)
+    local picker = self.settingsUI.fontPicker
+    if picker.frame and picker.frame:IsShown() then picker.frame:Hide() end
+    if picker.catcher and picker.catcher:IsShown() then picker.catcher:Hide() end
+    local trigger = picker.dropdown and picker.dropdown.statsProTrigger
+    if trigger then
+        trigger.statsProActive = false
+        self.settingsDesign.RefreshControl(trigger)
+    end
+end
+
+function addon.settingsUI.fontPicker.BuildFrame(self)
+    local picker = self.settingsUI.fontPicker
+    local context = self.settingsUI.context
+    local config = context and context.frame
+    local frameWidth = picker.columns * picker.buttonWidth
+        + picker.padding * 2 + picker.scrollbarWidth
+    local frameHeight = picker.visibleRows * picker.rowHeight + picker.padding * 2
+
+    picker.frame = CreateFrame("Frame", "StatsProFontPicker", UIParent, "BackdropTemplate")
+    picker.frame:SetSize(frameWidth, frameHeight)
+    picker.frame:SetFrameStrata("DIALOG")
+    picker.frame:SetFrameLevel((config and config:GetFrameLevel() or 100) + 50)
+    picker.frame:SetClampedToScreen(true)
+    self.settingsDesign.ApplySurface(picker.frame, "window")
+    picker.frame:Hide()
+
+    picker.catcher = CreateFrame("Frame", nil, UIParent)
+    picker.catcher:SetAllPoints(UIParent)
+    picker.catcher:SetFrameStrata("DIALOG")
+    picker.catcher:SetFrameLevel(picker.frame:GetFrameLevel() - 1)
+    picker.catcher:EnableMouse(true)
+    picker.catcher:Hide()
+    picker.catcher:SetScript("OnMouseDown", function() picker.Hide(self) end)
+    picker.frame.statsProCatcher = picker.catcher
+
+    local surface = self.settingsDesign.CreateTextureSurface(picker.frame, "viewport")
+    surface:SetPoint("TOPLEFT", picker.padding - 2, -(picker.padding - 2))
+    surface:SetPoint("BOTTOMRIGHT", -(picker.padding + picker.scrollbarWidth - 2),
+        picker.padding - 2)
+    picker.frame.statsProViewport = surface
+
+    picker.scroll = CreateFrame(
+        "ScrollFrame", "StatsProFontPickerScroll", picker.frame, "UIPanelScrollFrameTemplate")
+    picker.scroll:SetPoint("TOPLEFT", picker.padding, -picker.padding)
+    picker.scroll:SetPoint("BOTTOMRIGHT", -(picker.padding + picker.scrollbarWidth), picker.padding)
+    self.settingsDesign.StyleScrollFrame(picker.scroll)
+
+    picker.content = CreateFrame("Frame", nil, picker.scroll)
+    picker.content:SetSize(picker.columns * picker.buttonWidth, 100)
+    picker.scroll:SetScrollChild(picker.content)
+
+    picker.frame:SetScript("OnHide", function()
+        -- OnHide is the single restore path for Escape, click-outside, commit, and
+        -- Settings teardown. Invalidate every delayed pending-file retry first.
+        picker.retryGeneration = picker.retryGeneration + 1
+        self.profileUI.RemoveSpecialFrame("StatsProFontPicker")
+        if picker.catcher then picker.catcher:Hide() end
+        local trigger = picker.dropdown and picker.dropdown.statsProTrigger
+        if trigger then
+            trigger.statsProActive = false
+            self.settingsDesign.RefreshControl(trigger)
+        end
+        picker.CancelPreview(self, true)
+        local owner = self.settingsUI.context and self.settingsUI.context.frame
+        if owner and owner:IsShown()
+            and not (self.profileUI.manager and self.profileUI.manager:IsShown())
+            and not (self.profileUI.operationDialog
+                and self.profileUI.operationDialog:IsShown()) then
+            -- Blizzard walks UISpecialFrames live. Restore Settings on the next tick
+            -- so one Escape cannot close both the picker and its owner.
+            self.profileUI.DeferSpecialFrameRestore("StatsProConfigFrame", function()
+                return owner:IsShown() and not picker.frame:IsShown()
+                    and not (self.profileUI.manager and self.profileUI.manager:IsShown())
+                    and not (self.profileUI.operationDialog
+                        and self.profileUI.operationDialog:IsShown())
+            end)
+        else
+            self.profileUI.CancelSpecialFrameRestore("StatsProConfigFrame")
+            self.profileUI.RemoveSpecialFrame("StatsProConfigFrame")
+        end
+    end)
+end
+
+function addon.settingsUI.fontPicker.Populate(self)
+    local picker = self.settingsUI.fontPicker
+    local fonts = picker.BuildFontsList(self, true)
+    local currentPath = self.fontRuntime.preferredPath()
+    local rows = math.ceil(#fonts / picker.columns)
+    local currentRow
+    local hoveredVisibleButton
+
+    picker.content:SetHeight(math.max(rows * picker.rowHeight, 1))
+    for index, font in ipairs(fonts) do
+        local button = picker.buttons[index]
+        if not button then
+            button = CreateFrame("Button", nil, picker.content)
+            button:SetSize(picker.buttonWidth, picker.rowHeight)
+            button.bg = button:CreateTexture(nil, "BACKGROUND")
+            button.bg:SetAllPoints()
+            button.bg:SetColorTexture(0, 0, 0, 0)
+            button.text = button:CreateFontString(nil, "OVERLAY")
+            button.text:SetPoint("LEFT", 6, 0)
+            button.text:SetPoint("RIGHT", -4, 0)
+            button.text:SetWordWrap(false)
+            button.text:SetMaxLines(1)
+            self.settingsDesign.StyleListRow(button, button.text, "body")
+            button.text:SetJustifyH("LEFT")
+
+            button:SetScript("OnEnter", function(target)
+                picker.hoverGeneration = picker.hoverGeneration + 1
+                if picker.Preview(self, target.fontPath) == false and picker.previewedPath then
+                    picker.CancelPreview(self)
+                end
+            end)
+            button:SetScript("OnLeave", function()
+                local generation = picker.hoverGeneration
+                C_Timer.After(0, function()
+                    if generation == picker.hoverGeneration then picker.CancelPreview(self) end
+                end)
+            end)
+            button:SetScript("OnClick", function(target)
+                if picker.Pick(self, { name = target.fontName, path = target.fontPath }) then
+                    picker.Hide(self)
+                end
+            end)
+            picker.buttons[index] = button
+        end
+
+        local row = math.floor((index - 1) / picker.columns)
+        local column = (index - 1) % picker.columns
+        button:ClearAllPoints()
+        button:SetPoint("TOPLEFT", column * picker.buttonWidth, -row * picker.rowHeight)
+        button.fontName = font.name
+        button.fontPath = font.path
+        button.text:SetText(font.name)
+        if SameFontPath(font.path, currentPath) then
+            self.settingsDesign.SetListRowSelected(button, true)
+            currentRow = row
+        else
+            self.settingsDesign.SetListRowSelected(button, false)
+        end
+        button:Show()
+        if button.statsProHovered == true then hoveredVisibleButton = button end
+    end
+
+    for index = #fonts + 1, #picker.buttons do picker.buttons[index]:Hide() end
+    -- A visible retry may rebind a pooled button without firing leave/enter. Keep
+    -- tooltip and preview attached to the row that is actually under the pointer.
+    if hoveredVisibleButton then
+        self.settingsDesign.RefreshOwnedControlTooltip(hoveredVisibleButton)
+        if not SameFontPath(hoveredVisibleButton.fontPath, picker.previewedPath) then
+            if picker.Preview(self, hoveredVisibleButton.fontPath) == false
+                and picker.previewedPath then
+                picker.CancelPreview(self)
+            end
+        end
+    elseif picker.previewedPath then
+        picker.CancelPreview(self)
+    end
+
+    if currentRow then
+        local centerOffset = math.floor(picker.visibleRows / 2)
+        local targetScroll = math.max(0, (currentRow - centerOffset) * picker.rowHeight)
+        local maxScroll = math.max(0,
+            rows * picker.rowHeight - picker.visibleRows * picker.rowHeight)
+        picker.scroll:SetVerticalScroll(math.min(targetScroll, maxScroll))
+    else
+        picker.scroll:SetVerticalScroll(0)
+    end
+end
+
+function addon.settingsUI.fontPicker.SchedulePendingRetry(self, generation, attempt)
+    local picker = self.settingsUI.fontPicker
+    local delays = self.fontRuntime.pendingRetryDelays
+    if not picker.cachedFontsListHasPending or attempt > #delays then return end
+    C_Timer.After(delays[attempt], function()
+        -- Hidden/reopened pickers own a newer generation; stale probes are no-ops.
+        if generation ~= picker.retryGeneration
+            or not picker.frame or not picker.frame:IsShown() then
+            return
+        end
+        picker.Populate(self)
+        picker.SchedulePendingRetry(self, generation, attempt + 1)
+    end)
+end
+
+function addon.settingsUI.fontPicker.Show(self)
+    local picker = self.settingsUI.fontPicker
+    if not picker.initialized then
+        picker.BuildFrame(self)
+        picker.initialized = true
+    end
+    picker.previewedPath = nil
+    picker.hoverGeneration = picker.hoverGeneration + 1
+    picker.retryGeneration = picker.retryGeneration + 1
+    picker.Populate(self)
+
+    local context = self.settingsUI.context
+    local config = context and context.frame
+    picker.frame:SetFrameLevel((config and config:GetFrameLevel() or 100) + 50)
+    picker.catcher:SetFrameLevel(picker.frame:GetFrameLevel() - 1)
+    local dropdown = picker.dropdown
+    local button = _G["StatsProFontDropdownButton"] or dropdown.Button
+    picker.frame:ClearAllPoints()
+    if button then
+        picker.frame:SetPoint("TOPLEFT", button, "BOTTOMLEFT", 0, -2)
+    else
+        picker.frame:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 16, -2)
+    end
+
+    self.profileUI.CancelSpecialFrameRestore("StatsProConfigFrame")
+    self.profileUI.RemoveSpecialFrame("StatsProConfigFrame")
+    self.profileUI.PushSpecialFrame("StatsProFontPicker")
+    picker.catcher:Show()
+    picker.frame:Show()
+    picker.SchedulePendingRetry(self, picker.retryGeneration, 1)
+    if dropdown.statsProTrigger then
+        dropdown.statsProTrigger.statsProActive = true
+        self.settingsDesign.RefreshControl(dropdown.statsProTrigger)
+    end
+end
+
+function addon.settingsUI.fontPicker.Toggle(self)
+    local picker = self.settingsUI.fontPicker
+    if picker.frame and picker.frame:IsShown() then
+        picker.Hide(self)
+    else
+        picker.Show(self)
+    end
+end
+
+function addon.settingsUI.fontPicker.RegisterLSMCallback(self)
+    local picker = self.settingsUI.fontPicker
+    if picker.lsmCallbackRegistered or not LSM
+        or type(LSM.RegisterCallback) ~= "function" then return end
+    picker.lsmCallbackRegistered = true
+    -- LSM registration is add-only in normal play. Invalidate synchronously, then
+    -- coalesce registration bursts into one next-tick visible-picker refresh.
+    LSM.RegisterCallback(self, "LibSharedMedia_Registered", function(_, mediaType)
+        if mediaType ~= LSM.MediaType.FONT then return end
+        picker.cachedFontsList = nil
+        picker.cachedFontsListLen = -1
+        picker.cachedFontsListHasPending = false
+        if picker.catalogRefreshScheduled then return end
+        picker.catalogRefreshScheduled = true
+        C_Timer.After(0, function()
+            picker.catalogRefreshScheduled = false
+            picker.RefreshCaption(self)
+            if not picker.frame or not picker.frame:IsShown() then return end
+            picker.retryGeneration = picker.retryGeneration + 1
+            picker.Populate(self)
+            picker.SchedulePendingRetry(self, picker.retryGeneration, 1)
+        end)
+    end)
+end
+
+function addon.settingsUI.fontPicker.Initialize(self, context, dropdown)
+    local picker = self.settingsUI.fontPicker
+    picker.dropdown = dropdown
+    picker.columns = 3
+    picker.buttonWidth = 160
+    picker.rowHeight = self.settingsDesign.tokens.geometry.fontRowHeight
+    picker.padding = 8
+    picker.scrollbarWidth = 22
+    picker.visibleRows = 14
+    context.refreshLanguageWarning = context.refreshLanguageWarning or function() end
+
+    picker.RegisterLSMCallback(self)
+    picker.RefreshCaption(self)
+    PushRefresher(function() picker.RefreshCaption(self) end)
+
+    local trigger = _G["StatsProFontDropdownButton"] or dropdown.Button
+    if trigger then
+        trigger:SetScript("OnClick", function()
+            PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
+            picker.Toggle(self)
+        end)
+    end
+end
+
+function addon.settingsUI.localization.Preview(self, value)
+    local state = self.settingsUI.localization
+    local locale = value == "auto"
+        and self.NormalizeOutputLocale(GetLocale()) or value
+    -- Dedup repeated hover events without comparing or caching rendered strings.
+    if locale == state.previewLocale then return end
+    state.previewLocale = locale
+    cached.activeLabels = LABELS_BY_LOCALE[locale] or LABELS_BY_LOCALE.enUS
+    cached.activeLabelsLocale = LABELS_BY_LOCALE[locale] and locale or "enUS"
+
+    -- Always evaluate the hovered locale against the committed baseline. Otherwise
+    -- ruRU -> fallback -> deDE would compare against the fallback and fail to restore.
+    local requirement = LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN
+    local current = self.fontRuntime.currentPath()
+    local fallback = FindCompatibleFont(current, requirement)
+    if fallback and not SameFontPath(fallback, current) then
+        local applied = ApplyTextStyleToAllPanels(fallback, GetNumberDB("fontSize"))
+        if applied then state.previewSwappedFont = true end
+    elseif state.previewSwappedFont then
+        local restored = ApplyTextStyleToAllPanels(
+            current, GetNumberDB("fontSize"), true)
+        if restored then state.previewSwappedFont = false end
+    end
+
+    state.previewActive = true
+    ApplyConfigFont(ResolveConfigFont(locale))
+    RefreshConfigLocalization()
+    self:RunUpdateStatsSafe()
+end
+
+function addon.settingsUI.localization.CancelPreview(self)
+    local state = self.settingsUI.localization
+    if not state.previewActive then return end
+    if self.profileRuntime.suppressIntermediateRefresh then
+        state.previewActive = false
+        state.previewSwappedFont = false
+        state.previewLocale = nil
+        return
+    end
+
+    local active = ResolveActiveLocale()
+    cached.activeLabels = LABELS_BY_LOCALE[active] or LABELS_BY_LOCALE.enUS
+    cached.activeLabelsLocale = LABELS_BY_LOCALE[active] and active or "enUS"
+    if state.previewSwappedFont then
+        local restored = self.fontRuntime.applyCommittedTextStyle(
+            self.fontRuntime.preferredPath(), GetNumberDB("fontSize"), true, true)
+        if restored then state.previewSwappedFont = false end
+    end
+    state.previewActive = false
+    state.previewLocale = nil
+    ApplyConfigFont(ResolveConfigFont(active))
+    RefreshConfigLocalization()
+    self:RunUpdateStatsSafe()
+end
+
+function addon.settingsUI.localization.CommitPreview(self)
+    local state = self.settingsUI.localization
+    if state.previewSwappedFont then
+        local restored = self.fontRuntime.applyCommittedTextStyle(
+            self.fontRuntime.preferredPath(), GetNumberDB("fontSize"), true, true)
+        if restored then state.previewSwappedFont = false end
+    end
+    state.previewActive = false
+    state.previewLocale = nil
+end
+
+function addon.settingsUI.BuildAppearanceTab(self, context)
     --[[ ===== APPEARANCE TAB (Lua var: displayTab) ===== ]]
-    cd = NewCursor(displayTab, 12, -8)
+    local displayTab = context.displayTab
+    local displayDropdownRows = context.displayDropdownRows
+    local scrollChild = context.scrollChild
+    local scrollChildWidth = context.scrollChildWidth
+    local ownerFrame = context.frame
+    local cd = NewCursor(displayTab, 12, -8)
 
     CursorSection(cd, "Appearance Presets")
     do
@@ -15332,477 +15789,19 @@ function addon:OpenConfigMenu()
         fontLabel:SetPoint("TOPLEFT", cd.padX, rowY)
         PushLocalizedLabel(function() fontLabel:SetText(L("Font:")) end)
 
-        -- WHY rebuilt on demand (not at load): LSM-registered fonts can appear after
-        -- StatsPro loads (another addon may register later). Cache ordinary caption
-        -- refreshes because re-enumerating and probing a large catalog is unnecessary
-        -- while it is unchanged. The LSM callback below also refreshes an already-open
-        -- picker when the catalog grows, without requiring /reload.
-        local cachedFontsList
-        local cachedFontsListLen = -1
-        local cachedFontsListHasPending = false
-        local function BuildFontsList(retryPending)
-            local lsmLen = LSM and #LSM:List(LSM.MediaType.FONT) or 0
-            if cachedFontsList and cachedFontsListLen == lsmLen
-                and not (retryPending and cachedFontsListHasPending) then
-                return cachedFontsList
-            end
-            local list
-            local hasPending = false
-            if LSM then
-                list = {}
-                for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
-                    local path = type(name) == "string" and addon.fontRuntime.rawLSMPath(name) or nil
-                    local usable, status = addon.fontRuntime.usableCatalogPath(path)
-                    if status == "pending" then hasPending = true end
-                    if usable then
-                        list[#list + 1] = {
-                            name = name,
-                            path = usable,
-                            sortKey = addon.fontRuntime.asciiLower(name),
-                        }
-                    end
-                end
-            else
-                list = {}
-                local clientLocale = GetLocale()
-                for _, f in ipairs(BLIZZARD_SHIPPED_FONTS) do
-                    if not f.locale or f.locale == clientLocale then
-                        local usable, status = addon.fontRuntime.usableCatalogPath(f.path)
-                        if status == "pending" then hasPending = true end
-                        if usable then
-                            list[#list + 1] = {
-                                name = f.name,
-                                path = usable,
-                                sortKey = addon.fontRuntime.asciiLower(f.name),
-                            }
-                        end
-                    end
-                end
-            end
-            -- Stable sort independent of LSM internal ordering. Precomputed ASCII-only
-            -- sort keys avoid repeating path-safe casing work in
-            -- every comparator call while leaving localized UTF-8 font names byte-stable.
-            table.sort(list, function(a, b)
-                if a.sortKey ~= b.sortKey then return a.sortKey < b.sortKey end
-                if a.name ~= b.name then return a.name < b.name end
-                return FontPathKey(a.path) < FontPathKey(b.path)
-            end)
-            -- Keep ordinary caption refreshes cheap, but never freeze a cold-start
-            -- false into the picker: an explicit populate retries pending loose files
-            -- even when LSM catalogue length is unchanged.
-            cachedFontsList = list
-            cachedFontsListLen = lsmLen
-            cachedFontsListHasPending = hasPending
-            return list
-        end
-
-        -- Assignment to forward-declared upvalue (section 15 prelude); language-dropdown
-        -- info.func captures fontDropdown / CurrentFontName to sync caption after
-        -- MaybeAutoSwitchFont silently changes db.font on a locale switch.
-        fontDropdown = CreateFrame("Frame", "StatsProFontDropdown", appearanceBody, "UIDropDownMenuTemplate")
-        -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after the Appearance-tab dropdown rows build.
-        fontDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
-        UIDropDownMenu_SetWidth(fontDropdown, addon.settingsDesign.tokens.geometry.dropdownWidth)
+        -- SharedMedia can register faces after Settings construction. The stateful
+        -- picker owns catalogue invalidation, pending probes, pooling, hover preview,
+        -- and Escape restoration without rebuilding the Settings shell.
+        local fontDropdown = CreateFrame("Frame", "StatsProFontDropdown", appearanceBody,
+            "UIDropDownMenuTemplate")
+        fontDropdown:SetPoint("TOPLEFT", cd.padX + 100,
+            rowY + CONFIG_DROPDOWN_Y_OFFSET)
+        UIDropDownMenu_SetWidth(fontDropdown,
+            addon.settingsDesign.tokens.geometry.dropdownWidth)
         UIDropDownMenu_JustifyText(fontDropdown, "LEFT")
         addon.settingsDesign.StyleDropdown(fontDropdown, fontLabel)
-        -- Hover-preview: while font picker is open, hovering a font button applies it to
-        -- panels temporarily without writing DB. Picker's OnHide handler is the SINGLE source
-        -- of font-state sync — it forcibly re-applies DB.font after close, so cancel-on-close
-        -- happens automatically (preview never wrote DB; PickFont wrote DB on commit-path).
-        -- WHY immediate Reflow after Apply: ApplyStyle invalidates cachedLabelH + sets
-        -- heightDirty; without an immediate SetTextSafe re-measure, frame width / repair
-        -- row anchor stay stale until the next OnUpdate tick (≤ updateInterval, ~0.5s).
-        --
-        -- Hover-preview state shared across font picker buttons + commit/cancel paths:
-        --   previewedPath = nil  → no preview applied; panels show DB.font
-        --   previewedPath = "X"  → panels currently showing preview of font X
-        -- Without this dedup, scrolling the picker fires OnEnter dozens of times in <1s
-        -- (each scroll tick re-targets a different button under the cursor), each call
-        -- re-running the apply pipeline. hoverGen + deferred-cancel pattern below adds an
-        -- OnLeave path that auto-restores when the mouse drifts off all buttons, so the
-        -- panels don't stay stuck on a previewed font when the user moves to the picker's
-        -- padding without clicking.
-        local previewedPath
-        local hoverGen = 0
-        -- WHY ReflowAllPanels (not UpdateStats) for font-only paths: line text doesn't
-        -- change on font swap — only glyph widths do. Reflow re-feeds cached strings to
-        -- SetTextSafe so frame width / repair-row Y / column alignment all re-measure
-        -- under the new font, while skipping the stat/gear builders + the stat-API
-        -- rescan that UpdateStats does. Subjective speed-up on font-picker scroll-hover
-        -- where each unique button fires Apply + Reflow ~30× per second of scroll.
-        local function PreviewFont(path)
-            if SameFontPath(path, previewedPath) then return end
-            local applied, effectiveFont = ApplyTextStyleToAllPanels(path, GetNumberDB("fontSize"))
-            if not applied then return false end
-            previewedPath = effectiveFont
-            ReflowAllPanels()
-            return true
-        end
-        -- Ordinary callers avoid a needless style/reflow pass when no preview exists.
-        -- OnHide uses force=true because preview tracking can desync against the applied
-        -- panel font through SetFont fallback or child OnLeave ordering; that defensive
-        -- path always restores the committed DB font.
-        local function CancelFontPreview(force)
-            local hadPreview = previewedPath ~= nil
-            previewedPath = nil
-            if self.profileRuntime.suppressIntermediateRefresh then return hadPreview end
-            if not force and not hadPreview then return false end
-            local restored = self.fontRuntime.applyCommittedTextStyle(
-                self.fontRuntime.preferredPath(), GetNumberDB("fontSize"), true, true)
-            ReflowAllPanels()
-            return restored
-        end
-        self.profileRuntime.cancelFontPreview = CancelFontPreview
-        local function PickFont(f)
-            if not self.fontRuntime.canMutateDB(true) then return false end
-            local applied = self.fontRuntime.applyCommittedTextStyle(
-                f.path, GetNumberDB("fontSize"), false, false)
-            if not applied then return false end
-            self.fontRuntime.clearSavedAutoFont()  -- explicit user pick clears auto-switch memory
-            ReflowAllPanels()
-            previewedPath = nil  -- preview is now committed; OnHide force-syncs to DB.font
-            UIDropDownMenu_SetText(fontDropdown, CurrentFontName())
-            CloseDropDownMenus()  -- defensive; no-op when no Blizzard dropdown is open
-            RefreshLanguageWarning()  -- new font may not cover active locale's glyphs
-            return true
-        end
-        self.profileRuntime.previewFont = PreviewFont
-        -- NOTE: UIDropDownMenu_Initialize is intentionally NOT called — Blizzard's default
-        -- popup is replaced by a custom multi-column picker (see Block B below). Without
-        -- Initialize, the template's default OnClick would open an empty DropDownList1, but
-        -- Block E overrides Button:OnClick to open our picker instead.
+        self.settingsUI.fontPicker.Initialize(self, context, fontDropdown)
 
-        --[[ ===== Custom multi-column font picker ===== ]]
-        -- Geometry constants — tweak here, do NOT inline magic numbers at call sites.
-        local FONT_PICKER_COLS         = 3
-        local FONT_PICKER_BTN_W        = 160      -- ~25 char names fit at CONFIG_FONT 12pt
-        local FONT_PICKER_BTN_H        = addon.settingsDesign.tokens.geometry.fontRowHeight
-        local FONT_PICKER_PAD          = 8
-        local FONT_PICKER_SCROLLBAR_W  = 22
-        local FONT_PICKER_VISIBLE_ROWS = 14
-        local FONT_PICKER_FRAME_W      = FONT_PICKER_COLS * FONT_PICKER_BTN_W + FONT_PICKER_PAD * 2 + FONT_PICKER_SCROLLBAR_W  -- 518
-        local FONT_PICKER_FRAME_H      = FONT_PICKER_VISIBLE_ROWS * FONT_PICKER_BTN_H + FONT_PICKER_PAD * 2                    -- 352
-
-        local fontPickerFrame
-        local fontPickerScroll
-        local fontPickerContent
-        local fontPickerCatcher
-        local fontPickerButtons = {}   -- pool of font-button frames; reused across Populate calls
-        local fontPickerInitialized = false
-        local fontPickerRetryGeneration = 0
-        local fontPickerCatalogRefreshScheduled = false
-
-        local function HideFontPicker()
-            -- Single entry. picker:OnHide handler (set in Build) cancels active preview and
-            -- hides catcher; both are idempotent so calling here covers programmatic close paths.
-            if fontPickerFrame and fontPickerFrame:IsShown() then
-                fontPickerFrame:Hide()
-            end
-            if fontPickerCatcher and fontPickerCatcher:IsShown() then
-                fontPickerCatcher:Hide()
-            end
-            if fontDropdown and fontDropdown.statsProTrigger then
-                fontDropdown.statsProTrigger.statsProActive = false
-                addon.settingsDesign.RefreshControl(fontDropdown.statsProTrigger)
-            end
-        end
-
-        local function BuildFontPickerFrame()
-            -- Picker frame inherits the same restrained shell surface while keeping its
-            -- independent DIALOG level and click-catcher ownership.
-            fontPickerFrame = CreateFrame("Frame", "StatsProFontPicker", UIParent, "BackdropTemplate")
-            fontPickerFrame:SetSize(FONT_PICKER_FRAME_W, FONT_PICKER_FRAME_H)
-            fontPickerFrame:SetFrameStrata("DIALOG")
-            -- Initial frame level; ShowFontPicker re-applies on each show in case configFrame's
-            -- level shifted (e.g., Blizzard Settings API re-parented configFrame between sessions).
-            fontPickerFrame:SetFrameLevel((configFrame and configFrame:GetFrameLevel() or 100) + 50)
-            fontPickerFrame:SetClampedToScreen(true)
-            self.settingsDesign.ApplySurface(fontPickerFrame, "window")
-            fontPickerFrame:Hide()
-
-            -- Click-catcher: invisible fullscreen frame BEHIND picker, ABOVE other DIALOG content.
-            -- WHY consume click: standard modal-popup pattern (matches ColorPickerFrame, StaticPopup).
-            -- Trade-off: 2-click penalty for trigger toggle and tab-switch.
-            fontPickerCatcher = CreateFrame("Frame", nil, UIParent)
-            fontPickerCatcher:SetAllPoints(UIParent)
-            fontPickerCatcher:SetFrameStrata("DIALOG")
-            fontPickerCatcher:SetFrameLevel(fontPickerFrame:GetFrameLevel() - 1)
-            fontPickerCatcher:EnableMouse(true)
-            fontPickerCatcher:Hide()
-            fontPickerCatcher:SetScript("OnMouseDown", HideFontPicker)
-            fontPickerFrame.statsProCatcher = fontPickerCatcher
-
-            local pickerSurface = self.settingsDesign.CreateTextureSurface(fontPickerFrame, "viewport")
-            pickerSurface:SetPoint("TOPLEFT", FONT_PICKER_PAD - 2, -(FONT_PICKER_PAD - 2))
-            pickerSurface:SetPoint("BOTTOMRIGHT",
-                -(FONT_PICKER_PAD + FONT_PICKER_SCROLLBAR_W - 2), FONT_PICKER_PAD - 2)
-            fontPickerFrame.statsProViewport = pickerSurface
-
-            -- ScrollFrame — UIPanelScrollFrameTemplate matches configFrame's existing scroll pattern.
-            fontPickerScroll = CreateFrame("ScrollFrame", "StatsProFontPickerScroll", fontPickerFrame, "UIPanelScrollFrameTemplate")
-            fontPickerScroll:SetPoint("TOPLEFT", FONT_PICKER_PAD, -FONT_PICKER_PAD)
-            fontPickerScroll:SetPoint("BOTTOMRIGHT", -(FONT_PICKER_PAD + FONT_PICKER_SCROLLBAR_W), FONT_PICKER_PAD)
-            self.settingsDesign.StyleScrollFrame(fontPickerScroll)
-
-            fontPickerContent = CreateFrame("Frame", nil, fontPickerScroll)
-            fontPickerContent:SetSize(FONT_PICKER_COLS * FONT_PICKER_BTN_W, 100)  -- height set in Populate
-            fontPickerScroll:SetScrollChild(fontPickerContent)
-
-            -- OnHide: cancels active preview + hides catcher. Covers ALL close paths (Esc,
-            -- click-outside, font-button click, /ss reset, configFrame-Hide hook). Catcher
-            -- hide is unconditional (it's just a UIParent overlay); preview restore goes
-            -- through CancelFontPreview's forced DB-font sync. PickFont writes DB first,
-            -- so the commit path still lands on the chosen font when Hide fires.
-            fontPickerFrame:SetScript("OnHide", function()
-                fontPickerRetryGeneration = fontPickerRetryGeneration + 1
-                self.profileUI.RemoveSpecialFrame("StatsProFontPicker")
-                if fontPickerCatcher then fontPickerCatcher:Hide() end
-                if fontDropdown and fontDropdown.statsProTrigger then
-                    fontDropdown.statsProTrigger.statsProActive = false
-                    addon.settingsDesign.RefreshControl(fontDropdown.statsProTrigger)
-                end
-                CancelFontPreview(true)
-                if configFrame and configFrame:IsShown()
-                    and not (self.profileUI.manager and self.profileUI.manager:IsShown())
-                    and not (self.profileUI.operationDialog
-                        and self.profileUI.operationDialog:IsShown()) then
-                    -- WARNING: restoring Settings synchronously can let one Escape
-                    -- close both layers during Blizzard's live special-frame walk.
-                    self.profileUI.DeferSpecialFrameRestore(
-                        "StatsProConfigFrame", function()
-                            return configFrame:IsShown()
-                                and not fontPickerFrame:IsShown()
-                                and not (self.profileUI.manager
-                                    and self.profileUI.manager:IsShown())
-                                and not (self.profileUI.operationDialog
-                                    and self.profileUI.operationDialog:IsShown())
-                        end)
-                else
-                    self.profileUI.CancelSpecialFrameRestore("StatsProConfigFrame")
-                    self.profileUI.RemoveSpecialFrame("StatsProConfigFrame")
-                end
-            end)
-        end
-
-        local function PopulateFontPicker()
-            local fonts = BuildFontsList(true)
-            local currentPath = self.fontRuntime.preferredPath()
-            local rows = math.ceil(#fonts / FONT_PICKER_COLS)
-            local currentRow = nil
-            local hoveredVisibleButton = nil
-
-            fontPickerContent:SetHeight(math.max(rows * FONT_PICKER_BTN_H, 1))
-
-            for i, f in ipairs(fonts) do
-                local btn = fontPickerButtons[i]
-                if not btn then
-                    -- Lazy create + permanent setup. Pool-style — created once, reused.
-                    btn = CreateFrame("Button", nil, fontPickerContent)
-                    btn:SetSize(FONT_PICKER_BTN_W, FONT_PICKER_BTN_H)
-
-                    btn.bg = btn:CreateTexture(nil, "BACKGROUND")
-                    btn.bg:SetAllPoints()
-                    btn.bg:SetColorTexture(0, 0, 0, 0)
-
-                    btn.text = btn:CreateFontString(nil, "OVERLAY")
-                    btn.text:SetPoint("LEFT", 6, 0)
-                    btn.text:SetPoint("RIGHT", -4, 0)
-                    -- WHY no-wrap: long font names (>25 char) would wrap to a 2nd line, breaking
-                    -- the row-height grid. Single-line overflow visually clipped by FontString.
-                    btn.text:SetWordWrap(false)
-                    btn.text:SetMaxLines(1)
-                    addon.settingsDesign.StyleListRow(btn, btn.text, "body")
-                    btn.text:SetJustifyH("LEFT")
-
-                    -- hoverGen pattern: OnEnter bumps gen + applies preview; OnLeave captures
-                    -- current gen and schedules a 0-tick deferred cancel. If the mouse moves
-                    -- to ANOTHER button before the timer fires, that button's OnEnter bumps
-                    -- gen — the captured-gen comparison fails, cancel is skipped (preview
-                    -- transitions directly button→button without an Apply DB.font in between).
-                    -- If the mouse leaves all buttons (drifts to picker padding or out of the
-                    -- frame), no OnEnter fires before the timer → cancel runs, panels return
-                    -- to DB.font. Without OnLeave, hovering then moving to padding leaves the
-                    -- preview "stuck" until the user clicks something — felt as the picker
-                    -- "fixating" on a random font in the user-facing report.
-                    btn:SetScript("OnEnter", function(button)
-                        hoverGen = hoverGen + 1
-                        if PreviewFont(button.fontPath) == false and previewedPath then
-                            CancelFontPreview()
-                        end
-                    end)
-                    btn:SetScript("OnLeave", function()
-                        local myGen = hoverGen
-                        C_Timer.After(0, function()
-                            if myGen == hoverGen then CancelFontPreview() end
-                        end)
-                    end)
-                    btn:SetScript("OnClick", function(button)
-                        if PickFont({ name = button.fontName, path = button.fontPath }) then
-                            HideFontPicker()
-                        end
-                    end)
-
-                    fontPickerButtons[i] = btn
-                end
-
-                local row = math.floor((i - 1) / FONT_PICKER_COLS)
-                local col = (i - 1) % FONT_PICKER_COLS
-                btn:ClearAllPoints()
-                btn:SetPoint("TOPLEFT", col * FONT_PICKER_BTN_W, -row * FONT_PICKER_BTN_H)
-                btn.fontName = f.name
-                btn.fontPath = f.path
-                btn.text:SetText(f.name)
-
-                -- Current committed font marker uses the shared selected-row tint.
-                if SameFontPath(f.path, currentPath) then
-                    addon.settingsDesign.SetListRowSelected(btn, true)
-                    currentRow = row
-                else
-                    addon.settingsDesign.SetListRowSelected(btn, false)
-                end
-                btn:Show()
-                if btn.statsProHovered == true then hoveredVisibleButton = btn end
-            end
-
-            -- Hide leftover pooled buttons defensively if a media provider returns a
-            -- shorter list than it did during an earlier population.
-            for i = #fonts + 1, #fontPickerButtons do
-                fontPickerButtons[i]:Hide()
-            end
-
-            -- A visible retry can rebind a pooled button without firing leave/enter.
-            -- Keep both the tooltip and the live preview attached to what is now under
-            -- the pointer; if that row disappeared, restore the committed font.
-            if hoveredVisibleButton then
-                addon.settingsDesign.RefreshOwnedControlTooltip(hoveredVisibleButton)
-                if not SameFontPath(hoveredVisibleButton.fontPath, previewedPath) then
-                    if PreviewFont(hoveredVisibleButton.fontPath) == false and previewedPath then
-                        CancelFontPreview()
-                    end
-                end
-            elseif previewedPath then
-                CancelFontPreview()
-            end
-
-            -- Center current font in visible area; if in first half of viewport, scroll stays at 0.
-            if currentRow then
-                local centerOffset = math.floor(FONT_PICKER_VISIBLE_ROWS / 2)
-                local targetScroll = math.max(0, (currentRow - centerOffset) * FONT_PICKER_BTN_H)
-                local maxScroll    = math.max(0, rows * FONT_PICKER_BTN_H - FONT_PICKER_VISIBLE_ROWS * FONT_PICKER_BTN_H)
-                fontPickerScroll:SetVerticalScroll(math.min(targetScroll, maxScroll))
-            else
-                fontPickerScroll:SetVerticalScroll(0)
-            end
-        end
-
-        local function SchedulePendingFontPickerRetry(generation, attempt)
-            local delays = addon.fontRuntime.pendingRetryDelays
-            if not cachedFontsListHasPending or attempt > #delays then return end
-            C_Timer.After(delays[attempt], function()
-                if generation ~= fontPickerRetryGeneration
-                    or not fontPickerFrame or not fontPickerFrame:IsShown() then
-                    return
-                end
-                PopulateFontPicker()
-                SchedulePendingFontPickerRetry(generation, attempt + 1)
-            end)
-        end
-
-        local function ShowFontPicker()
-            if not fontPickerInitialized then
-                BuildFontPickerFrame()
-                fontPickerInitialized = true
-            end
-            -- Clean slate per show: any deferred-cancel timer captured prior session's
-            -- hoverGen; bumping here ensures it can't false-positive against this session.
-            -- previewedPath should already be nil from prior OnHide, but reset defensively.
-            previewedPath = nil
-            hoverGen = hoverGen + 1
-            fontPickerRetryGeneration = fontPickerRetryGeneration + 1
-            PopulateFontPicker()  -- always refresh: picks up LSM-added fonts + current-marker drift
-
-            -- Re-apply frame level — defensive against configFrame re-parenting.
-            fontPickerFrame:SetFrameLevel((configFrame and configFrame:GetFrameLevel() or 100) + 50)
-            fontPickerCatcher:SetFrameLevel(fontPickerFrame:GetFrameLevel() - 1)
-
-            -- Anchor TOPLEFT to fontDropdownButton's BOTTOMLEFT (NOT to fontDropdown frame —
-            -- frame includes template chrome with padding; button is the visible edge).
-            local btn = _G["StatsProFontDropdownButton"] or fontDropdown.Button
-            fontPickerFrame:ClearAllPoints()
-            if btn then
-                fontPickerFrame:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -2)
-            else
-                fontPickerFrame:SetPoint("TOPLEFT", fontDropdown, "BOTTOMLEFT", 16, -2)
-            end
-            -- Font Picker exclusively owns the next Escape. Settings is restored from
-            -- OnHide on a later tick so Blizzard cannot close both in one live walk.
-            self.profileUI.CancelSpecialFrameRestore("StatsProConfigFrame")
-            self.profileUI.RemoveSpecialFrame("StatsProConfigFrame")
-            self.profileUI.PushSpecialFrame("StatsProFontPicker")
-            fontPickerCatcher:Show()
-            fontPickerFrame:Show()
-            SchedulePendingFontPickerRetry(fontPickerRetryGeneration, 1)
-            if fontDropdown.statsProTrigger then
-                fontDropdown.statsProTrigger.statsProActive = true
-                addon.settingsDesign.RefreshControl(fontDropdown.statsProTrigger)
-            end
-        end
-
-        local function ToggleFontPicker()
-            if fontPickerFrame and fontPickerFrame:IsShown() then
-                HideFontPicker()
-            else
-                ShowFontPicker()
-            end
-        end
-
-        -- LSM is add-only in normal play, but registrations can arrive after Settings
-        -- was built. Invalidate synchronously, then coalesce a registration burst onto
-        -- one next-tick rebuild instead of probing the growing catalog once per font.
-        if LSM and type(LSM.RegisterCallback) == "function" then
-            LSM.RegisterCallback(self, "LibSharedMedia_Registered", function(_, mediaType)
-                if mediaType ~= LSM.MediaType.FONT then return end
-                cachedFontsList = nil
-                cachedFontsListLen = -1
-                cachedFontsListHasPending = false
-                if fontPickerCatalogRefreshScheduled then return end
-                fontPickerCatalogRefreshScheduled = true
-                C_Timer.After(0, function()
-                    fontPickerCatalogRefreshScheduled = false
-                    if self.fontRuntime.refreshCaption then self.fontRuntime.refreshCaption() end
-                    if not fontPickerFrame or not fontPickerFrame:IsShown() then return end
-                    fontPickerRetryGeneration = fontPickerRetryGeneration + 1
-                    PopulateFontPicker()
-                    SchedulePendingFontPickerRetry(fontPickerRetryGeneration, 1)
-                end)
-            end)
-        end
-
-        CurrentFontName = function()
-            local current = self.fontRuntime.preferredPath()
-            for _, f in ipairs(BuildFontsList()) do
-                if SameFontPath(f.path, current) then return f.name end
-            end
-            return addon.fontRuntime.catalogName(current)
-        end
-        self.fontRuntime.refreshCaption = function()
-            if fontDropdown and CurrentFontName then
-                UIDropDownMenu_SetText(fontDropdown, CurrentFontName())
-            end
-        end
-        UIDropDownMenu_SetText(fontDropdown, CurrentFontName())
-        PushRefresher(function() UIDropDownMenu_SetText(fontDropdown, CurrentFontName()) end)
-
-        -- Override Blizzard's default UIDropDownMenu trigger; open custom picker instead.
-        -- UIDropDownMenuTemplate creates child Button at <frame_name>Button (Cataclysm-stable
-        -- convention) OR exposes as frame.Button (Mixin-style). Defensive lookup covers both.
-        local fontDropdownButton = _G["StatsProFontDropdownButton"] or fontDropdown.Button
-        if fontDropdownButton then
-            fontDropdownButton:SetScript("OnClick", function()
-                PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)  -- audio parity with other dropdowns
-                ToggleFontPicker()
-            end)
-        end
 
         tinsert(displayDropdownRows, {
             text = fontLabel, dropdown = fontDropdown,
@@ -15844,7 +15843,7 @@ function addon:OpenConfigMenu()
 
     CursorGap(cd, 4)
     CursorSection(cd, "Readability")
-    CreateSimpleDropdownRow(
+    self.settingsUI.CreateSimpleDropdownRow(
         appearanceBody,
         displayDropdownRows,
         "StatsProTextOutlineDropdown",
@@ -15872,7 +15871,7 @@ function addon:OpenConfigMenu()
         langLabel:SetPoint("TOPLEFT", cd.padX, rowY)
         PushLocalizedLabel(function() langLabel:SetText(L("Language:")) end)
 
-        -- Linear scan LANGUAGE_OPTIONS for opt.value == value match. 3 callsites.
+        -- Linear scan LANGUAGE_OPTIONS for opt.value == value match. Four callsites.
         local function FindLangOption(value)
             for _, o in ipairs(LANGUAGE_OPTIONS) do
                 if o.value == value then return o end
@@ -15916,91 +15915,6 @@ function addon:OpenConfigMenu()
             return CompactLabel(LANGUAGE_OPTIONS[1])  -- fallback for unknown values
         end
 
-        -- Hover-preview: hovering a language item swaps panel labels live; close-without-pick
-        -- restores. Visual-only preview — no DB writes (so /reload mid-hover doesn't persist
-        -- anything); no langWarn refresh (settings UI stays stable). When the committed font
-        -- doesn't cover the hovered locale's glyphs (e.g. ruRU on enUS client with FRIZQT —
-        -- no Cyrillic), we ALSO preview the auto-fallback font so labels don't render as
-        -- boxes. ruRU client is a no-op via FONT_GLYPH_SUPPORT's locale-conditional FRIZQT
-        -- entry (Cyrillic-supported on ruRU clients only) — FindCompatibleFont returns the
-        -- current font unchanged.
-        local langPreviewActive     = false
-        local langPreviewSwappedFnt = false  -- true when preview ApplyTextStyle'd a fallback
-        local langPreviewLocale            -- last applied preview's resolved locale, for dedup
-
-        local function PreviewLanguage(value)
-            local locale = (value == "auto")
-                and addon.NormalizeOutputLocale(GetLocale()) or value
-            -- Dedup: hovering the SAME locale row twice in succession (mouse jitter,
-            -- entering then exiting then re-entering same item) repeats the heavy work
-            -- (ApplyTextStyleToAllPanels + ApplyConfigFont mutating typography groups +
-            -- RefreshConfigLocalization replaying ~60 setters + alignment re-measure +
-            -- UpdateStats full panel rebuild). Bail when nothing actually changed.
-            if locale == langPreviewLocale then return end
-            langPreviewLocale = locale
-            cached.activeLabels = LABELS_BY_LOCALE[locale] or LABELS_BY_LOCALE.enUS
-            cached.activeLabelsLocale = LABELS_BY_LOCALE[locale] and locale or "enUS"
-
-            -- Visual font swap if the committed font lacks the previewed locale's glyphs.
-            -- WHY currentPath() (committed) and not the currently-rendered preview font:
-            -- consecutive hovers must each evaluate against the BASELINE, otherwise hover
-            -- ru→ARIALN→hover de would compare ARIALN(Latin-OK) and skip restoring FRIZQT.
-            local req      = LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN
-            local cur      = self.fontRuntime.currentPath()
-            local fallback = FindCompatibleFont(cur, req)
-            if fallback and not SameFontPath(fallback, cur) then
-                local applied = ApplyTextStyleToAllPanels(fallback, GetNumberDB("fontSize"))
-                if applied then langPreviewSwappedFnt = true end
-            elseif langPreviewSwappedFnt then
-                -- Previous hover swapped to fallback; this hover doesn't need to. Force
-                -- the restore for the same cache-drift class as picker/dropdown cancel.
-                local restored = ApplyTextStyleToAllPanels(cur, GetNumberDB("fontSize"), true)
-                if restored then langPreviewSwappedFnt = false end
-            end
-
-            langPreviewActive = true
-            -- Replay every settings-UI label setter so the open config window reflects the
-            -- previewed locale live alongside the panel-side UpdateStats below — symmetry
-            -- with the commit path's RefreshConfigLocalization at the dropdown info.func.
-            -- Also re-font settings UI labels: hovering ruRU on enUS client must swap our
-            -- custom CreateFontStrings to ARIALN (Cyrillic) so they don't render as boxes —
-            -- mirrors ApplyTextStyleToAllPanels above for the stat panels' baseline.
-            ApplyConfigFont(ResolveConfigFont(locale))
-            RefreshConfigLocalization()
-            addon:RunUpdateStatsSafe()
-        end
-
-        -- WHY re-resolve from DB instead of stored baseline: mirrors font picker's OnHide
-        -- pattern. Commit path overwrote forceLocale + cleared the flag, so this is a no-op
-        -- post-commit; close-without-pick path restores to baseline (=current forceLocale).
-        local function CancelLanguagePreview()
-            if not langPreviewActive then return end
-            if self.profileRuntime.suppressIntermediateRefresh then
-                langPreviewActive = false
-                langPreviewSwappedFnt = false
-                langPreviewLocale = nil
-                return
-            end
-            local active = ResolveActiveLocale()
-            cached.activeLabels = LABELS_BY_LOCALE[active] or LABELS_BY_LOCALE.enUS
-            cached.activeLabelsLocale = LABELS_BY_LOCALE[active] and active or "enUS"
-            if langPreviewSwappedFnt then
-                local restored = self.fontRuntime.applyCommittedTextStyle(
-                    self.fontRuntime.preferredPath(), GetNumberDB("fontSize"), true, true)
-                if restored then langPreviewSwappedFnt = false end
-            end
-            langPreviewActive = false
-            langPreviewLocale = nil  -- next preview must always run a fresh apply
-            -- Restore settings-UI font for the COMMITTED locale (mirrors stat-panel restore
-            -- above): hover-ruRU-then-cancel on enUS must put our CreateFontStrings back to
-            -- the committed locale's CONFIG_FONT instead of retaining a fallback face.
-            ApplyConfigFont(ResolveConfigFont(active))
-            RefreshConfigLocalization()
-            addon:RunUpdateStatsSafe()
-        end
-        self.profileRuntime.previewLanguage = PreviewLanguage
-        self.profileRuntime.cancelLanguagePreview = CancelLanguagePreview
-
         local langDropdown = CreateFrame("Frame", "StatsProLanguageDropdown", appearanceBody, "UIDropDownMenuTemplate")
         -- Placeholder anchor; AlignSwatchColumn re-anchors at column x = cd.padX + maxLabelW + CONFIG_DROPDOWN_GAP after the Appearance-tab dropdown rows build.
         langDropdown:SetPoint("TOPLEFT", cd.padX + 100, rowY + CONFIG_DROPDOWN_Y_OFFSET)
@@ -16018,7 +15932,7 @@ function addon:OpenConfigMenu()
                     local db = self.dbRuntime.GetWritableSettings(true, "forceLocale")
                     if not db then
                         CloseDropDownMenus()
-                        CancelLanguagePreview()
+                        self.settingsUI.localization.CancelPreview(self)
                         return false
                     end
                     -- Commit supersedes any in-flight hover preview. MaybeAutoSwitchFont
@@ -16033,22 +15947,16 @@ function addon:OpenConfigMenu()
                     -- enUS) leaves MAS short-circuiting via FontSupports(FRIZQT, LATIN)=true,
                     -- so panels remain stuck on ARIALN. Force re-apply db.font (post-MAS,
                     -- authoritative) to undo the preview leak even if appliedFont cache
-                    -- drifted. CancelLanguagePreview does the same conditional restore for
+                    -- drifted. The stable cancel method does the same conditional restore for
                     -- the close-without-pick path.
                     -- ApplyConfigFont is unconditionally called inside MAS so the settings
                     -- UI doesn't share this asymmetry — panels are the only side affected.
-                    if langPreviewSwappedFnt then
-                        local restored = self.fontRuntime.applyCommittedTextStyle(
-                            self.fontRuntime.preferredPath(), GetNumberDB("fontSize"), true, true)
-                        if restored then langPreviewSwappedFnt = false end
-                    end
-                    langPreviewActive     = false
-                    langPreviewLocale     = nil
+                    self.settingsUI.localization.CommitPreview(self)
                     -- WHY: auto-switch may have changed db.font; PushRefresher only fires on Reset.
-                    UIDropDownMenu_SetText(fontDropdown, CurrentFontName())
+                    self.settingsUI.fontPicker.RefreshCaption(self)
                     UIDropDownMenu_SetText(langDropdown, CompactLabel(opt))
                     CloseDropDownMenus()
-                    RefreshLanguageWarning()
+                    context.refreshLanguageWarning()
                     RefreshConfigLocalization()
                     addon:RunUpdateStatsSafe()
                 end
@@ -16069,7 +15977,7 @@ function addon:OpenConfigMenu()
                     btn:HookScript("OnEnter", function(button)
                         if UIDROPDOWNMENU_OPEN_MENU ~= langDropdown then return end
                         if button.value == nil then return end  -- separator/title row
-                        PreviewLanguage(button.value)
+                        self.settingsUI.localization.Preview(self, button.value)
                     end)
                     btn._statsProLangPreviewHooked = true
                 end
@@ -16078,7 +15986,9 @@ function addon:OpenConfigMenu()
 
         if DropDownList1 then
             DropDownList1:HookScript("OnShow", HookLanguageMenuButtons)
-            DropDownList1:HookScript("OnHide", CancelLanguagePreview)
+            DropDownList1:HookScript("OnHide", function()
+                self.settingsUI.localization.CancelPreview(self)
+            end)
         end
 
         -- 24 + cd.gap (6) = 30 effective; matches Display Mode dropdown row pattern.
@@ -16095,10 +16005,9 @@ function addon:OpenConfigMenu()
         langWarn:SetWordWrap(true)
         langWarn:SetMaxLines(2)
         langWarn:SetText("")
-        if self.__statsproSmoke == true then configFrame.languageWarning = langWarn end
+        if self.__statsproSmoke == true then ownerFrame.languageWarning = langWarn end
 
-        -- Assignment to file-scope upvalue declared in section 15 prelude (NOT a global).
-        RefreshLanguageWarning = function()
+        context.refreshLanguageWarning = function()
             local active = ResolveActiveLocale()
             local req    = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
             if FontSupports(self.fontRuntime.preferredPath(), req) then
@@ -16119,7 +16028,7 @@ function addon:OpenConfigMenu()
         -- this UI boundary. The language commit handler also calls this for an immediate recheck.
         local function RefreshLanguageControls()
             UIDropDownMenu_SetText(langDropdown, CurrentLabel())
-            RefreshLanguageWarning()
+            context.refreshLanguageWarning()
         end
         PushLocalizedLabel(RefreshLanguageControls)
         -- WHY fixed two-line reservation: localized warnings wrap inside the padded
@@ -16182,14 +16091,117 @@ function addon:OpenConfigMenu()
 
             displayTab.contentHeight = math.abs(bodyTop) + appearanceBody.contentHeight
             displayTab:SetHeight(displayTab.contentHeight)
-            if configFrame.activeTabIndex == 3 then
+            if ownerFrame.activeTabIndex == 3 then
                 scrollChild:SetHeight(displayTab.contentHeight)
             end
         end
         self.appearancePresets.RefreshUI()
     end
+end
 
+addon.settingsUI.dependentStatGroups = {
+    {
+        section = "Offensive Stats",
+        masterName = "StatsProOffensiveCheck",
+        masterLabel = "Show Offensive Stats",
+        masterKey = "showOffensive",
+        hideZeroName = "StatsProHideZeroOffCheck",
+        hideZeroKey = "hideZeroOffensive",
+        entries = {
+            { name = "StatsProCritCheck", label = "Show Crit", key = "showCrit",
+                color = "crit", column = 1, row = 0 },
+            { name = "StatsProHasteCheck", label = "Show Haste", key = "showHaste",
+                color = "haste", column = 2, row = 0 },
+            { name = "StatsProMasteryCheck", label = "Show Mastery", key = "showMastery",
+                color = "mastery", column = 1, row = 1 },
+            { name = "StatsProVersCheck", label = "Show Versatility",
+                key = "showVersatility", color = "versatility", column = 2, row = 1 },
+        },
+    },
+    {
+        section = "Tertiary Stats",
+        masterName = "StatsProTertiaryCheck",
+        masterLabel = "Show Tertiary Stats",
+        masterKey = "showTertiary",
+        hideZeroName = "StatsProHideZeroCheck",
+        hideZeroKey = "hideZeroTertiary",
+        entries = {
+            { name = "StatsProLeechCheck", label = "Show Leech", key = "showLeech",
+                color = "leech", column = 1, row = 0 },
+            { name = "StatsProAvoidanceCheck", label = "Show Avoidance",
+                key = "showAvoidance", color = "avoidance", column = 2, row = 0 },
+            { name = "StatsProSpeedCheck", label = "Show Speed", key = "showSpeed",
+                color = "speed", column = 1, row = 1 },
+        },
+    },
+    {
+        section = "Defensive Stats",
+        masterName = "StatsProDefensiveCheck",
+        masterLabel = "Show Defensive Stats",
+        masterKey = "showDefensive",
+        hideZeroName = "StatsProHideZeroDefCheck",
+        hideZeroKey = "hideZeroDefensive",
+        entries = {
+            { name = "StatsProDodgeCheck", label = "Show Dodge", key = "showDodge",
+                color = "dodge", column = 1, row = 0 },
+            { name = "StatsProParryCheck", label = "Show Parry", key = "showParry",
+                color = "parry", column = 2, row = 0 },
+            { name = "StatsProBlockCheck", label = "Show Block", key = "showBlock",
+                color = "block", column = 1, row = 1 },
+            { name = "StatsProArmorCheck", label = "Show Armor", key = "showArmor",
+                color = "armor", column = 2, row = 1 },
+            { name = "StatsProStaggerCheck", label = "Show Stagger",
+                key = "showStagger", color = "stagger", column = 1, row = 2 },
+        },
+    },
+}
+
+function addon.settingsUI.BuildDependentStatGroup(self, parent, cursor, definition)
+    CursorSection(cursor, definition.section)
+    local rowY = cursor.y
+    local subControls = {}
+    local function ApplySubControlsEnabled(masterOn)
+        for _, control in ipairs(subControls) do
+            SetCheckboxEnabled(control, masterOn, definition.masterLabel)
+        end
+    end
+
+    CreateCheckbox(parent, definition.masterName, definition.masterLabel,
+        definition.masterKey, cursor.padX, rowY,
+        function(checked) ApplySubControlsEnabled(checked) end)
+    CreateCheckbox(parent, definition.hideZeroName, "Hide Zero Values",
+        definition.hideZeroKey, cursor.padX + CONFIG_COL_OFFSET, rowY)
+    cursor.y = rowY - 26
+
+    local columns = { {}, {} }
+    local rowCount = 0
+    local rowPitch = 22 + cursor.gap
+    for _, entry in ipairs(definition.entries) do
+        local control, swatch, text = CreateCheckboxColor(parent, entry.name,
+            entry.label, entry.key, entry.color,
+            cursor.padX + (entry.column - 1) * CONFIG_COL_OFFSET,
+            cursor.y - entry.row * rowPitch)
+        subControls[#subControls + 1] = control
+        columns[entry.column][#columns[entry.column] + 1] = {
+            text = text,
+            swatch = swatch,
+        }
+        rowCount = math.max(rowCount, entry.row + 1)
+    end
+    cursor.y = cursor.y - rowCount * rowPitch
+    AlignSwatchColumn(columns[1])
+    AlignSwatchColumn(columns[2])
+    ApplySubControlsEnabled(GetBoolDB(definition.masterKey))
+    PushRefresher(function()
+        ApplySubControlsEnabled(GetBoolDB(definition.masterKey))
+    end)
+end
+
+function addon.settingsUI.BuildStatsTab(self, context)
     --[[ ===== STATS TAB ===== ]]
+    local statsTab = context.statsTab
+    local scrollChild = context.scrollChild
+    local ownerFrame = context.frame
     local cs = NewCursor(statsTab, 12, -8)
 
     CursorSection(cs, "Quick Setup")
@@ -16230,7 +16242,7 @@ function addon:OpenConfigMenu()
         if statsBody.contentHeight then
             statsTab.contentHeight = math.abs(bodyTop) + statsBody.contentHeight
             statsTab:SetHeight(statsTab.contentHeight)
-            if configFrame.activeTabIndex == 1 then
+            if ownerFrame.activeTabIndex == 1 then
                 scrollChild:SetHeight(statsTab.contentHeight)
             end
         end
@@ -16262,116 +16274,18 @@ function addon:OpenConfigMenu()
 
     CursorGap(cs, 6)
 
-    CursorSection(cs, "Offensive Stats")
-    do
-        local rowY = cs.y
-        local critCb, hasteCb, masteryCb, versCb
-        local function ApplyOffensiveSubsEnabled(masterOn)
-            SetCheckboxEnabled(critCb,    masterOn, "Show Offensive Stats")
-            SetCheckboxEnabled(hasteCb,   masterOn, "Show Offensive Stats")
-            SetCheckboxEnabled(masteryCb, masterOn, "Show Offensive Stats")
-            SetCheckboxEnabled(versCb,    masterOn, "Show Offensive Stats")
-        end
-        CreateCheckbox(statsBody, "StatsProOffensiveCheck",  "Show Offensive Stats", "showOffensive",     cs.padX,       rowY,
-            function(checked) ApplyOffensiveSubsEnabled(checked) end)
-        CreateCheckbox(statsBody, "StatsProHideZeroOffCheck", "Hide Zero Values",    "hideZeroOffensive", cs.padX + CONFIG_COL_OFFSET, rowY)
-        cs.y = rowY - 26
-        -- Inline color swatches per stat (mirrors Defensive dodge/parry/block/armor pattern).
-        -- Two-column AlignSwatchColumn — left and right column widths measured independently.
-        local leftRows, rightRows = {}, {}
-        local sw, txt
-        critCb,    sw, txt = CreateCheckboxColor(statsBody, "StatsProCritCheck",    "Show Crit",        "showCrit",        "crit",        cs.padX,                       cs.y)
-        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
-        hasteCb,   sw, txt = CreateCheckboxColor(statsBody, "StatsProHasteCheck",   "Show Haste",       "showHaste",       "haste",       cs.padX + CONFIG_COL_OFFSET, cs.y)
-        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
-        CursorAdvance(cs, 22)
-        masteryCb, sw, txt = CreateCheckboxColor(statsBody, "StatsProMasteryCheck", "Show Mastery",     "showMastery",     "mastery",     cs.padX,                       cs.y)
-        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
-        versCb,    sw, txt = CreateCheckboxColor(statsBody, "StatsProVersCheck",    "Show Versatility", "showVersatility", "versatility", cs.padX + CONFIG_COL_OFFSET, cs.y)
-        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
-        CursorAdvance(cs, 22)
-        AlignSwatchColumn(leftRows)
-        AlignSwatchColumn(rightRows)
-        ApplyOffensiveSubsEnabled(GetBoolDB("showOffensive"))
-        PushRefresher(function() ApplyOffensiveSubsEnabled(GetBoolDB("showOffensive")) end)
-    end
+    self.settingsUI.BuildDependentStatGroup(
+        self, statsBody, cs, self.settingsUI.dependentStatGroups[1])
 
     CursorGap(cs, 6)
 
-    CursorSection(cs, "Tertiary Stats")
-    do
-        local rowY = cs.y
-        -- Sub-toggle refs captured to grey them when master is off (mirrors the
-        -- dependency-disable pattern in the Defensive Stats section).
-        local leechCb, avoidanceCb, speedCb
-        local function ApplyTertiarySubsEnabled(masterOn)
-            SetCheckboxEnabled(leechCb,     masterOn, "Show Tertiary Stats")
-            SetCheckboxEnabled(avoidanceCb, masterOn, "Show Tertiary Stats")
-            SetCheckboxEnabled(speedCb,     masterOn, "Show Tertiary Stats")
-        end
-        CreateCheckbox(statsBody, "StatsProTertiaryCheck", "Show Tertiary Stats", "showTertiary", cs.padX, rowY,
-            function(checked) ApplyTertiarySubsEnabled(checked) end)
-        CreateCheckbox(statsBody, "StatsProHideZeroCheck", "Hide Zero Values",    "hideZeroTertiary", cs.padX + CONFIG_COL_OFFSET, rowY)
-        cs.y = rowY - 26
-        -- Two-column grid matches Offensive/Defensive sections. With 3 stats the right
-        -- side of row 2 is empty; left/right columns align via independent AlignSwatchColumn.
-        local leftRows, rightRows = {}, {}
-        local sw, txt
-        leechCb,     sw, txt = CreateCheckboxColor(statsBody, "StatsProLeechCheck",     "Show Leech",     "showLeech",     "leech",     cs.padX,                       cs.y)
-        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
-        avoidanceCb, sw, txt = CreateCheckboxColor(statsBody, "StatsProAvoidanceCheck", "Show Avoidance", "showAvoidance", "avoidance", cs.padX + CONFIG_COL_OFFSET, cs.y)
-        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
-        CursorAdvance(cs, 22)
-        speedCb,     sw, txt = CreateCheckboxColor(statsBody, "StatsProSpeedCheck",     "Show Speed",     "showSpeed",     "speed",     cs.padX,                       cs.y)
-        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
-        CursorAdvance(cs, 22)
-        AlignSwatchColumn(leftRows)
-        AlignSwatchColumn(rightRows)
-        ApplyTertiarySubsEnabled(GetBoolDB("showTertiary"))
-        PushRefresher(function() ApplyTertiarySubsEnabled(GetBoolDB("showTertiary")) end)
-    end
+    self.settingsUI.BuildDependentStatGroup(
+        self, statsBody, cs, self.settingsUI.dependentStatGroups[2])
 
     CursorGap(cs, 6)
 
-    CursorSection(cs, "Defensive Stats")
-    do
-        local rowY = cs.y
-        -- Sub-toggle refs captured to grey them when master is off (mirrors Tertiary tab).
-        local dodgeCb, parryCb, blockCb, armorCb, staggerCb
-        local function ApplyDefensiveSubsEnabled(masterOn)
-            SetCheckboxEnabled(dodgeCb, masterOn, "Show Defensive Stats")
-            SetCheckboxEnabled(parryCb, masterOn, "Show Defensive Stats")
-            SetCheckboxEnabled(blockCb, masterOn, "Show Defensive Stats")
-            SetCheckboxEnabled(armorCb, masterOn, "Show Defensive Stats")
-            SetCheckboxEnabled(staggerCb, masterOn, "Show Defensive Stats")
-        end
-        CreateCheckbox(statsBody, "StatsProDefensiveCheck",   "Show Defensive Stats", "showDefensive",     cs.padX,       rowY,
-            function(checked) ApplyDefensiveSubsEnabled(checked) end)
-        CreateCheckbox(statsBody, "StatsProHideZeroDefCheck", "Hide Zero Values",     "hideZeroDefensive", cs.padX + CONFIG_COL_OFFSET, rowY)
-        cs.y = rowY - 26
-        -- Each defensive stat with its own inline color swatch. Two balanced columns;
-        -- aligned per-column via AlignSwatchColumn so left swatches share an x and right
-        -- swatches share an x (each column's max GetStringWidth measured independently).
-        local leftRows, rightRows = {}, {}
-        local sw, txt
-        dodgeCb, sw, txt = CreateCheckboxColor(statsBody, "StatsProDodgeCheck", "Show Dodge", "showDodge", "dodge", cs.padX,                       cs.y)
-        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
-        parryCb, sw, txt = CreateCheckboxColor(statsBody, "StatsProParryCheck", "Show Parry", "showParry", "parry", cs.padX + CONFIG_COL_OFFSET, cs.y)
-        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
-        CursorAdvance(cs, 22)
-        blockCb, sw, txt = CreateCheckboxColor(statsBody, "StatsProBlockCheck", "Show Block", "showBlock", "block", cs.padX,                       cs.y)
-        leftRows[#leftRows + 1]   = { text = txt, swatch = sw }
-        armorCb, sw, txt = CreateCheckboxColor(statsBody, "StatsProArmorCheck", "Show Armor", "showArmor", "armor", cs.padX + CONFIG_COL_OFFSET, cs.y)
-        rightRows[#rightRows + 1] = { text = txt, swatch = sw }
-        CursorAdvance(cs, 22)
-        staggerCb, sw, txt = CreateCheckboxColor(statsBody, "StatsProStaggerCheck", "Show Stagger", "showStagger", "stagger", cs.padX, cs.y)
-        leftRows[#leftRows + 1] = { text = txt, swatch = sw }
-        CursorAdvance(cs, 22)
-        AlignSwatchColumn(leftRows)
-        AlignSwatchColumn(rightRows)
-        ApplyDefensiveSubsEnabled(GetBoolDB("showDefensive"))
-        PushRefresher(function() ApplyDefensiveSubsEnabled(GetBoolDB("showDefensive")) end)
-    end
+    self.settingsUI.BuildDependentStatGroup(
+        self, statsBody, cs, self.settingsUI.dependentStatGroups[3])
 
     CursorGap(cs, 6)
 
@@ -16419,17 +16333,59 @@ function addon:OpenConfigMenu()
         + statsBody.contentHeight
     statsTab:SetHeight(statsTab.contentHeight)
     self.hudPresets.RegisterView(setupUI)
+end
+
+function addon:OpenConfigMenu()
+    -- Opening Settings is discovery enough. Keep navigation zero-write; the delayed
+    -- onboarding check commits the marker even if this happens before profile bootstrap
+    -- or Settings closes before the first-install timer fires.
+    self.hudPresets.settingsDiscovered = true
+    local welcome = self.hudPresets.welcome
+    if welcome and welcome:IsShown() then
+        welcome.statsProSettingsHandoff = true
+        self.hudPresets.MarkWelcomeSeen()
+        welcome:Hide()
+        welcome.statsProSettingsHandoff = nil
+    end
+    -- Settings remains inspectable under a future schema, but the shared write gate
+    -- explains once per session why every mutating control is read-only.
+    self.dbRuntime.GetWritableSettings(true)
+    local settingsFrame = self.settingsUI.frame
+    if settingsFrame then
+        if settingsFrame:IsShown() then
+            settingsFrame:Hide()
+        else
+            settingsFrame:Show()
+            -- Always reopen on the first tab (Stats) — predictable UX, matches initial open.
+            if settingsFrame.SwitchToTab then settingsFrame.SwitchToTab(1) end
+            self.profileUI.RefreshSafe()
+        end
+        return
+    end
+
+    -- These registries belong to the one-shot Settings window. Persistent launcher
+    -- labels intentionally live in localizedPersistentLabels and survive this reset.
+    wipe(configRefreshers)
+    wipe(alignmentGroups)
+    wipe(localizedConfigLabels)
+    wipe(localizedConfigFonts)
+
+    local context = self.settingsUI.BuildShell(self)
+    self.settingsUI.BuildLayoutTab(self, context)
+    self.settingsUI.BuildAppearanceTab(self, context)
+    self.settingsUI.BuildStatsTab(self, context)
 
     --[[ ===== Initial state ===== ]]
     self.settingsDesign.RefreshMutationControls()
-    SwitchToTab(1)
+    context.switchToTab(1)
     -- CreateFrame starts shown, before the OnShow hook above exists. Explicitly seed
     -- the first-open state; later opens are handled by the hook.
     self.panelEditRuntime.SetRequested(true)
 end
 
 function addon:ShowConfigMenu()
-    if configFrame and configFrame:IsShown() then return end
+    local settingsFrame = self.settingsUI.frame
+    if settingsFrame and settingsFrame:IsShown() then return end
     self:OpenConfigMenu()
 end
 
@@ -17142,10 +17098,10 @@ if addon and addon.__statsproSmoke == true then
             }
         end,
         previewFontForSmoke = function(path)
-            return addon.profileRuntime.previewFont(path)
+            return addon.settingsUI.fontPicker.Preview(addon, path)
         end,
         previewLanguageForSmoke = function(locale)
-            return addon.profileRuntime.previewLanguage(locale)
+            return addon.settingsUI.localization.Preview(addon, locale)
         end,
         addConfigRefresherForSmoke = function(refresh)
             PushRefresher(refresh)
@@ -17209,9 +17165,10 @@ if addon and addon.__statsproSmoke == true then
             addon.settingsDesign.RefreshMutationControls()
         end,
         settingsShellState = function()
-            if not configFrame then return nil end
+            local settingsFrame = addon.settingsUI.frame
+            if not settingsFrame then return nil end
             local sections = {}
-            for tabIndex, tab in ipairs(configFrame.tabContents or {}) do
+            for tabIndex, tab in ipairs(settingsFrame.tabContents or {}) do
                 sections[tabIndex] = {}
                 for sectionIndex, section in ipairs(tab.statsProSections or {}) do
                     sections[tabIndex][sectionIndex] = {
@@ -17225,8 +17182,8 @@ if addon and addon.__statsproSmoke == true then
                 end
             end
             return {
-                shell = configFrame.settingsShell,
-                tabs = configFrame.tabButtons,
+                shell = settingsFrame.settingsShell,
+                tabs = settingsFrame.tabButtons,
                 sections = sections,
             }
         end,
@@ -17478,9 +17435,10 @@ if addon and addon.__statsproSmoke == true then
                     stopMovingCalls = rawget(panel.frame, "stopMovingCalls") or 0,
                 }
             end
+            local settingsFrame = addon.settingsUI.frame
             return {
                 requested = addon.panelEditRuntime.requested == true,
-                configShown = configFrame and configFrame:IsShown() or false,
+                configShown = settingsFrame and settingsFrame:IsShown() or false,
                 locked = cached.isLocked,
                 combat = addon.profileRuntime.ReadCombatState(),
                 main = Snapshot(mainPanel),

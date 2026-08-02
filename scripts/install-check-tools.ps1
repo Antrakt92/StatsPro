@@ -192,7 +192,7 @@ function Install-PinnedLua51 {
             if (($destinationItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
                 throw "Pinned Lua destination cannot be replaced through a reparse point."
             }
-            [System.IO.Directory]::Delete($destinationFull, $true)
+            Remove-StatsProDirectoryWithRetry -Path $destinationFull
         }
         Move-Item -LiteralPath $staging -Destination $DestinationRoot
         [void](Assert-Lua51Pair -Root $DestinationRoot -Locks $Locks)
@@ -206,7 +206,7 @@ function Install-PinnedLua51 {
             [System.IO.File]::Delete($archive)
         }
         if (Test-Path -LiteralPath $staging -PathType Container) {
-            [System.IO.Directory]::Delete($staging, $true)
+            Remove-StatsProDirectoryWithRetry -Path $staging
         }
     }
 }
@@ -256,9 +256,9 @@ function Remove-OwnedToolDirectory {
         -DestinationRoot $DestinationRoot `
         -AllowedToolRoot $AllowedToolRoot `
         -Label $Label
-    if ([System.IO.Directory]::Exists($destinationFull)) {
-        [System.IO.Directory]::Delete($destinationFull, $true)
-    }
+    # Windows can retain a just-exited tool's DLL mapping briefly. The shared
+    # bounded cleanup keeps every owned-tool path consistent and idempotent.
+    Remove-StatsProDirectoryWithRetry -Path $destinationFull
 }
 
 function Assert-LuaLanguageServerRoot {
@@ -325,7 +325,7 @@ function Install-PinnedLuaLanguageServer {
             [System.IO.File]::Delete($archive)
         }
         if ([System.IO.Directory]::Exists($staging)) {
-            [System.IO.Directory]::Delete($staging, $true)
+            Remove-StatsProDirectoryWithRetry -Path $staging
         }
     }
 }
@@ -461,7 +461,7 @@ function Install-PinnedLuaRocksBundle {
     }
     finally {
         if ([System.IO.Directory]::Exists($downloadRoot)) {
-            [System.IO.Directory]::Delete($downloadRoot, $true)
+            Remove-StatsProDirectoryWithRetry -Path $downloadRoot
         }
     }
 }
@@ -600,6 +600,16 @@ function Invoke-SelfTest {
     $selfTestRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-tool-selftest-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $selfTestRoot | Out-Null
     try {
+        $cleanupRoot = Join-Path $selfTestRoot "cleanup"
+        New-Item -ItemType Directory -Path $cleanupRoot | Out-Null
+        [System.IO.File]::WriteAllText((Join-Path $cleanupRoot "owned.bin"), "owned")
+        Remove-StatsProDirectoryWithRetry -Path $cleanupRoot
+        Assert-Equal "bounded cleanup removes an owned directory" `
+            (Test-Path -LiteralPath $cleanupRoot) $false
+        Remove-StatsProDirectoryWithRetry -Path $cleanupRoot
+        Assert-Equal "bounded cleanup is idempotent" `
+            (Test-Path -LiteralPath $cleanupRoot) $false
+
         $good = Join-Path $selfTestRoot "good.bin"
         $bad = Join-Path $selfTestRoot "bad.bin"
         [System.IO.File]::WriteAllText($good, "trusted")
@@ -725,7 +735,7 @@ function Invoke-SelfTest {
         Assert-Equal "tampered installer leaves PATH unchanged" $env:PATH $pathBefore
     }
     finally {
-        [System.IO.Directory]::Delete($selfTestRoot, $true)
+        Remove-StatsProDirectoryWithRetry -Path $selfTestRoot
     }
     Assert-StatsProPackageVersionLine -Label "luacheck" -Output @("luacheck`t1.2.0-1`tinstalled`tC:/rocks") -ExpectedVersion "1.2.0-1"
 
@@ -768,7 +778,7 @@ if ($PinnedLuaIntegrationTest) {
     }
     finally {
         if (Test-Path -LiteralPath $integrationToolRoot -PathType Container) {
-            [System.IO.Directory]::Delete($integrationToolRoot, $true)
+            Remove-StatsProDirectoryWithRetry -Path $integrationToolRoot
         }
     }
     return

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.12.2 - 03-Aug-2026 — Settings and runtime reliability
+
+### Fixed
+
+- **Settings now opens reliably even when a newly created FontString cannot accept a direct font during client startup.** Config labels inherit their owned FontObject before receiving text, and failed font rollbacks no longer call `SetText` on an unconfigured region.
+- **Movement keeps its percentage contract during restricted combat without attempting to convert a protected yards-per-second value.** When the client withholds the number, StatsPro now reports an honest unknown state instead of reusing or inventing a percentage.
+- **Rapid consecutive panel drags now keep the click guard until the newest drag finishes, preventing an older timer from opening Settings unexpectedly.**
+
+### Updated
+
+- **Bundled M+ High Keys and Raid Mythic All Bosses target ratings were refreshed from Archon on 03-Aug-2026.**
+
 ## 1.12.1 - 01-Aug-2026 — Archon target refresh
 
 ### Updated

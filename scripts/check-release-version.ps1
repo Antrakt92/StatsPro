@@ -11,25 +11,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
-
-function Get-SingleRegexMatch {
-    param(
-        [string]$Path,
-        [string]$Pattern,
-        [string]$Description
-    )
-
-    $Text = Get-Content -Path $Path -Raw -Encoding UTF8
-    $Matches = [regex]::Matches($Text, $Pattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
-    if ($Matches.Count -eq 0) {
-        throw "Missing $Description in $Path"
-    }
-    if ($Matches.Count -gt 1) {
-        throw "Found multiple $Description values in $Path"
-    }
-    return $Matches[0].Groups[1].Value
-}
 
 function Invoke-Git {
     param(
@@ -634,24 +617,6 @@ function Assert-ReleaseVersion {
     Export-TopChangelogEntry -SourcePath "CHANGELOG.md" -DestinationPath $ExportTopChangelogPath
 
     Write-Host "Release version check passed: $TagName -> $TagVersion"
-}
-
-function Assert-ThrowsMatch {
-    param([string]$Name, [scriptblock]$Script, [string]$Pattern)
-
-    $ok = $false
-    try {
-        & $Script
-        $ok = $true
-    }
-    catch {
-        if ($_.Exception.Message -notmatch $Pattern) {
-            throw "$Name failed with wrong error: $($_.Exception.Message)"
-        }
-    }
-    if ($ok) {
-        throw "$Name should have failed."
-    }
 }
 
 function Invoke-SelfTest {

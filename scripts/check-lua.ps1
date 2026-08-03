@@ -10,6 +10,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "tool-version-locks.ps1")
 . (Join-Path $PSScriptRoot "native-process.ps1")
 
@@ -215,24 +216,6 @@ function Assert-UndefinedFieldDiagnosticsEnabled {
     $disabled = @($config.'diagnostics.disable')
     if ($disabled -contains "undefined-field") {
         throw "LuaLS config must keep undefined-field diagnostics enabled."
-    }
-}
-
-function Assert-ThrowsMatch {
-    param([string]$Name, [scriptblock]$Script, [string]$Pattern)
-
-    $ok = $false
-    try {
-        & $Script
-        $ok = $true
-    }
-    catch {
-        if ($_.Exception.Message -notmatch $Pattern) {
-            throw "$Name failed with wrong error: $($_.Exception.Message)"
-        }
-    }
-    if ($ok) {
-        throw "$Name should have failed."
     }
 }
 

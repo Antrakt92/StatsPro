@@ -6,20 +6,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "release-check-contract.ps1")
 
-function Assert-Equal {
-    param(
-        [string]$Name,
-        [object]$Actual,
-        [object]$Expected
-    )
-
-    if ($Actual -ne $Expected) {
-        throw "$Name expected <$Expected>, got <$Actual>."
-    }
-}
-
-function Assert-ThrowsMatch {
+function Assert-ThrowsWithMessage {
     param([string]$Name, [scriptblock]$Script, [string]$Pattern)
     try {
         & $Script
@@ -195,7 +184,7 @@ jobs:
 "@
         $refs = @(Read-WorkflowActionRefs -WorkflowRoot $workflowRoot)
         Assert-Equal "workflow ref count" $refs.Count 3
-        Assert-ThrowsMatch "unpinned workflow ref rejected" {
+        Assert-ThrowsWithMessage "unpinned workflow ref rejected" {
             Assert-WorkflowActionRefsPinned -Refs $refs
         } "actions/checkout@v6.*40-character SHA"
 

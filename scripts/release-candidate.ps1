@@ -18,39 +18,12 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 
 $CandidateFileName = "statspro-release-candidate.json"
 $ReleaseJsonFileName = "release.json"
 $ManifestFileName = "statspro-package-tree.sha256"
-
-function ConvertFrom-JsonCompat {
-    param([string]$Json)
-
-    $command = Get-Command ConvertFrom-Json
-    if ($command.Parameters.ContainsKey("Depth")) {
-        return ($Json | ConvertFrom-Json -Depth 100)
-    }
-    return ($Json | ConvertFrom-Json)
-}
-
-function Assert-ThrowsMatch {
-    param([string]$Name, [scriptblock]$Script, [string]$Pattern)
-
-    $completed = $false
-    try {
-        & $Script
-        $completed = $true
-    }
-    catch {
-        if ($_.Exception.Message -notmatch $Pattern) {
-            throw "$Name failed with wrong error: $($_.Exception.Message)"
-        }
-    }
-    if ($completed) {
-        throw "$Name should have failed."
-    }
-}
 
 function Assert-RepositoryName {
     param([string]$Value)
@@ -101,19 +74,11 @@ function Assert-Sha256 {
     }
 }
 
-function Resolve-RequiredFile {
-    param([string]$Path, [string]$Description)
-
-    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-        throw "Missing $Description file '$Path'."
-    }
-    return (Resolve-Path -LiteralPath $Path).Path
-}
-
-function Get-LowercaseFileSha256 {
+function Get-ValidatedLowercaseFileSha256 {
     param([string]$Path)
 
-    return (Get-FileHash -LiteralPath (Resolve-RequiredFile -Path $Path -Description "hash input") -Algorithm SHA256).Hash.ToLowerInvariant()
+    $resolved = Resolve-RequiredFile -Path $Path -Description "hash input"
+    return Get-LowercaseFileSha256 -Path $resolved
 }
 
 function Get-FileContract {
@@ -127,21 +92,7 @@ function Get-FileContract {
     return [pscustomobject][ordered]@{
         name = $Name
         size = [long]$size
-        sha256 = Get-LowercaseFileSha256 -Path $resolved
-    }
-}
-
-function Assert-ExactPropertySet {
-    param([object]$Value, [string[]]$Expected, [string]$Description)
-
-    if ($null -eq $Value) {
-        throw "$Description is missing."
-    }
-    $actual = @($Value.PSObject.Properties.Name | Sort-Object)
-    $expectedSorted = @($Expected | Sort-Object)
-    if ($actual.Count -ne $expectedSorted.Count -or
-        (Compare-Object -ReferenceObject $expectedSorted -DifferenceObject $actual)) {
-        throw "$Description fields are '$($actual -join ', ')'; expected '$($expectedSorted -join ', ')'."
+        sha256 = Get-ValidatedLowercaseFileSha256 -Path $resolved
     }
 }
 
@@ -259,7 +210,7 @@ function New-ReleaseCandidate {
     Add-OutputValue -Path $GithubOutputPath -Name "manifest_path" -Value $resolved.Manifest
     Add-OutputValue -Path $GithubOutputPath -Name "candidate_path" -Value ([System.IO.Path]::GetFullPath($Destination))
     Add-OutputValue -Path $GithubOutputPath -Name "archive_sha256" -Value $candidate.files.archive.sha256
-    Add-OutputValue -Path $GithubOutputPath -Name "candidate_sha256" -Value (Get-LowercaseFileSha256 -Path $Destination)
+    Add-OutputValue -Path $GithubOutputPath -Name "candidate_sha256" -Value (Get-ValidatedLowercaseFileSha256 -Path $Destination)
     return $candidate
 }
 
@@ -278,7 +229,7 @@ function Read-ReleaseCandidate {
     $resolved = Resolve-RequiredFile -Path $Path -Description "release candidate"
     Assert-ExpectedFileName -Path $resolved -ExpectedName $CandidateFileName -Description "candidate"
     Assert-Sha256 -Value $ExpectedSha256 -Description "Expected candidate SHA-256"
-    $actualSha = Get-LowercaseFileSha256 -Path $resolved
+    $actualSha = Get-ValidatedLowercaseFileSha256 -Path $resolved
     if (-not [System.StringComparer]::Ordinal.Equals($actualSha, $ExpectedSha256)) {
         throw "Release candidate SHA-256 is '$actualSha', expected '$ExpectedSha256'."
     }
@@ -516,7 +467,7 @@ function Confirm-ReleaseCandidate {
     $resolvedPaths = [ordered]@{}
     foreach ($key in $bindings.Keys) {
         $path = Join-Path $root ([string]$bindings[$key].name)
-        $actualSha = Get-LowercaseFileSha256 -Path $path
+        $actualSha = Get-ValidatedLowercaseFileSha256 -Path $path
         $actualSize = (Get-Item -LiteralPath $path).Length
         if ($actualSize -ne [long]$bindings[$key].size) {
             throw "Release handoff $key size is '$actualSize', expected '$($bindings[$key].size)'."
@@ -615,7 +566,7 @@ function Invoke-SelfTest {
             -Manifest $manifest `
             -Destination $candidate `
             -ValidateArtifact $validator)
-        $candidateSha = Get-LowercaseFileSha256 -Path $candidate
+        $candidateSha = Get-ValidatedLowercaseFileSha256 -Path $candidate
         [void](Confirm-ReleaseCandidate `
             -RepositoryName 'owner/repo' `
             -Tag $tag `
@@ -666,7 +617,7 @@ function Invoke-SelfTest {
             -Manifest $manifest `
             -Destination $candidate `
             -ValidateArtifact $validator)
-        $candidateSha = Get-LowercaseFileSha256 -Path $candidate
+        $candidateSha = Get-ValidatedLowercaseFileSha256 -Path $candidate
 
         Assert-ThrowsMatch "wrong candidate digest rejected" {
             [void](Read-ReleaseCandidate -Path $candidate -ExpectedSha256 ('f' * 64) -RepositoryName 'owner/repo' -Tag $tag -CommitSha $commit -RunId $runId -RunAttempt $runAttempt -ProjectVersion $projectVersion)
@@ -686,17 +637,17 @@ function Invoke-SelfTest {
             throw "Failed semantic validation still created a release candidate."
         }
         [void](New-ReleaseCandidate -RepositoryName 'owner/repo' -Tag $tag -CommitSha $commit -RunId $runId -RunAttempt $runAttempt -ProjectVersion $projectVersion -Archive $archive -ReleaseJson $releaseJson -Manifest $manifest -Destination $candidate -ValidateArtifact $validator)
-        $candidateSha = Get-LowercaseFileSha256 -Path $candidate
+        $candidateSha = Get-ValidatedLowercaseFileSha256 -Path $candidate
 
         $json = ConvertFrom-JsonCompat ([System.IO.File]::ReadAllText($candidate))
         $json | Add-Member -NotePropertyName extra -NotePropertyValue $true
         Write-Utf8NoBom -Path $candidate -Text (($json | ConvertTo-Json -Depth 6 -Compress) + "`n")
         Assert-ThrowsMatch "extra candidate field rejected" {
-            [void](Read-ReleaseCandidate -Path $candidate -ExpectedSha256 (Get-LowercaseFileSha256 -Path $candidate) -RepositoryName 'owner/repo' -Tag $tag -CommitSha $commit -RunId $runId -RunAttempt $runAttempt -ProjectVersion $projectVersion)
+            [void](Read-ReleaseCandidate -Path $candidate -ExpectedSha256 (Get-ValidatedLowercaseFileSha256 -Path $candidate) -RepositoryName 'owner/repo' -Tag $tag -CommitSha $commit -RunId $runId -RunAttempt $runAttempt -ProjectVersion $projectVersion)
         } "fields"
 
         [void](New-ReleaseCandidate -RepositoryName 'owner/repo' -Tag $tag -CommitSha $commit -RunId $runId -RunAttempt $runAttempt -ProjectVersion $projectVersion -Archive $archive -ReleaseJson $releaseJson -Manifest $manifest -Destination $candidate -ValidateArtifact $validator)
-        $candidateSha = Get-LowercaseFileSha256 -Path $candidate
+        $candidateSha = Get-ValidatedLowercaseFileSha256 -Path $candidate
         Write-Utf8NoBom -Path (Join-Path $root 'unexpected.txt') -Text 'unexpected'
         Assert-ThrowsMatch "extra handoff file rejected" {
             [void](Confirm-ReleaseCandidate -RepositoryName 'owner/repo' -Tag $tag -CommitSha $commit -RunId $runId -RunAttempt $runAttempt -ProjectVersion $projectVersion -Candidate $candidate -CandidateSha256 $candidateSha)

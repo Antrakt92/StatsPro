@@ -1,13 +1,3 @@
-function ConvertFrom-StatsProMarketplaceJson {
-    param([string]$Json)
-
-    $command = Get-Command ConvertFrom-Json
-    if ($command.Parameters.ContainsKey("Depth")) {
-        return ($Json | ConvertFrom-Json -Depth 100)
-    }
-    return ($Json | ConvertFrom-Json)
-}
-
 function Get-StatsProExpectedMarketplaceProjectIdMap {
     return [ordered]@{
         CurseForge = "1525100"
@@ -164,7 +154,7 @@ function Resolve-StatsProWowInterfaceVersions {
 function Resolve-StatsProCurseForgeVersionIdMap {
     param([string]$Json, [string[]]$RequiredVersions)
 
-    $items = @(ConvertFrom-StatsProMarketplaceJson $Json)
+    $items = @(ConvertFrom-JsonCompat $Json)
     $ids = @()
     foreach ($version in @($RequiredVersions)) {
         $versionMatches = @($items | Where-Object {
@@ -192,7 +182,7 @@ function Resolve-StatsProCurseForgeVersionIdMap {
 function Resolve-StatsProWowInterfaceVersionsFromJson {
     param([string]$Json, [string[]]$RequiredVersions)
 
-    $items = @(ConvertFrom-StatsProMarketplaceJson $Json)
+    $items = @(ConvertFrom-JsonCompat $Json)
     $availableVersions = @($items | Where-Object {
         [string]$_.game -ceq "Retail"
     } | ForEach-Object { [string]$_.id })
@@ -205,7 +195,7 @@ function Resolve-StatsProWagoVersionSelection {
     param([string]$Json, [string[]]$RequiredVersions, [switch]$RequireDirectCompatibilityMatch)
 
     # SYNC: BigWigs Packager release.sh::upload_wago reads patches.retail from this endpoint.
-    $data = ConvertFrom-StatsProMarketplaceJson $Json
+    $data = ConvertFrom-JsonCompat $Json
     if ($null -eq $data -or $null -eq $data.patches) {
         throw "Wago game data must contain a patches object."
     }
@@ -265,7 +255,7 @@ function Assert-StatsProWowInterfaceProjectAccess {
     param([string]$Json, [string]$ExpectedProjectId)
 
     try {
-        $items = @(ConvertFrom-StatsProMarketplaceJson $Json)
+        $items = @(ConvertFrom-JsonCompat $Json)
     }
     catch {
         throw "WoWInterface project-access response contained invalid JSON."

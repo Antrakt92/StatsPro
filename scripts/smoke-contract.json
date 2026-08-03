@@ -1,21 +1,21 @@
 {
   "schemaVersion": 2,
-  "totalAssertions": 35584,
+  "totalAssertions": 35243,
   "suites": [
     {
       "name": "core-panel-persistence",
-      "assertions": 1203,
-      "fingerprint": "5a0c710f"
+      "assertions": 1216,
+      "fingerprint": "3410b63d"
     },
     {
       "name": "runtime-rendering",
-      "assertions": 1371,
-      "fingerprint": "30da6e86"
+      "assertions": 1419,
+      "fingerprint": "428be4ed"
     },
     {
       "name": "fonts",
-      "assertions": 4914,
-      "fingerprint": "22ac22bf"
+      "assertions": 4502,
+      "fingerprint": "7f52b4f9"
     },
     {
       "name": "durability-repair",
@@ -24,8 +24,8 @@
     },
     {
       "name": "settings-compatibility",
-      "assertions": 20738,
-      "fingerprint": "53e9143a"
+      "assertions": 20748,
+      "fingerprint": "3dff68a2"
     },
     {
       "name": "profile-context",

@@ -9,6 +9,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 
 function Invoke-Git {
@@ -129,24 +130,6 @@ function New-TestRepo {
         Pop-Location
     }
     return $work
-}
-
-function Assert-ThrowsMatch {
-    param([string]$Name, [scriptblock]$Script, [string]$Pattern)
-
-    $ok = $false
-    try {
-        & $Script
-        $ok = $true
-    }
-    catch {
-        if ($_.Exception.Message -notmatch $Pattern) {
-            throw "$Name failed with wrong error: $($_.Exception.Message)"
-        }
-    }
-    if ($ok) {
-        throw "$Name should have failed."
-    }
 }
 
 function Invoke-SelfTest {

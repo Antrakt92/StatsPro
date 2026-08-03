@@ -845,25 +845,6 @@ local function makeEnv(locale, opts)
     end
     env.issecretvalue = opts.issecretvalue or function() return false end
     env.issecrettable = opts.issecrettable
-    if not opts.disableCurveUtil then
-        env.C_CurveUtil = {
-            CreateCurve = function()
-                local curve = { points = {} }
-                function curve:AddPoint(x, y)
-                    self.points[#self.points + 1] = { x = x, y = y }
-                end
-                function curve:Evaluate(value)
-                    if opts.evaluateCurve then return opts.evaluateCurve(self, value) end
-                    local first = self.points[1]
-                    local last = self.points[#self.points]
-                    if not first or not last or first.x == last.x then return 0 end
-                    return first.y + ((value - first.x) / (last.x - first.x))
-                        * (last.y - first.y)
-                end
-                return curve
-            end,
-        }
-    end
     env.C_StringUtil = {
         -- The live C API accepts secret numbers. The default harness stub avoids
         -- inspecting opaque sentinels; focused tests provide exact display text.
@@ -1210,6 +1191,81 @@ local function withProfileIdentity(opts)
     opts.specRole = opts.specRole or "TANK"
     opts.primaryStat = opts.primaryStat or 1
     return opts
+end
+
+local function loadFocusedStatScenario(dbDefaults, dbOverrides, apiOverrides)
+    local statsProDB = {}
+    for key, value in pairs(dbDefaults) do
+        statsProDB[key] = value
+    end
+    for key, value in pairs(dbOverrides or {}) do
+        statsProDB[key] = value
+    end
+
+    local options = {}
+    for key, value in pairs(apiOverrides or {}) do
+        options[key] = value
+    end
+    options.statsProDB = statsProDB
+    return loadStatsPro("enUS", options)
+end
+
+local function loadCritScenario(dbOverrides, apiOverrides)
+    return loadFocusedStatScenario({
+        showOffensive = true,
+        showCrit = true,
+        showHaste = false,
+        showMastery = false,
+        showVersatility = false,
+        showTertiary = false,
+        showDefensive = false,
+    }, dbOverrides, apiOverrides)
+end
+
+local function loadDefensiveScenario(dbOverrides, apiOverrides)
+    return loadFocusedStatScenario({
+        showOffensive = false,
+        showDefensive = true,
+        hideZeroDefensive = false,
+        showDodge = false,
+        showParry = false,
+    }, dbOverrides, apiOverrides)
+end
+
+local function loadArmorScenario(dbOverrides, apiOverrides)
+    return loadFocusedStatScenario({
+        showOffensive = false,
+        showDefensive = true,
+        hideZeroDefensive = false,
+        showDodge = false,
+        showParry = false,
+        showBlock = false,
+        showArmor = true,
+        showStagger = false,
+    }, dbOverrides, apiOverrides)
+end
+
+local function loadVersatilityScenario(dbOverrides, apiOverrides)
+    return loadFocusedStatScenario({
+        showOffensive = true,
+        showCrit = false,
+        showHaste = false,
+        showMastery = false,
+        showVersatility = true,
+        showTertiary = false,
+        showDefensive = false,
+    }, dbOverrides, apiOverrides)
+end
+
+local function loadMovementScenario(dbOverrides, apiOverrides)
+    return loadFocusedStatScenario({
+        showOffensive = false,
+        showTertiary = true,
+        showLeech = false,
+        showAvoidance = false,
+        showSpeed = true,
+        showDefensive = false,
+    }, dbOverrides, apiOverrides)
 end
 
 local function loadArchonValidatorModule()
@@ -3756,19 +3812,11 @@ end
 
 do
     local secretCrit = {}
-    local pewEnv, _, pewTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            showPercentage = true,
-            hideZeroOffensive = false,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local pewEnv, _, pewTest = loadCritScenario({
+        showRating = false,
+        showPercentage = true,
+        hideZeroOffensive = false,
+    }, {
         getCritChance = function() return secretCrit end,
         getRangedCritChance = function() return nil end,
         getSpellCritChance = function() return nil end,
@@ -3885,7 +3933,15 @@ do
     callScript("lifecycle.drag_guard.stop", dragEnv.StatsProFrame, "OnDragStop")
     callScript("lifecycle.drag_guard.right_click_suppressed", dragEnv.StatsProFrame, "OnMouseUp", "RightButton")
     eq("lifecycle.drag_guard.config_not_opened", dragEnv.StatsProConfigFrame, nil)
-    flushTimers("lifecycle.drag_guard.timer_flush", dragEnv, 0.11, 1)
+    callScript("lifecycle.drag_guard.second_start", dragEnv.StatsProFrame, "OnDragStart")
+    flushTimers("lifecycle.drag_guard.stale_timer_flush", dragEnv, 0.11, 1)
+    eq("lifecycle.drag_guard.stale_timer_preserves_new_drag",
+        dragEnv.StatsProFrame.wasDragging, true)
+    callScript("lifecycle.drag_guard.second_right_click_suppressed",
+        dragEnv.StatsProFrame, "OnMouseUp", "RightButton")
+    eq("lifecycle.drag_guard.second_config_not_opened", dragEnv.StatsProConfigFrame, nil)
+    callScript("lifecycle.drag_guard.second_stop", dragEnv.StatsProFrame, "OnDragStop")
+    flushTimers("lifecycle.drag_guard.current_timer_flush", dragEnv, 0.11, 1)
     callScript("lifecycle.drag_guard.right_click_after_timer", dragEnv.StatsProFrame, "OnMouseUp", "RightButton")
     exists("lifecycle.drag_guard.config_opened", dragEnv.StatsProConfigFrame)
 end
@@ -4631,19 +4687,11 @@ end
 
 do
     local schoolCrit = { [2] = 25, [3] = 20, [4] = 19, [5] = 18, [6] = 22, [7] = 15 }
-    local critEnv, _, critTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            showPercentage = true,
-            hideZeroOffensive = false,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local critEnv, _, critTest = loadCritScenario({
+        showRating = false,
+        showPercentage = true,
+        hideZeroOffensive = false,
+    }, {
         getCritChance = function() return 16 end,
         getRangedCritChance = function() return 17 end,
         getSpellCritChance = function(school) return schoolCrit[school] end,
@@ -4656,18 +4704,10 @@ do
 end
 
 do
-    local critEnv, _, critTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            hideZeroOffensive = false,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local critEnv, _, critTest = loadCritScenario({
+        showRating = false,
+        hideZeroOffensive = false,
+    }, {
         getCritChance = function() return nil end,
         getRangedCritChance = function() return nil end,
         getSpellCritChance = function() return nil end,
@@ -4679,18 +4719,10 @@ do
 end
 
 do
-    local critEnv, _, critTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            hideZeroOffensive = false,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local critEnv, _, critTest = loadCritScenario({
+        showRating = false,
+        hideZeroOffensive = false,
+    }, {
         getCritChance = function() return "bad" end,
         getRangedCritChance = function() return "bad" end,
         getSpellCritChance = function() return "bad" end,
@@ -4723,18 +4755,10 @@ do
 end
 
 do
-    local critEnv, _, critTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            hideZeroOffensive = false,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local critEnv, _, critTest = loadCritScenario({
+        showRating = false,
+        hideZeroOffensive = false,
+    }, {
         getCritChance = function() error("crit API unavailable") end,
         getRangedCritChance = function() return nil end,
         getSpellCritChance = function() return nil end,
@@ -4746,17 +4770,9 @@ do
 end
 
 do
-    local critEnv, _, critTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            hideZeroOffensive = false,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local critEnv, _, critTest = loadCritScenario({
+        hideZeroOffensive = false,
+    }, {
         getCritChance = function() return 10 end,
         getRangedCritChance = function() return 15 end,
         getSpellCritChance = function() return 20 end,
@@ -4769,17 +4785,9 @@ do
 end
 
 do
-    local critEnv, _, critTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            hideZeroOffensive = false,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local critEnv, _, critTest = loadCritScenario({
+        hideZeroOffensive = false,
+    }, {
         getCritChance = function() return nil end,
         getRangedCritChance = function() return nil end,
         getSpellCritChance = function() return 23.4 end,
@@ -4795,17 +4803,9 @@ end
 do
     local secretSpellCrit = 24.2
     local spellCalls = 0
-    local critEnv, _, critTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            hideZeroOffensive = false,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local critEnv, _, critTest = loadCritScenario({
+        hideZeroOffensive = false,
+    }, {
         getCritChance = function() return 11.1 end,
         getRangedCritChance = function() return 18.6 end,
         getSpellCritChance = function(school)
@@ -4828,17 +4828,9 @@ end
 do
     local secretSpellCrit = 24.2
     local spellCalls = 0
-    local critEnv, _, critTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            hideZeroOffensive = false,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local critEnv, _, critTest = loadCritScenario({
+        hideZeroOffensive = false,
+    }, {
         getCritChance = function() return nil end,
         getRangedCritChance = function() return nil end,
         getSpellCritChance = function()
@@ -4858,18 +4850,10 @@ do
 end
 
 do
-    local critEnv, _, critTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = true,
-            showPercentage = false,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local critEnv, _, critTest = loadCritScenario({
+        showRating = true,
+        showPercentage = false,
+    }, {
         getCritChance = function() return 12.5 end,
         getCombatRating = function() return nil end,
     })
@@ -4882,19 +4866,11 @@ do
 end
 
 do
-    local critEnv, _, critTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = true,
-            showPercentage = false,
-            hideZeroOffensive = true,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local critEnv, _, critTest = loadCritScenario({
+        showRating = true,
+        showPercentage = false,
+        hideZeroOffensive = true,
+    }, {
         getCritChance = function() return nil end,
         getRangedCritChance = function() return nil end,
         getSpellCritChance = function() return nil end,
@@ -4932,19 +4908,11 @@ do
 end
 
 do
-    local critEnv, _, critTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = true,
-            showPercentage = false,
-            hideZeroOffensive = false,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local critEnv, _, critTest = loadCritScenario({
+        showRating = true,
+        showPercentage = false,
+        hideZeroOffensive = false,
+    }, {
         getCritChance = function() return nil end,
         getRangedCritChance = function() return nil end,
         getSpellCritChance = function() return nil end,
@@ -4960,19 +4928,11 @@ do
     local percentValue
     local ratingValue = 812
     local secretRating = 777
-    local critEnv, _, critTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = true,
-            showPercentage = false,
-            hideZeroOffensive = true,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local critEnv, _, critTest = loadCritScenario({
+        showRating = true,
+        showPercentage = false,
+        hideZeroOffensive = true,
+    }, {
         getCritChance = function() return percentValue end,
         getRangedCritChance = function() return percentValue end,
         getSpellCritChance = function() return percentValue end,
@@ -4999,22 +4959,14 @@ do
     local targetFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
         { crit = 1000, haste = 200, mastery = 300, versatility = 400 })
-    local critEnv, _, critTest = loadStatsPro("enUS", {
+    local critEnv, _, critTest = loadCritScenario({
+        showRating = true,
+        showPercentage = false,
+        hideZeroOffensive = true,
+    }, {
         unitClassToken = "MAGE",
         specIndex = 1,
         specID = 64,
-        statsProDB = {
-            showOffensive = true,
-            showRating = true,
-            showPercentage = false,
-            hideZeroOffensive = true,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
         statsProArchonTargets = targetFixture,
         getCritChance = function() return nil end,
         getRangedCritChance = function() return nil end,
@@ -5037,22 +4989,14 @@ do
     local targetFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
         { crit = 1000, haste = 200, mastery = 300, versatility = 400 })
-    local critEnv, _, critTest = loadStatsPro("enUS", {
+    local critEnv, _, critTest = loadCritScenario({
+        showRating = true,
+        showPercentage = true,
+        hideZeroOffensive = true,
+    }, {
         unitClassToken = "MAGE",
         specIndex = 1,
         specID = 64,
-        statsProDB = {
-            showOffensive = true,
-            showRating = true,
-            showPercentage = true,
-            hideZeroOffensive = true,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
         statsProArchonTargets = targetFixture,
         getCritChance = function() return nil end,
         getRangedCritChance = function() return nil end,
@@ -5115,22 +5059,14 @@ do
     local targetFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
         { crit = 1000, haste = 200, mastery = 300, versatility = 400 })
-    local critEnv, _, critTest = loadStatsPro("enUS", {
+    local critEnv, _, critTest = loadCritScenario({
+        showRating = true,
+        showPercentage = true,
+        hideZeroOffensive = true,
+    }, {
         unitClassToken = "MAGE",
         specIndex = 1,
         specID = 64,
-        statsProDB = {
-            showOffensive = true,
-            showRating = true,
-            showPercentage = true,
-            hideZeroOffensive = true,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
         statsProArchonTargets = targetFixture,
         getCritChance = function() return secretCritPercent end,
         getRangedCritChance = function() return nil end,
@@ -5161,21 +5097,13 @@ do
     local targetHoverFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(targetHoverFixture, "mythicPlus", "MAGE", "frost",
         { crit = 1000, haste = 200, mastery = 300, versatility = 400 })
-    local critEnv, _, critTest = loadStatsPro("enUS", {
+    local critEnv, _, critTest = loadCritScenario({
+        showRating = false,
+        showPercentage = true,
+    }, {
         unitClassToken = "MAGE",
         specIndex = 1,
         specID = 64,
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            showPercentage = true,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
         statsProArchonTargets = targetHoverFixture,
         getCritChance = function() return 12.5 end,
         getCombatRating = function()
@@ -5202,22 +5130,14 @@ do
     local targetHoverFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(targetHoverFixture, "mythicPlus", "MAGE", "frost",
         { crit = 1000, haste = 200, mastery = 300, versatility = 400 })
-    local critEnv, _, critTest = loadStatsPro("enUS", {
+    local critEnv, _, critTest = loadCritScenario({
+        showRating = false,
+        showPercentage = true,
+    }, {
         unitClassToken = "MAGE",
         specIndex = 1,
         specID = 64,
         inCombatLockdown = function() return true end,
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            showPercentage = true,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
         statsProArchonTargets = targetHoverFixture,
         getCritChance = function() return livePercent end,
         getCombatRating = function() return liveRating end,
@@ -6142,18 +6062,10 @@ do
     local secretRangedB = {}
     local secretSpell = {}
     local phase = "clean"
-    local updateEnv, _, updateTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            showPercentage = true,
-            showCrit = true,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = false,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local updateEnv, _, updateTest = loadCritScenario({
+        showRating = false,
+        showPercentage = true,
+    }, {
         getCritChance = function()
             return phase == "clean" and 10 or secretMelee
         end,
@@ -6816,16 +6728,11 @@ do
 end
 
 do
-    local dodgeEnv, _, dodgeTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showDefensive = true,
-            hideZeroDefensive = false,
-            showDodge = true,
-            showParry = false,
-            showBlock = false,
-            showArmor = false,
-        },
+    local dodgeEnv, _, dodgeTest = loadDefensiveScenario({
+        showDodge = true,
+        showBlock = false,
+        showArmor = false,
+    }, {
         getDodgeChance = function() return nil end,
     })
     fireEvent("render.defensive_nil_percent_skips_dodge.fire", dodgeEnv, "PLAYER_ENTERING_WORLD")
@@ -6835,17 +6742,7 @@ do
 end
 
 do
-    local armorEnv, _, armorTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showDefensive = true,
-            hideZeroDefensive = false,
-            showDodge = false,
-            showParry = false,
-            showBlock = false,
-            showArmor = true,
-            showStagger = false,
-        },
+    local armorEnv, _, armorTest = loadArmorScenario(nil, {
         inCombatLockdown = function() return true end,
         unitArmor = function() error("cold combat should not call UnitArmor") end,
     })
@@ -6858,17 +6755,7 @@ end
 
 do
     local secretReduction = {}
-    local armorEnv, _, armorTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showDefensive = true,
-            hideZeroDefensive = false,
-            showDodge = false,
-            showParry = false,
-            showBlock = false,
-            showArmor = true,
-            showStagger = false,
-        },
+    local armorEnv, _, armorTest = loadArmorScenario(nil, {
         unitArmor = function() return 0, 5000 end,
         unitEffectiveLevel = function() return 80 end,
         getArmorEffectiveness = function() return secretReduction end,
@@ -6885,17 +6772,7 @@ do
 end
 
 do
-    local armorEnv, _, armorTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showDefensive = true,
-            hideZeroDefensive = false,
-            showDodge = false,
-            showParry = false,
-            showBlock = false,
-            showArmor = true,
-            showStagger = false,
-        },
+    local armorEnv, _, armorTest = loadArmorScenario(nil, {
         unitArmor = function() return 0, 5000 end,
         unitEffectiveLevel = function() return 80 end,
         getArmorEffectiveness = function(armor, attackerLevel)
@@ -6913,17 +6790,7 @@ do
 end
 
 do
-    local armorEnv, _, armorTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showDefensive = true,
-            hideZeroDefensive = false,
-            showDodge = false,
-            showParry = false,
-            showBlock = false,
-            showArmor = true,
-            showStagger = false,
-        },
+    local armorEnv, _, armorTest = loadArmorScenario(nil, {
         unitArmor = function() return 0, 5000 end,
         unitEffectiveLevel = function() return 80 end,
         paperDollFrameGetArmorReduction = function() return 1 end,
@@ -6935,17 +6802,7 @@ do
 end
 
 do
-    local armorEnv, _, armorTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showDefensive = true,
-            hideZeroDefensive = false,
-            showDodge = false,
-            showParry = false,
-            showBlock = false,
-            showArmor = true,
-            showStagger = false,
-        },
+    local armorEnv, _, armorTest = loadArmorScenario(nil, {
         unitArmor = function() return 0, 5000 end,
         unitEffectiveLevel = function() return 80 end,
         paperDollFrameGetArmorReduction = false,
@@ -7003,17 +6860,7 @@ do
 end
 
 do
-    local armorEnv, _, armorTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showDefensive = true,
-            hideZeroDefensive = false,
-            showDodge = false,
-            showParry = false,
-            showBlock = false,
-            showArmor = true,
-            showStagger = false,
-        },
+    local armorEnv, _, armorTest = loadArmorScenario(nil, {
         unitArmor = function() return 0, 5000 end,
         unitEffectiveLevel = function() return 80 end,
         paperDollFrameGetArmorReduction = function() return 150 end,
@@ -7025,17 +6872,7 @@ do
 end
 
 do
-    local armorEnv, _, armorTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showDefensive = true,
-            hideZeroDefensive = false,
-            showDodge = false,
-            showParry = false,
-            showBlock = false,
-            showArmor = true,
-            showStagger = false,
-        },
+    local armorEnv, _, armorTest = loadArmorScenario(nil, {
         unitArmor = function() return 0, 5000 end,
         unitEffectiveLevel = function() return 80 end,
         paperDollFrameGetArmorReduction = function() return -5 end,
@@ -7049,17 +6886,7 @@ end
 do
     local secretArmor = {}
     local secretMode = false
-    local armorEnv, _, armorTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showDefensive = true,
-            hideZeroDefensive = false,
-            showDodge = false,
-            showParry = false,
-            showBlock = false,
-            showArmor = true,
-            showStagger = false,
-        },
+    local armorEnv, _, armorTest = loadArmorScenario(nil, {
         unitArmor = function()
             if secretMode then return 0, secretArmor end
             return 0, 5000
@@ -7083,17 +6910,7 @@ do
     local secretReduction = {}
     local reductionMode = "clean"
     local fallbackCalls = 0
-    local armorEnv, _, armorTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showDefensive = true,
-            hideZeroDefensive = false,
-            showDodge = false,
-            showParry = false,
-            showBlock = false,
-            showArmor = true,
-            showStagger = false,
-        },
+    local armorEnv, _, armorTest = loadArmorScenario(nil, {
         unitArmor = function() return 0, 5000 end,
         unitEffectiveLevel = function() return 80 end,
         getArmorEffectiveness = function()
@@ -7124,17 +6941,7 @@ end
 
 do
     local badLevel = false
-    local armorEnv, _, armorTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showDefensive = true,
-            hideZeroDefensive = false,
-            showDodge = false,
-            showParry = false,
-            showBlock = false,
-            showArmor = true,
-            showStagger = false,
-        },
+    local armorEnv, _, armorTest = loadArmorScenario(nil, {
         unitArmor = function() return 0, 5000 end,
         unitEffectiveLevel = function()
             if badLevel then return "bad-level" end
@@ -7155,17 +6962,7 @@ end
 
 do
     local inCombat = false
-    local armorEnv, _, armorTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showDefensive = true,
-            hideZeroDefensive = false,
-            showDodge = false,
-            showParry = false,
-            showBlock = false,
-            showArmor = true,
-            showStagger = false,
-        },
+    local armorEnv, _, armorTest = loadArmorScenario(nil, {
         inCombatLockdown = function() return inCombat end,
         unitArmor = function()
             if inCombat then error("combat should stop before UnitArmor") end
@@ -7183,18 +6980,10 @@ do
 end
 
 do
-    local versEnv, _, versTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            hideZeroOffensive = true,
-            showCrit = false,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = true,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local versEnv, _, versTest = loadVersatilityScenario({
+        showRating = false,
+        hideZeroOffensive = true,
+    }, {
         getCombatRatingBonus = function() return nil end,
         getVersatilityBonus = function() return nil end,
     })
@@ -7205,18 +6994,10 @@ do
 end
 
 do
-    local versEnv, _, versTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            hideZeroOffensive = false,
-            showCrit = false,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = true,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local versEnv, _, versTest = loadVersatilityScenario({
+        showRating = false,
+        hideZeroOffensive = false,
+    }, {
         getCombatRatingBonus = function() return nil end,
         getVersatilityBonus = function() return nil end,
     })
@@ -7229,19 +7010,11 @@ end
 do
     local secretMode = false
     local secretVersRatingBonus = 14.7
-    local versEnv, _, versTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            showPercentage = true,
-            hideZeroOffensive = false,
-            showCrit = false,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = true,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local versEnv, _, versTest = loadVersatilityScenario({
+        showRating = false,
+        showPercentage = true,
+        hideZeroOffensive = false,
+    }, {
         getCombatRatingBonus = function()
             if secretMode then return secretVersRatingBonus end
             return 10
@@ -7274,22 +7047,14 @@ do
     local targetFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
         { crit = 100, haste = 200, mastery = 300, versatility = 1000 })
-    local versEnv, _, versTest = loadStatsPro("enUS", {
+    local versEnv, _, versTest = loadVersatilityScenario({
+        showRating = false,
+        showPercentage = true,
+        hideZeroOffensive = false,
+    }, {
         unitClassToken = "MAGE",
         specIndex = 1,
         specID = 64,
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            showPercentage = true,
-            hideZeroOffensive = false,
-            showCrit = false,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = true,
-            showTertiary = false,
-            showDefensive = false,
-        },
         statsProArchonTargets = targetFixture,
         getCombatRatingBonus = function() return ratingBonus end,
         getVersatilityBonus = function() return flatBonus end,
@@ -7354,19 +7119,11 @@ end
 
 do
     local secretRatingBonus = 14.7
-    local versEnv, _, versTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            showPercentage = true,
-            hideZeroOffensive = false,
-            showCrit = false,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = true,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local versEnv, _, versTest = loadVersatilityScenario({
+        showRating = false,
+        showPercentage = true,
+        hideZeroOffensive = false,
+    }, {
         getCombatRatingBonus = function() return secretRatingBonus end,
         getVersatilityBonus = function() return 2 end,
         issecretvalue = function(value) return value == secretRatingBonus end,
@@ -7382,19 +7139,11 @@ end
 
 do
     local secretFlatBonus = 3.3
-    local versEnv, _, versTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            showPercentage = true,
-            hideZeroOffensive = false,
-            showCrit = false,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = true,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local versEnv, _, versTest = loadVersatilityScenario({
+        showRating = false,
+        showPercentage = true,
+        hideZeroOffensive = false,
+    }, {
         getCombatRatingBonus = function() return 0 end,
         getVersatilityBonus = function() return secretFlatBonus end,
         issecretvalue = function(value) return value == secretFlatBonus end,
@@ -7413,19 +7162,11 @@ end
 
 do
     local secretFlatBonus = 3.3
-    local versEnv, _, versTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            showPercentage = true,
-            hideZeroOffensive = false,
-            showCrit = false,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = true,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local versEnv, _, versTest = loadVersatilityScenario({
+        showRating = false,
+        showPercentage = true,
+        hideZeroOffensive = false,
+    }, {
         getCombatRatingBonus = function() return 5 end,
         getVersatilityBonus = function() return secretFlatBonus end,
         issecretvalue = function(value) return value == secretFlatBonus end,
@@ -7446,19 +7187,11 @@ end
 do
     local secretRatingBonus = 14.7
     local secretFlatBonus = 3.3
-    local versEnv, _, versTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            showPercentage = true,
-            hideZeroOffensive = false,
-            showCrit = false,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = true,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local versEnv, _, versTest = loadVersatilityScenario({
+        showRating = false,
+        showPercentage = true,
+        hideZeroOffensive = false,
+    }, {
         getCombatRatingBonus = function() return secretRatingBonus end,
         getVersatilityBonus = function() return secretFlatBonus end,
         issecretvalue = function(value)
@@ -7478,22 +7211,34 @@ do
 end
 
 do
+    local secretCrit = {}
+    local critEnv, _, critTest = loadCritScenario({
+        showRating = false,
+        showPercentage = true,
+        hideZeroOffensive = true,
+    }, {
+        getCritChance = function() return secretCrit end,
+        getRangedCritChance = function() return secretCrit end,
+        getSpellCritChance = function() return secretCrit end,
+        issecretvalue = function(value) return rawequal(value, secretCrit) end,
+    })
+    fireEvent("render.offensive_hide_zero_cold_restricted_hidden.fire",
+        critEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(critTest.buildRenderBlocks)
+    check("render.offensive_hide_zero_cold_restricted_hidden.no_error", ok, blocks)
+    eq("render.offensive_hide_zero_cold_restricted_hidden.no_row",
+        blockDumpContains(blocks, "Crit:"), false)
+end
+
+do
     local secretMode = false
     local ratingBonus = 0
     local flatBonus = 0
-    local versEnv, _, versTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            showPercentage = true,
-            hideZeroOffensive = true,
-            showCrit = false,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = true,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local versEnv, _, versTest = loadVersatilityScenario({
+        showRating = false,
+        showPercentage = true,
+        hideZeroOffensive = true,
+    }, {
         getCombatRatingBonus = function() return ratingBonus end,
         getVersatilityBonus = function() return flatBonus end,
         issecretvalue = function(value)
@@ -7519,22 +7264,35 @@ do
 end
 
 do
+    local secretRatingBonus, secretFlatBonus = {}, {}
+    local versEnv, _, versTest = loadVersatilityScenario({
+        showRating = false,
+        showPercentage = true,
+        hideZeroOffensive = true,
+    }, {
+        getCombatRatingBonus = function() return secretRatingBonus end,
+        getVersatilityBonus = function() return secretFlatBonus end,
+        issecretvalue = function(value)
+            return rawequal(value, secretRatingBonus) or rawequal(value, secretFlatBonus)
+        end,
+    })
+    fireEvent("render.versatility_hide_zero_cold_restricted_hidden.fire",
+        versEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(versTest.buildRenderBlocks)
+    check("render.versatility_hide_zero_cold_restricted_hidden.no_error", ok, blocks)
+    eq("render.versatility_hide_zero_cold_restricted_hidden.no_row",
+        blockDumpContains(blocks, "Vers:"), false)
+end
+
+do
     local secretMode = false
     local ratingBonus = 10
     local flatBonus = 2
-    local versEnv, _, versTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = false,
-            showPercentage = true,
-            hideZeroOffensive = true,
-            showCrit = false,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = true,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local versEnv, _, versTest = loadVersatilityScenario({
+        showRating = false,
+        showPercentage = true,
+        hideZeroOffensive = true,
+    }, {
         getCombatRatingBonus = function() return ratingBonus end,
         getVersatilityBonus = function() return flatBonus end,
         issecretvalue = function(value)
@@ -7566,23 +7324,15 @@ do
     local targetFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
         { crit = 100, haste = 200, mastery = 300, versatility = 1000 })
-    local versEnv, _, versTest = loadStatsPro("enUS", {
+    local versEnv, _, versTest = loadVersatilityScenario({
+        showRating = true,
+        showPercentage = true,
+        matchValueColorToStat = false,
+        hideZeroOffensive = true,
+    }, {
         unitClassToken = "MAGE",
         specIndex = 1,
         specID = 64,
-        statsProDB = {
-            showOffensive = true,
-            showRating = true,
-            showPercentage = true,
-            matchValueColorToStat = false,
-            hideZeroOffensive = true,
-            showCrit = false,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = true,
-            showTertiary = false,
-            showDefensive = false,
-        },
         statsProArchonTargets = targetFixture,
         getCombatRatingBonus = function() return secretRatingBonus end,
         getVersatilityBonus = function() return secretFlatBonus end,
@@ -7665,22 +7415,14 @@ do
     local secretVersFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(secretVersFixture, "mythicPlus", "MAGE", "frost",
         { crit = 100, haste = 200, mastery = 300, versatility = 1000 })
-    local versEnv, _, versTest = loadStatsPro("enUS", {
+    local versEnv, _, versTest = loadVersatilityScenario({
+        showRating = true,
+        showPercentage = true,
+        hideZeroOffensive = false,
+    }, {
         unitClassToken = "MAGE",
         specIndex = 1,
         specID = 64,
-        statsProDB = {
-            showOffensive = true,
-            showRating = true,
-            showPercentage = true,
-            hideZeroOffensive = false,
-            showCrit = false,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = true,
-            showTertiary = false,
-            showDefensive = false,
-        },
         statsProArchonTargets = secretVersFixture,
         getCombatRatingBonus = function() return secretVersRatingBonus end,
         getVersatilityBonus = function() return 0 end,
@@ -7718,19 +7460,11 @@ do
 end
 
 do
-    local versEnv, _, versTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = true,
-            showRating = true,
-            showPercentage = false,
-            hideZeroOffensive = true,
-            showCrit = false,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = true,
-            showTertiary = false,
-            showDefensive = false,
-        },
+    local versEnv, _, versTest = loadVersatilityScenario({
+        showRating = true,
+        showPercentage = false,
+        hideZeroOffensive = true,
+    }, {
         getCombatRatingBonus = function() return nil end,
         getVersatilityBonus = function() return nil end,
         getCombatRating = function() return 699 end,
@@ -7746,22 +7480,14 @@ do
     local targetFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
         { crit = 100, haste = 200, mastery = 300, versatility = 1000 })
-    local versEnv, _, versTest = loadStatsPro("enUS", {
+    local versEnv, _, versTest = loadVersatilityScenario({
+        showRating = true,
+        showPercentage = true,
+        hideZeroOffensive = true,
+    }, {
         unitClassToken = "MAGE",
         specIndex = 1,
         specID = 64,
-        statsProDB = {
-            showOffensive = true,
-            showRating = true,
-            showPercentage = true,
-            hideZeroOffensive = true,
-            showCrit = false,
-            showHaste = false,
-            showMastery = false,
-            showVersatility = true,
-            showTertiary = false,
-            showDefensive = false,
-        },
         statsProArchonTargets = targetFixture,
         getCombatRatingBonus = function() return nil end,
         getVersatilityBonus = function() return nil end,
@@ -7786,18 +7512,11 @@ do
 end
 
 do
-    local speedEnv, _, speedTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showTertiary = true,
-            showRating = true,
-            showPercentage = false,
-            hideZeroTertiary = true,
-            showLeech = false,
-            showAvoidance = false,
-            showSpeed = true,
-            showDefensive = false,
-        },
+    local speedEnv, _, speedTest = loadMovementScenario({
+        showRating = true,
+        showPercentage = false,
+        hideZeroTertiary = true,
+    }, {
         getUnitSpeed = function() return 0, 0, 0, 0 end,
         getCombatRating = function() return 377 end,
     })
@@ -7809,110 +7528,55 @@ do
 end
 
 do
-    local currentSpeed = 7.7
-    local speedEnv, _, speedTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showTertiary = true,
-            showRating = false,
-            showPercentage = true,
-            hideZeroTertiary = false,
-            showLeech = false,
-            showAvoidance = false,
-            showSpeed = true,
-            showDefensive = false,
-        },
-        -- The remaining returns deliberately disagree: the row must use only
-        -- currentSpeed, never the maximum ground/flight/swim capabilities.
-        getUnitSpeed = function() return currentSpeed, 15.4, 29.4, 7.7 end,
+    local runSpeed = 7.7
+    local speedEnv, _, speedTest = loadMovementScenario({
+        showRating = false,
+        showPercentage = true,
+        hideZeroTertiary = false,
+    }, {
+        -- The returns deliberately disagree: Movement is the current ground
+        -- run-speed percentage, not instantaneous yards/second or flight/swim.
+        getUnitSpeed = function() return 0, runSpeed, 29.4, 3.5 end,
     })
-    fireEvent("render.speed_instantaneous_clean.fire", speedEnv, "PLAYER_ENTERING_WORLD")
+    fireEvent("render.speed_run_percent_clean.fire", speedEnv, "PLAYER_ENTERING_WORLD")
     local ok, blocks = pcall(speedTest.buildRenderBlocks)
-    check("render.speed_instantaneous_clean.moving_no_error", ok, blocks)
-    eq("render.speed_instantaneous_clean.moving_value",
-        blockDumpContains(blocks, "110.0%"), true)
-    eq("render.speed_instantaneous_clean.not_run_capability",
-        blockDumpContains(blocks, "220.0%"), false)
-    eq("render.speed_instantaneous_clean.not_flight_capability",
-        blockDumpContains(blocks, "420.0%"), false)
+    check("render.speed_run_percent_clean.initial_no_error", ok, blocks)
+    local tertiary = blocks[3]
+    eq("render.speed_run_percent_clean.initial_value",
+        tertiary.ratings[1]:find("110.0%", 1, true) ~= nil, true)
+    eq("render.speed_run_percent_clean.not_flight_capability",
+        tertiary.ratings[1]:find("420.0%", 1, true), nil)
 
-    currentSpeed = 0
+    runSpeed = 0
     ok, blocks = pcall(speedTest.buildRenderBlocks)
-    check("render.speed_instantaneous_clean.stopped_no_error", ok, blocks)
-    eq("render.speed_instantaneous_clean.stopped_value",
-        blockDumpContains(blocks, "0.0%"), true)
+    check("render.speed_run_percent_clean.zero_no_error", ok, blocks)
+    tertiary = blocks[3]
+    eq("render.speed_run_percent_clean.zero_value",
+        tertiary.ratings[1]:find("0.0%", 1, true) ~= nil, true)
 
-    currentSpeed = 10.5
+    runSpeed = 10.5
     ok, blocks = pcall(speedTest.buildRenderBlocks)
-    check("render.speed_instantaneous_clean.boost_no_error", ok, blocks)
-    eq("render.speed_instantaneous_clean.boost_value",
-        blockDumpContains(blocks, "150.0%"), true)
+    check("render.speed_run_percent_clean.boost_no_error", ok, blocks)
+    tertiary = blocks[3]
+    eq("render.speed_run_percent_clean.boost_value",
+        tertiary.ratings[1]:find("150.0%", 1, true) ~= nil, true)
 end
 
 do
     local secretSpeedA, secretSpeedB = {}, {}
-    local secretPercentA, secretPercentB = {}, {}
     local phase = "clean"
-    local curveEvaluations = 0
-    local formatterInputs = {}
-    local formatterGets, formatterClears = 0, 0
-    local integerFallbackCalls = 0
-    local curveReturnedA, curveReturnedB = 0, 0
-    local curvePointCountOK, curveBasePointOK = true, true
-    local formatterFormatOK = true
-    local speedEnv, _, speedTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showTertiary = true,
-            showRating = false,
-            showPercentage = true,
-            hideZeroTertiary = false,
-            showLeech = false,
-            showAvoidance = false,
-            showSpeed = true,
-            showDefensive = false,
-        },
+    local speedEnv, _, speedTest = loadMovementScenario({
+        showRating = false,
+        showPercentage = true,
+        hideZeroTertiary = false,
+    }, {
         getUnitSpeed = function()
-            if phase == "a" then return secretSpeedA, 7, 7, 7 end
-            if phase == "b" then return secretSpeedB, 7, 7, 7 end
-            return 7, 7, 7, 7
+            if phase == "a" then return secretSpeedA, secretSpeedA, secretSpeedA, secretSpeedA end
+            if phase == "b" then return secretSpeedB, secretSpeedB, secretSpeedB, secretSpeedB end
+            return 0, 7, 7, 7
         end,
         issecretvalue = function(value)
             return rawequal(value, secretSpeedA) or rawequal(value, secretSpeedB)
-                or rawequal(value, secretPercentA) or rawequal(value, secretPercentB)
-        end,
-        evaluateCurve = function(curve, value)
-            curveEvaluations = curveEvaluations + 1
-            curvePointCountOK = curvePointCountOK and #curve.points == 3
-            curveBasePointOK = curveBasePointOK
-                and curve.points[2].x == 7 and curve.points[2].y == 100
-            if rawequal(value, secretSpeedA) then
-                curveReturnedA = curveReturnedA + 1
-                return secretPercentA
-            end
-            if rawequal(value, secretSpeedB) then
-                curveReturnedB = curveReturnedB + 1
-                return secretPercentB
-            end
-            error("unexpected secret speed curve input", 0)
-        end,
-        setFormattedText = function(_, format, value)
-            formatterFormatOK = formatterFormatOK and format == "%.1f%%"
-            formatterInputs[#formatterInputs + 1] = value
-            if rawequal(value, secretPercentA) then return "125.0%" end
-            if rawequal(value, secretPercentB) then return "178.6%" end
-            error("raw speed bypassed the percent curve", 0)
-        end,
-        getFormattedText = function(holder)
-            formatterGets = formatterGets + 1
-            return holder.text
-        end,
-        clearFormattedText = function()
-            formatterClears = formatterClears + 1
-        end,
-        roundToNearestString = function()
-            integerFallbackCalls = integerFallbackCalls + 1
-            return "unexpected"
         end,
     })
     fireEvent("render.speed_secret_live.fire", speedEnv, "PLAYER_ENTERING_WORLD")
@@ -7923,62 +7587,152 @@ do
     phase = "a"
     ok, blocks = pcall(speedTest.buildRenderBlocks)
     check("render.speed_secret_live.first_no_error", ok, blocks)
-    eq("render.speed_secret_live.first_value", blockDumpContains(blocks, "125.0%"), true)
+    local tertiary = blocks[3]
+    eq("render.speed_secret_live.first_row_count", #tertiary.labels, 1)
+    eq("render.speed_secret_live.first_row", tertiary.labels[1]:find("Movement:", 1, true) ~= nil, true)
+    eq("render.speed_secret_live.first_value", tertiary.ratings[1]:find("?%", 1, true) ~= nil, true)
     eq("render.speed_secret_live.first_not_stale", blockDumpContains(blocks, "100.0%"), false)
 
     phase = "b"
     ok, blocks = pcall(speedTest.buildRenderBlocks)
     check("render.speed_secret_live.second_no_error", ok, blocks)
-    eq("render.speed_secret_live.second_value", blockDumpContains(blocks, "178.6%"), true)
-    eq("render.speed_secret_live.second_not_stale", blockDumpContains(blocks, "125.0%"), false)
-    eq("render.speed_secret_live.curve_evaluations", curveEvaluations, 2)
-    eq("render.speed_secret_live.curve_first_input", curveReturnedA, 1)
-    eq("render.speed_secret_live.curve_second_input", curveReturnedB, 1)
-    eq("render.speed_secret_live.curve_point_count", curvePointCountOK, true)
-    eq("render.speed_secret_live.curve_base_point", curveBasePointOK, true)
-    eq("render.speed_secret_live.format", formatterFormatOK, true)
-    eq("render.speed_secret_live.formatter_calls", #formatterInputs, 2)
-    eq("render.speed_secret_live.formatter_gets", formatterGets, 2)
-    eq("render.speed_secret_live.formatter_clears", formatterClears, 4)
-    eq("render.speed_secret_live.first_formatter_receives_percent",
-        rawequal(formatterInputs[1], secretPercentA), true)
-    eq("render.speed_secret_live.second_formatter_receives_percent",
-        rawequal(formatterInputs[2], secretPercentB), true)
-    eq("render.speed_secret_live.no_integer_fallback", integerFallbackCalls, 0)
+    tertiary = blocks[3]
+    eq("render.speed_secret_live.second_row_count", #tertiary.labels, 1)
+    check("render.speed_secret_live.second_value",
+        tertiary.ratings[1]:find("?%", 1, true) ~= nil,
+        tertiary.ratings[1])
+    eq("render.speed_secret_live.second_not_stale", blockDumpContains(blocks, "100.0%"), false)
+    eq("render.speed_secret_live.no_yards_per_second", blockDumpContains(blocks, "yd/s"), false)
+end
+
+do
+    local secretInstant, secretRun = {}, {}
+    local speedState = "cold-secret"
+    local formatterCalls = 0
+    local speedEnv, _, speedTest = loadMovementScenario({
+        showRating = false,
+        showPercentage = true,
+        hideZeroTertiary = true,
+    }, {
+        getUnitSpeed = function()
+            if speedState == "clean-zero" then return 7, 0, 14, 3.5 end
+            if speedState == "clean-nonzero" then return secretInstant, 7.7, 14, 3.5 end
+            if speedState == "secret-after-zero" or speedState == "secret-after-nonzero" then
+                return 7, secretRun, 14, 3.5
+            end
+            return secretInstant, secretRun, secretRun, secretRun
+        end,
+        getCombatRating = function() return 0 end,
+        issecretvalue = function(value)
+            return rawequal(value, secretInstant) or rawequal(value, secretRun)
+        end,
+        setFormattedText = function()
+            formatterCalls = formatterCalls + 1
+            return "unexpected"
+        end,
+    })
+    fireEvent("render.speed_hide_zero_restricted.fire", speedEnv, "PLAYER_ENTERING_WORLD")
+
+    local ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_hide_zero_restricted.cold_no_error", ok, blocks)
+    eq("render.speed_hide_zero_restricted.cold_hidden", #(blocks[3].labels or {}), 0)
+
+    speedState = "clean-zero"
+    ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_hide_zero_restricted.clean_zero_no_error", ok, blocks)
+    eq("render.speed_hide_zero_restricted.clean_zero_hidden", #(blocks[3].labels or {}), 0)
+
+    speedState = "secret-after-zero"
+    ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_hide_zero_restricted.after_zero_no_error", ok, blocks)
+    eq("render.speed_hide_zero_restricted.after_zero_hidden", #(blocks[3].labels or {}), 0)
+
+    speedState = "clean-nonzero"
+    ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_hide_zero_restricted.clean_nonzero_no_error", ok, blocks)
+    local tertiary = blocks[3]
+    eq("render.speed_hide_zero_restricted.uses_clean_second_return",
+        tertiary.ratings[1]:find("110.0%", 1, true) ~= nil, true)
+
+    speedState = "secret-after-nonzero"
+    ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_hide_zero_restricted.after_nonzero_no_error", ok, blocks)
+    tertiary = blocks[3]
+    eq("render.speed_hide_zero_restricted.after_nonzero_visible", #tertiary.labels, 1)
+    eq("render.speed_hide_zero_restricted.after_nonzero_unknown_percent",
+        tertiary.ratings[1]:find("?%", 1, true) ~= nil, true)
+    eq("render.speed_hide_zero_restricted.after_nonzero_not_stale",
+        tertiary.ratings[1]:find("110.0%", 1, true), nil)
+    eq("render.speed_hide_zero_restricted.raw_secret_not_formatted", formatterCalls, 0)
+
+    local settings = activeSettings(speedEnv)
+    speedState = "clean-zero"
+    settings.showRating = true
+    settings.showPercentage = true
+    speedTest.cacheSettings()
+    ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_hide_zero_restricted.dual_zero_no_error", ok, blocks)
+    eq("render.speed_hide_zero_restricted.dual_zero_hidden", #(blocks[3].labels or {}), 0)
+
+    speedState = "secret-after-zero"
+    ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_hide_zero_restricted.dual_after_zero_no_error", ok, blocks)
+    eq("render.speed_hide_zero_restricted.dual_after_zero_hidden", #(blocks[3].labels or {}), 0)
+
+    settings.showPercentage = false
+    speedTest.cacheSettings()
+    ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_hide_zero_restricted.rating_only_zero_no_error", ok, blocks)
+    eq("render.speed_hide_zero_restricted.rating_only_zero_hidden", #(blocks[3].labels or {}), 0)
 end
 
 do
     local secretSpeed = {}
-    local restricted = false
-    local speedEnv, _, speedTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showTertiary = true,
-            showRating = false,
-            showPercentage = true,
-            hideZeroTertiary = false,
-            showLeech = false,
-            showAvoidance = false,
-            showSpeed = true,
-            showDefensive = false,
-        },
-        disableCurveUtil = true,
+    local speedState = "clean"
+    local speedEnv, _, speedTest = loadMovementScenario({
+        showRating = true,
+        showPercentage = true,
+        hideZeroTertiary = true,
+    }, {
         getUnitSpeed = function()
-            return restricted and secretSpeed or 7, 7, 7, 7
+            if speedState == "nil" then return nil, nil, nil, nil end
+            if speedState == "clean" then return 0, 7, 7, 7 end
+            return secretSpeed, secretSpeed, secretSpeed, secretSpeed
         end,
+        getCombatRating = function() return 377 end,
         issecretvalue = function(value) return rawequal(value, secretSpeed) end,
     })
-    fireEvent("render.speed_curve_unavailable.fire", speedEnv, "PLAYER_ENTERING_WORLD")
+    fireEvent("render.speed_secret_dual_column.fire", speedEnv, "PLAYER_ENTERING_WORLD")
+    speedState = "secret"
     local ok, blocks = pcall(speedTest.buildRenderBlocks)
-    check("render.speed_curve_unavailable.clean_no_error", ok, blocks)
-    eq("render.speed_curve_unavailable.clean_value", blockDumpContains(blocks, "100.0%"), true)
-    restricted = true
+    check("render.speed_secret_dual_column.no_error", ok, blocks)
+    local tertiary = blocks[3]
+    eq("render.speed_secret_dual_column.row_count", #tertiary.labels, 1)
+    eq("render.speed_secret_dual_column.row", tertiary.labels[1]:find("Movement:", 1, true) ~= nil, true)
+    eq("render.speed_secret_dual_column.rating", tertiary.ratings[1]:find("377", 1, true) ~= nil, true)
+    eq("render.speed_secret_dual_column.unknown_percent", tertiary.values[1]:find("?%", 1, true) ~= nil, true)
+    eq("render.speed_secret_dual_column.no_yards_per_second", tertiary.values[1]:find("yd/s", 1, true), nil)
+
+    local settings = activeSettings(speedEnv)
+    settings.showPercentage = false
+    speedTest.cacheSettings()
     ok, blocks = pcall(speedTest.buildRenderBlocks)
-    check("render.speed_curve_unavailable.secret_no_error", ok, blocks)
-    eq("render.speed_curve_unavailable.no_stale_value",
-        blockDumpContains(blocks, "100.0%"), false)
-    eq("render.speed_curve_unavailable.no_false_percent_row",
-        blockDumpContains(blocks, "Movement:"), false)
+    check("render.speed_secret_rating_only.no_error", ok, blocks)
+    tertiary = blocks[3]
+    eq("render.speed_secret_rating_only.row_count", #tertiary.labels, 1)
+    eq("render.speed_secret_rating_only.rating", tertiary.ratings[1]:find("377", 1, true) ~= nil, true)
+    eq("render.speed_secret_rating_only.no_false_placeholder", tertiary.ratings[1]:find("?", 1, true), nil)
+    eq("render.speed_secret_rating_only.value_empty", tertiary.values[1], "")
+
+    speedState = "nil"
+    settings.showRating = false
+    settings.showPercentage = true
+    settings.hideZeroTertiary = false
+    speedTest.cacheSettings()
+    ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_unavailable_not_restricted.no_error", ok, blocks)
+    tertiary = blocks[3]
+    eq("render.speed_unavailable_not_restricted.no_fake_unknown_row", #tertiary.labels, 0)
 end
 
 do
@@ -8310,16 +8064,10 @@ do
 end
 
 do
-    local blockEnv = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showDefensive = true,
-            hideZeroDefensive = false,
-            showDodge = false,
-            showParry = false,
-            showBlock = true,
-            showArmor = false,
-        },
+    local blockEnv = loadDefensiveScenario({
+        showBlock = true,
+        showArmor = false,
+    }, {
         unitClassToken = "MONK",
         getBlockChance = function() return 7 end,
     })
@@ -8329,16 +8077,10 @@ do
 end
 
 do
-    local blockEnv = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showDefensive = true,
-            hideZeroDefensive = false,
-            showDodge = false,
-            showParry = false,
-            showBlock = true,
-            showArmor = false,
-        },
+    local blockEnv = loadDefensiveScenario({
+        showBlock = true,
+        showArmor = false,
+    }, {
         unitClassToken = "SHAMAN",
         getBlockChance = function() return 0 end,
     })
@@ -8351,17 +8093,11 @@ do
     local staggerPhase = "clean"
     local secretStagger = {}
     local secretDisplay = "40"
-    local staggerEnv, _, staggerTest = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showDefensive = true,
-            hideZeroDefensive = false,
-            showDodge = false,
-            showParry = false,
-            showBlock = false,
-            showArmor = false,
-            showStagger = true,
-        },
+    local staggerEnv, _, staggerTest = loadDefensiveScenario({
+        showBlock = false,
+        showArmor = false,
+        showStagger = true,
+    }, {
         unitClassToken = "MONK",
         specIndex = 1,
         specID = 268,
@@ -8401,17 +8137,11 @@ do
 end
 
 do
-    local staggerEnv = loadStatsPro("enUS", {
-        statsProDB = {
-            showOffensive = false,
-            showDefensive = true,
-            hideZeroDefensive = false,
-            showDodge = false,
-            showParry = false,
-            showBlock = false,
-            showArmor = false,
-            showStagger = true,
-        },
+    local staggerEnv = loadDefensiveScenario({
+        showBlock = false,
+        showArmor = false,
+        showStagger = true,
+    }, {
         unitClassToken = "MONK",
         specIndex = 1,
         specID = 269,
@@ -8420,6 +8150,73 @@ do
     fireEvent("defensive.stagger_skips_non_brewmaster.fire", staggerEnv, "PLAYER_ENTERING_WORLD")
     slash("defensive.stagger_skips_non_brewmaster.dump", staggerEnv, "debug bucket")
     eq("defensive.stagger_skips_non_brewmaster.no_row", printContains(staggerEnv, "Stagger:"), false)
+end
+
+do
+    local failedEnv, failedAddon = loadStatsPro("enUS")
+    local mutationControlCount = #(failedAddon.settingsDesign.mutationControls or {})
+    local buildShell = failedAddon.settingsUI.BuildShell
+    local buildLayoutTab = failedAddon.settingsUI.BuildLayoutTab
+    local shellCalls, layoutCalls = 0, 0
+    failedAddon.settingsUI.BuildShell = function(...)
+        shellCalls = shellCalls + 1
+        return buildShell(...)
+    end
+    failedAddon.settingsUI.BuildLayoutTab = function(...)
+        layoutCalls = layoutCalls + 1
+        buildLayoutTab(...)
+        error("settings build fixture")
+    end
+
+    local ok, err = pcall(function() failedAddon:OpenConfigMenu() end)
+    eq("config.build_failure.first_open_rethrows", ok, false)
+    check("config.build_failure.original_error", type(err) == "string"
+        and string.find(err, "settings build fixture", 1, true) ~= nil, err)
+    eq("config.build_failure.state", failedAddon.settingsUI.buildState, "failed")
+    eq("config.build_failure.one_shell", shellCalls, 1)
+    eq("config.build_failure.one_layout", layoutCalls, 1)
+    local partialFrame = exists("config.build_failure.partial_frame",
+        failedEnv.StatsProConfigFrame)
+    eq("config.build_failure.partial_frame_hidden", partialFrame:IsShown(), false)
+    eq("config.build_failure.context_cleared", failedAddon.settingsUI.context, nil)
+    eq("config.build_failure.mutation_controls_cleaned",
+        #(failedAddon.settingsDesign.mutationControls or {}), mutationControlCount)
+    eq("config.build_failure.special_frame_removed",
+        contains(failedEnv.UISpecialFrames, "StatsProConfigFrame"), false)
+
+    failedAddon.settingsUI.BuildLayoutTab = buildLayoutTab
+    clearPrints(failedEnv)
+    ok, err = pcall(function() failedAddon:OpenConfigMenu() end)
+    check("config.build_failure.repeat_is_safe", ok, err)
+    eq("config.build_failure.no_duplicate_shell", shellCalls, 1)
+    eq("config.build_failure.no_builder_retry", layoutCalls, 1)
+    eq("config.build_failure.stays_hidden", partialFrame:IsShown(), false)
+    eq("config.build_failure.guidance",
+        printContains(failedEnv, "Settings could not be opened. Run /reload and try again."), true)
+end
+
+do
+    local pickerEnv, pickerAddon = loadStatsPro("enUS")
+    local ok, err = pcall(function() pickerAddon:OpenConfigMenu() end)
+    check("config.font_picker_hide_dedup.open", ok, err)
+    local picker = pickerAddon.settingsUI.fontPicker
+    picker.Show(pickerAddon)
+    eq("config.font_picker_hide_dedup.precondition", picker.frame:IsShown(), true)
+    local trigger = exists("config.font_picker_hide_dedup.trigger",
+        picker.dropdown.statsProTrigger)
+    local refreshControl = pickerAddon.settingsDesign.RefreshControl
+    local triggerRefreshes = 0
+    pickerAddon.settingsDesign.RefreshControl = function(control)
+        if control == trigger then triggerRefreshes = triggerRefreshes + 1 end
+        return refreshControl(control)
+    end
+    picker.Hide(pickerAddon)
+    pickerAddon.settingsDesign.RefreshControl = refreshControl
+    eq("config.font_picker_hide_dedup.one_trigger_refresh", triggerRefreshes, 1)
+    eq("config.font_picker_hide_dedup.frame_hidden", picker.frame:IsShown(), false)
+    eq("config.font_picker_hide_dedup.catcher_hidden", picker.catcher:IsShown(), false)
+    eq("config.font_picker_hide_dedup.trigger_inactive", trigger.statsProActive, false)
+    check("config.font_picker_hide_dedup.retry_invalidated", picker.retryGeneration > 0)
 end
 
 do
@@ -8533,6 +8330,81 @@ do
 end
 
 do
+    -- A cold client can accept the shared probe while a newly created settings
+    -- FontString still cannot take a direct SetFont. Settings must inherit from
+    -- its owned FontObjects and must not require direct mutation to become usable.
+    local directConfigSetFontCalls = 0
+    local function IsConfigDescendant(frame)
+        local current = frame
+        while current do
+            if current.name == "StatsProConfigFrame" then return true end
+            current = current.parent
+        end
+        return false
+    end
+    local coldEnv, coldAddon = loadStatsPro("enUS", {
+        setFontResult = function(frame)
+            if frame.regionType == "FontString" and IsConfigDescendant(frame) then
+                directConfigSetFontCalls = directConfigSetFontCalls + 1
+                frame.font, frame.fontSize, frame.fontFlags = nil, nil, nil
+                frame.fontObject = nil
+                return false
+            end
+            return true
+        end,
+        fontObjectSetFontResult = function() return true end,
+    })
+    local openOK, openError = pcall(function() coldAddon:OpenConfigMenu() end)
+    check("fonts.settings_cold_region_inherits_owned_font.open", openOK, openError)
+    eq("fonts.settings_cold_region_inherits_owned_font.no_direct_setfont",
+        directConfigSetFontCalls, 0)
+    exists("fonts.settings_cold_region_inherits_owned_font.frame", coldEnv.StatsProConfigFrame)
+end
+
+do
+    local preferredConfigFont =
+        "Interface\\AddOns\\SharedMedia\\Fonts\\NotoSans-Medium.ttf"
+    local failedRegion
+    local failureTriggered = false
+    local ownedFailureTriggered = false
+    local fallbackEnv, _, fallbackTest = loadStatsPro("enUS", {
+        lsmFonts = {
+            { name = "Noto Sans Medium", path = preferredConfigFont },
+        },
+        setFontResult = function(frame, font)
+            if frame == failedRegion and font == preferredConfigFont then
+                failureTriggered = true
+                frame.font, frame.fontSize, frame.fontFlags = nil, nil, nil
+                frame.fontObject = nil
+                return false
+            end
+            return true
+        end,
+        fontObjectSetFontResult = function(fontObject, font)
+            if string.find(fontObject.name or "", "StatsProOwnedFont", 1, true) == 1
+                and font == preferredConfigFont then
+                ownedFailureTriggered = true
+                return false
+            end
+            return true
+        end,
+    })
+    failedRegion = fallbackEnv.UIParent:CreateFontString(nil, "OVERLAY")
+    failedRegion:SetFont("Fonts\\FRIZQT__.TTF", 12)
+    failedRegion:SetText("Settings")
+    local ok, applied, effective = pcall(
+        fallbackTest.registerConfigFont, failedRegion, 12, nil)
+    check("fonts.config_register_failed_primary.safe", ok, applied)
+    eq("fonts.config_register_failed_primary.owned_triggered", ownedFailureTriggered, true)
+    eq("fonts.config_register_failed_primary.triggered", failureTriggered, true)
+    eq("fonts.config_register_failed_primary.fallback_applied", applied, true)
+    eq("fonts.config_register_failed_primary.effective_font",
+        failedRegion:GetFont(), effective)
+    eq("fonts.config_register_failed_primary.text_preserved",
+        failedRegion:GetText(), "Settings")
+end
+
+do
     local ownedEnv, ownedAddon, ownedTest = loadStatsPro("enUS")
     local before = ownedTest.panelFontState()
     eq("fonts.owned_panels.object_count", #ownedEnv.__fontObjects, 2)
@@ -8595,12 +8467,10 @@ do
     local roleObjects = {}
     local appearance = {}
     for index, entry in ipairs(configBefore.entries) do
-        exists("fonts.owned_settings.object." .. index, entry.actualObject)
-        local prior = roleObjects[entry.roleKey]
-        if prior then
-            eq("fonts.owned_settings.semantic_role_shared." .. index,
-                entry.actualObject, prior)
-        else
+        check("fonts.owned_settings.registered_object." .. index,
+            entry.actualObject ~= nil and entry.actualObject == entry.ownedObject,
+            "settings region did not inherit its registered FontObject")
+        if not roleObjects[entry.roleKey] then
             roleObjects[entry.roleKey] = entry.actualObject
         end
         appearance[entry.region] = {
@@ -8623,7 +8493,8 @@ do
     for index, entry in ipairs(configAfter.entries) do
         local old = appearance[entry.region]
         eq("fonts.owned_settings.identity_stable." .. index, entry.actualObject, old.object)
-        eq("fonts.owned_settings.inherited_font." .. index, entry.actualFont, "Fonts\\ARIALN.TTF")
+        eq("fonts.owned_settings.inherited_font." .. index,
+            entry.actualFont, "Fonts\\ARIALN.TTF")
         eq("fonts.owned_settings.no_direct_setfont." .. index,
             entry.region.setFontCalls or 0, old.directCalls)
         assertDeepEqual("fonts.owned_settings.color_preserved." .. index,
@@ -8661,7 +8532,6 @@ do
     check("fonts.owned_fallback.settings_open", ok, err)
     local configState = fallbackTest.configFontState()
     for index, entry in ipairs(configState.entries) do
-        eq("fonts.owned_fallback.settings_owned_object." .. index, entry.ownedObject, nil)
         eq("fonts.owned_fallback.settings_private_object." .. index,
             entry.actualObject.isPrivateFontObject, true)
     end
@@ -8749,54 +8619,6 @@ do
 end
 
 do
-    local targetFont = "Fonts\\ARIALN.TTF"
-    local poisonFont = "Fonts\\MORPHEUS.TTF"
-    local active = false
-    local targetCalls = 0
-    local failedObject
-    local _, rollbackAddon, rollbackTest = loadStatsPro("enUS", {
-        fontObjectSetFontResult = function(fontObject, font, size, flags)
-            if active and font == targetFont then
-                targetCalls = targetCalls + 1
-                if targetCalls == 2 then
-                    failedObject = fontObject
-                    fontObject.font, fontObject.fontSize, fontObject.fontFlags =
-                        poisonFont, size, flags
-                    return false
-                end
-            elseif active and fontObject == failedObject then
-                return false
-            end
-            return true
-        end,
-    })
-    local ok, err = pcall(function() rollbackAddon:OpenConfigMenu() end)
-    check("fonts.owned_config_rollback_failure.open", ok, err)
-    active = true
-    local applied, effective, status = rollbackTest.applyConfigFont(targetFont, true)
-    eq("fonts.owned_config_rollback_failure.result", applied, false)
-    eq("fonts.owned_config_rollback_failure.effective", effective, nil)
-    eq("fonts.owned_config_rollback_failure.status", status, "rollback-failed")
-    exists("fonts.owned_config_rollback_failure.failed_object", failedObject)
-    local state = rollbackTest.configFontState()
-    eq("fonts.owned_config_rollback_failure.current_cleared", state.currentFont, nil)
-    for index, entry in ipairs(state.entries) do
-        eq("fonts.owned_config_rollback_failure.metadata_cleared." .. index,
-            entry.appliedFont, nil)
-    end
-    active = false
-    applied = rollbackTest.applyConfigFont("Fonts\\FRIZQT__.TTF", true)
-    eq("fonts.owned_config_rollback_failure.recovery", applied, true)
-    state = rollbackTest.configFontState()
-    eq("fonts.owned_config_rollback_failure.recovery_current",
-        state.currentFont, "Fonts\\FRIZQT__.TTF")
-    for index, entry in ipairs(state.entries) do
-        eq("fonts.owned_config_rollback_failure.recovery_metadata." .. index,
-            entry.appliedFont, "Fonts\\FRIZQT__.TTF")
-    end
-end
-
-do
     local partialEnv, _, partialTest = loadStatsPro("enUS", {
         setFontObjectResult = function(_, fontObject)
             if fontObject.name == "StatsProOwnedFont1" and fontObject.attachCount >= 2 then
@@ -8822,58 +8644,6 @@ do
         end
     end
     eq("fonts.owned_partial.object_registry_stable", #partialEnv.__fontObjects, 2)
-end
-
-do
-    local active = false
-    local mutationCalls = 0
-    local bodyObject
-    local poisonFont = "Fonts\\MORPHEUS.TTF"
-    local lateEnv, lateAddon, lateTest = loadStatsPro("enUS", {
-        fontObjectSetFontResult = function(fontObject, font, size, flags)
-            if active and fontObject == bodyObject then
-                mutationCalls = mutationCalls + 1
-                if mutationCalls <= 2 then
-                    fontObject.font, fontObject.fontSize, fontObject.fontFlags =
-                        poisonFont, size, flags
-                    return false
-                end
-            end
-            return true
-        end,
-    })
-    local ok, err = pcall(function() lateAddon:OpenConfigMenu() end)
-    check("fonts.owned_late_register_recovery.open", ok, err)
-    local before = lateTest.configFontState()
-    for _, entry in ipairs(before.entries) do
-        if entry.roleKey == "role:body" then
-            bodyObject = entry.ownedObject
-            break
-        end
-    end
-    exists("fonts.owned_late_register_recovery.body_object", bodyObject)
-    bodyObject.font = poisonFont
-    active = true
-    local lateRegion = lateEnv.UIParent:CreateFontString(nil, "OVERLAY")
-    local registered, effective = lateTest.registerConfigFont(
-        lateRegion, 12, nil, "role:body")
-    eq("fonts.owned_late_register_recovery.registered", registered, true)
-    eq("fonts.owned_late_register_recovery.effective", effective, before.currentFont)
-    eq("fonts.owned_late_register_recovery.double_failure_then_full_apply",
-        mutationCalls, 3)
-    local after = lateTest.configFontState()
-    eq("fonts.owned_late_register_recovery.current", after.currentFont, before.currentFont)
-    for index, entry in ipairs(after.entries) do
-        eq("fonts.owned_late_register_recovery.metadata." .. index,
-            entry.appliedFont, before.currentFont)
-        eq("fonts.owned_late_register_recovery.actual." .. index,
-            entry.actualFont, before.currentFont)
-    end
-    local callsBeforeFastPath = mutationCalls
-    registered = lateTest.applyConfigFont(before.currentFont, false)
-    eq("fonts.owned_late_register_recovery.valid_fast_path", registered, true)
-    eq("fonts.owned_late_register_recovery.fast_path_no_mutation",
-        mutationCalls, callsBeforeFastPath)
 end
 
 do
@@ -9885,13 +9655,33 @@ do
     local pickerTarget = "Interface\\AddOns\\SharedMedia\\Fonts\\PickerTarget.ttf"
     local mode = "pass"
     local defaultFontCalls = 0
+    local partialTargetFailureRegion
+    local rollbackFailureRegion
+    local partialRestoreFont
+    local registeredRegions = {}
+    local retryTouchedRegions = {}
     local configEnv, configAddon, configTest = loadStatsPro("enUS", {
+        -- Exercise the compatibility transaction independently from the owned
+        -- FontObject path covered above.
+        createFontAvailable = false,
         lsmFonts = {
             { name = "Noto Sans Medium", path = readableConfigFont },
             { name = "Config Target", path = configTarget },
             { name = "Picker Target", path = pickerTarget },
         },
         setFontResult = function(frame, font, _, flags)
+            if mode == "partial-rollback-failure" then
+                if font == configTarget and frame == partialTargetFailureRegion then
+                    return false
+                end
+                if font == partialRestoreFont and frame == rollbackFailureRegion then
+                    frame.font, frame.fontSize, frame.fontFlags = nil, nil, nil
+                    return false
+                end
+            elseif mode == "partial-retry" and font == partialRestoreFont
+                and registeredRegions[frame] then
+                retryTouchedRegions[frame] = true
+            end
             if font == configTarget and mode == "config-false" then return false end
             if font == pickerTarget and mode == "picker-false" then return false end
             if font == pickerTarget and mode == "picker-error" then error("synthetic config SetFont error") end
@@ -9913,7 +9703,6 @@ do
     eq("fonts.config_registry.readable_default_supports_cyrillic",
         configTest.fontSupports(readableConfigFont, "Cyrillic"), true)
     check("fonts.config_registry.has_entries", #before.entries > 10, "expected populated config font registry")
-    local registeredRegions = {}
     for i, entry in ipairs(before.entries) do
         check("fonts.config_registry.unique_region." .. i,
             registeredRegions[entry.region] == nil,
@@ -9970,6 +9759,41 @@ do
         eq("fonts.config_registry.error.object_identity." .. i,
             entry.actualObject, beforeError.entries[i].actualObject)
         eq("fonts.config_registry.error.actual_text." .. i, entry.actualText, beforeError.entries[i].actualText)
+    end
+
+    partialTargetFailureRegion = beforeError.entries[2].region
+    rollbackFailureRegion = beforeError.entries[1].region
+    partialRestoreFont = beforeError.currentFont
+    mode = "partial-rollback-failure"
+    local rollbackReason
+    applied, rollbackReason = configTest.applyConfigFont(configTarget, true)
+    eq("fonts.config_registry.partial_rollback_failure.rejected", applied, false)
+    eq("fonts.config_registry.partial_rollback_failure.reason", rollbackReason, "rollback-failed")
+    local partialState = configTest.configFontState()
+    eq("fonts.config_registry.partial_rollback_failure.invalidates_current",
+        partialState.currentFont, nil)
+    eq("fonts.config_registry.partial_rollback_failure.exposes_failed_restore",
+        partialState.entries[1].actualFont, nil)
+    for i, entry in ipairs(partialState.entries) do
+        eq("fonts.config_registry.partial_rollback_failure.invalidates_entry." .. i,
+            entry.appliedFont, nil)
+    end
+
+    mode = "partial-retry"
+    applied, effective = configTest.applyConfigFont(partialRestoreFont, false)
+    eq("fonts.config_registry.partial_rollback_failure.retry_applies", applied, true)
+    eq("fonts.config_registry.partial_rollback_failure.retry_effective",
+        effective, partialRestoreFont)
+    local retryTouchedCount = 0
+    for _ in pairs(retryTouchedRegions) do retryTouchedCount = retryTouchedCount + 1 end
+    eq("fonts.config_registry.partial_rollback_failure.retry_touches_all",
+        retryTouchedCount, #partialState.entries)
+    local recoveredState = configTest.configFontState()
+    for i, entry in ipairs(recoveredState.entries) do
+        eq("fonts.config_registry.partial_rollback_failure.retry_applied_font." .. i,
+            entry.appliedFont, partialRestoreFont)
+        eq("fonts.config_registry.partial_rollback_failure.retry_actual_font." .. i,
+            entry.actualFont, partialRestoreFont)
     end
 
     mode = "pass"
@@ -11692,6 +11516,7 @@ do
     end
     eq("config.builders.frame_owner", settingsUI.frame, env.StatsProConfigFrame)
     eq("config.builders.context_owner", settingsUI.context.frame, env.StatsProConfigFrame)
+    eq("config.builders.build_state", settingsUI.buildState, "ready")
     for _, bridgeName in ipairs({
         "previewFont", "cancelFontPreview", "previewLanguage", "cancelLanguagePreview",
     }) do
@@ -11716,6 +11541,17 @@ do
     exists("config.frame_registered.scroll", env.StatsProConfigScroll)
     check("config.frame_registered.special", contains(env.UISpecialFrames, "StatsProConfigFrame"),
         "StatsProConfigFrame missing from UISpecialFrames")
+
+    local hiddenTab = env.StatsProConfigFrame.tabButtons[2]
+    userInteract("config.tab_hide_reset.enter", hiddenTab, "OnEnter")
+    userInteract("config.tab_hide_reset.down", hiddenTab, "OnMouseDown")
+    eq("config.tab_hide_reset.precondition", hiddenTab.statsProTabState, "pressed")
+    hiddenTab:Hide()
+    eq("config.tab_hide_reset.hover", hiddenTab.statsProHovered, nil)
+    eq("config.tab_hide_reset.pressed", hiddenTab.statsProPressed, nil)
+    eq("config.tab_hide_reset.state", hiddenTab.statsProTabState, "normal")
+    hiddenTab:Show()
+    eq("config.tab_hide_reset.reopen", hiddenTab.statsProTabState, "normal")
 
     local coreControls = {
         "StatsProVisibleCheck",

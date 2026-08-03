@@ -54,16 +54,6 @@ MAX_SPELL_SCHOOLS = 7
 ---@type StatsProStringUtil?
 C_StringUtil = nil
 
----@class (exact) StatsProCurve
----@field AddPoint fun(self: StatsProCurve, pointX: number, pointY: number)
----@field Evaluate fun(self: StatsProCurve, x: number): number
-
----@class (exact) StatsProCurveUtil
----@field CreateCurve fun(): StatsProCurve
-
----@type StatsProCurveUtil?
-C_CurveUtil = nil
-
 ---@class (exact) StatsProUIFileAsset
 ---@field IsKnownFile fun(filePath: string): boolean
 

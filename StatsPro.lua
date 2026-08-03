@@ -54,10 +54,8 @@ addon.critRuntime = {
     selectedSpellSchool = nil,
 }
 addon.movementRuntime = {
-    percentCurve = nil,
     baseSpeed = 7,
     percentAtBaseSpeed = 100,
-    curveMaxBaseUnits = 1000,
 }
 
 --[[ ============================================================
@@ -1172,8 +1170,9 @@ local DEFENSIVE_STATS = {
 local TERTIARY_STATS = {
     { label = "Leech",     api = GetLifesteal, ratingCR = CR_LIFESTEAL, colorKey = "leech",     showKey = "showLeech"     },
     { label = "Avoidance", api = GetAvoidance, ratingCR = CR_AVOIDANCE, colorKey = "avoidance", showKey = "showAvoidance" },
-    -- GetUnitSpeed returns yards/second, so only value resolution differs. Rating,
-    -- visibility, hide-zero, columns, colors and formatting stay on the shared path.
+    -- GetUnitSpeed's second return is ground run speed in yards/second, so only
+    -- value resolution differs. Rating, visibility, hide-zero, columns, colors
+    -- and formatting stay on the shared path.
     { label = "Speed", api = GetUnitSpeed, ratingCR = CR_SPEED, colorKey = "speed",
       showKey = "showSpeed", valueKind = "movement" },
 }
@@ -3875,48 +3874,20 @@ function SAFE_NUM.SafeDisplayPercent(fn, ...)
     return SAFE_NUM.ResolveDisplayNumber(value, false)
 end
 
--- GetUnitSpeed's first return is the player's actual instantaneous speed in
--- yards/second, not a percentage. Restricted combat makes that number secret,
--- so Lua cannot divide it by the base run speed. A Blizzard curve performs the
--- conversion inside the client and preserves the secret tag for the existing
--- FontString-only display path. The wide final point keeps transport speeds in
--- the same linear mapping rather than relying on out-of-range curve behavior.
-function addon.movementRuntime.CreatePercentCurve()
-    local curveUtil = _G.C_CurveUtil
-    if type(curveUtil) ~= "table" or type(curveUtil.CreateCurve) ~= "function" then
-        return nil
-    end
-    local ok, curve = pcall(curveUtil.CreateCurve)
-    if not ok or not curve or type(curve.AddPoint) ~= "function"
-        or type(curve.Evaluate) ~= "function" then
-        return nil
-    end
-    local baseSpeed = addon.movementRuntime.baseSpeed
-    local basePercent = addon.movementRuntime.percentAtBaseSpeed
-    local maxBaseUnits = addon.movementRuntime.curveMaxBaseUnits
-    if not pcall(curve.AddPoint, curve, 0, 0)
-        or not pcall(curve.AddPoint, curve, baseSpeed, basePercent)
-        or not pcall(curve.AddPoint, curve,
-            baseSpeed * maxBaseUnits, basePercent * maxBaseUnits) then
-        return nil
-    end
-    return curve
-end
-
-addon.movementRuntime.percentCurve = addon.movementRuntime.CreatePercentCurve()
-
-function addon.movementRuntime.ResolvePercent(currentSpeed)
-    local displaySpeed, cleanSpeed = SAFE_NUM.ResolveDisplayNumber(currentSpeed, true)
+-- GetUnitSpeed returns ground run speed in yards/second rather than a
+-- percentage. Clean values can be converted normally. Under unit-stat
+-- restrictions the return is secret and addon Lua cannot divide it by the base
+-- speed. CurveObject:Evaluate is not a laundering step: Blizzard permits secret
+-- arguments only from untainted execution. Preserve the percentage contract and
+-- report the restricted state explicitly instead of dropping the row, changing
+-- units, inventing a percentage, or reusing a stale out-of-combat value.
+function addon.movementRuntime.ResolvePercent(runSpeed)
+    local displaySpeed, cleanSpeed = SAFE_NUM.ResolveDisplayNumber(runSpeed, true)
     if cleanSpeed ~= nil then
         return (cleanSpeed / addon.movementRuntime.baseSpeed)
-            * addon.movementRuntime.percentAtBaseSpeed
+            * addon.movementRuntime.percentAtBaseSpeed, false
     end
-    if not issecretvalue(displaySpeed) then return nil end
-    local curve = addon.movementRuntime.percentCurve
-    if not curve then return nil end
-    local ok, percent = pcall(curve.Evaluate, curve, displaySpeed)
-    if not ok or not SAFE_NUM.IsRenderableNumberValue(percent) then return nil end
-    return percent
+    return nil, issecretvalue(displaySpeed)
 end
 
 function SAFE_NUM.SafeCompositePercent(fn, ...)
@@ -3992,6 +3963,15 @@ local function shouldShow(rowKey, val, hideZero)
     if not hideZero then return true end
     if isSecret then return rowKey and cached.cleanRowVisibility[rowKey] == true end
     return val ~= 0
+end
+
+-- Unknown is not evidence of non-zero. Keep the row visible when Hide Zero is
+-- off; otherwise preserve only a prior clean non-zero decision. Rating
+-- visibility is evaluated independently by each caller.
+local function shouldShowUnknown(rowKey, isUnknown, hideZero)
+    if not isUnknown then return false end
+    if not hideZero then return true end
+    return rowKey and cached.cleanRowVisibility[rowKey] == true
 end
 
 local function FormatRepairCost(copper)
@@ -7853,13 +7833,13 @@ function Panel:New(globalName, dbKeyPrefix)
         overlay:RegisterForDrag("LeftButton")
         overlay:SetScript("OnDragStart", function()
             if InCombatLockdown() or cached.isLocked then return end
-            frame.wasDragging = true
+            panel:BeginDragGuard()
             frame:StartMoving()
         end)
         overlay:SetScript("OnDragStop", function()
             frame:StopMovingOrSizing()
             panel:SavePosition()
-            C_Timer.After(0.1, function() frame.wasDragging = false end)
+            panel:ScheduleDragGuardRelease()
         end)
         overlay:SetScript("OnMouseUp", function(_, button)
             if button == "RightButton" and not frame.wasDragging and not InCombatLockdown() then
@@ -7897,7 +7877,7 @@ function Panel:New(globalName, dbKeyPrefix)
         if addon.profileRuntime.ReadCombatState() ~= false then return end
         if not addon.dbRuntime.GetWritableSettings(false) then return end
         panel.editDragging = true
-        frame.wasDragging = true
+        panel:BeginDragGuard()
         frame:StartMoving()
     end)
     editHandle:SetScript("OnDragStop", function()
@@ -7985,7 +7965,7 @@ function Panel:New(globalName, dbKeyPrefix)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", function(f)
         if InCombatLockdown() or cached.isLocked then return end
-        f.wasDragging = true
+        panel:BeginDragGuard()
         f:StartMoving()
     end)
     frame:SetScript("OnDragStop", function(f)
@@ -7994,7 +7974,7 @@ function Panel:New(globalName, dbKeyPrefix)
         -- 100ms guard absorbs the OnMouseUp that fires immediately after a drag, so
         -- the right-click handler doesn't open Settings on drag-end. Pure clicks
         -- don't pass the drag-distance threshold, never set wasDragging, unaffected.
-        C_Timer.After(0.1, function() f.wasDragging = false end)
+        panel:ScheduleDragGuardRelease()
     end)
     -- Right-click -> Settings while out of combat (drag-aware via wasDragging guard).
     frame:SetScript("OnMouseUp", function(f, button)
@@ -8023,12 +8003,26 @@ function Panel:SavePositionTo(db)
     db[self:DBKey("yOfs")] = yOfs
 end
 
+function Panel:BeginDragGuard()
+    self.dragGuardGeneration = (self.dragGuardGeneration or 0) + 1
+    self.frame.wasDragging = true
+end
+
+function Panel:ScheduleDragGuardRelease()
+    local generation = self.dragGuardGeneration or 0
+    C_Timer.After(0.1, function()
+        if self.dragGuardGeneration == generation then
+            self.frame.wasDragging = false
+        end
+    end)
+end
+
 function Panel:FinishEditDrag()
     if not self.editDragging then return end
     self.frame:StopMovingOrSizing()
     self:SavePosition()
     self.editDragging = false
-    C_Timer.After(0.1, function() self.frame.wasDragging = false end)
+    self:ScheduleDragGuardRelease()
 end
 
 function Panel:SetEditAffordanceVisible(show)
@@ -9132,7 +9126,7 @@ local function FmtRatingPct(rating, pct, statColor, forceUnknownPercent)
     local pc = (cached.matchValueColorToStat and statColor) or cs.percentage
     local ratingStr = SAFE_NUM.FormatColorNumber(rc, rating, "%d") or ("|cff" .. rc .. "?|r")
     local pctStr = forceUnknownPercent
-        and ("|cff" .. pc .. "?|r") or FmtColorPct(pc, pct)
+        and ("|cff" .. pc .. "?%|r") or FmtColorPct(pc, pct)
     if IsDualColMode() then
         return ratingStr .. " |cff808080|||r", pctStr or ""
     elseif cached.showRating then
@@ -9284,7 +9278,8 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
             local ratingDisplay, targetRating
             local ratingRead = false
             local forceUnknownPercent = percentState == "restricted"
-            local visible = forceUnknownPercent
+            local visible = shouldShowUnknown(
+                    def.showKey, forceUnknownPercent, cached.hideZeroOffensive)
                 or shouldShow(def.showKey, val, cached.hideZeroOffensive)
             if cached.showRating then
                 ratingDisplay, targetRating = SAFE_NUM.ReadRatingValue(
@@ -9360,7 +9355,8 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
                 cached.versTotalRating = targetVersRating
             end
         end
-        local versVisible = versDisplayUnknown
+        local versVisible = shouldShowUnknown(
+                "showVersatility", versDisplayUnknown, cached.hideZeroOffensive)
             or shouldShow("showVersatility", versDisplay, cached.hideZeroOffensive)
         if cached.showRating then
             local versRatingVisible = shouldShow("showVersatilityRating", versRatingDisplay, cached.hideZeroOffensive)
@@ -9403,13 +9399,20 @@ local function BuildTertiaryLines(labels, ratings, values)
     for _, def in ipairs(TERTIARY_STATS) do
         if cached[def.showKey] then
             local val
+            local forceUnknownPercent = false
             if def.valueKind == "movement" then
-                val = addon.movementRuntime.ResolvePercent(safeCall(def.api, "player"))
+                local ok, _, runSpeed = pcall(def.api, "player")
+                if ok then
+                    val, forceUnknownPercent = addon.movementRuntime.ResolvePercent(runSpeed)
+                    forceUnknownPercent = forceUnknownPercent and cached.showPercentage
+                end
             else
                 val = SAFE_NUM.SafeDisplayPercent(def.api)
             end
             local ratingDisplay
-            local visible = shouldShow(def.showKey, val, cached.hideZeroTertiary)
+            local visible = shouldShowUnknown(
+                    def.showKey, forceUnknownPercent, cached.hideZeroTertiary)
+                or shouldShow(def.showKey, val, cached.hideZeroTertiary)
             if needRating then
                 ratingDisplay = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
                 local ratingVisible = shouldShow(def.showKey .. "Rating", ratingDisplay, cached.hideZeroTertiary)
@@ -9419,7 +9422,8 @@ local function BuildTertiaryLines(labels, ratings, values)
                 local rating
                 if needRating then rating = ratingDisplay end
                 local statColor = cs[def.colorKey]
-                local rStr, vStr = FmtRatingPct(rating, val, statColor)
+                local rStr, vStr = FmtRatingPct(
+                    rating, val, statColor, forceUnknownPercent)
                 PushRow(labels, ratings, values,
                     FormatLabel(statColor, def.label),
                     rStr, vStr)
@@ -9969,14 +9973,14 @@ local CONFIG_FONT = LocaleAwareConfigFont()
 -- Blizzard FontObjects (GameFontNormal etc. used by buttons) carry built-in OS
 -- fallback so they render Cyrillic/CJK acceptably. StatsPro's owned FontObjects still
 -- need an explicit locale-compatible face; without this swap, ruRU/zhCN previews on
--- enUS clients render as boxes. RegisterConfigFont attaches each real region to a
--- semantic typography group that ApplyConfigFont can mutate without rebuilding.
+-- enUS clients render as boxes. ApplyConfigFont refreshes semantic font groups in place.
 local currentConfigFont    = CONFIG_FONT
 local localizedConfigFonts = {}
 
 local function ConfigFontGroupKey(roleKey, size, flags)
-    if type(roleKey) ~= "string" or roleKey == "" then return nil end
-    return roleKey .. "\031" .. size .. "\031" .. (flags or "")
+    local semanticRole = type(roleKey) == "string" and roleKey ~= ""
+        and roleKey or "custom"
+    return semanticRole .. "\031" .. size .. "\031" .. (flags or "")
 end
 
 local function ConfigFontGroupRegions(group)
@@ -10007,7 +10011,6 @@ local function RemoveConfigFontEntry(group, entry)
 end
 
 local function GetConfigFontGroup(groupKey, size, flags)
-    if not groupKey then return nil end
     local groups = localizedConfigFonts.groups
     local groupOrder = localizedConfigFonts.groupOrder
     if not groups then
@@ -10045,9 +10048,9 @@ ResolveConfigFont = function(activeLocale)
     return FindCompatibleFont(CONFIG_FONT, req) or CONFIG_FONT
 end
 
--- Settings-UI font register: real regions inherit from stable addon-owned FontObjects.
--- Semantic role is part of the ownership key so independently styled surfaces never
--- become coupled merely because they currently share a size and outline.
+-- Settings FontStrings inherit from stable addon-owned FontObjects before their
+-- first localized SetText. Direct SetFont remains only a compatibility fallback:
+-- on a cold client it can leave a newly created region without any font at all.
 local function RegisterConfigFont(fs, size, flags, roleKey)
     local entry = localizedConfigFonts[fs]
     if not entry then
@@ -10055,39 +10058,31 @@ local function RegisterConfigFont(fs, size, flags, roleKey)
         localizedConfigFonts[fs] = entry
         tinsert(localizedConfigFonts, entry)
     end
-    local normalizedRole = roleKey
-    local groupKey = ConfigFontGroupKey(normalizedRole, size, flags)
+    local groupKey = ConfigFontGroupKey(roleKey, size, flags)
     if entry.group and entry.group.key ~= groupKey then
         RemoveConfigFontEntry(entry.group, entry)
         entry.group = nil
     end
-    entry.roleKey = normalizedRole
+    entry.roleKey = roleKey
     entry.size = size
     entry.flags = flags
     local previousText = fs:GetText()
-    local resolvedFont, effectiveFlags
-    if addon.fontRuntime.configFontValidated then
-        resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(currentConfigFont, size, flags)
-    else
-        resolvedFont, effectiveFlags = addon.fontRuntime.resolveFlags(currentConfigFont, size, flags)
-    end
-    local group = resolvedFont and GetConfigFontGroup(groupKey, size, flags) or nil
-    local inherited = false
-    local groupRollbackFailed = false
-    if group then
-        local oldGroupFont, oldGroupSize, oldGroupFlags =
+    local registryRollbackFailed = false
+
+    local function TryInherit(group, font, effectiveFlags)
+        if not group or not font then return false end
+        local oldFont, oldSize, oldFlags =
             group.appliedFont, group.appliedSize, group.appliedFlags
         local objectReady = addon.fontRuntime.matchesAppliedFont(
-            group.object, resolvedFont, size, effectiveFlags)
+            group.object, font, size, effectiveFlags)
         if not objectReady then
             objectReady = addon.fontRuntime.setOwnedFont(
-                group.object, ConfigFontGroupRegions(group), resolvedFont, size, effectiveFlags)
-            if not objectReady and oldGroupFont then
+                group.object, ConfigFontGroupRegions(group), font, size, effectiveFlags)
+            if not objectReady and oldFont then
                 local restored = addon.fontRuntime.restoreOwned(
-                    group.object, ConfigFontGroupRegions(group),
-                    oldGroupFont, oldGroupSize, oldGroupFlags)
+                    group.object, ConfigFontGroupRegions(group), oldFont, oldSize, oldFlags)
                 if not restored then
-                    groupRollbackFailed = true
+                    registryRollbackFailed = true
                     group.appliedFont = nil
                     group.appliedSize = nil
                     group.appliedFlags = nil
@@ -10101,61 +10096,76 @@ local function RegisterConfigFont(fs, size, flags, roleKey)
                 end
             end
         end
-        if objectReady then
-            inherited = entry.group == group
-                or addon.fontRuntime.attachOwnedFontObject(fs, group.object)
-            if inherited then
-                inherited = addon.fontRuntime.ownedRegionsMatch(
-                    { fs }, group.object, resolvedFont, size, effectiveFlags)
-            end
-        end
+        if not objectReady then return false end
+        local inherited = entry.group == group
+            or addon.fontRuntime.attachOwnedFontObject(fs, group.object)
+        return inherited and addon.fontRuntime.ownedRegionsMatch(
+            { fs }, group.object, font, size, effectiveFlags)
     end
 
-    if inherited and group then
+    local function CommitGroup(group, font, effectiveFlags)
         if entry.group ~= group then
             entry.group = group
             tinsert(group.entries, entry)
         end
         if previousText ~= nil then fs:SetText(previousText) end
-        currentConfigFont = resolvedFont
+        currentConfigFont = font
         addon.fontRuntime.configFontValidated = true
-        group.appliedFont = resolvedFont
+        group.appliedFont = font
         group.appliedSize = size
         group.appliedFlags = effectiveFlags
-        entry.appliedFont = resolvedFont
+        entry.appliedFont = font
         entry.appliedSize = size
         entry.appliedFlags = effectiveFlags
-        return true
+        return true, font
     end
 
-    -- Direct SetFont is retained only as a compatibility fallback. It also detaches
-    -- a partially attached FontObject if SetFontObject failed after changing state.
+    local resolvedFont, effectiveFlags
+    if addon.fontRuntime.configFontValidated then
+        resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(
+            currentConfigFont, size, flags)
+    else
+        resolvedFont, effectiveFlags = addon.fontRuntime.resolveFlags(
+            currentConfigFont, size, flags)
+    end
+    local group = resolvedFont and GetConfigFontGroup(groupKey, size, flags) or nil
+    if TryInherit(group, resolvedFont, effectiveFlags) then
+        return CommitGroup(group, resolvedFont, effectiveFlags)
+    end
+
+    -- Compatibility path for clients where CreateFont/SetFontObject is unavailable.
     if entry.group then RemoveConfigFontEntry(entry.group, entry) end
     entry.group = nil
     if resolvedFont and addon.fontRuntime.setRegionFont(fs, resolvedFont, size, effectiveFlags) then
         if previousText ~= nil then fs:SetText(previousText) end
-        if groupRollbackFailed then
-            entry.appliedFont = resolvedFont
-            entry.appliedSize = size
-            entry.appliedFlags = effectiveFlags
-            return ApplyConfigFont(resolvedFont, true)
-        end
         currentConfigFont = resolvedFont
         addon.fontRuntime.configFontValidated = true
         entry.appliedFont = resolvedFont
         entry.appliedSize = size
         entry.appliedFlags = effectiveFlags
-        return true
+        if registryRollbackFailed then
+            return ApplyConfigFont(resolvedFont, true)
+        end
+        return true, resolvedFont
     end
 
-    -- A failed SetFont may still clear the FontString on some clients. Restore
-    -- the label before the fallback path snapshots and reapplies it.
-    if previousText ~= nil then fs:SetText(previousText) end
+    -- A failed direct SetFont may clear the region. Attach a separate owned
+    -- Blizzard fallback before any caller is allowed to set text.
     local active = ResolveActiveLocale()
     local req = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
     local fallback = FindCompatibleFont(addon.fontRuntime.safeDefaultPath(), req)
         or addon.fontRuntime.safeDefaultPath()
-    return ApplyConfigFont(fallback, true)
+    local fallbackFont, fallbackFlags = addon.fontRuntime.resolveFlags(
+        fallback, size, flags)
+    local fallbackGroup = fallbackFont and GetConfigFontGroup(
+        "fallback\031" .. groupKey, size, flags) or nil
+    if TryInherit(fallbackGroup, fallbackFont, fallbackFlags) then
+        local applied, effective = CommitGroup(
+            fallbackGroup, fallbackFont, fallbackFlags)
+        if registryRollbackFailed then ApplyConfigFont(fallbackFont, true) end
+        return applied, effective
+    end
+    return false, nil, "font-unavailable"
 end
 
 -- Called from MaybeAutoSwitchFont and the Settings language preview. Idempotent
@@ -10191,19 +10201,19 @@ ApplyConfigFont = function(font, force)
             })
         end
     end
-    for i, e in ipairs(localizedConfigFonts) do
-        previousText[i] = e.fs:GetText()
-        if not e.group then
+    for i, entry in ipairs(localizedConfigFonts) do
+        previousText[i] = entry.fs:GetText()
+        if not entry.group then
             local resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(
-                usable, e.size, e.flags)
+                usable, entry.size, entry.flags)
             if not resolvedFont then return false end
             tinsert(directPlans, {
-                entry = e,
+                entry = entry,
                 font = resolvedFont,
                 flags = effectiveFlags,
-                oldFont = e.appliedFont,
-                oldSize = e.appliedSize,
-                oldFlags = e.appliedFlags,
+                oldFont = entry.appliedFont,
+                oldSize = entry.appliedSize,
+                oldFlags = entry.appliedFlags,
             })
         end
     end
@@ -10226,8 +10236,20 @@ ApplyConfigFont = function(font, force)
                 restored = false
             end
         end
-        for index, e in ipairs(localizedConfigFonts) do
-            if previousText[index] ~= nil then e.fs:SetText(previousText[index]) end
+        -- Never restore text onto a region whose font rollback failed. Retail
+        -- raises FontString:SetText(): Font not set and masks the real failure.
+        for index, entry in ipairs(localizedConfigFonts) do
+            if previousText[index] ~= nil then
+                local fontReady = entry.appliedFont
+                    and addon.fontRuntime.matchesAppliedFont(
+                        entry.fs, entry.appliedFont,
+                        entry.appliedSize, entry.appliedFlags)
+                if fontReady then
+                    entry.fs:SetText(previousText[index])
+                else
+                    restored = false
+                end
+            end
         end
         return restored
     end
@@ -10256,7 +10278,7 @@ ApplyConfigFont = function(font, force)
                 ClearConfigFontMetadata()
                 groupStatus = "rollback-failed"
             end
-            return false, nil, groupStatus
+            return false, groupStatus
         end
     end
     for _, plan in ipairs(directPlans) do
@@ -10268,11 +10290,11 @@ ApplyConfigFont = function(font, force)
                 ClearConfigFontMetadata()
                 directStatus = "rollback-failed"
             end
-            return false, nil, directStatus
+            return false, directStatus
         end
     end
-    for index, e in ipairs(localizedConfigFonts) do
-        if previousText[index] ~= nil then e.fs:SetText(previousText[index]) end
+    for index, entry in ipairs(localizedConfigFonts) do
+        if previousText[index] ~= nil then entry.fs:SetText(previousText[index]) end
     end
 
     currentConfigFont = groupPlans[1] and groupPlans[1].font
@@ -11758,6 +11780,11 @@ function addon.settingsDesign.CreateTab(parent, label)
     button:HookScript("OnLeave", addon.settingsDesign.RefreshTab)
     button:HookScript("OnMouseDown", addon.settingsDesign.RefreshTab)
     button:HookScript("OnMouseUp", addon.settingsDesign.RefreshTab)
+    button:HookScript("OnHide", function(control)
+        control.statsProHovered = nil
+        control.statsProPressed = nil
+        addon.settingsDesign.RefreshTab(control)
+    end)
     addon.settingsDesign.RefreshTab(button)
     return button
 end
@@ -15309,7 +15336,10 @@ end
 
 function addon.settingsUI.fontPicker.Hide(self)
     local picker = self.settingsUI.fontPicker
-    if picker.frame and picker.frame:IsShown() then picker.frame:Hide() end
+    if picker.frame and picker.frame:IsShown() then
+        picker.frame:Hide()
+        return
+    end
     if picker.catcher and picker.catcher:IsShown() then picker.catcher:Hide() end
     local trigger = picker.dropdown and picker.dropdown.statsProTrigger
     if trigger then
@@ -16352,6 +16382,12 @@ function addon:OpenConfigMenu()
     self.dbRuntime.GetWritableSettings(true)
     local settingsFrame = self.settingsUI.frame
     if settingsFrame then
+        if self.settingsUI.buildState == "failed" then
+            if settingsFrame:IsShown() then settingsFrame:Hide() end
+            PrintMsg("Settings could not be opened. Run /reload and try again.")
+            return
+        end
+        if self.settingsUI.buildState == "building" then return end
         if settingsFrame:IsShown() then
             settingsFrame:Hide()
         else
@@ -16363,24 +16399,57 @@ function addon:OpenConfigMenu()
         return
     end
 
-    -- These registries belong to the one-shot Settings window. Persistent launcher
-    -- labels intentionally live in localizedPersistentLabels and survive this reset.
-    wipe(configRefreshers)
-    wipe(alignmentGroups)
-    wipe(localizedConfigLabels)
-    wipe(localizedConfigFonts)
+    self.settingsDesign.mutationControls = self.settingsDesign.mutationControls or {}
+    local mutationControls = self.settingsDesign.mutationControls
+    local mutationControlCount = #mutationControls
+    self.settingsUI.buildState = "building"
+    local buildStage = "registry reset"
+    local buildOK, buildFailure = xpcall(function()
+        -- These registries belong to the one-shot Settings window. Persistent launcher
+        -- labels intentionally live in localizedPersistentLabels and survive this reset.
+        wipe(configRefreshers)
+        wipe(alignmentGroups)
+        wipe(localizedConfigLabels)
+        wipe(localizedConfigFonts)
 
-    local context = self.settingsUI.BuildShell(self)
-    self.settingsUI.BuildLayoutTab(self, context)
-    self.settingsUI.BuildAppearanceTab(self, context)
-    self.settingsUI.BuildStatsTab(self, context)
+        buildStage = "shell"
+        local context = self.settingsUI.BuildShell(self)
+        buildStage = "layout tab"
+        self.settingsUI.BuildLayoutTab(self, context)
+        buildStage = "appearance tab"
+        self.settingsUI.BuildAppearanceTab(self, context)
+        buildStage = "stats tab"
+        self.settingsUI.BuildStatsTab(self, context)
 
-    --[[ ===== Initial state ===== ]]
-    self.settingsDesign.RefreshMutationControls()
-    context.switchToTab(1)
-    -- CreateFrame starts shown, before the OnShow hook above exists. Explicitly seed
-    -- the first-open state; later opens are handled by the hook.
-    self.panelEditRuntime.SetRequested(true)
+        --[[ ===== Initial state ===== ]]
+        buildStage = "initial state"
+        self.settingsDesign.RefreshMutationControls()
+        context.switchToTab(1)
+        -- CreateFrame starts shown, before the OnShow hook above exists. Explicitly seed
+        -- the first-open state; later opens are handled by the hook.
+        self.panelEditRuntime.SetRequested(true)
+        self.settingsUI.buildState = "ready"
+    end, function(failure)
+        local message = type(failure) == "string" and failure or "unknown error"
+        return "Settings build failed during " .. buildStage .. ": " .. message
+    end)
+    if not buildOK then
+        self.settingsUI.buildState = "failed"
+        local partialFrame = self.settingsUI.frame
+        if partialFrame then pcall(partialFrame.Hide, partialFrame) end
+        self.profileUI.CancelSpecialFrameRestore("StatsProConfigFrame")
+        self.profileUI.RemoveSpecialFrame("StatsProConfigFrame")
+        for index = #mutationControls, mutationControlCount + 1, -1 do
+            mutationControls[index].statsProMutationRegistered = false
+            tremove(mutationControls, index)
+        end
+        wipe(configRefreshers)
+        wipe(alignmentGroups)
+        wipe(localizedConfigLabels)
+        wipe(localizedConfigFonts)
+        self.settingsUI.context = nil
+        error(buildFailure, 0)
+    end
 end
 
 function addon:ShowConfigMenu()

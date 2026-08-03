@@ -11,40 +11,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 . (Join-Path $PSScriptRoot "marketplace-version-contract.ps1")
 
 $ExpectedProjectIds = Get-StatsProExpectedMarketplaceProjectIdMap
-
-function Assert-ThrowsMatch {
-    param([string]$Name, [scriptblock]$Script, [string]$Pattern)
-
-    $completed = $false
-    try {
-        & $Script
-        $completed = $true
-    }
-    catch {
-        if ($_.Exception.Message -notmatch $Pattern) {
-            throw "$Name failed with wrong error: $($_.Exception.Message)"
-        }
-    }
-    if ($completed) {
-        throw "$Name should have failed."
-    }
-}
-
-function Assert-ExactPropertySet {
-    param([object]$Value, [string[]]$Expected, [string]$Description)
-
-    if ($null -eq $Value) { throw "$Description is missing." }
-    $actual = @($Value.PSObject.Properties.Name | Sort-Object)
-    $expectedSorted = @($Expected | Sort-Object)
-    if ($actual.Count -ne $expectedSorted.Count -or
-        (Compare-Object -ReferenceObject $expectedSorted -DifferenceObject $actual)) {
-        throw "$Description fields are '$($actual -join ', ')'; expected '$($expectedSorted -join ', ')'."
-    }
-}
 
 function Write-Utf8NoBom {
     param([string]$Path, [string]$Text)
@@ -67,27 +38,12 @@ function Add-OutputValue {
         [System.Text.UTF8Encoding]::new($false))
 }
 
-function Resolve-RequiredFile {
-    param([string]$Path, [string]$Description)
-
-    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-        throw "Missing $Description file '$Path'."
-    }
-    return (Resolve-Path -LiteralPath $Path).Path
-}
-
 function Assert-Sha256 {
     param([string]$Value, [string]$Description = 'Expected archive SHA-256')
 
     if ($Value -cnotmatch '^[0-9a-f]{64}$') {
         throw "$Description must be 64 lowercase hexadecimal characters."
     }
-}
-
-function Get-LowercaseFileSha256 {
-    param([string]$Path)
-
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
 function Assert-ArchiveIdentity {
@@ -335,7 +291,7 @@ function Read-MarketplacePlan {
     if (-not [System.StringComparer]::Ordinal.Equals($actualSha, $ExpectedSha256)) {
         throw "Marketplace plan SHA-256 is '$actualSha', expected '$ExpectedSha256'."
     }
-    try { $plan = ConvertFrom-StatsProMarketplaceJson ([System.IO.File]::ReadAllText($resolved)) }
+    try { $plan = ConvertFrom-JsonCompat ([System.IO.File]::ReadAllText($resolved)) }
     catch { throw "Marketplace plan contains invalid JSON: $($_.Exception.Message)" }
     Assert-ExactPropertySet -Value $plan -Expected @(
         'schemaVersion', 'kind', 'tag', 'archiveSha256', 'retailVersions',
@@ -587,7 +543,7 @@ function Invoke-SelfTest {
                 throw "Marketplace upload did not bind the exact archive file."
             }
         }
-        $cfPayload = ConvertFrom-StatsProMarketplaceJson ([string]$calls[1].Form.metadata)
+        $cfPayload = ConvertFrom-JsonCompat ([string]$calls[1].Form.metadata)
         if ($calls[1].Headers.Count -ne 1 -or $calls[1].Headers['x-api-token'] -ne $credentials.CF_API_KEY -or
             $calls[1].Form.Count -ne 2 -or $cfPayload.displayName -ne $tag -or $cfPayload.releaseType -ne 'release' -or
             $cfPayload.changelogType -ne 'markdown' -or $cfPayload.changelog -ne "## 1.2.3`n`n- Fixed.`n" -or
@@ -599,7 +555,7 @@ function Invoke-SelfTest {
             $calls[2].Form.compatible -ne '12.1.0,12.0.7' -or $calls[2].Form.changelog -ne "## 1.2.3`n`n- Fixed.`n") {
             throw "WoWInterface payload self-test failed."
         }
-        $wagoPayload = ConvertFrom-StatsProMarketplaceJson ([string]$calls[0].Form.metadata)
+        $wagoPayload = ConvertFrom-JsonCompat ([string]$calls[0].Form.metadata)
         if ($calls[0].Headers.Count -ne 2 -or $calls[0].Headers.authorization -ne "Bearer $($credentials.WAGO_API_TOKEN)" -or
             $calls[0].Headers.accept -ne 'application/json' -or $calls[0].Form.Count -ne 2 -or
             $wagoPayload.label -ne $tag -or $wagoPayload.stability -ne 'stable' -or

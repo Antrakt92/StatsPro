@@ -9,35 +9,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
-
-function Assert-ThrowsMatch {
-    param([string]$Name, [scriptblock]$Script, [string]$Pattern)
-
-    $ok = $false
-    try {
-        & $Script
-        $ok = $true
-    }
-    catch {
-        if ($_.Exception.Message -notmatch $Pattern) {
-            throw "$Name failed with wrong error: $($_.Exception.Message)"
-        }
-    }
-    if ($ok) {
-        throw "$Name should have failed."
-    }
-}
-
-function ConvertFrom-JsonCompat {
-    param([string]$Json)
-
-    $command = Get-Command ConvertFrom-Json
-    if ($command.Parameters.ContainsKey("Depth")) {
-        return ($Json | ConvertFrom-Json -Depth 100)
-    }
-    return ($Json | ConvertFrom-Json)
-}
 
 function ConvertTo-JsonCompat {
     param($InputObject)

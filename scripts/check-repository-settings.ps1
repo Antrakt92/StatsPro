@@ -6,6 +6,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "release-check-contract.ps1")
 
 function Invoke-NativeCapture {
     param(
@@ -25,34 +26,6 @@ function Invoke-NativeCapture {
     return @{
         ExitCode = $exitCode
         Output   = $output
-    }
-}
-
-function ConvertFrom-JsonCompat {
-    param([string]$Json)
-
-    $command = Get-Command ConvertFrom-Json
-    if ($command.Parameters.ContainsKey("Depth")) {
-        return ($Json | ConvertFrom-Json -Depth 100)
-    }
-    return ($Json | ConvertFrom-Json)
-}
-
-function Assert-ThrowsMatch {
-    param([string]$Name, [scriptblock]$Script, [string]$Pattern)
-
-    $completed = $false
-    try {
-        & $Script
-        $completed = $true
-    }
-    catch {
-        if ($_.Exception.Message -notmatch $Pattern) {
-            throw "$Name failed with wrong error: $($_.Exception.Message)"
-        }
-    }
-    if ($completed) {
-        throw "$Name should have failed."
     }
 }
 

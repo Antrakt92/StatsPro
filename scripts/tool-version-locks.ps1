@@ -1,20 +1,11 @@
 $ErrorActionPreference = "Stop"
 
-function ConvertFrom-StatsProJsonCompat {
-    param([string]$Json)
-    $command = Get-Command ConvertFrom-Json
-    if ($command.Parameters.ContainsKey("Depth")) {
-        return ($Json | ConvertFrom-Json -Depth 100)
-    }
-    return ($Json | ConvertFrom-Json)
-}
-
 function Read-StatsProToolLocks {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         throw "Tool version lock file not found: $Path"
     }
-    return ConvertFrom-StatsProJsonCompat (Get-Content -LiteralPath $Path -Raw -Encoding UTF8)
+    return ConvertFrom-JsonCompat (Get-Content -LiteralPath $Path -Raw -Encoding UTF8)
 }
 
 function Get-StatsProLockProperty {
@@ -378,7 +369,7 @@ function Read-StatsProOwnedToolManifest {
             -AllowedRoot $Layout.ToolRoot `
             -ExpectedSha256 $manifestHash `
             -Label "owned tool manifest")
-    $manifest = ConvertFrom-StatsProJsonCompat (Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8)
+    $manifest = ConvertFrom-JsonCompat (Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8)
     if ($manifest.schemaVersion -ne 1 -or
         -not [System.StringComparer]::Ordinal.Equals([string]$manifest.lockFingerprint, $Layout.LockFingerprint)) {
         throw "Owned tool manifest does not match the current tool locks."

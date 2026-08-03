@@ -15,53 +15,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
-
-function Assert-ThrowsMatch {
-    param([string]$Name, [scriptblock]$Script, [string]$Pattern)
-
-    $ok = $false
-    try {
-        & $Script
-        $ok = $true
-    }
-    catch {
-        if ($_.Exception.Message -notmatch $Pattern) {
-            throw "$Name failed with wrong error: $($_.Exception.Message)"
-        }
-    }
-    if ($ok) {
-        throw "$Name should have failed."
-    }
-}
 
 function Assert-PowerShell7OrNewer {
     if ($PSVersionTable.PSVersion.Major -lt 7) {
         throw "check-package-dry-run.ps1 requires PowerShell 7+ (pwsh). Windows PowerShell 5.1 lacks APIs used by the package repeatability checks."
     }
-}
-
-function Assert-ReleaseTag {
-    param([string]$Value)
-
-    Assert-StatsProReleaseTag -Value $Value
-}
-
-function Get-SingleRegexMatchFromText {
-    param(
-        [string]$Text,
-        [string]$Pattern,
-        [string]$Description
-    )
-
-    $matches = [regex]::Matches($Text, $Pattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
-    if ($matches.Count -eq 0) {
-        throw "Missing $Description."
-    }
-    if ($matches.Count -gt 1) {
-        throw "Found multiple $Description values."
-    }
-    return $matches[0].Groups[1].Value
 }
 
 function Get-StatsProSourceVersionTag {
@@ -84,7 +44,7 @@ function Resolve-StatsProExpectedTag {
     if ([string]::IsNullOrWhiteSpace($Value)) {
         $Value = Get-StatsProSourceVersionTag -Root $Root
     }
-    Assert-ReleaseTag $Value
+    Assert-StatsProReleaseTag -Value $Value
     return $Value
 }
 
@@ -483,7 +443,7 @@ function Invoke-SelfTest {
     Assert-StatsProReleaseTagContractSelfTest
     $sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
     $tag = Get-StatsProSourceVersionTag -Root $sourceRoot
-    Assert-ReleaseTag $tag
+    Assert-StatsProReleaseTag -Value $tag
     Assert-ThrowsMatch "leading-zero expected tag rejected" {
         [void](Resolve-StatsProExpectedTag -Value "v01.2.3" -Root $sourceRoot)
     } "Malformed StatsPro release tag"

@@ -18,6 +18,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 
 function Format-NativeArgument {
@@ -993,34 +994,6 @@ function Invoke-NativeCapture {
     }
 }
 
-function ConvertFrom-JsonCompat {
-    param([string]$Json)
-
-    $command = Get-Command ConvertFrom-Json
-    if ($command.Parameters.ContainsKey("Depth")) {
-        return ($Json | ConvertFrom-Json -Depth 100)
-    }
-    return ($Json | ConvertFrom-Json)
-}
-
-function Assert-ThrowsMatch {
-    param([string]$Name, [scriptblock]$Script, [string]$Pattern)
-
-    $completed = $false
-    try {
-        & $Script
-        $completed = $true
-    }
-    catch {
-        if ($_.Exception.Message -notmatch $Pattern) {
-            throw "$Name failed with wrong error: $($_.Exception.Message)"
-        }
-    }
-    if ($completed) {
-        throw "$Name should have failed."
-    }
-}
-
 function Invoke-NativeCaptureSelfTest {
     $fixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-native-capture-test-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
@@ -1418,12 +1391,6 @@ $child.Dispose()
     }
 }
 
-function Assert-ReleaseTag {
-    param([string]$Value)
-
-    Assert-StatsProReleaseTag -Value $Value
-}
-
 function Assert-CommitSha {
     param([string]$Value)
 
@@ -1470,7 +1437,7 @@ function Get-CanonicalFileText {
         [string]$Description
     )
 
-    $resolved = Resolve-RequiredFile -Path $Path -Description $Description
+    $resolved = Resolve-ReleaseManagerRequiredFile -Path $Path -Description $Description
     $text = [System.IO.File]::ReadAllText($resolved)
     $normalized = ($text -replace "`r`n", "`n") -replace "`r", "`n"
     return $normalized.TrimEnd([char[]]"`n")
@@ -1555,7 +1522,7 @@ function Get-ReleaseStateData {
     )
 
     Assert-RepositoryName $Repository
-    Assert-ReleaseTag $ExpectedTag
+    Assert-StatsProReleaseTag -Value $ExpectedTag
     Assert-CommitSha $ExpectedCommitSha
     Assert-RunId $ExpectedRunId
     Assert-LowercaseSha256 -Value $NotesSha256 -Description 'Release notes digest'
@@ -1671,7 +1638,7 @@ function Read-ReleaseStateMarker {
         throw "Release state marker has unsupported phase '$($state.phase)'."
     }
     Assert-RepositoryName ([string]$state.repository)
-    Assert-ReleaseTag ([string]$state.tag)
+    Assert-StatsProReleaseTag -Value ([string]$state.tag)
     Assert-CommitSha ([string]$state.commitSha)
     Assert-RunId ([string]$state.runId)
     if ($schemaVersion -eq 2) {
@@ -2236,16 +2203,11 @@ function Assert-PublishedImmutableRelease {
     Assert-ExactAssetSet -Release $Release -ExpectedNames (Get-ExpectedReleaseAssetNames -ExpectedTag $ExpectedTag)
 }
 
-function Get-LowercaseFileSha256 {
-    param([string]$Path)
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
-}
-
 function Assert-LocalArchiveSha256 {
     param([string]$Path, [string]$ExpectedSha256)
 
     Assert-LowercaseSha256 -Value $ExpectedSha256 -Description 'Expected release archive digest'
-    $resolved = Resolve-RequiredFile -Path $Path -Description 'release archive'
+    $resolved = Resolve-ReleaseManagerRequiredFile -Path $Path -Description 'release archive'
     $actual = Get-LowercaseFileSha256 -Path $resolved
     if (-not [System.StringComparer]::Ordinal.Equals($actual, $ExpectedSha256)) {
         throw "Release archive digest is '$actual', expected '$ExpectedSha256'."
@@ -2400,7 +2362,7 @@ function Invoke-BoundedReadOnlyCheck {
     throw "$Description did not pass after $Attempts attempt(s): $($lastError.Exception.Message)"
 }
 
-function Resolve-RequiredFile {
+function Resolve-ReleaseManagerRequiredFile {
     param(
         [string]$Path,
         [string]$Description
@@ -2419,8 +2381,8 @@ function Assert-ReleaseAssetPaths {
         [string]$ExpectedTag
     )
 
-    $archive = Resolve-RequiredFile -Path $ArchivePath -Description "StatsPro archive"
-    $releaseJson = Resolve-RequiredFile -Path $ReleaseJsonPath -Description "release.json"
+    $archive = Resolve-ReleaseManagerRequiredFile -Path $ArchivePath -Description "StatsPro archive"
+    $releaseJson = Resolve-ReleaseManagerRequiredFile -Path $ReleaseJsonPath -Description "release.json"
     if (-not [System.StringComparer]::Ordinal.Equals([System.IO.Path]::GetFileName($archive), "StatsPro-$ExpectedTag.zip")) {
         throw "Archive filename must be StatsPro-$ExpectedTag.zip."
     }
@@ -3861,7 +3823,7 @@ function Invoke-SelfTest {
     $selfTestDeadline = (Get-Date).AddMinutes(5)
     foreach ($invalidTag in @("v01.2.3", "V1.2.3", ("v1.2.3" + [char]10))) {
         Assert-ThrowsMatch "release manager rejects noncanonical tag '$invalidTag'" {
-            Assert-ReleaseTag -Value $invalidTag
+            Assert-StatsProReleaseTag -Value $invalidTag
         } "Malformed StatsPro release tag"
     }
 
@@ -4175,7 +4137,7 @@ function Invoke-SelfTest {
         [void](Read-ReleaseStateMarker -Body (Get-ReleaseBody -State $staleV2Transaction -CanonicalNotes $protocolNotes))
     } "transaction ID"
     Assert-ThrowsMatch "uppercase release tag rejected" {
-        Assert-ReleaseTag 'V1.2.3'
+        Assert-StatsProReleaseTag -Value 'V1.2.3'
     } "Malformed StatsPro release tag"
     if ($null -ne (Select-GitHubReleaseByTag -Releases @([pscustomobject]@{ tag_name = 'V1.2.3' }) -ExpectedTag $tag)) {
         throw "Release lookup must use ordinal tag identity."
@@ -5098,7 +5060,7 @@ if ([string]::IsNullOrWhiteSpace($Mode)) {
     throw "Missing release-management -Mode."
 }
 Assert-RepositoryName $Repository
-Assert-ReleaseTag $ExpectedTag
+Assert-StatsProReleaseTag -Value $ExpectedTag
 if ($Mode -ne "RefuseExisting") {
     Assert-CommitSha $ExpectedCommitSha
 }

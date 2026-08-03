@@ -6,31 +6,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
-
-function Assert-ThrowsMatch {
-    param([string]$Name, [scriptblock]$Script, [string]$Pattern)
-
-    $completed = $false
-    try {
-        & $Script
-        $completed = $true
-    }
-    catch {
-        if ($_.Exception.Message -notmatch $Pattern) {
-            throw "$Name failed with wrong error: $($_.Exception.Message)"
-        }
-    }
-    if ($completed) {
-        throw "$Name should have failed."
-    }
-}
-
-function Assert-ReleaseTag {
-    param([string]$Value)
-
-    Assert-StatsProReleaseTag -Value $Value
-}
 
 function Resolve-StatsProPackagerOutput {
     param([string]$Root, [string]$Tag)
@@ -39,7 +16,7 @@ function Resolve-StatsProPackagerOutput {
         throw "Packager release root not found: $Root"
     }
     if (-not [string]::IsNullOrWhiteSpace($Tag)) {
-        Assert-ReleaseTag $Tag
+        Assert-StatsProReleaseTag -Value $Tag
     }
 
     $resolvedRoot = (Resolve-Path -LiteralPath $Root).Path

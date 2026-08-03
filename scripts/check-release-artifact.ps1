@@ -16,6 +16,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "tool-version-locks.ps1")
 . (Join-Path $PSScriptRoot "third-party-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
@@ -40,40 +41,6 @@ function Invoke-NativeCapture {
         ExitCode = $exitCode
         Output   = $output
     }
-}
-
-function ConvertFrom-JsonCompat {
-    param([string]$Json)
-
-    $command = Get-Command ConvertFrom-Json
-    if ($command.Parameters.ContainsKey("Depth")) {
-        return ($Json | ConvertFrom-Json -Depth 100)
-    }
-    return ($Json | ConvertFrom-Json)
-}
-
-function Assert-ThrowsMatch {
-    param([string]$Name, [scriptblock]$Script, [string]$Pattern)
-
-    $ok = $false
-    try {
-        & $Script
-        $ok = $true
-    }
-    catch {
-        if ($_.Exception.Message -notmatch $Pattern) {
-            throw "$Name failed with wrong error: $($_.Exception.Message)"
-        }
-    }
-    if ($ok) {
-        throw "$Name should have failed."
-    }
-}
-
-function Assert-ReleaseTag {
-    param([string]$Value)
-
-    Assert-StatsProReleaseTag -Value $Value
 }
 
 function Normalize-StatsProZipEntryPath {
@@ -215,23 +182,6 @@ function Expand-StatsProPackageToTemp {
     }
 }
 
-function Get-SingleRegexMatchFromText {
-    param(
-        [string]$Text,
-        [string]$Pattern,
-        [string]$Description
-    )
-
-    $matches = [regex]::Matches($Text, $Pattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
-    if ($matches.Count -eq 0) {
-        throw "Missing $Description."
-    }
-    if ($matches.Count -gt 1) {
-        throw "Found multiple $Description values."
-    }
-    return $matches[0].Groups[1].Value
-}
-
 function Get-TocInterfaceValues {
     param([string]$TocPath)
 
@@ -256,7 +206,7 @@ function Assert-PackagedStatsProVersionMetadata {
         [string]$PackagerProjectVersion
     )
 
-    Assert-ReleaseTag $ExpectedTag
+    Assert-StatsProReleaseTag -Value $ExpectedTag
     Assert-PackagerProjectVersion $PackagerProjectVersion
     $expectedVersion = $ExpectedTag.Substring(1)
     $tocPath = Join-Path $PackageRoot "StatsPro.toc"
@@ -607,7 +557,7 @@ function Assert-StatsProReleaseJson {
         [int[]]$ExpectedInterfaces = @(120007, 120100)
     )
 
-    Assert-ReleaseTag $ExpectedTag
+    Assert-StatsProReleaseTag -Value $ExpectedTag
     $json = ConvertFrom-JsonCompat $JsonText
     $releases = @($json.releases)
     if ($releases.Count -eq 0) {
@@ -667,7 +617,7 @@ function New-StatsProReleaseJsonText {
         [int[]]$Interfaces
     )
 
-    Assert-ReleaseTag $ExpectedTag
+    Assert-StatsProReleaseTag -Value $ExpectedTag
     if ($Interfaces.Count -eq 0) {
         throw "Cannot create release.json without TOC Interface values."
     }
@@ -824,7 +774,7 @@ function Assert-StatsProReleaseArtifact {
     if ([string]::IsNullOrWhiteSpace($ExpectedTag)) {
         throw "Missing -ExpectedTag."
     }
-    Assert-ReleaseTag $ExpectedTag
+    Assert-StatsProReleaseTag -Value $ExpectedTag
     if ($RequireExactPackagerProjectVersion -and [string]::IsNullOrWhiteSpace($PackagerProjectVersion)) {
         throw "Exact-tag mode requires an explicit -PackagerProjectVersion."
     }

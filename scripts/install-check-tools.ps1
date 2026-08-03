@@ -10,6 +10,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "tool-version-locks.ps1")
 . (Join-Path $PSScriptRoot "native-process.ps1")
 
@@ -520,18 +521,6 @@ function Assert-ToolCommandVersion {
         throw "$Label version command exited with code $($result.ExitCode): $(Format-StatsProVersionOutput $result.Output)"
     }
     Assert-StatsProCommandVersionText -Label $Label -Text ($result.Output -join "`n") -Pattern $Pattern
-}
-
-function Assert-Equal {
-    param(
-        [string]$Name,
-        [object]$Actual,
-        [object]$Expected
-    )
-
-    if ($Actual -ne $Expected) {
-        throw "$Name expected <$Expected>, got <$Actual>."
-    }
 }
 
 function Invoke-SelfTest {

@@ -733,10 +733,10 @@ addon.hudPresets = {
                 displayMode = "flat", labelStyle = "full",
                 showRating = true, showPercentage = true,
                 showMainStat = false, showStamina = false, showItemLevel = true,
-                showOffensive = true, hideZeroOffensive = false,
+                showOffensive = true, hideZeroOffensive = true,
                 showCrit = true, showHaste = true,
                 showMastery = true, showVersatility = true,
-                showTertiary = true, hideZeroTertiary = false,
+                showTertiary = true, hideZeroTertiary = true,
                 showLeech = true, showAvoidance = true, showSpeed = true,
                 showDefensive = false, hideZeroDefensive = true,
                 showDodge = true, showParry = true, showBlock = true,
@@ -15444,6 +15444,15 @@ function addon.settingsUI.fontPicker.Populate(self)
             button.text:SetWordWrap(false)
             button.text:SetMaxLines(1)
             self.settingsDesign.StyleListRow(button, button.text, "body")
+            -- The generic rowHover fill is intentionally subtle and became
+            -- effectively invisible while the live font preview changed the HUD.
+            -- Keep a dedicated Button highlight so the hovered font remains clear.
+            button:SetHighlightTexture("Interface\\Buttons\\WHITE8X8")
+            local highlight = button:GetHighlightTexture()
+            local hoverColor = self.settingsDesign.Color("accent")
+            highlight:SetVertexColor(
+                hoverColor[1], hoverColor[2], hoverColor[3], 0.18)
+            button.statsProFontHoverTexture = highlight
             button.text:SetJustifyH("LEFT")
 
             button:SetScript("OnEnter", function(target)

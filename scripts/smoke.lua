@@ -523,6 +523,16 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetVerticalScroll(value) self.verticalScroll = value or 0 end
     function frame:GetVerticalScroll() return self.verticalScroll end
     function frame:GetNormalTexture() return self.normalTexture end
+    function frame:SetHighlightTexture(texture)
+        local highlight = texture
+        if type(texture) ~= "table" then
+            highlight = makeFrame(nil, self.setFontResult, self)
+            highlight.regionType = "Texture"
+            highlight:SetTexture(texture)
+        end
+        highlight:SetDrawLayer("HIGHLIGHT")
+        self.highlightTexture = highlight
+    end
     function frame:GetHighlightTexture()
         self.highlightTexture = self.highlightTexture or makeFrame(nil, self.setFontResult, self)
         return self.highlightTexture
@@ -20064,12 +20074,26 @@ do
         end
     end
     local fontHoverBefore = deepCopy(env.StatsProDB)
-    local fontRow = findFrame("config.control_design.font_row", env, function(frame)
+    local selectedFontRow = findFrame("config.control_design.selected_font_row", env, function(frame)
         return frame.fontPath ~= nil and frame.statsProControlKind == "listRow"
             and frame.statsProSelected == true
     end)
     assertRGBA("config.control_design.font_selected_fill",
-        fontRow.statsProStateTexture.colorTexture, tokens.colors.selected)
+        selectedFontRow.statsProStateTexture.colorTexture, tokens.colors.selected)
+    local fontRow = findFrame("config.control_design.unselected_font_row", env, function(frame)
+        return frame.fontPath ~= nil and frame.statsProControlKind == "listRow"
+            and frame.statsProSelected ~= true and frame:IsShown()
+    end)
+    local fontHover = exists("config.control_design.font_hover_texture",
+        fontRow.statsProFontHoverTexture)
+    eq("config.control_design.font_hover_texture_path",
+        fontHover.texture, "Interface\\Buttons\\WHITE8X8")
+    local hoverLayer = fontHover:GetDrawLayer()
+    eq("config.control_design.font_hover_texture_layer", hoverLayer, "HIGHLIGHT")
+    assertRGBA("config.control_design.font_hover_texture_color", fontHover.vertexColor,
+        tokens.colors.accent[1], tokens.colors.accent[2], tokens.colors.accent[3], 0.18)
+    near("config.control_design.font_unselected_fill_before_hover",
+        fontRow.statsProStateTexture.colorTexture.a, 0)
     userInteract("config.control_design.font_row_hover", fontRow, "OnEnter")
     assertRGBA("config.control_design.font_hover_fill",
         fontRow.statsProStateTexture.colorTexture, tokens.colors.rowHover)
@@ -20746,6 +20770,14 @@ do
         definitions.dps.values.showDefensive, false)
     eq("hud.presets.registry.tank_adds_defensive",
         definitions.tank.values.showDefensive, true)
+    for _, presetID in ipairs({ "dps", "tank" }) do
+        for _, key in ipairs({
+            "hideZeroOffensive", "hideZeroTertiary", "hideZeroDefensive",
+        }) do
+            eq("hud.presets.registry.hide_zero." .. presetID .. "." .. key,
+                definitions[presetID].values[key], true)
+        end
+    end
     eq("hud.presets.registry.default_is_compact", service.currentID(), "compact")
     local legacyFull = deepCopy(definitions.dps.values)
     legacyFull.showMainStat = true
@@ -20775,6 +20807,10 @@ do
     eq("hud.presets.preview.mode", presetTest.getDB("displayMode"), "flat")
     eq("hud.presets.preview.no_defensive", presetTest.getBoolDB("showDefensive"), false)
     eq("hud.presets.preview.tertiary", presetTest.getBoolDB("showTertiary"), true)
+    eq("hud.presets.preview.hide_zero_offensive",
+        presetTest.getBoolDB("hideZeroOffensive"), true)
+    eq("hud.presets.preview.hide_zero_tertiary",
+        presetTest.getBoolDB("hideZeroTertiary"), true)
     eq("hud.presets.preview.durability", presetTest.getBoolDB("showDurability"), true)
     eq("hud.presets.preview.repair", presetTest.getBoolDB("showRepairCost"), true)
     local previewVisual = presetTest.panelVisualState()
@@ -20825,6 +20861,8 @@ do
     eq("hud.presets.apply.stamina", settings.showStamina, false)
     eq("hud.presets.apply.item_level", settings.showItemLevel, true)
     eq("hud.presets.apply.tertiary", settings.showTertiary, true)
+    eq("hud.presets.apply.hide_zero_offensive", settings.hideZeroOffensive, true)
+    eq("hud.presets.apply.hide_zero_tertiary", settings.hideZeroTertiary, true)
     eq("hud.presets.apply.no_defensive", settings.showDefensive, false)
     eq("hud.presets.apply.durability", settings.showDurability, true)
     eq("hud.presets.apply.repair", settings.showRepairCost, true)
@@ -20853,6 +20891,12 @@ do
     eq("hud.presets.tank.preview_flat", presetTest.getDB("displayMode"), "flat")
     eq("hud.presets.tank.preview_tertiary", presetTest.getBoolDB("showTertiary"), true)
     eq("hud.presets.tank.preview_defensive", presetTest.getBoolDB("showDefensive"), true)
+    eq("hud.presets.tank.preview_hide_zero_offensive",
+        presetTest.getBoolDB("hideZeroOffensive"), true)
+    eq("hud.presets.tank.preview_hide_zero_tertiary",
+        presetTest.getBoolDB("hideZeroTertiary"), true)
+    eq("hud.presets.tank.preview_hide_zero_defensive",
+        presetTest.getBoolDB("hideZeroDefensive"), true)
     local tankPreviewVisual = presetTest.panelVisualState()
     eq("hud.presets.tank.preview_side_hidden", tankPreviewVisual.sideShown, false)
     eq("hud.presets.tank.preview_no_section_headers",
@@ -20864,6 +20908,9 @@ do
     eq("hud.presets.tank.flat", settings.displayMode, "flat")
     eq("hud.presets.tank.tertiary", settings.showTertiary, true)
     eq("hud.presets.tank.defensive", settings.showDefensive, true)
+    eq("hud.presets.tank.hide_zero_offensive", settings.hideZeroOffensive, true)
+    eq("hud.presets.tank.hide_zero_tertiary", settings.hideZeroTertiary, true)
+    eq("hud.presets.tank.hide_zero_defensive", settings.hideZeroDefensive, true)
     eq("hud.presets.tank.durability", settings.showDurability, true)
     eq("hud.presets.tank.repair", settings.showRepairCost, true)
     eq("hud.presets.tank.average_durability", settings.useWorstDurability, false)

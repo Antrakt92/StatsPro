@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.12.3 - 03-Aug-2026 — Preset and font picker hotfixes
+
+### Fixed
+
+- **DPS and Tank Quick Setup presets now enable Hide Zero Values for offensive, tertiary, and defensive stats.** Empty optional rows stay out of the HUD immediately after previewing or applying either preset.
+- **The font picker once again clearly highlights the row under the cursor while previewing fonts.**
+
 ## 1.12.2 - 03-Aug-2026 — Settings and runtime reliability
 
 ### Fixed

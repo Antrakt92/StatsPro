@@ -116,8 +116,8 @@ positions are clear; this editing chrome never becomes part of the saved HUD.
 
 Every row is optional. Rated stats can show rating, percentage, or both. Repair
 cost uses the same gold / silver / copper presentation as the vendor UI.
-Movement shows actual current speed: 0% while stationary, about 100% at normal
-run speed, and live changes from slows, boosts, mounts, swimming, or flight.
+Movement shows current ground run speed: about 100% at normal speed, meaningful
+even while stationary, with live changes from slows, boosts, and ground mounts.
 
 ## Archon reference snapshots
 

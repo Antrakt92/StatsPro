@@ -56,6 +56,21 @@ addon.critRuntime = {
 addon.movementRuntime = {
     baseSpeed = 7,
     percentAtBaseSpeed = 100,
+    -- WHY: AbbreviateNumbers is AllowedWhenTainted in Retail 12.x and performs
+    -- the scaling inside Blizzard C code. One decimal keeps the existing HUD
+    -- precision; the tiny epsilon avoids binary floor-underflow at exact values.
+    nativePercentOptions = {
+        breakpointData = {
+            {
+                breakpoint = 0,
+                abbreviation = "%",
+                significandDivisor = 0.006999999999,
+                fractionDivisor = 10,
+                abbreviationIsGlobal = false,
+            },
+        },
+    },
+    nativePercentFormatterState = nil,
 }
 
 --[[ ============================================================
@@ -323,7 +338,7 @@ end
 -- when metadata is invalid); a package uses its exact project version, including the
 -- branch build suffix in CI dry runs.
 -- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
-local CURRENT_RELEASE = "1.12.9"
+local CURRENT_RELEASE = "1.12.10"
 
 function addon.ResolveAddonVersion(packagerProjectVersion, metadataVersion, sourceVersion)
     if type(packagerProjectVersion) == "string" then
@@ -3874,20 +3889,62 @@ function SAFE_NUM.SafeDisplayPercent(fn, ...)
     return SAFE_NUM.ResolveDisplayNumber(value, false)
 end
 
+function addon.movementRuntime.NativePercentFormatterAvailable()
+    local runtime = addon.movementRuntime
+    if runtime.nativePercentFormatterState ~= nil then
+        return runtime.nativePercentFormatterState == true
+    end
+
+    runtime.nativePercentFormatterState = false
+    local formatter = _G.AbbreviateNumbers
+    if type(formatter) ~= "function" then return false end
+
+    -- Validate only clean inputs, so comparing the returned strings cannot branch
+    -- on a secret. This fails closed if Blizzard changes breakpoint semantics.
+    local baseOK, baseText = pcall(formatter, 7, runtime.nativePercentOptions)
+    local boostOK, boostText = pcall(formatter, 10.5, runtime.nativePercentOptions)
+    if not baseOK or not boostOK then return false end
+    local baseSecretOK, baseSecret = pcall(issecretvalue, baseText)
+    local boostSecretOK, boostSecret = pcall(issecretvalue, boostText)
+    if not baseSecretOK or baseSecret or not boostSecretOK or boostSecret then return false end
+    if type(baseText) ~= "string" or type(boostText) ~= "string" then return false end
+    local baseMatches = baseText == "100%" or baseText == "100.0%"
+    local boostMatches = boostText == "150%" or boostText == "150.0%"
+    runtime.nativePercentFormatterState = baseMatches and boostMatches
+    return runtime.nativePercentFormatterState
+end
+
+function addon.movementRuntime.FormatRestricted(runSpeed)
+    local runtime = addon.movementRuntime
+    if runtime.NativePercentFormatterAvailable() then
+        local ok, text = pcall(_G.AbbreviateNumbers, runSpeed, runtime.nativePercentOptions)
+        if ok then
+            -- WARNING: text is secret. Callers may only concatenate it and pass it
+            -- through the existing FontString render path; never inspect, compare,
+            -- or reformat it.
+            return text, true
+        end
+        runtime.nativePercentFormatterState = false
+    end
+
+    -- A future API restriction must degrade to the exact live ground speed, not
+    -- a stale percentage. FontString formatting is already the shared secret-safe
+    -- fallback used by other live stats.
+    return SAFE_NUM.FormatDisplayNumber(runSpeed, "%.1f yd/s", " yd/s")
+end
+
 -- GetUnitSpeed returns ground run speed in yards/second rather than a
--- percentage. Clean values can be converted normally. Under unit-stat
--- restrictions the return is secret and addon Lua cannot divide it by the base
--- speed. CurveObject:Evaluate is not a laundering step: Blizzard permits secret
--- arguments only from untainted execution. Preserve the percentage contract and
--- report the restricted state explicitly instead of dropping the row, changing
--- units, inventing a percentage, or reusing a stale out-of-combat value.
+-- percentage. Clean values can be converted normally. Restricted values are
+-- scaled by Blizzard's tainted-safe abbreviation API and remain display-only.
 function addon.movementRuntime.ResolvePercent(runSpeed)
     local displaySpeed, cleanSpeed = SAFE_NUM.ResolveDisplayNumber(runSpeed, true)
     if cleanSpeed ~= nil then
         return (cleanSpeed / addon.movementRuntime.baseSpeed)
-            * addon.movementRuntime.percentAtBaseSpeed, false
+            * addon.movementRuntime.percentAtBaseSpeed, nil, false, false
     end
-    return nil, issecretvalue(displaySpeed)
+    if not issecretvalue(displaySpeed) then return nil, nil, false, false end
+    local text, hasText = addon.movementRuntime.FormatRestricted(displaySpeed)
+    return nil, text, hasText, true
 end
 
 function SAFE_NUM.SafeCompositePercent(fn, ...)
@@ -9120,13 +9177,21 @@ end
 
 -- Format a stat value (rating + percentage variants honoring user toggles).
 -- Returns TWO strings (ratingStr, valueStr) — see IsDualColMode for routing rules.
-local function FmtRatingPct(rating, pct, statColor, forceUnknownPercent)
+local function FmtRatingPct(rating, pct, statColor, forceUnknownPercent,
+        formattedValue, hasFormattedValue)
     local cs = cached.colorStrings
     local rc = (cached.matchValueColorToStat and statColor) or cs.rating
     local pc = (cached.matchValueColorToStat and statColor) or cs.percentage
     local ratingStr = SAFE_NUM.FormatColorNumber(rc, rating, "%d") or ("|cff" .. rc .. "?|r")
-    local pctStr = forceUnknownPercent
-        and ("|cff" .. pc .. "?%|r") or FmtColorPct(pc, pct)
+    local pctStr
+    if hasFormattedValue then
+        -- formattedValue may be secret; concatenate only, never inspect it.
+        pctStr = "|cff" .. pc .. formattedValue .. "|r"
+    elseif forceUnknownPercent then
+        pctStr = "|cff" .. pc .. "?%|r"
+    else
+        pctStr = FmtColorPct(pc, pct)
+    end
     if IsDualColMode() then
         return ratingStr .. " |cff808080|||r", pctStr or ""
     elseif cached.showRating then
@@ -9400,17 +9465,21 @@ local function BuildTertiaryLines(labels, ratings, values)
         if cached[def.showKey] then
             local val
             local forceUnknownPercent = false
+            local formattedValue
+            local hasFormattedValue = false
             if def.valueKind == "movement" then
                 local ok, _, runSpeed = pcall(def.api, "player")
-                if ok then
-                    val, forceUnknownPercent = addon.movementRuntime.ResolvePercent(runSpeed)
-                    forceUnknownPercent = forceUnknownPercent and cached.showPercentage
+                if ok and cached.showPercentage then
+                    local restricted
+                    val, formattedValue, hasFormattedValue, restricted =
+                        addon.movementRuntime.ResolvePercent(runSpeed)
+                    forceUnknownPercent = restricted and not hasFormattedValue
                 end
             else
                 val = SAFE_NUM.SafeDisplayPercent(def.api)
             end
             local ratingDisplay
-            local visible = shouldShowUnknown(
+            local visible = hasFormattedValue or shouldShowUnknown(
                     def.showKey, forceUnknownPercent, cached.hideZeroTertiary)
                 or shouldShow(def.showKey, val, cached.hideZeroTertiary)
             if needRating then
@@ -9423,7 +9492,8 @@ local function BuildTertiaryLines(labels, ratings, values)
                 if needRating then rating = ratingDisplay end
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtRatingPct(
-                    rating, val, statColor, forceUnknownPercent)
+                    rating, val, statColor, forceUnknownPercent,
+                    formattedValue, hasFormattedValue)
                 PushRow(labels, ratings, values,
                     FormatLabel(statColor, def.label),
                     rStr, vStr)

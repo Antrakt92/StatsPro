@@ -54,6 +54,11 @@ MAX_SPELL_SCHOOLS = 7
 ---@type StatsProStringUtil?
 C_StringUtil = nil
 
+---@param value number
+---@param options table
+---@return string
+function AbbreviateNumbers(value, options) end
+
 ---@class (exact) StatsProUIFileAsset
 ---@field IsKnownFile fun(filePath: string): boolean
 

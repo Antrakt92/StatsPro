@@ -860,6 +860,18 @@ local function makeEnv(locale, opts)
         -- inspecting opaque sentinels; focused tests provide exact display text.
         RoundToNearestString = opts.roundToNearestString or function() return "secret" end,
     }
+    env.AbbreviateNumbers = opts.abbreviateNumbers or function(value, options)
+        if type(value) ~= "number" then return "secret%" end
+        local data = options and options.breakpointData or {}
+        for _, breakpoint in ipairs(data) do
+            if value >= breakpoint.breakpoint then
+                local scaled = math.floor(value / breakpoint.significandDivisor)
+                    / breakpoint.fractionDivisor
+                return tostring(scaled) .. breakpoint.abbreviation
+            end
+        end
+        return tostring(value)
+    end
     env.CopyTable = deepCopy
     env.tinsert = table.insert
     env.tremove = table.remove
@@ -7573,20 +7585,43 @@ do
 end
 
 do
-    local secretSpeedA, secretSpeedB = {}, {}
+    local secretInstantA, secretInstantB = {}, {}
+    local secretRunA, secretRunB = {}, {}
+    local secretTextA, secretTextB = "125.4%", "163.7%"
     local phase = "clean"
+    local restrictedFormatterCalls = 0
+    local optionsContractOK = true
     local speedEnv, _, speedTest = loadMovementScenario({
         showRating = false,
         showPercentage = true,
         hideZeroTertiary = false,
     }, {
         getUnitSpeed = function()
-            if phase == "a" then return secretSpeedA, secretSpeedA, secretSpeedA, secretSpeedA end
-            if phase == "b" then return secretSpeedB, secretSpeedB, secretSpeedB, secretSpeedB end
+            if phase == "a" then return secretInstantA, secretRunA, secretRunA, secretRunA end
+            if phase == "b" then return secretInstantB, secretRunB, secretRunB, secretRunB end
             return 0, 7, 7, 7
         end,
         issecretvalue = function(value)
-            return rawequal(value, secretSpeedA) or rawequal(value, secretSpeedB)
+            return rawequal(value, secretInstantA) or rawequal(value, secretInstantB)
+                or rawequal(value, secretRunA) or rawequal(value, secretRunB)
+                or rawequal(value, secretTextA) or rawequal(value, secretTextB)
+        end,
+        abbreviateNumbers = function(value, options)
+            if type(value) == "number" then
+                if value == 7 then return "100%" end
+                if value == 10.5 then return "150%" end
+                error("unexpected clean movement formatter self-test", 0)
+            end
+            local rule = options and options.breakpointData and options.breakpointData[1]
+            optionsContractOK = optionsContractOK and rule ~= nil
+                and rule.breakpoint == 0
+                and rule.abbreviation == "%"
+                and rule.fractionDivisor == 10
+                and rule.abbreviationIsGlobal == false
+            restrictedFormatterCalls = restrictedFormatterCalls + 1
+            if rawequal(value, secretRunA) then return secretTextA end
+            if rawequal(value, secretRunB) then return secretTextB end
+            error("Movement formatted the instantaneous speed instead of run speed", 0)
         end,
     })
     fireEvent("render.speed_secret_live.fire", speedEnv, "PLAYER_ENTERING_WORLD")
@@ -7600,7 +7635,8 @@ do
     local tertiary = blocks[3]
     eq("render.speed_secret_live.first_row_count", #tertiary.labels, 1)
     eq("render.speed_secret_live.first_row", tertiary.labels[1]:find("Movement:", 1, true) ~= nil, true)
-    eq("render.speed_secret_live.first_value", tertiary.ratings[1]:find("?%", 1, true) ~= nil, true)
+    eq("render.speed_secret_live.first_value", tertiary.ratings[1]:find(secretTextA, 1, true) ~= nil, true)
+    eq("render.speed_secret_live.first_not_unknown", tertiary.ratings[1]:find("?%", 1, true), nil)
     eq("render.speed_secret_live.first_not_stale", blockDumpContains(blocks, "100.0%"), false)
 
     phase = "b"
@@ -7609,16 +7645,22 @@ do
     tertiary = blocks[3]
     eq("render.speed_secret_live.second_row_count", #tertiary.labels, 1)
     check("render.speed_secret_live.second_value",
-        tertiary.ratings[1]:find("?%", 1, true) ~= nil,
+        tertiary.ratings[1]:find(secretTextB, 1, true) ~= nil,
         tertiary.ratings[1])
+    eq("render.speed_secret_live.second_not_first",
+        tertiary.ratings[1]:find(secretTextA, 1, true), nil)
     eq("render.speed_secret_live.second_not_stale", blockDumpContains(blocks, "100.0%"), false)
+    eq("render.speed_secret_live.restricted_formatter_calls", restrictedFormatterCalls, 2)
+    eq("render.speed_secret_live.options_contract", optionsContractOK, true)
     eq("render.speed_secret_live.no_yards_per_second", blockDumpContains(blocks, "yd/s"), false)
 end
 
 do
     local secretInstant, secretRun = {}, {}
+    local secretText = "140.0%"
     local speedState = "cold-secret"
-    local formatterCalls = 0
+    local fallbackFormatterCalls = 0
+    local restrictedAbbreviateCalls = 0
     local speedEnv, _, speedTest = loadMovementScenario({
         showRating = false,
         showPercentage = true,
@@ -7635,17 +7677,33 @@ do
         getCombatRating = function() return 0 end,
         issecretvalue = function(value)
             return rawequal(value, secretInstant) or rawequal(value, secretRun)
+                or rawequal(value, secretText)
         end,
         setFormattedText = function()
-            formatterCalls = formatterCalls + 1
+            fallbackFormatterCalls = fallbackFormatterCalls + 1
             return "unexpected"
+        end,
+        abbreviateNumbers = function(value)
+            if type(value) == "number" then
+                if value == 7 then return "100%" end
+                if value == 10.5 then return "150%" end
+                error("unexpected clean movement formatter self-test", 0)
+            end
+            if not rawequal(value, secretRun) then
+                error("Movement formatted the instantaneous speed instead of run speed", 0)
+            end
+            restrictedAbbreviateCalls = restrictedAbbreviateCalls + 1
+            return secretText
         end,
     })
     fireEvent("render.speed_hide_zero_restricted.fire", speedEnv, "PLAYER_ENTERING_WORLD")
+    restrictedAbbreviateCalls = 0
 
     local ok, blocks = pcall(speedTest.buildRenderBlocks)
     check("render.speed_hide_zero_restricted.cold_no_error", ok, blocks)
-    eq("render.speed_hide_zero_restricted.cold_hidden", #(blocks[3].labels or {}), 0)
+    eq("render.speed_hide_zero_restricted.cold_visible", #(blocks[3].labels or {}), 1)
+    eq("render.speed_hide_zero_restricted.cold_live_value",
+        blocks[3].ratings[1]:find(secretText, 1, true) ~= nil, true)
 
     speedState = "clean-zero"
     ok, blocks = pcall(speedTest.buildRenderBlocks)
@@ -7655,7 +7713,9 @@ do
     speedState = "secret-after-zero"
     ok, blocks = pcall(speedTest.buildRenderBlocks)
     check("render.speed_hide_zero_restricted.after_zero_no_error", ok, blocks)
-    eq("render.speed_hide_zero_restricted.after_zero_hidden", #(blocks[3].labels or {}), 0)
+    eq("render.speed_hide_zero_restricted.after_zero_visible", #(blocks[3].labels or {}), 1)
+    eq("render.speed_hide_zero_restricted.after_zero_live_value",
+        blocks[3].ratings[1]:find(secretText, 1, true) ~= nil, true)
 
     speedState = "clean-nonzero"
     ok, blocks = pcall(speedTest.buildRenderBlocks)
@@ -7669,11 +7729,11 @@ do
     check("render.speed_hide_zero_restricted.after_nonzero_no_error", ok, blocks)
     tertiary = blocks[3]
     eq("render.speed_hide_zero_restricted.after_nonzero_visible", #tertiary.labels, 1)
-    eq("render.speed_hide_zero_restricted.after_nonzero_unknown_percent",
-        tertiary.ratings[1]:find("?%", 1, true) ~= nil, true)
+    eq("render.speed_hide_zero_restricted.after_nonzero_live_percent",
+        tertiary.ratings[1]:find(secretText, 1, true) ~= nil, true)
     eq("render.speed_hide_zero_restricted.after_nonzero_not_stale",
         tertiary.ratings[1]:find("110.0%", 1, true), nil)
-    eq("render.speed_hide_zero_restricted.raw_secret_not_formatted", formatterCalls, 0)
+    eq("render.speed_hide_zero_restricted.raw_fallback_not_used", fallbackFormatterCalls, 0)
 
     local settings = activeSettings(speedEnv)
     speedState = "clean-zero"
@@ -7687,17 +7747,22 @@ do
     speedState = "secret-after-zero"
     ok, blocks = pcall(speedTest.buildRenderBlocks)
     check("render.speed_hide_zero_restricted.dual_after_zero_no_error", ok, blocks)
-    eq("render.speed_hide_zero_restricted.dual_after_zero_hidden", #(blocks[3].labels or {}), 0)
+    eq("render.speed_hide_zero_restricted.dual_after_zero_visible", #(blocks[3].labels or {}), 1)
+    eq("render.speed_hide_zero_restricted.dual_after_zero_live_value",
+        blocks[3].values[1]:find(secretText, 1, true) ~= nil, true)
 
     settings.showPercentage = false
     speedTest.cacheSettings()
     ok, blocks = pcall(speedTest.buildRenderBlocks)
     check("render.speed_hide_zero_restricted.rating_only_zero_no_error", ok, blocks)
     eq("render.speed_hide_zero_restricted.rating_only_zero_hidden", #(blocks[3].labels or {}), 0)
+    eq("render.speed_hide_zero_restricted.restricted_formatter_calls",
+        restrictedAbbreviateCalls, 4)
 end
 
 do
     local secretSpeed = {}
+    local secretText = "133.7%"
     local speedState = "clean"
     local speedEnv, _, speedTest = loadMovementScenario({
         showRating = true,
@@ -7710,7 +7775,18 @@ do
             return secretSpeed, secretSpeed, secretSpeed, secretSpeed
         end,
         getCombatRating = function() return 377 end,
-        issecretvalue = function(value) return rawequal(value, secretSpeed) end,
+        issecretvalue = function(value)
+            return rawequal(value, secretSpeed) or rawequal(value, secretText)
+        end,
+        abbreviateNumbers = function(value)
+            if type(value) == "number" then
+                if value == 7 then return "100%" end
+                if value == 10.5 then return "150%" end
+                error("unexpected clean movement formatter self-test", 0)
+            end
+            if rawequal(value, secretSpeed) then return secretText end
+            error("unexpected movement formatter input", 0)
+        end,
     })
     fireEvent("render.speed_secret_dual_column.fire", speedEnv, "PLAYER_ENTERING_WORLD")
     speedState = "secret"
@@ -7720,7 +7796,8 @@ do
     eq("render.speed_secret_dual_column.row_count", #tertiary.labels, 1)
     eq("render.speed_secret_dual_column.row", tertiary.labels[1]:find("Movement:", 1, true) ~= nil, true)
     eq("render.speed_secret_dual_column.rating", tertiary.ratings[1]:find("377", 1, true) ~= nil, true)
-    eq("render.speed_secret_dual_column.unknown_percent", tertiary.values[1]:find("?%", 1, true) ~= nil, true)
+    eq("render.speed_secret_dual_column.live_percent", tertiary.values[1]:find(secretText, 1, true) ~= nil, true)
+    eq("render.speed_secret_dual_column.not_unknown", tertiary.values[1]:find("?%", 1, true), nil)
     eq("render.speed_secret_dual_column.no_yards_per_second", tertiary.values[1]:find("yd/s", 1, true), nil)
 
     local settings = activeSettings(speedEnv)
@@ -7743,6 +7820,115 @@ do
     check("render.speed_unavailable_not_restricted.no_error", ok, blocks)
     tertiary = blocks[3]
     eq("render.speed_unavailable_not_restricted.no_fake_unknown_row", #tertiary.labels, 0)
+end
+
+do
+    local secretInstantA, secretInstantB = {}, {}
+    local secretRunA, secretRunB = {}, {}
+    local rawTextA, rawTextB = "7.7 yd/s", "10.5 yd/s"
+    local phase = "a"
+    local restrictedNativeCalls = 0
+    local rawFormatterCalls = 0
+    local rawFormatOK = true
+    local speedEnv, _, speedTest = loadMovementScenario({
+        showRating = false,
+        showPercentage = true,
+        hideZeroTertiary = false,
+    }, {
+        getUnitSpeed = function()
+            if phase == "a" then return secretInstantA, secretRunA, secretRunA, secretRunA end
+            return secretInstantB, secretRunB, secretRunB, secretRunB
+        end,
+        issecretvalue = function(value)
+            return rawequal(value, secretInstantA) or rawequal(value, secretInstantB)
+                or rawequal(value, secretRunA) or rawequal(value, secretRunB)
+                or rawequal(value, rawTextA) or rawequal(value, rawTextB)
+        end,
+        abbreviateNumbers = function(value)
+            if type(value) == "number" then
+                if value == 7 then return "100%" end
+                if value == 10.5 then return "150%" end
+                error("unexpected clean movement formatter self-test", 0)
+            end
+            restrictedNativeCalls = restrictedNativeCalls + 1
+            error("restricted native formatter unavailable", 0)
+        end,
+        setFormattedText = function(_, format, value)
+            rawFormatterCalls = rawFormatterCalls + 1
+            rawFormatOK = rawFormatOK and format == "%.1f yd/s"
+            if rawequal(value, secretRunA) then return rawTextA end
+            if rawequal(value, secretRunB) then return rawTextB end
+            error("Movement raw fallback did not receive run speed", 0)
+        end,
+    })
+    fireEvent("render.speed_secret_native_failure_fallback.fire", speedEnv, "PLAYER_ENTERING_WORLD")
+    rawFormatterCalls = 0
+
+    local ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_secret_native_failure_fallback.first_no_error", ok, blocks)
+    eq("render.speed_secret_native_failure_fallback.first_value",
+        blockDumpContains(blocks, rawTextA), true)
+    eq("render.speed_secret_native_failure_fallback.first_not_unknown",
+        blockDumpContains(blocks, "?%"), false)
+
+    phase = "b"
+    ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_secret_native_failure_fallback.second_no_error", ok, blocks)
+    eq("render.speed_secret_native_failure_fallback.second_value",
+        blockDumpContains(blocks, rawTextB), true)
+    eq("render.speed_secret_native_failure_fallback.second_not_stale",
+        blockDumpContains(blocks, rawTextA), false)
+    eq("render.speed_secret_native_failure_fallback.native_failure_not_retried",
+        restrictedNativeCalls, 1)
+    eq("render.speed_secret_native_failure_fallback.raw_formatter_calls", rawFormatterCalls, 2)
+    eq("render.speed_secret_native_failure_fallback.raw_format", rawFormatOK, true)
+end
+
+do
+    local secretInstant, secretRun = {}, {}
+    local rawText = "9.8 yd/s"
+    local restrictedNativeCalls = 0
+    local rawFormatterCalls = 0
+    local speedEnv, _, speedTest = loadMovementScenario({
+        showRating = false,
+        showPercentage = true,
+        hideZeroTertiary = false,
+    }, {
+        getUnitSpeed = function()
+            return secretInstant, secretRun, secretRun, secretRun
+        end,
+        issecretvalue = function(value)
+            return rawequal(value, secretInstant) or rawequal(value, secretRun)
+                or rawequal(value, rawText)
+        end,
+        abbreviateNumbers = function(value)
+            if type(value) == "number" then
+                -- Simulate a future Blizzard semantic change. The clean probe must
+                -- reject it before any protected value reaches this formatter.
+                if value == 7 then return "99%" end
+                if value == 10.5 then return "149%" end
+            end
+            restrictedNativeCalls = restrictedNativeCalls + 1
+            error("invalid native formatter received restricted movement", 0)
+        end,
+        setFormattedText = function(_, format, value)
+            rawFormatterCalls = rawFormatterCalls + 1
+            if format ~= "%.1f yd/s" or not rawequal(value, secretRun) then
+                error("Movement fallback contract changed", 0)
+            end
+            return rawText
+        end,
+    })
+    fireEvent("render.speed_native_contract_change.fire", speedEnv, "PLAYER_ENTERING_WORLD")
+    rawFormatterCalls = 0
+
+    local ok, blocks = pcall(speedTest.buildRenderBlocks)
+    check("render.speed_native_contract_change.no_error", ok, blocks)
+    eq("render.speed_native_contract_change.live_fallback",
+        blockDumpContains(blocks, rawText), true)
+    eq("render.speed_native_contract_change.restricted_native_never_called",
+        restrictedNativeCalls, 0)
+    eq("render.speed_native_contract_change.raw_formatter_calls", rawFormatterCalls, 1)
 end
 
 do

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.12.10 - 10-Aug-2026 — Live dungeon Movement
+
+### Fixed
+
+- **Movement now shows its live percentage in dungeons and other restricted combat.** Speed buffs and slows update the HUD instead of falling back to `?%`.
+
 ## 1.12.9 - 10-Aug-2026 — Archon target refresh
 
 ### Updated

@@ -465,7 +465,7 @@ function Invoke-SelfTest {
             try {
                 foreach ($entryData in @(
                     [pscustomobject]@{ Name = 'StatsPro/StatsPro.toc'; Text = @"
-## Interface: 120007, 120100
+## Interface: 120100
 ## Version: 1.2.3
 ## X-Curse-Project-ID: 1525100
 ## X-Wago-ID: EGPemEN1
@@ -489,11 +489,11 @@ function Invoke-SelfTest {
             param([string]$Uri, [hashtable]$Headers)
             $readCalls.Add([pscustomobject]@{ Uri = $Uri; Headers = $Headers })
             switch ($Uri) {
-                'https://wow.curseforge.com/api/game/wow/versions' { return '[{"id":120007,"name":"12.0.7","gameVersionTypeID":517},{"id":120100,"name":"12.1.0","gameVersionTypeID":517}]' }
+                'https://wow.curseforge.com/api/game/wow/versions' { return '[{"id":120100,"name":"12.1.0","gameVersionTypeID":517}]' }
                 'https://api.wowinterface.com/addons/list.json' { return '[{"id":27130,"title":"StatsPro"}]' }
                 'https://addons.wago.io/addons/EGPemEN1' { return '<meta property="og:url" content="https://addons.wago.io/addons/EGPemEN1" />' }
-                'https://api.wowinterface.com/addons/compatible.json' { return '[{"id":"12.0.7","game":"Retail"},{"id":"12.1.0","game":"Retail"}]' }
-                'https://addons.wago.io/api/data/game' { return '{"patches":{"retail":["12.0.7","12.1.0"]}}' }
+                'https://api.wowinterface.com/addons/compatible.json' { return '[{"id":"12.1.0","game":"Retail"}]' }
+                'https://addons.wago.io/api/data/game' { return '{"patches":{"retail":["12.1.0"]}}' }
                 default { throw "unexpected read URI" }
             }
         }
@@ -547,12 +547,12 @@ function Invoke-SelfTest {
         if ($calls[1].Headers.Count -ne 1 -or $calls[1].Headers['x-api-token'] -ne $credentials.CF_API_KEY -or
             $calls[1].Form.Count -ne 2 -or $cfPayload.displayName -ne $tag -or $cfPayload.releaseType -ne 'release' -or
             $cfPayload.changelogType -ne 'markdown' -or $cfPayload.changelog -ne "## 1.2.3`n`n- Fixed.`n" -or
-            (@($cfPayload.gameVersions) -join ',') -ne '120007,120100') {
+            (@($cfPayload.gameVersions) -join ',') -ne '120100') {
             throw "CurseForge payload self-test failed."
         }
         if ($calls[2].Headers.Count -ne 1 -or $calls[2].Headers['x-api-token'] -ne $credentials.WOWI_API_TOKEN -or
             $calls[2].Form.Count -ne 5 -or $calls[2].Form.id -ne '27130' -or $calls[2].Form.version -ne $tag -or
-            $calls[2].Form.compatible -ne '12.1.0,12.0.7' -or $calls[2].Form.changelog -ne "## 1.2.3`n`n- Fixed.`n") {
+            $calls[2].Form.compatible -ne '12.1.0' -or $calls[2].Form.changelog -ne "## 1.2.3`n`n- Fixed.`n") {
             throw "WoWInterface payload self-test failed."
         }
         $wagoPayload = ConvertFrom-JsonCompat ([string]$calls[0].Form.metadata)
@@ -560,7 +560,7 @@ function Invoke-SelfTest {
             $calls[0].Headers.accept -ne 'application/json' -or $calls[0].Form.Count -ne 2 -or
             $wagoPayload.label -ne $tag -or $wagoPayload.stability -ne 'stable' -or
             $wagoPayload.changelog -ne "## 1.2.3`n`n- Fixed.`n" -or
-            (@($wagoPayload.supported_retail_patches) -join ',') -ne '12.1.0,12.0.7') {
+            (@($wagoPayload.supported_retail_patches) -join ',') -ne '12.1.0') {
             throw "Wago payload self-test failed."
         }
 
@@ -603,11 +603,11 @@ function Invoke-SelfTest {
         Assert-ThrowsMatch "boolean marketplace schema rejected" {
             [void](Read-MarketplacePlan -Path $planPath -ExpectedSha256 $invalidSha -Tag $tag -ArchiveSha256 $sha)
         } "identity"
-        $invalidSha = & $writeInvalidPlan ($validPlanText.Replace('120007', '2147483648'))
+        $invalidSha = & $writeInvalidPlan ($validPlanText.Replace('120100', '2147483648'))
         Assert-ThrowsMatch "oversized CurseForge plan ID rejected" {
             [void](Read-MarketplacePlan -Path $planPath -ExpectedSha256 $invalidSha -Tag $tag -ArchiveSha256 $sha)
         } "IDs are invalid"
-        $invalidSha = & $writeInvalidPlan ($validPlanText.Replace('120100', '120007'))
+        $invalidSha = & $writeInvalidPlan ($validPlanText.Replace('120100', '120100,120100'))
         Assert-ThrowsMatch "duplicate CurseForge plan ID rejected" {
             [void](Read-MarketplacePlan -Path $planPath -ExpectedSha256 $invalidSha -Tag $tag -ArchiveSha256 $sha)
         } "IDs are invalid"
@@ -625,7 +625,7 @@ function Invoke-SelfTest {
             [void](New-MarketplacePlan -Archive $archive -Tag $tag -Sha256 $sha -CredentialValues $credentials -ReadRequest {
                 param($uri, $headers)
                 if ($uri -eq 'https://wow.curseforge.com/api/game/wow/versions') {
-                    return '[{"id":120007,"name":"12.0.7","gameVersionTypeID":517},{"id":120008,"name":"12.0.7","gameVersionTypeID":517},{"id":120100,"name":"12.1.0","gameVersionTypeID":517}]'
+                    return '[{"id":120100,"name":"12.1.0","gameVersionTypeID":517},{"id":120101,"name":"12.1.0","gameVersionTypeID":517}]'
                 }
                 return & $read $uri $headers
             })
@@ -717,24 +717,24 @@ function Invoke-SelfTest {
         Assert-ThrowsMatch "unsupported WoWInterface fallback blocks upload" {
             Publish-ExactMarketplaceArchive -Archive $archive -Tag $tag -Sha256 $sha -CredentialValues $credentials -ReadRequest {
                 param($uri, $headers)
-                if ($uri -match 'curseforge') { return '[{"id":120007,"name":"12.0.7","gameVersionTypeID":517},{"id":120100,"name":"12.1.0","gameVersionTypeID":517}]' }
+                if ($uri -match 'curseforge') { return '[{"id":120100,"name":"12.1.0","gameVersionTypeID":517}]' }
                 if ($uri -eq 'https://api.wowinterface.com/addons/list.json') { return '[{"id":27130,"title":"StatsPro"}]' }
                 if ($uri -eq 'https://api.wowinterface.com/addons/compatible.json') { return '[{"id":"12.0.9","game":"Retail"},{"id":"12.0.0","game":"Retail"}]' }
                 if ($uri -eq 'https://addons.wago.io/addons/EGPemEN1') { return '<meta property="og:url" content="https://addons.wago.io/addons/EGPemEN1" />' }
-                return '{"patches":{"retail":["12.0.7","12.1.0"]}}'
+                return '{"patches":{"retail":["12.1.0"]}}'
             } -UploadRequest { throw 'should not upload' }
         } "WoWInterface would select unsupported fallback"
 
         Assert-ThrowsMatch "lowercase WoWInterface game label is ignored like upstream" {
             Publish-ExactMarketplaceArchive -Archive $archive -Tag $tag -Sha256 $sha -CredentialValues $credentials -ReadRequest {
                 param($uri, $headers)
-                if ($uri -match 'curseforge') { return '[{"id":120007,"name":"12.0.7","gameVersionTypeID":517},{"id":120100,"name":"12.1.0","gameVersionTypeID":517}]' }
+                if ($uri -match 'curseforge') { return '[{"id":120100,"name":"12.1.0","gameVersionTypeID":517}]' }
                 if ($uri -eq 'https://api.wowinterface.com/addons/list.json') { return '[{"id":27130,"title":"StatsPro"}]' }
-                if ($uri -eq 'https://api.wowinterface.com/addons/compatible.json') { return '[{"id":"12.0.7","game":"retail"},{"id":"12.1.0","game":"Retail"}]' }
+                if ($uri -eq 'https://api.wowinterface.com/addons/compatible.json') { return '[{"id":"12.1.0","game":"retail"},{"id":"12.0.7","game":"Retail"}]' }
                 if ($uri -eq 'https://addons.wago.io/addons/EGPemEN1') { return '<meta property="og:url" content="https://addons.wago.io/addons/EGPemEN1" />' }
-                return '{"patches":{"retail":["12.0.7","12.1.0"]}}'
+                return '{"patches":{"retail":["12.1.0"]}}'
             } -UploadRequest { throw 'should not upload' }
-        } "WoWInterface would select unsupported fallback '12\.1\.0'"
+        } "WoWInterface would select unsupported fallback '12\.0\.7'"
 
         if ((Select-StatsProOrdinalMarketplaceVersion -AvailableVersions @('12.0.9', '12.0.10') -RequestedVersion '12.1.0') -cne '12.0.9') {
             throw "Marketplace fallback selection must use the greatest ordinal predecessor."

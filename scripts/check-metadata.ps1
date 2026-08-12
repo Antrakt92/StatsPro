@@ -420,7 +420,7 @@ function Set-TestToc {
         [string[]]$SavedVariablesLines = @("## SavedVariables: StatsProDB")
     )
 
-    $content = @("## Interface: 120007, 120100") + $SavedVariablesLines + $Refs
+    $content = @("## Interface: 120100") + $SavedVariablesLines + $Refs
     Set-Content -Path (Join-Path $Root "StatsPro.toc") -Value ($content -join "`n") -Encoding UTF8
 }
 
@@ -881,7 +881,7 @@ try {
         -Path $contract.TocPath `
         -Pattern "^##\s+Interface:\s*(.+?)\s*$" `
         -Description "TOC Interface"
-    $ExpectedInterfaceText = "120007, 120100"
+    $ExpectedInterfaceText = "120100"
     if ($InterfaceText -ne $ExpectedInterfaceText) {
         throw "TOC Interface is '$InterfaceText', expected '$ExpectedInterfaceText'."
     }

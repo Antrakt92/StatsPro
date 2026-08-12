@@ -201,7 +201,7 @@ and the original `SwiftStatsDB` remain unchanged.
 
 ## Compatibility
 
-- **Supported:** World of Warcraft Retail — Midnight 12.0.7 and 12.1.0
+- **Supported:** World of Warcraft Retail — Midnight 12.1.0
 - **Not supported:** Classic Era, Cataclysm Classic, Mists of Pandaria Classic,
   and other non-Retail clients
 

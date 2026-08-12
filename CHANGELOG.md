@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.12.13 - 12-Aug-2026 — Retail 12.1 compatibility
+
+### Updated
+
+- **StatsPro now targets World of Warcraft Retail 12.1.0 only.**
+
 ## 1.12.12 - 12-Aug-2026 — Archon target refresh
 
 ### Updated

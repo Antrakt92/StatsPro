@@ -545,8 +545,9 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetChecked(value) self.checked = value end
     function frame:GetChecked() return self.checked end
     function frame:GetName() return self.name end
-    function frame:StartMoving()
+    function frame:StartMoving(alwaysStartFromMouse)
         self.startMovingCalls = (self.startMovingCalls or 0) + 1
+        self.lastStartMovingFromMouse = alwaysStartFromMouse
         self.moving = true
     end
     function frame:StopMovingOrSizing()
@@ -2094,6 +2095,8 @@ do
     exists("tooltip.right_click_forwards_settings", tooltipEnv.StatsProConfigFrame)
     tooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnDragStart")
     eq("tooltip.drag_forwards_parent_flag", tooltipEnv.StatsProFrame.wasDragging, true)
+    eq("tooltip.drag_starts_from_mouse",
+        tooltipEnv.StatsProFrame.lastStartMovingFromMouse, true)
     tooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnDragStop")
     local okFlush, flushed = pcall(tooltipEnv.__flushTimers, 0.1)
     check("tooltip.drag_guard_timer", okFlush, flushed)
@@ -3951,7 +3954,13 @@ end
 do
     local dragEnv = loadStatsPro("enUS")
     fireEvent("lifecycle.drag_guard.fire", dragEnv, "PLAYER_ENTERING_WORLD")
+    eq("lifecycle.first_install_drag.onboarding_marker",
+        dragEnv.StatsProDB.account.quickSetupSeen, false)
+    eq("lifecycle.first_install_drag.user_placed_before_first_drag",
+        dragEnv.StatsProFrame.userPlaced, true)
     callScript("lifecycle.drag_guard.start", dragEnv.StatsProFrame, "OnDragStart")
+    eq("lifecycle.first_install_drag.starts_from_mouse",
+        dragEnv.StatsProFrame.lastStartMovingFromMouse, true)
     callScript("lifecycle.drag_guard.stop", dragEnv.StatsProFrame, "OnDragStop")
     callScript("lifecycle.drag_guard.right_click_suppressed", dragEnv.StatsProFrame, "OnMouseUp", "RightButton")
     eq("lifecycle.drag_guard.config_not_opened", dragEnv.StatsProConfigFrame, nil)
@@ -3966,6 +3975,19 @@ do
     flushTimers("lifecycle.drag_guard.current_timer_flush", dragEnv, 0.11, 1)
     callScript("lifecycle.drag_guard.right_click_after_timer", dragEnv.StatsProFrame, "OnMouseUp", "RightButton")
     exists("lifecycle.drag_guard.config_opened", dragEnv.StatsProConfigFrame)
+end
+
+do
+    local blockedEnv = loadStatsPro("enUS")
+    fireEvent("lifecycle.drag_start_failure.fire", blockedEnv, "PLAYER_ENTERING_WORLD")
+    blockedEnv.StatsProFrame.StartMoving = function()
+        error("synthetic StartMoving failure")
+    end
+    local ok = pcall(callScript,
+        "lifecycle.drag_start_failure.start", blockedEnv.StatsProFrame, "OnDragStart")
+    eq("lifecycle.drag_start_failure.propagates", ok, false)
+    eq("lifecycle.drag_start_failure.no_drag_guard",
+        blockedEnv.StatsProFrame.wasDragging, nil)
 end
 
 do
@@ -4264,12 +4286,26 @@ do
     eq("panel.edit.combat_leave.side_hidden_in_flat_mode", state.side.visible, false)
     assertDeepEqual("panel.edit.combat_roundtrip_no_db_write", editEnv.StatsProDB, beforeCombat)
 
+    local originalStartMoving = editEnv.StatsProFrame.StartMoving
+    editEnv.StatsProFrame.StartMoving = function()
+        error("synthetic edit StartMoving failure")
+    end
+    local failedStartOK = pcall(
+        editTest.firePanelEditHandleForSmoke, "main", "OnDragStart")
+    eq("panel.edit.failed_start.propagates", failedStartOK, false)
+    state = editTest.panelEditAffordanceState()
+    eq("panel.edit.failed_start.not_dragging", state.main.dragging, false)
+    eq("panel.edit.failed_start.no_drag_guard", editEnv.StatsProFrame.wasDragging, nil)
+    editEnv.StatsProFrame.StartMoving = originalStartMoving
+
     startCalls = state.main.startMovingCalls
     local stopCalls = state.main.stopMovingCalls
     editTest.firePanelEditHandleForSmoke("main", "OnDragStart")
     state = editTest.panelEditAffordanceState()
     eq("panel.edit.handle_drag_started", state.main.dragging, true)
     eq("panel.edit.handle_drag_moves_panel", state.main.startMovingCalls, startCalls + 1)
+    eq("panel.edit.handle_drag_starts_from_mouse",
+        editEnv.StatsProFrame.lastStartMovingFromMouse, true)
     inCombat = true
     fireEvent("panel.edit.combat_stops_drag", editEnv, "PLAYER_REGEN_DISABLED")
     state = editTest.panelEditAffordanceState()

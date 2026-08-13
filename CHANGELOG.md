@@ -1,6 +1,10 @@
 # Changelog
 
-## 1.12.14 - 13-Aug-2026 — Archon target refresh
+## 1.12.15 - 13-Aug-2026 — Drag fix and Archon target refresh
+
+### Fixed
+
+- **Panels now start dragging from the cursor on a fresh installation instead of jumping away from the click point.**
 
 ### Updated
 

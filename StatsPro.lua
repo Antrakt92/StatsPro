@@ -338,7 +338,7 @@ end
 -- when metadata is invalid); a package uses its exact project version, including the
 -- branch build suffix in CI dry runs.
 -- WARNING: bump CURRENT_RELEASE on every `git tag v*` so dev builds reflect the working base.
-local CURRENT_RELEASE = "1.12.14"
+local CURRENT_RELEASE = "1.12.15"
 
 function addon.ResolveAddonVersion(packagerProjectVersion, metadataVersion, sourceVersion)
     if type(packagerProjectVersion) == "string" then
@@ -7890,8 +7890,7 @@ function Panel:New(globalName, dbKeyPrefix)
         overlay:RegisterForDrag("LeftButton")
         overlay:SetScript("OnDragStart", function()
             if InCombatLockdown() or cached.isLocked then return end
-            panel:BeginDragGuard()
-            frame:StartMoving()
+            panel:StartMouseDrag()
         end)
         overlay:SetScript("OnDragStop", function()
             frame:StopMovingOrSizing()
@@ -7933,9 +7932,7 @@ function Panel:New(globalName, dbKeyPrefix)
         if not panel.editAffordanceShown or cached.isLocked then return end
         if addon.profileRuntime.ReadCombatState() ~= false then return end
         if not addon.dbRuntime.GetWritableSettings(false) then return end
-        panel.editDragging = true
-        panel:BeginDragGuard()
-        frame:StartMoving()
+        panel.editDragging = panel:StartMouseDrag()
     end)
     editHandle:SetScript("OnDragStop", function()
         panel:FinishEditDrag()
@@ -8020,10 +8017,9 @@ function Panel:New(globalName, dbKeyPrefix)
     -- Lock state gates drag inside OnDragStart via cached.isLocked; mouse-enable is
     -- permanently true (Panel:New) so right-click → Settings works regardless of lock.
     frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", function(f)
+    frame:SetScript("OnDragStart", function()
         if InCombatLockdown() or cached.isLocked then return end
-        panel:BeginDragGuard()
-        f:StartMoving()
+        panel:StartMouseDrag()
     end)
     frame:SetScript("OnDragStop", function(f)
         f:StopMovingOrSizing()
@@ -8063,6 +8059,14 @@ end
 function Panel:BeginDragGuard()
     self.dragGuardGeneration = (self.dragGuardGeneration or 0) + 1
     self.frame.wasDragging = true
+end
+
+function Panel:StartMouseDrag()
+    -- WHY: Always start from the mouse so named-frame layout state cannot create
+    -- a cursor offset on the first drag of a fresh install.
+    self.frame:StartMoving(true)
+    self:BeginDragGuard()
+    return true
 end
 
 function Panel:ScheduleDragGuardRelease()

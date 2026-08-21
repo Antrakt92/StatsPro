@@ -379,8 +379,8 @@ function Assert-ArchiveArchonFreshness {
     $dateMatches = @([regex]::Matches(
         $text,
         '(?m)^\s*capturedAt\s*=\s*"([0-9]{4}-[0-9]{2}-[0-9]{2})"\s*,\s*$'))
-    if ($dateMatches.Count -ne 2) {
-        throw "Packaged Archon targets must contain exactly two capturedAt dates, found $($dateMatches.Count)."
+    if ($dateMatches.Count -lt 1 -or $dateMatches.Count -gt 5) {
+        throw "Packaged Archon targets must contain between one and five capturedAt dates, found $($dateMatches.Count)."
     }
 
     $today = $TodayUtc.Date
@@ -497,7 +497,7 @@ function New-TestZip {
     param(
         [string]$Path,
         [string]$Tag,
-        [string[]]$CapturedAt = @('2026-07-25', '2026-07-25')
+        [string[]]$CapturedAt = @('2026-07-25')
     )
 
     Add-Type -AssemblyName System.IO.Compression
@@ -506,18 +506,21 @@ function New-TestZip {
     try {
         $zip = [System.IO.Compression.ZipArchive]::new($stream, [System.IO.Compression.ZipArchiveMode]::Create, $false)
         try {
-            $archonText = @"
-StatsProArchonTargets = {
-  snapshots = {
-    mythicPlus = {
-      capturedAt = "$($CapturedAt[0])",
-    },
-    raid = {
-      capturedAt = "$($CapturedAt[1])",
-    },
-  },
-}
-"@
+            if ($CapturedAt.Count -lt 1 -or $CapturedAt.Count -gt 6) {
+                throw "Test archive requires between one and six capturedAt values."
+            }
+            $profileNames = @('mythicPlusCurrent', 'mythicPlusHighKeys', 'raidNormal', 'raidHeroic', 'raidMythic', 'unexpectedSixth')
+            $archonLines = [System.Collections.Generic.List[string]]::new()
+            $archonLines.Add('StatsProArchonTargets = {')
+            $archonLines.Add('  snapshots = {')
+            for ($index = 0; $index -lt $CapturedAt.Count; $index++) {
+                $archonLines.Add("    $($profileNames[$index]) = {")
+                $archonLines.Add("      capturedAt = `"$($CapturedAt[$index])`",")
+                $archonLines.Add('    },')
+            }
+            $archonLines.Add('  },')
+            $archonLines.Add('}')
+            $archonText = ($archonLines -join "`n") + "`n"
             foreach ($item in @(
                 [pscustomobject]@{ Name = 'StatsPro/StatsPro.toc'; Text = "## Version: $($Tag.Substring(1))`n" },
                 [pscustomobject]@{ Name = 'StatsPro/CHANGELOG.md'; Text = "# Changelog`n`n## $($Tag.Substring(1))`n" },
@@ -591,18 +594,22 @@ function Invoke-SelfTest {
                 -ArchonMaximumAgeDays -2)
         } "must be -1.*non-negative"
 
-        New-TestZip -Path $archive -Tag $tag -CapturedAt @('2026-07-20', '2026-07-20')
+        New-TestZip -Path $archive -Tag $tag -CapturedAt @('2026-07-20')
         Assert-ThrowsMatch "stale Archon handoff rejected" {
             Assert-ArchiveArchonFreshness -Archive $archive -MaxAgeDays 3 -TodayUtc ([datetime]'2026-07-25')
         } "is stale"
-        New-TestZip -Path $archive -Tag $tag -CapturedAt @('2026-07-27', '2026-07-27')
+        New-TestZip -Path $archive -Tag $tag -CapturedAt @('2026-07-27', '2026-07-27', '2026-07-27')
         Assert-ThrowsMatch "future Archon handoff rejected" {
             Assert-ArchiveArchonFreshness -Archive $archive -MaxAgeDays 3 -TodayUtc ([datetime]'2026-07-25')
         } "in the future"
-        New-TestZip -Path $archive -Tag $tag -CapturedAt @('2026-02-29', '2026-02-29')
+        New-TestZip -Path $archive -Tag $tag -CapturedAt @('2026-02-29', '2026-02-29', '2026-02-29', '2026-02-29', '2026-02-29')
         Assert-ThrowsMatch "invalid Archon handoff date rejected" {
             Assert-ArchiveArchonFreshness -Archive $archive -MaxAgeDays 999 -TodayUtc ([datetime]'2026-07-25')
         } "not a valid YYYY-MM-DD"
+        New-TestZip -Path $archive -Tag $tag -CapturedAt @('2026-07-25', '2026-07-25', '2026-07-25', '2026-07-25', '2026-07-25', '2026-07-25')
+        Assert-ThrowsMatch "six-profile Archon handoff rejected" {
+            Assert-ArchiveArchonFreshness -Archive $archive -MaxAgeDays 3 -TodayUtc ([datetime]'2026-07-25')
+        } "between one and five"
         New-TestZip -Path $archive -Tag $tag
 
         [void](New-ReleaseCandidate `

@@ -49,6 +49,57 @@ local SPECS = {
 }
 
 local PROFILES = {
+    mythicPlusCurrent = {
+        label = "M+ Current",
+        title = "M+ Target",
+        activity = "mythic-plus",
+        bracket = "10",
+        dungeon = "all-dungeons",
+        window = "this-week",
+    },
+    mythicPlusHighKeys = {
+        label = "M+ High Keys",
+        title = "M+ Target",
+        activity = "mythic-plus",
+        bracket = "high-keys",
+        dungeon = "all-dungeons",
+        window = "this-week",
+    },
+    raidNormal = {
+        label = "Raid Normal All Bosses",
+        title = "Raid Target",
+        activity = "raid",
+        difficulty = "normal",
+        boss = "all-bosses",
+        window = "last-14-days",
+    },
+    raidHeroic = {
+        label = "Raid Heroic All Bosses",
+        title = "Raid Target",
+        activity = "raid",
+        difficulty = "heroic",
+        boss = "all-bosses",
+        window = "last-14-days",
+    },
+    raidMythic = {
+        label = "Raid Mythic All Bosses",
+        title = "Raid Target",
+        activity = "raid",
+        difficulty = "mythic",
+        boss = "all-bosses",
+        window = "last-14-days",
+    },
+}
+
+local PROFILE_ORDER = {
+    "mythicPlusCurrent",
+    "mythicPlusHighKeys",
+    "raidNormal",
+    "raidHeroic",
+    "raidMythic",
+}
+
+local LEGACY_V2_PROFILES = {
     mythicPlus = {
         label = "M+ High Keys",
         title = "M+ Target",
@@ -67,7 +118,11 @@ local PROFILES = {
     },
 }
 
-local PROFILE_ORDER = { "mythicPlus", "raid" }
+local LEGACY_V2_PROFILE_ORDER = { "mythicPlus", "raid" }
+local LEGACY_V2_CANONICAL_KEYS = {
+    mythicPlus = "mythicPlusHighKeys",
+    raid = "raidMythic",
+}
 
 local function fail(message)
     error(message, 0)
@@ -134,11 +189,18 @@ local function is_finite_positive_integer(value)
         and math.floor(value) == value
 end
 
-local function expected_url(spec, profileKey)
-    if profileKey == "mythicPlus" then
-        return "https://www.archon.gg/wow/builds/" .. spec.specSlug .. "/" .. spec.classSlug .. "/mythic-plus/overview/high-keys/all-dungeons/this-week"
+local function expected_url(spec, profileKey, schemaVersion)
+    local profiles = schemaVersion == 2 and LEGACY_V2_PROFILES or PROFILES
+    local profile = profiles[profileKey]
+    if not profile then
+        fail("unknown profile key " .. tostring(profileKey))
     end
-    return "https://www.archon.gg/wow/builds/" .. spec.specSlug .. "/" .. spec.classSlug .. "/raid/overview/mythic/all-bosses"
+    if profile.activity == "raid" then
+        return "https://www.archon.gg/wow/builds/" .. spec.specSlug .. "/" .. spec.classSlug
+            .. "/raid/overview/" .. profile.difficulty .. "/" .. profile.boss
+    end
+    return "https://www.archon.gg/wow/builds/" .. spec.specSlug .. "/" .. spec.classSlug
+        .. "/mythic-plus/overview/" .. profile.bracket .. "/" .. profile.dungeon .. "/" .. profile.window
 end
 
 local function days_in_month(year, month)
@@ -265,23 +327,24 @@ local function count_target_lines(text)
     return count
 end
 
-local function validate_raw_text_shape(text)
+local function validate_raw_text_shape(text, profileCount)
     if not text then
         return
     end
+    profileCount = profileCount or #PROFILE_ORDER
     local sourceUrlCount = count_pattern_occurrences(text, 'sourceUrl%s*=%s*"https://www%.archon%.gg/wow/builds/')
-    if sourceUrlCount ~= (#SPECS * #PROFILE_ORDER) then
-        fail("generated file must contain exactly " .. tostring(#SPECS * #PROFILE_ORDER) .. " Archon sourceUrl entries, got " .. tostring(sourceUrlCount))
+    if sourceUrlCount ~= (#SPECS * profileCount) then
+        fail("generated file must contain exactly " .. tostring(#SPECS * profileCount) .. " Archon sourceUrl entries, got " .. tostring(sourceUrlCount))
     end
 
     local targetCount = count_target_lines(text)
-    if targetCount ~= (#SPECS * #PROFILE_ORDER * #REQUIRED_STATS) then
-        fail("generated file must contain exactly " .. tostring(#SPECS * #PROFILE_ORDER * #REQUIRED_STATS) .. " secondary-stat target entries, got " .. tostring(targetCount))
+    if targetCount ~= (#SPECS * profileCount * #REQUIRED_STATS) then
+        fail("generated file must contain exactly " .. tostring(#SPECS * profileCount * #REQUIRED_STATS) .. " secondary-stat target entries, got " .. tostring(targetCount))
     end
 
     local capturedAtCount = count_pattern_occurrences(text, 'capturedAt%s*=%s*"%d%d%d%d%-%d%d%-%d%d"')
-    if capturedAtCount ~= #PROFILE_ORDER then
-        fail("generated file must contain exactly " .. tostring(#PROFILE_ORDER) .. " capturedAt entries, got " .. tostring(capturedAtCount))
+    if capturedAtCount ~= profileCount then
+        fail("generated file must contain exactly " .. tostring(profileCount) .. " capturedAt entries, got " .. tostring(capturedAtCount))
     end
 end
 
@@ -560,17 +623,36 @@ end
 local function validate_snapshot(root, text, options)
     validate_spec_manifest()
     validate_runtime_spec_parity(options.statsProLua)
-    validate_raw_text_shape(text)
     validate_exact_keys(root, make_key_set({ "schemaVersion", "source", "snapshots" }), "StatsProArchonTargets")
     expect_type(root, "table", "StatsProArchonTargets")
-    expect_equal(root.schemaVersion, 2, "schemaVersion")
+    if root.schemaVersion ~= 2 and root.schemaVersion ~= 3 then
+        fail("schemaVersion must be 2 or 3, got " .. tostring(root.schemaVersion))
+    end
     expect_equal(root.source, "archon", "source")
     expect_type(root.snapshots, "table", "snapshots")
-    expect_equal(count_keys(root.snapshots), #PROFILE_ORDER, "snapshots profile count")
+    local profiles = root.schemaVersion == 2 and LEGACY_V2_PROFILES or PROFILES
+    local profileOrder = root.schemaVersion == 2 and LEGACY_V2_PROFILE_ORDER or PROFILE_ORDER
+    local profileCount = count_keys(root.snapshots)
+    if root.schemaVersion == 2 then
+        expect_equal(profileCount, #profileOrder, "snapshots profile count")
+    elseif profileCount < 1 or profileCount > #profileOrder then
+        fail("schema v3 snapshots profile count must be between 1 and " .. tostring(#profileOrder)
+            .. ", got " .. tostring(profileCount))
+    end
+    for profileKey in pairs(root.snapshots) do
+        if not profiles[profileKey] then
+            fail("snapshots has unexpected profile " .. tostring(profileKey))
+        end
+    end
+    validate_raw_text_shape(text, profileCount)
 
-    for _, profileKey in ipairs(PROFILE_ORDER) do
+    for _, profileKey in ipairs(profileOrder) do
         local profile = root.snapshots[profileKey]
-        local expectedProfile = PROFILES[profileKey]
+        if root.schemaVersion == 3 and profile == nil then
+            -- Availability is data-driven in schema v3. Missing profiles are not
+            -- offered by the addon and may appear automatically in a later snapshot.
+        else
+        local expectedProfile = profiles[profileKey]
         local profileContext = "snapshots." .. profileKey
         expect_type(profile, "table", profileContext)
         local allowedProfileKeys = { capturedAt = true, specs = true }
@@ -609,7 +691,7 @@ local function validate_snapshot(root, text, options)
             local specData = profile.specs[spec.classToken] and profile.specs[spec.classToken][spec.specKey]
             expect_type(specData, "table", specContext)
             validate_exact_keys(specData, make_key_set({ "sourceUrl", "targets", "order" }), specContext)
-            local url = expected_url(spec, profileKey)
+            local url = expected_url(spec, profileKey, root.schemaVersion)
             expect_equal(specData.sourceUrl, url, specContext .. ".sourceUrl")
             local occurrenceCount = count_plain_occurrences(text, url)
             if occurrenceCount and occurrenceCount ~= 1 then
@@ -617,6 +699,7 @@ local function validate_snapshot(root, text, options)
             end
             contains_exactly_required_stats(specData.targets, specContext .. ".targets")
             validate_order(specData.order, specContext .. ".order")
+        end
         end
     end
 end
@@ -631,23 +714,28 @@ end
 
 local function build_semantic_lines(root)
     local lines = {}
-    for _, profileKey in ipairs(PROFILE_ORDER) do
-        local profile = root.snapshots[profileKey]
+    local profileOrder = root.schemaVersion == 2 and LEGACY_V2_PROFILE_ORDER or PROFILE_ORDER
+    for _, sourceProfileKey in ipairs(profileOrder) do
+        local profile = root.snapshots[sourceProfileKey]
+        if profile then
+        local profileKey = root.schemaVersion == 2
+            and LEGACY_V2_CANONICAL_KEYS[sourceProfileKey] or sourceProfileKey
+        local canonicalProfile = PROFILES[profileKey]
         lines[#lines + 1] = table.concat({
             "profile",
             profileKey,
-            profile.label or "",
-            profile.title or "",
-            profile.activity or "",
-            profile.bracket or "",
-            profile.dungeon or "",
-            profile.difficulty or "",
-            profile.boss or "",
-            profile.window or "",
+            canonicalProfile.label or "",
+            canonicalProfile.title or "",
+            canonicalProfile.activity or "",
+            canonicalProfile.bracket or "",
+            canonicalProfile.dungeon or "",
+            canonicalProfile.difficulty or "",
+            canonicalProfile.boss or "",
+            canonicalProfile.window or "",
         }, "\t")
 
         for _, spec in ipairs(SPECS) do
-            local specData = root.snapshots[profileKey].specs[spec.classToken][spec.specKey]
+            local specData = profile.specs[spec.classToken][spec.specKey]
             lines[#lines + 1] = table.concat({
                 "spec",
                 profileKey,
@@ -661,6 +749,7 @@ local function build_semantic_lines(root)
                 join_order(specData.order),
             }, "\t")
         end
+        end
     end
     return lines
 end
@@ -670,7 +759,7 @@ local function load_generated_file(path)
     return parse_generated_lua(text, path), text
 end
 
-local function make_valid_fixture(capturedAt)
+local function make_valid_fixture(capturedAt, includedProfiles)
     local specsByClass = {}
     for _, spec in ipairs(SPECS) do
         specsByClass[spec.classToken] = specsByClass[spec.classToken] or {}
@@ -678,7 +767,9 @@ local function make_valid_fixture(capturedAt)
     end
 
     local snapshots = {}
+    local include = includedProfiles or make_key_set(PROFILE_ORDER)
     for _, profileKey in ipairs(PROFILE_ORDER) do
+        if include[profileKey] then
         local profile = {}
         for key, value in pairs(PROFILES[profileKey]) do
             profile[key] = value
@@ -689,15 +780,16 @@ local function make_valid_fixture(capturedAt)
             profile.specs[classToken] = {}
             for specKey, spec in pairs(classSpecs) do
                 profile.specs[classToken][specKey] = {
-                    sourceUrl = expected_url(spec, profileKey),
+                    sourceUrl = expected_url(spec, profileKey, 3),
                     targets = { crit = 100, haste = 200, mastery = 300, versatility = 400 },
                     order = { "crit", "haste", "mastery", "versatility" },
                 }
             end
         end
         snapshots[profileKey] = profile
+        end
     end
-    return { schemaVersion = 2, source = "archon", snapshots = snapshots }
+    return { schemaVersion = 3, source = "archon", snapshots = snapshots }
 end
 
 local function clone(value)
@@ -755,12 +847,28 @@ local function run_self_test(parsedOptions)
     validate_spec_manifest()
     validate_runtime_spec_parity(options.statsProLua)
     validate_snapshot(make_valid_fixture("2026-05-16"), nil, options)
+    validate_snapshot(make_valid_fixture("2026-05-16", {
+        mythicPlusCurrent = true,
+        raidNormal = true,
+        raidHeroic = true,
+    }), nil, options)
+
+    local emptyProfiles = make_valid_fixture("2026-05-16", {})
+    assert_throws("schema v3 rejects no available profiles", function()
+        validate_snapshot(emptyProfiles, nil, options)
+    end, "profile count must be between 1")
+
+    local unknownProfile = make_valid_fixture("2026-05-16", { mythicPlusCurrent = true })
+    unknownProfile.snapshots.arena = clone(unknownProfile.snapshots.mythicPlusCurrent)
+    assert_throws("schema v3 rejects unknown profile", function()
+        validate_snapshot(unknownProfile, nil, options)
+    end, "unexpected profile arena")
 
     local rawLines = {}
     for _, profileKey in ipairs(PROFILE_ORDER) do
         rawLines[#rawLines + 1] = 'capturedAt = "2026-05-16",'
         for _, spec in ipairs(SPECS) do
-            rawLines[#rawLines + 1] = 'sourceUrl = "' .. expected_url(spec, profileKey) .. '",'
+            rawLines[#rawLines + 1] = 'sourceUrl = "' .. expected_url(spec, profileKey, 3) .. '",'
             rawLines[#rawLines + 1] = "    crit = 100,"
             rawLines[#rawLines + 1] = "    haste = 200,"
             rawLines[#rawLines + 1] = "    mastery = 300,"
@@ -801,41 +909,41 @@ local function run_self_test(parsedOptions)
     end, "invalid integer literal")
 
     local missingSpec = clone(make_valid_fixture("2026-05-16"))
-    missingSpec.snapshots.mythicPlus.specs.DEMONHUNTER.devourer = nil
+    missingSpec.snapshots.mythicPlusCurrent.specs.DEMONHUNTER.devourer = nil
     assert_throws("missing Devourer", function()
         validate_snapshot(missingSpec, nil, options)
     end, "DEMONHUNTER spec count")
 
     local badTarget = clone(make_valid_fixture("2026-05-16"))
-    badTarget.snapshots.raid.specs.MAGE.frost.targets.mastery = 0
+    badTarget.snapshots.raidMythic.specs.MAGE.frost.targets.mastery = 0
     assert_throws("zero target", function()
         validate_snapshot(badTarget, nil, options)
     end, "positive finite integer")
 
     local fractionalTarget = clone(make_valid_fixture("2026-05-16"))
-    fractionalTarget.snapshots.raid.specs.MAGE.frost.targets.crit = 100.5
+    fractionalTarget.snapshots.raidMythic.specs.MAGE.frost.targets.crit = 100.5
     assert_throws("fractional target", function()
         validate_snapshot(fractionalTarget, nil, options)
     end, "positive finite integer")
 
     local maximumTarget = clone(make_valid_fixture("2026-05-16"))
-    maximumTarget.snapshots.raid.specs.MAGE.frost.targets.mastery = MAX_TARGET_VALUE
+    maximumTarget.snapshots.raidMythic.specs.MAGE.frost.targets.mastery = MAX_TARGET_VALUE
     validate_snapshot(maximumTarget, nil, options)
 
     local overMaximumTarget = clone(make_valid_fixture("2026-05-16"))
-    overMaximumTarget.snapshots.raid.specs.MAGE.frost.targets.mastery = MAX_TARGET_VALUE + 1
+    overMaximumTarget.snapshots.raidMythic.specs.MAGE.frost.targets.mastery = MAX_TARGET_VALUE + 1
     assert_throws("target above ceiling", function()
         validate_snapshot(overMaximumTarget, nil, options)
-    end, "snapshots.raid.specs.MAGE.frost.targets.mastery value 100001 exceeds ceiling 100000")
+    end, "snapshots.raidMythic.specs.MAGE.frost.targets.mastery value 100001 exceeds ceiling 100000")
 
     local int32MaximumTarget = clone(make_valid_fixture("2026-05-16"))
-    int32MaximumTarget.snapshots.raid.specs.MAGE.frost.targets.mastery = 2147483647
+    int32MaximumTarget.snapshots.raidMythic.specs.MAGE.frost.targets.mastery = 2147483647
     assert_throws("Int32 maximum target", function()
         validate_snapshot(int32MaximumTarget, nil, options)
-    end, "snapshots.raid.specs.MAGE.frost.targets.mastery value 2147483647 exceeds ceiling 100000")
+    end, "snapshots.raidMythic.specs.MAGE.frost.targets.mastery value 2147483647 exceeds ceiling 100000")
 
     local badOrder = clone(make_valid_fixture("2026-05-16"))
-    badOrder.snapshots.raid.specs.MAGE.frost.order = { "crit", "crit", "haste", "mastery" }
+    badOrder.snapshots.raidMythic.specs.MAGE.frost.order = { "crit", "crit", "haste", "mastery" }
     assert_throws("duplicate order key", function()
         validate_snapshot(badOrder, nil, options)
     end, "crit exactly once")
@@ -868,7 +976,7 @@ local function run_self_test(parsedOptions)
     end, "sourceUrl entries")
 
     local badMetadata = clone(make_valid_fixture("2026-05-16"))
-    badMetadata.snapshots.mythicPlus.window = "last-14-days"
+    badMetadata.snapshots.mythicPlusCurrent.window = "last-14-days"
     assert_throws("bad profile metadata", function()
         validate_snapshot(badMetadata, nil, options)
     end, "this-week")
@@ -880,7 +988,7 @@ local function run_self_test(parsedOptions)
     end, "unexpected key specManifest")
 
     local extraSpecKey = clone(make_valid_fixture("2026-05-16"))
-    extraSpecKey.snapshots.mythicPlus.specs.MAGE.frost.specID = 64
+    extraSpecKey.snapshots.mythicPlusCurrent.specs.MAGE.frost.specID = 64
     assert_throws("unexpected spec key", function()
         validate_snapshot(extraSpecKey, nil, options)
     end, "unexpected key specID")

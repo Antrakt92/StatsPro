@@ -1380,9 +1380,9 @@ check("api.surface.modal_close_authoritative",
 
 do
     local archonFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(archonFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(archonFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 1007, haste = 560, mastery = 823, versatility = 97 })
-    archonFixture.snapshots.mythicPlus.specs.MAGE.fire = nil
+    archonFixture.snapshots.mythicPlusCurrent.specs.MAGE.fire = nil
     local archonEnv, _, archonTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
         specIndex = 1,
@@ -1390,7 +1390,7 @@ do
         statsProArchonTargets = archonFixture,
     })
     local snapshot = archonTest.getArchonTargetSnapshot("MAGE", "frost")
-    eq("archon.snapshot.source", snapshot.sourceUrl, "https://www.archon.gg/wow/builds/frost/mage/mythic-plus/overview/high-keys/all-dungeons/this-week")
+    eq("archon.snapshot.source", snapshot.sourceUrl, "https://www.archon.gg/wow/builds/frost/mage/mythic-plus/overview/10/all-dungeons/this-week")
     local meta = archonTest.buildArchonTargetMeta("mastery", 700, archonEnv.CR_MASTERY)
     eq("archon.meta.state", meta.comparisonState, "exact")
     eq("archon.meta.target", meta.target, 823)
@@ -1399,13 +1399,13 @@ do
     eq("archon.meta.rating_cr", meta.ratingCR, archonEnv.CR_MASTERY)
     eq("archon.meta.captured_at", meta.capturedAt, "2026-05-15")
     eq("archon.meta.missing_snapshot", archonTest.getArchonTargetSnapshot("MAGE", "fire"), nil)
-    eq("archon.meta.hidden_without_root", archonEnv.StatsProArchonTargets.schemaVersion, 2)
+    eq("archon.meta.hidden_without_root", archonEnv.StatsProArchonTargets.schemaVersion, 3)
 
     local dualFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(dualFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(dualFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 1007, haste = 560, mastery = 823, versatility = 97 })
-    dualFixture.snapshots.raid.capturedAt = "2026-05-16"
-    setArchonFixtureTargets(dualFixture, "raid", "MAGE", "frost",
+    dualFixture.snapshots.raidMythic.capturedAt = "2026-05-16"
+    setArchonFixtureTargets(dualFixture, "raidMythic", "MAGE", "frost",
         { crit = 1044, haste = 551, mastery = 812, versatility = 88 })
     local dualEnv, _, dualTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
@@ -1420,7 +1420,7 @@ do
     check("archon.v2_raid_selected.fire", okDual, errDual)
     local raidSnapshot = dualTest.getArchonTargetSnapshot("MAGE", "frost", "raid")
     eq("archon.v2.raid_snapshot_source", raidSnapshot.sourceUrl, "https://www.archon.gg/wow/builds/frost/mage/raid/overview/mythic/all-bosses")
-    local mplusSnapshot = dualTest.getArchonTargetSnapshot("MAGE", "frost", "mythicPlus")
+    local mplusSnapshot = dualTest.getArchonTargetSnapshot("MAGE", "frost", "mythicPlusCurrent")
     eq("archon.v2.mplus_snapshot_still_available", mplusSnapshot.targets.mastery, 823)
     local raidMeta = dualTest.buildArchonTargetMeta("mastery", 700, dualEnv.CR_MASTERY)
     eq("archon.v2.selected_raid_target", raidMeta.target, 812)
@@ -1432,6 +1432,55 @@ do
     eq("archon.v2.raid_tooltip_source_label", dualEnv.GameTooltip.lines[6].left, "Source:")
     eq("archon.v2.raid_tooltip_source_value", dualEnv.GameTooltip.lines[6].right, "Archon")
 
+    local legacyMplusFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(legacyMplusFixture, "mythicPlusCurrent", "MAGE", "frost",
+        { crit = 100, haste = 200, mastery = 700, versatility = 400 })
+    setArchonFixtureTargets(legacyMplusFixture, "mythicPlusHighKeys", "MAGE", "frost",
+        { crit = 110, haste = 210, mastery = 900, versatility = 410 })
+    local legacyMplusEnv, _, legacyMplusTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProDB = { targetSnapshot = "mythicPlus" },
+        statsProArchonTargets = legacyMplusFixture,
+    })
+    local okLegacyMplus, errLegacyMplus = pcall(legacyMplusEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("archon.legacy_mplus_keeps_high_keys.fire", okLegacyMplus, errLegacyMplus)
+    eq("archon.legacy_mplus_keeps_high_keys.key", legacyMplusTest.cachedTargetSnapshot(), "mythicPlusHighKeys")
+    eq("archon.legacy_mplus_keeps_high_keys.target",
+        legacyMplusTest.buildArchonTargetMeta("mastery", 700, legacyMplusEnv.CR_MASTERY).target, 900)
+
+    local availableFixture = makeArchonV2Fixture("2026-05-15")
+    availableFixture.snapshots.mythicPlusHighKeys = nil
+    availableFixture.snapshots.raidMythic = nil
+    setArchonFixtureTargets(availableFixture, "mythicPlusCurrent", "MAGE", "frost",
+        { crit = 100, haste = 200, mastery = 700, versatility = 400 })
+    setArchonFixtureTargets(availableFixture, "raidNormal", "MAGE", "frost",
+        { crit = 110, haste = 210, mastery = 710, versatility = 410 })
+    setArchonFixtureTargets(availableFixture, "raidHeroic", "MAGE", "frost",
+        { crit = 120, haste = 220, mastery = 720, versatility = 420 })
+    local availableEnv, _, availableTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProDB = { targetSnapshot = "raid" },
+        statsProArchonTargets = availableFixture,
+    })
+    local okAvailable, errAvailable = pcall(availableEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("archon.v3_available_profiles.fire", okAvailable, errAvailable)
+    local availableOptionValues = {}
+    for _, option in ipairs(availableTest.availableArchonSnapshotOptions()) do
+        availableOptionValues[#availableOptionValues + 1] = option.value
+    end
+    eq("archon.v3_available_profiles.options",
+        table.concat(availableOptionValues, ","), "mythicPlusCurrent,raidNormal,raidHeroic")
+    eq("archon.v3_legacy_raid_falls_back_to_heroic",
+        availableTest.cachedTargetSnapshot(), "raidHeroic")
+    eq("archon.v3_legacy_raid_heroic_target",
+        availableTest.buildArchonTargetMeta("mastery", 700, availableEnv.CR_MASTERY).target, 720)
+    eq("archon.v3_missing_high_keys_falls_back_to_current",
+        availableTest.resolveArchonSnapshotKey("mythicPlusHighKeys"), "mythicPlusCurrent")
+
     local corruptPrefEnv, _, corruptPrefTest = loadStatsPro("enUS", {
         statsProDB = {
             targetSnapshot = "arena",
@@ -1439,7 +1488,7 @@ do
     })
     local okCorruptPref, errCorruptPref = pcall(corruptPrefEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
     check("archon.corrupt_target_snapshot_pref.fire", okCorruptPref, errCorruptPref)
-    eq("archon.corrupt_target_snapshot_pref.cache_default", corruptPrefTest.cachedTargetSnapshot(), "mythicPlus")
+    eq("archon.corrupt_target_snapshot_pref.cache_default", corruptPrefTest.cachedTargetSnapshot(), "mythicPlusCurrent")
 
     local v1RaidPrefEnv, _, v1RaidPrefTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
@@ -1465,12 +1514,14 @@ do
     check("archon.v1_with_raid_pref_falls_back.fire", okV1RaidPref, errV1RaidPref)
     local v1FallbackMeta = v1RaidPrefTest.buildArchonTargetMeta("mastery", 700, v1RaidPrefEnv.CR_MASTERY)
     eq("archon.v1_with_raid_pref_falls_back.target", v1FallbackMeta.target, 823)
-    eq("archon.v1_with_raid_pref_falls_back.key", v1FallbackMeta.snapshotKey, "mythicPlus")
+    eq("archon.v1_with_raid_pref_falls_back.key", v1FallbackMeta.snapshotKey, "mythicPlusHighKeys")
 
     local v2MissingRaidFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(v2MissingRaidFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(v2MissingRaidFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 100, haste = 200, mastery = 823, versatility = 400 })
-    v2MissingRaidFixture.snapshots.raid = nil
+    v2MissingRaidFixture.snapshots.raidNormal = nil
+    v2MissingRaidFixture.snapshots.raidHeroic = nil
+    v2MissingRaidFixture.snapshots.raidMythic = nil
     local v2MissingRaidEnv, _, v2MissingRaidTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
         specIndex = 1,
@@ -1484,12 +1535,12 @@ do
     check("archon.v2_missing_raid_profile_falls_back.fire", okV2MissingRaid, errV2MissingRaid)
     local v2FallbackMeta = v2MissingRaidTest.buildArchonTargetMeta("mastery", 700, v2MissingRaidEnv.CR_MASTERY)
     eq("archon.v2_missing_raid_profile_falls_back.target", v2FallbackMeta.target, 823)
-    eq("archon.v2_missing_raid_profile_falls_back.key", v2FallbackMeta.snapshotKey, "mythicPlus")
+    eq("archon.v2_missing_raid_profile_falls_back.key", v2FallbackMeta.snapshotKey, "mythicPlusCurrent")
 
     local v2RaidMissingSpecFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(v2RaidMissingSpecFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(v2RaidMissingSpecFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 100, haste = 200, mastery = 823, versatility = 400 })
-    v2RaidMissingSpecFixture.snapshots.raid.specs.MAGE.frost = nil
+    v2RaidMissingSpecFixture.snapshots.raidMythic.specs.MAGE.frost = nil
     local v2RaidMissingSpecEnv, _, v2RaidMissingSpecTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
         specIndex = 1,
@@ -1506,7 +1557,7 @@ do
     for index, spec in ipairs(archonManifest.specs) do
         local parityFixture = makeArchonV2Fixture("2026-05-15")
         local expectedTarget = 1000 + index
-        setArchonFixtureTargets(parityFixture, "mythicPlus", spec.classToken, spec.specKey,
+        setArchonFixtureTargets(parityFixture, "mythicPlusCurrent", spec.classToken, spec.specKey,
             { crit = 100, haste = 200, mastery = expectedTarget, versatility = 400 })
         local parityEnv, _, parityTest = loadStatsPro("enUS", {
             unitClassToken = spec.classToken,
@@ -1519,7 +1570,7 @@ do
     end
 
     local wrongMappingFixture = makeArchonV2Fixture("2026-05-15")
-    wrongMappingFixture.snapshots.mythicPlus.specs.MAGE.frost = nil
+    wrongMappingFixture.snapshots.mythicPlusCurrent.specs.MAGE.frost = nil
     local _, _, wrongMappingTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
         specIndex = 1,
@@ -1529,7 +1580,7 @@ do
     eq("archon.spec_manifest_runtime_wrong_mapping_returns_nil", wrongMappingTest.buildArchonTargetMeta("mastery", 900), nil)
 
     local devourerFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(devourerFixture, "mythicPlus", "DEMONHUNTER", "devourer",
+    setArchonFixtureTargets(devourerFixture, "mythicPlusCurrent", "DEMONHUNTER", "devourer",
         { crit = 259, haste = 1036, mastery = 1187, versatility = 58 })
     local devourerArchonEnv, _, devourerArchonTest = loadStatsPro("enUS", {
         unitClassToken = "DEMONHUNTER",
@@ -1540,10 +1591,10 @@ do
     local devourerMeta = devourerArchonTest.buildArchonTargetMeta("mastery", 1000, devourerArchonEnv.CR_MASTERY)
     eq("archon.devourer.spec_id_maps", devourerMeta.target, 1187)
     eq("archon.devourer.delta", devourerMeta.delta, -187)
-    eq("archon.devourer.snapshot_key", devourerMeta.snapshotKey, "mythicPlus")
+    eq("archon.devourer.snapshot_key", devourerMeta.snapshotKey, "mythicPlusCurrent")
 
     local badTargetFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(badTargetFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(badTargetFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 100, haste = 200, mastery = math.huge, versatility = 400 })
     local _, _, badTargetArchonTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
@@ -1567,7 +1618,7 @@ do
     eq("archon.meta.secret_guard_before_compare", secretChecks, 1)
 
     local restrictedFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(restrictedFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(restrictedFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 1007, haste = 560, mastery = 823, versatility = 97 })
     local restrictedEnv, _, restrictedTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
@@ -1604,28 +1655,28 @@ do
     eq("archon.restricted.recovery.current", recoveredMeta.current, 710)
     eq("archon.restricted.recovery.current_pct", recoveredMeta.currentPct, 23.1)
 
-    restrictedFixture.snapshots.mythicPlus.specs.MAGE.frost.targets.mastery = 900
+    restrictedFixture.snapshots.mythicPlusCurrent.specs.MAGE.frost.targets.mastery = 900
     local changedTargetMeta = restrictedTest.buildArchonTargetMeta("mastery", -1, restrictedEnv.CR_MASTERY)
     eq("archon.restricted.changed_target.state", changedTargetMeta.comparisonState, "targetOnly")
     eq("archon.restricted.changed_target.target", changedTargetMeta.target, 900)
-    restrictedFixture.snapshots.mythicPlus.specs.MAGE.frost.targets.mastery = 823
+    restrictedFixture.snapshots.mythicPlusCurrent.specs.MAGE.frost.targets.mastery = 823
     local revertedTargetMeta = restrictedTest.buildArchonTargetMeta("mastery", -1, restrictedEnv.CR_MASTERY)
     eq("archon.restricted.target_revert_stays_invalid.state", revertedTargetMeta.comparisonState, "targetOnly")
     restrictedTest.buildArchonTargetMeta("mastery", 710, restrictedEnv.CR_MASTERY, 23.1)
-    restrictedFixture.snapshots.mythicPlus.capturedAt = "2026-05-16"
+    restrictedFixture.snapshots.mythicPlusCurrent.capturedAt = "2026-05-16"
     local changedCaptureMeta = restrictedTest.buildArchonTargetMeta("mastery", -1, restrictedEnv.CR_MASTERY)
     eq("archon.restricted.changed_capture.state", changedCaptureMeta.comparisonState, "targetOnly")
     eq("archon.restricted.changed_capture.captured_at", changedCaptureMeta.capturedAt, "2026-05-16")
-    restrictedFixture.snapshots.mythicPlus.capturedAt = "2026-05-15"
+    restrictedFixture.snapshots.mythicPlusCurrent.capturedAt = "2026-05-15"
     local revertedCaptureMeta = restrictedTest.buildArchonTargetMeta("mastery", -1, restrictedEnv.CR_MASTERY)
     eq("archon.restricted.capture_revert_stays_invalid.state", revertedCaptureMeta.comparisonState, "targetOnly")
 
     local contextFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(contextFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(contextFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 100, haste = 200, mastery = 823, versatility = 400 })
-    setArchonFixtureTargets(contextFixture, "mythicPlus", "MAGE", "fire",
+    setArchonFixtureTargets(contextFixture, "mythicPlusCurrent", "MAGE", "fire",
         { crit = 110, haste = 210, mastery = 933, versatility = 410 })
-    setArchonFixtureTargets(contextFixture, "raid", "MAGE", "frost",
+    setArchonFixtureTargets(contextFixture, "raidMythic", "MAGE", "frost",
         { crit = 120, haste = 220, mastery = 812, versatility = 420 })
     local activeSpecID = 64
     local contextEnv, _, contextTest = loadStatsPro("enUS", {
@@ -1652,12 +1703,12 @@ do
     local raidRestrictedMeta = contextTest.buildArchonTargetMeta("mastery", -1, contextEnv.CR_MASTERY)
     eq("archon.restricted.snapshot_isolation.state", raidRestrictedMeta.comparisonState, "targetOnly")
     eq("archon.restricted.snapshot_isolation.target", raidRestrictedMeta.target, 812)
-    activeSettings(contextEnv).targetSnapshot = "mythicPlus"
+    activeSettings(contextEnv).targetSnapshot = "mythicPlusCurrent"
     contextTest.cacheSettings()
     local mythicPlusAgainMeta = contextTest.buildArchonTargetMeta("mastery", -1, contextEnv.CR_MASTERY)
     eq("archon.restricted.snapshot_switch_back_invalidates.state", mythicPlusAgainMeta.comparisonState, "targetOnly")
     contextTest.buildArchonTargetMeta("mastery", 705, contextEnv.CR_MASTERY, 20.5)
-    contextFixture.snapshots.mythicPlus.specs.MAGE.fire = nil
+    contextFixture.snapshots.mythicPlusCurrent.specs.MAGE.fire = nil
     activeSpecID = 63
     eq("archon.restricted.missing_spec_context.meta",
         contextTest.buildArchonTargetMeta("mastery", -1, contextEnv.CR_MASTERY), nil)
@@ -2088,7 +2139,7 @@ do
     eq("tooltip.on_enter_missing", tooltipEnv.GameTooltip.lines[4].left, "Missing:")
     eq("tooltip.on_enter_missing_value", tooltipEnv.GameTooltip.lines[4].right, "231 (~+3.3%)")
     eq("tooltip.on_enter_snapshot_label", tooltipEnv.GameTooltip.lines[5].left, "Snapshot:")
-    eq("tooltip.on_enter_snapshot_date", tooltipEnv.GameTooltip.lines[5].right, "M+ High Keys, 15-May-26")
+    eq("tooltip.on_enter_snapshot_date", tooltipEnv.GameTooltip.lines[5].right, "M+ Current, 15-May-26")
     tooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnLeave")
     eq("tooltip.on_leave_hides", tooltipEnv.GameTooltip:IsShown(), false)
     tooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnMouseUp", "RightButton")
@@ -2106,7 +2157,7 @@ end
 
 do
     local targetFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(targetFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 1043, haste = 560, mastery = 823, versatility = 97 })
     local targetOnlyEnv, _, targetOnlyTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
@@ -2231,7 +2282,7 @@ do
     eq("tooltip.over_target_pct", overEnv.GameTooltip.lines[2].right, "1000 (~15.0%)")
     eq("tooltip.over_current_pct", overEnv.GameTooltip.lines[3].right, "1200 (~17.0%)")
     eq("tooltip.over_value_pct", overEnv.GameTooltip.lines[4].right, "+200 (~+2.0%)")
-    eq("tooltip.invalid_snapshot_date_fallback", overEnv.GameTooltip.lines[5].right, "M+ High Keys, 2027-02-29")
+    eq("tooltip.invalid_snapshot_date_fallback", overEnv.GameTooltip.lines[5].right, "M+ Current, 2027-02-29")
 end
 
 do
@@ -2595,7 +2646,7 @@ do
     eq("tooltip.match_color_target_value_stays_neutral", coloredEnv.GameTooltip.lines[2].right, "350 (~19.1%)")
     eq("tooltip.match_color_current_value", coloredEnv.GameTooltip.lines[3].right, "|cff00ff00" .. "515 (~22.4%)" .. "|r")
     eq("tooltip.match_color_over_value_uses_status_color", coloredEnv.GameTooltip.lines[4].right, "+165 (~+3.3%)")
-    eq("tooltip.match_color_snapshot_plain", coloredEnv.GameTooltip.lines[5].right, "M+ High Keys, 15-May-26")
+    eq("tooltip.match_color_snapshot_plain", coloredEnv.GameTooltip.lines[5].right, "M+ Current, 15-May-26")
 
     coloredTest.renderMainPanelForSmoke("Mastery:", "200", "16.0%", 1, nil, nil, {
         { statKey = "mastery", colorKey = "mastery", ratingCR = coloredEnv.CR_MASTERY, target = 350, current = 200, currentPct = 16.0, delta = -150, capturedAt = "2026-05-15" },
@@ -2929,7 +2980,7 @@ do
     eq("db.empty_default_population.show_percentage", db.showPercentage, true)
     eq("db.empty_default_population.match_value_color", db.matchValueColorToStat, true)
     eq("db.empty_default_population.label_style", db.labelStyle, "full")
-    eq("db.empty_default_population.target_snapshot", db.targetSnapshot, "mythicPlus")
+    eq("db.empty_default_population.target_snapshot", db.targetSnapshot, "mythicPlusCurrent")
     eq("db.empty_default_population.split_item_level", db.splitItemLevel, true)
     eq("db.empty_default_population.show_stagger", db.showStagger, false)
     check("db.empty_default_population.colors", type(db.colors) == "table", "colors table missing")
@@ -4420,7 +4471,7 @@ do
     eq("slash.reset_restores_defaults.show_percentage", slashSettings.showPercentage, true)
     eq("slash.reset_restores_defaults.match_value_color", slashSettings.matchValueColorToStat, true)
     eq("slash.reset_restores_defaults.label_style", slashSettings.labelStyle, "full")
-    eq("slash.reset_restores_defaults.target_snapshot", slashSettings.targetSnapshot, "mythicPlus")
+    eq("slash.reset_restores_defaults.target_snapshot", slashSettings.targetSnapshot, "mythicPlusCurrent")
     eq("slash.reset_restores_defaults.transient_font", slashSettings.fontBeforeAutoSwitch, nil)
     eq("slash.reset_restores_defaults.legacy_locale", slashSettings.useLocalizedLabels, nil)
     eq("slash.reset_restores_defaults.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Settings reset to defaults")
@@ -5015,7 +5066,7 @@ end
 
 do
     local targetFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(targetFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 1000, haste = 200, mastery = 300, versatility = 400 })
     local critEnv, _, critTest = loadCritScenario({
         showRating = true,
@@ -5045,7 +5096,7 @@ end
 
 do
     local targetFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(targetFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 1000, haste = 200, mastery = 300, versatility = 400 })
     local critEnv, _, critTest = loadCritScenario({
         showRating = true,
@@ -5115,7 +5166,7 @@ end
 do
     local secretCritPercent = 18.4
     local targetFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(targetFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 1000, haste = 200, mastery = 300, versatility = 400 })
     local critEnv, _, critTest = loadCritScenario({
         showRating = true,
@@ -5153,7 +5204,7 @@ end
 do
     local ratingCalls = 0
     local targetHoverFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(targetHoverFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(targetHoverFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 1000, haste = 200, mastery = 300, versatility = 400 })
     local critEnv, _, critTest = loadCritScenario({
         showRating = false,
@@ -5186,7 +5237,7 @@ do
     local liveRating = 812
     local livePercent = 14
     local targetHoverFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(targetHoverFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(targetHoverFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 1000, haste = 200, mastery = 300, versatility = 400 })
     local critEnv, _, critTest = loadCritScenario({
         showRating = false,
@@ -5263,7 +5314,7 @@ end
 do
     local coefficientCalls = 0
     local masteryTargetFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(masteryTargetFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(masteryTargetFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 100, haste = 200, mastery = 1000, versatility = 400 })
     local coefficientEnv, _, coefficientTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
@@ -5288,7 +5339,7 @@ do
     local phase = "prime"
     local secretCurrentBonus = -992
     local masteryTargetFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(masteryTargetFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(masteryTargetFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 100, haste = 200, mastery = 1000, versatility = 400 })
     local mixedEnv, _, mixedTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
@@ -5323,7 +5374,7 @@ do
     local secretEffect = -2
     local secretCoefficient = -3
     local masteryTargetFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(masteryTargetFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(masteryTargetFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 100, haste = 200, mastery = 1000, versatility = 400 })
     local masteryEnv, _, masteryTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
@@ -5516,7 +5567,7 @@ do
         rePrimedBlocks[2].targetRows[1].targetPct, 30)
 
     phase = "allSecret"
-    masteryTargetFixture.snapshots.mythicPlus.specs.MAGE.frost.targets.mastery = 1100
+    masteryTargetFixture.snapshots.mythicPlusCurrent.specs.MAGE.frost.targets.mastery = 1100
     local changedTargetBlocks = masteryTest.buildRenderBlocks()
     local changedTargetMeta = changedTargetBlocks[2].targetRows[1]
     eq("render.mastery_target_pct_survives_restriction.changed_target_live_state",
@@ -5529,7 +5580,7 @@ do
     eq("render.mastery_target_pct_survives_restriction.changed_target_no_stale_pct",
         masteryEnv.GameTooltip.lines[3].right, "1100")
 
-    masteryTargetFixture.snapshots.mythicPlus.specs.MAGE.frost.targets.mastery = 1000
+    masteryTargetFixture.snapshots.mythicPlusCurrent.specs.MAGE.frost.targets.mastery = 1000
     phase = "clean"
     masteryRating = 800
     masteryTest.buildRenderBlocks()
@@ -5562,7 +5613,7 @@ do
     local cleanRatings = {}
     local conversionArgs = {}
     local targetHoverFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(targetHoverFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(targetHoverFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 1000, haste = 600, mastery = 900, versatility = 500 })
 
     local hoverEnv, hoverAddon, hoverTest = loadStatsPro("enUS", {
@@ -5812,7 +5863,7 @@ do
         hoverEnv.GameTooltip.lines[3].right:find("811", 1, true) ~= nil,
         hoverEnv.GameTooltip.lines[3].right)
 
-    settings.targetSnapshot = "mythicPlus"
+    settings.targetSnapshot = "mythicPlusCurrent"
     hoverTest.cacheSettings()
     check("render.target_hover_lifecycle.snapshot_mplus.update", hoverAddon:RunUpdateStatsSafe())
     eq("render.target_hover_lifecycle.snapshot_mplus.held_owner",
@@ -6200,7 +6251,7 @@ do
     local secretFormatterClears = 0
     local integerFallbackCalls = 0
     local targetFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(targetFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 1000, haste = 600, mastery = 300, versatility = 400 })
     local hasteEnv, _, hasteTest = loadStatsPro("enUS", {
         unitClassToken = "MAGE",
@@ -7103,7 +7154,7 @@ do
     local secretRating = false
     local secretFlat = false
     local targetFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(targetFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 100, haste = 200, mastery = 300, versatility = 1000 })
     local versEnv, _, versTest = loadVersatilityScenario({
         showRating = false,
@@ -7380,7 +7431,7 @@ do
     local conversionCalls = 0
     local conversionMode = "normal"
     local targetFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(targetFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 100, haste = 200, mastery = 300, versatility = 1000 })
     local versEnv, _, versTest = loadVersatilityScenario({
         showRating = true,
@@ -7440,7 +7491,7 @@ do
         currentPct = 12,
         delta = -300,
         capturedAt = "2026-05-15",
-        snapshotKey = "mythicPlus",
+        snapshotKey = "mythicPlusCurrent",
     }
     versEnv.GameTooltip:Hide()
     versTest.renderMainPanelForSmoke("Vers:", "700", "12.0%", 1, nil, nil, { cleanMeta })
@@ -7471,7 +7522,7 @@ do
     local secretVersRatingBonus = 14.7
     local secretVersRating = 888
     local secretVersFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(secretVersFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(secretVersFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 100, haste = 200, mastery = 300, versatility = 1000 })
     local versEnv, _, versTest = loadVersatilityScenario({
         showRating = true,
@@ -7536,7 +7587,7 @@ end
 
 do
     local targetFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(targetFixture, "mythicPlus", "MAGE", "frost",
+    setArchonFixtureTargets(targetFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 100, haste = 200, mastery = 300, versatility = 1000 })
     local versEnv, _, versTest = loadVersatilityScenario({
         showRating = true,
@@ -11954,9 +12005,9 @@ do
     eq("config.dropdown_display_mode_split_writes_db.split_check_enabled",
         env.StatsProSplitOffensiveCheck:IsEnabled(), true)
 
-    selectDropdownValue("config.dropdown_target_snapshot_raid_writes_db", env.StatsProTargetSnapshotDropdown, "raid")
-    eq("config.dropdown_target_snapshot_raid_writes_db.value", activeSettings(env).targetSnapshot, "raid")
-    eq("config.dropdown_target_snapshot_raid_writes_db.cache", test.cachedTargetSnapshot(), "raid")
+    selectDropdownValue("config.dropdown_target_snapshot_mplus_writes_db", env.StatsProTargetSnapshotDropdown, "mythicPlusCurrent")
+    eq("config.dropdown_target_snapshot_mplus_writes_db.value", activeSettings(env).targetSnapshot, "mythicPlusCurrent")
+    eq("config.dropdown_target_snapshot_mplus_writes_db.cache", test.cachedTargetSnapshot(), "mythicPlusCurrent")
 
     selectDropdownValue("config.dropdown_label_style_hidden_writes_db", env.StatsProLabelStyleDropdown, "hidden")
     eq("config.dropdown_label_style_hidden_writes_db.value", activeSettings(env).labelStyle, "hidden")
@@ -14065,7 +14116,7 @@ do
         isLocked = false,
         displayMode = "sectioned",
         labelStyle = "full",
-        targetSnapshot = "mythicPlus",
+        targetSnapshot = "mythicPlusCurrent",
         scale = 1,
         updateInterval = 0.5,
         font = "Fonts\\ARIALN.TTF",
@@ -14182,7 +14233,7 @@ do
     clickCheckbox("db_compat.future_read_only.checkbox", futureEnv.StatsProVisibleCheck, false)
     changeSlider("db_compat.future_read_only.slider", futureEnv.StatsProScaleSlider, 1.7)
     selectDropdownValue("db_compat.future_read_only.display_mode", futureEnv.StatsProDisplayModeDropdown, "split")
-    selectDropdownValue("db_compat.future_read_only.target_snapshot", futureEnv.StatsProTargetSnapshotDropdown, "raid")
+    selectDropdownValue("db_compat.future_read_only.target_snapshot", futureEnv.StatsProTargetSnapshotDropdown, "mythicPlusCurrent")
     selectDropdownValue("db_compat.future_read_only.label_style", futureEnv.StatsProLabelStyleDropdown, "hidden")
     selectDropdownValue("db_compat.future_read_only.outline", futureEnv.StatsProTextOutlineDropdown, "none")
     selectDropdownValue("db_compat.future_read_only.language", futureEnv.StatsProLanguageDropdown, "deDE")
@@ -17673,7 +17724,7 @@ do
     local secretMasteryRating = {}
     local secretMasteryPercent = {}
     local targetFixture = makeArchonV2Fixture("2026-05-15")
-    setArchonFixtureTargets(targetFixture, "mythicPlus", "WARRIOR", "protection",
+    setArchonFixtureTargets(targetFixture, "mythicPlusCurrent", "WARRIOR", "protection",
         { crit = 1000, haste = 600, mastery = 900, versatility = 500 })
     local env, _, profileTest = makeProfileOpsFixture({
         statsProArchonTargets = targetFixture,

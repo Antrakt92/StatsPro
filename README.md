@@ -26,7 +26,7 @@
 - **See the useful numbers without opening the Character panel.** Show secondary
   stats, item level, defensives, durability, and repair cost directly on the HUD.
 - **Compare ratings with current context.** Hover Crit, Haste, Mastery, or
-  Versatility for bundled Archon M+ High Keys or Raid Mythic reference snapshots.
+  Versatility for the bundled Archon M+ or raid-difficulty snapshot you select.
 - **Switch characters or specs without rebuilding the HUD.** Assigned profiles
   activate automatically and can be shared intentionally when that is useful.
 - **Start with a finished HUD.** Preview Compact, DPS, or Tank, then keep that
@@ -121,12 +121,14 @@ even while stationary, with live changes from slows, boosts, and ground mounts.
 
 ## Archon reference snapshots
 
-Choose one of two bundled datasets:
+Choose from the datasets Archon currently provides:
 
-- **Mythic+** — High Keys / All Dungeons / This Week
-- **Raid** — Mythic / All Bosses
+- **Mythic+** — current bracket or High Keys / All Dungeons; current-affix routes use Archon's rolling 14-day sample
+- **Raid** — Normal, Heroic, or Mythic / All Bosses
 
-Hover a secondary-stat row to see the reference target and snapshot date. When a
+Unavailable profiles are omitted from the selector and appear automatically in
+a later bundled snapshot when Archon starts publishing them. Hover a
+secondary-stat row to see the reference target and snapshot date. When a
 clean live or cached comparison is available, the tooltip also shows the current
 rating and its **Missing**, **Over**, or **Matched** delta. During restricted
 combat states, StatsPro keeps the target metadata visible. Without a clean

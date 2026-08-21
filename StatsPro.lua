@@ -431,7 +431,7 @@ local defaults = {
     showRating = true,
     showPercentage = true,
     matchValueColorToStat = true,
-    targetSnapshot = "mythicPlus",
+    targetSnapshot = "mythicPlusCurrent",
 
     -- Tertiary stats
     showTertiary = false,
@@ -845,10 +845,13 @@ local function GetCurrentMainStatId()
 end
 
 addon.archonTargets = addon.archonTargets or {}
-addon.archonTargets.defaultSnapshotKey = "mythicPlus"
+addon.archonTargets.defaultSnapshotKey = "mythicPlusCurrent"
 addon.archonTargets.snapshotOptions = {
-    { value = "mythicPlus", label = "Mythic+" },
-    { value = "raid",       label = "Raid" },
+    { value = "mythicPlusCurrent",  label = "M+ Current" },
+    { value = "mythicPlusHighKeys", label = "M+ High Keys" },
+    { value = "raidNormal",         label = "Raid Normal" },
+    { value = "raidHeroic",         label = "Raid Heroic" },
+    { value = "raidMythic",         label = "Raid Mythic" },
 }
 -- Session-local by design: a character change reloads addon Lua, while zoning into
 -- Mythic+ does not. Context and effective-level changes clear entries so switching
@@ -978,26 +981,94 @@ function addon.archonTargets.StoreCleanComparison(classToken, specKey, snapshotK
 end
 
 function addon.archonTargets.NormalizeSnapshotKey(value)
-    if value == "raid" then return "raid" end
+    if value == "raid" then return "raidMythic" end
+    -- Legacy schema v1/v2 and SavedVariables used mythicPlus for High Keys.
+    -- Keep that meaning so an upgrade never silently changes a user's target.
+    if value == "mythicPlus" then return "mythicPlusHighKeys" end
+    for _, option in ipairs(addon.archonTargets.snapshotOptions) do
+        if value == option.value then return value end
+    end
+    return addon.archonTargets.defaultSnapshotKey
+end
+
+function addon.archonTargets.GetAvailableSnapshotOptions()
+    local root = _G.StatsProArchonTargets
+    local options = {}
+    if type(root) == "table" and root.schemaVersion == 3
+        and type(root.snapshots) == "table" then
+        for _, option in ipairs(addon.archonTargets.snapshotOptions) do
+            if type(root.snapshots[option.value]) == "table" then
+                options[#options + 1] = option
+            end
+        end
+    elseif type(root) == "table" and root.schemaVersion == 2
+        and type(root.snapshots) == "table" then
+        if type(root.snapshots.mythicPlus) == "table" then
+            options[#options + 1] = addon.archonTargets.snapshotOptions[2]
+        end
+        if type(root.snapshots.raid) == "table" then
+            options[#options + 1] = addon.archonTargets.snapshotOptions[5]
+        end
+    elseif type(root) == "table" and root.schemaVersion == 1 then
+        options[#options + 1] = addon.archonTargets.snapshotOptions[2]
+    end
+    -- Settings construction requires one stable value even if generated data failed
+    -- to load. Snapshot lookup still returns nil, so no target is fabricated.
+    if #options == 0 then
+        options[1] = addon.archonTargets.snapshotOptions[1]
+    end
+    return options
+end
+
+function addon.archonTargets.ResolveAvailableSnapshotKey(value)
+    local requested = addon.archonTargets.NormalizeSnapshotKey(value)
+    local available = {}
+    for _, option in ipairs(addon.archonTargets.GetAvailableSnapshotOptions()) do
+        available[option.value] = true
+    end
+    if available[requested] then return requested end
+
+    local fallbackOrder
+    if requested == "mythicPlusHighKeys" then
+        fallbackOrder = { "mythicPlusHighKeys", "mythicPlusCurrent" }
+    elseif requested == "mythicPlusCurrent" then
+        fallbackOrder = { "mythicPlusCurrent", "mythicPlusHighKeys" }
+    elseif requested == "raidNormal" then
+        fallbackOrder = { "raidNormal", "raidHeroic", "raidMythic" }
+    elseif requested == "raidHeroic" then
+        fallbackOrder = { "raidHeroic", "raidNormal", "raidMythic" }
+    else
+        fallbackOrder = { "raidMythic", "raidHeroic", "raidNormal" }
+    end
+    for _, key in ipairs(fallbackOrder) do
+        if available[key] then return key end
+    end
+    for _, option in ipairs(addon.archonTargets.GetAvailableSnapshotOptions()) do
+        if available[option.value] then return option.value end
+    end
     return addon.archonTargets.defaultSnapshotKey
 end
 
 function addon.archonTargets.GetRootSnapshot(snapshotKey)
     local root = _G.StatsProArchonTargets
     if type(root) ~= "table" then return nil end
-    local normalizedKey = addon.archonTargets.NormalizeSnapshotKey(snapshotKey)
-    if root.schemaVersion == 2 then
+    local normalizedKey = addon.archonTargets.ResolveAvailableSnapshotKey(snapshotKey)
+    if root.schemaVersion == 3 then
         local snapshots = root.snapshots
         local snapshotRoot = type(snapshots) == "table" and snapshots[normalizedKey] or nil
-        if type(snapshotRoot) ~= "table" and normalizedKey ~= addon.archonTargets.defaultSnapshotKey then
-            normalizedKey = addon.archonTargets.defaultSnapshotKey
-            snapshotRoot = type(snapshots) == "table" and snapshots[normalizedKey] or nil
-        end
+        if type(snapshotRoot) ~= "table" then return nil end
+        return snapshotRoot, root, normalizedKey
+    end
+    if root.schemaVersion == 2 then
+        local legacyKey = normalizedKey == "raidMythic" and "raid"
+            or normalizedKey == "mythicPlusHighKeys" and "mythicPlus" or nil
+        local snapshotRoot = legacyKey and type(root.snapshots) == "table"
+            and root.snapshots[legacyKey] or nil
         if type(snapshotRoot) ~= "table" then return nil end
         return snapshotRoot, root, normalizedKey
     end
     if root.schemaVersion == 1 then
-        return root, root, addon.archonTargets.defaultSnapshotKey
+        return root, root, "mythicPlusHighKeys"
     end
     return nil
 end
@@ -1019,7 +1090,7 @@ function addon.archonTargets.GetCurrentSnapshot()
     local specKey = addon.archonTargets.GetCurrentSpecKey()
     if not classToken or not specKey then return nil end
     local snapshot, snapshotRoot, root, snapshotKey = addon.archonTargets.GetSnapshot(classToken, specKey, cached.targetSnapshot)
-    snapshotKey = snapshotKey or addon.archonTargets.NormalizeSnapshotKey(cached.targetSnapshot)
+    snapshotKey = snapshotKey or addon.archonTargets.ResolveAvailableSnapshotKey(cached.targetSnapshot)
     addon.archonTargets.ActivateComparisonContext(classToken, specKey, snapshotKey)
     return snapshot, snapshotRoot, root, snapshotKey, classToken, specKey
 end
@@ -1266,7 +1337,7 @@ cached = {
     lastUpdateError = nil,
     displayMode = "flat",
     labelStyle = "full",
-    targetSnapshot = "mythicPlus",
+    targetSnapshot = "mythicPlusCurrent",
     updateInterval = 0.5,
 }
 
@@ -1448,10 +1519,12 @@ local LABELS_BY_LOCALE = {
         -- Dropdown options (Display Mode):
         ["Flat"] = "Flat", ["Sectioned"] = "Sectioned", ["Split"] = "Split",
         ["Mythic+"] = "Mythic+", ["Raid"] = "Raid",
+        ["Raid Normal"] = "Raid Normal", ["Raid Heroic"] = "Raid Heroic", ["Raid Mythic"] = "Raid Mythic",
         ["Full"] = "Full", ["Short"] = "Short", ["Hidden"] = "Hidden",
         ["None"] = "None", ["Outline"] = "Outline", ["Thick Outline"] = "Thick Outline",
         ["M+ Target"] = "M+ Target", ["Raid Target"] = "Raid Target",
         ["M+ High Keys"] = "M+ High Keys", ["Raid Mythic All Bosses"] = "Raid Mythic All Bosses",
+        ["M+ Current"] = "M+ Current", ["Raid Normal All Bosses"] = "Raid Normal All Bosses", ["Raid Heroic All Bosses"] = "Raid Heroic All Bosses",
         ["Target:"] = "Target:", ["Current:"] = "Current:", ["Missing:"] = "Missing:",
         ["Over:"] = "Over:", ["Matched:"] = "Matched:", ["Snapshot:"] = "Snapshot:",
         ["Last known comparison"] = "Last known comparison", ["Live values; comparison unavailable"] = "Live values; comparison unavailable", ["Source:"] = "Source:",
@@ -1588,10 +1661,12 @@ local LABELS_BY_LOCALE = {
         -- Dropdown options (Display Mode):
         ["Flat"] = "Плоский", ["Sectioned"] = "По секциям", ["Split"] = "Разделённый",
         ["Mythic+"] = "Мифик+", ["Raid"] = "Рейд",
+        ["Raid Normal"] = "Рейд: обычный", ["Raid Heroic"] = "Рейд: героический", ["Raid Mythic"] = "Рейд: эпохальный",
         ["Full"] = "Полный", ["Short"] = "Короткий", ["Hidden"] = "Скрытый",
         ["None"] = "Нет", ["Outline"] = "Контур", ["Thick Outline"] = "Толстый контур",
         ["M+ Target"] = "Цель M+", ["Raid Target"] = "Цель рейда",
         ["M+ High Keys"] = "M+ высокие ключи", ["Raid Mythic All Bosses"] = "Эпох. рейд, все боссы",
+        ["M+ Current"] = "M+ текущие ключи", ["Raid Normal All Bosses"] = "Обычный рейд, все боссы", ["Raid Heroic All Bosses"] = "Героический рейд, все боссы",
         ["Target:"] = "Цель:", ["Current:"] = "Сейчас:", ["Missing:"] = "Не хватает:",
         ["Over:"] = "Сверх:", ["Matched:"] = "Совпало:", ["Snapshot:"] = "Снимок:",
         ["Last known comparison"] = "Последнее известное сравнение", ["Live values; comparison unavailable"] = "Актуальные значения; сравнение недоступно", ["Source:"] = "Источник:",
@@ -1723,10 +1798,12 @@ local LABELS_BY_LOCALE = {
         ["Display Mode:"] = "Anzeigemodus:", ["Tooltip Targets:"] = "Tooltip-Ziele:", ["Label Style:"] = "Labelstil:", ["Text Outline:"] = "Textkontur:", ["Font:"] = "Schrift:", ["Language:"] = "Sprache:",
         ["Flat"] = "Flach", ["Sectioned"] = "Gruppiert", ["Split"] = "Geteilt",
         ["Mythic+"] = "Mythic+", ["Raid"] = "Raid",
+        ["Raid Normal"] = "Raid Normal", ["Raid Heroic"] = "Raid Heroisch", ["Raid Mythic"] = "Raid Mythisch",
         ["Full"] = "Voll", ["Short"] = "Kurz", ["Hidden"] = "Versteckt",
         ["None"] = "Keine", ["Outline"] = "Kontur", ["Thick Outline"] = "Dicke Kontur",
         ["M+ Target"] = "M+ Ziel", ["Raid Target"] = "Raid-Ziel",
         ["M+ High Keys"] = "M+ hohe Schlüssel", ["Raid Mythic All Bosses"] = "Raid Mythisch alle Bosse",
+        ["M+ Current"] = "M+ aktuell", ["Raid Normal All Bosses"] = "Raid Normal alle Bosse", ["Raid Heroic All Bosses"] = "Raid Heroisch alle Bosse",
         ["Target:"] = "Ziel:", ["Current:"] = "Aktuell:", ["Missing:"] = "Fehlt:",
         ["Over:"] = "Drüber:", ["Matched:"] = "Erreicht:", ["Snapshot:"] = "Datenstand:",
         ["Last known comparison"] = "Letzter bekannter Vergleich", ["Live values; comparison unavailable"] = "Live-Werte; Vergleich nicht verfügbar", ["Source:"] = "Quelle:",
@@ -1853,10 +1930,12 @@ local LABELS_BY_LOCALE = {
         ["Display Mode:"] = "Mode d'affichage :", ["Tooltip Targets:"] = "Cibles infobulle :", ["Label Style:"] = "Style d'étiquette :", ["Text Outline:"] = "Contour du texte :", ["Font:"] = "Police :", ["Language:"] = "Langue :",
         ["Flat"] = "Plat", ["Sectioned"] = "Par sections", ["Split"] = "Séparé",
         ["Mythic+"] = "Mythique+", ["Raid"] = "Raid",
+        ["Raid Normal"] = "Raid normal", ["Raid Heroic"] = "Raid héroïque", ["Raid Mythic"] = "Raid mythique",
         ["Full"] = "Complet", ["Short"] = "Court", ["Hidden"] = "Masqué",
         ["None"] = "Aucun", ["Outline"] = "Contour", ["Thick Outline"] = "Contour épais",
         ["M+ Target"] = "Cible M+", ["Raid Target"] = "Cible raid",
         ["M+ High Keys"] = "M+ hautes clés", ["Raid Mythic All Bosses"] = "Raid mythique tous les boss",
+        ["M+ Current"] = "M+ actuel", ["Raid Normal All Bosses"] = "Raid normal tous les boss", ["Raid Heroic All Bosses"] = "Raid héroïque tous les boss",
         ["Target:"] = "Cible :", ["Current:"] = "Actuel :", ["Missing:"] = "Manquant :",
         ["Over:"] = "Excès :", ["Matched:"] = "Atteint :", ["Snapshot:"] = "Instantané :",
         ["Last known comparison"] = "Dernière comparaison connue", ["Live values; comparison unavailable"] = "Valeurs en direct ; comparaison indisponible", ["Source:"] = "Source :",
@@ -1984,10 +2063,12 @@ local LABELS_BY_LOCALE = {
         ["Display Mode:"] = "Modo:", ["Tooltip Targets:"] = "Objetivos tooltip:", ["Label Style:"] = "Estilo de etiqueta:", ["Text Outline:"] = "Contorno del texto:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por secciones", ["Split"] = "Dividido",
         ["Mythic+"] = "Mítico+", ["Raid"] = "Banda",
+        ["Raid Normal"] = "Banda normal", ["Raid Heroic"] = "Banda heroica", ["Raid Mythic"] = "Banda mítica",
         ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Oculto",
         ["None"] = "Ninguno", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno grueso",
         ["M+ Target"] = "Objetivo M+", ["Raid Target"] = "Objetivo banda",
         ["M+ High Keys"] = "M+ llaves altas", ["Raid Mythic All Bosses"] = "Banda mítica todos los jefes",
+        ["M+ Current"] = "M+ actual", ["Raid Normal All Bosses"] = "Banda normal todos los jefes", ["Raid Heroic All Bosses"] = "Banda heroica todos los jefes",
         ["Target:"] = "Objetivo:", ["Current:"] = "Actual:", ["Missing:"] = "Falta:",
         ["Over:"] = "Exceso:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Captura:",
         ["Last known comparison"] = "Última comparación conocida", ["Live values; comparison unavailable"] = "Valores en vivo; comparación no disponible", ["Source:"] = "Fuente:",
@@ -2113,10 +2194,12 @@ local LABELS_BY_LOCALE = {
         ["Display Mode:"] = "Modo:", ["Tooltip Targets:"] = "Objetivos tooltip:", ["Label Style:"] = "Estilo de etiqueta:", ["Text Outline:"] = "Contorno del texto:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por secciones", ["Split"] = "Dividido",
         ["Mythic+"] = "Mítico+", ["Raid"] = "Banda",
+        ["Raid Normal"] = "Banda normal", ["Raid Heroic"] = "Banda heroica", ["Raid Mythic"] = "Banda mítica",
         ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Oculto",
         ["None"] = "Ninguno", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno grueso",
         ["M+ Target"] = "Objetivo M+", ["Raid Target"] = "Objetivo banda",
         ["M+ High Keys"] = "M+ llaves altas", ["Raid Mythic All Bosses"] = "Banda mítica todos los jefes",
+        ["M+ Current"] = "M+ actual", ["Raid Normal All Bosses"] = "Banda normal todos los jefes", ["Raid Heroic All Bosses"] = "Banda heroica todos los jefes",
         ["Target:"] = "Objetivo:", ["Current:"] = "Actual:", ["Missing:"] = "Falta:",
         ["Over:"] = "Exceso:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Captura:",
         ["Last known comparison"] = "Última comparación conocida", ["Live values; comparison unavailable"] = "Valores en vivo; comparación no disponible", ["Source:"] = "Fuente:",
@@ -2243,10 +2326,12 @@ local LABELS_BY_LOCALE = {
         ["Display Mode:"] = "Modalità:", ["Tooltip Targets:"] = "Target tooltip:", ["Label Style:"] = "Stile etichetta:", ["Text Outline:"] = "Contorno testo:", ["Font:"] = "Font:", ["Language:"] = "Lingua:",
         ["Flat"] = "Piatto", ["Sectioned"] = "A sezioni", ["Split"] = "Diviso",
         ["Mythic+"] = "Mitica+", ["Raid"] = "Incursione",
+        ["Raid Normal"] = "Incursione Normale", ["Raid Heroic"] = "Incursione Eroica", ["Raid Mythic"] = "Incursione Mitica",
         ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Nascosto",
         ["None"] = "Nessuno", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno spesso",
         ["M+ Target"] = "Bersaglio M+", ["Raid Target"] = "Bersaglio incursione",
         ["M+ High Keys"] = "M+ chiavi alte", ["Raid Mythic All Bosses"] = "Incursione Mitica tutti i boss",
+        ["M+ Current"] = "M+ attuale", ["Raid Normal All Bosses"] = "Incursione Normale tutti i boss", ["Raid Heroic All Bosses"] = "Incursione Eroica tutti i boss",
         ["Target:"] = "Bersaglio:", ["Current:"] = "Attuale:", ["Missing:"] = "Manca:",
         ["Over:"] = "Oltre:", ["Matched:"] = "Raggiunto:", ["Snapshot:"] = "Istantanea:",
         ["Last known comparison"] = "Ultimo confronto noto", ["Live values; comparison unavailable"] = "Valori in tempo reale; confronto non disponibile", ["Source:"] = "Fonte:",
@@ -2372,10 +2457,12 @@ local LABELS_BY_LOCALE = {
         ["Display Mode:"] = "Modo:", ["Tooltip Targets:"] = "Alvos do tooltip:", ["Label Style:"] = "Estilo do rótulo:", ["Text Outline:"] = "Contorno do texto:", ["Font:"] = "Fonte:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por seções", ["Split"] = "Dividido",
         ["Mythic+"] = "Mítico+", ["Raid"] = "Raide",
+        ["Raid Normal"] = "Raide Normal", ["Raid Heroic"] = "Raide Heroico", ["Raid Mythic"] = "Raide Mítico",
         ["Full"] = "Completo", ["Short"] = "Curto", ["Hidden"] = "Oculto",
         ["None"] = "Nenhum", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno grosso",
         ["M+ Target"] = "Alvo M+", ["Raid Target"] = "Alvo de raide",
         ["M+ High Keys"] = "M+ chaves altas", ["Raid Mythic All Bosses"] = "Raide Mítico todos os chefes",
+        ["M+ Current"] = "M+ atual", ["Raid Normal All Bosses"] = "Raide Normal todos os chefes", ["Raid Heroic All Bosses"] = "Raide Heroico todos os chefes",
         ["Target:"] = "Alvo:", ["Current:"] = "Atual:", ["Missing:"] = "Falta:",
         ["Over:"] = "Acima:", ["Matched:"] = "Igualado:", ["Snapshot:"] = "Registro:",
         ["Last known comparison"] = "Última comparação conhecida", ["Live values; comparison unavailable"] = "Valores em tempo real; comparação indisponível", ["Source:"] = "Fonte:",
@@ -2508,10 +2595,12 @@ local LABELS_BY_LOCALE = {
         ["Display Mode:"] = "표시 모드:", ["Tooltip Targets:"] = "툴팁 목표:", ["Label Style:"] = "라벨 스타일:", ["Text Outline:"] = "글자 외곽선:", ["Font:"] = "글꼴:", ["Language:"] = "언어:",
         ["Flat"] = "단일", ["Sectioned"] = "구역별", ["Split"] = "분리",
         ["Mythic+"] = "쐐기+", ["Raid"] = "공격대",
+        ["Raid Normal"] = "일반 공격대", ["Raid Heroic"] = "영웅 공격대", ["Raid Mythic"] = "신화 공격대",
         ["Full"] = "전체", ["Short"] = "짧게", ["Hidden"] = "숨김",
         ["None"] = "없음", ["Outline"] = "외곽선", ["Thick Outline"] = "굵은 외곽선",
         ["M+ Target"] = "쐐기+ 목표", ["Raid Target"] = "공격대 목표",
         ["M+ High Keys"] = "쐐기+ 고단", ["Raid Mythic All Bosses"] = "신화 공격대 모든 우두머리",
+        ["M+ Current"] = "현재 쐐기+", ["Raid Normal All Bosses"] = "일반 공격대 모든 우두머리", ["Raid Heroic All Bosses"] = "영웅 공격대 모든 우두머리",
         ["Target:"] = "목표:", ["Current:"] = "현재:", ["Missing:"] = "부족:",
         ["Over:"] = "초과:", ["Matched:"] = "일치:", ["Snapshot:"] = "스냅샷:",
         ["Last known comparison"] = "마지막으로 확인된 비교", ["Live values; comparison unavailable"] = "실시간 값; 비교할 수 없음", ["Source:"] = "출처:",
@@ -2637,10 +2726,12 @@ local LABELS_BY_LOCALE = {
         ["Display Mode:"] = "显示模式:", ["Tooltip Targets:"] = "提示目标:", ["Label Style:"] = "标签样式:", ["Text Outline:"] = "文字描边:", ["Font:"] = "字体:", ["Language:"] = "语言:",
         ["Flat"] = "扁平", ["Sectioned"] = "分组", ["Split"] = "分离",
         ["Mythic+"] = "史诗+", ["Raid"] = "团队",
+        ["Raid Normal"] = "普通团队", ["Raid Heroic"] = "英雄团队", ["Raid Mythic"] = "史诗团队",
         ["Full"] = "完整", ["Short"] = "简短", ["Hidden"] = "隐藏",
         ["None"] = "无", ["Outline"] = "描边", ["Thick Outline"] = "粗描边",
         ["M+ Target"] = "史诗+目标", ["Raid Target"] = "团队目标",
         ["M+ High Keys"] = "史诗+高层", ["Raid Mythic All Bosses"] = "史诗团队全部首领",
+        ["M+ Current"] = "当前史诗+", ["Raid Normal All Bosses"] = "普通团队全部首领", ["Raid Heroic All Bosses"] = "英雄团队全部首领",
         ["Target:"] = "目标:", ["Current:"] = "当前:", ["Missing:"] = "缺少:",
         ["Over:"] = "超出:", ["Matched:"] = "已达成:", ["Snapshot:"] = "快照:",
         ["Last known comparison"] = "上次已知对比", ["Live values; comparison unavailable"] = "实时数值；无法比较", ["Source:"] = "来源:",
@@ -2766,10 +2857,12 @@ local LABELS_BY_LOCALE = {
         ["Display Mode:"] = "顯示模式:", ["Tooltip Targets:"] = "提示目標:", ["Label Style:"] = "標籤樣式:", ["Text Outline:"] = "文字描邊:", ["Font:"] = "字型:", ["Language:"] = "語言:",
         ["Flat"] = "扁平", ["Sectioned"] = "分組", ["Split"] = "分離",
         ["Mythic+"] = "傳奇+", ["Raid"] = "團隊",
+        ["Raid Normal"] = "普通團隊", ["Raid Heroic"] = "英雄團隊", ["Raid Mythic"] = "傳奇團隊",
         ["Full"] = "完整", ["Short"] = "簡短", ["Hidden"] = "隱藏",
         ["None"] = "無", ["Outline"] = "描邊", ["Thick Outline"] = "粗描邊",
         ["M+ Target"] = "傳奇+目標", ["Raid Target"] = "團隊目標",
         ["M+ High Keys"] = "傳奇+高層", ["Raid Mythic All Bosses"] = "傳奇團隊全部首領",
+        ["M+ Current"] = "目前傳奇+", ["Raid Normal All Bosses"] = "普通團隊全部首領", ["Raid Heroic All Bosses"] = "英雄團隊全部首領",
         ["Target:"] = "目標:", ["Current:"] = "目前:", ["Missing:"] = "缺少:",
         ["Over:"] = "超出:", ["Matched:"] = "已達成:", ["Snapshot:"] = "快照:",
         ["Last known comparison"] = "上次已知比較", ["Live values; comparison unavailable"] = "即時數值；無法比較", ["Source:"] = "來源:",
@@ -4288,7 +4381,10 @@ addon.profileTransfer = {
         appearance = "Appearance settings",
     },
     allowedStrings = {
-        targetSnapshot = { mythicPlus = true, raid = true },
+        targetSnapshot = {
+            mythicPlus = true, mythicPlusCurrent = true, mythicPlusHighKeys = true,
+            raid = true, raidNormal = true, raidHeroic = true, raidMythic = true,
+        },
         displayMode = { flat = true, sectioned = true, split = true },
         labelStyle = { full = true, short = true, hidden = true },
         textOutlineStyle = { none = true, outline = true, thick = true },
@@ -7152,7 +7248,7 @@ local function CacheSettings()
     cached.updateInterval = GetNumberDB("updateInterval")
     cached.displayMode = addon.NormalizeDisplayMode(GetDB("displayMode"))
     cached.labelStyle = NormalizeLabelStyle(GetDB("labelStyle"))
-    cached.targetSnapshot = addon.archonTargets.NormalizeSnapshotKey(GetDB("targetSnapshot"))
+    cached.targetSnapshot = addon.archonTargets.ResolveAvailableSnapshotKey(GetDB("targetSnapshot"))
     -- WHY runtime clamp: corrupt SavedVariables should not make text invisible,
     -- spam OnUpdate, or break font/scale arithmetic. Do not write back here; UI
     -- slider commits remain the only normal path that mutates SavedVariables.
@@ -7386,7 +7482,10 @@ addon.legacyImport = {
     allowedStrings = {
         displayMode = { flat = true, sectioned = true, split = true },
         labelStyle = { full = true, short = true, hidden = true },
-        targetSnapshot = { mythicPlus = true, raid = true },
+        targetSnapshot = {
+            mythicPlus = true, mythicPlusCurrent = true, mythicPlusHighKeys = true,
+            raid = true, raidNormal = true, raidHeroic = true, raidMythic = true,
+        },
         textOutlineStyle = { none = true, outline = true, thick = true },
     },
 }
@@ -8296,17 +8395,27 @@ function addon.archonTargets.GetMonthAbbr(monthNum)
 end
 
 function addon.archonTargets.GetLocalizedSnapshotLabel(snapshotKey)
-    if addon.archonTargets.NormalizeSnapshotKey(snapshotKey) == "raid" then
-        return L("Raid Mythic All Bosses")
-    end
-    return L("M+ High Keys")
+    local labels = {
+        mythicPlusCurrent = "M+ Current",
+        mythicPlusHighKeys = "M+ High Keys",
+        raidNormal = "Raid Normal All Bosses",
+        raidHeroic = "Raid Heroic All Bosses",
+        raidMythic = "Raid Mythic All Bosses",
+    }
+    local key = addon.archonTargets.ResolveAvailableSnapshotKey(snapshotKey)
+    return L(labels[key] or labels.mythicPlusCurrent)
 end
 
 function addon.archonTargets.GetLocalizedSnapshotTitle(snapshotKey)
-    if addon.archonTargets.NormalizeSnapshotKey(snapshotKey) == "raid" then
-        return L("Raid Target")
-    end
-    return L("M+ Target")
+    local titles = {
+        mythicPlusCurrent = "M+ Target",
+        mythicPlusHighKeys = "M+ Target",
+        raidNormal = "Raid Target",
+        raidHeroic = "Raid Target",
+        raidMythic = "Raid Target",
+    }
+    local key = addon.archonTargets.ResolveAvailableSnapshotKey(snapshotKey)
+    return L(titles[key] or titles.mythicPlusCurrent)
 end
 
 function addon.archonTargets.IsLeapYear(year)
@@ -13273,7 +13382,7 @@ function addon.wipeRuntime.Request()
 end
 
 function addon.archonTargets.GetTargetSnapshotDropdownValue()
-    return addon.archonTargets.NormalizeSnapshotKey(GetDB("targetSnapshot"))
+    return addon.archonTargets.ResolveAvailableSnapshotKey(GetDB("targetSnapshot"))
 end
 
 function addon.archonTargets.SelectTargetSnapshotDropdownValue(value, opt, dropdown)
@@ -13282,7 +13391,7 @@ function addon.archonTargets.SelectTargetSnapshotDropdownValue(value, opt, dropd
         CloseDropDownMenus()
         return false
     end
-    db.targetSnapshot = addon.archonTargets.NormalizeSnapshotKey(value)
+    db.targetSnapshot = addon.archonTargets.ResolveAvailableSnapshotKey(value)
     CacheSettings()
     UIDropDownMenu_SetText(dropdown, L(opt.label))
     CloseDropDownMenus()
@@ -14832,11 +14941,17 @@ function addon.settingsUI.CreateSimpleDropdownRow(parent, rows, frameName, label
     UIDropDownMenu_JustifyText(dropdown, "LEFT")
     addon.settingsDesign.StyleDropdown(dropdown, label)
 
+    local function GetOptions()
+        if type(options) == "function" then return options() end
+        return options
+    end
+
     local function ResolveOption(value)
-        for _, opt in ipairs(options) do
+        local resolvedOptions = GetOptions()
+        for _, opt in ipairs(resolvedOptions) do
             if opt.value == value then return opt end
         end
-        return options[1]
+        return resolvedOptions[1]
     end
 
     local function RefreshDropdownText()
@@ -14847,7 +14962,7 @@ function addon.settingsUI.CreateSimpleDropdownRow(parent, rows, frameName, label
 
     UIDropDownMenu_Initialize(dropdown, function()
         local current = ResolveOption(getValue())
-        for _, opt in ipairs(options) do
+        for _, opt in ipairs(GetOptions()) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = L(opt.label)
             info.value = opt.value
@@ -15241,7 +15356,7 @@ function addon.settingsUI.BuildLayoutTab(self, context)
         layoutDropdownRows,
         "StatsProTargetSnapshotDropdown",
         "Tooltip Targets:",
-        self.archonTargets.snapshotOptions,
+        self.archonTargets.GetAvailableSnapshotOptions,
         cd,
         self.archonTargets.GetTargetSnapshotDropdownValue,
         self.archonTargets.SelectTargetSnapshotDropdownValue)
@@ -17276,6 +17391,10 @@ if addon and addon.__statsproSmoke == true then
             }
         end,
         cachedTargetSnapshot = function() return cached.targetSnapshot end,
+        availableArchonSnapshotOptions = function()
+            return CopyTable(addon.archonTargets.GetAvailableSnapshotOptions())
+        end,
+        resolveArchonSnapshotKey = addon.archonTargets.ResolveAvailableSnapshotKey,
         currentRelease = function() return CURRENT_RELEASE end,
         addonVersion = function() return ADDON_VERSION end,
         copyDefaults = function() return CopyTable(defaults) end,

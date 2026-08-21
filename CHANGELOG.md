@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.13.1 - 21-Aug-2026 — Archon profile safeguards
+
+### Added
+
+- **Archon targets can now be selected by every profile currently available from Archon.** Current Mythic+, Raid Normal, and Raid Heroic are bundled now; High Keys and Raid Mythic appear automatically when complete data becomes available.
+
+### Fixed
+
+- **The target selector now shows Archon's verified difficulty range and never offers a placeholder dataset when generated data is missing.** Existing High Keys preferences keep their original meaning and fall back safely while that profile is unavailable.
+- **Archon collection and packaging now fail closed on unexpected difficulty ranges, sample windows, stale source metadata, partial profiles, and one-through-five-profile archive layouts.**
+
+### Updated
+
+- **Bundled current Mythic+ and Raid Normal/Heroic target ratings were refreshed from the latest available Archon data.**
+
 ## 1.13.0 - 21-Aug-2026 — Selectable Archon profiles
 
 ### Added

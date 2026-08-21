@@ -13408,7 +13408,8 @@ function addon.archonTargets.SelectTargetSnapshotDropdownValue(value, opt, dropd
     end
     db.targetSnapshot = addon.archonTargets.ResolveAvailableSnapshotKey(value)
     CacheSettings()
-    UIDropDownMenu_SetText(dropdown, L(opt.label))
+    UIDropDownMenu_SetText(dropdown,
+        addon.settingsUI.FormatSimpleDropdownOptionText(opt))
     CloseDropDownMenus()
     addon:RunUpdateStatsSafe()
 end
@@ -14942,6 +14943,16 @@ function addon.profileUI.BuildSettingsUI(owner)
     return header, manager
 end
 
+function addon.settingsUI.FormatSimpleDropdownOptionText(option)
+    if not option then return L("None") end
+    local text = L(option.label)
+    local detail = option.detail
+    if type(detail) == "string" and not issecretvalue(detail) and detail ~= "" then
+        return text .. " (" .. detail .. ")"
+    end
+    return text
+end
+
 function addon.settingsUI.CreateSimpleDropdownRow(parent, rows, frameName, labelKey,
         options, cursor, getValue, onSelect)
     local rowY = cursor.y
@@ -14969,18 +14980,10 @@ function addon.settingsUI.CreateSimpleDropdownRow(parent, rows, frameName, label
         return resolvedOptions[1]
     end
 
-    local function FormatOptionText(option)
-        if not option then return L("None") end
-        local text = L(option.label)
-        if type(option.detail) == "string" and option.detail ~= "" then
-            return text .. " (" .. option.detail .. ")"
-        end
-        return text
-    end
-
     local function RefreshDropdownText()
         label:SetText(L(labelKey))
-        UIDropDownMenu_SetText(dropdown, FormatOptionText(ResolveOption(getValue())))
+        UIDropDownMenu_SetText(dropdown,
+            addon.settingsUI.FormatSimpleDropdownOptionText(ResolveOption(getValue())))
         addon.settingsDesign.RefreshControl(dropdown.statsProTrigger)
     end
 
@@ -14989,7 +14992,7 @@ function addon.settingsUI.CreateSimpleDropdownRow(parent, rows, frameName, label
         if not current then return end
         for _, opt in ipairs(GetOptions()) do
             local info = UIDropDownMenu_CreateInfo()
-            info.text = FormatOptionText(opt)
+            info.text = addon.settingsUI.FormatSimpleDropdownOptionText(opt)
             info.value = opt.value
             info.checked = (current.value == opt.value)
             info.func = function()

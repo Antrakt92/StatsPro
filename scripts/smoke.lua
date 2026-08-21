@@ -8551,6 +8551,18 @@ do
         activeSettings(availableEnv).targetSnapshot, "raidHeroic")
     eq("config.dropdown_target_snapshot_available.select_heroic.cache",
         availableTest.cachedTargetSnapshot(), "raidHeroic")
+    eq("config.dropdown_target_snapshot_available.select_heroic.text",
+        availableEnv.StatsProTargetSnapshotDropdown.dropdownText,
+        "Raid Heroic (Heroic)")
+    selectDropdownValue("config.dropdown_target_snapshot_available.select_normal",
+        availableEnv.StatsProTargetSnapshotDropdown, "raidNormal")
+    eq("config.dropdown_target_snapshot_available.select_normal.db",
+        activeSettings(availableEnv).targetSnapshot, "raidNormal")
+    eq("config.dropdown_target_snapshot_available.select_normal.cache",
+        availableTest.cachedTargetSnapshot(), "raidNormal")
+    eq("config.dropdown_target_snapshot_available.select_normal.text",
+        availableEnv.StatsProTargetSnapshotDropdown.dropdownText,
+        "Raid Normal (Normal)")
 end
 
 do

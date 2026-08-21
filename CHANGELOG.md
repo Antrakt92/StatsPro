@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.13.0 - 21-Aug-2026 — Selectable Archon profiles
+
+### Added
+
+- **Archon targets can now be selected by available profile.** Choose current Mythic+ or Raid Normal/Heroic now; High Keys and Raid Mythic appear automatically when Archon publishes complete data.
+
+### Fixed
+
+- **Existing High Keys preferences keep their original meaning after updating.** When High Keys are unavailable, StatsPro safely falls back to current Mythic+ without rewriting the saved preference.
+
+### Updated
+
+- **Bundled current Mythic+ and Raid Normal/Heroic target ratings were refreshed from the latest available Archon data.**
+
 ## 1.12.15 - 13-Aug-2026 — Drag fix and Archon target refresh
 
 ### Fixed

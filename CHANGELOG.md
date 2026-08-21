@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.13.3 - 21-Aug-2026 — Archon selector reliability
+
+### Fixed
+
+- **Archon target details now remain visible immediately after switching Mythic+ range or raid difficulty.**
+
 ## 1.13.2 - 21-Aug-2026 — Archon profile safeguards
 
 ### Added

@@ -598,6 +598,10 @@ function Invoke-SelfTest {
         Assert-ThrowsMatch "stale Archon handoff rejected" {
             Assert-ArchiveArchonFreshness -Archive $archive -MaxAgeDays 3 -TodayUtc ([datetime]'2026-07-25')
         } "is stale"
+        New-TestZip -Path $archive -Tag $tag -CapturedAt @('2026-07-25', '2026-07-24', '2026-07-23')
+        Assert-ArchiveArchonFreshness -Archive $archive -MaxAgeDays 3 -TodayUtc ([datetime]'2026-07-25')
+        New-TestZip -Path $archive -Tag $tag -CapturedAt @('2026-07-25', '2026-07-24', '2026-07-23', '2026-07-22', '2026-07-25')
+        Assert-ArchiveArchonFreshness -Archive $archive -MaxAgeDays 3 -TodayUtc ([datetime]'2026-07-25')
         New-TestZip -Path $archive -Tag $tag -CapturedAt @('2026-07-27', '2026-07-27', '2026-07-27')
         Assert-ThrowsMatch "future Archon handoff rejected" {
             Assert-ArchiveArchonFreshness -Archive $archive -MaxAgeDays 3 -TodayUtc ([datetime]'2026-07-25')

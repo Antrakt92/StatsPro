@@ -1307,8 +1307,9 @@ end
 
 local archonManifest = loadArchonValidatorModule()
 
-local function makeArchonV2Fixture(capturedAt)
-    return deepCopy(archonManifest.makeValidFixture(capturedAt or "2026-05-15"))
+local function makeArchonV2Fixture(capturedAt, includedProfiles)
+    return deepCopy(archonManifest.makeValidFixture(
+        capturedAt or "2026-05-15", includedProfiles))
 end
 
 local function setArchonFixtureTargets(fixture, profileKey, classToken, specKey, targets, order)
@@ -1399,7 +1400,7 @@ do
     eq("archon.meta.rating_cr", meta.ratingCR, archonEnv.CR_MASTERY)
     eq("archon.meta.captured_at", meta.capturedAt, "2026-05-15")
     eq("archon.meta.missing_snapshot", archonTest.getArchonTargetSnapshot("MAGE", "fire"), nil)
-    eq("archon.meta.hidden_without_root", archonEnv.StatsProArchonTargets.schemaVersion, 3)
+    eq("archon.meta.hidden_without_root", archonEnv.StatsProArchonTargets.schemaVersion, 4)
 
     local dualFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(dualFixture, "mythicPlusCurrent", "MAGE", "frost",
@@ -1428,7 +1429,7 @@ do
     dualTest.renderMainPanelForSmoke("Mastery:", "700", "20.0%", 1, nil, nil, { raidMeta })
     dualTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("archon.v2.raid_tooltip_title", dualEnv.GameTooltip.lines[1].left, "StatsPro Raid Target")
-    eq("archon.v2.raid_tooltip_snapshot_label", dualEnv.GameTooltip.lines[5].right, "Raid Mythic All Bosses, 16-May-26")
+    eq("archon.v2.raid_tooltip_snapshot_label", dualEnv.GameTooltip.lines[5].right, "Raid Mythic All Bosses (Mythic), 16-May-26")
     eq("archon.v2.raid_tooltip_source_label", dualEnv.GameTooltip.lines[6].left, "Source:")
     eq("archon.v2.raid_tooltip_source_value", dualEnv.GameTooltip.lines[6].right, "Archon")
 
@@ -8503,6 +8504,56 @@ do
 end
 
 do
+    local missingEnv, missingAddon = loadStatsPro("enUS")
+    fireEvent("config.dropdown_target_snapshot_missing_root.fire",
+        missingEnv, "PLAYER_ENTERING_WORLD")
+    local ok, err = pcall(function() missingAddon:OpenConfigMenu() end)
+    check("config.dropdown_target_snapshot_missing_root.open", ok, err)
+    eq("config.dropdown_target_snapshot_missing_root.text",
+        missingEnv.StatsProTargetSnapshotDropdown.dropdownText, "None")
+    eq("config.dropdown_target_snapshot_missing_root.entry_count",
+        #runDropdownInit("config.dropdown_target_snapshot_missing_root.entries",
+            missingEnv.StatsProTargetSnapshotDropdown), 0)
+
+    local availableFixture = makeArchonV2Fixture("2026-05-15", {
+        mythicPlusCurrent = true,
+        raidNormal = true,
+        raidHeroic = true,
+    })
+    local availableEnv, availableAddon, availableTest = loadStatsPro("enUS", {
+        statsProArchonTargets = availableFixture,
+    })
+    fireEvent("config.dropdown_target_snapshot_available.fire",
+        availableEnv, "PLAYER_ENTERING_WORLD")
+    ok, err = pcall(function() availableAddon:OpenConfigMenu() end)
+    check("config.dropdown_target_snapshot_available.open", ok, err)
+    local entries = runDropdownInit("config.dropdown_target_snapshot_available.entries",
+        availableEnv.StatsProTargetSnapshotDropdown)
+    eq("config.dropdown_target_snapshot_available.count", #entries, 3)
+    eq("config.dropdown_target_snapshot_available.current.value",
+        entries[1].value, "mythicPlusCurrent")
+    eq("config.dropdown_target_snapshot_available.current.text",
+        entries[1].text, "M+ Current (+7 to +19)")
+    eq("config.dropdown_target_snapshot_available.normal.value",
+        entries[2].value, "raidNormal")
+    eq("config.dropdown_target_snapshot_available.normal.text",
+        entries[2].text, "Raid Normal (Normal)")
+    eq("config.dropdown_target_snapshot_available.heroic.value",
+        entries[3].value, "raidHeroic")
+    eq("config.dropdown_target_snapshot_available.heroic.text",
+        entries[3].text, "Raid Heroic (Heroic)")
+    eq("config.dropdown_target_snapshot_available.checked",
+        checkedDropdownValue("config.dropdown_target_snapshot_available", entries),
+        "mythicPlusCurrent")
+    selectDropdownValue("config.dropdown_target_snapshot_available.select_heroic",
+        availableEnv.StatsProTargetSnapshotDropdown, "raidHeroic")
+    eq("config.dropdown_target_snapshot_available.select_heroic.db",
+        activeSettings(availableEnv).targetSnapshot, "raidHeroic")
+    eq("config.dropdown_target_snapshot_available.select_heroic.cache",
+        availableTest.cachedTargetSnapshot(), "raidHeroic")
+end
+
+do
     runCache(runMigrate({ forceLocale = "auto" }))
     local failures = test.collectLabelStyleSmokeFailures()
     eq("labels.existing_utf8_invariants.count", #failures, 0)
@@ -12005,10 +12056,6 @@ do
     eq("config.dropdown_display_mode_split_writes_db.split_check_enabled",
         env.StatsProSplitOffensiveCheck:IsEnabled(), true)
 
-    selectDropdownValue("config.dropdown_target_snapshot_mplus_writes_db", env.StatsProTargetSnapshotDropdown, "mythicPlusCurrent")
-    eq("config.dropdown_target_snapshot_mplus_writes_db.value", activeSettings(env).targetSnapshot, "mythicPlusCurrent")
-    eq("config.dropdown_target_snapshot_mplus_writes_db.cache", test.cachedTargetSnapshot(), "mythicPlusCurrent")
-
     selectDropdownValue("config.dropdown_label_style_hidden_writes_db", env.StatsProLabelStyleDropdown, "hidden")
     eq("config.dropdown_label_style_hidden_writes_db.value", activeSettings(env).labelStyle, "hidden")
 
@@ -14172,6 +14219,9 @@ do
     local futureEnv, futureAddon, futureTest = loadStatsPro("enUS", {
         statsProDB = futureDB,
         swiftStatsDB = { fontSize = 17 },
+        statsProArchonTargets = makeArchonV2Fixture("2026-05-15", {
+            mythicPlusCurrent = true,
+        }),
     })
     local function assertRootUnchanged(name)
         eq(name .. ".same_root", rawequal(futureEnv.StatsProDB, futureDB), true)

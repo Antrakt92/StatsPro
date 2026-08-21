@@ -56,6 +56,8 @@ local PROFILES = {
         bracket = "10",
         dungeon = "all-dungeons",
         window = "this-week",
+        sampleWindow = "last-14-days",
+        difficultyLabel = "+7 to +19",
     },
     mythicPlusHighKeys = {
         label = "M+ High Keys",
@@ -64,6 +66,8 @@ local PROFILES = {
         bracket = "high-keys",
         dungeon = "all-dungeons",
         window = "this-week",
+        sampleWindow = "last-14-days",
+        difficultyLabel = "High Keys",
     },
     raidNormal = {
         label = "Raid Normal All Bosses",
@@ -72,6 +76,8 @@ local PROFILES = {
         difficulty = "normal",
         boss = "all-bosses",
         window = "last-14-days",
+        sampleWindow = "last-14-days",
+        difficultyLabel = "Normal",
     },
     raidHeroic = {
         label = "Raid Heroic All Bosses",
@@ -80,6 +86,8 @@ local PROFILES = {
         difficulty = "heroic",
         boss = "all-bosses",
         window = "last-14-days",
+        sampleWindow = "last-14-days",
+        difficultyLabel = "Heroic",
     },
     raidMythic = {
         label = "Raid Mythic All Bosses",
@@ -88,6 +96,8 @@ local PROFILES = {
         difficulty = "mythic",
         boss = "all-bosses",
         window = "last-14-days",
+        sampleWindow = "last-14-days",
+        difficultyLabel = "Mythic",
     },
 }
 
@@ -625,8 +635,8 @@ local function validate_snapshot(root, text, options)
     validate_runtime_spec_parity(options.statsProLua)
     validate_exact_keys(root, make_key_set({ "schemaVersion", "source", "snapshots" }), "StatsProArchonTargets")
     expect_type(root, "table", "StatsProArchonTargets")
-    if root.schemaVersion ~= 2 and root.schemaVersion ~= 3 then
-        fail("schemaVersion must be 2 or 3, got " .. tostring(root.schemaVersion))
+    if root.schemaVersion ~= 2 and root.schemaVersion ~= 3 and root.schemaVersion ~= 4 then
+        fail("schemaVersion must be 2, 3, or 4, got " .. tostring(root.schemaVersion))
     end
     expect_equal(root.source, "archon", "source")
     expect_type(root.snapshots, "table", "snapshots")
@@ -636,7 +646,7 @@ local function validate_snapshot(root, text, options)
     if root.schemaVersion == 2 then
         expect_equal(profileCount, #profileOrder, "snapshots profile count")
     elseif profileCount < 1 or profileCount > #profileOrder then
-        fail("schema v3 snapshots profile count must be between 1 and " .. tostring(#profileOrder)
+        fail("schema v3/v4 snapshots profile count must be between 1 and " .. tostring(#profileOrder)
             .. ", got " .. tostring(profileCount))
     end
     for profileKey in pairs(root.snapshots) do
@@ -648,8 +658,8 @@ local function validate_snapshot(root, text, options)
 
     for _, profileKey in ipairs(profileOrder) do
         local profile = root.snapshots[profileKey]
-        if root.schemaVersion == 3 and profile == nil then
-            -- Availability is data-driven in schema v3. Missing profiles are not
+        if (root.schemaVersion == 3 or root.schemaVersion == 4) and profile == nil then
+            -- Availability is data-driven in schema v3/v4. Missing profiles are not
             -- offered by the addon and may appear automatically in a later snapshot.
         else
         local expectedProfile = profiles[profileKey]
@@ -657,11 +667,17 @@ local function validate_snapshot(root, text, options)
         expect_type(profile, "table", profileContext)
         local allowedProfileKeys = { capturedAt = true, specs = true }
         for key in pairs(expectedProfile) do
-            allowedProfileKeys[key] = true
+            if root.schemaVersion == 4
+                or (key ~= "sampleWindow" and key ~= "difficultyLabel") then
+                allowedProfileKeys[key] = true
+            end
         end
         validate_exact_keys(profile, allowedProfileKeys, profileContext)
         for key, value in pairs(expectedProfile) do
-            expect_equal(profile[key], value, profileContext .. "." .. key)
+            if root.schemaVersion == 4
+                or (key ~= "sampleWindow" and key ~= "difficultyLabel") then
+                expect_equal(profile[key], value, profileContext .. "." .. key)
+            end
         end
         validate_date(profile.capturedAt, profileContext .. ".capturedAt", options)
         expect_type(profile.specs, "table", profileContext .. ".specs")
@@ -732,6 +748,8 @@ local function build_semantic_lines(root)
             canonicalProfile.difficulty or "",
             canonicalProfile.boss or "",
             canonicalProfile.window or "",
+            root.schemaVersion == 4 and profile.sampleWindow or "",
+            root.schemaVersion == 4 and profile.difficultyLabel or "",
         }, "\t")
 
         for _, spec in ipairs(SPECS) do
@@ -789,7 +807,7 @@ local function make_valid_fixture(capturedAt, includedProfiles)
         snapshots[profileKey] = profile
         end
     end
-    return { schemaVersion = 3, source = "archon", snapshots = snapshots }
+    return { schemaVersion = 4, source = "archon", snapshots = snapshots }
 end
 
 local function clone(value)
@@ -980,6 +998,18 @@ local function run_self_test(parsedOptions)
     assert_throws("bad profile metadata", function()
         validate_snapshot(badMetadata, nil, options)
     end, "this-week")
+
+    local badSampleWindow = clone(make_valid_fixture("2026-05-16"))
+    badSampleWindow.snapshots.mythicPlusCurrent.sampleWindow = "last-7-days"
+    assert_throws("bad sample window metadata", function()
+        validate_snapshot(badSampleWindow, nil, options)
+    end, "last-14-days")
+
+    local badDifficultyLabel = clone(make_valid_fixture("2026-05-16"))
+    badDifficultyLabel.snapshots.mythicPlusCurrent.difficultyLabel = "+8 to +19"
+    assert_throws("bad difficulty label metadata", function()
+        validate_snapshot(badDifficultyLabel, nil, options)
+    end, "+7 to +19")
 
     local extraRootKey = clone(make_valid_fixture("2026-05-16"))
     extraRootKey.specManifest = {}

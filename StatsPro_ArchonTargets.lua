@@ -1,7 +1,7 @@
 -- Generated during StatsPro release preparation.
 -- Do not edit by hand.
 StatsProArchonTargets = {
-  schemaVersion = 3,
+  schemaVersion = 4,
   source = "archon",
   snapshots = {
     ["mythicPlusCurrent"] = {
@@ -11,6 +11,8 @@ StatsProArchonTargets = {
       bracket = "10",
       dungeon = "all-dungeons",
       window = "this-week",
+      sampleWindow = "last-14-days",
+      difficultyLabel = "+7 to +19",
       capturedAt = "2026-08-21",
       specs = {
         ["DEATHKNIGHT"] = {
@@ -448,6 +450,8 @@ StatsProArchonTargets = {
       difficulty = "normal",
       boss = "all-bosses",
       window = "last-14-days",
+      sampleWindow = "last-14-days",
+      difficultyLabel = "Normal",
       capturedAt = "2026-08-21",
       specs = {
         ["DEATHKNIGHT"] = {
@@ -885,6 +889,8 @@ StatsProArchonTargets = {
       difficulty = "heroic",
       boss = "all-bosses",
       window = "last-14-days",
+      sampleWindow = "last-14-days",
+      difficultyLabel = "Heroic",
       capturedAt = "2026-08-21",
       specs = {
         ["DEATHKNIGHT"] = {

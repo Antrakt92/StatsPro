@@ -123,7 +123,7 @@ even while stationary, with live changes from slows, boosts, and ground mounts.
 
 Choose from the datasets Archon currently provides:
 
-- **Mythic+** — current bracket or High Keys / All Dungeons; current-affix routes use Archon's rolling 14-day sample
+- **Mythic+** — current +7 to +19 bracket or High Keys / All Dungeons; current-affix routes use Archon's rolling 14-day sample
 - **Raid** — Normal, Heroic, or Mythic / All Bosses
 
 Unavailable profiles are omitted from the selector and appear automatically in

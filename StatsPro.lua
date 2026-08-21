@@ -994,7 +994,21 @@ end
 function addon.archonTargets.GetAvailableSnapshotOptions()
     local root = _G.StatsProArchonTargets
     local options = {}
-    if type(root) == "table" and root.schemaVersion == 3
+    if type(root) == "table" and root.schemaVersion == 4
+        and type(root.snapshots) == "table" then
+        for _, option in ipairs(addon.archonTargets.snapshotOptions) do
+            local snapshot = root.snapshots[option.value]
+            if type(snapshot) == "table" then
+                local detail = type(snapshot.difficultyLabel) == "string"
+                    and snapshot.difficultyLabel ~= "" and snapshot.difficultyLabel or nil
+                options[#options + 1] = {
+                    value = option.value,
+                    label = option.label,
+                    detail = detail,
+                }
+            end
+        end
+    elseif type(root) == "table" and root.schemaVersion == 3
         and type(root.snapshots) == "table" then
         for _, option in ipairs(addon.archonTargets.snapshotOptions) do
             if type(root.snapshots[option.value]) == "table" then
@@ -1011,11 +1025,6 @@ function addon.archonTargets.GetAvailableSnapshotOptions()
         end
     elseif type(root) == "table" and root.schemaVersion == 1 then
         options[#options + 1] = addon.archonTargets.snapshotOptions[2]
-    end
-    -- Settings construction requires one stable value even if generated data failed
-    -- to load. Snapshot lookup still returns nil, so no target is fabricated.
-    if #options == 0 then
-        options[1] = addon.archonTargets.snapshotOptions[1]
     end
     return options
 end
@@ -1053,7 +1062,7 @@ function addon.archonTargets.GetRootSnapshot(snapshotKey)
     local root = _G.StatsProArchonTargets
     if type(root) ~= "table" then return nil end
     local normalizedKey = addon.archonTargets.ResolveAvailableSnapshotKey(snapshotKey)
-    if root.schemaVersion == 3 then
+    if root.schemaVersion == 3 or root.schemaVersion == 4 then
         local snapshots = root.snapshots
         local snapshotRoot = type(snapshots) == "table" and snapshots[normalizedKey] or nil
         if type(snapshotRoot) ~= "table" then return nil end
@@ -8403,7 +8412,13 @@ function addon.archonTargets.GetLocalizedSnapshotLabel(snapshotKey)
         raidMythic = "Raid Mythic All Bosses",
     }
     local key = addon.archonTargets.ResolveAvailableSnapshotKey(snapshotKey)
-    return L(labels[key] or labels.mythicPlusCurrent)
+    local text = L(labels[key] or labels.mythicPlusCurrent)
+    local snapshotRoot = addon.archonTargets.GetRootSnapshot(key)
+    local detail = type(snapshotRoot) == "table" and snapshotRoot.difficultyLabel or nil
+    if type(detail) == "string" and not issecretvalue(detail) and detail ~= "" then
+        return text .. " (" .. detail .. ")"
+    end
+    return text
 end
 
 function addon.archonTargets.GetLocalizedSnapshotTitle(snapshotKey)
@@ -14954,17 +14969,27 @@ function addon.settingsUI.CreateSimpleDropdownRow(parent, rows, frameName, label
         return resolvedOptions[1]
     end
 
+    local function FormatOptionText(option)
+        if not option then return L("None") end
+        local text = L(option.label)
+        if type(option.detail) == "string" and option.detail ~= "" then
+            return text .. " (" .. option.detail .. ")"
+        end
+        return text
+    end
+
     local function RefreshDropdownText()
         label:SetText(L(labelKey))
-        UIDropDownMenu_SetText(dropdown, L(ResolveOption(getValue()).label))
+        UIDropDownMenu_SetText(dropdown, FormatOptionText(ResolveOption(getValue())))
         addon.settingsDesign.RefreshControl(dropdown.statsProTrigger)
     end
 
     UIDropDownMenu_Initialize(dropdown, function()
         local current = ResolveOption(getValue())
+        if not current then return end
         for _, opt in ipairs(GetOptions()) do
             local info = UIDropDownMenu_CreateInfo()
-            info.text = L(opt.label)
+            info.text = FormatOptionText(opt)
             info.value = opt.value
             info.checked = (current.value == opt.value)
             info.func = function()

@@ -66,14 +66,6 @@ function Assert-ProjectVersion {
     }
 }
 
-function Assert-Sha256 {
-    param([string]$Value, [string]$Description)
-
-    if ($Value -cnotmatch '^[0-9a-f]{64}$') {
-        throw "$Description must be 64 lowercase hexadecimal characters."
-    }
-}
-
 function Get-ValidatedLowercaseFileSha256 {
     param([string]$Path)
 
@@ -94,31 +86,6 @@ function Get-FileContract {
         size = [long]$size
         sha256 = Get-ValidatedLowercaseFileSha256 -Path $resolved
     }
-}
-
-function Write-Utf8NoBom {
-    param([string]$Path, [string]$Text)
-
-    $resolvedParent = Split-Path -Parent ([System.IO.Path]::GetFullPath($Path))
-    if (-not (Test-Path -LiteralPath $resolvedParent -PathType Container)) {
-        [void](New-Item -ItemType Directory -Path $resolvedParent -Force)
-    }
-    [System.IO.File]::WriteAllText([System.IO.Path]::GetFullPath($Path), $Text, [System.Text.UTF8Encoding]::new($false))
-}
-
-function Add-OutputValue {
-    param([string]$Path, [string]$Name, [string]$Value)
-
-    if ([string]::IsNullOrWhiteSpace($Path)) {
-        return
-    }
-    if ($Value -match '[\r\n]') {
-        throw "Output '$Name' contains a newline."
-    }
-    [System.IO.File]::AppendAllText(
-        [System.IO.Path]::GetFullPath($Path),
-        "$Name=$Value`n",
-        [System.Text.UTF8Encoding]::new($false))
 }
 
 function Get-ExpectedNames {

@@ -14,30 +14,6 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 
-function Invoke-Git {
-    param(
-        [string[]]$Arguments,
-        [switch]$AllowFailure
-    )
-
-    $previousErrorActionPreference = $ErrorActionPreference
-    try {
-        $ErrorActionPreference = "Continue"
-        $output = @(& git @Arguments 2>&1)
-        $exitCode = $LASTEXITCODE
-    }
-    finally {
-        $ErrorActionPreference = $previousErrorActionPreference
-    }
-    if ($exitCode -ne 0 -and -not $AllowFailure) {
-        throw "git $($Arguments -join ' ') failed with code ${exitCode}: $($output -join ' ')"
-    }
-    return @{
-        ExitCode = $exitCode
-        Output = $output
-    }
-}
-
 function Normalize-ReleaseTagName {
     param([string]$Value)
 

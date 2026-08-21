@@ -17,40 +17,11 @@ $ErrorActionPreference = "Stop"
 
 $ExpectedProjectIds = Get-StatsProExpectedMarketplaceProjectIdMap
 
-function Write-Utf8NoBom {
-    param([string]$Path, [string]$Text)
-
-    $parent = Split-Path -Parent ([System.IO.Path]::GetFullPath($Path))
-    if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
-        [void](New-Item -ItemType Directory -Path $parent -Force)
-    }
-    [System.IO.File]::WriteAllText([System.IO.Path]::GetFullPath($Path), $Text, [System.Text.UTF8Encoding]::new($false))
-}
-
-function Add-OutputValue {
-    param([string]$Path, [string]$Name, [string]$Value)
-
-    if ([string]::IsNullOrWhiteSpace($Path)) { return }
-    if ($Value -match '[\r\n]') { throw "Output '$Name' contains a newline." }
-    [System.IO.File]::AppendAllText(
-        [System.IO.Path]::GetFullPath($Path),
-        "$Name=$Value`n",
-        [System.Text.UTF8Encoding]::new($false))
-}
-
-function Assert-Sha256 {
-    param([string]$Value, [string]$Description = 'Expected archive SHA-256')
-
-    if ($Value -cnotmatch '^[0-9a-f]{64}$') {
-        throw "$Description must be 64 lowercase hexadecimal characters."
-    }
-}
-
 function Assert-ArchiveIdentity {
     param([string]$Path, [string]$Tag, [string]$Sha256)
 
     Assert-StatsProReleaseTag -Value $Tag
-    Assert-Sha256 $Sha256
+    Assert-Sha256 -Value $Sha256 -Description 'Expected archive SHA-256'
     $resolved = Resolve-RequiredFile -Path $Path -Description "marketplace archive"
     $expectedName = "StatsPro-$Tag.zip"
     if (-not [System.StringComparer]::Ordinal.Equals([System.IO.Path]::GetFileName($resolved), $expectedName)) {

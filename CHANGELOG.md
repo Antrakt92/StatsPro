@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.14.0 - 23-Aug-2026 — Mythic target fallback
+
+### Added
+
+- **Raid Mythic targets now remain available when Archon lacks usable data for individual specializations.** Those specializations automatically use the corresponding Raid Heroic target instead.
+
+### Updated
+
+- **Bundled available M+ and raid target ratings were refreshed from the latest Archon data.**
+
 ## 1.13.4 - 22-Aug-2026 — Archon target refresh
 
 ### Updated

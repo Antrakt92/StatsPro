@@ -337,19 +337,20 @@ local function count_target_lines(text)
     return count
 end
 
-local function validate_raw_text_shape(text, profileCount)
+local function validate_raw_text_shape(text, profileCount, expectedSpecCount)
     if not text then
         return
     end
     profileCount = profileCount or #PROFILE_ORDER
+    expectedSpecCount = expectedSpecCount or (#SPECS * profileCount)
     local sourceUrlCount = count_pattern_occurrences(text, 'sourceUrl%s*=%s*"https://www%.archon%.gg/wow/builds/')
-    if sourceUrlCount ~= (#SPECS * profileCount) then
-        fail("generated file must contain exactly " .. tostring(#SPECS * profileCount) .. " Archon sourceUrl entries, got " .. tostring(sourceUrlCount))
+    if sourceUrlCount ~= expectedSpecCount then
+        fail("generated file must contain exactly " .. tostring(expectedSpecCount) .. " Archon sourceUrl entries, got " .. tostring(sourceUrlCount))
     end
 
     local targetCount = count_target_lines(text)
-    if targetCount ~= (#SPECS * profileCount * #REQUIRED_STATS) then
-        fail("generated file must contain exactly " .. tostring(#SPECS * profileCount * #REQUIRED_STATS) .. " secondary-stat target entries, got " .. tostring(targetCount))
+    if targetCount ~= (expectedSpecCount * #REQUIRED_STATS) then
+        fail("generated file must contain exactly " .. tostring(expectedSpecCount * #REQUIRED_STATS) .. " secondary-stat target entries, got " .. tostring(targetCount))
     end
 
     local capturedAtCount = count_pattern_occurrences(text, 'capturedAt%s*=%s*"%d%d%d%d%-%d%d%-%d%d"')
@@ -635,8 +636,8 @@ local function validate_snapshot(root, text, options)
     validate_runtime_spec_parity(options.statsProLua)
     validate_exact_keys(root, make_key_set({ "schemaVersion", "source", "snapshots" }), "StatsProArchonTargets")
     expect_type(root, "table", "StatsProArchonTargets")
-    if root.schemaVersion ~= 2 and root.schemaVersion ~= 3 and root.schemaVersion ~= 4 then
-        fail("schemaVersion must be 2, 3, or 4, got " .. tostring(root.schemaVersion))
+    if root.schemaVersion ~= 2 and root.schemaVersion ~= 3 and root.schemaVersion ~= 4 and root.schemaVersion ~= 5 then
+        fail("schemaVersion must be 2, 3, 4, or 5, got " .. tostring(root.schemaVersion))
     end
     expect_equal(root.source, "archon", "source")
     expect_type(root.snapshots, "table", "snapshots")
@@ -646,7 +647,7 @@ local function validate_snapshot(root, text, options)
     if root.schemaVersion == 2 then
         expect_equal(profileCount, #profileOrder, "snapshots profile count")
     elseif profileCount < 1 or profileCount > #profileOrder then
-        fail("schema v3/v4 snapshots profile count must be between 1 and " .. tostring(#profileOrder)
+        fail("schema v3/v4/v5 snapshots profile count must be between 1 and " .. tostring(#profileOrder)
             .. ", got " .. tostring(profileCount))
     end
     for profileKey in pairs(root.snapshots) do
@@ -654,11 +655,11 @@ local function validate_snapshot(root, text, options)
             fail("snapshots has unexpected profile " .. tostring(profileKey))
         end
     end
-    validate_raw_text_shape(text, profileCount)
+    local emittedSpecCount = 0
 
     for _, profileKey in ipairs(profileOrder) do
         local profile = root.snapshots[profileKey]
-        if (root.schemaVersion == 3 or root.schemaVersion == 4) and profile == nil then
+        if (root.schemaVersion == 3 or root.schemaVersion == 4 or root.schemaVersion == 5) and profile == nil then
             -- Availability is data-driven in schema v3/v4. Missing profiles are not
             -- offered by the addon and may appear automatically in a later snapshot.
         else
@@ -667,14 +668,14 @@ local function validate_snapshot(root, text, options)
         expect_type(profile, "table", profileContext)
         local allowedProfileKeys = { capturedAt = true, specs = true }
         for key in pairs(expectedProfile) do
-            if root.schemaVersion == 4
+            if root.schemaVersion == 4 or root.schemaVersion == 5
                 or (key ~= "sampleWindow" and key ~= "difficultyLabel") then
                 allowedProfileKeys[key] = true
             end
         end
         validate_exact_keys(profile, allowedProfileKeys, profileContext)
         for key, value in pairs(expectedProfile) do
-            if root.schemaVersion == 4
+            if root.schemaVersion == 4 or root.schemaVersion == 5
                 or (key ~= "sampleWindow" and key ~= "difficultyLabel") then
                 expect_equal(profile[key], value, profileContext .. "." .. key)
             end
@@ -686,7 +687,9 @@ local function validate_snapshot(root, text, options)
         for _, spec in ipairs(SPECS) do
             expectedClasses[spec.classToken] = true
         end
-        expect_equal(count_keys(profile.specs), count_keys(expectedClasses), profileContext .. ".specs class count")
+        if root.schemaVersion ~= 5 or profileKey ~= "raidMythic" then
+            expect_equal(count_keys(profile.specs), count_keys(expectedClasses), profileContext .. ".specs class count")
+        end
         for classToken in pairs(profile.specs) do
             if not expectedClasses[classToken] then
                 fail(profileContext .. ".specs has unexpected class " .. tostring(classToken))
@@ -698,13 +701,26 @@ local function validate_snapshot(root, text, options)
             expectedSpecCounts[spec.classToken] = (expectedSpecCounts[spec.classToken] or 0) + 1
         end
         for classToken, count in pairs(expectedSpecCounts) do
-            expect_type(profile.specs[classToken], "table", profileContext .. ".specs." .. classToken)
-            expect_equal(count_keys(profile.specs[classToken]), count, profileContext .. ".specs." .. classToken .. " spec count")
+            if root.schemaVersion ~= 5 or profileKey ~= "raidMythic" then
+                expect_type(profile.specs[classToken], "table", profileContext .. ".specs." .. classToken)
+                expect_equal(count_keys(profile.specs[classToken]), count, profileContext .. ".specs." .. classToken .. " spec count")
+            elseif profile.specs[classToken] ~= nil then
+                expect_type(profile.specs[classToken], "table", profileContext .. ".specs." .. classToken)
+                if count_keys(profile.specs[classToken]) > count then
+                    fail(profileContext .. ".specs." .. classToken .. " has too many specs")
+                end
+            end
         end
 
         for _, spec in ipairs(SPECS) do
             local specContext = profileContext .. ".specs." .. spec.classToken .. "." .. spec.specKey
             local specData = profile.specs[spec.classToken] and profile.specs[spec.classToken][spec.specKey]
+            if specData == nil and root.schemaVersion == 5 and profileKey == "raidMythic" then
+                local heroic = root.snapshots.raidHeroic
+                local fallback = heroic and heroic.specs and heroic.specs[spec.classToken]
+                    and heroic.specs[spec.classToken][spec.specKey]
+                expect_type(fallback, "table", specContext .. " Heroic fallback")
+            else
             expect_type(specData, "table", specContext)
             validate_exact_keys(specData, make_key_set({ "sourceUrl", "targets", "order" }), specContext)
             local url = expected_url(spec, profileKey, root.schemaVersion)
@@ -715,9 +731,12 @@ local function validate_snapshot(root, text, options)
             end
             contains_exactly_required_stats(specData.targets, specContext .. ".targets")
             validate_order(specData.order, specContext .. ".order")
+            emittedSpecCount = emittedSpecCount + 1
+            end
         end
         end
     end
+    validate_raw_text_shape(text, profileCount, emittedSpecCount)
 end
 
 local function join_order(order)
@@ -748,12 +767,14 @@ local function build_semantic_lines(root)
             canonicalProfile.difficulty or "",
             canonicalProfile.boss or "",
             canonicalProfile.window or "",
-            root.schemaVersion == 4 and profile.sampleWindow or "",
-            root.schemaVersion == 4 and profile.difficultyLabel or "",
+            (root.schemaVersion == 4 or root.schemaVersion == 5) and profile.sampleWindow or "",
+            (root.schemaVersion == 4 or root.schemaVersion == 5) and profile.difficultyLabel or "",
         }, "\t")
 
         for _, spec in ipairs(SPECS) do
-            local specData = profile.specs[spec.classToken][spec.specKey]
+            local classData = profile.specs[spec.classToken]
+            local specData = classData and classData[spec.specKey]
+            if specData then
             lines[#lines + 1] = table.concat({
                 "spec",
                 profileKey,
@@ -766,6 +787,7 @@ local function build_semantic_lines(root)
                 tostring(specData.targets.versatility),
                 join_order(specData.order),
             }, "\t")
+            end
         end
         end
     end
@@ -931,6 +953,17 @@ local function run_self_test(parsedOptions)
     assert_throws("missing Devourer", function()
         validate_snapshot(missingSpec, nil, options)
     end, "DEMONHUNTER spec count")
+
+    local partialMythic = clone(make_valid_fixture("2026-05-16"))
+    partialMythic.schemaVersion = 5
+    partialMythic.snapshots.raidMythic.specs.MAGE.frost = nil
+    validate_snapshot(partialMythic, nil, options)
+
+    local partialWithoutFallback = clone(partialMythic)
+    partialWithoutFallback.snapshots.raidHeroic.specs.MAGE.frost = nil
+    assert_throws("partial Mythic requires complete Heroic fallback coverage", function()
+        validate_snapshot(partialWithoutFallback, nil, options)
+    end, "snapshots.raidHeroic.specs.MAGE spec count")
 
     local badTarget = clone(make_valid_fixture("2026-05-16"))
     badTarget.snapshots.raidMythic.specs.MAGE.frost.targets.mastery = 0

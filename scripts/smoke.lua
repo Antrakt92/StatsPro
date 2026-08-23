@@ -1555,6 +1555,25 @@ do
     check("archon.v2_raid_profile_missing_spec_no_mplus_fallback.fire", okV2RaidMissingSpec, errV2RaidMissingSpec)
     eq("archon.v2_raid_profile_missing_spec_no_mplus_fallback.meta", v2RaidMissingSpecTest.buildArchonTargetMeta("mastery", 700, v2RaidMissingSpecEnv.CR_MASTERY), nil)
 
+    local perSpecFallbackFixture = makeArchonV2Fixture("2026-05-16")
+    perSpecFallbackFixture.schemaVersion = 5
+    perSpecFallbackFixture.snapshots.raidMythic.specs.MAGE.frost = nil
+    setArchonFixtureTargets(perSpecFallbackFixture, "raidHeroic", "MAGE", "frost",
+        { crit = 120, haste = 220, mastery = 720, versatility = 420 })
+    local perSpecFallbackEnv, _, perSpecFallbackTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProDB = { targetSnapshot = "raidMythic" },
+        statsProArchonTargets = perSpecFallbackFixture,
+    })
+    local okPerSpecFallback, errPerSpecFallback = pcall(perSpecFallbackEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("archon.v5_missing_mythic_spec_falls_back_to_heroic.fire", okPerSpecFallback, errPerSpecFallback)
+    local perSpecFallbackMeta = perSpecFallbackTest.buildArchonTargetMeta("mastery", 700, perSpecFallbackEnv.CR_MASTERY)
+    eq("archon.v5_missing_mythic_spec_falls_back_to_heroic.target", perSpecFallbackMeta.target, 720)
+    eq("archon.v5_missing_mythic_spec_falls_back_to_heroic.key", perSpecFallbackMeta.snapshotKey, "raidHeroic")
+    eq("archon.v5_missing_mythic_spec_falls_back_to_heroic.date", perSpecFallbackMeta.capturedAt, "2026-05-16")
+
     for index, spec in ipairs(archonManifest.specs) do
         local parityFixture = makeArchonV2Fixture("2026-05-15")
         local expectedTarget = 1000 + index

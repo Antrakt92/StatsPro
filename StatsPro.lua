@@ -994,7 +994,7 @@ end
 function addon.archonTargets.GetAvailableSnapshotOptions()
     local root = _G.StatsProArchonTargets
     local options = {}
-    if type(root) == "table" and root.schemaVersion == 4
+    if type(root) == "table" and (root.schemaVersion == 4 or root.schemaVersion == 5)
         and type(root.snapshots) == "table" then
         for _, option in ipairs(addon.archonTargets.snapshotOptions) do
             local snapshot = root.snapshots[option.value]
@@ -1062,7 +1062,7 @@ function addon.archonTargets.GetRootSnapshot(snapshotKey)
     local root = _G.StatsProArchonTargets
     if type(root) ~= "table" then return nil end
     local normalizedKey = addon.archonTargets.ResolveAvailableSnapshotKey(snapshotKey)
-    if root.schemaVersion == 3 or root.schemaVersion == 4 then
+    if root.schemaVersion == 3 or root.schemaVersion == 4 or root.schemaVersion == 5 then
         local snapshots = root.snapshots
         local snapshotRoot = type(snapshots) == "table" and snapshots[normalizedKey] or nil
         if type(snapshotRoot) ~= "table" then return nil end
@@ -1090,7 +1090,20 @@ function addon.archonTargets.GetSnapshot(classToken, specKey, snapshotKey)
     local classData = specs[classToken]
     if type(classData) ~= "table" then return nil, snapshotRoot, root, normalizedKey end
     local specData = classData[specKey]
-    if type(specData) ~= "table" then return nil, snapshotRoot, root, normalizedKey end
+    if type(specData) ~= "table" then
+        local rootSnapshots = type(root) == "table" and root.snapshots or nil
+        if type(root) == "table" and root.schemaVersion == 5 and normalizedKey == "raidMythic"
+            and type(rootSnapshots) == "table" then
+            local fallbackRoot = rootSnapshots.raidHeroic
+            local fallbackClasses = type(fallbackRoot) == "table" and fallbackRoot.specs or nil
+            local fallbackClass = type(fallbackClasses) == "table" and fallbackClasses[classToken] or nil
+            local fallbackSpec = type(fallbackClass) == "table" and fallbackClass[specKey] or nil
+            if type(fallbackSpec) == "table" then
+                return fallbackSpec, fallbackRoot, root, "raidHeroic"
+            end
+        end
+        return nil, snapshotRoot, root, normalizedKey
+    end
     return specData, snapshotRoot, root, normalizedKey
 end
 

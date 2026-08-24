@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.14.1 - 24-Aug-2026 — Archon target refresh
+
+### Updated
+
+- **Bundled available M+ and raid target ratings were refreshed from latest Archon data.**
+
 ## 1.14.0 - 23-Aug-2026 — Mythic target fallback
 
 ### Added

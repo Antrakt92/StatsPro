@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.15.0 - 31-Aug-2026 — Account-wide profiles
+
+### Added
+
+- **One account-wide setup can now apply to every existing and future character and specialization.** Return to specialization settings at any time without losing the saved assignments, then resume the same account-wide setup later.
+
+### Fixed
+
+- **Profile switching and recovery are more resilient when the active specialization changes, a settings update fails, or saved profile data is incomplete.**
+- **Profiles & sharing keeps its actions, selections, and tooltips synchronized through combat, imports, resets, and account-wide transitions.**
+
+### Updated
+
+- **Bundled available M+ and raid target ratings were refreshed from the latest Archon data.**
+
 ## 1.14.5 - 30-Aug-2026 — Archon target refresh
 
 ### Updated

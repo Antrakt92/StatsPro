@@ -1344,6 +1344,7 @@ function test.makeRegistryFixture()
             updateInterval = 0.5,
             defaultProfileID = "p1",
             nextProfileID = 3,
+            accountWideEnabled = false,
         },
         profiles = {
             p1 = {
@@ -2767,6 +2768,234 @@ do
 end
 
 do
+    local registry = test.makeRegistryFixture()
+    registry.dbVersion = 10
+    registry.account.accountWideEnabled = "unknown-v10-field"
+    registry.account.accountWideProfileID = { future = true }
+    registry.characters["Player-1-V10"] = {
+        displayName = "Legacy-Realm",
+        classID = 1,
+        lastSeen = 123,
+        specProfiles = { [71] = "p2" },
+    }
+    registry.futureRegistryShadow = { child = { value = 27 } }
+    local rootRef = registry
+    local accountRef = registry.account
+    local profilesRef = registry.profiles
+    local p1Ref, p1SettingsRef = registry.profiles.p1, registry.profiles.p1.settings
+    local p2Ref, p2SettingsRef = registry.profiles.p2, registry.profiles.p2.settings
+    local rolesRef = registry.roleTemplates
+    local charactersRef = registry.characters
+    local characterRef = registry.characters["Player-1-V10"]
+    local shadowRef = registry.futureRegistryShadow
+
+    eq("profiles.v10_to_v11.source_valid", test.validateRegistry(registry), true)
+    local accountClone, accountCopied = test.cloneSerializable(registry.account)
+    eq("profiles.v10_to_v11.account_clone", accountCopied, true)
+    accountClone.accountWideEnabled = false
+    accountClone.accountWideProfileID = nil
+    local candidate = deepCopy(registry)
+    candidate.account = accountClone
+    candidate.dbVersion = 11
+    eq("profiles.v10_to_v11.candidate_valid", test.validateRegistry(candidate), true)
+    env.StatsProDB = registry
+    local migrated, migrationReason = test.migrateDB()
+    check("profiles.v10_to_v11.migration_result", migrated == true, migrationReason)
+    local root = registry
+    eq("profiles.v10_to_v11.current_version_fixture", test.currentDBVersion(), 11)
+    eq("profiles.v10_to_v11.same_root", root, rootRef)
+    eq("profiles.v10_to_v11.version", root.dbVersion, 11)
+    eq("profiles.v10_to_v11.account_replaced", rawequal(root.account, accountRef), false)
+    eq("profiles.v10_to_v11.disabled", root.account.accountWideEnabled, false)
+    eq("profiles.v10_to_v11.no_saved_profile", root.account.accountWideProfileID, nil)
+    eq("profiles.v10_to_v11.profiles_identity", root.profiles, profilesRef)
+    eq("profiles.v10_to_v11.p1_identity", root.profiles.p1, p1Ref)
+    eq("profiles.v10_to_v11.p1_settings_identity", root.profiles.p1.settings, p1SettingsRef)
+    eq("profiles.v10_to_v11.p2_identity", root.profiles.p2, p2Ref)
+    eq("profiles.v10_to_v11.p2_settings_identity", root.profiles.p2.settings, p2SettingsRef)
+    eq("profiles.v10_to_v11.roles_identity", root.roleTemplates, rolesRef)
+    eq("profiles.v10_to_v11.characters_identity", root.characters, charactersRef)
+    eq("profiles.v10_to_v11.character_identity",
+        root.characters["Player-1-V10"], characterRef)
+    eq("profiles.v10_to_v11.assignment_preserved",
+        root.characters["Player-1-V10"].specProfiles[71], "p2")
+    eq("profiles.v10_to_v11.shadow_identity", root.futureRegistryShadow, shadowRef)
+    local migratedAccountRef = root.account
+    local secondMigration = test.migrateDB()
+    eq("profiles.v10_to_v11.idempotent_result", secondMigration, true)
+    eq("profiles.v10_to_v11.idempotent_account_identity",
+        root.account, migratedAccountRef)
+    eq("profiles.v10_to_v11.idempotent_profiles_identity", root.profiles, profilesRef)
+end
+
+do
+    local registry = test.makeRegistryFixture()
+    registry.dbVersion = 10
+    registry.profiles.p2.settings.accountWideEnabled = false
+    registry.profiles.p2.settings.accountWideProfileID = "legacy-profile-field"
+    registry.profiles.p2.settings.futureNested = { child = { value = 31 } }
+    local rootRef = registry
+    local accountRef, profilesRef = registry.account, registry.profiles
+    local p1Ref = registry.profiles.p1
+    local p2Ref, p2SettingsRef = registry.profiles.p2, registry.profiles.p2.settings
+    local rolesRef, charactersRef = registry.roleTemplates, registry.characters
+    local expectedSettings = deepCopy(p2SettingsRef)
+    expectedSettings.accountWideEnabled = nil
+    expectedSettings.accountWideProfileID = nil
+
+    eq("profiles.v10_to_v11.profile_metadata.source_valid",
+        test.validateRegistry(registry), true)
+    env.StatsProDB = registry
+    local migrated, migrationReason = test.migrateDB()
+    check("profiles.v10_to_v11.profile_metadata.result", migrated == true, migrationReason)
+    eq("profiles.v10_to_v11.profile_metadata.same_root", registry, rootRef)
+    eq("profiles.v10_to_v11.profile_metadata.version", registry.dbVersion, 11)
+    eq("profiles.v10_to_v11.profile_metadata.account_replaced",
+        rawequal(registry.account, accountRef), false)
+    eq("profiles.v10_to_v11.profile_metadata.profiles_replaced",
+        rawequal(registry.profiles, profilesRef), false)
+    eq("profiles.v10_to_v11.profile_metadata.p1_preserved", registry.profiles.p1, p1Ref)
+    eq("profiles.v10_to_v11.profile_metadata.p2_replaced",
+        rawequal(registry.profiles.p2, p2Ref), false)
+    eq("profiles.v10_to_v11.profile_metadata.settings_replaced",
+        rawequal(registry.profiles.p2.settings, p2SettingsRef), false)
+    assertDeepEqual("profiles.v10_to_v11.profile_metadata.settings_preserved",
+        registry.profiles.p2.settings, expectedSettings)
+    eq("profiles.v10_to_v11.profile_metadata.source_flag_untouched",
+        p2SettingsRef.accountWideEnabled, false)
+    eq("profiles.v10_to_v11.profile_metadata.source_id_untouched",
+        p2SettingsRef.accountWideProfileID, "legacy-profile-field")
+    assertNoSharedTables("profiles.v10_to_v11.profile_metadata.detached",
+        registry.profiles.p2.settings, p2SettingsRef)
+    eq("profiles.v10_to_v11.profile_metadata.roles_preserved",
+        registry.roleTemplates, rolesRef)
+    eq("profiles.v10_to_v11.profile_metadata.characters_preserved",
+        registry.characters, charactersRef)
+    eq("profiles.v10_to_v11.profile_metadata.candidate_valid",
+        test.validateRegistry(registry), true)
+end
+
+
+do
+    local registry = test.makeRegistryFixture()
+    registry.dbVersion = 10
+    registry.account.defaultProfileID = "missing-profile"
+    local before = deepCopy(registry)
+    local accountRef, profilesRef = registry.account, registry.profiles
+    local rolesRef, charactersRef = registry.roleTemplates, registry.characters
+    env.StatsProDB = registry
+    local migrated = test.migrateDB()
+    eq("profiles.v10_to_v11.invalid_rejected", migrated, false)
+    assertDeepEqual("profiles.v10_to_v11.invalid_zero_writes", registry, before)
+    eq("profiles.v10_to_v11.invalid_version_unchanged", registry.dbVersion, 10)
+    eq("profiles.v10_to_v11.invalid_account_identity", registry.account, accountRef)
+    eq("profiles.v10_to_v11.invalid_profiles_identity", registry.profiles, profilesRef)
+    eq("profiles.v10_to_v11.invalid_roles_identity", registry.roleTemplates, rolesRef)
+    eq("profiles.v10_to_v11.invalid_characters_identity", registry.characters, charactersRef)
+end
+
+do
+    local registry = test.makeRegistryFixture()
+    registry.account.accountWideEnabled = nil
+    eq("profiles.v11.account_wide_flag_required",
+        test.validateRegistry(registry), false)
+end
+
+do
+    local registry = test.makeRegistryFixture()
+    registry.account.accountWideEnabled = false
+    registry.account.accountWideProfileID = "p2"
+    eq("profiles.v11.account_wide_profile_must_be_dedicated",
+        test.validateRegistry(registry), false)
+end
+
+do
+    local invalidMarkers = {
+        { name = "string", value = "not-a-version" },
+        { name = "table", value = { invalid = true } },
+        { name = "nan", value = 0 / 0 },
+        { name = "fractional", value = 10.5 },
+        { name = "missing", value = nil },
+    }
+    for _, case in ipairs(invalidMarkers) do
+        local registry = test.makeRegistryFixture()
+        registry.profiles.p3 = {
+            name = "Preserve me",
+            settings = deepCopy(registry.profiles.p2.settings),
+        }
+        registry.account.nextProfileID = 4
+        registry.dbVersion = case.value
+        local rootRef = registry
+        local accountRef, profilesRef = registry.account, registry.profiles
+        local rolesRef, charactersRef = registry.roleTemplates, registry.characters
+        local markerRef = rawget(registry, "dbVersion")
+        local accountBefore = deepCopy(registry.account)
+        local profilesBefore = deepCopy(registry.profiles)
+        local rolesBefore = deepCopy(registry.roleTemplates)
+        local charactersBefore = deepCopy(registry.characters)
+        env.StatsProDB = registry
+        local migrated = test.migrateDB()
+        eq("profiles.invalid_version." .. case.name .. ".rejected", migrated, false)
+        eq("profiles.invalid_version." .. case.name .. ".root_identity",
+            env.StatsProDB, rootRef)
+        eq("profiles.invalid_version." .. case.name .. ".account_identity",
+            registry.account, accountRef)
+        eq("profiles.invalid_version." .. case.name .. ".profiles_identity",
+            registry.profiles, profilesRef)
+        eq("profiles.invalid_version." .. case.name .. ".roles_identity",
+            registry.roleTemplates, rolesRef)
+        eq("profiles.invalid_version." .. case.name .. ".characters_identity",
+            registry.characters, charactersRef)
+        local currentMarker = rawget(registry, "dbVersion")
+        eq("profiles.invalid_version." .. case.name .. ".marker_identity",
+            case.name == "nan" and currentMarker ~= currentMarker
+                or rawequal(currentMarker, markerRef), true)
+        assertDeepEqual("profiles.invalid_version." .. case.name .. ".account_exact",
+            registry.account, accountBefore)
+        assertDeepEqual("profiles.invalid_version." .. case.name .. ".profiles_exact",
+            registry.profiles, profilesBefore)
+        assertDeepEqual("profiles.invalid_version." .. case.name .. ".roles_exact",
+            registry.roleTemplates, rolesBefore)
+        assertDeepEqual("profiles.invalid_version." .. case.name .. ".characters_exact",
+            registry.characters, charactersBefore)
+        local state = test.dbCompatibilityState()
+        eq("profiles.invalid_version." .. case.name .. ".mode", state.mode, "corrupt")
+        eq("profiles.invalid_version." .. case.name .. ".read_only", state.readOnly, true)
+    end
+end
+
+do
+    -- Lock the full startup/recovery path for the original data-loss scenario.
+    local registry = test.makeRegistryFixture()
+    registry.profiles.p3 = {
+        name = "Lifecycle preserve",
+        settings = deepCopy(registry.profiles.p2.settings),
+    }
+    registry.account.nextProfileID = 4
+    registry.dbVersion = "not-a-version"
+    local before = deepCopy(registry)
+    local invalidEnv, _, invalidTest = loadStatsPro("enUS", {
+        statsProDB = registry,
+    })
+    local startupOK, startupError = pcall(
+        fireEvent, "profiles.invalid_version.lifecycle.pew",
+        invalidEnv, "PLAYER_ENTERING_WORLD")
+    check("profiles.invalid_version.lifecycle.no_error", startupOK, startupError)
+    eq("profiles.invalid_version.lifecycle.root_identity",
+        invalidEnv.StatsProDB, registry)
+    assertDeepEqual("profiles.invalid_version.lifecycle.no_writes", registry, before)
+    eq("profiles.invalid_version.lifecycle.mode",
+        invalidTest.dbCompatibilityState().mode, "corrupt")
+    slash("profiles.invalid_version.lifecycle.wipe", invalidEnv, "wipe")
+    local prompt = invalidTest.destructivePromptState()
+    eq("profiles.invalid_version.lifecycle.recovery_prompt", prompt.wipePending, true)
+    eq("profiles.invalid_version.lifecycle.recovery_route",
+        prompt.wipeCorruptRecovery, true)
+    invalidEnv.__cancelStaticPopup()
+    assertDeepEqual("profiles.invalid_version.lifecycle.cancel_no_writes", registry, before)
+end
+
+do
     local legacyColors = { primary = { r = 0.25, g = 0.35, b = 0.45 } }
     local legacyUnknown = { child = { value = 17 } }
     local flat = {
@@ -2985,6 +3214,30 @@ do
 end
 
 do
+    local root = {
+        dbVersion = 9,
+        isVisible = false,
+        colors = { crit = { r = 0.2, g = 0.3, b = 0.4 } },
+    }
+    local before = deepCopy(root)
+    local iteratorEnv, _, iteratorTest = loadStatsPro("enUS", {
+        statsProDB = root,
+        next = function(value, key)
+            if value == root then error("injected root iterator failure") end
+            return next(value, key)
+        end,
+    })
+    local startupOK, startupError = pcall(
+        fireEvent, "profiles.migration_iterator.pew",
+        iteratorEnv, "PLAYER_ENTERING_WORLD")
+    check("profiles.migration_iterator.no_error", startupOK, startupError)
+    eq("profiles.migration_iterator.same_root", iteratorEnv.StatsProDB, root)
+    assertDeepEqual("profiles.migration_iterator.no_writes", root, before)
+    eq("profiles.migration_iterator.mode",
+        iteratorTest.dbCompatibilityState().mode, "corrupt")
+end
+
+do
     local root = runMigrate({})
     local db = activeSettings(root)
     eq("db.empty_default_population.version", root.dbVersion, test.currentDBVersion())
@@ -3091,10 +3344,26 @@ do
 end
 
 do
-    local root = runMigrate({ dbVersion = "bad" })
-    eq("db.version_invalid_runs_forward_migrations.string", root.dbVersion, test.currentDBVersion())
-    root = runMigrate({ dbVersion = 0 / 0 })
-    eq("db.version_invalid_runs_forward_migrations.nan", root.dbVersion, test.currentDBVersion())
+    for _, case in ipairs({
+        { name = "string", value = "bad" },
+        { name = "nan", value = 0 / 0 },
+        { name = "negative", value = -1 },
+        { name = "fractional", value = 7.5 },
+    }) do
+        local nested = { keep = true }
+        local root = { dbVersion = case.value, futureOnly = nested }
+        env.StatsProDB = root
+        local migrated = test.migrateDB()
+        eq("db.version_invalid_rejected." .. case.name, migrated, false)
+        eq("db.version_invalid_preserves_marker." .. case.name,
+            case.name == "nan" and root.dbVersion ~= root.dbVersion
+                or rawequal(root.dbVersion, case.value), true)
+        eq("db.version_invalid_preserves_nested." .. case.name,
+            root.futureOnly, nested)
+        eq("db.version_invalid_no_registry." .. case.name, root.account, nil)
+        eq("db.version_invalid_corrupt." .. case.name,
+            test.dbCompatibilityState().mode, "corrupt")
+    end
 end
 
 do
@@ -3472,7 +3741,7 @@ do
     local fallbackEnv = loadStatsPro("enUS", {
         statsProDB = {},
         swiftStatsDB = { updateNoticeShown = true, minimapPos = 45 },
-        swiftStatsLocalDB = { dbVersion = test.currentDBVersion() - 1, fontSize = 18 },
+        swiftStatsLocalDB = { dbVersion = 9, fontSize = 18 },
     })
     fireEvent("legacy_import.ignored_public_falls_back_local.fire", fallbackEnv, "PLAYER_ENTERING_WORLD")
     eq("legacy_import.ignored_public_falls_back_local.font_size", activeSettings(fallbackEnv).fontSize, 18)
@@ -3939,6 +4208,8 @@ end
 
 do
     local logoutEnv = loadStatsPro("enUS")
+    fireEvent("lifecycle.logout_saves_positions.pew",
+        logoutEnv, "PLAYER_ENTERING_WORLD")
     logoutEnv.StatsProFrame:ClearAllPoints()
     logoutEnv.StatsProFrame:SetPoint("TOPLEFT", logoutEnv.UIParent, "TOPLEFT", 41, -42)
     logoutEnv.StatsProDefensiveFrame:ClearAllPoints()
@@ -3952,6 +4223,8 @@ do
     local nilPointEnv = loadStatsPro("enUS", {
         statsProDB = { point = "BOTTOM", xOfs = 7, yOfs = 8 },
     })
+    fireEvent("lifecycle.logout_nil_point_preserves_db.pew",
+        nilPointEnv, "PLAYER_ENTERING_WORLD")
     nilPointEnv.StatsProFrame.noPoint = true
     fireEvent("lifecycle.logout_nil_point_preserves_db.fire", nilPointEnv, "PLAYER_LOGOUT")
     eq("lifecycle.logout_nil_point_preserves_db.point", activeSettings(nilPointEnv).point, "BOTTOM")
@@ -4085,6 +4358,27 @@ do
     eq("appearance.presets.stale.replacement_reason", reason, "stale")
     eq("appearance.presets.stale.replacement_preserved",
         state.root.profiles[state.profileID].settings, replacement)
+
+    local scopeEnv, _, scopeTest = loadStatsPro("enUS", withProfileIdentity())
+    fireEvent("appearance.presets.stale.scope.pew", scopeEnv, "PLAYER_ENTERING_WORLD")
+    service = scopeTest.appearancePresets
+    ok = service.startPreview("midnight")
+    eq("appearance.presets.stale.scope.preview", ok, true)
+    state = scopeTest.profileState()
+    local scopeSettingsBefore = deepCopy(state.settings)
+    local currentCharacter = state.root.characters[
+        scopeTest.profileRuntimeState().currentGUID]
+    local addedCharacter = deepCopy(currentCharacter)
+    for specID in pairs(addedCharacter.specProfiles) do
+        addedCharacter.specProfiles[specID] = state.profileID
+    end
+    state.root.characters["Player-1-PRESET-SCOPE"] = addedCharacter
+    result, reason = service.applyPreview()
+    eq("appearance.presets.stale.scope_rejected", result, false)
+    eq("appearance.presets.stale.scope_reason", reason, "stale")
+    assertDeepEqual("appearance.presets.stale.scope_preserved",
+        state.root.profiles[state.profileID].settings, scopeSettingsBefore)
+    eq("appearance.presets.stale.scope_closed", service.state().active, false)
 
     local restoreEnv, restoreAddon, restoreTest = loadStatsPro("enUS", withProfileIdentity())
     fireEvent("appearance.presets.restore.pew", restoreEnv, "PLAYER_ENTERING_WORLD")
@@ -9736,9 +10030,9 @@ end
 do
     local dangling = "B – C"
     local danglingCalls = 0
-    local coldEnv, _, coldTest = loadStatsPro("enUS", {
+    local coldEnv, coldAddon, coldTest = loadStatsPro("enUS", {
         statsProDB = {
-            dbVersion = test.currentDBVersion() - 1,
+            dbVersion = 9,
             font = dangling,
             fontBeforeAutoSwitch = dangling,
         },
@@ -9761,7 +10055,7 @@ do
 
     local ruEnv, _, ruTest = loadStatsPro("enUS", {
         statsProDB = {
-            dbVersion = test.currentDBVersion() - 1,
+            dbVersion = 9,
             font = dangling,
             forceLocale = "ruRU",
         },
@@ -9779,7 +10073,7 @@ do
     local secretPath = "Interface\\AddOns\\SecretMedia\\Secret.ttf"
     local secretSetFontCalls = 0
     local secretDB = {
-        dbVersion = test.currentDBVersion() - 1,
+        dbVersion = 9,
         font = secretPath,
         fontBeforeAutoSwitch = secretPath,
     }
@@ -9855,7 +10149,7 @@ do
     local brokenCalls = 0
     local savedEnv = loadStatsPro("enUS", {
         statsProDB = {
-            dbVersion = test.currentDBVersion() - 1,
+            dbVersion = 9,
             font = "Fonts\\FRIZQT__.TTF",
             fontBeforeAutoSwitch = brokenSaved,
         },
@@ -11474,7 +11768,7 @@ do
         eq(prefix .. ".swatch_count", counts.swatch, 18)
         eq(prefix .. ".slider_count", counts.slider, 5)
         eq(prefix .. ".dropdown_count", counts.dropdown, 6)
-        eq(prefix .. ".button_count", counts.button, 18)
+        eq(prefix .. ".button_count", counts.button, 21)
         eq(prefix .. ".developer_link_count", counts.developerLink, 2)
         local presetUI = localeAddon.appearancePresets.ui
         for _, presetID in ipairs({
@@ -12322,12 +12616,15 @@ do
     check("config.color_picker.reset_closes_picker.preview", ok, err)
     assertColor("config.color_picker.reset_closes_picker.preview_db",
         activeSettings(env).colors.crit, 0.4, 0.5, 0.6)
+    local validationCountBeforeStructuralReset = test.dbValidationCount()
+    eq("config.mutation_gate.ordinary_writes_reuse_full_validation",
+        validationCountBeforeStructuralReset, validationCountBeforeUIWrites)
     slash("config.reset_closes_color_picker", env, "reset")
     eq("config.reset_closes_color_picker.hidden", env.ColorPickerFrame:IsShown(), false)
     eq("config.reset_closes_color_picker.restores_unaccepted_preview",
         activeSettings(env).colors.crit, nil)
-    eq("config.mutation_gate.reuses_full_validation",
-        test.dbValidationCount(), validationCountBeforeUIWrites)
+    eq("config.mutation_gate.structural_reset_revalidates",
+        test.dbValidationCount(), validationCountBeforeStructuralReset + 1)
 end
 
 do
@@ -12931,14 +13228,18 @@ do
         local availableWidth = manager:GetWidth() - 258 - 34
         eq(prefix .. ".child_width", child:GetWidth(), availableWidth)
         for index, control in ipairs({
+            resizeEnv.StatsProProfileAccountWideButton,
             resizeEnv.StatsProProfileCopyFromButton,
             resizeEnv.StatsProProfileUseSameButton,
             resizeEnv.StatsProProfileUseForButton,
             resizeEnv.StatsProProfileStopSharingButton,
+            resizeEnv.StatsProProfileTransferButton,
             resizeEnv.StatsProProfileAdvancedButton,
             resizeEnv.StatsProProfileResetButton,
             resizeEnv.StatsProProfileForgetButton,
             resizeEnv.StatsProProfileRoleTemplateButton,
+            resizeEnv.StatsProProfileReplaceAccountWideButton,
+            resizeEnv.StatsProProfileDiscardAccountWideButton,
             resizeEnv.StatsProProfileCleanupButton,
         }) do
             check(prefix .. ".control_positive." .. index,
@@ -13270,6 +13571,29 @@ do
 end
 
 do
+    local scalarAccountDB = test.makeRegistryFixture()
+    scalarAccountDB.account = 42
+    local before = deepCopy(scalarAccountDB)
+    local scalarEnv, _, scalarTest = loadStatsPro(
+        "enUS", { statsProDB = scalarAccountDB })
+    fireEvent("db_compat.corrupt_scalar_account.pew",
+        scalarEnv, "PLAYER_ENTERING_WORLD")
+    eq("db_compat.corrupt_scalar_account.mode",
+        scalarTest.dbCompatibilityState().mode, "corrupt")
+    local ok, model = pcall(scalarTest.profileViewModel)
+    check("db_compat.corrupt_scalar_account.viewmodel_no_error", ok, model)
+    if ok then
+        eq("db_compat.corrupt_scalar_account.viewmodel_read_only", model.readOnly, true)
+        eq("db_compat.corrupt_scalar_account.viewmodel_global_disabled",
+            model.accountWideEnabled, false)
+        eq("db_compat.corrupt_scalar_account.viewmodel_global_id",
+            model.accountWideProfileID, nil)
+    end
+    assertDeepEqual("db_compat.corrupt_scalar_account.no_writes",
+        scalarAccountDB, before)
+end
+
+do
     assertNoSharedTables("db_compat.registry_fixture.fresh_graph",
         test.makeRegistryFixture(), test.makeRegistryFixture())
 
@@ -13470,6 +13794,19 @@ do
             boundaryTest.dbValidationCount(), countBefore + 1)
     end
 
+    local missingScopeDB = test.makeRegistryFixture()
+    local missingScopeEnv, _, missingScopeTest = loadStatsPro(
+        "enUS", { statsProDB = missingScopeDB })
+    fireEvent("db_compat.validation_cache.account_wide_missing.pew",
+        missingScopeEnv, "PLAYER_ENTERING_WORLD")
+    local missingScopeCount = missingScopeTest.dbValidationCount()
+    missingScopeDB.account.accountWideEnabled = nil
+    local missingScopeState = missingScopeTest.dbCompatibilityState()
+    eq("db_compat.validation_cache.account_wide_missing.revalidated",
+        missingScopeTest.dbValidationCount(), missingScopeCount + 1)
+    eq("db_compat.validation_cache.account_wide_missing.corrupt",
+        missingScopeState.mode, "corrupt")
+
     local malformedDB = test.makeRegistryFixture()
     local malformedEnv, _, malformedTest = loadStatsPro("enUS", { statsProDB = malformedDB })
     fireEvent("db_compat.validation_cache.malformed.pew", malformedEnv, "PLAYER_ENTERING_WORLD")
@@ -13600,6 +13937,7 @@ do
                 quickSetupSeen = true,
                 defaultProfileID = "p1",
                 nextProfileID = 2,
+                accountWideEnabled = false,
             },
             profiles = { p1 = { name = "Default", settings = settings } },
             roleTemplates = { TANK = "p1", HEALER = "p1", DAMAGER = "p1" },
@@ -14426,7 +14764,7 @@ end
 
 do
     local transitionDB = {
-        dbVersion = test.currentDBVersion() - 1,
+        dbVersion = 9,
         colors = { crit = { r = 0.2, g = 0.3, b = 0.4 } },
     }
     local transitionEnv = loadStatsPro("enUS", { statsProDB = transitionDB })
@@ -16065,6 +16403,93 @@ do
 end
 
 do
+    -- A retry-position journal belongs to the payload that was active when the
+    -- transition started. If a separately valid assignment change activates a
+    -- different payload before retry, the stale journal must be released instead
+    -- of keeping profile writes pending forever.
+    local seed = loadStatsPro("enUS")
+    fireEvent("profiles.context.stale_position_journal.seed",
+        seed, "PLAYER_ENTERING_WORLD")
+    local root = deepCopy(seed.StatsProDB)
+    local base = deepCopy(root.profiles.p1.settings)
+    root.profiles.p2 = { name = "Old active", settings = deepCopy(base) }
+    root.profiles.p3 = { name = "Requested target", settings = deepCopy(base) }
+    root.profiles.p2.settings.point = "TOPLEFT"
+    root.profiles.p2.settings.relativePoint = "TOPLEFT"
+    root.profiles.p2.settings.xOfs = 120
+    root.profiles.p2.settings.yOfs = -121
+    root.profiles.p3.settings.point = "BOTTOMRIGHT"
+    root.profiles.p3.settings.relativePoint = "BOTTOMRIGHT"
+    root.profiles.p3.settings.xOfs = -330
+    root.profiles.p3.settings.yOfs = 331
+    root.account.nextProfileID = 4
+    root.roleTemplates = { TANK = "p1", HEALER = "p1", DAMAGER = "p1" }
+    root.characters = {
+        ["Player-1-STALE-POSITION"] = {
+            displayName = "Retry-Realm",
+            classID = 1,
+            lastSeen = 1,
+            defaultProfileID = "p1",
+            specProfiles = { [73] = "p2", [71] = "p3" },
+        },
+    }
+    local identity = { specID = 73, specName = "Protection" }
+    local env, addonContext, test = loadStatsPro("enUS", {
+        statsProDB = root,
+        unitGUID = function() return "Player-1-STALE-POSITION" end,
+        unitFullName = function() return "Retry", "Realm" end,
+        getServerTime = function() return 1 end,
+        getSpecialization = function() return 1 end,
+        getSpecializationInfo = function()
+            return identity.specID, identity.specName, nil, nil, "TANK", 1
+        end,
+    })
+    fireEvent("profiles.context.stale_position_journal.activate",
+        env, "PLAYER_ENTERING_WORLD")
+    eq("profiles.context.stale_position_journal.initial_profile",
+        test.profileState().profileID, "p2")
+    addonContext:OpenConfigMenu()
+    callScript("profiles.context.stale_position_journal.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    callScript("profiles.context.stale_position_journal.open_dialog",
+        env.StatsProProfileResetButton, "OnClick")
+    local oldHide = env.StatsProProfileOperationDialog.Hide
+    env.StatsProProfileOperationDialog.Hide = function()
+        error("injected modal close failure before assignment replacement")
+    end
+    identity.specID, identity.specName = 71, "Arms"
+    fireEvent("profiles.context.stale_position_journal.switch",
+        env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    local state = test.profileRuntimeState()
+    eq("profiles.context.stale_position_journal.retained_before_retry",
+        state.contextRetryPositionsPending, true)
+    eq("profiles.context.stale_position_journal.pending_before_retry",
+        state.pendingResolution, true)
+
+    env.StatsProProfileOperationDialog.Hide = oldHide
+    root.characters["Player-1-STALE-POSITION"].specProfiles[73] = "p3"
+    local expectedRoot = deepCopy(root)
+    env.__flushTimers(0.25)
+    state = test.profileRuntimeState()
+    eq("profiles.context.stale_position_journal.latest_spec", state.activeSpecID, 71)
+    eq("profiles.context.stale_position_journal.latest_profile",
+        test.profileState().profileID, "p3")
+    eq("profiles.context.stale_position_journal.pending_cleared",
+        state.pendingResolution, false)
+    eq("profiles.context.stale_position_journal.journal_cleared",
+        state.contextRetryPositionsPending, false)
+    eq("profiles.context.stale_position_journal.retry_cleared",
+        state.contextRetryCount, 0)
+    eq("profiles.context.stale_position_journal.target_x_preserved",
+        root.profiles.p3.settings.xOfs, -330)
+    eq("profiles.context.stale_position_journal.target_y_preserved",
+        root.profiles.p3.settings.yOfs, 331)
+    assertDeepEqual("profiles.context.stale_position_journal.no_extra_writes",
+        root, expectedRoot)
+end
+
+do
     -- A metadata-only registry transaction can target an already existing profile.
     -- If applying that target fails after touching its payload, both structures and
     -- payload values must roll back rather than leaking a partial switch.
@@ -16190,6 +16615,95 @@ do
         profileTest.profileState().settings, targetSettingsRef)
     eq("profiles.context.metadata_rollback.target_colors_after_success",
         profileTest.profileState().settings.colors, targetColorsRef)
+end
+
+do
+    -- If modal closing fails after positions were saved, the retry journal is the
+    -- only durable copy of that movement. A terminal no-spec retry must restore the
+    -- matching frames, publish the snapshot, and only then release the write gate.
+    local seed = loadStatsPro("enUS")
+    fireEvent("profiles.context.no_spec_position.seed", seed, "PLAYER_ENTERING_WORLD")
+    local root = deepCopy(seed.StatsProDB)
+    root.profiles.p2 = {
+        name = "Other spec",
+        settings = deepCopy(root.profiles.p1.settings),
+    }
+    root.account.nextProfileID = 3
+    root.roleTemplates = { TANK = "p1", HEALER = "p1", DAMAGER = "p2" }
+    root.characters = {
+        ["Player-1-NOSPEC-POS"] = {
+            displayName = "Position-Realm",
+            lastSeen = 1,
+            defaultProfileID = "p1",
+            specProfiles = { [73] = "p1", [71] = "p2" },
+        },
+    }
+    local identity = { specID = 73, specName = "Protection", role = "TANK" }
+    local env, addonContext, test = loadStatsPro("enUS", {
+        statsProDB = root,
+        unitGUID = function() return "Player-1-NOSPEC-POS" end,
+        unitFullName = function() return "Position", "Realm" end,
+        getSpecialization = function()
+            if identity.noSpec then return nil end
+            return 1
+        end,
+        getSpecializationInfo = function()
+            return identity.specID, identity.specName, nil, nil, identity.role, 1
+        end,
+    })
+    fireEvent("profiles.context.no_spec_position.activate",
+        env, "PLAYER_ENTERING_WORLD")
+    env.__flushTimers(0)
+    eq("profiles.context.no_spec_position.initial_profile",
+        test.profileState().profileID, "p1")
+    eq("profiles.context.no_spec_position.initial_spec",
+        test.profileRuntimeState().activeSpecID, 73)
+    addonContext:OpenConfigMenu()
+    callScript("profiles.context.no_spec_position.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    callScript("profiles.context.no_spec_position.open_dialog",
+        env.StatsProProfileResetButton, "OnClick")
+    env.StatsProFrame:ClearAllPoints()
+    env.StatsProFrame:SetPoint("TOPRIGHT", env.UIParent, "TOPRIGHT", -222, -111)
+    local oldHide = env.StatsProProfileOperationDialog.Hide
+    env.StatsProProfileOperationDialog.Hide = function()
+        error("injected modal close failure before terminal no-spec")
+    end
+    identity.specID, identity.specName, identity.role = 71, "Arms", "DAMAGER"
+    fireEvent("profiles.context.no_spec_position.switch",
+        env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    eq("profiles.context.no_spec_position.force_set",
+        test.profileRuntimeState().forceReapply, true)
+    eq("profiles.context.no_spec_position.journal_retained",
+        test.profileRuntimeState().contextRetryPositionsPending, true)
+    env.StatsProProfileOperationDialog.Hide = oldHide
+    identity.noSpec = true
+    env.__flushTimers(0.25)
+    eq("profiles.context.no_spec_position.force_recovered",
+        test.profileRuntimeState().forceReapply, false)
+    local finalizedPoint = env.StatsProFrame:GetPoint()
+    eq("profiles.context.no_spec_position.finalized_live_point",
+        finalizedPoint, "TOPRIGHT")
+    env.__flushTimers(0.1)
+    local state = test.profileRuntimeState()
+    eq("profiles.context.no_spec_position.pending_cleared",
+        state.pendingResolution, false)
+    eq("profiles.context.no_spec_position.journal_cleared",
+        state.contextRetryPositionsPending, false)
+    eq("profiles.context.no_spec_position.saved_point",
+        root.profiles.p1.settings.point, "TOPRIGHT")
+    eq("profiles.context.no_spec_position.saved_x",
+        root.profiles.p1.settings.xOfs, -222)
+    eq("profiles.context.no_spec_position.saved_y",
+        root.profiles.p1.settings.yOfs, -111)
+    local point, _, relativePoint, x, y = env.StatsProFrame:GetPoint()
+    eq("profiles.context.no_spec_position.live_point", point, "TOPRIGHT")
+    eq("profiles.context.no_spec_position.live_relative", relativePoint, "TOPRIGHT")
+    eq("profiles.context.no_spec_position.live_x", x, -222)
+    eq("profiles.context.no_spec_position.live_y", y, -111)
+    callScript("profiles.context.no_spec_position.close_dialog",
+        env.StatsProProfileOperationCancelButton, "OnClick")
 end
 
 smokeReachability:complete("profile-context")
@@ -16408,7 +16922,12 @@ do
     assertRGBA("profiles.ui.manager.detail_profile_shared_color",
         state.detailProfileColor, profileTest.settingsDesignSnapshot().colors.positive)
 
+    callScript("profiles.ui.manager.scroll_reopen.advanced_open",
+        env.StatsProProfileAdvancedButton, "OnClick")
+    eq("profiles.ui.manager.scroll_reopen.advanced_before_close",
+        profileTest.profileUIState().advancedShown, true)
     env.StatsProProfileManagerScroll:SetVerticalScroll(90)
+    env.StatsProProfileActionsScroll:SetVerticalScroll(90)
     callScript("profiles.ui.manager.scroll_reopen.close",
         env.StatsProManageProfilesButton, "OnClick")
     local refreshBeforeReopen = profileTest.profileUIState().refreshCount
@@ -16417,17 +16936,21 @@ do
     flushTimers("profiles.ui.manager.scroll_reopen.cancelled_restore", env, 0, 1)
     state = profileTest.profileUIState()
     eq("profiles.ui.manager.scroll_reopen.reset", env.StatsProProfileManagerScroll:GetVerticalScroll(), 0)
+    eq("profiles.ui.manager.scroll_reopen.actions_reset",
+        env.StatsProProfileActionsScroll:GetVerticalScroll(), 0)
+    eq("profiles.ui.manager.scroll_reopen.advanced_collapsed", state.advancedShown, false)
     eq("profiles.ui.manager.scroll_reopen.single_refresh",
         state.refreshCount - refreshBeforeReopen, 1)
     eq("profiles.ui.manager.scroll_reopen.active_guid", state.selectedGUID, "Player-1-ALPHA")
     eq("profiles.ui.manager.scroll_reopen.active_spec", state.selectedSpecID, 73)
 
-    eq("profiles.ui.actions.copy_label", state.actions.copy.text, "Copy settings from...")
+    eq("profiles.ui.actions.copy_label", state.actions.copy.text, "Copy once from...")
     eq("profiles.ui.actions.use_same_label", state.actions.useSame.text,
         "Use the same settings as...")
     eq("profiles.ui.actions.use_for_label", state.actions.useFor.text,
-        "Use these settings for...")
-    eq("profiles.ui.actions.stop_label", state.actions.stopSharing.text, "Stop sharing...")
+        "Share these settings with...")
+    eq("profiles.ui.actions.stop_label", state.actions.stopSharing.text,
+        "Make this specialization independent...")
     eq("profiles.ui.actions.copy_enabled", state.actions.copy.enabled, true)
     eq("profiles.ui.actions.stop_enabled", state.actions.stopSharing.enabled, true)
     eq("profiles.ui.actions.advanced_collapsed", state.advancedShown, false)
@@ -16550,8 +17073,10 @@ do
     eq("profiles.ui.navigation.shared_profile_identity", rawequal(root.profiles.p2, sharedProfileRef), true)
     eq("profiles.ui.navigation.shared_settings_identity",
         rawequal(root.profiles.p2.settings, sharedSettingsRef), true)
-    eq("profiles.ui.navigation.cached_validation",
-        profileTest.dbValidationCount(), validationBeforeUI)
+    -- Every detailed manager refresh deliberately validates the whole registry;
+    -- this sequence has seven bounded refreshes (opens, restores, and selections).
+    eq("profiles.ui.navigation.bounded_full_validation",
+        profileTest.dbValidationCount(), validationBeforeUI + 7)
 
     identity.specID, identity.specName, identity.role = 71, "Arms", "DAMAGER"
     fireEvent("profiles.ui.live_switch", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
@@ -16747,8 +17272,10 @@ do
         state.selectedGUID, selectedBefore.selectedGUID)
     eq("profiles.ui.late_metadata.preview_selection_spec",
         state.selectedSpecID, selectedBefore.selectedSpecID)
-    eq("profiles.ui.late_metadata.preview_dialog_preserved",
-        state.operationKind, selectedBefore.operationKind)
+    eq("profiles.ui.late_metadata.preview_dialog_closed",
+        state.operationDialogShown, false)
+    eq("profiles.ui.late_metadata.preview_pending_cleared",
+        state.operationKind, nil)
     eq("profiles.ui.late_metadata.preview_manager_identity",
         env.StatsProProfileManager, managerRef)
     eq("profiles.ui.late_metadata.preview_dialog_identity",
@@ -16960,9 +17487,135 @@ do
     eq("profiles.ui.no_spec.fallback", profileTest.profileUIState().headerProfile,
         "Account default profile")
     callScript("profiles.ui.no_spec.open_manager", env.StatsProManageProfilesButton, "OnClick")
-    eq("profiles.ui.no_spec.no_rows", #profileTest.profileUIState().rows, 0)
+    local state = profileTest.profileUIState()
+    eq("profiles.ui.no_spec.no_rows", #state.rows, 0)
+    eq("profiles.ui.no_spec.assigned_fallback", state.selectedAssignedProfileID, "p1")
+    eq("profiles.ui.no_spec.effective_fallback", state.selectedEffectiveProfileID, "p1")
+    eq("profiles.ui.no_spec.account_wide_available", state.actions.accountWide.enabled, true)
+    eq("profiles.ui.no_spec.transfer_requires_target_context", state.actions.transfer.enabled, false)
+    eq("profiles.ui.no_spec.reset_requires_target_context", state.actions.reset.enabled, false)
+    eq("profiles.ui.no_spec.status_tooltip", state.operationStatusTooltip,
+        state.operationStatus)
     eq("profiles.ui.no_spec.root_identity", rawequal(env.StatsProDB, root), true)
     assertDeepEqual("profiles.ui.no_spec.no_writes", env.StatsProDB, before)
+
+    callScript("profiles.ui.no_spec.enable_open",
+        env.StatsProProfileAccountWideButton, "OnClick")
+    eq("profiles.ui.no_spec.enable_kind",
+        profileTest.profileUIState().operationKind, "enable-account-wide")
+    check("profiles.ui.no_spec.enable_uses_account_default",
+        string.find(profileTest.profileUIState().operationDialogMessage,
+            "Account default profile", 1, true) ~= nil)
+    callScript("profiles.ui.no_spec.enable_confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    local globalProfileID = root.account.accountWideProfileID
+    check("profiles.ui.no_spec.global_created", type(globalProfileID) == "string")
+    state = profileTest.profileUIState()
+    eq("profiles.ui.no_spec.global_detail", state.detailCharacter,
+        "Account-wide settings")
+    eq("profiles.ui.no_spec.global_badge", state.detailProfile, "Account-wide")
+    eq("profiles.ui.no_spec.global_badge_shown", state.detailProfileShown, true)
+    eq("profiles.ui.no_spec.global_transfer_enabled", state.actions.transfer.enabled, true)
+    eq("profiles.ui.no_spec.global_reset_enabled", state.actions.reset.enabled, true)
+    eq("profiles.ui.no_spec.global_status_tooltip", state.operationStatusTooltip,
+        "Profile changes saved.")
+
+    local transferString = profileTest.profileTransfer.serialize(
+        "No-spec import", root.profiles[globalProfileID].settings,
+        { stats = true, layout = true, appearance = true })
+    callScript("profiles.ui.no_spec.transfer_open",
+        env.StatsProProfileTransferButton, "OnClick")
+    local importChoice = findChoiceFrame(
+        "profiles.ui.no_spec.transfer_import_choice", env, function(choice)
+            return choice.direction == "import"
+        end)
+    eq("profiles.ui.no_spec.transfer_import_label", importChoice.text:GetText(),
+        "Import profile - Account-wide settings")
+    callScript("profiles.ui.no_spec.transfer_import_choose", importChoice, "OnClick")
+    env.StatsProProfileTransferEditBox:SetText(transferString)
+    callScript("profiles.ui.no_spec.transfer_preview",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    eq("profiles.ui.no_spec.transfer_preview_kind",
+        profileTest.profileUIState().transferKind, "import-preview")
+    callScript("profiles.ui.no_spec.transfer_prepare",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    eq("profiles.ui.no_spec.transfer_confirm_kind",
+        profileTest.profileUIState().operationKind, "transfer-import-confirm")
+    callScript("profiles.ui.no_spec.transfer_confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    local importedGlobalProfileID = root.account.accountWideProfileID
+    check("profiles.ui.no_spec.transfer_new_global",
+        importedGlobalProfileID ~= globalProfileID)
+    check("profiles.ui.no_spec.transfer_global_message",
+        string.find(lastPrint(env),
+            "Every existing and future specialization uses these settings.",
+            1, true) ~= nil)
+    eq("profiles.ui.no_spec.transfer_characters_unchanged", next(root.characters), nil)
+
+    root.profiles[importedGlobalProfileID].settings.showTertiary = true
+    callScript("profiles.ui.no_spec.advanced_open",
+        env.StatsProProfileAdvancedButton, "OnClick")
+    env.StatsProProfileActionsScroll:SetVerticalScroll(80)
+    callScript("profiles.ui.no_spec.reset_open",
+        env.StatsProProfileResetButton, "OnClick")
+    callScript("profiles.ui.no_spec.reset_confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    eq("profiles.ui.no_spec.reset_global",
+        root.profiles[importedGlobalProfileID].settings.showTertiary, false)
+    eq("profiles.ui.no_spec.mutation_resets_action_scroll",
+        env.StatsProProfileActionsScroll:GetVerticalScroll(), 0)
+
+    callScript("profiles.ui.no_spec.disable_open",
+        env.StatsProProfileAccountWideButton, "OnClick")
+    callScript("profiles.ui.no_spec.disable_confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    state = profileTest.profileUIState()
+    eq("profiles.ui.no_spec.disabled", root.account.accountWideEnabled, false)
+    eq("profiles.ui.no_spec.saved_global", root.account.accountWideProfileID,
+        importedGlobalProfileID)
+    eq("profiles.ui.no_spec.saved_resume_available",
+        state.actions.accountWide.enabled, true)
+    eq("profiles.ui.no_spec.saved_resume_label", state.actions.accountWide.text,
+        "Use account-wide settings...")
+    eq("profiles.ui.no_spec.saved_replace_available",
+        state.actions.replaceAccountWide.enabled, true)
+    callScript("profiles.ui.no_spec.saved_replace_open",
+        env.StatsProProfileReplaceAccountWideButton, "OnClick")
+    eq("profiles.ui.no_spec.saved_replace_kind",
+        profileTest.profileUIState().operationKind, "replace-account-wide")
+    eq("profiles.ui.no_spec.saved_replace_destructive",
+        env.StatsProProfileOperationConfirmButton.statsProButtonRole, "destructive")
+    check("profiles.ui.no_spec.saved_replace_uses_account_default",
+        string.find(profileTest.profileUIState().operationDialogMessage,
+            "Account default profile", 1, true) ~= nil)
+    callScript("profiles.ui.no_spec.saved_replace_cancel",
+        env.StatsProProfileOperationCancelButton, "OnClick")
+    callScript("profiles.ui.no_spec.resume_open",
+        env.StatsProProfileAccountWideButton, "OnClick")
+    callScript("profiles.ui.no_spec.resume_confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    eq("profiles.ui.no_spec.resume_same_global",
+        root.account.accountWideProfileID, importedGlobalProfileID)
+    eq("profiles.ui.no_spec.resume_enabled", root.account.accountWideEnabled, true)
+
+    slash("profiles.ui.no_spec.wipe_request", env, "wipe")
+    check("profiles.ui.no_spec.wipe_popup", env.__lastStaticPopup ~= nil)
+    env.__acceptStaticPopup()
+    local freshRoot = env.StatsProDB
+    eq("profiles.ui.no_spec.wipe_root_replaced", rawequal(freshRoot, root), false)
+    eq("profiles.ui.no_spec.wipe_version", freshRoot.dbVersion,
+        profileTest.currentDBVersion())
+    eq("profiles.ui.no_spec.wipe_global_disabled",
+        freshRoot.account.accountWideEnabled, false)
+    eq("profiles.ui.no_spec.wipe_global_removed",
+        freshRoot.account.accountWideProfileID, nil)
+    eq("profiles.ui.no_spec.wipe_no_characters", next(freshRoot.characters), nil)
+    eq("profiles.ui.no_spec.wipe_only_default_profile",
+        next(freshRoot.profiles, "p1"), nil)
+    eq("profiles.ui.no_spec.wipe_active_default",
+        profileTest.profileState().effectiveProfileID, "p1")
+    eq("profiles.ui.no_spec.wipe_message", lastPrint(env),
+        STATSPRO_PRINT_PREFIX .. "All StatsPro data reset to defaults.")
 end
 
 do
@@ -16977,23 +17630,30 @@ do
         ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = { "A", "B" },
         ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = { "A", "B", 3, 4 },
         ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = { "A" },
-        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = { "A", 2 },
         ["Reset the settings used by \"%s\" to defaults?"] = { "A" },
-        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = { 2 },
+        ["Delete %d unused settings records? Settings used by a specialization, saved account-wide settings, starting settings, or fallback settings will be kept."] = { 2 },
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = { "A" },
-        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = { "A" },
-        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = { "A" },
-        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = { "A" },
+        ["Use \"%s\" as the starting settings for new Tank specializations? Existing specializations will not change; each new specialization receives its own copy."] = { "A" },
+        ["Use \"%s\" as the starting settings for new Healer specializations? Existing specializations will not change; each new specialization receives its own copy."] = { "A" },
+        ["Use \"%s\" as the starting settings for new Damage specializations? Existing specializations will not change; each new specialization receives its own copy."] = { "A" },
+        ["Changes affect %d specializations."] = { 2 },
+        ["Reset active profile \"%s\" to defaults?"] = { "A" },
+        ["SwiftStats settings imported as new account-wide settings \"%s\"."] = { "A" },
         ["StatsPro profile: %s"] = { "A" },
         ["Format version: %d"] = { 1 },
         ["Included: %s"] = { "A" },
         ["Import selected sections as a new independent profile for \"%s\"? Existing profiles and unselected settings will stay unchanged."] = { "A" },
+        ["Create account-wide settings from \"%s\"? Every existing and future character and specialization will use them. Existing specialization assignments will be kept."] = { "A" },
+        ["Replace the saved account-wide settings with a copy of \"%s\"? They will stay inactive until you turn account-wide settings on."] = { "A" },
         ["Imported profile \"%s\" was created."] = { "A" },
     }
     local requiredOperationKeys = {
         "Profiles & sharing...", "Profiles & sharing",
-        "Copy settings from...", "Use the same settings as...",
-        "Use these settings for...", "Stop sharing...", "Export / import profile...",
+        "Account-wide settings", "Account-wide",
+        "Use these settings everywhere...", "Use account-wide settings...",
+        "Return to specialization settings...", "Copy once from...",
+        "Use the same settings as...", "Share these settings with...",
+        "Make this specialization independent...", "Export / import profile...",
         "Export this profile", "Import into a new profile", "Export profile",
         "Import profile", "Select all", "Preview", "Imported profile",
         "Export string ready. Select it, then press Ctrl+C to copy.",
@@ -17002,14 +17662,31 @@ do
         "This profile string uses a newer unsupported format.",
         "Advanced...", "Hide advanced",
         "Reset these settings...", "Forget this character...",
-        "Defaults for future specializations...", "Delete unused settings...",
+        "Starting settings for new specializations...",
+        "Replace saved account-wide settings...",
+        "Delete saved account-wide settings...", "Delete unused settings...",
         "Confirm", "Cancel",
         "All settings", "Stat and gear settings", "Layout settings",
         "Appearance settings", "Choose settings to copy",
         "Profile changes saved.", "Profiles changed; review and try again.",
-        "This profile is also a default for future specializations; they will use the reset settings.",
         "The current character cannot be forgotten.", "Nothing changed.",
         "Profile operation failed. Review the selection and try again.",
+        "Every existing and future specialization uses these settings.",
+        "Copy makes a separate snapshot. Sharing keeps future changes linked.",
+        "Visit another specialization or character before copying or sharing settings.",
+        "All known specializations already use these settings.",
+        "Return to specialization settings before changing assignments.",
+        "Use the saved account-wide settings everywhere? Existing specialization assignments will be kept.",
+        "Return to specialization settings? Previous assignments will become active again. Account-wide settings will be kept.",
+        "Reset account-wide settings to defaults? This affects every existing and future character and specialization.",
+        "Delete the saved account-wide settings? Specialization assignments will stay unchanged.",
+        "Import selected sections as new account-wide settings? Existing specialization assignments and unselected settings will stay unchanged.",
+        "Changes affect every character and specialization.",
+        "Changes affect %d specializations.",
+        "These settings are also used to create independent settings for new specializations.",
+        "These settings are also used as fallback settings.",
+        "Reset account-wide settings to defaults?", "Reset active profile \"%s\" to defaults?",
+        "Import compatible SwiftStats settings as new account-wide settings? Existing specialization assignments, other profiles, account settings, and SwiftStats data will stay unchanged.",
         "Tank", "Healer", "Damage", "Choose a role",
     }
     local function placeholderCount(value, token)
@@ -17121,12 +17798,16 @@ do
         eq("profiles.ui.locales.manager_status." .. locale,
             state.detailProfile, string.format(labels["Shared with %d specializations"], 2))
         local actionKeys = {
-            copy = "Copy settings from...", useSame = "Use the same settings as...",
-            useFor = "Use these settings for...", stopSharing = "Stop sharing...",
+            accountWide = "Use these settings everywhere...",
+            copy = "Copy once from...", useSame = "Use the same settings as...",
+            useFor = "Share these settings with...",
+            stopSharing = "Make this specialization independent...",
             transfer = "Export / import profile...",
             advanced = "Advanced...", reset = "Reset these settings...",
             forget = "Forget this character...",
-            roleTemplate = "Defaults for future specializations...",
+            roleTemplate = "Starting settings for new specializations...",
+            replaceAccountWide = "Replace saved account-wide settings...",
+            discardAccountWide = "Delete saved account-wide settings...",
             cleanup = "Delete unused settings...",
         }
         for action, key in pairs(actionKeys) do
@@ -17216,7 +17897,10 @@ local function makeProfileOpsFixture(options)
         unitGUID = function() return identity.guid end,
         unitFullName = function() return identity.name, "Realm" end,
         getServerTime = function() return 100 end,
-        getSpecialization = function() return 1 end,
+        getSpecialization = function()
+            if identity.noSpec then return nil end
+            return 1
+        end,
         getSpecializationInfo = function()
             return identity.specID, identity.specName, nil, nil, identity.role, 1
         end,
@@ -17237,6 +17921,1260 @@ local function makeProfileOpsFixture(options)
     fireEvent("profiles.ops.fixture.activate." .. profileOpsFixtureCount,
         env, "PLAYER_ENTERING_WORLD")
     return env, addonContext, test, root, identity
+end
+
+do
+    local env, addonContext, test, _, identity = makeProfileOpsFixture({
+        mutateRoot = function(root)
+            root.characters = {
+                ["Player-1-OPS-A"] = {
+                    displayName = "Alpha-Realm",
+                    lastSeen = 100,
+                    defaultProfileID = "p1",
+                    specProfiles = { [73] = "p2" },
+                },
+            }
+        end,
+    })
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.first_context.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    local state = test.profileUIState()
+    local expectedTooltip =
+        "Visit another specialization or character before copying or sharing settings."
+    for _, action in ipairs({ "copy", "useSame", "useFor" }) do
+        eq("profiles.ui.first_context." .. action .. ".disabled",
+            state.actions[action].enabled, false)
+        eq("profiles.ui.first_context." .. action .. ".explained",
+            state.actions[action].disabledTooltip, expectedTooltip)
+    end
+    userInteract("profiles.ui.first_context.copy.tooltip_open",
+        env.StatsProProfileCopyFromButton, "OnEnter")
+    eq("profiles.ui.first_context.copy.tooltip_initial",
+        env.GameTooltip.lines[1].left, expectedTooltip)
+    identity.combat = true
+    fireEvent("profiles.ui.first_context.combat", env, "PLAYER_REGEN_DISABLED")
+    state = test.profileUIState()
+    for _, action in ipairs({ "copy", "useSame", "useFor" }) do
+        eq("profiles.ui.first_context.combat." .. action .. ".explained",
+            state.actions[action].disabledTooltip,
+            "Profile changes are unavailable during combat.")
+    end
+    eq("profiles.ui.first_context.copy.tooltip_updates_in_place",
+        env.GameTooltip.lines[1].left,
+        "Profile changes are unavailable during combat.")
+    identity.combat = false
+    fireEvent("profiles.ui.first_context.combat_end", env, "PLAYER_REGEN_ENABLED")
+    state = test.profileUIState()
+    eq("profiles.ui.first_context.combat_end.specific_again",
+        state.actions.copy.disabledTooltip, expectedTooltip)
+    eq("profiles.ui.first_context.copy.tooltip_stays_open",
+        env.GameTooltip:IsShown(), true)
+    eq("profiles.ui.first_context.copy.tooltip_owner_stays_bound",
+        env.GameTooltip:GetOwner(), env.StatsProProfileCopyFromButton)
+    eq("profiles.ui.first_context.copy.tooltip_restored_in_place",
+        env.GameTooltip.lines[1].left, expectedTooltip)
+    userInteract("profiles.ui.first_context.copy.tooltip_leave",
+        env.StatsProProfileCopyFromButton, "OnLeave")
+end
+
+do
+    local env, addonContext, test = makeProfileOpsFixture()
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.role_choices.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    eq("profiles.ui.role_choices.enabled",
+        test.profileUIState().actions.roleTemplate.enabled, true)
+    callScript("profiles.ui.role_choices.open",
+        env.StatsProProfileRoleTemplateButton, "OnClick")
+    local seen = {}
+    for _, choice in ipairs(test.profileUIState().choices) do
+        if choice.shown and choice.data and choice.data.role then
+            seen[choice.data.role] = true
+        end
+    end
+    eq("profiles.ui.role_choices.omits_current_tank", seen.TANK, nil)
+    eq("profiles.ui.role_choices.keeps_healer", seen.HEALER, true)
+    eq("profiles.ui.role_choices.keeps_damage", seen.DAMAGER, true)
+    callScript("profiles.ui.role_choices.cancel",
+        env.StatsProProfileOperationCancelButton, "OnClick")
+end
+
+do
+    local env, addonContext, test = makeProfileOpsFixture({
+        mutateRoot = function(candidate)
+            for _, character in pairs(candidate.characters) do
+                for specID in pairs(character.specProfiles) do
+                    character.specProfiles[specID] = "p2"
+                end
+            end
+            candidate.roleTemplates = { TANK = "p2", HEALER = "p2", DAMAGER = "p2" }
+        end,
+    })
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.all_known_shared.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    local state = test.profileUIState()
+    local expectedTooltip = "All known specializations already use these settings."
+    for _, action in ipairs({ "copy", "useSame", "useFor" }) do
+        eq("profiles.ui.all_known_shared." .. action .. ".disabled",
+            state.actions[action].enabled, false)
+        eq("profiles.ui.all_known_shared." .. action .. ".truthful_tooltip",
+            state.actions[action].disabledTooltip, expectedTooltip)
+    end
+    eq("profiles.ui.all_known_shared.stop_sharing_enabled",
+        state.actions.stopSharing.enabled, true)
+    eq("profiles.ui.all_known_shared.no_remaining_role_choice",
+        state.actions.roleTemplate.enabled, false)
+end
+
+do
+    local env, addonContext, test, root = makeProfileOpsFixture({
+        mutateRoot = function(candidate)
+            candidate.characters["Player-1-OPS-C"].specProfiles = {}
+            candidate.characters["Player-1-OPS-C"].defaultProfileID = "p4"
+            candidate.profiles.p5 = {
+                name = "Account-wide test",
+                settings = deepCopy(candidate.profiles.p3.settings),
+            }
+            candidate.account.nextProfileID = 6
+            candidate.account.accountWideEnabled = true
+            candidate.account.accountWideProfileID = "p5"
+        end,
+    })
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.empty_character.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    local heading = findFrame("profiles.ui.empty_character.heading", env, function(frame)
+        return frame.profileContext and frame.profileContext.guid == "Player-1-OPS-C"
+            and frame.profileContext.specID == nil and frame:IsShown()
+    end)
+    callScript("profiles.ui.empty_character.select", heading, "OnClick")
+    local state = test.profileUIState()
+    eq("profiles.ui.empty_character.normal_row", heading.statsProHeading, false)
+    eq("profiles.ui.empty_character.selected_state",
+        heading.statsProControlState, "selected")
+    assertRGBA("profiles.ui.empty_character.selected_fill",
+        heading.statsProStateTexture.colorTexture,
+        test.settingsDesignSnapshot().colors.selected)
+    eq("profiles.ui.empty_character.selected_guid",
+        state.selectedGUID, "Player-1-OPS-C")
+    eq("profiles.ui.empty_character.selected_no_spec", state.selectedSpecID, nil)
+    eq("profiles.ui.empty_character.detail", state.detailCharacter, "Charlie-Realm")
+    eq("profiles.ui.empty_character.account_default_source",
+        state.selectedAssignedProfileID, "p1")
+    eq("profiles.ui.empty_character.global_effective_source",
+        state.selectedEffectiveProfileID, "p5")
+    eq("profiles.ui.empty_character.global_badge", state.detailProfile, "Account-wide")
+    eq("profiles.ui.empty_character.global_badge_shown", state.detailProfileShown, true)
+    eq("profiles.ui.empty_character.forget_enabled", state.actions.forget.enabled, true)
+    callScript("profiles.ui.empty_character.forget",
+        env.StatsProProfileForgetButton, "OnClick")
+    eq("profiles.ui.empty_character.confirmation",
+        test.profileUIState().operationKind, "forget")
+    callScript("profiles.ui.empty_character.confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    eq("profiles.ui.empty_character.removed",
+        root.characters["Player-1-OPS-C"], nil)
+    eq("profiles.ui.empty_character.success_status",
+        test.profileUIState().operationStatus, "Profile changes saved.")
+    callScript("profiles.ui.empty_character.close_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    callScript("profiles.ui.empty_character.reopen_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    eq("profiles.ui.empty_character.reopen_status_reset",
+        test.profileUIState().operationStatus,
+        "Every existing and future specialization uses these settings.")
+end
+
+do
+    -- Clicking from an old manager model must not build a mutating payload while
+    -- the externally changed binding is still waiting for its normal apply boundary.
+    local env, addonContext, test, root = makeProfileOpsFixture()
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.stale_action.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    eq("profiles.ui.stale_action.initial_assignment",
+        test.profileUIState().selectedAssignedProfileID, "p2")
+    local applyBefore = test.profileRuntimeState().applyCount
+    root.characters["Player-1-OPS-A"].specProfiles[73] = "p3"
+    local afterExternalChange = deepCopy(root)
+    local timersBefore = #env.__timers
+    callScript("profiles.ui.stale_action.open_account_wide",
+        env.StatsProProfileAccountWideButton, "OnClick")
+    local state = test.profileUIState()
+    eq("profiles.ui.stale_action.no_stale_confirmation", state.operationKind, nil)
+    eq("profiles.ui.stale_action.pending",
+        test.profileRuntimeState().bindingReconciliationPending, true)
+    eq("profiles.ui.stale_action.one_reconcile_timer", #env.__timers, timersBefore + 1)
+    assertDeepEqual("profiles.ui.stale_action.zero_action_writes",
+        root, afterExternalChange)
+    test.profileViewModel()
+    eq("profiles.ui.stale_action.model_read_deduplicates_timer",
+        #env.__timers, timersBefore + 1)
+    env.__flushTimers(0)
+    local runtime = test.profileRuntimeState()
+    eq("profiles.ui.stale_action.reconciled", runtime.bindingReconciliationPending, false)
+    eq("profiles.ui.stale_action.pending_cleared", runtime.pendingResolution, false)
+    eq("profiles.ui.stale_action.one_apply", runtime.applyCount, applyBefore + 1)
+    state = test.profileUIState()
+    eq("profiles.ui.stale_action.refreshed_assignment",
+        state.selectedAssignedProfileID, "p3")
+    callScript("profiles.ui.stale_action.open_fresh_account_wide",
+        env.StatsProProfileAccountWideButton, "OnClick")
+    eq("profiles.ui.stale_action.confirmation_kind",
+        test.profileUIState().operationKind, "enable-account-wide")
+    callScript("profiles.ui.stale_action.confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    local globalProfileID = root.account.accountWideProfileID
+    eq("profiles.ui.stale_action.enabled", root.account.accountWideEnabled, true)
+    near("profiles.ui.stale_action.copied_live_assignment",
+        root.profiles[globalProfileID].settings.scale, root.profiles.p3.settings.scale)
+    check("profiles.ui.stale_action.did_not_copy_old_assignment",
+        root.profiles[globalProfileID].settings.scale ~= root.profiles.p2.settings.scale)
+end
+
+do
+    -- A valid active specialization that becomes terminally unavailable must stop
+    -- exposing its previous profile to manager actions and direct profile imports.
+    local env, addonContext, test, root, identity = makeProfileOpsFixture()
+    root.profiles.p1.settings.isVisible = true
+    root.profiles.p2.settings.isVisible = true
+    local applyBefore = test.profileRuntimeState().applyCount
+    identity.noSpec = true
+    fireEvent("profiles.context.valid_to_no_spec.request",
+        env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    eq("profiles.context.valid_to_no_spec.settling",
+        test.profileRuntimeState().pendingResolution, true)
+    env.__flushTimers(0.1)
+    local runtime = test.profileRuntimeState()
+    eq("profiles.context.valid_to_no_spec.context_invalid", runtime.activeContextValid, false)
+    eq("profiles.context.valid_to_no_spec.active_spec_cleared", runtime.activeSpecID, nil)
+    eq("profiles.context.valid_to_no_spec.pending_cleared", runtime.pendingResolution, false)
+    eq("profiles.context.valid_to_no_spec.default_applied",
+        test.profileState().profileID, "p1")
+    eq("profiles.context.valid_to_no_spec.one_apply", runtime.applyCount, applyBefore + 1)
+
+    addonContext:OpenConfigMenu()
+    callScript("profiles.context.valid_to_no_spec.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    local state = test.profileUIState()
+    eq("profiles.context.valid_to_no_spec.current_character_selected",
+        state.selectedGUID, "Player-1-OPS-A")
+    eq("profiles.context.valid_to_no_spec.no_stale_spec_selected",
+        state.selectedSpecID, nil)
+    eq("profiles.context.valid_to_no_spec.reset_disabled",
+        state.actions.reset.enabled, false)
+    eq("profiles.context.valid_to_no_spec.transfer_disabled",
+        state.actions.transfer.enabled, false)
+
+    local beforeImport = deepCopy(root)
+    local imported, reason = test.profileOps.importAndAssign(test.copyDefaults())
+    eq("profiles.context.valid_to_no_spec.import_blocked", imported, false)
+    eq("profiles.context.valid_to_no_spec.import_reason", reason, "missing-context")
+    assertDeepEqual("profiles.context.valid_to_no_spec.import_zero_writes",
+        root, beforeImport)
+    slash("profiles.context.valid_to_no_spec.default_write", env, "hide")
+    eq("profiles.context.valid_to_no_spec.default_changed",
+        root.profiles.p1.settings.isVisible, false)
+    eq("profiles.context.valid_to_no_spec.old_profile_unchanged",
+        root.profiles.p2.settings.isVisible, true)
+end
+
+do
+    -- Reconciliation failure must restore the exact previously published payload.
+    -- Resolving the old assigned ID against the already changed registry would select
+    -- the failed target again and make the rollback only appear successful.
+    local env, _, test, root = makeProfileOpsFixture()
+    local oldSettings = root.profiles.p2.settings
+    root.profiles.p5 = {
+        name = "Dormant global",
+        settings = deepCopy(root.profiles.p3.settings),
+    }
+    root.account.nextProfileID = 6
+    root.account.accountWideProfileID = "p5"
+    env.__flushTimers()
+    local oldSetPoint = env.StatsProFrame.SetPoint
+    local failTargetOnce = true
+    rawset(env.StatsProFrame, "SetPoint", function(frame, ...)
+        if failTargetOnce then
+            failTargetOnce = false
+            error("injected reconciliation target apply failure")
+        end
+        return oldSetPoint(frame, ...)
+    end)
+    local applyBefore = test.profileRuntimeState().applyCount
+    root.account.accountWideEnabled = true
+    local targetX = root.profiles.p5.settings.xOfs
+    test.profileViewModel()
+    eq("profiles.context.reconcile_failure.queued",
+        test.profileRuntimeState().bindingReconciliationPending, true)
+    env.__flushTimers(0)
+    rawset(env.StatsProFrame, "SetPoint", oldSetPoint)
+
+    local runtime = test.profileRuntimeState()
+    local state = test.profileState()
+    eq("profiles.context.reconcile_failure.pending", runtime.pendingResolution, true)
+    eq("profiles.context.reconcile_failure.binding_pending",
+        runtime.bindingReconciliationPending, true)
+    eq("profiles.context.reconcile_failure.old_profile_published", state.profileID, "p2")
+    eq("profiles.context.reconcile_failure.old_settings_identity",
+        state.settings, oldSettings)
+    near("profiles.context.reconcile_failure.old_scale_restored",
+        env.StatsProFrame:GetScale(), root.profiles.p2.settings.scale)
+    eq("profiles.context.reconcile_failure.target_position_untouched",
+        root.profiles.p5.settings.xOfs, targetX)
+    eq("profiles.context.reconcile_failure.rollback_applied_once",
+        runtime.applyCount, applyBefore + 1)
+
+    local applyAfterRollback = runtime.applyCount
+    env.__flushTimers(0.25)
+    runtime = test.profileRuntimeState()
+    state = test.profileState()
+    eq("profiles.context.reconcile_failure.recovered_profile", state.profileID, "p5")
+    eq("profiles.context.reconcile_failure.recovered_pending",
+        runtime.pendingResolution, false)
+    eq("profiles.context.reconcile_failure.recovered_binding_pending",
+        runtime.bindingReconciliationPending, false)
+    eq("profiles.context.reconcile_failure.target_applied_once",
+        runtime.applyCount, applyAfterRollback + 1)
+    local expectedTargetScale = math.floor(
+        root.profiles.p5.settings.scale * 10 + 0.5) / 10
+    near("profiles.context.reconcile_failure.target_scale",
+        env.StatsProFrame:GetScale(), expectedTargetScale)
+end
+
+do
+    -- If both target apply and its immediate rollback fail, force-reapply must keep
+    -- reading the old published payload even though the registry now enables a
+    -- different account-wide profile.
+    local env, _, test, root = makeProfileOpsFixture()
+    local oldSettings = root.profiles.p2.settings
+    root.profiles.p5 = {
+        name = "Force retry global",
+        settings = deepCopy(root.profiles.p3.settings),
+    }
+    root.account.nextProfileID = 6
+    root.account.accountWideProfileID = "p5"
+    env.__flushTimers()
+    local oldSetPoint = env.StatsProFrame.SetPoint
+    local targetFailures, oldFailures = 2, 1
+    local recoveringSettings
+    rawset(env.StatsProFrame, "SetPoint", function(frame, ...)
+        local published = test.publishedProfileState().settings
+        if recoveringSettings == published then
+            recoveringSettings = nil
+            return oldSetPoint(frame, ...)
+        end
+        if published == root.profiles.p5.settings and targetFailures > 0 then
+            targetFailures = targetFailures - 1
+            recoveringSettings = published
+            error("injected account-wide target apply failure")
+        elseif published == oldSettings and oldFailures > 0 then
+            oldFailures = oldFailures - 1
+            recoveringSettings = published
+            error("injected old-profile rollback apply failure")
+        end
+        return oldSetPoint(frame, ...)
+    end)
+    local applyBefore = test.profileRuntimeState().applyCount
+    root.account.accountWideEnabled = true
+    test.profileViewModel()
+    check("profiles.context.reconcile_force.reconcile_timers",
+        env.__flushTimers(0) >= 1)
+    local runtime = test.profileRuntimeState()
+    eq("profiles.context.reconcile_force.initial_target_failure_remaining",
+        targetFailures, 1)
+    eq("profiles.context.reconcile_force.initial_old_failure_consumed",
+        oldFailures, 0)
+    eq("profiles.context.reconcile_force.initial_force", runtime.forceReapply, true)
+    eq("profiles.context.reconcile_force.initial_pending", runtime.pendingResolution, true)
+    eq("profiles.context.reconcile_force.initial_binding_pending",
+        runtime.bindingReconciliationPending, true)
+    eq("profiles.context.reconcile_force.initial_no_completed_apply",
+        runtime.applyCount, applyBefore)
+    local state = test.publishedProfileState()
+    eq("profiles.context.reconcile_force.initial_old_profile", state.profileID, "p2")
+    eq("profiles.context.reconcile_force.initial_old_settings", state.settings, oldSettings)
+
+    eq("profiles.context.reconcile_force.force_timer",
+        env.__flushNextTimer(0.25), true)
+    runtime = test.profileRuntimeState()
+    state = test.publishedProfileState()
+    eq("profiles.context.reconcile_force.retry_target_failures_consumed",
+        targetFailures, 0)
+    eq("profiles.context.reconcile_force.retry_force_cleared",
+        runtime.forceReapply, false)
+    eq("profiles.context.reconcile_force.retry_stays_pending",
+        runtime.pendingResolution, true)
+    eq("profiles.context.reconcile_force.retry_old_profile", state.profileID, "p2")
+    eq("profiles.context.reconcile_force.retry_old_settings", state.settings, oldSettings)
+    eq("profiles.context.reconcile_force.retry_two_old_applies",
+        runtime.applyCount, applyBefore + 2)
+
+    rawset(env.StatsProFrame, "SetPoint", oldSetPoint)
+    check("profiles.context.reconcile_force.recovery_timers",
+        env.__flushTimers(0) >= 1)
+    runtime = test.profileRuntimeState()
+    state = test.publishedProfileState()
+    eq("profiles.context.reconcile_force.recovered_profile", state.profileID, "p5")
+    eq("profiles.context.reconcile_force.recovered_pending",
+        runtime.pendingResolution, false)
+    eq("profiles.context.reconcile_force.recovered_binding_pending",
+        runtime.bindingReconciliationPending, false)
+    eq("profiles.context.reconcile_force.target_applied_once",
+        runtime.applyCount, applyBefore + 3)
+end
+
+do
+    -- Preview teardown can call CacheSettings synchronously while a binding boundary
+    -- is suppressed. Those nested refreshes must keep the old published profile until
+    -- the teardown and target apply both complete.
+    local env, _, test, root = makeProfileOpsFixture()
+    local service = test.appearancePresets
+    local oldSettings = root.profiles.p2.settings
+    root.profiles.p5 = {
+        name = "Preview retry global",
+        settings = deepCopy(root.profiles.p3.settings),
+    }
+    root.account.nextProfileID = 6
+    root.account.accountWideProfileID = "p5"
+    env.__flushTimers()
+    eq("profiles.context.reconcile_preview.preview_started",
+        service.startPreview("midnight"), true)
+    service.setRuntimeFailureCount(1)
+    root.account.accountWideEnabled = true
+    test.profileViewModel()
+    eq("profiles.context.reconcile_preview.reconcile_timer",
+        env.__flushNextTimer(0), true)
+    local runtime = test.profileRuntimeState()
+    local state = test.profileState()
+    eq("profiles.context.reconcile_preview.old_profile_published",
+        state.profileID, "p2")
+    eq("profiles.context.reconcile_preview.old_settings_identity",
+        state.settings, oldSettings)
+    eq("profiles.context.reconcile_preview.preview_preserved",
+        service.state().active, true)
+    eq("profiles.context.reconcile_preview.pending", runtime.pendingResolution, true)
+    eq("profiles.context.reconcile_preview.force", runtime.forceReapply, true)
+
+    service.setRuntimeFailureCount(0)
+    eq("profiles.context.reconcile_preview.recovery_timer",
+        env.__flushNextTimer(0), true)
+    runtime = test.profileRuntimeState()
+    state = test.profileState()
+    eq("profiles.context.reconcile_preview.recovered_profile", state.profileID, "p5")
+    eq("profiles.context.reconcile_preview.preview_closed", service.state().active, false)
+    eq("profiles.context.reconcile_preview.pending_cleared",
+        runtime.pendingResolution, false)
+    eq("profiles.context.reconcile_preview.binding_cleared",
+        runtime.bindingReconciliationPending, false)
+end
+
+do
+    -- Once a current registry is externally downgraded, every ordinary write path,
+    -- including the final logout position save, must fail closed against that root.
+    local env, _, test, root = makeProfileOpsFixture()
+    root.dbVersion = 10
+    local before = deepCopy(root)
+    slash("profiles.compat.downgrade_write_gate.slash", env, "hide")
+    env.StatsProFrame:ClearAllPoints()
+    env.StatsProFrame:SetPoint("TOPLEFT", env.UIParent, "TOPLEFT", 777, -778)
+    fireEvent("profiles.compat.downgrade_write_gate.logout", env, "PLAYER_LOGOUT")
+    local compatibility = test.dbCompatibilityState()
+    eq("profiles.compat.downgrade_write_gate.mode", compatibility.mode, "legacy")
+    eq("profiles.compat.downgrade_write_gate.registry_blocked",
+        compatibility.registryReady, false)
+    assertDeepEqual("profiles.compat.downgrade_write_gate.zero_writes", root, before)
+end
+
+do
+    -- Runtime metatables are never produced by SavedVariables deserialization, but a
+    -- hostile in-session table must still fail closed instead of invoking __newindex
+    -- halfway through legacy migration publication.
+    local writes = 0
+    local metatable = {
+        __newindex = function()
+            writes = writes + 1
+            error("hostile legacy root write")
+        end,
+    }
+    local root = setmetatable({ dbVersion = 10, isVisible = true }, metatable)
+    local env, _, test = loadStatsPro("enUS", { statsProDB = root })
+    local loadOK, loadError = pcall(env.__fireEvent, "PLAYER_ENTERING_WORLD")
+    check("profiles.compat.metatable_legacy.no_bubble", loadOK, loadError)
+    local compatibility = test.dbCompatibilityState()
+    eq("profiles.compat.metatable_legacy.mode", compatibility.mode, "corrupt")
+    eq("profiles.compat.metatable_legacy.read_only", compatibility.readOnly, true)
+    eq("profiles.compat.metatable_legacy.no_metamethod_write", writes, 0)
+    eq("profiles.compat.metatable_legacy.no_partial_account", rawget(root, "account"), nil)
+    eq("profiles.compat.metatable_legacy.marker_preserved", rawget(root, "dbVersion"), 10)
+    eq("profiles.compat.metatable_legacy.metatable_preserved",
+        getmetatable(root), metatable)
+end
+
+do
+    local _, _, test, root = makeProfileOpsFixture()
+    local writes = 0
+    local metatable = {
+        __newindex = function()
+            writes = writes + 1
+            error("hostile active settings write")
+        end,
+    }
+    setmetatable(root.profiles.p2.settings, metatable)
+    local refreshOK, compatibility = pcall(test.dbCompatibilityState)
+    eq("profiles.compat.metatable_active.no_bubble", refreshOK, true)
+    eq("profiles.compat.metatable_active.mode", compatibility.mode, "corrupt")
+    eq("profiles.compat.metatable_active.read_only", compatibility.readOnly, true)
+    eq("profiles.compat.metatable_active.no_metamethod_write", writes, 0)
+    eq("profiles.compat.metatable_active.metatable_preserved",
+        getmetatable(root.profiles.p2.settings), metatable)
+end
+
+do
+    -- Multi-step dialogs retain both endpoints. A source/target row selected from an
+    -- earlier model must never silently resolve to the profile that row used to name.
+    do
+        local env, addonContext, test, root = makeProfileOpsFixture()
+        addonContext:OpenConfigMenu()
+        callScript("profiles.ui.stale_choice.copy_open_manager",
+            env.StatsProManageProfilesButton, "OnClick")
+        callScript("profiles.ui.stale_choice.copy_open",
+            env.StatsProProfileCopyFromButton, "OnClick")
+        local source = findChoiceFrame("profiles.ui.stale_choice.copy_source", env,
+            function(choice)
+                return choice.guid == "Player-1-OPS-A" and choice.specID == 71
+            end)
+        root.characters["Player-1-OPS-A"].specProfiles[71] = "p4"
+        callScript("profiles.ui.stale_choice.copy_click", source, "OnClick")
+        eq("profiles.ui.stale_choice.copy_closed",
+            test.profileUIState().operationDialogShown, false)
+        eq("profiles.ui.stale_choice.copy_target_preserved",
+            root.characters["Player-1-OPS-A"].specProfiles[73], "p2")
+    end
+
+    do
+        local env, addonContext, _, root = makeProfileOpsFixture()
+        addonContext:OpenConfigMenu()
+        callScript("profiles.ui.stale_choice.copy_confirm_open_manager",
+            env.StatsProManageProfilesButton, "OnClick")
+        callScript("profiles.ui.stale_choice.copy_confirm_open",
+            env.StatsProProfileCopyFromButton, "OnClick")
+        local source = findChoiceFrame(
+            "profiles.ui.stale_choice.copy_confirm_source", env, function(choice)
+                return choice.guid == "Player-1-OPS-A" and choice.specID == 71
+            end)
+        callScript("profiles.ui.stale_choice.copy_confirm_choose_source",
+            source, "OnClick")
+        local scope = findChoiceFrame(
+            "profiles.ui.stale_choice.copy_confirm_scope", env, function(choice)
+                return choice.scope == "stats"
+            end)
+        callScript("profiles.ui.stale_choice.copy_confirm_choose_scope",
+            scope, "OnClick")
+        root.characters["Player-1-OPS-A"].specProfiles[71] = "p4"
+        callScript("profiles.ui.stale_choice.copy_confirm_commit",
+            env.StatsProProfileOperationConfirmButton, "OnClick")
+        eq("profiles.ui.stale_choice.copy_confirm_target_preserved",
+            root.characters["Player-1-OPS-A"].specProfiles[73], "p2")
+        eq("profiles.ui.stale_choice.copy_confirm_source_preserved",
+            root.characters["Player-1-OPS-A"].specProfiles[71], "p4")
+    end
+
+    do
+        local env, addonContext, _, root = makeProfileOpsFixture()
+        addonContext:OpenConfigMenu()
+        callScript("profiles.ui.stale_choice.share_source_open_manager",
+            env.StatsProManageProfilesButton, "OnClick")
+        callScript("profiles.ui.stale_choice.share_source_open",
+            env.StatsProProfileUseSameButton, "OnClick")
+        local source = findChoiceFrame(
+            "profiles.ui.stale_choice.share_source_choice", env, function(choice)
+                return choice.guid == "Player-1-OPS-A" and choice.specID == 71
+            end)
+        callScript("profiles.ui.stale_choice.share_source_choose", source, "OnClick")
+        root.characters["Player-1-OPS-A"].specProfiles[71] = "p4"
+        callScript("profiles.ui.stale_choice.share_source_confirm",
+            env.StatsProProfileOperationConfirmButton, "OnClick")
+        eq("profiles.ui.stale_choice.share_source_target_preserved",
+            root.characters["Player-1-OPS-A"].specProfiles[73], "p2")
+    end
+
+    do
+        local env, addonContext, _, root = makeProfileOpsFixture()
+        addonContext:OpenConfigMenu()
+        callScript("profiles.ui.stale_choice.share_scope_open_manager",
+            env.StatsProManageProfilesButton, "OnClick")
+        callScript("profiles.ui.stale_choice.share_scope_open",
+            env.StatsProProfileUseSameButton, "OnClick")
+        local source = findChoiceFrame(
+            "profiles.ui.stale_choice.share_scope_choice", env, function(choice)
+                return choice.guid == "Player-1-OPS-A" and choice.specID == 71
+            end)
+        callScript("profiles.ui.stale_choice.share_scope_choose", source, "OnClick")
+        root.characters["Player-1-OPS-B"].specProfiles[72] = "p3"
+        callScript("profiles.ui.stale_choice.share_scope_confirm",
+            env.StatsProProfileOperationConfirmButton, "OnClick")
+        eq("profiles.ui.stale_choice.share_scope_target_preserved",
+            root.characters["Player-1-OPS-A"].specProfiles[73], "p2")
+        eq("profiles.ui.stale_choice.share_scope_new_reference_preserved",
+            root.characters["Player-1-OPS-B"].specProfiles[72], "p3")
+    end
+
+    do
+        local env, addonContext, _, root = makeProfileOpsFixture()
+        addonContext:OpenConfigMenu()
+        callScript("profiles.ui.stale_choice.share_target_open_manager",
+            env.StatsProManageProfilesButton, "OnClick")
+        callScript("profiles.ui.stale_choice.share_target_open",
+            env.StatsProProfileUseForButton, "OnClick")
+        local target = findChoiceFrame(
+            "profiles.ui.stale_choice.share_target_choice", env, function(choice)
+                return choice.guid == "Player-1-OPS-B" and choice.specID == 72
+            end)
+        callScript("profiles.ui.stale_choice.share_target_choose", target, "OnClick")
+        root.characters["Player-1-OPS-A"].specProfiles[73] = "p3"
+        callScript("profiles.ui.stale_choice.share_target_confirm",
+            env.StatsProProfileOperationConfirmButton, "OnClick")
+        eq("profiles.ui.stale_choice.share_target_preserved",
+            root.characters["Player-1-OPS-B"].specProfiles[72], "p4")
+    end
+
+    do
+        local env, addonContext, _, root = makeProfileOpsFixture()
+        addonContext:OpenConfigMenu()
+        callScript("profiles.ui.stale_choice.role_open_manager",
+            env.StatsProManageProfilesButton, "OnClick")
+        callScript("profiles.ui.stale_choice.role_open",
+            env.StatsProProfileRoleTemplateButton, "OnClick")
+        local role = findChoiceFrame(
+            "profiles.ui.stale_choice.role_choice", env, function(choice)
+                return choice.role == "HEALER"
+            end)
+        callScript("profiles.ui.stale_choice.role_choose", role, "OnClick")
+        root.characters["Player-1-OPS-A"].specProfiles[73] = "p3"
+        callScript("profiles.ui.stale_choice.role_confirm",
+            env.StatsProProfileOperationConfirmButton, "OnClick")
+        eq("profiles.ui.stale_choice.role_preserved",
+            root.roleTemplates.HEALER, "p1")
+    end
+end
+
+do
+    local env, addonContext, test, root = makeProfileOpsFixture()
+    root.profiles.p5 = {
+        name = "Unused before prompt",
+        settings = deepCopy(root.profiles.p1.settings),
+    }
+    root.account.nextProfileID = 6
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.cleanup_scope.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    eq("profiles.ui.cleanup_scope.initial_count",
+        test.profileViewModel().unusedProfileCount, 1)
+    callScript("profiles.ui.cleanup_scope.open_prompt",
+        env.StatsProProfileCleanupButton, "OnClick")
+    eq("profiles.ui.cleanup_scope.prompt_kind",
+        test.profileUIState().operationKind, "cleanup")
+    root.characters["Player-1-OPS-B"].specProfiles[72] = "p3"
+    callScript("profiles.ui.cleanup_scope.confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    check("profiles.ui.cleanup_scope.original_unused_kept", root.profiles.p5 ~= nil)
+    check("profiles.ui.cleanup_scope.newly_unused_kept", root.profiles.p4 ~= nil)
+    eq("profiles.ui.cleanup_scope.stale_message",
+        test.profileUIState().operationStatus,
+        "Profiles changed; review and try again.")
+end
+
+do
+    local env, addonContext, test, root = makeProfileOpsFixture()
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.reset_scope.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    local before = deepCopy(root.profiles.p2.settings)
+    callScript("profiles.ui.reset_scope.open_prompt",
+        env.StatsProProfileResetButton, "OnClick")
+    eq("profiles.ui.reset_scope.prompt_kind",
+        test.profileUIState().operationKind, "reset")
+    root.characters["Player-1-OPS-B"].specProfiles[72] = "p2"
+    callScript("profiles.ui.reset_scope.confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    assertDeepEqual("profiles.ui.reset_scope.settings_preserved",
+        root.profiles.p2.settings, before)
+    eq("profiles.ui.reset_scope.stale_message",
+        test.profileUIState().operationStatus,
+        "Profiles changed; review and try again.")
+end
+
+do
+    local env, _, test, root = makeProfileOpsFixture()
+    local ops = test.profileOps
+    local assignmentsBefore = deepCopy(root.characters)
+    local rolesBefore = deepCopy(root.roleTemplates)
+    local sourceSettings = deepCopy(root.profiles.p2.settings)
+    local sourceSettingsRef = root.profiles.p2.settings
+    local nextProfileID = root.account.nextProfileID
+    local applyBefore = test.profileRuntimeState().applyCount
+
+    local state = test.profileState()
+    eq("profiles.account_wide.initial.assigned", state.assignedProfileID, "p2")
+    eq("profiles.account_wide.initial.effective", state.effectiveProfileID, "p2")
+    local ok, result = ops.enableAccountWide("p2")
+    eq("profiles.account_wide.enable.ok", ok, true)
+    eq("profiles.account_wide.enable.created", result.created, true)
+    eq("profiles.account_wide.enable.resumed", result.resumed, false)
+    local accountWideProfileID = result.profileID
+    eq("profiles.account_wide.enable.id", accountWideProfileID, "p5")
+    eq("profiles.account_wide.enable.flag", root.account.accountWideEnabled, true)
+    eq("profiles.account_wide.enable.saved_id",
+        root.account.accountWideProfileID, accountWideProfileID)
+    eq("profiles.account_wide.enable.next_id", root.account.nextProfileID, nextProfileID + 1)
+    assertDeepEqual("profiles.account_wide.enable.settings",
+        root.profiles[accountWideProfileID].settings, sourceSettings)
+    assertNoSharedTables("profiles.account_wide.enable.detached",
+        root.profiles[accountWideProfileID].settings, sourceSettingsRef)
+    assertDeepEqual("profiles.account_wide.enable.assignments", root.characters, assignmentsBefore)
+    assertDeepEqual("profiles.account_wide.enable.roles", root.roleTemplates, rolesBefore)
+    state = test.profileState()
+    eq("profiles.account_wide.enable.assigned", state.assignedProfileID, "p2")
+    eq("profiles.account_wide.enable.effective", state.effectiveProfileID, accountWideProfileID)
+    eq("profiles.account_wide.enable.active_alias", state.profileID, accountWideProfileID)
+    eq("profiles.account_wide.enable.applied",
+        test.profileRuntimeState().applyCount, applyBefore + 1)
+    clearPrints(env)
+    slash("profiles.account_wide.enable.debug", env, "debug")
+    eq("profiles.account_wide.enable.debug_state",
+        printContains(env,
+            "profile: assigned=p2 effective=p5 accountWide=enabled saved=p5"), true)
+    local references = ops.countReferences(root, accountWideProfileID)
+    eq("profiles.account_wide.enable.reference", references.accountWide, 1)
+    eq("profiles.account_wide.enable.reference_total", references.total, 1)
+
+    root.profiles[accountWideProfileID].settings.scale = 1.77
+    eq("profiles.account_wide.enable.source_unchanged", root.profiles.p2.settings.scale, 1.1)
+    applyBefore = test.profileRuntimeState().applyCount
+    ok, result = ops.disableAccountWide()
+    eq("profiles.account_wide.disable.ok", ok, true)
+    eq("profiles.account_wide.disable.id", result.profileID, accountWideProfileID)
+    eq("profiles.account_wide.disable.flag", root.account.accountWideEnabled, false)
+    eq("profiles.account_wide.disable.saved_id",
+        root.account.accountWideProfileID, accountWideProfileID)
+    state = test.profileState()
+    eq("profiles.account_wide.disable.assigned", state.assignedProfileID, "p2")
+    eq("profiles.account_wide.disable.effective", state.effectiveProfileID, "p2")
+    eq("profiles.account_wide.disable.assignment_restored",
+        root.characters["Player-1-OPS-A"].specProfiles[73], "p2")
+    eq("profiles.account_wide.disable.applied",
+        test.profileRuntimeState().applyCount, applyBefore + 1)
+    clearPrints(env)
+    slash("profiles.account_wide.disable.debug", env, "debug")
+    eq("profiles.account_wide.disable.debug_state",
+        printContains(env,
+            "profile: assigned=p2 effective=p2 accountWide=disabled saved=p5"), true)
+
+    local savedNextProfileID = root.account.nextProfileID
+    ok, result = ops.enableAccountWide("p3")
+    eq("profiles.account_wide.resume.ok", ok, true)
+    eq("profiles.account_wide.resume.created", result.created, false)
+    eq("profiles.account_wide.resume.resumed", result.resumed, true)
+    eq("profiles.account_wide.resume.same_id", result.profileID, accountWideProfileID)
+    eq("profiles.account_wide.resume.no_allocation", root.account.nextProfileID, savedNextProfileID)
+    eq("profiles.account_wide.resume.saved_change",
+        root.profiles[accountWideProfileID].settings.scale, 1.77)
+    ops.disableAccountWide()
+
+    root.profiles.p2.settings.scale = 1.33
+    applyBefore = test.profileRuntimeState().applyCount
+    ok, result = ops.replaceSavedAccountWide("p2")
+    eq("profiles.account_wide.replace.ok", ok, true)
+    eq("profiles.account_wide.replace.id", result.profileID, accountWideProfileID)
+    eq("profiles.account_wide.replace.stays_disabled", root.account.accountWideEnabled, false)
+    eq("profiles.account_wide.replace.value",
+        root.profiles[accountWideProfileID].settings.scale, 1.33)
+    eq("profiles.account_wide.replace.detached",
+        rawequal(root.profiles[accountWideProfileID].settings, root.profiles.p2.settings), false)
+    eq("profiles.account_wide.replace.no_apply",
+        test.profileRuntimeState().applyCount, applyBefore)
+
+    root.profiles.p6 = {
+        name = "Unused while global saved",
+        settings = deepCopy(root.profiles.p1.settings),
+    }
+    root.account.nextProfileID = 7
+    ok, result = ops.deleteUnusedProfiles()
+    eq("profiles.account_wide.cleanup.ok", ok, true)
+    eq("profiles.account_wide.cleanup.deleted", result, 1)
+    check("profiles.account_wide.cleanup.saved_kept", root.profiles[accountWideProfileID] ~= nil)
+    eq("profiles.account_wide.cleanup.unused_removed", root.profiles.p6, nil)
+
+    ok, result = ops.discardSavedAccountWide()
+    eq("profiles.account_wide.discard.ok", ok, true)
+    eq("profiles.account_wide.discard.deleted", result.deleted, true)
+    eq("profiles.account_wide.discard.flag", root.account.accountWideEnabled, false)
+    eq("profiles.account_wide.discard.saved_id", root.account.accountWideProfileID, nil)
+    eq("profiles.account_wide.discard.profile", root.profiles[accountWideProfileID], nil)
+    assertDeepEqual("profiles.account_wide.discard.assignments", root.characters, assignmentsBefore)
+    clearPrints(env)
+    slash("profiles.account_wide.discard.debug", env, "debug")
+    eq("profiles.account_wide.discard.debug_state",
+        printContains(env,
+            "profile: assigned=p2 effective=p2 accountWide=disabled saved=none"), true)
+end
+
+do
+    -- A cached active-global registry must not accept a second hidden reference to
+    -- its dedicated profile. Structural operations revalidate the complete graph.
+    local _, _, test, root = makeProfileOpsFixture()
+    local ops = test.profileOps
+    local enabledOK, enabled = ops.enableAccountWide("p2")
+    eq("profiles.account_wide.cache_corruption.setup", enabledOK, true)
+    test.profileState()
+    root.characters["Player-1-OPS-A"].specProfiles[73] = enabled.profileID
+    local before = deepCopy(root)
+    local ok, reason = ops.disableAccountWide()
+    eq("profiles.account_wide.cache_corruption.rejected", ok, false)
+    eq("profiles.account_wide.cache_corruption.reason", reason, "corrupt")
+    assertDeepEqual("profiles.account_wide.cache_corruption.no_writes", root, before)
+    local model = test.profileViewModel()
+    eq("profiles.account_wide.cache_corruption.model_mode", model.mode, "corrupt")
+    eq("profiles.account_wide.cache_corruption.model_read_only", model.readOnly, true)
+    eq("profiles.account_wide.cache_corruption.model_mutation_blocked", model.canMutate, false)
+end
+
+do
+    -- The manager itself must fail closed when a nested character is corrupted in
+    -- place without changing any of the top-level table identities in the cache.
+    local env, _, test, root = makeProfileOpsFixture()
+    test.profileState()
+    root.characters["Player-1-OPS-A"] = true
+    local model = test.profileViewModel()
+    eq("profiles.registry_cache.nested_corrupt.mode", model.mode, "corrupt")
+    eq("profiles.registry_cache.nested_corrupt.read_only", model.readOnly, true)
+    eq("profiles.registry_cache.nested_corrupt.no_characters", #model.characters, 0)
+    local impactOK, impact = pcall(test.profileImpactText, root, "p2")
+    eq("profiles.registry_cache.nested_corrupt.impact_safe", impactOK, true)
+    eq("profiles.registry_cache.nested_corrupt.impact_empty", impact, "")
+    clearPrints(env)
+    slash("profiles.registry_cache.nested_corrupt.debug", env, "debug")
+    eq("profiles.registry_cache.nested_corrupt.debug_safe",
+        printContains(env,
+            "profile: assigned=unavailable effective=unavailable accountWide=unavailable saved=unavailable"),
+        true)
+end
+
+do
+    -- Changing the active assignment in place must invalidate the hot identity cache
+    -- before the newly selected profile payload is published.
+    local _, _, test, root = makeProfileOpsFixture()
+    test.profileState()
+    root.characters["Player-1-OPS-A"].specProfiles[73] = "p3"
+    root.profiles.p3.settings = true
+    local before = deepCopy(root)
+    local refreshOK, state = pcall(test.dbCompatibilityState)
+    eq("profiles.registry_cache.active_shift_corrupt.no_error", refreshOK, true)
+    eq("profiles.registry_cache.active_shift_corrupt.mode", state.mode, "corrupt")
+    eq("profiles.registry_cache.active_shift_corrupt.read_only", state.readOnly, true)
+    assertDeepEqual("profiles.registry_cache.active_shift_corrupt.no_writes", root, before)
+end
+
+do
+    -- ActivateProfile is a publication boundary too: an inactive graph can be
+    -- corrupted after validation even when its outer settings table still looks valid.
+    local env, _, test, root, identity = makeProfileOpsFixture()
+    test.profileState()
+    root.profiles.p3.settings.self = root.profiles.p3.settings
+    local before = deepCopy(root)
+    identity.specID, identity.specName, identity.role = 71, "Arms", "DAMAGER"
+    local switchOK, switchError = pcall(function()
+        fireEvent("profiles.registry_cache.activation_corrupt.switch",
+            env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+        env.__flushTimers(0)
+    end)
+    check("profiles.registry_cache.activation_corrupt.no_error", switchOK, switchError)
+    local state = test.dbCompatibilityState()
+    eq("profiles.registry_cache.activation_corrupt.mode", state.mode, "corrupt")
+    eq("profiles.registry_cache.activation_corrupt.read_only", state.readOnly, true)
+    assertDeepEqual("profiles.registry_cache.activation_corrupt.no_writes", root, before)
+end
+
+do
+    -- Preset expected-state checks traverse reference counts. Malformed nested
+    -- character data must close the preview safely instead of reaching that traversal.
+    local _, _, test, root = makeProfileOpsFixture()
+    local service = test.appearancePresets
+    eq("appearance.presets.corrupt_registry.preview_started",
+        service.startPreview("midnight"), true)
+    root.characters["Player-1-OPS-A"] = true
+    local before = deepCopy(root)
+    local callOK, applied, reason = pcall(service.applyPreview)
+    eq("appearance.presets.corrupt_registry.no_error", callOK, true)
+    eq("appearance.presets.corrupt_registry.rejected", applied, false)
+    eq("appearance.presets.corrupt_registry.reason", reason, "stale")
+    eq("appearance.presets.corrupt_registry.preview_closed", service.state().active, false)
+    local state = test.dbCompatibilityState()
+    eq("appearance.presets.corrupt_registry.mode", state.mode, "corrupt")
+    eq("appearance.presets.corrupt_registry.read_only", state.readOnly, true)
+    assertDeepEqual("appearance.presets.corrupt_registry.no_writes", root, before)
+end
+
+local function captureRegistryIdentities(root)
+    local snapshot = {
+        root = root,
+        account = root.account,
+        profiles = root.profiles,
+        roleTemplates = root.roleTemplates,
+        characters = root.characters,
+        profileEntries = {},
+        profileSettings = {},
+        profileColors = {},
+        characterEntries = {},
+        characterSpecs = {},
+    }
+    for profileID, profile in pairs(root.profiles or {}) do
+        snapshot.profileEntries[profileID] = profile
+        snapshot.profileSettings[profileID] = profile.settings
+        snapshot.profileColors[profileID] = profile.settings and profile.settings.colors
+    end
+    for guid, character in pairs(root.characters or {}) do
+        snapshot.characterEntries[guid] = character
+        snapshot.characterSpecs[guid] = character.specProfiles
+    end
+    return snapshot
+end
+
+local function assertRegistryIdentities(name, root, snapshot)
+    eq(name .. ".root", rawequal(root, snapshot.root), true)
+    eq(name .. ".account", rawequal(root.account, snapshot.account), true)
+    eq(name .. ".profiles", rawequal(root.profiles, snapshot.profiles), true)
+    eq(name .. ".roles", rawequal(root.roleTemplates, snapshot.roleTemplates), true)
+    eq(name .. ".characters", rawequal(root.characters, snapshot.characters), true)
+    for profileID, profile in pairs(snapshot.profileEntries) do
+        eq(name .. ".profile." .. profileID,
+            rawequal(root.profiles[profileID], profile), true)
+        eq(name .. ".settings." .. profileID,
+            rawequal(root.profiles[profileID].settings, snapshot.profileSettings[profileID]), true)
+        eq(name .. ".colors." .. profileID,
+            rawequal(root.profiles[profileID].settings.colors, snapshot.profileColors[profileID]), true)
+    end
+    for guid, character in pairs(snapshot.characterEntries) do
+        eq(name .. ".character." .. guid,
+            rawequal(root.characters[guid], character), true)
+        eq(name .. ".specs." .. guid,
+            rawequal(root.characters[guid].specProfiles, snapshot.characterSpecs[guid]), true)
+    end
+end
+
+for _, stage in ipairs({ "validate", "commit", "apply" }) do
+    local _, _, test, root = makeProfileOpsFixture()
+    local before = deepCopy(root)
+    local accountRef, profilesRef = root.account, root.profiles
+    local rolesRef, charactersRef = root.roleTemplates, root.characters
+    local runtimeBefore = test.profileRuntimeState()
+    test.profileOps.setFailureStage(stage)
+    local ok, reason = test.profileOps.enableAccountWide("p2")
+    eq("profiles.account_wide.failure." .. stage .. ".ok", ok, false)
+    eq("profiles.account_wide.failure." .. stage .. ".reason",
+        reason, stage .. "-failed")
+    assertDeepEqual("profiles.account_wide.failure." .. stage .. ".root", root, before)
+    eq("profiles.account_wide.failure." .. stage .. ".account_identity",
+        root.account, accountRef)
+    eq("profiles.account_wide.failure." .. stage .. ".profiles_identity",
+        root.profiles, profilesRef)
+    eq("profiles.account_wide.failure." .. stage .. ".roles_identity",
+        root.roleTemplates, rolesRef)
+    eq("profiles.account_wide.failure." .. stage .. ".characters_identity",
+        root.characters, charactersRef)
+    local state = test.profileState()
+    eq("profiles.account_wide.failure." .. stage .. ".assigned",
+        state.assignedProfileID, "p2")
+    eq("profiles.account_wide.failure." .. stage .. ".effective",
+        state.effectiveProfileID, "p2")
+    eq("profiles.account_wide.failure." .. stage .. ".guid",
+        test.profileRuntimeState().activeGUID, runtimeBefore.activeGUID)
+    eq("profiles.account_wide.failure." .. stage .. ".not_busy",
+        test.profileOps.state().inProgress, false)
+end
+
+for _, stage in ipairs({ "validate", "commit", "apply" }) do
+    local _, _, test, root = makeProfileOpsFixture()
+    local enabledOK, enabled = test.profileOps.enableAccountWide("p2")
+    eq("profiles.account_wide.disable_failure." .. stage .. ".setup", enabledOK, true)
+    local globalProfileID = enabled.profileID
+    local before = deepCopy(root)
+    local identities = captureRegistryIdentities(root)
+    test.profileOps.setFailureStage(stage)
+    local ok, reason = test.profileOps.disableAccountWide()
+    eq("profiles.account_wide.disable_failure." .. stage .. ".ok", ok, false)
+    eq("profiles.account_wide.disable_failure." .. stage .. ".reason",
+        reason, stage .. "-failed")
+    assertDeepEqual("profiles.account_wide.disable_failure." .. stage .. ".root",
+        root, before)
+    assertRegistryIdentities(
+        "profiles.account_wide.disable_failure." .. stage .. ".identities",
+        root, identities)
+    eq("profiles.account_wide.disable_failure." .. stage .. ".enabled",
+        root.account.accountWideEnabled, true)
+    eq("profiles.account_wide.disable_failure." .. stage .. ".effective",
+        test.profileState().effectiveProfileID, globalProfileID)
+end
+
+do
+    local _, _, test, root = makeProfileOpsFixture()
+    root.account.nextProfileID = 99999999999999
+    local before = deepCopy(root)
+    local identities = captureRegistryIdentities(root)
+    local ok, reason = test.profileOps.enableAccountWide("p2")
+    eq("profiles.account_wide.id_exhausted.ok", ok, false)
+    eq("profiles.account_wide.id_exhausted.reason", reason, "id-exhausted")
+    assertDeepEqual("profiles.account_wide.id_exhausted.root", root, before)
+    assertRegistryIdentities(
+        "profiles.account_wide.id_exhausted.identities", root, identities)
+end
+
+do
+    local _, _, test, root = makeProfileOpsFixture()
+    root.profiles.p1.name = "Account-wide settings"
+    root.profiles.p2.name = "Account-wide settings 2"
+    root.profiles.p3.name = "Account-wide settings 3"
+    test.profileOps.setMaxUniqueNameCandidates(3)
+    local before = deepCopy(root)
+    local identities = captureRegistryIdentities(root)
+    local ok, reason = test.profileOps.enableAccountWide("p2")
+    eq("profiles.account_wide.name_exhausted.ok", ok, false)
+    eq("profiles.account_wide.name_exhausted.reason", reason, "name-exhausted")
+    assertDeepEqual("profiles.account_wide.name_exhausted.root", root, before)
+    assertRegistryIdentities(
+        "profiles.account_wide.name_exhausted.identities", root, identities)
+end
+
+do
+    local _, _, test, root = makeProfileOpsFixture()
+    local ok, enabled = test.profileOps.enableAccountWide("p2")
+    eq("profiles.account_wide.forget.setup", ok, true)
+    local globalProfileID = enabled.profileID
+    local globalProfileRef = root.profiles[globalProfileID]
+    local applyBefore = test.profileRuntimeState().applyCount
+    ok = test.profileOps.forgetCharacter("Player-1-OPS-B")
+    eq("profiles.account_wide.forget.ok", ok, true)
+    eq("profiles.account_wide.forget.character_removed",
+        root.characters["Player-1-OPS-B"], nil)
+    eq("profiles.account_wide.forget.saved_id",
+        root.account.accountWideProfileID, globalProfileID)
+    eq("profiles.account_wide.forget.profile_identity",
+        root.profiles[globalProfileID], globalProfileRef)
+    eq("profiles.account_wide.forget.effective",
+        test.profileState().effectiveProfileID, globalProfileID)
+    eq("profiles.account_wide.forget.no_apply",
+        test.profileRuntimeState().applyCount, applyBefore)
+    check("profiles.account_wide.forget.offline_profile_kept",
+        root.profiles.p4 ~= nil)
+end
+
+do
+    local _, _, test, root = makeProfileOpsFixture()
+    local ops = test.profileOps
+    local ok = ops.enableAccountWide("p2")
+    eq("profiles.account_wide.guards.enable", ok, true)
+    local before = deepCopy(root)
+    local calls = {
+        function()
+            return ops.copySettingsToContext(
+                "p3", "Player-1-OPS-A", 73, "all")
+        end,
+        function() return ops.assign("Player-1-OPS-A", 73, "p3") end,
+        function() return ops.makeContextIndependent("Player-1-OPS-A", 73) end,
+        function() return ops.setRoleTemplate("HEALER", "p4") end,
+    }
+    for index, invoke in ipairs(calls) do
+        local guarded, reason = invoke()
+        eq("profiles.account_wide.guards.rejected." .. index, guarded, false)
+        eq("profiles.account_wide.guards.reason." .. index,
+            reason, "account-wide-active")
+    end
+    assertDeepEqual("profiles.account_wide.guards.no_writes", root, before)
+
+    local wrongResetOK, wrongResetReason = ops.resetProfile("p2")
+    eq("profiles.account_wide.guards.wrong_reset_rejected", wrongResetOK, false)
+    eq("profiles.account_wide.guards.wrong_reset_reason",
+        wrongResetReason, "account-wide-active")
+    assertDeepEqual("profiles.account_wide.guards.wrong_reset_no_writes", root, before)
+
+    local globalProfileID = root.account.accountWideProfileID
+    ok = ops.resetProfile(globalProfileID)
+    eq("profiles.account_wide.guards.reset_allowed", ok, true)
+    eq("profiles.account_wide.guards.reset_effective",
+        test.profileState().effectiveProfileID, globalProfileID)
+end
+
+do
+    local _, _, test, root = makeProfileOpsFixture()
+    local assignmentsBefore = deepCopy(root.characters)
+    local ok, created = test.profileOps.enableAccountWide("p2")
+    eq("profiles.account_wide.import.setup", ok, true)
+    local oldGlobalProfileID = created.profileID
+    local importedSettings = test.copyDefaults()
+    importedSettings.scale = 1.44
+    ok, created = test.profileOps.importAndAssign(importedSettings)
+    eq("profiles.account_wide.import.ok", ok, true)
+    eq("profiles.account_wide.import.new_id", created.profileID, "p6")
+    eq("profiles.account_wide.import.pointer",
+        root.account.accountWideProfileID, "p6")
+    eq("profiles.account_wide.import.enabled", root.account.accountWideEnabled, true)
+    eq("profiles.account_wide.import.assigned",
+        test.profileState().assignedProfileID, "p2")
+    eq("profiles.account_wide.import.effective",
+        test.profileState().effectiveProfileID, "p6")
+    eq("profiles.account_wide.import.value", root.profiles.p6.settings.scale, 1.44)
+    check("profiles.account_wide.import.previous_kept",
+        root.profiles[oldGlobalProfileID] ~= nil)
+    assertDeepEqual("profiles.account_wide.import.assignments_kept",
+        root.characters, assignmentsBefore)
+    assertNoSharedTables("profiles.account_wide.import.detached",
+        root.profiles.p6.settings, importedSettings)
+end
+
+do
+    local env, _, test, root, identity = makeProfileOpsFixture()
+    local ok, enabled = test.profileOps.enableAccountWide("p2")
+    eq("profiles.account_wide.context.setup", ok, true)
+    local globalProfileID = enabled.profileID
+    local runtimeBefore = test.profileRuntimeState()
+
+    identity.specID, identity.specName, identity.role = 71, "Arms", "DAMAGER"
+    fireEvent("profiles.account_wide.context.switch_existing",
+        env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    local state = test.profileState()
+    eq("profiles.account_wide.context.existing_assigned", state.assignedProfileID, "p3")
+    eq("profiles.account_wide.context.existing_effective",
+        state.effectiveProfileID, globalProfileID)
+    eq("profiles.account_wide.context.existing_apply",
+        test.profileRuntimeState().applyCount, runtimeBefore.applyCount + 1)
+
+    runtimeBefore = test.profileRuntimeState()
+    fireEvent("profiles.account_wide.context.same_context",
+        env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    eq("profiles.account_wide.context.same_no_apply",
+        test.profileRuntimeState().applyCount, runtimeBefore.applyCount)
+    eq("profiles.account_wide.context.same_no_commit",
+        test.profileRuntimeState().structuralCommitCount,
+        runtimeBefore.structuralCommitCount)
+
+    identity.specID, identity.specName, identity.role = 999, "New spec", "DAMAGER"
+    runtimeBefore = test.profileRuntimeState()
+    fireEvent("profiles.account_wide.context.switch_new",
+        env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    local newAssignedProfileID = root.characters[identity.guid].specProfiles[999]
+    eq("profiles.account_wide.context.new_assigned_id", newAssignedProfileID, "p6")
+    assertDeepEqual("profiles.account_wide.context.new_role_clone",
+        root.profiles[newAssignedProfileID].settings, root.profiles.p3.settings)
+    assertNoSharedTables("profiles.account_wide.context.new_role_detached",
+        root.profiles[newAssignedProfileID].settings, root.profiles.p3.settings)
+    state = test.profileState()
+    eq("profiles.account_wide.context.new_assigned",
+        state.assignedProfileID, newAssignedProfileID)
+    eq("profiles.account_wide.context.new_effective",
+        state.effectiveProfileID, globalProfileID)
+    eq("profiles.account_wide.context.new_one_commit",
+        test.profileRuntimeState().structuralCommitCount,
+        runtimeBefore.structuralCommitCount + 1)
+    eq("profiles.account_wide.context.new_one_apply",
+        test.profileRuntimeState().applyCount, runtimeBefore.applyCount + 1)
+
+    identity.guid, identity.name = "Player-1-OPS-B", "Bravo"
+    identity.specID, identity.specName, identity.role = 72, "Fury", "DAMAGER"
+    fireEvent("profiles.account_wide.context.switch_character",
+        env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    state = test.profileState()
+    eq("profiles.account_wide.context.character_assigned", state.assignedProfileID, "p4")
+    eq("profiles.account_wide.context.character_effective",
+        state.effectiveProfileID, globalProfileID)
+
+    ok = test.profileOps.disableAccountWide()
+    eq("profiles.account_wide.context.disable", ok, true)
+    state = test.profileState()
+    eq("profiles.account_wide.context.disable_restores", state.effectiveProfileID, "p4")
+end
+
+do
+    local _, _, sourceTest, sourceRoot = makeProfileOpsFixture()
+    local ok, enabled = sourceTest.profileOps.enableAccountWide("p2")
+    eq("profiles.account_wide.no_spec.setup", ok, true)
+    local globalProfileID = enabled.profileID
+    local coldRoot = deepCopy(sourceRoot)
+    local coldEnv, _, coldTest = loadStatsPro("enUS", {
+        statsProDB = coldRoot,
+        swiftStatsDB = { fontSize = 19 },
+        unitGUID = function() return "Player-1-OPS-A" end,
+        getSpecialization = function() return nil end,
+    })
+    fireEvent("profiles.account_wide.no_spec.activate", coldEnv, "PLAYER_ENTERING_WORLD")
+    coldEnv.__flushTimers(0.1)
+    local state = coldTest.profileState()
+    eq("profiles.account_wide.no_spec.effective", state.effectiveProfileID, globalProfileID)
+    eq("profiles.account_wide.no_spec.settings_identity",
+        state.settings, coldRoot.profiles[globalProfileID].settings)
+    eq("profiles.account_wide.no_spec.no_active_context",
+        coldTest.profileRuntimeState().activeSpecID, nil)
+
+    local assignmentsBefore = deepCopy(coldRoot.characters)
+    slash("profiles.account_wide.no_spec.import_request", coldEnv, "import")
+    check("profiles.account_wide.no_spec.import_prompt",
+        string.find(coldEnv.__lastStaticPopup.renderedText,
+            "new account-wide settings", 1, true) ~= nil)
+    coldEnv.__acceptStaticPopup()
+    local importedProfileID = coldRoot.account.accountWideProfileID
+    eq("profiles.account_wide.no_spec.import_id", importedProfileID, "p6")
+    eq("profiles.account_wide.no_spec.import_effective",
+        coldTest.profileState().effectiveProfileID, importedProfileID)
+    eq("profiles.account_wide.no_spec.import_value",
+        coldRoot.profiles[importedProfileID].settings.fontSize, 19)
+    assertDeepEqual("profiles.account_wide.no_spec.import_assignments",
+        coldRoot.characters, assignmentsBefore)
+
+    coldRoot.profiles[importedProfileID].settings.showTertiary = true
+    slash("profiles.account_wide.no_spec.reset_request", coldEnv, "reset")
+    check("profiles.account_wide.no_spec.reset_prompt",
+        string.find(coldEnv.__lastStaticPopup.renderedText,
+            "Changes affect every character and specialization", 1, true) ~= nil)
+    coldEnv.__acceptStaticPopup()
+    eq("profiles.account_wide.no_spec.reset_value",
+        coldRoot.profiles[importedProfileID].settings.showTertiary, false)
+end
+
+do
+    local _, _, test, root = makeProfileOpsFixture()
+    local assignmentsBefore = deepCopy(root.characters)
+    local ok, enabled = test.profileOps.enableAccountWide("p2")
+    eq("profiles.account_wide.presets.setup", ok, true)
+    local globalProfileID = enabled.profileID
+    local globalBefore = deepCopy(root.profiles[globalProfileID].settings)
+    ok = test.appearancePresets.startPreview("midnight")
+    eq("profiles.account_wide.presets.preview", ok, true)
+    eq("profiles.account_wide.presets.preview_active",
+        test.appearancePresets.state().active, true)
+    ok = test.profileOps.disableAccountWide()
+    eq("profiles.account_wide.presets.toggle", ok, true)
+    eq("profiles.account_wide.presets.preview_cancelled",
+        test.appearancePresets.state().active, false)
+    assertDeepEqual("profiles.account_wide.presets.preview_zero_writes",
+        root.profiles[globalProfileID].settings, globalBefore)
+
+    ok = test.profileOps.enableAccountWide("p2")
+    eq("profiles.account_wide.presets.resume", ok, true)
+    ok = test.appearancePresets.startPreview("midnight")
+    eq("profiles.account_wide.presets.apply_preview", ok, true)
+    ok = test.appearancePresets.applyPreview()
+    eq("profiles.account_wide.presets.apply", ok, true)
+    eq("profiles.account_wide.presets.global_marker",
+        root.profiles[globalProfileID].settings.appearancePresetID, "midnight")
+    assertDeepEqual("profiles.account_wide.presets.assignments_kept",
+        root.characters, assignmentsBefore)
 end
 
 do
@@ -17578,6 +19516,43 @@ do
         imported ~= root.profiles.p2.settings and imported ~= root.profiles.p3.settings)
 end
 
+do
+    local _, _, test, root = makeProfileOpsFixture({
+        mutateRoot = function(candidate)
+            candidate.profiles.p3.settings.scale = 1.61
+            candidate.profiles.p3.settings.showDefensive = false
+        end,
+    })
+    local assignmentsBefore = deepCopy(root.characters)
+    local ok, enabled = test.profileOps.enableAccountWide("p2")
+    eq("profiles.transfer.account_wide.setup", ok, true)
+    local previousGlobalProfileID = enabled.profileID
+    local encoded = test.profileTransfer.serialize(
+        root.profiles.p3.name, root.profiles.p3.settings,
+        { stats = true, layout = true, appearance = true })
+    local package = test.profileTransfer.parse(encoded)
+    ok, enabled = test.profileOps.importTransferToContext(
+        package, package.sections, "Player-1-OPS-A", 73)
+    eq("profiles.transfer.account_wide.success", ok, true)
+    eq("profiles.transfer.account_wide.profile_id", enabled.profileID, "p6")
+    eq("profiles.transfer.account_wide.previous_profile",
+        enabled.previousProfileID, previousGlobalProfileID)
+    eq("profiles.transfer.account_wide.pointer",
+        root.account.accountWideProfileID, "p6")
+    eq("profiles.transfer.account_wide.enabled", root.account.accountWideEnabled, true)
+    eq("profiles.transfer.account_wide.assigned",
+        test.profileState().assignedProfileID, "p2")
+    eq("profiles.transfer.account_wide.effective",
+        test.profileState().effectiveProfileID, "p6")
+    eq("profiles.transfer.account_wide.scale", root.profiles.p6.settings.scale, 1.6)
+    eq("profiles.transfer.account_wide.stats",
+        root.profiles.p6.settings.showDefensive, false)
+    check("profiles.transfer.account_wide.previous_kept",
+        root.profiles[previousGlobalProfileID] ~= nil)
+    assertDeepEqual("profiles.transfer.account_wide.assignments_kept",
+        root.characters, assignmentsBefore)
+end
+
 for _, failure in ipairs({
     { stage = "validate", reason = "validate-failed" },
     { stage = "commit", reason = "commit-failed" },
@@ -17631,12 +19606,23 @@ do
             "profiles.prompts.locale.reset_popup." .. suffix, env.__lastStaticPopup)
         local activeProfile = test.profileState()
         local references = test.profileOps.countReferences(root, activeProfile.profileID)
+        local resetText = string.format(
+            labels["Reset active profile \"%s\" to defaults?"],
+            root.profiles[activeProfile.profileID].name)
+        if references.specs > 1 then
+            resetText = resetText .. " " .. string.format(
+                labels["Changes affect %d specializations."], references.specs)
+        end
+        if references.roleTemplates > 0 then
+            resetText = resetText .. " " .. labels[
+                "These settings are also used to create independent settings for new specializations."]
+        end
+        if references.characterDefaults + references.accountDefault > 0 then
+            resetText = resetText .. " "
+                .. labels["These settings are also used as fallback settings."]
+        end
         eq("profiles.prompts.locale.reset_text." .. suffix,
-            resetPopup.renderedText,
-            string.format(
-                labels["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."],
-                root.profiles[activeProfile.profileID].name, references.specs,
-                references.characterDefaults + references.accountDefault + references.roleTemplates))
+            resetPopup.renderedText, resetText)
         eq("profiles.prompts.locale.reset_action." .. suffix,
             resetPopup.renderedButton1, labels["Confirm"])
         eq("profiles.prompts.locale.reset_cancel." .. suffix,
@@ -17862,53 +19848,6 @@ do
         env.GameTooltip.lines[4].right)
     eq("profiles.ops.archon_cache_preservation.tooltip_no_stale_missing",
         env.GameTooltip.lines[5].left, "Snapshot:")
-end
-
-local function captureRegistryIdentities(root)
-    local snapshot = {
-        root = root,
-        account = root.account,
-        profiles = root.profiles,
-        roleTemplates = root.roleTemplates,
-        characters = root.characters,
-        profileEntries = {},
-        profileSettings = {},
-        profileColors = {},
-        characterEntries = {},
-        characterSpecs = {},
-    }
-    for profileID, profile in pairs(root.profiles or {}) do
-        snapshot.profileEntries[profileID] = profile
-        snapshot.profileSettings[profileID] = profile.settings
-        snapshot.profileColors[profileID] = profile.settings and profile.settings.colors
-    end
-    for guid, character in pairs(root.characters or {}) do
-        snapshot.characterEntries[guid] = character
-        snapshot.characterSpecs[guid] = character.specProfiles
-    end
-    return snapshot
-end
-
-local function assertRegistryIdentities(name, root, snapshot)
-    eq(name .. ".root", rawequal(root, snapshot.root), true)
-    eq(name .. ".account", rawequal(root.account, snapshot.account), true)
-    eq(name .. ".profiles", rawequal(root.profiles, snapshot.profiles), true)
-    eq(name .. ".roles", rawequal(root.roleTemplates, snapshot.roleTemplates), true)
-    eq(name .. ".characters", rawequal(root.characters, snapshot.characters), true)
-    for profileID, profile in pairs(snapshot.profileEntries) do
-        eq(name .. ".profile." .. profileID,
-            rawequal(root.profiles[profileID], profile), true)
-        eq(name .. ".settings." .. profileID,
-            rawequal(root.profiles[profileID].settings, snapshot.profileSettings[profileID]), true)
-        eq(name .. ".colors." .. profileID,
-            rawequal(root.profiles[profileID].settings.colors, snapshot.profileColors[profileID]), true)
-    end
-    for guid, character in pairs(snapshot.characterEntries) do
-        eq(name .. ".character." .. guid,
-            rawequal(root.characters[guid], character), true)
-        eq(name .. ".specs." .. guid,
-            rawequal(root.characters[guid].specProfiles, snapshot.characterSpecs[guid]), true)
-    end
 end
 
 local function assertMutationPopupCombatCancellation(case)
@@ -18722,7 +20661,8 @@ do
         local identities = captureRegistryIdentities(root)
         local ok, reason = case.invoke(test, expected)
         eq("profiles.ops.gate.exact_ref." .. case.name .. ".rejected", ok, false)
-        eq("profiles.ops.gate.exact_ref." .. case.name .. ".reason", reason, "stale")
+        eq("profiles.ops.gate.exact_ref." .. case.name .. ".reason", reason,
+            case.name == "profiles_ref" and "pending" or "stale")
         assertDeepEqual("profiles.ops.gate.exact_ref." .. case.name .. ".root", root, before)
         assertRegistryIdentities(
             "profiles.ops.gate.exact_ref." .. case.name .. ".identities", root, identities)
@@ -19018,7 +20958,7 @@ do
         specProfiles = { [73] = "p2" },
     }
     local coldBefore = deepCopy(coldRoot)
-    local coldEnv, _, coldTest = loadStatsPro("enUS", {
+    local coldEnv, coldAddon, coldTest = loadStatsPro("enUS", {
         statsProDB = coldRoot,
         unitGUID = function() return "Player-1-OPS-A" end,
         getSpecialization = function() return nil end,
@@ -19027,6 +20967,22 @@ do
     coldEnv.__flushTimers(0.1)
     eq("profiles.ops.forget.no_spec.no_active_guid",
         coldTest.profileRuntimeState().activeGUID, nil)
+    eq("profiles.ops.forget.no_spec.current_guid_known",
+        coldTest.profileRuntimeState().currentGUID, "Player-1-OPS-A")
+    local coldModel = coldTest.profileViewModel()
+    local currentCharacter
+    for _, character in ipairs(coldModel.characters) do
+        if character.guid == "Player-1-OPS-A" then currentCharacter = character; break end
+    end
+    check("profiles.ops.forget.no_spec.current_character_present",
+        currentCharacter ~= nil)
+    eq("profiles.ops.forget.no_spec.current_character_marked",
+        currentCharacter and currentCharacter.isCurrent, true)
+    coldAddon:OpenConfigMenu()
+    callScript("profiles.ops.forget.no_spec.open_manager",
+        coldEnv.StatsProManageProfilesButton, "OnClick")
+    eq("profiles.ops.forget.no_spec.current_button_disabled",
+        coldTest.profileUIState().actions.forget.enabled, false)
     ok = coldTest.profileOps.forgetCharacter("Player-1-OPS-A")
     eq("profiles.ops.forget.no_spec.current_rejected", ok, false)
     assertDeepEqual("profiles.ops.forget.no_spec.no_writes", coldRoot, coldBefore)
@@ -19085,7 +21041,8 @@ do
     eq("profiles.ops.failure.mutating_apply.visual_y", restoredY, oldY)
     eq("profiles.ops.failure.mutating_apply.visual_scale", env.StatsProFrame:GetScale(), oldScale)
 
-    env, _, test, root = makeProfileOpsFixture()
+    local identity
+    env, _, test, root, identity = makeProfileOpsFixture()
     before = deepCopy(root)
     oldSetPoint = env.StatsProFrame.SetPoint
     rawset(env.StatsProFrame, "SetPoint", function(frame, ...)
@@ -19098,6 +21055,7 @@ do
     eq("profiles.ops.failure.rollback_apply.force", test.profileRuntimeState().forceReapply, true)
     eq("profiles.ops.failure.rollback_apply.pending",
         test.profileRuntimeState().pendingResolution, true)
+    identity.noSpec = true
     local failRecoveryOnce = true
     rawset(env.StatsProFrame, "SetPoint", function(frame, ...)
         if failRecoveryOnce then
@@ -19114,17 +21072,38 @@ do
         test.profileRuntimeState().pendingResolution, true)
     assertDeepEqual("profiles.ops.failure.rollback_apply.first_retry_root", root, before)
     rawset(env.StatsProFrame, "SetPoint", oldSetPoint)
-    env.__flushTimers(0.25)
+    eq("profiles.ops.failure.rollback_apply.force_retry_timer",
+        env.__flushNextTimer(0.25), true)
     eq("profiles.ops.failure.rollback_apply.recovered_force",
         test.profileRuntimeState().forceReapply, false)
+    eq("profiles.ops.failure.rollback_apply.no_spec_still_pending",
+        test.profileRuntimeState().pendingResolution, true)
+    eq("profiles.ops.failure.rollback_apply.no_spec_retry_scheduled",
+        test.profileRuntimeState().noSpecRetryScheduled, true)
+    local beforeSettled = deepCopy(root)
+    local blocked, blockedReason = test.profileOps.assign(
+        "Player-1-OPS-A", 73, "p3")
+    eq("profiles.ops.failure.rollback_apply.no_spec_write_blocked", blocked, false)
+    eq("profiles.ops.failure.rollback_apply.no_spec_write_reason", blockedReason, "pending")
+    assertDeepEqual(
+        "profiles.ops.failure.rollback_apply.no_spec_write_zero_mutation",
+        root, beforeSettled)
+    env.__flushTimers(0.1)
     eq("profiles.ops.failure.rollback_apply.recovered_pending",
         test.profileRuntimeState().pendingResolution, false)
-    eq("profiles.ops.failure.rollback_apply.recovered_profile", test.profileState().profileID, "p2")
+    eq("profiles.ops.failure.rollback_apply.position_journal_cleared",
+        test.profileRuntimeState().contextRetryPositionsPending, false)
+    eq("profiles.ops.failure.rollback_apply.recovered_profile",
+        test.profileState().profileID, "p1")
 end
 
 do
     local calls = function(ops)
         return {
+            function() return ops.enableAccountWide("p2") end,
+            function() return ops.disableAccountWide() end,
+            function() return ops.replaceSavedAccountWide("p2") end,
+            function() return ops.discardSavedAccountWide() end,
             function()
                 return ops.copySettingsToContext(
                     "p3", "Player-1-OPS-A", 73, "all")
@@ -19468,7 +21447,7 @@ do
         env.StatsProProfileResetButton, "OnClick")
     eq("profiles.ui.slash_modal.visibility.reset_default_warning",
         test.profileUIState().operationDialogMessage,
-        "Reset the settings used by \"Alpha-Realm / Protection\"? The same reset will affect 3 specializations. This profile is also a default for future specializations; they will use the reset settings.")
+        "Reset the settings used by \"Alpha-Realm / Protection\" to defaults? Changes affect 3 specializations. These settings are also used to create independent settings for new specializations. These settings are also used as fallback settings.")
     local staleVisibilityConfirm = env.StatsProProfileOperationConfirmButton.scripts.OnClick
     local visibilityAssignments = deepCopy(root.characters)
     local visibilityRoles = deepCopy(root.roleTemplates)
@@ -19566,7 +21545,7 @@ do
     eq("profiles.ui.ops.selector_assigned", state.selectedAssignedProfileID, "p2")
     local actionCount = 0
     for _ in pairs(state.actions) do actionCount = actionCount + 1 end
-    eq("profiles.ui.ops.action_count", actionCount, 10)
+    eq("profiles.ui.ops.action_count", actionCount, 13)
     eq("profiles.ui.ops.copy_enabled", state.actions.copy.enabled, true)
     eq("profiles.ui.ops.use_same_enabled", state.actions.useSame.enabled, true)
     eq("profiles.ui.ops.use_for_enabled", state.actions.useFor.enabled, true)
@@ -19818,6 +21797,119 @@ do
 end
 
 do
+    local env, addonContext, test, root, identity = makeProfileOpsFixture()
+    local assignmentsBefore = deepCopy(root.characters)
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.account_wide.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    local state = test.profileUIState()
+    eq("profiles.ui.account_wide.initial_label",
+        state.actions.accountWide.text, "Use these settings everywhere...")
+    eq("profiles.ui.account_wide.initial_helper", state.operationStatus,
+        "Copy makes a separate snapshot. Sharing keeps future changes linked.")
+    eq("profiles.ui.account_wide.initial_effective",
+        state.selectedEffectiveProfileID, "p2")
+
+    callScript("profiles.ui.account_wide.enable_open",
+        env.StatsProProfileAccountWideButton, "OnClick")
+    state = test.profileUIState()
+    eq("profiles.ui.account_wide.enable_kind", state.operationKind, "enable-account-wide")
+    check("profiles.ui.account_wide.enable_scope_copy",
+        string.find(state.operationDialogMessage,
+            "Every existing and future character and specialization", 1, true) ~= nil)
+    local beforeCancel = deepCopy(root)
+    callScript("profiles.ui.account_wide.enable_cancel",
+        env.StatsProProfileOperationCancelButton, "OnClick")
+    assertDeepEqual("profiles.ui.account_wide.enable_cancel_no_writes", root, beforeCancel)
+
+    callScript("profiles.ui.account_wide.enable_reopen",
+        env.StatsProProfileAccountWideButton, "OnClick")
+    callScript("profiles.ui.account_wide.enable_confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    local globalProfileID = root.account.accountWideProfileID
+    eq("profiles.ui.account_wide.enable_id", globalProfileID, "p5")
+    assertDeepEqual("profiles.ui.account_wide.enable_assignments_kept",
+        root.characters, assignmentsBefore)
+    state = test.profileUIState()
+    eq("profiles.ui.account_wide.enable_header", state.headerProfile, "Account-wide settings")
+    eq("profiles.ui.account_wide.enable_detail", state.detailProfile, "Account-wide")
+    eq("profiles.ui.account_wide.enable_detail_shown", state.detailProfileShown, true)
+    eq("profiles.ui.account_wide.enable_assigned", state.selectedAssignedProfileID, "p2")
+    eq("profiles.ui.account_wide.enable_effective",
+        state.selectedEffectiveProfileID, globalProfileID)
+    eq("profiles.ui.account_wide.enable_label",
+        state.actions.accountWide.text, "Return to specialization settings...")
+    for _, action in ipairs({ "copy", "useSame", "useFor", "stopSharing", "roleTemplate" }) do
+        eq("profiles.ui.account_wide.hidden_context_action." .. action,
+            state.actions[action].shown, false)
+    end
+    eq("profiles.ui.account_wide.transfer_shown", state.actions.transfer.shown, true)
+
+    root.profiles[globalProfileID].settings.showTertiary = true
+    local offlineRow = findFrame("profiles.ui.account_wide.offline_row", env, function(frame)
+        return type(frame.profileContext) == "table"
+            and frame.profileContext.guid == "Player-1-OPS-B"
+            and frame.profileContext.specID == 72
+    end)
+    callScript("profiles.ui.account_wide.select_offline", offlineRow, "OnClick")
+    state = test.profileUIState()
+    eq("profiles.ui.account_wide.offline_assigned", state.selectedAssignedProfileID, "p4")
+    eq("profiles.ui.account_wide.offline_effective",
+        state.selectedEffectiveProfileID, globalProfileID)
+    callScript("profiles.ui.account_wide.expand_advanced",
+        env.StatsProProfileAdvancedButton, "OnClick")
+    callScript("profiles.ui.account_wide.reset_open",
+        env.StatsProProfileResetButton, "OnClick")
+    check("profiles.ui.account_wide.reset_copy",
+        string.find(test.profileUIState().operationDialogMessage,
+            "every existing and future character", 1, true) ~= nil)
+    callScript("profiles.ui.account_wide.reset_confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    eq("profiles.ui.account_wide.reset_global",
+        root.profiles[globalProfileID].settings.showTertiary, false)
+    eq("profiles.ui.account_wide.reset_offline_assignment",
+        root.characters["Player-1-OPS-B"].specProfiles[72], "p4")
+
+    callScript("profiles.ui.account_wide.disable_open",
+        env.StatsProProfileAccountWideButton, "OnClick")
+    eq("profiles.ui.account_wide.disable_kind",
+        test.profileUIState().operationKind, "disable-account-wide")
+    callScript("profiles.ui.account_wide.disable_confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    state = test.profileUIState()
+    eq("profiles.ui.account_wide.disable_flag", root.account.accountWideEnabled, false)
+    eq("profiles.ui.account_wide.disable_saved",
+        root.account.accountWideProfileID, globalProfileID)
+    eq("profiles.ui.account_wide.disable_label",
+        state.actions.accountWide.text, "Use account-wide settings...")
+    eq("profiles.ui.account_wide.disable_effective",
+        state.selectedEffectiveProfileID, "p4")
+    eq("profiles.ui.account_wide.saved_replace_shown",
+        state.actions.replaceAccountWide.shown, true)
+    eq("profiles.ui.account_wide.saved_discard_shown",
+        state.actions.discardAccountWide.shown, true)
+
+    callScript("profiles.ui.account_wide.resume_open",
+        env.StatsProProfileAccountWideButton, "OnClick")
+    check("profiles.ui.account_wide.resume_copy",
+        string.find(test.profileUIState().operationDialogMessage,
+            "saved account-wide settings", 1, true) ~= nil)
+    callScript("profiles.ui.account_wide.resume_confirm",
+        env.StatsProProfileOperationConfirmButton, "OnClick")
+    eq("profiles.ui.account_wide.resume_same_id",
+        root.account.accountWideProfileID, globalProfileID)
+    eq("profiles.ui.account_wide.resume_effective",
+        test.profileUIState().selectedEffectiveProfileID, globalProfileID)
+
+    identity.combat = true
+    fireEvent("profiles.ui.account_wide.combat", env, "PLAYER_REGEN_DISABLED")
+    eq("profiles.ui.account_wide.combat_disabled",
+        test.profileUIState().actions.accountWide.enabled, false)
+    identity.combat = false
+    fireEvent("profiles.ui.account_wide.combat_end", env, "PLAYER_REGEN_ENABLED")
+end
+
+do
     local env, addonContext, test, root = makeProfileOpsFixture({
         mutateRoot = function(candidate) candidate.dbVersion = 999999 end,
     })
@@ -19863,6 +21955,33 @@ do
     callScript("profiles.ui.future_export.close",
         env.StatsProProfileOperationCancelButton, "OnClick")
     assertDeepEqual("profiles.ui.future_export.no_writes", root, before)
+end
+
+do
+    local secretAccountWide = {}
+    local env, addonContext, test, root = makeProfileOpsFixture({
+        issecretvalue = function(value) return value == secretAccountWide end,
+    })
+    addonContext:OpenConfigMenu()
+    callScript("profiles.ui.export_corrupt.open_manager",
+        env.StatsProManageProfilesButton, "OnClick")
+    callScript("profiles.ui.export_corrupt.open_direction",
+        env.StatsProProfileTransferButton, "OnClick")
+    local exportChoice = findChoiceFrame(
+        "profiles.ui.export_corrupt.choice", env, function(choice)
+            return choice.direction == "export"
+        end)
+    callScript("profiles.ui.export_corrupt.choose", exportChoice, "OnClick")
+    eq("profiles.ui.export_corrupt.dialog_open",
+        test.profileUIState().operationDialogShown, true)
+    root.account.accountWideEnabled = secretAccountWide
+    local before = deepCopy(root)
+    local refreshOK, refreshError = pcall(addonContext.profileUI.RefreshSafe)
+    check("profiles.ui.export_corrupt.refresh_safe", refreshOK, refreshError)
+    local state = test.profileUIState()
+    eq("profiles.ui.export_corrupt.mode", test.dbCompatibilityState().mode, "corrupt")
+    eq("profiles.ui.export_corrupt.dialog_closed", state.operationDialogShown, false)
+    assertDeepEqual("profiles.ui.export_corrupt.no_writes", root, before)
 end
 
 do
@@ -20407,9 +22526,9 @@ do
             selectedFontRows = selectedFontRows + 1
         end
     end
-    -- One selected font row, the committed appearance preset, and the selected
-    -- specialization row in the already-built profile manager.
-    eq("config.control_design.selected_rows", selectedFontRows, 3)
+    -- The hidden profile manager now stays lightweight and does not build a selected
+    -- specialization row. Only the font and committed appearance preset are selected.
+    eq("config.control_design.selected_rows", selectedFontRows, 2)
     local fontRows = {}
     for _, frame in ipairs(env.__frames) do
         if frame.fontPath and frame.statsProControlKind == "listRow" then
@@ -21301,8 +23420,8 @@ do
     local ok = service.startPreview("dps")
     eq("hud.presets.shared.preview", ok, true)
     local ui = sharedEnv.StatsProConfigFrame.tabContents[1].quickSetupView
-    check("hud.presets.shared.warning_text",
-        ui.warning:GetText():find("shared by 2 specs", 1, true) ~= nil)
+    eq("hud.presets.shared.warning_text",
+        ui.warning:GetText(), "Changes affect 2 specializations.")
     local _, _, _, _, bodyY = sharedEnv.StatsProConfigFrame.tabContents[1].statsBody:GetPoint()
     eq("hud.presets.shared.warning_reflow", bodyY, ui.warningY - 42 - 36)
     ok = service.applyPreview()

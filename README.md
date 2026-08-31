@@ -13,8 +13,9 @@
 
 <p align="center">
   A standalone stats and gear HUD for World of Warcraft Retail: Midnight (12.x).
-  Keep the numbers you use visible in clean, draggable panels, with per-character
-  and per-specialization profiles plus bundled Archon M+ and Raid reference snapshots.
+  Keep the numbers you use visible in clean, draggable panels, with automatic
+  per-specialization settings, an optional account-wide setup, and bundled Archon
+  M+ and Raid reference snapshots.
 </p>
 
 <p align="center">
@@ -27,8 +28,9 @@
   stats, item level, defensives, durability, and repair cost directly on the HUD.
 - **Compare ratings with current context.** Hover Crit, Haste, Mastery, or
   Versatility for the bundled Archon M+ or raid-difficulty snapshot you select.
-- **Switch characters or specs without rebuilding the HUD.** Assigned profiles
-  activate automatically and can be shared intentionally when that is useful.
+- **Choose one setup or several.** Keep automatic settings for each specialization,
+  share selected setups, or use one account-wide setup for every current and future
+  character and specialization.
 - **Start with a finished HUD.** Preview Compact, DPS, or Tank, then keep that
   layout or adjust individual rows and presentation.
 - **Use only the space you want.** Build a compact secondary-stat strip, a tank
@@ -45,7 +47,8 @@ and tertiary stats with item level, durability, and repair, or
 the rows compact without category headers. Clicking a card previews the real HUD
 before anything is saved; **Use this setup** applies it.
 Close the panel or press Escape to keep the current setup, and it will not
-interrupt a later login. The choice configures the current profile; profile
+interrupt a later login. The choice configures the settings currently in use,
+including account-wide settings when that mode is active; specialization
 assignments themselves stay unchanged.
 
 Quick Setup remains available at the top of the **Stats** tab afterward. These
@@ -69,22 +72,33 @@ background; the Appearance tab can add a darker backing when you want more contr
 
 StatsPro keeps settings for each visited character and specialization
 automatically. Open **Profiles & sharing...** when you want to copy **Stats**, **Layout**,
-**Appearance**, or all settings from another specialization, or deliberately
-share one set of settings between two specializations. **Stop sharing** gives the
-selected specialization its own copy again.
+**Appearance**, or all settings once from another specialization, or deliberately
+share one live set of settings between specializations. **Make this specialization
+independent...** gives the selected specialization its own copy again.
+
+Select **Use these settings everywhere...** to create a dedicated account-wide
+copy from the selected specialization, or from the account default until a
+specialization is known. Every existing and future character and specialization
+then uses that copy without erasing its previous assignment.
+**Return to specialization settings...** restores those assignments immediately
+and keeps the account-wide settings saved, so **Use account-wide settings...** can
+resume the same setup later. Advanced tools can replace or delete that saved copy.
 
 **Export / import profile...** creates a versioned `SPP1:` string for any
 combination of **Stats**, **Layout**, and **Appearance**. Import always shows the
 profile name, format version, and included sections before it can write. You can
-leave sections unchecked; those settings are inherited from the selected
-specialization, and the imported sections are saved as a new independent profile.
-Existing profiles, other specialization assignments, account language, and refresh
-rate are not overwritten. A custom font must also be installed on the receiving
-client for the exact typeface to render; StatsPro keeps its normal safe fallback.
+leave sections unchecked; those settings are inherited from the settings currently
+in use. Normally, the imported sections are saved as a new independent profile for
+the selected specialization. While account-wide settings are active, they become a
+new account-wide copy instead. Existing profiles, specialization assignments,
+account language, and refresh rate are not overwritten. A custom font must also be
+installed on the receiving client for the exact typeface to render; StatsPro keeps
+its normal safe fallback.
 
-Less common maintenance stays under **Advanced**: reset the selected settings,
-forget an offline character, choose Tank, Healer, and Damage defaults for future
-specializations, or delete settings records that are no longer used.
+Less common maintenance stays under **Advanced**: reset the effective settings,
+forget an offline character, choose Tank, Healer, and Damage starting settings for
+new specializations, manage a saved account-wide copy, or delete settings records
+that are no longer used.
 
 Six appearance presets are included:
 
@@ -95,8 +109,9 @@ Six appearance presets are included:
 - **Monochrome**
 - **High Contrast**
 
-Preset preview changes presentation only. It does not change visible stats, panel
-routing, positions, scale, language, refresh rate, or profile assignments. When
+Preset preview changes presentation only. It applies to the effective settings,
+including the account-wide copy when active, and does not change visible stats,
+panel routing, positions, scale, language, refresh rate, or profile assignments. When
 panels are unlocked, Settings shows temporary outlines and drag handles so their
 positions are clear; this editing chrome never becomes part of the saved HUD.
 
@@ -169,7 +184,8 @@ locale; every current Retail addon locale is supported.
 ![StatsPro localization preview across current Retail addon locales](screenshots/localization.png)
 
 Language and refresh rate are account-wide. Labels, visible rows, layout, colors,
-and the rest of the HUD presentation follow the active assigned profile.
+and the rest of the HUD presentation follow the effective settings: the active
+account-wide copy when enabled, otherwise the current specialization assignment.
 
 ## Commands
 
@@ -179,9 +195,9 @@ and the rest of the HUD presentation follow the active assigned profile.
 | `/ss show` | Show the HUD |
 | `/ss hide` | Hide the HUD |
 | `/ss toggle` | Toggle visibility |
-| `/ss reset` | Confirm and reset the active profile; shared assignments are identified in the warning |
+| `/ss reset` | Confirm and reset the effective settings; the warning identifies every affected specialization or account-wide scope |
 | `/ss wipe` or `/ss reset all` | Confirm and reset all profiles, assignments, role templates, account settings, and saved positions |
-| `/statspro import` | Import compatible SwiftStats settings into a new profile |
+| `/statspro import` | Import compatible SwiftStats settings into a new specialization or account-wide profile |
 | `/ss debug` | Print support state for a bug report |
 | `/ss help` | Show the command summary |
 
@@ -197,9 +213,10 @@ both addons are loaded for the first login. If StatsPro has already started:
 3. Run `/statspro import` and confirm the import.
 4. Check the new `SwiftStats Import` profile, then disable or uninstall SwiftStats.
 
-The import assigns the new profile only to the current character and
-specialization. Existing StatsPro profiles, other assignments, account settings,
-and the original `SwiftStatsDB` remain unchanged.
+Normally, the import assigns the new profile only to the current character and
+specialization. While account-wide settings are active, it creates and activates a
+new account-wide copy instead. Existing StatsPro profiles, specialization
+assignments, account settings, and the original `SwiftStatsDB` remain unchanged.
 
 ## Compatibility
 

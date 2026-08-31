@@ -76,7 +76,7 @@ addon.movementRuntime = {
 --[[ ============================================================
     1. CONSTANTS
 ============================================================ ]]
-local CURRENT_DB_VERSION = 10
+local CURRENT_DB_VERSION = 11
 
 local DURABILITY_SLOT_MIN = 1
 local DURABILITY_SLOT_MAX = 19
@@ -1574,19 +1574,16 @@ local LABELS_BY_LOCALE = {
         ["Profiles & sharing..."] = "Profiles...", ["Profiles & sharing"] = "Profiles & sharing",
         ["Shared with %d specializations"] = "Shared with %d specializations",
         ["Unknown specialization (%d)"] = "Unknown specialization (%d)",
-        ["Copy settings from..."] = "Copy settings from...", ["Use the same settings as..."] = "Use the same settings as...",
-        ["Use these settings for..."] = "Use these settings for...", ["Stop sharing..."] = "Stop sharing...",
+        ["Use the same settings as..."] = "Use the same settings as...",
         ["Advanced..."] = "Advanced...", ["Hide advanced"] = "Hide advanced",
         ["Reset these settings..."] = "Reset these settings...", ["Forget this character..."] = "Forget this character...",
-        ["Defaults for future specializations..."] = "Defaults for future specializations...", ["Delete unused settings..."] = "Delete unused settings...",
+        ["Delete unused settings..."] = "Delete unused settings...",
         ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward.",
         ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "Use the same settings for \"%s\" and \"%s\"? Future changes will affect both.",
         ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d.",
         ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations.",
-        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "Reset the settings used by \"%s\"? The same reset will affect %d specializations.",
         ["Reset the settings used by \"%s\" to defaults?"] = "Reset the settings used by \"%s\" to defaults?",
-        ["This profile is also a default for future specializations; they will use the reset settings."] = "This profile is also a default for future specializations; they will use the reset settings.",
-        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept.",
+        ["Delete %d unused settings records? Settings used by a specialization, saved account-wide settings, starting settings, or fallback settings will be kept."] = "Delete %d unused settings records? Settings used by a specialization, saved account-wide settings, starting settings, or fallback settings will be kept.",
         ["Switch pending until combat ends"] = "Switch pending until combat ends", ["Account default profile"] = "Account default profile",
         ["Current"] = "Current", ["Active"] = "Active",
         ["No visited characters"] = "No visited characters",
@@ -1598,16 +1595,12 @@ local LABELS_BY_LOCALE = {
         ["Confirm"] = "Confirm", ["Cancel"] = "Cancel",
         ["Tank"] = "Tank", ["Healer"] = "Healer", ["Damage"] = "Damage",
         ["Choose a role"] = "Choose a role",
-        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy.",
-        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy.",
-        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy.",
         ["Profile changes saved."] = "Profile changes saved.", ["Enter a valid profile name."] = "Enter a valid profile name.",
         ["A profile with this name already exists."] = "A profile with this name already exists.",
         ["Profiles changed; review and try again."] = "Profiles changed; review and try again.",
         ["The current character cannot be forgotten."] = "The current character cannot be forgotten.",
         ["Nothing changed."] = "Nothing changed.",
         ["Profile operation failed. Review the selection and try again."] = "Profile operation failed. Review the selection and try again.",
-        ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Forget \"%s\"? Its character record will be removed, but profile settings will be kept.",
         -- Templates:
         ["Auto (current: %s)"] = "Auto (current: %s)",
@@ -1716,19 +1709,16 @@ local LABELS_BY_LOCALE = {
         ["Profiles & sharing..."] = "Профили...", ["Profiles & sharing"] = "Профили и общий доступ",
         ["Shared with %d specializations"] = "Общие настройки для специализаций: %d",
         ["Unknown specialization (%d)"] = "Неизвестная специализация (%d)",
-        ["Copy settings from..."] = "Скопировать настройки из...", ["Use the same settings as..."] = "Использовать общие настройки с...",
-        ["Use these settings for..."] = "Использовать эти настройки для...", ["Stop sharing..."] = "Отделить настройки...",
+        ["Use the same settings as..."] = "Использовать общие настройки с...",
         ["Advanced..."] = "Дополнительно...", ["Hide advanced"] = "Скрыть дополнительные",
         ["Reset these settings..."] = "Сбросить эти настройки...", ["Forget this character..."] = "Забыть этого персонажа...",
-        ["Defaults for future specializations..."] = "Настройки для будущих специализаций...", ["Delete unused settings..."] = "Удалить неиспользуемые настройки...",
+        ["Delete unused settings..."] = "Удалить неиспользуемые настройки...",
         ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "Скопировать %s из «%s» в «%s»? После этого у назначения останутся собственные настройки.",
         ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "Использовать общие настройки для «%s» и «%s»? Последующие изменения затронут обе специализации.",
         ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "Использовать общие настройки из «%s» для «%s»? Их уже используют %d специализации; последующие изменения затронут все %d.",
         ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "Создать для «%s» отдельную копию этих настроек? Последующие изменения больше не затронут другие специализации.",
-        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "Сбросить настройки, используемые «%s»? Этот же сброс затронет %d специализаций.",
         ["Reset the settings used by \"%s\" to defaults?"] = "Сбросить настройки, используемые «%s», до стандартных?",
-        ["This profile is also a default for future specializations; they will use the reset settings."] = "Этот профиль также задан по умолчанию для будущих специализаций; после сброса они будут использовать сброшенные настройки.",
-        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "Удалить неиспользуемые записи настроек (%d)? Настройки специализаций и шаблоны для будущих специализаций будут сохранены.",
+        ["Delete %d unused settings records? Settings used by a specialization, saved account-wide settings, starting settings, or fallback settings will be kept."] = "Удалить %d неиспользуемых записей настроек? Настройки, используемые специализацией, сохранённые общие настройки аккаунта, начальные или резервные настройки будут сохранены.",
         ["Switch pending until combat ends"] = "Переключение после окончания боя", ["Account default profile"] = "Профиль аккаунта по умолчанию",
         ["Current"] = "Текущий", ["Active"] = "Активно",
         ["No visited characters"] = "Нет посещённых персонажей",
@@ -1740,16 +1730,12 @@ local LABELS_BY_LOCALE = {
         ["Confirm"] = "Подтвердить", ["Cancel"] = "Отмена",
         ["Tank"] = "Танк", ["Healer"] = "Лекарь", ["Damage"] = "Урон",
         ["Choose a role"] = "Выберите роль",
-        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "Использовать «%s» как источник для будущих специализаций танка? Существующие назначения не изменятся; каждый новый контекст получит независимую копию.",
-        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "Использовать «%s» как источник для будущих специализаций лекаря? Существующие назначения не изменятся; каждый новый контекст получит независимую копию.",
-        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "Использовать «%s» как источник для будущих специализаций урона? Существующие назначения не изменятся; каждый новый контекст получит независимую копию.",
         ["Profile changes saved."] = "Изменения профилей сохранены.", ["Enter a valid profile name."] = "Введите допустимое имя профиля.",
         ["A profile with this name already exists."] = "Профиль с таким именем уже существует.",
         ["Profiles changed; review and try again."] = "Профили изменились. Проверьте выбор и повторите попытку.",
         ["The current character cannot be forgotten."] = "Текущего персонажа нельзя забыть.",
         ["Nothing changed."] = "Ничего не изменилось.",
         ["Profile operation failed. Review the selection and try again."] = "Операция с профилем не выполнена. Проверьте выбор и повторите попытку.",
-        ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "Сбросить активный профиль «%s»? Будут изменены специализации: %d, другие ссылки: %d.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Забыть «%s»? Запись персонажа будет удалена, но настройки профилей сохранятся.",
         -- Templates:
         ["Auto (current: %s)"] = "Авто (сейчас: %s)",
@@ -1852,19 +1838,16 @@ local LABELS_BY_LOCALE = {
         ["Profiles & sharing..."] = "Profile...", ["Profiles & sharing"] = "Profile und Freigabe",
         ["Shared with %d specializations"] = "Mit %d Spezialisierungen geteilt",
         ["Unknown specialization (%d)"] = "Unbekannte Spezialisierung (%d)",
-        ["Copy settings from..."] = "Einstellungen kopieren von...", ["Use the same settings as..."] = "Dieselben Einstellungen verwenden wie...",
-        ["Use these settings for..."] = "Diese Einstellungen verwenden für...", ["Stop sharing..."] = "Freigabe beenden...",
+        ["Use the same settings as..."] = "Dieselben Einstellungen verwenden wie...",
         ["Advanced..."] = "Erweitert...", ["Hide advanced"] = "Erweitert ausblenden",
         ["Reset these settings..."] = "Diese Einstellungen zurücksetzen...", ["Forget this character..."] = "Diesen Charakter vergessen...",
-        ["Defaults for future specializations..."] = "Standardwerte für zukünftige Spezialisierungen...", ["Delete unused settings..."] = "Nicht verwendete Einstellungen löschen...",
+        ["Delete unused settings..."] = "Nicht verwendete Einstellungen löschen...",
         ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "%s von „%s“ nach „%s“ kopieren? Das Ziel behält danach eigene Einstellungen.",
         ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "Dieselben Einstellungen für „%s“ und „%s“ verwenden? Künftige Änderungen wirken sich auf beide aus.",
         ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "Die geteilten Einstellungen von „%s“ für „%s“ verwenden? Sie werden bereits von %d Spezialisierungen verwendet; künftige Änderungen betreffen alle %d.",
         ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "„%s“ eine eigene Kopie dieser Einstellungen geben? Künftige Änderungen wirken sich nicht mehr auf die anderen Spezialisierungen aus.",
-        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "Die von „%s“ verwendeten Einstellungen zurücksetzen? Derselbe Reset betrifft %d Spezialisierungen.",
         ["Reset the settings used by \"%s\" to defaults?"] = "Die von „%s“ verwendeten Einstellungen auf Standardwerte zurücksetzen?",
-        ["This profile is also a default for future specializations; they will use the reset settings."] = "Dieses Profil ist auch ein Standardwert für zukünftige Spezialisierungen; sie verwenden danach die zurückgesetzten Einstellungen.",
-        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "%d nicht verwendete Einstellungsdatensätze löschen? Verwendete Einstellungen und Standardwerte für zukünftige Spezialisierungen bleiben erhalten.",
+        ["Delete %d unused settings records? Settings used by a specialization, saved account-wide settings, starting settings, or fallback settings will be kept."] = "%d nicht verwendete Einstellungsdatensätze löschen? Von einer Spezialisierung verwendete Einstellungen, gespeicherte kontoweite Einstellungen, Starteinstellungen und Ausweichseinstellungen bleiben erhalten.",
         ["Switch pending until combat ends"] = "Wechsel nach Kampfende", ["Account default profile"] = "Standardprofil des Accounts",
         ["Current"] = "Aktuell", ["Active"] = "Aktiv",
         ["No visited characters"] = "Keine besuchten Charaktere",
@@ -1876,16 +1859,12 @@ local LABELS_BY_LOCALE = {
         ["Confirm"] = "Bestätigen", ["Cancel"] = "Abbrechen",
         ["Tank"] = "Tank", ["Healer"] = "Heiler", ["Damage"] = "Schaden",
         ["Choose a role"] = "Rolle auswählen",
-        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "„%s“ als Quelle für künftige Tank-Kontexte verwenden? Bestehende Zuweisungen ändern sich nicht; jeder neue Kontext erhält eine unabhängige Kopie.",
-        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "„%s“ als Quelle für künftige Heiler-Kontexte verwenden? Bestehende Zuweisungen ändern sich nicht; jeder neue Kontext erhält eine unabhängige Kopie.",
-        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "„%s“ als Quelle für künftige Schadenskontexte verwenden? Bestehende Zuweisungen ändern sich nicht; jeder neue Kontext erhält eine unabhängige Kopie.",
         ["Profile changes saved."] = "Profiländerungen gespeichert.", ["Enter a valid profile name."] = "Gib einen gültigen Profilnamen ein.",
         ["A profile with this name already exists."] = "Ein Profil mit diesem Namen existiert bereits.",
         ["Profiles changed; review and try again."] = "Die Profile wurden geändert. Prüfe die Auswahl und versuche es erneut.",
         ["The current character cannot be forgotten."] = "Der aktuelle Charakter kann nicht vergessen werden.",
         ["Nothing changed."] = "Es wurde nichts geändert.",
         ["Profile operation failed. Review the selection and try again."] = "Der Profilvorgang ist fehlgeschlagen. Prüfe die Auswahl und versuche es erneut.",
-        ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "Aktives Profil „%s“ auf Standardwerte zurücksetzen? Geändert werden %d zugewiesene Spezialisierungen und %d weitere Verweise.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "„%s“ vergessen? Der Charaktereintrag wird entfernt, die Profileinstellungen bleiben erhalten.",
         ["Auto (current: %s)"] = "Auto (aktuell: %s)",
         ["Western European text"] = "westeuropäischen Text",
@@ -1984,19 +1963,16 @@ local LABELS_BY_LOCALE = {
         ["Profiles & sharing..."] = "Profils...", ["Profiles & sharing"] = "Profils et partage",
         ["Shared with %d specializations"] = "Partagé avec %d spécialisations",
         ["Unknown specialization (%d)"] = "Spécialisation inconnue (%d)",
-        ["Copy settings from..."] = "Copier les réglages depuis...", ["Use the same settings as..."] = "Utiliser les mêmes réglages que...",
-        ["Use these settings for..."] = "Utiliser ces réglages pour...", ["Stop sharing..."] = "Arrêter le partage...",
+        ["Use the same settings as..."] = "Utiliser les mêmes réglages que...",
         ["Advanced..."] = "Avancé...", ["Hide advanced"] = "Masquer les options avancées",
         ["Reset these settings..."] = "Réinitialiser ces réglages...", ["Forget this character..."] = "Oublier ce personnage...",
-        ["Defaults for future specializations..."] = "Réglages des futures spécialisations...", ["Delete unused settings..."] = "Supprimer les réglages inutilisés...",
+        ["Delete unused settings..."] = "Supprimer les réglages inutilisés...",
         ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "Copier %s de « %s » vers « %s » ? La destination conservera ensuite ses propres réglages.",
         ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "Utiliser les mêmes réglages pour « %s » et « %s » ? Les futures modifications affecteront les deux.",
         ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "Utiliser les réglages partagés de « %s » pour « %s » ? Ils sont déjà partagés par %d spécialisations ; les futures modifications affecteront les %d.",
         ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "Donner à « %s » sa propre copie de ces réglages ? Les futures modifications n’affecteront plus les autres spécialisations.",
-        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "Réinitialiser les réglages utilisés par « %s » ? La même réinitialisation affectera %d spécialisations.",
         ["Reset the settings used by \"%s\" to defaults?"] = "Réinitialiser les réglages utilisés par « %s » ?",
-        ["This profile is also a default for future specializations; they will use the reset settings."] = "Ce profil sert aussi de réglage par défaut aux futures spécialisations ; elles utiliseront les réglages réinitialisés.",
-        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "Supprimer %d ensembles de réglages inutilisés ? Les réglages utilisés et ceux des futures spécialisations seront conservés.",
+        ["Delete %d unused settings records? Settings used by a specialization, saved account-wide settings, starting settings, or fallback settings will be kept."] = "Supprimer %d ensembles de réglages inutilisés ? Les réglages utilisés par une spécialisation, les réglages de compte enregistrés, les réglages de départ et les réglages de secours seront conservés.",
         ["Switch pending until combat ends"] = "Changement après le combat", ["Account default profile"] = "Profil de compte par défaut",
         ["Current"] = "Actuel", ["Active"] = "Actif",
         ["No visited characters"] = "Aucun personnage visité",
@@ -2008,16 +1984,12 @@ local LABELS_BY_LOCALE = {
         ["Confirm"] = "Confirmer", ["Cancel"] = "Annuler",
         ["Tank"] = "Tank", ["Healer"] = "Soigneur", ["Damage"] = "Dégâts",
         ["Choose a role"] = "Choisir un rôle",
-        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "Utiliser « %s » comme source des futurs contextes Tank ? Les attributions existantes ne changeront pas ; chaque nouveau contexte recevra une copie indépendante.",
-        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "Utiliser « %s » comme source des futurs contextes Soigneur ? Les attributions existantes ne changeront pas ; chaque nouveau contexte recevra une copie indépendante.",
-        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "Utiliser « %s » comme source des futurs contextes Dégâts ? Les attributions existantes ne changeront pas ; chaque nouveau contexte recevra une copie indépendante.",
         ["Profile changes saved."] = "Modifications des profils enregistrées.", ["Enter a valid profile name."] = "Saisissez un nom de profil valide.",
         ["A profile with this name already exists."] = "Un profil portant ce nom existe déjà.",
         ["Profiles changed; review and try again."] = "Les profils ont changé. Vérifiez la sélection et réessayez.",
         ["The current character cannot be forgotten."] = "Le personnage actuel ne peut pas être oublié.",
         ["Nothing changed."] = "Aucune modification.",
         ["Profile operation failed. Review the selection and try again."] = "L’opération sur le profil a échoué. Vérifiez la sélection et réessayez.",
-        ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "Réinitialiser le profil actif « %s » ? Cela modifie %d spécialisations attribuées et %d autres références.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Oublier « %s » ? Sa fiche de personnage sera supprimée, mais les réglages des profils seront conservés.",
         ["Auto (current: %s)"] = "Auto (actuel : %s)",
         ["Western European text"] = "le texte d’Europe occidentale",
@@ -2117,19 +2089,16 @@ local LABELS_BY_LOCALE = {
         ["Profiles & sharing..."] = "Perfiles...", ["Profiles & sharing"] = "Perfiles y uso compartido",
         ["Shared with %d specializations"] = "Compartido con %d especializaciones",
         ["Unknown specialization (%d)"] = "Especialización desconocida (%d)",
-        ["Copy settings from..."] = "Copiar ajustes desde...", ["Use the same settings as..."] = "Usar los mismos ajustes que...",
-        ["Use these settings for..."] = "Usar estos ajustes para...", ["Stop sharing..."] = "Dejar de compartir...",
+        ["Use the same settings as..."] = "Usar los mismos ajustes que...",
         ["Advanced..."] = "Avanzado...", ["Hide advanced"] = "Ocultar opciones avanzadas",
         ["Reset these settings..."] = "Restablecer estos ajustes...", ["Forget this character..."] = "Olvidar este personaje...",
-        ["Defaults for future specializations..."] = "Ajustes para futuras especializaciones...", ["Delete unused settings..."] = "Eliminar ajustes sin usar...",
+        ["Delete unused settings..."] = "Eliminar ajustes sin usar...",
         ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "¿Copiar %s de «%s» a «%s»? El destino conservará sus propios ajustes después.",
         ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "¿Usar los mismos ajustes para «%s» y «%s»? Los cambios futuros afectarán a ambos.",
         ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "¿Usar los ajustes compartidos de «%s» para «%s»? Ya los comparten %d especializaciones; los cambios futuros afectarán a las %d.",
         ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "¿Dar a «%s» su propia copia de estos ajustes? Los cambios futuros ya no afectarán a las otras especializaciones.",
-        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "¿Restablecer los ajustes que usa «%s»? El mismo restablecimiento afectará a %d especializaciones.",
         ["Reset the settings used by \"%s\" to defaults?"] = "¿Restablecer los ajustes que usa «%s» a los valores predeterminados?",
-        ["This profile is also a default for future specializations; they will use the reset settings."] = "Este perfil también es predeterminado para futuras especializaciones; usarán los ajustes restablecidos.",
-        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "¿Eliminar %d conjuntos de ajustes sin usar? Se conservarán los ajustes usados y los predeterminados para futuras especializaciones.",
+        ["Delete %d unused settings records? Settings used by a specialization, saved account-wide settings, starting settings, or fallback settings will be kept."] = "¿Eliminar %d conjuntos de ajustes sin usar? Se conservarán los ajustes usados por una especialización, los ajustes guardados de toda la cuenta, los ajustes iniciales y los ajustes alternativos.",
         ["Switch pending until combat ends"] = "Cambio al terminar el combate", ["Account default profile"] = "Perfil de cuenta predeterminado",
         ["Current"] = "Actual", ["Active"] = "Activo",
         ["No visited characters"] = "No hay personajes visitados",
@@ -2141,16 +2110,12 @@ local LABELS_BY_LOCALE = {
         ["Confirm"] = "Confirmar", ["Cancel"] = "Cancelar",
         ["Tank"] = "Tanque", ["Healer"] = "Sanador", ["Damage"] = "Daño",
         ["Choose a role"] = "Elige un rol",
-        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Tanque? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
-        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Sanador? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
-        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Daño? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
         ["Profile changes saved."] = "Cambios de perfiles guardados.", ["Enter a valid profile name."] = "Introduce un nombre de perfil válido.",
         ["A profile with this name already exists."] = "Ya existe un perfil con este nombre.",
         ["Profiles changed; review and try again."] = "Los perfiles han cambiado. Revisa la selección e inténtalo de nuevo.",
         ["The current character cannot be forgotten."] = "No se puede olvidar al personaje actual.",
         ["Nothing changed."] = "No se ha cambiado nada.",
         ["Profile operation failed. Review the selection and try again."] = "La operación del perfil ha fallado. Revisa la selección e inténtalo de nuevo.",
-        ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "¿Restablecer el perfil activo «%s»? Esto cambia %d especializaciones asignadas y %d referencias más.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "¿Olvidar a «%s»? Se eliminará su registro de personaje, pero se conservarán los ajustes de perfiles.",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
         ["Western European text"] = "texto de Europa occidental",
@@ -2248,19 +2213,16 @@ local LABELS_BY_LOCALE = {
         ["Profiles & sharing..."] = "Perfiles...", ["Profiles & sharing"] = "Perfiles y uso compartido",
         ["Shared with %d specializations"] = "Compartido con %d especializaciones",
         ["Unknown specialization (%d)"] = "Especialización desconocida (%d)",
-        ["Copy settings from..."] = "Copiar ajustes desde...", ["Use the same settings as..."] = "Usar los mismos ajustes que...",
-        ["Use these settings for..."] = "Usar estos ajustes para...", ["Stop sharing..."] = "Dejar de compartir...",
+        ["Use the same settings as..."] = "Usar los mismos ajustes que...",
         ["Advanced..."] = "Avanzado...", ["Hide advanced"] = "Ocultar opciones avanzadas",
         ["Reset these settings..."] = "Restablecer estos ajustes...", ["Forget this character..."] = "Olvidar este personaje...",
-        ["Defaults for future specializations..."] = "Ajustes para futuras especializaciones...", ["Delete unused settings..."] = "Eliminar ajustes sin usar...",
+        ["Delete unused settings..."] = "Eliminar ajustes sin usar...",
         ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "¿Copiar %s de «%s» a «%s»? El destino conservará sus propios ajustes después.",
         ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "¿Usar los mismos ajustes para «%s» y «%s»? Los cambios futuros afectarán a ambos.",
         ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "¿Usar los ajustes compartidos de «%s» para «%s»? Ya los comparten %d especializaciones; los cambios futuros afectarán a las %d.",
         ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "¿Dar a «%s» su propia copia de estos ajustes? Los cambios futuros ya no afectarán a las otras especializaciones.",
-        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "¿Restablecer los ajustes que usa «%s»? El mismo restablecimiento afectará a %d especializaciones.",
         ["Reset the settings used by \"%s\" to defaults?"] = "¿Restablecer los ajustes que usa «%s» a los valores predeterminados?",
-        ["This profile is also a default for future specializations; they will use the reset settings."] = "Este perfil también es predeterminado para futuras especializaciones; usarán los ajustes restablecidos.",
-        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "¿Eliminar %d conjuntos de ajustes sin usar? Se conservarán los ajustes usados y los predeterminados para futuras especializaciones.",
+        ["Delete %d unused settings records? Settings used by a specialization, saved account-wide settings, starting settings, or fallback settings will be kept."] = "¿Eliminar %d conjuntos de ajustes sin usar? Se conservarán los ajustes usados por una especialización, los ajustes guardados de toda la cuenta, los ajustes iniciales y los ajustes alternativos.",
         ["Switch pending until combat ends"] = "Cambio al terminar el combate", ["Account default profile"] = "Perfil predeterminado de la cuenta",
         ["Current"] = "Actual", ["Active"] = "Activo",
         ["No visited characters"] = "No hay personajes visitados",
@@ -2272,16 +2234,12 @@ local LABELS_BY_LOCALE = {
         ["Confirm"] = "Confirmar", ["Cancel"] = "Cancelar",
         ["Tank"] = "Tanque", ["Healer"] = "Sanador", ["Damage"] = "Daño",
         ["Choose a role"] = "Elige un rol",
-        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Tanque? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
-        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Sanador? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
-        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "¿Usar «%s» como origen para futuros contextos de Daño? Las asignaciones existentes no cambiarán; cada contexto nuevo recibirá una copia independiente.",
         ["Profile changes saved."] = "Cambios de perfiles guardados.", ["Enter a valid profile name."] = "Ingresa un nombre de perfil válido.",
         ["A profile with this name already exists."] = "Ya existe un perfil con este nombre.",
         ["Profiles changed; review and try again."] = "Los perfiles cambiaron. Revisa la selección e inténtalo de nuevo.",
         ["The current character cannot be forgotten."] = "No se puede olvidar al personaje actual.",
         ["Nothing changed."] = "No se cambió nada.",
         ["Profile operation failed. Review the selection and try again."] = "La operación del perfil falló. Revisa la selección e inténtalo de nuevo.",
-        ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "¿Restablecer el perfil activo «%s»? Esto cambia %d especializaciones asignadas y %d referencias más.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "¿Olvidar a «%s»? Se eliminará su registro de personaje, pero se conservarán los ajustes de perfiles.",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
         ["Western European text"] = "texto de Europa occidental",
@@ -2380,19 +2338,16 @@ local LABELS_BY_LOCALE = {
         ["Profiles & sharing..."] = "Profili...", ["Profiles & sharing"] = "Profili e condivisione",
         ["Shared with %d specializations"] = "Condiviso con %d specializzazioni",
         ["Unknown specialization (%d)"] = "Specializzazione sconosciuta (%d)",
-        ["Copy settings from..."] = "Copia impostazioni da...", ["Use the same settings as..."] = "Usa le stesse impostazioni di...",
-        ["Use these settings for..."] = "Usa queste impostazioni per...", ["Stop sharing..."] = "Interrompi condivisione...",
+        ["Use the same settings as..."] = "Usa le stesse impostazioni di...",
         ["Advanced..."] = "Avanzate...", ["Hide advanced"] = "Nascondi opzioni avanzate",
         ["Reset these settings..."] = "Ripristina queste impostazioni...", ["Forget this character..."] = "Dimentica questo personaggio...",
-        ["Defaults for future specializations..."] = "Impostazioni per specializzazioni future...", ["Delete unused settings..."] = "Elimina impostazioni inutilizzate...",
+        ["Delete unused settings..."] = "Elimina impostazioni inutilizzate...",
         ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "Copiare %s da «%s» a «%s»? La destinazione manterrà poi le proprie impostazioni.",
         ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "Usare le stesse impostazioni per «%s» e «%s»? Le modifiche future influiranno su entrambe.",
         ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "Usare le impostazioni condivise di «%s» per «%s»? Sono già condivise da %d specializzazioni; le modifiche future interesseranno tutte e %d.",
         ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "Dare a «%s» una copia separata di queste impostazioni? Le modifiche future non influiranno più sulle altre specializzazioni.",
-        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "Ripristinare le impostazioni usate da «%s»? Lo stesso ripristino influirà su %d specializzazioni.",
         ["Reset the settings used by \"%s\" to defaults?"] = "Ripristinare ai valori predefiniti le impostazioni usate da «%s»?",
-        ["This profile is also a default for future specializations; they will use the reset settings."] = "Questo profilo è anche predefinito per le specializzazioni future; useranno le impostazioni ripristinate.",
-        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "Eliminare %d gruppi di impostazioni inutilizzati? Le impostazioni in uso e quelle per le specializzazioni future saranno mantenute.",
+        ["Delete %d unused settings records? Settings used by a specialization, saved account-wide settings, starting settings, or fallback settings will be kept."] = "Eliminare %d gruppi di impostazioni inutilizzati? Verranno mantenute le impostazioni usate da una specializzazione, le impostazioni account salvate, le impostazioni iniziali e quelle di riserva.",
         ["Switch pending until combat ends"] = "Cambio dopo il combattimento", ["Account default profile"] = "Profilo account predefinito",
         ["Current"] = "Attuale", ["Active"] = "Attivo",
         ["No visited characters"] = "Nessun personaggio visitato",
@@ -2404,16 +2359,12 @@ local LABELS_BY_LOCALE = {
         ["Confirm"] = "Conferma", ["Cancel"] = "Annulla",
         ["Tank"] = "Difensore", ["Healer"] = "Guaritore", ["Damage"] = "Assaltatore",
         ["Choose a role"] = "Scegli un ruolo",
-        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usare «%s» come origine per i futuri contesti Difensore? Le assegnazioni esistenti non cambieranno; ogni nuovo contesto riceverà una copia indipendente.",
-        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usare «%s» come origine per i futuri contesti Guaritore? Le assegnazioni esistenti non cambieranno; ogni nuovo contesto riceverà una copia indipendente.",
-        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usare «%s» come origine per i futuri contesti Assaltatore? Le assegnazioni esistenti non cambieranno; ogni nuovo contesto riceverà una copia indipendente.",
         ["Profile changes saved."] = "Modifiche ai profili salvate.", ["Enter a valid profile name."] = "Inserisci un nome profilo valido.",
         ["A profile with this name already exists."] = "Esiste già un profilo con questo nome.",
         ["Profiles changed; review and try again."] = "I profili sono cambiati. Controlla la selezione e riprova.",
         ["The current character cannot be forgotten."] = "Il personaggio attuale non può essere dimenticato.",
         ["Nothing changed."] = "Nessuna modifica.",
         ["Profile operation failed. Review the selection and try again."] = "Operazione sul profilo non riuscita. Controlla la selezione e riprova.",
-        ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "Ripristinare il profilo attivo «%s»? Verranno modificate %d specializzazioni assegnate e %d altri riferimenti.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Dimenticare «%s»? Il record del personaggio verrà rimosso, ma le impostazioni dei profili saranno conservate.",
         ["Auto (current: %s)"] = "Auto (attuale: %s)",
         ["Western European text"] = "testo dell’Europa occidentale",
@@ -2511,19 +2462,16 @@ local LABELS_BY_LOCALE = {
         ["Profiles & sharing..."] = "Perfis...", ["Profiles & sharing"] = "Perfis e compartilhamento",
         ["Shared with %d specializations"] = "Compartilhado com %d especializações",
         ["Unknown specialization (%d)"] = "Especialização desconhecida (%d)",
-        ["Copy settings from..."] = "Copiar configurações de...", ["Use the same settings as..."] = "Usar as mesmas configurações de...",
-        ["Use these settings for..."] = "Usar estas configurações para...", ["Stop sharing..."] = "Parar de compartilhar...",
+        ["Use the same settings as..."] = "Usar as mesmas configurações de...",
         ["Advanced..."] = "Avançado...", ["Hide advanced"] = "Ocultar opções avançadas",
         ["Reset these settings..."] = "Redefinir estas configurações...", ["Forget this character..."] = "Esquecer este personagem...",
-        ["Defaults for future specializations..."] = "Configurações para especializações futuras...", ["Delete unused settings..."] = "Excluir configurações não usadas...",
+        ["Delete unused settings..."] = "Excluir configurações não usadas...",
         ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "Copiar %s de “%s” para “%s”? O destino manterá suas próprias configurações depois.",
         ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "Usar as mesmas configurações para “%s” e “%s”? Alterações futuras afetarão ambos.",
         ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "Usar as configurações compartilhadas de “%s” para “%s”? Elas já são compartilhadas por %d especializações; alterações futuras afetarão todas as %d.",
         ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "Dar a “%s” uma cópia própria destas configurações? Alterações futuras não afetarão mais as outras especializações.",
-        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "Redefinir as configurações usadas por “%s”? A mesma redefinição afetará %d especializações.",
         ["Reset the settings used by \"%s\" to defaults?"] = "Redefinir as configurações usadas por “%s” para os padrões?",
-        ["This profile is also a default for future specializations; they will use the reset settings."] = "Este perfil também é padrão para especializações futuras; elas usarão as configurações redefinidas.",
-        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "Excluir %d conjuntos de configurações não usados? Configurações em uso e padrões para especializações futuras serão mantidos.",
+        ["Delete %d unused settings records? Settings used by a specialization, saved account-wide settings, starting settings, or fallback settings will be kept."] = "Excluir %d conjuntos de configurações não usados? Serão mantidas as configurações usadas por uma especialização, as configurações salvas da conta, as configurações iniciais e as configurações de fallback.",
         ["Switch pending until combat ends"] = "Troca após o combate", ["Account default profile"] = "Perfil padrão da conta",
         ["Current"] = "Atual", ["Active"] = "Ativo",
         ["No visited characters"] = "Nenhum personagem visitado",
@@ -2535,16 +2483,12 @@ local LABELS_BY_LOCALE = {
         ["Confirm"] = "Confirmar", ["Cancel"] = "Cancelar",
         ["Tank"] = "Tanque", ["Healer"] = "Cura", ["Damage"] = "Dano",
         ["Choose a role"] = "Escolha uma função",
-        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usar «%s» como origem para futuros contextos de Tanque? As atribuições existentes não mudarão; cada novo contexto receberá uma cópia independente.",
-        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usar «%s» como origem para futuros contextos de Cura? As atribuições existentes não mudarão; cada novo contexto receberá uma cópia independente.",
-        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "Usar «%s» como origem para futuros contextos de Dano? As atribuições existentes não mudarão; cada novo contexto receberá uma cópia independente.",
         ["Profile changes saved."] = "Alterações de perfil salvas.", ["Enter a valid profile name."] = "Digite um nome de perfil válido.",
         ["A profile with this name already exists."] = "Já existe um perfil com este nome.",
         ["Profiles changed; review and try again."] = "Os perfis mudaram. Revise a seleção e tente novamente.",
         ["The current character cannot be forgotten."] = "O personagem atual não pode ser esquecido.",
         ["Nothing changed."] = "Nada foi alterado.",
         ["Profile operation failed. Review the selection and try again."] = "A operação do perfil falhou. Revise a seleção e tente novamente.",
-        ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "Redefinir o perfil ativo “%s” para os padrões? Isso altera %d especializações atribuídas e %d outras referências.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Esquecer “%s”? O registro do personagem será removido, mas as configurações dos perfis serão mantidas.",
         ["Auto (current: %s)"] = "Auto (atual: %s)",
         ["Western European text"] = "texto da Europa Ocidental",
@@ -2649,19 +2593,16 @@ local LABELS_BY_LOCALE = {
         ["Profiles & sharing..."] = "프로필 및 공유...", ["Profiles & sharing"] = "프로필 및 공유",
         ["Shared with %d specializations"] = "전문화 %d개와 공유",
         ["Unknown specialization (%d)"] = "알 수 없는 전문화 (%d)",
-        ["Copy settings from..."] = "설정 복사 원본...", ["Use the same settings as..."] = "같은 설정 사용...",
-        ["Use these settings for..."] = "이 설정을 사용할 전문화...", ["Stop sharing..."] = "공유 중지...",
+        ["Use the same settings as..."] = "같은 설정 사용...",
         ["Advanced..."] = "고급...", ["Hide advanced"] = "고급 옵션 숨기기",
         ["Reset these settings..."] = "이 설정 초기화...", ["Forget this character..."] = "이 캐릭터 기록 삭제...",
-        ["Defaults for future specializations..."] = "새 전문화의 기본 설정...", ["Delete unused settings..."] = "사용하지 않는 설정 삭제...",
+        ["Delete unused settings..."] = "사용하지 않는 설정 삭제...",
         ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "%s 설정을 “%s”에서 “%s”로 복사하시겠습니까? 대상은 이후 별도 설정을 유지합니다.",
         ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "“%s”와 “%s”에 같은 설정을 사용하시겠습니까? 이후 변경 사항이 둘 다에 적용됩니다.",
         ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "“%s”의 공유 설정을 “%s”에도 사용하시겠습니까? 이미 전문화 %d개가 공유 중이며 이후 변경 사항은 전문화 %d개 모두에 적용됩니다.",
         ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "“%s”에 이 설정의 별도 사본을 만드시겠습니까? 이후 변경 사항은 다른 전문화에 영향을 주지 않습니다.",
-        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "“%s”이(가) 사용하는 설정을 초기화하시겠습니까? 같은 초기화가 전문화 %d개에 적용됩니다.",
         ["Reset the settings used by \"%s\" to defaults?"] = "“%s”이(가) 사용하는 설정을 기본값으로 초기화하시겠습니까?",
-        ["This profile is also a default for future specializations; they will use the reset settings."] = "이 프로필은 향후 전문화의 기본 설정으로도 사용되며 초기화된 설정이 적용됩니다.",
-        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "사용하지 않는 설정 %d개를 삭제하시겠습니까? 현재 사용 중인 설정과 새 전문화의 기본 설정은 유지됩니다.",
+        ["Delete %d unused settings records? Settings used by a specialization, saved account-wide settings, starting settings, or fallback settings will be kept."] = "사용하지 않는 설정 기록 %d개를 삭제하시겠습니까? 전문화가 사용하는 설정, 저장된 계정 전체 설정, 시작 설정 및 대체 설정은 유지됩니다.",
         ["Switch pending until combat ends"] = "전투 종료 후 전환", ["Account default profile"] = "계정 기본 프로필",
         ["Current"] = "현재", ["Active"] = "활성",
         ["No visited characters"] = "방문한 캐릭터 없음",
@@ -2673,16 +2614,12 @@ local LABELS_BY_LOCALE = {
         ["Confirm"] = "확인", ["Cancel"] = "취소",
         ["Tank"] = "방어 전담", ["Healer"] = "치유 전담", ["Damage"] = "공격 전담",
         ["Choose a role"] = "역할 선택",
-        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "%s 프로필을 향후 방어 전담 컨텍스트의 원본으로 사용하시겠습니까? 기존 할당은 바뀌지 않으며 새 컨텍스트마다 독립 복사본이 생성됩니다.",
-        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "%s 프로필을 향후 치유 전담 컨텍스트의 원본으로 사용하시겠습니까? 기존 할당은 바뀌지 않으며 새 컨텍스트마다 독립 복사본이 생성됩니다.",
-        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "%s 프로필을 향후 공격 전담 컨텍스트의 원본으로 사용하시겠습니까? 기존 할당은 바뀌지 않으며 새 컨텍스트마다 독립 복사본이 생성됩니다.",
         ["Profile changes saved."] = "프로필 변경 사항을 저장했습니다.", ["Enter a valid profile name."] = "올바른 프로필 이름을 입력하세요.",
         ["A profile with this name already exists."] = "같은 이름의 프로필이 이미 있습니다.",
         ["Profiles changed; review and try again."] = "프로필이 변경되었습니다. 선택을 확인하고 다시 시도하세요.",
         ["The current character cannot be forgotten."] = "현재 캐릭터의 기록은 삭제할 수 없습니다.",
         ["Nothing changed."] = "변경된 내용이 없습니다.",
         ["Profile operation failed. Review the selection and try again."] = "프로필 작업에 실패했습니다. 선택을 확인하고 다시 시도하세요.",
-        ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "활성 프로필 \"%s\"을(를) 기본값으로 초기화하시겠습니까? 할당된 전문화 %d개와 기타 참조 %d개가 변경됩니다.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "\"%s\"의 기록을 삭제하시겠습니까? 캐릭터 기록만 제거되고 프로필 설정은 유지됩니다.",
         ["Auto (current: %s)"] = "자동 (현재: %s)",
         ["Western European text"] = "서유럽 언어 텍스트",
@@ -2780,19 +2717,16 @@ local LABELS_BY_LOCALE = {
         ["Profiles & sharing..."] = "配置与共享...", ["Profiles & sharing"] = "配置与共享",
         ["Shared with %d specializations"] = "与 %d 个专精共享",
         ["Unknown specialization (%d)"] = "未知专精（%d）",
-        ["Copy settings from..."] = "复制设置自...", ["Use the same settings as..."] = "使用相同设置...",
-        ["Use these settings for..."] = "将这些设置用于...", ["Stop sharing..."] = "停止共享...",
+        ["Use the same settings as..."] = "使用相同设置...",
         ["Advanced..."] = "高级...", ["Hide advanced"] = "隐藏高级选项",
         ["Reset these settings..."] = "重置这些设置...", ["Forget this character..."] = "忘记此角色...",
-        ["Defaults for future specializations..."] = "未来专精的默认设置...", ["Delete unused settings..."] = "删除未使用的设置...",
+        ["Delete unused settings..."] = "删除未使用的设置...",
         ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "将%s从“%s”复制到“%s”？之后目标将保留独立设置。",
         ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "让“%s”和“%s”使用相同设置？今后的更改会同时影响两者。",
         ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "让“%s”的共享设置也用于“%s”？已有 %d 个专精共享这些设置；今后的更改会影响全部 %d 个专精。",
         ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "为“%s”创建这些设置的独立副本？今后的更改将不再影响其他专精。",
-        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "重置“%s”使用的设置？同一次重置会影响 %d 个专精。",
         ["Reset the settings used by \"%s\" to defaults?"] = "将“%s”使用的设置重置为默认值？",
-        ["This profile is also a default for future specializations; they will use the reset settings."] = "此配置也是未来专精的默认配置；重置后它们将使用重置后的设置。",
-        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "删除 %d 组未使用的设置？正在使用的设置和未来专精的默认设置将保留。",
+        ["Delete %d unused settings records? Settings used by a specialization, saved account-wide settings, starting settings, or fallback settings will be kept."] = "删除 %d 组未使用的设置？专精正在使用的设置、已保存的账号通用设置、初始设置和备用设置将会保留。",
         ["Switch pending until combat ends"] = "战斗结束后切换", ["Account default profile"] = "账号默认配置",
         ["Current"] = "当前", ["Active"] = "激活",
         ["No visited characters"] = "没有已访问角色",
@@ -2804,16 +2738,12 @@ local LABELS_BY_LOCALE = {
         ["Confirm"] = "确认", ["Cancel"] = "取消",
         ["Tank"] = "坦克", ["Healer"] = "治疗", ["Damage"] = "输出",
         ["Choose a role"] = "选择职责",
-        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "将“%s”作为未来坦克环境的来源？现有分配不会改变；每个新环境都会获得独立副本。",
-        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "将“%s”作为未来治疗环境的来源？现有分配不会改变；每个新环境都会获得独立副本。",
-        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "将“%s”作为未来输出环境的来源？现有分配不会改变；每个新环境都会获得独立副本。",
         ["Profile changes saved."] = "配置更改已保存。", ["Enter a valid profile name."] = "请输入有效的配置名称。",
         ["A profile with this name already exists."] = "已存在同名配置。",
         ["Profiles changed; review and try again."] = "配置已发生变化。请检查选择后重试。",
         ["The current character cannot be forgotten."] = "无法移除当前角色的记录。",
         ["Nothing changed."] = "没有任何更改。",
         ["Profile operation failed. Review the selection and try again."] = "配置操作失败。请检查选择后重试。",
-        ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "将当前配置“%s”重置为默认值？这会更改 %d 个已分配专精和 %d 个其他引用。",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "移除“%s”的记录？角色记录将被删除，但配置设置会保留。",
         ["Auto (current: %s)"] = "自动（当前: %s）",
         ["Western European text"] = "西欧语言文本",
@@ -2911,19 +2841,16 @@ local LABELS_BY_LOCALE = {
         ["Profiles & sharing..."] = "設定檔與共用...", ["Profiles & sharing"] = "設定檔與共用",
         ["Shared with %d specializations"] = "與 %d 個專精共用",
         ["Unknown specialization (%d)"] = "未知專精（%d）",
-        ["Copy settings from..."] = "複製設定自...", ["Use the same settings as..."] = "使用相同設定...",
-        ["Use these settings for..."] = "將這些設定用於...", ["Stop sharing..."] = "停止共用...",
+        ["Use the same settings as..."] = "使用相同設定...",
         ["Advanced..."] = "進階...", ["Hide advanced"] = "隱藏進階選項",
         ["Reset these settings..."] = "重設這些設定...", ["Forget this character..."] = "忘記此角色...",
-        ["Defaults for future specializations..."] = "未來專精的預設設定...", ["Delete unused settings..."] = "刪除未使用的設定...",
+        ["Delete unused settings..."] = "刪除未使用的設定...",
         ["Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."] = "將%s從「%s」複製到「%s」？之後目標會保留獨立設定。",
         ["Use the same settings for \"%s\" and \"%s\"? Future changes will affect both."] = "讓「%s」與「%s」使用相同設定？之後的變更會同時影響兩者。",
         ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "讓「%s」的共用設定也用於「%s」？已有 %d 個專精共用這些設定；之後的變更會影響全部 %d 個專精。",
         ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "為「%s」建立這些設定的獨立副本？之後的變更將不再影響其他專精。",
-        ["Reset the settings used by \"%s\"? The same reset will affect %d specializations."] = "重設「%s」使用的設定？同一次重設會影響 %d 個專精。",
         ["Reset the settings used by \"%s\" to defaults?"] = "將「%s」使用的設定重設為預設值？",
-        ["This profile is also a default for future specializations; they will use the reset settings."] = "此設定檔也是未來專精的預設設定檔；重設後它們會使用重設後的設定。",
-        ["Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."] = "刪除 %d 組未使用的設定？使用中的設定與未來專精的預設設定會保留。",
+        ["Delete %d unused settings records? Settings used by a specialization, saved account-wide settings, starting settings, or fallback settings will be kept."] = "刪除 %d 組未使用的設定？專精正在使用的設定、已儲存的帳號通用設定、起始設定和備用設定會保留。",
         ["Switch pending until combat ends"] = "戰鬥結束後切換", ["Account default profile"] = "帳號預設設定檔",
         ["Current"] = "目前", ["Active"] = "啟用",
         ["No visited characters"] = "沒有已造訪角色",
@@ -2935,16 +2862,12 @@ local LABELS_BY_LOCALE = {
         ["Confirm"] = "確認", ["Cancel"] = "取消",
         ["Tank"] = "坦克", ["Healer"] = "治療", ["Damage"] = "輸出",
         ["Choose a role"] = "選擇職責",
-        ["Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."] = "將「%s」作為未來坦克環境的來源？現有指派不會變更；每個新環境都會取得獨立副本。",
-        ["Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."] = "將「%s」作為未來治療環境的來源？現有指派不會變更；每個新環境都會取得獨立副本。",
-        ["Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."] = "將「%s」作為未來輸出環境的來源？現有指派不會變更；每個新環境都會取得獨立副本。",
         ["Profile changes saved."] = "設定檔變更已儲存。", ["Enter a valid profile name."] = "請輸入有效的設定檔名稱。",
         ["A profile with this name already exists."] = "已有同名設定檔。",
         ["Profiles changed; review and try again."] = "設定檔已發生變更。請檢查選擇後再試一次。",
         ["The current character cannot be forgotten."] = "無法移除目前角色的記錄。",
         ["Nothing changed."] = "沒有任何變更。",
         ["Profile operation failed. Review the selection and try again."] = "設定檔操作失敗。請檢查選擇後再試一次。",
-        ["Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."] = "將目前設定檔「%s」重設為預設值？這會變更 %d 個已指派專精和 %d 個其他參照。",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "移除「%s」的記錄？角色記錄將被刪除，但設定檔內容會保留。",
         ["Auto (current: %s)"] = "自動（目前: %s）",
         ["Western European text"] = "西歐語言文字",
@@ -3166,6 +3089,286 @@ do
     profileTransferLabels.esMX = profileTransferLabels.esES
     for locale, transferLabels in pairs(profileTransferLabels) do
         for key, value in pairs(transferLabels) do LABELS_BY_LOCALE[locale][key] = value end
+    end
+end
+
+-- Account-wide scope and the clarified sharing vocabulary are kept together so
+-- every shipped locale exposes the same state model and confirmation contract.
+do
+    local accountWideLabels = {
+    enUS = {
+        ["Account-wide settings"] = "Account-wide settings", ["Account-wide"] = "Account-wide",
+        ["Use these settings everywhere..."] = "Use these settings everywhere...", ["Use account-wide settings..."] = "Use account-wide settings...", ["Return to specialization settings..."] = "Return to specialization settings...",
+        ["Copy once from..."] = "Copy once from...", ["Share these settings with..."] = "Share these settings with...", ["Make this specialization independent..."] = "Make this specialization independent...", ["Starting settings for new specializations..."] = "Starting settings for new specializations...",
+        ["Replace saved account-wide settings..."] = "Replace saved account-wide settings...", ["Delete saved account-wide settings..."] = "Delete saved account-wide settings...",
+        ["Every existing and future specialization uses these settings."] = "Every existing and future specialization uses these settings.", ["Copy makes a separate snapshot. Sharing keeps future changes linked."] = "Copy makes a separate snapshot. Sharing keeps future changes linked.",
+        ["Return to specialization settings before changing assignments."] = "Return to specialization settings before changing assignments.",
+        ["Create account-wide settings from \"%s\"? Every existing and future character and specialization will use them. Existing specialization assignments will be kept."] = "Create account-wide settings from \"%s\"? Every existing and future character and specialization will use them. Existing specialization assignments will be kept.",
+        ["Use the saved account-wide settings everywhere? Existing specialization assignments will be kept."] = "Use the saved account-wide settings everywhere? Existing specialization assignments will be kept.",
+        ["Return to specialization settings? Previous assignments will become active again. Account-wide settings will be kept."] = "Return to specialization settings? Previous assignments will become active again. Account-wide settings will be kept.",
+        ["Reset account-wide settings to defaults? This affects every existing and future character and specialization."] = "Reset account-wide settings to defaults? This affects every existing and future character and specialization.",
+        ["Replace the saved account-wide settings with a copy of \"%s\"? They will stay inactive until you turn account-wide settings on."] = "Replace the saved account-wide settings with a copy of \"%s\"? They will stay inactive until you turn account-wide settings on.",
+        ["Delete the saved account-wide settings? Specialization assignments will stay unchanged."] = "Delete the saved account-wide settings? Specialization assignments will stay unchanged.",
+        ["Import selected sections as new account-wide settings? Existing specialization assignments and unselected settings will stay unchanged."] = "Import selected sections as new account-wide settings? Existing specialization assignments and unselected settings will stay unchanged.",
+        ["Changes affect every character and specialization."] = "Changes affect every character and specialization.", ["Changes affect %d specializations."] = "Changes affect %d specializations.",
+        ["These settings are also used to create independent settings for new specializations."] = "These settings are also used to create independent settings for new specializations.", ["These settings are also used as fallback settings."] = "These settings are also used as fallback settings.",
+        ["Reset account-wide settings to defaults?"] = "Reset account-wide settings to defaults?", ["Reset active profile \"%s\" to defaults?"] = "Reset active profile \"%s\" to defaults?",
+        ["Import compatible SwiftStats settings as new account-wide settings? Existing specialization assignments, other profiles, account settings, and SwiftStats data will stay unchanged."] = "Import compatible SwiftStats settings as new account-wide settings? Existing specialization assignments, other profiles, account settings, and SwiftStats data will stay unchanged.",
+        ["SwiftStats settings imported as new account-wide settings \"%s\"."] = "SwiftStats settings imported as new account-wide settings \"%s\".",
+        ["Use \"%s\" as the starting settings for new Tank specializations? Existing specializations will not change; each new specialization receives its own copy."] = "Use \"%s\" as the starting settings for new Tank specializations? Existing specializations will not change; each new specialization receives its own copy.",
+        ["Use \"%s\" as the starting settings for new Healer specializations? Existing specializations will not change; each new specialization receives its own copy."] = "Use \"%s\" as the starting settings for new Healer specializations? Existing specializations will not change; each new specialization receives its own copy.",
+        ["Use \"%s\" as the starting settings for new Damage specializations? Existing specializations will not change; each new specialization receives its own copy."] = "Use \"%s\" as the starting settings for new Damage specializations? Existing specializations will not change; each new specialization receives its own copy.",
+    },
+    ruRU = {
+        ["Account-wide settings"] = "Общие настройки аккаунта", ["Account-wide"] = "Для всего аккаунта",
+        ["Use these settings everywhere..."] = "Использовать эти настройки везде...", ["Use account-wide settings..."] = "Включить общие настройки аккаунта...", ["Return to specialization settings..."] = "Вернуться к настройкам специализаций...",
+        ["Copy once from..."] = "Один раз скопировать из...", ["Share these settings with..."] = "Поделиться настройками с...", ["Make this specialization independent..."] = "Сделать специализацию независимой...", ["Starting settings for new specializations..."] = "Начальные настройки новых специализаций...",
+        ["Replace saved account-wide settings..."] = "Заменить сохранённые общие настройки...", ["Delete saved account-wide settings..."] = "Удалить сохранённые общие настройки...",
+        ["Every existing and future specialization uses these settings."] = "Эти настройки используются всеми существующими и будущими специализациями.", ["Copy makes a separate snapshot. Sharing keeps future changes linked."] = "Копирование создаёт отдельный снимок. Общие настройки сохраняют связь будущих изменений.",
+        ["Return to specialization settings before changing assignments."] = "Вернитесь к настройкам специализаций, прежде чем менять назначения.",
+        ["Create account-wide settings from \"%s\"? Every existing and future character and specialization will use them. Existing specialization assignments will be kept."] = "Создать общие настройки аккаунта из «%s»? Их будут использовать все существующие и будущие персонажи и специализации. Текущие назначения специализаций сохранятся.",
+        ["Use the saved account-wide settings everywhere? Existing specialization assignments will be kept."] = "Использовать сохранённые общие настройки везде? Текущие назначения специализаций сохранятся.",
+        ["Return to specialization settings? Previous assignments will become active again. Account-wide settings will be kept."] = "Вернуться к настройкам специализаций? Предыдущие назначения снова станут активными. Общие настройки аккаунта сохранятся.",
+        ["Reset account-wide settings to defaults? This affects every existing and future character and specialization."] = "Сбросить общие настройки аккаунта? Это затронет всех существующих и будущих персонажей и специализации.",
+        ["Replace the saved account-wide settings with a copy of \"%s\"? They will stay inactive until you turn account-wide settings on."] = "Заменить сохранённые общие настройки копией «%s»? Они останутся неактивными, пока вы не включите общие настройки аккаунта.",
+        ["Delete the saved account-wide settings? Specialization assignments will stay unchanged."] = "Удалить сохранённые общие настройки аккаунта? Назначения специализаций не изменятся.",
+        ["Import selected sections as new account-wide settings? Existing specialization assignments and unselected settings will stay unchanged."] = "Импортировать выбранные разделы как новые общие настройки аккаунта? Назначения специализаций и невыбранные настройки не изменятся.",
+        ["Changes affect every character and specialization."] = "Изменения затрагивают всех персонажей и специализации.", ["Changes affect %d specializations."] = "Изменения затрагивают специализации: %d.",
+        ["These settings are also used to create independent settings for new specializations."] = "Эти настройки также используются для создания независимых настроек новых специализаций.", ["These settings are also used as fallback settings."] = "Эти настройки также используются как резервные.",
+        ["Reset account-wide settings to defaults?"] = "Сбросить общие настройки аккаунта?", ["Reset active profile \"%s\" to defaults?"] = "Сбросить активный профиль «%s»?",
+        ["Import compatible SwiftStats settings as new account-wide settings? Existing specialization assignments, other profiles, account settings, and SwiftStats data will stay unchanged."] = "Импортировать совместимые настройки SwiftStats как новые общие настройки аккаунта? Назначения специализаций, другие профили, настройки аккаунта и данные SwiftStats не изменятся.",
+        ["SwiftStats settings imported as new account-wide settings \"%s\"."] = "Настройки SwiftStats импортированы как новые общие настройки аккаунта «%s».",
+        ["Use \"%s\" as the starting settings for new Tank specializations? Existing specializations will not change; each new specialization receives its own copy."] = "Использовать «%s» как начальные настройки новых специализаций-танков? Существующие специализации не изменятся; каждая новая получит собственную копию.",
+        ["Use \"%s\" as the starting settings for new Healer specializations? Existing specializations will not change; each new specialization receives its own copy."] = "Использовать «%s» как начальные настройки новых специализаций-лекарей? Существующие специализации не изменятся; каждая новая получит собственную копию.",
+        ["Use \"%s\" as the starting settings for new Damage specializations? Existing specializations will not change; each new specialization receives its own copy."] = "Использовать «%s» как начальные настройки новых бойцов? Существующие специализации не изменятся; каждая новая получит собственную копию.",
+    },
+    deDE = {
+        ["Account-wide settings"] = "Kontoweite Einstellungen", ["Account-wide"] = "Kontoweit",
+        ["Use these settings everywhere..."] = "Diese Einstellungen überall verwenden...", ["Use account-wide settings..."] = "Kontoweite Einstellungen verwenden...", ["Return to specialization settings..."] = "Zu Spezialisierungseinstellungen zurückkehren...",
+        ["Copy once from..."] = "Einmal kopieren von...", ["Share these settings with..."] = "Einstellungen teilen mit...", ["Make this specialization independent..."] = "Diese Spezialisierung unabhängig machen...", ["Starting settings for new specializations..."] = "Starteinstellungen für neue Spezialisierungen...",
+        ["Replace saved account-wide settings..."] = "Gespeicherte kontoweite Einstellungen ersetzen...", ["Delete saved account-wide settings..."] = "Gespeicherte kontoweite Einstellungen löschen...",
+        ["Every existing and future specialization uses these settings."] = "Jede bestehende und zukünftige Spezialisierung verwendet diese Einstellungen.", ["Copy makes a separate snapshot. Sharing keeps future changes linked."] = "Kopieren erstellt einen eigenen Stand. Teilen verknüpft zukünftige Änderungen.",
+        ["Return to specialization settings before changing assignments."] = "Kehre vor dem Ändern von Zuweisungen zu Spezialisierungseinstellungen zurück.",
+        ["Create account-wide settings from \"%s\"? Every existing and future character and specialization will use them. Existing specialization assignments will be kept."] = "Kontoweite Einstellungen aus „%s“ erstellen? Alle bestehenden und zukünftigen Charaktere und Spezialisierungen verwenden sie. Bestehende Zuweisungen bleiben erhalten.",
+        ["Use the saved account-wide settings everywhere? Existing specialization assignments will be kept."] = "Gespeicherte kontoweite Einstellungen überall verwenden? Bestehende Spezialisierungszuweisungen bleiben erhalten.",
+        ["Return to specialization settings? Previous assignments will become active again. Account-wide settings will be kept."] = "Zu Spezialisierungseinstellungen zurückkehren? Frühere Zuweisungen werden wieder aktiv. Kontoweite Einstellungen bleiben gespeichert.",
+        ["Reset account-wide settings to defaults? This affects every existing and future character and specialization."] = "Kontoweite Einstellungen zurücksetzen? Dies betrifft alle bestehenden und zukünftigen Charaktere und Spezialisierungen.",
+        ["Replace the saved account-wide settings with a copy of \"%s\"? They will stay inactive until you turn account-wide settings on."] = "Gespeicherte kontoweite Einstellungen durch eine Kopie von „%s“ ersetzen? Sie bleiben inaktiv, bis du sie einschaltest.",
+        ["Delete the saved account-wide settings? Specialization assignments will stay unchanged."] = "Gespeicherte kontoweite Einstellungen löschen? Spezialisierungszuweisungen bleiben unverändert.",
+        ["Import selected sections as new account-wide settings? Existing specialization assignments and unselected settings will stay unchanged."] = "Ausgewählte Bereiche als neue kontoweite Einstellungen importieren? Zuweisungen und nicht ausgewählte Einstellungen bleiben unverändert.",
+        ["Changes affect every character and specialization."] = "Änderungen betreffen jeden Charakter und jede Spezialisierung.", ["Changes affect %d specializations."] = "Änderungen betreffen %d Spezialisierungen.",
+        ["These settings are also used to create independent settings for new specializations."] = "Diese Einstellungen erstellen auch unabhängige Einstellungen für neue Spezialisierungen.", ["These settings are also used as fallback settings."] = "Diese Einstellungen werden auch als Rückfalleinstellungen verwendet.",
+        ["Reset account-wide settings to defaults?"] = "Kontoweite Einstellungen zurücksetzen?", ["Reset active profile \"%s\" to defaults?"] = "Aktives Profil „%s“ zurücksetzen?",
+        ["Import compatible SwiftStats settings as new account-wide settings? Existing specialization assignments, other profiles, account settings, and SwiftStats data will stay unchanged."] = "Kompatible SwiftStats-Einstellungen als neue kontoweite Einstellungen importieren? Zuweisungen, andere Profile, Kontoeinstellungen und SwiftStats-Daten bleiben unverändert.",
+        ["SwiftStats settings imported as new account-wide settings \"%s\"."] = "SwiftStats-Einstellungen wurden als neue kontoweite Einstellungen „%s“ importiert.",
+        ["Use \"%s\" as the starting settings for new Tank specializations? Existing specializations will not change; each new specialization receives its own copy."] = "„%s“ als Starteinstellungen für neue Tank-Spezialisierungen verwenden? Bestehende Spezialisierungen bleiben unverändert; jede neue erhält eine eigene Kopie.",
+        ["Use \"%s\" as the starting settings for new Healer specializations? Existing specializations will not change; each new specialization receives its own copy."] = "„%s“ als Starteinstellungen für neue Heiler-Spezialisierungen verwenden? Bestehende Spezialisierungen bleiben unverändert; jede neue erhält eine eigene Kopie.",
+        ["Use \"%s\" as the starting settings for new Damage specializations? Existing specializations will not change; each new specialization receives its own copy."] = "„%s“ als Starteinstellungen für neue Schadens-Spezialisierungen verwenden? Bestehende Spezialisierungen bleiben unverändert; jede neue erhält eine eigene Kopie.",
+    },
+    frFR = {
+        ["Account-wide settings"] = "Réglages du compte", ["Account-wide"] = "Tout le compte",
+        ["Use these settings everywhere..."] = "Utiliser ces réglages partout...", ["Use account-wide settings..."] = "Utiliser les réglages du compte...", ["Return to specialization settings..."] = "Revenir aux réglages des spécialisations...",
+        ["Copy once from..."] = "Copier une fois depuis...", ["Share these settings with..."] = "Partager ces réglages avec...", ["Make this specialization independent..."] = "Rendre cette spécialisation indépendante...", ["Starting settings for new specializations..."] = "Réglages initiaux des nouvelles spécialisations...",
+        ["Replace saved account-wide settings..."] = "Remplacer les réglages du compte enregistrés...", ["Delete saved account-wide settings..."] = "Supprimer les réglages du compte enregistrés...",
+        ["Every existing and future specialization uses these settings."] = "Toutes les spécialisations actuelles et futures utilisent ces réglages.", ["Copy makes a separate snapshot. Sharing keeps future changes linked."] = "La copie crée un instantané séparé. Le partage lie les changements futurs.",
+        ["Return to specialization settings before changing assignments."] = "Revenez aux réglages des spécialisations avant de modifier les affectations.",
+        ["Create account-wide settings from \"%s\"? Every existing and future character and specialization will use them. Existing specialization assignments will be kept."] = "Créer les réglages du compte à partir de « %s » ? Tous les personnages et spécialisations actuels et futurs les utiliseront. Les affectations existantes seront conservées.",
+        ["Use the saved account-wide settings everywhere? Existing specialization assignments will be kept."] = "Utiliser partout les réglages du compte enregistrés ? Les affectations existantes seront conservées.",
+        ["Return to specialization settings? Previous assignments will become active again. Account-wide settings will be kept."] = "Revenir aux réglages des spécialisations ? Les anciennes affectations redeviendront actives. Les réglages du compte seront conservés.",
+        ["Reset account-wide settings to defaults? This affects every existing and future character and specialization."] = "Réinitialiser les réglages du compte ? Cela affecte tous les personnages et spécialisations actuels et futurs.",
+        ["Replace the saved account-wide settings with a copy of \"%s\"? They will stay inactive until you turn account-wide settings on."] = "Remplacer les réglages du compte enregistrés par une copie de « %s » ? Ils resteront inactifs jusqu’à leur activation.",
+        ["Delete the saved account-wide settings? Specialization assignments will stay unchanged."] = "Supprimer les réglages du compte enregistrés ? Les affectations de spécialisation resteront inchangées.",
+        ["Import selected sections as new account-wide settings? Existing specialization assignments and unselected settings will stay unchanged."] = "Importer les sections sélectionnées comme nouveaux réglages du compte ? Les affectations et réglages non sélectionnés resteront inchangés.",
+        ["Changes affect every character and specialization."] = "Les changements affectent chaque personnage et spécialisation.", ["Changes affect %d specializations."] = "Les changements affectent %d spécialisations.",
+        ["These settings are also used to create independent settings for new specializations."] = "Ces réglages servent aussi à créer des réglages indépendants pour les nouvelles spécialisations.", ["These settings are also used as fallback settings."] = "Ces réglages servent aussi de réglages de secours.",
+        ["Reset account-wide settings to defaults?"] = "Réinitialiser les réglages du compte ?", ["Reset active profile \"%s\" to defaults?"] = "Réinitialiser le profil actif « %s » ?",
+        ["Import compatible SwiftStats settings as new account-wide settings? Existing specialization assignments, other profiles, account settings, and SwiftStats data will stay unchanged."] = "Importer les réglages SwiftStats compatibles comme nouveaux réglages du compte ? Les affectations, autres profils, réglages du compte et données SwiftStats resteront inchangés.",
+        ["SwiftStats settings imported as new account-wide settings \"%s\"."] = "Réglages SwiftStats importés comme nouveaux réglages du compte « %s ».",
+        ["Use \"%s\" as the starting settings for new Tank specializations? Existing specializations will not change; each new specialization receives its own copy."] = "Utiliser « %s » comme réglages initiaux des nouvelles spécialisations Tank ? Les spécialisations existantes ne changeront pas ; chaque nouvelle recevra sa propre copie.",
+        ["Use \"%s\" as the starting settings for new Healer specializations? Existing specializations will not change; each new specialization receives its own copy."] = "Utiliser « %s » comme réglages initiaux des nouvelles spécialisations Soigneur ? Les spécialisations existantes ne changeront pas ; chaque nouvelle recevra sa propre copie.",
+        ["Use \"%s\" as the starting settings for new Damage specializations? Existing specializations will not change; each new specialization receives its own copy."] = "Utiliser « %s » comme réglages initiaux des nouvelles spécialisations Dégâts ? Les spécialisations existantes ne changeront pas ; chaque nouvelle recevra sa propre copie.",
+    },
+    esES = {
+        ["Account-wide settings"] = "Ajustes de toda la cuenta", ["Account-wide"] = "Toda la cuenta",
+        ["Use these settings everywhere..."] = "Usar estos ajustes en todas partes...", ["Use account-wide settings..."] = "Usar ajustes de toda la cuenta...", ["Return to specialization settings..."] = "Volver a los ajustes de especialización...",
+        ["Copy once from..."] = "Copiar una vez desde...", ["Share these settings with..."] = "Compartir estos ajustes con...", ["Make this specialization independent..."] = "Hacer independiente esta especialización...", ["Starting settings for new specializations..."] = "Ajustes iniciales para nuevas especializaciones...",
+        ["Replace saved account-wide settings..."] = "Reemplazar ajustes guardados de toda la cuenta...", ["Delete saved account-wide settings..."] = "Eliminar ajustes guardados de toda la cuenta...",
+        ["Every existing and future specialization uses these settings."] = "Todas las especializaciones actuales y futuras usan estos ajustes.", ["Copy makes a separate snapshot. Sharing keeps future changes linked."] = "Copiar crea una instantánea separada. Compartir mantiene vinculados los cambios futuros.",
+        ["Return to specialization settings before changing assignments."] = "Vuelve a los ajustes de especialización antes de cambiar asignaciones.",
+        ["Create account-wide settings from \"%s\"? Every existing and future character and specialization will use them. Existing specialization assignments will be kept."] = "¿Crear ajustes de toda la cuenta desde «%s»? Todos los personajes y especializaciones actuales y futuros los usarán. Se conservarán las asignaciones existentes.",
+        ["Use the saved account-wide settings everywhere? Existing specialization assignments will be kept."] = "¿Usar en todas partes los ajustes guardados de toda la cuenta? Se conservarán las asignaciones existentes.",
+        ["Return to specialization settings? Previous assignments will become active again. Account-wide settings will be kept."] = "¿Volver a los ajustes de especialización? Las asignaciones anteriores volverán a activarse. Se conservarán los ajustes de toda la cuenta.",
+        ["Reset account-wide settings to defaults? This affects every existing and future character and specialization."] = "¿Restablecer los ajustes de toda la cuenta? Esto afecta a todos los personajes y especializaciones actuales y futuros.",
+        ["Replace the saved account-wide settings with a copy of \"%s\"? They will stay inactive until you turn account-wide settings on."] = "¿Reemplazar los ajustes guardados de toda la cuenta por una copia de «%s»? Permanecerán inactivos hasta que los actives.",
+        ["Delete the saved account-wide settings? Specialization assignments will stay unchanged."] = "¿Eliminar los ajustes guardados de toda la cuenta? Las asignaciones de especialización no cambiarán.",
+        ["Import selected sections as new account-wide settings? Existing specialization assignments and unselected settings will stay unchanged."] = "¿Importar las secciones seleccionadas como nuevos ajustes de toda la cuenta? Las asignaciones y ajustes no seleccionados no cambiarán.",
+        ["Changes affect every character and specialization."] = "Los cambios afectan a todos los personajes y especializaciones.", ["Changes affect %d specializations."] = "Los cambios afectan a %d especializaciones.",
+        ["These settings are also used to create independent settings for new specializations."] = "Estos ajustes también crean ajustes independientes para nuevas especializaciones.", ["These settings are also used as fallback settings."] = "Estos ajustes también se usan como ajustes de reserva.",
+        ["Reset account-wide settings to defaults?"] = "¿Restablecer los ajustes de toda la cuenta?", ["Reset active profile \"%s\" to defaults?"] = "¿Restablecer el perfil activo «%s»?",
+        ["Import compatible SwiftStats settings as new account-wide settings? Existing specialization assignments, other profiles, account settings, and SwiftStats data will stay unchanged."] = "¿Importar ajustes compatibles de SwiftStats como nuevos ajustes de toda la cuenta? Las asignaciones, otros perfiles, ajustes de cuenta y datos de SwiftStats no cambiarán.",
+        ["SwiftStats settings imported as new account-wide settings \"%s\"."] = "Ajustes de SwiftStats importados como nuevos ajustes de toda la cuenta «%s».",
+        ["Use \"%s\" as the starting settings for new Tank specializations? Existing specializations will not change; each new specialization receives its own copy."] = "¿Usar «%s» como ajustes iniciales para nuevas especializaciones de tanque? Las existentes no cambiarán; cada nueva recibirá su propia copia.",
+        ["Use \"%s\" as the starting settings for new Healer specializations? Existing specializations will not change; each new specialization receives its own copy."] = "¿Usar «%s» como ajustes iniciales para nuevas especializaciones de sanador? Las existentes no cambiarán; cada nueva recibirá su propia copia.",
+        ["Use \"%s\" as the starting settings for new Damage specializations? Existing specializations will not change; each new specialization receives its own copy."] = "¿Usar «%s» como ajustes iniciales para nuevas especializaciones de daño? Las existentes no cambiarán; cada nueva recibirá su propia copia.",
+    },
+    itIT = {
+        ["Account-wide settings"] = "Impostazioni per tutto l’account", ["Account-wide"] = "Tutto l’account",
+        ["Use these settings everywhere..."] = "Usa queste impostazioni ovunque...", ["Use account-wide settings..."] = "Usa impostazioni per tutto l’account...", ["Return to specialization settings..."] = "Torna alle impostazioni delle specializzazioni...",
+        ["Copy once from..."] = "Copia una volta da...", ["Share these settings with..."] = "Condividi queste impostazioni con...", ["Make this specialization independent..."] = "Rendi indipendente questa specializzazione...", ["Starting settings for new specializations..."] = "Impostazioni iniziali per nuove specializzazioni...",
+        ["Replace saved account-wide settings..."] = "Sostituisci impostazioni account salvate...", ["Delete saved account-wide settings..."] = "Elimina impostazioni account salvate...",
+        ["Every existing and future specialization uses these settings."] = "Ogni specializzazione attuale e futura usa queste impostazioni.", ["Copy makes a separate snapshot. Sharing keeps future changes linked."] = "La copia crea un’istantanea separata. La condivisione collega le modifiche future.",
+        ["Return to specialization settings before changing assignments."] = "Torna alle impostazioni delle specializzazioni prima di cambiare le assegnazioni.",
+        ["Create account-wide settings from \"%s\"? Every existing and future character and specialization will use them. Existing specialization assignments will be kept."] = "Creare impostazioni per tutto l’account da «%s»? Tutti i personaggi e le specializzazioni attuali e futuri le useranno. Le assegnazioni esistenti saranno mantenute.",
+        ["Use the saved account-wide settings everywhere? Existing specialization assignments will be kept."] = "Usare ovunque le impostazioni account salvate? Le assegnazioni esistenti saranno mantenute.",
+        ["Return to specialization settings? Previous assignments will become active again. Account-wide settings will be kept."] = "Tornare alle impostazioni delle specializzazioni? Le assegnazioni precedenti torneranno attive. Le impostazioni account saranno mantenute.",
+        ["Reset account-wide settings to defaults? This affects every existing and future character and specialization."] = "Ripristinare le impostazioni dell’account? Questo interessa tutti i personaggi e le specializzazioni attuali e futuri.",
+        ["Replace the saved account-wide settings with a copy of \"%s\"? They will stay inactive until you turn account-wide settings on."] = "Sostituire le impostazioni account salvate con una copia di «%s»? Resteranno inattive finché non le attivi.",
+        ["Delete the saved account-wide settings? Specialization assignments will stay unchanged."] = "Eliminare le impostazioni account salvate? Le assegnazioni delle specializzazioni non cambieranno.",
+        ["Import selected sections as new account-wide settings? Existing specialization assignments and unselected settings will stay unchanged."] = "Importare le sezioni selezionate come nuove impostazioni account? Le assegnazioni e le impostazioni non selezionate non cambieranno.",
+        ["Changes affect every character and specialization."] = "Le modifiche interessano ogni personaggio e specializzazione.", ["Changes affect %d specializations."] = "Le modifiche interessano %d specializzazioni.",
+        ["These settings are also used to create independent settings for new specializations."] = "Queste impostazioni creano anche impostazioni indipendenti per le nuove specializzazioni.", ["These settings are also used as fallback settings."] = "Queste impostazioni sono usate anche come riserva.",
+        ["Reset account-wide settings to defaults?"] = "Ripristinare le impostazioni dell’account?", ["Reset active profile \"%s\" to defaults?"] = "Ripristinare il profilo attivo «%s»?",
+        ["Import compatible SwiftStats settings as new account-wide settings? Existing specialization assignments, other profiles, account settings, and SwiftStats data will stay unchanged."] = "Importare le impostazioni SwiftStats compatibili come nuove impostazioni account? Assegnazioni, altri profili, impostazioni account e dati SwiftStats non cambieranno.",
+        ["SwiftStats settings imported as new account-wide settings \"%s\"."] = "Impostazioni SwiftStats importate come nuove impostazioni account «%s».",
+        ["Use \"%s\" as the starting settings for new Tank specializations? Existing specializations will not change; each new specialization receives its own copy."] = "Usare «%s» come impostazioni iniziali per nuove specializzazioni Tank? Quelle esistenti non cambieranno; ogni nuova riceverà una copia propria.",
+        ["Use \"%s\" as the starting settings for new Healer specializations? Existing specializations will not change; each new specialization receives its own copy."] = "Usare «%s» come impostazioni iniziali per nuove specializzazioni Curatore? Quelle esistenti non cambieranno; ogni nuova riceverà una copia propria.",
+        ["Use \"%s\" as the starting settings for new Damage specializations? Existing specializations will not change; each new specialization receives its own copy."] = "Usare «%s» come impostazioni iniziali per nuove specializzazioni Danni? Quelle esistenti non cambieranno; ogni nuova riceverà una copia propria.",
+    },
+    ptBR = {
+        ["Account-wide settings"] = "Configurações de toda a conta", ["Account-wide"] = "Toda a conta",
+        ["Use these settings everywhere..."] = "Usar estas configurações em todos os lugares...", ["Use account-wide settings..."] = "Usar configurações de toda a conta...", ["Return to specialization settings..."] = "Voltar às configurações de especialização...",
+        ["Copy once from..."] = "Copiar uma vez de...", ["Share these settings with..."] = "Compartilhar estas configurações com...", ["Make this specialization independent..."] = "Tornar esta especialização independente...", ["Starting settings for new specializations..."] = "Configurações iniciais para novas especializações...",
+        ["Replace saved account-wide settings..."] = "Substituir configurações salvas da conta...", ["Delete saved account-wide settings..."] = "Excluir configurações salvas da conta...",
+        ["Every existing and future specialization uses these settings."] = "Todas as especializações atuais e futuras usam estas configurações.", ["Copy makes a separate snapshot. Sharing keeps future changes linked."] = "Copiar cria um estado separado. Compartilhar mantém as mudanças futuras vinculadas.",
+        ["Return to specialization settings before changing assignments."] = "Volte às configurações de especialização antes de alterar atribuições.",
+        ["Create account-wide settings from \"%s\"? Every existing and future character and specialization will use them. Existing specialization assignments will be kept."] = "Criar configurações de toda a conta a partir de “%s”? Todos os personagens e especializações atuais e futuros as usarão. As atribuições existentes serão mantidas.",
+        ["Use the saved account-wide settings everywhere? Existing specialization assignments will be kept."] = "Usar as configurações salvas da conta em todos os lugares? As atribuições existentes serão mantidas.",
+        ["Return to specialization settings? Previous assignments will become active again. Account-wide settings will be kept."] = "Voltar às configurações de especialização? As atribuições anteriores ficarão ativas novamente. As configurações da conta serão mantidas.",
+        ["Reset account-wide settings to defaults? This affects every existing and future character and specialization."] = "Redefinir as configurações da conta? Isso afeta todos os personagens e especializações atuais e futuros.",
+        ["Replace the saved account-wide settings with a copy of \"%s\"? They will stay inactive until you turn account-wide settings on."] = "Substituir as configurações salvas da conta por uma cópia de “%s”? Elas ficarão inativas até serem ativadas.",
+        ["Delete the saved account-wide settings? Specialization assignments will stay unchanged."] = "Excluir as configurações salvas da conta? As atribuições de especialização não mudarão.",
+        ["Import selected sections as new account-wide settings? Existing specialization assignments and unselected settings will stay unchanged."] = "Importar as seções selecionadas como novas configurações da conta? As atribuições e configurações não selecionadas não mudarão.",
+        ["Changes affect every character and specialization."] = "As mudanças afetam todos os personagens e especializações.", ["Changes affect %d specializations."] = "As mudanças afetam %d especializações.",
+        ["These settings are also used to create independent settings for new specializations."] = "Estas configurações também criam configurações independentes para novas especializações.", ["These settings are also used as fallback settings."] = "Estas configurações também são usadas como reserva.",
+        ["Reset account-wide settings to defaults?"] = "Redefinir as configurações da conta?", ["Reset active profile \"%s\" to defaults?"] = "Redefinir o perfil ativo “%s”?",
+        ["Import compatible SwiftStats settings as new account-wide settings? Existing specialization assignments, other profiles, account settings, and SwiftStats data will stay unchanged."] = "Importar configurações compatíveis do SwiftStats como novas configurações da conta? Atribuições, outros perfis, configurações da conta e dados do SwiftStats não mudarão.",
+        ["SwiftStats settings imported as new account-wide settings \"%s\"."] = "Configurações do SwiftStats importadas como novas configurações da conta “%s”.",
+        ["Use \"%s\" as the starting settings for new Tank specializations? Existing specializations will not change; each new specialization receives its own copy."] = "Usar “%s” como configurações iniciais para novas especializações de Tanque? As existentes não mudarão; cada nova receberá sua própria cópia.",
+        ["Use \"%s\" as the starting settings for new Healer specializations? Existing specializations will not change; each new specialization receives its own copy."] = "Usar “%s” como configurações iniciais para novas especializações de Cura? As existentes não mudarão; cada nova receberá sua própria cópia.",
+        ["Use \"%s\" as the starting settings for new Damage specializations? Existing specializations will not change; each new specialization receives its own copy."] = "Usar “%s” como configurações iniciais para novas especializações de Dano? As existentes não mudarão; cada nova receberá sua própria cópia.",
+    },
+    koKR = {
+        ["Account-wide settings"] = "계정 전체 설정", ["Account-wide"] = "계정 전체",
+        ["Use these settings everywhere..."] = "이 설정을 모든 곳에 사용...", ["Use account-wide settings..."] = "계정 전체 설정 사용...", ["Return to specialization settings..."] = "전문화 설정으로 돌아가기...",
+        ["Copy once from..."] = "한 번 복사할 원본...", ["Share these settings with..."] = "이 설정을 공유할 대상...", ["Make this specialization independent..."] = "이 전문화를 독립 설정으로 만들기...", ["Starting settings for new specializations..."] = "새 전문화의 시작 설정...",
+        ["Replace saved account-wide settings..."] = "저장된 계정 전체 설정 교체...", ["Delete saved account-wide settings..."] = "저장된 계정 전체 설정 삭제...",
+        ["Every existing and future specialization uses these settings."] = "현재 및 앞으로의 모든 전문화가 이 설정을 사용합니다.", ["Copy makes a separate snapshot. Sharing keeps future changes linked."] = "복사는 별도 사본을 만듭니다. 공유하면 이후 변경 사항도 함께 적용됩니다.",
+        ["Return to specialization settings before changing assignments."] = "할당을 변경하기 전에 전문화 설정으로 돌아가세요.",
+        ["Create account-wide settings from \"%s\"? Every existing and future character and specialization will use them. Existing specialization assignments will be kept."] = "\"%s\"에서 계정 전체 설정을 만드시겠습니까? 현재 및 앞으로의 모든 캐릭터와 전문화가 사용합니다. 기존 전문화 할당은 유지됩니다.",
+        ["Use the saved account-wide settings everywhere? Existing specialization assignments will be kept."] = "저장된 계정 전체 설정을 모든 곳에 사용하시겠습니까? 기존 전문화 할당은 유지됩니다.",
+        ["Return to specialization settings? Previous assignments will become active again. Account-wide settings will be kept."] = "전문화 설정으로 돌아가시겠습니까? 이전 할당이 다시 활성화되고 계정 전체 설정은 보관됩니다.",
+        ["Reset account-wide settings to defaults? This affects every existing and future character and specialization."] = "계정 전체 설정을 초기화하시겠습니까? 현재 및 앞으로의 모든 캐릭터와 전문화에 적용됩니다.",
+        ["Replace the saved account-wide settings with a copy of \"%s\"? They will stay inactive until you turn account-wide settings on."] = "저장된 계정 전체 설정을 \"%s\"의 사본으로 교체하시겠습니까? 계정 전체 설정을 켤 때까지 비활성 상태로 유지됩니다.",
+        ["Delete the saved account-wide settings? Specialization assignments will stay unchanged."] = "저장된 계정 전체 설정을 삭제하시겠습니까? 전문화 할당은 변경되지 않습니다.",
+        ["Import selected sections as new account-wide settings? Existing specialization assignments and unselected settings will stay unchanged."] = "선택한 항목을 새 계정 전체 설정으로 가져오시겠습니까? 전문화 할당과 선택하지 않은 설정은 변경되지 않습니다.",
+        ["Changes affect every character and specialization."] = "변경 사항은 모든 캐릭터와 전문화에 적용됩니다.", ["Changes affect %d specializations."] = "변경 사항은 전문화 %d개에 적용됩니다.",
+        ["These settings are also used to create independent settings for new specializations."] = "이 설정은 새 전문화의 독립 설정을 만드는 데에도 사용됩니다.", ["These settings are also used as fallback settings."] = "이 설정은 예비 설정으로도 사용됩니다.",
+        ["Reset account-wide settings to defaults?"] = "계정 전체 설정을 초기화하시겠습니까?", ["Reset active profile \"%s\" to defaults?"] = "활성 프로필 \"%s\"을(를) 초기화하시겠습니까?",
+        ["Import compatible SwiftStats settings as new account-wide settings? Existing specialization assignments, other profiles, account settings, and SwiftStats data will stay unchanged."] = "호환되는 SwiftStats 설정을 새 계정 전체 설정으로 가져오시겠습니까? 전문화 할당, 다른 프로필, 계정 설정 및 SwiftStats 데이터는 변경되지 않습니다.",
+        ["SwiftStats settings imported as new account-wide settings \"%s\"."] = "SwiftStats 설정을 새 계정 전체 설정 \"%s\"(으)로 가져왔습니다.",
+        ["Use \"%s\" as the starting settings for new Tank specializations? Existing specializations will not change; each new specialization receives its own copy."] = "\"%s\"을(를) 새 방어 전담 전문화의 시작 설정으로 사용하시겠습니까? 기존 전문화는 변경되지 않으며 새 전문화마다 자체 사본을 받습니다.",
+        ["Use \"%s\" as the starting settings for new Healer specializations? Existing specializations will not change; each new specialization receives its own copy."] = "\"%s\"을(를) 새 치유 전담 전문화의 시작 설정으로 사용하시겠습니까? 기존 전문화는 변경되지 않으며 새 전문화마다 자체 사본을 받습니다.",
+        ["Use \"%s\" as the starting settings for new Damage specializations? Existing specializations will not change; each new specialization receives its own copy."] = "\"%s\"을(를) 새 공격 전담 전문화의 시작 설정으로 사용하시겠습니까? 기존 전문화는 변경되지 않으며 새 전문화마다 자체 사본을 받습니다.",
+    },
+    zhCN = {
+        ["Account-wide settings"] = "账号通用设置", ["Account-wide"] = "账号通用",
+        ["Use these settings everywhere..."] = "在所有地方使用这些设置...", ["Use account-wide settings..."] = "使用账号通用设置...", ["Return to specialization settings..."] = "恢复专精设置...",
+        ["Copy once from..."] = "一次性复制自...", ["Share these settings with..."] = "将这些设置共享给...", ["Make this specialization independent..."] = "让此专精使用独立设置...", ["Starting settings for new specializations..."] = "新专精的初始设置...",
+        ["Replace saved account-wide settings..."] = "替换已保存的账号通用设置...", ["Delete saved account-wide settings..."] = "删除已保存的账号通用设置...",
+        ["Every existing and future specialization uses these settings."] = "所有现有和未来的专精都使用这些设置。", ["Copy makes a separate snapshot. Sharing keeps future changes linked."] = "复制会创建独立快照；共享会让后续更改保持同步。",
+        ["Return to specialization settings before changing assignments."] = "更改分配前请先恢复专精设置。",
+        ["Create account-wide settings from \"%s\"? Every existing and future character and specialization will use them. Existing specialization assignments will be kept."] = "要从“%s”创建账号通用设置吗？所有现有和未来的角色及专精都将使用它们。现有专精分配会保留。",
+        ["Use the saved account-wide settings everywhere? Existing specialization assignments will be kept."] = "要在所有地方使用已保存的账号通用设置吗？现有专精分配会保留。",
+        ["Return to specialization settings? Previous assignments will become active again. Account-wide settings will be kept."] = "要恢复专精设置吗？之前的分配会重新生效，账号通用设置会保留。",
+        ["Reset account-wide settings to defaults? This affects every existing and future character and specialization."] = "要重置账号通用设置吗？这会影响所有现有和未来的角色及专精。",
+        ["Replace the saved account-wide settings with a copy of \"%s\"? They will stay inactive until you turn account-wide settings on."] = "要用“%s”的副本替换已保存的账号通用设置吗？在启用账号通用设置前，它们会保持停用。",
+        ["Delete the saved account-wide settings? Specialization assignments will stay unchanged."] = "要删除已保存的账号通用设置吗？专精分配不会改变。",
+        ["Import selected sections as new account-wide settings? Existing specialization assignments and unselected settings will stay unchanged."] = "要将所选部分导入为新的账号通用设置吗？专精分配和未选设置不会改变。",
+        ["Changes affect every character and specialization."] = "更改会影响所有角色和专精。", ["Changes affect %d specializations."] = "更改会影响 %d 个专精。",
+        ["These settings are also used to create independent settings for new specializations."] = "这些设置还用于为新专精创建独立设置。", ["These settings are also used as fallback settings."] = "这些设置还用作备用设置。",
+        ["Reset account-wide settings to defaults?"] = "要重置账号通用设置吗？", ["Reset active profile \"%s\" to defaults?"] = "要重置当前配置“%s”吗？",
+        ["Import compatible SwiftStats settings as new account-wide settings? Existing specialization assignments, other profiles, account settings, and SwiftStats data will stay unchanged."] = "要将兼容的 SwiftStats 设置导入为新的账号通用设置吗？专精分配、其他配置、账号设置和 SwiftStats 数据不会改变。",
+        ["SwiftStats settings imported as new account-wide settings \"%s\"."] = "SwiftStats 设置已导入为新的账号通用设置“%s”。",
+        ["Use \"%s\" as the starting settings for new Tank specializations? Existing specializations will not change; each new specialization receives its own copy."] = "要将“%s”用作新坦克专精的初始设置吗？现有专精不会改变；每个新专精都会获得独立副本。",
+        ["Use \"%s\" as the starting settings for new Healer specializations? Existing specializations will not change; each new specialization receives its own copy."] = "要将“%s”用作新治疗专精的初始设置吗？现有专精不会改变；每个新专精都会获得独立副本。",
+        ["Use \"%s\" as the starting settings for new Damage specializations? Existing specializations will not change; each new specialization receives its own copy."] = "要将“%s”用作新伤害专精的初始设置吗？现有专精不会改变；每个新专精都会获得独立副本。",
+    },
+    zhTW = {
+        ["Account-wide settings"] = "帳號通用設定", ["Account-wide"] = "帳號通用",
+        ["Use these settings everywhere..."] = "在所有地方使用這些設定...", ["Use account-wide settings..."] = "使用帳號通用設定...", ["Return to specialization settings..."] = "恢復專精設定...",
+        ["Copy once from..."] = "一次複製自...", ["Share these settings with..."] = "將這些設定共用給...", ["Make this specialization independent..."] = "讓此專精使用獨立設定...", ["Starting settings for new specializations..."] = "新專精的初始設定...",
+        ["Replace saved account-wide settings..."] = "取代已儲存的帳號通用設定...", ["Delete saved account-wide settings..."] = "刪除已儲存的帳號通用設定...",
+        ["Every existing and future specialization uses these settings."] = "所有目前與未來的專精都使用這些設定。", ["Copy makes a separate snapshot. Sharing keeps future changes linked."] = "複製會建立獨立快照；共用會讓後續變更保持同步。",
+        ["Return to specialization settings before changing assignments."] = "變更指派前請先恢復專精設定。",
+        ["Create account-wide settings from \"%s\"? Every existing and future character and specialization will use them. Existing specialization assignments will be kept."] = "要從「%s」建立帳號通用設定嗎？所有目前與未來的角色及專精都會使用。現有專精指派會保留。",
+        ["Use the saved account-wide settings everywhere? Existing specialization assignments will be kept."] = "要在所有地方使用已儲存的帳號通用設定嗎？現有專精指派會保留。",
+        ["Return to specialization settings? Previous assignments will become active again. Account-wide settings will be kept."] = "要恢復專精設定嗎？先前的指派會重新生效，帳號通用設定會保留。",
+        ["Reset account-wide settings to defaults? This affects every existing and future character and specialization."] = "要重設帳號通用設定嗎？這會影響所有目前與未來的角色及專精。",
+        ["Replace the saved account-wide settings with a copy of \"%s\"? They will stay inactive until you turn account-wide settings on."] = "要用「%s」的副本取代已儲存的帳號通用設定嗎？在啟用帳號通用設定前，它們會保持停用。",
+        ["Delete the saved account-wide settings? Specialization assignments will stay unchanged."] = "要刪除已儲存的帳號通用設定嗎？專精指派不會改變。",
+        ["Import selected sections as new account-wide settings? Existing specialization assignments and unselected settings will stay unchanged."] = "要將所選區段匯入為新的帳號通用設定嗎？專精指派與未選設定不會改變。",
+        ["Changes affect every character and specialization."] = "變更會影響所有角色與專精。", ["Changes affect %d specializations."] = "變更會影響 %d 個專精。",
+        ["These settings are also used to create independent settings for new specializations."] = "這些設定也用於為新專精建立獨立設定。", ["These settings are also used as fallback settings."] = "這些設定也用作備用設定。",
+        ["Reset account-wide settings to defaults?"] = "要重設帳號通用設定嗎？", ["Reset active profile \"%s\" to defaults?"] = "要重設目前設定檔「%s」嗎？",
+        ["Import compatible SwiftStats settings as new account-wide settings? Existing specialization assignments, other profiles, account settings, and SwiftStats data will stay unchanged."] = "要將相容的 SwiftStats 設定匯入為新的帳號通用設定嗎？專精指派、其他設定檔、帳號設定與 SwiftStats 資料不會改變。",
+        ["SwiftStats settings imported as new account-wide settings \"%s\"."] = "SwiftStats 設定已匯入為新的帳號通用設定「%s」。",
+        ["Use \"%s\" as the starting settings for new Tank specializations? Existing specializations will not change; each new specialization receives its own copy."] = "要將「%s」用作新坦克專精的初始設定嗎？現有專精不會改變；每個新專精都會取得獨立副本。",
+        ["Use \"%s\" as the starting settings for new Healer specializations? Existing specializations will not change; each new specialization receives its own copy."] = "要將「%s」用作新治療專精的初始設定嗎？現有專精不會改變；每個新專精都會取得獨立副本。",
+        ["Use \"%s\" as the starting settings for new Damage specializations? Existing specializations will not change; each new specialization receives its own copy."] = "要將「%s」用作新傷害專精的初始設定嗎？現有專精不會改變；每個新專精都會取得獨立副本。",
+    },
+    }
+    accountWideLabels.esMX = accountWideLabels.esES
+    for locale, labels in pairs(accountWideLabels) do
+        for key, value in pairs(labels) do LABELS_BY_LOCALE[locale][key] = value end
+    end
+end
+
+-- A disabled copy/share action needs to explain the normal first-use state: the
+-- manager only knows specializations and characters that have been seen locally.
+do
+    local key = "Visit another specialization or character before copying or sharing settings."
+    local sharedKey = "All known specializations already use these settings."
+    local profileAvailabilityLabels = {
+        enUS = "Visit another specialization or character before copying or sharing settings.",
+        ruRU = "Переключитесь на другую специализацию или зайдите на другого персонажа, прежде чем копировать настройки или делать их общими.",
+        deDE = "Aktiviere eine andere Spezialisierung oder logge dich mit einem anderen Charakter ein, bevor du Einstellungen kopierst oder teilst.",
+        frFR = "Activez une autre spécialisation ou connectez-vous avec un autre personnage avant de copier ou de partager des réglages.",
+        esES = "Activa otra especialización o inicia sesión con otro personaje antes de copiar o compartir ajustes.",
+        itIT = "Attiva un'altra specializzazione o accedi con un altro personaggio prima di copiare o condividere le impostazioni.",
+        ptBR = "Ative outra especialização ou entre com outro personagem antes de copiar ou compartilhar configurações.",
+        koKR = "설정을 복사하거나 공유하려면 먼저 다른 전문화로 전환하거나 다른 캐릭터로 접속하세요.",
+        zhCN = "请先切换到其他专精或登录其他角色，然后再复制或共享设置。",
+        zhTW = "請先切換至其他專精或登入其他角色，再複製或共用設定。",
+    }
+    local sharedAvailabilityLabels = {
+        enUS = "All known specializations already use these settings.",
+        ruRU = "Все известные специализации уже используют эти настройки.",
+        deDE = "Alle bekannten Spezialisierungen verwenden bereits diese Einstellungen.",
+        frFR = "Toutes les spécialisations connues utilisent déjà ces réglages.",
+        esES = "Todas las especializaciones conocidas ya usan estos ajustes.",
+        itIT = "Tutte le specializzazioni note usano già queste impostazioni.",
+        ptBR = "Todas as especializações conhecidas já usam estas configurações.",
+        koKR = "알려진 모든 전문화가 이미 이 설정을 사용하고 있습니다.",
+        zhCN = "所有已知专精都已在使用这些设置。",
+        zhTW = "所有已知專精都已在使用這些設定。",
+    }
+    profileAvailabilityLabels.esMX = profileAvailabilityLabels.esES
+    sharedAvailabilityLabels.esMX = sharedAvailabilityLabels.esES
+    for locale, value in pairs(profileAvailabilityLabels) do
+        LABELS_BY_LOCALE[locale][key] = value
+    end
+    for locale, value in pairs(sharedAvailabilityLabels) do
+        LABELS_BY_LOCALE[locale][sharedKey] = value
     end
 end
 
@@ -3422,10 +3625,13 @@ local function NormalizeDBVersion(value)
     -- WARNING: an unreadable/secret schema marker must block mutation like a
     -- future version; treating it as version 0 would run destructive migrations.
     if not secretOK or secret then return CURRENT_DB_VERSION + 1, false end
+    if type(value) == "nil" then return 0, true end
     local numberOK, n = pcall(tonumber, value)
-    if not numberOK then return 0, true end
-    if not IsFiniteNumber(n) then return 0, true end
-    return math.floor(n), true
+    if not numberOK or not IsFiniteNumber(n) or n < 0
+        or n ~= math.floor(n) then
+        return CURRENT_DB_VERSION + 1, false
+    end
+    return n, true
 end
 
 local NUMBER_SETTING_META = {
@@ -4225,7 +4431,7 @@ local function PrintMsg(text)
     print("|cff00ff7f[StatsPro]|r " .. text)
 end
 
--- One dynamic boundary owns every SavedVariables read/write. Schema v10 leaves the
+-- One dynamic boundary owns every SavedVariables read/write. Schema v11 leaves the
 -- old flat fields untouched at the root as a one-generation downgrade shadow, while
 -- current code reads profile settings and account-wide settings only through
 -- these accessors. Re-evaluate every attempted mutation so root/version/profile changes
@@ -4240,6 +4446,7 @@ addon.dbRuntime = {
     rootRef = nil,
     activeAccount = nil,
     activeSettings = nil,
+    assignedProfileID = nil,
     activeProfileID = nil,
     registryReady = false,
     generation = 0,
@@ -4252,6 +4459,13 @@ addon.dbRuntime = {
     validatedCharactersRef = nil,
     validatedDefaultProfileID = nil,
     validatedDefaultProfileRef = nil,
+    validatedAccountWideEnabled = nil,
+    validatedAccountWideProfileID = nil,
+    validatedAccountWideProfileRef = nil,
+    validatedResolvedAssignedProfileID = nil,
+    validatedResolvedActiveProfileID = nil,
+    validatedResolvedActiveProfileRef = nil,
+    validatedResolvedSettingsRef = nil,
     validatedActiveProfileRef = nil,
     readFallback = {},
     maxProfileNumber = 99999999999999,
@@ -4261,6 +4475,10 @@ addon.dbRuntime = {
         forceLocale = true,
         updateInterval = true,
         quickSetupSeen = true,
+    },
+    accountMetadataKeys = {
+        accountWideEnabled = true,
+        accountWideProfileID = true,
     },
     registryRootKeys = {
         dbVersion = true,
@@ -4279,6 +4497,7 @@ addon.dbRuntime = {
 }
 
 addon.profileRuntime = {
+    currentGUID = nil,
     activeGUID = nil,
     activeSpecID = nil,
     activeDisplayName = nil,
@@ -4298,12 +4517,16 @@ addon.profileRuntime = {
     bootstrapStarted = false,
     bootstrapPending = false,
     pendingResolution = false,
+    activeContextValid = false,
+    bindingReconciliationPending = false,
+    bindingReconciliationToken = nil,
     scheduledToken = nil,
     noSpecRetryToken = nil,
     settlingNoSpec = false,
     requestGeneration = 0,
     transitioning = false,
     suppressIntermediateRefresh = false,
+    restoringPublishedBinding = false,
     activationCount = 0,
     applyCount = 0,
     configRefreshCount = 0,
@@ -4887,6 +5110,7 @@ function addon.profileOps.CountAllReferences(root)
             characterDefaults = 0,
             accountDefault = 0,
             roleTemplates = 0,
+            accountWide = 0,
             total = 0,
         }
     end
@@ -4905,6 +5129,7 @@ function addon.profileOps.CountAllReferences(root)
         countsByProfile[profileID] = newCounts()
     end
     add(root.account and root.account.defaultProfileID, "accountDefault")
+    add(root.account and root.account.accountWideProfileID, "accountWide")
     for _, profileID in pairs(root.roleTemplates or {}) do
         add(profileID, "roleTemplates")
     end
@@ -4917,8 +5142,13 @@ function addon.profileOps.CountAllReferences(root)
     return countsByProfile
 end
 
-function addon.profileUI.BuildViewModel()
-    local root = addon.dbRuntime.Refresh()
+function addon.profileUI.BuildViewModel(includeRegistryDetails)
+    if includeRegistryDetails == nil then includeRegistryDetails = true end
+    -- The manager traverses the complete registry graph. Revalidate it here so
+    -- in-place SavedVariables corruption cannot bypass the identity cache used by
+    -- hot render paths and then reach unguarded character/reference traversal.
+    -- A hidden manager only needs the lightweight current-profile header model.
+    local root = addon.dbRuntime.Refresh(includeRegistryDetails)
     local runtime = addon.profileRuntime
     local pending = runtime.pendingResolution or runtime.scheduledToken ~= nil
         or runtime.noSpecRetryToken ~= nil or runtime.contextRetryToken ~= nil
@@ -4929,12 +5159,19 @@ function addon.profileUI.BuildViewModel()
         pending = pending,
         combat = combat,
         canMutate = false,
-        activeGUID = runtime.activeGUID,
-        activeSpecID = runtime.activeSpecID,
+        activeContextValid = runtime.activeContextValid == true,
+        activeGUID = runtime.currentGUID or runtime.activeGUID,
+        activeSpecID = runtime.activeContextValid and runtime.activeSpecID or nil,
         activeDisplayName = runtime.activeDisplayName,
         activeSpecName = runtime.activeSpecName,
+        assignedProfileID = addon.dbRuntime.assignedProfileID,
         activeProfileID = addon.dbRuntime.activeProfileID,
+        effectiveProfileID = addon.dbRuntime.activeProfileID,
+        defaultProfileID = nil,
+        accountWideEnabled = false,
+        accountWideProfileID = nil,
         unusedProfileCount = 0,
+        unusedProfileIDs = {},
         roleTemplates = {},
         characters = {},
         profiles = {},
@@ -4949,8 +5186,22 @@ function addon.profileUI.BuildViewModel()
     end
     if not registryReadable then return model end
 
+    -- Registry validation is the authority for reading these fields. Keeping the
+    -- corrupt-path defaults above avoids indexing or comparing malformed/secret
+    -- account values while still projecting valid future-schema roots read-only.
+    model.accountWideEnabled = root.account.accountWideEnabled == true
+    model.accountWideProfileID = root.account.accountWideProfileID
+    model.defaultProfileID = root.account.defaultProfileID
+    if not runtime.activeContextValid and not model.pending then
+        model.assignedProfileID = model.defaultProfileID
+        model.activeProfileID = model.accountWideEnabled
+            and model.accountWideProfileID or model.defaultProfileID
+        model.effectiveProfileID = model.activeProfileID
+    end
+
     model.canMutate = not model.readOnly and combat == false and not pending
         and not runtime.transitioning and not addon.profileOps.inProgress
+    if not includeRegistryDetails then return model end
     local referenceCounts = addon.profileOps.CountAllReferences(root)
     for _, role in ipairs(addon.profileOps.roleOrder) do
         local profileID = root.roleTemplates[role]
@@ -4975,7 +5226,7 @@ function addon.profileUI.BuildViewModel()
                 sharedCount = referenceCounts[profileID]
                     and referenceCounts[profileID].specs or 0,
                 isActive = guid == model.activeGUID and specID == model.activeSpecID
-                    and profileID == model.activeProfileID,
+                    and profileID == model.assignedProfileID,
             }
         end
         table.sort(characterModel.specs, function(left, right)
@@ -4994,8 +5245,10 @@ function addon.profileUI.BuildViewModel()
         model.profiles[profileID] = { profileID = profileID, references = references }
         if references.total == 0 then
             model.unusedProfileCount = model.unusedProfileCount + 1
+            model.unusedProfileIDs[#model.unusedProfileIDs + 1] = profileID
         end
     end
+    table.sort(model.unusedProfileIDs)
     return model
 end
 
@@ -5013,6 +5266,8 @@ end
 
 function addon.dbRuntime.IsCleanTable(value)
     if not addon.dbRuntime.IsCleanType(value, "table") then return false end
+    local metatableOK, metatable = pcall(getmetatable, value)
+    if not metatableOK or metatable ~= nil then return false end
     if type(_G.issecrettable) == "function" then
         local ok, secret = pcall(_G.issecrettable, value)
         if not ok or secret then return false end
@@ -5023,13 +5278,19 @@ end
 function addon.dbRuntime.StripAccountSettings(settings)
     if not addon.dbRuntime.IsCleanTable(settings) then return false end
     for key in pairs(addon.dbRuntime.accountSettingKeys) do settings[key] = nil end
+    for key in pairs(addon.dbRuntime.accountMetadataKeys) do settings[key] = nil end
     return true
 end
 
-function addon.dbRuntime.ContainsAccountSettings(settings)
+function addon.dbRuntime.ContainsAccountSettings(settings, includeMetadata)
     if not addon.dbRuntime.IsCleanTable(settings) then return false end
     for key in pairs(addon.dbRuntime.accountSettingKeys) do
-        if rawget(settings, key) ~= nil then return true end
+        if type(rawget(settings, key)) ~= "nil" then return true end
+    end
+    if includeMetadata ~= false then
+        for key in pairs(addon.dbRuntime.accountMetadataKeys) do
+            if type(rawget(settings, key)) ~= "nil" then return true end
+        end
     end
     return false
 end
@@ -5061,6 +5322,10 @@ function addon.dbRuntime.IsInspectableGraphTable(value, budget)
         return addon.dbRuntime.FailGraphBudget(budget, "inspection")
     end
     if secret then return false end
+    local metatableOK, metatable = pcall(getmetatable, value)
+    if not metatableOK or metatable ~= nil then
+        return addon.dbRuntime.FailGraphBudget(budget, "metatable")
+    end
     if type(_G.issecrettable) == "function" then
         local tableOK, secretTable = pcall(_G.issecrettable, value)
         if not tableOK then
@@ -5278,6 +5543,7 @@ function addon.dbRuntime.ValidateRegistry(root)
     local profiles = rawget(root, "profiles")
     local roleTemplates = rawget(root, "roleTemplates")
     local characters = rawget(root, "characters")
+    local registryVersion = NormalizeDBVersion(rawget(root, "dbVersion"))
     if not addon.dbRuntime.IsCleanTable(account)
         or not addon.dbRuntime.IsCleanTable(profiles)
         or not addon.dbRuntime.IsCleanTable(roleTemplates)
@@ -5328,6 +5594,13 @@ function addon.dbRuntime.ValidateRegistry(root)
             and not addon.dbRuntime.IsCleanType(account.quickSetupSeen, "boolean")) then
         return false
     end
+    if registryVersion >= 11
+        and (not addon.dbRuntime.IsCleanType(account.accountWideEnabled, "boolean")
+            or (type(account.accountWideProfileID) ~= "nil"
+                and (not addon.dbRuntime.IsCleanType(account.accountWideProfileID, "string")
+                    or account.accountWideProfileID == ""))) then
+        return false
+    end
     local nextProfileID = account.nextProfileID
     if not addon.dbRuntime.IsCleanType(nextProfileID, "number")
         or not IsFiniteNumber(nextProfileID) or nextProfileID < 2
@@ -5346,7 +5619,8 @@ function addon.dbRuntime.ValidateRegistry(root)
             or not addon.dbRuntime.IsCleanTable(profile)
             or not addon.dbRuntime.IsCleanType(profile.name, "string") or profile.name == ""
             or not addon.dbRuntime.IsCleanTable(profile.settings)
-            or addon.dbRuntime.ContainsAccountSettings(profile.settings) then
+            or addon.dbRuntime.ContainsAccountSettings(
+                profile.settings, registryVersion >= 11) then
             return false
         end
         profileCount = profileCount + 1
@@ -5358,6 +5632,16 @@ function addon.dbRuntime.ValidateRegistry(root)
     end
     local profile = profiles[profileID]
     if not addon.dbRuntime.IsCleanTable(profile) then return false end
+    if registryVersion >= 11 then
+        local accountWideProfileID = account.accountWideProfileID
+        if accountWideProfileID ~= nil
+            and not addon.dbRuntime.IsCleanTable(profiles[accountWideProfileID]) then
+            return false
+        end
+        if account.accountWideEnabled == true and accountWideProfileID == nil then
+            return false
+        end
+    end
 
     for _, role in ipairs({ "TANK", "HEALER", "DAMAGER" }) do
         local roleProfileID = roleTemplates[role]
@@ -5408,6 +5692,12 @@ function addon.dbRuntime.ValidateRegistry(root)
             end
         end
     end
+    if registryVersion >= 11 and account.accountWideProfileID ~= nil then
+        local references = addon.profileOps.CountAllReferences(root)[account.accountWideProfileID]
+        if not references or references.accountWide ~= 1 or references.total ~= 1 then
+            return false
+        end
+    end
     return true, account, profileID, profile.settings
 end
 
@@ -5424,19 +5714,38 @@ function addon.dbRuntime.CacheValidatedRegistry(root, account, defaultProfileID)
     addon.dbRuntime.validatedCharactersRef = rawget(root, "characters")
     addon.dbRuntime.validatedDefaultProfileID = defaultProfileID
     addon.dbRuntime.validatedDefaultProfileRef = addon.dbRuntime.validatedProfilesRef[defaultProfileID]
+    addon.dbRuntime.validatedAccountWideEnabled = account.accountWideEnabled
+    addon.dbRuntime.validatedAccountWideProfileID = account.accountWideProfileID
+    addon.dbRuntime.validatedAccountWideProfileRef = account.accountWideProfileID
+        and addon.dbRuntime.validatedProfilesRef[account.accountWideProfileID] or nil
+end
+
+function addon.dbRuntime.CacheResolvedBinding(
+    assignedProfileID, activeProfileID, activeProfile, activeSettings)
+    addon.dbRuntime.validatedResolvedAssignedProfileID = assignedProfileID
+    addon.dbRuntime.validatedResolvedActiveProfileID = activeProfileID
+    addon.dbRuntime.validatedResolvedActiveProfileRef = activeProfile
+    addon.dbRuntime.validatedResolvedSettingsRef = activeSettings
 end
 
 -- Frequent UI mutations only need to prove that the already-validated registry
 -- boundaries and active payload identities did not move. Structural profile/character
 -- operations must call Invalidate(), which forces the full graph validator once.
-function addon.dbRuntime.CanReuseRegistryValidation(root, activeProfileID, activeSettings)
+function addon.dbRuntime.CanReuseRegistryValidation(root)
     if not rawequal(root, addon.dbRuntime.validatedRootRef) then return false end
     local account = rawget(root, "account")
     local profiles = rawget(root, "profiles")
-    if not rawequal(account, addon.dbRuntime.validatedAccountRef)
+    local roleTemplates = rawget(root, "roleTemplates")
+    local characters = rawget(root, "characters")
+    if not addon.dbRuntime.IsCleanTable(root)
+        or not addon.dbRuntime.IsCleanTable(account)
+        or not addon.dbRuntime.IsCleanTable(profiles)
+        or not addon.dbRuntime.IsCleanTable(roleTemplates)
+        or not addon.dbRuntime.IsCleanTable(characters)
+        or not rawequal(account, addon.dbRuntime.validatedAccountRef)
         or not rawequal(profiles, addon.dbRuntime.validatedProfilesRef)
-        or not rawequal(rawget(root, "roleTemplates"), addon.dbRuntime.validatedRoleTemplatesRef)
-        or not rawequal(rawget(root, "characters"), addon.dbRuntime.validatedCharactersRef) then
+        or not rawequal(roleTemplates, addon.dbRuntime.validatedRoleTemplatesRef)
+        or not rawequal(characters, addon.dbRuntime.validatedCharactersRef) then
         return false
     end
     local idOK, defaultUnchanged = pcall(function()
@@ -5447,37 +5756,189 @@ function addon.dbRuntime.CanReuseRegistryValidation(root, activeProfileID, activ
             addon.dbRuntime.validatedDefaultProfileRef) then
         return false
     end
-    local activeProfile = activeProfileID and profiles[activeProfileID] or nil
-    return type(activeProfile) == "table"
-        and rawequal(activeProfile, addon.dbRuntime.validatedActiveProfileRef)
-        and rawequal(activeProfile.settings, activeSettings)
+    local accountWideOK, accountWideUnchanged = pcall(function()
+        return account.accountWideEnabled
+                == addon.dbRuntime.validatedAccountWideEnabled
+            and account.accountWideProfileID
+                == addon.dbRuntime.validatedAccountWideProfileID
+    end)
+    local validatedAccountWideProfileID = addon.dbRuntime.validatedAccountWideProfileID
+    local accountWideProfileRef = validatedAccountWideProfileID
+        and profiles[validatedAccountWideProfileID] or nil
+    if not accountWideOK or not accountWideUnchanged
+        or not rawequal(accountWideProfileRef,
+            addon.dbRuntime.validatedAccountWideProfileRef) then
+        return false
+    end
+    local resolvedAssignedProfileID = addon.dbRuntime.ResolveCurrentAssignedProfileID(
+        root, addon.dbRuntime.validatedResolvedAssignedProfileID)
+    local resolvedActiveProfileID = addon.dbRuntime.ResolveEffectiveProfileID(
+        root, resolvedAssignedProfileID)
+    if resolvedAssignedProfileID ~= addon.dbRuntime.validatedResolvedAssignedProfileID
+        or resolvedActiveProfileID ~= addon.dbRuntime.validatedResolvedActiveProfileID then
+        return false
+    end
+    local activeProfile = resolvedActiveProfileID and profiles[resolvedActiveProfileID] or nil
+    local activeProfileClean = addon.dbRuntime.IsCleanTable(activeProfile)
+    local activeSettings = activeProfileClean
+        and rawget(activeProfile, "settings") or nil
+    return activeProfileClean
+        and addon.dbRuntime.IsCleanTable(activeSettings)
+        and rawequal(activeProfile, addon.dbRuntime.validatedResolvedActiveProfileRef)
+        and rawequal(activeSettings, addon.dbRuntime.validatedResolvedSettingsRef)
 end
 
-function addon.dbRuntime.Refresh()
+function addon.dbRuntime.ResolveEffectiveProfileID(root, assignedProfileID)
+    if not addon.dbRuntime.IsCleanTable(root) then return nil end
+    local account = rawget(root, "account")
+    local profiles = rawget(root, "profiles")
+    if not addon.dbRuntime.IsCleanTable(account)
+        or not addon.dbRuntime.IsCleanTable(profiles) then return nil end
+    if account.accountWideEnabled == true then
+        local accountWideProfileID = account.accountWideProfileID
+        if addon.dbRuntime.IsCleanType(accountWideProfileID, "string")
+            and addon.dbRuntime.IsCleanTable(profiles[accountWideProfileID]) then
+            return accountWideProfileID
+        end
+        return nil
+    end
+    if addon.dbRuntime.IsCleanType(assignedProfileID, "string")
+        and addon.dbRuntime.IsCleanTable(profiles[assignedProfileID]) then
+        return assignedProfileID
+    end
+    local defaultProfileID = account.defaultProfileID
+    if addon.dbRuntime.IsCleanType(defaultProfileID, "string")
+        and addon.dbRuntime.IsCleanTable(profiles[defaultProfileID]) then
+        return defaultProfileID
+    end
+    return nil
+end
+
+function addon.dbRuntime.ResolveAssignedProfileID(
+    state, guid, specID, fallbackProfileID, requireCharacter)
+    if not addon.dbRuntime.IsCleanTable(state) then return nil end
+    local account = rawget(state, "account")
+    local profiles = rawget(state, "profiles")
+    local characters = rawget(state, "characters")
+    if not addon.dbRuntime.IsCleanTable(account)
+        or not addon.dbRuntime.IsCleanTable(profiles)
+        or not addon.dbRuntime.IsCleanTable(characters) then
+        return nil
+    end
+    local hasContext = addon.dbRuntime.IsCleanType(guid, "string") and guid ~= ""
+        and addon.dbRuntime.IsCleanType(specID, "number")
+        and IsFiniteNumber(specID) and specID > 0 and specID == math.floor(specID)
+    if hasContext then
+        local character = rawget(characters, guid)
+        if type(character) == "nil" then
+            if requireCharacter then return nil end
+        elseif not addon.dbRuntime.IsCleanTable(character) then
+            return nil
+        else
+            local specProfiles = rawget(character, "specProfiles")
+            if type(specProfiles) ~= "nil"
+                and not addon.dbRuntime.IsCleanTable(specProfiles) then
+                return nil
+            end
+            local profileID = specProfiles and rawget(specProfiles, specID) or nil
+            if type(profileID) ~= "nil" then
+                if addon.dbRuntime.IsCleanType(profileID, "string")
+                    and addon.dbRuntime.IsCleanTable(rawget(profiles, profileID)) then
+                    return profileID
+                end
+                return nil
+            end
+            local characterDefaultProfileID = rawget(character, "defaultProfileID")
+            if type(characterDefaultProfileID) ~= "nil" then
+                if addon.dbRuntime.IsCleanType(characterDefaultProfileID, "string")
+                    and addon.dbRuntime.IsCleanTable(
+                        rawget(profiles, characterDefaultProfileID)) then
+                    return characterDefaultProfileID
+                end
+                return nil
+            end
+        end
+    elseif addon.dbRuntime.IsCleanType(fallbackProfileID, "string")
+        and addon.dbRuntime.IsCleanTable(rawget(profiles, fallbackProfileID)) then
+        return fallbackProfileID
+    end
+    local defaultProfileID = rawget(account, "defaultProfileID")
+    if addon.dbRuntime.IsCleanType(defaultProfileID, "string")
+        and addon.dbRuntime.IsCleanTable(rawget(profiles, defaultProfileID)) then
+        return defaultProfileID
+    end
+    return nil
+end
+
+function addon.dbRuntime.ResolveCurrentAssignedProfileID(root, transitionProfileID)
+    local runtime = addon.profileRuntime
+    local profiles = addon.dbRuntime.IsCleanTable(root) and rawget(root, "profiles") or nil
+    if runtime.transitioning
+        and addon.dbRuntime.IsCleanType(transitionProfileID, "string")
+        and addon.dbRuntime.IsCleanTable(profiles)
+        and addon.dbRuntime.IsCleanTable(rawget(profiles, transitionProfileID)) then
+        return transitionProfileID
+    end
+    return addon.dbRuntime.ResolveAssignedProfileID(
+        root, runtime.activeGUID, runtime.activeSpecID, nil, false)
+end
+
+function addon.profileRuntime.QueueBindingReconciliation()
+    local runtime = addon.profileRuntime
+    if runtime.bindingReconciliationToken ~= nil then return true end
+    local token = {}
+    runtime.bindingReconciliationToken = token
+    C_Timer.After(0, function()
+        if runtime.bindingReconciliationToken ~= token then return end
+        if runtime.bindingReconciliationPending
+            and type(runtime.ResolvePending) == "function" then
+            -- This is a live binding transition, not cold bootstrap. Resolve it
+            -- immediately inside the owned timer while preserving the normal
+            -- save/apply/rollback boundary.
+            pcall(runtime.ResolvePending, false)
+        end
+        if runtime.bindingReconciliationToken == token then
+            runtime.bindingReconciliationToken = nil
+        end
+    end)
+    return true
+end
+
+function addon.dbRuntime.Refresh(forceFullValidation)
     local root = EnsureStatsProDBTable()
     local previousRoot = addon.dbRuntime.rootRef
+    local previousAccount = addon.dbRuntime.activeAccount
     local previousSettings = addon.dbRuntime.activeSettings
+    local previousAssignedProfileID = addon.dbRuntime.assignedProfileID
     local previousProfileID = addon.dbRuntime.activeProfileID
+    local previousActiveProfileRef = addon.dbRuntime.validatedActiveProfileRef
+    local previousRegistryReady = addon.dbRuntime.registryReady
     local version, versionReadable = NormalizeDBVersion(root.dbVersion)
     local valid, account, defaultProfileID
 
     addon.dbRuntime.version = version
     addon.dbRuntime.versionDisplay = versionReadable and string.format("%d", version) or "<unavailable>"
-    addon.dbRuntime.mode = version > CURRENT_DB_VERSION and "future" or "legacy"
-    addon.dbRuntime.readOnly = version > CURRENT_DB_VERSION
+    addon.dbRuntime.mode = not versionReadable and "corrupt"
+        or (version > CURRENT_DB_VERSION and "future" or "legacy")
+    addon.dbRuntime.readOnly = not versionReadable or version > CURRENT_DB_VERSION
     addon.dbRuntime.registryReady = false
     addon.dbRuntime.activeAccount = root
     addon.dbRuntime.activeSettings = root
+    addon.dbRuntime.assignedProfileID = nil
     addon.dbRuntime.activeProfileID = nil
 
     -- Future and unreadable schema markers stay in the compatibility state set
     -- above, even if this table previously failed current-schema validation.
-    if version <= CURRENT_DB_VERSION
+    if not versionReadable then
+        addon.dbRuntime.mode = "corrupt"
+        addon.dbRuntime.readOnly = true
+    elseif version <= CURRENT_DB_VERSION
         and rawequal(addon.dbRuntime.migrationFailedRoot, root) then
         addon.dbRuntime.mode = "corrupt"
         addon.dbRuntime.readOnly = true
     elseif version == CURRENT_DB_VERSION then
-        if addon.dbRuntime.CanReuseRegistryValidation(root, previousProfileID, previousSettings) then
+        if not forceFullValidation
+            and addon.dbRuntime.CanReuseRegistryValidation(root) then
             valid = true
             account = addon.dbRuntime.validatedAccountRef
             defaultProfileID = addon.dbRuntime.validatedDefaultProfileID
@@ -5490,18 +5951,68 @@ function addon.dbRuntime.Refresh()
             end
         end
         if valid then
-            local requestedProfileID = previousProfileID
-            local requestedProfile = requestedProfileID and root.profiles[requestedProfileID] or nil
-            addon.dbRuntime.activeProfileID = type(requestedProfile) == "table"
-                and type(requestedProfile.settings) == "table" and requestedProfileID or defaultProfileID
-            local activeProfile = root.profiles[addon.dbRuntime.activeProfileID]
-            addon.dbRuntime.activeAccount = account
-            addon.dbRuntime.activeSettings = activeProfile.settings
-            addon.dbRuntime.validatedActiveProfileRef = activeProfile
-            addon.dbRuntime.registryReady = true
-            addon.dbRuntime.mode = "current"
-            addon.dbRuntime.readOnly = false
-        else
+            local assignedProfileID = addon.dbRuntime.ResolveCurrentAssignedProfileID(
+                root, previousAssignedProfileID)
+                or defaultProfileID
+            local activeProfileID = addon.dbRuntime.ResolveEffectiveProfileID(
+                root, assignedProfileID)
+            local profiles = rawget(root, "profiles")
+            local activeProfile = activeProfileID and rawget(profiles, activeProfileID) or nil
+            local activeSettings = addon.dbRuntime.IsCleanTable(activeProfile)
+                and rawget(activeProfile, "settings") or nil
+            if addon.dbRuntime.IsCleanTable(activeSettings) then
+                addon.dbRuntime.CacheResolvedBinding(
+                    assignedProfileID, activeProfileID, activeProfile, activeSettings)
+                local runtime = addon.profileRuntime
+                local restorePublishedBinding = (runtime.restoringPublishedBinding == true
+                    or runtime.suppressIntermediateRefresh == true)
+                    and previousRegistryReady and rawequal(previousRoot, root)
+                local reconcileBinding = previousRegistryReady
+                    and rawequal(previousRoot, root)
+                    and not runtime.transitioning
+                    and not addon.profileOps.inProgress
+                    and (not rawequal(previousAccount, account)
+                        or previousAssignedProfileID ~= assignedProfileID
+                        or previousProfileID ~= activeProfileID
+                        or not rawequal(previousSettings, activeSettings))
+                if restorePublishedBinding then
+                    addon.dbRuntime.assignedProfileID = previousAssignedProfileID
+                    addon.dbRuntime.activeProfileID = previousProfileID
+                    addon.dbRuntime.activeAccount = previousAccount
+                    addon.dbRuntime.activeSettings = previousSettings
+                    addon.dbRuntime.validatedActiveProfileRef = previousActiveProfileRef
+                elseif reconcileBinding then
+                    -- A valid registry can still change outside StatsPro's transaction
+                    -- coordinators. Keep publishing the last actually applied payload;
+                    -- ResolveCurrent will move to the new binding through the normal
+                    -- save/apply/rollback boundary instead of desynchronizing the HUD.
+                    addon.dbRuntime.assignedProfileID = previousAssignedProfileID
+                    addon.dbRuntime.activeProfileID = previousProfileID
+                    addon.dbRuntime.activeAccount = previousAccount
+                    addon.dbRuntime.activeSettings = previousSettings
+                    addon.dbRuntime.validatedActiveProfileRef = previousActiveProfileRef
+                    if not runtime.bindingReconciliationPending then
+                        addon.dbRuntime.generation = addon.dbRuntime.generation + 1
+                    end
+                    runtime.bindingReconciliationPending = true
+                    runtime.pendingResolution = true
+                    runtime.QueueBindingReconciliation()
+                else
+                    addon.dbRuntime.assignedProfileID = assignedProfileID
+                    addon.dbRuntime.activeProfileID = activeProfileID
+                    addon.dbRuntime.activeAccount = account
+                    addon.dbRuntime.activeSettings = activeSettings
+                    addon.dbRuntime.validatedActiveProfileRef = activeProfile
+                end
+                addon.dbRuntime.registryReady = true
+                addon.dbRuntime.mode = "current"
+                addon.dbRuntime.readOnly = false
+            else
+                valid = false
+                addon.dbRuntime.migrationFailedRoot = root
+            end
+        end
+        if not valid then
             addon.dbRuntime.mode = "corrupt"
             addon.dbRuntime.readOnly = true
         end
@@ -5510,6 +6021,7 @@ function addon.dbRuntime.Refresh()
     addon.dbRuntime.rootRef = root
     if not rawequal(previousRoot, root)
         or not rawequal(previousSettings, addon.dbRuntime.activeSettings)
+        or previousAssignedProfileID ~= addon.dbRuntime.assignedProfileID
         or previousProfileID ~= addon.dbRuntime.activeProfileID then
         addon.dbRuntime.generation = addon.dbRuntime.generation + 1
     end
@@ -5534,23 +6046,31 @@ function addon.dbRuntime.GetAccount()
     return addon.dbRuntime.activeAccount or root
 end
 
-function addon.dbRuntime.ActivateProfile(profileID)
-    local root = addon.dbRuntime.Refresh()
+function addon.dbRuntime.ActivateProfile(assignedProfileID)
+    -- Profile switches publish a different settings graph. Revalidate the complete
+    -- registry so a previously inactive, in-place-corrupted profile cannot become live.
+    local root = addon.dbRuntime.Refresh(true)
     if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady
-        or not addon.dbRuntime.IsCleanType(profileID, "string") then
+        or not addon.dbRuntime.IsCleanType(assignedProfileID, "string") then
         return false, false
     end
-    local profile = root.profiles[profileID]
-    if not addon.dbRuntime.IsCleanTable(profile)
-        or not addon.dbRuntime.IsCleanTable(profile.settings) then
+    local assignedProfile = root.profiles[assignedProfileID]
+    local profileID = addon.dbRuntime.ResolveEffectiveProfileID(root, assignedProfileID)
+    local profile = profileID and root.profiles[profileID] or nil
+    local profileSettings = type(profile) == "table" and rawget(profile, "settings") or nil
+    if not addon.dbRuntime.IsCleanTable(assignedProfile)
+        or not addon.dbRuntime.IsCleanTable(profile)
+        or not addon.dbRuntime.IsCleanTable(profileSettings) then
         return false, false
     end
-    if addon.dbRuntime.activeProfileID == profileID
-        and rawequal(addon.dbRuntime.activeSettings, profile.settings) then
+    if addon.dbRuntime.assignedProfileID == assignedProfileID
+        and addon.dbRuntime.activeProfileID == profileID
+        and rawequal(addon.dbRuntime.activeSettings, profileSettings) then
         return true, false
     end
+    addon.dbRuntime.assignedProfileID = assignedProfileID
     addon.dbRuntime.activeProfileID = profileID
-    addon.dbRuntime.activeSettings = profile.settings
+    addon.dbRuntime.activeSettings = profileSettings
     addon.dbRuntime.activeAccount = root.account
     addon.dbRuntime.validatedActiveProfileRef = profile
     addon.dbRuntime.generation = addon.dbRuntime.generation + 1
@@ -5569,27 +6089,35 @@ function addon.dbRuntime.ShowReadOnlyGuidance(showGuidance)
         addon.dbRuntime.warnedMode = mode
         if mode == "corrupt" then
             PrintMsg(L("StatsPro saved data is corrupted and remains read-only. Use /ss wipe outside combat to reset it."))
-        else
+        elseif mode == "future" then
             PrintMsg(L("Settings are read-only because they were saved by a newer StatsPro version. Update StatsPro to change them."))
+        else
+            PrintMsg(L("Waiting for a safe profile context."))
         end
     end
 end
 
 function addon.dbRuntime.GetWritableRoot(showGuidance)
     local root = addon.dbRuntime.Refresh()
-    if not addon.dbRuntime.readOnly and not addon.profileRuntime.BlocksUserWrites() then
+    if addon.dbRuntime.registryReady and not addon.dbRuntime.readOnly
+        and not addon.profileRuntime.BlocksUserWrites() then
         return root
     end
-    if addon.dbRuntime.readOnly then addon.dbRuntime.ShowReadOnlyGuidance(showGuidance) end
+    if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady then
+        addon.dbRuntime.ShowReadOnlyGuidance(showGuidance)
+    end
     return nil
 end
 
 function addon.dbRuntime.GetWritableSettings(showGuidance, key)
     addon.dbRuntime.Refresh()
-    if not addon.dbRuntime.readOnly and not addon.profileRuntime.BlocksUserWrites() then
+    if addon.dbRuntime.registryReady and not addon.dbRuntime.readOnly
+        and not addon.profileRuntime.BlocksUserWrites() then
         return addon.dbRuntime.GetSettingStore(key)
     end
-    if addon.dbRuntime.readOnly then addon.dbRuntime.ShowReadOnlyGuidance(showGuidance) end
+    if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady then
+        addon.dbRuntime.ShowReadOnlyGuidance(showGuidance)
+    end
     return nil
 end
 
@@ -5608,6 +6136,7 @@ function addon.dbRuntime.BuildRegistry(flat, quickSetupSeen)
         if type(key) == "string"
             and not addon.dbRuntime.registryRootKeys[key]
             and not addon.dbRuntime.accountSettingKeys[key]
+            and not addon.dbRuntime.accountMetadataKeys[key]
             and not addon.dbRuntime.legacySettingKeys[key] then
             local cloned, clonedOK = addon.dbRuntime.CloneSerializable(value, nil, budget, 1)
             if not clonedOK then return nil end
@@ -5630,6 +6159,7 @@ function addon.dbRuntime.BuildRegistry(flat, quickSetupSeen)
             quickSetupSeen = quickSetupSeen ~= false,
             defaultProfileID = "p1",
             nextProfileID = 2,
+            accountWideEnabled = false,
         },
         profiles = {
             p1 = { name = "Default", settings = settings },
@@ -5663,6 +6193,7 @@ function addon.profileRuntime.ReadPlayerContext()
     if not guidOK or not addon.dbRuntime.IsCleanType(guid, "string") or guid == "" then
         return nil, "unknown"
     end
+    addon.profileRuntime.currentGUID = guid
 
     local getSpecIndex = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization
         or GetSpecialization
@@ -5907,10 +6438,14 @@ function addon.profileRuntime.RestoreContextRetryPositionFrames()
     local settings = runtime.contextRetryPositionSettings
     local snapshot = runtime.contextRetryPositionSnapshot
     if not settings or not snapshot then return true end
-    if not rawequal(settings, addon.dbRuntime.activeSettings)
-        or type(runtime.restoreActivePositions) ~= "function" then
-        return false
+    if not rawequal(settings, addon.dbRuntime.activeSettings) then
+        -- The saved position already belongs to the former payload. If another
+        -- valid assignment became active before this retry, the journal can no
+        -- longer restore live frames and must not keep the write gate pending.
+        runtime.ClearContextRetryPositions()
+        return true
     end
+    if type(runtime.restoreActivePositions) ~= "function" then return false end
     local committed = addon.profileOps.CapturePositionFields(settings)
     addon.profileOps.RestorePositionFields(settings, snapshot)
     local restored = pcall(runtime.restoreActivePositions)
@@ -5923,8 +6458,32 @@ function addon.profileRuntime.CommitContextRetryPositions()
     local settings = runtime.contextRetryPositionSettings
     local snapshot = runtime.contextRetryPositionSnapshot
     if not settings or not snapshot then return true end
-    if not rawequal(settings, addon.dbRuntime.activeSettings) then return false end
+    if not rawequal(settings, addon.dbRuntime.activeSettings) then
+        runtime.ClearContextRetryPositions()
+        return true
+    end
     addon.profileOps.RestorePositionFields(settings, snapshot)
+    runtime.ClearContextRetryPositions()
+    return true
+end
+
+function addon.profileRuntime.FinalizeContextRetryPositions()
+    local runtime = addon.profileRuntime
+    local settings = runtime.contextRetryPositionSettings
+    local snapshot = runtime.contextRetryPositionSnapshot
+    if not settings or not snapshot then return true end
+    if not rawequal(settings, addon.dbRuntime.activeSettings) then
+        runtime.ClearContextRetryPositions()
+        return true
+    end
+    if type(runtime.restoreActivePositions) ~= "function" then return false end
+    local previous = addon.profileOps.CapturePositionFields(settings)
+    addon.profileOps.RestorePositionFields(settings, snapshot)
+    if not pcall(runtime.restoreActivePositions) then
+        addon.profileOps.RestorePositionFields(settings, previous)
+        pcall(runtime.restoreActivePositions)
+        return false
+    end
     runtime.ClearContextRetryPositions()
     return true
 end
@@ -6003,14 +6562,29 @@ function addon.profileRuntime.ResumeCorruptRollbackApply()
     return runtime.ScheduleCorruptRollbackApply(runtime.corruptRollbackRoot)
 end
 
-function addon.profileRuntime.ActivateResolvedContext(context, transaction, profileID, initializing)
+function addon.profileRuntime.ActivateResolvedContext(
+    context, transaction, profileID, initializing, contextValid)
     local runtime = addon.profileRuntime
-    local oldProfileID = addon.dbRuntime.activeProfileID
+    local oldAssignedProfileID = addon.dbRuntime.assignedProfileID
+    local oldActiveProfileID = addon.dbRuntime.activeProfileID
+    local oldActiveAccount = addon.dbRuntime.activeAccount
     local oldSettings = addon.dbRuntime.activeSettings
+    local oldActiveProfileRef = addon.dbRuntime.validatedActiveProfileRef
     local oldGUID, oldSpecID = runtime.activeGUID, runtime.activeSpecID
     local oldDisplayName, oldSpecName, oldRole =
         runtime.activeDisplayName, runtime.activeSpecName, runtime.activeRole
     local preBoundaryJournal = addon.profileOps.CaptureMutationJournal(oldSettings)
+    local function RestorePublishedBinding()
+        -- The backing registry may already contain a different valid assignment or
+        -- account-wide binding. Re-resolving oldAssignedProfileID against that graph
+        -- can select the failed target again, so rollback restores the exact payload
+        -- that was live before this boundary.
+        addon.dbRuntime.assignedProfileID = oldAssignedProfileID
+        addon.dbRuntime.activeProfileID = oldActiveProfileID
+        addon.dbRuntime.activeAccount = oldActiveAccount
+        addon.dbRuntime.activeSettings = oldSettings
+        addon.dbRuntime.validatedActiveProfileRef = oldActiveProfileRef
+    end
 
     runtime.transitioning = true
     runtime.suppressIntermediateRefresh = true
@@ -6041,19 +6615,21 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
         -- The preflight candidate was built before the outgoing UI boundary was
         -- settled. Rebuild from the now-committed source so a first-seen context
         -- cannot clone a Color Picker preview or stale pre-save panel position.
-        local freshTransaction, freshProfileID = runtime.PrepareContextTransaction(context)
-        if not addon.dbRuntime.IsCleanType(freshProfileID, "string") then
-            runtime.forceReapply = true
-            runtime.forceReapplyRetryCount = 0
-            runtime.forceReapplyRetryToken = nil
-            runtime.pendingResolution = true
-            runtime.suppressIntermediateRefresh = false
-            runtime.transitioning = false
-            runtime.ScheduleContextRetry()
-            addon.profileUI.RefreshSafe()
-            return false
+        if contextValid ~= false then
+            local freshTransaction, freshProfileID = runtime.PrepareContextTransaction(context)
+            if not addon.dbRuntime.IsCleanType(freshProfileID, "string") then
+                runtime.forceReapply = true
+                runtime.forceReapplyRetryCount = 0
+                runtime.forceReapplyRetryToken = nil
+                runtime.pendingResolution = true
+                runtime.suppressIntermediateRefresh = false
+                runtime.transitioning = false
+                runtime.ScheduleContextRetry()
+                addon.profileUI.RefreshSafe()
+                return false
+            end
+            transaction, profileID = freshTransaction, freshProfileID
         end
-        transaction, profileID = freshTransaction, freshProfileID
     end
     local oldSettingsJournal = addon.profileOps.CaptureMutationJournal(oldSettings)
     runtime.suppressIntermediateRefresh = false
@@ -6066,7 +6642,7 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
     if not targetJournal then
         runtime.RollbackTransaction(transaction)
         addon.profileOps.RestoreMutationJournal(oldSettingsJournal)
-        addon.dbRuntime.ActivateProfile(oldProfileID)
+        RestorePublishedBinding()
         runtime.activeGUID, runtime.activeSpecID = oldGUID, oldSpecID
         runtime.activeDisplayName, runtime.activeSpecName, runtime.activeRole =
             oldDisplayName, oldSpecName, oldRole
@@ -6087,7 +6663,7 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
         addon.profileOps.RestoreMutationJournal(targetJournal)
         runtime.RollbackTransaction(transaction)
         addon.profileOps.RestoreMutationJournal(oldSettingsJournal)
-        addon.dbRuntime.ActivateProfile(oldProfileID)
+        RestorePublishedBinding()
         runtime.activeGUID, runtime.activeSpecID = oldGUID, oldSpecID
         runtime.activeDisplayName, runtime.activeSpecName, runtime.activeRole =
             oldDisplayName, oldSpecName, oldRole
@@ -6095,7 +6671,9 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
             and addon.profileOps.CaptureMutationJournal(oldSettings) or nil
         local rollbackApplied = false
         if type(runtime.applyActiveSettings) == "function" then
+            runtime.restoringPublishedBinding = true
             rollbackApplied = pcall(runtime.applyActiveSettings)
+            runtime.restoringPublishedBinding = false
         end
         if not rollbackApplied then
             addon.profileOps.RestoreMutationJournal(rollbackJournal)
@@ -6126,6 +6704,8 @@ function addon.profileRuntime.ActivateResolvedContext(context, transaction, prof
     runtime.ResetContextRetry()
     runtime.ClearContextRetryPositions()
     runtime.pendingResolution = false
+    runtime.activeContextValid = contextValid ~= false
+    runtime.bindingReconciliationPending = false
     runtime.activationCount = runtime.activationCount + 1
     runtime.transitioning = false
     addon.profileUI.RefreshSafe()
@@ -6157,15 +6737,67 @@ function addon.profileRuntime.ResolveCurrent(initializing, combatEnded)
         addon.profileUI.RefreshSafe()
         return false
     end
+    -- A failed target apply followed by a failed rollback leaves the already
+    -- selected settings requiring an exact reapply. That recovery is independent
+    -- of specialization discovery and must run before terminal no-spec/unavailable
+    -- handling can clear the pending write gate.
+    if runtime.forceReapply then
+        runtime.transitioning = true
+        local activeSettings = addon.dbRuntime.activeSettings
+        local journal = addon.dbRuntime.IsCleanTable(activeSettings)
+            and addon.profileOps.CaptureMutationJournal(activeSettings) or nil
+        local applied = false
+        if journal and type(runtime.applyActiveSettings) == "function" then
+            if runtime.bindingReconciliationPending then
+                runtime.restoringPublishedBinding = true
+            end
+            applied = pcall(runtime.applyActiveSettings)
+            runtime.restoringPublishedBinding = false
+        end
+        if not applied and journal then addon.profileOps.RestoreMutationJournal(journal) end
+        runtime.transitioning = false
+        if not applied then
+            runtime.pendingResolution = true
+            runtime.forceReapplyRetryCount = runtime.forceReapplyRetryCount + 1
+            if runtime.forceReapplyRetryCount <= 3
+                and runtime.forceReapplyRetryToken == nil then
+                local retryToken = {}
+                local requestGeneration = runtime.requestGeneration
+                runtime.forceReapplyRetryToken = retryToken
+                C_Timer.After(math.min(0.25 * runtime.forceReapplyRetryCount, 1), function()
+                    if runtime.forceReapplyRetryToken ~= retryToken then return end
+                    runtime.forceReapplyRetryToken = nil
+                    if runtime.requestGeneration ~= requestGeneration then return end
+                    runtime.ResolveCurrent(false)
+                end)
+            end
+            addon.profileUI.RefreshSafe()
+            return false
+        end
+        runtime.forceReapply = false
+        runtime.forceReapplyRetryCount = 0
+        runtime.forceReapplyRetryToken = nil
+    end
+
     local context, contextStatus = runtime.ReadPlayerContext()
     if not context then
         local terminal = false
-        if contextStatus == "unavailable" then
-            runtime.pendingResolution = false
-            terminal = true
-        elseif contextStatus == "no-spec" and runtime.settlingNoSpec then
-            runtime.pendingResolution = false
-            terminal = true
+        if contextStatus == "unavailable"
+            or (contextStatus == "no-spec" and runtime.settlingNoSpec) then
+            -- A failed transition can leave the last safely captured position only
+            -- in this retry journal (for example when modal closing failed after the
+            -- frame save). Publish it and restore matching live frames before a
+            -- terminal context state is allowed to release the write gate.
+            if runtime.FinalizeContextRetryPositions() then
+                local fallbackProfileID = root.account and root.account.defaultProfileID
+                terminal = addon.dbRuntime.IsCleanType(fallbackProfileID, "string")
+                    and runtime.ActivateResolvedContext(
+                        {}, nil, fallbackProfileID, initializing, false) == true
+                if not terminal then runtime.pendingResolution = true end
+            else
+                runtime.pendingResolution = true
+                runtime.ScheduleContextRetry()
+            end
         else
             runtime.pendingResolution = true
             if contextStatus == "no-spec" and runtime.noSpecRetryToken == nil then
@@ -6192,38 +6824,6 @@ function addon.profileRuntime.ResolveCurrent(initializing, combatEnded)
     end
     runtime.noSpecRetryToken = nil
 
-    if runtime.forceReapply then
-        runtime.transitioning = true
-        local activeSettings = addon.dbRuntime.activeSettings
-        local journal = addon.dbRuntime.IsCleanTable(activeSettings)
-            and addon.profileOps.CaptureMutationJournal(activeSettings) or nil
-        local applied = journal and type(runtime.applyActiveSettings) == "function"
-            and pcall(runtime.applyActiveSettings)
-        if not applied and journal then addon.profileOps.RestoreMutationJournal(journal) end
-        runtime.transitioning = false
-        if not applied then
-            runtime.pendingResolution = true
-            runtime.forceReapplyRetryCount = runtime.forceReapplyRetryCount + 1
-            if runtime.forceReapplyRetryCount <= 3
-                and runtime.forceReapplyRetryToken == nil then
-                local retryToken = {}
-                local requestGeneration = runtime.requestGeneration
-                runtime.forceReapplyRetryToken = retryToken
-                C_Timer.After(math.min(0.25 * runtime.forceReapplyRetryCount, 1), function()
-                    if runtime.forceReapplyRetryToken ~= retryToken then return end
-                    runtime.forceReapplyRetryToken = nil
-                    if runtime.requestGeneration ~= requestGeneration then return end
-                    runtime.ResolveCurrent(false)
-                end)
-            end
-            addon.profileUI.RefreshSafe()
-            return false
-        end
-        runtime.forceReapply = false
-        runtime.forceReapplyRetryCount = 0
-        runtime.forceReapplyRetryToken = nil
-    end
-
     if not runtime.RestoreContextRetryPositionFrames() then
         runtime.forceReapply = true
         runtime.forceReapplyRetryCount = 0
@@ -6237,7 +6837,8 @@ function addon.profileRuntime.ResolveCurrent(initializing, combatEnded)
     local mappedProfileID = character and character.specProfiles
         and character.specProfiles[context.specID] or nil
     if runtime.activeGUID == context.guid and runtime.activeSpecID == context.specID
-        and addon.dbRuntime.activeProfileID == mappedProfileID then
+        and addon.dbRuntime.assignedProfileID == mappedProfileID
+        and not runtime.bindingReconciliationPending then
         -- A same-context event is still allowed to enrich late character/spec metadata.
         -- Do not reapply the profile payload or disturb open settings controls.
         local transaction, profileID = runtime.PrepareContextTransaction(context)
@@ -6264,6 +6865,7 @@ function addon.profileRuntime.ResolveCurrent(initializing, combatEnded)
         runtime.activeRole = context.role or runtime.activeRole
         if context.specName then runtime.knownSpecNames[context.specID] = context.specName end
         runtime.ResetContextRetry()
+        runtime.activeContextValid = true
         runtime.pendingResolution = false
         addon.profileUI.RefreshSafe()
         if addon.fontRuntime.pendingSavedFont
@@ -6296,6 +6898,7 @@ function addon.profileRuntime.RequestResolution(immediate)
     runtime.ResetContextRetry()
     runtime.forceReapplyRetryToken = nil
     if type(UnitGUID) ~= "function" then
+        runtime.activeContextValid = false
         runtime.pendingResolution = false
         addon.profileUI.RefreshSafe()
         if runtime.bootstrapPending and type(runtime.CompleteBootstrap) == "function" then
@@ -6436,8 +7039,82 @@ function addon.profileOps.CountReferences(root, profileID)
             characterDefaults = 0,
             accountDefault = 0,
             roleTemplates = 0,
+            accountWide = 0,
             total = 0,
         }
+end
+
+addon.profileOps.referenceCountKeys = {
+    "specs", "characterDefaults", "accountDefault", "roleTemplates", "accountWide",
+}
+
+function addon.profileOps.CaptureReferenceCounts(root, profileID)
+    local counts = addon.profileOps.CountReferences(root, profileID)
+    if not counts then return nil end
+    local snapshot = {}
+    for _, key in ipairs(addon.profileOps.referenceCountKeys) do
+        snapshot[key] = counts[key]
+    end
+    return snapshot
+end
+
+function addon.profileOps.ReferenceCountsMatch(root, profileID, expected)
+    if type(expected) ~= "table" then return false end
+    local counts = addon.profileOps.CountReferences(root, profileID)
+    if not counts then return false end
+    for _, key in ipairs(addon.profileOps.referenceCountKeys) do
+        if counts[key] ~= expected[key] then return false end
+    end
+    return true
+end
+
+function addon.profileOps.CollectUnusedProfileIDs(root)
+    local referenceCounts = addon.profileOps.CountAllReferences(root)
+    local profileIDs = {}
+    for profileID in pairs(root.profiles) do
+        local references = referenceCounts[profileID]
+        if not references or references.total == 0 then
+            profileIDs[#profileIDs + 1] = profileID
+        end
+    end
+    table.sort(profileIDs)
+    return profileIDs
+end
+
+function addon.profileOps.ProfileIDSetsMatch(left, right)
+    if type(left) ~= "table" or type(right) ~= "table"
+        or #left ~= #right then return false end
+    for index = 1, #left do
+        if left[index] ~= right[index] then return false end
+    end
+    return true
+end
+
+function addon.profileUI.ProfileImpactText(profileID)
+    -- This helper is also used by preset refreshers outside the profile manager.
+    -- Revalidate before traversing references so a stale identity cache cannot turn
+    -- an informational warning into an unhandled error on malformed nested data.
+    local root = addon.dbRuntime.Refresh(true)
+    if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady then return "" end
+    local references = addon.profileOps.CountReferences(root, profileID)
+    if root.account.accountWideEnabled == true
+        and root.account.accountWideProfileID == profileID then
+        return L("Changes affect every character and specialization.")
+    end
+    local messages = {}
+    if references.specs > 1 then
+        messages[#messages + 1] = string.format(
+            L("Changes affect %d specializations."), references.specs)
+    end
+    if references.roleTemplates > 0 then
+        messages[#messages + 1] = L(
+            "These settings are also used to create independent settings for new specializations.")
+    end
+    if references.characterDefaults + references.accountDefault > 0 then
+        messages[#messages + 1] = L(
+            "These settings are also used as fallback settings.")
+    end
+    return table.concat(messages, " ")
 end
 
 function addon.profileOps.ResolveAssignment(root, guid, specID)
@@ -6458,43 +7135,78 @@ end
 
 function addon.profileOps.CheckExpected(root, expected, ignoreGeneration)
     if type(expected) ~= "table" then return true end
-    if expected.rootRef and not rawequal(root, expected.rootRef) then return false end
-    if not ignoreGeneration and expected.generation
-        and expected.generation ~= addon.dbRuntime.generation then return false end
-    if expected.profilesRef and not rawequal(root.profiles, expected.profilesRef) then return false end
-    if expected.roleTemplatesRef
-        and not rawequal(root.roleTemplates, expected.roleTemplatesRef) then return false end
-    if expected.activeProfileID
-        and expected.activeProfileID ~= addon.dbRuntime.activeProfileID then return false end
-    if expected.profileID and expected.profileRef
-        and not rawequal(root.profiles[expected.profileID], expected.profileRef) then return false end
-    if expected.profileID and expected.settingsRef
-        and (not root.profiles[expected.profileID]
-            or not rawequal(root.profiles[expected.profileID].settings,
-                expected.settingsRef)) then return false end
-    if expected.guid and expected.assignmentID
-        and addon.profileOps.ResolveAssignment(root, expected.guid, expected.specID)
-            ~= expected.assignmentID then
-        return false
-    end
-    if expected.guid and expected.characterRef
-        and not rawequal(root.characters[expected.guid], expected.characterRef) then return false end
-    return true
+    -- SavedVariables can become malformed between a dialog opening and its next UI
+    -- refresh. Expected-state checks are rejection gates, so every inspection fails
+    -- closed instead of allowing a secret comparison or bad traversal to escape.
+    local checked, matches = pcall(function()
+        if expected.rootRef and not rawequal(root, expected.rootRef) then return false end
+        if not ignoreGeneration and expected.generation
+            and expected.generation ~= addon.dbRuntime.generation then return false end
+        if expected.profilesRef and not rawequal(root.profiles, expected.profilesRef) then return false end
+        if expected.accountRef and not rawequal(root.account, expected.accountRef) then return false end
+        if expected.roleTemplatesRef
+            and not rawequal(root.roleTemplates, expected.roleTemplatesRef) then return false end
+        if expected.hasAccountWideState
+            and (root.account.accountWideEnabled ~= expected.accountWideEnabled
+                or root.account.accountWideProfileID ~= expected.accountWideProfileID) then
+            return false
+        end
+        if expected.assignedProfileID
+            and expected.assignedProfileID ~= addon.dbRuntime.assignedProfileID then return false end
+        if expected.activeProfileID
+            and expected.activeProfileID ~= addon.dbRuntime.activeProfileID then return false end
+        if expected.profileID and expected.profileRef
+            and not rawequal(root.profiles[expected.profileID], expected.profileRef) then return false end
+        if expected.profileID and expected.settingsRef
+            and (not root.profiles[expected.profileID]
+                or not rawequal(root.profiles[expected.profileID].settings,
+                    expected.settingsRef)) then return false end
+        if expected.profileID and expected.referenceCounts
+            and not addon.profileOps.ReferenceCountsMatch(
+                root, expected.profileID, expected.referenceCounts) then
+            return false
+        end
+        if expected.unusedProfileIDs
+            and not addon.profileOps.ProfileIDSetsMatch(
+                addon.profileOps.CollectUnusedProfileIDs(root),
+                expected.unusedProfileIDs) then
+            return false
+        end
+        if expected.guid and expected.assignmentID
+            and addon.profileOps.ResolveAssignment(root, expected.guid, expected.specID)
+                ~= expected.assignmentID then
+            return false
+        end
+        if expected.guid and expected.characterRef
+            and not rawequal(root.characters[expected.guid], expected.characterRef) then
+            return false
+        end
+        for _, assignment in ipairs(expected.additionalAssignments or {}) do
+            if addon.profileOps.ResolveAssignment(
+                root, assignment.guid, assignment.specID) ~= assignment.assignmentID then
+                return false
+            end
+        end
+        return true
+    end)
+    return checked and matches == true
 end
 
-function addon.profileOps.AcquireOperationRoot(internal)
+function addon.profileOps.AcquireOperationRoot(internal, forceFullValidation)
     local runtime = addon.profileRuntime
     if addon.profileOps.inProgress and not internal then return nil, "busy" end
     if runtime.transitioning then return nil, "busy" end
     local combat = runtime.ReadCombatState()
     if combat == true then return nil, "combat" end
     if combat ~= false then return nil, "unsafe-context" end
-    return addon.dbRuntime.Refresh()
+    return addon.dbRuntime.Refresh(forceFullValidation)
 end
 
 function addon.profileOps.Gate(expected, internal)
     local runtime = addon.profileRuntime
-    local root, gateReason = addon.profileOps.AcquireOperationRoot(internal)
+    -- Structural operations consume the entire registry graph. Force a complete
+    -- validation so an in-place mutation cannot inherit stale cached readiness.
+    local root, gateReason = addon.profileOps.AcquireOperationRoot(internal, true)
     if not root then return nil, gateReason end
     if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady then
         return nil, addon.dbRuntime.mode == "corrupt" and "corrupt" or "read-only"
@@ -6583,21 +7295,10 @@ function addon.profileOps.RestoreMutationJournal(journal)
     end
 end
 
-function addon.profileOps.ResolveCandidateActiveProfileID(transaction, fallbackProfileID)
-    local guid, specID = addon.profileRuntime.activeGUID, addon.profileRuntime.activeSpecID
-    if guid and specID then
-        local character = transaction.characters[guid]
-        if not character then return nil end
-        local profileID = character.specProfiles and character.specProfiles[specID]
-            or character.defaultProfileID or transaction.account.defaultProfileID
-        if transaction.profiles[profileID] then return profileID end
-        return nil
-    end
-    if transaction.profiles[fallbackProfileID] then return fallbackProfileID end
-    if transaction.profiles[transaction.account.defaultProfileID] then
-        return transaction.account.defaultProfileID
-    end
-    return nil
+function addon.profileOps.ResolveCandidateAssignedProfileID(transaction, fallbackProfileID)
+    return addon.dbRuntime.ResolveAssignedProfileID(
+        transaction, addon.profileRuntime.activeGUID, addon.profileRuntime.activeSpecID,
+        fallbackProfileID, true)
 end
 
 -- Both transaction coordinators must release lifecycle gates and refresh the
@@ -6624,6 +7325,7 @@ function addon.profileOps.Execute(expected, builder)
     root, gateReason = addon.profileOps.Gate(expected, true)
     if not root then return finish(false, gateReason) end
 
+    local oldAssignedProfileID = addon.dbRuntime.assignedProfileID
     local oldProfileID = addon.dbRuntime.activeProfileID
     local oldSettings = addon.dbRuntime.activeSettings
     local positionSnapshot = addon.profileOps.CapturePositionFields(oldSettings)
@@ -6638,16 +7340,19 @@ function addon.profileOps.Execute(expected, builder)
         addon.profileOps.RestorePositionFields(oldSettings, positionSnapshot)
         return finish(false, built and result or "prepare-failed")
     end
-    local desiredProfileID = addon.profileOps.ResolveCandidateActiveProfileID(
-        transaction, oldProfileID)
-    if not desiredProfileID then
+    local candidate = addon.profileOps.BuildCandidate(transaction)
+    local desiredAssignedProfileID = addon.profileOps.ResolveCandidateAssignedProfileID(
+        transaction, oldAssignedProfileID)
+    local desiredProfileID = desiredAssignedProfileID
+        and addon.dbRuntime.ResolveEffectiveProfileID(candidate, desiredAssignedProfileID) or nil
+    if not desiredAssignedProfileID or not desiredProfileID then
         addon.profileOps.RestorePositionFields(oldSettings, positionSnapshot)
         return finish(false, "active-orphan")
     end
     local desiredProfile = transaction.profiles[desiredProfileID]
     local reapply = desiredProfileID ~= oldProfileID
         or not rawequal(desiredProfile.settings, oldSettings)
-    if not addon.dbRuntime.ValidateRegistry(addon.profileOps.BuildCandidate(transaction))
+    if not addon.dbRuntime.ValidateRegistry(candidate)
         or addon.profileOps.ShouldFail("validate") then
         addon.profileOps.RestorePositionFields(oldSettings, positionSnapshot)
         return finish(false, "validate-failed")
@@ -6663,17 +7368,17 @@ function addon.profileOps.Execute(expected, builder)
         transaction.root.characters = transaction.characters
         addon.profileRuntime.RollbackTransaction(transaction)
         addon.profileOps.RestorePositionFields(oldSettings, positionSnapshot)
-        addon.dbRuntime.ActivateProfile(oldProfileID)
+        addon.dbRuntime.ActivateProfile(oldAssignedProfileID)
         return finish(false, "commit-failed")
     end
 
     addon.profileRuntime.CommitTransaction(transaction)
     if reapply then
-        local activated = addon.dbRuntime.ActivateProfile(desiredProfileID)
+        local activated = addon.dbRuntime.ActivateProfile(desiredAssignedProfileID)
         if not activated then
             addon.profileRuntime.RollbackTransaction(transaction)
             addon.profileOps.RestorePositionFields(oldSettings, positionSnapshot)
-            addon.dbRuntime.ActivateProfile(oldProfileID)
+            addon.dbRuntime.ActivateProfile(oldAssignedProfileID)
             return finish(false, "activate-failed")
         end
         local targetSettings = addon.dbRuntime.activeSettings
@@ -6685,7 +7390,7 @@ function addon.profileOps.Execute(expected, builder)
             addon.profileOps.RestoreMutationJournal(targetJournal)
             addon.profileRuntime.RollbackTransaction(transaction)
             addon.profileOps.RestorePositionFields(oldSettings, positionSnapshot)
-            addon.dbRuntime.ActivateProfile(oldProfileID)
+            addon.dbRuntime.ActivateProfile(oldAssignedProfileID)
             local rollbackJournal = addon.profileOps.CaptureMutationJournal(oldSettings)
             local rollbackApplied = false
             if type(addon.profileRuntime.applyActiveSettings) == "function" then
@@ -6730,7 +7435,7 @@ function addon.profileOps.ExecuteRootReplacement(expected, builder, corruptRecov
     if not root then return finish(false, gateReason) end
 
     local oldRoot = root
-    local oldProfileID = addon.dbRuntime.activeProfileID
+    local oldAssignedProfileID = addon.dbRuntime.assignedProfileID
     local oldSettings = addon.dbRuntime.activeSettings
     local positionSnapshot = not corruptRecovery
         and addon.profileOps.CapturePositionFields(oldSettings) or nil
@@ -6778,7 +7483,7 @@ function addon.profileOps.ExecuteRootReplacement(expected, builder, corruptRecov
             addon.profileRuntime.ScheduleCorruptRollbackApply(oldRoot)
             return false
         end
-        if not addon.dbRuntime.ActivateProfile(oldProfileID) then return false end
+        if not addon.dbRuntime.ActivateProfile(oldAssignedProfileID) then return false end
         if not reapply then return true end
         local rollbackJournal = addon.profileOps.CaptureMutationJournal(oldSettings)
         local rollbackApplied = type(addon.profileRuntime.applyActiveSettings) == "function"
@@ -6905,6 +7610,134 @@ function addon.profileOps.BuildCopiedSettings(source, target, scope, cloneBudget
     return settings
 end
 
+function addon.profileOps.IsAccountWideActive(root)
+    return addon.dbRuntime.IsCleanTable(root)
+        and addon.dbRuntime.IsCleanTable(root.account)
+        and root.account.accountWideEnabled == true
+end
+
+function addon.profileOps.EnableAccountWide(sourceProfileID, expected)
+    return addon.profileOps.Execute(expected, function(root)
+        if addon.profileOps.IsAccountWideActive(root) then return nil, "no-change" end
+        local cloneBudget = addon.dbRuntime.NewGraphBudget()
+        local account, copied = addon.dbRuntime.CloneSerializable(
+            root.account, nil, cloneBudget)
+        if not copied or type(account) ~= "table"
+            or not addon.dbRuntime.IsCleanTable(account) then
+            return nil, "clone-failed"
+        end
+
+        local savedProfileID = rawget(account, "accountWideProfileID")
+        if addon.dbRuntime.IsCleanType(savedProfileID, "string")
+            and addon.dbRuntime.IsCleanTable(root.profiles[savedProfileID]) then
+            account.accountWideEnabled = true
+            local transaction = addon.profileOps.NewTransaction(root)
+            transaction.account = account
+            return transaction, {
+                profileID = savedProfileID,
+                created = false,
+                resumed = true,
+            }
+        end
+
+        local sourceProfile = root.profiles[sourceProfileID]
+        if not addon.dbRuntime.IsCleanTable(sourceProfile) then
+            return nil, "missing-profile"
+        end
+        local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
+        local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
+        if not profileID then return nil, "id-exhausted" end
+        local name, nameStatus = addon.profileOps.UniqueProfileName(
+            L("Account-wide settings"), profiles, "Account-wide settings")
+        if not name then return nil, nameStatus end
+        local profile = addon.profileRuntime.CloneProfile(sourceProfile, name, cloneBudget)
+        if not profile then return nil, "clone-failed" end
+        profiles[profileID] = profile
+        account.accountWideProfileID = profileID
+        account.accountWideEnabled = true
+        local transaction = addon.profileOps.NewTransaction(root)
+        transaction.account = account
+        transaction.profiles = profiles
+        return transaction, {
+            profileID = profileID,
+            created = true,
+            resumed = false,
+        }
+    end)
+end
+
+function addon.profileOps.DisableAccountWide(expected)
+    return addon.profileOps.Execute(expected, function(root)
+        if not addon.profileOps.IsAccountWideActive(root) then return nil, "no-change" end
+        local account, copied = addon.dbRuntime.CloneSerializable(root.account)
+        if not copied or type(account) ~= "table"
+            or not addon.dbRuntime.IsCleanTable(account) then
+            return nil, "clone-failed"
+        end
+        local profileID = rawget(account, "accountWideProfileID")
+        account.accountWideEnabled = false
+        local transaction = addon.profileOps.NewTransaction(root)
+        transaction.account = account
+        return transaction, { profileID = profileID }
+    end)
+end
+
+function addon.profileOps.ReplaceSavedAccountWide(sourceProfileID, expected)
+    return addon.profileOps.Execute(expected, function(root)
+        if addon.profileOps.IsAccountWideActive(root) then
+            return nil, "account-wide-active"
+        end
+        local savedProfileID = root.account.accountWideProfileID
+        local savedProfile = savedProfileID and root.profiles[savedProfileID] or nil
+        local sourceProfile = root.profiles[sourceProfileID]
+        if type(savedProfile) ~= "table"
+            or not addon.dbRuntime.IsCleanTable(savedProfile) then
+            return nil, "missing-account-wide-profile"
+        end
+        if not addon.dbRuntime.IsCleanTable(sourceProfile) then
+            return nil, "missing-profile"
+        end
+        if sourceProfileID == savedProfileID then return nil, "no-change" end
+        local cloneBudget = addon.dbRuntime.NewGraphBudget()
+        local profile = addon.profileRuntime.CloneProfile(
+            sourceProfile, rawget(savedProfile, "name"), cloneBudget)
+        if not profile then return nil, "clone-failed" end
+        local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
+        profiles[savedProfileID] = profile
+        local transaction = addon.profileOps.NewTransaction(root)
+        transaction.profiles = profiles
+        return transaction, { profileID = savedProfileID }
+    end)
+end
+
+function addon.profileOps.DiscardSavedAccountWide(expected)
+    return addon.profileOps.Execute(expected, function(root)
+        if addon.profileOps.IsAccountWideActive(root) then
+            return nil, "account-wide-active"
+        end
+        local profileID = root.account.accountWideProfileID
+        if not addon.dbRuntime.IsCleanType(profileID, "string")
+            or not addon.dbRuntime.IsCleanTable(root.profiles[profileID]) then
+            return nil, "missing-account-wide-profile"
+        end
+        local account, copied = addon.dbRuntime.CloneSerializable(root.account)
+        if not copied or not addon.dbRuntime.IsCleanTable(account) then
+            return nil, "clone-failed"
+        end
+        account.accountWideEnabled = false
+        account.accountWideProfileID = nil
+
+        -- The v11 registry gate above guarantees that the dedicated saved profile
+        -- has exactly one reference: account.accountWideProfileID.
+        local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
+        profiles[profileID] = nil
+        local transaction = addon.profileOps.NewTransaction(root)
+        transaction.account = account
+        transaction.profiles = profiles
+        return transaction, { profileID = profileID, deleted = true }
+    end)
+end
+
 function addon.profileOps.CloneContextAssignment(
     root, character, specID, expectedProfileID, cloneBudget)
     local account, accountCopied = addon.dbRuntime.CloneSerializable(
@@ -6949,6 +7782,9 @@ end
 function addon.profileOps.CopySettingsToContext(
     sourceProfileID, guid, specID, scope, expected)
     return addon.profileOps.Execute(expected, function(root)
+        if addon.profileOps.IsAccountWideActive(root) then
+            return nil, "account-wide-active"
+        end
         local character = root.characters[guid]
         local targetProfileID = addon.profileOps.ResolveAssignment(root, guid, specID)
         local source = root.profiles[sourceProfileID]
@@ -6998,6 +7834,9 @@ end
 
 function addon.profileOps.Assign(guid, specID, profileID, expected)
     return addon.profileOps.Execute(expected, function(root)
+        if addon.profileOps.IsAccountWideActive(root) then
+            return nil, "account-wide-active"
+        end
         if not root.profiles[profileID] then return nil, "missing-profile" end
         local character = root.characters[guid]
         if not character then return nil, "missing-context" end
@@ -7023,6 +7862,9 @@ end
 
 function addon.profileOps.MakeContextIndependent(guid, specID, expected)
     return addon.profileOps.Execute(expected, function(root)
+        if addon.profileOps.IsAccountWideActive(root) then
+            return nil, "account-wide-active"
+        end
         local character = root.characters[guid]
         local sourceProfileID = addon.profileOps.ResolveAssignment(root, guid, specID)
         local sourceProfile = sourceProfileID and root.profiles[sourceProfileID] or nil
@@ -7059,6 +7901,9 @@ end
 
 function addon.profileOps.SetRoleTemplate(role, profileID, expected)
     return addon.profileOps.Execute(expected, function(root)
+        if addon.profileOps.IsAccountWideActive(root) then
+            return nil, "account-wide-active"
+        end
         if not addon.dbRuntime.IsCleanType(role, "string")
             or not addon.profileOps.roleKeys[role] then return nil, "invalid-role" end
         if not addon.dbRuntime.IsCleanType(profileID, "string")
@@ -7077,6 +7922,10 @@ end
 
 function addon.profileOps.ResetProfile(profileID, expected)
     return addon.profileOps.Execute(expected, function(root)
+        if addon.profileOps.IsAccountWideActive(root)
+            and profileID ~= root.account.accountWideProfileID then
+            return nil, "account-wide-active"
+        end
         local profile = root.profiles[profileID]
         if not profile then return nil, "missing-profile" end
         local settings = addon.profileOps.BuildDefaultSettings()
@@ -7111,6 +7960,7 @@ function addon.profileOps.DeleteUnusedProfiles(expected)
 end
 
 function addon.profileOps.ReadCleanActiveContext()
+    if addon.profileRuntime.activeContextValid ~= true then return nil end
     local guid = addon.profileRuntime.activeGUID
     local specID = addon.profileRuntime.activeSpecID
     if type(guid) ~= "string" or not addon.dbRuntime.IsCleanType(guid, "string")
@@ -7123,8 +7973,48 @@ function addon.profileOps.ReadCleanActiveContext()
     return guid, specID
 end
 
+function addon.profileOps.BuildAccountWideImportTransaction(
+    root, settings, baseName, fallbackName, cloneBudget)
+    local account, copied = addon.dbRuntime.CloneSerializable(
+        root.account, nil, cloneBudget)
+    if not copied or not addon.dbRuntime.IsCleanTable(account) then
+        return nil, "clone-failed"
+    end
+    local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
+    local profileID = addon.profileRuntime.AllocateProfileID(account, profiles)
+    if not profileID then return nil, "id-exhausted" end
+    local name, nameStatus = addon.profileOps.UniqueProfileName(
+        baseName, profiles, fallbackName)
+    if not name then return nil, nameStatus end
+    profiles[profileID] = { name = name, settings = settings }
+    account.accountWideProfileID = profileID
+    account.accountWideEnabled = true
+    local transaction = addon.profileOps.NewTransaction(root)
+    transaction.account = account
+    transaction.profiles = profiles
+    return transaction, { profileID = profileID, name = name, accountWide = true }
+end
+
 function addon.profileOps.ImportAndAssign(importedSettings, expected)
     return addon.profileOps.Execute(expected, function(root)
+        local cloneBudget = addon.dbRuntime.NewGraphBudget()
+        local settings, settingsCopied = addon.dbRuntime.CloneSerializable(
+            importedSettings, nil, cloneBudget)
+        if not settingsCopied or type(settings) ~= "table"
+            or not addon.dbRuntime.IsCleanTable(settings) then
+            return nil, "clone-failed"
+        end
+
+        -- Account settings belong to StatsPro as a whole, not to the imported
+        -- character/spec profile. Never leak them into profile settings.
+        if not addon.dbRuntime.StripAccountSettings(settings) then
+            return nil, "clone-failed"
+        end
+        if addon.profileOps.IsAccountWideActive(root) then
+            return addon.profileOps.BuildAccountWideImportTransaction(
+                root, settings, "SwiftStats Import", nil, cloneBudget)
+        end
+
         local guid, specID = addon.profileOps.ReadCleanActiveContext()
         if not guid or not specID then return nil, "missing-context" end
         local character = root.characters[guid]
@@ -7133,21 +8023,10 @@ function addon.profileOps.ImportAndAssign(importedSettings, expected)
             or not addon.dbRuntime.IsCleanTable(character) then
             return nil, "missing-context"
         end
-        local cloneBudget = addon.dbRuntime.NewGraphBudget()
         local account, changedCharacter, specProfiles =
             addon.profileOps.CloneContextAssignment(
                 root, character, specID, targetProfileID, cloneBudget)
-        local settings, settingsCopied = addon.dbRuntime.CloneSerializable(
-            importedSettings, nil, cloneBudget)
-        if not account or not changedCharacter or not specProfiles
-            or not settingsCopied or type(settings) ~= "table"
-            or not addon.dbRuntime.IsCleanTable(settings) then
-            return nil, "clone-failed"
-        end
-
-        -- Account settings belong to StatsPro as a whole, not to the imported
-        -- character/spec profile. Never leak them into profile settings.
-        if not addon.dbRuntime.StripAccountSettings(settings) then
+        if not account or not changedCharacter or not specProfiles then
             return nil, "clone-failed"
         end
         local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
@@ -7169,18 +8048,30 @@ end
 function addon.profileOps.ImportTransferToContext(
     package, sections, guid, specID, expected)
     return addon.profileOps.Execute(expected, function(root)
-        local character = root.characters[guid]
-        local targetProfileID = addon.profileOps.ResolveAssignment(root, guid, specID)
+        local accountWide = addon.profileOps.IsAccountWideActive(root)
+        local targetProfileID = accountWide and root.account.accountWideProfileID
+            or addon.profileOps.ResolveAssignment(root, guid, specID)
         local target = targetProfileID and root.profiles[targetProfileID] or nil
-        if not targetProfileID or not target or not character
-            or not addon.dbRuntime.IsCleanType(specID, "number") then
-            return nil, "missing-context"
-        end
+        if not target then return nil, "missing-context" end
         local cloneBudget = addon.dbRuntime.NewGraphBudget()
         local settings, selected = addon.profileTransfer.BuildImportedSettings(
             target.settings, package, sections, cloneBudget)
         if not settings then return nil, selected end
+        if accountWide then
+            local transaction, result = addon.profileOps.BuildAccountWideImportTransaction(
+                root, settings, package.profileName, L("Imported profile"), cloneBudget)
+            if transaction and result then
+                result.sections = selected
+                result.previousProfileID = targetProfileID
+            end
+            return transaction, result
+        end
 
+        local character = root.characters[guid]
+        if not targetProfileID or not target or not character
+            or not addon.dbRuntime.IsCleanType(specID, "number") then
+            return nil, "missing-context"
+        end
         local account, changedCharacter, specProfiles =
             addon.profileOps.CloneContextAssignment(
                 root, character, specID, targetProfileID, cloneBudget)
@@ -7212,19 +8103,20 @@ end
 function addon.profileOps.FullWipe(expected)
     return addon.profileOps.ExecuteRootReplacement(expected, function()
         local guid, specID = addon.profileOps.ReadCleanActiveContext()
-        if not guid or not specID then return nil, "missing-context" end
         local freshRoot = addon.dbRuntime.BuildRegistry(defaults)
         if type(freshRoot) ~= "table" or not addon.dbRuntime.IsCleanTable(freshRoot) then
             return nil, "clone-failed"
         end
-        local character = {
-            defaultProfileID = "p1",
-            specProfiles = { [specID] = "p1" },
-        }
-        if addon.dbRuntime.IsCleanType(addon.profileRuntime.activeDisplayName, "string") then
-            character.displayName = addon.profileRuntime.activeDisplayName
+        if guid and specID then
+            local character = {
+                defaultProfileID = "p1",
+                specProfiles = { [specID] = "p1" },
+            }
+            if addon.dbRuntime.IsCleanType(addon.profileRuntime.activeDisplayName, "string") then
+                character.displayName = addon.profileRuntime.activeDisplayName
+            end
+            freshRoot.characters[guid] = character
         end
-        freshRoot.characters[guid] = character
         if not addon.dbRuntime.ValidateRegistry(freshRoot) then
             return nil, "validate-failed"
         end
@@ -7300,12 +8192,31 @@ end
 
 local function MigrateDB(dbOverride)
     local destination = dbOverride or EnsureStatsProDBTable()
-    local freshInstall = next(destination) == nil
-    local dbVersion = NormalizeDBVersion(destination.dbVersion)
+    local liveDestination = rawequal(destination, EnsureStatsProDBTable())
+    local function FailMigration()
+        if liveDestination then
+            addon.dbRuntime.migrationFailedRoot = destination
+            addon.dbRuntime.Invalidate()
+        end
+        return false
+    end
+    local nextOK, firstKey = pcall(next, destination, nil)
+    if not nextOK then return FailMigration() end
+    local freshInstall = type(firstKey) == "nil"
+    local rawVersion = rawget(destination, "dbVersion")
+    local dbVersion, versionReadable = NormalizeDBVersion(rawVersion)
+    if not versionReadable then return FailMigration() end
+    if type(rawVersion) == "nil" then
+        -- A genuinely flat pre-registry DB has none of these reserved tables.
+        -- Missing the marker on registry-shaped data is corruption, not v0.
+        for _, key in ipairs({ "account", "profiles", "roleTemplates", "characters" }) do
+            if type(rawget(destination, key)) ~= "nil" then return FailMigration() end
+        end
+    end
     if dbVersion > CURRENT_DB_VERSION then return false end
     if dbVersion == CURRENT_DB_VERSION then
         local valid = addon.dbRuntime.ValidateRegistry(destination)
-        if rawequal(destination, EnsureStatsProDBTable()) then
+        if liveDestination then
             if valid then
                 addon.dbRuntime.migrationFailedRoot = nil
             else
@@ -7316,16 +8227,78 @@ local function MigrateDB(dbOverride)
         return valid == true
     end
 
+    -- v10 -> v11: v10 is already the registry schema. It must never pass through
+    -- the flat SavedVariables migration below, which intentionally ignores registry
+    -- root keys and would collapse every saved profile/assignment into a new p1.
+    -- Validate the old registry first, prepare the account replacement off to the
+    -- side, and publish only that one detached table before committing dbVersion.
+    if dbVersion == 10 then
+        local valid = addon.dbRuntime.ValidateRegistry(destination)
+        local account, accountCopied
+        local migratedProfiles = destination.profiles
+        local profileCopiesOK = true
+        local migrationBudget = addon.dbRuntime.NewGraphBudget()
+        if valid then
+            local accountSource = addon.profileRuntime.ShallowCopy(destination.account)
+            accountSource.accountWideEnabled = nil
+            accountSource.accountWideProfileID = nil
+            account, accountCopied = addon.dbRuntime.CloneSerializable(
+                accountSource, nil, migrationBudget)
+            for candidateID, sourceProfile in pairs(destination.profiles) do
+                local sourceSettings = sourceProfile.settings
+                local hasLegacyMetadata = type(rawget(
+                    sourceSettings, "accountWideEnabled")) ~= "nil"
+                    or type(rawget(sourceSettings, "accountWideProfileID")) ~= "nil"
+                if hasLegacyMetadata then
+                    if rawequal(migratedProfiles, destination.profiles) then
+                        migratedProfiles = addon.profileRuntime.ShallowCopy(destination.profiles)
+                    end
+                    local settingsSource = addon.profileRuntime.ShallowCopy(sourceSettings)
+                    settingsSource.accountWideEnabled = nil
+                    settingsSource.accountWideProfileID = nil
+                    local settings, copied = addon.dbRuntime.CloneSerializable(
+                        settingsSource, nil, migrationBudget)
+                    if not copied or not addon.dbRuntime.IsCleanTable(settings) then
+                        profileCopiesOK = false
+                        break
+                    end
+                    local profile = addon.profileRuntime.ShallowCopy(sourceProfile)
+                    profile.settings = settings
+                    migratedProfiles[candidateID] = profile
+                end
+            end
+        end
+        if not valid or not accountCopied or not addon.dbRuntime.IsCleanTable(account)
+            or not profileCopiesOK then
+            return FailMigration()
+        end
+        -- v10 predates this feature. Ignore coincidental/unknown fields with the
+        -- same names so upgrading can never opt a user into account-wide scope.
+        account.accountWideEnabled = false
+        account.accountWideProfileID = nil
+        local candidate = addon.profileRuntime.ShallowCopy(destination)
+        candidate.account = account
+        candidate.profiles = migratedProfiles
+        candidate.dbVersion = CURRENT_DB_VERSION
+        if not addon.dbRuntime.ValidateRegistry(candidate) then
+            return FailMigration()
+        end
+        destination.account = account
+        destination.profiles = migratedProfiles
+        destination.dbVersion = CURRENT_DB_VERSION
+        if liveDestination then
+            addon.dbRuntime.migrationFailedRoot = nil
+            addon.dbRuntime.Invalidate()
+        end
+        return true
+    end
+
     -- Build every legacy transformation and the complete registry off to the side.
     -- The live flat root remains the exact downgrade shadow; only reserved registry
     -- fields are attached after validation, with dbVersion committed last.
     local db = addon.dbRuntime.CloneMigrationWork(destination, dbVersion)
     if type(db) ~= "table" then
-        if rawequal(destination, EnsureStatsProDBTable()) then
-            addon.dbRuntime.migrationFailedRoot = destination
-            addon.dbRuntime.Invalidate()
-        end
-        return false
+        return FailMigration()
     end
 
     local preDefaultShowDurability = db.showDurability
@@ -7462,11 +8435,7 @@ local function MigrateDB(dbOverride)
     db.dbVersion = 9
     local registry = addon.dbRuntime.BuildRegistry(db, not freshInstall)
     if not registry then
-        if rawequal(destination, EnsureStatsProDBTable()) then
-            addon.dbRuntime.migrationFailedRoot = destination
-            addon.dbRuntime.Invalidate()
-        end
-        return false
+        return FailMigration()
     end
 
     destination.account = registry.account
@@ -7474,7 +8443,7 @@ local function MigrateDB(dbOverride)
     destination.roleTemplates = registry.roleTemplates
     destination.characters = registry.characters
     destination.dbVersion = CURRENT_DB_VERSION
-    if rawequal(destination, EnsureStatsProDBTable()) then
+    if liveDestination then
         addon.dbRuntime.migrationFailedRoot = nil
         addon.dbRuntime.Invalidate()
     end
@@ -7693,9 +8662,13 @@ function addon.legacyImport.FindCandidate()
 end
 
 function addon.legacyImport.ImportFreshIfAvailable()
-    local db = addon.dbRuntime.GetWritableRoot(false)
-    if not db then return false end
-    if next(db) ~= nil then return false end
+    -- This bootstrap-only carry-forward intentionally runs before migration and
+    -- therefore before registryReady can exist. It may replace only a clean,
+    -- genuinely empty root; normal user writes still require the registry gate.
+    local db = EnsureStatsProDBTable()
+    if not addon.dbRuntime.IsCleanTable(db) then return false end
+    local nextOK, firstKey = pcall(next, db, nil)
+    if not nextOK or type(firstKey) ~= "nil" then return false end
     local candidate = addon.legacyImport.FindCandidate()
     if not candidate then return false end
     _G.StatsProDB = candidate
@@ -10055,7 +11028,7 @@ local function OnPlayerLogout()
     -- flush. The ownership check inside Close leaves a foreign picker untouched.
     if addon.settingsUI.CloseColorPicker then addon.settingsUI.CloseColorPicker(true) end
     addon.dbRuntime.Refresh()
-    if addon.dbRuntime.readOnly then return end
+    if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady then return end
     if addon.profileRuntime.pendingResolution and addon.profileRuntime.activeGUID == nil then return end
     local settings = addon.dbRuntime.activeSettings
     if addon.dbRuntime.IsCleanTable(settings) then
@@ -11308,7 +12281,11 @@ function addon.settingsDesign.DisabledControlTooltip(control)
     local blockers = control.statsProControlBlockers
     local blocker = blockers and (blockers.schema or blockers.context
         or blockers.combat or blockers.dependency)
-    if not blocker then return nil end
+    if not blocker then
+        local messageKey = control.statsProDisabledMessageKey
+        if messageKey then return L(messageKey) end
+        return nil
+    end
     if blocker.mode == "requires" then
         return string.format(L("Requires %s."), L(blocker.key))
     end
@@ -12390,7 +13367,10 @@ end
 
 function addon.presetRuntime.SessionIsCurrent(service, session, ignoreGeneration)
     if not session or type(session.expected) ~= "table" then return false end
-    local root = addon.dbRuntime.Refresh()
+    -- Expected-state checks include reference counts and therefore traverse the
+    -- complete registry. Never trust the hot-path identity cache at this boundary.
+    local root = addon.dbRuntime.Refresh(true)
+    if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady then return false end
     if not addon.profileOps.CheckExpected(root, session.expected, ignoreGeneration) then
         return false
     end
@@ -12465,7 +13445,7 @@ function addon.presetRuntime.StartPreview(service, presetID)
         presetID = presetID,
         candidate = candidate,
         baseline = baseline,
-        expected = addon.profileUI.CaptureExpected(nil, nil, profileID),
+        expected = addon.profileUI.CaptureExpected(nil, nil, profileID, true),
         profileID = profileID,
         baselineMarker = service.markerKey
             and rawget(profile.settings, service.markerKey) or nil,
@@ -12595,14 +13575,10 @@ function addon.appearancePresets.RefreshUI()
     if session then
         ui.apply:Show()
         ui.cancel:Show()
-        local root = addon.dbRuntime.Refresh()
-        local counts = addon.profileOps.CountReferences(root,
-            addon.dbRuntime.activeProfileID)
-        if counts.total > 1 then
+        local impact = addon.profileUI.ProfileImpactText(addon.dbRuntime.activeProfileID)
+        if impact ~= "" then
             warningVisible = true
-            ui.warning:SetText(string.format(L(
-                "This profile is shared by %d specs and %d other references. Applying changes all of them."),
-                counts.specs, counts.total - counts.specs))
+            ui.warning:SetText(impact)
             addon.settingsDesign.SetWarningVisible(ui.warning, true)
         else
             ui.warning:SetText("")
@@ -12688,14 +13664,10 @@ function addon.hudPresets.RefreshUI()
     local definition = addon.hudPresets.definitions[displayID]
     local displayLabel = definition and L(definition.label) or L("Custom")
     local warningVisible = false
-    local sharedCounts
+    local impact = ""
     if session then
-        local root = addon.dbRuntime.Refresh()
-        sharedCounts = addon.profileOps.CountReferences(root,
-            addon.dbRuntime.activeProfileID)
-        if sharedCounts.total > 1 then
-            warningVisible = true
-        end
+        impact = addon.profileUI.ProfileImpactText(addon.dbRuntime.activeProfileID)
+        warningVisible = impact ~= ""
     end
     for _, ui in ipairs(addon.hudPresets.views) do
         if session then
@@ -12707,9 +13679,7 @@ function addon.hudPresets.RefreshUI()
             addon.settingsDesign.SetListRowSelected(button, presetID == displayID)
         end
         if session and warningVisible then
-            ui.warning:SetText(string.format(L(
-                "This profile is shared by %d specs and %d other references. Applying changes all of them."),
-                sharedCounts.specs, sharedCounts.total - sharedCounts.specs))
+            ui.warning:SetText(impact)
             addon.settingsDesign.SetWarningVisible(ui.warning, true)
         else
             ui.warning:SetText("")
@@ -13121,11 +14091,13 @@ function addon.legacyImport.AcceptPending(_, popupData)
         pending.settings, pending.expected)
     if ok and type(result) == "table"
         and addon.dbRuntime.IsCleanType(result.name, "string") then
-        PrintMsg(string.format(
-            L("SwiftStats settings imported into new profile \"%s\"."), result.name))
+        local root = addon.dbRuntime.Refresh()
+        PrintMsg(string.format(L(root.account.accountWideEnabled
+            and "SwiftStats settings imported as new account-wide settings \"%s\"."
+            or "SwiftStats settings imported into new profile \"%s\"."), result.name))
         return
     end
-    if result == "combat" or result == "read-only" or result == "pending"
+    if result == "combat" or result == "corrupt" or result == "read-only" or result == "pending"
         or result == "busy" or result == "unsafe-context" or result == "stale" then
         PrintMsg(addon.profileUI.OperationErrorText(result))
     else
@@ -13225,19 +14197,23 @@ function addon.legacyImport.Request()
     local guid = addon.profileRuntime.activeGUID
     local specID = addon.profileRuntime.activeSpecID
     local activeProfileID = addon.dbRuntime.activeProfileID
+    local accountWide = root.account.accountWideEnabled == true
     if not candidateValid or not addon.dbRuntime.IsCleanTable(candidateSettings)
-        or not addon.dbRuntime.IsCleanType(guid, "string") or guid == ""
-        or not addon.dbRuntime.IsCleanType(specID, "number")
+        or (not accountWide and (not addon.dbRuntime.IsCleanType(guid, "string") or guid == ""))
+        or (not accountWide and not addon.dbRuntime.IsCleanType(specID, "number"))
         or not addon.dbRuntime.IsCleanType(activeProfileID, "string") then
         PrintMsg(L("SwiftStats import failed; profiles and assignments were preserved."))
         return
     end
     addon.legacyImport.pending = {
         settings = candidateSettings,
-        expected = addon.profileUI.CaptureExpected(guid, specID, activeProfileID),
+        expected = addon.profileUI.CaptureExpected(
+            accountWide and nil or guid, accountWide and nil or specID, activeProfileID),
     }
     local definition = _G.StaticPopupDialogs[addon.legacyImport.popupKey]
-    definition.text = L("Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged.")
+    definition.text = L(accountWide
+        and "Import compatible SwiftStats settings as new account-wide settings? Existing specialization assignments, other profiles, account settings, and SwiftStats data will stay unchanged."
+        or "Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged.")
     definition.button1 = L("Import")
     definition.button2 = L("Cancel")
     local ok, popup = pcall(_G.StaticPopup_Show,
@@ -13291,22 +14267,25 @@ function addon.resetRuntime.Request()
     local profile = profileID and root.profiles[profileID] or nil
     local guid = addon.profileRuntime.activeGUID
     local specID = addon.profileRuntime.activeSpecID
-    if not profile or not addon.dbRuntime.IsCleanType(guid, "string")
-        or not addon.dbRuntime.IsCleanType(specID, "number") then
+    local accountWide = root.account.accountWideEnabled == true
+        and root.account.accountWideProfileID == profileID
+    if not profile or (not accountWide and not addon.dbRuntime.IsCleanType(guid, "string"))
+        or (not accountWide and not addon.dbRuntime.IsCleanType(specID, "number")) then
         PrintMsg(addon.profileUI.OperationErrorText("missing-context"))
         return false
     end
-    local references = addon.profileOps.CountReferences(root, profileID)
-    local otherReferences = references.characterDefaults
-        + references.accountDefault + references.roleTemplates
     addon.resetRuntime.pending = {
         profileID = profileID,
-        expected = addon.profileUI.CaptureExpected(guid, specID, profileID),
+        expected = addon.profileUI.CaptureExpected(
+            accountWide and nil or guid, accountWide and nil or specID,
+            profileID, not accountWide),
     }
     local definition = _G.StaticPopupDialogs[addon.resetRuntime.popupKey]
-    definition.text = string.format(
-        L("Reset active profile \"%s\" to defaults? This changes %d assigned specs and %d other references."),
-        profile.name, references.specs, otherReferences)
+    local prompt = accountWide
+        and L("Reset account-wide settings to defaults?")
+        or string.format(L("Reset active profile \"%s\" to defaults?"), profile.name)
+    local impact = addon.profileUI.ProfileImpactText(profileID)
+    definition.text = impact ~= "" and prompt .. " " .. impact or prompt
     definition.button1 = L("Confirm")
     definition.button2 = L("Cancel")
     local ok, popup = pcall(_G.StaticPopup_Show,
@@ -13382,14 +14361,11 @@ function addon.wipeRuntime.Request()
             return false
         end
         local profileID = addon.dbRuntime.activeProfileID
-        local guid = addon.profileRuntime.activeGUID
-        local specID = addon.profileRuntime.activeSpecID
-        if not addon.dbRuntime.IsCleanType(profileID, "string")
-            or not addon.dbRuntime.IsCleanType(guid, "string")
-            or not addon.dbRuntime.IsCleanType(specID, "number") then
+        if not addon.dbRuntime.IsCleanType(profileID, "string") then
             PrintMsg(addon.profileUI.OperationErrorText("missing-context"))
             return false
         end
+        local guid, specID = addon.profileOps.ReadCleanActiveContext()
         addon.wipeRuntime.pending = {
             expected = addon.profileUI.CaptureExpected(guid, specID, profileID),
         }
@@ -13462,38 +14438,60 @@ function addon.profileUI.RoleLabel(role)
     return role or ""
 end
 
-function addon.profileUI.RoleTemplateChoices(model)
+function addon.profileUI.RoleTemplateChoices(model, selectedProfileID)
     local choices = {}
     for _, role in ipairs(addon.profileOps.roleOrder) do
         local template = model and model.roleTemplates and model.roleTemplates[role] or nil
-        choices[#choices + 1] = {
-            kind = "role",
-            role = role,
-            profileID = template and template.profileID or nil,
-            label = addon.profileUI.RoleLabel(role),
-        }
+        if not template or template.profileID ~= selectedProfileID then
+            choices[#choices + 1] = {
+                kind = "role",
+                role = role,
+                profileID = template and template.profileID or nil,
+                label = addon.profileUI.RoleLabel(role),
+            }
+        end
     end
     return choices
 end
 
-function addon.profileUI.CaptureExpected(guid, specID, profileID)
+function addon.profileUI.CaptureExpected(
+    guid, specID, profileID, captureReferences, additionalGUID, additionalSpecID)
     local root = addon.dbRuntime.Refresh()
     local expected = {
         rootRef = root,
         generation = addon.dbRuntime.generation,
+        assignedProfileID = addon.dbRuntime.assignedProfileID,
         activeProfileID = addon.dbRuntime.activeProfileID,
+        accountRef = root.account,
+        hasAccountWideState = true,
+        accountWideEnabled = root.account.accountWideEnabled,
+        accountWideProfileID = root.account.accountWideProfileID,
         profilesRef = root.profiles,
         roleTemplatesRef = root.roleTemplates,
     }
     if profileID and root.profiles and root.profiles[profileID] then
         expected.profileID = profileID
         expected.profileRef = root.profiles[profileID]
+        if captureReferences then
+            expected.referenceCounts = addon.profileOps.CaptureReferenceCounts(
+                root, profileID)
+        end
     end
     if guid then
         expected.guid = guid
         expected.specID = specID
         expected.assignmentID = addon.profileOps.ResolveAssignment(root, guid, specID)
         expected.characterRef = root.characters and root.characters[guid] or nil
+    end
+    if additionalGUID then
+        expected.additionalAssignments = {
+            {
+                guid = additionalGUID,
+                specID = additionalSpecID,
+                assignmentID = addon.profileOps.ResolveAssignment(
+                    root, additionalGUID, additionalSpecID),
+            },
+        }
     end
     return expected
 end
@@ -13511,6 +14509,9 @@ function addon.profileUI.OperationErrorText(reason)
         return L("Waiting for a safe profile context.")
     end
     if reason == "current-character" then return L("The current character cannot be forgotten.") end
+    if reason == "account-wide-active" then
+        return L("Return to specialization settings before changing assignments.")
+    end
     if reason == "same-profile" or reason == "no-change" then
         return L("Nothing changed.")
     end
@@ -13581,46 +14582,68 @@ function addon.profileUI.BuildOperationUI(manager)
     operationStatus:SetWordWrap(true)
     operationStatus:SetMaxLines(2)
     addon.settingsDesign.ApplyTextRole(operationStatus, "controlMetadata")
+    local operationStatusHit = CreateFrame(
+        "Frame", "StatsProProfileOperationStatusHit", actionChild)
+    operationStatusHit:SetAllPoints(operationStatus)
+    operationStatusHit:EnableMouse(true)
+    addon.settingsDesign.AttachTooltip(operationStatusHit, function()
+        return operationStatus:GetText()
+    end)
 
-    local function createAction(name, labelKey, y, roleName)
+    local function createAction(name, labelKey, roleName)
         local button = addon.settingsDesign.CreateShellButton(
             actionChild, name, roleName or "field")
-        button:SetPoint("TOPLEFT", 6, y)
+        button:SetPoint("TOPLEFT", 6, -30)
         button:SetSize(addon.settingsDesign.tokens.geometry.actionWidth,
             addon.settingsDesign.tokens.geometry.actionHeight)
-        PushLocalizedLabel(function() button:SetText(L(labelKey)) end)
+        if labelKey then
+            PushLocalizedLabel(function() button:SetText(L(labelKey)) end)
+        end
         return button
     end
 
+    local accountWideButton = createAction(
+        "StatsProProfileAccountWideButton", nil, "primary")
+    accountWideButton:SetText(L("Use these settings everywhere..."))
     local copyButton = createAction(
-        "StatsProProfileCopyFromButton", "Copy settings from...", -30)
+        "StatsProProfileCopyFromButton", "Copy once from...")
     local useSameButton = createAction(
-        "StatsProProfileUseSameButton", "Use the same settings as...", -58, "primary")
+        "StatsProProfileUseSameButton", "Use the same settings as...", "primary")
     local useForButton = createAction(
-        "StatsProProfileUseForButton", "Use these settings for...", -86)
+        "StatsProProfileUseForButton", "Share these settings with...")
     local stopSharingButton = createAction(
-        "StatsProProfileStopSharingButton", "Stop sharing...", -114)
+        "StatsProProfileStopSharingButton", "Make this specialization independent...")
     local transferButton = createAction(
-        "StatsProProfileTransferButton", "Export / import profile...", -142, "primary")
+        "StatsProProfileTransferButton", "Export / import profile...", "primary")
     local advancedButton = createAction(
-        "StatsProProfileAdvancedButton", "Advanced...", -178)
+        "StatsProProfileAdvancedButton", "Advanced...")
     local resetButton = createAction(
-        "StatsProProfileResetButton", "Reset these settings...", -214, "destructive")
+        "StatsProProfileResetButton", "Reset these settings...", "destructive")
     local forgetButton = createAction(
-        "StatsProProfileForgetButton", "Forget this character...", -242, "destructive")
+        "StatsProProfileForgetButton", "Forget this character...", "destructive")
     local roleTemplateButton = createAction(
-        "StatsProProfileRoleTemplateButton", "Defaults for future specializations...", -270)
+        "StatsProProfileRoleTemplateButton", "Starting settings for new specializations...")
+    local replaceAccountWideButton = createAction(
+        "StatsProProfileReplaceAccountWideButton", "Replace saved account-wide settings...")
+    local discardAccountWideButton = createAction(
+        "StatsProProfileDiscardAccountWideButton", "Delete saved account-wide settings...",
+        "destructive")
     local cleanupButton = createAction(
-        "StatsProProfileCleanupButton", "Delete unused settings...", -298, "destructive")
+        "StatsProProfileCleanupButton", "Delete unused settings...", "destructive")
 
     ui.advancedShown = false
     function ui.SetAdvancedShown(shown)
         ui.advancedShown = shown == true
         advancedButton:SetText(L(ui.advancedShown and "Hide advanced" or "Advanced..."))
-        for _, button in ipairs({ resetButton, forgetButton, roleTemplateButton, cleanupButton }) do
-            if ui.advancedShown then button:Show() else button:Hide() end
+        if type(ui.LayoutActionButtons) == "function" then
+            ui.LayoutActionButtons(ui.currentModel)
         end
-        actionChild:SetHeight(ui.advancedShown and 334 or 200)
+    end
+    function ui.ResetOperationPane()
+        ui.SetAdvancedShown(false)
+        actionScroll:SetVerticalScroll(0)
+        ui.operationStatusKind = nil
+        ui.operationStatusReason = nil
     end
     PushLocalizedLabel(function() ui.SetAdvancedShown(ui.advancedShown) end)
     ui.SetAdvancedShown(false)
@@ -13755,7 +14778,9 @@ function addon.profileUI.BuildOperationUI(manager)
     ui.transferHint = transferHint
 
     ui.operationStatus = operationStatus
+    ui.operationStatusHit = operationStatusHit
     ui.actionButtons = {
+        accountWide = accountWideButton,
         copy = copyButton,
         useSame = useSameButton,
         useFor = useForButton,
@@ -13765,8 +14790,51 @@ function addon.profileUI.BuildOperationUI(manager)
         reset = resetButton,
         forget = forgetButton,
         roleTemplate = roleTemplateButton,
+        replaceAccountWide = replaceAccountWideButton,
+        discardAccountWide = discardAccountWideButton,
         cleanup = cleanupButton,
     }
+    function ui.LayoutActionButtons(model)
+        local accountWide = model and model.accountWideEnabled == true
+        local hasSavedAccountWide = model and model.accountWideProfileID ~= nil
+        accountWideButton:SetText(L(accountWide
+            and "Return to specialization settings..."
+            or (hasSavedAccountWide and "Use account-wide settings..."
+                or "Use these settings everywhere...")))
+        local ordered = { accountWideButton }
+        if not accountWide then
+            ordered[#ordered + 1] = copyButton
+            ordered[#ordered + 1] = useSameButton
+            ordered[#ordered + 1] = useForButton
+            ordered[#ordered + 1] = stopSharingButton
+        end
+        ordered[#ordered + 1] = transferButton
+        ordered[#ordered + 1] = advancedButton
+        if ui.advancedShown then
+            ordered[#ordered + 1] = resetButton
+            ordered[#ordered + 1] = forgetButton
+            if not accountWide then ordered[#ordered + 1] = roleTemplateButton end
+            if hasSavedAccountWide and not accountWide then
+                ordered[#ordered + 1] = replaceAccountWideButton
+                ordered[#ordered + 1] = discardAccountWideButton
+            end
+            ordered[#ordered + 1] = cleanupButton
+        end
+        local visible = {}
+        for _, button in ipairs(ordered) do visible[button] = true end
+        for _, button in pairs(ui.actionButtons) do
+            if not visible[button] then button:Hide() end
+        end
+        local y = -30
+        for _, button in ipairs(ordered) do
+            button:ClearAllPoints()
+            button:SetPoint("TOPLEFT", 6, y)
+            button:Show()
+            y = y - 28
+        end
+        actionChild:SetHeight(math.max(1, -y + 8))
+    end
+    ui.LayoutActionButtons(ui.currentModel)
     function ui.ApplyOperationPaneWidth(managerWidth)
         local availableWidth = math.max(1, managerWidth - 258 - 34)
         local controlWidth = math.max(
@@ -13783,7 +14851,7 @@ function addon.profileUI.BuildOperationUI(manager)
 
     function ui.RefreshOperationStatus(model)
         local failed = ui.operationStatusKind == "error"
-        local message = ""
+        local message
         local colorRole = "accent"
         if model and model.readOnly then
             failed = model.mode == "corrupt"
@@ -13802,9 +14870,14 @@ function addon.profileUI.BuildOperationUI(manager)
         elseif failed then
             message = ui.OperationErrorText(ui.operationStatusReason)
             colorRole = "danger"
+        elseif model and model.accountWideEnabled then
+            message = L("Every existing and future specialization uses these settings.")
+        else
+            message = L("Copy makes a separate snapshot. Sharing keeps future changes linked.")
         end
         operationStatus:SetText(message)
         addon.settingsDesign.SetRegionColor(operationStatus, colorRole)
+        addon.settingsDesign.RefreshOwnedControlTooltip(operationStatusHit)
     end
 
     function ui.SetOperationStatus(kind, reason)
@@ -13992,7 +15065,9 @@ function addon.profileUI.BuildOperationUI(manager)
         }
         ui.ShowDialogBase(title)
         primaryButton.statsProButtonRole = (kind == "reset" or kind == "cleanup"
-            or kind == "forget") and "destructive" or "primary"
+            or kind == "forget" or kind == "discard-account-wide"
+            or kind == "replace-account-wide")
+            and "destructive" or "primary"
         addon.settingsDesign.RefreshShellButton(primaryButton)
         dialogMessage:SetText(message)
     end
@@ -14120,10 +15195,12 @@ function addon.profileUI.BuildOperationUI(manager)
             return false
         end
         local payload = pending.payload or {}
-        ui.ShowConfirmation("transfer-import-confirm", L("Import profile"),
-            string.format(
+        local message = payload.accountWide
+            and L("Import selected sections as new account-wide settings? Existing specialization assignments and unselected settings will stay unchanged.")
+            or string.format(
                 L("Import selected sections as a new independent profile for \"%s\"? Existing profiles and unselected settings will stay unchanged."),
-                payload.targetLabel or L("Character")), {
+                payload.targetLabel or L("Character"))
+        ui.ShowConfirmation("transfer-import-confirm", L("Import profile"), message, {
                 transferString = package.originalString,
                 sections = sections,
                 guid = payload.guid,
@@ -14168,7 +15245,9 @@ function addon.profileUI.BuildOperationUI(manager)
     transferEditBox:SetScript("OnEnterPressed", function() ui.RunTransferAction() end)
     transferEditBox:SetScript("OnEscapePressed", function(box) box:ClearFocus() end)
     PushLocalizedLabel(function()
-        if dialog:IsShown() and ui.transferState then ui.RefreshTransferDialog() end
+        if not dialog:IsShown() then return end
+        if ui.transferState then ui.RefreshTransferDialog()
+        else ui.CloseOperationDialog() end
     end)
 
     function ui.SpecChoices(
@@ -14192,6 +15271,18 @@ function addon.profileUI.BuildOperationUI(manager)
         return choices
     end
 
+    function ui.FindContext(model, guid, specID)
+        for _, character in ipairs(model.characters or {}) do
+            if character.guid == guid then
+                for _, spec in ipairs(character.specs or {}) do
+                    if spec.specID == specID then return character, spec end
+                end
+                return character, nil
+            end
+        end
+        return nil, nil
+    end
+
     function ui.CopyScopeChoices()
         return {
             { kind = "scope", scope = "all", label = L("All settings") },
@@ -14203,6 +15294,7 @@ function addon.profileUI.BuildOperationUI(manager)
 
     function ui.HandleOperationResult(ok, result)
         if ok then
+            actionScroll:SetVerticalScroll(0)
             ui.SetOperationStatus("success")
             ui.CloseOperationDialog()
             ui.RefreshSafe()
@@ -14217,7 +15309,20 @@ function addon.profileUI.BuildOperationUI(manager)
     function ui.HandleChoice(choice)
         local pending = ui.pendingAction
         if not pending or pending.mode ~= "choice" then return end
-        local model = ui.currentModel or ui.BuildViewModel()
+        -- Rebuild before consuming a choice. RefreshOperationControls closes this
+        -- dialog if the registry or selected assignment changed while it was open.
+        ui.RefreshAll()
+        if not rawequal(ui.pendingAction, pending) then return end
+        local model = ui.currentModel
+        local choiceCharacter, choiceSpec
+        if choice.kind == "context" then
+            choiceCharacter, choiceSpec = ui.FindContext(
+                model, choice.guid, choice.specID)
+            if not choiceSpec or choiceSpec.profileID ~= choice.profileID then
+                ui.HandleOperationResult(false, "stale")
+                return
+            end
+        end
         if pending.kind == "transfer-direction" then
             local payload = pending.payload or {}
             if choice.direction == "export" then
@@ -14240,12 +15345,16 @@ function addon.profileUI.BuildOperationUI(manager)
             ui.ShowChoices("copy-scope", L("Choose settings to copy"),
                 ui.CopyScopeChoices(), {
                     sourceProfileID = source.profileID,
-                    sourceLabel = choice.label,
+                    sourceLabel = ui.ContextLabel(choiceCharacter, choiceSpec),
+                    sourceGUID = choice.guid,
+                    sourceSpecID = choice.specID,
                     targetProfileID = target.profileID,
                     targetLabel = payload.targetLabel,
                     guid = payload.guid,
                     specID = payload.specID,
-                }, ui.CaptureExpected(payload.guid, payload.specID, target.profileID))
+                }, ui.CaptureExpected(
+                    payload.guid, payload.specID, target.profileID, false,
+                    choice.guid, choice.specID))
             return
         end
         if pending.kind == "copy-scope" then
@@ -14254,7 +15363,7 @@ function addon.profileUI.BuildOperationUI(manager)
                 ui.HandleOperationResult(false, "stale")
                 return
             end
-            ui.ShowConfirmation("copy-context", L("Copy settings from..."),
+            ui.ShowConfirmation("copy-context", L("Copy once from..."),
                 string.format(
                     L("Copy %s from \"%s\" to \"%s\"? The destination will keep its own settings afterward."),
                     choice.label, payload.sourceLabel, payload.targetLabel), {
@@ -14271,11 +15380,13 @@ function addon.profileUI.BuildOperationUI(manager)
             if pending.kind == "share-source" then
                 sourceProfileID = choice.profileID
                 guid, specID = payload.guid, payload.specID
-                sourceLabel, targetLabel = choice.label, payload.targetLabel
+                sourceLabel = ui.ContextLabel(choiceCharacter, choiceSpec)
+                targetLabel = payload.targetLabel
             else
                 sourceProfileID = payload.sourceProfileID
                 guid, specID = choice.guid, choice.specID
-                sourceLabel, targetLabel = payload.sourceLabel, choice.label
+                sourceLabel = payload.sourceLabel
+                targetLabel = ui.ContextLabel(choiceCharacter, choiceSpec)
             end
             local source = ui.FindProfile(model, sourceProfileID)
             if not source then ui.HandleOperationResult(false, "stale"); return end
@@ -14292,7 +15403,12 @@ function addon.profileUI.BuildOperationUI(manager)
                     guid = guid,
                     specID = specID,
                     profileID = sourceProfileID,
-                }, ui.CaptureExpected(guid, specID, sourceProfileID))
+                }, ui.CaptureExpected(
+                    guid, specID, sourceProfileID, true,
+                    pending.kind == "share-source" and choice.guid
+                        or payload.sourceGUID,
+                    pending.kind == "share-source" and choice.specID
+                        or payload.sourceSpecID))
             return
         end
         if pending.kind == "role-template" then
@@ -14308,12 +15424,12 @@ function addon.profileUI.BuildOperationUI(manager)
                 return
             end
             local messageKey = choice.role == "TANK"
-                and "Use \"%s\" as the source for future Tank contexts? Existing assignments will not change; each new context receives an independent copy."
+                and "Use \"%s\" as the starting settings for new Tank specializations? Existing specializations will not change; each new specialization receives its own copy."
                 or choice.role == "HEALER"
-                    and "Use \"%s\" as the source for future Healer contexts? Existing assignments will not change; each new context receives an independent copy."
-                    or "Use \"%s\" as the source for future Damage contexts? Existing assignments will not change; each new context receives an independent copy."
+                    and "Use \"%s\" as the starting settings for new Healer specializations? Existing specializations will not change; each new specialization receives its own copy."
+                    or "Use \"%s\" as the starting settings for new Damage specializations? Existing specializations will not change; each new specialization receives its own copy."
             ui.ShowConfirmation("set-role-template",
-                L("Defaults for future specializations..."),
+                L("Starting settings for new specializations..."),
                 string.format(L(messageKey), payload.sourceLabel), {
                     role = choice.role,
                     profileID = profile.profileID,
@@ -14341,6 +15457,16 @@ function addon.profileUI.BuildOperationUI(manager)
         elseif pending.kind == "stop-sharing" then
             ok, result = addon.profileOps.MakeContextIndependent(
                 payload.guid, payload.specID, pending.expected)
+        elseif pending.kind == "enable-account-wide" then
+            ok, result = addon.profileOps.EnableAccountWide(
+                payload.sourceProfileID, pending.expected)
+        elseif pending.kind == "disable-account-wide" then
+            ok, result = addon.profileOps.DisableAccountWide(pending.expected)
+        elseif pending.kind == "replace-account-wide" then
+            ok, result = addon.profileOps.ReplaceSavedAccountWide(
+                payload.sourceProfileID, pending.expected)
+        elseif pending.kind == "discard-account-wide" then
+            ok, result = addon.profileOps.DiscardSavedAccountWide(pending.expected)
         elseif pending.kind == "reset" then
             ok, result = addon.profileOps.ResetProfile(payload.profileID, pending.expected)
         elseif pending.kind == "forget" then
@@ -14360,48 +15486,97 @@ function addon.profileUI.BuildOperationUI(manager)
                     package, payload.sections, payload.guid, payload.specID,
                     pending.expected)
                 if ok and result and result.name then
-                    PrintMsg(string.format(L("Imported profile \"%s\" was created."), result.name))
+                    local message = string.format(
+                        L("Imported profile \"%s\" was created."), result.name)
+                    if result.accountWide then
+                        message = message .. " " .. L(
+                            "Every existing and future specialization uses these settings.")
+                    end
+                    PrintMsg(message)
                 end
             end
         end
         ui.HandleOperationResult(ok, result)
     end
 
+    local function SetActionEnabled(button, enabled)
+        if enabled then
+            if not button:IsEnabled() then button:Enable() end
+        elseif button:IsEnabled() then
+            button:Disable()
+        end
+    end
+
     function ui.RefreshOperationControls(model, character, spec)
-        local assignedProfileID = spec and spec.profileID or nil
+        local assignedProfileID = spec and spec.profileID
+            or model.defaultProfileID
         local assignedProfile = ui.FindProfile(model, assignedProfileID)
+        local effectiveProfileID = model.accountWideEnabled
+            and model.accountWideProfileID or assignedProfileID
+        local effectiveProfile = ui.FindProfile(model, effectiveProfileID)
         ui.selectedAssignedProfileID = assignedProfileID
+        ui.selectedEffectiveProfileID = effectiveProfileID
         ui.selectedCharacterModel = character
         ui.selectedSpecModel = spec
         ui.RefreshOperationStatus(model)
 
         local mutable = model.canMutate == true
         local hasContext = character ~= nil and spec ~= nil and assignedProfile ~= nil
+        local accountWide = model.accountWideEnabled == true
+        local hasEffectiveTarget = effectiveProfile ~= nil and (hasContext or accountWide)
         local alternatives = hasContext
             and ui.SpecChoices(
                 model, character.guid, spec.specID, assignedProfileID, true) or {}
         local hasAlternative = #alternatives > 0
-        if mutable and hasContext and hasAlternative then
-            copyButton:Enable()
-            useSameButton:Enable()
-            useForButton:Enable()
-        else
-            copyButton:Disable()
-            useSameButton:Disable()
-            useForButton:Disable()
+        local unavailableMessage
+        if not mutable then
+            if model.readOnly then
+                unavailableMessage = model.mode == "corrupt"
+                    and "Corrupted data - profiles are read-only. Use /ss wipe to reset."
+                    or "Compatibility mode - profiles are read-only."
+            elseif model.combat == true then
+                unavailableMessage = "Profile changes are unavailable during combat."
+            else
+                unavailableMessage = "Waiting for a safe profile context."
+            end
+        elseif hasContext and not accountWide and not hasAlternative then
+            unavailableMessage = (spec.sharedCount or 0) > 1
+                and "All known specializations already use these settings."
+                or "Visit another specialization or character before copying or sharing settings."
         end
-        if mutable and hasContext and (spec.sharedCount or 0) > 1 then
-            stopSharingButton:Enable()
-        else stopSharingButton:Disable() end
-        if hasContext then transferButton:Enable() else transferButton:Disable() end
-        advancedButton:Enable()
-        if mutable and hasContext then resetButton:Enable() else resetButton:Disable() end
-        if mutable and character and not character.isCurrent then forgetButton:Enable()
-        else forgetButton:Disable() end
-        if mutable and hasContext then roleTemplateButton:Enable()
-        else roleTemplateButton:Disable() end
-        if mutable and (model.unusedProfileCount or 0) > 0 then cleanupButton:Enable()
-        else cleanupButton:Disable() end
+        copyButton.statsProDisabledMessageKey = unavailableMessage
+        useSameButton.statsProDisabledMessageKey = unavailableMessage
+        useForButton.statsProDisabledMessageKey = unavailableMessage
+        local canCopyOrShare = mutable and hasContext and hasAlternative
+            and not accountWide
+        SetActionEnabled(copyButton, canCopyOrShare)
+        SetActionEnabled(useSameButton, canCopyOrShare)
+        SetActionEnabled(useForButton, canCopyOrShare)
+        SetActionEnabled(stopSharingButton,
+            mutable and hasContext and not accountWide and (spec.sharedCount or 0) > 1)
+        SetActionEnabled(transferButton, hasEffectiveTarget)
+        SetActionEnabled(advancedButton, true)
+        SetActionEnabled(resetButton, mutable and hasEffectiveTarget)
+        SetActionEnabled(forgetButton,
+            mutable and character ~= nil and not character.isCurrent)
+        local roleChoices = hasContext
+            and ui.RoleTemplateChoices(model, assignedProfileID) or {}
+        SetActionEnabled(roleTemplateButton,
+            mutable and hasContext and not accountWide and #roleChoices > 0)
+        SetActionEnabled(accountWideButton,
+            mutable and (accountWide or model.accountWideProfileID ~= nil
+                or assignedProfile ~= nil))
+        SetActionEnabled(replaceAccountWideButton,
+            mutable and not accountWide and assignedProfile ~= nil
+                and model.accountWideProfileID ~= nil)
+        SetActionEnabled(discardAccountWideButton,
+            mutable and not accountWide and model.accountWideProfileID ~= nil)
+        SetActionEnabled(cleanupButton,
+            mutable and (model.unusedProfileCount or 0) > 0)
+        for _, button in ipairs({ copyButton, useSameButton, useForButton }) do
+            addon.settingsDesign.RefreshOwnedControlTooltip(button)
+        end
+        ui.LayoutActionButtons(model)
 
         local exportOnlyDialog = ui.pendingAction
             and (ui.pendingAction.kind == "transfer-export"
@@ -14415,13 +15590,61 @@ function addon.profileUI.BuildOperationUI(manager)
         end
     end
 
+    local function RefreshActionSelection(requireMutable)
+        -- Action payloads must come from the same freshly validated model as their
+        -- expected-state snapshot. Otherwise an in-place assignment change between
+        -- manager refresh and click could be silently blessed by CaptureExpected.
+        ui.RefreshAll()
+        if requireMutable and (not ui.currentModel
+            or ui.currentModel.canMutate ~= true) then
+            return nil, nil, nil
+        end
+        return ui.currentModel, ui.selectedCharacterModel, ui.selectedSpecModel
+    end
+
+    accountWideButton:SetScript("OnClick", function()
+        local model, character, spec = RefreshActionSelection(true)
+        if not model then return end
+        local source = ui.FindProfile(model, ui.selectedAssignedProfileID)
+            or ui.FindProfile(model, model.assignedProfileID)
+            or ui.FindProfile(model, model.defaultProfileID)
+        if model.accountWideEnabled then
+            ui.ShowConfirmation("disable-account-wide",
+                L("Return to specialization settings..."),
+                L("Return to specialization settings? Previous assignments will become active again. Account-wide settings will be kept."),
+                nil, ui.CaptureExpected(
+                    character and character.guid, spec and spec.specID,
+                    model.accountWideProfileID))
+            return
+        end
+        if model.accountWideProfileID then
+            ui.ShowConfirmation("enable-account-wide",
+                L("Use account-wide settings..."),
+                L("Use the saved account-wide settings everywhere? Existing specialization assignments will be kept."),
+                { sourceProfileID = source and source.profileID },
+                ui.CaptureExpected(
+                    character and character.guid, spec and spec.specID,
+                    model.accountWideProfileID))
+            return
+        end
+        if not source then return end
+        ui.ShowConfirmation("enable-account-wide",
+            L("Use these settings everywhere..."),
+            string.format(
+                L("Create account-wide settings from \"%s\"? Every existing and future character and specialization will use them. Existing specialization assignments will be kept."),
+                character and spec and ui.ContextLabel(character, spec)
+                    or L("Account default profile")),
+            { sourceProfileID = source.profileID },
+            ui.CaptureExpected(
+                character and character.guid, spec and spec.specID, source.profileID))
+    end)
+
     copyButton:SetScript("OnClick", function()
-        local model = ui.currentModel or ui.BuildViewModel()
-        local character, spec = ui.selectedCharacterModel, ui.selectedSpecModel
+        local model, character, spec = RefreshActionSelection(true)
         local target = ui.FindProfile(model, ui.selectedAssignedProfileID)
         if not character or not spec or not target then return end
         local targetLabel = ui.ContextLabel(character, spec)
-        ui.ShowChoices("copy-source", L("Copy settings from..."),
+        ui.ShowChoices("copy-source", L("Copy once from..."),
             ui.SpecChoices(model, character.guid, spec.specID, target.profileID, true), {
                 guid = character.guid,
                 specID = spec.specID,
@@ -14431,8 +15654,7 @@ function addon.profileUI.BuildOperationUI(manager)
     end)
 
     useSameButton:SetScript("OnClick", function()
-        local model = ui.currentModel or ui.BuildViewModel()
-        local character, spec = ui.selectedCharacterModel, ui.selectedSpecModel
+        local model, character, spec = RefreshActionSelection(true)
         local target = ui.FindProfile(model, ui.selectedAssignedProfileID)
         if not character or not spec or not target then return end
         ui.ShowChoices("share-source", L("Use the same settings as..."),
@@ -14444,24 +15666,24 @@ function addon.profileUI.BuildOperationUI(manager)
     end)
 
     useForButton:SetScript("OnClick", function()
-        local model = ui.currentModel or ui.BuildViewModel()
-        local character, spec = ui.selectedCharacterModel, ui.selectedSpecModel
+        local model, character, spec = RefreshActionSelection(true)
         local source = ui.FindProfile(model, ui.selectedAssignedProfileID)
         if not character or not spec or not source then return end
-        ui.ShowChoices("share-target", L("Use these settings for..."),
+        ui.ShowChoices("share-target", L("Share these settings with..."),
             ui.SpecChoices(model, character.guid, spec.specID, source.profileID), {
                 sourceProfileID = source.profileID,
                 sourceLabel = ui.ContextLabel(character, spec),
+                sourceGUID = character.guid,
+                sourceSpecID = spec.specID,
             }, ui.CaptureExpected(character.guid, spec.specID, source.profileID))
     end)
 
     stopSharingButton:SetScript("OnClick", function()
-        local model = ui.currentModel or ui.BuildViewModel()
-        local character, spec = ui.selectedCharacterModel, ui.selectedSpecModel
+        local model, character, spec = RefreshActionSelection(true)
         local profile = ui.FindProfile(model, ui.selectedAssignedProfileID)
         if not character or not spec or not profile or (spec.sharedCount or 0) <= 1 then return end
         local label = ui.ContextLabel(character, spec)
-        ui.ShowConfirmation("stop-sharing", L("Stop sharing..."),
+        ui.ShowConfirmation("stop-sharing", L("Make this specialization independent..."),
             string.format(L("Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."), label), {
                 guid = character.guid,
                 specID = spec.specID,
@@ -14469,26 +15691,32 @@ function addon.profileUI.BuildOperationUI(manager)
     end)
 
     transferButton:SetScript("OnClick", function()
-        local model = ui.currentModel or ui.BuildViewModel()
-        local character, spec = ui.selectedCharacterModel, ui.selectedSpecModel
-        local profile = ui.FindProfile(model, ui.selectedAssignedProfileID)
-        if not character or not spec or not profile then return end
+        local model, character, spec = RefreshActionSelection()
+        if not model then return end
+        local profile = ui.FindProfile(model, ui.selectedEffectiveProfileID)
+        local accountWide = model.accountWideEnabled == true
+        if not profile or (not accountWide and (not character or not spec)) then return end
         local choices = {
             { kind = "transfer", direction = "export", label = L("Export this profile") },
         }
         if model.canMutate == true then
             choices[#choices + 1] = {
                 kind = "transfer", direction = "import",
-                label = L("Import into a new profile"),
+                label = accountWide
+                    and (L("Import profile") .. " - " .. L("Account-wide settings"))
+                    or L("Import into a new profile"),
             }
         end
         ui.ShowChoices("transfer-direction", L("Export / import profile..."), choices, {
-            guid = character.guid,
-            specID = spec.specID,
+            guid = character and character.guid,
+            specID = spec and spec.specID,
             profileID = profile.profileID,
-            targetLabel = ui.ContextLabel(character, spec),
+            targetLabel = accountWide and L("Account-wide settings")
+                or ui.ContextLabel(character, spec),
+            accountWide = accountWide,
             canImport = model.canMutate == true,
-        }, ui.CaptureExpected(character.guid, spec.specID, profile.profileID))
+        }, ui.CaptureExpected(
+            character and character.guid, spec and spec.specID, profile.profileID))
     end)
 
     advancedButton:SetScript("OnClick", function()
@@ -14497,28 +15725,32 @@ function addon.profileUI.BuildOperationUI(manager)
     end)
 
     resetButton:SetScript("OnClick", function()
-        local model = ui.currentModel or ui.BuildViewModel()
-        local character, spec = ui.selectedCharacterModel, ui.selectedSpecModel
-        local profile = ui.FindProfile(model, ui.selectedAssignedProfileID)
-        if not character or not spec or not profile then return end
-        local label = ui.ContextLabel(character, spec)
-        local sharedCount = profile.references and profile.references.specs or 1
-        local message = sharedCount > 1
-            and string.format(L("Reset the settings used by \"%s\"? The same reset will affect %d specializations."), label, sharedCount)
-            or string.format(L("Reset the settings used by \"%s\" to defaults?"), label)
-        local futureReferences = profile.references
-            and profile.references.total - profile.references.specs or 0
-        if futureReferences > 0 then
-            message = message .. " " .. L(
-                "This profile is also a default for future specializations; they will use the reset settings.")
+        local model, character, spec = RefreshActionSelection(true)
+        if not model then return end
+        local profile = ui.FindProfile(model, ui.selectedEffectiveProfileID)
+        if not profile then return end
+        if model.accountWideEnabled then
+            ui.ShowConfirmation("reset", L("Reset these settings..."),
+                L("Reset account-wide settings to defaults? This affects every existing and future character and specialization."), {
+                    profileID = profile.profileID,
+                }, ui.CaptureExpected(
+                    character and character.guid, spec and spec.specID, profile.profileID))
+            return
         end
+        if not character or not spec then return end
+        local label = ui.ContextLabel(character, spec)
+        local message = string.format(
+            L("Reset the settings used by \"%s\" to defaults?"), label)
+        local impact = addon.profileUI.ProfileImpactText(profile.profileID)
+        if impact ~= "" then message = message .. " " .. impact end
         ui.ShowConfirmation("reset", L("Reset these settings..."), message, {
             profileID = profile.profileID,
-        }, ui.CaptureExpected(character.guid, spec.specID, profile.profileID))
+        }, ui.CaptureExpected(
+            character.guid, spec.specID, profile.profileID, true))
     end)
 
     forgetButton:SetScript("OnClick", function()
-        local character = ui.selectedCharacterModel
+        local _, character = RefreshActionSelection(true)
         if not character then return end
         local message = string.format(
             L("Forget \"%s\"? Its character record will be removed, but profile settings will be kept."),
@@ -14529,24 +15761,53 @@ function addon.profileUI.BuildOperationUI(manager)
     end)
 
     roleTemplateButton:SetScript("OnClick", function()
-        local model = ui.currentModel or ui.BuildViewModel()
-        local character, spec = ui.selectedCharacterModel, ui.selectedSpecModel
+        local model, character, spec = RefreshActionSelection(true)
         local profile = ui.FindProfile(model, ui.selectedAssignedProfileID)
         if not character or not spec or not profile then return end
         ui.ShowChoices("role-template", L("Choose a role"),
-            ui.RoleTemplateChoices(model), {
+            ui.RoleTemplateChoices(model, profile.profileID), {
                 profileID = profile.profileID,
                 sourceLabel = ui.ContextLabel(character, spec),
-            }, ui.CaptureExpected(nil, nil, profile.profileID))
+            }, ui.CaptureExpected(character.guid, spec.specID, profile.profileID))
+    end)
+
+    replaceAccountWideButton:SetScript("OnClick", function()
+        local model, character, spec = RefreshActionSelection(true)
+        if not model then return end
+        local source = ui.FindProfile(model, ui.selectedAssignedProfileID)
+        if model.accountWideEnabled or not model.accountWideProfileID or not source then return end
+        local sourceLabel = character and spec and ui.ContextLabel(character, spec)
+            or L("Account default profile")
+        ui.ShowConfirmation("replace-account-wide",
+            L("Replace saved account-wide settings..."),
+            string.format(
+                L("Replace the saved account-wide settings with a copy of \"%s\"? They will stay inactive until you turn account-wide settings on."),
+                sourceLabel), {
+                sourceProfileID = source.profileID,
+            }, ui.CaptureExpected(
+                character and character.guid, spec and spec.specID, source.profileID))
+    end)
+
+    discardAccountWideButton:SetScript("OnClick", function()
+        local model = RefreshActionSelection(true)
+        if not model then return end
+        if model.accountWideEnabled or not model.accountWideProfileID then return end
+        ui.ShowConfirmation("discard-account-wide",
+            L("Delete saved account-wide settings..."),
+            L("Delete the saved account-wide settings? Specialization assignments will stay unchanged."),
+            nil, ui.CaptureExpected(nil, nil, model.accountWideProfileID))
     end)
 
     cleanupButton:SetScript("OnClick", function()
-        local model = ui.currentModel or ui.BuildViewModel()
+        local model = RefreshActionSelection(true)
+        if not model then return end
         local count = model.unusedProfileCount or 0
         if count <= 0 then return end
+        local expected = ui.CaptureExpected()
+        expected.unusedProfileIDs = CopyTable(model.unusedProfileIDs)
         ui.ShowConfirmation("cleanup", L("Delete unused settings..."),
-            string.format(L("Delete %d unused settings records? Settings currently used by a specialization or future-specialization default will be kept."), count),
-            nil, ui.CaptureExpected())
+            string.format(L("Delete %d unused settings records? Settings used by a specialization, saved account-wide settings, starting settings, or fallback settings will be kept."), count),
+            nil, expected)
     end)
 
     primaryButton:SetScript("OnClick", ui.RunPendingAction)
@@ -14789,7 +16050,7 @@ function addon.profileUI.BuildSettingsUI(owner)
     end
 
     function ui.RefreshAll()
-        local model = ui.BuildViewModel()
+        local model = ui.BuildViewModel(manager:IsShown())
         ui.currentModel = model
         ui.refreshCount = ui.refreshCount + 1
 
@@ -14804,6 +16065,8 @@ function addon.profileUI.BuildSettingsUI(owner)
                 and "Switch pending until combat ends"
                 or "Waiting for a safe profile context."))
             warning = true
+        elseif model.accountWideEnabled then
+            profileButton:SetText(L("Account-wide settings"))
         elseif model.activeGUID and model.activeSpecID then
             profileButton:SetText(ui.FormatSpecName(model.activeSpecID, model.activeSpecName)
                 .. " - " .. (model.activeDisplayName or L("Character")))
@@ -14826,7 +16089,10 @@ function addon.profileUI.BuildSettingsUI(owner)
                 break
             end
         end
-        if selectedCharacter and not selectedSpec then
+        local preserveCharacterOnly = selectedCharacter and not selectedSpec
+            and model.activeContextValid == false
+            and selectedCharacter.guid == model.activeGUID
+        if selectedCharacter and not selectedSpec and not preserveCharacterOnly then
             if selectedCharacter.guid == model.activeGUID then
                 for _, spec in ipairs(selectedCharacter.specs) do
                     if spec.specID == model.activeSpecID then selectedSpec = spec; break end
@@ -14855,6 +16121,10 @@ function addon.profileUI.BuildSettingsUI(owner)
                 end
             end
         end
+        -- Older registries may contain a valid offline character record whose
+        -- specialization list is empty. Keep it selectable so Forget can release
+        -- its default-profile reference instead of leaving an immortal record.
+        selectedCharacter = selectedCharacter or model.characters[1]
         ui.selectedGUID = selectedCharacter and selectedCharacter.guid or nil
         ui.selectedSpecID = selectedSpec and selectedSpec.specID or nil
 
@@ -14864,14 +16134,16 @@ function addon.profileUI.BuildSettingsUI(owner)
             local row = ui.EnsureManagerRow(rowIndex)
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", 0, y)
-            row.profileContext = nil
-            row.statsProHeading = true
+            row.profileContext = not character.specs[1]
+                and { guid = character.guid, specID = nil } or nil
+            row.statsProHeading = character.specs[1] ~= nil
             row:Enable()
             row:EnableMouse(true)
             row.text:SetText(character.displayName)
             row.badge:SetText(character.isCurrent and L("Current") or "")
             addon.settingsDesign.RefreshOwnedControlTooltip(row)
-            addon.settingsDesign.SetListRowSelected(row, false)
+            addon.settingsDesign.SetListRowSelected(row,
+                character.guid == ui.selectedGUID and ui.selectedSpecID == nil)
             row:Show()
             y = y - 26
             for _, spec in ipairs(character.specs) do
@@ -14902,7 +16174,11 @@ function addon.profileUI.BuildSettingsUI(owner)
             detailCharacter:SetText(ui.FormatSpecName(selectedSpec.specID, selectedSpec.specName))
             detailContext:SetText(selectedCharacter.displayName)
             local isShared = selectedSpec.sharedCount > 1
-            if isShared then
+            if model.accountWideEnabled then
+                detailProfile:SetText(L("Account-wide"))
+                addon.settingsDesign.SetRegionColor(detailProfile, "positive")
+                detailProfile:Show()
+            elseif isShared then
                 detailProfile:SetText(string.format(
                     L("Shared with %d specializations"), selectedSpec.sharedCount))
                 addon.settingsDesign.SetRegionColor(detailProfile, "positive")
@@ -14911,13 +16187,32 @@ function addon.profileUI.BuildSettingsUI(owner)
                 detailProfile:SetText("")
                 detailProfile:Hide()
             end
-            ui.SetSharingSummaryVisible(isShared)
-        else
-            detailCharacter:SetText(L("No visited characters"))
+            ui.SetSharingSummaryVisible(model.accountWideEnabled or isShared)
+        elseif selectedCharacter then
+            detailCharacter:SetText(selectedCharacter.displayName)
             detailContext:SetText("")
-            detailProfile:SetText("")
-            detailProfile:Hide()
-            ui.SetSharingSummaryVisible(false)
+            if model.accountWideEnabled then
+                detailProfile:SetText(L("Account-wide"))
+                addon.settingsDesign.SetRegionColor(detailProfile, "positive")
+                detailProfile:Show()
+            else
+                detailProfile:SetText("")
+                detailProfile:Hide()
+            end
+            ui.SetSharingSummaryVisible(model.accountWideEnabled)
+        else
+            detailCharacter:SetText(model.accountWideEnabled
+                and L("Account-wide settings") or L("No visited characters"))
+            detailContext:SetText("")
+            if model.accountWideEnabled then
+                detailProfile:SetText(L("Account-wide"))
+                addon.settingsDesign.SetRegionColor(detailProfile, "positive")
+                detailProfile:Show()
+            else
+                detailProfile:SetText("")
+                detailProfile:Hide()
+            end
+            ui.SetSharingSummaryVisible(model.accountWideEnabled)
         end
 
         ui.RefreshOperationControls(model, selectedCharacter, selectedSpec)
@@ -14926,9 +16221,12 @@ function addon.profileUI.BuildSettingsUI(owner)
 
     function ui.OpenManager(selectActive)
         if not addon.presetRuntime.CancelAllPreviews(true) then return end
+        if type(ui.ResetOperationPane) == "function" then ui.ResetOperationPane() end
         if selectActive then
-            ui.selectedGUID = addon.profileRuntime.activeGUID
-            ui.selectedSpecID = addon.profileRuntime.activeSpecID
+            ui.selectedGUID = addon.profileRuntime.currentGUID
+                or addon.profileRuntime.activeGUID
+            ui.selectedSpecID = addon.profileRuntime.activeContextValid
+                and addon.profileRuntime.activeSpecID or nil
             -- Current character/spec rows are sorted first. Reopening Profiles
             -- must not retain a stale scroll offset that leaves that selection
             -- outside the viewport.
@@ -16700,7 +17998,7 @@ end
 -- Self-serve diagnostics: dump runtime state to chat for bug reports. Each group is
 -- a separate PrintMsg so restricted values cannot poison unrelated diagnostic lines.
 function addon:PrintDebugDump()
-    addon.dbRuntime.Refresh()
+    addon.dbRuntime.Refresh(true)
     PrintMsg(string.format("debug v%s  dbVer %s/%d  dbMode=%s  isLoaded=%s  durDirty=%s  mem=%dKB",
         ADDON_VERSION,
         addon.dbRuntime.versionDisplay,
@@ -16708,6 +18006,25 @@ function addon:PrintDebugDump()
         addon.dbRuntime.readOnly and ("read-only/" .. addon.dbRuntime.mode) or "current",
         tostring(isLoaded), tostring(durabilityDirty),
         math.floor(collectgarbage("count"))))
+
+    local assignedText, effectiveText = "unavailable", "unavailable"
+    local accountWideText, savedText = "unavailable", "unavailable"
+    if addon.dbRuntime.registryReady then
+        if addon.dbRuntime.IsCleanType(addon.dbRuntime.assignedProfileID, "string") then
+            assignedText = addon.dbRuntime.assignedProfileID
+        end
+        if addon.dbRuntime.IsCleanType(addon.dbRuntime.activeProfileID, "string") then
+            effectiveText = addon.dbRuntime.activeProfileID
+        end
+        local account = addon.dbRuntime.activeAccount
+        if addon.dbRuntime.IsCleanTable(account) then
+            accountWideText = account.accountWideEnabled == true and "enabled" or "disabled"
+            savedText = addon.dbRuntime.IsCleanType(account.accountWideProfileID, "string")
+                and account.accountWideProfileID or "none"
+        end
+    end
+    PrintMsg(string.format("profile: assigned=%s effective=%s accountWide=%s saved=%s",
+        assignedText, effectiveText, accountWideText, savedText))
 
     PrintMsg(string.format("visible=%s  locked=%s  mode=%s  labelStyle=%s  outline=%s  font=%dpx  scale=%.1f  refresh=%.2fs  textAlpha=%d%%  bgAlpha=%d%%",
         tostring(cached.isVisible), tostring(cached.isLocked),
@@ -17147,11 +18464,13 @@ if addon and addon.__statsproSmoke == true then
                 readOnly = addon.dbRuntime.readOnly,
                 mode = addon.dbRuntime.mode,
                 version = addon.dbRuntime.version,
+                registryReady = addon.dbRuntime.registryReady,
                 warnedMode = addon.dbRuntime.warnedMode,
                 generation = addon.dbRuntime.generation,
             }
         end,
         dbValidationCount = function() return addon.dbRuntime.validationCount end,
+        validateRegistry = addon.dbRuntime.ValidateRegistry,
         dbGraphLimits = function()
             return {
                 maxDepth = addon.dbRuntime.maxGraphDepth,
@@ -17166,15 +18485,26 @@ if addon and addon.__statsproSmoke == true then
                 account = addon.dbRuntime.activeAccount,
                 settings = addon.dbRuntime.activeSettings,
                 profileID = addon.dbRuntime.activeProfileID,
+                assignedProfileID = addon.dbRuntime.assignedProfileID,
+                effectiveProfileID = addon.dbRuntime.activeProfileID,
                 profiles = root.profiles,
                 roleTemplates = root.roleTemplates,
                 characters = root.characters,
                 generation = addon.dbRuntime.generation,
             }
         end,
+        publishedProfileState = function()
+            return {
+                account = addon.dbRuntime.activeAccount,
+                settings = addon.dbRuntime.activeSettings,
+                assignedProfileID = addon.dbRuntime.assignedProfileID,
+                profileID = addon.dbRuntime.activeProfileID,
+            }
+        end,
         profileRuntimeState = function()
             local runtime = addon.profileRuntime
             return {
+                currentGUID = runtime.currentGUID,
                 activeGUID = runtime.activeGUID,
                 activeSpecID = runtime.activeSpecID,
                 activeDisplayName = runtime.activeDisplayName,
@@ -17186,8 +18516,11 @@ if addon and addon.__statsproSmoke == true then
                 corruptRollbackRoot = runtime.corruptRollbackRoot,
                 contextRetryCount = runtime.contextRetryCount,
                 contextRetryScheduled = runtime.contextRetryToken ~= nil,
+                contextRetryPositionsPending = runtime.contextRetryPositionSnapshot ~= nil,
                 bootstrapPending = runtime.bootstrapPending,
                 pendingResolution = runtime.pendingResolution,
+                activeContextValid = runtime.activeContextValid,
+                bindingReconciliationPending = runtime.bindingReconciliationPending,
                 scheduled = runtime.scheduledToken ~= nil,
                 noSpecRetryScheduled = runtime.noSpecRetryToken ~= nil,
                 transitioning = runtime.transitioning,
@@ -17249,6 +18582,7 @@ if addon and addon.__statsproSmoke == true then
             end,
         },
         profileViewModel = addon.profileUI.BuildViewModel,
+        profileImpactText = addon.profileUI.ProfileImpactText,
         formatProfileSpecName = addon.profileUI.FormatSpecName,
         profileOps = {
             normalizeName = function(rawName)
@@ -17258,6 +18592,10 @@ if addon and addon.__statsproSmoke == true then
             uniqueName = addon.profileOps.UniqueProfileName,
             specProfileName = addon.profileRuntime.SpecProfileName,
             countReferences = addon.profileOps.CountReferences,
+            enableAccountWide = addon.profileOps.EnableAccountWide,
+            disableAccountWide = addon.profileOps.DisableAccountWide,
+            replaceSavedAccountWide = addon.profileOps.ReplaceSavedAccountWide,
+            discardSavedAccountWide = addon.profileOps.DiscardSavedAccountWide,
             copySettingsToContext = addon.profileOps.CopySettingsToContext,
             assign = addon.profileOps.Assign,
             makeContextIndependent = addon.profileOps.MakeContextIndependent,
@@ -17335,6 +18673,7 @@ if addon and addon.__statsproSmoke == true then
                     enabled = button:IsEnabled(),
                     shown = button:IsShown(),
                     text = button:GetText(),
+                    disabledTooltip = addon.settingsDesign.DisabledControlTooltip(button),
                 }
             end
             return {
@@ -17342,6 +18681,7 @@ if addon and addon.__statsproSmoke == true then
                 selectedGUID = ui.selectedGUID,
                 selectedSpecID = ui.selectedSpecID,
                 selectedAssignedProfileID = ui.selectedAssignedProfileID,
+                selectedEffectiveProfileID = ui.selectedEffectiveProfileID,
                 headerProfile = ui.headerProfileButton and ui.headerProfileButton:GetText() or nil,
                 headerProfileColor = ui.headerProfileButton
                     and ui.headerProfileButton.statsProText
@@ -17371,6 +18711,10 @@ if addon and addon.__statsproSmoke == true then
                     and ui.detailProfile.nonSpaceWrap,
                 detailProfileMaxLines = ui.detailProfile and ui.detailProfile.maxLines or nil,
                 operationStatus = ui.operationStatus and ui.operationStatus:GetText() or nil,
+                operationStatusTooltip = ui.operationStatusHit
+                    and ui.operationStatusHit.statsProTooltipProvider
+                    and ui.operationStatusHit.statsProTooltipProvider(
+                        ui.operationStatusHit) or nil,
                 actions = actions,
                 advancedShown = ui.advancedShown == true,
                 operationDialogShown = ui.operationDialog and ui.operationDialog:IsShown() or false,

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.15.1 - 01-Sep-2026 — Archon target refresh
+
+### Updated
+
+- **Bundled available M+ and raid target ratings were refreshed from latest Archon data.**
+
 ## 1.15.0 - 31-Aug-2026 — Account-wide profiles
 
 ### Added

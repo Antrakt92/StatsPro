@@ -7463,6 +7463,70 @@ do
 end
 
 do
+    for _, showPercentage in ipairs({ true, false }) do
+        local prefix = "render.versatility_live_rating." .. (showPercentage and "dual" or "rating_only")
+        local liveRating = 812
+        local targetFixture = makeArchonV2Fixture("2026-05-15")
+        setArchonFixtureTargets(targetFixture, "mythicPlusCurrent", "MAGE", "frost",
+            { crit = 100, haste = 200, mastery = 300, versatility = 1000 })
+        local versEnv, _, versTest = loadVersatilityScenario({
+            showRating = true,
+            showPercentage = showPercentage,
+            hideZeroOffensive = false,
+        }, {
+            unitClassToken = "MAGE",
+            specIndex = 1,
+            specID = 64,
+            statsProArchonTargets = targetFixture,
+            getCombatRating = function() return liveRating end,
+            getCombatRatingBonus = function() return 10 end,
+            getVersatilityBonus = function() return 2 end,
+            issecretvalue = function(value) return value == -1 or value == -2 end,
+            roundToNearestString = function(value)
+                if value == -1 then return "1200" end
+                if value == -2 then return "1800" end
+                return tostring(value)
+            end,
+        })
+        fireEvent(prefix .. ".fire", versEnv, "PLAYER_ENTERING_WORLD")
+        local cleanBlocks = versTest.buildRenderBlocks()
+        eq(prefix .. ".clean_display", blockDumpContains(cleanBlocks, "812"), true)
+        eq(prefix .. ".clean_comparison", cleanBlocks[2].targetRows[1].current, 812)
+
+        for index, expected in ipairs({ "1200", "1800" }) do
+            liveRating = -index
+            local step = prefix .. ".restricted_" .. index
+            local blocks = versTest.buildRenderBlocks()
+            local meta = blocks[2].targetRows[1]
+            eq(step .. ".live_display", blockDumpContains(blocks, expected), true)
+            eq(step .. ".no_stale_display", blockDumpContains(blocks, "812"), false)
+            eq(step .. ".clean_rating_cache", versTest.versatilityState().rating, 812)
+            eq(step .. ".clean_comparison_cache",
+                versTest.archonComparisonCache().entries.versatility.current, 812)
+            eq(step .. ".live_meta", meta.comparisonState, "liveOnly")
+            eq(step .. ".no_comparison_current", meta.current, nil)
+            eq(step .. ".no_comparison_delta", meta.delta, nil)
+            versTest.renderMainPanelForSmoke("Vers:", expected, "", 1, nil, nil, { meta })
+            versTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+            check(step .. ".tooltip_matches_display",
+                versEnv.GameTooltip.lines[4].right:find(expected, 1, true) ~= nil,
+                versEnv.GameTooltip.lines[4].right)
+        end
+
+        liveRating = 830
+        local recoveredBlocks = versTest.buildRenderBlocks()
+        eq(prefix .. ".recovered_display", blockDumpContains(recoveredBlocks, "830"), true)
+        eq(prefix .. ".recovered_rating_cache", versTest.versatilityState().rating, 830)
+        eq(prefix .. ".recovered_comparison", recoveredBlocks[2].targetRows[1].current, 830)
+        liveRating = nil
+        local unavailableBlocks = versTest.buildRenderBlocks()
+        eq(prefix .. ".unavailable_retains_cache", blockDumpContains(unavailableBlocks, "830"), true)
+        eq(prefix .. ".unavailable_comparison_state",
+            unavailableBlocks[2].targetRows[1].comparisonState, "lastKnown")
+    end
+end
+
+do
     local ratingBonus = 10
     local flatBonus = 2
     local secretRating = false

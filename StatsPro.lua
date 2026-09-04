@@ -10545,7 +10545,9 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
             local versStr = cs.versatility
             local rating
             if cached.showRating then
-                if SAFE_NUM.IsCleanFiniteNumber(versRatingDisplay) then
+                -- Direct restricted ratings remain displayable; only an unavailable
+                -- read falls back to the clean cache used outside the live display.
+                if SAFE_NUM.IsRenderableNumberValue(versRatingDisplay) then
                     rating = versRatingDisplay
                 elseif SAFE_NUM.IsCleanFiniteNumber(cached.versTotalRating) then
                     rating = cached.versTotalRating

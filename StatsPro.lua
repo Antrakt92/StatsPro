@@ -4919,8 +4919,10 @@ function addon.profileTransfer.NormalizeSections(sections, available)
 end
 
 function addon.profileTransfer.Serialize(profileName, settings, sections)
+    -- Legacy profiles can keep longer names; shorten only the transfer label
+    -- after validating the entire name, including any suffix beyond the limit.
     local normalizedName = addon.profileOps.NormalizeNameShape(
-        profileName, addon.profileOps.maxNameCodepoints, false)
+        profileName, addon.profileOps.maxNameCodepoints, true)
     local selected = addon.profileTransfer.NormalizeSections(sections)
     if not normalizedName or not selected or not addon.dbRuntime.IsCleanTable(settings) then
         return nil, "invalid"

@@ -19581,6 +19581,44 @@ do
     eq("profiles.cleanup.multiple.characters_identity", root.characters, charactersRef)
 end
 
+for _, nameCase in ipairs({
+    { key = "ascii", name = string.rep("A", 41), expected = string.rep("A", 40) },
+    { key = "unicode", name = string.rep("界", 39) .. "😀界",
+        expected = string.rep("界", 39) .. "😀" },
+    { key = "boundary_space", name = "  " .. string.rep("界", 39) .. " suffix  ",
+        expected = string.rep("界", 39) },
+}) do
+    local loadedRoot, loadedProfile, loadedSettings
+    local _, _, test, root = makeProfileOpsFixture({
+        mutateRoot = function(candidate)
+            candidate.profiles.p2.name = nameCase.name
+            loadedRoot = candidate
+            loadedProfile = candidate.profiles.p2
+            loadedSettings = loadedProfile.settings
+        end,
+    })
+    local prefix = "profiles.transfer.legacy_name." .. nameCase.key
+    eq(prefix .. ".current_schema", test.dbCompatibilityState().mode, "current")
+    eq(prefix .. ".writable", test.dbCompatibilityState().readOnly, false)
+    eq(prefix .. ".loaded_root_identity", root, loadedRoot)
+    eq(prefix .. ".loaded_profile_identity", root.profiles.p2, loadedProfile)
+    eq(prefix .. ".loaded_settings_identity", root.profiles.p2.settings, loadedSettings)
+    eq(prefix .. ".loaded_name", root.profiles.p2.name, nameCase.name)
+    local before, identities = deepCopy(root), captureRegistryIdentities(root)
+    local transfer = test.profileTransfer
+    local sections = { stats = true, layout = true, appearance = true }
+    local encoded, reason = transfer.serialize(
+        root.profiles.p2.name, root.profiles.p2.settings, sections)
+    check(prefix .. ".exports", type(encoded) == "string", reason)
+    local package = transfer.parse(encoded)
+    check(prefix .. ".parses", type(package) == "table")
+    eq(prefix .. ".transport_name", package.profileName, nameCase.expected)
+    eq(prefix .. ".deterministic", transfer.serialize(
+        root.profiles.p2.name, root.profiles.p2.settings, sections), encoded)
+    assertDeepEqual(prefix .. ".source_unchanged", root, before)
+    assertRegistryIdentities(prefix .. ".source_identities", root, identities)
+end
+
 do
     local _, _, test, root = makeProfileOpsFixture()
     local transfer = test.profileTransfer
@@ -19704,6 +19742,34 @@ do
     eq("profiles.transfer.parse.oversized_detail", oversizedDetail, "size")
     local invalidName = transfer.serialize("bad|name", source.settings, sections)
     eq("profiles.transfer.serialize.invalid_name", invalidName, nil)
+
+    for _, suffixCase in ipairs({
+        { key = "pipe", suffix = "|name" },
+        { key = "control", suffix = "\n" },
+        { key = "malformed_utf8", suffix = string.char(0xE2, 0x82) },
+        { key = "unicode_separator", suffix = "　" },
+    }) do
+        local rejectedName, nameReason = transfer.serialize(
+            string.rep("界", 41) .. suffixCase.suffix, source.settings, sections)
+        eq("profiles.transfer.serialize.invalid_suffix." .. suffixCase.key, rejectedName, nil)
+        eq("profiles.transfer.serialize.invalid_suffix_reason." .. suffixCase.key,
+            nameReason, "invalid")
+    end
+
+    local boundaryName = string.rep("A", 40)
+    local baselinePayload = transfer.decodePayload(encoded)
+    local boundaryPayload = baselinePayload:gsub("^name=[^\n]+",
+        "name=" .. string.rep("41", 40), 1)
+    eq("profiles.transfer.serialize.existing_boundary_unchanged",
+        transfer.serialize(boundaryName, source.settings, sections),
+        transfer.encodePayload(boundaryPayload))
+    local overlongPayload = baselinePayload:gsub("^name=[^\n]+",
+        "name=" .. string.rep("41", 41), 1)
+    local overlongPackage, overlongReason, overlongDetail = transfer.parse(
+        transfer.encodePayload(overlongPayload))
+    eq("profiles.transfer.parse.overlong_name_rejected", overlongPackage, nil)
+    eq("profiles.transfer.parse.overlong_name_reason", overlongReason, "invalid")
+    eq("profiles.transfer.parse.overlong_name_detail", overlongDetail, "header")
 
     local layoutString = transfer.serialize(
         "Malicious fixture", source.settings, { layout = true })

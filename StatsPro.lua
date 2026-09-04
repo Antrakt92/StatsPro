@@ -9704,18 +9704,19 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
         local repairLabelVisible = repairLabelStr and repairLabelStr ~= ""
         local repairRowY = hasRows and -(lineCount * lineH + 1) or 0  -- 1px gap only when below stat rows
 
-        -- Repair label: use stat labelW when below stat rows; measure its own label for
-        -- repair-only panels so a stale previous stat width cannot collapse or overinflate.
+        -- Measure the entire label before alignment: its previous width may truncate
+        -- a longer translation. Keep the intrinsic cache separate from the stat width.
         self.repairLabelText:ClearAllPoints()
         self.repairLabelText:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, repairRowY)
         self.repairLabelText:SetText(repairLabelStr or "")
         if repairLabelVisible then
-            if hasRows then
-                repairLabelW = labelW
-            else
-                repairLabelW, self.cachedRepairLabelW = MeasuredOrCached(
-                    self.repairLabelText, self.cachedRepairLabelW, "GetStringWidth", 80)
-            end
+            repairLabelW, self.cachedRepairLabelW = MeasuredOrCached(
+                self.repairLabelText, self.cachedRepairLabelW, "GetUnboundedStringWidth",
+                effectiveFontSize * (labelStyle == "short"
+                    and Panel.SECRET_SHORT_LABEL_WIDTH_UNITS or Panel.SECRET_FULL_LABEL_WIDTH_UNITS))
+            -- Only the independent repair row widens for a long label; ordinary
+            -- stat columns retain their natural spacing above it.
+            if hasRows then repairLabelW = math.max(labelW, repairLabelW) end
             self.repairLabelText:SetWidth(repairLabelW)
             self.repairLabelText:Show()
         else
@@ -19124,6 +19125,7 @@ if addon and addon.__statsproSmoke == true then
                 fs.statsProWidthOverride = width
                 fs.statsProHeightOverride = height
             end
+            return fs
         end,
         setMainPanelStringHeightMultiplier = function(column, multiplier)
             local fs = ({ label = mainPanel.labelText, rating = mainPanel.ratingText, value = mainPanel.valueText })[column]

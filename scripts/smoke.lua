@@ -578,11 +578,12 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetMaxLines(value) self.maxLines = value end
     function frame:SetWordWrap(value) self.wordWrap = value end
     function frame:SetNonSpaceWrap(value) self.nonSpaceWrap = value end
-    function frame:GetStringWidth()
+    function frame:GetUnboundedStringWidth()
         if self.statsProWidthOverride ~= nil then return self.statsProWidthOverride end
         local _, size = self:GetFont()
         return utf8VisualUnits(self.text or "") * ((size or 12) * 0.5)
     end
+    function frame:GetStringWidth() return self:GetUnboundedStringWidth() end
     function frame:GetStringHeight()
         if self.statsProHeightOverride ~= nil then return self.statsProHeightOverride end
         local text = self.text or ""
@@ -1941,6 +1942,80 @@ do
 end
 
 do
+    local secretWidth = {}
+    local labelEnv, _, labelTest = loadStatsPro("enUS", {
+        statsProDB = { dbVersion = 9, labelStyle = "full", fontSize = 14,
+            showRating = true, showPercentage = true },
+        issecretvalue = function(value) return value == secretWidth end,
+    })
+    labelTest.cacheSettings()
+    labelTest.setPanelMeasurementOverride("main", "label", 35, 14)
+    labelTest.setPanelMeasurementOverride("main", "rating", 21, 14)
+    labelTest.setPanelMeasurementOverride("main", "value", 35, 14)
+    labelTest.setPanelMeasurementOverride("main", "repair", 100, 14)
+    local repairLabel = labelTest.setPanelMeasurementOverride("main", "repairLabel", 49, 14)
+    -- A constrained single-line FontString can report only its truncated width.
+    -- The intrinsic measurement must remain independent of the previous layout.
+    function repairLabel:GetStringWidth()
+        local width = self:GetUnboundedStringWidth()
+        if width == secretWidth then return width end
+        return math.min(self:GetWidth(), width)
+    end
+    for _, width in ipairs({ 49, 140, 28 }) do
+        local prefix = "panel.repair_label.intrinsic_" .. width
+        labelTest.setPanelMeasurementOverride("main", "repairLabel", width, 14)
+        labelTest.renderMainPanelForSmoke("Crit:", "700", "12.0%", 1, "coin", "Repair:")
+        local state = labelTest.panelVisualState()
+        eq(prefix .. ".label_fits", state.mainRepairLabelWidth, math.max(35, width))
+        eq(prefix .. ".cache_is_intrinsic", state.mainCachedRepairLabelW, width)
+        eq(prefix .. ".stats_label_unchanged", state.mainRenderedLabelW, 35)
+        eq(prefix .. ".rating_left_unchanged",
+            state.mainFrameWidth + state.mainRatingPoints[1][4] - state.mainRenderedRatingW, 37)
+        eq(prefix .. ".value_left_unchanged",
+            state.mainFrameWidth + state.mainValuePoints[1][4] - state.mainRenderedValueW, 60)
+        eq(prefix .. ".independent_row_width", state.mainFrameWidth, math.max(35, width) + 102)
+        eq(prefix .. ".one_repair_line", state.mainFrameHeight, 29)
+    end
+    labelTest.renderMainPanelForSmoke("", "", "", 0, "coin", "Rep:")
+    local only = labelTest.panelVisualState()
+    eq("panel.repair_label.only_shrinks_past_stat_width", only.mainRepairLabelWidth, 28)
+    eq("panel.repair_label.only_width", only.mainFrameWidth, 130)
+
+    labelTest.setPanelMeasurementOverride("main", "repairLabel", nil, nil)
+    labelTest.renderMainPanelForSmoke("Crit:", "700", "12.0%", 1, "coin", "Repair:")
+    eq("panel.repair_label.actual_english_width", labelTest.panelVisualState().mainRepairLabelWidth, 49)
+    check("panel.repair_label.font_change", labelTest.applyTextStyleToAllPanels(
+        labelTest.copyDefaults().font, 20, true))
+    labelTest.renderMainPanelForSmoke("Crit:", "700", "12.0%", 1, "coin", "Réparation:")
+    eq("panel.repair_label.font_locale_grows", labelTest.panelVisualState().mainRepairLabelWidth, 110)
+    labelTest.renderMainPanelForSmoke("Crit:", "700", "12.0%", 1, "coin", "Rep:")
+    eq("panel.repair_label.locale_shrinks", labelTest.panelVisualState().mainRepairLabelWidth, 40)
+
+    labelTest.setPanelMeasurementOverride("main", "repairLabel", secretWidth, 20)
+    labelTest.renderMainPanelForSmoke("Crit:", "700", "12.0%", 1, "coin", "Repair:")
+    local restricted = labelTest.panelVisualState()
+    eq("panel.repair_label.secret_keeps_clean_cache", restricted.mainCachedRepairLabelW, 40)
+    eq("panel.repair_label.secret_font_scaled_fallback", restricted.mainRepairLabelWidth, 160)
+    labelTest.renderMainPanelForSmoke("", "", "", 0, "coin", "Repair:")
+    eq("panel.repair_label.secret_only_same_measurement",
+        labelTest.panelVisualState().mainRepairLabelWidth, 160)
+    labelTest.setPanelMeasurementOverride("main", "repairLabel", 60, 20)
+    labelTest.renderMainPanelForSmoke("", "", "", 0, "coin", "Repair:")
+    eq("panel.repair_label.secret_recovery_shrinks", labelTest.panelVisualState().mainRepairLabelWidth, 60)
+    eq("panel.repair_label.secret_recovery_cache", labelTest.panelVisualState().mainCachedRepairLabelW, 60)
+
+    activeSettings(labelEnv).labelStyle = "hidden"
+    labelTest.cacheSettings()
+    labelTest.renderMainPanelForSmoke("", "700", "12.0%", 1, "coin", "")
+    local hidden = labelTest.panelVisualState()
+    eq("panel.repair_label.hidden_width", hidden.mainRepairLabelWidth, 0)
+    eq("panel.repair_label.hidden_cache", hidden.mainCachedRepairLabelW, 0)
+    eq("panel.repair_label.hidden_no_gap", hidden.mainFrameWidth, 100)
+    labelTest.renderMainPanelForSmoke("", "", "", 0, "coin", "")
+    eq("panel.repair_label.hidden_only_no_gap", labelTest.panelVisualState().mainFrameWidth, 100)
+end
+
+do
     local secretWidth, secretHeight = {}, {}
     local repairEnv, _, repairTest = loadStatsPro("enUS", {
         statsProDB = {
@@ -1959,9 +2034,10 @@ do
     local cold = repairTest.panelVisualState()
     eq("panel.secret_repair.cold_render_width", cold.mainRenderedRepairW, 112)
     eq("panel.secret_repair.cold_cache_stays_clean", cold.mainCachedRepairW, nil)
-    eq("panel.secret_repair.cold_frame_width", cold.mainFrameWidth, 128)
-    eq("panel.secret_repair.cold_rating_anchor", cold.mainRatingPoints[1][4], -91)
-    eq("panel.secret_repair.cold_value_anchor", cold.mainValuePoints[1][4], -54)
+    -- The full 49px repair label must fit when the stat-label column is only 14px.
+    eq("panel.secret_repair.cold_frame_width", cold.mainFrameWidth, 163)
+    eq("panel.secret_repair.cold_rating_anchor", cold.mainRatingPoints[1][4], -126)
+    eq("panel.secret_repair.cold_value_anchor", cold.mainValuePoints[1][4], -89)
     eq("panel.secret_repair.cold_frame_height", cold.mainFrameHeight, 29)
 
     repairTest.setPanelMeasurementOverride("main", "repair", 28, 14)
@@ -1970,8 +2046,8 @@ do
     eq("panel.secret_repair.recovery_render_width", recovered.mainRenderedRepairW, 28)
     eq("panel.secret_repair.recovery_cache", recovered.mainCachedRepairW, 28)
     eq("panel.secret_repair.recovery_frame_width", recovered.mainFrameWidth, 80)
-    eq("panel.secret_repair.recovery_rating_anchor", recovered.mainRatingPoints[1][4], -37)
-    eq("panel.secret_repair.recovery_value_anchor", recovered.mainValuePoints[1][4], 0)
+    eq("panel.secret_repair.recovery_rating_anchor", recovered.mainRatingPoints[1][4], -42)
+    eq("panel.secret_repair.recovery_value_anchor", recovered.mainValuePoints[1][4], -5)
 
     repairTest.renderMainPanelForSmoke("C:", "700", "12.0%", 1)
     local disabled = repairTest.panelVisualState()
@@ -1985,8 +2061,8 @@ do
     repairTest.renderMainPanelForSmoke("", "", "", 0, "coin", "Repair:")
     local repairOnly = repairTest.panelVisualState()
     eq("panel.secret_repair.only_render_width", repairOnly.mainRenderedRepairW, 112)
-    eq("panel.secret_repair.only_label_width", repairOnly.mainRepairLabelWidth, 80)
-    eq("panel.secret_repair.only_frame_width", repairOnly.mainFrameWidth, 194)
+    eq("panel.secret_repair.only_label_width", repairOnly.mainRepairLabelWidth, 112)
+    eq("panel.secret_repair.only_frame_width", repairOnly.mainFrameWidth, 226)
     eq("panel.secret_repair.only_frame_height", repairOnly.mainFrameHeight, 14)
     eq("panel.secret_repair.only_label_shown", repairOnly.mainRepairLabelShown, true)
 

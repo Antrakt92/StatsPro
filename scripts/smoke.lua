@@ -19617,23 +19617,85 @@ do
         root.characters, assignmentsBefore)
 end
 
+for _, scenario in ipairs({
+    { key = "appearance", sections = { appearance = true } },
+    { key = "account_wide", sections = { appearance = true }, accountWide = true },
+    { key = "stats_only", sections = { stats = true } },
+    { key = "layout_only", sections = { layout = true } },
+}) do
+    local env, addonContext, test, root = makeProfileOpsFixture({
+        mutateRoot = function(candidate)
+            candidate.account.forceLocale = "ruRU"
+            candidate.profiles.p2.settings.font = "Fonts\\FRIZQT__.TTF"
+            candidate.profiles.p3.settings.font = "Fonts\\ARIALN.TTF"
+        end,
+    })
+    local prefix = "profiles.transfer.font_restore." .. scenario.key
+    eq(prefix .. ".fallback_font", root.profiles.p2.settings.font, "Fonts\\ARIALN.TTF")
+    eq(prefix .. ".original_font",
+        root.profiles.p2.settings.fontBeforeAutoSwitch, "Fonts\\FRIZQT__.TTF")
+    if scenario.accountWide then
+        local enabled = test.profileOps.enableAccountWide("p2")
+        eq(prefix .. ".account_wide_enabled", enabled, true)
+    end
+    local targetID = test.profileState().profileID
+    local targetRef, sourceRef = root.profiles[targetID], root.profiles.p3
+    local targetBefore, sourceBefore = deepCopy(targetRef), deepCopy(sourceRef)
+    local encoded = test.profileTransfer.serialize(
+        sourceRef.name, sourceRef.settings,
+        { stats = true, layout = true, appearance = true })
+    local package = test.profileTransfer.parse(encoded)
+    local ok, result = test.profileOps.importTransferToContext(
+        package, scenario.sections, "Player-1-OPS-A", 73)
+    eq(prefix .. ".imported", ok, true)
+    local imported = root.profiles[result.profileID].settings
+    eq(prefix .. ".imported_font", imported.font, "Fonts\\ARIALN.TTF")
+    if scenario.sections.appearance then
+        eq(prefix .. ".previous_restore_cleared", imported.fontBeforeAutoSwitch, nil)
+    else
+        eq(prefix .. ".unselected_restore_preserved",
+            imported.fontBeforeAutoSwitch, "Fonts\\FRIZQT__.TTF")
+    end
+    eq(prefix .. ".target_identity", root.profiles[targetID], targetRef)
+    eq(prefix .. ".source_identity", root.profiles.p3, sourceRef)
+    assertDeepEqual(prefix .. ".target_unchanged", targetRef, targetBefore)
+    assertDeepEqual(prefix .. ".source_unchanged", sourceRef, sourceBefore)
+    addonContext:OpenConfigMenu()
+    selectDropdownValue(prefix .. ".language_change", env.StatsProLanguageDropdown, "enUS")
+    eq(prefix .. ".language_committed", root.account.forceLocale, "enUS")
+    eq(prefix .. ".font_after_language_change", imported.font,
+        scenario.sections.appearance and "Fonts\\ARIALN.TTF" or "Fonts\\FRIZQT__.TTF")
+    eq(prefix .. ".restore_after_language_change", imported.fontBeforeAutoSwitch, nil)
+end
+
 for _, failure in ipairs({
     { stage = "validate", reason = "validate-failed" },
     { stage = "commit", reason = "commit-failed" },
     { stage = "apply", reason = "apply-failed" },
 }) do
-    local _, _, test, root = makeProfileOpsFixture()
+    local _, _, test, root = makeProfileOpsFixture({
+        mutateRoot = function(candidate)
+            candidate.account.forceLocale = "ruRU"
+            candidate.profiles.p2.settings.font = "Fonts\\FRIZQT__.TTF"
+            candidate.profiles.p3.settings.font = "Fonts\\ARIALN.TTF"
+        end,
+    })
     local encoded = test.profileTransfer.serialize(
         root.profiles.p3.name, root.profiles.p3.settings,
         { stats = true, layout = true, appearance = true })
     local package = test.profileTransfer.parse(encoded)
     local before = deepCopy(root)
+    local identities = captureRegistryIdentities(root)
+    eq("profiles.transfer.rollback." .. failure.stage .. ".original_font",
+        root.profiles.p2.settings.fontBeforeAutoSwitch, "Fonts\\FRIZQT__.TTF")
     test.profileOps.setFailureStage(failure.stage)
     local ok, reason = test.profileOps.importTransferToContext(
         package, package.sections, "Player-1-OPS-A", 73)
     eq("profiles.transfer.rollback." .. failure.stage .. ".rejected", ok, false)
     eq("profiles.transfer.rollback." .. failure.stage .. ".reason", reason, failure.reason)
     assertDeepEqual("profiles.transfer.rollback." .. failure.stage .. ".root", root, before)
+    assertRegistryIdentities(
+        "profiles.transfer.rollback." .. failure.stage .. ".identities", root, identities)
 end
 
 do

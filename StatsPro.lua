@@ -5080,6 +5080,11 @@ function addon.profileTransfer.BuildImportedSettings(targetSettings, package, se
     if not addon.dbRuntime.StripAccountSettings(settings) then
         return nil, "clone-failed"
     end
+    if selected.appearance then
+        -- The imported font replaces the destination's selection and its
+        -- locale fallback restore path. Runtime may create a fresh restore path.
+        settings.fontBeforeAutoSwitch = nil
+    end
     return settings, selected
 end
 

@@ -11821,9 +11821,17 @@ local function OpenColorPicker(btn, statName)
     end
     local function OnCancel()
         if not COLOR_PICKER_STATE.IsActive(session) then return end
-        local writableDB = addon.dbRuntime.GetWritableSettings(true)
-        if writableDB and session.generation == addon.dbRuntime.generation then
-            RestoreSnapshotToSettings(writableDB)
+        -- Refresh ownership even when a pending context blocks ordinary writes.
+        -- Undo only this session's preview in its exact supported settings table.
+        addon.dbRuntime.GetWritableSettings(false)
+        if addon.dbRuntime.registryReady and not addon.dbRuntime.readOnly
+            and addon.dbRuntime.version == CURRENT_DB_VERSION
+            and session.generation == addon.dbRuntime.generation
+            and addon.dbRuntime.IsCleanTable(session.root)
+            and addon.dbRuntime.IsCleanTable(session.settings)
+            and rawequal(addon.dbRuntime.rootRef, session.root)
+            and rawequal(addon.dbRuntime.activeSettings, session.settings) then
+            RestoreSnapshotToSettings(session.settings)
         else
             local persisted = GetColor(statName)
             addon.settingsDesign.SetSwatchColor(btn, persisted.r, persisted.g, persisted.b)
@@ -11832,23 +11840,7 @@ local function OpenColorPicker(btn, statName)
     end
     session.swatchFunc = OnColorSelect
     session.cancelFunc = OnCancel
-    session.restoreForLogout = function()
-        if not COLOR_PICKER_STATE.IsActive(session) then return end
-        local rootVersion = session.root and NormalizeDBVersion(rawget(session.root, "dbVersion"))
-            or CURRENT_DB_VERSION + 1
-        if session.generation == addon.dbRuntime.generation
-            and rootVersion == CURRENT_DB_VERSION
-            and rawequal(addon.dbRuntime.rootRef, session.root)
-            and rawequal(addon.dbRuntime.activeSettings, session.settings)
-            and addon.dbRuntime.IsCleanTable(session.settings) then
-            -- Pending profile resolution blocks ordinary writes, but rollback is safe
-            -- for the exact settings table that received this session's preview.
-            RestoreSnapshotToSettings(session.settings)
-            FinishCancel()
-        else
-            OnCancel()
-        end
-    end
+    session.restoreForLogout = OnCancel
     session.acceptFunc = function()
         if not session.changed or session.generation ~= addon.dbRuntime.generation then return end
         local writableDB = addon.dbRuntime.GetWritableSettings(false)

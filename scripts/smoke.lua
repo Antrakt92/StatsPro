@@ -15172,6 +15172,99 @@ do
     assertColor("config.color_picker.logout_pending.restores_same_settings",
         activeSettings(pendingEnv).colors.crit, 0.2, 0.3, 0.4)
     eq("config.color_picker.logout_pending.closes_owned", pendingEnv.ColorPickerFrame:IsShown(), false)
+
+    for _, initialColor in ipairs({ "explicit", "default" }) do
+        for _, closeKind in ipairs({ "cancel", "hide", "settings", "takeover" }) do
+            local prefix = "config.color_picker.pending_" .. closeKind .. "_" .. initialColor
+            local env, _, test = loadStatsPro("enUS", {
+                statsProDB = { colors = { crit = { r = 0.2, g = 0.3, b = 0.4 } } },
+            })
+            fireEvent(prefix .. ".fire", env, "PLAYER_ENTERING_WORLD")
+            local settings = activeSettings(env)
+            if initialColor == "default" then settings.colors.crit = nil end
+            openCritPicker(prefix, env)
+            local options = env.ColorPickerFrame.colorPickerOptions
+            env.__setColorPickerRGB(0.6, 0.7, 0.8)
+            options.swatchFunc()
+            test.setSettingsContextBlockedForSmoke(true)
+            local foreignToken, foreignCanceled = {}, false
+            if closeKind == "cancel" then
+                env.__cancelColorPicker()
+            elseif closeKind == "hide" then
+                env.ColorPickerFrame:Hide()
+            elseif closeKind == "settings" then
+                env.StatsProConfigFrame:Hide()
+            else
+                env.ColorPickerFrame:SetupColorPickerAndShow({
+                    r = 0.1, g = 0.2, b = 0.3, extraInfo = foreignToken,
+                    cancelFunc = function() foreignCanceled = true end,
+                })
+            end
+            if initialColor == "default" then
+                eq(prefix .. ".restores_nil", settings.colors.crit, nil)
+            else
+                assertColor(prefix .. ".restores_snapshot", settings.colors.crit, 0.2, 0.3, 0.4)
+            end
+            eq(prefix .. ".picker_visibility", env.ColorPickerFrame:IsShown(), closeKind == "takeover")
+            if closeKind == "takeover" then
+                eq(prefix .. ".foreign_owner", env.ColorPickerFrame:GetExtraInfo(), foreignToken)
+                eq(prefix .. ".foreign_not_canceled", foreignCanceled, false)
+            end
+            test.setSettingsContextBlockedForSmoke(false)
+            options.swatchFunc()
+            options.cancelFunc()
+            if initialColor == "default" then
+                eq(prefix .. ".stale_callbacks_preserve_nil", settings.colors.crit, nil)
+            else
+                assertColor(prefix .. ".stale_callbacks_preserve_snapshot",
+                    settings.colors.crit, 0.2, 0.3, 0.4)
+            end
+        end
+    end
+
+    for _, closeKind in ipairs({ "cancel", "logout" }) do
+        for _, invalidation in ipairs({ "future", "unreadable", "root", "settings", "generation" }) do
+            local prefix = "config.color_picker.rollback_guard_" .. closeKind .. "_" .. invalidation
+            local env, addon, test = loadStatsPro("enUS", {
+                statsProDB = { colors = { crit = { r = 0.2, g = 0.3, b = 0.4 } } },
+            })
+            fireEvent(prefix .. ".fire", env, "PLAYER_ENTERING_WORLD")
+            openCritPicker(prefix, env)
+            local state = test.profileState()
+            local settings, root = state.settings, state.root
+            env.__setColorPickerRGB(0.6, 0.7, 0.8)
+            env.ColorPickerFrame.colorPickerOptions.swatchFunc()
+            test.setSettingsContextBlockedForSmoke(true)
+            local replacement
+            if invalidation == "future" then
+                root.dbVersion = root.dbVersion + 1
+            elseif invalidation == "unreadable" then
+                root.dbVersion = {}
+            elseif invalidation == "root" then
+                env.StatsProDB = deepCopy(root)
+                replacement = activeSettings(env)
+                replacement.colors.crit = { r = 0.1, g = 0.2, b = 0.3 }
+            elseif invalidation == "settings" then
+                replacement = deepCopy(settings)
+                replacement.colors.crit = { r = 0.1, g = 0.2, b = 0.3 }
+                root.profiles[state.profileID].settings = replacement
+            else
+                addon.dbRuntime.Invalidate()
+                addon.dbRuntime.Refresh()
+                check(prefix .. ".generation_changed", addon.dbRuntime.generation ~= state.generation)
+            end
+            if closeKind == "logout" then
+                fireEvent(prefix .. ".logout", env, "PLAYER_LOGOUT")
+            else
+                env.__cancelColorPicker()
+            end
+            assertColor(prefix .. ".old_settings_untouched", settings.colors.crit, 0.6, 0.7, 0.8)
+            if replacement then
+                assertColor(prefix .. ".replacement_untouched", replacement.colors.crit, 0.1, 0.2, 0.3)
+            end
+            eq(prefix .. ".picker_closed", env.ColorPickerFrame:IsShown(), false)
+        end
+    end
 end
 
 do

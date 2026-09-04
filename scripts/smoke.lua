@@ -10985,6 +10985,140 @@ do
 end
 
 do
+    local mode = "inventory_pending"
+    local scans, tooltipCalls = 0, 0
+    local repairEnv, repairAddon, repairTest = loadStatsPro("enUS", {
+        statsProDB = { dbVersion = 9, showDurability = false, showRepairCost = true },
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then
+                scans = scans + 1
+                if mode ~= "inventory_pending" then return 0, 100 end
+            end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function()
+            tooltipCalls = tooltipCalls + 1
+            if mode == "repair_ready" then return { repairCost = 300 } end
+            return nil
+        end,
+    })
+    fireEvent("repair.only_hydration.enter", repairEnv, "PLAYER_ENTERING_WORLD")
+    flushTimers("repair.only_hydration.bootstrap", repairEnv, 0)
+    eq("repair.only_hydration.initial_scan", scans, 1)
+    local state = repairTest.durabilityState()
+    eq("repair.only_hydration.pending", state.repairCostComplete, false)
+    eq("repair.only_hydration.no_false_zero", state.repairCost, nil)
+    eq("repair.only_hydration.unknown_row", findBlockBySplitKey(
+        "repair.only_hydration.block", repairTest.buildRenderBlocks(), "splitRepairCost").repairStr, "?")
+    eq("repair.only_hydration.one_timer", #repairEnv.__timers, 1)
+    eq("repair.only_hydration.tooltip_budget_preserved", state.repairRetryAttempt, 0)
+    mode = "tooltip_pending"
+    flushTimers("repair.only_hydration.inventory_timer", repairEnv, 1, 1)
+    check("repair.only_hydration.inventory_update", repairAddon:RunUpdateStatsSafe())
+    state = repairTest.durabilityState()
+    eq("repair.only_hydration.broken_item_is_complete", state.durabilityComplete, true)
+    eq("repair.only_hydration.broken_item_value", state.durabilityValue, 0)
+    eq("repair.only_hydration.tooltip_pending", state.repairCostComplete, false)
+    eq("repair.only_hydration.tooltip_first_attempt", state.repairRetryAttempt, 1)
+    eq("repair.only_hydration.one_tooltip_timer", #repairEnv.__timers, 1)
+    mode = "repair_ready"
+    flushTimers("repair.only_hydration.tooltip_timer", repairEnv, 1, 1)
+    check("repair.only_hydration.tooltip_update", repairAddon:RunUpdateStatsSafe())
+    state = repairTest.durabilityState()
+    eq("repair.only_hydration.recovered_cost", state.repairCost, 300)
+    eq("repair.only_hydration.recovered_complete", state.repairCostComplete, true)
+    eq("repair.only_hydration.three_scans", scans, 3)
+    eq("repair.only_hydration.two_tooltips", tooltipCalls, 2)
+    eq("repair.only_hydration.no_timers", #repairEnv.__timers, 0)
+    check("repair.only_hydration.stable_update", repairAddon:RunUpdateStatsSafe())
+    eq("repair.only_hydration.no_stable_rescan", scans, 3)
+end
+
+do
+    for _, mode in ipairs({ "empty", "non_durable", "full" }) do
+        local prefix = "repair.only_inventory." .. mode
+        local scans, tooltipCalls = 0, 0
+        local emptyEnv, emptyAddon, emptyTest = loadStatsPro("enUS", {
+            statsProDB = { dbVersion = 9, showDurability = false, showRepairCost = true },
+            getInventoryItemDurability = function(slot)
+                if slot == 1 then
+                    scans = scans + 1
+                    if mode == "full" then return 100, 100 end
+                    if mode == "non_durable" then return 0, 0 end
+                end
+                return nil, nil
+            end,
+            getTooltipInventoryItem = function()
+                tooltipCalls = tooltipCalls + 1
+                return { repairCost = 999 }
+            end,
+        })
+        fireEvent(prefix .. ".enter", emptyEnv, "PLAYER_ENTERING_WORLD")
+        if mode ~= "full" then
+            for attempt, delay in ipairs({ 1, 3, 8, 15 }) do
+                eq(prefix .. ".pending_" .. attempt, emptyTest.durabilityState().repairCostComplete, false)
+                eq(prefix .. ".one_timer_" .. attempt, #emptyEnv.__timers, 1)
+                flushTimers(prefix .. ".timer_" .. attempt, emptyEnv, delay, 1)
+                check(prefix .. ".update_" .. attempt, emptyAddon:RunUpdateStatsSafe())
+            end
+        end
+        local state = emptyTest.durabilityState()
+        eq(prefix .. ".complete_zero", state.repairCostComplete, true)
+        eq(prefix .. ".zero_cost", state.repairCost, 0)
+        eq(prefix .. ".bounded_scans", scans, mode == "full" and 1 or 5)
+        eq(prefix .. ".no_tooltip_reads", tooltipCalls, 0)
+        eq(prefix .. ".no_timers", #emptyEnv.__timers, 0)
+        eq(prefix .. ".hidden_repair_row", findBlockBySplitKey(
+            prefix .. ".block", emptyTest.buildRenderBlocks(), "splitRepairCost").repairStr, "")
+        check(prefix .. ".stable_update", emptyAddon:RunUpdateStatsSafe())
+        eq(prefix .. ".no_stable_rescan", scans, mode == "full" and 1 or 5)
+    end
+end
+
+do
+    for _, boundary in ipairs({ "combat", "disabled" }) do
+        local prefix = "repair.only_hydration." .. boundary
+        local inCombat, ready = false, false
+        local scans = 0
+        local boundaryEnv, boundaryAddon, boundaryTest = loadStatsPro("enUS", {
+            statsProDB = { dbVersion = 9, showDurability = false, showRepairCost = true },
+            inCombatLockdown = function() return inCombat end,
+            getInventoryItemDurability = function(slot)
+                if slot == 1 then
+                    scans = scans + 1
+                    if ready then return 50, 100 end
+                end
+                return nil, nil
+            end,
+            getTooltipInventoryItem = function() return { repairCost = 300 } end,
+        })
+        fireEvent(prefix .. ".enter", boundaryEnv, "PLAYER_ENTERING_WORLD")
+        eq(prefix .. ".initial_timer", #boundaryEnv.__timers, 1)
+        if boundary == "combat" then
+            inCombat = true
+            fireEvent(prefix .. ".combat_start", boundaryEnv, "PLAYER_REGEN_DISABLED")
+        else
+            activeSettings(boundaryEnv).showRepairCost = false
+            boundaryTest.cacheSettings()
+        end
+        ready = true
+        flushTimers(prefix .. ".cancelled_timer", boundaryEnv, 1, 1)
+        eq(prefix .. ".no_dirty", boundaryTest.durabilityState().dirty, false)
+        check(prefix .. ".cancelled_update", boundaryAddon:RunUpdateStatsSafe())
+        eq(prefix .. ".no_rescan", scans, 1)
+        eq(prefix .. ".no_timer", #boundaryEnv.__timers, 0)
+        if boundary == "combat" then
+            inCombat = false
+            fireEvent(prefix .. ".combat_end", boundaryEnv, "PLAYER_REGEN_ENABLED")
+            eq(prefix .. ".regen_dirty", boundaryTest.durabilityState().dirty, true)
+            check(prefix .. ".recovery_update", boundaryAddon:RunUpdateStatsSafe())
+            eq(prefix .. ".recovered_cost", boundaryTest.durabilityState().repairCost, 300)
+            eq(prefix .. ".recovered_complete", boundaryTest.durabilityState().repairCostComplete, true)
+        end
+    end
+end
+
+do
     local tooltipCalls, surfaceCalls = {}, 0
     local costs = { [1] = 100, [2] = 200, [4] = 999, [18] = 999 }
     local _, _, repairTest = loadStatsPro("enUS", {

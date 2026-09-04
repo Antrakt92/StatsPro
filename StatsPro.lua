@@ -1423,7 +1423,7 @@ function addon.durabilityRuntime.ScheduleRetry(kind, pending)
         state.scheduledAttempt = nil
         local shouldRetry
         if kind == "durability" then
-            shouldRetry = cached.showDurability
+            shouldRetry = (cached.showDurability or cached.showRepairCost)
                 and cached.durabilityComplete == false and not InCombatLockdown()
         else
             shouldRetry = cached.showRepairCost and cached.repairCostComplete == false
@@ -8821,14 +8821,17 @@ local function RefreshDurabilityCache()
     cached.durabilityValue = cached.useWorstDurability
         and cached.durabilityLastCompleteWorst
         or cached.durabilityLastCompleteAverage
+    -- An empty durability read can mean equipment is still loading. Both gear
+    -- rows share that hydration budget before an empty inventory proves zero cost.
     cached.repairCostComplete = not repairCostPending
+        and not (cached.showRepairCost and durabilityCleanEmpty)
     cached.repairCost = cached.repairCostComplete and cost or nil
     durabilityDirty = false
 
     -- A cold/incomplete out-of-combat durability read must recover without requiring
     -- a vendor, gear swap, or combat transition. Restricted combat reads keep the
     -- last complete aggregate and rely on PLAYER_REGEN_ENABLED instead of polling.
-    local durabilityRetryPending = cached.showDurability
+    local durabilityRetryPending = (cached.showDurability or cached.showRepairCost)
         and not durabilityComplete and not InCombatLockdown()
     local repairRetryPending = repairCostPending and repairCostRetryable
     addon.durabilityRuntime.ScheduleRetry("durability", durabilityRetryPending)
@@ -8847,6 +8850,8 @@ local function RefreshDurabilityCache()
         cached.durabilityValue = nil
         cached.durabilityHasItems = false
         cached.durabilityComplete = true
+        cached.repairCostComplete = true
+        cached.repairCost = 0
     end
 end
 

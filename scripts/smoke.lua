@@ -23458,6 +23458,63 @@ do
 end
 
 do
+    for _, case in ipairs({
+        { key = "fontSize", slider = "StatsProFontSlider", baseline = 15,
+            requested = 17, nextValue = 18, format = "%d", divisor = 1 },
+        { key = "textAlpha", slider = "StatsProTextAlphaSlider", baseline = 80,
+            requested = 90, nextValue = 85, format = "%d%%", divisor = 100 },
+        { key = "panelBackgroundAlpha", slider = "StatsProPanelBackgroundSlider", baseline = 20,
+            requested = 40, nextValue = 45, format = "%d%%", divisor = 100 },
+    }) do
+        local prefix = "appearance.presets.slider_sync." .. case.key
+        local env, addon, test = loadStatsPro("enUS", withProfileIdentity({
+            statsProDB = { [case.key] = case.baseline },
+        }))
+        fireEvent(prefix .. ".enter", env, "PLAYER_ENTERING_WORLD")
+        addon:OpenConfigMenu()
+        local slider = env[case.slider]
+        local caption = env[case.slider .. "Text"]
+        local service = test.appearancePresets
+        check(prefix .. ".start_preview", service.startPreview("high-contrast"))
+        local fontApplyCalls = 0
+        local originalApplyFont = addon.fontRuntime.applyCommittedTextStyle
+        addon.fontRuntime.applyCommittedTextStyle = function(...)
+            fontApplyCalls = fontApplyCalls + 1
+            return originalApplyFont(...)
+        end
+        local customCalls = 0
+        local originalMarkCustom = addon.appearancePresets.MarkCustom
+        addon.appearancePresets.MarkCustom = function(...)
+            customCalls = customCalls + 1
+            return originalMarkCustom(...)
+        end
+        local function assertValue(suffix, expected)
+            eq(prefix .. suffix .. ".saved", test.profileState().settings[case.key], expected)
+            eq(prefix .. suffix .. ".thumb", slider:GetValue(), expected)
+            eq(prefix .. suffix .. ".caption", caption:GetText(), string.format(case.format, expected))
+            near(prefix .. suffix .. ".runtime",
+                test.cachedAppearanceState()[case.key], expected / case.divisor)
+        end
+        changeSlider(prefix .. ".preview_edit", slider, case.requested)
+        eq(prefix .. ".preview_cancelled", service.state().active, false)
+        assertValue(".preview_edit", case.requested)
+        eq(prefix .. ".preview_edit.one_custom_mark", customCalls, 1)
+        eq(prefix .. ".preview_edit.font_apply_count", fontApplyCalls, case.key == "fontSize" and 1 or 0)
+        changeSlider(prefix .. ".ordinary_edit", slider, case.nextValue)
+        assertValue(".ordinary_edit", case.nextValue)
+        eq(prefix .. ".ordinary_edit.one_custom_mark", customCalls, 2)
+        eq(prefix .. ".ordinary_edit.font_apply_count", fontApplyCalls, case.key == "fontSize" and 2 or 0)
+        changeSlider(prefix .. ".same_value", slider, case.nextValue)
+        eq(prefix .. ".same_value.no_recursive_edit", customCalls, 2)
+        test.setSettingsContextBlockedForSmoke(true)
+        changeSlider(prefix .. ".blocked_edit", slider, case.requested)
+        assertValue(".blocked_edit", case.nextValue)
+        eq(prefix .. ".blocked_edit.no_custom_mark", customCalls, 2)
+        eq(prefix .. ".blocked_edit.no_font_apply", fontApplyCalls, case.key == "fontSize" and 2 or 0)
+    end
+end
+
+do
     local inCombat = false
     local gateEnv, _, gateTest = loadStatsPro("enUS", withProfileIdentity({
         inCombatLockdown = function() return inCombat end,

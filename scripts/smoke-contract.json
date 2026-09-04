@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "totalAssertions": 38999,
+  "totalAssertions": 39077,
   "suites": [
     {
       "name": "core-panel-persistence",
@@ -49,8 +49,8 @@
     },
     {
       "name": "presets-onboarding",
-      "assertions": 1377,
-      "fingerprint": "0c47914c"
+      "assertions": 1455,
+      "fingerprint": "26f98c74"
     }
   ]
 }

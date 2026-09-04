@@ -13215,48 +13215,46 @@ local function CreateConfigSlider(parent, name, labelText, dbKey, cd, minVal, ma
     addon.settingsDesign.StyleSlider(
         slider, lbl, _G[name .. "Text"], _G[name .. "Low"], _G[name .. "High"])
 
-    local reverting = false
-    slider:SetScript("OnValueChanged", function(self, value)
-        if reverting then return end
+    local syncingValue = false
+    local function SyncValue(value)
+        syncingValue = true
+        slider:SetValue(value)
+        syncingValue = false
+        _G[slider:GetName() .. "Text"]:SetText(string.format(valueFmt, value))
+    end
+    slider:SetScript("OnValueChanged", function(_, value)
+        if syncingValue then return end
         if not addon.appearancePresets.BeforeManualEdit(dbKey) then
             local current = NUMBER_SETTING_META[dbKey]
                 and GetNumberDB(dbKey) or GetDB(dbKey)
-            reverting = true
-            self:SetValue(current)
-            reverting = false
-            _G[self:GetName() .. "Text"]:SetText(string.format(valueFmt, current))
+            SyncValue(current)
             return
         end
         local previous = NUMBER_SETTING_META[dbKey] and GetNumberDB(dbKey) or GetDB(dbKey)
         local normalized = NUMBER_SETTING_META[dbKey] and NormalizeNumberSetting(dbKey, value) or value
         local db = addon.dbRuntime.GetWritableSettings(true, dbKey)
         if not db then
-            reverting = true
-            self:SetValue(previous)
-            reverting = false
-            _G[self:GetName() .. "Text"]:SetText(string.format(valueFmt, previous))
+            SyncValue(previous)
             return
         end
-        _G[self:GetName() .. "Text"]:SetText(string.format(valueFmt, normalized))
         db[dbKey] = normalized
         local accepted = onChange and onChange(normalized, previous)
         if accepted == false then
             db[dbKey] = previous
-            reverting = true
-            self:SetValue(previous)
-            reverting = false
-            _G[self:GetName() .. "Text"]:SetText(string.format(valueFmt, previous))
-        elseif normalized ~= previous and addon.appearancePresets.allowlist[dbKey] then
-            addon.appearancePresets.MarkCustom(db)
+            SyncValue(previous)
+        else
+            -- Canceling a preset refreshes every control to its committed baseline.
+            -- Restore the accepted thumb position without firing another user edit.
+            SyncValue(normalized)
+            if normalized ~= previous and addon.appearancePresets.allowlist[dbKey] then
+                addon.appearancePresets.MarkCustom(db)
+            end
         end
     end)
 
     PushRefresher(function()
         local v = NUMBER_SETTING_META[dbKey] and GetNumberDB(dbKey) or GetDB(dbKey)
-        reverting = true
-        slider:SetValue(v)
-        reverting = false
-        _G[slider:GetName() .. "Text"]:SetText(string.format(valueFmt, v))
+        SyncValue(v)
         addon.settingsDesign.RefreshControl(slider)
     end)
 

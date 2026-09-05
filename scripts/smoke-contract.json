@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "totalAssertions": 41605,
+  "totalAssertions": 41795,
   "suites": [
     {
       "name": "core-panel-persistence",
@@ -14,8 +14,8 @@
     },
     {
       "name": "fonts",
-      "assertions": 5026,
-      "fingerprint": "3b5ece9f"
+      "assertions": 5216,
+      "fingerprint": "0efe5f7d"
     },
     {
       "name": "durability-repair",

@@ -10981,6 +10981,7 @@ local function UpdateStats()
     -- WARNING: skip until init complete; cached.colorStrings is empty until CacheSettings runs
     if not isLoaded then return end
     updateCount = updateCount + 1
+    addon.fontRuntime.ReconcileCatalogLocale()
 
     -- WHY: master visibility toggle. When off, hide both panels and skip all work
     -- (stat APIs, slot scans). Re-enabling via slash/UI calls UpdateStats explicitly,
@@ -11082,6 +11083,7 @@ addon.profileRuntime.CompleteBootstrap = function()
     addon.readabilityConfig.applyPanelBackgroundAlphaToAllPanels(cached.panelBackgroundAlpha)
     isLoaded = true
     runtime.bootstrapPending = false
+    addon.settingsUI.fontPicker.RegisterLSMCallback(addon)
     addon.fontRuntime.schedulePendingSavedFontRetry()
     if type(runtime.RefreshConfigControls) == "function" then
         runtime.RefreshConfigControls()
@@ -11626,6 +11628,61 @@ ApplyConfigFont = function(font, force)
     end
     return true, currentConfigFont
 end
+
+function addon.fontRuntime.MarkCatalogLocaleDirty()
+    local runtime = addon.fontRuntime
+    runtime.catalogLocaleGeneration = (runtime.catalogLocaleGeneration or 0) + 1
+    runtime.catalogLocaleRetryAttempt = 0
+    runtime.catalogLocaleDirty = true
+end
+
+function addon.fontRuntime.ReconcileCatalogLocale()
+    local runtime = addon.fontRuntime
+    if not runtime.catalogLocaleDirty then return end
+    local profile = addon.profileRuntime
+    if not isLoaded or addon.dbRuntime.readOnly or addon.profileOps.inProgress
+        or profile.transitioning or profile.suppressIntermediateRefresh
+        or profile.forceReapply or profile.BlocksUserWrites()
+        or profile.ReadCombatState() ~= false or runtime.pendingSavedFont
+        or addon.settingsUI.fontPicker.previewedPath
+        or addon.settingsUI.localization.previewActive
+        or addon.appearancePresets.session or addon.hudPresets.session then return end
+
+    -- Consume before applying: callbacks may announce another catalogue generation.
+    local generation = runtime.catalogLocaleGeneration
+    runtime.catalogLocaleDirty = false
+    local req = LOCALE_GLYPH_REQ[ResolveActiveLocale()] or GLYPH_LATIN
+    local previousConfigFont = currentConfigFont
+    if not FontSupports(runtime.currentPath(), req) then
+        MaybeAutoSwitchFont()
+    elseif not FontSupports(currentConfigFont, req) then
+        ApplyConfigFont(ResolveConfigFont(ResolveActiveLocale()))
+    end
+    local context = addon.settingsUI.context
+    if not SameFontPath(previousConfigFont, currentConfigFont) then
+        addon.profileRuntime.RefreshConfigControls()
+    elseif context and type(context.refreshLanguageWarning) == "function" then
+        context.refreshLanguageWarning()
+    end
+    if generation ~= runtime.catalogLocaleGeneration then return end
+    if FontSupports(runtime.currentPath(), req) and FontSupports(currentConfigFont, req) then
+        runtime.catalogLocaleGeneration = generation + 1
+        return
+    end
+
+    -- Cold loose files get a bounded retry. Timers never retain profile settings
+    -- or change fonts; the next safe HUD tick resolves the current context again.
+    local attempt = (runtime.catalogLocaleRetryAttempt or 0) + 1
+    local delay = runtime.pendingRetryDelays[attempt]
+    if not delay then return end
+    runtime.catalogLocaleRetryAttempt = attempt
+    C_Timer.After(delay, function()
+        if generation == runtime.catalogLocaleGeneration then
+            runtime.catalogLocaleDirty = true
+        end
+    end)
+end
+
 local CONFIG_SWATCH_GAP = 6     -- label.RIGHT → swatch.LEFT
 local CONFIG_COL_OFFSET = 220   -- left-col x → right-col x within a 2-column section
 -- WHY separate from CONFIG_SWATCH_GAP: heavy chrome on UIDropDownMenuTemplate may want
@@ -17468,6 +17525,7 @@ function addon.settingsUI.fontPicker.RegisterLSMCallback(self)
     -- coalesce registration bursts into one next-tick visible-picker refresh.
     LSM.RegisterCallback(self, "LibSharedMedia_Registered", function(_, mediaType)
         if mediaType ~= LSM.MediaType.FONT then return end
+        self.fontRuntime.MarkCatalogLocaleDirty()
         picker.cachedFontsList = nil
         picker.cachedFontsListLen = -1
         picker.cachedFontsListHasPending = false

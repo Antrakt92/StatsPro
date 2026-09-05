@@ -11090,6 +11090,262 @@ do
     assertDeepEqual("fonts.browsing_pending.zero_saved_writes", pending.env.StatsProDB, pending.saved)
 end
 
+do
+    local cjkPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\NotoSansCJK.ttf"
+    local latinPath = "Fonts\\FRIZQT__.TTF"
+    local customPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\SourceHanSans.ttf"
+
+    local function NewCatalogLocaleFixture(locale, options)
+        options = options or {}
+        local state = { ready = options.ready ~= false, combat = false, probes = 0 }
+        local fonts = { { name = "Friz Quadrata TT", path = latinPath } }
+        if options.custom then fonts[#fonts + 1] = { name = "Chosen CJK", path = customPath } end
+        local env, addon, test = loadStatsPro("enUS", withProfileIdentity({
+            statsProDB = { dbVersion = 9, forceLocale = locale,
+                font = options.custom and customPath or latinPath,
+                isVisible = options.visible == true },
+            lsmFonts = fonts,
+            inCombatLockdown = function() return state.combat end,
+            setFontResult = function(frame, font, size, flags)
+                if font == cjkPath then
+                    state.probes = state.probes + 1
+                    if not state.ready then return false end
+                    frame.font, frame.fontSize, frame.fontFlags = font, size, flags
+                end
+                return true
+            end,
+            fontObjectSetFontResult = function(_, font)
+                if font == cjkPath and not state.ready then return false end
+                return true
+            end,
+        }))
+        env.__fireEvent("PLAYER_ENTERING_WORLD")
+        env.__flushTimers(0)
+        state.env, state.addon, state.test = env, addon, test
+        state.settings = test.profileState().settings
+        state.glyph = test.registrySnapshot().localeGlyphReq[locale]
+        state.tick = function() return addon:RunUpdateStatsSafe() end
+        state.register = function(path)
+            env.__registerLSMFont(path == cjkPath and "Late CJK" or "Late Latin", path)
+            env.__flushTimers(0)
+        end
+        return state
+    end
+
+    local function AssertReadable(name, fixture)
+        eq(name .. ".hud_compatible", fixture.test.fontSupports(
+            fixture.test.panelFontState().mainAppliedFont, fixture.glyph), true)
+        eq(name .. ".config_compatible", fixture.test.fontSupports(
+            fixture.test.configFontState().currentFont, fixture.glyph), true)
+        eq(name .. ".locale_preserved", fixture.test.profileState().root.account.forceLocale,
+            fixture.locale)
+    end
+
+    for _, locale in ipairs({ "koKR", "zhCN", "zhTW" }) do
+        for _, window in ipairs({ "never-opened", "hidden-picker", "open-picker" }) do
+            local fixture = NewCatalogLocaleFixture(locale)
+            fixture.locale = locale
+            local name = "fonts.catalog_locale." .. locale .. "." .. window
+            local root = fixture.test.profileState().root
+            local profileID = fixture.test.profileState().profileID
+            local profile = root.profiles[profileID]
+            if window ~= "never-opened" then
+                fixture.addon:OpenConfigMenu()
+                fixture.addon.settingsUI.fontPicker.Show(fixture.addon)
+                if window == "hidden-picker" then fixture.env.StatsProFontPicker:Hide() end
+            end
+            eq(name .. ".initial_unreadable", fixture.test.fontSupports(
+                fixture.test.panelFontState().mainAppliedFont, fixture.glyph), false)
+            fixture.register(cjkPath)
+            if window == "never-opened" then
+                local ticker = findFrame(name .. ".ticker", fixture.env, function(frame)
+                    return frame.scripts and type(frame.scripts.OnUpdate) == "function"
+                end)
+                callScript(name .. ".hidden_hud_tick", ticker, "OnUpdate", 999)
+            else
+                fixture.tick()
+            end
+            AssertReadable(name, fixture)
+            eq(name .. ".font_saved", fixture.settings.font, cjkPath)
+            eq(name .. ".restore_choice_preserved", fixture.settings.fontBeforeAutoSwitch, latinPath)
+            eq(name .. ".root_identity", fixture.test.profileState().root, root)
+            eq(name .. ".profile_identity", root.profiles[profileID], profile)
+            eq(name .. ".settings_identity", profile.settings, fixture.settings)
+            if window == "never-opened" then
+                eq(name .. ".settings_not_created", fixture.env.StatsProConfigFrame, nil)
+            end
+        end
+    end
+
+    local compatible = NewCatalogLocaleFixture("koKR", { custom = true })
+    local compatibleBefore = deepCopy(compatible.test.profileState().root)
+    compatible.register(cjkPath)
+    compatible.tick()
+    eq("fonts.catalog_locale.compatible_keeps_chosen_font", compatible.settings.font, customPath)
+    assertDeepEqual("fonts.catalog_locale.compatible_zero_writes",
+        compatible.test.profileState().root, compatibleBefore)
+
+    local alignment = NewCatalogLocaleFixture("koKR")
+    alignment.addon:OpenConfigMenu()
+    local dropdownRows = alignment.addon.settingsUI.context.displayDropdownRows
+    for _, row in ipairs(dropdownRows) do
+        row.text.GetStringWidth = function(region)
+            return select(1, region:GetFont()) == cjkPath and 90 or 40
+        end
+    end
+    alignment.addon.profileRuntime.RefreshConfigControls()
+    local oldDropdownX = select(4, dropdownRows[1].dropdown:GetPoint())
+    alignment.register(cjkPath)
+    alignment.tick()
+    for index, row in ipairs(dropdownRows) do
+        eq("fonts.catalog_locale.alignment.label_width." .. index, row.text:GetWidth(), 90)
+        eq("fonts.catalog_locale.alignment.dropdown_column." .. index,
+            select(4, row.dropdown:GetPoint()), oldDropdownX + 50)
+    end
+
+    local unavailable = NewCatalogLocaleFixture("koKR")
+    local unavailableBefore = deepCopy(unavailable.test.profileState().root)
+    unavailable.register("Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\LateLatin.ttf")
+    unavailable.tick()
+    assertDeepEqual("fonts.catalog_locale.unsupported_registration_zero_writes",
+        unavailable.test.profileState().root, unavailableBefore)
+
+    -- Exercise the real preview entry/cancel paths, not only the guard flags.
+    for _, kind in ipairs({ "font", "language", "appearance", "hud" }) do
+        local fixture = NewCatalogLocaleFixture("koKR")
+        fixture.locale = "koKR"
+        fixture.addon:OpenConfigMenu()
+        local name = "fonts.catalog_locale.preview." .. kind
+        local cancel
+        if kind == "font" then
+            fixture.addon.settingsUI.fontPicker.Preview(fixture.addon, "Fonts\\ARIALN.TTF")
+            cancel = function() fixture.addon.settingsUI.fontPicker.CancelPreview(fixture.addon) end
+        elseif kind == "language" then
+            fixture.addon.settingsUI.localization.Preview(fixture.addon, "enUS")
+            cancel = function() fixture.addon.settingsUI.localization.CancelPreview(fixture.addon) end
+        elseif kind == "appearance" then
+            eq(name .. ".start", fixture.test.appearancePresets.startPreview("midnight"), true)
+            cancel = function() fixture.test.appearancePresets.cancelPreview() end
+        else
+            eq(name .. ".start", fixture.test.hudPresets.startPreview("dps"), true)
+            cancel = function() fixture.test.hudPresets.cancelPreview() end
+        end
+        local before = deepCopy(fixture.test.profileState().root)
+        local previewFont = fixture.test.panelFontState().mainAppliedFont
+        fixture.register(cjkPath)
+        fixture.tick()
+        assertDeepEqual(name .. ".blocked_zero_writes", fixture.test.profileState().root, before)
+        eq(name .. ".preview_font_untouched", fixture.test.panelFontState().mainAppliedFont, previewFont)
+        cancel()
+        fixture.tick()
+        AssertReadable(name .. ".resumed", fixture)
+    end
+
+    -- Transient write guards retain the work for the next permitted update.
+    for _, guard in ipairs({ "combat", "unknown-combat", "operation", "transition", "suppressed",
+        "force-reapply", "pending-context", "pending-saved-font" }) do
+        local fixture = NewCatalogLocaleFixture("koKR")
+        fixture.locale = "koKR"
+        local runtime, fontRuntime = fixture.addon.profileRuntime, fixture.addon.fontRuntime
+        local clear
+        if guard == "combat" or guard == "unknown-combat" then
+            fixture.combat = guard == "combat" and true or nil
+            clear = function() fixture.combat = false end
+        elseif guard == "operation" then
+            fixture.addon.profileOps.inProgress = true
+            clear = function() fixture.addon.profileOps.inProgress = false end
+        elseif guard == "transition" then
+            runtime.transitioning = true
+            clear = function() runtime.transitioning = false end
+        elseif guard == "suppressed" then
+            runtime.suppressIntermediateRefresh = true
+            clear = function() runtime.suppressIntermediateRefresh = false end
+        elseif guard == "force-reapply" then
+            runtime.forceReapply = true
+            clear = function() runtime.forceReapply = false end
+        elseif guard == "pending-context" then
+            runtime.pendingResolution = true
+            clear = function() runtime.pendingResolution = false end
+        else
+            fontRuntime.pendingSavedFont = latinPath
+            clear = function() fontRuntime.pendingSavedFont = nil end
+        end
+        local before = deepCopy(fixture.test.profileState().root)
+        fixture.register(cjkPath)
+        fixture.tick()
+        assertDeepEqual("fonts.catalog_locale.guard." .. guard .. ".zero_writes",
+            fixture.test.profileState().root, before)
+        eq("fonts.catalog_locale.guard." .. guard .. ".font_untouched", fixture.settings.font, latinPath)
+        clear()
+        fixture.tick()
+        AssertReadable("fonts.catalog_locale.guard." .. guard .. ".resumed", fixture)
+    end
+
+    local readonly = NewCatalogLocaleFixture("koKR")
+    local readonlyRoot = readonly.test.profileState().root
+    readonlyRoot.dbVersion = readonly.test.currentDBVersion() + 1
+    readonly.addon.dbRuntime.Refresh(true)
+    local readonlyBefore = deepCopy(readonlyRoot)
+    readonly.register(cjkPath)
+    readonly.tick()
+    assertDeepEqual("fonts.catalog_locale.future_root_zero_writes", readonlyRoot, readonlyBefore)
+
+    local context = NewCatalogLocaleFixture("koKR")
+    context.locale = "koKR"
+    local root = context.test.profileState().root
+    local source = context.settings
+    local sourceBefore = deepCopy(source)
+    context.register(cjkPath)
+    local targetID = root.account.defaultProfileID
+    eq("fonts.catalog_locale.context.assign", context.test.profileOps.assign(
+        "Player-1-IMPORT", 73, targetID), true)
+    context.tick()
+    eq("fonts.catalog_locale.context.incoming_selected", context.test.profileState().profileID, targetID)
+    assertDeepEqual("fonts.catalog_locale.context.outgoing_unchanged", source, sourceBefore)
+    AssertReadable("fonts.catalog_locale.context.incoming", context)
+
+    local cold = NewCatalogLocaleFixture("koKR", { ready = false })
+    cold.locale = "koKR"
+    cold.register(cjkPath)
+    cold.tick()
+    eq("fonts.catalog_locale.cold.pending_preserves_choice", cold.settings.font, latinPath)
+    cold.ready = true
+    cold.env.__flushTimers(0.2)
+    cold.tick()
+    AssertReadable("fonts.catalog_locale.cold.retry", cold)
+
+    local stale = NewCatalogLocaleFixture("koKR", { ready = false })
+    stale.register(cjkPath)
+    stale.tick()
+    eq("fonts.catalog_locale.stale.old_retry_scheduled", #stale.env.__timers, 1)
+    stale.register(customPath)
+    stale.tick()
+    eq("fonts.catalog_locale.stale.new_registration_applied", stale.settings.font, customPath)
+    local probesBeforeStale = stale.probes
+    local rootBeforeStale = deepCopy(stale.test.profileState().root)
+    stale.env.__flushTimers(0.2)
+    stale.tick()
+    eq("fonts.catalog_locale.stale.old_retry_no_probe", stale.probes, probesBeforeStale)
+    assertDeepEqual("fonts.catalog_locale.stale.old_retry_zero_writes",
+        stale.test.profileState().root, rootBeforeStale)
+
+    local never = NewCatalogLocaleFixture("koKR", { ready = false })
+    local neverBefore = deepCopy(never.test.profileState().root)
+    never.register(cjkPath)
+    never.tick()
+    for attempt, delay in ipairs({ 0.2, 1, 3, 5 }) do
+        eq("fonts.catalog_locale.bounded.timer_count." .. attempt, #never.env.__timers, 1)
+        eq("fonts.catalog_locale.bounded.delay." .. attempt, never.env.__timers[1].delay, delay)
+        never.env.__flushTimers(delay)
+        never.tick()
+    end
+    eq("fonts.catalog_locale.bounded.no_fifth_timer", #never.env.__timers, 0)
+    local probesAfterLimit = never.probes
+    for _ = 1, 10 do never.tick() end
+    eq("fonts.catalog_locale.bounded.no_polling_after_limit", never.probes, probesAfterLimit)
+    assertDeepEqual("fonts.catalog_locale.bounded.zero_writes", never.test.profileState().root, neverBefore)
+end
+
 smokeReachability:complete("fonts")
 
 do

@@ -9141,7 +9141,21 @@ do
     eq("config.dropdown_target_snapshot_available.current.value",
         entries[1].value, "mythicPlusCurrent")
     eq("config.dropdown_target_snapshot_available.current.text",
-        entries[1].text, "M+ Current (+7 to +19)")
+        entries[1].text, "M+ Current (" .. availableFixture.snapshots.mythicPlusCurrent.difficultyLabel .. ")")
+    for _, range in ipairs({
+        { label = "+7 to +19", text = "M+ Current (+7 to +19)" },
+        { label = "+7 to +20", text = "M+ Current (+7 to +20)" },
+    }) do
+        local rangeFixture = makeArchonV2Fixture("2026-05-15", { mythicPlusCurrent = true })
+        rangeFixture.snapshots.mythicPlusCurrent.difficultyLabel = range.label
+        local rangeEnv, rangeAddon = loadStatsPro("enUS", { statsProArchonTargets = rangeFixture })
+        local prefix = "config.dropdown_target_snapshot_advertised_range." .. range.label
+        fireEvent(prefix .. ".pew", rangeEnv, "PLAYER_ENTERING_WORLD")
+        rangeAddon:OpenConfigMenu()
+        local rangeEntries = runDropdownInit(prefix .. ".entries", rangeEnv.StatsProTargetSnapshotDropdown)
+        eq(prefix .. ".single_available_profile", #rangeEntries, 1)
+        eq(prefix .. ".advertised_label", rangeEntries[1].text, range.text)
+    end
     eq("config.dropdown_target_snapshot_available.normal.value",
         entries[2].value, "raidNormal")
     eq("config.dropdown_target_snapshot_available.normal.text",

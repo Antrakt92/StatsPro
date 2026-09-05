@@ -57,7 +57,7 @@ local PROFILES = {
         dungeon = "all-dungeons",
         window = "this-week",
         sampleWindow = "last-14-days",
-        difficultyLabel = "+7 to +19",
+        difficultyLabel = "+7 to +20",
     },
     mythicPlusHighKeys = {
         label = "M+ High Keys",
@@ -677,7 +677,13 @@ local function validate_snapshot(root, text, options)
         for key, value in pairs(expectedProfile) do
             if root.schemaVersion == 4 or root.schemaVersion == 5
                 or (key ~= "sampleWindow" and key ~= "difficultyLabel") then
-                expect_equal(profile[key], value, profileContext .. "." .. key)
+                -- Keep the exact previous published range readable for immutable
+                -- snapshot comparisons. Other labels and metadata remain strict.
+                local publishedCurrentRange = profileKey == "mythicPlusCurrent"
+                    and key == "difficultyLabel" and profile[key] == "+7 to +19"
+                if not publishedCurrentRange then
+                    expect_equal(profile[key], value, profileContext .. "." .. key)
+                end
             end
         end
         validate_date(profile.capturedAt, profileContext .. ".capturedAt", options)
@@ -887,6 +893,19 @@ local function run_self_test(parsedOptions)
     validate_spec_manifest()
     validate_runtime_spec_parity(options.statsProLua)
     validate_snapshot(make_valid_fixture("2026-05-16"), nil, options)
+    for _, schemaVersion in ipairs({ 4, 5 }) do
+        local currentRange = make_valid_fixture("2026-05-16")
+        currentRange.schemaVersion = schemaVersion
+        currentRange.snapshots.mythicPlusCurrent.difficultyLabel = "+7 to +20"
+        validate_snapshot(currentRange, nil, options)
+        local publishedRange = clone(currentRange)
+        publishedRange.snapshots.mythicPlusCurrent.difficultyLabel = "+7 to +19"
+        validate_snapshot(publishedRange, nil, options)
+        publishedRange.snapshots.mythicPlusCurrent.sampleWindow = "last-7-days"
+        assert_throws("published range keeps sample window validation " .. schemaVersion, function()
+            validate_snapshot(publishedRange, nil, options)
+        end, "last-14-days")
+    end
     validate_snapshot(make_valid_fixture("2026-05-16", {
         mythicPlusCurrent = true,
         raidNormal = true,
@@ -1038,11 +1057,17 @@ local function run_self_test(parsedOptions)
         validate_snapshot(badSampleWindow, nil, options)
     end, "last-14-days")
 
-    local badDifficultyLabel = clone(make_valid_fixture("2026-05-16"))
-    badDifficultyLabel.snapshots.mythicPlusCurrent.difficultyLabel = "+8 to +19"
-    assert_throws("bad difficulty label metadata", function()
-        validate_snapshot(badDifficultyLabel, nil, options)
-    end, "+7 to +19")
+    for _, schemaVersion in ipairs({ 4, 5 }) do
+        for _, label in ipairs({ "+7 to +21", "+8 to +20", "+8 to +19",
+            "+7 to +18", "+7 to +20 ", "+7-20" }) do
+            local badDifficultyLabel = clone(make_valid_fixture("2026-05-16"))
+            badDifficultyLabel.schemaVersion = schemaVersion
+            badDifficultyLabel.snapshots.mythicPlusCurrent.difficultyLabel = label
+            assert_throws("bad difficulty label metadata " .. schemaVersion .. " " .. label, function()
+                validate_snapshot(badDifficultyLabel, nil, options)
+            end, "+7 to +20")
+        end
+    end
 
     local extraRootKey = clone(make_valid_fixture("2026-05-16"))
     extraRootKey.specManifest = {}

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "totalAssertions": 40491,
+  "totalAssertions": 40755,
   "suites": [
     {
       "name": "core-panel-persistence",
@@ -14,8 +14,8 @@
     },
     {
       "name": "fonts",
-      "assertions": 4606,
-      "fingerprint": "04c3a46e"
+      "assertions": 4658,
+      "fingerprint": "6396d949"
     },
     {
       "name": "durability-repair",
@@ -24,8 +24,8 @@
     },
     {
       "name": "settings-compatibility",
-      "assertions": 22827,
-      "fingerprint": "68325e43"
+      "assertions": 22871,
+      "fingerprint": "5fa64b3f"
     },
     {
       "name": "profile-context",
@@ -34,8 +34,8 @@
     },
     {
       "name": "profile-ui",
-      "assertions": 2529,
-      "fingerprint": "4c3607ec"
+      "assertions": 2507,
+      "fingerprint": "51e45627"
     },
     {
       "name": "profile-mutations",
@@ -44,13 +44,13 @@
     },
     {
       "name": "control-design",
-      "assertions": 793,
-      "fingerprint": "2dc35cf1"
+      "assertions": 803,
+      "fingerprint": "384a1b81"
     },
     {
       "name": "presets-onboarding",
-      "assertions": 1455,
-      "fingerprint": "26f98c74"
+      "assertions": 1635,
+      "fingerprint": "3032d962"
     }
   ]
 }

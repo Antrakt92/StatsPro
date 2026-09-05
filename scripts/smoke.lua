@@ -12831,7 +12831,7 @@ do
     ok, err = pcall(function() addon:OpenConfigMenu() end)
     check("config.reopen_toggle.show", ok, err)
     eq("config.reopen_toggle.shown", env.StatsProConfigFrame:IsShown(), true)
-    eq("config.reopen_toggle.first_tab", env.StatsProConfigFrame.activeTabIndex, 1)
+    eq("config.reopen_toggle.last_tab", env.StatsProConfigFrame.activeTabIndex, 3)
 
     userInteract("config.font_picker_lazy_scaffold.open",
         env.StatsProFontDropdownButton, "OnClick")
@@ -17478,7 +17478,7 @@ do
     config:Hide()
     eq("profiles.ui.config_hide.closes_manager", manager:IsShown(), false)
     addonContext:OpenConfigMenu()
-    eq("profiles.ui.reopen.first_tab", config.activeTabIndex, 1)
+    eq("profiles.ui.reopen.last_tab", config.activeTabIndex, 3)
     eq("profiles.ui.reopen.header_visible", header:IsShown(), true)
 end
 
@@ -23611,11 +23611,11 @@ do
         presetUI.warning:GetText():find("2", 1, true) ~= nil)
     local _, _, _, _, sharedBodyY = presetUI.lowerBody:GetPoint()
     eq("appearance.presets.ui.shared_preview_body_y", sharedBodyY,
-        presetUI.warningY - 42 - 32)
+        presetUI.warningY - 42 - presetUI.choiceBody.contentHeight - 8)
     presetUI.refreshLayout(true, false)
     local _, _, _, _, unsharedBodyY = presetUI.lowerBody:GetPoint()
     eq("appearance.presets.ui.unshared_preview_body_y", unsharedBodyY,
-        presetUI.warningY - 32)
+        presetUI.warningY - presetUI.choiceBody.contentHeight - 8)
     presetAddon.appearancePresets.RefreshUI()
     local _, _, _, _, restoredSharedBodyY = presetUI.lowerBody:GetPoint()
     eq("appearance.presets.ui.shared_preview_layout_restored",
@@ -24131,7 +24131,8 @@ do
     eq("hud.presets.shared.warning_text",
         ui.warning:GetText(), "Changes affect 2 specializations.")
     local _, _, _, _, bodyY = sharedEnv.StatsProConfigFrame.tabContents[1].statsBody:GetPoint()
-    eq("hud.presets.shared.warning_reflow", bodyY, ui.warningY - 42 - 36)
+    eq("hud.presets.shared.warning_reflow", bodyY,
+        ui.warningY - 42 - ui.choiceBody.contentHeight - 8)
     ok = service.applyPreview()
     eq("hud.presets.shared.apply", ok, true)
     eq("hud.presets.shared.same_profile_reference",
@@ -24426,6 +24427,139 @@ do
     handoffAddon:OpenConfigMenu()
     eq("hud.welcome.handoff.close_cancels_preview",
         handoffTest.hudPresets.state().active, false)
+end
+
+do
+    for _, locale in ipairs({ "enUS", "ruRU" }) do
+        local env, addon, test = loadStatsPro(locale, withProfileIdentity({
+            statsProDB = { fontSize = 15 }, uiParentHeight = 300,
+        }))
+        local prefix = "config.disclosure." .. locale
+        fireEvent(prefix .. ".pew", env, "PLAYER_ENTERING_WORLD")
+        addon:OpenConfigMenu()
+        local config = env.StatsProConfigFrame
+        local context = addon.settingsUI.context
+        local before = deepCopy(env.StatsProDB)
+        for _, entry in ipairs({
+            { ui = config.tabContents[1].quickSetupView,
+                service = test.hudPresets, preset = "dps", index = 1 },
+            { ui = addon.appearancePresets.ui,
+                service = test.appearancePresets, preset = "midnight", index = 3 },
+        }) do
+            local ui, service, preset, index = entry.ui, entry.service, entry.preset, entry.index
+            local name = prefix .. ".tab" .. index
+            config.SwitchToTab(index)
+            eq(name .. ".header_height", ui.disclosure:GetHeight(), 44)
+            eq(name .. ".header_width", ui.disclosure:GetWidth(), 426)
+            eq(name .. ".collapsed", ui.choiceBody:IsShown(), false)
+            eq(name .. ".manual_controls_top", ui.bodyTop, -60)
+            check(name .. ".current_summary", #ui.status:GetText() > 0)
+            userInteract(name .. ".expand", ui.disclosure, "OnClick")
+            eq(name .. ".choices_visible", ui.choiceBody:IsShown(), true)
+            eq(name .. ".expanded_body", ui.bodyTop,
+                -60 - ui.choiceBody.contentHeight - 8)
+            userInteract(name .. ".collapse", ui.disclosure, "OnClick")
+            eq(name .. ".collapsed_again", ui.bodyTop, -60)
+            eq(name .. ".preview", service.startPreview(preset), true)
+            eq(name .. ".preview_forces_open", ui.choiceBody:IsShown(), true)
+            eq(name .. ".preview_disables_header", ui.disclosure:IsEnabled(), false)
+            eq(name .. ".preview_keeps_preference", ui.expanded, false)
+            eq(name .. ".apply_above_choices", ui.apply.points[1][5], -60)
+            check(name .. ".choices_below_actions", ui.choiceBody.points[1][5] <= -96)
+            userInteract(name .. ".disabled_tooltip", ui.disclosure, "OnEnter")
+            eq(name .. ".disabled_tooltip_text", env.GameTooltip.lines[1].left,
+                locale == "ruRU" and "Сначала примените или отмените предпросмотр."
+                    or "Apply or cancel the preview first.")
+            eq(name .. ".disabled_click", userInteract(name .. ".try_collapse",
+                ui.disclosure, "OnClick"), false)
+            eq(name .. ".session_preserved", service.state().active, true)
+            eq(name .. ".cancel", service.cancelPreview(), true)
+            eq(name .. ".cancel_collapses", ui.choiceBody:IsShown(), false)
+            eq(name .. ".cancel_enables_header", ui.disclosure:IsEnabled(), true)
+            userInteract(name .. ".expand_again", ui.disclosure, "OnClick")
+            eq(name .. ".expanded_preview", service.startPreview(preset), true)
+            eq(name .. ".expanded_cancel", service.cancelPreview(), true)
+            eq(name .. ".expanded_preference_preserved", ui.choiceBody:IsShown(), true)
+            userInteract(name .. ".final_collapse", ui.disclosure, "OnClick")
+        end
+        assertDeepEqual(prefix .. ".disclosure_and_cancel_zero_writes", env.StatsProDB, before)
+
+        -- Model synchronous native range/clamp callbacks that the basic frame mock
+        -- cannot produce from anchors. Geometry updates must preserve saved intent.
+        local scroll = context.scrollFrame
+        local nativeScroll = scroll.SetVerticalScroll
+        local nativeEvents = 0
+        local function transientNativeClamp()
+            nativeEvents = nativeEvents + 1
+            nativeScroll(scroll, 0)
+            runFrameHandlers(scroll, "OnVerticalScroll", 0)
+            runFrameHandlers(scroll, "OnScrollRangeChanged", 0, 0)
+        end
+        local childSetHeight = context.scrollChild.SetHeight
+        context.scrollChild.SetHeight = function(frame, height)
+            childSetHeight(frame, height)
+            transientNativeClamp()
+        end
+        local shellSetSize = config.SetSize
+        config.SetSize = function(frame, width, height)
+            shellSetSize(frame, width, height)
+            transientNativeClamp()
+        end
+        for _, tab in ipairs(config.tabContents) do
+            local tabSetHeight = tab.SetHeight
+            tab.SetHeight = function(frame, height)
+                tabSetHeight(frame, height)
+                transientNativeClamp()
+            end
+        end
+        config.SwitchToTab(1)
+        scroll:SetVerticalScroll(70)
+        runFrameHandlers(scroll, "OnVerticalScroll", 70)
+        config.SwitchToTab(3)
+        eq(prefix .. ".new_tab_starts_at_top", scroll:GetVerticalScroll(), 0)
+        scroll:SetVerticalScroll(90)
+        runFrameHandlers(scroll, "OnVerticalScroll", 90)
+        config.SwitchToTab(1)
+        eq(prefix .. ".return_restores_stats", scroll:GetVerticalScroll(), 70)
+        config.SwitchToTab(1)
+        eq(prefix .. ".same_tab_keeps_scroll", scroll:GetVerticalScroll(), 70)
+        config.SwitchToTab(3)
+        eq(prefix .. ".return_restores_appearance", scroll:GetVerticalScroll(), 90)
+        config:Hide()
+        addon:OpenConfigMenu()
+        eq(prefix .. ".reopen_last_tab", config.activeTabIndex, 3)
+        eq(prefix .. ".reopen_last_scroll", scroll:GetVerticalScroll(), 90)
+        local hiddenUI = config.tabContents[1].quickSetupView
+        hiddenUI.expanded = true
+        hiddenUI.refreshLayout(false, false)
+        eq(prefix .. ".hidden_reflow_keeps_active_scroll", scroll:GetVerticalScroll(), 90)
+        eq(prefix .. ".hidden_reflow_keeps_active_tab", config.activeTabIndex, 3)
+        config.SwitchToTab(1)
+        eq(prefix .. ".hidden_reflow_keeps_saved_scroll", scroll:GetVerticalScroll(), 70)
+        hiddenUI.expanded = false
+        hiddenUI.refreshLayout(false, false)
+        config.SwitchToTab(3)
+        eq(prefix .. ".hidden_reflow_return_keeps_scroll", scroll:GetVerticalScroll(), 90)
+
+        local ui = addon.appearancePresets.ui
+        userInteract(prefix .. ".native_expand", ui.disclosure, "OnClick")
+        eq(prefix .. ".reflow_preserves_scroll", scroll:GetVerticalScroll(), 90)
+        scroll:SetVerticalScroll(config.tabContents[3].contentHeight)
+        runFrameHandlers(scroll, "OnVerticalScroll")
+        userInteract(prefix .. ".native_collapse", ui.disclosure, "OnClick")
+        local geometry = test.settingsDesignSnapshot().geometry
+        local function maximum()
+            return math.max(0, config.tabContents[3].contentHeight
+                - (config:GetHeight() - geometry.scrollTop - geometry.scrollBottom))
+        end
+        eq(prefix .. ".collapse_clamps_to_viewport", scroll:GetVerticalScroll(), maximum())
+        env.UIParent:SetHeight(1080)
+        addon.settingsUI.ApplyFrameSize(addon)
+        eq(prefix .. ".resize_clamps_to_viewport", scroll:GetVerticalScroll(), maximum())
+        eq(prefix .. ".resize_retains_tab", config.activeTabIndex, 3)
+        check(prefix .. ".native_callbacks_exercised", nativeEvents > 10)
+        assertDeepEqual(prefix .. ".navigation_zero_writes", env.StatsProDB, before)
+    end
 end
 
 smokeReachability:complete("presets-onboarding")

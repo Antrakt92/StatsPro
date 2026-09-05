@@ -51,7 +51,8 @@ interrupt a later login. The choice configures the settings currently in use,
 including account-wide settings when that mode is active; specialization
 assignments themselves stay unchanged.
 
-Quick Setup remains available at the top of the **Stats** tab afterward. These
+Expand **Quick Setup** at the top of the **Stats** tab to choose another setup.
+It starts collapsed so individual stat controls are close at hand. These
 presets change stat rows, value display, durability summary, and panel layout.
 Font, colors, scale, panel positions, language, refresh rate, and profile
 assignments stay unchanged.
@@ -107,7 +108,8 @@ copy when that mode is active. The saved source, replaced setup, and other
 specialization assignments are kept. The action is unavailable when no unused
 saved setup remains.
 
-Six appearance presets are included:
+Expand **Appearance Presets** at the top of the **Appearance** tab to choose
+from six themes; the current theme remains visible while the choices are collapsed:
 
 - **Default**
 - **Classic**
@@ -121,6 +123,10 @@ including the account-wide copy when active, and does not change visible stats,
 panel routing, positions, scale, language, refresh rate, or profile assignments. When
 panels are unlocked, Settings shows temporary outlines and drag handles so their
 positions are clear; this editing chrome never becomes part of the saved HUD.
+
+During a preview, **Apply** and **Cancel preview** stay above the preset choices.
+Settings remembers your last tab and each tab's scroll position during the game
+session, so switching tabs or reopening the window keeps your place.
 
 <p align="center">
   <img src="screenshots/appearance-presets-v1.10.2.jpg" alt="StatsPro Appearance settings with six presets" width="390">

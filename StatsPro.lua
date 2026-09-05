@@ -3362,6 +3362,14 @@ do
     end
 end
 
+do
+    local key = "Apply or cancel the preview first."
+    for locale, labels in pairs(LABELS_BY_LOCALE) do
+        labels[key] = locale == "ruRU"
+            and "Сначала примените или отмените предпросмотр." or key
+    end
+end
+
 -- A disabled copy/share action needs to explain the normal first-use state: the
 -- manager only knows specializations and characters that have been seen locally.
 do
@@ -13816,15 +13824,17 @@ function addon.hudPresets.ForceCancelPreview()
     return addon.presetRuntime.ForceCancelPreview(addon.hudPresets)
 end
 
-function addon.hudPresets.BuildCardList(parent, x, y, width)
-    local ui = { buttons = {}, mutationControls = {} }
-    local status = parent:CreateFontString(nil, "OVERLAY")
-    addon.settingsDesign.ApplyTextRole(status, "body")
-    status:SetPoint("TOPLEFT", x, y)
-    status:SetSize(width, 20)
-    status:SetJustifyH("LEFT")
-    ui.status = status
-    y = y - 24
+function addon.hudPresets.BuildCardList(parent, x, y, width, ui)
+    ui = ui or { buttons = {}, mutationControls = {} }
+    if not ui.status then
+        local status = parent:CreateFontString(nil, "OVERLAY")
+        addon.settingsDesign.ApplyTextRole(status, "body")
+        status:SetPoint("TOPLEFT", x, y)
+        status:SetSize(width, 20)
+        status:SetJustifyH("LEFT")
+        ui.status = status
+        y = y - 24
+    end
 
     local intro = parent:CreateFontString(nil, "OVERLAY")
     addon.settingsDesign.ApplyTextRole(intro, "metadata")
@@ -13902,17 +13912,23 @@ function addon.hudPresets.BuildCardList(parent, x, y, width)
     ui.note = note
     y = y - 46
 
-    local warning = parent:CreateFontString(nil, "OVERLAY")
+    local warningParent = ui.ownerTab or parent
+    local warning = warningParent:CreateFontString(nil, "OVERLAY")
     warning:SetPoint("TOPLEFT", x, y)
     warning:SetSize(width, 36)
     warning:SetJustifyH("LEFT")
     warning:SetJustifyV("TOP")
     warning:SetWordWrap(true)
-    addon.settingsDesign.StyleWarning(parent, warning)
+    addon.settingsDesign.StyleWarning(warningParent, warning)
     addon.settingsDesign.SetWarningVisible(warning, false)
     ui.warning = warning
     ui.warningY = y
-    ui.compactBodyTop = y
+    if ui.choiceBody then
+        ui.choiceBody.contentHeight = math.abs(y)
+        ui.choiceBody:SetHeight(ui.choiceBody.contentHeight)
+    else
+        ui.compactBodyTop = y
+    end
     return ui
 end
 
@@ -16492,6 +16508,121 @@ function addon.settingsUI.CreateSimpleDropdownRow(parent, rows, frameName, label
     return dropdown, label
 end
 
+-- Both preset selectors share disclosure and preview placement while their
+-- services continue to own every setting mutation and rollback.
+function addon.settingsUI.CreatePresetDisclosure(parent, name, titleKey)
+    local ui = { buttons = {}, mutationControls = {}, ownerTab = parent,
+        expanded = false, compactBodyTop = -60 }
+    local header = CreateFrame("Button", name, parent)
+    header:SetPoint("TOPLEFT", 12, -8)
+    header:SetSize(426, 44)
+    local surface = addon.settingsDesign.CreateTextureSurface(header, "raised")
+    surface:SetAllPoints(header)
+    local title = header:CreateFontString(nil, "OVERLAY")
+    title:SetPoint("TOPLEFT", 12, -6)
+    title:SetSize(366, 16)
+    title:SetJustifyH("LEFT")
+    title:SetWordWrap(false)
+    title:SetMaxLines(1)
+    addon.settingsDesign.StyleListRow(header, title, "body")
+    PushLocalizedLabel(function() title:SetText(L(titleKey)) end)
+    local status = header:CreateFontString(nil, "OVERLAY")
+    addon.settingsDesign.ApplyTextRole(status, "controlMetadata")
+    status:SetPoint("TOPLEFT", 12, -24)
+    status:SetSize(366, 14)
+    status:SetJustifyH("LEFT")
+    status:SetWordWrap(false)
+    status:SetMaxLines(1)
+    local chevron = header:CreateFontString(nil, "OVERLAY")
+    addon.settingsDesign.ApplyTextRole(chevron, "button")
+    chevron:SetPoint("RIGHT", -8, 0)
+    chevron:SetSize(24, 24)
+    chevron:SetJustifyH("CENTER")
+    ui.disclosure, ui.status, ui.chevron = header, status, chevron
+    ui.choiceBody = CreateFrame("Frame", nil, parent)
+    ui.choiceBody:SetWidth(450)
+    ui.choiceBody:Hide()
+    header:SetScript("OnClick", function()
+        if ui.hasSession then return end
+        ui.expanded = not ui.expanded
+        if ui.refreshLayout then ui.refreshLayout(false, false) end
+    end)
+    return ui
+end
+
+function addon.settingsUI.LayoutPresetDisclosure(ui, lowerBody, hasSession, warningVisible)
+    addon.settingsUI.SaveActiveScroll()
+    local navigation = addon.settingsUI.context
+    local wasRestoring = navigation and navigation.restoringScroll
+    if navigation then navigation.restoringScroll = true end
+    ui.hasSession = hasSession
+    local expanded = ui.expanded or hasSession
+    ui.chevron:SetText(expanded and "−" or "+")
+    addon.settingsDesign.SetListRowSelected(ui.disclosure, expanded)
+    addon.settingsDesign.SetControlBlocked(ui.disclosure, "dependency", hasSession,
+        "message", "Apply or cancel the preview first.")
+    local y = ui.compactBodyTop
+    ui.apply:ClearAllPoints()
+    ui.apply:SetPoint("TOPRIGHT", ui.ownerTab, "TOPRIGHT", -12, y)
+    ui.cancel:ClearAllPoints()
+    ui.cancel:SetPoint("TOPRIGHT", ui.ownerTab, "TOPRIGHT", -140, y)
+    if hasSession then y = y - 36 end
+    ui.warningY = y
+    ui.warning:ClearAllPoints()
+    ui.warning:SetPoint("TOPLEFT", ui.ownerTab, "TOPLEFT", 12, y)
+    if hasSession and warningVisible then y = y - 42 end
+    ui.choiceBody:ClearAllPoints()
+    ui.choiceBody:SetPoint("TOPLEFT", ui.ownerTab, "TOPLEFT", 0, y)
+    if expanded then
+        ui.choiceBody:Show()
+        y = y - ui.choiceBody.contentHeight - 8
+    else
+        ui.choiceBody:Hide()
+    end
+    ui.bodyTop = y
+    lowerBody:ClearAllPoints()
+    lowerBody:SetPoint("TOPLEFT", ui.ownerTab, "TOPLEFT", 0, y)
+    lowerBody:SetPoint("TOPRIGHT", ui.ownerTab, "TOPRIGHT", 0, y)
+    if lowerBody.contentHeight then
+        ui.ownerTab.contentHeight = math.abs(y) + lowerBody.contentHeight
+        ui.ownerTab:SetHeight(ui.ownerTab.contentHeight)
+    end
+    if navigation then navigation.restoringScroll = wasRestoring end
+    addon.settingsUI.RefreshActiveScroll()
+end
+
+function addon.settingsUI.SaveActiveScroll()
+    local context = addon.settingsUI.context
+    if not context or context.restoringScroll then return end
+    local value = context.scrollFrame:GetVerticalScroll()
+    if SAFE_NUM.IsCleanFiniteNumber(value) and value >= 0 then
+        context.scrollOffsets[context.frame.activeTabIndex or 1] = value
+    end
+end
+
+function addon.settingsUI.RefreshActiveScroll()
+    local context = addon.settingsUI.context
+    if not context or context.restoringScroll then return end
+    local index = context.frame.activeTabIndex
+    local tab = index and context.tabContents[index]
+    local height = context.frame:GetHeight()
+    if not tab or not SAFE_NUM.IsCleanFiniteNumber(tab.contentHeight)
+        or not SAFE_NUM.IsCleanFiniteNumber(height) then return end
+    local geometry = addon.settingsDesign.tokens.geometry
+    -- The viewport is anchored to this shell; derive its settled height without
+    -- relying on a ScrollFrame range that may lag a content/size change.
+    local viewportHeight = height - geometry.scrollTop - geometry.scrollBottom
+    if viewportHeight <= 0 then return end
+    local target = context.scrollOffsets[index] or 0
+    local maximum = math.max(0, tab.contentHeight - viewportHeight)
+    target = math.max(0, math.min(target, maximum))
+    context.restoringScroll = true
+    context.scrollChild:SetHeight(tab.contentHeight)
+    context.scrollFrame:SetVerticalScroll(target)
+    context.restoringScroll = false
+    context.scrollOffsets[index] = target
+end
+
 function addon.settingsUI.ApplyFrameSize(self)
     local frame = self.settingsUI.frame
     if not frame then return false end
@@ -16504,7 +16635,13 @@ function addon.settingsUI.ApplyFrameSize(self)
     if frame:GetWidth() == frameWidth and frame:GetHeight() == maxHeight then
         return true
     end
+    self.settingsUI.SaveActiveScroll()
+    local navigation = self.settingsUI.context
+    local wasRestoring = navigation and navigation.restoringScroll
+    if navigation then navigation.restoringScroll = true end
     frame:SetSize(frameWidth, maxHeight)
+    if navigation then navigation.restoringScroll = wasRestoring end
+    self.settingsUI.RefreshActiveScroll()
     return true
 end
 
@@ -16548,6 +16685,7 @@ function addon.settingsUI.BuildShell(self)
     -- orphan dropdown list above (and stale language-preview state until user clicks elsewhere
     -- to trigger DropDownList1:OnHide and restore the committed locale).
     configFrame:HookScript("OnHide", function()
+        self.settingsUI.SaveActiveScroll()
         self.profileUI.CancelSpecialFrameRestore("StatsProConfigFrame")
         self.profileUI.RemoveSpecialFrame("StatsProConfigFrame")
         self.panelEditRuntime.SetRequested(false)
@@ -16679,6 +16817,11 @@ function addon.settingsUI.BuildShell(self)
     local tabButtons = {}
 
     local function SwitchToTab(idx)
+        if not tabContents[idx] then return end
+        self.settingsUI.SaveActiveScroll()
+        local navigation = self.settingsUI.context
+        local wasRestoring = navigation and navigation.restoringScroll
+        if navigation then navigation.restoringScroll = true end
         configFrame.activeTabIndex = idx
         for i, content in ipairs(tabContents) do
             if i == idx then
@@ -16692,7 +16835,8 @@ function addon.settingsUI.BuildShell(self)
                 self.settingsDesign.SetTabSelected(tabButtons[i], false)
             end
         end
-        scrollFrame:SetVerticalScroll(0)
+        if navigation then navigation.restoringScroll = wasRestoring end
+        self.settingsUI.RefreshActiveScroll()
     end
     configFrame.SwitchToTab = SwitchToTab
 
@@ -16732,6 +16876,9 @@ function addon.settingsUI.BuildShell(self)
 
     local context = {
         frame = configFrame,
+        scrollFrame = scrollFrame,
+        scrollOffsets = {},
+        tabContents = tabContents,
         scrollChild = scrollChild,
         scrollChildWidth = scrollChildWidth,
         displayTab = displayTab,
@@ -16742,6 +16889,9 @@ function addon.settingsUI.BuildShell(self)
         displayDropdownRows = {},
     }
     self.settingsUI.context = context
+    scrollFrame:HookScript("OnVerticalScroll", self.settingsUI.SaveActiveScroll)
+    scrollFrame:HookScript("OnScrollRangeChanged", self.settingsUI.RefreshActiveScroll)
+    scrollFrame:HookScript("OnSizeChanged", self.settingsUI.RefreshActiveScroll)
     return context
 end
 
@@ -17390,27 +17540,21 @@ end
 function addon.settingsUI.BuildAppearanceTab(self, context)
     --[[ ===== APPEARANCE TAB (Lua var: displayTab) ===== ]]
     local displayTab = context.displayTab
-    local displayDropdownRows = context.displayDropdownRows
-    local scrollChild = context.scrollChild
-    local scrollChildWidth = context.scrollChildWidth
     local ownerFrame = context.frame
-    local cd = NewCursor(displayTab, 12, -8)
+    local displayDropdownRows = context.displayDropdownRows
+    local scrollChildWidth = context.scrollChildWidth
+    local cd
 
-    CursorSection(cd, "Appearance Presets")
     do
-        local presetUI = { buttons = {} }
-        local status = displayTab:CreateFontString(nil, "OVERLAY")
-        self.settingsDesign.ApplyTextRole(status, "body")
-        status:SetPoint("TOPLEFT", cd.padX, cd.y)
-        status:SetSize(426, 20)
-        status:SetJustifyH("LEFT")
-        presetUI.status = status
-        cd.y = cd.y - 26
+        local presetUI = self.settingsUI.CreatePresetDisclosure(displayTab,
+            "StatsProAppearancePresetsDisclosure", "Appearance Presets")
+        local choiceBody = presetUI.choiceBody
+        cd = NewCursor(choiceBody, 12, 0)
 
         for index, presetID in ipairs(self.appearancePresets.order) do
             local definition = self.appearancePresets.definitions[presetID]
             local button = CreateFrame("Button", "StatsProAppearancePreset"
-                .. presetID:gsub("[^%w]", ""), displayTab)
+                .. presetID:gsub("[^%w]", ""), choiceBody)
             local column = (index - 1) % 2
             local row = math.floor((index - 1) / 2)
             button:SetPoint("TOPLEFT", cd.padX + column * 217, cd.y - row * 40)
@@ -17454,7 +17598,7 @@ function addon.settingsUI.BuildAppearanceTab(self, context)
         end
         cd.y = cd.y - 120
 
-        local note = displayTab:CreateFontString(nil, "OVERLAY")
+        local note = choiceBody:CreateFontString(nil, "OVERLAY")
         self.settingsDesign.ApplyTextRole(note, "metadata")
         note:SetPoint("TOPLEFT", cd.padX, cd.y)
         note:SetSize(426, 52)
@@ -17466,7 +17610,8 @@ function addon.settingsUI.BuildAppearanceTab(self, context)
         end)
         presetUI.note = note
         cd.y = cd.y - 58
-        presetUI.compactBodyTop = cd.y
+        choiceBody.contentHeight = math.abs(cd.y)
+        choiceBody:SetHeight(choiceBody.contentHeight)
 
         local warning = displayTab:CreateFontString(nil, "OVERLAY")
         warning:SetPoint("TOPLEFT", cd.padX, cd.y)
@@ -17790,43 +17935,15 @@ function addon.settingsUI.BuildAppearanceTab(self, context)
     -- The movable body owns these surfaces visually, but the tab remains their logical
     -- settings section owner.
     for _, section in ipairs(appearanceBody.statsProSections or {}) do
+        displayTab.statsProSections = displayTab.statsProSections or {}
         tinsert(displayTab.statsProSections, section)
     end
     do
         local presetUI = self.appearancePresets.ui
-        local cancel = presetUI and presetUI.cancel
-        local apply = presetUI and presetUI.apply
-        local warningY = presetUI and presetUI.warningY
-        local compactBodyTop = presetUI and presetUI.compactBodyTop
-        if not presetUI or not cancel or not apply
-            or type(warningY) ~= "number" or type(compactBodyTop) ~= "number" then
-            error("StatsPro appearance preset layout is incomplete")
-        end
+        if not presetUI then error("StatsPro appearance preset layout is incomplete") end
         presetUI.lowerBody = appearanceBody
         presetUI.refreshLayout = function(hasSession, warningVisible)
-            local actionY = warningY
-            if hasSession and warningVisible then
-                actionY = actionY - 42
-            end
-
-            cancel:ClearAllPoints()
-            cancel:SetPoint("TOPRIGHT", displayTab, "TOPRIGHT", -140, actionY)
-            apply:ClearAllPoints()
-            apply:SetPoint("TOPRIGHT", displayTab, "TOPRIGHT", -12, actionY)
-
-            local bodyTop = compactBodyTop
-            if hasSession then
-                bodyTop = actionY - 32
-            end
-            appearanceBody:ClearAllPoints()
-            appearanceBody:SetPoint("TOPLEFT", displayTab, "TOPLEFT", 0, bodyTop)
-            appearanceBody:SetPoint("TOPRIGHT", displayTab, "TOPRIGHT", 0, bodyTop)
-
-            displayTab.contentHeight = math.abs(bodyTop) + appearanceBody.contentHeight
-            displayTab:SetHeight(displayTab.contentHeight)
-            if ownerFrame.activeTabIndex == 3 then
-                scrollChild:SetHeight(displayTab.contentHeight)
-            end
+            self.settingsUI.LayoutPresetDisclosure(presetUI, appearanceBody, hasSession, warningVisible)
         end
         self.appearancePresets.RefreshUI()
     end
@@ -17933,12 +18050,11 @@ end
 function addon.settingsUI.BuildStatsTab(self, context)
     --[[ ===== STATS TAB ===== ]]
     local statsTab = context.statsTab
-    local scrollChild = context.scrollChild
-    local ownerFrame = context.frame
     local cs = NewCursor(statsTab, 12, -8)
 
-    CursorSection(cs, "Quick Setup")
-    local setupUI = self.hudPresets.BuildCardList(statsTab, cs.padX, cs.y, 426)
+    local setupUI = self.settingsUI.CreatePresetDisclosure(statsTab,
+        "StatsProQuickSetupDisclosure", "Quick Setup")
+    self.hudPresets.BuildCardList(setupUI.choiceBody, cs.padX, 0, 426, setupUI)
     local statsBody = CreateFrame("Frame", nil, statsTab)
     statsBody:SetPoint("TOPLEFT", statsTab, "TOPLEFT", 0, setupUI.compactBodyTop)
     statsBody:SetPoint("TOPRIGHT", statsTab, "TOPRIGHT", 0, setupUI.compactBodyTop)
@@ -17959,26 +18075,9 @@ function addon.settingsUI.BuildStatsTab(self, context)
         if not ok then PrintMsg(self.profileUI.OperationErrorText(reason)) end
     end)
     setupUI.apply = setupApply
+    setupUI.lowerBody = statsBody
     setupUI.refreshLayout = function(hasSession, warningVisible)
-        local actionY = setupUI.warningY
-        if hasSession and warningVisible then actionY = actionY - 42 end
-        setupCancel:ClearAllPoints()
-        setupCancel:SetPoint("TOPRIGHT", statsTab, "TOPRIGHT", -140, actionY)
-        setupApply:ClearAllPoints()
-        setupApply:SetPoint("TOPRIGHT", statsTab, "TOPRIGHT", -12, actionY)
-        local bodyTop = setupUI.compactBodyTop
-        if hasSession then bodyTop = actionY - 36 end
-        setupUI.bodyTop = bodyTop
-        statsBody:ClearAllPoints()
-        statsBody:SetPoint("TOPLEFT", statsTab, "TOPLEFT", 0, bodyTop)
-        statsBody:SetPoint("TOPRIGHT", statsTab, "TOPRIGHT", 0, bodyTop)
-        if statsBody.contentHeight then
-            statsTab.contentHeight = math.abs(bodyTop) + statsBody.contentHeight
-            statsTab:SetHeight(statsTab.contentHeight)
-            if ownerFrame.activeTabIndex == 1 then
-                scrollChild:SetHeight(statsTab.contentHeight)
-            end
-        end
+        self.settingsUI.LayoutPresetDisclosure(setupUI, statsBody, hasSession, warningVisible)
     end
     if self.__statsproSmoke == true then
         statsTab.quickSetupView = setupUI
@@ -18060,6 +18159,7 @@ function addon.settingsUI.BuildStatsTab(self, context)
     statsBody.contentHeight = CursorUsed(cs)
     statsBody:SetHeight(statsBody.contentHeight)
     for _, section in ipairs(statsBody.statsProSections or {}) do
+        statsTab.statsProSections = statsTab.statsProSections or {}
         tinsert(statsTab.statsProSections, section)
     end
     statsTab.contentHeight = math.abs(setupUI.bodyTop or setupUI.compactBodyTop)
@@ -18095,8 +18195,7 @@ function addon:OpenConfigMenu()
             settingsFrame:Hide()
         else
             settingsFrame:Show()
-            -- Always reopen on the first tab (Stats) — predictable UX, matches initial open.
-            if settingsFrame.SwitchToTab then settingsFrame.SwitchToTab(1) end
+            self.settingsUI.RefreshActiveScroll()
             self.profileUI.RefreshSafe()
         end
         return

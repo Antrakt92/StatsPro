@@ -17291,8 +17291,14 @@ function addon.settingsUI.fontPicker.BuildFrame(self)
     end)
 end
 
-function addon.settingsUI.fontPicker.Populate(self)
+function addon.settingsUI.fontPicker.Populate(self, centerSelection)
     local picker = self.settingsUI.fontPicker
+    -- Native range updates may clamp while rows are rebuilt. Preserve the user's
+    -- browsing position before changing content height; only opening recenters.
+    local targetScroll = picker.scroll:GetVerticalScroll()
+    if not SAFE_NUM.IsCleanFiniteNumber(targetScroll) or targetScroll < 0 then
+        targetScroll = 0
+    end
     local fonts = picker.BuildFontsList(self, true)
     local currentPath = self.fontRuntime.preferredPath()
     local rows = math.ceil(#fonts / picker.columns)
@@ -17377,15 +17383,14 @@ function addon.settingsUI.fontPicker.Populate(self)
         picker.CancelPreview(self)
     end
 
-    if currentRow then
-        local centerOffset = math.floor(picker.visibleRows / 2)
-        local targetScroll = math.max(0, (currentRow - centerOffset) * picker.rowHeight)
-        local maxScroll = math.max(0,
-            rows * picker.rowHeight - picker.visibleRows * picker.rowHeight)
-        picker.scroll:SetVerticalScroll(math.min(targetScroll, maxScroll))
-    else
-        picker.scroll:SetVerticalScroll(0)
+    if centerSelection then
+        targetScroll = currentRow
+            and math.max(0, (currentRow - math.floor(picker.visibleRows / 2)) * picker.rowHeight)
+            or 0
     end
+    local maxScroll = math.max(0,
+        rows * picker.rowHeight - picker.visibleRows * picker.rowHeight)
+    picker.scroll:SetVerticalScroll(math.min(targetScroll, maxScroll))
 end
 
 function addon.settingsUI.fontPicker.SchedulePendingRetry(self, generation, attempt)
@@ -17398,7 +17403,7 @@ function addon.settingsUI.fontPicker.SchedulePendingRetry(self, generation, atte
             or not picker.frame or not picker.frame:IsShown() then
             return
         end
-        picker.Populate(self)
+        picker.Populate(self, false)
         picker.SchedulePendingRetry(self, generation, attempt + 1)
     end)
 end
@@ -17412,7 +17417,7 @@ function addon.settingsUI.fontPicker.Show(self)
     picker.previewedPath = nil
     picker.hoverGeneration = picker.hoverGeneration + 1
     picker.retryGeneration = picker.retryGeneration + 1
-    picker.Populate(self)
+    picker.Populate(self, true)
 
     local context = self.settingsUI.context
     local config = context and context.frame
@@ -17467,7 +17472,7 @@ function addon.settingsUI.fontPicker.RegisterLSMCallback(self)
             picker.RefreshCaption(self)
             if not picker.frame or not picker.frame:IsShown() then return end
             picker.retryGeneration = picker.retryGeneration + 1
-            picker.Populate(self)
+            picker.Populate(self, false)
             picker.SchedulePendingRetry(self, picker.retryGeneration, 1)
         end)
     end)

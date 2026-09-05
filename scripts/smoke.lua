@@ -10929,6 +10929,104 @@ do
         futureEnv.StatsProFontDropdown.dropdownText, "Friz Quadrata TT")
 end
 
+do
+    local function NewBrowsingFixture(prefix, pending)
+        local fonts = {}
+        for index = 1, 90 do
+            fonts[index] = { name = string.format("Font %03d", index),
+                path = string.format("Interface\\AddOns\\SharedMedia\\Font%03d.ttf", index) }
+        end
+        local pendingPath = "Interface\\AddOns\\SharedMedia\\Pending.ttf"
+        if pending then fonts[#fonts + 1] = { name = "ZZZ Pending", path = pendingPath } end
+        local secretOffset = setmetatable({}, {
+            __lt = function() error("secret scroll compared") end,
+            __le = function() error("secret scroll compared") end,
+            __tostring = function() error("secret scroll inspected") end,
+        })
+        local env, addon = loadStatsPro("enUS", withProfileIdentity({
+            lsmFonts = fonts, statsProDB = { font = fonts[61].path },
+            issecretvalue = function(value) return rawequal(value, secretOffset) end,
+            setFontResult = function(_, path) return path ~= pendingPath end,
+        }))
+        fireEvent(prefix .. ".pew", env, "PLAYER_ENTERING_WORLD")
+        flushTimers(prefix .. ".bootstrap", env, 0)
+        addon:OpenConfigMenu()
+        env.StatsProConfigFrame.SwitchToTab(3)
+        userInteract(prefix .. ".open", env.StatsProFontDropdownButton, "OnClick")
+        local picker = addon.settingsUI.fontPicker
+        eq(prefix .. ".initial_centers_selection", picker.scroll:GetVerticalScroll(),
+            13 * picker.rowHeight)
+        return { env = env, addon = addon, picker = picker, fonts = fonts,
+            secretOffset = secretOffset, saved = deepCopy(env.StatsProDB) }
+    end
+
+    local fixture = NewBrowsingFixture("fonts.browsing", false)
+    local picker = fixture.picker
+    picker.scroll:SetVerticalScroll(200)
+    fixture.env.__registerLSMFont("ZZZ Late", "Interface\\AddOns\\SharedMedia\\Late.ttf")
+    flushTimers("fonts.browsing.registration", fixture.env, 0, 1)
+    eq("fonts.browsing.registration_preserves_offset", picker.scroll:GetVerticalScroll(), 200)
+    fixture.env.__registerLSMFont("AAA Late", "Interface\\AddOns\\SharedMedia\\First.ttf")
+    flushTimers("fonts.browsing.reorder", fixture.env, 0, 1)
+    eq("fonts.browsing.reorder_preserves_pixel_offset", picker.scroll:GetVerticalScroll(), 200)
+
+    -- The native ScrollFrame may clamp synchronously while content height changes.
+    -- Snapshot browsing position before changing that height, not afterward.
+    local nativeSetHeight = picker.content.SetHeight
+    picker.content.SetHeight = function(frame, height)
+        nativeSetHeight(frame, height)
+        picker.scroll:SetVerticalScroll(0)
+    end
+    picker.Populate(fixture.addon, false)
+    eq("fonts.browsing.native_clamp_preserves_snapshot", picker.scroll:GetVerticalScroll(), 200)
+    local nativeGetScroll = picker.scroll.GetVerticalScroll
+    for _, value in ipairs({
+        { name = "missing" }, { name = "negative", value = -1 },
+        { name = "infinity", value = math.huge }, { name = "nan", value = 0 / 0 },
+        { name = "text", value = "200" }, { name = "secret", value = fixture.secretOffset },
+    }) do
+        picker.scroll.GetVerticalScroll = function() return value.value end
+        picker.Populate(fixture.addon, false)
+        picker.scroll.GetVerticalScroll = nativeGetScroll
+        eq("fonts.browsing.invalid_offset." .. value.name, picker.scroll:GetVerticalScroll(), 0)
+    end
+    local fullCatalog = picker.BuildFontsList
+    local catalogSize = 45
+    picker.BuildFontsList = function() local fonts = {}
+        for index = 1, catalogSize do fonts[index] = fixture.fonts[index] end
+        return fonts
+    end
+    picker.scroll:SetVerticalScroll(200)
+    picker.Populate(fixture.addon, false)
+    eq("fonts.browsing.shrink_clamps_end", picker.scroll:GetVerticalScroll(), picker.rowHeight)
+    catalogSize = 0
+    picker.Populate(fixture.addon, false)
+    eq("fonts.browsing.empty_clamps_zero", picker.scroll:GetVerticalScroll(), 0)
+    picker.BuildFontsList = fullCatalog
+    assertDeepEqual("fonts.browsing.zero_saved_writes", fixture.env.StatsProDB, fixture.saved)
+
+    local pending = NewBrowsingFixture("fonts.browsing_pending", true)
+    picker = pending.picker
+    picker.scroll:SetVerticalScroll(200)
+    eq("fonts.browsing_pending.first_delay", pending.env.__timers[1].delay, 0.2)
+    flushTimers("fonts.browsing_pending.no_change_retry", pending.env, 0.2, 1)
+    eq("fonts.browsing_pending.retry_preserves_offset", picker.scroll:GetVerticalScroll(), 200)
+    picker.Hide(pending.addon)
+    flushTimers("fonts.browsing_pending.hidden_retry", pending.env, 1)
+    eq("fonts.browsing_pending.hidden_stays_closed", picker.frame:IsShown(), false)
+    eq("fonts.browsing_pending.hidden_offset_unchanged", picker.scroll:GetVerticalScroll(), 200)
+    picker.Show(pending.addon)
+    eq("fonts.browsing_pending.reopen_centers_selection", picker.scroll:GetVerticalScroll(),
+        13 * picker.rowHeight)
+    local staleRetry = pending.env.__timers[1].fn
+    picker.Hide(pending.addon)
+    picker.Show(pending.addon)
+    picker.scroll:SetVerticalScroll(150)
+    staleRetry()
+    eq("fonts.browsing_pending.stale_reopen_retry_noop", picker.scroll:GetVerticalScroll(), 150)
+    assertDeepEqual("fonts.browsing_pending.zero_saved_writes", pending.env.StatsProDB, pending.saved)
+end
+
 smokeReachability:complete("fonts")
 
 do

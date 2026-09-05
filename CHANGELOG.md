@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.16.0 - 05-Sep-2026 — Settings and profile recovery
+
+### Added
+
+- Recover saved setups replaced by imports from **Profiles & sharing... → Advanced... → Recover saved settings...**.
+
+### Improved
+
+- Preset sections start collapsed, and Settings remembers your tab and scroll position.
+- Font browsing keeps its position as new fonts become available.
+
+### Fixed
+
+- Imported profiles preserve their font choice, and older profiles with long names export correctly.
+- Canceling color previews restores original colors; sliders stay synchronized after preset previews.
+- Repair costs recover reliably after equipment changes, long repair labels fit correctly, and coin icons resize immediately with the font.
+- Interrupted panel drags stop cleanly without changing another profile's saved position.
+- Versatility ratings continue updating during restricted combat states.
+- WenQuanYi Zen Hei correctly supports Korean and Cyrillic; compatible fonts loaded later restore language coverage automatically.
+
+### Updated
+
+- Archon M+ and raid targets were refreshed on 5 September across all 40 specializations. The current M+ bracket now displays **+7 to +20**.
+
 ## 1.15.4 - 04-Sep-2026 — Archon target refresh
 
 ### Updated

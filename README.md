@@ -64,6 +64,8 @@ rating and percentage columns stay aligned, and Split mode lets you move selecte
 blocks to a separate panel. Fresh and reset panels start with a transparent
 background; the Appearance tab can add a darker backing when you want more contrast.
 
+The Settings screenshots show an earlier version of the interface.
+
 <p align="center">
   <img src="screenshots/settings-overview-v1.10.2.jpg" alt="StatsPro detailed Stats controls below Quick Setup" width="390">
   <img src="screenshots/layout-settings-v1.10.2.jpg" alt="StatsPro Layout settings with display mode and panel routing controls" width="390">
@@ -91,7 +93,7 @@ profile name, format version, and included sections before it can write. You can
 leave sections unchecked; those settings are inherited from the settings currently
 in use. Normally, the imported sections are saved as a new independent profile for
 the selected specialization. While account-wide settings are active, they become a
-new account-wide copy instead. Existing profiles, specialization assignments,
+new account-wide copy instead. Existing profiles, other specialization assignments,
 account language, and refresh rate are not overwritten. A custom font must also be
 installed on the receiving client for the exact typeface to render; StatsPro keeps
 its normal safe fallback.
@@ -228,7 +230,7 @@ both addons are loaded for the first login. If StatsPro has already started:
 
 Normally, the import assigns the new profile only to the current character and
 specialization. While account-wide settings are active, it creates and activates a
-new account-wide copy instead. Existing StatsPro profiles, specialization
+new account-wide copy instead. Existing StatsPro profiles, other specialization
 assignments, account settings, and the original `SwiftStatsDB` remain unchanged.
 
 ## Compatibility

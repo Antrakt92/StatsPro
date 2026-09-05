@@ -1841,24 +1841,32 @@ function Get-GitHubRemoteTagCommitSha {
     param(
         [string]$Repository,
         [string]$ExpectedTag,
-        [datetime]$Deadline
+        [datetime]$Deadline,
+        [switch]$RequireLightweight,
+        [scriptblock]$ReadObject = $null
     )
 
-    $reference = ConvertFrom-JsonCompat ((Invoke-Gh -Deadline $Deadline -Description "GitHub tag reference lookup" -Arguments @(
-        "api",
-        "-H", "Accept: application/vnd.github+json",
-        "-H", "X-GitHub-Api-Version: 2026-03-10",
-        "repos/$Repository/git/ref/tags/$ExpectedTag"
-    )) -join "`n")
+    if ($null -eq $ReadObject) {
+        $ReadObject = {
+            param([string]$ApiPath, [datetime]$RequestDeadline)
+            ConvertFrom-JsonCompat ((Invoke-Gh -Deadline $RequestDeadline -Description "GitHub tag object lookup" -Arguments @(
+                "api",
+                "-H", "Accept: application/vnd.github+json",
+                "-H", "X-GitHub-Api-Version: 2026-03-10",
+                $ApiPath
+            )) -join "`n")
+        }
+    }
+    $reference = & $ReadObject "repos/$Repository/git/ref/tags/$ExpectedTag" $Deadline
     $objectType = [string]$reference.object.type
     $objectSha = [string]$reference.object.sha
+    # Current publication requires digest equality with the event commit. Keep
+    # historical peeling available, but never reach a writer with an annotated tag.
+    if ($RequireLightweight -and $objectType -cne "commit") {
+        throw "Release tag $ExpectedTag must be a lightweight tag pointing directly to a commit; found '$objectType'."
+    }
     for ($depth = 0; $depth -lt 5 -and $objectType -eq "tag"; $depth++) {
-        $tagObject = ConvertFrom-JsonCompat ((Invoke-Gh -Deadline $Deadline -Description "GitHub annotated tag lookup" -Arguments @(
-            "api",
-            "-H", "Accept: application/vnd.github+json",
-            "-H", "X-GitHub-Api-Version: 2026-03-10",
-            "repos/$Repository/git/tags/$objectSha"
-        )) -join "`n")
+        $tagObject = & $ReadObject "repos/$Repository/git/tags/$objectSha" $Deadline
         $objectType = [string]$tagObject.object.type
         $objectSha = [string]$tagObject.object.sha
     }
@@ -1875,17 +1883,18 @@ function Assert-RemoteTagCommit {
         [string]$ExpectedTag,
         [string]$ExpectedCommitSha,
         [datetime]$Deadline,
-        [scriptblock]$ResolveTagCommit = $null
+        [scriptblock]$ResolveTagCommit = $null,
+        [scriptblock]$ReadTagObject = $null
     )
 
     Assert-CommitSha $ExpectedCommitSha
     if ($null -eq $ResolveTagCommit) {
         $ResolveTagCommit = {
-            param([string]$RepoName, [string]$TagName, [datetime]$RequestDeadline)
-            Get-GitHubRemoteTagCommitSha -Repository $RepoName -ExpectedTag $TagName -Deadline $RequestDeadline
+            param([string]$RepoName, [string]$TagName, [datetime]$RequestDeadline, [scriptblock]$Lookup)
+            Get-GitHubRemoteTagCommitSha -Repository $RepoName -ExpectedTag $TagName -Deadline $RequestDeadline -RequireLightweight -ReadObject $Lookup
         }
     }
-    $actual = [string](& $ResolveTagCommit $Repository $ExpectedTag $Deadline)
+    $actual = [string](& $ResolveTagCommit $Repository $ExpectedTag $Deadline $ReadTagObject)
     if ((Get-DeadlineRemainingMilliseconds -Deadline $Deadline) -lt 1) {
         throw "Remote tag verification for $ExpectedTag completed after its absolute deadline."
     }
@@ -4000,6 +4009,57 @@ function Invoke-SelfTest {
             return "fedcba9876543210fedcba9876543210fedcba98"
         }
     } "expected event commit"
+
+    $tagObjectReads = [System.Collections.Generic.List[string]]::new()
+    Assert-RemoteTagCommit -Repository "owner/repo" -ExpectedTag $tag -ExpectedCommitSha $commit -Deadline $selfTestDeadline -ReadTagObject {
+        param([string]$ApiPath, [datetime]$RequestDeadline)
+        $tagObjectReads.Add($ApiPath) | Out-Null
+        if ($RequestDeadline -ne $selfTestDeadline) { throw "Tag lookup lost the release deadline." }
+        return [pscustomobject]@{ object = [pscustomobject]@{ type = "commit"; sha = $commit } }
+    }
+    if ($tagObjectReads.Count -ne 1 -or $tagObjectReads[0] -cne "repos/owner/repo/git/ref/tags/$tag") {
+        throw "Lightweight release verification must resolve the exact remote tag reference."
+    }
+    foreach ($objectType in @("tag", "tree", "blob", "")) {
+        $tagObjectReads.Clear()
+        $publicationReached = [System.Collections.Generic.List[string]]::new()
+        Assert-ThrowsMatch "non-commit current tag rejected before publication '$objectType'" {
+            Assert-RemoteTagCommit -Repository "owner/repo" -ExpectedTag $tag -ExpectedCommitSha $commit -Deadline $selfTestDeadline -ReadTagObject {
+                param([string]$ApiPath, [datetime]$RequestDeadline)
+                $tagObjectReads.Add($ApiPath) | Out-Null
+                if ($RequestDeadline -ne $selfTestDeadline) { throw "Tag lookup lost the release deadline." }
+                return [pscustomobject]@{ object = [pscustomobject]@{ type = $objectType; sha = $commit } }
+            }
+            $publicationReached.Add("write") | Out-Null
+        } "lightweight"
+        if ($publicationReached.Count -ne 0 -or $tagObjectReads.Count -ne 1) {
+            throw "An unsupported current tag must fail before tag peeling or publication."
+        }
+    }
+    $tagObjectReads.Clear()
+    $historicalCommit = Get-GitHubRemoteTagCommitSha -Repository "owner/repo" -ExpectedTag $tag -Deadline $selfTestDeadline -ReadObject {
+        param([string]$ApiPath, [datetime]$RequestDeadline)
+        $tagObjectReads.Add($ApiPath) | Out-Null
+        if ($tagObjectReads.Count -eq 1) {
+            return [pscustomobject]@{ object = [pscustomobject]@{ type = "tag"; sha = ("1" * 40) } }
+        }
+        if ($ApiPath -cne ("repos/owner/repo/git/tags/" + ("1" * 40))) {
+            throw "Historical tag peeling must read the referenced immutable tag object."
+        }
+        return [pscustomobject]@{ object = [pscustomobject]@{ type = "commit"; sha = $commit } }
+    }
+    if ($historicalCommit -cne $commit -or $tagObjectReads.Count -ne 2) {
+        throw "Historical annotated tags must remain resolvable to their commit."
+    }
+    $tagObjectReads.Clear()
+    Assert-ThrowsMatch "historical tag peeling remains bounded" {
+        [void](Get-GitHubRemoteTagCommitSha -Repository "owner/repo" -ExpectedTag $tag -Deadline $selfTestDeadline -ReadObject {
+            param([string]$ApiPath, [datetime]$RequestDeadline)
+            $tagObjectReads.Add($ApiPath) | Out-Null
+            return [pscustomobject]@{ object = [pscustomobject]@{ type = "tag"; sha = ("1" * 40) } }
+        })
+    } "did not peel to a commit"
+    if ($tagObjectReads.Count -ne 6) { throw "Historical tag peeling exceeded its five-object bound." }
 
     $createArguments = Get-CreateDraftGhArguments -Repository "owner/repo" -ExpectedTag $tag -NotesPath "notes.md"
     if ($createArguments -notcontains "--draft" -or $createArguments -notcontains "--verify-tag" -or $createArguments -contains "--target") {

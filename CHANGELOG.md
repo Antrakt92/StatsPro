@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.16.1 - 05-Sep-2026 — Verified release recovery
+
+### Fixed
+
+- Release preparation now rejects unsupported tag types before uploading files, preventing a verification failure after publication.
+
+### Included
+
+- All 1.16.0 improvements: saved-settings recovery, more convenient Settings navigation, font and profile fixes, reliable repair rows, and live combat stat updates.
+- The complete 5 September Archon refresh for all 40 specializations, including the current **+7 to +20** M+ bracket.
+
 ## 1.16.0 - 05-Sep-2026 — Settings and profile recovery
 
 ### Added

@@ -65,6 +65,13 @@ function Assert-ReleaseTagAtMainHead {
     )
 
     Fetch-OriginMain -RemoteName $RemoteName
+    $tagObject = Invoke-Git -Arguments @("cat-file", "-t", "refs/tags/$TagName")
+    $tagObjectType = ($tagObject.Output | Select-Object -First 1).Trim()
+    # Release attestations bind the direct tag object digest to the event commit.
+    # Reject annotated tags before packaging or publication rather than after upload.
+    if ($tagObjectType -cne "commit") {
+        throw "Release tag $TagName must be a lightweight tag pointing directly to a commit; found '$tagObjectType'."
+    }
     $tagCommit = Resolve-TagCommit -TagName $TagName
     $mainHead = Resolve-MainHead -RefName $MainRefName
 
@@ -129,7 +136,15 @@ function Invoke-SelfTest {
             Assert-ReleaseTagAtMainHead -TagName "v1.0.0" -RemoteName "origin" -MainRefName "origin/main" -PermitAncestor:$false
 
             [void](Invoke-Git -Arguments @("tag", "-a", "v1.0.1", "-m", "v1.0.1"))
-            Assert-ReleaseTagAtMainHead -TagName "v1.0.1" -RemoteName "origin" -MainRefName "origin/main" -PermitAncestor:$false
+            Assert-ThrowsMatch "annotated current release tag rejected" {
+                Assert-ReleaseTagAtMainHead -TagName "v1.0.1" -RemoteName "origin" -MainRefName "origin/main" -PermitAncestor:$false
+            } "lightweight"
+            Assert-ThrowsMatch "ancestor override cannot permit annotated release tag" {
+                Assert-ReleaseTagAtMainHead -TagName "v1.0.1" -RemoteName "origin" -MainRefName "origin/main" -PermitAncestor:$true
+            } "lightweight"
+            if ((Resolve-TagCommit -TagName "v1.0.1") -ne (Resolve-TagCommit -TagName "v1.0.0")) {
+                throw "Historical annotated tags must remain resolvable to their commit."
+            }
 
             Set-Content -Path "file.txt" -Value "two" -Encoding ASCII
             [void](Invoke-Git -Arguments @("commit", "-am", "fix: main update"))

@@ -34,6 +34,11 @@ command before committing.
 For user-visible changes, also test in the Retail client after `/reload`.
 Include screenshots for layout, Settings, font, color, or localization changes.
 
+Release tags must be lightweight so their Git ref and release attestation name
+the same commit. Use `git -c tag.gpgSign=false tag vX.Y.Z`; do not use annotated
+or signed tags. Run `scripts/check-release-ancestry.ps1 -Tag vX.Y.Z` before
+pushing a release tag. Published tags and assets must never be rewritten.
+
 ## Architecture guide
 
 Most runtime code lives in [`StatsPro.lua`](StatsPro.lua). Important boundaries:

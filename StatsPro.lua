@@ -3333,6 +3333,35 @@ do
     end
 end
 
+do
+    local recoveryLabels = {
+        enUS = {
+            ["Recover saved settings..."] = "Recover saved settings...",
+            ["Choose saved settings to recover"] = "Choose saved settings to recover",
+            ["Saved settings"] = "Saved settings",
+            ["No saved settings are available to recover."] = "No saved settings are available to recover.",
+            ["%s · Font %d · Scale %d%%"] = "%s · Font %d · Scale %d%%",
+            ["Recover \"%s\" as a separate copy for \"%s\"? The saved source, current setup and other specializations will be kept."] = "Recover \"%s\" as a separate copy for \"%s\"? The saved source, current setup and other specializations will be kept.",
+            ["Recover \"%s\" as new account-wide settings? The saved source, current setup and specialization assignments will be kept."] = "Recover \"%s\" as new account-wide settings? The saved source, current setup and specialization assignments will be kept.",
+            ["These saved settings are now in use. Choose another setup."] = "These saved settings are now in use. Choose another setup.",
+        },
+        ruRU = {
+            ["Recover saved settings..."] = "Восстановить сохранённые настройки...",
+            ["Choose saved settings to recover"] = "Выберите настройки для восстановления",
+            ["Saved settings"] = "Сохранённые настройки",
+            ["No saved settings are available to recover."] = "Нет сохранённых настроек для восстановления.",
+            ["%s · Font %d · Scale %d%%"] = "%s · Шрифт %d · Масштаб %d%%",
+            ["Recover \"%s\" as a separate copy for \"%s\"? The saved source, current setup and other specializations will be kept."] = "Восстановить «%s» отдельной копией для «%s»? Сохранённый источник, текущие настройки и другие специализации останутся без изменений.",
+            ["Recover \"%s\" as new account-wide settings? The saved source, current setup and specialization assignments will be kept."] = "Восстановить «%s» как новые общие настройки аккаунта? Сохранённый источник, текущие настройки и назначения специализаций сохранятся.",
+            ["These saved settings are now in use. Choose another setup."] = "Эти сохранённые настройки уже используются. Выберите другой вариант.",
+        },
+    }
+    for locale in pairs(LABELS_BY_LOCALE) do
+        local labels = recoveryLabels[locale] or recoveryLabels.enUS
+        for key, value in pairs(labels) do LABELS_BY_LOCALE[locale][key] = value end
+    end
+end
+
 -- A disabled copy/share action needs to explain the normal first-use state: the
 -- manager only knows specializations and characters that have been seen locally.
 do
@@ -7168,6 +7197,12 @@ function addon.profileOps.CheckExpected(root, expected, ignoreGeneration)
             and (not root.profiles[expected.profileID]
                 or not rawequal(root.profiles[expected.profileID].settings,
                     expected.settingsRef)) then return false end
+        if expected.profileID and expected.profileSnapshot then
+            local snapshot, copied = addon.dbRuntime.CloneSerializable(
+                root.profiles[expected.profileID])
+            if not copied or not addon.presetRuntime.ValuesEqual(
+                snapshot, expected.profileSnapshot) then return false end
+        end
         if expected.profileID and expected.referenceCounts
             and not addon.profileOps.ReferenceCountsMatch(
                 root, expected.profileID, expected.referenceCounts) then
@@ -8104,6 +8139,43 @@ function addon.profileOps.ImportTransferToContext(
             sections = selected,
             previousProfileID = targetProfileID,
         }
+    end)
+end
+
+function addon.profileOps.RecoverUnusedProfile(sourceProfileID, guid, specID, expected)
+    return addon.profileOps.Execute(expected, function(root)
+        local source = root.profiles[sourceProfileID]
+        if not source then return nil, "missing-profile" end
+        if addon.profileOps.CountReferences(root, sourceProfileID).total ~= 0 then
+            return nil, "profile-in-use"
+        end
+        local cloneBudget = addon.dbRuntime.NewGraphBudget()
+        local settings, copied = addon.dbRuntime.CloneSerializable(
+            source.settings, nil, cloneBudget)
+        if not copied or not addon.dbRuntime.IsCleanTable(settings)
+            or not addon.dbRuntime.StripAccountSettings(settings) then
+            return nil, "clone-failed"
+        end
+        if addon.profileOps.IsAccountWideActive(root) then
+            return addon.profileOps.BuildAccountWideImportTransaction(
+                root, settings, source.name, L("Saved settings"), cloneBudget)
+        end
+
+        local targetProfileID = addon.profileOps.ResolveAssignment(root, guid, specID)
+        local character = root.characters[guid]
+        if not targetProfileID or not character then return nil, "missing-context" end
+        local account, changedCharacter, specProfiles = addon.profileOps.CloneContextAssignment(
+            root, character, specID, targetProfileID, cloneBudget)
+        if not account then return nil, "clone-failed" end
+        local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
+        local name, reason = addon.profileOps.UniqueProfileName(
+            source.name, profiles, L("Saved settings"))
+        if not name then return nil, reason end
+        local transaction, profileID = addon.profileOps.BuildAssignedProfileTransaction(
+            root, account, profiles, changedCharacter, specProfiles, guid, specID,
+            function() return { name = name, settings = settings } end)
+        if not transaction then return nil, profileID end
+        return transaction, { profileID = profileID, name = name }
     end)
 end
 
@@ -14514,6 +14586,9 @@ function addon.profileUI.OperationErrorText(reason)
         return L("Waiting for a safe profile context.")
     end
     if reason == "current-character" then return L("The current character cannot be forgotten.") end
+    if reason == "profile-in-use" then
+        return L("These saved settings are now in use. Choose another setup.")
+    end
     if reason == "account-wide-active" then
         return L("Return to specialization settings before changing assignments.")
     end
@@ -14635,6 +14710,8 @@ function addon.profileUI.BuildOperationUI(manager)
         "destructive")
     local cleanupButton = createAction(
         "StatsProProfileCleanupButton", "Delete unused settings...", "destructive")
+    local recoverButton = createAction(
+        "StatsProProfileRecoverButton", "Recover saved settings...")
 
     ui.advancedShown = false
     function ui.SetAdvancedShown(shown)
@@ -14798,6 +14875,7 @@ function addon.profileUI.BuildOperationUI(manager)
         replaceAccountWide = replaceAccountWideButton,
         discardAccountWide = discardAccountWideButton,
         cleanup = cleanupButton,
+        recover = recoverButton,
     }
     function ui.LayoutActionButtons(model)
         local accountWide = model and model.accountWideEnabled == true
@@ -14823,6 +14901,7 @@ function addon.profileUI.BuildOperationUI(manager)
                 ordered[#ordered + 1] = replaceAccountWideButton
                 ordered[#ordered + 1] = discardAccountWideButton
             end
+            ordered[#ordered + 1] = recoverButton
             ordered[#ordered + 1] = cleanupButton
         end
         local visible = {}
@@ -15088,6 +15167,18 @@ function addon.profileUI.BuildOperationUI(manager)
         text:SetWordWrap(false)
         row.text = text
         addon.settingsDesign.StyleListRow(row, text, "metadata")
+        local detail = row:CreateFontString(nil, "OVERLAY")
+        addon.settingsDesign.ApplyTextRole(detail, "controlMetadata")
+        detail:SetPoint("TOPLEFT", 8, -25)
+        detail:SetPoint("TOPRIGHT", -8, -25)
+        detail:SetJustifyH("LEFT")
+        detail:SetWordWrap(false)
+        detail:Hide()
+        row.detail = detail
+        addon.settingsDesign.AttachTooltip(row, function()
+            local choice = row.choiceData
+            return choice and choice.label or row.text:GetText(), choice and choice.detail
+        end)
         text:SetJustifyH("LEFT")
         row:SetScript("OnClick", function(button)
             if button.choiceData then ui.HandleChoice(button.choiceData) end
@@ -15103,10 +15194,20 @@ function addon.profileUI.BuildOperationUI(manager)
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", 0, y)
             row.choiceData = choice
+            row:SetHeight(choice.detail and 46 or 26)
+            row.text:ClearAllPoints()
+            row.text:SetPoint(choice.detail and "TOPLEFT" or "LEFT", 8, choice.detail and -6 or 0)
+            row.text:SetPoint(choice.detail and "TOPRIGHT" or "RIGHT", -8, choice.detail and -6 or 0)
             row.text:SetText(choice.label)
+            if choice.detail then
+                row.detail:SetText(choice.detail)
+                row.detail:Show()
+            else
+                row.detail:Hide()
+            end
             addon.settingsDesign.RefreshOwnedControlTooltip(row)
             row:Show()
-            y = y - 28
+            y = y - (choice.detail and 48 or 28)
         end
         for index = #choices + 1, #ui.choiceRows do ui.choiceRows[index]:Hide() end
         choiceChild:SetHeight(math.max(1, -y + 2))
@@ -15339,6 +15440,22 @@ function addon.profileUI.BuildOperationUI(manager)
             end
             return
         end
+        if pending.kind == "recover-source" then
+            local payload = pending.payload or {}
+            if choice.kind ~= "recovery"
+                or not addon.profileOps.CheckExpected(addon.dbRuntime.Refresh(), choice.expected) then
+                ui.HandleOperationResult(false, "stale")
+                return
+            end
+            local message = payload.accountWide
+                and string.format(L("Recover \"%s\" as new account-wide settings? The saved source, current setup and specialization assignments will be kept."), choice.label)
+                or string.format(L("Recover \"%s\" as a separate copy for \"%s\"? The saved source, current setup and other specializations will be kept."), choice.label, payload.targetLabel)
+            ui.ShowConfirmation("recover-profile", L("Recover saved settings..."),
+                choice.detail .. "\n\n" .. message, {
+                    sourceProfileID = choice.profileID, guid = payload.guid, specID = payload.specID,
+                }, choice.expected)
+            return
+        end
         if pending.kind == "copy-source" then
             local payload = pending.payload
             local source = ui.FindProfile(model, choice.profileID)
@@ -15479,6 +15596,9 @@ function addon.profileUI.BuildOperationUI(manager)
             if ok then ui.selectedGUID, ui.selectedSpecID = nil, nil end
         elseif pending.kind == "cleanup" then
             ok, result = addon.profileOps.DeleteUnusedProfiles(pending.expected)
+        elseif pending.kind == "recover-profile" then
+            ok, result = addon.profileOps.RecoverUnusedProfile(
+                payload.sourceProfileID, payload.guid, payload.specID, pending.expected)
         elseif pending.kind == "set-role-template" then
             ok, result = addon.profileOps.SetRoleTemplate(
                 payload.role, payload.profileID, pending.expected)
@@ -15578,6 +15698,10 @@ function addon.profileUI.BuildOperationUI(manager)
             mutable and not accountWide and model.accountWideProfileID ~= nil)
         SetActionEnabled(cleanupButton,
             mutable and (model.unusedProfileCount or 0) > 0)
+        recoverButton.statsProDisabledMessageKey = not mutable and unavailableMessage
+            or "No saved settings are available to recover."
+        SetActionEnabled(recoverButton,
+            mutable and hasEffectiveTarget and (model.unusedProfileCount or 0) > 0)
         for _, button in ipairs({ copyButton, useSameButton, useForButton }) do
             addon.settingsDesign.RefreshOwnedControlTooltip(button)
         end
@@ -15801,6 +15925,43 @@ function addon.profileUI.BuildOperationUI(manager)
             L("Delete saved account-wide settings..."),
             L("Delete the saved account-wide settings? Specialization assignments will stay unchanged."),
             nil, ui.CaptureExpected(nil, nil, model.accountWideProfileID))
+    end)
+
+    recoverButton:SetScript("OnClick", function()
+        local model, character, spec = RefreshActionSelection(true)
+        if not model or (not model.accountWideEnabled and (not character or not spec)) then return end
+        local choices = {}
+        local root = addon.dbRuntime.Refresh()
+        for _, profileID in ipairs(model.unusedProfileIDs or {}) do
+            local source = root.profiles[profileID]
+            local snapshot, copied = addon.dbRuntime.CloneSerializable(source)
+            if copied and source then
+                local expected = ui.CaptureExpected(
+                    character and character.guid, spec and spec.specID, profileID, true)
+                expected.settingsRef = source.settings
+                expected.profileSnapshot = snapshot
+                local label = addon.profileOps.NormalizeNameShape(
+                    source.name, addon.profileOps.maxNameCodepoints, true) or L("Saved settings")
+                local mode = source.settings.displayMode
+                local layout = mode == "split" and "Split" or mode == "sectioned" and "Sectioned" or "Flat"
+                choices[#choices + 1] = {
+                    kind = "recovery", profileID = profileID, label = label, expected = expected,
+                    detail = string.format(L("%s · Font %d · Scale %d%%"), L(layout),
+                        NormalizeNumberSetting("fontSize", source.settings.fontSize),
+                        math.floor(NormalizeNumberSetting("scale", source.settings.scale) * 100 + 0.5)),
+                }
+            end
+        end
+        if #choices == 0 then return end
+        local expected = ui.CaptureExpected(character and character.guid, spec and spec.specID,
+            ui.selectedEffectiveProfileID)
+        expected.unusedProfileIDs = CopyTable(model.unusedProfileIDs)
+        ui.ShowChoices("recover-source", L("Choose saved settings to recover"), choices, {
+            guid = character and character.guid, specID = spec and spec.specID,
+            targetLabel = model.accountWideEnabled and L("Account-wide settings")
+                or ui.ContextLabel(character, spec),
+            accountWide = model.accountWideEnabled,
+        }, expected)
     end)
 
     cleanupButton:SetScript("OnClick", function()
@@ -18607,6 +18768,7 @@ if addon and addon.__statsproSmoke == true then
             setRoleTemplate = addon.profileOps.SetRoleTemplate,
             resetProfile = addon.profileOps.ResetProfile,
             deleteUnusedProfiles = addon.profileOps.DeleteUnusedProfiles,
+            recoverUnusedProfile = addon.profileOps.RecoverUnusedProfile,
             importAndAssign = addon.profileOps.ImportAndAssign,
             importTransferToContext = addon.profileOps.ImportTransferToContext,
             fullWipe = addon.profileOps.FullWipe,

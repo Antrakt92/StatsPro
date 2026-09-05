@@ -12042,7 +12042,7 @@ do
         eq(prefix .. ".swatch_count", counts.swatch, 18)
         eq(prefix .. ".slider_count", counts.slider, 5)
         eq(prefix .. ".dropdown_count", counts.dropdown, 6)
-        eq(prefix .. ".button_count", counts.button, 21)
+        eq(prefix .. ".button_count", counts.button, 22)
         eq(prefix .. ".developer_link_count", counts.developerLink, 2)
         local presetUI = localeAddon.appearancePresets.ui
         for _, presetID in ipairs({
@@ -20068,6 +20068,162 @@ for _, failure in ipairs({
 end
 
 do
+    local function makeRecoveryFixture(prefix, accountWide, locale)
+        local env, addon, test, root, identity = makeProfileOpsFixture({
+            mutateRoot = function(candidate) candidate.account.forceLocale = locale or "enUS" end,
+        })
+        if accountWide then
+            eq(prefix .. ".enable_account_wide", test.profileOps.enableAccountWide("p2"), true)
+        end
+        local settings = deepCopy(root.profiles.p3.settings)
+        local sections = { stats = true, layout = true, appearance = true }
+        settings.scale = 1.4
+        local package = test.profileTransfer.parse(test.profileTransfer.serialize("Saved A", settings, sections))
+        local firstOK, first = test.profileOps.importTransferToContext(
+            package, sections, "Player-1-OPS-A", 73)
+        eq(prefix .. ".import_a", firstOK, true)
+        settings.scale = 1.6
+        package = test.profileTransfer.parse(test.profileTransfer.serialize("Current B", settings, sections))
+        local secondOK, second = test.profileOps.importTransferToContext(
+            package, sections, "Player-1-OPS-A", 73)
+        eq(prefix .. ".import_b", secondOK, true)
+        eq(prefix .. ".source_unused", test.profileOps.countReferences(root, first.profileID).total, 0)
+        addon:OpenConfigMenu()
+        addon.profileUI.OpenManager(true)
+        callScript(prefix .. ".advanced", env.StatsProProfileAdvancedButton, "OnClick")
+        return env, addon, test, root, first.profileID, second.profileID, identity
+    end
+
+    local function chooseRecovery(prefix, env, sourceID)
+        callScript(prefix .. ".open", env.StatsProProfileRecoverButton, "OnClick")
+        return findChoiceFrame(prefix .. ".source", env, function(choice)
+            return choice.kind == "recovery" and choice.profileID == sourceID
+        end)
+    end
+
+    for _, accountWide in ipairs({ false, true }) do
+        for _, locale in ipairs({ "enUS", "ruRU" }) do
+            local prefix = "profiles.recovery.flow." .. tostring(accountWide) .. "." .. locale
+            local env, addon, test, root, sourceID, replacedID = makeRecoveryFixture(prefix, accountWide, locale)
+            local source, replaced = root.profiles[sourceID], root.profiles[replacedID]
+            local before = deepCopy(root)
+            eq(prefix .. ".action_enabled", env.StatsProProfileRecoverButton:IsEnabled(), true)
+            eq(prefix .. ".action_label", env.StatsProProfileRecoverButton:GetText(),
+                locale == "ruRU" and "Восстановить сохранённые настройки..." or "Recover saved settings...")
+            local row = chooseRecovery(prefix .. ".cancel_list", env, sourceID)
+            eq(prefix .. ".source_label", row.text:GetText(), "Saved A")
+            eq(prefix .. ".row_height", row:GetHeight(), 46)
+            check(prefix .. ".source_summary", row.detail:GetText():find("140%%") ~= nil)
+            userInteract(prefix .. ".source_hover", row, "OnEnter")
+            eq(prefix .. ".full_summary_tooltip", env.GameTooltip.lines[2].left, row.detail:GetText())
+            userInteract(prefix .. ".source_leave", row, "OnLeave")
+            callScript(prefix .. ".list_cancel", env.StatsProProfileOperationCancelButton, "OnClick")
+            assertDeepEqual(prefix .. ".list_cancel_no_writes", root, before)
+            row = chooseRecovery(prefix .. ".cancel_confirmation", env, sourceID)
+            callScript(prefix .. ".choose_cancel", row, "OnClick")
+            eq(prefix .. ".confirmation_kind", test.profileUIState().operationKind, "recover-profile")
+            check(prefix .. ".confirmation_source", test.profileUIState().operationDialogMessage:find("Saved A", 1, true) ~= nil)
+            callScript(prefix .. ".confirmation_cancel", env.StatsProProfileOperationCancelButton, "OnClick")
+            assertDeepEqual(prefix .. ".confirmation_cancel_no_writes", root, before)
+            row = chooseRecovery(prefix .. ".accept", env, sourceID)
+            callScript(prefix .. ".choose_accept", row, "OnClick")
+            callScript(prefix .. ".confirm", env.StatsProProfileOperationConfirmButton, "OnClick")
+            local recoveredID = test.profileState().profileID
+            check(prefix .. ".new_copy", recoveredID ~= sourceID and recoveredID ~= replacedID)
+            near(prefix .. ".recovered_scale", root.profiles[recoveredID].settings.scale, 1.4)
+            eq(prefix .. ".source_identity", root.profiles[sourceID], source)
+            eq(prefix .. ".replaced_identity", root.profiles[replacedID], replaced)
+            assertDeepEqual(prefix .. ".source_kept", source, before.profiles[sourceID])
+            assertDeepEqual(prefix .. ".replaced_kept", replaced, before.profiles[replacedID])
+            assertNoSharedTables(prefix .. ".detached", root.profiles[recoveredID].settings, source.settings)
+            assertDeepEqual(prefix .. ".other_character_kept", root.characters["Player-1-OPS-B"], before.characters["Player-1-OPS-B"])
+            assertDeepEqual(prefix .. ".role_templates_kept", root.roleTemplates, before.roleTemplates)
+            if accountWide then
+                assertDeepEqual(prefix .. ".assignments_kept", root.characters, before.characters)
+            else
+                eq(prefix .. ".selected_assignment", root.characters["Player-1-OPS-A"].specProfiles[73], recoveredID)
+            end
+            local reloadRoot = deepCopy(root)
+            local reloadEnv, _, reloadTest = loadStatsPro("enUS", withProfileIdentity({
+                statsProDB = reloadRoot, unitGUID = function() return "Player-1-OPS-A" end,
+                unitFullName = function() return "Alpha", "Realm" end,
+                getServerTime = function() return 100 end,
+            }))
+            fireEvent(prefix .. ".reload", reloadEnv, "PLAYER_ENTERING_WORLD")
+            eq(prefix .. ".reload_profile", reloadTest.profileState().profileID, recoveredID)
+            near(prefix .. ".reload_scale", reloadTest.profileState().settings.scale, 1.4)
+            eq(prefix .. ".reload_no_allocation", reloadRoot.account.nextProfileID, root.account.nextProfileID)
+            if not accountWide then
+                callScript(prefix .. ".normal_choices", env.StatsProProfileCopyFromButton, "OnClick")
+                local normal = findChoiceFrame(prefix .. ".normal_row", env, function(choice) return choice.kind == "context" end)
+                eq(prefix .. ".normal_row_height", normal:GetHeight(), 26)
+                eq(prefix .. ".normal_detail_hidden", normal.detail:IsShown(), false)
+            end
+        end
+    end
+
+    for _, phase in ipairs({ "list", "confirmation" }) do
+        for _, invalidation in ipairs({ "content", "name", "settings", "profile", "cleanup", "references", "context", "combat", "read_only" }) do
+            local prefix = "profiles.recovery.stale." .. phase .. "." .. invalidation
+            local env, addon, test, root, sourceID, _, identity = makeRecoveryFixture(prefix)
+            local row = chooseRecovery(prefix, env, sourceID)
+            if phase == "confirmation" then callScript(prefix .. ".choose", row, "OnClick") end
+            if invalidation == "content" then root.profiles[sourceID].settings.scale = 1.8
+            elseif invalidation == "name" then root.profiles[sourceID].name = "Changed source"
+            elseif invalidation == "settings" then root.profiles[sourceID].settings = deepCopy(root.profiles[sourceID].settings)
+            elseif invalidation == "profile" then root.profiles[sourceID] = deepCopy(root.profiles[sourceID])
+            elseif invalidation == "cleanup" then eq(prefix .. ".cleanup", test.profileOps.deleteUnusedProfiles(), true)
+            elseif invalidation == "references" then root.roleTemplates.HEALER = sourceID
+            elseif invalidation == "context" then
+                identity.specID, identity.specName, identity.role = 71, "Arms", "DAMAGER"
+                fireEvent(prefix .. ".spec_event", env, "PLAYER_SPECIALIZATION_CHANGED", "player")
+            elseif invalidation == "combat" then identity.combat = true
+            else root.dbVersion = test.currentDBVersion() + 1 end
+            local before = deepCopy(root)
+            if phase == "list" then callScript(prefix .. ".stale_choice", row, "OnClick")
+            else callScript(prefix .. ".stale_confirm", env.StatsProProfileOperationConfirmButton, "OnClick") end
+            assertDeepEqual(prefix .. ".no_recovery_writes", root, before)
+            eq(prefix .. ".dialog_closed", test.profileUIState().operationDialogShown, false)
+        end
+    end
+
+    for _, accountWide in ipairs({ false, true }) do
+        for _, stage in ipairs({ "validate", "commit", "apply" }) do
+            local prefix = "profiles.recovery.rollback." .. tostring(accountWide) .. "." .. stage
+            local env, _, test, root, sourceID = makeRecoveryFixture(prefix, accountWide)
+            local row = chooseRecovery(prefix, env, sourceID)
+            local expected = row.choiceData.expected
+            local before, identities = deepCopy(root), captureRegistryIdentities(root)
+            test.profileOps.setFailureStage(stage)
+            local ok, reason = test.profileOps.recoverUnusedProfile(sourceID, "Player-1-OPS-A", 73, expected)
+            eq(prefix .. ".rejected", ok, false)
+            eq(prefix .. ".reason", reason, stage .. "-failed")
+            assertDeepEqual(prefix .. ".exact_root", root, before)
+            assertRegistryIdentities(prefix .. ".exact_identities", root, identities)
+            test.profileOps.setFailureStage(nil)
+            local retryOK = test.profileOps.recoverUnusedProfile(sourceID, "Player-1-OPS-A", 73)
+            eq(prefix .. ".fresh_retry", retryOK, true)
+            eq(prefix .. ".one_allocation", root.account.nextProfileID, before.account.nextProfileID + 1)
+        end
+    end
+
+    do
+        local env, addon, test, root = makeProfileOpsFixture()
+        addon:OpenConfigMenu()
+        addon.profileUI.OpenManager(true)
+        callScript("profiles.recovery.empty.advanced", env.StatsProProfileAdvancedButton, "OnClick")
+        eq("profiles.recovery.empty.disabled", env.StatsProProfileRecoverButton:IsEnabled(), false)
+        eq("profiles.recovery.empty.tooltip", test.profileUIState().actions.recover.disabledTooltip,
+            "No saved settings are available to recover.")
+        local before = deepCopy(root)
+        local ok, reason = test.profileOps.recoverUnusedProfile("p2", "Player-1-OPS-A", 73)
+        eq("profiles.recovery.used.rejected", ok, false)
+        eq("profiles.recovery.used.reason", reason, "profile-in-use")
+        assertDeepEqual("profiles.recovery.used.no_writes", root, before)
+    end
+end
+
+do
     local env, _, test, root = makeProfileOpsFixture({
         swiftStatsDB = { fontSize = 19 },
         mutateRoot = function(candidate) candidate.account.forceLocale = "ruRU" end,
@@ -22040,7 +22196,7 @@ do
     eq("profiles.ui.ops.selector_assigned", state.selectedAssignedProfileID, "p2")
     local actionCount = 0
     for _ in pairs(state.actions) do actionCount = actionCount + 1 end
-    eq("profiles.ui.ops.action_count", actionCount, 13)
+    eq("profiles.ui.ops.action_count", actionCount, 14)
     eq("profiles.ui.ops.copy_enabled", state.actions.copy.enabled, true)
     eq("profiles.ui.ops.use_same_enabled", state.actions.useSame.enabled, true)
     eq("profiles.ui.ops.use_for_enabled", state.actions.useFor.enabled, true)

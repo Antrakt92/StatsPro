@@ -100,6 +100,13 @@ forget an offline character, choose Tank, Healer, and Damage starting settings f
 new specializations, manage a saved account-wide copy, or delete settings records
 that are no longer used.
 
+To return to a setup replaced by a later import, choose **Advanced → Recover saved
+settings...**. Pick its name and review the layout summary, then confirm. Recovery
+creates a separate copy for the selected specialization, or a new account-wide
+copy when that mode is active. The saved source, replaced setup, and other
+specialization assignments are kept. The action is unavailable when no unused
+saved setup remains.
+
 Six appearance presets are included:
 
 - **Default**

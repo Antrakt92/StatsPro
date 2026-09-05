@@ -4600,6 +4600,161 @@ do
 end
 
 do
+    local fixtureIndex = 0
+    local function NewDrag(route)
+        fixtureIndex = fixtureIndex + 1
+        local fixtureLabel = "panel.drag.fixture" .. fixtureIndex
+        local combat = false
+        local env, addon, test = loadStatsPro("enUS", withProfileIdentity({
+            statsProDB = { dbVersion = 9,
+                displayMode = route == "side-frame" and "split" or "flat",
+                showDefensive = true, showArmor = true, hideZeroDefensive = false },
+            inCombatLockdown = function() return combat end,
+            unitArmor = function() return 0, 1000 end,
+        }))
+        fireEvent(fixtureLabel .. ".pew", env, "PLAYER_ENTERING_WORLD")
+        flushTimers(fixtureLabel .. ".bootstrap", env, 0)
+        addon:OpenConfigMenu()
+        local frame = route == "side-frame" and env.StatsProDefensiveFrame or env.StatsProFrame
+        eq(fixtureLabel .. ".content_shown", frame:IsShown(), true)
+        local settings = test.profileState().settings
+        local originalStop = frame.StopMovingOrSizing
+        frame.StopMovingOrSizing = function(self)
+            local wasMoving = self.moving
+            originalStop(self)
+            -- Native movement commits its final anchor on StopMovingOrSizing.
+            if wasMoving then
+                self:ClearAllPoints()
+                self:SetPoint("CENTER", env.UIParent, "CENTER", 42, -55)
+            end
+        end
+        if route == "overlay" then
+            test.renderMainPanelForSmoke("Crit:", "50", "10%", 1, nil, nil, {
+                { statKey = "crit", ratingCR = env.CR_CRIT_MELEE,
+                  target = 100, current = 50, currentPct = 10, delta = -50 },
+            })
+        end
+        local fireIndex = 0
+        local function Fire(script)
+            fireIndex = fireIndex + 1
+            if route == "handle" then
+                test.firePanelEditHandleForSmoke("main", script)
+            elseif route == "overlay" then
+                test.fireMainPanelTooltipOverlayForSmoke(1, script)
+            else
+                callScript(fixtureLabel .. ".fire" .. fireIndex .. "." .. script, frame, script)
+            end
+        end
+        Fire("OnDragStart")
+        eq(fixtureLabel .. ".started", frame.moving, true)
+        return { env = env, addon = addon, test = test, frame = frame,
+            xKey = route == "side-frame" and "defensive_xOfs" or "xOfs",
+            yKey = route == "side-frame" and "defensive_yOfs" or "yOfs",
+            settings = settings, fire = Fire, enterCombat = function()
+                combat = true
+                fireEvent(fixtureLabel .. ".combat", env, "PLAYER_REGEN_DISABLED")
+            end }
+    end
+
+    for _, route in ipairs({ "frame", "overlay", "handle", "side-frame" }) do
+        for _, boundary in ipairs({ "combat", "lock", "hide", "slash-hide", "manual", "logout", "drop" }) do
+            local fixture = NewDrag(route)
+            local label = "panel.drag." .. route .. "." .. boundary
+            if boundary == "combat" then
+                fixture.enterCombat()
+            elseif boundary == "lock" then
+                fixture.settings.isLocked = true
+                fixture.test.cacheSettings()
+                fixture.addon.panelEditRuntime.Refresh()
+            elseif boundary == "hide" then
+                fixture.settings.isVisible = false
+                fixture.test.cacheSettings()
+                fixture.addon:RunUpdateStatsSafe()
+            elseif boundary == "slash-hide" then
+                slash(label, fixture.env, "hide")
+            elseif boundary == "manual" then
+                clickCheckbox(label, fixture.env.StatsProVisibleCheck, false)
+            elseif boundary == "logout" then
+                fireEvent(label, fixture.env, "PLAYER_LOGOUT")
+            else
+                fixture.fire("OnDragStop")
+            end
+            eq(label .. ".stopped", fixture.frame.moving, false)
+            eq(label .. ".stop_once", fixture.frame.stopMovingCalls, 1)
+            near(label .. ".final_x_saved", fixture.settings[fixture.xKey], 42)
+            near(label .. ".final_y_saved", fixture.settings[fixture.yKey], -55)
+            fixture.fire("OnDragStop")
+            fixture.fire("OnDragStop")
+            eq(label .. ".late_stop_noop", fixture.frame.stopMovingCalls, 1)
+        end
+    end
+
+    local refresh = NewDrag("frame")
+    refresh.env.StatsProConfigFrame:Hide()
+    refresh.addon.panelEditRuntime.Refresh()
+    eq("panel.drag.closed_settings_refresh_keeps_direct_drag", refresh.frame.moving, true)
+    refresh.fire("OnDragStop")
+
+    local hidden = NewDrag("handle")
+    hidden.fire("OnDragStop")
+    hidden.settings.isVisible = false
+    hidden.test.cacheSettings()
+    hidden.addon:RunUpdateStatsSafe()
+    hidden.fire("OnDragStart")
+    hidden.addon:RunUpdateStatsSafe()
+    eq("panel.drag.empty_handle_survives_repeated_hide", hidden.frame.moving, true)
+    hidden.env.StatsProConfigFrame:Hide()
+    eq("panel.drag.chrome_removal_stops_handle", hidden.frame.moving, false)
+
+    local context = NewDrag("frame")
+    local state = context.test.profileState()
+    local targetID = state.root.account.defaultProfileID
+    local target = state.root.profiles[targetID].settings
+    target.xOfs, target.yOfs = 515, -125
+    local assigned = context.test.profileOps.assign("Player-1-IMPORT", 73, targetID)
+    eq("panel.drag.context.assign", assigned, true)
+    eq("panel.drag.context.stopped_before_target", context.frame.moving, false)
+    near("panel.drag.context.outgoing_final_anchor", context.settings.xOfs, 42)
+    near("panel.drag.context.target_saved_anchor", target.xOfs, 515)
+    near("panel.drag.context.target_frame_anchor", select(4, context.frame:GetPoint()), 515)
+    context.fire("OnDragStop")
+    near("panel.drag.context.late_stop_preserves_target", target.xOfs, 515)
+    eq("panel.drag.context.late_stop_once", context.frame.stopMovingCalls, 1)
+
+    local replacement = NewDrag("frame")
+    state = replacement.test.profileState()
+    local replaced = deepCopy(replacement.settings)
+    replaced.xOfs, replaced.yOfs = 317, -91
+    state.root.profiles[state.profileID].settings = replaced
+    eq("panel.drag.replacement.activate",
+        replacement.addon.dbRuntime.ActivateProfile(state.profileID), true)
+    replacement.addon.profileRuntime.restoreActivePositions()
+    eq("panel.drag.replacement.stopped", replacement.frame.moving, false)
+    near("panel.drag.replacement.target_anchor", replaced.xOfs, 317)
+    near("panel.drag.replacement.target_frame", select(4, replacement.frame:GetPoint()), 317)
+    replacement.fire("OnDragStop")
+    near("panel.drag.replacement.late_stop_preserves_target", replaced.xOfs, 317)
+
+    local rollback = NewDrag("frame")
+    state = rollback.test.profileState()
+    targetID = state.root.account.defaultProfileID
+    target = state.root.profiles[targetID].settings
+    target.xOfs, target.yOfs = 618, -217
+    local beforeFailure = deepCopy(state.root)
+    rollback.test.profileOps.setFailureStage("apply")
+    local applied, reason = rollback.test.profileOps.assign("Player-1-IMPORT", 73, targetID)
+    eq("panel.drag.rollback.assign_failed", applied, false)
+    eq("panel.drag.rollback.reason", reason, "apply-failed")
+    eq("panel.drag.rollback.stopped", rollback.frame.moving, false)
+    assertDeepEqual("panel.drag.rollback.journal_preserved", state.root, beforeFailure)
+    rollback.fire("OnDragStop")
+    assertDeepEqual("panel.drag.rollback.late_stop_no_write", state.root, beforeFailure)
+    rollback.test.profileOps.setFailureStage(nil)
+    eq("panel.drag.rollback.retry", rollback.test.profileOps.assign("Player-1-IMPORT", 73, targetID), true)
+    near("panel.drag.rollback.retry_target_preserved", target.xOfs, 618)
+end
+
+do
     local inCombat = false
     local editEnv, editAddon, editTest = loadStatsPro("enUS", {
         statsProDB = { panelBackgroundAlpha = 0 },

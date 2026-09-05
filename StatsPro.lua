@@ -9079,9 +9079,7 @@ function Panel:New(globalName, dbKeyPrefix)
             panel:StartMouseDrag()
         end)
         overlay:SetScript("OnDragStop", function()
-            frame:StopMovingOrSizing()
-            panel:SavePosition()
-            panel:ScheduleDragGuardRelease()
+            panel:FinishMouseDrag()
         end)
         overlay:SetScript("OnMouseUp", function(_, button)
             if button == "RightButton" and not frame.wasDragging and not InCombatLockdown() then
@@ -9118,10 +9116,10 @@ function Panel:New(globalName, dbKeyPrefix)
         if not panel.editAffordanceShown or cached.isLocked then return end
         if addon.profileRuntime.ReadCombatState() ~= false then return end
         if not addon.dbRuntime.GetWritableSettings(false) then return end
-        panel.editDragging = panel:StartMouseDrag()
+        if panel:StartMouseDrag() then panel.editDragging = true end
     end)
     editHandle:SetScript("OnDragStop", function()
-        panel:FinishEditDrag()
+        panel:FinishMouseDrag()
     end)
     local initialRegions = { labelText, ratingText, valueText, repairText, repairLabelText }
     local fontObject = addon.fontRuntime.getOwnedFontObject("panel:" .. globalName)
@@ -9207,13 +9205,11 @@ function Panel:New(globalName, dbKeyPrefix)
         if InCombatLockdown() or cached.isLocked then return end
         panel:StartMouseDrag()
     end)
-    frame:SetScript("OnDragStop", function(f)
-        f:StopMovingOrSizing()
-        panel:SavePosition()
+    frame:SetScript("OnDragStop", function()
         -- 100ms guard absorbs the OnMouseUp that fires immediately after a drag, so
         -- the right-click handler doesn't open Settings on drag-end. Pure clicks
         -- don't pass the drag-distance threshold, never set wasDragging, unaffected.
-        panel:ScheduleDragGuardRelease()
+        panel:FinishMouseDrag()
     end)
     -- Right-click -> Settings while out of combat (drag-aware via wasDragging guard).
     frame:SetScript("OnMouseUp", function(f, button)
@@ -9248,9 +9244,14 @@ function Panel:BeginDragGuard()
 end
 
 function Panel:StartMouseDrag()
+    if self.dragActive or cached.isLocked
+        or addon.profileRuntime.ReadCombatState() ~= false then return false end
+    local settings = addon.dbRuntime.GetWritableSettings(false)
     -- WHY: Always start from the mouse so named-frame layout state cannot create
     -- a cursor offset on the first drag of a fresh install.
     self.frame:StartMoving(true)
+    self.dragSettings = settings
+    self.dragActive = true
     self:BeginDragGuard()
     return true
 end
@@ -9264,33 +9265,41 @@ function Panel:ScheduleDragGuardRelease()
     end)
 end
 
-function Panel:FinishEditDrag()
-    if not self.editDragging then return end
-    self.frame:StopMovingOrSizing()
-    self:SavePosition()
+function Panel:FinishMouseDrag(savePosition)
+    if not self.dragActive then return end
+    local settings = self.dragSettings
+    -- Invalidate the gesture before native callbacks; delayed stop events must not
+    -- save the incoming profile's frame after a context switch or rollback.
+    self.dragActive = false
+    self.dragSettings = nil
     self.editDragging = false
+    self.frame:StopMovingOrSizing()
+    if savePosition ~= false and settings then self:SavePosition(settings) end
     self:ScheduleDragGuardRelease()
 end
 
 function Panel:SetEditAffordanceVisible(show)
     show = show == true
+    if not show and self.editDragging then self:FinishMouseDrag() end
     if self.editAffordanceShown == show then return end
     self.editAffordanceShown = show
     if show then
         self.editOutline:Show()
     else
-        self:FinishEditDrag()
         self.editOutline:Hide()
     end
 end
 
-function Panel:SavePosition()
+function Panel:SavePosition(expectedSettings)
     local db = addon.dbRuntime.GetWritableSettings(false)
-    if not db then return end
+    if not db or (expectedSettings and not rawequal(db, expectedSettings)) then return end
     self:SavePositionTo(db)
 end
 
 function Panel:LoadPosition()
+    -- The active settings may already be a replacement/target payload. Settle the
+    -- old native gesture without persisting its coordinates into that payload.
+    self:FinishMouseDrag(false)
     local db = addon.dbRuntime.GetActiveSettings()
     local pointKey         = self:DBKey("point")
     local relativePointKey = self:DBKey("relativePoint")
@@ -9326,6 +9335,9 @@ function Panel:LoadPosition()
 end
 
 function Panel:Hide()
+    -- Repeated Hide calls are normal for an empty panel whose sibling edit handle
+    -- remains usable. Only a shown-to-hidden content transition ends its drag.
+    if self:IsShown() then self:FinishMouseDrag() end
     if not self:IsShown() and self.lastLineCount == -1 and not self.lastRepairText then return end
     self.frame:Hide()
     self:ApplyTooltipRows(nil, 0)
@@ -10020,8 +10032,15 @@ local mainPanel      = Panel:New("StatsProFrame",          "")
 local defensivePanel = Panel:New("StatsProDefensiveFrame", "defensive_")
 
 addon.profileRuntime.saveActivePositions = function(settings)
+    mainPanel:FinishMouseDrag(false)
+    defensivePanel:FinishMouseDrag(false)
     mainPanel:SavePositionTo(settings)
     defensivePanel:SavePositionTo(settings)
+end
+
+addon.panelEditRuntime.FinishDrags = function(savePosition)
+    mainPanel:FinishMouseDrag(savePosition)
+    defensivePanel:FinishMouseDrag(savePosition)
 end
 
 addon.profileRuntime.restoreActivePositions = function()
@@ -11119,6 +11138,7 @@ end
 -- but if the user reloads/quits via a path that bypasses our drag handler (rare),
 -- this guarantees the latest GetPoint() is what hits disk.
 local function OnPlayerLogout()
+    addon.panelEditRuntime.FinishDrags(false)
     -- Restore any unaccepted StatsPro-owned color preview before SavedVariables
     -- flush. The ownership check inside Close leaves a foreign picker untouched.
     if addon.settingsUI.CloseColorPicker then addon.settingsUI.CloseColorPicker(true) end
@@ -11195,6 +11215,7 @@ local EVENT_HANDLERS = {
         addon.hudPresets.MaybeShowWelcome()
     end,
     PLAYER_REGEN_DISABLED       = function()
+        addon.panelEditRuntime.FinishDrags()
         addon.hudPresets.combatState = true
         addon.profileRuntime.CancelOwnedMutationPopups()
         addon.presetRuntime.ForceCancelAllPreviews()
@@ -12109,6 +12130,7 @@ addon.panelEditRuntime.Refresh = function(combatOverride)
     if type(combat) ~= "boolean" then
         combat = addon.profileRuntime.ReadCombatState()
     end
+    if cached.isLocked or combat ~= false then addon.panelEditRuntime.FinishDrags() end
     local show = addon.panelEditRuntime.requested == true
         and cached.isLocked == false
         and combat == false
@@ -14122,6 +14144,10 @@ function addon.profileRuntime.CloseOwnedDropdownMenus()
 end
 
 addon.profileRuntime.closeOwnedSettingsModals = function()
+    -- Transactions own their position journals and outgoing save. Ordinary edits
+    -- must commit the finished gesture before preview cancellation reflows it.
+    addon.panelEditRuntime.FinishDrags(
+        not addon.profileOps.inProgress and not addon.profileRuntime.transitioning)
     -- Destructive prompts are invalidated first. A later preview/modal restore
     -- failure must not leave an old confirmation capable of committing.
     addon.profileRuntime.CancelOwnedMutationPopups()

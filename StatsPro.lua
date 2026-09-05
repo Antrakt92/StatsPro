@@ -261,6 +261,10 @@ local FONT_GLYPH_PATTERNS = {
     -- Adobe / Google universal CJK (documented Latin + Cyrillic + full CJK coverage)
     { pattern = "noto.*cjk",        glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT, GLYPH_HANGUL } },
     { pattern = "sourcehan",        glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT, GLYPH_HANGUL } },
+    -- Zen Hei includes UnDotum Hangul and Russian glyphs. Other WenQuanYi
+    -- families keep their conservative coverage below.
+    { pattern = "^wqy%-zenhei%.tt[fc]$", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT, GLYPH_HANGUL } },
+    { pattern = "^wenquanyizenhei%.tt[fc]$", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT, GLYPH_HANGUL } },
     -- Open-source CN+TW
     { pattern = "wenquanyi",        glyphs = { GLYPH_LATIN, GLYPH_HANS, GLYPH_HANT } },
     { pattern = "wqy",              glyphs = { GLYPH_LATIN, GLYPH_HANS, GLYPH_HANT } },
@@ -287,6 +291,8 @@ do
     local SAMPLES = {
         ["noto.*cjk"]        = "notosanscjk-regular.otf",
         ["sourcehan"]        = "sourcehansans-regular.otf",
+        ["^wqy%-zenhei%.tt[fc]$"] = "wqy-zenhei.ttf",
+        ["^wenquanyizenhei%.tt[fc]$"] = "wenquanyizenhei.ttc",
         ["wenquanyi"]        = "wenquanyimicrohei.ttf",
         ["wqy"]              = "wqy-zenhei.ttc",
         ["pingfang"]         = "pingfangsc.ttf",

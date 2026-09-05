@@ -10517,6 +10517,69 @@ do
 end
 
 do
+    local zenHeiPaths = {
+        { name = "installed", path = "Interface\\Addons\\SharedMedia\\fonts\\wen_quan_yi_zen_hei\\wqy-zenhei.ttf" },
+        { name = "alias", path = "Interface\\AddOns\\SharedMedia\\Fonts\\WenQuanYiZenHei.ttf" },
+    }
+    for _, font in ipairs({
+        { name = "uppercase_ttc", path = "Interface/AddOns/Media/WQY-ZENHEI.TTC", expected = true },
+        { name = "alias_ttc", path = "Interface/AddOns/Media/WENQUANYIZENHEI.TTC", expected = true },
+        { name = "backup", path = "Interface/AddOns/Media/wqy-zenhei.ttf.backup", expected = false },
+        { name = "unrelated", path = "Interface/AddOns/Media/not-wqy-zenhei.ttf", expected = false },
+    }) do
+        for _, glyph in ipairs({ "Cyrillic", "Hangul" }) do
+            eq("fonts.zenhei.exact_basename." .. font.name .. "." .. glyph,
+                test.fontSupports(font.path, glyph), font.expected)
+        end
+    end
+    for _, client in ipairs({ "enUS", "ruRU" }) do
+        for _, font in ipairs(zenHeiPaths) do
+            local prefix = "fonts.zenhei." .. client .. "." .. font.name
+            local env, addon, test = loadStatsPro(client, withProfileIdentity({
+                statsProDB = { font = "Fonts\\FRIZQT__.TTF" },
+                lsmFonts = { { name = "WenQuanYi Zen Hei", path = font.path } },
+            }))
+            for _, glyph in ipairs({ "Latin", "Cyrillic", "Hangul", "Hans", "Hant" }) do
+                eq(prefix .. ".coverage." .. glyph, test.fontSupports(font.path, glyph), true)
+            end
+            eq(prefix .. ".microhei_not_promoted", test.fontSupports(
+                "Interface\\AddOns\\Media\\WenQuanYiMicroHei.ttf", "Hangul"), false)
+            eq(prefix .. ".folder_not_coverage", test.fontSupports(
+                "Interface\\AddOns\\WenQuanYiZenHei\\Mystery.ttf", "Hangul"), false)
+            fireEvent(prefix .. ".pew", env, "PLAYER_ENTERING_WORLD")
+            flushTimers(prefix .. ".bootstrap", env, 0)
+            addon:OpenConfigMenu()
+            env.StatsProConfigFrame.SwitchToTab(3)
+            local baseline = deepCopy(env.StatsProDB)
+            local baselineHUD = test.panelFontState().mainAppliedFont
+            local baselineConfig = test.configFontState().currentFont
+            for _, locale in ipairs({ "koKR", "zhCN", "zhTW" }) do
+                local name = prefix .. "." .. locale
+                addon.settingsUI.localization.Preview(addon, locale)
+                eq(name .. ".preview_hud", test.panelFontState().mainAppliedFont, font.path)
+                eq(name .. ".preview_settings", test.configFontState().currentFont, font.path)
+                assertDeepEqual(name .. ".preview_no_saved_writes", env.StatsProDB, baseline)
+                addon.settingsUI.localization.CancelPreview(addon)
+                eq(name .. ".cancel_hud", test.panelFontState().mainAppliedFont, baselineHUD)
+                eq(name .. ".cancel_settings", test.configFontState().currentFont, baselineConfig)
+                assertDeepEqual(name .. ".cancel_no_saved_writes", env.StatsProDB, baseline)
+                selectDropdownValue(name .. ".select", env.StatsProLanguageDropdown, locale)
+                eq(name .. ".committed_language", accountSettings(env).forceLocale, locale)
+                eq(name .. ".committed_hud", test.panelFontState().mainAppliedFont, font.path)
+                eq(name .. ".committed_settings", test.configFontState().currentFont, font.path)
+                eq(name .. ".no_coverage_warning", env.StatsProConfigFrame.languageWarning:GetText(), "")
+                eq(name .. ".no_warning_surface",
+                    env.StatsProConfigFrame.languageWarning.statsProWarningSurface:IsShown(), false)
+                selectDropdownValue(name .. ".return_auto", env.StatsProLanguageDropdown, "auto")
+                eq(name .. ".restored_preference", activeSettings(env).font, "Fonts\\FRIZQT__.TTF")
+                eq(name .. ".restored_hud", test.panelFontState().mainAppliedFont, baselineHUD)
+                eq(name .. ".restored_settings", test.configFontState().currentFont, baselineConfig)
+            end
+        end
+    end
+end
+
+do
     local outlineFallbackPath = "Interface\\AddOns\\SharedMedia\\Fonts\\NoOutline.ttf"
     local setFontCalls = 0
     local fallbackEnv, _, fallbackTest = loadStatsPro("enUS", {

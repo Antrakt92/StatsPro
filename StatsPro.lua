@@ -10020,12 +10020,17 @@ end
 function Panel:Reflow()
     local hasRepair = self.lastRepairText and self.lastRepairText ~= ""
     if (not self.lastLabelText or self.lastLineCount < 0) and not hasRepair then return end
+    local repairText = self.lastRepairText or ""
+    if hasRepair and SAFE_NUM.IsCleanFiniteNumber(cached.repairCost) and cached.repairCost >= 0 then
+        -- Inline coin textures carry their own size; SetFont cannot resize them.
+        repairText = FormatRepairCost(cached.repairCost)
+    end
     self:SetTextSafe(
         self.lastLabelText,
         self.lastRatingText or "",
         self.lastValueText or "",
         self.lastLineCount,
-        self.lastRepairText or "",
+        repairText,
         self.lastRepairLabelText or "",
         self.lastTargetRows
     )
@@ -17791,8 +17796,8 @@ function addon.settingsUI.BuildAppearanceTab(self, context)
 
     -- Font Size slider — text rendering size. Naturally pairs with Font dropdown above.
     -- ReflowAllPanels (not UpdateStats) for the same reason as font picker: size change
-    -- only affects measurements, not text content. Slider fires OnValueChanged per
-    -- step-tick during drag (8→9→...→32 = up to 25 events), intentionally preserving
+    -- updates measurements and inline coin sizes from cached content. Slider fires
+    -- OnValueChanged per step-tick during drag (8→9→...→32 = up to 25 events), preserving
     -- live visual preview because this control is adjusted rarely but benefits hugely
     -- from immediate feedback.
     CreateConfigSlider(appearanceBody, "StatsProFontSlider", "Font Size:", "fontSize", cd,

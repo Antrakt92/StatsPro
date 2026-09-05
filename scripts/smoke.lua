@@ -11349,6 +11349,75 @@ end
 smokeReachability:complete("fonts")
 
 do
+    for _, mode in ipairs({ "known", "split", "unknown", "hidden", "disabled" }) do
+        local inventoryCalls, tooltipCalls, coinCalls = 0, 0, 0
+        local repairEnv, repairAddon, repairTest = loadStatsPro("enUS", withProfileIdentity({
+            statsProDB = { dbVersion = 9, fontSize = 14, showDurability = false,
+                showRepairCost = mode ~= "disabled", displayMode = mode == "split" and "split" or "flat",
+                splitRepairCost = mode == "split" },
+            getInventoryItemDurability = function(slot)
+                inventoryCalls = inventoryCalls + 1
+                if slot == 1 then return 50, 100 end
+            end,
+            getTooltipInventoryItem = function()
+                tooltipCalls = tooltipCalls + 1
+                if mode ~= "unknown" then return { repairCost = 12345 } end
+            end,
+        }))
+        local name = "repair.font_slider." .. mode
+        fireEvent(name .. ".pew", repairEnv, "PLAYER_ENTERING_WORLD")
+        flushTimers(name .. ".bootstrap", repairEnv, 0)
+        repairAddon:OpenConfigMenu()
+        local fontState = repairTest.panelFontState()
+        local repairRegion = (mode == "split" and fontState.sideFontRegions or fontState.mainFontRegions)[4]
+        local otherRepair = (mode == "split" and fontState.mainFontRegions or fontState.sideFontRegions)[4]
+        if mode == "known" or mode == "split" or mode == "hidden" then
+            eq(name .. ".initial_coin_size", repairRegion:GetText(), "coin:12345:14")
+            eq(name .. ".initial_font_size", select(2, repairRegion:GetFont()), 14)
+        elseif mode == "unknown" then
+            eq(name .. ".initial_unknown", repairRegion:GetText(), "?")
+        else
+            eq(name .. ".initial_no_repair", repairRegion:IsShown(), false)
+        end
+        if mode == "split" then
+            eq(name .. ".repair_on_side", repairRegion:GetParent(), repairEnv.StatsProDefensiveFrame)
+            eq(name .. ".main_has_no_repair", otherRepair:IsShown(), false)
+        elseif mode == "hidden" then
+            clickCheckbox(name .. ".hide", repairEnv.StatsProVisibleCheck, false)
+            eq(name .. ".hud_hidden", repairEnv.StatsProFrame:IsShown(), false)
+        end
+        local inventoryBefore, tooltipBefore = inventoryCalls, tooltipCalls
+        local originalCoinFormatter = repairEnv.GetCoinTextureString
+        repairEnv.GetCoinTextureString = function(copper, fontSize)
+            coinCalls = coinCalls + 1
+            return originalCoinFormatter(copper, fontSize)
+        end
+        for _, size in ipairs({ 32, 8 }) do
+            repairEnv.StatsProFontSlider:SetValue(size)
+            local step = name .. ".size" .. size
+            eq(step .. ".saved_font_size", repairTest.profileState().settings.fontSize, size)
+            eq(step .. ".actual_font_size", select(2, repairRegion:GetFont()), size)
+            eq(step .. ".no_inventory_rescan", inventoryCalls, inventoryBefore)
+            eq(step .. ".no_tooltip_rescan", tooltipCalls, tooltipBefore)
+            if mode == "known" or mode == "split" then
+                eq(step .. ".immediate_coin_markup", repairRegion:GetText(), "coin:12345:" .. size)
+                eq(step .. ".repair_still_shown", repairRegion:IsShown(), true)
+                eq(step .. ".other_panel_has_no_repair", otherRepair:IsShown(), false)
+            elseif mode == "unknown" then
+                eq(step .. ".unknown_preserved", repairRegion:GetText(), "?")
+                eq(step .. ".unknown_not_formatted_as_zero", coinCalls, 0)
+            else
+                eq(step .. ".no_repair_revealed", repairRegion:IsShown(), false)
+                eq(step .. ".no_coin_formatting", coinCalls, 0)
+                if mode == "hidden" then
+                    eq(step .. ".hud_stays_hidden", repairEnv.StatsProFrame:IsShown(), false)
+                end
+            end
+        end
+    end
+end
+
+do
     runMigrate({ fontSize = "15.4" })
     local formatted = test.formatRepairCost(12345)
     local call = env.__lastCoinCall()

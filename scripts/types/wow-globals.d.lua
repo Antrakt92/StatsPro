@@ -54,6 +54,17 @@ MAX_SPELL_SCHOOLS = 7
 ---@type StatsProStringUtil?
 C_StringUtil = nil
 
+---@param unit string
+---@param slot number
+---@return number? itemID
+function GetInventoryItemID(unit, slot) end
+
+---@class (exact) StatsProItemAPI
+---@field IsItemDataCachedByID fun(itemID: number): boolean
+
+---@type StatsProItemAPI?
+C_Item = nil
+
 ---@param value number
 ---@param options table
 ---@return string

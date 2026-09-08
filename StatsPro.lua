@@ -28,6 +28,7 @@ addon.developerLinks = {
 }
 addon.durabilityRuntime = {
     generation = 0,
+    pendingItemSlots = {},
     retryDelays = { 1, 3, 8, 15 },
     retryStates = {
         durability = {
@@ -1389,6 +1390,40 @@ function addon.durabilityRuntime.MarkDirty()
     repairRetry.scheduledGeneration = nil
     repairRetry.scheduledAttempt = nil
     durabilityDirty = true
+end
+
+function addon.durabilityRuntime.GetCleanEquippedItemID(slot)
+    local getID = _G.GetInventoryItemID
+    if type(getID) ~= "function" then return nil end
+    local ok, itemID = pcall(getID, "player", slot)
+    if not ok or not addon.IsCleanFiniteNumber(itemID)
+        or itemID <= 0 or itemID ~= math.floor(itemID) then return nil end
+    return itemID
+end
+
+function addon.durabilityRuntime.GetUncachedEquippedItemID(slot)
+    local itemAPI = _G.C_Item
+    if type(itemAPI) ~= "table" or type(itemAPI.IsItemDataCachedByID) ~= "function" then return nil end
+    local itemID = addon.durabilityRuntime.GetCleanEquippedItemID(slot)
+    if not itemID then return nil end
+    local ok, isCached = pcall(itemAPI.IsItemDataCachedByID, itemID)
+    if not ok or issecretvalue(isCached) or type(isCached) ~= "boolean" or isCached then return nil end
+    return itemID
+end
+
+function addon.durabilityRuntime.OnItemDataReady(itemID, success)
+    if not addon.IsCleanFiniteNumber(itemID) or issecretvalue(success)
+        or type(success) ~= "boolean" or not success then return end
+    local runtime = addon.durabilityRuntime
+    for slot, pendingID in pairs(runtime.pendingItemSlots) do
+        if itemID == pendingID and runtime.GetCleanEquippedItemID(slot) == itemID then
+            -- A completed item request can arrive after the bounded retry budget.
+            -- Validate the current slot identity; old equipment callbacks are inert.
+            runtime.pendingItemSlots[slot] = nil
+            runtime.MarkDirty()
+            return
+        end
+    end
 end
 
 -- Durability and repair share one slot scan but own independent retry budgets.
@@ -8825,6 +8860,8 @@ local function ScanDurabilityAndCost()
     local durabilityIncomplete = false
     local repairCostPending = false
     local repairCostRetryable = false
+    local pendingItemSlots = {}
+    addon.durabilityRuntime.pendingItemSlots = pendingItemSlots
     for slot = DURABILITY_SLOT_MIN, DURABILITY_SLOT_MAX do
         if not DURABILITY_SKIP_SLOTS[slot] then
             local cur, max = GetInventoryItemDurability(slot)
@@ -8878,6 +8915,15 @@ local function ScanDurabilityAndCost()
                         repairCostPending = true
                         repairCostRetryable = true
                     end
+                end
+            else
+                -- nil/nil also describes jewelry and empty slots. Only an explicitly
+                -- uncached equipped item proves that this aggregate is incomplete.
+                local pendingID = addon.durabilityRuntime.GetUncachedEquippedItemID(slot)
+                if pendingID then
+                    pendingItemSlots[slot] = pendingID
+                    durabilityIncomplete = true
+                    if cached.showRepairCost then repairCostPending = true end
                 end
             end
         end
@@ -11223,6 +11269,8 @@ local EVENT_HANDLERS = {
         addon.profileRuntime.RequestResolution(false)
     end,
     UPDATE_INVENTORY_DURABILITY = function() addon.durabilityRuntime.MarkDirty() end,
+    GET_ITEM_INFO_RECEIVED      = addon.durabilityRuntime.OnItemDataReady,
+    ITEM_DATA_LOAD_RESULT       = addon.durabilityRuntime.OnItemDataReady,
     PLAYER_EQUIPMENT_CHANGED    = function()
         addon.durabilityRuntime.MarkDirty()
         addon.itemLevelRuntime.MarkDirty()

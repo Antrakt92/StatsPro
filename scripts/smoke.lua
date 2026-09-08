@@ -12449,6 +12449,139 @@ do
         repairTest.durabilityState().repairRetryAttempt, 4)
 end
 
+do
+    local function fixture(initiallyPending, secretDetector)
+        local state = { pending = initiallyPending, itemID = 303, inCombat = false, scans = 0 }
+        local itemEnv, itemAddon, itemTest = loadStatsPro("enUS", {
+            statsProDB = { showDurability = true, showRepairCost = true, useWorstDurability = false },
+            inCombatLockdown = function() return state.inCombat end,
+            issecretvalue = secretDetector,
+            getInventoryItemDurability = function(slot)
+                if slot == 1 then state.scans = state.scans + 1; return 80, 100 end
+                if slot == 3 and not state.pending then return 20, 100 end
+                return nil, nil
+            end,
+            getTooltipInventoryItem = function(_, slot)
+                return { repairCost = slot == 1 and 100 or 900 }
+            end,
+        })
+        itemEnv.GetInventoryItemID = function(_, slot)
+            if slot == 2 then return 202 end -- Cached jewelry legitimately has no durability.
+            if slot == 3 then return state.itemID end
+        end
+        itemEnv.C_Item = { IsItemDataCachedByID = function(id)
+            return id ~= state.itemID or not state.pending
+        end }
+        return itemEnv, itemAddon, itemTest, state
+    end
+
+    local itemEnv, itemAddon, itemTest, state = fixture(false)
+    fireEvent("durability.partial_hydration.enter", itemEnv, "PLAYER_ENTERING_WORLD")
+    near("durability.partial_hydration.seed_average", itemTest.durabilityState().durabilityValue, 50)
+    eq("durability.partial_hydration.seed_cost", itemTest.durabilityState().repairCost, 1000)
+    eq("durability.partial_hydration.cached_jewelry_no_retry", #itemEnv.__timers, 0)
+    local scans = state.scans
+    for _ = 1, 5 do itemAddon:RunUpdateStatsSafe() end
+    eq("durability.partial_hydration.clean_no_polling", state.scans, scans)
+    state.pending = true
+    fireEvent("durability.partial_hydration.equipment", itemEnv, "PLAYER_EQUIPMENT_CHANGED")
+    check("durability.partial_hydration.refresh", itemAddon:RunUpdateStatsSafe())
+    local cache = itemTest.durabilityState()
+    eq("durability.partial_hydration.incomplete", cache.durabilityComplete, false)
+    near("durability.partial_hydration.retains_complete_average", cache.durabilityValue, 50)
+    eq("durability.partial_hydration.no_partial_cost", cache.repairCost, nil)
+    eq("durability.partial_hydration.no_repair_budget_spent", cache.repairRetryAttempt, 0)
+    for attempt = 1, cache.retryLimit do
+        eq("durability.partial_hydration.timer" .. attempt, itemEnv.__flushNextTimer(), true)
+        check("durability.partial_hydration.retry" .. attempt, itemAddon:RunUpdateStatsSafe())
+    end
+    eq("durability.partial_hydration.bounded", #itemEnv.__timers, 0)
+    eq("durability.partial_hydration.exhausted_dirty", itemTest.durabilityState().dirty, false)
+    for _, event in ipairs({ "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT" }) do
+        fireEvent("durability.partial_hydration.unrelated." .. event, itemEnv, event, 999, true)
+        fireEvent("durability.partial_hydration.failed." .. event, itemEnv, event, 303, false)
+        eq("durability.partial_hydration.ignored." .. event, itemTest.durabilityState().dirty, false)
+    end
+    state.itemID = 404
+    fireEvent("durability.partial_hydration.stale_item", itemEnv, "ITEM_DATA_LOAD_RESULT", 303, true)
+    eq("durability.partial_hydration.stale_ignored", itemTest.durabilityState().dirty, false)
+    state.itemID = 303
+    state.pending = false
+    scans = state.scans
+    fireEvent("durability.partial_hydration.ready", itemEnv, "ITEM_DATA_LOAD_RESULT", 303, true)
+    eq("durability.partial_hydration.ready_marks_dirty", itemTest.durabilityState().dirty, true)
+    eq("durability.partial_hydration.event_coalesces", state.scans, scans)
+    check("durability.partial_hydration.ready_refresh", itemAddon:RunUpdateStatsSafe())
+    cache = itemTest.durabilityState()
+    eq("durability.partial_hydration.recovered_complete", cache.durabilityComplete, true)
+    near("durability.partial_hydration.recovered_average", cache.durabilityValue, 50)
+    eq("durability.partial_hydration.recovered_cost", cache.repairCost, 1000)
+    fireEvent("durability.partial_hydration.duplicate_ready", itemEnv, "GET_ITEM_INFO_RECEIVED", 303, true)
+    eq("durability.partial_hydration.resolved_event_ignored", itemTest.durabilityState().dirty, false)
+
+    for _, mode in ipairs({ "cold", "hidden", "disabled", "combat" }) do
+        local readyEnv, readyAddon, readyTest, readyState = fixture(true)
+        readyState.inCombat = mode == "combat"
+        fireEvent("durability.item_ready." .. mode .. ".enter", readyEnv, "PLAYER_ENTERING_WORLD")
+        eq("durability.item_ready." .. mode .. ".no_partial_average", readyTest.durabilityState().durabilityValue, nil)
+        if mode == "combat" then
+            eq("durability.item_ready.combat.no_retry_timer", #readyEnv.__timers, 0)
+        end
+        local settings = activeSettings(readyEnv)
+        if mode == "hidden" then settings.isVisible = false end
+        if mode == "disabled" then settings.showDurability, settings.showRepairCost = false, false end
+        readyTest.cacheSettings()
+        readyState.pending = false
+        local beforeScans = readyState.scans
+        fireEvent("durability.item_ready." .. mode .. ".ready", readyEnv, "GET_ITEM_INFO_RECEIVED", 303, true)
+        check("durability.item_ready." .. mode .. ".update", readyAddon:RunUpdateStatsSafe())
+        if mode == "hidden" or mode == "disabled" then
+            eq("durability.item_ready." .. mode .. ".no_hidden_scan", readyState.scans, beforeScans)
+            settings.isVisible, settings.showDurability, settings.showRepairCost = true, true, true
+            readyTest.cacheSettings()
+            check("durability.item_ready." .. mode .. ".resume", readyAddon:RunUpdateStatsSafe())
+        end
+        eq("durability.item_ready." .. mode .. ".complete", readyTest.durabilityState().durabilityComplete, true)
+        near("durability.item_ready." .. mode .. ".average", readyTest.durabilityState().durabilityValue, 50)
+        local completeScans = readyState.scans
+        readyEnv.__flushTimers()
+        check("durability.item_ready." .. mode .. ".stale_timer_update", readyAddon:RunUpdateStatsSafe())
+        eq("durability.item_ready." .. mode .. ".stale_timer_inert", readyState.scans, completeScans)
+    end
+
+    local secretID, secretCached = {}, {}
+    for _, mode in ipairs({ "missing", "id_error", "id_secret", "id_nan", "id_fraction", "id_zero",
+            "cache_error", "cache_nil", "cache_secret", "cached" }) do
+        local badEnv, badAddon, badTest, badState = fixture(true, function(value)
+            return value == secretID or value == secretCached
+        end)
+        if mode == "missing" then badEnv.C_Item = nil
+        elseif mode:sub(1, 3) == "id_" then
+            badEnv.GetInventoryItemID = function()
+                if mode == "id_error" then error("inventory ID unavailable") end
+                if mode == "id_secret" then return secretID end
+                if mode == "id_nan" then return 0 / 0 end
+                if mode == "id_fraction" then return 303.5 end
+                return 0
+            end
+        else
+            badEnv.C_Item.IsItemDataCachedByID = function()
+                if mode == "cache_error" then error("cache state unavailable") end
+                if mode == "cache_secret" then return secretCached end
+                if mode == "cached" then return true end
+            end
+        end
+        fireEvent("durability.cache_capability." .. mode .. ".enter", badEnv, "PLAYER_ENTERING_WORLD")
+        check("durability.cache_capability." .. mode .. ".update", badAddon:RunUpdateStatsSafe())
+        eq("durability.cache_capability." .. mode .. ".legacy_complete", badTest.durabilityState().durabilityComplete, true)
+        eq("durability.cache_capability." .. mode .. ".no_retry", #badEnv.__timers, 0)
+        local beforeScans = badState.scans
+        fireEvent("durability.cache_capability." .. mode .. ".secret_id", badEnv, "GET_ITEM_INFO_RECEIVED", secretID, true)
+        fireEvent("durability.cache_capability." .. mode .. ".secret_success", badEnv, "GET_ITEM_INFO_RECEIVED", 303, secretCached)
+        eq("durability.cache_capability." .. mode .. ".no_scan", badState.scans, beforeScans)
+    end
+end
+
 smokeReachability:complete("durability-repair")
 
 do

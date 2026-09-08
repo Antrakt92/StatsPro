@@ -22,8 +22,6 @@ globals = {
     -- Slash registration
     "SLASH_STATSPRO1", "SLASH_STATSPRO2",
     "SlashCmdList",  -- Blizzard table; addon adds keys, so it's writable for us
-    -- Explicit support bridge exposed on a named global.
-    "StatsProCloseColorPicker",
 }
 
 -- WoW API surface (read-only). Curated to what StatsPro touches; add more as
@@ -42,7 +40,6 @@ read_globals = {
     "GetCombatRatingBonusForCombatRatingValue",
     "GetDodgeChance", "GetParryChance", "GetBlockChance",
     "GetLifesteal", "GetAvoidance", "GetUnitSpeed",
-    "IsSwimming", "IsFlying", "IsFalling",
     "GetAverageItemLevel",
     "UnitStat", "UnitArmor", "UnitEffectiveLevel", "UnitClass",
     "UnitGUID", "UnitFullName", "GetServerTime",

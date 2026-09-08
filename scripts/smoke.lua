@@ -11360,6 +11360,124 @@ do
     assertDeepEqual("fonts.catalog_locale.bounded.zero_writes", never.test.profileState().root, neverBefore)
 end
 
+do
+    for _, scenario in ipairs({ "picker-hide", "picker-cancel", "locale-cancel", "locale-commit" }) do
+        local name = "fonts.preview_restore_recovery." .. scenario
+        local previewFont = scenario:find("locale", 1, true)
+            and "Fonts\\ARIALN.TTF"
+            or "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\PreviewRecovery.ttf"
+        local rejectRestore, combat = false, false
+        local env, addon, test = loadStatsPro("enUS", withProfileIdentity({
+            lsmFonts = { { name = "Preview Recovery", path = previewFont } },
+            isKnownFontFile = function() return true end,
+            inCombatLockdown = function() return combat end,
+            setFontResult = function(_, font)
+                return not rejectRestore or font == previewFont
+            end,
+        }))
+        fireEvent(name .. ".pew", env, "PLAYER_ENTERING_WORLD")
+        addon:OpenConfigMenu()
+        local committed = activeSettings(env).font
+        local baseline = deepCopy(env.StatsProDB)
+        if scenario:find("locale", 1, true) then
+            addon.settingsUI.localization.Preview(addon, "ruRU")
+        else
+            addon.settingsUI.fontPicker.Show(addon)
+            addon.settingsUI.fontPicker.Preview(addon, previewFont)
+        end
+        eq(name .. ".preview_applied", test.panelFontState().mainAppliedFont, previewFont)
+        rejectRestore = true
+        if scenario == "picker-hide" then
+            addon.settingsUI.fontPicker.Hide(addon)
+        elseif scenario == "picker-cancel" then
+            addon.settingsUI.fontPicker.CancelPreview(addon)
+        elseif scenario == "locale-cancel" then
+            addon.settingsUI.localization.CancelPreview(addon)
+        else
+            addon.settingsUI.localization.CommitPreview(addon)
+        end
+        eq(name .. ".recovery_requested", addon.profileRuntime.forceReapply, true)
+        eq(name .. ".font_override_cleared", addon.settingsUI.fontPicker.previewedPath, nil)
+        eq(name .. ".locale_override_cleared", addon.settingsUI.localization.previewActive, false)
+        eq(name .. ".new_font_preview_waits", addon.settingsUI.fontPicker.Preview(addon, previewFont), false)
+        eq(name .. ".new_locale_preview_waits", addon.settingsUI.localization.Preview(addon, "ruRU"), false)
+        assertDeepEqual(name .. ".failure_zero_writes", env.StatsProDB, baseline)
+        if scenario == "picker-cancel" then
+            env.__flushTimers(0.75)
+            eq(name .. ".persistent_failure_bounded", addon.profileRuntime.forceReapplyRetryCount, 4)
+            eq(name .. ".retry_token_exhausted", addon.profileRuntime.forceReapplyRetryToken, nil)
+        end
+        if scenario == "picker-hide" then
+            rejectRestore = false
+            env.__flushTimers(0)
+        else
+            combat = true
+            env.__flushTimers(0)
+            eq(name .. ".combat_defers_restore", test.panelFontState().mainAppliedFont, previewFont)
+            eq(name .. ".combat_preserves_recovery", addon.profileRuntime.forceReapply, true)
+            rejectRestore, combat = false, false
+            fireEvent(name .. ".combat_end", env, "PLAYER_REGEN_ENABLED")
+        end
+        eq(name .. ".committed_restored", test.panelFontState().mainAppliedFont, committed)
+        eq(name .. ".recovery_complete", addon.profileRuntime.forceReapply, false)
+        assertDeepEqual(name .. ".recovery_zero_writes", env.StatsProDB, baseline)
+    end
+end
+
+do
+    for _, scenario in ipairs({ "bounded", "success", "newer-root", "newer-preview" }) do
+        local name = "fonts.preview_restore_readonly." .. scenario
+        local previewFont = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\ReadOnlyPreview.ttf"
+        local rejectRestore = false
+        local env, addon, test = loadStatsPro("enUS", {
+            lsmFonts = { { name = "Read-only Preview", path = previewFont } },
+            isKnownFontFile = function() return true end,
+            setFontResult = function(_, font)
+                return not rejectRestore or font == previewFont
+            end,
+        })
+        fireEvent(name .. ".pew", env, "PLAYER_ENTERING_WORLD")
+        addon:OpenConfigMenu()
+        addon.settingsUI.fontPicker.Show(addon)
+        addon.settingsUI.fontPicker.Preview(addon, previewFont)
+        local currentRoot = deepCopy(env.StatsProDB)
+        local committed = activeSettings(env).font
+        local futureRoot = deepCopy(currentRoot)
+        futureRoot.dbVersion = futureRoot.dbVersion + 1
+        env.StatsProDB = futureRoot
+        rejectRestore = true
+        addon.settingsUI.fontPicker.Hide(addon)
+        eq(name .. ".no_unserviceable_profile_recovery", addon.profileRuntime.forceReapply, false)
+        check(name .. ".display_retry_queued", addon.fontRuntime.previewRestoreToken ~= nil)
+        local futureBaseline = deepCopy(futureRoot)
+        if scenario == "success" then
+            rejectRestore = false
+        elseif scenario == "newer-root" then
+            for _, profile in pairs(currentRoot.profiles) do
+                profile.settings.font = "Fonts\\ARIALN.TTF"
+            end
+            env.StatsProDB = currentRoot
+            rejectRestore = false
+        elseif scenario == "newer-preview" then
+            env.StatsProDB = currentRoot
+            rejectRestore = false
+            addon.settingsUI.fontPicker.Preview(addon, previewFont)
+        end
+        env.__flushTimers(0.75)
+        eq(name .. ".display_retry_finished", addon.fontRuntime.previewRestoreToken, nil)
+        assertDeepEqual(name .. ".future_root_untouched", futureRoot, futureBaseline)
+        if scenario == "success" then
+            eq(name .. ".fallback_restored", test.panelFontState().mainAppliedFont, committed)
+            eq(name .. ".still_readonly", addon.dbRuntime.readOnly, true)
+        elseif scenario == "newer-root" then
+            eq(name .. ".current_preference_wins", test.panelFontState().mainAppliedFont, "Fonts\\ARIALN.TTF")
+            eq(name .. ".current_root_retained", env.StatsProDB, currentRoot)
+        else
+            eq(name .. ".no_stale_font_apply", test.panelFontState().mainAppliedFont, previewFont)
+        end
+    end
+end
+
 smokeReachability:complete("fonts")
 
 do

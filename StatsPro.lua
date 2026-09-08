@@ -10236,6 +10236,45 @@ local function ReflowAllPanels()
     defensivePanel:Reflow()
 end
 
+function addon.fontRuntime.RestoreCommittedPreviewFont(retryAttempt)
+    local runtime = addon.fontRuntime
+    local restored = runtime.applyCommittedTextStyle(
+        runtime.preferredPath(), GetNumberDB("fontSize"), true, true)
+    runtime.previewRestoreToken = nil
+    if restored then return true end
+
+    local profile = addon.profileRuntime
+    if addon.dbRuntime.registryReady and not addon.dbRuntime.readOnly
+        and type(UnitGUID) == "function" then
+        -- Use the current profile at the safe retry boundary. Never retain the
+        -- cancelled preview's font or settings graph, or restart an existing budget.
+        if not profile.forceReapply then
+            profile.forceReapply = true
+            profile.forceReapplyRetryCount = 0
+            profile.pendingResolution = true
+            profile.RequestResolution(false)
+        end
+    else
+        -- Compatibility mode has no writable profile for the coordinator to apply.
+        -- Retry only the display style, with the latest fallback preference each time.
+        local attempt = (retryAttempt or 0) + 1
+        if attempt <= 3 then
+            local token = {}
+            runtime.previewRestoreToken = token
+            C_Timer.After(0.25 * attempt, function()
+                if runtime.previewRestoreToken ~= token then return end
+                runtime.previewRestoreToken = nil
+                if profile.suppressIntermediateRefresh or profile.transitioning
+                    or addon.settingsUI.fontPicker.previewedPath
+                    or addon.settingsUI.localization.previewActive
+                    or addon.appearancePresets.session or addon.hudPresets.session then return end
+                if runtime.RestoreCommittedPreviewFont(attempt) then ReflowAllPanels() end
+            end)
+        end
+    end
+    return false
+end
+
 addon.readabilityConfig.getTextOutlineStyle = addon.readabilityConfig.getTextOutlineStyleDB
 
 addon.readabilityConfig.selectTextOutlineStyle = function(value, opt, dropdown)
@@ -17233,6 +17272,8 @@ function addon.settingsUI.fontPicker.RefreshCaption(self)
 end
 
 function addon.settingsUI.fontPicker.Preview(self, path)
+    if self.profileRuntime.forceReapply or self.profileRuntime.transitioning
+        or self.profileRuntime.suppressIntermediateRefresh then return false end
     local picker = self.settingsUI.fontPicker
     if SameFontPath(path, picker.previewedPath) then return end
     local applied, effectiveFont = ApplyTextStyleToAllPanels(path, GetNumberDB("fontSize"))
@@ -17248,8 +17289,7 @@ function addon.settingsUI.fontPicker.CancelPreview(self, force)
     picker.previewedPath = nil
     if self.profileRuntime.suppressIntermediateRefresh then return hadPreview end
     if not force and not hadPreview then return false end
-    local restored = self.fontRuntime.applyCommittedTextStyle(
-        self.fontRuntime.preferredPath(), GetNumberDB("fontSize"), true, true)
+    local restored = self.fontRuntime.RestoreCommittedPreviewFont()
     ReflowAllPanels()
     return restored
 end
@@ -17572,6 +17612,8 @@ function addon.settingsUI.fontPicker.Initialize(self, context, dropdown)
 end
 
 function addon.settingsUI.localization.Preview(self, value)
+    if self.profileRuntime.forceReapply or self.profileRuntime.transitioning
+        or self.profileRuntime.suppressIntermediateRefresh then return false end
     local state = self.settingsUI.localization
     local locale = value == "auto"
         and self.NormalizeOutputLocale(GetLocale()) or value
@@ -17614,13 +17656,11 @@ function addon.settingsUI.localization.CancelPreview(self)
     local active = ResolveActiveLocale()
     cached.activeLabels = LABELS_BY_LOCALE[active] or LABELS_BY_LOCALE.enUS
     cached.activeLabelsLocale = LABELS_BY_LOCALE[active] and active or "enUS"
-    if state.previewSwappedFont then
-        local restored = self.fontRuntime.applyCommittedTextStyle(
-            self.fontRuntime.preferredPath(), GetNumberDB("fontSize"), true, true)
-        if restored then state.previewSwappedFont = false end
-    end
+    local restoreFont = state.previewSwappedFont
+    state.previewSwappedFont = false
     state.previewActive = false
     state.previewLocale = nil
+    if restoreFont then self.fontRuntime.RestoreCommittedPreviewFont() end
     ApplyConfigFont(ResolveConfigFont(active))
     RefreshConfigLocalization()
     self:RunUpdateStatsSafe()
@@ -17628,13 +17668,11 @@ end
 
 function addon.settingsUI.localization.CommitPreview(self)
     local state = self.settingsUI.localization
-    if state.previewSwappedFont then
-        local restored = self.fontRuntime.applyCommittedTextStyle(
-            self.fontRuntime.preferredPath(), GetNumberDB("fontSize"), true, true)
-        if restored then state.previewSwappedFont = false end
-    end
+    local restoreFont = state.previewSwappedFont
+    state.previewSwappedFont = false
     state.previewActive = false
     state.previewLocale = nil
+    if restoreFont then self.fontRuntime.RestoreCommittedPreviewFont() end
 end
 
 function addon.settingsUI.BuildAppearanceTab(self, context)

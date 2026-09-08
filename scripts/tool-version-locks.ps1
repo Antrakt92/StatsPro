@@ -111,6 +111,18 @@ function New-StatsProOwnedToolInvocationRoot {
     return $root
 }
 
+function Invoke-StatsProCleanupPreservingFailure {
+    param([scriptblock]$Cleanup, [AllowNull()]$Failure)
+
+    try { & $Cleanup }
+    catch {
+        if ($null -eq $Failure) { throw }
+        # A locked temporary file is secondary to the tool/install error that
+        # triggered cleanup. Keep both visible without replacing that primary error.
+        Write-Warning -WarningAction Continue "Cleanup failed after '$($Failure.Exception.Message)': $($_.Exception.Message)"
+    }
+}
+
 function Remove-StatsProDirectoryWithRetry {
     param(
         [string]$Path,

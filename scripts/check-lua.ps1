@@ -906,6 +906,7 @@ if ($SelfTest) {
 
 $GateOwnedToolRoot = if ($EnforceToolLocks) { New-StatsProOwnedToolInvocationRoot } else { $null }
 $LocationPushed = $false
+$GateFailure = $null
 try {
 Push-Location -Path $RepoRoot
 $LocationPushed = $true
@@ -1093,6 +1094,7 @@ if ($UpdateSmokeContract) {
 
 Write-Host "All Lua checks passed."
 }
+catch { $GateFailure = $_; throw }
 finally {
     try {
         if ($LocationPushed) {
@@ -1101,7 +1103,9 @@ finally {
     }
     finally {
         if ($GateOwnedToolRoot) {
-            Remove-StatsProOwnedToolInvocationRoot -Path $GateOwnedToolRoot
+            Invoke-StatsProCleanupPreservingFailure -Failure $GateFailure -Cleanup {
+                Remove-StatsProOwnedToolInvocationRoot -Path $GateOwnedToolRoot
+            }
         }
     }
 }

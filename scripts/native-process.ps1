@@ -58,6 +58,49 @@ function Format-StatsProVersionOutput {
     return ($lines -join " | ")
 }
 
+function Stop-StatsProNativeProcessTree {
+    param([System.Diagnostics.Process]$Process)
+
+    # Never send a PID-based command after the owned root has exited: that PID
+    # could now identify another process. The caller still reports its timeout.
+    if ($Process.HasExited) { return }
+    if ($env:OS -eq "Windows_NT") {
+        $start = [System.Diagnostics.ProcessStartInfo]::new()
+        $start.FileName = Join-Path ([Environment]::GetFolderPath("System")) "taskkill.exe"
+        $start.Arguments = "/PID $($Process.Id) /T /F"
+        $start.UseShellExecute = $false
+        $start.CreateNoWindow = $true
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        $terminator = [System.Diagnostics.Process]::new()
+        $terminator.StartInfo = $start
+        try {
+            [void]$terminator.Start()
+            $stdout = $terminator.StandardOutput.ReadToEndAsync()
+            $stderr = $terminator.StandardError.ReadToEndAsync()
+            if (-not $terminator.WaitForExit(10000)) {
+                if (-not $terminator.HasExited) { $terminator.Kill() }
+                throw "Owned process-tree termination exceeded 10 seconds."
+            }
+            if ($terminator.ExitCode -ne 0) {
+                throw "Owned process-tree termination exited with code $($terminator.ExitCode)."
+            }
+            [void]$stdout.Wait(1000)
+            [void]$stderr.Wait(1000)
+        }
+        finally { $terminator.Dispose() }
+    }
+    elseif ($Process.GetType().GetMethod("Kill", [type[]]@([bool]))) {
+        $Process.Kill($true)
+    }
+    else {
+        $Process.Kill()
+    }
+    if (-not $Process.WaitForExit(5000)) {
+        throw "Owned process did not exit after process-tree termination."
+    }
+}
+
 function Invoke-StatsProNativeCapture {
     param(
         [string]$FilePath,
@@ -113,17 +156,25 @@ function Invoke-StatsProNativeCapture {
             $completed = $true
         }
         if (-not $completed) {
+            $cleanupFailure = $null
             try {
-                $process.Kill()
+                Stop-StatsProNativeProcessTree -Process $process
             }
             catch {
-                # Preserve the timeout failure below; the process may have exited between WaitForExit and Kill.
+                $cleanupFailure = $_.Exception.Message
             }
-            [void]$process.WaitForExit(5000)
             $timeoutOutput = @()
-            if ($stdoutTask.Wait(1000)) { $timeoutOutput += Split-StatsProNativeOutput $stdoutTask.Result }
-            if ($stderrTask.Wait(1000)) { $timeoutOutput += Split-StatsProNativeOutput $stderrTask.Result }
+            foreach ($streamTask in @($stdoutTask, $stderrTask)) {
+                try {
+                    if ($streamTask.Wait(1000)) { $timeoutOutput += Split-StatsProNativeOutput $streamTask.Result }
+                }
+                catch {
+                    # Reading diagnostics must never replace the original timeout.
+                    $timeoutOutput += "Output capture failed: $($_.Exception.Message)"
+                }
+            }
             $details = if ($timeoutOutput.Count -gt 0) { " Output: $($timeoutOutput -join ' ')" } else { "" }
+            if ($cleanupFailure) { $details += " Tree cleanup failed: $cleanupFailure" }
             throw "Timed out after $TimeoutSeconds second(s): $displayName.$details"
         }
         if (-not $stdoutTask.Wait(5000)) {

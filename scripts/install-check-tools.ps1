@@ -174,6 +174,7 @@ function Install-PinnedLua51 {
     }
     $ownsArchive = -not $ArchivePathOverride
     $staging = Join-Path $allowedFull "lua-$nonce"
+    $installFailure = $null
     try {
         if (-not $ArchivePathOverride) {
             [void](Save-PinnedArtifact -Lock $Lock -DestinationPath $archive)
@@ -202,12 +203,15 @@ function Install-PinnedLua51 {
         }
         return $DestinationRoot
     }
+    catch { $installFailure = $_; throw }
     finally {
-        if ($ownsArchive -and (Test-Path -LiteralPath $archive -PathType Leaf)) {
-            [System.IO.File]::Delete($archive)
-        }
-        if (Test-Path -LiteralPath $staging -PathType Container) {
-            Remove-StatsProDirectoryWithRetry -Path $staging
+        Invoke-StatsProCleanupPreservingFailure -Failure $installFailure -Cleanup {
+            if ($ownsArchive -and (Test-Path -LiteralPath $archive -PathType Leaf)) {
+                [System.IO.File]::Delete($archive)
+            }
+            if (Test-Path -LiteralPath $staging -PathType Container) {
+                Remove-StatsProDirectoryWithRetry -Path $staging
+            }
         }
     }
 }
@@ -299,6 +303,7 @@ function Install-PinnedLuaLanguageServer {
     }
     $ownsArchive = -not $ArchivePathOverride
     $staging = Join-Path ([System.IO.Path]::GetFullPath($AllowedToolRoot)) "luals-$nonce"
+    $installFailure = $null
     try {
         if ($ArchivePathOverride) {
             [void](Assert-StatsProPinnedArchive -Path $archive -ExpectedSha256 $Lock.Sha256)
@@ -321,12 +326,15 @@ function Install-PinnedLuaLanguageServer {
         Move-Item -LiteralPath $staging -Destination $DestinationRoot
         return Assert-LuaLanguageServerRoot -Root $DestinationRoot -Locks $Locks
     }
+    catch { $installFailure = $_; throw }
     finally {
-        if ($ownsArchive -and [System.IO.File]::Exists($archive)) {
-            [System.IO.File]::Delete($archive)
-        }
-        if ([System.IO.Directory]::Exists($staging)) {
-            Remove-StatsProDirectoryWithRetry -Path $staging
+        Invoke-StatsProCleanupPreservingFailure -Failure $installFailure -Cleanup {
+            if ($ownsArchive -and [System.IO.File]::Exists($archive)) {
+                [System.IO.File]::Delete($archive)
+            }
+            if ([System.IO.Directory]::Exists($staging)) {
+                Remove-StatsProDirectoryWithRetry -Path $staging
+            }
         }
     }
 }
@@ -397,6 +405,7 @@ function Install-PinnedLuaRocksBundle {
         throw "Pinned LuaRocks staging escaped the temporary directory."
     }
     [System.IO.Directory]::CreateDirectory($downloadRoot) | Out-Null
+    $installFailure = $null
     try {
         $archive = Join-Path $downloadRoot $luaRocksLock.FileName
         [void](Save-PinnedArtifact -Lock $luaRocksLock -DestinationPath $archive)
@@ -440,10 +449,12 @@ function Install-PinnedLuaRocksBundle {
         foreach ($package in @(Get-LuacheckInstallPlan -Locks $Locks)) {
             Write-Host "Installing pinned $($package.Name) $($package.Lock.Version) into the owned rock tree..."
             $installArgs = @("install", $rockPaths[$package.Name], "--tree", $tree, "--deps-mode=none")
+            # Local source-rock copies spawn many Windows command helpers and can
+            # exceed two minutes even while progressing. Keep a finite five-minute cap.
             $result = Invoke-NativeCapture `
                 -FilePath $luaRocks `
                 -Arguments $installArgs `
-                -TimeoutSeconds 120 `
+                -TimeoutSeconds 300 `
                 -Description "pinned $($package.Name) install"
             if ($result.ExitCode -ne 0) {
                 throw "Pinned $($package.Name) install exited with code $($result.ExitCode): $(Format-StatsProVersionOutput $result.Output)"
@@ -452,17 +463,22 @@ function Install-PinnedLuaRocksBundle {
         return Assert-LuaRocksBundle -Layout $Layout -Locks $Locks
     }
     catch {
-        if (Test-Path -LiteralPath $DestinationRoot) {
-            Remove-OwnedToolDirectory `
-                -DestinationRoot $DestinationRoot `
-                -AllowedToolRoot $AllowedToolRoot `
-                -Label "Pinned LuaRocks"
+        $installFailure = $_
+        Invoke-StatsProCleanupPreservingFailure -Failure $installFailure -Cleanup {
+            if (Test-Path -LiteralPath $DestinationRoot) {
+                Remove-OwnedToolDirectory `
+                    -DestinationRoot $DestinationRoot `
+                    -AllowedToolRoot $AllowedToolRoot `
+                    -Label "Pinned LuaRocks"
+            }
         }
         throw
     }
     finally {
-        if ([System.IO.Directory]::Exists($downloadRoot)) {
-            Remove-StatsProDirectoryWithRetry -Path $downloadRoot
+        Invoke-StatsProCleanupPreservingFailure -Failure $installFailure -Cleanup {
+            if ([System.IO.Directory]::Exists($downloadRoot)) {
+                Remove-StatsProDirectoryWithRetry -Path $downloadRoot
+            }
         }
     }
 }
@@ -521,6 +537,92 @@ function Assert-ToolCommandVersion {
         throw "$Label version command exited with code $($result.ExitCode): $(Format-StatsProVersionOutput $result.Output)"
     }
     Assert-StatsProCommandVersionText -Label $Label -Text ($result.Output -join "`n") -Pattern $Pattern
+}
+
+function Assert-NativeTimeoutTreeCleanup {
+    param([string]$Root)
+
+    if ($env:OS -ne "Windows_NT") { return }
+    $fixtureRoot = Join-Path $Root "native-timeout"
+    [void][System.IO.Directory]::CreateDirectory($fixtureRoot)
+    $childPath = Join-Path $fixtureRoot "child.ps1"
+    $parentPath = Join-Path $fixtureRoot "parent.ps1"
+    [System.IO.File]::WriteAllText($childPath, @'
+param([string]$Root)
+$ErrorActionPreference = "Stop"
+$lock = [System.IO.File]::Open((Join-Path $Root "child.dll"), 'Create', 'ReadWrite', 'None')
+try {
+    $current = [System.Diagnostics.Process]::GetCurrentProcess()
+    [System.IO.File]::WriteAllText((Join-Path $Root "child.pid"), "$PID|$($current.StartTime.ToUniversalTime().Ticks)")
+    [Console]::Out.WriteLine("child-ready")
+    [System.Threading.Thread]::Sleep(45000)
+}
+finally { $lock.Dispose() }
+'@)
+    [System.IO.File]::WriteAllText($parentPath, @'
+param([string]$Root)
+$ErrorActionPreference = "Stop"
+$current = [System.Diagnostics.Process]::GetCurrentProcess()
+[System.IO.File]::WriteAllText((Join-Path $Root "parent.pid"), "$PID|$($current.StartTime.ToUniversalTime().Ticks)")
+$start = [System.Diagnostics.ProcessStartInfo]::new()
+$start.FileName = $current.MainModule.FileName
+$start.Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $Root 'child.ps1') + '" -Root "' + $Root + '"'
+$start.UseShellExecute = $false
+$start.CreateNoWindow = $true
+$child = [System.Diagnostics.Process]::Start($start)
+try { $child.WaitForExit() }
+finally { $child.Dispose() }
+'@)
+    $failure = $null
+    try {
+        try {
+            [void](Invoke-NativeCapture `
+                -FilePath ([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName) `
+                -Arguments @("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $parentPath, "-Root", $fixtureRoot) `
+                -TimeoutSeconds 10 `
+                -Description "owned parent and child timeout regression")
+        }
+        catch { $failure = $_ }
+        if (-not $failure -or $failure.Exception.Message -notmatch 'Timed out after 10 second\(s\)') {
+            throw "Native tree timeout did not preserve the original timeout: $($failure.Exception.Message)"
+        }
+        foreach ($name in @("parent", "child")) {
+            $identityPath = Join-Path $fixtureRoot "$name.pid"
+            if (-not [System.IO.File]::Exists($identityPath)) {
+                throw "Native timeout fixture did not start its $name process."
+            }
+            $identity = [System.IO.File]::ReadAllText($identityPath).Split('|')
+            $ownedProcess = Get-Process -Id ([int]$identity[0]) -ErrorAction SilentlyContinue
+            if ($ownedProcess) {
+                try {
+                    if ($ownedProcess.StartTime.ToUniversalTime().Ticks -eq [long]$identity[1]) {
+                        throw "Native timeout left its owned $name process running."
+                    }
+                }
+                finally { $ownedProcess.Dispose() }
+            }
+        }
+        Remove-StatsProDirectoryWithRetry -Path $fixtureRoot
+        Assert-Equal "native timeout releases descendant DLL locks" (Test-Path -LiteralPath $fixtureRoot) $false
+    }
+    finally {
+        # A failed regression must not leak its own fixture child. Check its exact
+        # start identity before touching a PID that the operating system may reuse.
+        foreach ($name in @("child", "parent")) {
+            $identityPath = Join-Path $fixtureRoot "$name.pid"
+            if (-not [System.IO.File]::Exists($identityPath)) { continue }
+            $identity = [System.IO.File]::ReadAllText($identityPath).Split('|')
+            $ownedProcess = Get-Process -Id ([int]$identity[0]) -ErrorAction SilentlyContinue
+            if (-not $ownedProcess) { continue }
+            try {
+                if ($ownedProcess.StartTime.ToUniversalTime().Ticks -eq [long]$identity[1]) {
+                    $ownedProcess.Kill()
+                    [void]$ownedProcess.WaitForExit(5000)
+                }
+            }
+            finally { $ownedProcess.Dispose() }
+        }
+    }
 }
 
 function Invoke-SelfTest {
@@ -589,6 +691,29 @@ function Invoke-SelfTest {
     $selfTestRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-tool-selftest-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $selfTestRoot | Out-Null
     try {
+        Assert-NativeTimeoutTreeCleanup -Root $selfTestRoot
+        $primaryFailure = $null
+        $observedFailure = $null
+        $cleanupMessages = @()
+        try {
+            try { throw "original installer failure" }
+            catch { $primaryFailure = $_; throw }
+            finally {
+                $cleanupMessages = @(Invoke-StatsProCleanupPreservingFailure -Failure $primaryFailure -Cleanup {
+                    throw "secondary locked-file cleanup failure"
+                } 3>&1)
+            }
+        }
+        catch { $observedFailure = $_ }
+        Assert-Equal "cleanup retains original failure" $observedFailure.Exception.Message "original installer failure"
+        Assert-Equal "cleanup retains original exception identity" `
+            ([object]::ReferenceEquals($observedFailure.Exception, $primaryFailure.Exception)) $true
+        Assert-Equal "cleanup retains original failure stack" $observedFailure.ScriptStackTrace $primaryFailure.ScriptStackTrace
+        Assert-Equal "cleanup reports secondary failure" `
+            (($cleanupMessages -join " ") -match "secondary locked-file cleanup failure") $true
+        Assert-ThrowsMatch "cleanup remains fatal without primary failure" {
+            Invoke-StatsProCleanupPreservingFailure -Failure $null -Cleanup { throw "unmasked cleanup failure" }
+        } "unmasked cleanup failure"
         $cleanupRoot = Join-Path $selfTestRoot "cleanup"
         New-Item -ItemType Directory -Path $cleanupRoot | Out-Null
         [System.IO.File]::WriteAllText((Join-Path $cleanupRoot "owned.bin"), "owned")

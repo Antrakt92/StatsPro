@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.16.5 - 09-Sep-2026 — Gear and font recovery
+
+### Fixed
+
+- Durability and repair rows recover when equipped items finish loading late.
+- Cancelling a font or language preview restores the saved font after an interrupted update.
+
+### Updated
+
+- Bundled M+ and raid stat targets refreshed from Archon on 9 September for all 40 specializations.
+- Improved timeout recovery in development checks.
+
 ## 1.16.4 - 08-Sep-2026 — Archon target refresh
 
 ### Updated

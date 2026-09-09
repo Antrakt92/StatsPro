@@ -288,7 +288,7 @@ function ConvertTo-StatsProExpectedPackagedText {
 function Get-StatsProTopChangelogEntryFromText {
     param([string]$Text)
 
-    # SYNC: check-release-version.ps1::Get-TopChangelogEntry prepares the release-only manual changelog.
+    # Reproduce the legacy truncated archive for the source-fidelity regression.
     $headingDash = [regex]::Escape([string][char]0x2014)
     $headingPattern = "^##\s+([0-9]+\.[0-9]+\.[0-9]+)\s+-\s+([0-9]{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-[0-9]{4})\s+$headingDash\s+\S.*$"
     $headingMatches = [regex]::Matches($Text, $headingPattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
@@ -430,23 +430,8 @@ function Assert-StatsProPackageSourceFidelity {
             $sourceText = ConvertTo-StatsProNormalizedText -Path $sourceItem.FullName -ContractPath $contractPath
             $expectedText = ConvertTo-StatsProExpectedPackagedText -SourceText $sourceText -ContractPath $contractPath -ProjectVersion $ProjectVersion -Contract $contract
             $actualText = ConvertTo-StatsProNormalizedText -Path $packagePath -ContractPath $contractPath
-            $expectedAlternatives = @($expectedText)
-            if ($contractPath -eq "StatsPro/CHANGELOG.md") {
-                $topChangelogEntry = Get-StatsProTopChangelogEntryFromText -Text $expectedText
-                if (-not [System.StringComparer]::Ordinal.Equals($topChangelogEntry, $expectedText)) {
-                    $expectedAlternatives += $topChangelogEntry
-                }
-            }
-            $matched = $false
-            foreach ($expectedAlternative in $expectedAlternatives) {
-                if ([System.StringComparer]::Ordinal.Equals($expectedAlternative, $actualText)) {
-                    $matched = $true
-                    break
-                }
-            }
-            if (-not $matched) {
-                $expectedHashes = @($expectedAlternatives | ForEach-Object { Get-StatsProTextSha256 $_ })
-                throw "Package source-fidelity mismatch for ${contractPath}: normalized SHA256 $(Get-StatsProTextSha256 $actualText), expected one of $($expectedHashes -join ', ')."
+            if (-not [System.StringComparer]::Ordinal.Equals($expectedText, $actualText)) {
+                throw "Package source-fidelity mismatch for ${contractPath}: normalized SHA256 $(Get-StatsProTextSha256 $actualText), expected $(Get-StatsProTextSha256 $expectedText)."
             }
         }
         else {
@@ -1071,7 +1056,9 @@ function Invoke-SelfTest {
             $sourceChangelogText = ConvertTo-StatsProNormalizedText -Path $sourceChangelogPath -ContractPath "StatsPro/CHANGELOG.md"
             $topChangelogText = (Get-StatsProTopChangelogEntryFromText -Text $sourceChangelogText) -replace "`n", "`r`n"
             [System.IO.File]::WriteAllText($changelogPath, $topChangelogText, [System.Text.UTF8Encoding]::new($false))
-            Assert-StatsProPackageSourceFidelity -PackageRoot $mutationRoot -SourceRoot $sourceRoot -ProjectVersion $tag
+            Assert-ThrowsMatch "truncated changelog history rejected" {
+                Assert-StatsProPackageSourceFidelity -PackageRoot $mutationRoot -SourceRoot $sourceRoot -ProjectVersion $tag
+            } "StatsPro/CHANGELOG\.md"
             [System.IO.File]::AppendAllText($changelogPath, "mutation`r`n", [System.Text.UTF8Encoding]::new($false))
             Assert-ThrowsMatch "trimmed changelog drift rejected" {
                 Assert-StatsProPackageSourceFidelity -PackageRoot $mutationRoot -SourceRoot $sourceRoot -ProjectVersion $tag

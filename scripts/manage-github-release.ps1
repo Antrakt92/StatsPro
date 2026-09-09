@@ -3110,6 +3110,10 @@ function Assert-ReleaseWorkflowBoundary {
 
     Assert-ReleaseEventBoundary -WorkflowText $WorkflowText
 
+    if ($WorkflowText -match '(?i)-ExportTopChangelogPath\b') {
+        throw "Release workflow must preserve the full changelog history."
+    }
+
     if ($WorkflowText -match '(?m)^\s*(?:"(?:uses|permissions|environment|needs)"|''(?:uses|permissions|environment|needs)''|(?:uses|permissions|environment|needs)\s+):' -or
         $WorkflowText -match '(?m)^\s*(?:<<|\?\s+|:\s+)') {
         throw "Release workflow must use canonical plain mapping keys without aliases."
@@ -3276,13 +3280,12 @@ function Assert-ReleaseWorkflowBoundary {
             'Check release ancestry',
             'Check release version',
             'Lua checks',
-            'Trim release changelog',
             'Validate interrupted release state'
         )
         package = @(
             'Checkout',
             'Verify anonymous checkout boundary',
-            'Trim release changelog',
+            'Check release version',
             'Install release validation tools',
             'Build package without publishing',
             'Resolve initial package output',
@@ -4556,6 +4559,11 @@ function Invoke-SelfTest {
     $workflowPath = Join-Path (Join-Path $PSScriptRoot "..") ".github\workflows\release.yml"
     $workflowText = Get-Content -LiteralPath $workflowPath -Raw -Encoding UTF8
     Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText
+    Assert-ThrowsMatch "release changelog truncation rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            'run: ./scripts/check-release-version.ps1 -Tag $env:GITHUB_REF_NAME -EnforceSemVer',
+            'run: ./scripts/check-release-version.ps1 -Tag $env:GITHUB_REF_NAME -EnforceSemVer -ExportTopChangelogPath CHANGELOG.md')
+    } "preserve the full changelog history"
     Assert-ThrowsMatch "workflow_dispatch release trigger rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^  push:\s*$', "  workflow_dispatch:`n  push:")
     } "exact tag-only push trigger"

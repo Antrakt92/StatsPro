@@ -427,6 +427,7 @@ function Invoke-SelfTest {
     [void](New-Item -ItemType Directory -Path $root)
     try {
         $tag = 'v1.2.3'
+        $fullChangelog = "# Changelog`n`n## 1.2.3`n`n- Fixed.`n`n## 1.2.2`n`n- Previous update.`n`n## 1.0.0`n`n- Initial release.`n"
         $archive = Join-Path $root "StatsPro-$tag.zip"
         Add-Type -AssemblyName System.IO.Compression
         Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -442,7 +443,7 @@ function Invoke-SelfTest {
 ## X-Wago-ID: EGPemEN1
 ## X-WoWI-ID: 27130
 "@ },
-                    [pscustomobject]@{ Name = 'StatsPro/CHANGELOG.md'; Text = "## 1.2.3`n`n- Fixed.`n" }
+                    [pscustomobject]@{ Name = 'StatsPro/CHANGELOG.md'; Text = $fullChangelog }
                 )) {
                     $entry = $testZip.CreateEntry($entryData.Name)
                     $writer = [System.IO.StreamWriter]::new($entry.Open(), [System.Text.UTF8Encoding]::new($false))
@@ -517,20 +518,20 @@ function Invoke-SelfTest {
         $cfPayload = ConvertFrom-JsonCompat ([string]$calls[1].Form.metadata)
         if ($calls[1].Headers.Count -ne 1 -or $calls[1].Headers['x-api-token'] -ne $credentials.CF_API_KEY -or
             $calls[1].Form.Count -ne 2 -or $cfPayload.displayName -ne $tag -or $cfPayload.releaseType -ne 'release' -or
-            $cfPayload.changelogType -ne 'markdown' -or $cfPayload.changelog -ne "## 1.2.3`n`n- Fixed.`n" -or
+            $cfPayload.changelogType -ne 'markdown' -or $cfPayload.changelog -ne $fullChangelog -or
             (@($cfPayload.gameVersions) -join ',') -ne '120100') {
             throw "CurseForge payload self-test failed."
         }
         if ($calls[2].Headers.Count -ne 1 -or $calls[2].Headers['x-api-token'] -ne $credentials.WOWI_API_TOKEN -or
             $calls[2].Form.Count -ne 5 -or $calls[2].Form.id -ne '27130' -or $calls[2].Form.version -ne $tag -or
-            $calls[2].Form.compatible -ne '12.1.0' -or $calls[2].Form.changelog -ne "## 1.2.3`n`n- Fixed.`n") {
+            $calls[2].Form.compatible -ne '12.1.0' -or $calls[2].Form.changelog -ne $fullChangelog) {
             throw "WoWInterface payload self-test failed."
         }
         $wagoPayload = ConvertFrom-JsonCompat ([string]$calls[0].Form.metadata)
         if ($calls[0].Headers.Count -ne 2 -or $calls[0].Headers.authorization -ne "Bearer $($credentials.WAGO_API_TOKEN)" -or
             $calls[0].Headers.accept -ne 'application/json' -or $calls[0].Form.Count -ne 2 -or
             $wagoPayload.label -ne $tag -or $wagoPayload.stability -ne 'stable' -or
-            $wagoPayload.changelog -ne "## 1.2.3`n`n- Fixed.`n" -or
+            $wagoPayload.changelog -ne $fullChangelog -or
             (@($wagoPayload.supported_retail_patches) -join ',') -ne '12.1.0') {
             throw "Wago payload self-test failed."
         }

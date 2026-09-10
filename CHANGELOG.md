@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.16.6 - 10-Sep-2026 — Archon targets and complete changelogs
+
+### Updated
+
+- Bundled M+ and raid stat targets refreshed from Archon on 10 September for all 40 specializations.
+
+### Fixed
+
+- GitHub release notes, marketplace changelogs, and release archives now retain the full published changelog history.
+
 ## 1.16.5 - 09-Sep-2026 — Gear and font recovery
 
 ### Fixed

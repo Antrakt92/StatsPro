@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.16.11 - 14-Sep-2026 — Archon target refresh
+
+### Updated
+
+- M+ and raid stat targets refreshed from Archon on 14 September for all 40 specializations.
+- The current M+ snapshot now reflects Archon's +7 to +21 range.
+
+### Fixed
+
+- Target updates continue to work when Archon's highest observed M+ key changes.
+
 ## 1.16.10 - 13-Sep-2026 — Archon target refresh
 
 ### Updated

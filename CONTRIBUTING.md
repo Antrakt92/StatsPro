@@ -3,6 +3,24 @@
 Bug reports, translation corrections, and focused pull requests are welcome.
 Please keep changes compatible with World of Warcraft Retail and Lua 5.1.
 
+## Before opening a pull request
+
+For a bug report, include your WoW build, StatsPro version, class and
+specialization, and steps to reproduce the problem. For a translation correction,
+include the client language and the label you want to change.
+
+Use Git to clone the repository so the checks can inspect tracked files and
+release history:
+
+```powershell
+git clone https://github.com/Antrakt92/StatsPro.git
+cd StatsPro
+```
+
+The locked local toolchain runs on Windows. Use PowerShell and allow downloads
+from the sources listed in [`scripts/tool-version-locks.json`](scripts/tool-version-locks.json).
+You do not need to install Lua tools globally.
+
 ## Local verification
 
 From the repository root, run:
@@ -33,11 +51,6 @@ command before committing.
 
 For user-visible changes, also test in the Retail client after `/reload`.
 Include screenshots for layout, Settings, font, color, or localization changes.
-
-Release tags must be lightweight so their Git ref and release attestation name
-the same commit. Use `git -c tag.gpgSign=false tag vX.Y.Z`; do not use annotated
-or signed tags. Run `scripts/check-release-ancestry.ps1 -Tag vX.Y.Z` before
-pushing a release tag. Published tags and assets must never be rewritten.
 
 ## Architecture guide
 
@@ -71,3 +84,12 @@ rules. Follow the guarded patterns already used by adjacent code.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for shipped behavior and
 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) for bundled dependency provenance.
+
+## Releases
+
+Maintainers publish releases through the tag-triggered workflow. A normal pull
+request does not need a release tag. Release tags must be lightweight so their
+Git ref and release attestation name the same commit. Use
+`git -c tag.gpgSign=false tag vX.Y.Z`; do not use annotated or signed tags.
+Run `scripts/check-release-ancestry.ps1 -Tag vX.Y.Z` before pushing a release
+tag. Published tags and assets must never be rewritten.

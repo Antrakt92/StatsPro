@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.16.13 - 16-Sep-2026 — Archon target refresh
+
+### Updated
+
+- **Bundled available M+ and raid target ratings were refreshed from latest Archon data.**
+
 ## 1.16.12 - 15-Sep-2026 — Archon target refresh
 
 ### Updated

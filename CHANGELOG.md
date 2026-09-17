@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.16.14 - 17-Sep-2026 — Archon targets and setup guidance
+
+### Updated
+
+- **Bundled available M+ and raid target ratings were refreshed from latest Archon data.**
+- Clarified installation, Quick Setup, profile sharing, and contributor guidance.
+
 ## 1.16.13 - 16-Sep-2026 — Archon target refresh
 
 ### Updated

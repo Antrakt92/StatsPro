@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.16.21 - 24-Sep-2026 — Midnight PTR compatibility
+## 1.16.22 - 24-Sep-2026 — Midnight PTR compatibility
 
 ### Updated
 

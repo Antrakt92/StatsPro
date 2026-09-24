@@ -539,7 +539,7 @@ function Assert-StatsProReleaseJson {
     param(
         [string]$JsonText,
         [string]$ExpectedTag,
-        [int[]]$ExpectedInterfaces = @(120100)
+        [int[]]$ExpectedInterfaces = @(120100, 120105)
     )
 
     Assert-StatsProReleaseTag -Value $ExpectedTag

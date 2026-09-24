@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.16.21 - 24-Sep-2026 — Midnight PTR compatibility
+
+### Updated
+
+- **The same addon package now loads on Retail 12.1.0 and the 12.1.5 PTR.**
+
 ## 1.16.20 - 23-Sep-2026 — Archon target refresh
 
 ### Updated

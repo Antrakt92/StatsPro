@@ -236,7 +236,7 @@ settings are preserved.
 
 ## Compatibility
 
-**Supported: World of Warcraft Retail — Midnight 12.1.0.** Classic and other
+**Supported: World of Warcraft Retail — Midnight 12.1.0 and 12.1.5 PTR.** Classic and other
 non-Retail clients are not supported.
 
 ## Help, feedback, and development

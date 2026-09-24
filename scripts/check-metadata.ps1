@@ -881,7 +881,7 @@ try {
         -Path $contract.TocPath `
         -Pattern "^##\s+Interface:\s*(.+?)\s*$" `
         -Description "TOC Interface"
-    $ExpectedInterfaceText = "120100"
+    $ExpectedInterfaceText = "120100, 120105"
     if ($InterfaceText -ne $ExpectedInterfaceText) {
         throw "TOC Interface is '$InterfaceText', expected '$ExpectedInterfaceText'."
     }

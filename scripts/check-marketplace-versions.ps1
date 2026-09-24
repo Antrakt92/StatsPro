@@ -341,6 +341,10 @@ function Invoke-SelfTest {
     if (($versions -join ",") -ne "12.1.0") {
         throw "Expected TOC interface conversion to 12.1.0; got $($versions -join ',')"
     }
+    $dualVersions = Get-RequiredRetailVersionsFromInterfaces -Interfaces @("120100", "120105")
+    if (($dualVersions -join ",") -ne "12.1.0,12.1.5") {
+        throw "Expected Retail and PTR interface conversion; got $($dualVersions -join ',')"
+    }
 
     $validCredentials = @{
         CF_API_KEY = "cf-self-test-secret"
@@ -424,6 +428,7 @@ function Invoke-SelfTest {
     $cfValid = @'
 [
   {"id": 120100, "gameVersionTypeID": 517, "name": "12.1.0"},
+  {"id": 120105, "gameVersionTypeID": 517, "name": "12.1.5"},
   {"id": 1, "gameVersionTypeID": 732, "name": "12.0.7"}
 ]
 '@
@@ -527,6 +532,10 @@ function Invoke-SelfTest {
     $curseForgeIds = @(Resolve-StatsProCurseForgeVersionIdMap -Json $cfValid -RequiredVersions $versions)
     if (($curseForgeIds -join ',') -ne '120100') {
         throw "CurseForge version mapping returned unexpected IDs '$($curseForgeIds -join ',')'."
+    }
+    $dualCurseForgeIds = @(Resolve-StatsProCurseForgeVersionIdMap -Json $cfValid -RequiredVersions $dualVersions)
+    if (($dualCurseForgeIds -join ',') -ne '120100,120105') {
+        throw "Retail and PTR CurseForge version mapping returned unexpected IDs '$($dualCurseForgeIds -join ',')'."
     }
     [void](Resolve-StatsProWowInterfaceVersionsFromJson -Json $wowiExactValid -RequiredVersions $versions)
     [void](Resolve-StatsProWowInterfaceVersionsFromJson -Json $wowiAggregateValid -RequiredVersions $versions)

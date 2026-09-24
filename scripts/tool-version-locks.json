@@ -7,16 +7,16 @@
       "sha256": "5f34cf7d40a20a587ea351482a4207d93b92ef6f1983e910a13338253819fe93"
     },
     "luaLanguageServer": {
-      "version": "3.18.1",
-      "url": "https://github.com/LuaLS/lua-language-server/releases/download/3.18.1/lua-language-server-3.18.1-win32-x64.zip",
-      "fileName": "lua-language-server-3.18.1-win32-x64.zip",
-      "sha256": "0b0c4ac671629269b847e13239b70ac7271a562e0253c789f590c8a8985addea"
+      "version": "3.19.1",
+      "url": "https://github.com/LuaLS/lua-language-server/releases/download/3.19.1/lua-language-server-3.19.1-win32-x64.zip",
+      "fileName": "lua-language-server-3.19.1-win32-x64.zip",
+      "sha256": "fdb9a59108cf62517813c97fa5549b0e16d1ef0688306bac728b08434db7e4cd"
     },
     "luaRocks": {
-      "version": "2.4.4",
-      "url": "https://luarocks.github.io/luarocks/releases/luarocks-2.4.4-win32.zip",
-      "fileName": "luarocks-2.4.4-win32.zip",
-      "sha256": "763d2fbe301b5f941dd5ea4aea485fb35e75cbbdceca8cc2f18726b75f9895c1"
+      "version": "3.13.0",
+      "url": "https://luarocks.github.io/luarocks/releases/luarocks-3.13.0-win32.zip",
+      "fileName": "luarocks-3.13.0-win32.zip",
+      "sha256": "97606881b49d944f9febf1f7ae62fa2c2274ccf583ed9dda8fe6170c3e6128e1"
     }
   },
   "rocks": {
@@ -42,8 +42,8 @@
   "commands": {
     "lua5.1": "Lua\\s+5\\.1\\.5",
     "luac5.1": "Lua\\s+5\\.1\\.5",
-    "lua-language-server": "^3\\.18\\.1(?:-dev)?$",
-    "luarocks": "2\\.4\\.4",
+    "lua-language-server": "^3\\.19\\.1(?:-dev)?$",
+    "luarocks": "3\\.13\\.0",
     "luacheck": "Luacheck:\\s+1\\.2\\.0"
   }
 }

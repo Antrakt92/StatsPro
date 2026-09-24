@@ -655,15 +655,15 @@ function Invoke-SelfTest {
     catch { $malformedVersionFailed = $true }
     Assert-Equal "malformed Lua version cannot shape tool path" $malformedVersionFailed $true
     $luaLsLock = Get-StatsProLockedPortableTool -Locks $locks -ToolName "luaLanguageServer"
-    Assert-Equal "locked LuaLS version" $luaLsLock.Version "3.18.1"
+    Assert-Equal "locked LuaLS version" $luaLsLock.Version "3.19.1"
     Assert-Equal "locked LuaLS URL scheme" ([uri]$luaLsLock.Url).Scheme "https"
-    Assert-Equal "locked LuaLS file name" $luaLsLock.FileName "lua-language-server-3.18.1-win32-x64.zip"
-    Assert-Equal "locked LuaLS SHA-256" $luaLsLock.Sha256 "0b0c4ac671629269b847e13239b70ac7271a562e0253c789f590c8a8985addea"
+    Assert-Equal "locked LuaLS file name" $luaLsLock.FileName "lua-language-server-3.19.1-win32-x64.zip"
+    Assert-Equal "locked LuaLS SHA-256" $luaLsLock.Sha256 "fdb9a59108cf62517813c97fa5549b0e16d1ef0688306bac728b08434db7e4cd"
     $luaRocksLock = Get-StatsProLockedPortableTool -Locks $locks -ToolName "luaRocks"
-    Assert-Equal "locked LuaRocks version" $luaRocksLock.Version "2.4.4"
+    Assert-Equal "locked LuaRocks version" $luaRocksLock.Version "3.13.0"
     Assert-Equal "locked LuaRocks URL scheme" ([uri]$luaRocksLock.Url).Scheme "https"
-    Assert-Equal "locked LuaRocks file name" $luaRocksLock.FileName "luarocks-2.4.4-win32.zip"
-    Assert-Equal "locked LuaRocks SHA-256" $luaRocksLock.Sha256 "763d2fbe301b5f941dd5ea4aea485fb35e75cbbdceca8cc2f18726b75f9895c1"
+    Assert-Equal "locked LuaRocks file name" $luaRocksLock.FileName "luarocks-3.13.0-win32.zip"
+    Assert-Equal "locked LuaRocks SHA-256" $luaRocksLock.Sha256 "97606881b49d944f9febf1f7ae62fa2c2274ccf583ed9dda8fe6170c3e6128e1"
     Assert-Equal "locked luacheck rock version" (Get-StatsProLockedLuarocksVersion -Locks $locks -PackageName "luacheck") "1.2.0-1"
     $luacheckPlan = @(Get-LuacheckInstallPlan -Locks $locks)
     Assert-Equal "locked luacheck install plan count" $luacheckPlan.Count 3
@@ -674,7 +674,7 @@ function Invoke-SelfTest {
         Assert-Equal "locked $($package.Name) SHA-256 length" $package.Lock.Sha256.Length 64
     }
     $bundleRoot = Get-StatsProPortableLuaRocksRoot -Locks $locks -ToolRoot "C:\owned-tools"
-    if ($bundleRoot -notmatch 'luarocks-2\.4\.4-[0-9a-f]{12}$') {
+    if ($bundleRoot -notmatch 'luarocks-3\.13\.0-[0-9a-f]{12}$') {
         throw "Owned LuaRocks root must include the version and complete bundle fingerprint."
     }
     $ownedLayout = Get-StatsProOwnedToolLayout -Locks $locks -ToolRoot "C:\owned-tools"
@@ -683,7 +683,7 @@ function Invoke-SelfTest {
     Assert-Equal "owned layout LuaLS path" $ownedLayout.LuaLanguageServerPath `
         (Join-Path $ownedLayout.LuaLanguageServerRoot "bin\lua-language-server.exe")
     Assert-Equal "owned layout luacheck script path" $ownedLayout.LuacheckScriptPath `
-        (Join-Path $ownedLayout.LuaRocksRoot "systree\lib\luarocks\rocks\luacheck\1.2.0-1\bin\luacheck")
+        (Join-Path $ownedLayout.LuaRocksRoot "systree\lib\luarocks\rocks-5.1\luacheck\1.2.0-1\bin\luacheck")
     $invocationRootOne = New-StatsProOwnedToolInvocationRoot
     $invocationRootTwo = New-StatsProOwnedToolInvocationRoot
     Assert-Equal "concurrent invocations receive distinct owned roots" `
@@ -767,16 +767,16 @@ function Invoke-SelfTest {
         New-Item -ItemType Directory -Path $wrongRoot, $sameRoot -Force | Out-Null
         [System.IO.File]::WriteAllText(
             (Join-Path $wrongRoot "lua-language-server.cmd"),
-            "@echo off`r`n> `"$wrongMarker`" echo wrong`r`necho 3.18.2-dev`r`n")
+            "@echo off`r`n> `"$wrongMarker`" echo wrong`r`necho 3.19.0-dev`r`n")
         [System.IO.File]::WriteAllText(
             (Join-Path $wrongRoot "luarocks.cmd"),
             "@echo off`r`n> `"$wrongMarker`" echo wrong`r`necho 3.0.0`r`n")
         [System.IO.File]::WriteAllText(
             (Join-Path $sameRoot "lua-language-server.cmd"),
-            "@echo off`r`n> `"$sameMarker`" echo same`r`necho 3.18.1`r`n")
+            "@echo off`r`n> `"$sameMarker`" echo same`r`necho 3.19.1`r`n")
         [System.IO.File]::WriteAllText(
             (Join-Path $sameRoot "luarocks.cmd"),
-            "@echo off`r`n> `"$sameMarker`" echo same`r`necho 2.4.4`r`n")
+            "@echo off`r`n> `"$sameMarker`" echo same`r`necho 3.13.0`r`n")
         foreach ($shadowRoot in @($wrongRoot, $sameRoot)) {
             try {
                 $env:PATH = $shadowRoot + [System.IO.Path]::PathSeparator + $pathBefore

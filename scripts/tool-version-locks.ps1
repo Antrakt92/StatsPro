@@ -283,7 +283,7 @@ function Get-StatsProOwnedToolLayout {
         LuaRocksPath = Join-Path $luaRocksRoot "luarocks.bat"
         LuaRocksLuaPath = Join-Path $luaRocksRoot "lua5.1.exe"
         GeneratedLuacheckPath = Join-Path $luaRocksRoot "systree\bin\luacheck.bat"
-        LuacheckScriptPath = Join-Path $luaRocksRoot "systree\lib\luarocks\rocks\luacheck\$($luacheckLock.Version)\bin\luacheck"
+        LuacheckScriptPath = Join-Path $luaRocksRoot "systree\lib\luarocks\rocks-5.1\luacheck\$($luacheckLock.Version)\bin\luacheck"
         LuacheckShareRoot = Join-Path $luaRocksRoot "systree\share\lua\5.1"
         LuacheckCPathRoot = Join-Path $luaRocksRoot "systree\lib\lua\5.1"
         ManifestPath = Join-Path $root "owned-tools-v1-$($fingerprint.Substring(0, 16)).json"

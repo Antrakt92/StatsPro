@@ -45,14 +45,14 @@ immutable bundled source revision explicitly declares LGPL v2.1. StatsPro pins
 that per-file declaration and includes the corresponding GNU license text.
 
 - Project: LibSharedMedia-3.0
-- Source: https://www.curseforge.com/wow/addons/libsharedmedia-3-0/files/7908455
-- Source revision: r164
-- Source artifact: LibSharedMedia-3.0-v12.0.0.zip
-- Source artifact SHA256: 5DEC89B8D48280554E84246A327501AEE10055649396DC23B839AF6701A1BB84
+- Source: https://www.curseforge.com/wow/addons/libsharedmedia-3-0/files/8691989
+- Source revision: r176
+- Source artifact: LibSharedMedia-3.0-v12.1.0.zip
+- Source artifact SHA256: 14BEB11FCC1082C7B846960FDE39596147A769A807601ECB0AEC4DE60750956D
 - License: LGPL-2.1-only
-- License declaration: https://repos.curseforge.com/wow/libsharedmedia-3-0/!svn/rvr/164/trunk/LibSharedMedia-3.0/LibSharedMedia-3.0.lua
-- License declaration SHA256: 7431586B50A01CC6BF562DA69761418AE8FCDB73523E70BFAC1CB8838E815DAE
+- License declaration: https://repos.curseforge.com/wow/libsharedmedia-3-0/!svn/rvr/176/trunk/LibSharedMedia-3.0/LibSharedMedia-3.0.lua
+- License declaration SHA256: EA359E44EAE4355C51A49A69960C878889EE26ADAC9D72D1362C22A3DB6AF6D0
 - License text: LICENSES/LibSharedMedia-3.0-LGPL-2.1.txt
 - License text source: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
 - License text SHA256: 20E50FE7AAE3E56378EBF0417D9DE904F55A0E61E4DF315333E632A4D3555D95
-- SHA256: 39445CC0486FB0FDBA7367AAE9979CAA342D2AB194CDBC5ED1C6FED72FDD8D6E
+- SHA256: B2650FC5ACBFF310C7F7A23A36C8026A99D2441982D4B4F63AFB76489D56B214

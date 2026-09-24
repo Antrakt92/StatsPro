@@ -699,10 +699,10 @@ param([string]$Value, [AllowEmptyString()][string]$EmptyValue)
         New-Item -ItemType Directory -Path $wrongShadowRoot, $sameShadowRoot -Force | Out-Null
         [System.IO.File]::WriteAllText(
             (Join-Path $wrongShadowRoot "lua-language-server.cmd"),
-            "@echo off`r`n> `"$wrongShadowMarker`" echo wrong`r`necho 3.18.2-dev`r`n")
+            "@echo off`r`n> `"$wrongShadowMarker`" echo wrong`r`necho 3.19.0-dev`r`n")
         [System.IO.File]::WriteAllText(
             (Join-Path $sameShadowRoot "lua-language-server.cmd"),
-            "@echo off`r`n> `"$sameShadowMarker`" echo same`r`necho 3.18.1`r`n")
+            "@echo off`r`n> `"$sameShadowMarker`" echo same`r`necho 3.19.1`r`n")
         $oldPath = $env:PATH
         try {
             foreach ($shadowRoot in @($wrongShadowRoot, $sameShadowRoot)) {
@@ -715,7 +715,7 @@ param([string]$Value, [AllowEmptyString()][string]$EmptyValue)
                     -Description "owned LuaLS shadow regression" `
                     -IsolateLuaEnvironment
                 if ($versionResult.ExitCode -ne 0 -or
-                    ($versionResult.Output -join "`n") -notmatch '^3\.18\.1(?:\s|$)' -or
+                    ($versionResult.Output -join "`n") -notmatch '^3\.19\.1(?:\s|$)' -or
                     (Test-Path -LiteralPath $wrongShadowMarker) -or
                     (Test-Path -LiteralPath $sameShadowMarker)) {
                     throw "canonical enforced resolution executed an ambient LuaLS shadow"
@@ -962,7 +962,7 @@ else {
 
     $LuacheckCandidates = @(
         (Get-Command luacheck -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
-        "C:\ProgramData\chocolatey\lib\luarocks\luarocks-2.4.4-win32\systree\bin\luacheck.bat"
+        "C:\ProgramData\chocolatey\lib\luarocks\luarocks-3.13.0-win32\systree\bin\luacheck.bat"
     ) | Where-Object { $_ -and (Test-Path $_) }
     $Luacheck = $LuacheckCandidates | Select-Object -First 1
     if (-not $Luacheck) {

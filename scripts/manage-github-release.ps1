@@ -2627,7 +2627,7 @@ function Assert-ChecksWorkflowBoundary {
     $stepBlocks = @([regex]::Matches($packageJob.Value, '(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)'))
     $packagerSteps = @($stepBlocks | Where-Object { $_.Value -match '(?im)^\s{8}uses:\s*BigWigsMods/packager@' })
     if ($packagerSteps.Count -ne 1 -or
-        $packagerSteps[0].Value -notmatch '(?m)^\s{8}uses:\s*BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28\s*$') {
+        $packagerSteps[0].Value -notmatch '(?m)^\s{8}uses:\s*BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0\s*$') {
         throw "Checks package-contract job must use the exact pinned BigWigs Packager action once."
     }
     $packagerArgs = @([regex]::Matches($packagerSteps[0].Value, '(?m)^\s{10}args:\s*(.*?)\s*$'))
@@ -2786,7 +2786,7 @@ function Assert-TrustedManualWorkflowBoundary {
         -Description "Trusted manual job '$JobName' checkout inputs"
     $expectedCheckoutStep = @'
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -2909,7 +2909,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -3043,7 +3043,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -3223,26 +3223,26 @@ function Assert-ReleaseWorkflowBoundary {
     }
 
     $actionContract = @{
-        preflight = @('actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10')
+        preflight = @('actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1')
         package = @(
-            'actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10',
-            'BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28',
-            'BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28',
+            'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
+            'BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0',
+            'BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0',
             'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
         )
         'github-prepare' = @(
-            'actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10',
+            'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
             'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
         )
         'marketplace-upload' = @(
-            'actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10',
+            'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
             'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
         )
         'github-finalize' = @(
-            'actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10',
+            'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
             'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
         )
-        verify = @('actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10')
+        verify = @('actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1')
     }
     foreach ($jobName in $expectedJobNames) {
         $actualActions = @([regex]::Matches($jobs[$jobName].Value, '(?m)^\s{8}uses:\s*(\S+)\s*$') | ForEach-Object { $_.Groups[1].Value })
@@ -3342,7 +3342,7 @@ function Assert-ReleaseWorkflowBoundary {
 
     $expectedCheckoutStep = @'
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -4637,13 +4637,13 @@ function Invoke-SelfTest {
     } "must run Packager, resolver, and validator in that order"
     Assert-ThrowsMatch "package-contract GitHub token exposure rejected" {
         Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(
-            '        uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28',
-            "        uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28`n        env:`n          GH_TOKEN: `${{ github.token }}")
+            '        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0',
+            "        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0`n        env:`n          GH_TOKEN: `${{ github.token }}")
     } "must not reference secrets or a GitHub token"
     Assert-ThrowsMatch "package-contract secret exposure rejected" {
         Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(
-            '        uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28',
-            "        uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28`n        env:`n          CF_API_KEY: `${{ secrets.CF_API_KEY }}")
+            '        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0',
+            "        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0`n        env:`n          CF_API_KEY: `${{ secrets.CF_API_KEY }}")
     } "must not reference secrets or a GitHub token"
     Assert-ThrowsMatch "package-contract output handoff drift rejected" {
         Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(
@@ -4748,7 +4748,7 @@ function Invoke-SelfTest {
     Assert-ThrowsMatch "Packager in manual marketplace workflow rejected" {
         $mutated = $marketplaceWorkflowText.Replace(
             '      - name: Verify marketplace release credentials and versions',
-            "      - name: Unexpected Packager`n        uses: BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28`n        with:`n          args: -d`n`n      - name: Verify marketplace release credentials and versions")
+            "      - name: Unexpected Packager`n        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0`n        with:`n          args: -d`n`n      - name: Verify marketplace release credentials and versions")
         Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $mutated
     } "must not execute Packager"
     Assert-ThrowsMatch "manual marketplace self-test substitution rejected" {
@@ -4932,7 +4932,7 @@ function Invoke-SelfTest {
             param($value)
             $value.Replace(
                 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c',
-                'BigWigsMods/packager@6d50adb6e8517eefef63f4afb16a6518166a6b28')
+                'BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0')
         }
         Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
     } "allowlist"

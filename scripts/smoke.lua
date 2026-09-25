@@ -1420,7 +1420,7 @@ do
         statsProArchonTargets = dualFixture,
     })
     local okDual, errDual = pcall(dualEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
-    check("archon.v2_raid_selected.fire", okDual, errDual)
+    check("archon.v2_raid_selected.triggered", okDual, errDual)
     local raidSnapshot = dualTest.getArchonTargetSnapshot("MAGE", "frost", "raid")
     eq("archon.v2.raid_snapshot_source", raidSnapshot.sourceUrl, "https://www.archon.gg/wow/builds/frost/mage/raid/overview/mythic/all-bosses")
     local mplusSnapshot = dualTest.getArchonTargetSnapshot("MAGE", "frost", "mythicPlusCurrent")
@@ -1448,7 +1448,7 @@ do
         statsProArchonTargets = legacyMplusFixture,
     })
     local okLegacyMplus, errLegacyMplus = pcall(legacyMplusEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
-    check("archon.legacy_mplus_keeps_high_keys.fire", okLegacyMplus, errLegacyMplus)
+    check("archon.legacy_mplus_keeps_high_keys.triggered", okLegacyMplus, errLegacyMplus)
     eq("archon.legacy_mplus_keeps_high_keys.key", legacyMplusTest.cachedTargetSnapshot(), "mythicPlusHighKeys")
     eq("archon.legacy_mplus_keeps_high_keys.target",
         legacyMplusTest.buildArchonTargetMeta("mastery", 700, legacyMplusEnv.CR_MASTERY).target, 900)
@@ -1470,7 +1470,7 @@ do
         statsProArchonTargets = availableFixture,
     })
     local okAvailable, errAvailable = pcall(availableEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
-    check("archon.v3_available_profiles.fire", okAvailable, errAvailable)
+    check("archon.v3_available_profiles.triggered", okAvailable, errAvailable)
     local availableOptionValues = {}
     for _, option in ipairs(availableTest.availableArchonSnapshotOptions()) do
         availableOptionValues[#availableOptionValues + 1] = option.value
@@ -1490,7 +1490,7 @@ do
         },
     })
     local okCorruptPref, errCorruptPref = pcall(corruptPrefEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
-    check("archon.corrupt_target_snapshot_pref.fire", okCorruptPref, errCorruptPref)
+    check("archon.corrupt_target_snapshot_pref.triggered", okCorruptPref, errCorruptPref)
     eq("archon.corrupt_target_snapshot_pref.cache_default", corruptPrefTest.cachedTargetSnapshot(), "mythicPlusCurrent")
 
     local v1RaidPrefEnv, _, v1RaidPrefTest = loadStatsPro("enUS", {
@@ -1514,7 +1514,7 @@ do
         },
     })
     local okV1RaidPref, errV1RaidPref = pcall(v1RaidPrefEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
-    check("archon.v1_with_raid_pref_falls_back.fire", okV1RaidPref, errV1RaidPref)
+    check("archon.v1_with_raid_pref_falls_back.triggered", okV1RaidPref, errV1RaidPref)
     local v1FallbackMeta = v1RaidPrefTest.buildArchonTargetMeta("mastery", 700, v1RaidPrefEnv.CR_MASTERY)
     eq("archon.v1_with_raid_pref_falls_back.target", v1FallbackMeta.target, 823)
     eq("archon.v1_with_raid_pref_falls_back.key", v1FallbackMeta.snapshotKey, "mythicPlusHighKeys")
@@ -1535,7 +1535,7 @@ do
         statsProArchonTargets = v2MissingRaidFixture,
     })
     local okV2MissingRaid, errV2MissingRaid = pcall(v2MissingRaidEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
-    check("archon.v2_missing_raid_profile_falls_back.fire", okV2MissingRaid, errV2MissingRaid)
+    check("archon.v2_missing_raid_profile_falls_back.triggered", okV2MissingRaid, errV2MissingRaid)
     local v2FallbackMeta = v2MissingRaidTest.buildArchonTargetMeta("mastery", 700, v2MissingRaidEnv.CR_MASTERY)
     eq("archon.v2_missing_raid_profile_falls_back.target", v2FallbackMeta.target, 823)
     eq("archon.v2_missing_raid_profile_falls_back.key", v2FallbackMeta.snapshotKey, "mythicPlusCurrent")
@@ -1554,7 +1554,7 @@ do
         statsProArchonTargets = v2RaidMissingSpecFixture,
     })
     local okV2RaidMissingSpec, errV2RaidMissingSpec = pcall(v2RaidMissingSpecEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
-    check("archon.v2_raid_profile_missing_spec_no_mplus_fallback.fire", okV2RaidMissingSpec, errV2RaidMissingSpec)
+    check("archon.v2_raid_profile_missing_spec_no_mplus_fallback.triggered", okV2RaidMissingSpec, errV2RaidMissingSpec)
     eq("archon.v2_raid_profile_missing_spec_no_mplus_fallback.meta", v2RaidMissingSpecTest.buildArchonTargetMeta("mastery", 700, v2RaidMissingSpecEnv.CR_MASTERY), nil)
 
     local perSpecFallbackFixture = makeArchonV2Fixture("2026-05-16")
@@ -1570,7 +1570,7 @@ do
         statsProArchonTargets = perSpecFallbackFixture,
     })
     local okPerSpecFallback, errPerSpecFallback = pcall(perSpecFallbackEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
-    check("archon.v5_missing_mythic_spec_falls_back_to_heroic.fire", okPerSpecFallback, errPerSpecFallback)
+    check("archon.v5_missing_mythic_spec_falls_back_to_heroic.triggered", okPerSpecFallback, errPerSpecFallback)
     local perSpecFallbackMeta = perSpecFallbackTest.buildArchonTargetMeta("mastery", 700, perSpecFallbackEnv.CR_MASTERY)
     eq("archon.v5_missing_mythic_spec_falls_back_to_heroic.target", perSpecFallbackMeta.target, 720)
     eq("archon.v5_missing_mythic_spec_falls_back_to_heroic.key", perSpecFallbackMeta.snapshotKey, "raidHeroic")
@@ -2267,7 +2267,7 @@ do
         issecretvalue = function(value) return value == -1 end,
     })
     local okTargetOnlyFire, errTargetOnlyFire = pcall(targetOnlyEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
-    check("tooltip.restricted_target_only.fire", okTargetOnlyFire, errTargetOnlyFire)
+    check("tooltip.restricted_target_only.triggered", okTargetOnlyFire, errTargetOnlyFire)
     local targetOnlyMeta = targetOnlyTest.buildArchonTargetMeta(
         "crit", -1, targetOnlyEnv.CR_CRIT_MELEE)
     eq("tooltip.restricted_target_only.state", targetOnlyMeta.comparisonState, "targetOnly")
@@ -2330,7 +2330,7 @@ do
         },
     })
     local okLocalizedTooltip, errLocalizedTooltip = pcall(localizedTooltipEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
-    check("tooltip.localized_ruRU.fire", okLocalizedTooltip, errLocalizedTooltip)
+    check("tooltip.localized_ruRU.triggered", okLocalizedTooltip, errLocalizedTooltip)
     local localizedMeta = localizedTooltipTest.buildArchonTargetMeta("crit", 812, localizedTooltipEnv.CR_CRIT_MELEE, 30.0)
     localizedTooltipTest.renderMainPanelForSmoke("Крит:", "812", "30.0%", 1, nil, nil, { localizedMeta })
     localizedTooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")

@@ -85,18 +85,21 @@ addon.movementRuntime = {
 ============================================================ ]]
 local CURRENT_DB_VERSION = 11
 
-local DURABILITY_SLOT_MIN = 1
-local DURABILITY_SLOT_MAX = 19
--- WHY: slot 4 = shirt, slot 18 = deprecated ranged. Slot 19 (tabard) self-filters via max>0.
-local DURABILITY_SKIP_SLOTS = { [4] = true, [18] = true }
+local DURABILITY_SCAN = {
+    slotMin = 1,
+    slotMax = 19,
+    -- WHY: slot 4 = shirt, slot 18 = deprecated ranged. Slot 19 (tabard) self-filters via max>0.
+    skipSlots = { [4] = true, [18] = true },
+    greenThreshold = 60,
+    yellowThreshold = 30,
+}
 
-local DURABILITY_GREEN_THRESHOLD  = 60
-local DURABILITY_YELLOW_THRESHOLD = 30
-
-local ITEM_LEVEL_WARN_DELTA = 5
-local ITEM_LEVEL_DANGER_DELTA = 20
-local ITEM_LEVEL_WARN_COLOR = "ffcc33"
-local ITEM_LEVEL_DANGER_COLOR = "ff3333"
+local ITEM_LEVEL_ALERT = {
+    warnDelta = 5,
+    dangerDelta = 20,
+    warnColor = "ffcc33",
+    dangerColor = "ff3333",
+}
 
 local GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL, GLYPH_HANS, GLYPH_HANT =
     "Latin", "Cyrillic", "Hangul", "Hans", "Hant"
@@ -4513,9 +4516,9 @@ local function FormatRepairCost(copper, fontSize)
 end
 
 local function ComputeDurabilityColor(pct)
-    if pct >= DURABILITY_GREEN_THRESHOLD then
+    if pct >= DURABILITY_SCAN.greenThreshold then
         return 0.2, 1, 0.2
-    elseif pct >= DURABILITY_YELLOW_THRESHOLD then
+    elseif pct >= DURABILITY_SCAN.yellowThreshold then
         return 1, 0.8, 0.2
     else
         return 1, 0.2, 0.2
@@ -8937,8 +8940,8 @@ local function ScanDurabilityAndCost()
     local repairCostRetryable = false
     local pendingItemSlots = {}
     addon.durabilityRuntime.pendingItemSlots = pendingItemSlots
-    for slot = DURABILITY_SLOT_MIN, DURABILITY_SLOT_MAX do
-        if not DURABILITY_SKIP_SLOTS[slot] then
+    for slot = DURABILITY_SCAN.slotMin, DURABILITY_SCAN.slotMax do
+        if not DURABILITY_SCAN.skipSlots[slot] then
             -- WHY pcall fail-closed: a throwing durability API must not abort the
             -- 19-slot scan. Route the failure into the restricted-read branch below,
             -- which marks the aggregate incomplete and keeps the last complete values.
@@ -10675,10 +10678,10 @@ local function PushItemLevelRow(labels, ratings, values)
     local equipped = math.floor(cached.itemLevelEquipped)
     local delta = math.max(0, overall - equipped)
     local equippedColor = valueColor
-    if delta >= ITEM_LEVEL_DANGER_DELTA then
-        equippedColor = ITEM_LEVEL_DANGER_COLOR
-    elseif delta >= ITEM_LEVEL_WARN_DELTA then
-        equippedColor = ITEM_LEVEL_WARN_COLOR
+    if delta >= ITEM_LEVEL_ALERT.dangerDelta then
+        equippedColor = ITEM_LEVEL_ALERT.dangerColor
+    elseif delta >= ITEM_LEVEL_ALERT.warnDelta then
+        equippedColor = ITEM_LEVEL_ALERT.warnColor
     end
     local label = ""
     if labelStr ~= "" then

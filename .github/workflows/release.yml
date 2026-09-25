@@ -7,10 +7,12 @@ on:
       - 'v*'
 
 concurrency:
-  # Serialize publication attempts per tag without silently dropping queued
-  # runs. cancel-in-progress: false keeps every pushed tag waiting its turn
-  # so marketplace uploads never overlap and no tag is dropped.
-  group: release-${{ github.ref }}
+  # Serialize ALL publication attempts through one global slot without
+  # silently dropping queued runs. cancel-in-progress: false keeps every
+  # pushed tag waiting its turn so marketplace uploads never overlap and
+  # no tag is dropped. The group is intentionally fixed (not per-tag):
+  # two different tags pushed together must still upload one at a time.
+  group: statspro-release
   cancel-in-progress: false
 
 jobs:

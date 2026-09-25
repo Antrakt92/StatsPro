@@ -702,6 +702,29 @@ local alpha = 3
         Remove-Item -LiteralPath $localsFixture -Force -ErrorAction SilentlyContinue
     }
 
+    $probeLua = @(
+        if ($env:STATSPRO_PINNED_LUA_ROOT) { Join-Path $env:STATSPRO_PINNED_LUA_ROOT "lua5.1.exe" },
+        (Get-Command lua5.1 -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source),
+        "C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe"
+    ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    if (-not $probeLua) {
+        Write-Warning "Skipping smoke mutation-probe self-test: no ambient lua5.1 runtime found."
+    }
+    else {
+        # Fail-propagation canary: with the probe env var set, smoke.lua forces
+        # one assertion false and must exit non-zero. This proves harness
+        # failures propagate end to end (the name-fingerprint contract alone
+        # cannot tell a weakened `check(name, true)` from a real one).
+        $probeResult = Invoke-NativeCapture -FilePath $probeLua -Arguments @($SmokeFile) -TimeoutSeconds 180 -Description "smoke mutation probe" -IsolateLuaEnvironment -Environment @{ STATSPRO_SMOKE_MUTATION_PROBE = "1" }
+        if ($probeResult.ExitCode -eq 0) {
+            throw "Smoke mutation probe unexpectedly passed; harness failures must propagate as non-zero exit."
+        }
+        if (-not ($probeResult.Output | Where-Object { $_ -match "STATSPRO_SMOKE_PROBE mutation_probe_canary armed" })) {
+            throw "Smoke mutation probe failed without reporting the canary assertion."
+        }
+        Write-Host "Smoke mutation probe passed: forced failure exits non-zero via the canary."
+    }
+
     $realSmokeContract = Read-SmokeContract -Path $SmokeContractFile
     if ($realSmokeContract.Suites.Count -lt 2) {
         throw "Tracked smoke reachability contract must contain multiple named suites."

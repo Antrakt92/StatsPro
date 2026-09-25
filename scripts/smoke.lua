@@ -26014,5 +26014,23 @@ do
     end
 end
 
+-- Mutation probe (fail-propagation canary, no product coverage).
+-- WHY: the reachability contract fingerprints assertion *names*, so it cannot
+-- tell a weakened `check(name, true)` from a real one. When
+-- STATSPRO_SMOKE_MUTATION_PROBE=1, this canary is forced false and the whole
+-- harness must exit non-zero; check-lua.ps1 -SelfTest asserts exactly that,
+-- proving failures still propagate end to end. Normal runs record one
+-- passing assertion inside presets-onboarding; its name/count are covered by
+-- the contract like any other. `os` is harness-only (ambient Lua 5.1); WoW
+-- has no os table, and this file never ships to the client.
+local smokeMutationProbe = os and os.getenv and os.getenv("STATSPRO_SMOKE_MUTATION_PROBE") == "1" or false
+if smokeMutationProbe then
+    -- Stdout sentinel: Lua errors go to stderr (not captured by the gate),
+    -- so announce the armed canary on stdout before failing.
+    print("STATSPRO_SMOKE_PROBE mutation_probe_canary armed")
+end
+check("smoke.selftest.mutation_probe_canary", not smokeMutationProbe,
+    "mutation probe active: harness must fail this run")
+
 smokeReachability:complete("presets-onboarding")
 smokeReachability:finish()

@@ -20,6 +20,8 @@ ignore:
   - AGENTS.md
   - PLAN.md
   - NOTES.md
+  - TODO.md
+  - CURSEFORGE_DESCRIPTION.md
   - "*.private.md"
   - libs/LibStub/tests
   - libs/LibStub/*.toc

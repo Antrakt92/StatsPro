@@ -56,3 +56,17 @@ that per-file declaration and includes the corresponding GNU license text.
 - License text source: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
 - License text SHA256: 20E50FE7AAE3E56378EBF0417D9DE904F55A0E61E4DF315333E632A4D3555D95
 - SHA256: B2650FC5ACBFF310C7F7A23A36C8026A99D2441982D4B4F63AFB76489D56B214
+
+## SwiftStats (derived portions, no vendored file)
+
+StatsPro contains no vendored SwiftStats file; the import reads a user's
+installed SwiftStats saved variables at runtime and carries over compatible
+settings. The notice below records the upstream project, version, and license
+for those derived portions.
+
+- Project: SwiftStats
+- Author: TaylorSay
+- Source: https://www.curseforge.com/wow/addons/swiftstats
+- Version: v2.1
+- License: MIT
+- Scope: derived portions only; no SwiftStats file is vendored in this repository

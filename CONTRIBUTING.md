@@ -92,4 +92,5 @@ request does not need a release tag. Release tags must be lightweight so their
 Git ref and release attestation name the same commit. Use
 `git -c tag.gpgSign=false tag vX.Y.Z`; do not use annotated or signed tags.
 Run `scripts/check-release-ancestry.ps1 -Tag vX.Y.Z` before pushing a release
-tag. Published tags and assets must never be rewritten.
+tag. Published tags and assets must never be rewritten. Failed release tags that
+never published receive no CHANGELOG heading.

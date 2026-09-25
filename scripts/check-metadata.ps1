@@ -203,6 +203,8 @@ function Assert-RequiredPkgmetaIgnores {
 
     $expectedIgnores = @(
         ".gitattributes",
+        "TODO.md",
+        "CURSEFORGE_DESCRIPTION.md",
         "libs/LibStub/tests",
         "libs/LibStub/*.toc",
         "libs/CallbackHandler-1.0/*.xml",
@@ -773,6 +775,8 @@ GitHub issues are public.
 ignore:
   - .github
   - .gitattributes
+  - TODO.md
+  - CURSEFORGE_DESCRIPTION.md
   - libs/LibStub/tests
   - libs/LibStub/*.toc
   - libs/CallbackHandler-1.0/*.xml

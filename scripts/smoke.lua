@@ -9279,6 +9279,265 @@ do
     eq("launcher.localized_enGB_fallback.text", enGBTest.launcherDescriptionText(), launcherDescriptionCases[1][2])
 end
 
+do
+    -- Consecutive restricted reads (A then B, no clean between) must reuse the
+    -- last clean delta/targetPct without tainting the comparison cache, and a
+    -- later clean read must recover with a fresh delta.
+    local secretA, secretB = {}, {}
+    local consecutiveFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(consecutiveFixture, "mythicPlusCurrent", "MAGE", "frost",
+        { crit = 100, haste = 200, mastery = 1000, versatility = 400 })
+    local consecutiveEnv, _, consecutiveTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        statsProArchonTargets = consecutiveFixture,
+        getCombatRatingBonusForCombatRatingValue = function(_, value) return value / 100 end,
+        getMasteryEffect = function() return 26, 2 end,
+        issecretvalue = function(value)
+            return rawequal(value, secretA) or rawequal(value, secretB)
+        end,
+    })
+    local cleanMeta = consecutiveTest.buildArchonTargetMeta(
+        "mastery", 800, consecutiveEnv.CR_MASTERY, 26)
+    eq("render.consecutive_restricted.clean_state", cleanMeta.comparisonState, "exact")
+    eq("render.consecutive_restricted.clean_delta", cleanMeta.delta, -200)
+    check("render.consecutive_restricted.clean_target_pct", cleanMeta.targetPct ~= nil)
+    for _, case in ipairs({
+        { key = "a", rating = secretA, pct = secretA },
+        { key = "b", rating = secretB, pct = secretB },
+    }) do
+        local ok, meta = pcall(consecutiveTest.buildArchonTargetMeta,
+            "mastery", case.rating, consecutiveEnv.CR_MASTERY,
+            case.pct, nil, case.pct, case.rating)
+        check("render.consecutive_restricted." .. case.key .. ".no_error", ok, meta)
+        check("render.consecutive_restricted." .. case.key .. ".restricted_state",
+            meta.comparisonState == "liveOnly" or meta.comparisonState == "targetOnly",
+            meta.comparisonState)
+        eq("render.consecutive_restricted." .. case.key .. ".no_current", meta.current, nil)
+        eq("render.consecutive_restricted." .. case.key .. ".no_delta", meta.delta, nil)
+        eq("render.consecutive_restricted." .. case.key .. ".target_pct_last_clean",
+            meta.targetPct, cleanMeta.targetPct)
+        check("render.consecutive_restricted." .. case.key .. ".rating_display_renderable",
+            meta.currentRatingDisplay ~= nil)
+        check("render.consecutive_restricted." .. case.key .. ".pct_display_renderable",
+            meta.currentPctDisplay ~= nil)
+        consecutiveTest.renderMainPanelForSmoke(
+            "Mastery:", "secret", "secret%", 1, nil, nil, { meta })
+        local tooltipOK, tooltipErr = pcall(
+            consecutiveTest.fireMainPanelTooltipOverlayForSmoke, 1, "OnEnter")
+        check("render.consecutive_restricted." .. case.key .. ".display_strings_renderable",
+            tooltipOK, tooltipErr)
+        eq("render.consecutive_restricted." .. case.key .. ".overlay_shows",
+            consecutiveEnv.GameTooltip:IsShown(), true)
+        local cache = consecutiveTest.archonComparisonCache()
+        eq("render.consecutive_restricted." .. case.key .. ".cache_current",
+            cache.entries.mastery.current, 800)
+        eq("render.consecutive_restricted." .. case.key .. ".cache_delta",
+            cache.entries.mastery.delta, -200)
+        eq("render.consecutive_restricted." .. case.key .. ".cache_target_pct",
+            cache.entries.mastery.targetPct, cleanMeta.targetPct)
+    end
+    local recoveredMeta = consecutiveTest.buildArchonTargetMeta(
+        "mastery", 830, consecutiveEnv.CR_MASTERY, 27)
+    eq("render.consecutive_restricted.recovered_state", recoveredMeta.comparisonState, "exact")
+    eq("render.consecutive_restricted.recovered_current", recoveredMeta.current, 830)
+    eq("render.consecutive_restricted.recovered_delta", recoveredMeta.delta, -170)
+    check("render.consecutive_restricted.recovered_target_pct",
+        recoveredMeta.targetPct ~= nil)
+end
+
+do
+    -- Hide-zero decisions survive consecutive secrets: a clean hidden zero stays
+    -- hidden across secret A and B, a clean visible value stays visible, and a
+    -- cold secret with no prior clean read stays hidden.
+    local secretA, secretB = {}, {}
+    local leechValue = 0
+    local hiddenEnv, _, hiddenTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            hideZeroTertiary = true,
+            showLeech = true,
+            showAvoidance = false,
+            showSpeed = false,
+            showDefensive = false,
+        },
+        getLifesteal = function() return leechValue end,
+        issecretvalue = function(value)
+            return rawequal(value, secretA) or rawequal(value, secretB)
+        end,
+        roundToNearestString = function(value)
+            if rawequal(value, secretA) then return "3" end
+            if rawequal(value, secretB) then return "5" end
+            return "0"
+        end,
+    })
+    fireEvent("render.hide_zero_consecutive_hidden.fire", hiddenEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(hiddenTest.buildRenderBlocks)
+    check("render.hide_zero_consecutive_hidden.clean_no_error", ok, blocks)
+    eq("render.hide_zero_consecutive_hidden.clean_no_row", blockDumpContains(blocks, "Leech:"), false)
+    leechValue = secretA
+    ok, blocks = pcall(hiddenTest.buildRenderBlocks)
+    check("render.hide_zero_consecutive_hidden.secret_a_no_error", ok, blocks)
+    eq("render.hide_zero_consecutive_hidden.secret_a_no_row", blockDumpContains(blocks, "Leech:"), false)
+    leechValue = secretB
+    ok, blocks = pcall(hiddenTest.buildRenderBlocks)
+    check("render.hide_zero_consecutive_hidden.secret_b_no_error", ok, blocks)
+    eq("render.hide_zero_consecutive_hidden.secret_b_no_row", blockDumpContains(blocks, "Leech:"), false)
+    eq("render.hide_zero_consecutive_hidden.secret_b_no_unknown", blockDumpContains(blocks, "?"), false)
+end
+
+do
+    local secretA, secretB = {}, {}
+    local leechValue = 4
+    local visibleEnv, _, visibleTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            showRating = false,
+            showPercentage = true,
+            hideZeroTertiary = true,
+            showLeech = true,
+            showAvoidance = false,
+            showSpeed = false,
+            showDefensive = false,
+        },
+        getLifesteal = function() return leechValue end,
+        issecretvalue = function(value)
+            return rawequal(value, secretA) or rawequal(value, secretB)
+        end,
+        roundToNearestString = function(value)
+            if rawequal(value, secretA) then return "3" end
+            if rawequal(value, secretB) then return "5" end
+            return "unexpected"
+        end,
+    })
+    fireEvent("render.hide_zero_consecutive_visible.fire", visibleEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(visibleTest.buildRenderBlocks)
+    check("render.hide_zero_consecutive_visible.clean_no_error", ok, blocks)
+    eq("render.hide_zero_consecutive_visible.clean_row", blockDumpContains(blocks, "Leech:"), true)
+    leechValue = secretA
+    ok, blocks = pcall(visibleTest.buildRenderBlocks)
+    check("render.hide_zero_consecutive_visible.secret_a_no_error", ok, blocks)
+    eq("render.hide_zero_consecutive_visible.secret_a_row", blockDumpContains(blocks, "Leech:"), true)
+    check("render.hide_zero_consecutive_visible.secret_a_live_value",
+        blockDumpContains(blocks, "3"), blocks)
+    leechValue = secretB
+    ok, blocks = pcall(visibleTest.buildRenderBlocks)
+    check("render.hide_zero_consecutive_visible.secret_b_no_error", ok, blocks)
+    eq("render.hide_zero_consecutive_visible.secret_b_row", blockDumpContains(blocks, "Leech:"), true)
+    check("render.hide_zero_consecutive_visible.secret_b_live_value",
+        blockDumpContains(blocks, "5"), blocks)
+    eq("render.hide_zero_consecutive_visible.secret_b_no_stale_value",
+        blockDumpContains(blocks, "4.0%"), false)
+    eq("render.hide_zero_consecutive_visible.secret_b_no_unknown",
+        blockDumpContains(blocks, "?"), false)
+end
+
+do
+    local coldSecret = {}
+    local coldEnv, _, coldTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showOffensive = false,
+            showTertiary = true,
+            hideZeroTertiary = true,
+            showLeech = true,
+            showAvoidance = false,
+            showSpeed = false,
+            showDefensive = false,
+        },
+        getLifesteal = function() return coldSecret end,
+        issecretvalue = function(value) return rawequal(value, coldSecret) end,
+        roundToNearestString = function() return "6" end,
+    })
+    fireEvent("render.hide_zero_consecutive_cold.fire", coldEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(coldTest.buildRenderBlocks)
+    check("render.hide_zero_consecutive_cold.no_error", ok, blocks)
+    eq("render.hide_zero_consecutive_cold.no_row", blockDumpContains(blocks, "Leech:"), false)
+    eq("render.hide_zero_consecutive_cold.no_unknown", blockDumpContains(blocks, "?"), false)
+end
+
+do
+    -- A secret-tagged UnitClass read must suppress Block/Stagger rows instead of
+    -- raising on the token comparison inside the defensive build.
+    local secretClass = {}
+    local secretEnv, _, secretTest = loadDefensiveScenario({
+        showBlock = true,
+        showArmor = false,
+        showStagger = true,
+    }, {
+        unitClassToken = secretClass,
+        specIndex = 1,
+        specID = 268,
+        getBlockChance = function() return 7 end,
+        getStaggerPercentage = function() return 37.5 end,
+        issecretvalue = function(value) return rawequal(value, secretClass) end,
+    })
+    fireEvent("defensive.secret_class_suppressed.fire", secretEnv, "PLAYER_ENTERING_WORLD")
+    slash("defensive.secret_class_suppressed.dump", secretEnv, "debug bucket")
+    eq("defensive.secret_class_suppressed.no_block_row", printContains(secretEnv, "Block:"), false)
+    eq("defensive.secret_class_suppressed.no_stagger_row", printContains(secretEnv, "Stagger:"), false)
+    local ok, blocks = pcall(secretTest.buildRenderBlocks)
+    check("defensive.secret_class_suppressed.no_error", ok, blocks)
+    eq("defensive.secret_class_suppressed.no_block_block", blockDumpContains(blocks, "Block:"), false)
+    eq("defensive.secret_class_suppressed.no_stagger_block", blockDumpContains(blocks, "Stagger:"), false)
+end
+
+do
+    -- Two combat ticks with changing restricted ratings stay targetOnly without
+    -- seeding the clean cache; leaving combat recovers to exact with no manual
+    -- cache refresh.
+    local inCombat = true
+    local secretA, secretB = {}, {}
+    local combatPhase = "a"
+    local combatFixture = makeArchonV2Fixture("2026-05-15")
+    setArchonFixtureTargets(combatFixture, "mythicPlusCurrent", "MAGE", "frost",
+        { crit = 1043, haste = 560, mastery = 823, versatility = 97 })
+    local combatEnv, _, combatTest = loadStatsPro("enUS", {
+        unitClassToken = "MAGE",
+        specIndex = 1,
+        specID = 64,
+        inCombatLockdown = function() return inCombat end,
+        statsProArchonTargets = combatFixture,
+        getCombatRating = function()
+            if combatPhase == "a" then return secretA end
+            if combatPhase == "b" then return secretB end
+            return 812
+        end,
+        issecretvalue = function(value)
+            return rawequal(value, secretA) or rawequal(value, secretB)
+        end,
+    })
+    for _, tick in ipairs({ "a", "b" }) do
+        combatPhase = tick
+        eq("render.combat_consecutive_targetonly.in_combat." .. tick,
+            combatEnv.InCombatLockdown(), true)
+        local ok, meta = pcall(combatTest.buildArchonTargetMeta,
+            "crit", combatEnv.GetCombatRating(combatEnv.CR_CRIT_MELEE),
+            combatEnv.CR_CRIT_MELEE)
+        check("render.combat_consecutive_targetonly.no_error." .. tick, ok, meta)
+        eq("render.combat_consecutive_targetonly.state." .. tick,
+            meta.comparisonState, "targetOnly")
+        eq("render.combat_consecutive_targetonly.no_current." .. tick, meta.current, nil)
+        eq("render.combat_consecutive_targetonly.no_delta." .. tick, meta.delta, nil)
+        eq("render.combat_consecutive_targetonly.cache_empty." .. tick,
+            next(combatTest.archonComparisonCache().entries), nil)
+    end
+    inCombat = false
+    combatPhase = "clean"
+    eq("render.combat_consecutive_targetonly.out_of_combat",
+        combatEnv.InCombatLockdown(), false)
+    local ok, recovered = pcall(combatTest.buildArchonTargetMeta,
+        "crit", combatEnv.GetCombatRating(combatEnv.CR_CRIT_MELEE),
+        combatEnv.CR_CRIT_MELEE, 30.0)
+    check("render.combat_consecutive_targetonly.recovery_no_error", ok, recovered)
+    eq("render.combat_consecutive_targetonly.recovery_state",
+        recovered.comparisonState, "exact")
+    eq("render.combat_consecutive_targetonly.recovery_current", recovered.current, 812)
+    eq("render.combat_consecutive_targetonly.recovery_delta", recovered.delta, -231)
+end
+
 smokeReachability:complete("runtime-rendering")
 
 do
@@ -11478,6 +11737,52 @@ do
     end
 end
 
+do
+    -- A throwing or secret-tainted C_UIFileAsset.IsKnownFile probe must degrade
+    -- to pending (never invalid, never a crash) on a rejected direct region.
+    local secretKnown = {}
+    for _, mode in ipairs({ "throw", "secret" }) do
+        local name = "fonts.asset_probe_unavailable." .. mode
+        local probeEnv, _, probeTest = loadStatsPro("enUS", {
+            setFontResult = function() return false end,
+            isKnownFontFile = function()
+                if mode == "throw" then error("probe unavailable") end
+                return secretKnown
+            end,
+            issecretvalue = function(value) return rawequal(value, secretKnown) end,
+        })
+        fireEvent(name .. ".pew", probeEnv, "PLAYER_ENTERING_WORLD")
+        local region = probeTest.panelFontState().mainFontRegions[1]
+        check(name .. ".region", region ~= nil)
+        local ok, status = pcall(probeTest.trySetFontForSmoke,
+            region, "Fonts\\FRIZQT__.TTF", 12, "")
+        check(name .. ".no_error", ok, status)
+        eq(name .. ".pending", status, "pending")
+    end
+end
+
+do
+    -- With CreateFont unavailable the owned-font path resolves to nil without a
+    -- crash, and picker preview still applies through the direct-region fallback.
+    local previewFont = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\NilCreatePreview.ttf"
+    local nilEnv, nilAddon, nilTest = loadStatsPro("enUS", {
+        createFontAvailable = false,
+        lsmFonts = { { name = "Nil Create Preview", path = previewFont } },
+    })
+    fireEvent("fonts.createfont_nil_preview.pew", nilEnv, "PLAYER_ENTERING_WORLD")
+    eq("fonts.createfont_nil_preview.no_owned_object",
+        nilTest.panelFontState().mainOwnedFontObject, nil)
+    nilAddon:OpenConfigMenu()
+    nilAddon.settingsUI.fontPicker.Show(nilAddon)
+    local ok, applied = pcall(nilTest.previewFontForSmoke, previewFont)
+    check("fonts.createfont_nil_preview.no_crash", ok, applied)
+    eq("fonts.createfont_nil_preview.applied", applied, true)
+    eq("fonts.createfont_nil_preview.hud",
+        nilTest.panelFontState().mainAppliedFont, previewFont)
+    eq("fonts.createfont_nil_preview.still_no_owned_object",
+        nilTest.panelFontState().mainOwnedFontObject, nil)
+end
+
 smokeReachability:complete("fonts")
 
 do
@@ -12580,6 +12885,94 @@ do
         fireEvent("durability.cache_capability." .. mode .. ".secret_success", badEnv, "GET_ITEM_INFO_RECEIVED", 303, secretCached)
         eq("durability.cache_capability." .. mode .. ".no_scan", badState.scans, beforeScans)
     end
+end
+
+do
+    -- A throwing GetInventoryItemDurability must fail closed: the update reports
+    -- failure without propagating, the last complete aggregate is preserved and
+    -- still rendered, and the scan stays dirty for a later retry.
+    local mode = "clean"
+    local errorEnv, errorAddon, errorTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showDurability = true,
+            showRepairCost = false,
+            useWorstDurability = false,
+        },
+        getInventoryItemDurability = function(slot)
+            if mode == "error" then error("durability API unavailable") end
+            if slot == 1 then return 80, 100 end
+            if slot == 2 then return 60, 100 end
+            return nil, nil
+        end,
+    })
+    fireEvent("durability.api_error.prime", errorEnv, "PLAYER_ENTERING_WORLD")
+    check("durability.api_error.prime_update", errorAddon:RunUpdateStatsSafe())
+    local primed = errorTest.durabilityState()
+    eq("durability.api_error.prime_complete", primed.durabilityComplete, true)
+    near("durability.api_error.prime_average", primed.durabilityLastCompleteAverage, 70)
+    mode = "error"
+    fireEvent("durability.api_error.rescan", errorEnv, "UPDATE_INVENTORY_DURABILITY")
+    eq("durability.api_error.rescan_dirty", errorTest.durabilityState().dirty, true)
+    local ok, result = pcall(function() return errorAddon:RunUpdateStatsSafe() end)
+    check("durability.api_error.no_throw", ok, result)
+    eq("durability.api_error.update_survives_throwing_api", result, true)
+    local failed = errorTest.durabilityState()
+    eq("durability.api_error.scan_fail_closed", failed.durabilityComplete, false)
+    near("durability.api_error.average_preserved", failed.durabilityLastCompleteAverage, 70)
+    near("durability.api_error.worst_preserved", failed.durabilityLastCompleteWorst, 60)
+    near("durability.api_error.selected_falls_back", failed.durabilityValue, 70)
+    eq("durability.api_error.scan_clears_dirty", failed.dirty, false)
+    eq("durability.api_error.last_complete_rendered",
+        blockDumpContains(errorTest.buildRenderBlocks(), "70.0%"), true)
+    mode = "clean"
+    fireEvent("durability.api_error.recover_event", errorEnv, "UPDATE_INVENTORY_DURABILITY")
+    check("durability.api_error.recovery_update", errorAddon:RunUpdateStatsSafe())
+    local recovered = errorTest.durabilityState()
+    eq("durability.api_error.recovery_complete", recovered.durabilityComplete, true)
+    eq("durability.api_error.recovery_clears_dirty", recovered.dirty, false)
+end
+
+do
+    -- An in-combat secret scan leaves durability incomplete with repair pending;
+    -- leaving combat marks the scan dirty and the next update recovers with no
+    -- further inventory event.
+    local inCombat = true
+    local mode = "combat"
+    local secretDur = {}
+    local scanCount = 0
+    local recoverEnv, recoverAddon, recoverTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showDurability = true,
+            showRepairCost = true,
+            useWorstDurability = false,
+        },
+        inCombatLockdown = function() return inCombat end,
+        issecretvalue = function(value) return rawequal(value, secretDur) end,
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then scanCount = scanCount + 1 end
+            if mode == "clean" and slot == 1 then return 80, 100 end
+            if slot == 1 then return secretDur, secretDur end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function() return nil end,
+    })
+    fireEvent("durability.ooc_recovery.enter", recoverEnv, "PLAYER_ENTERING_WORLD")
+    local combatState = recoverTest.durabilityState()
+    eq("durability.ooc_recovery.combat_incomplete", combatState.durabilityComplete, false)
+    eq("durability.ooc_recovery.combat_no_value", combatState.durabilityValue, nil)
+    eq("durability.ooc_recovery.combat_repair_pending", combatState.repairCostComplete, false)
+    local scansBeforeRegen = scanCount
+    inCombat = false
+    fireEvent("durability.ooc_recovery.regen", recoverEnv, "PLAYER_REGEN_ENABLED")
+    eq("durability.ooc_recovery.regen_marks_dirty", recoverTest.durabilityState().dirty, true)
+    eq("durability.ooc_recovery.regen_defers_scan", scanCount, scansBeforeRegen)
+    mode = "clean"
+    check("durability.ooc_recovery.update", recoverAddon:RunUpdateStatsSafe())
+    local recovered = recoverTest.durabilityState()
+    eq("durability.ooc_recovery.recovered_complete", recovered.durabilityComplete, true)
+    near("durability.ooc_recovery.recovered_value", recovered.durabilityValue, 80)
+    eq("durability.ooc_recovery.recovery_clears_dirty", recovered.dirty, false)
+    eq("durability.ooc_recovery.one_recovery_scan", scanCount, scansBeforeRegen + 1)
 end
 
 smokeReachability:complete("durability-repair")
@@ -17977,6 +18370,54 @@ do
     eq("profiles.context.no_spec_position.live_y", y, -111)
     callScript("profiles.context.no_spec_position.close_dialog",
         env.StatsProProfileOperationCancelButton, "OnClick")
+end
+
+do
+    -- forceReapply retries are bounded: attempts 1-3 schedule a new C_Timer.After
+    -- with growing delay, attempt 4 schedules nothing and invalidates the token.
+    local retryEnv, retryAddon = loadStatsPro("enUS", withProfileIdentity({}))
+    fireEvent("profiles.context.forcereapply_bound.pew", retryEnv, "PLAYER_ENTERING_WORLD")
+    retryAddon.profileRuntime.applyActiveSettings = function()
+        error("injected reapply failure")
+    end
+    retryAddon.profileRuntime.forceReapply = true
+    retryAddon.profileRuntime.forceReapplyRetryCount = 0
+    retryAddon.profileRuntime.forceReapplyRetryToken = nil
+    local ok, result = pcall(retryAddon.profileRuntime.ResolveCurrent, false)
+    check("profiles.context.forcereapply_bound.first_no_error", ok, result)
+    eq("profiles.context.forcereapply_bound.first_rejected", result, false)
+    eq("profiles.context.forcereapply_bound.first_count",
+        retryAddon.profileRuntime.forceReapplyRetryCount, 1)
+    check("profiles.context.forcereapply_bound.first_token",
+        retryAddon.profileRuntime.forceReapplyRetryToken ~= nil)
+    eq("profiles.context.forcereapply_bound.first_timer", #retryEnv.__timers, 1)
+    eq("profiles.context.forcereapply_bound.first_delay", retryEnv.__timers[1].delay, 0.25)
+    for attempt, delay in ipairs({ 0.5, 0.75 }) do
+        eq("profiles.context.forcereapply_bound.timer_runs." .. attempt,
+            retryEnv.__flushNextTimer(), true)
+        eq("profiles.context.forcereapply_bound.count." .. attempt,
+            retryAddon.profileRuntime.forceReapplyRetryCount, attempt + 1)
+        check("profiles.context.forcereapply_bound.token." .. attempt,
+            retryAddon.profileRuntime.forceReapplyRetryToken ~= nil)
+        eq("profiles.context.forcereapply_bound.timers." .. attempt, #retryEnv.__timers, 1)
+        eq("profiles.context.forcereapply_bound.delay." .. attempt,
+            retryEnv.__timers[1].delay, delay)
+    end
+    local staleToken = retryAddon.profileRuntime.forceReapplyRetryToken
+    check("profiles.context.forcereapply_bound.stale_token_held", staleToken ~= nil)
+    eq("profiles.context.forcereapply_bound.fourth_timer_runs",
+        retryEnv.__flushNextTimer(), true)
+    eq("profiles.context.forcereapply_bound.fourth_count",
+        retryAddon.profileRuntime.forceReapplyRetryCount, 4)
+    eq("profiles.context.forcereapply_bound.fourth_token_exhausted",
+        retryAddon.profileRuntime.forceReapplyRetryToken, nil)
+    check("profiles.context.forcereapply_bound.stale_token_invalidated",
+        retryAddon.profileRuntime.forceReapplyRetryToken ~= staleToken)
+    eq("profiles.context.forcereapply_bound.fourth_no_new_timer", #retryEnv.__timers, 0)
+    eq("profiles.context.forcereapply_bound.still_force",
+        retryAddon.profileRuntime.forceReapply, true)
+    eq("profiles.context.forcereapply_bound.still_pending",
+        retryAddon.profileRuntime.pendingResolution, true)
 end
 
 smokeReachability:complete("profile-context")
@@ -23618,6 +24059,111 @@ do
         root.profiles.p2, before.profiles.p2)
     check("profiles.ui.transfer_commit.message",
         printContains(env, "Imported profile \"Damage solo 2\" was created."))
+end
+
+do
+    -- A mutating target apply plus a failing rollback apply finishes with
+    -- rollback-apply-failed: the journal restores the root and recovery is
+    -- requested via forceReapply.
+    local env, _, test, root = makeProfileOpsFixture()
+    local before = deepCopy(root)
+    local identities = captureRegistryIdentities(root)
+    local oldSetPoint = env.StatsProFrame.SetPoint
+    local failTarget = true
+    rawset(env.StatsProFrame, "SetPoint", function(frame, ...)
+        if failTarget then
+            failTarget = false
+            root.profiles.p3.settings.showDefensive = true
+            root.profiles.p3.settings.colors.crit.r = 0.999
+        end
+        error("injected target and rollback apply failure")
+    end)
+    local ok, reason = test.profileOps.assign("Player-1-OPS-A", 73, "p3")
+    rawset(env.StatsProFrame, "SetPoint", oldSetPoint)
+    eq("profiles.ops.failure.mutating_rollback_apply.rejected", ok, false)
+    eq("profiles.ops.failure.mutating_rollback_apply.reason", reason, "rollback-apply-failed")
+    assertDeepEqual("profiles.ops.failure.mutating_rollback_apply.root", root, before)
+    assertRegistryIdentities(
+        "profiles.ops.failure.mutating_rollback_apply.identity", root, identities)
+    eq("profiles.ops.failure.mutating_rollback_apply.active",
+        test.profileState().profileID, "p2")
+    eq("profiles.ops.failure.mutating_rollback_apply.force",
+        test.profileRuntimeState().forceReapply, true)
+    eq("profiles.ops.failure.mutating_rollback_apply.pending",
+        test.profileRuntimeState().pendingResolution, true)
+end
+
+do
+    local _, _, test = makeProfileOpsFixture()
+    local transfer = test.profileTransfer
+    local goldenFile = assert(io.open(
+        "scripts/fixtures/profile-transfer-v1-layout.spp", "rb"))
+    local golden = goldenFile:read("*a")
+    goldenFile:close()
+    golden = golden:gsub("[\r\n]+$", "")
+    local envelope, base64 = golden:match("^(SPP1:[0-9A-Fa-f]+:)([A-Za-z0-9+/=]+)$")
+    check("profiles.transfer.parse.negative_fixture", envelope ~= nil and base64 ~= nil)
+
+    local parsed, reason, detail = transfer.parse("spp1:" .. string.sub(golden, 6))
+    eq("profiles.transfer.parse.lower_prefix_rejected", parsed, nil)
+    eq("profiles.transfer.parse.lower_prefix_reason", reason, "invalid")
+    eq("profiles.transfer.parse.lower_prefix_detail", detail, "envelope")
+
+    parsed, reason, detail = transfer.parse("SPP1::" .. base64)
+    eq("profiles.transfer.parse.double_colon_rejected", parsed, nil)
+    eq("profiles.transfer.parse.double_colon_reason", reason, "invalid")
+    eq("profiles.transfer.parse.double_colon_detail", detail, "envelope")
+
+    parsed, reason, detail = transfer.parse(string.sub(golden, 1, #golden - 4))
+    eq("profiles.transfer.parse.truncated_rejected", parsed, nil)
+    eq("profiles.transfer.parse.truncated_reason", reason, "invalid")
+    eq("profiles.transfer.parse.truncated_detail", detail, "checksum")
+
+    -- The fixture checksum is already lowercase, so case tolerance is pinned
+    -- with an uppercased variant: the envelope is case-sensitive, the checksum
+    -- itself is not.
+    local upperChecksum = string.gsub(golden, "^(SPP1:)([0-9A-Fa-f]+)(:)",
+        function(prefix, checksum, sep) return prefix .. string.upper(checksum) .. sep end, 1)
+    check("profiles.transfer.parse.upper_checksum_fixture", upperChecksum ~= golden)
+    local upperPackage, upperReason, upperDetail = transfer.parse(upperChecksum)
+    check("profiles.transfer.parse.upper_checksum_accepted",
+        type(upperPackage) == "table",
+        tostring(upperReason) .. " " .. tostring(upperDetail))
+    eq("profiles.transfer.parse.upper_checksum_name",
+        upperPackage.profileName, "SPP1 compatibility")
+end
+
+do
+    -- Importing the layout fixture with nine colliding names exhausts attempts
+    -- 1-9, so the two-digit suffix of attempt 10 is used.
+    local _, _, test, root = makeProfileOpsFixture({
+        mutateRoot = function(candidate)
+            local base = deepCopy(candidate.profiles.p1.settings)
+            for attempt = 1, 9 do
+                local suffix = attempt == 1 and "" or " " .. tostring(attempt)
+                candidate.profiles["p" .. tostring(attempt + 4)] = {
+                    name = "SPP1 compatibility" .. suffix,
+                    settings = deepCopy(base),
+                }
+            end
+            candidate.account.nextProfileID = 14
+        end,
+    })
+    local goldenFile = assert(io.open(
+        "scripts/fixtures/profile-transfer-v1-layout.spp", "rb"))
+    local golden = goldenFile:read("*a")
+    goldenFile:close()
+    golden = golden:gsub("[\r\n]+$", "")
+    local package, parseReason, parseDetail = test.profileTransfer.parse(golden)
+    check("profiles.transfer.import_suffix.parse", type(package) == "table",
+        tostring(parseReason) .. " " .. tostring(parseDetail))
+    local ok, result = test.profileOps.importTransferToContext(
+        package, { layout = true }, "Player-1-OPS-A", 73)
+    eq("profiles.transfer.import_suffix.ok", ok, true)
+    eq("profiles.transfer.import_suffix.profile_id", result.profileID, "p14")
+    eq("profiles.transfer.import_suffix.two_digit_name", result.name, "SPP1 compatibility 10")
+    eq("profiles.transfer.import_suffix.stored_name",
+        root.profiles.p14.name, "SPP1 compatibility 10")
 end
 
 smokeReachability:complete("profile-mutations")

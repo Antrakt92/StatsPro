@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "totalAssertions": 42124,
+  "totalAssertions": 42322,
   "suites": [
     {
       "name": "core-panel-persistence",
@@ -9,18 +9,18 @@
     },
     {
       "name": "runtime-rendering",
-      "assertions": 1540,
-      "fingerprint": "3064b182"
+      "assertions": 1619,
+      "fingerprint": "2d8d01a4"
     },
     {
       "name": "fonts",
-      "assertions": 5297,
-      "fingerprint": "4cfa66a6"
+      "assertions": 5311,
+      "fingerprint": "0aed93b1"
     },
     {
       "name": "durability-repair",
-      "assertions": 652,
-      "fingerprint": "2a73cbd2"
+      "assertions": 682,
+      "fingerprint": "28b294d1"
     },
     {
       "name": "settings-compatibility",
@@ -29,8 +29,8 @@
     },
     {
       "name": "profile-context",
-      "assertions": 521,
-      "fingerprint": "3d455210"
+      "assertions": 546,
+      "fingerprint": "151c150d"
     },
     {
       "name": "profile-ui",
@@ -39,13 +39,13 @@
     },
     {
       "name": "profile-mutations",
-      "assertions": 4384,
-      "fingerprint": "3e44b9d5"
+      "assertions": 4434,
+      "fingerprint": "5f9d9436"
     },
     {
       "name": "control-design",
       "assertions": 803,
-      "fingerprint": "384a1b81"
+      "fingerprint": "384a5af5"
     },
     {
       "name": "presets-onboarding",

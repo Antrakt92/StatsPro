@@ -49,6 +49,12 @@ addon.itemLevelRuntime = {
     generation = 0,
     attempt = 0,
     maxAttempts = 4,
+    -- WHY mirror durability: average-iLvl recompute is asynchronous after
+    -- bag/equipment events, so each external dirty generation gets the same short
+    -- bounded backoff. Generation + attempt tokens make older timers harmless.
+    retryDelays = { 1, 3, 8, 15 },
+    scheduledGeneration = nil,
+    scheduledAttempt = nil,
 }
 addon.critRuntime = {
     selectedSource = nil,
@@ -833,8 +839,18 @@ local function SafeGetSpecInfo(idx)
     local fn = C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfo
         or GetSpecializationInfo
     if type(fn) ~= "function" then return nil end
+    local idxSecretOK, idxSecret = pcall(issecretvalue, idx)
+    if not idxSecretOK or idxSecret then return nil end
     local ok, specID, name, description, icon, role, primaryStat = pcall(fn, idx)
     if not ok then return nil end
+    -- WHY: any return can be secret-tagged in combat; == / ~= on a secret raises
+    -- and would abort callers such as IsBrewmasterSpec. Reject the whole tuple.
+    -- Fixed bound (not ipairs): nil holes must not skip later secret checks.
+    local results = { specID, name, description, icon, role, primaryStat }
+    for i = 1, 6 do
+        local secretOK, secret = pcall(issecretvalue, results[i])
+        if not secretOK or secret then return nil end
+    end
     return specID, name, description, icon, role, primaryStat
 end
 
@@ -1250,14 +1266,26 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
     return meta
 end
 
+-- WHY pcall + secret reject: UnitClass returns can be secret-tagged in combat
+-- and == / ~= on a secret raises. Callers compare the token directly, so a
+-- secret/failing read resolves to nil (no block / no brewmaster) instead of
+-- aborting the render path. Clean reads behave exactly as before.
+local function SafeGetPlayerClassToken()
+    if type(UnitClass) ~= "function" then return nil end
+    local ok, _, classToken = pcall(UnitClass, "player")
+    if not ok then return nil end
+    local secretOK, secret = pcall(issecretvalue, classToken)
+    if not secretOK or secret or type(classToken) ~= "string" then return nil end
+    return classToken
+end
+
 local function PlayerCanBlock()
-    local _, classToken = UnitClass("player")
+    local classToken = SafeGetPlayerClassToken()
     return classToken == "PALADIN" or classToken == "SHAMAN" or classToken == "WARRIOR"
 end
 
 local function IsBrewmasterSpec()
-    local _, classToken = UnitClass("player")
-    if classToken ~= "MONK" then return false end
+    if SafeGetPlayerClassToken() ~= "MONK" then return false end
     local idx = SafeGetSpecIndex()
     if not idx then return false end
     local specID = SafeGetSpecInfo(idx)
@@ -1478,8 +1506,45 @@ function addon.itemLevelRuntime.MarkDirty()
     local runtime = addon.itemLevelRuntime
     runtime.generation = runtime.generation + 1
     runtime.attempt = 0
+    runtime.scheduledGeneration = nil
+    runtime.scheduledAttempt = nil
     cached.itemLevelComplete = false
     itemLevelDirty = true
+end
+
+-- Bounded timer backoff mirroring durability ScheduleRetry. The coalesced ticker
+-- owns the fast retry budget (attempt/maxAttempts); once that is exhausted, each
+-- arm reopens the cache for exactly one rescan. The arm index derives from scan
+-- attempts past the ticker budget, so the delay table bounds the whole chain and
+-- stale nil data cannot spin forever. Timer callbacks never reset this budget,
+-- and a newer MarkDirty generation makes older timers inert.
+function addon.itemLevelRuntime.ScheduleRetry(pending)
+    local runtime = addon.itemLevelRuntime
+    local generation = runtime.generation
+    if not pending then
+        if runtime.scheduledGeneration == generation then
+            runtime.scheduledGeneration = nil
+            runtime.scheduledAttempt = nil
+        end
+        return
+    end
+    if runtime.scheduledGeneration == generation then return end
+    local armIndex = runtime.attempt - runtime.maxAttempts + 1
+    if armIndex < 1 then armIndex = 1 end
+    local delay = runtime.retryDelays[armIndex]
+    if not delay then return end
+    runtime.scheduledGeneration = generation
+    runtime.scheduledAttempt = armIndex
+    C_Timer.After(delay, function()
+        if runtime.generation ~= generation
+                or runtime.scheduledGeneration ~= generation
+                or runtime.scheduledAttempt ~= armIndex then return end
+        runtime.scheduledGeneration = nil
+        runtime.scheduledAttempt = nil
+        if cached.showItemLevel and cached.itemLevelComplete == false then
+            itemLevelDirty = true
+        end
+    end)
 end
 -- Init guard: UpdateStats must not run before CacheSettings populates cached.colorStrings
 local isLoaded = false
@@ -1488,12 +1553,13 @@ local isLoaded = false
     7. HELPERS
 ============================================================ ]]
 
--- Compact short-form stat labels, hand-curated per locale to match StatsPro's
--- 4-7-char aesthetic across every client language. Translation philosophy:
--- preserve the same visual weight as the English "Crit" / "Vers" — abbreviated
--- where the natural translation is long, full where it's already short. Aim for
--- ≥4 chars when the language supports it (3-char abbreviations like "Par" or
--- "Cel" read as truncations rather than words and look unfinished).
+-- Short-form labels are a first-character derivative, not a hand-curated table:
+-- GetStyledLabelText renders the "short" style as FirstUTF8Char(localized label)
+-- plus a colon, so every locale inherits its short form from the full
+-- LABELS_BY_LOCALE entry below (UTF-8-aware, non-ASCII initials stay intact).
+-- Translation philosophy: keep the full label natural in each client language
+-- (official WoW client stat terminology preferred) and the short style follows
+-- automatically without per-locale abbreviations.
 --
 -- Ships with current WoW addon locale tables:
 --   enUS (canonical source table with a few intentional display-name aliases)
@@ -4389,18 +4455,23 @@ local function RefreshItemLevelCache()
     if not GetAverageItemLevel then
         cached.itemLevelComplete = false
         itemLevelDirty = false
+        addon.itemLevelRuntime.ScheduleRetry(false)
         return
     end
     local ok, overall, equipped = pcall(GetAverageItemLevel)
     if not ok or not IsCleanNonNegativeNumber(overall) or not IsCleanNonNegativeNumber(equipped) then
         cached.itemLevelComplete = false
-        if runtime.attempt >= runtime.maxAttempts then itemLevelDirty = false end
+        if runtime.attempt >= runtime.maxAttempts then
+            itemLevelDirty = false
+            addon.itemLevelRuntime.ScheduleRetry(true)
+        end
         return
     end
     cached.itemLevelOverall = overall
     cached.itemLevelEquipped = equipped
     cached.itemLevelComplete = true
     itemLevelDirty = false
+    addon.itemLevelRuntime.ScheduleRetry(false)
 end
 
 local function IsRenderablePercentValue(val)
@@ -4430,12 +4501,15 @@ local function shouldShowUnknown(rowKey, isUnknown, hideZero)
     return rowKey and cached.cleanRowVisibility[rowKey] == true
 end
 
-local function FormatRepairCost(copper)
+local function FormatRepairCost(copper, fontSize)
     -- WHY: Blizzard's GetCoinTextureString embeds gold/silver/copper icons inline,
     -- matching the vendor display exactly. Pass fontHeight explicitly — without it
     -- the helper produces `:0:0` markup which in Retail 12.x sometimes renders icons
     -- at the wrong size or with the digits floating to a separate baseline.
-    return GetCoinTextureString(copper, GetNumberDB("fontSize"))
+    -- WHY optional size: per-tick callers pass cached.fontSize (synced by
+    -- CacheSettings and the Font Size slider) instead of a DB read every tick.
+    -- Omitted size falls back to the normalized DB value with no render change.
+    return GetCoinTextureString(copper, fontSize or GetNumberDB("fontSize"))
 end
 
 local function ComputeDurabilityColor(pct)
@@ -8288,6 +8362,7 @@ local function CacheSettings()
         cached[k] = GetBoolDB(k)
     end
     cached.updateInterval = GetNumberDB("updateInterval")
+    cached.fontSize = GetNumberDB("fontSize")
     cached.displayMode = addon.NormalizeDisplayMode(GetDB("displayMode"))
     cached.labelStyle = NormalizeLabelStyle(GetDB("labelStyle"))
     cached.targetSnapshot = addon.archonTargets.ResolveAvailableSnapshotKey(GetDB("targetSnapshot"))
@@ -8864,9 +8939,17 @@ local function ScanDurabilityAndCost()
     addon.durabilityRuntime.pendingItemSlots = pendingItemSlots
     for slot = DURABILITY_SLOT_MIN, DURABILITY_SLOT_MAX do
         if not DURABILITY_SKIP_SLOTS[slot] then
-            local cur, max = GetInventoryItemDurability(slot)
-            local curSecret = issecretvalue(cur)
-            local maxSecret = issecretvalue(max)
+            -- WHY pcall fail-closed: a throwing durability API must not abort the
+            -- 19-slot scan. Route the failure into the restricted-read branch below,
+            -- which marks the aggregate incomplete and keeps the last complete values.
+            local okDur, cur, max = pcall(GetInventoryItemDurability, slot)
+            local curSecret, maxSecret
+            if not okDur then
+                curSecret, maxSecret = true, true
+            else
+                curSecret = issecretvalue(cur)
+                maxSecret = issecretvalue(max)
+            end
             if curSecret or maxSecret then
                 durabilityIncomplete = true
                 if cached.showRepairCost then repairCostPending = true end
@@ -9127,7 +9210,7 @@ function Panel:New(globalName, dbKeyPrefix)
         overlay:Hide()
         overlay:RegisterForDrag("LeftButton")
         overlay:SetScript("OnDragStart", function()
-            if InCombatLockdown() or cached.isLocked then return end
+            if addon.profileRuntime.ReadCombatState() ~= false or cached.isLocked then return end
             panel:StartMouseDrag()
         end)
         overlay:SetScript("OnDragStop", function()
@@ -9254,7 +9337,7 @@ function Panel:New(globalName, dbKeyPrefix)
     -- permanently true (Panel:New) so right-click → Settings works regardless of lock.
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", function()
-        if InCombatLockdown() or cached.isLocked then return end
+        if addon.profileRuntime.ReadCombatState() ~= false or cached.isLocked then return end
         panel:StartMouseDrag()
     end)
     frame:SetScript("OnDragStop", function()
@@ -9781,7 +9864,7 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- Cold secret reads use font-scaled geometry for this render only. Empty columns still
     -- return a clean zero, so rating-only / percentage-only routing gets no phantom value
     -- column. Height fallbacks are aggregate (lineCount * size), matching cached semantics.
-    local effectiveFontSize = self.appliedSize or GetNumberDB("fontSize")
+    local effectiveFontSize = self.appliedSize or cached.fontSize or GetNumberDB("fontSize")
     local labelW, ratingW, valueW = 0, 0, 0
     local labelH, ratingH, valueH
     if hasRows then
@@ -10069,7 +10152,7 @@ function Panel:Reflow()
     local repairText = self.lastRepairText or ""
     if hasRepair and SAFE_NUM.IsCleanFiniteNumber(cached.repairCost) and cached.repairCost >= 0 then
         -- Inline coin textures carry their own size; SetFont cannot resize them.
-        repairText = FormatRepairCost(cached.repairCost)
+        repairText = FormatRepairCost(cached.repairCost, cached.fontSize)
     end
     self:SetTextSafe(
         self.lastLabelText,
@@ -10912,7 +10995,7 @@ local function BuildRepairCostPayload()
         return "?", repairLabelStr
     end
     if cached.repairCost <= 0 then return "", nil end
-    return FormatRepairCost(cached.repairCost), repairLabelStr
+    return FormatRepairCost(cached.repairCost, cached.fontSize), repairLabelStr
 end
 
 -- WHY: separate header injector — sectioned mode places localized structural rows
@@ -11289,6 +11372,11 @@ local EVENT_HANDLERS = {
     -- WHY: bag/equipment events can precede Blizzard's asynchronous average-iLvl
     -- recompute. This authoritative follow-up reopens the cache for the coalesced ticker.
     PLAYER_AVG_ITEM_LEVEL_UPDATE = function() addon.itemLevelRuntime.MarkDirty() end,
+    -- WHY: combat ratings change on procs/gear with no other refresh trigger. Only
+    -- accelerate the coalesced OnUpdate ticker; never recompute stats in the callback.
+    COMBAT_RATING_UPDATE = function()
+        timeSinceLastUpdate = cached.updateInterval or 0.5
+    end,
     MERCHANT_SHOW               = function() addon.durabilityRuntime.MarkDirty() end,
     -- WHY: lock state is stored in cached.isLocked and read by OnDragStart. Mouse stays
     -- enabled permanently so right-click Settings works even while locked.
@@ -13340,13 +13428,25 @@ local function CursorGap(c, n)     c.y = c.y - (n or 8) end
 local function CursorUsed(c)       return math.abs(c.initialY - c.y) + 16 end
 
 -- Lead-byte ranges per RFC 3629; malformed input progresses 1 byte to avoid infinite loop.
+-- 4-byte range is 0xF0-0xF4 with second-byte validation mirroring NormalizeNameShape
+-- (0xF0 needs 0x90-0xBF, 0xF4 needs 0x80-0x8F, else 0x80-0xBF); 0xF5-0xF7 are
+-- invalid lead bytes. A proven-bad second byte degrades to length 1.
 local function Utf8CharLen(s, i)
     local b1 = s and string.byte(s, i or 1)
     if not b1 then return 0 end
     if b1 < 0x80 then return 1 end
     if b1 >= 0xC2 and b1 <= 0xDF then return 2 end
     if b1 >= 0xE0 and b1 <= 0xEF then return 3 end
-    if b1 >= 0xF0 and b1 <= 0xF7 then return 4 end
+    if b1 >= 0xF0 and b1 <= 0xF4 then
+        local b2 = string.byte(s, (i or 1) + 1)
+        if b2 then
+            local secondMin, secondMax = 0x80, 0xBF
+            if b1 == 0xF0 then secondMin = 0x90
+            elseif b1 == 0xF4 then secondMax = 0x8F end
+            if b2 < secondMin or b2 > secondMax then return 1 end
+        end
+        return 4
+    end
     return 1
 end
 
@@ -17891,7 +17991,12 @@ function addon.settingsUI.BuildAppearanceTab(self, context)
         function()
             local applied = self.fontRuntime.applyCommittedTextStyle(
                 self.fontRuntime.preferredPath(), GetNumberDB("fontSize"), false, true)
-            if applied then ReflowAllPanels() end
+            if applied then
+                -- WHY: this path reflows (not CacheSettings + UpdateStats), so sync
+                -- the cached mirror here or FormatRepairCost would reuse the old size.
+                cached.fontSize = GetNumberDB("fontSize")
+                ReflowAllPanels()
+            end
             return applied
         end)
 

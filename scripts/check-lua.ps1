@@ -2,6 +2,7 @@ param(
     [switch]$Release,
     [int]$ArchonMaxAgeDays = 14,
     [switch]$AllowStaleArchonTargets,
+    [switch]$AllowReducedArchonProfiles,
     [string]$ToolLockPath = (Join-Path $PSScriptRoot "tool-version-locks.json"),
     [switch]$EnforceToolLocks,
     [switch]$UpdateSmokeContract,
@@ -16,6 +17,9 @@ $ErrorActionPreference = "Stop"
 
 if ($ArchonMaxAgeDays -lt 0) {
     throw "-ArchonMaxAgeDays must be a non-negative integer."
+}
+if ($Release -and -not $PSBoundParameters.ContainsKey("ArchonMaxAgeDays")) {
+    throw "-Release requires an explicit -ArchonMaxAgeDays (the scheduled release uses 3); the 14-day default is dev-only and must never silently gate a publication."
 }
 if ($UpdateSmokeContract -and ($SelfTest -or $Release)) {
     throw "-UpdateSmokeContract cannot be combined with -SelfTest or -Release."
@@ -1141,6 +1145,16 @@ if (Test-Path $ArchonTargetsFile) {
             Write-Warning "Release Archon gate: allow-stale=false; enforcing -ArchonMaxAgeDays $ArchonMaxAgeDays."
             $ArchonArgs += @("--max-age-days", $ArchonMaxAgeDays)
         }
+        if ($AllowReducedArchonProfiles) {
+            Write-Warning "Release Archon gate: reduced-profile snapshot explicitly allowed via -AllowReducedArchonProfiles (operator-reviewed transition only)."
+        }
+        else {
+            Write-Warning "Release Archon gate: requiring the complete 5-profile snapshot (--min-profiles 5)."
+            $ArchonArgs += @("--min-profiles", 5)
+        }
+    }
+    else {
+        Write-Warning "Non-release Archon check: snapshot age/profile-completeness validation is skipped (no --max-age-days/--min-profiles passed)."
     }
     $ArchonResult = Invoke-NativeCapture -FilePath $Lua -Arguments $ArchonArgs -TimeoutSeconds 30 -Description "Archon target snapshot check" -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
     $ArchonResult.Output | ForEach-Object { Write-Host $_ }

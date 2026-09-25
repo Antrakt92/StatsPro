@@ -1,0 +1,16 @@
+# EditorConfig helps contributors and agents keep formatting consistent.
+# See https://editorconfig.org
+
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{lua,ps1,psm1}]
+indent_style = space
+indent_size = 4
+
+[*.{md,bbcode}]
+trim_trailing_whitespace = false

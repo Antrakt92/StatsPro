@@ -30,7 +30,7 @@ your characters. Hover secondary stats for bundled Archon references.
 
 ![StatsPro showing character stats beside the action bars during normal play](screenshots/09-flat-in-game.jpg)
 
-*Retained older in-game capture; fresh replacement pending live captures (T3-70).*
+*Retained older in-game capture; fresh screenshots pending.*
 
 ## Getting started
 

@@ -631,6 +631,30 @@ local function validate_runtime_spec_parity(statsProLuaPath)
     end
 end
 
+local function parse_require_profiles(value)
+    expect_type(value, "string", "--require-profiles")
+    local required = {}
+    local seen = {}
+    for entry in string.gmatch(value, "([^,]+)") do
+        local key = entry:match("^%s*(.-)%s*$")
+        if key == "" then
+            fail("--require-profiles contains an empty profile name")
+        end
+        if not PROFILES[key] then
+            fail("--require-profiles has unknown profile " .. tostring(key))
+        end
+        if seen[key] then
+            fail("--require-profiles repeats profile " .. tostring(key))
+        end
+        seen[key] = true
+        required[#required + 1] = key
+    end
+    if #required == 0 then
+        fail("--require-profiles requires at least one profile key")
+    end
+    return required
+end
+
 local function validate_snapshot(root, text, options)
     validate_spec_manifest()
     validate_runtime_spec_parity(options.statsProLua)
@@ -653,6 +677,17 @@ local function validate_snapshot(root, text, options)
     for profileKey in pairs(root.snapshots) do
         if not profiles[profileKey] then
             fail("snapshots has unexpected profile " .. tostring(profileKey))
+        end
+    end
+    if options.minProfiles and profileCount < options.minProfiles then
+        fail("snapshots profile count " .. tostring(profileCount)
+            .. " is below required minimum " .. tostring(options.minProfiles))
+    end
+    if options.requireProfiles then
+        for _, requiredKey in ipairs(options.requireProfiles) do
+            if root.snapshots[requiredKey] == nil then
+                fail("snapshots is missing required profile " .. tostring(requiredKey))
+            end
         end
     end
     local emittedSpecCount = 0
@@ -730,6 +765,8 @@ local function validate_snapshot(root, text, options)
                 local fallback = heroic and heroic.specs and heroic.specs[spec.classToken]
                     and heroic.specs[spec.classToken][spec.specKey]
                 expect_type(fallback, "table", specContext .. " Heroic fallback")
+                contains_exactly_required_stats(fallback.targets, specContext .. " Heroic fallback.targets")
+                validate_order(fallback.order, specContext .. " Heroic fallback.order")
             else
             expect_type(specData, "table", specContext)
             validate_exact_keys(specData, make_key_set({ "sourceUrl", "targets", "order" }), specContext)
@@ -1090,6 +1127,76 @@ local function run_self_test(parsedOptions)
         validate_snapshot(extraSpecKey, nil, options)
     end, "unexpected key specID")
 
+    local gatedProfiles = make_valid_fixture("2026-05-16", {
+        mythicPlusCurrent = true,
+        raidNormal = true,
+        raidHeroic = true,
+    })
+    local gatedBase = { today = "2026-05-16", maxAgeDays = 14, statsProLua = options.statsProLua }
+    local gatedMinPass = clone(gatedBase)
+    gatedMinPass.minProfiles = 3
+    validate_snapshot(gatedProfiles, nil, gatedMinPass)
+    local gatedMinFail = clone(gatedBase)
+    gatedMinFail.minProfiles = 4
+    assert_throws("min-profiles rejects transitional snapshot", function()
+        validate_snapshot(gatedProfiles, nil, gatedMinFail)
+    end, "below required minimum 4")
+    local gatedRequirePass = clone(gatedBase)
+    gatedRequirePass.requireProfiles = { "mythicPlusCurrent", "raidHeroic" }
+    validate_snapshot(gatedProfiles, nil, gatedRequirePass)
+    local gatedRequireFail = clone(gatedBase)
+    gatedRequireFail.requireProfiles = { "mythicPlusCurrent", "raidMythic" }
+    assert_throws("require-profiles rejects missing profile", function()
+        validate_snapshot(gatedProfiles, nil, gatedRequireFail)
+    end, "missing required profile raidMythic")
+
+    local parsedMin = parse_args({ "--min-profiles", "5" })
+    expect_equal(parsedMin.minProfiles, 5, "--min-profiles value")
+    local parsedRequire = parse_args({ "--require-profiles", "raidMythic, mythicPlusCurrent" })
+    expect_equal(#parsedRequire.requireProfiles, 2, "--require-profiles count")
+    expect_equal(parsedRequire.requireProfiles[1], "raidMythic", "--require-profiles first key")
+    expect_equal(parsedRequire.requireProfiles[2], "mythicPlusCurrent", "--require-profiles second key")
+    assert_throws("min-profiles zero rejected", function()
+        parse_args({ "--min-profiles", "0" })
+    end, "positive integer")
+    assert_throws("min-profiles above profile count rejected", function()
+        parse_args({ "--min-profiles", "6" })
+    end, "between 1 and 5")
+    assert_throws("min-profiles missing value rejected", function()
+        parse_args({ "--min-profiles" })
+    end, "requires a number")
+    assert_throws("require-profiles unknown rejected", function()
+        parse_args({ "--require-profiles", "arena" })
+    end, "unknown profile arena")
+    assert_throws("require-profiles duplicate rejected", function()
+        parse_args({ "--require-profiles", "raidMythic,raidMythic" })
+    end, "repeats profile raidMythic")
+    assert_throws("require-profiles empty rejected", function()
+        parse_args({ "--require-profiles", " , " })
+    end, "empty profile name")
+    assert_throws("require-profiles missing value rejected", function()
+        parse_args({ "--require-profiles" })
+    end, "comma-separated profile list")
+
+    -- Corrupt Heroic fallback data is rejected by the Heroic profile's own
+    -- atomic gate before the Mythic fallback revalidation runs; both layers
+    -- must agree that no partial/corrupt fallback can pass.
+    local badFallbackTargets = clone(partialMythic)
+    badFallbackTargets.snapshots.raidHeroic.specs.MAGE.frost.targets.mastery = 0
+    assert_throws("corrupt Heroic fallback targets rejected", function()
+        validate_snapshot(badFallbackTargets, nil, options)
+    end, "snapshots.raidHeroic.specs.MAGE.frost.targets.mastery must be a positive finite integer")
+    local badFallbackOrder = clone(partialMythic)
+    badFallbackOrder.snapshots.raidHeroic.specs.MAGE.frost.order = { "crit", "crit", "haste", "mastery" }
+    assert_throws("corrupt Heroic fallback order rejected", function()
+        validate_snapshot(badFallbackOrder, nil, options)
+    end, "snapshots.raidHeroic.specs.MAGE.frost.order")
+    local badFallbackExtra = clone(partialMythic)
+    badFallbackExtra.snapshots.raidHeroic.specs.MAGE.frost.targets.leech = 100
+    assert_throws("Heroic fallback with extra stat rejected", function()
+        validate_snapshot(badFallbackExtra, nil, options)
+    end, "key count")
+
     io.write("Archon target validator self-test passed.\n")
 end
 
@@ -1110,6 +1217,24 @@ function parse_args(argv)
             options.semanticLines = true
         elseif arg == "--allow-stale" then
             options.allowStale = true
+        elseif arg == "--require-profiles" then
+            index = index + 1
+            if not argv[index] then
+                fail("--require-profiles requires a comma-separated profile list")
+            end
+            options.requireProfiles = parse_require_profiles(argv[index])
+        elseif arg == "--min-profiles" then
+            index = index + 1
+            options.minProfiles = tonumber(argv[index])
+            if not options.minProfiles then
+                fail("--min-profiles requires a number")
+            end
+            if options.minProfiles < 1 or math.floor(options.minProfiles) ~= options.minProfiles then
+                fail("--min-profiles must be a positive integer")
+            end
+            if options.minProfiles > #PROFILE_ORDER then
+                fail("--min-profiles must be between 1 and " .. tostring(#PROFILE_ORDER))
+            end
         elseif arg == "--max-age-days" then
             index = index + 1
             options.maxAgeDays = tonumber(argv[index])

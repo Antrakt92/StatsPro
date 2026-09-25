@@ -3124,10 +3124,10 @@ function Assert-ReleaseWorkflowBoundary {
 
     $concurrencyBlock = [regex]::Match($WorkflowText, '(?ms)^concurrency:\s*$.*?(?=^jobs:\s*$)')
     if (-not $concurrencyBlock.Success -or
-        $concurrencyBlock.Value -notmatch '(?m)^  group: statspro-release-publication\s*$' -or
-        $concurrencyBlock.Value -notmatch '(?m)^  queue: max\s*$' -or
-        $concurrencyBlock.Value -match '(?m)^\s+cancel-in-progress:') {
-        throw "Release workflow must use the shared non-cancelling queue with queue: max."
+        $concurrencyBlock.Value -notmatch '(?m)^  group: release-\$\{\{\s*github\.ref\s*\}\}\s*$' -or
+        $concurrencyBlock.Value -notmatch '(?m)^  cancel-in-progress:\s*false\s*$' -or
+        $concurrencyBlock.Value -match '(?m)^\s+queue:') {
+        throw "Release workflow must serialize publications per tag with cancel-in-progress: false and no queue key."
     }
 
     $jobsBlock = [regex]::Match($WorkflowText, '(?ms)^jobs:\s*$.*\z')
@@ -3274,6 +3274,7 @@ function Assert-ReleaseWorkflowBoundary {
 
     $stepInventory = [ordered]@{
         preflight = @(
+            'Reject non-canonical release tag',
             'Checkout',
             'Verify anonymous checkout boundary',
             'Check CI action refs',
@@ -3362,6 +3363,19 @@ function Assert-ReleaseWorkflowBoundary {
             -Expected $expectedAnonymousStep `
             -Description "Release job '$jobName' anonymous checkout step"
     }
+    $expectedNonCanonicalTagStep = @'
+      - name: Reject non-canonical release tag
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if ([string]::IsNullOrWhiteSpace($tag) -or $tag -cnotmatch '\Av(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\z') {
+            throw "Refusing non-canonical release tag '$tag'. Expected vX.Y.Z with ASCII digits and no leading zeros."
+          }
+'@
+    Assert-ExactWorkflowBlock `
+        -Actual (& $getStep 'preflight' 'Reject non-canonical release tag').Block.Value `
+        -Expected $expectedNonCanonicalTagStep `
+        -Description "Release preflight non-canonical tag early-exit step"
     $expectedConsumerVerifySteps = [ordered]@{
         'github-prepare' = @'
       - name: Verify exact release candidate
@@ -5113,9 +5127,24 @@ function Invoke-SelfTest {
         Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Remove($marketplaceJob.Index, $marketplaceJob.Length).Insert($marketplaceJob.Index, $mutatedJob)
     } "marketplace-upload.*timeout-minutes: 45"
 
-    Assert-ThrowsMatch "single-pending release queue rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace('queue: max', 'queue: single')
-    } "queue: max"
+    Assert-ThrowsMatch "cancelling release concurrency rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace('cancel-in-progress: false', 'cancel-in-progress: true')
+    } "cancel-in-progress: false"
+    Assert-ThrowsMatch "legacy queue release concurrency rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^  cancel-in-progress: false\s*\r?\n', "  queue: max`n")
+    } "no queue key"
+    Assert-ThrowsMatch "missing non-canonical tag early-exit rejected" {
+        $earlyExitJob = Get-WorkflowJobBlock -WorkflowText $workflowText -JobName 'preflight'
+        $earlyExitStep = [regex]::Match(
+            $earlyExitJob.Value,
+            '(?ms)^\s{6}- name: Reject non-canonical release tag\s*$.*?(?=^\s{6}- name:|\z)')
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Remove($earlyExitStep.Index + $earlyExitJob.Index, $earlyExitStep.Length)
+    } "step inventory"
+    Assert-ThrowsMatch "weakened non-canonical tag early-exit rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            "'\Av(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\z'",
+            "'\Av.*\z'")
+    } "canonical YAML block"
     Write-Host "GitHub release management self-test passed."
 }
 

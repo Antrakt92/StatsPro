@@ -1,3 +1,18 @@
+. (Join-Path $PSScriptRoot "release-tag-contract.ps1")
+
+function Assert-StatsProMarketplaceVersionFormat {
+    param([AllowNull()][AllowEmptyString()][string]$Value)
+
+    # SYNC: marketplace versions reuse the strict release-tag contract, so
+    # leading zeros and non-canonical forms fail closed here as well.
+    try {
+        [void](ConvertTo-StatsProReleaseVersionParts -Value $Value)
+    }
+    catch {
+        throw "Marketplace version '$Value' must be canonical X.Y.Z with ASCII digits and no leading zeros."
+    }
+}
+
 function Get-StatsProExpectedMarketplaceProjectIdMap {
     return [ordered]@{
         CurseForge = "1525100"
@@ -14,10 +29,7 @@ function Get-StatsProAcceptedMarketplaceVersions {
         [switch]$AllowEarlierRequiredVersions
     )
 
-    if ($Version -notmatch '^\d+\.\d+\.\d+$') {
-        throw "Marketplace version '$Version' must contain exactly three numeric components."
-    }
-
+    Assert-StatsProMarketplaceVersionFormat -Value $Version
     $parsed = [version]$Version
     $accepted = @($Version)
     $minorAggregate = "$($parsed.Major).$($parsed.Minor).0"
@@ -33,9 +45,7 @@ function Get-StatsProAcceptedMarketplaceVersions {
 
     if ($AllowEarlierRequiredVersions) {
         foreach ($requiredVersion in @($RequiredVersions)) {
-            if ($requiredVersion -notmatch '^\d+\.\d+\.\d+$') {
-                throw "Marketplace version '$requiredVersion' must contain exactly three numeric components."
-            }
+            Assert-StatsProMarketplaceVersionFormat -Value $requiredVersion
             $requiredParsed = [version]$requiredVersion
             if ($requiredParsed.Major -eq $parsed.Major -and
                 $requiredParsed -le $parsed -and
@@ -56,9 +66,7 @@ function Select-StatsProOrdinalMarketplaceVersion {
         [switch]$AllowLegacyTwoComponentVersions
     )
 
-    if ($RequestedVersion -notmatch '^\d+\.\d+\.\d+$') {
-        throw "Marketplace version '$RequestedVersion' must contain exactly three numeric components."
-    }
+    Assert-StatsProMarketplaceVersionFormat -Value $RequestedVersion
 
     $comparer = [System.StringComparer]::Ordinal
     $seen = [System.Collections.Generic.HashSet[string]]::new($comparer)
@@ -210,7 +218,10 @@ function Resolve-StatsProWagoVersionSelection {
     }
     $seen = @{}
     foreach ($versionText in $retailVersions) {
-        if ($versionText -notmatch "^\d+\.\d+\.\d+$") {
+        try {
+            Assert-StatsProMarketplaceVersionFormat -Value $versionText
+        }
+        catch {
             throw "Wago patches.retail contains malformed version '$versionText'."
         }
         if ($seen.ContainsKey($versionText)) {

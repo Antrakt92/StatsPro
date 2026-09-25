@@ -7,10 +7,11 @@ on:
       - 'v*'
 
 concurrency:
-  # WARNING: the default single pending slot drops an older queued tag. Keep
-  # every publication attempt serialized so marketplace uploads never overlap.
-  group: statspro-release-publication
-  queue: max
+  # Serialize publication attempts per tag without silently dropping queued
+  # runs. cancel-in-progress: false keeps every pushed tag waiting its turn
+  # so marketplace uploads never overlap and no tag is dropped.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   preflight:
@@ -20,6 +21,14 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Reject non-canonical release tag
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if ([string]::IsNullOrWhiteSpace($tag) -or $tag -cnotmatch '\Av(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\z') {
+            throw "Refusing non-canonical release tag '$tag'. Expected vX.Y.Z with ASCII digits and no leading zeros."
+          }
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:

@@ -219,6 +219,64 @@ function Assert-UndefinedFieldDiagnosticsEnabled {
     }
 }
 
+function Get-StatsProTopLevelLocalNameCount {
+    param([string]$Path)
+
+    # Lua 5.1 allows 200 locals per chunk. Only column-zero `local`
+    # declarations add names to the main-chunk scope; indented lines belong
+    # to nested blocks and are ignored here.
+    $text = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+    $names = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($line in ($text -split "`n")) {
+        $stripped = $line.TrimEnd()
+        if ($stripped -cnotmatch '^local[ \t]') {
+            continue
+        }
+        $rest = $stripped -replace '^local[ \t]+', ''
+        $functionMatch = [regex]::Match($rest, '\Afunction[ \t]+([A-Za-z_][A-Za-z0-9_]*)')
+        if ($functionMatch.Success) {
+            [void]$names.Add($functionMatch.Groups[1].Value)
+            continue
+        }
+        $head = (($rest -split '=', 2)[0] -split '--', 2)[0]
+        $declared = 0
+        foreach ($part in ($head -split ',')) {
+            $name = $part.Trim().TrimEnd(';').Trim()
+            if ([string]::IsNullOrEmpty($name)) {
+                continue
+            }
+            if ($name -cnotmatch '\A[A-Za-z_][A-Za-z0-9_]*\z') {
+                throw "Unparseable top-level local declaration in ${Path}: '$stripped'."
+            }
+            [void]$names.Add($name)
+            $declared++
+        }
+        if ($declared -eq 0) {
+            throw "Unparseable top-level local declaration in ${Path}: '$stripped'."
+        }
+    }
+    return $names.Count
+}
+
+function Assert-StatsProTopLevelLocalBudget {
+    param(
+        [string]$Path,
+        [int]$Limit = 200,
+        [int]$FailAt = 200,
+        [int]$WarnAt = 195
+    )
+
+    $count = Get-StatsProTopLevelLocalNameCount -Path $Path
+    Write-Host "StatsPro.lua top-level local names: $count (limit $Limit, warn at >=$WarnAt, fail at >=$FailAt)."
+    if ($count -ge $FailAt) {
+        throw "StatsPro.lua declares $count top-level local names (limit $Limit, fail at >=$FailAt). Fold new state into tables or existing scopes instead of adding file-scope locals."
+    }
+    if ($count -ge $WarnAt) {
+        $headroom = $Limit - $count
+        Write-Warning "StatsPro.lua declares $count top-level local names (limit $Limit, headroom $headroom). File is close to the Lua 5.1 chunk ceiling; prefer tables over new file-scope locals."
+    }
+}
+
 function ConvertTo-SmokeContractPositiveInteger {
     param([object]$Value, [string]$Label)
 
@@ -617,6 +675,33 @@ function Invoke-SelfTest {
         ))
     } "Malformed smoke terminal summary"
 
+    $localsFixture = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-locals-" + [System.Guid]::NewGuid().ToString("N") + ".lua")
+    try {
+        Set-Content -LiteralPath $localsFixture -Value @'
+local alpha, beta = 1, 2
+local gamma-- trailing comment without space
+local function delta() end
+	local indented = 1
+local epsilon;
+local alpha = 3
+'@ -Encoding UTF8
+        $localsCount = Get-StatsProTopLevelLocalNameCount -Path $localsFixture
+        if ($localsCount -ne 5) {
+            throw "Top-level local fixture should declare 5 unique names, got $localsCount."
+        }
+        Assert-ThrowsMatch "top-level local budget trips at the reserve threshold" {
+            Assert-StatsProTopLevelLocalBudget -Path $localsFixture -Limit 200 -FailAt 5
+        } "5 top-level local names"
+        Assert-StatsProTopLevelLocalBudget -Path $localsFixture -Limit 200 -FailAt 6
+        Set-Content -LiteralPath $localsFixture -Value "local 123bad = 1`n" -Encoding UTF8
+        Assert-ThrowsMatch "unparseable top-level local rejected" {
+            [void](Get-StatsProTopLevelLocalNameCount -Path $localsFixture)
+        } "Unparseable top-level local"
+    }
+    finally {
+        Remove-Item -LiteralPath $localsFixture -Force -ErrorAction SilentlyContinue
+    }
+
     $realSmokeContract = Read-SmokeContract -Path $SmokeContractFile
     if ($realSmokeContract.Suites.Count -lt 2) {
         throw "Tracked smoke reachability contract must contain multiple named suites."
@@ -996,6 +1081,9 @@ if ($EnforceToolLocks) {
 
 $RuntimeLuaRefs = @(Get-RuntimeLuaRefs -MetadataCheckPath $MetadataCheck)
 
+Write-Host "== Top-level locals =="
+Assert-StatsProTopLevelLocalBudget -Path (Join-Path $RepoRoot "StatsPro.lua")
+
 Write-Host "== Lua syntax =="
 $SyntaxFiles = @($RuntimeLuaRefs | ForEach-Object { $_.FullPath })
 if (Test-Path $ArchonTargetsCheck) { $SyntaxFiles += $ArchonTargetsCheck }
@@ -1018,11 +1106,16 @@ if (Test-Path $ArchonTargetsFile) {
     }
     $ArchonArgs = @($ArchonTargetsCheck, "--path", $ArchonTargetsFile)
     if ($Release) {
-        if ($AllowStaleArchonTargets -or $env:STATSPRO_ALLOW_STALE_ARCHON_TARGETS -eq "1") {
-            Write-Warning "Allowing stale Archon targets because an explicit stale-data override is set."
+        $envAllowsStaleArchonTargets = ($env:STATSPRO_ALLOW_STALE_ARCHON_TARGETS -eq "1")
+        if ($envAllowsStaleArchonTargets -and -not $AllowStaleArchonTargets) {
+            throw "STATSPRO_ALLOW_STALE_ARCHON_TARGETS=1 requires the explicit -AllowStaleArchonTargets CLI flag in -Release mode (fail-closed)."
+        }
+        if ($AllowStaleArchonTargets) {
+            Write-Warning "Release Archon gate: allow-stale=true via explicit -AllowStaleArchonTargets; -ArchonMaxAgeDays $ArchonMaxAgeDays is ignored."
             $ArchonArgs += "--allow-stale"
         }
         else {
+            Write-Warning "Release Archon gate: allow-stale=false; enforcing -ArchonMaxAgeDays $ArchonMaxAgeDays."
             $ArchonArgs += @("--max-age-days", $ArchonMaxAgeDays)
         }
     }

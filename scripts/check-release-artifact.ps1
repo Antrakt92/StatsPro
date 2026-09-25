@@ -492,6 +492,12 @@ function Resolve-Luac51 {
         }
         $result = Invoke-NativeCapture -FilePath $candidate -Arguments @("-v")
         if ($result.ExitCode -eq 0 -and ($result.Output -join "`n") -match 'Lua 5\.1(?:\.|\s|$)') {
+            # KNOWN GAP: ambient luac5.1 selection is version string-match only.
+            # It is not pinned and its bytes are not checksum-verified here;
+            # full enforcement happens only with -EnforceToolLocks via
+            # Assert-PackagedRuntimeLuaSyntax. Do not treat this as a locked
+            # toolchain proof (notably on Linux runners using apt lua5.1).
+            Write-Warning "Resolve-Luac51: using ambient luac5.1 at '$candidate' (ambient binary, string-match only; no pin/checksum enforcement)."
             return $candidate
         }
     }

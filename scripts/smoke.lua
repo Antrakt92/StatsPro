@@ -4984,7 +4984,7 @@ do
     eq("slash.toggle.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Stats panel hidden")
     clearPrints(slashEnv)
     slash("slash.help", slashEnv, "help")
-    eq("slash.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help")
+    eq("slash.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help")
     slashSettings.fontBeforeAutoSwitch = "Fonts\\ARIALN.TTF"
     slashSettings.useLocalizedLabels = false
     slashSettings.font = "Fonts\\ARIALN.TTF"
@@ -5041,7 +5041,7 @@ do
     eq("slash.localized_ruRU.toggle.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Панель статов скрыта")
     clearPrints(slashEnv)
     slash("slash.localized_ruRU.help", slashEnv, "help")
-    eq("slash.localized_ruRU.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe, /statspro import, /ss debug, /ss help")
+    eq("slash.localized_ruRU.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help")
     clearPrints(slashEnv)
     slash("slash.localized_ruRU.debug", slashEnv, "debug")
     eq("slash.localized_ruRU.debug_english", printContains(slashEnv, "debug v"), true)
@@ -9485,6 +9485,142 @@ do
 end
 
 do
+    -- Hide-zero Dodge rows survive consecutive secrets: a clean visible value
+    -- stays visible across secret A and B with live display values (no stale
+    -- clean, no unknown), then a clean read recovers exact.
+    local secretA, secretB = {}, {}
+    local dodgeValue = 4.5
+    local dodgeEnv, _, dodgeTest = loadDefensiveScenario({
+        showDodge = true,
+        showBlock = false,
+        showArmor = false,
+        hideZeroDefensive = true,
+    }, {
+        getDodgeChance = function() return dodgeValue end,
+        issecretvalue = function(value)
+            return rawequal(value, secretA) or rawequal(value, secretB)
+        end,
+        roundToNearestString = function(value)
+            if rawequal(value, secretA) then return "7" end
+            if rawequal(value, secretB) then return "9" end
+            return "unexpected"
+        end,
+    })
+    fireEvent("render.hide_zero_defensive_dodge_consecutive_visible.fire", dodgeEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(dodgeTest.buildRenderBlocks)
+    check("render.hide_zero_defensive_dodge_consecutive_visible.clean_no_error", ok, blocks)
+    eq("render.hide_zero_defensive_dodge_consecutive_visible.clean_row", blockDumpContains(blocks, "Dodge:"), true)
+    check("render.hide_zero_defensive_dodge_consecutive_visible.clean_value",
+        blockDumpContains(blocks, "4.5%"), blocks)
+    dodgeValue = secretA
+    ok, blocks = pcall(dodgeTest.buildRenderBlocks)
+    check("render.hide_zero_defensive_dodge_consecutive_visible.secret_a_no_error", ok, blocks)
+    eq("render.hide_zero_defensive_dodge_consecutive_visible.secret_a_row", blockDumpContains(blocks, "Dodge:"), true)
+    check("render.hide_zero_defensive_dodge_consecutive_visible.secret_a_live_value",
+        blockDumpContains(blocks, "7%"), blocks)
+    eq("render.hide_zero_defensive_dodge_consecutive_visible.secret_a_no_stale_value",
+        blockDumpContains(blocks, "4.5%"), false)
+    eq("render.hide_zero_defensive_dodge_consecutive_visible.secret_a_no_unknown",
+        blockDumpContains(blocks, "?"), false)
+    dodgeValue = secretB
+    ok, blocks = pcall(dodgeTest.buildRenderBlocks)
+    check("render.hide_zero_defensive_dodge_consecutive_visible.secret_b_no_error", ok, blocks)
+    eq("render.hide_zero_defensive_dodge_consecutive_visible.secret_b_row", blockDumpContains(blocks, "Dodge:"), true)
+    check("render.hide_zero_defensive_dodge_consecutive_visible.secret_b_live_value",
+        blockDumpContains(blocks, "9%"), blocks)
+    eq("render.hide_zero_defensive_dodge_consecutive_visible.secret_b_no_stale_value",
+        blockDumpContains(blocks, "4.5%"), false)
+    eq("render.hide_zero_defensive_dodge_consecutive_visible.secret_b_no_unknown",
+        blockDumpContains(blocks, "?"), false)
+    dodgeValue = 6
+    ok, blocks = pcall(dodgeTest.buildRenderBlocks)
+    check("render.hide_zero_defensive_dodge_consecutive_visible.recovered_no_error", ok, blocks)
+    eq("render.hide_zero_defensive_dodge_consecutive_visible.recovered_row", blockDumpContains(blocks, "Dodge:"), true)
+    check("render.hide_zero_defensive_dodge_consecutive_visible.recovered_value",
+        blockDumpContains(blocks, "6.0%"), blocks)
+end
+
+do
+    -- Hide-zero Armor rows survive consecutive secrets: the OOC effectiveness
+    -- cache keeps the last clean reduction across secret A and B (no unknown),
+    -- then a clean read recovers exact with the new value.
+    local secretA, secretB = {}, {}
+    local reductionPhase = "clean"
+    local armorEnv, armorAddon, armorTest = loadArmorScenario({
+        hideZeroDefensive = true,
+    }, {
+        unitArmor = function() return 0, 5000 end,
+        unitEffectiveLevel = function() return 80 end,
+        getArmorEffectiveness = function()
+            if reductionPhase == "a" then return secretA end
+            if reductionPhase == "b" then return secretB end
+            if reductionPhase == "recover" then return 0.30 end
+            return 0.25
+        end,
+        paperDollFrameGetArmorReduction = false,
+        issecretvalue = function(value)
+            return rawequal(value, secretA) or rawequal(value, secretB)
+        end,
+    })
+    fireEvent("render.hide_zero_defensive_armor_consecutive_visible.fire", armorEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(armorTest.buildRenderBlocks)
+    check("render.hide_zero_defensive_armor_consecutive_visible.clean_no_error", ok, blocks)
+    eq("render.hide_zero_defensive_armor_consecutive_visible.clean_row", blockDumpContains(blocks, "Armor:"), true)
+    check("render.hide_zero_defensive_armor_consecutive_visible.clean_value",
+        blockDumpContains(blocks, "25.0%"), blocks)
+    for _, tick in ipairs({ "a", "b" }) do
+        reductionPhase = tick
+        check("render.hide_zero_defensive_armor_consecutive_visible.update." .. tick,
+            armorAddon:RunUpdateStatsSafe())
+        ok, blocks = pcall(armorTest.buildRenderBlocks)
+        check("render.hide_zero_defensive_armor_consecutive_visible.secret_" .. tick .. "_no_error", ok, blocks)
+        eq("render.hide_zero_defensive_armor_consecutive_visible.secret_" .. tick .. "_row",
+            blockDumpContains(blocks, "Armor:"), true)
+        check("render.hide_zero_defensive_armor_consecutive_visible.secret_" .. tick .. "_last_clean_value",
+            blockDumpContains(blocks, "25.0%"), blocks)
+        eq("render.hide_zero_defensive_armor_consecutive_visible.secret_" .. tick .. "_no_unknown",
+            blockDumpContains(blocks, "?"), false)
+    end
+    reductionPhase = "recover"
+    check("render.hide_zero_defensive_armor_consecutive_visible.recovery_update",
+        armorAddon:RunUpdateStatsSafe())
+    ok, blocks = pcall(armorTest.buildRenderBlocks)
+    check("render.hide_zero_defensive_armor_consecutive_visible.recovered_no_error", ok, blocks)
+    eq("render.hide_zero_defensive_armor_consecutive_visible.recovered_row", blockDumpContains(blocks, "Armor:"), true)
+    check("render.hide_zero_defensive_armor_consecutive_visible.recovered_value",
+        blockDumpContains(blocks, "30.0%"), blocks)
+    eq("render.hide_zero_defensive_armor_consecutive_visible.recovered_no_stale_value",
+        blockDumpContains(blocks, "25.0%"), false)
+end
+
+do
+    -- Cold secrets with no prior clean read stay hidden for both hide-zero
+    -- defensive tracks instead of surfacing fake rows.
+    local coldDodge, coldReduction = {}, {}
+    local coldEnv, _, coldTest = loadArmorScenario({
+        showDodge = true,
+        showBlock = false,
+        hideZeroDefensive = true,
+    }, {
+        getDodgeChance = function() return coldDodge end,
+        unitArmor = function() return 0, 5000 end,
+        unitEffectiveLevel = function() return 80 end,
+        getArmorEffectiveness = function() return coldReduction end,
+        paperDollFrameGetArmorReduction = false,
+        issecretvalue = function(value)
+            return rawequal(value, coldDodge) or rawequal(value, coldReduction)
+        end,
+        roundToNearestString = function() return "6" end,
+    })
+    fireEvent("render.hide_zero_defensive_consecutive_cold.fire", coldEnv, "PLAYER_ENTERING_WORLD")
+    local ok, blocks = pcall(coldTest.buildRenderBlocks)
+    check("render.hide_zero_defensive_consecutive_cold.no_error", ok, blocks)
+    eq("render.hide_zero_defensive_consecutive_cold.no_dodge_row", blockDumpContains(blocks, "Dodge:"), false)
+    eq("render.hide_zero_defensive_consecutive_cold.no_armor_row", blockDumpContains(blocks, "Armor:"), false)
+    eq("render.hide_zero_defensive_consecutive_cold.no_unknown", blockDumpContains(blocks, "?"), false)
+end
+
+do
     -- Two combat ticks with changing restricted ratings stay targetOnly without
     -- seeding the clean cache; leaving combat recovers to exact with no manual
     -- cache refresh.
@@ -12973,6 +13109,135 @@ do
     near("durability.ooc_recovery.recovered_value", recovered.durabilityValue, 80)
     eq("durability.ooc_recovery.recovery_clears_dirty", recovered.dirty, false)
     eq("durability.ooc_recovery.one_recovery_scan", scanCount, scansBeforeRegen + 1)
+end
+
+do
+    -- Two combat ticks with changing restricted durability keep the last
+    -- complete aggregate and repair pending; leaving combat recovers with no
+    -- further inventory event.
+    local inCombat = false
+    local secretA, secretB = {}, {}
+    local durabilityPhase = "clean"
+    local consecutiveEnv, consecutiveAddon, consecutiveTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showDurability = true,
+            showRepairCost = true,
+            useWorstDurability = false,
+        },
+        inCombatLockdown = function() return inCombat end,
+        issecretvalue = function(value)
+            return rawequal(value, secretA) or rawequal(value, secretB)
+        end,
+        getInventoryItemDurability = function(slot)
+            if durabilityPhase == "clean" then
+                if slot == 1 then return 80, 100 end
+                if slot == 2 then return 60, 100 end
+                return nil, nil
+            end
+            if durabilityPhase == "recover" then
+                if slot == 1 then return 90, 100 end
+                if slot == 2 then return 70, 100 end
+                return nil, nil
+            end
+            if slot == 1 or slot == 2 then
+                if durabilityPhase == "a" then return secretA, secretA end
+                return secretB, secretB
+            end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function(_, slot)
+            if slot == 1 then return { repairCost = 200 } end
+            if slot == 2 then return { repairCost = 300 } end
+            return nil
+        end,
+    })
+    fireEvent("durability.consecutive_combat_secrets_preserve_last_complete.enter",
+        consecutiveEnv, "PLAYER_ENTERING_WORLD")
+    local primed = consecutiveTest.durabilityState()
+    eq("durability.consecutive_combat_secrets_preserve_last_complete.prime_complete",
+        primed.durabilityComplete, true)
+    near("durability.consecutive_combat_secrets_preserve_last_complete.prime_average",
+        primed.durabilityLastCompleteAverage, 70)
+    near("durability.consecutive_combat_secrets_preserve_last_complete.prime_worst",
+        primed.durabilityLastCompleteWorst, 60)
+    eq("durability.consecutive_combat_secrets_preserve_last_complete.prime_cost",
+        primed.repairCost, 500)
+    eq("durability.consecutive_combat_secrets_preserve_last_complete.prime_cost_complete",
+        primed.repairCostComplete, true)
+    inCombat = true
+    for _, tick in ipairs({ "a", "b" }) do
+        durabilityPhase = tick
+        fireEvent("durability.consecutive_combat_secrets_preserve_last_complete.scan." .. tick,
+            consecutiveEnv, "UPDATE_INVENTORY_DURABILITY")
+        check("durability.consecutive_combat_secrets_preserve_last_complete.update." .. tick,
+            consecutiveAddon:RunUpdateStatsSafe())
+        local state = consecutiveTest.durabilityState()
+        eq("durability.consecutive_combat_secrets_preserve_last_complete.incomplete." .. tick,
+            state.durabilityComplete, false)
+        near("durability.consecutive_combat_secrets_preserve_last_complete.last_average." .. tick,
+            state.durabilityLastCompleteAverage, 70)
+        near("durability.consecutive_combat_secrets_preserve_last_complete.last_worst." .. tick,
+            state.durabilityLastCompleteWorst, 60)
+        near("durability.consecutive_combat_secrets_preserve_last_complete.selected_falls_back." .. tick,
+            state.durabilityValue, 70)
+        eq("durability.consecutive_combat_secrets_preserve_last_complete.repair_pending." .. tick,
+            state.repairCostComplete, false)
+        eq("durability.consecutive_combat_secrets_preserve_last_complete.repair_cost_hidden." .. tick,
+            state.repairCost, nil)
+    end
+    inCombat = false
+    durabilityPhase = "recover"
+    fireEvent("durability.consecutive_combat_secrets_preserve_last_complete.regen",
+        consecutiveEnv, "PLAYER_REGEN_ENABLED")
+    eq("durability.consecutive_combat_secrets_preserve_last_complete.regen_marks_dirty",
+        consecutiveTest.durabilityState().dirty, true)
+    check("durability.consecutive_combat_secrets_preserve_last_complete.recovery_update",
+        consecutiveAddon:RunUpdateStatsSafe())
+    local recovered = consecutiveTest.durabilityState()
+    eq("durability.consecutive_combat_secrets_preserve_last_complete.recovered_complete",
+        recovered.durabilityComplete, true)
+    near("durability.consecutive_combat_secrets_preserve_last_complete.recovered_value",
+        recovered.durabilityValue, 80)
+    eq("durability.consecutive_combat_secrets_preserve_last_complete.recovered_cost_complete",
+        recovered.repairCostComplete, true)
+    eq("durability.consecutive_combat_secrets_preserve_last_complete.recovered_cost",
+        recovered.repairCost, 500)
+end
+
+do
+    -- A cold secret repair cost with no prior complete total renders "?" and
+    -- never fabricates a zero cost.
+    local secretCost = {}
+    local coldEnv, _, coldTest = loadStatsPro("enUS", {
+        statsProDB = {
+            showDurability = true,
+            showRepairCost = true,
+            useWorstDurability = true,
+        },
+        issecretvalue = function(value) return rawequal(value, secretCost) end,
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then return 50, 100 end
+            if slot == 2 then return 80, 100 end
+            return nil, nil
+        end,
+        getTooltipInventoryItem = function(_, slot)
+            if slot == 1 then return { repairCost = 300 } end
+            return { repairCost = secretCost }
+        end,
+    })
+    fireEvent("durability.repair_consecutive_cold_unknown.enter", coldEnv, "PLAYER_ENTERING_WORLD")
+    local state = coldTest.durabilityState()
+    eq("durability.repair_consecutive_cold_unknown.durability_complete",
+        state.durabilityComplete, true)
+    eq("durability.repair_consecutive_cold_unknown.cost_pending",
+        state.repairCostComplete, false)
+    eq("durability.repair_consecutive_cold_unknown.cost_hidden", state.repairCost, nil)
+    check("durability.repair_consecutive_cold_unknown.cost_not_zero",
+        state.repairCost ~= 0, state.repairCost)
+    eq("durability.repair_consecutive_cold_unknown.no_timer", #coldEnv.__timers, 0)
+    local repairBlock = findBlockBySplitKey("durability.repair_consecutive_cold_unknown.block",
+        coldTest.buildRenderBlocks(), "splitRepairCost")
+    eq("durability.repair_consecutive_cold_unknown.renders_unknown", repairBlock.repairStr, "?")
 end
 
 smokeReachability:complete("durability-repair")

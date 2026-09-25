@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "totalAssertions": 42323,
+  "totalAssertions": 42400,
   "suites": [
     {
       "name": "core-panel-persistence",
@@ -9,8 +9,8 @@
     },
     {
       "name": "runtime-rendering",
-      "assertions": 1619,
-      "fingerprint": "2d8d01a4"
+      "assertions": 1660,
+      "fingerprint": "514c481d"
     },
     {
       "name": "fonts",
@@ -19,13 +19,13 @@
     },
     {
       "name": "durability-repair",
-      "assertions": 682,
-      "fingerprint": "28b294d1"
+      "assertions": 718,
+      "fingerprint": "7265f84e"
     },
     {
       "name": "settings-compatibility",
       "assertions": 22871,
-      "fingerprint": "5fa64b3f"
+      "fingerprint": "46d782d0"
     },
     {
       "name": "profile-context",

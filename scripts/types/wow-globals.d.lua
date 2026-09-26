@@ -133,6 +133,12 @@ SwiftStatsLocalDB = nil
 ---@type table?
 StatsProSelfTest = nil
 
+---@type table?
+DoYouNeedItSelfTest = nil
+
+---@type table?
+ApplicantScoutSelfTest = nil
+
 ---@return string? version
 ---@return string? build
 ---@return string? date

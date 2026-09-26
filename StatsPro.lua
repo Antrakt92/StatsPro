@@ -1674,7 +1674,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Last known comparison", ["Live values; comparison unavailable"] = "Live values; comparison unavailable", ["Source:"] = "Source:",
         ["Stats panel shown"] = "Stats panel shown", ["Stats panel hidden"] = "Stats panel hidden",
         ["Settings reset to defaults"] = "Settings reset to defaults",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help"] = "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats has no supported settings to import.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "These settings use a newer schema and cannot be imported by this StatsPro version.",
@@ -1809,7 +1809,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Последнее известное сравнение", ["Live values; comparison unavailable"] = "Актуальные значения; сравнение недоступно", ["Source:"] = "Источник:",
         ["Stats panel shown"] = "Панель статов показана", ["Stats panel hidden"] = "Панель статов скрыта",
         ["Settings reset to defaults"] = "Настройки сброшены по умолчанию",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help"] = "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Настройки SwiftStats не загружены. Включите SwiftStats на один вход в игру, выполните /reload, затем снова введите /statspro import.",
         ["SwiftStats has no supported settings to import."] = "В SwiftStats нет поддерживаемых настроек для импорта.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Эти настройки используют более новую схему и не могут быть импортированы этой версией StatsPro.",
@@ -1939,7 +1939,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Letzter bekannter Vergleich", ["Live values; comparison unavailable"] = "Live-Werte; Vergleich nicht verfügbar", ["Source:"] = "Quelle:",
         ["Stats panel shown"] = "Statpanel angezeigt", ["Stats panel hidden"] = "Statpanel ausgeblendet",
         ["Settings reset to defaults"] = "Einstellungen auf Standard zurückgesetzt",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "Befehle: /ss oder /statspro (Einstellungen), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help"] = "Befehle: /ss oder /statspro (Einstellungen), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats-Einstellungen sind nicht geladen. Aktiviere SwiftStats für eine Anmeldung, führe /reload aus und gib danach erneut /statspro import ein.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats enthält keine unterstützten Einstellungen zum Importieren.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Diese Einstellungen verwenden ein neueres Schema und können von dieser StatsPro-Version nicht importiert werden.",
@@ -2064,7 +2064,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Dernière comparaison connue", ["Live values; comparison unavailable"] = "Valeurs en direct ; comparaison indisponible", ["Source:"] = "Source :",
         ["Stats panel shown"] = "Panneau de stats affiché", ["Stats panel hidden"] = "Panneau de stats masqué",
         ["Settings reset to defaults"] = "Paramètres réinitialisés",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "Commandes : /ss ou /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help"] = "Commandes : /ss ou /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Les réglages de SwiftStats ne sont pas chargés. Activez SwiftStats pour une connexion, exécutez /reload, puis relancez /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats ne contient aucun réglage pris en charge à importer.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Ces réglages utilisent un schéma plus récent et ne peuvent pas être importés par cette version de StatsPro.",
@@ -2190,7 +2190,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Última comparación conocida", ["Live values; comparison unavailable"] = "Valores en vivo; comparación no disponible", ["Source:"] = "Fuente:",
         ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
         ["Settings reset to defaults"] = "Ajustes restablecidos",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Los ajustes de SwiftStats no están cargados. Activa SwiftStats durante un inicio de sesión, ejecuta /reload y vuelve a usar /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats no tiene ajustes compatibles para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Estos ajustes usan un esquema más reciente y esta versión de StatsPro no puede importarlos.",
@@ -2314,7 +2314,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Última comparación conocida", ["Live values; comparison unavailable"] = "Valores en vivo; comparación no disponible", ["Source:"] = "Fuente:",
         ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
         ["Settings reset to defaults"] = "Configuración restablecida",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "La configuración de SwiftStats no está cargada. Activa SwiftStats durante un inicio de sesión, ejecuta /reload y vuelve a usar /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats no tiene opciones compatibles para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Esta configuración usa un esquema más reciente y esta versión de StatsPro no puede importarla.",
@@ -2439,7 +2439,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Ultimo confronto noto", ["Live values; comparison unavailable"] = "Valori in tempo reale; confronto non disponibile", ["Source:"] = "Fonte:",
         ["Stats panel shown"] = "Pannello statistiche mostrato", ["Stats panel hidden"] = "Pannello statistiche nascosto",
         ["Settings reset to defaults"] = "Impostazioni ripristinate",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "Comandi: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help"] = "Comandi: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Le impostazioni di SwiftStats non sono caricate. Abilita SwiftStats per un accesso, esegui /reload, quindi usa di nuovo /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats non contiene impostazioni supportate da importare.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Queste impostazioni usano uno schema più recente e non possono essere importate da questa versione di StatsPro.",
@@ -2563,7 +2563,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Última comparação conhecida", ["Live values; comparison unavailable"] = "Valores em tempo real; comparação indisponível", ["Source:"] = "Fonte:",
         ["Stats panel shown"] = "Painel de atributos mostrado", ["Stats panel hidden"] = "Painel de atributos oculto",
         ["Settings reset to defaults"] = "Configurações restauradas",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "Comandos: /ss ou /statspro (configurações), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help"] = "Comandos: /ss ou /statspro (configurações), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "As configurações do SwiftStats não estão carregadas. Ative o SwiftStats por um login, execute /reload e use /statspro import novamente.",
         ["SwiftStats has no supported settings to import."] = "O SwiftStats não tem configurações compatíveis para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Estas configurações usam um esquema mais recente e não podem ser importadas por esta versão do StatsPro.",
@@ -2694,7 +2694,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "마지막으로 확인된 비교", ["Live values; comparison unavailable"] = "실시간 값; 비교할 수 없음", ["Source:"] = "출처:",
         ["Stats panel shown"] = "능력치 패널 표시됨", ["Stats panel hidden"] = "능력치 패널 숨김",
         ["Settings reset to defaults"] = "설정이 기본값으로 초기화되었습니다",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "명령어: /ss 또는 /statspro (설정), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help"] = "명령어: /ss 또는 /statspro (설정), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats 설정이 로드되지 않았습니다. 한 번 로그인하는 동안 SwiftStats를 활성화하고 /reload 후 /statspro import를 다시 실행하세요.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats에 가져올 수 있는 지원 설정이 없습니다.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "이 설정은 더 새로운 스키마를 사용하므로 현재 StatsPro 버전에서 가져올 수 없습니다.",
@@ -2818,7 +2818,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "上次已知对比", ["Live values; comparison unavailable"] = "实时数值；无法比较", ["Source:"] = "来源:",
         ["Stats panel shown"] = "属性面板已显示", ["Stats panel hidden"] = "属性面板已隐藏",
         ["Settings reset to defaults"] = "设置已恢复默认",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "命令: /ss 或 /statspro (设置), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help"] = "命令: /ss 或 /statspro (设置), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "未加载 SwiftStats 设置。请启用 SwiftStats 登录一次，执行 /reload，然后再次运行 /statspro import。",
         ["SwiftStats has no supported settings to import."] = "SwiftStats 中没有可导入的受支持设置。",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "这些设置使用较新的数据结构，当前版本的 StatsPro 无法导入。",
@@ -2942,7 +2942,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "上次已知比較", ["Live values; comparison unavailable"] = "即時數值；無法比較", ["Source:"] = "來源:",
         ["Stats panel shown"] = "屬性面板已顯示", ["Stats panel hidden"] = "屬性面板已隱藏",
         ["Settings reset to defaults"] = "設定已恢復預設",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "指令: /ss 或 /statspro (設定), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help"] = "指令: /ss 或 /statspro (設定), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "未載入 SwiftStats 設定。請啟用 SwiftStats 登入一次，執行 /reload，然後再次輸入 /statspro import。",
         ["SwiftStats has no supported settings to import."] = "SwiftStats 中沒有可匯入的支援設定。",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "這些設定使用較新的資料結構，目前版本的 StatsPro 無法匯入。",
@@ -20588,6 +20588,63 @@ function addon.selfTest.PrintSummary()
         .. " recovered=" .. (totals.recovered == true and "yes" or "no"))
 end
 
+-- WHY read-only sibling overview: never call sibling addon code (version
+-- skew across separate release trains). Only presence via the client
+-- C_AddOns API, TOC version metadata, and each sibling's own isolated
+-- selftest SV root are inspected, all through pcall + strict type guards.
+-- Minimal shared convention (documented, not enforced): a sibling report is
+-- a table with a numeric-or-string finishedAt. Anything else renders as
+-- "unrecognized" rather than failing.
+addon.selfTest.siblingAddons = {
+    { addonName = "DoYouNeedIt", command = "/dyni selftest", reportKey = "DoYouNeedItSelfTest" },
+    { addonName = "ApplicantScout", command = "/apscout selftest", reportKey = "ApplicantScoutSelfTest" },
+}
+
+function addon.selfTest.ReadAddonLoaded(addonName)
+    if type(C_AddOns) ~= "table" or type(C_AddOns.IsAddOnLoaded) ~= "function" then
+        return nil
+    end
+    local ok, loaded = pcall(C_AddOns.IsAddOnLoaded, addonName)
+    if not ok or type(loaded) ~= "boolean" then return nil end
+    return loaded
+end
+
+function addon.selfTest.ReadAddonVersion(addonName)
+    if type(C_AddOns) ~= "table" or type(C_AddOns.GetAddOnMetadata) ~= "function" then
+        return nil
+    end
+    local ok, version = pcall(C_AddOns.GetAddOnMetadata, addonName, "Version")
+    if not ok or type(version) ~= "string" or version == "" then return nil end
+    return version
+end
+
+function addon.selfTest.ReadSiblingReportState(reportKey)
+    local stored = _G[reportKey]
+    if type(stored) ~= "table" then return "no report yet" end
+    local finishedAt = stored.finishedAt
+    if addon.IsCleanFiniteNumber(finishedAt) then
+        return "report " .. string.format("%d", finishedAt)
+    end
+    if type(finishedAt) == "string" and finishedAt ~= "" then
+        return "report " .. finishedAt
+    end
+    return "report (unrecognized shape)"
+end
+
+function addon.selfTest.RunAll()
+    local ownState = type(addon.selfTest.state) == "string" and addon.selfTest.state or "?"
+    PrintMsg("selftest all: StatsPro " .. ownState .. ", " .. addon.selfTest.ReadSiblingReportState("StatsProSelfTest"))
+    for _, spec in ipairs(addon.selfTest.siblingAddons) do
+        local loaded = addon.selfTest.ReadAddonLoaded(spec.addonName)
+        local loadedText = (loaded == nil and "unknown") or (loaded and "loaded" or "not loaded")
+        local version = addon.selfTest.ReadAddonVersion(spec.addonName) or "?"
+        PrintMsg("selftest all: " .. spec.addonName .. " " .. loadedText .. " " .. version
+            .. ", " .. addon.selfTest.ReadSiblingReportState(spec.reportKey)
+            .. " — run " .. spec.command)
+    end
+    PrintMsg("selftest all: run each addon's own command for a fresh report, then /reload so reports flush to disk.")
+end
+
 function addon.selfTest.ShowStaticPopup()
     local dialogs = _G.StaticPopupDialogs
     if type(dialogs) ~= "table" or type(dialogs["STATSPRO_SELFTEST_COPY"]) ~= "table" then return false end
@@ -20695,9 +20752,14 @@ SlashCmdList["STATSPRO"] = function(msg)
             addon:PrintDebugDump()
         end
     elseif arg == "selftest" then
-        addon.selfTest.Toggle()
+        local subArg = rest:match("^(%S+)") or ""
+        if subArg == "all" then
+            addon.selfTest.RunAll()
+        else
+            addon.selfTest.Toggle()
+        end
     elseif arg == "help" or arg == "?" then
-        PrintMsg(L("Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"))
+        PrintMsg(L("Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help"))
     else
         addon:OpenConfigMenu()
     end

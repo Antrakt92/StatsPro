@@ -655,6 +655,8 @@ local function makeEnv(locale, opts)
     env.__fontObjectsByName = {}
     env.__timers = {}
     env.__timerOrder = 0
+    env.__tickers = {}
+    env.__tickerOrder = 0
     env.__closedDropdowns = 0
     env.__prints = {}
     env.__staticPopupShows = 0
@@ -809,7 +811,34 @@ local function makeEnv(locale, opts)
                 }
             end
         end,
+        NewTicker = function(delay, fn)
+            if type(fn) ~= "function" then error("NewTicker callback must be a function", 2) end
+            env.__tickerOrder = env.__tickerOrder + 1
+            local ticker = {
+                delay = tonumber(delay) or 0,
+                order = env.__tickerOrder,
+                fn = fn,
+                cancelled = false,
+            }
+            function ticker.Cancel(self)
+                (self or ticker).cancelled = true
+            end
+            env.__tickers[#env.__tickers + 1] = ticker
+            return ticker
+        end,
     }
+    env.__fireTickers = function(times)
+        local count = 0
+        for _ = 1, (times or 1) do
+            for _, ticker in ipairs(env.__tickers) do
+                if not ticker.cancelled and type(ticker.fn) == "function" then
+                    ticker.fn()
+                    count = count + 1
+                end
+            end
+        end
+        return count
+    end
     env.Settings = {
         RegisterCanvasLayoutCategory = function(_, name) return { name = name } end,
         RegisterAddOnCategory = function() end,
@@ -3579,7 +3608,8 @@ do
         end
     end
     eq("toc.saved_variables.directive_count", count, 1)
-    eq("toc.saved_variables.exact_root", value, "StatsProDB")
+    check("toc.saved_variables.exact_root",
+        value == "StatsProDB" or value == "StatsProDB, StatsProSelfTest", value)
     eq("toc.saved_variables.no_per_character_root", perCharacterCount, 0)
 end
 
@@ -4984,7 +5014,7 @@ do
     eq("slash.toggle.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Stats panel hidden")
     clearPrints(slashEnv)
     slash("slash.help", slashEnv, "help")
-    eq("slash.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help")
+    eq("slash.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help")
     slashSettings.fontBeforeAutoSwitch = "Fonts\\ARIALN.TTF"
     slashSettings.useLocalizedLabels = false
     slashSettings.font = "Fonts\\ARIALN.TTF"
@@ -5041,7 +5071,7 @@ do
     eq("slash.localized_ruRU.toggle.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Панель статов скрыта")
     clearPrints(slashEnv)
     slash("slash.localized_ruRU.help", slashEnv, "help")
-    eq("slash.localized_ruRU.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help")
+    eq("slash.localized_ruRU.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help")
     clearPrints(slashEnv)
     slash("slash.localized_ruRU.debug", slashEnv, "debug")
     eq("slash.localized_ruRU.debug_english", printContains(slashEnv, "debug v"), true)
@@ -5077,6 +5107,220 @@ do
     eq("slash.localized_ruRU.reset.panel_keeps_glyph_font",
         slashTest.panelFontState().mainAppliedFont, "Fonts\\ARIALN.TTF")
     eq("slash.localized_ruRU.reset.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Настройки сброшены по умолчанию")
+end
+
+do
+    -- Self-test: guided run start -> ooc-collect -> await-combat -> combat ->
+    -- recovery -> done, with combat secrets recorded as flags (never values).
+    local combatState = { inCombat = false }
+    local statValues = { haste = 12.5, mastery = 30 }
+    local secretMode = { active = false }
+    local secretHaste = 777001.5
+    local secretMastery = 777002.5
+    local stEnv, stAddon = loadStatsPro("enUS", {
+        inCombatLockdown = function() return combatState.inCombat end,
+        getHaste = function()
+            if secretMode.active then return secretHaste end
+            return statValues.haste
+        end,
+        getMasteryEffect = function()
+            if secretMode.active then return secretMastery end
+            return statValues.mastery
+        end,
+        getRangedCritChance = function() return 15 end,
+        issecretvalue = function(value)
+            return value == secretHaste or value == secretMastery
+        end,
+        specIndex = 1,
+        specID = 71,
+        specName = "Arms",
+        specRole = "DAMAGER",
+        primaryStat = 1,
+    })
+    local guided = stAddon.selfTest
+    eq("selftest.module.present", type(guided), "table")
+    fireEvent("selftest.transitions.pew", stEnv, "PLAYER_ENTERING_WORLD")
+    eq("selftest.transitions.starts_idle", guided.state, "idle")
+    slash("selftest.transitions.start", stEnv, "selftest")
+    eq("selftest.transitions.ooc_collect", guided.state, "ooc-collect")
+    eq("selftest.transitions.ticker_created", #stEnv.__tickers, 1)
+    eq("selftest.transitions.ticker_running", stEnv.__tickers[1].cancelled, false)
+    eq("selftest.transitions.env_class", guided.env.class, "WARRIOR")
+    eq("selftest.transitions.env_spec", guided.env.spec, "arms")
+    eq("selftest.transitions.env_archon", guided.env.archon, "mythicPlusCurrent")
+    eq("selftest.transitions.env_interval", guided.env.interval, 0.5)
+    eq("selftest.transitions.env_show_crit", guided.env.show.crit, true)
+    stEnv.__fireTickers(3)
+    eq("selftest.transitions.ooc_progress", guided.oocCount, 3)
+    statValues.haste = 13.5
+    stEnv.__fireTickers(7)
+    eq("selftest.transitions.ooc_done", guided.oocCount, 10)
+    eq("selftest.transitions.await_combat", guided.state, "await-combat")
+    eq("selftest.transitions.ticker_stopped_ooc", stEnv.__tickers[1].cancelled, true)
+    eq("selftest.transitions.haste_changed", guided.rowStats.haste.changed, 1)
+    near("selftest.transitions.haste_min", guided.rowMin.haste, 12.5)
+    near("selftest.transitions.haste_max", guided.rowMax.haste, 13.5)
+    combatState.inCombat = true
+    fireEvent("selftest.transitions.regen_disabled", stEnv, "PLAYER_REGEN_DISABLED")
+    eq("selftest.transitions.combat_collect", guided.state, "combat-collect")
+    eq("selftest.transitions.ticker_restarted", #stEnv.__tickers, 2)
+    secretMode.active = true
+    stEnv.__fireTickers(5)
+    eq("selftest.transitions.combat_samples", guided.combatCount, 5)
+    eq("selftest.transitions.combat_secrets", guided.secretsSeen, 5)
+    secretMode.active = false
+    combatState.inCombat = false
+    fireEvent("selftest.transitions.regen_enabled", stEnv, "PLAYER_REGEN_ENABLED")
+    eq("selftest.transitions.recovery_armed", guided.recoveryLeft, 3)
+    stEnv.__fireTickers(3)
+    eq("selftest.transitions.done", guided.state, "done")
+    eq("selftest.transitions.recovery_samples", guided.recoveryCount, 3)
+    local sv = stEnv.StatsProSelfTest
+    eq("selftest.transitions.sv_present", type(sv), "table")
+    eq("selftest.transitions.sv_version", sv.version, 1)
+    eq("selftest.transitions.sv_finished", sv.finishedAt, 1770000000)
+    eq("selftest.transitions.sv_samples", #sv.report.samples, 18)
+    eq("selftest.transitions.sv_ooc", sv.report.totals.ooc, 10)
+    eq("selftest.transitions.sv_combat", sv.report.totals.combat, 5)
+    eq("selftest.transitions.sv_recovery", sv.report.totals.recovery, 3)
+    eq("selftest.transitions.sv_secrets", sv.report.totals.secrets, 5)
+    eq("selftest.transitions.sv_flaps", sv.report.totals.flaps, 4)
+    eq("selftest.transitions.sv_recovered", sv.report.totals.recovered, true)
+    eq("selftest.transitions.sv_timeout", sv.report.totals.timeout, false)
+    eq("selftest.transitions.summary_printed",
+        printContains(stEnv, "selftest: finished ooc=10 combat=5 recovery=3"), true)
+    eq("selftest.transitions.copy_popup",
+        stEnv.__lastStaticPopup and stEnv.__lastStaticPopup.key, "STATSPRO_SELFTEST_COPY")
+    local payload = stEnv.__lastStaticPopup:GetEditBox():GetText()
+    eq("selftest.payload.prefix", string.sub(payload, 1, 6), "SPS1:1")
+    check("selftest.payload.release",
+        payload:find("\nrelease=1.16.23\n", 1, true) ~= nil, payload)
+    check("selftest.payload.class",
+        payload:find("\nclass=WARRIOR\n", 1, true) ~= nil, payload)
+    check("selftest.payload.spec",
+        payload:find("\nspec=arms\n", 1, true) ~= nil, payload)
+    check("selftest.payload.archon",
+        payload:find("\narchon=mythicPlusCurrent\n", 1, true) ~= nil, payload)
+    check("selftest.payload.interval",
+        payload:find("\ninterval=0.50\n", 1, true) ~= nil, payload)
+    check("selftest.payload.samples",
+        payload:find("\nsamples=18\n", 1, true) ~= nil, payload)
+    check("selftest.payload.counts",
+        payload:find("\nooc=10\n", 1, true) ~= nil
+        and payload:find("\ncombat=5\n", 1, true) ~= nil
+        and payload:find("\nrecovery=3\n", 1, true) ~= nil, payload)
+    check("selftest.payload.totals",
+        payload:find("\nerrors=0\n", 1, true) ~= nil
+        and payload:find("\nsecrets=5\n", 1, true) ~= nil
+        and payload:find("\nflaps=4\n", 1, true) ~= nil
+        and payload:find("\nrecovered=1\n", 1, true) ~= nil, payload)
+    check("selftest.payload.haste_row",
+        payload:find("row.haste=clean:13 secret:5 unknown:0 changed:1 min:12.50 max:13.50", 1, true) ~= nil,
+        payload)
+    local sampleLines, rowLines = 0, 0
+    for line in (payload .. "\n"):gmatch("([^\n]*)\n") do
+        if line:find("^s.%d") then sampleLines = sampleLines + 1 end
+        if line:find("^row.") then rowLines = rowLines + 1 end
+    end
+    eq("selftest.payload.sample_lines", sampleLines, 18)
+    eq("selftest.payload.row_lines", rowLines, 9)
+    eq("selftest.payload.no_haste_leak", payload:find("777001", 1, true), nil)
+    eq("selftest.payload.no_mastery_leak", payload:find("777002", 1, true), nil)
+    local leaked = false
+    for _, sample in ipairs(sv.report.samples) do
+        for _, key in ipairs(guided.rowKeys) do
+            local cell = sample.rows[key]
+            if type(cell) == "table" then
+                if cell.mn == secretHaste or cell.mx == secretHaste
+                    or cell.mn == secretMastery or cell.mx == secretMastery then
+                    leaked = true
+                end
+            end
+        end
+    end
+    eq("selftest.secrets.no_value_leak", leaked, false)
+end
+
+do
+    -- Self-test: combat timeout finishes the run and defers the copy window.
+    local combatState = { inCombat = false }
+    local toEnv, toAddon = loadStatsPro("enUS", {
+        inCombatLockdown = function() return combatState.inCombat end,
+    })
+    fireEvent("selftest.timeout.pew", toEnv, "PLAYER_ENTERING_WORLD")
+    slash("selftest.timeout.start", toEnv, "selftest")
+    toAddon.selfTest.combatTimeoutTicks = 2
+    toEnv.__fireTickers(10)
+    eq("selftest.timeout.await", toAddon.selfTest.state, "await-combat")
+    combatState.inCombat = true
+    fireEvent("selftest.timeout.regen_disabled", toEnv, "PLAYER_REGEN_DISABLED")
+    toEnv.__fireTickers(2)
+    eq("selftest.timeout.done", toAddon.selfTest.state, "done")
+    eq("selftest.timeout.flag", toAddon.selfTest.report.totals.timeout, true)
+    eq("selftest.timeout.recovered", toAddon.selfTest.report.totals.recovered, false)
+    eq("selftest.timeout.deferred", toAddon.selfTest.deferredWindow, true)
+    eq("selftest.timeout.no_popup_in_combat", toEnv.__lastStaticPopup, nil)
+    combatState.inCombat = false
+    fireEvent("selftest.timeout.regen_enabled", toEnv, "PLAYER_REGEN_ENABLED")
+    eq("selftest.timeout.deferred_shown", toEnv.__lastStaticPopup.key, "STATSPRO_SELFTEST_COPY")
+    eq("selftest.timeout.sv_timeout", toEnv.StatsProSelfTest.report.totals.timeout, true)
+end
+
+do
+    -- Self-test: sample storage is bounded; overflow truncates instead of growing SV.
+    local bdEnv, bdAddon = loadStatsPro("enUS", {})
+    fireEvent("selftest.bound.pew", bdEnv, "PLAYER_ENTERING_WORLD")
+    slash("selftest.bound.start", bdEnv, "selftest")
+    bdAddon.selfTest.oocTarget = 100
+    bdAddon.selfTest.maxSamples = 12
+    bdEnv.__fireTickers(15)
+    eq("selftest.bound.done", bdAddon.selfTest.state, "done")
+    eq("selftest.bound.capped", #bdAddon.selfTest.samples, 12)
+    eq("selftest.bound.truncated", bdAddon.selfTest.report.totals.truncated, true)
+    eq("selftest.bound.sv_capped", #bdEnv.StatsProSelfTest.report.samples, 12)
+end
+
+do
+    -- Self-test: starting in combat refuses politely without sampling or frames.
+    local combatState = { inCombat = true }
+    local rfEnv, rfAddon = loadStatsPro("enUS", {
+        inCombatLockdown = function() return combatState.inCombat end,
+    })
+    fireEvent("selftest.refusal.pew", rfEnv, "PLAYER_ENTERING_WORLD")
+    slash("selftest.refusal.start_in_combat", rfEnv, "selftest")
+    eq("selftest.refusal.stays_idle", rfAddon.selfTest.state, "idle")
+    eq("selftest.refusal.polite", printContains(rfEnv, "selftest: leave combat"), true)
+    eq("selftest.refusal.no_ticker", #rfEnv.__tickers, 0)
+    eq("selftest.refusal.no_sv", rfEnv.StatsProSelfTest, nil)
+end
+
+do
+    -- Self-test: the same slash toggles a running session off without saving.
+    local spEnv, spAddon = loadStatsPro("enUS", {})
+    fireEvent("selftest.stop.pew", spEnv, "PLAYER_ENTERING_WORLD")
+    slash("selftest.stop.start", spEnv, "selftest")
+    eq("selftest.stop.running", spAddon.selfTest.state, "ooc-collect")
+    eq("selftest.alias.ss", spEnv.SLASH_STATSPRO1, "/ss")
+    eq("selftest.alias.statspro", spEnv.SLASH_STATSPRO2, "/statspro")
+    slash("selftest.stop.toggle", spEnv, "selftest")
+    eq("selftest.stop.idle", spAddon.selfTest.state, "idle")
+    eq("selftest.stop.ticker_cancelled", spEnv.__tickers[1].cancelled, true)
+    eq("selftest.stop.no_sv", spEnv.StatsProSelfTest, nil)
+end
+
+do
+    -- Self-test: the profile export dialog reuses its edit-box builder for reports.
+    local dlgEnv, dlgAddon = loadStatsPro("enUS", withProfileIdentity({}))
+    fireEvent("selftest.dialog.pew", dlgEnv, "PLAYER_ENTERING_WORLD")
+    dlgAddon:OpenConfigMenu()
+    exists("selftest.dialog.editbox", dlgEnv.StatsProProfileTransferEditBox)
+    local dialogOK, dialogShown = pcall(
+        dlgAddon.profileUI.ShowSelfTestExport, "SPS1:1\nrelease=1.16.23\n", "selftest summary")
+    check("selftest.dialog.open_call", dialogOK, dialogShown)
+    eq("selftest.dialog.open_shown", dialogShown, true)
+    eq("selftest.dialog.editbox_text",
+        dlgEnv.StatsProProfileTransferEditBox:GetText(), "SPS1:1\nrelease=1.16.23\n")
+    eq("selftest.dialog.state_kind", dlgAddon.profileUI.transferState.kind, "selftest")
 end
 
 do

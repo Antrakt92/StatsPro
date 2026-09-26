@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.17.0 - 26-Sep-2026 — Combat diagnostics and live stats
+
+### Added
+
+- **New in-game combat self-test with a copyable report.** Use `/ss selftest all` to include DoYouNeedIt and ApplicantScout report summaries.
+
+### Fixed
+
+- **Live combat stats now update more reliably during procs and buffs.**
+- **Locked panels and combat correctly prevent dragging.**
+
+### Updated
+
+- **Bundled M+ and raid target ratings were refreshed from Archon on 26 September.**
+
 ## 1.16.23 - 24-Sep-2026 — Archon target refresh
 
 ### Updated

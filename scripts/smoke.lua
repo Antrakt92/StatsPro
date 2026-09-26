@@ -5194,7 +5194,7 @@ do
     local payload = stEnv.__lastStaticPopup:GetEditBox():GetText()
     eq("selftest.payload.prefix", string.sub(payload, 1, 6), "SPS1:1")
     check("selftest.payload.release",
-        payload:find("\nrelease=1.16.23\n", 1, true) ~= nil, payload)
+        payload:find("\nrelease=" .. guided.env.release .. "\n", 1, true) ~= nil, payload)
     check("selftest.payload.class",
         payload:find("\nclass=WARRIOR\n", 1, true) ~= nil, payload)
     check("selftest.payload.spec",

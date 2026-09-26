@@ -14,7 +14,7 @@
 ## Author: Antrakt
 ## Version: 1.16.23
 ## IconTexture: Interface\AddOns\StatsPro\textures\logo.png
-## SavedVariables: StatsProDB
+## SavedVariables: StatsProDB, StatsProSelfTest
 ## Category: Combat
 ## Category-deDE: Kampf
 ## Category-esES: Combate

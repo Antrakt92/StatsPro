@@ -130,5 +130,17 @@ SwiftStatsDB = nil
 ---@type table?
 SwiftStatsLocalDB = nil
 
+---@type table?
+StatsProSelfTest = nil
+
+---@return string? version
+---@return string? build
+---@return string? date
+---@return number? tocversion
+function GetBuildInfo() end
+
+---@return string? zoneName
+function GetZoneText() end
+
 ---@type boolean?
 __STATSPRO_ARCHON_TARGETS_MODULE = nil

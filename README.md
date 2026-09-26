@@ -212,6 +212,7 @@ follow your current specialization's settings or the active account-wide setup.
 | `/ss hide` | Hide the HUD |
 | `/ss toggle` | Toggle HUD visibility |
 | `/ss help` | List available commands |
+| `/ss selftest` | Collect out-of-combat and combat diagnostic samples, then show a copyable report |
 | `/ss debug` | Print support information |
 | `/statspro import` | Import compatible SwiftStats settings into a new specialization or account-wide profile |
 | `/ss reset` | Confirm and reset the settings currently in use; the warning identifies affected specializations or account-wide scope |

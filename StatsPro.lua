@@ -1674,7 +1674,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Last known comparison", ["Live values; comparison unavailable"] = "Live values; comparison unavailable", ["Source:"] = "Source:",
         ["Stats panel shown"] = "Stats panel shown", ["Stats panel hidden"] = "Stats panel hidden",
         ["Settings reset to defaults"] = "Settings reset to defaults",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help"] = "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats has no supported settings to import.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "These settings use a newer schema and cannot be imported by this StatsPro version.",
@@ -1809,7 +1809,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Последнее известное сравнение", ["Live values; comparison unavailable"] = "Актуальные значения; сравнение недоступно", ["Source:"] = "Источник:",
         ["Stats panel shown"] = "Панель статов показана", ["Stats panel hidden"] = "Панель статов скрыта",
         ["Settings reset to defaults"] = "Настройки сброшены по умолчанию",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help"] = "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Настройки SwiftStats не загружены. Включите SwiftStats на один вход в игру, выполните /reload, затем снова введите /statspro import.",
         ["SwiftStats has no supported settings to import."] = "В SwiftStats нет поддерживаемых настроек для импорта.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Эти настройки используют более новую схему и не могут быть импортированы этой версией StatsPro.",
@@ -1939,7 +1939,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Letzter bekannter Vergleich", ["Live values; comparison unavailable"] = "Live-Werte; Vergleich nicht verfügbar", ["Source:"] = "Quelle:",
         ["Stats panel shown"] = "Statpanel angezeigt", ["Stats panel hidden"] = "Statpanel ausgeblendet",
         ["Settings reset to defaults"] = "Einstellungen auf Standard zurückgesetzt",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help"] = "Befehle: /ss oder /statspro (Einstellungen), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "Befehle: /ss oder /statspro (Einstellungen), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats-Einstellungen sind nicht geladen. Aktiviere SwiftStats für eine Anmeldung, führe /reload aus und gib danach erneut /statspro import ein.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats enthält keine unterstützten Einstellungen zum Importieren.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Diese Einstellungen verwenden ein neueres Schema und können von dieser StatsPro-Version nicht importiert werden.",
@@ -2064,7 +2064,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Dernière comparaison connue", ["Live values; comparison unavailable"] = "Valeurs en direct ; comparaison indisponible", ["Source:"] = "Source :",
         ["Stats panel shown"] = "Panneau de stats affiché", ["Stats panel hidden"] = "Panneau de stats masqué",
         ["Settings reset to defaults"] = "Paramètres réinitialisés",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help"] = "Commandes : /ss ou /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "Commandes : /ss ou /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Les réglages de SwiftStats ne sont pas chargés. Activez SwiftStats pour une connexion, exécutez /reload, puis relancez /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats ne contient aucun réglage pris en charge à importer.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Ces réglages utilisent un schéma plus récent et ne peuvent pas être importés par cette version de StatsPro.",
@@ -2190,7 +2190,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Última comparación conocida", ["Live values; comparison unavailable"] = "Valores en vivo; comparación no disponible", ["Source:"] = "Fuente:",
         ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
         ["Settings reset to defaults"] = "Ajustes restablecidos",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Los ajustes de SwiftStats no están cargados. Activa SwiftStats durante un inicio de sesión, ejecuta /reload y vuelve a usar /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats no tiene ajustes compatibles para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Estos ajustes usan un esquema más reciente y esta versión de StatsPro no puede importarlos.",
@@ -2314,7 +2314,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Última comparación conocida", ["Live values; comparison unavailable"] = "Valores en vivo; comparación no disponible", ["Source:"] = "Fuente:",
         ["Stats panel shown"] = "Panel de estadísticas mostrado", ["Stats panel hidden"] = "Panel de estadísticas oculto",
         ["Settings reset to defaults"] = "Configuración restablecida",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "Comandos: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "La configuración de SwiftStats no está cargada. Activa SwiftStats durante un inicio de sesión, ejecuta /reload y vuelve a usar /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats no tiene opciones compatibles para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Esta configuración usa un esquema más reciente y esta versión de StatsPro no puede importarla.",
@@ -2439,7 +2439,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Ultimo confronto noto", ["Live values; comparison unavailable"] = "Valori in tempo reale; confronto non disponibile", ["Source:"] = "Fonte:",
         ["Stats panel shown"] = "Pannello statistiche mostrato", ["Stats panel hidden"] = "Pannello statistiche nascosto",
         ["Settings reset to defaults"] = "Impostazioni ripristinate",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help"] = "Comandi: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "Comandi: /ss o /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "Le impostazioni di SwiftStats non sono caricate. Abilita SwiftStats per un accesso, esegui /reload, quindi usa di nuovo /statspro import.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats non contiene impostazioni supportate da importare.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Queste impostazioni usano uno schema più recente e non possono essere importate da questa versione di StatsPro.",
@@ -2563,7 +2563,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "Última comparação conhecida", ["Live values; comparison unavailable"] = "Valores em tempo real; comparação indisponível", ["Source:"] = "Fonte:",
         ["Stats panel shown"] = "Painel de atributos mostrado", ["Stats panel hidden"] = "Painel de atributos oculto",
         ["Settings reset to defaults"] = "Configurações restauradas",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help"] = "Comandos: /ss ou /statspro (configurações), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "Comandos: /ss ou /statspro (configurações), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "As configurações do SwiftStats não estão carregadas. Ative o SwiftStats por um login, execute /reload e use /statspro import novamente.",
         ["SwiftStats has no supported settings to import."] = "O SwiftStats não tem configurações compatíveis para importar.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "Estas configurações usam um esquema mais recente e não podem ser importadas por esta versão do StatsPro.",
@@ -2694,7 +2694,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "마지막으로 확인된 비교", ["Live values; comparison unavailable"] = "실시간 값; 비교할 수 없음", ["Source:"] = "출처:",
         ["Stats panel shown"] = "능력치 패널 표시됨", ["Stats panel hidden"] = "능력치 패널 숨김",
         ["Settings reset to defaults"] = "설정이 기본값으로 초기화되었습니다",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help"] = "명령어: /ss 또는 /statspro (설정), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "명령어: /ss 또는 /statspro (설정), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "SwiftStats 설정이 로드되지 않았습니다. 한 번 로그인하는 동안 SwiftStats를 활성화하고 /reload 후 /statspro import를 다시 실행하세요.",
         ["SwiftStats has no supported settings to import."] = "SwiftStats에 가져올 수 있는 지원 설정이 없습니다.",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "이 설정은 더 새로운 스키마를 사용하므로 현재 StatsPro 버전에서 가져올 수 없습니다.",
@@ -2818,7 +2818,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "上次已知对比", ["Live values; comparison unavailable"] = "实时数值；无法比较", ["Source:"] = "来源:",
         ["Stats panel shown"] = "属性面板已显示", ["Stats panel hidden"] = "属性面板已隐藏",
         ["Settings reset to defaults"] = "设置已恢复默认",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help"] = "命令: /ss 或 /statspro (设置), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "命令: /ss 或 /statspro (设置), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "未加载 SwiftStats 设置。请启用 SwiftStats 登录一次，执行 /reload，然后再次运行 /statspro import。",
         ["SwiftStats has no supported settings to import."] = "SwiftStats 中没有可导入的受支持设置。",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "这些设置使用较新的数据结构，当前版本的 StatsPro 无法导入。",
@@ -2942,7 +2942,7 @@ local LABELS_BY_LOCALE = {
         ["Last known comparison"] = "上次已知比較", ["Live values; comparison unavailable"] = "即時數值；無法比較", ["Source:"] = "來源:",
         ["Stats panel shown"] = "屬性面板已顯示", ["Stats panel hidden"] = "屬性面板已隱藏",
         ["Settings reset to defaults"] = "設定已恢復預設",
-        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help"] = "指令: /ss 或 /statspro (設定), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help",
+        ["Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"] = "指令: /ss 或 /statspro (設定), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help",
         ["SwiftStats settings not loaded. Enable SwiftStats for one login, /reload, then run /statspro import again."] = "未載入 SwiftStats 設定。請啟用 SwiftStats 登入一次，執行 /reload，然後再次輸入 /statspro import。",
         ["SwiftStats has no supported settings to import."] = "SwiftStats 中沒有可匯入的支援設定。",
         ["These settings use a newer schema and cannot be imported by this StatsPro version."] = "這些設定使用較新的資料結構，目前版本的 StatsPro 無法匯入。",
@@ -11416,6 +11416,9 @@ local EVENT_HANDLERS = {
         end
         addon.profileUI.RefreshSafe()
         addon.hudPresets.MaybeShowWelcome()
+        if type(addon.selfTest) == "table" and type(addon.selfTest.OnCombatEnd) == "function" then
+            addon.selfTest.OnCombatEnd()
+        end
     end,
     PLAYER_REGEN_DISABLED       = function()
         addon.panelEditRuntime.FinishDrags()
@@ -11425,6 +11428,9 @@ local EVENT_HANDLERS = {
         addon.hudPresets.SuspendWelcomeForCombat()
         addon.panelEditRuntime.Refresh(true)
         addon.profileUI.RefreshSafe()
+        if type(addon.selfTest) == "table" and type(addon.selfTest.OnCombatStart) == "function" then
+            addon.selfTest.OnCombatStart()
+        end
     end,
 }
 
@@ -14544,6 +14550,38 @@ _G.StaticPopupDialogs[addon.developerLinks.popupKey] = {
     preferredIndex = 3,
 }
 
+-- WHY: fallback copy box for the self-test report when the Settings profile
+-- dialog was never built this session. Same StaticPopup + edit-box builder
+-- shape as the link popup above; the payload comes from addon.selfTest state.
+_G.StaticPopupDialogs["STATSPRO_SELFTEST_COPY"] = {
+    text = "StatsPro self-test report is ready. Copy it (Ctrl+C), then close.",
+    button1 = "Close",
+    hasEditBox = true,
+    editBoxWidth = 340,
+    OnShow = function(self)
+        local text = addon.selfTest.pendingText
+        if type(text) ~= "string" or text == "" then
+            self:Hide()
+            return
+        end
+        local editBox = self:GetEditBox()
+        editBox:SetText(text)
+        editBox:HighlightText()
+        editBox:SetFocus()
+    end,
+    EditBoxOnEnterPressed = function(editBox)
+        editBox:GetParent():Hide()
+    end,
+    EditBoxOnEscapePressed = function(editBox)
+        editBox:GetParent():Hide()
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    exclusive = true,
+    preferredIndex = 3,
+}
+
 function addon.developerLinks.Show(linkKey)
     local link = addon.developerLinks[linkKey]
     if type(link) ~= "table" or type(link.url) ~= "string" then return false end
@@ -15372,6 +15410,21 @@ function addon.profileUI.BuildOperationUI(manager)
         addon.settingsDesign.SetRegionColor(transferHint,
             state.error and "danger" or "textSecondary")
 
+        if state.kind == "selftest" then
+            dialogTitle:SetText("StatsPro Self-Test")
+            ui.SetTransferSections(nil, nil, false)
+            transferSummary:SetText(state.summary or "")
+            transferInputSurface:ClearAllPoints()
+            transferInputSurface:SetPoint("TOP", dialog, "TOP", 0, -220)
+            ui.SetTransferText(state.text or "", state.selectText == true)
+            state.selectText = false
+            transferHint:SetText(state.error
+                or "Self-test report ready. Select it, then press Ctrl+C to copy.")
+            primaryButton:SetText("Select all")
+            if state.text and state.text ~= "" then primaryButton:Enable() else primaryButton:Disable() end
+            return
+        end
+
         if state.kind == "export" then
             dialogTitle:SetText(L("Export profile"))
             ui.SetTransferSections(state.available, state.selected, true)
@@ -15577,6 +15630,22 @@ function addon.profileUI.BuildOperationUI(manager)
         ui.RefreshTransferDialog()
     end
 
+    function ui.ShowSelfTestExport(payloadText, summaryText)
+        if ui.transferEditBox == nil then return false end
+        ui.ShowDialogBase("StatsPro Self-Test")
+        ui.pendingAction = {
+            mode = "transfer", kind = "selftest-note",
+        }
+        ui.transferState = {
+            kind = "selftest",
+            text = payloadText,
+            summary = summaryText,
+            selectText = true,
+        }
+        ui.RefreshTransferDialog()
+        return true
+    end
+
     function ui.ShowTransferImportEntry(payload, expected)
         ui.ShowDialogBase(L("Import profile"))
         ui.pendingAction = {
@@ -15646,7 +15715,7 @@ function addon.profileUI.BuildOperationUI(manager)
     function ui.RunTransferAction()
         local state = ui.transferState
         if not state then return end
-        if state.kind == "export" then
+        if state.kind == "export" or state.kind == "selftest" then
             transferEditBox:HighlightText()
             transferEditBox:SetFocus()
         elseif state.kind == "import-entry" then
@@ -15660,9 +15729,9 @@ function addon.profileUI.BuildOperationUI(manager)
         if ui.transferUpdatingText then return end
         local state = ui.transferState
         if not state then return end
-        if state.kind == "export" then
-            if transferEditBox:GetText() ~= (state.transferString or "") then
-                ui.SetTransferText(state.transferString or "", true)
+        if state.kind == "export" or state.kind == "selftest" then
+            if transferEditBox:GetText() ~= (state.transferString or state.text or "") then
+                ui.SetTransferText(state.transferString or state.text or "", true)
             end
             return
         end
@@ -19813,6 +19882,751 @@ local launcherCategory = Settings.RegisterCanvasLayoutCategory(launcher, launche
 Settings.RegisterAddOnCategory(launcherCategory)
 
 --[[ ============================================================
+    16B. SELF-TEST DIAGNOSTIC (guided OOC + combat sampler)
+============================================================ ]]
+-- WHY: guided in-game check that passively samples row states out of combat
+-- and in combat, then offers a copyable SPS1 report for bug triage. Sampling
+-- only reads stat APIs (no frames); the copy window opens out of combat only.
+-- Secret reads become flags, never values: only IsCleanFiniteNumber numbers,
+-- clean booleans, and clean strings reach chat, the payload, or SV. All state
+-- lives on addon.selfTest so the file-scope local budget stays untouched.
+addon.selfTest = {
+    state = "idle",
+    samples = {},
+    seq = 0,
+    oocTarget = 10,
+    combatTicks = 0,
+    combatTimeoutTicks = 120,
+    recoveryNeeded = 3,
+    recoveryLeft = 0,
+    sawCombat = false,
+    maxSamples = 150,
+    payloadBudget = 16000,
+    errBase = 0,
+    oocCount = 0,
+    combatCount = 0,
+    recoveryCount = 0,
+    secretsSeen = 0,
+    hideFlaps = 0,
+    timeout = false,
+    truncated = false,
+    recovered = false,
+    deferredWindow = false,
+    ticker = nil,
+    tickerGen = 0,
+    env = nil,
+    report = nil,
+    pendingText = nil,
+    lastClean = {},
+    rowMin = {},
+    rowMax = {},
+    rowHasClean = {},
+    rowStats = {},
+    rowKeys = { "crit", "haste", "mastery", "versatility", "main", "movement", "armor", "durability", "repair" },
+    rowShort = {
+        crit = "crit", haste = "haste", mastery = "mastery", versatility = "vers",
+        main = "main", movement = "move", armor = "armor", durability = "dur", repair = "rep",
+    },
+    rowShowKey = {
+        crit = "showCrit", haste = "showHaste", mastery = "showMastery", versatility = "showVersatility",
+        main = "showMainStat", movement = "showSpeed", armor = "showArmor",
+        durability = "showDurability", repair = "showRepairCost",
+    },
+}
+
+function addon.selfTest.IsActive()
+    local state = addon.selfTest.state
+    return state ~= "idle" and state ~= "done"
+end
+
+function addon.selfTest.ReadCombat()
+    local runtime = addon.profileRuntime
+    if type(runtime) ~= "table" or type(runtime.ReadCombatState) ~= "function" then return false end
+    local ok, combat = pcall(runtime.ReadCombatState)
+    if not ok then return false end
+    return combat == true
+end
+
+function addon.selfTest.ReadErrorCount()
+    if addon.IsCleanFiniteNumber(cached.updateErrorCount) then
+        return cached.updateErrorCount
+    end
+    return 0
+end
+
+function addon.selfTest.CleanString(value)
+    if not addon.dbRuntime.IsCleanType(value, "string") then return nil end
+    if value == "" then return nil end
+    return value
+end
+
+function addon.selfTest.SanitizeToken(value)
+    local clean = addon.selfTest.CleanString(value)
+    if clean == nil then return nil end
+    return (clean:gsub("[%c=]", "?"))
+end
+
+-- WHY: single classification boundary for sampler probes. The flag says what
+-- Blizzard returned (0 clean / 1 secret / 2 unknown); only clean numbers flow
+-- into changed/min/max math, chat, payload, or SV.
+function addon.selfTest.ClassifyCall(fn, ...)
+    if type(fn) ~= "function" then return 2, nil end
+    local ok, value = pcall(fn, ...)
+    if not ok then return 2, nil end
+    local secretOK, secret = pcall(issecretvalue, value)
+    if not secretOK or secret then return 1, nil end
+    if addon.IsCleanFiniteNumber(value) then return 0, value end
+    return 2, nil
+end
+
+function addon.selfTest.ClassifySelect(index, fn, ...)
+    if type(fn) ~= "function" or type(index) ~= "number" then return 2, nil end
+    local results = { pcall(fn, ...) }
+    if results[1] ~= true then return 2, nil end
+    local value = results[index + 1]
+    local secretOK, secret = pcall(issecretvalue, value)
+    if not secretOK or secret then return 1, nil end
+    if addon.IsCleanFiniteNumber(value) then return 0, value end
+    return 2, nil
+end
+
+function addon.selfTest.ProbeDurability()
+    local seenSecret = false
+    local seenUnknown = false
+    for slot = DURABILITY_SCAN.slotMin, DURABILITY_SCAN.slotMax do
+        if not DURABILITY_SCAN.skipSlots[slot] then
+            local ok, cur, max = pcall(GetInventoryItemDurability, slot)
+            if not ok then
+                seenUnknown = true
+            else
+                local secretOK, curSecret = pcall(issecretvalue, cur)
+                local secretOK2, maxSecret = pcall(issecretvalue, max)
+                if not secretOK or not secretOK2 or curSecret or maxSecret then
+                    seenSecret = true
+                end
+            end
+        end
+    end
+    if seenSecret then return 1, nil end
+    if cached.durabilityComplete == true and addon.IsCleanFiniteNumber(cached.durabilityValue) then
+        return 0, cached.durabilityValue
+    end
+    if seenUnknown then return 2, nil end
+    return 0, nil
+end
+
+function addon.selfTest.ProbeRepair()
+    if cached.repairCostComplete == true and addon.IsCleanFiniteNumber(cached.repairCost)
+        and cached.repairCost >= 0 then
+        return 0, cached.repairCost
+    end
+    if cached.showRepairCost == true and addon.selfTest.ProbeDurability() == 1 then
+        return 1, nil
+    end
+    return 2, nil
+end
+
+function addon.selfTest.ProbeRow(key)
+    if key == "crit" then
+        return addon.selfTest.ClassifyCall(addon.GetBestCritChance)
+    end
+    if key == "haste" then
+        return addon.selfTest.ClassifyCall(GetHaste)
+    end
+    if key == "mastery" then
+        return addon.selfTest.ClassifyCall(GetMasteryEffect)
+    end
+    if key == "versatility" then
+        local ratingState, ratingValue =
+            addon.selfTest.ClassifyCall(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
+        local flatState, flatValue =
+            addon.selfTest.ClassifyCall(GetVersatilityBonus, CR_VERSATILITY_DAMAGE_DONE)
+        if ratingState == 1 or flatState == 1 then return 1, nil end
+        if ratingState == 0 and flatState == 0 then return 0, ratingValue + flatValue end
+        return 2, nil
+    end
+    if key == "main" then
+        local mainID = GetCurrentMainStatId()
+        if type(mainID) ~= "number" then return 2, nil end
+        return addon.selfTest.ClassifyCall(GetEffectiveStat, mainID)
+    end
+    if key == "movement" then
+        return addon.selfTest.ClassifySelect(2, GetUnitSpeed, "player")
+    end
+    if key == "armor" then
+        return addon.selfTest.ClassifySelect(2, UnitArmor, "player")
+    end
+    if key == "durability" then
+        return addon.selfTest.ProbeDurability()
+    end
+    if key == "repair" then
+        return addon.selfTest.ProbeRepair()
+    end
+    return 2, nil
+end
+
+function addon.selfTest.RecordRow(key, s, value)
+    local stats = addon.selfTest.rowStats[key]
+    if type(stats) ~= "table" then
+        stats = { clean = 0, secret = 0, unknown = 0, changed = 0 }
+        addon.selfTest.rowStats[key] = stats
+    end
+    local changed = false
+    if s == 0 then
+        stats.clean = stats.clean + 1
+        if value ~= nil then
+            local last = addon.selfTest.lastClean[key]
+            if last ~= nil and value ~= last then
+                changed = true
+                stats.changed = stats.changed + 1
+            end
+            addon.selfTest.lastClean[key] = value
+            local mn = addon.selfTest.rowMin[key]
+            if mn == nil or value < mn then addon.selfTest.rowMin[key] = value end
+            local mx = addon.selfTest.rowMax[key]
+            if mx == nil or value > mx then addon.selfTest.rowMax[key] = value end
+        end
+    elseif s == 1 then
+        stats.secret = stats.secret + 1
+    else
+        stats.unknown = stats.unknown + 1
+    end
+    -- WHY flap proxy: clean-value presence per row flips when hide-zero rows
+    -- appear/disappear across samples. Presence booleans are clean by
+    -- construction; no display text is compared.
+    local hasClean = (s == 0 and value ~= nil)
+    local prev = addon.selfTest.rowHasClean[key]
+    if prev ~= nil and prev ~= hasClean then
+        addon.selfTest.hideFlaps = addon.selfTest.hideFlaps + 1
+    end
+    addon.selfTest.rowHasClean[key] = hasClean
+    return { ch = changed, mn = addon.selfTest.rowMin[key], mx = addon.selfTest.rowMax[key] }
+end
+
+function addon.selfTest.TakeSample(inCombat, isRecovery)
+    if #addon.selfTest.samples >= addon.selfTest.maxSamples then
+        addon.selfTest.truncated = true
+        addon.selfTest.Finish("truncated")
+        return
+    end
+    addon.selfTest.seq = addon.selfTest.seq + 1
+    local errDelta = addon.selfTest.ReadErrorCount() - addon.selfTest.errBase
+    if errDelta < 0 then errDelta = 0 end
+    local rows = {}
+    local sampleSecret = false
+    for _, key in ipairs(addon.selfTest.rowKeys) do
+        local s, value = addon.selfTest.ProbeRow(key)
+        local entry = addon.selfTest.RecordRow(key, s, value)
+        entry.s = s
+        rows[key] = entry
+        if s == 1 then sampleSecret = true end
+    end
+    if sampleSecret then addon.selfTest.secretsSeen = addon.selfTest.secretsSeen + 1 end
+    addon.selfTest.samples[#addon.selfTest.samples + 1] = {
+        seq = addon.selfTest.seq, combat = inCombat == true, err = errDelta, rows = rows,
+    }
+    if isRecovery then
+        addon.selfTest.recoveryCount = addon.selfTest.recoveryCount + 1
+    elseif inCombat then
+        addon.selfTest.combatCount = addon.selfTest.combatCount + 1
+    else
+        addon.selfTest.oocCount = addon.selfTest.oocCount + 1
+    end
+end
+
+function addon.selfTest.CaptureEnv()
+    local out = { show = {} }
+    out.release = CURRENT_RELEASE
+    local buildFn = _G.GetBuildInfo
+    if type(buildFn) == "function" then
+        local ok, version, build = pcall(buildFn)
+        if ok then
+            local cleanVersion = addon.selfTest.CleanString(version)
+            local cleanBuild = addon.selfTest.CleanString(build)
+            if cleanVersion and cleanBuild then
+                out.build = cleanVersion .. "." .. cleanBuild
+            elseif cleanVersion then
+                out.build = cleanVersion
+            end
+        end
+    end
+    if out.build == nil then out.build = "unknown" end
+    if type(addon.archonTargets) == "table" then
+        if type(addon.archonTargets.GetCurrentClassToken) == "function" then
+            local ok, token = pcall(addon.archonTargets.GetCurrentClassToken)
+            if ok then out.class = addon.selfTest.CleanString(token) end
+        end
+        if type(addon.archonTargets.GetCurrentSpecKey) == "function" then
+            local ok, spec = pcall(addon.archonTargets.GetCurrentSpecKey)
+            if ok then out.spec = addon.selfTest.CleanString(spec) end
+        end
+        if type(addon.archonTargets.GetTargetSnapshotDropdownValue) == "function" then
+            local ok, archon = pcall(addon.archonTargets.GetTargetSnapshotDropdownValue)
+            if ok then out.archon = addon.selfTest.CleanString(archon) end
+        end
+    end
+    if out.archon == nil then
+        out.archon = addon.selfTest.CleanString(cached.targetSnapshot)
+    end
+    local zoneFn = _G.GetZoneText
+    if type(zoneFn) == "function" then
+        local ok, zone = pcall(zoneFn)
+        if ok then out.zone = addon.selfTest.CleanString(zone) end
+    end
+    for _, key in ipairs(addon.selfTest.rowKeys) do
+        out.show[key] = cached[addon.selfTest.rowShowKey[key]] == true
+    end
+    local interval = cached.updateInterval
+    if not addon.IsCleanFiniteNumber(interval) then
+        local dbInterval = GetNumberDB("updateInterval")
+        if addon.IsCleanFiniteNumber(dbInterval) then interval = dbInterval else interval = nil end
+    end
+    out.interval = interval
+    addon.selfTest.env = out
+end
+
+function addon.selfTest.Reset()
+    addon.selfTest.state = "idle"
+    addon.selfTest.samples = {}
+    addon.selfTest.seq = 0
+    addon.selfTest.combatTicks = 0
+    addon.selfTest.recoveryLeft = 0
+    addon.selfTest.sawCombat = false
+    addon.selfTest.errBase = 0
+    addon.selfTest.oocCount = 0
+    addon.selfTest.combatCount = 0
+    addon.selfTest.recoveryCount = 0
+    addon.selfTest.secretsSeen = 0
+    addon.selfTest.hideFlaps = 0
+    addon.selfTest.timeout = false
+    addon.selfTest.truncated = false
+    addon.selfTest.recovered = false
+    addon.selfTest.deferredWindow = false
+    addon.selfTest.env = nil
+    addon.selfTest.report = nil
+    addon.selfTest.pendingText = nil
+    addon.selfTest.lastClean = {}
+    addon.selfTest.rowMin = {}
+    addon.selfTest.rowMax = {}
+    addon.selfTest.rowHasClean = {}
+    addon.selfTest.rowStats = {}
+end
+
+function addon.selfTest.Start()
+    if addon.selfTest.IsActive() then return false end
+    if addon.selfTest.ReadCombat() then
+        PrintMsg("selftest: leave combat, then run /ss selftest again.")
+        return false
+    end
+    addon.selfTest.StopTicker()
+    addon.selfTest.Reset()
+    addon.selfTest.errBase = addon.selfTest.ReadErrorCount()
+    addon.selfTest.CaptureEnv()
+    addon.selfTest.state = "ooc-collect"
+    addon.selfTest.StartTicker()
+    PrintMsg("selftest: collecting 10 out-of-combat samples, then hit a training dummy to test combat.")
+    return true
+end
+
+function addon.selfTest.Stop(reason)
+    addon.selfTest.StopTicker()
+    addon.selfTest.state = "idle"
+    if reason == "cancelled" then
+        PrintMsg("selftest: stopped, no report was saved.")
+    end
+end
+
+function addon.selfTest.Toggle()
+    if addon.selfTest.IsActive() then
+        addon.selfTest.Stop("cancelled")
+        return
+    end
+    addon.selfTest.Start()
+end
+
+function addon.selfTest.StopTicker()
+    addon.selfTest.tickerGen = addon.selfTest.tickerGen + 1
+    local ticker = addon.selfTest.ticker
+    addon.selfTest.ticker = nil
+    if type(ticker) == "table" and type(ticker.Cancel) == "function" then
+        pcall(ticker.Cancel, ticker)
+    end
+end
+
+function addon.selfTest.StartTicker()
+    addon.selfTest.StopTicker()
+    addon.selfTest.tickerGen = addon.selfTest.tickerGen + 1
+    local timerLib = C_Timer
+    if type(timerLib) == "table" and type(timerLib.NewTicker) == "function" then
+        local ok, ticker = pcall(timerLib.NewTicker, 0.5, function()
+            addon.selfTest.OnTick()
+        end)
+        if ok and type(ticker) == "table" then
+            addon.selfTest.ticker = ticker
+            return true
+        end
+    end
+    addon.selfTest.ArmFallback()
+    return true
+end
+
+function addon.selfTest.ArmFallback()
+    local gen = addon.selfTest.tickerGen
+    local timerLib = C_Timer
+    if type(timerLib) ~= "table" or type(timerLib.After) ~= "function" then return end
+    pcall(timerLib.After, 0.5, function()
+        if addon.selfTest.tickerGen ~= gen then return end
+        addon.selfTest.OnTick()
+        if addon.selfTest.tickerGen == gen and addon.selfTest.IsActive() then
+            addon.selfTest.ArmFallback()
+        end
+    end)
+end
+
+function addon.selfTest.OnTick()
+    if not addon.selfTest.IsActive() then
+        addon.selfTest.StopTicker()
+        return
+    end
+    local state = addon.selfTest.state
+    local combat = addon.selfTest.ReadCombat()
+    if state == "ooc-collect" then
+        if combat then
+            addon.selfTest.ToCombat()
+            return
+        end
+        addon.selfTest.TakeSample(false, false)
+        if addon.selfTest.oocCount >= addon.selfTest.oocTarget then
+            addon.selfTest.state = "await-combat"
+            addon.selfTest.StopTicker()
+            PrintMsg("selftest: out-of-combat samples done. Hit a training dummy to start combat sampling.")
+        end
+        return
+    end
+    if state == "await-combat" then return end
+    if state == "combat-collect" then
+        if addon.selfTest.recoveryLeft > 0 then
+            addon.selfTest.TakeSample(false, true)
+            addon.selfTest.recoveryLeft = addon.selfTest.recoveryLeft - 1
+            if addon.selfTest.recoveryLeft <= 0 then
+                addon.selfTest.Finish("ok")
+            end
+            return
+        end
+        if combat then
+            addon.selfTest.combatTicks = addon.selfTest.combatTicks + 1
+            addon.selfTest.TakeSample(true, false)
+            if addon.selfTest.combatTicks >= addon.selfTest.combatTimeoutTicks then
+                addon.selfTest.Finish("timeout")
+            end
+            return
+        end
+        if addon.selfTest.sawCombat then
+            addon.selfTest.BeginRecovery()
+            return
+        end
+        return
+    end
+end
+
+function addon.selfTest.ToCombat()
+    addon.selfTest.sawCombat = true
+    addon.selfTest.state = "combat-collect"
+    addon.selfTest.combatTicks = 0
+    PrintMsg("selftest: combat detected, collecting combat samples.")
+end
+
+function addon.selfTest.BeginRecovery()
+    addon.selfTest.recoveryLeft = addon.selfTest.recoveryNeeded
+    addon.selfTest.StartTicker()
+    PrintMsg("selftest: combat ended, collecting 3 recovery samples.")
+end
+
+-- WHY: combat entry/exit arrive through the shared EVENT_HANDLERS table only;
+-- these entry points no-op unless a run is waiting for that transition.
+function addon.selfTest.OnCombatStart()
+    local state = addon.selfTest.state
+    if state == "ooc-collect" or state == "await-combat" then
+        addon.selfTest.ToCombat()
+        addon.selfTest.StartTicker()
+    end
+end
+
+function addon.selfTest.OnCombatEnd()
+    if addon.selfTest.deferredWindow then
+        addon.selfTest.deferredWindow = false
+        addon.selfTest.ShowWindow()
+    end
+    if addon.selfTest.state == "combat-collect" and addon.selfTest.sawCombat
+        and addon.selfTest.recoveryLeft <= 0 then
+        addon.selfTest.BeginRecovery()
+    end
+end
+
+function addon.selfTest.Finish(reason)
+    addon.selfTest.StopTicker()
+    if reason == "timeout" then addon.selfTest.timeout = true end
+    if reason == "ok" and addon.selfTest.recoveryCount >= addon.selfTest.recoveryNeeded then
+        addon.selfTest.recovered = true
+    end
+    addon.selfTest.BuildReport()
+    addon.selfTest.SaveToSV()
+    addon.selfTest.state = "done"
+    addon.selfTest.PrintSummary()
+    if addon.selfTest.ReadCombat() then
+        addon.selfTest.deferredWindow = true
+        PrintMsg("selftest: copy window deferred until you leave combat.")
+        return
+    end
+    addon.selfTest.ShowWindow()
+end
+
+function addon.selfTest.BuildReport()
+    local rows = {}
+    for _, key in ipairs(addon.selfTest.rowKeys) do
+        local stats = addon.selfTest.rowStats[key]
+        if type(stats) ~= "table" then
+            stats = { clean = 0, secret = 0, unknown = 0, changed = 0 }
+        end
+        rows[key] = {
+            clean = stats.clean,
+            secret = stats.secret,
+            unknown = stats.unknown,
+            changed = stats.changed,
+            min = addon.selfTest.rowMin[key],
+            max = addon.selfTest.rowMax[key],
+        }
+    end
+    local errors = addon.selfTest.ReadErrorCount() - addon.selfTest.errBase
+    if errors < 0 then errors = 0 end
+    addon.selfTest.report = {
+        env = addon.selfTest.env,
+        samples = addon.selfTest.samples,
+        totals = {
+            ooc = addon.selfTest.oocCount,
+            combat = addon.selfTest.combatCount,
+            recovery = addon.selfTest.recoveryCount,
+            errors = errors,
+            secrets = addon.selfTest.secretsSeen,
+            flaps = addon.selfTest.hideFlaps,
+            recovered = addon.selfTest.recovered,
+            timeout = addon.selfTest.timeout,
+            truncated = addon.selfTest.truncated,
+        },
+        rows = rows,
+    }
+end
+
+function addon.selfTest.Sanitize(value, depth)
+    if depth > 6 then return nil end
+    if type(value) == "number" then
+        if addon.IsCleanFiniteNumber(value) then return value end
+        return nil
+    end
+    if type(value) == "boolean" then return value end
+    if type(value) == "string" then
+        local secretOK, secret = pcall(issecretvalue, value)
+        if secretOK and not secret then return value end
+        return nil
+    end
+    if type(value) ~= "table" then return nil end
+    local out = {}
+    for k, v in pairs(value) do
+        local cleanKey = nil
+        if type(k) == "number" then
+            cleanKey = k
+        elseif type(k) == "string" then
+            local secretOK, secret = pcall(issecretvalue, k)
+            if secretOK and not secret then cleanKey = k end
+        end
+        if cleanKey ~= nil then
+            local cleanValue = addon.selfTest.Sanitize(v, depth + 1)
+            if cleanValue ~= nil then out[cleanKey] = cleanValue end
+        end
+    end
+    return out
+end
+
+function addon.selfTest.SaveToSV()
+    local finishedAt = 0
+    if type(GetServerTime) == "function" then
+        local ok, now = pcall(GetServerTime)
+        if ok and addon.IsCleanFiniteNumber(now) then finishedAt = now end
+    end
+    _G.StatsProSelfTest = {
+        version = 1,
+        finishedAt = finishedAt,
+        report = addon.selfTest.Sanitize(addon.selfTest.report, 0),
+    }
+end
+
+function addon.selfTest.BuildPayload()
+    local report = addon.selfTest.report
+    if type(report) ~= "table" then return nil end
+    local env = report.env
+    if type(env) ~= "table" then return nil end
+    local totals = report.totals
+    if type(totals) ~= "table" then return nil end
+    local lines = {}
+    local function add(key, value)
+        lines[#lines + 1] = key .. "=" .. value
+    end
+    local function token(value, fallback)
+        return addon.selfTest.SanitizeToken(value) or fallback
+    end
+    local function count(value)
+        if addon.IsCleanFiniteNumber(value) then return string.format("%d", value) end
+        return "0"
+    end
+    local function flag(value)
+        return value == true and "1" or "0"
+    end
+    lines[#lines + 1] = "SPS1:1"
+    add("release", token(env.release, "unknown"))
+    add("build", token(env.build, "unknown"))
+    add("class", token(env.class, "unknown"))
+    add("spec", token(env.spec, "unknown"))
+    add("zone", token(env.zone, "unknown"))
+    add("archon", token(env.archon, "unknown"))
+    if addon.IsCleanFiniteNumber(env.interval) then
+        add("interval", string.format("%.2f", env.interval))
+    else
+        add("interval", "unknown")
+    end
+    add("ooc", count(totals.ooc))
+    add("combat", count(totals.combat))
+    add("recovery", count(totals.recovery))
+    if type(report.samples) == "table" then
+        add("samples", count(#report.samples))
+    else
+        add("samples", "0")
+    end
+    add("errors", count(totals.errors))
+    add("secrets", count(totals.secrets))
+    add("flaps", count(totals.flaps))
+    add("recovered", flag(totals.recovered))
+    add("timeout", flag(totals.timeout))
+    add("truncated", flag(totals.truncated))
+    for _, key in ipairs(addon.selfTest.rowKeys) do
+        local short = addon.selfTest.rowShort[key]
+        local stats = report.rows and report.rows[key] or nil
+        if type(stats) == "table" then
+            local cell = "clean:" .. count(stats.clean) .. " secret:" .. count(stats.secret)
+                .. " unknown:" .. count(stats.unknown) .. " changed:" .. count(stats.changed)
+            if addon.IsCleanFiniteNumber(stats.min) and addon.IsCleanFiniteNumber(stats.max) then
+                cell = cell .. string.format(" min:%.2f max:%.2f", stats.min, stats.max)
+            end
+            lines[#lines + 1] = "row." .. short .. "=" .. cell
+        end
+    end
+    local shown = 0
+    local omitted = 0
+    local size = 0
+    for _, header in ipairs(lines) do size = size + #header + 1 end
+    local budget = addon.selfTest.payloadBudget
+    if not addon.IsCleanFiniteNumber(budget) then budget = 16000 end
+    if type(report.samples) == "table" then
+        for _, sample in ipairs(report.samples) do
+            if type(sample) == "table" and type(sample.rows) == "table" then
+                local parts = {}
+                for _, key in ipairs(addon.selfTest.rowKeys) do
+                    local cell = sample.rows[key]
+                    if type(cell) == "table" and addon.IsCleanFiniteNumber(cell.s) then
+                        local text = addon.selfTest.rowShort[key] .. "=" .. string.format("%d", cell.s)
+                        if cell.ch == true then text = text .. "*" end
+                        parts[#parts + 1] = text
+                    end
+                end
+                local combatFlag = sample.combat == true and "1" or "0"
+                local line = "s." .. count(sample.seq) .. " c=" .. combatFlag
+                    .. " e=" .. count(sample.err) .. " " .. table.concat(parts, " ")
+                if size + #line + 1 > budget then
+                    omitted = omitted + 1
+                else
+                    lines[#lines + 1] = line
+                    size = size + #line + 1
+                    shown = shown + 1
+                end
+            end
+        end
+    end
+    add("shown", count(shown))
+    add("omitted", count(omitted))
+    return table.concat(lines, "\n")
+end
+
+function addon.selfTest.WindowSummary()
+    local totals = addon.selfTest.report and addon.selfTest.report.totals or nil
+    local env = addon.selfTest.report and addon.selfTest.report.env or nil
+    if type(totals) ~= "table" or type(env) ~= "table" then return "" end
+    local function count(value)
+        if addon.IsCleanFiniteNumber(value) then return string.format("%d", value) end
+        return "0"
+    end
+    return "samples ooc=" .. count(totals.ooc) .. " combat=" .. count(totals.combat)
+        .. " recovery=" .. count(totals.recovery) .. " errors=" .. count(totals.errors)
+        .. " secrets=" .. count(totals.secrets) .. " flaps=" .. count(totals.flaps)
+        .. " recovered=" .. (totals.recovered == true and "yes" or "no")
+        .. "\nrelease=" .. (addon.selfTest.SanitizeToken(env.release) or "?")
+        .. " class=" .. (addon.selfTest.SanitizeToken(env.class) or "?")
+        .. " spec=" .. (addon.selfTest.SanitizeToken(env.spec) or "?")
+end
+
+function addon.selfTest.PrintSummary()
+    local totals = addon.selfTest.report and addon.selfTest.report.totals or nil
+    if type(totals) ~= "table" then return end
+    local function count(value)
+        if addon.IsCleanFiniteNumber(value) then return string.format("%d", value) end
+        return "0"
+    end
+    PrintMsg("selftest: finished ooc=" .. count(totals.ooc)
+        .. " combat=" .. count(totals.combat)
+        .. " recovery=" .. count(totals.recovery)
+        .. " errors=" .. count(totals.errors)
+        .. " secrets=" .. count(totals.secrets)
+        .. " flaps=" .. count(totals.flaps)
+        .. " recovered=" .. (totals.recovered == true and "yes" or "no"))
+end
+
+function addon.selfTest.ShowStaticPopup()
+    local dialogs = _G.StaticPopupDialogs
+    if type(dialogs) ~= "table" or type(dialogs["STATSPRO_SELFTEST_COPY"]) ~= "table" then return false end
+    local showFn = _G.StaticPopup_Show
+    if type(showFn) ~= "function" then return false end
+    local ok, popup = pcall(showFn, "STATSPRO_SELFTEST_COPY")
+    return ok and popup ~= nil
+end
+
+function addon.selfTest.ShowWindow()
+    if addon.selfTest.ReadCombat() then
+        addon.selfTest.deferredWindow = true
+        return false
+    end
+    addon.selfTest.deferredWindow = false
+    local payload = addon.selfTest.BuildPayload()
+    if type(payload) ~= "string" or payload == "" then
+        PrintMsg("selftest: report is empty, nothing to show.")
+        return false
+    end
+    local profileUI = addon.profileUI
+    if type(profileUI) == "table" and type(profileUI.ShowSelfTestExport) == "function" then
+        local ok, shown = pcall(profileUI.ShowSelfTestExport, payload, addon.selfTest.WindowSummary())
+        if ok and shown then
+            PrintMsg("selftest: copy window opened. Select the text, then press Ctrl+C.")
+            return true
+        end
+    end
+    addon.selfTest.pendingText = payload
+    if addon.selfTest.ShowStaticPopup() then
+        PrintMsg("selftest: copy window opened. Select the text, then press Ctrl+C.")
+        return true
+    end
+    addon.selfTest.pendingText = nil
+    PrintMsg("selftest: copy window unavailable. Open Settings once, then finish a new run.")
+    return false
+end
+
+--[[ ============================================================
     17. SLASH COMMANDS
 ============================================================ ]]
 SLASH_STATSPRO1 = "/ss"
@@ -19880,8 +20694,10 @@ SlashCmdList["STATSPRO"] = function(msg)
         else
             addon:PrintDebugDump()
         end
+    elseif arg == "selftest" then
+        addon.selfTest.Toggle()
     elseif arg == "help" or arg == "?" then
-        PrintMsg(L("Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss help"))
+        PrintMsg(L("Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help"))
     else
         addon:OpenConfigMenu()
     end

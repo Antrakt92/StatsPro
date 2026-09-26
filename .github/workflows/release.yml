@@ -7,12 +7,11 @@ on:
       - 'v*'
 
 concurrency:
-  # Serialize ALL publication attempts through one global slot without
-  # silently dropping queued runs. cancel-in-progress: false keeps every
-  # pushed tag waiting its turn so marketplace uploads never overlap and
-  # no tag is dropped. The group is intentionally fixed (not per-tag):
-  # two different tags pushed together must still upload one at a time.
+  # Serialize all tags through one global slot. The default single pending
+  # slot replaces older queued tags; queue: max retains up to 100 pending
+  # publications without cancelling the active release.
   group: statspro-release
+  queue: max
   cancel-in-progress: false
 
 jobs:

@@ -3126,8 +3126,8 @@ function Assert-ReleaseWorkflowBoundary {
     if (-not $concurrencyBlock.Success -or
         $concurrencyBlock.Value -notmatch '(?m)^  group: statspro-release\s*$' -or
         $concurrencyBlock.Value -notmatch '(?m)^  cancel-in-progress:\s*false\s*$' -or
-        $concurrencyBlock.Value -match '(?m)^\s+queue:') {
-        throw "Release workflow must serialize publications through the fixed statspro-release group with cancel-in-progress: false and no queue key."
+        $concurrencyBlock.Value -notmatch '(?m)^  queue: max\s*$') {
+        throw "Release workflow must serialize publications through the fixed statspro-release group with cancel-in-progress: false and queue: max."
     }
 
     $jobsBlock = [regex]::Match($WorkflowText, '(?ms)^jobs:\s*$.*\z')
@@ -5133,9 +5133,12 @@ function Invoke-SelfTest {
     Assert-ThrowsMatch "per-tag release concurrency rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace('group: statspro-release', 'group: release-${{ github.ref }}')
     } "fixed statspro-release group"
-    Assert-ThrowsMatch "legacy queue release concurrency rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^  cancel-in-progress: false\s*\r?\n', "  queue: max`n")
-    } "no queue key"
+    Assert-ThrowsMatch "missing release queue policy rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^  queue: max[^\S\r\n]*\r?\n', '')
+    } "queue: max"
+    Assert-ThrowsMatch "single-pending release queue rejected" {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace('queue: max', 'queue: single')
+    } "queue: max"
     Assert-ThrowsMatch "missing non-canonical tag early-exit rejected" {
         $earlyExitJob = Get-WorkflowJobBlock -WorkflowText $workflowText -JobName 'preflight'
         $earlyExitStep = [regex]::Match(

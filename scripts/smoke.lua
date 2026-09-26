@@ -5014,7 +5014,7 @@ do
     eq("slash.toggle.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Stats panel hidden")
     clearPrints(slashEnv)
     slash("slash.help", slashEnv, "help")
-    eq("slash.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help")
+    eq("slash.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help")
     slashSettings.fontBeforeAutoSwitch = "Fonts\\ARIALN.TTF"
     slashSettings.useLocalizedLabels = false
     slashSettings.font = "Fonts\\ARIALN.TTF"
@@ -5071,7 +5071,7 @@ do
     eq("slash.localized_ruRU.toggle.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Панель статов скрыта")
     clearPrints(slashEnv)
     slash("slash.localized_ruRU.help", slashEnv, "help")
-    eq("slash.localized_ruRU.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest, /ss help")
+    eq("slash.localized_ruRU.help.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Команды: /ss или /statspro (настройки), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help")
     clearPrints(slashEnv)
     slash("slash.localized_ruRU.debug", slashEnv, "debug")
     eq("slash.localized_ruRU.debug_english", printContains(slashEnv, "debug v"), true)
@@ -5321,6 +5321,65 @@ do
     eq("selftest.dialog.editbox_text",
         dlgEnv.StatsProProfileTransferEditBox:GetText(), "SPS1:1\nrelease=1.16.23\n")
     eq("selftest.dialog.state_kind", dlgAddon.profileUI.transferState.kind, "selftest")
+end
+
+do
+    -- selftest all: read-only sibling overview. Never calls sibling code:
+    -- only C_AddOns presence/version metadata plus each sibling's own
+    -- isolated selftest SV root, all through type guards. One fresh env per
+    -- case (single assignment per mock field keeps LuaLS duplicate-set-field
+    -- quiet).
+    local allEnv, allAddon = loadStatsPro("enUS", {})
+    local guidedAll = allAddon.selfTest
+    eq("selftest.all.module", type(guidedAll.RunAll), "function")
+    fireEvent("selftest.all.pew", allEnv, "PLAYER_ENTERING_WORLD")
+    -- Default harness: C_AddOns without IsAddOnLoaded, no sibling reports.
+    slash("selftest.all.unknown", allEnv, "selftest all")
+    eq("selftest.all.unknown_head", printContains(allEnv, "selftest all: StatsPro idle, no report yet"), true)
+    eq("selftest.all.unknown_dyni", printContains(allEnv, "DoYouNeedIt unknown 9.8.7,"), true)
+    eq("selftest.all.unknown_hint", printContains(allEnv, "run /dyni selftest"), true)
+end
+
+do
+    -- Sibling loaded with a numeric report.
+    local allEnv = loadStatsPro("enUS", {})
+    fireEvent("selftest.all.loaded_pew", allEnv, "PLAYER_ENTERING_WORLD")
+    allEnv.C_AddOns.IsAddOnLoaded = function(_) return true end
+    allEnv.DoYouNeedItSelfTest = { version = 1, finishedAt = 1720000000 }
+    slash("selftest.all.loaded", allEnv, "selftest all")
+    eq("selftest.all.loaded_line", printContains(allEnv, "DoYouNeedIt loaded 9.8.7, report 1720000000"), true)
+end
+
+do
+    -- Unrecognized shape never fails.
+    local allEnv = loadStatsPro("enUS", {})
+    fireEvent("selftest.all.shape_pew", allEnv, "PLAYER_ENTERING_WORLD")
+    allEnv.C_AddOns.IsAddOnLoaded = function(_) return true end
+    allEnv.ApplicantScoutSelfTest = { version = 1, finishedAt = {} }
+    slash("selftest.all.unrecognized", allEnv, "selftest all")
+    eq("selftest.all.unrecognized_line", printContains(allEnv, "ApplicantScout loaded 9.8.7, report (unrecognized shape)"), true)
+end
+
+do
+    -- String finishedAt passes through verbatim.
+    local allEnv = loadStatsPro("enUS", {})
+    fireEvent("selftest.all.string_pew", allEnv, "PLAYER_ENTERING_WORLD")
+    allEnv.C_AddOns.IsAddOnLoaded = function(_) return true end
+    allEnv.ApplicantScoutSelfTest = { version = 1, finishedAt = "2026-09-26" }
+    slash("selftest.all.string_date", allEnv, "selftest all")
+    eq("selftest.all.string_line", printContains(allEnv, "report 2026-09-26"), true)
+end
+
+do
+    -- Explicitly not loaded; missing client API degrades to unknown.
+    local allEnv = loadStatsPro("enUS", {})
+    fireEvent("selftest.all.absent_pew", allEnv, "PLAYER_ENTERING_WORLD")
+    allEnv.C_AddOns.IsAddOnLoaded = function(_) return false end
+    slash("selftest.all.absent", allEnv, "selftest all")
+    eq("selftest.all.absent_line", printContains(allEnv, "DoYouNeedIt not loaded 9.8.7, no report yet"), true)
+    allEnv.C_AddOns = nil
+    slash("selftest.all.noapi", allEnv, "selftest all")
+    eq("selftest.all.noapi_line", printContains(allEnv, "DoYouNeedIt unknown ?, no report yet"), true)
 end
 
 do

@@ -15,9 +15,15 @@ function Assert-StatsProSavedVariablesContract {
     }
 
     $roots = @($directives[0].Groups[1].Value -split ',' | ForEach-Object { $_.Trim() })
-    if ($roots.Count -ne 1 -or
-        [string]::IsNullOrWhiteSpace($roots[0]) -or
-        -not [System.StringComparer]::Ordinal.Equals($roots[0], 'StatsProDB')) {
+    # WHY: the self-test diagnostic persists its last finished run in a separate
+    # root so sampling can never disturb the main settings registry. The only
+    # accepted shapes are StatsProDB alone or StatsProDB plus StatsProSelfTest.
+    $validRoots = ($roots.Count -eq 1 -and
+        [System.StringComparer]::Ordinal.Equals($roots[0], 'StatsProDB')) -or
+        ($roots.Count -eq 2 -and
+        [System.StringComparer]::Ordinal.Equals($roots[0], 'StatsProDB') -and
+        [System.StringComparer]::Ordinal.Equals($roots[1], 'StatsProSelfTest'))
+    if (-not $validRoots) {
         throw "$Description SavedVariables directive must name only StatsProDB; got '$($roots -join ', ')'."
     }
 

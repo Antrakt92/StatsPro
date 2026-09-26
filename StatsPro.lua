@@ -19941,10 +19941,10 @@ end
 
 function addon.selfTest.ReadCombat()
     local runtime = addon.profileRuntime
-    if type(runtime) ~= "table" or type(runtime.ReadCombatState) ~= "function" then return false end
+    if type(runtime) ~= "table" or type(runtime.ReadCombatState) ~= "function" then return nil end
     local ok, combat = pcall(runtime.ReadCombatState)
-    if not ok then return false end
-    return combat == true
+    if not ok or not addon.dbRuntime.IsCleanType(combat, "boolean") then return nil end
+    return combat
 end
 
 function addon.selfTest.ReadErrorCount()
@@ -20190,6 +20190,7 @@ function addon.selfTest.Reset()
     addon.selfTest.samples = {}
     addon.selfTest.seq = 0
     addon.selfTest.combatTicks = 0
+    addon.selfTest.unknownTicks = 0
     addon.selfTest.recoveryLeft = 0
     addon.selfTest.sawCombat = false
     addon.selfTest.errBase = 0
@@ -20214,7 +20215,7 @@ end
 
 function addon.selfTest.Start()
     if addon.selfTest.IsActive() then return false end
-    if addon.selfTest.ReadCombat() then
+    if addon.selfTest.ReadCombat() ~= false then
         PrintMsg("selftest: leave combat, then run /ss selftest again.")
         return false
     end
@@ -20248,24 +20249,33 @@ function addon.selfTest.StopTicker()
     addon.selfTest.tickerGen = addon.selfTest.tickerGen + 1
     local ticker = addon.selfTest.ticker
     addon.selfTest.ticker = nil
-    if type(ticker) == "table" and type(ticker.Cancel) == "function" then
-        pcall(ticker.Cancel, ticker)
+    if type(ticker) == "table" or type(ticker) == "userdata" then
+        pcall(function()
+            if type(ticker.Cancel) == "function" then ticker:Cancel() end
+        end)
     end
 end
 
 function addon.selfTest.StartTicker()
     addon.selfTest.StopTicker()
     addon.selfTest.tickerGen = addon.selfTest.tickerGen + 1
+    local gen = addon.selfTest.tickerGen
     local timerLib = C_Timer
     if type(timerLib) == "table" and type(timerLib.NewTicker) == "function" then
         local ok, ticker = pcall(timerLib.NewTicker, 0.5, function()
+            if addon.selfTest.tickerGen ~= gen then return end
             addon.selfTest.OnTick()
         end)
-        if ok and type(ticker) == "table" then
-            addon.selfTest.ticker = ticker
-            return true
+        if ok and (type(ticker) == "table" or type(ticker) == "userdata") then
+            local readable, cancel = pcall(function() return ticker.Cancel end)
+            if readable and type(cancel) == "function" then
+                addon.selfTest.ticker = ticker
+                return true
+            end
         end
     end
+    -- A malformed native handle cannot own the run alongside the fallback.
+    addon.selfTest.tickerGen = addon.selfTest.tickerGen + 1
     addon.selfTest.ArmFallback()
     return true
 end
@@ -20290,6 +20300,17 @@ function addon.selfTest.OnTick()
     end
     local state = addon.selfTest.state
     local combat = addon.selfTest.ReadCombat()
+    -- Unknown state breaks the recovery streak and cannot leave a ticker alive
+    -- indefinitely if the client API stops providing trustworthy combat state.
+    if combat == nil then
+        addon.selfTest.recoveryLeft = 0
+        addon.selfTest.unknownTicks = addon.selfTest.unknownTicks + 1
+        if addon.selfTest.unknownTicks >= addon.selfTest.combatTimeoutTicks then
+            addon.selfTest.Finish("timeout")
+        end
+        return
+    end
+    addon.selfTest.unknownTicks = 0
     if state == "ooc-collect" then
         if combat then
             addon.selfTest.ToCombat()
@@ -20305,19 +20326,20 @@ function addon.selfTest.OnTick()
     end
     if state == "await-combat" then return end
     if state == "combat-collect" then
+        if combat then
+            addon.selfTest.recoveryLeft = 0
+            addon.selfTest.combatTicks = addon.selfTest.combatTicks + 1
+            addon.selfTest.TakeSample(true, false)
+            if addon.selfTest.combatTicks >= addon.selfTest.combatTimeoutTicks then
+                addon.selfTest.Finish("timeout")
+            end
+            return
+        end
         if addon.selfTest.recoveryLeft > 0 then
             addon.selfTest.TakeSample(false, true)
             addon.selfTest.recoveryLeft = addon.selfTest.recoveryLeft - 1
             if addon.selfTest.recoveryLeft <= 0 then
                 addon.selfTest.Finish("ok")
-            end
-            return
-        end
-        if combat then
-            addon.selfTest.combatTicks = addon.selfTest.combatTicks + 1
-            addon.selfTest.TakeSample(true, false)
-            if addon.selfTest.combatTicks >= addon.selfTest.combatTimeoutTicks then
-                addon.selfTest.Finish("timeout")
             end
             return
         end
@@ -20346,6 +20368,10 @@ end
 -- these entry points no-op unless a run is waiting for that transition.
 function addon.selfTest.OnCombatStart()
     local state = addon.selfTest.state
+    if state == "combat-collect" then
+        addon.selfTest.recoveryLeft = 0
+        return
+    end
     if state == "ooc-collect" or state == "await-combat" then
         addon.selfTest.ToCombat()
         addon.selfTest.StartTicker()
@@ -20373,7 +20399,7 @@ function addon.selfTest.Finish(reason)
     addon.selfTest.SaveToSV()
     addon.selfTest.state = "done"
     addon.selfTest.PrintSummary()
-    if addon.selfTest.ReadCombat() then
+    if addon.selfTest.ReadCombat() ~= false then
         addon.selfTest.deferredWindow = true
         PrintMsg("selftest: copy window deferred until you leave combat.")
         return
@@ -20655,7 +20681,7 @@ function addon.selfTest.ShowStaticPopup()
 end
 
 function addon.selfTest.ShowWindow()
-    if addon.selfTest.ReadCombat() then
+    if addon.selfTest.ReadCombat() ~= false then
         addon.selfTest.deferredWindow = true
         return false
     end

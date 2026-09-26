@@ -4,7 +4,7 @@
 
 ### Added
 
-- **New in-game combat self-test with a copyable report.** Use `/ss selftest all` to include DoYouNeedIt and ApplicantScout report summaries.
+- **New in-game combat self-test with a copyable report.** `/ss selftest all` prints existing StatsPro, DoYouNeedIt and ApplicantScout report summaries in chat.
 
 ### Fixed
 

@@ -824,6 +824,7 @@ local function makeEnv(locale, opts)
                 (self or ticker).cancelled = true
             end
             env.__tickers[#env.__tickers + 1] = ticker
+            if opts.tickerHandleFactory then return opts.tickerHandleFactory(ticker) end
             return ticker
         end,
     }
@@ -5278,6 +5279,153 @@ do
     eq("selftest.bound.capped", #bdAddon.selfTest.samples, 12)
     eq("selftest.bound.truncated", bdAddon.selfTest.report.totals.truncated, true)
     eq("selftest.bound.sv_capped", #bdEnv.StatsProSelfTest.report.samples, 12)
+end
+
+do
+    -- A new pull interrupts recovery, whether its event arrives or the ticker
+    -- observes combat first. Only a fresh complete recovery streak can finish.
+    for _, mode in ipairs({ "event", "poll" }) do
+        local combat = false
+        local env, addonUnderTest = loadStatsPro("enUS", {
+            inCombatLockdown = function() return combat end,
+        })
+        local guided = addonUnderTest.selfTest
+        fireEvent("selftest.reentry." .. mode .. ".pew", env, "PLAYER_ENTERING_WORLD")
+        guided.Start()
+        env.__fireTickers(10)
+        combat = true
+        fireEvent("selftest.reentry." .. mode .. ".start", env, "PLAYER_REGEN_DISABLED")
+        env.__fireTickers(2)
+        combat = false
+        fireEvent("selftest.reentry." .. mode .. ".end", env, "PLAYER_REGEN_ENABLED")
+        env.__fireTickers(1)
+        combat = true
+        if mode == "event" then
+            fireEvent("selftest.reentry." .. mode .. ".restart", env, "PLAYER_REGEN_DISABLED")
+        end
+        env.__fireTickers(2)
+        eq("selftest.reentry." .. mode .. ".active", guided.state, "combat-collect")
+        eq("selftest.reentry." .. mode .. ".not_recovered", guided.recovered, false)
+        eq("selftest.reentry." .. mode .. ".combat_sample", guided.samples[#guided.samples].combat, true)
+        eq("selftest.reentry." .. mode .. ".budget_preserved", guided.combatTicks, 4)
+        eq("selftest.reentry." .. mode .. ".no_report", env.StatsProSelfTest, nil)
+        combat = false
+        fireEvent("selftest.reentry." .. mode .. ".final_end", env, "PLAYER_REGEN_ENABLED")
+        env.__fireTickers(2)
+        eq("selftest.reentry." .. mode .. ".requires_full_streak", guided.state, "combat-collect")
+        env.__fireTickers(1)
+        eq("selftest.reentry." .. mode .. ".done", guided.state, "done")
+        eq("selftest.reentry." .. mode .. ".recovered", guided.recovered, true)
+    end
+end
+
+do
+    -- Native timer handles are userdata. Cancellation and generation rejection
+    -- cover a callback already queued before cancellation or restart.
+    local env, addonUnderTest = loadStatsPro("enUS", {
+        tickerHandleFactory = function(record)
+            local handle = newproxy(true)
+            getmetatable(handle).__index = {
+                Cancel = function() record.cancelled = true end,
+            }
+            return handle
+        end,
+    })
+    fireEvent("selftest.native_ticker.pew", env, "PLAYER_ENTERING_WORLD")
+    local guided = addonUnderTest.selfTest
+    guided.Start()
+    eq("selftest.native_ticker.handle", type(guided.ticker), "userdata")
+    eq("selftest.native_ticker.no_fallback", #env.__timers, 0)
+    local stale = env.__tickers[1].fn
+    guided.Stop("cancelled")
+    eq("selftest.native_ticker.cancelled", env.__tickers[1].cancelled, true)
+    guided.Start()
+    local newHandle = guided.ticker
+    stale()
+    eq("selftest.native_ticker.stale_no_sample", guided.oocCount, 0)
+    eq("selftest.native_ticker.stale_no_cancel", guided.ticker, newHandle)
+    env.__fireTickers(1)
+    eq("selftest.native_ticker.one_sample", guided.oocCount, 1)
+    guided.Stop("cancelled")
+end
+
+do
+    for _, mode in ipairs({ "nil", "throw", "secret" }) do
+        local secret = {}
+        local env, addonUnderTest = loadStatsPro("enUS", {
+            issecretvalue = function(value) return rawequal(value, secret) end,
+        })
+        fireEvent("selftest.unknown." .. mode .. ".pew", env, "PLAYER_ENTERING_WORLD")
+        local guided = addonUnderTest.selfTest
+        local combatState = false
+        addonUnderTest.profileRuntime.ReadCombatState = function()
+            if combatState == "unknown" then
+                if mode == "throw" then error("unavailable combat API") end
+                if mode == "secret" then return secret end
+                return nil
+            end
+            return combatState
+        end
+        combatState = "unknown"
+        eq("selftest.unknown." .. mode .. ".read", guided.ReadCombat(), nil)
+        eq("selftest.unknown." .. mode .. ".refuses_start", guided.Start(), false)
+        guided.ShowWindow()
+        eq("selftest.unknown." .. mode .. ".defers_window", guided.deferredWindow, true)
+        eq("selftest.unknown." .. mode .. ".no_popup", env.__lastStaticPopup, nil)
+        combatState = false
+        guided.Start()
+        combatState = "unknown"
+        env.__fireTickers(1)
+        eq("selftest.unknown." .. mode .. ".no_ooc_sample", guided.oocCount, 0)
+        combatState = true
+        guided.OnCombatStart()
+        env.__fireTickers(1)
+        combatState = false
+        guided.OnCombatEnd()
+        env.__fireTickers(1)
+        combatState = "unknown"
+        env.__fireTickers(3)
+        eq("selftest.unknown." .. mode .. ".no_recovery_sample", guided.recoveryCount, 1)
+        eq("selftest.unknown." .. mode .. ".invalidates_streak", guided.recoveryLeft, 0)
+        eq("selftest.unknown." .. mode .. ".no_false_recovery", guided.recovered, false)
+        eq("selftest.unknown." .. mode .. ".no_report", env.StatsProSelfTest, nil)
+        combatState = false
+        guided.OnCombatEnd()
+        env.__fireTickers(2)
+        eq("selftest.unknown." .. mode .. ".needs_full_streak", guided.recovered, false)
+        env.__fireTickers(1)
+        eq("selftest.unknown." .. mode .. ".recovers", guided.recovered, true)
+    end
+end
+
+do
+    local env, addonUnderTest = loadStatsPro("enUS", {})
+    fireEvent("selftest.unknown_timeout.pew", env, "PLAYER_ENTERING_WORLD")
+    local guided = addonUnderTest.selfTest
+    guided.Start()
+    guided.combatTimeoutTicks = 3
+    addonUnderTest.profileRuntime.ReadCombatState = function() return nil end
+    env.__fireTickers(3)
+    eq("selftest.unknown_timeout.done", guided.state, "done")
+    eq("selftest.unknown_timeout.cancelled", env.__tickers[1].cancelled, true)
+    eq("selftest.unknown_timeout.flag", guided.timeout, true)
+    eq("selftest.unknown_timeout.not_recovered", guided.recovered, false)
+    eq("selftest.unknown_timeout.deferred", guided.deferredWindow, true)
+end
+
+do
+    local env, addonUnderTest = loadStatsPro("enUS", {
+        tickerHandleFactory = function() return {} end,
+    })
+    fireEvent("selftest.invalid_ticker.pew", env, "PLAYER_ENTERING_WORLD")
+    local guided = addonUnderTest.selfTest
+    guided.Start()
+    eq("selftest.invalid_ticker.fallback", #env.__timers, 1)
+    env.__tickers[1].fn()
+    eq("selftest.invalid_ticker.native_inert", guided.oocCount, 0)
+    env.__flushNextTimer()
+    eq("selftest.invalid_ticker.fallback_samples", guided.oocCount, 1)
+    guided.Stop("cancelled")
 end
 
 do

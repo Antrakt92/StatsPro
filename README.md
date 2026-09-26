@@ -268,6 +268,10 @@ StatsPro is free and MIT-licensed. Optional support is available through
 - **[LibSharedMedia-3.0](https://www.curseforge.com/wow/addons/libsharedmedia-3-0)** —
   font selection support.
 
+## More by Antrakt
+- [ApplicantScout](https://www.curseforge.com/wow/addons/applicantscout-lfg-overlay) — LFG & Party overlay with WCL and RaiderIO context
+- [DoYouNeedIt](https://www.curseforge.com/wow/addons/do-you-need-it) — group loot helper with opt-in whispers
+
 ## License
 
 [MIT](LICENSE). Original SwiftStats portions are © TaylorSay; StatsPro extensions

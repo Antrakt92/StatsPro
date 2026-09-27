@@ -97,10 +97,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y lua5.1
 
+      - name: Check tagged and untagged package builds
+        shell: bash
+        run: bash ./scripts/build-check-package.sh --self-test
+
       - name: Build package without publishing
-        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0
-        with:
-          args: -d
+        shell: bash
+        run: bash ./scripts/build-check-package.sh
 
       - name: Resolve package output
         id: package-output

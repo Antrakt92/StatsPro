@@ -10125,6 +10125,77 @@ do
     eq("render.combat_consecutive_targetonly.recovery_delta", recovered.delta, -231)
 end
 
+do
+    -- A clean value from the last winning Crit source is only a display proxy
+    -- while another candidate is restricted; it cannot establish the aggregate.
+    for _, initial in ipairs({ 0, 30 }) do
+        local phase, proxyValue = "clean", 7
+        local secret = {}
+        local fixture = makeArchonV2Fixture("2026-05-15")
+        setArchonFixtureTargets(fixture, "mythicPlusCurrent", "MAGE", "frost",
+            { crit = 1000, haste = 200, mastery = 300, versatility = 400 })
+        local critEnv, critAddon, critTest = loadCritScenario({
+            showRating = false, showPercentage = true, hideZeroOffensive = true,
+        }, {
+            unitClassToken = "MAGE", specIndex = 1, specID = 64,
+            statsProArchonTargets = fixture,
+            getCritChance = function() if phase == "proxy" then return secret end return initial end,
+            getRangedCritChance = function() if phase == "proxy" then return secret end return initial end,
+            getSpellCritChance = function() if phase == "proxy" then return proxyValue end return initial end,
+            getCombatRating = function() return 812 end,
+            getCombatRatingBonusForCombatRatingValue = function(_, value) return value / 100 end,
+            issecretvalue = function(value) return rawequal(value, secret) end,
+        })
+        local prefix = "render.crit_clean_proxy." .. initial
+        fireEvent(prefix .. ".fire", critEnv, "PLAYER_ENTERING_WORLD")
+        phase = "proxy"
+        local probeState, probeValue = critAddon.selfTest.ProbeRow("crit")
+        eq(prefix .. ".probe_restricted", probeState, 1)
+        eq(prefix .. ".probe_no_aggregate", probeValue, nil)
+        local blocks = critTest.buildRenderBlocks()
+        eq(prefix .. ".keeps_clean_visibility", #blocks[2].labels, initial == 0 and 0 or 1)
+        activeSettings(critEnv).hideZeroOffensive = false
+        critTest.cacheSettings()
+        blocks = critTest.buildRenderBlocks()
+        local meta = blocks[2].targetRows[1]
+        eq(prefix .. ".rating_comparison_exact", meta.comparisonState, "exact")
+        eq(prefix .. ".current_rating", meta.current, 812)
+        eq(prefix .. ".no_clean_percentage", meta.currentPct, nil)
+        eq(prefix .. ".display_proxy", meta.currentPctDisplay, 7)
+        eq(prefix .. ".proxy_provenance", meta.currentPctIsProxy, true)
+        eq(prefix .. ".cache_no_proxy", critTest.archonComparisonCache().entries.crit.currentPct, nil)
+        check(prefix .. ".hud_live_proxy", blocks[2].ratings[1]:find("7.0%", 1, true) ~= nil)
+        critAddon.archonTargets.ShowTooltip(critEnv.UIParent, meta)
+        eq(prefix .. ".tooltip_target_rating_only", critEnv.GameTooltip.lines[2].right, "1000")
+        check(prefix .. ".tooltip_current_live", critEnv.GameTooltip.lines[3].right:find("7.0%", 1, true) ~= nil)
+        eq(prefix .. ".tooltip_delta_rating_only", critEnv.GameTooltip.lines[4].right, "188")
+        -- A later zero proxy must not overwrite the earlier complete nonzero decision.
+        proxyValue = 0
+        activeSettings(critEnv).hideZeroOffensive = true
+        critTest.cacheSettings()
+        blocks = critTest.buildRenderBlocks()
+        eq(prefix .. ".zero_proxy_keeps_visibility", #blocks[2].labels, initial == 0 and 0 or 1)
+        phase = "clean"
+        blocks = critTest.buildRenderBlocks()
+        if initial ~= 0 then
+            eq(prefix .. ".recovery_exact_percentage", blocks[2].targetRows[1].currentPct, initial)
+            eq(prefix .. ".recovery_clears_proxy", blocks[2].targetRows[1].currentPctIsProxy, false)
+        end
+        probeState, probeValue = critAddon.selfTest.ProbeRow("crit")
+        eq(prefix .. ".probe_recovers", probeState, 0)
+        eq(prefix .. ".probe_recovers_value", probeValue, initial)
+    end
+    local coldEnv, coldAddon = loadCritScenario(nil, {
+        getCritChance = function() return -1 end,
+        getRangedCritChance = function() return -1 end,
+        getSpellCritChance = function() return -1 end,
+        issecretvalue = function(value) return value == -1 end,
+    })
+    fireEvent("render.crit_cold_restricted_probe.fire", coldEnv, "PLAYER_ENTERING_WORLD")
+    local state, value = coldAddon.selfTest.ProbeRow("crit")
+    eq("render.crit_cold_restricted_probe.state", state, 1)
+    eq("render.crit_cold_restricted_probe.value", value, nil)
+end
 smokeReachability:complete("runtime-rendering")
 
 do

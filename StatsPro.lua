@@ -1196,7 +1196,7 @@ function addon.archonTargets.CalculateMasteryTargetPercent(currentRating, curren
 end
 
 function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, currentPct,
-                                       colorKey, currentPctDisplay, currentRatingDisplay)
+                                       colorKey, currentPctDisplay, currentRatingDisplay, currentPctIsProxy)
     local hasCleanCurrent = addon.IsCleanFiniteNumber(currentRating) and currentRating >= 0
     local _, ratingDisplayIsSecret = addon.ClassifyRenderableNumber(currentRatingDisplay)
     local hasLiveCurrentRating = ratingDisplayIsSecret
@@ -1238,6 +1238,7 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
                 end
             end
             meta.comparisonState = "exact"
+            meta.currentPctIsProxy = currentPctIsProxy == true
             meta.current = currentRating
             meta.currentPct = displayPct
             meta.targetPct = targetPct
@@ -1276,6 +1277,7 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
         -- live value over a stale last-known comparison and state the limitation
         -- explicitly in the tooltip.
         meta.comparisonState = "liveOnly"
+        meta.currentPctIsProxy = currentPctIsProxy == true
         meta.currentRatingDisplay = currentRatingDisplay
         if hasCurrentPctDisplay then meta.currentPctDisplay = currentPctDisplay end
         -- Target % was captured during a clean update for this exact class/spec/
@@ -4431,6 +4433,8 @@ function SAFE_NUM.SafeCompositePercent(fn, ...)
     local ok, value, state = pcall(fn, ...)
     if not ok then return nil, nil, "unavailable" end
     local display, clean = SAFE_NUM.ResolveDisplayNumber(value, false)
+    -- A readable winning-source proxy is still not an authoritative aggregate.
+    if state == "liveProxy" then clean = nil end
     return display, clean, state
 end
 
@@ -9746,7 +9750,10 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     -- A restricted live percentage is displayable but cannot participate in Lua
     -- arithmetic. Keep Target/Delta as honest rating comparisons instead of pairing
     -- the live Current percent with percentages derived from a different clean state.
-    if comparisonState == "exact" and displayIsSecret then
+    if meta.currentPctIsProxy then
+        targetDisplayBonus = nil
+        deltaBonus = nil
+    elseif comparisonState == "exact" and displayIsSecret then
         if not hasTargetPct then targetDisplayBonus = nil end
         deltaBonus = nil
     end
@@ -10763,9 +10770,10 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
             local ratingDisplay, targetRating
             local ratingRead = false
             local forceUnknownPercent = percentState == "restricted"
+            local percentIsProxy = percentState == "liveProxy"
             local visible = shouldShowUnknown(
-                    def.showKey, forceUnknownPercent, cached.hideZeroOffensive)
-                or shouldShow(def.showKey, val, cached.hideZeroOffensive)
+                    def.showKey, forceUnknownPercent or percentIsProxy, cached.hideZeroOffensive)
+                or (not percentIsProxy and shouldShow(def.showKey, val, cached.hideZeroOffensive))
             if cached.showRating then
                 ratingDisplay, targetRating = SAFE_NUM.ReadRatingValue(
                     GetCombatRating, def.ratingCR)
@@ -10786,7 +10794,7 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
                 if targetRows then
                     targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta(
                         def.statKey, targetRating, def.ratingCR, currentPercent,
-                        def.colorKey, val, ratingDisplay) or false
+                        def.colorKey, val, ratingDisplay, percentIsProxy) or false
                 end
                 PushRow(labels, ratings, values,
                     FormatLabel(statColor, def.label),
@@ -20028,7 +20036,11 @@ end
 
 function addon.selfTest.ProbeRow(key)
     if key == "crit" then
-        return addon.selfTest.ClassifyCall(addon.GetBestCritChance)
+        local ok, value, state = pcall(addon.GetBestCritChance)
+        if not ok then return 2, nil end
+        if state == "liveProxy" or state == "restricted" then return 1, nil end
+        if addon.IsCleanFiniteNumber(value) then return 0, value end
+        return 2, nil
     end
     if key == "haste" then
         return addon.selfTest.ClassifyCall(GetHaste)

@@ -5274,11 +5274,99 @@ do
     slash("selftest.bound.start", bdEnv, "selftest")
     bdAddon.selfTest.oocTarget = 100
     bdAddon.selfTest.maxSamples = 12
+    local finishes = {}
+    local finish = bdAddon.selfTest.Finish
+    bdAddon.selfTest.Finish = function(reason)
+        finishes[#finishes + 1] = reason
+        return finish(reason)
+    end
     bdEnv.__fireTickers(15)
     eq("selftest.bound.done", bdAddon.selfTest.state, "done")
     eq("selftest.bound.capped", #bdAddon.selfTest.samples, 12)
     eq("selftest.bound.truncated", bdAddon.selfTest.report.totals.truncated, true)
     eq("selftest.bound.sv_capped", #bdEnv.StatsProSelfTest.report.samples, 12)
+    assertDeepEqual("selftest.bound.single_finish", finishes, { "truncated" })
+    eq("selftest.bound.ticker_stopped", bdAddon.selfTest.ticker, nil)
+end
+
+do
+    -- A cap reached on the final recovery tick must not reuse samples from an
+    -- interrupted streak to overwrite the truncated report with recovered=true.
+    local combat = false
+    local env, addonUnderTest = loadStatsPro("enUS", {
+        inCombatLockdown = function() return combat end,
+    })
+    local guided = addonUnderTest.selfTest
+    fireEvent("selftest.bound_recovery.pew", env, "PLAYER_ENTERING_WORLD")
+    guided.maxSamples = 16
+    guided.Start()
+    env.__fireTickers(10)
+    combat = true
+    fireEvent("selftest.bound_recovery.first_start", env, "PLAYER_REGEN_DISABLED")
+    env.__fireTickers(1)
+    combat = false
+    fireEvent("selftest.bound_recovery.first_end", env, "PLAYER_REGEN_ENABLED")
+    env.__fireTickers(2)
+    combat = true
+    fireEvent("selftest.bound_recovery.second_start", env, "PLAYER_REGEN_DISABLED")
+    env.__fireTickers(1)
+    combat = false
+    fireEvent("selftest.bound_recovery.second_end", env, "PLAYER_REGEN_ENABLED")
+    env.__fireTickers(2)
+    eq("selftest.bound_recovery.before_cap", guided.recoveryLeft, 1)
+    eq("selftest.bound_recovery.prior_samples", guided.recoveryCount, 4)
+    local finishes = {}
+    local finish = guided.Finish
+    guided.Finish = function(reason)
+        finishes[#finishes + 1] = reason
+        return finish(reason)
+    end
+    env.__fireTickers(1)
+    assertDeepEqual("selftest.bound_recovery.single_finish", finishes, { "truncated" })
+    eq("selftest.bound_recovery.done", guided.state, "done")
+    eq("selftest.bound_recovery.capped", #guided.samples, 16)
+    eq("selftest.bound_recovery.incomplete_streak", guided.recoveryLeft, 1)
+    eq("selftest.bound_recovery.no_extra_sample", guided.recoveryCount, 4)
+    eq("selftest.bound_recovery.truncated", guided.report.totals.truncated, true)
+    eq("selftest.bound_recovery.not_recovered", guided.report.totals.recovered, false)
+    eq("selftest.bound_recovery.saved_not_recovered",
+        env.StatsProSelfTest.report.totals.recovered, false)
+    local savedReport = env.StatsProSelfTest
+    env.__fireTickers(3)
+    eq("selftest.bound_recovery.no_late_report", env.StatsProSelfTest, savedReport)
+    eq("selftest.bound_recovery.no_late_finish", #finishes, 1)
+end
+
+do
+    -- Sample-cap and combat-timeout boundaries can coincide. The cap owns this
+    -- terminal tick; it must not save and display a second report as a timeout.
+    local combat = false
+    local env, addonUnderTest = loadStatsPro("enUS", {
+        inCombatLockdown = function() return combat end,
+    })
+    local guided = addonUnderTest.selfTest
+    fireEvent("selftest.bound_timeout.pew", env, "PLAYER_ENTERING_WORLD")
+    guided.maxSamples = 11
+    guided.combatTimeoutTicks = 2
+    guided.Start()
+    env.__fireTickers(10)
+    local finishes = {}
+    local finish = guided.Finish
+    guided.Finish = function(reason)
+        finishes[#finishes + 1] = reason
+        return finish(reason)
+    end
+    combat = true
+    fireEvent("selftest.bound_timeout.start", env, "PLAYER_REGEN_DISABLED")
+    env.__fireTickers(2)
+    assertDeepEqual("selftest.bound_timeout.single_finish", finishes, { "truncated" })
+    eq("selftest.bound_timeout.done", guided.state, "done")
+    eq("selftest.bound_timeout.capped", #guided.samples, 11)
+    eq("selftest.bound_timeout.truncated", guided.report.totals.truncated, true)
+    eq("selftest.bound_timeout.no_second_reason", guided.report.totals.timeout, false)
+    eq("selftest.bound_timeout.saved_no_second_reason",
+        env.StatsProSelfTest.report.totals.timeout, false)
+    eq("selftest.bound_timeout.window_deferred", guided.deferredWindow, true)
 end
 
 do

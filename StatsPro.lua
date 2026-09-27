@@ -20119,7 +20119,7 @@ function addon.selfTest.TakeSample(inCombat, isRecovery)
     if #addon.selfTest.samples >= addon.selfTest.maxSamples then
         addon.selfTest.truncated = true
         addon.selfTest.Finish("truncated")
-        return
+        return false
     end
     addon.selfTest.seq = addon.selfTest.seq + 1
     local errDelta = addon.selfTest.ReadErrorCount() - addon.selfTest.errBase
@@ -20144,6 +20144,7 @@ function addon.selfTest.TakeSample(inCombat, isRecovery)
     else
         addon.selfTest.oocCount = addon.selfTest.oocCount + 1
     end
+    return true
 end
 
 function addon.selfTest.CaptureEnv()
@@ -20328,7 +20329,7 @@ function addon.selfTest.OnTick()
             addon.selfTest.ToCombat()
             return
         end
-        addon.selfTest.TakeSample(false, false)
+        if not addon.selfTest.TakeSample(false, false) then return end
         if addon.selfTest.oocCount >= addon.selfTest.oocTarget then
             addon.selfTest.state = "await-combat"
             addon.selfTest.StopTicker()
@@ -20341,14 +20342,16 @@ function addon.selfTest.OnTick()
         if combat then
             addon.selfTest.recoveryLeft = 0
             addon.selfTest.combatTicks = addon.selfTest.combatTicks + 1
-            addon.selfTest.TakeSample(true, false)
+            if not addon.selfTest.TakeSample(true, false) then return end
             if addon.selfTest.combatTicks >= addon.selfTest.combatTimeoutTicks then
                 addon.selfTest.Finish("timeout")
             end
             return
         end
         if addon.selfTest.recoveryLeft > 0 then
-            addon.selfTest.TakeSample(false, true)
+            -- Truncation already finished the run; only a recorded sample may
+            -- advance the current recovery streak or publish a successful report.
+            if not addon.selfTest.TakeSample(false, true) then return end
             addon.selfTest.recoveryLeft = addon.selfTest.recoveryLeft - 1
             if addon.selfTest.recoveryLeft <= 0 then
                 addon.selfTest.Finish("ok")

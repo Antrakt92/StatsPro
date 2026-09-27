@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.17.2 - 27-Sep-2026 — Crit comparisons and diagnostic reliability
+
+### Fixed
+
+- **Crit comparisons and Hide Zero stay consistent when combat restricts some stat values.** Live values remain visible without treating partial readings as exact Archon percentages.
+- **Combat self-tests stop correctly when the sample limit is reached.** Incomplete recovery no longer produces a successful result.
+- **Package checks and Windows verification tools handle release tags and special characters in paths more reliably.**
+
 ## 1.17.1 - 27-Sep-2026 — Archon targets and addon links
 
 ### Updated

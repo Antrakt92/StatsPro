@@ -291,8 +291,7 @@ function Assert-CredentialEnvironmentSettings {
         -ExpectedName "marketplace-release" `
         -ExpectedPolicyName "v*" `
         -ExpectedPolicyType "tag" `
-        -ExpectedSecretNames $protectedSecrets `
-        -ExpectedReviewerLogin $RepositoryOwner
+        -ExpectedSecretNames $protectedSecrets
 
     if ($RepositorySecrets.Count -ne 0) {
         $repositorySecretNames = @($RepositorySecrets | ForEach-Object { [string]$_.name } | Sort-Object)
@@ -589,7 +588,7 @@ function Invoke-SelfTest {
         }
     }
     $manualEnvironment = & $newEnvironmentFixture "marketplace-manual"
-    $releaseEnvironment = & $newEnvironmentFixture "marketplace-release" -RequireReviewer
+    $releaseEnvironment = & $newEnvironmentFixture "marketplace-release"
     $manualPolicies = @([pscustomobject]@{ name = "main"; type = "branch" })
     $releasePolicies = @([pscustomobject]@{ name = "v*"; type = "tag" })
     $manualSecrets = @("CF_API_KEY", "WAGO_API_TOKEN", "WOWI_API_TOKEN") |
@@ -649,6 +648,19 @@ function Invoke-SelfTest {
             -ExpectedPolicyType "branch" `
             -ExpectedSecretNames @("CF_API_KEY", "WAGO_API_TOKEN", "WOWI_API_TOKEN")
     } "secrets is"
+    $releaseWithReviewer = & $newEnvironmentFixture "marketplace-release" -RequireReviewer
+    Assert-ThrowsMatch "manual approval gate on automated releases rejected" {
+        Assert-CredentialEnvironmentSettings `
+            -Environments @($manualEnvironment, $releaseWithReviewer) `
+            -ManualEnvironment $manualEnvironment `
+            -ManualPolicies $manualPolicies `
+            -ManualSecrets $manualSecrets `
+            -ReleaseEnvironment $releaseWithReviewer `
+            -ReleasePolicies $releasePolicies `
+            -ReleaseSecrets $releaseSecrets `
+            -RepositorySecrets @() `
+            -RepositoryOwner "owner"
+    } "protection rule types"
     $releaseWithoutReviewer = & $newEnvironmentFixture "marketplace-release"
     Assert-ThrowsMatch "missing release environment reviewer rejected" {
         Assert-CredentialEnvironment `
@@ -663,7 +675,7 @@ function Invoke-SelfTest {
     } "protection rule types"
     Assert-ThrowsMatch "wrong release environment reviewer rejected" {
         Assert-CredentialEnvironment `
-            -Environment $releaseEnvironment `
+            -Environment $releaseWithReviewer `
             -Policies $releasePolicies `
             -Secrets $releaseSecrets `
             -ExpectedName "marketplace-release" `

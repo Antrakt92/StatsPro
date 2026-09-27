@@ -2592,6 +2592,18 @@ function Assert-WorkflowCheckoutCredentialBoundary {
     }
 }
 
+function Assert-ChecksPackagerHelperBoundary {
+    param([string]$Text)
+
+    # Review the entire no-upload helper, including its immutable source checkout.
+    # A substring check could accept safe dead code followed by a publishing call.
+    $normalized = $Text.Replace("`r`n", "`n")
+    $digest = Get-LowercaseTextSha256 -Text $normalized
+    if ($digest -ne 'da5211493467759d4ed492dfe84e49691995f3de7bcde7d00574ff6426739a4a') {
+        throw "Checks Packager helper differs from the reviewed immutable-source/no-upload implementation."
+    }
+}
+
 function Assert-ChecksWorkflowBoundary {
     param([string]$WorkflowText)
 
@@ -2625,14 +2637,24 @@ function Assert-ChecksWorkflowBoundary {
     Assert-WorkflowCheckoutCredentialBoundary -WorkflowText $WorkflowText -JobNames @('package-contract')
 
     $stepBlocks = @([regex]::Matches($packageJob.Value, '(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)'))
-    $packagerSteps = @($stepBlocks | Where-Object { $_.Value -match '(?im)^\s{8}uses:\s*BigWigsMods/packager@' })
+    $packagerSteps = @($stepBlocks | Where-Object { $_.Value -match '(?m)^\s{8}run: bash \./scripts/build-check-package\.sh\s*$' })
     if ($packagerSteps.Count -ne 1 -or
-        $packagerSteps[0].Value -notmatch '(?m)^\s{8}uses:\s*BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0\s*$') {
-        throw "Checks package-contract job must use the exact pinned BigWigs Packager action once."
+        $packagerSteps[0].Value -notmatch '(?m)^\s{8}shell: bash\s*$' -or
+        $packageJob.Value -match 'BigWigsMods/packager@') {
+        throw "Checks package-contract job must run the reviewed no-upload Packager helper once without extra arguments."
     }
-    $packagerArgs = @([regex]::Matches($packagerSteps[0].Value, '(?m)^\s{10}args:\s*(.*?)\s*$'))
-    if ($packagerArgs.Count -ne 1 -or $packagerArgs[0].Groups[1].Value -ne '-d') {
-        throw "Checks package-contract Packager step must use literal args: -d without publication flags."
+    $selfTestSteps = @($stepBlocks | Where-Object { $_.Value -match '(?m)^\s{8}run: bash \./scripts/build-check-package\.sh --self-test\s*$' })
+    if ($selfTestSteps.Count -ne 1 -or $selfTestSteps[0].Index -ge $packagerSteps[0].Index -or
+        $selfTestSteps[0].Value -notmatch '(?m)^\s{8}shell: bash\s*$') {
+        throw "Checks package-contract must run the real Packager regression before the source build."
+    }
+    foreach ($step in @($selfTestSteps[0], $packagerSteps[0])) {
+        if ($step.Value -match '(?m)^\s{8}(?:if|continue-on-error|env|working-directory):') {
+            throw "Checks Packager helper steps must not skip, mask failures, or override their execution environment."
+        }
+    }
+    if ([regex]::Matches($packageJob.Value, 'build-check-package\.sh').Count -ne 2) {
+        throw "Checks package-contract must invoke only the reviewed build and self-test helper commands."
     }
 
     $resolverSteps = @($stepBlocks | Where-Object { $_.Value -match '(?i)resolve-packager-output\.ps1' })
@@ -4612,7 +4634,29 @@ function Invoke-SelfTest {
     } "exact tag-only push trigger"
     $checksWorkflowPath = Join-Path (Join-Path $PSScriptRoot "..") ".github\workflows\checks.yml"
     $checksWorkflowText = Get-Content -LiteralPath $checksWorkflowPath -Raw -Encoding UTF8
+    $checksHelperText = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'build-check-package.sh') -Raw -Encoding UTF8
+    Assert-ChecksPackagerHelperBoundary -Text $checksHelperText
+    foreach ($mutatedHelper in @(
+        $checksHelperText.Replace(' -d -t ', ' -t '),
+        $checksHelperText.Replace('https://github.com/BigWigsMods/packager.git', 'https://example.invalid/packager.git'),
+        ($checksHelperText + "`nbash release.sh --publish`n"))) {
+        Assert-ThrowsMatch "changed Packager helper boundary rejected" {
+            Assert-ChecksPackagerHelperBoundary -Text $mutatedHelper
+        } 'reviewed immutable-source/no-upload'
+    }
     Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText
+    Assert-ThrowsMatch "missing real Packager regression rejected" {
+        Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(
+            '        run: bash ./scripts/build-check-package.sh --self-test',
+            '        run: echo skipped')
+    } 'real Packager regression'
+    foreach ($override in @('if: false', 'continue-on-error: true', 'working-directory: other', 'env: {}')) {
+        Assert-ThrowsMatch "Packager execution override rejected" {
+            Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(
+                '        run: bash ./scripts/build-check-package.sh --self-test',
+                "        run: bash ./scripts/build-check-package.sh --self-test`n        $override")
+        } 'must not skip, mask failures, or override'
+    }
     Assert-ThrowsMatch "missing pull_request checks trigger rejected" {
         Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(
             '  pull_request:',
@@ -4635,13 +4679,13 @@ function Invoke-SelfTest {
     } "contents: read without workflow-level write permissions"
     Assert-ThrowsMatch "package-contract publication flags rejected" {
         Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(
-            '          args: -d',
-            '          args: -d --publish')
-    } "literal args: -d without publication flags"
+            '        run: bash ./scripts/build-check-package.sh',
+            '        run: bash ./scripts/build-check-package.sh --publish')
+    } "reviewed no-upload Packager helper once without extra arguments"
     Assert-ThrowsMatch "reordered package-contract steps rejected" {
         $packageJob = Get-WorkflowJobBlock -WorkflowText $checksWorkflowText -JobName 'package-contract'
         $stepBlocks = @([regex]::Matches($packageJob.Value, '(?ms)^\s{6}- name: .+?\s*$.*?(?=^\s{6}- name:|\z)'))
-        $packager = @($stepBlocks | Where-Object { $_.Value -match '(?i)BigWigsMods/packager@' })[0]
+        $packager = @($stepBlocks | Where-Object { $_.Value -match '(?m)^\s{8}run: bash \./scripts/build-check-package\.sh\s*$' })[0]
         $resolver = @($stepBlocks | Where-Object { $_.Value -match '(?i)resolve-packager-output\.ps1' })[0]
         $validator = @($stepBlocks | Where-Object { $_.Value -match '(?i)check-package-dry-run\.ps1' })[0]
         $mutated = $checksWorkflowText.Replace(
@@ -4651,13 +4695,13 @@ function Invoke-SelfTest {
     } "must run Packager, resolver, and validator in that order"
     Assert-ThrowsMatch "package-contract GitHub token exposure rejected" {
         Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(
-            '        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0',
-            "        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0`n        env:`n          GH_TOKEN: `${{ github.token }}")
+            '        run: bash ./scripts/build-check-package.sh',
+            "        run: bash ./scripts/build-check-package.sh`n        env:`n          GH_TOKEN: `${{ github.token }}")
     } "must not reference secrets or a GitHub token"
     Assert-ThrowsMatch "package-contract secret exposure rejected" {
         Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(
-            '        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0',
-            "        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0`n        env:`n          CF_API_KEY: `${{ secrets.CF_API_KEY }}")
+            '        run: bash ./scripts/build-check-package.sh',
+            "        run: bash ./scripts/build-check-package.sh`n        env:`n          CF_API_KEY: `${{ secrets.CF_API_KEY }}")
     } "must not reference secrets or a GitHub token"
     Assert-ThrowsMatch "package-contract output handoff drift rejected" {
         Assert-ChecksWorkflowBoundary -WorkflowText $checksWorkflowText.Replace(

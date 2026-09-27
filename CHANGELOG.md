@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.17.1 - 27-Sep-2026 — Archon targets and addon links
+
+### Updated
+
+- **Bundled M+ and raid target ratings were refreshed from Archon on 27 September.**
+- **The README now links to ApplicantScout and DoYouNeedIt.**
+
 ## 1.17.0 - 26-Sep-2026 — Combat diagnostics and live stats
 
 ### Added

@@ -118,27 +118,45 @@ function Invoke-StatsProNativeCapture {
         throw "TimeoutSeconds must be non-negative."
     }
 
-    $effectiveFilePath = $FilePath
-    $effectiveArguments = @($Arguments)
     $extension = [System.IO.Path]::GetExtension($FilePath)
-    if ($extension -in @(".bat", ".cmd")) {
-        if (-not $env:ComSpec) {
-            throw "Cannot run ${FilePath}: ComSpec is not set."
-        }
-        $effectiveFilePath = $env:ComSpec
-        $effectiveArguments = @("/d", "/c", "call", $FilePath) + @($Arguments)
-    }
+    $isBatch = $extension -in @(".bat", ".cmd")
 
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $effectiveFilePath
+    $startInfo.FileName = $FilePath
     $startInfo.WorkingDirectory = (Get-Location).Path
-    $startInfo.Arguments = (@($effectiveArguments) | ForEach-Object { Format-StatsProNativeArgument $_ }) -join " "
+    $startInfo.Arguments = (@($Arguments) | ForEach-Object { Format-StatsProNativeArgument $_ }) -join " "
     $startInfo.UseShellExecute = $false
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
     $startInfo.CreateNoWindow = $true
     if ($IsolateLuaEnvironment) {
         Set-StatsProIsolatedLuaProcessEnvironment -StartInfo $startInfo -Environment $Environment
+    }
+    if ($isBatch) {
+        if (-not $env:ComSpec) { throw "Cannot run batch command: ComSpec is not set." }
+        $values = @($FilePath) + @($Arguments)
+        foreach ($value in $values) {
+            if ([string]$value -match '["\x00-\x1f\x7f]') {
+                throw "Batch command values cannot contain double quotes or control characters."
+            }
+        }
+        # WHY: CRT quoting is not cmd.exe quoting. Expand each value once inside
+        # quotes; CALL would expand percent signs a second time. Disable delayed
+        # expansion so exclamation marks also remain literal.
+        $prefix = "STATSPRO_BATCH_$([guid]::NewGuid().ToString('N'))_"
+        $references = @()
+        for ($index = 0; $index -lt $values.Count; $index++) {
+            if ([string]::IsNullOrEmpty([string]$values[$index])) {
+                $references += '""'
+            }
+            else {
+                $name = "$prefix$index"
+                $startInfo.EnvironmentVariables[$name] = [string]$values[$index]
+                $references += '"%' + $name + '%"'
+            }
+        }
+        $startInfo.FileName = $env:ComSpec
+        $startInfo.Arguments = '/d /v:off /s /c "' + ($references -join ' ') + '"'
     }
 
     $process = [System.Diagnostics.Process]::new()

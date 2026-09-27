@@ -691,6 +691,39 @@ function Invoke-SelfTest {
     $selfTestRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-tool-selftest-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $selfTestRoot | Out-Null
     try {
+        $batchFixture = Join-Path $selfTestRoot "batch & 100%!.cmd"
+        [System.IO.File]::WriteAllText($batchFixture, @'
+@echo off
+echo [%1]
+echo [%2]
+echo [%3]
+echo [%4]
+echo [%5]
+echo [%6]
+echo [%7]
+echo %STATSPRO_BATCH_CANARY%
+exit /b 23
+'@)
+        $batchArguments = @(
+            'safe&echo.ARGUMENT_EXECUTED',
+            '%STATSPRO_BATCH_CANARY%',
+            '!STATSPRO_BATCH_CANARY!',
+            'path with spaces\',
+            '',
+            'a^b|c<d>e(f)',
+            'ordinary')
+        $batchResult = Invoke-NativeCapture -FilePath $batchFixture -Arguments $batchArguments `
+            -TimeoutSeconds 10 -Description "literal batch arguments" `
+            -Environment @{ STATSPRO_BATCH_CANARY = 'environment-preserved' }
+        Assert-Equal "batch child exit code preserved" $batchResult.ExitCode 23
+        $expectedBatchOutput = @($batchArguments | ForEach-Object { '["' + $_ + '"]' }) + @('environment-preserved')
+        Assert-Equal "batch arguments remain literal" ($batchResult.Output -join "`n") ($expectedBatchOutput -join "`n")
+        foreach ($invalidArgument in @('embedded"quote', "line`nbreak", "line`rbreak", "tab`tvalue", "nul$([char]0)value")) {
+            Assert-ThrowsMatch "unsafe batch argument rejected before execution" {
+                Invoke-NativeCapture -FilePath $batchFixture -Arguments @($invalidArgument) -TimeoutSeconds 10
+            } "Batch command values cannot contain"
+        }
+
         Assert-NativeTimeoutTreeCleanup -Root $selfTestRoot
         $primaryFailure = $null
         $observedFailure = $null

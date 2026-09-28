@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.17.3 - 28-Sep-2026 — Archon target refresh
+
+### Updated
+
+- **Bundled M+ and raid target ratings were refreshed from Archon on 28 September.**
+
 ## 1.17.2 - 27-Sep-2026 — Crit comparisons and diagnostic reliability
 
 ### Fixed

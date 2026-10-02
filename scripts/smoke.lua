@@ -7593,7 +7593,7 @@ do
 end
 
 do
-    for _, failureMode in ipairs({ "set", "get", "post_clear" }) do
+    for _, failureMode in ipairs({ "set", "get", "get_nil", "get_number", "get_table", "get_boolean", "post_clear" }) do
         local secretHaste = {}
         local setCalls, getCalls, clearCalls, fallbackCalls = 0, 0, 0, 0
         local formatterHolder
@@ -7625,6 +7625,10 @@ do
                 if holder ~= formatterHolder then return holder.text end
                 getCalls = getCalls + 1
                 if failureMode == "get" then error("synthetic GetText failure", 0) end
+                if failureMode == "get_nil" then return nil end
+                if failureMode == "get_number" then return 24.6 end
+                if failureMode == "get_table" then return {} end
+                if failureMode == "get_boolean" then return false end
                 return holder.text
             end,
             clearFormattedText = function(holder)
@@ -7660,6 +7664,48 @@ do
         else
             check(prefix .. ".get_called", getCalls >= 1, getCalls)
         end
+    end
+end
+
+do
+    for _, failureMode in ipairs({ "throw", "nil", "number", "table", "boolean" }) do
+        local secretHaste = {}
+        local restricted = false
+        local env, addon, test = loadStatsPro("enUS", {
+            statsProDB = {
+                showMainStat = false, showStamina = true, showItemLevel = false,
+                showOffensive = true, showRating = false, showPercentage = true,
+                showCrit = false, showHaste = true, showMastery = false,
+                showVersatility = false, showTertiary = false, showDefensive = false,
+                showDurability = false, showRepairCost = false,
+            },
+            getHaste = function() return restricted and secretHaste or 12.5 end,
+            issecretvalue = function(value) return rawequal(value, secretHaste) end,
+            roundToNearestString = function()
+                if failureMode == "throw" then error("synthetic integer formatter failure") end
+                if failureMode == "number" then return 13 end
+                if failureMode == "table" then return {} end
+                if failureMode == "boolean" then return false end
+                return nil
+            end,
+        })
+        local prefix = "render.secret_all_formatters_unavailable." .. failureMode
+        fireEvent(prefix .. ".pew", env, "PLAYER_ENTERING_WORLD")
+        local saved = deepCopy(env.StatsProDB)
+        local errors = addon.selfTest.ReadErrorCount()
+        restricted = true
+        eq(prefix .. ".update_succeeds", addon:RunUpdateStatsSafe(), true)
+        local state = test.panelVisualState()
+        eq(prefix .. ".unknown_displayed", state.mainRatingText:find("?", 1, true) ~= nil, true)
+        eq(prefix .. ".no_stale_haste", state.mainRatingText:find("12.5%", 1, true), nil)
+        eq(prefix .. ".other_row_retained", state.mainLabelText:find("Stamina:", 1, true) ~= nil, true)
+        eq(prefix .. ".other_value_retained", state.mainRatingText:find("100", 1, true) ~= nil, true)
+        eq(prefix .. ".no_update_errors", addon.selfTest.ReadErrorCount(), errors)
+        assertDeepEqual(prefix .. ".no_saved_writes", env.StatsProDB, saved)
+        restricted = false
+        eq(prefix .. ".clean_recovery", addon:RunUpdateStatsSafe(), true)
+        eq(prefix .. ".clean_value_restored",
+            test.panelVisualState().mainRatingText:find("12.5%", 1, true) ~= nil, true)
     end
 end
 
@@ -9183,6 +9229,40 @@ do
         restrictedNativeCalls, 1)
     eq("render.speed_secret_native_failure_fallback.raw_formatter_calls", rawFormatterCalls, 2)
     eq("render.speed_secret_native_failure_fallback.raw_format", rawFormatOK, true)
+end
+
+do
+    for _, resultKind in ipairs({ "nil", "number", "table", "boolean" }) do
+        local secretRun, nativeCalls = {}, 0
+        local env, addon, test = loadMovementScenario({
+            showRating = false, showPercentage = true, hideZeroTertiary = false,
+        }, {
+            getUnitSpeed = function() return 0, secretRun, secretRun, secretRun end,
+            issecretvalue = function(value) return rawequal(value, secretRun) end,
+            abbreviateNumbers = function(value)
+                if type(value) == "number" then
+                    return value == 7 and "100%" or "150%"
+                end
+                nativeCalls = nativeCalls + 1
+                if resultKind == "number" then return 140 end
+                if resultKind == "table" then return {} end
+                if resultKind == "boolean" then return false end
+                return nil
+            end,
+            setFormattedText = function(_, format, value)
+                if format == "%.1f yd/s" and rawequal(value, secretRun) then return "9.8 yd/s" end
+                error("unexpected speed formatter input")
+            end,
+        })
+        local prefix = "render.speed_malformed_native_text." .. resultKind
+        fireEvent(prefix .. ".pew", env, "PLAYER_ENTERING_WORLD")
+        eq(prefix .. ".first_raw_fallback",
+            test.panelVisualState().mainRatingText:find("9.8 yd/s", 1, true) ~= nil, true)
+        eq(prefix .. ".second_update_succeeds", addon:RunUpdateStatsSafe(), true)
+        eq(prefix .. ".second_raw_fallback",
+            test.panelVisualState().mainRatingText:find("9.8 yd/s", 1, true) ~= nil, true)
+        eq(prefix .. ".malformed_native_disabled", nativeCalls, 1)
+    end
 end
 
 do

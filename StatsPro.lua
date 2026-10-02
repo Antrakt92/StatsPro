@@ -4345,7 +4345,8 @@ function SAFE_NUM.FormatDisplayNumber(value, cleanFormat, secretSuffix)
                 end
             end
             local postClearOK = pcall(formatter.ClearText, formatter)
-            if not preClearOK or not setOK or not getOK or not postClearOK then
+            if not preClearOK or not setOK or not getOK or not postClearOK
+                or type(text) ~= "string" then
                 -- A failed holder is never reused this session: a sticky Text secret
                 -- aspect would make its later output and dimensions untrustworthy.
                 SAFE_NUM.secretFormatter = nil
@@ -4359,8 +4360,9 @@ function SAFE_NUM.FormatDisplayNumber(value, cleanFormat, secretSuffix)
             or type(_G.C_StringUtil.RoundToNearestString) ~= "function" then
             return "?", true
         end
-        return _G.C_StringUtil.RoundToNearestString(value)
-            .. (secretSuffix or ""), true
+        local ok, text = pcall(_G.C_StringUtil.RoundToNearestString, value)
+        if not ok or type(text) ~= "string" then return "?", true end
+        return text .. (secretSuffix or ""), true
     end
     if not SAFE_NUM.IsCleanFiniteNumber(value) then return nil, false end
     return string.format(cleanFormat, value), true
@@ -4400,7 +4402,7 @@ function addon.movementRuntime.FormatRestricted(runSpeed)
     local runtime = addon.movementRuntime
     if runtime.NativePercentFormatterAvailable() then
         local ok, text = pcall(_G.AbbreviateNumbers, runSpeed, runtime.nativePercentOptions)
-        if ok then
+        if ok and type(text) == "string" then
             -- WARNING: text is secret. Callers may only concatenate it and pass it
             -- through the existing FontString render path; never inspect, compare,
             -- or reformat it.

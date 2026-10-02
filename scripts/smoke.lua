@@ -9314,6 +9314,85 @@ do
 end
 
 do
+    for _, mode in ipairs({ "throw", "nil", "number", "secret_false" }) do
+        local unavailable, armorCalls = false, 0
+        local env, subject, view = loadStatsPro("enUS", {
+            statsProDB = {
+                showDefensive = true, showArmor = true, showOffensive = true,
+                showCrit = false, showHaste = true, showMastery = false,
+                showVersatility = false, showDurability = false, showRepairCost = false,
+            },
+            inCombatLockdown = function()
+                if not unavailable then return false end
+                if mode == "throw" then error("synthetic combat state failure") end
+                if mode == "nil" then return nil end
+                if mode == "number" then return 0 end
+                return false
+            end,
+            issecretvalue = function(value)
+                return unavailable and mode == "secret_false" and rawequal(value, false)
+            end,
+            unitArmor = function() armorCalls = armorCalls + 1; return 0, 5000 end,
+            getArmorEffectiveness = function() return 0.35 end,
+        })
+        local prefix = "lifecycle.unknown_combat." .. mode
+        fireEvent(prefix .. ".pew", env, "PLAYER_ENTERING_WORLD")
+        local saved, previousCalls = deepCopy(env.StatsProDB), armorCalls
+        unavailable = true
+        eq(prefix .. ".update_succeeds", subject:RunUpdateStatsSafe(), true)
+        eq(prefix .. ".no_armor_api", armorCalls, previousCalls)
+        eq(prefix .. ".cached_armor_preserved",
+            blockDumpContains(view.buildRenderBlocks(), "35.0%"), true)
+        callScript(prefix .. ".right_click", env.StatsProFrame, "OnMouseUp", "RightButton")
+        eq(prefix .. ".no_settings", env.StatsProConfigFrame, nil)
+        assertDeepEqual(prefix .. ".no_saved_writes", env.StatsProDB, saved)
+        unavailable = false
+        eq(prefix .. ".clean_recovery", subject:RunUpdateStatsSafe(), true)
+        eq(prefix .. ".armor_refresh_resumes", armorCalls, previousCalls + 1)
+        callScript(prefix .. ".clean_right_click", env.StatsProFrame, "OnMouseUp", "RightButton")
+        eq(prefix .. ".settings_resume", env.StatsProConfigFrame ~= nil, true)
+    end
+end
+
+do
+    for _, mode in ipairs({ "throw", "nil", "secret_false" }) do
+        local unavailable = false
+        local env, subject, view = loadStatsPro("enUS", {
+            statsProDB = { showDurability = true, showRepairCost = true },
+            inCombatLockdown = function()
+                if not unavailable then return false end
+                if mode == "throw" then error("synthetic retry combat failure") end
+                if mode == "nil" then return nil end
+                return false
+            end,
+            issecretvalue = function(value)
+                return unavailable and mode == "secret_false" and rawequal(value, false)
+            end,
+            getInventoryItemDurability = function(slot)
+                if slot == 1 then return 1, nil end
+            end,
+        })
+        local prefix = "lifecycle.unknown_combat_retry." .. mode
+        fireEvent(prefix .. ".pew", env, "PLAYER_ENTERING_WORLD")
+        local state = view.durabilityState()
+        eq(prefix .. ".durability_armed", state.durabilityRetryScheduled, true)
+        eq(prefix .. ".repair_armed", state.repairRetryScheduled, true)
+        unavailable = true
+        local ok = pcall(env.__flushTimers, 0.2)
+        eq(prefix .. ".callbacks_succeed", ok, true)
+        eq(prefix .. ".no_unknown_rescan", view.durabilityState().dirty, false)
+        eq(prefix .. ".pending_update_succeeds", subject:RunUpdateStatsSafe(), true)
+        subject.durabilityRuntime.MarkDirty()
+        eq(prefix .. ".event_update_succeeds", subject:RunUpdateStatsSafe(), true)
+        eq(prefix .. ".no_unknown_durability_retry", view.durabilityState().durabilityRetryScheduled, false)
+        unavailable = false
+        fireEvent(prefix .. ".combat_end", env, "PLAYER_REGEN_ENABLED")
+        eq(prefix .. ".recovery_update", subject:RunUpdateStatsSafe(), true)
+        eq(prefix .. ".fresh_retry_resumes", view.durabilityState().durabilityRetryScheduled, true)
+    end
+end
+
+do
     local secretInstant, secretRun = {}, {}
     local rawText = "9.8 yd/s"
     local restrictedNativeCalls = 0

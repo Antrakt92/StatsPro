@@ -1509,10 +1509,10 @@ function addon.durabilityRuntime.ScheduleRetry(kind, pending)
         local shouldRetry
         if kind == "durability" then
             shouldRetry = (cached.showDurability or cached.showRepairCost)
-                and cached.durabilityComplete == false and not InCombatLockdown()
+                and cached.durabilityComplete == false and addon.profileRuntime.ReadCombatState() == false
         else
             shouldRetry = cached.showRepairCost and cached.repairCostComplete == false
-                and not InCombatLockdown()
+                and addon.profileRuntime.ReadCombatState() == false
         end
         if shouldRetry then durabilityDirty = true end
     end)
@@ -8906,7 +8906,7 @@ function addon.legacyImport.ImportFreshIfAvailable()
 end
 
 local function RefreshArmorCache()
-    if InCombatLockdown() then return end
+    if addon.profileRuntime.ReadCombatState() ~= false then return end
     local reductionFn, returnsFraction
     if C_PaperDollInfo and type(C_PaperDollInfo.GetArmorEffectiveness) == "function" then
         reductionFn = C_PaperDollInfo.GetArmorEffectiveness
@@ -9076,7 +9076,7 @@ local function RefreshDurabilityCache()
     -- a vendor, gear swap, or combat transition. Restricted combat reads keep the
     -- last complete aggregate and rely on PLAYER_REGEN_ENABLED instead of polling.
     local durabilityRetryPending = (cached.showDurability or cached.showRepairCost)
-        and not durabilityComplete and not InCombatLockdown()
+        and not durabilityComplete and addon.profileRuntime.ReadCombatState() == false
     local repairRetryPending = repairCostPending and repairCostRetryable
     addon.durabilityRuntime.ScheduleRetry("durability", durabilityRetryPending)
     addon.durabilityRuntime.ScheduleRetry("repair", repairRetryPending)
@@ -9244,7 +9244,7 @@ function Panel:New(globalName, dbKeyPrefix)
             panel:FinishMouseDrag()
         end)
         overlay:SetScript("OnMouseUp", function(_, button)
-            if button == "RightButton" and not frame.wasDragging and not InCombatLockdown() then
+            if button == "RightButton" and not frame.wasDragging and addon.profileRuntime.ReadCombatState() == false then
                 addon:OpenConfigMenu()
             end
         end)
@@ -9375,7 +9375,7 @@ function Panel:New(globalName, dbKeyPrefix)
     end)
     -- Right-click -> Settings while out of combat (drag-aware via wasDragging guard).
     frame:SetScript("OnMouseUp", function(f, button)
-        if button == "RightButton" and not f.wasDragging and not InCombatLockdown() then
+        if button == "RightButton" and not f.wasDragging and addon.profileRuntime.ReadCombatState() == false then
             addon:OpenConfigMenu()
         end
     end)
@@ -11192,7 +11192,7 @@ local function UpdateStats()
 
     -- Armor refresh is unnecessary when either the master defensive block or the
     -- Armor sub-row is hidden. Keep the API chain out of the recurring ticker then.
-    if not InCombatLockdown() and cached.showDefensive and cached.showArmor then
+    if addon.profileRuntime.ReadCombatState() == false and cached.showDefensive and cached.showArmor then
         RefreshArmorCache()
     end
 

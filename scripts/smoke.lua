@@ -5690,6 +5690,54 @@ do
 end
 
 do
+    -- Clean-value availability changes are independent of actual Hide Zero
+    -- visibility. Keep the legacy wire count, but identify its meaning explicitly.
+    local haste, restricted = 0, false
+    local secretHaste = {}
+    local env, subject, view = loadStatsPro("enUS", {
+        statsProDB = {
+            showMainStat = false, showStamina = false, showItemLevel = false,
+            showOffensive = true, showCrit = false, showHaste = true,
+            showMastery = false, showVersatility = false,
+            showTertiary = false, showDefensive = false, showDurability = false,
+            showRepairCost = false, hideZeroOffensive = true,
+        },
+        getHaste = function() return restricted and secretHaste or haste end,
+        issecretvalue = function(value) return rawequal(value, secretHaste) end,
+        roundToNearestString = function() return "25" end,
+    })
+    fireEvent("selftest.metric.pew", env, "PLAYER_ENTERING_WORLD")
+    local guided = subject.selfTest
+    eq("selftest.metric.start", guided.Start(), true)
+    guided.TakeSample(false, false)
+    eq("selftest.metric.zero_row_hidden", view.panelVisualState().mainShown, false)
+    haste = 12.5
+    eq("selftest.metric.nonzero_update", subject:RunUpdateStatsSafe(), true)
+    guided.TakeSample(false, false)
+    eq("selftest.metric.nonzero_row_shown", view.panelVisualState().mainShown, true)
+    eq("selftest.metric.visibility_change_no_clean_transition", guided.hideFlaps, 0)
+    restricted = true
+    eq("selftest.metric.restricted_update", subject:RunUpdateStatsSafe(), true)
+    guided.TakeSample(true, false)
+    eq("selftest.metric.restricted_row_stays_shown", view.panelVisualState().mainShown, true)
+    eq("selftest.metric.restricted_transition", guided.hideFlaps, 1)
+    restricted = false
+    eq("selftest.metric.recovery_update", subject:RunUpdateStatsSafe(), true)
+    guided.TakeSample(false, true)
+    eq("selftest.metric.recovery_row_stays_shown", view.panelVisualState().mainShown, true)
+    eq("selftest.metric.recovery_transition", guided.hideFlaps, 2)
+    guided.Finish("cancelled")
+    eq("selftest.metric.legacy_saved_count", env.StatsProSelfTest.report.totals.flaps, 2)
+    local payload = guided.BuildPayload()
+    eq("selftest.metric.legacy_wire_count", payload:find("\nflaps=2\n", 1, true) ~= nil, true)
+    eq("selftest.metric.wire_semantics",
+        payload:find("\nflapMetric=clean-presence-transitions\n", 1, true) ~= nil, true)
+    eq("selftest.metric.window_semantics",
+        guided.WindowSummary():find("cleanTransitions=2", 1, true) ~= nil, true)
+    eq("selftest.metric.chat_semantics", printContains(env, "cleanTransitions=2"), true)
+end
+
+do
     eq("selector.best_crit_exposed_on_addon", type(addon.GetBestCritChance), "function")
 end
 

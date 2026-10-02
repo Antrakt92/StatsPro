@@ -20112,9 +20112,10 @@ function addon.selfTest.RecordRow(key, s, value)
     else
         stats.unknown = stats.unknown + 1
     end
-    -- WHY flap proxy: clean-value presence per row flips when hide-zero rows
-    -- appear/disappear across samples. Presence booleans are clean by
-    -- construction; no display text is compared.
+    -- WHY: count clean-value availability transitions, not HUD visibility.
+    -- Restricted reads can preserve a visible row, while clean zero/nonzero
+    -- changes can hide/show it without changing availability. The legacy
+    -- flaps wire field retains this count; no display text is compared.
     local hasClean = (s == 0 and value ~= nil)
     local prev = addon.selfTest.rowHasClean[key]
     if prev ~= nil and prev ~= hasClean then
@@ -20554,6 +20555,7 @@ function addon.selfTest.BuildPayload()
     add("errors", count(totals.errors))
     add("secrets", count(totals.secrets))
     add("flaps", count(totals.flaps))
+    add("flapMetric", "clean-presence-transitions")
     add("recovered", flag(totals.recovered))
     add("timeout", flag(totals.timeout))
     add("truncated", flag(totals.truncated))
@@ -20615,7 +20617,7 @@ function addon.selfTest.WindowSummary()
     end
     return "samples ooc=" .. count(totals.ooc) .. " combat=" .. count(totals.combat)
         .. " recovery=" .. count(totals.recovery) .. " errors=" .. count(totals.errors)
-        .. " secrets=" .. count(totals.secrets) .. " flaps=" .. count(totals.flaps)
+        .. " secrets=" .. count(totals.secrets) .. " cleanTransitions=" .. count(totals.flaps)
         .. " recovered=" .. (totals.recovered == true and "yes" or "no")
         .. "\nrelease=" .. (addon.selfTest.SanitizeToken(env.release) or "?")
         .. " class=" .. (addon.selfTest.SanitizeToken(env.class) or "?")
@@ -20634,7 +20636,7 @@ function addon.selfTest.PrintSummary()
         .. " recovery=" .. count(totals.recovery)
         .. " errors=" .. count(totals.errors)
         .. " secrets=" .. count(totals.secrets)
-        .. " flaps=" .. count(totals.flaps)
+        .. " cleanTransitions=" .. count(totals.flaps)
         .. " recovered=" .. (totals.recovered == true and "yes" or "no"))
 end
 

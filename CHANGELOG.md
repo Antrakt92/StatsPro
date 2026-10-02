@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.17.7 - 02-Oct-2026 — Archon snapshot verification
+
+### Updated
+
+- **Bundled M+ and raid targets were checked against Archon on 2 October; ratings remain unchanged and the snapshot date now reflects that check.**
+
 ## 1.17.6 - 01-Oct-2026 — Archon target refresh
 
 ### Updated

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.17.8 - 02-Oct-2026 — Combat and settings reliability
+
+### Fixed
+
+- Handle unavailable combat state and restricted stat formatting safely.
+- Recover settings preset previews after a UI error.
+- Clarify that diagnostic transition counts measure value availability.
+
 ## 1.17.7 - 02-Oct-2026 — Archon snapshot verification
 
 ### Updated

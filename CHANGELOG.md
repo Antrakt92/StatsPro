@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.17.8 - 02-Oct-2026 — Combat and settings reliability
+## 1.17.9 - 02-Oct-2026 — Combat and settings reliability
 
 ### Fixed
 

@@ -13763,12 +13763,19 @@ function addon.appearancePresets.ApplyRuntime()
     return addon:RunUpdateStatsSafe()
 end
 
+function addon.presetRuntime.ApplyRuntimeSafe(service)
+    -- Native UI failures must enter the same bounded recovery path as a false
+    -- result, including when a preview has already changed part of the HUD.
+    local ok, applied = pcall(service.ApplyRuntime)
+    return ok and applied == true
+end
+
 function addon.presetRuntime.RestoreCommittedRuntime(service)
     local session = service.session
     service.session = nil
-    if service.ApplyRuntime() then return true end
+    if addon.presetRuntime.ApplyRuntimeSafe(service) then return true end
     service.session = session
-    service.ApplyRuntime()
+    addon.presetRuntime.ApplyRuntimeSafe(service)
     return false
 end
 
@@ -13858,7 +13865,7 @@ function addon.presetRuntime.StartPreview(service, presetID)
             and rawget(profile.settings, service.markerKey) or nil,
     }
     service.session.expected.settingsRef = profile.settings
-    if not service.ApplyRuntime() then
+    if not addon.presetRuntime.ApplyRuntimeSafe(service) then
         local runtimeRestored = addon.presetRuntime.RestoreCommittedRuntime(service)
         service.RefreshUI()
         return false, runtimeRestored and "preview-failed" or "restore-failed"
@@ -13909,7 +13916,7 @@ function addon.presetRuntime.ApplyPreview(service)
         -- changed. Do not re-read and silently adopt a different transaction graph.
         session.expected.generation = addon.dbRuntime.generation
         service.session = session
-        if service.session and not service.ApplyRuntime() then
+        if service.session and not addon.presetRuntime.ApplyRuntimeSafe(service) then
             service.ForceCancelPreview()
             result = "preview-resume-failed"
         end
@@ -13928,14 +13935,14 @@ end
 function addon.presetRuntime.ForceCancelPreview(service)
     if not service.session then return true end
     service.session = nil
-    if service.ApplyRuntime() then
+    if addon.presetRuntime.ApplyRuntimeSafe(service) then
         service.RefreshUI()
         return true
     end
     -- A close/combat transition cannot leave a hidden retry UI with candidate
     -- overrides active. Retry committed runtime once, then hand recovery to the
     -- existing profile reapply coordinator if the client boundary is still unsafe.
-    if service.ApplyRuntime() then
+    if addon.presetRuntime.ApplyRuntimeSafe(service) then
         service.RefreshUI()
         return true
     end

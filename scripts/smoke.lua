@@ -4552,6 +4552,72 @@ do
 end
 
 do
+    for _, kind in ipairs({ "appearance", "hud" }) do
+        local env, addon, test = loadStatsPro("enUS", withProfileIdentity())
+        local prefix = "presets.exceptions." .. kind
+        fireEvent(prefix .. ".pew", env, "PLAYER_ENTERING_WORLD")
+        local service = kind == "appearance" and test.appearancePresets or test.hudPresets
+        local presetID = kind == "appearance" and "midnight" or "tank"
+        local owner = kind == "appearance" and addon.readabilityConfig or addon.panelEditRuntime
+        local method = kind == "appearance" and "applyPanelBackgroundAlphaToAllPanels" or "Refresh"
+        local original = owner[method]
+        local failures, failedCalls = 0, 0
+        owner[method] = function(...)
+            if failures > 0 then
+                failedCalls = failedCalls + 1
+                failures = failures - 1
+                error("synthetic native preset UI failure")
+            end
+            return original(...)
+        end
+        local saved = deepCopy(env.StatsProDB)
+        local baselineID = service.currentID()
+        failures = 1
+        local protected, ok, reason = pcall(service.startPreview, presetID)
+        eq(prefix .. ".start_no_exception", protected, true)
+        eq(prefix .. ".start_rejected", ok, false)
+        eq(prefix .. ".start_reason", reason, "preview-failed")
+        eq(prefix .. ".start_session_cleared", service.state().active, false)
+        eq(prefix .. ".start_runtime_restored", service.currentID(), baselineID)
+        assertDeepEqual(prefix .. ".start_no_saved_writes", env.StatsProDB, saved)
+
+        eq(prefix .. ".cancel_seed", service.startPreview(presetID), true)
+        failures = 1
+        protected, ok, reason = pcall(service.cancelPreview)
+        eq(prefix .. ".cancel_no_exception", protected, true)
+        eq(prefix .. ".cancel_rejected", ok, false)
+        eq(prefix .. ".cancel_reason", reason, "restore-failed")
+        eq(prefix .. ".cancel_session_retained", service.state().active, true)
+        eq(prefix .. ".cancel_retry", service.cancelPreview(), true)
+        assertDeepEqual(prefix .. ".cancel_no_saved_writes", env.StatsProDB, saved)
+
+        eq(prefix .. ".apply_seed", service.startPreview(presetID), true)
+        failures = 1
+        protected, ok, reason = pcall(service.applyPreview)
+        eq(prefix .. ".apply_no_exception", protected, true)
+        eq(prefix .. ".apply_rejected", ok, false)
+        eq(prefix .. ".apply_reason", reason, "restore-failed")
+        eq(prefix .. ".apply_session_retained", service.state().active, true)
+        assertDeepEqual(prefix .. ".apply_no_saved_writes", env.StatsProDB, saved)
+        eq(prefix .. ".apply_cancel", service.cancelPreview(), true)
+
+        eq(prefix .. ".combat_seed", service.startPreview(presetID), true)
+        failures = 2
+        failedCalls = 0
+        protected = pcall(fireEvent, prefix .. ".combat", env, "PLAYER_REGEN_DISABLED")
+        eq(prefix .. ".combat_no_exception", protected, true)
+        eq(prefix .. ".combat_session_cleared", service.state().active, false)
+        eq(prefix .. ".combat_bounded_restore_attempts", failedCalls, 2)
+        eq(prefix .. ".combat_reapply_queued", addon.profileRuntime.forceReapply, true)
+        assertDeepEqual(prefix .. ".combat_no_saved_writes", env.StatsProDB, saved)
+        fireEvent(prefix .. ".recovery", env, "PLAYER_REGEN_ENABLED")
+        eq(prefix .. ".recovery_reapplied", addon.profileRuntime.forceReapply, false)
+        eq(prefix .. ".recovery_no_preview", service.state().active, false)
+        owner[method] = original
+    end
+end
+
+do
     local defaultEnv, _, defaultTest = loadStatsPro("enUS", withProfileIdentity())
     fireEvent("appearance.presets.default_round_trip.pew", defaultEnv, "PLAYER_ENTERING_WORLD")
     local service = defaultTest.appearancePresets

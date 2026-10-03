@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.17.10 - 03-Oct-2026 — Archon target refresh
+
+### Updated
+
+- **Bundled M+ and raid targets were refreshed from Archon data checked on 3 October.**
+
 ## 1.17.9 - 02-Oct-2026 — Combat and settings reliability
 
 ### Fixed

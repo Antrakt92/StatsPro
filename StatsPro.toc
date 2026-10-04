@@ -26,7 +26,7 @@
 ## Category-ruRU: Бой
 ## Category-zhCN: 战斗
 ## Category-zhTW: 戰鬥
-## X-License: MIT
+## X-License: Custom (see LICENSE)
 ## X-Website: https://github.com/Antrakt92/StatsPro
 ## X-Curse-Project-ID: 1525100
 ## X-Wago-ID: EGPemEN1

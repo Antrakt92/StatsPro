@@ -4,7 +4,8 @@ StatsPro bundles these runtime libraries so release packages use the same review
 source that is present in the source tree. Source revisions, source archives, and
 license texts are pinned below. SHA256 values for text files are computed after
 normalizing line endings to LF, so Windows and Linux checkouts validate the same
-content. The StatsPro addon code is MIT-licensed; bundled libraries keep their
+content. Antrakt's original StatsPro extensions use the custom license in LICENSE.
+SwiftStats-derived portions remain MIT-licensed; bundled libraries keep their
 upstream licenses.
 
 ## libs/LibStub/LibStub.lua

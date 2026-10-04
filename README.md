@@ -19,7 +19,7 @@
   <a href="https://github.com/Antrakt92/StatsPro/releases/latest"><img src="https://img.shields.io/github/v/release/Antrakt92/StatsPro?label=release&color=brightgreen" alt="Latest release"></a>
   <a href="https://www.curseforge.com/wow/addons/statspro"><img src="https://img.shields.io/curseforge/dt/1525100?label=downloads&color=orange" alt="CurseForge downloads"></a>
   <img src="https://img.shields.io/badge/WoW-Retail%2012.x-blueviolet" alt="WoW Retail 12.x">
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/Antrakt92/StatsPro" alt="MIT License"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-custom-blue" alt="Custom License"></a>
 </p>
 
 StatsPro is a customizable stats and gear HUD for **World of Warcraft Retail:
@@ -262,7 +262,7 @@ visual issues. For combat-stat or Archon-tooltip issues, include the output of
 See [`CHANGELOG.md`](CHANGELOG.md) for release history and
 [`CONTRIBUTING.md`](CONTRIBUTING.md) for developer setup and verification.
 
-StatsPro is free and MIT-licensed. Optional support is available through
+StatsPro is free to use. Optional support is available through
 [Ko-fi](https://ko-fi.com/antrakt92) or
 [GitHub Sponsors](https://github.com/sponsors/Antrakt92).
 
@@ -282,7 +282,12 @@ StatsPro is free and MIT-licensed. Optional support is available through
 
 ## License
 
-[MIT](LICENSE). Original SwiftStats portions are © TaylorSay; StatsPro extensions
-are © Antrakt. Bundled libraries retain their upstream licenses. Exact notices,
-versions, provenance and hashes are listed in
-[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+StatsPro is free to use. Antrakt's original extensions use the [Antrakt Attribution and CurseForge Rewards License 1.0](https://github.com/Antrakt92/StatsPro/blob/main/LICENSE), a custom license based on MIT.
+
+Public forks, ports and projects reusing an original implementation of a significant user-facing feature must credit Antrakt92, name [StatsPro](https://www.curseforge.com/wow/addons/statspro) and link to the original.
+
+If such a project earns CurseForge Reward Points, allocate at least 10% of that project's points in total to the CurseForge account `antrakt92` through Members.
+
+Reusing several Antrakt92 projects does not add percentages. Isolated lines, small helper snippets, standard API calls, independently implemented ideas and compatibility or dependency-only use are exempt from reward sharing and additional public attribution. No separate permission request is needed; CurseForge requires the author to accept the member invitation.
+
+Previously granted MIT permissions remain valid. Third-party code keeps its original license. SwiftStats-derived portions remain MIT-licensed and credited to TaylorSay. See [third-party notices](https://github.com/Antrakt92/StatsPro/blob/main/THIRD-PARTY-NOTICES.md).

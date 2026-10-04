@@ -78,7 +78,7 @@ copper icons.
 Movement shows your current ground run speed, including slows, boosts and ground
 mounts. Normal speed is about 100%; the value remains meaningful while stationary.
 
-## Flexible layouts
+## Layouts
 
 - **Flat:** a simple list of your chosen rows.
 - **Sectioned:** rows grouped under category headings.
@@ -212,12 +212,20 @@ follow your current specialization's settings or the active account-wide setup.
 | `/ss hide` | Hide the HUD |
 | `/ss toggle` | Toggle HUD visibility |
 | `/ss help` | List available commands |
+| `/statspro import` | Import compatible SwiftStats settings into a new specialization or account-wide profile |
+
+<details>
+<summary>Diagnostics and reset commands</summary>
+
+| Command | Action |
+|---|---|
 | `/ss selftest` | Collect out-of-combat and combat diagnostic samples, then show a copyable report |
 | `/ss selftest all` | Print existing StatsPro, DoYouNeedIt and ApplicantScout report summaries in chat |
 | `/ss debug` | Print support information |
-| `/statspro import` | Import compatible SwiftStats settings into a new specialization or account-wide profile |
 | `/ss reset` | Confirm and reset the settings currently in use; the warning identifies affected specializations or account-wide scope |
 | `/ss wipe` or `/ss reset all` | Confirm and reset all profiles, assignments, role templates, account settings and saved positions |
+
+</details>
 
 All commands also work with `/statspro`. Use it if `/ss` conflicts with another
 command. To control visibility with a keybind, put `/ss toggle` in a macro and

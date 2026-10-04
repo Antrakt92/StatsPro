@@ -55,12 +55,11 @@ function Get-RequiredMarketplaceCredentials {
         $EnvironmentValues = @{
             CF_API_KEY = [Environment]::GetEnvironmentVariable("CF_API_KEY")
             WAGO_API_TOKEN = [Environment]::GetEnvironmentVariable("WAGO_API_TOKEN")
-            WOWI_API_TOKEN = [Environment]::GetEnvironmentVariable("WOWI_API_TOKEN")
         }
     }
 
     $credentials = [ordered]@{}
-    foreach ($name in @("CF_API_KEY", "WAGO_API_TOKEN", "WOWI_API_TOKEN")) {
+    foreach ($name in @("CF_API_KEY", "WAGO_API_TOKEN")) {
         $value = [string]$EnvironmentValues[$name]
         if ([string]::IsNullOrWhiteSpace($value)) {
             throw "$name is required for the marketplace release preflight."
@@ -315,16 +314,7 @@ function Assert-MarketplaceVersions {
             -Description "CurseForge game versions"
     }
     [void](Resolve-StatsProCurseForgeVersionIdMap -Json $curseForgeJson -RequiredVersions $requiredVersions)
-    [void](Invoke-WowInterfaceCredentialProbe `
-        -ApiToken $credentials.WOWI_API_TOKEN `
-        -ProjectId $projectIds.WowInterface)
     [void](Invoke-WagoProjectExistenceProbe -ProjectId $projectIds.Wago)
-
-    $wowInterfaceJson = Read-JsonTextOrFetch `
-        -Path $WowInterfaceVersionsJsonPath `
-        -Uri "https://api.wowinterface.com/addons/compatible.json" `
-        -Description "WoWInterface compatibility versions"
-    [void](Resolve-StatsProWowInterfaceVersionsFromJson -Json $wowInterfaceJson -RequiredVersions $requiredVersions)
 
     $wagoJson = Read-JsonTextOrFetch `
         -Path $WagoVersionsJsonPath `
@@ -332,7 +322,7 @@ function Assert-MarketplaceVersions {
         -Description "Wago game versions"
     [void](Resolve-StatsProWagoVersionSelection -Json $wagoJson -RequiredVersions $requiredVersions -RequireDirectCompatibilityMatch)
 
-    Write-Host "Marketplace preflight passed for Retail $($requiredVersions -join ', '): required keys are present, the CurseForge token is valid, WoWInterface project access is valid, and Wago project existence is valid."
+    Write-Host "Marketplace preflight passed for Retail $($requiredVersions -join ', '): required keys are present, the CurseForge token is valid, and Wago project existence is valid."
     Write-Warning "CurseForge does not publish a read-only upload-permission probe, and Wago does not publish a read-only API-key validation endpoint. This gate does not make mutation-shaped requests to either service."
 }
 
@@ -352,10 +342,10 @@ function Invoke-SelfTest {
         WOWI_API_TOKEN = "wowi-self-test-secret"
     }
     $resolvedCredentials = Get-RequiredMarketplaceCredentials -EnvironmentValues $validCredentials
-    if ($resolvedCredentials.Count -ne 3) {
-        throw "Marketplace credential set should contain exactly three values."
+    if ($resolvedCredentials.Count -ne 2) {
+        throw "Marketplace credential set should contain exactly two values."
     }
-    foreach ($missingName in @("CF_API_KEY", "WAGO_API_TOKEN", "WOWI_API_TOKEN")) {
+    foreach ($missingName in @("CF_API_KEY", "WAGO_API_TOKEN")) {
         foreach ($missingValue in @($null, "", "   ")) {
             $case = $validCredentials.Clone()
             $case[$missingName] = $missingValue

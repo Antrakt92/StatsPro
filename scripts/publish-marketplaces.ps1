@@ -66,7 +66,7 @@ function Get-RequiredCredentials {
     param([hashtable]$Values)
 
     $credentials = [ordered]@{}
-    foreach ($name in @('CF_API_KEY', 'WAGO_API_TOKEN', 'WOWI_API_TOKEN')) {
+    foreach ($name in @('CF_API_KEY', 'WAGO_API_TOKEN')) {
         $value = [string]$Values[$name]
         if ([string]::IsNullOrWhiteSpace($value)) {
             throw "$name is required for marketplace publication."
@@ -199,11 +199,8 @@ function New-MarketplacePlan {
 
     $context = Get-MarketplaceArchiveContext -Archive $Archive -Tag $Tag -Sha256 $Sha256 -CredentialValues $CredentialValues
     $cfJson = Invoke-JsonRead -Uri 'https://wow.curseforge.com/api/game/wow/versions' -Headers @{ 'x-api-token' = $context.Credentials.CF_API_KEY } -Request $ReadRequest
-    $wowiProjectsJson = Invoke-JsonRead -Uri 'https://api.wowinterface.com/addons/list.json' -Headers @{ 'x-api-token' = $context.Credentials.WOWI_API_TOKEN } -Request $ReadRequest
-    Assert-StatsProWowInterfaceProjectAccess -Json $wowiProjectsJson -ExpectedProjectId $context.Contract.ProjectIds.WowInterface
     $wagoProjectHtml = Invoke-JsonRead -Uri "https://addons.wago.io/addons/$($context.Contract.ProjectIds.Wago)" -Headers @{} -Request $ReadRequest
     Assert-StatsProWagoProjectPage -Html $wagoProjectHtml -ExpectedProjectId $context.Contract.ProjectIds.Wago
-    $wowiJson = Invoke-JsonRead -Uri 'https://api.wowinterface.com/addons/compatible.json' -Headers @{} -Request $ReadRequest
     $wagoJson = Invoke-JsonRead -Uri 'https://addons.wago.io/api/data/game' -Headers @{} -Request $ReadRequest
     return [pscustomobject][ordered]@{
         schemaVersion = 1
@@ -212,7 +209,7 @@ function New-MarketplacePlan {
         archiveSha256 = $Sha256
         retailVersions = @($context.Contract.RetailVersions)
         curseForgeGameVersionIds = @(Resolve-StatsProCurseForgeVersionIdMap -Json $cfJson -RequiredVersions $context.Contract.RetailVersions)
-        wowInterfaceVersions = @(Resolve-StatsProWowInterfaceVersionsFromJson -Json $wowiJson -RequiredVersions $context.Contract.RetailVersions)
+        wowInterfaceVersions = @() # Retired; reject old plans that still request uploads.
         wagoVersions = @(Resolve-StatsProWagoVersionSelection -Json $wagoJson -RequiredVersions $context.Contract.RetailVersions)
     }
 }
@@ -276,7 +273,9 @@ function Read-MarketplacePlan {
         throw "Marketplace plan identity does not match the exact archive."
     }
     Assert-PlanStringArray -Values $plan.retailVersions -Description 'Marketplace plan retail versions' -Pattern '^\d+\.\d+\.\d+$'
-    Assert-PlanStringArray -Values $plan.wowInterfaceVersions -Description 'Marketplace plan WoWInterface versions' -Pattern '^\d+\.\d+\.\d+$'
+    if ($plan.wowInterfaceVersions -isnot [System.Array] -or $plan.wowInterfaceVersions.Count -ne 0) {
+        throw 'WoWInterface publication is retired; prepare a new marketplace plan.'
+    }
     Assert-PlanStringArray -Values $plan.wagoVersions -Description 'Marketplace plan Wago versions' -Pattern '^\d+\.\d+\.\d+$'
     $cfIds = $plan.curseForgeGameVersionIds
     $seenIds = [System.Collections.Generic.HashSet[int]]::new()
@@ -352,7 +351,6 @@ function Publish-ExactMarketplacePlan {
     $context = Get-MarketplaceArchiveContext -Archive $Archive -Tag $Tag -Sha256 $Sha256 -CredentialValues $CredentialValues
     Assert-MarketplacePlanMatchesArchive -Plan $Plan -ArchiveContext $context
     $cfVersionIds = @($Plan.curseForgeGameVersionIds | ForEach-Object { [int]$_ })
-    $wowiVersions = @($Plan.wowInterfaceVersions | ForEach-Object { [string]$_ })
     $wagoVersions = @($Plan.wagoVersions | ForEach-Object { [string]$_ })
     $cfMetadata = [ordered]@{
         displayName = $Tag
@@ -386,23 +384,6 @@ function Publish-ExactMarketplacePlan {
         -Form @{ metadata = $cfMetadata; file = Get-Item -LiteralPath $context.Archive } `
         -ExpectedStatus @(200) `
         -Description 'CurseForge upload' `
-        -Request $UploadRequest
-
-    [void](Assert-ArchiveIdentity -Path $context.Archive -Tag $Tag -Sha256 $Sha256)
-    Invoke-ExactUpload `
-        -Uri 'https://api.wowinterface.com/addons/update' `
-        -Headers @{ 'x-api-token' = $context.Credentials.WOWI_API_TOKEN } `
-        -Form @{
-            id = $context.Contract.ProjectIds.WowInterface
-            version = $Tag
-            compatible = ($wowiVersions -join ',')
-            # Pinned Packager sends the manual Markdown unchanged when its
-            # no-secret build has no pandoc-generated WoWI sidecar.
-            changelog = $context.Markdown
-            updatefile = Get-Item -LiteralPath $context.Archive
-        } `
-        -ExpectedStatus @(202) `
-        -Description 'WoWInterface upload' `
         -Request $UploadRequest
 
     Write-Host "Marketplace uploads accepted the exact attested archive for $Tag."
@@ -455,7 +436,7 @@ function Invoke-SelfTest {
         finally { $archiveStream.Dispose() }
         $originalArchive = [System.IO.File]::ReadAllBytes($archive)
         $sha = Get-LowercaseFileSha256 -Path $archive
-        $credentials = @{ CF_API_KEY = 'cf-secret'; WAGO_API_TOKEN = 'wago-secret'; WOWI_API_TOKEN = 'wowi-secret' }
+        $credentials = @{ CF_API_KEY = 'cf-secret'; WAGO_API_TOKEN = 'wago-secret' }
         $readCalls = [System.Collections.Generic.List[object]]::new()
         $read = {
             param([string]$Uri, [hashtable]$Headers)
@@ -479,29 +460,24 @@ function Invoke-SelfTest {
         Publish-ExactMarketplaceArchive -Archive $archive -Tag $tag -Sha256 $sha -CredentialValues $credentials -ReadRequest $read -UploadRequest $upload
         $expectedReadUris = @(
             'https://wow.curseforge.com/api/game/wow/versions',
-            'https://api.wowinterface.com/addons/list.json',
             'https://addons.wago.io/addons/EGPemEN1',
-            'https://api.wowinterface.com/addons/compatible.json',
             'https://addons.wago.io/api/data/game'
         )
-        if ($readCalls.Count -ne 5) { throw "Marketplace pre-upload read count self-test failed." }
+        if ($readCalls.Count -ne 3) { throw "Marketplace pre-upload read count self-test failed." }
         for ($index = 0; $index -lt $expectedReadUris.Count; $index++) {
             if (-not [System.StringComparer]::Ordinal.Equals($readCalls[$index].Uri, $expectedReadUris[$index])) {
                 throw "Marketplace compatibility URI self-test failed."
             }
         }
         if ($readCalls[0].Headers.Count -ne 1 -or $readCalls[0].Headers['x-api-token'] -ne $credentials.CF_API_KEY -or
-            $readCalls[1].Headers.Count -ne 1 -or $readCalls[1].Headers['x-api-token'] -ne $credentials.WOWI_API_TOKEN -or
-            $readCalls[2].Headers.Count -ne 0 -or $readCalls[3].Headers.Count -ne 0 -or
-            $readCalls[4].Headers.Count -ne 0) {
+            $readCalls[1].Headers.Count -ne 0 -or $readCalls[2].Headers.Count -ne 0) {
             throw "Marketplace pre-upload header self-test failed."
         }
         $expectedUploadUris = @(
             'https://addons.wago.io/api/projects/EGPemEN1/version',
-            'https://wow.curseforge.com/api/projects/1525100/upload-file',
-            'https://api.wowinterface.com/addons/update'
+            'https://wow.curseforge.com/api/projects/1525100/upload-file'
         )
-        if ($calls.Count -ne 3) {
+        if ($calls.Count -ne 2) {
             throw "Marketplace upload ordering self-test failed."
         }
         for ($index = 0; $index -lt $expectedUploadUris.Count; $index++) {
@@ -521,11 +497,6 @@ function Invoke-SelfTest {
             $cfPayload.changelogType -ne 'markdown' -or $cfPayload.changelog -ne $fullChangelog -or
             (@($cfPayload.gameVersions) -join ',') -ne '120100') {
             throw "CurseForge payload self-test failed."
-        }
-        if ($calls[2].Headers.Count -ne 1 -or $calls[2].Headers['x-api-token'] -ne $credentials.WOWI_API_TOKEN -or
-            $calls[2].Form.Count -ne 5 -or $calls[2].Form.id -ne '27130' -or $calls[2].Form.version -ne $tag -or
-            $calls[2].Form.compatible -ne '12.1.0' -or $calls[2].Form.changelog -ne $fullChangelog) {
-            throw "WoWInterface payload self-test failed."
         }
         $wagoPayload = ConvertFrom-JsonCompat ([string]$calls[0].Form.metadata)
         if ($calls[0].Headers.Count -ne 2 -or $calls[0].Headers.authorization -ne "Bearer $($credentials.WAGO_API_TOKEN)" -or
@@ -559,8 +530,15 @@ function Invoke-SelfTest {
             $planCalls.Add([pscustomobject]@{ Uri = $uri; Headers = $headers; Form = $form })
             [pscustomobject]@{ StatusCode = if ($uri -match 'wowinterface') { 202 } else { 200 } }
         }
-        if ($planCalls.Count -ne 3) { throw "Prepared marketplace plan did not drive exactly three uploads." }
+        if ($planCalls.Count -ne 2) { throw "Prepared marketplace plan did not drive exactly two uploads." }
         $validPlanText = [System.IO.File]::ReadAllText($planPath)
+        $retiredPlan = [System.IO.File]::ReadAllText($planPath).Replace('"wowInterfaceVersions":[]', '"wowInterfaceVersions":["12.1.0"]')
+        Write-Utf8NoBom -Path $planPath -Text $retiredPlan
+        Assert-ThrowsMatch "retired WoWInterface plan rejected" {
+            [void](Read-MarketplacePlan -Path $planPath -ExpectedSha256 (Get-LowercaseFileSha256 -Path $planPath) -Tag $tag -ArchiveSha256 $sha)
+        } "WoWInterface publication is retired"
+        Write-Utf8NoBom -Path $planPath -Text $validPlanText
+
         [System.IO.File]::AppendAllText($planPath, 'tampered')
         Assert-ThrowsMatch "tampered marketplace plan rejected" {
             [void](Read-MarketplacePlan -Path $planPath -ExpectedSha256 $planSha -Tag $tag -ArchiveSha256 $sha)
@@ -603,13 +581,6 @@ function Invoke-SelfTest {
             })
         } "exactly one Retail game version"
 
-        Assert-ThrowsMatch "wrong WoWInterface project access rejected before plan" {
-            [void](New-MarketplacePlan -Archive $archive -Tag $tag -Sha256 $sha -CredentialValues $credentials -ReadRequest {
-                param($uri, $headers)
-                if ($uri -eq 'https://api.wowinterface.com/addons/list.json') { return '[]' }
-                return & $read $uri $headers
-            })
-        } "must expose exactly one"
 
         Assert-ThrowsMatch "wrong Wago project page rejected before plan" {
             [void](New-MarketplacePlan -Archive $archive -Tag $tag -Sha256 $sha -CredentialValues $credentials -ReadRequest {
@@ -686,27 +657,7 @@ function Invoke-SelfTest {
         } "outcome is ambiguous.*RuntimeException"
         if ($ambiguousCalls.Count -ne 1) { throw "Ambiguous upload must be attempted exactly once." }
 
-        Assert-ThrowsMatch "unsupported WoWInterface fallback blocks upload" {
-            Publish-ExactMarketplaceArchive -Archive $archive -Tag $tag -Sha256 $sha -CredentialValues $credentials -ReadRequest {
-                param($uri, $headers)
-                if ($uri -match 'curseforge') { return '[{"id":120100,"name":"12.1.0","gameVersionTypeID":517}]' }
-                if ($uri -eq 'https://api.wowinterface.com/addons/list.json') { return '[{"id":27130,"title":"StatsPro"}]' }
-                if ($uri -eq 'https://api.wowinterface.com/addons/compatible.json') { return '[{"id":"12.0.9","game":"Retail"},{"id":"12.0.0","game":"Retail"}]' }
-                if ($uri -eq 'https://addons.wago.io/addons/EGPemEN1') { return '<meta property="og:url" content="https://addons.wago.io/addons/EGPemEN1" />' }
-                return '{"patches":{"retail":["12.1.0"]}}'
-            } -UploadRequest { throw 'should not upload' }
-        } "WoWInterface would select unsupported fallback"
 
-        Assert-ThrowsMatch "lowercase WoWInterface game label is ignored like upstream" {
-            Publish-ExactMarketplaceArchive -Archive $archive -Tag $tag -Sha256 $sha -CredentialValues $credentials -ReadRequest {
-                param($uri, $headers)
-                if ($uri -match 'curseforge') { return '[{"id":120100,"name":"12.1.0","gameVersionTypeID":517}]' }
-                if ($uri -eq 'https://api.wowinterface.com/addons/list.json') { return '[{"id":27130,"title":"StatsPro"}]' }
-                if ($uri -eq 'https://api.wowinterface.com/addons/compatible.json') { return '[{"id":"12.1.0","game":"retail"},{"id":"12.0.7","game":"Retail"}]' }
-                if ($uri -eq 'https://addons.wago.io/addons/EGPemEN1') { return '<meta property="og:url" content="https://addons.wago.io/addons/EGPemEN1" />' }
-                return '{"patches":{"retail":["12.1.0"]}}'
-            } -UploadRequest { throw 'should not upload' }
-        } "WoWInterface would select unsupported fallback '12\.0\.7'"
 
         if ((Select-StatsProOrdinalMarketplaceVersion -AvailableVersions @('12.0.9', '12.0.10') -RequestedVersion '12.1.0') -cne '12.0.9') {
             throw "Marketplace fallback selection must use the greatest ordinal predecessor."
@@ -739,7 +690,6 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 $environmentValues = @{
     CF_API_KEY = [Environment]::GetEnvironmentVariable('CF_API_KEY')
     WAGO_API_TOKEN = [Environment]::GetEnvironmentVariable('WAGO_API_TOKEN')
-    WOWI_API_TOKEN = [Environment]::GetEnvironmentVariable('WOWI_API_TOKEN')
 }
 if ([string]::IsNullOrWhiteSpace($Mode)) {
     throw "Missing marketplace publication -Mode."

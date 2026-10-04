@@ -2687,7 +2687,7 @@ function Assert-CanonicalMarketplaceEnvironment {
         [string]$StepName
     )
 
-    $expectedNames = @('CF_API_KEY', 'WAGO_API_TOKEN', 'WOWI_API_TOKEN')
+    $expectedNames = @('CF_API_KEY', 'WAGO_API_TOKEN')
     $actualNames = @(
         [regex]::Matches($StepBlock.Value, '(?m)^\s{10}([A-Z][A-Z0-9_]+):') |
             ForEach-Object { $_.Groups[1].Value } |
@@ -2695,7 +2695,7 @@ function Assert-CanonicalMarketplaceEnvironment {
     )
     if ($actualNames.Count -ne $expectedNames.Count -or
         (Compare-Object -ReferenceObject ($expectedNames | Sort-Object) -DifferenceObject $actualNames)) {
-        throw "Marketplace step '$StepName' must expose exactly the three marketplace token environment keys."
+        throw "Marketplace step '$StepName' must expose exactly the two marketplace token environment keys."
     }
 
     $withoutCanonicalReferences = $StepBlock.Value
@@ -2886,7 +2886,7 @@ function Assert-MarketplaceCredentialWorkflowBoundary {
     Assert-ExactWorkflowKeySet `
         -Text $credentialStep.Value `
         -Indent 10 `
-        -ExpectedKeys @('CF_API_KEY', 'WAGO_API_TOKEN', 'WOWI_API_TOKEN') `
+        -ExpectedKeys @('CF_API_KEY', 'WAGO_API_TOKEN') `
         -Description "Marketplace credential checker environment"
     $expectedCredentialStep = @'
       - name: Verify marketplace release credentials and versions
@@ -2894,7 +2894,6 @@ function Assert-MarketplaceCredentialWorkflowBoundary {
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
-          WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
         run: ./scripts/check-marketplace-versions.ps1
 '@
     Assert-CanonicalMarketplaceEnvironment `
@@ -2946,7 +2945,6 @@ jobs:
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
-          WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
         run: ./scripts/check-marketplace-versions.ps1
 '@
     Assert-ExactWorkflowBlock `
@@ -3486,7 +3484,6 @@ function Assert-ReleaseWorkflowBoundary {
         IMMUTABLE_RELEASES_READ_TOKEN = @('marketplace-upload/Verify immutable release policy')
         CF_API_KEY = @('marketplace-upload/Prepare exact marketplace publication plan', 'marketplace-upload/Publish exact archive to marketplaces')
         WAGO_API_TOKEN = @('marketplace-upload/Prepare exact marketplace publication plan', 'marketplace-upload/Publish exact archive to marketplaces')
-        WOWI_API_TOKEN = @('marketplace-upload/Prepare exact marketplace publication plan', 'marketplace-upload/Publish exact archive to marketplaces')
     }
     $withoutApprovedSecrets = $WorkflowText
     foreach ($secretName in $approvedSecrets.Keys) {
@@ -3562,7 +3559,6 @@ function Assert-ReleaseWorkflowBoundary {
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
-          WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
         run: |
           ./scripts/publish-marketplaces.ps1 `
             -Mode Prepare `
@@ -3596,7 +3592,6 @@ function Assert-ReleaseWorkflowBoundary {
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
-          WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
         run: |
           ./scripts/publish-marketplaces.ps1 `
             -Mode Publish `
@@ -5094,14 +5089,14 @@ function Invoke-SelfTest {
     } "canonical YAML block|already verified exact archive"
 
     Assert-ThrowsMatch "missing marketplace credential binding rejected" {
-        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^\s{10}WOWI_API_TOKEN:\s*\$\{\{ secrets\.WOWI_API_TOKEN \}\}\s*\r?\n', '')
-    } "secret 'WOWI_API_TOKEN'"
+        Assert-ReleaseWorkflowBoundary -WorkflowText ($workflowText -replace '(?m)^\s{10}WAGO_API_TOKEN:\s*\$\{\{ secrets\.WAGO_API_TOKEN \}\}\s*\r?\n', '')
+    } "secret 'WAGO_API_TOKEN'"
 
     Assert-ThrowsMatch "unknown secret reference rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
-            'secrets.WOWI_API_TOKEN',
-            'secrets.WOWI_API_TOKEN_BACKUP')
-    } "secret 'WOWI_API_TOKEN'|unapproved"
+            'secrets.WAGO_API_TOKEN',
+            'secrets.WAGO_API_TOKEN_BACKUP')
+    } "secret 'WAGO_API_TOKEN'|unapproved"
 
     Assert-ThrowsMatch "github token context injection rejected" {
         $replacement = '$1' + "`n        env:`n          GH_TOKEN: `${{ github.token }}"

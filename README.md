@@ -11,7 +11,6 @@
 <p align="center">
   <a href="https://www.curseforge.com/wow/addons/statspro"><strong>Install on CurseForge</strong></a>
   · <a href="https://addons.wago.io/addons/statspro">Wago Addons</a>
-  · <a href="https://www.wowinterface.com/downloads/info27130-StatsPro.html">WoWInterface</a>
   · <a href="https://github.com/Antrakt92/StatsPro/releases/latest">GitHub Releases</a>
 </p>
 

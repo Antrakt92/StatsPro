@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.17.11 - 04-Oct-2026 — Archon targets and distribution updates
+
+### Updated
+
+- **Bundled M+ and raid targets were refreshed from Archon data checked on 4 October.**
+- Simplified command documentation and clarified attribution and CurseForge reward-sharing terms; existing MIT permissions remain valid.
+- Future releases are distributed through CurseForge, Wago and GitHub; WoWInterface publication has ended.
+
 ## 1.17.10 - 03-Oct-2026 — Archon target refresh
 
 ### Updated

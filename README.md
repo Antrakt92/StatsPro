@@ -281,12 +281,8 @@ StatsPro is free to use. Optional support is available through
 
 ## License
 
-StatsPro is free to use. Antrakt's original extensions use the [Antrakt Attribution and CurseForge Rewards License 1.0](https://github.com/Antrakt92/StatsPro/blob/main/LICENSE), a custom license based on MIT.
+StatsPro is free to use. Future copies carrying the [Antrakt Attribution and CurseForge Rewards License 1.1](https://github.com/Antrakt92/StatsPro/blob/main/LICENSE) may be modified and shared without contacting me.
 
-Public forks, ports and projects reusing an original implementation of a significant user-facing feature must credit Antrakt92, name [StatsPro](https://www.curseforge.com/wow/addons/statspro) and link to the original.
+For a public fork, port or substantial reuse of my original feature code, keep the license, credit **antrakt92** and link to [StatsPro](https://www.curseforge.com/wow/addons/statspro). If that derivative project earns CurseForge Reward Points, share at least **10% of its points** through Members. The minimum applies separately to each of my projects substantially reused under version 1.1. No rewards means no payment.
 
-If such a project earns CurseForge Reward Points, allocate at least 10% of that project's points in total to the CurseForge account `antrakt92` through Members.
-
-Reusing several Antrakt92 projects does not add percentages. Isolated lines, small helper snippets, standard API calls, independently implemented ideas and compatibility or dependency-only use are exempt from reward sharing and additional public attribution. No separate permission request is needed; CurseForge requires the author to accept the member invitation.
-
-Previously granted MIT permissions remain valid. Third-party code keeps its original license. SwiftStats-derived portions remain MIT-licensed and credited to TaylorSay. See [third-party notices](https://github.com/Antrakt92/StatsPro/blob/main/THIRD-PARTY-NOTICES.md).
+Small snippets, independently written code, translations, dependency references and collection links require no share by themselves. Earlier MIT and version 1.0 copies keep their terms. SwiftStats-derived code remains MIT; bundled libraries retain their licenses. See [third-party notices](https://github.com/Antrakt92/StatsPro/blob/main/THIRD-PARTY-NOTICES.md).

@@ -281,8 +281,8 @@ StatsPro is free to use. Optional support is available through
 
 ## License
 
-StatsPro is free to use. Future copies carrying the [Antrakt Attribution and CurseForge Rewards License 1.1](https://github.com/Antrakt92/StatsPro/blob/main/LICENSE) may be modified and shared without contacting me.
+StatsPro is free to use. Future copies carrying the [Antrakt Attribution and CurseForge Rewards License 1.2](https://github.com/Antrakt92/StatsPro/blob/main/LICENSE) may be modified and shared without asking first.
 
-For a public fork, port or substantial reuse of my original feature code, keep the license, credit **antrakt92** and link to [StatsPro](https://www.curseforge.com/wow/addons/statspro). If that derivative project earns CurseForge Reward Points, share at least **10% of its points** through Members. The minimum applies separately to each of my projects substantially reused under version 1.1. No rewards means no payment.
+For a public fork, port or substantial reuse of my original feature code, keep the license, credit **antrakt92**, and name and link to [StatsPro](https://www.curseforge.com/wow/addons/statspro). If that derivative earns CurseForge Reward Points, share at least **10% of that project's points** with `antrakt92` through Members. One share covers all my projects reused in it; each separate derivative has its own 10% requirement.
 
-Small snippets, independently written code, translations, dependency references and collection links require no share by themselves. Earlier MIT and version 1.0 copies keep their terms. SwiftStats-derived code remains MIT; bundled libraries retain their licenses. See [third-party notices](https://github.com/Antrakt92/StatsPro/blob/main/THIRD-PARTY-NOTICES.md).
+Small snippets, independent code and translations, compatibility patches, dependencies and collection links require no share by themselves. Earlier MIT and 1.0/1.1 grants remain; the single-share permission also applies to earlier custom versions. SwiftStats-derived code remains MIT. [Third-party material](https://github.com/Antrakt92/StatsPro/blob/main/THIRD-PARTY-NOTICES.md) keeps its own terms.

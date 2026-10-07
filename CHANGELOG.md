@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.17.14 - 07-Oct-2026 — Archon targets and reuse terms
+
+### Updated
+
+- **Bundled M+ and raid targets were refreshed from Archon data checked on 7 October.**
+- Clarified reuse terms: one 10% CurseForge reward share per derivative project covers all reused Antrakt92 projects; earlier grants and third-party licenses remain valid.
+
 ## 1.17.13 - 06-Oct-2026 — Archon target refresh
 
 ### Updated

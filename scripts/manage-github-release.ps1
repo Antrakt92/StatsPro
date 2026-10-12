@@ -3248,19 +3248,19 @@ function Assert-ReleaseWorkflowBoundary {
             'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
             'BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0',
             'BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0',
-            'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
+            'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
         )
         'github-prepare' = @(
             'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
-            'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
+            'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
         )
         'marketplace-upload' = @(
             'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
-            'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
+            'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
         )
         'github-finalize' = @(
             'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
-            'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c'
+            'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333'
         )
         verify = @('actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1')
     }
@@ -4984,7 +4984,7 @@ function Invoke-SelfTest {
         $mutated = & $replaceJob 'github-prepare' {
             param($value)
             $value.Replace(
-                'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c',
+                'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333',
                 'BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0')
         }
         Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
@@ -5134,7 +5134,7 @@ function Invoke-SelfTest {
 
     Assert-ThrowsMatch "unpinned official action rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
-            'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c',
+            'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333',
             'actions/download-artifact@v8')
     } "allowlist"
 
@@ -5147,7 +5147,7 @@ function Invoke-SelfTest {
     Assert-ThrowsMatch "unnamed action step rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
             '      - name: Upload exact release candidate',
-            '      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a')
+            '      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9')
     } "Every release step must be named"
 
     Assert-ThrowsMatch "fallible candidate verification rejected" {

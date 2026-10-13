@@ -1,0 +1,20 @@
+## Interface: 16001
+## Title: |cff00ff7fStatsPro|r — Forever Beta
+## Notes: Character stats and gear HUD for WoW Forever (beta).
+## Notes-ruRU: Характеристики и экипировка персонажа в WoW Forever (бета).
+## Author: Antrakt
+## Version: 1.17.21
+## IconTexture: Interface\AddOns\StatsPro\textures\logo.png
+## SavedVariables: StatsProDB, StatsProSelfTest
+## Category: Combat
+## X-License: Custom (see LICENSE)
+## X-Website: https://github.com/Antrakt92/StatsPro
+## X-StatsPro-Flavor: forever
+## X-StatsPro-Channel: beta
+## X-Credits: Inspired by SwiftStats by TaylorSay (MIT)
+
+libs\LibStub\LibStub.lua
+libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
+StatsPro_Forever.lua
+StatsPro.lua

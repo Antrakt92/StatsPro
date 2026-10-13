@@ -250,6 +250,20 @@ settings are preserved.
 **Supported: World of Warcraft Retail — Midnight 12.1.0 and 12.1.5 PTR.** Classic and other
 non-Retail clients are not supported.
 
+### Forever beta preview
+
+Forever support is under development. Its separate beta build uses the same HUD,
+appearance and profile controls, with a Forever-specific stat list and no Archon
+references. Stable downloads above continue to target Retail.
+
+The preview starts with the five primary attributes and offers physical, caster,
+healer and tank setups. Individual rows can be selected in Settings. Profiles are
+assigned per character; automatic talent-based switching is not available yet.
+Some compound values may show `?` when their inputs are restricted in combat.
+
+The preview requires native-client testing before a stable release. Classic Era
+and other Classic branches remain outside this preview.
+
 ## Help, feedback, and development
 
 Open a [GitHub issue](https://github.com/Antrakt92/StatsPro/issues) for bugs,

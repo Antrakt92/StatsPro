@@ -145,6 +145,23 @@ ApplicantScoutSelfTest = nil
 ---@return number? tocversion
 function GetBuildInfo() end
 
+---@type number?
+WOW_PROJECT_ID = nil
+
+---@class (exact) StatsProDamageClassEnum
+---@field Holy number
+---@field Fire number
+---@field Nature number
+---@field Frost number
+---@field Shadow number
+---@field Arcane number
+
+---@class (exact) StatsProEnum
+---@field Damageclass StatsProDamageClassEnum
+
+---@type StatsProEnum?
+Enum = nil
+
 ---@return string? zoneName
 function GetZoneText() end
 

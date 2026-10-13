@@ -1,7 +1,9 @@
 # Contributing to StatsPro
 
 Bug reports, translation corrections, and focused pull requests are welcome.
-Please keep changes compatible with World of Warcraft Retail and Lua 5.1.
+Please keep shared changes compatible with World of Warcraft Retail and Lua 5.1.
+The separate Forever preview also uses the shared HUD; its stat sources live in
+`StatsPro_Forever.lua` and its load order is defined in `StatsPro_Forever.toc`.
 
 ## Before opening a pull request
 
@@ -51,6 +53,12 @@ command before committing.
 
 For user-visible changes, also test in the Retail client after `/reload`.
 Include screenshots for layout, Settings, font, color, or localization changes.
+
+The local gate also checks Forever stat sources and focused HUD regressions.
+Build the local preview with `scripts/build-forever-package.ps1`; validate it with
+`scripts/test-forever-package.ps1 -ArchivePath <path>`. This builder does not publish.
+Changes to Forever need login, combat, character stats, Settings, profile and reload
+checks in that client. Retail's automatic Archon releases remain separate.
 
 ## Architecture guide
 

@@ -1290,6 +1290,15 @@ local function loadStatsPro(locale, opts)
         __statsproSmoke = true,
         __testWelcomeEnabled = opts and opts.testWelcomeEnabled == true,
     }
+    if opts and opts.forever then
+        for key, value in pairs(opts.foreverAPIs or {}) do env[key] = value end
+        env.WOW_PROJECT_ID = 18
+        env.GetBuildInfo = function() return "1.60.1", "70338", "Oct 10 2026", 16001 end
+        local foreverChunk, foreverError = loadfile("StatsPro_Forever.lua")
+        if not foreverChunk then error(foreverError, 0) end
+        setfenv(foreverChunk, env)
+        foreverChunk("StatsPro", addon)
+    end
     local chunk, loadErr = loadfile("StatsPro.lua")
     if not chunk then error(loadErr, 0) end
     setfenv(chunk, env)
@@ -1301,6 +1310,9 @@ local function loadStatsPro(locale, opts)
     env.__getArchonTooltip = addon.__test.getArchonTooltip
     return env, addon, addon.__test
 end
+
+-- Reuse the client fixture for focused flavor integration without running Retail suites.
+if ... == "fixtures" then return { loadStatsPro = loadStatsPro } end
 
 local function withProfileIdentity(opts)
     opts = opts or {}

@@ -27,6 +27,7 @@ globals = {
 -- WoW API surface (read-only). Curated to what StatsPro touches; add more as
 -- new APIs are referenced.
 read_globals = {
+    "GetBuildInfo", "WOW_PROJECT_ID", "issecretvalue",
     -- Frame / UI
     "CreateFrame", "UIParent",
     "SettingsPanel", "HideUIPanel", "Settings",

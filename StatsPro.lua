@@ -3,6 +3,7 @@
 -- basic stat list are adapted from upstream; the rest is original work. See LICENSE
 -- for full attribution.
 local _, addon = ...
+addon.forever = addon.forever or { enabled = false }
 addon.fontRuntime = {}
 addon.panelEditRuntime = { requested = false }
 addon.resetRuntime = {
@@ -95,6 +96,8 @@ local DURABILITY_SCAN = {
     greenThreshold = 60,
     yellowThreshold = 30,
 }
+-- Forever still has a ranged equipment slot; nil durability self-filters empty slots.
+if addon.forever.enabled then DURABILITY_SCAN.skipSlots[18] = nil end
 
 local ITEM_LEVEL_ALERT = {
     warnDelta = 5,
@@ -511,6 +514,10 @@ local defaults = {
     },
 }
 
+if addon.forever.enabled then
+    for key, value in pairs(addon.forever.defaults) do defaults[key] = value end
+end
+
 --[[ ============================================================
     4. STAT DEFINITION TABLES (data-driven; UpdateStats iterates these)
 ============================================================ ]]
@@ -798,6 +805,21 @@ addon.hudPresets.definitions.tank.values =
     CopyTable(addon.hudPresets.definitions.dps.values)
 addon.hudPresets.definitions.tank.values.showDefensive = true
 
+if addon.forever.enabled then
+    for _, definition in pairs(addon.forever.presets.definitions) do
+        for key in pairs(addon.hudPresets.allowlist) do
+            if definition.values[key] == nil then definition.values[key] = defaults[key] end
+        end
+    end
+    addon.hudPresets.order = addon.forever.presets.order
+    addon.hudPresets.definitions = addon.forever.presets.definitions
+    for _, rows in pairs(addon.forever.rows) do
+        for _, definition in ipairs(rows) do
+            addon.hudPresets.allowlist[definition.showKey] = true
+        end
+    end
+end
+
 -- Shared preview coordination keeps the two preset services mutually exclusive and
 -- gives DB reads a single override path. Service-specific definitions, runtime apply,
 -- current-ID detection, and UI rendering stay on their owning service.
@@ -1051,6 +1073,7 @@ function addon.archonTargets.GetSnapshotDetail(snapshotKey, snapshot)
 end
 
 function addon.archonTargets.GetAvailableSnapshotOptions()
+    if addon.forever.enabled then return {} end
     local root = _G.StatsProArchonTargets
     local options = {}
     if type(root) == "table" and (root.schemaVersion == 4 or root.schemaVersion == 5)
@@ -1116,6 +1139,7 @@ function addon.archonTargets.ResolveAvailableSnapshotKey(value)
 end
 
 function addon.archonTargets.GetRootSnapshot(snapshotKey)
+    if addon.forever.enabled then return nil end
     local root = _G.StatsProArchonTargets
     if type(root) ~= "table" then return nil end
     local normalizedKey = addon.archonTargets.ResolveAvailableSnapshotKey(snapshotKey)
@@ -1140,6 +1164,7 @@ function addon.archonTargets.GetRootSnapshot(snapshotKey)
 end
 
 function addon.archonTargets.GetSnapshot(classToken, specKey, snapshotKey)
+    if addon.forever.enabled then return nil end
     local snapshotRoot, root, normalizedKey = addon.archonTargets.GetRootSnapshot(snapshotKey)
     if not snapshotRoot then return nil end
     local specs = snapshotRoot.specs
@@ -1361,6 +1386,19 @@ local CACHED_BOOL_KEYS = {
     "splitCharacter", "splitItemLevel", "splitOffensive", "splitTertiary",
     "splitDefensive", "splitDurability", "splitRepairCost",
 }
+
+if addon.forever.enabled then
+    local known = {}
+    for _, key in ipairs(CACHED_BOOL_KEYS) do known[key] = true end
+    for _, rows in pairs(addon.forever.rows) do
+        for _, definition in ipairs(rows) do
+            if not known[definition.showKey] then
+                CACHED_BOOL_KEYS[#CACHED_BOOL_KEYS + 1] = definition.showKey
+                known[definition.showKey] = true
+            end
+        end
+    end
+end
 
 --[[ ============================================================
     6. SAVED VARIABLES + RUNTIME STATE
@@ -4272,6 +4310,10 @@ end
 -- few intentional display aliases. Before CacheSettings the empty table falls
 -- through to the English key; both paths remain O(1).
 local function L(englishKey)
+    if addon.forever.enabled and addon.forever.Translate then
+        local translated = addon.forever.Translate(englishKey, cached.activeLabelsLocale or GetLocale())
+        if translated then return translated end
+    end
     return cached.activeLabels[englishKey] or englishKey
 end
 
@@ -4877,6 +4919,23 @@ addon.profileTransfer = {
 
 do
     local transfer = addon.profileTransfer
+    if addon.forever.enabled then
+        -- Separate envelopes prevent silently importing another client's stat choices.
+        transfer.prefix = "SPF1:"
+        local known = {}
+        for _, field in ipairs(transfer.fields) do known[field.id] = true end
+        for _, group in ipairs({ "character", "offensive", "defensive", "utility" }) do
+            for _, definition in ipairs(addon.forever.rows[group]) do
+                if not known[definition.showKey] then
+                    transfer.fields[#transfer.fields + 1] = {
+                        id = definition.showKey, section = "stats", kind = "boolean",
+                    }
+                    known[definition.showKey] = true
+                end
+                addon.profileOps.copyScopeKeys.stats[definition.showKey] = true
+            end
+        end
+    end
     transfer.fieldByID = {}
     transfer.sectionFieldCounts = { stats = 0, layout = 0, appearance = 0 }
     transfer.base64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
@@ -5143,7 +5202,10 @@ function addon.profileTransfer.Parse(value)
     end
     value = value:match("^%s*(.-)%s*$")
     if value == "" then return nil, "invalid", "size" end
-    local version = value:match("^SPP(%d+):")
+    if addon.forever.enabled and value:match("^SPP%d+:") then
+        return nil, "invalid", "client-flavor"
+    end
+    local version = value:match(addon.forever.enabled and "^SPF(%d+):" or "^SPP(%d+):")
     if version then
         local numericVersion = tonumber(version)
         if numericVersion and numericVersion > addon.profileTransfer.formatVersion then
@@ -6380,6 +6442,13 @@ function addon.profileRuntime.ReadCombatState()
 end
 
 function addon.profileRuntime.ReadPlayerContext()
+    if addon.forever.enabled then
+        local context = addon.forever.ReadContext()
+        addon.profileRuntime.contextReadCount = addon.profileRuntime.contextReadCount + 1
+        if not context then return nil, "unknown" end
+        addon.profileRuntime.currentGUID = context.guid
+        return context, "valid"
+    end
     addon.profileRuntime.contextReadCount = addon.profileRuntime.contextReadCount + 1
     if type(UnitGUID) ~= "function" then return nil, "unavailable" end
     local guidOK, guid = pcall(UnitGUID, "player")
@@ -10881,7 +10950,42 @@ local function PushItemLevelRow(labels, ratings, values)
     PushRow(labels, ratings, values, label, rStr, vStr)
 end
 
+function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
+    for _, definition in ipairs(addon.forever.rows[group]) do
+        if cached[definition.showKey] then
+            local value, state = definition.Read()
+            local rowKey = "forever:" .. definition.key
+            local visible
+            if state == "clean" then
+                -- Cache only the clean visibility decision, never a numeric fallback.
+                cached.cleanRowVisibility[rowKey] = value ~= 0
+                visible = not hideZero or cached.cleanRowVisibility[rowKey]
+            else
+                visible = shouldShowUnknown(rowKey, true, hideZero)
+            end
+            if visible and state ~= "missing" then
+                local color = cached.colorStrings[definition.colorKey] or cached.colorStrings.mainStat
+                local valueColor = cached.matchValueColorToStat and color or cached.colorStrings.percentage
+                local text
+                if state == "unknown" then
+                    text = "|cff" .. valueColor .. "?|r"
+                elseif definition.kind == "percent" then
+                    text = SAFE_NUM.FormatColorNumber(valueColor, value, "%.2f%%", "%")
+                else
+                    text = SAFE_NUM.FormatColorNumber(valueColor, value, definition.format or (group == "utility" and "%.2f" or "%d"))
+                end
+                local rCol, vCol = RouteValueOnly(text or ("|cff" .. valueColor .. "?|r"))
+                PushRow(labels, ratings, values, FormatLabel(color, definition.label), rCol, vCol)
+            end
+        end
+    end
+    return labels, ratings, values
+end
+
 local function BuildCharacterLines(labels, ratings, values)
+    if addon.forever.enabled then
+        return addon.forever.BuildLines("character", labels, ratings, values, false)
+    end
     if not cached.showMainStat and not cached.showStamina then return labels, ratings, values end
     if cached.showMainStat then
         local def = PRIMARY_STATS_BY_ID[GetCurrentMainStatId()]
@@ -10904,6 +11008,10 @@ local function BuildItemLevelLines(labels, ratings, values)
 end
 
 local function BuildOffensiveLines(labels, ratings, values, targetRows)
+    if addon.forever.enabled then
+        if not cached.showOffensive then return labels, ratings, values end
+        return addon.forever.BuildLines("offensive", labels, ratings, values, cached.hideZeroOffensive)
+    end
     -- Master gate: hide entire section when off (cheapest check, exits whole function).
     if not cached.showOffensive then return labels, ratings, values end
     -- WHY guard: with both display toggles off the user wants offensive rows hidden
@@ -11041,6 +11149,10 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
 end
 
 local function BuildTertiaryLines(labels, ratings, values)
+    if addon.forever.enabled then
+        if not cached.showTertiary then return labels, ratings, values end
+        return addon.forever.BuildLines("utility", labels, ratings, values, cached.hideZeroTertiary)
+    end
     if not cached.showTertiary then return labels, ratings, values end
     if not (cached.showRating or cached.showPercentage) then return labels, ratings, values end
     local cs = cached.colorStrings
@@ -11089,6 +11201,10 @@ local function BuildTertiaryLines(labels, ratings, values)
 end
 
 local function BuildDefensiveLines(labels, ratings, values)
+    if addon.forever.enabled then
+        if not cached.showDefensive then return labels, ratings, values end
+        return addon.forever.BuildLines("defensive", labels, ratings, values, cached.hideZeroDefensive)
+    end
     if not cached.showDefensive then return labels, ratings, values end
     local cs = cached.colorStrings
 
@@ -11345,7 +11461,8 @@ local function UpdateStats()
 
     -- Armor refresh is unnecessary when either the master defensive block or the
     -- Armor sub-row is hidden. Keep the API chain out of the recurring ticker then.
-    if addon.profileRuntime.ReadCombatState() == false and cached.showDefensive and cached.showArmor then
+    if not addon.forever.enabled and addon.profileRuntime.ReadCombatState() == false
+        and cached.showDefensive and cached.showArmor then
         RefreshArmorCache()
     end
 
@@ -11599,7 +11716,11 @@ local EVENT_HANDLERS = {
 
 local eventFrame = CreateFrame("Frame")
 for event in pairs(EVENT_HANDLERS) do
-    eventFrame:RegisterEvent(event)
+    if addon.forever.enabled then
+        pcall(eventFrame.RegisterEvent, eventFrame, event)
+    else
+        eventFrame:RegisterEvent(event)
+    end
 end
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     local handler = EVENT_HANDLERS[event]
@@ -15017,6 +15138,7 @@ function addon.archonTargets.SelectTargetSnapshotDropdownValue(value, opt, dropd
 end
 
 function addon.profileUI.FormatSpecName(specID, explicitName)
+    if addon.forever.enabled then return L("Character") end
     if addon.dbRuntime.IsCleanType(explicitName, "string") and explicitName ~= "" then
         return explicitName
     end
@@ -17557,6 +17679,7 @@ function addon.settingsUI.BuildLayoutTab(self, context)
     -- Value Display covers rated-stat column visibility plus label presentation for all
     -- normal HUD rows.
     CursorSection(cd, "Value Display")
+    if not addon.forever.enabled then
     self.settingsUI.CreateSimpleDropdownRow(
         layoutTab,
         layoutDropdownRows,
@@ -17566,6 +17689,8 @@ function addon.settingsUI.BuildLayoutTab(self, context)
         cd,
         self.archonTargets.GetTargetSnapshotDropdownValue,
         self.archonTargets.SelectTargetSnapshotDropdownValue)
+    end
+    if not addon.forever.enabled then
     do
         local rowY = cd.y
         local leftRows, rightRows = {}, {}
@@ -17577,6 +17702,7 @@ function addon.settingsUI.BuildLayoutTab(self, context)
         AlignSwatchColumn(leftRows)
         AlignSwatchColumn(rightRows)
         cd.y = rowY - 26
+    end
     end
     do
         local LABEL_STYLE_OPTIONS = {
@@ -18649,6 +18775,7 @@ function addon.settingsUI.BuildStatsTab(self, context)
 
     -- Character-sheet rows. Inline color swatches per row drive label color +
     -- matchValueColorToStat coloring.
+    if not addon.forever.enabled then
     CursorSection(cs, "Character")
     do
         local rowY = cs.y
@@ -18682,19 +18809,47 @@ function addon.settingsUI.BuildStatsTab(self, context)
 
     CursorGap(cs, 6)
 
+    else
+        for _, group in ipairs({ "character", "offensive", "defensive", "utility" }) do
+            local rows = self.forever.rows[group]
+            CursorSection(cs, ({ character = "Character", offensive = "Offensive Stats",
+                defensive = "Defensive Stats", utility = "Utility" })[group])
+            if group ~= "character" then
+                local master = ({ offensive = "showOffensive", defensive = "showDefensive",
+                    utility = "showTertiary" })[group]
+                CreateCheckbox(statsBody, "StatsProForever" .. group .. "Master",
+                    ({ offensive = "Show Offensive Stats", defensive = "Show Defensive Stats",
+                        utility = "Show Utility Stats" })[group], master, cs.padX, cs.y)
+                CreateCheckbox(statsBody, "StatsProForever" .. group .. "HideZero",
+                    "Hide Zero Values", ({ offensive = "hideZeroOffensive", defensive = "hideZeroDefensive",
+                        utility = "hideZeroTertiary" })[group], cs.padX + CONFIG_COL_OFFSET, cs.y)
+                CursorAdvance(cs, 26)
+            end
+            for index, definition in ipairs(rows) do
+                local column = (index - 1) % 2
+                CreateCheckboxColor(statsBody, "StatsProForever" .. definition.key,
+                    definition.label, definition.showKey, definition.colorKey,
+                    cs.padX + column * CONFIG_COL_OFFSET, cs.y)
+                if column == 1 or index == #rows then CursorAdvance(cs, 26) end
+            end
+            CursorGap(cs, 6)
+        end
+    end
     CursorSection(cs, "Gear")
     do
         local rowY = cs.y
         local leftRows, rightRows = {}, {}
         local sw, txt
+        if not addon.forever.enabled or addon.forever.capabilities.itemLevel then
         _, sw, txt = CreateCheckboxColor(statsBody, "StatsProItemLevelCheck",
             "Show Item Level", "showItemLevel", "itemLevel", cs.padX, rowY,
             function(checked) if checked then addon.itemLevelRuntime.MarkDirty() end end)
         leftRows[#leftRows + 1] = { text = txt, swatch = sw }
+        end
         -- Durability swatch is the override color used when Auto Color is OFF.
         -- WHY: also mark dirty so re-enabling after a long off period gets fresh values
         -- on the next tick, not whatever was cached when last enabled.
-        _, sw, txt = CreateCheckboxColor(statsBody, "StatsProDurabilityCheck", "Show Durability",  "showDurability", "durability", cs.padX + CONFIG_COL_OFFSET, rowY,
+        _, sw, txt = CreateCheckboxColor(statsBody, "StatsProDurabilityCheck", "Show Durability",  "showDurability", "durability", cs.padX + (addon.forever.enabled and 0 or CONFIG_COL_OFFSET), rowY,
             function() addon.durabilityRuntime.MarkDirty() end)
         rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         AlignSwatchColumn(leftRows)
@@ -19748,6 +19903,8 @@ if addon and addon.__statsproSmoke == true then
         archonComparisonCache = function() return CopyTable(addon.archonTargets.comparisonCache) end,
         formatSnapshotDate = addon.archonTargets.FormatSnapshotDate,
         buildRenderBlocks = BuildRenderBlocks,
+        forever = addon.forever,
+        transferPrefix = function() return addon.profileTransfer.prefix end,
         routeRenderBlocks = RouteRenderBlocks,
         bucketHasContent = BucketHasContent,
         applyTextStyleToAllPanels = ApplyTextStyleToAllPanels,
@@ -20027,7 +20184,11 @@ launcherDesc:SetPoint("TOPLEFT", launcherTitle, "BOTTOMLEFT", 0, -8)
 launcherDesc:SetPoint("RIGHT", launcher, "RIGHT", -16, 0)
 launcherDesc:SetJustifyH("LEFT")
 PushPersistentLocalizedLabel(function()
-    launcherDesc:SetText(L("Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."))
+    if addon.forever.enabled then
+        launcherDesc:SetText(L("Character stats and gear HUD for WoW Forever. Open Settings to choose a layout and visible stats."))
+    else
+        launcherDesc:SetText(L("Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."))
+    end
 end)
 
 if addon.__test then

@@ -1115,6 +1115,11 @@ Write-Host "== Lua syntax =="
 $SyntaxFiles = @($RuntimeLuaRefs | ForEach-Object { $_.FullPath })
 if (Test-Path $ArchonTargetsCheck) { $SyntaxFiles += $ArchonTargetsCheck }
 $SyntaxFiles += $SmokeFile
+foreach ($name in @("StatsPro_Forever.lua", "scripts/test-forever.lua", "scripts/test-forever-hud.lua")) {
+    $path = Join-Path $RepoRoot $name
+    if (-not (Test-Path -LiteralPath $path)) { throw "Missing Forever verification source: $name" }
+    $SyntaxFiles += $path
+}
 $SyntaxResult = Invoke-NativeCapture `
     -FilePath $Luac `
     -Arguments (@("-p") + $SyntaxFiles) `
@@ -1181,11 +1186,20 @@ if (-not $UpdateSmokeContract) {
     Write-Host "Smoke reachability contract passed: $($SmokeSummary.SuiteCount) suites, $($SmokeSummary.TotalAssertions) assertions."
 }
 
+Write-Host "== Forever stat and HUD regressions =="
+foreach ($script in @("scripts/test-forever.lua", "scripts/test-forever-hud.lua")) {
+    $result = Invoke-NativeCapture -FilePath $Lua -Arguments @((Join-Path $RepoRoot $script)) `
+        -TimeoutSeconds 60 -Description $script -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
+    $result.Output | ForEach-Object { Write-Host $_ }
+    if ($result.ExitCode -ne 0) { throw "$script exited with code $($result.ExitCode)" }
+}
+
 $StaticAnalysisFiles = @(
     $RuntimeLuaRefs |
         Where-Object { -not $_.IsVendored -and -not $_.IsGenerated } |
         ForEach-Object { $_.FullPath }
 )
+$StaticAnalysisFiles += (Join-Path $RepoRoot "StatsPro_Forever.lua")
 if ($StaticAnalysisFiles.Count -eq 0) {
     throw "No first-party runtime Lua files available for static analysis."
 }

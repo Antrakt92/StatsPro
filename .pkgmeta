@@ -5,6 +5,9 @@ manual-changelog:
   markup-type: markdown
 
 ignore:
+  # The local Forever preview has its own explicit package builder.
+  - StatsPro_Forever.toc
+  - StatsPro_Forever.lua
   - .github
   - .gitattributes
   - .gitignore

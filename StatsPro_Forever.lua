@@ -294,9 +294,11 @@ local function Parts(text)
     return result
 end
 local componentKeys = Parts(vocabularyKeys)
+local localeComponents = {}
 for locale, words in pairs(vocabulary) do
     local components = {}
     for index, word in ipairs(Parts(words)) do components[componentKeys[index]] = word end
+    localeComponents[locale] = components
     local labels = F.labels[locale] or {}
     F.labels[locale] = labels
     for _, rows in pairs(F.rows) do
@@ -307,20 +309,71 @@ for locale, words in pairs(vocabulary) do
                 local mode, stat = key:match("^(Melee)(.+)$")
                 if not mode then mode, stat = key:match("^(Ranged)(.+)$") end
                 if not mode then mode, stat = key:match("^(Spell)(.+)$") end
-                if mode and components[stat] then text = components[stat] .. ": " .. components[mode] end
+                if mode and components[stat] then text = components[stat] .. " (" .. components[mode] .. ")" end
                 local school = key:match("^SpellPower(.+)$")
-                if school and components[school] then text = components.SpellPower .. ": " .. components[school] end
+                if school and components[school] then text = components.SpellPower .. " (" .. components[school] .. ")" end
                 local resistance = key:match("^(.+)Resistance$")
-                if resistance and components[resistance] then text = components.Resistance .. ": " .. components[resistance] end
+                if resistance and components[resistance] then text = components.Resistance .. " (" .. components[resistance] .. ")" end
                 local hand = key:match("^(.+)Expertise$")
-                if hand and components[hand] then text = components.Expertise .. ": " .. components[hand] end
+                if hand and components[hand] then text = components.Expertise .. " (" .. components[hand] .. ")" end
                 if key == "MovementSpeed" then text = components.RunSpeed end
             end
-            labels[row.label] = labels[row.label] or text
+            labels[row.label] = (locale == "enUS" or locale == "enGB") and row.label or (labels[row.label] or text)
         end
     end
     for _, key in ipairs({ "Compact", "Physical", "Caster", "Healer", "Tank", "Character" }) do labels[key] = components[key] end
     labels["Select individual stats for your build."] = components.Summary
+end
+
+local function Abbreviate(text)
+    local out, count = {}, 0
+    for character in text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+        if not character:match("%s") then
+            count = count + 1
+            out[count] = character
+            if count == 3 then break end
+        end
+    end
+    return table.concat(out)
+end
+F.shortLabels = {}
+for locale, components in pairs(localeComponents) do
+    local labels, owners = {}, {}
+    F.shortLabels[locale] = labels
+    local seconds = locale == "ruRU" and "с" or ((locale == "zhCN" or locale == "zhTW") and "秒" or (locale == "koKR" and "초" or "s"))
+    for _, rows in pairs(F.rows) do
+        for _, row in ipairs(rows) do
+            local key = row.key
+            local short = components[key] and Abbreviate(components[key])
+            local mode, stat = key:match("^(Melee)(.+)$")
+            if not mode then mode, stat = key:match("^(Ranged)(.+)$") end
+            if not mode then mode, stat = key:match("^(Spell)(.+)$") end
+            if mode and components[stat] then short = Abbreviate(components[stat]) .. " " .. Abbreviate(components[mode]) end
+            local school = key:match("^SpellPower(.+)$")
+            if school then short = Abbreviate(components.SpellPower) .. " " .. Abbreviate(components[school]) end
+            local resistance = key:match("^(.+)Resistance$")
+            if resistance then short = Abbreviate(components.Resistance) .. " " .. Abbreviate(components[resistance]) end
+            local hand = key:match("^(.+)Expertise$")
+            if hand then short = Abbreviate(components.Expertise) .. " " .. Abbreviate(components[hand]) end
+            if key:match("ManaRegen") then
+                local casting = key:match("^Casting") and (Abbreviate(components.Spell) .. " ") or ""
+                short = casting .. Abbreviate(components.ManaRegen) .. "/" .. (key:match("MP5$") and "5" or "") .. seconds
+            elseif key == "MovementSpeed" then short = Abbreviate(components.RunSpeed) end
+            short = short or F.labels[locale][row.label]
+            if owners[short] then
+                -- Full localized labels retain meaning when abbreviations collide.
+                labels[owners[short]] = F.labels[locale][owners[short]]
+                labels[row.label] = F.labels[locale][row.label]
+            else
+                owners[short] = row.label
+                labels[row.label] = short
+            end
+        end
+    end
+end
+function F.ShortLabel(label, locale)
+    local labels = F.shortLabels[locale]
+    return labels and labels[label] or nil
 end
 local utilityLabels = {
     enUS = { "Utility", "Show Utility Stats", "Character stats and gear HUD for WoW Forever. Open Settings to choose a layout and visible stats." },
@@ -375,6 +428,310 @@ characterProfileLabels.esMX = characterProfileLabels.esES
 for locale, labels in pairs(characterProfileLabels) do
     for index, key in ipairs(characterProfileLabels.enUS) do F.labels[locale][key] = labels[index] end
 end
+F.textOverrides = {
+    ["Changes affect every character and specialization."] = "Changes affect every character.",
+    ["Changes affect %d specializations."] = "Changes affect %d characters.",
+    ["Return to specialization settings before changing assignments."] = "Return to character settings before changing assignments.",
+    ["All known specializations already use these settings."] = "All known characters already use these settings.",
+    ["Visit another specialization or character before copying or sharing settings."] = "Visit another character before copying or sharing settings.",
+    ["Return to specialization settings..."] = "Return to character settings...",
+    ["Make this specialization independent..."] = "Make this character independent...",
+    ["Give \"%s\" its own copy of these settings? Future changes will no longer affect the other specializations."] = "Give \"%s\" its own copy of these settings? Future changes will no longer affect the other characters.",
+    ["Return to specialization settings? Previous assignments will become active again. Account-wide settings will be kept."] = "Return to character settings? Previous assignments will become active again. Account-wide settings will be kept.",
+    ["Shared with %d specializations"] = "Shared with %d characters",
+    ["Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d specializations; future changes will affect all %d."] = "Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d characters; future changes will affect all %d.",
+    ["Every existing and future specialization uses these settings."] = "Every existing and future character uses these settings.",
+    ["Import selected sections as new account-wide settings? Existing specialization assignments and unselected settings will stay unchanged."] = "Import selected sections as new account-wide settings? Existing character assignments and unselected settings will stay unchanged.",
+    ["Recover \"%s\" as new account-wide settings? The saved source, current setup and specialization assignments will be kept."] = "Recover \"%s\" as new account-wide settings? The saved source, current setup and character assignments will be kept.",
+    ["Recover \"%s\" as a separate copy for \"%s\"? The saved source, current setup and other specializations will be kept."] = "Recover \"%s\" as a separate copy for \"%s\"? The saved source, current setup and other characters will be kept.",
+    ["Use the saved account-wide settings everywhere? Existing specialization assignments will be kept."] = "Use the saved account-wide settings everywhere? Existing character assignments will be kept.",
+    ["Create account-wide settings from \"%s\"? Every existing and future character and specialization will use them. Existing specialization assignments will be kept."] = "Create account-wide settings from \"%s\"? Every existing and future character will use them. Existing character assignments will be kept.",
+    ["Reset account-wide settings to defaults? This affects every existing and future character and specialization."] = "Reset account-wide settings to defaults? This affects every existing and future character.",
+    ["Delete the saved account-wide settings? Specialization assignments will stay unchanged."] = "Delete the saved account-wide settings? Character assignments will stay unchanged.",
+    ["Delete %d unused settings records? Settings used by a specialization, saved account-wide settings, starting settings, or fallback settings will be kept."] = "Delete %d unused settings records? Settings used by a character, saved account-wide settings, starting settings, or fallback settings will be kept.",
+    ["Import compatible SwiftStats settings as new account-wide settings? Existing specialization assignments, other profiles, account settings, and SwiftStats data will stay unchanged."] = "Import compatible SwiftStats settings as new account-wide settings? Existing character assignments, other profiles, account settings, and SwiftStats data will stay unchanged.",
+    ["Import compatible SwiftStats settings into a new profile for the current character and specialization? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged."] = "Import compatible SwiftStats settings into a new profile for the current character? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged.",
+    ["Reset corrupted StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position."] = "Reset corrupted StatsPro data? This permanently removes every profile, character assignment, role template, account setting, and saved position.",
+    ["Reset all StatsPro data? This permanently removes every profile, character and specialization assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged."] = "Reset all StatsPro data? This permanently removes every profile, character assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged.",
+}
+local profilePromptKeys = {
+    "Changes affect every character.",
+    "Changes affect %d characters.",
+    "Return to character settings before changing assignments.",
+    "All known characters already use these settings.",
+    "Visit another character before copying or sharing settings.",
+    "Return to character settings...",
+    "Make this character independent...",
+    "Give \"%s\" its own copy of these settings? Future changes will no longer affect the other characters.",
+    "Return to character settings? Previous assignments will become active again. Account-wide settings will be kept.",
+    "Shared with %d characters",
+    "Use the shared settings from \"%s\" for \"%s\"? They are already shared by %d characters; future changes will affect all %d.",
+    "Every existing and future character uses these settings.",
+    "Import selected sections as new account-wide settings? Existing character assignments and unselected settings will stay unchanged.",
+    "Recover \"%s\" as new account-wide settings? The saved source, current setup and character assignments will be kept.",
+    "Recover \"%s\" as a separate copy for \"%s\"? The saved source, current setup and other characters will be kept.",
+    "Use the saved account-wide settings everywhere? Existing character assignments will be kept.",
+    "Create account-wide settings from \"%s\"? Every existing and future character will use them. Existing character assignments will be kept.",
+    "Reset account-wide settings to defaults? This affects every existing and future character.",
+    "Delete the saved account-wide settings? Character assignments will stay unchanged.",
+    "Delete %d unused settings records? Settings used by a character, saved account-wide settings, starting settings, or fallback settings will be kept.",
+    "Import compatible SwiftStats settings as new account-wide settings? Existing character assignments, other profiles, account settings, and SwiftStats data will stay unchanged.",
+    "Import compatible SwiftStats settings into a new profile for the current character? Existing profiles, other assignments, account settings, and SwiftStats data will stay unchanged.",
+    "Reset corrupted StatsPro data? This permanently removes every profile, character assignment, role template, account setting, and saved position.",
+    "Reset all StatsPro data? This permanently removes every profile, character assignment, role template, account setting, and saved position. SwiftStats data will stay unchanged.",
+    "Collecting 10 out-of-combat samples, then fight a creature to test combat.",
+}
+local translatedProfilePrompts = {
+    enUS = profilePromptKeys,
+    ruRU = {
+        "Изменения затронут всех персонажей.",
+        "Изменения затронут %d персонажей.",
+        "Вернись к настройкам персонажа перед изменением назначений.",
+        "Все известные персонажи уже используют эти настройки.",
+        "Зайди на другого персонажа перед копированием или объединением настроек.",
+        "Вернуться к настройкам персонажа...",
+        "Сделать настройки персонажа отдельными...",
+        "Создать отдельную копию настроек для \"%s\"? Будущие изменения больше не затронут других персонажей.",
+        "Вернуться к настройкам персонажей? Предыдущие назначения снова станут активными. Общие настройки учетной записи сохранятся.",
+        "Общие для %d персонажей",
+        "Использовать настройки \"%s\" для \"%s\"? Они уже общие для %d персонажей; будущие изменения затронут всех %d.",
+        "Эти настройки используются всеми нынешними и будущими персонажами.",
+        "Импортировать выбранные разделы как новые общие настройки учетной записи? Назначения персонажей и невыбранные настройки останутся прежними.",
+        "Восстановить \"%s\" как новые общие настройки учетной записи? Источник, текущие настройки и назначения персонажей сохранятся.",
+        "Восстановить \"%s\" отдельной копией для \"%s\"? Источник, текущие настройки и другие персонажи останутся без изменений.",
+        "Использовать сохраненные общие настройки везде? Назначения персонажей сохранятся.",
+        "Создать общие настройки учетной записи из \"%s\"? Их будут использовать все нынешние и будущие персонажи. Прежние назначения сохранятся.",
+        "Сбросить общие настройки учетной записи? Это затронет всех нынешних и будущих персонажей.",
+        "Удалить сохраненные общие настройки учетной записи? Назначения персонажей останутся прежними.",
+        "Удалить %d неиспользуемых записей настроек? Используемые персонажами, общие, начальные и резервные настройки сохранятся.",
+        "Импортировать совместимые настройки SwiftStats как новые общие настройки учетной записи? Назначения персонажей, другие профили, настройки учетной записи и данные SwiftStats останутся прежними.",
+        "Импортировать совместимые настройки SwiftStats в новый профиль текущего персонажа? Существующие профили, другие назначения, настройки учетной записи и данные SwiftStats останутся прежними.",
+        "Сбросить поврежденные данные StatsPro? Это навсегда удалит все профили, назначения персонажей, шаблоны ролей, настройки учетной записи и сохраненные позиции.",
+        "Сбросить все данные StatsPro? Это навсегда удалит все профили, назначения персонажей, шаблоны ролей, настройки учетной записи и сохраненные позиции. Данные SwiftStats останутся прежними.",
+        "Собираем 10 замеров вне боя, затем сразись с существом для проверки в бою.",
+    },
+    deDE = {
+        "Änderungen betreffen jeden Charakter.",
+        "Änderungen betreffen %d Charaktere.",
+        "Kehre vor der Änderung von Zuweisungen zu den Charaktereinstellungen zurück.",
+        "Alle bekannten Charaktere verwenden diese Einstellungen bereits.",
+        "Besuche vor dem Kopieren oder Teilen einen anderen Charakter.",
+        "Zu Charaktereinstellungen zurückkehren...",
+        "Diesen Charakter unabhängig machen...",
+        "Eigene Kopie dieser Einstellungen für \"%s\" erstellen? Künftige Änderungen betreffen die anderen Charaktere nicht mehr.",
+        "Zu Charaktereinstellungen zurückkehren? Frühere Zuweisungen werden wieder aktiv. Accountweite Einstellungen bleiben erhalten.",
+        "Mit %d Charakteren geteilt",
+        "Geteilte Einstellungen von \"%s\" für \"%s\" verwenden? Bereits %d Charaktere teilen sie; künftige Änderungen betreffen alle %d.",
+        "Alle bestehenden und zukünftigen Charaktere verwenden diese Einstellungen.",
+        "Ausgewählte Bereiche als neue accountweite Einstellungen importieren? Charakterzuweisungen und nicht ausgewählte Einstellungen bleiben unverändert.",
+        "\"%s\" als neue accountweite Einstellungen wiederherstellen? Gespeicherte Quelle, aktuelle Einstellungen und Charakterzuweisungen bleiben erhalten.",
+        "\"%s\" als separate Kopie für \"%s\" wiederherstellen? Gespeicherte Quelle, aktuelle Einstellungen und andere Charaktere bleiben erhalten.",
+        "Gespeicherte accountweite Einstellungen überall verwenden? Charakterzuweisungen bleiben erhalten.",
+        "Accountweite Einstellungen aus \"%s\" erstellen? Alle bestehenden und zukünftigen Charaktere verwenden sie. Bisherige Charakterzuweisungen bleiben erhalten.",
+        "Accountweite Einstellungen zurücksetzen? Dies betrifft alle bestehenden und zukünftigen Charaktere.",
+        "Gespeicherte accountweite Einstellungen löschen? Charakterzuweisungen bleiben unverändert.",
+        "%d ungenutzte Einstellungsdatensätze löschen? Von Charakteren verwendete, accountweite, Start- und Fallback-Einstellungen bleiben erhalten.",
+        "Kompatible SwiftStats-Einstellungen als neue accountweite Einstellungen importieren? Charakterzuweisungen, andere Profile, Account-Einstellungen und SwiftStats-Daten bleiben unverändert.",
+        "Kompatible SwiftStats-Einstellungen in ein neues Profil für diesen Charakter importieren? Bestehende Profile, andere Zuweisungen, Account-Einstellungen und SwiftStats-Daten bleiben unverändert.",
+        "Beschädigte StatsPro-Daten zurücksetzen? Dies löscht dauerhaft alle Profile, Charakterzuweisungen, Rollenvorlagen, Account-Einstellungen und gespeicherten Positionen.",
+        "Alle StatsPro-Daten zurücksetzen? Dies löscht dauerhaft alle Profile, Charakterzuweisungen, Rollenvorlagen, Account-Einstellungen und gespeicherten Positionen. SwiftStats-Daten bleiben unverändert.",
+        "10 Stichproben außerhalb des Kampfes werden gesammelt. Kämpfe danach gegen eine Kreatur für den Kampftest.",
+    },
+    esES = {
+        "Los cambios afectan a todos los personajes.",
+        "Los cambios afectan a %d personajes.",
+        "Vuelve a los ajustes del personaje antes de cambiar asignaciones.",
+        "Todos los personajes conocidos ya usan estos ajustes.",
+        "Entra con otro personaje antes de copiar o compartir ajustes.",
+        "Volver a los ajustes del personaje...",
+        "Usar ajustes independientes para este personaje...",
+        "¿Crear una copia de estos ajustes para \"%s\"? Los cambios futuros ya no afectarán a los demás personajes.",
+        "¿Volver a los ajustes de personaje? Se reactivarán las asignaciones anteriores. Se conservarán los ajustes de cuenta.",
+        "Compartido con %d personajes",
+        "¿Usar los ajustes de \"%s\" para \"%s\"? Ya los comparten %d personajes; los cambios futuros afectarán a los %d.",
+        "Todos los personajes actuales y futuros usan estos ajustes.",
+        "¿Importar las secciones seleccionadas como nuevos ajustes de cuenta? Las asignaciones de personajes y los ajustes no seleccionados no cambiarán.",
+        "¿Recuperar \"%s\" como nuevos ajustes de cuenta? Se conservarán la fuente, la configuración actual y las asignaciones de personajes.",
+        "¿Recuperar \"%s\" como copia independiente para \"%s\"? Se conservarán la fuente, la configuración actual y los demás personajes.",
+        "¿Usar los ajustes de cuenta guardados en todas partes? Se conservarán las asignaciones de personajes.",
+        "¿Crear ajustes de cuenta a partir de \"%s\"? Los usarán todos los personajes actuales y futuros. Se conservarán las asignaciones anteriores.",
+        "¿Restablecer los ajustes de cuenta? Esto afecta a todos los personajes actuales y futuros.",
+        "¿Eliminar los ajustes de cuenta guardados? Las asignaciones de personajes no cambiarán.",
+        "¿Eliminar %d registros de ajustes sin usar? Se conservarán los usados por personajes, los de cuenta, los iniciales y los de respaldo.",
+        "¿Importar ajustes compatibles de SwiftStats como nuevos ajustes de cuenta? Las asignaciones de personajes, otros perfiles, los ajustes de cuenta y los datos de SwiftStats no cambiarán.",
+        "¿Importar ajustes compatibles de SwiftStats en un nuevo perfil para este personaje? Los perfiles existentes, otras asignaciones, los ajustes de cuenta y los datos de SwiftStats no cambiarán.",
+        "¿Restablecer los datos dañados de StatsPro? Esto elimina permanentemente todos los perfiles, asignaciones de personajes, plantillas de rol, ajustes de cuenta y posiciones guardadas.",
+        "¿Restablecer todos los datos de StatsPro? Esto elimina permanentemente todos los perfiles, asignaciones de personajes, plantillas de rol, ajustes de cuenta y posiciones guardadas. Los datos de SwiftStats no cambiarán.",
+        "Se recopilan 10 muestras fuera de combate. Después, lucha contra una criatura para probar el combate.",
+    },
+    frFR = {
+        "Les modifications affectent tous les personnages.",
+        "Les modifications affectent %d personnages.",
+        "Revenez aux paramètres du personnage avant de modifier les affectations.",
+        "Tous les personnages connus utilisent déjà ces paramètres.",
+        "Connectez un autre personnage avant de copier ou partager les paramètres.",
+        "Revenir aux paramètres du personnage...",
+        "Rendre ce personnage indépendant...",
+        "Créer une copie de ces paramètres pour \"%s\" ? Les modifications futures n’affecteront plus les autres personnages.",
+        "Revenir aux paramètres des personnages ? Les affectations précédentes seront réactivées. Les paramètres du compte seront conservés.",
+        "Partagé avec %d personnages",
+        "Utiliser les paramètres de \"%s\" pour \"%s\" ? Ils sont déjà partagés par %d personnages ; les modifications futures affecteront les %d.",
+        "Tous les personnages actuels et futurs utilisent ces paramètres.",
+        "Importer les sections sélectionnées comme nouveaux paramètres du compte ? Les affectations des personnages et les paramètres non sélectionnés resteront inchangés.",
+        "Récupérer \"%s\" comme nouveaux paramètres du compte ? La source, la configuration actuelle et les affectations des personnages seront conservées.",
+        "Récupérer \"%s\" comme copie distincte pour \"%s\" ? La source, la configuration actuelle et les autres personnages seront conservés.",
+        "Utiliser partout les paramètres du compte enregistrés ? Les affectations des personnages seront conservées.",
+        "Créer des paramètres du compte à partir de \"%s\" ? Tous les personnages actuels et futurs les utiliseront. Les affectations précédentes seront conservées.",
+        "Réinitialiser les paramètres du compte ? Cela affecte tous les personnages actuels et futurs.",
+        "Supprimer les paramètres du compte enregistrés ? Les affectations des personnages resteront inchangées.",
+        "Supprimer %d enregistrements inutilisés ? Les paramètres utilisés par les personnages, ceux du compte, les paramètres initiaux et de secours seront conservés.",
+        "Importer les paramètres compatibles de SwiftStats comme nouveaux paramètres du compte ? Les affectations des personnages, autres profils, paramètres du compte et données SwiftStats resteront inchangés.",
+        "Importer les paramètres compatibles de SwiftStats dans un nouveau profil pour ce personnage ? Les profils existants, autres affectations, paramètres du compte et données SwiftStats resteront inchangés.",
+        "Réinitialiser les données StatsPro corrompues ? Cela supprime définitivement tous les profils, affectations des personnages, modèles de rôles, paramètres du compte et positions enregistrées.",
+        "Réinitialiser toutes les données StatsPro ? Cela supprime définitivement tous les profils, affectations des personnages, modèles de rôles, paramètres du compte et positions enregistrées. Les données SwiftStats resteront inchangées.",
+        "Collecte de 10 échantillons hors combat. Combattez ensuite une créature pour tester le combat.",
+    },
+    itIT = {
+        "Le modifiche interessano tutti i personaggi.",
+        "Le modifiche interessano %d personaggi.",
+        "Torna alle impostazioni del personaggio prima di modificare le assegnazioni.",
+        "Tutti i personaggi conosciuti usano già queste impostazioni.",
+        "Accedi con un altro personaggio prima di copiare o condividere le impostazioni.",
+        "Torna alle impostazioni del personaggio...",
+        "Rendi indipendente questo personaggio...",
+        "Creare una copia di queste impostazioni per \"%s\"? Le modifiche future non interesseranno più gli altri personaggi.",
+        "Tornare alle impostazioni dei personaggi? Le assegnazioni precedenti torneranno attive. Le impostazioni dell’account saranno conservate.",
+        "Condiviso con %d personaggi",
+        "Usare le impostazioni di \"%s\" per \"%s\"? Sono già condivise da %d personaggi; le modifiche future interesseranno tutti e %d.",
+        "Tutti i personaggi attuali e futuri usano queste impostazioni.",
+        "Importare le sezioni selezionate come nuove impostazioni dell’account? Le assegnazioni dei personaggi e le impostazioni non selezionate resteranno invariate.",
+        "Recuperare \"%s\" come nuove impostazioni dell’account? La fonte, la configurazione attuale e le assegnazioni dei personaggi saranno conservate.",
+        "Recuperare \"%s\" come copia separata per \"%s\"? La fonte, la configurazione attuale e gli altri personaggi saranno conservati.",
+        "Usare ovunque le impostazioni dell’account salvate? Le assegnazioni dei personaggi saranno conservate.",
+        "Creare impostazioni dell’account da \"%s\"? Tutti i personaggi attuali e futuri le useranno. Le assegnazioni precedenti saranno conservate.",
+        "Ripristinare le impostazioni dell’account? Questo interessa tutti i personaggi attuali e futuri.",
+        "Eliminare le impostazioni dell’account salvate? Le assegnazioni dei personaggi resteranno invariate.",
+        "Eliminare %d registrazioni inutilizzate? Le impostazioni usate dai personaggi, quelle dell’account, quelle iniziali e di riserva saranno conservate.",
+        "Importare le impostazioni compatibili di SwiftStats come nuove impostazioni dell’account? Le assegnazioni dei personaggi, gli altri profili, le impostazioni dell’account e i dati di SwiftStats resteranno invariati.",
+        "Importare le impostazioni compatibili di SwiftStats in un nuovo profilo per questo personaggio? I profili esistenti, le altre assegnazioni, le impostazioni dell’account e i dati di SwiftStats resteranno invariati.",
+        "Ripristinare i dati danneggiati di StatsPro? Questo elimina definitivamente tutti i profili, le assegnazioni dei personaggi, i modelli di ruolo, le impostazioni dell’account e le posizioni salvate.",
+        "Ripristinare tutti i dati di StatsPro? Questo elimina definitivamente tutti i profili, le assegnazioni dei personaggi, i modelli di ruolo, le impostazioni dell’account e le posizioni salvate. I dati di SwiftStats resteranno invariati.",
+        "Raccolta di 10 campioni fuori combattimento. Poi combatti contro una creatura per verificare il comportamento in combattimento.",
+    },
+    ptBR = {
+        "As alterações afetam todos os personagens.",
+        "As alterações afetam %d personagens.",
+        "Volte às configurações do personagem antes de alterar atribuições.",
+        "Todos os personagens conhecidos já usam estas configurações.",
+        "Acesse outro personagem antes de copiar ou compartilhar configurações.",
+        "Voltar às configurações do personagem...",
+        "Tornar este personagem independente...",
+        "Criar uma cópia destas configurações para \"%s\"? Alterações futuras não afetarão mais os outros personagens.",
+        "Voltar às configurações dos personagens? As atribuições anteriores voltarão a ficar ativas. As configurações da conta serão mantidas.",
+        "Compartilhado com %d personagens",
+        "Usar as configurações de \"%s\" para \"%s\"? Elas já são compartilhadas por %d personagens; alterações futuras afetarão todos os %d.",
+        "Todos os personagens atuais e futuros usam estas configurações.",
+        "Importar as seções selecionadas como novas configurações da conta? As atribuições dos personagens e as configurações não selecionadas ficarão inalteradas.",
+        "Recuperar \"%s\" como novas configurações da conta? A fonte, a configuração atual e as atribuições dos personagens serão mantidas.",
+        "Recuperar \"%s\" como cópia separada para \"%s\"? A fonte, a configuração atual e os outros personagens serão mantidos.",
+        "Usar as configurações salvas da conta em todos os personagens? As atribuições dos personagens serão mantidas.",
+        "Criar configurações da conta a partir de \"%s\"? Todos os personagens atuais e futuros as usarão. As atribuições anteriores serão mantidas.",
+        "Restaurar as configurações da conta? Isso afeta todos os personagens atuais e futuros.",
+        "Excluir as configurações salvas da conta? As atribuições dos personagens ficarão inalteradas.",
+        "Excluir %d registros de configurações sem uso? Serão mantidas as configurações usadas por personagens, as da conta, as iniciais e as de reserva.",
+        "Importar configurações compatíveis do SwiftStats como novas configurações da conta? As atribuições dos personagens, outros perfis, configurações da conta e dados do SwiftStats ficarão inalterados.",
+        "Importar configurações compatíveis do SwiftStats em um novo perfil para este personagem? Os perfis existentes, outras atribuições, configurações da conta e dados do SwiftStats ficarão inalterados.",
+        "Restaurar dados corrompidos do StatsPro? Isso remove permanentemente todos os perfis, atribuições de personagens, modelos de papel, configurações da conta e posições salvas.",
+        "Restaurar todos os dados do StatsPro? Isso remove permanentemente todos os perfis, atribuições de personagens, modelos de papel, configurações da conta e posições salvas. Os dados do SwiftStats ficarão inalterados.",
+        "Coletando 10 amostras fora de combate. Depois, lute contra uma criatura para testar o combate.",
+    },
+    koKR = {
+        "변경 사항이 모든 캐릭터에 적용됩니다.",
+        "변경 사항이 캐릭터 %d명에 적용됩니다.",
+        "할당을 변경하기 전에 캐릭터 설정으로 돌아가세요.",
+        "알려진 모든 캐릭터가 이미 이 설정을 사용합니다.",
+        "설정을 복사하거나 공유하기 전에 다른 캐릭터로 접속하세요.",
+        "캐릭터 설정으로 돌아가기...",
+        "이 캐릭터의 설정을 독립시키기...",
+        "\"%s\"에 이 설정의 독립된 사본을 만드시겠습니까? 이후 변경은 다른 캐릭터에 적용되지 않습니다.",
+        "캐릭터 설정으로 돌아가시겠습니까? 이전 할당이 다시 활성화됩니다. 계정 전체 설정은 유지됩니다.",
+        "캐릭터 %d명과 공유",
+        "\"%s\"의 공유 설정을 \"%s\"에 사용하시겠습니까? 이미 캐릭터 %d명이 공유하며 이후 변경은 %d명 모두에 적용됩니다.",
+        "현재와 향후 모든 캐릭터가 이 설정을 사용합니다.",
+        "선택한 항목을 새 계정 전체 설정으로 가져오시겠습니까? 캐릭터 할당과 선택하지 않은 설정은 변경되지 않습니다.",
+        "\"%s\"을 새 계정 전체 설정으로 복구하시겠습니까? 저장된 원본, 현재 구성과 캐릭터 할당은 유지됩니다.",
+        "\"%s\"을 \"%s\"의 별도 사본으로 복구하시겠습니까? 저장된 원본, 현재 구성과 다른 캐릭터는 유지됩니다.",
+        "저장된 계정 전체 설정을 모든 곳에 사용하시겠습니까? 캐릭터 할당은 유지됩니다.",
+        "\"%s\"에서 계정 전체 설정을 만드시겠습니까? 현재와 향후 모든 캐릭터가 사용합니다. 기존 캐릭터 할당은 유지됩니다.",
+        "계정 전체 설정을 초기화하시겠습니까? 현재와 향후 모든 캐릭터에 적용됩니다.",
+        "저장된 계정 전체 설정을 삭제하시겠습니까? 캐릭터 할당은 변경되지 않습니다.",
+        "사용하지 않는 설정 기록 %d개를 삭제하시겠습니까? 캐릭터가 사용하는 설정, 계정 전체 설정, 시작 설정과 대체 설정은 유지됩니다.",
+        "호환되는 SwiftStats 설정을 새 계정 전체 설정으로 가져오시겠습니까? 캐릭터 할당, 다른 프로필, 계정 설정과 SwiftStats 데이터는 변경되지 않습니다.",
+        "호환되는 SwiftStats 설정을 현재 캐릭터의 새 프로필로 가져오시겠습니까? 기존 프로필, 다른 할당, 계정 설정과 SwiftStats 데이터는 변경되지 않습니다.",
+        "손상된 StatsPro 데이터를 초기화하시겠습니까? 모든 프로필, 캐릭터 할당, 역할 템플릿, 계정 설정과 저장된 위치가 영구 삭제됩니다.",
+        "모든 StatsPro 데이터를 초기화하시겠습니까? 모든 프로필, 캐릭터 할당, 역할 템플릿, 계정 설정과 저장된 위치가 영구 삭제됩니다. SwiftStats 데이터는 변경되지 않습니다.",
+        "비전투 상태에서 표본 10개를 수집합니다. 그 후 몬스터와 싸워 전투 상태를 테스트하세요.",
+    },
+    zhCN = {
+        "更改会影响所有角色。",
+        "更改会影响%d个角色。",
+        "更改分配前请返回角色设置。",
+        "所有已知角色都已使用这些设置。",
+        "复制或共享设置前请登录另一个角色。",
+        "返回角色设置...",
+        "让此角色使用独立设置...",
+        "为“%s”创建这些设置的独立副本？未来更改将不再影响其他角色。",
+        "返回角色设置？之前的分配将重新生效。账号通用设置会保留。",
+        "与%d个角色共享",
+        "将“%s”的共享设置应用到“%s”？已有%d个角色共享；未来更改会影响全部%d个角色。",
+        "所有现有和未来的角色都使用这些设置。",
+        "将选中部分导入为新的账号通用设置？现有角色分配和未选中的设置不会改变。",
+        "将“%s”恢复为新的账号通用设置？保存的来源、当前配置和角色分配会保留。",
+        "将“%s”恢复为“%s”的独立副本？保存的来源、当前配置和其他角色会保留。",
+        "在所有角色上使用保存的账号通用设置？角色分配会保留。",
+        "从“%s”创建账号通用设置？所有现有和未来角色都会使用。现有角色分配会保留。",
+        "重置账号通用设置？这会影响所有现有和未来角色。",
+        "删除保存的账号通用设置？角色分配不会改变。",
+        "删除%d条未使用的设置记录？角色使用的设置、账号通用设置、初始设置和备用设置会保留。",
+        "将兼容的SwiftStats设置导入为新的账号通用设置？现有角色分配、其他配置、账号设置和SwiftStats数据不会改变。",
+        "将兼容的SwiftStats设置导入当前角色的新配置？现有配置、其他分配、账号设置和SwiftStats数据不会改变。",
+        "重置损坏的StatsPro数据？这会永久删除所有配置、角色分配、职责模板、账号设置和保存的位置。",
+        "重置全部StatsPro数据？这会永久删除所有配置、角色分配、职责模板、账号设置和保存的位置。SwiftStats数据不会改变。",
+        "正在收集10个非战斗样本，之后请与一个生物战斗以测试战斗状态。",
+    },
+    zhTW = {
+        "變更會影響所有角色。",
+        "變更會影響%d個角色。",
+        "變更分配前請返回角色設定。",
+        "所有已知角色都已使用這些設定。",
+        "複製或共用設定前請登入另一個角色。",
+        "返回角色設定...",
+        "讓此角色使用獨立設定...",
+        "為「%s」建立這些設定的獨立副本？未來變更將不再影響其他角色。",
+        "返回角色設定？之前的分配將重新生效。帳號通用設定會保留。",
+        "與%d個角色共用",
+        "將「%s」的共用設定套用至「%s」？已有%d個角色共用；未來變更會影響全部%d個角色。",
+        "所有現有和未來的角色都使用這些設定。",
+        "將選取部分匯入為新的帳號通用設定？現有角色分配和未選取的設定不會變更。",
+        "將「%s」恢復為新的帳號通用設定？儲存的來源、目前配置和角色分配會保留。",
+        "將「%s」恢復為「%s」的獨立副本？儲存的來源、目前配置和其他角色會保留。",
+        "在所有角色上使用儲存的帳號通用設定？角色分配會保留。",
+        "從「%s」建立帳號通用設定？所有現有和未來角色都會使用。現有角色分配會保留。",
+        "重設帳號通用設定？這會影響所有現有和未來角色。",
+        "刪除儲存的帳號通用設定？角色分配不會變更。",
+        "刪除%d筆未使用的設定記錄？角色使用的設定、帳號通用設定、初始設定和備用設定會保留。",
+        "將相容的SwiftStats設定匯入為新的帳號通用設定？現有角色分配、其他配置、帳號設定和SwiftStats資料不會變更。",
+        "將相容的SwiftStats設定匯入目前角色的新配置？現有配置、其他分配、帳號設定和SwiftStats資料不會變更。",
+        "重設損壞的StatsPro資料？這會永久刪除所有配置、角色分配、職責範本、帳號設定和儲存的位置。",
+        "重設全部StatsPro資料？這會永久刪除所有配置、角色分配、職責範本、帳號設定和儲存的位置。SwiftStats資料不會變更。",
+        "正在收集10個非戰鬥樣本，之後請與一個生物戰鬥以測試戰鬥狀態。",
+    },
+}
+translatedProfilePrompts.enGB = translatedProfilePrompts.enUS
+translatedProfilePrompts.esMX = translatedProfilePrompts.esES
+for locale, labels in pairs(translatedProfilePrompts) do
+    for index, key in ipairs(profilePromptKeys) do F.labels[locale][key] = labels[index] end
+end
 local nativeLabelGlobals = {
     Strength = "SPELL_STAT1_NAME", Agility = "SPELL_STAT2_NAME", Stamina = "SPELL_STAT3_NAME",
     Intellect = "SPELL_STAT4_NAME", Spirit = "SPELL_STAT5_NAME", Armor = "ARMOR", Defense = "DEFENSE",
@@ -384,10 +741,10 @@ local nativeLabelGlobals = {
     ["Armor Penetration"] = "STAT_ARMOR_PENETRATION",
 }
 function F.Translate(label, locale)
-    if type(GetLocale) == "function" and locale == GetLocale() then
-        local key = nativeLabelGlobals[label]
-        local text = key and _G[key]
-        if type(text) == "string" and text ~= "" then return text end
+    local key = nativeLabelGlobals[label]
+    local text = key and _G[key]
+    if type(text) == "string" and text ~= "" and type(GetLocale) == "function" and locale == GetLocale() then
+        return text
     end
     local translations = F.labels[locale]
     if translations and translations[label] then return translations[label] end

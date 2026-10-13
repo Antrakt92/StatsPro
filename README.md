@@ -263,6 +263,8 @@ assigned per character; automatic talent-based switching is not available yet.
 Some compound values may show `?` when their inputs are restricted in combat.
 Attributes and stat families have separate editable colors. Applying a stat setup
 keeps your appearance and custom colors.
+Short labels distinguish melee, ranged and spell stats, spell schools and
+resistances. Hover a stat checkbox in Settings to read its full localized name.
 
 Profiles and sharing use characters in this preview. Role-template assignment is
 hidden until automatic talent context is supported. For combat-stat problems, run

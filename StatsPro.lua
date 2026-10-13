@@ -4313,9 +4313,13 @@ end
 -- few intentional display aliases. Before CacheSettings the empty table falls
 -- through to the English key; both paths remain O(1).
 local function L(englishKey)
-    if addon.forever.enabled and addon.forever.Translate then
-        local translated = addon.forever.Translate(englishKey, cached.activeLabelsLocale or GetLocale())
-        if translated then return translated end
+    if addon.forever.enabled then
+        local overrides = addon.forever.textOverrides
+        englishKey = overrides and overrides[englishKey] or englishKey
+        if addon.forever.Translate then
+            local translated = addon.forever.Translate(englishKey, cached.activeLabelsLocale or GetLocale())
+            if translated then return translated end
+        end
     end
     return cached.activeLabels[englishKey] or englishKey
 end
@@ -11375,7 +11379,7 @@ end
 local RENDER_BLOCK_DEFS = {
     { splitKey = "splitCharacter",  sectionKey = "Character",  buildFn = BuildCharacterLines },
     { splitKey = "splitOffensive",  sectionKey = "Offensive",  buildFn = BuildOffensiveLines },
-    { splitKey = "splitTertiary",   sectionKey = "Tertiary",   buildFn = BuildTertiaryLines },
+    { splitKey = "splitTertiary",   sectionKey = addon.forever.enabled and "Utility" or "Tertiary", buildFn = BuildTertiaryLines },
     { splitKey = "splitDefensive",  sectionKey = "Defensive",  buildFn = BuildDefensiveLines },
     { splitKey = "splitItemLevel",  sectionKey = "Gear",       buildFn = BuildItemLevelLines },
     { splitKey = "splitDurability", sectionKey = "Gear",       buildFn = BuildDurabilityLines },
@@ -13804,6 +13808,10 @@ GetStyledLabelText = function(englishKey, labelStyle)
     if style == "hidden" then
         return ""
     elseif style == "short" then
+        if addon.forever.enabled and addon.forever.ShortLabel then
+            local label = addon.forever.ShortLabel(englishKey, cached.activeLabelsLocale or GetLocale())
+            if label then return label .. ":" end
+        end
         local first = FirstUTF8Char(base)
         if first == "" then return "" end
         return first .. ":"
@@ -18859,9 +18867,10 @@ function addon.settingsUI.BuildStatsTab(self, context)
             local colorColumns = { {}, {} }
             for index, definition in ipairs(rows) do
                 local column = (index - 1) % 2
-                local _, swatch, text = CreateCheckboxColor(statsBody, "StatsProForever" .. definition.key,
+                local control, swatch, text = CreateCheckboxColor(statsBody, "StatsProForever" .. definition.key,
                     definition.label, definition.showKey, definition.colorKey,
                     cs.padX + column * CONFIG_COL_OFFSET, cs.y)
+                self.settingsDesign.AttachTooltip(control, function() return L(definition.label) end)
                 colorColumns[column + 1][#colorColumns[column + 1] + 1] = {
                     text = text, swatch = swatch,
                 }
@@ -19050,9 +19059,13 @@ function addon:PrintDebugDump()
         GetNumberDB("fontSize"), GetNumberDB("scale"), GetNumberDB("updateInterval"),
         GetNumberDB("textAlpha"), GetNumberDB("panelBackgroundAlpha")))
 
+    if addon.forever.enabled then
+        PrintMsg("show fmt: client=forever single-values matchColor=" .. tostring(cached.matchValueColorToStat))
+    else
     PrintMsg(string.format("show fmt: rating=%s pct=%s matchColor=%s target=%s",
         tostring(cached.showRating), tostring(cached.showPercentage),
         tostring(cached.matchValueColorToStat), tostring(cached.targetSnapshot)))
+    end
 
     PrintMsg(string.format("split side: character=%s itemLevel=%s off=%s tert=%s defensive=%s dur=%s repair=%s",
         tostring(cached.splitCharacter), tostring(cached.splitItemLevel),
@@ -19075,6 +19088,12 @@ function addon:PrintDebugDump()
         tostring(FontSupports(addon.fontRuntime.currentPath(), req)),
         savedFontText))
 
+    if addon.forever.enabled then
+        PrintMsg(string.format("show stats: offensive=%s utility=%s defensive=%s durability=%s repair=%s itemLevel=%s",
+            tostring(cached.showOffensive), tostring(cached.showTertiary), tostring(cached.showDefensive),
+            tostring(cached.showDurability), tostring(cached.showRepairCost), tostring(cached.showItemLevel)))
+        self:PrintDebugLiveStats()
+    else
     PrintMsg(string.format("show stats: off=%s tert=%s defensive=%s dur=%s repair=%s cost=%s complete=%s mainStat=%s liveMainId=%s stamina=%s itemLevel=%s %s/%s",
         tostring(cached.showOffensive),
         tostring(cached.showTertiary), tostring(cached.showDefensive), tostring(cached.showDurability),
@@ -19090,6 +19109,7 @@ function addon:PrintDebugDump()
         tostring(cached.showLeech), tostring(cached.showAvoidance), tostring(cached.showSpeed),
         tostring(cached.showDodge), tostring(cached.showParry), tostring(cached.showBlock),
         tostring(cached.showArmor), tostring(cached.showStagger)))
+    end
 
     -- Panel positions: nil-guard (DB may be partial in pre-PEW edge cases)
     local function PosLine(label, p, rp, x, y, fallbackY)
@@ -20655,7 +20675,11 @@ function addon.selfTest.Start()
     addon.selfTest.CaptureEnv()
     addon.selfTest.state = "ooc-collect"
     addon.selfTest.StartTicker()
-    PrintMsg("selftest: collecting 10 out-of-combat samples, then hit a training dummy to test combat.")
+    if addon.forever.enabled then
+        PrintMsg("selftest: " .. L("Collecting 10 out-of-combat samples, then fight a creature to test combat."))
+    else
+        PrintMsg("selftest: collecting 10 out-of-combat samples, then hit a training dummy to test combat.")
+    end
     return true
 end
 
@@ -21222,7 +21246,11 @@ SlashCmdList["STATSPRO"] = function(msg)
             addon.selfTest.Toggle()
         end
     elseif arg == "help" or arg == "?" then
-        PrintMsg(L("Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help"))
+        local helpText = L("Commands: /ss or /statspro (config), /ss show, /ss hide, /ss toggle, /ss reset, /ss wipe or /ss reset all, /statspro import, /ss debug, /ss selftest [all], /ss help")
+        if addon.forever.enabled then
+            helpText = helpText:gsub("/statspro import", "/statspro import (SwiftStats)")
+        end
+        PrintMsg(helpText)
     else
         addon:OpenConfigMenu()
     end

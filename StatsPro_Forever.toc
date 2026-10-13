@@ -2,6 +2,15 @@
 ## Title: |cff00ff7fStatsPro|r — Forever Beta
 ## Notes: Character stats and gear HUD for WoW Forever (beta).
 ## Notes-ruRU: Характеристики и экипировка персонажа в WoW Forever (бета).
+## Notes-deDE: Charakterwerte und Ausrüstung für WoW Forever (Beta).
+## Notes-esES: Estadísticas y equipo del personaje en WoW Forever (beta).
+## Notes-esMX: Estadísticas y equipo del personaje en WoW Forever (beta).
+## Notes-frFR: Caractéristiques et équipement du personnage dans WoW Forever (bêta).
+## Notes-itIT: Statistiche ed equipaggiamento del personaggio in WoW Forever (beta).
+## Notes-ptBR: Atributos e equipamentos do personagem no WoW Forever (beta).
+## Notes-koKR: WoW Forever의 캐릭터 능력치 및 장비 표시창 (베타).
+## Notes-zhCN: WoW Forever角色属性与装备面板（测试版）。
+## Notes-zhTW: WoW Forever角色屬性與裝備面板（測試版）。
 ## Author: Antrakt
 ## Version: 1.17.21
 ## IconTexture: Interface\AddOns\StatsPro\textures\logo.png

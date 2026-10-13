@@ -223,4 +223,50 @@ check(env.StatsProForeverStrengthText:GetWidth() == env.StatsProForeverStaminaTe
 addon.profileUI.advancedShown = true
 addon.profileUI.LayoutActionButtons(addon.profileUI.currentModel)
 check(not addon.profileUI.actionButtons.roleTemplate:IsShown(), "unsupported role templates absent in Forever")
+check(test.buildRenderBlocks()[3].sectionKey == "Utility", "Forever sectioned HUD names utility correctly")
+local longControl = env.StatsProForeverCastingManaRegenMP5
+check(type(longControl.statsProTooltipProvider) == "function", "long stat controls expose full labels on hover")
+check(longControl.statsProTooltipProvider() == "Casting Mana Regen / 5 sec",
+    "long stat tooltip exposes complete untruncated name")
+env.__prints = {}
+env.SlashCmdList.STATSPRO("debug")
+local defaultDebug = table.concat(env.__prints, "\n")
+check(defaultDebug:find("debug forever SpellCrit=5.00", 1, true)
+    and not defaultDebug:find("mythicPlusCurrent", 1, true)
+    and not defaultDebug:find("showMastery", 1, true),
+    "default Forever debug uses the actual client catalog")
+env.__prints = {}
+check(addon.selfTest.Start(), "Forever diagnostic starts")
+local startText = table.concat(env.__prints, "\n")
+check(startText:find("fight a creature", 1, true) and not startText:find("training dummy", 1, true),
+    "Forever diagnostic instructions match the beta client")
+addon.selfTest.Stop("cancelled")
+env.__prints = {}
+env.SlashCmdList.STATSPRO("help")
+check(table.concat(env.__prints, "\n"):find("/statspro import (SwiftStats)", 1, true),
+    "Forever help distinguishes legacy SwiftStats import from profile strings")
+retailEnv.__prints = {}
+retailEnv.SlashCmdList.STATSPRO("help")
+check(not table.concat(retailEnv.__prints, "\n"):find("import (SwiftStats)", 1, true),
+    "Retail command help remains unchanged")
+-- Exercise actual confirmation creation; do not accept destructive actions.
+local beforeWipeRoot = env.StatsProDB
+check(addon.wipeRuntime.Request(), "Forever wipe confirmation opens")
+local wipePopup = env.__lastStaticPopup
+check(wipePopup.renderedText:find("character assignment", 1, true)
+    and not wipePopup.renderedText:find("specialization", 1, true),
+    "Forever wipe confirmation uses character assignments")
+addon.wipeRuntime.CancelPending(wipePopup, wipePopup.data)
+check(env.StatsProDB == beforeWipeRoot and addon.wipeRuntime.pending == nil,
+    "cancelled Forever confirmation preserves profiles")
+local ruEnv, ruAddon = fixtures.loadStatsPro("ruRU", {
+    forever = true, unitGUID = function() return "Player-RussianPopupFixture" end,
+})
+ruEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+check(ruAddon.wipeRuntime.Request(), "localized Forever wipe confirmation opens")
+local ruWipe = ruEnv.__lastStaticPopup
+check(ruWipe.renderedText:find("персонаж", 1, true)
+    and not ruWipe.renderedText:find("специализа", 1, true),
+    "Russian Forever confirmation names characters correctly")
+ruAddon.wipeRuntime.CancelPending(ruWipe, ruWipe.data)
 print("StatsPro Forever HUD integration: PASS (" .. count .. " checks)")

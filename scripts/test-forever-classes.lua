@@ -76,12 +76,44 @@ for _, class in ipairs(classes) do
         { stats = true, layout = true, appearance = true })
     check(type(exported) == "string", class .. " all-row profile exports")
     check(test.profileTransfer.parse(exported) ~= nil, class .. " all-row profile roundtrips")
-    for _, locale in ipairs({ "enUS", "ruRU", "koKR", "zhCN" }) do
+    addon:OpenConfigMenu()
+    for _, locale in ipairs({ "enUS", "enGB", "deDE", "esES", "esMX", "frFR", "itIT", "ptBR", "ruRU", "koKR", "zhCN", "zhTW" }) do
         env.StatsProDB.account.forceLocale = locale
-        test.cacheSettings()
-        local translated = test.buildRenderBlocks()
-        check(#translated[1].labels == 5 and #translated[2].labels == 23,
-            class .. " translated catalogue retains row alignment: " .. locale)
+        for _, style in ipairs({ "full", "short", "hidden" }) do
+            settings.labelStyle = style
+            test.cacheSettings()
+            if style == "full" then addon.profileRuntime.RefreshConfigControls() end
+            local translated = test.buildRenderBlocks()
+            local seen, groupOrder = {}, { "character", "offensive", "utility", "defensive" }
+            for index, group in ipairs(groupOrder) do
+                local block = translated[index]
+                check(#block.labels == #addon.forever.rows[group]
+                    and #block.labels == #block.values and #block.labels == #block.ratings,
+                    class .. " columns remain aligned: " .. locale .. " " .. style .. " " .. group)
+                for rowIndex, row in ipairs(addon.forever.rows[group]) do
+                    local label = block.labels[rowIndex]:gsub("|cff%x%x%x%x%x%x", ""):gsub("|r", "")
+                    if style == "hidden" then
+                        check(label == "", class .. " hidden label retains its value: " .. row.key)
+                    else
+                        check(label ~= "" and not seen[label],
+                            class .. " distinguishable " .. locale .. " " .. style .. " label: " .. row.key .. " " .. label)
+                        seen[label] = true
+                        if style == "full" then
+                            check(label == addon.forever.Translate(row.label, locale) .. ":",
+                                class .. " actual HUD uses localized label: " .. locale .. " " .. row.key)
+                            local control = env["StatsProForever" .. row.key]
+                            local controlText = env["StatsProForever" .. row.key .. "Text"]
+                            check(control and controlText and controlText:GetText() == addon.forever.Translate(row.label, locale),
+                                class .. " Settings refreshes its localized label: " .. locale .. " " .. row.key)
+                            check(control.statsProTooltipProvider() == controlText:GetText(),
+                                class .. " tooltip follows Settings language: " .. locale .. " " .. row.key)
+                        end
+                    end
+                    check(block.ratings[rowIndex] ~= "" or block.values[rowIndex] ~= "",
+                        class .. " localized row retains a value: " .. locale .. " " .. style .. " " .. row.key)
+                end
+            end
+        end
     end
     collectgarbage("collect")
 end

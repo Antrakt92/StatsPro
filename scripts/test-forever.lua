@@ -146,8 +146,14 @@ for _, id in ipairs(F.presets.order) do
     assert(values.showMastery == false and values.showVersatility == false)
 end
 for _, locale in ipairs({ "enUS", "enGB", "ruRU", "deDE", "esES", "esMX", "frFR", "itIT", "ptBR", "koKR", "zhCN", "zhTW" }) do
+    local shortLabels = {}
     for _, row in pairs(catalogue) do
         assert(type(F.Translate(row.label, locale)) == "string", locale .. " " .. row.label .. " translation")
+        assert(not F.Translate(row.label, locale):find(":"), locale .. " row labels should not add internal colons")
+        local short = F.ShortLabel(row.label, locale)
+        assert(type(short) == "string" and short ~= "" and not short:find(":"), locale .. " valid short label")
+        assert(not shortLabels[short], locale .. " distinct short label " .. short)
+        shortLabels[short] = row.label
     end
     for _, label in ipairs({ "Compact", "Physical", "Caster", "Healer", "Tank", "Character", "Utility", "Show Utility Stats", "Select individual stats for your build.", "Character stats and gear HUD for WoW Forever. Open Settings to choose a layout and visible stats." }) do
         assert(type(F.Translate(label, locale)) == "string", locale .. " UI translation")
@@ -158,6 +164,18 @@ for _, locale in ipairs({ "enUS", "enGB", "ruRU", "deDE", "esES", "esMX", "frFR"
         assert(type(translated) == "string", locale .. " character profile translation")
         if label:find("%%d") then assert(translated:find("%%d"), locale .. " profile count placeholder") end
     end
+    local overrideCount = 0
+    for original, replacement in pairs(F.textOverrides) do
+        overrideCount = overrideCount + 1
+        local translated = F.Translate(replacement, locale)
+        assert(type(translated) == "string" and translated ~= "", locale .. " complete profile override")
+        local expected, actual = {}, {}
+        for placeholder in original:gmatch("%%[ds]") do expected[#expected + 1] = placeholder end
+        for placeholder in translated:gmatch("%%[ds]") do actual[#actual + 1] = placeholder end
+        assert(table.concat(expected) == table.concat(actual), locale .. " profile placeholder order")
+    end
+    assert(overrideCount == 24, "bounded profile override set")
+    assert(type(F.Translate("Collecting 10 out-of-combat samples, then fight a creature to test combat.", locale)) == "string", locale .. " selftest instruction")
     for _, id in ipairs(F.presets.order) do
         local summary = F.Translate(F.presets.definitions[id].summary, locale)
         assert(type(summary) == "string" and not previous[summary], locale .. " distinct preset summaries")
@@ -240,4 +258,8 @@ GetLocale = function() return "ruRU" end
 SPELL_STAT1_NAME = "Native strength fixture"
 assert(F.Translate("Strength", "ruRU") == "Native strength fixture")
 assert(F.Translate("Strength", "deDE") ~= "Native strength fixture")
+local localeReads = 0
+GetLocale = function() localeReads = localeReads + 1 return "ruRU" end
+for _ = 1, 100 do F.Translate("Fire Spell Power", "ruRU") end
+assert(localeReads == 0, "composite labels should not query the native locale")
 print("Forever stat sources: passed")

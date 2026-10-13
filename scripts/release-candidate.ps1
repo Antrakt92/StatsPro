@@ -8,6 +8,7 @@ param(
     [string]$ExpectedRunAttempt,
     [string]$ExpectedProjectVersion,
     [string]$ArchivePath,
+    [string]$ForeverArchivePath,
     [string]$ReleaseJsonPath,
     [string]$ManifestPath,
     [string]$CandidatePath,
@@ -20,6 +21,7 @@ param(
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
+. (Join-Path $PSScriptRoot "flavor-release-contract.ps1")
 
 $CandidateFileName = "statspro-release-candidate.json"
 $ReleaseJsonFileName = "release.json"
@@ -116,11 +118,13 @@ function New-ReleaseCandidate {
         [string]$RunAttempt,
         [string]$ProjectVersion,
         [string]$Archive,
+        [string]$ForeverArchive,
         [string]$ReleaseJson,
         [string]$Manifest,
         [string]$Destination,
         [string]$GithubOutputPath,
-        [scriptblock]$ValidateArtifact
+        [scriptblock]$ValidateArtifact,
+        [scriptblock]$ValidateForeverArtifact
     )
 
     Assert-RepositoryName $RepositoryName
@@ -169,6 +173,18 @@ function New-ReleaseCandidate {
             packageManifest = Get-FileContract -Path $resolved.Manifest -Name $names.Manifest
         }
     }
+    if (-not [string]::IsNullOrWhiteSpace($ForeverArchive)) {
+        $forever = Resolve-RequiredFile -Path $ForeverArchive -Description 'Forever release archive'
+        Assert-ExpectedFileName -Path $forever -ExpectedName "StatsPro-$Tag-Forever-beta.zip" -Description 'Forever archive'
+        if ($ValidateForeverArtifact) { & $ValidateForeverArtifact $forever $Tag }
+        else {
+            & (Join-Path $PSScriptRoot 'test-forever-package.ps1') -ArchivePath $forever
+        }
+        $candidate.schemaVersion = 2
+        $candidate.files | Add-Member -NotePropertyName foreverArchive -NotePropertyValue (Get-FileContract -Path $forever -Name "StatsPro-$Tag-Forever-beta.zip")
+        Add-OutputValue -Path $GithubOutputPath -Name 'forever_archive_path' -Value $forever
+        Add-OutputValue -Path $GithubOutputPath -Name 'forever_archive_sha256' -Value $candidate.files.foreverArchive.sha256
+    }
     $json = $candidate | ConvertTo-Json -Depth 6 -Compress
     Write-Utf8NoBom -Path $Destination -Text ($json + "`n")
 
@@ -207,8 +223,12 @@ function Read-ReleaseCandidate {
         throw "Release candidate contains invalid JSON: $($_.Exception.Message)"
     }
     Assert-ExactPropertySet -Value $candidate -Expected @('schemaVersion', 'kind', 'repository', 'tag', 'commitSha', 'runId', 'runAttempt', 'projectVersion', 'files') -Description "Release candidate"
-    Assert-ExactPropertySet -Value $candidate.files -Expected @('archive', 'releaseJson', 'packageManifest') -Description "Release candidate files"
-    foreach ($property in @('archive', 'releaseJson', 'packageManifest')) {
+    if (($candidate.schemaVersion -isnot [int] -and $candidate.schemaVersion -isnot [long]) -or
+        $candidate.schemaVersion -notin @(1, 2)) { throw 'Release candidate has an unsupported schema or kind.' }
+    $fileProperties = @('archive', 'releaseJson', 'packageManifest')
+    if ([int]$candidate.schemaVersion -eq 2) { $fileProperties += 'foreverArchive' }
+    Assert-ExactPropertySet -Value $candidate.files -Expected $fileProperties -Description "Release candidate files"
+    foreach ($property in $fileProperties) {
         Assert-ExactPropertySet -Value $candidate.files.$property -Expected @('name', 'size', 'sha256') -Description "Release candidate $property"
         Assert-Sha256 -Value ([string]$candidate.files.$property.sha256) -Description "Release candidate $property SHA-256"
         $size = 0L
@@ -216,7 +236,7 @@ function Read-ReleaseCandidate {
             throw "Release candidate $property size must be a positive integer."
         }
     }
-    if ([int]$candidate.schemaVersion -ne 1 -or
+    if ([int]$candidate.schemaVersion -notin @(1, 2) -or
         -not [System.StringComparer]::Ordinal.Equals([string]$candidate.kind, 'statspro-release-candidate')) {
         throw "Release candidate has an unsupported schema or kind."
     }
@@ -248,6 +268,10 @@ function Read-ReleaseCandidate {
         if (-not [System.StringComparer]::Ordinal.Equals($candidateNames[$key], $expectedNames[$key])) {
             throw "Release candidate $key filename is '$($candidateNames[$key])', expected '$($expectedNames[$key])'."
         }
+    }
+    if ([int]$candidate.schemaVersion -eq 2 -and
+        -not [System.StringComparer]::Ordinal.Equals([string]$candidate.files.foreverArchive.name, "StatsPro-$Tag-Forever-beta.zip")) {
+        throw 'Release candidate Forever filename does not match exact tag'
     }
     return $candidate
 }
@@ -405,6 +429,7 @@ function Confirm-ReleaseCandidate {
     foreach ($property in @('archive', 'releaseJson', 'packageManifest')) {
         $expectedFiles += [string]$contract.files.$property.name
     }
+    if ([int]$contract.schemaVersion -eq 2) { $expectedFiles += [string]$contract.files.foreverArchive.name }
     $actualItems = @(Get-ChildItem -LiteralPath $root -Force -Recurse)
     foreach ($item in $actualItems) {
         if ($item.PSIsContainer -or (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) -or
@@ -431,6 +456,7 @@ function Confirm-ReleaseCandidate {
         release_json = $contract.files.releaseJson
         manifest = $contract.files.packageManifest
     }
+    if ([int]$contract.schemaVersion -eq 2) { $bindings.forever_archive = $contract.files.foreverArchive }
     $resolvedPaths = [ordered]@{}
     foreach ($key in $bindings.Keys) {
         $path = Join-Path $root ([string]$bindings[$key].name)
@@ -457,6 +483,8 @@ function Confirm-ReleaseCandidate {
     Add-OutputValue -Path $GithubOutputPath -Name "release_json_path" -Value $resolvedPaths.release_json
     Add-OutputValue -Path $GithubOutputPath -Name "manifest_path" -Value $resolvedPaths.manifest
     Add-OutputValue -Path $GithubOutputPath -Name "notes_path" -Value $archiveContracts.Notes
+    Add-OutputValue -Path $GithubOutputPath -Name 'forever_archive_path' -Value $(if ([int]$contract.schemaVersion -eq 2) { $resolvedPaths.forever_archive } else { '' })
+    Add-OutputValue -Path $GithubOutputPath -Name 'forever_archive_sha256' -Value $(if ([int]$contract.schemaVersion -eq 2) { $contract.files.foreverArchive.sha256 } else { '' })
     return $contract
 }
 
@@ -524,6 +552,56 @@ function Invoke-SelfTest {
         New-TestZip -Path $archive -Tag $tag
         Write-Utf8NoBom -Path $releaseJson -Text "{}`n"
         Write-Utf8NoBom -Path $manifest -Text "abc  StatsPro/StatsPro.toc`n"
+        $selectionRoot = Join-Path $root 'selection'
+        [void](New-Item -ItemType Directory -Path $selectionRoot)
+        $selectionToc = Join-Path $selectionRoot 'StatsPro_Forever.toc'
+        Write-Utf8NoBom -Path $selectionToc -Text "## Version: 1.2.3`n"
+        if (-not (Get-StatsProFlavorReleaseContract -SourceRoot $selectionRoot -ExpectedTag $tag).IncludeForever) { throw 'Joint flavor selection failed' }
+        Write-Utf8NoBom -Path $selectionToc -Text "## Version: 1.2.2`n"
+        if ((Get-StatsProFlavorReleaseContract -SourceRoot $selectionRoot -ExpectedTag $tag).IncludeForever) { throw 'Retail-only flavor selection failed' }
+        Write-Utf8NoBom -Path $selectionToc -Text "## Version: 1.2.3`n"
+        [void](Invoke-StatsProFlavorGitRead -SourceRoot $selectionRoot -Arguments @('init','--quiet'))
+        [void](Invoke-StatsProFlavorGitRead -SourceRoot $selectionRoot -Arguments @('add','StatsPro_Forever.toc'))
+        $fixtureCommitOptions = @('-c','core.hooksPath=/dev/null','-c','commit.gpgSign=false','-c','user.name=Fixture','-c','user.email=fixture@example.invalid')
+        [void](Invoke-StatsProFlavorGitRead -SourceRoot $selectionRoot -Arguments ($fixtureCommitOptions + @('commit','--quiet','-m','Fixture missing helper')))
+        $missingHelperCommit = (Invoke-StatsProFlavorGitRead -SourceRoot $selectionRoot -Arguments @('rev-parse','HEAD')).Trim()
+        Assert-ThrowsMatch 'expected commit without flavor helper rejected' {
+            Get-StatsProFlavorReleaseContractFromGit -SourceRoot $selectionRoot -ExpectedCommitSha $missingHelperCommit -ExpectedTag $tag
+        } 'missing an ordinary flavor contract file'
+        [void](New-Item -ItemType Directory -Path (Join-Path $selectionRoot 'scripts'))
+        $selectionHelper = Join-Path $selectionRoot 'scripts/flavor-release-contract.ps1'
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'flavor-release-contract.ps1') -Destination $selectionHelper
+        [void](Invoke-StatsProFlavorGitRead -SourceRoot $selectionRoot -Arguments @('add','scripts/flavor-release-contract.ps1'))
+        [void](Invoke-StatsProFlavorGitRead -SourceRoot $selectionRoot -Arguments ($fixtureCommitOptions + @('commit','--quiet','-m','Fixture joint source')))
+        $jointCommit = (Invoke-StatsProFlavorGitRead -SourceRoot $selectionRoot -Arguments @('rev-parse','HEAD')).Trim()
+        if (-not (Get-StatsProFlavorReleaseContractFromGit -SourceRoot $selectionRoot -ExpectedCommitSha $jointCommit -ExpectedTag $tag).IncludeForever) { throw 'Immutable joint selection failed' }
+        Write-Utf8NoBom -Path $selectionToc -Text "## Version: 1.2.2`n"
+        Assert-ThrowsMatch 'checkout cannot reduce immutable joint release to Retail-only' {
+            Get-StatsProFlavorReleaseContractFromGit -SourceRoot $selectionRoot -ExpectedCommitSha $jointCommit -ExpectedTag $tag
+        } 'Checkout flavor contract differs'
+        Write-Utf8NoBom -Path $selectionToc -Text "## Version: 1.2.3`n"
+        [System.IO.File]::AppendAllText($selectionHelper, "`n# changed checkout helper")
+        Assert-ThrowsMatch 'changed checkout flavor helper rejected' {
+            Get-StatsProFlavorReleaseContractFromGit -SourceRoot $selectionRoot -ExpectedCommitSha $jointCommit -ExpectedTag $tag
+        } 'Checkout flavor contract differs'
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'flavor-release-contract.ps1') -Destination $selectionHelper -Force
+        Write-Utf8NoBom -Path $selectionToc -Text "## Version: 1.2.3`r`n"
+        [void](Invoke-StatsProFlavorGitRead -SourceRoot $selectionRoot -Arguments @('replace', $jointCommit, $missingHelperCommit))
+        if (-not (Get-StatsProFlavorReleaseContractFromGit -SourceRoot $selectionRoot -ExpectedCommitSha $jointCommit -ExpectedTag $tag).IncludeForever) { throw 'Replacement ref or CRLF changed immutable flavor selection' }
+        $selectionPhysical = [System.IO.Path]::GetFullPath($selectionRoot)
+        if (-not $selectionPhysical.StartsWith([System.IO.Path]::GetFullPath($root) + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe flavor fixture cleanup' }
+        Remove-Item -LiteralPath $selectionPhysical -Recurse -Force
+        $forever = Join-Path $root "StatsPro-$tag-Forever-beta.zip"
+        New-TestZip -Path $forever -Tag $tag
+        [void](New-ReleaseCandidate -RepositoryName 'owner/repo' -Tag $tag -CommitSha $commit -RunId $runId -RunAttempt $runAttempt -ProjectVersion $projectVersion -Archive $archive -ForeverArchive $forever -ReleaseJson $releaseJson -Manifest $manifest -Destination $candidate -ValidateArtifact $validator -ValidateForeverArtifact { param($a,$t) })
+        $jointSha = Get-ValidatedLowercaseFileSha256 -Path $candidate
+        $joint = Confirm-ReleaseCandidate -RepositoryName 'owner/repo' -Tag $tag -CommitSha $commit -RunId $runId -RunAttempt $runAttempt -ProjectVersion $projectVersion -Candidate $candidate -CandidateSha256 $jointSha
+        if ($joint.schemaVersion -ne 2 -or $joint.files.foreverArchive.name -cne "StatsPro-$tag-Forever-beta.zip") { throw 'Joint candidate identity missing' }
+        [System.IO.File]::AppendAllText($forever, 'tampered')
+        Assert-ThrowsMatch 'tampered Forever handoff rejected' {
+            Confirm-ReleaseCandidate -RepositoryName 'owner/repo' -Tag $tag -CommitSha $commit -RunId $runId -RunAttempt $runAttempt -ProjectVersion $projectVersion -Candidate $candidate -CandidateSha256 $jointSha
+        } 'forever_archive size|forever_archive SHA-256'
+        Remove-Item -LiteralPath $forever
         [void](New-ReleaseCandidate `
             -RepositoryName 'owner/repo' `
             -Tag $tag `
@@ -658,8 +736,10 @@ if ($SelfTest) {
 if ([string]::IsNullOrWhiteSpace($Mode)) {
     throw "Missing release candidate -Mode."
 }
+$flavorContract = Get-StatsProFlavorReleaseContractFromGit -SourceRoot (Join-Path $PSScriptRoot '..') -ExpectedCommitSha $ExpectedCommitSha -ExpectedTag $ExpectedTag
 switch ($Mode) {
     "Create" {
+        if ($flavorContract.IncludeForever -ne (-not [string]::IsNullOrWhiteSpace($ForeverArchivePath))) { throw 'Candidate archive selection disagrees with immutable flavor TOC versions' }
         [void](New-ReleaseCandidate `
             -RepositoryName $Repository `
             -Tag $ExpectedTag `
@@ -668,13 +748,14 @@ switch ($Mode) {
             -RunAttempt $ExpectedRunAttempt `
             -ProjectVersion $ExpectedProjectVersion `
             -Archive $ArchivePath `
+            -ForeverArchive $ForeverArchivePath `
             -ReleaseJson $ReleaseJsonPath `
             -Manifest $ManifestPath `
             -Destination $CandidatePath `
             -GithubOutputPath $OutputPath)
     }
     "Verify" {
-        [void](Confirm-ReleaseCandidate `
+        $confirmed = Confirm-ReleaseCandidate `
             -RepositoryName $Repository `
             -Tag $ExpectedTag `
             -CommitSha $ExpectedCommitSha `
@@ -684,6 +765,10 @@ switch ($Mode) {
             -Candidate $CandidatePath `
             -CandidateSha256 $ExpectedCandidateSha256 `
             -GithubOutputPath $OutputPath `
-            -ArchonMaximumAgeDays $ArchonMaxAgeDays)
+            -ArchonMaximumAgeDays $ArchonMaxAgeDays
+        if ($flavorContract.IncludeForever -ne ([int]$confirmed.schemaVersion -eq 2)) { throw 'Candidate schema selection disagrees with immutable flavor TOC versions' }
+        if ($flavorContract.IncludeForever) {
+            & (Join-Path $PSScriptRoot 'test-forever-package.ps1') -ArchivePath (Join-Path (Split-Path -Parent $CandidatePath) $confirmed.files.foreverArchive.name)
+        }
     }
 }

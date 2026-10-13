@@ -33,7 +33,19 @@ function Assert-ForeverToc {
         [regex]::Matches($Text, '(?m)^## Interface:').Count -ne 1) { throw 'Forever Interface must be exactly 16001' }
     $versions = [regex]::Matches($Text, '(?m)^## Version:\s*([^\r\n]+)')
     if ($versions.Count -ne 1 -or $versions[0].Groups[1].Value.Trim() -cne $Version) { throw 'Forever version differs from expected flavor version' }
-    if ($Text -match '(?i)Archon|X-Curse-Project-ID|X-Wago-ID|X-WoWI-ID') { throw 'Forever beta TOC contains unsupported publication or Archon metadata' }
+    if ($Text -match '(?i)Archon|X-WoWI-ID') { throw 'Forever beta TOC contains unsupported publication or Archon metadata' }
+    $marketplaceKeys = @('X-Curse-Project-ID', 'X-Wago-ID')
+    $marketplaceIds = @('1525100', 'EGPemEN1')
+    $hasMarketplaceMetadata = $Text -match '(?m)^##\s+X-(Curse-Project-ID|Wago-ID)\s*:'
+    if ($hasMarketplaceMetadata) {
+        for ($index = 0; $index -lt $marketplaceKeys.Count; $index++) {
+            $prefix = '(?m)^##[ \t]+' + [regex]::Escape($marketplaceKeys[$index]) + '[ \t]*:'
+            if ([regex]::Matches($Text, $prefix).Count -ne 1 -or
+                [regex]::Matches($Text, $prefix + '[ \t]*' + $marketplaceIds[$index] + '[ \t]*\r?$').Count -ne 1) {
+                throw 'Forever marketplace metadata must identify the configured StatsPro projects exactly'
+            }
+        }
+    }
     $refs = @($Text -split '\r?\n' | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith('#') } | ForEach-Object { $_.Trim().Replace('\', '/') })
     $expected = @('libs/LibStub/LibStub.lua','libs/CallbackHandler-1.0/CallbackHandler-1.0.lua','libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua','StatsPro_Forever.lua','StatsPro.lua')
     if (($refs -join '|') -cne ($expected -join '|')) { throw 'Forever runtime load order mismatch' }
@@ -95,6 +107,18 @@ if ($SelfTest) {
         [System.IO.File]::WriteAllText((Join-Path $fixture 'StatsPro.lua'), 'local version = "@project-version@"')
         $toc = "## Interface: 16001`n## Version: 1.17.21`n## SavedVariables: StatsProDB, StatsProSelfTest`n## X-StatsPro-Flavor: forever`n## X-StatsPro-Channel: beta`nlibs\LibStub\LibStub.lua`nlibs\CallbackHandler-1.0\CallbackHandler-1.0.lua`nlibs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua`nStatsPro_Forever.lua`nStatsPro.lua`n"
         [System.IO.File]::WriteAllText((Join-Path $fixture 'StatsPro_Forever.toc'), $toc)
+        $publishedToc = $toc + "## X-Curse-Project-ID: 1525100`n## X-Wago-ID: EGPemEN1`n"
+        Assert-ForeverToc $publishedToc '1.17.21'
+        foreach ($badMarketplaceToc in @(
+            $publishedToc.Replace('1525100', '123'),
+            $publishedToc.Replace('EGPemEN1', 'Wrong123'),
+            $publishedToc.Replace("## X-Wago-ID: EGPemEN1`n", ''),
+            ($publishedToc + "## X-Wago-ID: EGPemEN1`n")
+        )) {
+            $rejected = $false
+            try { Assert-ForeverToc $badMarketplaceToc '1.17.21' } catch { $rejected = $true }
+            if (-not $rejected) { throw 'Wrong, partial or duplicate Forever marketplace IDs accepted' }
+        }
         & (Join-Path $PSScriptRoot 'build-forever-package.ps1') -SourceRoot $fixture -OutputRoot (Join-Path $fixture 'first')
         & (Join-Path $PSScriptRoot 'build-forever-package.ps1') -SourceRoot $fixture -OutputRoot (Join-Path $fixture 'second')
         $first = Join-Path $fixture 'first/StatsPro-v1.17.21-Forever-beta.zip'

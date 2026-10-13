@@ -80,6 +80,7 @@ jobs:
     outputs:
       artifact_id: ${{ steps.upload-candidate.outputs.artifact-id }}
       archive_sha256: ${{ steps.create-candidate.outputs.archive_sha256 }}
+      forever_archive_sha256: ${{ steps.create-candidate.outputs.forever_archive_sha256 }}
       candidate_sha256: ${{ steps.create-candidate.outputs.candidate_sha256 }}
       project_version: ${{ steps.rebuild-package-output.outputs.project_version }}
       run_attempt: ${{ github.run_attempt }}
@@ -183,6 +184,16 @@ jobs:
           STATSPRO_ARCHIVE_PATH: ${{ steps.rebuild-package-output.outputs.archive_path }}
           STATSPRO_PROJECT_VERSION: ${{ steps.rebuild-package-output.outputs.project_version }}
         run: |
+          . ./scripts/release-tag-contract.ps1
+          . ./scripts/flavor-release-contract.ps1
+          $flavors = Get-StatsProFlavorReleaseContractFromGit -SourceRoot . -ExpectedCommitSha $env:GITHUB_SHA -ExpectedTag $env:GITHUB_REF_NAME
+          $foreverArchive = ''
+          if ($flavors.IncludeForever) {
+            ./scripts/build-forever-package.ps1 -OutputRoot (Join-Path '.release' 'forever-candidate')
+            $builtForeverArchive = Join-Path (Join-Path '.release' 'forever-candidate') $flavors.ForeverArchiveName
+            $foreverArchive = Join-Path '.release' $flavors.ForeverArchiveName
+            [System.IO.File]::Copy($builtForeverArchive, $foreverArchive, $false)
+          }
           ./scripts/release-candidate.ps1 `
             -Mode Create `
             -Repository $env:GITHUB_REPOSITORY `
@@ -192,6 +203,7 @@ jobs:
             -ExpectedRunAttempt $env:GITHUB_RUN_ATTEMPT `
             -ExpectedProjectVersion $env:STATSPRO_PROJECT_VERSION `
             -ArchivePath $env:STATSPRO_ARCHIVE_PATH `
+            -ForeverArchivePath $foreverArchive `
             -ReleaseJsonPath (Join-Path ".release" "release.json") `
             -ManifestPath (Join-Path ".release" "statspro-package-tree.sha256") `
             -CandidatePath (Join-Path ".release" "statspro-release-candidate.json") `
@@ -204,6 +216,7 @@ jobs:
           name: statspro-release-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ steps.create-candidate.outputs.archive_path }}
+            ${{ steps.create-candidate.outputs.forever_archive_path }}
             ${{ steps.create-candidate.outputs.release_json_path }}
             ${{ steps.create-candidate.outputs.manifest_path }}
             ${{ steps.create-candidate.outputs.candidate_path }}
@@ -267,6 +280,8 @@ jobs:
             -ExpectedRunId $env:GITHUB_RUN_ID `
             -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
             -ExpectedArchiveSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -ForeverArchivePath '${{ steps.verify-candidate.outputs.forever_archive_path }}' `
+            -ExpectedForeverArchiveSha256 '${{ steps.verify-candidate.outputs.forever_archive_sha256 }}' `
             -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
             -NotesPath '${{ steps.verify-candidate.outputs.notes_path }}' `
             -ManifestPath '${{ steps.verify-candidate.outputs.manifest_path }}'
@@ -343,6 +358,17 @@ jobs:
             -ExpectedSha256 '${{ needs.package.outputs.archive_sha256 }}' `
             -PlanPath (Join-Path ".release" "handoff" "statspro-marketplace-plan.json") `
             -OutputPath $env:GITHUB_OUTPUT
+          if ('${{ steps.verify-candidate.outputs.forever_archive_path }}' -ne '') {
+            $foreverPlan = Join-Path '.release' 'handoff' 'statspro-forever-marketplace-plan.json'
+            ./scripts/publish-marketplaces.ps1 `
+              -Mode Prepare -Flavor Forever `
+              -ArchivePath '${{ steps.verify-candidate.outputs.forever_archive_path }}' `
+              -ExpectedTag $env:GITHUB_REF_NAME `
+              -ExpectedSha256 '${{ steps.verify-candidate.outputs.forever_archive_sha256 }}' `
+              -PlanPath $foreverPlan
+            "forever_plan_path=$foreverPlan" >> $env:GITHUB_OUTPUT
+            "forever_plan_sha256=$((Get-FileHash -LiteralPath $foreverPlan -Algorithm SHA256).Hash.ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          }
 
       - name: Mark marketplace publication started
         shell: pwsh
@@ -357,6 +383,8 @@ jobs:
             -ExpectedRunId $env:GITHUB_RUN_ID `
             -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
             -ExpectedArchiveSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -ForeverArchivePath '${{ steps.verify-candidate.outputs.forever_archive_path }}' `
+            -ExpectedForeverArchiveSha256 '${{ steps.verify-candidate.outputs.forever_archive_sha256 }}' `
             -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
             -NotesPath '${{ steps.verify-candidate.outputs.notes_path }}' `
             -ManifestPath '${{ steps.verify-candidate.outputs.manifest_path }}'
@@ -374,6 +402,15 @@ jobs:
             -ExpectedSha256 '${{ needs.package.outputs.archive_sha256 }}' `
             -PlanPath '${{ steps.prepare-marketplace.outputs.plan_path }}' `
             -ExpectedPlanSha256 '${{ steps.prepare-marketplace.outputs.plan_sha256 }}'
+          if ('${{ steps.verify-candidate.outputs.forever_archive_path }}' -ne '') {
+            ./scripts/publish-marketplaces.ps1 `
+              -Mode Publish -Flavor Forever `
+              -ArchivePath '${{ steps.verify-candidate.outputs.forever_archive_path }}' `
+              -ExpectedTag $env:GITHUB_REF_NAME `
+              -ExpectedSha256 '${{ steps.verify-candidate.outputs.forever_archive_sha256 }}' `
+              -PlanPath '${{ steps.prepare-marketplace.outputs.forever_plan_path }}' `
+              -ExpectedPlanSha256 '${{ steps.prepare-marketplace.outputs.forever_plan_sha256 }}'
+          }
 
   github-finalize:
     needs: [package, marketplace-upload]
@@ -429,6 +466,8 @@ jobs:
             -ExpectedRunId $env:GITHUB_RUN_ID `
             -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
             -ExpectedArchiveSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -ForeverArchivePath '${{ steps.verify-candidate.outputs.forever_archive_path }}' `
+            -ExpectedForeverArchiveSha256 '${{ steps.verify-candidate.outputs.forever_archive_sha256 }}' `
             -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
             -ArchivePath '${{ steps.verify-candidate.outputs.archive_path }}' `
             -ReleaseJsonPath '${{ steps.verify-candidate.outputs.release_json_path }}' `
@@ -448,6 +487,8 @@ jobs:
             -ExpectedRunId $env:GITHUB_RUN_ID `
             -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
             -ExpectedArchiveSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -ForeverArchivePath '${{ steps.verify-candidate.outputs.forever_archive_path }}' `
+            -ExpectedForeverArchiveSha256 '${{ steps.verify-candidate.outputs.forever_archive_sha256 }}' `
             -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
             -ArchivePath '${{ steps.verify-candidate.outputs.archive_path }}' `
             -ReleaseJsonPath '${{ steps.verify-candidate.outputs.release_json_path }}' `
@@ -514,3 +555,23 @@ jobs:
             -WithReleaseJson `
             -ArchonMaxAgeDays 3 `
             -EnforceToolLocks
+          . ./scripts/release-tag-contract.ps1
+          . ./scripts/flavor-release-contract.ps1
+          $flavors = Get-StatsProFlavorReleaseContractFromGit -SourceRoot . -ExpectedCommitSha $env:GITHUB_SHA -ExpectedTag $tag
+          if ($flavors.IncludeForever) {
+            $foreverZipPath = Save-ReleaseAsset -Name $flavors.ForeverArchiveName
+            gh release verify-asset $tag $foreverZipPath --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { throw 'Forever immutable asset attestation failed.' }
+            ./scripts/test-forever-package.ps1 -ArchivePath $foreverZipPath
+            ./scripts/check-release-artifact.ps1 `
+              -ZipPath $zipPath `
+              -ReleaseJsonPath $releaseJsonPath `
+              -ExpectedTag $tag `
+              -PackagerProjectVersion $tag `
+              -RequireExactPackagerProjectVersion `
+              -WithReleaseJson `
+              -ArchonMaxAgeDays 3 `
+              -EnforceToolLocks `
+              -RequireSelectedFlavors `
+              -ForeverArchivePath $foreverZipPath
+          }

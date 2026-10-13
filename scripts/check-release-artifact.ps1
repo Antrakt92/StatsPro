@@ -1,5 +1,7 @@
 param(
     [string]$ZipPath,
+    [string]$ForeverArchivePath,
+    [switch]$RequireSelectedFlavors,
     [string]$ReleaseJsonPath,
     [string]$ExpectedTag,
     [string]$PackagerProjectVersion,
@@ -21,6 +23,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "third-party-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 . (Join-Path $PSScriptRoot "saved-variables-contract.ps1")
+. (Join-Path $PSScriptRoot "flavor-release-contract.ps1")
 
 function Invoke-NativeCapture {
     param(
@@ -737,6 +740,35 @@ function Assert-PackagedArchonTargets {
     }
 }
 
+function Assert-StatsProSelectedFlavorArtifacts {
+    param([string]$Root, [string]$Tag, [string]$ForeverArchivePath,
+        [bool]$RequireSelectedFlavors = $false)
+
+    if (-not $RequireSelectedFlavors -and [string]::IsNullOrWhiteSpace($ForeverArchivePath)) { return }
+    $contract = Get-StatsProFlavorReleaseContract -SourceRoot $Root -ExpectedTag $Tag
+    if (-not $contract.IncludeForever) {
+        if (-not [string]::IsNullOrWhiteSpace($ForeverArchivePath)) {
+            throw 'Forever archive supplied but the release tag does not select the Forever TOC version.'
+        }
+        return
+    }
+    if ([string]::IsNullOrWhiteSpace($ForeverArchivePath)) {
+        throw 'Selected Forever flavor requires -ForeverArchivePath in the final joint artifact gate.'
+    }
+    if ([System.IO.Path]::GetFileName($ForeverArchivePath) -cne $contract.ForeverArchiveName) {
+        throw "Selected Forever archive filename must be '$($contract.ForeverArchiveName)'."
+    }
+    if (-not (Test-Path -LiteralPath $ForeverArchivePath -PathType Leaf)) {
+        throw 'Selected Forever archive is missing.'
+    }
+    # Import in this function scope: the library's parameter block must not reset
+    # the caller's SourceRoot, SelfTest or other release gate parameters.
+    . (Join-Path $PSScriptRoot 'test-forever-package.ps1') -SourceRoot $Root -LibraryOnly
+    Assert-ForeverArchive -Path $ForeverArchivePath -Root $Root
+    $after = Get-StatsProFlavorReleaseContract -SourceRoot $Root -ExpectedTag $Tag
+    if (-not $after.IncludeForever) { throw 'Selected Forever TOC changed during artifact verification.' }
+}
+
 function Assert-StatsProReleaseArtifact {
     param(
         [string]$ZipPath,
@@ -748,7 +780,9 @@ function Assert-StatsProReleaseArtifact {
         [bool]$RequireExactPackagerProjectVersion,
         [bool]$PackageOnly,
         [bool]$WithReleaseJson,
-        [bool]$WriteReleaseJson
+        [bool]$WriteReleaseJson,
+        [string]$ForeverArchivePath,
+        [bool]$RequireSelectedFlavors = $false
     )
 
     if ($PackageOnly -and $WithReleaseJson) {
@@ -779,6 +813,9 @@ function Assert-StatsProReleaseArtifact {
     }
     $zipFullPath = (Resolve-Path $ZipPath).Path
     $sourceFullPath = (Resolve-Path $SourceRoot).Path
+
+    Assert-StatsProSelectedFlavorArtifacts -Root $sourceFullPath -Tag $ExpectedTag `
+        -ForeverArchivePath $ForeverArchivePath -RequireSelectedFlavors:$RequireSelectedFlavors
 
     $entries = Get-ZipEntries -Path $zipFullPath
     Assert-StatsProPackageEntries -Entries $entries
@@ -899,6 +936,67 @@ function Invoke-SelfTest {
             throw "Generated release.json is not deterministic."
         }
         Assert-StatsProReleaseArtifact -ZipPath $zip -ExpectedTag $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$true -WithReleaseJson:$false -WriteReleaseJson:$false
+        # Retail-only package checks remain valid before the separate beta build.
+        Assert-StatsProSelectedFlavorArtifacts -Root $sourceRoot -Tag $tag
+        $flavorRoot = Join-Path $tempDir 'forever-source'
+        $flavorOutput = Join-Path $tempDir 'forever-output'
+        New-Item -ItemType Directory -Path $flavorRoot | Out-Null
+        Assert-StatsProSelectedFlavorArtifacts -Root $flavorRoot -Tag $tag -RequireSelectedFlavors:$true
+        # Library parameter declarations stay in this test-only function scope.
+        & {
+            param($Root, $Fixture, $Output, $Tag)
+            . (Join-Path $PSScriptRoot 'test-forever-package.ps1') -SourceRoot $Root -LibraryOnly
+            $fixtureFiles = @((Get-ForeverPackageMap).Values) + @(
+                (Get-StatsProPackageFileContract).RequiredFiles | ForEach-Object { $_.Substring('StatsPro/'.Length) }
+            ) + @('scripts/check-archon-targets.lua')
+            foreach ($relative in @($fixtureFiles | Select-Object -Unique)) {
+                $destination = Join-Path $Fixture $relative
+                New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+                Copy-Item -LiteralPath (Join-Path $Root $relative) -Destination $destination
+            }
+            $tocPath = Join-Path $Fixture 'StatsPro_Forever.toc'
+            $toc = [System.IO.File]::ReadAllText($tocPath)
+            $toc = [regex]::Replace($toc, '(?m)^## Version:[^\r\n]+', "## Version: $($Tag.Substring(1))")
+            [System.IO.File]::WriteAllText($tocPath, $toc)
+            & (Join-Path $PSScriptRoot 'build-forever-package.ps1') -SourceRoot $Fixture -OutputRoot $Output
+        } $sourceRoot $flavorRoot $flavorOutput $tag
+        $foreverZip = Join-Path $flavorOutput "StatsPro-$tag-Forever-beta.zip"
+        Assert-ThrowsMatch 'selected Forever archive missing from joint gate' {
+            Assert-StatsProSelectedFlavorArtifacts -Root $flavorRoot -Tag $tag -RequireSelectedFlavors:$true
+        } 'requires -ForeverArchivePath'
+        Assert-ThrowsMatch 'selected Forever nonexistent archive rejected' {
+            Assert-StatsProSelectedFlavorArtifacts -Root $flavorRoot -Tag $tag `
+                -ForeverArchivePath (Join-Path $tempDir "StatsPro-$tag-Forever-beta.zip") -RequireSelectedFlavors:$true
+        } 'archive is missing'
+        Assert-ThrowsMatch 'selected Forever wrong archive filename rejected' {
+            Assert-StatsProSelectedFlavorArtifacts -Root $flavorRoot -Tag $tag -ForeverArchivePath $zip -RequireSelectedFlavors:$true
+        } 'archive filename must'
+        Assert-StatsProReleaseArtifact -ZipPath $zip -ExpectedTag $tag -SourceRoot $flavorRoot `
+            -ArchonMaxAgeDays 99999 -PackageOnly:$true -ForeverArchivePath $foreverZip -RequireSelectedFlavors:$true
+        Assert-StatsProSelectedFlavorArtifacts -Root $flavorRoot -Tag $tag -ForeverArchivePath $foreverZip
+        $tampered = Join-Path $tempDir 'tampered-forever'
+        New-Item -ItemType Directory -Path $tampered | Out-Null
+        $tamperedZip = Join-Path $tampered "StatsPro-$tag-Forever-beta.zip"
+        Copy-Item -LiteralPath $foreverZip -Destination $tamperedZip
+        $mutated = [System.IO.Compression.ZipFile]::Open($tamperedZip, [System.IO.Compression.ZipArchiveMode]::Update)
+        try {
+            $entry = $mutated.GetEntry('StatsPro/StatsPro_Forever.lua')
+            $entry.Delete()
+            $entry = $mutated.CreateEntry('StatsPro/StatsPro_Forever.lua')
+            $writer = [System.IO.StreamWriter]::new($entry.Open())
+            try { $writer.Write('altered runtime') } finally { $writer.Dispose() }
+        }
+        finally { $mutated.Dispose() }
+        Assert-ThrowsMatch 'selected Forever altered bytes rejected' {
+            Assert-StatsProSelectedFlavorArtifacts -Root $flavorRoot -Tag $tag -ForeverArchivePath $tamperedZip -RequireSelectedFlavors:$true
+        } 'Archive/source mismatch'
+        $olderOnlyTag = 'v0.0.0'
+        if ($tag -ceq $olderOnlyTag) { $olderOnlyTag = 'v0.0.1' }
+        Assert-StatsProSelectedFlavorArtifacts -Root $flavorRoot -Tag $olderOnlyTag -RequireSelectedFlavors:$true
+        Assert-ThrowsMatch 'unselected Forever archive rejected' {
+            Assert-StatsProSelectedFlavorArtifacts -Root $flavorRoot -Tag $olderOnlyTag -ForeverArchivePath $foreverZip
+        } 'does not select'
+
         $writeMutatedTocZip = {
             param([string]$Destination, [scriptblock]$Mutation)
 
@@ -1250,4 +1348,6 @@ Assert-StatsProReleaseArtifact `
     -RequireExactPackagerProjectVersion:$RequireExactPackagerProjectVersion.IsPresent `
     -PackageOnly:$PackageOnly.IsPresent `
     -WithReleaseJson:$WithReleaseJson.IsPresent `
-    -WriteReleaseJson:$WriteReleaseJson.IsPresent
+    -WriteReleaseJson:$WriteReleaseJson.IsPresent `
+    -ForeverArchivePath $ForeverArchivePath `
+    -RequireSelectedFlavors:$RequireSelectedFlavors.IsPresent

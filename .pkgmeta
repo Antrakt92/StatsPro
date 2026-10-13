@@ -5,7 +5,7 @@ manual-changelog:
   markup-type: markdown
 
 ignore:
-  # The local Forever preview has its own explicit package builder.
+  # Forever is built separately with its own client metadata and stat sources.
   - StatsPro_Forever.toc
   - StatsPro_Forever.lua
   - .github

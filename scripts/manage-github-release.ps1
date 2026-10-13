@@ -7,8 +7,10 @@ param(
     [string]$ExpectedRunId,
     [string]$ExpectedRunAttempt,
     [string]$ExpectedArchiveSha256,
+    [string]$ExpectedForeverArchiveSha256,
     [string]$ExpectedCandidateSha256,
     [string]$ArchivePath,
+    [string]$ForeverArchivePath,
     [string]$ReleaseJsonPath,
     [string]$NotesPath,
     [string]$ManifestPath,
@@ -20,6 +22,7 @@ param(
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
+. (Join-Path $PSScriptRoot 'flavor-release-contract.ps1')
 
 function Format-NativeArgument {
     param([AllowNull()][string]$Argument)
@@ -1910,7 +1913,9 @@ function Get-ReleaseAssetNames {
 
 function Get-ExpectedReleaseAssetNames {
     param([string]$ExpectedTag)
-    return @("StatsPro-$ExpectedTag.zip", "release.json")
+    $names = @("StatsPro-$ExpectedTag.zip", "release.json")
+    if ($script:ReleaseFlavorContract -and $script:ReleaseFlavorContract.IncludeForever) { $names += "StatsPro-$ExpectedTag-Forever-beta.zip" }
+    return $names
 }
 
 function Test-ContainsOrdinal {
@@ -2237,6 +2242,7 @@ function Assert-DraftAssetsMatchLocalFiles {
         "StatsPro-$ExpectedTag.zip" = $ArchivePath
         "release.json"              = $ReleaseJsonPath
     }
+    if ($script:ReleaseFlavorContract -and $script:ReleaseFlavorContract.IncludeForever) { $localFiles["StatsPro-$ExpectedTag-Forever-beta.zip"] = $script:ReleaseForeverArchive }
     foreach ($asset in @($Release.assets)) {
         $name = [string]$asset.name
         $path = $localFiles[$name]
@@ -2398,9 +2404,15 @@ function Assert-ReleaseAssetPaths {
     if (-not [System.StringComparer]::Ordinal.Equals([System.IO.Path]::GetFileName($releaseJson), "release.json")) {
         throw "Release metadata filename must be release.json."
     }
+    $forever = $null
+    if ($script:ReleaseFlavorContract -and $script:ReleaseFlavorContract.IncludeForever) {
+        $forever = Assert-LocalArchiveSha256 -Path $script:ReleaseForeverArchive -ExpectedSha256 $script:ReleaseForeverSha256
+        if (-not [System.StringComparer]::Ordinal.Equals([System.IO.Path]::GetFileName($forever), "StatsPro-$ExpectedTag-Forever-beta.zip")) { throw 'Forever release archive filename does not match tag' }
+    }
     return [pscustomobject]@{
         Archive     = $archive
         ReleaseJson = $releaseJson
+        ForeverArchive = $forever
     }
 }
 
@@ -2446,6 +2458,10 @@ function Invoke-ImmutableReleaseAttestationChecks {
         -ExpectedCommitSha $ExpectedCommitSha
     [void](Invoke-Gh -Deadline $Deadline -Description "GitHub archive asset attestation" -Arguments @("release", "verify-asset", $ExpectedTag, $ArchivePath, "--repo", $Repository))
     [void](Invoke-Gh -Deadline $Deadline -Description "GitHub metadata asset attestation" -Arguments @("release", "verify-asset", $ExpectedTag, $ReleaseJsonPath, "--repo", $Repository))
+    if ($script:ReleaseFlavorContract -and $script:ReleaseFlavorContract.IncludeForever) {
+        [void](Assert-LocalArchiveSha256 -Path $script:ReleaseForeverArchive -ExpectedSha256 $script:ReleaseForeverSha256)
+        [void](Invoke-Gh -Deadline $Deadline -Description 'GitHub Forever archive asset attestation' -Arguments @('release','verify-asset',$ExpectedTag,$script:ReleaseForeverArchive,'--repo',$Repository))
+    }
 }
 
 function Get-WorkflowJobBlock {
@@ -3541,6 +3557,8 @@ function Assert-ReleaseWorkflowBoundary {
             -ExpectedRunId $env:GITHUB_RUN_ID `
             -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
             -ExpectedArchiveSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -ForeverArchivePath '${{ steps.verify-candidate.outputs.forever_archive_path }}' `
+            -ExpectedForeverArchiveSha256 '${{ steps.verify-candidate.outputs.forever_archive_sha256 }}' `
             -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
             -NotesPath '${{ steps.verify-candidate.outputs.notes_path }}' `
             -ManifestPath '${{ steps.verify-candidate.outputs.manifest_path }}'
@@ -3567,6 +3585,17 @@ function Assert-ReleaseWorkflowBoundary {
             -ExpectedSha256 '${{ needs.package.outputs.archive_sha256 }}' `
             -PlanPath (Join-Path ".release" "handoff" "statspro-marketplace-plan.json") `
             -OutputPath $env:GITHUB_OUTPUT
+          if ('${{ steps.verify-candidate.outputs.forever_archive_path }}' -ne '') {
+            $foreverPlan = Join-Path '.release' 'handoff' 'statspro-forever-marketplace-plan.json'
+            ./scripts/publish-marketplaces.ps1 `
+              -Mode Prepare -Flavor Forever `
+              -ArchivePath '${{ steps.verify-candidate.outputs.forever_archive_path }}' `
+              -ExpectedTag $env:GITHUB_REF_NAME `
+              -ExpectedSha256 '${{ steps.verify-candidate.outputs.forever_archive_sha256 }}' `
+              -PlanPath $foreverPlan
+            "forever_plan_path=$foreverPlan" >> $env:GITHUB_OUTPUT
+            "forever_plan_sha256=$((Get-FileHash -LiteralPath $foreverPlan -Algorithm SHA256).Hash.ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          }
 '@ },
         [pscustomobject]@{ Job = 'marketplace-upload'; Name = 'Mark marketplace publication started'; Block = @'
       - name: Mark marketplace publication started
@@ -3582,6 +3611,8 @@ function Assert-ReleaseWorkflowBoundary {
             -ExpectedRunId $env:GITHUB_RUN_ID `
             -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
             -ExpectedArchiveSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -ForeverArchivePath '${{ steps.verify-candidate.outputs.forever_archive_path }}' `
+            -ExpectedForeverArchiveSha256 '${{ steps.verify-candidate.outputs.forever_archive_sha256 }}' `
             -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
             -NotesPath '${{ steps.verify-candidate.outputs.notes_path }}' `
             -ManifestPath '${{ steps.verify-candidate.outputs.manifest_path }}'
@@ -3600,6 +3631,15 @@ function Assert-ReleaseWorkflowBoundary {
             -ExpectedSha256 '${{ needs.package.outputs.archive_sha256 }}' `
             -PlanPath '${{ steps.prepare-marketplace.outputs.plan_path }}' `
             -ExpectedPlanSha256 '${{ steps.prepare-marketplace.outputs.plan_sha256 }}'
+          if ('${{ steps.verify-candidate.outputs.forever_archive_path }}' -ne '') {
+            ./scripts/publish-marketplaces.ps1 `
+              -Mode Publish -Flavor Forever `
+              -ArchivePath '${{ steps.verify-candidate.outputs.forever_archive_path }}' `
+              -ExpectedTag $env:GITHUB_REF_NAME `
+              -ExpectedSha256 '${{ steps.verify-candidate.outputs.forever_archive_sha256 }}' `
+              -PlanPath '${{ steps.prepare-marketplace.outputs.forever_plan_path }}' `
+              -ExpectedPlanSha256 '${{ steps.prepare-marketplace.outputs.forever_plan_sha256 }}'
+          }
 '@ },
         [pscustomobject]@{ Job = 'github-finalize'; Name = 'Attach validated assets to draft'; Block = @'
       - name: Attach validated assets to draft
@@ -3615,6 +3655,8 @@ function Assert-ReleaseWorkflowBoundary {
             -ExpectedRunId $env:GITHUB_RUN_ID `
             -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
             -ExpectedArchiveSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -ForeverArchivePath '${{ steps.verify-candidate.outputs.forever_archive_path }}' `
+            -ExpectedForeverArchiveSha256 '${{ steps.verify-candidate.outputs.forever_archive_sha256 }}' `
             -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
             -ArchivePath '${{ steps.verify-candidate.outputs.archive_path }}' `
             -ReleaseJsonPath '${{ steps.verify-candidate.outputs.release_json_path }}' `
@@ -3635,6 +3677,8 @@ function Assert-ReleaseWorkflowBoundary {
             -ExpectedRunId $env:GITHUB_RUN_ID `
             -ExpectedRunAttempt '${{ needs.package.outputs.run_attempt }}' `
             -ExpectedArchiveSha256 '${{ needs.package.outputs.archive_sha256 }}' `
+            -ForeverArchivePath '${{ steps.verify-candidate.outputs.forever_archive_path }}' `
+            -ExpectedForeverArchiveSha256 '${{ steps.verify-candidate.outputs.forever_archive_sha256 }}' `
             -ExpectedCandidateSha256 '${{ needs.package.outputs.candidate_sha256 }}' `
             -ArchivePath '${{ steps.verify-candidate.outputs.archive_path }}' `
             -ReleaseJsonPath '${{ steps.verify-candidate.outputs.release_json_path }}' `
@@ -3679,6 +3723,26 @@ function Assert-ReleaseWorkflowBoundary {
             -WithReleaseJson `
             -ArchonMaxAgeDays 3 `
             -EnforceToolLocks
+          . ./scripts/release-tag-contract.ps1
+          . ./scripts/flavor-release-contract.ps1
+          $flavors = Get-StatsProFlavorReleaseContractFromGit -SourceRoot . -ExpectedCommitSha $env:GITHUB_SHA -ExpectedTag $tag
+          if ($flavors.IncludeForever) {
+            $foreverZipPath = Save-ReleaseAsset -Name $flavors.ForeverArchiveName
+            gh release verify-asset $tag $foreverZipPath --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { throw 'Forever immutable asset attestation failed.' }
+            ./scripts/test-forever-package.ps1 -ArchivePath $foreverZipPath
+            ./scripts/check-release-artifact.ps1 `
+              -ZipPath $zipPath `
+              -ReleaseJsonPath $releaseJsonPath `
+              -ExpectedTag $tag `
+              -PackagerProjectVersion $tag `
+              -RequireExactPackagerProjectVersion `
+              -WithReleaseJson `
+              -ArchonMaxAgeDays 3 `
+              -EnforceToolLocks `
+              -RequireSelectedFlavors `
+              -ForeverArchivePath $foreverZipPath
+          }
 '@ }
     )
     foreach ($contract in $sensitiveStepContracts) {
@@ -3700,6 +3764,9 @@ function Assert-ReleaseWorkflowBoundary {
     $artifactUpload = & $getStep 'package' 'Upload exact release candidate'
     if ($candidateCreate.Block.Value -notmatch '(?m)^\s+id:\s*create-candidate\s*$' -or
         $candidateCreate.Block.Value -notmatch '(?m)^\s+-Mode Create\s*' -or
+        $candidateCreate.Block.Value -notmatch '-ForeverArchivePath \$foreverArchive' -or
+        $candidateCreate.Block.Value -notmatch 'Get-StatsProFlavorReleaseContractFromGit -SourceRoot \. -ExpectedCommitSha \$env:GITHUB_SHA -ExpectedTag \$env:GITHUB_REF_NAME' -or
+        $candidateCreate.Block.Value -notmatch '\[System\.IO\.File\]::Copy\(\$builtForeverArchive, \$foreverArchive, \$false\)' -or
         $candidateCreate.Block.Value -notmatch '-ExpectedRunAttempt \$env:GITHUB_RUN_ATTEMPT' -or
         $candidateCreate.Block.Value -notmatch '-ExpectedProjectVersion \$env:STATSPRO_PROJECT_VERSION' -or
         $candidateCreate.Block.Index -ge $artifactUpload.Block.Index) {
@@ -3901,6 +3968,20 @@ function Invoke-SelfTest {
     Assert-DraftRelease -Release $draftEmpty -ExpectedTag $tag -ExpectedAssets @()
     Assert-DraftRelease -Release $draftReady -ExpectedTag $tag -ExpectedAssets (Get-ExpectedReleaseAssetNames -ExpectedTag $tag)
     Assert-PublishedImmutableRelease -Release $published -ExpectedTag $tag
+    $script:ReleaseFlavorContract = [pscustomobject]@{ IncludeForever = $true }
+    try {
+        Assert-ThrowsMatch 'joint release rejects missing Forever asset' {
+            Assert-PublishedImmutableRelease -Release $published -ExpectedTag $tag
+        } 'Release assets'
+        $jointPublished = $published.PSObject.Copy()
+        $jointPublished.assets = @($published.assets) + @([pscustomobject]@{ name = "StatsPro-$tag-Forever-beta.zip" })
+        Assert-PublishedImmutableRelease -Release $jointPublished -ExpectedTag $tag
+        $jointPublished.assets += [pscustomobject]@{ name = 'unexpected.zip' }
+        Assert-ThrowsMatch 'joint release rejects extra asset' {
+            Assert-PublishedImmutableRelease -Release $jointPublished -ExpectedTag $tag
+        } 'Release assets'
+    }
+    finally { $script:ReleaseFlavorContract = $null }
 
     Assert-ThrowsMatch "existing draft marker rejected" {
         Assert-NoExistingRelease -Release $draftEmpty -ExpectedTag $tag
@@ -4456,6 +4537,25 @@ function Invoke-SelfTest {
             )
         }
         Assert-DraftAssetsMatchLocalFiles -Release $draftWithDigests -ExpectedTag $tag -ArchivePath $archivePath -ReleaseJsonPath $releaseJsonPath
+        $foreverFixture = Join-Path (Split-Path -Parent $archivePath) "StatsPro-$tag-Forever-beta.zip"
+        [System.IO.File]::WriteAllText($foreverFixture, 'Forever asset fixture')
+        $script:ReleaseFlavorContract = [pscustomobject]@{ IncludeForever = $true }
+        $script:ReleaseForeverArchive = $foreverFixture
+        try {
+            $jointDraft = $draftWithDigests.PSObject.Copy()
+            $foreverAsset = [pscustomobject]@{
+                name = "StatsPro-$tag-Forever-beta.zip"; state = 'uploaded'
+                size = (Get-Item -LiteralPath $foreverFixture).Length
+                digest = "sha256:$(Get-LowercaseFileSha256 -Path $foreverFixture)"
+            }
+            $jointDraft.assets = @($draftWithDigests.assets) + @($foreverAsset)
+            Assert-DraftAssetsMatchLocalFiles -Release $jointDraft -ExpectedTag $tag -ArchivePath $archivePath -ReleaseJsonPath $releaseJsonPath
+            $foreverAsset.digest = 'sha256:' + ('0' * 64)
+            Assert-ThrowsMatch 'tampered Forever draft digest rejected' {
+                Assert-DraftAssetsMatchLocalFiles -Release $jointDraft -ExpectedTag $tag -ArchivePath $archivePath -ReleaseJsonPath $releaseJsonPath
+            } 'Forever-beta.zip digest'
+        }
+        finally { $script:ReleaseFlavorContract = $null; $script:ReleaseForeverArchive = $null; Remove-Item -LiteralPath $foreverFixture }
         $publishedProtocolRelease = & $newProtocolRelease 'marketplace-started' $protocolRunId @($draftWithDigests.assets) $false $true
         [void](Assert-PublishedProtocolIdentity -Release $publishedProtocolRelease -Repository 'owner/repo' -ExpectedTag $tag -ExpectedCommitSha $commit -ExpectedRunId $protocolRunId -ExpectedRunAttempt $protocolRunAttempt -ExpectedNotes $protocolNotes -ExpectedManifestSha256 $protocolManifestSha -ExpectedArchiveSha256 $protocolArchiveSha -ExpectedCandidateSha256 $protocolCandidateSha)
         $localFiles = @{
@@ -4590,6 +4690,10 @@ function Invoke-SelfTest {
     $workflowPath = Join-Path (Join-Path $PSScriptRoot "..") ".github\workflows\release.yml"
     $workflowText = Get-Content -LiteralPath $workflowPath -Raw -Encoding UTF8
     Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText
+    Assert-ThrowsMatch 'Forever candidate must retain flat artifact handoff' {
+        Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
+            '[System.IO.File]::Copy($builtForeverArchive, $foreverArchive, $false)', 'Write-Host skipped-copy')
+    } 'candidate creation'
     Assert-ThrowsMatch "release changelog truncation rejected" {
         Assert-ReleaseWorkflowBoundary -WorkflowText $workflowText.Replace(
             'run: ./scripts/check-release-version.ps1 -Tag $env:GITHUB_REF_NAME -EnforceSemVer',
@@ -5203,6 +5307,19 @@ if ([string]::IsNullOrWhiteSpace($Mode)) {
 }
 Assert-RepositoryName $Repository
 Assert-StatsProReleaseTag -Value $ExpectedTag
+$script:ReleaseFlavorContract = if ($Mode -eq 'RefuseExisting') { $null } else {
+    Get-StatsProFlavorReleaseContractFromGit -SourceRoot (Join-Path $PSScriptRoot '..') -ExpectedCommitSha $ExpectedCommitSha -ExpectedTag $ExpectedTag
+}
+$script:ReleaseForeverArchive = $ForeverArchivePath
+$script:ReleaseForeverSha256 = $ExpectedForeverArchiveSha256
+if ($Mode -in @('CreateDraft','MarkMarketplaceStarted','AttachAssets','Publish')) {
+    if ($script:ReleaseFlavorContract.IncludeForever) {
+        Assert-LowercaseSha256 -Value $ExpectedForeverArchiveSha256 -Description 'Expected Forever archive digest'
+        $script:ReleaseForeverArchive = Assert-LocalArchiveSha256 -Path $ForeverArchivePath -ExpectedSha256 $ExpectedForeverArchiveSha256
+        if (-not [System.StringComparer]::Ordinal.Equals([System.IO.Path]::GetFileName($script:ReleaseForeverArchive), $script:ReleaseFlavorContract.ForeverArchiveName)) { throw 'Forever archive filename disagrees with selected flavor' }
+    }
+    elseif ($ForeverArchivePath -or $ExpectedForeverArchiveSha256) { throw 'Retail-only release cannot bind a Forever archive' }
+}
 if ($Mode -ne "RefuseExisting") {
     Assert-CommitSha $ExpectedCommitSha
 }
@@ -5346,8 +5463,10 @@ switch ($Mode) {
             "StatsPro-$ExpectedTag.zip" = $paths.Archive
             "release.json"              = $paths.ReleaseJson
         }
-        foreach ($assetName in @("StatsPro-$ExpectedTag.zip", "release.json")) {
+        if ($paths.ForeverArchive) { $localFiles["StatsPro-$ExpectedTag-Forever-beta.zip"] = $paths.ForeverArchive }
+        foreach ($assetName in @(Get-ExpectedReleaseAssetNames -ExpectedTag $ExpectedTag)) {
             [void](Assert-LocalArchiveSha256 -Path $paths.Archive -ExpectedSha256 $ExpectedArchiveSha256)
+            if ($paths.ForeverArchive) { [void](Assert-LocalArchiveSha256 -Path $paths.ForeverArchive -ExpectedSha256 $ExpectedForeverArchiveSha256) }
             $release = Get-GitHubReleaseByTag -Repository $Repository -ExpectedTag $ExpectedTag -Deadline $deadline
             [void](Assert-ReleaseProtocolIdentity -Release $release -Repository $Repository -ExpectedTag $ExpectedTag -ExpectedCommitSha $ExpectedCommitSha -ExpectedPhase 'marketplace-started' -ExpectedRunId $ExpectedRunId -ExpectedRunAttempt $ExpectedRunAttempt -ExpectedNotes $notesText -ExpectedManifestSha256 $manifestSha256 -ExpectedArchiveSha256 $ExpectedArchiveSha256 -ExpectedCandidateSha256 $ExpectedCandidateSha256)
             Assert-ReleaseAssetSubsetMatchesLocalFiles -Release $release -LocalFiles $localFiles

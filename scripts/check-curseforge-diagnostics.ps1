@@ -5,12 +5,16 @@ param(
     [int]$TimeoutSec = 30,
     [int]$MaxAttempts = 3,
     [int]$RetryDelaySeconds = 5,
+    [ValidateSet('Retail', 'Forever')]
+    [string]$Flavor = 'Retail',
     [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
+. (Join-Path $PSScriptRoot "marketplace-version-contract.ps1")
+$Flavor = ConvertTo-StatsProMarketplaceFlavor -Value $Flavor
 
 function ConvertTo-JsonCompat {
     param($InputObject)
@@ -138,10 +142,24 @@ function Get-CurseForgeFileItems {
 function Test-CurseForgeFileVersionMatch {
     param(
         [object]$File,
-        [string]$Version
+        [string]$Version,
+        [ValidateSet('Retail', 'Forever')][string]$Flavor = 'Retail'
     )
 
     Assert-StatsProReleaseTag -Value $Version
+    if ($Flavor -ieq 'Forever') {
+        if ([string]$File.fileName -cne "StatsPro-$Version-Forever-beta.zip" -or
+            [string]$File.displayName -cne "$Version-Forever-beta" -or
+            @($File.gameVersions) -cnotcontains '1.60.1' -or
+            @($File.gameVersionTypeIds) -notcontains 88568 -or
+            @($File.gameVersionTypeIds) -contains 517 -or
+            ([string]$File.releaseType -cne '2' -and [string]$File.releaseType -cne 'beta')) {
+            return $false
+        }
+    } elseif ([string]$File.fileName -match '-Forever-beta\.zip$' -or
+        ([string]$File.displayName -match '-Forever-beta$' -and @($File.gameVersionTypeIds) -notcontains 517)) {
+        return $false
+    }
     $escapedVersion = [regex]::Escape($Version)
     $versionTokenPattern = "(?<![\p{L}\p{M}\p{N}\p{Cs}])$escapedVersion(?![\p{L}\p{M}\p{N}\p{Cs}]|\.[\p{N}\p{Cs}])"
     foreach ($property in @("displayName", "fileName", "name")) {
@@ -248,7 +266,8 @@ function Invoke-CurseForgeDiagnostics {
         [int]$RetryDelaySeconds = 5,
         [scriptblock]$Request = $null,
         [scriptblock]$Sleep = $null,
-        [scriptblock]$GetEndpoints = $null
+        [scriptblock]$GetEndpoints = $null,
+        [ValidateSet('Retail', 'Forever')][string]$Flavor = 'Retail'
     )
 
     if ([string]::IsNullOrWhiteSpace($Version)) { throw "Missing version label. Pass -Version vX.Y.Z or set STATSPRO_VERSION." }
@@ -314,7 +333,7 @@ function Invoke-CurseForgeDiagnostics {
         Write-Host "Parsed $($files.Count) file listing item(s)."
         Write-CurseForgeFileSummary -Files $files
         foreach ($file in $files) {
-            if (Test-CurseForgeFileVersionMatch -File $file -Version $Version) {
+            if (Test-CurseForgeFileVersionMatch -File $file -Version $Version -Flavor $Flavor) {
                 Write-Host "$Version found in CurseForge file listings."
                 return
             }
@@ -771,6 +790,32 @@ function Invoke-SelfTest {
             }
     } "invalid JSON"
 
+    $foreverFixture = [pscustomobject]@{
+        displayName = 'v1.2.3-Forever-beta'; fileName = 'StatsPro-v1.2.3-Forever-beta.zip'
+        gameVersions = @('1.60.1'); gameVersionTypeIds = @(88568); releaseType = 2
+    }
+    if (-not (Test-CurseForgeFileVersionMatch -File $foreverFixture -Version 'v1.2.3' -Flavor Forever)) {
+        throw 'Forever diagnostics must accept exact beta flavor metadata.'
+    }
+    if (Test-CurseForgeFileVersionMatch -File $foreverFixture -Version 'v1.2.3') {
+        throw 'Retail diagnostics must not accept a Forever beta file with the same release tag.'
+    }
+    foreach ($property in @('gameVersions', 'gameVersionTypeIds', 'fileName', 'displayName', 'releaseType')) {
+        $mutated = [pscustomobject]@{
+            displayName = $foreverFixture.displayName; fileName = $foreverFixture.fileName
+            gameVersions = @('1.60.1'); gameVersionTypeIds = @(88568); releaseType = 2
+        }
+        $mutated.$property = switch ($property) {
+            'gameVersions' { @('1.15.9') }
+            'gameVersionTypeIds' { @(517) }
+            'fileName' { 'StatsPro-v1.2.3.zip' }
+            'displayName' { 'v1.2.3' }
+            'releaseType' { 1 }
+        }
+        if (Test-CurseForgeFileVersionMatch -File $mutated -Version 'v1.2.3' -Flavor Forever) {
+            throw "Forever diagnostics accepted wrong $property metadata."
+        }
+    }
     Write-Host "CurseForge diagnostics self-test passed."
 }
 
@@ -785,4 +830,4 @@ Invoke-CurseForgeDiagnostics `
     -ApiKey $ApiKey `
     -TimeoutSec $TimeoutSec `
     -MaxAttempts $MaxAttempts `
-    -RetryDelaySeconds $RetryDelaySeconds
+    -RetryDelaySeconds $RetryDelaySeconds -Flavor $Flavor

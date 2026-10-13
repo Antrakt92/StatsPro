@@ -7,6 +7,8 @@ param(
     [string]$PlanPath,
     [string]$ExpectedPlanSha256,
     [string]$OutputPath,
+    [ValidateSet('Retail', 'Forever')]
+    [string]$Flavor = 'Retail',
     [switch]$SelfTest
 )
 
@@ -14,16 +16,17 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 . (Join-Path $PSScriptRoot "marketplace-version-contract.ps1")
+$Flavor = ConvertTo-StatsProMarketplaceFlavor -Value $Flavor
 
 $ExpectedProjectIds = Get-StatsProExpectedMarketplaceProjectIdMap
 
 function Assert-ArchiveIdentity {
-    param([string]$Path, [string]$Tag, [string]$Sha256)
+    param([string]$Path, [string]$Tag, [string]$Sha256, [ValidateSet('Retail', 'Forever')][string]$Flavor = 'Retail')
 
     Assert-StatsProReleaseTag -Value $Tag
     Assert-Sha256 -Value $Sha256 -Description 'Expected archive SHA-256'
     $resolved = Resolve-RequiredFile -Path $Path -Description "marketplace archive"
-    $expectedName = "StatsPro-$Tag.zip"
+    $expectedName = if ($Flavor -ieq 'Forever') { "StatsPro-$Tag-Forever-beta.zip" } else { "StatsPro-$Tag.zip" }
     if (-not [System.StringComparer]::Ordinal.Equals([System.IO.Path]::GetFileName($resolved), $expectedName)) {
         throw "Marketplace archive filename must be '$expectedName'."
     }
@@ -90,7 +93,9 @@ function Get-SingleTocValue {
 }
 
 function Get-TocUploadContract {
-    param([string]$Text, [string]$Tag)
+    param([string]$Text, [string]$Tag, [ValidateSet('Retail', 'Forever')][string]$Flavor = 'Retail')
+
+    $Flavor = ConvertTo-StatsProMarketplaceFlavor -Value $Flavor
 
     $version = Get-SingleTocValue -Text $text -Key 'Version' -Pattern '^\d+\.\d+\.\d+$'
     if (-not [System.StringComparer]::Ordinal.Equals("v$version", $Tag)) {
@@ -99,8 +104,8 @@ function Get-TocUploadContract {
     $ids = [ordered]@{
         CurseForge = Get-SingleTocValue -Text $text -Key 'X-Curse-Project-ID' -Pattern '^\d+$'
         Wago = Get-SingleTocValue -Text $text -Key 'X-Wago-ID' -Pattern '^[A-Za-z0-9]{8}$'
-        WowInterface = Get-SingleTocValue -Text $text -Key 'X-WoWI-ID' -Pattern '^\d+$'
     }
+    if ($Flavor -ieq 'Retail') { $ids.WowInterface = Get-SingleTocValue -Text $text -Key 'X-WoWI-ID' -Pattern '^\d+$' }
     foreach ($name in $ids.Keys) {
         if (-not [System.StringComparer]::Ordinal.Equals($ids[$name], $ExpectedProjectIds[$name])) {
             throw "Packaged TOC $name project ID '$($ids[$name])' is not the configured StatsPro project."
@@ -113,6 +118,13 @@ function Get-TocUploadContract {
     $interfaces = @($interfaceMatches[0].Groups[1].Value -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
     $versions = @()
     foreach ($interface in $interfaces) {
+        if ($Flavor -ieq 'Forever') {
+            if ($interfaces.Count -ne 1 -or $interface -cne '16001') {
+                throw 'Forever TOC must declare exact Interface 16001 without other flavors.'
+            }
+            $versions += '1.60.1'
+            continue
+        }
         if ($interface -notmatch '^\d{6}$') {
             throw "Packaged TOC Interface '$interface' is not a six-digit Retail interface."
         }
@@ -121,6 +133,8 @@ function Get-TocUploadContract {
     return [pscustomobject]@{
         Version = $version
         ProjectIds = $ids
+        Flavor = $Flavor
+        GameVersions = @($versions | Sort-Object { [version]$_ } -Unique)
         RetailVersions = @($versions | Sort-Object { [version]$_ } -Unique)
     }
 }
@@ -171,11 +185,12 @@ function Invoke-ExactUpload {
 }
 
 function Get-MarketplaceArchiveContext {
-    param([string]$Archive, [string]$Tag, [string]$Sha256, [hashtable]$CredentialValues)
+    param([string]$Archive, [string]$Tag, [string]$Sha256, [hashtable]$CredentialValues,
+        [ValidateSet('Retail', 'Forever')][string]$Flavor = 'Retail')
 
-    $resolvedArchive = Assert-ArchiveIdentity -Path $Archive -Tag $Tag -Sha256 $Sha256
+    $resolvedArchive = Assert-ArchiveIdentity -Path $Archive -Tag $Tag -Sha256 $Sha256 -Flavor $Flavor
     $archiveText = Get-ArchiveTextContracts -Path $resolvedArchive
-    $contract = Get-TocUploadContract -Text $archiveText.Toc -Tag $Tag
+    $contract = Get-TocUploadContract -Text $archiveText.Toc -Tag $Tag -Flavor $Flavor
     $markdown = [string]$archiveText.Changelog
     if ([string]::IsNullOrWhiteSpace($markdown)) {
         throw "Packaged changelog must be non-empty."
@@ -194,32 +209,42 @@ function New-MarketplacePlan {
         [string]$Tag,
         [string]$Sha256,
         [hashtable]$CredentialValues,
-        [scriptblock]$ReadRequest
+        [scriptblock]$ReadRequest,
+        [ValidateSet('Retail', 'Forever')][string]$Flavor = 'Retail'
     )
 
-    $context = Get-MarketplaceArchiveContext -Archive $Archive -Tag $Tag -Sha256 $Sha256 -CredentialValues $CredentialValues
+    $context = Get-MarketplaceArchiveContext -Archive $Archive -Tag $Tag -Sha256 $Sha256 -CredentialValues $CredentialValues -Flavor $Flavor
     $cfJson = Invoke-JsonRead -Uri 'https://wow.curseforge.com/api/game/wow/versions' -Headers @{ 'x-api-token' = $context.Credentials.CF_API_KEY } -Request $ReadRequest
     $wagoProjectHtml = Invoke-JsonRead -Uri "https://addons.wago.io/addons/$($context.Contract.ProjectIds.Wago)" -Headers @{} -Request $ReadRequest
     Assert-StatsProWagoProjectPage -Html $wagoProjectHtml -ExpectedProjectId $context.Contract.ProjectIds.Wago
     $wagoJson = Invoke-JsonRead -Uri 'https://addons.wago.io/api/data/game' -Headers @{} -Request $ReadRequest
-    return [pscustomobject][ordered]@{
+    $plan = [ordered]@{
         schemaVersion = 1
         kind = 'statspro-marketplace-plan'
         tag = $Tag
         archiveSha256 = $Sha256
         retailVersions = @($context.Contract.RetailVersions)
-        curseForgeGameVersionIds = @(Resolve-StatsProCurseForgeVersionIdMap -Json $cfJson -RequiredVersions $context.Contract.RetailVersions)
+        curseForgeGameVersionIds = @(Resolve-StatsProCurseForgeVersionIdMap -Json $cfJson -RequiredVersions $context.Contract.GameVersions -Flavor $Flavor)
         wowInterfaceVersions = @() # Retired; reject old plans that still request uploads.
-        wagoVersions = @(Resolve-StatsProWagoVersionSelection -Json $wagoJson -RequiredVersions $context.Contract.RetailVersions)
+        wagoVersions = @(Resolve-StatsProWagoVersionSelection -Json $wagoJson -RequiredVersions $context.Contract.GameVersions -Flavor $Flavor)
     }
+    if ($Flavor -ieq 'Forever') {
+        $plan.schemaVersion = 2
+        $plan.Remove('retailVersions')
+        $plan.flavor = 'Forever'
+        $plan.gameVersions = @($context.Contract.GameVersions)
+        $plan.curseForgeGameVersionTypeId = 88568
+    }
+    return [pscustomobject]$plan
 }
 
 function Save-MarketplacePlan {
     param([object]$Plan, [string]$Path, [string]$GithubOutputPath)
 
+    $filename = if ($Plan.PSObject.Properties['flavor'] -and $Plan.flavor -ceq 'Forever') { 'statspro-forever-marketplace-plan.json' } else { 'statspro-marketplace-plan.json' }
     if ([string]::IsNullOrWhiteSpace($Path) -or
-        -not [System.StringComparer]::Ordinal.Equals([System.IO.Path]::GetFileName($Path), 'statspro-marketplace-plan.json')) {
-        throw "Marketplace plan filename must be 'statspro-marketplace-plan.json'."
+        -not [System.StringComparer]::Ordinal.Equals([System.IO.Path]::GetFileName($Path), $filename)) {
+        throw "Marketplace plan filename must be '$filename'."
     }
     Write-Utf8NoBom -Path $Path -Text (($Plan | ConvertTo-Json -Depth 5 -Compress) + "`n")
     $resolved = Resolve-RequiredFile -Path $Path -Description 'marketplace plan'
@@ -248,12 +273,14 @@ function Assert-PlanStringArray {
 }
 
 function Read-MarketplacePlan {
-    param([string]$Path, [string]$ExpectedSha256, [string]$Tag, [string]$ArchiveSha256)
+    param([string]$Path, [string]$ExpectedSha256, [string]$Tag, [string]$ArchiveSha256,
+        [ValidateSet('Retail', 'Forever')][string]$Flavor = 'Retail')
 
     Assert-Sha256 -Value $ExpectedSha256 -Description 'Expected marketplace plan SHA-256'
     $resolved = Resolve-RequiredFile -Path $Path -Description 'marketplace plan'
-    if (-not [System.StringComparer]::Ordinal.Equals([System.IO.Path]::GetFileName($resolved), 'statspro-marketplace-plan.json')) {
-        throw "Marketplace plan filename must be 'statspro-marketplace-plan.json'."
+    $filename = if ($Flavor -ieq 'Forever') { 'statspro-forever-marketplace-plan.json' } else { 'statspro-marketplace-plan.json' }
+    if (-not [System.StringComparer]::Ordinal.Equals([System.IO.Path]::GetFileName($resolved), $filename)) {
+        throw "Marketplace plan filename must be '$filename'."
     }
     $actualSha = Get-LowercaseFileSha256 -Path $resolved
     if (-not [System.StringComparer]::Ordinal.Equals($actualSha, $ExpectedSha256)) {
@@ -261,18 +288,31 @@ function Read-MarketplacePlan {
     }
     try { $plan = ConvertFrom-JsonCompat ([System.IO.File]::ReadAllText($resolved)) }
     catch { throw "Marketplace plan contains invalid JSON: $($_.Exception.Message)" }
-    Assert-ExactPropertySet -Value $plan -Expected @(
+    $expectedProperties = @(
         'schemaVersion', 'kind', 'tag', 'archiveSha256', 'retailVersions',
         'curseForgeGameVersionIds', 'wowInterfaceVersions', 'wagoVersions'
-    ) -Description 'Marketplace plan'
+    )
+    $schema = 1
+    if ($Flavor -ieq 'Forever') {
+        $schema = 2
+        $expectedProperties = @($expectedProperties | Where-Object { $_ -cne 'retailVersions' }) + @('flavor', 'gameVersions', 'curseForgeGameVersionTypeId')
+    }
+    Assert-ExactPropertySet -Value $plan -Expected $expectedProperties -Description 'Marketplace plan'
     $schemaIsInteger = $plan.schemaVersion -is [int] -or $plan.schemaVersion -is [long]
-    if (-not $schemaIsInteger -or [long]$plan.schemaVersion -ne 1 -or
+    if (-not $schemaIsInteger -or [long]$plan.schemaVersion -ne $schema -or
         $plan.kind -isnot [string] -or $plan.kind -cne 'statspro-marketplace-plan' -or
         $plan.tag -isnot [string] -or $plan.tag -cne $Tag -or
         $plan.archiveSha256 -isnot [string] -or $plan.archiveSha256 -cne $ArchiveSha256) {
         throw "Marketplace plan identity does not match the exact archive."
     }
-    Assert-PlanStringArray -Values $plan.retailVersions -Description 'Marketplace plan retail versions' -Pattern '^\d+\.\d+\.\d+$'
+    if ($Flavor -ieq 'Forever') {
+        if ($plan.flavor -isnot [string] -or $plan.flavor -cne 'Forever' -or
+            ($plan.curseForgeGameVersionTypeId -isnot [int] -and $plan.curseForgeGameVersionTypeId -isnot [long]) -or
+            $plan.curseForgeGameVersionTypeId -ne 88568) { throw 'Forever marketplace plan flavor identity is invalid.' }
+        Assert-PlanStringArray -Values $plan.gameVersions -Description 'Marketplace plan Forever versions' -Pattern '^1\.60\.1$'
+    } else {
+        Assert-PlanStringArray -Values $plan.retailVersions -Description 'Marketplace plan retail versions' -Pattern '^\d+\.\d+\.\d+$'
+    }
     if ($plan.wowInterfaceVersions -isnot [System.Array] -or $plan.wowInterfaceVersions.Count -ne 0) {
         throw 'WoWInterface publication is retired; prepare a new marketplace plan.'
     }
@@ -289,12 +329,23 @@ function Read-MarketplacePlan {
             throw "Marketplace plan CurseForge game version IDs are invalid or duplicated."
         }
     }
+    if ($Flavor -ieq 'Forever' -and ($cfIds.Count -ne 1 -or @($plan.wagoVersions).Count -ne 1 -or $plan.wagoVersions[0] -cne '1.60.1')) {
+        throw 'Forever marketplace plan must select one exact CurseForge ID and Wago patch 1.60.1.'
+    }
     return $plan
 }
 
 function Assert-MarketplacePlanMatchesArchive {
     param([object]$Plan, [object]$ArchiveContext)
 
+    if ($ArchiveContext.Contract.Flavor -ceq 'Forever') {
+        if ($Plan.flavor -cne 'Forever' -or $Plan.curseForgeGameVersionTypeId -ne 88568 -or
+            (@($Plan.gameVersions) -join ',') -cne '1.60.1' -or (@($Plan.wagoVersions) -join ',') -cne '1.60.1') {
+            throw 'Marketplace plan Forever flavor does not match the packaged TOC.'
+        }
+        return
+    }
+    if ($Plan.PSObject.Properties['flavor']) { throw 'Marketplace plan flavor does not match the Retail archive.' }
     if ((@($Plan.retailVersions) -join "`n") -cne (@($ArchiveContext.Contract.RetailVersions) -join "`n")) {
         throw "Marketplace plan Retail versions do not match the packaged TOC."
     }
@@ -308,7 +359,8 @@ function Prepare-MarketplacePlanHandoff {
         [hashtable]$CredentialValues,
         [string]$Path,
         [string]$GithubOutputPath,
-        [scriptblock]$ReadRequest
+        [scriptblock]$ReadRequest,
+        [ValidateSet('Retail', 'Forever')][string]$Flavor = 'Retail'
     )
 
     $plan = New-MarketplacePlan `
@@ -316,20 +368,20 @@ function Prepare-MarketplacePlanHandoff {
         -Tag $Tag `
         -Sha256 $Sha256 `
         -CredentialValues $CredentialValues `
-        -ReadRequest $ReadRequest
+        -ReadRequest $ReadRequest -Flavor $Flavor
     $planSha = Save-MarketplacePlan -Plan $plan -Path $Path
     $validatedPlan = Read-MarketplacePlan `
         -Path $Path `
         -ExpectedSha256 $planSha `
         -Tag $Tag `
-        -ArchiveSha256 $Sha256
+        -ArchiveSha256 $Sha256 -Flavor $Flavor
     $context = Get-MarketplaceArchiveContext `
         -Archive $Archive `
         -Tag $Tag `
         -Sha256 $Sha256 `
-        -CredentialValues $CredentialValues
+        -CredentialValues $CredentialValues -Flavor $Flavor
     Assert-MarketplacePlanMatchesArchive -Plan $validatedPlan -ArchiveContext $context
-    [void](Assert-ArchiveIdentity -Path $context.Archive -Tag $Tag -Sha256 $Sha256)
+    [void](Assert-ArchiveIdentity -Path $context.Archive -Tag $Tag -Sha256 $Sha256 -Flavor $Flavor)
     Add-OutputValue `
         -Path $GithubOutputPath `
         -Name 'plan_path' `
@@ -345,30 +397,33 @@ function Publish-ExactMarketplacePlan {
         [string]$Sha256,
         [hashtable]$CredentialValues,
         [object]$Plan,
-        [scriptblock]$UploadRequest
+        [scriptblock]$UploadRequest,
+        [ValidateSet('Retail', 'Forever')][string]$Flavor = 'Retail'
     )
 
-    $context = Get-MarketplaceArchiveContext -Archive $Archive -Tag $Tag -Sha256 $Sha256 -CredentialValues $CredentialValues
+    $context = Get-MarketplaceArchiveContext -Archive $Archive -Tag $Tag -Sha256 $Sha256 -CredentialValues $CredentialValues -Flavor $Flavor
     Assert-MarketplacePlanMatchesArchive -Plan $Plan -ArchiveContext $context
     $cfVersionIds = @($Plan.curseForgeGameVersionIds | ForEach-Object { [int]$_ })
     $wagoVersions = @($Plan.wagoVersions | ForEach-Object { [string]$_ })
     $cfMetadata = [ordered]@{
-        displayName = $Tag
+        displayName = if ($Flavor -ieq 'Forever') { "$Tag-Forever-beta" } else { $Tag }
         gameVersions = $cfVersionIds
-        releaseType = 'release'
+        releaseType = if ($Flavor -ieq 'Forever') { 'beta' } else { 'release' }
         changelog = $context.Markdown
         changelogType = 'markdown'
     } | ConvertTo-Json -Depth 4 -Compress
-    $wagoMetadata = [ordered]@{
-        label = $Tag
-        supported_retail_patches = $wagoVersions
-        stability = 'stable'
+    $wagoValues = [ordered]@{
+        label = if ($Flavor -ieq 'Forever') { "$Tag-Forever-beta" } else { $Tag }
+        stability = if ($Flavor -ieq 'Forever') { 'beta' } else { 'stable' }
         changelog = $context.Markdown
-    } | ConvertTo-Json -Depth 4 -Compress
+    }
+    $supportProperty = if ($Flavor -ieq 'Forever') { 'supported_forever_patches' } else { 'supported_retail_patches' }
+    $wagoValues[$supportProperty] = $wagoVersions
+    $wagoMetadata = $wagoValues | ConvertTo-Json -Depth 4 -Compress
 
     # Wago has no safe read-only token ownership probe, so attempt it before
     # platforms whose credentials/project access were checked during Prepare.
-    [void](Assert-ArchiveIdentity -Path $context.Archive -Tag $Tag -Sha256 $Sha256)
+    [void](Assert-ArchiveIdentity -Path $context.Archive -Tag $Tag -Sha256 $Sha256 -Flavor $Flavor)
     Invoke-ExactUpload `
         -Uri "https://addons.wago.io/api/projects/$($context.Contract.ProjectIds.Wago)/version" `
         -Headers @{ authorization = "Bearer $($context.Credentials.WAGO_API_TOKEN)"; accept = 'application/json' } `
@@ -377,7 +432,7 @@ function Publish-ExactMarketplacePlan {
         -Description 'Wago upload' `
         -Request $UploadRequest
 
-    [void](Assert-ArchiveIdentity -Path $context.Archive -Tag $Tag -Sha256 $Sha256)
+    [void](Assert-ArchiveIdentity -Path $context.Archive -Tag $Tag -Sha256 $Sha256 -Flavor $Flavor)
     Invoke-ExactUpload `
         -Uri "https://wow.curseforge.com/api/projects/$($context.Contract.ProjectIds.CurseForge)/upload-file" `
         -Headers @{ 'x-api-token' = $context.Credentials.CF_API_KEY } `
@@ -386,7 +441,11 @@ function Publish-ExactMarketplacePlan {
         -Description 'CurseForge upload' `
         -Request $UploadRequest
 
-    Write-Host "Marketplace uploads accepted the exact attested archive for $Tag."
+    if ($Flavor -ieq 'Forever') {
+        Write-Host "Forever marketplace uploads accepted the exact attested archive for ${Tag}: $([System.IO.Path]::GetFileName($context.Archive)) sha256=$Sha256."
+    } else {
+        Write-Host "Marketplace uploads accepted the exact attested archive for $Tag."
+    }
 }
 
 function Publish-ExactMarketplaceArchive {
@@ -396,11 +455,12 @@ function Publish-ExactMarketplaceArchive {
         [string]$Sha256,
         [hashtable]$CredentialValues,
         [scriptblock]$ReadRequest,
-        [scriptblock]$UploadRequest
+        [scriptblock]$UploadRequest,
+        [ValidateSet('Retail', 'Forever')][string]$Flavor = 'Retail'
     )
 
-    $plan = New-MarketplacePlan -Archive $Archive -Tag $Tag -Sha256 $Sha256 -CredentialValues $CredentialValues -ReadRequest $ReadRequest
-    Publish-ExactMarketplacePlan -Archive $Archive -Tag $Tag -Sha256 $Sha256 -CredentialValues $CredentialValues -Plan $plan -UploadRequest $UploadRequest
+    $plan = New-MarketplacePlan -Archive $Archive -Tag $Tag -Sha256 $Sha256 -CredentialValues $CredentialValues -ReadRequest $ReadRequest -Flavor $Flavor
+    Publish-ExactMarketplacePlan -Archive $Archive -Tag $Tag -Sha256 $Sha256 -CredentialValues $CredentialValues -Plan $plan -UploadRequest $UploadRequest -Flavor $Flavor
 }
 
 function Invoke-SelfTest {
@@ -667,6 +727,88 @@ function Invoke-SelfTest {
             throw "Marketplace publisher must preserve the allowed earlier required Wago fallback."
         }
 
+        $foreverArchive = Join-Path $root "StatsPro-$tag-Forever-beta.zip"
+        $stream = [System.IO.File]::Create($foreverArchive)
+        try {
+            $zip = [System.IO.Compression.ZipArchive]::new($stream, [System.IO.Compression.ZipArchiveMode]::Create, $false)
+            try {
+                foreach ($data in @(
+                    @{ Name = 'StatsPro/StatsPro.toc'; Text = "## Interface: 16001`n## Version: 1.2.3`n## X-Curse-Project-ID: 1525100`n## X-Wago-ID: EGPemEN1`n" },
+                    @{ Name = 'StatsPro/CHANGELOG.md'; Text = $fullChangelog }
+                )) {
+                    $writer = [System.IO.StreamWriter]::new($zip.CreateEntry($data.Name).Open(), [System.Text.UTF8Encoding]::new($false))
+                    try { $writer.Write($data.Text) } finally { $writer.Dispose() }
+                }
+            } finally { $zip.Dispose() }
+        } finally { $stream.Dispose() }
+        $foreverSha = Get-LowercaseFileSha256 -Path $foreverArchive
+        $foreverRead = {
+            param($uri, $headers)
+            if ($uri -eq 'https://wow.curseforge.com/api/game/wow/versions') {
+                # Synthetic ID: production resolves its exact ID from authenticated API data.
+                return '[{"id":1600100,"name":"1.60.1","gameVersionTypeID":88568},{"id":120100,"name":"1.60.1","gameVersionTypeID":517}]'
+            }
+            if ($uri -eq 'https://addons.wago.io/api/data/game') { return '{"patches":{"retail":["12.1.0"],"forever":["1.60.1"]}}' }
+            return & $read $uri $headers
+        }
+        $foreverPath = Join-Path $root 'statspro-forever-marketplace-plan.json'
+        $foreverPrepared = Prepare-MarketplacePlanHandoff -Archive $foreverArchive -Tag $tag -Sha256 $foreverSha `
+            -CredentialValues $credentials -Path $foreverPath -ReadRequest $foreverRead -Flavor Forever
+        $lowercaseForever = New-MarketplacePlan -Archive $foreverArchive -Tag $tag -Sha256 $foreverSha -CredentialValues $credentials -ReadRequest $foreverRead -Flavor forever
+        $lowercaseForeverContext = Get-MarketplaceArchiveContext -Archive $foreverArchive -Tag $tag -Sha256 $foreverSha -CredentialValues $credentials -Flavor forever
+        Assert-MarketplacePlanMatchesArchive -Plan $lowercaseForever -ArchiveContext $lowercaseForeverContext
+        if ($lowercaseForeverContext.Contract.Flavor -cne 'Forever') { throw 'Lowercase Forever flavor was not canonicalized.' }
+        $lowercaseRetailContext = Get-MarketplaceArchiveContext -Archive $archive -Tag $tag -Sha256 $sha -CredentialValues $credentials -Flavor retail
+        if ($lowercaseRetailContext.Contract.Flavor -cne 'Retail') { throw 'Lowercase Retail flavor was not canonicalized.' }
+        Assert-MarketplacePlanMatchesArchive -Plan $loadedPlan -ArchiveContext $lowercaseRetailContext
+        $foreverCalls = [System.Collections.Generic.List[object]]::new()
+        Publish-ExactMarketplacePlan -Archive $foreverArchive -Tag $tag -Sha256 $foreverSha -CredentialValues $credentials `
+            -Plan $foreverPrepared.Plan -Flavor Forever -UploadRequest {
+                param($uri, $headers, $form)
+                $foreverCalls.Add([pscustomobject]@{ Uri = $uri; Metadata = ConvertFrom-JsonCompat $form.metadata })
+                [pscustomobject]@{ StatusCode = 200 }
+            }
+        if ($foreverCalls.Count -ne 2 -or $foreverCalls[0].Metadata.label -cne "$tag-Forever-beta" -or
+            $foreverCalls[0].Metadata.stability -cne 'beta' -or
+            (@($foreverCalls[0].Metadata.supported_forever_patches) -join ',') -cne '1.60.1' -or
+            $foreverCalls[0].Metadata.PSObject.Properties['supported_retail_patches'] -or
+            $foreverCalls[1].Metadata.displayName -cne "$tag-Forever-beta" -or
+            $foreverCalls[1].Metadata.releaseType -cne 'beta' -or
+            (@($foreverCalls[1].Metadata.gameVersions) -join ',') -cne '1600100') { throw 'Forever exact beta upload metadata is invalid.' }
+        Assert-ThrowsMatch 'Forever archive requires explicit flavor' {
+            [void](New-MarketplacePlan -Archive $foreverArchive -Tag $tag -Sha256 $foreverSha -CredentialValues $credentials -ReadRequest $foreverRead)
+        } 'filename'
+        Assert-ThrowsMatch 'Retail plan cannot authorize Forever' {
+            Publish-ExactMarketplacePlan -Archive $foreverArchive -Tag $tag -Sha256 $foreverSha -CredentialValues $credentials -Plan $loadedPlan -Flavor Forever -UploadRequest { throw 'must not upload' }
+        } 'Forever flavor'
+        Assert-ThrowsMatch 'Forever must reject wrong CF flavor' {
+            Resolve-StatsProCurseForgeVersionIdMap -Json '[{"id":120100,"name":"1.60.1","gameVersionTypeID":517}]' -RequiredVersions @('1.60.1') -Flavor Forever
+        } 'exactly one Forever'
+        Assert-ThrowsMatch 'Forever must reject Wago fallback' {
+            Resolve-StatsProWagoVersionSelection -Json '{"patches":{"retail":["1.60.1"],"forever":["1.60.0"]}}' -RequiredVersions @('1.60.1') -Flavor Forever
+        } 'fallback is forbidden'
+        Assert-ThrowsMatch 'Forever rejects duplicate CF versions' {
+            Resolve-StatsProCurseForgeVersionIdMap -Json '[{"id":1,"name":"1.60.1","gameVersionTypeID":88568},{"id":2,"name":"1.60.1","gameVersionTypeID":88568}]' -RequiredVersions @('1.60.1') -Flavor Forever
+        } 'exactly one Forever'
+        $foreverPlanText = [System.IO.File]::ReadAllText($foreverPath)
+        Write-Utf8NoBom -Path $foreverPath -Text ($foreverPlanText.Replace('"curseForgeGameVersionTypeId":88568', '"curseForgeGameVersionTypeId":517'))
+        Assert-ThrowsMatch 'Forever rejects flavor plan mutation even with replaced hash' {
+            Read-MarketplacePlan -Path $foreverPath -ExpectedSha256 (Get-LowercaseFileSha256 -Path $foreverPath) -Tag $tag -ArchiveSha256 $foreverSha -Flavor Forever
+        } 'flavor identity'
+        Assert-ThrowsMatch 'Forever rejects plan hash tampering' {
+            Read-MarketplacePlan -Path $foreverPath -ExpectedSha256 $foreverPrepared.Sha256 -Tag $tag -ArchiveSha256 $foreverSha -Flavor Forever
+        } 'plan SHA-256'
+        Write-Utf8NoBom -Path $foreverPath -Text $foreverPlanText
+        $foreverFailures = [System.Collections.Generic.List[string]]::new()
+        Assert-ThrowsMatch 'Forever never retries failed upload' {
+            Publish-ExactMarketplacePlan -Archive $foreverArchive -Tag $tag -Sha256 $foreverSha -CredentialValues $credentials -Plan $foreverPrepared.Plan -Flavor Forever -UploadRequest {
+                param($uri, $headers, $form)
+                $foreverFailures.Add($uri)
+                [pscustomobject]@{ StatusCode = 503 }
+            }
+        } 'HTTP 503.*do not retry'
+        if ($foreverFailures.Count -ne 1) { throw 'Forever retried an uncertain upload.' }
+
         Write-Host "Marketplace publisher self-test passed."
     }
     finally {
@@ -702,19 +844,19 @@ switch ($Mode) {
             -Sha256 $ExpectedSha256 `
             -CredentialValues $environmentValues `
             -Path $PlanPath `
-            -GithubOutputPath $OutputPath)
+            -GithubOutputPath $OutputPath -Flavor $Flavor)
     }
     'Publish' {
         $plan = Read-MarketplacePlan `
             -Path $PlanPath `
             -ExpectedSha256 $ExpectedPlanSha256 `
             -Tag $ExpectedTag `
-            -ArchiveSha256 $ExpectedSha256
+            -ArchiveSha256 $ExpectedSha256 -Flavor $Flavor
         Publish-ExactMarketplacePlan `
             -Archive $ArchivePath `
             -Tag $ExpectedTag `
             -Sha256 $ExpectedSha256 `
             -CredentialValues $environmentValues `
-            -Plan $plan
+            -Plan $plan -Flavor $Flavor
     }
 }

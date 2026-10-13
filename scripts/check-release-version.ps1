@@ -514,6 +514,24 @@ function Export-TopChangelogEntry {
     Write-Host "Exported top changelog entry to $destinationFullPath"
 }
 
+function Assert-StatsProFlavorVersions {
+    param([string]$Root, [string]$RetailVersion)
+
+    Assert-StatsProReleaseVersion -Value $RetailVersion
+    $path = Join-Path $Root 'StatsPro_Forever.toc'
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return }
+    $text = [System.IO.File]::ReadAllText($path)
+    $matches = [regex]::Matches($text, '(?m)^##[ \t]+Version:[ \t]*([^\r\n]+)[ \t]*\r?$')
+    if ($matches.Count -ne 1 -or [regex]::Matches($text, '(?m)^##[ \t]+Version:').Count -ne 1) {
+        throw 'Forever TOC requires exactly one Version directive.'
+    }
+    $version = $matches[0].Groups[1].Value.Trim()
+    Assert-StatsProReleaseVersion -Value $version
+    if ((Compare-SemVer -Left $version -Right $RetailVersion) -gt 0) {
+        throw "Forever TOC version $version is ahead of Retail release version $RetailVersion."
+    }
+}
+
 function Assert-ReleaseVersion {
     param(
         [string]$TagValue,
@@ -567,6 +585,8 @@ function Assert-ReleaseVersion {
     if ($Errors.Count -gt 0) {
         throw ($Errors -join "`n")
     }
+
+    Assert-StatsProFlavorVersions -Root (Get-Location).Path -RetailVersion $TocVersion
 
     if ($ShouldVerifyPublishedChangelog) {
         $releases = @(Get-GitHubReleaseInventory -RepositoryName $RepositoryName)
@@ -736,6 +756,33 @@ function Invoke-SelfTest {
     New-Item -ItemType Directory -Path $root | Out-Null
     Push-Location $root
     try {
+        $flavorRoot = Join-Path $root 'flavor-fixtures'
+        New-Item -ItemType Directory -Path $flavorRoot | Out-Null
+        Assert-StatsProFlavorVersions -Root $flavorRoot -RetailVersion '1.2.3'
+        $flavorToc = Join-Path $flavorRoot 'StatsPro_Forever.toc'
+        foreach ($version in @('1.2.2', '1.2.3')) {
+            [System.IO.File]::WriteAllText($flavorToc, "## Version: $version`n")
+            Assert-StatsProFlavorVersions -Root $flavorRoot -RetailVersion '1.2.3'
+        }
+        [System.IO.File]::WriteAllText($flavorToc, "## Version: 1.2.4`n")
+        Assert-ThrowsMatch 'Forever ahead of Retail rejected' {
+            Assert-StatsProFlavorVersions -Root $flavorRoot -RetailVersion '1.2.3'
+        } 'ahead of Retail'
+        foreach ($bad in @('01.2.3', '1.2.3-beta', '2147483648.0.0')) {
+            [System.IO.File]::WriteAllText($flavorToc, "## Version: $bad`n")
+            Assert-ThrowsMatch 'Forever noncanonical version rejected' {
+                Assert-StatsProFlavorVersions -Root $flavorRoot -RetailVersion '1.2.3'
+            } 'Malformed|supported range'
+        }
+        [System.IO.File]::WriteAllText($flavorToc, "## Version: 1.2.3`n## Version: 1.2.3`n")
+        Assert-ThrowsMatch 'Forever duplicate Version rejected' {
+            Assert-StatsProFlavorVersions -Root $flavorRoot -RetailVersion '1.2.3'
+        } 'exactly one'
+        [System.IO.File]::WriteAllText($flavorToc, "## Version: 1.2.3`n## Version:`n")
+        Assert-ThrowsMatch 'Forever empty duplicate Version rejected' {
+            Assert-StatsProFlavorVersions -Root $flavorRoot -RetailVersion '1.2.3'
+        } 'exactly one'
+        Remove-Item -LiteralPath $flavorToc
         [void](Invoke-Git -Arguments @("init"))
         [void](Invoke-Git -Arguments @("config", "user.email", "statspro-tests@example.invalid"))
         [void](Invoke-Git -Arguments @("config", "user.name", "StatsPro Tests"))

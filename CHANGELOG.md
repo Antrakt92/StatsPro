@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.18.0 - 13-Oct-2026 — WoW Forever support
+
+### Added
+
+- Support WoW Forever's beta client with a separate download alongside Retail.
+- Choose class-aware Compact, Physical, Caster, Healer or Tank setups, with 45 optional character, combat, resistance and utility stats.
+- Customize Forever stat colors and share profiles between characters. Archon references remain Retail-only.
+
+### Fixed
+
+- Keep Forever Quick Setup buttons inside the window and separate Item Level and Durability controls.
+- Improve localized stat labels, profile dialogs and diagnostics for Forever.
+
 ## 1.17.21 - 13-Oct-2026 — Clearer stat target tooltips
 
 ### Fixed

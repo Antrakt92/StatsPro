@@ -1,5 +1,11 @@
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 
+function ConvertTo-StatsProMarketplaceFlavor {
+    param([ValidateSet('Retail', 'Forever')][string]$Value = 'Retail')
+    if ([System.StringComparer]::OrdinalIgnoreCase.Equals($Value, 'Forever')) { return 'Forever' }
+    return 'Retail'
+}
+
 function Assert-StatsProMarketplaceVersionFormat {
     param([AllowNull()][AllowEmptyString()][string]$Value)
 
@@ -160,16 +166,21 @@ function Resolve-StatsProWowInterfaceVersions {
 }
 
 function Resolve-StatsProCurseForgeVersionIdMap {
-    param([string]$Json, [string[]]$RequiredVersions)
+    param([string]$Json, [string[]]$RequiredVersions, [ValidateSet('Retail', 'Forever')][string]$Flavor = 'Retail')
 
+    $Flavor = ConvertTo-StatsProMarketplaceFlavor -Value $Flavor
     $items = @(ConvertFrom-JsonCompat $Json)
+    $typeId = if ($Flavor -ieq 'Forever') { 88568 } else { 517 }
+    if ($Flavor -ieq 'Forever' -and (@($RequiredVersions).Count -ne 1 -or $RequiredVersions[0] -cne '1.60.1')) {
+        throw 'Forever publication requires exact game version 1.60.1.'
+    }
     $ids = @()
     foreach ($version in @($RequiredVersions)) {
         $versionMatches = @($items | Where-Object {
-            [string]$_.name -eq $version -and [int]$_.gameVersionTypeID -eq 517
+            [string]$_.name -ceq $version -and [int]$_.gameVersionTypeID -eq $typeId
         })
         if ($versionMatches.Count -ne 1) {
-            throw "CurseForge must expose exactly one Retail game version '$version' with gameVersionTypeID 517; found $($versionMatches.Count)."
+            throw "CurseForge must expose exactly one $Flavor game version '$version' with gameVersionTypeID $typeId; found $($versionMatches.Count)."
         }
 
         $rawId = $versionMatches[0].id
@@ -200,12 +211,35 @@ function Resolve-StatsProWowInterfaceVersionsFromJson {
 }
 
 function Resolve-StatsProWagoVersionSelection {
-    param([string]$Json, [string[]]$RequiredVersions, [switch]$RequireDirectCompatibilityMatch)
+    param([string]$Json, [string[]]$RequiredVersions, [switch]$RequireDirectCompatibilityMatch,
+        [ValidateSet('Retail', 'Forever')][string]$Flavor = 'Retail')
+
+    $Flavor = ConvertTo-StatsProMarketplaceFlavor -Value $Flavor
 
     # SYNC: BigWigs Packager release.sh::upload_wago reads patches.retail from this endpoint.
     $data = ConvertFrom-JsonCompat $Json
     if ($null -eq $data -or $null -eq $data.patches) {
         throw "Wago game data must contain a patches object."
+    }
+    if ($Flavor -ieq 'Forever') {
+        if (@($RequiredVersions).Count -ne 1 -or $RequiredVersions[0] -cne '1.60.1') {
+            throw 'Forever publication requires exact game version 1.60.1.'
+        }
+        $property = $data.patches.PSObject.Properties['forever']
+        if ($null -eq $property -or $property.Value -isnot [System.Array]) {
+            throw 'Wago game data must contain patches.forever as an array.'
+        }
+        $seenForever = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+        foreach ($candidate in $property.Value) {
+            if ($candidate -isnot [string] -or -not $seenForever.Add($candidate)) {
+                throw 'Wago patches.forever contains an invalid or duplicate version.'
+            }
+            Assert-StatsProMarketplaceVersionFormat -Value $candidate
+        }
+        if (-not $seenForever.Contains('1.60.1')) {
+            throw 'Wago must expose exact patches.forever version 1.60.1; fallback is forbidden.'
+        }
+        return @('1.60.1')
     }
     $retailProperty = $data.patches.PSObject.Properties["retail"]
     if ($null -eq $retailProperty) {

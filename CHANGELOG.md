@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.17.21 - 13-Oct-2026 — Clearer stat target tooltips
+
+### Fixed
+
+- Make stat target tooltips more compact, with aligned values and a centered snapshot date beneath the selected profile.
+- Remove repeated difficulty names and keep tooltips beside the HUD.
+
 ## 1.17.20 - 13-Oct-2026 — Archon target refresh
 
 ### Updated

@@ -881,14 +881,13 @@ addon.archonTargets.snapshotOptions = {
     { value = "raidHeroic",         label = "Raid Heroic" },
     { value = "raidMythic",         label = "Raid Mythic" },
 }
--- WHY single source: snapshot label/title pairs stay in one table so the
--- tooltip title and the snapshot line cannot drift apart per snapshot key.
+-- One source for localized profile names and redundant difficulty metadata.
 addon.archonTargets.snapshotTexts = {
-    mythicPlusCurrent = { label = "M+ Current", title = "M+ Target" },
-    mythicPlusHighKeys = { label = "M+ High Keys", title = "M+ Target", redundantDetail = "High Keys" },
-    raidNormal = { label = "Raid Normal", title = "Raid Target", redundantDetail = "Normal" },
-    raidHeroic = { label = "Raid Heroic", title = "Raid Target", redundantDetail = "Heroic" },
-    raidMythic = { label = "Raid Mythic", title = "Raid Target", redundantDetail = "Mythic" },
+    mythicPlusCurrent = { label = "M+ Current" },
+    mythicPlusHighKeys = { label = "M+ High Keys", redundantDetail = "High Keys" },
+    raidNormal = { label = "Raid Normal", redundantDetail = "Normal" },
+    raidHeroic = { label = "Raid Heroic", redundantDetail = "Heroic" },
+    raidMythic = { label = "Raid Mythic", redundantDetail = "Mythic" },
 }
 -- Session-local by design: a character change reloads addon Lua, while zoning into
 -- Mythic+ does not. Context and effective-level changes clear entries so switching
@@ -9679,7 +9678,7 @@ function addon.archonTargets.GetLocalizedSnapshotTitle(snapshotKey)
     local texts = addon.archonTargets.snapshotTexts
     local key = addon.archonTargets.ResolveAvailableSnapshotKey(snapshotKey)
     local entry = texts[key] or texts.mythicPlusCurrent
-    return L(entry.title)
+    return L(entry.label)
 end
 
 function addon.archonTargets.IsLeapYear(year)
@@ -9703,11 +9702,11 @@ end
 -- Shared gray for comparison-state notices.
 local TOOLTIP_LABEL_COLOR = { 0.7, 0.7, 0.7 }
 
-function addon.archonTargets.AddTooltipRow(label, value, labelColorHex, r, g, b)
-    -- A single line keeps values beside their labels regardless of the longest
-    -- snapshot or warning. Concatenation preserves restricted display strings
-    -- without measuring, parsing or comparing them for layout.
-    GameTooltip:AddLine("|cff" .. (labelColorHex or "b3b3b3") .. label .. "|r " .. value,
+function addon.archonTargets.AddTooltipRow(label, value, r, g, b)
+    -- Only numeric comparisons share the native right column. Profile/sample
+    -- metadata uses separate lines so it cannot widen that value column.
+    GameTooltip:AddDoubleLine(label, value,
+        r or TOOLTIP_LABEL_COLOR[1], g or TOOLTIP_LABEL_COLOR[2], b or TOOLTIP_LABEL_COLOR[3],
         r or 1, g or 1, b or 1)
 end
 
@@ -9778,11 +9777,11 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     -- SetOwner resets lines on current clients, but an owner-preserving refresh must
     -- not depend on that undocumented side effect or accumulate stale state rows.
     if type(GameTooltip.ClearLines) == "function" then GameTooltip:ClearLines() end
-    GameTooltip:AddLine("StatsPro " .. addon.archonTargets.GetLocalizedSnapshotTitle(meta.snapshotKey), 1, 0.82, 0)
+    GameTooltip:AddLine("StatsPro · " .. addon.archonTargets.GetLocalizedSnapshotTitle(meta.snapshotKey), 1, 0.82, 0, true)
     if comparisonState == "lastKnown" then
-        GameTooltip:AddLine(L("Last known comparison"), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3])
+        GameTooltip:AddLine(L("Last known comparison"), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], true)
     elseif comparisonState == "liveOnly" then
-        GameTooltip:AddLine(L("Live values; comparison unavailable"), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3])
+        GameTooltip:AddLine(L("Live values; comparison unavailable"), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], true)
     end
     addon.archonTargets.AddTooltipRow(L("Target:"), addon.archonTargets.FormatRatingWithBonus(meta.target, targetDisplayBonus, false))
     if hasComparison or hasLiveCurrent then
@@ -9791,19 +9790,25 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     end
     if hasComparison then
         if meta.delta < 0 then
-            addon.archonTargets.AddTooltipRow(L("Missing:"), addon.archonTargets.FormatRatingWithBonus(math.abs(meta.delta), deltaBonus, true), "ff5959", 1, 0.35, 0.35)
+            addon.archonTargets.AddTooltipRow(L("Missing:"), addon.archonTargets.FormatRatingWithBonus(math.abs(meta.delta), deltaBonus, true), 1, 0.35, 0.35)
         elseif meta.delta > 0 then
-            addon.archonTargets.AddTooltipRow(L("Over:"), addon.archonTargets.FormatRatingWithBonus(addon.archonTargets.FormatSignedRatingDelta(meta.delta), deltaBonus and -deltaBonus, true), "59ccff", 0.35, 0.8, 1)
+            addon.archonTargets.AddTooltipRow(L("Over:"), addon.archonTargets.FormatRatingWithBonus(addon.archonTargets.FormatSignedRatingDelta(meta.delta), deltaBonus and -deltaBonus, true), 0.35, 0.8, 1)
         else
-            addon.archonTargets.AddTooltipRow(L("Matched:"), addon.archonTargets.FormatRatingWithBonus(0, deltaBonus, true), "80ff80", 0.5, 1, 0.5)
+            addon.archonTargets.AddTooltipRow(L("Matched:"), addon.archonTargets.FormatRatingWithBonus(0, deltaBonus, true), 0.5, 1, 0.5)
         end
     end
-    local snapshotDate = addon.archonTargets.FormatSnapshotDate(meta.capturedAt)
-    if snapshotDate then
-        addon.archonTargets.AddTooltipRow(L("Snapshot:"), addon.archonTargets.GetLocalizedSnapshotLabel(meta.snapshotKey) .. ", " .. snapshotDate, nil, 0.85, 0.85, 0.85)
-    end
+    local footer = addon.archonTargets.FormatSnapshotDate(meta.capturedAt)
+    if footer == "" then footer = nil end
     if type(meta.sourceUrl) == "string" and not issecretvalue(meta.sourceUrl) and meta.sourceUrl ~= "" then
-        addon.archonTargets.AddTooltipRow(L("Source:"), "Archon", nil, 0.85, 0.85, 0.85)
+        footer = footer and "Archon · " .. footer or "Archon"
+    end
+    local snapshotKey = addon.archonTargets.ResolveAvailableSnapshotKey(meta.snapshotKey)
+    local detail = addon.archonTargets.GetSnapshotDetail(snapshotKey, addon.archonTargets.GetRootSnapshot(snapshotKey))
+    if detail or footer then
+        GameTooltip:AddLine(detail or " ", TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], true)
+    end
+    if footer then
+        GameTooltip:AddLine(footer, TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], true)
     end
     GameTooltip:Show()
     return true

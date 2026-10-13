@@ -1,16 +1,16 @@
 {
   "schemaVersion": 2,
-  "totalAssertions": 43449,
+  "totalAssertions": 43702,
   "suites": [
     {
       "name": "core-panel-persistence",
-      "assertions": 2479,
-      "fingerprint": "21231f07"
+      "assertions": 2730,
+      "fingerprint": "2811b663"
     },
     {
       "name": "runtime-rendering",
-      "assertions": 2144,
-      "fingerprint": "3c23fcb3"
+      "assertions": 2146,
+      "fingerprint": "29312be0"
     },
     {
       "name": "fonts",

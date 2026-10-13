@@ -9777,7 +9777,18 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     -- SetOwner resets lines on current clients, but an owner-preserving refresh must
     -- not depend on that undocumented side effect or accumulate stale state rows.
     if type(GameTooltip.ClearLines) == "function" then GameTooltip:ClearLines() end
-    GameTooltip:AddLine("StatsPro · " .. addon.archonTargets.GetLocalizedSnapshotTitle(meta.snapshotKey), 1, 0.82, 0, true)
+    GameTooltip:AddLine(addon.archonTargets.GetLocalizedSnapshotTitle(meta.snapshotKey), 1, 0.82, 0, true)
+    -- Profile and sample metadata form one header block. Wrapped metadata
+    -- stays separate from the numeric comparison columns.
+    local subtitle = addon.archonTargets.FormatSnapshotDate(meta.capturedAt)
+    if subtitle == "" then subtitle = nil end
+    if type(meta.sourceUrl) == "string" and not issecretvalue(meta.sourceUrl) and meta.sourceUrl ~= "" then
+        subtitle = subtitle and "Archon · " .. subtitle or "Archon"
+    end
+    if subtitle then GameTooltip:AddLine(subtitle, 0.6, 0.6, 0.6, true) end
+    local snapshotKey = addon.archonTargets.ResolveAvailableSnapshotKey(meta.snapshotKey)
+    local detail = addon.archonTargets.GetSnapshotDetail(snapshotKey, addon.archonTargets.GetRootSnapshot(snapshotKey))
+    if detail then GameTooltip:AddLine(detail, 0.6, 0.6, 0.6, true) end
     if comparisonState == "lastKnown" then
         GameTooltip:AddLine(L("Last known comparison"), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], true)
     elseif comparisonState == "liveOnly" then
@@ -9796,19 +9807,6 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
         else
             addon.archonTargets.AddTooltipRow(L("Matched:"), addon.archonTargets.FormatRatingWithBonus(0, deltaBonus, true), 0.5, 1, 0.5)
         end
-    end
-    local footer = addon.archonTargets.FormatSnapshotDate(meta.capturedAt)
-    if footer == "" then footer = nil end
-    if type(meta.sourceUrl) == "string" and not issecretvalue(meta.sourceUrl) and meta.sourceUrl ~= "" then
-        footer = footer and "Archon · " .. footer or "Archon"
-    end
-    local snapshotKey = addon.archonTargets.ResolveAvailableSnapshotKey(meta.snapshotKey)
-    local detail = addon.archonTargets.GetSnapshotDetail(snapshotKey, addon.archonTargets.GetRootSnapshot(snapshotKey))
-    if detail or footer then
-        GameTooltip:AddLine(detail or " ", TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], true)
-    end
-    if footer then
-        GameTooltip:AddLine(footer, TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], true)
     end
     GameTooltip:Show()
     return true

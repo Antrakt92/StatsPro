@@ -18895,7 +18895,7 @@ function addon.settingsUI.BuildStatsTab(self, context)
         -- Durability swatch is the override color used when Auto Color is OFF.
         -- WHY: also mark dirty so re-enabling after a long off period gets fresh values
         -- on the next tick, not whatever was cached when last enabled.
-        _, sw, txt = CreateCheckboxColor(statsBody, "StatsProDurabilityCheck", "Show Durability",  "showDurability", "durability", cs.padX + (addon.forever.enabled and 0 or CONFIG_COL_OFFSET), rowY,
+        _, sw, txt = CreateCheckboxColor(statsBody, "StatsProDurabilityCheck", "Show Durability",  "showDurability", "durability", cs.padX + (#leftRows > 0 and CONFIG_COL_OFFSET or 0), rowY,
             function() addon.durabilityRuntime.MarkDirty() end)
         rightRows[#rightRows + 1] = { text = txt, swatch = sw }
         AlignSwatchColumn(leftRows)

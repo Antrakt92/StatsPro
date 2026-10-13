@@ -269,4 +269,74 @@ check(ruWipe.renderedText:find("персонаж", 1, true)
     and not ruWipe.renderedText:find("специализа", 1, true),
     "Russian Forever confirmation names characters correctly")
 ruAddon.wipeRuntime.CancelPending(ruWipe, ruWipe.data)
+-- Some beta clients expose item level; both capability states must fit Gear.
+local function controlPosition(control)
+    local _, shortX, shortY, x, y = control:GetPoint()
+    return x or shortX, y or shortY
+end
+for _, available in ipairs({ false, true }) do
+    local gearEnv, gearAddon = fixtures.loadStatsPro("enUS", {
+        forever = true,
+        foreverAPIs = { GetAverageItemLevel = available and function() return 5, 4 end or false },
+    })
+    gearEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    gearAddon:OpenConfigMenu()
+    local dur = gearEnv.StatsProDurabilityCheck
+    local durX, durY = controlPosition(dur)
+    local repairX, repairY = controlPosition(gearEnv.StatsProRepairCostCheck)
+    local item = gearEnv.StatsProItemLevelCheck
+    if available then
+        check(item ~= nil, "supported item level control exists")
+        local itemX, itemY = controlPosition(item)
+        check(durY == itemY and durX >= itemX + item:GetWidth(),
+            "item level and durability occupy separate Gear columns")
+    else
+        check(item == nil, "unsupported item level control absent")
+        check(durX == repairX, "durability occupies left column without item level")
+    end
+    check(repairY < durY, "repair checkbox follows complete Gear row")
+end
+do
+    local phase, visited = "pending", {}
+    local repairEnv, repairAddon, repairTest = fixtures.loadStatsPro("enUS", {
+        forever = true, unitGUID = function() return "Player-RepairForever" end,
+        statsProDB = { showRepairCost = true, showDurability = true },
+        getInventoryItemDurability = function(slot)
+            if slot == 1 or slot == 18 then return phase == "repaired" and 100 or 50, 100 end
+        end,
+        getTooltipInventoryItem = function(unit, slot)
+            assert(unit == "player")
+            visited[slot] = true
+            if slot == 1 then return { repairCost = 123, sellPrice = 90000 } end
+            if slot == 18 then
+                if phase == "pending" then return { sellPrice = 80000 } end
+                return { repairCost = 456, sellPrice = 80000 }
+            end
+        end,
+    })
+    repairEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    repairTest.cacheSettings()
+    check(repairAddon:RunUpdateStatsSafe(), "Forever repair initial update")
+    check(visited[1] and visited[18], "repair inspects damaged ranged slot")
+    check(repairTest.durabilityState().repairCost == nil and not repairTest.durabilityState().repairCostComplete,
+        "partial repair cost stays unknown")
+    check(repairTest.durabilityState().repairRetryAttempt == 1, "missing repair cost gets bounded retry")
+    check(repairTest.buildRenderBlocks()[7].repairStr == "?", "incomplete repair row shows unknown instead of partial sum")
+    phase = "ready"
+    check(repairEnv.__flushNextTimer(1), "repair retry timer runs")
+    check(repairAddon:RunUpdateStatsSafe(), "repair retry update")
+    check(repairTest.durabilityState().repairCostComplete and repairTest.durabilityState().repairCost == 579,
+        "repair sums repairCost, not sellPrice")
+    check(repairTest.buildRenderBlocks()[7].repairStr ~= "" and repairTest.buildRenderBlocks()[7].repairStr ~= "?",
+        "known nonzero repair row renders money")
+    phase, visited = "repaired", {}
+    repairEnv.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+    check(repairTest.durabilityState().dirty, "repair event invalidates equipped cost")
+    check(repairAddon:RunUpdateStatsSafe(), "post-repair update")
+    check(repairTest.durabilityState().repairCostComplete and repairTest.durabilityState().repairCost == 0,
+        "fully repaired cost is zero")
+    check(repairTest.durabilityState().durabilityValue == 100, "repair restores durability")
+    check(repairTest.buildRenderBlocks()[7].repairStr == "", "fully repaired gear hides the zero-cost row")
+    check(not next(visited), "fully repaired gear needs no repair tooltips")
+end
 print("StatsPro Forever HUD integration: PASS (" .. count .. " checks)")

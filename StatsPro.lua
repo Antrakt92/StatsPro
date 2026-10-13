@@ -9256,11 +9256,8 @@ function Panel:New(globalName, dbKeyPrefix)
             end
         end)
         overlay:SetScript("OnLeave", function(f)
-            -- Another UI surface may take GameTooltip ownership before this overlay's
-            -- delayed OnLeave fires. Never hide a tooltip StatsPro no longer owns.
-            if type(GameTooltip.GetOwner) ~= "function" or GameTooltip:GetOwner() == f then
-                GameTooltip:Hide()
-            end
+            local tooltip = addon.archonTargets.tooltip
+            if tooltip and tooltip:GetOwner() == f then tooltip:Hide() end
         end)
         overlay.statsProTargetMeta = nil
         return overlay
@@ -9702,10 +9699,152 @@ end
 -- Shared gray for comparison-state notices.
 local TOOLTIP_LABEL_COLOR = { 0.7, 0.7, 0.7 }
 
+function addon.archonTargets.MeasureTooltipText(probe, text, maxWidth)
+    local okSecret, secret = pcall(issecretvalue, text)
+    if not okSecret or secret or type(text) ~= "string" then return nil, nil end
+    probe:SetWidth(0)
+    probe:SetWordWrap(false)
+    local okText = pcall(probe.SetText, probe, text)
+    if not okText then return nil, nil end
+    local measure = probe.GetUnboundedStringWidth or probe.GetStringWidth
+    local okWidth, width = pcall(measure, probe)
+    local okFinite, finite = pcall(SAFE_NUM.IsCleanFiniteNumber, width)
+    if not okWidth or not okFinite or not finite or width <= 0 then return nil, nil end
+    if maxWidth and width > maxWidth then
+        width = maxWidth
+        probe:SetWidth(maxWidth)
+        probe:SetWordWrap(true)
+    end
+    local okHeight, height = pcall(probe.GetStringHeight, probe)
+    local okHeightFinite, heightFinite = pcall(SAFE_NUM.IsCleanFiniteNumber, height)
+    if not okHeight or not okHeightFinite or not heightFinite or height <= 0 then height = nil end
+    return width, height
+end
+
+function addon.archonTargets.GetTooltip()
+    if addon.archonTargets.tooltip then return addon.archonTargets.tooltip end
+    local tooltip = CreateFrame("Frame", "StatsProTargetTooltip", UIParent, "BackdropTemplate")
+    tooltip:SetFrameStrata("TOOLTIP")
+    tooltip:SetClampedToScreen(true)
+    tooltip:EnableMouse(false)
+    tooltip:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
+    tooltip:SetBackdropColor(0, 0, 0, 0.9)
+    tooltip.lines, tooltip.regions, tooltip.lastCleanValueWidths = {}, {}, {}
+    tooltip.padding, tooltip.columnGap, tooltip.lineGap = 10, 8, 2
+    tooltip.bodyProbe = tooltip:CreateFontString(nil, "OVERLAY", "GameTooltipText")
+    tooltip.headerProbe = tooltip:CreateFontString(nil, "OVERLAY", "GameTooltipHeaderText")
+    tooltip.bodyProbe:Hide()
+    tooltip.headerProbe:Hide()
+
+    function tooltip:GetOwner() return self.owner end
+    function tooltip:ClearLines()
+        self.lines = {}
+        for _, region in ipairs(self.regions) do
+            region.leftText:SetText("")
+            region.rightText:SetText("")
+            region.leftText:Hide()
+            region.rightText:Hide()
+        end
+    end
+    function tooltip:SetOwner(owner)
+        self.owner = owner
+        self:ClearLines()
+        local panel = owner and owner:GetParent() or nil
+        self:ClearAllPoints()
+        self:SetPoint("BOTTOM", panel or owner or UIParent, "TOP", 0, 8)
+    end
+    function tooltip:AddLine(text, r, g, b, wrapText)
+        self.lines[#self.lines + 1] = { left = text, color = { r, g, b }, wrapText = wrapText, isDouble = false }
+    end
+    function tooltip:AddDoubleLine(left, right, lr, lg, lb, rr, rg, rb)
+        self.lines[#self.lines + 1] = { left = left, right = right, isDouble = true,
+            leftColor = { lr, lg, lb }, rightColor = { rr, rg, rb } }
+    end
+    tooltip.Layout = addon.archonTargets.LayoutTooltip
+    tooltip:Hide()
+    addon.archonTargets.tooltip = tooltip
+    return tooltip
+end
+
+function addon.archonTargets.LayoutTooltip(tooltip)
+    local metadataWidth, labelWidth, valueWidth, numericIndex = 0, 0, 0, 0
+    local fallbackWidth = addon.archonTargets.MeasureTooltipText(tooltip.bodyProbe, "99999 (~999.9%)") or 120
+    for index, row in ipairs(tooltip.lines) do
+        local region = tooltip.regions[index]
+        if not region then
+            region = {
+                leftText = tooltip:CreateFontString(nil, "OVERLAY", index == 1 and "GameTooltipHeaderText" or "GameTooltipText"),
+                rightText = tooltip:CreateFontString(nil, "OVERLAY", "GameTooltipText"),
+            }
+            tooltip.regions[index] = region
+        end
+        if row.isDouble then
+            numericIndex = numericIndex + 1
+            local measuredLabel, height = addon.archonTargets.MeasureTooltipText(tooltip.bodyProbe, row.left)
+            local measuredValue = addon.archonTargets.MeasureTooltipText(tooltip.bodyProbe, row.right)
+            if measuredValue then tooltip.lastCleanValueWidths[numericIndex] = measuredValue end
+            region.cleanLabelWidth = measuredLabel or region.cleanLabelWidth
+            row.height = height or region.cleanHeight or 12
+            if height then region.cleanHeight = height end
+            labelWidth = math.max(labelWidth, region.cleanLabelWidth or 72)
+            local displayWidth = measuredValue
+                or math.max(tooltip.lastCleanValueWidths[numericIndex] or 0, fallbackWidth)
+            valueWidth = math.max(valueWidth, displayWidth)
+        else
+            local probe = index == 1 and tooltip.headerProbe or tooltip.bodyProbe
+            local width, height = addon.archonTargets.MeasureTooltipText(probe, row.left, 280)
+            if width then region.cleanMetadataWidth = width end
+            if height then region.cleanHeight = height end
+            row.height = height or region.cleanHeight or (index == 1 and 14 or 12)
+            metadataWidth = math.max(metadataWidth, width or region.cleanMetadataWidth or 160)
+        end
+    end
+    local blockWidth = labelWidth + tooltip.columnGap + valueWidth
+    local contentWidth = math.max(blockWidth, metadataWidth)
+    -- Center the comparison block itself. A long title/notice adds outer margins,
+    -- never extra space between the label and value columns.
+    local labelRight = tooltip.padding + (contentWidth - blockWidth) / 2 + labelWidth
+    local valueRight = labelRight + tooltip.columnGap + valueWidth
+    local y = tooltip.padding
+    for index, row in ipairs(tooltip.lines) do
+        local region = tooltip.regions[index]
+        region.leftText:ClearAllPoints()
+        region.rightText:ClearAllPoints()
+        if row.isDouble then
+            region.leftText:SetPoint("TOPRIGHT", tooltip, "TOPLEFT", labelRight, -y)
+            region.leftText:SetWidth(labelWidth)
+            region.leftText:SetJustifyH("RIGHT")
+            region.leftText:SetWordWrap(false)
+            region.rightText:SetPoint("TOPRIGHT", tooltip, "TOPLEFT", valueRight, -y)
+            region.rightText:SetJustifyH("RIGHT")
+            region.rightText:SetWordWrap(false)
+            region.rightText:SetHeight(row.height)
+            region.rightText:SetTextColor(row.rightColor[1] or 1, row.rightColor[2] or 1, row.rightColor[3] or 1)
+            -- No hard value width: restricted live text remains displayable even
+            -- when its clean measurement is unavailable.
+            region.rightText:SetText(row.right)
+            region.rightText:Show()
+            region.leftText:SetTextColor(row.leftColor[1] or 1, row.leftColor[2] or 1, row.leftColor[3] or 1)
+        else
+            region.leftText:SetPoint("TOPLEFT", tooltip, "TOPLEFT", tooltip.padding, -y)
+            region.leftText:SetWidth(contentWidth)
+            region.leftText:SetJustifyH("CENTER")
+            region.leftText:SetWordWrap(true)
+            region.leftText:SetTextColor(row.color[1] or 1, row.color[2] or 1, row.color[3] or 1)
+            region.rightText:Hide()
+        end
+        region.leftText:SetHeight(row.height)
+        region.leftText:SetText(row.left)
+        region.leftText:Show()
+        y = y + row.height + tooltip.lineGap
+    end
+    tooltip:SetSize(contentWidth + tooltip.padding * 2, y - tooltip.lineGap + tooltip.padding)
+    tooltip.layout = { labelWidth = labelWidth, valueWidth = valueWidth, labelRight = labelRight,
+        valueRight = valueRight, blockWidth = blockWidth, contentWidth = contentWidth }
+end
+
 function addon.archonTargets.AddTooltipRow(label, value, r, g, b)
-    -- Only numeric comparisons share the native right column. Profile/sample
-    -- metadata uses separate lines so it cannot widen that value column.
-    GameTooltip:AddDoubleLine(label, value,
+    addon.archonTargets.GetTooltip():AddDoubleLine(label, value,
         r or TOOLTIP_LABEL_COLOR[1], g or TOOLTIP_LABEL_COLOR[2], b or TOOLTIP_LABEL_COLOR[3],
         r or 1, g or 1, b or 1)
 end
@@ -9773,26 +9912,21 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
         deltaBonus = nil
     end
     local valueColor = addon.archonTargets.GetTooltipValueColor(meta)
-    GameTooltip:SetOwner(anchor, "ANCHOR_RIGHT")
-    -- SetOwner resets lines on current clients, but an owner-preserving refresh must
-    -- not depend on that undocumented side effect or accumulate stale state rows.
-    if type(GameTooltip.ClearLines) == "function" then GameTooltip:ClearLines() end
-    GameTooltip:AddLine(addon.archonTargets.GetLocalizedSnapshotTitle(meta.snapshotKey), 1, 0.82, 0, true)
+    local tooltip = addon.archonTargets.GetTooltip()
+    tooltip:SetOwner(anchor)
+    tooltip:AddLine(addon.archonTargets.GetLocalizedSnapshotTitle(meta.snapshotKey), 1, 0.82, 0, true)
     -- Profile and sample metadata form one header block. Wrapped metadata
     -- stays separate from the numeric comparison columns.
     local subtitle = addon.archonTargets.FormatSnapshotDate(meta.capturedAt)
     if subtitle == "" then subtitle = nil end
-    if type(meta.sourceUrl) == "string" and not issecretvalue(meta.sourceUrl) and meta.sourceUrl ~= "" then
-        subtitle = subtitle and "Archon · " .. subtitle or "Archon"
-    end
-    if subtitle then GameTooltip:AddLine(subtitle, 0.6, 0.6, 0.6, true) end
+    if subtitle then tooltip:AddLine(subtitle, 0.6, 0.6, 0.6, true) end
     local snapshotKey = addon.archonTargets.ResolveAvailableSnapshotKey(meta.snapshotKey)
     local detail = addon.archonTargets.GetSnapshotDetail(snapshotKey, addon.archonTargets.GetRootSnapshot(snapshotKey))
-    if detail then GameTooltip:AddLine(detail, 0.6, 0.6, 0.6, true) end
+    if detail then tooltip:AddLine(detail, 0.6, 0.6, 0.6, true) end
     if comparisonState == "lastKnown" then
-        GameTooltip:AddLine(L("Last known comparison"), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], true)
+        tooltip:AddLine(L("Last known comparison"), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], true)
     elseif comparisonState == "liveOnly" then
-        GameTooltip:AddLine(L("Live values; comparison unavailable"), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], true)
+        tooltip:AddLine(L("Live values; comparison unavailable"), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], true)
     end
     addon.archonTargets.AddTooltipRow(L("Target:"), addon.archonTargets.FormatRatingWithBonus(meta.target, targetDisplayBonus, false))
     if hasComparison or hasLiveCurrent then
@@ -9808,7 +9942,8 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
             addon.archonTargets.AddTooltipRow(L("Matched:"), addon.archonTargets.FormatRatingWithBonus(0, deltaBonus, true), 0.5, 1, 0.5)
         end
     end
-    GameTooltip:Show()
+    tooltip:Layout()
+    tooltip:Show()
     return true
 end
 
@@ -9821,8 +9956,9 @@ function Panel:ApplyTooltipRows(targetRows, lineCount)
     -- a tooltip after the cursor left. Semantic stat identity prevents a row-index
     -- shift (headers, toggles, Split routing) from silently switching Crit to Haste.
     local openOwner
-    if GameTooltip:IsShown() and type(GameTooltip.GetOwner) == "function" then
-        openOwner = GameTooltip:GetOwner()
+    local tooltip = addon.archonTargets.tooltip
+    if tooltip and tooltip:IsShown() then
+        openOwner = tooltip:GetOwner()
     end
     for i = 1, math.max(#(targetRows or {}), #(self.tooltipOverlays or {})) do
         local overlay = self.tooltipOverlays[i]
@@ -9847,11 +9983,11 @@ function Panel:ApplyTooltipRows(targetRows, lineCount)
                 local sameStat = type(previousMeta) == "table"
                     and previousMeta.statKey == meta.statKey
                 if not sameStat or not addon.archonTargets.ShowTooltip(overlay, meta) then
-                    GameTooltip:Hide()
+                    tooltip:Hide()
                 end
             end
         else
-            if ownedOpen then GameTooltip:Hide() end
+            if ownedOpen then tooltip:Hide() end
             overlay:Hide()
             overlay:SetScript("OnEnter", nil)
             overlay.statsProTargetMeta = nil
@@ -19607,6 +19743,7 @@ if addon and addon.__statsproSmoke == true then
         normalizeColor = NormalizeColor,
         rgbToHex = RGBToHex,
         getArchonTargetSnapshot = addon.archonTargets.GetSnapshot,
+        getArchonTooltip = addon.archonTargets.GetTooltip,
         buildArchonTargetMeta = addon.archonTargets.BuildMeta,
         archonComparisonCache = function() return CopyTable(addon.archonTargets.comparisonCache) end,
         formatSnapshotDate = addon.archonTargets.FormatSnapshotDate,

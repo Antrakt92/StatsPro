@@ -885,10 +885,10 @@ addon.archonTargets.snapshotOptions = {
 -- tooltip title and the snapshot line cannot drift apart per snapshot key.
 addon.archonTargets.snapshotTexts = {
     mythicPlusCurrent = { label = "M+ Current", title = "M+ Target" },
-    mythicPlusHighKeys = { label = "M+ High Keys", title = "M+ Target" },
-    raidNormal = { label = "Raid Normal All Bosses", title = "Raid Target" },
-    raidHeroic = { label = "Raid Heroic All Bosses", title = "Raid Target" },
-    raidMythic = { label = "Raid Mythic All Bosses", title = "Raid Target" },
+    mythicPlusHighKeys = { label = "M+ High Keys", title = "M+ Target", redundantDetail = "High Keys" },
+    raidNormal = { label = "Raid Normal", title = "Raid Target", redundantDetail = "Normal" },
+    raidHeroic = { label = "Raid Heroic", title = "Raid Target", redundantDetail = "Heroic" },
+    raidMythic = { label = "Raid Mythic", title = "Raid Target", redundantDetail = "Mythic" },
 }
 -- Session-local by design: a character change reloads addon Lua, while zoning into
 -- Mythic+ does not. Context and effective-level changes clear entries so switching
@@ -1041,6 +1041,16 @@ function addon.archonTargets.NormalizeSnapshotKey(value)
     return addon.archonTargets.defaultSnapshotKey
 end
 
+function addon.archonTargets.GetSnapshotDetail(snapshotKey, snapshot)
+    local detail = type(snapshot) == "table" and snapshot.difficultyLabel or nil
+    if type(detail) ~= "string" or issecretvalue(detail) then return nil end
+    local entry = addon.archonTargets.snapshotTexts[snapshotKey]
+    -- The profile already names its difficulty; only additional ranges/details
+    -- belong in parentheses. Compare metadata keys, never translated substrings.
+    if detail == "" or (entry and detail == entry.redundantDetail) then return nil end
+    return detail
+end
+
 function addon.archonTargets.GetAvailableSnapshotOptions()
     local root = _G.StatsProArchonTargets
     local options = {}
@@ -1049,12 +1059,10 @@ function addon.archonTargets.GetAvailableSnapshotOptions()
         for _, option in ipairs(addon.archonTargets.snapshotOptions) do
             local snapshot = root.snapshots[option.value]
             if type(snapshot) == "table" then
-                local detail = type(snapshot.difficultyLabel) == "string"
-                    and snapshot.difficultyLabel ~= "" and snapshot.difficultyLabel or nil
                 options[#options + 1] = {
                     value = option.value,
                     label = option.label,
-                    detail = detail,
+                    detail = addon.archonTargets.GetSnapshotDetail(option.value, snapshot),
                 }
             end
         end
@@ -9660,9 +9668,8 @@ function addon.archonTargets.GetLocalizedSnapshotLabel(snapshotKey)
     local key = addon.archonTargets.ResolveAvailableSnapshotKey(snapshotKey)
     local entry = texts[key] or texts.mythicPlusCurrent
     local text = L(entry.label)
-    local snapshotRoot = addon.archonTargets.GetRootSnapshot(key)
-    local detail = type(snapshotRoot) == "table" and snapshotRoot.difficultyLabel or nil
-    if type(detail) == "string" and not issecretvalue(detail) and detail ~= "" then
+    local detail = addon.archonTargets.GetSnapshotDetail(key, addon.archonTargets.GetRootSnapshot(key))
+    if detail then
         return text .. " (" .. detail .. ")"
     end
     return text
@@ -9693,9 +9700,16 @@ function addon.archonTargets.FormatSnapshotDate(capturedAt)
     return day .. "-" .. monthName .. "-" .. year:sub(3, 4)
 end
 
--- WHY named triples: tooltip label gray / value white repeat across rows.
+-- Shared gray for comparison-state notices.
 local TOOLTIP_LABEL_COLOR = { 0.7, 0.7, 0.7 }
-local TOOLTIP_VALUE_COLOR = { 1, 1, 1 }
+
+function addon.archonTargets.AddTooltipRow(label, value, labelColorHex, r, g, b)
+    -- A single line keeps values beside their labels regardless of the longest
+    -- snapshot or warning. Concatenation preserves restricted display strings
+    -- without measuring, parsing or comparing them for layout.
+    GameTooltip:AddLine("|cff" .. (labelColorHex or "b3b3b3") .. label .. "|r " .. value,
+        r or 1, g or 1, b or 1)
+end
 
 function addon.archonTargets.ShowTooltip(anchor, meta)
     if type(meta) ~= "table" or not SAFE_NUM.IsCleanFiniteNumber(meta.target) or meta.target < 0 then
@@ -9770,26 +9784,26 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     elseif comparisonState == "liveOnly" then
         GameTooltip:AddLine(L("Live values; comparison unavailable"), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3])
     end
-    GameTooltip:AddDoubleLine(L("Target:"), addon.archonTargets.FormatRatingWithBonus(meta.target, targetDisplayBonus, false), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], TOOLTIP_VALUE_COLOR[1], TOOLTIP_VALUE_COLOR[2], TOOLTIP_VALUE_COLOR[3])
+    addon.archonTargets.AddTooltipRow(L("Target:"), addon.archonTargets.FormatRatingWithBonus(meta.target, targetDisplayBonus, false))
     if hasComparison or hasLiveCurrent then
         local currentRating = hasLiveCurrent and meta.currentRatingDisplay or meta.current
-        GameTooltip:AddDoubleLine(L("Current:"), addon.archonTargets.ColorTooltipValue(addon.archonTargets.FormatRatingWithBonus(currentRating, currentDisplayBonus, false), valueColor), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], TOOLTIP_VALUE_COLOR[1], TOOLTIP_VALUE_COLOR[2], TOOLTIP_VALUE_COLOR[3])
+        addon.archonTargets.AddTooltipRow(L("Current:"), addon.archonTargets.ColorTooltipValue(addon.archonTargets.FormatRatingWithBonus(currentRating, currentDisplayBonus, false), valueColor))
     end
     if hasComparison then
         if meta.delta < 0 then
-            GameTooltip:AddDoubleLine(L("Missing:"), addon.archonTargets.FormatRatingWithBonus(math.abs(meta.delta), deltaBonus, true), 1, 0.35, 0.35, 1, 0.35, 0.35)
+            addon.archonTargets.AddTooltipRow(L("Missing:"), addon.archonTargets.FormatRatingWithBonus(math.abs(meta.delta), deltaBonus, true), "ff5959", 1, 0.35, 0.35)
         elseif meta.delta > 0 then
-            GameTooltip:AddDoubleLine(L("Over:"), addon.archonTargets.FormatRatingWithBonus(addon.archonTargets.FormatSignedRatingDelta(meta.delta), deltaBonus and -deltaBonus, true), 0.35, 0.8, 1, 0.35, 0.8, 1)
+            addon.archonTargets.AddTooltipRow(L("Over:"), addon.archonTargets.FormatRatingWithBonus(addon.archonTargets.FormatSignedRatingDelta(meta.delta), deltaBonus and -deltaBonus, true), "59ccff", 0.35, 0.8, 1)
         else
-            GameTooltip:AddDoubleLine(L("Matched:"), addon.archonTargets.FormatRatingWithBonus(0, deltaBonus, true), 0.5, 1, 0.5, 0.5, 1, 0.5)
+            addon.archonTargets.AddTooltipRow(L("Matched:"), addon.archonTargets.FormatRatingWithBonus(0, deltaBonus, true), "80ff80", 0.5, 1, 0.5)
         end
     end
     local snapshotDate = addon.archonTargets.FormatSnapshotDate(meta.capturedAt)
     if snapshotDate then
-        GameTooltip:AddDoubleLine(L("Snapshot:"), addon.archonTargets.GetLocalizedSnapshotLabel(meta.snapshotKey) .. ", " .. snapshotDate, TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], 0.85, 0.85, 0.85)
+        addon.archonTargets.AddTooltipRow(L("Snapshot:"), addon.archonTargets.GetLocalizedSnapshotLabel(meta.snapshotKey) .. ", " .. snapshotDate, nil, 0.85, 0.85, 0.85)
     end
     if type(meta.sourceUrl) == "string" and not issecretvalue(meta.sourceUrl) and meta.sourceUrl ~= "" then
-        GameTooltip:AddDoubleLine(L("Source:"), "Archon", TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], 0.85, 0.85, 0.85)
+        addon.archonTargets.AddTooltipRow(L("Source:"), "Archon", nil, 0.85, 0.85, 0.85)
     end
     GameTooltip:Show()
     return true

@@ -105,6 +105,18 @@ local function eq(name, actual, expected)
     end
 end
 
+local function tooltipRowPart(row, part)
+    if type(row) ~= "table" or row.right ~= nil then
+        error("expected a single-column tooltip row", 2)
+    end
+    local label, value = row.left:match("^|cff%x%x%x%x%x%x(.-)|r (.*)$")
+    if not label then error("expected colored label followed immediately by one space and its value", 2) end
+    return part == "label" and label or value
+end
+
+local function tooltipRowLabel(row) return tooltipRowPart(row, "label") end
+local function tooltipRowValue(row) return tooltipRowPart(row, "value") end
+
 local function near(name, actual, expected, epsilon)
     recordAssertion(name)
     epsilon = epsilon or 0.00001
@@ -783,8 +795,8 @@ local function makeEnv(locale, opts)
         self.lines = {}
     end
     function env.GameTooltip:ClearLines() self.lines = {} end
-    function env.GameTooltip:AddLine(text)
-        self.lines[#self.lines + 1] = { left = text }
+    function env.GameTooltip:AddLine(text, r, g, b)
+        self.lines[#self.lines + 1] = { left = text, color = { r, g, b } }
     end
     function env.GameTooltip:AddDoubleLine(left, right)
         self.lines[#self.lines + 1] = { left = left, right = right }
@@ -1354,6 +1366,104 @@ local function setArchonFixtureTargets(fixture, profileKey, classToken, specKey,
 end
 
 do
+    local compactFixture = makeArchonV2Fixture("2026-10-13")
+    local compactEnv, compactAddon, compactTest = loadStatsPro("enUS", {
+        statsProArchonTargets = compactFixture,
+    })
+    eq("tooltip.compact.high_keys_label",
+        compactAddon.archonTargets.GetLocalizedSnapshotLabel("mythicPlusHighKeys"), "M+ High Keys")
+    compactTest.renderMainPanelForSmoke("Haste:", "971", "27.0%", 1, nil, nil, {
+        { statKey = "haste", target = 1006, current = 971, delta = -35,
+            snapshotKey = "mythicPlusHighKeys", capturedAt = "2026-10-13",
+            sourceUrl = "https://www.archon.gg/wow/" },
+    })
+    compactTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    eq("tooltip.compact.target_adjacent", compactEnv.GameTooltip.lines[2].left,
+        "|cffb3b3b3Target:|r 1006")
+    eq("tooltip.compact.current_adjacent", compactEnv.GameTooltip.lines[3].left,
+        "|cffb3b3b3Current:|r 971")
+    eq("tooltip.compact.missing_adjacent", compactEnv.GameTooltip.lines[4].left,
+        "|cffff5959Missing:|r 35")
+    assertDeepEqual("tooltip.compact.missing_color", compactEnv.GameTooltip.lines[4].color,
+        { 1, 0.35, 0.35 })
+    eq("tooltip.compact.snapshot_adjacent", compactEnv.GameTooltip.lines[5].left,
+        "|cffb3b3b3Snapshot:|r M+ High Keys, 13-Oct-26")
+    eq("tooltip.compact.source_adjacent", compactEnv.GameTooltip.lines[6].left,
+        "|cffb3b3b3Source:|r Archon")
+    for index = 2, #compactEnv.GameTooltip.lines do
+        eq("tooltip.compact.no_right_column." .. index,
+            compactEnv.GameTooltip.lines[index].right, nil)
+    end
+end
+
+do
+    local profiles = {
+        { key = "mythicPlusCurrent", label = "M+ Current", detail = " (+7 to +22)" },
+        { key = "mythicPlusHighKeys", label = "M+ High Keys", detail = "" },
+        { key = "raidNormal", label = "Raid Normal", detail = "" },
+        { key = "raidHeroic", label = "Raid Heroic", detail = "" },
+        { key = "raidMythic", label = "Raid Mythic", detail = "" },
+    }
+    for _, locale in ipairs({ "enUS", "enGB", "ruRU", "deDE", "frFR", "esES", "esMX",
+        "itIT", "ptBR", "koKR", "zhCN", "zhTW" }) do
+        local fixture = makeArchonV2Fixture("2026-10-13")
+        fixture.snapshots.mythicPlusCurrent.difficultyLabel = "+7 to +22"
+        local localeEnv, localeAddon, localeTest = loadStatsPro(locale, {
+            statsProArchonTargets = fixture,
+        })
+        local prefix = "tooltip.compact.localized." .. locale
+        local ok, err = pcall(localeEnv.__fireEvent, "PLAYER_ENTERING_WORLD")
+        check(prefix .. ".pew", ok, err)
+        local allLabels = localeTest.registrySnapshot().labelsByLocale
+        local labels = allLabels[locale] or allLabels.enUS
+        local options = localeAddon.archonTargets.GetAvailableSnapshotOptions()
+        eq(prefix .. ".option_count", #options, #profiles)
+        for index, profile in ipairs(profiles) do
+            local expectedLabel = (labels[profile.label] or profile.label) .. profile.detail
+            eq(prefix .. ".snapshot." .. profile.key,
+                localeAddon.archonTargets.GetLocalizedSnapshotLabel(profile.key), expectedLabel)
+            eq(prefix .. ".dropdown." .. profile.key,
+                localeAddon.settingsUI.FormatSimpleDropdownOptionText(options[index]), expectedLabel)
+            localeTest.renderMainPanelForSmoke("Haste:", "971", "27.0%", 1, nil, nil, {
+                { statKey = "haste", target = 1006, current = 971, delta = -35,
+                    snapshotKey = profile.key, capturedAt = "2026-10-13" },
+            })
+            localeTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+            eq(prefix .. ".snapshot_row." .. profile.key, localeEnv.GameTooltip.lines[5].left,
+                "|cffb3b3b3" .. (labels["Snapshot:"] or "Snapshot:") .. "|r "
+                    .. expectedLabel .. ", " .. localeTest.formatSnapshotDate("2026-10-13"))
+        end
+    end
+end
+
+do
+    local fixture = makeArchonV2Fixture("2026-10-13")
+    local detailEnv, detailAddon = loadStatsPro("enUS", {
+        statsProArchonTargets = fixture,
+        issecretvalue = function(value) return value == "restricted-detail" end,
+    })
+    for _, case in ipairs({
+        { key = "mythicPlusCurrent", detail = "+7 to +19", label = "M+ Current (+7 to +19)" },
+        { key = "mythicPlusCurrent", detail = "+7 to +20", label = "M+ Current (+7 to +20)" },
+        { key = "mythicPlusHighKeys", detail = "+23 and higher", label = "M+ High Keys (+23 and higher)" },
+        { key = "raidHeroic", detail = "Selected bosses", label = "Raid Heroic (Selected bosses)" },
+        { key = "mythicPlusHighKeys", detail = "restricted-detail", label = "M+ High Keys" },
+        { key = "mythicPlusHighKeys", detail = "", label = "M+ High Keys" },
+        { key = "mythicPlusHighKeys", detail = false, label = "M+ High Keys" },
+        { key = "mythicPlusHighKeys", label = "M+ High Keys" },
+    }) do
+        fixture.snapshots[case.key].difficultyLabel = case.detail
+        local prefix = "tooltip.compact.detail." .. tostring(case.detail)
+        eq(prefix .. ".snapshot", detailAddon.archonTargets.GetLocalizedSnapshotLabel(case.key), case.label)
+        local options = detailAddon.archonTargets.GetAvailableSnapshotOptions()
+        local index = case.key == "raidHeroic" and 4 or case.key == "mythicPlusCurrent" and 1 or 2
+        eq(prefix .. ".dropdown",
+            detailAddon.settingsUI.FormatSimpleDropdownOptionText(options[index]), case.label)
+    end
+    eq("tooltip.compact.detail.env_loaded", detailEnv ~= nil, true)
+end
+
+do
     local ok, err = pcall(loadStatsPro, "enUS", { statsProDB = true })
     check("load.root_non_table_self_heals", ok, err)
 end
@@ -1461,9 +1571,9 @@ do
     dualTest.renderMainPanelForSmoke("Mastery:", "700", "20.0%", 1, nil, nil, { raidMeta })
     dualTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("archon.v2.raid_tooltip_title", dualEnv.GameTooltip.lines[1].left, "StatsPro Raid Target")
-    eq("archon.v2.raid_tooltip_snapshot_label", dualEnv.GameTooltip.lines[5].right, "Raid Mythic All Bosses (Mythic), 16-May-26")
-    eq("archon.v2.raid_tooltip_source_label", dualEnv.GameTooltip.lines[6].left, "Source:")
-    eq("archon.v2.raid_tooltip_source_value", dualEnv.GameTooltip.lines[6].right, "Archon")
+    eq("archon.v2.raid_tooltip_snapshot_label", tooltipRowValue(dualEnv.GameTooltip.lines[5]), "Raid Mythic, 16-May-26")
+    eq("archon.v2.raid_tooltip_source_label", tooltipRowLabel(dualEnv.GameTooltip.lines[6]), "Source:")
+    eq("archon.v2.raid_tooltip_source_value", tooltipRowValue(dualEnv.GameTooltip.lines[6]), "Archon")
 
     local legacyMplusFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(legacyMplusFixture, "mythicPlusCurrent", "MAGE", "frost",
@@ -2259,14 +2369,14 @@ do
     tooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("tooltip.on_enter_shows", tooltipEnv.GameTooltip:IsShown(), true)
     eq("tooltip.on_enter_title", tooltipEnv.GameTooltip.lines[1].left, "StatsPro M+ Target")
-    eq("tooltip.on_enter_target", tooltipEnv.GameTooltip.lines[2].right, "1043 (~33.3%)")
-    eq("tooltip.on_enter_target_label", tooltipEnv.GameTooltip.lines[2].left, "Target:")
-    eq("tooltip.on_enter_current_label", tooltipEnv.GameTooltip.lines[3].left, "Current:")
-    eq("tooltip.on_enter_current_value", tooltipEnv.GameTooltip.lines[3].right, "812 (~30.0%)")
-    eq("tooltip.on_enter_missing", tooltipEnv.GameTooltip.lines[4].left, "Missing:")
-    eq("tooltip.on_enter_missing_value", tooltipEnv.GameTooltip.lines[4].right, "231 (~+3.3%)")
-    eq("tooltip.on_enter_snapshot_label", tooltipEnv.GameTooltip.lines[5].left, "Snapshot:")
-    eq("tooltip.on_enter_snapshot_date", tooltipEnv.GameTooltip.lines[5].right, "M+ Current, 15-May-26")
+    eq("tooltip.on_enter_target", tooltipRowValue(tooltipEnv.GameTooltip.lines[2]), "1043 (~33.3%)")
+    eq("tooltip.on_enter_target_label", tooltipRowLabel(tooltipEnv.GameTooltip.lines[2]), "Target:")
+    eq("tooltip.on_enter_current_label", tooltipRowLabel(tooltipEnv.GameTooltip.lines[3]), "Current:")
+    eq("tooltip.on_enter_current_value", tooltipRowValue(tooltipEnv.GameTooltip.lines[3]), "812 (~30.0%)")
+    eq("tooltip.on_enter_missing", tooltipRowLabel(tooltipEnv.GameTooltip.lines[4]), "Missing:")
+    eq("tooltip.on_enter_missing_value", tooltipRowValue(tooltipEnv.GameTooltip.lines[4]), "231 (~+3.3%)")
+    eq("tooltip.on_enter_snapshot_label", tooltipRowLabel(tooltipEnv.GameTooltip.lines[5]), "Snapshot:")
+    eq("tooltip.on_enter_snapshot_date", tooltipRowValue(tooltipEnv.GameTooltip.lines[5]), "M+ Current, 15-May-26")
     tooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnLeave")
     eq("tooltip.on_leave_hides", tooltipEnv.GameTooltip:IsShown(), false)
     tooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnMouseUp", "RightButton")
@@ -2305,11 +2415,11 @@ do
     targetOnlyTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("tooltip.restricted_target_only.combat_on_enter_shows", targetOnlyEnv.GameTooltip:IsShown(), true)
     eq("tooltip.restricted_target_only.line_count", #targetOnlyEnv.GameTooltip.lines, 4)
-    eq("tooltip.restricted_target_only.target_label", targetOnlyEnv.GameTooltip.lines[2].left, "Target:")
-    eq("tooltip.restricted_target_only.target_value", targetOnlyEnv.GameTooltip.lines[2].right, "1043")
-    eq("tooltip.restricted_target_only.snapshot_label", targetOnlyEnv.GameTooltip.lines[3].left, "Snapshot:")
-    eq("tooltip.restricted_target_only.source_label", targetOnlyEnv.GameTooltip.lines[4].left, "Source:")
-    eq("tooltip.restricted_target_only.source_value", targetOnlyEnv.GameTooltip.lines[4].right, "Archon")
+    eq("tooltip.restricted_target_only.target_label", tooltipRowLabel(targetOnlyEnv.GameTooltip.lines[2]), "Target:")
+    eq("tooltip.restricted_target_only.target_value", tooltipRowValue(targetOnlyEnv.GameTooltip.lines[2]), "1043")
+    eq("tooltip.restricted_target_only.snapshot_label", tooltipRowLabel(targetOnlyEnv.GameTooltip.lines[3]), "Snapshot:")
+    eq("tooltip.restricted_target_only.source_label", tooltipRowLabel(targetOnlyEnv.GameTooltip.lines[4]), "Source:")
+    eq("tooltip.restricted_target_only.source_value", tooltipRowValue(targetOnlyEnv.GameTooltip.lines[4]), "Archon")
 
     local exactMeta = targetOnlyTest.buildArchonTargetMeta(
         "crit", 812, targetOnlyEnv.CR_CRIT_MELEE, 30.0)
@@ -2320,12 +2430,12 @@ do
     targetOnlyTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("tooltip.restricted_last_known.line_count", #targetOnlyEnv.GameTooltip.lines, 7)
     eq("tooltip.restricted_last_known.notice", targetOnlyEnv.GameTooltip.lines[2].left, "Last known comparison")
-    eq("tooltip.restricted_last_known.target_label", targetOnlyEnv.GameTooltip.lines[3].left, "Target:")
-    eq("tooltip.restricted_last_known.current_label", targetOnlyEnv.GameTooltip.lines[4].left, "Current:")
-    eq("tooltip.restricted_last_known.current_value", targetOnlyEnv.GameTooltip.lines[4].right, "812 (~30.0%)")
-    eq("tooltip.restricted_last_known.delta_label", targetOnlyEnv.GameTooltip.lines[5].left, "Missing:")
-    eq("tooltip.restricted_last_known.snapshot_label", targetOnlyEnv.GameTooltip.lines[6].left, "Snapshot:")
-    eq("tooltip.restricted_last_known.source_label", targetOnlyEnv.GameTooltip.lines[7].left, "Source:")
+    eq("tooltip.restricted_last_known.target_label", tooltipRowLabel(targetOnlyEnv.GameTooltip.lines[3]), "Target:")
+    eq("tooltip.restricted_last_known.current_label", tooltipRowLabel(targetOnlyEnv.GameTooltip.lines[4]), "Current:")
+    eq("tooltip.restricted_last_known.current_value", tooltipRowValue(targetOnlyEnv.GameTooltip.lines[4]), "812 (~30.0%)")
+    eq("tooltip.restricted_last_known.delta_label", tooltipRowLabel(targetOnlyEnv.GameTooltip.lines[5]), "Missing:")
+    eq("tooltip.restricted_last_known.snapshot_label", tooltipRowLabel(targetOnlyEnv.GameTooltip.lines[6]), "Snapshot:")
+    eq("tooltip.restricted_last_known.source_label", tooltipRowLabel(targetOnlyEnv.GameTooltip.lines[7]), "Source:")
 end
 
 do
@@ -2365,11 +2475,11 @@ do
     localizedTooltipTest.renderMainPanelForSmoke("Крит:", "812", "30.0%", 1, nil, nil, { localizedMeta })
     localizedTooltipTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("tooltip.localized_ruRU_title", localizedTooltipEnv.GameTooltip.lines[1].left, "StatsPro Цель M+")
-    eq("tooltip.localized_ruRU_target_label", localizedTooltipEnv.GameTooltip.lines[2].left, "Цель:")
-    eq("tooltip.localized_ruRU_current_label", localizedTooltipEnv.GameTooltip.lines[3].left, "Сейчас:")
-    eq("tooltip.localized_ruRU_missing_label", localizedTooltipEnv.GameTooltip.lines[4].left, "Не хватает:")
-    eq("tooltip.localized_ruRU_snapshot_label", localizedTooltipEnv.GameTooltip.lines[5].left, "Снимок:")
-    eq("tooltip.localized_ruRU_snapshot_value", localizedTooltipEnv.GameTooltip.lines[5].right, "M+ высокие ключи, 15-май-26")
+    eq("tooltip.localized_ruRU_target_label", tooltipRowLabel(localizedTooltipEnv.GameTooltip.lines[2]), "Цель:")
+    eq("tooltip.localized_ruRU_current_label", tooltipRowLabel(localizedTooltipEnv.GameTooltip.lines[3]), "Сейчас:")
+    eq("tooltip.localized_ruRU_missing_label", tooltipRowLabel(localizedTooltipEnv.GameTooltip.lines[4]), "Не хватает:")
+    eq("tooltip.localized_ruRU_snapshot_label", tooltipRowLabel(localizedTooltipEnv.GameTooltip.lines[5]), "Снимок:")
+    eq("tooltip.localized_ruRU_snapshot_value", tooltipRowValue(localizedTooltipEnv.GameTooltip.lines[5]), "M+ высокие ключи, 15-май-26")
     local localizedLastKnown = localizedTooltipTest.buildArchonTargetMeta(
         "crit", -1, localizedTooltipEnv.CR_CRIT_MELEE)
     localizedTooltipTest.renderMainPanelForSmoke("Крит:", "812", "30.0%", 1, nil, nil, { localizedLastKnown })
@@ -2391,9 +2501,9 @@ do
         { statKey = "mastery", ratingCR = masteryEnv.CR_MASTERY, target = 1000, current = 800, currentPct = 16.0, delta = -200, capturedAt = "2026-05-15" },
     })
     masteryTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
-    eq("tooltip.mastery_target_effect_pct", masteryEnv.GameTooltip.lines[2].right, "1000 (~20.0%)")
-    eq("tooltip.mastery_current_effect_pct", masteryEnv.GameTooltip.lines[3].right, "800 (~16.0%)")
-    eq("tooltip.mastery_missing_effect_pct", masteryEnv.GameTooltip.lines[4].right, "200 (~+4.0%)")
+    eq("tooltip.mastery_target_effect_pct", tooltipRowValue(masteryEnv.GameTooltip.lines[2]), "1000 (~20.0%)")
+    eq("tooltip.mastery_current_effect_pct", tooltipRowValue(masteryEnv.GameTooltip.lines[3]), "800 (~16.0%)")
+    eq("tooltip.mastery_missing_effect_pct", tooltipRowValue(masteryEnv.GameTooltip.lines[4]), "200 (~+4.0%)")
 end
 
 do
@@ -2406,10 +2516,10 @@ do
         { statKey = "crit", ratingCR = overEnv.CR_CRIT_MELEE, target = 1000, current = 1200, currentPct = 17.0, delta = 200, capturedAt = "2027-02-29" },
     })
     overTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
-    eq("tooltip.over_target_pct", overEnv.GameTooltip.lines[2].right, "1000 (~15.0%)")
-    eq("tooltip.over_current_pct", overEnv.GameTooltip.lines[3].right, "1200 (~17.0%)")
-    eq("tooltip.over_value_pct", overEnv.GameTooltip.lines[4].right, "+200 (~+2.0%)")
-    eq("tooltip.invalid_snapshot_date_fallback", overEnv.GameTooltip.lines[5].right, "M+ Current, 2027-02-29")
+    eq("tooltip.over_target_pct", tooltipRowValue(overEnv.GameTooltip.lines[2]), "1000 (~15.0%)")
+    eq("tooltip.over_current_pct", tooltipRowValue(overEnv.GameTooltip.lines[3]), "1200 (~17.0%)")
+    eq("tooltip.over_value_pct", tooltipRowValue(overEnv.GameTooltip.lines[4]), "+200 (~+2.0%)")
+    eq("tooltip.invalid_snapshot_date_fallback", tooltipRowValue(overEnv.GameTooltip.lines[5]), "M+ Current, 2027-02-29")
 end
 
 do
@@ -2425,9 +2535,9 @@ do
         { statKey = "mastery", colorKey = "mastery", ratingCR = masteryLiveEnv.CR_MASTERY, target = 350, current = 515, currentPct = 22.4, delta = 165, capturedAt = "2026-05-15" },
     })
     masteryLiveTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
-    eq("tooltip.mastery_live_like_target_uses_projected_total_pct", masteryLiveEnv.GameTooltip.lines[2].right, "350 (~19.1%)")
-    eq("tooltip.mastery_live_like_current_uses_panel_pct", masteryLiveEnv.GameTooltip.lines[3].right, "515 (~22.4%)")
-    eq("tooltip.mastery_live_like_over_uses_rating_delta_pct", masteryLiveEnv.GameTooltip.lines[4].right, "+165 (~+3.3%)")
+    eq("tooltip.mastery_live_like_target_uses_projected_total_pct", tooltipRowValue(masteryLiveEnv.GameTooltip.lines[2]), "350 (~19.1%)")
+    eq("tooltip.mastery_live_like_current_uses_panel_pct", tooltipRowValue(masteryLiveEnv.GameTooltip.lines[3]), "515 (~22.4%)")
+    eq("tooltip.mastery_live_like_over_uses_rating_delta_pct", tooltipRowValue(masteryLiveEnv.GameTooltip.lines[4]), "+165 (~+3.3%)")
 end
 
 do
@@ -2440,9 +2550,9 @@ do
         { statKey = "crit", ratingCR = fallbackEnv.CR_CRIT_MELEE, target = 1043, current = 812, currentPct = 30.0, delta = -231, capturedAt = "2026-05-15" },
     })
     fallbackTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
-    eq("tooltip.rating_bonus_fallback_target", fallbackEnv.GameTooltip.lines[2].right, "1043")
-    eq("tooltip.rating_bonus_fallback_current", fallbackEnv.GameTooltip.lines[3].right, "812 (~30.0%)")
-    eq("tooltip.rating_bonus_fallback_missing", fallbackEnv.GameTooltip.lines[4].right, "231")
+    eq("tooltip.rating_bonus_fallback_target", tooltipRowValue(fallbackEnv.GameTooltip.lines[2]), "1043")
+    eq("tooltip.rating_bonus_fallback_current", tooltipRowValue(fallbackEnv.GameTooltip.lines[3]), "812 (~30.0%)")
+    eq("tooltip.rating_bonus_fallback_missing", tooltipRowValue(fallbackEnv.GameTooltip.lines[4]), "231")
 end
 
 do
@@ -2455,8 +2565,12 @@ do
         { statKey = "crit", ratingCR = matchedEnv.CR_CRIT_MELEE, target = 1000, current = 1000, currentPct = 20.0, delta = 0, capturedAt = "2026-05-15" },
     })
     matchedTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
-    eq("tooltip.matched_label", matchedEnv.GameTooltip.lines[4].left, "Matched:")
-    eq("tooltip.matched_value_pct", matchedEnv.GameTooltip.lines[4].right, "0 (~+0.0%)")
+    eq("tooltip.matched_label", tooltipRowLabel(matchedEnv.GameTooltip.lines[4]), "Matched:")
+    eq("tooltip.matched_value_pct", tooltipRowValue(matchedEnv.GameTooltip.lines[4]), "0 (~+0.0%)")
+    eq("tooltip.matched_compact_row", matchedEnv.GameTooltip.lines[4].left,
+        "|cff80ff80Matched:|r 0 (~+0.0%)")
+    assertDeepEqual("tooltip.matched_compact_color", matchedEnv.GameTooltip.lines[4].color,
+        { 0.5, 1, 0.5 })
 end
 
 do
@@ -2469,7 +2583,7 @@ do
         { statKey = "crit", ratingCR = zeroSignEnv.CR_CRIT_MELEE, target = 1000, current = 999, currentPct = 20.0, delta = -1, capturedAt = "2026-05-15" },
     })
     zeroSignTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
-    eq("tooltip.signed_zero_bonus_uses_positive_zero", zeroSignEnv.GameTooltip.lines[4].right, "1 (~+0.0%)")
+    eq("tooltip.signed_zero_bonus_uses_positive_zero", tooltipRowValue(zeroSignEnv.GameTooltip.lines[4]), "1 (~+0.0%)")
 end
 
 do
@@ -2485,9 +2599,9 @@ do
         { statKey = "crit", ratingCR = secretBonusEnv.CR_CRIT_MELEE, target = 1043, current = 812, currentPct = 30.0, delta = -231, capturedAt = "2026-05-15" },
     })
     secretBonusTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
-    eq("tooltip.secret_rating_bonus_fallback_target", secretBonusEnv.GameTooltip.lines[2].right, "1043")
-    eq("tooltip.secret_rating_bonus_fallback_current", secretBonusEnv.GameTooltip.lines[3].right, "812 (~30.0%)")
-    eq("tooltip.secret_rating_bonus_fallback_missing", secretBonusEnv.GameTooltip.lines[4].right, "231")
+    eq("tooltip.secret_rating_bonus_fallback_target", tooltipRowValue(secretBonusEnv.GameTooltip.lines[2]), "1043")
+    eq("tooltip.secret_rating_bonus_fallback_current", tooltipRowValue(secretBonusEnv.GameTooltip.lines[3]), "812 (~30.0%)")
+    eq("tooltip.secret_rating_bonus_fallback_missing", tooltipRowValue(secretBonusEnv.GameTooltip.lines[4]), "231")
 end
 
 do
@@ -2519,7 +2633,7 @@ do
     eq("tooltip.secret_rating_cr.no_converter_call", converterCalls, 0)
     eq("tooltip.secret_rating_cr.no_mastery_call", masteryCalls, 0)
     eq("tooltip.secret_rating_cr.target_rating_only",
-        secretCREnv.GameTooltip.lines[2].right, "1000")
+        tooltipRowValue(secretCREnv.GameTooltip.lines[2]), "1000")
 end
 
 do
@@ -2770,16 +2884,22 @@ do
         { statKey = "mastery", colorKey = "mastery", ratingCR = coloredEnv.CR_MASTERY, target = 350, current = 515, currentPct = 22.4, delta = 165, capturedAt = "2026-05-15" },
     })
     coloredTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
-    eq("tooltip.match_color_target_value_stays_neutral", coloredEnv.GameTooltip.lines[2].right, "350 (~19.1%)")
-    eq("tooltip.match_color_current_value", coloredEnv.GameTooltip.lines[3].right, "|cff00ff00" .. "515 (~22.4%)" .. "|r")
-    eq("tooltip.match_color_over_value_uses_status_color", coloredEnv.GameTooltip.lines[4].right, "+165 (~+3.3%)")
-    eq("tooltip.match_color_snapshot_plain", coloredEnv.GameTooltip.lines[5].right, "M+ Current, 15-May-26")
+    eq("tooltip.match_color_target_value_stays_neutral", tooltipRowValue(coloredEnv.GameTooltip.lines[2]), "350 (~19.1%)")
+    eq("tooltip.match_color_current_value", tooltipRowValue(coloredEnv.GameTooltip.lines[3]), "|cff00ff00" .. "515 (~22.4%)" .. "|r")
+    eq("tooltip.match_color_compact_current", coloredEnv.GameTooltip.lines[3].left,
+        "|cffb3b3b3Current:|r |cff00ff00515 (~22.4%)|r")
+    eq("tooltip.match_color_over_value_uses_status_color", tooltipRowValue(coloredEnv.GameTooltip.lines[4]), "+165 (~+3.3%)")
+    eq("tooltip.match_color_compact_over", coloredEnv.GameTooltip.lines[4].left,
+        "|cff59ccffOver:|r +165 (~+3.3%)")
+    assertDeepEqual("tooltip.match_color_compact_over_color", coloredEnv.GameTooltip.lines[4].color,
+        { 0.35, 0.8, 1 })
+    eq("tooltip.match_color_snapshot_plain", tooltipRowValue(coloredEnv.GameTooltip.lines[5]), "M+ Current, 15-May-26")
 
     coloredTest.renderMainPanelForSmoke("Mastery:", "200", "16.0%", 1, nil, nil, {
         { statKey = "mastery", colorKey = "mastery", ratingCR = coloredEnv.CR_MASTERY, target = 350, current = 200, currentPct = 16.0, delta = -150, capturedAt = "2026-05-15" },
     })
     coloredTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
-    eq("tooltip.match_color_missing_value_uses_status_color", coloredEnv.GameTooltip.lines[4].right, "150 (~+3.0%)")
+    eq("tooltip.match_color_missing_value_uses_status_color", tooltipRowValue(coloredEnv.GameTooltip.lines[4]), "150 (~+3.0%)")
 end
 
 do
@@ -6477,13 +6597,13 @@ do
     eq("render.target_hover_clean_secret_secret_clean.live_notice",
         critEnv.GameTooltip.lines[2].left, "Live values; comparison unavailable")
     eq("render.target_hover_clean_secret_secret_clean.live_current_label",
-        critEnv.GameTooltip.lines[4].left, "Current:")
+        tooltipRowLabel(critEnv.GameTooltip.lines[4]), "Current:")
     check("render.target_hover_clean_secret_secret_clean.live_current_rating",
-        critEnv.GameTooltip.lines[4].right:find("875", 1, true) ~= nil,
-        critEnv.GameTooltip.lines[4].right)
+        tooltipRowValue(critEnv.GameTooltip.lines[4]):find("875", 1, true) ~= nil,
+        tooltipRowValue(critEnv.GameTooltip.lines[4]))
     check("render.target_hover_clean_secret_secret_clean.live_current_percent",
-        critEnv.GameTooltip.lines[4].right:find("19.0%", 1, true) ~= nil,
-        critEnv.GameTooltip.lines[4].right)
+        tooltipRowValue(critEnv.GameTooltip.lines[4]):find("19.0%", 1, true) ~= nil,
+        tooltipRowValue(critEnv.GameTooltip.lines[4]))
     liveRating = -2
     livePercent = 23
     local secondRestrictedBlocks = critTest.buildRenderBlocks()
@@ -6493,11 +6613,11 @@ do
     critTest.renderMainPanelForSmoke("Crit:", "23%", "", 1, nil, nil, { secondLiveMeta })
     critTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     check("render.target_hover_clean_secret_secret_clean.second_live_current_rating",
-        critEnv.GameTooltip.lines[4].right:find("900", 1, true) ~= nil,
-        critEnv.GameTooltip.lines[4].right)
+        tooltipRowValue(critEnv.GameTooltip.lines[4]):find("900", 1, true) ~= nil,
+        tooltipRowValue(critEnv.GameTooltip.lines[4]))
     check("render.target_hover_clean_secret_secret_clean.second_live_current_percent",
-        critEnv.GameTooltip.lines[4].right:find("23.0%", 1, true) ~= nil,
-        critEnv.GameTooltip.lines[4].right)
+        tooltipRowValue(critEnv.GameTooltip.lines[4]):find("23.0%", 1, true) ~= nil,
+        tooltipRowValue(critEnv.GameTooltip.lines[4]))
     eq("render.target_hover_clean_secret_secret_clean.cache_never_tainted",
         critTest.archonComparisonCache().entries.crit.current, 812)
 
@@ -6642,12 +6762,12 @@ do
         "Mastery:", "800", "26.0%", 1, nil, nil, { exactMeta })
     masteryTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("render.mastery_target_pct_survives_restriction.hover_api_failure_target",
-        masteryEnv.GameTooltip.lines[2].right, "1000 (~30.0%)")
+        tooltipRowValue(masteryEnv.GameTooltip.lines[2]), "1000 (~30.0%)")
     check("render.mastery_target_pct_survives_restriction.hover_api_failure_current",
-        masteryEnv.GameTooltip.lines[3].right:find("800 (~26.0%)", 1, true) ~= nil,
-        masteryEnv.GameTooltip.lines[3].right)
+        tooltipRowValue(masteryEnv.GameTooltip.lines[3]):find("800 (~26.0%)", 1, true) ~= nil,
+        tooltipRowValue(masteryEnv.GameTooltip.lines[3]))
     eq("render.mastery_target_pct_survives_restriction.hover_api_failure_missing",
-        masteryEnv.GameTooltip.lines[4].right, "200 (~+4.0%)")
+        tooltipRowValue(masteryEnv.GameTooltip.lines[4]), "200 (~+4.0%)")
 
     -- A malformed/nil clean update is not restriction. It must omit total
     -- percentages rather than pairing a cached target with rating-only Current,
@@ -6672,12 +6792,12 @@ do
         "Mastery:", "850", "", 1, nil, nil, { unavailableMeta })
     masteryTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("render.mastery_target_pct_survives_restriction.unavailable_tooltip_target",
-        masteryEnv.GameTooltip.lines[2].right, "1000")
+        tooltipRowValue(masteryEnv.GameTooltip.lines[2]), "1000")
     check("render.mastery_target_pct_survives_restriction.unavailable_tooltip_current",
-        masteryEnv.GameTooltip.lines[3].right:find("850", 1, true) ~= nil,
-        masteryEnv.GameTooltip.lines[3].right)
+        tooltipRowValue(masteryEnv.GameTooltip.lines[3]):find("850", 1, true) ~= nil,
+        tooltipRowValue(masteryEnv.GameTooltip.lines[3]))
     eq("render.mastery_target_pct_survives_restriction.unavailable_tooltip_missing",
-        masteryEnv.GameTooltip.lines[4].right, "150")
+        tooltipRowValue(masteryEnv.GameTooltip.lines[4]), "150")
 
     -- A clean Mastery total plus a transient converter failure is still an
     -- incomplete tuple. It must not replace the last fully projected Target %.
@@ -6710,9 +6830,9 @@ do
         "Mastery:", "820", "41.1%", 1, nil, nil, { percentSecretMeta })
     masteryTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("render.mastery_target_pct_survives_restriction.percent_secret_tooltip_target",
-        masteryEnv.GameTooltip.lines[2].right, "1000 (~30.0%)")
+        tooltipRowValue(masteryEnv.GameTooltip.lines[2]), "1000 (~30.0%)")
     eq("render.mastery_target_pct_survives_restriction.percent_secret_missing_rating_only",
-        masteryEnv.GameTooltip.lines[4].right, "180")
+        tooltipRowValue(masteryEnv.GameTooltip.lines[4]), "180")
 
     phase = "allSecret"
     local restrictedBlocks = masteryTest.buildRenderBlocks()
@@ -6731,12 +6851,12 @@ do
     eq("render.mastery_target_pct_survives_restriction.tooltip_notice",
         masteryEnv.GameTooltip.lines[2].left, "Live values; comparison unavailable")
     eq("render.mastery_target_pct_survives_restriction.tooltip_target",
-        masteryEnv.GameTooltip.lines[3].right, "1000 (~30.0%)")
+        tooltipRowValue(masteryEnv.GameTooltip.lines[3]), "1000 (~30.0%)")
     check("render.mastery_target_pct_survives_restriction.tooltip_current_is_live",
-        masteryEnv.GameTooltip.lines[4].right:find("848 (~41.1%)", 1, true) ~= nil,
-        masteryEnv.GameTooltip.lines[4].right)
+        tooltipRowValue(masteryEnv.GameTooltip.lines[4]):find("848 (~41.1%)", 1, true) ~= nil,
+        tooltipRowValue(masteryEnv.GameTooltip.lines[4]))
     eq("render.mastery_target_pct_survives_restriction.no_stale_missing",
-        masteryEnv.GameTooltip.lines[5].left, "Snapshot:")
+        tooltipRowLabel(masteryEnv.GameTooltip.lines[5]), "Snapshot:")
 
     local generationBeforeLevel = masteryTest.archonComparisonCache().generation
     fireEvent("render.mastery_target_pct_survives_restriction.level_changed",
@@ -6755,7 +6875,7 @@ do
         "Mastery:", "848", "41.1%", 1, nil, nil, { levelChangedMeta })
     masteryTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("render.mastery_target_pct_survives_restriction.level_no_stale_pct",
-        masteryEnv.GameTooltip.lines[3].right, "1000")
+        tooltipRowValue(masteryEnv.GameTooltip.lines[3]), "1000")
 
     phase = "clean"
     masteryRating = 800
@@ -6776,7 +6896,7 @@ do
         "Mastery:", "848", "41.1%", 1, nil, nil, { changedTargetMeta })
     masteryTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("render.mastery_target_pct_survives_restriction.changed_target_no_stale_pct",
-        masteryEnv.GameTooltip.lines[3].right, "1100")
+        tooltipRowValue(masteryEnv.GameTooltip.lines[3]), "1100")
 
     masteryTargetFixture.snapshots.mythicPlusCurrent.specs.MAGE.frost.targets.mastery = 1000
     phase = "clean"
@@ -6889,13 +7009,13 @@ do
             eq("render.target_hover_lifecycle.cold.tooltip_lines." .. index,
                 #hoverEnv.GameTooltip.lines, 6)
             eq("render.target_hover_lifecycle.cold.tooltip_target." .. index,
-                hoverEnv.GameTooltip.lines[3].left, "Target:")
+                tooltipRowLabel(hoverEnv.GameTooltip.lines[3]), "Target:")
             eq("render.target_hover_lifecycle.cold.tooltip_current." .. index,
-                hoverEnv.GameTooltip.lines[4].left, "Current:")
+                tooltipRowLabel(hoverEnv.GameTooltip.lines[4]), "Current:")
             eq("render.target_hover_lifecycle.cold.tooltip_snapshot." .. index,
-                hoverEnv.GameTooltip.lines[5].left, "Snapshot:")
+                tooltipRowLabel(hoverEnv.GameTooltip.lines[5]), "Snapshot:")
             eq("render.target_hover_lifecycle.cold.tooltip_source." .. index,
-                hoverEnv.GameTooltip.lines[6].left, "Source:")
+                tooltipRowLabel(hoverEnv.GameTooltip.lines[6]), "Source:")
         end
     end
     hoverTest.firePanelTooltipOverlayForSmoke("main", 1, "OnEnter")
@@ -6945,8 +7065,8 @@ do
     eq("render.target_hover_lifecycle.recovery.held_lines_refreshed",
         #hoverEnv.GameTooltip.lines, 6)
     check("render.target_hover_lifecycle.recovery.held_current_refreshed",
-        hoverEnv.GameTooltip.lines[3].right:find("800", 1, true) ~= nil,
-        hoverEnv.GameTooltip.lines[3].right)
+        tooltipRowValue(hoverEnv.GameTooltip.lines[3]):find("800", 1, true) ~= nil,
+        tooltipRowValue(hoverEnv.GameTooltip.lines[3]))
     local expectedCurrentByStat = {
         crit = 800,
         haste = 500,
@@ -6973,8 +7093,8 @@ do
     eq("render.target_hover_lifecycle.live_restricted.held_notice_refreshed",
         hoverEnv.GameTooltip.lines[2].left, "Live values; comparison unavailable")
     check("render.target_hover_lifecycle.live_restricted.held_current_is_live",
-        hoverEnv.GameTooltip.lines[4].right:find("secret", 1, true) ~= nil,
-        hoverEnv.GameTooltip.lines[4].right)
+        tooltipRowValue(hoverEnv.GameTooltip.lines[4]):find("secret", 1, true) ~= nil,
+        tooltipRowValue(hoverEnv.GameTooltip.lines[4]))
     local liveRestrictedState = hoverTest.panelTooltipState("main")
     for index, meta in ipairs(liveRestrictedState.lastTargetRows) do
         if type(meta) == "table" then
@@ -7003,8 +7123,8 @@ do
     eq("render.target_hover_lifecycle.clean_return.held_lines_refreshed",
         #hoverEnv.GameTooltip.lines, 6)
     check("render.target_hover_lifecycle.clean_return.held_current_refreshed",
-        hoverEnv.GameTooltip.lines[3].right:find("811", 1, true) ~= nil,
-        hoverEnv.GameTooltip.lines[3].right)
+        tooltipRowValue(hoverEnv.GameTooltip.lines[3]):find("811", 1, true) ~= nil,
+        tooltipRowValue(hoverEnv.GameTooltip.lines[3]))
     for _, meta in ipairs(returnedState.lastTargetRows) do
         if type(meta) == "table" then
             eq("render.target_hover_lifecycle.clean_return.current." .. meta.statKey,
@@ -7030,9 +7150,9 @@ do
     eq("render.target_hover_lifecycle.locale_ru.title",
         hoverEnv.GameTooltip.lines[1].left, "StatsPro Цель M+")
     eq("render.target_hover_lifecycle.locale_ru.target",
-        hoverEnv.GameTooltip.lines[2].left, "Цель:")
+        tooltipRowLabel(hoverEnv.GameTooltip.lines[2]), "Цель:")
     eq("render.target_hover_lifecycle.locale_ru.current",
-        hoverEnv.GameTooltip.lines[3].left, "Сейчас:")
+        tooltipRowLabel(hoverEnv.GameTooltip.lines[3]), "Сейчас:")
 
     account.forceLocale = "enUS"
     restricted = true
@@ -7046,7 +7166,7 @@ do
     eq("render.target_hover_lifecycle.snapshot_raid.live_notice",
         hoverEnv.GameTooltip.lines[2].left, "Live values; comparison unavailable")
     eq("render.target_hover_lifecycle.snapshot_raid.target",
-        hoverEnv.GameTooltip.lines[3].left, "Target:")
+        tooltipRowLabel(hoverEnv.GameTooltip.lines[3]), "Target:")
     eq("render.target_hover_lifecycle.snapshot_raid.live_only_lines",
         #hoverEnv.GameTooltip.lines, 6)
 
@@ -7058,8 +7178,8 @@ do
     eq("render.target_hover_lifecycle.snapshot_raid.recovery_lines",
         #hoverEnv.GameTooltip.lines, 6)
     check("render.target_hover_lifecycle.snapshot_raid.recovery_current",
-        hoverEnv.GameTooltip.lines[3].right:find("811", 1, true) ~= nil,
-        hoverEnv.GameTooltip.lines[3].right)
+        tooltipRowValue(hoverEnv.GameTooltip.lines[3]):find("811", 1, true) ~= nil,
+        tooltipRowValue(hoverEnv.GameTooltip.lines[3]))
 
     settings.targetSnapshot = "mythicPlusCurrent"
     hoverTest.cacheSettings()
@@ -7503,8 +7623,8 @@ do
     hasteTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     local heldOwner = hasteEnv.GameTooltip:GetOwner()
     check("render.haste_secret_proc_bloodlust_updates.clean_tooltip",
-        hasteEnv.GameTooltip.lines[3].right:find("875 (~22.0%)", 1, true) ~= nil,
-        hasteEnv.GameTooltip.lines[3].right)
+        tooltipRowValue(hasteEnv.GameTooltip.lines[3]):find("875 (~22.0%)", 1, true) ~= nil,
+        tooltipRowValue(hasteEnv.GameTooltip.lines[3]))
 
     local ticker
     for _, frame in ipairs(hasteEnv.__frames) do
@@ -7526,16 +7646,16 @@ do
     eq("render.haste_secret_proc_bloodlust_updates.proc_tooltip_owner",
         hasteEnv.GameTooltip:GetOwner(), heldOwner)
     check("render.haste_secret_proc_bloodlust_updates.proc_tooltip_value",
-        hasteEnv.GameTooltip.lines[3].right:find("875 (~34.4%)", 1, true) ~= nil,
-        hasteEnv.GameTooltip.lines[3].right)
+        tooltipRowValue(hasteEnv.GameTooltip.lines[3]):find("875 (~34.4%)", 1, true) ~= nil,
+        tooltipRowValue(hasteEnv.GameTooltip.lines[3]))
     eq("render.haste_secret_proc_bloodlust_updates.proc_target_pct_suppressed",
-        hasteEnv.GameTooltip.lines[2].right:find("%", 1, true), nil)
+        tooltipRowValue(hasteEnv.GameTooltip.lines[2]):find("%", 1, true), nil)
     eq("render.haste_secret_proc_bloodlust_updates.proc_delta_pct_suppressed",
-        hasteEnv.GameTooltip.lines[4].right:find("%", 1, true), nil)
+        tooltipRowValue(hasteEnv.GameTooltip.lines[4]):find("%", 1, true), nil)
     eq("render.haste_secret_proc_bloodlust_updates.proc_tooltip_not_baseline",
-        hasteEnv.GameTooltip.lines[3].right:find("22.0%", 1, true), nil)
+        tooltipRowValue(hasteEnv.GameTooltip.lines[3]):find("22.0%", 1, true), nil)
     eq("render.haste_secret_proc_bloodlust_updates.proc_tooltip_not_rating_derived",
-        hasteEnv.GameTooltip.lines[3].right:find("8.8%", 1, true), nil)
+        tooltipRowValue(hasteEnv.GameTooltip.lines[3]):find("8.8%", 1, true), nil)
     local procMeta = hasteTest.panelTooltipState("main").lastTargetRows[1]
     eq("render.haste_secret_proc_bloodlust_updates.proc_meta_exact",
         procMeta.comparisonState, "exact")
@@ -7560,19 +7680,19 @@ do
     eq("render.haste_secret_proc_bloodlust_updates.bloodlust_tooltip_owner",
         hasteEnv.GameTooltip:GetOwner(), heldOwner)
     check("render.haste_secret_proc_bloodlust_updates.bloodlust_tooltip_value",
-        hasteEnv.GameTooltip.lines[3].right:find("875 (~64.7%)", 1, true) ~= nil,
-        hasteEnv.GameTooltip.lines[3].right)
+        tooltipRowValue(hasteEnv.GameTooltip.lines[3]):find("875 (~64.7%)", 1, true) ~= nil,
+        tooltipRowValue(hasteEnv.GameTooltip.lines[3]))
     eq("render.haste_secret_proc_bloodlust_updates.bloodlust_target_pct_suppressed",
-        hasteEnv.GameTooltip.lines[2].right:find("%", 1, true), nil)
+        tooltipRowValue(hasteEnv.GameTooltip.lines[2]):find("%", 1, true), nil)
     eq("render.haste_secret_proc_bloodlust_updates.bloodlust_delta_pct_suppressed",
-        hasteEnv.GameTooltip.lines[4].right:find("%", 1, true), nil)
+        tooltipRowValue(hasteEnv.GameTooltip.lines[4]):find("%", 1, true), nil)
     eq("render.haste_secret_proc_bloodlust_updates.bloodlust_tooltip_not_proc",
-        hasteEnv.GameTooltip.lines[3].right:find("34.4%", 1, true), nil)
+        tooltipRowValue(hasteEnv.GameTooltip.lines[3]):find("34.4%", 1, true), nil)
     hasteTest.fireMainPanelTooltipOverlayForSmoke(1, "OnLeave")
     hasteTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     check("render.haste_secret_proc_bloodlust_updates.bloodlust_reentered_tooltip",
-        hasteEnv.GameTooltip.lines[3].right:find("875 (~64.7%)", 1, true) ~= nil,
-        hasteEnv.GameTooltip.lines[3].right)
+        tooltipRowValue(hasteEnv.GameTooltip.lines[3]):find("875 (~64.7%)", 1, true) ~= nil,
+        tooltipRowValue(hasteEnv.GameTooltip.lines[3]))
 
     phase = "clean"
     ok, err = pcall(ticker.scripts.OnUpdate, ticker, 999)
@@ -7581,8 +7701,8 @@ do
     check("render.haste_secret_proc_bloodlust_updates.expiry_hud",
         state.mainRatingText:find("22.0%", 1, true) ~= nil, state.mainRatingText)
     check("render.haste_secret_proc_bloodlust_updates.expiry_tooltip",
-        hasteEnv.GameTooltip.lines[3].right:find("875 (~22.0%)", 1, true) ~= nil,
-        hasteEnv.GameTooltip.lines[3].right)
+        tooltipRowValue(hasteEnv.GameTooltip.lines[3]):find("875 (~22.0%)", 1, true) ~= nil,
+        tooltipRowValue(hasteEnv.GameTooltip.lines[3]))
     clearPrints(hasteEnv)
     slash("render.haste_secret_proc_bloodlust_updates.debug_perf", hasteEnv, "debug perf")
     eq("render.haste_secret_proc_bloodlust_updates.zero_update_errors",
@@ -8439,8 +8559,8 @@ do
             versTest.renderMainPanelForSmoke("Vers:", expected, "", 1, nil, nil, { meta })
             versTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
             check(step .. ".tooltip_matches_display",
-                versEnv.GameTooltip.lines[4].right:find(expected, 1, true) ~= nil,
-                versEnv.GameTooltip.lines[4].right)
+                tooltipRowValue(versEnv.GameTooltip.lines[4]):find(expected, 1, true) ~= nil,
+                tooltipRowValue(versEnv.GameTooltip.lines[4]))
         end
 
         liveRating = 830
@@ -8782,11 +8902,11 @@ do
     versTest.renderMainPanelForSmoke("Vers:", "699", "", 1, nil, nil, { meta })
     versTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("render.versatility_cold_secret_percent_keeps_clean_rating.tooltip_target_raw",
-        versEnv.GameTooltip.lines[2].right, "1000")
+        tooltipRowValue(versEnv.GameTooltip.lines[2]), "1000")
     eq("render.versatility_cold_secret_percent_keeps_clean_rating.tooltip_current_raw",
-        versEnv.GameTooltip.lines[3].right, "699")
+        tooltipRowValue(versEnv.GameTooltip.lines[3]), "699")
     eq("render.versatility_cold_secret_percent_keeps_clean_rating.tooltip_missing_raw",
-        versEnv.GameTooltip.lines[4].right, "301")
+        tooltipRowValue(versEnv.GameTooltip.lines[4]), "301")
     eq("render.versatility_cold_secret_percent_keeps_clean_rating.tooltip_skips_partial_conversion",
         conversionCalls, 0)
 
@@ -8805,11 +8925,11 @@ do
     versTest.renderMainPanelForSmoke("Vers:", "700", "12.0%", 1, nil, nil, { cleanMeta })
     versTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("render.versatility_clean_percent_tooltip.target_projected_total",
-        versEnv.GameTooltip.lines[2].right, "1000 (~15.0%)")
+        tooltipRowValue(versEnv.GameTooltip.lines[2]), "1000 (~15.0%)")
     eq("render.versatility_clean_percent_tooltip.current_complete_total",
-        versEnv.GameTooltip.lines[3].right, "700 (~12.0%)")
+        tooltipRowValue(versEnv.GameTooltip.lines[3]), "700 (~12.0%)")
     eq("render.versatility_clean_percent_tooltip.missing_rating_delta",
-        versEnv.GameTooltip.lines[4].right, "300 (~+3.0%)")
+        tooltipRowValue(versEnv.GameTooltip.lines[4]), "300 (~+3.0%)")
     eq("render.versatility_clean_percent_tooltip.uses_rating_conversion", conversionCalls, 2)
 
     conversionMode = "missing-current"
@@ -8818,11 +8938,11 @@ do
     versTest.renderMainPanelForSmoke("Vers:", "700", "12.0%", 1, nil, nil, { cleanMeta })
     versTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     eq("render.versatility_partial_conversion_tooltip.target_raw",
-        versEnv.GameTooltip.lines[2].right, "1000")
+        tooltipRowValue(versEnv.GameTooltip.lines[2]), "1000")
     eq("render.versatility_partial_conversion_tooltip.current_complete_total",
-        versEnv.GameTooltip.lines[3].right, "700 (~12.0%)")
+        tooltipRowValue(versEnv.GameTooltip.lines[3]), "700 (~12.0%)")
     eq("render.versatility_partial_conversion_tooltip.missing_raw",
-        versEnv.GameTooltip.lines[4].right, "300")
+        tooltipRowValue(versEnv.GameTooltip.lines[4]), "300")
     eq("render.versatility_partial_conversion_tooltip.attempts_both_conversions", conversionCalls, 2)
 end
 
@@ -8872,8 +8992,8 @@ do
     eq("render.versatility_secret_rating_renders_without_meta.tooltip_lines",
         #versEnv.GameTooltip.lines, 6)
     check("render.versatility_secret_rating_renders_without_meta.tooltip_current",
-        versEnv.GameTooltip.lines[4].right:find("888 (~15%)", 1, true) ~= nil,
-        versEnv.GameTooltip.lines[4].right)
+        tooltipRowValue(versEnv.GameTooltip.lines[4]):find("888 (~15%)", 1, true) ~= nil,
+        tooltipRowValue(versEnv.GameTooltip.lines[4]))
 end
 
 do
@@ -9971,11 +10091,11 @@ do
     eq("config.dropdown_target_snapshot_available.normal.value",
         entries[2].value, "raidNormal")
     eq("config.dropdown_target_snapshot_available.normal.text",
-        entries[2].text, "Raid Normal (Normal)")
+        entries[2].text, "Raid Normal")
     eq("config.dropdown_target_snapshot_available.heroic.value",
         entries[3].value, "raidHeroic")
     eq("config.dropdown_target_snapshot_available.heroic.text",
-        entries[3].text, "Raid Heroic (Heroic)")
+        entries[3].text, "Raid Heroic")
     eq("config.dropdown_target_snapshot_available.checked",
         checkedDropdownValue("config.dropdown_target_snapshot_available", entries),
         "mythicPlusCurrent")
@@ -9987,7 +10107,7 @@ do
         availableTest.cachedTargetSnapshot(), "raidHeroic")
     eq("config.dropdown_target_snapshot_available.select_heroic.text",
         availableEnv.StatsProTargetSnapshotDropdown.dropdownText,
-        "Raid Heroic (Heroic)")
+        "Raid Heroic")
     selectDropdownValue("config.dropdown_target_snapshot_available.select_normal",
         availableEnv.StatsProTargetSnapshotDropdown, "raidNormal")
     eq("config.dropdown_target_snapshot_available.select_normal.db",
@@ -9996,7 +10116,7 @@ do
         availableTest.cachedTargetSnapshot(), "raidNormal")
     eq("config.dropdown_target_snapshot_available.select_normal.text",
         availableEnv.StatsProTargetSnapshotDropdown.dropdownText,
-        "Raid Normal (Normal)")
+        "Raid Normal")
 end
 
 do
@@ -10527,9 +10647,9 @@ do
         eq(prefix .. ".cache_no_proxy", critTest.archonComparisonCache().entries.crit.currentPct, nil)
         check(prefix .. ".hud_live_proxy", blocks[2].ratings[1]:find("7.0%", 1, true) ~= nil)
         critAddon.archonTargets.ShowTooltip(critEnv.UIParent, meta)
-        eq(prefix .. ".tooltip_target_rating_only", critEnv.GameTooltip.lines[2].right, "1000")
-        check(prefix .. ".tooltip_current_live", critEnv.GameTooltip.lines[3].right:find("7.0%", 1, true) ~= nil)
-        eq(prefix .. ".tooltip_delta_rating_only", critEnv.GameTooltip.lines[4].right, "188")
+        eq(prefix .. ".tooltip_target_rating_only", tooltipRowValue(critEnv.GameTooltip.lines[2]), "1000")
+        check(prefix .. ".tooltip_current_live", tooltipRowValue(critEnv.GameTooltip.lines[3]):find("7.0%", 1, true) ~= nil)
+        eq(prefix .. ".tooltip_delta_rating_only", tooltipRowValue(critEnv.GameTooltip.lines[4]), "188")
         -- A later zero proxy must not overwrite the earlier complete nonzero decision.
         proxyValue = 0
         activeSettings(critEnv).hideZeroOffensive = true
@@ -22990,10 +23110,10 @@ do
     eq("profiles.ops.archon_cache_preservation.tooltip_notice",
         env.GameTooltip.lines[2].left, "Live values; comparison unavailable")
     check("profiles.ops.archon_cache_preservation.tooltip_current_live",
-        env.GameTooltip.lines[4].right:find("760 (~24%)", 1, true) ~= nil,
-        env.GameTooltip.lines[4].right)
+        tooltipRowValue(env.GameTooltip.lines[4]):find("760 (~24%)", 1, true) ~= nil,
+        tooltipRowValue(env.GameTooltip.lines[4]))
     eq("profiles.ops.archon_cache_preservation.tooltip_no_stale_missing",
-        env.GameTooltip.lines[5].left, "Snapshot:")
+        tooltipRowLabel(env.GameTooltip.lines[5]), "Snapshot:")
 end
 
 local function assertMutationPopupCombatCancellation(case)

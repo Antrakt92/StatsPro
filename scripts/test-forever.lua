@@ -54,6 +54,12 @@ UnitArmor = function() return 20, 200, 50, 150 end
 Expect("Armor", 200, "clean")
 UnitAttackPower = function() return 100, 20, -30 end
 Expect("AttackPower", 90, "clean")
+UnitAttackPower = function() return 100, 0, -300 end
+Expect("AttackPower", 0, "clean")
+UnitRangedAttackPower = function() return 100, 0, -300 end
+Expect("RangedAttackPower", 0, "clean")
+UnitDefenseSkill = function() return 5, -10 end
+Expect("Defense", 0, "clean")
 for index = 1, 3 do
     UnitAttackPower = function()
         local values = { 100, 20, -30 }
@@ -147,6 +153,11 @@ for _, locale in ipairs({ "enUS", "enGB", "ruRU", "deDE", "esES", "esMX", "frFR"
         assert(type(F.Translate(label, locale)) == "string", locale .. " UI translation")
     end
     local previous = {}
+    for _, label in ipairs({ "Return to character settings...", "Make this character independent...", "Shared with %d characters", "Every existing and future character uses these settings." }) do
+        local translated = F.Translate(label, locale)
+        assert(type(translated) == "string", locale .. " character profile translation")
+        if label:find("%%d") then assert(translated:find("%%d"), locale .. " profile count placeholder") end
+    end
     for _, id in ipairs(F.presets.order) do
         local summary = F.Translate(F.presets.definitions[id].summary, locale)
         assert(type(summary) == "string" and not previous[summary], locale .. " distinct preset summaries")
@@ -166,6 +177,15 @@ assert(F.BuildDefaults("ROGUE").showAgility and not F.BuildDefaults("ROGUE").sho
 UnitClass = function() return "Mage", "MAGE", 8 end
 local loadedMage = Load()
 assert(loadedMage.defaults.showIntellect and not loadedMage.defaults.showStrength)
+local classReads = 0
+UnitClass = function()
+    classReads = classReads + 1
+    return "Fixture", classReads == 1 and "MAGE" or "HUNTER"
+end
+local singleClassSnapshot = Load()
+assert(singleClassSnapshot.defaults.showIntellect == singleClassSnapshot.presets.definitions.compact.values.showIntellect,
+    "defaults and presets must use the same class snapshot")
+assert(classReads == 1, "class should be resolved once")
 UnitClass = function() return "Unknown", secret end
 local restrictedClass = Load()
 assert(restrictedClass.defaults.showStamina and not restrictedClass.defaults.showIntellect)
@@ -193,6 +213,18 @@ end
 local first = F.BuildDefaults("MAGE")
 first.showIntellect = false
 assert(F.BuildDefaults("MAGE").showIntellect, "defaults must be detached")
+for _, class in ipairs({ "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }) do
+    local presets = F.BuildPresets(class)
+    local defaults = F.BuildDefaults(class)
+    for _, id in ipairs(presets.order) do
+        for _, row in pairs(catalogue) do
+            assert(type(presets.definitions[id].values[row.showKey]) == "boolean", class .. " complete preset")
+            assert(type(defaults[row.showKey]) == "boolean", class .. " complete defaults")
+        end
+    end
+    presets.definitions.compact.values.showIntellect = not defaults.showIntellect
+    assert(defaults.showIntellect ~= presets.definitions.compact.values.showIntellect, "separate default ownership")
+end
 local existingColors = { stamina = true, crit = true, haste = true, armor = true, dodge = true, parry = true, block = true, speed = true }
 for _, row in pairs(catalogue) do
     assert(row.colorKey ~= "mainStat", row.key .. " generic color")

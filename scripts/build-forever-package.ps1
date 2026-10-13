@@ -9,6 +9,7 @@ $OutputRoot = $buildOutputRoot
 if (-not $OutputRoot) { $OutputRoot = Join-Path $SourceRoot '.release/forever-beta' }
 $OutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
 $version = Get-ForeverSourceVersion $SourceRoot
+Assert-StatsProThirdPartyMaterials -Root $SourceRoot
 $map = Get-ForeverPackageMap
 Assert-ForeverToc ([System.IO.File]::ReadAllText((Join-Path $SourceRoot 'StatsPro_Forever.toc'))) $version
 $snapshots = @{}

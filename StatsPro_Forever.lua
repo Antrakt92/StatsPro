@@ -58,6 +58,15 @@ local function Hit(constant, modifier)
     end
 end
 
+local function Nonnegative(reader)
+    return function()
+        local value, state = reader()
+        if state ~= "clean" then return nil, "unknown" end
+        -- Match the client's effective AP and defense display after debuffs.
+        return math.max(0, value), "clean"
+    end
+end
+
 local function Scale(reader, factor)
     return function()
         local value, state = reader()
@@ -94,8 +103,8 @@ Row("offensive", "SpellHit", "Spell Hit", Hit("CR_HIT_SPELL", "GetSpellHitModifi
 Row("offensive", "MeleeHaste", "Melee Haste", Scalar("GetMeleeHaste", 1), "percent", "haste")
 Row("offensive", "RangedHaste", "Ranged Haste", Sum("GetRangedHaste", 2), "percent", "haste")
 Row("offensive", "SpellHaste", "Spell Haste", Scalar("UnitSpellHaste", 1, "player"), "percent", "haste")
-Row("offensive", "AttackPower", "Attack Power", Sum("UnitAttackPower", 3, "player"))
-Row("offensive", "RangedAttackPower", "Ranged Attack Power", Sum("UnitRangedAttackPower", 3, "player"))
+Row("offensive", "AttackPower", "Attack Power", Nonnegative(Sum("UnitAttackPower", 3, "player")))
+Row("offensive", "RangedAttackPower", "Ranged Attack Power", Nonnegative(Sum("UnitRangedAttackPower", 3, "player")))
 for school, name in ipairs({ "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" }) do
     Row("offensive", "SpellPower" .. name, name .. " Spell Power", Scalar("GetSpellBonusDamage", 1, school + 1))
 end
@@ -106,7 +115,7 @@ for index, name in ipairs({ "Mainhand", "Offhand", "Ranged" }) do
     Row("offensive", name .. "Expertise", name .. " Expertise", Scalar("GetExpertise", index), "percent")
 end
 Row("defensive", "Armor", "Armor", Scalar("UnitArmor", 2, "player"), "number", "armor")
-Row("defensive", "Defense", "Defense", Sum("UnitDefenseSkill", 2, "player"))
+Row("defensive", "Defense", "Defense", Nonnegative(Sum("UnitDefenseSkill", 2, "player")))
 Row("defensive", "Dodge", "Dodge", Scalar("GetDodgeChance", 1), "percent", "dodge")
 Row("defensive", "Parry", "Parry", Scalar("GetParryChance", 1), "percent", "parry")
 Row("defensive", "Block", "Block", Scalar("GetBlockChance", 1), "percent", "block")
@@ -193,8 +202,9 @@ function F.BuildDefaults(class)
     for key, value in pairs(values) do defaults[key] = value end
     return defaults
 end
-F.presets = F.BuildPresets(CurrentClass())
-F.defaults = F.BuildDefaults(CurrentClass())
+local initialClass = CurrentClass()
+F.presets = F.BuildPresets(initialClass)
+F.defaults = F.BuildDefaults(initialClass)
 
 -- An addon palette: the client source supplies no canonical school RGB table.
 F.colorDefaults = {
@@ -347,6 +357,23 @@ presetSummaries.enGB = presetSummaries.enUS
 presetSummaries.esMX = presetSummaries.esES
 for locale, translated in pairs(presetSummaries) do
     for index, id in ipairs(F.presets.order) do F.labels[locale][summaries[id]] = translated[index] end
+end
+local characterProfileLabels = {
+    enUS = { "Return to character settings...", "Make this character independent...", "Shared with %d characters", "Every existing and future character uses these settings." },
+    ruRU = { "Вернуться к настройкам персонажа...", "Сделать настройки персонажа отдельными...", "Общие для %d персонажей", "Эти настройки используются всеми нынешними и будущими персонажами." },
+    deDE = { "Zu Charaktereinstellungen zurückkehren...", "Diesen Charakter unabhängig machen...", "Mit %d Charakteren geteilt", "Alle bestehenden und zukünftigen Charaktere verwenden diese Einstellungen." },
+    esES = { "Volver a los ajustes del personaje...", "Usar ajustes independientes para este personaje...", "Compartido con %d personajes", "Todos los personajes actuales y futuros usan estos ajustes." },
+    frFR = { "Revenir aux paramètres du personnage...", "Rendre ce personnage indépendant...", "Partagé avec %d personnages", "Tous les personnages actuels et futurs utilisent ces paramètres." },
+    itIT = { "Torna alle impostazioni del personaggio...", "Rendi indipendente questo personaggio...", "Condiviso con %d personaggi", "Tutti i personaggi attuali e futuri usano queste impostazioni." },
+    ptBR = { "Voltar às configurações do personagem...", "Tornar este personagem independente...", "Compartilhado com %d personagens", "Todos os personagens atuais e futuros usam estas configurações." },
+    koKR = { "캐릭터 설정으로 돌아가기...", "이 캐릭터의 설정을 독립시키기...", "캐릭터 %d명과 공유", "현재와 향후 모든 캐릭터가 이 설정을 사용합니다." },
+    zhCN = { "返回角色设置...", "让此角色使用独立设置...", "与%d个角色共享", "所有现有和未来的角色都使用这些设置。" },
+    zhTW = { "返回角色設定...", "讓此角色使用獨立設定...", "與%d個角色共用", "所有現有和未來的角色都使用這些設定。" },
+}
+characterProfileLabels.enGB = characterProfileLabels.enUS
+characterProfileLabels.esMX = characterProfileLabels.esES
+for locale, labels in pairs(characterProfileLabels) do
+    for index, key in ipairs(characterProfileLabels.enUS) do F.labels[locale][key] = labels[index] end
 end
 local nativeLabelGlobals = {
     Strength = "SPELL_STAT1_NAME", Agility = "SPELL_STAT2_NAME", Stamina = "SPELL_STAT3_NAME",

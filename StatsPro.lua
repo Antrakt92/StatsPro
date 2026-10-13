@@ -15379,7 +15379,8 @@ function addon.profileUI.BuildOperationUI(manager)
     local useForButton = createAction(
         "StatsProProfileUseForButton", "Share these settings with...")
     local stopSharingButton = createAction(
-        "StatsProProfileStopSharingButton", "Make this specialization independent...")
+        "StatsProProfileStopSharingButton", addon.forever.enabled and "Make this character independent..."
+            or "Make this specialization independent...")
     local transferButton = createAction(
         "StatsProProfileTransferButton", "Export / import profile...", "primary")
     local advancedButton = createAction(
@@ -15568,7 +15569,7 @@ function addon.profileUI.BuildOperationUI(manager)
         local accountWide = model and model.accountWideEnabled == true
         local hasSavedAccountWide = model and model.accountWideProfileID ~= nil
         accountWideButton:SetText(L(accountWide
-            and "Return to specialization settings..."
+            and (addon.forever.enabled and "Return to character settings..." or "Return to specialization settings...")
             or (hasSavedAccountWide and "Use account-wide settings..."
                 or "Use these settings everywhere...")))
         local ordered = { accountWideButton }
@@ -15583,7 +15584,7 @@ function addon.profileUI.BuildOperationUI(manager)
         if ui.advancedShown then
             ordered[#ordered + 1] = resetButton
             ordered[#ordered + 1] = forgetButton
-            if not accountWide then ordered[#ordered + 1] = roleTemplateButton end
+            if not accountWide and not addon.forever.enabled then ordered[#ordered + 1] = roleTemplateButton end
             if hasSavedAccountWide and not accountWide then
                 ordered[#ordered + 1] = replaceAccountWideButton
                 ordered[#ordered + 1] = discardAccountWideButton
@@ -15642,7 +15643,8 @@ function addon.profileUI.BuildOperationUI(manager)
             message = ui.OperationErrorText(ui.operationStatusReason)
             colorRole = "danger"
         elseif model and model.accountWideEnabled then
-            message = L("Every existing and future specialization uses these settings.")
+            message = L(addon.forever.enabled and "Every existing and future character uses these settings."
+                                or "Every existing and future specialization uses these settings.")
         else
             message = L("Copy makes a separate snapshot. Sharing keeps future changes linked.")
         end
@@ -17064,7 +17066,7 @@ function addon.profileUI.BuildSettingsUI(owner)
                 detailProfile:Show()
             elseif isShared then
                 detailProfile:SetText(string.format(
-                    L("Shared with %d specializations"), selectedSpec.sharedCount))
+                    L(addon.forever.enabled and "Shared with %d characters" or "Shared with %d specializations"), selectedSpec.sharedCount))
                 addon.settingsDesign.SetRegionColor(detailProfile, "positive")
                 detailProfile:Show()
             else
@@ -17692,7 +17694,7 @@ function addon.settingsUI.BuildLayoutTab(self, context)
         AddSplitCheck("StatsProSplitItemLevelCheck",  "Item Level",   "splitItemLevel",  cd.padX + CONFIG_COL_OFFSET, rowY)
         cd.y = rowY - 26
         AddSplitCheck("StatsProSplitOffensiveCheck",  "Offensive",    "splitOffensive",  cd.padX,                       cd.y)
-        AddSplitCheck("StatsProSplitTertiaryCheck",   "Tertiary",     "splitTertiary",   cd.padX + CONFIG_COL_OFFSET, cd.y)
+        AddSplitCheck("StatsProSplitTertiaryCheck",   addon.forever.enabled and "Utility" or "Tertiary",     "splitTertiary",   cd.padX + CONFIG_COL_OFFSET, cd.y)
         CursorAdvance(cd, 22)
         AddSplitCheck("StatsProSplitDefensiveCheck",  "Defensive",    "splitDefensive",  cd.padX,                       cd.y)
         AddSplitCheck("StatsProSplitDurabilityCheck", "Durability",   "splitDurability", cd.padX + CONFIG_COL_OFFSET, cd.y)
@@ -18854,13 +18856,19 @@ function addon.settingsUI.BuildStatsTab(self, context)
                         utility = "hideZeroTertiary" })[group], cs.padX + CONFIG_COL_OFFSET, cs.y)
                 CursorAdvance(cs, 26)
             end
+            local colorColumns = { {}, {} }
             for index, definition in ipairs(rows) do
                 local column = (index - 1) % 2
-                CreateCheckboxColor(statsBody, "StatsProForever" .. definition.key,
+                local _, swatch, text = CreateCheckboxColor(statsBody, "StatsProForever" .. definition.key,
                     definition.label, definition.showKey, definition.colorKey,
                     cs.padX + column * CONFIG_COL_OFFSET, cs.y)
+                colorColumns[column + 1][#colorColumns[column + 1] + 1] = {
+                    text = text, swatch = swatch,
+                }
                 if column == 1 or index == #rows then CursorAdvance(cs, 26) end
             end
+            AlignSwatchColumn(colorColumns[1])
+            AlignSwatchColumn(colorColumns[2])
             CursorGap(cs, 6)
         end
     end
@@ -19169,6 +19177,19 @@ function addon.DebugStatCall(fn, fmt, ...)
 end
 
 function addon:PrintDebugLiveStats()
+    if addon.forever.enabled then
+        for _, group in ipairs({ "character", "offensive", "defensive", "utility" }) do
+            for _, definition in ipairs(addon.forever.rows[group]) do
+                local ok, value, state = pcall(definition.Read)
+                local text = not ok and "error" or state
+                if ok and state == "clean" and addon.IsCleanFiniteNumber(value) then
+                    text = string.format("%.2f", value)
+                end
+                PrintMsg("debug forever " .. definition.key .. "=" .. (text or "unknown"))
+            end
+        end
+        return
+    end
     PrintMsg(string.format("debug live: updateErrors=%d lastError=%s",
         cached.updateErrorCount or 0,
         cached.lastUpdateError or "<none>"))
@@ -19207,6 +19228,10 @@ function addon.archonTargets.CleanNumberCall(fn, ...)
 end
 
 function addon:PrintDebugRatingConversion()
+    if addon.forever.enabled then
+        self:PrintDebugLiveStats()
+        return
+    end
     local rows = {
         { "crit", CR_CRIT_MELEE },
         { "haste", CR_HASTE_MELEE },
@@ -20388,6 +20413,19 @@ function addon.selfTest.ProbeRepair()
 end
 
 function addon.selfTest.ProbeRow(key)
+    if addon.forever.enabled then
+        for _, group in ipairs({ "character", "offensive", "defensive", "utility" }) do
+            for _, definition in ipairs(addon.forever.rows[group]) do
+                if definition.key == key then
+                    local ok, value, state = pcall(definition.Read)
+                    if not ok then return 2, nil end
+                    if state == "secret" then return 1, nil end
+                    if state == "clean" and addon.IsCleanFiniteNumber(value) then return 0, value end
+                    return 2, nil
+                end
+            end
+        end
+    end
     if key == "crit" then
         local ok, value, state = pcall(addon.GetBestCritChance)
         if not ok then return 2, nil end
@@ -20503,6 +20541,27 @@ end
 
 function addon.selfTest.CaptureEnv()
     local out = { show = {} }
+    if addon.forever.enabled then
+        out.flavor = "forever"
+        addon.selfTest.rowKeys = {}
+        for _, group in ipairs({ "character", "offensive", "defensive", "utility" }) do
+            local enabled = group == "character" or cached[({ offensive = "showOffensive",
+                defensive = "showDefensive", utility = "showTertiary" })[group]]
+            for _, definition in ipairs(addon.forever.rows[group]) do
+                if enabled and cached[definition.showKey] then
+                    local key = definition.key
+                    addon.selfTest.rowKeys[#addon.selfTest.rowKeys + 1] = key
+                    addon.selfTest.rowShort[key] = key
+                    addon.selfTest.rowShowKey[key] = definition.showKey
+                end
+            end
+        end
+        for _, key in ipairs({ "durability", "repair" }) do
+            if cached[addon.selfTest.rowShowKey[key]] then
+                addon.selfTest.rowKeys[#addon.selfTest.rowKeys + 1] = key
+            end
+        end
+    end
     out.release = CURRENT_RELEASE
     local buildFn = _G.GetBuildInfo
     if type(buildFn) == "function" then
@@ -20518,7 +20577,7 @@ function addon.selfTest.CaptureEnv()
         end
     end
     if out.build == nil then out.build = "unknown" end
-    if type(addon.archonTargets) == "table" then
+    if not addon.forever.enabled and type(addon.archonTargets) == "table" then
         if type(addon.archonTargets.GetCurrentClassToken) == "function" then
             local ok, token = pcall(addon.archonTargets.GetCurrentClassToken)
             if ok then out.class = addon.selfTest.CleanString(token) end
@@ -20532,8 +20591,12 @@ function addon.selfTest.CaptureEnv()
             if ok then out.archon = addon.selfTest.CleanString(archon) end
         end
     end
-    if out.archon == nil then
+    if not addon.forever.enabled and out.archon == nil then
         out.archon = addon.selfTest.CleanString(cached.targetSnapshot)
+    end
+    if addon.forever.enabled then
+        out.class = SafeGetPlayerClassToken()
+        out.spec = "character"
     end
     local zoneFn = _G.GetZoneText
     if type(zoneFn) == "function" then
@@ -20882,7 +20945,11 @@ function addon.selfTest.BuildPayload()
     add("class", token(env.class, "unknown"))
     add("spec", token(env.spec, "unknown"))
     add("zone", token(env.zone, "unknown"))
-    add("archon", token(env.archon, "unknown"))
+    if addon.forever.enabled then
+        add("flavor", token(env.flavor, "forever"))
+    else
+        add("archon", token(env.archon, "unknown"))
+    end
     if addon.IsCleanFiniteNumber(env.interval) then
         add("interval", string.format("%.2f", env.interval))
     else

@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param([string]$ArchivePath, [string]$SourceRoot = (Join-Path $PSScriptRoot '..'), [switch]$LibraryOnly, [switch]$SelfTest)
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'saved-variables-contract.ps1')
+. (Join-Path $PSScriptRoot 'third-party-contract.ps1')
 function Get-ForeverPackageMap {
     [ordered]@{
         'StatsPro.toc' = 'StatsPro_Forever.toc'
@@ -19,6 +21,14 @@ function Get-ForeverPackageMap {
 }
 function Assert-ForeverToc {
     param([string]$Text, [string]$Version)
+    Assert-StatsProSavedVariablesContract -TocText $Text -Description 'Forever TOC'
+    foreach ($directive in @(@{ Name = 'Flavor'; Value = 'forever' }, @{ Name = 'Channel'; Value = 'beta' })) {
+        $prefix = '^##[ \t]+X-StatsPro-' + $directive.Name + '[ \t]*:'
+        if ([regex]::Matches($Text, '(?m)' + $prefix).Count -ne 1 -or
+            [regex]::Matches($Text, '(?m)' + $prefix + '[ \t]*' + $directive.Value + '[ \t]*\r?$').Count -ne 1) {
+            throw "Forever TOC requires exactly one X-StatsPro-$($directive.Name): $($directive.Value) directive"
+        }
+    }
     if ([regex]::Matches($Text, '(?m)^## Interface:\s*16001\s*$').Count -ne 1 -or
         [regex]::Matches($Text, '(?m)^## Interface:').Count -ne 1) { throw 'Forever Interface must be exactly 16001' }
     $versions = [regex]::Matches($Text, '(?m)^## Version:\s*([^\r\n]+)')
@@ -39,6 +49,7 @@ function Get-ForeverSourceVersion {
 }
 function Assert-ForeverArchive {
     param([string]$Path, [string]$Root)
+    Assert-StatsProThirdPartyMaterials -Root $Root
     $version = Get-ForeverSourceVersion $Root
     $map = Get-ForeverPackageMap
     $zip = [System.IO.Compression.ZipFile]::OpenRead([System.IO.Path]::GetFullPath($Path))
@@ -46,7 +57,7 @@ function Assert-ForeverArchive {
         $expected = @($map.Keys | ForEach-Object { "StatsPro/$_" })
         $names = @($zip.Entries.FullName)
         if ($names.Count -ne $expected.Count -or @($names | Select-Object -Unique).Count -ne $names.Count -or
-            (Compare-Object $names $expected)) { throw 'Forever archive contains missing, duplicate or extra entries' }
+            (Compare-Object $names $expected -CaseSensitive)) { throw 'Forever archive contains missing, duplicate or extra entries' }
         foreach ($entry in $zip.Entries) {
             $relative = $entry.FullName.Substring('StatsPro/'.Length)
             $sourceBytes = [System.IO.File]::ReadAllBytes((Join-Path $Root $map[$relative]))
@@ -74,9 +85,15 @@ if ($SelfTest) {
             New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
             [System.IO.File]::WriteAllText($path, 'fixture')
         }
+        $realRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+        $materialPaths = @('LICENSE','THIRD-PARTY-NOTICES.md') + @(Get-StatsProThirdPartyContract | ForEach-Object {
+            $_.Path
+            if ($_.LicenseFile) { $_.LicenseFile }
+        })
+        foreach ($name in $materialPaths) { Copy-Item -LiteralPath (Join-Path $realRoot $name) -Destination (Join-Path $fixture $name) }
         [System.IO.File]::WriteAllText((Join-Path $fixture 'StatsPro.toc'), "## Version: 1.17.21`n")
         [System.IO.File]::WriteAllText((Join-Path $fixture 'StatsPro.lua'), 'local version = "@project-version@"')
-        $toc = "## Interface: 16001`n## Version: 1.17.21`nlibs\LibStub\LibStub.lua`nlibs\CallbackHandler-1.0\CallbackHandler-1.0.lua`nlibs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua`nStatsPro_Forever.lua`nStatsPro.lua`n"
+        $toc = "## Interface: 16001`n## Version: 1.17.21`n## SavedVariables: StatsProDB, StatsProSelfTest`n## X-StatsPro-Flavor: forever`n## X-StatsPro-Channel: beta`nlibs\LibStub\LibStub.lua`nlibs\CallbackHandler-1.0\CallbackHandler-1.0.lua`nlibs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua`nStatsPro_Forever.lua`nStatsPro.lua`n"
         [System.IO.File]::WriteAllText((Join-Path $fixture 'StatsPro_Forever.toc'), $toc)
         & (Join-Path $PSScriptRoot 'build-forever-package.ps1') -SourceRoot $fixture -OutputRoot (Join-Path $fixture 'first')
         & (Join-Path $PSScriptRoot 'build-forever-package.ps1') -SourceRoot $fixture -OutputRoot (Join-Path $fixture 'second')
@@ -94,11 +111,30 @@ if ($SelfTest) {
             if (-not $rejected) { throw 'Invalid Forever version accepted' }
         }
         [System.IO.File]::WriteAllText((Join-Path $fixture 'StatsPro_Forever.toc'), $toc)
-        foreach ($badToc in @($toc.Replace('16001','120100'), $toc.Replace('1.17.21','1.17.22'), $toc.Replace('StatsPro_Forever.lua','StatsPro_ArchonTargets.lua'), $toc.Replace("StatsPro_Forever.lua`nStatsPro.lua", "StatsPro.lua`nStatsPro_Forever.lua"))) {
+        foreach ($badToc in @($toc.Replace('16001','120100'), $toc.Replace('1.17.21','1.17.22'), $toc.Replace('StatsPro_Forever.lua','StatsPro_ArchonTargets.lua'), $toc.Replace("StatsPro_Forever.lua`nStatsPro.lua", "StatsPro.lua`nStatsPro_Forever.lua"), $toc.Replace('StatsProDB, StatsProSelfTest','UnrelatedAddonDB'), $toc.Replace('## X-StatsPro-Flavor: forever',''), $toc.Replace('## X-StatsPro-Flavor: forever',"## X-StatsPro-Flavor: forever`n## X-StatsPro-Flavor: forever"), $toc.Replace('## X-StatsPro-Channel: beta',''))) {
             $rejected = $false
             try { Assert-ForeverToc $badToc '1.17.21' } catch { $rejected = $true }
             if (-not $rejected) { throw 'Invalid Forever metadata was accepted' }
         }
+        $vendoredPath = Join-Path $fixture 'libs/LibStub/LibStub.lua'
+        $vendoredBytes = [System.IO.File]::ReadAllBytes($vendoredPath)
+        [System.IO.File]::AppendAllText($vendoredPath, "`n-- unexpected vendored change")
+        try {
+            $rejected = $false
+            try { Assert-ForeverArchive $first $fixture } catch {
+                if ($_.Exception.Message -notmatch 'expected frozen upstream SHA256') { throw }
+                $rejected = $true
+            }
+            if (-not $rejected) { throw 'Archive checker accepted modified vendored library' }
+            $rejected = $false
+            $rejectedBuild = Join-Path $fixture 'rejected-vendored-build'
+            try { & (Join-Path $PSScriptRoot 'build-forever-package.ps1') -SourceRoot $fixture -OutputRoot $rejectedBuild } catch {
+                if ($_.Exception.Message -notmatch 'expected frozen upstream SHA256') { throw }
+                $rejected = $true
+            }
+            if (-not $rejected -or (Test-Path -LiteralPath $rejectedBuild)) { throw 'Modified dependency was not rejected before build writes' }
+        }
+        finally { [System.IO.File]::WriteAllBytes($vendoredPath, $vendoredBytes) }
         $zip = [System.IO.Compression.ZipFile]::Open($first, [System.IO.Compression.ZipArchiveMode]::Update)
         try { $zip.CreateEntry('StatsPro/StatsPro_ArchonTargets.lua') | Out-Null } finally { $zip.Dispose() }
         $rejected = $false

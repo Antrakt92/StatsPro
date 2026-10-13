@@ -264,6 +264,12 @@ Some compound values may show `?` when their inputs are restricted in combat.
 Attributes and stat families have separate editable colors. Applying a stat setup
 keeps your appearance and custom colors.
 
+Profiles and sharing use characters in this preview. Role-template assignment is
+hidden until automatic talent context is supported. For combat-stat problems, run
+`/ss selftest` outside combat, then fight a creature and leave combat to collect
+the report. `/ss debug live` shows the Forever stat sources, with restricted
+values identified rather than printed.
+
 The preview requires native-client testing before a stable release. Classic Era
 and other Classic branches remain outside this preview.
 

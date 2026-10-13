@@ -55,6 +55,8 @@ For user-visible changes, also test in the Retail client after `/reload`.
 Include screenshots for layout, Settings, font, color, or localization changes.
 
 The local gate also checks Forever stat sources and focused HUD regressions.
+It exercises every preset and the complete optional catalogue across all nine
+Forever classes, including profile transfers and forced-language row alignment.
 Build the local preview with `scripts/build-forever-package.ps1`; validate it with
 `scripts/test-forever-package.ps1 -ArchivePath <path>`. This builder does not publish.
 Changes to Forever need login, combat, character stats, Settings, profile and reload

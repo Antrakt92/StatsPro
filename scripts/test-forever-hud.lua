@@ -187,4 +187,40 @@ check(smallWelcome:GetHeight() * smallWelcome:GetScale() <= smallEnv.UIParent:Ge
     "five-card welcome fits a short viewport without clipping")
 check(smallWelcome:GetWidth() * smallWelcome:GetScale() <= smallEnv.UIParent:GetWidth() - 32,
     "five-card welcome fits a narrow viewport without clipping")
+-- Forever diagnostics must inspect its actual catalog, never Retail Mastery.
+local spellState, spellValue = addon.selfTest.ProbeRow("SpellCrit")
+check(spellState == 0 and spellValue == 5, "selftest probes Forever spell crit")
+settings.showSpellCrit, settings.showOffensive, settings.showSpirit = true, true, false
+test.cacheSettings()
+addon.selfTest.CaptureEnv()
+local observedKeys = {}
+for _, key in ipairs(addon.selfTest.rowKeys) do observedKeys[key] = true end
+check(observedKeys.SpellCrit and not observedKeys.Spirit and not observedKeys.mastery,
+    "selftest catalogs only selected Forever rows")
+addon.selfTest.TakeSample(false, false)
+addon.selfTest.BuildReport()
+local diagnostic = addon.selfTest.BuildPayload()
+check(diagnostic:find("flavor=forever", 1, true) and not diagnostic:find("archon=", 1, true),
+    "copied diagnostic includes flavor and excludes Archon")
+restricted = true
+local directState, directValue = addon.selfTest.ProbeRow("MeleeCrit")
+check(directState == 1 and directValue == nil, "selftest excludes restricted scalar numbers")
+local compositeState, compositeValue = addon.selfTest.ProbeRow("AttackPower")
+check(compositeState == 2 and compositeValue == nil, "selftest excludes restricted composite numbers")
+env.__prints = {}
+addon:PrintDebugLiveStats()
+local debugOutput = table.concat(env.__prints, "\n")
+check(debugOutput:find("SpellCrit=5.00", 1, true) and debugOutput:find("MeleeCrit=secret", 1, true),
+    "debug live samples Forever rows safely")
+check(not debugOutput:find("-123457", 1, true) and not debugOutput:find("mastery", 1, true),
+    "debug live excludes raw restricted numbers and Retail-only rows")
+restricted = false
+check(addon.selfTest.env.archon == nil, "Forever selftest excludes Archon context")
+check(addon.selfTest.env.flavor == "forever", "Forever selftest identifies client flavor")
+check(env.StatsProSplitTertiaryCheckText:GetText() == "Utility", "split routing names Forever utility")
+check(env.StatsProForeverStrengthText:GetWidth() == env.StatsProForeverStaminaText:GetWidth(),
+    "Forever character color swatches align in their column")
+addon.profileUI.advancedShown = true
+addon.profileUI.LayoutActionButtons(addon.profileUI.currentModel)
+check(not addon.profileUI.actionButtons.roleTemplate:IsShown(), "unsupported role templates absent in Forever")
 print("StatsPro Forever HUD integration: PASS (" .. count .. " checks)")

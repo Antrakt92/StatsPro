@@ -35,6 +35,11 @@ local env, addon, test = fixtures.loadStatsPro("enUS", {
 env.__fireEvent("PLAYER_ENTERING_WORLD")
 check(addon.forever.enabled, "verified beta adapter enabled")
 check(env.StatsProFrame:IsShown(), "level-one HUD visible without Retail specialization")
+local initialSettings = test.profileState().settings
+for _, name in ipairs({ "Strength", "Agility", "Stamina", "Intellect", "Spirit" }) do
+    initialSettings["show" .. name] = true
+end
+test.cacheSettings()
 local blocks = test.buildRenderBlocks()
 check(#blocks[1].labels == 5, "all five attributes shown")
 check(string.find(table.concat(blocks[1].labels, "\n"), "Spirit", 1, true), "Spirit in shared HUD")
@@ -44,9 +49,15 @@ check(addon.archonTargets.GetSnapshot("MAGE", "frost") == nil, "no Archon lookup
 local settings = test.profileState().settings
 local export = test.profileTransfer.serialize("Forever", settings, { stats = true, layout = true, appearance = true })
 check(type(export) == "string" and export:sub(1, 5) == "SPF1:", "profile export includes flavor")
-check(test.profileTransfer.parse(export) ~= nil, "own flavor profile roundtrip")
+local parsedExport = test.profileTransfer.parse(export)
+check(parsedExport ~= nil, "own flavor profile roundtrip")
+for key, color in pairs(addon.forever.colorDefaults or {}) do
+    check(settings.colors[key] ~= nil, "Forever color seeded " .. key)
+    check(parsedExport.values["colors." .. key .. ".r"] == settings.colors[key].r,
+        "Forever color included in appearance transfer " .. key)
+end
 check(test.profileTransfer.parse(export:gsub("^SPF1:", "SPP1:")) == nil, "Retail profile rejected")
-local retailEnv, _, retailTest = fixtures.loadStatsPro("enUS")
+local retailEnv, retailAddon, retailTest = fixtures.loadStatsPro("enUS")
 check(retailTest.profileTransfer.parse(export) == nil, "Forever profile rejected by Retail")
 check(retailEnv ~= nil, "Retail remains loadable")
 for _, id in ipairs(test.hudPresets.order()) do
@@ -112,6 +123,10 @@ local gearEnv, _, gearTest = fixtures.loadStatsPro("enUS", {
 gearEnv.__fireEvent("PLAYER_ENTERING_WORLD")
 check(visited[18], "Forever ranged-slot durability is inspected")
 check(gearTest.durabilityState().durabilityValue == 50, "ranged-slot durability contributes to HUD")
+local customColorKey = next(addon.forever.colorDefaults or {})
+if customColorKey then
+    settings.colors[customColorKey] = { r = 0.12, g = 0.34, b = 0.56 }
+end
 local root = env.StatsProDB
 local reloadEnv, _, reloadTest = fixtures.loadStatsPro("enUS", {
     forever = true, statsProDB = root,
@@ -121,4 +136,55 @@ local reloadEnv, _, reloadTest = fixtures.loadStatsPro("enUS", {
 reloadEnv.__fireEvent("PLAYER_ENTERING_WORLD")
 check(reloadTest.profileState().settings.showSpirit == settings.showSpirit, "Forever row selections survive reload")
 check(#reloadTest.buildRenderBlocks()[1].labels > 0, "HUD survives reload")
+if customColorKey then
+    local restored = reloadTest.profileState().settings.colors[customColorKey]
+    check(restored.r == 0.12 and restored.g == 0.34 and restored.b == 0.56,
+        "custom Forever stat color survives reload")
+end
+-- Five cards must fit the standalone welcome and the expanded Settings body.
+local welcome = addon.hudPresets.BuildWelcome()
+local welcomeUI = welcome.statsProView
+check(welcomeUI ~= nil, "welcome has testable layout")
+for _, warning in ipairs({ false, true }) do
+    welcomeUI.refreshLayout(true, warning)
+    for _, button in ipairs({ welcomeUI.cancel, welcomeUI.apply }) do
+        local _, _, _, _, top = button:GetPoint()
+        check(-top + button:GetHeight() + 16 <= welcome:GetHeight(),
+            "five-card welcome footer fits including warning " .. tostring(warning))
+    end
+end
+local lastCard = welcomeUI.buttons[test.hudPresets.order()[5]]
+local _, _, lastShortTop, _, lastTop = lastCard:GetPoint()
+lastTop = lastTop or lastShortTop
+check(-lastTop + lastCard:GetHeight() < -welcomeUI.warningY,
+    "fifth welcome card above note and footer")
+local statsTab
+for _, candidate in ipairs(env.__frames) do
+    if candidate.quickSetupView then statsTab = candidate; break end
+end
+check(statsTab ~= nil, "Settings quick setup available")
+local settingsUI = statsTab.quickSetupView
+settingsUI.expanded = true
+settingsUI.refreshLayout(false, false)
+local fifthSettingsCard = settingsUI.buttons[test.hudPresets.order()[5]]
+local _, _, fifthShortTop, _, fifthTop = fifthSettingsCard:GetPoint()
+fifthTop = fifthTop or fifthShortTop
+check(-fifthTop + fifthSettingsCard:GetHeight() < settingsUI.choiceBody:GetHeight(),
+    "fifth Settings card fits expanded choice body")
+local _, _, _, _, lowerTop = statsTab.statsBody:GetPoint()
+check(-lowerTop + statsTab.statsBody:GetHeight() <= statsTab:GetHeight(),
+    "expanded Settings content height includes all five cards and stat controls")
+check(retailTest.hudPresets.order()[4] == nil, "Retail keeps three cards")
+local retailWelcome = retailAddon.hudPresets.BuildWelcome()
+retailWelcome.statsProView.refreshLayout(true, true)
+check(retailWelcome:GetHeight() == 438, "Retail three-card welcome retains its original height")
+local smallEnv, smallAddon = fixtures.loadStatsPro("enUS", {
+    forever = true, uiParentWidth = 440, uiParentHeight = 400,
+})
+local smallWelcome = smallAddon.hudPresets.BuildWelcome()
+smallWelcome.statsProView.refreshLayout(true, true)
+check(smallWelcome:GetHeight() * smallWelcome:GetScale() <= smallEnv.UIParent:GetHeight() - 32,
+    "five-card welcome fits a short viewport without clipping")
+check(smallWelcome:GetWidth() * smallWelcome:GetScale() <= smallEnv.UIParent:GetWidth() - 32,
+    "five-card welcome fits a narrow viewport without clipping")
 print("StatsPro Forever HUD integration: PASS (" .. count .. " checks)")

@@ -146,6 +146,63 @@ for _, locale in ipairs({ "enUS", "enGB", "ruRU", "deDE", "esES", "esMX", "frFR"
     for _, label in ipairs({ "Compact", "Physical", "Caster", "Healer", "Tank", "Character", "Utility", "Show Utility Stats", "Select individual stats for your build.", "Character stats and gear HUD for WoW Forever. Open Settings to choose a layout and visible stats." }) do
         assert(type(F.Translate(label, locale)) == "string", locale .. " UI translation")
     end
+    local previous = {}
+    for _, id in ipairs(F.presets.order) do
+        local summary = F.Translate(F.presets.definitions[id].summary, locale)
+        assert(type(summary) == "string" and not previous[summary], locale .. " distinct preset summaries")
+        previous[summary] = true
+    end
+end
+local mage = F.BuildDefaults("MAGE")
+assert(mage.showIntellect and mage.showSpirit and mage.showSpellCrit)
+assert(not mage.showStrength and not mage.showAgility and not mage.showStamina)
+assert(mage.showSpellPowerFire and mage.showSpellPowerFrost and mage.showSpellPowerArcane)
+assert(not mage.showSpellPowerHoly and not mage.showSpellPowerNature and not mage.showSpellPowerShadow)
+local hunter = F.BuildPresets("HUNTER").definitions.physical.values
+assert(hunter.showAgility and hunter.showRangedAttackPower and hunter.showRangedCrit and hunter.showRangedHit and hunter.showRangedHaste)
+assert(not hunter.showStrength and not hunter.showAttackPower and not hunter.showMeleeCrit and not hunter.showMeleeHit)
+assert(F.BuildDefaults("WARRIOR").showStrength and not F.BuildDefaults("WARRIOR").showIntellect)
+assert(F.BuildDefaults("ROGUE").showAgility and not F.BuildDefaults("ROGUE").showStrength)
+UnitClass = function() return "Mage", "MAGE", 8 end
+local loadedMage = Load()
+assert(loadedMage.defaults.showIntellect and not loadedMage.defaults.showStrength)
+UnitClass = function() return "Unknown", secret end
+local restrictedClass = Load()
+assert(restrictedClass.defaults.showStamina and not restrictedClass.defaults.showIntellect)
+UnitClass = nil
+for _, class in ipairs({ "DRUID", "SHAMAN", "PALADIN" }) do
+    local compact = F.BuildDefaults(class)
+    assert(compact.showIntellect and not compact.showSpellCrit and not compact.showMeleeCrit)
+    local presets = F.BuildPresets(class)
+    assert(presets.definitions.physical.values.showMeleeCrit)
+    assert(presets.definitions.caster.values.showSpellCrit)
+    assert(presets.definitions.healer.values.showHealingPower)
+    assert(presets.definitions.tank.values.showArmor)
+end
+local spellSchools = {
+    MAGE = { Fire = true, Frost = true, Arcane = true }, WARLOCK = { Fire = true, Shadow = true },
+    PRIEST = { Holy = true, Shadow = true }, DRUID = { Nature = true, Arcane = true },
+    SHAMAN = { Fire = true, Frost = true, Nature = true }, PALADIN = { Holy = true },
+}
+for class, schools in pairs(spellSchools) do
+    local caster = F.BuildPresets(class).definitions.caster.values
+    for _, school in ipairs({ "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" }) do
+        assert(caster["showSpellPower" .. school] == (schools[school] == true), class .. " school relevance")
+    end
+end
+local first = F.BuildDefaults("MAGE")
+first.showIntellect = false
+assert(F.BuildDefaults("MAGE").showIntellect, "defaults must be detached")
+local existingColors = { stamina = true, crit = true, haste = true, armor = true, dodge = true, parry = true, block = true, speed = true }
+for _, row in pairs(catalogue) do
+    assert(row.colorKey ~= "mainStat", row.key .. " generic color")
+    assert(F.colorDefaults[row.colorKey] or existingColors[row.colorKey], row.key .. " palette")
+end
+assert(catalogue.Strength.colorKey ~= catalogue.Intellect.colorKey)
+assert(catalogue.SpellPowerFire.colorKey ~= catalogue.SpellPowerFrost.colorKey)
+assert(catalogue.FireResistance.colorKey ~= catalogue.SpellPowerFire.colorKey)
+for _, color in pairs(F.colorDefaults) do
+    for _, channel in ipairs({ "r", "g", "b" }) do assert(color[channel] >= 0 and color[channel] <= 1) end
 end
 GetLocale = function() return "ruRU" end
 SPELL_STAT1_NAME = "Native strength fixture"

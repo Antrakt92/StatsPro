@@ -256,10 +256,13 @@ Forever support is under development. Its separate beta build uses the same HUD,
 appearance and profile controls, with a Forever-specific stat list and no Archon
 references. Stable downloads above continue to target Retail.
 
-The preview starts with the five primary attributes and offers physical, caster,
-healer and tank setups. Individual rows can be selected in Settings. Profiles are
+The preview starts with class-relevant stats and offers compact, physical, caster,
+healer and tank setups. Caster setups use that class's spell schools; Hunters use
+ranged stats in the physical setup. Individual rows can be selected in Settings. Profiles are
 assigned per character; automatic talent-based switching is not available yet.
 Some compound values may show `?` when their inputs are restricted in combat.
+Attributes and stat families have separate editable colors. Applying a stat setup
+keeps your appearance and custom colors.
 
 The preview requires native-client testing before a stable release. Classic Era
 and other Classic branches remain outside this preview.

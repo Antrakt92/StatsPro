@@ -125,28 +125,106 @@ F.defaults.showItemLevel = false
 F.defaults.showMastery = false
 F.defaults.showVersatility = false
 F.defaults.showStagger = false
-F.defaults.showStamina = true
-F.defaults.showStrength = true
-F.defaults.showAgility = true
-F.defaults.showIntellect = true
-F.defaults.showSpirit = true
-
-F.presets.order = { "compact", "physical", "caster", "healer", "tank" }
-F.presets.definitions = {}
-local selections = {
-    compact = { "Strength", "Agility", "Stamina", "Intellect", "Spirit" },
-    physical = { "Strength", "Agility", "Stamina", "AttackPower", "MeleeCrit", "MeleeHit", "MeleeHaste", "MainhandExpertise" },
-    caster = { "Intellect", "Spirit", "Stamina", "SpellCrit", "SpellHit", "SpellHaste", "SpellPowerHoly", "SpellPowerFire", "SpellPowerNature", "SpellPowerFrost", "SpellPowerShadow", "SpellPowerArcane" },
-    healer = { "Intellect", "Spirit", "Stamina", "HealingPower", "SpellCrit", "SpellHaste", "ManaRegenMP5", "CastingManaRegenMP5" },
-    tank = { "Strength", "Agility", "Stamina", "Armor", "Defense", "Dodge", "Parry", "Block", "BlockValue", "MeleeHit", "MainhandExpertise" },
+-- These are display choices, not stat weights or inferred talent roles.
+local classSchools = {
+    MAGE = { "Fire", "Frost", "Arcane" }, WARLOCK = { "Fire", "Shadow" },
+    PRIEST = { "Holy", "Shadow" }, DRUID = { "Nature", "Arcane" },
+    SHAMAN = { "Fire", "Frost", "Nature" }, PALADIN = { "Holy" },
 }
-for _, id in ipairs(F.presets.order) do
-    local values = { showOffensive = true, showDefensive = id == "tank", showTertiary = id == "healer", showMainStat = false, showItemLevel = false, showMastery = false, showVersatility = false, showStagger = false }
-    for _, rows in pairs(F.rows) do
-        for _, row in ipairs(rows) do values[row.showKey] = false end
+local compactSelections = {
+    MAGE = { "Intellect", "Spirit", "SpellCrit" }, WARLOCK = { "Intellect", "Spirit", "SpellCrit" },
+    PRIEST = { "Intellect", "Spirit", "SpellCrit" },
+    WARRIOR = { "Strength", "Stamina", "AttackPower", "MeleeCrit" },
+    ROGUE = { "Agility", "Stamina", "AttackPower", "MeleeCrit" },
+    HUNTER = { "Agility", "Stamina", "RangedAttackPower", "RangedCrit" },
+    DRUID = { "Agility", "Intellect", "Stamina" },
+    SHAMAN = { "Strength", "Intellect", "Stamina" }, PALADIN = { "Strength", "Intellect", "Stamina" },
+}
+local summaries = {
+    compact = "Class essentials; choose a role preset for a hybrid build.",
+    physical = "Attack power, crit, hit and haste; ranged stats for Hunters.",
+    caster = "Spell crit, hit, haste and your class's spell schools.",
+    healer = "Healing power, mana regeneration, spell crit and haste.",
+    tank = "Armor, defense and avoidance, plus melee hit and expertise.",
+}
+local function CurrentClass()
+    local fn = _G.UnitClass
+    if type(fn) ~= "function" then return nil end
+    local ok, _, token = pcall(fn, "player")
+    if not ok or type(issecretvalue) ~= "function" then return nil end
+    local checked, restricted = pcall(issecretvalue, token)
+    if not checked or restricted ~= false or type(token) ~= "string" then return nil end
+    return token
+end
+function F.BuildPresets(class)
+    local presets = { order = { "compact", "physical", "caster", "healer", "tank" }, definitions = {} }
+    local hunter = class == "HUNTER"
+    local agile = hunter or class == "ROGUE" or class == "DRUID"
+    local selections = {
+        compact = compactSelections[class] or { "Stamina" },
+        physical = { agile and "Agility" or "Strength", "Stamina", hunter and "RangedAttackPower" or "AttackPower",
+            hunter and "RangedCrit" or "MeleeCrit", hunter and "RangedHit" or "MeleeHit",
+            hunter and "RangedHaste" or "MeleeHaste", hunter and "RangedExpertise" or "MainhandExpertise" },
+        caster = { "Intellect", "Spirit", "SpellCrit", "SpellHit", "SpellHaste" },
+        healer = { "Intellect", "Spirit", "HealingPower", "SpellCrit", "SpellHaste", "ManaRegenMP5", "CastingManaRegenMP5" },
+        tank = { class == "DRUID" and "Agility" or "Strength", "Stamina", "Armor", "Defense", "Dodge", "MeleeHit", "MainhandExpertise" },
+    }
+    if class ~= "DRUID" then selections.tank[#selections.tank + 1] = "Parry" end
+    if class == "WARRIOR" or class == "PALADIN" or class == "SHAMAN" then
+        selections.tank[#selections.tank + 1] = "Block"
+        selections.tank[#selections.tank + 1] = "BlockValue"
     end
-    for _, key in ipairs(selections[id]) do values["show" .. key] = true end
-    F.presets.definitions[id] = { label = id:sub(1, 1):upper() .. id:sub(2), summary = "Select individual stats for your build.", values = values }
+    for _, id in ipairs(presets.order) do
+        local values = { showOffensive = true, showDefensive = id == "tank", showTertiary = id == "healer", showMainStat = false, showItemLevel = false, showMastery = false, showVersatility = false, showStagger = false }
+        for _, rows in pairs(F.rows) do
+            for _, row in ipairs(rows) do values[row.showKey] = false end
+        end
+        for _, key in ipairs(selections[id]) do values["show" .. key] = true end
+        if id == "caster" or (id == "compact" and (class == "MAGE" or class == "WARLOCK" or class == "PRIEST")) then
+            for _, school in ipairs(classSchools[class] or {}) do values["showSpellPower" .. school] = true end
+        end
+        presets.definitions[id] = { label = id:sub(1, 1):upper() .. id:sub(2), summary = summaries[id], values = values }
+    end
+    return presets
+end
+function F.BuildDefaults(class)
+    local values = F.BuildPresets(class).definitions.compact.values
+    local defaults = {}
+    for key, value in pairs(values) do defaults[key] = value end
+    return defaults
+end
+F.presets = F.BuildPresets(CurrentClass())
+F.defaults = F.BuildDefaults(CurrentClass())
+
+-- An addon palette: the client source supplies no canonical school RGB table.
+F.colorDefaults = {
+    foreverStrength = { r = 1, g = 0.35, b = 0.3 }, foreverAgility = { r = 0.35, g = 1, b = 0.45 },
+    foreverIntellect = { r = 0.35, g = 0.7, b = 1 }, foreverSpirit = { r = 0.8, g = 0.55, b = 1 },
+    foreverAttackPower = { r = 1, g = 0.55, b = 0.2 }, foreverHit = { r = 1, g = 0.85, b = 0.35 },
+    foreverExpertise = { r = 1, g = 0.5, b = 0.75 }, foreverRegen = { r = 0.35, g = 0.9, b = 0.85 },
+    foreverHealing = { r = 0.35, g = 1, b = 0.6 }, foreverSpellPenetration = { r = 0.7, g = 0.6, b = 1 },
+    foreverArmorPenetration = { r = 0.95, g = 0.7, b = 0.45 }, foreverDefense = { r = 0.65, g = 0.8, b = 1 },
+    foreverHoly = { r = 1, g = 0.9, b = 0.55 }, foreverFire = { r = 1, g = 0.4, b = 0.2 },
+    foreverNature = { r = 0.4, g = 0.95, b = 0.35 }, foreverFrost = { r = 0.45, g = 0.85, b = 1 },
+    foreverShadow = { r = 0.75, g = 0.45, b = 0.95 }, foreverArcane = { r = 0.95, g = 0.55, b = 1 },
+}
+for _, school in ipairs({ "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" }) do
+    local rgb = F.colorDefaults["forever" .. school]
+    F.colorDefaults["foreverResistance" .. school] = { r = rgb.r, g = rgb.g, b = rgb.b }
+end
+for _, rows in pairs(F.rows) do
+    for _, row in ipairs(rows) do
+        local key = row.key
+        if key == "Strength" or key == "Agility" or key == "Intellect" or key == "Spirit" then row.colorKey = "forever" .. key
+        elseif key:match("Hit$") then row.colorKey = "foreverHit"
+        elseif key:match("Expertise$") then row.colorKey = "foreverExpertise"
+        elseif key:match("AttackPower$") then row.colorKey = "foreverAttackPower"
+        elseif key:match("ManaRegen") then row.colorKey = "foreverRegen"
+        elseif key == "HealingPower" then row.colorKey = "foreverHealing"
+        elseif key == "Defense" or key == "ArmorPenetration" or key == "SpellPenetration" then row.colorKey = "forever" .. key
+        elseif key:match("^SpellPower") then row.colorKey = "forever" .. key:sub(11)
+        elseif key:match("Resistance$") then row.colorKey = "foreverResistance" .. key:gsub("Resistance$", "") end
+    end
 end
 
 function F.ReadContext()
@@ -252,6 +330,23 @@ for locale, labels in pairs(utilityLabels) do
     F.labels[locale]["Utility"] = labels[1]
     F.labels[locale]["Show Utility Stats"] = labels[2]
     F.labels[locale]["Character stats and gear HUD for WoW Forever. Open Settings to choose a layout and visible stats."] = labels[3]
+end
+local presetSummaries = {
+    enUS = { "Class essentials; choose a role preset for a hybrid build.", "Attack power, crit, hit and haste; ranged stats for Hunters.", "Spell crit, hit, haste and your class's spell schools.", "Healing power, mana regeneration, spell crit and haste.", "Armor, defense and avoidance, plus melee hit and expertise." },
+    ruRU = { "Основное для класса; для гибридного билда выбери пресет роли.", "Сила атаки, крит, меткость и скорость; у охотников — дальний бой.", "Крит, меткость, скорость и школы магии твоего класса.", "Сила исцеления, восстановление маны, крит и скорость заклинаний.", "Броня, защита и уклонение от атак, а также меткость и мастерство." },
+    deDE = { "Grundwerte deiner Klasse; wähle für Hybrid-Builds eine Rollenvorlage.", "Angriffskraft, Krit, Trefferchance und Tempo; Fernkampfwerte für Jäger.", "Zauberkrit, Trefferchance, Tempo und die Zauberschulen deiner Klasse.", "Heilungskraft, Manaregeneration, Zauberkrit und Tempo.", "Rüstung, Verteidigung und Vermeidung sowie Nahkampftrefferchance und Waffenkunde." },
+    esES = { "Estadísticas básicas de tu clase; elige un rol para una configuración híbrida.", "Poder de ataque, crítico, golpe y celeridad; valores a distancia para cazadores.", "Crítico, golpe, celeridad y escuelas de magia de tu clase.", "Poder de sanación, regeneración de maná, crítico y celeridad de hechizos.", "Armadura, defensa y evasión, junto con golpe cuerpo a cuerpo y pericia." },
+    frFR = { "L’essentiel de votre classe ; choisissez un rôle pour une configuration hybride.", "Puissance d’attaque, critique, toucher et hâte ; valeurs à distance pour les chasseurs.", "Critique, toucher, hâte des sorts et écoles de magie de votre classe.", "Puissance des soins, régénération du mana, critique et hâte des sorts.", "Armure, défense et évitement, avec toucher en mêlée et expertise." },
+    itIT = { "Statistiche essenziali della classe; scegli un ruolo per una configurazione ibrida.", "Potenza d’attacco, critico, impatto e celerità; statistiche a distanza per i Cacciatori.", "Critico, impatto, celerità e scuole magiche della tua classe.", "Potenza di cura, rigenerazione del mana, critico e celerità degli incantesimi.", "Armatura, difesa ed elusione, più impatto in mischia e perizia." },
+    ptBR = { "Atributos essenciais da classe; escolha um papel para uma configuração híbrida.", "Poder de ataque, crítico, acerto e aceleração; atributos à distância para Caçadores.", "Crítico, acerto, aceleração e escolas de magia da sua classe.", "Poder de cura, regeneração de mana, crítico e aceleração de feitiços.", "Armadura, defesa e evasão, além de acerto corpo a corpo e aptidão." },
+    koKR = { "직업의 기본 능력치입니다. 혼합 빌드는 역할별 구성을 선택하세요.", "전투력, 치명타, 적중, 가속입니다. 사냥꾼은 원거리 능력치를 사용합니다.", "주문 치명타, 적중, 가속과 직업별 마법 계열입니다.", "치유력, 마나 회복, 주문 치명타와 가속입니다.", "방어도, 방어 숙련, 공격 회피와 근접 적중 및 숙련입니다." },
+    zhCN = { "职业基础属性；混合流派请选择角色预设。", "攻击强度、爆击、命中与急速；猎人使用远程属性。", "法术爆击、命中、急速与当前职业的法术系别。", "治疗强度、法力回复、法术爆击与急速。", "护甲、防御与免伤属性，以及近战命中和精准。" },
+    zhTW = { "職業基礎屬性；混合流派請選擇角色預設。", "攻擊強度、致命一擊、命中與加速；獵人使用遠程屬性。", "法術致命一擊、命中、加速與目前職業的法術系別。", "治療能量、法力恢復、法術致命一擊與加速。", "護甲、防禦與免傷屬性，以及近戰命中和熟練。" },
+}
+presetSummaries.enGB = presetSummaries.enUS
+presetSummaries.esMX = presetSummaries.esES
+for locale, translated in pairs(presetSummaries) do
+    for index, id in ipairs(F.presets.order) do F.labels[locale][summaries[id]] = translated[index] end
 end
 local nativeLabelGlobals = {
     Strength = "SPELL_STAT1_NAME", Agility = "SPELL_STAT2_NAME", Stamina = "SPELL_STAT3_NAME",

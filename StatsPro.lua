@@ -516,6 +516,9 @@ local defaults = {
 
 if addon.forever.enabled then
     for key, value in pairs(addon.forever.defaults) do defaults[key] = value end
+    for key, color in pairs(addon.forever.colorDefaults or {}) do
+        defaults.colors[key] = CopyTable(color)
+    end
 end
 
 --[[ ============================================================
@@ -4956,6 +4959,21 @@ do
                 color = colorName,
                 channel = channel,
             }
+        end
+    end
+    if addon.forever.enabled then
+        local colorKeys = {}
+        for colorName in pairs(addon.forever.colorDefaults or {}) do
+            colorKeys[#colorKeys + 1] = colorName
+        end
+        table.sort(colorKeys)
+        for _, colorName in ipairs(colorKeys) do
+            for _, channel in ipairs({ "r", "g", "b" }) do
+                transfer.fields[#transfer.fields + 1] = {
+                    id = "colors." .. colorName .. "." .. channel,
+                    section = "appearance", kind = "color", color = colorName, channel = channel,
+                }
+            end
         end
     end
     for _, field in ipairs(transfer.fields) do
@@ -14637,6 +14655,17 @@ function addon.hudPresets.BuildWelcome()
     ui.apply = apply
     ui.refreshLayout = function(_, warningVisible)
         local actionY = ui.warningY - (warningVisible and 42 or 0)
+        -- Card count drives the content footprint. Keep both actions and their
+        -- bottom padding inside the window, including the sharing warning.
+        frame:SetHeight(math.max(438, math.abs(actionY) + apply:GetHeight() + 22))
+        if addon.forever.enabled then
+            local width, height = UIParent:GetWidth(), UIParent:GetHeight()
+            if SAFE_NUM.IsCleanFiniteNumber(width) and SAFE_NUM.IsCleanFiniteNumber(height)
+                and width > 32 and height > 32 then
+                frame:SetScale(math.min(1, (width - 32) / frame:GetWidth(),
+                    (height - 32) / frame:GetHeight()))
+            end
+        end
         cancel:ClearAllPoints()
         cancel:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -220, actionY)
         apply:ClearAllPoints()

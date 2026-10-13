@@ -1495,11 +1495,11 @@ do
     eq("tooltip.compact.global_owner_untouched", compactEnv.GameTooltip:GetOwner(), nil)
     eq("tooltip.compact.global_lines_untouched", #compactEnv.GameTooltip.lines, 0)
     local point = tooltip.points[1]
-    eq("tooltip.compact.above_hud.point", point[1], "BOTTOM")
-    eq("tooltip.compact.above_hud.parent", point[2], tooltip:GetOwner():GetParent())
-    eq("tooltip.compact.above_hud.relative", point[3], "TOP")
-    eq("tooltip.compact.above_hud.x", point[4], 0)
-    eq("tooltip.compact.above_hud.y", point[5], 8)
+    eq("tooltip.compact.right_of_hud.point", point[1], "TOPLEFT")
+    eq("tooltip.compact.right_of_hud.parent", point[2], tooltip:GetOwner():GetParent())
+    eq("tooltip.compact.right_of_hud.relative", point[3], "TOPRIGHT")
+    eq("tooltip.compact.right_of_hud.x", point[4], 8)
+    eq("tooltip.compact.right_of_hud.y", point[5], 0)
     assertOwnedTooltipLayout("tooltip.compact.geometry", tooltip)
 end
 
@@ -7646,7 +7646,7 @@ do
     hoverTest.firePanelTooltipOverlayForSmoke("side", ownedIndices[1], "OnLeave")
     eq("render.target_hover_routing.private_delayed_leave_stays_shown", archonTooltip(hoverEnv):IsShown(), true)
     eq("render.target_hover_routing.private_delayed_leave_owner", archonTooltip(hoverEnv):GetOwner(), secondOwned)
-    eq("render.target_hover_routing.private_above_split_panel",
+    eq("render.target_hover_routing.private_beside_split_panel",
         archonTooltip(hoverEnv).points[1][2], secondOwned:GetParent())
     hoverTest.firePanelTooltipOverlayForSmoke("side", ownedIndices[2], "OnLeave")
     eq("render.target_hover_routing.private_current_leave_hides", archonTooltip(hoverEnv):IsShown(), false)

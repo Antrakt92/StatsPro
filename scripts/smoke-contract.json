@@ -5,12 +5,12 @@
     {
       "name": "core-panel-persistence",
       "assertions": 2898,
-      "fingerprint": "0d4f2c01"
+      "fingerprint": "23c0542d"
     },
     {
       "name": "runtime-rendering",
       "assertions": 2153,
-      "fingerprint": "5eb181f1"
+      "fingerprint": "0fff96f2"
     },
     {
       "name": "fonts",

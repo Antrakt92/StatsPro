@@ -9751,7 +9751,7 @@ function addon.archonTargets.GetTooltip()
         self:ClearLines()
         local panel = owner and owner:GetParent() or nil
         self:ClearAllPoints()
-        self:SetPoint("BOTTOM", panel or owner or UIParent, "TOP", 0, 8)
+        self:SetPoint("TOPLEFT", panel or owner or UIParent, "TOPRIGHT", 8, 0)
     end
     function tooltip:AddLine(text, r, g, b, wrapText)
         self.lines[#self.lines + 1] = { left = text, color = { r, g, b }, wrapText = wrapText, isDouble = false }

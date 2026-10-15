@@ -121,3 +121,10 @@ Git ref and release attestation name the same commit. Use
 Run `scripts/check-release-ancestry.ps1 -Tag vX.Y.Z` before pushing a release
 tag. Published tags and assets must never be rewritten. Failed release tags that
 never published receive no CHANGELOG heading.
+
+Forever-only maintenance uses lightweight `forever-vX.Y.Z` tags and the separate
+Forever beta release workflow. Its version comes from `StatsPro_Forever.toc`,
+and its cumulative notes live in [`CHANGELOG-FOREVER.md`](CHANGELOG-FOREVER.md).
+These GitHub prereleases contain only the Forever archive and leave Retail's
+latest release unchanged. Failed or uncertain uploads recover under a new beta
+version; never rerun an upload or move its tag.

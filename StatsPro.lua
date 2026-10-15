@@ -17428,7 +17428,7 @@ function addon.settingsUI.BuildShell(self)
     self.settingsDesign.ApplyTextRole(titleMetadata, "metadata")
     titleMetadata:SetPoint("LEFT", title, "RIGHT", 8, 0)
     PushLocalizedLabel(function()
-        titleMetadata:SetText(L("Settings") .. "  v" .. ADDON_VERSION)
+        titleMetadata:SetText(L(addon.forever.enabled and "Forever Beta" or "Settings") .. "  v" .. ADDON_VERSION)
     end)
 
     local closeX = CreateFrame("Button", nil, configFrame, "UIPanelCloseButton")
@@ -18851,15 +18851,23 @@ function addon.settingsUI.BuildStatsTab(self, context)
     else
         for _, group in ipairs({ "character", "offensive", "defensive", "utility" }) do
             local rows = self.forever.rows[group]
+            local subControls = {}
+            local master = ({ offensive = "showOffensive", defensive = "showDefensive",
+                utility = "showTertiary" })[group]
+            local masterLabel = ({ offensive = "Show Offensive Stats", defensive = "Show Defensive Stats",
+                utility = "Show Utility Stats" })[group]
+            local function RefreshDependencies()
+                if not master then return end
+                for _, control in ipairs(subControls) do
+                    SetCheckboxEnabled(control, GetBoolDB(master), masterLabel)
+                end
+            end
             CursorSection(cs, ({ character = "Character", offensive = "Offensive Stats",
                 defensive = "Defensive Stats", utility = "Utility" })[group])
             if group ~= "character" then
-                local master = ({ offensive = "showOffensive", defensive = "showDefensive",
-                    utility = "showTertiary" })[group]
                 CreateCheckbox(statsBody, "StatsProForever" .. group .. "Master",
-                    ({ offensive = "Show Offensive Stats", defensive = "Show Defensive Stats",
-                        utility = "Show Utility Stats" })[group], master, cs.padX, cs.y)
-                CreateCheckbox(statsBody, "StatsProForever" .. group .. "HideZero",
+                    masterLabel, master, cs.padX, cs.y, RefreshDependencies)
+                subControls[#subControls + 1] = CreateCheckbox(statsBody, "StatsProForever" .. group .. "HideZero",
                     "Hide Zero Values", ({ offensive = "hideZeroOffensive", defensive = "hideZeroDefensive",
                         utility = "hideZeroTertiary" })[group], cs.padX + CONFIG_COL_OFFSET, cs.y)
                 CursorAdvance(cs, 26)
@@ -18870,7 +18878,11 @@ function addon.settingsUI.BuildStatsTab(self, context)
                 local control, swatch, text = CreateCheckboxColor(statsBody, "StatsProForever" .. definition.key,
                     definition.label, definition.showKey, definition.colorKey,
                     cs.padX + column * CONFIG_COL_OFFSET, cs.y)
-                self.settingsDesign.AttachTooltip(control, function() return L(definition.label) end)
+                self.settingsDesign.AttachTooltip(control, function()
+                    return self.settingsDesign.DisabledControlTooltip(control) or L(definition.label),
+                        L("A ? means this stat is unavailable or cannot be calculated safely.")
+                end)
+                subControls[#subControls + 1] = control
                 colorColumns[column + 1][#colorColumns[column + 1] + 1] = {
                     text = text, swatch = swatch,
                 }
@@ -18878,6 +18890,8 @@ function addon.settingsUI.BuildStatsTab(self, context)
             end
             AlignSwatchColumn(colorColumns[1])
             AlignSwatchColumn(colorColumns[2])
+            RefreshDependencies()
+            PushRefresher(RefreshDependencies)
             CursorGap(cs, 6)
         end
     end
@@ -20247,7 +20261,10 @@ launcher.name = "StatsPro"
 
 local launcherTitle = launcher:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
 launcherTitle:SetPoint("TOPLEFT", 16, -16)
-launcherTitle:SetText("StatsPro v" .. ADDON_VERSION)
+PushPersistentLocalizedLabel(function()
+    launcherTitle:SetText("StatsPro" .. (addon.forever.enabled and (" — " .. L("Forever Beta")) or "")
+        .. " v" .. ADDON_VERSION)
+end)
 
 local launcherDesc = launcher:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 -- Dual-anchor instead of SetWidth: launcher is canvas-resized by Settings panel,
@@ -20266,6 +20283,7 @@ PushPersistentLocalizedLabel(function()
 end)
 
 if addon.__test then
+    addon.__test.launcherTitleText = function() return launcherTitle:GetText() end
     addon.__test.launcherDescriptionText = function() return launcherDesc:GetText() end
 end
 

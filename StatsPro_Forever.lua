@@ -394,6 +394,24 @@ for locale, labels in pairs(utilityLabels) do
     F.labels[locale]["Show Utility Stats"] = labels[2]
     F.labels[locale]["Character stats and gear HUD for WoW Forever. Open Settings to choose a layout and visible stats."] = labels[3]
 end
+local statusLabels = {
+    enUS = { "Forever Beta", "A ? means this stat is unavailable or cannot be calculated safely." },
+    ruRU = { "Forever — бета", "Знак ? означает, что характеристика недоступна или её нельзя безопасно вычислить." },
+    deDE = { "Forever-Beta", "Ein ? bedeutet, dass dieser Wert nicht verfügbar ist oder nicht sicher berechnet werden kann." },
+    esES = { "Forever beta", "Un ? indica que esta estadística no está disponible o no se puede calcular de forma segura." },
+    frFR = { "Forever bêta", "Un ? indique que cette caractéristique est indisponible ou ne peut pas être calculée de façon sûre." },
+    itIT = { "Forever beta", "Un ? indica che questa statistica non è disponibile o non può essere calcolata in modo sicuro." },
+    ptBR = { "Forever beta", "Um ? indica que este atributo está indisponível ou não pode ser calculado com segurança." },
+    koKR = { "Forever 베타", "?는 이 능력치를 확인할 수 없거나 안전하게 계산할 수 없다는 뜻입니다." },
+    zhCN = { "Forever 测试版", "? 表示此属性不可用或无法安全计算。" },
+    zhTW = { "Forever 測試版", "? 表示此屬性無法取得或無法安全計算。" },
+}
+statusLabels.enGB = statusLabels.enUS
+statusLabels.esMX = statusLabels.esES
+for locale, labels in pairs(statusLabels) do
+    F.labels[locale]["Forever Beta"] = labels[1]
+    F.labels[locale]["A ? means this stat is unavailable or cannot be calculated safely."] = labels[2]
+end
 local presetSummaries = {
     enUS = { "Class essentials; choose a role preset for a hybrid build.", "Attack power, crit, hit and haste; ranged stats for Hunters.", "Spell crit, hit, haste and your class's spell schools.", "Healing power, mana regeneration, spell crit and haste.", "Armor, defense and avoidance, plus melee hit and expertise." },
     ruRU = { "Основное для класса; для гибридного билда выбери пресет роли.", "Сила атаки, крит, меткость и скорость; у охотников — дальний бой.", "Крит, меткость, скорость и школы магии твоего класса.", "Сила исцеления, восстановление маны, крит и скорость заклинаний.", "Броня, защита и уклонение от атак, а также меткость и мастерство." },

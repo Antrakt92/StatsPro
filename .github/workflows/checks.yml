@@ -52,6 +52,10 @@ jobs:
           .\scripts\check-lua.ps1 -SelfTest
           .\scripts\check-release-version.ps1 -SelfTest
           .\scripts\check-release-ancestry.ps1 -SelfTest
+          .\scripts\test-forever-release-contract.ps1
+          .\scripts\manage-github-release.ps1 -ForeverBeta -SelfTest
+          .\scripts\test-forever-package.ps1 -SelfTest
+          .\scripts\test-forever-workflow.ps1
           lua5.1 .\scripts\check-archon-targets.lua --self-test
 
       - name: Check process helpers on Windows PowerShell 5.1

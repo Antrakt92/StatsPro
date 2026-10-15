@@ -9,11 +9,11 @@ function Get-ForeverPackageMap {
         'StatsPro.lua' = 'StatsPro.lua'
         'StatsPro_Forever.lua' = 'StatsPro_Forever.lua'
         'LICENSE' = 'LICENSE'
-        'CHANGELOG.md' = 'CHANGELOG.md'
+        'CHANGELOG.md' = 'CHANGELOG-FOREVER.md'
         'THIRD-PARTY-NOTICES.md' = 'THIRD-PARTY-NOTICES.md'
         'LICENSES/CallbackHandler-1.0-BSD-2-Clause.txt' = 'LICENSES/CallbackHandler-1.0-BSD-2-Clause.txt'
         'LICENSES/LibSharedMedia-3.0-LGPL-2.1.txt' = 'LICENSES/LibSharedMedia-3.0-LGPL-2.1.txt'
-        'textures/logo.png' = 'textures/logo.png'
+        'textures/forever-logo.png' = 'textures/forever-logo.png'
         'libs/LibStub/LibStub.lua' = 'libs/LibStub/LibStub.lua'
         'libs/CallbackHandler-1.0/CallbackHandler-1.0.lua' = 'libs/CallbackHandler-1.0/CallbackHandler-1.0.lua'
         'libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua' = 'libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua'
@@ -33,6 +33,10 @@ function Assert-ForeverToc {
         [regex]::Matches($Text, '(?m)^## Interface:').Count -ne 1) { throw 'Forever Interface must be exactly 16001' }
     $versions = [regex]::Matches($Text, '(?m)^## Version:\s*([^\r\n]+)')
     if ($versions.Count -ne 1 -or $versions[0].Groups[1].Value.Trim() -cne $Version) { throw 'Forever version differs from expected flavor version' }
+    $icons = [regex]::Matches($Text, '(?m)^##[ \t]+IconTexture:[ \t]*([^\r\n]*)')
+    if ($icons.Count -ne 1 -or $icons[0].Groups[1].Value.Trim() -cne 'Interface\AddOns\StatsPro\textures\forever-logo.png') {
+        throw 'Forever TOC must reference its single packaged Forever icon'
+    }
     if ($Text -match '(?i)Archon|X-WoWI-ID') { throw 'Forever beta TOC contains unsupported publication or Archon metadata' }
     $marketplaceKeys = @('X-Curse-Project-ID', 'X-Wago-ID')
     $marketplaceIds = @('1525100', 'EGPemEN1')
@@ -105,7 +109,8 @@ if ($SelfTest) {
         foreach ($name in $materialPaths) { Copy-Item -LiteralPath (Join-Path $realRoot $name) -Destination (Join-Path $fixture $name) }
         [System.IO.File]::WriteAllText((Join-Path $fixture 'StatsPro.toc'), "## Version: 1.17.21`n")
         [System.IO.File]::WriteAllText((Join-Path $fixture 'StatsPro.lua'), 'local version = "@project-version@"')
-        $toc = "## Interface: 16001`n## Version: 1.17.21`n## SavedVariables: StatsProDB, StatsProSelfTest`n## X-StatsPro-Flavor: forever`n## X-StatsPro-Channel: beta`nlibs\LibStub\LibStub.lua`nlibs\CallbackHandler-1.0\CallbackHandler-1.0.lua`nlibs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua`nStatsPro_Forever.lua`nStatsPro.lua`n"
+        $iconDirective = '## IconTexture: Interface\AddOns\StatsPro\textures\forever-logo.png'
+        $toc = "## Interface: 16001`n## Version: 1.17.21`n$iconDirective`n## SavedVariables: StatsProDB, StatsProSelfTest`n## X-StatsPro-Flavor: forever`n## X-StatsPro-Channel: beta`nlibs\LibStub\LibStub.lua`nlibs\CallbackHandler-1.0\CallbackHandler-1.0.lua`nlibs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua`nStatsPro_Forever.lua`nStatsPro.lua`n"
         [System.IO.File]::WriteAllText((Join-Path $fixture 'StatsPro_Forever.toc'), $toc)
         $publishedToc = $toc + "## X-Curse-Project-ID: 1525100`n## X-Wago-ID: EGPemEN1`n"
         Assert-ForeverToc $publishedToc '1.17.21'
@@ -135,6 +140,15 @@ if ($SelfTest) {
             if (-not $rejected) { throw 'Invalid Forever version accepted' }
         }
         [System.IO.File]::WriteAllText((Join-Path $fixture 'StatsPro_Forever.toc'), $toc)
+        foreach ($badIconToc in @(
+            $toc.Replace($iconDirective, ''),
+            $toc.Replace('textures\forever-logo.png', 'textures\logo.png'),
+            ($toc + "$iconDirective`n")
+        )) {
+            $rejected = $false
+            try { Assert-ForeverToc $badIconToc '1.17.21' } catch { $rejected = $true }
+            if (-not $rejected) { throw 'Missing, wrong or duplicate Forever icon accepted' }
+        }
         foreach ($badToc in @($toc.Replace('16001','120100'), $toc.Replace('1.17.21','1.17.22'), $toc.Replace('StatsPro_Forever.lua','StatsPro_ArchonTargets.lua'), $toc.Replace("StatsPro_Forever.lua`nStatsPro.lua", "StatsPro.lua`nStatsPro_Forever.lua"), $toc.Replace('StatsProDB, StatsProSelfTest','UnrelatedAddonDB'), $toc.Replace('## X-StatsPro-Flavor: forever',''), $toc.Replace('## X-StatsPro-Flavor: forever',"## X-StatsPro-Flavor: forever`n## X-StatsPro-Flavor: forever"), $toc.Replace('## X-StatsPro-Channel: beta',''))) {
             $rejected = $false
             try { Assert-ForeverToc $badToc '1.17.21' } catch { $rejected = $true }

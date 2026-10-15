@@ -8,6 +8,9 @@ ignore:
   # Forever is built separately with its own client metadata and stat sources.
   - StatsPro_Forever.toc
   - StatsPro_Forever.lua
+  - CHANGELOG-FOREVER.md
+  - textures/forever-logo.png
+  - textures/forever-logo.svg
   - .github
   - .gitattributes
   - .gitignore

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 128 128">
+  <title>StatsPro Forever icon</title>
+  <rect x="2" y="2" width="124" height="124" rx="24" fill="#15252b" stroke="#3e6a66" stroke-width="2"/>
+  <path d="M56 30H38Q29 30 29 39Q29 48 38 48H47Q56 48 56 57Q56 66 47 66H29M73 66V30H89Q99 30 99 40Q99 50 89 50H73" fill="none" stroke="#a3ddd0" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="29" y="90" width="18" height="17" rx="3" fill="#477b73"/>
+  <rect x="55" y="81" width="18" height="26" rx="3" fill="#659d90"/>
+  <rect x="81" y="72" width="18" height="35" rx="3" fill="#8fc6b4"/>
+</svg>

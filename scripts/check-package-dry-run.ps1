@@ -52,7 +52,7 @@ function Resolve-StatsProPackagerProjectVersion {
     param([string]$Value, [string]$Root)
 
     if ([string]::IsNullOrWhiteSpace($Value)) {
-        $output = @(& git -C $Root describe --tags --abbrev=7 '--exclude=*[Aa][Ll][Pp][Hh][Aa]*' 2>&1)
+        $output = @(& git -C $Root describe --tags --abbrev=7 --match 'v[0-9]*' '--exclude=*[Aa][Ll][Pp][Hh][Aa]*' 2>&1)
         if ($LASTEXITCODE -ne 0) {
             throw "Could not derive the pinned Packager project version from git: $($output -join ' ')"
         }
@@ -538,6 +538,27 @@ steps:
     $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-package-dry-run-test-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $tempDir | Out-Null
     try {
+        $versionRepo = Join-Path $tempDir 'version-source'
+        New-Item -ItemType Directory -Path $versionRepo | Out-Null
+        function Invoke-VersionFixtureGit {
+            param([string[]]$Arguments)
+            $output = @(& git -C $versionRepo @Arguments 2>&1)
+            if ($LASTEXITCODE -ne 0) { throw "Version fixture Git failed: $($output -join ' ')" }
+        }
+        Invoke-VersionFixtureGit @('init')
+        Invoke-VersionFixtureGit @('-c','user.name=Fixture','-c','user.email=fixture@example.invalid','-c','core.hooksPath=NUL','commit','--allow-empty','-m','Retail release')
+        Invoke-VersionFixtureGit @('tag','v1.2.3')
+        Invoke-VersionFixtureGit @('-c','user.name=Fixture','-c','user.email=fixture@example.invalid','-c','core.hooksPath=NUL','commit','--allow-empty','-m','Forever beta update')
+        Invoke-VersionFixtureGit @('tag','forever-v1.2.4')
+        $betaHeadVersion = Resolve-StatsProPackagerProjectVersion -Value '' -Root $versionRepo
+        if ($betaHeadVersion -cnotmatch '\Av1\.2\.3-1-g[0-9a-f]{7}\z') {
+            throw "Forever tag displaced the Retail Packager version: $betaHeadVersion"
+        }
+        Invoke-VersionFixtureGit @('tag','v1.2.4')
+        if ((Resolve-StatsProPackagerProjectVersion -Value '' -Root $versionRepo) -cne 'v1.2.4') {
+            throw 'Retail tag at HEAD was not selected alongside a Forever beta tag'
+        }
+
         $invalidSource = Join-Path $tempDir "invalid-source"
         New-Item -ItemType Directory -Path $invalidSource | Out-Null
         Set-Content -LiteralPath (Join-Path $invalidSource "StatsPro.toc") -Value "## Version: 01.2.3" -Encoding UTF8

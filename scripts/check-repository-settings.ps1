@@ -151,7 +151,7 @@ function Assert-MinimalHistoryRuleset {
         [object[]]$Rulesets,
         [string]$Name,
         [string]$Target,
-        [string]$IncludedRef
+        [string[]]$IncludedRefs
     )
 
     $matches = @($Rulesets | Where-Object { [string]$_.name -eq $Name })
@@ -178,7 +178,7 @@ function Assert-MinimalHistoryRuleset {
     Assert-ExactStringSet `
         -Description "Ruleset '$Name' included refs" `
         -Actual @($ruleset.conditions.ref_name.include | ForEach-Object { [string]$_ }) `
-        -Expected @($IncludedRef)
+        -Expected @($IncludedRefs)
     Assert-ExactStringSet `
         -Description "Ruleset '$Name' excluded refs" `
         -Actual @($ruleset.conditions.ref_name.exclude | ForEach-Object { [string]$_ }) `
@@ -195,7 +195,7 @@ function Assert-CredentialEnvironment {
         [object[]]$Policies,
         [object[]]$Secrets,
         [string]$ExpectedName,
-        [string]$ExpectedPolicyName,
+        [string[]]$ExpectedPolicyNames,
         [string]$ExpectedPolicyType,
         [string[]]$ExpectedSecretNames,
         [AllowEmptyString()][string]$ExpectedReviewerLogin = ""
@@ -219,11 +219,14 @@ function Assert-CredentialEnvironment {
         throw "Credential environment '$ExpectedName' must use custom deployment branch policies only."
     }
 
-    if ($Policies.Count -ne 1 -or
-        [string]$Policies[0].name -ne $ExpectedPolicyName -or
-        [string]$Policies[0].type -ne $ExpectedPolicyType) {
-        throw "Credential environment '$ExpectedName' must allow only $ExpectedPolicyType '$ExpectedPolicyName'."
+    $policyDescription = "Credential environment '$ExpectedName' must allow only $ExpectedPolicyType '$($ExpectedPolicyNames -join "', '")'"
+    if (@($Policies | Where-Object { [string]$_.type -ne $ExpectedPolicyType }).Count -ne 0) {
+        throw "$policyDescription."
     }
+    Assert-ExactStringSet `
+        -Description $policyDescription `
+        -Actual @($Policies | ForEach-Object { [string]$_.name }) `
+        -Expected $ExpectedPolicyNames
     Assert-ExactStringSet `
         -Description "Credential environment '$ExpectedName' secrets" `
         -Actual @($Secrets | ForEach-Object { [string]$_.name }) `
@@ -281,7 +284,7 @@ function Assert-CredentialEnvironmentSettings {
         -Policies $ManualPolicies `
         -Secrets $ManualSecrets `
         -ExpectedName "marketplace-manual" `
-        -ExpectedPolicyName "main" `
+        -ExpectedPolicyNames @("main") `
         -ExpectedPolicyType "branch" `
         -ExpectedSecretNames $marketplaceSecrets
     Assert-CredentialEnvironment `
@@ -289,7 +292,7 @@ function Assert-CredentialEnvironmentSettings {
         -Policies $ReleasePolicies `
         -Secrets $ReleaseSecrets `
         -ExpectedName "marketplace-release" `
-        -ExpectedPolicyName "v*" `
+        -ExpectedPolicyNames @("v*", "forever-v*") `
         -ExpectedPolicyType "tag" `
         -ExpectedSecretNames $protectedSecrets
 
@@ -384,7 +387,7 @@ function Invoke-SelfTest {
         bypass_actors = @()
         conditions = [pscustomobject]@{
             ref_name = [pscustomobject]@{
-                include = @("refs/tags/v*")
+                include = @("refs/tags/v*", "refs/tags/forever-v*")
                 exclude = @()
             }
         }
@@ -399,8 +402,8 @@ function Invoke-SelfTest {
         can_approve_pull_request_reviews = $false
     })
     Assert-RepositoryRulesetInventory -Rulesets $rulesets
-    Assert-MinimalHistoryRuleset -Rulesets $rulesets -Name "Protect main history" -Target "branch" -IncludedRef "refs/heads/main"
-    Assert-MinimalHistoryRuleset -Rulesets $rulesets -Name "Protect release tags" -Target "tag" -IncludedRef "refs/tags/v*"
+    Assert-MinimalHistoryRuleset -Rulesets $rulesets -Name "Protect main history" -Target "branch" -IncludedRefs @("refs/heads/main")
+    Assert-MinimalHistoryRuleset -Rulesets $rulesets -Name "Protect release tags" -Target "tag" -IncludedRefs @("refs/tags/v*", "refs/tags/forever-v*")
 
     Assert-ImmutableReleasePolicy -Policy ([pscustomobject]@{
         enabled = $true
@@ -549,19 +552,39 @@ function Invoke-SelfTest {
     $missingBypassField = $branchRuleset.PSObject.Copy()
     $missingBypassField.PSObject.Properties.Remove("bypass_actors")
     Assert-ThrowsMatch "missing ruleset bypass field rejected" {
-        Assert-MinimalHistoryRuleset -Rulesets @($missingBypassField) -Name "Protect main history" -Target "branch" -IncludedRef "refs/heads/main"
+        Assert-MinimalHistoryRuleset -Rulesets @($missingBypassField) -Name "Protect main history" -Target "branch" -IncludedRefs @("refs/heads/main")
     } "missing bypass_actors"
 
     $creationBlocked = $tagRuleset.PSObject.Copy()
     $creationBlocked.rules = @($tagRuleset.rules) + @([pscustomobject]@{ type = "creation" })
     Assert-ThrowsMatch "tag creation restriction rejected" {
-        Assert-MinimalHistoryRuleset -Rulesets @($creationBlocked) -Name "Protect release tags" -Target "tag" -IncludedRef "refs/tags/v*"
+        Assert-MinimalHistoryRuleset -Rulesets @($creationBlocked) -Name "Protect release tags" -Target "tag" -IncludedRefs @("refs/tags/v*", "refs/tags/forever-v*")
     } "rule types"
+
+    foreach ($missingRef in @("refs/tags/v*", "refs/tags/forever-v*")) {
+        $missingTagRef = ConvertFrom-JsonCompat ($tagRuleset | ConvertTo-Json -Depth 10)
+        $missingTagRef.conditions.ref_name.include = @($tagRuleset.conditions.ref_name.include | Where-Object { $_ -ne $missingRef })
+        Assert-ThrowsMatch "missing protected tag pattern $missingRef rejected" {
+            Assert-MinimalHistoryRuleset -Rulesets @($missingTagRef) -Name "Protect release tags" -Target "tag" -IncludedRefs @("refs/tags/v*", "refs/tags/forever-v*")
+        } "included refs"
+    }
+    foreach ($missingRule in @("deletion", "non_fast_forward")) {
+        $missingTagRule = $tagRuleset.PSObject.Copy()
+        $missingTagRule.rules = @($tagRuleset.rules | Where-Object { $_.type -ne $missingRule })
+        Assert-ThrowsMatch "missing release tag protection $missingRule rejected" {
+            Assert-MinimalHistoryRuleset -Rulesets @($missingTagRule) -Name "Protect release tags" -Target "tag" -IncludedRefs @("refs/tags/v*", "refs/tags/forever-v*")
+        } "rule types"
+    }
+    $tagBypass = $tagRuleset.PSObject.Copy()
+    $tagBypass.bypass_actors = @([pscustomobject]@{ actor_id = 5; actor_type = "RepositoryRole"; bypass_mode = "always" })
+    Assert-ThrowsMatch "release tag bypass rejected" {
+        Assert-MinimalHistoryRuleset -Rulesets @($tagBypass) -Name "Protect release tags" -Target "tag" -IncludedRefs @("refs/tags/v*", "refs/tags/forever-v*")
+    } "must not have bypass actors"
 
     $updateBlocked = $branchRuleset.PSObject.Copy()
     $updateBlocked.rules = @($branchRuleset.rules) + @([pscustomobject]@{ type = "update" })
     Assert-ThrowsMatch "direct main update restriction rejected" {
-        Assert-MinimalHistoryRuleset -Rulesets @($updateBlocked) -Name "Protect main history" -Target "branch" -IncludedRef "refs/heads/main"
+        Assert-MinimalHistoryRuleset -Rulesets @($updateBlocked) -Name "Protect main history" -Target "branch" -IncludedRefs @("refs/heads/main")
     } "rule types"
 
     $newEnvironmentFixture = {
@@ -590,7 +613,10 @@ function Invoke-SelfTest {
     $manualEnvironment = & $newEnvironmentFixture "marketplace-manual"
     $releaseEnvironment = & $newEnvironmentFixture "marketplace-release"
     $manualPolicies = @([pscustomobject]@{ name = "main"; type = "branch" })
-    $releasePolicies = @([pscustomobject]@{ name = "v*"; type = "tag" })
+    $releasePolicies = @(
+        [pscustomobject]@{ name = "v*"; type = "tag" },
+        [pscustomobject]@{ name = "forever-v*"; type = "tag" }
+    )
     $manualSecrets = @("CF_API_KEY", "WAGO_API_TOKEN", "WOWI_API_TOKEN") |
         ForEach-Object { [pscustomobject]@{ name = $_ } }
     $releaseSecrets = @("CF_API_KEY", "IMMUTABLE_RELEASES_READ_TOKEN", "WAGO_API_TOKEN", "WOWI_API_TOKEN") |
@@ -606,6 +632,35 @@ function Invoke-SelfTest {
         -RepositorySecrets @() `
         -RepositoryOwner "owner"
 
+    foreach ($missingPattern in @("v*", "forever-v*")) {
+        Assert-ThrowsMatch "missing release credential tag pattern $missingPattern rejected" {
+            Assert-CredentialEnvironment `
+                -Environment $releaseEnvironment `
+                -Policies @($releasePolicies | Where-Object { $_.name -ne $missingPattern }) `
+                -Secrets $releaseSecrets `
+                -ExpectedName "marketplace-release" `
+                -ExpectedPolicyNames @("v*", "forever-v*") `
+                -ExpectedPolicyType "tag" `
+                -ExpectedSecretNames @("CF_API_KEY", "IMMUTABLE_RELEASES_READ_TOKEN", "WAGO_API_TOKEN", "WOWI_API_TOKEN")
+        } "allow only tag"
+    }
+    foreach ($extraPolicy in @(
+        [pscustomobject]@{ name = "*"; type = "tag" },
+        [pscustomobject]@{ name = "main"; type = "branch" },
+        [pscustomobject]@{ name = "forever-v*"; type = "tag" }
+    )) {
+        Assert-ThrowsMatch "additional release credential policy rejected" {
+            Assert-CredentialEnvironment `
+                -Environment $releaseEnvironment `
+                -Policies (@($releasePolicies) + @($extraPolicy)) `
+                -Secrets $releaseSecrets `
+                -ExpectedName "marketplace-release" `
+                -ExpectedPolicyNames @("v*", "forever-v*") `
+                -ExpectedPolicyType "tag" `
+                -ExpectedSecretNames @("CF_API_KEY", "IMMUTABLE_RELEASES_READ_TOKEN", "WAGO_API_TOKEN", "WOWI_API_TOKEN")
+        } "allow only tag"
+    }
+
     $bypassEnvironment = & $newEnvironmentFixture "marketplace-manual"
     $bypassEnvironment.can_admins_bypass = $true
     Assert-ThrowsMatch "credential environment admin bypass rejected" {
@@ -614,7 +669,7 @@ function Invoke-SelfTest {
             -Policies $manualPolicies `
             -Secrets $manualSecrets `
             -ExpectedName "marketplace-manual" `
-            -ExpectedPolicyName "main" `
+            -ExpectedPolicyNames @("main") `
             -ExpectedPolicyType "branch" `
             -ExpectedSecretNames @("CF_API_KEY", "WAGO_API_TOKEN", "WOWI_API_TOKEN")
     } "disable administrator bypass"
@@ -624,7 +679,7 @@ function Invoke-SelfTest {
             -Policies @([pscustomobject]@{ name = "*"; type = "branch" }) `
             -Secrets $manualSecrets `
             -ExpectedName "marketplace-manual" `
-            -ExpectedPolicyName "main" `
+            -ExpectedPolicyNames @("main") `
             -ExpectedPolicyType "branch" `
             -ExpectedSecretNames @("CF_API_KEY", "WAGO_API_TOKEN", "WOWI_API_TOKEN")
     } "allow only branch 'main'"
@@ -634,7 +689,7 @@ function Invoke-SelfTest {
             -Policies @([pscustomobject]@{ name = "main"; type = "tag" }) `
             -Secrets $manualSecrets `
             -ExpectedName "marketplace-manual" `
-            -ExpectedPolicyName "main" `
+            -ExpectedPolicyNames @("main") `
             -ExpectedPolicyType "branch" `
             -ExpectedSecretNames @("CF_API_KEY", "WAGO_API_TOKEN", "WOWI_API_TOKEN")
     } "allow only branch 'main'"
@@ -644,7 +699,7 @@ function Invoke-SelfTest {
             -Policies $manualPolicies `
             -Secrets @($manualSecrets | Where-Object { $_.name -ne "WAGO_API_TOKEN" }) `
             -ExpectedName "marketplace-manual" `
-            -ExpectedPolicyName "main" `
+            -ExpectedPolicyNames @("main") `
             -ExpectedPolicyType "branch" `
             -ExpectedSecretNames @("CF_API_KEY", "WAGO_API_TOKEN", "WOWI_API_TOKEN")
     } "secrets is"
@@ -668,7 +723,7 @@ function Invoke-SelfTest {
             -Policies $releasePolicies `
             -Secrets $releaseSecrets `
             -ExpectedName "marketplace-release" `
-            -ExpectedPolicyName "v*" `
+            -ExpectedPolicyNames @("v*", "forever-v*") `
             -ExpectedPolicyType "tag" `
             -ExpectedSecretNames @("CF_API_KEY", "IMMUTABLE_RELEASES_READ_TOKEN", "WAGO_API_TOKEN", "WOWI_API_TOKEN") `
             -ExpectedReviewerLogin "owner"
@@ -679,7 +734,7 @@ function Invoke-SelfTest {
             -Policies $releasePolicies `
             -Secrets $releaseSecrets `
             -ExpectedName "marketplace-release" `
-            -ExpectedPolicyName "v*" `
+            -ExpectedPolicyNames @("v*", "forever-v*") `
             -ExpectedPolicyType "tag" `
             -ExpectedSecretNames @("CF_API_KEY", "IMMUTABLE_RELEASES_READ_TOKEN", "WAGO_API_TOKEN", "WOWI_API_TOKEN") `
             -ExpectedReviewerLogin "someone-else"
@@ -784,8 +839,8 @@ $repositorySecretResponse = Invoke-GhJson -Arguments (@("api") + $headers + @("r
 
 Assert-ActionsWorkflowPermissions -Settings $actionsSettings
 Assert-RepositoryRulesetInventory -Rulesets $rulesets
-Assert-MinimalHistoryRuleset -Rulesets $rulesets -Name "Protect main history" -Target "branch" -IncludedRef "refs/heads/main"
-Assert-MinimalHistoryRuleset -Rulesets $rulesets -Name "Protect release tags" -Target "tag" -IncludedRef "refs/tags/v*"
+Assert-MinimalHistoryRuleset -Rulesets $rulesets -Name "Protect main history" -Target "branch" -IncludedRefs @("refs/heads/main")
+Assert-MinimalHistoryRuleset -Rulesets $rulesets -Name "Protect release tags" -Target "tag" -IncludedRefs @("refs/tags/v*", "refs/tags/forever-v*")
 Assert-CredentialEnvironmentSettings `
     -Environments @($environmentResponse.environments) `
     -ManualEnvironment $manualEnvironment `

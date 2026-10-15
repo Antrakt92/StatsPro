@@ -51,8 +51,8 @@ at the top of the **Stats** tab or adjust individual rows yourself.
 
 - **Retail: Midnight:** install the Retail file through CurseForge or Wago, or
   choose the Retail archive on [GitHub Releases](https://github.com/Antrakt92/StatsPro/releases/latest).
-- **WoW Forever beta:** open the [Forever beta download](https://github.com/Antrakt92/StatsPro/releases/tag/v1.18.0)
-  and choose `StatsPro-v1.18.0-Forever-beta.zip`. Use a marketplace file only if it
+- **WoW Forever beta:** open the [Forever beta download](https://github.com/Antrakt92/StatsPro/releases/tag/forever-v1.18.1)
+  and choose `StatsPro-v1.18.1-Forever-beta.zip`. Use a marketplace file only if it
   is explicitly labelled for Forever.
 
 Retail and Forever update separately. A newer Retail release may not include a
@@ -130,6 +130,10 @@ Attributes and stat families have separate editable colors. Short labels keep
 combat types, spell schools and resistances distinct; hover a stat checkbox to
 read its full name. Some values may show `?` when unavailable or when a compound
 value cannot be read safely in combat.
+
+Forever Settings show **Forever Beta** beside the version. Hover a stat checkbox
+for its full name and an explanation of unavailable values. Turning a section
+off disables its individual controls while keeping your selections.
 
 ## Layouts
 

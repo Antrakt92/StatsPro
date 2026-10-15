@@ -110,6 +110,40 @@ end
 check(foundSpirit, "Forever Spirit checkbox exists")
 check(foundUtility, "utility section controls exist")
 check(not foundArchon, "Archon Settings control absent")
+for _, group in ipairs({ "offensive", "defensive", "utility" }) do
+    local master = env["StatsProForever" .. group .. "Master"]
+    local row = addon.forever.rows[group][1]
+    local child = env["StatsProForever" .. row.key]
+    local hideZero = env["StatsProForever" .. group .. "HideZero"]
+    local selection = test.profileState().settings[row.showKey]
+    for _, enabled in ipairs({ false, true }) do
+        master:SetChecked(enabled)
+        master.scripts.OnClick(master)
+        check(child:IsEnabled() == enabled, group .. " child follows live master toggle")
+        check(hideZero:IsEnabled() == enabled, group .. " hide zero follows live master toggle")
+        check(test.profileState().settings[row.showKey] == selection,
+            group .. " master toggle preserves individual row choices")
+    end
+    local _, detail = child.statsProTooltipProvider(child)
+    check(detail == "A ? means this stat is unavailable or cannot be calculated safely.",
+        group .. " tooltip explains unavailable stat values")
+    local masterKey = ({ offensive = "showOffensive", defensive = "showDefensive", utility = "showTertiary" })[group]
+    test.profileState().settings[masterKey] = false
+    test.cacheSettings()
+    addon.profileRuntime.RefreshConfigControls()
+    check(not child:IsEnabled() and not hideZero:IsEnabled(), group .. " refresh restores dependency state")
+    local blocked = child.statsProTooltipProvider(child)
+    check(blocked:find("Requires ", 1, true), group .. " disabled row explains its master dependency")
+    master:SetChecked(true)
+    master.scripts.OnClick(master)
+end
+check(test.settingsShellState().shell.titleMetadata:GetText():find("Forever Beta", 1, true),
+    "Settings header identifies Forever beta")
+check(test.launcherTitleText():find("Forever Beta", 1, true), "Settings launcher identifies Forever beta")
+retailAddon:OpenConfigMenu()
+check(retailTest.settingsShellState().shell.titleMetadata:GetText():find("Settings  v", 1, true),
+    "Retail Settings header stays unchanged")
+check(not retailTest.launcherTitleText():find("Forever", 1, true), "Retail launcher keeps its existing identity")
 check(addon.forever.capabilities.itemLevel, "observed item-level API offers optional control")
 local visited = {}
 local gearEnv, _, gearTest = fixtures.loadStatsPro("enUS", {

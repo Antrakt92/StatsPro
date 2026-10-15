@@ -1,0 +1,177 @@
+name: Forever beta release
+
+on:
+  push:
+    tags:
+      - 'forever-v*'
+
+concurrency:
+  group: statspro-release
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  package:
+    if: ${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      archive_sha256: ${{ steps.candidate.outputs.archive_sha256 }}
+      candidate_sha256: ${{ steps.candidate.outputs.candidate_sha256 }}
+      archive_name: ${{ steps.candidate.outputs.archive_name }}
+      run_attempt: ${{ github.run_attempt }}
+    steps:
+      - name: Use canonical source line endings
+        shell: pwsh
+        run: git config --global core.autocrlf false
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify checkout and action pins
+        shell: pwsh
+        run: |
+          ./scripts/check-anonymous-checkout.ps1
+          ./scripts/report-ci-action-refs.ps1 -EnforcePinnedWorkflowRefs
+      - name: Validate beta release contracts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          ./scripts/test-forever-release-contract.ps1
+          ./scripts/test-forever-workflow.ps1
+          ./scripts/manage-github-release.ps1 -ForeverBeta -SelfTest
+          ./scripts/test-forever-package.ps1 -SelfTest
+          ./scripts/publish-marketplaces.ps1 -SelfTest
+          ./scripts/check-repository-settings.ps1 -SelfTest
+          ./scripts/manage-github-release.ps1 -ForeverBeta -Mode RefuseExisting -Repository $env:GITHUB_REPOSITORY -ExpectedTag $env:GITHUB_REF_NAME -ExpectedCommitSha $env:GITHUB_SHA
+      - name: Run locked Lua checks
+        shell: pwsh
+        run: ./scripts/check-lua.ps1 -EnforceToolLocks
+      - name: Build exact Forever candidate
+        id: candidate
+        shell: pwsh
+        run: |
+          . ./scripts/forever-release-contract.ps1
+          $contract = Get-StatsProForeverReleaseContract -SourceRoot . -ExpectedTag $env:GITHUB_REF_NAME -ExpectedCommitSha $env:GITHUB_SHA
+          ./scripts/build-forever-package.ps1 -OutputRoot .release/forever-candidate
+          $archive = Join-Path .release/forever-candidate $contract.ArchiveName
+          $candidate = New-StatsProForeverReleaseCandidate -Contract $contract -Repository $env:GITHUB_REPOSITORY -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT -ArchivePath $archive -CandidatePath .release/forever-candidate/candidate.json
+          "archive_name=$($contract.ArchiveName)" >> $env:GITHUB_OUTPUT
+          "archive_sha256=$($candidate.ArchiveSha256)" >> $env:GITHUB_OUTPUT
+          "candidate_sha256=$($candidate.CandidateSha256)" >> $env:GITHUB_OUTPUT
+      - name: Upload exact candidate
+        id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: forever-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .release/forever-candidate/*
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: false
+          retention-days: 35
+
+  publish:
+    needs: package
+    if: ${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}
+    environment: marketplace-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify anonymous checkout boundary
+        shell: pwsh
+        run: ./scripts/check-anonymous-checkout.ps1
+      - name: Download same-run exact candidate
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          artifact-ids: ${{ needs.package.outputs.artifact_id }}
+          path: .release/forever-candidate
+          digest-mismatch: error
+      - name: Require immutable releases
+        env:
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
+        shell: pwsh
+        run: ./scripts/check-repository-settings.ps1 -ImmutableReleasePolicyOnly -RequireExplicitToken
+      - name: Prepare exact Forever publication
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          ARCHIVE_NAME: ${{ needs.package.outputs.archive_name }}
+          ARCHIVE_SHA256: ${{ needs.package.outputs.archive_sha256 }}
+          CANDIDATE_SHA256: ${{ needs.package.outputs.candidate_sha256 }}
+          PACKAGE_ATTEMPT: ${{ needs.package.outputs.run_attempt }}
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_RUN_ATTEMPT -cne $env:PACKAGE_ATTEMPT) { throw 'Refusing a candidate from an earlier run attempt.' }
+          . ./scripts/forever-release-contract.ps1
+          $contract = Get-StatsProForeverReleaseContract -SourceRoot . -ExpectedTag $env:GITHUB_REF_NAME -ExpectedCommitSha $env:GITHUB_SHA
+          $archive = Join-Path .release/forever-candidate $contract.ArchiveName
+          [void](Read-StatsProForeverReleaseCandidate -Contract $contract -Repository $env:GITHUB_REPOSITORY -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT -ArchivePath $archive -CandidatePath .release/forever-candidate/candidate.json -ExpectedCandidateSha256 $env:CANDIDATE_SHA256 -ExpectedArchiveSha256 $env:ARCHIVE_SHA256)
+          ./scripts/manage-github-release.ps1 -ForeverBeta -Mode RefuseExisting -Repository $env:GITHUB_REPOSITORY -ExpectedTag $env:GITHUB_REF_NAME -ExpectedCommitSha $env:GITHUB_SHA
+          ./scripts/publish-marketplaces.ps1 -Mode Prepare -Flavor Forever -ArchivePath $archive -ExpectedTag $contract.PackageTag -ExpectedSha256 $env:ARCHIVE_SHA256 -PlanPath .release/forever-plan.json -OutputPath $env:GITHUB_OUTPUT
+      - name: Publish exact Forever beta once
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          ARCHIVE_SHA256: ${{ needs.package.outputs.archive_sha256 }}
+          CANDIDATE_SHA256: ${{ needs.package.outputs.candidate_sha256 }}
+          PLAN_SHA256: ${{ steps.plan.outputs.plan_sha256 }}
+        shell: pwsh
+        run: |
+          . ./scripts/forever-release-contract.ps1
+          $contract = Get-StatsProForeverReleaseContract -SourceRoot . -ExpectedTag $env:GITHUB_REF_NAME -ExpectedCommitSha $env:GITHUB_SHA
+          $archive = Join-Path .release/forever-candidate $contract.ArchiveName
+          $release = @{ ForeverBeta = $true; Repository = $env:GITHUB_REPOSITORY; ExpectedTag = $env:GITHUB_REF_NAME; ExpectedCommitSha = $env:GITHUB_SHA; ExpectedRunId = $env:GITHUB_RUN_ID; ExpectedRunAttempt = $env:GITHUB_RUN_ATTEMPT; ExpectedArchiveSha256 = $env:ARCHIVE_SHA256; ExpectedCandidateSha256 = $env:CANDIDATE_SHA256; ArchivePath = $archive; ReleaseJsonPath = '.release/forever-candidate/candidate.json'; NotesPath = 'CHANGELOG-FOREVER.md' }
+          ./scripts/manage-github-release.ps1 @release -Mode CreateDraft
+          ./scripts/manage-github-release.ps1 @release -Mode MarkMarketplaceStarted
+          ./scripts/publish-marketplaces.ps1 -Mode Publish -Flavor Forever -ArchivePath $archive -ExpectedTag $contract.PackageTag -ExpectedSha256 $env:ARCHIVE_SHA256 -PlanPath .release/forever-plan.json -ExpectedPlanSha256 $env:PLAN_SHA256
+          ./scripts/manage-github-release.ps1 @release -Mode AttachAssets
+          ./scripts/manage-github-release.ps1 @release -Mode Publish
+
+  verify:
+    needs: [package, publish]
+    if: ${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify anonymous checkout boundary
+        shell: pwsh
+        run: ./scripts/check-anonymous-checkout.ps1
+      - name: Download exact candidate
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          artifact-ids: ${{ needs.package.outputs.artifact_id }}
+          path: .release/forever-candidate
+          digest-mismatch: error
+      - name: Verify immutable beta release and assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCHIVE_SHA256: ${{ needs.package.outputs.archive_sha256 }}
+          CANDIDATE_SHA256: ${{ needs.package.outputs.candidate_sha256 }}
+          PACKAGE_ATTEMPT: ${{ needs.package.outputs.run_attempt }}
+        shell: pwsh
+        run: |
+          . ./scripts/forever-release-contract.ps1
+          $contract = Get-StatsProForeverReleaseContract -SourceRoot . -ExpectedTag $env:GITHUB_REF_NAME -ExpectedCommitSha $env:GITHUB_SHA
+          ./scripts/manage-github-release.ps1 -ForeverBeta -Mode Verify -Repository $env:GITHUB_REPOSITORY -ExpectedTag $env:GITHUB_REF_NAME -ExpectedCommitSha $env:GITHUB_SHA -ExpectedRunId $env:GITHUB_RUN_ID -ExpectedRunAttempt $env:PACKAGE_ATTEMPT -ExpectedArchiveSha256 $env:ARCHIVE_SHA256 -ExpectedCandidateSha256 $env:CANDIDATE_SHA256 -ArchivePath (Join-Path .release/forever-candidate $contract.ArchiveName) -ReleaseJsonPath .release/forever-candidate/candidate.json -NotesPath CHANGELOG-FOREVER.md

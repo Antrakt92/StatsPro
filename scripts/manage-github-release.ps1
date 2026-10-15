@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("RefuseExisting", "ValidateStart", "CreateDraft", "MarkMarketplaceStarted", "AttachAssets", "Publish", "RetirePrepared")]
+    [ValidateSet("RefuseExisting", "ValidateStart", "CreateDraft", "MarkMarketplaceStarted", "AttachAssets", "Publish", "RetirePrepared", "Verify")]
     [string]$Mode,
     [string]$Repository,
     [string]$ExpectedTag,
@@ -16,10 +16,21 @@ param(
     [string]$ManifestPath,
     [int]$AttestationAttempts = 6,
     [int]$TimeoutMinutes = 10,
-    [switch]$SelfTest
+    [switch]$SelfTest,
+    [switch]$ForeverBeta
 )
 
 $ErrorActionPreference = "Stop"
+if ($ForeverBeta) {
+    $betaParameters = @{} + $PSBoundParameters
+    [void]$betaParameters.Remove('ForeverBeta')
+    foreach ($unused in @('ExpectedForeverArchiveSha256', 'ForeverArchivePath', 'ManifestPath', 'AttestationAttempts', 'TimeoutMinutes')) {
+        [void]$betaParameters.Remove($unused)
+    }
+    & (Join-Path $PSScriptRoot 'manage-forever-release.ps1') @betaParameters
+    return
+}
+if ($Mode -eq 'Verify') { throw 'Verify is supported only with -ForeverBeta.' }
 . (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 . (Join-Path $PSScriptRoot 'flavor-release-contract.ps1')

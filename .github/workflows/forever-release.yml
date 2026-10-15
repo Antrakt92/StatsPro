@@ -123,7 +123,7 @@ jobs:
           $archive = Join-Path .release/forever-candidate $contract.ArchiveName
           [void](Read-StatsProForeverReleaseCandidate -Contract $contract -Repository $env:GITHUB_REPOSITORY -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT -ArchivePath $archive -CandidatePath .release/forever-candidate/candidate.json -ExpectedCandidateSha256 $env:CANDIDATE_SHA256 -ExpectedArchiveSha256 $env:ARCHIVE_SHA256)
           ./scripts/manage-github-release.ps1 -ForeverBeta -Mode RefuseExisting -Repository $env:GITHUB_REPOSITORY -ExpectedTag $env:GITHUB_REF_NAME -ExpectedCommitSha $env:GITHUB_SHA
-          ./scripts/publish-marketplaces.ps1 -Mode Prepare -Flavor Forever -ArchivePath $archive -ExpectedTag $contract.PackageTag -ExpectedSha256 $env:ARCHIVE_SHA256 -PlanPath .release/forever-plan.json -OutputPath $env:GITHUB_OUTPUT
+          ./scripts/publish-marketplaces.ps1 -Mode Prepare -Flavor Forever -ArchivePath $archive -ExpectedTag $contract.PackageTag -ExpectedSha256 $env:ARCHIVE_SHA256 -PlanPath .release/statspro-forever-marketplace-plan.json -OutputPath $env:GITHUB_OUTPUT
       - name: Publish exact Forever beta once
         env:
           GH_TOKEN: ${{ github.token }}
@@ -140,7 +140,7 @@ jobs:
           $release = @{ ForeverBeta = $true; Repository = $env:GITHUB_REPOSITORY; ExpectedTag = $env:GITHUB_REF_NAME; ExpectedCommitSha = $env:GITHUB_SHA; ExpectedRunId = $env:GITHUB_RUN_ID; ExpectedRunAttempt = $env:GITHUB_RUN_ATTEMPT; ExpectedArchiveSha256 = $env:ARCHIVE_SHA256; ExpectedCandidateSha256 = $env:CANDIDATE_SHA256; ArchivePath = $archive; ReleaseJsonPath = '.release/forever-candidate/candidate.json'; NotesPath = 'CHANGELOG-FOREVER.md' }
           ./scripts/manage-github-release.ps1 @release -Mode CreateDraft
           ./scripts/manage-github-release.ps1 @release -Mode MarkMarketplaceStarted
-          ./scripts/publish-marketplaces.ps1 -Mode Publish -Flavor Forever -ArchivePath $archive -ExpectedTag $contract.PackageTag -ExpectedSha256 $env:ARCHIVE_SHA256 -PlanPath .release/forever-plan.json -ExpectedPlanSha256 $env:PLAN_SHA256
+          ./scripts/publish-marketplaces.ps1 -Mode Publish -Flavor Forever -ArchivePath $archive -ExpectedTag $contract.PackageTag -ExpectedSha256 $env:ARCHIVE_SHA256 -PlanPath .release/statspro-forever-marketplace-plan.json -ExpectedPlanSha256 $env:PLAN_SHA256
           ./scripts/manage-github-release.ps1 @release -Mode AttachAssets
           ./scripts/manage-github-release.ps1 @release -Mode Publish
 

@@ -1,4 +1,5 @@
 . (Join-Path $PSScriptRoot 'release-tag-contract.ps1')
+. (Join-Path $PSScriptRoot 'native-process.ps1')
 # The package checker is also an executable script. Its parameter block must
 # not replace the manager's supplied archive or mode switches during import.
 $foreverLibraryParameterSnapshot = @{}
@@ -20,6 +21,38 @@ function Get-StatsProForeverTextHash {
     param([Parameter(Mandatory)][string]$Text)
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text.Replace("`r`n", "`n").Replace("`r", "`n"))
     [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+}
+
+function ConvertFrom-StatsProPublishedForeverInventory {
+    param([Parameter(Mandatory)][string]$Json)
+    $pages = ConvertFrom-Json -InputObject $Json -AsHashtable -NoEnumerate
+    if ($pages -isnot [System.Collections.IList]) { throw 'Forever published release inventory must contain paginated arrays' }
+    foreach ($page in $pages) {
+        if ($page -isnot [System.Collections.IList]) { throw 'Forever published release inventory page is malformed' }
+        foreach ($release in $page) {
+            if ($release -isnot [System.Collections.IDictionary] -or
+                $release.draft -isnot [bool] -or $release.prerelease -isnot [bool] -or
+                $release.tag_name -isnot [string] -or -not $release.Contains('published_at')) {
+                throw 'Forever published release inventory entry is malformed'
+            }
+            if (-not $release.draft -and $release.prerelease -and $release.published_at -and
+                $release.tag_name.StartsWith('forever-', [System.StringComparison]::Ordinal)) {
+                [void][datetimeoffset]::Parse($release.published_at, [System.Globalization.CultureInfo]::InvariantCulture)
+                $release.tag_name
+            }
+        }
+    }
+}
+
+function Get-StatsProPublishedForeverTags {
+    param([string]$Repository = 'Antrakt92/StatsPro')
+    if ($Repository -cnotmatch '\A[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\z') { throw 'Forever release inventory requires an exact repository identity' }
+    $gh = (Get-Command gh -CommandType Application -ErrorAction Stop).Source
+    $result = Invoke-StatsProNativeCapture -FilePath $gh -Arguments @(
+        'api', '--paginate', '--slurp', "repos/$Repository/releases?per_page=100"
+    ) -TimeoutSeconds 60 -Description 'Read published Forever release history'
+    if ($result.ExitCode -ne 0) { throw 'Could not read published Forever release history; publication remains blocked' }
+    ConvertFrom-StatsProPublishedForeverInventory -Json ($result.Output -join "`n")
 }
 
 function Invoke-StatsProForeverGit {
@@ -62,8 +95,10 @@ function Get-StatsProForeverReleaseContract {
     param(
         [Parameter(Mandatory)][string]$SourceRoot,
         [Parameter(Mandatory)][string]$ExpectedTag,
-        [string]$ExpectedCommitSha
+        [string]$ExpectedCommitSha,
+        [string]$Repository = 'Antrakt92/StatsPro'
     )
+    if ($Repository -cnotmatch '\A[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\z') { throw 'Forever release requires an exact repository identity' }
     if ($ExpectedTag -cnotmatch '\Aforever-(v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))\z') {
         throw 'Forever release tag must be exactly forever-vX.Y.Z'
     }
@@ -130,8 +165,9 @@ function Get-StatsProForeverReleaseContract {
         if (-not $notes.Replace("`r`n", "`n").Replace("`r", "`n").TrimEnd().EndsWith($history, [System.StringComparison]::Ordinal)) {
             throw 'Forever changelog must retain the original cumulative release history'
         }
-        $previousTags = @((Invoke-StatsProForeverGit $root @('tag','--merged',$ExpectedCommitSha,'--list','forever-v*')) -split '\r?\n' |
-            Where-Object { $_ -and $_ -cne $ExpectedTag })
+        # A consumed tag can belong to a failed preparation. Only releases users
+        # could actually download establish changelog retention obligations.
+        $previousTags = @(Get-StatsProPublishedForeverTags -Repository $Repository | Where-Object { $_ -cne $ExpectedTag })
         $previous = $null
         foreach ($previousTag in $previousTags) {
             if ($previousTag -cnotmatch '\Aforever-(v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))\z') {

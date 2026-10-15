@@ -2626,7 +2626,7 @@ function Assert-ChecksPackagerHelperBoundary {
     # A substring check could accept safe dead code followed by a publishing call.
     $normalized = $Text.Replace("`r`n", "`n")
     $digest = Get-LowercaseTextSha256 -Text $normalized
-    if ($digest -ne 'da5211493467759d4ed492dfe84e49691995f3de7bcde7d00574ff6426739a4a') {
+    if ($digest -ne '036e5eb4c467125ab0f2a689deb53243b93252a27307a7348e131323a5be1647') {
         throw "Checks Packager helper differs from the reviewed immutable-source/no-upload implementation."
     }
 }

@@ -54,6 +54,8 @@ jobs:
         run: ./scripts/check-lua.ps1 -EnforceToolLocks
       - name: Build exact Forever candidate
         id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
           . ./scripts/forever-release-contract.ps1

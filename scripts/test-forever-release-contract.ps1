@@ -7,6 +7,15 @@ $SelfTest = $true
 if ($ArchivePath -cne 'caller-archive-path' -or $SourceRoot -cne 'caller-source-root' -or $LibraryOnly -or -not $SelfTest) {
     throw 'Importing the Forever contract replaced caller parameters'
 }
+$script:publishedForeverTags = @()
+$script:publishedInventoryFailure = $false
+$script:publishedInventoryReads = 0
+function Get-StatsProPublishedForeverTags {
+    param([string]$Repository)
+    $script:publishedInventoryReads++
+    if ($script:publishedInventoryFailure) { throw 'Fixture published inventory unavailable' }
+    $script:publishedForeverTags
+}
 $count = 0
 function Assert-ForeverTestRejected {
     param([scriptblock]$Action, [string]$Pattern)
@@ -21,6 +30,13 @@ $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
 $fixture = Join-Path $tempBase ('statspro-forever-release-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $fixture | Out-Null
 try {
+    $inventoryFixture = @'
+[[{"tag_name":"forever-v1.18.1","draft":false,"prerelease":true,"published_at":"2026-10-15T12:00:00Z"},{"tag_name":"forever-v1.18.2","draft":true,"prerelease":true,"published_at":null}],[{"tag_name":"v1.18.2","draft":false,"prerelease":false,"published_at":"2026-10-15T12:00:00Z"},{"tag_name":"forever-v1.18.3","draft":false,"prerelease":false,"published_at":"2026-10-15T12:00:00Z"}]]
+'@
+    $published = @(ConvertFrom-StatsProPublishedForeverInventory $inventoryFixture)
+    if ($published.Count -ne 1 -or $published[0] -cne 'forever-v1.18.1') { throw 'Published release inventory included draft or wrong-channel entries' }
+    Assert-ForeverTestRejected { ConvertFrom-StatsProPublishedForeverInventory '{"message":"API failure"}' } 'paginated arrays'
+    Assert-ForeverTestRejected { ConvertFrom-StatsProPublishedForeverInventory '[[{"tag_name":"forever-v1.18.1"}]]' } 'malformed'
     $realRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
     $files = @((Get-ForeverPackageMap).Values) + @(
         'StatsPro.toc', 'scripts/forever-release-contract.ps1',
@@ -60,6 +76,10 @@ try {
     [void](Invoke-StatsProForeverGit $fixture @('tag','forever-v1.18.1'))
     [void](Invoke-StatsProForeverGit $fixture @('update-ref','refs/remotes/origin/main',$commit))
     $contract = Get-StatsProForeverReleaseContract $fixture 'forever-v1.18.1' $commit
+    if ($script:publishedInventoryReads -ne 1) { throw 'Exact release contract should read publication inventory once' }
+    $script:publishedInventoryFailure = $true
+    Assert-ForeverTestRejected { Get-StatsProForeverReleaseContract $fixture 'forever-v1.18.1' $commit } 'published inventory unavailable'
+    $script:publishedInventoryFailure = $false
     if ($contract.RetailVersion -cne '1.18.2' -or $contract.PackageTag -cne 'v1.18.1' -or
         @($contract.AssetNames).Count -ne 1 -or $contract.AssetNames[0] -cne 'StatsPro-v1.18.1-Forever-beta.zip') {
         throw 'Forever release changed Retail identity or selected extra assets'
@@ -113,6 +133,7 @@ try {
     [void](Invoke-StatsProForeverGit $fixture @('tag','forever-v1.18.2'))
     $nextCommit = (Invoke-StatsProForeverGit $fixture @('rev-parse','HEAD')).Trim()
     [void](Invoke-StatsProForeverGit $fixture @('update-ref','refs/remotes/origin/main',$nextCommit))
+    $script:publishedForeverTags = @('forever-v1.18.1')
     [void](Get-StatsProForeverReleaseContract $fixture 'forever-v1.18.2' $nextCommit)
     [System.IO.File]::WriteAllText($tocPath, $tocNext.Replace('1.18.2', '1.18.3'))
     [System.IO.File]::WriteAllText($notesPath, "# Forever changelog`n`n## 1.18.3 - 17-Oct-2026 — Incomplete history`n`n- Current changes.`n`n$history")
@@ -121,6 +142,13 @@ try {
     [void](Invoke-StatsProForeverGit $fixture @('tag','forever-v1.18.3'))
     $truncatedCommit = (Invoke-StatsProForeverGit $fixture @('rev-parse','HEAD')).Trim()
     [void](Invoke-StatsProForeverGit $fixture @('update-ref','refs/remotes/origin/main',$truncatedCommit))
+    # Local tags exist for both earlier attempts, but neither publication is
+    # required in the changelog when no published release identifies them.
+    $script:publishedForeverTags = @()
+    [void](Get-StatsProForeverReleaseContract $fixture 'forever-v1.18.3' $truncatedCommit)
+    $script:publishedForeverTags = @('forever-v1.18.1')
+    Assert-ForeverTestRejected { Get-StatsProForeverReleaseContract $fixture 'forever-v1.18.3' $truncatedCommit } 'previous beta cumulative'
+    $script:publishedForeverTags = @('forever-v1.18.1','forever-v1.18.2')
     Assert-ForeverTestRejected { Get-StatsProForeverReleaseContract $fixture 'forever-v1.18.3' $truncatedCommit } 'previous beta cumulative'
     Write-Host "Forever release contract tests passed ($count rejection cases): exact beta identity, independent Retail, immutable source, archive, canonical notes, candidate binding and no replay."
 }

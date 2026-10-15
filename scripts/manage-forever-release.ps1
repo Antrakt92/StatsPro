@@ -19,12 +19,11 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'native-process.ps1')
 
 function Invoke-ForeverGh {
-    param([string[]]$Arguments, [switch]$AllowMissing)
+    param([string[]]$Arguments)
     $command = (Get-Command gh -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
     $result = Invoke-StatsProNativeCapture -FilePath $command -Arguments $Arguments -TimeoutSeconds 60 -Description 'Forever release operation'
     $output = $result.Output -join "`n"
     if ($result.ExitCode -ne 0) {
-        if ($AllowMissing -and $output -match '\(HTTP 404\)') { return $null }
         throw "GitHub operation failed; its outcome must be reconciled before any mutation is repeated: $output"
     }
     return $output
@@ -32,9 +31,27 @@ function Invoke-ForeverGh {
 
 function Get-ForeverRelease {
     param([object]$Context)
-    $json = Invoke-ForeverGh -Arguments @('api', "repos/$($Context.Repository)/releases/tags/$($Context.Tag)") -AllowMissing
-    if ($null -eq $json) { return $null }
-    return $json | ConvertFrom-Json
+    # The by-tag REST endpoint can hide drafts. Use the stable manager's complete
+    # paginated release inventory so an existing draft never looks like absence.
+    $json = Invoke-ForeverGh -Arguments @('api', '--paginate', '--slurp',
+        '-H', 'Accept: application/vnd.github+json', '-H', 'X-GitHub-Api-Version: 2026-03-10',
+        "repos/$($Context.Repository)/releases?per_page=100")
+    $pages = ConvertFrom-Json -InputObject $json -NoEnumerate
+    if ($pages -isnot [array] -or $pages.Count -eq 0) { throw 'Malformed GitHub release inventory: expected paginated arrays.' }
+    $matches = @()
+    foreach ($page in $pages) {
+        if ($page -isnot [array]) { throw 'Malformed GitHub release inventory page.' }
+        foreach ($release in $page) {
+            if ($null -eq $release -or $release.tag_name -isnot [string] -or $release.tag_name -eq '' -or
+                $release.draft -isnot [bool] -or ($release.id -isnot [int] -and $release.id -isnot [long]) -or $release.id -le 0) {
+                throw 'Malformed GitHub release inventory record.'
+            }
+            if ($release.tag_name -ceq $Context.Tag) { $matches += $release }
+        }
+    }
+    if ($matches.Count -gt 1) { throw 'Duplicate exact-tag GitHub releases are forbidden.' }
+    if ($matches.Count -eq 0) { return $null }
+    return $matches[0]
 }
 
 function Assert-ForeverRemoteTag {

@@ -12,6 +12,8 @@ function Assert-Rejected([scriptblock]$Action, [string]$Description) {
 }
 # Exercise the production resolver before the release-state mock replaces it.
 & {
+    $script:resolverExitCode = 0
+    $script:resolverOutput = 'bounded resolver fixture'
     function Get-Command {
         param([string]$Name, [string]$CommandType, [string]$ErrorAction)
         Assert-Test ($Name -ceq 'gh' -and $CommandType -ceq 'Application') 'resolver requests the GitHub executable'
@@ -21,9 +23,34 @@ function Assert-Rejected([scriptblock]$Action, [string]$Description) {
         param([string]$FilePath, [string[]]$Arguments, [int]$TimeoutSeconds, [string]$Description)
         Assert-Test ($FilePath -ceq '/usr/bin/gh') 'multiple executable matches resolve to exactly the first path'
         Assert-Test (($Arguments -join ' ') -ceq 'api user' -and $TimeoutSeconds -eq 60) 'resolved executable preserves arguments and timeout'
-        return [pscustomobject]@{ ExitCode = 0; Output = @('bounded resolver fixture') }
+        return [pscustomobject]@{ ExitCode = $script:resolverExitCode; Output = @($script:resolverOutput) }
     }
     Assert-Test ((Invoke-ForeverGh -Arguments @('api', 'user')) -ceq 'bounded resolver fixture') 'production GitHub invoker accepts multiple PATH matches'
+    $script:resolverExitCode = 1
+    $script:resolverOutput = 'gh: Not Found (HTTP 404)'
+    Assert-Rejected { Invoke-ForeverGh -Arguments @('api', 'user') } 'a failed inventory request never becomes an empty inventory'
+}
+# REST's release-by-tag endpoint may return 404 for drafts. Exercise the actual
+# reader against the same paginated inventory shape used by the stable manager.
+& {
+    $context = [pscustomobject]@{ Repository = 'Owner/StatsPro'; Tag = 'forever-v1.2.3' }
+    $script:inventoryJson = '[[{"id":1,"tag_name":"v1.2.3","draft":false}],[{"id":2,"tag_name":"forever-v1.2.3","draft":true}]]'
+    function Invoke-ForeverGh {
+        param([string[]]$Arguments, [switch]$AllowMissing)
+        if ($Arguments -contains "repos/$($context.Repository)/releases/tags/$($context.Tag)") { return $null }
+        Assert-Test ($Arguments -contains '--paginate' -and $Arguments -contains '--slurp' -and $Arguments -contains "repos/$($context.Repository)/releases?per_page=100") 'draft lookup uses the supported complete inventory'
+        return $script:inventoryJson
+    }
+    $draft = Get-ForeverRelease $context
+    Assert-Test ($null -ne $draft -and $draft.id -eq 2 -and $draft.draft -eq $true) 'draft remains discoverable when the by-tag endpoint is unavailable'
+    $script:inventoryJson = '[[{"id":2,"tag_name":"forever-v1.2.3","draft":true}],[{"id":3,"tag_name":"forever-v1.2.3","draft":true}]]'
+    Assert-Rejected { Get-ForeverRelease $context } 'duplicate exact tags across pages fail closed'
+    foreach ($malformed in @('{}', '[]', '[{}]', '[[null]]', '[[{"id":2,"tag_name":"forever-v1.2.3","draft":"true"}]]')) {
+        $script:inventoryJson = $malformed
+        Assert-Rejected { Get-ForeverRelease $context } 'malformed release inventory fails closed'
+    }
+    $script:inventoryJson = '[[]]'
+    Assert-Test ($null -eq (Get-ForeverRelease $context)) 'a genuinely empty complete inventory permits initial publication'
 }
 $fixture = Join-Path ([IO.Path]::GetTempPath()) ("statspro-forever-manager-test-" + [guid]::NewGuid().ToString('N') + '.zip')
 [IO.File]::WriteAllText($fixture, 'bounded archive fixture')
@@ -44,15 +71,15 @@ try {
             if ($Arguments[1] -like '*/git/ref/tags/*') {
                 return (@{ object = @{ type = 'commit'; sha = $script:remoteCommit } } | ConvertTo-Json -Depth 5)
             }
-            if ($null -eq $script:remote) { return $null }
-            return ($script:remote | ConvertTo-Json -Depth 8)
+            if ($null -eq $script:remote) { return '[[]]' }
+            return '[[' + ($script:remote | ConvertTo-Json -Depth 8 -Compress) + ']]'
         }
         switch ($Arguments[1]) {
             'create' {
                 $script:mutations.Add('create')
                 Assert-Test ($Arguments -contains '--draft' -and $Arguments -contains '--prerelease' -and $Arguments -contains '--latest=false' -and $Arguments -contains '--verify-tag') 'draft command preserves beta/latest/tag boundary'
                 $body = [IO.File]::ReadAllText($Arguments[[Array]::IndexOf($Arguments, '--notes-file') + 1])
-                $script:remote = [pscustomobject]@{ tag_name = $context.Tag; name = "StatsPro $($context.Version) — Forever Beta"
+                $script:remote = [pscustomobject]@{ id = 123; tag_name = $context.Tag; name = "StatsPro $($context.Version) — Forever Beta"
                     prerelease = $true; draft = $true; body = $body; immutable = $false; assets = @() }
             }
             'edit' {

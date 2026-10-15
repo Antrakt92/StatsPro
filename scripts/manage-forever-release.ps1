@@ -56,10 +56,11 @@ function Get-ForeverRelease {
 
 function Assert-ForeverRemoteTag {
     param([object]$Context)
-    $ref = Invoke-ForeverGh -Arguments @('api', "repos/$($Context.Repository)/git/ref/tags/$($Context.Tag)") | ConvertFrom-Json
+    $headers = @('-H', 'Accept: application/vnd.github+json', '-H', 'X-GitHub-Api-Version: 2026-03-10')
+    $ref = Invoke-ForeverGh -Arguments (@('api', "repos/$($Context.Repository)/git/ref/tags/$($Context.Tag)") + $headers) | ConvertFrom-Json
     $object = $ref.object
     for ($depth = 0; $object.type -eq 'tag' -and $depth -lt 4; $depth++) {
-        $tag = Invoke-ForeverGh -Arguments @('api', "repos/$($Context.Repository)/git/tags/$($object.sha)") | ConvertFrom-Json
+        $tag = Invoke-ForeverGh -Arguments (@('api', "repos/$($Context.Repository)/git/tags/$($object.sha)") + $headers) | ConvertFrom-Json
         $object = $tag.object
     }
     if ($object.type -cne 'commit' -or $object.sha -cne $Context.Commit) { throw 'Remote Forever tag does not resolve to the expected commit.' }
@@ -141,6 +142,63 @@ function Assert-ForeverAttestation {
     }
 }
 
+function Get-ForeverStateDiagnostic {
+    param([object]$Context, [object]$Release, [string]$Phase, [bool]$Published, [int]$AssetCount)
+    $observedCount = if ($null -eq $Release) { 0 } else { @($Release.assets).Count }
+    $expectedBody = Get-ForeverReleaseBody $Context $Phase
+    $notesMatch = $Release.body -is [string] -and $Release.body.StartsWith(($Context.Notes + "`n`n"), [StringComparison]::Ordinal)
+    $markerMatch = $Release.body -is [string] -and $Release.body.EndsWith($expectedBody.Substring($Context.Notes.Length + 2), [StringComparison]::Ordinal)
+    return "exists=$($null -ne $Release) tagMatch=$($Release.tag_name -ceq $Context.Tag) titleMatch=$($Release.name -ceq "StatsPro $($Context.Version) — Forever Beta") draftMatch=$($Release.draft -eq (-not $Published)) prereleaseMatch=$($Release.prerelease -eq $true) bodyMatch=$($Release.body -ceq $expectedBody) notesMatch=$notesMatch markerMatch=$markerMatch assetsMatch=$($observedCount -eq $AssetCount) immutable=$($Release.immutable -eq $true) expectedPhase=$Phase"
+}
+
+function Wait-ForeverReleaseState {
+    param([object]$Context, [string]$Phase, [bool]$Published = $false, [int]$AssetCount = 0,
+        [scriptblock]$AdditionalCheck = $null, [int]$Attempts = 10, [int]$PauseSeconds = 2)
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        $observed = $null
+        $stateAttested = $tagCommitAttested = $evidenceAttested = $false
+        try {
+            $observed = Get-ForeverRelease -Context $Context
+            Assert-ForeverRelease -Context $Context -Release $observed -Phase $Phase -Published $Published -AssetCount $AssetCount
+            $stateAttested = $true
+            Assert-ForeverRemoteTag -Context $Context
+            $tagCommitAttested = $true
+            if ($AdditionalCheck) { [void](& $AdditionalCheck $observed) }
+            $evidenceAttested = $true
+            return $observed
+        } catch {
+            # Only booleans and the expected phase enter logs: never notes,
+            # protocol payloads, credentials or arbitrary API response text.
+            $diagnostic = Get-ForeverStateDiagnostic $Context $observed $Phase $Published $AssetCount
+            $diagnostic += " stateAttested=$stateAttested tagCommitAttested=$tagCommitAttested evidenceAttested=$evidenceAttested"
+            if ($attempt -eq $Attempts) { throw "Forever read-only state attestation exhausted: $diagnostic" }
+            Write-Host "Forever state visibility retry $attempt/$Attempts`: $diagnostic"
+            Start-Sleep -Seconds $PauseSeconds
+        }
+    }
+}
+
+function Invoke-ForeverMutationAndAttest {
+    param([object]$Context, [scriptblock]$Mutation, [string]$Phase, [bool]$Published = $false,
+        [int]$AssetCount = 0, [scriptblock]$AdditionalCheck = $null)
+    $ambiguous = $false
+    try { [void](& $Mutation) } catch { $ambiguous = $true }
+    # A failed CLI response is not proof that nothing happened. Reconcile by
+    # reads only; this function invokes the mutation exactly once in all cases.
+    $observed = Wait-ForeverReleaseState -Context $Context -Phase $Phase -Published $Published -AssetCount $AssetCount -AdditionalCheck $AdditionalCheck
+    if ($ambiguous) { Write-Warning "Ambiguous Forever mutation reconciled by exact read-only state attestation; expectedPhase=$Phase." }
+    return $observed
+}
+
+function Assert-ForeverPublishedEvidence {
+    param([object]$Context, [object]$Release)
+    Assert-ForeverRemoteAsset -Context $Context -Release $Release
+    Assert-ForeverLocalArchive -Context $Context
+    $attestation = Invoke-ForeverGh -Arguments @('release', 'verify', $Context.Tag, '--repo', $Context.Repository, '--format', 'json') | ConvertFrom-Json
+    Assert-ForeverAttestation -Context $Context -Attestation $attestation
+    [void](Invoke-ForeverGh -Arguments @('release', 'verify-asset', $Context.Tag, $Context.ArchivePath, '--repo', $Context.Repository))
+}
+
 function Invoke-ForeverReleaseMode {
     param([object]$Context, [string]$SelectedMode)
     Assert-ForeverRemoteTag -Context $Context
@@ -152,44 +210,40 @@ function Invoke-ForeverReleaseMode {
     switch ($SelectedMode) {
         'CreateDraft' {
             if ($null -ne $release) { throw 'A release already exists; automatic recovery is forbidden.' }
-            Invoke-ForeverBodyMutation -Context $Context -Phase prepared -Create
-            Assert-ForeverRelease -Context $Context -Release (Get-ForeverRelease $Context) -Phase prepared
+            [void](Invoke-ForeverMutationAndAttest -Context $Context -Phase prepared -Mutation {
+                Invoke-ForeverBodyMutation -Context $Context -Phase prepared -Create
+            })
         }
         'MarkMarketplaceStarted' {
             Assert-ForeverRelease -Context $Context -Release $release -Phase prepared
-            Invoke-ForeverBodyMutation -Context $Context -Phase marketplace-started
-            Assert-ForeverRelease -Context $Context -Release (Get-ForeverRelease $Context) -Phase marketplace-started
+            [void](Invoke-ForeverMutationAndAttest -Context $Context -Phase marketplace-started -Mutation {
+                Invoke-ForeverBodyMutation -Context $Context -Phase marketplace-started
+            })
         }
         'AttachAssets' {
             Assert-ForeverRelease -Context $Context -Release $release -Phase marketplace-started
             Assert-ForeverLocalArchive -Context $Context
             # Persist the boundary before upload so even an unknown zero-asset outcome cannot be retried.
-            Invoke-ForeverBodyMutation -Context $Context -Phase asset-upload-started
-            Assert-ForeverRelease -Context $Context -Release (Get-ForeverRelease $Context) -Phase asset-upload-started
-            [void](Invoke-ForeverGh -Arguments @('release', 'upload', $Context.Tag, $Context.ArchivePath, '--repo', $Context.Repository))
-            $release = Get-ForeverRelease $Context
-            Assert-ForeverRelease -Context $Context -Release $release -Phase asset-upload-started -AssetCount 1
-            Assert-ForeverRemoteAsset -Context $Context -Release $release
+            [void](Invoke-ForeverMutationAndAttest -Context $Context -Phase asset-upload-started -Mutation {
+                Invoke-ForeverBodyMutation -Context $Context -Phase asset-upload-started
+            })
+            [void](Invoke-ForeverMutationAndAttest -Context $Context -Phase asset-upload-started -AssetCount 1 -Mutation {
+                [void](Invoke-ForeverGh -Arguments @('release', 'upload', $Context.Tag, $Context.ArchivePath, '--repo', $Context.Repository))
+            } -AdditionalCheck { param($observed) Assert-ForeverRemoteAsset -Context $Context -Release $observed })
         }
         'Publish' {
             Assert-ForeverRelease -Context $Context -Release $release -Phase asset-upload-started -AssetCount 1
             Assert-ForeverLocalArchive -Context $Context
             Assert-ForeverRemoteAsset -Context $Context -Release $release
             Assert-ForeverRemoteTag -Context $Context
-            [void](Invoke-ForeverGh -Arguments @('release', 'edit', $Context.Tag, '--repo', $Context.Repository, '--draft=false', '--prerelease', '--latest=false'))
-            # Attestations can become visible after publication. Retry only the read-only checks.
-            for ($attempt = 1; $attempt -le 6; $attempt++) {
-                try { Invoke-ForeverReleaseMode -Context $Context -SelectedMode Verify; break }
-                catch { if ($attempt -eq 6) { throw }; Start-Sleep -Seconds 2 }
-            }
+            [void](Invoke-ForeverMutationAndAttest -Context $Context -Phase asset-upload-started -Published $true -AssetCount 1 -Mutation {
+                [void](Invoke-ForeverGh -Arguments @('release', 'edit', $Context.Tag, '--repo', $Context.Repository, '--draft=false', '--prerelease', '--latest=false'))
+            } -AdditionalCheck { param($observed) Assert-ForeverPublishedEvidence -Context $Context -Release $observed })
         }
         'Verify' {
-            Assert-ForeverRelease -Context $Context -Release $release -Phase asset-upload-started -Published $true -AssetCount 1
-            Assert-ForeverRemoteAsset -Context $Context -Release $release
-            Assert-ForeverLocalArchive -Context $Context
-            $attestation = Invoke-ForeverGh -Arguments @('release', 'verify', $Context.Tag, '--repo', $Context.Repository, '--format', 'json') | ConvertFrom-Json
-            Assert-ForeverAttestation -Context $Context -Attestation $attestation
-            [void](Invoke-ForeverGh -Arguments @('release', 'verify-asset', $Context.Tag, $Context.ArchivePath, '--repo', $Context.Repository))
+            [void](Wait-ForeverReleaseState -Context $Context -Phase asset-upload-started -Published $true -AssetCount 1 -AdditionalCheck {
+                param($observed) Assert-ForeverPublishedEvidence -Context $Context -Release $observed
+            })
         }
         default { throw "Unsupported Forever release mode '$SelectedMode'." }
     }

@@ -10,6 +10,9 @@ function Assert-Rejected([scriptblock]$Action, [string]$Description) {
     try { & $Action } catch { $rejected = $true }
     Assert-Test $rejected $Description
 }
+# Production waits remain bounded; the fake API advances on reads instead of time.
+$script:visibilityWaits = 0
+function Start-Sleep { param([int]$Seconds) $script:visibilityWaits++ }
 # Exercise the production resolver before the release-state mock replaces it.
 & {
     $script:resolverExitCode = 0
@@ -38,7 +41,7 @@ function Assert-Rejected([scriptblock]$Action, [string]$Description) {
     function Invoke-ForeverGh {
         param([string[]]$Arguments, [switch]$AllowMissing)
         if ($Arguments -contains "repos/$($context.Repository)/releases/tags/$($context.Tag)") { return $null }
-        Assert-Test ($Arguments -contains '--paginate' -and $Arguments -contains '--slurp' -and $Arguments -contains "repos/$($context.Repository)/releases?per_page=100") 'draft lookup uses the supported complete inventory'
+        Assert-Test ($Arguments -contains '--paginate' -and $Arguments -contains '--slurp' -and $Arguments -contains "repos/$($context.Repository)/releases?per_page=100" -and $Arguments -contains 'Accept: application/vnd.github+json' -and $Arguments -contains 'X-GitHub-Api-Version: 2026-03-10') 'draft lookup uses the supported complete inventory and API version'
         return $script:inventoryJson
     }
     $draft = Get-ForeverRelease $context
@@ -65,15 +68,23 @@ try {
     $script:remoteCommit = $context.Commit
     $script:failUpload = $false
     $script:attestationFailuresRemaining = 0
+    $script:visibilityLagReads = 0
+    $script:staleInventory = '[[]]'
+    $script:successfulMutationRepliesLost = 0
+    $script:loseSuccessfulMutationReply = $true
+    $contextBefore = $context | ConvertTo-Json -Depth 5 -Compress
     function Invoke-ForeverGh {
         param([string[]]$Arguments, [switch]$AllowMissing)
         if ($Arguments[0] -eq 'api') {
             if ($Arguments[1] -like '*/git/ref/tags/*') {
+                Assert-Test ($Arguments -contains 'Accept: application/vnd.github+json' -and $Arguments -contains 'X-GitHub-Api-Version: 2026-03-10') 'tag reads use the same supported API version'
                 return (@{ object = @{ type = 'commit'; sha = $script:remoteCommit } } | ConvertTo-Json -Depth 5)
             }
+            if ($script:visibilityLagReads -gt 0) { $script:visibilityLagReads--; return $script:staleInventory }
             if ($null -eq $script:remote) { return '[[]]' }
             return '[[' + ($script:remote | ConvertTo-Json -Depth 8 -Compress) + ']]'
         }
+        $beforeInventory = if ($null -eq $script:remote) { '[[]]' } else { '[[' + ($script:remote | ConvertTo-Json -Depth 8 -Compress) + ']]' }
         switch ($Arguments[1]) {
             'create' {
                 $script:mutations.Add('create')
@@ -109,6 +120,14 @@ try {
             }
             default { throw "Unexpected mocked GitHub command: $($Arguments -join ' ')" }
         }
+        if ($Arguments[1] -in @('create', 'edit', 'upload')) {
+            $script:staleInventory = $beforeInventory
+            $script:visibilityLagReads = 3
+            if ($script:loseSuccessfulMutationReply) {
+                $script:successfulMutationRepliesLost++
+                throw 'mutation committed but its response was lost'
+            }
+        }
         return ''
     }
     Invoke-ForeverReleaseMode $context RefuseExisting
@@ -118,6 +137,7 @@ try {
     Assert-Test ($mutations.Count -eq 0) 'wrong commit has no effects'
     $script:remoteCommit = $context.Commit
     Invoke-ForeverReleaseMode $context CreateDraft
+    Assert-Test ($mutations.Count -eq 1 -and $script:visibilityLagReads -eq 0) 'invisible draft becomes visible without repeating create'
     Assert-Rejected { Invoke-ForeverReleaseMode $context RefuseExisting } 'existing draft prevents restart'
     Assert-Rejected { Invoke-ForeverReleaseMode $context CreateDraft } 'existing draft cannot be claimed'
     Assert-Rejected { Invoke-ForeverReleaseMode $context AttachAssets } 'assets cannot bypass marketplace boundary'
@@ -125,6 +145,7 @@ try {
     Assert-Rejected { Invoke-ForeverReleaseMode $context MarkMarketplaceStarted } 'stable release state is rejected'
     $script:remote.prerelease = $true
     Invoke-ForeverReleaseMode $context MarkMarketplaceStarted
+    Assert-Test ($mutations.Count -eq 2 -and $script:visibilityLagReads -eq 0) 'stale phase becomes visible without repeating its edit'
     Assert-Rejected { Invoke-ForeverReleaseMode $context MarkMarketplaceStarted } 'marketplace-started state cannot be replayed'
     $script:failUpload = $true
     $before = $mutations.Count
@@ -137,6 +158,7 @@ try {
     # Build a separate pristine mock scenario; production never rewinds a boundary marker.
     $script:remote.body = Get-ForeverReleaseBody -Context $context -Phase marketplace-started
     Invoke-ForeverReleaseMode $context AttachAssets
+    Assert-Test ($script:visibilityLagReads -eq 0) 'delayed asset inventory is attested before publication can proceed'
     Assert-Rejected { Invoke-ForeverReleaseMode $context AttachAssets } 'asset upload cannot be replayed after success'
     $script:remote.assets[0].digest = 'sha256:' + ('c' * 64)
     Assert-Rejected { Invoke-ForeverReleaseMode $context Publish } 'wrong asset digest blocks publication'
@@ -169,5 +191,10 @@ try {
     $script:remote.body += ' changed'
     Assert-Rejected { Invoke-ForeverReleaseMode $context Verify } 'notes and protocol marker cannot change'
     Assert-Rejected { & (Join-Path $PSScriptRoot 'manage-github-release.ps1') -Mode Verify } 'stable dispatcher rejects beta-only Verify'
+    Assert-Test ($script:successfulMutationRepliesLost -ge 5) 'all mutation kinds reconcile committed outcomes after a lost response'
+    Assert-Test ($script:visibilityWaits -ge 15) 'read barriers cover create, both phase markers, upload and publication'
+    Assert-Test (($context | ConvertTo-Json -Depth 5 -Compress) -ceq $contextBefore) 'complete release chain preserves the exact candidate context'
+    $diagnostic = Get-ForeverStateDiagnostic $context $script:remote prepared $false 0
+    Assert-Test (-not $diagnostic.Contains('Current notes') -and -not $diagnostic.Contains('statspro-forever-release:')) 'state diagnostics expose no notes or protocol payload'
     Write-Host "Forever release manager self-test: PASS ($checks checks)."
 } finally { Remove-Item -LiteralPath $fixture -Force }

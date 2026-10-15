@@ -1,0 +1,68 @@
+name: Forever draft read-only diagnostic
+
+on:
+  workflow_dispatch:
+
+jobs:
+  inspect-existing-draft:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    # No environment secrets are needed. marketplace-release permits tags only,
+    # whereas this manual diagnostic must load its new workflow from main.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify anonymous checkout boundary
+        shell: pwsh
+        run: ./scripts/check-anonymous-checkout.ps1
+      - name: Compare existing draft through inventory and direct ID
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          . ./scripts/manage-forever-release.ps1 -LibraryOnly
+          . ./scripts/forever-release-contract.ps1
+          $commit = '359531fd6bb4cea2cd8e53b1cc31b0c58ffca4ed'
+          $notes = Invoke-StatsProForeverGit -SourceRoot . -Arguments @('cat-file', 'blob', "${commit}:CHANGELOG-FOREVER.md")
+          $context = [pscustomobject]@{
+            Repository = 'Antrakt92/StatsPro'
+            Tag = 'forever-v1.18.5'
+            Commit = $commit
+            Version = '1.18.5'
+            RunId = '38735541074'
+            RunAttempt = '1'
+            ArchiveSha256 = 'd658d0aaf9efa6bff3d1d596ea74f9f8edfef3ba299f8f6686b574aa968d1406'
+            CandidateSha256 = '070f5f15307211706499b2a903ef2fd3ad1a1aa0d1c7f8dcc9a331c9b390e2c4'
+            Notes = $notes.Replace("`r`n", "`n").Replace("`r", "`n").TrimEnd([char[]]"`n")
+          }
+          $tagMatch = $false
+          try { Assert-ForeverRemoteTag -Context $context; $tagMatch = $true } catch {}
+          Write-Host "remoteTagCommitMatch=$tagMatch"
+          $headers = @('-H', 'Accept: application/vnd.github+json', '-H', 'X-GitHub-Api-Version: 2026-03-10')
+          $allMatch = $tagMatch
+          foreach ($source in @('inventory', 'direct-id')) {
+            $observed = $null
+            $readSucceeded = $false
+            try {
+              if ($source -ceq 'inventory') {
+                $observed = Get-ForeverRelease -Context $context
+              } else {
+                $json = Invoke-ForeverGh -Arguments (@('api', '--method', 'GET', 'repos/Antrakt92/StatsPro/releases/413792857') + $headers)
+                $observed = ConvertFrom-Json -InputObject $json
+              }
+              $readSucceeded = $true
+            } catch {}
+            $stateMatch = $false
+            try { Assert-ForeverRelease -Context $context -Release $observed -Phase prepared; $stateMatch = $true } catch {}
+            $idMatch = $null -ne $observed -and $observed.id -eq 413792857
+            Write-Host "source=$source readSucceeded=$readSucceeded releaseIdMatch=$idMatch stateMatch=$stateMatch"
+            Write-Host (Get-ForeverStateDiagnostic -Context $context -Release $observed -Phase prepared -Published $false -AssetCount 0)
+            $allMatch = $allMatch -and $readSucceeded -and $stateMatch -and $idMatch
+          }
+          if (-not $allMatch) { throw 'Existing draft diagnostic did not match; inspect the boolean field results above.' }
+          Write-Host 'Existing draft diagnostic passed. No release or marketplace mutations were invoked.'

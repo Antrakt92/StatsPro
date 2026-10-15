@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.18.5 - 15-Oct-2026 — Clearer Forever settings
+## 1.18.6 - 15-Oct-2026 — Clearer Forever settings
 
 ### Improved
 

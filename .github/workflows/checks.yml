@@ -96,6 +96,15 @@ jobs:
         shell: pwsh
         run: ./scripts/manage-github-release.ps1 -SelfTest
 
+      - name: Check Forever release helpers on Linux
+        shell: pwsh
+        run: |
+          ./scripts/test-forever-release-contract.ps1
+          ./scripts/manage-github-release.ps1 -ForeverBeta -SelfTest
+          ./scripts/test-forever-workflow.ps1
+          . ./scripts/manage-forever-release.ps1 -LibraryOnly
+          [void](Invoke-ForeverGh -Arguments @('--version'))
+
       - name: Install release validation tools
         run: |
           sudo apt-get update

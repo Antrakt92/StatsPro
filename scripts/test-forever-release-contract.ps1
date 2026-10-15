@@ -10,6 +10,7 @@ if ($ArchivePath -cne 'caller-archive-path' -or $SourceRoot -cne 'caller-source-
 $script:publishedForeverTags = @()
 $script:publishedInventoryFailure = $false
 $script:publishedInventoryReads = 0
+$script:realPublishedForeverTagReader = ${function:Get-StatsProPublishedForeverTags}
 function Get-StatsProPublishedForeverTags {
     param([string]$Repository)
     $script:publishedInventoryReads++
@@ -30,6 +31,27 @@ $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
 $fixture = Join-Path $tempBase ('statspro-forever-release-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $fixture | Out-Null
 try {
+    $script:inventoryNativeCalls = 0
+    & {
+        function Get-Command {
+            param([string]$Name, [string]$CommandType, [string]$ErrorAction)
+            if ($Name -cne 'gh' -or $CommandType -cne 'Application') { throw 'Unexpected inventory executable lookup' }
+            [pscustomobject]@{ Source = '/usr/bin/gh' }
+            [pscustomobject]@{ Source = '/bin/gh' }
+        }
+        function Invoke-StatsProNativeCapture {
+            param([string]$FilePath, [string[]]$Arguments, [int]$TimeoutSeconds, [string]$Description)
+            $script:inventoryNativeCalls++
+            if ($FilePath -cne '/usr/bin/gh' -or
+                ($Arguments -join '|') -cne 'api|--paginate|--slurp|repos/Antrakt92/StatsPro/releases?per_page=100') {
+                throw 'Inventory must invoke one executable path with the exact read-only release request'
+            }
+            [pscustomobject]@{ ExitCode = 0; Output = @('[[]]') }
+        }
+        $tags = @(& $script:realPublishedForeverTagReader -Repository 'Antrakt92/StatsPro')
+        if ($tags.Count -ne 0) { throw 'Empty inventory produced published tags' }
+    }
+    if ($script:inventoryNativeCalls -ne 1) { throw 'Inventory should execute one resolved gh application' }
     $inventoryFixture = @'
 [[{"tag_name":"forever-v1.18.1","draft":false,"prerelease":true,"published_at":"2026-10-15T12:00:00Z"},{"tag_name":"forever-v1.18.2","draft":true,"prerelease":true,"published_at":null}],[{"tag_name":"v1.18.2","draft":false,"prerelease":false,"published_at":"2026-10-15T12:00:00Z"},{"tag_name":"forever-v1.18.3","draft":false,"prerelease":false,"published_at":"2026-10-15T12:00:00Z"}]]
 '@

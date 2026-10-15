@@ -47,7 +47,7 @@ function ConvertFrom-StatsProPublishedForeverInventory {
 function Get-StatsProPublishedForeverTags {
     param([string]$Repository = 'Antrakt92/StatsPro')
     if ($Repository -cnotmatch '\A[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\z') { throw 'Forever release inventory requires an exact repository identity' }
-    $gh = (Get-Command gh -CommandType Application -ErrorAction Stop).Source
+    $gh = (Get-Command gh -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
     $result = Invoke-StatsProNativeCapture -FilePath $gh -Arguments @(
         'api', '--paginate', '--slurp', "repos/$Repository/releases?per_page=100"
     ) -TimeoutSeconds 60 -Description 'Read published Forever release history'

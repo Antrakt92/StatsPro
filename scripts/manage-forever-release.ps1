@@ -20,7 +20,7 @@ $ErrorActionPreference = 'Stop'
 
 function Invoke-ForeverGh {
     param([string[]]$Arguments, [switch]$AllowMissing)
-    $command = (Get-Command gh -CommandType Application -ErrorAction Stop).Source
+    $command = (Get-Command gh -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
     $result = Invoke-StatsProNativeCapture -FilePath $command -Arguments $Arguments -TimeoutSeconds 60 -Description 'Forever release operation'
     $output = $result.Output -join "`n"
     if ($result.ExitCode -ne 0) {

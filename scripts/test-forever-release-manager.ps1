@@ -10,6 +10,21 @@ function Assert-Rejected([scriptblock]$Action, [string]$Description) {
     try { & $Action } catch { $rejected = $true }
     Assert-Test $rejected $Description
 }
+# Exercise the production resolver before the release-state mock replaces it.
+& {
+    function Get-Command {
+        param([string]$Name, [string]$CommandType, [string]$ErrorAction)
+        Assert-Test ($Name -ceq 'gh' -and $CommandType -ceq 'Application') 'resolver requests the GitHub executable'
+        return @([pscustomobject]@{ Source = '/usr/bin/gh' }, [pscustomobject]@{ Source = '/bin/gh' })
+    }
+    function Invoke-StatsProNativeCapture {
+        param([string]$FilePath, [string[]]$Arguments, [int]$TimeoutSeconds, [string]$Description)
+        Assert-Test ($FilePath -ceq '/usr/bin/gh') 'multiple executable matches resolve to exactly the first path'
+        Assert-Test (($Arguments -join ' ') -ceq 'api user' -and $TimeoutSeconds -eq 60) 'resolved executable preserves arguments and timeout'
+        return [pscustomobject]@{ ExitCode = 0; Output = @('bounded resolver fixture') }
+    }
+    Assert-Test ((Invoke-ForeverGh -Arguments @('api', 'user')) -ceq 'bounded resolver fixture') 'production GitHub invoker accepts multiple PATH matches'
+}
 $fixture = Join-Path ([IO.Path]::GetTempPath()) ("statspro-forever-manager-test-" + [guid]::NewGuid().ToString('N') + '.zip')
 [IO.File]::WriteAllText($fixture, 'bounded archive fixture')
 try {

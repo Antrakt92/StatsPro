@@ -527,9 +527,6 @@ function Assert-StatsProFlavorVersions {
     }
     $version = $matches[0].Groups[1].Value.Trim()
     Assert-StatsProReleaseVersion -Value $version
-    if ((Compare-SemVer -Left $version -Right $RetailVersion) -gt 0) {
-        throw "Forever TOC version $version is ahead of Retail release version $RetailVersion."
-    }
 }
 
 function Assert-ReleaseVersion {
@@ -760,14 +757,13 @@ function Invoke-SelfTest {
         New-Item -ItemType Directory -Path $flavorRoot | Out-Null
         Assert-StatsProFlavorVersions -Root $flavorRoot -RetailVersion '1.2.3'
         $flavorToc = Join-Path $flavorRoot 'StatsPro_Forever.toc'
-        foreach ($version in @('1.2.2', '1.2.3')) {
+        # Independent beta tags can advance Forever beyond the stable Retail version.
+        foreach ($version in @('1.2.2', '1.2.3', '1.2.4')) {
             [System.IO.File]::WriteAllText($flavorToc, "## Version: $version`n")
             Assert-StatsProFlavorVersions -Root $flavorRoot -RetailVersion '1.2.3'
         }
-        [System.IO.File]::WriteAllText($flavorToc, "## Version: 1.2.4`n")
-        Assert-ThrowsMatch 'Forever ahead of Retail rejected' {
-            Assert-StatsProFlavorVersions -Root $flavorRoot -RetailVersion '1.2.3'
-        } 'ahead of Retail'
+        [System.IO.File]::WriteAllText($flavorToc, "## Version: 1.18.3`n")
+        Assert-StatsProFlavorVersions -Root $flavorRoot -RetailVersion '1.18.2'
         foreach ($bad in @('01.2.3', '1.2.3-beta', '2147483648.0.0')) {
             [System.IO.File]::WriteAllText($flavorToc, "## Version: $bad`n")
             Assert-ThrowsMatch 'Forever noncanonical version rejected' {

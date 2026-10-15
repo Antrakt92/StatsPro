@@ -12,7 +12,7 @@
 ## Notes-zhCN: WoW Forever角色属性与装备面板（测试版）。
 ## Notes-zhTW: WoW Forever角色屬性與裝備面板（測試版）。
 ## Author: Antrakt
-## Version: 1.18.2
+## Version: 1.18.3
 ## IconTexture: Interface\AddOns\StatsPro\textures\forever-logo.png
 ## SavedVariables: StatsProDB, StatsProSelfTest
 ## Category: Combat

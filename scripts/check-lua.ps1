@@ -977,10 +977,12 @@ local globalTypo = _G.StatsProFontPickre
 local maxSchoolsTypo = _G.MAX_SPELL_SCHOOL
 local specInfoByID = _G.GetSpecializationInfoByID
 local specInfoByIDTypo = _G.GetSpecializationInfoById
+local overrideAP = _G.GetOverrideAPBySpellPower
+local overrideAPTypo = _G.GetOverrideAPBySpellPowre
 local suffix = "Text"
 local dynamic = _G["StatsProVisibleCheck" .. suffix]
 return state.retrySchedueld or globalTypo or maxSchoolsTypo
-    or specInfoByID or specInfoByIDTypo or dynamic
+    or specInfoByID or specInfoByIDTypo or overrideAP or overrideAPTypo or dynamic
 '@ -Encoding UTF8
         $fieldCheck = Invoke-LuaLanguageServerCheck `
             -ServerPath $luaLanguageServer `
@@ -991,16 +993,17 @@ return state.retrySchedueld or globalTypo or maxSchoolsTypo
             -IsolateLuaEnvironment
         $undefinedFieldDiagnostics = @($fieldCheck.Diagnostics | Where-Object { $_.Code -eq "undefined-field" })
         $fieldMessages = $undefinedFieldDiagnostics.Message -join "`n"
-        if ($fieldCheck.ExitCode -eq 0 -or $fieldCheck.Diagnostics.Count -ne 6 -or
-            $undefinedFieldDiagnostics.Count -ne 6 -or
+        if ($fieldCheck.ExitCode -eq 0 -or $fieldCheck.Diagnostics.Count -ne 7 -or
+            $undefinedFieldDiagnostics.Count -ne 7 -or
             $fieldMessages -notmatch "retrySchedueld" -or
             $fieldMessages -notmatch "StatsProFontPickre" -or
             $fieldMessages -notmatch "MAX_SPELL_SCHOOL" -or
             $fieldMessages -notmatch "IsShwon" -or
             $fieldMessages -notmatch "buton1" -or
-            $fieldMessages -notmatch "GetSpecializationInfoById") {
+            $fieldMessages -notmatch "GetSpecializationInfoById" -or
+            $fieldMessages -notmatch "GetOverrideAPBySpellPowre") {
             $summary = @($fieldCheck.Diagnostics | ForEach-Object { "$($_.Code): $($_.Message)" }) -join " | "
-            throw "LuaLS field-typo fixture must report only the six intentional field typos; exit=$($fieldCheck.ExitCode), diagnostics=$summary"
+            throw "LuaLS field-typo fixture must report only the seven intentional field typos; exit=$($fieldCheck.ExitCode), diagnostics=$summary"
         }
     }
     finally {

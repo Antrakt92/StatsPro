@@ -36,7 +36,7 @@ for _, rows in pairs(F.rows) do
 end
 local count = 0
 for _ in pairs(catalogue) do count = count + 1 end
-assert(count == 45, "catalogue completeness")
+assert(count == 46, "catalogue completeness")
 local function Expect(key, expected, expectedState)
     local value, state = catalogue[key].Read()
     assert(rawequal(value, expected), key .. " value")
@@ -58,6 +58,50 @@ UnitAttackPower = function() return 100, 0, -300 end
 Expect("AttackPower", 0, "clean")
 UnitRangedAttackPower = function() return 100, 0, -300 end
 Expect("RangedAttackPower", 0, "clean")
+UnitAttackPower = function() return 100, 20, -30 end
+UnitRangedAttackPower = function() return 300, 20, -30 end
+GetOverrideAPBySpellPower = function() return 0.5 end
+GetSpellBonusDamage = function(school) return school == 6 and 400 or 500 end
+GetSpellBonusHealing = function() return 450 end
+Expect("AttackPower", 200, "clean")
+Expect("RangedAttackPower", 200, "clean")
+GetSpellBonusHealing = function() return 30 end
+Expect("AttackPower", 15, "clean")
+GetSpellBonusHealing = function() return -30 end
+Expect("AttackPower", 0, "clean")
+Expect("RangedAttackPower", 0, "clean")
+GetSpellBonusHealing = function() return 450 end
+GetSpellBonusDamage = function(school) return school == 6 and -40 or 500 end
+Expect("AttackPower", 0, "clean")
+Expect("RangedAttackPower", 0, "clean")
+for school = 2, 7 do
+    GetSpellBonusDamage = function(index) return index == school and secret or 500 end
+    Expect("AttackPower", nil, "unknown")
+    Expect("RangedAttackPower", nil, "unknown")
+end
+GetSpellBonusDamage = function() return 400 end
+GetSpellBonusHealing = function() return secret end
+Expect("AttackPower", nil, "unknown")
+GetSpellBonusHealing = function() return 450 end
+for _, result in ipairs({ secret, math.huge, 0 / 0, false, "invalid" }) do
+    GetOverrideAPBySpellPower = function() return result end
+    Expect("AttackPower", nil, "unknown")
+end
+GetOverrideAPBySpellPower = function() return nil end
+Expect("AttackPower", nil, "unknown")
+GetOverrideAPBySpellPower = function() error("unavailable") end
+Expect("AttackPower", nil, "unknown")
+GetOverrideAPBySpellPower = function() return 1e308 end
+GetSpellBonusDamage = function() return 1e308 end
+GetSpellBonusHealing = function() return 1e308 end
+Expect("AttackPower", nil, "unknown")
+for _, multiplier in ipairs({ 0, -1 }) do
+    GetOverrideAPBySpellPower = function() return multiplier end
+    Expect("AttackPower", 90, "clean")
+    Expect("RangedAttackPower", 290, "clean")
+end
+GetOverrideAPBySpellPower = nil
+Expect("AttackPower", 90, "clean")
 UnitDefenseSkill = function() return 5, -10 end
 Expect("Defense", 0, "clean")
 for index = 1, 3 do
@@ -77,6 +121,22 @@ Expect("RangedHaste", nil, "unknown")
 GetCombatRatingBonus = function(index) assert(index == CR_HIT_MELEE) return 3 end
 GetHitModifier = function() return -1 end
 Expect("MeleeHit", 2, "clean")
+GetOffhandHitModifier = function() return 5 end
+Expect("OffhandHit", 8, "clean")
+assert(catalogue.OffhandHit.kind == "percent" and catalogue.OffhandHit.colorKey == "foreverHit")
+assert(F.defaults.showOffhandHit == false, "new optional row preserves existing selections")
+GetOffhandHitModifier = function() return secret end
+Expect("OffhandHit", nil, "unknown")
+GetOffhandHitModifier = function() return 0 / 0 end
+Expect("OffhandHit", nil, "unknown")
+GetOffhandHitModifier = function() error("unsupported API") end
+Expect("OffhandHit", nil, "unknown")
+GetOffhandHitModifier = nil
+Expect("OffhandHit", nil, "unknown")
+GetOffhandHitModifier = function() return 5 end
+GetCombatRatingBonus = function() return secret end
+Expect("OffhandHit", nil, "unknown")
+GetCombatRatingBonus = function(index) assert(index == CR_HIT_MELEE) return 3 end
 GetHitModifier = function() return secret end
 Expect("MeleeHit", nil, "unknown")
 CR_HIT_MELEE = nil

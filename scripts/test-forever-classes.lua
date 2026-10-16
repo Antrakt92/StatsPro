@@ -19,6 +19,7 @@ for _, class in ipairs(classes) do
             GetSpellCritChance = function() return 5 end,
             GetCombatRatingBonus = function() return 1 end,
             GetHitModifier = function() return 0 end,
+            GetOffhandHitModifier = function() return 0 end,
             GetRangedHitModifier = function() return 0 end,
             GetSpellHitModifier = function() return 0 end,
             CR_HIT_MELEE = 101, CR_HIT_RANGED = 102, CR_HIT_SPELL = 103,
@@ -66,7 +67,7 @@ for _, class in ipairs(classes) do
     test.cacheSettings()
     local blocks = test.buildRenderBlocks()
     local total = #blocks[1].labels + #blocks[2].labels + #blocks[3].labels + #blocks[4].labels
-    check(total == 45, class .. " can select all 45 supported rows")
+    check(total == 46, class .. " can select all 46 supported rows")
     for _, rows in pairs(addon.forever.rows) do
         for _, row in ipairs(rows) do
             check(settings.colors[row.colorKey] ~= nil, class .. " editable color for " .. row.key)

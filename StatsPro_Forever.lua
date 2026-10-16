@@ -67,6 +67,25 @@ local function Nonnegative(reader)
     end
 end
 
+local function AttackPower(name)
+    local base = Sum(name, 3, "player")
+    return Nonnegative(function()
+        if _G.GetOverrideAPBySpellPower == nil then return base() end
+        local multiplier, state = Read("GetOverrideAPBySpellPower", 1)
+        if state ~= "clean" then return nil, "unknown" end
+        if multiplier <= 0 then return base() end
+        -- Match the character sheet's spell-power override for both AP sources.
+        local minimum, healingState = Read("GetSpellBonusHealing", 1)
+        if healingState ~= "clean" then return nil, "unknown" end
+        for school = 2, 7 do
+            local power, powerState = Read("GetSpellBonusDamage", 1, school)
+            if powerState ~= "clean" then return nil, "unknown" end
+            minimum = math.min(minimum, power)
+        end
+        return Classify(minimum * multiplier)
+    end)
+end
+
 local function Scale(reader, factor)
     return function()
         local value, state = reader()
@@ -98,13 +117,14 @@ Row("offensive", "MeleeCrit", "Melee Crit", Scalar("GetCritChance", 1), "percent
 Row("offensive", "RangedCrit", "Ranged Crit", Scalar("GetRangedCritChance", 1), "percent", "crit")
 Row("offensive", "SpellCrit", "Spell Crit", Scalar("GetSpellCritChance", 1), "percent", "crit")
 Row("offensive", "MeleeHit", "Melee Hit", Hit("CR_HIT_MELEE", "GetHitModifier"), "percent")
+Row("offensive", "OffhandHit", "Offhand Hit", Hit("CR_HIT_MELEE", "GetOffhandHitModifier"), "percent")
 Row("offensive", "RangedHit", "Ranged Hit", Hit("CR_HIT_RANGED", "GetRangedHitModifier"), "percent")
 Row("offensive", "SpellHit", "Spell Hit", Hit("CR_HIT_SPELL", "GetSpellHitModifier"), "percent")
 Row("offensive", "MeleeHaste", "Melee Haste", Scalar("GetMeleeHaste", 1), "percent", "haste")
 Row("offensive", "RangedHaste", "Ranged Haste", Sum("GetRangedHaste", 2), "percent", "haste")
 Row("offensive", "SpellHaste", "Spell Haste", Scalar("UnitSpellHaste", 1, "player"), "percent", "haste")
-Row("offensive", "AttackPower", "Attack Power", Nonnegative(Sum("UnitAttackPower", 3, "player")))
-Row("offensive", "RangedAttackPower", "Ranged Attack Power", Nonnegative(Sum("UnitRangedAttackPower", 3, "player")))
+Row("offensive", "AttackPower", "Attack Power", AttackPower("UnitAttackPower"))
+Row("offensive", "RangedAttackPower", "Ranged Attack Power", AttackPower("UnitRangedAttackPower"))
 for school, name in ipairs({ "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" }) do
     Row("offensive", "SpellPower" .. name, name .. " Spell Power", Scalar("GetSpellBonusDamage", 1, school + 1))
 end
@@ -253,7 +273,7 @@ F.labels = {
         ["Strength"] = "Сила", ["Agility"] = "Ловкость", ["Stamina"] = "Выносливость",
         ["Intellect"] = "Интеллект", ["Spirit"] = "Дух", ["Melee Crit"] = "Крит ближнего боя",
         ["Ranged Crit"] = "Крит дальнего боя", ["Spell Crit"] = "Крит заклинаний",
-        ["Melee Hit"] = "Меткость ближнего боя", ["Ranged Hit"] = "Меткость дальнего боя",
+        ["Melee Hit"] = "Меткость ближнего боя", ["Offhand Hit"] = "Меткость второй руки", ["Ranged Hit"] = "Меткость дальнего боя",
         ["Spell Hit"] = "Меткость заклинаний", ["Melee Haste"] = "Скорость ближнего боя",
         ["Ranged Haste"] = "Скорость дальнего боя", ["Spell Haste"] = "Скорость заклинаний",
         ["Attack Power"] = "Сила атаки", ["Ranged Attack Power"] = "Сила атаки дальнего боя",
@@ -309,6 +329,7 @@ for locale, words in pairs(vocabulary) do
                 local mode, stat = key:match("^(Melee)(.+)$")
                 if not mode then mode, stat = key:match("^(Ranged)(.+)$") end
                 if not mode then mode, stat = key:match("^(Spell)(.+)$") end
+                if not mode then mode, stat = key:match("^(Offhand)(.+)$") end
                 if mode and components[stat] then text = components[stat] .. " (" .. components[mode] .. ")" end
                 local school = key:match("^SpellPower(.+)$")
                 if school and components[school] then text = components.SpellPower .. " (" .. components[school] .. ")" end
@@ -348,6 +369,7 @@ for locale, components in pairs(localeComponents) do
             local mode, stat = key:match("^(Melee)(.+)$")
             if not mode then mode, stat = key:match("^(Ranged)(.+)$") end
             if not mode then mode, stat = key:match("^(Spell)(.+)$") end
+            if not mode then mode, stat = key:match("^(Offhand)(.+)$") end
             if mode and components[stat] then short = Abbreviate(components[stat]) .. " " .. Abbreviate(components[mode]) end
             local school = key:match("^SpellPower(.+)$")
             if school then short = Abbreviate(components.SpellPower) .. " " .. Abbreviate(components[school]) end

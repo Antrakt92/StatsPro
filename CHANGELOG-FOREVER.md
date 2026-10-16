@@ -2,14 +2,20 @@
 
 ## 1.19.0 - 16-Oct-2026 — Offhand hit and stat fixes
 
+Updated for WoW Forever Beta 1.60.1, build 70425.
+
 ### Added
 
-- Choose a separate offhand hit row using the latest Forever Beta API.
+- Add an optional **Offhand Hit** row, separate from Melee Hit. Enable it in
+  Stats settings; existing row selections are preserved.
 
 ### Fixed
 
-- Match character-sheet attack power when a spell-power override is active.
-- Apply appearance themes to every Forever stat color, including Monochrome and High Contrast.
+- Attack Power and Ranged Attack Power now match the character sheet when a
+  spell-power conversion is active, instead of showing the unconverted value.
+- Appearance themes now apply to every Forever stat color. Monochrome stays
+  gray, High Contrast uses its full palette, and cancelling a preview restores
+  your custom colors.
 
 ## 1.18.6 - 15-Oct-2026 — Clearer Forever settings
 

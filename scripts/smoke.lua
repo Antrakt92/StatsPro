@@ -2087,6 +2087,41 @@ do
     eq("archon.v5_missing_mythic_spec_falls_back_to_heroic.footer",
         archonTooltip(perSpecFallbackEnv).lines[2].left, "16-May-26")
 
+    for _, case in ipairs({
+        { name = "missing_class", schema = 5, fallback = true },
+        { name = "malformed_class_false", schema = 5, classData = false },
+        { name = "malformed_class_string", schema = 5, classData = "invalid" },
+        { name = "legacy_missing_class", schema = 4 },
+    }) do
+        local fixture = makeArchonV2Fixture("2026-05-16")
+        fixture.schemaVersion = case.schema
+        fixture.snapshots.raidMythic.specs.MAGE = case.classData
+        setArchonFixtureTargets(fixture, "raidHeroic", "MAGE", "frost",
+            { crit = 120, haste = 220, mastery = 720, versatility = 420 })
+        local env, _, test = loadStatsPro("enUS", {
+            unitClassToken = "MAGE", specIndex = 1, specID = 64,
+            statsProDB = { targetSnapshot = "raidMythic" },
+            statsProArchonTargets = fixture,
+        })
+        local ok, err = pcall(env.__fireEvent, "PLAYER_ENTERING_WORLD")
+        local prefix = "archon.mythic_class_fallback." .. case.name
+        check(prefix .. ".triggered", ok, err)
+        local meta = test.buildArchonTargetMeta("mastery", 700, env.CR_MASTERY)
+        if case.fallback then
+            eq(prefix .. ".target", meta and meta.target, 720)
+            eq(prefix .. ".key", meta and meta.snapshotKey, "raidHeroic")
+            eq(prefix .. ".date", meta and meta.capturedAt, "2026-05-16")
+            if meta then
+                test.renderMainPanelForSmoke("Mastery:", "700", "20.0%", 1, nil, nil, { meta })
+                test.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+                eq(prefix .. ".header", archonTooltip(env).lines[1].left, "Raid Heroic")
+                eq(prefix .. ".footer", archonTooltip(env).lines[2].left, "16-May-26")
+            end
+        else
+            eq(prefix .. ".rejected", meta, nil)
+        end
+    end
+
     for index, spec in ipairs(archonManifest.specs) do
         local parityFixture = makeArchonV2Fixture("2026-05-15")
         local expectedTarget = 1000 + index

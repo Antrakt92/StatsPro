@@ -1173,8 +1173,10 @@ function addon.archonTargets.GetSnapshot(classToken, specKey, snapshotKey)
     local specs = snapshotRoot.specs
     if type(specs) ~= "table" then return nil, snapshotRoot, root, normalizedKey end
     local classData = specs[classToken]
-    if type(classData) ~= "table" then return nil, snapshotRoot, root, normalizedKey end
-    local specData = classData[specKey]
+    if classData ~= nil and type(classData) ~= "table" then
+        return nil, snapshotRoot, root, normalizedKey
+    end
+    local specData = type(classData) == "table" and classData[specKey] or nil
     if type(specData) ~= "table" then
         local rootSnapshots = type(root) == "table" and root.snapshots or nil
         if type(root) == "table" and root.schemaVersion == 5 and normalizedKey == "raidMythic"

@@ -373,4 +373,73 @@ do
     check(repairTest.buildRenderBlocks()[7].repairStr == "", "fully repaired gear hides the zero-cost row")
     check(not next(visited), "fully repaired gear needs no repair tooltips")
 end
+do
+    local paletteEnv, paletteAddon, paletteTest = fixtures.loadStatsPro("enUS", {
+        forever = true, unitGUID = function() return "Player-ForeverPalette" end,
+    })
+    paletteEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local function CustomPalette()
+        local active = paletteTest.profileState().settings
+        active.labelStyle = "full"
+        active.showOffensive, active.showDefensive, active.showTertiary = true, true, true
+        active.hideZeroOffensive, active.hideZeroDefensive, active.hideZeroTertiary = false, false, false
+        for _, rows in pairs(paletteAddon.forever.rows) do
+            for _, row in ipairs(rows) do active[row.showKey] = true end
+        end
+        for key in pairs(paletteAddon.forever.colorDefaults) do
+            active.colors[key] = { r = .13, g = .27, b = .41 }
+        end
+        paletteTest.cacheSettings()
+        return active, active.colors
+    end
+    local active, customColors = CustomPalette()
+    local originalRoot = paletteEnv.StatsProDB
+    check(paletteTest.appearancePresets.startPreview("monochrome"), "Forever monochrome preview starts")
+    for _, block in ipairs(paletteTest.buildRenderBlocks()) do
+        for _, label in ipairs(block.labels) do
+            local red, green, blue = label:match("^|cff(%x%x)(%x%x)(%x%x)")
+            check(red and red == green and red == blue, "actual Forever monochrome HUD labels are grayscale")
+        end
+    end
+    check(paletteTest.appearancePresets.cancelPreview(), "Forever monochrome preview cancels")
+    check(paletteEnv.StatsProDB == originalRoot and paletteTest.profileState().settings == active
+        and active.colors == customColors, "cancel preserves exact custom profile palette identities")
+    for key in pairs(paletteAddon.forever.colorDefaults) do
+        local color = active.colors[key]
+        check(color.r == .13 and color.g == .27 and color.b == .41,
+            "cancel restores custom Forever color " .. key)
+    end
+    local groupOrder = { "character", "offensive", "utility", "defensive" }
+    for _, id in ipairs(paletteTest.appearancePresets.order()) do
+        CustomPalette()
+        check(paletteTest.appearancePresets.startPreview(id), "Forever palette previews " .. id)
+        check(paletteTest.appearancePresets.applyPreview(), "Forever palette applies " .. id)
+        local applied = paletteTest.profileState().settings
+        check(paletteTest.appearancePresets.currentID() == id, "Forever palette is recognized " .. id)
+        local blocks = paletteTest.buildRenderBlocks()
+        for key in pairs(paletteAddon.forever.colorDefaults) do
+            local color = applied.colors[key]
+            check(color ~= nil, id .. " has explicit Forever color " .. key)
+            if id == "monochrome" then
+                check(color.r == color.g and color.g == color.b, "monochrome palette stays gray " .. key)
+            elseif id == "high-contrast" then
+                check(math.max(color.r, color.g, color.b) == 1, "high-contrast palette stays bright " .. key)
+            end
+        end
+        for index, group in ipairs(groupOrder) do
+            for rowIndex, row in ipairs(paletteAddon.forever.rows[group]) do
+                local color = applied.colors[row.colorKey]
+                local expected = string.format("|cff%02x%02x%02x", math.floor(color.r * 255 + .5),
+                    math.floor(color.g * 255 + .5), math.floor(color.b * 255 + .5))
+                check(blocks[index].labels[rowIndex]:sub(1, 10) == expected,
+                    id .. " actual HUD renders palette for " .. row.key)
+            end
+        end
+    end
+    for _, definition in pairs(retailTest.appearancePresets.definitions()) do
+        for key in pairs(paletteAddon.forever.colorDefaults) do
+            check(definition.colors[key] == nil, "Retail palette excludes Forever color " .. key)
+        end
+    end
+end
 print("StatsPro Forever HUD integration: PASS (" .. count .. " checks)")

@@ -720,6 +720,31 @@ for key in pairs(addon.appearancePresets.allowlist) do
         and CopyTable(defaults.colors) or defaults[key]
 end
 
+if addon.forever.enabled then
+    -- Extend each theme from its own colors so missing client-specific rows do
+    -- not fall back to the colorful default palette during a themed preview.
+    local themeSources = {
+        foreverStrength = "mainStat", foreverAgility = "mastery",
+        foreverIntellect = "haste", foreverSpirit = "leech",
+        foreverAttackPower = "speed", foreverHit = "versatility",
+        foreverExpertise = "parry", foreverRegen = "avoidance",
+        foreverHealing = "stagger", foreverSpellPenetration = "leech",
+        foreverArmorPenetration = "block", foreverDefense = "dodge",
+        foreverHoly = "mainStat", foreverFire = "crit",
+        foreverNature = "mastery", foreverFrost = "haste",
+        foreverShadow = "leech", foreverArcane = "versatility",
+    }
+    for _, definition in pairs(addon.appearancePresets.definitions) do
+        for key in pairs(addon.forever.colorDefaults) do
+            if not definition.colors[key] then
+                local school = key:match("^foreverResistance(.+)$")
+                local source = themeSources[key] or (school and themeSources["forever" .. school])
+                definition.colors[key] = CopyTable(definition.colors[source or "mainStat"])
+            end
+        end
+    end
+end
+
 -- Quick Setup presets are deliberately functional rather than visual. They own
 -- the complete row/routing shape required for a predictable result, while
 -- preserving appearance, scale, positions, locale, refresh rate, visibility,

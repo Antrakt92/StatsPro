@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.18.4 - 16-Oct-2026 — Midnight 12.1.5 support
+
+### Updated
+
+- Update Retail compatibility to Midnight 12.1.5.
+
+### Fixed
+
+- Keep Heroic stat references available when Mythic data has no entries for your class.
+
 ## 1.18.3 - 16-Oct-2026 — Archon target refresh
 
 ### Updated

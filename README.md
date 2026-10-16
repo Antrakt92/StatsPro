@@ -314,7 +314,7 @@ settings are preserved.
 
 ## Compatibility
 
-- **Retail — Midnight:** 12.1.0 and the 12.1.5 PTR.
+- **Retail — Midnight:** 12.1.5.
 - **WoW Forever beta:** the separate Forever build targets the current beta
   client. Its stat catalog and per-character profiles are designed for that client.
 - **Classic Era and other Classic branches:** not supported by either build.

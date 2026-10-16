@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.18.3 - 16-Oct-2026 — Archon target refresh
+
+### Updated
+
+- **Bundled M+ and raid targets were refreshed from Archon data checked on 16 October.**
+- Clarified installation guidance for separate Retail and Forever beta downloads.
+
 ## 1.18.2 - 15-Oct-2026 — Archon target refresh
 
 ### Updated

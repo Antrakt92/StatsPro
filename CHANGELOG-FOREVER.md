@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.19.0 - 16-Oct-2026 — Offhand hit and stat fixes
+
+### Added
+
+- Choose a separate offhand hit row using the latest Forever Beta API.
+
+### Fixed
+
+- Match character-sheet attack power when a spell-power override is active.
+- Apply appearance themes to every Forever stat color, including Monochrome and High Contrast.
+
 ## 1.18.6 - 15-Oct-2026 — Clearer Forever settings
 
 ### Improved

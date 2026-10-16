@@ -28,7 +28,7 @@ action bars, with optional gear information and settings you can share across
 characters.
 
 Retail includes Crit, Haste, Mastery, Versatility and bundled Archon references.
-Forever has its own 45-row stat catalog, class-aware setups and per-character
+Forever has its own 46-row stat catalog, class-aware setups and per-character
 profiles. Archon references are available only in Retail.
 
 ![StatsPro showing character stats beside the action bars during normal play](screenshots/09-flat-in-game.jpg)
@@ -51,8 +51,8 @@ at the top of the **Stats** tab or adjust individual rows yourself.
 
 - **Retail: Midnight:** install the Retail file through CurseForge or Wago, or
   choose the Retail archive on [GitHub Releases](https://github.com/Antrakt92/StatsPro/releases/latest).
-- **WoW Forever beta:** open the [Forever beta download](https://github.com/Antrakt92/StatsPro/releases/tag/forever-v1.18.6)
-  and choose `StatsPro-v1.18.6-Forever-beta.zip`. Use a marketplace file only if it
+- **WoW Forever beta:** open the [Forever beta download](https://github.com/Antrakt92/StatsPro/releases/tag/forever-v1.19.0)
+  and choose `StatsPro-v1.19.0-Forever-beta.zip`. Use a marketplace file only if it
   is explicitly labelled for Forever.
 
 Retail and Forever update separately. A newer Retail release may not include a
@@ -115,11 +115,12 @@ mounts. Normal speed is about 100%; the value remains meaningful while stationar
 
 ### Forever beta
 
-Choose from **45 optional rows**:
+Choose from **46 optional rows**:
 
 - All five attributes: Strength, Agility, Stamina, Intellect and Spirit.
 - Separate melee, ranged and spell crit, hit and haste; melee and ranged attack
   power; expertise, armor penetration and spell penetration.
+- Offhand hit, available separately from melee hit on the latest beta client.
 - Spell power by school and healing power.
 - Armor, defense, Dodge, Parry, Block, block value and school resistances.
 - Mana regeneration outside and during casting, per second or per five seconds;

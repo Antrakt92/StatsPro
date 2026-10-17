@@ -18431,18 +18431,7 @@ function addon.settingsUI.localization.MenuInfo(self, info, value)
             info.fontObject = object
         end
     end
-    for index, option in ipairs(LANGUAGE_OPTIONS) do
-        if option.value == locale then
-            local left = (index - 2) * 32 + 3
-            info.icon = "Interface\\AddOns\\StatsPro\\textures\\language-flags.tga"
-            -- Regular dropdown rows consume top-level coordinates and draw a
-            -- 16x16 icon. Include transparent vertical padding to retain the
-            -- flag's proportions; iconInfo applies only to icon-only rows.
-            info.tCoordLeft, info.tCoordRight = left / 512, (left + 26) / 512
-            info.tCoordTop, info.tCoordBottom = 3 / 32, 29 / 32
-            break
-        end
-    end
+
 end
 
 function addon.settingsUI.localization.Preview(self, value)

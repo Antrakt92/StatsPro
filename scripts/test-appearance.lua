@@ -36,11 +36,8 @@ for _, locale in ipairs({ "ruRU", "koKR", "zhCN", "zhTW" }) do
     addon.settingsUI.localization.MenuInfo(addon, info, locale)
     assert(info.fontObject, "language menu has its own font for " .. locale)
     assert(test.fontSupports(info.fontObject:GetFont(), requirement), "readable menu row for " .. locale)
-    -- Match UIDropDownMenu_AddButton's regular-row contract, including its
-    -- 16x16 texture. Nested iconInfo is ignored by this native path.
-    assert(info.icon and info.tCoordLeft and info.tCoordRight, "cropped texture flag for " .. locale)
-    assert((info.tCoordRight - info.tCoordLeft) * 512 ==
-        (info.tCoordBottom - info.tCoordTop) * 32, "square crop preserves flag proportions")
+    assert(not info.icon and not info.iconInfo and not info.tCoordLeft and not info.tCoordRight,
+        "language names have no decorative image for " .. locale)
     addon.settingsUI.localization.Preview(addon, locale)
     local state = test.panelFontState()
     assert(test.fontSupports(state.mainAppliedFont, requirement), "readable HUD preview for " .. locale)
@@ -51,20 +48,33 @@ for _, locale in ipairs({ "ruRU", "koKR", "zhCN", "zhTW" }) do
 end
 local auto = {}
 addon.settingsUI.localization.MenuInfo(addon, auto, "auto")
-assert(auto.tCoordLeft == 3 / 512, "Auto uses the client language flag")
-local crops = {}
+assert(not auto.icon and not auto.tCoordLeft, "Auto uses a readable name without a country image")
 for _, option in ipairs(test.registrySnapshot().languageOptions) do
     local info = {}
     addon.settingsUI.localization.MenuInfo(addon, info, option.value)
-    assert(info.icon and info.tCoordLeft, "native icon coordinates for " .. option.value)
-    if option.value ~= "auto" then
-        assert(not crops[info.tCoordLeft], "distinct flag crop for " .. option.value)
-        crops[info.tCoordLeft] = true
-    end
+    assert(info.fontObject and not info.icon and not info.iconInfo and not info.tCoordLeft and
+        not info.tCoordRight and not info.tCoordTop and not info.tCoordBottom,
+        "every language row keeps its readable font without images: " .. option.value)
 end
-local image = assert(io.open("textures/language-flags.tga", "rb"))
-assert(#image:read("*a") == 18 + 512 * 32 * 4, "complete power-of-two RGBA flag atlas")
-image:close()
+local dropdown = env.StatsProLanguageDropdown
+dropdown.dropdownInit()
+assert(#dropdown.dropdownEntries == #test.registrySnapshot().languageOptions,
+    "every language remains selectable by name")
+for _, info in ipairs(dropdown.dropdownEntries) do
+    assert(type(info.text) == "string" and info.text ~= "" and not info.icon and not info.iconInfo,
+        "rendered language choices contain names only")
+end
+local retailEnv, retailAddon, retailTest = fixtures.loadStatsPro("enUS")
+retailEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+retailAddon:OpenConfigMenu()
+local retailDropdown = retailEnv.StatsProLanguageDropdown
+retailDropdown.dropdownInit()
+assert(#retailDropdown.dropdownEntries == #retailTest.registrySnapshot().languageOptions,
+    "Retail keeps every language choice")
+for _, info in ipairs(retailDropdown.dropdownEntries) do
+    assert(type(info.text) == "string" and info.text ~= "" and not info.icon and not info.iconInfo and
+        not info.text:find("|T", 1, true), "Retail language choices contain names only")
+end
 
 local rollbackEnv, rollbackAddon, rollbackTest = fixtures.loadStatsPro("enUS", {
     forever = true,

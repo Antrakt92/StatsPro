@@ -248,11 +248,10 @@ end
 
 -- Per-client-shipped Blizzard font paths (drives the picker no-LSM fallback and
 -- current-name reverse lookup). FONT_GLYPH_SUPPORT above answers "what glyphs
--- at this path?"; this table answers the orthogonal "does THIS client install
--- physically ship a working file at this path?". locale=nil → universal entry
--- (every client). locale=<L> → only on the matching client install (gated by
--- GetLocale(), NOT by db.forceLocale — file-existence axis is install-bound,
--- never user-output-bound). Descriptive names mirror LSM-list convention and
+-- at this path?"; this table lists candidates whose availability must be probed.
+-- locale=nil identifies common picker entries; locale=<L> identifies native
+-- picker entries. Cross-language fallback may use any successfully probed asset,
+-- independently of GetLocale() and db.forceLocale. Names mirror LSM convention and
 -- fit the 25-char FONT_PICKER_BTN_W ceiling.
 local BLIZZARD_SHIPPED_FONTS = {
     { path = "Fonts\\FRIZQT__.TTF", name = "Friz Quadrata TT" },
@@ -4065,9 +4064,8 @@ function addon.fontRuntime.catalogEntry(fontPath)
 
     local localeDefault = LocaleAwareDefaultFont()
     if SameFontPath(fontPath, localeDefault) then return localeDefault, nil end
-    local clientLocale = GetLocale()
     for _, entry in ipairs(BLIZZARD_SHIPPED_FONTS) do
-        if (not entry.locale or entry.locale == clientLocale) and SameFontPath(fontPath, entry.path) then
+        if SameFontPath(fontPath, entry.path) then
             return entry.path, entry.name
         end
     end
@@ -4188,11 +4186,11 @@ function addon.fontRuntime.probeStatus(fontPath, size, flags)
     if cachedResult ~= nil then return cachedResult end
     local status = addon.fontRuntime.trySetFont(
         addon.fontRuntime.probeFontString, fontPath, size, flags)
-    -- On a cold client, loose SharedMedia files can return false from a direct
+    -- On a cold client, built-in and loose fonts can return false from a direct
     -- FontString:SetFont until any attached FontObject has loaded that asset.
     -- Keep the activator isolated: direct SetFont would break its inheritance,
     -- and sharing it with HUD/config regions would couple unrelated sizes/flags.
-    if status == "pending" and not IsBlizzardFontPath(fontPath)
+    if status == "pending" and (not IsBlizzardFontPath(fontPath) or not flags)
         and addon.fontRuntime.activateLooseFont(fontPath, size) then
         status = addon.fontRuntime.trySetFont(
             addon.fontRuntime.probeFontString, fontPath, size, flags)
@@ -4273,6 +4271,14 @@ local function FindCompatibleFont(currentFont, req)
     if LSM then
         for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
             match = consider(addon.fontRuntime.rawLSMPath(name), true)
+            if match then return match end
+        end
+    end
+    -- Output language can differ from the client locale. Probe other localized
+    -- client assets after installed media, rather than assuming they are absent.
+    for _, entry in ipairs(BLIZZARD_SHIPPED_FONTS) do
+        if entry.locale and entry.locale ~= GetLocale() then
+            match = consider(entry.path, true)
             if match then return match end
         end
     end
@@ -17834,7 +17840,8 @@ function addon.settingsUI.fontPicker.BuildFontsList(self, retryPending)
                 }
             end
         end
-    else
+    end
+    if #list == 0 then
         local clientLocale = GetLocale()
         for _, font in ipairs(BLIZZARD_SHIPPED_FONTS) do
             if not font.locale or font.locale == clientLocale then
@@ -18221,6 +18228,32 @@ function addon.settingsUI.fontPicker.Initialize(self, context, dropdown)
     end
 end
 
+function addon.settingsUI.localization.MenuInfo(self, info, value)
+    local locale = value == "auto" and self.NormalizeOutputLocale(GetLocale()) or value
+    local requirement = LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN
+    local path = FindCompatibleFont(CONFIG_FONT, requirement)
+    if path then
+        local object = self.fontRuntime.getOwnedFontObject("languageMenu:" .. locale)
+        if self.fontRuntime.setOwnedFont(object, nil, path, 12, nil) then
+            -- Each row keeps the font for its own script while the hovered
+            -- language changes the rest of Settings.
+            info.fontObject = object
+        end
+    end
+    for index, option in ipairs(LANGUAGE_OPTIONS) do
+        if option.value == locale then
+            local left = (index - 2) * 32 + 3
+            info.icon = "Interface\\AddOns\\StatsPro\\textures\\language-flags.tga"
+            info.iconInfo = {
+                tCoordLeft = left / 512, tCoordRight = (left + 26) / 512,
+                tCoordTop = 7 / 32, tCoordBottom = 25 / 32,
+                tSizeX = 18, tSizeY = 12,
+            }
+            break
+        end
+    end
+end
+
 function addon.settingsUI.localization.Preview(self, value)
     if self.profileRuntime.forceReapply or self.profileRuntime.transitioning
         or self.profileRuntime.suppressIntermediateRefresh then return false end
@@ -18559,6 +18592,7 @@ function addon.settingsUI.BuildAppearanceTab(self, context)
                 info.text = DisplayLabel(opt)
                 info.value = opt.value
                 info.checked = (current == opt.value)
+                self.settingsUI.localization.MenuInfo(self, info, opt.value)
                 info.func = function()
                     local db = self.dbRuntime.GetWritableSettings(true, "forceLocale")
                     if not db then

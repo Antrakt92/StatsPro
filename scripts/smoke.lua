@@ -12942,6 +12942,13 @@ do
 
     local function NewCatalogLocaleFixture(locale, options)
         options = options or {}
+        -- This fixture exercises recovery when the client has no CJK assets;
+        -- a successful SetFont would now make those assets valid fallbacks.
+        local missingClientFonts = {
+            ["Fonts\\2002.ttf"] = true,
+            ["Fonts\\ARKai_T.ttf"] = true,
+            ["Fonts\\bHEI00M.ttf"] = true,
+        }
         local state = { ready = options.ready ~= false, combat = false, probes = 0 }
         local fonts = { { name = "Friz Quadrata TT", path = latinPath } }
         if options.custom then fonts[#fonts + 1] = { name = "Chosen CJK", path = customPath } end
@@ -12952,6 +12959,7 @@ do
             lsmFonts = fonts,
             inCombatLockdown = function() return state.combat end,
             setFontResult = function(frame, font, size, flags)
+                if missingClientFonts[font] then error("fixture: unavailable client font") end
                 if font == cjkPath then
                     state.probes = state.probes + 1
                     if not state.ready then return false end
@@ -12960,6 +12968,7 @@ do
                 return true
             end,
             fontObjectSetFontResult = function(_, font)
+                if missingClientFonts[font] then error("fixture: unavailable client font") end
                 if font == cjkPath and not state.ready then return false end
                 return true
             end,

@@ -18075,10 +18075,17 @@ function addon.settingsUI.fontPicker.Preview(self, path)
         or self.profileRuntime.suppressIntermediateRefresh then return false end
     local picker = self.settingsUI.fontPicker
     if SameFontPath(path, picker.previewedPath) then return end
-    local applied, effectiveFont = ApplyTextStyleToAllPanels(path, GetNumberDB("fontSize"))
+    local size = GetNumberDB("fontSize")
+    local outline = cached.textOutlineStyle or self.readabilityConfig.getTextOutlineStyleDB()
+    local unchanged = SameFontPath(mainPanel.appliedFont, path)
+        and SameFontPath(defensivePanel.appliedFont, path)
+        and mainPanel.appliedSize == size and defensivePanel.appliedSize == size
+        and mainPanel.appliedTextOutlineStyle == outline
+        and defensivePanel.appliedTextOutlineStyle == outline
+    local applied, effectiveFont = ApplyTextStyleToAllPanels(path, size)
     if not applied then return false end
     picker.previewedPath = effectiveFont
-    ReflowAllPanels()
+    if not unchanged then ReflowAllPanels() end
     return true
 end
 
@@ -18086,8 +18093,18 @@ function addon.settingsUI.fontPicker.CancelPreview(self, force)
     local picker = self.settingsUI.fontPicker
     local hadPreview = picker.previewedPath ~= nil
     picker.previewedPath = nil
-    if self.profileRuntime.suppressIntermediateRefresh then return hadPreview end
+    if self.profileRuntime.forceReapply or self.profileRuntime.transitioning
+        or self.profileRuntime.suppressIntermediateRefresh then return hadPreview end
     if not force and not hadPreview then return false end
+    local font = self.fontRuntime.currentPath()
+    local size = GetNumberDB("fontSize")
+    local outline = cached.textOutlineStyle or self.readabilityConfig.getTextOutlineStyleDB()
+    if SameFontPath(mainPanel.appliedFont, font) and SameFontPath(defensivePanel.appliedFont, font)
+        and mainPanel.appliedSize == size and defensivePanel.appliedSize == size
+        and mainPanel.appliedTextOutlineStyle == outline
+        and defensivePanel.appliedTextOutlineStyle == outline then
+        return true
+    end
     local restored = self.fontRuntime.RestoreCommittedPreviewFont()
     ReflowAllPanels()
     return restored
@@ -18102,6 +18119,7 @@ function addon.settingsUI.fontPicker.Pick(self, font)
     self.fontRuntime.clearSavedAutoFont()
     ReflowAllPanels()
     picker.previewedPath = nil
+    picker.hoverGeneration = picker.hoverGeneration + 1
     picker.RefreshCaption(self)
     CloseDropDownMenus()
     local context = self.settingsUI.context
@@ -18170,6 +18188,7 @@ function addon.settingsUI.fontPicker.BuildFrame(self)
         -- OnHide is the single restore path for Escape, click-outside, commit, and
         -- Settings teardown. Invalidate every delayed pending-file retry first.
         picker.retryGeneration = picker.retryGeneration + 1
+        picker.hoverGeneration = picker.hoverGeneration + 1
         self.profileUI.RemoveSpecialFrame("StatsProFontPicker")
         if picker.catcher then picker.catcher:Hide() end
         local trigger = picker.dropdown and picker.dropdown.statsProTrigger
@@ -18246,7 +18265,9 @@ function addon.settingsUI.fontPicker.Populate(self, centerSelection)
             end)
             button:SetScript("OnLeave", function()
                 local generation = picker.hoverGeneration
-                C_Timer.After(0, function()
+                -- Give the pointer a short exit grace across row gaps. Enter still
+                -- previews synchronously; only restoring the saved face waits.
+                C_Timer.After(0.06, function()
                     if generation == picker.hoverGeneration then picker.CancelPreview(self) end
                 end)
             end)

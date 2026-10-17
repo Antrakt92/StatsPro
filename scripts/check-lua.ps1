@@ -1121,7 +1121,7 @@ Write-Host "== Lua syntax =="
 $SyntaxFiles = @($RuntimeLuaRefs | ForEach-Object { $_.FullPath })
 if (Test-Path $ArchonTargetsCheck) { $SyntaxFiles += $ArchonTargetsCheck }
 $SyntaxFiles += $SmokeFile
-foreach ($name in @("StatsPro_Forever.lua", "scripts/test-forever.lua", "scripts/test-forever-hud.lua", "scripts/test-forever-classes.lua", "scripts/test-appearance.lua", "scripts/test-retail-recovery.lua", "scripts/test-bundled-fonts.lua")) {
+foreach ($name in @("StatsPro_Forever.lua", "scripts/test-forever.lua", "scripts/test-forever-hud.lua", "scripts/test-forever-classes.lua", "scripts/test-appearance.lua", "scripts/test-retail-recovery.lua", "scripts/test-bundled-fonts.lua", "scripts/test-font-hover.lua")) {
     $path = Join-Path $RepoRoot $name
     if (-not (Test-Path -LiteralPath $path)) { throw "Missing Forever verification source: $name" }
     $SyntaxFiles += $path
@@ -1193,7 +1193,7 @@ if (-not $UpdateSmokeContract) {
 }
 
 Write-Host "== Forever stat and HUD regressions =="
-foreach ($script in @("scripts/test-forever.lua", "scripts/test-forever-hud.lua", "scripts/test-forever-classes.lua", "scripts/test-appearance.lua", "scripts/test-retail-recovery.lua", "scripts/test-bundled-fonts.lua")) {
+foreach ($script in @("scripts/test-forever.lua", "scripts/test-forever-hud.lua", "scripts/test-forever-classes.lua", "scripts/test-appearance.lua", "scripts/test-retail-recovery.lua", "scripts/test-bundled-fonts.lua", "scripts/test-font-hover.lua")) {
     $result = Invoke-NativeCapture -FilePath $Lua -Arguments @((Join-Path $RepoRoot $script)) `
         -TimeoutSeconds 60 -Description $script -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
     $result.Output | ForEach-Object { Write-Host $_ }

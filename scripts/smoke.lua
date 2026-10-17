@@ -26406,7 +26406,7 @@ do
     assertRGBA("config.control_design.font_hover_fill",
         fontRow.statsProStateTexture.colorTexture, tokens.colors.rowHover)
     userInteract("config.control_design.font_row_leave", fontRow, "OnLeave")
-    flushTimers("config.control_design.font_hover_timer", env, 0, 1)
+    flushTimers("config.control_design.font_hover_timer", env, 0.1, 1)
     assertDeepEqual("config.control_design.font_hover_zero_writes",
         env.StatsProDB, fontHoverBefore)
     env.StatsProFontPicker:Hide()

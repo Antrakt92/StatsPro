@@ -47,6 +47,11 @@ Type `/ss` or `/statspro` to open Settings. Outside combat, you can also
 right-click the HUD. To choose another setup later, expand **Quick Setup**
 at the top of the **Stats** tab or adjust individual rows yourself.
 
+Both builds include 12 additional font faces, including Noto Sans, Roboto
+Condensed, Oswald, DejaVu and Liberation. Choose one in **Appearance → Font**;
+no separate font addon is needed. Fonts registered by other addons remain
+available alongside the included collection.
+
 ### Choose your download
 
 - **Retail: Midnight:** install the Retail file through CurseForge or Wago, or

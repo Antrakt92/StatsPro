@@ -335,6 +335,10 @@ end
 -- LibSharedMedia-3.0 (soft dependency - gracefully falls back if not loaded)
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
 
+for _, font in ipairs(addon.bundledFonts or {}) do
+    AddFontGlyphSupport(font.path, font.cyrillic and { GLYPH_LATIN, GLYPH_CYR } or { GLYPH_LATIN })
+end
+
 -- WHY hijack-guard: STANDARD_TEXT_FONT is a Blizzard global ANY addon can mutate
 -- (ChonkyCharacterSheet / Tukui / ElvUI font modules / other "system font replacement"
 -- addons all do). Reading it raw lets a third-party pin StatsPro's defaults, migration

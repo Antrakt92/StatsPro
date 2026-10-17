@@ -1,4 +1,5 @@
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'bundled-font-contract.ps1')
 
 function Get-StatsProNormalizedTextSha256 {
     param([string]$Path)
@@ -151,4 +152,5 @@ function Assert-StatsProThirdPartyMaterials {
             Assert-StatsProThirdPartyNoticeField -Body $body -Path $requirement.Path -Name "License text SHA256" -Value $licenseHash
         }
     }
+    Assert-StatsProBundledFontMaterials -Root $Root
 }

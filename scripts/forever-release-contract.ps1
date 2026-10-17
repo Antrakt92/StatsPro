@@ -134,7 +134,8 @@ function Get-StatsProForeverReleaseContract {
             'StatsPro.toc', 'scripts/forever-release-contract.ps1',
             'scripts/test-forever-package.ps1', 'scripts/build-forever-package.ps1',
             'scripts/release-tag-contract.ps1', 'scripts/saved-variables-contract.ps1',
-            'scripts/third-party-contract.ps1', 'scripts/manage-forever-release.ps1',
+            'scripts/third-party-contract.ps1', 'scripts/bundled-font-contract.ps1',
+            'scripts/bundled-fonts.json', 'scripts/manage-forever-release.ps1',
             'scripts/manage-github-release.ps1', 'scripts/native-process.ps1',
             'scripts/publish-marketplaces.ps1', 'scripts/release-check-contract.ps1',
             'scripts/marketplace-version-contract.ps1', 'scripts/check-marketplace-versions.ps1',
@@ -152,7 +153,7 @@ function Get-StatsProForeverReleaseContract {
             }
             $localBytes = [System.IO.File]::ReadAllBytes($path)
             $same = [Convert]::ToBase64String($bytes) -ceq [Convert]::ToBase64String($localBytes)
-            if (-not $same -and $relative -notlike '*.png') {
+            if (-not $same -and $relative -notmatch '\.(png|tga|ttf|otf)$') {
                 $decoder = [System.Text.UTF8Encoding]::new($false, $true)
                 $same = (Get-StatsProForeverTextHash $decoder.GetString($bytes)) -ceq (Get-StatsProForeverTextHash $decoder.GetString($localBytes))
             }

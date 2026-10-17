@@ -97,6 +97,7 @@ function Get-StatsProPackageFileContract {
     ) + $licenseFiles + @(
         "StatsPro/StatsPro.toc",
         "StatsPro/StatsPro.lua",
+        "StatsPro/StatsPro_Fonts.lua",
         "StatsPro/StatsPro_ArchonTargets.lua",
         "StatsPro/textures/logo.png",
         "StatsPro/textures/language-flags.tga",
@@ -104,7 +105,8 @@ function Get-StatsProPackageFileContract {
         "StatsPro/libs/CallbackHandler-1.0/CallbackHandler-1.0.lua",
         "StatsPro/libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua"
     )
-    $binaryFiles = @("StatsPro/textures/logo.png", "StatsPro/textures/language-flags.tga")
+    $requiredFiles += @(Get-StatsProBundledFontFiles | ForEach-Object { "StatsPro/$_" })
+    $binaryFiles = @($requiredFiles | Where-Object { $_ -match '\.(png|tga|ttf|otf)$' })
     $textFiles = @($requiredFiles | Where-Object { $_ -notin $binaryFiles })
     return [pscustomobject]@{
         RequiredFiles = $requiredFiles
@@ -928,6 +930,15 @@ function Invoke-SelfTest {
         Assert-ThrowsMatch "missing language flag atlas rejected" {
             Assert-StatsProPackageEntries -Entries @($packageContract.RequiredFiles | Where-Object { $_ -ne $flagAtlas })
         } "language-flags\.tga"
+        foreach ($fontFile in @(Get-StatsProBundledFontFiles)) {
+            $contractPath = "StatsPro/$fontFile"
+            if ($fontFile -match '\.(ttf|otf)$' -and $contractPath -in $packageContract.TextFiles) {
+                throw "Bundled font must be treated as binary: $fontFile"
+            }
+            Assert-ThrowsMatch "missing bundled font material $fontFile rejected" {
+                Assert-StatsProPackageEntries -Entries @($packageContract.RequiredFiles | Where-Object { $_ -cne $contractPath })
+            } ([regex]::Escape($contractPath))
+        }
         Assert-ThrowsMatch "unsafe zip path rejected" {
             [void](Normalize-StatsProZipEntryPath "StatsPro/../evil.lua")
         } "unsafe"
@@ -1189,7 +1200,7 @@ function Invoke-SelfTest {
                 "LICENSE",
                 "LICENSES/CallbackHandler-1.0-BSD-2-Clause.txt",
                 "LICENSES/LibSharedMedia-3.0-LGPL-2.1.txt"
-            )) {
+            ) + @(Get-StatsProBundledFontFiles | Where-Object { $_ -like 'fonts/licenses/*' })) {
                 $mutationPath = Join-Path $mutationRoot ($relativeMutationPath -replace "/", [System.IO.Path]::DirectorySeparatorChar)
                 $originalBytes = [System.IO.File]::ReadAllBytes($mutationPath)
                 [System.IO.File]::AppendAllText($mutationPath, "`nmutation", [System.Text.UTF8Encoding]::new($false))
@@ -1199,8 +1210,8 @@ function Invoke-SelfTest {
                 [System.IO.File]::WriteAllBytes($mutationPath, $originalBytes)
             }
 
-            foreach ($binaryName in @("logo.png", "language-flags.tga")) {
-                $binaryPath = Join-Path (Join-Path $mutationRoot "textures") $binaryName
+            foreach ($binaryName in @("textures/logo.png", "textures/language-flags.tga") + @(Get-StatsProBundledFontFiles | Where-Object { $_ -match '\.(ttf|otf)$' })) {
+                $binaryPath = Join-Path $mutationRoot $binaryName
                 $originalBytes = [System.IO.File]::ReadAllBytes($binaryPath)
                 if ($originalBytes.Length -eq 0) { throw "Self-test binary fixture is empty: $binaryName" }
                 $mutatedBytes = [byte[]]$originalBytes.Clone()
@@ -1208,7 +1219,7 @@ function Invoke-SelfTest {
                 [System.IO.File]::WriteAllBytes($binaryPath, $mutatedBytes)
                 Assert-ThrowsMatch "binary $binaryName source-fidelity mutation rejected" {
                     Assert-StatsProPackageSourceFidelity -PackageRoot $mutationRoot -SourceRoot $sourceRoot -ProjectVersion $tag
-                } ([regex]::Escape("StatsPro/textures/$binaryName"))
+                } ([regex]::Escape("StatsPro/$binaryName"))
                 [System.IO.File]::WriteAllBytes($binaryPath, $originalBytes)
             }
 
@@ -1269,6 +1280,11 @@ function Invoke-SelfTest {
                 New-Item -ItemType Directory -Path (Split-Path -Parent $licenseTarget) -Force | Out-Null
                 Copy-Item -LiteralPath $licenseSource -Destination $licenseTarget
             }
+        }
+        foreach ($relative in Get-StatsProBundledFontFiles) {
+            $destination = Join-Path $noticeRoot $relative
+            New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $sourceRoot $relative) -Destination $destination
         }
         $noticePath = Join-Path $noticeRoot "THIRD-PARTY-NOTICES.md"
         Copy-Item -LiteralPath (Join-Path $sourceRoot "THIRD-PARTY-NOTICES.md") -Destination $noticePath

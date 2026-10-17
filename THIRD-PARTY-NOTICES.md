@@ -71,3 +71,48 @@ for those derived portions.
 - Version: v2.1
 - License: MIT
 - Scope: derived portions only; no SwiftStats file is vendored in this repository
+
+## Bundled fonts
+
+StatsPro includes twelve unchanged static font files. They remain under their
+respective font licenses, independently of the license for StatsPro code. Font
+files are neither subsetted nor converted. DejaVu filenames are shortened; their
+font data and internal names are unchanged.
+
+The source URLs and licenses are listed below. Detailed file hashes are available in the source repository. The corresponding license files are included in release archives.
+
+| Fonts | Source | Version | License text |
+|---|---|---|---|
+| DejaVu Sans, DejaVu Serif | [DejaVu Fonts](https://dejavu-fonts.github.io/) via SharedMedia r202 | 2.37 | fonts/licenses/DejaVu.txt |
+| Gentium | [SIL Global](https://github.com/silnrsi/font-gentium/releases/tag/v7.000) via SharedMedia r202 | 7.000 | fonts/licenses/Gentium.txt |
+| Hack | [Source Foundry](https://github.com/source-foundry/Hack/tree/v3.003) via SharedMedia r202 | 3.003 | fonts/licenses/Hack.txt |
+| Liberation Mono, Liberation Sans, Liberation Serif | [Liberation Fonts](https://github.com/liberationfonts/liberation-fonts/tree/2.1.5) via SharedMedia r202 | 2.1.5 | fonts/licenses/Liberation.txt |
+| TeX Gyre Adventor, TeX Gyre Adventor Bold | [GUST e-Foundry](https://www.gust.org.pl/projects/e-foundry/tex-gyre/adventor) via SharedMedia r202 | 2.609 | fonts/licenses/TeX-Gyre-Adventor.txt |
+| Noto Sans | [Noto Project](https://github.com/notofonts/noto-fonts/tree/ffebf8c1ee449e544955a7e813c54f9b73848eac) | pinned static hinted TTF | fonts/licenses/NotoSans.txt |
+| Roboto Condensed | [Google Fonts](https://github.com/googlefonts/roboto-2/tree/38062f4b4a0be4346d07a928408da21602545e9e) | pinned static hinted TTF | fonts/licenses/Roboto.txt |
+| Oswald | [Google Fonts](https://github.com/googlefonts/OswaldFont/tree/89795261ac9eeb9aa8cd99f43982c4e4b0e53261) | pinned static TTF | fonts/licenses/Oswald.txt |
+
+Every reused file was verified byte-for-byte against the pinned
+[SharedMedia r202 source](https://repos.wowace.com/wow/sharedmedia/!svn/rvr/202/trunk/fonts/).
+Only the individual font files and their licenses are bundled; no SharedMedia
+addon code is included. TeX Gyre's notice includes the GUST Font License and its
+referenced [LPPL 1.3c](https://www.latex-project.org/lppl/lppl-1-3c.txt).
+
+Ten included fonts contain the complete Russian alphabet. TeX Gyre Adventor and
+its Bold variant cover Latin text; language-aware selection retains compatible
+fallbacks for Cyrillic, Chinese and Korean text.
+
+Included font files:
+
+- fonts/DejaVuSans.ttf
+- fonts/DejaVuSerif.ttf
+- fonts/Gentium-Regular.ttf
+- fonts/Hack-Regular.ttf
+- fonts/LiberationMono-Regular.ttf
+- fonts/LiberationSans-Regular.ttf
+- fonts/LiberationSerif-Regular.ttf
+- fonts/texgyreadventor-regular.otf
+- fonts/texgyreadventor-bold.otf
+- fonts/NotoSans-Regular.ttf
+- fonts/RobotoCondensed-Regular.ttf
+- fonts/Oswald-Regular.ttf

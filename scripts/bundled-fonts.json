@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "fonts": [
+    {
+      "name": "DejaVu Sans",
+      "path": "fonts/DejaVuSans.ttf",
+      "sha256": "321487EFD1B5FA5BFFC0597755708FB7B308B3A9A613CEBAA013F6A9DD873AB8",
+      "license": "Bitstream-Vera AND Arev",
+      "licenseFile": "fonts/licenses/DejaVu.txt",
+      "licenseSha256": "7A083B136E64D064794C3419751E5C7DD10D2F64C108FE5BA161EAE5E5958A93",
+      "source": "https://repos.wowace.com/wow/sharedmedia/!svn/rvr/202/trunk/fonts/deja_vu/DejaVuLGCSans.ttf",
+      "sourceRevision": "r202",
+      "cyrillic": true
+    },
+    {
+      "name": "DejaVu Serif",
+      "path": "fonts/DejaVuSerif.ttf",
+      "sha256": "AB7232A1CBDD638B9459BACBCEF5F00FB21CDC37439DC404BC358A61A7E73B19",
+      "license": "Bitstream-Vera AND Arev",
+      "licenseFile": "fonts/licenses/DejaVu.txt",
+      "licenseSha256": "7A083B136E64D064794C3419751E5C7DD10D2F64C108FE5BA161EAE5E5958A93",
+      "source": "https://repos.wowace.com/wow/sharedmedia/!svn/rvr/202/trunk/fonts/deja_vu/DejaVuLGCSerif.ttf",
+      "sourceRevision": "r202",
+      "cyrillic": true
+    },
+    {
+      "name": "Gentium",
+      "path": "fonts/Gentium-Regular.ttf",
+      "sha256": "158D89548EF28F62ABFC2921878FA253B833111E8D3932DA7F501DAEF6D0ECCF",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/Gentium.txt",
+      "licenseSha256": "1E19AB96E28E74536B8A68DD5776ACC60EF894D7C53C5B94341783B756DE1BC8",
+      "source": "https://repos.wowace.com/wow/sharedmedia/!svn/rvr/202/trunk/fonts/gentium/Gentium-Regular.ttf",
+      "sourceRevision": "r202",
+      "cyrillic": true
+    },
+    {
+      "name": "Hack",
+      "path": "fonts/Hack-Regular.ttf",
+      "sha256": "15F55CC0C85A2988D2B4B3A8CDB5D77FDFBAF319E1BB5309D725DB9818FB7125",
+      "license": "MIT AND Bitstream-Vera",
+      "licenseFile": "fonts/licenses/Hack.txt",
+      "licenseSha256": "1F61BB7C790C59B4B0ECDF304628B94E42AE4C8020094A8C3DA73381AB212623",
+      "source": "https://repos.wowace.com/wow/sharedmedia/!svn/rvr/202/trunk/fonts/hack/Hack-Regular.ttf",
+      "sourceRevision": "r202",
+      "cyrillic": true
+    },
+    {
+      "name": "Liberation Mono",
+      "path": "fonts/LiberationMono-Regular.ttf",
+      "sha256": "F2B83C763E8AFD21709333370BED4774337FAE82267937E2B5AEA7E2FBD922C1",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/Liberation.txt",
+      "licenseSha256": "93FED46019C38BBE566B479D22148E2E8A1E85ADA614ACCB0211C37B2C61C19B",
+      "source": "https://repos.wowace.com/wow/sharedmedia/!svn/rvr/202/trunk/fonts/liberation/LiberationMono-Regular.ttf",
+      "sourceRevision": "r202",
+      "cyrillic": true
+    },
+    {
+      "name": "Liberation Sans",
+      "path": "fonts/LiberationSans-Regular.ttf",
+      "sha256": "76D04C18EA243F426B7DE1F3AD208E927008F961DC5945E5AAD352D0DFDE8EE8",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/Liberation.txt",
+      "licenseSha256": "93FED46019C38BBE566B479D22148E2E8A1E85ADA614ACCB0211C37B2C61C19B",
+      "source": "https://repos.wowace.com/wow/sharedmedia/!svn/rvr/202/trunk/fonts/liberation/LiberationSans-Regular.ttf",
+      "sourceRevision": "r202",
+      "cyrillic": true
+    },
+    {
+      "name": "Liberation Serif",
+      "path": "fonts/LiberationSerif-Regular.ttf",
+      "sha256": "058EA80864AEF09A23F45CBEC2BB5400BC3DFBDEA01C3F10538A21FCB497FB74",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/Liberation.txt",
+      "licenseSha256": "93FED46019C38BBE566B479D22148E2E8A1E85ADA614ACCB0211C37B2C61C19B",
+      "source": "https://repos.wowace.com/wow/sharedmedia/!svn/rvr/202/trunk/fonts/liberation/LiberationSerif-Regular.ttf",
+      "sourceRevision": "r202",
+      "cyrillic": true
+    },
+    {
+      "name": "TeX Gyre Adventor",
+      "path": "fonts/texgyreadventor-regular.otf",
+      "sha256": "17BFC0A97D48393453F28422F109D47099D54875600EA88A8D61C5DDD2DBFFC4",
+      "license": "LPPL-1.3c-or-later",
+      "licenseFile": "fonts/licenses/TeX-Gyre-Adventor.txt",
+      "licenseSha256": "91EF82644634CA1D051292B35606A6DAF0ED408369FA705B78EB505F4EAB16AA",
+      "source": "https://repos.wowace.com/wow/sharedmedia/!svn/rvr/202/trunk/fonts/tex_gyre_adventor/texgyreadventor-regular.otf",
+      "sourceRevision": "r202",
+      "cyrillic": false
+    },
+    {
+      "name": "TeX Gyre Adventor Bold",
+      "path": "fonts/texgyreadventor-bold.otf",
+      "sha256": "881FCD422499D3C269697E37E4D483EE91A617A28428CDB6037029924DC47129",
+      "license": "LPPL-1.3c-or-later",
+      "licenseFile": "fonts/licenses/TeX-Gyre-Adventor.txt",
+      "licenseSha256": "91EF82644634CA1D051292B35606A6DAF0ED408369FA705B78EB505F4EAB16AA",
+      "source": "https://repos.wowace.com/wow/sharedmedia/!svn/rvr/202/trunk/fonts/tex_gyre_adventor/texgyreadventor-bold.otf",
+      "sourceRevision": "r202",
+      "cyrillic": false
+    },
+    {
+      "name": "Noto Sans",
+      "path": "fonts/NotoSans-Regular.ttf",
+      "sha256": "B85C38ECEA8A7CFB39C24E395A4007474FA5A4FC864F6EE33309EB4948D232D5",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/NotoSans.txt",
+      "licenseSha256": "0DAB92D0544F7B233403F14B84A663BDBFA746982EDA629E7F4F9FFE1B036FEB",
+      "source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSans/NotoSans-Regular.ttf",
+      "sourceRevision": "ffebf8c1ee449e544955a7e813c54f9b73848eac",
+      "cyrillic": true
+    },
+    {
+      "name": "Roboto Condensed",
+      "path": "fonts/RobotoCondensed-Regular.ttf",
+      "sha256": "A9603DB0F52E244064DE480253AB7F48E6C21C22E24528207CAB06D39ABC7BB7",
+      "license": "Apache-2.0",
+      "licenseFile": "fonts/licenses/Roboto.txt",
+      "licenseSha256": "C71D239DF91726FC519C6EB72D318EC65820627232B2F796219E87DCF35D0AB4",
+      "source": "https://raw.githubusercontent.com/googlefonts/roboto-2/38062f4b4a0be4346d07a928408da21602545e9e/src/hinted/RobotoCondensed-Regular.ttf",
+      "sourceRevision": "38062f4b4a0be4346d07a928408da21602545e9e",
+      "cyrillic": true
+    },
+    {
+      "name": "Oswald",
+      "path": "fonts/Oswald-Regular.ttf",
+      "sha256": "0D9980DA817EE71AD9C34BB46950FCF15DD53E928031F39D2E11AE19178AB826",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/Oswald.txt",
+      "licenseSha256": "0687C51A3126AE6963389181135A2EAEA02F2E88F31230D27409952F28E84DA5",
+      "source": "https://raw.githubusercontent.com/googlefonts/OswaldFont/89795261ac9eeb9aa8cd99f43982c4e4b0e53261/fonts/ttf/Oswald-Regular.ttf",
+      "sourceRevision": "89795261ac9eeb9aa8cd99f43982c4e4b0e53261",
+      "cyrillic": true
+    }
+  ]
+}

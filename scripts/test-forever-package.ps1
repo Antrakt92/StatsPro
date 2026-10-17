@@ -4,9 +4,10 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'saved-variables-contract.ps1')
 . (Join-Path $PSScriptRoot 'third-party-contract.ps1')
 function Get-ForeverPackageMap {
-    [ordered]@{
+    $map = [ordered]@{
         'StatsPro.toc' = 'StatsPro_Forever.toc'
         'StatsPro.lua' = 'StatsPro.lua'
+        'StatsPro_Fonts.lua' = 'StatsPro_Fonts.lua'
         'StatsPro_Forever.lua' = 'StatsPro_Forever.lua'
         'LICENSE' = 'LICENSE'
         'CHANGELOG.md' = 'CHANGELOG-FOREVER.md'
@@ -19,6 +20,8 @@ function Get-ForeverPackageMap {
         'libs/CallbackHandler-1.0/CallbackHandler-1.0.lua' = 'libs/CallbackHandler-1.0/CallbackHandler-1.0.lua'
         'libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua' = 'libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua'
     }
+    foreach ($path in Get-StatsProBundledFontFiles) { $map[$path] = $path }
+    return $map
 }
 function Assert-ForeverToc {
     param([string]$Text, [string]$Version)
@@ -52,7 +55,7 @@ function Assert-ForeverToc {
         }
     }
     $refs = @($Text -split '\r?\n' | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith('#') } | ForEach-Object { $_.Trim().Replace('\', '/') })
-    $expected = @('libs/LibStub/LibStub.lua','libs/CallbackHandler-1.0/CallbackHandler-1.0.lua','libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua','StatsPro_Forever.lua','StatsPro.lua')
+    $expected = @('libs/LibStub/LibStub.lua','libs/CallbackHandler-1.0/CallbackHandler-1.0.lua','libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua','StatsPro_Fonts.lua','StatsPro_Forever.lua','StatsPro.lua')
     if (($refs -join '|') -cne ($expected -join '|')) { throw 'Forever runtime load order mismatch' }
 }
 function Get-ForeverSourceVersion {
@@ -103,7 +106,7 @@ if ($SelfTest) {
             [System.IO.File]::WriteAllText($path, 'fixture')
         }
         $realRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-        $materialPaths = @('LICENSE','THIRD-PARTY-NOTICES.md') + @(Get-StatsProThirdPartyContract | ForEach-Object {
+        $materialPaths = @('LICENSE','THIRD-PARTY-NOTICES.md') + @(Get-StatsProBundledFontFiles) + @(Get-StatsProThirdPartyContract | ForEach-Object {
             $_.Path
             if ($_.LicenseFile) { $_.LicenseFile }
         })
@@ -111,7 +114,7 @@ if ($SelfTest) {
         [System.IO.File]::WriteAllText((Join-Path $fixture 'StatsPro.toc'), "## Version: 1.17.21`n")
         [System.IO.File]::WriteAllText((Join-Path $fixture 'StatsPro.lua'), 'local version = "@project-version@"')
         $iconDirective = '## IconTexture: Interface\AddOns\StatsPro\textures\forever-logo.png'
-        $toc = "## Interface: 16001`n## Version: 1.17.21`n$iconDirective`n## SavedVariables: StatsProDB, StatsProSelfTest`n## X-StatsPro-Flavor: forever`n## X-StatsPro-Channel: beta`nlibs\LibStub\LibStub.lua`nlibs\CallbackHandler-1.0\CallbackHandler-1.0.lua`nlibs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua`nStatsPro_Forever.lua`nStatsPro.lua`n"
+        $toc = "## Interface: 16001`n## Version: 1.17.21`n$iconDirective`n## SavedVariables: StatsProDB, StatsProSelfTest`n## X-StatsPro-Flavor: forever`n## X-StatsPro-Channel: beta`nlibs\LibStub\LibStub.lua`nlibs\CallbackHandler-1.0\CallbackHandler-1.0.lua`nlibs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua`nStatsPro_Fonts.lua`nStatsPro_Forever.lua`nStatsPro.lua`n"
         [System.IO.File]::WriteAllText((Join-Path $fixture 'StatsPro_Forever.toc'), $toc)
         $publishedToc = $toc + "## X-Curse-Project-ID: 1525100`n## X-Wago-ID: EGPemEN1`n"
         Assert-ForeverToc $publishedToc '1.17.21'
@@ -154,6 +157,42 @@ if ($SelfTest) {
             $rejected = $false
             try { Assert-ForeverToc $badToc '1.17.21' } catch { $rejected = $true }
             if (-not $rejected) { throw 'Invalid Forever metadata was accepted' }
+        }
+        foreach ($relative in Get-StatsProBundledFontFiles) {
+            $materialPath = Join-Path $fixture $relative
+            $original = [System.IO.File]::ReadAllBytes($materialPath)
+            try {
+                [System.IO.File]::Delete($materialPath)
+                $rejected = $false
+                try { Assert-ForeverArchive $first $fixture } catch {
+                    if ($_.Exception.Message -notmatch 'Missing bundled font') { throw }
+                    $rejected = $true
+                }
+                if (-not $rejected) { throw "Missing font/license accepted: $relative" }
+                [System.IO.File]::WriteAllBytes($materialPath, $original)
+                $mutated = [byte[]]$original.Clone()
+                $mutated[0] = $mutated[0] -bxor 1
+                [System.IO.File]::WriteAllBytes($materialPath, $mutated)
+                $rejected = $false
+                try { Assert-ForeverArchive $first $fixture } catch {
+                    if ($_.Exception.Message -notmatch 'approved SHA256') { throw }
+                    $rejected = $true
+                }
+                if (-not $rejected) { throw "Modified font/license accepted: $relative" }
+            }
+            finally { [System.IO.File]::WriteAllBytes($materialPath, $original) }
+        }
+        foreach ($relative in Get-StatsProBundledFontFiles) {
+            $badArchive = Join-Path $fixture 'missing-font-material.zip'
+            [System.IO.File]::Copy($first, $badArchive, $true)
+            $zip = [System.IO.Compression.ZipFile]::Open($badArchive, [System.IO.Compression.ZipArchiveMode]::Update)
+            try { $zip.GetEntry("StatsPro/$relative").Delete() } finally { $zip.Dispose() }
+            $rejected = $false
+            try { Assert-ForeverArchive $badArchive $fixture } catch {
+                if ($_.Exception.Message -notmatch 'missing, duplicate or extra entries') { throw }
+                $rejected = $true
+            }
+            if (-not $rejected) { throw "Archive without font/license accepted: $relative" }
         }
         $vendoredPath = Join-Path $fixture 'libs/LibStub/LibStub.lua'
         $vendoredBytes = [System.IO.File]::ReadAllBytes($vendoredPath)

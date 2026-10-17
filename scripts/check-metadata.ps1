@@ -380,6 +380,7 @@ function Get-TocRuntimeContract {
         "libs\LibStub\LibStub.lua",
         "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua",
         "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua",
+        "StatsPro_Fonts.lua",
         "StatsPro_ArchonTargets.lua",
         "StatsPro.lua"
     )
@@ -411,6 +412,7 @@ function New-TestRuntimeFiles {
     Set-Content -Path (Join-Path $Root "libs\LibStub\LibStub.lua") -Value "" -Encoding UTF8
     Set-Content -Path (Join-Path $Root "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua") -Value "" -Encoding UTF8
     Set-Content -Path (Join-Path $Root "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua") -Value "" -Encoding UTF8
+    Set-Content -Path (Join-Path $Root "StatsPro_Fonts.lua") -Value "" -Encoding UTF8
     Set-Content -Path (Join-Path $Root "StatsPro_ArchonTargets.lua") -Value "" -Encoding UTF8
     Set-Content -Path (Join-Path $Root "StatsPro.lua") -Value "" -Encoding UTF8
 }
@@ -503,19 +505,30 @@ function Invoke-SelfTest {
             "libs\LibStub\LibStub.lua",
             "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua",
             "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua",
+            "StatsPro_Fonts.lua",
             "StatsPro_ArchonTargets.lua",
             "StatsPro.lua"
         )
         Set-TestToc -Root $root -Refs $validRefs
         $noticeRequirements = @(Write-TestThirdPartyNotices -Root $root)
+        $fontSourceRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+        foreach ($relative in Get-StatsProBundledFontFiles) {
+            $destination = Join-Path $root $relative
+            New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $fontSourceRoot $relative) -Destination $destination
+        }
+        $sourceNotices = [System.IO.File]::ReadAllText((Join-Path $fontSourceRoot 'THIRD-PARTY-NOTICES.md'))
+        $fontNotices = [regex]::Match($sourceNotices, '(?ms)^## Bundled fonts\s*\r?\n.*\z').Value
+        [System.IO.File]::AppendAllText((Join-Path $root 'THIRD-PARTY-NOTICES.md'), "`n" + $fontNotices)
+
         $contract = Get-TocRuntimeContract -RepoRoot $root -TocPath (Join-Path $root "StatsPro.toc")
-        if ($contract.RuntimeLuaRefs.Count -ne 5) {
-            throw "expected five runtime Lua refs, got $($contract.RuntimeLuaRefs.Count)"
+        if ($contract.RuntimeLuaRefs.Count -ne 6) {
+            throw "expected six runtime Lua refs, got $($contract.RuntimeLuaRefs.Count)"
         }
         if (-not $contract.RuntimeLuaRefs[0].IsVendored) {
             throw "expected first runtime ref to be marked vendored"
         }
-        if (-not $contract.RuntimeLuaRefs[3].IsGenerated) {
+        if (-not $contract.RuntimeLuaRefs[4].IsGenerated) {
             throw "expected Archon target file to be marked generated"
         }
 
@@ -701,6 +714,7 @@ GitHub issues are public.
             "libs/LibStub/LibStub.lua",
             "libs/CallbackHandler-1.0/CallbackHandler-1.0.lua",
             "libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua",
+            "StatsPro_Fonts.lua",
             "StatsPro_ArchonTargets.lua",
             "StatsPro.lua"
         )
@@ -709,6 +723,7 @@ GitHub issues are public.
         Set-TestToc -Root $root -Refs @(
             "libs\LibStub\LibStub.lua",
             "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua",
+            "StatsPro_Fonts.lua",
             "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua",
             "StatsPro_ArchonTargets.lua",
             "StatsPro.lua"
@@ -721,6 +736,7 @@ GitHub issues are public.
             "libs\LibStub\LibStub.lua",
             "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua",
             "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua",
+            "StatsPro_Fonts.lua",
             "StatsPro.lua",
             "StatsPro_ArchonTargets.lua"
         )
@@ -732,16 +748,18 @@ GitHub issues are public.
             "libs\LibStub\LibStub.lua",
             "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua",
             "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua",
+            "StatsPro_Fonts.lua",
             "StatsPro.lua"
         )
         Assert-ThrowsMatch "missing generated data rejected" {
             [void](Get-TocRuntimeContract -RepoRoot $root -TocPath (Join-Path $root "StatsPro.toc"))
-        } "exactly 5 runtime"
+        } "exactly 6 runtime"
 
         Set-TestToc -Root $root -Refs @(
             "libs\LibStub\LibStub.lua",
             "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua",
             "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua",
+            "StatsPro_Fonts.lua",
             "StatsPro_ArchonTargets.lua",
             "..\outside.lua"
         )
@@ -753,6 +771,7 @@ GitHub issues are public.
             "libs\LibStub\LibStub.lua",
             "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua",
             "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua",
+            "StatsPro_Fonts.lua",
             "StatsPro_ArchonTargets.lua",
             "C:\Temp\StatsPro.lua"
         )
@@ -764,6 +783,7 @@ GitHub issues are public.
             "libs\LibStub\LibStub.lua",
             "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua",
             "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua",
+            "StatsPro_Fonts.lua",
             "StatsPro_ArchonTargets.lua",
             "StatsPro.lua # inline comment"
         )

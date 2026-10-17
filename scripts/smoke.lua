@@ -891,11 +891,11 @@ local function makeEnv(locale, opts)
     }
     env.SettingsPanel = makeFrame("SettingsPanel", opts.setFontResult)
     env.HideUIPanel = function(frame) if frame and frame.Hide then frame:Hide() end end
-    if opts.lsmFonts then
+    if opts.lsmFonts or opts.bundledFonts then
         local names = {}
         local paths = {}
         local callbacks = {}
-        for _, font in ipairs(opts.lsmFonts) do
+        for _, font in ipairs(opts.lsmFonts or {}) do
             names[#names + 1] = font.name
             paths[font.name] = font.path
         end
@@ -923,6 +923,19 @@ local function makeEnv(locale, opts)
             paths[name] = path
             for _, callback in pairs(callbacks.LibSharedMedia_Registered or {}) do
                 callback("LibSharedMedia_Registered", "font", name)
+            end
+        end
+        if opts.bundledFonts then
+            lsm.LOCALE_BIT_koKR, lsm.LOCALE_BIT_ruRU = 1, 2
+            lsm.LOCALE_BIT_zhCN, lsm.LOCALE_BIT_zhTW, lsm.LOCALE_BIT_western = 4, 8, 128
+            local localeMask = ({ koKR = 1, ruRU = 2, zhCN = 4, zhTW = 8 })[locale] or 128
+            lsm.Register = function(_, mediaType, name, path, mask)
+                if mediaType ~= "font" or paths[name] ~= nil
+                    or not env.C_UIFileAsset.IsKnownFile(path)
+                    or (mask and math.floor(mask / localeMask) % 2 == 0)
+                    or (not mask and localeMask ~= 128) then return false end
+                env.__registerLSMFont(name, path)
+                return true
             end
         end
     end
@@ -1293,6 +1306,12 @@ local function loadStatsPro(locale, opts)
         __statsproSmoke = true,
         __testWelcomeEnabled = opts and opts.testWelcomeEnabled == true,
     }
+    if opts and opts.bundledFonts then
+        local fontChunk, fontError = loadfile("StatsPro_Fonts.lua")
+        if not fontChunk then error(fontError, 0) end
+        setfenv(fontChunk, env)
+        fontChunk("StatsPro", addon)
+    end
     if opts and opts.forever then
         for key, value in pairs(opts.foreverAPIs or {}) do env[key] = value end
         env.WOW_PROJECT_ID = 18

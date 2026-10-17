@@ -1,2 +1,5 @@
 LICENSES/*.txt text eol=lf
 scripts/*.sh text eol=lf
+fonts/*.ttf binary
+fonts/*.otf binary
+fonts/licenses/*.txt text eol=lf

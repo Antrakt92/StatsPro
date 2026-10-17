@@ -17999,41 +17999,47 @@ end
 
 function addon.settingsUI.fontPicker.BuildFontsList(self, retryPending)
     local picker = self.settingsUI.fontPicker
+    -- A hover preview does not commit a language. Cache by the chosen output
+    -- script rather than the client locale or the temporary Settings labels.
+    local requirement = LOCALE_GLYPH_REQ[ResolveActiveLocale()] or GLYPH_LATIN
     local lsmLen = LSM and #LSM:List(LSM.MediaType.FONT) or 0
     if picker.cachedFontsList and picker.cachedFontsListLen == lsmLen
+        and picker.cachedFontsListRequirement == requirement
         and not (retryPending and picker.cachedFontsListHasPending) then
         return picker.cachedFontsList
     end
 
-    local list = {}
+    local list, seenNames = {}, {}
     local hasPending = false
+    local function add(name, path)
+        if type(name) ~= "string" or seenNames[name] then return end
+        -- An external registration retains ownership of its name even when its
+        -- asset is unavailable or cannot render this language.
+        seenNames[name] = true
+        if not FontSupports(path, requirement) then return end
+        local usable, status = self.fontRuntime.usableCatalogPath(path)
+        if status == "pending" then hasPending = true end
+        if usable then
+            list[#list + 1] = {
+                name = name, path = usable,
+                sortKey = self.fontRuntime.asciiLower(name),
+            }
+        end
+    end
     if LSM then
         for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
             local path = type(name) == "string" and self.fontRuntime.rawLSMPath(name) or nil
-            local usable, status = self.fontRuntime.usableCatalogPath(path)
-            if status == "pending" then hasPending = true end
-            if usable then
-                list[#list + 1] = {
-                    name = name,
-                    path = usable,
-                    sortKey = self.fontRuntime.asciiLower(name),
-                }
-            end
+            add(name, path)
         end
     end
+    -- LSM registers media for the client language. Bundled faces can also be
+    -- used by a different selected output language, without changing LSM globals.
+    for _, font in ipairs(addon.bundledFonts or {}) do add(font.name, font.path) end
     if #list == 0 then
         local clientLocale = GetLocale()
         for _, font in ipairs(BLIZZARD_SHIPPED_FONTS) do
-            if not font.locale or font.locale == clientLocale then
-                local usable, status = self.fontRuntime.usableCatalogPath(font.path)
-                if status == "pending" then hasPending = true end
-                if usable then
-                    list[#list + 1] = {
-                        name = font.name,
-                        path = usable,
-                        sortKey = self.fontRuntime.asciiLower(font.name),
-                    }
-                end
+            if requirement ~= GLYPH_LATIN or not font.locale or font.locale == clientLocale then
+                add(font.name, font.path)
             end
         end
     end
@@ -18049,6 +18055,7 @@ function addon.settingsUI.fontPicker.BuildFontsList(self, retryPending)
     -- pending loose files even when the LSM list length has not changed.
     picker.cachedFontsList = list
     picker.cachedFontsListLen = lsmLen
+    picker.cachedFontsListRequirement = requirement
     picker.cachedFontsListHasPending = hasPending
     return list
 end
@@ -18063,8 +18070,15 @@ end
 
 function addon.settingsUI.fontPicker.RefreshCaption(self)
     local picker = self.settingsUI.fontPicker
+    local previousRequirement = picker.cachedFontsListRequirement
     if picker.dropdown then
         UIDropDownMenu_SetText(picker.dropdown, picker.CurrentFontName(self))
+    end
+    if previousRequirement ~= picker.cachedFontsListRequirement
+        and picker.frame and picker.frame:IsShown() then
+        picker.retryGeneration = picker.retryGeneration + 1
+        picker.Populate(self, true)
+        picker.SchedulePendingRetry(self, picker.retryGeneration, 1)
     end
 end
 
@@ -18419,6 +18433,7 @@ function addon.settingsUI.fontPicker.Initialize(self, context, dropdown)
     picker.RegisterLSMCallback(self)
     picker.RefreshCaption(self)
     PushRefresher(function() picker.RefreshCaption(self) end)
+    PushLocalizedLabel(function() picker.RefreshCaption(self) end)
 
     local trigger = _G["StatsProFontDropdownButton"] or dropdown.Button
     if trigger then

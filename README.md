@@ -50,7 +50,8 @@ at the top of the **Stats** tab or adjust individual rows yourself.
 Both builds include 28 additional font faces, including Noto Sans, Fira Sans,
 PT Sans, Roboto Condensed, Oswald, DejaVu and Liberation. Choose one in **Appearance → Font**;
 no separate font addon is needed. Fonts registered by other addons remain
-available alongside the included collection.
+available alongside the included collection. Only fonts compatible with your
+selected language appear in the list.
 
 ### Choose your download
 

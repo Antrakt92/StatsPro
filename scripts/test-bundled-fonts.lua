@@ -210,4 +210,78 @@ for _, forever in ipairs({ false, true }) do
         check(reloadTest.panelFontState().mainAppliedFont == selected, "reloaded HUD reapplies bundled font")
     end
 end
+-- Filter by the committed output language, independently of the client locale.
+local function selectLanguage(env, locale)
+    local dropdown = env.StatsProLanguageDropdown
+    dropdown.dropdownInit()
+    for _, row in ipairs(dropdown.dropdownEntries) do
+        if row.value == locale then row.func(); return end
+    end
+    error("missing language choice: " .. locale)
+end
+for _, forever in ipairs({ false, true }) do
+    local env, addon, test = fixtures.loadStatsPro("enUS", {
+        forever = forever, bundledFonts = true, isKnownFontFile = function() return true end,
+        lsmFonts = { { name = "Unknown coverage", path = "Interface\\AddOns\\Media\\Opaque.ttf" } },
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    addon:OpenConfigMenu()
+    local picker = addon.settingsUI.fontPicker
+    local english = picker.BuildFontsList(addon)
+    addon.settingsUI.localization.Preview(addon, "ruRU")
+    check(picker.BuildFontsList(addon) == english, "hover does not change committed font choices")
+    addon.settingsUI.localization.CancelPreview(addon)
+    picker.Show(addon)
+    for _, locale in ipairs({ "ruRU", "enUS", "deDE", "frFR", "esES", "esMX", "ptBR", "itIT", "koKR", "zhCN", "zhTW", "auto" }) do
+        selectLanguage(env, locale)
+        local active = locale == "auto" and "enUS" or locale
+        local requirement = test.registrySnapshot().localeGlyphReq[active]
+        local list = picker.BuildFontsList(addon)
+        check(#list > 0, "a compatible font remains available: " .. locale)
+        local names = {}
+        for _, font in ipairs(list) do
+            check(test.fontSupports(font.path, requirement), "only compatible fonts: " .. locale .. "/" .. font.name)
+            check(not names[font.name], "no duplicate font names")
+            names[font.name] = true
+        end
+        check(names["Unknown coverage"] == (requirement == "Latin" and true or nil),
+            "unknown external coverage is conservative for non-Latin output")
+        for _, font in ipairs(addon.bundledFonts) do
+            local expected = requirement == "Latin" or (requirement == "Cyrillic" and font.cyrillic)
+            check((names[font.name] == true) == expected, "bundled language filtering: " .. locale .. "/" .. font.name)
+        end
+        for _, button in ipairs(picker.buttons) do
+            if button:IsShown() then
+                check(test.fontSupports(button.fontPath, requirement), "open picker refreshes after language commit")
+            end
+        end
+    end
+    selectLanguage(env, "ruRU")
+    env.__registerLSMFont("Late Latin", "Fonts\\MORPHEUS.TTF")
+    env.__registerLSMFont("Late Cyrillic", "Fonts\\ARIALN.TTF")
+    env.__registerLSMFont("Bangers", "Fonts\\ARIALN.TTF")
+    env.__flushTimers(0)
+    local late = {}
+    for _, font in ipairs(picker.BuildFontsList(addon)) do late[font.name] = font.path end
+    check(not late["Late Latin"] and late["Late Cyrillic"] == "Fonts\\ARIALN.TTF",
+        "late SharedMedia registrations retain output-language filtering")
+    check(late.Bangers == "Fonts\\ARIALN.TTF", "external same-name face retains ownership")
+    picker.Hide(addon)
+
+    local russianEnv, russianAddon = fixtures.loadStatsPro("ruRU", {
+        forever = forever, bundledFonts = true, statsProDB = { forceLocale = "enUS" },
+        isKnownFontFile = function() return true end,
+    })
+    russianEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    russianAddon:OpenConfigMenu()
+    local function visible(name)
+        for _, font in ipairs(russianAddon.settingsUI.fontPicker.BuildFontsList(russianAddon)) do
+            if font.name == name then return true end
+        end
+        return false
+    end
+    check(visible("Bangers"), "English on a Russian client includes bundled Latin faces")
+    selectLanguage(russianEnv, "auto")
+    check(not visible("Bangers") and visible("PT Sans"), "Auto follows Russian client glyph requirements")
+end
 print("StatsPro bundled fonts: PASS (" .. checks .. " checks)")

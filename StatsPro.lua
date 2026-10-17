@@ -4305,7 +4305,8 @@ function addon.fontRuntime.resolveFlags(fontPath, size, requestedFlags)
 end
 
 function addon.fontRuntime.setRegionFont(region, fontPath, size, flags)
-    local status = addon.fontRuntime.trySetFont(region, fontPath, size, flags)
+    -- EditBox and FontObject require a string; FontString alone permits nil.
+    local status = addon.fontRuntime.trySetFont(region, fontPath, size, flags or "")
     return status == "applied", status
 end
 

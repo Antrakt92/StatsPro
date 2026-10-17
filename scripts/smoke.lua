@@ -413,6 +413,9 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetFont(font, size, flags)
         if type(font) ~= "string" then error("SetFont font must be a string", 2) end
         if not isFiniteNumber(size) then error("SetFont size must be a finite number", 2) end
+        if self.regionType == "EditBox" and type(flags) ~= "string" then
+            error("EditBox:SetFont flags must be a string", 2)
+        end
         -- Direct SimpleFont mutation switches this region to a private font object,
         -- matching FrameXML's MakeFontObjectCustom ownership model.
         self.setFontCalls = (self.setFontCalls or 0) + 1
@@ -12548,7 +12551,7 @@ do
             if font == pickerTarget and mode == "picker-false" then return false end
             if font == pickerTarget and mode == "picker-error" then error("synthetic config SetFont error") end
             if font == "Fonts\\ARIALN.TTF" and mode == "arial-false" then return false end
-            if flags ~= nil then return false end
+            if flags ~= nil and flags ~= "" then return false end
             if font == "Fonts\\FRIZQT__.TTF" then defaultFontCalls = defaultFontCalls + 1 end
             frame.text = ""  -- emulate Blizzard SetFont clearing an existing FontString
             return true
@@ -12584,7 +12587,7 @@ do
         eq("fonts.config_registry.flag_fallback.applied_font." .. i, entry.appliedFont, configTarget)
         eq("fonts.config_registry.flag_fallback.actual_font." .. i, entry.actualFont, configTarget)
         eq("fonts.config_registry.flag_fallback.applied_flags." .. i, entry.appliedFlags, nil)
-        eq("fonts.config_registry.flag_fallback.actual_flags." .. i, entry.actualFlags, nil)
+        eq("fonts.config_registry.flag_fallback.actual_flags." .. i, entry.actualFlags or "", "")
         eq("fonts.config_registry.flag_fallback.text_preserved." .. i, entry.actualText, before.entries[i].actualText)
     end
 

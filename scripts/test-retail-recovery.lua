@@ -99,3 +99,31 @@ for _, failFirst in ipairs({ false, true }) do
     end
 end
 print("Retail Settings inherited-override recovery regressions passed")
+
+-- EditBox:SetFont requires a flags string even when FontString accepts nil.
+-- The hidden profile-transfer input participates in the same Settings transaction.
+do
+    local env, addon, test = fixtures.loadStatsPro("enUS", { lsmFonts = { { name = "Chinese", path = "Fonts\\ARHei.TTF" } } })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    addon:OpenConfigMenu()
+    local input
+    for _, entry in ipairs(test.configFontState().entries) do
+        if entry.roleKey == "transferInput" then input = entry.region; break end
+    end
+    assert(input, "real profile-transfer EditBox is registered")
+    local font, size, flags = input:GetFont()
+    input:SetFont(font, size, flags or "")
+    local originalSet = input.SetFont
+    input.SetFont = function(self, path, height, style)
+        assert(type(style) == "string", "EditBox flags must be a string")
+        return originalSet(self, path, height, style)
+    end
+    for _, path in ipairs({ "Fonts\\ARHei.TTF", "Fonts\\ARIALN.TTF", "Fonts\\2002.ttf" }) do
+        local applied, status = test.applyConfigFont(path, true)
+        assert(applied, "hidden EditBox must not roll back Settings font switch: " .. tostring(status) .. " " .. tostring(addon.fontRuntime.configFontFailure) .. " " .. tostring(addon.fontRuntime.configFontFailureChild))
+        for _, entry in ipairs(test.configFontState().entries) do
+            assert(entry.actualFont == path, "all Settings regions receive selected font")
+        end
+    end
+end
+print("Retail EditBox font flags regressions passed")

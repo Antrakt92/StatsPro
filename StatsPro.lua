@@ -4619,7 +4619,16 @@ local function FormatRepairCost(copper, fontSize)
     -- WHY optional size: per-tick callers pass cached.fontSize (synced by
     -- CacheSettings and the Font Size slider) instead of a DB read every tick.
     -- Omitted size falls back to the normalized DB value with no render change.
-    return GetCoinTextureString(copper, fontSize or GetNumberDB("fontSize"))
+    local currencyAPI = _G.C_CurrencyInfo
+    local formatter = type(currencyAPI) == "table" and currencyAPI.GetCoinTextureString
+    if type(formatter) ~= "function" then formatter = GetCoinTextureString end
+    if type(formatter) ~= "function" then return "?" end
+    -- A missing or failing money formatter must not suppress the entire HUD.
+    local ok, text = pcall(formatter, copper, fontSize or GetNumberDB("fontSize"))
+    if ok and not issecretvalue(text) and type(text) == "string" and text ~= "" then
+        return text
+    end
+    return "?"
 end
 
 local function ComputeDurabilityColor(pct)

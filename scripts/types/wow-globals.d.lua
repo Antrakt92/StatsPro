@@ -68,6 +68,12 @@ function GetInventoryItemID(unit, slot) end
 ---@type StatsProItemAPI?
 C_Item = nil
 
+---@class (exact) StatsProCurrencyAPI
+---@field GetCoinTextureString fun(amount: number, fontHeight: number): string
+
+---@type StatsProCurrencyAPI?
+C_CurrencyInfo = nil
+
 ---@param value number
 ---@param options table
 ---@return string

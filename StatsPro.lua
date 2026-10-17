@@ -4112,9 +4112,9 @@ function addon.fontRuntime.trySetFont(region, fontPath, size, flags)
     -- SetFont's pseudo-return varies by client state and font source. Only the
     -- effective path, size, and flags reported by GetFont prove application.
     if addon.fontRuntime.matchesAppliedFont(region, fontPath, size, flags) then return "applied" end
-    -- A missing Blizzard asset is definitive because its file table is fixed before
-    -- addons load. External loose files are different: IsKnownFile does not prove
-    -- existence/openability or distinguish failure from an inconclusive cold readback.
+    -- A file-table miss classifies this direct attempt only. probeStatus still
+    -- tries attached activation before caching it: aliases/cold assets can become
+    -- usable there. Loose files likewise need effective readback, not IsKnownFile.
     if IsBlizzardFontPath(fontPath) and addon.fontRuntime.isKnownAsset(fontPath) == false then
         return "invalid"
     end
@@ -4190,7 +4190,7 @@ function addon.fontRuntime.probeStatus(fontPath, size, flags)
     -- FontString:SetFont until any attached FontObject has loaded that asset.
     -- Keep the activator isolated: direct SetFont would break its inheritance,
     -- and sharing it with HUD/config regions would couple unrelated sizes/flags.
-    if status == "pending" and (not IsBlizzardFontPath(fontPath) or not flags)
+    if status ~= "applied" and (not IsBlizzardFontPath(fontPath) or not flags)
         and addon.fontRuntime.activateLooseFont(fontPath, size) then
         status = addon.fontRuntime.trySetFont(
             addon.fontRuntime.probeFontString, fontPath, size, flags)
@@ -10802,6 +10802,24 @@ local function MaybeAutoSwitchFont()
     local req    = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
     local cur    = GetFontDB()
 
+    -- An automatic CJK fallback may also advertise Cyrillic, but that does not
+    -- make it the user's preferred Russian face. Resolve from the saved choice
+    -- when crossing scripts instead of keeping a wide CJK fallback indefinitely.
+    local savedChoice = GetSavedAutoFontDB()
+    if savedChoice and not SameFontPath(savedChoice, cur) then
+        local preferred = FindCompatibleFont(savedChoice, req)
+        if preferred and not SameFontPath(preferred, cur) then
+            local applied, effectiveFont = addon.fontRuntime.applyCommittedTextStyle(
+                preferred, GetNumberDB("fontSize"), false, false)
+            if applied then
+                cur = effectiveFont
+                if writableDB and SameFontPath(cur, savedChoice) then
+                    writableDB.fontBeforeAutoSwitch = nil
+                end
+            end
+        end
+    end
+
     if FontSupports(cur, req) then
         local saved = GetSavedAutoFontDB()
         if writableDB and type(db.fontBeforeAutoSwitch) ~= "nil" and not saved then
@@ -11927,6 +11945,10 @@ end
 -- WHY no `local`: assigning the forward-decl'd upvalue declared earlier in this section.
 ResolveConfigFont = function(activeLocale)
     local req = LOCALE_GLYPH_REQ[activeLocale] or GLYPH_LATIN
+    if req == GLYPH_CYR and (FontSupports(CONFIG_FONT, GLYPH_HANS)
+        or FontSupports(CONFIG_FONT, GLYPH_HANT) or FontSupports(CONFIG_FONT, GLYPH_HANGUL)) then
+        return FindCompatibleFont("Fonts\\ARIALN.TTF", req) or CONFIG_FONT
+    end
     return FindCompatibleFont(CONFIG_FONT, req) or CONFIG_FONT
 end
 
@@ -18305,9 +18327,18 @@ end
 function addon.settingsUI.localization.MenuInfo(self, info, value)
     local locale = value == "auto" and self.NormalizeOutputLocale(GetLocale()) or value
     local requirement = LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN
+    if value == "auto" then
+        -- The Auto row's sentence is translated in the current output language,
+        -- while its current-client name can belong to a different script.
+        local sentenceRequirement = LOCALE_GLYPH_REQ[cached.activeLabelsLocale] or GLYPH_LATIN
+        if sentenceRequirement ~= GLYPH_LATIN then requirement = sentenceRequirement end
+    end
     local path = FindCompatibleFont(CONFIG_FONT, requirement)
     if path then
-        local object = self.fontRuntime.getOwnedFontObject("languageMenu:" .. locale)
+        if value == "auto" and not FontSupports(path, LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN) then
+            info.text = string.format(L("Auto (current: %s)"), locale)
+        end
+        local object = self.fontRuntime.getOwnedFontObject("languageMenu:" .. value)
         if self.fontRuntime.setOwnedFont(object, nil, path, 12, nil) then
             -- Each row keeps the font for its own script while the hovered
             -- language changes the rest of Settings.
@@ -18344,7 +18375,7 @@ function addon.settingsUI.localization.Preview(self, value)
     -- ruRU -> fallback -> deDE would compare against the fallback and fail to restore.
     local requirement = LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN
     local current = self.fontRuntime.currentPath()
-    local fallback = FindCompatibleFont(current, requirement)
+    local fallback = FindCompatibleFont(GetSavedAutoFontDB() or current, requirement)
     if fallback and not SameFontPath(fallback, current) then
         local applied = ApplyTextStyleToAllPanels(fallback, GetNumberDB("fontSize"))
         if applied then state.previewSwappedFont = true end

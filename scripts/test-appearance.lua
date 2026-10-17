@@ -4,7 +4,9 @@ local activated = {}
 local env, addon, test = fixtures.loadStatsPro("enUS", {
     forever = true,
     lsmFonts = {},
-    isKnownFontFile = function() return true end,
+    -- A file-table miss does not prevent the attached FontObject from loading
+    -- the font. Exercise activation before caching an invalid built-in path.
+    isKnownFontFile = function() return false end,
     setFontResult = function(_, path) return activated[path] == true end,
     fontObjectSetFontResult = function(object, path)
         if object.name == "StatsProFontAssetActivator" then activated[path] = true end
@@ -90,4 +92,51 @@ assert(rollbackTest.applyConfigFont("Fonts\\ARKai_T.ttf", true), "font switch re
 for _, entry in ipairs(rollbackTest.configFontState().entries) do
     assert(entry.actualFont == "Fonts\\ARKai_T.ttf", "recovery updates all Settings fonts")
 end
+
+local warmed = {}
+local crossEnv, crossAddon, crossTest = fixtures.loadStatsPro("enUS", {
+    forever = true,
+    statsProDB = { forceLocale = "zhCN", font = "Fonts\\ARHei.TTF",
+        fontBeforeAutoSwitch = "Fonts\\FRIZQT__.TTF" },
+    isKnownFontFile = function() return false end,
+    setFontResult = function(_, path)
+        return path == "Fonts\\ARHei.TTF" or warmed[path] == true
+    end,
+    fontObjectSetFontResult = function(object, path)
+        if object.name == "StatsProFontAssetActivator" then warmed[path] = true end
+        return true
+    end,
+})
+crossEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+crossAddon:OpenConfigMenu()
+local autoChinese = {}
+crossAddon.settingsUI.localization.MenuInfo(crossAddon, autoChinese, "auto")
+for _, option in ipairs(crossTest.registrySnapshot().languageOptions) do
+    if option.value ~= "auto" then
+        crossAddon.settingsUI.localization.MenuInfo(crossAddon, {}, option.value)
+    end
+end
+assert(crossTest.fontSupports(autoChinese.fontObject:GetFont(), "Hans"), "Auto sentence uses Chinese glyphs")
+crossAddon.settingsUI.localization.Preview(crossAddon, "ruRU")
+assert(crossTest.panelFontState().mainAppliedFont == "Fonts\\ARIALN.TTF", "Russian HUD returns to normal Cyrillic face")
+assert(crossTest.configFontState().currentFont == "Fonts\\ARIALN.TTF", "Russian Settings uses normal Cyrillic face")
+crossAddon.settingsUI.localization.CancelPreview(crossAddon)
+crossAddon.settingsUI.localization.Preview(crossAddon, "koKR")
+assert(crossTest.fontSupports(crossTest.configFontState().currentFont, "Hangul"), "cold Korean Settings font activates")
+assert(crossTest.fontSupports(crossTest.panelFontState().mainAppliedFont, "Hangul"), "cold Korean HUD font activates")
+crossAddon.settingsUI.localization.CancelPreview(crossAddon)
+local function selectLanguage(locale)
+    local dropdown = crossEnv.StatsProLanguageDropdown
+    dropdown.dropdownInit()
+    for _, info in ipairs(dropdown.dropdownEntries) do
+        if info.value == locale then info.func(); return end
+    end
+    error("language option missing: " .. locale)
+end
+selectLanguage("ruRU")
+assert(crossTest.panelFontState().mainAppliedFont == "Fonts\\ARIALN.TTF", "committed Russian restores normal Cyrillic face")
+assert(crossTest.profileState().settings.fontBeforeAutoSwitch == "Fonts\\FRIZQT__.TTF", "Russian fallback preserves original choice")
+selectLanguage("enUS")
+assert(crossTest.profileState().settings.font == "Fonts\\FRIZQT__.TTF", "English restores original choice")
+assert(crossTest.profileState().settings.fontBeforeAutoSwitch == nil, "restored choice clears automatic fallback")
 print("Appearance cold-client and cross-language regressions passed")

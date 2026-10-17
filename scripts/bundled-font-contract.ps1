@@ -38,7 +38,45 @@ function Get-StatsProBundledFontFiles {
         'fonts/licenses/PTSans.txt',
         'fonts/licenses/PTSansNarrow.txt',
         'fonts/licenses/PTSerif.txt',
-        'fonts/licenses/SpecialElite.txt'
+        'fonts/licenses/SpecialElite.txt',
+        'fonts/BadScript-Regular.ttf',
+        'fonts/DoHyeon-Regular.ttf',
+        'fonts/KosugiMaru-Regular.ttf',
+        'fonts/Lobster-Regular.ttf',
+        'fonts/MaShanZheng-Regular.ttf',
+        'fonts/Marmelad-Regular.ttf',
+        'fonts/NanumPenScript-Regular.ttf',
+        'fonts/Neucha.ttf',
+        'fonts/OldStandard-Regular.ttf',
+        'fonts/Philosopher-Regular.ttf',
+        'fonts/PressStart2P-Regular.ttf',
+        'fonts/RubikMonoOne-Regular.ttf',
+        'fonts/RuslanDisplay-Regular.ttf',
+        'fonts/RussoOne-Regular.ttf',
+        'fonts/SawarabiMincho-Regular.ttf',
+        'fonts/SourceHanSansCN-Regular.otf',
+        'fonts/SourceHanSansTW-Regular.otf',
+        'fonts/SourceHanSerifCN-Regular.otf',
+        'fonts/SourceHanSerifTW-Regular.otf',
+        'fonts/ZCOOLXiaoWei-Regular.ttf',
+        'fonts/licenses/BadScript-Regular-License.txt',
+        'fonts/licenses/DoHyeon-Regular-License.txt',
+        'fonts/licenses/KosugiMaru-Regular-License.txt',
+        'fonts/licenses/Lobster-Regular-License.txt',
+        'fonts/licenses/MaShanZheng-Regular-License.txt',
+        'fonts/licenses/Marmelad-Regular-License.txt',
+        'fonts/licenses/NanumPenScript-Regular-License.txt',
+        'fonts/licenses/Neucha-License.txt',
+        'fonts/licenses/OldStandard-Regular-License.txt',
+        'fonts/licenses/Philosopher-Regular-License.txt',
+        'fonts/licenses/PressStart2P-Regular-License.txt',
+        'fonts/licenses/RubikMonoOne-Regular-License.txt',
+        'fonts/licenses/RuslanDisplay-Regular-License.txt',
+        'fonts/licenses/RussoOne-Regular-License.txt',
+        'fonts/licenses/SawarabiMincho-Regular-License.txt',
+        'fonts/licenses/SourceHanSans.txt',
+        'fonts/licenses/SourceHanSerif.txt',
+        'fonts/licenses/ZCOOLXiaoWei-Regular-License.txt'
     )
 }
 
@@ -47,13 +85,13 @@ function Assert-StatsProBundledFontMaterials {
 
     $manifestPath = Join-Path $PSScriptRoot 'bundled-fonts.json'
     $manifest = [System.IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json
-    if ($manifest.schemaVersion -ne 1 -or @($manifest.fonts).Count -ne 28) {
-        throw 'Bundled font manifest must contain schema 1 and exactly 28 fonts.'
+    if ($manifest.schemaVersion -ne 1 -or @($manifest.fonts).Count -ne 48) {
+        throw 'Bundled font manifest must contain schema 1 and exactly 48 fonts.'
     }
     $expected = @(Get-StatsProBundledFontFiles)
     $fontPaths = @($manifest.fonts | ForEach-Object { $_.path })
     $expectedFonts = @($expected | Where-Object { $_ -match '\.(ttf|otf)$' })
-    if (@($fontPaths | Select-Object -Unique).Count -ne 28 -or
+    if (@($fontPaths | Select-Object -Unique).Count -ne 48 -or
         (Compare-Object $fontPaths $expectedFonts -CaseSensitive)) {
         throw 'Bundled font manifest paths differ from the exact approved font set.'
     }
@@ -72,6 +110,11 @@ function Assert-StatsProBundledFontMaterials {
             $font.cyrillic -isnot [bool] -or $font.sha256 -cnotmatch '\A[A-F0-9]{64}\z' -or
             $font.licenseSha256 -cnotmatch '\A[A-F0-9]{64}\z') {
             throw "Bundled font $($font.path) has invalid provenance or hash metadata."
+        }
+        foreach ($script in @('latin', 'hans', 'hant', 'hangul', 'japanese')) {
+            if ($font.PSObject.Properties.Name -contains $script -and $font.$script -isnot [bool]) {
+                throw "Bundled font $($font.path) has invalid $script coverage metadata."
+            }
         }
         $fontPath = Join-Path $Root $font.path
         $licensePath = Join-Path $Root $font.licenseFile

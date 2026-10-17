@@ -50,9 +50,13 @@ local function inspectFont(path)
                 local ends = base + 14
                 local starts = ends + count * 2 + 2
                 local deltas, ranges = starts + count * 2, starts + count * 4
-                for index = 0, count - 1 do
+                local low, high = 0, count - 1
+                while low <= high do
+                    local index = math.floor((low + high) / 2)
                     local first, last = uint(starts + index * 2, 2), uint(ends + index * 2, 2)
-                    if codepoint >= first and codepoint <= last then
+                    if codepoint < first then high = index - 1
+                    elseif codepoint > last then low = index + 1
+                    else
                         local delta, range = uint(deltas + index * 2, 2), uint(ranges + index * 2, 2)
                         local glyph = codepoint
                         if range ~= 0 then
@@ -60,13 +64,21 @@ local function inspectFont(path)
                             if glyph == 0 then break end
                         end
                         if (glyph + delta) % 65536 ~= 0 then return true end
+                        break
                     end
                 end
             elseif format == 12 then
-                for offset = base + 16, base + 16 + 12 * uint(base + 12, 4) - 1, 12 do
+                local low, high = 0, uint(base + 12, 4) - 1
+                while low <= high do
+                    local index = math.floor((low + high) / 2)
+                    local offset = base + 16 + index * 12
                     local first, last = uint(offset, 4), uint(offset + 4, 4)
-                    if codepoint >= first and codepoint <= last
-                        and uint(offset + 8, 4) + codepoint - first ~= 0 then return true end
+                    if codepoint < first then high = index - 1
+                    elseif codepoint > last then low = index + 1
+                    else
+                        if uint(offset + 8, 4) + codepoint - first ~= 0 then return true end
+                        break
+                    end
                 end
             end
         end
@@ -75,7 +87,7 @@ local function inspectFont(path)
     for codepoint = 32, 126 do check(hasGlyph(codepoint), "ASCII glyph coverage: " .. path) end
     local cyrillic = hasGlyph(0x401) and hasGlyph(0x451)
     for codepoint = 0x410, 0x44F do cyrillic = hasGlyph(codepoint) and cyrillic end
-    inspected[path] = { cyrillic = cyrillic }
+    inspected[path] = { cyrillic = cyrillic, hasGlyph = hasGlyph }
     return inspected[path]
 end
 
@@ -110,6 +122,12 @@ local function library(locale, missing)
     return env, env.LibStub("LibSharedMedia-3.0")
 end
 
+local function supportsLocale(font, locale)
+    local field = ({ ruRU = "cyrillic", zhCN = "hans", zhTW = "hant", koKR = "hangul" })[locale]
+    if field then return font[field] == true end
+    return font.latin ~= false
+end
+
 local manifest
 local locales = { "enUS", "deDE", "esES", "esMX", "frFR", "itIT", "ptBR", "ruRU", "koKR", "zhCN", "zhTW" }
 for _, locale in ipairs(locales) do
@@ -118,7 +136,7 @@ for _, locale in ipairs(locales) do
     local addon = {}
     loadIn(env, "StatsPro_Fonts.lua", addon)
     local fonts = addon.bundledFonts
-    check(type(fonts) == "table" and #fonts == 28, locale .. ": complete bundled font collection")
+    check(type(fonts) == "table" and #fonts == 48, locale .. ": complete bundled font collection")
     manifest = fonts
     local names, paths = {}, {}
     for _, font in ipairs(fonts) do
@@ -130,8 +148,7 @@ for _, locale in ipairs(locales) do
         check(header == "\0\1\0\0" or header == "OTTO", "bundled font has a standalone TTF or OTF signature")
         check(inspectFont(font.path).cyrillic == font.cyrillic,
             "binary Russian alphabet matches declared coverage: " .. font.name)
-        local supported = locale ~= "koKR" and locale ~= "zhCN" and locale ~= "zhTW"
-            and (locale ~= "ruRU" or font.cyrillic == true)
+        local supported = supportsLocale(font, locale)
         check((media:HashTable("font")[font.name] == font.path) == supported,
             locale .. ": exact registration for " .. font.name)
     end
@@ -165,8 +182,46 @@ do
 end
 
 local fixtures = assert(loadfile("scripts/smoke.lua"))("fixtures")
+local _, _, coverageTest = fixtures.loadStatsPro("enUS")
+local required = { latin = {}, hans = {}, hant = {}, hangul = {}, japanese = {} }
+local function collect(locale, value)
+    if type(value) == "table" then for _, child in pairs(value) do collect(locale, child) end
+    elseif type(value) == "string" then
+        local index = 1
+        while index <= #value do
+            local code = value:byte(index)
+            local count = code < 128 and 1 or code < 224 and 2 or code < 240 and 3 or 4
+            if count > 1 then
+                code = code % (2 ^ (7 - count))
+                for offset = 1, count - 1 do code = code * 64 + value:byte(index + offset) % 64 end
+            end
+            if locale == "zhCN" and code >= 0x3400 and code <= 0x9FFF then required.hans[code] = true
+            elseif locale == "zhTW" and code >= 0x3400 and code <= 0x9FFF then required.hant[code] = true
+            elseif locale == "koKR" and code >= 0xAC00 and code <= 0xD7A3 then required.hangul[code] = true
+            elseif locale ~= "ruRU" and locale ~= "zhCN" and locale ~= "zhTW" and locale ~= "koKR"
+                and code >= 0xC0 and code <= 0x24F and code ~= 0xD7 and code ~= 0xF7 then
+                required.latin[code] = true
+            end
+            index = index + count
+        end
+    end
+end
+for locale, labels in pairs(coverageTest.registrySnapshot().labelsByLocale) do collect(locale, labels) end
+for code = 32, 126 do required.latin[code] = true end
+for code = 0x3041, 0x3093 do required.japanese[code] = true end
+for code = 0x30A1, 0x30F6 do required.japanese[code] = true end
+for _, font in ipairs(manifest) do
+    for field, codes in pairs(required) do
+        local supported = true
+        for code in pairs(codes) do
+            if not inspectFont(font.path).hasGlyph(code) then supported = false; break end
+        end
+        local declared = field == "latin" and font.latin ~= false or font[field] == true
+        check(supported == declared, "actual translated characters match declared " .. field .. ": " .. font.name)
+    end
+end
 for _, forever in ipairs({ false, true }) do
-    for _, locale in ipairs({ "enUS", "ruRU" }) do
+    for _, locale in ipairs({ "enUS", "ruRU", "zhCN", "zhTW", "koKR" }) do
         local env, addon, test = fixtures.loadStatsPro(locale, {
             forever = forever, bundledFonts = true, isKnownFontFile = exists,
             unitGUID = function() return "Player-BundledFontFixture" end,
@@ -182,11 +237,12 @@ for _, forever in ipairs({ false, true }) do
         end
         local selected
         for _, font in ipairs(addon.bundledFonts) do
-            check(not test.fontSupports(font.path, "Hangul") and not test.fontSupports(font.path, "Hans")
-                and not test.fontSupports(font.path, "Hant"), "bundled western fonts do not claim CJK coverage")
-            check(test.fontSupports(font.path, "Cyrillic") == font.cyrillic,
-                "runtime honors verified Cyrillic coverage: " .. font.name)
-            if locale ~= "ruRU" or font.cyrillic then
+            for requirement, field in pairs({ Hangul = "hangul", Hans = "hans", Hant = "hant", Cyrillic = "cyrillic" }) do
+                check(test.fontSupports(font.path, requirement) == (font[field] == true),
+                    "runtime honors verified script coverage: " .. font.name .. "/" .. requirement)
+            end
+            check(test.fontSupports(font.path, "Latin") == (font.latin ~= false), "verified western accent coverage")
+            if supportsLocale(font, locale) then
                 check(catalog[font.name] == font.path, "font appears in the picker: " .. font.name)
                 check(env.LibStub("LibSharedMedia-3.0"):HashTable("font")[font.name] == font.path,
                     "bundled font is available to shared runtime: " .. font.name)
@@ -247,7 +303,7 @@ for _, forever in ipairs({ false, true }) do
         check(names["Unknown coverage"] == (requirement == "Latin" and true or nil),
             "unknown external coverage is conservative for non-Latin output")
         for _, font in ipairs(addon.bundledFonts) do
-            local expected = requirement == "Latin" or (requirement == "Cyrillic" and font.cyrillic)
+            local expected = supportsLocale(font, active)
             check((names[font.name] == true) == expected, "bundled language filtering: " .. locale .. "/" .. font.name)
         end
         for _, button in ipairs(picker.buttons) do

@@ -29,16 +29,39 @@ addon.bundledFonts = {
     { name = "Black Ops One", file = "BlackOpsOne-Regular.ttf", cyrillic = false },
     { name = "Bangers", file = "Bangers-Regular.ttf", cyrillic = false },
     { name = "Special Elite", file = "SpecialElite-Regular.ttf", cyrillic = false },
+    { name = "Russo One", file = "RussoOne-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
+    { name = "Ruslan Display", file = "RuslanDisplay-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
+    { name = "Rubik Mono One", file = "RubikMonoOne-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
+    { name = "Marmelad", file = "Marmelad-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
+    { name = "Philosopher", file = "Philosopher-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
+    { name = "Lobster", file = "Lobster-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
+    { name = "Bad Script", file = "BadScript-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
+    { name = "Neucha", file = "Neucha.ttf", latin = false, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
+    { name = "Old Standard TT", file = "OldStandard-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
+    { name = "Press Start 2P", file = "PressStart2P-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
+    { name = "Kosugi Maru", file = "KosugiMaru-Regular.ttf", latin = false, cyrillic = true, hans = false, hant = false, hangul = false, japanese = true },
+    { name = "Sawarabi Mincho", file = "SawarabiMincho-Regular.ttf", latin = true, cyrillic = false, hans = false, hant = false, hangul = false, japanese = true },
+    { name = "Do Hyeon", file = "DoHyeon-Regular.ttf", latin = false, cyrillic = false, hans = false, hant = false, hangul = true, japanese = false },
+    { name = "Nanum Pen Script", file = "NanumPenScript-Regular.ttf", latin = false, cyrillic = false, hans = false, hant = false, hangul = true, japanese = false },
+    { name = "Ma Shan Zheng", file = "MaShanZheng-Regular.ttf", latin = false, cyrillic = false, hans = true, hant = false, hangul = false, japanese = false },
+    { name = "ZCOOL XiaoWei", file = "ZCOOLXiaoWei-Regular.ttf", latin = false, cyrillic = false, hans = true, hant = false, hangul = false, japanese = false },
+    { name = "Source Han Sans CN", file = "SourceHanSansCN-Regular.otf", latin = true, cyrillic = true, hans = true, hant = true, hangul = false, japanese = true },
+    { name = "Source Han Sans TW", file = "SourceHanSansTW-Regular.otf", latin = true, cyrillic = true, hans = false, hant = true, hangul = false, japanese = true },
+    { name = "Source Han Serif CN", file = "SourceHanSerifCN-Regular.otf", latin = true, cyrillic = true, hans = true, hant = true, hangul = false, japanese = true },
+    { name = "Source Han Serif TW", file = "SourceHanSerifTW-Regular.otf", latin = true, cyrillic = true, hans = false, hant = true, hangul = false, japanese = true },
 }
 
 local media = LibStub and LibStub("LibSharedMedia-3.0", true)
 for _, font in ipairs(addon.bundledFonts) do
     font.path = "Interface\\AddOns\\StatsPro\\fonts\\" .. font.file
     if media and type(media.Register) == "function" then
-        local mask = media.LOCALE_BIT_western
+        local mask = font.latin ~= false and media.LOCALE_BIT_western or 0
         if font.cyrillic and mask and media.LOCALE_BIT_ruRU then
             mask = mask + media.LOCALE_BIT_ruRU
         end
+        if font.hans and media.LOCALE_BIT_zhCN then mask = mask + media.LOCALE_BIT_zhCN end
+        if font.hant and media.LOCALE_BIT_zhTW then mask = mask + media.LOCALE_BIT_zhTW end
+        if font.hangul and media.LOCALE_BIT_koKR then mask = mask + media.LOCALE_BIT_koKR end
         -- Register preserves a previously registered face with the same name.
         media:Register(media.MediaType.FONT, font.name, font.path, mask)
     end

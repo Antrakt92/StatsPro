@@ -74,7 +74,7 @@ for those derived portions.
 
 ## Bundled fonts
 
-StatsPro includes twenty-eight unchanged static font files. They remain under their
+StatsPro includes forty-eight unchanged static font files. They remain under their
 respective font licenses, independently of the license for StatsPro code. Font
 files are neither subsetted nor converted. DejaVu filenames are shortened; their
 font data and internal names are unchanged.
@@ -102,6 +102,26 @@ The source URLs and licenses are listed below. Detailed file hashes are availabl
 | Black Ops One | [Google Fonts](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/blackopsone) | pinned unchanged static TTF | fonts/licenses/BlackOpsOne.txt |
 | Bangers | [Google Fonts](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/bangers) | pinned unchanged static TTF | fonts/licenses/Bangers.txt |
 | Special Elite | [Google Fonts](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/apache/specialelite) | pinned unchanged static TTF | fonts/licenses/SpecialElite.txt |
+| Russo One | [Upstream source](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/russoone) | pinned unchanged static font | fonts/licenses/RussoOne-Regular-License.txt |
+| Ruslan Display | [Upstream source](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/ruslandisplay) | pinned unchanged static font | fonts/licenses/RuslanDisplay-Regular-License.txt |
+| Rubik Mono One | [Upstream source](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/rubikmonoone) | pinned unchanged static font | fonts/licenses/RubikMonoOne-Regular-License.txt |
+| Marmelad | [Upstream source](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/marmelad) | pinned unchanged static font | fonts/licenses/Marmelad-Regular-License.txt |
+| Philosopher | [Upstream source](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/philosopher) | pinned unchanged static font | fonts/licenses/Philosopher-Regular-License.txt |
+| Lobster | [Upstream source](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/lobster) | pinned unchanged static font | fonts/licenses/Lobster-Regular-License.txt |
+| Bad Script | [Upstream source](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/badscript) | pinned unchanged static font | fonts/licenses/BadScript-Regular-License.txt |
+| Neucha | [Upstream source](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/neucha) | pinned unchanged static font | fonts/licenses/Neucha-License.txt |
+| Old Standard TT | [Upstream source](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/oldstandardtt) | pinned unchanged static font | fonts/licenses/OldStandard-Regular-License.txt |
+| Press Start 2P | [Upstream source](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/pressstart2p) | pinned unchanged static font | fonts/licenses/PressStart2P-Regular-License.txt |
+| Kosugi Maru | [Upstream source](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/apache/kosugimaru) | pinned unchanged static font | fonts/licenses/KosugiMaru-Regular-License.txt |
+| Sawarabi Mincho | [Upstream source](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/sawarabimincho) | pinned unchanged static font | fonts/licenses/SawarabiMincho-Regular-License.txt |
+| Do Hyeon | [Upstream source](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/dohyeon) | pinned unchanged static font | fonts/licenses/DoHyeon-Regular-License.txt |
+| Nanum Pen Script | [Upstream source](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/nanumpenscript) | pinned unchanged static font | fonts/licenses/NanumPenScript-Regular-License.txt |
+| Ma Shan Zheng | [Upstream source](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/mashanzheng) | pinned unchanged static font | fonts/licenses/MaShanZheng-Regular-License.txt |
+| ZCOOL XiaoWei | [Upstream source](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/zcoolxiaowei) | pinned unchanged static font | fonts/licenses/ZCOOLXiaoWei-Regular-License.txt |
+| Source Han Sans CN | [Upstream source](https://github.com/adobe-fonts/source-han-sans/tree/a4f7cf94edfb9d7ffbdfc4841de276358bd7e0f2/SubsetOTF/CN) | pinned unchanged static font | fonts/licenses/SourceHanSans.txt |
+| Source Han Sans TW | [Upstream source](https://github.com/adobe-fonts/source-han-sans/tree/a4f7cf94edfb9d7ffbdfc4841de276358bd7e0f2/SubsetOTF/TW) | pinned unchanged static font | fonts/licenses/SourceHanSans.txt |
+| Source Han Serif CN | [Upstream source](https://github.com/adobe-fonts/source-han-serif/tree/7889f11bf31170b5d092a083b357c8c8130f89e0/SubsetOTF/CN) | pinned unchanged static font | fonts/licenses/SourceHanSerif.txt |
+| Source Han Serif TW | [Upstream source](https://github.com/adobe-fonts/source-han-serif/tree/7889f11bf31170b5d092a083b357c8c8130f89e0/SubsetOTF/TW) | pinned unchanged static font | fonts/licenses/SourceHanSerif.txt |
 
 The SharedMedia-sourced files were verified byte-for-byte against the pinned
 [SharedMedia r202 source](https://repos.wowace.com/wow/sharedmedia/!svn/rvr/202/trunk/fonts/).
@@ -109,9 +129,16 @@ Only the individual font files and their licenses are bundled; no SharedMedia
 addon code is included. TeX Gyre's notice includes the GUST Font License and its
 referenced [LPPL 1.3c](https://www.latex-project.org/lppl/lppl-1-3c.txt).
 
-Twenty-two included fonts contain the complete Russian alphabet. TeX Gyre Adventor and
-its Bold variant, Audiowide, Black Ops One, Bangers and Special Elite cover Latin text; language-aware selection retains compatible
-fallbacks for Cyrillic, Chinese and Korean text.
+Thirty-seven included faces contain the complete Russian alphabet. Script coverage
+is recorded per face and checked against the actual character maps. Chinese and
+Korean compatibility includes the characters used by the translated addon labels;
+Japanese faces also include common hiragana and katakana. Western compatibility
+requires the accented letters used by the supported European translations.
+
+Asian fonts retain their upstream regional glyph forms. The Source Han CN and TW
+files are unchanged upstream region-specific static releases, with their original
+filenames and licenses. Fonts that lack a required script are hidden by the
+language-aware picker.
 
 Included font files:
 
@@ -144,3 +171,24 @@ Included font files:
 - fonts/BlackOpsOne-Regular.ttf
 - fonts/Bangers-Regular.ttf
 - fonts/SpecialElite-Regular.ttf
+
+- fonts/RussoOne-Regular.ttf
+- fonts/RuslanDisplay-Regular.ttf
+- fonts/RubikMonoOne-Regular.ttf
+- fonts/Marmelad-Regular.ttf
+- fonts/Philosopher-Regular.ttf
+- fonts/Lobster-Regular.ttf
+- fonts/BadScript-Regular.ttf
+- fonts/Neucha.ttf
+- fonts/OldStandard-Regular.ttf
+- fonts/PressStart2P-Regular.ttf
+- fonts/KosugiMaru-Regular.ttf
+- fonts/SawarabiMincho-Regular.ttf
+- fonts/DoHyeon-Regular.ttf
+- fonts/NanumPenScript-Regular.ttf
+- fonts/MaShanZheng-Regular.ttf
+- fonts/ZCOOLXiaoWei-Regular.ttf
+- fonts/SourceHanSansCN-Regular.otf
+- fonts/SourceHanSansTW-Regular.otf
+- fonts/SourceHanSerifCN-Regular.otf
+- fonts/SourceHanSerifTW-Regular.otf

@@ -334,7 +334,13 @@ end
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
 
 for _, font in ipairs(addon.bundledFonts or {}) do
-    AddFontGlyphSupport(font.path, font.cyrillic and { GLYPH_LATIN, GLYPH_CYR } or { GLYPH_LATIN })
+    local glyphs = {}
+    if font.latin ~= false then glyphs[#glyphs + 1] = GLYPH_LATIN end
+    if font.cyrillic then glyphs[#glyphs + 1] = GLYPH_CYR end
+    if font.hans then glyphs[#glyphs + 1] = GLYPH_HANS end
+    if font.hant then glyphs[#glyphs + 1] = GLYPH_HANT end
+    if font.hangul then glyphs[#glyphs + 1] = GLYPH_HANGUL end
+    AddFontGlyphSupport(font.path, glyphs)
 end
 
 -- WHY hijack-guard: STANDARD_TEXT_FONT is a Blizzard global ANY addon can mutate

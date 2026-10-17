@@ -32,13 +32,15 @@ end
 print("Retail cross-language cold-font regressions passed")
 
 -- A client exposing only the namespaced money API must still render both gear rows.
-for _, mode in ipairs({ "modern", "modern-only", "legacy", "missing", "throwing" }) do
+for _, mode in ipairs({ "modern", "modern-only", "legacy", "missing", "throwing",
+    "nil-return", "number-return", "empty-return", "secret-return" }) do
     local env, addon, test = fixtures.loadStatsPro("enUS", {
         statsProDB = { showDurability = true, showRepairCost = true },
         getInventoryItemDurability = function(slot)
             if slot == 1 then return 70, 100 end
         end,
         getTooltipInventoryItem = function() return { repairCost = 4458354 } end,
+        issecretvalue = function(value) return value == "restricted-money" end,
     })
     local legacy = env.GetCoinTextureString
     if mode ~= "legacy" then env.GetCoinTextureString = nil end
@@ -47,6 +49,12 @@ for _, mode in ipairs({ "modern", "modern-only", "legacy", "missing", "throwing"
         if mode == "modern" then env.GetCoinTextureString = function() error("modern API must take priority") end end
     elseif mode == "throwing" then
         env.C_CurrencyInfo = { GetCoinTextureString = function() error("formatter unavailable") end }
+    elseif mode:find("-return", 1, true) then
+        env.C_CurrencyInfo = { GetCoinTextureString = function()
+            if mode == "number-return" then return 42 end
+            if mode == "empty-return" then return "" end
+            if mode == "secret-return" then return "restricted-money" end
+        end }
     end
     env.__fireEvent("PLAYER_ENTERING_WORLD")
     assert(addon:RunUpdateStatsSafe(), mode .. ": repair formatting must not abort HUD rendering")
@@ -127,3 +135,119 @@ do
     end
 end
 print("Retail EditBox font flags regressions passed")
+
+-- A single unavailable Settings region must not strand committed localization.
+do
+    local function fixture()
+        local state = { failures = 1, attempts = 0, combat = false, specID = 73 }
+        local env, addon, test = fixtures.loadStatsPro("enUS", {
+            lsmFonts = {},
+            unitGUID = function() return "Player-1-SETTINGS-RECOVERY" end,
+            getSpecialization = function() return 1 end,
+            getSpecializationInfo = function()
+                return state.specID, state.specID == 73 and "Protection" or "Arms",
+                    nil, nil, state.specID == 73 and "TANK" or "DAMAGER", 1
+            end,
+            inCombatLockdown = function() return state.combat end,
+        })
+        env.__fireEvent("PLAYER_ENTERING_WORLD")
+        env.__flushTimers(0)
+        addon:OpenConfigMenu()
+        local input
+        for _, entry in ipairs(test.configFontState().entries) do
+            if entry.roleKey == "transferInput" then input = entry.region; break end
+        end
+        assert(input, "recovery uses the real transfer input")
+        input:SetFont(input:GetFont())
+        local original = input.SetFont
+        input.SetFont = function(self, path, height, flags)
+            if path == "Fonts\\ARIALN.TTF" then
+                state.attempts = state.attempts + 1
+                if state.failures > 0 then state.failures = state.failures - 1; return false end
+            end
+            return original(self, path, height, flags)
+        end
+        state.env, state.addon, state.test = env, addon, test
+        state.select = function(locale)
+            local dropdown = env.StatsProLanguageDropdown
+            dropdown.dropdownInit()
+            for _, info in ipairs(dropdown.dropdownEntries) do
+                if info.value == locale then info.func(); return end
+            end
+            error("missing language " .. locale)
+        end
+        state.tick = function() addon:RunUpdateStatsSafe() end
+        return state
+    end
+
+    local once = fixture()
+    local before = once.test.profileState()
+    local root, settings, profile = before.root, before.settings, before.root.profiles[before.profileID]
+    once.select("ruRU")
+    once.tick()
+    assert(once.attempts == 2, "one-shot region failure retries automatically")
+    assert(once.test.configFontState().currentFont == "Fonts\\ARIALN.TTF", "Settings recovers without manual apply")
+    assert(once.test.profileState().root == root and once.test.profileState().settings == settings
+        and root.profiles[before.profileID] == profile, "font recovery preserves profile graph identities")
+    assert(root.account.forceLocale == "ruRU", "recovery preserves committed locale")
+    assert(settings.fontBeforeAutoSwitch == "Fonts\\FRIZQT__.TTF", "recovery preserves original font preference")
+
+    local persistent = fixture()
+    persistent.failures = 100
+    persistent.select("ruRU")
+    for _, delay in ipairs({ 0.2, 1, 3, 5 }) do
+        persistent.env.__flushTimers(delay)
+        persistent.tick()
+    end
+    local attempts = persistent.attempts
+    for _ = 1, 20 do persistent.env.__flushTimers(10); persistent.tick() end
+    assert(attempts == 6 and persistent.attempts == attempts, "persistent Settings failure has a fixed retry budget")
+
+    for _, guard in ipairs({ "combat", "unknown-combat", "transition", "preview", "latest-locale" }) do
+        local guarded = fixture()
+        guarded.failures = 100
+        guarded.select("ruRU")
+        local oldAttempts = guarded.attempts
+        guarded.failures = 0
+        if guard == "combat" then guarded.combat = true
+        elseif guard == "unknown-combat" then guarded.combat = nil
+        elseif guard == "transition" then guarded.addon.profileRuntime.transitioning = true
+        elseif guard == "preview" then guarded.addon.settingsUI.localization.Preview(guarded.addon, "koKR")
+        else guarded.select("zhCN") end
+        guarded.env.__flushTimers(0.2)
+        guarded.tick()
+        if guard ~= "latest-locale" then
+            assert(guarded.attempts == oldAttempts, guard .. ": retry waits for safe context")
+        end
+        if guard == "preview" then
+            assert(guarded.test.fontSupports(guarded.test.configFontState().currentFont, "Hangul"), "retry preserves hovered script")
+            guarded.addon.settingsUI.localization.CancelPreview(guarded.addon)
+        elseif guard == "latest-locale" then
+            assert(guarded.test.fontSupports(guarded.test.configFontState().currentFont, "Hans"), "old retry cannot restore former locale")
+        else
+            guarded.combat = false
+            guarded.addon.profileRuntime.transitioning = false
+        end
+        guarded.tick()
+        assert(guarded.test.fontSupports(guarded.test.configFontState().currentFont,
+            guard == "latest-locale" and "Hans" or "Cyrillic"), guard .. ": recovery uses latest locale")
+    end
+
+    local handoff = fixture()
+    handoff.failures = 100
+    handoff.select("ruRU")
+    local old = handoff.test.profileState()
+    local oldSettings, oldFont, oldSaved = old.settings, old.settings.font, old.settings.fontBeforeAutoSwitch
+    handoff.specID = 71
+    handoff.env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    handoff.env.__flushTimers(0)
+    local current = handoff.test.profileState()
+    assert(current.profileID ~= old.profileID and current.settings ~= oldSettings, "real specialization change selects a new profile")
+    handoff.failures = 0
+    handoff.env.__flushTimers(0.2)
+    handoff.tick()
+    assert(handoff.test.configFontState().currentFont == "Fonts\\ARIALN.TTF", "retry recovers in latest profile")
+    assert(handoff.test.profileState().settings == current.settings, "retry preserves new settings identity")
+    assert(oldSettings.font == oldFont and oldSettings.fontBeforeAutoSwitch == oldSaved, "retry cannot mutate outgoing settings")
+end
+print("Retail committed Settings recovery regressions passed")

@@ -10839,7 +10839,7 @@ local function MaybeAutoSwitchFont()
                 cur, GetNumberDB("fontSize"), false, false)
             if applied then cur = effectiveFont end
         end
-        ApplyConfigFont(ResolveConfigFont(active))
+        addon.fontRuntime.ApplyCommittedConfigFont(active)
         return cur
     end
 
@@ -10853,7 +10853,7 @@ local function MaybeAutoSwitchFont()
             if writableDB then writableDB.fontBeforeAutoSwitch = saved end
         end
     end
-    ApplyConfigFont(ResolveConfigFont(active))
+    addon.fontRuntime.ApplyCommittedConfigFont(active)
     return cur
 end
 
@@ -12339,6 +12339,20 @@ function addon.fontRuntime.MarkCatalogLocaleDirty()
     runtime.catalogLocaleDirty = true
 end
 
+function addon.fontRuntime.ApplyCommittedConfigFont(locale)
+    local runtime = addon.fontRuntime
+    local applied = ApplyConfigFont(ResolveConfigFont(locale))
+    if applied then
+        runtime.configFontRecoveryPending = nil
+    elseif not runtime.configFontRecoveryPending then
+        -- Reuse the catalogue's bounded, guarded recovery. Retain only a flag:
+        -- retries resolve the current locale/profile after previews and transitions.
+        runtime.configFontRecoveryPending = true
+        runtime.MarkCatalogLocaleDirty()
+    end
+    return applied
+end
+
 function addon.fontRuntime.ReconcileCatalogLocale()
     local runtime = addon.fontRuntime
     if not runtime.catalogLocaleDirty then return end
@@ -12358,8 +12372,8 @@ function addon.fontRuntime.ReconcileCatalogLocale()
     local previousConfigFont = currentConfigFont
     if not FontSupports(runtime.currentPath(), req) then
         MaybeAutoSwitchFont()
-    elseif not FontSupports(currentConfigFont, req) then
-        ApplyConfigFont(ResolveConfigFont(ResolveActiveLocale()))
+    elseif runtime.configFontRecoveryPending or not FontSupports(currentConfigFont, req) then
+        runtime.ApplyCommittedConfigFont(ResolveActiveLocale())
     end
     local context = addon.settingsUI.context
     if not SameFontPath(previousConfigFont, currentConfigFont) then
@@ -12368,7 +12382,8 @@ function addon.fontRuntime.ReconcileCatalogLocale()
         context.refreshLanguageWarning()
     end
     if generation ~= runtime.catalogLocaleGeneration then return end
-    if FontSupports(runtime.currentPath(), req) and FontSupports(currentConfigFont, req) then
+    if not runtime.configFontRecoveryPending
+        and FontSupports(runtime.currentPath(), req) and FontSupports(currentConfigFont, req) then
         runtime.catalogLocaleGeneration = generation + 1
         return
     end
@@ -18476,7 +18491,7 @@ function addon.settingsUI.localization.CancelPreview(self)
     state.previewActive = false
     state.previewLocale = nil
     if restoreFont then self.fontRuntime.RestoreCommittedPreviewFont() end
-    ApplyConfigFont(ResolveConfigFont(active))
+    self.fontRuntime.ApplyCommittedConfigFont(active)
     RefreshConfigLocalization()
     self:RunUpdateStatsSafe()
 end

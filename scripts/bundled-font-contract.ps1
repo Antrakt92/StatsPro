@@ -11,7 +11,34 @@ function Get-StatsProBundledFontFiles {
         'fonts/licenses/DejaVu.txt', 'fonts/licenses/Gentium.txt',
         'fonts/licenses/Hack.txt', 'fonts/licenses/Liberation.txt',
         'fonts/licenses/TeX-Gyre-Adventor.txt', 'fonts/licenses/NotoSans.txt',
-        'fonts/licenses/Roboto.txt', 'fonts/licenses/Oswald.txt'
+        'fonts/licenses/Roboto.txt', 'fonts/licenses/Oswald.txt',
+        'fonts/Audiowide-Regular.ttf',
+        'fonts/Bangers-Regular.ttf',
+        'fonts/BlackOpsOne-Regular.ttf',
+        'fonts/FiraMono-Regular.ttf',
+        'fonts/FiraSans-Bold.ttf',
+        'fonts/FiraSans-Regular.ttf',
+        'fonts/FiraSansCondensed-Bold.ttf',
+        'fonts/FiraSansCondensed-Regular.ttf',
+        'fonts/PTM55FT.ttf',
+        'fonts/PT_Sans-Narrow-Web-Bold.ttf',
+        'fonts/PT_Sans-Narrow-Web-Regular.ttf',
+        'fonts/PT_Sans-Web-Bold.ttf',
+        'fonts/PT_Sans-Web-Regular.ttf',
+        'fonts/PT_Serif-Web-Bold.ttf',
+        'fonts/PT_Serif-Web-Regular.ttf',
+        'fonts/SpecialElite-Regular.ttf',
+        'fonts/licenses/Audiowide.txt',
+        'fonts/licenses/Bangers.txt',
+        'fonts/licenses/BlackOpsOne.txt',
+        'fonts/licenses/FiraMono.txt',
+        'fonts/licenses/FiraSans.txt',
+        'fonts/licenses/FiraSansCondensed.txt',
+        'fonts/licenses/PTMono.txt',
+        'fonts/licenses/PTSans.txt',
+        'fonts/licenses/PTSansNarrow.txt',
+        'fonts/licenses/PTSerif.txt',
+        'fonts/licenses/SpecialElite.txt'
     )
 }
 
@@ -20,13 +47,13 @@ function Assert-StatsProBundledFontMaterials {
 
     $manifestPath = Join-Path $PSScriptRoot 'bundled-fonts.json'
     $manifest = [System.IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json
-    if ($manifest.schemaVersion -ne 1 -or @($manifest.fonts).Count -ne 12) {
-        throw 'Bundled font manifest must contain schema 1 and exactly 12 fonts.'
+    if ($manifest.schemaVersion -ne 1 -or @($manifest.fonts).Count -ne 28) {
+        throw 'Bundled font manifest must contain schema 1 and exactly 28 fonts.'
     }
     $expected = @(Get-StatsProBundledFontFiles)
     $fontPaths = @($manifest.fonts | ForEach-Object { $_.path })
     $expectedFonts = @($expected | Where-Object { $_ -match '\.(ttf|otf)$' })
-    if (@($fontPaths | Select-Object -Unique).Count -ne 12 -or
+    if (@($fontPaths | Select-Object -Unique).Count -ne 28 -or
         (Compare-Object $fontPaths $expectedFonts -CaseSensitive)) {
         throw 'Bundled font manifest paths differ from the exact approved font set.'
     }

@@ -74,7 +74,7 @@ for those derived portions.
 
 ## Bundled fonts
 
-StatsPro includes twelve unchanged static font files. They remain under their
+StatsPro includes twenty-eight unchanged static font files. They remain under their
 respective font licenses, independently of the license for StatsPro code. Font
 files are neither subsetted nor converted. DejaVu filenames are shortened; their
 font data and internal names are unchanged.
@@ -91,15 +91,26 @@ The source URLs and licenses are listed below. Detailed file hashes are availabl
 | Noto Sans | [Noto Project](https://github.com/notofonts/noto-fonts/tree/ffebf8c1ee449e544955a7e813c54f9b73848eac) | pinned static hinted TTF | fonts/licenses/NotoSans.txt |
 | Roboto Condensed | [Google Fonts](https://github.com/googlefonts/roboto-2/tree/38062f4b4a0be4346d07a928408da21602545e9e) | pinned static hinted TTF | fonts/licenses/Roboto.txt |
 | Oswald | [Google Fonts](https://github.com/googlefonts/OswaldFont/tree/89795261ac9eeb9aa8cd99f43982c4e4b0e53261) | pinned static TTF | fonts/licenses/Oswald.txt |
+| PT Sans, PT Sans Bold | [Google Fonts](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/ptsans) | pinned unchanged static TTF | fonts/licenses/PTSans.txt |
+| PT Sans Narrow, PT Sans Narrow Bold | [Google Fonts](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/ptsansnarrow) | pinned unchanged static TTF | fonts/licenses/PTSansNarrow.txt |
+| PT Serif, PT Serif Bold | [Google Fonts](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/ptserif) | pinned unchanged static TTF | fonts/licenses/PTSerif.txt |
+| Fira Sans, Fira Sans Bold | [Google Fonts](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/firasans) | pinned unchanged static TTF | fonts/licenses/FiraSans.txt |
+| Fira Mono | [Google Fonts](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/firamono) | pinned unchanged static TTF | fonts/licenses/FiraMono.txt |
+| Fira Sans Condensed, Fira Sans Condensed Bold | [Google Fonts](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/firasanscondensed) | pinned unchanged static TTF | fonts/licenses/FiraSansCondensed.txt |
+| PT Mono | [Google Fonts](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/ptmono) | pinned unchanged static TTF | fonts/licenses/PTMono.txt |
+| Audiowide | [Google Fonts](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/audiowide) | pinned unchanged static TTF | fonts/licenses/Audiowide.txt |
+| Black Ops One | [Google Fonts](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/blackopsone) | pinned unchanged static TTF | fonts/licenses/BlackOpsOne.txt |
+| Bangers | [Google Fonts](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/bangers) | pinned unchanged static TTF | fonts/licenses/Bangers.txt |
+| Special Elite | [Google Fonts](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/apache/specialelite) | pinned unchanged static TTF | fonts/licenses/SpecialElite.txt |
 
-Every reused file was verified byte-for-byte against the pinned
+The SharedMedia-sourced files were verified byte-for-byte against the pinned
 [SharedMedia r202 source](https://repos.wowace.com/wow/sharedmedia/!svn/rvr/202/trunk/fonts/).
 Only the individual font files and their licenses are bundled; no SharedMedia
 addon code is included. TeX Gyre's notice includes the GUST Font License and its
 referenced [LPPL 1.3c](https://www.latex-project.org/lppl/lppl-1-3c.txt).
 
-Ten included fonts contain the complete Russian alphabet. TeX Gyre Adventor and
-its Bold variant cover Latin text; language-aware selection retains compatible
+Twenty-two included fonts contain the complete Russian alphabet. TeX Gyre Adventor and
+its Bold variant, Audiowide, Black Ops One, Bangers and Special Elite cover Latin text; language-aware selection retains compatible
 fallbacks for Cyrillic, Chinese and Korean text.
 
 Included font files:
@@ -116,3 +127,20 @@ Included font files:
 - fonts/NotoSans-Regular.ttf
 - fonts/RobotoCondensed-Regular.ttf
 - fonts/Oswald-Regular.ttf
+
+- fonts/PT_Sans-Web-Regular.ttf
+- fonts/PT_Sans-Web-Bold.ttf
+- fonts/PT_Sans-Narrow-Web-Regular.ttf
+- fonts/PT_Sans-Narrow-Web-Bold.ttf
+- fonts/PT_Serif-Web-Regular.ttf
+- fonts/PT_Serif-Web-Bold.ttf
+- fonts/FiraSans-Regular.ttf
+- fonts/FiraSans-Bold.ttf
+- fonts/FiraMono-Regular.ttf
+- fonts/FiraSansCondensed-Regular.ttf
+- fonts/FiraSansCondensed-Bold.ttf
+- fonts/PTM55FT.ttf
+- fonts/Audiowide-Regular.ttf
+- fonts/BlackOpsOne-Regular.ttf
+- fonts/Bangers-Regular.ttf
+- fonts/SpecialElite-Regular.ttf

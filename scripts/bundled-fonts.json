@@ -132,6 +132,182 @@
       "source": "https://raw.githubusercontent.com/googlefonts/OswaldFont/89795261ac9eeb9aa8cd99f43982c4e4b0e53261/fonts/ttf/Oswald-Regular.ttf",
       "sourceRevision": "89795261ac9eeb9aa8cd99f43982c4e4b0e53261",
       "cyrillic": true
+    },
+    {
+      "name": "PT Sans",
+      "path": "fonts/PT_Sans-Web-Regular.ttf",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/PTSans.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/ptsans/PT_Sans-Web-Regular.ttf",
+      "sourceRevision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+      "cyrillic": true,
+      "sha256": "9CC831490532009BAE2B3CE0D39C62ADFC889060BEB421593BFD9D2396D0F10A",
+      "licenseSha256": "EE633F3E777F9DDD3CC18984D74CCBE2D1A863276465B347D2AAB925BE9C58D9"
+    },
+    {
+      "name": "PT Sans Bold",
+      "path": "fonts/PT_Sans-Web-Bold.ttf",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/PTSans.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/ptsans/PT_Sans-Web-Bold.ttf",
+      "sourceRevision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+      "cyrillic": true,
+      "sha256": "3128BD5ECF01816E59A23D54C57A7A6B14615B07DB53FF277C77376010265B05",
+      "licenseSha256": "EE633F3E777F9DDD3CC18984D74CCBE2D1A863276465B347D2AAB925BE9C58D9"
+    },
+    {
+      "name": "PT Sans Narrow",
+      "path": "fonts/PT_Sans-Narrow-Web-Regular.ttf",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/PTSansNarrow.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/ptsansnarrow/PT_Sans-Narrow-Web-Regular.ttf",
+      "sourceRevision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+      "cyrillic": true,
+      "sha256": "4102EDDA03059163771869D258DF54AC8563C408FA6E9EF75B2DDC85EABEA6F4",
+      "licenseSha256": "EE633F3E777F9DDD3CC18984D74CCBE2D1A863276465B347D2AAB925BE9C58D9"
+    },
+    {
+      "name": "PT Sans Narrow Bold",
+      "path": "fonts/PT_Sans-Narrow-Web-Bold.ttf",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/PTSansNarrow.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/ptsansnarrow/PT_Sans-Narrow-Web-Bold.ttf",
+      "sourceRevision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+      "cyrillic": true,
+      "sha256": "E69D83BCF5BD647892B4E2B22F5098DABD55C989413513197722FC156FB9F00E",
+      "licenseSha256": "EE633F3E777F9DDD3CC18984D74CCBE2D1A863276465B347D2AAB925BE9C58D9"
+    },
+    {
+      "name": "PT Serif",
+      "path": "fonts/PT_Serif-Web-Regular.ttf",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/PTSerif.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/ptserif/PT_Serif-Web-Regular.ttf",
+      "sourceRevision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+      "cyrillic": true,
+      "sha256": "A4951FADE06FF8F09B7673AA81FFB65A8CD409E24D3289A6DC670BC4DDA2557A",
+      "licenseSha256": "DDF311C28DDF5A5AD9747649837346B67BED9D356789C3072BB27DBCE49E514D"
+    },
+    {
+      "name": "PT Serif Bold",
+      "path": "fonts/PT_Serif-Web-Bold.ttf",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/PTSerif.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/ptserif/PT_Serif-Web-Bold.ttf",
+      "sourceRevision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+      "cyrillic": true,
+      "sha256": "038BA7336BD7EA14F12AD155BED51A4345CAC5153275D521DEC3BA04021C526E",
+      "licenseSha256": "DDF311C28DDF5A5AD9747649837346B67BED9D356789C3072BB27DBCE49E514D"
+    },
+    {
+      "name": "Fira Sans",
+      "path": "fonts/FiraSans-Regular.ttf",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/FiraSans.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/firasans/FiraSans-Regular.ttf",
+      "sourceRevision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+      "cyrillic": true,
+      "sha256": "C29556A2719BF613EF3D5E070E40D903A8965D9C081BECA1375DC1E6E0F93C23",
+      "licenseSha256": "8F24842E9174BEDA18A556C2AE7D54F5DC444340C19A3A9EF77E23BCA366ADBD"
+    },
+    {
+      "name": "Fira Sans Bold",
+      "path": "fonts/FiraSans-Bold.ttf",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/FiraSans.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/firasans/FiraSans-Bold.ttf",
+      "sourceRevision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+      "cyrillic": true,
+      "sha256": "A4D8E149ECDD4874A0726EB0AF894488B3B31C423D6B0017C8F415ED1B795B45",
+      "licenseSha256": "8F24842E9174BEDA18A556C2AE7D54F5DC444340C19A3A9EF77E23BCA366ADBD"
+    },
+    {
+      "name": "Fira Mono",
+      "path": "fonts/FiraMono-Regular.ttf",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/FiraMono.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/firamono/FiraMono-Regular.ttf",
+      "sourceRevision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+      "cyrillic": true,
+      "sha256": "2E00B0CF3106A3D792F35711B7722740B76C02EE7300EA8C60F940584B7A8AC9",
+      "licenseSha256": "D1829FF3455BBF3B9D13DFB0A57758A863107C9108AAB48558F26F37F1094180"
+    },
+    {
+      "name": "Fira Sans Condensed",
+      "path": "fonts/FiraSansCondensed-Regular.ttf",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/FiraSansCondensed.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/firasanscondensed/FiraSansCondensed-Regular.ttf",
+      "sourceRevision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+      "cyrillic": true,
+      "sha256": "C67609F14FC9D328442BFFFCC31988B0F76E5575CF460FCC1F3DD8E4912FE257",
+      "licenseSha256": "8F24842E9174BEDA18A556C2AE7D54F5DC444340C19A3A9EF77E23BCA366ADBD"
+    },
+    {
+      "name": "Fira Sans Condensed Bold",
+      "path": "fonts/FiraSansCondensed-Bold.ttf",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/FiraSansCondensed.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/firasanscondensed/FiraSansCondensed-Bold.ttf",
+      "sourceRevision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+      "cyrillic": true,
+      "sha256": "B9371052E58EC5B709153DD0FFFC60B5205B4D3435CF957C2522705B31B0DBCC",
+      "licenseSha256": "8F24842E9174BEDA18A556C2AE7D54F5DC444340C19A3A9EF77E23BCA366ADBD"
+    },
+    {
+      "name": "PT Mono",
+      "path": "fonts/PTM55FT.ttf",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/PTMono.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/ptmono/PTM55FT.ttf",
+      "sourceRevision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+      "cyrillic": true,
+      "sha256": "CBE732B3B8FD211FD986EBDFC9B870DDECA4FAAB0BB5425FC509B37F9B4AC804",
+      "licenseSha256": "5311B83295D7549DFCBDB410ED0A848A5444B21D70BCCA7B4274A03BBF4EF3E2"
+    },
+    {
+      "name": "Audiowide",
+      "path": "fonts/Audiowide-Regular.ttf",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/Audiowide.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/audiowide/Audiowide-Regular.ttf",
+      "sourceRevision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+      "cyrillic": false,
+      "sha256": "C7C0F2B0F6FAD8C623E31772CE79F94A4EDB9321FFCE9FCE978EA892D20AE730",
+      "licenseSha256": "4FE01B13FFB41FAA8F030D84843A95DAB32792DFEECA7C072ABBFD3F4D6896AD"
+    },
+    {
+      "name": "Black Ops One",
+      "path": "fonts/BlackOpsOne-Regular.ttf",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/BlackOpsOne.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/blackopsone/BlackOpsOne-Regular.ttf",
+      "sourceRevision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+      "cyrillic": false,
+      "sha256": "282A825B5F294377387E3969F765408157DBEA8DA0F5D0AAE68C6BC704B145B3",
+      "licenseSha256": "F67CA4A200424868EE8FCD5464D7B35AC1CBF7723F6BFDBD19A8524689FAB9A8"
+    },
+    {
+      "name": "Bangers",
+      "path": "fonts/Bangers-Regular.ttf",
+      "license": "OFL-1.1",
+      "licenseFile": "fonts/licenses/Bangers.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/bangers/Bangers-Regular.ttf",
+      "sourceRevision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+      "cyrillic": false,
+      "sha256": "4160A7311DE9342674CCE9160CDE9FCBB30F48190397D86FF1B70B455AF65824",
+      "licenseSha256": "C36AD22AE5DAF9BB19FA6DECB3D9EC51CB9DC5B89C04C630AEBE34EF26FB962E"
+    },
+    {
+      "name": "Special Elite",
+      "path": "fonts/SpecialElite-Regular.ttf",
+      "license": "Apache-2.0",
+      "licenseFile": "fonts/licenses/SpecialElite.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/apache/specialelite/SpecialElite-Regular.ttf",
+      "sourceRevision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+      "cyrillic": false,
+      "sha256": "A776FCB4CEB8BDF03E2967688EBDAD42680DE5B91A7E62C17E718AE212D14BC4",
+      "licenseSha256": "CFC7749B96F63BD31C3C42B5C471BF756814053E847C10F3EB003417BC523D30"
     }
   ]
 }

@@ -16,6 +16,69 @@ local function exists(path)
     return false
 end
 
+-- Inspect the actual binary tables so catalog flags cannot promise missing glyphs.
+local inspected = {}
+local function inspectFont(path)
+    if inspected[path] then return inspected[path] end
+    local file = assert(io.open(sourcePath(path), "rb"))
+    local data = file:read("*a")
+    file:close()
+    local function uint(offset, size)
+        assert(offset >= 0 and offset + size <= #data, "font table stays within the file")
+        local value = 0
+        for index = offset + 1, offset + size do value = value * 256 + data:byte(index) end
+        return value
+    end
+    local tables = {}
+    for offset = 12, 12 + 16 * uint(4, 2) - 1, 16 do
+        tables[data:sub(offset + 1, offset + 4)] = uint(offset + 8, 4)
+    end
+    check(not tables.fvar, "bundled fonts use static faces: " .. path)
+    local cmap = assert(tables.cmap, "font includes a Unicode character map")
+    local subtables = {}
+    for offset = cmap + 4, cmap + 4 + 8 * uint(cmap + 2, 2) - 1, 8 do
+        local platform, encoding = uint(offset, 2), uint(offset + 2, 2)
+        if platform == 0 or (platform == 3 and (encoding == 1 or encoding == 10)) then
+            subtables[cmap + uint(offset + 4, 4)] = true
+        end
+    end
+    local function hasGlyph(codepoint)
+        for base in pairs(subtables) do
+            local format = uint(base, 2)
+            if format == 4 and codepoint < 65536 then
+                local count = uint(base + 6, 2) / 2
+                local ends = base + 14
+                local starts = ends + count * 2 + 2
+                local deltas, ranges = starts + count * 2, starts + count * 4
+                for index = 0, count - 1 do
+                    local first, last = uint(starts + index * 2, 2), uint(ends + index * 2, 2)
+                    if codepoint >= first and codepoint <= last then
+                        local delta, range = uint(deltas + index * 2, 2), uint(ranges + index * 2, 2)
+                        local glyph = codepoint
+                        if range ~= 0 then
+                            glyph = uint(ranges + index * 2 + range + (codepoint - first) * 2, 2)
+                            if glyph == 0 then break end
+                        end
+                        if (glyph + delta) % 65536 ~= 0 then return true end
+                    end
+                end
+            elseif format == 12 then
+                for offset = base + 16, base + 16 + 12 * uint(base + 12, 4) - 1, 12 do
+                    local first, last = uint(offset, 4), uint(offset + 4, 4)
+                    if codepoint >= first and codepoint <= last
+                        and uint(offset + 8, 4) + codepoint - first ~= 0 then return true end
+                end
+            end
+        end
+        return false
+    end
+    for codepoint = 32, 126 do check(hasGlyph(codepoint), "ASCII glyph coverage: " .. path) end
+    local cyrillic = hasGlyph(0x401) and hasGlyph(0x451)
+    for codepoint = 0x410, 0x44F do cyrillic = hasGlyph(codepoint) and cyrillic end
+    inspected[path] = { cyrillic = cyrillic }
+    return inspected[path]
+end
+
 local function band(left, right)
     local result, weight = 0, 1
     while left > 0 and right > 0 do
@@ -55,7 +118,7 @@ for _, locale in ipairs(locales) do
     local addon = {}
     loadIn(env, "StatsPro_Fonts.lua", addon)
     local fonts = addon.bundledFonts
-    check(type(fonts) == "table" and #fonts == 12, locale .. ": complete bundled font collection")
+    check(type(fonts) == "table" and #fonts == 28, locale .. ": complete bundled font collection")
     manifest = fonts
     local names, paths = {}, {}
     for _, font in ipairs(fonts) do
@@ -65,6 +128,8 @@ for _, locale in ipairs(locales) do
         local header = file:read(4)
         file:close()
         check(header == "\0\1\0\0" or header == "OTTO", "bundled font has a standalone TTF or OTF signature")
+        check(inspectFont(font.path).cyrillic == font.cyrillic,
+            "binary Russian alphabet matches declared coverage: " .. font.name)
         local supported = locale ~= "koKR" and locale ~= "zhCN" and locale ~= "zhTW"
             and (locale ~= "ruRU" or font.cyrillic == true)
         check((media:HashTable("font")[font.name] == font.path) == supported,
@@ -111,6 +176,10 @@ for _, forever in ipairs({ false, true }) do
         env.__fireEvent("PLAYER_ENTERING_WORLD")
         addon:OpenConfigMenu()
         local before = test.profileState()
+        local catalog = {}
+        for _, entry in ipairs(addon.settingsUI.fontPicker.BuildFontsList(addon, true)) do
+            catalog[entry.name] = entry.path
+        end
         local selected
         for _, font in ipairs(addon.bundledFonts) do
             check(not test.fontSupports(font.path, "Hangul") and not test.fontSupports(font.path, "Hans")
@@ -118,6 +187,7 @@ for _, forever in ipairs({ false, true }) do
             check(test.fontSupports(font.path, "Cyrillic") == font.cyrillic,
                 "runtime honors verified Cyrillic coverage: " .. font.name)
             if locale ~= "ruRU" or font.cyrillic then
+                check(catalog[font.name] == font.path, "font appears in the picker: " .. font.name)
                 check(env.LibStub("LibSharedMedia-3.0"):HashTable("font")[font.name] == font.path,
                     "bundled font is available to shared runtime: " .. font.name)
                 check(addon.settingsUI.fontPicker.Pick(addon, font), "font selection succeeds: " .. font.name)

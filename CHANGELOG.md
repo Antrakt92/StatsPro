@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.19.0 - 17-Oct-2026 — Fresh targets and Forever stat updates
+
+### Updated
+
+- **Bundled M+ and raid targets were refreshed from Archon data checked on 17 October.**
+- Forever beta now shows off-hand hit and effective attack power, with appearance themes applied to every stat color.
+- Keep Retail and Forever beta downloads on their separate release channels.
+
 ## 1.18.4 - 16-Oct-2026 — Midnight 12.1.5 support
 
 ### Updated

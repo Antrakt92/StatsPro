@@ -13,7 +13,16 @@ function Get-StatsProFlavorReleaseContractFromTocText {
         $versions = [regex]::Matches($TocText, '(?m)^##[ \t]+Version:[ \t]*((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))[ \t]*\r?$')
         if ($versions.Count -ne 1 -or [regex]::Matches($TocText, '(?m)^##[ \t]+Version:').Count -ne 1) { throw 'Forever flavor TOC has noncanonical or ambiguous version' }
         Assert-StatsProReleaseVersion -Value $versions[0].Groups[1].Value
-        $include = [System.StringComparer]::Ordinal.Equals("v$($versions[0].Groups[1].Value)", $ExpectedTag)
+        # Independent beta tags own their uploads even when Retail reaches the
+        # same version. Older TOCs retain their joint-release selection policy.
+        $policy = 'joint'
+        $directives = [regex]::Matches($TocText, '(?im)^[ \t]*##[ \t]*X-StatsPro-Release-Policy\b[^\r\n]*')
+        if ($directives.Count -gt 0) {
+            $canonical = [regex]::Matches($TocText, '(?m)^##[ \t]+X-StatsPro-Release-Policy:[ \t]*(joint|independent)[ \t]*\r?$')
+            if ($directives.Count -ne 1 -or $canonical.Count -ne 1) { throw 'Forever release policy must be one canonical joint or independent directive' }
+            $policy = $canonical[0].Groups[1].Value
+        }
+        $include = $policy -ceq 'joint' -and [System.StringComparer]::Ordinal.Equals("v$($versions[0].Groups[1].Value)", $ExpectedTag)
     }
     $foreverName = "StatsPro-$ExpectedTag-Forever-beta.zip"
     $names = @("StatsPro-$ExpectedTag.zip", 'release.json')

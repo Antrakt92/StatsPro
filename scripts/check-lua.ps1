@@ -1111,6 +1111,9 @@ if ($EnforceToolLocks) {
 
 $RuntimeLuaRefs = @(Get-RuntimeLuaRefs -MetadataCheckPath $MetadataCheck)
 
+Write-Host "== Flavor release policy =="
+& (Join-Path $PSScriptRoot "test-flavor-release-contract.ps1")
+
 Write-Host "== Top-level locals =="
 Assert-StatsProTopLevelLocalBudget -Path (Join-Path $RepoRoot "StatsPro.lua")
 

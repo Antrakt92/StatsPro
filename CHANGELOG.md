@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.21.0 - 17-Oct-2026 — Font favorites and compact Settings
+
+- Expand the included collection to 46 fonts, with Cyrillic, Chinese, Japanese and Korean styles.
+- Show compatible fonts for your selected language and display language names in their own script.
+- Add font favorites, saved across profiles and sessions.
+- Give Settings dropdowns a compact design with clearer hover and selection states.
+- Fix font switching, startup warnings and dropdowns opening twice.
+
 ## 1.20.0 - 17-Oct-2026 — Fonts and language menus
 
 - Add 12 included font faces, available without a separate font addon.

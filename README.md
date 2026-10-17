@@ -47,7 +47,7 @@ Type `/ss` or `/statspro` to open Settings. Outside combat, you can also
 right-click the HUD. To choose another setup later, expand **Quick Setup**
 at the top of the **Stats** tab or adjust individual rows yourself.
 
-Both builds include 48 font faces: clean, geometric, pixel, handwritten and
+Both builds include 46 font faces: clean, geometric, pixel, handwritten and
 classic serif styles, with Cyrillic, Chinese, Japanese and Korean families.
 Choose one in **Appearance → Font**; no separate font addon is needed. Fonts
 registered by other addons remain available alongside the included collection.

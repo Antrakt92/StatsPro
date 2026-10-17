@@ -128,6 +128,18 @@ local function supportsLocale(font, locale)
     return font.latin ~= false
 end
 
+local function visibleLocale(font, locale)
+    local supported = supportsLocale(font, locale)
+    if font.latinLocales and locale ~= "ruRU" and locale ~= "zhCN" and locale ~= "zhTW" and locale ~= "koKR" then
+        supported = font.latinLocales[locale] == true
+    end
+    if font.region then
+        if locale == "zhCN" or locale == "zhTW" then supported = supported and font.region == locale
+        elseif font.region == "zhTW" then supported = false end
+    end
+    return supported
+end
+
 local manifest
 local locales = { "enUS", "deDE", "esES", "esMX", "frFR", "itIT", "ptBR", "ruRU", "koKR", "zhCN", "zhTW" }
 for _, locale in ipairs(locales) do
@@ -136,7 +148,7 @@ for _, locale in ipairs(locales) do
     local addon = {}
     loadIn(env, "StatsPro_Fonts.lua", addon)
     local fonts = addon.bundledFonts
-    check(type(fonts) == "table" and #fonts == 48, locale .. ": complete bundled font collection")
+    check(type(fonts) == "table" and #fonts == 46, locale .. ": complete bundled font collection")
     manifest = fonts
     local names, paths = {}, {}
     for _, font in ipairs(fonts) do
@@ -184,6 +196,7 @@ end
 local fixtures = assert(loadfile("scripts/smoke.lua"))("fixtures")
 local _, _, coverageTest = fixtures.loadStatsPro("enUS")
 local required = { latin = {}, hans = {}, hant = {}, hangul = {}, japanese = {} }
+local westernLocales = { enUS = {}, deDE = {}, esES = {}, esMX = {}, frFR = {}, itIT = {}, ptBR = {} }
 local function collect(locale, value)
     if type(value) == "table" then for _, child in pairs(value) do collect(locale, child) end
     elseif type(value) == "string" then
@@ -201,6 +214,7 @@ local function collect(locale, value)
             elseif locale ~= "ruRU" and locale ~= "zhCN" and locale ~= "zhTW" and locale ~= "koKR"
                 and code >= 0xC0 and code <= 0x24F and code ~= 0xD7 and code ~= 0xF7 then
                 required.latin[code] = true
+                if westernLocales[locale] then westernLocales[locale][code] = true end
             end
             index = index + count
         end
@@ -211,6 +225,15 @@ for code = 32, 126 do required.latin[code] = true end
 for code = 0x3041, 0x3093 do required.japanese[code] = true end
 for code = 0x30A1, 0x30F6 do required.japanese[code] = true end
 for _, font in ipairs(manifest) do
+    if font.latinLocales then
+        for locale, codes in pairs(westernLocales) do
+            local supported = true
+            for code in pairs(codes) do
+                if not inspectFont(font.path).hasGlyph(code) then supported = false; break end
+            end
+            check(supported == (font.latinLocales[locale] == true), "partial western coverage matches actual translated accents: " .. font.name .. "/" .. locale)
+        end
+    end
     for field, codes in pairs(required) do
         local supported = true
         for code in pairs(codes) do
@@ -242,10 +265,10 @@ for _, forever in ipairs({ false, true }) do
                     "runtime honors verified script coverage: " .. font.name .. "/" .. requirement)
             end
             check(test.fontSupports(font.path, "Latin") == (font.latin ~= false), "verified western accent coverage")
-            if supportsLocale(font, locale) then
+            check((env.LibStub("LibSharedMedia-3.0"):HashTable("font")[font.name] == font.path) == supportsLocale(font, locale),
+                "shared registry honors client language mask: " .. font.name)
+            if visibleLocale(font, locale) then
                 check(catalog[font.name] == font.path, "font appears in the picker: " .. font.name)
-                check(env.LibStub("LibSharedMedia-3.0"):HashTable("font")[font.name] == font.path,
-                    "bundled font is available to shared runtime: " .. font.name)
                 check(addon.settingsUI.fontPicker.Pick(addon, font), "font selection succeeds: " .. font.name)
                 check(test.panelFontState().mainAppliedFont == font.path, "HUD uses selected bundled font")
                 check(test.profileState().settings.font == font.path, "profile saves selected bundled font")
@@ -296,19 +319,19 @@ for _, forever in ipairs({ false, true }) do
         check(#list > 0, "a compatible font remains available: " .. locale)
         local names = {}
         for _, font in ipairs(list) do
-            check(test.fontSupports(font.path, requirement), "only compatible fonts: " .. locale .. "/" .. font.name)
+            check(test.fontSupports(font.path, requirement, active), "only compatible fonts: " .. locale .. "/" .. font.name)
             check(not names[font.name], "no duplicate font names")
             names[font.name] = true
         end
         check(names["Unknown coverage"] == (requirement == "Latin" and true or nil),
             "unknown external coverage is conservative for non-Latin output")
         for _, font in ipairs(addon.bundledFonts) do
-            local expected = supportsLocale(font, active)
+            local expected = visibleLocale(font, active)
             check((names[font.name] == true) == expected, "bundled language filtering: " .. locale .. "/" .. font.name)
         end
         for _, button in ipairs(picker.buttons) do
             if button:IsShown() then
-                check(test.fontSupports(button.fontPath, requirement), "open picker refreshes after language commit")
+                check(test.fontSupports(button.fontPath, requirement, active), "open picker refreshes after language commit")
             end
         end
     end

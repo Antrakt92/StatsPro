@@ -272,6 +272,10 @@ local BLIZZARD_SHIPPED_FONTS = {
 local FONT_GLYPH_PATTERNS = {
     -- Adobe / Google universal CJK (documented Latin + Cyrillic + full CJK coverage)
     { pattern = "noto.*cjk",        glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT, GLYPH_HANGUL } },
+    { pattern = "^sourcehan.-cn[%-.]", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS } },
+    { pattern = "^sourcehan.-tw[%-.]", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANT } },
+    { pattern = "^sourcehan.-jp[%-.]", glyphs = { GLYPH_LATIN, GLYPH_CYR } },
+    { pattern = "^sourcehan.-kr[%-.]", glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANGUL } },
     { pattern = "sourcehan",        glyphs = { GLYPH_LATIN, GLYPH_CYR, GLYPH_HANS, GLYPH_HANT, GLYPH_HANGUL } },
     -- Zen Hei includes UnDotum Hangul and Russian glyphs. Other WenQuanYi
     -- families keep their conservative coverage below.
@@ -333,7 +337,9 @@ end
 -- LibSharedMedia-3.0 (soft dependency - gracefully falls back if not loaded)
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
 
+addon.fontRuntime.bundledByPath = {}
 for _, font in ipairs(addon.bundledFonts or {}) do
+    addon.fontRuntime.bundledByPath[FontPathKey(font.path)] = font
     local glyphs = {}
     if font.latin ~= false then glyphs[#glyphs + 1] = GLYPH_LATIN end
     if font.cyrillic then glyphs[#glyphs + 1] = GLYPH_CYR end
@@ -341,6 +347,12 @@ for _, font in ipairs(addon.bundledFonts or {}) do
     if font.hant then glyphs[#glyphs + 1] = GLYPH_HANT end
     if font.hangul then glyphs[#glyphs + 1] = GLYPH_HANGUL end
     AddFontGlyphSupport(font.path, glyphs)
+end
+for oldFile, newFile in pairs(addon.retiredFonts or {}) do
+    local prefix = "Interface\\AddOns\\StatsPro\\fonts\\"
+    local targetKey = FontPathKey(prefix .. newFile)
+    addon.fontRuntime.bundledByPath[FontPathKey(prefix .. oldFile)] = addon.fontRuntime.bundledByPath[targetKey]
+    AddFontGlyphSupport(prefix .. oldFile, FONT_GLYPH_SUPPORT[targetKey])
 end
 
 -- WHY hijack-guard: STANDARD_TEXT_FONT is a Blizzard global ANY addon can mutate
@@ -3975,9 +3987,13 @@ function addon.readabilityConfig.getTextOutlineStyleDB()
     return addon.readabilityConfig.normalizeTextOutlineStyle(GetDB("textOutlineStyle"))
 end
 
-local function FontSupports(fontPath, glyph)
+local function FontSupports(fontPath, glyph, outputLocale)
     local key = FontPathKey(fontPath)
     if not key then return glyph == GLYPH_LATIN end
+    local bundled = addon.fontRuntime.bundledByPath[key]
+    if glyph == GLYPH_LATIN and outputLocale and bundled and bundled.latinLocales then
+        return bundled.latinLocales[outputLocale] == true
+    end
     local entry = FONT_GLYPH_SUPPORT[key]
     if not entry then
         -- WHY basename: anchor patterns to filename, not addon-folder substrings.
@@ -4066,9 +4082,19 @@ function addon.fontRuntime.rawLSMPath(name)
     return LSM:Fetch(mediaType, name)
 end
 
+function addon.fontRuntime.offersLocale(font, locale)
+    if not font.region then return true end
+    if locale == "zhCN" or locale == "zhTW" then return font.region == locale end
+    return font.region ~= "zhTW"
+end
+
 function addon.fontRuntime.catalogEntry(fontPath)
     local key = FontPathKey(fontPath)
     if not key then return nil, nil end
+    -- Bundled assets remain addressable when LSM excluded them for the client
+    -- language, and retired filenames resolve to their retained replacement.
+    local bundled = addon.fontRuntime.bundledByPath[key]
+    if bundled then return bundled.path, bundled.name end
 
     local localeDefault = LocaleAwareDefaultFont()
     if SameFontPath(fontPath, localeDefault) then return localeDefault, nil end
@@ -4253,7 +4279,8 @@ function addon.fontRuntime.catalogName(fontPath)
     return (type(fontPath) == "string" and string.match(fontPath, "[^\\/]+$")) or "Font"
 end
 
-local function FindCompatibleFont(currentFont, req)
+local function FindCompatibleFont(currentFont, req, outputLocale)
+    outputLocale = outputLocale or ResolveActiveLocale()
     local seen = {}
     local function consider(path, knownCatalogEntry)
         local usable = knownCatalogEntry
@@ -4262,7 +4289,7 @@ local function FindCompatibleFont(currentFont, req)
         local key = FontPathKey(usable)
         if not key or seen[key] then return nil end
         seen[key] = true
-        if FontSupports(usable, req) then return usable end
+        if FontSupports(usable, req, outputLocale) then return usable end
         return nil
     end
 
@@ -4274,6 +4301,16 @@ local function FindCompatibleFont(currentFont, req)
         if not entry.locale or entry.locale == GetLocale() then
             match = consider(entry.path, true)
             if match then return match end
+        end
+    end
+    -- The client-filtered media registry can omit bundled scripts. Prefer
+    -- broad-coverage faces before script-only display faces in this fallback.
+    for _, western in ipairs({ true, false }) do
+        for _, font in ipairs(addon.bundledFonts or {}) do
+            if (font.latin ~= false) == western and addon.fontRuntime.offersLocale(font, outputLocale) then
+                match = consider(font.path, true)
+                if match then return match end
+            end
         end
     end
     if LSM then
@@ -8725,7 +8762,7 @@ local function MigrateDB(dbOverride)
     -- itself client-locale-bound.
     if dbVersion <= 3 then
         local req = LOCALE_GLYPH_REQ[GetLocale()] or GLYPH_LATIN
-        if not FontSupports(db.font, req) then
+        if not FontSupports(db.font, req, GetLocale()) then
             db.font = LocaleAwareDefaultFont()
         end
     end
@@ -10829,12 +10866,12 @@ local function MaybeAutoSwitchFont()
         end
     end
 
-    if FontSupports(cur, req) then
+    if FontSupports(cur, req, active) then
         local saved = GetSavedAutoFontDB()
         if writableDB and type(db.fontBeforeAutoSwitch) ~= "nil" and not saved then
             writableDB.fontBeforeAutoSwitch = nil
         end
-        if saved and not SameFontPath(saved, cur) and FontSupports(saved, req) then
+        if saved and not SameFontPath(saved, cur) and FontSupports(saved, req, active) then
             local applied, effectiveFont = addon.fontRuntime.applyCommittedTextStyle(
                 saved, GetNumberDB("fontSize"), false, false)
             if applied then
@@ -11985,9 +12022,9 @@ ResolveConfigFont = function(activeLocale)
     local req = LOCALE_GLYPH_REQ[activeLocale] or GLYPH_LATIN
     if req == GLYPH_CYR and (FontSupports(CONFIG_FONT, GLYPH_HANS)
         or FontSupports(CONFIG_FONT, GLYPH_HANT) or FontSupports(CONFIG_FONT, GLYPH_HANGUL)) then
-        return FindCompatibleFont("Fonts\\ARIALN.TTF", req) or CONFIG_FONT
+        return FindCompatibleFont("Fonts\\ARIALN.TTF", req, activeLocale) or CONFIG_FONT
     end
-    return FindCompatibleFont(CONFIG_FONT, req) or CONFIG_FONT
+    return FindCompatibleFont(CONFIG_FONT, req, activeLocale) or CONFIG_FONT
 end
 
 -- Settings FontStrings inherit from stable addon-owned FontObjects before their
@@ -12378,9 +12415,9 @@ function addon.fontRuntime.ReconcileCatalogLocale()
     runtime.catalogLocaleDirty = false
     local req = LOCALE_GLYPH_REQ[ResolveActiveLocale()] or GLYPH_LATIN
     local previousConfigFont = currentConfigFont
-    if not FontSupports(runtime.currentPath(), req) then
+    if not FontSupports(runtime.currentPath(), req, ResolveActiveLocale()) then
         MaybeAutoSwitchFont()
-    elseif runtime.configFontRecoveryPending or not FontSupports(currentConfigFont, req) then
+    elseif runtime.configFontRecoveryPending or not FontSupports(currentConfigFont, req, ResolveActiveLocale()) then
         runtime.ApplyCommittedConfigFont(ResolveActiveLocale())
     end
     local context = addon.settingsUI.context
@@ -12391,7 +12428,7 @@ function addon.fontRuntime.ReconcileCatalogLocale()
     end
     if generation ~= runtime.catalogLocaleGeneration then return end
     if not runtime.configFontRecoveryPending
-        and FontSupports(runtime.currentPath(), req) and FontSupports(currentConfigFont, req) then
+        and FontSupports(runtime.currentPath(), req, ResolveActiveLocale()) and FontSupports(currentConfigFont, req, ResolveActiveLocale()) then
         runtime.catalogLocaleGeneration = generation + 1
         return
     end
@@ -18007,10 +18044,12 @@ function addon.settingsUI.fontPicker.BuildFontsList(self, retryPending)
     local picker = self.settingsUI.fontPicker
     -- A hover preview does not commit a language. Cache by the chosen output
     -- script rather than the client locale or the temporary Settings labels.
-    local requirement = LOCALE_GLYPH_REQ[ResolveActiveLocale()] or GLYPH_LATIN
+    local outputLocale = ResolveActiveLocale()
+    local requirement = LOCALE_GLYPH_REQ[outputLocale] or GLYPH_LATIN
     local lsmLen = LSM and #LSM:List(LSM.MediaType.FONT) or 0
     if picker.cachedFontsList and picker.cachedFontsListLen == lsmLen
         and picker.cachedFontsListRequirement == requirement
+        and picker.cachedFontsListLocale == outputLocale
         and not (retryPending and picker.cachedFontsListHasPending) then
         return picker.cachedFontsList
     end
@@ -18022,7 +18061,9 @@ function addon.settingsUI.fontPicker.BuildFontsList(self, retryPending)
         -- An external registration retains ownership of its name even when its
         -- asset is unavailable or cannot render this language.
         seenNames[name] = true
-        if not FontSupports(path, requirement) then return end
+        if not FontSupports(path, requirement, outputLocale) then return end
+        local bundled = addon.fontRuntime.bundledByPath[FontPathKey(path)]
+        if bundled and not self.fontRuntime.offersLocale(bundled, outputLocale) then return end
         local usable, status = self.fontRuntime.usableCatalogPath(path)
         if status == "pending" then hasPending = true end
         if usable then
@@ -18062,6 +18103,7 @@ function addon.settingsUI.fontPicker.BuildFontsList(self, retryPending)
     picker.cachedFontsList = list
     picker.cachedFontsListLen = lsmLen
     picker.cachedFontsListRequirement = requirement
+    picker.cachedFontsListLocale = outputLocale
     picker.cachedFontsListHasPending = hasPending
     return list
 end
@@ -18076,11 +18118,10 @@ end
 
 function addon.settingsUI.fontPicker.RefreshCaption(self)
     local picker = self.settingsUI.fontPicker
-    local previousRequirement = picker.cachedFontsListRequirement
     if picker.dropdown then
         UIDropDownMenu_SetText(picker.dropdown, picker.CurrentFontName(self))
     end
-    if previousRequirement ~= picker.cachedFontsListRequirement
+    if picker.populatedLocale ~= picker.cachedFontsListLocale
         and picker.frame and picker.frame:IsShown() then
         picker.retryGeneration = picker.retryGeneration + 1
         picker.Populate(self, true)
@@ -18244,6 +18285,7 @@ function addon.settingsUI.fontPicker.Populate(self, centerSelection)
         targetScroll = 0
     end
     local fonts = picker.BuildFontsList(self, true)
+    picker.populatedLocale = picker.cachedFontsListLocale
     local currentPath = self.fontRuntime.preferredPath()
     local rows = math.ceil(#fonts / picker.columns)
     local currentRow
@@ -18469,7 +18511,7 @@ function addon.settingsUI.localization.MenuInfo(self, info, value)
         local sentenceRequirement = LOCALE_GLYPH_REQ[cached.activeLabelsLocale] or GLYPH_LATIN
         if sentenceRequirement ~= GLYPH_LATIN then requirement = sentenceRequirement end
     end
-    local path = FindCompatibleFont(CONFIG_FONT, requirement)
+    local path = FindCompatibleFont(CONFIG_FONT, requirement, locale)
     if path then
         local object = self.fontRuntime.getOwnedFontObject("languageMenu:" .. value)
         if self.fontRuntime.setOwnedFont(object, nil, path, 12, nil) then
@@ -18499,7 +18541,7 @@ function addon.settingsUI.localization.Preview(self, value)
     -- ruRU -> fallback -> deDE would compare against the fallback and fail to restore.
     local requirement = LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN
     local current = self.fontRuntime.currentPath()
-    local fallback = FindCompatibleFont(GetSavedAutoFontDB() or current, requirement)
+    local fallback = FindCompatibleFont(GetSavedAutoFontDB() or current, requirement, locale)
     if fallback and not SameFontPath(fallback, current) then
         local applied = ApplyTextStyleToAllPanels(fallback, GetNumberDB("fontSize"))
         if applied then state.previewSwappedFont = true end
@@ -18889,7 +18931,7 @@ function addon.settingsUI.BuildAppearanceTab(self, context)
         context.refreshLanguageWarning = function()
             local active = ResolveActiveLocale()
             local req    = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
-            if FontSupports(self.fontRuntime.preferredPath(), req) then
+            if FontSupports(self.fontRuntime.preferredPath(), req, active) then
                 langWarn:SetText("")
                 addon.settingsDesign.SetWarningVisible(langWarn, false)
             else
@@ -19374,7 +19416,7 @@ function addon:PrintDebugDump()
     PrintMsg(string.format("font: path=%s glyphReq=%s supports=%s saved=%s",
         tostring(addon.fontRuntime.currentPath() or "?"),
         req,
-        tostring(FontSupports(addon.fontRuntime.currentPath(), req)),
+        tostring(FontSupports(addon.fontRuntime.currentPath(), req, ResolveActiveLocale())),
         savedFontText))
     PrintMsg(addon.fontRuntime.ConfigFontDiagnostic())
     if addon.fontRuntime.configFontFailure then

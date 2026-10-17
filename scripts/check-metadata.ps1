@@ -521,6 +521,40 @@ function Invoke-SelfTest {
         $fontNotices = [regex]::Match($sourceNotices, '(?ms)^## Bundled fonts\s*\r?\n.*\z').Value
         [System.IO.File]::AppendAllText((Join-Path $root 'THIRD-PARTY-NOTICES.md'), "`n" + $fontNotices)
 
+        $fontManifest = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot 'bundled-fonts.json')) | ConvertFrom-Json
+        $fontRuntime = [System.IO.File]::ReadAllText((Join-Path $fontSourceRoot 'StatsPro_Fonts.lua'))
+        Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime
+        Assert-ThrowsMatch 'font name provenance drift rejected' {
+            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('DejaVu Sans', 'Incorrect Font Name')
+        } 'Runtime font name differs'
+        Assert-ThrowsMatch 'font coverage provenance drift rejected' {
+            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('cyrillic = true', 'cyrillic = false')
+        } 'coverage differs'
+        Assert-ThrowsMatch 'font regional policy drift rejected' {
+            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('region = "zhTW"', 'region = "zhCN"')
+        } 'region differs'
+        Assert-ThrowsMatch 'font locale override drift rejected' {
+            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('enUS = true', 'enUS = false')
+        } 'locale override'
+        Assert-ThrowsMatch 'retired font alias drift rejected' {
+            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('["FiraMono-Regular.ttf"] = "Hack-Regular.ttf"', '["FiraMono-Regular.ttf"] = "Missing.ttf"')
+        } 'retired font alias differs'
+        Assert-ThrowsMatch 'duplicate retired font alias rejected' {
+            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('["LiberationMono-Regular.ttf"]', '["FiraMono-Regular.ttf"]')
+        } 'Duplicate runtime retired font alias'
+        Assert-ThrowsMatch 'duplicate font coverage attribute rejected' {
+            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('cyrillic = true', 'cyrillic = true, cyrillic = false')
+        } 'Duplicate or invalid runtime font'
+        Assert-ThrowsMatch 'nonboolean font coverage attribute rejected' {
+            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('cyrillic = false', 'cyrillic = 0')
+        } 'Duplicate or invalid runtime font'
+        Assert-ThrowsMatch 'duplicate font locale override rejected' {
+            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('enUS = true', 'enUS = true, enUS = true')
+        } 'Duplicate runtime font locale override'
+        Assert-ThrowsMatch 'false duplicate font locale override rejected' {
+            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('enUS = true', 'enUS = true, enUS = false')
+        } 'Invalid runtime font locale override'
+
         $contract = Get-TocRuntimeContract -RepoRoot $root -TocPath (Join-Path $root "StatsPro.toc")
         if ($contract.RuntimeLuaRefs.Count -ne 6) {
             throw "expected six runtime Lua refs, got $($contract.RuntimeLuaRefs.Count)"

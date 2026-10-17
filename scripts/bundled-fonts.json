@@ -46,17 +46,6 @@
       "cyrillic": true
     },
     {
-      "name": "Liberation Mono",
-      "path": "fonts/LiberationMono-Regular.ttf",
-      "sha256": "F2B83C763E8AFD21709333370BED4774337FAE82267937E2B5AEA7E2FBD922C1",
-      "license": "OFL-1.1",
-      "licenseFile": "fonts/licenses/Liberation.txt",
-      "licenseSha256": "93FED46019C38BBE566B479D22148E2E8A1E85ADA614ACCB0211C37B2C61C19B",
-      "source": "https://repos.wowace.com/wow/sharedmedia/!svn/rvr/202/trunk/fonts/liberation/LiberationMono-Regular.ttf",
-      "sourceRevision": "r202",
-      "cyrillic": true
-    },
-    {
       "name": "Liberation Sans",
       "path": "fonts/LiberationSans-Regular.ttf",
       "sha256": "76D04C18EA243F426B7DE1F3AD208E927008F961DC5945E5AAD352D0DFDE8EE8",
@@ -220,17 +209,6 @@
       "cyrillic": true,
       "sha256": "A4D8E149ECDD4874A0726EB0AF894488B3B31C423D6B0017C8F415ED1B795B45",
       "licenseSha256": "8F24842E9174BEDA18A556C2AE7D54F5DC444340C19A3A9EF77E23BCA366ADBD"
-    },
-    {
-      "name": "Fira Mono",
-      "path": "fonts/FiraMono-Regular.ttf",
-      "license": "OFL-1.1",
-      "licenseFile": "fonts/licenses/FiraMono.txt",
-      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/firamono/FiraMono-Regular.ttf",
-      "sourceRevision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
-      "cyrillic": true,
-      "sha256": "2E00B0CF3106A3D792F35711B7722740B76C02EE7300EA8C60F940584B7A8AC9",
-      "licenseSha256": "D1829FF3455BBF3B9D13DFB0A57758A863107C9108AAB48558F26F37F1094180"
     },
     {
       "name": "Fira Sans Condensed",
@@ -435,7 +413,14 @@
       "hans": false,
       "hant": false,
       "hangul": false,
-      "japanese": false
+      "japanese": false,
+      "latinLocales": [
+        "enUS",
+        "deDE",
+        "esES",
+        "esMX",
+        "frFR"
+      ]
     },
     {
       "name": "Old Standard TT",
@@ -483,7 +468,10 @@
       "hans": false,
       "hant": false,
       "hangul": false,
-      "japanese": true
+      "japanese": true,
+      "latinLocales": [
+        "enUS"
+      ]
     },
     {
       "name": "Sawarabi Mincho",
@@ -515,7 +503,10 @@
       "hans": false,
       "hant": false,
       "hangul": true,
-      "japanese": false
+      "japanese": false,
+      "latinLocales": [
+        "enUS"
+      ]
     },
     {
       "name": "Nanum Pen Script",
@@ -531,7 +522,10 @@
       "hans": false,
       "hant": false,
       "hangul": true,
-      "japanese": false
+      "japanese": false,
+      "latinLocales": [
+        "enUS"
+      ]
     },
     {
       "name": "Ma Shan Zheng",
@@ -547,7 +541,10 @@
       "hans": true,
       "hant": false,
       "hangul": false,
-      "japanese": false
+      "japanese": false,
+      "latinLocales": [
+        "enUS"
+      ]
     },
     {
       "name": "ZCOOL XiaoWei",
@@ -563,7 +560,10 @@
       "hans": true,
       "hant": false,
       "hangul": false,
-      "japanese": false
+      "japanese": false,
+      "latinLocales": [
+        "enUS"
+      ]
     },
     {
       "name": "Source Han Sans CN",
@@ -579,7 +579,8 @@
       "hans": true,
       "hant": true,
       "hangul": false,
-      "japanese": true
+      "japanese": true,
+      "region": "zhCN"
     },
     {
       "name": "Source Han Sans TW",
@@ -595,7 +596,8 @@
       "hans": false,
       "hant": true,
       "hangul": false,
-      "japanese": true
+      "japanese": true,
+      "region": "zhTW"
     },
     {
       "name": "Source Han Serif CN",
@@ -611,7 +613,8 @@
       "hans": true,
       "hant": true,
       "hangul": false,
-      "japanese": true
+      "japanese": true,
+      "region": "zhCN"
     },
     {
       "name": "Source Han Serif TW",
@@ -627,7 +630,12 @@
       "hans": false,
       "hant": true,
       "hangul": false,
-      "japanese": true
+      "japanese": true,
+      "region": "zhTW"
     }
-  ]
+  ],
+  "retiredFonts": {
+    "FiraMono-Regular.ttf": "Hack-Regular.ttf",
+    "LiberationMono-Regular.ttf": "Hack-Regular.ttf"
+  }
 }

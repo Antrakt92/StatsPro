@@ -14950,12 +14950,12 @@ do
         return localeEnv
     end
 
-    assertLanguageCaption("config.language_compact.esES_explicit", "enUS", "esES", "Español ES")
-    assertLanguageCaption("config.language_compact.esMX_explicit", "enUS", "esMX", "Español MX")
-    assertLanguageCaption("config.language_compact.esMX_auto_current", "esMX", "auto", "Español MX")
-    assertLanguageCaption("config.language_compact.koKR_forced_fallback", "enUS", "koKR", "한국어 / Korean")
-    assertLanguageCaption("config.language_compact.zhCN_forced_fallback", "enUS", "zhCN", "中文 / Simpl.")
-    assertLanguageCaption("config.language_compact.zhTW_forced_fallback", "enUS", "zhTW", "中文 / Trad.")
+    assertLanguageCaption("config.language_compact.esES_explicit", "enUS", "esES", "Español (España)")
+    assertLanguageCaption("config.language_compact.esMX_explicit", "enUS", "esMX", "Español (Latinoamérica)")
+    assertLanguageCaption("config.language_compact.esMX_auto_current", "esMX", "auto", "Español (Latinoamérica)")
+    assertLanguageCaption("config.language_compact.koKR_forced_fallback", "enUS", "koKR", "한국어")
+    assertLanguageCaption("config.language_compact.zhCN_forced_fallback", "enUS", "zhCN", "简体中文")
+    assertLanguageCaption("config.language_compact.zhTW_forced_fallback", "enUS", "zhTW", "繁體中文")
 end
 
 do

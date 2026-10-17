@@ -149,4 +149,72 @@ assert(crossTest.profileState().settings.fontBeforeAutoSwitch == "Fonts\\FRIZQT_
 selectLanguage("enUS")
 assert(crossTest.profileState().settings.font == "Fonts\\FRIZQT__.TTF", "English restores original choice")
 assert(crossTest.profileState().settings.fontBeforeAutoSwitch == nil, "restored choice clears automatic fallback")
+
+-- Menu and committed caption use the same native names in both client flavors.
+local nativeNames = {
+    enUS = "English", deDE = "Deutsch", esES = "Español (España)",
+    esMX = "Español (Latinoamérica)", frFR = "Français", itIT = "Italiano",
+    ptBR = "Português (Brasil)", ruRU = "Русский", koKR = "한국어",
+    zhCN = "简体中文", zhTW = "繁體中文",
+}
+for _, forever in ipairs({ false, true }) do
+    local namesEnv, namesAddon = fixtures.loadStatsPro("enUS", { forever = forever })
+    namesEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    namesAddon:OpenConfigMenu()
+    local choices = namesEnv.StatsProLanguageDropdown
+    for locale, expected in pairs(nativeNames) do
+        choices.dropdownInit()
+        local selected
+        for _, row in ipairs(choices.dropdownEntries) do
+            if row.value == locale then selected = row end
+        end
+        assert(selected and selected.text == expected, "native menu name: " .. locale)
+        selected.func()
+        assert(choices.dropdownText == expected, "complete committed caption: " .. locale)
+    end
+    choices.dropdownInit()
+    for _, row in ipairs(choices.dropdownEntries) do
+        if row.value == "auto" then row.func() end
+    end
+    assert(choices.dropdownText == "English", "Auto restores current client name")
+end
+
+-- A missing script font must leave readable names instead of unsupported glyphs.
+for _, forever in ipairs({ false, true }) do
+    local missingEnv, missingAddon, missingTest = fixtures.loadStatsPro("enUS", {
+        forever = forever,
+        isKnownFontFile = function() return false end,
+        setFontResult = function(_, path) return path == "Fonts\\FRIZQT__.TTF" end,
+        fontObjectSetFontResult = function(_, path) return path == "Fonts\\FRIZQT__.TTF" end,
+    })
+    missingEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    missingAddon:OpenConfigMenu()
+    local choices = missingEnv.StatsProLanguageDropdown
+    choices.dropdownInit()
+    for _, row in ipairs(choices.dropdownEntries) do
+        local expected = ({ ruRU = "Russian", koKR = "Korean",
+            zhCN = "Chinese (Simplified)", zhTW = "Chinese (Traditional)" })[row.value]
+        if expected then
+            assert(row.text == expected, "readable fallback menu: " .. row.value)
+            row.func()
+            assert(choices.dropdownText == expected, "readable fallback caption: " .. row.value)
+            assert(missingTest.getDB("forceLocale") == row.value,
+                "fallback preserves the chosen language: " .. row.value)
+        end
+    end
+end
+-- Auto must also be readable when the client language's script font is absent.
+for _, forever in ipairs({ false, true }) do
+    local autoEnv, autoAddon = fixtures.loadStatsPro("zhCN", {
+        forever = forever, statsProDB = { forceLocale = "enUS" },
+        isKnownFontFile = function() return false end,
+        setFontResult = function(_, path) return path == "Fonts\\FRIZQT__.TTF" end,
+        fontObjectSetFontResult = function(_, path) return path == "Fonts\\FRIZQT__.TTF" end,
+    })
+    autoEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    autoAddon:OpenConfigMenu()
+    autoEnv.StatsProLanguageDropdown.dropdownInit()
+    local first = autoEnv.StatsProLanguageDropdown.dropdownEntries[1]
+    assert(first.text == "Auto (current: Chinese (Simplified))", "Auto script fallback")
+end
 print("Appearance cold-client and cross-language regressions passed")

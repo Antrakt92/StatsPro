@@ -126,10 +126,8 @@ end
 -- Reject secret-tagged values before any path normalization or SetFont call.
 local issecretvalue = _G.issecretvalue or function() return false end
 
--- WHY hybrid native+English labels for non-Latin: dropdown buttons render with the
--- system font of the dropdown frame; on non-CJK clients the frame font lacks CJK
--- glyphs and "한국어" / "中文" render as `?` boxes. Adding English in parens keeps a
--- readable fallback on every client. Latin labels render universally — kept clean.
+-- Native language names use script-specific fonts. English names are reserved
+-- for clients where a compatible font cannot be loaded.
 -- WARNING: LANGUAGE_OPTIONS[1] MUST be the auto entry; CurrentLabel() falls back to
 -- it on unknown forceLocale values.
 --
@@ -147,15 +145,15 @@ local LANGUAGE_OPTIONS = {
     { value = "auto",  label = nil },                        -- composed dynamically (Auto + native of GetLocale())
     { value = "enUS",  label = "English" },
     { value = "deDE",  label = "Deutsch" },
-    { value = "esES",  label = "Español (España)", compactLabel = "Español ES" },
-    { value = "esMX",  label = "Español (México)", compactLabel = "Español MX" },
+    { value = "esES",  label = "Español (España)" },
+    { value = "esMX",  label = "Español (Latinoamérica)" },
     { value = "frFR",  label = "Français" },
     { value = "itIT",  label = "Italiano" },
     { value = "ptBR",  label = "Português (Brasil)" },
-    { value = "koKR",  label = "한국어 (Korean)", compactLabel = "한국어 / Korean" },
-    { value = "ruRU",  label = "Русский (Russian)" },
-    { value = "zhCN",  label = "中文 简体 (Simplified)", compactLabel = "中文 / Simpl." },
-    { value = "zhTW",  label = "中文 繁體 (Traditional)", compactLabel = "中文 / Trad." },
+    { value = "koKR",  label = "한국어", fallbackLabel = "Korean" },
+    { value = "ruRU",  label = "Русский", fallbackLabel = "Russian" },
+    { value = "zhCN",  label = "简体中文", fallbackLabel = "Chinese (Simplified)" },
+    { value = "zhTW",  label = "繁體中文", fallbackLabel = "Chinese (Traditional)" },
 }
 
 local LOCALE_GLYPH_REQ = {
@@ -18431,6 +18429,16 @@ function addon.settingsUI.fontPicker.Initialize(self, context, dropdown)
     end
 end
 
+function addon.settingsUI.localization.LanguageName(self, locale, readable)
+    for _, option in ipairs(LANGUAGE_OPTIONS) do
+        if option.value == locale then
+            if readable == false then return option.fallbackLabel or option.label or locale end
+            return option.label or locale
+        end
+    end
+    return locale
+end
+
 function addon.settingsUI.localization.MenuInfo(self, info, value)
     local locale = value == "auto" and self.NormalizeOutputLocale(GetLocale()) or value
     local requirement = LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN
@@ -18442,9 +18450,6 @@ function addon.settingsUI.localization.MenuInfo(self, info, value)
     end
     local path = FindCompatibleFont(CONFIG_FONT, requirement)
     if path then
-        if value == "auto" and not FontSupports(path, LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN) then
-            info.text = string.format(L("Auto (current: %s)"), locale)
-        end
         local object = self.fontRuntime.getOwnedFontObject("languageMenu:" .. value)
         if self.fontRuntime.setOwnedFont(object, nil, path, 12, nil) then
             -- Each row keeps the font for its own script while the hovered
@@ -18452,7 +18457,9 @@ function addon.settingsUI.localization.MenuInfo(self, info, value)
             info.fontObject = object
         end
     end
-
+    local readable = info.fontObject ~= nil and FontSupports(path, LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN)
+    local name = self.settingsUI.localization.LanguageName(self, locale, readable)
+    info.text = value == "auto" and string.format(L("Auto (current: %s)"), name) or name
 end
 
 function addon.settingsUI.localization.Preview(self, value)
@@ -18744,34 +18751,19 @@ function addon.settingsUI.BuildAppearanceTab(self, context)
             return nil
         end
 
-        -- StripParenSuffix: trim trailing " (Foo)" clarifier from a bilingual label.
-        -- Reused by DisplayLabel and CompactLabel for the LANGUAGE_OPTIONS native+English
-        -- form ("Русский (Russian)" -> "Русский"). Returns "" for nil so CompactLabel's
-        -- explicit-pick branch keeps its prior nil-coalesce semantics.
-        local function StripParenSuffix(s)
-            if not s then return "" end
-            return s:match("^(.-)%s*%(") or s
-        end
-
-        -- DisplayLabel: native form for menu items. For non-Latin Auto entries we strip
-        -- the "(English)" clarifier — "Auto (current: Русский)" reads cleanly while the
-        -- explicit-pick rows below keep the full bilingual label for disambiguation.
         local function DisplayLabel(opt)
             if opt.value ~= "auto" then return opt.label end
             local cur = addon.NormalizeOutputLocale(GetLocale())
-            local o = FindLangOption(cur)
-            return string.format(L("Auto (current: %s)"), StripParenSuffix((o and o.label) or cur))
+            return string.format(L("Auto (current: %s)"),
+                self.settingsUI.localization.LanguageName(self, cur))
         end
 
-        -- CompactLabel: short form for the dropdown's collapsed current-text field, sized
-        -- for the collapsed field while keeping locale variants distinguishable.
+        -- Keep regional qualifiers in the closed field as well as the menu.
+        -- During another script's hover preview, use a readable fallback caption.
         local function CompactLabel(opt)
-            if opt.value == "auto" then
-                local cur = addon.NormalizeOutputLocale(GetLocale())
-                local o = FindLangOption(cur)
-                return (o and (o.compactLabel or StripParenSuffix(o.label))) or cur
-            end
-            return opt.compactLabel or StripParenSuffix(opt.label)
+            local locale = opt.value == "auto" and addon.NormalizeOutputLocale(GetLocale()) or opt.value
+            return self.settingsUI.localization.LanguageName(self, locale,
+                FontSupports(currentConfigFont, LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN))
         end
 
         local function CurrentLabel()

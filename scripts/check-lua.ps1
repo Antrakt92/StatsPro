@@ -1200,6 +1200,15 @@ foreach ($script in @("scripts/test-forever.lua", "scripts/test-forever-hud.lua"
     if ($result.ExitCode -ne 0) { throw "$script exited with code $($result.ExitCode)" }
 }
 
+Write-Host "== Forever language and gear recovery regressions =="
+$ForeverRecoveryResult = Invoke-NativeCapture -FilePath $Lua `
+    -Arguments @((Join-Path $RepoRoot "scripts/test-retail-recovery.lua"), "forever") `
+    -TimeoutSeconds 60 -Description "Forever recovery" -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
+$ForeverRecoveryResult.Output | ForEach-Object { Write-Host $_ }
+if ($ForeverRecoveryResult.ExitCode -ne 0) {
+    throw "Forever recovery exited with code $($ForeverRecoveryResult.ExitCode)"
+}
+
 $StaticAnalysisFiles = @(
     $RuntimeLuaRefs |
         Where-Object { -not $_.IsVendored -and -not $_.IsGenerated } |

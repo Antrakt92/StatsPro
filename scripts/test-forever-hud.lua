@@ -374,6 +374,55 @@ do
     check(not next(visited), "fully repaired gear needs no repair tooltips")
 end
 do
+    local rangedReady = false
+    local gearEnv, gearAddon, gearTest = fixtures.loadStatsPro("enUS", {
+        forever = true, unitGUID = function() return "Player-RangedHydrationForever" end,
+        statsProDB = { showRepairCost = true, showDurability = true },
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then return 80, 100 end
+            if slot == 18 and rangedReady then return 20, 100 end
+        end,
+        getTooltipInventoryItem = function(_, slot)
+            return { repairCost = slot == 18 and 200 or 100 }
+        end,
+    })
+    -- Jewelry's cached nil/nil durability is complete; the same shape for an
+    -- uncached ranged weapon must keep the aggregate unknown until hydration.
+    gearEnv.GetInventoryItemID = function(_, slot)
+        if slot == 2 then return 1002 end
+        if slot == 18 then return 1018 end
+    end
+    gearEnv.C_Item = gearEnv.C_Item or {}
+    gearEnv.C_Item.IsItemDataCachedByID = function(itemID)
+        return itemID ~= 1018 or rangedReady
+    end
+    local money = gearEnv.GetCoinTextureString
+    gearEnv.GetCoinTextureString = nil
+    gearEnv.C_CurrencyInfo = { GetCoinTextureString = money }
+    gearEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    check(gearAddon:RunUpdateStatsSafe(), "Forever ranged hydration initial update")
+    local pending = gearTest.durabilityState()
+    check(not pending.durabilityComplete and not pending.repairCostComplete,
+        "uncached ranged weapon prevents partial durability and repair totals")
+    check(gearTest.buildRenderBlocks()[7].repairStr == "?", "uncached ranged repair is unknown")
+    check(not pending.dirty, "initial hydration scan coalesces work")
+    gearEnv.__fireEvent("ITEM_DATA_LOAD_RESULT", 1002, true)
+    check(not gearTest.durabilityState().dirty, "cached jewelry callback does not invalidate ranged hydration")
+    rangedReady = true
+    gearEnv.__fireEvent("ITEM_DATA_LOAD_RESULT", 1018, true)
+    check(gearTest.durabilityState().dirty, "matching ranged item load invalidates cached aggregate")
+    check(gearAddon:RunUpdateStatsSafe(), "Forever ranged hydration recovery update")
+    local ready = gearTest.durabilityState()
+    check(ready.durabilityComplete and ready.durabilityValue == 50,
+        "hydrated ranged weapon contributes while cached nil jewelry remains complete")
+    check(ready.repairCostComplete and ready.repairCost == 300,
+        "hydrated ranged repair totals include both damaged durable slots")
+    check(gearTest.buildRenderBlocks()[7].repairStr == "coin:300:14",
+        "Forever ranged gear renders through namespaced money API without legacy global")
+    check(gearEnv.StatsProFrame:IsShown(), "Forever HUD remains shown after hydration and money formatting")
+end
+
+do
     local paletteEnv, paletteAddon, paletteTest = fixtures.loadStatsPro("enUS", {
         forever = true, unitGUID = function() return "Player-ForeverPalette" end,
     })

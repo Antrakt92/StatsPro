@@ -1,8 +1,19 @@
--- Retail language previews must work independently of the installed client locale.
+-- Shared recovery must work independently of client language and addon flavor.
+local forever = arg and arg[1] == "forever"
+assert(not arg or not arg[1] or forever, "expected optional forever flavor")
+local flavor = forever and "Forever" or "Retail"
 local fixtures = assert(loadfile("scripts/smoke.lua"))("fixtures")
+local function loadStatsPro(locale, options)
+    options = options or {}
+    options.forever = forever
+    local env, addon, test = fixtures.loadStatsPro(locale, options)
+    assert((addon.forever and addon.forever.enabled == true or false) == forever,
+        "recovery fixture loads the requested flavor")
+    return env, addon, test
+end
 for _, client in ipairs({ "enUS", "ruRU" }) do
     local activated = {}
-    local env, addon, test = fixtures.loadStatsPro(client, {
+    local env, addon, test = loadStatsPro(client, {
         lsmFonts = {},
         isKnownFontFile = function() return true end,
         setFontResult = function(_, path) return activated[path] == true end,
@@ -29,12 +40,12 @@ for _, client in ipairs({ "enUS", "ruRU" }) do
         addon.settingsUI.localization.CancelPreview(addon)
     end
 end
-print("Retail cross-language cold-font regressions passed")
+print(flavor .. " cross-language cold-font regressions passed")
 
 -- A client exposing only the namespaced money API must still render both gear rows.
 for _, mode in ipairs({ "modern", "modern-only", "legacy", "missing", "throwing",
     "nil-return", "number-return", "empty-return", "secret-return" }) do
-    local env, addon, test = fixtures.loadStatsPro("enUS", {
+    local env, addon, test = loadStatsPro("enUS", {
         statsProDB = { showDurability = true, showRepairCost = true },
         getInventoryItemDurability = function(slot)
             if slot == 1 then return 70, 100 end
@@ -64,12 +75,12 @@ for _, mode in ipairs({ "modern", "modern-only", "legacy", "missing", "throwing"
     local text = test.formatRepairCost(4458354, 15)
     assert(text == ((mode == "modern" or mode == "modern-only" or mode == "legacy") and "coin:4458354:15" or "?"), mode .. ": repair display")
 end
-print("Retail money API and HUD recovery regressions passed")
+print(flavor .. " money API and HUD recovery regressions passed")
 
 -- A styled FontString can retain its own font even while GetFontObject still
 -- identifies the shared parent. Changing that parent must not strand Settings.
 for _, failFirst in ipairs({ false, true }) do
-    local env, addon, test = fixtures.loadStatsPro("enUS")
+    local env, addon, test = loadStatsPro("enUS")
     env.__fireEvent("PLAYER_ENTERING_WORLD")
     addon:OpenConfigMenu()
     local before = test.configFontState()
@@ -106,12 +117,12 @@ for _, failFirst in ipairs({ false, true }) do
         assert(entry.actualFont == "Fonts\\2002.ttf", "every Settings font switches to Korean")
     end
 end
-print("Retail Settings inherited-override recovery regressions passed")
+print(flavor .. " Settings inherited-override recovery regressions passed")
 
 -- EditBox:SetFont requires a flags string even when FontString accepts nil.
 -- The hidden profile-transfer input participates in the same Settings transaction.
 do
-    local env, addon, test = fixtures.loadStatsPro("enUS", { lsmFonts = { { name = "Chinese", path = "Fonts\\ARHei.TTF" } } })
+    local env, addon, test = loadStatsPro("enUS", { lsmFonts = { { name = "Chinese", path = "Fonts\\ARHei.TTF" } } })
     env.__fireEvent("PLAYER_ENTERING_WORLD")
     addon:OpenConfigMenu()
     local input
@@ -134,13 +145,13 @@ do
         end
     end
 end
-print("Retail EditBox font flags regressions passed")
+print(flavor .. " EditBox font flags regressions passed")
 
 -- A single unavailable Settings region must not strand committed localization.
 do
     local function fixture()
         local state = { failures = 1, attempts = 0, combat = false, specID = 73 }
-        local env, addon, test = fixtures.loadStatsPro("enUS", {
+        local env, addon, test = loadStatsPro("enUS", {
             lsmFonts = {},
             unitGUID = function() return "Player-1-SETTINGS-RECOVERY" end,
             getSpecialization = function() return 1 end,
@@ -238,11 +249,18 @@ do
     handoff.select("ruRU")
     local old = handoff.test.profileState()
     local oldSettings, oldFont, oldSaved = old.settings, old.settings.font, old.settings.fontBeforeAutoSwitch
-    handoff.specID = 71
-    handoff.env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    if forever then
+        -- Forever routes character/manual profiles without Retail specialization.
+        local switched, result = handoff.test.profileOps.enableAccountWide(old.profileID)
+        assert(switched and result.created, "manual account-wide switch creates a separate profile")
+    else
+        handoff.specID = 71
+        handoff.env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    end
     handoff.env.__flushTimers(0)
     local current = handoff.test.profileState()
-    assert(current.profileID ~= old.profileID and current.settings ~= oldSettings, "real specialization change selects a new profile")
+    assert(current.profileID ~= old.profileID and current.settings ~= oldSettings,
+        "real profile-context change selects new settings")
     handoff.failures = 0
     handoff.env.__flushTimers(0.2)
     handoff.tick()
@@ -250,4 +268,4 @@ do
     assert(handoff.test.profileState().settings == current.settings, "retry preserves new settings identity")
     assert(oldSettings.font == oldFont and oldSettings.fontBeforeAutoSwitch == oldSaved, "retry cannot mutate outgoing settings")
 end
-print("Retail committed Settings recovery regressions passed")
+print(flavor .. " committed Settings recovery regressions passed")

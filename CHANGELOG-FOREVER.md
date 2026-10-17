@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.19.1 - 17-Oct-2026 — Repair and language fixes
+
+### Fixed
+
+- Restore durability and repair-cost displays on the current Forever beta.
+- Restore readable Settings and language previews for Russian, Korean and both Chinese translations.
+- Recover automatically when a Settings font change is temporarily unavailable.
+- Correct language flags and preserve your preferred font when switching languages.
+
 ## 1.19.0 - 16-Oct-2026 — Offhand hit and stat fixes
 
 Updated for WoW Forever Beta 1.60.1, build 70425.

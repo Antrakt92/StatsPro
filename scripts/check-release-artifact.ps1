@@ -99,11 +99,13 @@ function Get-StatsProPackageFileContract {
         "StatsPro/StatsPro.lua",
         "StatsPro/StatsPro_ArchonTargets.lua",
         "StatsPro/textures/logo.png",
+        "StatsPro/textures/language-flags.tga",
         "StatsPro/libs/LibStub/LibStub.lua",
         "StatsPro/libs/CallbackHandler-1.0/CallbackHandler-1.0.lua",
         "StatsPro/libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua"
     )
-    $textFiles = @($requiredFiles | Where-Object { $_ -ne "StatsPro/textures/logo.png" })
+    $binaryFiles = @("StatsPro/textures/logo.png", "StatsPro/textures/language-flags.tga")
+    $textFiles = @($requiredFiles | Where-Object { $_ -notin $binaryFiles })
     return [pscustomobject]@{
         RequiredFiles = $requiredFiles
         AllowedFiles  = $requiredFiles
@@ -917,6 +919,15 @@ function Invoke-SelfTest {
     New-Item -ItemType Directory -Path $tempDir | Out-Null
     try {
         [void](Normalize-StatsProZipEntryPath "StatsPro/StatsPro.lua")
+        $flagAtlas = "StatsPro/textures/language-flags.tga"
+        $packageContract = Get-StatsProPackageFileContract
+        if ($flagAtlas -notin $packageContract.RequiredFiles -or $flagAtlas -in $packageContract.TextFiles) {
+            throw "Language flag atlas must be a required binary package asset."
+        }
+        Assert-StatsProPackageEntries -Entries $packageContract.RequiredFiles
+        Assert-ThrowsMatch "missing language flag atlas rejected" {
+            Assert-StatsProPackageEntries -Entries @($packageContract.RequiredFiles | Where-Object { $_ -ne $flagAtlas })
+        } "language-flags\.tga"
         Assert-ThrowsMatch "unsafe zip path rejected" {
             [void](Normalize-StatsProZipEntryPath "StatsPro/../evil.lua")
         } "unsafe"
@@ -957,6 +968,9 @@ function Invoke-SelfTest {
             $tocPath = Join-Path $Fixture 'StatsPro_Forever.toc'
             $toc = [System.IO.File]::ReadAllText($tocPath)
             $toc = [regex]::Replace($toc, '(?m)^## Version:[^\r\n]+', "## Version: $($Tag.Substring(1))")
+            # This fixture exercises legacy joint uploads regardless of the
+            # checkout's current independent beta publication policy.
+            $toc = [regex]::Replace($toc, '(?m)^## X-StatsPro-Release-Policy:[^\r\n]+', '## X-StatsPro-Release-Policy: joint')
             [System.IO.File]::WriteAllText($tocPath, $toc)
             & (Join-Path $PSScriptRoot 'build-forever-package.ps1') -SourceRoot $Fixture -OutputRoot $Output
         } $sourceRoot $flavorRoot $flavorOutput $tag
@@ -1185,18 +1199,18 @@ function Invoke-SelfTest {
                 [System.IO.File]::WriteAllBytes($mutationPath, $originalBytes)
             }
 
-            $logoPath = Join-Path (Join-Path $mutationRoot "textures") "logo.png"
-            $logoBytes = [System.IO.File]::ReadAllBytes($logoPath)
-            if ($logoBytes.Length -eq 0) {
-                throw "Self-test logo fixture is empty."
+            foreach ($binaryName in @("logo.png", "language-flags.tga")) {
+                $binaryPath = Join-Path (Join-Path $mutationRoot "textures") $binaryName
+                $originalBytes = [System.IO.File]::ReadAllBytes($binaryPath)
+                if ($originalBytes.Length -eq 0) { throw "Self-test binary fixture is empty: $binaryName" }
+                $mutatedBytes = [byte[]]$originalBytes.Clone()
+                $mutatedBytes[0] = $mutatedBytes[0] -bxor 0x01
+                [System.IO.File]::WriteAllBytes($binaryPath, $mutatedBytes)
+                Assert-ThrowsMatch "binary $binaryName source-fidelity mutation rejected" {
+                    Assert-StatsProPackageSourceFidelity -PackageRoot $mutationRoot -SourceRoot $sourceRoot -ProjectVersion $tag
+                } ([regex]::Escape("StatsPro/textures/$binaryName"))
+                [System.IO.File]::WriteAllBytes($binaryPath, $originalBytes)
             }
-            $mutatedLogoBytes = [byte[]]$logoBytes.Clone()
-            $mutatedLogoBytes[0] = $mutatedLogoBytes[0] -bxor 0x01
-            [System.IO.File]::WriteAllBytes($logoPath, $mutatedLogoBytes)
-            Assert-ThrowsMatch "binary logo source-fidelity mutation rejected" {
-                Assert-StatsProPackageSourceFidelity -PackageRoot $mutationRoot -SourceRoot $sourceRoot -ProjectVersion $tag
-            } "StatsPro/textures/logo\.png"
-            [System.IO.File]::WriteAllBytes($logoPath, $logoBytes)
 
             $extraPath = Join-Path $mutationRoot "debug.lua"
             [System.IO.File]::WriteAllText($extraPath, "return true`n", [System.Text.UTF8Encoding]::new($false))

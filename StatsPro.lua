@@ -11877,6 +11877,35 @@ function addon.fontRuntime.ConfigFontSnapshot(region)
     end
 end
 
+function addon.fontRuntime.DescribeConfigFont(region)
+    if not region or type(region.GetFont) ~= "function" then return "no-region" end
+    local ok, font, size, flags = pcall(region.GetFont, region)
+    if not ok then return "GetFont:error" end
+    local flagsOK, flagsSecret = pcall(issecretvalue, flags)
+    local flagsText = flagsOK and not flagsSecret and type(flags) == "string"
+        and flags:gsub("%c", "?") or ("<" .. type(flags) .. ">")
+    return (FontPathKey(font) or ("<" .. type(font) .. ">")) .. "@"
+        .. SAFE_NUM.DumpNumber(size, "%.3f", "?") .. ":" .. flagsText
+end
+
+function addon.fontRuntime.RecordConfigFontFailure(stage, role, status, object, entries, font, size, flags)
+    local runtime = addon.fontRuntime
+    local entry = entries and entries[1]
+    for _, candidate in ipairs(entries or {}) do
+        if not runtime.matchesAppliedFont(candidate.fs, font, size, flags) then entry = candidate; break end
+    end
+    local inherited = "n/a"
+    if object and entry then
+        local ok, actual = pcall(entry.fs.GetFontObject, entry.fs)
+        inherited = ok and rawequal(actual, object) and "same" or "different"
+    end
+    runtime.configFontFailure = string.format("settings failure: stage=%s role=%s status=%s want=%s@%s:%s",
+        stage, role or "custom", status or "?", font or "?", tostring(size), flags or "none")
+    runtime.configFontFailureParent = "settings parent: " .. runtime.DescribeConfigFont(object)
+    runtime.configFontFailureChild = "settings child: " .. runtime.DescribeConfigFont(entry and entry.fs)
+        .. " owner=" .. inherited
+end
+
 local function ConfigFontGroupKey(roleKey, size, flags)
     local semanticRole = type(roleKey) == "string" and roleKey ~= ""
         and roleKey or "custom"
@@ -12077,6 +12106,9 @@ local function RegisterConfigFont(fs, size, flags, roleKey)
         if registryRollbackFailed then ApplyConfigFont(fallbackFont, true) end
         return applied, effective
     end
+    addon.fontRuntime.RecordConfigFontFailure("register", roleKey, "font-unavailable",
+        fallbackGroup and fallbackGroup.object, { entry },
+        fallbackFont or resolvedFont or currentConfigFont, size, fallbackFlags)
     return false, nil, "font-unavailable"
 end
 
@@ -12113,7 +12145,7 @@ ApplyConfigFont = function(font, force)
             end
         end
     end
-    local groupPlans, directPlans, previousText = {}, {}, {}
+    local groupPlans, directPlans, previousText, previousFonts = {}, {}, {}, {}
     local groupOrder = localizedConfigFonts.groupOrder or {}
     for _, group in ipairs(groupOrder) do
         if #group.entries > 0 then
@@ -12133,8 +12165,9 @@ ApplyConfigFont = function(font, force)
     end
     for i, entry in ipairs(localizedConfigFonts) do
         previousText[i] = entry.fs:GetText()
+        local oldFont, oldSize, oldFlags = addon.fontRuntime.ConfigFontSnapshot(entry.fs)
+        previousFonts[entry] = { font = oldFont, size = oldSize, flags = oldFlags }
         if not entry.group then
-            local oldFont, oldSize, oldFlags = addon.fontRuntime.ConfigFontSnapshot(entry.fs)
             local resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(
                 usable, entry.size, entry.flags)
             if not resolvedFont then return false end
@@ -12217,7 +12250,38 @@ ApplyConfigFont = function(font, force)
         local groupApplied, groupStatus = addon.fontRuntime.setOwnedFont(
             plan.group.object, ConfigFontGroupRegions(plan.group),
             plan.font, plan.group.size, plan.flags)
+        if not groupApplied and addon.fontRuntime.matchesAppliedFont(
+                plan.group.object, plan.font, plan.group.size, plan.flags) then
+            -- Native regions can keep local font overrides while still reporting
+            -- the same parent. Only the effective child font proves inheritance.
+            -- Preserve the pre-change snapshots and use the direct transaction
+            -- for those regions; a failed parent mutation never enters this path.
+            local overridden, canRestore = {}, true
+            for _, entry in ipairs(plan.group.entries) do
+                if not addon.fontRuntime.matchesAppliedFont(
+                        entry.fs, plan.font, entry.size, plan.flags) then
+                    overridden[#overridden + 1] = entry
+                    if not previousFonts[entry].font then canRestore = false end
+                end
+            end
+            if canRestore then
+                for _, entry in ipairs(overridden) do
+                    local old = previousFonts[entry]
+                    tinsert(directPlans, {
+                        entry = entry, font = plan.font, flags = plan.flags,
+                        oldFont = old.font, oldSize = old.size, oldFlags = old.flags,
+                    })
+                    RemoveConfigFontEntry(plan.group, entry)
+                    entry.group = nil
+                end
+                groupApplied = addon.fontRuntime.ownedRegionsMatch(
+                    ConfigFontGroupRegions(plan.group), plan.group.object,
+                    plan.font, plan.group.size, plan.flags)
+            end
+        end
         if not groupApplied then
+            addon.fontRuntime.RecordConfigFontFailure("group", plan.group.entries[1].roleKey,
+                groupStatus, plan.group.object, plan.group.entries, plan.font, plan.group.size, plan.flags)
             if not RestoreConfigFonts() then
                 ClearConfigFontMetadata()
                 groupStatus = "rollback-failed"
@@ -12230,6 +12294,8 @@ ApplyConfigFont = function(font, force)
         local directApplied, directStatus = addon.fontRuntime.setRegionFont(
             plan.entry.fs, plan.font, plan.entry.size, plan.flags)
         if not directApplied then
+            addon.fontRuntime.RecordConfigFontFailure("direct", plan.entry.roleKey,
+                directStatus, nil, { plan.entry }, plan.font, plan.entry.size, plan.flags)
             if not RestoreConfigFonts() then
                 ClearConfigFontMetadata()
                 directStatus = "rollback-failed"
@@ -19268,6 +19334,11 @@ function addon:PrintDebugDump()
         tostring(FontSupports(addon.fontRuntime.currentPath(), req)),
         savedFontText))
     PrintMsg(addon.fontRuntime.ConfigFontDiagnostic())
+    if addon.fontRuntime.configFontFailure then
+        PrintMsg(addon.fontRuntime.configFontFailure)
+        PrintMsg(addon.fontRuntime.configFontFailureParent)
+        PrintMsg(addon.fontRuntime.configFontFailureChild)
+    end
 
     if addon.forever.enabled then
         PrintMsg(string.format("show stats: offensive=%s utility=%s defensive=%s durability=%s repair=%s itemLevel=%s",

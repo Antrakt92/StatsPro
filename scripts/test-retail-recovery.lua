@@ -57,3 +57,45 @@ for _, mode in ipairs({ "modern", "modern-only", "legacy", "missing", "throwing"
     assert(text == ((mode == "modern" or mode == "modern-only" or mode == "legacy") and "coin:4458354:15" or "?"), mode .. ": repair display")
 end
 print("Retail money API and HUD recovery regressions passed")
+
+-- A styled FontString can retain its own font even while GetFontObject still
+-- identifies the shared parent. Changing that parent must not strand Settings.
+for _, failFirst in ipairs({ false, true }) do
+    local env, addon, test = fixtures.loadStatsPro("enUS")
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    addon:OpenConfigMenu()
+    local before = test.configFontState()
+    local fail = failFirst
+    for _, entry in ipairs(before.entries) do
+        local region = entry.region
+        local originalGet, originalSet = region.GetFont, region.SetFont
+        local font, size, flags = region:GetFont()
+        local pinned = true
+        region.GetFont = function(self)
+            if pinned then return font, size, flags end
+            return originalGet(self)
+        end
+        region.SetFont = function(self, path, height, style)
+            if fail and path == "Fonts\\ARIALN.TTF" then return false end
+            pinned = false
+            return originalSet(self, path, height, style)
+        end
+    end
+    if failFirst then
+        assert(not test.applyConfigFont("Fonts\\ARIALN.TTF", true), "failed direct fallback remains atomic")
+        for index, entry in ipairs(test.configFontState().entries) do
+            assert(entry.actualFont == before.entries[index].actualFont, "fallback failure restores every font")
+            assert(entry.actualText == before.entries[index].actualText, "fallback failure preserves every label")
+        end
+        fail = false
+    end
+    assert(test.applyConfigFont("Fonts\\ARIALN.TTF", true), "same-owner overrides recover through direct Settings update")
+    for _, entry in ipairs(test.configFontState().entries) do
+        assert(entry.actualFont == "Fonts\\ARIALN.TTF", "every Settings font updates despite local override")
+    end
+    assert(test.applyConfigFont("Fonts\\2002.ttf", true), "subsequent Korean switch also updates direct regions")
+    for _, entry in ipairs(test.configFontState().entries) do
+        assert(entry.actualFont == "Fonts\\2002.ttf", "every Settings font switches to Korean")
+    end
+end
+print("Retail Settings inherited-override recovery regressions passed")

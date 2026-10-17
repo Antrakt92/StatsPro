@@ -27,6 +27,10 @@ for _, forever in ipairs({ false, true }) do
     local settings = test.profileState().settings
     local saved = settings.font
     fire(last.favorite, 'OnEnter')
+    check(last.favoriteHover and last.favoriteHover:IsShown(), 'star hover highlights its whole font cell')
+    check(last.text.textColor.r == 1 and last.text.textColor.g == 0.8,
+        'star hover lights the font name in gold')
+    check(not picker.buttons[1].favoriteHover:IsShown(), 'star hover does not highlight a neighboring font')
     check(test.panelFontState().mainAppliedFont == path, 'star hover previews its font')
     check(last.favorite.statsProHovered, 'star hover state participates in row reuse')
     local tooltip = last.favorite.statsProTooltipProvider(last.favorite)
@@ -36,7 +40,11 @@ for _, forever in ipairs({ false, true }) do
     check(settings.font == saved, 'star does not select the font')
     check(test.panelFontState().mainAppliedFont == last.fontPath,
         'reordered row previews the font now under the pointer')
+    check(last.favoriteHover:IsShown() and last.text.textColor.g == 0.8,
+        'favorite sorting retains the hovered cell highlight')
     fire(last.favorite, 'OnLeave')
+    check(not last.favoriteHover:IsShown(), 'leaving star clears whole-cell gold highlight')
+    check(last.text.textColor.g ~= 0.8, 'leaving star restores the normal font label color')
     env.__flushTimers(0.2)
     check(test.panelFontState().mainAppliedFont == saved, 'leaving star restores committed font')
     check(picker.buttons[1].fontName == name, 'favorite sorts first')
@@ -44,6 +52,13 @@ for _, forever in ipairs({ false, true }) do
     check(env.StatsProDB.account.fontFavorites[path:lower():gsub('/', '\\')] == true,
         'favorite belongs to the account')
     check(settings.fontFavorites == nil, 'favorite does not enter profile settings')
+    fire(last.favorite, 'OnEnter')
+    last.favorite:Disable()
+    check(not last.favoriteHover:IsShown(), 'disabled star clears its cell highlight')
+    last.favorite:Enable()
+    fire(last.favorite, 'OnEnter')
+    fire(last.favorite, 'OnHide')
+    check(not last.favoriteHover:IsShown(), 'hiding star clears its cell highlight')
     local account = env.StatsProDB.account
     local favorites = account.fontFavorites
     combat = true

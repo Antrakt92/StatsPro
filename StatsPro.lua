@@ -18336,6 +18336,17 @@ function addon.settingsUI.fontPicker.BuildFrame(self)
     end)
 end
 
+function addon.settingsUI.fontPicker.RefreshFavoriteHover(self, button)
+    self.settingsDesign.RefreshControl(button)
+    if button.favorite.statsProHovered == true
+        and self.settingsDesign.IsControlEnabled(button.favorite) then
+        button.favoriteHover:Show()
+        button.text:SetTextColor(1, 0.8, 0.25, 1)
+    else
+        button.favoriteHover:Hide()
+    end
+end
+
 function addon.settingsUI.fontPicker.Populate(self, centerSelection)
     local picker = self.settingsUI.fontPicker
     -- Native range updates may clamp while rows are rebuilt. Preserve the user's
@@ -18375,6 +18386,11 @@ function addon.settingsUI.fontPicker.Populate(self, centerSelection)
             highlight:SetVertexColor(
                 hoverColor[1], hoverColor[2], hoverColor[3], 0.18)
             button.statsProFontHoverTexture = highlight
+            -- A child button owns mouse hover independently of its font row.
+            button.favoriteHover = button:CreateTexture(nil, "ARTWORK")
+            button.favoriteHover:SetAllPoints()
+            button.favoriteHover:SetColorTexture(1, 0.8, 0.25, 0.14)
+            button.favoriteHover:Hide()
             button.text:SetJustifyH("LEFT")
             local star = CreateFrame("Button", nil, button)
             star:SetSize(22, picker.rowHeight)
@@ -18399,6 +18415,9 @@ function addon.settingsUI.fontPicker.Populate(self, centerSelection)
             end)
             self.settingsDesign.RegisterMutationControl(star)
             self.settingsDesign.HookControl(star)
+            for _, event in ipairs({ "OnEnter", "OnLeave", "OnHide", "OnDisable" }) do
+                star:HookScript(event, function() picker.RefreshFavoriteHover(self, button) end)
+            end
             self.settingsDesign.AttachTooltip(star, function(control)
                 local blockedTitle, detail = self.settingsDesign.DisabledControlTooltip(control)
                 if blockedTitle then return blockedTitle, detail end
@@ -18450,6 +18469,7 @@ function addon.settingsUI.fontPicker.Populate(self, centerSelection)
             self.settingsDesign.SetListRowSelected(button, false)
         end
         button:Show()
+        picker.RefreshFavoriteHover(self, button)
         if button.statsProHovered == true or button.favorite.statsProHovered == true then
             hoveredVisibleButton = button
         end

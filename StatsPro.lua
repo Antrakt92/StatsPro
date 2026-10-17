@@ -4866,6 +4866,7 @@ addon.profileUI = {
 addon.settingsUI = {
     frame = nil,
     context = nil,
+    dropdownMenu = { buttons = {}, generation = 0 },
     fontPicker = {
         buttons = {},
         cachedFontsList = nil,
@@ -13602,6 +13603,16 @@ function addon.settingsDesign.StyleDropdown(dropdown, label)
     button:HookScript("OnClick", addon.settingsDesign.RefreshControl)
     addon.settingsDesign.AttachTooltip(button, addon.settingsDesign.ControlTextTooltip)
     addon.settingsDesign.RefreshControl(button)
+    button:SetScript("OnClick", function()
+        addon.settingsUI.dropdownMenu.Toggle(addon, dropdown)
+    end)
+    for _, event in ipairs({ "OnHide", "OnDisable" }) do
+        button:HookScript(event, function()
+            if addon.settingsUI.dropdownMenu.openDropdown == dropdown then
+                addon.settingsUI.dropdownMenu.Hide(addon)
+            end
+        end)
+    end
 end
 
 function addon.settingsDesign.StyleListRow(row, text, textRole)
@@ -13617,7 +13628,9 @@ function addon.settingsDesign.StyleListRow(row, text, textRole)
     state:SetDrawLayer("BACKGROUND", 1)
     row.statsProStateTexture = state
     row.statsProText = text
-    addon.settingsDesign.ApplyTextRole(text, textRole or "controlMetadata")
+    if textRole ~= false then
+        addon.settingsDesign.ApplyTextRole(text, textRole or "controlMetadata")
+    end
     addon.settingsDesign.RegisterControl(row, "listRow")
     addon.settingsDesign.HookControl(row)
     addon.settingsDesign.AttachTooltip(row, addon.settingsDesign.ControlTextTooltip)
@@ -15014,6 +15027,7 @@ function addon.profileRuntime.CancelOwnedMutationPopups()
 end
 
 function addon.profileRuntime.CloseOwnedDropdownMenus()
+    addon.settingsUI.dropdownMenu.Hide(addon)
     local openMenu = _G.UIDROPDOWNMENU_OPEN_MENU
     local menuName
     if openMenu and type(openMenu.GetName) == "function" then
@@ -17420,6 +17434,187 @@ function addon.settingsUI.FormatSimpleDropdownOptionText(option)
     return text
 end
 
+-- Native initialization remains available to integrations; the visible Settings
+-- menus own their frames and never restyle shared Blizzard dropdown lists.
+function addon.settingsUI.dropdownMenu.Initialize(dropdown, build)
+    dropdown.statsProBuildOptions = build
+    UIDropDownMenu_Initialize(dropdown, function() build(UIDropDownMenu_AddButton) end)
+end
+
+function addon.settingsUI.dropdownMenu.Hide(self)
+    local menu = self.settingsUI.dropdownMenu
+    if menu.frame and menu.frame:IsShown() then menu.frame:Hide() end
+end
+
+function addon.settingsUI.dropdownMenu.BuildFrame(self)
+    local menu = self.settingsUI.dropdownMenu
+    menu.frame = CreateFrame("Frame", "StatsProSettingsMenu", UIParent, "BackdropTemplate")
+    menu.frame:SetFrameStrata("DIALOG")
+    menu.frame:SetClampedToScreen(true)
+    self.settingsDesign.ApplySurface(menu.frame, "viewport")
+    menu.frame:Hide()
+    menu.catcher = CreateFrame("Frame", nil, UIParent)
+    menu.catcher:SetAllPoints(UIParent)
+    menu.catcher:SetFrameStrata("DIALOG")
+    menu.catcher:EnableMouse(true)
+    menu.catcher:Hide()
+    menu.catcher:SetScript("OnMouseDown", function() menu.Hide(self) end)
+    menu.scroll = CreateFrame("ScrollFrame", "StatsProSettingsMenuScroll", menu.frame, "UIPanelScrollFrameTemplate")
+    menu.scroll:SetPoint("TOPLEFT", 8, -8)
+    menu.scroll:SetPoint("BOTTOMRIGHT", -28, 8)
+    self.settingsDesign.StyleScrollFrame(menu.scroll)
+    menu.content = CreateFrame("Frame", nil, menu.scroll)
+    menu.scroll:SetScrollChild(menu.content)
+    menu.frame:SetScript("OnHide", function()
+        local dropdown = menu.openDropdown
+        menu.openDropdown = nil
+        menu.generation = menu.generation + 1
+        menu.catcher:Hide()
+        for _, row in ipairs(menu.buttons) do
+            row.info = nil
+            row.mark:Hide()
+            self.settingsDesign.SetListRowSelected(row, false)
+            self.settingsDesign.OnControlHide(row)
+        end
+        if dropdown and dropdown.statsProTrigger then
+            dropdown.statsProTrigger.statsProActive = false
+            self.settingsDesign.RefreshControl(dropdown.statsProTrigger)
+        end
+        if dropdown and dropdown.statsProLanguageMenu then
+            self.settingsUI.localization.CancelPreview(self)
+        end
+        self.profileUI.RemoveSpecialFrame("StatsProSettingsMenu")
+        local owner = self.settingsUI.context and self.settingsUI.context.frame
+        if owner and owner:IsShown() then
+            self.profileUI.DeferSpecialFrameRestore("StatsProConfigFrame", function()
+                return owner:IsShown() and not menu.frame:IsShown()
+                    and not (self.settingsUI.fontPicker.frame and self.settingsUI.fontPicker.frame:IsShown())
+                    and not (self.profileUI.manager and self.profileUI.manager:IsShown())
+                    and not (self.profileUI.operationDialog and self.profileUI.operationDialog:IsShown())
+            end)
+        end
+    end)
+end
+
+function addon.settingsUI.dropdownMenu.Toggle(self, dropdown)
+    local menu = self.settingsUI.dropdownMenu
+    if menu.openDropdown == dropdown then menu.Hide(self); return end
+    menu.Show(self, dropdown)
+end
+
+function addon.settingsUI.dropdownMenu.Show(self, dropdown)
+    local menu = self.settingsUI.dropdownMenu
+    local owner = self.settingsUI.context and self.settingsUI.context.frame
+    local trigger = dropdown and dropdown.statsProTrigger
+    if not owner or not owner:IsShown() or not trigger
+        or not self.settingsDesign.IsControlEnabled(trigger)
+        or self.profileRuntime.ReadCombatState() ~= false
+        or self.profileRuntime.transitioning or self.profileRuntime.forceReapply
+        or type(dropdown.statsProBuildOptions) ~= "function" then return false end
+    local root = self.dbRuntime.GetWritableRoot(false)
+    if not root then return false end
+    local profileID = self.dbRuntime.activeProfileID
+    menu.Hide(self)
+    self.settingsUI.fontPicker.Hide(self)
+    CloseDropDownMenus()
+    local entries = {}
+    dropdown.statsProBuildOptions(function(info) entries[#entries + 1] = info end)
+    if #entries == 0 then return false end
+    if not menu.frame then menu.BuildFrame(self) end
+    -- Prepare readable text before publishing any visible or active popup state.
+    local labelFont = self.fontRuntime.getOwnedFontObject("settingsMenuLabels")
+    if not self.fontRuntime.setOwnedFont(
+            labelFont, nil, ResolveConfigFont(ResolveActiveLocale()), 12, nil) then return false end
+    menu.generation = menu.generation + 1
+    local generation = menu.generation
+    menu.openDropdown = dropdown
+    local width = math.max(self.settingsDesign.tokens.geometry.dropdownWidth, 280)
+    local pitch = 28
+    -- These labels retain their own script while language hover previews change
+    -- the rest of Settings. They do not belong to the config font registry.
+    local needsScroll = #entries > 12
+    menu.frame:SetSize(width + (needsScroll and 36 or 16), math.min(#entries, 12) * pitch + 16)
+    menu.scroll:ClearAllPoints()
+    menu.scroll:SetPoint("TOPLEFT", 8, -8)
+    menu.scroll:SetPoint("BOTTOMRIGHT", needsScroll and -28 or -8, 8)
+    menu.frame:SetFrameLevel(owner:GetFrameLevel() + 50)
+    menu.catcher:SetFrameLevel(menu.frame:GetFrameLevel() - 1)
+    menu.content:SetSize(width, #entries * pitch)
+    menu.frame:ClearAllPoints()
+    menu.frame:SetPoint("TOPLEFT", trigger, "BOTTOMLEFT", 0, -4)
+    local selectedIndex = 1
+    for index, info in ipairs(entries) do
+        local row = menu.buttons[index]
+        if not row then
+            row = CreateFrame("Button", nil, menu.content)
+            row.statsProMenuSurface = self.settingsDesign.CreateTextureSurface(row, "raised")
+            row.statsProMenuSurface:SetAllPoints(row)
+            row.text = row:CreateFontString(nil, "OVERLAY")
+            row.text:SetPoint("LEFT", 14, 0)
+            row.text:SetPoint("RIGHT", -8, 0)
+            row.text:SetJustifyH("LEFT")
+            row.text:SetWordWrap(false)
+            row.text:SetMaxLines(1)
+            self.settingsDesign.StyleListRow(row, row.text, false)
+            row.mark = row:CreateTexture(nil, "ARTWORK")
+            row.mark:SetPoint("TOPLEFT", 3, -5)
+            row.mark:SetPoint("BOTTOMLEFT", 3, 5)
+            row.mark:SetWidth(3)
+            local accent = self.settingsDesign.Color("accent")
+            row.mark:SetColorTexture(accent[1], accent[2], accent[3], 1)
+            row:SetHighlightTexture("Interface\\Buttons\\WHITE8X8")
+            row:GetHighlightTexture():SetVertexColor(accent[1], accent[2], accent[3], 0.16)
+            menu.buttons[index] = row
+        end
+        row:SetSize(width, pitch - 2)
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", 0, -(index - 1) * pitch)
+        row.info = info
+        row.statsProHovered = false
+        row.text:SetFontObject(info.fontObject or labelFont)
+        row.text:SetText(info.text)
+        self.settingsDesign.SetListRowSelected(row, info.checked == true)
+        self.settingsDesign.SetTextureSurfaceBorder(row.statsProMenuSurface,
+            info.checked and "accentMuted" or "borderSoft")
+        if info.checked then row.mark:Show(); selectedIndex = index else row.mark:Hide() end
+        local function current()
+            return menu.generation == generation and menu.openDropdown == dropdown
+                and menu.frame:IsShown() and owner:IsShown()
+                and self.profileRuntime.ReadCombatState() == false
+                and not self.profileRuntime.transitioning and not self.profileRuntime.forceReapply
+                and self.dbRuntime.GetWritableRoot(false) == root
+                and self.dbRuntime.activeProfileID == profileID
+        end
+        row:SetScript("OnEnter", function()
+            if current() and dropdown.statsProLanguageMenu then
+                self.settingsUI.localization.Preview(self, info.value)
+            end
+        end)
+        row:SetScript("OnClick", function()
+            if not current() then return end
+            info.func()
+            if menu.generation == generation then menu.Hide(self) end
+        end)
+        row:Show()
+    end
+    for index = #entries + 1, #menu.buttons do menu.buttons[index]:Hide() end
+    menu.scroll:SetVerticalScroll(math.max(0, math.min(selectedIndex - 1, #entries - 12)) * pitch)
+    self.profileUI.CancelSpecialFrameRestore("StatsProConfigFrame")
+    self.profileUI.RemoveSpecialFrame("StatsProConfigFrame")
+    self.profileUI.PushSpecialFrame("StatsProSettingsMenu")
+    trigger.statsProActive = true
+    self.settingsDesign.RefreshControl(trigger)
+    menu.catcher:Show()
+    menu.frame:Show()
+    if menu.scroll.ScrollBar then
+        if needsScroll then menu.scroll.ScrollBar:Show() else menu.scroll.ScrollBar:Hide() end
+    end
+    if menu.scroll.statsProScrollTrack then
+        if needsScroll then menu.scroll.statsProScrollTrack:Show() else menu.scroll.statsProScrollTrack:Hide() end
+    end
+    return true
+end
+
 function addon.settingsUI.CreateSimpleDropdownRow(parent, rows, frameName, labelKey,
         options, cursor, getValue, onSelect)
     local rowY = cursor.y
@@ -17454,7 +17649,7 @@ function addon.settingsUI.CreateSimpleDropdownRow(parent, rows, frameName, label
         addon.settingsDesign.RefreshControl(dropdown.statsProTrigger)
     end
 
-    UIDropDownMenu_Initialize(dropdown, function()
+    addon.settingsUI.dropdownMenu.Initialize(dropdown, function(add)
         local current = ResolveOption(getValue())
         if not current then return end
         for _, opt in ipairs(GetOptions()) do
@@ -17465,7 +17660,7 @@ function addon.settingsUI.CreateSimpleDropdownRow(parent, rows, frameName, label
             info.func = function()
                 onSelect(opt.value, ResolveOption(opt.value), dropdown)
             end
-            UIDropDownMenu_AddButton(info)
+            add(info)
         end
     end)
 
@@ -18275,7 +18470,7 @@ function addon.settingsUI.fontPicker.BuildFrame(self)
     picker.frame:SetFrameStrata("DIALOG")
     picker.frame:SetFrameLevel((config and config:GetFrameLevel() or 100) + 50)
     picker.frame:SetClampedToScreen(true)
-    self.settingsDesign.ApplySurface(picker.frame, "window")
+    self.settingsDesign.ApplySurface(picker.frame, "viewport")
     picker.frame:Hide()
 
     picker.catcher = CreateFrame("Frame", nil, UIParent)
@@ -18517,6 +18712,7 @@ function addon.settingsUI.fontPicker.SchedulePendingRetry(self, generation, atte
 end
 
 function addon.settingsUI.fontPicker.Show(self)
+    self.settingsUI.dropdownMenu.Hide(self)
     local picker = self.settingsUI.fontPicker
     if not picker.initialized then
         picker.BuildFrame(self)
@@ -18961,7 +19157,8 @@ function addon.settingsUI.BuildAppearanceTab(self, context)
         UIDropDownMenu_SetWidth(langDropdown, addon.settingsDesign.tokens.geometry.dropdownWidth)
         UIDropDownMenu_JustifyText(langDropdown, "LEFT")
         addon.settingsDesign.StyleDropdown(langDropdown, langLabel)
-        UIDropDownMenu_Initialize(langDropdown, function()
+        langDropdown.statsProLanguageMenu = true
+        self.settingsUI.dropdownMenu.Initialize(langDropdown, function(add)
             local current = (FindLangOption(GetDB("forceLocale")) or LANGUAGE_OPTIONS[1]).value
             for _, opt in ipairs(LANGUAGE_OPTIONS) do
                 local info = UIDropDownMenu_CreateInfo()
@@ -19001,7 +19198,7 @@ function addon.settingsUI.BuildAppearanceTab(self, context)
                     RefreshConfigLocalization()
                     addon:RunUpdateStatsSafe()
                 end
-                UIDropDownMenu_AddButton(info)
+                add(info)
             end
         end)
         UIDropDownMenu_SetText(langDropdown, CurrentLabel())

@@ -15868,7 +15868,8 @@ do
         env.StatsProFontDropdownButton, "OnClick")
     exists("config.font_picker_lazy_scaffold.frame", env.StatsProFontPicker)
     eq("config.font_picker_strata.dialog", env.StatsProFontPicker:GetFrameStrata(), "DIALOG")
-    eq("config.font_picker_surface.window", env.StatsProFontPicker.statsProSurfaceRole, "window")
+    -- All Settings popups use the same plain, thin border.
+    eq("config.font_picker_surface.window", env.StatsProFontPicker.statsProSurfaceRole, "viewport")
     eq("config.font_picker_surface.viewport",
         env.StatsProFontPicker.statsProViewport.statsProSurfaceRole, "viewport")
     check("config.font_picker_level_above_config",
@@ -26244,10 +26245,10 @@ do
         dropdownTrigger.statsProSurface.statsProBorders[1].colorTexture.a,
         tokens.colors.borderStrong[4])
     userInteract("config.control_design.dropdown_leave", dropdownTrigger, "OnLeave")
-    env.UIDROPDOWNMENU_OPEN_MENU = env.StatsProDisplayModeDropdown
     userInteract("config.control_design.dropdown_open", dropdownTrigger, "OnClick")
     eq("config.control_design.dropdown_open_flag", dropdownTrigger.statsProOpen, true)
-    env.UIDROPDOWNMENU_OPEN_MENU = nil
+    addonContext.settingsUI.dropdownMenu.Hide(addonContext)
+    flushTimers("config.control_design.dropdown_close_timer", env, 0, 1)
     userInteract("config.control_design.dropdown_close_refresh", dropdownTrigger, "OnLeave")
     eq("config.control_design.dropdown_closed_flag", dropdownTrigger.statsProOpen, false)
 

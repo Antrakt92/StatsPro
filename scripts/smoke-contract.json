@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "totalAssertions": 43977,
+  "totalAssertions": 43982,
   "suites": [
     {
       "name": "core-panel-persistence",
@@ -44,8 +44,8 @@
     },
     {
       "name": "control-design",
-      "assertions": 803,
-      "fingerprint": "384a5af5"
+      "assertions": 808,
+      "fingerprint": "5f3081ca"
     },
     {
       "name": "presets-onboarding",

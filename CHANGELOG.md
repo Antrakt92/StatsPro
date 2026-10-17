@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.20.0 - 17-Oct-2026 — Fonts and language menus
+
+- Add 12 included font faces, available without a separate font addon.
+- Replace country flags with language names in the language menu.
+- Make language and font hover previews more responsive while preserving your saved selection.
+
 ## 1.19.1 - 17-Oct-2026 — Repair and language fixes
 
 ### Fixed
@@ -7,7 +13,7 @@
 - Restore durability and repair-cost displays on Retail 12.1.5.
 - Restore readable Settings and language previews for Russian, Korean and both Chinese translations.
 - Recover automatically when a Settings font change is temporarily unavailable.
-- Show language names without country flags and keep available fonts visible in Appearance.
+- Keep language flags and available fonts visible in Appearance.
 
 ## 1.19.0 - 17-Oct-2026 — Fresh targets and Forever stat updates
 

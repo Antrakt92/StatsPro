@@ -13556,6 +13556,12 @@ function addon.settingsDesign.StyleDropdown(dropdown, label)
     local button = dropdown.Button or (name and _G[name .. "Button"])
     local text = name and _G[name .. "Text"] or nil
     if not button or not text then return end
+    -- The inherited toggle opens Blizzard's menu on mouse-down. Own the entire
+    -- input sequence before installing our state hooks, including the font field.
+    for _, event in ipairs({ "OnMouseDown", "OnMouseUp", "OnEnter", "OnLeave" }) do
+        button:SetScript(event, nil)
+    end
+    button:RegisterForClicks("LeftButtonUp")
     local surface = addon.settingsDesign.CreateTextureSurface(dropdown, "raised")
     surface:SetPoint("TOPLEFT", 16, -4)
     surface:SetPoint("BOTTOMRIGHT", -8, 4)
@@ -17460,8 +17466,8 @@ function addon.settingsUI.dropdownMenu.BuildFrame(self)
     menu.catcher:Hide()
     menu.catcher:SetScript("OnMouseDown", function() menu.Hide(self) end)
     menu.scroll = CreateFrame("ScrollFrame", "StatsProSettingsMenuScroll", menu.frame, "UIPanelScrollFrameTemplate")
-    menu.scroll:SetPoint("TOPLEFT", 8, -8)
-    menu.scroll:SetPoint("BOTTOMRIGHT", -28, 8)
+    menu.scroll:SetPoint("TOPLEFT", 6, -6)
+    menu.scroll:SetPoint("BOTTOMRIGHT", -26, 6)
     self.settingsDesign.StyleScrollFrame(menu.scroll)
     menu.content = CreateFrame("Frame", nil, menu.scroll)
     menu.scroll:SetScrollChild(menu.content)
@@ -17528,30 +17534,30 @@ function addon.settingsUI.dropdownMenu.Show(self, dropdown)
     menu.generation = menu.generation + 1
     local generation = menu.generation
     menu.openDropdown = dropdown
-    local width = math.max(self.settingsDesign.tokens.geometry.dropdownWidth, 280)
-    local pitch = 28
+    local width = math.max(self.settingsDesign.tokens.geometry.dropdownWidth, 220)
+    local pitch = 24
     -- These labels retain their own script while language hover previews change
     -- the rest of Settings. They do not belong to the config font registry.
     local needsScroll = #entries > 12
-    menu.frame:SetSize(width + (needsScroll and 36 or 16), math.min(#entries, 12) * pitch + 16)
+    menu.frame:SetSize(width + (needsScroll and 32 or 12), math.min(#entries, 12) * pitch + 12)
     menu.scroll:ClearAllPoints()
-    menu.scroll:SetPoint("TOPLEFT", 8, -8)
-    menu.scroll:SetPoint("BOTTOMRIGHT", needsScroll and -28 or -8, 8)
+    menu.scroll:SetPoint("TOPLEFT", 6, -6)
+    menu.scroll:SetPoint("BOTTOMRIGHT", needsScroll and -26 or -6, 6)
     menu.frame:SetFrameLevel(owner:GetFrameLevel() + 50)
     menu.catcher:SetFrameLevel(menu.frame:GetFrameLevel() - 1)
     menu.content:SetSize(width, #entries * pitch)
     menu.frame:ClearAllPoints()
-    menu.frame:SetPoint("TOPLEFT", trigger, "BOTTOMLEFT", 0, -4)
+    menu.frame:SetPoint("TOPLEFT", trigger, "BOTTOMLEFT", 0, -2)
     local selectedIndex = 1
     for index, info in ipairs(entries) do
         local row = menu.buttons[index]
         if not row then
             row = CreateFrame("Button", nil, menu.content)
-            row.statsProMenuSurface = self.settingsDesign.CreateTextureSurface(row, "raised")
+            row.statsProMenuSurface = self.settingsDesign.CreateTextureSurface(row, "viewport")
             row.statsProMenuSurface:SetAllPoints(row)
             row.text = row:CreateFontString(nil, "OVERLAY")
-            row.text:SetPoint("LEFT", 14, 0)
-            row.text:SetPoint("RIGHT", -8, 0)
+            row.text:SetPoint("LEFT", 12, 0)
+            row.text:SetPoint("RIGHT", -6, 0)
             row.text:SetJustifyH("LEFT")
             row.text:SetWordWrap(false)
             row.text:SetMaxLines(1)
@@ -17559,14 +17565,14 @@ function addon.settingsUI.dropdownMenu.Show(self, dropdown)
             row.mark = row:CreateTexture(nil, "ARTWORK")
             row.mark:SetPoint("TOPLEFT", 3, -5)
             row.mark:SetPoint("BOTTOMLEFT", 3, 5)
-            row.mark:SetWidth(3)
+            row.mark:SetWidth(2)
             local accent = self.settingsDesign.Color("accent")
             row.mark:SetColorTexture(accent[1], accent[2], accent[3], 1)
             row:SetHighlightTexture("Interface\\Buttons\\WHITE8X8")
             row:GetHighlightTexture():SetVertexColor(accent[1], accent[2], accent[3], 0.16)
             menu.buttons[index] = row
         end
-        row:SetSize(width, pitch - 2)
+        row:SetSize(width, pitch)
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", 0, -(index - 1) * pitch)
         row.info = info
@@ -17575,7 +17581,7 @@ function addon.settingsUI.dropdownMenu.Show(self, dropdown)
         row.text:SetText(info.text)
         self.settingsDesign.SetListRowSelected(row, info.checked == true)
         self.settingsDesign.SetTextureSurfaceBorder(row.statsProMenuSurface,
-            info.checked and "accentMuted" or "borderSoft")
+            info.checked and "accentMuted" or "transparent")
         if info.checked then row.mark:Show(); selectedIndex = index else row.mark:Hide() end
         local function current()
             return menu.generation == generation and menu.openDropdown == dropdown

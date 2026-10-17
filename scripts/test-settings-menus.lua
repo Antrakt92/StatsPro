@@ -21,13 +21,24 @@ for _, forever in ipairs({ false, true }) do
     addon:OpenConfigMenu()
     local menu = addon.settingsUI.dropdownMenu
     check(menu ~= nil, 'Settings use addon-owned menus')
+    local function clickField(dropdown)
+        local trigger = dropdown.statsProTrigger
+        local before = env.__nativeDropdownOpens
+        fire(trigger, 'OnMouseDown')
+        check(env.__nativeDropdownOpens == before, 'press never opens the inherited native list')
+        fire(trigger, 'OnMouseUp')
+        fire(trigger, 'OnClick')
+        check(env.__nativeDropdownOpens == before, 'release opens no native list')
+        check(trigger.registeredClicks and trigger.registeredClicks[1] == 'LeftButtonUp',
+            'dropdown toggles once on left-button release')
+    end
     local settingKeys = { StatsProDisplayModeDropdown = 'displayMode', StatsProLabelStyleDropdown = 'labelStyle',
         StatsProTextOutlineDropdown = 'textOutlineStyle', StatsProTargetSnapshotDropdown = 'targetSnapshot' }
     for _, name in ipairs({ 'StatsProDisplayModeDropdown', 'StatsProLabelStyleDropdown',
         'StatsProTextOutlineDropdown', 'StatsProLanguageDropdown', 'StatsProTargetSnapshotDropdown' }) do
         local dropdown = env[name]
         if dropdown then
-            fire(dropdown.statsProTrigger, 'OnClick')
+            clickField(dropdown)
             check(menu.openDropdown == dropdown and menu.frame:IsShown(), name .. ' opens owned menu')
             check(menu.catcher:IsShown(), 'outside-click catcher is active')
             check(menu.frame.backdrop.edgeFile == 'Interface\\Buttons\\WHITE8X8', 'popup uses a thin matching border')
@@ -35,8 +46,8 @@ for _, forever in ipairs({ false, true }) do
             for _, row in ipairs(menu.buttons) do
                 if row.info then
                     count = count + 1
-                    check(row:GetHeight() == 26, 'options have a comfortable click target')
-                    check(row.statsProMenuSurface.statsProSurfaceRole == 'raised', 'options share the Settings button surface')
+                    check(row:GetHeight() == 24, 'options use compact 24-pixel click targets')
+                    check(row.statsProMenuSurface.statsProSurfaceRole == 'viewport', 'rows use a flat popup surface')
                     if row.mark:IsShown() then selected = selected + 1 end
                 end
             end
@@ -62,6 +73,9 @@ for _, forever in ipairs({ false, true }) do
             end
         end
     end
+    clickField(env.StatsProFontDropdown)
+    check(addon.settingsUI.fontPicker.frame:IsShown(), 'font field opens its picker directly')
+    addon.settingsUI.fontPicker.Hide(addon)
     local language = env.StatsProLanguageDropdown
     local normalProvider = language.statsProBuildOptions
     language.statsProBuildOptions = function(add)
@@ -69,11 +83,12 @@ for _, forever in ipairs({ false, true }) do
     end
     menu.Show(addon, language)
     check(menu.scroll.ScrollBar:IsShown(), 'long menu exposes styled scrollbar')
-    check(menu.frame:GetHeight() == 12 * 28 + 16, 'long menu keeps bounded visible height')
+    check(menu.frame:GetHeight() == 12 * 24 + 12, 'long menu keeps compact bounded height')
     check(menu.scroll:GetVerticalScroll() > 0, 'long menu scrolls current option into view')
     menu.Hide(addon)
     language.statsProBuildOptions = normalProvider
     check(menu.Show(addon, language), 'language menu opens')
+    check(menu.frame:GetWidth() <= 260, 'ordinary popup avoids oversized minimum width')
     check(not menu.scroll.ScrollBar:IsShown(), 'shorter menu hides unneeded scrollbar')
     check(not menu.buttons[20]:IsShown(), 'pooled overflow rows are hidden on reuse')
     local russian, english

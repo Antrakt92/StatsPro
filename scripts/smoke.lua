@@ -550,6 +550,7 @@ local function makeFrame(name, setFontResult, parent)
     function frame:IsEnabled() return self.enabled end
     function frame:RegisterForDrag(...) self.dragButtons = { ... } end
     function frame:SetScript(event, fn) self.scripts[event] = fn end
+    function frame:RegisterForClicks(...) self.registeredClicks = { ... } end
     function frame:HookScript(event, fn)
         self.hooks[event] = self.hooks[event] or {}
         self.hooks[event][#self.hooks[event] + 1] = fn
@@ -969,6 +970,7 @@ local function makeEnv(locale, opts)
     env.GetLocale = function() return currentLocale end
     env.GetAddOnMetadata = env.C_AddOns.GetAddOnMetadata
     env.InCombatLockdown = opts.inCombatLockdown or function() return false end
+    env.__nativeDropdownOpens = 0
     env.CloseDropDownMenus = function()
         env.__closedDropdowns = env.__closedDropdowns + 1
         if env.DropDownList1 then env.DropDownList1:Hide() end
@@ -1155,6 +1157,16 @@ local function makeEnv(locale, opts)
             env[name .. "Button"] = env[name .. "Button"] or makeFrame(name .. "Button", opts.setFontResult)
             env[name .. "Button"].mouseEnabled = true
             frame.Button = env[name .. "Button"]
+        end
+        if template == "UIDropDownMenuTemplate" then
+            -- The shipped toggle template opens its legacy menu on mouse-down,
+            -- before an OnClick replacement can run on release.
+            frame.Button:SetScript("OnMouseDown", function(button)
+                if not button:IsEnabled() then return end
+                env.__nativeDropdownOpens = env.__nativeDropdownOpens + 1
+                env.UIDROPDOWNMENU_OPEN_MENU = frame
+                env.DropDownList1:Show()
+            end)
         end
         if template == "UIPanelScrollFrameTemplate" then
             local scrollBarName = name and (name .. "ScrollBar") or nil

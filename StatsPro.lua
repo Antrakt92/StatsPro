@@ -11834,6 +11834,31 @@ local CONFIG_FONT = LocaleAwareConfigFont()
 local currentConfigFont    = CONFIG_FONT
 local localizedConfigFonts = {}
 
+function addon.fontRuntime.ConfigFontDiagnostic()
+    local detached, mismatched = 0, 0
+    for _, entry in ipairs(localizedConfigFonts) do
+        if entry.group then
+            local ok, object = pcall(entry.fs.GetFontObject, entry.fs)
+            if not ok or not rawequal(object, entry.group.object) then detached = detached + 1 end
+        end
+        if not addon.fontRuntime.matchesAppliedFont(
+            entry.fs, currentConfigFont, entry.size, entry.appliedFlags) then
+            mismatched = mismatched + 1
+        end
+    end
+    return string.format("settings font: path=%s regions=%d detached=%d mismatched=%d",
+        currentConfigFont or "?", #localizedConfigFonts, detached, mismatched)
+end
+
+function addon.fontRuntime.ConfigFontSnapshot(region)
+    local ok, font, size, flags = pcall(region.GetFont, region)
+    if ok and FontPathKey(font) and SAFE_NUM.IsCleanFiniteNumber(size)
+        and addon.fontRuntime.matchesAppliedFont(region, font, size, flags) then
+        if flags == "" then flags = nil end
+        return font, size, flags
+    end
+end
+
 local function ConfigFontGroupKey(roleKey, size, flags)
     local semanticRole = type(roleKey) == "string" and roleKey ~= ""
         and roleKey or "custom"
@@ -11915,6 +11940,13 @@ local function RegisterConfigFont(fs, size, flags, roleKey)
         localizedConfigFonts[fs] = entry
         tinsert(localizedConfigFonts, entry)
     end
+    if entry.group then
+        local ok, object = pcall(fs.GetFontObject, fs)
+        if not ok or not rawequal(object, entry.group.object) then
+            RemoveConfigFontEntry(entry.group, entry)
+            entry.group = nil
+        end
+    end
     local groupKey = ConfigFontGroupKey(roleKey, size, flags)
     if entry.group and entry.group.key ~= groupKey then
         RemoveConfigFontEntry(entry.group, entry)
@@ -11954,7 +11986,8 @@ local function RegisterConfigFont(fs, size, flags, roleKey)
             end
         end
         if not objectReady then return false end
-        local inherited = entry.group == group
+        local inherited = addon.fontRuntime.ownedRegionsMatch(
+            { fs }, group.object, font, size, effectiveFlags)
             or addon.fontRuntime.attachOwnedFontObject(fs, group.object)
         return inherited and addon.fontRuntime.ownedRegionsMatch(
             { fs }, group.object, font, size, effectiveFlags)
@@ -12031,7 +12064,12 @@ end
 ApplyConfigFont = function(font, force)
     if not force and addon.fontRuntime.configFontValidated
         and SameFontPath(font, currentConfigFont) then
-        return true, currentConfigFont
+        local matches = true
+        for _, entry in ipairs(localizedConfigFonts) do
+            if not addon.fontRuntime.matchesAppliedFont(
+                entry.fs, font, entry.size, entry.appliedFlags) then matches = false; break end
+        end
+        if matches then return true, currentConfigFont end
     end
     local usable = addon.fontRuntime.usablePath(font)
     if not usable then return false end
@@ -12041,10 +12079,23 @@ ApplyConfigFont = function(font, force)
         return true, usable
     end
 
+    -- Styling a region can give it a private FontObject. Registry membership is
+    -- not proof of native inheritance. Keep that region's local styling and use
+    -- the direct path rather than letting one detached member abort every group.
+    for _, entry in ipairs(localizedConfigFonts) do
+        if entry.group then
+            local ok, object = pcall(entry.fs.GetFontObject, entry.fs)
+            if not ok or not rawequal(object, entry.group.object) then
+                RemoveConfigFontEntry(entry.group, entry)
+                entry.group = nil
+            end
+        end
+    end
     local groupPlans, directPlans, previousText = {}, {}, {}
     local groupOrder = localizedConfigFonts.groupOrder or {}
     for _, group in ipairs(groupOrder) do
         if #group.entries > 0 then
+            local oldFont, oldSize, oldFlags = addon.fontRuntime.ConfigFontSnapshot(group.object)
             local resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(
                 usable, group.size, group.flags)
             if not resolvedFont then return false end
@@ -12052,15 +12103,16 @@ ApplyConfigFont = function(font, force)
                 group = group,
                 font = resolvedFont,
                 flags = effectiveFlags,
-                oldFont = group.appliedFont,
-                oldSize = group.appliedSize,
-                oldFlags = group.appliedFlags,
+                oldFont = oldFont,
+                oldSize = oldSize,
+                oldFlags = oldFlags,
             })
         end
     end
     for i, entry in ipairs(localizedConfigFonts) do
         previousText[i] = entry.fs:GetText()
         if not entry.group then
+            local oldFont, oldSize, oldFlags = addon.fontRuntime.ConfigFontSnapshot(entry.fs)
             local resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(
                 usable, entry.size, entry.flags)
             if not resolvedFont then return false end
@@ -12068,9 +12120,9 @@ ApplyConfigFont = function(font, force)
                 entry = entry,
                 font = resolvedFont,
                 flags = effectiveFlags,
-                oldFont = entry.appliedFont,
-                oldSize = entry.appliedSize,
-                oldFlags = entry.appliedFlags,
+                oldFont = oldFont,
+                oldSize = oldSize,
+                oldFlags = oldFlags,
             })
         end
     end
@@ -12083,6 +12135,10 @@ ApplyConfigFont = function(font, force)
             if not plan.oldFont or not addon.fontRuntime.restore(
                     { plan.entry.fs }, plan.oldFont, plan.oldSize, plan.oldFlags) then
                 restored = false
+            else
+                plan.entry.appliedFont = plan.oldFont
+                plan.entry.appliedSize = plan.oldSize
+                plan.entry.appliedFlags = plan.oldFlags
             end
         end
         for index = #changedGroups, 1, -1 do
@@ -12091,6 +12147,15 @@ ApplyConfigFont = function(font, force)
                     plan.group.object, ConfigFontGroupRegions(plan.group),
                     plan.oldFont, plan.oldSize, plan.oldFlags) then
                 restored = false
+            else
+                plan.group.appliedFont = plan.oldFont
+                plan.group.appliedSize = plan.oldSize
+                plan.group.appliedFlags = plan.oldFlags
+                for _, entry in ipairs(plan.group.entries) do
+                    entry.appliedFont = plan.oldFont
+                    entry.appliedSize = plan.oldSize
+                    entry.appliedFlags = plan.oldFlags
+                end
             end
         end
         -- Never restore text onto a region whose font rollback failed. Retail
@@ -18253,11 +18318,11 @@ function addon.settingsUI.localization.MenuInfo(self, info, value)
         if option.value == locale then
             local left = (index - 2) * 32 + 3
             info.icon = "Interface\\AddOns\\StatsPro\\textures\\language-flags.tga"
-            info.iconInfo = {
-                tCoordLeft = left / 512, tCoordRight = (left + 26) / 512,
-                tCoordTop = 7 / 32, tCoordBottom = 25 / 32,
-                tSizeX = 18, tSizeY = 12,
-            }
+            -- Regular dropdown rows consume top-level coordinates and draw a
+            -- 16x16 icon. Include transparent vertical padding to retain the
+            -- flag's proportions; iconInfo applies only to icon-only rows.
+            info.tCoordLeft, info.tCoordRight = left / 512, (left + 26) / 512
+            info.tCoordTop, info.tCoordBottom = 3 / 32, 29 / 32
             break
         end
     end
@@ -19171,6 +19236,7 @@ function addon:PrintDebugDump()
         req,
         tostring(FontSupports(addon.fontRuntime.currentPath(), req)),
         savedFontText))
+    PrintMsg(addon.fontRuntime.ConfigFontDiagnostic())
 
     if addon.forever.enabled then
         PrintMsg(string.format("show stats: offensive=%s utility=%s defensive=%s durability=%s repair=%s itemLevel=%s",

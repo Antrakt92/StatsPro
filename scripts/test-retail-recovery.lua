@@ -12,11 +12,20 @@ for _, client in ipairs({ "enUS", "ruRU" }) do
         end,
     })
     env.__fireEvent("PLAYER_ENTERING_WORLD")
+    addon:OpenConfigMenu()
+    for index, entry in ipairs(test.configFontState().entries) do
+        if index > 22 then break end
+        local path, size, flags = entry.region:GetFont()
+        entry.region:SetFont(path, size, flags)
+    end
     for _, locale in ipairs({ "ruRU", "koKR", "zhCN", "zhTW", "enUS" }) do
         addon.settingsUI.localization.Preview(addon, locale)
         local requirement = test.registrySnapshot().localeGlyphReq[locale]
         local state = test.panelFontState()
         assert(test.fontSupports(state.mainAppliedFont, requirement), client .. ": readable HUD for " .. locale)
+        for _, entry in ipairs(test.configFontState().entries) do
+            assert(test.fontSupports(entry.actualFont, requirement), client .. ": readable Settings for " .. locale)
+        end
         addon.settingsUI.localization.CancelPreview(addon)
     end
 end

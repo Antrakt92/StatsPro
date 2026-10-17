@@ -15,6 +15,8 @@ function Get-ForeverPackageMap {
         'LICENSES/CallbackHandler-1.0-BSD-2-Clause.txt' = 'LICENSES/CallbackHandler-1.0-BSD-2-Clause.txt'
         'LICENSES/LibSharedMedia-3.0-LGPL-2.1.txt' = 'LICENSES/LibSharedMedia-3.0-LGPL-2.1.txt'
         'textures/forever-logo.png' = 'textures/forever-logo.png'
+        'textures/font-star-filled.tga' = 'textures/font-star-filled.tga'
+        'textures/font-star-outline.tga' = 'textures/font-star-outline.tga'
         'libs/LibStub/LibStub.lua' = 'libs/LibStub/LibStub.lua'
         'libs/CallbackHandler-1.0/CallbackHandler-1.0.lua' = 'libs/CallbackHandler-1.0/CallbackHandler-1.0.lua'
         'libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua' = 'libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua'

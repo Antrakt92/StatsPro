@@ -52,6 +52,8 @@ classic serif styles, with Cyrillic, Chinese, Japanese and Korean families.
 Choose one in **Appearance → Font**; no separate font addon is needed. Fonts
 registered by other addons remain available alongside the included collection.
 Only fonts compatible with your selected language appear in the list.
+Click the star beside a font to keep it at the top of the list. Favorites are
+shared across profiles and saved between sessions; hover still previews the HUD.
 
 ### Choose your download
 

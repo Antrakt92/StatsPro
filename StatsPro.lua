@@ -307,6 +307,10 @@ do
     local SAMPLES = {
         ["noto.*cjk"]        = "notosanscjk-regular.otf",
         ["sourcehan"]        = "sourcehansans-regular.otf",
+        ["^sourcehan.-cn[%-.]"] = "sourcehansanscn-regular.otf",
+        ["^sourcehan.-tw[%-.]"] = "sourcehanseriftw-regular.otf",
+        ["^sourcehan.-jp[%-.]"] = "sourcehansansjp-regular.otf",
+        ["^sourcehan.-kr[%-.]"] = "sourcehansanskr-regular.otf",
         ["^wqy%-zenhei%.tt[fc]$"] = "wqy-zenhei.ttf",
         ["^wenquanyizenhei%.tt[fc]$"] = "wenquanyizenhei.ttc",
         ["wenquanyi"]        = "wenquanyimicrohei.ttf",
@@ -1755,7 +1759,7 @@ local LABELS_BY_LOCALE = {
         -- Sliders:
         ["Scale:"] = "Scale:", ["Refresh Rate (sec):"] = "Refresh Rate (sec):", ["Font Size:"] = "Font Size:", ["Text Opacity:"] = "Text Opacity:", ["Panel Background:"] = "Panel Background:",
         -- Dropdown captions:
-        ["Display Mode:"] = "Display Mode:", ["Tooltip Targets:"] = "Tooltip Targets:", ["Label Style:"] = "Label Style:", ["Text Outline:"] = "Text Outline:", ["Font:"] = "Font:", ["Language:"] = "Language:",
+        ["Display Mode:"] = "Display Mode:", ["Tooltip Targets:"] = "Tooltip Targets:", ["Label Style:"] = "Label Style:", ["Text Outline:"] = "Text Outline:", ["Add favorite"] = "Add favorite", ["Remove favorite"] = "Remove favorite", ["Font:"] = "Font:", ["Language:"] = "Language:",
         -- Dropdown options (Display Mode):
         ["Flat"] = "Flat", ["Sectioned"] = "Sectioned", ["Split"] = "Split",
         ["Mythic+"] = "Mythic+", ["Raid"] = "Raid",
@@ -1890,7 +1894,7 @@ local LABELS_BY_LOCALE = {
         -- Sliders:
         ["Scale:"] = "Масштаб:", ["Refresh Rate (sec):"] = "Частота обновления (сек):", ["Font Size:"] = "Размер шрифта:", ["Text Opacity:"] = "Прозрачность текста:", ["Panel Background:"] = "Фон панели:",
         -- Dropdown captions:
-        ["Display Mode:"] = "Режим отображения:", ["Tooltip Targets:"] = "Цели в подсказке:", ["Label Style:"] = "Стиль меток:", ["Text Outline:"] = "Контур текста:", ["Font:"] = "Шрифт:", ["Language:"] = "Язык:",
+        ["Display Mode:"] = "Режим отображения:", ["Tooltip Targets:"] = "Цели в подсказке:", ["Label Style:"] = "Стиль меток:", ["Text Outline:"] = "Контур текста:", ["Add favorite"] = "В избранное", ["Remove favorite"] = "Убрать из избранного", ["Font:"] = "Шрифт:", ["Language:"] = "Язык:",
         -- Dropdown options (Display Mode):
         ["Flat"] = "Плоский", ["Sectioned"] = "По секциям", ["Split"] = "Разделённый",
         ["Mythic+"] = "Мифик+", ["Raid"] = "Рейд",
@@ -2021,7 +2025,7 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Auto-Farbe nach Schwellwert",
         ["Use Worst Slot (instead of average)"] = "Schlechtester Slot (statt Durchschnitt)",
         ["Scale:"] = "Skalierung:", ["Refresh Rate (sec):"] = "Aktualisierungsrate (Sek.):", ["Font Size:"] = "Schriftgröße:", ["Text Opacity:"] = "Textdeckkraft:", ["Panel Background:"] = "Panelhintergrund:",
-        ["Display Mode:"] = "Anzeigemodus:", ["Tooltip Targets:"] = "Tooltip-Ziele:", ["Label Style:"] = "Labelstil:", ["Text Outline:"] = "Textkontur:", ["Font:"] = "Schrift:", ["Language:"] = "Sprache:",
+        ["Display Mode:"] = "Anzeigemodus:", ["Tooltip Targets:"] = "Tooltip-Ziele:", ["Label Style:"] = "Labelstil:", ["Text Outline:"] = "Textkontur:", ["Add favorite"] = "Favorit hinzufügen", ["Remove favorite"] = "Favorit entfernen", ["Font:"] = "Schrift:", ["Language:"] = "Sprache:",
         ["Flat"] = "Flach", ["Sectioned"] = "Gruppiert", ["Split"] = "Geteilt",
         ["Mythic+"] = "Mythic+", ["Raid"] = "Raid",
         ["Raid Normal"] = "Raid Normal", ["Raid Heroic"] = "Raid Heroisch", ["Raid Mythic"] = "Raid Mythisch",
@@ -2146,7 +2150,7 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Couleur auto par seuil",
         ["Use Worst Slot (instead of average)"] = "Pire emplacement (vs moyenne)",
         ["Scale:"] = "Échelle :", ["Refresh Rate (sec):"] = "Fréquence (sec) :", ["Font Size:"] = "Taille de police :", ["Text Opacity:"] = "Opacité du texte :", ["Panel Background:"] = "Arrière-plan du panneau :",
-        ["Display Mode:"] = "Mode d'affichage :", ["Tooltip Targets:"] = "Cibles infobulle :", ["Label Style:"] = "Style d'étiquette :", ["Text Outline:"] = "Contour du texte :", ["Font:"] = "Police :", ["Language:"] = "Langue :",
+        ["Display Mode:"] = "Mode d'affichage :", ["Tooltip Targets:"] = "Cibles infobulle :", ["Label Style:"] = "Style d'étiquette :", ["Text Outline:"] = "Contour du texte :", ["Add favorite"] = "Ajouter aux favoris", ["Remove favorite"] = "Retirer des favoris", ["Font:"] = "Police :", ["Language:"] = "Langue :",
         ["Flat"] = "Plat", ["Sectioned"] = "Par sections", ["Split"] = "Séparé",
         ["Mythic+"] = "Mythique+", ["Raid"] = "Raid",
         ["Raid Normal"] = "Raid normal", ["Raid Heroic"] = "Raid héroïque", ["Raid Mythic"] = "Raid mythique",
@@ -2272,7 +2276,7 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Color auto por umbral",
         ["Use Worst Slot (instead of average)"] = "Peor ranura (en vez de media)",
         ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:", ["Text Opacity:"] = "Opacidad del texto:", ["Panel Background:"] = "Fondo del panel:",
-        ["Display Mode:"] = "Modo:", ["Tooltip Targets:"] = "Objetivos tooltip:", ["Label Style:"] = "Estilo de etiqueta:", ["Text Outline:"] = "Contorno del texto:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
+        ["Display Mode:"] = "Modo:", ["Tooltip Targets:"] = "Objetivos tooltip:", ["Label Style:"] = "Estilo de etiqueta:", ["Text Outline:"] = "Contorno del texto:", ["Add favorite"] = "Añadir a favoritos", ["Remove favorite"] = "Quitar de favoritos", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por secciones", ["Split"] = "Dividido",
         ["Mythic+"] = "Mítico+", ["Raid"] = "Banda",
         ["Raid Normal"] = "Banda normal", ["Raid Heroic"] = "Banda heroica", ["Raid Mythic"] = "Banda mítica",
@@ -2396,7 +2400,7 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Color auto por umbral",
         ["Use Worst Slot (instead of average)"] = "Peor ranura (en vez del promedio)",
         ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:", ["Text Opacity:"] = "Opacidad del texto:", ["Panel Background:"] = "Fondo del panel:",
-        ["Display Mode:"] = "Modo:", ["Tooltip Targets:"] = "Objetivos tooltip:", ["Label Style:"] = "Estilo de etiqueta:", ["Text Outline:"] = "Contorno del texto:", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
+        ["Display Mode:"] = "Modo:", ["Tooltip Targets:"] = "Objetivos tooltip:", ["Label Style:"] = "Estilo de etiqueta:", ["Text Outline:"] = "Contorno del texto:", ["Add favorite"] = "Añadir a favoritos", ["Remove favorite"] = "Quitar de favoritos", ["Font:"] = "Fuente:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por secciones", ["Split"] = "Dividido",
         ["Mythic+"] = "Mítico+", ["Raid"] = "Banda",
         ["Raid Normal"] = "Banda normal", ["Raid Heroic"] = "Banda heroica", ["Raid Mythic"] = "Banda mítica",
@@ -2521,7 +2525,7 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Colore auto per soglia",
         ["Use Worst Slot (instead of average)"] = "Slot peggiore (anziché media)",
         ["Scale:"] = "Scala:", ["Refresh Rate (sec):"] = "Frequenza (sec):", ["Font Size:"] = "Dimensione font:", ["Text Opacity:"] = "Opacità del testo:", ["Panel Background:"] = "Sfondo pannello:",
-        ["Display Mode:"] = "Modalità:", ["Tooltip Targets:"] = "Target tooltip:", ["Label Style:"] = "Stile etichetta:", ["Text Outline:"] = "Contorno testo:", ["Font:"] = "Font:", ["Language:"] = "Lingua:",
+        ["Display Mode:"] = "Modalità:", ["Tooltip Targets:"] = "Target tooltip:", ["Label Style:"] = "Stile etichetta:", ["Text Outline:"] = "Contorno testo:", ["Add favorite"] = "Aggiungi ai preferiti", ["Remove favorite"] = "Rimuovi dai preferiti", ["Font:"] = "Font:", ["Language:"] = "Lingua:",
         ["Flat"] = "Piatto", ["Sectioned"] = "A sezioni", ["Split"] = "Diviso",
         ["Mythic+"] = "Mitica+", ["Raid"] = "Incursione",
         ["Raid Normal"] = "Incursione Normale", ["Raid Heroic"] = "Incursione Eroica", ["Raid Mythic"] = "Incursione Mitica",
@@ -2645,7 +2649,7 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "Cor auto por limite",
         ["Use Worst Slot (instead of average)"] = "Pior slot (em vez de média)",
         ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Atualização (s):", ["Font Size:"] = "Tamanho da fonte:", ["Text Opacity:"] = "Opacidade do texto:", ["Panel Background:"] = "Fundo do painel:",
-        ["Display Mode:"] = "Modo:", ["Tooltip Targets:"] = "Alvos do tooltip:", ["Label Style:"] = "Estilo do rótulo:", ["Text Outline:"] = "Contorno do texto:", ["Font:"] = "Fonte:", ["Language:"] = "Idioma:",
+        ["Display Mode:"] = "Modo:", ["Tooltip Targets:"] = "Alvos do tooltip:", ["Label Style:"] = "Estilo do rótulo:", ["Text Outline:"] = "Contorno do texto:", ["Add favorite"] = "Adicionar aos favoritos", ["Remove favorite"] = "Remover dos favoritos", ["Font:"] = "Fonte:", ["Language:"] = "Idioma:",
         ["Flat"] = "Plano", ["Sectioned"] = "Por seções", ["Split"] = "Dividido",
         ["Mythic+"] = "Mítico+", ["Raid"] = "Raide",
         ["Raid Normal"] = "Raide Normal", ["Raid Heroic"] = "Raide Heroico", ["Raid Mythic"] = "Raide Mítico",
@@ -2776,7 +2780,7 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "임계값 자동 색상",
         ["Use Worst Slot (instead of average)"] = "최악 슬롯 사용 (평균 대신)",
         ["Scale:"] = "크기:", ["Refresh Rate (sec):"] = "갱신 주기 (초):", ["Font Size:"] = "글꼴 크기:", ["Text Opacity:"] = "텍스트 투명도:", ["Panel Background:"] = "패널 배경:",
-        ["Display Mode:"] = "표시 모드:", ["Tooltip Targets:"] = "툴팁 목표:", ["Label Style:"] = "라벨 스타일:", ["Text Outline:"] = "글자 외곽선:", ["Font:"] = "글꼴:", ["Language:"] = "언어:",
+        ["Display Mode:"] = "표시 모드:", ["Tooltip Targets:"] = "툴팁 목표:", ["Label Style:"] = "라벨 스타일:", ["Text Outline:"] = "글자 외곽선:", ["Add favorite"] = "즐겨찾기 추가", ["Remove favorite"] = "즐겨찾기 제거", ["Font:"] = "글꼴:", ["Language:"] = "언어:",
         ["Flat"] = "단일", ["Sectioned"] = "구역별", ["Split"] = "분리",
         ["Mythic+"] = "쐐기+", ["Raid"] = "공격대",
         ["Raid Normal"] = "일반 공격대", ["Raid Heroic"] = "영웅 공격대", ["Raid Mythic"] = "신화 공격대",
@@ -2900,7 +2904,7 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "按阈值自动着色",
         ["Use Worst Slot (instead of average)"] = "最差栏位（替代平均值）",
         ["Scale:"] = "缩放:", ["Refresh Rate (sec):"] = "刷新率 (秒):", ["Font Size:"] = "字体大小:", ["Text Opacity:"] = "文字不透明度:", ["Panel Background:"] = "面板背景:",
-        ["Display Mode:"] = "显示模式:", ["Tooltip Targets:"] = "提示目标:", ["Label Style:"] = "标签样式:", ["Text Outline:"] = "文字描边:", ["Font:"] = "字体:", ["Language:"] = "语言:",
+        ["Display Mode:"] = "显示模式:", ["Tooltip Targets:"] = "提示目标:", ["Label Style:"] = "标签样式:", ["Text Outline:"] = "文字描边:", ["Add favorite"] = "添加收藏", ["Remove favorite"] = "取消收藏", ["Font:"] = "字体:", ["Language:"] = "语言:",
         ["Flat"] = "扁平", ["Sectioned"] = "分组", ["Split"] = "分离",
         ["Mythic+"] = "史诗+", ["Raid"] = "团队",
         ["Raid Normal"] = "普通团队", ["Raid Heroic"] = "英雄团队", ["Raid Mythic"] = "史诗团队",
@@ -3024,7 +3028,7 @@ local LABELS_BY_LOCALE = {
         ["Auto Color by Threshold"] = "依閾值自動上色",
         ["Use Worst Slot (instead of average)"] = "最差欄位（替代平均值）",
         ["Scale:"] = "縮放:", ["Refresh Rate (sec):"] = "更新率 (秒):", ["Font Size:"] = "字型大小:", ["Text Opacity:"] = "文字不透明度:", ["Panel Background:"] = "面板背景:",
-        ["Display Mode:"] = "顯示模式:", ["Tooltip Targets:"] = "提示目標:", ["Label Style:"] = "標籤樣式:", ["Text Outline:"] = "文字描邊:", ["Font:"] = "字型:", ["Language:"] = "語言:",
+        ["Display Mode:"] = "顯示模式:", ["Tooltip Targets:"] = "提示目標:", ["Label Style:"] = "標籤樣式:", ["Text Outline:"] = "文字描邊:", ["Add favorite"] = "加入最愛", ["Remove favorite"] = "移除最愛", ["Font:"] = "字型:", ["Language:"] = "語言:",
         ["Flat"] = "扁平", ["Sectioned"] = "分組", ["Split"] = "分離",
         ["Mythic+"] = "傳奇+", ["Raid"] = "團隊",
         ["Raid Normal"] = "普通團隊", ["Raid Heroic"] = "英雄團隊", ["Raid Mythic"] = "傳奇團隊",
@@ -4796,6 +4800,8 @@ addon.dbRuntime = {
     accountMetadataKeys = {
         accountWideEnabled = true,
         accountWideProfileID = true,
+        -- Optional picker preference, excluded from profile transfer/settings.
+        fontFavorites = true,
     },
     registryRootKeys = {
         dbVersion = true,
@@ -18040,6 +18046,51 @@ function addon.settingsUI.BuildLayoutTab(self, context)
     layoutTab:SetHeight(layoutTab.contentHeight)
 end
 
+-- Optional account preference; invalid entries never become font paths or writes.
+function addon.settingsUI.fontPicker.Favorites(self)
+    local stored = self.dbRuntime.GetAccount().fontFavorites
+    local result = {}
+    if not self.dbRuntime.IsCleanTable(stored) then return result end
+    local count = 0
+    for path, value in pairs(stored) do
+        count = count + 1
+        if count > 512 then return {} end
+        if self.dbRuntime.IsCleanType(path, "string") and #path <= 1024
+            and self.dbRuntime.IsCleanType(value, "boolean") and value == true then
+            result[FontPathKey(path)] = true
+        end
+    end
+    return result
+end
+
+function addon.settingsUI.fontPicker.ToggleFavorite(self, path)
+    if self.profileRuntime.ReadCombatState() ~= false then return false end
+    local root = self.dbRuntime.GetWritableRoot(true)
+    if not root then return false end
+    local account = root.account
+    -- Only a currently offered, usable font can be starred by this control.
+    local offered = false
+    for _, font in ipairs(self.settingsUI.fontPicker.BuildFontsList(self, true)) do
+        if SameFontPath(font.path, path) then offered = true; break end
+    end
+    if not offered then return false end
+    local favorites = self.settingsUI.fontPicker.Favorites(self)
+    local key = FontPathKey(path)
+    if not key then return false end
+    if favorites[key] then
+        favorites[key] = nil
+    else
+        local count = 0
+        for _ in pairs(favorites) do count = count + 1 end
+        if count >= 512 then return false end
+        favorites[key] = true
+    end
+    account.fontFavorites = favorites
+    self.settingsUI.fontPicker.cachedFontsList = nil
+    self.settingsUI.fontPicker.Populate(self, false)
+    return true
+end
+
 function addon.settingsUI.fontPicker.BuildFontsList(self, retryPending)
     local picker = self.settingsUI.fontPicker
     -- A hover preview does not commit a language. Cache by the chosen output
@@ -18047,9 +18098,15 @@ function addon.settingsUI.fontPicker.BuildFontsList(self, retryPending)
     local outputLocale = ResolveActiveLocale()
     local requirement = LOCALE_GLYPH_REQ[outputLocale] or GLYPH_LATIN
     local lsmLen = LSM and #LSM:List(LSM.MediaType.FONT) or 0
+    local favorites = picker.Favorites(self)
+    local favoriteKeys = {}
+    for path in pairs(favorites) do favoriteKeys[#favoriteKeys + 1] = path end
+    table.sort(favoriteKeys)
+    local favoritesKey = table.concat(favoriteKeys, "\n")
     if picker.cachedFontsList and picker.cachedFontsListLen == lsmLen
         and picker.cachedFontsListRequirement == requirement
         and picker.cachedFontsListLocale == outputLocale
+        and picker.cachedFavoritesKey == favoritesKey
         and not (retryPending and picker.cachedFontsListHasPending) then
         return picker.cachedFontsList
     end
@@ -18070,6 +18127,7 @@ function addon.settingsUI.fontPicker.BuildFontsList(self, retryPending)
             list[#list + 1] = {
                 name = name, path = usable,
                 sortKey = self.fontRuntime.asciiLower(name),
+                favorite = favorites[FontPathKey(usable)] == true,
             }
         end
     end
@@ -18094,6 +18152,7 @@ function addon.settingsUI.fontPicker.BuildFontsList(self, retryPending)
     -- Stable sort independent of LSM internal ordering. ASCII-only sort keys leave
     -- localized UTF-8 font names byte-stable while avoiding repeated casing work.
     table.sort(list, function(left, right)
+        if left.favorite ~= right.favorite then return left.favorite end
         if left.sortKey ~= right.sortKey then return left.sortKey < right.sortKey end
         if left.name ~= right.name then return left.name < right.name end
         return FontPathKey(left.path) < FontPathKey(right.path)
@@ -18101,6 +18160,7 @@ function addon.settingsUI.fontPicker.BuildFontsList(self, retryPending)
     -- Ordinary caption refreshes reuse the catalogue, but an explicit populate retries
     -- pending loose files even when the LSM list length has not changed.
     picker.cachedFontsList = list
+    picker.cachedFavoritesKey = favoritesKey
     picker.cachedFontsListLen = lsmLen
     picker.cachedFontsListRequirement = requirement
     picker.cachedFontsListLocale = outputLocale
@@ -18302,7 +18362,7 @@ function addon.settingsUI.fontPicker.Populate(self, centerSelection)
             button.bg:SetColorTexture(0, 0, 0, 0)
             button.text = button:CreateFontString(nil, "OVERLAY")
             button.text:SetPoint("LEFT", 6, 0)
-            button.text:SetPoint("RIGHT", -4, 0)
+            button.text:SetPoint("RIGHT", -24, 0)
             button.text:SetWordWrap(false)
             button.text:SetMaxLines(1)
             self.settingsDesign.StyleListRow(button, button.text, "body")
@@ -18316,6 +18376,35 @@ function addon.settingsUI.fontPicker.Populate(self, centerSelection)
                 hoverColor[1], hoverColor[2], hoverColor[3], 0.18)
             button.statsProFontHoverTexture = highlight
             button.text:SetJustifyH("LEFT")
+            local star = CreateFrame("Button", nil, button)
+            star:SetSize(22, picker.rowHeight)
+            star:SetPoint("RIGHT", button, "RIGHT", 0, 0)
+            star.icon = star:CreateTexture(nil, "ARTWORK")
+            star.icon:SetSize(14, 14)
+            star.icon:SetPoint("CENTER")
+            star:SetHighlightTexture("Interface\\Buttons\\WHITE8X8")
+            star:GetHighlightTexture():SetVertexColor(1, 0.8, 0.25, 0.2)
+            star:SetScript("OnClick", function()
+                picker.ToggleFavorite(self, button.fontPath)
+            end)
+            star:SetScript("OnEnter", function()
+                picker.hoverGeneration = picker.hoverGeneration + 1
+                picker.Preview(self, button.fontPath)
+            end)
+            star:SetScript("OnLeave", function()
+                local generation = picker.hoverGeneration
+                C_Timer.After(0.06, function()
+                    if generation == picker.hoverGeneration then picker.CancelPreview(self) end
+                end)
+            end)
+            self.settingsDesign.RegisterMutationControl(star)
+            self.settingsDesign.HookControl(star)
+            self.settingsDesign.AttachTooltip(star, function(control)
+                local blockedTitle, detail = self.settingsDesign.DisabledControlTooltip(control)
+                if blockedTitle then return blockedTitle, detail end
+                return L(control.isFavorite and "Remove favorite" or "Add favorite"), button.fontName
+            end)
+            button.favorite = star
 
             button:SetScript("OnEnter", function(target)
                 picker.hoverGeneration = picker.hoverGeneration + 1
@@ -18346,6 +18435,14 @@ function addon.settingsUI.fontPicker.Populate(self, centerSelection)
         button.fontName = font.name
         button.fontPath = font.path
         button.text:SetText(font.name)
+        button.favorite.isFavorite = font.favorite
+        button.favorite.icon:SetTexture("Interface\\AddOns\\StatsPro\\textures\\font-star-"
+            .. (font.favorite and "filled" or "outline") .. ".tga")
+        if font.favorite then
+            button.favorite.icon:SetVertexColor(1, 0.8, 0.25, 1)
+        else
+            button.favorite.icon:SetVertexColor(0.55, 0.65, 0.7, 0.8)
+        end
         if SameFontPath(font.path, currentPath) then
             self.settingsDesign.SetListRowSelected(button, true)
             currentRow = row
@@ -18353,7 +18450,10 @@ function addon.settingsUI.fontPicker.Populate(self, centerSelection)
             self.settingsDesign.SetListRowSelected(button, false)
         end
         button:Show()
-        if button.statsProHovered == true then hoveredVisibleButton = button end
+        if button.statsProHovered == true or button.favorite.statsProHovered == true then
+            hoveredVisibleButton = button
+        end
+        self.settingsDesign.RefreshOwnedControlTooltip(button.favorite)
     end
 
     for index = #fonts + 1, #picker.buttons do picker.buttons[index]:Hide() end

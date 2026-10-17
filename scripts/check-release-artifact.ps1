@@ -100,6 +100,8 @@ function Get-StatsProPackageFileContract {
         "StatsPro/StatsPro_Fonts.lua",
         "StatsPro/StatsPro_ArchonTargets.lua",
         "StatsPro/textures/logo.png",
+        "StatsPro/textures/font-star-filled.tga",
+        "StatsPro/textures/font-star-outline.tga",
         "StatsPro/libs/LibStub/LibStub.lua",
         "StatsPro/libs/CallbackHandler-1.0/CallbackHandler-1.0.lua",
         "StatsPro/libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua"
@@ -1205,7 +1207,7 @@ function Invoke-SelfTest {
                 [System.IO.File]::WriteAllBytes($mutationPath, $originalBytes)
             }
 
-            foreach ($binaryName in @("textures/logo.png") + @(Get-StatsProBundledFontFiles | Where-Object { $_ -match '\.(ttf|otf)$' })) {
+            foreach ($binaryName in @("textures/logo.png", "textures/font-star-filled.tga", "textures/font-star-outline.tga") + @(Get-StatsProBundledFontFiles | Where-Object { $_ -match '\.(ttf|otf)$' })) {
                 $binaryPath = Join-Path $mutationRoot $binaryName
                 $originalBytes = [System.IO.File]::ReadAllBytes($binaryPath)
                 if ($originalBytes.Length -eq 0) { throw "Self-test binary fixture is empty: $binaryName" }

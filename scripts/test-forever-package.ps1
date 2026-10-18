@@ -7,6 +7,7 @@ function Get-ForeverPackageMap {
     $map = [ordered]@{
         'StatsPro.toc' = 'StatsPro_Forever.toc'
         'StatsPro.lua' = 'StatsPro.lua'
+        'AntraktWindowLayers.lua' = 'AntraktWindowLayers.lua'
         'StatsPro_Fonts.lua' = 'StatsPro_Fonts.lua'
         'StatsPro_Forever.lua' = 'StatsPro_Forever.lua'
         'LICENSE' = 'LICENSE'
@@ -56,7 +57,7 @@ function Assert-ForeverToc {
         }
     }
     $refs = @($Text -split '\r?\n' | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith('#') } | ForEach-Object { $_.Trim().Replace('\', '/') })
-    $expected = @('libs/LibStub/LibStub.lua','libs/CallbackHandler-1.0/CallbackHandler-1.0.lua','libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua','StatsPro_Fonts.lua','StatsPro_Forever.lua','StatsPro.lua')
+    $expected = @('libs/LibStub/LibStub.lua','libs/CallbackHandler-1.0/CallbackHandler-1.0.lua','libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua','AntraktWindowLayers.lua','StatsPro_Fonts.lua','StatsPro_Forever.lua','StatsPro.lua')
     if (($refs -join '|') -cne ($expected -join '|')) { throw 'Forever runtime load order mismatch' }
 }
 function Get-ForeverSourceVersion {
@@ -115,7 +116,7 @@ if ($SelfTest) {
         [System.IO.File]::WriteAllText((Join-Path $fixture 'StatsPro.toc'), "## Version: 1.17.21`n")
         [System.IO.File]::WriteAllText((Join-Path $fixture 'StatsPro.lua'), 'local version = "@project-version@"')
         $iconDirective = '## IconTexture: Interface\AddOns\StatsPro\textures\forever-logo.png'
-        $toc = "## Interface: 16001`n## Version: 1.17.21`n$iconDirective`n## SavedVariables: StatsProDB, StatsProSelfTest`n## X-StatsPro-Flavor: forever`n## X-StatsPro-Channel: beta`nlibs\LibStub\LibStub.lua`nlibs\CallbackHandler-1.0\CallbackHandler-1.0.lua`nlibs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua`nStatsPro_Fonts.lua`nStatsPro_Forever.lua`nStatsPro.lua`n"
+        $toc = "## Interface: 16001`n## Version: 1.17.21`n$iconDirective`n## SavedVariables: StatsProDB, StatsProSelfTest`n## X-StatsPro-Flavor: forever`n## X-StatsPro-Channel: beta`nlibs\LibStub\LibStub.lua`nlibs\CallbackHandler-1.0\CallbackHandler-1.0.lua`nlibs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua`nAntraktWindowLayers.lua`nStatsPro_Fonts.lua`nStatsPro_Forever.lua`nStatsPro.lua`n"
         [System.IO.File]::WriteAllText((Join-Path $fixture 'StatsPro_Forever.toc'), $toc)
         $publishedToc = $toc + "## X-Curse-Project-ID: 1525100`n## X-Wago-ID: EGPemEN1`n"
         Assert-ForeverToc $publishedToc '1.17.21'

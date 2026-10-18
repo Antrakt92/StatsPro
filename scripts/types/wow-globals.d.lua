@@ -176,3 +176,6 @@ function GetZoneText() end
 
 ---@type boolean?
 __STATSPRO_ARCHON_TARGETS_MODULE = nil
+
+---@type table
+AntraktWindowLayers = nil

@@ -97,6 +97,7 @@ function Get-StatsProPackageFileContract {
     ) + $licenseFiles + @(
         "StatsPro/StatsPro.toc",
         "StatsPro/StatsPro.lua",
+        "StatsPro/AntraktWindowLayers.lua",
         "StatsPro/StatsPro_Fonts.lua",
         "StatsPro/StatsPro_ArchonTargets.lua",
         "StatsPro/textures/logo.png",

@@ -37,6 +37,7 @@
 libs\LibStub\LibStub.lua
 libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
+AntraktWindowLayers.lua
 StatsPro_Fonts.lua
 StatsPro_ArchonTargets.lua
 StatsPro.lua

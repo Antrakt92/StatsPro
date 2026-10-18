@@ -164,4 +164,76 @@ for _, forever in ipairs({ false, true }) do
     addon.settingsUI.context.frame:Hide()
     check(not menu.frame:IsShown() and not menu.catcher:IsShown(), 'Settings teardown leaves no orphan popup')
 end
+-- Distinct addon windows share strata; every control in the focused family
+-- must clear the other family's highest child, not just its root panel.
+for _, forever in ipairs({ false, true }) do
+    local env, addon = fixtures.loadStatsPro('enUS', { forever = forever, bundledFonts = true,
+        isKnownFontFile = function() return true end, statsProArchonTargets = archon.StatsProArchonTargets })
+    env.__fireEvent('PLAYER_ENTERING_WORLD')
+    addon:OpenConfigMenu()
+    local root = env.StatsProConfigFrame
+    local foreign = env.CreateFrame('Frame', nil, env.UIParent)
+    local foreignControl = env.CreateFrame('Button', nil, foreign)
+    foreignControl:SetFrameLevel(foreign:GetFrameLevel() + 14)
+    env.AntraktWindowLayers.Register(foreign)
+    env.AntraktWindowLayers.Focus(foreign)
+    local function bounds(frame)
+        local low, high = frame:GetFrameLevel(), frame:GetFrameLevel()
+        for _, child in ipairs({ frame:GetChildren() }) do
+            local childLow, childHigh = bounds(child)
+            low, high = math.min(low, childLow), math.max(high, childHigh)
+        end
+        return low, high
+    end
+    local function checkInFront(front, back, label)
+        local low = bounds(front)
+        local _, high = bounds(back)
+        check(low > high, label)
+    end
+    checkInFront(foreign, root, 'foreign window owns a coherent band above Settings')
+    fire(env.StatsProLanguageDropdown.statsProTrigger, 'OnMouseDown')
+    checkInFront(root, foreign, 'clicking a Settings control raises the whole family')
+    addon.settingsUI.dropdownMenu.Show(addon, env.StatsProLanguageDropdown)
+    check(addon.settingsUI.dropdownMenu.frame:GetFrameLevel() > select(2, bounds(root)),
+        'owned language popup remains above every Settings child')
+    env.AntraktWindowLayers.Focus(foreign)
+    check(not addon.settingsUI.dropdownMenu.frame:IsShown() and not addon.settingsUI.dropdownMenu.catcher:IsShown(),
+        'focusing another addon dismisses popup and its screen catcher')
+    root:Hide(); root:Show()
+    checkInFront(root, foreign, 'reopening Settings raises the full family')
+    local rootLevel = root:GetFrameLevel()
+    for _ = 1, 100 do
+        env.AntraktWindowLayers.Focus(foreign)
+        fire(root, 'OnMouseDown')
+    end
+    check(root:GetFrameLevel() == rootLevel, 'repeated focus compacts levels without unbounded growth')
+    addon.settingsUI.fontPicker.Show(addon)
+    check(addon.settingsUI.fontPicker.frame:GetFrameStrata() == 'DIALOG', 'font popup shares the family strata')
+    env.AntraktWindowLayers.Focus(foreign)
+    check(not addon.settingsUI.fontPicker.frame:IsShown() and not addon.settingsUI.fontPicker.catcher:IsShown(),
+        'font popup cannot remain above a different focused addon')
+    fire(root, 'OnMouseDown')
+    local picker = env.ColorPickerFrame
+    local oldStrata, oldLevel = picker:GetFrameStrata(), picker:GetFrameLevel()
+    local swatch
+    for _, frame in ipairs(env.__frames) do if frame.statsProColorKey then swatch = frame; break end end
+    fire(assert(swatch), 'OnClick')
+    check(picker:IsShown() and picker:GetFrameLevel() > select(2, bounds(root)),
+        'owned Blizzard color picker opens above the complete Settings family')
+    env.AntraktWindowLayers.Focus(foreign)
+    check(not picker:IsShown(), 'other addon focus closes owned color preview')
+    check(picker:GetFrameStrata() == oldStrata and picker:GetFrameLevel() == oldLevel,
+        'closing owned color picker restores its prior layers')
+    local focusedLevel = foreign:GetFrameLevel()
+    picker:SetupColorPickerAndShow({ swatchFunc = function() end, cancelFunc = function() end })
+    check(foreign:GetFrameLevel() == focusedLevel and root:GetFrameLevel() < foreign:GetFrameLevel(),
+        'foreign reuse of the shared picker cannot focus StatsPro')
+    picker:Hide()
+    check(addon.profileUI.ShowSelfTestExport('SPS1:1 layering', 'report'), 'standalone report opens')
+    local dialog = addon.profileUI.operationDialog
+    check(dialog:IsVisible(), 'standalone report has visible ancestry')
+    check(dialog:GetFrameLevel() > env.StatsProProfileOperationBlocker:GetFrameLevel(),
+        'standalone report stays above its own blocker')
+    addon.profileUI.CloseOperationDialog()
+end
 print('Settings menus: ' .. checks .. ' checks passed')

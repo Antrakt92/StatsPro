@@ -12568,6 +12568,14 @@ function COLOR_PICKER_STATE.IsActive(session)
 end
 
 function COLOR_PICKER_STATE.Clear(session)
+    if session and session.layerSnapshot and ColorPickerFrame then
+        _G.AntraktWindowLayers.Detach(addon.settingsUI.frame, ColorPickerFrame)
+        if COLOR_PICKER_STATE.OwnsFrame(session) then
+            ColorPickerFrame:SetFrameStrata(session.layerSnapshot.strata)
+            ColorPickerFrame:SetFrameLevel(session.layerSnapshot.level)
+        end
+        session.layerSnapshot = nil
+    end
     if COLOR_PICKER_STATE.IsActive(session) then
         COLOR_PICKER_STATE.active = nil
     end
@@ -12788,6 +12796,7 @@ local function OpenColorPicker(btn, statName)
         local writableDB = addon.dbRuntime.GetWritableSettings(false)
         if writableDB then addon.appearancePresets.MarkCustom(writableDB) end
     end
+    session.layerSnapshot = { strata = ColorPickerFrame:GetFrameStrata(), level = ColorPickerFrame:GetFrameLevel() }
     ColorPickerFrame:SetupColorPickerAndShow({
         r = snapshot.r, g = snapshot.g, b = snapshot.b,
         opacity = 1, hasOpacity = false,
@@ -12796,6 +12805,8 @@ local function OpenColorPicker(btn, statName)
         extraInfo = session,
     })
     COLOR_PICKER_STATE.active = session
+    addon.windowLayers.Attach(addon, ColorPickerFrame, 60)
+    addon.windowLayers.Focus(addon)
     btn.statsProActive = true
     addon.settingsDesign.RefreshControl(btn)
 end
@@ -15713,6 +15724,7 @@ function addon.profileUI.BuildOperationUI(manager)
     blocker:EnableMouse(true)
     blocker:SetFrameStrata("DIALOG")
     blocker:SetFrameLevel(manager:GetFrameLevel() + 9)
+    addon.windowLayers.Attach(addon, blocker, 29)
     blocker:Hide()
 
     local dialog = CreateFrame(
@@ -15723,6 +15735,7 @@ function addon.profileUI.BuildOperationUI(manager)
     dialog:EnableMouse(true)
     dialog:SetFrameStrata("DIALOG")
     dialog:SetFrameLevel(manager:GetFrameLevel() + 10)
+    addon.windowLayers.Attach(addon, dialog, 30)
     dialog:SetClampedToScreen(true)
 
     local dialogTitle = dialog:CreateFontString(nil, "OVERLAY")
@@ -16118,6 +16131,16 @@ function addon.profileUI.BuildOperationUI(manager)
 
     function ui.ShowDialogBase(title, owner)
         owner = owner or manager
+        if owner == UIParent then
+            _G.AntraktWindowLayers.Detach(addon.settingsUI.frame, dialog)
+            _G.AntraktWindowLayers.Detach(addon.settingsUI.frame, blocker)
+            _G.AntraktWindowLayers.Register(dialog)
+            _G.AntraktWindowLayers.Attach(dialog, blocker, -1)
+        else
+            _G.AntraktWindowLayers.Unregister(dialog)
+            addon.windowLayers.Attach(addon, blocker, 29)
+            addon.windowLayers.Attach(addon, dialog, 30)
+        end
         dialog:SetParent(owner)
         dialog:SetFrameLevel(blocker:GetFrameLevel() + 1)
         dialog:ClearAllPoints()
@@ -17063,6 +17086,7 @@ function addon.profileUI.BuildSettingsUI(owner)
     manager:SetClampedToScreen(true)
     manager:SetFrameStrata("DIALOG")
     manager:SetFrameLevel((owner:GetFrameLevel() or 100) + 20)
+    addon.windowLayers.Attach(addon, manager, 20)
     manager:Hide()
 
     local detailProfile
@@ -17554,8 +17578,9 @@ function addon.settingsUI.dropdownMenu.Show(self, dropdown)
     menu.scroll:ClearAllPoints()
     menu.scroll:SetPoint("TOPLEFT", 6, -6)
     menu.scroll:SetPoint("BOTTOMRIGHT", needsScroll and -26 or -6, 6)
-    menu.frame:SetFrameLevel(owner:GetFrameLevel() + 50)
-    menu.catcher:SetFrameLevel(menu.frame:GetFrameLevel() - 1)
+    self.windowLayers.Attach(self, menu.catcher, 49)
+    self.windowLayers.Attach(self, menu.frame, 50)
+    self.windowLayers.Focus(self)
     menu.content:SetSize(width, #entries * pitch)
     menu.frame:ClearAllPoints()
     menu.frame:SetPoint("TOPLEFT", trigger, "BOTTOMLEFT", 0, -2)
@@ -17831,6 +17856,29 @@ function addon.settingsUI.ApplyFrameSize(self)
     return true
 end
 
+addon.windowLayers = {}
+
+function addon.windowLayers.Register(self)
+    local root = self.settingsUI.frame
+    if not root then return end
+    _G.AntraktWindowLayers.Register(root, function()
+        self.settingsUI.dropdownMenu.Hide(self)
+        self.settingsUI.fontPicker.Hide(self)
+        if self.settingsUI.CloseColorPicker then self.settingsUI.CloseColorPicker() end
+    end)
+end
+
+function addon.windowLayers.Attach(self, frame, offset)
+    if not frame or not self.settingsUI.frame then return end
+    self.windowLayers.Register(self)
+    _G.AntraktWindowLayers.Attach(self.settingsUI.frame, frame, offset)
+end
+
+function addon.windowLayers.Focus(self)
+    self.windowLayers.Register(self)
+    if self.settingsUI.frame then _G.AntraktWindowLayers.Focus(self.settingsUI.frame) end
+end
+
 function addon.settingsUI.BuildShell(self)
     --[[ ===== Frame ===== ]]
     local configFrame = CreateFrame("Frame", "StatsProConfigFrame", UIParent,
@@ -17855,6 +17903,7 @@ function addon.settingsUI.BuildShell(self)
     configFrame:SetScript("OnDragStop", configFrame.StopMovingOrSizing)
     configFrame:SetClampedToScreen(true)
     configFrame:SetFrameStrata("DIALOG")
+    self.windowLayers.Register(self)
     self.profileUI.PushSpecialFrame("StatsProConfigFrame")
 
     configFrame:HookScript("OnShow", function()
@@ -18740,10 +18789,9 @@ function addon.settingsUI.fontPicker.Show(self)
     picker.retryGeneration = picker.retryGeneration + 1
     picker.Populate(self, true)
 
-    local context = self.settingsUI.context
-    local config = context and context.frame
-    picker.frame:SetFrameLevel((config and config:GetFrameLevel() or 100) + 50)
-    picker.catcher:SetFrameLevel(picker.frame:GetFrameLevel() - 1)
+    self.windowLayers.Attach(self, picker.catcher, 49)
+    self.windowLayers.Attach(self, picker.frame, 50)
+    self.windowLayers.Focus(self)
     local dropdown = picker.dropdown
     local button = _G["StatsProFontDropdownButton"] or dropdown.Button
     picker.frame:ClearAllPoints()
@@ -19658,6 +19706,7 @@ function addon:OpenConfigMenu()
         -- the first-open state; later opens are handled by the hook.
         self.panelEditRuntime.SetRequested(true)
         self.settingsUI.buildState = "ready"
+        self.windowLayers.Focus(self)
     end, function(failure)
         local message = type(failure) == "string" and failure or "unknown error"
         return "Settings build failed during " .. buildStage .. ": " .. message

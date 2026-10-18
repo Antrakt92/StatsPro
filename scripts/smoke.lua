@@ -373,8 +373,8 @@ local function makeFrame(name, setFontResult, parent)
         shown = true,
         width = 100,
         height = 20,
-        frameLevel = 1,
-        frameStrata = "MEDIUM",
+        frameLevel = parent and parent:GetFrameLevel() + 1 or 1,
+        frameStrata = parent and parent:GetFrameStrata() or "MEDIUM",
         points = {},
         scripts = {},
         hooks = {},
@@ -562,7 +562,13 @@ local function makeFrame(name, setFontResult, parent)
     end
     function frame:SetFrameStrata(strata) self.frameStrata = strata end
     function frame:GetFrameStrata() return self.frameStrata end
-    function frame:SetFrameLevel(level) self.frameLevel = level end
+    function frame:SetFrameLevel(level)
+        local delta = level - self.frameLevel
+        self.frameLevel = level
+        if self.GetChildren then
+            for _, child in ipairs({ self:GetChildren() }) do child:SetFrameLevel(child:GetFrameLevel() + delta) end
+        end
+    end
     function frame:GetFrameLevel() return self.frameLevel end
     function frame:SetAllPoints(target) self.allPointsTarget = target end
     function frame:SetScrollChild(child) self.scrollChild = child end
@@ -1087,6 +1093,17 @@ local function makeEnv(locale, opts)
 
     env.CreateFrame = function(frameType, name, parent, template)
         local frame = makeFrame(name, opts.setFontResult, parent)
+        if parent then
+            frame.frameLevel = parent:GetFrameLevel() + 1
+            frame.frameStrata = parent:GetFrameStrata()
+        end
+        function frame:GetChildren()
+            local children = {}
+            for _, candidate in ipairs(env.__frames) do
+                if candidate.parent == self then children[#children + 1] = candidate end
+            end
+            return unpack(children)
+        end
         function frame:SetFocus()
             local previous = env.__focusedFrame
             if previous and previous ~= self then
@@ -1160,6 +1177,11 @@ local function makeEnv(locale, opts)
             frame.Button = env[name .. "Button"]
         end
         if template == "UIDropDownMenuTemplate" then
+            frame.Button.parent = frame
+            frame.Button.frameLevel = frame:GetFrameLevel() + 1
+            frame.Button.frameStrata = frame:GetFrameStrata()
+            frame.Button.GetChildren = frame.GetChildren
+            env.__frames[#env.__frames + 1] = frame.Button
             -- The shipped toggle template opens its legacy menu on mouse-down,
             -- before an OnClick replacement can run on release.
             frame.Button:SetScript("OnMouseDown", function(button)
@@ -1189,6 +1211,9 @@ local function makeEnv(locale, opts)
             end
             function scrollBar:GetThumbTexture() return thumb end
             frame.ScrollBar = scrollBar
+            scrollBar.GetChildren = frame.GetChildren
+            up.GetChildren = frame.GetChildren
+            down.GetChildren = frame.GetChildren
             env.__frames[#env.__frames + 1] = scrollBar
             env.__frames[#env.__frames + 1] = up
             env.__frames[#env.__frames + 1] = down
@@ -1319,6 +1344,9 @@ local function loadStatsPro(locale, opts)
         __statsproSmoke = true,
         __testWelcomeEnabled = opts and opts.testWelcomeEnabled == true,
     }
+    local layersChunk = assert(loadfile("AntraktWindowLayers.lua"))
+    setfenv(layersChunk, env)
+    layersChunk()
     if opts and opts.bundledFonts then
         local fontChunk, fontError = loadfile("StatsPro_Fonts.lua")
         if not fontChunk then error(fontError, 0) end

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.curseforge.com/wow/addons/statspro"><strong>Install on CurseForge</strong></a>
+  <a href="https://www.curseforge.com/wow/addons/statspro"><strong>CurseForge</strong></a>
   · <a href="https://addons.wago.io/addons/statspro">Wago Addons</a>
   · <a href="https://github.com/Antrakt92/StatsPro/releases">GitHub Releases</a>
 </p>
@@ -37,8 +37,8 @@ profiles. Archon references are available only in Retail.
 
 ## Getting started
 
-1. Install and enable the StatsPro build for your WoW client.
-2. On a fresh install, preview a Quick Setup preset, then click **Use this setup**.
+1. Type `/ss` or `/statspro` to open Settings.
+2. Preview a Quick Setup preset, then click **Use this setup**.
    Retail offers **Compact**, **DPS** and **Tank**; Forever offers **Compact**,
    **Physical**, **Caster**, **Healer** and **Tank**.
 3. Drag the unlocked panels into place, then lock them in Settings.
@@ -55,22 +55,13 @@ Only fonts compatible with your selected language appear in the list.
 Click the star beside a font to keep it at the top of the list. Favorites are
 shared across profiles and saved between sessions; hover still previews the HUD.
 
-### Choose your download
+### Client versions
 
-- **Retail: Midnight:** install the Retail file through CurseForge or Wago, or
-  choose the Retail archive on [GitHub Releases](https://github.com/Antrakt92/StatsPro/releases/latest).
-- **WoW Forever beta:** open the [Forever beta download](https://github.com/Antrakt92/StatsPro/releases/tag/forever-v1.21.1)
-  and choose `StatsPro-v1.21.1-Forever-beta.zip`. Use a marketplace file only if it
-  is explicitly labelled for Forever.
+[Retail: Midnight](https://github.com/Antrakt92/StatsPro/releases/latest)
+· [WoW Forever beta](https://github.com/Antrakt92/StatsPro/releases/tag/forever-v1.21.1)
 
-Retail and Forever update separately. A newer Retail release may not include a
-Forever archive; the Forever link above stays on its most recent supported build.
-
-For a manual install, extract the archive's `StatsPro` folder into the
-`Interface\AddOns\` directory of the client you will play. Retail uses
-`World of Warcraft\_retail_\Interface\AddOns\`. Forever has its own beta-client
-folder: use that client's AddOns directory. Both builds use the same addon folder
-name, so install one matching build in each client.
+Retail and Forever have separate builds and update independently.
+Classic Era and other Classic branches are unsupported.
 
 ### Quick Setup
 

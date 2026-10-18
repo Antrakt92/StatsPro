@@ -19,11 +19,13 @@ addon.developerLinks = {
     koFiLink = {
         key = "koFiLink",
         label = "Ko-fi",
+        tooltipKey = "Support development",
         url = "https://ko-fi.com/antrakt92",
     },
     contact = {
         key = "contact",
         labelKey = "Contact",
+        tooltipKey = "Report a bug or suggest a feature",
         url = "https://github.com/Antrakt92/StatsPro/issues",
     },
 }
@@ -1791,6 +1793,7 @@ local LABELS_BY_LOCALE = {
         -- Buttons + title:
         ["Close"] = "Close",
         ["Contact"] = "Contact", ["Click to copy the link."] = "Click to copy the link.",
+        ["Support development"] = "Support development", ["Report a bug or suggest a feature"] = "Report a bug or suggest a feature",
         ["Copy the link below (Ctrl+C)."] = "Copy the link below (Ctrl+C).",
         ["Open Settings"] = "Open Settings", ["Settings"] = "Settings",
         ["Profiles & sharing..."] = "Profiles...", ["Profiles & sharing"] = "Profiles & sharing",
@@ -1926,6 +1929,7 @@ local LABELS_BY_LOCALE = {
         -- Buttons + title:
         ["Close"] = "Закрыть",
         ["Contact"] = "Связаться", ["Click to copy the link."] = "Нажмите, чтобы скопировать ссылку.",
+        ["Support development"] = "Поддержать разработку", ["Report a bug or suggest a feature"] = "Сообщить об ошибке или предложить функцию",
         ["Copy the link below (Ctrl+C)."] = "Скопируйте ссылку ниже (Ctrl+C).",
         ["Open Settings"] = "Открыть настройки", ["Settings"] = "Настройки",
         ["Profiles & sharing..."] = "Профили...", ["Profiles & sharing"] = "Профили и общий доступ",
@@ -2055,6 +2059,7 @@ local LABELS_BY_LOCALE = {
         ["All StatsPro data reset to defaults."] = "Alle StatsPro-Daten wurden auf die Standardwerte zurückgesetzt.",
         ["Close"] = "Schließen",
         ["Contact"] = "Kontakt", ["Click to copy the link."] = "Klicken, um den Link zu kopieren.",
+        ["Support development"] = "Entwicklung unterstützen", ["Report a bug or suggest a feature"] = "Fehler melden oder Funktion vorschlagen",
         ["Copy the link below (Ctrl+C)."] = "Kopiere den Link unten (Strg+C).",
         ["Open Settings"] = "Einstellungen öffnen", ["Settings"] = "Einstellungen",
         ["Profiles & sharing..."] = "Profile...", ["Profiles & sharing"] = "Profile und Freigabe",
@@ -2180,6 +2185,7 @@ local LABELS_BY_LOCALE = {
         ["All StatsPro data reset to defaults."] = "Toutes les données StatsPro ont été réinitialisées aux valeurs par défaut.",
         ["Close"] = "Fermer",
         ["Contact"] = "Contact", ["Click to copy the link."] = "Cliquez pour copier le lien.",
+        ["Support development"] = "Soutenir le développement", ["Report a bug or suggest a feature"] = "Signaler un bug ou proposer une fonctionnalité",
         ["Copy the link below (Ctrl+C)."] = "Copiez le lien ci-dessous (Ctrl+C).",
         ["Open Settings"] = "Ouvrir les paramètres", ["Settings"] = "Paramètres",
         ["Profiles & sharing..."] = "Profils...", ["Profiles & sharing"] = "Profils et partage",
@@ -2306,6 +2312,7 @@ local LABELS_BY_LOCALE = {
         ["All StatsPro data reset to defaults."] = "Todos los datos de StatsPro se restablecieron a los valores predeterminados.",
         ["Close"] = "Cerrar",
         ["Contact"] = "Contacto", ["Click to copy the link."] = "Haz clic para copiar el enlace.",
+        ["Support development"] = "Apoyar el desarrollo", ["Report a bug or suggest a feature"] = "Informar de un error o sugerir una función",
         ["Copy the link below (Ctrl+C)."] = "Copia el enlace de abajo (Ctrl+C).",
         ["Open Settings"] = "Abrir ajustes", ["Settings"] = "Ajustes",
         ["Profiles & sharing..."] = "Perfiles...", ["Profiles & sharing"] = "Perfiles y uso compartido",
@@ -2430,6 +2437,7 @@ local LABELS_BY_LOCALE = {
         ["All StatsPro data reset to defaults."] = "Todos los datos de StatsPro se restablecieron a los valores predeterminados.",
         ["Close"] = "Cerrar",
         ["Contact"] = "Contacto", ["Click to copy the link."] = "Haz clic para copiar el enlace.",
+        ["Support development"] = "Apoyar el desarrollo", ["Report a bug or suggest a feature"] = "Reportar un error o sugerir una función",
         ["Copy the link below (Ctrl+C)."] = "Copia el enlace de abajo (Ctrl+C).",
         ["Open Settings"] = "Abrir configuración", ["Settings"] = "Configuración",
         ["Profiles & sharing..."] = "Perfiles...", ["Profiles & sharing"] = "Perfiles y uso compartido",
@@ -2555,6 +2563,7 @@ local LABELS_BY_LOCALE = {
         ["All StatsPro data reset to defaults."] = "Tutti i dati di StatsPro sono stati ripristinati ai valori predefiniti.",
         ["Close"] = "Chiudi",
         ["Contact"] = "Contatti", ["Click to copy the link."] = "Fai clic per copiare il link.",
+        ["Support development"] = "Sostieni lo sviluppo", ["Report a bug or suggest a feature"] = "Segnala un errore o suggerisci una funzione",
         ["Copy the link below (Ctrl+C)."] = "Copia il link qui sotto (Ctrl+C).",
         ["Open Settings"] = "Apri impostazioni", ["Settings"] = "Impostazioni",
         ["Profiles & sharing..."] = "Profili...", ["Profiles & sharing"] = "Profili e condivisione",
@@ -2679,6 +2688,7 @@ local LABELS_BY_LOCALE = {
         ["All StatsPro data reset to defaults."] = "Todos os dados do StatsPro foram redefinidos para os padrões.",
         ["Close"] = "Fechar",
         ["Contact"] = "Contato", ["Click to copy the link."] = "Clique para copiar o link.",
+        ["Support development"] = "Apoiar o desenvolvimento", ["Report a bug or suggest a feature"] = "Relatar um erro ou sugerir uma função",
         ["Copy the link below (Ctrl+C)."] = "Copie o link abaixo (Ctrl+C).",
         ["Open Settings"] = "Abrir configurações", ["Settings"] = "Configurações",
         ["Profiles & sharing..."] = "Perfis...", ["Profiles & sharing"] = "Perfis e compartilhamento",
@@ -2810,6 +2820,7 @@ local LABELS_BY_LOCALE = {
         ["All StatsPro data reset to defaults."] = "모든 StatsPro 데이터를 기본값으로 초기화했습니다.",
         ["Close"] = "닫기",
         ["Contact"] = "문의", ["Click to copy the link."] = "클릭하여 링크를 복사하세요.",
+        ["Support development"] = "개발 후원", ["Report a bug or suggest a feature"] = "버그 신고 또는 기능 제안",
         ["Copy the link below (Ctrl+C)."] = "아래 링크를 복사하세요 (Ctrl+C).",
         ["Open Settings"] = "설정 열기", ["Settings"] = "설정",
         ["Profiles & sharing..."] = "프로필 및 공유...", ["Profiles & sharing"] = "프로필 및 공유",
@@ -2934,6 +2945,7 @@ local LABELS_BY_LOCALE = {
         ["All StatsPro data reset to defaults."] = "所有 StatsPro 数据已重置为默认值。",
         ["Close"] = "关闭",
         ["Contact"] = "联系", ["Click to copy the link."] = "点击复制链接。",
+        ["Support development"] = "支持开发", ["Report a bug or suggest a feature"] = "报告问题或建议新功能",
         ["Copy the link below (Ctrl+C)."] = "复制下方链接（Ctrl+C）。",
         ["Open Settings"] = "打开设置", ["Settings"] = "设置",
         ["Profiles & sharing..."] = "配置与共享...", ["Profiles & sharing"] = "配置与共享",
@@ -3058,6 +3070,7 @@ local LABELS_BY_LOCALE = {
         ["All StatsPro data reset to defaults."] = "所有 StatsPro 資料已重設為預設值。",
         ["Close"] = "關閉",
         ["Contact"] = "聯絡", ["Click to copy the link."] = "點擊複製連結。",
+        ["Support development"] = "支持開發", ["Report a bug or suggest a feature"] = "回報問題或建議新功能",
         ["Copy the link below (Ctrl+C)."] = "複製下方連結（Ctrl+C）。",
         ["Open Settings"] = "開啟設定", ["Settings"] = "設定",
         ["Profiles & sharing..."] = "設定檔與共用...", ["Profiles & sharing"] = "設定檔與共用",
@@ -13842,7 +13855,7 @@ end
 function addon.settingsDesign.DeveloperLinkTooltip(control)
     local link = addon.developerLinks[control.statsProLinkKey]
     if not link then return nil end
-    return link.labelKey and L(link.labelKey) or link.label, L("Click to copy the link.")
+    return L(link.tooltipKey), link.url .. "\n" .. L("Click to copy the link.")
 end
 
 function addon.settingsDesign.CreateDeveloperLinkButton(parent, name, linkKey,

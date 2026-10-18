@@ -16303,9 +16303,9 @@ do
     eq("config.shell.header.kofi_tooltip_owner", shellEnv.GameTooltip:GetOwner(),
         shell.koFiButton)
     eq("config.shell.header.kofi_tooltip_title", shellEnv.GameTooltip.lines[1].left,
-        "Ko-fi")
+        "Support development")
     eq("config.shell.header.kofi_tooltip_detail", shellEnv.GameTooltip.lines[2].left,
-        "Click to copy the link.")
+        "https://ko-fi.com/antrakt92\nClick to copy the link.")
     userInteract("config.shell.header.kofi_leave", shell.koFiButton, "OnLeave")
     eq("config.shell.header.kofi_leave_surface", shell.koFiButton.statsProHover:IsShown(), false)
     near("config.shell.header.kofi_leave_alpha", shell.koFiButton.statsProIcon:GetAlpha(), 0.76)
@@ -16329,9 +16329,9 @@ do
     eq("config.shell.header.contact_tooltip_owner", shellEnv.GameTooltip:GetOwner(),
         shell.contactButton)
     eq("config.shell.header.contact_tooltip_title", shellEnv.GameTooltip.lines[1].left,
-        "Contact")
+        "Report a bug or suggest a feature")
     eq("config.shell.header.contact_tooltip_detail", shellEnv.GameTooltip.lines[2].left,
-        "Click to copy the link.")
+        "https://github.com/Antrakt92/StatsPro/issues\nClick to copy the link.")
     userInteract("config.shell.header.contact_leave", shell.contactButton, "OnLeave")
     userInteract("config.shell.header.contact_click", shell.contactButton, "OnClick")
     linkPopup = exists("config.shell.header.contact_popup", shellEnv.__lastStaticPopup)

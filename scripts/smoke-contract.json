@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "totalAssertions": 44206,
+  "totalAssertions": 44294,
   "suites": [
     {
       "name": "core-panel-persistence",
@@ -24,8 +24,8 @@
     },
     {
       "name": "settings-compatibility",
-      "assertions": 23157,
-      "fingerprint": "5316b74b"
+      "assertions": 23245,
+      "fingerprint": "0b84f36b"
     },
     {
       "name": "profile-context",

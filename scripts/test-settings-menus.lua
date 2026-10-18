@@ -19,6 +19,18 @@ for _, forever in ipairs({ false, true }) do
     })
     env.__fireEvent('PLAYER_ENTERING_WORLD')
     addon:OpenConfigMenu()
+    for _, link in ipairs({
+        { env.StatsProKoFiLinkButton, 'Support development', 'https://ko-fi.com/antrakt92' },
+        { env.StatsProContactLinkButton, 'Report a bug or suggest a feature',
+            'https://github.com/Antrakt92/StatsPro/issues' },
+    }) do
+        fire(link[1], 'OnEnter')
+        check(env.GameTooltip.lines[1].left == link[2], 'header tooltip explains its purpose')
+        check(env.GameTooltip.lines[2].left:find(link[3], 1, true), 'header tooltip shows the exact destination')
+        check(env.GameTooltip.lines[2].left:find('Click to copy the link.', 1, true), 'header tooltip explains the copy action')
+        fire(link[1], 'OnLeave')
+        check(not env.GameTooltip:IsShown(), 'leaving header links dismisses their tooltip')
+    end
     local menu = addon.settingsUI.dropdownMenu
     check(menu ~= nil, 'Settings use addon-owned menus')
     local function clickField(dropdown)

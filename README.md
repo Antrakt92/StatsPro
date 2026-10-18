@@ -302,6 +302,7 @@ account-wide setup.
 
 </details>
 
+Retail and WoW Forever beta use the same commands and aliases.
 All commands also work with `/statspro`. Use it if `/ss` conflicts with another
 command. To control visibility with a keybind, put `/ss toggle` in a macro and
 bind it to a key.

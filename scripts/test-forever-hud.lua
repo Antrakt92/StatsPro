@@ -60,6 +60,34 @@ check(test.profileTransfer.parse(export:gsub("^SPF1:", "SPP1:")) == nil, "Retail
 local retailEnv, retailAddon, retailTest = fixtures.loadStatsPro("enUS")
 check(retailTest.profileTransfer.parse(export) == nil, "Forever profile rejected by Retail")
 check(retailEnv ~= nil, "Retail remains loadable")
+for _, forever in ipairs({ false, true }) do
+    local flavor = forever and "Forever" or "Retail"
+    local commandEnv = fixtures.loadStatsPro("enUS", { forever = forever })
+    commandEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    check(commandEnv.SLASH_STATSPRO1 == "/ss", flavor .. " registers /ss")
+    check(commandEnv.SLASH_STATSPRO2 == "/statspro", flavor .. " registers /statspro")
+    for _, alias in ipairs({ "/ss", "/statspro" }) do
+        local handler
+        for key, registeredAlias in pairs(commandEnv) do
+            if registeredAlias == alias and type(key) == "string" then
+                local command = key:match("^SLASH_(.-)%d+$")
+                if command then handler = commandEnv.SlashCmdList[command] end
+            end
+        end
+        check(type(handler) == "function", flavor .. " resolves " .. alias)
+        handler("hide")
+        check(not commandEnv.StatsProFrame:IsShown(), flavor .. " " .. alias .. " hide")
+        handler("show")
+        check(commandEnv.StatsProFrame:IsShown(), flavor .. " " .. alias .. " show")
+        handler("toggle")
+        check(not commandEnv.StatsProFrame:IsShown(), flavor .. " " .. alias .. " toggle off")
+        handler("toggle")
+        check(commandEnv.StatsProFrame:IsShown(), flavor .. " " .. alias .. " toggle on")
+        handler("")
+        check(commandEnv.StatsProConfigFrame:IsShown(), flavor .. " " .. alias .. " opens Settings")
+        commandEnv.StatsProConfigFrame:Hide()
+    end
+end
 for _, id in ipairs(test.hudPresets.order()) do
     check(test.hudPresets.startPreview(id), "preset preview " .. id)
     check(test.hudPresets.applyPreview(), "preset apply " .. id)

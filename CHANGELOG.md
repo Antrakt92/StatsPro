@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.21.1 - 18-Oct-2026 — Self-test report fix
+
+- Show the self-test report when Settings and Profiles are closed.
+- Prevent an invisible report window from blocking mouse input.
+
 ## 1.21.0 - 17-Oct-2026 — Font favorites and compact Settings
 
 - Expand the included collection to 46 fonts, with Cyrillic, Chinese, Japanese and Korean styles.

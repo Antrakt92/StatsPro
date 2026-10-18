@@ -59,8 +59,8 @@ shared across profiles and saved between sessions; hover still previews the HUD.
 
 - **Retail: Midnight:** install the Retail file through CurseForge or Wago, or
   choose the Retail archive on [GitHub Releases](https://github.com/Antrakt92/StatsPro/releases/latest).
-- **WoW Forever beta:** open the [Forever beta download](https://github.com/Antrakt92/StatsPro/releases/tag/forever-v1.21.0)
-  and choose `StatsPro-v1.21.0-Forever-beta.zip`. Use a marketplace file only if it
+- **WoW Forever beta:** open the [Forever beta download](https://github.com/Antrakt92/StatsPro/releases/tag/forever-v1.21.1)
+  and choose `StatsPro-v1.21.1-Forever-beta.zip`. Use a marketplace file only if it
   is explicitly labelled for Forever.
 
 Retail and Forever update separately. A newer Retail release may not include a

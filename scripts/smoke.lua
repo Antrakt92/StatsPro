@@ -16303,7 +16303,7 @@ do
     eq("config.shell.header.kofi_tooltip_owner", shellEnv.GameTooltip:GetOwner(),
         shell.koFiButton)
     eq("config.shell.header.kofi_tooltip_title", shellEnv.GameTooltip.lines[1].left,
-        "Support development")
+        "Developer page")
     eq("config.shell.header.kofi_tooltip_detail", shellEnv.GameTooltip.lines[2].left,
         "https://ko-fi.com/antrakt92\nClick to copy the link.")
     userInteract("config.shell.header.kofi_leave", shell.koFiButton, "OnLeave")

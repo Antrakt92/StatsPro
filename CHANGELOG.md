@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.21.2 - 18-Oct-2026 — Archon targets and window fixes
+## 1.21.3 - 18-Oct-2026 — Archon targets and window fixes
 
 - Refresh bundled M+ and raid targets from Archon data checked on 18 October.
 - Keep Settings and popups in the correct order when switching between addons.

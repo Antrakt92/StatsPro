@@ -10,7 +10,8 @@ param(
     [int]$ArchonMaxAgeDays = 3,
     [switch]$EnforceToolLocks,
     [switch]$RequireExactPackagerProjectVersion,
-    [switch]$SelfTest
+    [switch]$SelfTest,
+    [switch]$SourceSurfaceOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -359,7 +360,7 @@ function Save-StatsProPackageManifest {
 }
 
 function Assert-StatsProInGameSolicitationBoundary {
-    param([string]$Root)
+    param([string]$Root, [System.IO.FileInfo[]]$Files)
 
     if (-not (Test-Path -LiteralPath $Root -PathType Container)) {
         throw "Package root not found: $Root"
@@ -373,8 +374,10 @@ function Assert-StatsProInGameSolicitationBoundary {
         "Donate" = "\bdonat(?:e|ion|ions)\b"
         "Support-development" = "support\s+(?:development|the\s+developer)"
     }
-    $runtimeFiles = @(Get-ChildItem -LiteralPath $Root -Recurse -File |
-        Where-Object { $_.Extension -in ".lua", ".toc" })
+    $runtimeFiles = if ($PSBoundParameters.ContainsKey('Files')) { @($Files) } else {
+        @(Get-ChildItem -LiteralPath $Root -Recurse -File |
+            Where-Object { $_.Extension -in ".lua", ".toc" })
+    }
     $approvedKoFiLabel = 'label = "Ko-fi"'
     $approvedKoFiUrl = 'url = "https://ko-fi.com/antrakt92"'
     foreach ($file in $runtimeFiles) {
@@ -398,6 +401,30 @@ function Assert-StatsProInGameSolicitationBoundary {
             }
         }
     }
+}
+
+function Assert-StatsProSourceSurfaceOptions {
+    param([System.Collections.IDictionary]$Options)
+
+    foreach ($name in $Options.Keys) {
+        if ($name -notin @('SourceSurfaceOnly', 'SourceRoot')) {
+            throw "-SourceSurfaceOnly cannot be combined with -$name."
+        }
+    }
+}
+
+function Assert-StatsProSourceSurface {
+    param([string]$Root)
+
+    $resolvedRoot = (Resolve-Path -LiteralPath $Root).Path
+    $metadataCheck = Join-Path $resolvedRoot 'scripts/check-metadata.ps1'
+    $refOutput = @(& $metadataCheck -ListRuntimeLuaRefs)
+    if (-not $?) { throw 'Runtime metadata validation failed for source surface.' }
+    $refs = ($refOutput -join "`n") | ConvertFrom-Json
+    $paths = @((Join-Path $resolvedRoot 'StatsPro.toc')) + @($refs | ForEach-Object { $_.FullPath })
+    if ($paths.Count -lt 2) { throw 'No runtime references found for source surface validation.' }
+    $files = @($paths | ForEach-Object { Get-Item -LiteralPath $_ -ErrorAction Stop })
+    Assert-StatsProInGameSolicitationBoundary -Root $resolvedRoot -Files $files
 }
 
 function Invoke-StatsProPackageArtifactCheck {
@@ -441,6 +468,14 @@ function Invoke-StatsProPackageArtifactCheck {
 
 function Invoke-SelfTest {
     Assert-StatsProReleaseTagContractSelfTest
+    Assert-StatsProSourceSurfaceOptions -Options @{ SourceSurfaceOnly = $true; SourceRoot = 'fixture' }
+    foreach ($option in @('ArchivePath', 'ExpectedTag', 'PackagerProjectVersion', 'PackageRoot', 'ReleaseRoot',
+            'ManifestPath', 'CompareManifestPath', 'ArchonMaxAgeDays', 'EnforceToolLocks',
+            'RequireExactPackagerProjectVersion', 'SelfTest')) {
+        Assert-ThrowsMatch "source-only rejects $option" {
+            Assert-StatsProSourceSurfaceOptions -Options @{ SourceSurfaceOnly = $true; $option = 'fixture' }
+        } 'cannot be combined'
+    }
     $sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
     $tag = Get-StatsProSourceVersionTag -Root $sourceRoot
     Assert-StatsProReleaseTag -Value $tag
@@ -597,6 +632,12 @@ steps:
         ) -join "`n"
         Set-Content -LiteralPath $runtimePath -Value $approvedKoFiSample -Encoding UTF8
         Assert-StatsProInGameSolicitationBoundary -Root $packageRoot
+        Set-Content -LiteralPath $runtimePath -Value ($approvedKoFiSample + "`n" + 'local tooltipKey = "Support development"') -Encoding UTF8
+        Assert-ThrowsMatch "approved link does not exempt solicitation tooltip" {
+            Assert-StatsProInGameSolicitationBoundary -Root $packageRoot -Files @(Get-Item -LiteralPath $runtimePath)
+        } "forbidden solicitation token 'Support-development'"
+        Set-Content -LiteralPath $runtimePath -Value ($approvedKoFiSample + "`n" + 'local tooltipKey = "Developer page"') -Encoding UTF8
+        Assert-StatsProInGameSolicitationBoundary -Root $packageRoot -Files @(Get-Item -LiteralPath $runtimePath)
         Set-Content -LiteralPath $runtimePath -Value ($approvedKoFiSample + "`n" + 'local extra = "Ko-fi"') -Encoding UTF8
         Assert-ThrowsMatch "additional Ko-fi copy rejected" {
             Assert-StatsProInGameSolicitationBoundary -Root $packageRoot
@@ -628,6 +669,9 @@ steps:
         Assert-ThrowsMatch "TOC donation platform rejected" {
             Assert-StatsProInGameSolicitationBoundary -Root $packageRoot
         } "forbidden solicitation token 'Ko-fi'"
+        Assert-ThrowsMatch "selected source TOC donation platform rejected" {
+            Assert-StatsProInGameSolicitationBoundary -Root $packageRoot -Files @(Get-Item -LiteralPath $tocPath)
+        } "forbidden solicitation token 'Ko-fi'"
         Remove-Item -LiteralPath $tocPath
 
         $releaseRoot = Join-Path $tempDir "release"
@@ -651,6 +695,14 @@ steps:
         }
     }
     Write-Host "Package dry-run self-test passed."
+}
+
+if ($SourceSurfaceOnly) {
+    Assert-PowerShell7OrNewer
+    Assert-StatsProSourceSurfaceOptions -Options $PSBoundParameters
+    Assert-StatsProSourceSurface -Root $SourceRoot
+    Write-Host 'StatsPro shipped source surface checks passed.'
+    return
 }
 
 if ($SelfTest) {

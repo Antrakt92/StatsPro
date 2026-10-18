@@ -1109,6 +1109,11 @@ if ($EnforceToolLocks) {
 
 & $MetadataCheck
 
+if ($Release) {
+    Write-Host "== Shipped source surface =="
+    & (Join-Path $PSScriptRoot "check-package-dry-run.ps1") -SourceSurfaceOnly -SourceRoot $RepoRoot
+}
+
 $RuntimeLuaRefs = @(Get-RuntimeLuaRefs -MetadataCheckPath $MetadataCheck)
 
 Write-Host "== Flavor release policy =="

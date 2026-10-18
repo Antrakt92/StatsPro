@@ -20,7 +20,7 @@ for _, forever in ipairs({ false, true }) do
     env.__fireEvent('PLAYER_ENTERING_WORLD')
     addon:OpenConfigMenu()
     for _, link in ipairs({
-        { env.StatsProKoFiLinkButton, 'Support development', 'https://ko-fi.com/antrakt92' },
+        { env.StatsProKoFiLinkButton, 'Developer page', 'https://ko-fi.com/antrakt92' },
         { env.StatsProContactLinkButton, 'Report a bug or suggest a feature',
             'https://github.com/Antrakt92/StatsPro/issues' },
     }) do
@@ -247,5 +247,19 @@ for _, forever in ipairs({ false, true }) do
     check(dialog:GetFrameLevel() > env.StatsProProfileOperationBlocker:GetFrameLevel(),
         'standalone report stays above its own blocker')
     addon.profileUI.CloseOperationDialog()
+end
+for locale, title in pairs({
+    enUS = 'Developer page', ruRU = 'Страница разработчика', deDE = 'Entwicklerseite',
+    frFR = 'Page du développeur', esES = 'Página del desarrollador', esMX = 'Página del desarrollador',
+    itIT = 'Pagina dello sviluppatore', ptBR = 'Página do desenvolvedor', koKR = '개발자 페이지',
+    zhCN = '开发者页面', zhTW = '開發者頁面',
+}) do
+    local env, addon = fixtures.loadStatsPro(locale, { statsProArchonTargets = archon.StatsProArchonTargets })
+    env.__fireEvent('PLAYER_ENTERING_WORLD')
+    addon:OpenConfigMenu()
+    fire(env.StatsProKoFiLinkButton, 'OnEnter')
+    check(env.GameTooltip.lines[1].left == title, locale .. ' uses a neutral localized destination title')
+    check(env.GameTooltip.lines[2].left:find('https://ko-fi.com/antrakt92', 1, true),
+        locale .. ' keeps the exact approved destination')
 end
 print('Settings menus: ' .. checks .. ' checks passed')

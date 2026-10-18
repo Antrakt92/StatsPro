@@ -539,6 +539,7 @@ local function makeFrame(name, setFontResult, parent)
         return true
     end
     function frame:GetParent() return self.parent end
+    function frame:SetParent(parent) self.parent = parent end
     function frame:Enable()
         self.enabled = true
         runFrameHandlers(self, "OnEnable")
@@ -6181,13 +6182,36 @@ do
     fireEvent("selftest.dialog.pew", dlgEnv, "PLAYER_ENTERING_WORLD")
     dlgAddon:OpenConfigMenu()
     exists("selftest.dialog.editbox", dlgEnv.StatsProProfileTransferEditBox)
+    dlgEnv.StatsProConfigFrame:Hide()
+    eq("selftest.dialog.manager_hidden", dlgAddon.profileUI.manager:IsVisible(), false)
     local dialogOK, dialogShown = pcall(
         dlgAddon.profileUI.ShowSelfTestExport, "SPS1:1\nrelease=1.16.23\n", "selftest summary")
     check("selftest.dialog.open_call", dialogOK, dialogShown)
     eq("selftest.dialog.open_shown", dialogShown, true)
+    eq("selftest.dialog.actually_visible", dlgAddon.profileUI.operationDialog:IsVisible(), true)
+    check("selftest.dialog.above_mouse_blocker",
+        dlgAddon.profileUI.operationDialog:GetFrameLevel()
+            > dlgEnv.StatsProProfileOperationBlocker:GetFrameLevel())
     eq("selftest.dialog.editbox_text",
         dlgEnv.StatsProProfileTransferEditBox:GetText(), "SPS1:1\nrelease=1.16.23\n")
     eq("selftest.dialog.state_kind", dlgAddon.profileUI.transferState.kind, "selftest")
+    dlgAddon.profileUI.CloseOperationDialog()
+    eq("selftest.dialog.close_releases_mouse", dlgEnv.StatsProProfileOperationBlocker:IsShown(), false)
+    dlgAddon.profileUI.manager:Show()
+    dlgAddon.profileUI.ShowDialogBase("Profile operation")
+    eq("selftest.dialog.profile_parent_restored",
+        dlgAddon.profileUI.operationDialog:GetParent(), dlgAddon.profileUI.manager)
+    dlgAddon.profileUI.CloseOperationDialog()
+    dlgAddon.selfTest.BuildPayload = function() return "SPS1:1\n" end
+    dlgAddon.profileUI.ShowSelfTestExport = function()
+        dlgAddon.profileUI.ShowDialogBase("Interrupted report", dlgEnv.UIParent)
+        error("synthetic report setup failure")
+    end
+    eq("selftest.dialog.partial_failure_fallback", dlgAddon.selfTest.ShowWindow(), true)
+    eq("selftest.dialog.partial_failure_releases_mouse",
+        dlgEnv.StatsProProfileOperationBlocker:IsShown(), false)
+    eq("selftest.dialog.partial_failure_closes_dialog",
+        dlgAddon.profileUI.operationDialog:IsShown(), false)
 end
 
 do

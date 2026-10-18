@@ -16116,7 +16116,12 @@ function addon.profileUI.BuildOperationUI(manager)
         blocker:Hide()
     end
 
-    function ui.ShowDialogBase(title)
+    function ui.ShowDialogBase(title, owner)
+        owner = owner or manager
+        dialog:SetParent(owner)
+        dialog:SetFrameLevel(blocker:GetFrameLevel() + 1)
+        dialog:ClearAllPoints()
+        dialog:SetPoint("CENTER", owner, "CENTER", 0, 0)
         dialogTitle:SetText(title)
         dialogMessage:SetText("")
         dialogMessage:Show()
@@ -16245,7 +16250,9 @@ function addon.profileUI.BuildOperationUI(manager)
 
     function ui.ShowSelfTestExport(payloadText, summaryText)
         if ui.transferEditBox == nil then return false end
-        ui.ShowDialogBase("StatsPro Self-Test")
+        -- WHY: diagnostics finish with Profiles closed; its hidden ancestry would
+        -- hide the report while the UIParent blocker still consumes every click.
+        ui.ShowDialogBase("StatsPro Self-Test", UIParent)
         ui.pendingAction = {
             mode = "transfer", kind = "selftest-note",
         }
@@ -16256,6 +16263,10 @@ function addon.profileUI.BuildOperationUI(manager)
             selectText = true,
         }
         ui.RefreshTransferDialog()
+        if not dialog:IsVisible() then
+            ui.CloseOperationDialog()
+            return false
+        end
         return true
     end
 
@@ -21822,6 +21833,10 @@ function addon.selfTest.ShowWindow()
         if ok and shown then
             PrintMsg("selftest: copy window opened. Select the text, then press Ctrl+C.")
             return true
+        end
+        -- A partially opened dialog must release its mouse blocker before fallback.
+        if type(profileUI.CloseOperationDialog) == "function" then
+            pcall(profileUI.CloseOperationDialog)
         end
     end
     addon.selfTest.pendingText = payload

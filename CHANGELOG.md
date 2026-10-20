@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.21.5 - 20-Oct-2026 — Archon target refresh
+
+- Refresh bundled M+ and raid targets from Archon data checked on 20 October.
+
 ## 1.21.4 - 19-Oct-2026 — Archon target refresh
 
 - Refresh bundled M+ and raid targets from Archon data checked on 19 October.

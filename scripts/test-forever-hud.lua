@@ -255,6 +255,8 @@ check(spellState == 0 and spellValue == 5, "selftest probes Forever spell crit")
 settings.showSpellCrit, settings.showOffensive, settings.showSpirit = true, true, false
 test.cacheSettings()
 addon.selfTest.CaptureEnv()
+check(addon.selfTest.env.release == test.addonVersion(),
+    "Forever selftest identifies its own build rather than the Retail release")
 local observedKeys = {}
 for _, key in ipairs(addon.selfTest.rowKeys) do observedKeys[key] = true end
 check(observedKeys.SpellCrit and not observedKeys.Spirit and not observedKeys.mastery,
@@ -262,6 +264,8 @@ check(observedKeys.SpellCrit and not observedKeys.Spirit and not observedKeys.ma
 addon.selfTest.TakeSample(false, false)
 addon.selfTest.BuildReport()
 local diagnostic = addon.selfTest.BuildPayload()
+check(diagnostic:find("\nrelease=" .. test.addonVersion() .. "\n", 1, true),
+    "copied Forever diagnostic retains the flavor build version")
 check(diagnostic:find("flavor=forever", 1, true) and not diagnostic:find("archon=", 1, true),
     "copied diagnostic includes flavor and excludes Archon")
 restricted = true

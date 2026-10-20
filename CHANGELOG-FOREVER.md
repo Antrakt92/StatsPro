@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.21.2 - 20-Oct-2026 — Window and diagnostic fixes
+
+- Keep Settings, Profiles, dropdowns and color pickers in the correct window order when switching between addons.
+- Clarify where support and feedback links lead.
+- Report the Forever build version in self-test reports instead of the Retail version.
+
 ## 1.21.1 - 18-Oct-2026 — Self-test report fix
 
 - Show the self-test report when Settings and Profiles are closed.

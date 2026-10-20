@@ -21319,7 +21319,7 @@ function addon.selfTest.CaptureEnv()
             end
         end
     end
-    out.release = CURRENT_RELEASE
+    out.release = addon.forever.enabled and ADDON_VERSION or CURRENT_RELEASE
     local buildFn = _G.GetBuildInfo
     if type(buildFn) == "function" then
         local ok, version, build = pcall(buildFn)

@@ -58,7 +58,7 @@ shared across profiles and saved between sessions; hover still previews the HUD.
 ### Client versions
 
 [Retail: Midnight](https://github.com/Antrakt92/StatsPro/releases/latest)
-· [WoW Forever beta](https://github.com/Antrakt92/StatsPro/releases/tag/forever-v1.21.1)
+· [WoW Forever beta](https://github.com/Antrakt92/StatsPro/releases/tag/forever-v1.21.2)
 
 Retail and Forever have separate builds and update independently.
 Classic Era and other Classic branches are unsupported.

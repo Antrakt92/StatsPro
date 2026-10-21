@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.21.6 - 21-Oct-2026 — Archon target refresh
+
+- Refresh bundled M+ and raid targets from Archon data checked on 21 October.
+- Let derivative authors choose their positive CurseForge reward share, with no fixed minimum.
+
 ## 1.21.5 - 20-Oct-2026 — Archon target refresh
 
 - Refresh bundled M+ and raid targets from Archon data checked on 20 October.

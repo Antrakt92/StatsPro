@@ -1,6 +1,37 @@
 local fixtures = assert(loadfile('scripts/smoke.lua'))('fixtures')
 local archon = {}
 setfenv(assert(loadfile('StatsPro_ArchonTargets.lua')), archon)()
+-- Menu behavior uses shipped profile metadata, but deterministic player targets:
+-- a future source outage must not silently change this UI fixture's coverage.
+local function menuSnapshot()
+    local snapshot = { schemaVersion = 6, source = 'archon', snapshots = {} }
+    local paths = {
+        mythicPlusCurrent = 'mythic-plus/overview/10/all-dungeons/this-week',
+        mythicPlusHighKeys = 'mythic-plus/overview/high-keys/all-dungeons/this-week',
+        raidNormal = 'raid/overview/normal/all-bosses',
+        raidHeroic = 'raid/overview/heroic/all-bosses',
+        raidMythic = 'raid/overview/mythic/all-bosses',
+    }
+    for key, profile in pairs(archon.StatsProArchonTargets.snapshots) do
+        local copy = {}
+        for field, value in pairs(profile) do
+            if field ~= 'specs' then copy[field] = value end
+        end
+        copy.specs = { MAGE = {}, PALADIN = {} }
+        for _, player in ipairs({
+            { 'MAGE', 'mage', 'frost' }, { 'PALADIN', 'paladin', 'protection' },
+            { 'PALADIN', 'paladin', 'retribution' },
+        }) do
+            copy.specs[player[1]][player[3]] = {
+                sourceUrl = 'https://www.archon.gg/wow/builds/' .. player[3] .. '/' .. player[2] .. '/' .. paths[key],
+                targets = { crit = 100, haste = 200, mastery = 300, versatility = 400 },
+                order = { 'crit', 'haste', 'mastery', 'versatility' },
+            }
+        end
+        snapshot.snapshots[key] = copy
+    end
+    return snapshot
+end
 local checks = 0
 local function check(ok, message)
     checks = checks + 1
@@ -14,7 +45,8 @@ for _, forever in ipairs({ false, true }) do
     local combat = false
     local env, addon, test = fixtures.loadStatsPro('enUS', {
         forever = forever, bundledFonts = true, isKnownFontFile = function() return true end,
-        statsProArchonTargets = archon.StatsProArchonTargets,
+        unitClassToken = 'MAGE', specIndex = 1, specID = 64,
+        statsProArchonTargets = menuSnapshot(),
         inCombatLockdown = function() return combat end,
     })
     env.__fireEvent('PLAYER_ENTERING_WORLD')
@@ -175,6 +207,53 @@ for _, forever in ipairs({ false, true }) do
     menu.Show(addon, language)
     addon.settingsUI.context.frame:Hide()
     check(not menu.frame:IsShown() and not menu.catcher:IsShown(), 'Settings teardown leaves no orphan popup')
+end
+-- A selected raid difficulty can disappear for one specialization while the
+-- same menu continues to offer the other difficulties and specializations.
+do
+    local snapshot = menuSnapshot()
+    for _, key in ipairs({ 'raidNormal', 'raidHeroic' }) do
+        snapshot.snapshots[key].specs.PALADIN.protection = {
+            unavailable = 'archon-error-500',
+            sourceUrl = 'https://www.archon.gg/wow/builds/protection/paladin/raid/overview/'
+                .. (key == 'raidNormal' and 'normal' or 'heroic') .. '/all-bosses',
+        }
+    end
+    local specID = 66
+    local env, addon, test = fixtures.loadStatsPro('enUS', {
+        unitClassToken = 'PALADIN', specIndex = 1,
+        getSpecializationInfo = function() return specID end,
+        statsProDB = { targetSnapshot = 'raidNormal' }, statsProArchonTargets = snapshot,
+    })
+    env.__fireEvent('PLAYER_ENTERING_WORLD')
+    addon:OpenConfigMenu()
+    local dropdown = env.StatsProTargetSnapshotDropdown
+    local menu = addon.settingsUI.dropdownMenu
+    check(menu.Show(addon, dropdown), 'unavailable raid choice still opens the other available target options')
+    check(test.cachedTargetSnapshot() == 'raidNormal', 'opening target menu does not replace the unavailable saved difficulty')
+    local current
+    for _, row in ipairs(menu.buttons) do
+        if row.info then
+            check(row.info.value ~= 'raidNormal' and row.info.value ~= 'raidHeroic',
+                'unavailable Normal and Heroic choices are absent from owned menu')
+            if row.info.value == 'mythicPlusCurrent' then current = row end
+        end
+    end
+    check(current ~= nil, 'available Mythic Plus target remains selectable')
+    fire(current, 'OnClick')
+    check(test.getDB('targetSnapshot') == 'mythicPlusCurrent', 'remaining option commits its own difficulty')
+    check(not menu.frame:IsShown(), 'remaining option closes the target menu normally')
+    specID = 70
+    env.__fireEvent('PLAYER_SPECIALIZATION_CHANGED', 'player')
+    check(menu.Show(addon, dropdown), 'target menu reopens after specialization change')
+    local normal, heroic
+    for _, row in ipairs(menu.buttons) do
+        if row.info and row.info.value == 'raidNormal' then normal = row end
+        if row.info and row.info.value == 'raidHeroic' then heroic = row end
+    end
+    check(normal ~= nil and heroic ~= nil, 'available raid difficulties return for another specialization')
+    fire(normal, 'OnClick')
+    check(test.getDB('targetSnapshot') == 'raidNormal', 'restored difficulty can be selected')
 end
 -- Distinct addon windows share strata; every control in the focused family
 -- must clear the other family's highest child, not just its root panel.

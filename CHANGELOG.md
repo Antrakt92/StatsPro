@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.22.0 - 22-Oct-2026 — Available raid targets
+
+- Hide unavailable Normal and Heroic targets for affected specializations without reusing old ratings or another difficulty.
+- Refresh available M+ and raid targets from Archon data checked on 22 October.
+
 ## 1.21.6 - 21-Oct-2026 — Archon target refresh
 
 - Refresh bundled M+ and raid targets from Archon data checked on 21 October.

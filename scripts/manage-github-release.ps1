@@ -1026,10 +1026,17 @@ function Invoke-NativeCaptureSelfTest {
         $floodScript = Join-Path $fixtureRoot "flood.ps1"
         [System.IO.File]::WriteAllText($floodScript, @'
 param([string]$Value)
-for ($index = 0; $index -lt 6000; $index++) {
-    [Console]::Out.WriteLine("stdout-{0:D4}-xxxxxxxxxxxxxxxx" -f $index)
-    [Console]::Error.WriteLine("stderr-{0:D4}-yyyyyyyyyyyyyyyy" -f $index)
+Add-Type -TypeDefinition @"
+public static class StatsProNativeFloodFixture {
+    public static void WriteLines() {
+        for (int index = 0; index < 6000; index++) {
+            System.Console.Out.WriteLine("stdout-{0:D4}-xxxxxxxxxxxxxxxx", index);
+            System.Console.Error.WriteLine("stderr-{0:D4}-yyyyyyyyyyyyyyyy", index);
+        }
+    }
 }
+"@ -Language CSharp -ErrorAction Stop
+[StatsProNativeFloodFixture]::WriteLines()
 [Console]::Out.WriteLine("cwd:" + [Environment]::CurrentDirectory)
 [Console]::Out.WriteLine("argument:$Value")
 exit 7

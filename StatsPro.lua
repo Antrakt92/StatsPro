@@ -1125,15 +1125,33 @@ function addon.archonTargets.GetSnapshotDetail(snapshotKey, snapshot)
     return detail
 end
 
+function addon.archonTargets.IsSnapshotAvailableForCurrentSpec(snapshotKey, snapshot, root)
+    if root.schemaVersion ~= 6 then return true end
+    local classToken = addon.archonTargets.GetCurrentClassToken()
+    local specKey = addon.archonTargets.GetCurrentSpecKey()
+    if not classToken or not specKey then return false end
+    local classes = type(snapshot.specs) == "table" and snapshot.specs or nil
+    local class = classes and classes[classToken]
+    local spec = type(class) == "table" and class[specKey] or nil
+    if spec == nil and snapshotKey == "raidMythic" then
+        local heroic = root.snapshots.raidHeroic
+        classes = type(heroic) == "table" and heroic.specs or nil
+        class = type(classes) == "table" and classes[classToken] or nil
+        spec = type(class) == "table" and class[specKey] or nil
+    end
+    return type(spec) == "table" and spec.unavailable == nil and type(spec.targets) == "table"
+end
+
 function addon.archonTargets.GetAvailableSnapshotOptions()
     if addon.forever.enabled then return {} end
     local root = _G.StatsProArchonTargets
     local options = {}
-    if type(root) == "table" and (root.schemaVersion == 4 or root.schemaVersion == 5)
+    if type(root) == "table" and (root.schemaVersion == 4 or root.schemaVersion == 5 or root.schemaVersion == 6)
         and type(root.snapshots) == "table" then
         for _, option in ipairs(addon.archonTargets.snapshotOptions) do
             local snapshot = root.snapshots[option.value]
-            if type(snapshot) == "table" then
+            if type(snapshot) == "table"
+                and addon.archonTargets.IsSnapshotAvailableForCurrentSpec(option.value, snapshot, root) then
                 options[#options + 1] = {
                     value = option.value,
                     label = option.label,
@@ -1164,6 +1182,11 @@ end
 
 function addon.archonTargets.ResolveAvailableSnapshotKey(value)
     local requested = addon.archonTargets.NormalizeSnapshotKey(value)
+    local root = _G.StatsProArchonTargets
+    -- Keep an unavailable selected difficulty inert; never substitute another
+    -- profile when a player's specialization changes or a saved choice returns.
+    if type(root) == "table" and root.schemaVersion == 6 and type(root.snapshots) == "table"
+        and type(root.snapshots[requested]) == "table" then return requested end
     local available = {}
     for _, option in ipairs(addon.archonTargets.GetAvailableSnapshotOptions()) do
         available[option.value] = true
@@ -1196,7 +1219,7 @@ function addon.archonTargets.GetRootSnapshot(snapshotKey)
     local root = _G.StatsProArchonTargets
     if type(root) ~= "table" then return nil end
     local normalizedKey = addon.archonTargets.ResolveAvailableSnapshotKey(snapshotKey)
-    if root.schemaVersion == 3 or root.schemaVersion == 4 or root.schemaVersion == 5 then
+    if root.schemaVersion == 3 or root.schemaVersion == 4 or root.schemaVersion == 5 or root.schemaVersion == 6 then
         local snapshots = root.snapshots
         local snapshotRoot = type(snapshots) == "table" and snapshots[normalizedKey] or nil
         if type(snapshotRoot) ~= "table" then return nil end
@@ -1229,18 +1252,20 @@ function addon.archonTargets.GetSnapshot(classToken, specKey, snapshotKey)
     local specData = type(classData) == "table" and classData[specKey] or nil
     if type(specData) ~= "table" then
         local rootSnapshots = type(root) == "table" and root.snapshots or nil
-        if type(root) == "table" and root.schemaVersion == 5 and normalizedKey == "raidMythic"
+        if type(root) == "table" and (root.schemaVersion == 5 or root.schemaVersion == 6) and normalizedKey == "raidMythic"
             and type(rootSnapshots) == "table" then
             local fallbackRoot = rootSnapshots.raidHeroic
             local fallbackClasses = type(fallbackRoot) == "table" and fallbackRoot.specs or nil
             local fallbackClass = type(fallbackClasses) == "table" and fallbackClasses[classToken] or nil
             local fallbackSpec = type(fallbackClass) == "table" and fallbackClass[specKey] or nil
-            if type(fallbackSpec) == "table" then
+            if type(fallbackSpec) == "table" and fallbackSpec.unavailable == nil
+                and type(fallbackSpec.targets) == "table" then
                 return fallbackSpec, fallbackRoot, root, "raidHeroic"
             end
         end
         return nil, snapshotRoot, root, normalizedKey
     end
+    if specData.unavailable ~= nil then return nil, snapshotRoot, root, normalizedKey end
     return specData, snapshotRoot, root, normalizedKey
 end
 

@@ -337,15 +337,16 @@ local function count_target_lines(text)
     return count
 end
 
-local function validate_raw_text_shape(text, profileCount, expectedSpecCount)
+local function validate_raw_text_shape(text, profileCount, expectedSpecCount, unavailableSpecCount)
     if not text then
         return
     end
     profileCount = profileCount or #PROFILE_ORDER
     expectedSpecCount = expectedSpecCount or (#SPECS * profileCount)
     local sourceUrlCount = count_pattern_occurrences(text, 'sourceUrl%s*=%s*"https://www%.archon%.gg/wow/builds/')
-    if sourceUrlCount ~= expectedSpecCount then
-        fail("generated file must contain exactly " .. tostring(expectedSpecCount) .. " Archon sourceUrl entries, got " .. tostring(sourceUrlCount))
+    local expectedSourceCount = expectedSpecCount + (unavailableSpecCount or 0)
+    if sourceUrlCount ~= expectedSourceCount then
+        fail("generated file must contain exactly " .. tostring(expectedSourceCount) .. " Archon sourceUrl entries, got " .. tostring(sourceUrlCount))
     end
 
     local targetCount = count_target_lines(text)
@@ -660,8 +661,8 @@ local function validate_snapshot(root, text, options)
     validate_runtime_spec_parity(options.statsProLua)
     validate_exact_keys(root, make_key_set({ "schemaVersion", "source", "snapshots" }), "StatsProArchonTargets")
     expect_type(root, "table", "StatsProArchonTargets")
-    if root.schemaVersion ~= 2 and root.schemaVersion ~= 3 and root.schemaVersion ~= 4 and root.schemaVersion ~= 5 then
-        fail("schemaVersion must be 2, 3, 4, or 5, got " .. tostring(root.schemaVersion))
+    if root.schemaVersion ~= 2 and root.schemaVersion ~= 3 and root.schemaVersion ~= 4 and root.schemaVersion ~= 5 and root.schemaVersion ~= 6 then
+        fail("schemaVersion must be 2, 3, 4, 5, or 6, got " .. tostring(root.schemaVersion))
     end
     expect_equal(root.source, "archon", "source")
     expect_type(root.snapshots, "table", "snapshots")
@@ -671,7 +672,7 @@ local function validate_snapshot(root, text, options)
     if root.schemaVersion == 2 then
         expect_equal(profileCount, #profileOrder, "snapshots profile count")
     elseif profileCount < 1 or profileCount > #profileOrder then
-        fail("schema v3/v4/v5 snapshots profile count must be between 1 and " .. tostring(#profileOrder)
+        fail("schema v3/v4/v5/v6 snapshots profile count must be between 1 and " .. tostring(#profileOrder)
             .. ", got " .. tostring(profileCount))
     end
     for profileKey in pairs(root.snapshots) do
@@ -690,11 +691,11 @@ local function validate_snapshot(root, text, options)
             end
         end
     end
-    local emittedSpecCount = 0
+    local emittedSpecCount, unavailableSpecCount = 0, 0
 
     for _, profileKey in ipairs(profileOrder) do
         local profile = root.snapshots[profileKey]
-        if (root.schemaVersion == 3 or root.schemaVersion == 4 or root.schemaVersion == 5) and profile == nil then
+        if (root.schemaVersion == 3 or root.schemaVersion == 4 or root.schemaVersion == 5 or root.schemaVersion == 6) and profile == nil then
             -- Availability is data-driven in schema v3/v4. Missing profiles are not
             -- offered by the addon and may appear automatically in a later snapshot.
         else
@@ -703,14 +704,14 @@ local function validate_snapshot(root, text, options)
         expect_type(profile, "table", profileContext)
         local allowedProfileKeys = { capturedAt = true, specs = true }
         for key in pairs(expectedProfile) do
-            if root.schemaVersion == 4 or root.schemaVersion == 5
+            if root.schemaVersion == 4 or root.schemaVersion == 5 or root.schemaVersion == 6
                 or (key ~= "sampleWindow" and key ~= "difficultyLabel") then
                 allowedProfileKeys[key] = true
             end
         end
         validate_exact_keys(profile, allowedProfileKeys, profileContext)
         for key, value in pairs(expectedProfile) do
-            if root.schemaVersion == 4 or root.schemaVersion == 5
+            if root.schemaVersion == 4 or root.schemaVersion == 5 or root.schemaVersion == 6
                 or (key ~= "sampleWindow" and key ~= "difficultyLabel") then
                 -- The route selects all keys >=7; its displayed maximum grows
                 -- with observed keys. Preserve it, including historical ranges.
@@ -732,7 +733,7 @@ local function validate_snapshot(root, text, options)
         for _, spec in ipairs(SPECS) do
             expectedClasses[spec.classToken] = true
         end
-        if root.schemaVersion ~= 5 or profileKey ~= "raidMythic" then
+        if (root.schemaVersion ~= 5 and root.schemaVersion ~= 6) or profileKey ~= "raidMythic" then
             expect_equal(count_keys(profile.specs), count_keys(expectedClasses), profileContext .. ".specs class count")
         end
         for classToken in pairs(profile.specs) do
@@ -746,7 +747,7 @@ local function validate_snapshot(root, text, options)
             expectedSpecCounts[spec.classToken] = (expectedSpecCounts[spec.classToken] or 0) + 1
         end
         for classToken, count in pairs(expectedSpecCounts) do
-            if root.schemaVersion ~= 5 or profileKey ~= "raidMythic" then
+            if (root.schemaVersion ~= 5 and root.schemaVersion ~= 6) or profileKey ~= "raidMythic" then
                 expect_type(profile.specs[classToken], "table", profileContext .. ".specs." .. classToken)
                 expect_equal(count_keys(profile.specs[classToken]), count, profileContext .. ".specs." .. classToken .. " spec count")
             elseif profile.specs[classToken] ~= nil then
@@ -757,33 +758,47 @@ local function validate_snapshot(root, text, options)
             end
         end
 
+        local availableSpecCount = 0
         for _, spec in ipairs(SPECS) do
             local specContext = profileContext .. ".specs." .. spec.classToken .. "." .. spec.specKey
             local specData = profile.specs[spec.classToken] and profile.specs[spec.classToken][spec.specKey]
-            if specData == nil and root.schemaVersion == 5 and profileKey == "raidMythic" then
+            if specData == nil and (root.schemaVersion == 5 or root.schemaVersion == 6) and profileKey == "raidMythic" then
                 local heroic = root.snapshots.raidHeroic
                 local fallback = heroic and heroic.specs and heroic.specs[spec.classToken]
                     and heroic.specs[spec.classToken][spec.specKey]
                 expect_type(fallback, "table", specContext .. " Heroic fallback")
+                expect_equal(fallback.unavailable, nil, specContext .. " Heroic fallback unavailable")
+                availableSpecCount = availableSpecCount + 1
                 contains_exactly_required_stats(fallback.targets, specContext .. " Heroic fallback.targets")
                 validate_order(fallback.order, specContext .. " Heroic fallback.order")
             else
             expect_type(specData, "table", specContext)
-            validate_exact_keys(specData, make_key_set({ "sourceUrl", "targets", "order" }), specContext)
             local url = expected_url(spec, profileKey, root.schemaVersion)
             expect_equal(specData.sourceUrl, url, specContext .. ".sourceUrl")
             local occurrenceCount = count_plain_occurrences(text, url)
             if occurrenceCount and occurrenceCount ~= 1 then
                 fail(specContext .. ".sourceUrl must appear exactly once in file text, got " .. tostring(occurrenceCount))
             end
+            if root.schemaVersion == 6 and specData.unavailable ~= nil then
+                if profileKey ~= "raidNormal" and profileKey ~= "raidHeroic" then
+                    fail(specContext .. " unavailable marker is only permitted for Raid Normal/Heroic")
+                end
+                validate_exact_keys(specData, make_key_set({ "sourceUrl", "unavailable" }), specContext)
+                expect_equal(specData.unavailable, "archon-error-500", specContext .. ".unavailable")
+                unavailableSpecCount = unavailableSpecCount + 1
+            else
+            validate_exact_keys(specData, make_key_set({ "sourceUrl", "targets", "order" }), specContext)
             contains_exactly_required_stats(specData.targets, specContext .. ".targets")
             validate_order(specData.order, specContext .. ".order")
             emittedSpecCount = emittedSpecCount + 1
+            availableSpecCount = availableSpecCount + 1
+            end
             end
         end
+        if availableSpecCount == 0 then fail(profileContext .. " must contain at least one available spec") end
         end
     end
-    validate_raw_text_shape(text, profileCount, emittedSpecCount)
+    validate_raw_text_shape(text, profileCount, emittedSpecCount, unavailableSpecCount)
 end
 
 local function join_order(order)
@@ -814,14 +829,19 @@ local function build_semantic_lines(root)
             canonicalProfile.difficulty or "",
             canonicalProfile.boss or "",
             canonicalProfile.window or "",
-            (root.schemaVersion == 4 or root.schemaVersion == 5) and profile.sampleWindow or "",
-            (root.schemaVersion == 4 or root.schemaVersion == 5) and profile.difficultyLabel or "",
+            (root.schemaVersion == 4 or root.schemaVersion == 5 or root.schemaVersion == 6) and profile.sampleWindow or "",
+            (root.schemaVersion == 4 or root.schemaVersion == 5 or root.schemaVersion == 6) and profile.difficultyLabel or "",
         }, "\t")
 
         for _, spec in ipairs(SPECS) do
             local classData = profile.specs[spec.classToken]
             local specData = classData and classData[spec.specKey]
-            if specData then
+            if specData and specData.unavailable ~= nil then
+                lines[#lines + 1] = table.concat({
+                    "unavailable", profileKey, spec.classToken, spec.specKey,
+                    specData.sourceUrl, specData.unavailable,
+                }, "\t")
+            elseif specData then
             lines[#lines + 1] = table.concat({
                 "spec",
                 profileKey,
@@ -934,7 +954,7 @@ local function run_self_test(parsedOptions)
     validate_spec_manifest()
     validate_runtime_spec_parity(options.statsProLua)
     validate_snapshot(make_valid_fixture("2026-05-16"), nil, options)
-    for _, schemaVersion in ipairs({ 4, 5 }) do
+    for _, schemaVersion in ipairs({ 4, 5, 6 }) do
         local currentRange = make_valid_fixture("2026-05-16")
         currentRange.schemaVersion = schemaVersion
         currentRange.snapshots.mythicPlusCurrent.difficultyLabel = "+7 to +20"
@@ -1030,6 +1050,71 @@ local function run_self_test(parsedOptions)
         validate_snapshot(partialWithoutFallback, nil, options)
     end, "snapshots.raidHeroic.specs.MAGE spec count")
 
+    local unavailableRaid = clone(make_valid_fixture("2026-05-16"))
+    unavailableRaid.schemaVersion = 6
+    unavailableRaid.snapshots.raidNormal.specs.MAGE.frost = {
+        sourceUrl = "https://www.archon.gg/wow/builds/frost/mage/raid/overview/normal/all-bosses",
+        unavailable = "archon-error-500",
+    }
+    validate_snapshot(unavailableRaid, nil, options)
+    local unavailableLine = "unavailable\traidNormal\tMAGE\tfrost\thttps://www.archon.gg/wow/builds/frost/mage/raid/overview/normal/all-bosses\tarchon-error-500"
+    assert(table.concat(build_semantic_lines(unavailableRaid), "\n"):find(unavailableLine, 1, true),
+        "unavailable semantic entry must preserve source and reason")
+    for _, field in ipairs({ "targets", "order", "unexpected" }) do
+        local mixed = clone(unavailableRaid)
+        mixed.snapshots.raidNormal.specs.MAGE.frost[field] = {}
+        assert_throws("unavailable forbids " .. field, function()
+            validate_snapshot(mixed, nil, options)
+        end, "unexpected key")
+    end
+    local wrongUnavailableUrl = clone(unavailableRaid)
+    wrongUnavailableUrl.snapshots.raidNormal.specs.MAGE.frost.sourceUrl = "https://www.archon.gg/wow/builds/frost/mage/raid/overview/heroic/all-bosses"
+    assert_throws("unavailable URL must match difficulty", function()
+        validate_snapshot(wrongUnavailableUrl, nil, options)
+    end, ".sourceUrl")
+    local wrongUnavailableReason = clone(unavailableRaid)
+    wrongUnavailableReason.snapshots.raidNormal.specs.MAGE.frost.unavailable = "timeout"
+    assert_throws("unavailable requires exact reviewed source error", function()
+        validate_snapshot(wrongUnavailableReason, nil, options)
+    end, ".unavailable")
+    local wrongUnavailableSchema = clone(unavailableRaid)
+    wrongUnavailableSchema.schemaVersion = 5
+    assert_throws("unavailable requires schema6", function()
+        validate_snapshot(wrongUnavailableSchema, nil, options)
+    end, "unexpected key")
+    for _, profileKey in ipairs({ "mythicPlusCurrent", "mythicPlusHighKeys", "raidMythic" }) do
+        local disallowed = clone(unavailableRaid)
+        disallowed.snapshots[profileKey].specs.MAGE.frost = {
+            sourceUrl = expected_url(SPECS[1], profileKey, 6), unavailable = "archon-error-500",
+        }
+        for _, spec in ipairs(SPECS) do
+            if spec.classToken == "MAGE" and spec.specKey == "frost" then
+                disallowed.snapshots[profileKey].specs.MAGE.frost.sourceUrl = expected_url(spec, profileKey, 6)
+            end
+        end
+        assert_throws("marker scope " .. profileKey, function()
+            validate_snapshot(disallowed, nil, options)
+        end, "only permitted for Raid Normal/Heroic")
+    end
+    local noAvailableSpecs = clone(unavailableRaid)
+    for _, spec in ipairs(SPECS) do
+        noAvailableSpecs.snapshots.raidNormal.specs[spec.classToken][spec.specKey] = {
+            sourceUrl = expected_url(spec, "raidNormal", 6), unavailable = "archon-error-500",
+        }
+    end
+    assert_throws("all-unavailable profile rejected", function()
+        validate_snapshot(noAvailableSpecs, nil, options)
+    end, "at least one available spec")
+    local unavailableFallback = clone(unavailableRaid)
+    unavailableFallback.snapshots.raidMythic.specs.MAGE.frost = nil
+    unavailableFallback.snapshots.raidHeroic.specs.MAGE.frost = {
+        sourceUrl = "https://www.archon.gg/wow/builds/frost/mage/raid/overview/heroic/all-bosses",
+        unavailable = "archon-error-500",
+    }
+    assert_throws("Mythic cannot fall back to unavailable Heroic", function()
+        validate_snapshot(unavailableFallback, nil, options)
+    end, "Heroic fallback unavailable")
+
     local badTarget = clone(make_valid_fixture("2026-05-16"))
     badTarget.snapshots.raidMythic.specs.MAGE.frost.targets.mastery = 0
     assert_throws("zero target", function()
@@ -1103,7 +1188,7 @@ local function run_self_test(parsedOptions)
         validate_snapshot(badSampleWindow, nil, options)
     end, "last-14-days")
 
-    for _, schemaVersion in ipairs({ 4, 5 }) do
+    for _, schemaVersion in ipairs({ 4, 5, 6 }) do
         for _, label in ipairs({ "+7 to +6", "+8 to +20", "+8 to +19",
             "+7 to +100", "+7 to +021", "+7 to +20 ", "+7-20", "+7 to +21.5" }) do
             local badDifficultyLabel = clone(make_valid_fixture("2026-05-16"))

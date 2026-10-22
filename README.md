@@ -247,9 +247,10 @@ visible on its own.
 **These are reference values, not stat caps or personalized gearing
 recommendations.** Use simulations to evaluate upgrades for your own character.
 
-Snapshots cover all current Retail specializations and ship inside the addon;
-they are not fetched live. A dataset that Archon is not publishing stays out of
-the selector until a later addon snapshot includes it. Mythic+ current-affix
+Snapshots ship inside the addon and are not fetched live. Available datasets
+depend on your specialization. When an Archon Normal or Heroic page is
+unavailable, that spec's affected difficulty stays out of the selector, with no
+old ratings or substitute difficulty shown for that selection. Mythic+ current-affix
 routes use Archon's rolling 14-day sample. No companion app is required.
 
 ## Localization

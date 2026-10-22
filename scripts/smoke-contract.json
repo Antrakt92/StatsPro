@@ -1,11 +1,11 @@
 {
   "schemaVersion": 2,
-  "totalAssertions": 44294,
+  "totalAssertions": 44312,
   "suites": [
     {
       "name": "core-panel-persistence",
-      "assertions": 2910,
-      "fingerprint": "459d1520"
+      "assertions": 2928,
+      "fingerprint": "3d932809"
     },
     {
       "name": "runtime-rendering",

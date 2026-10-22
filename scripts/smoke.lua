@@ -2150,6 +2150,59 @@ do
     eq("archon.v5_missing_mythic_spec_falls_back_to_heroic.footer",
         archonTooltip(perSpecFallbackEnv).lines[2].left, "16-May-26")
 
+    do
+        local fixture = makeArchonV2Fixture("2026-05-16")
+        fixture.schemaVersion = 6
+        fixture.snapshots.raidNormal.specs.MAGE.fire = {
+            unavailable = "archon-error-500",
+            sourceUrl = "https://www.archon.gg/wow/builds/fire/mage/raid/overview/normal/all-bosses",
+        }
+        local activeSpec = 64
+        local env, archonAddon, test = loadStatsPro("enUS", {
+            unitClassToken = "MAGE", specIndex = 1,
+            statsProDB = { targetSnapshot = "raidNormal" },
+            statsProArchonTargets = fixture,
+            getSpecializationInfo = function() return activeSpec end,
+            issecretvalue = function(value) return value == -1 end,
+        })
+        env.__fireEvent("PLAYER_ENTERING_WORLD")
+        eq("archon.v6.available_option_count", #archonAddon.archonTargets.GetAvailableSnapshotOptions(), 5)
+        local meta = test.buildArchonTargetMeta("mastery", 700, env.CR_MASTERY, 20)
+        check("archon.v6.available_comparison", meta ~= nil)
+        test.renderMainPanelForSmoke("Mastery:", "700", "20.0%", 1, nil, nil, { meta })
+        test.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+        check("archon.v6.available_tooltip", archonTooltip(env):IsShown())
+        activeSpec = 63
+        env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+        eq("archon.v6.unavailable_option_count", #archonAddon.archonTargets.GetAvailableSnapshotOptions(), 4)
+        for _, option in ipairs(archonAddon.archonTargets.GetAvailableSnapshotOptions()) do
+            check("archon.v6.unavailable_option_hidden." .. option.value, option.value ~= "raidNormal")
+        end
+        eq("archon.v6.unavailable_choice_preserved", test.cachedTargetSnapshot(), "raidNormal")
+        eq("archon.v6.unavailable_no_other_difficulty", test.buildArchonTargetMeta("mastery", 700, env.CR_MASTERY), nil)
+        eq("archon.v6.unavailable_no_cached_comparison", test.buildArchonTargetMeta("mastery", -1, env.CR_MASTERY), nil)
+        test.renderMainPanelForSmoke("Mastery:", "700", "20.0%", 1, nil, nil, {})
+        check("archon.v6.unavailable_old_tooltip_cleared", not archonTooltip(env):IsShown())
+        activeSpec = 64
+        env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+        eq("archon.v6.return_to_available_options", #archonAddon.archonTargets.GetAvailableSnapshotOptions(), 5)
+        check("archon.v6.return_to_available_target", test.buildArchonTargetMeta("mastery", 700, env.CR_MASTERY) ~= nil)
+        fixture.snapshots.raidNormal.specs.MAGE.frost = {
+            unavailable = "archon-error-500", targets = { mastery = 999 },
+        }
+        eq("archon.v6.marker_with_stale_target_rejected", test.buildArchonTargetMeta("mastery", 700, env.CR_MASTERY), nil)
+        fixture.snapshots.raidMythic.specs.MAGE.frost = nil
+        fixture.snapshots.raidHeroic.specs.MAGE.frost = { unavailable = "archon-error-500" }
+        eq("archon.v6.mythic_unavailable_heroic_no_fallback", archonAddon.archonTargets.GetSnapshot("MAGE", "frost", "raidMythic"), nil)
+        local storedEnv, _, storedTest = loadStatsPro("enUS", {
+            unitClassToken = "MAGE", specIndex = 1, specID = 63,
+            statsProDB = { targetSnapshot = "raidNormal" }, statsProArchonTargets = fixture,
+        })
+        storedEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+        eq("archon.v6.stored_unavailable_choice", storedTest.cachedTargetSnapshot(), "raidNormal")
+        eq("archon.v6.stored_unavailable_no_target", storedTest.buildArchonTargetMeta("mastery", 700, storedEnv.CR_MASTERY), nil)
+    end
+
     for _, case in ipairs({
         { name = "missing_class", schema = 5, fallback = true },
         { name = "malformed_class_false", schema = 5, classData = false },

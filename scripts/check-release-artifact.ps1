@@ -319,7 +319,7 @@ function Get-StatsProBytesSha256 {
 
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try {
-        return (($sha.ComputeHash($Bytes) | ForEach-Object { $_.ToString("X2") }) -join "")
+        return [System.BitConverter]::ToString($sha.ComputeHash($Bytes)).Replace("-", "")
     }
     finally {
         $sha.Dispose()
@@ -916,6 +916,12 @@ function Get-SourceVersionTag {
 
 function Invoke-SelfTest {
     Assert-StatsProReleaseTagContractSelfTest
+    if ((Get-StatsProBytesSha256 -Bytes ([byte[]]@())) -cne "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855") {
+        throw "SHA256 empty-input vector must preserve exact uppercase hexadecimal."
+    }
+    if ((Get-StatsProTextSha256 -Text "abc") -cne "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD") {
+        throw "SHA256 abc vector must preserve exact uppercase hexadecimal."
+    }
     $sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
     $tag = Get-SourceVersionTag -Root $sourceRoot
     $interfaces = @(Get-TocInterfaceValues -TocPath (Join-Path $sourceRoot "StatsPro.toc"))

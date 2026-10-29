@@ -33,7 +33,7 @@ profiles. Archon references are available only in Retail.
 <p align="center">
   <a href="#installation">Install</a>
   · <a href="#getting-started">Quick setup</a>
-  · <a href="#stats-and-gear-rows">Features</a>
+  · <a href="#detailed-features">Features</a>
   · <a href="#commands">Commands</a>
   · <a href="#help-feedback-and-development">Help</a>
 </p>
@@ -85,6 +85,8 @@ registered by other addons remain available alongside the included collection.
 Only fonts compatible with your selected language appear in the list.
 Click the star beside a font to keep it at the top of the list. Favorites are
 shared across profiles and saved between sessions; hover still previews the HUD.
+
+## Detailed features
 
 <details>
 <summary>More setups, available stats, layouts and profile tools</summary>

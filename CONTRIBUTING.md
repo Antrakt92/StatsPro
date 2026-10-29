@@ -1,5 +1,7 @@
 # Contributing to StatsPro
 
+[Overview](README.md) · [Checks](#local-verification) · [Release history](CHANGELOG.md)
+
 Bug reports, translation corrections, and focused pull requests are welcome.
 Please keep shared changes compatible with World of Warcraft Retail, the supported
 WoW Forever beta and Lua 5.1. Both builds use the shared HUD. Forever's stat

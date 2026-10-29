@@ -1,25 +1,23 @@
 <p align="center">
-  <img src="screenshots/logo.png" alt="StatsPro logo" width="112">
+  <img src="screenshots/logo.png" alt="StatsPro logo" width="112" height="112">
 </p>
 
 <h1 align="center">StatsPro</h1>
 
 <p align="center">
-  Keep your character stats on screen without opening the Character panel.
+  Your stats. Your layout. Always in view.
 </p>
 
 <p align="center">
-  <a href="https://www.curseforge.com/wow/addons/statspro"><strong>CurseForge</strong></a>
-  · <a href="https://addons.wago.io/addons/statspro">Wago Addons</a>
-  · <a href="https://github.com/Antrakt92/StatsPro/releases">GitHub Releases</a>
+  <a href="https://github.com/Antrakt92/StatsPro/releases/latest"><strong>Download for Retail</strong></a>
+  · <a href="https://www.curseforge.com/wow/addons/statspro"><strong>CurseForge</strong></a>
+  · <a href="https://addons.wago.io/addons/statspro"><strong>Wago</strong></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Antrakt92/StatsPro/releases/latest"><img src="https://img.shields.io/github/v/release/Antrakt92/StatsPro?label=release&color=brightgreen" alt="Latest release"></a>
-  <a href="https://www.curseforge.com/wow/addons/statspro"><img src="https://img.shields.io/curseforge/dt/1525100?label=downloads&color=orange" alt="CurseForge downloads"></a>
-  <img src="https://img.shields.io/badge/WoW-Retail%2012.x-blueviolet" alt="WoW Retail 12.x">
-  <img src="https://img.shields.io/badge/WoW-Forever%20beta-blue" alt="WoW Forever beta">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-custom-blue" alt="Custom License"></a>
+  <a href="https://github.com/Antrakt92/StatsPro/releases"><img src="https://img.shields.io/github/v/release/Antrakt92/StatsPro?label=release&amp;color=22c55e" alt="Latest stable release"></a>
+  <img src="https://img.shields.io/badge/WoW-Midnight-8b5cf6" alt="WoW: Midnight">
+  <img src="https://img.shields.io/badge/WoW-Forever%20beta-3b82f6" alt="WoW: Forever beta">
 </p>
 
 StatsPro is a customizable stats and gear HUD for **World of Warcraft Retail:
@@ -31,9 +29,37 @@ Retail includes Crit, Haste, Mastery, Versatility and bundled Archon references.
 Forever has its own 46-row stat catalog, class-aware setups and per-character
 profiles. Archon references are available only in Retail.
 
+<p align="center">
+  <a href="#installation">Install</a>
+  · <a href="#getting-started">Quick setup</a>
+  · <a href="#stats-and-gear-rows">Features</a>
+  · <a href="#commands">Commands</a>
+  · <a href="#help-feedback-and-development">Help</a>
+</p>
+
+| Make it yours | Keep useful information close | Take your setup with you |
+|---|---|---|
+| Flat, Sectioned or Split layouts, fonts and appearance themes. | Optional stat, item-level, durability and repair rows; Retail-only Archon references. | Character profiles, account-wide settings and profile sharing. |
+
 ![StatsPro showing character stats beside the action bars during normal play](screenshots/09-flat-in-game.jpg)
 
 *Retained older in-game capture; fresh screenshots pending.*
+
+## Installation
+
+Install through [CurseForge](https://www.curseforge.com/wow/addons/statspro)
+or [Wago](https://addons.wago.io/addons/statspro), choosing the build for your client.
+For a manual install, download the packaged ZIP from the matching release below
+and extract its `StatsPro` folder into your client's `Interface/AddOns` folder.
+Use the addon archive under **Assets**, rather than GitHub's source-code ZIP.
+
+| Client | Download | Release history |
+|---|---|---|
+| Retail: Midnight | [Latest Retail release](https://github.com/Antrakt92/StatsPro/releases/latest) | [Retail changelog](CHANGELOG.md) |
+| WoW Forever beta | [Forever beta release](https://github.com/Antrakt92/StatsPro/releases/tag/forever-v1.21.2) | [Forever changelog](CHANGELOG-FOREVER.md) |
+
+Retail and Forever update independently. Classic Era and other Classic branches
+are unsupported.
 
 ## Getting started
 
@@ -43,8 +69,8 @@ profiles. Archon references are available only in Retail.
    **Physical**, **Caster**, **Healer** and **Tank**.
 3. Drag the unlocked panels into place, then lock them in Settings.
 
-Type `/ss` or `/statspro` to open Settings. Outside combat, you can also
-right-click the HUD. To choose another setup later, expand **Quick Setup**
+Outside combat, you can also right-click the HUD to open Settings.
+To choose another setup later, expand **Quick Setup**
 at the top of the **Stats** tab or adjust individual rows yourself.
 
 Both builds include 46 font faces: clean, geometric, pixel, handwritten and
@@ -54,14 +80,6 @@ registered by other addons remain available alongside the included collection.
 Only fonts compatible with your selected language appear in the list.
 Click the star beside a font to keep it at the top of the list. Favorites are
 shared across profiles and saved between sessions; hover still previews the HUD.
-
-### Client versions
-
-[Retail: Midnight](https://github.com/Antrakt92/StatsPro/releases/latest)
-· [WoW Forever beta](https://github.com/Antrakt92/StatsPro/releases/tag/forever-v1.21.2)
-
-Retail and Forever have separate builds and update independently.
-Classic Era and other Classic branches are unsupported.
 
 ### Quick Setup
 
@@ -352,8 +370,12 @@ StatsPro is free to use. Optional support is available through
   font selection support.
 
 ## More by Antrakt
-- [ApplicantScout](https://www.curseforge.com/wow/addons/applicantscout-lfg-overlay) — LFG & Party overlay with WCL and RaiderIO context
-- [DoYouNeedIt](https://www.curseforge.com/wow/addons/do-you-need-it) — group loot helper with opt-in whispers
+
+| Addon | What it does |
+|---|---|
+| [Dungeon Pro](https://github.com/Antrakt92/DungeonPro) | Dungeon quest preparation and navigation for Forever beta. |
+| [ApplicantScout](https://github.com/Antrakt92/ApplicantScout-Addon) | Warcraft Logs and RaiderIO for applicants and groups; Windows companion required. |
+| [Do You Need It?](https://github.com/Antrakt92/Do-You-Need-It-) | Group loot comparisons, history and optional whispers for Retail and Forever beta. |
 
 ## License
 

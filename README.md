@@ -5,7 +5,7 @@
 <h1 align="center">StatsPro</h1>
 
 <p align="center">
-  Your stats. Your layout. Always in view.
+  Character stats and gear information for Retail and Forever beta.
 </p>
 
 <p align="center">
@@ -37,13 +37,13 @@ profiles. Archon references are available only in Retail.
   · <a href="#help-feedback-and-development">Help</a>
 </p>
 
-| Make it yours | Keep useful information close | Take your setup with you |
+| Layouts and fonts | Stats and gear | Profiles |
 |---|---|---|
 | Flat, Sectioned or Split layouts, fonts and appearance themes. | Optional stat, item-level, durability and repair rows; Retail-only Archon references. | Character profiles, account-wide settings and profile sharing. |
 
 ![StatsPro showing character stats beside the action bars during normal play](screenshots/09-flat-in-game.jpg)
 
-*Retained older in-game capture; fresh screenshots pending.*
+*Earlier in-game capture; the current interface differs.*
 
 ## Installation
 

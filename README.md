@@ -10,6 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/Antrakt92/StatsPro/releases/latest"><strong>Download for Retail</strong></a>
+  · <a href="https://www.curseforge.com/wow/addons/statspro/files/all?page=1&amp;pageSize=20&amp;gameVersionTypeId=88568&amp;showAlphaFiles=hide"><strong>Download for Forever beta</strong></a>
   · <a href="https://www.curseforge.com/wow/addons/statspro"><strong>CurseForge</strong></a>
   · <a href="https://addons.wago.io/addons/statspro"><strong>Wago</strong></a>
 </p>
@@ -56,7 +57,7 @@ Use the addon archive under **Assets**, rather than GitHub's source-code ZIP.
 | Client | Download | Release history |
 |---|---|---|
 | Retail: Midnight | [Latest Retail release](https://github.com/Antrakt92/StatsPro/releases/latest) | [Retail changelog](CHANGELOG.md) |
-| WoW Forever beta | [Forever beta release](https://github.com/Antrakt92/StatsPro/releases/tag/forever-v1.21.2) | [Forever changelog](CHANGELOG-FOREVER.md) |
+| WoW Forever beta | [Forever beta files](https://www.curseforge.com/wow/addons/statspro/files/all?page=1&pageSize=20&gameVersionTypeId=88568&showAlphaFiles=hide) | [Forever changelog](CHANGELOG-FOREVER.md) |
 
 Retail and Forever update independently. Classic Era and other Classic branches
 are unsupported.
@@ -69,6 +70,10 @@ are unsupported.
    **Physical**, **Caster**, **Healer** and **Tank**.
 3. Drag the unlocked panels into place, then lock them in Settings.
 
+To use one setup across all your alts, open **Profiles & sharing...** and choose
+**Use these settings everywhere...**. Separate character/spec setups remain
+available if you prefer.
+
 Outside combat, you can also right-click the HUD to open Settings.
 To choose another setup later, expand **Quick Setup**
 at the top of the **Stats** tab or adjust individual rows yourself.
@@ -80,6 +85,9 @@ registered by other addons remain available alongside the included collection.
 Only fonts compatible with your selected language appear in the list.
 Click the star beside a font to keep it at the top of the list. Favorites are
 shared across profiles and saved between sessions; hover still previews the HUD.
+
+<details>
+<summary>More setups, available stats, layouts and profile tools</summary>
 
 ### Quick Setup
 
@@ -243,6 +251,8 @@ have changed; use the instructions above for current profile and Quick Setup too
 ![Layout controls in an earlier version of Settings](screenshots/layout-settings-v1.10.2.jpg)
 
 ![Appearance presets in an earlier version of Settings](screenshots/appearance-presets-v1.10.2.jpg)
+
+</details>
 
 </details>
 

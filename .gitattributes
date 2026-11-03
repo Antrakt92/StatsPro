@@ -4,3 +4,7 @@ fonts/*.ttf binary
 fonts/*.otf binary
 # Preserve upstream license formatting, including their original trailing spaces.
 fonts/licenses/*.txt text eol=lf whitespace=-blank-at-eol,-blank-at-eof
+
+AntraktFontCatalog.lua text eol=lf
+AntraktFontNotice.lua text eol=lf
+fonts/NOTICE.txt text eol=lf

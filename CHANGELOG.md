@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Move the optional font collection to Antrakt Fonts, shared by compatible addons and updated separately. Keep a compact multilingual baseline in StatsPro.
+- Preserve selected fonts, imported choices and favorites while the collection is unavailable; explain the transition in Font settings and a one-time notice.
+- Thanks to [chenrylee](https://github.com/chenrylee) for suggesting a separate font package ([StatsPro #10](https://github.com/Antrakt92/StatsPro/issues/10)).
+
 ## 1.22.12 - 03-Nov-2026 — Archon target refresh
 
 - Refresh bundled M+ and raid targets from Archon data checked on 3 November.

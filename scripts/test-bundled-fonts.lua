@@ -91,37 +91,6 @@ local function inspectFont(path)
     return inspected[path]
 end
 
-local function band(left, right)
-    local result, weight = 0, 1
-    while left > 0 and right > 0 do
-        if left % 2 == 1 and right % 2 == 1 then result = result + weight end
-        left, right, weight = math.floor(left / 2), math.floor(right / 2), weight * 2
-    end
-    return result
-end
-
-local function loadIn(env, path, addon)
-    local chunk = assert(loadfile(path))
-    setfenv(chunk, env)
-    return chunk("StatsPro", addon)
-end
-
-local function library(locale, missing)
-    local env = setmetatable({}, { __index = _G })
-    env._G = env
-    -- LSM deliberately reads getfenv(0), so keep it inside this client's sandbox.
-    env.getfenv = function(level) if level == 0 then return env end; return getfenv(level) end
-    env.GetLocale = function() return locale end
-    env.strmatch = string.match
-    env.bit = { band = band }
-    env.securecallfunction = function(callback, ...) return callback(...) end
-    env.C_UIFileAsset = { IsKnownFile = function(path) return not missing and exists(path) end }
-    loadIn(env, "libs/LibStub/LibStub.lua")
-    loadIn(env, "libs/CallbackHandler-1.0/CallbackHandler-1.0.lua")
-    loadIn(env, "libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua")
-    return env, env.LibStub("LibSharedMedia-3.0")
-end
-
 local function supportsLocale(font, locale)
     local field = ({ ruRU = "cyrillic", zhCN = "hans", zhTW = "hant", koKR = "hangul" })[locale]
     if field then return font[field] == true end
@@ -140,65 +109,12 @@ local function visibleLocale(font, locale)
     return supported
 end
 
-local manifest
-local locales = { "enUS", "deDE", "esES", "esMX", "frFR", "itIT", "ptBR", "ruRU", "koKR", "zhCN", "zhTW" }
-for _, locale in ipairs(locales) do
-    local env, media = library(locale)
-    local default, global = media:GetDefault("font"), media:GetGlobal("font")
-    local addon = {}
-    loadIn(env, "StatsPro_Fonts.lua", addon)
-    local fonts = addon.bundledFonts
-    check(type(fonts) == "table" and #fonts == 46, locale .. ": complete bundled font collection")
-    manifest = fonts
-    local names, paths = {}, {}
-    for _, font in ipairs(fonts) do
-        check(not names[font.name] and not paths[font.path], "unique bundled name and path")
-        names[font.name], paths[font.path] = true, true
-        local file = assert(io.open(sourcePath(font.path), "rb"))
-        local header = file:read(4)
-        file:close()
-        check(header == "\0\1\0\0" or header == "OTTO", "bundled font has a standalone TTF or OTF signature")
-        check(inspectFont(font.path).cyrillic == font.cyrillic,
-            "binary Russian alphabet matches declared coverage: " .. font.name)
-        local supported = supportsLocale(font, locale)
-        check((media:HashTable("font")[font.name] == font.path) == supported,
-            locale .. ": exact registration for " .. font.name)
-    end
-    check(media:GetDefault("font") == default, locale .. ": bundled fonts preserve library default")
-    check(media:GetGlobal("font") == global, locale .. ": bundled fonts preserve global override")
-    local registered = #media:List("font")
-    loadIn(env, "StatsPro_Fonts.lua", addon)
-    check(#media:List("font") == registered, locale .. ": repeat load is idempotent")
-end
-
-do
-    local env, media = library("enUS")
-    local first = manifest[1]
-    local externalPath = manifest[2].path
-    -- An earlier external registration owns its name even when its path differs.
-    check(media:Register("font", first.name, externalPath, media.LOCALE_BIT_western), "external font registered")
-    media:SetGlobal("font", first.name)
-    local default = media:GetDefault("font")
-    loadIn(env, "StatsPro_Fonts.lua", {})
-    check(media:HashTable("font")[first.name] == externalPath, "external same-name font remains unchanged")
-    check(media:GetGlobal("font") == first.name, "existing global override remains unchanged")
-    check(media:GetDefault("font") == default, "external default remains unchanged")
-end
-
-do
-    local env, media = library("enUS", true)
-    loadIn(env, "StatsPro_Fonts.lua", {})
-    for _, font in ipairs(manifest) do
-        check(media:HashTable("font")[font.name] == nil, "missing asset is not advertised: " .. font.name)
-    end
-end
-
 local fixtures = assert(loadfile("scripts/smoke.lua"))("fixtures")
-local _, _, coverageTest = fixtures.loadStatsPro("enUS")
-local required = { latin = {}, hans = {}, hant = {}, hangul = {}, japanese = {} }
-local westernLocales = { enUS = {}, deDE = {}, esES = {}, esMX = {}, frFR = {}, itIT = {}, ptBR = {} }
-local function collect(locale, value)
-    if type(value) == "table" then for _, child in pairs(value) do collect(locale, child) end
+local snapshot = assert(loadfile("AntraktFontCatalog.lua"))()
+local baseline = "Interface\\AddOns\\StatsPro\\fonts\\" .. snapshot.baseline.file
+local codes = {}
+local function collect(value)
+    if type(value) == "table" then for _, child in pairs(value) do collect(child) end
     elseif type(value) == "string" then
         local index = 1
         while index <= #value do
@@ -208,88 +124,24 @@ local function collect(locale, value)
                 code = code % (2 ^ (7 - count))
                 for offset = 1, count - 1 do code = code * 64 + value:byte(index + offset) % 64 end
             end
-            if locale == "zhCN" and code >= 0x3400 and code <= 0x9FFF then required.hans[code] = true
-            elseif locale == "zhTW" and code >= 0x3400 and code <= 0x9FFF then required.hant[code] = true
-            elseif locale == "koKR" and code >= 0xAC00 and code <= 0xD7A3 then required.hangul[code] = true
-            elseif locale ~= "ruRU" and locale ~= "zhCN" and locale ~= "zhTW" and locale ~= "koKR"
-                and code >= 0xC0 and code <= 0x24F and code ~= 0xD7 and code ~= 0xF7 then
-                required.latin[code] = true
-                if westernLocales[locale] then westernLocales[locale][code] = true end
-            end
+            if code >= 32 then codes[code] = true end
             index = index + count
         end
     end
 end
-for locale, labels in pairs(coverageTest.registrySnapshot().labelsByLocale) do collect(locale, labels) end
-for code = 32, 126 do required.latin[code] = true end
-for code = 0x3041, 0x3093 do required.japanese[code] = true end
-for code = 0x30A1, 0x30F6 do required.japanese[code] = true end
-for _, font in ipairs(manifest) do
-    if font.latinLocales then
-        for locale, codes in pairs(westernLocales) do
-            local supported = true
-            for code in pairs(codes) do
-                if not inspectFont(font.path).hasGlyph(code) then supported = false; break end
-            end
-            check(supported == (font.latinLocales[locale] == true), "partial western coverage matches actual translated accents: " .. font.name .. "/" .. locale)
-        end
-    end
-    for field, codes in pairs(required) do
-        local supported = true
-        for code in pairs(codes) do
-            if not inspectFont(font.path).hasGlyph(code) then supported = false; break end
-        end
-        local declared = field == "latin" and font.latin ~= false or font[field] == true
-        check(supported == declared, "actual translated characters match declared " .. field .. ": " .. font.name)
-    end
+for _, forever in ipairs({false, true}) do
+    local _, _, test = fixtures.loadStatsPro("enUS", {forever=forever})
+    collect(test.registrySnapshot().labelsByLocale)
 end
-for _, forever in ipairs({ false, true }) do
-    for _, locale in ipairs({ "enUS", "ruRU", "zhCN", "zhTW", "koKR" }) do
-        local env, addon, test = fixtures.loadStatsPro(locale, {
-            forever = forever, bundledFonts = true, isKnownFontFile = exists,
-            unitGUID = function() return "Player-BundledFontFixture" end,
-            getSpecialization = function() return 1 end, specID = 73,
-            specName = "Protection", specRole = "TANK", primaryStat = 1,
-        })
-        env.__fireEvent("PLAYER_ENTERING_WORLD")
-        addon:OpenConfigMenu()
-        local before = test.profileState()
-        local catalog = {}
-        for _, entry in ipairs(addon.settingsUI.fontPicker.BuildFontsList(addon, true)) do
-            catalog[entry.name] = entry.path
-        end
-        local selected
-        for _, font in ipairs(addon.bundledFonts) do
-            for requirement, field in pairs({ Hangul = "hangul", Hans = "hans", Hant = "hant", Cyrillic = "cyrillic" }) do
-                check(test.fontSupports(font.path, requirement) == (font[field] == true),
-                    "runtime honors verified script coverage: " .. font.name .. "/" .. requirement)
-            end
-            check(test.fontSupports(font.path, "Latin") == (font.latin ~= false), "verified western accent coverage")
-            check((env.LibStub("LibSharedMedia-3.0"):HashTable("font")[font.name] == font.path) == supportsLocale(font, locale),
-                "shared registry honors client language mask: " .. font.name)
-            if visibleLocale(font, locale) then
-                check(catalog[font.name] == font.path, "font appears in the picker: " .. font.name)
-                check(addon.settingsUI.fontPicker.Pick(addon, font), "font selection succeeds: " .. font.name)
-                check(test.panelFontState().mainAppliedFont == font.path, "HUD uses selected bundled font")
-                check(test.profileState().settings.font == font.path, "profile saves selected bundled font")
-                selected = font.path
-            end
-        end
-        local after = test.profileState()
-        check(before.root == after.root and before.settings == after.settings and before.profileID == after.profileID,
-            "font selection preserves profile identities")
-        local reloadEnv, _, reloadTest = fixtures.loadStatsPro(locale, {
-            forever = forever, bundledFonts = true, isKnownFontFile = exists,
-            unitGUID = function() return "Player-BundledFontFixture" end, statsProDB = env.StatsProDB,
-            getSpecialization = function() return 1 end, specID = 73,
-            specName = "Protection", specRole = "TANK", primaryStat = 1,
-        })
-        reloadEnv.__fireEvent("PLAYER_ENTERING_WORLD")
-        check(reloadTest.profileState().settings.font == selected, "selected bundled font survives reload")
-        check(reloadTest.panelFontState().mainAppliedFont == selected, "reloaded HUD reapplies bundled font")
-    end
+collect(snapshot.messages)
+for _, path in ipairs({"StatsPro.lua", "StatsPro_Forever.lua", "StatsPro_Fonts.lua", "StatsPro_FontsUI.lua", "AntraktFontCatalog.lua", "AntraktFontNotice.lua"}) do
+    local file = assert(io.open(path, "rb"))
+    collect(file:read("*a"))
+    file:close()
 end
--- Filter by the committed output language, independently of the client locale.
+for code in pairs(codes) do check(inspectFont(baseline).hasGlyph(code), "baseline covers actual UI codepoint " .. code) end
+for code = 0xAC00, 0xD7A3 do check(inspectFont(baseline).hasGlyph(code), "baseline supports complete modern Hangul") end
+check(inspectFont(baseline).cyrillic, "baseline supports the Russian alphabet")
 local function selectLanguage(env, locale)
     local dropdown = env.StatsProLanguageDropdown
     dropdown.dropdownInit()

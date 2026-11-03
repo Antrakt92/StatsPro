@@ -78,13 +78,15 @@ Outside combat, you can also right-click the HUD to open Settings.
 To choose another setup later, expand **Quick Setup**
 at the top of the **Stats** tab or adjust individual rows yourself.
 
-Both builds include 46 font faces: clean, geometric, pixel, handwritten and
-classic serif styles, with Cyrillic, Chinese, Japanese and Korean families.
-Choose one in **Appearance → Font**; no separate font addon is needed. Fonts
-registered by other addons remain available alongside the included collection.
-Only fonts compatible with your selected language appear in the list.
-Click the star beside a font to keep it at the top of the list. Favorites are
-shared across profiles and saved between sessions; hover still previews the HUD.
+Both builds include a compact multilingual baseline and support the optional
+**Antrakt Fonts** collection through LibSharedMedia. The collection is shared by
+compatible addons and updates independently. StatsPro works without it; open
+**Appearance → Font** for collection details and available download links.
+Your chosen font and favorites remain saved when the collection is unavailable;
+StatsPro temporarily uses a compatible fallback. Fonts registered by other addons
+also remain available. Only faces compatible with the selected language appear.
+Click the star beside a font to keep it at the top; favorites are shared across
+profiles and hover previews the HUD.
 
 ## Detailed features
 

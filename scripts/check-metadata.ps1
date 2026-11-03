@@ -140,6 +140,12 @@ function Assert-PublicChangelogContract {
     }
     $versionPattern = (Get-StatsProReleaseTagContract).VersionPattern
     $versionHeadingPattern = "^##\s+(?<version>$versionPattern)\s+-\s+\d{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{4}\s+—\s+\S.+$"
+    $unreleased = @($versionHeadings | Where-Object { $_.Value.Trim() -ceq "## Unreleased" })
+    if ($unreleased.Count -gt 1 -or ($unreleased.Count -eq 1 -and $versionHeadings[0].Value.Trim() -cne "## Unreleased")) {
+        throw "Unreleased must be a single leading section."
+    }
+    $versionHeadings = @($versionHeadings | Where-Object { $_.Value.Trim() -cne "## Unreleased" })
+    if ($versionHeadings.Count -eq 0) { throw "Changelog needs released version history." }
     foreach ($heading in $versionHeadings) {
         $headingMatch = [regex]::Match($heading.Value, $versionHeadingPattern)
         if (-not $headingMatch.Success) {
@@ -381,7 +387,10 @@ function Get-TocRuntimeContract {
         "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua",
         "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua",
         "AntraktWindowLayers.lua",
+        "AntraktFontCatalog.lua",
+        "AntraktFontNotice.lua",
         "StatsPro_Fonts.lua",
+        "StatsPro_FontsUI.lua",
         "StatsPro_ArchonTargets.lua",
         "StatsPro.lua"
     )
@@ -414,6 +423,9 @@ function New-TestRuntimeFiles {
     Set-Content -Path (Join-Path $Root "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua") -Value "" -Encoding UTF8
     Set-Content -Path (Join-Path $Root "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua") -Value "" -Encoding UTF8
     Set-Content -Path (Join-Path $Root "AntraktWindowLayers.lua") -Value "" -Encoding UTF8
+    foreach ($name in @("AntraktFontCatalog.lua", "AntraktFontNotice.lua", "StatsPro_FontsUI.lua")) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot "../$name") -Destination (Join-Path $Root $name)
+    }
     Set-Content -Path (Join-Path $Root "StatsPro_Fonts.lua") -Value "" -Encoding UTF8
     Set-Content -Path (Join-Path $Root "StatsPro_ArchonTargets.lua") -Value "" -Encoding UTF8
     Set-Content -Path (Join-Path $Root "StatsPro.lua") -Value "" -Encoding UTF8
@@ -508,7 +520,10 @@ function Invoke-SelfTest {
             "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua",
             "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua",
             "AntraktWindowLayers.lua",
+        "AntraktFontCatalog.lua",
+        "AntraktFontNotice.lua",
         "StatsPro_Fonts.lua",
+        "StatsPro_FontsUI.lua",
             "StatsPro_ArchonTargets.lua",
             "StatsPro.lua"
         )
@@ -516,7 +531,7 @@ function Invoke-SelfTest {
         Set-TestToc -Root $root -Refs @($validRefs | Where-Object { $_ -ne "AntraktWindowLayers.lua" })
         Assert-ThrowsMatch "missing window layer runtime rejected" {
             [void](Get-TocRuntimeContract -RepoRoot $root -TocPath (Join-Path $root "StatsPro.toc"))
-        } "exactly 7 runtime"
+        } "exactly 10 runtime"
         $reorderedLayers = @($validRefs)
         $reorderedLayers[3], $reorderedLayers[4] = $reorderedLayers[4], $reorderedLayers[3]
         Set-TestToc -Root $root -Refs $reorderedLayers
@@ -536,47 +551,23 @@ function Invoke-SelfTest {
         [System.IO.File]::AppendAllText((Join-Path $root 'THIRD-PARTY-NOTICES.md'), "`n" + $fontNotices)
 
         $fontManifest = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot 'bundled-fonts.json')) | ConvertFrom-Json
-        $fontRuntime = [System.IO.File]::ReadAllText((Join-Path $fontSourceRoot 'StatsPro_Fonts.lua'))
+        $fontRuntime = [System.IO.File]::ReadAllText((Join-Path $fontSourceRoot 'AntraktFontCatalog.lua'))
         Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime
-        Assert-ThrowsMatch 'font name provenance drift rejected' {
+        Assert-ThrowsMatch 'shared catalogue drift rejected' {
             Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('DejaVu Sans', 'Incorrect Font Name')
-        } 'Runtime font name differs'
-        Assert-ThrowsMatch 'font coverage provenance drift rejected' {
-            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('cyrillic = true', 'cyrillic = false')
-        } 'coverage differs'
-        Assert-ThrowsMatch 'font regional policy drift rejected' {
-            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('region = "zhTW"', 'region = "zhCN"')
-        } 'region differs'
-        Assert-ThrowsMatch 'font locale override drift rejected' {
-            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('enUS = true', 'enUS = false')
-        } 'locale override'
-        Assert-ThrowsMatch 'retired font alias drift rejected' {
-            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('["FiraMono-Regular.ttf"] = "Hack-Regular.ttf"', '["FiraMono-Regular.ttf"] = "Missing.ttf"')
-        } 'retired font alias differs'
-        Assert-ThrowsMatch 'duplicate retired font alias rejected' {
-            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('["LiberationMono-Regular.ttf"]', '["FiraMono-Regular.ttf"]')
-        } 'Duplicate runtime retired font alias'
-        Assert-ThrowsMatch 'duplicate font coverage attribute rejected' {
-            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('cyrillic = true', 'cyrillic = true, cyrillic = false')
-        } 'Duplicate or invalid runtime font'
-        Assert-ThrowsMatch 'nonboolean font coverage attribute rejected' {
-            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('cyrillic = false', 'cyrillic = 0')
-        } 'Duplicate or invalid runtime font'
-        Assert-ThrowsMatch 'duplicate font locale override rejected' {
-            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('enUS = true', 'enUS = true, enUS = true')
-        } 'Duplicate runtime font locale override'
-        Assert-ThrowsMatch 'false duplicate font locale override rejected' {
-            Assert-StatsProBundledFontCatalog -Manifest $fontManifest -SourceText $fontRuntime.Replace('enUS = true', 'enUS = true, enUS = false')
-        } 'Invalid runtime font locale override'
+        } 'approved SHA256'
+        New-Item -ItemType Directory -Path (Join-Path $root 'scripts') -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path $fontSourceRoot 'scripts/bundled-fonts.json') -Destination (Join-Path $root 'scripts/bundled-fonts.json')
+        Copy-Item -LiteralPath (Join-Path $fontSourceRoot 'scripts/shared-font-export.json') -Destination (Join-Path $root 'scripts/shared-font-export.json')
 
         $contract = Get-TocRuntimeContract -RepoRoot $root -TocPath (Join-Path $root "StatsPro.toc")
-        if ($contract.RuntimeLuaRefs.Count -ne 7) {
-            throw "expected seven runtime Lua refs, got $($contract.RuntimeLuaRefs.Count)"
+        if ($contract.RuntimeLuaRefs.Count -ne 10) {
+            throw "expected ten runtime Lua refs, got $($contract.RuntimeLuaRefs.Count)"
         }
         if (-not $contract.RuntimeLuaRefs[0].IsVendored) {
             throw "expected first runtime ref to be marked vendored"
         }
-        if (-not $contract.RuntimeLuaRefs[5].IsGenerated) {
+        if (-not $contract.RuntimeLuaRefs[8].IsGenerated) {
             throw "expected Archon target file to be marked generated"
         }
 
@@ -716,6 +707,19 @@ GitHub issues are public.
         Set-Content -LiteralPath $readmePath -Value 'See [`CHANGELOG.md`](CHANGELOG.md).' -Encoding UTF8
         Assert-PublicChangelogContract -ChangelogPath $changelogPath -ReadmePath $readmePath
 
+        $unreleasedChangelog = $validChangelog.Replace("# Changelog", "# Changelog`n`n## Unreleased`n`n- Pending font changes.")
+        Set-Content -LiteralPath $changelogPath -Value $unreleasedChangelog -Encoding UTF8
+        Assert-PublicChangelogContract -ChangelogPath $changelogPath -ReadmePath $readmePath
+        foreach ($invalidUnreleased in @(
+            ($unreleasedChangelog + "`n## Unreleased`n"),
+            ($validChangelog + "`n## Unreleased`n")
+        )) {
+            Set-Content -LiteralPath $changelogPath -Value $invalidUnreleased -Encoding UTF8
+            Assert-ThrowsMatch "duplicate or misplaced Unreleased rejected" {
+                Assert-PublicChangelogContract -ChangelogPath $changelogPath -ReadmePath $readmePath
+            } "single leading section"
+        }
+
         $malformedHistoricalHeading = $validChangelog.Replace(
             "## 1.0.0 - 01-Jan-2026 — Initial release",
             "## v1.0.0 (01-Jan-2026) — Initial release")
@@ -763,7 +767,10 @@ GitHub issues are public.
             "libs/CallbackHandler-1.0/CallbackHandler-1.0.lua",
             "libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua",
             "AntraktWindowLayers.lua",
+        "AntraktFontCatalog.lua",
+        "AntraktFontNotice.lua",
         "StatsPro_Fonts.lua",
+        "StatsPro_FontsUI.lua",
             "StatsPro_ArchonTargets.lua",
             "StatsPro.lua"
         )
@@ -773,7 +780,10 @@ GitHub issues are public.
             "libs\LibStub\LibStub.lua",
             "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua",
             "AntraktWindowLayers.lua",
+        "AntraktFontCatalog.lua",
+        "AntraktFontNotice.lua",
         "StatsPro_Fonts.lua",
+        "StatsPro_FontsUI.lua",
             "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua",
             "StatsPro_ArchonTargets.lua",
             "StatsPro.lua"
@@ -787,7 +797,10 @@ GitHub issues are public.
             "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua",
             "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua",
             "AntraktWindowLayers.lua",
+        "AntraktFontCatalog.lua",
+        "AntraktFontNotice.lua",
         "StatsPro_Fonts.lua",
+        "StatsPro_FontsUI.lua",
             "StatsPro.lua",
             "StatsPro_ArchonTargets.lua"
         )
@@ -800,19 +813,25 @@ GitHub issues are public.
             "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua",
             "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua",
             "AntraktWindowLayers.lua",
+        "AntraktFontCatalog.lua",
+        "AntraktFontNotice.lua",
         "StatsPro_Fonts.lua",
+        "StatsPro_FontsUI.lua",
             "StatsPro.lua"
         )
         Assert-ThrowsMatch "missing generated data rejected" {
             [void](Get-TocRuntimeContract -RepoRoot $root -TocPath (Join-Path $root "StatsPro.toc"))
-        } "exactly 7 runtime"
+        } "exactly 10 runtime"
 
         Set-TestToc -Root $root -Refs @(
             "libs\LibStub\LibStub.lua",
             "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua",
             "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua",
             "AntraktWindowLayers.lua",
+        "AntraktFontCatalog.lua",
+        "AntraktFontNotice.lua",
         "StatsPro_Fonts.lua",
+        "StatsPro_FontsUI.lua",
             "StatsPro_ArchonTargets.lua",
             "..\outside.lua"
         )
@@ -825,7 +844,10 @@ GitHub issues are public.
             "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua",
             "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua",
             "AntraktWindowLayers.lua",
+        "AntraktFontCatalog.lua",
+        "AntraktFontNotice.lua",
         "StatsPro_Fonts.lua",
+        "StatsPro_FontsUI.lua",
             "StatsPro_ArchonTargets.lua",
             "C:\Temp\StatsPro.lua"
         )
@@ -838,7 +860,10 @@ GitHub issues are public.
             "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua",
             "libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua",
             "AntraktWindowLayers.lua",
+        "AntraktFontCatalog.lua",
+        "AntraktFontNotice.lua",
         "StatsPro_Fonts.lua",
+        "StatsPro_FontsUI.lua",
             "StatsPro_ArchonTargets.lua",
             "StatsPro.lua # inline comment"
         )

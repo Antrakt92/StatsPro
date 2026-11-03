@@ -147,8 +147,9 @@ selectLanguage("ruRU")
 assert(crossTest.panelFontState().mainAppliedFont == "Fonts\\ARIALN.TTF", "committed Russian restores normal Cyrillic face")
 assert(crossTest.profileState().settings.fontBeforeAutoSwitch == "Fonts\\FRIZQT__.TTF", "Russian fallback preserves original choice")
 selectLanguage("enUS")
-assert(crossTest.profileState().settings.font == "Fonts\\FRIZQT__.TTF", "English restores original choice")
-assert(crossTest.profileState().settings.fontBeforeAutoSwitch == nil, "restored choice clears automatic fallback")
+assert(crossTest.profileState().settings.font == "Fonts\\ARHei.TTF", "language switches preserve the original legacy stored bytes")
+assert(crossAddon.fontRuntime.preferredPath() == "Fonts\\FRIZQT__.TTF" and crossTest.panelFontState().mainAppliedFont == "Fonts\\FRIZQT__.TTF", "English renders the original legacy intention")
+assert(crossTest.profileState().settings.fontBeforeAutoSwitch == "Fonts\\FRIZQT__.TTF", "automatic language changes keep legacy intention until explicit selection")
 
 -- Menu and committed caption use the same native names in both client flavors.
 local nativeNames = {

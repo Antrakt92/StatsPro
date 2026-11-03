@@ -394,6 +394,8 @@ local function makeFrame(name, setFontResult, parent)
     function frame:SetMovable(value) self.movable = value ~= false end
     function frame:IsMovable() return self.movable == true end
     function frame:EnableMouse(value) self.mouseEnabled = value ~= false end
+    function frame:EnableKeyboard(value) self.keyboardEnabled = value == true end
+    function frame:SetPropagateKeyboardInput(value) self.propagateKeyboardInput = value == true end
     function frame:IsMouseEnabled() return self.mouseEnabled == true end
     function frame:SetClampedToScreen(value) self.clamped = value ~= false end
     function frame:IsClampedToScreen() return self.clamped == true end
@@ -1343,16 +1345,32 @@ local function loadStatsPro(locale, opts)
     local addon = {
         __statsproSmoke = true,
         __testWelcomeEnabled = opts and opts.testWelcomeEnabled == true,
+        __testSharedFontsNoticeEnabled = opts and opts.testSharedFontsNotice == true,
     }
     local layersChunk = assert(loadfile("AntraktWindowLayers.lua"))
     setfenv(layersChunk, env)
     layersChunk()
+    for _, module in ipairs({ "AntraktFontCatalog.lua", "AntraktFontNotice.lua" }) do
+        local portable = assert(loadfile(module))
+        setfenv(portable, env)
+        portable("StatsPro", addon)
+    end
     if opts and opts.bundledFonts then
+        env.AntraktFonts = { GetCatalog = function()
+            return { formatMajor = 1, catalogRevision = addon.AntraktFontCatalog.catalogRevision,
+                fonts = addon.AntraktFontCatalog.fonts }
+        end }
+    end
+    if opts and opts.sharedProvider then env.AntraktFonts = opts.sharedProvider end
+    do
         local fontChunk, fontError = loadfile("StatsPro_Fonts.lua")
         if not fontChunk then error(fontError, 0) end
         setfenv(fontChunk, env)
         fontChunk("StatsPro", addon)
     end
+    local fontUI = assert(loadfile("StatsPro_FontsUI.lua"))
+    setfenv(fontUI, env)
+    fontUI("StatsPro", addon)
     if opts and opts.forever then
         for key, value in pairs(opts.foreverAPIs or {}) do env[key] = value end
         env.WOW_PROJECT_ID = 18
@@ -5817,7 +5835,7 @@ do
     localizedSettings = slashTest.profileState().settings
     eq("slash.localized_ruRU.reset.keeps_account_locale", accountSettings(slashEnv).forceLocale, "ruRU")
     eq("slash.localized_ruRU.reset.keeps_glyph_font",
-        localizedSettings.font, "Fonts\\ARIALN.TTF")
+        localizedSettings.font, "Fonts\\FRIZQT__.TTF")
     eq("slash.localized_ruRU.reset.panel_keeps_glyph_font",
         slashTest.panelFontState().mainAppliedFont, "Fonts\\ARIALN.TTF")
     eq("slash.localized_ruRU.reset.print", lastPrint(slashEnv), STATSPRO_PRINT_PREFIX .. "Настройки сброшены по умолчанию")
@@ -12179,7 +12197,7 @@ do
     local extraPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\OmegaRegistered.ttf"
     local lateEnv, lateAddon, lateTest
     lateEnv, lateAddon, lateTest = loadStatsPro("enUS", {
-        lsmFonts = { { name = "Zulu Registered", path = goodPath } },
+        lsmFonts = { { name = "0 Zulu Registered", path = goodPath } },
         setFontResult = function(frame, font, size, flags)
             if font == latePath then
                 if lateAddon and frame == lateAddon.fontRuntime.probeFontString then
@@ -12195,24 +12213,24 @@ do
     userInteract("fonts.lsm_registration_open_picker.show",
         lateEnv.StatsProFontDropdownButton, "OnClick")
     local pooledButton = findFrame("fonts.lsm_registration_open_picker.initial_button", lateEnv,
-        function(frame) return frame.fontName == "Zulu Registered" and frame:IsShown() end)
+        function(frame) return frame.fontName == "0 Zulu Registered" and frame:IsShown() end)
     local committedFont = activeSettings(lateEnv).font
     userInteract("fonts.lsm_registration_open_picker.initial_hover", pooledButton, "OnEnter")
     eq("fonts.lsm_registration_open_picker.initial_preview",
         lateTest.panelFontState().mainAppliedFont, goodPath)
 
-    lateEnv.__registerLSMFont("Alpha Registered", latePath)
-    lateEnv.__registerLSMFont("Omega Registered", extraPath)
+    lateEnv.__registerLSMFont("0 Alpha Registered", latePath)
+    lateEnv.__registerLSMFont("0 Omega Registered", extraPath)
     eq("fonts.lsm_registration_open_picker.coalesces_burst", #lateEnv.__timers, 1)
     eq("fonts.lsm_registration_open_picker.waits_one_tick",
-        countFrameField(lateEnv, "fontName", "Alpha Registered"), 0)
+        countFrameField(lateEnv, "fontName", "0 Alpha Registered"), 0)
     flushTimers("fonts.lsm_registration_open_picker.refresh", lateEnv, 0, 1)
     eq("fonts.lsm_registration_open_picker.refreshed_row",
-        countFrameField(lateEnv, "fontName", "Alpha Registered"), 1)
+        countFrameField(lateEnv, "fontName", "0 Alpha Registered"), 1)
     eq("fonts.lsm_registration_open_picker.second_registered_row",
-        countFrameField(lateEnv, "fontName", "Omega Registered"), 1)
+        countFrameField(lateEnv, "fontName", "0 Omega Registered"), 1)
     eq("fonts.lsm_registration_open_picker.rebinds_hovered_row",
-        pooledButton.fontName, "Alpha Registered")
+        pooledButton.fontName, "0 Alpha Registered")
     eq("fonts.lsm_registration_open_picker.exact_path", pooledButton.fontPath, latePath)
     eq("fonts.lsm_registration_open_picker.failed_rebind_restores_committed",
         lateTest.panelFontState().mainAppliedFont, committedFont)
@@ -12222,15 +12240,15 @@ do
     lateEnv.StatsProFontPicker:Hide()
     flushTimers("fonts.lsm_registration_open_picker.hide_restore", lateEnv, 0, 1)
     local hiddenPath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\BetaRegistered.ttf"
-    lateEnv.__registerLSMFont("Beta Registered", hiddenPath)
+    lateEnv.__registerLSMFont("0 Beta Registered", hiddenPath)
     eq("fonts.lsm_registration_open_picker.hidden_refresh_scheduled", #lateEnv.__timers, 1)
     flushTimers("fonts.lsm_registration_open_picker.hidden_refresh", lateEnv, 0, 1)
     userInteract("fonts.lsm_registration_open_picker.reopen",
         lateEnv.StatsProFontDropdownButton, "OnClick")
     local hiddenButton = findFrame("fonts.lsm_registration_open_picker.hidden_button", lateEnv,
-        function(frame) return frame.fontName == "Beta Registered" and frame:IsShown() end)
+        function(frame) return frame.fontName == "0 Beta Registered" and frame:IsShown() end)
     eq("fonts.lsm_registration_open_picker.hidden_registration_unique",
-        countFrameField(lateEnv, "fontName", "Beta Registered"), 1)
+        countFrameField(lateEnv, "fontName", "0 Beta Registered"), 1)
     eq("fonts.lsm_registration_open_picker.hidden_registration_path",
         hiddenButton.fontPath, hiddenPath)
 end
@@ -12259,7 +12277,7 @@ end
 
 do
     local stalePath = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\StaleRetry.ttf"
-    local staleEnv, _, staleTest = loadStatsPro("enUS", {
+    local staleEnv, staleAddon, staleTest = loadStatsPro("enUS", {
         statsProDB = { font = stalePath },
         lsmFonts = { { name = "Stale Retry", path = stalePath } },
         setFontResult = function(_, font)
@@ -12269,7 +12287,7 @@ do
     })
     fireEvent("fonts.pending_retry_cancel.pew", staleEnv, "PLAYER_ENTERING_WORLD")
     eq("fonts.pending_retry_cancel.initial_timer", #staleEnv.__timers, 1)
-    local applied = staleTest.applyCommittedTextStyle("Fonts\\ARIALN.TTF", 14, true, false)
+    local applied = staleAddon.settingsUI.fontPicker.Pick(staleAddon, {path="Fonts\\ARIALN.TTF"})
     eq("fonts.pending_retry_cancel.new_font_applied", applied, true)
     eq("fonts.pending_retry_cancel.new_font_saved",
         activeSettings(staleEnv).font, "Fonts\\ARIALN.TTF")
@@ -12344,7 +12362,7 @@ do
         end,
     })
     fireEvent("fonts.dangling_saved_path.ru_fallback.pew", ruEnv, "PLAYER_ENTERING_WORLD")
-    eq("fonts.dangling_saved_path.ru_fallback.db", activeSettings(ruEnv).font, "Fonts\\ARIALN.TTF")
+    eq("fonts.dangling_saved_path.ru_fallback.db", activeSettings(ruEnv).font, "Fonts\\FRIZQT__.TTF")
     eq("fonts.dangling_saved_path.ru_fallback.panel", ruTest.panelFontState().mainAppliedFont, "Fonts\\ARIALN.TTF")
 end
 
@@ -12402,7 +12420,7 @@ do
     })
     fireEvent("fonts.invalid_standard_text_font.pew", defaultEnv, "PLAYER_ENTERING_WORLD")
     eq("fonts.invalid_standard_text_font.safe_default", defaultTest.safeDefaultFontPath(), "Fonts\\FRIZQT__.TTF")
-    eq("fonts.invalid_standard_text_font.repairs_db", activeSettings(defaultEnv).font, "Fonts\\FRIZQT__.TTF")
+    eq("fonts.invalid_standard_text_font.preserves_preference", activeSettings(defaultEnv).font, missingDefault)
     eq("fonts.invalid_standard_text_font.panel_font", defaultTest.panelFontState().mainAppliedFont, "Fonts\\FRIZQT__.TTF")
 end
 
@@ -12497,7 +12515,7 @@ do
         },
     })
     fireEvent("fonts.lsm_locale_auto_switch.fire", autoEnv, "PLAYER_ENTERING_WORLD")
-    eq("fonts.lsm_locale_auto_switch.font", activeSettings(autoEnv).font, cjkFontPath)
+    eq("fonts.lsm_locale_auto_switch.preserves_preference", activeSettings(autoEnv).font, "Fonts\\FRIZQT__.TTF")
 end
 
 do
@@ -12551,9 +12569,9 @@ do
                 eq(name .. ".committed_language", accountSettings(env).forceLocale, locale)
                 eq(name .. ".committed_hud", test.panelFontState().mainAppliedFont, font.path)
                 eq(name .. ".committed_settings", test.configFontState().currentFont, font.path)
-                eq(name .. ".no_coverage_warning", env.StatsProConfigFrame.languageWarning:GetText(), "")
+                check(name .. ".preferred_font_coverage_warning", env.StatsProConfigFrame.languageWarning:GetText() ~= "")
                 eq(name .. ".no_warning_surface",
-                    env.StatsProConfigFrame.languageWarning.statsProWarningSurface:IsShown(), false)
+                    env.StatsProConfigFrame.languageWarning.statsProWarningSurface:IsShown(), true)
                 selectDropdownValue(name .. ".return_auto", env.StatsProLanguageDropdown, "auto")
                 eq(name .. ".restored_preference", activeSettings(env).font, "Fonts\\FRIZQT__.TTF")
                 eq(name .. ".restored_hud", test.panelFontState().mainAppliedFont, baselineHUD)
@@ -12566,7 +12584,7 @@ end
 do
     local outlineFallbackPath = "Interface\\AddOns\\SharedMedia\\Fonts\\NoOutline.ttf"
     local setFontCalls = 0
-    local fallbackEnv, _, fallbackTest = loadStatsPro("enUS", {
+    local fallbackEnv, fallbackAddon, fallbackTest = loadStatsPro("enUS", {
         lsmFonts = { { name = "No Outline", path = outlineFallbackPath } },
         setFontResult = function(_, _, _, flags)
             setFontCalls = setFontCalls + 1
@@ -12575,7 +12593,8 @@ do
         end,
     })
     fireEvent("fonts.unsupported_flags_fall_back_to_base.pew", fallbackEnv, "PLAYER_ENTERING_WORLD")
-    local applied, effectiveFont = fallbackTest.applyCommittedTextStyle(outlineFallbackPath, 14, true, false)
+    local applied = fallbackAddon.settingsUI.fontPicker.Pick(fallbackAddon, {path=outlineFallbackPath})
+    local effectiveFont = fallbackTest.currentRuntimeFontPath()
     eq("fonts.unsupported_flags_fall_back_to_base.applied", applied, true)
     eq("fonts.unsupported_flags_fall_back_to_base.effective_font", effectiveFont, outlineFallbackPath)
     eq("fonts.unsupported_flags_fall_back_to_base.db_font", activeSettings(fallbackEnv).font, outlineFallbackPath)
@@ -13093,7 +13112,7 @@ do
         if options.custom then fonts[#fonts + 1] = { name = "Chosen CJK", path = customPath } end
         local env, addon, test = loadStatsPro("enUS", withProfileIdentity({
             statsProDB = { dbVersion = 9, forceLocale = locale,
-                font = options.custom and customPath or latinPath,
+                font = options.missingPreferred and cjkPath or (options.custom and customPath or latinPath),
                 isVisible = options.visible == true },
             lsmFonts = fonts,
             inCombatLockdown = function() return state.combat end,
@@ -13147,8 +13166,8 @@ do
                 fixture.addon.settingsUI.fontPicker.Show(fixture.addon)
                 if window == "hidden-picker" then fixture.env.StatsProFontPicker:Hide() end
             end
-            eq(name .. ".initial_unreadable", fixture.test.fontSupports(
-                fixture.test.panelFontState().mainAppliedFont, fixture.glyph), false)
+            eq(name .. ".baseline_initially_readable", fixture.test.fontSupports(
+                fixture.test.panelFontState().mainAppliedFont, fixture.glyph), true)
             fixture.register(cjkPath)
             if window == "never-opened" then
                 local ticker = findFrame(name .. ".ticker", fixture.env, function(frame)
@@ -13159,8 +13178,8 @@ do
                 fixture.tick()
             end
             AssertReadable(name, fixture)
-            eq(name .. ".font_saved", fixture.settings.font, cjkPath)
-            eq(name .. ".restore_choice_preserved", fixture.settings.fontBeforeAutoSwitch, latinPath)
+            eq(name .. ".preference_preserved", fixture.settings.font, latinPath)
+            eq(name .. ".no_synthetic_restore_choice", fixture.settings.fontBeforeAutoSwitch, nil)
             eq(name .. ".root_identity", fixture.test.profileState().root, root)
             eq(name .. ".profile_identity", root.profiles[profileID], profile)
             eq(name .. ".settings_identity", profile.settings, fixture.settings)
@@ -13178,7 +13197,7 @@ do
     assertDeepEqual("fonts.catalog_locale.compatible_zero_writes",
         compatible.test.profileState().root, compatibleBefore)
 
-    local alignment = NewCatalogLocaleFixture("koKR")
+    local alignment = NewCatalogLocaleFixture("koKR", {missingPreferred=true})
     alignment.addon:OpenConfigMenu()
     local dropdownRows = alignment.addon.settingsUI.context.displayDropdownRows
     for _, row in ipairs(dropdownRows) do
@@ -13297,21 +13316,22 @@ do
     assertDeepEqual("fonts.catalog_locale.context.outgoing_unchanged", source, sourceBefore)
     AssertReadable("fonts.catalog_locale.context.incoming", context)
 
-    local cold = NewCatalogLocaleFixture("koKR", { ready = false })
+    local cold = NewCatalogLocaleFixture("koKR", { ready = false, missingPreferred = true })
     cold.locale = "koKR"
     cold.register(cjkPath)
     cold.tick()
-    eq("fonts.catalog_locale.cold.pending_preserves_choice", cold.settings.font, latinPath)
+    eq("fonts.catalog_locale.cold.pending_preserves_choice", cold.settings.font, cjkPath)
     cold.ready = true
     cold.env.__flushTimers(0.2)
     cold.tick()
     AssertReadable("fonts.catalog_locale.cold.retry", cold)
 
-    local stale = NewCatalogLocaleFixture("koKR", { ready = false })
+    local stale = NewCatalogLocaleFixture("koKR", { ready = false, missingPreferred = true })
     stale.register(cjkPath)
     stale.tick()
     eq("fonts.catalog_locale.stale.old_retry_scheduled", #stale.env.__timers, 1)
     stale.register(customPath)
+    check("fonts.catalog_locale.stale.explicit_new_choice", stale.addon.settingsUI.fontPicker.Pick(stale.addon, {path=customPath}))
     stale.tick()
     eq("fonts.catalog_locale.stale.new_registration_applied", stale.settings.font, customPath)
     local probesBeforeStale = stale.probes
@@ -13322,7 +13342,7 @@ do
     assertDeepEqual("fonts.catalog_locale.stale.old_retry_zero_writes",
         stale.test.profileState().root, rootBeforeStale)
 
-    local never = NewCatalogLocaleFixture("koKR", { ready = false })
+    local never = NewCatalogLocaleFixture("koKR", { ready = false, missingPreferred = true })
     local neverBefore = deepCopy(never.test.profileState().root)
     never.register(cjkPath)
     never.tick()
@@ -14982,9 +15002,9 @@ do
     end
 
     local warningTemplate =
-        "|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."
+        "|cffffaa44!|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."
     local oldWarningTemplate =
-        "|cffffaa44⚠|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."
+        "|cffffaa44!|r Font may not render %s glyphs. Pick a SharedMedia font with proper coverage."
     local requirementLabelKeys = {
         "Western European text", "Russian text", "Korean text",
         "Simplified Chinese text", "Traditional Chinese text",
@@ -15190,7 +15210,7 @@ do
         eq(prefix .. ".swatch_count", counts.swatch, 18)
         eq(prefix .. ".slider_count", counts.slider, 5)
         eq(prefix .. ".dropdown_count", counts.dropdown, 6)
-        eq(prefix .. ".button_count", counts.button, 22)
+        eq(prefix .. ".button_count", counts.button, 23)
         eq(prefix .. ".developer_link_count", counts.developerLink, 2)
         local presetUI = localeAddon.appearancePresets.ui
         for _, presetID in ipairs({
@@ -15429,7 +15449,7 @@ end
 
 do
     local warningTemplate =
-        "|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."
+        "|cffffaa44!|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."
     local cases = {
         { locale = "ruRU", requirement = "Cyrillic", labelKey = "Russian text" },
         { locale = "koKR", requirement = "Hangul", labelKey = "Korean text" },
@@ -23192,7 +23212,8 @@ for _, scenario in ipairs({
     local env, addonContext, test, root = makeProfileOpsFixture({
         mutateRoot = function(candidate)
             candidate.account.forceLocale = "ruRU"
-            candidate.profiles.p2.settings.font = "Fonts\\FRIZQT__.TTF"
+            candidate.profiles.p2.settings.font = "Fonts\\ARIALN.TTF"
+            candidate.profiles.p2.settings.fontBeforeAutoSwitch = "Fonts\\FRIZQT__.TTF"
             candidate.profiles.p3.settings.font = "Fonts\\ARIALN.TTF"
         end,
     })
@@ -23229,9 +23250,12 @@ for _, scenario in ipairs({
     addonContext:OpenConfigMenu()
     selectDropdownValue(prefix .. ".language_change", env.StatsProLanguageDropdown, "enUS")
     eq(prefix .. ".language_committed", root.account.forceLocale, "enUS")
-    eq(prefix .. ".font_after_language_change", imported.font,
+    eq(prefix .. ".preference_after_language_change", imported.font, "Fonts\\ARIALN.TTF")
+    eq(prefix .. ".runtime_after_language_change", test.panelFontState().mainAppliedFont,
         scenario.sections.appearance and "Fonts\\ARIALN.TTF" or "Fonts\\FRIZQT__.TTF")
-    eq(prefix .. ".restore_after_language_change", imported.fontBeforeAutoSwitch, nil)
+    local expectedRestore
+    if not scenario.sections.appearance then expectedRestore = "Fonts\\FRIZQT__.TTF" end
+    eq(prefix .. ".restore_after_language_change", imported.fontBeforeAutoSwitch, expectedRestore)
 end
 
 for _, failure in ipairs({
@@ -23242,7 +23266,8 @@ for _, failure in ipairs({
     local _, _, test, root = makeProfileOpsFixture({
         mutateRoot = function(candidate)
             candidate.account.forceLocale = "ruRU"
-            candidate.profiles.p2.settings.font = "Fonts\\FRIZQT__.TTF"
+            candidate.profiles.p2.settings.font = "Fonts\\ARIALN.TTF"
+            candidate.profiles.p2.settings.fontBeforeAutoSwitch = "Fonts\\FRIZQT__.TTF"
             candidate.profiles.p3.settings.font = "Fonts\\ARIALN.TTF"
         end,
     })

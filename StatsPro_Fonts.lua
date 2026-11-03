@@ -1,72 +1,145 @@
--- Optional font faces shared by both client flavors. Their own licenses apply.
+-- Collection metadata is separate from each consumer's profile state.
 local _, addon = ...
-addon.bundledFonts = {
-    { name = "DejaVu Sans", file = "DejaVuSans.ttf", cyrillic = true },
-    { name = "DejaVu Serif", file = "DejaVuSerif.ttf", cyrillic = true },
-    { name = "Gentium", file = "Gentium-Regular.ttf", cyrillic = true },
-    { name = "Hack", file = "Hack-Regular.ttf", cyrillic = true },
-    { name = "Liberation Sans", file = "LiberationSans-Regular.ttf", cyrillic = true },
-    { name = "Liberation Serif", file = "LiberationSerif-Regular.ttf", cyrillic = true },
-    { name = "TeX Gyre Adventor", file = "texgyreadventor-regular.otf", cyrillic = false },
-    { name = "TeX Gyre Adventor Bold", file = "texgyreadventor-bold.otf", cyrillic = false },
-    { name = "Noto Sans", file = "NotoSans-Regular.ttf", cyrillic = true },
-    { name = "Roboto Condensed", file = "RobotoCondensed-Regular.ttf", cyrillic = true },
-    { name = "Oswald", file = "Oswald-Regular.ttf", cyrillic = true },
-    { name = "PT Sans", file = "PT_Sans-Web-Regular.ttf", cyrillic = true },
-    { name = "PT Sans Bold", file = "PT_Sans-Web-Bold.ttf", cyrillic = true },
-    { name = "PT Sans Narrow", file = "PT_Sans-Narrow-Web-Regular.ttf", cyrillic = true },
-    { name = "PT Sans Narrow Bold", file = "PT_Sans-Narrow-Web-Bold.ttf", cyrillic = true },
-    { name = "PT Serif", file = "PT_Serif-Web-Regular.ttf", cyrillic = true },
-    { name = "PT Serif Bold", file = "PT_Serif-Web-Bold.ttf", cyrillic = true },
-    { name = "Fira Sans", file = "FiraSans-Regular.ttf", cyrillic = true },
-    { name = "Fira Sans Bold", file = "FiraSans-Bold.ttf", cyrillic = true },
-    { name = "Fira Sans Condensed", file = "FiraSansCondensed-Regular.ttf", cyrillic = true },
-    { name = "Fira Sans Condensed Bold", file = "FiraSansCondensed-Bold.ttf", cyrillic = true },
-    { name = "PT Mono", file = "PTM55FT.ttf", cyrillic = true },
-    { name = "Audiowide", file = "Audiowide-Regular.ttf", cyrillic = false },
-    { name = "Black Ops One", file = "BlackOpsOne-Regular.ttf", cyrillic = false },
-    { name = "Bangers", file = "Bangers-Regular.ttf", cyrillic = false },
-    { name = "Special Elite", file = "SpecialElite-Regular.ttf", cyrillic = false },
-    { name = "Russo One", file = "RussoOne-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Ruslan Display", file = "RuslanDisplay-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Rubik Mono One", file = "RubikMonoOne-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Marmelad", file = "Marmelad-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Philosopher", file = "Philosopher-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Lobster", file = "Lobster-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Bad Script", file = "BadScript-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Neucha", file = "Neucha.ttf", latin = false, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false, latinLocales = { enUS = true, deDE = true, esES = true, esMX = true, frFR = true } },
-    { name = "Old Standard TT", file = "OldStandard-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Press Start 2P", file = "PressStart2P-Regular.ttf", latin = true, cyrillic = true, hans = false, hant = false, hangul = false, japanese = false },
-    { name = "Kosugi Maru", file = "KosugiMaru-Regular.ttf", latin = false, cyrillic = true, hans = false, hant = false, hangul = false, japanese = true, latinLocales = { enUS = true } },
-    { name = "Sawarabi Mincho", file = "SawarabiMincho-Regular.ttf", latin = true, cyrillic = false, hans = false, hant = false, hangul = false, japanese = true },
-    { name = "Do Hyeon", file = "DoHyeon-Regular.ttf", latin = false, cyrillic = false, hans = false, hant = false, hangul = true, japanese = false, latinLocales = { enUS = true } },
-    { name = "Nanum Pen Script", file = "NanumPenScript-Regular.ttf", latin = false, cyrillic = false, hans = false, hant = false, hangul = true, japanese = false, latinLocales = { enUS = true } },
-    { name = "Ma Shan Zheng", file = "MaShanZheng-Regular.ttf", latin = false, cyrillic = false, hans = true, hant = false, hangul = false, japanese = false, latinLocales = { enUS = true } },
-    { name = "ZCOOL XiaoWei", file = "ZCOOLXiaoWei-Regular.ttf", latin = false, cyrillic = false, hans = true, hant = false, hangul = false, japanese = false, latinLocales = { enUS = true } },
-    { name = "Source Han Sans CN", file = "SourceHanSansCN-Regular.otf", latin = true, cyrillic = true, hans = true, hant = true, hangul = false, japanese = true, region = "zhCN" },
-    { name = "Source Han Sans TW", file = "SourceHanSansTW-Regular.otf", latin = true, cyrillic = true, hans = false, hant = true, hangul = false, japanese = true, region = "zhTW" },
-    { name = "Source Han Serif CN", file = "SourceHanSerifCN-Regular.otf", latin = true, cyrillic = true, hans = true, hant = true, hangul = false, japanese = true, region = "zhCN" },
-    { name = "Source Han Serif TW", file = "SourceHanSerifTW-Regular.otf", latin = true, cyrillic = true, hans = false, hant = true, hangul = false, japanese = true, region = "zhTW" },
-}
-
--- Keep existing profile and import paths usable after catalog curation.
-addon.retiredFonts = {
-    ["FiraMono-Regular.ttf"] = "Hack-Regular.ttf",
-    ["LiberationMono-Regular.ttf"] = "Hack-Regular.ttf",
-}
-
-local media = LibStub and LibStub("LibSharedMedia-3.0", true)
-for _, font in ipairs(addon.bundledFonts) do
-    font.path = "Interface\\AddOns\\StatsPro\\fonts\\" .. font.file
-    if media and type(media.Register) == "function" then
-        local mask = font.latin ~= false and media.LOCALE_BIT_western or 0
-        if font.cyrillic and mask and media.LOCALE_BIT_ruRU then
-            mask = mask + media.LOCALE_BIT_ruRU
-        end
-        if font.hans and media.LOCALE_BIT_zhCN then mask = mask + media.LOCALE_BIT_zhCN end
-        if font.hant and media.LOCALE_BIT_zhTW then mask = mask + media.LOCALE_BIT_zhTW end
-        if font.hangul and media.LOCALE_BIT_koKR then mask = mask + media.LOCALE_BIT_koKR end
-        -- Register preserves a previously registered face with the same name.
-        media:Register(media.MediaType.FONT, font.name, font.path, mask)
-    end
+local snapshot = assert(addon.AntraktFontCatalog)
+local shared = { status = 'provider-unavailable', snapshot = snapshot }
+addon.sharedFonts = shared
+shared.baseline = {}
+for key, value in pairs(snapshot.baseline) do shared.baseline[key] = value end
+shared.baseline.path = 'Interface\\AddOns\\StatsPro\\fonts\\' .. shared.baseline.file
+local glyphs = { 'latin', 'cyrillic', 'hans', 'hant', 'hangul', 'japanese' }
+local function clean(value, kind)
+    local ok, result = pcall(function()
+        return type(value) == kind and (type(_G.issecretvalue) ~= 'function' or not _G.issecretvalue(value))
+    end)
+    return ok and result == true
 end
+function shared.Key(value)
+    if not clean(value, 'string') or #value > 1024 then return nil end
+    return (value:gsub('/', '\\'):gsub('[A-Z]', string.lower))
+end
+local function plain(value)
+    return clean(value, 'table') and getmetatable(value) == nil
+end
+local function text(value, limit)
+    return clean(value, 'string') and #value > 0 and #value <= limit and not value:find('%c')
+end
+function shared.Refresh()
+    local provider = rawget(_G, 'AntraktFonts')
+    shared.provider, shared.revision = provider, nil
+    shared.status = 'provider-unavailable'
+    local active = {}
+    local readOK = pcall(function()
+    if provider ~= nil then
+        shared.status = 'provider-incompatible'
+        local ok, catalog = pcall(function()
+            if not plain(provider) or type(rawget(provider, 'GetCatalog')) ~= 'function' then return nil end
+            return provider.GetCatalog()
+        end)
+        if ok and catalog ~= nil and plain(catalog) and rawget(catalog, 'formatMajor') == 1
+            and text(rawget(catalog, 'catalogRevision'), 64)
+            and catalog.catalogRevision:match('^[a-f0-9]+$') and #catalog.catalogRevision == 64
+            and plain(rawget(catalog, 'fonts')) then
+            local fonts = assert(catalog.fonts)
+            local valid, ids, files = true, {}, {}
+            for index = 1, 257 do
+                local record = rawget(fonts, index)
+                if record == nil then break end
+                if index > 256 or not plain(record) or not text(rawget(record, 'id'), 64)
+                    or not record.id:match('^[a-z0-9][a-z0-9%-]*$') or ids[record.id]
+                    or not text(rawget(record, 'file'), 128)
+                    or not record.file:match('^[A-Za-z0-9_.%-]+%.[to][tt]f$')
+                    or files[record.file:lower()] or not text(rawget(record, 'name'), 128)
+                    or not text(rawget(record, 'sha256'), 64) or #record.sha256 ~= 64
+                    or not record.sha256:match('^[a-f0-9]+$')
+                    or rawget(record, 'path') ~= 'Interface\\AddOns\\AntraktFonts\\fonts\\' .. record.file then
+                    valid = false; break
+                end
+                for _, field in ipairs(glyphs) do
+                    if not clean(rawget(record, field), 'boolean') then valid = false end
+                end
+                if rawget(record, 'region') ~= nil and record.region ~= 'zhCN' and record.region ~= 'zhTW' then valid = false end
+                if rawget(record, 'latinLocales') ~= nil then
+                    if not plain(record.latinLocales) then valid = false
+                    else
+                        local count = 0
+                        for locale, value in pairs(record.latinLocales) do
+                            count = count + 1
+                            if count > 7 or not clean(locale, 'string') or value ~= true
+                                or not ({ enUS=true, deDE=true, esES=true, esMX=true, frFR=true, itIT=true, ptBR=true })[locale] then valid = false; break end
+                        end
+                    end
+                end
+                if not valid then break end
+                ids[record.id], files[record.file:lower()] = true, true
+                active[#active + 1] = record
+            end
+            local count = 0
+            for key in pairs(fonts) do
+                count = count + 1
+                if count > 256 or not clean(key, 'number') or key % 1 ~= 0
+                    or key < 1 or key > #active then valid = false; break end
+            end
+            if valid and #active > 0 then shared.status, shared.revision = 'available', catalog.catalogRevision
+            else active = {} end
+        end
+    end
+    end)
+    if not readOK then shared.status = "provider-incompatible"; active = {} end
+    shared.byPath, shared.byID = {}, {}
+    for _, record in ipairs(snapshot.fonts) do
+        shared.byID[record.id] = record
+        shared.byPath[shared.Key(record.path)] = record
+        for _, alias in ipairs(record.aliases) do shared.byPath[shared.Key(alias)] = record end
+    end
+    shared.activeByID = {}
+    addon.bundledFonts = { shared.baseline }
+    for _, record in ipairs(active) do
+        shared.activeByID[record.id] = record
+        shared.byID[record.id] = record
+        shared.byPath[shared.Key(record.path)] = record
+        addon.bundledFonts[#addon.bundledFonts + 1] = record
+    end
+    for path, record in pairs(shared.byPath) do
+        shared.byPath[path] = shared.activeByID[record.id] or record
+    end
+    shared.byPath[shared.Key(shared.baseline.path)] = shared.baseline
+    return shared.status
+end
+function shared.IsReference(path)
+    local key = shared.Key(path)
+    if not key or key:find("%c") or key:find("\\%.%.\\") then return false end
+    return (key:sub(1, 6) == "fonts\\" or key:sub(1, 17) == "interface\\addons\\")
+        and key:match("%.[to]tf$") ~= nil
+end
+function shared.Lookup(path)
+    local key = shared.Key(path)
+    return key and shared.byPath[key] or nil
+end
+function shared.Identity(path)
+    local record = shared.Lookup(path)
+    return record and ('owned:' .. record.id) or shared.Key(path)
+end
+function shared.Resolve(path)
+    local record = shared.Lookup(path)
+    if not record then return nil end
+    if record == shared.baseline then return shared.baseline.path, record.name end
+    local available = shared.activeByID[record.id]
+    if available then return available.path, available.name end
+    local legacy = path
+    local key = shared.Key(path)
+    if not key then return nil, record.name end
+    for _, owner in ipairs({'StatsPro', 'DoYouNeedIt'}) do
+        local prefix = 'Interface\\AddOns\\' .. owner .. '\\fonts\\'
+        if key:sub(1, #prefix) == shared.Key(prefix) then legacy = prefix .. record.file; break end
+    end
+    local ok, known = pcall(function() return C_UIFileAsset.IsKnownFile(legacy) end)
+    if ok and clean(known, 'boolean') and known == true then return legacy, record.name end
+    return nil, record.name, shared.status == "available" and "asset-unavailable" or shared.status
+end
+function shared.Message(locale, key, value)
+    local messages = snapshot.messages[locale] or snapshot.messages.enUS
+    local message = messages[key] or snapshot.messages.enUS[key] or key
+    if value ~= nil and clean(value, 'string') then return string.format(message, value) end
+    return message
+end
+shared.Refresh()

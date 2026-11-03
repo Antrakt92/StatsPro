@@ -11,6 +11,63 @@ local function loadStatsPro(locale, options)
         "recovery fixture loads the requested flavor")
     return env, addon, test
 end
+-- Retail may report THICKOUTLINE with its implied OUTLINE bit set.
+do
+    local secret={}
+    local _,addon=loadStatsPro('enUS',{issecretvalue=function(value) return value==secret end})
+    for _,case in ipairs({
+        {'THICKOUTLINE','OUTLINE, THICKOUTLINE',true},
+        {'THICKOUTLINE',' THICKOUTLINE , OUTLINE ',true},
+        {'OUTLINE, THICKOUTLINE','THICKOUTLINE',true},
+        {'MONOCHROME,THICKOUTLINE','OUTLINE, MONOCHROME, THICKOUTLINE',true},
+        {'OUTLINE',' OUTLINE ',true},
+        {'','',true},
+        {'THICKOUTLINE','OUTLINE',false},
+        {'THICKOUTLINE','',false},
+        {'OUTLINE','THICKOUTLINE',false},
+        {'THICKOUTLINE','THICKOUTLINE,MONOCHROME',false},
+        {'THICKOUTLINE','THICKOUTLINE,UNKNOWN',false},
+        {'THICKOUTLINE','THICKOUTLINE,,OUTLINE',false},
+        {'THICKOUTLINE','THICKOUTLINE,THICKOUTLINE',false},
+        {'THICKOUTLINE',string.rep(' ',129)..'THICKOUTLINE',false},
+        {'THICKOUTLINE',secret,false},
+        {secret,'THICKOUTLINE',false},
+    }) do
+        local region={GetFont=function() return 'Fonts\\ARIALN.TTF',14,case[2] end}
+        assert(addon.fontRuntime.matchesAppliedFont(region,'Fonts\\ARIALN.TTF',14,case[1])==case[3],
+            'bounded semantic font flag comparison: '..tostring(case[1])..' / '..tostring(case[2]))
+    end
+end
+for _,style in ipairs({'none','outline','thick'}) do
+    local env,addon,test=loadStatsPro('enUS',{
+        statsProDB={textOutlineStyle=style},
+        setFontResult=function(region)
+            if not region.normalizedFontReadback then
+                region.normalizedFontReadback=true
+                local original=region.GetFont
+                region.GetFont=function(self)
+                    local path,size,flags=original(self)
+                    if flags=='THICKOUTLINE' then flags='OUTLINE, THICKOUTLINE' end
+                    return path,size,flags
+                end
+            end
+            return true
+        end,
+    })
+    env.__fireEvent('PLAYER_ENTERING_WORLD')
+    addon:OpenConfigMenu()
+    assert(test.panelFontState().mainAppliedTextOutlineStyle==style,'native normalized readback preserves '..style..' HUD style')
+    for _,path in ipairs({'Fonts\\ARIALN.TTF','Fonts\\FRIZQT__.TTF'}) do
+        assert(addon.fontRuntime.applyCommittedTextStyle(path,14,true,true),'normalized readback permits subsequent style/font recovery')
+        local state=test.panelFontState()
+        assert(state.mainAppliedTextOutlineStyle==style,'recovery retains requested '..style..' style')
+        for _,region in ipairs(state.mainFontRegions) do
+            assert(addon.fontRuntime.matchesAppliedFont(region,state.mainAppliedFont,14,state.mainAppliedFontFlags),
+                'every actual HUD region verifies normalized flags after recovery')
+        end
+    end
+end
+print(flavor .. ' normalized font flag readback regressions passed')
 for _, client in ipairs({ "enUS", "ruRU" }) do
     local activated = {}
     local env, addon, test = loadStatsPro(client, {
@@ -201,7 +258,7 @@ do
     assert(once.test.profileState().root == root and once.test.profileState().settings == settings
         and root.profiles[before.profileID] == profile, "font recovery preserves profile graph identities")
     assert(root.account.forceLocale == "ruRU", "recovery preserves committed locale")
-    assert(settings.fontBeforeAutoSwitch == "Fonts\\FRIZQT__.TTF", "recovery preserves original font preference")
+    assert(settings.font == "Fonts\\FRIZQT__.TTF" and settings.fontBeforeAutoSwitch == nil, "recovery preserves the preference without creating a synthetic restore field")
 
     local persistent = fixture()
     persistent.failures = 100

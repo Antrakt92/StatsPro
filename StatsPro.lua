@@ -343,23 +343,22 @@ end
 -- LibSharedMedia-3.0 (soft dependency - gracefully falls back if not loaded)
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
 
-addon.fontRuntime.bundledByPath = {}
-for _, font in ipairs(addon.bundledFonts or {}) do
-    addon.fontRuntime.bundledByPath[FontPathKey(font.path)] = font
-    local glyphs = {}
-    if font.latin ~= false then glyphs[#glyphs + 1] = GLYPH_LATIN end
-    if font.cyrillic then glyphs[#glyphs + 1] = GLYPH_CYR end
-    if font.hans then glyphs[#glyphs + 1] = GLYPH_HANS end
-    if font.hant then glyphs[#glyphs + 1] = GLYPH_HANT end
-    if font.hangul then glyphs[#glyphs + 1] = GLYPH_HANGUL end
-    AddFontGlyphSupport(font.path, glyphs)
+function addon.fontRuntime.RefreshSharedCatalog(force)
+    local shared = addon.sharedFonts
+    if force or shared.provider ~= rawget(_G, "AntraktFonts") then shared.Refresh() end
+    addon.fontRuntime.bundledByPath = {}
+    for path, font in pairs(shared.byPath) do
+        addon.fontRuntime.bundledByPath[path] = font
+        local glyphs = {}
+        if font.latin then glyphs[#glyphs + 1] = GLYPH_LATIN end
+        if font.cyrillic then glyphs[#glyphs + 1] = GLYPH_CYR end
+        if font.hans then glyphs[#glyphs + 1] = GLYPH_HANS end
+        if font.hant then glyphs[#glyphs + 1] = GLYPH_HANT end
+        if font.hangul then glyphs[#glyphs + 1] = GLYPH_HANGUL end
+        FONT_GLYPH_SUPPORT[path] = glyphs
+    end
 end
-for oldFile, newFile in pairs(addon.retiredFonts or {}) do
-    local prefix = "Interface\\AddOns\\StatsPro\\fonts\\"
-    local targetKey = FontPathKey(prefix .. newFile)
-    addon.fontRuntime.bundledByPath[FontPathKey(prefix .. oldFile)] = addon.fontRuntime.bundledByPath[targetKey]
-    AddFontGlyphSupport(prefix .. oldFile, FONT_GLYPH_SUPPORT[targetKey])
-end
+addon.fontRuntime.RefreshSharedCatalog(false)
 
 -- WHY hijack-guard: STANDARD_TEXT_FONT is a Blizzard global ANY addon can mutate
 -- (ChonkyCharacterSheet / Tukui / ElvUI font modules / other "system font replacement"
@@ -1860,7 +1859,7 @@ local LABELS_BY_LOCALE = {
         ["Simplified Chinese text"] = "Simplified Chinese text",
         ["Traditional Chinese text"] = "Traditional Chinese text",
         ["text for the selected language"] = "text for the selected language",
-        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage.",
+        ["|cffffaa44!|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44!|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage.",
         -- Launcher description:
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window.",
     },
@@ -1996,7 +1995,7 @@ local LABELS_BY_LOCALE = {
         ["Simplified Chinese text"] = "текст на упрощённом китайском",
         ["Traditional Chinese text"] = "текст на традиционном китайском",
         ["text for the selected language"] = "текст выбранного языка",
-        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Шрифт может некорректно отображать %s. Выберите шрифт SharedMedia с нужным покрытием.",
+        ["|cffffaa44!|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44!|r Шрифт может некорректно отображать %s. Выберите шрифт SharedMedia с нужным покрытием.",
         -- Launcher description:
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD характеристик и экипировки: уровень предметов, прочность, стоимость ремонта и цели характеристик Archon. Нажмите ниже, чтобы открыть окно настроек.",
     },
@@ -2125,7 +2124,7 @@ local LABELS_BY_LOCALE = {
         ["Simplified Chinese text"] = "vereinfachtes Chinesisch",
         ["Traditional Chinese text"] = "traditionelles Chinesisch",
         ["text for the selected language"] = "Text der ausgewählten Sprache",
-        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Die Schrift stellt %s möglicherweise nicht korrekt dar. Wähle eine SharedMedia-Schrift mit passender Zeichenabdeckung.",
+        ["|cffffaa44!|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44!|r Die Schrift stellt %s möglicherweise nicht korrekt dar. Wähle eine SharedMedia-Schrift mit passender Zeichenabdeckung.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD für Werte und Ausrüstung: Gegenstandsstufe, Haltbarkeit, Reparaturkosten und Archon-Stat-Ziele. Klicke unten, um die vollständigen Einstellungen zu öffnen.",
     },
 
@@ -2251,7 +2250,7 @@ local LABELS_BY_LOCALE = {
         ["Simplified Chinese text"] = "le chinois simplifié",
         ["Traditional Chinese text"] = "le chinois traditionnel",
         ["text for the selected language"] = "le texte de la langue sélectionnée",
-        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La police sélectionnée peut ne pas afficher correctement %s. Choisissez une police SharedMedia avec une couverture adaptée.",
+        ["|cffffaa44!|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44!|r La police sélectionnée peut ne pas afficher correctement %s. Choisissez une police SharedMedia avec une couverture adaptée.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD de caractéristiques et d'équipement : niveau d'objet, durabilité, coût de réparation et objectifs de caractéristiques Archon. Cliquez ci-dessous pour ouvrir la fenêtre de paramètres complète.",
     },
 
@@ -2378,7 +2377,7 @@ local LABELS_BY_LOCALE = {
         ["Simplified Chinese text"] = "chino simplificado",
         ["Traditional Chinese text"] = "chino tradicional",
         ["text for the selected language"] = "texto del idioma seleccionado",
-        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La fuente seleccionada puede no mostrar correctamente %s. Elige una fuente SharedMedia con la cobertura adecuada.",
+        ["|cffffaa44!|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44!|r La fuente seleccionada puede no mostrar correctamente %s. Elige una fuente SharedMedia con la cobertura adecuada.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD de estadísticas y equipo: nivel de objeto, durabilidad, coste de reparación y objetivos de estadísticas de Archon. Haz clic abajo para abrir la ventana de ajustes.",
     },
 
@@ -2503,7 +2502,7 @@ local LABELS_BY_LOCALE = {
         ["Simplified Chinese text"] = "chino simplificado",
         ["Traditional Chinese text"] = "chino tradicional",
         ["text for the selected language"] = "texto del idioma seleccionado",
-        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r La fuente seleccionada puede no mostrar correctamente %s. Elige una fuente SharedMedia con la cobertura adecuada.",
+        ["|cffffaa44!|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44!|r La fuente seleccionada puede no mostrar correctamente %s. Elige una fuente SharedMedia con la cobertura adecuada.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD de estadísticas y equipo: nivel de objeto, durabilidad, costo de reparación y objetivos de estadísticas de Archon. Da clic abajo para abrir la ventana de configuración.",
     },
 
@@ -2629,7 +2628,7 @@ local LABELS_BY_LOCALE = {
         ["Simplified Chinese text"] = "cinese semplificato",
         ["Traditional Chinese text"] = "cinese tradizionale",
         ["text for the selected language"] = "testo della lingua selezionata",
-        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r Il font selezionato potrebbe non visualizzare correttamente %s. Scegli un font SharedMedia con copertura adeguata.",
+        ["|cffffaa44!|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44!|r Il font selezionato potrebbe non visualizzare correttamente %s. Scegli un font SharedMedia con copertura adeguata.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD di statistiche ed equipaggiamento: livello oggetto, durabilità, costo di riparazione e obiettivi statistiche Archon. Clicca sotto per aprire le impostazioni complete.",
     },
 
@@ -2754,7 +2753,7 @@ local LABELS_BY_LOCALE = {
         ["Simplified Chinese text"] = "chinês simplificado",
         ["Traditional Chinese text"] = "chinês tradicional",
         ["text for the selected language"] = "texto do idioma selecionado",
-        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r A fonte selecionada pode não exibir corretamente %s. Escolha uma fonte SharedMedia com cobertura adequada.",
+        ["|cffffaa44!|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44!|r A fonte selecionada pode não exibir corretamente %s. Escolha uma fonte SharedMedia com cobertura adequada.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "HUD de atributos e equipamento: nível de item, durabilidade, custo de reparo e metas de atributos do Archon. Clique abaixo para abrir a janela de configurações.",
     },
 
@@ -2886,7 +2885,7 @@ local LABELS_BY_LOCALE = {
         ["Simplified Chinese text"] = "중국어 간체",
         ["Traditional Chinese text"] = "중국어 번체",
         ["text for the selected language"] = "선택한 언어의 텍스트",
-        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 선택한 글꼴이 %s을(를) 올바르게 표시하지 못할 수 있습니다. SharedMedia에서 적합한 글꼴을 선택하세요.",
+        ["|cffffaa44!|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44!|r 선택한 글꼴이 %s을(를) 올바르게 표시하지 못할 수 있습니다. SharedMedia에서 적합한 글꼴을 선택하세요.",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "능력치·장비 HUD: 아이템 레벨, 내구도, 수리 비용, Archon 능력치 목표. 아래를 눌러 전체 설정 창을 엽니다.",
     },
 
@@ -3011,7 +3010,7 @@ local LABELS_BY_LOCALE = {
         ["Simplified Chinese text"] = "简体中文",
         ["Traditional Chinese text"] = "繁体中文",
         ["text for the selected language"] = "所选语言的文本",
-        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 所选字体可能无法正确显示%s。请从 SharedMedia 选择覆盖完整的字体。",
+        ["|cffffaa44!|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44!|r 所选字体可能无法正确显示%s。请从 SharedMedia 选择覆盖完整的字体。",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "属性与装备 HUD：装等、耐久度、修理费用及 Archon 属性目标。点击下方打开完整设置窗口。",
     },
 
@@ -3136,7 +3135,7 @@ local LABELS_BY_LOCALE = {
         ["Simplified Chinese text"] = "簡體中文",
         ["Traditional Chinese text"] = "繁體中文",
         ["text for the selected language"] = "所選語言的文字",
-        ["|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44⚠|r 所選字型可能無法正確顯示%s。請從 SharedMedia 選擇涵蓋完整的字型。",
+        ["|cffffaa44!|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."] = "|cffffaa44!|r 所選字型可能無法正確顯示%s。請從 SharedMedia 選擇涵蓋完整的字型。",
         ["Stats and gear HUD: item level, durability, repair cost and Archon stat targets. Click below to open the full settings window."] = "屬性與裝備 HUD：裝等、耐久度、修理費用及 Archon 屬性目標。點擊下方開啟完整設定視窗。",
     },
 }
@@ -3838,13 +3837,15 @@ end
 
 local function GetFontDB()
     local db = addon.dbRuntime.GetActiveSettings()
+    local requested = db.font
+    if addon.sharedFonts.IsReference(db.fontBeforeAutoSwitch) then requested = db.fontBeforeAutoSwitch end
     local usable, status
     if addon.fontRuntime.usablePath then
-        usable, status = addon.fontRuntime.usablePath(db.font)
+        usable, status = addon.fontRuntime.usablePath(requested)
     end
     if usable then return usable end
     if status == "pending" and addon.fontRuntime.catalogEntry then
-        local catalogPath = addon.fontRuntime.catalogEntry(db.font)
+        local catalogPath = addon.fontRuntime.catalogEntry(requested)
         if catalogPath then return catalogPath end
     end
     if addon.fontRuntime.safeDefaultPath then return addon.fontRuntime.safeDefaultPath() end
@@ -4135,8 +4136,8 @@ function addon.fontRuntime.catalogEntry(fontPath)
     if not key then return nil, nil end
     -- Bundled assets remain addressable when LSM excluded them for the client
     -- language, and retired filenames resolve to their retained replacement.
-    local bundled = addon.fontRuntime.bundledByPath[key]
-    if bundled then return bundled.path, bundled.name end
+    local bundled = addon.sharedFonts.Lookup(fontPath)
+    if bundled then return addon.sharedFonts.Resolve(fontPath) end
 
     local localeDefault = LocaleAwareDefaultFont()
     if SameFontPath(fontPath, localeDefault) then return localeDefault, nil end
@@ -4165,6 +4166,27 @@ function addon.fontRuntime.isKnownAsset(fontPath)
     return known
 end
 
+function addon.fontRuntime.semanticFlags(value)
+    local secretOK, secret = pcall(issecretvalue, value)
+    if not secretOK or secret then return nil end
+    if value == nil then return 0 end
+    if type(value) ~= "string" or #value > 128 then return nil end
+    if value:match("^%s*$") then return 0 end
+    local seen, count = {}, 0
+    for part in (value .. ","):gmatch("(.-),") do
+        count = count + 1
+        local token = part:match("^%s*(%u+)%s*$")
+        if count > 3 or not token or seen[token]
+            or (token ~= "OUTLINE" and token ~= "THICKOUTLINE" and token ~= "MONOCHROME") then
+            return nil
+        end
+        seen[token] = true
+    end
+    -- THICKOUTLINE implies OUTLINE on clients that return both bits.
+    return (seen.THICKOUTLINE and 2 or seen.OUTLINE and 1 or 0)
+        + (seen.MONOCHROME and 4 or 0)
+end
+
 function addon.fontRuntime.matchesAppliedFont(region, fontPath, size, flags)
     if not region or type(region.GetFont) ~= "function" then return false end
     local ok, actualFont, actualSize, actualFlags = pcall(region.GetFont, region)
@@ -4174,11 +4196,9 @@ function addon.fontRuntime.matchesAppliedFont(region, fontPath, size, flags)
     if not sizeSecretOK or sizeSecret or not flagsSecretOK or flagsSecret then return false end
     if not IsFiniteNumber(actualSize) or not IsFiniteNumber(size) then return false end
     if math.abs(actualSize - size) > 0.01 then return false end
-    local actualNormalized = actualFlags == nil and "" or actualFlags
-    local expectedNormalized = flags == nil and "" or flags
-    return type(actualNormalized) == "string"
-        and type(expectedNormalized) == "string"
-        and actualNormalized == expectedNormalized
+    local actualNormalized = addon.fontRuntime.semanticFlags(actualFlags)
+    local expectedNormalized = addon.fontRuntime.semanticFlags(flags)
+    return actualNormalized ~= nil and actualNormalized == expectedNormalized
 end
 
 function addon.fontRuntime.trySetFont(region, fontPath, size, flags)
@@ -4286,8 +4306,12 @@ end
 
 function addon.fontRuntime.usablePath(fontPath)
     if not FontPathKey(fontPath) then return nil, "invalid" end
-    local catalogPath = addon.fontRuntime.catalogEntry(fontPath)
-    if not catalogPath then return nil, "invalid" end
+    local catalogPath, _, sharedStatus = addon.fontRuntime.catalogEntry(fontPath)
+    if not catalogPath then
+        local known = addon.sharedFonts.Lookup(fontPath)
+        if known then return nil, sharedStatus or addon.sharedFonts.status end
+        return nil, "invalid"
+    end
     return addon.fontRuntime.usableCatalogPath(catalogPath)
 end
 
@@ -4296,6 +4320,7 @@ function addon.fontRuntime.safeDefaultPath()
         LocaleAwareDefaultFont(),
         "Fonts\\FRIZQT__.TTF",
         "Fonts\\ARIALN.TTF",
+        addon.sharedFonts.baseline.path,
     }
     for _, entry in ipairs(BLIZZARD_SHIPPED_FONTS) do
         if not entry.locale or entry.locale == GetLocale() then
@@ -4311,6 +4336,8 @@ end
 
 function addon.fontRuntime.catalogName(fontPath)
     if not FontPathKey(fontPath) then return "Font" end
+    local owned = addon.sharedFonts.Lookup(fontPath)
+    if owned then return owned.name end
     local _, name = addon.fontRuntime.catalogEntry(fontPath)
     if name then return name end
     if SameFontPath(fontPath, LocaleAwareDefaultFont()) then
@@ -4337,6 +4364,7 @@ local function FindCompatibleFont(currentFont, req, outputLocale)
 
     local match = consider(currentFont)
         or consider(LocaleAwareDefaultFont())
+        or consider("Fonts\\FRIZQT__.TTF")
         or consider("Fonts\\ARIALN.TTF")
     if match then return match end
     for _, entry in ipairs(BLIZZARD_SHIPPED_FONTS) do
@@ -4349,7 +4377,7 @@ local function FindCompatibleFont(currentFont, req, outputLocale)
     -- broad-coverage faces before script-only display faces in this fallback.
     for _, western in ipairs({ true, false }) do
         for _, font in ipairs(addon.bundledFonts or {}) do
-            if (font.latin ~= false) == western and addon.fontRuntime.offersLocale(font, outputLocale) then
+            if font ~= addon.sharedFonts.baseline and (font.latin ~= false) == western and addon.fontRuntime.offersLocale(font, outputLocale) then
                 match = consider(font.path, true)
                 if match then return match end
             end
@@ -4369,7 +4397,7 @@ local function FindCompatibleFont(currentFont, req, outputLocale)
             if match then return match end
         end
     end
-    return nil
+    return consider(addon.sharedFonts.baseline.path)
 end
 
 function addon.fontRuntime.resolveUsableFlags(usable, size, requestedFlags)
@@ -4840,6 +4868,7 @@ addon.dbRuntime = {
         accountWideProfileID = true,
         -- Optional picker preference, excluded from profile transfer/settings.
         fontFavorites = true,
+        sharedFontsNotice = true,
     },
     registryRootKeys = {
         dbVersion = true,
@@ -6003,6 +6032,11 @@ function addon.dbRuntime.ValidateRegistry(root)
             and not addon.dbRuntime.IsCleanType(account.quickSetupSeen, "boolean")) then
         return false
     end
+    if type(account.sharedFontsNotice) ~= "nil"
+        and (not addon.dbRuntime.IsCleanType(account.sharedFontsNotice, "string")
+            or (account.sharedFontsNotice ~= "fresh" and account.sharedFontsNotice ~= "acknowledged")) then
+        return false
+    end
     if registryVersion >= 11
         and (not addon.dbRuntime.IsCleanType(account.accountWideEnabled, "boolean")
             or (type(account.accountWideProfileID) ~= "nil"
@@ -6567,6 +6601,7 @@ function addon.dbRuntime.BuildRegistry(flat, quickSetupSeen)
             -- Missing means "existing install" for backward compatibility. Only
             -- a truly empty first install passes false and receives onboarding.
             quickSetupSeen = quickSetupSeen ~= false,
+            sharedFontsNotice = quickSetupSeen == false and "fresh" or nil,
             defaultProfileID = "p1",
             nextProfileID = 2,
             accountWideEnabled = false,
@@ -9021,8 +9056,8 @@ function addon.legacyImport.CopyFont(source, candidate)
     local font = addon.legacyImport.SafeRawGet(source, "font")
     if not addon.legacyImport.IsCleanType(font, "string") then return false end
     local usable = addon.fontRuntime.usablePath(font)
-    if not usable then return false end
-    candidate.font = usable
+    if not usable and not addon.sharedFonts.Lookup(font) then return false end
+    candidate.font = font
     return true
 end
 
@@ -10607,6 +10642,11 @@ local function ApplyTextStyleToAllPanels(font, size, force)
 end
 
 function addon.fontRuntime.applyCommittedTextStyle(font, size, force, allowFontFallback)
+    if allowFontFallback ~= false then
+        local active = ResolveActiveLocale()
+        local req = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
+        font = FindCompatibleFont(font, req, active) or addon.fontRuntime.safeDefaultPath()
+    end
     local applied, effectiveFont, effectiveOutline, effectiveFlags, requestedStatus =
         ApplyTextStyleToAllPanels(font, size, force)
     if not applied and allowFontFallback ~= false then
@@ -10626,11 +10666,14 @@ function addon.fontRuntime.applyCommittedTextStyle(font, size, force, allowFontF
     -- FontObject activation. The runtime fallback is safe, but replacing the saved
     -- preference is not; the bounded retry below commits only after the requested
     -- face is actually observable through GetFont.
-    local preservePending = db and requestedStatus == "pending"
-        and not SameFontPath(effectiveFont, font)
+    local preference = addon.fontRuntime.preferredPath()
+    local _, preferenceStatus = addon.fontRuntime.usablePath(preference)
+    local retryFont = preferenceStatus == "pending" and preference or font
+    local preservePending = db and (requestedStatus == "pending" or preferenceStatus == "pending")
+        and not SameFontPath(effectiveFont, retryFont)
     if preservePending then
-        if not SameFontPath(addon.fontRuntime.pendingSavedFont, font) then
-            addon.fontRuntime.pendingSavedFont = addon.fontRuntime.catalogEntry(font) or font
+        if not SameFontPath(addon.fontRuntime.pendingSavedFont, retryFont) then
+            addon.fontRuntime.pendingSavedFont = addon.fontRuntime.catalogEntry(retryFont) or retryFont
             addon.fontRuntime.pendingRetryAttempt = 0
             addon.fontRuntime.pendingRetryGeneration = addon.fontRuntime.pendingRetryGeneration + 1
             addon.fontRuntime.pendingRetryScheduled = false
@@ -10639,7 +10682,7 @@ function addon.fontRuntime.applyCommittedTextStyle(font, size, force, allowFontF
             addon.fontRuntime.schedulePendingSavedFontRetry()
         end
     elseif db then
-        db.font = effectiveFont
+        -- Automatic rendering changes only runtime state, never the preference.
         if addon.fontRuntime.pendingSavedFont then
             addon.fontRuntime.pendingSavedFont = nil
             addon.fontRuntime.pendingRetryAttempt = 0
@@ -10657,31 +10700,26 @@ function addon.fontRuntime.currentPath()
 end
 
 function addon.fontRuntime.preferredPath()
-    return GetFontDB()
+    local db = addon.dbRuntime.GetActiveSettings()
+    if addon.sharedFonts.IsReference(db.fontBeforeAutoSwitch) then return db.fontBeforeAutoSwitch end
+    return FontPathKey(db.font) and db.font or defaults.font
 end
 
 function addon.fontRuntime.repairSavedPaths()
     local db = addon.dbRuntime.GetWritableSettings(false)
     if not db then return end
-
     addon.fontRuntime.pendingSavedFont = nil
     addon.fontRuntime.pendingRetryAttempt = 0
     addon.fontRuntime.pendingRetryGeneration = addon.fontRuntime.pendingRetryGeneration + 1
     addon.fontRuntime.pendingRetryScheduled = false
-
-    local current, currentStatus = addon.fontRuntime.usablePath(db.font)
-    if currentStatus == "pending" then
-        addon.fontRuntime.pendingSavedFont = addon.fontRuntime.catalogEntry(db.font)
-    elseif not current then
-        local active = ResolveActiveLocale()
-        local req = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
-        current = FindCompatibleFont(addon.fontRuntime.safeDefaultPath(), req)
+    local preferred = addon.fontRuntime.preferredPath()
+    local _, status = addon.fontRuntime.usablePath(preferred)
+    if status == "pending" then
+        addon.fontRuntime.pendingSavedFont = addon.fontRuntime.catalogEntry(preferred)
     end
-    if currentStatus ~= "pending" and current then db.font = current end
-
-    if type(db.fontBeforeAutoSwitch) ~= "nil" then
-        local saved, savedStatus = addon.fontRuntime.usablePath(db.fontBeforeAutoSwitch)
-        if savedStatus ~= "pending" then db.fontBeforeAutoSwitch = saved end
+    if not addon.sharedFonts.IsReference(db.font) then db.font = defaults.font end
+    if db.fontBeforeAutoSwitch ~= nil and not addon.sharedFonts.IsReference(db.fontBeforeAutoSwitch) then
+        db.fontBeforeAutoSwitch = nil
     end
 end
 
@@ -10700,7 +10738,7 @@ function addon.fontRuntime.schedulePendingSavedFontRetry()
         addon.fontRuntime.pendingRetryScheduled = false
         local activeDB = addon.dbRuntime.GetActiveSettings()
         local writableDB = addon.dbRuntime.GetWritableSettings(false)
-        if not activeDB or not SameFontPath(activeDB.font, pending) then
+        if not activeDB or addon.sharedFonts.Identity(addon.fontRuntime.preferredPath()) ~= addon.sharedFonts.Identity(pending) then
             addon.fontRuntime.pendingSavedFont = nil
             addon.fontRuntime.pendingRetryGeneration = addon.fontRuntime.pendingRetryGeneration + 1
             return
@@ -10887,64 +10925,15 @@ local ApplyConfigFont
 
 -- Caller must set the account-wide forceLocale + run CacheSettings BEFORE calling.
 local function MaybeAutoSwitchFont()
-    local db = addon.dbRuntime.GetActiveSettings()
-    local writableDB = addon.dbRuntime.GetWritableSettings(false)
     local active = ResolveActiveLocale()
-    local req    = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
-    local cur    = GetFontDB()
-
-    -- An automatic CJK fallback may also advertise Cyrillic, but that does not
-    -- make it the user's preferred Russian face. Resolve from the saved choice
-    -- when crossing scripts instead of keeping a wide CJK fallback indefinitely.
-    local savedChoice = GetSavedAutoFontDB()
-    if savedChoice and not SameFontPath(savedChoice, cur) then
-        local preferred = FindCompatibleFont(savedChoice, req)
-        if preferred and not SameFontPath(preferred, cur) then
-            local applied, effectiveFont = addon.fontRuntime.applyCommittedTextStyle(
-                preferred, GetNumberDB("fontSize"), false, false)
-            if applied then
-                cur = effectiveFont
-                if writableDB and SameFontPath(cur, savedChoice) then
-                    writableDB.fontBeforeAutoSwitch = nil
-                end
-            end
-        end
-    end
-
-    if FontSupports(cur, req, active) then
-        local saved = GetSavedAutoFontDB()
-        if writableDB and type(db.fontBeforeAutoSwitch) ~= "nil" and not saved then
-            writableDB.fontBeforeAutoSwitch = nil
-        end
-        if saved and not SameFontPath(saved, cur) and FontSupports(saved, req, active) then
-            local applied, effectiveFont = addon.fontRuntime.applyCommittedTextStyle(
-                saved, GetNumberDB("fontSize"), false, false)
-            if applied then
-                cur = effectiveFont
-                if writableDB then writableDB.fontBeforeAutoSwitch = nil end
-            end
-        end
-        if not SameFontPath(cur, addon.fontRuntime.currentPath()) then
-            local applied, effectiveFont = addon.fontRuntime.applyCommittedTextStyle(
-                cur, GetNumberDB("fontSize"), false, false)
-            if applied then cur = effectiveFont end
-        end
-        addon.fontRuntime.ApplyCommittedConfigFont(active)
-        return cur
-    end
-
-    local fallback = FindCompatibleFont(cur, req)
-    if fallback and not SameFontPath(fallback, cur) then
-        local saved = GetSavedAutoFontDB() or cur
-        local applied, effectiveFont = addon.fontRuntime.applyCommittedTextStyle(
-            fallback, GetNumberDB("fontSize"), false, false)
-        if applied then
-            cur = effectiveFont
-            if writableDB then writableDB.fontBeforeAutoSwitch = saved end
-        end
-    end
+    local req = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
+    local preferred = addon.fontRuntime.preferredPath()
+    local resolved = FindCompatibleFont(preferred, req, active)
+        or addon.fontRuntime.safeDefaultPath()
+    local applied, effective = addon.fontRuntime.applyCommittedTextStyle(
+        resolved, GetNumberDB("fontSize"), false, true)
     addon.fontRuntime.ApplyCommittedConfigFont(active)
-    return cur
+    return applied and effective or resolved
 end
 
 local function LoadAllPositions()
@@ -11710,6 +11699,7 @@ addon.profileRuntime.CompleteBootstrap = function()
         runtime.bootstrapPending = false
         return true
     end
+    addon.fontRuntime.RefreshSharedCatalog(false)
     addon.fontRuntime.repairSavedPaths()
     CacheSettings()
     if RefreshPersistentLocalization then RefreshPersistentLocalization() end
@@ -11743,6 +11733,7 @@ addon.profileRuntime.CompleteBootstrap = function()
             if isLoaded then addon.hudPresets.MaybeShowWelcome() end
         end)
     end
+    addon.sharedFonts.InitializeNotice()
     return true
 end
 
@@ -11869,6 +11860,7 @@ local EVENT_HANDLERS = {
         end
         addon.profileUI.RefreshSafe()
         addon.hudPresets.MaybeShowWelcome()
+        addon.sharedFonts.RequestNotice()
         if type(addon.selfTest) == "table" and type(addon.selfTest.OnCombatEnd) == "function" then
             addon.selfTest.OnCombatEnd()
         end
@@ -11879,6 +11871,7 @@ local EVENT_HANDLERS = {
         addon.profileRuntime.CancelOwnedMutationPopups()
         addon.presetRuntime.ForceCancelAllPreviews()
         addon.hudPresets.SuspendWelcomeForCombat()
+        addon.sharedFonts.HideNotice()
         addon.panelEditRuntime.Refresh(true)
         addon.profileUI.RefreshSafe()
         if type(addon.selfTest) == "table" and type(addon.selfTest.OnCombatStart) == "function" then
@@ -12460,7 +12453,16 @@ function addon.fontRuntime.ReconcileCatalogLocale()
     runtime.catalogLocaleDirty = false
     local req = LOCALE_GLYPH_REQ[ResolveActiveLocale()] or GLYPH_LATIN
     local previousConfigFont = currentConfigFont
-    if not FontSupports(runtime.currentPath(), req, ResolveActiveLocale()) then
+    local preference = runtime.preferredPath()
+    local usable, status = runtime.usablePath(preference)
+    if status == "pending" then
+        runtime.pendingSavedFont = runtime.catalogEntry(preference)
+        runtime.pendingRetryAttempt = 0
+        runtime.pendingRetryGeneration = runtime.pendingRetryGeneration + 1
+        runtime.schedulePendingSavedFontRetry()
+    elseif (usable and FontSupports(usable, req, ResolveActiveLocale())
+        and not SameFontPath(usable, runtime.currentPath()))
+        or not FontSupports(runtime.currentPath(), req, ResolveActiveLocale()) then
         MaybeAutoSwitchFont()
     elseif runtime.configFontRecoveryPending or not FontSupports(currentConfigFont, req, ResolveActiveLocale()) then
         runtime.ApplyCommittedConfigFont(ResolveActiveLocale())
@@ -15253,7 +15255,7 @@ function addon.developerLinks.Show(linkKey)
         .. L("Copy the link below (Ctrl+C).")
     local ok, popup = pcall(_G.StaticPopup_Show,
         addon.developerLinks.popupKey, message, nil, link)
-    return ok and popup ~= nil
+    return ok and popup ~= nil, popup
 end
 
 _G.StaticPopupDialogs[addon.legacyImport.popupKey] = {
@@ -17806,7 +17808,7 @@ function addon.settingsUI.LayoutPresetDisclosure(ui, lowerBody, hasSession, warn
     if navigation then navigation.restoringScroll = true end
     ui.hasSession = hasSession
     local expanded = ui.expanded or hasSession
-    ui.chevron:SetText(expanded and "−" or "+")
+    ui.chevron:SetText(expanded and "-" or "+")
     addon.settingsDesign.SetListRowSelected(ui.disclosure, expanded)
     addon.settingsDesign.SetControlBlocked(ui.disclosure, "dependency", hasSession,
         "message", "Apply or cancel the preview first.")
@@ -18356,7 +18358,7 @@ function addon.settingsUI.fontPicker.Favorites(self)
         if count > 512 then return {} end
         if self.dbRuntime.IsCleanType(path, "string") and #path <= 1024
             and self.dbRuntime.IsCleanType(value, "boolean") and value == true then
-            result[FontPathKey(path)] = true
+            result[addon.sharedFonts.Identity(path)] = true
         end
     end
     return result
@@ -18374,7 +18376,7 @@ function addon.settingsUI.fontPicker.ToggleFavorite(self, path)
     end
     if not offered then return false end
     local favorites = self.settingsUI.fontPicker.Favorites(self)
-    local key = FontPathKey(path)
+    local key = addon.sharedFonts.Identity(path)
     if not key then return false end
     if favorites[key] then
         favorites[key] = nil
@@ -18384,7 +18386,20 @@ function addon.settingsUI.fontPicker.ToggleFavorite(self, path)
         if count >= 512 then return false end
         favorites[key] = true
     end
-    account.fontFavorites = favorites
+    -- Persist an actual path; normalize owned aliases only in the read view.
+    local stored = {}
+    if self.dbRuntime.IsCleanTable(account.fontFavorites) then
+        local count = 0
+        for oldPath, value in pairs(account.fontFavorites) do
+            count = count + 1
+            if count > 512 then return false end
+            if self.dbRuntime.IsCleanType(oldPath, "string") and #oldPath <= 1024
+                and self.dbRuntime.IsCleanType(value, "boolean") and value == true
+                and addon.sharedFonts.Identity(oldPath) ~= key then stored[oldPath] = true end
+        end
+    end
+    if favorites[key] then stored[FontPathKey(path)] = true end
+    account.fontFavorites = stored
     self.settingsUI.fontPicker.cachedFontsList = nil
     self.settingsUI.fontPicker.Populate(self, false)
     return true
@@ -18410,26 +18425,28 @@ function addon.settingsUI.fontPicker.BuildFontsList(self, retryPending)
         return picker.cachedFontsList
     end
 
-    local list, seenNames = {}, {}
+    local list, seenNames, seenOwned = {}, {}, {}
     local hasPending = false
     local function add(name, path)
         if type(name) ~= "string" or seenNames[name] then return end
-        -- An external registration retains ownership of its name even when its
-        -- asset is unavailable or cannot render this language.
-        seenNames[name] = true
+        local owned = addon.sharedFonts.Lookup(path)
+        if owned and seenOwned[owned.id] then return end
         if not FontSupports(path, requirement, outputLocale) then return end
         local bundled = addon.fontRuntime.bundledByPath[FontPathKey(path)]
         if bundled and not self.fontRuntime.offersLocale(bundled, outputLocale) then return end
         local usable, status = self.fontRuntime.usableCatalogPath(path)
         if status == "pending" then hasPending = true end
         if usable then
+            seenNames[name] = true
+            if owned then seenOwned[owned.id] = true end
             list[#list + 1] = {
                 name = name, path = usable,
                 sortKey = self.fontRuntime.asciiLower(name),
-                favorite = favorites[FontPathKey(usable)] == true,
+                favorite = favorites[addon.sharedFonts.Identity(usable)] == true,
             }
         end
     end
+    for _, font in ipairs(addon.bundledFonts or {}) do add(font.name, font.path) end
     if LSM then
         for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
             local path = type(name) == "string" and self.fontRuntime.rawLSMPath(name) or nil
@@ -18439,7 +18456,7 @@ function addon.settingsUI.fontPicker.BuildFontsList(self, retryPending)
     -- LSM registers media for the client language. Bundled faces can also be
     -- used by a different selected output language, without changing LSM globals.
     for _, font in ipairs(addon.bundledFonts or {}) do add(font.name, font.path) end
-    if #list == 0 then
+    do
         local clientLocale = GetLocale()
         for _, font in ipairs(BLIZZARD_SHIPPED_FONTS) do
             if requirement ~= GLYPH_LATIN or not font.locale or font.locale == clientLocale then
@@ -18480,6 +18497,7 @@ function addon.settingsUI.fontPicker.RefreshCaption(self)
     if picker.dropdown then
         UIDropDownMenu_SetText(picker.dropdown, picker.CurrentFontName(self))
     end
+    addon.sharedFonts.UpdateGuidance()
     if picker.populatedLocale ~= picker.cachedFontsListLocale
         and picker.frame and picker.frame:IsShown() then
         picker.retryGeneration = picker.retryGeneration + 1
@@ -18514,7 +18532,7 @@ function addon.settingsUI.fontPicker.CancelPreview(self, force)
     if self.profileRuntime.forceReapply or self.profileRuntime.transitioning
         or self.profileRuntime.suppressIntermediateRefresh then return hadPreview end
     if not force and not hadPreview then return false end
-    local font = self.fontRuntime.currentPath()
+    local font = self.fontRuntime.preferredPath()
     local size = GetNumberDB("fontSize")
     local outline = cached.textOutlineStyle or self.readabilityConfig.getTextOutlineStyleDB()
     if SameFontPath(mainPanel.appliedFont, font) and SameFontPath(defensivePanel.appliedFont, font)
@@ -18534,7 +18552,11 @@ function addon.settingsUI.fontPicker.Pick(self, font)
     local applied = self.fontRuntime.applyCommittedTextStyle(
         font.path, GetNumberDB("fontSize"), false, false)
     if not applied then return false end
+    local settings = self.dbRuntime.GetWritableSettings(false)
+    if not settings then return false end
+    settings.font = font.path
     self.fontRuntime.clearSavedAutoFont()
+    self.fontRuntime.repairSavedPaths()
     ReflowAllPanels()
     picker.previewedPath = nil
     picker.hoverGeneration = picker.hoverGeneration + 1
@@ -18877,6 +18899,7 @@ function addon.settingsUI.fontPicker.RegisterLSMCallback(self)
         picker.catalogRefreshScheduled = true
         C_Timer.After(0, function()
             picker.catalogRefreshScheduled = false
+            self.fontRuntime.RefreshSharedCatalog(true)
             picker.RefreshCaption(self)
             if not picker.frame or not picker.frame:IsShown() then return end
             picker.retryGeneration = picker.retryGeneration + 1
@@ -18889,6 +18912,7 @@ end
 function addon.settingsUI.fontPicker.Initialize(self, context, dropdown)
     local picker = self.settingsUI.fontPicker
     picker.dropdown = dropdown
+    self.sharedFonts.AttachGuidance(dropdown)
     picker.columns = 3
     picker.buttonWidth = 160
     picker.rowHeight = self.settingsDesign.tokens.geometry.fontRowHeight
@@ -19358,7 +19382,7 @@ function addon.settingsUI.BuildAppearanceTab(self, context)
                 local requirementLabel = L(
                     addon.fontRuntime.GlyphRequirementLabelKey(req))
                 langWarn:SetText(string.format(L(
-                    "|cffffaa44⚠|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."
+                    "|cffffaa44!|r The selected font may not render %s correctly. Pick a SharedMedia font with proper coverage."
                 ), requirementLabel))
                 addon.settingsDesign.SetWarningVisible(langWarn, true)
             end
@@ -19682,6 +19706,7 @@ function addon.settingsUI.BuildStatsTab(self, context)
 end
 
 function addon:OpenConfigMenu()
+    self.sharedFonts.HideNotice()
     -- Opening Settings is discovery enough. Keep navigation zero-write; the delayed
     -- onboarding check commits the marker even if this happens before profile bootstrap
     -- or Settings closes before the first-install timer fires.

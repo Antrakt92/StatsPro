@@ -14,6 +14,7 @@
 ## Author: Antrakt
 ## Version: 1.22.12
 ## IconTexture: Interface\AddOns\StatsPro\textures\logo.png
+## OptionalDeps: AntraktFonts
 ## SavedVariables: StatsProDB, StatsProSelfTest
 ## Category: Combat
 ## Category-deDE: Kampf
@@ -38,6 +39,9 @@ libs\LibStub\LibStub.lua
 libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
 AntraktWindowLayers.lua
+AntraktFontCatalog.lua
+AntraktFontNotice.lua
 StatsPro_Fonts.lua
+StatsPro_FontsUI.lua
 StatsPro_ArchonTargets.lua
 StatsPro.lua

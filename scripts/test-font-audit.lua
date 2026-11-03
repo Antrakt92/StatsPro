@@ -45,7 +45,7 @@ for _, forever in ipairs({ false, true }) do
     selectLanguage(env, 'frFR')
     check(catalog(addon).Neucha ~= nil and test.profileState().settings.font == saved, 'French retains compatible preference')
     selectLanguage(env, 'ptBR')
-    check(not catalog(addon).Neucha and test.profileState().settings.font ~= saved, 'Portuguese hides and replaces incompatible face')
+    check(not catalog(addon).Neucha and test.profileState().settings.font == saved and test.panelFontState().mainAppliedFont ~= saved, 'Portuguese renders fallback while preserving incompatible preference')
     selectLanguage(env, 'enUS')
     check(catalog(addon).Neucha ~= nil and test.profileState().settings.font == saved, 'English restores original preference')
     for _, locale in ipairs({ 'zhCN', 'zhTW' }) do
@@ -58,7 +58,7 @@ for _, forever in ipairs({ false, true }) do
     end
     for _, oldFile in ipairs({ 'FiraMono-Regular.ttf', 'LiberationMono-Regular.ttf' }) do
         local old = 'Interface\\AddOns\\StatsPro\\fonts\\' .. oldFile
-        local replacement = 'Interface\\AddOns\\StatsPro\\fonts\\Hack-Regular.ttf'
+        local replacement = 'Interface\\AddOns\\AntraktFonts\\fonts\\Hack-Regular.ttf'
         local oldEnv, oldAddon, oldTest = fixtures.loadStatsPro('enUS', {
             forever = forever, bundledFonts = true, statsProDB = { font = old, fontBeforeAutoSwitch = old, forceLocale = 'ruRU' },
             isKnownFontFile = function(path) return path ~= old end,
@@ -67,7 +67,7 @@ for _, forever in ipairs({ false, true }) do
         })
         oldEnv.__fireEvent('PLAYER_ENTERING_WORLD')
         check(oldAddon.fontRuntime.catalogEntry(old) == replacement, 'Retired path resolves to retained asset')
-        check(oldTest.profileState().settings.font == replacement, 'Saved retired face upgrades to Hack')
+        check(oldTest.profileState().settings.font == old, 'Saved retired preference remains intact while runtime resolves Hack')
         check(oldTest.panelFontState().mainAppliedFont == replacement, 'Retired face renders with compatible replacement')
         check(not oldAddon.fontRuntime.pendingSavedFont, 'Retired path does not enter cold-asset retry loop')
         check(oldAddon.fontRuntime.usablePath(old:gsub('\\', '/'):upper()) == replacement, 'Retired aliases normalize separators and case')

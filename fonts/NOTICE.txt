@@ -1,0 +1,29 @@
+Antrakt UI Sans is a modified font, not an official Noto or Droid release.
+
+It combines Noto Sans with the complementary character coverage of
+Droid Sans Fallback Legacy. Noto glyphs win overlapping Unicode assignments.
+Droid hints are removed before scaling its outlines from 256 to 1000 UPEM.
+Font layout tables are merged and the font is renamed. The build preserves
+the conservative merged metrics. See README.md and sources.json.
+
+Noto Sans:
+Copyright 2015-2021 Google LLC. All Rights Reserved.
+Copyright 2018 The Noto Project Authors (github.com/googlei18n/noto-fonts)
+Noto is a trademark of Google LLC.
+Monotype Imaging Inc.; Monotype Design Team.
+Original font license: SIL Open Font License 1.1; licenses/NotoSans-OFL.txt.
+
+Droid Sans Fallback Legacy:
+Digitized data copyright Google Corporation (C) 2006.
+Copyright (C) 2008 The Android Open Source Project.
+Droid is a trademark of Google and may be registered in certain jurisdictions.
+Ascender Corporation; Steve Matteson.
+Original font license: Apache License 2.0; licenses/Apache-2.0.txt.
+The unmodified upstream NOTICE and README are included as
+licenses/Droid-NOTICE.txt and licenses/Droid-README.txt.
+
+The combined modified font is distributed under SIL Open Font License 1.1.
+The original Droid portions retain their Apache License 2.0 notices and terms.
+Include this notice and all accompanying license files with any distribution
+of the modified font. The font is not covered by an addon's source-code license.
+No upstream author or trademark owner endorses this derivative.

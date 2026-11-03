@@ -98,6 +98,9 @@ function Get-StatsProPackageFileContract {
         "StatsPro/StatsPro.toc",
         "StatsPro/StatsPro.lua",
         "StatsPro/AntraktWindowLayers.lua",
+        "StatsPro/AntraktFontCatalog.lua",
+        "StatsPro/AntraktFontNotice.lua",
+        "StatsPro/StatsPro_FontsUI.lua",
         "StatsPro/StatsPro_Fonts.lua",
         "StatsPro/StatsPro_ArchonTargets.lua",
         "StatsPro/textures/logo.png",
@@ -1285,7 +1288,7 @@ function Invoke-SelfTest {
                 Copy-Item -LiteralPath $licenseSource -Destination $licenseTarget
             }
         }
-        foreach ($relative in Get-StatsProBundledFontFiles) {
+        foreach ($relative in @("AntraktFontCatalog.lua", "AntraktFontNotice.lua") + @(Get-StatsProBundledFontFiles)) {
             $destination = Join-Path $noticeRoot $relative
             New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
             Copy-Item -LiteralPath (Join-Path $sourceRoot $relative) -Destination $destination

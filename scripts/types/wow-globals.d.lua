@@ -179,3 +179,9 @@ __STATSPRO_ARCHON_TARGETS_MODULE = nil
 
 ---@type table
 AntraktWindowLayers = nil
+
+---@type table?
+AntraktFonts = nil
+
+---@type table?
+AntraktFontNoticeCoordinator = nil

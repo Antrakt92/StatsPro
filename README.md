@@ -30,6 +30,11 @@ Retail includes Crit, Haste, Mastery, Versatility and bundled Archon references.
 Forever has its own 46-row stat catalog, class-aware setups and per-character
 profiles. Archon references are available only in Retail.
 
+**Upcoming shared-font update:** this branch contains changes that are not yet
+in the published downloads above. The next Retail and Forever builds will use
+the optional [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts) collection.
+See each changelog's **Unreleased** section for the pending changes.
+
 <p align="center">
   <a href="#installation">Install</a>
   · <a href="#getting-started">Quick setup</a>
@@ -78,10 +83,16 @@ Outside combat, you can also right-click the HUD to open Settings.
 To choose another setup later, expand **Quick Setup**
 at the top of the **Stats** tab or adjust individual rows yourself.
 
-Both builds include a compact multilingual baseline and support the optional
-**Antrakt Fonts** collection through LibSharedMedia. The collection is shared by
+### Shared fonts in the upcoming builds
+
+Both upcoming builds include a compact multilingual baseline and support the optional
+[Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts) collection through LibSharedMedia. The collection is shared by
 compatible addons and updates independently. StatsPro works without it; open
 **Appearance → Font** for collection details and available download links.
+The linked project contains the collection's source and setup instructions;
+it is not yet a published packaged download. For source development, use a Git
+checkout and follow its contributor instructions. Published StatsPro downloads
+still contain their bundled font collection until this update is released.
 If the collection is installed but disabled, enable it from that information
 window; the same click reloads the interface to activate it.
 Existing installs receive a one-time migration notice only if a compatible collection
@@ -91,7 +102,8 @@ Your chosen font and favorites remain saved when the collection is unavailable;
 StatsPro temporarily uses a compatible fallback. Fonts registered by other addons
 also remain available. Only faces compatible with the selected language appear.
 Click the star beside a font to keep it at the top; favorites are shared across
-profiles and hover previews the HUD.
+profiles. Hover previews the HUD and Settings text; leaving or choosing a font
+restores the usual Settings typography.
 
 ## Detailed features
 
@@ -387,6 +399,8 @@ StatsPro is free to use. Optional support is available through
   project that originally inspired StatsPro.
 - **[LibSharedMedia-3.0](https://www.curseforge.com/wow/addons/libsharedmedia-3-0)** —
   font selection support.
+- **[chenrylee](https://github.com/chenrylee)** — suggested sharing the font
+  collection as a separate package ([issue #10](https://github.com/Antrakt92/StatsPro/issues/10)).
 
 ## More by Antrakt
 

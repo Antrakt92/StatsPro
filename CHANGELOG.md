@@ -6,7 +6,7 @@
 - Enable an installed Antrakt Fonts package and reload the interface with one click from Font settings.
 - Distinguish missing, disabled and unloaded Antrakt Fonts installations in Font settings; keep working font choices available.
 - Keep the shared-font information window's close icon visible before hovering.
-- Move the optional font collection to Antrakt Fonts, shared by compatible addons and updated separately. Keep a compact multilingual baseline in StatsPro.
+- Move the optional font collection to [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts), shared by compatible addons and updated separately. Keep a compact multilingual baseline in StatsPro.
 - Preserve selected fonts, imported choices and favorites while the collection is unavailable. Show the one-time migration notice only when a compatible collection is missing; keep details in Font settings.
 - Preview hovered fonts in Settings as well as the HUD, and restore the usual Settings font when the preview ends.
 - Thanks to [chenrylee](https://github.com/chenrylee) for suggesting a separate font package ([StatsPro #10](https://github.com/Antrakt92/StatsPro/issues/10)).

@@ -16,6 +16,20 @@ TOCs, versioned changelogs and the generated Archon file are inputs to the
 packaging and update scripts. Check their consumers before moving them.
 Run the commands below from the repository root.
 
+## Shared-font source development
+
+The shared-font integration on this branch is unreleased. Player downloads
+continue to use their existing bundled fonts until the corresponding Retail
+or Forever update is published.
+
+The optional [Antrakt Fonts project](https://github.com/Antrakt92/AntraktFonts)
+contains the collection source, contributor instructions and an independent-addon
+integration example. Clone that repository separately when changing the provider.
+StatsPro's normal checks and builds use its own committed baseline, catalogue
+snapshot and runtime modules; they need no sibling checkout or font regeneration.
+Keep the provider optional and preserve the selected font and favorites when it
+is unavailable. The core addon must retain a readable fallback.
+
 ## Updating the smoke contract
 
 The smoke harness has a tracked reachability contract in

@@ -27,6 +27,13 @@ local function clone(value)
     for key, child in pairs(value) do result[key] = clone(child) end
     return result
 end
+local function equal(left,right)
+    if type(left)~=type(right) then return false end
+    if type(left)~='table' then return left==right end
+    for key,value in pairs(left) do if not equal(value,right[key]) then return false end end
+    for key in pairs(right) do if left[key]==nil then return false end end
+    return true
+end
 for _, forever in ipairs({false, true}) do
     local original = snapshot.fonts[1].aliases[1]
     local calls = 0
@@ -199,5 +206,111 @@ for _,forever in ipairs({false,true}) do
     check(pendingEnv.StatsProDB.account.sharedFontsNotice==nil,'manual opening does not acknowledge pending campaign')
     pending.sharedFonts.notice.close.scripts.OnClick()
     check(pendingEnv.StatsProDB.account.sharedFontsNotice=='acknowledged','manual confirmation persists pending campaign')
+end
+-- A ready provider resolves this consumer without acknowledging another host.
+local function readyProvider()
+    return {GetCatalog=function()
+        return {formatMajor=1,catalogRevision=string.rep('a',64),fonts=clone(snapshot.fonts)}
+    end}
+end
+for _,forever in ipairs({false,true}) do
+    local env,host,test=fixtures.loadStatsPro('enUS',{
+        forever=forever,statsProDB={fontSize=14},sharedProvider=readyProvider(),testSharedFontsNotice=true,
+    })
+    env.__fireEvent('PLAYER_ENTERING_WORLD');env.__flushTimers(.6)
+    check(not host.sharedFonts.notice or not host.sharedFonts.notice:IsVisible(),'existing account with ready provider has no automatic migration popup')
+    check(env.StatsProDB.account.sharedFontsNotice=='satisfied','ready provider persists a separate satisfied state')
+    check(test.validateRegistry(env.StatsProDB),'satisfied metadata remains a valid registry')
+    local peerShown,peerAcknowledged=false,false
+    host.sharedFonts.coordinator:Register('PendingPeer',{
+        state=nil,canShow=function() return true end,show=function() peerShown=true;return true end,
+        acknowledge=function() peerAcknowledged=true;return true end,dismiss=function() peerShown=false end,
+    })
+    host.sharedFonts.coordinator:RequestShow()
+    check(peerShown and not peerAcknowledged,'satisfied host does not acknowledge or suppress a pending peer')
+    local saved=clone(env.StatsProDB)
+    local reloaded,reloadedHost,reloadedTest=fixtures.loadStatsPro('enUS',{
+        forever=forever,statsProDB=clone(saved),sharedProvider=readyProvider(),testSharedFontsNotice=true,
+        unitGUID=function() return 'Player-1-READY-POLICY' end, specIndex=1,specID=73,specName='Protection',specRole='TANK',primaryStat=1,
+    })
+    reloaded.__fireEvent('PLAYER_ENTERING_WORLD');reloaded.__flushTimers(.6)
+    check(reloaded.StatsProDB.account.sharedFontsNotice=='satisfied','satisfied survives a ready-provider reload')
+    check(not reloadedHost.sharedFonts.notice,'reload does not build a satisfied migration window')
+    local removed,removedHost,removedTest=fixtures.loadStatsPro('enUS',{
+        forever=forever,statsProDB=clone(saved),testSharedFontsNotice=true,
+    })
+    removed.__fireEvent('PLAYER_ENTERING_WORLD');removed.__flushTimers(.6)
+    check(removed.StatsProDB.account.sharedFontsNotice=='satisfied' and not removedHost.sharedFonts.notice,'later provider removal does not reopen a resolved campaign')
+    removedHost:OpenConfigMenu()
+    check(removedHost.sharedFonts.marker:IsShown() and removedHost.sharedFonts.marker.statsProSharedFontText~=nil,'later removal retains Font settings guidance')
+    removedHost.sharedFonts.marker.scripts.OnClick()
+    check(removedHost.sharedFonts.notice:IsVisible(),'satisfied account may manually open collection details')
+    removedHost.sharedFonts.notice.close.scripts.OnClick()
+    check(removed.StatsProDB.account.sharedFontsNotice=='acknowledged','explicit manual close may acknowledge a satisfied account')
+    local state=reloadedTest.profileState()
+    check(reloadedTest.profileOps.resetProfile(state.profileID),'ordinary profile reset succeeds')
+    check(reloaded.StatsProDB.account.sharedFontsNotice=='satisfied','profile reset preserves satisfied metadata')
+    check(reloadedTest.appearancePresets.startPreview('high-contrast'),'appearance preset preview starts')
+    check(reloadedTest.appearancePresets.applyPreview(),'appearance preset applies')
+    check(reloadedTest.appearancePresets.startPreview('default'),'appearance reset preview starts')
+    check(reloadedTest.appearancePresets.applyPreview(),'appearance reset applies')
+    check(reloaded.StatsProDB.account.sharedFontsNotice=='satisfied','appearance reset preserves satisfied metadata')
+    local stripped={sharedFontsNotice='satisfied',fontSize=14}
+    check(reloadedHost.dbRuntime.StripAccountSettings(stripped) and stripped.sharedFontsNotice==nil,'profile import excludes campaign metadata')
+    local text=reloadedTest.profileTransfer.serialize('Ready profile',reloadedTest.profileState().settings,{appearance=true,layout=true,stats=true})
+    local transferred=reloadedTest.profileTransfer.parse(text)
+    check(transferred and transferred.values.sharedFontsNotice==nil,'profile export excludes campaign metadata')
+    local context=reloadedTest.profileRuntimeState()
+    check(reloadedTest.profileOps.importTransferToContext(transferred,transferred.sections,context.activeGUID,context.activeSpecID),'ordinary profile import succeeds')
+    check(reloaded.StatsProDB.account.sharedFontsNotice=='satisfied','profile import preserves satisfied account metadata')
+    for _,prior in ipairs({'fresh','acknowledged'}) do
+        local db=clone(saved);db.account.sharedFontsNotice=prior
+        local keep,keepHost=fixtures.loadStatsPro('enUS',{forever=forever,statsProDB=db,sharedProvider=readyProvider(),testSharedFontsNotice=true})
+        keep.__fireEvent('PLAYER_ENTERING_WORLD');keep.__flushTimers(.6)
+        check(keep.StatsProDB.account.sharedFontsNotice==prior and not keepHost.sharedFonts.notice,'ready provider preserves existing '..prior..' campaign state')
+    end
+    local late,lateHost=fixtures.loadStatsPro('enUS',{forever=forever,statsProDB={fontSize=14},testSharedFontsNotice=true})
+    late.__fireEvent('PLAYER_ENTERING_WORLD');late.__flushTimers(.6)
+    check(lateHost.sharedFonts.notice:IsVisible(),'not-ready pending account shows its one automatic notice')
+    late.AntraktFonts=readyProvider();lateHost.fontRuntime.RefreshSharedCatalog(true)
+    check(not lateHost.sharedFonts.notice:IsVisible(),'late ready provider dismisses the active automatic window')
+    check(late.StatsProDB.account.sharedFontsNotice=='satisfied','late provider resolves by satisfaction, without acknowledgement')
+    local denied,deniedHost=fixtures.loadStatsPro('enUS',{forever=forever,statsProDB={fontSize=14},testSharedFontsNotice=true})
+    denied.__fireEvent('PLAYER_ENTERING_WORLD');denied.__flushTimers(.6)
+    local original=deniedHost.dbRuntime.GetWritableRoot
+    deniedHost.dbRuntime.GetWritableRoot=function() return nil end
+    denied.AntraktFonts=readyProvider();deniedHost.fontRuntime.RefreshSharedCatalog(true)
+    check(denied.StatsProDB.account.sharedFontsNotice==nil and not deniedHost.sharedFonts.notice:IsVisible(),'failed satisfied persistence still dismisses an automatic ready-provider window')
+    deniedHost.dbRuntime.GetWritableRoot=original
+    local callbacks=deniedHost.sharedFonts.noticeCallbacks
+    local guard={state=nil,canShow=callbacks.canShow,show=callbacks.show,acknowledge=callbacks.acknowledge,dismiss=callbacks.dismiss}
+    deniedHost.sharedFonts.coordinator:Register('StatsPro',guard)
+    check(not deniedHost.sharedFonts.coordinator:RequestShow(),'automatic canShow rejects ready provider independently of saved state')
+    deniedHost.sharedFonts.RequestNotice()
+    check(denied.StatsProDB.account.sharedFontsNotice=='satisfied','later safe lifecycle retries satisfied persistence')
+    local bad,badHost=fixtures.loadStatsPro('ruRU',{forever=forever,statsProDB={fontSize=14},sharedProvider={GetCatalog=function()return {formatMajor=2}end},testSharedFontsNotice=true})
+    bad.__fireEvent('PLAYER_ENTERING_WORLD');bad.__flushTimers(.6)
+    check(badHost.sharedFonts.notice.body:GetText()==badHost.sharedFonts.Message('ruRU','incompatible'),'incompatible automatic notice uses its translated explanation')
+    local readonly,readonlyHost,readonlyTest=fixtures.loadStatsPro('enUS',{forever=forever,testSharedFontsNotice=true})
+    readonly.__fireEvent('PLAYER_ENTERING_WORLD');readonly.__flushTimers(.6);readonlyHost:OpenConfigMenu()
+    local before=clone(readonly.StatsProDB)
+    readonlyHost.dbRuntime.GetWritableRoot=function() return nil end
+    readonlyHost.sharedFonts.marker.scripts.OnClick()
+    check(readonlyHost.sharedFonts.notice and readonlyHost.sharedFonts.notice:IsVisible(),'read-only database still permits manual font information')
+    readonlyHost.sharedFonts.notice.close.scripts.OnClick()
+    check(readonly.StatsProDB.account.sharedFontsNotice==before.account.sharedFontsNotice,'read-only manual acknowledgement never writes account metadata')
+    check(not readonlyTest.profileState().settings.sharedFontsNotice,'read-only information never writes profile metadata')
+    local futureDB=clone(saved);futureDB.dbVersion=futureDB.dbVersion+100
+    local futureBefore=clone(futureDB)
+    local future,futureHost,futureTest=fixtures.loadStatsPro('enUS',{forever=forever,statsProDB=futureDB,testSharedFontsNotice=true})
+    future.__fireEvent('PLAYER_ENTERING_WORLD');future.__flushTimers(.6)
+    check(futureTest.dbCompatibilityState().readOnly,'actual future schema enters compatibility mode')
+    check(not futureHost.sharedFonts.notice,'future schema has no automatic migration popup')
+    futureHost:OpenConfigMenu()
+    check(futureHost.sharedFonts.marker:IsEnabled(),'manual info marker remains enabled in future-schema mode')
+    futureHost.sharedFonts.marker.scripts.OnClick()
+    check(futureHost.sharedFonts.notice and futureHost.sharedFonts.notice:IsVisible(),'future-schema mode permits actual manual information')
+    futureHost.sharedFonts.notice.close.scripts.OnClick()
+    check(equal(future.StatsProDB,futureBefore),'future-schema information and close preserve every saved byte/value')
 end
 print('Shared fonts: ' .. checks .. ' checks passed')

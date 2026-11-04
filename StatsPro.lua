@@ -357,6 +357,7 @@ function addon.fontRuntime.RefreshSharedCatalog(force)
         if font.hangul then glyphs[#glyphs + 1] = GLYPH_HANGUL end
         FONT_GLYPH_SUPPORT[path] = glyphs
     end
+    if shared.noticeInitialized then shared.RefreshNoticeState() end
 end
 addon.fontRuntime.RefreshSharedCatalog(false)
 
@@ -6034,7 +6035,8 @@ function addon.dbRuntime.ValidateRegistry(root)
     end
     if type(account.sharedFontsNotice) ~= "nil"
         and (not addon.dbRuntime.IsCleanType(account.sharedFontsNotice, "string")
-            or (account.sharedFontsNotice ~= "fresh" and account.sharedFontsNotice ~= "acknowledged")) then
+            or (account.sharedFontsNotice ~= "fresh" and account.sharedFontsNotice ~= "acknowledged"
+                and account.sharedFontsNotice ~= "satisfied")) then
         return false
     end
     if registryVersion >= 11

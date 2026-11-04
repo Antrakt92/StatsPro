@@ -124,7 +124,9 @@ function shared.ShowNotice(confirm, suspend)
     frame.sharedFontsReady = true
     frame.confirm, frame.suspend = confirm, suspend
     frame.title:SetText(message('title'))
-    frame.body:SetText(message(shared.status == 'available' and 'ready' or 'missing'))
+    local bodyKey = shared.status == 'available' and 'ready'
+        or shared.status == 'provider-incompatible' and 'incompatible' or 'missing'
+    frame.body:SetText(message(bodyKey))
     frame.close:SetText(message('gotIt'))
     local links = shared.snapshot.links
     local hasLink = links.curseforge or links.wago or links.github
@@ -136,8 +138,29 @@ function shared.ShowNotice(confirm, suspend)
     _G.AntraktWindowLayers.Focus(frame)
     return visible(frame)
 end
+function shared.RefreshNoticeState()
+    if not shared.noticeCallbacks then return end
+    local account = addon.dbRuntime.GetAccount()
+    local state = account and account.sharedFontsNotice
+    if state == nil and shared.status == 'available'
+        and addon.profileRuntime.ReadCombatState() == false then
+        local root = addon.dbRuntime.GetWritableRoot(false)
+        if root then root.account.sharedFontsNotice = 'satisfied'; state = 'satisfied' end
+    end
+    -- Ready is a per-consumer resolution, never acknowledgement of another host.
+    local runtimeState = state == 'satisfied' and 'fresh' or state
+    if runtimeState == nil and shared.status == 'available' then runtimeState = 'fresh' end
+    if not shared.noticeRegistered or shared.registeredNoticeState ~= runtimeState then
+        shared.noticeCallbacks.state = runtimeState
+        if shared.coordinator:Register('StatsPro', shared.noticeCallbacks) then
+            shared.noticeRegistered = true
+            shared.registeredNoticeState = runtimeState
+        end
+    end
+end
 function shared.RequestNotice()
     if not shared.noticeInitialized or (addon.__statsproSmoke and not addon.__testSharedFontsNoticeEnabled) then return end
+    shared.RefreshNoticeState()
     shared.coordinator:RequestShow()
 end
 function shared.PersistAcknowledgement()
@@ -149,12 +172,12 @@ end
 function shared.InitializeNotice()
     shared.noticeInitialized = true
     shared.coordinator = addon.AntraktFontNotice.GetCoordinator()
-    local account = addon.dbRuntime.GetAccount()
-    shared.coordinator:Register('StatsPro', {
-        state = account and account.sharedFontsNotice,
+    shared.noticeRegistered = false
+    shared.noticeCallbacks = {
         canShow = function()
-            local root = addon.dbRuntime.GetWritableRoot(false)
-            if not root or addon.profileRuntime.ReadCombatState() ~= false then return false end
+            if addon.profileRuntime.ReadCombatState() ~= false then return false end
+            if not shared.manualRequest and (shared.status == 'available'
+                or not addon.dbRuntime.GetWritableRoot(false)) then return false end
             shared.noticeHooks = shared.noticeHooks or {}
             local surfaces = { welcome=addon.hudPresets.welcome,
                 settings=not shared.manualRequest and addon.settingsUI.frame or nil,
@@ -173,7 +196,8 @@ function shared.InitializeNotice()
         show = shared.ShowNotice,
         acknowledge = shared.PersistAcknowledgement,
         dismiss = shared.HideNotice,
-    })
+    }
+    shared.RefreshNoticeState()
     if not addon.__statsproSmoke or addon.__testSharedFontsNoticeEnabled then
         C_Timer.After(0.6, function() shared.RequestNotice() end)
     end

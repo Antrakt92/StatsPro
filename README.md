@@ -87,7 +87,8 @@ at the top of the **Stats** tab or adjust individual rows yourself.
 
 Both upcoming builds include a compact multilingual baseline and support the optional
 [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts) collection through LibSharedMedia. The collection is shared by
-compatible addons and updates independently. StatsPro works without it; open
+compatible addons and updates independently, so routine StatsPro updates no longer
+download the whole collection again. StatsPro works without it; open
 **Appearance → Font** for collection details and available download links.
 The linked project contains the collection's source and setup instructions;
 it is not yet a published packaged download. For source development, use a Git

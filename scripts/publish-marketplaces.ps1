@@ -411,6 +411,10 @@ function Publish-ExactMarketplacePlan {
         releaseType = if ($Flavor -ieq 'Forever') { 'beta' } else { 'release' }
         changelog = $context.Markdown
         changelogType = 'markdown'
+        # File-specific delivery metadata; existing files and runtime OptionalDeps stay unchanged.
+        relations = [ordered]@{
+            projects = @([ordered]@{ slug = 'antrakt-fonts'; projectID = '1783613'; type = 'requiredDependency' })
+        }
     } | ConvertTo-Json -Depth 4 -Compress
     $wagoValues = [ordered]@{
         label = if ($Flavor -ieq 'Forever') { "$Tag-Forever-beta" } else { $Tag }
@@ -552,6 +556,11 @@ function Invoke-SelfTest {
             }
         }
         $cfPayload = ConvertFrom-JsonCompat ([string]$calls[1].Form.metadata)
+        $requiredFonts = @($cfPayload.relations.projects)
+        if ($requiredFonts.Count -ne 1 -or $requiredFonts[0].slug -cne 'antrakt-fonts' -or
+            $requiredFonts[0].projectID -cne '1783613' -or $requiredFonts[0].type -cne 'requiredDependency') {
+            throw 'Retail CurseForge file must require the exact Antrakt Fonts project.'
+        }
         if ($calls[1].Headers.Count -ne 1 -or $calls[1].Headers['x-api-token'] -ne $credentials.CF_API_KEY -or
             $calls[1].Form.Count -ne 2 -or $cfPayload.displayName -ne $tag -or $cfPayload.releaseType -ne 'release' -or
             $cfPayload.changelogType -ne 'markdown' -or $cfPayload.changelog -ne $fullChangelog -or
@@ -559,6 +568,7 @@ function Invoke-SelfTest {
             throw "CurseForge payload self-test failed."
         }
         $wagoPayload = ConvertFrom-JsonCompat ([string]$calls[0].Form.metadata)
+        if ($wagoPayload.PSObject.Properties['relations']) { throw 'CurseForge relations must not enter the Wago payload.' }
         if ($calls[0].Headers.Count -ne 2 -or $calls[0].Headers.authorization -ne "Bearer $($credentials.WAGO_API_TOKEN)" -or
             $calls[0].Headers.accept -ne 'application/json' -or $calls[0].Form.Count -ne 2 -or
             $wagoPayload.label -ne $tag -or $wagoPayload.stability -ne 'stable' -or
@@ -775,6 +785,12 @@ function Invoke-SelfTest {
             $foreverCalls[1].Metadata.displayName -cne "$tag-Forever-beta" -or
             $foreverCalls[1].Metadata.releaseType -cne 'beta' -or
             (@($foreverCalls[1].Metadata.gameVersions) -join ',') -cne '1600100') { throw 'Forever exact beta upload metadata is invalid.' }
+        $requiredForeverFonts = @($foreverCalls[1].Metadata.relations.projects)
+        if ($requiredForeverFonts.Count -ne 1 -or $requiredForeverFonts[0].slug -cne 'antrakt-fonts' -or
+            $requiredForeverFonts[0].projectID -cne '1783613' -or $requiredForeverFonts[0].type -cne 'requiredDependency') {
+            throw 'Forever CurseForge file must require the exact Antrakt Fonts project.'
+        }
+        if ($foreverCalls[0].Metadata.PSObject.Properties['relations']) { throw 'Forever Wago payload must not contain CurseForge relations.' }
         Assert-ThrowsMatch 'Forever archive requires explicit flavor' {
             [void](New-MarketplacePlan -Archive $foreverArchive -Tag $tag -Sha256 $foreverSha -CredentialValues $credentials -ReadRequest $foreverRead)
         } 'filename'

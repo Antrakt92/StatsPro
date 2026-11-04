@@ -165,6 +165,18 @@ for _,forever in ipairs({false,true}) do
     local marker=assert(host.sharedFonts.marker)
     marker.scripts.OnClick()
     check(host.sharedFonts.notice and host.sharedFonts.notice:IsVisible(),'manual details may open over own Settings after a fresh install')
+    local noticeClose=host.sharedFonts.notice.x
+    check(noticeClose.statsProModernClose==true,'font information uses the unclipped window close control')
+    check(noticeClose.statsProCloseText:GetText()=='×' and noticeClose.statsProCloseText:GetPoint()=='CENTER',
+        'close glyph is naturally centered without narrow shell-label insets')
+    check(not noticeClose.statsProText and not noticeClose.statsProTooltipProvider,
+        'close glyph never relies on a truncated-label tooltip')
+    noticeClose.scripts.OnEnter(noticeClose)
+    check(noticeClose.statsProCloseHover:IsShown() and noticeClose.statsProCloseText:GetText()=='×',
+        'hover highlights the existing close glyph instead of revealing a label')
+    noticeClose.scripts.OnLeave(noticeClose)
+    check(not noticeClose.statsProCloseHover:IsShown() and noticeClose.statsProCloseText:GetText()=='×',
+        'leaving retains the same close glyph without hover background')
     local busy,owner=host.sharedFonts.coordinator:RequestShow()
     check(busy and owner=='StatsPro','manual details hold the common coordinator token')
     host.sharedFonts.HideNotice()
@@ -185,7 +197,8 @@ for _,forever in ipairs({false,true}) do
     combat=true;marker.scripts.OnClick()
     check(not host.sharedFonts.notice:IsVisible(),'manual details are blocked in combat')
     combat=false;marker.scripts.OnClick()
-    host.sharedFonts.notice.close.scripts.OnClick()
+    host.sharedFonts.notice.x.scripts.OnClick()
+    check(not host.sharedFonts.notice:IsVisible(),'window close glyph dismisses font information')
     check(env.StatsProDB.account.sharedFontsNotice=='acknowledged','manual acknowledgement persists for a fresh account')
     marker.scripts.OnClick()
     check(host.sharedFonts.notice:IsVisible(),'acknowledged account can reopen manual details')

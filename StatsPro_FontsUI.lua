@@ -92,10 +92,9 @@ function shared.ShowNotice(confirm, suspend)
             frame:Hide()
         end)
         frame.close = close
-        local x = addon.settingsDesign.CreateShellButton(frame, nil, 'field')
+        local x = CreateFrame('Button', nil, frame, 'UIPanelCloseButton')
         x:SetPoint('TOPRIGHT', -12, -12)
-        x:SetSize(24, 24)
-        x:SetText('X')
+        addon.settingsDesign.StyleCloseButton(x)
         x:SetScript('OnClick', function()
             if frame.confirm then frame.confirm() end
             frame:Hide()

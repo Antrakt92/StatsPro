@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Keep the shared-font information window's close icon visible before hovering.
 - Move the optional font collection to Antrakt Fonts, shared by compatible addons and updated separately. Keep a compact multilingual baseline in StatsPro.
 - Preserve selected fonts, imported choices and favorites while the collection is unavailable. Show the one-time migration notice only when a compatible collection is missing; keep details in Font settings.
 - Preview hovered fonts in Settings as well as the HUD, and restore the usual Settings font when the preview ends.

@@ -11,6 +11,10 @@
 - Preview hovered fonts in Settings as well as the HUD, and restore the usual Settings font when the preview ends.
 - Thanks to [chenrylee](https://github.com/chenrylee) for suggesting a separate font package ([StatsPro #10](https://github.com/Antrakt92/StatsPro/issues/10)).
 
+## 1.22.13 - 04-Nov-2026 — Archon target refresh
+
+- Refresh bundled M+ and raid targets from Archon data checked on 4 November.
+
 ## 1.22.12 - 03-Nov-2026 — Archon target refresh
 
 - Refresh bundled M+ and raid targets from Archon data checked on 3 November.

@@ -12,6 +12,24 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 . (Join-Path $PSScriptRoot "saved-variables-contract.ps1")
 
+function Assert-TocBrandContract {
+    param([string]$TocPath)
+
+    $text = [System.IO.File]::ReadAllText($TocPath)
+    $headers = [regex]::Matches($text, '(?im)^##[ \t]+(?<key>Category(?:-[^:\r\n]+)?|Group)[ \t]*:[ \t]*(?<value>[^\r\n]*)')
+    if (@($headers | Where-Object { $_.Groups['key'].Value -like 'Category-*' }).Count -gt 0) {
+        throw 'TOC brand category forbids localized Category overrides.'
+    }
+    foreach ($key in @('Category', 'Group')) {
+        $values = @($headers | Where-Object { $_.Groups['key'].Value -ieq $key })
+        if ($values.Count -ne 1) { throw "TOC $key requires exactly one brand directive." }
+        $expected = if ($key -eq 'Category') { 'Antrakt92' } else { 'StatsPro' }
+        if ($values[0].Groups['value'].Value.Trim() -cne $expected) {
+            throw "TOC $key must be '$expected'."
+        }
+    }
+}
+
 function Get-ExpectedTocNotes {
     return [ordered]@{
         "Notes"      = "Stats and gear HUD: item level, durability, repair cost and Archon stat targets."
@@ -515,6 +533,30 @@ function Invoke-SelfTest {
     New-Item -ItemType Directory -Path $root | Out-Null
     try {
         New-TestRuntimeFiles -Root $root
+        $brandPath = Join-Path $root 'brand.toc'
+        foreach ($interface in @('120105', '16001')) {
+            $validBrand = "## Interface: $interface`n## Category: Antrakt92`n## Group: StatsPro`n## X-Category: Combat`n"
+            [System.IO.File]::WriteAllText($brandPath, $validBrand)
+            Assert-TocBrandContract -TocPath $brandPath
+            $invalidBrands = [ordered]@{
+                'missing category' = $validBrand.Replace("## Category: Antrakt92`n", '')
+                'old category' = $validBrand.Replace('## Category: Antrakt92', '## Category: Combat')
+                'duplicate category' = $validBrand + "## Category: Antrakt92`n"
+                'duplicate category case' = $validBrand + "## category: Antrakt92`n"
+                'localized category' = $validBrand + "## Category-deDE: Kampf`n"
+                'missing group' = $validBrand.Replace("## Group: StatsPro`n", '')
+                'wrong parent group' = $validBrand.Replace('## Group: StatsPro', '## Group: AntraktFonts')
+                'duplicate group' = $validBrand + "## Group: StatsPro`n"
+                'duplicate group case' = $validBrand + "## group: StatsPro`n"
+            }
+            foreach ($case in $invalidBrands.Keys) {
+                [System.IO.File]::WriteAllText($brandPath, $invalidBrands[$case])
+                Assert-ThrowsMatch "brand $interface $case rejected" {
+                    Assert-TocBrandContract -TocPath $brandPath
+                } 'TOC (Category|Group|brand category)'
+            }
+        }
+        Write-Host 'TOC brand self-test passed: both flavors, localized overrides, missing/wrong/duplicate category and self-group.'
         $validRefs = @(
             "libs\LibStub\LibStub.lua",
             "libs\CallbackHandler-1.0\CallbackHandler-1.0.lua",
@@ -1002,29 +1044,10 @@ try {
     $IconRef = Resolve-RepoFileRef -Root $RepoRoot -RelativePath $LocalIconPath -LineNumber 0 -Description "TOC IconTexture target"
     Assert-PathExists "TOC IconTexture target" $IconRef.FullPath
 
-    $ExpectedCategories = [ordered]@{
-        "Category"      = "Combat"
-        "Category-deDE" = "Kampf"
-        "Category-esES" = "Combate"
-        "Category-esMX" = "Combate"
-        "Category-frFR" = "Combat"
-        "Category-itIT" = "Combattimento"
-        "Category-koKR" = ([string][char]0xC804 + [string][char]0xD22C)
-        "Category-ptBR" = "Combate"
-        "Category-ruRU" = ([string][char]0x0411 + [string][char]0x043E + [string][char]0x0439)
-        "Category-zhCN" = ([string][char]0x6218 + [string][char]0x6597)
-        "Category-zhTW" = ([string][char]0x6230 + [string][char]0x9B25)
-    }
-
-    foreach ($Key in $ExpectedCategories.Keys) {
-        $Actual = Get-SingleRegexMatch `
-            -Path $contract.TocPath `
-            -Pattern ("^##\s+" + [regex]::Escape($Key) + ":\s*(.+?)\s*$") `
-            -Description "TOC $Key"
-        if ($Actual -ne $ExpectedCategories[$Key]) {
-            throw "TOC $Key is '$Actual', expected '$($ExpectedCategories[$Key])'."
-        }
-    }
+    Assert-TocBrandContract -TocPath $contract.TocPath
+    $foreverTocPath = Join-Path $RepoRoot 'StatsPro_Forever.toc'
+    Assert-PathExists 'Forever TOC brand metadata' $foreverTocPath
+    Assert-TocBrandContract -TocPath $foreverTocPath
 
     Assert-TocNotesContract -Metadata $contract.Metadata -TocPath $contract.TocPath
     Assert-BugReportTemplateContract -Path (Join-Path $RepoRoot ".github\ISSUE_TEMPLATE\bug_report.md")

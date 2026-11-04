@@ -1,5 +1,7 @@
 ## Interface: 16001
 ## Title: |cff00ff7fStatsPro|r — Forever Beta
+## Category: Antrakt92
+## Group: StatsPro
 ## Notes: Character stats and gear HUD for WoW Forever (beta).
 ## Notes-ruRU: Характеристики и экипировка персонажа в WoW Forever (бета).
 ## Notes-deDE: Charakterwerte und Ausrüstung für WoW Forever (Beta).
@@ -16,7 +18,6 @@
 ## IconTexture: Interface\AddOns\StatsPro\textures\forever-logo.png
 ## OptionalDeps: AntraktFonts
 ## SavedVariables: StatsProDB, StatsProSelfTest
-## Category: Combat
 ## X-License: Custom (see LICENSE)
 ## X-Website: https://github.com/Antrakt92/StatsPro
 ## X-Curse-Project-ID: 1525100

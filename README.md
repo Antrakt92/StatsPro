@@ -33,7 +33,7 @@ profiles. Archon references are available only in Retail.
 **Upcoming shared-font update:** this branch contains changes that are not yet
 in the published downloads above. The next Retail and Forever builds will use
 the optional [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts) collection.
-See each changelog's **Unreleased** section for the pending changes.
+See the top entry in each changelog for the pending changes.
 
 <p align="center">
   <a href="#installation">Install</a>

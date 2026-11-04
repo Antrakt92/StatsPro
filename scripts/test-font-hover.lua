@@ -11,6 +11,7 @@ for _, forever in ipairs({ false, true }) do
     local fonts = {
         { name = "Hover A", path = "Interface\\AddOns\\Media\\HoverA.ttf" },
         { name = "Hover B", path = "Interface\\AddOns\\Media\\HoverB.ttf" },
+        { name = "Neucha", path = "Interface\\AddOns\\AntraktFonts\\fonts\\Neucha.ttf" },
     }
     local counts = { setFont = 0, ownedFont = 0, hudOwned = 0, width = 0 }
     local hudObjects = {}
@@ -57,18 +58,19 @@ for _, forever in ipairs({ false, true }) do
     end
     local function applied(path) return test.panelFontState().mainAppliedFont == path end
     local configBefore = test.configFontState()
-    local configBaseline, catalogRegions = {}, {}
+    local configBaseline, catalogRegions, closeRegions = {}, {}, {}
     for _, button in ipairs(picker.buttons) do catalogRegions[button.text] = true end
     for _, entry in ipairs(configBefore.entries) do
         local path, size, flags = entry.region:GetFont()
         configBaseline[entry.region] = {path=path,size=size,flags=flags,text=entry.region:GetText()}
+        if entry.region:GetText() == "×" then closeRegions[entry.region] = true end
     end
     local function menuFont(path, unchangedText)
         for _, entry in ipairs(test.configFontState().entries) do
             local baseline = configBaseline[entry.region]
             if baseline then
                 local actual, size, flags = entry.region:GetFont()
-                check(actual == (catalogRegions[entry.region] and baseline.path or path), 'actual owned Settings region follows hover while catalog labels stay independent')
+                check(actual == ((catalogRegions[entry.region] or closeRegions[entry.region]) and baseline.path or path), 'owned Settings text follows hover while catalogue labels and close icons stay independent')
                 check(size == baseline.size and addon.fontRuntime.semanticFlags(flags) == addon.fontRuntime.semanticFlags(baseline.flags), 'hover preserves semantic role size and outline flags')
                 if unchangedText then check(entry.region:GetText() == baseline.text, 'font preview restores every region text after mutation') end
             end
@@ -185,5 +187,27 @@ for _, forever in ipairs({ false, true }) do
     check(refreshes == 0, 'completed cancellation never repeats Settings control refresh')
     addon.settingsUI.localization.CancelPreview(addon)
     picker.Hide(addon)
+    -- Neucha's actual asset has no U+00D7: close icons must keep their baseline.
+    local neucha = assert(buttons["Neucha"])
+    local icon, baseline
+    for region in pairs(closeRegions) do icon, baseline = region, configBaseline[region]; break end
+    check(icon ~= nil, 'fixture includes an actual styled close icon')
+    picker.Show(addon); enter(neucha)
+    check(icon:GetFont() == baseline.path and icon:GetText() == "×", 'Neucha hover never applies its missing multiplication glyph to close icons')
+    local lateClose = env.CreateFrame('Button', nil, addon.settingsUI.frame, 'UIPanelCloseButton')
+    addon.settingsDesign.StyleCloseButton(lateClose)
+    local lateText = lateClose.statsProCloseText
+    check(lateText:GetFont() == baseline.path and lateText.statsProFontPreviewIndependent == true,
+        'a close icon registered during hover immediately inherits the readable baseline')
+    local lateLabel = addon.settingsUI.frame:CreateFontString(nil, 'OVERLAY')
+    addon.settingsDesign.ApplyTextRole(lateLabel, 'body')
+    lateLabel:SetText('Late preview label')
+    check(lateLabel:GetFont() == neucha.fontPath, 'late independent icon registration never resets ordinary preview text')
+    leave(neucha); env.__flushTimers(.2)
+    check(icon:GetFont() == baseline.path and lateText:GetFont() == baseline.path,
+        'leaving Neucha preserves original and late close icons')
+    enter(neucha); picker.Hide(addon)
+    check(icon:GetFont() == baseline.path and lateText:GetFont() == baseline.path
+        and lateLabel:GetFont() == baseline.path, 'cancellation restores ordinary text while close icons stay on baseline')
 end
 print("StatsPro font hover: PASS (" .. checks .. " checks)")

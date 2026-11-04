@@ -13809,6 +13809,7 @@ function addon.settingsDesign.StyleCloseButton(button)
     hover:SetColorTexture(danger[1], danger[2], danger[3], 0.14)
     hover:Hide()
     local text = button:CreateFontString(nil, "OVERLAY")
+    text.statsProFontPreviewIndependent = true
     RegisterConfigFont(text, 18, nil, "close")
     text:SetPoint("CENTER", 0, 1)
     text:SetText("×")

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "catalogRevision": "48acd1522a9b35739b76d1f09b3e201777bd3c9d9d281ff736c5f9bd2e41372f",
+  "catalogRevision": "4173937a1e693393b3b11b8c3f7bc690f91a30fc2e1cb787b1cd2c77b17564ac",
   "modules": {
-    "AntraktFontCatalog.lua": "7234adf05c3dcbd69944523ee98ce75916a3f5482c36ee16127cafd7a59677a1",
+    "AntraktFontCatalog.lua": "9afa76362e80582a418c3f695d3edc61ce62e37d64321e79113751df3c68dadf",
     "AntraktFontNotice.lua": "bd1efba37445ffe5ea3c1f6e958b60e7bd640fbe32c48f266b3b2bb07158e152"
   },
   "baseline": {

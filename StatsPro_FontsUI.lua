@@ -9,8 +9,8 @@ end
 local function message(key, value) return shared.Message(locale(), key, value) end
 local function packageKey(body)
     if shared.status == 'available' then return 'ready' end
-    if shared.status == 'provider-disabled' then return 'disabled' end
-    if shared.status == 'provider-not-loaded' then return 'notLoaded' end
+    if shared.status == 'provider-disabled' then return shared.actionResult == 'failed' and 'enableFailed' or 'disabled' end
+    if shared.status == 'provider-not-loaded' then return shared.actionResult == 'reload-required' and 'reloadRequired' or 'notLoaded' end
     if shared.status == 'provider-incompatible' then return 'incompatible' end
     return body and 'missing' or 'settingsMissing'
 end
@@ -65,6 +65,32 @@ end
 function shared.HideNotice()
     if shared.notice then shared.notice:Hide() end
 end
+function shared.UpdateNoticeAction()
+    local frame = shared.notice
+    if not frame or not frame.sharedFontsReady then return end
+    frame.body:SetText(message(packageKey(true)))
+    local links = shared.snapshot.links
+    local hasLink = links.curseforge or links.wago or links.github
+    frame.action = nil
+    if shared.status == 'provider-disabled' then
+        frame.action = 'enable'
+    elseif shared.status == 'provider-not-loaded' and shared.actionResult == 'reload-required' then
+        frame.action = 'reload'
+    end
+    if frame.action then
+        frame.copy:SetText(message(frame.action))
+        frame.copy:Show()
+        frame.copy:Enable()
+    elseif shared.status == 'provider-not-loaded' then
+        frame.copy:Hide()
+        frame.copy:Disable()
+    else
+        frame.action = 'copy'
+        frame.copy:SetText(message(hasLink and 'copyLink' or 'linkUnavailable'))
+        frame.copy:Show()
+        if hasLink then frame.copy:Enable() else frame.copy:Disable() end
+    end
+end
 function shared.ShowNotice(confirm, suspend)
     local frame = shared.notice
     if frame and not frame.sharedFontsReady then frame:Hide(); shared.notice = nil; frame = nil end
@@ -111,7 +137,20 @@ function shared.ShowNotice(confirm, suspend)
         local copy = addon.settingsDesign.CreateShellButton(frame, nil, 'field')
         copy:SetPoint('BOTTOMLEFT', 22, 20)
         copy:SetSize(240, 28)
-        copy:SetScript('OnClick', function() shared.CopyLink(frame.confirm) end)
+        copy:SetScript('OnClick', function()
+            if not visible(frame) or not visible(copy) then return end
+            local action = frame.action
+            if action == 'enable' then
+                local result = shared.EnableProvider()
+                shared.UpdateGuidance()
+                if result == 'available' then shared.HideNotice()
+                else shared.UpdateNoticeAction() end
+            elseif action == 'reload' then
+                shared.ReloadProvider()
+                shared.UpdateGuidance()
+                shared.UpdateNoticeAction()
+            elseif action == 'copy' then shared.CopyLink(frame.confirm) end
+        end)
         frame.copy = copy
         frame:SetScript('OnHide', function()
             _G.AntraktWindowLayers.Unregister(frame)
@@ -133,16 +172,7 @@ function shared.ShowNotice(confirm, suspend)
     frame.title:SetText(message('title'))
     frame.body:SetText(message(packageKey(true)))
     frame.close:SetText(message('gotIt'))
-    local links = shared.snapshot.links
-    local hasLink = links.curseforge or links.wago or links.github
-    if shared.status == 'provider-disabled' or shared.status == 'provider-not-loaded' then
-        frame.copy:Hide()
-        frame.copy:Disable()
-    else
-        frame.copy:SetText(message(hasLink and 'copyLink' or 'linkUnavailable'))
-        frame.copy:Show()
-        if hasLink then frame.copy:Enable() else frame.copy:Disable() end
-    end
+    shared.UpdateNoticeAction()
     frame:SetPropagateKeyboardInput(true)
     _G.AntraktWindowLayers.Register(frame)
     frame:Show()

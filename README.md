@@ -82,6 +82,8 @@ Both builds include a compact multilingual baseline and support the optional
 **Antrakt Fonts** collection through LibSharedMedia. The collection is shared by
 compatible addons and updates independently. StatsPro works without it; open
 **Appearance → Font** for collection details and available download links.
+If the collection is installed but disabled, enable it from that information
+window, then use the separate reload button to activate it.
 Existing installs receive a one-time migration notice only if a compatible collection
 is missing. An installed, compatible collection resolves the transition silently;
 later removal leaves guidance in Font settings.

@@ -377,8 +377,11 @@ for _,forever in ipairs({false,true}) do
         local notice=assert(host.sharedFonts.notice,case.name..': manual information opens')
         local bodyKey=case.key=='settingsMissing' and 'missing' or case.key
         check(notice.body:GetText()==host.sharedFonts.Message('enUS',bodyKey),case.name..' uses the same state in the information window')
-        if case.expected=='provider-disabled' or case.expected=='provider-not-loaded' then
+        if case.expected=='provider-not-loaded' then
             check(not notice.copy:IsShown(),case.name..' never asks for an unnecessary download')
+        elseif case.expected=='provider-disabled' then
+            check(notice.copy:IsShown() and notice.copy:GetText()==host.sharedFonts.Message('enUS','enable'),
+                'disabled package offers enable instead of download')
         end
         local before=calls
         for _=1,10 do host.sharedFonts.UpdateGuidance();host:RunUpdateStatsSafe() end
@@ -482,5 +485,91 @@ for _,forever in ipairs({false,true}) do
     check(host.settingsUI.fontPicker.BuildFontsList(host)~=previous,'provider event invalidates an already built picker')
     for _=1,10 do host:RunUpdateStatsSafe() end
     check(calls==1,'one load event never causes catalogue polling on later HUD ticks')
+end
+for _,forever in ipairs({false,true}) do
+    for _,case in ipairs({'reload','enable-error','enable-ignored','save-error','missing-save',
+        'missing-enable','modern-invalid','combat','unknown-combat','addon-list','unknown-list','missing',
+        'unsafe-guid','legacy','combat-during-query'}) do
+        local combat=false
+        local env,host,test=fixtures.loadStatsPro('enUS',{
+            forever=forever,testSharedFontsNotice=true,statsProDB={fontSize=14},
+            inCombatLockdown=function() return combat end,
+        })
+        env.__fireEvent('PLAYER_ENTERING_WORLD');env.__flushTimers(.6)
+        local before=clone(test.profileState().settings)
+        local enabled,enableCalls,saveCalls,loadCalls,reloadCalls=0,0,0,0,0
+        local armed=false
+        rawset(env,'UnitGUID',function() return case=='unsafe-guid' and {} or 'Player-EnableFontFixture' end)
+        rawset(env.C_AddOns,'DoesAddOnExist',function() return case~='missing' end)
+        rawset(env.C_AddOns,'IsAddOnLoaded',function() return false,false end)
+        local function enable(name,guid)
+            check(name=='AntraktFonts' and guid=='Player-EnableFontFixture','enable changes only this package for the current character')
+            enableCalls=enableCalls+1
+            if case=='enable-error' then error('enable failed') end
+            if case~='enable-ignored' then enabled=2 end
+        end
+        local function state(name,guid)
+            check(name=='AntraktFonts' and guid=='Player-EnableFontFixture','enable result is checked for the same character')
+            if armed and case=='combat-during-query' then combat=true end
+            return enabled
+        end
+        rawset(env.C_AddOns,'GetAddOnEnableState',state)
+        rawset(env.C_AddOns,'EnableAddOn',enable)
+        rawset(env.C_AddOns,'SaveAddOns',function(...)
+            check(select('#',...)==0,'save receives no expanded method-selection return')
+            saveCalls=saveCalls+1
+            if case=='save-error' then error('save failed') end
+        end)
+        rawset(env.C_AddOns,'LoadAddOn',function() loadCalls=loadCalls+1;error('ordinary collection requires reload') end)
+        rawset(env,'ReloadUI',function() reloadCalls=reloadCalls+1 end)
+        if case=='legacy' then
+            env.C_AddOns.EnableAddOn=nil;rawset(env,'EnableAddOn',enable)
+            env.C_AddOns.GetAddOnEnableState=nil
+            rawset(env,'GetAddOnEnableState',function(guid,name) return state(name,guid) end)
+        elseif case=='missing-save' then env.C_AddOns.SaveAddOns=nil
+        elseif case=='missing-enable' then env.C_AddOns.EnableAddOn=nil
+        elseif case=='modern-invalid' then
+            rawset(env.C_AddOns,'EnableAddOn',false)
+            rawset(env,'EnableAddOn',function() error('invalid modern method must not fall through') end)
+        elseif case=='combat' then combat=true
+        elseif case=='unknown-combat' then host.profileRuntime.ReadCombatState=function() return nil end
+        elseif case=='addon-list' then rawset(env,'AddonList',{IsShown=function() return true end})
+        elseif case=='unknown-list' then rawset(env,'AddonList',{}) end
+        host.sharedFonts.Refresh()
+        host.sharedFonts.ShowNotice(function() end,function() end)
+        local notice=host.sharedFonts.notice
+        -- Call the saved enable callback even if an external state change hides it.
+        notice.action='enable'
+        if case~='missing' and case~='unsafe-guid' then
+            notice:Hide();notice.copy.scripts.OnClick()
+            check(enableCalls==0 and saveCalls==0,'hidden notice cannot enable a package through its saved handler')
+            notice:Show()
+        end
+        armed=true;notice.copy.scripts.OnClick()
+        check(reloadCalls==0,'enable never reloads the interface automatically')
+        check(equal(before,test.profileState().settings),'enable never rewrites font/profile settings')
+        if case=='reload' or case=='legacy' then
+            check(enabled==2 and notice.action=='reload','verified enabled package offers a separate reload action')
+            check(notice.body:GetText()==host.sharedFonts.Message('enUS','reloadRequired'),'reload has localized truthful guidance')
+            check(saveCalls==1,'explicit enable saves one successful transaction')
+            check(loadCalls==0,'non-demand or unknown packages never use a live load')
+            notice:Hide();notice.copy.scripts.OnClick();check(reloadCalls==0,'hidden notice cannot reload through its saved handler')
+            notice:Show()
+            combat=true;notice.copy.scripts.OnClick();check(reloadCalls==0,'combat blocks an existing reload button')
+            combat=false
+            rawset(env.C_AddOns,'GetAddOnEnableState',function() combat=true;return enabled end)
+            local saved=saveCalls
+            notice.copy.scripts.OnClick()
+            check(reloadCalls==0 and saveCalls==saved,'combat changed during reload discovery blocks save and reload')
+            if case=='legacy' then env.C_AddOns.GetAddOnEnableState=nil
+            else rawset(env.C_AddOns,'GetAddOnEnableState',state) end
+            combat=false;notice.copy.scripts.OnClick();check(reloadCalls==1,'second explicit click reloads only after validation')
+            enabled=0;notice.copy.scripts.OnClick();check(reloadCalls==1,'stale reload cannot reload a disabled package')
+        elseif case=='save-error' then
+            check(enabled==2 and saveCalls==1 and loadCalls==0 and notice.action~='reload','failed save never loads or claims reload readiness')
+        else
+            check(enabled==0 and saveCalls==0 and loadCalls==0,'blocked or failed enable has no save/load effects: '..case)
+        end
+    end
 end
 print('Shared fonts: ' .. checks .. ' checks passed')

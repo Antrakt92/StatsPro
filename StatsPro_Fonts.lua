@@ -71,6 +71,55 @@ end
 function shared.RefreshPackageState()
     if clean(shared.provider, 'nil') then shared.status = shared.InstallationStatus() end
 end
+local function currentEnableState()
+    local guidOK, guid = query(rawget(_G, 'UnitGUID'), 'player')
+    if not guidOK or not text(guid, 128) then return nil end
+    local callback, modern = method('GetAddOnEnableState')
+    local ok, state
+    if modern then ok, state = query(callback, 'AntraktFonts', guid)
+    else ok, state = query(callback, guid, 'AntraktFonts') end
+    if ok and clean(state, 'number') and (state == 0 or state == 1 or state == 2) then return state, guid end
+end
+local function actionSafe()
+    if addon.profileRuntime.ReadCombatState() ~= false then return false end
+    local list = rawget(_G, 'AddonList')
+    if clean(list, 'nil') then return true end
+    local ok, shown = pcall(function() return list:IsShown() end)
+    return ok and clean(shown, 'boolean') and not shown
+end
+function shared.EnableProvider()
+    if not actionSafe() then return 'blocked' end
+    shared.Refresh()
+    if shared.status ~= 'provider-disabled' then return 'blocked' end
+    local save = method('SaveAddOns')
+    if not clean(save, 'function') then return 'blocked' end
+    local state, guid = currentEnableState()
+    if state ~= 0 or not actionSafe() then return 'blocked' end
+    local enabled = query(method('EnableAddOn'), 'AntraktFonts', guid)
+    local after = currentEnableState()
+    shared.Refresh()
+    if not enabled or (after ~= 1 and after ~= 2) then
+        shared.actionResult = 'failed'
+        return 'failed'
+    end
+    if not actionSafe() or not query(save) then shared.actionResult = nil; return 'failed' end
+    -- The collection is an ordinary addon: activate it on an explicit reload.
+    after = currentEnableState()
+    shared.actionResult = (after == 1 or after == 2) and 'reload-required' or 'failed'
+    return shared.actionResult
+end
+function shared.ReloadProvider()
+    if shared.actionResult ~= 'reload-required' or not actionSafe() then return false end
+    shared.Refresh()
+    if shared.status ~= 'provider-not-loaded' then return false end
+    local state = currentEnableState()
+    if state ~= 1 and state ~= 2 then return false end
+    local reload = rawget(_G, 'ReloadUI')
+    local save = method('SaveAddOns')
+    if not clean(reload, 'function') or not actionSafe() or not query(save) then return false end
+    if not actionSafe() then return false end
+    return query(reload)
+end
 function shared.Refresh()
     local provider = rawget(_G, 'AntraktFonts')
     shared.provider, shared.revision = provider, nil

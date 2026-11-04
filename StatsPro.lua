@@ -12969,16 +12969,16 @@ local localizedPersistentLabels = {}
 -- GetStringWidth returns the wrapped width (≤ SetWidth), not the natural width. Setting a
 -- huge SetWidth first forces single-line layout so GetStringWidth returns the real width
 -- of the new text — critical when language switch grows a label (en "Crit" → ru "Крит. удар").
-local function ReAlignGroupImpl(rows, gap)
-    for _, row in ipairs(rows) do
-        row.text:SetWidth(9999)
-    end
-    local maxW = 0
-    for _, row in ipairs(rows) do
-        local w = row.text:GetStringWidth()
-        local maxTextWidth = row.maxTextWidth or row.text.statsProMaxWidth
-        if maxTextWidth and w > maxTextWidth then w = maxTextWidth end
-        if w > maxW then maxW = w end
+local function ReAlignGroupImpl(rows, gap, fixedTextWidth)
+    local maxW = fixedTextWidth or 0
+    if not fixedTextWidth then
+        for _, row in ipairs(rows) do row.text:SetWidth(9999) end
+        for _, row in ipairs(rows) do
+            local w = row.text:GetStringWidth()
+            local maxTextWidth = row.maxTextWidth or row.text.statsProMaxWidth
+            if maxTextWidth and w > maxTextWidth then w = maxTextWidth end
+            if w > maxW then maxW = w end
+        end
     end
     for _, row in ipairs(rows) do
         row.text:SetWidth(maxW)
@@ -12990,9 +12990,13 @@ local function ReAlignGroupImpl(rows, gap)
             -- height and internal vertical padding aren't reliable to compute a y-offset that
             -- centers dropdown text on label baseline. Preserve each row's original TOPLEFT y
             -- (hand-tuned at row creation) and only update x to the shared column.
-            row.dropdown:ClearAllPoints()
-            row.dropdown:SetPoint("TOPLEFT", row.dropdownParent, "TOPLEFT",
-                row.dropdownX_base + maxW + gap, row.dropdownY)
+            local x = row.dropdownX_base + maxW + gap
+            local point, relative, relativePoint, oldX, oldY = row.dropdown:GetPoint()
+            if not fixedTextWidth or point ~= "TOPLEFT" or relative ~= row.dropdownParent
+                or relativePoint ~= "TOPLEFT" or oldX ~= x or oldY ~= row.dropdownY then
+                row.dropdown:ClearAllPoints()
+                row.dropdown:SetPoint("TOPLEFT", row.dropdownParent, "TOPLEFT", x, row.dropdownY)
+            end
         end
     end
 end
@@ -13005,10 +13009,10 @@ end
 -- in the current font, no hardcoded en-biased SetWidth(N). Registers the group so
 -- RefreshConfigLocalization() can re-run alignment after a language switch shrinks or
 -- grows the labels.
-local function AlignSwatchColumn(rows, gap)
+local function AlignSwatchColumn(rows, gap, fixedTextWidth)
     gap = gap or CONFIG_SWATCH_GAP
-    ReAlignGroupImpl(rows, gap)
-    tinsert(alignmentGroups, { rows = rows, gap = gap })
+    ReAlignGroupImpl(rows, gap, fixedTextWidth)
+    tinsert(alignmentGroups, { rows = rows, gap = gap, fixedTextWidth = fixedTextWidth })
 end
 
 -- PushLocalizedLabel: register a setter closure that calls fs:SetText with a fresh L()-resolved
@@ -13039,7 +13043,7 @@ local function RefreshConfigLocalization(skipSetters)
         if not skipSetters or not skipSetters[setter] then setter() end
     end
     for _, g in ipairs(alignmentGroups) do
-        ReAlignGroupImpl(g.rows, g.gap)
+        ReAlignGroupImpl(g.rows, g.gap, g.fixedTextWidth)
     end
 end
 
@@ -13669,6 +13673,7 @@ function addon.settingsDesign.StyleDropdown(dropdown, label)
     surface:SetPoint("TOPLEFT", 16, -4)
     surface:SetPoint("BOTTOMRIGHT", -8, 4)
     addon.settingsDesign.ApplyTextRole(label, "body")
+    text.statsProFontPreviewIndependent = true
     addon.settingsDesign.ApplyTextRole(text, "body")
     text:SetWidth(geometry.dropdownWidth - 16)
     text:SetJustifyH("LEFT")
@@ -19485,10 +19490,19 @@ function addon.settingsUI.BuildAppearanceTab(self, context)
         })
     end
 
-    -- Align Appearance-tab dropdowns into one column. Re-runs on language change via
-    -- RefreshConfigLocalization (alignmentGroups iteration), so locale label-width shifts
-    -- automatically widen or shrink the column.
-    AlignSwatchColumn(displayDropdownRows, CONFIG_DROPDOWN_GAP)
+    -- Keep the interactive fields independent of previewed label metrics so a
+    -- font/language hover cannot move the menu underneath the pointer.
+    local fixedLabelWidth = addon.settingsDesign.tokens.geometry.dropdownLabelMaxWidth
+    for _, row in ipairs(displayDropdownRows) do
+        -- Reserve the info button even while hidden, using the actual template
+        -- frame width rather than assuming its chrome padding matches a client.
+        local markerWidth = row.dropdown == self.settingsUI.fontPicker.dropdown
+            and (self.sharedFonts.marker:GetWidth() + CONFIG_DROPDOWN_GAP) or 0
+        local available = scrollChildWidth - row.dropdownX_base - CONFIG_DROPDOWN_GAP
+            - row.dropdown:GetWidth() - markerWidth - cd.padX
+        fixedLabelWidth = math.min(fixedLabelWidth, math.max(0, available))
+    end
+    AlignSwatchColumn(displayDropdownRows, CONFIG_DROPDOWN_GAP, fixedLabelWidth)
 
     appearanceBody.contentHeight = CursorUsed(cd)
     appearanceBody:SetHeight(appearanceBody.contentHeight)

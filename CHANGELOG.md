@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Keep Font and Language fields and their open menus stationary during hover previews.
 - Enable an installed Antrakt Fonts package and reload the interface with one click from Font settings.
 - Distinguish missing, disabled and unloaded Antrakt Fonts installations in Font settings; keep working font choices available.
 - Keep the shared-font information window's close icon visible before hovering.

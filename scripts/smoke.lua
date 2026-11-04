@@ -13208,12 +13208,13 @@ do
     end
     alignment.addon.profileRuntime.RefreshConfigControls()
     local oldDropdownX = select(4, dropdownRows[1].dropdown:GetPoint())
+    local oldLabelWidth = dropdownRows[1].text:GetWidth()
     alignment.register(cjkPath)
     alignment.tick()
     for index, row in ipairs(dropdownRows) do
-        eq("fonts.catalog_locale.alignment.label_width." .. index, row.text:GetWidth(), 90)
+        eq("fonts.catalog_locale.alignment.label_width." .. index, row.text:GetWidth(), oldLabelWidth)
         eq("fonts.catalog_locale.alignment.dropdown_column." .. index,
-            select(4, row.dropdown:GetPoint()), oldDropdownX + 50)
+            select(4, row.dropdown:GetPoint()), oldDropdownX)
     end
 
     local unavailable = NewCatalogLocaleFixture("koKR")

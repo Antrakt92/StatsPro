@@ -28,6 +28,11 @@ for _, forever in ipairs({ false, true }) do
             return true
         end,
     })
+    local setDropdownWidth=env.UIDropDownMenu_SetWidth
+    env.UIDropDownMenu_SetWidth=function(control,width)
+        setDropdownWidth(control,width)
+        control:SetWidth(width+50) -- Native template includes two 25px end caps.
+    end
     env.__fireEvent("PLAYER_ENTERING_WORLD")
     check(addon:RunUpdateStatsSafe(), "initial HUD renders")
     addon:OpenConfigMenu()
@@ -58,19 +63,49 @@ for _, forever in ipairs({ false, true }) do
     end
     local function applied(path) return test.panelFontState().mainAppliedFont == path end
     local configBefore = test.configFontState()
-    local configBaseline, catalogRegions, closeRegions = {}, {}, {}
+    local configBaseline, catalogRegions, closeRegions, fieldRegions = {}, {}, {}, {}
     for _, button in ipairs(picker.buttons) do catalogRegions[button.text] = true end
+    for _, trigger in ipairs(addon.settingsDesign.dropdownTriggers) do fieldRegions[trigger.statsProText] = true end
+    local controls = {env.StatsProFontDropdown,env.StatsProLanguageDropdown,env.StatsProTextOutlineDropdown}
+    local geometry = {}
+    local anchorWrites=0
+    for _, control in ipairs(controls) do
+        geometry[control] = {point={control:GetPoint()},width=control:GetWidth(),height=control:GetHeight()}
+        local clear,set=control.ClearAllPoints,control.SetPoint
+        control.ClearAllPoints=function(...) anchorWrites=anchorWrites+1;return clear(...) end
+        control.SetPoint=function(...) anchorWrites=anchorWrites+1;return set(...) end
+        local label=control.statsProLabel
+        local measure=label.GetStringWidth
+        label.GetStringWidth=function(region)
+            local font=region:GetFont()
+            if font==first.fontPath then return 205 end
+            if font==second.fontPath then return 20 end
+            return measure(region)
+        end
+    end
+    local function stableGeometry()
+        check(anchorWrites==0,'preview never clears or rewrites the stationary field anchors')
+        for _,control in ipairs(controls) do
+            local before=geometry[control];local point={control:GetPoint()}
+            for i=1,5 do check(point[i]==before.point[i],'font/language preview cannot move an Appearance field anchor') end
+            check(control:GetWidth()==before.width and control:GetHeight()==before.height,'preview keeps field dimensions fixed')
+        end
+        local fontField=env.StatsProFontDropdown
+        local right=select(4,fontField:GetPoint())+fontField:GetWidth()+4+addon.sharedFonts.marker:GetWidth()
+        check(right<=addon.settingsUI.context.scrollChildWidth,'field and info marker stay inside the viewport with native template padding')
+    end
     for _, entry in ipairs(configBefore.entries) do
         local path, size, flags = entry.region:GetFont()
         configBaseline[entry.region] = {path=path,size=size,flags=flags,text=entry.region:GetText()}
         if entry.region:GetText() == "×" then closeRegions[entry.region] = true end
     end
     local function menuFont(path, unchangedText)
+        stableGeometry()
         for _, entry in ipairs(test.configFontState().entries) do
             local baseline = configBaseline[entry.region]
             if baseline then
                 local actual, size, flags = entry.region:GetFont()
-                check(actual == ((catalogRegions[entry.region] or closeRegions[entry.region]) and baseline.path or path), 'owned Settings text follows hover while catalogue labels and close icons stay independent')
+                check(actual == ((catalogRegions[entry.region] or closeRegions[entry.region] or fieldRegions[entry.region]) and baseline.path or path), 'Settings text follows hover while catalogue, field captions and close icons stay readable')
                 check(size == baseline.size and addon.fontRuntime.semanticFlags(flags) == addon.fontRuntime.semanticFlags(baseline.flags), 'hover preserves semantic role size and outline flags')
                 if unchangedText then check(entry.region:GetText() == baseline.text, 'font preview restores every region text after mutation') end
             end
@@ -209,5 +244,18 @@ for _, forever in ipairs({ false, true }) do
     enter(neucha); picker.Hide(addon)
     check(icon:GetFont() == baseline.path and lateText:GetFont() == baseline.path
         and lateLabel:GetFont() == baseline.path, 'cancellation restores ordinary text while close icons stay on baseline')
+    addon.settingsUI.dropdownMenu.Toggle(addon,env.StatsProLanguageDropdown)
+    local menu=addon.settingsUI.dropdownMenu
+    local anchor={menu.frame:GetPoint()}
+    for _,row in ipairs(menu.buttons) do
+        if row:IsShown() and row.info then
+            row.scripts.OnEnter(row)
+            stableGeometry()
+            local current={menu.frame:GetPoint()}
+            for i=1,5 do check(current[i]==anchor[i],'hovering a language cannot reanchor its open menu') end
+        end
+    end
+    addon.settingsUI.dropdownMenu.Hide(addon)
+    stableGeometry()
 end
 print("StatsPro font hover: PASS (" .. checks .. " checks)")

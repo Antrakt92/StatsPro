@@ -117,6 +117,10 @@ function shared.ReloadProvider()
     local reload = rawget(_G, 'ReloadUI')
     local save = method('SaveAddOns')
     if not clean(reload, 'function') or not actionSafe() or not query(save) then return false end
+    shared.Refresh()
+    if shared.status ~= 'provider-not-loaded' then return false end
+    state = currentEnableState()
+    if state ~= 1 and state ~= 2 then return false end
     if not actionSafe() then return false end
     return query(reload)
 end

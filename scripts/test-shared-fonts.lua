@@ -564,6 +564,14 @@ for _,forever in ipairs({false,true}) do
             if case=='legacy' then env.C_AddOns.GetAddOnEnableState=nil
             else rawset(env.C_AddOns,'GetAddOnEnableState',state) end
             combat=false;notice.copy.scripts.OnClick();check(reloadCalls==1,'second explicit click reloads only after validation')
+            rawset(env.C_AddOns,'SaveAddOns',function() enabled=0 end)
+            notice.copy.scripts.OnClick()
+            check(reloadCalls==1,'a changed enable state during save blocks the reload')
+            enabled=2
+            rawset(env.C_AddOns,'SaveAddOns',function() combat=true end)
+            notice.copy.scripts.OnClick()
+            check(reloadCalls==1,'combat entered during save blocks the reload')
+            combat=false
             enabled=0;notice.copy.scripts.OnClick();check(reloadCalls==1,'stale reload cannot reload a disabled package')
         elseif case=='save-error' then
             check(enabled==2 and saveCalls==1 and loadCalls==0 and notice.action~='reload','failed save never loads or claims reload readiness')

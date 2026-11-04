@@ -45,7 +45,7 @@ function shared.UpdateGuidance()
     else marker:Hide() end
 end
 function shared.CopyLink(confirm)
-    if shared.status == 'provider-disabled' or shared.status == 'provider-not-loaded' then return false end
+    if shared.status == 'available' or shared.status == 'provider-disabled' or shared.status == 'provider-not-loaded' then return false end
     local links = shared.snapshot.links
     local url = links.curseforge or links.wago or links.github
     if type(url) ~= 'string' or addon.profileRuntime.ReadCombatState() ~= false then return false end
@@ -68,7 +68,12 @@ end
 function shared.UpdateNoticeAction()
     local frame = shared.notice
     if not frame or not frame.sharedFontsReady then return end
-    frame.body:SetText(message(packageKey(true)))
+    local body = message(packageKey(true))
+    if shared.status == 'available' then
+        local guidance, warning = shared.Guidance()
+        if warning then body = guidance end
+    end
+    frame.body:SetText(body)
     local links = shared.snapshot.links
     local hasLink = links.curseforge or links.wago or links.github
     frame.action = nil
@@ -81,7 +86,7 @@ function shared.UpdateNoticeAction()
         frame.copy:SetText(message(frame.action))
         frame.copy:Show()
         frame.copy:Enable()
-    elseif shared.status == 'provider-not-loaded' then
+    elseif shared.status == 'provider-not-loaded' or shared.status == 'available' then
         frame.copy:Hide()
         frame.copy:Disable()
     else
@@ -183,14 +188,9 @@ function shared.RefreshNoticeState()
     if not shared.noticeCallbacks then return end
     local account = addon.dbRuntime.GetAccount()
     local state = account and account.sharedFontsNotice
-    if state == nil and shared.status == 'available'
-        and addon.profileRuntime.ReadCombatState() == false then
-        local root = addon.dbRuntime.GetWritableRoot(false)
-        if root then root.account.sharedFontsNotice = 'satisfied'; state = 'satisfied' end
-    end
-    -- Ready is a per-consumer resolution, never acknowledgement of another host.
-    local runtimeState = state == 'satisfied' and 'fresh' or state
-    if runtimeState == nil and shared.status == 'available' then runtimeState = 'fresh' end
+    -- Older automatic resolution was not a user acknowledgement.
+    local runtimeState = state
+    if runtimeState == 'satisfied' then runtimeState = nil end
     if not shared.noticeRegistered or shared.registeredNoticeState ~= runtimeState then
         shared.noticeCallbacks.state = runtimeState
         if shared.coordinator:Register('StatsPro', shared.noticeCallbacks) then
@@ -198,6 +198,7 @@ function shared.RefreshNoticeState()
             shared.registeredNoticeState = runtimeState
         end
     end
+    if visible(shared.notice) then shared.UpdateNoticeAction() end
 end
 function shared.RequestNotice()
     if not shared.noticeInitialized or (addon.__statsproSmoke and not addon.__testSharedFontsNoticeEnabled) then return end
@@ -217,8 +218,7 @@ function shared.InitializeNotice()
     shared.noticeCallbacks = {
         canShow = function()
             if addon.profileRuntime.ReadCombatState() ~= false then return false end
-            if not shared.manualRequest and (shared.status == 'available'
-                or not addon.dbRuntime.GetWritableRoot(false)) then return false end
+            if not shared.manualRequest and not addon.dbRuntime.GetWritableRoot(false) then return false end
             shared.noticeHooks = shared.noticeHooks or {}
             local surfaces = { welcome=addon.hudPresets.welcome,
                 settings=not shared.manualRequest and addon.settingsUI.frame or nil,

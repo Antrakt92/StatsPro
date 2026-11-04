@@ -96,9 +96,9 @@ checkout and follow its contributor instructions. Published StatsPro downloads
 still contain their bundled font collection until this update is released.
 If the collection is installed but disabled, enable it from that information
 window; the same click reloads the interface to activate it.
-Existing installs receive a one-time migration notice only if a compatible collection
-is missing. An installed, compatible collection resolves the transition silently;
-later removal leaves guidance in Font settings.
+Existing installs receive one explanation of the shared-font transition, including
+when the collection is already installed. Closing it acknowledges the transition;
+ordinary updates do not repeat it. Later package removal leaves guidance in Font settings.
 Your chosen font and favorites remain saved when the collection is unavailable;
 StatsPro temporarily uses a compatible fallback. Fonts registered by other addons
 also remain available. Only faces compatible with the selected language appear.

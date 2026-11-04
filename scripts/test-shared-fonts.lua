@@ -220,7 +220,7 @@ for _,forever in ipairs({false,true}) do
     pending.sharedFonts.notice.close.scripts.OnClick()
     check(pendingEnv.StatsProDB.account.sharedFontsNotice=='acknowledged','manual confirmation persists pending campaign')
 end
--- A ready provider resolves this consumer without acknowledging another host.
+-- Existing users receive one shared explanation even when the provider is ready.
 local function readyProvider()
     return {GetCatalog=function()
         return {formatMajor=1,catalogRevision=string.rep('a',64),fonts=clone(snapshot.fonts)}
@@ -231,43 +231,51 @@ for _,forever in ipairs({false,true}) do
         forever=forever,statsProDB={fontSize=14},sharedProvider=readyProvider(),testSharedFontsNotice=true,
     })
     env.__fireEvent('PLAYER_ENTERING_WORLD');env.__flushTimers(.6)
-    check(not host.sharedFonts.notice or not host.sharedFonts.notice:IsVisible(),'existing account with ready provider has no automatic migration popup')
-    check(env.StatsProDB.account.sharedFontsNotice=='satisfied','ready provider persists a separate satisfied state')
-    check(test.validateRegistry(env.StatsProDB),'satisfied metadata remains a valid registry')
+    check(host.sharedFonts.notice and host.sharedFonts.notice:IsVisible(),'existing account receives the ready-provider migration explanation')
+    check(env.StatsProDB.account.sharedFontsNotice==nil,'ready display does not fabricate acknowledgement')
+    check(host.sharedFonts.notice.body:GetText()==host.sharedFonts.Message('enUS','ready'),'ready popup explains the installed shared package')
+    check(not host.sharedFonts.notice.copy:IsShown() and not host.sharedFonts.notice.copy:IsEnabled(),'ready popup has no download or activation action')
+    check(test.validateRegistry(env.StatsProDB),'pending ready metadata remains a valid registry')
     local peerShown,peerAcknowledged=false,false
     host.sharedFonts.coordinator:Register('PendingPeer',{
         state=nil,canShow=function() return true end,show=function() peerShown=true;return true end,
         acknowledge=function() peerAcknowledged=true;return true end,dismiss=function() peerShown=false end,
     })
     host.sharedFonts.coordinator:RequestShow()
-    check(peerShown and not peerAcknowledged,'satisfied host does not acknowledge or suppress a pending peer')
+    check(not peerShown and not peerAcknowledged,'ready explanation retains one host without premature peer acknowledgement')
+    host.sharedFonts.notice.close.scripts.OnClick()
+    check(env.StatsProDB.account.sharedFontsNotice=='acknowledged' and peerAcknowledged,'one explicit close acknowledges all pending peers')
+    local originalLinks=host.sharedFonts.snapshot.links
+    host.sharedFonts.snapshot.links={github='https://example.org/fonts'}
+    check(not host.sharedFonts.CopyLink(),'even a valid URL cannot reopen a ready-provider download action')
+    host.sharedFonts.snapshot.links=originalLinks
     local saved=clone(env.StatsProDB)
     local reloaded,reloadedHost,reloadedTest=fixtures.loadStatsPro('enUS',{
         forever=forever,statsProDB=clone(saved),sharedProvider=readyProvider(),testSharedFontsNotice=true,
         unitGUID=function() return 'Player-1-READY-POLICY' end, specIndex=1,specID=73,specName='Protection',specRole='TANK',primaryStat=1,
     })
     reloaded.__fireEvent('PLAYER_ENTERING_WORLD');reloaded.__flushTimers(.6)
-    check(reloaded.StatsProDB.account.sharedFontsNotice=='satisfied','satisfied survives a ready-provider reload')
-    check(not reloadedHost.sharedFonts.notice,'reload does not build a satisfied migration window')
+    check(reloaded.StatsProDB.account.sharedFontsNotice=='acknowledged','explicit acknowledgement survives a ready-provider reload')
+    check(not reloadedHost.sharedFonts.notice,'reload does not build an acknowledged migration window')
     local removed,removedHost,removedTest=fixtures.loadStatsPro('enUS',{
         forever=forever,statsProDB=clone(saved),testSharedFontsNotice=true,
     })
     removed.__fireEvent('PLAYER_ENTERING_WORLD');removed.__flushTimers(.6)
-    check(removed.StatsProDB.account.sharedFontsNotice=='satisfied' and not removedHost.sharedFonts.notice,'later provider removal does not reopen a resolved campaign')
+    check(removed.StatsProDB.account.sharedFontsNotice=='acknowledged' and not removedHost.sharedFonts.notice,'later provider removal does not reopen a resolved campaign')
     removedHost:OpenConfigMenu()
     check(removedHost.sharedFonts.marker:IsShown() and removedHost.sharedFonts.marker.statsProSharedFontText~=nil,'later removal retains Font settings guidance')
     removedHost.sharedFonts.marker.scripts.OnClick()
-    check(removedHost.sharedFonts.notice:IsVisible(),'satisfied account may manually open collection details')
+    check(removedHost.sharedFonts.notice:IsVisible(),'acknowledged account may manually open collection details')
     removedHost.sharedFonts.notice.close.scripts.OnClick()
     check(removed.StatsProDB.account.sharedFontsNotice=='acknowledged','explicit manual close may acknowledge a satisfied account')
     local state=reloadedTest.profileState()
     check(reloadedTest.profileOps.resetProfile(state.profileID),'ordinary profile reset succeeds')
-    check(reloaded.StatsProDB.account.sharedFontsNotice=='satisfied','profile reset preserves satisfied metadata')
+    check(reloaded.StatsProDB.account.sharedFontsNotice=='acknowledged','profile reset preserves acknowledgement')
     check(reloadedTest.appearancePresets.startPreview('high-contrast'),'appearance preset preview starts')
     check(reloadedTest.appearancePresets.applyPreview(),'appearance preset applies')
     check(reloadedTest.appearancePresets.startPreview('default'),'appearance reset preview starts')
     check(reloadedTest.appearancePresets.applyPreview(),'appearance reset applies')
-    check(reloaded.StatsProDB.account.sharedFontsNotice=='satisfied','appearance reset preserves satisfied metadata')
+    check(reloaded.StatsProDB.account.sharedFontsNotice=='acknowledged','appearance reset preserves acknowledgement')
     local stripped={sharedFontsNotice='satisfied',fontSize=14}
     check(reloadedHost.dbRuntime.StripAccountSettings(stripped) and stripped.sharedFontsNotice==nil,'profile import excludes campaign metadata')
     local text=reloadedTest.profileTransfer.serialize('Ready profile',reloadedTest.profileState().settings,{appearance=true,layout=true,stats=true})
@@ -275,7 +283,7 @@ for _,forever in ipairs({false,true}) do
     check(transferred and transferred.values.sharedFontsNotice==nil,'profile export excludes campaign metadata')
     local context=reloadedTest.profileRuntimeState()
     check(reloadedTest.profileOps.importTransferToContext(transferred,transferred.sections,context.activeGUID,context.activeSpecID),'ordinary profile import succeeds')
-    check(reloaded.StatsProDB.account.sharedFontsNotice=='satisfied','profile import preserves satisfied account metadata')
+    check(reloaded.StatsProDB.account.sharedFontsNotice=='acknowledged','profile import preserves account acknowledgement')
     for _,prior in ipairs({'fresh','acknowledged'}) do
         local db=clone(saved);db.account.sharedFontsNotice=prior
         local keep,keepHost=fixtures.loadStatsPro('enUS',{forever=forever,statsProDB=db,sharedProvider=readyProvider(),testSharedFontsNotice=true})
@@ -286,21 +294,35 @@ for _,forever in ipairs({false,true}) do
     late.__fireEvent('PLAYER_ENTERING_WORLD');late.__flushTimers(.6)
     check(lateHost.sharedFonts.notice:IsVisible(),'not-ready pending account shows its one automatic notice')
     late.AntraktFonts=readyProvider();lateHost.fontRuntime.RefreshSharedCatalog(true)
-    check(not lateHost.sharedFonts.notice:IsVisible(),'late ready provider dismisses the active automatic window')
-    check(late.StatsProDB.account.sharedFontsNotice=='satisfied','late provider resolves by satisfaction, without acknowledgement')
-    local denied,deniedHost=fixtures.loadStatsPro('enUS',{forever=forever,statsProDB={fontSize=14},testSharedFontsNotice=true})
+    check(lateHost.sharedFonts.notice:IsVisible(),'late ready provider preserves the unacknowledged explanation')
+    check(lateHost.sharedFonts.notice.body:GetText()==lateHost.sharedFonts.Message('enUS','ready')
+        and not lateHost.sharedFonts.notice.copy:IsShown(),'late provider refreshes the explanation and removes the stale download action')
+    check(late.StatsProDB.account.sharedFontsNotice==nil,'late provider arrival never acknowledges the campaign')
+    local oldDB=clone(saved);oldDB.account.sharedFontsNotice='satisfied'
+    local legacy,legacyHost=fixtures.loadStatsPro('enUS',{forever=forever,statsProDB=oldDB,sharedProvider=readyProvider(),testSharedFontsNotice=true})
+    legacy.__fireEvent('PLAYER_ENTERING_WORLD');legacy.__flushTimers(.6)
+    check(legacyHost.sharedFonts.notice:IsVisible() and legacy.StatsProDB.account.sharedFontsNotice=='satisfied','legacy automatic resolution still needs one real explanation')
+    legacyHost.sharedFonts.notice.close.scripts.OnClick()
+    check(legacy.StatsProDB.account.sharedFontsNotice=='acknowledged','legacy resolution persists only an explicit acknowledgement')
+    local denied,deniedHost=fixtures.loadStatsPro('enUS',{forever=forever,statsProDB={fontSize=14},sharedProvider=readyProvider(),testSharedFontsNotice=true})
     denied.__fireEvent('PLAYER_ENTERING_WORLD');denied.__flushTimers(.6)
     local original=deniedHost.dbRuntime.GetWritableRoot
     deniedHost.dbRuntime.GetWritableRoot=function() return nil end
-    denied.AntraktFonts=readyProvider();deniedHost.fontRuntime.RefreshSharedCatalog(true)
-    check(denied.StatsProDB.account.sharedFontsNotice==nil and not deniedHost.sharedFonts.notice:IsVisible(),'failed satisfied persistence still dismisses an automatic ready-provider window')
+    deniedHost.sharedFonts.notice.close.scripts.OnClick()
+    check(denied.StatsProDB.account.sharedFontsNotice==nil,'failed acknowledgement persistence does not fabricate saved success')
     deniedHost.dbRuntime.GetWritableRoot=original
-    local callbacks=deniedHost.sharedFonts.noticeCallbacks
-    local guard={state=nil,canShow=callbacks.canShow,show=callbacks.show,acknowledge=callbacks.acknowledge,dismiss=callbacks.dismiss}
-    deniedHost.sharedFonts.coordinator:Register('StatsPro',guard)
-    check(not deniedHost.sharedFonts.coordinator:RequestShow(),'automatic canShow rejects ready provider independently of saved state')
     deniedHost.sharedFonts.RequestNotice()
-    check(denied.StatsProDB.account.sharedFontsNotice=='satisfied','later safe lifecycle retries satisfied persistence')
+    check(denied.StatsProDB.account.sharedFontsNotice=='acknowledged' and not deniedHost.sharedFonts.notice:IsVisible(),'later safe lifecycle retries acknowledgement without another popup')
+    local failed,failedHost=fixtures.loadStatsPro('enUS',{
+        forever=forever,statsProDB={font='Interface\\AddOns\\StatsPro\\fonts\\PT_Sans-Web-Regular.ttf'},
+        sharedProvider=readyProvider(),testSharedFontsNotice=true,
+        isKnownFontFile=function(path) return not path:lower():find('pt_sans',1,true) end,
+        setFontResult=function(_,path) return not path:lower():find('pt_sans',1,true) end,
+    })
+    failed.__fireEvent('PLAYER_ENTERING_WORLD');failed.__flushTimers(.6)
+    check(failedHost.sharedFonts.notice.body:GetText():find(failedHost.sharedFonts.Message('enUS','assetUnavailable'),1,true),
+        'a rejected selected asset keeps truthful repair guidance instead of a ready success message')
+    check(not failedHost.sharedFonts.notice.copy:IsShown(),'an installed collection asset error does not offer a duplicate download')
     local bad,badHost=fixtures.loadStatsPro('ruRU',{forever=forever,statsProDB={fontSize=14},sharedProvider={GetCatalog=function()return {formatMajor=2}end},testSharedFontsNotice=true})
     bad.__fireEvent('PLAYER_ENTERING_WORLD');bad.__flushTimers(.6)
     check(badHost.sharedFonts.notice.body:GetText()==badHost.sharedFonts.Message('ruRU','incompatible'),'incompatible automatic notice uses its translated explanation')

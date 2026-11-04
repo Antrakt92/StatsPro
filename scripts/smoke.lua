@@ -847,6 +847,7 @@ local function makeEnv(locale, opts)
     env.STANDARD_TEXT_FONT = opts.standardTextFont or "Fonts\\FRIZQT__.TTF"
     local addonMetadataVersion = opts.addonMetadataVersion or "9.8.7"
     env.C_AddOns = {
+        DoesAddOnExist = function(name) return name == "StatsPro" end,
         GetAddOnMetadata = function(_, field)
             if field == "Version" then return addonMetadataVersion end
             return nil

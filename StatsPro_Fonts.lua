@@ -23,10 +23,58 @@ end
 local function text(value, limit)
     return clean(value, 'string') and #value > 0 and #value <= limit and not value:find('%c')
 end
+local function method(name)
+    local api, value = rawget(_G, 'C_AddOns')
+    if not clean(api, 'nil') and not plain(api) then return false, true end
+    if plain(api) then value = rawget(api, name) end
+    if not clean(value, 'nil') then return clean(value, 'function') and value or false, true end
+    value = rawget(_G, name)
+    if clean(value, 'nil') then return nil, false end
+    return clean(value, 'function') and value or false, false
+end
+local function query(callback, ...)
+    if not clean(callback, 'function') then return false end
+    return pcall(callback, ...)
+end
+function shared.InstallationStatus()
+    local existsMethod = method('DoesAddOnExist')
+    local ok, exists = query(existsMethod, 'AntraktFonts')
+    if existsMethod == nil then
+        -- Indexed discovery avoids treating an echoed missing name as installation.
+        local countMethod, infoMethod = method('GetNumAddOns'), method('GetAddOnInfo')
+        local counted, count = query(countMethod)
+        if counted and clean(count, 'number') and count >= 0 and count <= 1024 and count % 1 == 0 then
+            ok, exists = true, false
+            for index = 1, count do
+                local found, name = query(infoMethod, index)
+                if not found or not text(name, 256) then ok = false; break end
+                if name == 'AntraktFonts' then exists = true; break end
+            end
+        end
+    end
+    if not ok or not clean(exists, 'boolean') then return 'provider-not-loaded' end
+    if not exists then return 'provider-unavailable' end
+    local loadedMethod = method('IsAddOnLoaded')
+    local loadedOK, _, loaded = query(loadedMethod, 'AntraktFonts')
+    if loadedOK and clean(loaded, 'boolean') and loaded then return 'provider-incompatible' end
+    -- Default enable state covers all characters. Never infer current-character
+    -- disablement without a clean, ephemeral character identifier.
+    local guidOK, guid = query(rawget(_G, 'UnitGUID'), 'player')
+    if not guidOK or not text(guid, 128) then return 'provider-not-loaded' end
+    local enableMethod, modern = method('GetAddOnEnableState')
+    local enabledOK, enabled
+    if modern then enabledOK, enabled = query(enableMethod, 'AntraktFonts', guid)
+    else enabledOK, enabled = query(enableMethod, guid, 'AntraktFonts') end
+    if enabledOK and clean(enabled, 'number') and enabled == 0 then return 'provider-disabled' end
+    return 'provider-not-loaded'
+end
+function shared.RefreshPackageState()
+    if clean(shared.provider, 'nil') then shared.status = shared.InstallationStatus() end
+end
 function shared.Refresh()
     local provider = rawget(_G, 'AntraktFonts')
     shared.provider, shared.revision = provider, nil
-    shared.status = 'provider-unavailable'
+    shared.status = clean(provider, 'nil') and shared.InstallationStatus() or 'provider-unavailable'
     local active = {}
     local readOK = pcall(function()
     if provider ~= nil then

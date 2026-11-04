@@ -345,7 +345,18 @@ local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
 
 function addon.fontRuntime.RefreshSharedCatalog(force)
     local shared = addon.sharedFonts
+    local previousProvider, previousRevision = shared.provider, shared.revision
     if force or shared.provider ~= rawget(_G, "AntraktFonts") then shared.Refresh() end
+    if previousProvider ~= shared.provider or previousRevision ~= shared.revision then
+        addon.fontRuntime.probeResults = {}
+        local picker = addon.settingsUI and addon.settingsUI.fontPicker
+        if picker then
+            picker.cachedFontsList = nil
+            picker.cachedFontsListLen = -1
+            picker.cachedFontsListHasPending = false
+        end
+        if addon.fontRuntime.MarkCatalogLocaleDirty then addon.fontRuntime.MarkCatalogLocaleDirty() end
+    end
     addon.fontRuntime.bundledByPath = {}
     for path, font in pairs(shared.byPath) do
         addon.fontRuntime.bundledByPath[path] = font
@@ -360,6 +371,21 @@ function addon.fontRuntime.RefreshSharedCatalog(force)
     if shared.noticeInitialized then shared.RefreshNoticeState() end
 end
 addon.fontRuntime.RefreshSharedCatalog(false)
+
+function addon.fontRuntime.ReconcileProvider()
+    local runtime, profile = addon.fontRuntime, addon.profileRuntime
+    if not runtime.providerRefreshPending or profile.ReadCombatState() ~= false
+        or profile.transitioning or profile.forceReapply or profile.suppressIntermediateRefresh
+        or addon.settingsUI.fontPicker.previewedPath or addon.settingsUI.localization.previewActive then return end
+    runtime.providerRefreshPending = nil
+    runtime.RefreshSharedCatalog(true)
+    addon.sharedFonts.RefreshPackageState()
+    addon.sharedFonts.UpdateGuidance()
+    local picker = addon.settingsUI.fontPicker
+    if picker.frame and picker.frame:IsShown() then picker.Populate(addon, false) end
+    picker.RefreshCaption(addon)
+    addon.sharedFonts.RequestNotice()
+end
 
 -- WHY hijack-guard: STANDARD_TEXT_FONT is a Blizzard global ANY addon can mutate
 -- (ChonkyCharacterSheet / Tukui / ElvUI font modules / other "system font replacement"
@@ -11612,6 +11638,7 @@ local function UpdateStats()
     -- WARNING: skip until init complete; cached.colorStrings is empty until CacheSettings runs
     if not isLoaded then return end
     updateCount = updateCount + 1
+    addon.fontRuntime.ReconcileProvider()
     addon.fontRuntime.ReconcileCatalogLocale()
 
     -- WHY: master visibility toggle. When off, hide both panels and skip all work
@@ -11702,6 +11729,7 @@ addon.profileRuntime.CompleteBootstrap = function()
         return true
     end
     addon.fontRuntime.RefreshSharedCatalog(false)
+    addon.sharedFonts.RefreshPackageState()
     addon.fontRuntime.repairSavedPaths()
     CacheSettings()
     if RefreshPersistentLocalization then RefreshPersistentLocalization() end
@@ -11795,6 +11823,11 @@ local function OnPlayerLogout()
 end
 
 local EVENT_HANDLERS = {
+    ADDON_LOADED = function(name)
+        if not addon.dbRuntime.IsCleanType(name, "string") or name ~= "AntraktFonts" then return end
+        addon.fontRuntime.providerRefreshPending = true
+        timeSinceLastUpdate = cached.updateInterval or 0.5
+    end,
     PLAYER_ENTERING_WORLD       = OnPlayerEnteringWorld,
     PLAYER_LOGOUT               = OnPlayerLogout,
     PLAYER_SPECIALIZATION_CHANGED = function(unit)
@@ -19747,6 +19780,8 @@ end
 
 function addon:OpenConfigMenu()
     self.sharedFonts.HideNotice()
+    self.fontRuntime.RefreshSharedCatalog(false)
+    self.sharedFonts.RefreshPackageState()
     -- Opening Settings is discovery enough. Keep navigation zero-write; the delayed
     -- onboarding check commits the marker even if this happens before profile bootstrap
     -- or Settings closes before the first-install timer fires.

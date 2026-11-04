@@ -107,7 +107,9 @@ local function createCoordinator()
             dismiss = callbacks.dismiss,
         }
         if state == "acknowledged" then acknowledged = true end
-        if active and (active.owner == owner or state == "acknowledged") then dismissPresentation() end
+        if active and (active.owner == owner or (state == "acknowledged" and not active.manual)) then
+            dismissPresentation()
+        end
         persistAcknowledgement()
         return true
     end

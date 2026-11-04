@@ -326,4 +326,161 @@ for _,forever in ipairs({false,true}) do
     futureHost.sharedFonts.notice.close.scripts.OnClick()
     check(equal(future.StatsProDB,futureBefore),'future-schema information and close preserve every saved byte/value')
 end
+for _,forever in ipairs({false,true}) do
+    for _,case in ipairs({
+        {name='missing',exists=false,state=0,expected='provider-unavailable',key='settingsMissing'},
+        {name='disabled',exists=true,state=0,expected='provider-disabled',key='disabled'},
+        {name='enabled but not loaded',exists=true,state=2,expected='provider-not-loaded',key='notLoaded'},
+        {name='still loading',exists=true,state=2,loading=true,loaded=false,expected='provider-not-loaded',key='notLoaded'},
+        {name='incomplete modern load result',exists=true,state=2,partialLoaded=true,expected='provider-not-loaded',key='notLoaded'},
+        {name='loaded with no catalogue',exists=true,state=2,loading=true,loaded=true,expected='provider-incompatible',key='incompatible'},
+        {name='unknown existence',exists='error',state=0,expected='provider-not-loaded',key='notLoaded'},
+        {name='restricted character',exists=true,state=0,unsafeGUID=true,expected='provider-not-loaded',key='notLoaded'},
+        {name='failed current character',exists=true,state=0,failedGUID=true,expected='provider-not-loaded',key='notLoaded'},
+        {name='failed enable query',exists=true,state='error',expected='provider-not-loaded',key='notLoaded'},
+        {name='global some but current disabled',exists=true,state=0,expected='provider-disabled',key='disabled'},
+    }) do
+        local env,host=fixtures.loadStatsPro('enUS',{forever=forever,testSharedFontsNotice=true})
+        local calls=0
+        rawset(env,'UnitGUID',function()
+            if case.failedGUID then error('guid query failed') end
+            return case.unsafeGUID and {} or 'Player-FontStateFixture'
+        end)
+        rawset(env.C_AddOns,'DoesAddOnExist',function(name)
+            calls=calls+1;check(name=='AntraktFonts','only the package identity is queried')
+            if case.exists=='error' then error('existence query failed') end
+            return case.exists
+        end)
+        rawset(env.C_AddOns,'GetAddOnEnableState',function(name,character)
+            calls=calls+1
+            check(name=='AntraktFonts' and character=='Player-FontStateFixture','enabled state uses the current character GUID')
+            if case.state=='error' then error('enable query failed') end
+            return case.state
+        end)
+        rawset(env.C_AddOns,'IsAddOnLoaded',function()
+            calls=calls+1
+            if case.partialLoaded then return true end
+            return case.loading or false,case.loaded or false
+        end)
+        host.sharedFonts.Refresh()
+        check(host.sharedFonts.status==case.expected,case.name..' has an honest package state')
+        check(host.sharedFonts.Guidance()==host.sharedFonts.Message('enUS',case.key),case.name..' uses the matching settings instruction')
+        if case.unsafeGUID or case.failedGUID then
+            -- The profile UI also needs a usable identity; exercise the notice's
+            -- renderer independently while the identity query is inconclusive.
+            host.sharedFonts.ShowNotice(function() end,function() end)
+        else
+            env.__fireEvent('PLAYER_ENTERING_WORLD');env.__flushTimers(.6)
+            host:OpenConfigMenu()
+            host.sharedFonts.marker.scripts.OnClick()
+        end
+        local notice=assert(host.sharedFonts.notice,case.name..': manual information opens')
+        local bodyKey=case.key=='settingsMissing' and 'missing' or case.key
+        check(notice.body:GetText()==host.sharedFonts.Message('enUS',bodyKey),case.name..' uses the same state in the information window')
+        if case.expected=='provider-disabled' or case.expected=='provider-not-loaded' then
+            check(not notice.copy:IsShown(),case.name..' never asks for an unnecessary download')
+        end
+        local before=calls
+        for _=1,10 do host.sharedFonts.UpdateGuidance();host:RunUpdateStatsSafe() end
+        check(calls==before,'settings refresh and HUD work never poll installation metadata')
+    end
+end
+for _,forever in ipairs({false,true}) do
+    local env,host=fixtures.loadStatsPro('enUS',{forever=forever})
+    env.__fireEvent('PLAYER_ENTERING_WORLD')
+    rawset(env,"UnitGUID",function() return 'Player-FontStateFixture' end)
+    env.C_AddOns.DoesAddOnExist=nil
+    rawset(env.C_AddOns,"GetNumAddOns",function() return 2 end)
+    rawset(env.C_AddOns,'GetAddOnInfo',function(index)
+        check(type(index)=='number','fallback existence enumerates instead of accepting echoed names')
+        return index==1 and 'OtherMedia' or 'AntraktFonts'
+    end)
+    rawset(env,'GetAddOnEnableState',function(character,name)
+        check(character=='Player-FontStateFixture' and name=='AntraktFonts','legacy enable query preserves shim argument order')
+        return 0
+    end)
+    host.sharedFonts.Refresh()
+    check(host.sharedFonts.status=='provider-disabled','bounded indexed discovery supports missing modern existence API')
+    rawset(env.C_AddOns,"GetNumAddOns",function() return 2000 end)
+    host.sharedFonts.Refresh()
+    check(host.sharedFonts.status=='provider-not-loaded','oversized addon discovery fails closed')
+    env.C_AddOns.GetNumAddOns=nil
+    rawset(env.C_AddOns,"GetAddOnInfo",function(name) return name end)
+    host.sharedFonts.Refresh()
+    check(host.sharedFonts.status=='provider-not-loaded','an echoed missing name never proves installation')
+    rawset(env.C_AddOns,"DoesAddOnExist",function() return true end)
+    rawset(env.C_AddOns,"GetAddOnEnableState",function() error('modern query failed') end)
+    rawset(env,"GetAddOnEnableState",function() error('legacy fallback must not override an existing modern method') end)
+    host.sharedFonts.Refresh()
+    check(host.sharedFonts.status=='provider-not-loaded','a failed modern query is not replaced by conflicting legacy evidence')
+    rawset(env.C_AddOns,"GetAddOnEnableState",function() return 0 end)
+    local secretGUID='Player-RestrictedFontState'
+    rawset(env,"UnitGUID",function() return secretGUID end)
+    rawset(env,"issecretvalue",function(value) return value==secretGUID end)
+    host.sharedFonts.Refresh()
+    check(host.sharedFonts.status=='provider-not-loaded','restricted current character never becomes disabled evidence')
+    rawset(env,"issecretvalue",function() return false end)
+    rawset(env,"UnitGUID",function() return 'Player-FontStateFixture' end)
+    host:OpenConfigMenu()
+    check(host.sharedFonts.status=='provider-disabled','opening Settings refreshes an existing disabled package')
+    host:OpenConfigMenu()
+    rawset(env.C_AddOns,"DoesAddOnExist",function() return false end)
+    host:OpenConfigMenu()
+    check(host.sharedFonts.status=='provider-unavailable','opening Settings refreshes an absent package without changing provider identity')
+    local cached=host.settingsUI.fontPicker.BuildFontsList(host)
+    local calls=0
+    local added=clone(snapshot.fonts[1])
+    added.id,added.name,added.file='late-face','Late Face','Late.ttf'
+    added.path='Interface\\AddOns\\AntraktFonts\\fonts\\Late.ttf'
+    local fonts=clone(snapshot.fonts);fonts[#fonts+1]=added
+    env.AntraktFonts={GetCatalog=function() calls=calls+1;return {formatMajor=1,catalogRevision=string.rep('b',64),fonts=fonts} end}
+    host:OpenConfigMenu();host:OpenConfigMenu()
+    check(host.sharedFonts.status=='available','a valid late provider wins over contradictory installation metadata')
+    local refreshed=host.settingsUI.fontPicker.BuildFontsList(host)
+    check(refreshed~=cached,'late provider invalidates cached picker independently of LSM registration callbacks')
+    check(calls==1,'Settings reuse a compatible catalogue without repeated GetCatalog clones')
+    rawset(env,'C_AddOns',123)
+    rawset(env,"DoesAddOnExist",function() return false end)
+    check(host.sharedFonts.InstallationStatus()=='provider-not-loaded','an invalid modern namespace never falls through to conflicting legacy metadata')
+end
+for _,forever in ipairs({false,true}) do
+    local preferred=snapshot.fonts[1].path
+    local env,host,test=fixtures.loadStatsPro('enUS',{
+        forever=forever,statsProDB={font=preferred},isKnownFontFile=function() return true end,
+    })
+    env.__fireEvent('PLAYER_ENTERING_WORLD')
+    rawset(env,"UnitGUID",function() return 'Player-FontStateFixture' end)
+    rawset(env.C_AddOns,"DoesAddOnExist",function() return true end)
+    rawset(env.C_AddOns,"GetAddOnEnableState",function() return 0 end)
+    host.sharedFonts.Refresh()
+    check(host.sharedFonts.status=='provider-disabled','disabled package is distinguished even with directly readable assets')
+    check(host.fontRuntime.usablePath(preferred)==preferred,'disabled package never blocks a directly usable selected file')
+    check(test.profileState().settings.font==preferred,'installation guidance never rewrites the saved selected path')
+    check(host.sharedFonts.Guidance()==host.sharedFonts.Message('enUS','disabled'),'working selected face gets only the accurate enable hint')
+    rawset(env,"issecretvalue",function(value) return value==true end)
+    check(host.sharedFonts.InstallationStatus()=='provider-not-loaded','restricted existence booleans are not installation proof')
+    rawset(env,"issecretvalue",function(value) return value==0 end)
+    check(host.sharedFonts.InstallationStatus()=='provider-not-loaded','restricted enable values are not disablement proof')
+end
+for _,forever in ipairs({false,true}) do
+    local env,host=fixtures.loadStatsPro('enUS',{forever=forever,isKnownFontFile=function() return true end})
+    env.__fireEvent('PLAYER_ENTERING_WORLD');env.__flushTimers(.6)
+    host:OpenConfigMenu()
+    local previous=host.settingsUI.fontPicker.BuildFontsList(host)
+    local calls=0
+    env.AntraktFonts={GetCatalog=function()
+        calls=calls+1
+        return {formatMajor=1,catalogRevision=string.rep('c',64),fonts=clone(snapshot.fonts)}
+    end}
+    env.__fireEvent('ADDON_LOADED','OtherAddon')
+    check(calls==0,'unrelated addon loads do not discover the font provider')
+    env.__fireEvent('ADDON_LOADED','AntraktFonts')
+    check(calls==0,'provider loading event only marks coalesced work')
+    host:RunUpdateStatsSafe()
+    check(host.sharedFonts.status=='available','provider event refreshes an already open Settings window without LSM callbacks')
+    check(not host.sharedFonts.marker:IsShown(),'late compatible provider removes the install marker immediately on the safe tick')
+    check(host.settingsUI.fontPicker.BuildFontsList(host)~=previous,'provider event invalidates an already built picker')
+    for _=1,10 do host:RunUpdateStatsSafe() end
+    check(calls==1,'one load event never causes catalogue polling on later HUD ticks')
+end
 print('Shared fonts: ' .. checks .. ' checks passed')

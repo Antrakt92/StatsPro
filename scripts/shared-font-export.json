@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "catalogRevision": "9f311b8ca9fbb1f918acbc761f8ba6a6aceb53e0c386b8fd45be28f51ac39836",
+  "catalogRevision": "48acd1522a9b35739b76d1f09b3e201777bd3c9d9d281ff736c5f9bd2e41372f",
   "modules": {
-    "AntraktFontCatalog.lua": "44e8f2385acd3433a6ac7cde1241ab4d1de473dd5c4dc1d3a8f74b0605699fb2",
-    "AntraktFontNotice.lua": "dd2230f5ae4018f9faa89a2b7de1a50244fbb8b1103c6c80fb898e966bd5be58"
+    "AntraktFontCatalog.lua": "7234adf05c3dcbd69944523ee98ce75916a3f5482c36ee16127cafd7a59677a1",
+    "AntraktFontNotice.lua": "bd1efba37445ffe5ea3c1f6e958b60e7bd640fbe32c48f266b3b2bb07158e152"
   },
   "baseline": {
     "id": "antrakt-ui-sans",

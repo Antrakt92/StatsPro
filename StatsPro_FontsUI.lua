@@ -7,6 +7,13 @@ local function locale()
     return shared.snapshot.messages[chosen] and chosen or GetLocale()
 end
 local function message(key, value) return shared.Message(locale(), key, value) end
+local function packageKey(body)
+    if shared.status == 'available' then return 'ready' end
+    if shared.status == 'provider-disabled' then return 'disabled' end
+    if shared.status == 'provider-not-loaded' then return 'notLoaded' end
+    if shared.status == 'provider-incompatible' then return 'incompatible' end
+    return body and 'missing' or 'settingsMissing'
+end
 local function visible(frame)
     if not frame then return false end
     local method = frame.IsVisible or frame.IsShown
@@ -14,17 +21,17 @@ local function visible(frame)
     return ok and shown == true
 end
 function shared.Guidance()
+    local guidance = shared.status ~= 'available' and message(packageKey()) or nil
     local preferred = addon.fontRuntime.preferredPath()
     local record = shared.Lookup(preferred)
     if record and record ~= shared.baseline then
         local usable = addon.fontRuntime.usablePath(preferred)
         if not usable then
             if shared.status == 'available' then return message('assetUnavailable') .. ' ' .. record.name, true end
-            return message('selectedMissing', record.name), true
+            return guidance .. '\n' .. message('selectedMissing', record.name), true
         end
     end
-    if shared.status == 'provider-incompatible' then return message('incompatible'), true end
-    if shared.status ~= 'available' then return message('settingsMissing'), false end
+    if guidance then return guidance, shared.status == 'provider-incompatible' end
     return nil, false
 end
 function shared.UpdateGuidance()
@@ -38,6 +45,7 @@ function shared.UpdateGuidance()
     else marker:Hide() end
 end
 function shared.CopyLink(confirm)
+    if shared.status == 'provider-disabled' or shared.status == 'provider-not-loaded' then return false end
     local links = shared.snapshot.links
     local url = links.curseforge or links.wago or links.github
     if type(url) ~= 'string' or addon.profileRuntime.ReadCombatState() ~= false then return false end
@@ -123,14 +131,18 @@ function shared.ShowNotice(confirm, suspend)
     frame.sharedFontsReady = true
     frame.confirm, frame.suspend = confirm, suspend
     frame.title:SetText(message('title'))
-    local bodyKey = shared.status == 'available' and 'ready'
-        or shared.status == 'provider-incompatible' and 'incompatible' or 'missing'
-    frame.body:SetText(message(bodyKey))
+    frame.body:SetText(message(packageKey(true)))
     frame.close:SetText(message('gotIt'))
     local links = shared.snapshot.links
     local hasLink = links.curseforge or links.wago or links.github
-    frame.copy:SetText(message(hasLink and 'copyLink' or 'linkUnavailable'))
-    if hasLink then frame.copy:Enable() else frame.copy:Disable() end
+    if shared.status == 'provider-disabled' or shared.status == 'provider-not-loaded' then
+        frame.copy:Hide()
+        frame.copy:Disable()
+    else
+        frame.copy:SetText(message(hasLink and 'copyLink' or 'linkUnavailable'))
+        frame.copy:Show()
+        if hasLink then frame.copy:Enable() else frame.copy:Disable() end
+    end
     frame:SetPropagateKeyboardInput(true)
     _G.AntraktWindowLayers.Register(frame)
     frame:Show()

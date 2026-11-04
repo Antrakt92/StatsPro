@@ -12090,6 +12090,7 @@ local function RegisterConfigFont(fs, size, flags, roleKey)
         entry.group = nil
     end
     entry.roleKey = roleKey
+    entry.previewIndependent = fs.statsProFontPreviewIndependent == true
     entry.size = size
     entry.flags = flags
     local previousText = fs:GetText()
@@ -12136,7 +12137,7 @@ local function RegisterConfigFont(fs, size, flags, roleKey)
             tinsert(group.entries, entry)
         end
         if previousText ~= nil then fs:SetText(previousText) end
-        currentConfigFont = font
+        if not entry.previewIndependent or not addon.fontRuntime.configPreviewBaseFont then currentConfigFont = font end
         addon.fontRuntime.configFontValidated = true
         group.appliedFont = font
         group.appliedSize = size
@@ -12148,12 +12149,14 @@ local function RegisterConfigFont(fs, size, flags, roleKey)
     end
 
     local resolvedFont, effectiveFlags
+    local registrationFont = entry.previewIndependent
+        and addon.fontRuntime.configPreviewBaseFont or currentConfigFont
     if addon.fontRuntime.configFontValidated then
         resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(
-            currentConfigFont, size, flags)
+            registrationFont, size, flags)
     else
         resolvedFont, effectiveFlags = addon.fontRuntime.resolveFlags(
-            currentConfigFont, size, flags)
+            registrationFont, size, flags)
     end
     local group = resolvedFont and GetConfigFontGroup(groupKey, size, flags) or nil
     if TryInherit(group, resolvedFont, effectiveFlags) then
@@ -12165,7 +12168,7 @@ local function RegisterConfigFont(fs, size, flags, roleKey)
     entry.group = nil
     if resolvedFont and addon.fontRuntime.setRegionFont(fs, resolvedFont, size, effectiveFlags) then
         if previousText ~= nil then fs:SetText(previousText) end
-        currentConfigFont = resolvedFont
+        if not entry.previewIndependent or not addon.fontRuntime.configPreviewBaseFont then currentConfigFont = resolvedFont end
         addon.fontRuntime.configFontValidated = true
         entry.appliedFont = resolvedFont
         entry.appliedSize = size
@@ -12201,22 +12204,31 @@ end
 -- Called from MaybeAutoSwitchFont and the Settings language preview. Idempotent
 -- fast-path skips work when currentConfigFont already matches (covers PEW + back-to-
 -- default-locale scenarios). WHY no `local`: assigns the forward-decl'd upvalue.
-ApplyConfigFont = function(font, force)
+ApplyConfigFont = function(font, force, previewFont)
+    local displayFont = previewFont or font
     if not force and addon.fontRuntime.configFontValidated
-        and SameFontPath(font, currentConfigFont) then
+        and SameFontPath(displayFont, currentConfigFont)
+        and SameFontPath(font, addon.fontRuntime.configPreviewBaseFont or font) then
         local matches = true
         for _, entry in ipairs(localizedConfigFonts) do
             if not addon.fontRuntime.matchesAppliedFont(
-                entry.fs, font, entry.size, entry.appliedFlags) then matches = false; break end
+                entry.fs, entry.previewIndependent and font or displayFont,
+                entry.size, entry.appliedFlags) then matches = false; break end
         end
-        if matches then return true, currentConfigFont end
+        if matches then
+            addon.fontRuntime.configPreviewBaseFont = previewFont and font or nil
+            return true, currentConfigFont
+        end
     end
     local usable = addon.fontRuntime.usablePath(font)
-    if not usable then return false end
+    local previewUsable = previewFont and addon.fontRuntime.usablePath(previewFont)
+    if not usable or (previewFont and not previewUsable) then return false end
+    displayFont = previewUsable or usable
     if #localizedConfigFonts == 0 then
-        currentConfigFont = usable
+        currentConfigFont = displayFont
+        addon.fontRuntime.configPreviewBaseFont = previewUsable and usable or nil
         addon.fontRuntime.configFontValidated = true
-        return true, usable
+        return true, displayFont
     end
 
     -- Styling a region can give it a private FontObject. Registry membership is
@@ -12237,7 +12249,7 @@ ApplyConfigFont = function(font, force)
         if #group.entries > 0 then
             local oldFont, oldSize, oldFlags = addon.fontRuntime.ConfigFontSnapshot(group.object)
             local resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(
-                usable, group.size, group.flags)
+                group.entries[1].previewIndependent and usable or displayFont, group.size, group.flags)
             if not resolvedFont then return false end
             tinsert(groupPlans, {
                 group = group,
@@ -12255,7 +12267,7 @@ ApplyConfigFont = function(font, force)
         previousFonts[entry] = { font = oldFont, size = oldSize, flags = oldFlags }
         if not entry.group then
             local resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(
-                usable, entry.size, entry.flags)
+                entry.previewIndependent and usable or displayFont, entry.size, entry.flags)
             if not resolvedFont then return false end
             tinsert(directPlans, {
                 entry = entry,
@@ -12393,9 +12405,8 @@ ApplyConfigFont = function(font, force)
         if previousText[index] ~= nil then entry.fs:SetText(previousText[index]) end
     end
 
-    currentConfigFont = groupPlans[1] and groupPlans[1].font
-        or directPlans[1] and directPlans[1].font
-        or usable
+    currentConfigFont = displayFont
+    addon.fontRuntime.configPreviewBaseFont = previewUsable and usable or nil
     addon.fontRuntime.configFontValidated = true
     for _, plan in ipairs(groupPlans) do
         local group = plan.group
@@ -12426,7 +12437,12 @@ end
 
 function addon.fontRuntime.ApplyCommittedConfigFont(locale)
     local runtime = addon.fontRuntime
-    local applied = ApplyConfigFont(ResolveConfigFont(locale))
+    local base = ResolveConfigFont(locale)
+    local preview = addon.settingsUI.fontPicker.previewedPath
+    if preview then
+        preview = FindCompatibleFont(preview, LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN, locale) or base
+    end
+    local applied = ApplyConfigFont(base, false, preview)
     if applied then
         runtime.configFontRecoveryPending = nil
     elseif not runtime.configFontRecoveryPending then
@@ -13149,7 +13165,8 @@ end
 function addon.settingsDesign.ApplyTextRole(region, roleName)
     local role = addon.settingsDesign.tokens.typography[roleName]
     if not role then return end
-    RegisterConfigFont(region, role.size, role.flags, "role:" .. roleName)
+    local prefix = region.statsProFontPreviewIndependent and "catalogue:" or "role:"
+    RegisterConfigFont(region, role.size, role.flags, prefix .. roleName)
     addon.settingsDesign.SetRegionColor(region, role.color)
     region.statsProTextRole = roleName
 end
@@ -18520,9 +18537,21 @@ function addon.settingsUI.fontPicker.Preview(self, path)
         and mainPanel.appliedSize == size and defensivePanel.appliedSize == size
         and mainPanel.appliedTextOutlineStyle == outline
         and defensivePanel.appliedTextOutlineStyle == outline
+    local uiLocale = self.settingsUI.localization.previewLocale or ResolveActiveLocale()
+    local base = ResolveConfigFont(uiLocale)
+    local preview = FindCompatibleFont(path, LOCALE_GLYPH_REQ[uiLocale] or GLYPH_LATIN, uiLocale) or base
+    local oldConfig, oldBase = currentConfigFont, self.fontRuntime.configPreviewBaseFont
+    if not ApplyConfigFont(base, false, preview) then return false end
     local applied, effectiveFont = ApplyTextStyleToAllPanels(path, size)
-    if not applied then return false end
+    if not applied then
+        if not ApplyConfigFont(oldBase or oldConfig, true, oldBase and oldConfig or nil) then
+            self.fontRuntime.configFontRecoveryPending = true
+            self.fontRuntime.MarkCatalogLocaleDirty()
+        end
+        return false
+    end
     picker.previewedPath = effectiveFont
+    RefreshConfigLocalization()
     if not unchanged then ReflowAllPanels() end
     return true
 end
@@ -18530,10 +18559,17 @@ end
 function addon.settingsUI.fontPicker.CancelPreview(self, force)
     local picker = self.settingsUI.fontPicker
     local hadPreview = picker.previewedPath ~= nil
+    local hadConfigPreview = self.fontRuntime.configPreviewBaseFont ~= nil
     picker.previewedPath = nil
     if self.profileRuntime.forceReapply or self.profileRuntime.transitioning
         or self.profileRuntime.suppressIntermediateRefresh then return hadPreview end
-    if not force and not hadPreview then return false end
+    if not force and not hadPreview and not hadConfigPreview then return false end
+    local configRestored = true
+    if hadConfigPreview then
+        local locale = self.settingsUI.localization.previewLocale or ResolveActiveLocale()
+        configRestored = self.fontRuntime.ApplyCommittedConfigFont(locale)
+        if configRestored then RefreshConfigLocalization() end
+    end
     local font = self.fontRuntime.preferredPath()
     local size = GetNumberDB("fontSize")
     local outline = cached.textOutlineStyle or self.readabilityConfig.getTextOutlineStyleDB()
@@ -18541,11 +18577,11 @@ function addon.settingsUI.fontPicker.CancelPreview(self, force)
         and mainPanel.appliedSize == size and defensivePanel.appliedSize == size
         and mainPanel.appliedTextOutlineStyle == outline
         and defensivePanel.appliedTextOutlineStyle == outline then
-        return true
+        return configRestored
     end
     local restored = self.fontRuntime.RestoreCommittedPreviewFont()
     ReflowAllPanels()
-    return restored
+    return restored and configRestored
 end
 
 function addon.settingsUI.fontPicker.Pick(self, font)
@@ -18561,6 +18597,7 @@ function addon.settingsUI.fontPicker.Pick(self, font)
     self.fontRuntime.repairSavedPaths()
     ReflowAllPanels()
     picker.previewedPath = nil
+    picker.CancelPreview(self, true)
     picker.hoverGeneration = picker.hoverGeneration + 1
     picker.RefreshCaption(self)
     CloseDropDownMenus()
@@ -18695,6 +18732,7 @@ function addon.settingsUI.fontPicker.Populate(self, centerSelection)
             button.bg:SetAllPoints()
             button.bg:SetColorTexture(0, 0, 0, 0)
             button.text = button:CreateFontString(nil, "OVERLAY")
+            button.text.statsProFontPreviewIndependent = true
             button.text:SetPoint("LEFT", 6, 0)
             button.text:SetPoint("RIGHT", -24, 0)
             button.text:SetWordWrap(false)
@@ -18997,7 +19035,7 @@ function addon.settingsUI.localization.Preview(self, value)
     end
 
     state.previewActive = true
-    ApplyConfigFont(ResolveConfigFont(locale))
+    self.fontRuntime.ApplyCommittedConfigFont(locale)
     RefreshConfigLocalization()
     self:RunUpdateStatsSafe()
 end

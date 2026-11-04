@@ -12,7 +12,8 @@ for _, forever in ipairs({ false, true }) do
         { name = "Hover A", path = "Interface\\AddOns\\Media\\HoverA.ttf" },
         { name = "Hover B", path = "Interface\\AddOns\\Media\\HoverB.ttf" },
     }
-    local counts = { setFont = 0, ownedFont = 0, width = 0 }
+    local counts = { setFont = 0, ownedFont = 0, hudOwned = 0, width = 0 }
+    local hudObjects = {}
     local env, addon, test = fixtures.loadStatsPro("enUS", {
         forever = forever, lsmFonts = fonts, isKnownFontFile = function() return true end,
         unitGUID = function() return "Player-HoverFixture" end,
@@ -20,7 +21,11 @@ for _, forever in ipairs({ false, true }) do
         specName = "Protection", specRole = "TANK", primaryStat = 1,
         getCritChance = function() return 12 end,
         setFontResult = function() counts.setFont = counts.setFont + 1; return true end,
-        fontObjectSetFontResult = function() counts.ownedFont = counts.ownedFont + 1; return true end,
+        fontObjectSetFontResult = function(object)
+            counts.ownedFont = counts.ownedFont + 1
+            if hudObjects[object] then counts.hudOwned = counts.hudOwned + 1 end
+            return true
+        end,
     })
     env.__fireEvent("PLAYER_ENTERING_WORLD")
     check(addon:RunUpdateStatsSafe(), "initial HUD renders")
@@ -28,6 +33,7 @@ for _, forever in ipairs({ false, true }) do
     local picker = addon.settingsUI.fontPicker
     picker.Show(addon)
     local state = test.panelFontState()
+    hudObjects[state.mainOwnedFontObject], hudObjects[state.sideOwnedFontObject] = true, true
     for _, regions in ipairs({ state.mainFontRegions, state.sideFontRegions }) do
         for _, region in ipairs(regions) do
             local original = region.GetStringWidth
@@ -45,11 +51,35 @@ for _, forever in ipairs({ false, true }) do
         button.scripts.OnLeave(button)
         return env.__timers[#env.__timers].fn
     end
-    local function reset() counts.setFont, counts.ownedFont, counts.width = 0, 0, 0 end
+    local function reset() counts.setFont, counts.ownedFont, counts.hudOwned, counts.width = 0, 0, 0, 0 end
     local function idle(message)
         check(counts.setFont == 0 and counts.ownedFont == 0 and counts.width == 0, message)
     end
     local function applied(path) return test.panelFontState().mainAppliedFont == path end
+    local configBefore = test.configFontState()
+    local configBaseline, catalogRegions = {}, {}
+    for _, button in ipairs(picker.buttons) do catalogRegions[button.text] = true end
+    for _, entry in ipairs(configBefore.entries) do
+        local path, size, flags = entry.region:GetFont()
+        configBaseline[entry.region] = {path=path,size=size,flags=flags,text=entry.region:GetText()}
+    end
+    local function menuFont(path, unchangedText)
+        for _, entry in ipairs(test.configFontState().entries) do
+            local baseline = configBaseline[entry.region]
+            if baseline then
+                local actual, size, flags = entry.region:GetFont()
+                check(actual == (catalogRegions[entry.region] and baseline.path or path), 'actual owned Settings region follows hover while catalog labels stay independent')
+                check(size == baseline.size and addon.fontRuntime.semanticFlags(flags) == addon.fontRuntime.semanticFlags(baseline.flags), 'hover preserves semantic role size and outline flags')
+                if unchangedText then check(entry.region:GetText() == baseline.text, 'font preview restores every region text after mutation') end
+            end
+        end
+    end
+    local function menuRestored()
+        for region, baseline in pairs(configBaseline) do
+            local actual, size, flags = region:GetFont()
+            check(actual == baseline.path and size == baseline.size and addon.fontRuntime.semanticFlags(flags) == addon.fontRuntime.semanticFlags(baseline.flags), 'leave/cancel/selection restores each committed Settings font')
+        end
+    end
     local root, settings = test.profileState().root, test.profileState().settings
     local saved = settings.font
 
@@ -60,6 +90,7 @@ for _, forever in ipairs({ false, true }) do
     reset()
     enter(first)
     check(applied(first.fontPath), "first hover applies immediately")
+    menuFont(first.fontPath, true)
     check(counts.ownedFont > 0 and counts.width > 0, "hover exercises actual HUD mutation and measurement")
     local firstSets, firstOwned, firstWidths = counts.setFont, counts.ownedFont, counts.width
     local staleLeave = leave(first)
@@ -69,6 +100,7 @@ for _, forever in ipairs({ false, true }) do
     check(applied(first.fontPath), "row gap retains current preview until next hover")
     enter(second)
     check(applied(second.fontPath), "next hover applies immediately without a delayed callback")
+    menuFont(second.fontPath, true)
     check(counts.setFont <= firstSets and counts.ownedFont <= firstOwned and counts.width <= firstWidths,
         "adjacent hover performs at most one font mutation and measurement pass")
     check(settings.font == saved and test.profileState().root == root and test.profileState().settings == settings,
@@ -83,6 +115,7 @@ for _, forever in ipairs({ false, true }) do
     staleLeave = leave(second)
     picker.Hide(addon)
     check(applied(saved), "closing restores committed font")
+    menuRestored()
     reset()
     staleLeave()
     idle("closed picker ignores stale leave callback")
@@ -93,7 +126,8 @@ for _, forever in ipairs({ false, true }) do
     reset()
     second.scripts.OnClick(second)
     check(settings.font == second.fontPath and applied(second.fontPath), "click commits selected row")
-    check(counts.ownedFont == 2, "click applies each panel font once without repeating on close")
+    menuRestored()
+    check(counts.hudOwned == 2, "click applies each panel font once while ending the separate Settings demonstration")
     check(counts.width > 0 and counts.width <= firstWidths,
         "click performs one HUD measurement pass without repeating on close")
     reset()
@@ -103,7 +137,8 @@ for _, forever in ipairs({ false, true }) do
     picker.Show(addon)
     reset()
     enter(second)
-    idle("hovering selected font after commit performs no native work")
+    check(counts.hudOwned == 0 and counts.width == 0, "hovering selected font only demonstrates Settings without reapplying or measuring HUD")
+    menuFont(second.fontPath, false)
     check(applied(second.fontPath) and settings.font == second.fontPath,
         "selected row hover retains committed font and preference")
     picker.Hide(addon)
@@ -136,6 +171,19 @@ for _, forever in ipairs({ false, true }) do
     leave(first)
     env.__flushTimers(0.2)
     check(applied(settings.font), "actual list exit restores committed font after grace")
+    picker.Hide(addon)
+    picker.Show(addon)
+    enter(first)
+    addon.settingsUI.localization.Preview(addon, 'zhTW')
+    picker.CancelPreview(addon)
+    check(addon.fontRuntime.configPreviewBaseFont == nil, 'equal-base locale fallback cancellation clears temporary Settings preview state')
+    local refreshes = 0
+    test.addConfigRefresherForSmoke(function() refreshes = refreshes + 1 end)
+    reset()
+    check(not picker.CancelPreview(addon), 'a second completed cancellation is a no-op')
+    idle('completed equal-base cancellation causes no native work on a second exit')
+    check(refreshes == 0, 'completed cancellation never repeats Settings control refresh')
+    addon.settingsUI.localization.CancelPreview(addon)
     picker.Hide(addon)
 end
 print("StatsPro font hover: PASS (" .. checks .. " checks)")

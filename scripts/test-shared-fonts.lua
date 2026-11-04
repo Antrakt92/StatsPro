@@ -489,7 +489,7 @@ end
 for _,forever in ipairs({false,true}) do
     for _,case in ipairs({'reload','enable-error','enable-ignored','save-error','missing-save',
         'missing-enable','modern-invalid','combat','unknown-combat','addon-list','unknown-list','missing',
-        'unsafe-guid','legacy','combat-during-query'}) do
+        'unsafe-guid','legacy','combat-during-query','save-disables','save-combat','reload-error','missing-reload'}) do
         local combat=false
         local env,host,test=fixtures.loadStatsPro('enUS',{
             forever=forever,testSharedFontsNotice=true,statsProDB={fontSize=14},
@@ -519,14 +519,20 @@ for _,forever in ipairs({false,true}) do
             check(select('#',...)==0,'save receives no expanded method-selection return')
             saveCalls=saveCalls+1
             if case=='save-error' then error('save failed') end
+            if case=='save-disables' then enabled=0 end
+            if case=='save-combat' then combat=true end
         end)
         rawset(env.C_AddOns,'LoadAddOn',function() loadCalls=loadCalls+1;error('ordinary collection requires reload') end)
-        rawset(env,'ReloadUI',function() reloadCalls=reloadCalls+1 end)
+        rawset(env,'ReloadUI',function()
+            if case=='reload-error' then error('reload failed') end
+            reloadCalls=reloadCalls+1
+        end)
         if case=='legacy' then
             env.C_AddOns.EnableAddOn=nil;rawset(env,'EnableAddOn',enable)
             env.C_AddOns.GetAddOnEnableState=nil
             rawset(env,'GetAddOnEnableState',function(guid,name) return state(name,guid) end)
         elseif case=='missing-save' then env.C_AddOns.SaveAddOns=nil
+        elseif case=='missing-reload' then env.ReloadUI=nil
         elseif case=='missing-enable' then env.C_AddOns.EnableAddOn=nil
         elseif case=='modern-invalid' then
             rawset(env.C_AddOns,'EnableAddOn',false)
@@ -546,35 +552,37 @@ for _,forever in ipairs({false,true}) do
             notice:Show()
         end
         armed=true;notice.copy.scripts.OnClick()
-        check(reloadCalls==0,'enable never reloads the interface automatically')
+        check(reloadCalls==((case=='reload' or case=='legacy') and 1 or 0),'only a successful explicit enable click reloads immediately')
         check(equal(before,test.profileState().settings),'enable never rewrites font/profile settings')
         if case=='reload' or case=='legacy' then
-            check(enabled==2 and notice.action=='reload','verified enabled package offers a separate reload action')
+            check(enabled==2 and notice.action=='reload','if a mock reload returns, recovery still describes the enabled state')
             check(notice.body:GetText()==host.sharedFonts.Message('enUS','reloadRequired'),'reload has localized truthful guidance')
             check(saveCalls==1,'explicit enable saves one successful transaction')
             check(loadCalls==0,'non-demand or unknown packages never use a live load')
-            notice:Hide();notice.copy.scripts.OnClick();check(reloadCalls==0,'hidden notice cannot reload through its saved handler')
+            notice:Hide();notice.copy.scripts.OnClick();check(reloadCalls==1,'hidden notice cannot reload through its saved handler')
             notice:Show()
-            combat=true;notice.copy.scripts.OnClick();check(reloadCalls==0,'combat blocks an existing reload button')
+            combat=true;notice.copy.scripts.OnClick();check(reloadCalls==1,'combat blocks an existing reload button')
             combat=false
             rawset(env.C_AddOns,'GetAddOnEnableState',function() combat=true;return enabled end)
             local saved=saveCalls
             notice.copy.scripts.OnClick()
-            check(reloadCalls==0 and saveCalls==saved,'combat changed during reload discovery blocks save and reload')
+            check(reloadCalls==1 and saveCalls==saved,'combat changed during reload discovery blocks save and reload')
             if case=='legacy' then env.C_AddOns.GetAddOnEnableState=nil
             else rawset(env.C_AddOns,'GetAddOnEnableState',state) end
-            combat=false;notice.copy.scripts.OnClick();check(reloadCalls==1,'second explicit click reloads only after validation')
+            combat=false;notice.copy.scripts.OnClick();check(reloadCalls==2,'a recovery reload still validates before acting')
             rawset(env.C_AddOns,'SaveAddOns',function() enabled=0 end)
             notice.copy.scripts.OnClick()
-            check(reloadCalls==1,'a changed enable state during save blocks the reload')
+            check(reloadCalls==2,'a changed enable state during save blocks the reload')
             enabled=2
             rawset(env.C_AddOns,'SaveAddOns',function() combat=true end)
             notice.copy.scripts.OnClick()
-            check(reloadCalls==1,'combat entered during save blocks the reload')
+            check(reloadCalls==2,'combat entered during save blocks the reload')
             combat=false
-            enabled=0;notice.copy.scripts.OnClick();check(reloadCalls==1,'stale reload cannot reload a disabled package')
+            enabled=0;notice.copy.scripts.OnClick();check(reloadCalls==2,'stale reload cannot reload a disabled package')
         elseif case=='save-error' then
             check(enabled==2 and saveCalls==1 and loadCalls==0 and notice.action~='reload','failed save never loads or claims reload readiness')
+        elseif case=='save-disables' or case=='save-combat' or case=='reload-error' then
+            check(saveCalls==1 and loadCalls==0 and reloadCalls==0,'state changed during saving or reload failure never produces a successful reload')
         else
             check(enabled==0 and saveCalls==0 and loadCalls==0,'blocked or failed enable has no save/load effects: '..case)
         end

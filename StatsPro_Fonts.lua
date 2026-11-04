@@ -87,12 +87,21 @@ local function actionSafe()
     local ok, shown = pcall(function() return list:IsShown() end)
     return ok and clean(shown, 'boolean') and not shown
 end
+local function requestReload()
+    shared.Refresh()
+    if shared.status ~= 'provider-not-loaded' then return false end
+    local state = currentEnableState()
+    if state ~= 1 and state ~= 2 then return false end
+    local reload = rawget(_G, 'ReloadUI')
+    if not clean(reload, 'function') or not actionSafe() then return false end
+    return query(reload)
+end
 function shared.EnableProvider()
     if not actionSafe() then return 'blocked' end
     shared.Refresh()
     if shared.status ~= 'provider-disabled' then return 'blocked' end
     local save = method('SaveAddOns')
-    if not clean(save, 'function') then return 'blocked' end
+    if not clean(save, 'function') or not clean(rawget(_G, 'ReloadUI'), 'function') then return 'blocked' end
     local state, guid = currentEnableState()
     if state ~= 0 or not actionSafe() then return 'blocked' end
     local enabled = query(method('EnableAddOn'), 'AntraktFonts', guid)
@@ -103,9 +112,10 @@ function shared.EnableProvider()
         return 'failed'
     end
     if not actionSafe() or not query(save) then shared.actionResult = nil; return 'failed' end
-    -- The collection is an ordinary addon: activate it on an explicit reload.
+    -- This explicit enable click also activates the ordinary addon by reloading.
     after = currentEnableState()
     shared.actionResult = (after == 1 or after == 2) and 'reload-required' or 'failed'
+    if shared.actionResult == 'reload-required' and requestReload() then return 'reload-requested' end
     return shared.actionResult
 end
 function shared.ReloadProvider()
@@ -117,12 +127,7 @@ function shared.ReloadProvider()
     local reload = rawget(_G, 'ReloadUI')
     local save = method('SaveAddOns')
     if not clean(reload, 'function') or not actionSafe() or not query(save) then return false end
-    shared.Refresh()
-    if shared.status ~= 'provider-not-loaded' then return false end
-    state = currentEnableState()
-    if state ~= 1 and state ~= 2 then return false end
-    if not actionSafe() then return false end
-    return query(reload)
+    return requestReload()
 end
 function shared.Refresh()
     local provider = rawget(_G, 'AntraktFonts')

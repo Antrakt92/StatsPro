@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Enable an installed Antrakt Fonts package from Font settings, then reload with a separate button.
+- Enable an installed Antrakt Fonts package and reload the interface with one click from Font settings.
 - Distinguish missing, disabled and unloaded Antrakt Fonts installations in Font settings; keep working font choices available.
 - Keep the shared-font information window's close icon visible before hovering.
 - Move the optional font collection to Antrakt Fonts, shared by compatible addons and updated separately. Keep a compact multilingual baseline in StatsPro.

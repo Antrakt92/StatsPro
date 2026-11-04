@@ -1,14 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.22.0 - 04-Nov-2026 — Shared fonts and steadier windows
 
-- Keep Font and Language fields and their open menus stationary during hover previews.
-- Enable an installed Antrakt Fonts package and reload the interface with one click from Font settings.
-- Distinguish missing, disabled and unloaded Antrakt Fonts installations in Font settings; keep working font choices available.
-- Keep the shared-font information window's close icon visible before hovering.
-- Move the optional font collection to [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts), shared by compatible addons and updated separately. Keep a compact multilingual baseline in StatsPro.
-- Preserve selected fonts, imported choices and favorites while the collection is unavailable. Explain the shared-font transition once after updating, including when the collection is already installed; keep details in Font settings.
-- Preview hovered fonts in Settings as well as the HUD, and restore the usual Settings font when the preview ends.
+- Move additional fonts to optional [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts), shared by compatible addons. Keep a readable multilingual baseline and preserve selected fonts, imported choices and favorites when the collection is unavailable.
+- Declare Antrakt Fonts as an installation dependency in new CurseForge files; the addon remains usable without the collection.
+- Explain once why fonts use a separate package, including when it is already installed. Font settings distinguish missing, disabled and unloaded packages.
+- Enable an installed font package and reload the interface with one click from Font settings.
+- Preview fonts across the HUD and Settings while keeping Font and Language fields and their menus stationary; restore ordinary Settings typography when preview ends.
+- Group the addon under Antrakt92 in the AddOns list.
+- Keep close controls visible and clickable when switching between addon windows.
 - Thanks to [chenrylee](https://github.com/chenrylee) for suggesting a separate font package ([StatsPro #10](https://github.com/Antrakt92/StatsPro/issues/10)).
 
 ## 1.21.2 - 20-Oct-2026 — Window and diagnostic fixes

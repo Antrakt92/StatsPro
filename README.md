@@ -30,10 +30,9 @@ Retail includes Crit, Haste, Mastery, Versatility and bundled Archon references.
 Forever has its own 46-row stat catalog, class-aware setups and per-character
 profiles. Archon references are available only in Retail.
 
-**Upcoming shared-font update:** this branch contains changes that are not yet
-in the published downloads above. The next Retail and Forever builds will use
-the optional [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts) collection.
-See the top entry in each changelog for the pending changes.
+Retail and Forever include a compact multilingual font. Additional faces use
+the optional [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts) collection,
+whose first release is awaiting approval. StatsPro works without that package.
 
 <p align="center">
   <a href="#installation">Install</a>
@@ -83,9 +82,9 @@ Outside combat, you can also right-click the HUD to open Settings.
 To choose another setup later, expand **Quick Setup**
 at the top of the **Stats** tab or adjust individual rows yourself.
 
-### Shared fonts in the upcoming builds
+### Shared fonts
 
-Both upcoming builds include a compact multilingual baseline and support the optional
+Both builds include a compact multilingual baseline and support the optional
 [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts) collection through LibSharedMedia. The collection is shared by
 compatible addons and updates independently, so routine StatsPro updates no longer
 download the whole collection again. StatsPro works without it; open

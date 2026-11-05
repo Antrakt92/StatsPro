@@ -1,9 +1,9 @@
 # Changelog
 
-## 1.23.0 - 04-Nov-2026 — Shared fonts and steadier windows
+## 1.23.0 - 05-Nov-2026 — Shared fonts and steadier windows
 
 - Move additional fonts to optional [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts), shared by compatible addons. Keep a readable multilingual baseline and preserve selected fonts, imported choices and favorites when the collection is unavailable.
-- Declare Antrakt Fonts as an installation dependency in new CurseForge files; the addon remains usable without the collection.
+- Keep installation independent of the font package while its first release is being reviewed. The addon works with its included multilingual baseline.
 - Explain once why fonts use a separate package, including when it is already installed. Font settings distinguish missing, disabled and unloaded packages.
 - Enable an installed font package and reload the interface with one click from Font settings.
 - Preview fonts across the HUD and Settings while keeping Font and Language fields and their menus stationary; restore ordinary Settings typography when preview ends.

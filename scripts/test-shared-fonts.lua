@@ -93,6 +93,7 @@ for _, forever in ipairs({false,true}) do
         forever=forever, statsProDB={fontSize=14}, testSharedFontsNotice=true,
         inCombatLockdown=function() return combat end,
     })
+    addon.sharedFonts.snapshot.links={}
     env.__fireEvent('PLAYER_ENTERING_WORLD')
     env.__flushTimers(.6)
     local notice=assert(addon.sharedFonts.notice,'existing account builds transition notice')
@@ -113,6 +114,20 @@ for _, forever in ipairs({false,true}) do
     env2.__fireEvent('PLAYER_ENTERING_WORLD');env2.__flushTimers(.6)
     check(env2.StatsProDB.account.sharedFontsNotice=='fresh','fresh account gets a distinct marker')
     check(addon2.sharedFonts.notice==nil,'fresh account has no migration window')
+end
+for _,forever in ipairs({false,true}) do
+    local env,addon=fixtures.loadStatsPro('enUS',{
+        forever=forever,statsProDB={fontSize=14},testSharedFontsNotice=true,
+    })
+    env.__fireEvent('PLAYER_ENTERING_WORLD');env.__flushTimers(.6)
+    local notice=assert(addon.sharedFonts.notice)
+    check(notice.copy:IsEnabled(),'published collection link enables copy on both clients')
+    notice.copy.scripts.OnClick()
+    check(addon.developerLinks.sharedFonts.url=='https://www.curseforge.com/wow/addons/antrakt-fonts',
+        'actual generated catalogue hands off the exact published CurseForge project')
+    local popup=env.__staticPopups[addon.developerLinks.popupKey]
+    check(popup and popup:IsVisible(),'published collection link opens the real copy dialog')
+    check(env.StatsProDB.account.sharedFontsNotice=='acknowledged','successful published-link handoff acknowledges once')
 end
 for _, forever in ipairs({false,true}) do
     local face=snapshot.fonts[1]

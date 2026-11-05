@@ -31,8 +31,9 @@ Forever has its own 46-row stat catalog, class-aware setups and per-character
 profiles. Archon references are available only in Retail.
 
 Retail and Forever include a compact multilingual font. Additional faces use
-the optional [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts) collection,
-whose first release is awaiting approval. StatsPro works without that package.
+the shared [Antrakt Fonts](https://www.curseforge.com/wow/addons/antrakt-fonts) collection.
+CurseForge installation requests the matching collection; StatsPro also works
+without that package.
 
 <p align="center">
   <a href="#installation">Install</a>
@@ -89,10 +90,11 @@ Both builds include a compact multilingual baseline and support the optional
 compatible addons and updates independently, so routine StatsPro updates no longer
 download the whole collection again. StatsPro works without it; open
 **Appearance → Font** for collection details and available download links.
-The linked project contains the collection's source and setup instructions;
-it is not yet a published packaged download. For source development, use a Git
-checkout and follow its contributor instructions. Published StatsPro downloads
-still contain their bundled font collection until this update is released.
+New CurseForge files declare the collection as a required installation dependency.
+Delivery depends on a matching file and your client channel settings; an already
+installed package can remain disabled. For manual installation, download the
+matching Retail or Forever build from [CurseForge](https://www.curseforge.com/wow/addons/antrakt-fonts).
+The linked GitHub project contains source and contributor instructions.
 If the collection is installed but disabled, enable it from that information
 window; the same click reloads the interface to activate it.
 Existing installs receive one explanation of the shared-font transition, including

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.22.2 - 05-Nov-2026 — Shared font installation
+
+- Ask CurseForge to install the matching Forever build of [Antrakt Fonts](https://www.curseforge.com/wow/addons/antrakt-fonts) alongside StatsPro. The shared collection updates separately; saved font choices and the included multilingual fallback remain available when it is missing or disabled.
+
 ## 1.22.1 - 05-Nov-2026 — Forever package verification
 
 - Improve verification of the downloadable Forever package.

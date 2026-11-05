@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.22.1 - 05-Nov-2026 — Forever package verification
+
+- Improve verification of the downloadable Forever package.
+
 ## 1.22.0 - 05-Nov-2026 — Shared fonts and steadier windows
 
 - Move additional fonts to optional [Antrakt Fonts](https://github.com/Antrakt92/AntraktFonts), shared by compatible addons. Keep a readable multilingual baseline and preserve selected fonts, imported choices and favorites when the collection is unavailable.

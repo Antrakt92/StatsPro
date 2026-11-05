@@ -413,7 +413,7 @@ function Publish-ExactMarketplacePlan {
         changelogType = 'markdown'
         # Each new file requests the shared collection; runtime fallback remains optional.
         relations = [ordered]@{
-            projects = @([ordered]@{ slug = 'antrakt-fonts'; projectID = '1783613'; type = 'requiredDependency' })
+            projects = @([ordered]@{ slug = 'antrakt-fonts'; projectID = 1783613; type = 'requiredDependency' })
         }
     } | ConvertTo-Json -Depth 4 -Compress
     $wagoValues = [ordered]@{
@@ -468,6 +468,15 @@ function Publish-ExactMarketplaceArchive {
 }
 
 function Invoke-SelfTest {
+    function Assert-RequiredFontsMetadata {
+        param($Payload)
+        $fonts = @($Payload.relations.projects)
+        if ($fonts.Count -ne 1 -or $fonts[0].slug -cne 'antrakt-fonts' -or
+            ($fonts[0].projectID -isnot [int] -and $fonts[0].projectID -isnot [long]) -or
+            $fonts[0].projectID -ne 1783613 -or $fonts[0].type -cne 'requiredDependency') {
+            throw 'CurseForge file must require the exact Antrakt Fonts project with an integer projectID.'
+        }
+    }
     $root = Join-Path ([System.IO.Path]::GetTempPath()) ("statspro-marketplace-upload-" + [guid]::NewGuid().ToString('N'))
     [void](New-Item -ItemType Directory -Path $root)
     try {
@@ -556,11 +565,12 @@ function Invoke-SelfTest {
             }
         }
         $cfPayload = ConvertFrom-JsonCompat ([string]$calls[1].Form.metadata)
-        $requiredFonts = @($cfPayload.relations.projects)
-        if ($requiredFonts.Count -ne 1 -or $requiredFonts[0].slug -cne 'antrakt-fonts' -or
-            $requiredFonts[0].projectID -cne '1783613' -or $requiredFonts[0].type -cne 'requiredDependency') {
-            throw 'Retail CurseForge file must require the exact Antrakt Fonts project.'
-        }
+        Assert-RequiredFontsMetadata $cfPayload
+        $stringProjectPayload = ConvertFrom-JsonCompat ([string]$calls[1].Form.metadata)
+        $stringProjectPayload.relations.projects[0].projectID = '1783613'
+        Assert-ThrowsMatch 'Retail dependency rejects a string projectID' {
+            Assert-RequiredFontsMetadata (ConvertFrom-JsonCompat ($stringProjectPayload | ConvertTo-Json -Depth 4))
+        } 'integer projectID'
         if ($calls[1].Headers.Count -ne 1 -or $calls[1].Headers['x-api-token'] -ne $credentials.CF_API_KEY -or
             $calls[1].Form.Count -ne 2 -or $cfPayload.displayName -ne $tag -or $cfPayload.releaseType -ne 'release' -or
             $cfPayload.changelogType -ne 'markdown' -or $cfPayload.changelog -ne $fullChangelog -or
@@ -785,11 +795,12 @@ function Invoke-SelfTest {
             $foreverCalls[1].Metadata.displayName -cne "$tag-Forever-beta" -or
             $foreverCalls[1].Metadata.releaseType -cne 'beta' -or
             (@($foreverCalls[1].Metadata.gameVersions) -join ',') -cne '1600100') { throw 'Forever exact beta upload metadata is invalid.' }
-        $requiredForeverFonts = @($foreverCalls[1].Metadata.relations.projects)
-        if ($requiredForeverFonts.Count -ne 1 -or $requiredForeverFonts[0].slug -cne 'antrakt-fonts' -or
-            $requiredForeverFonts[0].projectID -cne '1783613' -or $requiredForeverFonts[0].type -cne 'requiredDependency') {
-            throw 'Forever CurseForge file must require the exact Antrakt Fonts project.'
-        }
+        Assert-RequiredFontsMetadata $foreverCalls[1].Metadata
+        $foreverStringProjectPayload = ConvertFrom-JsonCompat ($foreverCalls[1].Metadata | ConvertTo-Json -Depth 4)
+        $foreverStringProjectPayload.relations.projects[0].projectID = '1783613'
+        Assert-ThrowsMatch 'Forever dependency rejects a string projectID' {
+            Assert-RequiredFontsMetadata (ConvertFrom-JsonCompat ($foreverStringProjectPayload | ConvertTo-Json -Depth 4))
+        } 'integer projectID'
         if ($foreverCalls[0].Metadata.PSObject.Properties['relations']) { throw 'Forever Wago payload must not contain CurseForge relations.' }
         Assert-ThrowsMatch 'Forever archive requires explicit flavor' {
             [void](New-MarketplacePlan -Archive $foreverArchive -Tag $tag -Sha256 $foreverSha -CredentialValues $credentials -ReadRequest $foreverRead)

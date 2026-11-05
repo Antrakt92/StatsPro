@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.23.3 - 05-Nov-2026 — Shared font installation
+## 1.23.4 - 05-Nov-2026 — Shared font installation
 
 - Ask CurseForge to install [Antrakt Fonts](https://www.curseforge.com/wow/addons/antrakt-fonts) alongside StatsPro. The shared collection updates separately; saved font choices and the included multilingual fallback remain available when it is missing or disabled.
 

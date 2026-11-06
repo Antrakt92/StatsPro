@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.23.5 - 06-Nov-2026 — Archon target refresh
+
+- Refresh bundled M+ and raid targets from Archon data checked on 6 November.
+
 ## 1.23.4 - 05-Nov-2026 — Shared font installation
 
 - Ask CurseForge to install [Antrakt Fonts](https://www.curseforge.com/wow/addons/antrakt-fonts) alongside StatsPro. The shared collection updates separately; saved font choices and the included multilingual fallback remain available when it is missing or disabled.

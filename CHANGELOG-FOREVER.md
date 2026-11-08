@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.22.3 - 08-Nov-2026 — Movement speed on the HUD
+
+- Show ground movement speed as a percentage of normal run speed, with 100% at base speed even while standing still.
+- Enable the Movement Speed row by default in all five presets and in new profiles.
+
 ## 1.22.2 - 05-Nov-2026 — Shared font installation
 
 - Ask CurseForge to install the matching Forever build of [Antrakt Fonts](https://www.curseforge.com/wow/addons/antrakt-fonts) alongside StatsPro. The shared collection updates separately; saved font choices and the included multilingual fallback remain available when it is missing or disabled.

@@ -5,6 +5,16 @@ local function check(value, label)
     checks = checks + 1
     assert(value, label)
 end
+local function checkRunSpeed(utility, context)
+    for index, label in ipairs(utility.labels) do
+        if label:find("Run Speed (yd/sec)", 1, true) then
+            local value = utility.ratings[index] .. utility.values[index]
+            check(value:find("7.00", 1, true), context .. " displays ground run speed while stationary")
+            return
+        end
+    end
+    check(false, context .. " shows Run Speed in Utility")
+end
 local classes = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
 for _, class in ipairs(classes) do
     local env, addon, test = fixtures.loadStatsPro("enUS", {
@@ -48,11 +58,14 @@ for _, class in ipairs(classes) do
     env.__fireEvent("PLAYER_ENTERING_WORLD")
     check(env.StatsProFrame:IsShown(), class .. " starts with a visible HUD")
     check(test.profileRuntimeState().activeSpecName == "Character", class .. " uses explicit character scope")
+    checkRunSpeed(test.buildRenderBlocks()[3], class .. " fresh profile")
     for _, id in ipairs(test.hudPresets.order()) do
         check(test.hudPresets.startPreview(id), class .. " previews " .. id)
         check(test.hudPresets.applyPreview(), class .. " applies " .. id)
         check(test.hudPresets.currentID() == id, class .. " detects " .. id)
-        for _, block in ipairs(test.buildRenderBlocks()) do
+        local blocks = test.buildRenderBlocks()
+        checkRunSpeed(blocks[3], class .. " " .. id)
+        for _, block in ipairs(blocks) do
             check(#block.labels == #block.ratings and #block.labels == #block.values,
                 class .. " aligned columns for " .. id)
             for _, target in ipairs(block.targetRows or {}) do check(target == false, class .. " no Archon targets") end

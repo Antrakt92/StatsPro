@@ -204,10 +204,11 @@ function F.BuildPresets(class)
         selections.tank[#selections.tank + 1] = "BlockValue"
     end
     for _, id in ipairs(presets.order) do
-        local values = { showOffensive = true, showDefensive = id == "tank", showTertiary = id == "healer", showMainStat = false, showItemLevel = false, showMastery = false, showVersatility = false, showStagger = false }
+        local values = { showOffensive = true, showDefensive = id == "tank", showTertiary = true, showMainStat = false, showItemLevel = false, showMastery = false, showVersatility = false, showStagger = false }
         for _, rows in pairs(F.rows) do
             for _, row in ipairs(rows) do values[row.showKey] = false end
         end
+        values.showMovementSpeed = true
         for _, key in ipairs(selections[id]) do values["show" .. key] = true end
         if id == "caster" or (id == "compact" and (class == "MAGE" or class == "WARLOCK" or class == "PRIEST")) then
             for _, school in ipairs(classSchools[class] or {}) do values["showSpellPower" .. school] = true end

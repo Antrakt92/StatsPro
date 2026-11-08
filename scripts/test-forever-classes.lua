@@ -5,20 +5,28 @@ local function check(value, label)
     checks = checks + 1
     assert(value, label)
 end
-local function checkRunSpeed(utility, context)
+local function checkMovementSpeed(utility, expected, context)
     for index, label in ipairs(utility.labels) do
-        if label:find("Run Speed (yd/sec)", 1, true) then
-            local value = utility.ratings[index] .. utility.values[index]
-            check(value:find("7.00", 1, true), context .. " displays ground run speed while stationary")
+        if label:find("Movement Speed", 1, true) then
+            local value = (utility.ratings[index] .. utility.values[index]):gsub("|cff%x%x%x%x%x%x", ""):gsub("|r", "")
+            check(value == expected, context .. " displays " .. expected .. ", got " .. value)
             return
         end
     end
-    check(false, context .. " shows Run Speed in Utility")
+    check(false, context .. " shows Movement Speed in Utility")
 end
 local classes = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
+local restrictedSlow, restrictedBoost = {}, {}
 for _, class in ipairs(classes) do
+    local runSpeed = 7
     local env, addon, test = fixtures.loadStatsPro("enUS", {
         forever = true,
+        issecretvalue = function(value) return rawequal(value, restrictedSlow) or rawequal(value, restrictedBoost) end,
+        abbreviateNumbers = function(value)
+            if rawequal(value, restrictedSlow) then return "50%" end
+            if rawequal(value, restrictedBoost) or value == 10.5 then return "150%" end
+            if value == 7 then return "100%" end
+        end,
         unitGUID = function() return "Player-Matrix-" .. class end,
         unitClass = function() return class, class, 1 end,
         foreverAPIs = {
@@ -52,19 +60,28 @@ for _, class in ipairs(classes) do
             UnitResistance = function() return 0, 10, 10, 0 end,
             Enum = { Damageclass = { Holy = 1, Fire = 2, Nature = 3, Frost = 4, Shadow = 5, Arcane = 6 } },
             GetManaRegen = function() return 6, 1 end,
-            GetUnitSpeed = function() return 0, 7 end,
+            GetUnitSpeed = function() return 0, runSpeed end,
         },
     })
     env.__fireEvent("PLAYER_ENTERING_WORLD")
     check(env.StatsProFrame:IsShown(), class .. " starts with a visible HUD")
     check(test.profileRuntimeState().activeSpecName == "Character", class .. " uses explicit character scope")
-    checkRunSpeed(test.buildRenderBlocks()[3], class .. " fresh profile")
+    checkMovementSpeed(test.buildRenderBlocks()[3], "100%", class .. " stationary fresh profile")
+    runSpeed = 10.5
+    checkMovementSpeed(test.buildRenderBlocks()[3], "150%", class .. " speed boost")
+    runSpeed = 3.5
+    checkMovementSpeed(test.buildRenderBlocks()[3], "50%", class .. " slowed")
+    runSpeed = restrictedSlow
+    checkMovementSpeed(test.buildRenderBlocks()[3], "50%", class .. " restricted slow")
+    runSpeed = restrictedBoost
+    checkMovementSpeed(test.buildRenderBlocks()[3], "150%", class .. " restricted boost")
+    runSpeed = 7
     for _, id in ipairs(test.hudPresets.order()) do
         check(test.hudPresets.startPreview(id), class .. " previews " .. id)
         check(test.hudPresets.applyPreview(), class .. " applies " .. id)
         check(test.hudPresets.currentID() == id, class .. " detects " .. id)
         local blocks = test.buildRenderBlocks()
-        checkRunSpeed(blocks[3], class .. " " .. id)
+        checkMovementSpeed(blocks[3], "100%", class .. " " .. id)
         for _, block in ipairs(blocks) do
             check(#block.labels == #block.ratings and #block.labels == #block.values,
                 class .. " aligned columns for " .. id)

@@ -11159,6 +11159,13 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
                 local text
                 if state == "unknown" then
                     text = "|cff" .. valueColor .. "?|r"
+                elseif definition.kind == "movement" then
+                    local percent, formatted, hasFormatted = addon.movementRuntime.ResolvePercent(value)
+                    if percent ~= nil then
+                        text = SAFE_NUM.FormatColorNumber(valueColor, math.floor(percent + 0.5), "%.0f%%")
+                    elseif hasFormatted then
+                        text = "|cff" .. valueColor .. formatted .. "|r"
+                    end
                 elseif definition.kind == "percent" then
                     text = SAFE_NUM.FormatColorNumber(valueColor, value, "%.2f%%", "%")
                 else

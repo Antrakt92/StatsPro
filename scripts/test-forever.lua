@@ -196,7 +196,7 @@ GetUnitSpeed = function(unit)
     return 0, 7, 4.5, 7
 end
 Expect("MovementSpeed", 7, "clean")
-assert(catalogue.MovementSpeed.label == "Run Speed (yd/sec)")
+assert(catalogue.MovementSpeed.label == "Movement Speed")
 assert(catalogue.MainhandExpertise.kind == "percent")
 UnitGUID = function() return secret end
 assert(F.ReadContext() == nil)

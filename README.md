@@ -172,7 +172,7 @@ Choose from **46 optional rows**:
 - Spell power by school and healing power.
 - Armor, defense, Dodge, Parry, Block, block value and school resistances.
 - Mana regeneration outside and during casting, per second or per five seconds;
-  run speed in yards per second.
+  movement speed as a percentage of base ground run speed.
 
 Optional item level, durability and repair cost use the same gear controls.
 Attributes and stat families have separate editable colors. Short labels keep

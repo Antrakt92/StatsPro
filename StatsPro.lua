@@ -11150,6 +11150,9 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
                 -- Cache only the clean visibility decision, never a numeric fallback.
                 cached.cleanRowVisibility[rowKey] = value ~= 0
                 visible = not hideZero or cached.cleanRowVisibility[rowKey]
+            elseif state == "secret" then
+                -- On a cold start there is no clean zero to justify hiding a live value.
+                visible = not hideZero or cached.cleanRowVisibility[rowKey] ~= false
             else
                 visible = shouldShowUnknown(rowKey, true, hideZero)
             end

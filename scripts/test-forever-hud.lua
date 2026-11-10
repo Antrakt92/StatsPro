@@ -178,6 +178,44 @@ settings.labelStyle = "full"
 test.cacheSettings()
 combat, manaRegen, castingRegen = false, 6, 1
 check(hasManaRow("Mana Regen / 5 sec", "30.00"), "MP5 restored when restrictions end")
+do
+    local coldRegen, coldCrit = restrictedRegen, restrictedRegen
+    local coldEnv, _, coldTest = fixtures.loadStatsPro("enUS", {
+        forever = true,
+        unitGUID = function() return "Player-ColdCombat" end,
+        statsProDB = {
+            showTertiary = true, hideZeroTertiary = true, showManaRegenMP5 = true,
+            showOffensive = true, hideZeroOffensive = true, showMeleeCrit = true, showOffhandHit = true,
+        },
+        issecretvalue = function(number) return rawequal(number, restrictedRegen) end,
+        abbreviateNumbers = function() return nil end,
+        roundToNearestString = function() return "6" end,
+        foreverAPIs = {
+            GetCritChance = function() return coldCrit end,
+            GetManaRegen = function() return coldRegen end,
+        },
+    })
+    coldEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local function visibleLabels()
+        local labels = {}
+        for _, block in ipairs(coldTest.buildRenderBlocks()) do
+            for _, label in ipairs(block.labels) do
+                labels[stripColor(label)] = true
+            end
+        end
+        return labels
+    end
+    local visible = visibleLabels()
+    check(visible["Melee Crit:"] and visible["Mana Regen / sec:"],
+        "Hide Zero keeps live protected values on first restricted render")
+    check(not visible["Offhand Hit:"], "Hide Zero suppresses genuinely unavailable stats")
+    coldRegen, coldCrit = 0, 0
+    visibleLabels()
+    coldRegen, coldCrit = restrictedRegen, restrictedRegen
+    visible = visibleLabels()
+    check(not visible["Melee Crit:"] and not visible["Mana Regen / sec:"],
+        "protected rows reuse an observed clean zero")
+end
 settings.hideZeroOffensive = false
 settings.showRating, settings.showPercentage = false, false
 test.cacheSettings()

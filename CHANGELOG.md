@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.23.8 - 10-Nov-2026 — Archon targets and movement speed
+
+- Refresh bundled M+ and raid targets from Archon data checked on 10 November.
+- Keep combat movement speed displayed as a percentage when the game uses a decimal comma.
+
 ## 1.23.7 - 09-Nov-2026 — Archon target refresh
 
 - Refresh bundled M+ and raid targets from Archon data checked on 9 November.

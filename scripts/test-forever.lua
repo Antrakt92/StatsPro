@@ -148,6 +148,11 @@ GetManaRegen = function() return secret, secret end
 Expect("ManaRegen", secret, "secret")
 Expect("ManaRegenMP5", secret, "secret")
 Expect("CastingManaRegenMP5", secret, "secret")
+AbbreviateNumbers = function(value)
+    return rawequal(value, secret) and "30,25" or "10,25"
+end
+assert(F.FormatRestrictedMP5(secret) == "30,25", "MP5 accepts the client's decimal separator")
+AbbreviateNumbers = nil
 GetManaRegen = function() return 2, nil end
 Expect("ManaRegen", 2, "clean")
 Expect("CastingManaRegen", nil, "unknown")

@@ -11166,7 +11166,9 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
                         text = "|cff" .. valueColor .. formatted .. "|r"
                     else
                         label = definition.restrictedMP5FallbackLabel
-                        text = SAFE_NUM.FormatColorNumber(valueColor, value, "%.2f")
+                        local suffix = cached.labelStyle == "hidden"
+                            and (addon.forever.perSecondSuffixes[cached.activeLabelsLocale] or "/s") or ""
+                        text = SAFE_NUM.FormatColorNumber(valueColor, value, "%.2f" .. suffix, suffix)
                     end
                 elseif definition.kind == "movement" then
                     local percent, formatted, hasFormatted = addon.movementRuntime.ResolvePercent(value)

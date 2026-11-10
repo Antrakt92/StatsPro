@@ -111,7 +111,7 @@ function F.FormatRestrictedMP5(value)
         local ok, sample = pcall(formatter, 2.05, mp5Options)
         local classified, secret = pcall(issecretvalue, sample)
         mp5FormatterAvailable = ok and classified and secret == false
-            and type(sample) == "string" and sample == "10.25"
+            and type(sample) == "string" and (sample == "10.25" or sample == "10,25")
     end
     if mp5FormatterAvailable then
         local ok, text = pcall(formatter, value, mp5Options)
@@ -383,10 +383,12 @@ local function Abbreviate(text)
     return table.concat(out)
 end
 F.shortLabels = {}
+F.perSecondSuffixes = {}
 for locale, components in pairs(localeComponents) do
     local labels, owners = {}, {}
     F.shortLabels[locale] = labels
     local seconds = locale == "ruRU" and "с" or ((locale == "zhCN" or locale == "zhTW") and "秒" or (locale == "koKR" and "초" or "s"))
+    F.perSecondSuffixes[locale] = "/" .. seconds
     for _, rows in pairs(F.rows) do
         for _, row in ipairs(rows) do
             local key = row.key

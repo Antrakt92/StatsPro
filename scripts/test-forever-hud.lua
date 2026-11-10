@@ -34,6 +34,7 @@ local env, addon, test = fixtures.loadStatsPro("enUS", {
     roundToNearestString = function(number)
         if number == -123456 then return "75" end
         if number == -123457 then return "90" end
+        if number == restrictedRegen then return "6" end
         if number == nextRestrictedRegen then return "8" end
         return tostring(number)
     end,
@@ -140,13 +141,16 @@ local secondRestricted = table.concat(blocks[2].values, "\n") .. table.concat(bl
 check(string.find(secondRestricted, "90", 1, true), "second consecutive restricted scalar displayed live")
 check(not string.find(secondRestricted, "75", 1, true), "previous restricted scalar not cached")
 combat, restricted = false, false
-settings.showUtility, settings.showManaRegenMP5, settings.showCastingManaRegenMP5 = true, true, true
+settings.showTertiary, settings.showManaRegenMP5, settings.showCastingManaRegenMP5 = true, true, true
 test.cacheSettings()
+local function stripColor(text)
+    return (text:gsub("|cff%x%x%x%x%x%x", ""):gsub("|r", ""))
+end
 local function hasManaRow(label, value)
     for _, block in ipairs(test.buildRenderBlocks()) do
         for index, rowLabel in ipairs(block.labels) do
             local text = block.ratings[index] .. block.values[index]
-            if rowLabel:find(label .. ":", 1, true) and text:find(value .. "|r", 1, true) then
+            if stripColor(rowLabel) == label .. ":" and stripColor(text) == value then
                 return true
             end
         end
@@ -157,11 +161,21 @@ check(hasManaRow("Mana Regen / 5 sec", "30.00"), "clean MP5")
 combat, manaRegen, castingRegen = true, restrictedRegen, nextRestrictedRegen
 check(hasManaRow("Mana Regen / 5 sec", "30.25"), "first restricted MP5")
 check(hasManaRow("Casting Mana Regen / 5 sec", "38.75"), "restricted casting MP5")
-manaRegen = nextRestrictedRegen
+manaRegen, castingRegen = nextRestrictedRegen, restrictedRegen
 check(hasManaRow("Mana Regen / 5 sec", "38.75"), "next restricted MP5 is displayed live")
+check(hasManaRow("Casting Mana Regen / 5 sec", "30.25"), "next casting MP5 is displayed live")
 rejectMP5 = true
 check(hasManaRow("Mana Regen / sec", "8"), "rejected MP5 uses the per-second label and live value")
-check(hasManaRow("Casting Mana Regen / sec", "8"), "rejected casting MP5 uses the per-second label")
+check(hasManaRow("Casting Mana Regen / sec", "6"), "rejected casting MP5 uses the per-second label")
+settings.labelStyle = "hidden"
+test.cacheSettings()
+check(addon:RunUpdateStatsSafe(), "hidden-label fallback HUD update")
+local manaHUD = test.panelVisualState()
+local manaText = manaHUD.mainRatingText .. "\n" .. manaHUD.mainValueText
+check(manaHUD.mainLabelText == "" and manaText:find("8/s", 1, true)
+    and manaText:find("6/s", 1, true), "hidden-label MP5 fallbacks identify both values as per-second")
+settings.labelStyle = "full"
+test.cacheSettings()
 combat, manaRegen, castingRegen = false, 6, 1
 check(hasManaRow("Mana Regen / 5 sec", "30.00"), "MP5 restored when restrictions end")
 settings.hideZeroOffensive = false

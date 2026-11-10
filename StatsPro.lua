@@ -4624,8 +4624,8 @@ function addon.movementRuntime.NativePercentFormatterAvailable()
     local boostSecretOK, boostSecret = pcall(issecretvalue, boostText)
     if not baseSecretOK or baseSecret or not boostSecretOK or boostSecret then return false end
     if type(baseText) ~= "string" or type(boostText) ~= "string" then return false end
-    local baseMatches = baseText == "100%" or baseText == "100.0%"
-    local boostMatches = boostText == "150%" or boostText == "150.0%"
+    local baseMatches = baseText == "100%" or baseText == "100.0%" or baseText == "100,0%"
+    local boostMatches = boostText == "150%" or boostText == "150.0%" or boostText == "150,0%"
     runtime.nativePercentFormatterState = baseMatches and boostMatches
     return runtime.nativePercentFormatterState
 end

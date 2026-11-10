@@ -21,13 +21,16 @@ for _, class in ipairs(classes) do
     local runSpeed = 7
     local movementMode = "ground"
     local currentSpeed = 30.38
+    local inCombat = false
     local env, addon, test = fixtures.loadStatsPro("enUS", {
         forever = true,
+        inCombatLockdown = function() return inCombat end,
         issecretvalue = function(value) return rawequal(value, restrictedSlow) or rawequal(value, restrictedBoost) end,
         abbreviateNumbers = function(value)
             if rawequal(value, restrictedSlow) then return "50%" end
-            if rawequal(value, restrictedBoost) or value == 10.5 then return "150%" end
-            if value == 7 then return "100%" end
+            if rawequal(value, restrictedBoost) then return "150%" end
+            if value == 10.5 then return "150,0%" end
+            if value == 7 then return "100,0%" end
         end,
         unitGUID = function() return "Player-Matrix-" .. class end,
         unitClass = function() return class, class, 1 end,
@@ -100,6 +103,28 @@ for _, class in ipairs(classes) do
     checkMovementSpeed(test.buildRenderBlocks()[3], "200%", class .. " vehicle speed")
     movementMode = "ground"
     checkMovementSpeed(test.buildRenderBlocks()[3], "100%", class .. " back on the ground")
+    local ticker
+    for _, frame in ipairs(env.__frames) do
+        if frame.scripts and frame.scripts.OnUpdate then ticker = frame; break end
+    end
+    check(ticker ~= nil, class .. " HUD refresh ticker exists")
+    inCombat = true
+    env.__fireEvent("PLAYER_REGEN_DISABLED")
+    local function checkCombatTick(speed, expected, previous)
+        runSpeed = speed
+        ticker.scripts.OnUpdate(ticker, 999)
+        local panel = test.panelVisualState()
+        local values = panel.mainRatingText .. "\n" .. panel.mainValueText
+        values = "\n" .. values:gsub("|cff%x%x%x%x%x%x", ""):gsub("|r", "") .. "\n"
+        check(values:find("\n" .. expected .. "\n", 1, true), class .. " combat ticker displays " .. expected)
+        if previous then
+            check(not values:find("\n" .. previous .. "\n", 1, true), class .. " combat ticker replaces " .. previous)
+        end
+    end
+    checkCombatTick(restrictedSlow, "50%")
+    checkCombatTick(restrictedBoost, "150%", "50%")
+    runSpeed, inCombat = 7, false
+    env.__fireEvent("PLAYER_REGEN_ENABLED")
     for _, id in ipairs(test.hudPresets.order()) do
         check(test.hudPresets.startPreview(id), class .. " previews " .. id)
         check(test.hudPresets.applyPreview(), class .. " applies " .. id)

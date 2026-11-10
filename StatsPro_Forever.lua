@@ -47,15 +47,38 @@ local function Sum(name, count, ...)
     end
 end
 
+local function AddPair(first, firstState, second, secondState)
+    if firstState == "clean" and secondState == "clean" then
+        return Classify(first + second)
+    end
+    -- A confirmed zero leaves the other operand unchanged and safe to display.
+    if firstState == "secret" and secondState == "clean" and second == 0 then
+        return first, "secret"
+    end
+    if secondState == "secret" and firstState == "clean" and first == 0 then
+        return second, "secret"
+    end
+    return nil, "unknown"
+end
+
 local function Hit(constant, modifier)
     return function()
         local rating = _G[constant]
         if type(rating) ~= "number" then return nil, "unknown" end
         local bonus, bonusState = Read("GetCombatRatingBonus", 1, rating)
         local extra, extraState = Read(modifier, 1)
-        if bonusState ~= "clean" or extraState ~= "clean" then return nil, "unknown" end
-        return Classify(bonus + extra)
+        return AddPair(bonus, bonusState, extra, extraState)
     end
+end
+
+local function RangedHaste()
+    local fn = _G.GetRangedHaste
+    if type(fn) ~= "function" then return nil, "unknown" end
+    local ok, base, quiver = pcall(fn)
+    if not ok then return nil, "unknown" end
+    local baseValue, baseState = Classify(base)
+    local quiverValue, quiverState = Classify(quiver)
+    return AddPair(baseValue, baseState, quiverValue, quiverState)
 end
 
 local function Nonnegative(reader)
@@ -147,7 +170,7 @@ Row("offensive", "OffhandHit", "Offhand Hit", Hit("CR_HIT_MELEE", "GetOffhandHit
 Row("offensive", "RangedHit", "Ranged Hit", Hit("CR_HIT_RANGED", "GetRangedHitModifier"), "percent")
 Row("offensive", "SpellHit", "Spell Hit", Hit("CR_HIT_SPELL", "GetSpellHitModifier"), "percent")
 Row("offensive", "MeleeHaste", "Melee Haste", Scalar("GetMeleeHaste", 1), "percent", "haste")
-Row("offensive", "RangedHaste", "Ranged Haste", Sum("GetRangedHaste", 2), "percent", "haste")
+Row("offensive", "RangedHaste", "Ranged Haste", RangedHaste, "percent", "haste")
 Row("offensive", "SpellHaste", "Spell Haste", Scalar("UnitSpellHaste", 1, "player"), "percent", "haste")
 Row("offensive", "AttackPower", "Attack Power", AttackPower("UnitAttackPower"))
 Row("offensive", "RangedAttackPower", "Ranged Attack Power", AttackPower("UnitRangedAttackPower"))

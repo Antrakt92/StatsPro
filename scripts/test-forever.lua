@@ -139,8 +139,28 @@ Expect("OffhandHit", nil, "unknown")
 GetCombatRatingBonus = function(index) assert(index == CR_HIT_MELEE) return 3 end
 GetHitModifier = function() return secret end
 Expect("MeleeHit", nil, "unknown")
+GetCombatRatingBonus = function() return 0 end
+Expect("MeleeHit", secret, "secret")
+GetCombatRatingBonus = function() return secret end
+GetHitModifier = function() return 0 end
+Expect("MeleeHit", secret, "secret")
+GetHitModifier = function() return secret end
+Expect("MeleeHit", nil, "unknown")
+GetHitModifier = function() return nil end
+Expect("MeleeHit", nil, "unknown")
+GetCombatRatingBonus = function() return 3 end
 CR_HIT_MELEE = nil
 Expect("MeleeHit", nil, "unknown")
+GetRangedHaste = function() return 0, secret end
+Expect("RangedHaste", secret, "secret")
+GetRangedHaste = function() return secret, 0 end
+Expect("RangedHaste", secret, "secret")
+GetRangedHaste = function() return secret, 1 end
+Expect("RangedHaste", nil, "unknown")
+GetRangedHaste = function() return secret, secret end
+Expect("RangedHaste", nil, "unknown")
+GetRangedHaste = function() return 2, 1 end
+Expect("RangedHaste", 3, "clean")
 GetManaRegen = function() return 2, 0.5 end
 Expect("ManaRegenMP5", 10, "clean")
 Expect("CastingManaRegenMP5", 2.5, "clean")

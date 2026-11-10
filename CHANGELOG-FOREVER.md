@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.22.5 - 10-Nov-2026 — Movement speed by travel mode
+
+- Show the speed for your current travel mode. On the ground, normal running is still 100% while standing still. In the air or water, show flight or swim speed. On a taxi or in a vehicle, show actual travel speed.
+- Keep combat movement speed in percentages when the game formats numbers with a decimal comma.
+
 ## 1.22.4 - 10-Nov-2026 — Combat stat display
 
 - Keep normal and casting mana regeneration visible when WoW protects the values in combat. If the five-second rate cannot be formatted, show the live per-second rate with its unit.

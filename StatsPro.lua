@@ -11156,9 +11156,18 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
             if visible and state ~= "missing" then
                 local color = cached.colorStrings[definition.colorKey] or cached.colorStrings.mainStat
                 local valueColor = cached.matchValueColorToStat and color or cached.colorStrings.percentage
+                local label = definition.label
                 local text
                 if state == "unknown" then
                     text = "|cff" .. valueColor .. "?|r"
+                elseif state == "secret" and definition.restrictedMP5FallbackLabel then
+                    local formatted = addon.forever.FormatRestrictedMP5(value)
+                    if type(formatted) == "string" then
+                        text = "|cff" .. valueColor .. formatted .. "|r"
+                    else
+                        label = definition.restrictedMP5FallbackLabel
+                        text = SAFE_NUM.FormatColorNumber(valueColor, value, "%.2f")
+                    end
                 elseif definition.kind == "movement" then
                     local percent, formatted, hasFormatted = addon.movementRuntime.ResolvePercent(value)
                     if percent ~= nil then
@@ -11172,7 +11181,7 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
                     text = SAFE_NUM.FormatColorNumber(valueColor, value, definition.format or (group == "utility" and "%.2f" or "%d"))
                 end
                 local rCol, vCol = RouteValueOnly(text or ("|cff" .. valueColor .. "?|r"))
-                PushRow(labels, ratings, values, FormatLabel(color, definition.label), rCol, vCol)
+                PushRow(labels, ratings, values, FormatLabel(color, label), rCol, vCol)
             end
         end
     end

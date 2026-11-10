@@ -86,11 +86,36 @@ local function AttackPower(name)
     end)
 end
 
-local function Scale(reader, factor)
+local function ReadManaRegenMP5(index)
     return function()
-        local value, state = reader()
+        local value, state = Read("GetManaRegen", index)
+        -- The HUD can format this per-second value through Blizzard's API.
+        if state == "secret" then return value, state end
         if state ~= "clean" then return nil, "unknown" end
-        return Classify(value * factor)
+        return Classify(value * 5)
+    end
+end
+
+-- The C formatter scales by 5 while keeping the result display-only.
+-- A slightly smaller divisor avoids truncating an exact hundredth due to roundoff.
+local mp5Options = { breakpointData = { {
+    breakpoint = 0, abbreviation = "", abbreviationIsGlobal = false,
+    significandDivisor = 0.0019999999999999996, fractionDivisor = 100,
+} } }
+local mp5FormatterAvailable
+
+function F.FormatRestrictedMP5(value)
+    local formatter = _G.AbbreviateNumbers
+    if type(formatter) ~= "function" then return nil end
+    if mp5FormatterAvailable == nil then
+        local ok, sample = pcall(formatter, 2.05, mp5Options)
+        local classified, secret = pcall(issecretvalue, sample)
+        mp5FormatterAvailable = ok and classified and secret == false
+            and type(sample) == "string" and sample == "10.25"
+    end
+    if mp5FormatterAvailable then
+        local ok, text = pcall(formatter, value, mp5Options)
+        if ok and type(text) == "string" then return text end
     end
 end
 
@@ -108,6 +133,7 @@ local function Row(group, key, label, reader, kind, color)
         kind = kind or "number", colorKey = color or "mainStat", Read = reader }
     F.rows[group][#F.rows[group] + 1] = row
     F.defaults[row.showKey] = false
+    return row
 end
 
 for index, name in ipairs({ "Strength", "Agility", "Stamina", "Intellect", "Spirit" }) do
@@ -145,8 +171,8 @@ for _, name in ipairs({ "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" })
 end
 Row("utility", "ManaRegen", "Mana Regen / sec", Scalar("GetManaRegen", 1))
 Row("utility", "CastingManaRegen", "Casting Mana Regen / sec", Scalar("GetManaRegen", 2))
-Row("utility", "ManaRegenMP5", "Mana Regen / 5 sec", Scale(Scalar("GetManaRegen", 1), 5))
-Row("utility", "CastingManaRegenMP5", "Casting Mana Regen / 5 sec", Scale(Scalar("GetManaRegen", 2), 5))
+Row("utility", "ManaRegenMP5", "Mana Regen / 5 sec", ReadManaRegenMP5(1)).restrictedMP5FallbackLabel = "Mana Regen / sec"
+Row("utility", "CastingManaRegenMP5", "Casting Mana Regen / 5 sec", ReadManaRegenMP5(2)).restrictedMP5FallbackLabel = "Casting Mana Regen / sec"
 Row("utility", "MovementSpeed", "Movement Speed", Scalar("GetUnitSpeed", 2, "player"), "movement", "speed")
 
 F.defaults.showMainStat = false

@@ -9,14 +9,32 @@ local combat = false
 local value = 0
 local restricted = false
 local secret = -123456
+local restrictedRegen, nextRestrictedRegen = {}, {}
+local manaRegen, castingRegen = 6, 1
+local rejectMP5 = false
 local env, addon, test = fixtures.loadStatsPro("enUS", {
     forever = true,
     unitGUID = function() return "Player-ForeverFixture" end,
     inCombatLockdown = function() return combat end,
-    issecretvalue = function(number) return number == -123456 or number == -123457 end,
+    issecretvalue = function(number)
+        return number == -123456 or number == -123457
+            or number == restrictedRegen or number == nextRestrictedRegen
+    end,
+    abbreviateNumbers = function(number, options)
+        local breakpoint = options.breakpointData[1]
+        if number == restrictedRegen or number == nextRestrictedRegen then
+            assert(not rejectMP5, "native MP5 formatting rejected")
+            assert(breakpoint.abbreviation == "" and breakpoint.fractionDivisor == 100)
+            assert(math.abs(breakpoint.significandDivisor - 0.002) < 1e-9)
+            return number == restrictedRegen and "30.25" or "38.75"
+        end
+        return tostring(math.floor(number / breakpoint.significandDivisor)
+            / breakpoint.fractionDivisor) .. breakpoint.abbreviation
+    end,
     roundToNearestString = function(number)
         if number == -123456 then return "75" end
         if number == -123457 then return "90" end
+        if number == nextRestrictedRegen then return "8" end
         return tostring(number)
     end,
     foreverAPIs = {
@@ -27,7 +45,7 @@ local env, addon, test = fixtures.loadStatsPro("enUS", {
         GetSpellCritChance = function() return 5 end,
         GetSpellBonusHealing = function() return 15 end,
         UnitSpellHaste = function() return 0 end,
-        GetManaRegen = function() return 6, 1 end,
+        GetManaRegen = function() return manaRegen, castingRegen end,
         GetExpertise = function() return 0, 0, 0 end,
         UnitDefenseSkill = function() return 5, 0 end,
     },
@@ -122,6 +140,30 @@ local secondRestricted = table.concat(blocks[2].values, "\n") .. table.concat(bl
 check(string.find(secondRestricted, "90", 1, true), "second consecutive restricted scalar displayed live")
 check(not string.find(secondRestricted, "75", 1, true), "previous restricted scalar not cached")
 combat, restricted = false, false
+settings.showUtility, settings.showManaRegenMP5, settings.showCastingManaRegenMP5 = true, true, true
+test.cacheSettings()
+local function hasManaRow(label, value)
+    for _, block in ipairs(test.buildRenderBlocks()) do
+        for index, rowLabel in ipairs(block.labels) do
+            local text = block.ratings[index] .. block.values[index]
+            if rowLabel:find(label .. ":", 1, true) and text:find(value .. "|r", 1, true) then
+                return true
+            end
+        end
+    end
+    return false
+end
+check(hasManaRow("Mana Regen / 5 sec", "30.00"), "clean MP5")
+combat, manaRegen, castingRegen = true, restrictedRegen, nextRestrictedRegen
+check(hasManaRow("Mana Regen / 5 sec", "30.25"), "first restricted MP5")
+check(hasManaRow("Casting Mana Regen / 5 sec", "38.75"), "restricted casting MP5")
+manaRegen = nextRestrictedRegen
+check(hasManaRow("Mana Regen / 5 sec", "38.75"), "next restricted MP5 is displayed live")
+rejectMP5 = true
+check(hasManaRow("Mana Regen / sec", "8"), "rejected MP5 uses the per-second label and live value")
+check(hasManaRow("Casting Mana Regen / sec", "8"), "rejected casting MP5 uses the per-second label")
+combat, manaRegen, castingRegen = false, 6, 1
+check(hasManaRow("Mana Regen / 5 sec", "30.00"), "MP5 restored when restrictions end")
 settings.hideZeroOffensive = false
 settings.showRating, settings.showPercentage = false, false
 test.cacheSettings()

@@ -146,7 +146,8 @@ Expect("ManaRegenMP5", 10, "clean")
 Expect("CastingManaRegenMP5", 2.5, "clean")
 GetManaRegen = function() return secret, secret end
 Expect("ManaRegen", secret, "secret")
-Expect("ManaRegenMP5", nil, "unknown")
+Expect("ManaRegenMP5", secret, "secret")
+Expect("CastingManaRegenMP5", secret, "secret")
 GetManaRegen = function() return 2, nil end
 Expect("ManaRegen", 2, "clean")
 Expect("CastingManaRegen", nil, "unknown")

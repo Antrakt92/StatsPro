@@ -30,6 +30,34 @@ local function Scalar(name, index, ...)
     return function() return Read(name, index, unpack(args)) end
 end
 
+local movementModes = {
+    { flag = "UnitInVehicle", unit = "vehicle", index = 1 },
+    { flag = "IsSwimming", unit = "player", index = 4 },
+    { flag = "UnitOnTaxi", unit = "player", index = 1 },
+    { flag = "IsFlying", unit = "player", index = 3 },
+}
+
+local function ReadMovementFlag(name)
+    local fn = _G[name]
+    if type(fn) ~= "function" then return nil end
+    local ok, enabled = pcall(function()
+        local value = fn("player")
+        if issecretvalue(value) ~= false or type(value) ~= "boolean" then return nil end
+        return value == true
+    end)
+    if ok then return enabled end
+end
+
+local function MovementSpeed()
+    for _, mode in ipairs(movementModes) do
+        local enabled = ReadMovementFlag(mode.flag)
+        if enabled == nil then return nil, "unknown" end
+        if enabled then return Read("GetUnitSpeed", mode.index, mode.unit) end
+    end
+    -- Ground speed is the run rate even when the character is standing still.
+    return Read("GetUnitSpeed", 2, "player")
+end
+
 local function Sum(name, count, ...)
     local args = { ... }
     return function()
@@ -196,7 +224,7 @@ Row("utility", "ManaRegen", "Mana Regen / sec", Scalar("GetManaRegen", 1))
 Row("utility", "CastingManaRegen", "Casting Mana Regen / sec", Scalar("GetManaRegen", 2))
 Row("utility", "ManaRegenMP5", "Mana Regen / 5 sec", ReadManaRegenMP5(1)).restrictedMP5FallbackLabel = "Mana Regen / sec"
 Row("utility", "CastingManaRegenMP5", "Casting Mana Regen / 5 sec", ReadManaRegenMP5(2)).restrictedMP5FallbackLabel = "Casting Mana Regen / sec"
-Row("utility", "MovementSpeed", "Movement Speed", Scalar("GetUnitSpeed", 2, "player"), "movement", "speed")
+Row("utility", "MovementSpeed", "Movement Speed", MovementSpeed, "movement", "speed")
 
 F.defaults.showMainStat = false
 F.defaults.showItemLevel = false

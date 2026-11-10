@@ -217,10 +217,23 @@ issecretvalue = function() error("classification unavailable") end
 Expect("MeleeCrit", nil, "unknown")
 assert(F.ReadContext() == nil)
 issecretvalue = function(value) return rawequal(value, secret) end
+local function inactiveMovementMode() return false end
+UnitInVehicle = inactiveMovementMode
+IsSwimming = inactiveMovementMode
+UnitOnTaxi = inactiveMovementMode
+IsFlying = inactiveMovementMode
 GetUnitSpeed = function(unit)
     assert(unit == "player")
     return 0, 7, 4.5, 7
 end
+Expect("MovementSpeed", 7, "clean")
+UnitOnTaxi = function() return secret end
+Expect("MovementSpeed", nil, "unknown")
+UnitOnTaxi = function() error("taxi state unavailable") end
+Expect("MovementSpeed", nil, "unknown")
+UnitOnTaxi = function() return true end
+Expect("MovementSpeed", 0, "clean")
+UnitOnTaxi = inactiveMovementMode
 Expect("MovementSpeed", 7, "clean")
 assert(catalogue.MovementSpeed.label == "Movement Speed")
 assert(catalogue.MainhandExpertise.kind == "percent")

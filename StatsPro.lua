@@ -4649,8 +4649,8 @@ function addon.movementRuntime.FormatRestricted(runSpeed)
     return SAFE_NUM.FormatDisplayNumber(runSpeed, "%.1f yd/s", " yd/s")
 end
 
--- GetUnitSpeed returns ground run speed in yards/second rather than a
--- percentage. Clean values can be converted normally. Restricted values are
+-- GetUnitSpeed returns yards/second. Express the selected speed relative to
+-- normal ground running. Clean values can be converted normally. Restricted values are
 -- scaled by Blizzard's tainted-safe abbreviation API and remain display-only.
 function addon.movementRuntime.ResolvePercent(runSpeed)
     local displaySpeed, cleanSpeed = SAFE_NUM.ResolveDisplayNumber(runSpeed, true)

@@ -1287,6 +1287,11 @@ local function makeEnv(locale, opts)
     env.GetLifesteal = opts.getLifesteal or zero
     env.GetAvoidance = opts.getAvoidance or zero
     env.GetUnitSpeed = opts.getUnitSpeed or function() return 0, 0, 0, 0 end
+    local function notMovingByMode() return false end
+    env.UnitInVehicle = notMovingByMode
+    env.IsSwimming = notMovingByMode
+    env.UnitOnTaxi = notMovingByMode
+    env.IsFlying = notMovingByMode
     env.GetAverageItemLevel = opts.getAverageItemLevel or function() return 0, 0 end
     env.UnitStat = opts.unitStat or function(_, statId) return 0, statId == 3 and 100 or 0 end
     env.UnitArmor = opts.unitArmor or function() return 0, 0 end

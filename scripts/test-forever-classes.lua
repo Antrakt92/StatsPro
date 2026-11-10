@@ -19,6 +19,8 @@ local classes = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "
 local restrictedSlow, restrictedBoost = {}, {}
 for _, class in ipairs(classes) do
     local runSpeed = 7
+    local movementMode = "ground"
+    local currentSpeed = 30.38
     local env, addon, test = fixtures.loadStatsPro("enUS", {
         forever = true,
         issecretvalue = function(value) return rawequal(value, restrictedSlow) or rawequal(value, restrictedBoost) end,
@@ -60,7 +62,15 @@ for _, class in ipairs(classes) do
             UnitResistance = function() return 0, 10, 10, 0 end,
             Enum = { Damageclass = { Holy = 1, Fire = 2, Nature = 3, Frost = 4, Shadow = 5, Arcane = 6 } },
             GetManaRegen = function() return 6, 1 end,
-            GetUnitSpeed = function() return 0, runSpeed end,
+            UnitInVehicle = function() return movementMode == "vehicle" end,
+            IsSwimming = function() return movementMode == "swim" end,
+            UnitOnTaxi = function() return movementMode == "taxi" end,
+            IsFlying = function() return movementMode == "flight" or movementMode == "taxi" end,
+            GetUnitSpeed = function(unit)
+                if unit == "vehicle" then return 14 end
+                assert(unit == "player")
+                return movementMode == "ground" and 0 or currentSpeed, runSpeed, 21, 4.9
+            end,
         },
     })
     env.__fireEvent("PLAYER_ENTERING_WORLD")
@@ -76,6 +86,20 @@ for _, class in ipairs(classes) do
     runSpeed = restrictedBoost
     checkMovementSpeed(test.buildRenderBlocks()[3], "150%", class .. " restricted boost")
     runSpeed = 7
+    movementMode = "taxi"
+    checkMovementSpeed(test.buildRenderBlocks()[3], "434%", class .. " taxi instead of flight cap")
+    currentSpeed = restrictedSlow
+    checkMovementSpeed(test.buildRenderBlocks()[3], "50%", class .. " first restricted taxi reading")
+    currentSpeed = restrictedBoost
+    checkMovementSpeed(test.buildRenderBlocks()[3], "150%", class .. " next restricted taxi reading")
+    movementMode = "flight"
+    checkMovementSpeed(test.buildRenderBlocks()[3], "300%", class .. " flight speed")
+    movementMode = "swim"
+    checkMovementSpeed(test.buildRenderBlocks()[3], "70%", class .. " swimming speed")
+    movementMode = "vehicle"
+    checkMovementSpeed(test.buildRenderBlocks()[3], "200%", class .. " vehicle speed")
+    movementMode = "ground"
+    checkMovementSpeed(test.buildRenderBlocks()[3], "100%", class .. " back on the ground")
     for _, id in ipairs(test.hudPresets.order()) do
         check(test.hudPresets.startPreview(id), class .. " previews " .. id)
         check(test.hudPresets.applyPreview(), class .. " applies " .. id)

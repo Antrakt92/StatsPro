@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.22.4 - 10-Nov-2026 — Combat stat display
+
+- Keep normal and casting mana regeneration visible when WoW protects the values in combat. If the five-second rate cannot be formatted, show the live per-second rate with its unit.
+- Keep live stats visible with Hide Zero enabled when no earlier reading has confirmed zero.
+- Keep Hit and Ranged Haste visible when one part of the total is protected and the other is confirmed to be zero.
+
 ## 1.22.3 - 08-Nov-2026 — Movement speed on the HUD
 
 - Show ground movement speed as a percentage of normal run speed, with 100% at base speed even while standing still.

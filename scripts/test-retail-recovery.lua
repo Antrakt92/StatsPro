@@ -223,7 +223,7 @@ if not forever then
     local rating, percent = 0, 5
     local function readRating() return rating end
     local function readPercent() return percent end
-    local env, _, test = loadStatsPro("enUS", {
+    local env, addon, test = loadStatsPro("enUS", {
         unitGUID = function() return "Player-HideZero" end,
         getSpecialization = function() return 1 end, specID = 64, specRole = "DAMAGER",
         unitClassToken = "MAGE",
@@ -252,9 +252,23 @@ if not forever then
     end
     expectRows(0, 0)
     rating = 250
+    local contextReads = 0
+    local getCurrentSnapshot = addon.archonTargets.GetCurrentSnapshot
+    addon.archonTargets.GetCurrentSnapshot = function()
+        contextReads = contextReads + 1
+        return getCurrentSnapshot()
+    end
     local rated = expectRows(4, 2)
+    assert(contextReads == 1, "four rated rows share one Archon context")
     assert(type(rated.targetRows[1]) == "table" and rated.targetRows[1].current == 250,
         "rating-only rows retain Archon comparison metadata")
+    local snapshot = env.StatsProArchonTargets
+    env.StatsProArchonTargets = nil
+    contextReads = 0
+    local noSnapshot = expectRows(4, 2)
+    assert(contextReads == 1 and noSnapshot.targetRows[1] == false and noSnapshot.targetRows[4] == false,
+        "four rated rows also share an unavailable Archon context")
+    env.StatsProArchonTargets = snapshot
     rating = -1234
     expectRows(4, 2)
     rating = -1235

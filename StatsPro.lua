@@ -1310,13 +1310,20 @@ function addon.archonTargets.GetCurrentSnapshot()
     return snapshot, snapshotRoot, root, snapshotKey, classToken, specKey
 end
 
-function addon.archonTargets.GetStatTarget(statKey)
-    local snapshot, snapshotRoot, root, snapshotKey, classToken, specKey = addon.archonTargets.GetCurrentSnapshot()
+function addon.archonTargets.GetStatTarget(statKey, renderContext)
+    local context = renderContext or {}
+    if not context.resolved then
+        context.snapshot, context.snapshotRoot, context.root, context.snapshotKey,
+            context.classToken, context.specKey = addon.archonTargets.GetCurrentSnapshot()
+        context.resolved = true
+    end
+    local snapshot = context.snapshot
     local targets = snapshot and snapshot.targets
     local target = type(targets) == "table" and targets[statKey] or nil
     if type(target) ~= "number" or issecretvalue(target)
         or target ~= target or target <= 0 or target >= math.huge then return nil end
-    return target, snapshot, snapshotRoot, root, snapshotKey, classToken, specKey
+    return target, snapshot, context.snapshotRoot, context.root, context.snapshotKey,
+        context.classToken, context.specKey
 end
 
 function addon.archonTargets.CalculateMasteryTargetPercent(currentRating, currentPct, target)
@@ -1339,7 +1346,8 @@ function addon.archonTargets.CalculateMasteryTargetPercent(currentRating, curren
 end
 
 function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, currentPct,
-                                       colorKey, currentPctDisplay, currentRatingDisplay, currentPctIsProxy)
+                                       colorKey, currentPctDisplay, currentRatingDisplay, currentPctIsProxy,
+                                       renderContext)
     local hasCleanCurrent = addon.IsCleanFiniteNumber(currentRating) and currentRating >= 0
     local _, ratingDisplayIsSecret = addon.ClassifyRenderableNumber(currentRatingDisplay)
     local hasLiveCurrentRating = ratingDisplayIsSecret
@@ -1349,7 +1357,8 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
         currentPctDisplay = currentPct
         hasCurrentPctDisplay = addon.IsCleanFiniteNumber(currentPctDisplay)
     end
-    local target, snapshot, snapshotRoot, _, snapshotKey, classToken, specKey = addon.archonTargets.GetStatTarget(statKey)
+    local target, snapshot, snapshotRoot, _, snapshotKey, classToken, specKey =
+        addon.archonTargets.GetStatTarget(statKey, renderContext)
     if not target then return nil end
     if type(snapshot) ~= "table" or type(snapshotRoot) ~= "table" then return nil end
     local cleanRatingCR = addon.IsCleanFiniteNumber(ratingCR) and ratingCR or nil
@@ -11336,6 +11345,8 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
 
     -- Tooltip targets need the raw rating even when the rating column is hidden.
     local needTargetRating = targetRows ~= nil
+    -- Share one snapshot lookup across the rows, including a missing snapshot.
+    local targetContext = needTargetRating and {} or nil
     -- Keep recording clean percent visibility for later toggles. Only enabled
     -- columns can keep a row visible when Hide Zero is active.
     local percentAffectsVisibility = cached.showPercentage or not cached.hideZeroOffensive
@@ -11375,7 +11386,7 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
                 if targetRows then
                     targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta(
                         def.statKey, targetRating, def.ratingCR, currentPercent,
-                        def.colorKey, val, ratingDisplay, percentIsProxy) or false
+                        def.colorKey, val, ratingDisplay, percentIsProxy, targetContext) or false
                 end
                 PushRow(labels, ratings, values,
                     FormatLabel(statColor, def.label),
@@ -11457,7 +11468,7 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
                 targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta(
                     "versatility", targetVersRating, CR_VERSATILITY_DAMAGE_DONE,
                     versClean, "versatility", versTooltipDisplay,
-                    versRatingDisplay) or false
+                    versRatingDisplay, nil, targetContext) or false
             end
             PushRow(labels, ratings, values,
                 FormatLabel(versStr, "Vers"),

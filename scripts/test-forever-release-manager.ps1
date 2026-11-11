@@ -66,6 +66,8 @@ try {
     $script:mutations = [Collections.Generic.List[string]]::new()
     $script:attestedCommit = $context.Commit
     $script:remoteCommit = $context.Commit
+    $script:remoteType = 'commit'
+    $script:remoteTagObjectReads = 0
     $script:failUpload = $false
     $script:attestationFailuresRemaining = 0
     $script:visibilityLagReads = 0
@@ -78,7 +80,11 @@ try {
         if ($Arguments[0] -eq 'api') {
             if ($Arguments[1] -like '*/git/ref/tags/*') {
                 Assert-Test ($Arguments -contains 'Accept: application/vnd.github+json' -and $Arguments -contains 'X-GitHub-Api-Version: 2026-03-10') 'tag reads use the same supported API version'
-                return (@{ object = @{ type = 'commit'; sha = $script:remoteCommit } } | ConvertTo-Json -Depth 5)
+                return (@{ object = @{ type = $script:remoteType; sha = $script:remoteCommit } } | ConvertTo-Json -Depth 5)
+            }
+            if ($Arguments[1] -like '*/git/tags/*') {
+                $script:remoteTagObjectReads++
+                return (@{ object = @{ type = 'commit'; sha = $context.Commit } } | ConvertTo-Json -Depth 5)
             }
             if ($script:visibilityLagReads -gt 0) { $script:visibilityLagReads--; return $script:staleInventory }
             if ($null -eq $script:remote) { return '[[]]' }
@@ -132,6 +138,11 @@ try {
     }
     Invoke-ForeverReleaseMode $context RefuseExisting
     Assert-Test ($mutations.Count -eq 0) 'read-only preflight does not mutate'
+    $script:remoteType = 'tag'
+    Assert-Rejected { Invoke-ForeverReleaseMode $context RefuseExisting } 'annotated remote tag fails read-only preflight'
+    Assert-Rejected { Invoke-ForeverReleaseMode $context CreateDraft } 'annotated remote tag fails before creation'
+    Assert-Test ($mutations.Count -eq 0 -and $script:remoteTagObjectReads -eq 0) 'annotated tag is neither peeled nor used for mutation'
+    $script:remoteType = 'commit'
     $script:remoteCommit = 'c' * 40
     Assert-Rejected { Invoke-ForeverReleaseMode $context CreateDraft } 'wrong remote commit fails before creation'
     Assert-Test ($mutations.Count -eq 0) 'wrong commit has no effects'

@@ -126,8 +126,11 @@ function Get-StatsProForeverReleaseContract {
         if ($head -cne $ExpectedCommitSha) { throw 'Forever checkout HEAD differs from expected commit' }
         $resolved = (Invoke-StatsProForeverGit $root @('rev-parse','--verify', "$ExpectedCommitSha^{commit}")).Trim()
         if ($resolved -cne $ExpectedCommitSha) { throw 'Forever expected commit did not resolve exactly' }
-        $tagCommit = (Invoke-StatsProForeverGit $root @('rev-parse','--verify', "refs/tags/$ExpectedTag^{commit}")).Trim()
-        if ($tagCommit -cne $ExpectedCommitSha) { throw 'Forever tag differs from expected commit' }
+        $tagObject = (Invoke-StatsProForeverGit $root @('rev-parse','--verify', "refs/tags/$ExpectedTag")).Trim()
+        if ((Invoke-StatsProForeverGit $root @('cat-file','-t',$tagObject)).Trim() -cne 'commit') {
+            throw 'Forever tag must point directly to a commit'
+        }
+        if ($tagObject -cne $ExpectedCommitSha) { throw 'Forever tag differs from expected commit' }
         $main = (Invoke-StatsProForeverGit $root @('merge-base', $ExpectedCommitSha, 'origin/main')).Trim()
         if ($main -cne $ExpectedCommitSha) { throw 'Forever release commit must be an ancestor of origin/main' }
         $paths = @((Get-ForeverPackageMap).Values) + @(
@@ -162,8 +165,9 @@ function Get-StatsProForeverReleaseContract {
         $originalNotes = Invoke-StatsProForeverGit $root @('show','v1.18.0:CHANGELOG.md')
         $originalStart = [regex]::Match($originalNotes, '(?m)^## 1\.18\.0 - ')
         if (-not $originalStart.Success) { throw 'Original Forever release history is unavailable' }
+        $normalizedNotes = $notes.Replace("`r`n", "`n").Replace("`r", "`n").TrimEnd()
         $history = $originalNotes.Substring($originalStart.Index).Replace("`r`n", "`n").Replace("`r", "`n").TrimEnd()
-        if (-not $notes.Replace("`r`n", "`n").Replace("`r", "`n").TrimEnd().EndsWith($history, [System.StringComparison]::Ordinal)) {
+        if (-not $normalizedNotes.EndsWith($history, [System.StringComparison]::Ordinal)) {
             throw 'Forever changelog must retain the original cumulative release history'
         }
         # A consumed tag can belong to a failed preparation. Only releases users
@@ -185,10 +189,15 @@ function Get-StatsProForeverReleaseContract {
             $previousNotes = Invoke-StatsProForeverGit $root @('show', "$($previous.Tag):CHANGELOG-FOREVER.md")
             $previousStart = [regex]::Match($previousNotes, ('(?m)^## ' + [regex]::Escape($previous.Version) + ' - '))
             if (-not $previousStart.Success) { throw 'Previous Forever changelog is unavailable' }
-            $previousHistory = $previousNotes.Substring($previousStart.Index).Replace("`r`n", "`n").Replace("`r", "`n").TrimEnd()
-            if (-not $notes.Replace("`r`n", "`n").Replace("`r", "`n").TrimEnd().EndsWith($previousHistory, [System.StringComparison]::Ordinal)) {
+            $history = $previousNotes.Substring($previousStart.Index).Replace("`r`n", "`n").Replace("`r", "`n").TrimEnd()
+            if (-not $normalizedNotes.EndsWith($history, [System.StringComparison]::Ordinal)) {
                 throw 'Forever changelog must retain the previous beta cumulative release history'
             }
+        }
+        $currentEntry = $normalizedNotes.Substring(0, $normalizedNotes.Length - $history.Length)
+        if (-not $currentEntry.EndsWith("`n", [System.StringComparison]::Ordinal) -or
+            [regex]::Matches($currentEntry, '(?m)^ {0,3}##(?:[ \t]+|$)').Count -ne 1) {
+            throw 'Forever changelog must add exactly one release heading before its verified history'
         }
     }
     $name = "StatsPro-$packageTag-Forever-beta.zip"

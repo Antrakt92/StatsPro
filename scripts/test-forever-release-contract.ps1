@@ -96,8 +96,12 @@ try {
     [void](Invoke-StatsProForeverGit $fixture @('-c','user.name=Fixture','-c','user.email=fixture@example.invalid','-c','core.hooksPath=NUL','commit','-m','Fixture release sources'))
     [void](Invoke-StatsProForeverGit $fixture @('tag','v1.18.0'))
     $commit = (Invoke-StatsProForeverGit $fixture @('rev-parse','HEAD')).Trim()
-    [void](Invoke-StatsProForeverGit $fixture @('tag','forever-v1.18.1'))
     [void](Invoke-StatsProForeverGit $fixture @('update-ref','refs/remotes/origin/main',$commit))
+    [void](Invoke-StatsProForeverGit $fixture @('-c','user.name=Fixture','-c','user.email=fixture@example.invalid','-c','tag.gpgSign=false',
+        'tag','-a','forever-v1.18.1','-m','Annotated fixture tag'))
+    Assert-ForeverTestRejected { Get-StatsProForeverReleaseContract $fixture 'forever-v1.18.1' $commit } 'tag must point directly'
+    [void](Invoke-StatsProForeverGit $fixture @('tag','-d','forever-v1.18.1'))
+    [void](Invoke-StatsProForeverGit $fixture @('tag','forever-v1.18.1'))
     $contract = Get-StatsProForeverReleaseContract $fixture 'forever-v1.18.1' $commit
     if ($script:publishedInventoryReads -ne 1) { throw 'Exact release contract should read publication inventory once' }
     $script:publishedInventoryFailure = $true
@@ -173,6 +177,21 @@ try {
     Assert-ForeverTestRejected { Get-StatsProForeverReleaseContract $fixture 'forever-v1.18.3' $truncatedCommit } 'previous beta cumulative'
     $script:publishedForeverTags = @('forever-v1.18.1','forever-v1.18.2')
     Assert-ForeverTestRejected { Get-StatsProForeverReleaseContract $fixture 'forever-v1.18.3' $truncatedCommit } 'previous beta cumulative'
+
+    [System.IO.File]::WriteAllText($tocPath, $tocNext.Replace('1.18.2', '1.18.4'))
+    $phantom = "## 1.18.3 - 17-Oct-2026 — Unpublished beta`n`n- Unpublished changes.`n`n"
+    $currentNotes = "# Forever changelog`n`n## 1.18.4 - 18-Oct-2026 — Next beta`n`n- Current changes.`n`n"
+    $nextHistory = $nextNotes.Substring([regex]::Match($nextNotes, '(?m)^## 1\.18\.2 - ').Index)
+    [System.IO.File]::WriteAllText($notesPath, $currentNotes + $phantom + $nextHistory)
+    [void](Invoke-StatsProForeverGit $fixture @('add','StatsPro_Forever.toc','CHANGELOG-FOREVER.md'))
+    [void](Invoke-StatsProForeverGit $fixture @('-c','user.name=Fixture','-c','user.email=fixture@example.invalid','-c','core.hooksPath=NUL','commit','-m','Unpublished beta heading'))
+    [void](Invoke-StatsProForeverGit $fixture @('tag','forever-v1.18.4'))
+    $phantomCommit = (Invoke-StatsProForeverGit $fixture @('rev-parse','HEAD')).Trim()
+    [void](Invoke-StatsProForeverGit $fixture @('update-ref','refs/remotes/origin/main',$phantomCommit))
+    Assert-ForeverTestRejected { Get-StatsProForeverReleaseContract $fixture 'forever-v1.18.4' $phantomCommit } 'exactly one release heading'
+    $script:publishedForeverTags = @()
+    Assert-ForeverTestRejected { Get-StatsProForeverReleaseContract $fixture 'forever-v1.18.4' $phantomCommit } 'exactly one release heading'
+
     Write-Host "Forever release contract tests passed ($count rejection cases): exact beta identity, independent Retail, immutable source, archive, canonical notes, candidate binding and no replay."
 }
 finally {

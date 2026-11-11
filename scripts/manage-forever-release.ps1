@@ -59,11 +59,10 @@ function Assert-ForeverRemoteTag {
     $headers = @('-H', 'Accept: application/vnd.github+json', '-H', 'X-GitHub-Api-Version: 2026-03-10')
     $ref = Invoke-ForeverGh -Arguments (@('api', "repos/$($Context.Repository)/git/ref/tags/$($Context.Tag)") + $headers) | ConvertFrom-Json
     $object = $ref.object
-    for ($depth = 0; $object.type -eq 'tag' -and $depth -lt 4; $depth++) {
-        $tag = Invoke-ForeverGh -Arguments (@('api', "repos/$($Context.Repository)/git/tags/$($object.sha)") + $headers) | ConvertFrom-Json
-        $object = $tag.object
+    if ($object.type -isnot [string] -or $object.type -cne 'commit' -or
+        $object.sha -isnot [string] -or $object.sha -cne $Context.Commit) {
+        throw 'Remote Forever tag must point directly to the expected commit.'
     }
-    if ($object.type -cne 'commit' -or $object.sha -cne $Context.Commit) { throw 'Remote Forever tag does not resolve to the expected commit.' }
 }
 
 function Get-ForeverReleaseBody {

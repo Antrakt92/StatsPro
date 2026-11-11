@@ -18,9 +18,8 @@ Run the commands below from the repository root.
 
 ## Shared-font source development
 
-The shared-font integration on this branch is unreleased. Player downloads
-continue to use their existing bundled fonts until the corresponding Retail
-or Forever update is published.
+Retail and Forever packages include the multilingual baseline. Additional faces
+come from the shared collection when it is available in the client.
 
 The optional [Antrakt Fonts project](https://github.com/Antrakt92/AntraktFonts)
 contains the collection source, contributor instructions and an independent-addon
@@ -84,10 +83,10 @@ it excludes the Retail Archon dataset. Each package retains the full changelog
 and required license notices. Keep client flavor and release channel clear in
 file names and marketplace metadata, and do not mark Classic Era compatibility.
 
-Retail-only updates do not publish a new Forever package. When the Forever TOC
-version changes, update its download link in the README and marketplace
-descriptions to that release tag. Do not point Forever downloads at
-`releases/latest`: a newer Retail-only release can have no Forever asset.
+Retail-only updates publish the Retail package. Keep Forever download links in
+the player guide and marketplace descriptions on a Forever-filtered file list.
+For a direct GitHub download, link to the matching `forever-vX.Y.Z` prerelease.
+GitHub's `releases/latest` link serves Retail.
 
 Maintainers publish releases through the tag-triggered workflow. A normal pull
 request does not need a release tag. Release tags must be lightweight so their

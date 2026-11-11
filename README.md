@@ -55,9 +55,9 @@ without that package.
 
 Install through [CurseForge](https://www.curseforge.com/wow/addons/statspro)
 or [Wago](https://addons.wago.io/addons/statspro), choosing the build for your client.
-For a manual install, download the packaged ZIP from the matching release below
-and extract its `StatsPro` folder into your client's `Interface/AddOns` folder.
-Use the addon archive under **Assets**, rather than GitHub's source-code ZIP.
+For a manual install, download the addon ZIP for your client and extract its
+`StatsPro` folder into your client's `Interface/AddOns` folder. On GitHub, choose
+the packaged addon ZIP under **Assets**.
 
 | Client | Download | Release history |
 |---|---|---|
@@ -136,6 +136,12 @@ Forever's starting rows follow your class. Hybrid classes can choose a role pres
 or select individual rows; presets do not infer your talent build. Applying a
 setup keeps your appearance and custom colors.
 
+All five Forever presets include movement speed, durability and repair cost, with
+**Hide Zero** enabled. Compact, Caster and Healer include an adaptive
+**Mana Regen / 5 sec** row for classes that use mana. With that five-second row
+on its own, it switches to the casting rate in combat and returns to the normal
+rate afterward.
+
 Click a setup to preview it before applying. Closing the first-login panel or
 pressing Escape keeps your current settings; it will not reopen at the next login.
 Quick Setup changes rows and layout while keeping your font, colors, scale and
@@ -171,8 +177,9 @@ Choose from **46 optional rows**:
 - Offhand hit, available separately from melee hit on the latest beta client.
 - Spell power by school and healing power.
 - Armor, defense, Dodge, Parry, Block, block value and school resistances.
-- Mana regeneration outside and during casting, per second or per five seconds;
-  movement speed as a percentage of base ground run speed.
+- Mana regeneration outside and during casting, per second or per five seconds.
+- Movement speed for your current travel mode, shown as a percentage of base
+  ground run speed.
 
 Optional item level, durability and repair cost use the same gear controls.
 Attributes and stat families have separate editable colors. Short labels keep

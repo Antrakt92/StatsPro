@@ -830,3 +830,50 @@ if not forever then
         "returning to a previous spec does not resurrect its old sample")
     print("Retail spec-scoped restricted stat recovery regressions passed")
 end
+
+if not forever then
+    local data = {}
+    local loadData = assert(loadfile("StatsPro_ArchonTargets.lua"))
+    setfenv(loadData, data)
+    loadData()
+    local reads = 0
+    local coefficientUnavailable = false
+    local env, addon, test = loadStatsPro("enUS", {
+        unitClassToken = "MAGE", specIndex = 1, specID = 64,
+        statsProArchonTargets = data.StatsProArchonTargets,
+        statsProDB = {
+            showOffensive = true, showCrit = false, showHaste = false,
+            showMastery = true, showVersatility = false,
+        },
+        getCombatRating = function() return 300 end,
+        getCombatRatingBonusForCombatRatingValue = function(_, value) return value / 100 end,
+        getMasteryEffect = function()
+            reads = reads + 1
+            if reads % 2 == 0 then return 50, 4 end
+            if coefficientUnavailable then return 20 end
+            return 20, 2
+        end,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    reads = 0
+    local meta = test.buildRenderBlocks()[2].targetRows[1]
+    local expected = 20 + (meta.target / 100 - 3) * 2
+    assert(reads == 1 and meta.currentPct == 20 and math.abs(meta.targetPct - expected) < 1e-6,
+        "Mastery projection and displayed effect use the same client API result")
+    assert(addon.archonTargets.ShowTooltip(env.UIParent, meta) and reads == 1)
+
+    reads = 0
+    coefficientUnavailable = true
+    local unavailable = test.buildRenderBlocks()[2].targetRows[1]
+    assert(unavailable.targetPct == nil and unavailable.currentPct == 20 and reads == 1,
+        "a missing coefficient does not trigger another sample")
+    assert(addon.archonTargets.ShowTooltip(env.UIParent, unavailable) and reads == 1,
+        "an unavailable render coefficient cannot be replaced when opening the tooltip")
+
+    reads = 0
+    coefficientUnavailable = false
+    local standalone = test.buildArchonTargetMeta("mastery", 300, env.CR_MASTERY, 20)
+    assert(reads == 1 and math.abs(standalone.targetPct - expected) < 1e-6,
+        "standalone metadata remains compatible without a pre-read sample")
+    print("Retail Archon Mastery single-sample regressions passed")
+end

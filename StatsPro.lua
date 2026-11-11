@@ -1330,13 +1330,13 @@ function addon.archonTargets.GetStatTarget(statKey, renderContext)
         context.classToken, context.specKey
 end
 
-function addon.archonTargets.CalculateMasteryTargetPercent(currentRating, currentPct, target)
+function addon.archonTargets.CalculateMasteryTargetPercent(currentRating, currentPct, target, renderContext)
     if not addon.IsCleanFiniteNumber(currentRating) or currentRating < 0
         or not addon.IsCleanFiniteNumber(currentPct)
         or not addon.IsCleanFiniteNumber(target) or target < 0 then return nil end
     local currentBonus, targetBonus, currentReason, targetReason =
         addon.archonTargets.GetRatingBonusesForValues(
-            CR_MASTERY, currentRating, target)
+            CR_MASTERY, currentRating, target, renderContext)
     if not addon.IsCleanFiniteNumber(currentBonus)
         or not addon.IsCleanFiniteNumber(targetBonus) then
         if currentReason == "restricted" or targetReason == "restricted" then
@@ -1376,6 +1376,7 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
         sourceUrl = snapshot.sourceUrl,
         capturedAt = capturedAt,
         snapshotKey = snapshotKey,
+        masterySampled = statKey == "mastery" and renderContext and renderContext.masterySampled or nil,
     }
     if hasCleanCurrent then
         local displayPct = addon.IsCleanFiniteNumber(currentPct) and currentPct or nil
@@ -1385,7 +1386,7 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
             local cachedEntry
             if statKey == "mastery" and cleanRatingCR == CR_MASTERY then
                 targetPct, targetPctReason = addon.archonTargets.CalculateMasteryTargetPercent(
-                    currentRating, displayPct, target)
+                    currentRating, displayPct, target, renderContext)
                 if targetPct == nil and (displayIsSecret or targetPctReason == "restricted") then
                     cachedEntry = addon.archonTargets.GetCachedComparison(
                         classToken, specKey, snapshotKey, statKey,
@@ -10038,11 +10039,18 @@ function addon.archonTargets.GetRawRatingBonusForValue(ratingCR, rating)
     return bonus
 end
 
--- Convert both sides of one comparison against a single Mastery coefficient.
--- GetMasteryEffect can transition to a restricted value between API calls, so
--- independently converting current and target ratings can mix two client states.
+function addon.archonTargets.ReadMasteryEffect()
+    local ok, effect, coefficient = pcall(GetMasteryEffect)
+    if not ok then return nil, nil, "unavailable" end
+    if issecretvalue(coefficient) then return effect, nil, "restricted" end
+    if not SAFE_NUM.IsCleanFiniteNumber(coefficient) then return effect, nil, "unavailable" end
+    return effect, coefficient
+end
+
+-- Share one Mastery coefficient between both conversions and the live HUD effect.
+-- Standalone callers without a HUD sample obtain their own coefficient.
 function addon.archonTargets.GetRatingBonusesForValues(
-        ratingCR, currentRating, targetRating)
+        ratingCR, currentRating, targetRating, renderContext)
     local isMastery = SAFE_NUM.IsCleanFiniteNumber(ratingCR)
         and ratingCR == CR_MASTERY
     local currentBonus, currentReason
@@ -10057,15 +10065,12 @@ function addon.archonTargets.GetRatingBonusesForValues(
     end
     if isMastery and (currentBonus ~= nil or targetBonus ~= nil) then
         local coefficient, coefficientReason
-        if type(GetMasteryEffect) ~= "function" then
-            coefficientReason = "unavailable"
+        if renderContext and renderContext.masterySampled then
+            coefficient = renderContext.masteryCoefficient
+            coefficientReason = renderContext.masteryCoefficientReason
         else
-            local ok, _, readCoefficient = pcall(GetMasteryEffect)
-            coefficient = readCoefficient
-            if not ok or not SAFE_NUM.IsCleanFiniteNumber(coefficient) then
-                coefficientReason = issecretvalue(coefficient)
-                    and "restricted" or "unavailable"
-            end
+            local _
+            _, coefficient, coefficientReason = addon.archonTargets.ReadMasteryEffect()
         end
         if currentBonus ~= nil then
             if coefficientReason then
@@ -10372,8 +10377,8 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     local isHaste = meta.statKey == "haste"
     -- Haste, Versatility, and Mastery need a complete live percentage to
     -- present projected totals. The rating conversion alone is only one component.
-    if hasCleanCurrentPct or (not isHaste
-        and meta.statKey ~= "versatility" and meta.statKey ~= "mastery") then
+    if not meta.masterySampled and (hasCleanCurrentPct or (not isHaste
+        and meta.statKey ~= "versatility" and meta.statKey ~= "mastery")) then
         currentBonus, targetBonus = addon.archonTargets.GetRatingBonusesForValues(
             meta.ratingCR,
             hasComparison and deltaBonus == nil and meta.current or nil,
@@ -11536,6 +11541,12 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
             local val, currentPercent, percentState
             if def.composite then
                 val, currentPercent, percentState = SAFE_NUM.SafeCompositePercent(def.api)
+            elseif def.statKey == "mastery" and targetContext then
+                local effect, coefficient, reason = addon.archonTargets.ReadMasteryEffect()
+                targetContext.masterySampled = true
+                targetContext.masteryCoefficient = coefficient
+                targetContext.masteryCoefficientReason = reason
+                val, currentPercent = SAFE_NUM.ResolveDisplayNumber(effect, false)
             else
                 val, currentPercent = SAFE_NUM.SafeDisplayPercent(def.api)
             end

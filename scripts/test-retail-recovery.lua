@@ -954,7 +954,10 @@ if not forever then
         visibleWrites = visibleWrites + 1
         return setText(...)
     end
+    local measuredRows = tooltip.lines
     render(22)
+    assert(tooltip.lines == measuredRows and type(tooltip.lines[1].height) == "number",
+        "a clean layout reuse retains its measured row state")
     assert(measurements == 0 and anchors == 0 and visibleWrites == 0,
         "a shown tooltip does no geometry or visible text work for identical clean content")
     render(25)

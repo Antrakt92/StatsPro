@@ -10574,6 +10574,7 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     end
     if canReuseLayout and not liveRatingIsSecret and not displayIsSecret and tooltip:IsShown()
         and addon.archonTargets.CanReuseTooltipLayout(tooltip, previousLines) then
+        tooltip.lines = previousLines
         tooltip.layoutReusable = true
         return true
     end

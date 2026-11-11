@@ -6948,7 +6948,7 @@ do
     ratingValue = 0
     ok, blocks = pcall(critTest.buildRenderBlocks)
     check("render.offensive_rating_only_refreshes_rating_visibility_cache.zero_no_error", ok, blocks)
-    eq("render.offensive_rating_only_refreshes_rating_visibility_cache.percent_keeps_row", blockDumpContains(blocks, "Crit:"), true)
+    eq("render.offensive_rating_only_refreshes_rating_visibility_cache.hidden_percent_cannot_keep_row", blockDumpContains(blocks, "Crit:"), false)
     percentValue = nil
     ratingValue = secretRating
     ok, blocks = pcall(critTest.buildRenderBlocks)

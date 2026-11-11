@@ -11309,6 +11309,9 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
 
     -- Tooltip targets need the raw rating even when the rating column is hidden.
     local needTargetRating = targetRows ~= nil
+    -- Keep recording clean percent visibility for later toggles. Only enabled
+    -- columns can keep a row visible when Hide Zero is active.
+    local percentAffectsVisibility = cached.showPercentage or not cached.hideZeroOffensive
     for _, def in ipairs(OFFENSIVE_STATS) do
         if cached[def.showKey] then
             local val, currentPercent, percentState
@@ -11321,9 +11324,10 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
             local ratingRead = false
             local forceUnknownPercent = percentState == "restricted"
             local percentIsProxy = percentState == "liveProxy"
-            local visible = shouldShowUnknown(
+            local percentVisible = shouldShowUnknown(
                     def.showKey, forceUnknownPercent or percentIsProxy, cached.hideZeroOffensive)
                 or (not percentIsProxy and shouldShow(def.showKey, val, cached.hideZeroOffensive))
+            local visible = percentAffectsVisibility and percentVisible
             if cached.showRating then
                 ratingDisplay, targetRating = SAFE_NUM.ReadRatingValue(
                     GetCombatRating, def.ratingCR)
@@ -11398,9 +11402,10 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
                 cached.versTotalRating = targetVersRating
             end
         end
-        local versVisible = shouldShowUnknown(
+        local versPercentVisible = shouldShowUnknown(
                 "showVersatility", versDisplayUnknown, cached.hideZeroOffensive)
             or shouldShow("showVersatility", versDisplay, cached.hideZeroOffensive)
+        local versVisible = percentAffectsVisibility and versPercentVisible
         if cached.showRating then
             local versRatingVisible = shouldShow("showVersatilityRating", versRatingDisplay, cached.hideZeroOffensive)
             versVisible = versVisible or versRatingVisible
@@ -11445,6 +11450,7 @@ local function BuildTertiaryLines(labels, ratings, values)
     local cs = cached.colorStrings
 
     local needRating = cached.showRating
+    local percentAffectsVisibility = cached.showPercentage or not cached.hideZeroTertiary
     for _, def in ipairs(TERTIARY_STATS) do
         if cached[def.showKey] then
             local val
@@ -11463,9 +11469,10 @@ local function BuildTertiaryLines(labels, ratings, values)
                 val = SAFE_NUM.SafeDisplayPercent(def.api)
             end
             local ratingDisplay
-            local visible = hasFormattedValue or shouldShowUnknown(
+            local percentVisible = hasFormattedValue or shouldShowUnknown(
                     def.showKey, forceUnknownPercent, cached.hideZeroTertiary)
                 or shouldShow(def.showKey, val, cached.hideZeroTertiary)
+            local visible = percentAffectsVisibility and percentVisible
             if needRating then
                 ratingDisplay = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
                 local ratingVisible = shouldShow(def.showKey .. "Rating", ratingDisplay, cached.hideZeroTertiary)

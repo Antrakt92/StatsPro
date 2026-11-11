@@ -219,6 +219,65 @@ do
 end
 print(flavor .. " profile capacity recovery regressions passed")
 
+if not forever then
+    local rating, percent = 0, 5
+    local function readRating() return rating end
+    local function readPercent() return percent end
+    local env, _, test = loadStatsPro("enUS", {
+        unitGUID = function() return "Player-HideZero" end,
+        getSpecialization = function() return 1 end, specID = 64, specRole = "DAMAGER",
+        unitClassToken = "MAGE",
+        statsProDB = {
+            showRating = true, showPercentage = false,
+            showOffensive = true, hideZeroOffensive = true,
+            showCrit = true, showHaste = true, showMastery = true, showVersatility = true,
+            showTertiary = true, hideZeroTertiary = true, showLeech = true, showAvoidance = true, showSpeed = false,
+        },
+        getCombatRating = readRating,
+        getCritChance = readPercent, getHaste = readPercent, getMasteryEffect = readPercent,
+        getVersatilityBonus = readPercent, getLifesteal = readPercent, getAvoidance = readPercent,
+        issecretvalue = function(value) return value == -1234 or value == -1235 end,
+        roundToNearestString = function(value) return value == -1234 and "1234" or "1235" end,
+    })
+    local archon = assert(loadfile("StatsPro_ArchonTargets.lua"))
+    setfenv(archon, env)
+    archon()
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    local settings = test.profileState().settings
+    local function expectRows(expectedOffensive, expectedTertiary)
+        local blocks = test.buildRenderBlocks()
+        assert(#blocks[2].labels == expectedOffensive and #blocks[3].labels == expectedTertiary,
+            "Hide Zero follows the visible value columns")
+        return blocks[2]
+    end
+    expectRows(0, 0)
+    rating = 250
+    local rated = expectRows(4, 2)
+    assert(type(rated.targetRows[1]) == "table" and rated.targetRows[1].current == 250,
+        "rating-only rows retain Archon comparison metadata")
+    rating = -1234
+    expectRows(4, 2)
+    rating = -1235
+    expectRows(4, 2)
+    rating = 0
+    expectRows(0, 0)
+    rating = -1234
+    expectRows(0, 0)
+    rating, percent = 250, 0
+    settings.showRating, settings.showPercentage = false, true
+    test.cacheSettings()
+    expectRows(0, 0)
+    settings.showRating = true
+    test.cacheSettings()
+    expectRows(4, 2)
+    rating, percent = 0, 5
+    expectRows(4, 2)
+    settings.showPercentage, settings.hideZeroOffensive, settings.hideZeroTertiary = false, false, false
+    test.cacheSettings()
+    expectRows(4, 2)
+    print("Retail displayed-column Hide Zero regressions passed")
+end
+
 -- A styled FontString can retain its own font even while GetFontObject still
 -- identifies the shared parent. Changing that parent must not strand Settings.
 for _, failFirst in ipairs({ false, true }) do

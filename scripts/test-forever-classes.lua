@@ -79,6 +79,10 @@ for _, class in ipairs(classes) do
     env.__fireEvent("PLAYER_ENTERING_WORLD")
     check(env.StatsProFrame:IsShown(), class .. " starts with a visible HUD")
     check(test.profileRuntimeState().activeSpecName == "Character", class .. " uses explicit character scope")
+    local fresh = test.profileState().settings
+    check(fresh.showDurability and fresh.showRepairCost, class .. " fresh profile enables gear rows")
+    check(fresh.hideZeroOffensive and fresh.hideZeroDefensive and fresh.hideZeroTertiary,
+        class .. " fresh profile hides zero stats")
     checkMovementSpeed(test.buildRenderBlocks()[3], "100%", class .. " stationary fresh profile")
     runSpeed = 10.5
     checkMovementSpeed(test.buildRenderBlocks()[3], "150%", class .. " speed boost")
@@ -129,6 +133,15 @@ for _, class in ipairs(classes) do
         check(test.hudPresets.startPreview(id), class .. " previews " .. id)
         check(test.hudPresets.applyPreview(), class .. " applies " .. id)
         check(test.hudPresets.currentID() == id, class .. " detects " .. id)
+        local applied = test.profileState().settings
+        check(applied.showDurability and applied.showRepairCost, class .. " gear rows enabled in " .. id)
+        check(applied.hideZeroOffensive and applied.hideZeroDefensive and applied.hideZeroTertiary,
+            class .. " hides zero stats in " .. id)
+        local usesMana = class ~= "WARRIOR" and class ~= "ROGUE"
+        local showRegen = usesMana and (id == "compact" or id == "caster" or id == "healer")
+        check(applied.showManaRegenMP5 == showRegen and not applied.showCastingManaRegenMP5
+            and not applied.showManaRegen and not applied.showCastingManaRegen,
+            class .. " uses only adaptive MP5 when appropriate in " .. id)
         local blocks = test.buildRenderBlocks()
         checkMovementSpeed(blocks[3], "100%", class .. " " .. id)
         for _, block in ipairs(blocks) do

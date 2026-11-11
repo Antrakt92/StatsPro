@@ -138,13 +138,19 @@ local function AttackPower(name)
 end
 
 local function ReadManaRegenMP5(index)
-    return function()
-        local value, state = Read("GetManaRegen", index)
-        -- The HUD can format this per-second value through Blizzard's API.
-        if state == "secret" then return value, state end
-        if state ~= "clean" then return nil, "unknown" end
-        return Classify(value * 5)
-    end
+    local value, state = Read("GetManaRegen", index)
+    -- The HUD can format this per-second value through Blizzard's API.
+    if state == "secret" then return value, state end
+    if state ~= "clean" then return nil, "unknown" end
+    return Classify(value * 5)
+end
+
+local function ReadAdaptiveManaRegenMP5()
+    local inCombat = addon.profileRuntime.ReadCombatState()
+    if inCombat == nil then return nil, "unknown" end
+    local value, state = ReadManaRegenMP5(inCombat and 2 or 1)
+    -- Hide Zero must remember a separate clean result for each rate.
+    return value, state, inCombat and ":casting" or ":resting"
 end
 
 -- The C formatter scales by 5 while keeping the result display-only.
@@ -222,8 +228,9 @@ for _, name in ipairs({ "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" })
 end
 Row("utility", "ManaRegen", "Mana Regen / sec", Scalar("GetManaRegen", 1))
 Row("utility", "CastingManaRegen", "Casting Mana Regen / sec", Scalar("GetManaRegen", 2))
-Row("utility", "ManaRegenMP5", "Mana Regen / 5 sec", ReadManaRegenMP5(1)).restrictedMP5FallbackLabel = "Mana Regen / sec"
-Row("utility", "CastingManaRegenMP5", "Casting Mana Regen / 5 sec", ReadManaRegenMP5(2)).restrictedMP5FallbackLabel = "Casting Mana Regen / sec"
+Row("utility", "ManaRegenMP5", "Mana Regen / 5 sec", ReadAdaptiveManaRegenMP5).restrictedMP5FallbackLabel = "Mana Regen / sec"
+Row("utility", "CastingManaRegenMP5", "Casting Mana Regen / 5 sec",
+    function() return ReadManaRegenMP5(2) end).restrictedMP5FallbackLabel = "Casting Mana Regen / sec"
 Row("utility", "MovementSpeed", "Movement Speed", MovementSpeed, "movement", "speed")
 
 F.defaults.showMainStat = false
@@ -266,13 +273,14 @@ function F.BuildPresets(class)
     local presets = { order = { "compact", "physical", "caster", "healer", "tank" }, definitions = {} }
     local hunter = class == "HUNTER"
     local agile = hunter or class == "ROGUE" or class == "DRUID"
+    local usesMana = hunter or classSchools[class] ~= nil
     local selections = {
         compact = compactSelections[class] or { "Stamina" },
         physical = { agile and "Agility" or "Strength", "Stamina", hunter and "RangedAttackPower" or "AttackPower",
             hunter and "RangedCrit" or "MeleeCrit", hunter and "RangedHit" or "MeleeHit",
             hunter and "RangedHaste" or "MeleeHaste", hunter and "RangedExpertise" or "MainhandExpertise" },
         caster = { "Intellect", "Spirit", "SpellCrit", "SpellHit", "SpellHaste" },
-        healer = { "Intellect", "Spirit", "HealingPower", "SpellCrit", "SpellHaste", "ManaRegenMP5", "CastingManaRegenMP5" },
+        healer = { "Intellect", "Spirit", "HealingPower", "SpellCrit", "SpellHaste" },
         tank = { class == "DRUID" and "Agility" or "Strength", "Stamina", "Armor", "Defense", "Dodge", "MeleeHit", "MainhandExpertise" },
     }
     if class ~= "DRUID" then selections.tank[#selections.tank + 1] = "Parry" end
@@ -286,6 +294,12 @@ function F.BuildPresets(class)
             for _, row in ipairs(rows) do values[row.showKey] = false end
         end
         values.showMovementSpeed = true
+        values.hideZeroOffensive = true
+        values.hideZeroDefensive = true
+        values.hideZeroTertiary = true
+        values.showDurability = true
+        values.showRepairCost = true
+        values.showManaRegenMP5 = usesMana and (id == "compact" or id == "caster" or id == "healer")
         for _, key in ipairs(selections[id]) do values["show" .. key] = true end
         if id == "caster" or (id == "compact" and (class == "MAGE" or class == "WARLOCK" or class == "PRIEST")) then
             for _, school in ipairs(classSchools[class] or {}) do values["showSpellPower" .. school] = true end

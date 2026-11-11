@@ -12,7 +12,7 @@ issecretvalue = function(value) return rawequal(value, secret) end
 UnitGUID = function() return "Player-fixture" end
 CR_HIT_MELEE, CR_HIT_RANGED, CR_HIT_SPELL = 6, 7, 8
 local function Load()
-    local addon = {}
+    local addon = { profileRuntime = { ReadCombatState = function() return false end } }
     assert(loadfile(source))("StatsPro", addon)
     return addon.forever
 end

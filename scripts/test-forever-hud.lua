@@ -158,26 +158,41 @@ local function hasManaRow(label, value)
     return false
 end
 check(hasManaRow("Mana Regen / 5 sec", "30.00"), "clean MP5")
+combat = true
+env.__fireEvent("PLAYER_REGEN_DISABLED")
+check(hasManaRow("Mana Regen / 5 sec", "5.00"), "combat switches MP5 to casting rate with the same label")
 combat, manaRegen, castingRegen = true, restrictedRegen, nextRestrictedRegen
-check(hasManaRow("Mana Regen / 5 sec", "30.25"), "first restricted MP5")
+check(hasManaRow("Mana Regen / 5 sec", "38.75"), "first restricted combat MP5")
 check(hasManaRow("Casting Mana Regen / 5 sec", "38.75"), "restricted casting MP5")
 manaRegen, castingRegen = nextRestrictedRegen, restrictedRegen
-check(hasManaRow("Mana Regen / 5 sec", "38.75"), "next restricted MP5 is displayed live")
+check(hasManaRow("Mana Regen / 5 sec", "30.25"), "next restricted combat MP5 is displayed live")
 check(hasManaRow("Casting Mana Regen / 5 sec", "30.25"), "next casting MP5 is displayed live")
 rejectMP5 = true
-check(hasManaRow("Mana Regen / sec", "8"), "rejected MP5 uses the per-second label and live value")
+check(hasManaRow("Mana Regen / sec", "6"), "rejected combat MP5 uses the per-second label and casting rate")
 check(hasManaRow("Casting Mana Regen / sec", "6"), "rejected casting MP5 uses the per-second label")
 settings.labelStyle = "hidden"
 test.cacheSettings()
 check(addon:RunUpdateStatsSafe(), "hidden-label fallback HUD update")
 local manaHUD = test.panelVisualState()
 local manaText = manaHUD.mainRatingText .. "\n" .. manaHUD.mainValueText
-check(manaHUD.mainLabelText == "" and manaText:find("8/s", 1, true)
-    and manaText:find("6/s", 1, true), "hidden-label MP5 fallbacks identify both values as per-second")
+local _, fallbackCount = manaText:gsub("6/s", "")
+check(manaHUD.mainLabelText == "" and fallbackCount == 2,
+    "hidden-label MP5 fallbacks identify both casting values as per-second")
 settings.labelStyle = "full"
 test.cacheSettings()
 combat, manaRegen, castingRegen = false, 6, 1
+env.__fireEvent("PLAYER_REGEN_ENABLED")
 check(hasManaRow("Mana Regen / 5 sec", "30.00"), "MP5 restored when restrictions end")
+settings.hideZeroTertiary = true
+test.cacheSettings()
+combat, castingRegen = true, 0
+check(not hasManaRow("Mana Regen / 5 sec", "0.00"), "Hide Zero hides clean zero casting rate")
+combat, manaRegen = false, restrictedRegen
+rejectMP5 = false
+check(hasManaRow("Mana Regen / 5 sec", "30.25"), "casting zero does not hide protected resting rate")
+manaRegen, castingRegen = 6, 1
+settings.hideZeroTertiary = false
+test.cacheSettings()
 do
     local coldRegen, coldCrit = restrictedRegen, restrictedRegen
     local coldEnv, _, coldTest = fixtures.loadStatsPro("enUS", {

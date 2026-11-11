@@ -11143,8 +11143,8 @@ end
 function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
     for _, definition in ipairs(addon.forever.rows[group]) do
         if cached[definition.showKey] then
-            local value, state = definition.Read()
-            local rowKey = "forever:" .. definition.key
+            local value, state, visibilitySuffix = definition.Read()
+            local rowKey = "forever:" .. definition.key .. (visibilitySuffix or "")
             local visible
             if state == "clean" then
                 -- Cache only the clean visibility decision, never a numeric fallback.

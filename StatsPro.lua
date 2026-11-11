@@ -3,6 +3,9 @@
 -- basic stat list are adapted from upstream; the rest is original work. See LICENSE
 -- for full attribution.
 local _, addon = ...
+-- The Forever TOC loads its adapter before the shared runtime. Stop here if
+-- that package was forced to load in a client it cannot safely initialize.
+if addon.forever and not addon.forever.enabled then return end
 addon.forever = addon.forever or { enabled = false }
 addon.fontRuntime = {}
 addon.panelEditRuntime = { requested = false }

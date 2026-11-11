@@ -25,6 +25,22 @@ WOW_PROJECT_ID = 18
 GetBuildInfo = function() return "1.60.1", "future", "future", 16002 end
 assert(not Load().enabled)
 GetBuildInfo = function() return "1.60.1", "70338", "Oct 10 2026", 16001 end
+for _, client in ipairs({ { 18, 16002 }, { 1, 16001 } }) do
+    local saved = { oldSetting = true }
+    local env = setmetatable({
+        WOW_PROJECT_ID = client[1],
+        GetBuildInfo = function() return "unsupported", "0", "", client[2] end,
+        StatsProDB = saved,
+        CreateFrame = function() error("incompatible Forever package tried to create a frame") end,
+    }, { __index = _G })
+    env._G = env
+    local addon = {}
+    setfenv(assert(loadfile(source)), env)("StatsPro", addon)
+    assert(addon.forever.enabled == false)
+    setfenv(assert(loadfile("StatsPro.lua")), env)("StatsPro", addon)
+    assert(addon.profileRuntime == nil and env.StatsProDB == saved and saved.oldSetting == true
+        and env.SLASH_STATSPRO1 == nil, "unsupported Forever must leave runtime and profiles untouched")
+end
 local catalogue = {}
 for _, rows in pairs(F.rows) do
     for _, row in ipairs(rows) do

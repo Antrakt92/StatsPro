@@ -839,6 +839,7 @@ if not forever then
     restricted = true
     ratingReady = false
     specReady = true
+    env.__flushTimers(0)
     assert(addon:RunUpdateStatsSafe())
     value, state = addon.GetBestCritChance()
     assert(value == -9 and state == "liveProxy" and #test.buildRenderBlocks()[2].labels == 2,
@@ -873,6 +874,41 @@ if not forever then
     value, state = addon.GetBestCritChance()
     assert(value == nil and state == "restricted" and test.versatilityState().total == nil,
         "returning to a previous spec does not resurrect its old sample")
+
+    env.__flushTimers(0)
+    restricted = false
+    ratingReady = true
+    assert(addon:RunUpdateStatsSafe() and test.versatilityState().total == 12)
+    -- The event can precede the specialization API's update. An immediate
+    -- read still reports the old clean ID, while deferred profile resolution
+    -- sees the new ID once the client state settles.
+    env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    spec = 63
+    restricted = true
+    ratingReady = false
+    assert(addon:RunUpdateStatsSafe())
+    value, state = addon.GetBestCritChance()
+    assert(value == nil and state == "restricted" and #test.buildRenderBlocks()[2].labels == 0,
+        "a same-ID event sample cannot authorize old fallbacks before the deferred check")
+    env.__flushTimers(0)
+    assert(test.profileRuntimeState().activeSpecID == 63 and addon:RunUpdateStatsSafe())
+    value, state = addon.GetBestCritChance()
+    assert(value == nil and state == "restricted" and test.versatilityState().total == nil,
+        "the deferred read clears old fallback samples when the client publishes a new ID")
+
+    restricted = false
+    ratingReady = true
+    assert(addon:RunUpdateStatsSafe() and test.versatilityState().total == 11)
+    env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    assert(env.__flushNextTimer(0), "the stat recheck can run while the API still reports the old spec")
+    spec = 62
+    restricted = true
+    ratingReady = false
+    env.__flushTimers(0)
+    assert(test.profileRuntimeState().activeSpecID == 62 and addon:RunUpdateStatsSafe())
+    value, state = addon.GetBestCritChance()
+    assert(value == nil and state == "restricted" and test.versatilityState().total == nil,
+        "a later confirmed profile context also invalidates the stat fallbacks")
     print("Retail spec-scoped restricted stat recovery regressions passed")
 end
 

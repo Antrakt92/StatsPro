@@ -11659,9 +11659,9 @@ function addon.critRuntime.OnPlayerSpecChanged()
     local runtime = addon.critRuntime
     local previousSpecID = runtime.specID
     local specID = runtime.RefreshSpecIdentity(true)
-    if previousSpecID == nil or specID ~= previousSpecID then return end
+    if previousSpecID == nil or (specID ~= nil and specID ~= previousSpecID) then return end
 
-    -- An apparently unchanged ID can outlast the first deferred profile read.
+    -- An unreadable or apparently unchanged ID can outlast the first deferred profile read.
     -- Recheck once on the existing ticker, keeping the fallback hidden until then.
     runtime.specIdentityDirty = true
     runtime.specRecheckDelay = 0.1

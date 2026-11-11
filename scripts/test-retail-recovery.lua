@@ -854,6 +854,10 @@ if not forever then
     env.__flushTimers(0)
     assert(addon:RunUpdateStatsSafe())
     value, state = addon.GetBestCritChance()
+    assert(value == nil and state == "restricted",
+        "a former ID after an unreadable event sample must wait for confirmation")
+    ticker.scripts.OnUpdate(ticker, 0.11)
+    value, state = addon.GetBestCritChance()
     assert(value == -9 and state == "liveProxy" and #test.buildRenderBlocks()[2].labels == 2,
         "if the previous spec is confirmed, its Crit and Versatility caches resume")
 

@@ -71,6 +71,11 @@ addon.critRuntime = {
     selectedSpellSchool = nil,
     specIdentityDirty = true,
 }
+function addon.critRuntime.HasUnsettledSpecIdentity()
+    local runtime = addon.critRuntime
+    return runtime.specID ~= nil and runtime.specIdentityDirty
+end
+
 addon.movementRuntime = {
     baseSpeed = 7,
     percentAtBaseSpeed = 100,
@@ -635,8 +640,10 @@ function addon.GetBestCritChance()
         if state == "restricted" then restricted = true end
         if state == "unavailable" then unavailable = true end
     end
+    local runtime = addon.critRuntime
+    local specUnsettled = runtime.HasUnsettledSpecIdentity()
     if restricted then
-        local runtime = addon.critRuntime
+        if specUnsettled then return nil, "restricted" end
         if runtime.selectedSource == "spell" then
             local school = runtime.selectedSpellSchool
             if spellStates[school] ~= "unavailable" then
@@ -658,19 +665,17 @@ function addon.GetBestCritChance()
             spellSchool = school
         end
     end
-    local runtime = addon.critRuntime
+    local value, source, school = melee, "melee", nil
     if spell >= ranged and spell >= melee then
-        runtime.selectedSource = "spell"
-        runtime.selectedSpellSchool = spellSchool
-        return spell, "exact"
+        value, source, school = spell, "spell", spellSchool
     elseif ranged >= melee then
-        runtime.selectedSource = "ranged"
-        runtime.selectedSpellSchool = nil
-        return ranged, "exact"
+        value, source = ranged, "ranged"
     end
-    runtime.selectedSource = "melee"
-    runtime.selectedSpellSchool = nil
-    return melee, "exact"
+    if not specUnsettled then
+        runtime.selectedSource = source
+        runtime.selectedSpellSchool = school
+    end
+    return value, "exact"
 end
 
 local OFFENSIVE_STATS = {
@@ -11654,6 +11659,7 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
     -- fire (single-column routing), producing visible percent rows and ignoring intent.
     if not (cached.showRating or cached.showPercentage) then return labels, ratings, values end
     addon.critRuntime.RefreshSpecIdentity(false)
+    local specUnsettled = addon.critRuntime.HasUnsettledSpecIdentity()
     local cs = cached.colorStrings
 
     -- Tooltip targets need the raw rating even when the rating column is hidden.
@@ -11681,15 +11687,18 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
             local ratingRead = false
             local forceUnknownPercent = percentState == "restricted"
             local percentIsProxy = percentState == "liveProxy"
+            local visibilityKey = def.showKey
+            if specUnsettled and def.statKey == "crit" then visibilityKey = nil end
             local percentVisible = shouldShowUnknown(
-                    def.showKey, forceUnknownPercent or percentIsProxy, cached.hideZeroOffensive)
-                or (not percentIsProxy and shouldShow(def.showKey, val, cached.hideZeroOffensive))
+                    visibilityKey, forceUnknownPercent or percentIsProxy, cached.hideZeroOffensive)
+                or (not percentIsProxy and shouldShow(visibilityKey, val, cached.hideZeroOffensive))
             local visible = percentAffectsVisibility and percentVisible
             if cached.showRating then
                 ratingDisplay, targetRating = SAFE_NUM.ReadRatingValue(
                     GetCombatRating, def.ratingCR)
                 ratingRead = true
-                local ratingVisible = shouldShow(def.showKey .. "Rating", ratingDisplay, cached.hideZeroOffensive)
+                local ratingVisibilityKey = visibilityKey and visibilityKey .. "Rating"
+                local ratingVisible = shouldShow(ratingVisibilityKey, ratingDisplay, cached.hideZeroOffensive)
                 visible = visible or ratingVisible
             end
             if visible then
@@ -11721,7 +11730,9 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
     if cached.showVersatility then
         local versFromRating = safeCall(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
         local versFlat       = safeCall(GetVersatilityBonus,  CR_VERSATILITY_DAMAGE_DONE)
-        local versDisplay = cached.versTotal
+        local versDisplay = not specUnsettled and cached.versTotal or nil
+        local visibilityKey = not specUnsettled and "showVersatility" or nil
+        local ratingVisibilityKey = not specUnsettled and "showVersatilityRating" or nil
         local versClean
         local versDisplayUnknown = false
         local versRatingDisplay
@@ -11735,10 +11746,10 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
         local ratingIsClean = not ratingIsSecret and SAFE_NUM.IsCleanFiniteNumber(versFromRating)
         local flatIsClean = not flatIsSecret and SAFE_NUM.IsCleanFiniteNumber(versFlat)
         if ratingIsClean and flatIsClean then
-            cached.versTotal = versFromRating + versFlat
-            versDisplay = cached.versTotal
-            versClean = cached.versTotal
-            versTooltipDisplay = cached.versTotal
+            versClean = versFromRating + versFlat
+            versDisplay = versClean
+            versTooltipDisplay = versClean
+            if not specUnsettled then cached.versTotal = versClean end
         -- A secret component is still the complete total when its clean counterpart
         -- is exactly zero, so it may use the same whitelisted display-only path as
         -- direct stat APIs. Otherwise retain only the last complete clean total; never
@@ -11755,16 +11766,16 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
         if cached.showRating or needTargetRating then
             versRatingDisplay, targetVersRating = SAFE_NUM.ReadRatingValue(
                 GetCombatRating, CR_VERSATILITY_DAMAGE_DONE)
-            if targetVersRating then
+            if targetVersRating and not specUnsettled then
                 cached.versTotalRating = targetVersRating
             end
         end
         local versPercentVisible = shouldShowUnknown(
-                "showVersatility", versDisplayUnknown, cached.hideZeroOffensive)
-            or shouldShow("showVersatility", versDisplay, cached.hideZeroOffensive)
+                visibilityKey, versDisplayUnknown, cached.hideZeroOffensive)
+            or shouldShow(visibilityKey, versDisplay, cached.hideZeroOffensive)
         local versVisible = percentAffectsVisibility and versPercentVisible
         if cached.showRating then
-            local versRatingVisible = shouldShow("showVersatilityRating", versRatingDisplay, cached.hideZeroOffensive)
+            local versRatingVisible = shouldShow(ratingVisibilityKey, versRatingDisplay, cached.hideZeroOffensive)
             versVisible = versVisible or versRatingVisible
         end
         if versVisible then
@@ -11775,7 +11786,7 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
                 -- read falls back to the clean cache used outside the live display.
                 if SAFE_NUM.IsRenderableNumberValue(versRatingDisplay) then
                     rating = versRatingDisplay
-                elseif SAFE_NUM.IsCleanFiniteNumber(cached.versTotalRating) then
+                elseif not specUnsettled and SAFE_NUM.IsCleanFiniteNumber(cached.versTotalRating) then
                     rating = cached.versTotalRating
                 else
                     rating = versRatingDisplay

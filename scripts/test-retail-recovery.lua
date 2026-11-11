@@ -819,6 +819,31 @@ if not forever then
     assert(addon:RunUpdateStatsSafe() and test.versatilityState().rating == 750,
         "a same-spec player event preserves the last complete read")
 
+    specReady = false
+    env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    assert(addon:RunUpdateStatsSafe())
+    value, state = addon.GetBestCritChance()
+    assert(value == nil and state == "restricted" and #test.buildRenderBlocks()[2].labels == 0,
+        "an unsettled player spec cannot display the prior Crit or Versatility fallback")
+    assert(test.versatilityState().total == 12, "an unsettled identity keeps the former cache intact")
+
+    spec = 63
+    restricted = false
+    ratingReady = true
+    assert(addon:RunUpdateStatsSafe())
+    value, state = addon.GetBestCritChance()
+    assert(value == 31 and state == "exact" and test.versatilityState().rating == 750
+        and test.versatilityState().total == 12, "clean interim samples display without changing the former cache")
+
+    spec = 62
+    restricted = true
+    ratingReady = false
+    specReady = true
+    assert(addon:RunUpdateStatsSafe())
+    value, state = addon.GetBestCritChance()
+    assert(value == -9 and state == "liveProxy" and #test.buildRenderBlocks()[2].labels == 2,
+        "if the previous spec is confirmed, its Crit and Versatility caches resume")
+
     spec = 63
     specReady = false
     env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")

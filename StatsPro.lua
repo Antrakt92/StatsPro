@@ -69,6 +69,7 @@ addon.itemLevelRuntime = {
 addon.critRuntime = {
     selectedSource = nil,
     selectedSpellSchool = nil,
+    specIdentityDirty = true,
 }
 addon.movementRuntime = {
     baseSpeed = 7,
@@ -11488,6 +11489,27 @@ local function BuildItemLevelLines(labels, ratings, values)
     return labels, ratings, values
 end
 
+function addon.critRuntime.RefreshSpecIdentity(invalidate)
+    if addon.forever.enabled then return end
+    local runtime = addon.critRuntime
+    if not invalidate and not runtime.specIdentityDirty then return end
+    local index = SafeGetSpecIndex()
+    local specID = index and SafeGetSpecInfo(index)
+    runtime.specIdentityDirty = not SAFE_NUM.IsCleanFiniteNumber(specID)
+        or specID <= 0 or specID ~= math.floor(specID)
+    if runtime.specIdentityDirty or runtime.specID == specID then return end
+    runtime.specID = specID
+    runtime.selectedSource = nil
+    runtime.selectedSpellSchool = nil
+    cached.versTotal = nil
+    cached.versTotalRating = nil
+    local visibility = cached.cleanRowVisibility
+    visibility.showCrit = nil
+    visibility.showCritRating = nil
+    visibility.showVersatility = nil
+    visibility.showVersatilityRating = nil
+end
+
 local function BuildOffensiveLines(labels, ratings, values, targetRows)
     if addon.forever.enabled then
         if not cached.showOffensive then return labels, ratings, values end
@@ -11499,6 +11521,7 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
     -- entirely. Without this guard the percent-only branch of FmtRatingPct would still
     -- fire (single-column routing), producing visible percent rows and ignoring intent.
     if not (cached.showRating or cached.showPercentage) then return labels, ratings, values end
+    addon.critRuntime.RefreshSpecIdentity(false)
     local cs = cached.colorStrings
 
     -- Tooltip targets need the raw rating even when the rating column is hidden.
@@ -12073,6 +12096,7 @@ end
 
 local function OnPlayerEnteringWorld()
     SAFE_NUM.ReopenScaledFormatterRetries()
+    addon.critRuntime.RefreshSpecIdentity(true)
     if not isLoaded then
         mainPanel:Hide()
         defensivePanel:Hide()
@@ -12142,6 +12166,8 @@ local EVENT_HANDLERS = {
     PLAYER_LOGOUT               = OnPlayerLogout,
     PLAYER_SPECIALIZATION_CHANGED = function(unit)
         if not addon.dbRuntime.IsCleanType(unit, "string") or unit ~= "player" then return end
+        -- Confirm now even if the HUD is hidden. An unsettled API retries on render.
+        addon.critRuntime.RefreshSpecIdentity(true)
         addon.profileRuntime.RequestResolution(false)
     end,
     -- Rating conversion is player-level dependent. PLAYER_LEVEL_CHANGED covers

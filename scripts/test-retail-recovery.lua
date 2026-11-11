@@ -760,3 +760,73 @@ if not forever then
         and not targetRows["Current:"], "without a clean baseline, show the reference rating alone")
     print("Retail Archon Haste projection regressions passed")
 end
+
+if not forever then
+    local spec = 62
+    local specReady = true
+    local restricted = false
+    local ratingReady = true
+    local env, addon, test = loadStatsPro("enUS", {
+        unitClassToken = "MAGE", specIndex = 1,
+        unitGUID = function() return "Player-1-RETAIL-SPEC-CACHE" end,
+        getSpecializationInfo = function()
+            if specReady then return spec, "Mage", nil, nil, "DAMAGER", 4 end
+        end,
+        statsProDB = {
+            showOffensive = true, showCrit = true, showHaste = false,
+            showMastery = false, showVersatility = true, hideZeroOffensive = true,
+        },
+        getCritChance = function() return restricted and -9 or spec == 62 and 25 or 9 end,
+        getRangedCritChance = function() return restricted and -8 or 8 end,
+        getSpellCritChance = function() return restricted and -31 or spec == 62 and 12 or 31 end,
+        getCombatRating = function() if ratingReady then return spec == 62 and 750 or 300 end end,
+        getCombatRatingBonus = function() return restricted and -3 or spec == 62 and 10 or 3 end,
+        getVersatilityBonus = function() return restricted and -8 or spec == 62 and 2 or 8 end,
+        issecretvalue = function(value) return value == -9 or value == -8 or value == -31 or value == -3 end,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    assert(test.profileOps.enableAccountWide(test.profileState().profileID))
+    assert(addon:RunUpdateStatsSafe() and test.versatilityState().total == 12)
+    local value, state = addon.GetBestCritChance()
+    assert(value == 25 and state == "exact")
+    restricted = true
+    ratingReady = false
+
+    env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "pet")
+    assert(addon:RunUpdateStatsSafe() and test.versatilityState().total == 12,
+        "pet events do not evict a player's confirmed caches")
+    env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    assert(addon:RunUpdateStatsSafe() and test.versatilityState().rating == 750,
+        "a same-spec player event preserves the last complete read")
+
+    spec = 63
+    specReady = false
+    env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    assert(addon:RunUpdateStatsSafe())
+    assert(test.versatilityState().total == 12, "transient missing identity does not become a spec change")
+    specReady = true
+    env.__flushTimers(0)
+    assert(addon:RunUpdateStatsSafe())
+    value, state = addon.GetBestCritChance()
+    local vers = test.versatilityState()
+    assert(value == nil and state == "restricted", "new spec cannot borrow the former Crit proxy")
+    assert(vers.total == nil and vers.rating == nil and vers.percentVisible == nil,
+        "new spec cannot borrow Versatility total, rating, or Hide Zero decision")
+    assert(#test.buildRenderBlocks()[2].labels == 0, "restricted rows with no new-spec visibility do not use old decisions")
+
+    restricted = false
+    ratingReady = true
+    assert(addon:RunUpdateStatsSafe())
+    value, state = addon.GetBestCritChance()
+    assert(value == 31 and state == "exact" and test.versatilityState().total == 11,
+        "new spec resumes normal clean readings")
+    spec = 62
+    restricted = true
+    ratingReady = false
+    env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    assert(addon:RunUpdateStatsSafe())
+    value, state = addon.GetBestCritChance()
+    assert(value == nil and state == "restricted" and test.versatilityState().total == nil,
+        "returning to a previous spec does not resurrect its old sample")
+    print("Retail spec-scoped restricted stat recovery regressions passed")
+end

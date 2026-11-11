@@ -153,6 +153,42 @@ do
         and updated.characters["Player-Forever-Audit-One"].displayName == "One-Realm",
         "Forever profiles distinguish characters after the name event")
 end
+do
+    local function login(class, classID, guid, root)
+        local characterEnv, _, characterTest = fixtures.loadStatsPro("enUS", {
+            forever = true, statsProDB = root,
+            unitClassToken = class, classID = classID,
+            unitGUID = function() return guid end,
+        })
+        characterEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+        return characterTest.profileState(), characterTest
+    end
+
+    local warrior, warriorTest = login("WARRIOR", 1, "Player-Starter-Warrior")
+    local oldSettings = warrior.settings
+    local customRoot = assert(warriorTest.cloneSerializable(warrior.root))
+    customRoot.profiles.p1.settings.showSpirit = true
+    local mage = login("MAGE", 8, "Player-Starter-Mage", warrior.root)
+    check(mage.settings.showIntellect == true and mage.settings.showSpirit == true
+        and mage.settings.showSpellCrit == true and mage.settings.showSpellPowerFrost == true
+        and mage.settings.showManaRegenMP5 == true,
+        "new Forever character starts with their own class stats on an existing account")
+    check(mage.settings.showMeleeCrit == false and mage.settings.showAttackPower == false,
+        "new Forever character does not inherit the first class's rows")
+    local returningWarrior = login("WARRIOR", 1, "Player-Starter-Warrior", mage.root)
+    check(returningWarrior.settings == oldSettings and oldSettings.showAttackPower == true,
+        "new Forever character leaves established character settings intact")
+    local customMage = login("MAGE", 8, "Player-Starter-Mage", customRoot)
+    check(customMage.settings.showSpirit == true and customMage.settings.showAttackPower == true
+        and customMage.settings.showSpellCrit == false,
+        "explicitly edited Forever defaults retain their stat selection")
+
+    local mageStarter = login("MAGE", 8, "Player-Starter-Mage")
+    mageStarter.root.profiles.p1.settings.showManaRegenMP5 = false
+    local hunter = login("HUNTER", 3, "Player-Starter-Hunter", mageStarter.root)
+    check(hunter.settings.showManaRegenMP5 == false and hunter.settings.showSpellCrit == true,
+        "explicit MP5 opt-out does not resemble an old factory default")
+end
 for _, forever in ipairs({ false, true }) do
     local flavor = forever and "Forever" or "Retail"
     local commandEnv = fixtures.loadStatsPro("enUS", { forever = forever })

@@ -314,6 +314,45 @@ function F.BuildDefaults(class)
     for key, value in pairs(values) do defaults[key] = value end
     return defaults
 end
+
+function F.ApplyClassStarter(settings)
+    local class = CurrentClass()
+    if not compactSelections[class] then return end
+    if not F.starterDefaults then
+        local fallback = F.BuildDefaults()
+        local defaultsByClass, classKeys = {}, {}
+        for classToken in pairs(compactSelections) do
+            local values = F.BuildDefaults(classToken)
+            defaultsByClass[classToken] = values
+            for key, value in pairs(values) do
+                if value ~= fallback[key] then classKeys[key] = true end
+            end
+        end
+        F.starterDefaults, F.starterClassKeys = defaultsByClass, classKeys
+    end
+
+    -- Pre-adaptive starters had neither the MP5 row nor these three options on.
+    local beforeAdaptive = settings.showManaRegenMP5 == false and settings.hideZeroOffensive == false
+        and settings.showDurability == false and settings.showRepairCost == false
+    for _, candidate in pairs(F.starterDefaults) do
+        local matches = true
+        for key in pairs(F.starterClassKeys) do
+            -- Older registries dropped these three flags during flat migration.
+            local droppedPrimary = key == "showStrength" or key == "showAgility" or key == "showIntellect"
+            if not droppedPrimary and settings[key] ~= candidate[key]
+                and not (key == "showManaRegenMP5" and beforeAdaptive) then
+                matches = false
+                break
+            end
+        end
+        if matches then
+            local values = F.starterDefaults[class]
+            for key in pairs(F.starterClassKeys) do settings[key] = values[key] end
+            return
+        end
+    end
+end
+
 local initialClass = CurrentClass()
 F.presets = F.BuildPresets(initialClass)
 F.defaults = F.BuildDefaults(initialClass)

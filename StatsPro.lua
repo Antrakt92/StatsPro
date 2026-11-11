@@ -6803,6 +6803,20 @@ function addon.profileRuntime.CloneProfile(sourceProfile, name, budget)
     return { name = name, settings = settings }
 end
 
+function addon.profileRuntime.IsForeverFactoryStarter(root, sourceID, sourceName, settings)
+    if not addon.forever.enabled or sourceID ~= "p1"
+        or not addon.dbRuntime.IsCleanType(sourceName, "string") or sourceName ~= "Default" then return false end
+    if settings.showMainStat ~= true or settings.showStrength ~= nil
+        or settings.showAgility ~= nil or settings.showIntellect ~= nil then return false end
+    -- A flat downgrade shadow records an existing installation's preferences.
+    for key in pairs(root) do
+        if not addon.dbRuntime.IsCleanType(key, "string")
+            or not addon.dbRuntime.registryRootKeys[key] then return false end
+    end
+    local references = addon.profileOps.CountReferences(root, sourceID)
+    return references.specs == 0 and references.characterDefaults == 0 and references.accountWide == 0
+end
+
 function addon.profileRuntime.PrepareContextTransaction(context)
     local root = addon.dbRuntime.Refresh()
     if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady then return nil, nil end
@@ -6867,8 +6881,12 @@ function addon.profileRuntime.PrepareContextTransaction(context)
     local transaction, specProfileID = addon.profileOps.BuildAssignedProfileTransaction(
         root, account, profiles, character, character.specProfiles,
         context.guid, context.specID, function()
-            return addon.profileRuntime.CloneProfile(
-                sourceProfile, specName, cloneBudget), "clone-failed"
+            local profile = addon.profileRuntime.CloneProfile(sourceProfile, specName, cloneBudget)
+            if profile and addon.profileRuntime.IsForeverFactoryStarter(
+                    root, sourceProfileID, sourceProfile.name, profile.settings) then
+                addon.forever.ApplyClassStarter(profile.settings)
+            end
+            return profile, "clone-failed"
         end)
     if not transaction then return nil, nil end
     local valid = addon.dbRuntime.ValidateRegistry(

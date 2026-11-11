@@ -8875,6 +8875,13 @@ local function CacheSettings()
     for _, k in ipairs(CACHED_BOOL_KEYS) do
         cached[k] = GetBoolDB(k)
     end
+    if addon.forever.enabled then
+        local manaRows = (cached.showManaRegen and 1 or 0)
+            + (cached.showCastingManaRegen and 1 or 0)
+            + (cached.showManaRegenMP5 and 1 or 0)
+            + (cached.showCastingManaRegenMP5 and 1 or 0)
+        cached.shareManaRegenSample = manaRows > 1
+    end
     cached.updateInterval = GetNumberDB("updateInterval")
     cached.fontSize = GetNumberDB("fontSize")
     cached.displayMode = addon.NormalizeDisplayMode(GetDB("displayMode"))
@@ -11372,17 +11379,18 @@ local function PushItemLevelRow(labels, ratings, values)
     PushRow(labels, ratings, values, label, rStr, vStr)
 end
 
-function addon.forever.ReadHUDRow(definition)
+function addon.forever.ReadHUDRow(definition, manaSample)
     if definition.key == "ManaRegenMP5" then
-        return definition.Read(cached.showCastingManaRegenMP5)
+        return definition.Read(cached.showCastingManaRegenMP5, manaSample)
     end
-    return definition.Read()
+    return definition.Read(manaSample)
 end
 
 function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
+    local manaSample = group == "utility" and cached.shareManaRegenSample and {} or nil
     for _, definition in ipairs(addon.forever.rows[group]) do
         if cached[definition.showKey] then
-            local value, state, visibilitySuffix = addon.forever.ReadHUDRow(definition)
+            local value, state, visibilitySuffix = addon.forever.ReadHUDRow(definition, manaSample)
             local rowKey = "forever:" .. definition.key .. (visibilitySuffix or "")
             local visible
             if state == "clean" then

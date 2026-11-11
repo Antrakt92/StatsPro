@@ -137,20 +137,43 @@ local function AttackPower(name)
     end)
 end
 
-local function ReadManaRegenMP5(index)
-    local value, state = Read("GetManaRegen", index)
+local function ReadManaRegen(index, sample)
+    if sample and sample[index] ~= nil then return sample[index], "clean" end
+    local fn = _G.GetManaRegen
+    local ok, normal, casting
+    if type(fn) == "function" then ok, normal, casting = pcall(fn) end
+    if not ok then
+        if sample then sample[1], sample[2] = nil, nil end
+        return nil, "unknown"
+    end
+    if not sample then
+        if index == 1 then return Classify(normal) end
+        return Classify(casting)
+    end
+
+    local normalValue, normalState = Classify(normal)
+    local castingValue, castingState = Classify(casting)
+    -- Keep only clean values from the latest API read in this HUD pass.
+    sample[1] = normalState == "clean" and normalValue or nil
+    sample[2] = castingState == "clean" and castingValue or nil
+    if index == 1 then return normalValue, normalState end
+    return castingValue, castingState
+end
+
+local function ReadManaRegenMP5(index, sample)
+    local value, state = ReadManaRegen(index, sample)
     -- The HUD can format this per-second value through Blizzard's API.
     if state == "secret" then return value, state end
     if state ~= "clean" then return nil, "unknown" end
     return Classify(value * 5)
 end
 
-local function ReadAdaptiveManaRegenMP5(showBaseAlongsideCasting)
+local function ReadAdaptiveManaRegenMP5(showBaseAlongsideCasting, sample)
     -- Profiles that select both rows keep distinct fixed rates.
     local inCombat = false
     if not showBaseAlongsideCasting then inCombat = addon.profileRuntime.ReadCombatState() end
     if inCombat == nil then return nil, "unknown" end
-    local value, state = ReadManaRegenMP5(inCombat and 2 or 1)
+    local value, state = ReadManaRegenMP5(inCombat and 2 or 1, sample)
     -- Hide Zero must remember a separate clean result for each rate.
     return value, state, inCombat and ":casting" or ":resting"
 end
@@ -246,11 +269,11 @@ local function ManaRow(key, label, read, seconds, fallbackLabel)
     row.rateSeconds = seconds
     row.restrictedMP5FallbackLabel = fallbackLabel
 end
-ManaRow("ManaRegen", "Mana Regen / sec", Scalar("GetManaRegen", 1), 1)
-ManaRow("CastingManaRegen", "Casting Mana Regen / sec", Scalar("GetManaRegen", 2), 1)
+ManaRow("ManaRegen", "Mana Regen / sec", function(sample) return ReadManaRegen(1, sample) end, 1)
+ManaRow("CastingManaRegen", "Casting Mana Regen / sec", function(sample) return ReadManaRegen(2, sample) end, 1)
 ManaRow("ManaRegenMP5", "Mana Regen / 5 sec", ReadAdaptiveManaRegenMP5, 5, "Mana Regen / sec")
 ManaRow("CastingManaRegenMP5", "Casting Mana Regen / 5 sec",
-    function() return ReadManaRegenMP5(2) end, 5, "Casting Mana Regen / sec")
+    function(sample) return ReadManaRegenMP5(2, sample) end, 5, "Casting Mana Regen / sec")
 Row("utility", "MovementSpeed", "Movement Speed", MovementSpeed, "movement", "speed")
 
 F.defaults.showMainStat = false

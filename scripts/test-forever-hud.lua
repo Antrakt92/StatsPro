@@ -382,6 +382,95 @@ manaRegen, castingRegen = 6, 1
 settings.hideZeroTertiary = false
 test.cacheSettings()
 do
+    local calls, classifications, normal, casting = 0, 0, 6, 1
+    local mode
+    local sampleEnv, sampleAddon, sampleTest = fixtures.loadStatsPro("enUS", {
+        forever = true,
+        unitGUID = function() return "Player-ManaSample" end,
+        statsProDB = {
+            showTertiary = true, hideZeroTertiary = false, showManaRegen = true,
+            showCastingManaRegen = true, showManaRegenMP5 = true, showCastingManaRegenMP5 = true,
+        },
+        issecretvalue = function(value)
+            if value == restrictedRegen or value == nextRestrictedRegen then
+                classifications = classifications + 1
+                return true
+            end
+            return false
+        end,
+        roundToNearestString = function(value)
+            return value == restrictedRegen and "7" or "8"
+        end,
+        abbreviateNumbers = function(value)
+            if value == restrictedRegen then return "35.00" end
+            if value == nextRestrictedRegen then return "40.00" end
+            return "10.25"
+        end,
+        foreverAPIs = {
+            GetManaRegen = function()
+                calls = calls + 1
+                if mode == "mixed" then
+                    return calls == 1 and restrictedRegen or nextRestrictedRegen, 0
+                end
+                if mode == "failure" then
+                    if calls == 2 then error("mana API read failed") end
+                    return restrictedRegen, calls == 1 and 2 or 4
+                end
+                return normal, casting
+            end,
+        },
+    })
+    sampleEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local function renderMana()
+        calls, classifications = 0, 0
+        local result = {}
+        for _, block in ipairs(sampleTest.buildRenderBlocks()) do
+            for index, label in ipairs(block.labels) do
+                result[stripColor(label)] = stripColor(block.ratings[index] .. block.values[index])
+            end
+        end
+        return result
+    end
+    local rows = renderMana()
+    check(calls == 1 and rows["Mana Regen / sec:"] == "6.00"
+        and rows["Mana Regen / 5 sec:"] == "30.00"
+        and rows["Casting Mana Regen / sec:"] == "1.00"
+        and rows["Casting Mana Regen / 5 sec:"] == "5.00",
+        "four clean mana rows share one API read")
+    normal, casting = 9, 0
+    rows = renderMana()
+    check(calls == 1 and rows["Mana Regen / 5 sec:"] == "45.00"
+        and rows["Casting Mana Regen / 5 sec:"] == "0.00",
+        "next HUD pass samples changed rates and can reuse clean zero")
+    mode = "mixed"
+    rows = renderMana()
+    check(calls == 2 and rows["Mana Regen / sec:"] == "7"
+        and rows["Mana Regen / 5 sec:"] == "40.00"
+        and rows["Casting Mana Regen / 5 sec:"] == "0.00",
+        "restricted rates render separately while the clean sibling is shared")
+    mode = "failure"
+    rows = renderMana()
+    check(calls == 3 and rows["Mana Regen / 5 sec:"] == "?"
+        and rows["Casting Mana Regen / 5 sec:"] == "20.00",
+        "a failed read does not leave a previously sampled clean rate in use")
+    mode, normal, casting = nil, math.huge, 0
+    rows = renderMana()
+    check(calls == 2 and rows["Mana Regen / sec:"] == "?"
+        and rows["Mana Regen / 5 sec:"] == "?" and rows["Casting Mana Regen / 5 sec:"] == "0.00",
+        "nonfinite rates are never stored as clean samples")
+    local single = sampleTest.profileState().settings
+    single.showManaRegen, single.showCastingManaRegen, single.showCastingManaRegenMP5 = false, false, false
+    sampleTest.cacheSettings()
+    normal, casting = 6, restrictedRegen
+    rows = renderMana()
+    check(calls == 1 and classifications == 0 and rows["Mana Regen / 5 sec:"] == "30.00",
+        "single adaptive mana row does not classify the unused API result")
+    normal = 8
+    local _, diagnostic = sampleAddon.selfTest.ProbeRow("ManaRegenMP5")
+    check(calls == 2 and diagnostic == 40,
+        "standalone self-test reads live independently of the HUD sample")
+end
+do
     local coldRegen, coldCrit = restrictedRegen, restrictedRegen
     local coldEnv, _, coldTest = fixtures.loadStatsPro("enUS", {
         forever = true,

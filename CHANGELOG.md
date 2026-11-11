@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.24.2 - 11-Nov-2026 — Profile sharing and HUD fixes
+
+- Preserve panel positions when sharing a profile between screen sizes, and export the preferred font from older profiles.
+- Restore saved fonts that become available after login, and retry movement speed percentage formatting after combat when the game previously rejected it.
+- Apply Hide Zero to the displayed stat columns, recover repair prices as item data arrives, and show when an Archon target is unavailable for the selected difficulty.
+- Keep saved profiles intact when profile storage fills up and make cleanup available from Profiles & sharing.
+- Improve combat and repair reporting in `/ss selftest` and skip redundant HUD layout updates.
+
 ## 1.24.1 - 11-Nov-2026 — Archon target refresh
 
 - Refresh bundled M+ and raid targets from Archon data checked on 11 November.

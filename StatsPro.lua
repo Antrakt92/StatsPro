@@ -6673,6 +6673,7 @@ function addon.profileRuntime.ReadPlayerContext()
         addon.profileRuntime.contextReadCount = addon.profileRuntime.contextReadCount + 1
         if not context then return nil, "unknown" end
         addon.profileRuntime.currentGUID = context.guid
+        addon.profileRuntime.PopulateCharacterMetadata(context)
         return context, "valid"
     end
     addon.profileRuntime.contextReadCount = addon.profileRuntime.contextReadCount + 1
@@ -6713,7 +6714,11 @@ function addon.profileRuntime.ReadPlayerContext()
         and (role == "TANK" or role == "HEALER" or role == "DAMAGER") then
         context.role = role
     end
+    addon.profileRuntime.PopulateCharacterMetadata(context)
+    return context, "valid"
+end
 
+function addon.profileRuntime.PopulateCharacterMetadata(context)
     if type(UnitFullName) == "function" then
         local nameOK, name, realm = pcall(UnitFullName, "player")
         if nameOK and addon.dbRuntime.IsCleanType(name, "string") and name ~= "" then
@@ -6739,7 +6744,6 @@ function addon.profileRuntime.ReadPlayerContext()
             context.lastSeen = lastSeen
         end
     end
-    return context, "valid"
 end
 
 function addon.profileRuntime.ShallowCopy(source)

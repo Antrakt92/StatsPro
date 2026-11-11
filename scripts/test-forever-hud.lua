@@ -112,6 +112,47 @@ do
     check(transfer.Parse(test.profileTransfer.encodePayload(malformed .. "\nshowOffhandHit=1")) == nil,
         "current field count cannot disguise a missing required stat")
 end
+do
+    local firstEnv, firstAddon, firstTest = fixtures.loadStatsPro("enUS", {
+        forever = true,
+        unitGUID = function() return "Player-Forever-Audit-One" end,
+        unitFullName = function() return "One", "Realm" end,
+        classID = 1,
+        getServerTime = function() return 100 end,
+    })
+    firstEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local first = firstTest.profileState()
+    local one = first.characters["Player-Forever-Audit-One"]
+    check(one and one.displayName == "One-Realm" and one.classID == 1 and one.lastSeen == 100,
+        "Forever stores clean character metadata on first login")
+    check(first.profiles[first.profileID].name:match("^One%-Realm"),
+        "new Forever profiles include the player name")
+    check(firstAddon.profileRuntime.activeSpecID == 1 and firstAddon.profileRuntime.activeRole == nil,
+        "Forever keeps a character-only profile context")
+
+    local playerName
+    local secondEnv, secondAddon, secondTest = fixtures.loadStatsPro("enUS", {
+        forever = true, statsProDB = first.root,
+        unitGUID = function() return "Player-Forever-Audit-Two" end,
+        unitFullName = function() return playerName end,
+        unitClassToken = "MAGE", classID = 8,
+        getServerTime = function() return 200 end,
+    })
+    secondEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local second = secondTest.profileState()
+    local two = second.characters["Player-Forever-Audit-Two"]
+    check(two and two.displayName == nil and two.classID == 8 and two.lastSeen == 200,
+        "missing Forever player name leaves the other metadata available")
+    playerName = "Two"
+    secondEnv.__fireEvent("UNIT_NAME_UPDATE", "player")
+    secondAddon.profileRuntime.ResolvePending()
+    local updated = secondTest.profileState()
+    check(updated.profileID == second.profileID and updated.settings == second.settings,
+        "late Forever metadata preserves the assigned profile and settings")
+    check(updated.characters["Player-Forever-Audit-Two"].displayName == "Two"
+        and updated.characters["Player-Forever-Audit-One"].displayName == "One-Realm",
+        "Forever profiles distinguish characters after the name event")
+end
 for _, forever in ipairs({ false, true }) do
     local flavor = forever and "Forever" or "Retail"
     local commandEnv = fixtures.loadStatsPro("enUS", { forever = forever })

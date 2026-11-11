@@ -818,6 +818,18 @@ if not forever then
     env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
     assert(addon:RunUpdateStatsSafe() and test.versatilityState().rating == 750,
         "a same-spec player event preserves the last complete read")
+    local ticker
+    for _, frame in ipairs(env.__frames) do
+        if frame.scripts and frame.scripts.OnUpdate then
+            ticker = frame
+            break
+        end
+    end
+    assert(ticker, "expected the normal HUD OnUpdate ticker")
+    env.__flushTimers(0)
+    ticker.scripts.OnUpdate(ticker, 0.11)
+    value, state = addon.GetBestCritChance()
+    assert(value == -9 and state == "liveProxy", "a late same-spec confirmation resumes the old fallback")
 
     specReady = false
     env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
@@ -900,15 +912,20 @@ if not forever then
     ratingReady = true
     assert(addon:RunUpdateStatsSafe() and test.versatilityState().total == 11)
     env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
-    assert(env.__flushNextTimer(0), "the stat recheck can run while the API still reports the old spec")
+    assert(env.__flushTimers(0) == 1, "the event uses the existing zero-delay profile timer only")
+    assert(test.profileRuntimeState().activeSpecID == 63, "profile resolution can still observe the old ID")
+    ticker.scripts.OnUpdate(ticker, 0.05)
     spec = 62
     restricted = true
     ratingReady = false
-    env.__flushTimers(0)
-    assert(test.profileRuntimeState().activeSpecID == 62 and addon:RunUpdateStatsSafe())
+    assert(addon:RunUpdateStatsSafe())
+    value, state = addon.GetBestCritChance()
+    assert(value == nil and state == "restricted", "the old fallback is held while the late confirmation is pending")
+    ticker.scripts.OnUpdate(ticker, 0.06)
+    assert(addon:RunUpdateStatsSafe())
     value, state = addon.GetBestCritChance()
     assert(value == nil and state == "restricted" and test.versatilityState().total == nil,
-        "a later confirmed profile context also invalidates the stat fallbacks")
+        "a spec change after the zero-delay queue still invalidates the old stat caches")
     print("Retail spec-scoped restricted stat recovery regressions passed")
 end
 

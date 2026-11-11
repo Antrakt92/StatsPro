@@ -11625,16 +11625,22 @@ end
 function addon.critRuntime.RefreshSpecIdentity(invalidate, confirmedSpecID)
     if addon.forever.enabled then return end
     local runtime = addon.critRuntime
-    if not invalidate and (not runtime.specIdentityDirty or runtime.specRecheckScheduled) then return end
+    if not invalidate and (not runtime.specIdentityDirty or runtime.specRecheckDelay) then return end
     local specID = confirmedSpecID
     if specID == nil then
         local index = SafeGetSpecIndex()
         specID = index and SafeGetSpecInfo(index)
     end
-    runtime.specIdentityDirty = not SAFE_NUM.IsCleanFiniteNumber(specID)
-        or specID <= 0 or specID ~= math.floor(specID)
-        or (runtime.specRecheckScheduled == true and runtime.specID == specID)
-    if runtime.specIdentityDirty or runtime.specID == specID then return end
+    if not SAFE_NUM.IsCleanFiniteNumber(specID) or specID <= 0 or specID ~= math.floor(specID) then
+        runtime.specIdentityDirty = true
+        return nil
+    end
+    if runtime.specID == specID then
+        runtime.specIdentityDirty = runtime.specRecheckDelay ~= nil
+        return specID
+    end
+    runtime.specIdentityDirty = false
+    runtime.specRecheckDelay = nil
     runtime.specID = specID
     runtime.selectedSource = nil
     runtime.selectedSpellSchool = nil
@@ -11645,24 +11651,20 @@ function addon.critRuntime.RefreshSpecIdentity(invalidate, confirmedSpecID)
     visibility.showCritRating = nil
     visibility.showVersatility = nil
     visibility.showVersatilityRating = nil
+    return specID
 end
 
 function addon.critRuntime.OnPlayerSpecChanged()
     if addon.forever.enabled then return end
     local runtime = addon.critRuntime
     local previousSpecID = runtime.specID
-    runtime.RefreshSpecIdentity(true)
-    if previousSpecID == nil or runtime.specID ~= previousSpecID then return end
+    local specID = runtime.RefreshSpecIdentity(true)
+    if previousSpecID == nil or specID ~= previousSpecID then return end
 
-    -- A specialization event can precede the client publishing the new ID.
-    -- Hold the previous samples until a deferred read can confirm this result.
+    -- An apparently unchanged ID can outlast the first deferred profile read.
+    -- Recheck once on the existing ticker, keeping the fallback hidden until then.
     runtime.specIdentityDirty = true
-    if runtime.specRecheckScheduled then return end
-    runtime.specRecheckScheduled = true
-    C_Timer.After(0, function()
-        runtime.specRecheckScheduled = false
-        runtime.RefreshSpecIdentity(true)
-    end)
+    runtime.specRecheckDelay = 0.1
 end
 
 local function BuildOffensiveLines(labels, ratings, values, targetRows)
@@ -12201,6 +12203,14 @@ local timeSinceLastUpdate = 0
 local tickerFrame = CreateFrame("Frame")
 tickerFrame:SetScript("OnUpdate", function(self, elapsed)
     if not isLoaded then return end
+    local crit = addon.critRuntime
+    if crit.specRecheckDelay then
+        crit.specRecheckDelay = crit.specRecheckDelay - elapsed
+        if crit.specRecheckDelay <= 0 then
+            crit.specRecheckDelay = nil
+            crit.RefreshSpecIdentity(true)
+        end
+    end
     timeSinceLastUpdate = timeSinceLastUpdate + elapsed
     if timeSinceLastUpdate >= cached.updateInterval then
         addon:RunUpdateStatsSafe()
@@ -12267,7 +12277,7 @@ end
 
 local function OnPlayerEnteringWorld()
     SAFE_NUM.ReopenScaledFormatterRetries()
-    if not addon.critRuntime.specRecheckScheduled then addon.critRuntime.RefreshSpecIdentity(true) end
+    if not addon.critRuntime.specRecheckDelay then addon.critRuntime.RefreshSpecIdentity(true) end
     if not isLoaded then
         mainPanel:Hide()
         defensivePanel:Hide()

@@ -3927,10 +3927,15 @@ local function GetBoolDB(key)
     return value == true
 end
 
+function addon.fontRuntime.savedPreference(settings)
+    if addon.sharedFonts.IsReference(settings.fontBeforeAutoSwitch) then
+        return settings.fontBeforeAutoSwitch
+    end
+    return settings.font
+end
+
 local function GetFontDB()
-    local db = addon.dbRuntime.GetActiveSettings()
-    local requested = db.font
-    if addon.sharedFonts.IsReference(db.fontBeforeAutoSwitch) then requested = db.fontBeforeAutoSwitch end
+    local requested = addon.fontRuntime.savedPreference(addon.dbRuntime.GetActiveSettings())
     local usable, status
     if addon.fontRuntime.usablePath then
         usable, status = addon.fontRuntime.usablePath(requested)
@@ -5362,6 +5367,7 @@ function addon.profileTransfer.ReadField(settings, field)
     elseif field.kind == "preset" then
         value = addon.appearancePresets.CurrentID(settings)
     elseif field.kind == "font" then
+        value = addon.fontRuntime.savedPreference(settings)
         if not addon.dbRuntime.IsCleanType(value, "string") or #value > addon.profileTransfer.maxFontBytes
             or value:find("[%z\1-\31\127]") or not FontPathKey(value) then
             value = defaults.font
@@ -10932,9 +10938,8 @@ function addon.fontRuntime.currentPath()
 end
 
 function addon.fontRuntime.preferredPath()
-    local db = addon.dbRuntime.GetActiveSettings()
-    if addon.sharedFonts.IsReference(db.fontBeforeAutoSwitch) then return db.fontBeforeAutoSwitch end
-    return FontPathKey(db.font) and db.font or defaults.font
+    local saved = addon.fontRuntime.savedPreference(addon.dbRuntime.GetActiveSettings())
+    return FontPathKey(saved) and saved or defaults.font
 end
 
 function addon.fontRuntime.repairSavedPaths()

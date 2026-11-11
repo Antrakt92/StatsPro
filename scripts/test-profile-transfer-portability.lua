@@ -40,6 +40,15 @@ for _, forever in ipairs({ false, true }) do
     rawset(env.StatsProFrame, "GetPoint", function() return "CENTER", env.UIParent, "CENTER", 90, nil end)
     env.__fireEvent("PLAYER_LOGOUT")
     assert(saved.xOfs == 32 and saved.yOfs == -64, "incomplete frame anchor corrupted the saved position")
+
+    local font = "Interface\\AddOns\\AntraktFonts\\fonts\\DejaVuSans.ttf"
+    local oldSettings = { font = "Fonts\\ARIALN.TTF", fontBeforeAutoSwitch = font }
+    local appearance = { appearance = true }
+    local fontCode = assert(addon.profileTransfer.Serialize("Legacy font", oldSettings, appearance))
+    local fontPackage = assert(addon.profileTransfer.Parse(fontCode))
+    local transferred = assert(addon.profileTransfer.BuildImportedSettings({}, fontPackage, appearance))
+    assert(transferred.font == font and transferred.fontBeforeAutoSwitch == nil,
+        "appearance transfer lost the legacy preferred font")
 end
 
-print("Retail and Forever profile transfer positions passed")
+print("Retail and Forever profile transfer positions and fonts passed")

@@ -11170,10 +11170,17 @@ local function PushItemLevelRow(labels, ratings, values)
     PushRow(labels, ratings, values, label, rStr, vStr)
 end
 
+function addon.forever.ReadHUDRow(definition)
+    if definition.key == "ManaRegenMP5" then
+        return definition.Read(cached.showCastingManaRegenMP5)
+    end
+    return definition.Read()
+end
+
 function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
     for _, definition in ipairs(addon.forever.rows[group]) do
         if cached[definition.showKey] then
-            local value, state, visibilitySuffix = definition.Read()
+            local value, state, visibilitySuffix = addon.forever.ReadHUDRow(definition)
             local rowKey = "forever:" .. definition.key .. (visibilitySuffix or "")
             local visible
             if state == "clean" then
@@ -11190,17 +11197,19 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
                 local color = cached.colorStrings[definition.colorKey] or cached.colorStrings.mainStat
                 local valueColor = cached.matchValueColorToStat and color or cached.colorStrings.percentage
                 local label = definition.label
+                local hideLabel = cached.labelStyle == "hidden"
+                local suffix = hideLabel and definition.rateSeconds
+                    and addon.forever.RateSuffix(cached.activeLabelsLocale, definition.rateSeconds) or ""
                 local text
                 if state == "unknown" then
-                    text = "|cff" .. valueColor .. "?|r"
+                    text = "|cff" .. valueColor .. "?" .. suffix .. "|r"
                 elseif state == "secret" and definition.restrictedMP5FallbackLabel then
                     local formatted = addon.forever.FormatRestrictedMP5(value)
                     if type(formatted) == "string" then
-                        text = "|cff" .. valueColor .. formatted .. "|r"
+                        text = "|cff" .. valueColor .. formatted .. suffix .. "|r"
                     else
                         label = definition.restrictedMP5FallbackLabel
-                        local suffix = cached.labelStyle == "hidden"
-                            and (addon.forever.perSecondSuffixes[cached.activeLabelsLocale] or "/s") or ""
+                        suffix = hideLabel and addon.forever.RateSuffix(cached.activeLabelsLocale, 1) or ""
                         text = SAFE_NUM.FormatColorNumber(valueColor, value, "%.2f" .. suffix, suffix)
                     end
                 elseif definition.kind == "movement" then
@@ -11213,9 +11222,10 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
                 elseif definition.kind == "percent" then
                     text = SAFE_NUM.FormatColorNumber(valueColor, value, "%.2f%%", "%")
                 else
-                    text = SAFE_NUM.FormatColorNumber(valueColor, value, definition.format or (group == "utility" and "%.2f" or "%d"))
+                    local format = definition.format or (group == "utility" and "%.2f" or "%d")
+                    text = SAFE_NUM.FormatColorNumber(valueColor, value, format .. suffix, suffix)
                 end
-                local rCol, vCol = RouteValueOnly(text or ("|cff" .. valueColor .. "?|r"))
+                local rCol, vCol = RouteValueOnly(text or ("|cff" .. valueColor .. "?" .. suffix .. "|r"))
                 PushRow(labels, ratings, values, FormatLabel(color, label), rCol, vCol)
             end
         end
@@ -20124,7 +20134,7 @@ function addon:PrintDebugLiveStats()
     if addon.forever.enabled then
         for _, group in ipairs({ "character", "offensive", "defensive", "utility" }) do
             for _, definition in ipairs(addon.forever.rows[group]) do
-                local ok, value, state = pcall(definition.Read)
+                local ok, value, state = pcall(addon.forever.ReadHUDRow, definition)
                 local text = not ok and "error" or state
                 if ok and state == "clean" and addon.IsCleanFiniteNumber(value) then
                     text = string.format("%.2f", value)
@@ -21365,7 +21375,7 @@ function addon.selfTest.ProbeRow(key)
         for _, group in ipairs({ "character", "offensive", "defensive", "utility" }) do
             for _, definition in ipairs(addon.forever.rows[group]) do
                 if definition.key == key then
-                    local ok, value, state = pcall(definition.Read)
+                    local ok, value, state = pcall(addon.forever.ReadHUDRow, definition)
                     if not ok then return 2, nil end
                     if state == "secret" then return 1, nil end
                     if state == "clean" and addon.IsCleanFiniteNumber(value) then return 0, value end

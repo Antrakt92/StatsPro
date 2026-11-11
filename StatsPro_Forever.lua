@@ -145,8 +145,10 @@ local function ReadManaRegenMP5(index)
     return Classify(value * 5)
 end
 
-local function ReadAdaptiveManaRegenMP5()
-    local inCombat = addon.profileRuntime.ReadCombatState()
+local function ReadAdaptiveManaRegenMP5(showBaseAlongsideCasting)
+    -- Profiles that select both rows keep distinct fixed rates.
+    local inCombat = false
+    if not showBaseAlongsideCasting then inCombat = addon.profileRuntime.ReadCombatState() end
     if inCombat == nil then return nil, "unknown" end
     local value, state = ReadManaRegenMP5(inCombat and 2 or 1)
     -- Hide Zero must remember a separate clean result for each rate.
@@ -226,11 +228,16 @@ Row("defensive", "BlockValue", "Block Value", Scalar("GetShieldBlock", 1), "numb
 for _, name in ipairs({ "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" }) do
     Row("defensive", name .. "Resistance", name .. " Resistance", Resistance(name))
 end
-Row("utility", "ManaRegen", "Mana Regen / sec", Scalar("GetManaRegen", 1))
-Row("utility", "CastingManaRegen", "Casting Mana Regen / sec", Scalar("GetManaRegen", 2))
-Row("utility", "ManaRegenMP5", "Mana Regen / 5 sec", ReadAdaptiveManaRegenMP5).restrictedMP5FallbackLabel = "Mana Regen / sec"
-Row("utility", "CastingManaRegenMP5", "Casting Mana Regen / 5 sec",
-    function() return ReadManaRegenMP5(2) end).restrictedMP5FallbackLabel = "Casting Mana Regen / sec"
+local function ManaRow(key, label, read, seconds, fallbackLabel)
+    local row = Row("utility", key, label, read)
+    row.rateSeconds = seconds
+    row.restrictedMP5FallbackLabel = fallbackLabel
+end
+ManaRow("ManaRegen", "Mana Regen / sec", Scalar("GetManaRegen", 1), 1)
+ManaRow("CastingManaRegen", "Casting Mana Regen / sec", Scalar("GetManaRegen", 2), 1)
+ManaRow("ManaRegenMP5", "Mana Regen / 5 sec", ReadAdaptiveManaRegenMP5, 5, "Mana Regen / sec")
+ManaRow("CastingManaRegenMP5", "Casting Mana Regen / 5 sec",
+    function() return ReadManaRegenMP5(2) end, 5, "Casting Mana Regen / sec")
 Row("utility", "MovementSpeed", "Movement Speed", MovementSpeed, "movement", "speed")
 
 F.defaults.showMainStat = false
@@ -487,12 +494,16 @@ local function Abbreviate(text)
     return table.concat(out)
 end
 F.shortLabels = {}
-F.perSecondSuffixes = {}
+local secondUnits = {}
+function F.RateSuffix(locale, seconds)
+    local unit = secondUnits[locale] or "s"
+    return (seconds == 5 and "/5" or "/") .. unit
+end
 for locale, components in pairs(localeComponents) do
     local labels, owners = {}, {}
     F.shortLabels[locale] = labels
     local seconds = locale == "ruRU" and "с" or ((locale == "zhCN" or locale == "zhTW") and "秒" or (locale == "koKR" and "초" or "s"))
-    F.perSecondSuffixes[locale] = "/" .. seconds
+    secondUnits[locale] = seconds
     for _, rows in pairs(F.rows) do
         for _, row in ipairs(rows) do
             local key = row.key

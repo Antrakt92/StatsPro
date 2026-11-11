@@ -10938,9 +10938,9 @@ function addon.fontRuntime.applyCommittedTextStyle(font, size, force, allowFontF
     local _, preferenceStatus = addon.fontRuntime.usablePath(preference)
     local retryFont = preferenceStatus == "pending" and preference or font
     local preservePending = db and (requestedStatus == "pending" or preferenceStatus == "pending")
-        and not SameFontPath(effectiveFont, retryFont)
+        and addon.sharedFonts.Identity(effectiveFont) ~= addon.sharedFonts.Identity(retryFont)
     if preservePending then
-        if not SameFontPath(addon.fontRuntime.pendingSavedFont, retryFont) then
+        if addon.sharedFonts.Identity(addon.fontRuntime.pendingSavedFont) ~= addon.sharedFonts.Identity(retryFont) then
             addon.fontRuntime.pendingSavedFont = addon.fontRuntime.catalogEntry(retryFont) or retryFont
             addon.fontRuntime.pendingRetryAttempt = 0
             addon.fontRuntime.pendingRetryGeneration = addon.fontRuntime.pendingRetryGeneration + 1
@@ -10990,50 +10990,58 @@ function addon.fontRuntime.repairSavedPaths()
     end
 end
 
+function addon.fontRuntime.SavedFontRetryBlocked()
+    local profile = addon.profileRuntime
+    return profile.transitioning or profile.suppressIntermediateRefresh or profile.forceReapply
+        or profile.BlocksUserWrites() or addon.profileOps.inProgress
+        or addon.settingsUI.fontPicker.previewedPath or addon.settingsUI.localization.previewActive
+        or addon.appearancePresets.session or addon.hudPresets.session
+        or profile.ReadCombatState() ~= false
+end
+
 function addon.fontRuntime.schedulePendingSavedFontRetry()
-    local pending = addon.fontRuntime.pendingSavedFont
-    if not pending or addon.fontRuntime.pendingRetryScheduled then return end
-    local nextAttempt = addon.fontRuntime.pendingRetryAttempt + 1
-    local delay = addon.fontRuntime.pendingRetryDelays[nextAttempt]
+    local runtime = addon.fontRuntime
+    local pending = runtime.pendingSavedFont
+    if not pending or runtime.pendingRetryScheduled then return end
+    local nextAttempt = runtime.pendingRetryAttempt + 1
+    local delay = runtime.pendingRetryDelays[nextAttempt]
     if not delay then return end
+    if runtime.SavedFontRetryBlocked() then return end
 
-    addon.fontRuntime.pendingRetryAttempt = nextAttempt
-    addon.fontRuntime.pendingRetryScheduled = true
-    local generation = addon.fontRuntime.pendingRetryGeneration
+    runtime.pendingRetryAttempt = nextAttempt
+    runtime.pendingRetryScheduled = true
+    local generation = runtime.pendingRetryGeneration
     C_Timer.After(delay, function()
-        if generation ~= addon.fontRuntime.pendingRetryGeneration then return end
-        addon.fontRuntime.pendingRetryScheduled = false
-        local activeDB = addon.dbRuntime.GetActiveSettings()
+        if generation ~= runtime.pendingRetryGeneration then return end
+        runtime.pendingRetryScheduled = false
         local writableDB = addon.dbRuntime.GetWritableSettings(false)
-        if not activeDB or addon.sharedFonts.Identity(addon.fontRuntime.preferredPath()) ~= addon.sharedFonts.Identity(pending) then
-            addon.fontRuntime.pendingSavedFont = nil
-            addon.fontRuntime.pendingRetryGeneration = addon.fontRuntime.pendingRetryGeneration + 1
+        if runtime.SavedFontRetryBlocked() then
+            -- The regular HUD tick resumes this attempt after the owner releases it.
+            runtime.pendingRetryAttempt = nextAttempt - 1
             return
         end
-        if not writableDB then
-            if not addon.dbRuntime.readOnly and addon.profileRuntime.BlocksUserWrites() then
-                addon.fontRuntime.pendingRetryAttempt = math.max(
-                    0, addon.fontRuntime.pendingRetryAttempt - 1)
-                return
-            end
-            addon.fontRuntime.pendingSavedFont = nil
-            addon.fontRuntime.pendingRetryGeneration = addon.fontRuntime.pendingRetryGeneration + 1
+        local locale = ResolveActiveLocale()
+        if not writableDB or addon.sharedFonts.Identity(runtime.preferredPath()) ~= addon.sharedFonts.Identity(pending)
+            or not FontSupports(pending, LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN, locale) then
+            runtime.pendingSavedFont = nil
+            runtime.pendingRetryAttempt = 0
+            runtime.pendingRetryGeneration = generation + 1
             return
         end
 
-        local applied = addon.fontRuntime.applyCommittedTextStyle(
+        local applied = runtime.applyCommittedTextStyle(
             pending, GetNumberDB("fontSize"), true, false)
         if applied then
-            addon.fontRuntime.pendingSavedFont = nil
-            addon.fontRuntime.pendingRetryAttempt = 0
-            addon.fontRuntime.pendingRetryGeneration = addon.fontRuntime.pendingRetryGeneration + 1
+            runtime.pendingSavedFont = nil
+            runtime.pendingRetryAttempt = 0
+            runtime.pendingRetryGeneration = runtime.pendingRetryGeneration + 1
             addon:RunUpdateStatsSafe()
             if type(addon.profileRuntime.RefreshConfigControls) == "function" then
                 addon.profileRuntime.RefreshConfigControls()
             end
             return
         end
-        addon.fontRuntime.schedulePendingSavedFontRetry()
+        runtime.schedulePendingSavedFontRetry()
     end)
 end
 
@@ -11922,6 +11930,7 @@ local function UpdateStats()
     if not isLoaded then return end
     updateCount = updateCount + 1
     addon.fontRuntime.ReconcileProvider()
+    addon.fontRuntime.schedulePendingSavedFontRetry()
     addon.fontRuntime.ReconcileCatalogLocale()
 
     -- WHY: master visibility toggle. When off, hide both panels and skip all work

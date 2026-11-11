@@ -651,3 +651,49 @@ for _, ownedAlias in ipairs({ false, true }) do
         and test.profileState().settings.font == savedPath, "recovery preserves the saved selection and clears pending state")
 end
 print(flavor .. " late catalogue font recovery regressions passed")
+
+for _, mode in ipairs({ "preview", "locale", "combat" }) do
+    local path = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\DelayedLatinFixture.ttf"
+    local ready, combat = false, false
+    local function canApply(_, font) return font ~= path or ready end
+    local env, addon, test = loadStatsPro("enUS", {
+        statsProDB = { font = path },
+        lsmFonts = { { name = "Delayed Latin Fixture", path = path } },
+        setFontResult = canApply,
+        fontObjectSetFontResult = canApply,
+        inCombatLockdown = function() return combat end,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    assert(addon:OpenConfigMenu() ~= false)
+    if mode == "preview" then
+        assert(test.previewFontForSmoke("Fonts\\ARIALN.TTF"))
+    elseif mode == "locale" then
+        local dropdown = env.StatsProLanguageDropdown
+        dropdown.dropdownInit()
+        for _, entry in ipairs(dropdown.dropdownEntries) do
+            if entry.value == "ruRU" then entry.func() end
+        end
+        assert(test.profileState().root.account.forceLocale == "ruRU")
+    else
+        combat = true
+        env.__fireEvent("PLAYER_REGEN_DISABLED")
+    end
+    local before = test.panelFontState()
+    ready = true
+    assert(env.__flushNextTimer(0.2))
+    local after = test.panelFontState()
+    assert(after.mainAppliedFont == before.mainAppliedFont and after.sideAppliedFont == before.sideAppliedFont,
+        "saved font timer must not override " .. mode)
+    assert(test.profileState().settings.font == path, "saved preference must survive " .. mode)
+    if mode == "preview" then
+        addon.settingsUI.fontPicker.CancelPreview(addon)
+    elseif mode == "combat" then
+        combat = false
+        env.__fireEvent("PLAYER_REGEN_ENABLED")
+    end
+    assert(addon:RunUpdateStatsSafe())
+    env.__flushTimers(0.2)
+    assert((test.currentRuntimeFontPath() == path) == (mode ~= "locale"),
+        "compatible saved font must recover after " .. mode)
+end
+print(flavor .. " pending saved font ownership regressions passed")

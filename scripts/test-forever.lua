@@ -251,6 +251,36 @@ UnitOnTaxi = function() return true end
 Expect("MovementSpeed", 0, "clean")
 UnitOnTaxi = inactiveMovementMode
 Expect("MovementSpeed", 7, "clean")
+do
+    local swimming, falling, flying, taxi, vehicle = true, false, false, false, false
+    rawset(_G, "IsSwimming", function() return swimming end)
+    rawset(_G, "IsFalling", function() return falling end)
+    rawset(_G, "IsFlying", function() return flying end)
+    rawset(_G, "UnitOnTaxi", function() return taxi end)
+    rawset(_G, "UnitInVehicle", function() return vehicle end)
+    rawset(_G, "GetUnitSpeed", function(unit)
+        return unit == "vehicle" and 20 or 17, 7, 14, 4.9
+    end)
+    Expect("MovementSpeed", 4.9, "clean")
+    swimming, falling = false, true
+    Expect("MovementSpeed", 4.9, "clean")
+    flying = true
+    Expect("MovementSpeed", 4.9, "clean")
+    falling = false
+    Expect("MovementSpeed", 14, "clean")
+    swimming, flying = true, false
+    Expect("MovementSpeed", 4.9, "clean")
+    taxi, swimming, falling = true, false, true
+    Expect("MovementSpeed", 17, "clean")
+    vehicle = true
+    Expect("MovementSpeed", 20, "clean")
+    vehicle, taxi = false, false
+    Expect("MovementSpeed", 7, "clean")
+    swimming = true
+    Expect("MovementSpeed", 4.9, "clean")
+    swimming, falling = false, secret
+    Expect("MovementSpeed", 7, "clean")
+end
 assert(catalogue.MovementSpeed.label == "Movement Speed")
 assert(catalogue.MainhandExpertise.kind == "percent")
 UnitGUID = function() return secret end

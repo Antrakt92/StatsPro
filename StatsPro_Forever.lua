@@ -30,12 +30,11 @@ local function Scalar(name, index, ...)
     return function() return Read(name, index, unpack(args)) end
 end
 
-local movementModes = {
+local transportModes = {
     { flag = "UnitInVehicle", unit = "vehicle", index = 1 },
-    { flag = "IsSwimming", unit = "player", index = 4 },
     { flag = "UnitOnTaxi", unit = "player", index = 1 },
-    { flag = "IsFlying", unit = "player", index = 3 },
 }
+local wasSwimming = false
 
 local function ReadMovementFlag(name)
     local fn = _G[name]
@@ -49,11 +48,24 @@ local function ReadMovementFlag(name)
 end
 
 local function MovementSpeed()
-    for _, mode in ipairs(movementModes) do
+    for _, mode in ipairs(transportModes) do
         local enabled = ReadMovementFlag(mode.flag)
-        if enabled == nil then return nil, "unknown" end
-        if enabled then return Read("GetUnitSpeed", mode.index, mode.unit) end
+        if enabled ~= false then
+            wasSwimming = false
+            if enabled then return Read("GetUnitSpeed", mode.index, mode.unit) end
+            return nil, "unknown"
+        end
     end
+    local swimming = ReadMovementFlag("IsSwimming")
+    -- Match the character sheet during a jump out of water. Keep only a clean
+    -- mode flag and continue to read the current swim rate on each update.
+    wasSwimming = swimming == true or (swimming == false and wasSwimming
+        and ReadMovementFlag("IsFalling") == true)
+    if swimming == nil then return nil, "unknown" end
+    if wasSwimming then return Read("GetUnitSpeed", 4, "player") end
+    local flying = ReadMovementFlag("IsFlying")
+    if flying == nil then return nil, "unknown" end
+    if flying then return Read("GetUnitSpeed", 3, "player") end
     -- Ground speed is the run rate even when the character is standing still.
     return Read("GetUnitSpeed", 2, "player")
 end

@@ -665,14 +665,21 @@ for _, mode in ipairs({ "preview", "locale", "combat" }) do
     })
     env.__fireEvent("PLAYER_ENTERING_WORLD")
     assert(addon:OpenConfigMenu() ~= false)
-    if mode == "preview" then
-        assert(test.previewFontForSmoke("Fonts\\ARIALN.TTF"))
-    elseif mode == "locale" then
+    local function selectLocale(locale)
         local dropdown = env.StatsProLanguageDropdown
         dropdown.dropdownInit()
         for _, entry in ipairs(dropdown.dropdownEntries) do
-            if entry.value == "ruRU" then entry.func() end
+            if entry.value == locale then
+                entry.func()
+                return
+            end
         end
+        error("language choice is missing: " .. locale)
+    end
+    if mode == "preview" then
+        assert(test.previewFontForSmoke("Fonts\\ARIALN.TTF"))
+    elseif mode == "locale" then
+        selectLocale("ruRU")
         assert(test.profileState().root.account.forceLocale == "ruRU")
     else
         combat = true
@@ -695,6 +702,11 @@ for _, mode in ipairs({ "preview", "locale", "combat" }) do
     env.__flushTimers(0.2)
     assert((test.currentRuntimeFontPath() == path) == (mode ~= "locale"),
         "compatible saved font must recover after " .. mode)
+    if mode == "locale" then
+        selectLocale("enUS")
+        assert(test.currentRuntimeFontPath() == path and test.profileState().settings.font == path,
+            "returning to a supported locale restores the saved face")
+    end
 end
 print(flavor .. " pending saved font ownership regressions passed")
 

@@ -6,6 +6,14 @@ on:
       version:
         description: Version label to search for, such as vX.Y.Z
         required: true
+      flavor:
+        description: Addon flavor to match
+        required: true
+        type: choice
+        default: Retail
+        options:
+          - Retail
+          - Forever
 
 permissions:
   contents: read
@@ -33,4 +41,5 @@ jobs:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           STATSPRO_CF_PROJECT_ID: "1525100"
           STATSPRO_VERSION: ${{ inputs.version }}
+          STATSPRO_CF_FLAVOR: ${{ inputs.flavor }}
         run: ./scripts/check-curseforge-diagnostics.ps1

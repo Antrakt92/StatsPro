@@ -2997,6 +2997,14 @@ on:
       version:
         description: Version label to search for, such as vX.Y.Z
         required: true
+      flavor:
+        description: Addon flavor to match
+        required: true
+        type: choice
+        default: Retail
+        options:
+          - Retail
+          - Forever
 '@
     Assert-TrustedManualWorkflowBoundary `
         -WorkflowText $WorkflowText `
@@ -3027,7 +3035,7 @@ on:
     Assert-ExactWorkflowKeySet `
         -Text $queryStep.Value `
         -Indent 10 `
-        -ExpectedKeys @('CF_API_KEY', 'STATSPRO_CF_PROJECT_ID', 'STATSPRO_VERSION') `
+        -ExpectedKeys @('CF_API_KEY', 'STATSPRO_CF_PROJECT_ID', 'STATSPRO_VERSION', 'STATSPRO_CF_FLAVOR') `
         -Description "CurseForge diagnostics query environment"
     $expectedQueryStep = @'
       - name: Query CurseForge legacy API
@@ -3036,6 +3044,7 @@ on:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           STATSPRO_CF_PROJECT_ID: "1525100"
           STATSPRO_VERSION: ${{ inputs.version }}
+          STATSPRO_CF_FLAVOR: ${{ inputs.flavor }}
         run: ./scripts/check-curseforge-diagnostics.ps1
 '@
     $actualNames = @(
@@ -3043,21 +3052,22 @@ on:
             ForEach-Object { $_.Groups[1].Value } |
             Sort-Object
     )
-    $expectedNames = @('CF_API_KEY', 'STATSPRO_CF_PROJECT_ID', 'STATSPRO_VERSION')
+    $expectedNames = @('CF_API_KEY', 'STATSPRO_CF_PROJECT_ID', 'STATSPRO_VERSION', 'STATSPRO_CF_FLAVOR')
     if ($actualNames.Count -ne $expectedNames.Count -or
         (Compare-Object -ReferenceObject ($expectedNames | Sort-Object) -DifferenceObject $actualNames)) {
-        throw "CurseForge diagnostics query must expose only its exact three environment keys."
+        throw "CurseForge diagnostics query must expose only its exact four environment keys."
     }
     $canonicalPatterns = @(
         '(?m)^\s{10}CF_API_KEY:\s*\$\{\{\s*secrets\.CF_API_KEY\s*\}\}\s*$',
         '(?m)^\s{10}STATSPRO_CF_PROJECT_ID:\s*"1525100"\s*$',
-        '(?m)^\s{10}STATSPRO_VERSION:\s*\$\{\{\s*inputs\.version\s*\}\}\s*$'
+        '(?m)^\s{10}STATSPRO_VERSION:\s*\$\{\{\s*inputs\.version\s*\}\}\s*$',
+        '(?m)^\s{10}STATSPRO_CF_FLAVOR:\s*\$\{\{\s*inputs\.flavor\s*\}\}\s*$'
     )
     $withoutCanonicalBindings = $queryStep.Value
     foreach ($pattern in $canonicalPatterns) {
         $matches = @([regex]::Matches($withoutCanonicalBindings, $pattern))
         if ($matches.Count -ne 1) {
-            throw "CurseForge diagnostics query must keep its exact secret, project, and version bindings."
+            throw "CurseForge diagnostics query must keep its exact secret, project, version, and flavor bindings."
         }
         $withoutCanonicalBindings = $withoutCanonicalBindings.Remove($matches[0].Index, $matches[0].Length)
     }
@@ -3086,6 +3096,14 @@ on:
       version:
         description: Version label to search for, such as vX.Y.Z
         required: true
+      flavor:
+        description: Addon flavor to match
+        required: true
+        type: choice
+        default: Retail
+        options:
+          - Retail
+          - Forever
 
 permissions:
   contents: read
@@ -3113,6 +3131,7 @@ jobs:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           STATSPRO_CF_PROJECT_ID: "1525100"
           STATSPRO_VERSION: ${{ inputs.version }}
+          STATSPRO_CF_FLAVOR: ${{ inputs.flavor }}
         run: ./scripts/check-curseforge-diagnostics.ps1
 '@
     Assert-ExactWorkflowBlock `
@@ -5002,7 +5021,12 @@ function Invoke-SelfTest {
         Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
             '${{ inputs.version }}',
             '${{ github.ref_name }}')
-    } "exact secret, project, and version bindings"
+    } "exact secret, project, version, and flavor bindings"
+    Assert-ThrowsMatch "CurseForge diagnostics flavor input drift rejected" {
+        Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
+            '${{ inputs.flavor }}',
+            '${{ github.ref_name }}')
+    } "exact secret, project, version, and flavor bindings"
     Assert-ThrowsMatch "job-level CurseForge diagnostics secret rejected" {
         Assert-CurseForgeDiagnosticsWorkflowBoundary -WorkflowText $diagnosticsWorkflowText.Replace(
             '  files:',

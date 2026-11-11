@@ -6,7 +6,7 @@ param(
     [int]$MaxAttempts = 3,
     [int]$RetryDelaySeconds = 5,
     [ValidateSet('Retail', 'Forever')]
-    [string]$Flavor = 'Retail',
+    [string]$Flavor = $(if ($env:STATSPRO_CF_FLAVOR) { $env:STATSPRO_CF_FLAVOR } else { 'Retail' }),
     [switch]$SelfTest
 )
 
@@ -47,32 +47,12 @@ function Get-CurseForgeHttpStatusCode {
     return $null
 }
 
-function Get-CurseForgeFailureBody {
-    param($Exception)
-
-    if ($null -eq $Exception) { return "" }
-    try {
-        if ($Exception.Data -and $Exception.Data.Contains("CurseForgeBody")) {
-            return [string]$Exception.Data["CurseForgeBody"]
-        }
-    }
-    catch {
-    }
-    return ""
-}
-
 function Format-CurseForgeRequestFailure {
     param($Exception)
 
-    $message = if ($Exception -and $Exception.Message) { $Exception.Message } else { "unknown error" }
     $statusCode = Get-CurseForgeHttpStatusCode $Exception
-    $prefix = if ($null -ne $statusCode) { "HTTP $statusCode ($message)" } else { $message }
-    $body = Get-CurseForgeFailureBody $Exception
-    if (-not [string]::IsNullOrWhiteSpace($body)) {
-        $snippet = if ($body.Length -gt 2000) { $body.Substring(0, 2000) } else { $body }
-        return "$prefix Body: $snippet"
-    }
-    return $prefix
+    if ($null -ne $statusCode) { return "HTTP $statusCode" }
+    return "transport error without HTTP status"
 }
 
 function Test-CurseForgeAuthFailure {
@@ -117,7 +97,7 @@ function Get-CurseForgeFileItems {
         $parsed = ConvertFrom-JsonCompat $JsonText
     }
     catch {
-        throw "CurseForge response contained invalid JSON: $($_.Exception.Message)"
+        throw "CurseForge response contained invalid JSON."
     }
 
     if ($parsed -is [System.Array]) {
@@ -192,7 +172,7 @@ function Get-CurseForgeFileSummary {
             gameVersions = $_.gameVersions
             dateCreated = $_.dateCreated
             dateModified = $_.dateModified
-            downloadUrl = $_.downloadUrl
+            gameVersionTypeIds = $_.gameVersionTypeIds
         }
     })
 }
@@ -272,7 +252,7 @@ function Invoke-CurseForgeDiagnostics {
 
     if ([string]::IsNullOrWhiteSpace($Version)) { throw "Missing version label. Pass -Version vX.Y.Z or set STATSPRO_VERSION." }
     Assert-StatsProReleaseTag -Value $Version
-    if ([string]::IsNullOrWhiteSpace($ProjectId)) { throw "Missing CurseForge project id." }
+    if ($ProjectId -cnotmatch '\A[1-9][0-9]*\z') { throw "CurseForge project id must be a positive decimal integer." }
     if ([string]::IsNullOrWhiteSpace($ApiKey)) { throw "CF_API_KEY secret is not set." }
     if ($TimeoutSec -le 0) { throw "TimeoutSec must be positive." }
     if ($MaxAttempts -lt 1) { throw "MaxAttempts must be at least 1." }
@@ -334,14 +314,14 @@ function Invoke-CurseForgeDiagnostics {
         Write-CurseForgeFileSummary -Files $files
         foreach ($file in $files) {
             if (Test-CurseForgeFileVersionMatch -File $file -Version $Version -Flavor $Flavor) {
-                Write-Host "$Version found in CurseForge file listings."
+                Write-Host "$Version ($Flavor) found in CurseForge file listings."
                 return
             }
         }
     }
 
     if ($successfulListings -gt 0) {
-        throw "$Version was not found in CurseForge project $ProjectId file listings."
+        throw "$Version ($Flavor) was not found in CurseForge project $ProjectId file listings."
     }
     $details = if ($endpointFailures.Count -gt 0) { " Details: $($endpointFailures -join ' | ')" } else { "" }
     throw "Could not read CurseForge project $ProjectId file listings.$details"
@@ -708,6 +688,7 @@ function Invoke-SelfTest {
             displayName = "StatsPro-v$_.zip"
             fileName = "StatsPro-v$_.zip"
             ignoredProperty = "must not leak into diagnostics summary"
+            downloadUrl = "https://example.invalid/file?token=signed-test-value"
         }
     })
     $summary = @(Get-CurseForgeFileSummary -Files $summaryInput -Limit 25)
@@ -717,16 +698,17 @@ function Invoke-SelfTest {
     if ($summary[-1].displayName -ne "StatsPro-v25.zip") {
         throw "CurseForge file summary should preserve file listing order."
     }
-    if ($summary[0].PSObject.Properties.Name -contains "ignoredProperty") {
+    if ($summary[0].PSObject.Properties.Name -contains "ignoredProperty" -or
+        (ConvertTo-JsonCompat -InputObject $summary) -match 'signed-test-value') {
         throw "CurseForge file summary should expose only diagnostic-safe fields."
     }
 
-    $longBodyException = [System.Exception]::new("long body diagnostics self-test")
+    $longBodyException = [System.Exception]::new("signed-test-exception")
     $longBodyException.Data["CurseForgeStatusCode"] = 404
-    $longBodyException.Data["CurseForgeBody"] = ("x" * 3000)
+    $longBodyException.Data["CurseForgeBody"] = "signed-test-body"
     $longBodyFailure = Format-CurseForgeRequestFailure $longBodyException
-    if ($longBodyFailure -notmatch "HTTP 404" -or $longBodyFailure.Length -gt 2100) {
-        throw "Long CurseForge failure bodies should be bounded in diagnostics output."
+    if ($longBodyFailure -notmatch "HTTP 404" -or $longBodyFailure -match "signed-test") {
+        throw "CurseForge diagnostics must omit arbitrary failure messages and response bodies."
     }
 
     $nextEndpointState = @{ Attempts = 0; Uris = @() }
@@ -815,6 +797,13 @@ function Invoke-SelfTest {
         if (Test-CurseForgeFileVersionMatch -File $mutated -Version 'v1.2.3' -Flavor Forever) {
             throw "Forever diagnostics accepted wrong $property metadata."
         }
+    }
+    $foreverJson = ConvertTo-JsonCompat -InputObject @($foreverFixture)
+    $foreverOutput = @(Invoke-CurseForgeDiagnostics -Version 'v1.2.3' -Flavor Forever -ProjectId '1525100' -ApiKey 'fixture' -Request {
+        [pscustomobject]@{ StatusCode = 200; Content = $foreverJson }
+    } 6>&1) -join " "
+    if ($foreverOutput -notmatch 'v1\.2\.3 \(Forever\) found') {
+        throw "The Forever diagnostics route must report the selected flavor."
     }
     Write-Host "CurseForge diagnostics self-test passed."
 }

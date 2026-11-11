@@ -186,6 +186,39 @@ for _, costReadyOnWake in ipairs({ true, false }) do
 end
 print(flavor .. " late repair tooltip recovery regressions passed")
 
+do
+    local env, addon, test = loadStatsPro("enUS", {
+        unitGUID = function() return "Player-Capacity" end,
+        getSpecialization = function() return 1 end, specID = 73, specRole = "TANK",
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    assert(test.profileOps.enableAccountWide(test.profileState().profileID))
+    local sections = { stats = true, layout = true, appearance = true }
+    local payload = assert(test.profileTransfer.serialize("Capacity", test.profileState().settings, sections))
+    local package = assert(test.profileTransfer.parse(payload))
+    local reachedLimit = false
+    for _ = 1, 150 do
+        local before = test.profileState()
+        local ok, reason = test.profileOps.importTransferToContext(package, sections)
+        if not ok then
+            assert(reason == "profile-capacity", "valid profile growth reports the registry node limit")
+            local after = test.profileState()
+            assert(after.profiles == before.profiles and after.settings == before.settings
+                and after.profileID == before.profileID and test.validateRegistry(after.root),
+                "capacity rejection preserves the active valid registry")
+            local hint = addon.profileUI.OperationErrorText(reason)
+            assert(hint:find("Delete unused settings", 1, true), "capacity message identifies manual cleanup")
+            local cleaned, count = test.profileOps.deleteUnusedProfiles()
+            assert(cleaned and count > 0, "manual cleanup is available after rejection")
+            assert(test.profileOps.importTransferToContext(package, sections), "cleanup makes room for a retry")
+            reachedLimit = true
+            break
+        end
+    end
+    assert(reachedLimit, "fixture reaches the real profile storage limit")
+end
+print(flavor .. " profile capacity recovery regressions passed")
+
 -- A styled FontString can retain its own font even while GetFontObject still
 -- identifies the shared parent. Changing that parent must not strand Settings.
 for _, failFirst in ipairs({ false, true }) do

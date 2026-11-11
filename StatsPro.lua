@@ -1893,6 +1893,7 @@ local LABELS_BY_LOCALE = {
         ["The current character cannot be forgotten."] = "The current character cannot be forgotten.",
         ["Nothing changed."] = "Nothing changed.",
         ["Profile operation failed. Review the selection and try again."] = "Profile operation failed. Review the selection and try again.",
+        ["Profile storage is full. Use %s to make room."] = "Profile storage is full. Use %s to make room.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Forget \"%s\"? Its character record will be removed, but profile settings will be kept.",
         -- Templates:
         ["Auto (current: %s)"] = "Auto (current: %s)",
@@ -2029,6 +2030,7 @@ local LABELS_BY_LOCALE = {
         ["The current character cannot be forgotten."] = "Текущего персонажа нельзя забыть.",
         ["Nothing changed."] = "Ничего не изменилось.",
         ["Profile operation failed. Review the selection and try again."] = "Операция с профилем не выполнена. Проверьте выбор и повторите попытку.",
+        ["Profile storage is full. Use %s to make room."] = "Хранилище профилей заполнено. Освободите место через «%s».",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Забыть «%s»? Запись персонажа будет удалена, но настройки профилей сохранятся.",
         -- Templates:
         ["Auto (current: %s)"] = "Авто (сейчас: %s)",
@@ -2159,6 +2161,7 @@ local LABELS_BY_LOCALE = {
         ["The current character cannot be forgotten."] = "Der aktuelle Charakter kann nicht vergessen werden.",
         ["Nothing changed."] = "Es wurde nichts geändert.",
         ["Profile operation failed. Review the selection and try again."] = "Der Profilvorgang ist fehlgeschlagen. Prüfe die Auswahl und versuche es erneut.",
+        ["Profile storage is full. Use %s to make room."] = "Der Profilspeicher ist voll. Nutze „%s“, um Platz zu schaffen.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "„%s“ vergessen? Der Charaktereintrag wird entfernt, die Profileinstellungen bleiben erhalten.",
         ["Auto (current: %s)"] = "Auto (aktuell: %s)",
         ["Western European text"] = "westeuropäischen Text",
@@ -2285,6 +2288,7 @@ local LABELS_BY_LOCALE = {
         ["The current character cannot be forgotten."] = "Le personnage actuel ne peut pas être oublié.",
         ["Nothing changed."] = "Aucune modification.",
         ["Profile operation failed. Review the selection and try again."] = "L’opération sur le profil a échoué. Vérifiez la sélection et réessayez.",
+        ["Profile storage is full. Use %s to make room."] = "Le stockage des profils est plein. Utilisez « %s » pour libérer de la place.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Oublier « %s » ? Sa fiche de personnage sera supprimée, mais les réglages des profils seront conservés.",
         ["Auto (current: %s)"] = "Auto (actuel : %s)",
         ["Western European text"] = "le texte d’Europe occidentale",
@@ -2412,6 +2416,7 @@ local LABELS_BY_LOCALE = {
         ["The current character cannot be forgotten."] = "No se puede olvidar al personaje actual.",
         ["Nothing changed."] = "No se ha cambiado nada.",
         ["Profile operation failed. Review the selection and try again."] = "La operación del perfil ha fallado. Revisa la selección e inténtalo de nuevo.",
+        ["Profile storage is full. Use %s to make room."] = "El espacio para perfiles está lleno. Usa «%s» para liberar espacio.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "¿Olvidar a «%s»? Se eliminará su registro de personaje, pero se conservarán los ajustes de perfiles.",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
         ["Western European text"] = "texto de Europa occidental",
@@ -2537,6 +2542,7 @@ local LABELS_BY_LOCALE = {
         ["The current character cannot be forgotten."] = "No se puede olvidar al personaje actual.",
         ["Nothing changed."] = "No se cambió nada.",
         ["Profile operation failed. Review the selection and try again."] = "La operación del perfil falló. Revisa la selección e inténtalo de nuevo.",
+        ["Profile storage is full. Use %s to make room."] = "El espacio para perfiles está lleno. Usa «%s» para liberar espacio.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "¿Olvidar a «%s»? Se eliminará su registro de personaje, pero se conservarán los ajustes de perfiles.",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
         ["Western European text"] = "texto de Europa occidental",
@@ -2663,6 +2669,7 @@ local LABELS_BY_LOCALE = {
         ["The current character cannot be forgotten."] = "Il personaggio attuale non può essere dimenticato.",
         ["Nothing changed."] = "Nessuna modifica.",
         ["Profile operation failed. Review the selection and try again."] = "Operazione sul profilo non riuscita. Controlla la selezione e riprova.",
+        ["Profile storage is full. Use %s to make room."] = "Lo spazio per i profili è esaurito. Usa «%s» per liberare spazio.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Dimenticare «%s»? Il record del personaggio verrà rimosso, ma le impostazioni dei profili saranno conservate.",
         ["Auto (current: %s)"] = "Auto (attuale: %s)",
         ["Western European text"] = "testo dell’Europa occidentale",
@@ -2788,6 +2795,7 @@ local LABELS_BY_LOCALE = {
         ["The current character cannot be forgotten."] = "O personagem atual não pode ser esquecido.",
         ["Nothing changed."] = "Nada foi alterado.",
         ["Profile operation failed. Review the selection and try again."] = "A operação do perfil falhou. Revise a seleção e tente novamente.",
+        ["Profile storage is full. Use %s to make room."] = "O espaço para perfis está cheio. Use «%s» para liberar espaço.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Esquecer “%s”? O registro do personagem será removido, mas as configurações dos perfis serão mantidas.",
         ["Auto (current: %s)"] = "Auto (atual: %s)",
         ["Western European text"] = "texto da Europa Ocidental",
@@ -2920,6 +2928,7 @@ local LABELS_BY_LOCALE = {
         ["The current character cannot be forgotten."] = "현재 캐릭터의 기록은 삭제할 수 없습니다.",
         ["Nothing changed."] = "변경된 내용이 없습니다.",
         ["Profile operation failed. Review the selection and try again."] = "프로필 작업에 실패했습니다. 선택을 확인하고 다시 시도하세요.",
+        ["Profile storage is full. Use %s to make room."] = "프로필 저장 공간이 가득 찼습니다. ‘%s’에서 공간을 확보하세요.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "\"%s\"의 기록을 삭제하시겠습니까? 캐릭터 기록만 제거되고 프로필 설정은 유지됩니다.",
         ["Auto (current: %s)"] = "자동 (현재: %s)",
         ["Western European text"] = "서유럽 언어 텍스트",
@@ -3045,6 +3054,7 @@ local LABELS_BY_LOCALE = {
         ["The current character cannot be forgotten."] = "无法移除当前角色的记录。",
         ["Nothing changed."] = "没有任何更改。",
         ["Profile operation failed. Review the selection and try again."] = "配置操作失败。请检查选择后重试。",
+        ["Profile storage is full. Use %s to make room."] = "配置存储空间已满。请使用“%s”释放空间。",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "移除“%s”的记录？角色记录将被删除，但配置设置会保留。",
         ["Auto (current: %s)"] = "自动（当前: %s）",
         ["Western European text"] = "西欧语言文本",
@@ -3170,6 +3180,7 @@ local LABELS_BY_LOCALE = {
         ["The current character cannot be forgotten."] = "無法移除目前角色的記錄。",
         ["Nothing changed."] = "沒有任何變更。",
         ["Profile operation failed. Review the selection and try again."] = "設定檔操作失敗。請檢查選擇後再試一次。",
+        ["Profile storage is full. Use %s to make room."] = "設定檔儲存空間已滿。請使用「%s」釋放空間。",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "移除「%s」的記錄？角色記錄將被刪除，但設定檔內容會保留。",
         ["Auto (current: %s)"] = "自動（目前: %s）",
         ["Western European text"] = "西歐語言文字",
@@ -5795,9 +5806,11 @@ function addon.dbRuntime.FailGraphBudget(budget, reason)
 end
 
 function addon.dbRuntime.ConsumeGraphBudget(budget, depth)
-    if not budget or depth > addon.dbRuntime.maxGraphDepth
-        or budget.nodes >= addon.dbRuntime.maxGraphNodes then
-        return addon.dbRuntime.FailGraphBudget(budget, "budget")
+    if not budget or depth > addon.dbRuntime.maxGraphDepth then
+        return addon.dbRuntime.FailGraphBudget(budget, "depth-limit")
+    end
+    if budget.nodes >= addon.dbRuntime.maxGraphNodes then
+        return addon.dbRuntime.FailGraphBudget(budget, "node-limit")
     end
     budget.nodes = budget.nodes + 1
     return true
@@ -6023,9 +6036,9 @@ function addon.dbRuntime.CloneMigrationWork(source, dbVersion)
     return copy
 end
 
-function addon.dbRuntime.ValidateRegistry(root)
+function addon.dbRuntime.ValidateRegistry(root, budget)
     addon.dbRuntime.validationCount = addon.dbRuntime.validationCount + 1
-    local budget = addon.dbRuntime.NewGraphBudget()
+    budget = budget or addon.dbRuntime.NewGraphBudget()
     if not addon.dbRuntime.ConsumeGraphBudget(budget, 0)
         or not addon.dbRuntime.IsInspectableGraphTable(root, budget) then return false end
     local account = rawget(root, "account")
@@ -7884,10 +7897,11 @@ function addon.profileOps.Execute(expected, builder)
     local desiredProfile = transaction.profiles[desiredProfileID]
     local reapply = desiredProfileID ~= oldProfileID
         or not rawequal(desiredProfile.settings, oldSettings)
-    if not addon.dbRuntime.ValidateRegistry(candidate)
+    local validationBudget = addon.dbRuntime.NewGraphBudget()
+    if not addon.dbRuntime.ValidateRegistry(candidate, validationBudget)
         or addon.profileOps.ShouldFail("validate") then
         addon.profileOps.RestorePositionFields(oldSettings, positionSnapshot)
-        return finish(false, "validate-failed")
+        return finish(false, validationBudget.failure == "node-limit" and "profile-capacity" or "validate-failed")
     end
 
     addon.profileRuntime.transitioning = true
@@ -15757,6 +15771,9 @@ function addon.profileUI.OperationErrorText(reason)
     if reason == "current-character" then return L("The current character cannot be forgotten.") end
     if reason == "profile-in-use" then
         return L("These saved settings are now in use. Choose another setup.")
+    end
+    if reason == "profile-capacity" then
+        return string.format(L("Profile storage is full. Use %s to make room."), L("Delete unused settings..."))
     end
     if reason == "account-wide-active" then
         return L("Return to specialization settings before changing assignments.")

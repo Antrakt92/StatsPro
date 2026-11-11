@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.23.1 - 11-Nov-2026 — Character profiles and HUD fixes
+## 1.23.2 - 11-Nov-2026 — Character profiles and HUD fixes
 
 - Use class-appropriate starter rows on first login and after a reset. Preserve character profile details and accept older Forever profile codes.
 - Preserve panel positions across screen sizes and keep the preferred font when sharing older profiles. Restore saved fonts that become available after login.

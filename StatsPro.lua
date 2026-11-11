@@ -15687,8 +15687,8 @@ addon.profileRuntime.closeOwnedSettingsModals = function()
     if not addon.presetRuntime.CancelAllPreviews(true) then
         error("preset preview restore failed")
     end
-    if type(addon.profileUI.CloseOperationDialog) == "function" then
-        addon.profileUI.CloseOperationDialog()
+    if type(addon.profileUI.CloseProfileOperationDialog) == "function" then
+        addon.profileUI.CloseProfileOperationDialog()
     end
     local localization = addon.settingsUI.localization
     if type(localization.CancelPreview) == "function" then
@@ -16768,6 +16768,14 @@ function addon.profileUI.BuildOperationUI(manager)
         blocker:Hide()
     end
 
+    function ui.IsSelfTestDialog()
+        return ui.pendingAction and ui.pendingAction.kind == "selftest-note"
+    end
+
+    function ui.CloseProfileOperationDialog()
+        if not ui.IsSelfTestDialog() then ui.CloseOperationDialog() end
+    end
+
     function ui.ShowDialogBase(title, owner)
         owner = owner or manager
         if owner == UIParent then
@@ -17400,7 +17408,8 @@ function addon.profileUI.BuildOperationUI(manager)
                     and ui.pendingAction.payload.canImport ~= true))
         local cleanupDialog = canClean and ui.pendingAction
             and (ui.pendingAction.kind == "cleanup" or ui.pendingAction.kind == "forget")
-        if dialog:IsShown() and ((not mutable and not exportOnlyDialog and not cleanupDialog)
+        if dialog:IsShown() and not ui.IsSelfTestDialog()
+            and ((not mutable and not exportOnlyDialog and not cleanupDialog)
             or not addon.profileOps.CheckExpected(addon.dbRuntime.Refresh(),
                 ui.pendingAction and ui.pendingAction.expected)) then
             dialog:Hide()
@@ -17857,7 +17866,7 @@ function addon.profileUI.BuildSettingsUI(owner)
     ui.BuildOperationUI(manager)
 
     manager:HookScript("OnHide", function()
-        ui.CloseOperationDialog()
+        ui.CloseProfileOperationDialog()
         ui.RemoveSpecialFrame("StatsProProfileManager")
         -- See the dialog OnHide warning: restoring Settings synchronously can make one
         -- Escape close every visible StatsPro layer during Blizzard's live-table walk.

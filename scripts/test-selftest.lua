@@ -243,4 +243,28 @@ for _, forever in ipairs({ false, true }) do
         "report opens after the profile dialog closes")
 end
 
+for _, forever in ipairs({ false, true }) do
+    local env, addon = loadStatsPro(forever)
+    assert(addon:OpenConfigMenu() ~= false)
+    local ui = addon.profileUI
+    ui.OpenManager(true)
+    local guided = addon.selfTest
+    assert(guided.Start())
+    guided.Finish("ok")
+    local report = assert(ui.transferState)
+    assert(report.kind == "selftest" and env.StatsProProfileOperationDialog:IsShown())
+    env.__fireEvent("UNIT_NAME_UPDATE", "player")
+    assert(ui.transferState == report and env.StatsProProfileOperationDialog:IsShown(),
+        "pending context refresh preserves a detached report")
+    assert(addon.profileRuntime.CloseOwnedSettingsModals())
+    assert(ui.transferState == report and env.StatsProProfileOperationDialog:IsShown(),
+        "context cleanup preserves a detached report")
+    env.StatsProProfileManager:Hide()
+    assert(ui.transferState == report and env.StatsProProfileOperationDialog:IsShown(),
+        "profile manager closure preserves a detached report")
+    ui.CloseOperationDialog()
+    assert(not ui.transferState and not env.StatsProProfileOperationDialog:IsShown(),
+        "the report still closes explicitly")
+end
+
 print("StatsPro self-test diagnostics regressions passed")

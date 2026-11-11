@@ -21889,6 +21889,7 @@ function addon.selfTest.Reset()
     addon.selfTest.truncated = false
     addon.selfTest.recovered = false
     addon.selfTest.deferredWindow = false
+    addon.selfTest.windowRetryToken = nil
     addon.selfTest.env = nil
     addon.selfTest.report = nil
     addon.selfTest.pendingText = nil
@@ -22074,11 +22075,23 @@ function addon.selfTest.OnCombatStart()
     end
 end
 
+function addon.selfTest.ResumeDeferredWindow(attempt)
+    local guided = addon.selfTest
+    guided.windowRetryToken = nil
+    if not guided.deferredWindow then return end
+    local _, reason = guided.ShowWindow()
+    attempt = (attempt or 0) + 1
+    if reason ~= "combat" or attempt > 3 then return end
+    -- A combat-end event can precede the readable out-of-combat state.
+    local token = {}
+    guided.windowRetryToken = token
+    C_Timer.After(0.1, function()
+        if guided.windowRetryToken == token then guided.ResumeDeferredWindow(attempt) end
+    end)
+end
+
 function addon.selfTest.OnCombatEnd()
-    if addon.selfTest.deferredWindow then
-        addon.selfTest.deferredWindow = false
-        addon.selfTest.ShowWindow()
-    end
+    addon.selfTest.ResumeDeferredWindow()
     if addon.selfTest.state == "combat-collect" and addon.selfTest.sawCombat
         and addon.selfTest.recoveryLeft <= 0 then
         addon.selfTest.BeginRecovery()
@@ -22406,7 +22419,7 @@ end
 function addon.selfTest.ShowWindow()
     if addon.selfTest.ReadCombat() ~= false then
         addon.selfTest.deferredWindow = true
-        return false
+        return false, "combat"
     end
     addon.selfTest.deferredWindow = false
     local payload = addon.selfTest.BuildPayload()

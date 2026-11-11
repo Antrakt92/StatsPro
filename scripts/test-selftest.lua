@@ -176,4 +176,33 @@ for _, scenario in ipairs({ { cycles = 1, ticks = 24 }, { cycles = 25, ticks = 1
     end
 end
 
+for _, forever in ipairs({ false, true }) do
+    local combat = false
+    local env, addon = loadStatsPro(forever, { inCombatLockdown = function() return combat end })
+    local guided = addon.selfTest
+    assert(guided.Start())
+    for _ = 1, guided.oocTarget do guided.OnTick() end
+    combat = true
+    env.__fireEvent("PLAYER_REGEN_DISABLED")
+    for _ = 1, guided.combatTimeoutTicks do guided.OnTick() end
+    assert(guided.state == "done" and guided.deferredWindow and env.StatsProSelfTest.report)
+    env.__fireEvent("PLAYER_REGEN_ENABLED")
+    assert(guided.deferredWindow and not env.__lastStaticPopup, "stale combat still defers the report")
+    combat = false
+    env.__flushTimers(1)
+    assert(not guided.deferredWindow and env.__lastStaticPopup.key == "STATSPRO_SELFTEST_COPY",
+        "report opens after combat state catches up without a second event")
+
+    assert(guided.Start())
+    combat = true
+    env.__fireEvent("PLAYER_REGEN_DISABLED")
+    guided.Finish("timeout")
+    env.__fireEvent("PLAYER_REGEN_ENABLED")
+    env.__flushTimers(1)
+    assert(guided.deferredWindow and guided.windowRetryToken == nil, "stale combat retry is bounded")
+    combat = false
+    env.__fireEvent("PLAYER_REGEN_ENABLED")
+    assert(not guided.deferredWindow, "later combat end can resume the deferred report")
+end
+
 print("StatsPro self-test diagnostics regressions passed")

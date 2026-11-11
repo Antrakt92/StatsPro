@@ -77,6 +77,10 @@ if [[ ${1:-} == --self-test ]]; then
   fixture="$scratch/source"
   git clone --quiet --no-hardlinks "$source_root" "$fixture"
   # All mutations are confined to this disposable clone, never the source refs.
+  # Give the fixture its own base so a real tag on the checked-out commit
+  # cannot compete with the synthetic tag in the descendant's git describe.
+  git -C "$fixture" -c user.name=Fixture -c user.email=fixture@example.invalid \
+    -c commit.gpgSign=false -c core.hooksPath=/dev/null commit --quiet --allow-empty -m 'Fixture tag base'
   git -C "$fixture" -c tag.gpgSign=false tag v2147483647.0.0
   log="$scratch/suppressed.log"
   env GITHUB_ACTIONS=true GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main \

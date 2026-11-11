@@ -698,15 +698,23 @@ for _, mode in ipairs({ "preview", "locale", "combat" }) do
 end
 print(flavor .. " pending saved font ownership regressions passed")
 
+local function archonTargetsFixture()
+    return {
+        schemaVersion = 6,
+        snapshots = {
+            mythicPlusCurrent = {
+                capturedAt = "2026-11-11",
+                specs = { MAGE = { frost = { targets = { haste = 1000, mastery = 1000 } } } },
+            },
+        },
+    }
+end
+
 if not forever then
-    local data = {}
-    local loadData = assert(loadfile("StatsPro_ArchonTargets.lua"))
-    setfenv(loadData, data)
-    loadData()
     local phase = "clean"
     local env, addon, test = loadStatsPro("enUS", {
         unitClassToken = "MAGE", specIndex = 1, specID = 64,
-        statsProArchonTargets = data.StatsProArchonTargets,
+        statsProArchonTargets = archonTargetsFixture(),
         statsProDB = {
             showOffensive = true, showCrit = false, showHaste = true,
             showMastery = false, showVersatility = false, matchValueColorToStat = false,
@@ -832,15 +840,11 @@ if not forever then
 end
 
 if not forever then
-    local data = {}
-    local loadData = assert(loadfile("StatsPro_ArchonTargets.lua"))
-    setfenv(loadData, data)
-    loadData()
     local reads = 0
     local coefficientUnavailable = false
     local env, addon, test = loadStatsPro("enUS", {
         unitClassToken = "MAGE", specIndex = 1, specID = 64,
-        statsProArchonTargets = data.StatsProArchonTargets,
+        statsProArchonTargets = archonTargetsFixture(),
         statsProDB = {
             showOffensive = true, showCrit = false, showHaste = false,
             showMastery = true, showVersatility = false,

@@ -229,6 +229,7 @@ do
     addon:OpenConfigMenu()
     local dropdown = env.StatsProTargetSnapshotDropdown
     local menu = addon.settingsUI.dropdownMenu
+    check(dropdown.dropdownText == 'Raid Normal (Unavailable)', 'unavailable choice keeps its own caption')
     check(menu.Show(addon, dropdown), 'unavailable raid choice still opens the other available target options')
     check(test.cachedTargetSnapshot() == 'raidNormal', 'opening target menu does not replace the unavailable saved difficulty')
     local current
@@ -236,6 +237,8 @@ do
         if row.info then
             check(row.info.value ~= 'raidNormal' and row.info.value ~= 'raidHeroic',
                 'unavailable Normal and Heroic choices are absent from owned menu')
+            check(not row.info.checked and not row.mark:IsShown(),
+                'an unavailable saved choice does not mark a different difficulty')
             if row.info.value == 'mythicPlusCurrent' then current = row end
         end
     end
@@ -254,6 +257,15 @@ do
     check(normal ~= nil and heroic ~= nil, 'available raid difficulties return for another specialization')
     fire(normal, 'OnClick')
     check(test.getDB('targetSnapshot') == 'raidNormal', 'restored difficulty can be selected')
+    check(dropdown.dropdownText == 'Raid Normal', 'recovered availability restores the ordinary caption')
+    check(menu.Show(addon, dropdown), 'available Heroic can be opened before the next specialization change')
+    for _, row in ipairs(menu.buttons) do
+        if row.info and row.info.value == 'raidHeroic' then heroic = row end
+    end
+    specID = 66 -- API changed before the specialization event reached the popup.
+    fire(heroic, 'OnClick')
+    check(test.getDB('targetSnapshot') == 'raidNormal', 'stale unavailable click does not write another difficulty')
+    check(dropdown.dropdownText == 'Raid Normal (Unavailable)', 'rejected stale click refreshes the saved caption')
 end
 -- Distinct addon windows share strata; every control in the focused family
 -- must clear the other family's highest child, not just its root panel.

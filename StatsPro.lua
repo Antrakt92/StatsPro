@@ -1833,6 +1833,7 @@ local LABELS_BY_LOCALE = {
         ["Flat"] = "Flat", ["Sectioned"] = "Sectioned", ["Split"] = "Split",
         ["Mythic+"] = "Mythic+", ["Raid"] = "Raid",
         ["Raid Normal"] = "Raid Normal", ["Raid Heroic"] = "Raid Heroic", ["Raid Mythic"] = "Raid Mythic",
+        ["Unavailable"] = "Unavailable",
         ["Full"] = "Full", ["Short"] = "Short", ["Hidden"] = "Hidden",
         ["None"] = "None", ["Outline"] = "Outline", ["Thick Outline"] = "Thick Outline",
         ["M+ Target"] = "M+ Target", ["Raid Target"] = "Raid Target",
@@ -1970,6 +1971,7 @@ local LABELS_BY_LOCALE = {
         ["Flat"] = "Плоский", ["Sectioned"] = "По секциям", ["Split"] = "Разделённый",
         ["Mythic+"] = "Мифик+", ["Raid"] = "Рейд",
         ["Raid Normal"] = "Рейд: обычный", ["Raid Heroic"] = "Рейд: героический", ["Raid Mythic"] = "Рейд: эпохальный",
+        ["Unavailable"] = "Недоступно",
         ["Full"] = "Полный", ["Short"] = "Короткий", ["Hidden"] = "Скрытый",
         ["None"] = "Нет", ["Outline"] = "Контур", ["Thick Outline"] = "Толстый контур",
         ["M+ Target"] = "Цель M+", ["Raid Target"] = "Цель рейда",
@@ -2102,6 +2104,7 @@ local LABELS_BY_LOCALE = {
         ["Flat"] = "Flach", ["Sectioned"] = "Gruppiert", ["Split"] = "Geteilt",
         ["Mythic+"] = "Mythic+", ["Raid"] = "Raid",
         ["Raid Normal"] = "Raid Normal", ["Raid Heroic"] = "Raid Heroisch", ["Raid Mythic"] = "Raid Mythisch",
+        ["Unavailable"] = "Nicht verfügbar",
         ["Full"] = "Voll", ["Short"] = "Kurz", ["Hidden"] = "Versteckt",
         ["None"] = "Keine", ["Outline"] = "Kontur", ["Thick Outline"] = "Dicke Kontur",
         ["M+ Target"] = "M+ Ziel", ["Raid Target"] = "Raid-Ziel",
@@ -2229,6 +2232,7 @@ local LABELS_BY_LOCALE = {
         ["Flat"] = "Plat", ["Sectioned"] = "Par sections", ["Split"] = "Séparé",
         ["Mythic+"] = "Mythique+", ["Raid"] = "Raid",
         ["Raid Normal"] = "Raid normal", ["Raid Heroic"] = "Raid héroïque", ["Raid Mythic"] = "Raid mythique",
+        ["Unavailable"] = "Indisponible",
         ["Full"] = "Complet", ["Short"] = "Court", ["Hidden"] = "Masqué",
         ["None"] = "Aucun", ["Outline"] = "Contour", ["Thick Outline"] = "Contour épais",
         ["M+ Target"] = "Cible M+", ["Raid Target"] = "Cible raid",
@@ -2357,6 +2361,7 @@ local LABELS_BY_LOCALE = {
         ["Flat"] = "Plano", ["Sectioned"] = "Por secciones", ["Split"] = "Dividido",
         ["Mythic+"] = "Mítico+", ["Raid"] = "Banda",
         ["Raid Normal"] = "Banda normal", ["Raid Heroic"] = "Banda heroica", ["Raid Mythic"] = "Banda mítica",
+        ["Unavailable"] = "No disponible",
         ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Oculto",
         ["None"] = "Ninguno", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno grueso",
         ["M+ Target"] = "Objetivo M+", ["Raid Target"] = "Objetivo banda",
@@ -2483,6 +2488,7 @@ local LABELS_BY_LOCALE = {
         ["Flat"] = "Plano", ["Sectioned"] = "Por secciones", ["Split"] = "Dividido",
         ["Mythic+"] = "Mítico+", ["Raid"] = "Banda",
         ["Raid Normal"] = "Banda normal", ["Raid Heroic"] = "Banda heroica", ["Raid Mythic"] = "Banda mítica",
+        ["Unavailable"] = "No disponible",
         ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Oculto",
         ["None"] = "Ninguno", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno grueso",
         ["M+ Target"] = "Objetivo M+", ["Raid Target"] = "Objetivo banda",
@@ -2610,6 +2616,7 @@ local LABELS_BY_LOCALE = {
         ["Flat"] = "Piatto", ["Sectioned"] = "A sezioni", ["Split"] = "Diviso",
         ["Mythic+"] = "Mitica+", ["Raid"] = "Incursione",
         ["Raid Normal"] = "Incursione Normale", ["Raid Heroic"] = "Incursione Eroica", ["Raid Mythic"] = "Incursione Mitica",
+        ["Unavailable"] = "Non disponibile",
         ["Full"] = "Completo", ["Short"] = "Corto", ["Hidden"] = "Nascosto",
         ["None"] = "Nessuno", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno spesso",
         ["M+ Target"] = "Bersaglio M+", ["Raid Target"] = "Bersaglio incursione",
@@ -2736,6 +2743,7 @@ local LABELS_BY_LOCALE = {
         ["Flat"] = "Plano", ["Sectioned"] = "Por seções", ["Split"] = "Dividido",
         ["Mythic+"] = "Mítico+", ["Raid"] = "Raide",
         ["Raid Normal"] = "Raide Normal", ["Raid Heroic"] = "Raide Heroico", ["Raid Mythic"] = "Raide Mítico",
+        ["Unavailable"] = "Indisponível",
         ["Full"] = "Completo", ["Short"] = "Curto", ["Hidden"] = "Oculto",
         ["None"] = "Nenhum", ["Outline"] = "Contorno", ["Thick Outline"] = "Contorno grosso",
         ["M+ Target"] = "Alvo M+", ["Raid Target"] = "Alvo de raide",
@@ -2869,6 +2877,7 @@ local LABELS_BY_LOCALE = {
         ["Flat"] = "단일", ["Sectioned"] = "구역별", ["Split"] = "분리",
         ["Mythic+"] = "쐐기+", ["Raid"] = "공격대",
         ["Raid Normal"] = "일반 공격대", ["Raid Heroic"] = "영웅 공격대", ["Raid Mythic"] = "신화 공격대",
+        ["Unavailable"] = "사용 불가",
         ["Full"] = "전체", ["Short"] = "짧게", ["Hidden"] = "숨김",
         ["None"] = "없음", ["Outline"] = "외곽선", ["Thick Outline"] = "굵은 외곽선",
         ["M+ Target"] = "쐐기+ 목표", ["Raid Target"] = "공격대 목표",
@@ -2995,6 +3004,7 @@ local LABELS_BY_LOCALE = {
         ["Flat"] = "扁平", ["Sectioned"] = "分组", ["Split"] = "分离",
         ["Mythic+"] = "史诗+", ["Raid"] = "团队",
         ["Raid Normal"] = "普通团队", ["Raid Heroic"] = "英雄团队", ["Raid Mythic"] = "史诗团队",
+        ["Unavailable"] = "不可用",
         ["Full"] = "完整", ["Short"] = "简短", ["Hidden"] = "隐藏",
         ["None"] = "无", ["Outline"] = "描边", ["Thick Outline"] = "粗描边",
         ["M+ Target"] = "史诗+目标", ["Raid Target"] = "团队目标",
@@ -3121,6 +3131,7 @@ local LABELS_BY_LOCALE = {
         ["Flat"] = "扁平", ["Sectioned"] = "分組", ["Split"] = "分離",
         ["Mythic+"] = "傳奇+", ["Raid"] = "團隊",
         ["Raid Normal"] = "普通團隊", ["Raid Heroic"] = "英雄團隊", ["Raid Mythic"] = "傳奇團隊",
+        ["Unavailable"] = "無法使用",
         ["Full"] = "完整", ["Short"] = "簡短", ["Hidden"] = "隱藏",
         ["None"] = "無", ["Outline"] = "描邊", ["Thick Outline"] = "粗描邊",
         ["M+ Target"] = "傳奇+目標", ["Raid Target"] = "團隊目標",
@@ -15655,13 +15666,24 @@ function addon.archonTargets.GetTargetSnapshotDropdownValue()
     return addon.archonTargets.ResolveAvailableSnapshotKey(GetDB("targetSnapshot"))
 end
 
+function addon.archonTargets.GetMissingSnapshotCaption(value)
+    local root = _G.StatsProArchonTargets
+    local entry = addon.archonTargets.snapshotTexts[value]
+    if entry and type(root) == "table" and root.schemaVersion == 6
+        and type(root.snapshots) == "table" and type(root.snapshots[value]) == "table" then
+        return L(entry.label) .. " (" .. L("Unavailable") .. ")"
+    end
+    return L("None")
+end
+
 function addon.archonTargets.SelectTargetSnapshotDropdownValue(value, opt, dropdown)
+    if not opt or opt.value ~= value then return false end
     local db = addon.dbRuntime.GetWritableSettings(true)
     if not db then
         CloseDropDownMenus()
         return false
     end
-    db.targetSnapshot = addon.archonTargets.ResolveAvailableSnapshotKey(value)
+    db.targetSnapshot = value
     CacheSettings()
     UIDropDownMenu_SetText(dropdown,
         addon.settingsUI.FormatSimpleDropdownOptionText(opt))
@@ -17863,7 +17885,7 @@ function addon.settingsUI.dropdownMenu.Show(self, dropdown)
 end
 
 function addon.settingsUI.CreateSimpleDropdownRow(parent, rows, frameName, labelKey,
-        options, cursor, getValue, onSelect)
+        options, cursor, getValue, onSelect, missingCaption)
     local rowY = cursor.y
 
     local label = parent:CreateFontString(nil, "OVERLAY")
@@ -17881,31 +17903,38 @@ function addon.settingsUI.CreateSimpleDropdownRow(parent, rows, frameName, label
         return options
     end
 
-    local function ResolveOption(value)
-        local resolvedOptions = GetOptions()
+    local function ResolveOption(value, resolvedOptions)
         for _, opt in ipairs(resolvedOptions) do
             if opt.value == value then return opt end
         end
-        return resolvedOptions[1]
+        if not missingCaption then return resolvedOptions[1] end
     end
 
     local function RefreshDropdownText()
         label:SetText(L(labelKey))
-        UIDropDownMenu_SetText(dropdown,
-            addon.settingsUI.FormatSimpleDropdownOptionText(ResolveOption(getValue())))
+        local value = getValue()
+        local current = ResolveOption(value, GetOptions())
+        local text = not current and missingCaption and missingCaption(value)
+            or addon.settingsUI.FormatSimpleDropdownOptionText(current)
+        UIDropDownMenu_SetText(dropdown, text)
         addon.settingsDesign.RefreshControl(dropdown.statsProTrigger)
     end
 
     addon.settingsUI.dropdownMenu.Initialize(dropdown, function(add)
-        local current = ResolveOption(getValue())
-        if not current then return end
-        for _, opt in ipairs(GetOptions()) do
+        local available = GetOptions()
+        local current = ResolveOption(getValue(), available)
+        for _, opt in ipairs(available) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = addon.settingsUI.FormatSimpleDropdownOptionText(opt)
             info.value = opt.value
-            info.checked = (current.value == opt.value)
+            info.checked = current ~= nil and current.value == opt.value
             info.func = function()
-                onSelect(opt.value, ResolveOption(opt.value), dropdown)
+                local selected = ResolveOption(opt.value, GetOptions())
+                if missingCaption and not selected then
+                    RefreshDropdownText()
+                    return
+                end
+                onSelect(opt.value, selected, dropdown)
             end
             add(info)
         end
@@ -18455,7 +18484,8 @@ function addon.settingsUI.BuildLayoutTab(self, context)
         self.archonTargets.GetAvailableSnapshotOptions,
         cd,
         self.archonTargets.GetTargetSnapshotDropdownValue,
-        self.archonTargets.SelectTargetSnapshotDropdownValue)
+        self.archonTargets.SelectTargetSnapshotDropdownValue,
+        self.archonTargets.GetMissingSnapshotCaption)
     end
     if not addon.forever.enabled then
     do

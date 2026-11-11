@@ -3979,6 +3979,7 @@ end
 
 addon.positionRuntime = {
     legacyOffsetFloor = 3000,
+    portableOffsetLimit = 100000,
 }
 
 function addon.positionRuntime.GetOffsetBound(axis)
@@ -3997,9 +3998,14 @@ function addon.positionRuntime.GetOffsetBound(axis)
     return math.max(fallback, extent)
 end
 
-function addon.positionRuntime.IsValidOffset(value, axis)
+function addon.positionRuntime.IsPortableOffset(value)
     local secretOK, secret = pcall(issecretvalue, value)
-    if not secretOK or secret or not IsFiniteNumber(value) then return false end
+    return secretOK and not secret and IsFiniteNumber(value)
+        and math.abs(value) <= addon.positionRuntime.portableOffsetLimit
+end
+
+function addon.positionRuntime.IsValidOffset(value, axis)
+    if not addon.positionRuntime.IsPortableOffset(value) then return false end
     local bound = addon.positionRuntime.GetOffsetBound(axis)
     return value >= -bound and value <= bound
 end
@@ -5148,12 +5154,12 @@ addon.profileTransfer = {
 
         { id="point", section="layout", kind="anchor" },
         { id="relativePoint", section="layout", kind="anchor" },
-        { id="xOfs", section="layout", kind="offset", axis="x" },
-        { id="yOfs", section="layout", kind="offset", axis="y" },
+        { id="xOfs", section="layout", kind="offset" },
+        { id="yOfs", section="layout", kind="offset" },
         { id="defensive_point", section="layout", kind="anchor" },
         { id="defensive_relativePoint", section="layout", kind="anchor" },
-        { id="defensive_xOfs", section="layout", kind="offset", axis="x" },
-        { id="defensive_yOfs", section="layout", kind="offset", axis="y" },
+        { id="defensive_xOfs", section="layout", kind="offset" },
+        { id="defensive_yOfs", section="layout", kind="offset" },
         { id="scale", section="layout", kind="number-setting" },
         { id="isVisible", section="layout", kind="boolean" },
         { id="isLocked", section="layout", kind="boolean" },
@@ -5345,7 +5351,7 @@ function addon.profileTransfer.ReadField(settings, field)
     elseif field.kind == "number-setting" then
         value = NormalizeNumberSetting(field.id, value)
     elseif field.kind == "offset" then
-        value = NormalizePositionOffset(value, defaults[field.id], field.axis)
+        if not addon.positionRuntime.IsPortableOffset(value) then value = defaults[field.id] end
     elseif field.kind == "anchor" then
         value = NormalizeAnchorPoint(value, defaults[field.id])
     elseif field.kind == "enum" then
@@ -5388,8 +5394,7 @@ function addon.profileTransfer.DecodeFieldValue(field, encoded)
             return normalized, true
         end
         if field.kind == "offset" then
-            if math.abs(value) > 100000 then return nil, false end
-            return NormalizePositionOffset(value, defaults[field.id], field.axis), true
+            return value, addon.positionRuntime.IsPortableOffset(value)
         end
         if value < 0 or value > 1 then return nil, false end
         return value, true
@@ -9846,16 +9851,22 @@ function Panel:DBKey(suffix)
     return self.dbKeyPrefix .. suffix
 end
 
-function Panel:SavePositionTo(db)
+function Panel:SavePositionTo(db, fromDrag)
+    -- A viewport fallback is only for display. An explicit move replaces it.
+    if (self.positionUsesViewportFallbackX or self.positionUsesViewportFallbackY) and not fromDrag then return end
     local point, _, relativePoint, xOfs, yOfs = self.frame:GetPoint()
-    -- WHY: if the frame has no anchor yet (called before LoadPosition), GetPoint returns
-    -- nil. Writing nil deletes the key — next load would fall back to defaults and the
-    -- previously-saved position would be lost.
-    if not point or not addon.dbRuntime.IsCleanTable(db) then return end
+    -- GetPoint can return an incomplete or protected tuple. Commit it atomically.
+    if not addon.dbRuntime.IsCleanTable(db)
+        or not addon.dbRuntime.IsCleanType(point, "string") or not VALID_ANCHOR_POINTS[point]
+        or not addon.dbRuntime.IsCleanType(relativePoint, "string") or not VALID_ANCHOR_POINTS[relativePoint]
+        or not addon.positionRuntime.IsPortableOffset(xOfs)
+        or not addon.positionRuntime.IsPortableOffset(yOfs) then return end
     db[self:DBKey("point")] = point
     db[self:DBKey("relativePoint")] = relativePoint
     db[self:DBKey("xOfs")] = xOfs
     db[self:DBKey("yOfs")] = yOfs
+    self.positionUsesViewportFallbackX = false
+    self.positionUsesViewportFallbackY = false
 end
 
 function Panel:BeginDragGuard()
@@ -9896,6 +9907,7 @@ function Panel:FinishMouseDrag(savePosition)
     self.frame:StopMovingOrSizing()
     if savePosition ~= false and settings then self:SavePosition(settings) end
     self:ScheduleDragGuardRelease()
+    return settings
 end
 
 function Panel:SetEditAffordanceVisible(show)
@@ -9913,7 +9925,7 @@ end
 function Panel:SavePosition(expectedSettings)
     local db = addon.dbRuntime.GetWritableSettings(false)
     if not db or (expectedSettings and not rawequal(db, expectedSettings)) then return end
-    self:SavePositionTo(db)
+    self:SavePositionTo(db, true)
 end
 
 function Panel:LoadPosition()
@@ -9951,7 +9963,19 @@ function Panel:LoadPosition()
         end
         error("panel position apply failed")
     end
+    self.positionUsesViewportFallbackX = addon.positionRuntime.IsPortableOffset(db[xOfsKey]) and db[xOfsKey] ~= xOfs
+    self.positionUsesViewportFallbackY = addon.positionRuntime.IsPortableOffset(db[yOfsKey]) and db[yOfsKey] ~= yOfs
     -- WHY: scale is set via SetAllPanelsScale (single ownership); not duplicated here
+end
+
+function Panel:NeedsViewportPositionRefresh(settings)
+    if self.dragActive then return false end
+    local x = settings[self:DBKey("xOfs")]
+    local y = settings[self:DBKey("yOfs")]
+    local needsFallbackX = addon.positionRuntime.IsPortableOffset(x) and not addon.positionRuntime.IsValidOffset(x, "x")
+    local needsFallbackY = addon.positionRuntime.IsPortableOffset(y) and not addon.positionRuntime.IsValidOffset(y, "y")
+    return needsFallbackX ~= (self.positionUsesViewportFallbackX == true)
+        or needsFallbackY ~= (self.positionUsesViewportFallbackY == true)
 end
 
 function Panel:Hide()
@@ -10817,15 +10841,14 @@ local defensivePanel = Panel:New("StatsProDefensiveFrame", "defensive_")
 
 addon.profileRuntime.saveActivePositions = function(settings)
     if addon.profileRuntime.capacityFallback then return end
-    mainPanel:FinishMouseDrag(false)
-    defensivePanel:FinishMouseDrag(false)
-    mainPanel:SavePositionTo(settings)
-    defensivePanel:SavePositionTo(settings)
+    local mainDrag = mainPanel:FinishMouseDrag(false)
+    local defensiveDrag = defensivePanel:FinishMouseDrag(false)
+    mainPanel:SavePositionTo(settings, rawequal(mainDrag, settings))
+    defensivePanel:SavePositionTo(settings, rawequal(defensiveDrag, settings))
 end
 
 addon.panelEditRuntime.FinishDrags = function(savePosition)
-    mainPanel:FinishMouseDrag(savePosition)
-    defensivePanel:FinishMouseDrag(savePosition)
+    return mainPanel:FinishMouseDrag(savePosition), defensivePanel:FinishMouseDrag(savePosition)
 end
 
 addon.profileRuntime.restoreActivePositions = function()
@@ -12036,7 +12059,7 @@ end
 -- but if the user reloads/quits via a path that bypasses our drag handler (rare),
 -- this guarantees the latest GetPoint() is what hits disk.
 local function OnPlayerLogout()
-    addon.panelEditRuntime.FinishDrags(false)
+    local mainDrag, defensiveDrag = addon.panelEditRuntime.FinishDrags(false)
     -- Restore any unaccepted StatsPro-owned color preview before SavedVariables
     -- flush. The ownership check inside Close leaves a foreign picker untouched.
     if addon.settingsUI.CloseColorPicker then addon.settingsUI.CloseColorPicker(true) end
@@ -12046,8 +12069,8 @@ local function OnPlayerLogout()
     if addon.profileRuntime.pendingResolution and addon.profileRuntime.activeGUID == nil then return end
     local settings = addon.dbRuntime.activeSettings
     if addon.dbRuntime.IsCleanTable(settings) then
-        mainPanel:SavePositionTo(settings)
-        defensivePanel:SavePositionTo(settings)
+        mainPanel:SavePositionTo(settings, rawequal(mainDrag, settings))
+        defensivePanel:SavePositionTo(settings, rawequal(defensiveDrag, settings))
     end
 end
 
@@ -14482,9 +14505,19 @@ local function RunCoalesced(key, delay, fn)
 end
 
 function addon.settingsDesign.RequestResponsiveFrameResize()
+    local settings = isLoaded and addon.dbRuntime.GetActiveSettings()
+    local panelRefresh = settings and (mainPanel:NeedsViewportPositionRefresh(settings)
+        or defensivePanel:NeedsViewportPositionRefresh(settings))
     if not addon.settingsUI.frame
-        and type(addon.profileUI.ApplyManagerSize) ~= "function" then return end
+        and type(addon.profileUI.ApplyManagerSize) ~= "function" and not panelRefresh then return end
     RunCoalesced("responsiveFrameSize", 0, function()
+        if isLoaded then
+            local active = addon.dbRuntime.GetActiveSettings()
+            if mainPanel:NeedsViewportPositionRefresh(active) then pcall(mainPanel.LoadPosition, mainPanel) end
+            if defensivePanel:NeedsViewportPositionRefresh(active) then
+                pcall(defensivePanel.LoadPosition, defensivePanel)
+            end
+        end
         if addon.settingsUI.frame then addon.settingsUI.ApplyFrameSize(addon) end
         local applyManager = addon.profileUI.ApplyManagerSize
         if type(applyManager) == "function" then applyManager() end

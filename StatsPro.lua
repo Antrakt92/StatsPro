@@ -17491,6 +17491,7 @@ function addon.profileUI.BuildOperationUI(manager)
             ui.CancelSpecialFrameRestore("StatsProProfileManager")
             ui.RemoveSpecialFrame("StatsProProfileManager")
         end
+        if addon.selfTest then addon.selfTest.ScheduleDeferredWindow(0) end
     end)
     dialog:Hide()
 end
@@ -22083,9 +22084,15 @@ function addon.selfTest.ResumeDeferredWindow(attempt)
     attempt = (attempt or 0) + 1
     if reason ~= "combat" or attempt > 3 then return end
     -- A combat-end event can precede the readable out-of-combat state.
+    guided.ScheduleDeferredWindow(0.1, attempt)
+end
+
+function addon.selfTest.ScheduleDeferredWindow(delay, attempt)
+    local guided = addon.selfTest
+    if not guided.deferredWindow then return end
     local token = {}
     guided.windowRetryToken = token
-    C_Timer.After(0.1, function()
+    C_Timer.After(delay, function()
         if guided.windowRetryToken == token then guided.ResumeDeferredWindow(attempt) end
     end)
 end
@@ -22114,7 +22121,10 @@ function addon.selfTest.Finish(reason)
         PrintMsg("selftest: copy window deferred until you leave combat.")
         return
     end
-    addon.selfTest.ShowWindow()
+    local _, windowReason = addon.selfTest.ShowWindow()
+    if windowReason == "dialog" then
+        PrintMsg("selftest: the report will open when you close the profile dialog.")
+    end
 end
 
 function addon.selfTest.BuildReport()
@@ -22421,13 +22431,18 @@ function addon.selfTest.ShowWindow()
         addon.selfTest.deferredWindow = true
         return false, "combat"
     end
+    local profileUI = addon.profileUI
+    if profileUI and profileUI.pendingAction then
+        -- The profile dialog owns the shared edit box until it closes.
+        addon.selfTest.deferredWindow = true
+        return false, "dialog"
+    end
     addon.selfTest.deferredWindow = false
     local payload = addon.selfTest.BuildPayload()
     if type(payload) ~= "string" or payload == "" then
         PrintMsg("selftest: report is empty, nothing to show.")
         return false
     end
-    local profileUI = addon.profileUI
     if type(profileUI) == "table" and type(profileUI.ShowSelfTestExport) == "function" then
         local ok, shown = pcall(profileUI.ShowSelfTestExport, payload, addon.selfTest.WindowSummary())
         if ok and shown then

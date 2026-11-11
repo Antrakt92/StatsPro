@@ -205,4 +205,42 @@ for _, forever in ipairs({ false, true }) do
     assert(not guided.deferredWindow, "later combat end can resume the deferred report")
 end
 
+for _, forever in ipairs({ false, true }) do
+    local combat = false
+    local env, addon = loadStatsPro(forever, { inCombatLockdown = function() return combat end })
+    local guided = addon.selfTest
+    assert(guided.Start())
+    for _ = 1, guided.oocTarget do guided.OnTick() end
+    combat = true
+    env.__fireEvent("PLAYER_REGEN_DISABLED")
+    guided.OnTick()
+    combat = false
+    env.__fireEvent("PLAYER_REGEN_ENABLED")
+
+    assert(addon:OpenConfigMenu() ~= false)
+    local ui = addon.profileUI
+    ui.OpenManager(true)
+    ui.ShowTransferImportEntry({}, {})
+    local input = env.StatsProProfileTransferEditBox
+    local code = assert(addon.profileTransfer.Serialize("Profile draft", { showCrit = true }, { stats = true }))
+    input:SetText(code)
+    assert(ui.PreviewTransferImport())
+    local preview = ui.transferState
+    for _ = 1, guided.recoveryNeeded do guided.OnTick() end
+    assert(guided.state == "done" and env.StatsProSelfTest.report)
+    assert(guided.deferredWindow and ui.transferState == preview and input:GetText() == code,
+        "finished self-test must preserve the open import draft")
+
+    ui.CloseOperationDialog()
+    ui.ShowTransferImportEntry({}, {})
+    input:SetText(code)
+    env.__flushTimers(0)
+    assert(guided.deferredWindow and ui.transferState.kind == "import-entry" and input:GetText() == code,
+        "a newly opened dialog remains the owner")
+    ui.CloseOperationDialog()
+    env.__flushTimers(0)
+    assert(not guided.deferredWindow and ui.transferState.kind == "selftest" and input:GetText():match("^SPS1:"),
+        "report opens after the profile dialog closes")
+end
+
 print("StatsPro self-test diagnostics regressions passed")

@@ -14560,23 +14560,33 @@ local function RunCoalesced(key, delay, fn)
 end
 
 function addon.settingsDesign.RequestResponsiveFrameResize()
-    local settings = isLoaded and addon.dbRuntime.GetActiveSettings()
-    local panelRefresh = settings and (mainPanel:NeedsViewportPositionRefresh(settings)
-        or defensivePanel:NeedsViewportPositionRefresh(settings))
-    if not addon.settingsUI.frame
-        and type(addon.profileUI.ApplyManagerSize) ~= "function" and not panelRefresh then return end
-    RunCoalesced("responsiveFrameSize", 0, function()
+    if not isLoaded and not addon.settingsUI.frame
+        and type(addon.profileUI.ApplyManagerSize) ~= "function" then return end
+    local attempt = 0
+    local function refresh()
+        attempt = attempt + 1
         if isLoaded then
             local active = addon.dbRuntime.GetActiveSettings()
-            if mainPanel:NeedsViewportPositionRefresh(active) then pcall(mainPanel.LoadPosition, mainPanel) end
+            local mainOK, defensiveOK = true, true
+            if mainPanel:NeedsViewportPositionRefresh(active) then
+                mainOK = pcall(mainPanel.LoadPosition, mainPanel)
+            end
             if defensivePanel:NeedsViewportPositionRefresh(active) then
-                pcall(defensivePanel.LoadPosition, defensivePanel)
+                defensiveOK = pcall(defensivePanel.LoadPosition, defensivePanel)
+            end
+            -- UIParent can settle after the first callback. Retry a failed native
+            -- apply once more, always projecting the latest settings and viewport.
+            if attempt == 1 or (attempt == 2 and not (mainOK and defensiveOK)) then
+                RunCoalesced("responsiveFrameSize", 0.1, refresh)
             end
         end
-        if addon.settingsUI.frame then addon.settingsUI.ApplyFrameSize(addon) end
-        local applyManager = addon.profileUI.ApplyManagerSize
-        if type(applyManager) == "function" then applyManager() end
-    end)
+        if attempt == 1 then
+            if addon.settingsUI.frame then addon.settingsUI.ApplyFrameSize(addon) end
+            local applyManager = addon.profileUI.ApplyManagerSize
+            if type(applyManager) == "function" then applyManager() end
+        end
+    end
+    RunCoalesced("responsiveFrameSize", 0, refresh)
 end
 
 function addon.settingsDesign.ReadUIParentDimension(getterName)

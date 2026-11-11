@@ -51,4 +51,55 @@ for _, forever in ipairs({ false, true }) do
         "appearance transfer lost the legacy preferred font")
 end
 
+for _, forever in ipairs({ false, true }) do
+    for _, failure in ipairs({ "early-event", "SetPoint", "SetUserPlaced", "persistent" }) do
+        local env, addon, test = fixtures.loadStatsPro("enUS", {
+            forever = forever, uiParentWidth = 1920,
+            unitGUID = function() return "Player-1-VIEWPORT" end,
+            getSpecialization = function() return 1 end, specID = 73,
+        })
+        env.__fireEvent("PLAYER_ENTERING_WORLD")
+        local sections = { layout = true }
+        local payload = assert(addon.profileTransfer.Serialize("Wide layout", {
+            point = "RIGHT", relativePoint = "LEFT", xOfs = 4400, yOfs = 0,
+        }, sections))
+        local state = test.profileRuntimeState()
+        assert(addon.profileOps.ImportTransferToContext(assert(addon.profileTransfer.Parse(payload)),
+            sections, state.activeGUID, state.activeSpecID))
+        local frame = env.StatsProFrame
+        local function anchorX() return select(4, frame:GetPoint()) end
+        local fallback = anchorX()
+        assert(fallback ~= 4400)
+        local method = failure == "persistent" and "SetUserPlaced" or failure
+        local setter = frame[method]
+        local failures = 0
+        if failure == "early-event" then
+            env.__fireEvent("DISPLAY_SIZE_CHANGED")
+            env.__flushTimers(0)
+            env.UIParent:SetWidth(7680)
+        else
+            rawset(frame, method, function(self, ...)
+                if failure == "persistent" or failures == 0 then
+                    failures = failures + 1
+                    error("synthetic viewport positioning failure")
+                end
+                return setter(self, ...)
+            end)
+            env.UIParent:SetWidth(7680)
+            env.__fireEvent("DISPLAY_SIZE_CHANGED")
+            env.__flushTimers(0)
+            assert(anchorX() == fallback, "failed reposition keeps the former anchor")
+        end
+        env.__flushTimers(1)
+        if failure == "persistent" then
+            assert(failures > 1 and failures <= 3 and anchorX() == fallback, "viewport retries are bounded")
+            rawset(frame, method, setter)
+            env.__fireEvent("UI_SCALE_CHANGED")
+            env.__flushTimers(1)
+        end
+        assert(anchorX() == 4400, "viewport change restores the saved position after " .. failure)
+        assert(addon.dbRuntime.GetActiveSettings().xOfs == 4400, "viewport does not rewrite the saved position")
+    end
+end
+
 print("Retail and Forever profile transfer positions and fonts passed")

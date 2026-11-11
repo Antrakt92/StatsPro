@@ -210,11 +210,13 @@ end
 do
     local function loginLateClass(options)
         local classReady = false
+        local inCombat = false
         local guid = options.guidReady and "Player-Forever-LateClass" or nil
         local lateEnv, lateAddon, lateTest = fixtures.loadStatsPro("enUS", {
             forever = true,
             statsProDB = options.root,
             unitGUID = function() return guid end,
+            inCombatLockdown = function() return inCombat end,
             foreverAPIs = { UnitClass = function()
                 if classReady then return "Mage", "MAGE", 8 end
             end },
@@ -223,6 +225,17 @@ do
         local before = lateTest.profileState()
         if options.keepUnknown then return before.root end
         if options.edit then before.settings.showSpellCrit = false end
+        if options.roundTrip then
+            check(lateAddon.profileOps.Assign(guid, 1, "p1"), "select a different existing profile before class resolution")
+            check(lateAddon.profileOps.Assign(guid, 1, "p2"), "explicitly select the generic starter again")
+        end
+        if options.openSettings then lateAddon:OpenConfigMenu() end
+        if options.openDialog then
+            lateAddon:OpenConfigMenu()
+            lateEnv.StatsProConfigFrame:Hide()
+            check(lateAddon.profileUI.ShowSelfTestExport("SPS1:1\nrelease=fixture\n", "fixture report"),
+                "standalone copy dialog opens before late class resolution")
+        end
         if options.failApply then
             local apply = lateAddon.profileRuntime.applyActiveSettings
             rawset(lateAddon.profileRuntime, "applyActiveSettings", function()
@@ -231,8 +244,43 @@ do
             end)
         end
         classReady, guid = true, "Player-Forever-LateClass"
-        lateEnv.__fireEvent("UNIT_NAME_UPDATE", "player")
-        lateAddon.profileRuntime.ResolvePending()
+        if options.openDialog then
+            -- Evaluate the resolver with an open copy dialog independently of
+            -- the shared pending-context UI refresh used by the name event.
+            lateAddon.profileRuntime.ResolveCurrent(false)
+        else
+            lateEnv.__fireEvent("UNIT_NAME_UPDATE", "player")
+            lateAddon.profileRuntime.ResolvePending()
+        end
+        if options.openSettings then
+            check(lateEnv.StatsProConfigFrame:IsShown() and lateTest.profileState().settings == before.settings,
+                "late class leaves open Settings and the starter untouched until Settings closes")
+            if options.combatClose then
+                inCombat = true
+                lateEnv.__fireEvent("PLAYER_REGEN_DISABLED")
+            end
+            lateEnv.StatsProConfigFrame:Hide()
+            if options.reopen then lateAddon:OpenConfigMenu() end
+            lateEnv.__flushTimers(0)
+            if options.reopen then
+                check(lateEnv.StatsProConfigFrame:IsShown() and lateTest.profileState().settings == before.settings,
+                    "queued late repair does not close Settings reopened in the meantime")
+                lateEnv.StatsProConfigFrame:Hide()
+                lateEnv.__flushTimers(0)
+            end
+            if options.combatClose then
+                check(lateTest.profileState().settings == before.settings,
+                    "closing Settings during combat does not apply the starter early")
+                inCombat = false
+                lateEnv.__fireEvent("PLAYER_REGEN_ENABLED")
+            end
+        end
+        if options.openDialog then
+            check(lateAddon.profileUI.operationDialog:IsShown() and lateTest.profileState().settings == before.settings,
+                "late class leaves a standalone copy dialog untouched")
+            lateAddon.profileUI.CloseOperationDialog()
+            lateEnv.__flushTimers(0)
+        end
         if options.failApply then
             local failed = lateTest.profileState()
             check(failed.settings == before.settings and failed.profileID == before.profileID,
@@ -245,7 +293,7 @@ do
             "Quick Setup learns class after first entering world")
         check(after.profileID == "p2" and after.root.account.nextProfileID == 3,
             "late class keeps one character profile allocation")
-        if options.edit or options.root then
+        if options.edit or options.root or options.roundTrip then
             check(after.settings == before.settings and after.settings.showSpellCrit ~= true,
                 "late class preserves an edited or established profile")
         else
@@ -262,6 +310,12 @@ do
     loginLateClass({ guidReady = true })
     loginLateClass({ guidReady = true, failApply = true })
     loginLateClass({ guidReady = true, edit = true })
+    loginLateClass({ guidReady = true, openSettings = true })
+    loginLateClass({ guidReady = true, openSettings = true, edit = true })
+    loginLateClass({ guidReady = true, openSettings = true, reopen = true })
+    loginLateClass({ guidReady = true, openSettings = true, combatClose = true })
+    loginLateClass({ guidReady = true, openDialog = true })
+    loginLateClass({ guidReady = true, roundTrip = true })
     local genericRoot = loginLateClass({ guidReady = true, keepUnknown = true })
     loginLateClass({ guidReady = true, root = genericRoot })
 end

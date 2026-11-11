@@ -6936,19 +6936,40 @@ function addon.profileRuntime.IsForeverFactoryStarter(root, sourceID, sourceName
 end
 
 function addon.profileRuntime.BuildLateForeverStarter(root, profileID)
-    local expected = addon.profileRuntime.foreverPendingStarter
-    if not expected or not expected.profileSnapshot or not addon.forever.classToken
-        or expected.profileID ~= profileID or not addon.profileOps.CheckExpected(root, expected) then
+    local runtime = addon.profileRuntime
+    local expected = runtime.foreverPendingStarter
+    if not expected or not expected.profileSnapshot or not addon.forever.classToken then return nil end
+    if expected.profileID ~= profileID or expected.operationCount ~= addon.profileOps.operationCount
+        or not addon.profileOps.CheckExpected(root, expected) then
+        runtime.foreverPendingStarter = nil
         return nil
     end
     local settings = addon.settingsUI.frame
     local dialog = addon.profileUI.operationDialog
     -- A late starter repair must not close an open settings workflow or preview.
     if addon.hudPresets.session or (settings and settings:IsShown())
-        or (dialog and dialog:IsShown()) then return nil end
+        or (dialog and dialog:IsShown()) then
+        expected.deferred = true
+        return nil
+    end
     local profile, copied = addon.dbRuntime.CloneSerializable(expected.profileRef)
     if not copied then return nil end
     if addon.forever.ApplyClassStarter(profile.settings) then return profile end
+end
+
+function addon.profileRuntime.ResumeDeferredForeverStarter()
+    local runtime = addon.profileRuntime
+    local expected = runtime.foreverPendingStarter
+    if not expected or not expected.deferred or expected.resumeScheduled then return end
+    expected.resumeScheduled = true
+    C_Timer.After(0, function()
+        expected.resumeScheduled = nil
+        if not rawequal(runtime.foreverPendingStarter, expected)
+            or runtime.transitioning or addon.profileOps.inProgress then return end
+        -- Let the ordinary context resolver recheck combat, profile ownership and
+        -- any dialog reopened before the queued repair runs.
+        runtime.RequestResolution(false)
+    end)
 end
 
 function addon.profileRuntime.PrepareContextTransaction(context)
@@ -7382,6 +7403,7 @@ function addon.profileRuntime.ActivateResolvedContext(
             settingsRef = targetSettings, assignedProfileID = profileID, activeProfileID = profileID,
             guid = context.guid, specID = context.specID, assignmentID = profileID,
             referenceCounts = addon.profileOps.CaptureReferenceCounts(activeRoot, profileID),
+            operationCount = addon.profileOps.operationCount,
         }
     elseif transaction and transaction.foreverStarterRepair then
         runtime.foreverPendingStarter = nil
@@ -15597,9 +15619,12 @@ function addon.hudPresets.BuildWelcome()
         for _, control in ipairs(ui.mutationControls) do
             addon.settingsDesign.UnregisterMutationControl(control)
         end
-        if frame.statsProSettingsHandoff or frame.statsProCombatSuspend then return end
-        addon.hudPresets.MarkWelcomeSeen()
-        addon.hudPresets.ForceCancelPreview()
+        if frame.statsProSettingsHandoff then return end
+        if not frame.statsProCombatSuspend then
+            addon.hudPresets.MarkWelcomeSeen()
+            addon.hudPresets.ForceCancelPreview()
+        end
+        addon.profileRuntime.ResumeDeferredForeverStarter()
     end)
     if addon.__statsproSmoke == true then frame.statsProView = ui end
     addon.hudPresets.welcome = frame
@@ -17687,6 +17712,7 @@ function addon.profileUI.BuildOperationUI(manager)
             ui.RemoveSpecialFrame("StatsProProfileManager")
         end
         if addon.selfTest then addon.selfTest.ScheduleDeferredWindow(0) end
+        addon.profileRuntime.ResumeDeferredForeverStarter()
     end)
     dialog:Hide()
 end
@@ -18584,6 +18610,7 @@ function addon.settingsUI.BuildShell(self)
         if self.settingsUI.CloseColorPicker then self.settingsUI.CloseColorPicker() end
         self.settingsUI.fontPicker.Hide(self)
         self.profileUI.HideManager()
+        self.profileRuntime.ResumeDeferredForeverStarter()
     end)
 
     --[[ ===== Header (title + X) ===== ]]

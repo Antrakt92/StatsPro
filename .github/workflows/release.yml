@@ -73,7 +73,7 @@ jobs:
   package:
     needs: preflight
     if: ${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -498,7 +498,7 @@ jobs:
   verify:
     needs: github-finalize
     if: ${{ github.event.created == true && github.event.forced == false && github.event.deleted == false }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read

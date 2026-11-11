@@ -79,6 +79,39 @@ check(test.profileTransfer.parse(export:gsub("^SPF1:", "SPP1:")) == nil, "Retail
 local retailEnv, retailAddon, retailTest = fixtures.loadStatsPro("enUS")
 check(retailTest.profileTransfer.parse(export) == nil, "Forever profile rejected by Retail")
 check(retailEnv ~= nil, "Retail remains loadable")
+do
+    -- Produced by the original Forever 1.18.6 exporter, before Offhand Hit.
+    local file = assert(io.open("scripts/fixtures/profile-transfer-forever-v1-stats.spf", "rb"))
+    local legacyText = file:read("*a")
+    file:close()
+    local transfer = addon.profileTransfer
+    local legacy = transfer.Parse(legacyText)
+    check(legacy ~= nil, "published legacy Forever stats export parses")
+    check(legacy.values.showMeleeHit == true and legacy.values.showSpellCrit == false,
+        "legacy transfer retains explicit stat choices")
+    check(legacy.values.showOffhandHit == nil, "legacy transfer has no Offhand Hit choice")
+    local destination = { showOffhandHit = true, showMeleeHit = false, showSpellCrit = true }
+    local imported = transfer.BuildImportedSettings(destination, legacy, { stats = true })
+    check(imported and imported.showOffhandHit == true and imported.showMeleeHit == true
+        and imported.showSpellCrit == false, "legacy import preserves the destination's Offhand Hit")
+    check(destination.showMeleeHit == false, "legacy import builds detached settings")
+    destination.showOffhandHit = nil
+    imported = transfer.BuildImportedSettings(destination, legacy, { stats = true })
+    check(imported and imported.showOffhandHit == nil, "legacy import preserves absent Offhand Hit")
+
+    local current = transfer.Parse(export)
+    destination.showOffhandHit = not current.values.showOffhandHit
+    imported = transfer.BuildImportedSettings(destination, current, { stats = true })
+    check(imported and imported.showOffhandHit == current.values.showOffhandHit,
+        "current import still applies its explicit Offhand Hit choice")
+    local payload = assert(transfer.Base64Decode(legacyText:match("^SPF1:%x+:([A-Za-z0-9+/=]+)")))
+    local malformed, removed = payload:gsub("\nshowMeleeHit=[^\n]+", "", 1)
+    check(removed == 1, "legacy fixture includes Melee Hit")
+    check(transfer.Parse(test.profileTransfer.encodePayload(malformed)) == nil,
+        "legacy stats with another missing field are rejected")
+    check(transfer.Parse(test.profileTransfer.encodePayload(malformed .. "\nshowOffhandHit=1")) == nil,
+        "current field count cannot disguise a missing required stat")
+end
 for _, forever in ipairs({ false, true }) do
     local flavor = forever and "Forever" or "Retail"
     local commandEnv = fixtures.loadStatsPro("enUS", { forever = forever })

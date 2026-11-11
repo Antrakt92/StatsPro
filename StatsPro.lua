@@ -5118,6 +5118,7 @@ do
     if addon.forever.enabled then
         -- Separate envelopes prevent silently importing another client's stat choices.
         transfer.prefix = "SPF1:"
+        transfer.legacyOptionalStat = "showOffhandHit"
         local known = {}
         for _, field in ipairs(transfer.fields) do known[field.id] = true end
         for _, group in ipairs({ "character", "offensive", "defensive", "utility" }) do
@@ -5487,9 +5488,16 @@ function addon.profileTransfer.Parse(value)
             expectedCount = expectedCount + addon.profileTransfer.sectionFieldCounts[section]
         end
     end
+    local legacyOptionalStat = addon.profileTransfer.legacyOptionalStat
+    if sections.stats and legacyOptionalStat and not seen[legacyOptionalStat]
+        and fieldCount == expectedCount - 1 then
+        -- The first published SPF1 stats schema predates Offhand Hit.
+        package.omittedLegacyStat = legacyOptionalStat
+        expectedCount = expectedCount - 1
+    end
     if fieldCount ~= expectedCount then return nil, "invalid", "field-count" end
     for _, field in ipairs(addon.profileTransfer.fields) do
-        if sections[field.section] and not seen[field.id] then
+        if sections[field.section] and not seen[field.id] and field.id ~= package.omittedLegacyStat then
             return nil, "invalid", "missing:" .. field.id
         end
     end
@@ -5510,7 +5518,7 @@ function addon.profileTransfer.BuildImportedSettings(targetSettings, package, se
         targetSettings, nil, cloneBudget)
     if not copied or not addon.dbRuntime.IsCleanTable(settings) then return nil, "clone-failed" end
     for _, field in ipairs(addon.profileTransfer.fields) do
-        if selected[field.section] then
+        if selected[field.section] and field.id ~= package.omittedLegacyStat then
             local fieldID = field.id
             if type(fieldID) ~= "string" then return nil, "invalid" end
             local value = rawget(package.values, fieldID)

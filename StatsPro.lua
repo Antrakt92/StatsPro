@@ -10313,16 +10313,6 @@ function addon.archonTargets.GetTooltip()
     tooltip.headerProbe:Hide()
 
     function tooltip:GetOwner() return self.owner end
-    function tooltip:ClearLines()
-        self.lines = {}
-        self.layoutReusable = false
-        for _, region in ipairs(self.regions) do
-            region.leftText:SetText("")
-            region.rightText:SetText("")
-            region.leftText:Hide()
-            region.rightText:Hide()
-        end
-    end
     function tooltip:SetOwner(owner)
         if self.owner == owner then return end
         self.owner = nil

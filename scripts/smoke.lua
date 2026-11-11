@@ -1606,7 +1606,7 @@ do
     local geometryEnv, _, geometryTest = loadStatsPro("enUS")
     local tooltip = geometryTest.getArchonTooltip()
     local function draw(title)
-        tooltip:ClearLines()
+        tooltip.lines = {}
         tooltip:AddLine(title, 1, 0.82, 0, true)
         tooltip:AddLine("13-Oct-26", 0.6, 0.6, 0.6, true)
         tooltip:AddDoubleLine("Target:", "1006", 0.7, 0.7, 0.7, 1, 1, 1)
@@ -1624,7 +1624,7 @@ do
     near("tooltip.owned.long_metadata_body_unchanged", tooltip.layout.blockWidth, shortBlock)
     eq("tooltip.owned.long_metadata_wrap_height", tooltip.lines[1].height > headerSize, true)
     assertOwnedTooltipLayout("tooltip.owned.long_metadata_geometry", tooltip)
-    tooltip:ClearLines()
+    tooltip.lines = {}
     tooltip:AddLine("M+ High Keys", 1, 0.82, 0, true)
     tooltip:AddDoubleLine("Target:", "1006", 0.7, 0.7, 0.7, 1, 1, 1)
     tooltip:Layout()

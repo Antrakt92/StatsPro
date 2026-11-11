@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.23.0 - 11-Nov-2026 — Adaptive mana regen and Quick Setup
+
+- The Mana Regen / 5 sec row switches to the casting rate when you enter combat and returns to the normal rate when you leave.
+- All five Quick Setup presets include movement speed, durability and repair cost, with Hide Zero enabled.
+- Compact, Caster and Healer use one adaptive mana regen row for classes with mana.
+
 ## 1.22.5 - 10-Nov-2026 — Movement speed by travel mode
 
 - Show the speed for your current travel mode. On the ground, normal running is still 100% while standing still. In the air or water, show flight or swim speed. On a taxi or in a vehicle, show actual travel speed.

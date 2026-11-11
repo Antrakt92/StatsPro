@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.23.1 - 11-Nov-2026 — Character profiles and HUD fixes
+
+- Use class-appropriate starter rows on first login and after a reset. Preserve character profile details and accept older Forever profile codes.
+- Preserve panel positions across screen sizes and keep the preferred font when sharing older profiles. Restore saved fonts that become available after login.
+- Keep the normal and casting mana rates distinct when both five-second rows are enabled. Retry movement speed and five-second mana formatting after combat if the game previously rejected it.
+- Recover late repair prices and improve combat, recovery, and equipment reporting in `/ss selftest`.
+- Reduce repeated HUD layout updates and share readable mana regeneration data across visible mana rows.
+
 ## 1.23.0 - 11-Nov-2026 — Adaptive mana regen and Quick Setup
 
 - The Mana Regen / 5 sec row switches to the casting rate when you enter combat and returns to the normal rate when you leave.

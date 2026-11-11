@@ -42,9 +42,17 @@ for _, forever in ipairs({ false, true }) do
     local guided = addon.selfTest
     expectProbe(guided.ProbeDurability, 0, 70, "valid wear is clean")
     expectProbe(guided.ProbeRepair, 0, 300, "read repair is clean")
-    combat, mode = true, "restricted-cost"
+    combat = true
     env.__fireEvent("PLAYER_REGEN_DISABLED")
     expectProbe(guided.ProbeRepair, 2, nil, "out-of-combat price is unknown in a new phase")
+    env.__fireEvent("MERCHANT_SHOW")
+    assert(addon:RunUpdateStatsSafe())
+    expectProbe(guided.ProbeRepair, 0, 300, "fresh combat price is clean")
+    combat = false
+    env.__fireEvent("PLAYER_REGEN_ENABLED")
+    combat, mode = true, "restricted-cost"
+    env.__fireEvent("PLAYER_REGEN_DISABLED")
+    expectProbe(guided.ProbeRepair, 2, nil, "price from a previous encounter is unknown")
     env.__fireEvent("MERCHANT_SHOW")
     assert(addon:RunUpdateStatsSafe())
     expectProbe(guided.ProbeRepair, 1, nil, "fresh combat tooltip cost is protected")

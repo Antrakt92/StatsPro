@@ -12157,6 +12157,7 @@ local EVENT_HANDLERS = {
     -- enabled permanently so right-click Settings works even while locked.
     PLAYER_REGEN_ENABLED        = function()
         SAFE_NUM.ReopenScaledFormatterRetries()
+        cached.repairCostCombat = nil
         addon.hudPresets.combatState = false
         addon.profileRuntime.ResumeCorruptRollbackApply()
         local wasLoaded = isLoaded
@@ -12183,6 +12184,7 @@ local EVENT_HANDLERS = {
         end
     end,
     PLAYER_REGEN_DISABLED       = function()
+        cached.repairCostCombat = nil
         addon.panelEditRuntime.FinishDrags()
         addon.hudPresets.combatState = true
         addon.profileRuntime.CancelOwnedMutationPopups()

@@ -33,7 +33,7 @@ local function createCoordinator()
     local generation = 0
     local dispatching = false
     local acknowledging = false
-    local dismissing = false
+    local dismissing
 
     local function owners()
         local result = {}
@@ -49,17 +49,25 @@ local function createCoordinator()
         return true
     end
 
+    local function suspend(token)
+        if dismissing == token then
+            token.hiddenDuringDismiss = true
+            return false
+        end
+        return release(token)
+    end
+
     local function dismissPresentation()
         local token = active
         if not token then return end
         -- Invalidate callbacks before hiding: OnHide can synchronously reenter.
         release(token)
-        dismissing = true
+        dismissing = token
         local ok = false
         if token.entry.dismiss then ok = pcall(token.entry.dismiss) end
-        dismissing = false
-        -- A host that could not close stays busy until it releases its window.
-        if not ok and not active then active = token end
+        dismissing = nil
+        -- OnHide may have already confirmed the window is closed before cleanup failed.
+        if not ok and not token.hiddenDuringDismiss and not active then active = token end
     end
 
     local function persistAcknowledgement()
@@ -120,7 +128,7 @@ local function createCoordinator()
         active = token
         local shown = callTrue(entry.show,
             function() return confirm(token) end,
-            function() return release(token) end)
+            function() return suspend(token) end)
         if active == token then
             token.opening = false
             if shown then

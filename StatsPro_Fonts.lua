@@ -146,7 +146,8 @@ function shared.Refresh()
             and catalog.catalogRevision:match('^[a-f0-9]+$') and #catalog.catalogRevision == 64
             and plain(rawget(catalog, 'fonts')) then
             local fonts = assert(catalog.fonts)
-            local valid, ids, files = true, {}, {}
+            local valid = true
+            local ids, files = { [shared.baseline.id] = true }, { [shared.baseline.file:lower()] = true }
             for index = 1, 257 do
                 local record = rawget(fonts, index)
                 if record == nil then break end

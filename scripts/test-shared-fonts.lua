@@ -87,6 +87,28 @@ for _, mutate in ipairs({
     local _,addon=fixtures.loadStatsPro('enUS',{sharedProvider={GetCatalog=function() return catalog end}})
     check(addon.sharedFonts.status=='provider-incompatible','malformed provider safely rejects its whole catalogue')
 end
+for _, forever in ipairs({false, true}) do
+    local catalog={formatMajor=1,catalogRevision=string.rep('a',64),fonts=clone(snapshot.fonts)}
+    local collision = catalog.fonts[1]
+    collision.id = snapshot.baseline.id
+    local _,addon=fixtures.loadStatsPro('enUS',{
+        forever=forever, sharedProvider={GetCatalog=function() return catalog end},
+    })
+    local shared = addon.sharedFonts
+    check(shared.status == 'provider-incompatible', 'a collection cannot claim the baseline identity')
+    check(next(shared.activeByID) == nil, 'a baseline collision rejects the complete provider catalogue')
+    check(shared.Resolve(shared.baseline.path) == shared.baseline.path,
+        'the embedded baseline still resolves to its own file')
+    check(shared.Identity(shared.baseline.path) ~= shared.Identity(collision.path),
+        'the baseline and a conflicting provider face remain separate favorites')
+
+    collision.id = snapshot.fonts[1].id
+    collision.file = snapshot.baseline.file:upper():gsub('%.TTF$', '.ttf')
+    collision.path = 'Interface\\AddOns\\AntraktFonts\\fonts\\' .. collision.file
+    shared.Refresh()
+    check(shared.status == 'provider-incompatible', 'the baseline filename is reserved regardless of case')
+    check(next(shared.activeByID) == nil, 'a baseline filename collision cannot add a provider face')
+end
 for _, forever in ipairs({false,true}) do
     local combat=false
     local env,addon,test=fixtures.loadStatsPro('enUS',{

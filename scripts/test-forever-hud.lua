@@ -67,11 +67,18 @@ check(#addon.archonTargets.GetAvailableSnapshotOptions() == 0, "no Archon snapsh
 check(addon.archonTargets.GetSnapshot("MAGE", "frost") == nil, "no Archon lookup")
 do
     local available = true
+    local swimming, falling = false, false
+    local movementReads = 0
     local moveEnv, moveAddon, moveTest = fixtures.loadStatsPro("enUS", {
         forever = true,
         unitGUID = function() return "Player-Forever-UnknownUnits" end,
         foreverAPIs = {
-            GetUnitSpeed = function() return 7, 7, 14, 4.9 end,
+            GetUnitSpeed = function()
+                movementReads = movementReads + 1
+                return 7, 7, 14, 4.9
+            end,
+            IsSwimming = function() return swimming end,
+            IsFalling = function() return falling end,
             UnitOnTaxi = function() if available then return false end end,
             GetCritChance = function() if available then return 5 end end,
             GetManaRegen = function() if available then return 6, 1 end end,
@@ -97,6 +104,28 @@ do
     check(valueFor("offensive", "Melee Crit"):find("?%", 1, true), "unknown crit retains the percentage unit")
     local unknownMP5 = valueFor("utility", "Mana Regen / 5 sec")
     check(unknownMP5:find("?", 1, true) and not unknownMP5:find("%", 1, true), "unknown MP5 retains its time unit")
+
+    available = true
+    for _, visibilityKey in ipairs({ "showMovementSpeed", "showTertiary", "isVisible" }) do
+        swimming, falling = true, false
+        check(valueFor("utility", "Movement Speed"):find("70%", 1, true), "swim speed before hiding " .. visibilityKey)
+        swimming, falling = false, true
+        check(valueFor("utility", "Movement Speed"):find("70%", 1, true), "visible jump keeps swim speed")
+        moveSettings[visibilityKey] = false
+        moveTest.cacheSettings()
+        local before = movementReads
+        swimming, falling = false, false
+        check(moveAddon:RunUpdateStatsSafe() and movementReads == before, "hidden movement is not sampled: " .. visibilityKey)
+        if visibilityKey == "isVisible" then
+            swimming = true
+            local status, speed = moveAddon.selfTest.ProbeRow("MovementSpeed")
+            check(status == 0 and speed == 4.9, "the diagnostic can still sample movement while the HUD is hidden")
+        end
+        swimming, falling = false, true
+        moveSettings[visibilityKey] = true
+        moveTest.cacheSettings()
+        check(valueFor("utility", "Movement Speed"):find("100%", 1, true), "a dry jump after hiding uses run speed: " .. visibilityKey)
+    end
 end
 local settings = test.profileState().settings
 local export = test.profileTransfer.serialize("Forever", settings, { stats = true, layout = true, appearance = true })

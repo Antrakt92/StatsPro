@@ -8955,11 +8955,18 @@ end
     8. CACHE UTILITIES
 ============================================================ ]]
 local function CacheSettings()
+    local wasMovementVisible = addon.forever.enabled and cached.isVisible
+        and cached.showTertiary and cached.showMovementSpeed
     -- Booleans / scalar settings
     for _, k in ipairs(CACHED_BOOL_KEYS) do
         cached[k] = GetBoolDB(k)
     end
     if addon.forever.enabled then
+        -- Water-exit continuity only applies across visible HUD samples. A
+        -- diagnostic read can still observe swimming while the HUD is hidden.
+        if not wasMovementVisible or not (cached.isVisible and cached.showTertiary and cached.showMovementSpeed) then
+            addon.forever.ResetMovementMode()
+        end
         local manaRows = (cached.showManaRegen and 1 or 0)
             + (cached.showCastingManaRegen and 1 or 0)
             + (cached.showManaRegenMP5 and 1 or 0)

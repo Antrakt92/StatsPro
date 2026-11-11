@@ -36,6 +36,10 @@ local transportModes = {
 }
 local wasSwimming = false
 
+function F.ResetMovementMode()
+    wasSwimming = false
+end
+
 local function ReadMovementFlag(name)
     local fn = _G[name]
     if type(fn) ~= "function" then return nil end

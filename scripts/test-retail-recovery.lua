@@ -522,3 +522,94 @@ do
     assert(oldSettings.font == oldFont and oldSettings.fontBeforeAutoSwitch == oldSaved, "retry cannot mutate outgoing settings")
 end
 print(flavor .. " committed Settings recovery regressions passed")
+
+
+-- The scaled protected-number formatters recover after combat without retrying
+-- a failing native call on every HUD update.
+for _, kind in ipairs(forever and { "Movement", "MP5" } or { "Movement" }) do
+    local first, second = {}, {}
+    local combat, phase = false, "probe-error"
+    local probeCalls, restrictedCalls = 0, 0
+    local opts = {
+        statsProDB = {
+            showOffensive = false, showTertiary = false, showDefensive = false,
+            showMainStat = false, showStamina = false, showItemLevel = false,
+        },
+        inCombatLockdown = function() return combat end,
+        issecretvalue = function(value) return rawequal(value, first) or rawequal(value, second) end,
+        abbreviateNumbers = function(value)
+            if type(value) == "number" then
+                probeCalls = probeCalls + 1
+                if phase == "probe-error" then error("transient clean probe failure") end
+                if kind == "Movement" then return value == 7 and "100,0%" or "150,0%" end
+                return "10,25"
+            end
+            restrictedCalls = restrictedCalls + 1
+            if phase == "protected-error" then return nil end
+            if kind == "Movement" then return rawequal(value, first) and "110,0%" or "150,0%" end
+            return rawequal(value, first) and "30,25" or "38,75"
+        end,
+        setFormattedText = function(_, format, value)
+            assert(format == "%.1f yd/s", "Movement preserves the live raw-speed format")
+            return rawequal(value, first) and "7,7 yd/s" or "10,5 yd/s"
+        end,
+    }
+    local env, addon = loadStatsPro("enUS", opts)
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    local function cycleCombat()
+        combat = false
+        env.__fireEvent("PLAYER_REGEN_ENABLED")
+        combat = true
+        env.__fireEvent("PLAYER_REGEN_DISABLED")
+    end
+    local function read(value)
+        if kind == "MP5" then return addon.forever.FormatRestrictedMP5(value) end
+        local _, text = addon.movementRuntime.ResolvePercent(value)
+        return text
+    end
+    local fallbackFirst = kind == "Movement" and "7,7 yd/s" or nil
+    local fallbackSecond = kind == "Movement" and "10,5 yd/s" or nil
+    local nativeFirst = kind == "Movement" and "110,0%" or "30,25"
+    local nativeSecond = kind == "Movement" and "150,0%" or "38,75"
+    combat = true
+    env.__fireEvent("PLAYER_REGEN_DISABLED")
+    assert(read(first) == fallbackFirst, kind .. ": failed clean probe uses fallback")
+    local failedProbes = probeCalls
+    phase = "ready"
+    assert(read(second) == fallbackSecond and probeCalls == failedProbes and restrictedCalls == 0,
+        kind .. ": clean probe is not repeated in the same combat")
+    cycleCombat()
+    assert(read(first) == nativeFirst and probeCalls > failedProbes and restrictedCalls == 1,
+        kind .. ": clean probe can recover on the next combat")
+
+    phase = "protected-error"
+    assert(read(first) == fallbackFirst and restrictedCalls == 2,
+        kind .. ": malformed protected result uses the correct fallback")
+    phase = "ready"
+    assert(read(second) == fallbackSecond and restrictedCalls == 2,
+        kind .. ": protected call is not repeated in the same combat")
+    cycleCombat()
+    assert(read(first) == nativeFirst and read(second) == nativeSecond and restrictedCalls == 4,
+        kind .. ": resumed native path displays consecutive live values")
+
+    local incompatibleProbes, unexpectedProtectedCalls = 0, 0
+    local compatible = false
+    env.AbbreviateNumbers = function(value)
+        if type(value) ~= "number" then
+            unexpectedProtectedCalls = unexpectedProtectedCalls + 1
+            return nativeFirst
+        end
+        incompatibleProbes = incompatibleProbes + 1
+        if not compatible then return "1.0" end
+        if kind == "Movement" then return value == 7 and "100%" or "150%" end
+        return "10.25"
+    end
+    assert(read(first) == fallbackFirst and incompatibleProbes > 0, kind .. ": clean mismatch fails closed")
+    local provenMismatch = incompatibleProbes
+    compatible = true
+    cycleCombat()
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    assert(read(second) == fallbackSecond and incompatibleProbes == provenMismatch and unexpectedProtectedCalls == 0,
+        kind .. ": a proven mismatch remains cached across recovery events")
+    print(flavor .. " " .. kind .. " protected formatter recovery regressions passed")
+end

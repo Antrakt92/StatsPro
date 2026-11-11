@@ -87,7 +87,6 @@ addon.movementRuntime = {
             },
         },
     },
-    nativePercentFormatterState = nil,
 }
 
 --[[ ============================================================
@@ -4692,42 +4691,53 @@ function SAFE_NUM.SafeDisplayPercent(fn, ...)
     return SAFE_NUM.ResolveDisplayNumber(value, false)
 end
 
-function addon.movementRuntime.NativePercentFormatterAvailable()
+function addon.movementRuntime.NativePercentFormatterAvailable(formatter)
     local runtime = addon.movementRuntime
+    if runtime.nativePercentFormatter ~= formatter then
+        runtime.nativePercentFormatter = formatter
+        runtime.nativePercentFormatterState = nil
+        runtime.nativePercentRetryBlocked = nil
+    end
+    if runtime.nativePercentRetryBlocked or type(formatter) ~= "function" then return false end
     if runtime.nativePercentFormatterState ~= nil then
-        return runtime.nativePercentFormatterState == true
+        return runtime.nativePercentFormatterState
     end
 
-    runtime.nativePercentFormatterState = false
-    local formatter = _G.AbbreviateNumbers
-    if type(formatter) ~= "function" then return false end
-
-    -- Validate only clean inputs, so comparing the returned strings cannot branch
-    -- on a secret. This fails closed if Blizzard changes breakpoint semantics.
+    -- A clean mismatch proves incompatible scaling for this formatter. A failed
+    -- probe leaves its capability unknown and can be retried after combat.
     local baseOK, baseText = pcall(formatter, 7, runtime.nativePercentOptions)
     local boostOK, boostText = pcall(formatter, 10.5, runtime.nativePercentOptions)
-    if not baseOK or not boostOK then return false end
     local baseSecretOK, baseSecret = pcall(issecretvalue, baseText)
     local boostSecretOK, boostSecret = pcall(issecretvalue, boostText)
-    if not baseSecretOK or baseSecret or not boostSecretOK or boostSecret then return false end
-    if type(baseText) ~= "string" or type(boostText) ~= "string" then return false end
+    if not baseOK or not boostOK or not baseSecretOK or baseSecret ~= false
+        or not boostSecretOK or boostSecret ~= false
+        or type(baseText) ~= "string" or type(boostText) ~= "string" then
+        runtime.nativePercentRetryBlocked = true
+        return false
+    end
     local baseMatches = baseText == "100%" or baseText == "100.0%" or baseText == "100,0%"
     local boostMatches = boostText == "150%" or boostText == "150.0%" or boostText == "150,0%"
     runtime.nativePercentFormatterState = baseMatches and boostMatches
     return runtime.nativePercentFormatterState
 end
 
+function SAFE_NUM.ReopenScaledFormatterRetries()
+    addon.movementRuntime.nativePercentRetryBlocked = nil
+    if addon.forever.enabled then addon.forever.ReopenMP5FormatterRetry() end
+end
+
 function addon.movementRuntime.FormatRestricted(runSpeed)
     local runtime = addon.movementRuntime
-    if runtime.NativePercentFormatterAvailable() then
-        local ok, text = pcall(_G.AbbreviateNumbers, runSpeed, runtime.nativePercentOptions)
+    local formatter = _G.AbbreviateNumbers
+    if runtime.NativePercentFormatterAvailable(formatter) then
+        local ok, text = pcall(formatter, runSpeed, runtime.nativePercentOptions)
         if ok and type(text) == "string" then
             -- WARNING: text is secret. Callers may only concatenate it and pass it
             -- through the existing FontString render path; never inspect, compare,
             -- or reformat it.
             return text, true
         end
-        runtime.nativePercentFormatterState = false
+        runtime.nativePercentRetryBlocked = true
     end
 
     -- A future API restriction must degrade to the exact live ground speed, not
@@ -12016,6 +12026,7 @@ addon.profileRuntime.CompleteBootstrap = function()
 end
 
 local function OnPlayerEnteringWorld()
+    SAFE_NUM.ReopenScaledFormatterRetries()
     if not isLoaded then
         mainPanel:Hide()
         defensivePanel:Hide()
@@ -12128,6 +12139,7 @@ local EVENT_HANDLERS = {
     -- WHY: lock state is stored in cached.isLocked and read by OnDragStart. Mouse stays
     -- enabled permanently so right-click Settings works even while locked.
     PLAYER_REGEN_ENABLED        = function()
+        SAFE_NUM.ReopenScaledFormatterRetries()
         addon.hudPresets.combatState = false
         addon.profileRuntime.ResumeCorruptRollbackApply()
         local wasLoaded = isLoaded

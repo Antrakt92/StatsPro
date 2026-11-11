@@ -161,20 +161,33 @@ local mp5Options = { breakpointData = { {
     breakpoint = 0, abbreviation = "", abbreviationIsGlobal = false,
     significandDivisor = 0.0019999999999999996, fractionDivisor = 100,
 } } }
-local mp5FormatterAvailable
+local mp5Formatter, mp5FormatterAvailable, mp5FormatterRetryBlocked
+
+function F.ReopenMP5FormatterRetry()
+    mp5FormatterRetryBlocked = nil
+end
 
 function F.FormatRestrictedMP5(value)
     local formatter = _G.AbbreviateNumbers
-    if type(formatter) ~= "function" then return nil end
+    if mp5Formatter ~= formatter then
+        mp5Formatter = formatter
+        mp5FormatterAvailable = nil
+        F.ReopenMP5FormatterRetry()
+    end
+    if mp5FormatterRetryBlocked or type(formatter) ~= "function" then return nil end
     if mp5FormatterAvailable == nil then
         local ok, sample = pcall(formatter, 2.05, mp5Options)
         local classified, secret = pcall(issecretvalue, sample)
-        mp5FormatterAvailable = ok and classified and secret == false
-            and type(sample) == "string" and (sample == "10.25" or sample == "10,25")
+        if not ok or not classified or secret ~= false or type(sample) ~= "string" then
+            mp5FormatterRetryBlocked = true
+            return nil
+        end
+        mp5FormatterAvailable = sample == "10.25" or sample == "10,25"
     end
     if mp5FormatterAvailable then
         local ok, text = pcall(formatter, value, mp5Options)
         if ok and type(text) == "string" then return text end
+        mp5FormatterRetryBlocked = true
     end
 end
 

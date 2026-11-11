@@ -349,7 +349,10 @@ test.cacheSettings()
 check(hasManaRow("", "8/s") and hasManaRow("", "6/s"),
     "hidden-label MP5 fallbacks identify both values as per-second")
 rejectMP5 = false
+check(hasManaRow("", "8/s") and hasManaRow("", "6/s"),
+    "protected MP5 formatter does not retry repeatedly in the same combat")
 combat, manaRegen, castingRegen = false, 6, 1
+env.__fireEvent("PLAYER_REGEN_ENABLED")
 settings.showManaRegen, settings.showCastingManaRegen = true, true
 test.cacheSettings()
 check(hasManaRow("", "30.00/5s") and hasManaRow("", "5.00/5s")

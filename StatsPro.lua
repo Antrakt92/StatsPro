@@ -889,7 +889,7 @@ addon.hudPresets.definitions.tank.values =
     CopyTable(addon.hudPresets.definitions.dps.values)
 addon.hudPresets.definitions.tank.values.showDefensive = true
 
-if addon.forever.enabled then
+function addon.forever.ApplyHudPresets()
     for _, definition in pairs(addon.forever.presets.definitions) do
         for key in pairs(addon.hudPresets.allowlist) do
             if definition.values[key] == nil then definition.values[key] = defaults[key] end
@@ -897,6 +897,10 @@ if addon.forever.enabled then
     end
     addon.hudPresets.order = addon.forever.presets.order
     addon.hudPresets.definitions = addon.forever.presets.definitions
+end
+
+if addon.forever.enabled then
+    addon.forever.ApplyHudPresets()
     for _, rows in pairs(addon.forever.rows) do
         for _, definition in ipairs(rows) do
             addon.hudPresets.allowlist[definition.showKey] = true
@@ -6870,7 +6874,7 @@ end
 function addon.profileRuntime.IsForeverFactoryStarter(root, sourceID, sourceName, settings)
     if not addon.forever.enabled or sourceID ~= "p1"
         or not addon.dbRuntime.IsCleanType(sourceName, "string") or sourceName ~= "Default" then return false end
-    if settings.showMainStat ~= true or settings.showStrength ~= nil
+    if type(settings.showMainStat) ~= "boolean" or settings.showStrength ~= nil
         or settings.showAgility ~= nil or settings.showIntellect ~= nil then return false end
     -- A flat downgrade shadow records an existing installation's preferences.
     for key in pairs(root) do
@@ -8061,6 +8065,10 @@ function addon.profileOps.ExecuteRootReplacement(expected, builder, corruptRecov
         return finish(false, built and buildStatus or "prepare-failed")
     end
     local valid, _, desiredProfileID = addon.dbRuntime.ValidateRegistry(freshRoot)
+    if valid and not corruptRecovery then
+        local guid, specID = addon.profileOps.ReadCleanActiveContext()
+        desiredProfileID = addon.dbRuntime.ResolveAssignedProfileID(freshRoot, guid, specID, desiredProfileID, true)
+    end
     if not valid or not desiredProfileID or addon.profileOps.ShouldFail("validate") then
         addon.profileOps.RestorePositionFields(oldSettings, positionSnapshot)
         return finish(false, "validate-failed")
@@ -8758,10 +8766,27 @@ function addon.profileOps.FullWipe(expected)
         if type(freshRoot) ~= "table" or not addon.dbRuntime.IsCleanTable(freshRoot) then
             return nil, "clone-failed"
         end
+        local profileID = freshRoot.account.defaultProfileID
+        if addon.forever.enabled then
+            addon.forever.ClearStarterClassSettings(freshRoot.profiles[profileID].settings)
+            if guid and specID then
+                local settings = addon.profileOps.BuildDefaultSettings()
+                if not settings then return nil, "clone-failed" end
+                local name, reason = addon.profileRuntime.SpecProfileName({
+                    displayName = addon.profileRuntime.activeDisplayName,
+                    specName = addon.profileRuntime.activeSpecName,
+                    specID = specID,
+                }, freshRoot.profiles)
+                if not name then return nil, reason end
+                profileID = addon.profileRuntime.AllocateProfileID(freshRoot.account, freshRoot.profiles)
+                if not profileID then return nil, "id-exhausted" end
+                freshRoot.profiles[profileID] = { name = name, settings = settings }
+            end
+        end
         if guid and specID then
             local character = {
-                defaultProfileID = "p1",
-                specProfiles = { [specID] = "p1" },
+                defaultProfileID = profileID,
+                specProfiles = { [specID] = profileID },
             }
             if addon.dbRuntime.IsCleanType(addon.profileRuntime.activeDisplayName, "string") then
                 character.displayName = addon.profileRuntime.activeDisplayName
@@ -8771,7 +8796,7 @@ function addon.profileOps.FullWipe(expected)
         if not addon.dbRuntime.ValidateRegistry(freshRoot) then
             return nil, "validate-failed"
         end
-        return freshRoot, nil, "p1"
+        return freshRoot, nil, profileID
     end)
 end
 
@@ -8780,6 +8805,10 @@ function addon.profileOps.RecoverCorruptRoot(expected)
         local freshRoot = addon.dbRuntime.BuildRegistry(defaults)
         if type(freshRoot) ~= "table" or not addon.dbRuntime.IsCleanTable(freshRoot) then
             return nil, "clone-failed"
+        end
+        if addon.forever.enabled then
+            local starter = freshRoot.profiles[freshRoot.account.defaultProfileID]
+            addon.forever.ClearStarterClassSettings(starter.settings)
         end
         if not addon.dbRuntime.ValidateRegistry(freshRoot) then
             return nil, "validate-failed"
@@ -11971,6 +12000,10 @@ local function OnPlayerEnteringWorld()
         -- runs against an empty StatsPro DB; established settings are never overwritten
         -- without the explicit `/statspro import` confirmation path.
         if not addon.profileRuntime.bootstrapStarted then
+            if addon.forever.enabled and addon.forever.RefreshInitialClass() then
+                for key, value in pairs(addon.forever.defaults) do defaults[key] = value end
+                addon.forever.ApplyHudPresets()
+            end
             addon.legacyImport.ImportFreshIfAvailable()
             MigrateDB()
             addon.dbRuntime.Refresh()

@@ -154,6 +154,27 @@ do
         "Forever profiles distinguish characters after the name event")
 end
 do
+    local classReady = false
+    local coldEnv, coldAddon, coldTest = fixtures.loadStatsPro("enUS", {
+        forever = true,
+        unitGUID = function() return "Player-Cold-Class" end,
+        foreverAPIs = {
+            UnitClass = function()
+                if classReady then return "Mage", "MAGE", 8 end
+            end,
+        },
+    })
+    check(not coldAddon.hudPresets.definitions.compact.values.showSpellCrit, "cold fixture starts without class data")
+    classReady = true
+    coldEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local settings = coldTest.profileState().settings
+    check(settings.showIntellect == true and settings.showSpellCrit == true
+        and settings.showManaRegenMP5 == true, "class data available at login determines first settings")
+    check(coldAddon.hudPresets.definitions.compact.values.showSpellCrit == true,
+        "class data available at login also refreshes Quick Setup")
+end
+
+do
     local function login(class, classID, guid, root)
         local characterEnv, _, characterTest = fixtures.loadStatsPro("enUS", {
             forever = true, statsProDB = root,
@@ -188,6 +209,39 @@ do
     local hunter = login("HUNTER", 3, "Player-Starter-Hunter", mageStarter.root)
     check(hunter.settings.showManaRegenMP5 == false and hunter.settings.showSpellCrit == true,
         "explicit MP5 opt-out does not resemble an old factory default")
+
+    local originalWarrior, resetTest = login("WARRIOR", 1, "Player-Reset-Warrior")
+    for _, stage in ipairs({ "validate", "commit", "apply" }) do
+        resetTest.profileOps.setFailureStage(stage)
+        local ok = resetTest.profileOps.fullWipe()
+        local restored = resetTest.profileState()
+        check(not ok and restored.root == originalWarrior.root and restored.settings == originalWarrior.settings,
+            "failed Forever full wipe preserves the saved assignment at " .. stage)
+    end
+    resetTest.profileOps.setFailureStage(nil)
+    check(resetTest.profileOps.fullWipe(), "Forever full wipe succeeds")
+    local resetWarrior = resetTest.profileState()
+    check(resetWarrior.profileID ~= resetWarrior.account.defaultProfileID and resetWarrior.settings.showAttackPower == true,
+        "Forever full wipe gives the current character a detached class profile")
+    resetWarrior.settings.showOffhandHit = true
+    local resetMage = login("MAGE", 8, "Player-Reset-Mage", resetWarrior.root)
+    check(resetMage.settings.showSpellCrit == true and resetMage.settings.showManaRegenMP5 == true
+        and resetMage.settings.showAttackPower == false and resetMage.settings.showOffhandHit == false,
+        "a new character after full wipe receives its own class setup")
+
+    local damagedRoot = { dbVersion = originalWarrior.root.dbVersion }
+    local damagedEnv, damagedAddon, damagedTest = fixtures.loadStatsPro("enUS", {
+        forever = true, statsProDB = damagedRoot,
+        unitGUID = function() return "Player-Recover-Warrior" end,
+    })
+    damagedEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    check(damagedAddon.profileOps.RecoverCorruptRoot({
+        rootRef = damagedRoot, generation = damagedTest.profileState().generation,
+    }), "Forever corrupt-root reset succeeds")
+    check(damagedAddon.profileRuntime.ResolvePending(), "corrupt-root reset resolves the current character")
+    local recoveredMage = login("MAGE", 8, "Player-Recover-Mage", damagedTest.profileState().root)
+    check(recoveredMage.settings.showSpellCrit == true and recoveredMage.settings.showAttackPower == false,
+        "corrupt-root recovery also leaves a class-neutral account starter")
 end
 for _, forever in ipairs({ false, true }) do
     local flavor = forever and "Forever" or "Retail"

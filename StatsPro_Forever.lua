@@ -322,9 +322,7 @@ function F.BuildDefaults(class)
     return defaults
 end
 
-function F.ApplyClassStarter(settings)
-    local class = CurrentClass()
-    if not compactSelections[class] then return end
+local function CacheClassStarters()
     if not F.starterDefaults then
         local fallback = F.BuildDefaults()
         local defaultsByClass, classKeys = {}, {}
@@ -336,6 +334,26 @@ function F.ApplyClassStarter(settings)
             end
         end
         F.starterDefaults, F.starterClassKeys = defaultsByClass, classKeys
+    end
+end
+
+function F.ClearStarterClassSettings(settings)
+    CacheClassStarters()
+    for key in pairs(F.starterClassKeys) do settings[key] = nil end
+end
+
+function F.ApplyClassStarter(settings)
+    local class = CurrentClass()
+    if not compactSelections[class] then return end
+    CacheClassStarters()
+    local values = F.starterDefaults[class]
+    if settings.showMainStat == false then
+        -- A newly reset account default leaves every class-dependent choice unset.
+        for key in pairs(F.starterClassKeys) do
+            if settings[key] ~= nil then return end
+        end
+        for key in pairs(F.starterClassKeys) do settings[key] = values[key] end
+        return
     end
 
     -- Pre-adaptive starters had neither the MP5 row nor these three options on.
@@ -353,7 +371,6 @@ function F.ApplyClassStarter(settings)
             end
         end
         if matches then
-            local values = F.starterDefaults[class]
             for key in pairs(F.starterClassKeys) do settings[key] = values[key] end
             return
         end
@@ -363,6 +380,16 @@ end
 local initialClass = CurrentClass()
 F.presets = F.BuildPresets(initialClass)
 F.defaults = F.BuildDefaults(initialClass)
+
+function F.RefreshInitialClass()
+    if compactSelections[initialClass] then return false end
+    local class = CurrentClass()
+    if not compactSelections[class] then return false end
+    initialClass = class
+    F.presets = F.BuildPresets(class)
+    F.defaults = F.BuildDefaults(class)
+    return true
+end
 
 -- An addon palette: the client source supplies no canonical school RGB table.
 F.colorDefaults = {

@@ -12778,7 +12778,9 @@ function addon.fontRuntime.ReconcileCatalogLocale()
     if not isLoaded or addon.dbRuntime.readOnly or addon.profileOps.inProgress
         or profile.transitioning or profile.suppressIntermediateRefresh
         or profile.forceReapply or profile.BlocksUserWrites()
-        or profile.ReadCombatState() ~= false or runtime.pendingSavedFont
+        or profile.ReadCombatState() ~= false
+        or (runtime.pendingSavedFont and (runtime.pendingRetryScheduled
+            or runtime.pendingRetryAttempt < #runtime.pendingRetryDelays))
         or addon.settingsUI.fontPicker.previewedPath
         or addon.settingsUI.localization.previewActive
         or addon.appearancePresets.session or addon.hudPresets.session then return end
@@ -12791,10 +12793,14 @@ function addon.fontRuntime.ReconcileCatalogLocale()
     local preference = runtime.preferredPath()
     local usable, status = runtime.usablePath(preference)
     if status == "pending" then
-        runtime.pendingSavedFont = runtime.catalogEntry(preference)
-        runtime.pendingRetryAttempt = 0
-        runtime.pendingRetryGeneration = runtime.pendingRetryGeneration + 1
-        runtime.schedulePendingSavedFontRetry()
+        -- Catalogue events can recover an exhausted preference if it becomes
+        -- usable. An unrelated registration must not restart the same retry budget.
+        if addon.sharedFonts.Identity(runtime.pendingSavedFont) ~= addon.sharedFonts.Identity(preference) then
+            runtime.pendingSavedFont = runtime.catalogEntry(preference)
+            runtime.pendingRetryAttempt = 0
+            runtime.pendingRetryGeneration = runtime.pendingRetryGeneration + 1
+            runtime.schedulePendingSavedFontRetry()
+        end
     elseif (usable and FontSupports(usable, req, ResolveActiveLocale())
         and not SameFontPath(usable, runtime.currentPath()))
         or not FontSupports(runtime.currentPath(), req, ResolveActiveLocale()) then

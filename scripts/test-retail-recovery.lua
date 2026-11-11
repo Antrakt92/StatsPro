@@ -613,3 +613,41 @@ for _, kind in ipairs(forever and { "Movement", "MP5" } or { "Movement" }) do
         kind .. ": a proven mismatch remains cached across recovery events")
     print(flavor .. " " .. kind .. " protected formatter recovery regressions passed")
 end
+
+for _, ownedAlias in ipairs({ false, true }) do
+    local snapshot = assert(loadfile("AntraktFontCatalog.lua"))()
+    local face = snapshot.fonts[1]
+    local path = ownedAlias and face.path or "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\LateReady.ttf"
+    local savedPath = ownedAlias and face.aliases[1] or path
+    local ready = false
+    local function canApply(_, font) return (font ~= path and font ~= savedPath) or ready end
+    local env, addon, test = fixtures.loadStatsPro("enUS", {
+        forever = forever,
+        statsProDB = { font = savedPath },
+        bundledFonts = ownedAlias,
+        lsmFonts = { { name = "Late Ready", path = path } },
+        setFontResult = canApply,
+        fontObjectSetFontResult = canApply,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    for _ = 1, 8 do
+        if not env.__flushNextTimer(5) then break end
+    end
+    local attempts = test.fontRuntimeState().pendingRetryAttempt
+    assert(attempts == 4 and not test.fontRuntimeState().pendingRetryScheduled
+        and test.currentRuntimeFontPath() ~= path, "font starts in exhausted fallback")
+    env.__registerLSMFont("Unrelated", "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\Unrelated.ttf")
+    env.__flushTimers(0)
+    assert(addon:RunUpdateStatsSafe())
+    assert(test.fontRuntimeState().pendingRetryAttempt == attempts
+        and not test.fontRuntimeState().pendingRetryScheduled, "unrelated registration cannot restart the same retry budget")
+
+    ready = true
+    env.__registerLSMFont("Late Ready", path)
+    env.__flushTimers(0)
+    assert(addon:RunUpdateStatsSafe())
+    assert(test.currentRuntimeFontPath() == path, "a ready catalogue font recovers after its initial retry window")
+    assert(test.fontRuntimeState().pendingSavedFont == nil
+        and test.profileState().settings.font == savedPath, "recovery preserves the saved selection and clears pending state")
+end
+print(flavor .. " late catalogue font recovery regressions passed")

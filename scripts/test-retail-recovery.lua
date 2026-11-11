@@ -134,6 +134,58 @@ for _, mode in ipairs({ "modern", "modern-only", "legacy", "missing", "throwing"
 end
 print(flavor .. " money API and HUD recovery regressions passed")
 
+for _, costReadyOnWake in ipairs({ true, false }) do
+    local slot = forever and 18 or 1
+    local equippedID, reads, cost = 1337, 0, nil
+    local env, addon, test = loadStatsPro("enUS", {
+        statsProDB = { showDurability = true, showRepairCost = true },
+        getInventoryItemDurability = function(index)
+            if index == slot then return 80, 100 end
+        end,
+        getTooltipInventoryItem = function()
+            reads = reads + 1
+            return cost and { repairCost = cost } or nil
+        end,
+    })
+    env.GetInventoryItemID = function(_, index) if index == slot then return equippedID end end
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    local limit = test.durabilityState().retryLimit
+    env.__fireEvent("GET_ITEM_INFO_RECEIVED", 1337, true)
+    assert(not test.durabilityState().dirty, "scheduled retry leaves late readiness available")
+    for _ = 1, limit do
+        assert(env.__flushNextTimer(), "pending repair schedules its bounded retries")
+        assert(addon:RunUpdateStatsSafe(), "pending repair retries render safely")
+    end
+    local exhausted = test.durabilityState()
+    assert(exhausted.durabilityValue == 80 and exhausted.repairCost == nil
+        and exhausted.repairRetryAttempt == limit and not exhausted.repairRetryScheduled,
+        "readable durability does not prove the repair tooltip is available")
+    local before = reads
+    env.__fireEvent("ITEM_DATA_LOAD_RESULT", 999, true)
+    env.__fireEvent("GET_ITEM_INFO_RECEIVED", 1337, false)
+    equippedID = 42
+    env.__fireEvent("ITEM_DATA_LOAD_RESULT", 1337, true)
+    assert(not test.durabilityState().dirty and reads == before,
+        "foreign, failed and stale item callbacks cannot wake repair")
+    equippedID = 1337
+    if costReadyOnWake then cost = 300 end
+    env.__fireEvent("ITEM_DATA_LOAD_RESULT", 1337, true)
+    assert(test.durabilityState().dirty and reads == before, "repair-only item readiness coalesces a scan")
+    assert(addon:RunUpdateStatsSafe() and reads == before + 1, "late repair readiness runs one scan")
+    local after = test.durabilityState()
+    assert(after.repairCost == cost and after.repairRetryAttempt == limit and not after.repairRetryScheduled,
+        "late readiness applies the result without reopening the retry budget")
+    env.__fireEvent("GET_ITEM_INFO_RECEIVED", 1337, true)
+    assert(not test.durabilityState().dirty, "duplicate item readiness cannot wake a second scan")
+    if not costReadyOnWake then
+        cost = 0
+        env.__fireEvent("MERCHANT_SHOW")
+        assert(addon:RunUpdateStatsSafe() and test.durabilityState().repairCost == 0,
+            "new external generation can still recover zero repair cost")
+    end
+end
+print(flavor .. " late repair tooltip recovery regressions passed")
+
 -- A styled FontString can retain its own font even while GetFontObject still
 -- identifies the shared parent. Changing that parent must not strand Settings.
 for _, failFirst in ipairs({ false, true }) do

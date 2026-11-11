@@ -34,6 +34,8 @@ local RETRY_DELAYS = { 1, 3, 8, 15 }
 addon.durabilityRuntime = {
     generation = 0,
     pendingItemSlots = {},
+    pendingRepairItemSlots = {},
+    repairItemWakeups = {},
     retryDelays = RETRY_DELAYS,
     retryStates = {
         durability = {
@@ -1574,6 +1576,8 @@ local durabilityDirty = true
 function addon.durabilityRuntime.MarkDirty()
     local runtime = addon.durabilityRuntime
     runtime.generation = runtime.generation + 1
+    runtime.pendingRepairItemSlots = {}
+    runtime.repairItemWakeups = {}
     local durabilityRetry = runtime.retryStates.durability
     durabilityRetry.generation = runtime.generation
     durabilityRetry.attempt = 0
@@ -1617,6 +1621,18 @@ function addon.durabilityRuntime.OnItemDataReady(itemID, success)
             runtime.pendingItemSlots[slot] = nil
             runtime.MarkDirty()
             return
+        end
+    end
+    if not cached.showRepairCost or durabilityDirty
+        or runtime.retryStates.repair.scheduledGeneration == runtime.generation then return end
+    for slot, pendingID in pairs(runtime.pendingRepairItemSlots) do
+        if itemID == pendingID and not runtime.repairItemWakeups[slot]
+            and runtime.GetCleanEquippedItemID(slot) == itemID then
+            -- Item-data events can overlap. Allow one repair-only rescan per
+            -- slot and generation without resetting either timer budget.
+            runtime.repairItemWakeups[slot] = true
+            runtime.pendingRepairItemSlots[slot] = nil
+            durabilityDirty = true
         end
     end
 end
@@ -9286,8 +9302,9 @@ local function ScanDurabilityAndCost()
     local durabilityIncomplete = false
     local repairCostPending = false
     local repairCostRetryable = false
-    local pendingItemSlots = {}
+    local pendingItemSlots, pendingRepairItemSlots = {}, {}
     addon.durabilityRuntime.pendingItemSlots = pendingItemSlots
+    addon.durabilityRuntime.pendingRepairItemSlots = pendingRepairItemSlots
     for slot = DURABILITY_SCAN.slotMin, DURABILITY_SCAN.slotMax do
         if not DURABILITY_SCAN.skipSlots[slot] then
             -- WHY pcall fail-closed: a throwing durability API must not abort the
@@ -9313,6 +9330,7 @@ local function ScanDurabilityAndCost()
                     count = count + 1
                     if not minPct or pct < minPct then minPct = pct end
                     if cached.showRepairCost and cur < max then
+                        local retrySlotRepair = false
                         if C_TooltipInfo and C_TooltipInfo.GetInventoryItem then
                             local okData, data = pcall(C_TooltipInfo.GetInventoryItem, "player", slot)
                             if okData and data then
@@ -9326,18 +9344,22 @@ local function ScanDurabilityAndCost()
                                         totalCost = totalCost + cost
                                     else
                                         repairCostPending = true
-                                        if not okCost or not issecretvalue(cost) then repairCostRetryable = true end
+                                        retrySlotRepair = not okCost or not issecretvalue(cost)
                                     end
                                 else
                                     repairCostPending = true
-                                    repairCostRetryable = true
+                                    retrySlotRepair = true
                                 end
                             else
                                 repairCostPending = true
-                                repairCostRetryable = true
+                                retrySlotRepair = true
                             end
                         else
                             repairCostPending = true
+                        end
+                        if retrySlotRepair then
+                            repairCostRetryable = true
+                            pendingRepairItemSlots[slot] = addon.durabilityRuntime.GetCleanEquippedItemID(slot)
                         end
                     end
                 elseif not (SAFE_NUM.IsCleanFiniteNumber(cur)

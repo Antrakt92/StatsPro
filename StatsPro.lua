@@ -6953,7 +6953,7 @@ function addon.profileRuntime.BuildLateForeverStarter(root, profileID)
         return nil
     end
     local profile, copied = addon.dbRuntime.CloneSerializable(expected.profileRef)
-    if not copied then return nil end
+    if not copied or type(profile) ~= "table" or type(profile.settings) ~= "table" then return nil end
     if addon.forever.ApplyClassStarter(profile.settings) then return profile end
 end
 
@@ -6995,7 +6995,7 @@ function addon.profileRuntime.PrepareContextTransaction(context)
             transaction.characters = addon.profileRuntime.ShallowCopy(root.characters)
             transaction.characters[context.guid] = character
         end
-        if starter then
+        if starter and existingProfileID then
             transaction.profiles = addon.profileRuntime.ShallowCopy(root.profiles)
             transaction.profiles[existingProfileID] = starter
             transaction.foreverStarterRepair = true
@@ -7395,7 +7395,7 @@ function addon.profileRuntime.ActivateResolvedContext(
     runtime.bindingReconciliationPending = false
     runtime.activationCount = runtime.activationCount + 1
     runtime.transitioning = false
-    if transaction and transaction.foreverStarterPending
+    if transaction and transaction.foreverStarterPending and activeRoot and profileID
         and profileID == addon.dbRuntime.activeProfileID then
         runtime.foreverColdFactoryRoot = nil
         runtime.foreverPendingStarter = {

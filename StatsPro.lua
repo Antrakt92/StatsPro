@@ -10048,6 +10048,15 @@ function Panel:LoadPosition()
     -- WHY: scale is set via SetAllPanelsScale (single ownership); not duplicated here
 end
 
+function Panel:HasViewportSensitivePosition(settings)
+    local x = settings[self:DBKey("xOfs")]
+    local y = settings[self:DBKey("yOfs")]
+    local floor = addon.positionRuntime.legacyOffsetFloor
+    return self.positionUsesViewportFallbackX or self.positionUsesViewportFallbackY
+        or (addon.positionRuntime.IsPortableOffset(x) and math.abs(x) > floor)
+        or (addon.positionRuntime.IsPortableOffset(y) and math.abs(y) > floor)
+end
+
 function Panel:NeedsViewportPositionRefresh(settings)
     if self.dragActive then return false end
     local x = settings[self:DBKey("xOfs")]
@@ -14672,8 +14681,10 @@ local function RunCoalesced(key, delay, fn)
 end
 
 function addon.settingsDesign.RequestResponsiveFrameResize()
-    if not isLoaded and not addon.settingsUI.frame
-        and type(addon.profileUI.ApplyManagerSize) ~= "function" then return end
+    local settings = isLoaded and addon.dbRuntime.GetActiveSettings()
+    if not addon.settingsUI.frame and type(addon.profileUI.ApplyManagerSize) ~= "function"
+        and not (settings and (mainPanel:HasViewportSensitivePosition(settings)
+            or defensivePanel:HasViewportSensitivePosition(settings))) then return end
     local attempt = 0
     local function refresh()
         attempt = attempt + 1
@@ -14688,7 +14699,9 @@ function addon.settingsDesign.RequestResponsiveFrameResize()
             end
             -- UIParent can settle after the first callback. Retry a failed native
             -- apply once more, always projecting the latest settings and viewport.
-            if attempt == 1 or (attempt == 2 and not (mainOK and defensiveOK)) then
+            local sensitive = mainPanel:HasViewportSensitivePosition(active)
+                or defensivePanel:HasViewportSensitivePosition(active)
+            if (attempt == 1 and sensitive) or (attempt == 2 and not (mainOK and defensiveOK)) then
                 RunCoalesced("responsiveFrameSize", 0.1, refresh)
             end
         end

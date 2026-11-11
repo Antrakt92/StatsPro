@@ -577,7 +577,7 @@ for _,forever in ipairs({false,true}) do
         rawset(env.C_AddOns,'SaveAddOns',function(...)
             check(select('#',...)==0,'save receives no expanded method-selection return')
             saveCalls=saveCalls+1
-            if case=='save-error' then error('save failed') end
+            if case=='save-error' and saveCalls==1 then error('save failed') end
             if case=='save-disables' then enabled=0 end
             if case=='save-combat' then combat=true end
         end)
@@ -639,7 +639,16 @@ for _,forever in ipairs({false,true}) do
             combat=false
             enabled=0;notice.copy.scripts.OnClick();check(reloadCalls==2,'stale reload cannot reload a disabled package')
         elseif case=='save-error' then
-            check(enabled==2 and saveCalls==1 and loadCalls==0 and notice.action~='reload','failed save never loads or claims reload readiness')
+            check(enabled==2 and saveCalls==1 and loadCalls==0 and reloadCalls==0,
+                'failed save never loads or reloads immediately')
+            check(notice.body:GetText()~=host.sharedFonts.Message('enUS','reloadRequired'),
+                'failed save does not claim reload readiness')
+            check(notice.action=='reload' and notice.copy:IsShown(), 'failed save offers an explicit retry')
+            combat=true;notice.copy.scripts.OnClick()
+            check(saveCalls==1 and reloadCalls==0,'combat blocks retrying a failed save')
+            combat=false;notice.copy.scripts.OnClick()
+            check(enableCalls==1 and saveCalls==2 and reloadCalls==1 and loadCalls==0,
+                'explicit retry saves again and reloads without enabling twice')
         elseif case=='save-disables' or case=='save-combat' or case=='reload-error' then
             check(saveCalls==1 and loadCalls==0 and reloadCalls==0,'state changed during saving or reload failure never produces a successful reload')
         else

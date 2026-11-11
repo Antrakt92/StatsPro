@@ -79,7 +79,8 @@ function shared.UpdateNoticeAction()
     frame.action = nil
     if shared.status == 'provider-disabled' then
         frame.action = 'enable'
-    elseif shared.status == 'provider-not-loaded' and shared.actionResult == 'reload-required' then
+    elseif shared.status == 'provider-not-loaded'
+        and (shared.actionResult == 'reload-required' or shared.actionResult == 'save-required') then
         frame.action = 'reload'
     end
     if frame.action then

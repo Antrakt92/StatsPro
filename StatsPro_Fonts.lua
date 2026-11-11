@@ -94,6 +94,7 @@ local function requestReload()
     if state ~= 1 and state ~= 2 then return false end
     local reload = rawget(_G, 'ReloadUI')
     if not clean(reload, 'function') or not actionSafe() then return false end
+    shared.actionResult = 'reload-required'
     return query(reload)
 end
 function shared.EnableProvider()
@@ -111,7 +112,10 @@ function shared.EnableProvider()
         shared.actionResult = 'failed'
         return 'failed'
     end
-    if not actionSafe() or not query(save) then shared.actionResult = nil; return 'failed' end
+    if not actionSafe() or not query(save) then
+        shared.actionResult = 'save-required'
+        return 'failed'
+    end
     -- This explicit enable click also activates the ordinary addon by reloading.
     after = currentEnableState()
     shared.actionResult = (after == 1 or after == 2) and 'reload-required' or 'failed'
@@ -119,7 +123,8 @@ function shared.EnableProvider()
     return shared.actionResult
 end
 function shared.ReloadProvider()
-    if shared.actionResult ~= 'reload-required' or not actionSafe() then return false end
+    if (shared.actionResult ~= 'reload-required' and shared.actionResult ~= 'save-required')
+        or not actionSafe() then return false end
     shared.Refresh()
     if shared.status ~= 'provider-not-loaded' then return false end
     local state = currentEnableState()

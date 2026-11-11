@@ -148,6 +148,12 @@ Quick Setup changes rows and layout while keeping your font, colors, scale and
 panel positions. It applies to the settings currently in use, including an active
 account-wide setup.
 
+If an existing Forever profile shows only Stamina and you want the starter rows
+for your class, open **Quick Setup**, preview **Compact**, and choose
+**Use this setup**. To change only this character, return to character settings
+if account-wide settings are active, and make the character independent if it
+shares a setup with others.
+
 ## Stats and gear rows
 
 ### Retail

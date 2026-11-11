@@ -208,6 +208,65 @@ do
 end
 
 do
+    local function loginLateClass(options)
+        local classReady = false
+        local guid = options.guidReady and "Player-Forever-LateClass" or nil
+        local lateEnv, lateAddon, lateTest = fixtures.loadStatsPro("enUS", {
+            forever = true,
+            statsProDB = options.root,
+            unitGUID = function() return guid end,
+            foreverAPIs = { UnitClass = function()
+                if classReady then return "Mage", "MAGE", 8 end
+            end },
+        })
+        lateEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+        local before = lateTest.profileState()
+        if options.keepUnknown then return before.root end
+        if options.edit then before.settings.showSpellCrit = false end
+        if options.failApply then
+            local apply = lateAddon.profileRuntime.applyActiveSettings
+            rawset(lateAddon.profileRuntime, "applyActiveSettings", function()
+                rawset(lateAddon.profileRuntime, "applyActiveSettings", apply)
+                error("injected late class apply failure")
+            end)
+        end
+        classReady, guid = true, "Player-Forever-LateClass"
+        lateEnv.__fireEvent("UNIT_NAME_UPDATE", "player")
+        lateAddon.profileRuntime.ResolvePending()
+        if options.failApply then
+            local failed = lateTest.profileState()
+            check(failed.settings == before.settings and failed.profileID == before.profileID,
+                "failed late class apply restores the exact previous profile")
+            lateEnv.__flushTimers(1)
+        end
+        local after = lateTest.profileState()
+        check(after.characters[guid].classID == 8, "late class also refreshes metadata")
+        check(lateAddon.hudPresets.definitions.compact.values.showSpellCrit == true,
+            "Quick Setup learns class after first entering world")
+        check(after.profileID == "p2" and after.root.account.nextProfileID == 3,
+            "late class keeps one character profile allocation")
+        if options.edit or options.root then
+            check(after.settings == before.settings and after.settings.showSpellCrit ~= true,
+                "late class preserves an edited or established profile")
+        else
+            check(after.settings.showIntellect == true and after.settings.showSpellCrit == true
+                and after.settings.showManaRegenMP5 == true,
+                "late class repairs a verified unmodified fresh starter")
+        end
+        local reset = assert(lateAddon.profileOps.BuildDefaultSettings())
+        check(reset.showIntellect == true and reset.showSpellCrit == true and reset.showManaRegenMP5 == true,
+            "explicit reset uses the now-known class even when an existing profile remains unchanged")
+        return after.root
+    end
+    loginLateClass({ guidReady = false })
+    loginLateClass({ guidReady = true })
+    loginLateClass({ guidReady = true, failApply = true })
+    loginLateClass({ guidReady = true, edit = true })
+    local genericRoot = loginLateClass({ guidReady = true, keepUnknown = true })
+    loginLateClass({ guidReady = true, root = genericRoot })
+end
+
+do
     local function login(class, classID, guid, root)
         local characterEnv, _, characterTest = fixtures.loadStatsPro("enUS", {
             forever = true, statsProDB = root,

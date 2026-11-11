@@ -899,6 +899,17 @@ function addon.forever.ApplyHudPresets()
     addon.hudPresets.definitions = addon.forever.presets.definitions
 end
 
+function addon.forever.RefreshClassDefaults(beforeMigration)
+    if not addon.forever.enabled or not addon.forever.RefreshInitialClass() then return false end
+    -- An existing session must retain the fallback it already used to render
+    -- missing settings. Class-specific late choices are explicit profile edits.
+    if beforeMigration then
+        for key, value in pairs(addon.forever.defaults) do defaults[key] = value end
+    end
+    addon.forever.ApplyHudPresets()
+    return true
+end
+
 if addon.forever.enabled then
     addon.forever.ApplyHudPresets()
     for _, rows in pairs(addon.forever.rows) do
@@ -6919,6 +6930,22 @@ function addon.profileRuntime.IsForeverFactoryStarter(root, sourceID, sourceName
     return references.specs == 0 and references.characterDefaults == 0 and references.accountWide == 0
 end
 
+function addon.profileRuntime.BuildLateForeverStarter(root, profileID)
+    local expected = addon.profileRuntime.foreverPendingStarter
+    if not expected or not expected.profileSnapshot or not addon.forever.classToken
+        or expected.profileID ~= profileID or not addon.profileOps.CheckExpected(root, expected) then
+        return nil
+    end
+    local settings = addon.settingsUI.frame
+    local dialog = addon.profileUI.operationDialog
+    -- A late starter repair must not close an open settings workflow or preview.
+    if addon.hudPresets.session or (settings and settings:IsShown())
+        or (dialog and dialog:IsShown()) then return nil end
+    local profile, copied = addon.dbRuntime.CloneSerializable(expected.profileRef)
+    if not copied then return nil end
+    if addon.forever.ApplyClassStarter(profile.settings) then return profile end
+end
+
 function addon.profileRuntime.PrepareContextTransaction(context)
     local root = addon.dbRuntime.Refresh()
     if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady then return nil, nil end
@@ -6930,18 +6957,23 @@ function addon.profileRuntime.PrepareContextTransaction(context)
         local metadataChanged = (context.displayName and context.displayName ~= currentCharacter.displayName)
             or (context.classID and context.classID ~= currentCharacter.classID)
             or (context.lastSeen and context.lastSeen ~= currentCharacter.lastSeen)
-        if not metadataChanged then return nil, existingProfileID end
-        local cloneBudget = addon.dbRuntime.NewGraphBudget()
-        local character, copied = addon.dbRuntime.CloneSerializable(
-            currentCharacter, nil, cloneBudget)
-        if not copied then return nil, nil end
-        if context.displayName then character.displayName = context.displayName end
-        if context.classID then character.classID = context.classID end
-        if context.lastSeen then character.lastSeen = context.lastSeen end
-        local characters = addon.profileRuntime.ShallowCopy(root.characters)
-        characters[context.guid] = character
+        local starter = addon.profileRuntime.BuildLateForeverStarter(root, existingProfileID)
+        if not metadataChanged and not starter then return nil, existingProfileID end
         local transaction = addon.profileOps.NewTransaction(root)
-        transaction.characters = characters
+        if metadataChanged then
+            local character, copied = addon.dbRuntime.CloneSerializable(currentCharacter)
+            if not copied then return nil, nil end
+            if context.displayName then character.displayName = context.displayName end
+            if context.classID then character.classID = context.classID end
+            if context.lastSeen then character.lastSeen = context.lastSeen end
+            transaction.characters = addon.profileRuntime.ShallowCopy(root.characters)
+            transaction.characters[context.guid] = character
+        end
+        if starter then
+            transaction.profiles = addon.profileRuntime.ShallowCopy(root.profiles)
+            transaction.profiles[existingProfileID] = starter
+            transaction.foreverStarterRepair = true
+        end
         local validationBudget = addon.dbRuntime.NewGraphBudget()
         if not addon.dbRuntime.ValidateRegistry(
             addon.profileOps.BuildCandidate(transaction), validationBudget) then
@@ -6984,6 +7016,7 @@ function addon.profileRuntime.PrepareContextTransaction(context)
     if context.displayName then character.displayName = context.displayName end
     if context.classID then character.classID = context.classID end
     if context.lastSeen then character.lastSeen = context.lastSeen end
+    local coldStarter = false
     local transaction, specProfileID = addon.profileOps.BuildAssignedProfileTransaction(
         root, account, profiles, character, character.specProfiles,
         context.guid, context.specID, function()
@@ -6991,10 +7024,13 @@ function addon.profileRuntime.PrepareContextTransaction(context)
             if profile and addon.profileRuntime.IsForeverFactoryStarter(
                     root, sourceProfileID, sourceProfile.name, profile.settings) then
                 addon.forever.ApplyClassStarter(profile.settings)
+                coldStarter = rawequal(root, addon.profileRuntime.foreverColdFactoryRoot)
+                    and not addon.forever.classToken
             end
             return profile, "clone-failed"
         end)
     if not transaction then return nil, nil end
+    transaction.foreverStarterPending = coldStarter
     local validationBudget = addon.dbRuntime.NewGraphBudget()
     local valid = addon.dbRuntime.ValidateRegistry(
         addon.profileOps.BuildCandidate(transaction), validationBudget)
@@ -7333,6 +7369,18 @@ function addon.profileRuntime.ActivateResolvedContext(
     runtime.bindingReconciliationPending = false
     runtime.activationCount = runtime.activationCount + 1
     runtime.transitioning = false
+    if transaction and transaction.foreverStarterPending
+        and profileID == addon.dbRuntime.activeProfileID then
+        runtime.foreverColdFactoryRoot = nil
+        runtime.foreverPendingStarter = {
+            rootRef = activeRoot, profileID = profileID, profileRef = activeRoot.profiles[profileID],
+            settingsRef = targetSettings, assignedProfileID = profileID, activeProfileID = profileID,
+            guid = context.guid, specID = context.specID, assignmentID = profileID,
+            referenceCounts = addon.profileOps.CaptureReferenceCounts(activeRoot, profileID),
+        }
+    elseif transaction and transaction.foreverStarterRepair then
+        runtime.foreverPendingStarter = nil
+    end
     addon.profileUI.RefreshSafe()
     return true
 end
@@ -7362,6 +7410,7 @@ function addon.profileRuntime.ResolveCurrent(initializing, combatEnded)
         addon.profileUI.RefreshSafe()
         return false
     end
+    if addon.forever.RefreshClassDefaults(false) then addon.hudPresets.RefreshUI() end
     -- A failed target apply followed by a failed rollback leaves the already
     -- selected settings requiring an exact reapply. That recovery is independent
     -- of specialization discovery and must run before terminal no-spec/unavailable
@@ -7471,6 +7520,9 @@ function addon.profileRuntime.ResolveCurrent(initializing, combatEnded)
             runtime.pendingResolution = true
             addon.profileUI.RefreshSafe()
             return false
+        end
+        if transaction and transaction.foreverStarterRepair then
+            return runtime.ActivateResolvedContext(context, transaction, profileID, false)
         end
         if not runtime.CommitContextRetryPositions() then
             runtime.pendingResolution = true
@@ -7669,6 +7721,9 @@ end
 function addon.profileOps.BuildDefaultSettings(budget)
     local settings, copied = addon.dbRuntime.CloneSerializable(defaults, nil, budget)
     if not copied or not addon.dbRuntime.StripAccountSettings(settings) then return nil end
+    if addon.forever.enabled and addon.forever.classToken then
+        for key, value in pairs(addon.forever.defaults) do settings[key] = value end
+    end
     return settings
 end
 
@@ -9162,6 +9217,10 @@ local function MigrateDB(dbOverride)
     local registry = addon.dbRuntime.BuildRegistry(db, not freshInstall)
     if not registry then
         return FailMigration()
+    end
+    if liveDestination and freshInstall and addon.forever.enabled and not addon.forever.classToken then
+        addon.forever.ClearStarterClassSettings(registry.profiles.p1.settings)
+        addon.profileRuntime.foreverColdFactoryRoot = destination
     end
 
     destination.account = registry.account
@@ -12096,6 +12155,11 @@ addon.profileRuntime.CompleteBootstrap = function()
     addon.itemLevelRuntime.MarkDirty()
     addon:RunUpdateStatsSafe()
     addon.profileUI.RefreshSafe()
+    local expected = runtime.foreverPendingStarter
+    if expected and not expected.profileSnapshot then
+        local snapshot, copied = addon.dbRuntime.CloneSerializable(expected.profileRef)
+        if copied then expected.profileSnapshot = snapshot end
+    end
     local account = addon.dbRuntime.GetAccount()
     if account and rawget(account, "quickSetupSeen") == false
         and (addon.__statsproSmoke ~= true or addon.__testWelcomeEnabled == true) then
@@ -12118,10 +12182,7 @@ local function OnPlayerEnteringWorld()
         -- runs against an empty StatsPro DB; established settings are never overwritten
         -- without the explicit `/statspro import` confirmation path.
         if not addon.profileRuntime.bootstrapStarted then
-            if addon.forever.enabled and addon.forever.RefreshInitialClass() then
-                for key, value in pairs(addon.forever.defaults) do defaults[key] = value end
-                addon.forever.ApplyHudPresets()
-            end
+            addon.forever.RefreshClassDefaults(true)
             addon.legacyImport.ImportFreshIfAvailable()
             MigrateDB()
             addon.dbRuntime.Refresh()

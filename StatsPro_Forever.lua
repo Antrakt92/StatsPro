@@ -391,7 +391,7 @@ function F.ClearStarterClassSettings(settings)
 end
 
 function F.ApplyClassStarter(settings)
-    local class = CurrentClass()
+    local class = F.classToken or CurrentClass()
     if not compactSelections[class] then return end
     CacheClassStarters()
     local values = F.starterDefaults[class]
@@ -401,7 +401,7 @@ function F.ApplyClassStarter(settings)
             if settings[key] ~= nil then return end
         end
         for key in pairs(F.starterClassKeys) do settings[key] = values[key] end
-        return
+        return true
     end
 
     -- Pre-adaptive starters had neither the MP5 row nor these three options on.
@@ -420,22 +420,23 @@ function F.ApplyClassStarter(settings)
         end
         if matches then
             for key in pairs(F.starterClassKeys) do settings[key] = values[key] end
-            return
+            return true
         end
     end
 end
 
 local initialClass = CurrentClass()
+F.classToken = compactSelections[initialClass] and initialClass or nil
 F.presets = F.BuildPresets(initialClass)
 F.defaults = F.BuildDefaults(initialClass)
 
 function F.RefreshInitialClass()
-    if compactSelections[initialClass] then return false end
+    if F.classToken then return false end
     local class = CurrentClass()
     if not compactSelections[class] then return false end
-    initialClass = class
     F.presets = F.BuildPresets(class)
     F.defaults = F.BuildDefaults(class)
+    F.classToken = class
     return true
 end
 

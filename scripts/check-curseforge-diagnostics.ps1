@@ -137,7 +137,9 @@ function Test-CurseForgeFileVersionMatch {
             return $false
         }
     } elseif ([string]$File.fileName -match '-Forever-beta\.zip$' -or
-        ([string]$File.displayName -match '-Forever-beta$' -and @($File.gameVersionTypeIds) -notcontains 517)) {
+        [string]$File.displayName -match '-Forever-beta$' -or
+        @($File.gameVersionTypeIds) -contains 88568 -or
+        @($File.gameVersions) -contains '1.60.1') {
         return $false
     }
     $escapedVersion = [regex]::Escape($Version)
@@ -781,6 +783,23 @@ function Invoke-SelfTest {
     }
     if (Test-CurseForgeFileVersionMatch -File $foreverFixture -Version 'v1.2.3') {
         throw 'Retail diagnostics must not accept a Forever beta file with the same release tag.'
+    }
+    foreach ($metadata in @(
+        @{ gameVersionTypeIds = @(88568) },
+        @{ gameVersionTypeIds = @(517, 88568) },
+        @{ gameVersions = @('1.60.1') },
+        @{ displayName = 'v1.2.3-Forever-beta'; gameVersionTypeIds = @(517) }
+    )) {
+        $retailLookingFile = [pscustomobject]@{
+            displayName = 'v1.2.3'; fileName = 'StatsPro-v1.2.3.zip'
+            gameVersions = @(); gameVersionTypeIds = @()
+        }
+        foreach ($entry in $metadata.GetEnumerator()) {
+            $retailLookingFile.($entry.Key) = $entry.Value
+        }
+        if (Test-CurseForgeFileVersionMatch -File $retailLookingFile -Version 'v1.2.3' -Flavor Retail) {
+            throw "Retail diagnostics must reject a Retail-looking file with explicit Forever evidence."
+        }
     }
     foreach ($property in @('gameVersions', 'gameVersionTypeIds', 'fileName', 'displayName', 'releaseType')) {
         $mutated = [pscustomobject]@{

@@ -697,3 +697,66 @@ for _, mode in ipairs({ "preview", "locale", "combat" }) do
         "compatible saved font must recover after " .. mode)
 end
 print(flavor .. " pending saved font ownership regressions passed")
+
+if not forever then
+    local data = {}
+    local loadData = assert(loadfile("StatsPro_ArchonTargets.lua"))
+    setfenv(loadData, data)
+    loadData()
+    local phase = "clean"
+    local env, addon, test = loadStatsPro("enUS", {
+        unitClassToken = "MAGE", specIndex = 1, specID = 64,
+        statsProArchonTargets = data.StatsProArchonTargets,
+        statsProDB = {
+            showOffensive = true, showCrit = false, showHaste = true,
+            showMastery = false, showVersatility = false, matchValueColorToStat = false,
+        },
+        getCombatRating = function()
+            if phase == "liveOnly" then return -21 end
+            if phase ~= "targetOnly" then return 2000 end
+        end,
+        getHaste = function()
+            if phase == "liveOnly" or phase == "secretPercent" then return -22 end
+            return 56
+        end,
+        issecretvalue = function(value) return value == -21 or value == -22 end,
+        getCombatRatingBonusForCombatRatingValue = function(_, rating)
+            assert(rating >= 0, "protected rating must never reach conversion")
+            return rating == 2000 and 20 or 10
+        end,
+        setFormattedText = function(_, _, value)
+            assert(value == -21 or value == -22, "expected protected Haste value")
+            return value == -21 and "2000" or "56.0%"
+        end,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    local function tooltipRows()
+        local meta = test.buildRenderBlocks()[2].targetRows[1]
+        assert(addon.archonTargets.ShowTooltip(env.UIParent, meta))
+        local rows = {}
+        for _, row in ipairs(test.getArchonTooltip().lines) do rows[row.left] = row.right end
+        return rows, meta.target, meta.comparisonState
+    end
+    local rows, target = tooltipRows()
+    assert(rows["Target:"] == target .. " (~43.0%)", "Haste target retains the current 30% multiplier")
+    assert(rows["Current:"] == "2000 (~56.0%)" and rows["Over:"]:find("(~+13.0%)", 1, true),
+        "Haste gap compares the two projected totals")
+
+    phase = "liveOnly"
+    local liveRows, _, liveState = tooltipRows()
+    assert(liveState == "liveOnly" and liveRows["Target:"] == tostring(target)
+        and liveRows["Current:"] == "2000 (~56.0%)" and not liveRows["Over:"],
+        "a protected live total cannot be paired with a rating-only percentage")
+
+    phase = "secretPercent"
+    local secretRows = tooltipRows()
+    assert(secretRows["Target:"] == tostring(target) and secretRows["Current:"] == "2000 (~56.0%)"
+        and not secretRows["Over:"]:find("%", 1, true), "a restricted total cannot drive projected percentages")
+
+    addon.archonTargets.InvalidateComparisonCache()
+    phase = "targetOnly"
+    local targetRows, _, targetState = tooltipRows()
+    assert(targetState == "targetOnly" and targetRows["Target:"] == tostring(target)
+        and not targetRows["Current:"], "without a clean baseline, show the reference rating alone")
+    print("Retail Archon Haste projection regressions passed")
+end

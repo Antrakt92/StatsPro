@@ -10368,11 +10368,11 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     if hasTargetPct and hasCleanCurrentPct then
         deltaBonus = meta.targetPct - meta.currentPct
     end
-    -- Versatility and Mastery include non-rating components that conversion cannot
-    -- recover. Without a clean complete currentPct, raw-rating percentages would
-    -- be partial values presented as totals.
-    if (meta.statKey ~= "versatility" and meta.statKey ~= "mastery")
-        or hasCleanCurrentPct then
+    local isHaste = meta.statKey == "haste"
+    -- Haste, Versatility, and Mastery need a complete live percentage to
+    -- present projected totals. The rating conversion alone is only one component.
+    if hasCleanCurrentPct or (not isHaste
+        and meta.statKey ~= "versatility" and meta.statKey ~= "mastery") then
         currentBonus, targetBonus = addon.archonTargets.GetRatingBonusesForValues(
             meta.ratingCR,
             hasComparison and deltaBonus == nil and meta.current or nil,
@@ -10382,6 +10382,18 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     -- and hard caps are evaluated at the player's current/target stat positions.
     if SAFE_NUM.IsCleanFiniteNumber(currentBonus) and SAFE_NUM.IsCleanFiniteNumber(targetBonus) then
         deltaBonus = targetBonus - currentBonus
+        if isHaste then
+            -- Preserve the current non-rating haste multiplier when substituting
+            -- target rating, including multiplicative racial and temporary buffs.
+            if meta.currentPct > -100 and currentBonus > -100 and targetBonus > -100 then
+                deltaBonus = deltaBonus * ((100 + meta.currentPct) / (100 + currentBonus))
+                if not SAFE_NUM.IsCleanFiniteNumber(meta.currentPct + deltaBonus) then
+                    deltaBonus = nil
+                end
+            else
+                deltaBonus = nil
+            end
+        end
     end
     local currentDisplayBonus
     if (comparisonState == "exact" or comparisonState == "liveOnly")
@@ -10393,7 +10405,7 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
         currentDisplayBonus = currentBonus
     end
     local targetDisplayBonus = hasTargetPct and meta.targetPct or targetBonus
-    if meta.statKey == "versatility" then targetDisplayBonus = nil end
+    if isHaste or meta.statKey == "versatility" then targetDisplayBonus = nil end
     if not hasTargetPct and hasCleanCurrentPct
         and SAFE_NUM.IsCleanFiniteNumber(deltaBonus) then
         targetDisplayBonus = meta.currentPct + deltaBonus

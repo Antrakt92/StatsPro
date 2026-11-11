@@ -10310,6 +10310,7 @@ function addon.archonTargets.GetTooltip()
     function tooltip:GetOwner() return self.owner end
     function tooltip:ClearLines()
         self.lines = {}
+        self.layoutReusable = false
         for _, region in ipairs(self.regions) do
             region.leftText:SetText("")
             region.rightText:SetText("")
@@ -10318,11 +10319,13 @@ function addon.archonTargets.GetTooltip()
         end
     end
     function tooltip:SetOwner(owner)
-        self.owner = owner
-        self:ClearLines()
+        if self.owner == owner then return end
+        self.owner = nil
+        self.layoutReusable = false
         local panel = owner and owner:GetParent() or nil
         self:ClearAllPoints()
         self:SetPoint("TOPLEFT", panel or owner or UIParent, "TOPRIGHT", 8, 0)
+        self.owner = owner
     end
     function tooltip:AddLine(text, r, g, b, wrapText)
         self.lines[#self.lines + 1] = { left = text, color = { r, g, b }, wrapText = wrapText, isDouble = false }
@@ -10337,7 +10340,35 @@ function addon.archonTargets.GetTooltip()
     return tooltip
 end
 
+function addon.archonTargets.CanReuseTooltipLayout(tooltip, previousLines)
+    if #previousLines ~= #tooltip.lines then return false end
+    local function sameColor(current, previous)
+        return current[1] == previous[1] and current[2] == previous[2] and current[3] == previous[3]
+    end
+    for index, row in ipairs(tooltip.lines) do
+        local previous = previousLines[index]
+        if row.isDouble ~= previous.isDouble
+            or issecretvalue(row.left) or issecretvalue(previous.left)
+            or row.left ~= previous.left then return false end
+        if row.isDouble then
+            if issecretvalue(row.right) or issecretvalue(previous.right)
+                or row.right ~= previous.right or not sameColor(row.leftColor, previous.leftColor)
+                or not sameColor(row.rightColor, previous.rightColor) then return false end
+        elseif not sameColor(row.color, previous.color) then
+            return false
+        end
+    end
+    return true
+end
+
+function addon.archonTargets.InvalidateTooltipLayout()
+    local tooltip = addon.archonTargets.tooltip
+    if tooltip then tooltip.layoutReusable = false end
+end
+
 function addon.archonTargets.LayoutTooltip(tooltip)
+    tooltip.layoutReusable = false
+    local fullyMeasured = true
     local metadataWidth, labelWidth, valueWidth, numericIndex = 0, 0, 0, 0
     local fallbackWidth = addon.archonTargets.MeasureTooltipText(tooltip.bodyProbe, "99999 (~999.9%)") or 120
     for index, row in ipairs(tooltip.lines) do
@@ -10353,6 +10384,7 @@ function addon.archonTargets.LayoutTooltip(tooltip)
             numericIndex = numericIndex + 1
             local measuredLabel, height = addon.archonTargets.MeasureTooltipText(tooltip.bodyProbe, row.left)
             local measuredValue = addon.archonTargets.MeasureTooltipText(tooltip.bodyProbe, row.right)
+            if not measuredLabel or not measuredValue or not height then fullyMeasured = false end
             if measuredValue then tooltip.lastCleanValueWidths[numericIndex] = measuredValue end
             region.cleanLabelWidth = measuredLabel or region.cleanLabelWidth
             row.height = height or region.cleanHeight or 12
@@ -10364,6 +10396,7 @@ function addon.archonTargets.LayoutTooltip(tooltip)
         else
             local probe = index == 1 and tooltip.headerProbe or tooltip.bodyProbe
             local width, height = addon.archonTargets.MeasureTooltipText(probe, row.left, 280)
+            if not width or not height then fullyMeasured = false end
             if width then region.cleanMetadataWidth = width end
             if height then region.cleanHeight = height end
             row.height = height or region.cleanHeight or (index == 1 and 14 or 12)
@@ -10402,16 +10435,31 @@ function addon.archonTargets.LayoutTooltip(tooltip)
             region.leftText:SetJustifyH("CENTER")
             region.leftText:SetWordWrap(true)
             region.leftText:SetTextColor(row.color[1] or 1, row.color[2] or 1, row.color[3] or 1)
-            region.rightText:Hide()
+            if region.rightText:IsShown() then
+                region.rightText:SetText("")
+                region.rightText:Hide()
+            end
         end
         region.leftText:SetHeight(row.height)
         region.leftText:SetText(row.left)
         region.leftText:Show()
         y = y + row.height + tooltip.lineGap
     end
+    for index = #tooltip.lines + 1, #tooltip.regions do
+        local region = tooltip.regions[index]
+        if region.leftText:IsShown() then
+            region.leftText:SetText("")
+            region.leftText:Hide()
+        end
+        if region.rightText:IsShown() then
+            region.rightText:SetText("")
+            region.rightText:Hide()
+        end
+    end
     tooltip:SetSize(contentWidth + tooltip.padding * 2, y - tooltip.lineGap + tooltip.padding)
     tooltip.layout = { labelWidth = labelWidth, valueWidth = valueWidth, labelRight = labelRight,
         valueRight = valueRight, blockWidth = blockWidth, contentWidth = contentWidth }
+    tooltip.layoutReusable = fullyMeasured
 end
 
 function addon.archonTargets.AddTooltipRow(label, value, r, g, b)
@@ -10497,6 +10545,10 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     local valueColor = addon.archonTargets.GetTooltipValueColor(meta)
     local tooltip = addon.archonTargets.GetTooltip()
     tooltip:SetOwner(anchor)
+    local canReuseLayout = tooltip.layoutReusable
+    tooltip.layoutReusable = false
+    local previousLines = tooltip.lines
+    tooltip.lines = {}
     tooltip:AddLine(addon.archonTargets.GetLocalizedSnapshotTitle(meta.snapshotKey), 1, 0.82, 0, true)
     -- Profile and sample metadata form one header block. Wrapped metadata
     -- stays separate from the numeric comparison columns.
@@ -10524,6 +10576,11 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
         else
             addon.archonTargets.AddTooltipRow(L("Matched:"), addon.archonTargets.FormatRatingWithBonus(0, deltaBonus, true), 0.5, 1, 0.5)
         end
+    end
+    if canReuseLayout and not liveRatingIsSecret and not displayIsSecret and tooltip:IsShown()
+        and addon.archonTargets.CanReuseTooltipLayout(tooltip, previousLines) then
+        tooltip.layoutReusable = true
+        return true
     end
     tooltip:Layout()
     tooltip:Show()
@@ -12273,11 +12330,13 @@ local EVENT_HANDLERS = {
     end,
     BAG_UPDATE_DELAYED          = function() addon.itemLevelRuntime.MarkDirty() end,
     DISPLAY_SIZE_CHANGED        = function()
+        addon.archonTargets.InvalidateTooltipLayout()
         if type(addon.settingsDesign.RequestResponsiveFrameResize) == "function" then
             addon.settingsDesign.RequestResponsiveFrameResize()
         end
     end,
     UI_SCALE_CHANGED            = function()
+        addon.archonTargets.InvalidateTooltipLayout()
         if type(addon.settingsDesign.RequestResponsiveFrameResize) == "function" then
             addon.settingsDesign.RequestResponsiveFrameResize()
         end

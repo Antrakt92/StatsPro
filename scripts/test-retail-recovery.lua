@@ -877,3 +877,69 @@ if not forever then
         "standalone metadata remains compatible without a pre-read sample")
     print("Retail Archon Mastery single-sample regressions passed")
 end
+
+if not forever then
+    local env, _, test = loadStatsPro("enUS", {
+        issecretvalue = function(value) return value == -21 or value == -22 end,
+        setFormattedText = function(_, _, value) return value == -21 and "41.2%" or "63.7%" end,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    local function render(currentPct, currentPctDisplay)
+        test.renderMainPanelForSmoke("Haste:", "875", "22.0%", 1, nil, nil, {
+            {
+                statKey = "haste", ratingCR = env.CR_HASTE_MELEE, target = 1000, current = 875,
+                currentPct = currentPct, currentPctDisplay = currentPctDisplay,
+                delta = -125, capturedAt = "2026-11-11", comparisonState = "exact",
+            },
+        })
+    end
+    render(22)
+    test.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    local tooltip = test.getArchonTooltip()
+    local measurements, anchors, visibleWrites = 0, 0, 0
+    local measure = tooltip.bodyProbe.GetUnboundedStringWidth
+    tooltip.bodyProbe.GetUnboundedStringWidth = function(...)
+        measurements = measurements + 1
+        return measure(...)
+    end
+    local clearPoints = tooltip.ClearAllPoints
+    tooltip.ClearAllPoints = function(...)
+        anchors = anchors + 1
+        return clearPoints(...)
+    end
+    local region = tooltip.regions[4].rightText
+    local setText = region.SetText
+    region.SetText = function(...)
+        visibleWrites = visibleWrites + 1
+        return setText(...)
+    end
+    render(22)
+    assert(measurements == 0 and anchors == 0 and visibleWrites == 0,
+        "a shown tooltip does no geometry or visible text work for identical clean content")
+    render(25)
+    assert(measurements > 0 and visibleWrites > 0, "changed clean content updates geometry and text")
+
+    env.__fireEvent("UI_SCALE_CHANGED")
+    local beforeScale = measurements
+    render(25)
+    assert(measurements > beforeScale, "scale changes invalidate clean tooltip layout")
+
+    render(nil, -21)
+    local beforeProtected = visibleWrites
+    render(nil, -22)
+    assert(visibleWrites > beforeProtected and region:GetText():find("63.7%", 1, true),
+        "two consecutive restricted updates remain live")
+
+    tooltip:Hide()
+    render(25)
+    local beforeReopen = measurements
+    test.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    assert(tooltip:IsShown() and measurements > beforeReopen,
+        "opening a hidden tooltip does not reuse an old visible layout")
+    test.renderMainPanelForSmoke("Haste:", "875", "22.0%", 1, nil, nil, {
+        { statKey = "haste", ratingCR = env.CR_HASTE_MELEE, target = 1000, comparisonState = "targetOnly" },
+    })
+    assert(not region:IsShown() and region:GetText() == "",
+        "a shorter tooltip clears previously visible text regions")
+    print("Retail Archon stable tooltip layout regressions passed")
+end

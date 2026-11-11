@@ -3280,8 +3280,8 @@ function Assert-ReleaseWorkflowBoundary {
         preflight = @('actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1')
         package = @(
             'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
-            'BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0',
-            'BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0',
+            'BigWigsMods/packager@01e8631a69c69d7654c788d152630d5fed9e3812',
+            'BigWigsMods/packager@01e8631a69c69d7654c788d152630d5fed9e3812',
             'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
         )
         'github-prepare' = @(
@@ -4923,7 +4923,7 @@ function Invoke-SelfTest {
     Assert-ThrowsMatch "Packager in manual marketplace workflow rejected" {
         $mutated = $marketplaceWorkflowText.Replace(
             '      - name: Verify marketplace release credentials and versions',
-            "      - name: Unexpected Packager`n        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0`n        with:`n          args: -d`n`n      - name: Verify marketplace release credentials and versions")
+            "      - name: Unexpected Packager`n        uses: BigWigsMods/packager@01e8631a69c69d7654c788d152630d5fed9e3812`n        with:`n          args: -d`n`n      - name: Verify marketplace release credentials and versions")
         Assert-MarketplaceCredentialWorkflowBoundary -WorkflowText $mutated
     } "must not execute Packager"
     Assert-ThrowsMatch "manual marketplace self-test substitution rejected" {
@@ -5107,7 +5107,7 @@ function Invoke-SelfTest {
             param($value)
             $value.Replace(
                 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333',
-                'BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0')
+                'BigWigsMods/packager@01e8631a69c69d7654c788d152630d5fed9e3812')
         }
         Assert-ReleaseWorkflowBoundary -WorkflowText $mutated
     } "allowlist"

@@ -1907,6 +1907,7 @@ local LABELS_BY_LOCALE = {
         ["Nothing changed."] = "Nothing changed.",
         ["Profile operation failed. Review the selection and try again."] = "Profile operation failed. Review the selection and try again.",
         ["Profile storage is full. Use %s to make room."] = "Profile storage is full. Use %s to make room.",
+        ["Profile storage is full."] = "Profile storage is full.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Forget \"%s\"? Its character record will be removed, but profile settings will be kept.",
         -- Templates:
         ["Auto (current: %s)"] = "Auto (current: %s)",
@@ -2045,6 +2046,7 @@ local LABELS_BY_LOCALE = {
         ["Nothing changed."] = "Ничего не изменилось.",
         ["Profile operation failed. Review the selection and try again."] = "Операция с профилем не выполнена. Проверьте выбор и повторите попытку.",
         ["Profile storage is full. Use %s to make room."] = "Хранилище профилей заполнено. Освободите место через «%s».",
+        ["Profile storage is full."] = "Хранилище профилей заполнено.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Забыть «%s»? Запись персонажа будет удалена, но настройки профилей сохранятся.",
         -- Templates:
         ["Auto (current: %s)"] = "Авто (сейчас: %s)",
@@ -2177,6 +2179,7 @@ local LABELS_BY_LOCALE = {
         ["Nothing changed."] = "Es wurde nichts geändert.",
         ["Profile operation failed. Review the selection and try again."] = "Der Profilvorgang ist fehlgeschlagen. Prüfe die Auswahl und versuche es erneut.",
         ["Profile storage is full. Use %s to make room."] = "Der Profilspeicher ist voll. Nutze „%s“, um Platz zu schaffen.",
+        ["Profile storage is full."] = "Der Profilspeicher ist voll.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "„%s“ vergessen? Der Charaktereintrag wird entfernt, die Profileinstellungen bleiben erhalten.",
         ["Auto (current: %s)"] = "Auto (aktuell: %s)",
         ["Western European text"] = "westeuropäischen Text",
@@ -2305,6 +2308,7 @@ local LABELS_BY_LOCALE = {
         ["Nothing changed."] = "Aucune modification.",
         ["Profile operation failed. Review the selection and try again."] = "L’opération sur le profil a échoué. Vérifiez la sélection et réessayez.",
         ["Profile storage is full. Use %s to make room."] = "Le stockage des profils est plein. Utilisez « %s » pour libérer de la place.",
+        ["Profile storage is full."] = "Le stockage des profils est plein.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Oublier « %s » ? Sa fiche de personnage sera supprimée, mais les réglages des profils seront conservés.",
         ["Auto (current: %s)"] = "Auto (actuel : %s)",
         ["Western European text"] = "le texte d’Europe occidentale",
@@ -2434,6 +2438,7 @@ local LABELS_BY_LOCALE = {
         ["Nothing changed."] = "No se ha cambiado nada.",
         ["Profile operation failed. Review the selection and try again."] = "La operación del perfil ha fallado. Revisa la selección e inténtalo de nuevo.",
         ["Profile storage is full. Use %s to make room."] = "El espacio para perfiles está lleno. Usa «%s» para liberar espacio.",
+        ["Profile storage is full."] = "El espacio para perfiles está lleno.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "¿Olvidar a «%s»? Se eliminará su registro de personaje, pero se conservarán los ajustes de perfiles.",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
         ["Western European text"] = "texto de Europa occidental",
@@ -2561,6 +2566,7 @@ local LABELS_BY_LOCALE = {
         ["Nothing changed."] = "No se cambió nada.",
         ["Profile operation failed. Review the selection and try again."] = "La operación del perfil falló. Revisa la selección e inténtalo de nuevo.",
         ["Profile storage is full. Use %s to make room."] = "El espacio para perfiles está lleno. Usa «%s» para liberar espacio.",
+        ["Profile storage is full."] = "El espacio para perfiles está lleno.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "¿Olvidar a «%s»? Se eliminará su registro de personaje, pero se conservarán los ajustes de perfiles.",
         ["Auto (current: %s)"] = "Auto (actual: %s)",
         ["Western European text"] = "texto de Europa occidental",
@@ -2689,6 +2695,7 @@ local LABELS_BY_LOCALE = {
         ["Nothing changed."] = "Nessuna modifica.",
         ["Profile operation failed. Review the selection and try again."] = "Operazione sul profilo non riuscita. Controlla la selezione e riprova.",
         ["Profile storage is full. Use %s to make room."] = "Lo spazio per i profili è esaurito. Usa «%s» per liberare spazio.",
+        ["Profile storage is full."] = "Lo spazio per i profili è esaurito.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Dimenticare «%s»? Il record del personaggio verrà rimosso, ma le impostazioni dei profili saranno conservate.",
         ["Auto (current: %s)"] = "Auto (attuale: %s)",
         ["Western European text"] = "testo dell’Europa occidentale",
@@ -2816,6 +2823,7 @@ local LABELS_BY_LOCALE = {
         ["Nothing changed."] = "Nada foi alterado.",
         ["Profile operation failed. Review the selection and try again."] = "A operação do perfil falhou. Revise a seleção e tente novamente.",
         ["Profile storage is full. Use %s to make room."] = "O espaço para perfis está cheio. Use «%s» para liberar espaço.",
+        ["Profile storage is full."] = "O espaço para perfis está cheio.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "Esquecer “%s”? O registro do personagem será removido, mas as configurações dos perfis serão mantidas.",
         ["Auto (current: %s)"] = "Auto (atual: %s)",
         ["Western European text"] = "texto da Europa Ocidental",
@@ -2950,6 +2958,7 @@ local LABELS_BY_LOCALE = {
         ["Nothing changed."] = "변경된 내용이 없습니다.",
         ["Profile operation failed. Review the selection and try again."] = "프로필 작업에 실패했습니다. 선택을 확인하고 다시 시도하세요.",
         ["Profile storage is full. Use %s to make room."] = "프로필 저장 공간이 가득 찼습니다. ‘%s’에서 공간을 확보하세요.",
+        ["Profile storage is full."] = "프로필 저장 공간이 가득 찼습니다.",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "\"%s\"의 기록을 삭제하시겠습니까? 캐릭터 기록만 제거되고 프로필 설정은 유지됩니다.",
         ["Auto (current: %s)"] = "자동 (현재: %s)",
         ["Western European text"] = "서유럽 언어 텍스트",
@@ -3077,6 +3086,7 @@ local LABELS_BY_LOCALE = {
         ["Nothing changed."] = "没有任何更改。",
         ["Profile operation failed. Review the selection and try again."] = "配置操作失败。请检查选择后重试。",
         ["Profile storage is full. Use %s to make room."] = "配置存储空间已满。请使用“%s”释放空间。",
+        ["Profile storage is full."] = "配置存储空间已满。",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "移除“%s”的记录？角色记录将被删除，但配置设置会保留。",
         ["Auto (current: %s)"] = "自动（当前: %s）",
         ["Western European text"] = "西欧语言文本",
@@ -3204,6 +3214,7 @@ local LABELS_BY_LOCALE = {
         ["Nothing changed."] = "沒有任何變更。",
         ["Profile operation failed. Review the selection and try again."] = "設定檔操作失敗。請檢查選擇後再試一次。",
         ["Profile storage is full. Use %s to make room."] = "設定檔儲存空間已滿。請使用「%s」釋放空間。",
+        ["Profile storage is full."] = "設定檔儲存空間已滿。",
         ["Forget \"%s\"? Its character record will be removed, but profile settings will be kept."] = "移除「%s」的記錄？角色記錄將被刪除，但設定檔內容會保留。",
         ["Auto (current: %s)"] = "自動（目前: %s）",
         ["Western European text"] = "西歐語言文字",
@@ -5681,6 +5692,7 @@ function addon.profileUI.BuildViewModel(includeRegistryDetails)
         pending = pending,
         combat = combat,
         canMutate = false,
+        capacityFallback = runtime.capacityFallback == true,
         activeContextValid = runtime.activeContextValid == true,
         activeGUID = runtime.currentGUID or runtime.activeGUID,
         activeSpecID = runtime.activeContextValid and runtime.activeSpecID or nil,
@@ -5775,10 +5787,10 @@ function addon.profileUI.BuildViewModel(includeRegistryDetails)
 end
 
 function addon.profileRuntime.BlocksUserWrites()
-    return not addon.profileRuntime.transitioning
+    return addon.profileRuntime.capacityFallback or (not addon.profileRuntime.transitioning
         and (addon.profileRuntime.pendingResolution
             or addon.profileRuntime.scheduledToken ~= nil
-            or addon.profileRuntime.contextRetryToken ~= nil)
+            or addon.profileRuntime.contextRetryToken ~= nil))
 end
 
 function addon.dbRuntime.IsCleanType(value, expectedType)
@@ -6892,8 +6904,12 @@ function addon.profileRuntime.PrepareContextTransaction(context)
         characters[context.guid] = character
         local transaction = addon.profileOps.NewTransaction(root)
         transaction.characters = characters
+        local validationBudget = addon.dbRuntime.NewGraphBudget()
         if not addon.dbRuntime.ValidateRegistry(
-            addon.profileOps.BuildCandidate(transaction)) then
+            addon.profileOps.BuildCandidate(transaction), validationBudget) then
+            if validationBudget.failure == "node-limit" and addon.dbRuntime.ValidateRegistry(root) then
+                return nil, existingProfileID
+            end
             return nil, nil
         end
         return transaction, existingProfileID
@@ -6941,9 +6957,15 @@ function addon.profileRuntime.PrepareContextTransaction(context)
             return profile, "clone-failed"
         end)
     if not transaction then return nil, nil end
+    local validationBudget = addon.dbRuntime.NewGraphBudget()
     local valid = addon.dbRuntime.ValidateRegistry(
-        addon.profileOps.BuildCandidate(transaction))
-    if not valid then return nil, nil end
+        addon.profileOps.BuildCandidate(transaction), validationBudget)
+    if not valid then
+        if validationBudget.failure == "node-limit" and addon.dbRuntime.ValidateRegistry(root) then
+            return nil, nil, "profile-capacity"
+        end
+        return nil, nil
+    end
     return transaction, specProfileID
 end
 
@@ -7125,8 +7147,9 @@ function addon.profileRuntime.ResumeCorruptRollbackApply()
 end
 
 function addon.profileRuntime.ActivateResolvedContext(
-    context, transaction, profileID, initializing, contextValid)
+    context, transaction, profileID, initializing, contextValid, capacityFallback)
     local runtime = addon.profileRuntime
+    local previousCapacityFallback = runtime.capacityFallback
     local oldAssignedProfileID = addon.dbRuntime.assignedProfileID
     local oldActiveProfileID = addon.dbRuntime.activeProfileID
     local oldActiveAccount = addon.dbRuntime.activeAccount
@@ -7217,11 +7240,13 @@ function addon.profileRuntime.ActivateResolvedContext(
         return false
     end
 
+    runtime.capacityFallback = capacityFallback == true
     local applied = true
     if not initializing and type(runtime.applyActiveSettings) == "function" then
         applied = pcall(runtime.applyActiveSettings)
     end
     if not applied then
+        runtime.capacityFallback = previousCapacityFallback
         addon.profileOps.RestoreMutationJournal(targetJournal)
         runtime.RollbackTransaction(transaction)
         addon.profileOps.RestoreMutationJournal(oldSettingsJournal)
@@ -7441,7 +7466,22 @@ function addon.profileRuntime.ResolveCurrent(initializing, combatEnded)
         return true
     end
 
-    local transaction, profileID = runtime.PrepareContextTransaction(context)
+    local transaction, profileID, reason = runtime.PrepareContextTransaction(context)
+    if reason == "profile-capacity" then
+        if runtime.capacityFallback then
+            runtime.pendingResolution = false
+            addon.profileUI.RefreshSafe()
+            return true
+        end
+        local activated = runtime.ActivateResolvedContext(
+            {}, nil, root.account.defaultProfileID, initializing, false, true)
+        if not activated then return false end
+        if runtime.bootstrapPending and type(runtime.CompleteBootstrap) == "function" then
+            runtime.CompleteBootstrap()
+        end
+        PrintMsg(addon.profileUI.OperationErrorText(reason))
+        return true
+    end
     if not addon.dbRuntime.IsCleanType(profileID, "string") then
         runtime.pendingResolution = true
         addon.profileUI.RefreshSafe()
@@ -7770,7 +7810,7 @@ function addon.profileOps.AcquireOperationRoot(internal, forceFullValidation)
     return addon.dbRuntime.Refresh(forceFullValidation)
 end
 
-function addon.profileOps.Gate(expected, internal)
+function addon.profileOps.Gate(expected, internal, allowCapacityCleanup)
     local runtime = addon.profileRuntime
     -- Structural operations consume the entire registry graph. Force a complete
     -- validation so an in-place mutation cannot inherit stale cached readiness.
@@ -7779,6 +7819,7 @@ function addon.profileOps.Gate(expected, internal)
     if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady then
         return nil, addon.dbRuntime.mode == "corrupt" and "corrupt" or "read-only"
     end
+    if runtime.capacityFallback and not allowCapacityCleanup then return nil, "profile-capacity" end
     if runtime.pendingResolution or runtime.scheduledToken ~= nil
         or runtime.noSpecRetryToken ~= nil or runtime.contextRetryToken ~= nil then
         return nil, "pending"
@@ -7881,8 +7922,8 @@ end
 -- Successful builders return only transaction, result. The coordinator derives the
 -- active payload from the candidate mapping and settings identity so a parallel intent
 -- cannot silently disagree with the state that will actually be committed.
-function addon.profileOps.Execute(expected, builder)
-    local root, gateReason = addon.profileOps.Gate(expected, false)
+function addon.profileOps.Execute(expected, builder, allowCapacityCleanup)
+    local root, gateReason = addon.profileOps.Gate(expected, false, allowCapacityCleanup)
     if not root then return false, gateReason end
     addon.profileOps.inProgress = true
     local finish = addon.profileOps.FinishOperation
@@ -7890,7 +7931,7 @@ function addon.profileOps.Execute(expected, builder)
     if not addon.profileRuntime.CloseOwnedSettingsModals() then
         return finish(false, "close-failed")
     end
-    root, gateReason = addon.profileOps.Gate(expected, true)
+    root, gateReason = addon.profileOps.Gate(expected, true, allowCapacityCleanup)
     if not root then return finish(false, gateReason) end
 
     local oldAssignedProfileID = addon.dbRuntime.assignedProfileID
@@ -8510,7 +8551,7 @@ function addon.profileOps.ResetProfile(profileID, expected)
 end
 
 function addon.profileOps.DeleteUnusedProfiles(expected)
-    return addon.profileOps.Execute(expected, function(root)
+    local ok, result = addon.profileOps.Execute(expected, function(root)
         local profiles = addon.profileRuntime.ShallowCopy(root.profiles)
         local referenceCounts = addon.profileOps.CountAllReferences(root)
         local deleted = 0
@@ -8525,7 +8566,11 @@ function addon.profileOps.DeleteUnusedProfiles(expected)
         local transaction = addon.profileOps.NewTransaction(root)
         transaction.profiles = profiles
         return transaction, deleted
-    end)
+    end, true)
+    if ok and addon.profileRuntime.capacityFallback then
+        addon.profileRuntime.RequestResolution(false)
+    end
+    return ok, result
 end
 
 function addon.profileOps.ReadCleanActiveContext()
@@ -8744,7 +8789,7 @@ function addon.profileOps.RecoverCorruptRoot(expected)
 end
 
 function addon.profileOps.ForgetCharacter(guid, expected)
-    return addon.profileOps.Execute(expected, function(root)
+    local ok, result = addon.profileOps.Execute(expected, function(root)
         local currentGUID = addon.profileOps.ReadCurrentGUID()
         if not currentGUID then return nil, "unsafe-context" end
         if guid == currentGUID then return nil, "current-character" end
@@ -8754,7 +8799,11 @@ function addon.profileOps.ForgetCharacter(guid, expected)
         local transaction = addon.profileOps.NewTransaction(root)
         transaction.characters = characters
         return transaction, guid
-    end)
+    end, true)
+    if ok and addon.profileRuntime.capacityFallback then
+        addon.profileRuntime.RequestResolution(false)
+    end
+    return ok, result
 end
 
 --[[ ============================================================
@@ -10738,6 +10787,7 @@ local mainPanel      = Panel:New("StatsProFrame",          "")
 local defensivePanel = Panel:New("StatsProDefensiveFrame", "defensive_")
 
 addon.profileRuntime.saveActivePositions = function(settings)
+    if addon.profileRuntime.capacityFallback then return end
     mainPanel:FinishMouseDrag(false)
     defensivePanel:FinishMouseDrag(false)
     mainPanel:SavePositionTo(settings)
@@ -11959,6 +12009,7 @@ local function OnPlayerLogout()
     if addon.settingsUI.CloseColorPicker then addon.settingsUI.CloseColorPicker(true) end
     addon.dbRuntime.Refresh()
     if addon.dbRuntime.readOnly or not addon.dbRuntime.registryReady then return end
+    if addon.profileRuntime.capacityFallback then return end
     if addon.profileRuntime.pendingResolution and addon.profileRuntime.activeGUID == nil then return end
     local settings = addon.dbRuntime.activeSettings
     if addon.dbRuntime.IsCleanTable(settings) then
@@ -15832,6 +15883,11 @@ function addon.profileUI.OperationErrorText(reason)
         return L("These saved settings are now in use. Choose another setup.")
     end
     if reason == "profile-capacity" then
+        local root = addon.dbRuntime.rootRef
+        if not addon.dbRuntime.registryReady or not root
+            or #addon.profileOps.CollectUnusedProfileIDs(root) == 0 then
+            return L("Profile storage is full.")
+        end
         return string.format(L("Profile storage is full. Use %s to make room."), L("Delete unused settings..."))
     end
     if reason == "account-wide-active" then
@@ -16946,7 +17002,8 @@ function addon.profileUI.BuildOperationUI(manager)
         ui.selectedSpecModel = spec
         ui.RefreshOperationStatus(model)
 
-        local mutable = model.canMutate == true
+        local canClean = model.canMutate == true
+        local mutable = canClean and not model.capacityFallback
         local hasContext = character ~= nil and spec ~= nil and assignedProfile ~= nil
         local accountWide = model.accountWideEnabled == true
         local hasEffectiveTarget = effectiveProfile ~= nil and (hasContext or accountWide)
@@ -16962,6 +17019,8 @@ function addon.profileUI.BuildOperationUI(manager)
                     or "Compatibility mode - profiles are read-only."
             elseif model.combat == true then
                 unavailableMessage = "Profile changes are unavailable during combat."
+            elseif model.capacityFallback then
+                unavailableMessage = "Profile storage is full."
             else
                 unavailableMessage = "Waiting for a safe profile context."
             end
@@ -16984,7 +17043,7 @@ function addon.profileUI.BuildOperationUI(manager)
         SetActionEnabled(advancedButton, true)
         SetActionEnabled(resetButton, mutable and hasEffectiveTarget)
         SetActionEnabled(forgetButton,
-            mutable and character ~= nil and not character.isCurrent)
+            canClean and character ~= nil and not character.isCurrent)
         local roleChoices = hasContext
             and ui.RoleTemplateChoices(model, assignedProfileID) or {}
         SetActionEnabled(roleTemplateButton,
@@ -16998,7 +17057,7 @@ function addon.profileUI.BuildOperationUI(manager)
         SetActionEnabled(discardAccountWideButton,
             mutable and not accountWide and model.accountWideProfileID ~= nil)
         SetActionEnabled(cleanupButton,
-            mutable and (model.unusedProfileCount or 0) > 0)
+            canClean and (model.unusedProfileCount or 0) > 0)
         recoverButton.statsProDisabledMessageKey = not mutable and unavailableMessage
             or "No saved settings are available to recover."
         SetActionEnabled(recoverButton,
@@ -17013,7 +17072,9 @@ function addon.profileUI.BuildOperationUI(manager)
                 or (ui.pendingAction.kind == "transfer-direction"
                     and ui.pendingAction.payload
                     and ui.pendingAction.payload.canImport ~= true))
-        if dialog:IsShown() and ((not mutable and not exportOnlyDialog)
+        local cleanupDialog = canClean and ui.pendingAction
+            and (ui.pendingAction.kind == "cleanup" or ui.pendingAction.kind == "forget")
+        if dialog:IsShown() and ((not mutable and not exportOnlyDialog and not cleanupDialog)
             or not addon.profileOps.CheckExpected(addon.dbRuntime.Refresh(),
                 ui.pendingAction and ui.pendingAction.expected)) then
             dialog:Hide()
@@ -17129,7 +17190,8 @@ function addon.profileUI.BuildOperationUI(manager)
         local choices = {
             { kind = "transfer", direction = "export", label = L("Export this profile") },
         }
-        if model.canMutate == true then
+        local canImport = model.canMutate == true and not model.capacityFallback
+        if canImport then
             choices[#choices + 1] = {
                 kind = "transfer", direction = "import",
                 label = accountWide
@@ -17144,7 +17206,7 @@ function addon.profileUI.BuildOperationUI(manager)
             targetLabel = accountWide and L("Account-wide settings")
                 or ui.ContextLabel(character, spec),
             accountWide = accountWide,
-            canImport = model.canMutate == true,
+            canImport = canImport,
         }, ui.CaptureExpected(
             character and character.guid, spec and spec.specID, profile.profileID))
     end)

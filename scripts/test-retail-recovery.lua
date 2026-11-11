@@ -208,9 +208,47 @@ do
                 "capacity rejection preserves the active valid registry")
             local hint = addon.profileUI.OperationErrorText(reason)
             assert(hint:find("Delete unused settings", 1, true), "capacity message identifies manual cleanup")
-            local cleaned, count = test.profileOps.deleteUnusedProfiles()
-            assert(cleaned and count > 0, "manual cleanup is available after rejection")
-            assert(test.profileOps.importTransferToContext(package, sections), "cleanup makes room for a retry")
+            local altEnv, altAddon, altTest = loadStatsPro("enUS", {
+                statsProDB = after.root,
+                unitGUID = function() return "Player-Capacity-Alt" end,
+                getSpecialization = function() return 1 end, specID = 73, specRole = "TANK",
+            })
+            local budget = altAddon.dbRuntime.NewGraphBudget()
+            assert(altAddon.dbRuntime.ValidateRegistry(after.root, budget))
+            altAddon.dbRuntime.maxGraphNodes = budget.nodes
+            altEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+            local fallback = altTest.profileState()
+            assert(not fallback.characters["Player-Capacity-Alt"] and altEnv.StatsProFrame:IsShown()
+                and not altAddon.profileRuntime.pendingResolution,
+                "first login at capacity can show existing settings without allocating a profile")
+            local wasVisible, xOffset = fallback.settings.isVisible, fallback.settings.xOfs
+            altEnv.SlashCmdList.STATSPRO("hide")
+            altEnv.StatsProFrame:ClearAllPoints()
+            altEnv.StatsProFrame:SetPoint("CENTER", altEnv.UIParent, "CENTER", 500, 100)
+            altEnv.__fireEvent("PLAYER_LOGOUT")
+            local reset, resetReason = altTest.profileOps.resetProfile(fallback.profileID)
+            assert(not reset and resetReason == "profile-capacity"
+                and fallback.settings.isVisible == wasVisible and fallback.settings.xOfs == xOffset,
+                "capacity fallback protects saved settings from normal operations and logout")
+            local function click(button)
+                assert(button:IsEnabled(), "expected available profile action")
+                button.scripts.OnClick(button)
+            end
+            altAddon:OpenConfigMenu()
+            click(altEnv.StatsProManageProfilesButton)
+            click(altEnv.StatsProProfileAdvancedButton)
+            assert(not altEnv.StatsProProfileResetButton:IsEnabled(), "fallback disables regular profile changes")
+            click(altEnv.StatsProProfileCleanupButton)
+            assert(altEnv.StatsProProfileOperationDialog:IsShown(), "manual cleanup offers confirmation")
+            click(altEnv.StatsProProfileOperationConfirmButton)
+            assert(altAddon.profileRuntime.ResolvePending(), "cleanup retries the new character assignment")
+            local recovered = altTest.profileState()
+            assert(recovered.characters["Player-Capacity-Alt"] and not altAddon.profileRuntime.capacityFallback,
+                "new character receives a normal assignment after cleanup")
+            assert(addon.profileUI.OperationErrorText(reason) == "Profile storage is full.",
+                "capacity message does not direct users to unavailable cleanup")
+            assert(altTest.profileOps.importTransferToContext(assert(altTest.profileTransfer.parse(payload)), sections),
+                "cleanup makes room for a retry")
             reachedLimit = true
             break
         end

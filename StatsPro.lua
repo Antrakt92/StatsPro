@@ -10316,6 +10316,7 @@ end
 
 function Panel:ApplyTooltipRows(targetRows, lineCount)
     self.lastTargetRows = targetRows
+    if addon.forever.enabled then return end
     local rowHeight = self.lastLineH or GetNumberDB("fontSize")
     if not SAFE_NUM.IsCleanFiniteNumber(rowHeight) or rowHeight <= 0 then rowHeight = 1 end
     -- Refresh only the tooltip that is both visible and still owned by one of this
@@ -10327,37 +10328,49 @@ function Panel:ApplyTooltipRows(targetRows, lineCount)
     if tooltip and tooltip:IsShown() then
         openOwner = tooltip:GetOwner()
     end
-    for i = 1, math.max(#(targetRows or {}), #(self.tooltipOverlays or {})) do
-        local overlay = self.tooltipOverlays[i]
-        if not overlay then
-            overlay = self.makeTooltipOverlay()
-            self.tooltipOverlays[i] = overlay
-        end
+    lineCount = lineCount or 0
+    for i, overlay in pairs(self.tooltipOverlays) do
         local meta = targetRows and targetRows[i] or nil
-        local previousMeta = overlay.statsProTargetMeta
-        local ownedOpen = openOwner == overlay
-        if type(meta) == "table" and i <= (lineCount or 0) then
-            overlay:ClearAllPoints()
-            overlay:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, -((i - 1) * rowHeight))
-            overlay:SetPoint("RIGHT", self.frame, "RIGHT", 0, 0)
-            overlay:SetHeight(rowHeight)
-            overlay:SetScript("OnEnter", function(f)
-                addon.archonTargets.ShowTooltip(f, meta)
-            end)
+        if type(meta) ~= "table" or i > lineCount then
+            if openOwner == overlay then tooltip:Hide() end
+            if overlay.statsProTargetMeta then
+                overlay:Hide()
+                overlay:SetScript("OnEnter", nil)
+                overlay.statsProTargetMeta = nil
+            end
+        end
+    end
+    if not targetRows then return end
+    for i = 1, math.min(#targetRows, lineCount) do
+        local meta = targetRows[i]
+        if type(meta) == "table" then
+            local overlay = self.tooltipOverlays[i]
+            if not overlay then
+                overlay = self.makeTooltipOverlay()
+                self.tooltipOverlays[i] = overlay
+            end
+            local previousMeta = overlay.statsProTargetMeta
+            if overlay.statsProRowHeight ~= rowHeight then
+                overlay:ClearAllPoints()
+                overlay:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, -((i - 1) * rowHeight))
+                overlay:SetPoint("RIGHT", self.frame, "RIGHT", 0, 0)
+                overlay:SetHeight(rowHeight)
+                overlay.statsProRowHeight = rowHeight
+            end
+            if not previousMeta then
+                overlay:SetScript("OnEnter", function(f)
+                    addon.archonTargets.ShowTooltip(f, f.statsProTargetMeta)
+                end)
+            end
             overlay.statsProTargetMeta = meta
-            overlay:Show()
-            if ownedOpen then
+            if not overlay:IsShown() then overlay:Show() end
+            if openOwner == overlay then
                 local sameStat = type(previousMeta) == "table"
                     and previousMeta.statKey == meta.statKey
                 if not sameStat or not addon.archonTargets.ShowTooltip(overlay, meta) then
                     tooltip:Hide()
                 end
             end
-        else
-            if ownedOpen then tooltip:Hide() end
-            overlay:Hide()
-            overlay:SetScript("OnEnter", nil)
-            overlay.statsProTargetMeta = nil
         end
     end
 end
@@ -11630,7 +11643,7 @@ end
 -- The return fallback preserves rows if a future builder accidentally stays mutate-only.
 local function BuildRowBlock(def)
     local labels, ratings, values = {}, {}, {}
-    local targetRows = def.splitKey == "splitOffensive" and {} or nil
+    local targetRows = not addon.forever.enabled and def.splitKey == "splitOffensive" and {} or nil
     local outLabels, outRatings, outValues = def.buildFn(labels, ratings, values, targetRows)
     if outLabels then
         labels = outLabels
@@ -11673,12 +11686,15 @@ local RENDER_BLOCK_DEFS = {
 }
 
 local function NewRenderBucket()
-    return { labels = {}, ratings = {}, values = {}, targetRows = {}, repairStr = "", repairLabelStr = nil }
+    return { labels = {}, ratings = {}, values = {}, targetRows = not addon.forever.enabled and {} or nil,
+        repairStr = "", repairLabelStr = nil }
 end
 
 local function AddBlockToBucket(bucket, block)
     AppendRows(bucket.labels, bucket.ratings, bucket.values, block.labels, block.ratings, block.values)
-    bucket.targetRows = addon.archonTargets.AppendTargetRows(bucket.targetRows, block.targetRows, #block.labels)
+    if bucket.targetRows then
+        addon.archonTargets.AppendTargetRows(bucket.targetRows, block.targetRows, #block.labels)
+    end
     if block.repairStr and block.repairStr ~= "" then
         bucket.repairStr = block.repairStr
         bucket.repairLabelStr = block.repairLabelStr
@@ -11693,7 +11709,7 @@ local function AddSectionedBlockToBucket(bucket, block, lastSectionKey, labelSty
     if not BlockHasContent(block) then return lastSectionKey end
     if NormalizeLabelStyle(labelStyle) ~= "hidden" and block.sectionKey and block.sectionKey ~= lastSectionKey then
         PushHeader(bucket.labels, bucket.ratings, bucket.values, SectionHeader(block.sectionKey))
-        bucket.targetRows[#bucket.targetRows + 1] = false
+        if bucket.targetRows then bucket.targetRows[#bucket.targetRows + 1] = false end
         lastSectionKey = block.sectionKey
     elseif block.sectionKey and block.sectionKey ~= lastSectionKey then
         lastSectionKey = block.sectionKey
@@ -21201,8 +21217,10 @@ if addon and addon.__statsproSmoke == true then
             if fs then fs.statsProStringHeightMultiplier = multiplier end
         end,
         mainPanelTooltipState = function()
+            local overlayCount = 0
+            for _ in pairs(mainPanel.tooltipOverlays) do overlayCount = overlayCount + 1 end
             return {
-                overlayCount = #(mainPanel.tooltipOverlays or {}),
+                overlayCount = overlayCount,
                 firstShown = mainPanel.tooltipOverlays[1] and mainPanel.tooltipOverlays[1]:IsShown() or false,
                 secondShown = mainPanel.tooltipOverlays[2] and mainPanel.tooltipOverlays[2]:IsShown() or false,
                 lastTargetRows = mainPanel.lastTargetRows,
@@ -21211,12 +21229,14 @@ if addon and addon.__statsproSmoke == true then
         panelTooltipState = function(panelName)
             local panel = panelName == "side" and defensivePanel or mainPanel
             local shown, hasOnEnter = {}, {}
-            for i, overlay in ipairs(panel.tooltipOverlays or {}) do
+            local overlayCount = 0
+            for i, overlay in pairs(panel.tooltipOverlays) do
+                overlayCount = overlayCount + 1
                 shown[i] = overlay:IsShown()
                 hasOnEnter[i] = type(overlay.scripts and overlay.scripts.OnEnter) == "function"
             end
             return {
-                overlayCount = #(panel.tooltipOverlays or {}),
+                overlayCount = overlayCount,
                 shown = shown,
                 hasOnEnter = hasOnEnter,
                 lastTargetRows = panel.lastTargetRows,

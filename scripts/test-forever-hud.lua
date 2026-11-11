@@ -762,5 +762,9 @@ do
             check(definition.colors[key] == nil, "Retail palette excludes Forever color " .. key)
         end
     end
+    check(paletteAddon:RunUpdateStatsSafe(), "Forever renders its full stat catalog")
+    local tooltipState = paletteTest.mainPanelTooltipState()
+    check(tooltipState.overlayCount == 0 and tooltipState.lastTargetRows == nil,
+        "Forever needs no Archon row metadata or mouse overlays")
 end
 print("StatsPro Forever HUD integration: PASS (" .. count .. " checks)")

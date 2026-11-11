@@ -2872,7 +2872,7 @@ do
         { statKey = "mastery", target = 1043, current = 812, delta = -231, capturedAt = "2026-05-15" },
     })
     local tooltipState = test.mainPanelTooltipState()
-    eq("tooltip.overlay_count", tooltipState.overlayCount, 2)
+    eq("tooltip.overlay_count", tooltipState.overlayCount, 1)
     eq("tooltip.first_row_hidden", tooltipState.firstShown, false)
     eq("tooltip.second_row_shown", tooltipState.secondShown, true)
     eq("tooltip.target_row_dense_alignment", tooltipState.lastTargetRows[2].statKey, "mastery")
@@ -15303,8 +15303,11 @@ do
             "Welcome note fell back to English")
         welcome:Hide()
 
-        for index, frame in ipairs(localeEnv.__frames) do
+        -- Number Settings controls independently of unrelated HUD frame allocation.
+        local index = 0
+        for _, frame in ipairs(localeEnv.__frames) do
             local kind = frame.statsProControlKind
+            if kind then index = index + 1 end
             if kind == "checkbox" then
                 local text = exists(prefix .. ".checkbox_text." .. index, frame.statsProText)
                 local point, relativeTo, relativePoint, xOffset, yOffset = text:GetPoint()

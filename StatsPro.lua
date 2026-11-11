@@ -1350,16 +1350,10 @@ function addon.archonTargets.CalculateMasteryTargetPercent(currentRating, curren
     if not addon.IsCleanFiniteNumber(currentRating) or currentRating < 0
         or not addon.IsCleanFiniteNumber(currentPct)
         or not addon.IsCleanFiniteNumber(target) or target < 0 then return nil end
-    local currentBonus, targetBonus, currentReason, targetReason =
-        addon.archonTargets.GetRatingBonusesForValues(
-            CR_MASTERY, currentRating, target, renderContext)
+    local currentBonus, targetBonus = addon.archonTargets.GetRatingBonusesForValues(
+        CR_MASTERY, currentRating, target, renderContext)
     if not addon.IsCleanFiniteNumber(currentBonus)
-        or not addon.IsCleanFiniteNumber(targetBonus) then
-        if currentReason == "restricted" or targetReason == "restricted" then
-            return nil, "restricted"
-        end
-        return nil, "unavailable"
-    end
+        or not addon.IsCleanFiniteNumber(targetBonus) then return nil end
     local targetPct = currentPct + targetBonus - currentBonus
     if not addon.IsCleanFiniteNumber(targetPct) then return nil end
     return targetPct
@@ -1398,12 +1392,12 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
         local displayPct = addon.IsCleanFiniteNumber(currentPct) and currentPct or nil
         local delta = currentRating - target
         if addon.IsCleanFiniteNumber(delta) then
-            local targetPct, targetPctReason
+            local targetPct
             local cachedEntry
             if statKey == "mastery" and cleanRatingCR == CR_MASTERY then
-                targetPct, targetPctReason = addon.archonTargets.CalculateMasteryTargetPercent(
+                targetPct = addon.archonTargets.CalculateMasteryTargetPercent(
                     currentRating, displayPct, target, renderContext)
-                if targetPct == nil and (displayIsSecret or targetPctReason == "restricted") then
+                if targetPct == nil and displayIsSecret then
                     cachedEntry = addon.archonTargets.GetCachedComparison(
                         classToken, specKey, snapshotKey, statKey,
                         target, cleanRatingCR, capturedAt)
@@ -1420,13 +1414,11 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
             -- only to the same client formatter used by the live HUD.
             if hasCurrentPctDisplay then meta.currentPctDisplay = currentPctDisplay end
             meta.delta = delta
-            -- A transient nil/error from Mastery APIs must not replace the last fully
-            -- clean percentage tuple with a rating-only one. Restricted live values
-            -- are different: the cached Target % is still valid and intentionally
-            -- travels with the fresh clean rating comparison.
+            -- A partial Mastery read must not overwrite a complete comparison or
+            -- pair an older Target % with a new clean Current %. Restricted live
+            -- percentages can still show the previous target without a percent delta.
             local preserveCompleteMasteryCache = statKey == "mastery"
                 and targetPct == nil and not displayIsSecret
-                and targetPctReason ~= "restricted"
             if preserveCompleteMasteryCache and cachedEntry == nil then
                 cachedEntry = addon.archonTargets.GetCachedComparison(
                     classToken, specKey, snapshotKey, statKey,
@@ -10137,17 +10129,14 @@ function addon.archonTargets.GetRawRatingBonusForValue(ratingCR, rating)
     if type(GetCombatRatingBonusForCombatRatingValue) ~= "function" then return nil end
     if not SAFE_NUM.IsCleanFiniteNumber(ratingCR) or not SAFE_NUM.IsCleanFiniteNumber(rating) or rating < 0 then return nil end
     local okBonus, bonus = pcall(GetCombatRatingBonusForCombatRatingValue, ratingCR, rating)
-    if not okBonus then return nil end
-    if issecretvalue(bonus) then return nil, "restricted" end
-    if not SAFE_NUM.IsCleanFiniteNumber(bonus) then return nil end
+    if not okBonus or not SAFE_NUM.IsCleanFiniteNumber(bonus) then return nil end
     return bonus
 end
 
 function addon.archonTargets.ReadMasteryEffect()
     local ok, effect, coefficient = pcall(GetMasteryEffect)
-    if not ok then return nil, nil, "unavailable" end
-    if issecretvalue(coefficient) then return effect, nil, "restricted" end
-    if not SAFE_NUM.IsCleanFiniteNumber(coefficient) then return effect, nil, "unavailable" end
+    if not ok then return nil end
+    if not SAFE_NUM.IsCleanFiniteNumber(coefficient) then return effect end
     return effect, coefficient
 end
 
@@ -10157,47 +10146,32 @@ function addon.archonTargets.GetRatingBonusesForValues(
         ratingCR, currentRating, targetRating, renderContext)
     local isMastery = SAFE_NUM.IsCleanFiniteNumber(ratingCR)
         and ratingCR == CR_MASTERY
-    local currentBonus, currentReason
-    local targetBonus, targetReason
+    local currentBonus, targetBonus
     if currentRating ~= nil then
-        currentBonus, currentReason =
-            addon.archonTargets.GetRawRatingBonusForValue(ratingCR, currentRating)
+        currentBonus = addon.archonTargets.GetRawRatingBonusForValue(ratingCR, currentRating)
     end
     if targetRating ~= nil then
-        targetBonus, targetReason =
-            addon.archonTargets.GetRawRatingBonusForValue(ratingCR, targetRating)
+        targetBonus = addon.archonTargets.GetRawRatingBonusForValue(ratingCR, targetRating)
     end
     if isMastery and (currentBonus ~= nil or targetBonus ~= nil) then
-        local coefficient, coefficientReason
+        local coefficient
         if renderContext and renderContext.masterySampled then
             coefficient = renderContext.masteryCoefficient
-            coefficientReason = renderContext.masteryCoefficientReason
         else
             local _
-            _, coefficient, coefficientReason = addon.archonTargets.ReadMasteryEffect()
+            _, coefficient = addon.archonTargets.ReadMasteryEffect()
         end
+        if coefficient == nil then return nil, nil end
         if currentBonus ~= nil then
-            if coefficientReason then
-                currentBonus, currentReason = nil, coefficientReason
-            else
-                currentBonus = currentBonus * coefficient
-                if not SAFE_NUM.IsCleanFiniteNumber(currentBonus) then
-                    currentBonus, currentReason = nil, "unavailable"
-                end
-            end
+            currentBonus = currentBonus * coefficient
+            if not SAFE_NUM.IsCleanFiniteNumber(currentBonus) then currentBonus = nil end
         end
         if targetBonus ~= nil then
-            if coefficientReason then
-                targetBonus, targetReason = nil, coefficientReason
-            else
-                targetBonus = targetBonus * coefficient
-                if not SAFE_NUM.IsCleanFiniteNumber(targetBonus) then
-                    targetBonus, targetReason = nil, "unavailable"
-                end
-            end
+            targetBonus = targetBonus * coefficient
+            if not SAFE_NUM.IsCleanFiniteNumber(targetBonus) then targetBonus = nil end
         end
     end
-    return currentBonus, targetBonus, currentReason, targetReason
+    return currentBonus, targetBonus
 end
 
 function addon.archonTargets.FormatPercentBonus(value, signed)
@@ -11719,10 +11693,9 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
             if def.composite then
                 val, currentPercent, percentState = SAFE_NUM.SafeCompositePercent(def.api)
             elseif def.statKey == "mastery" and targetContext then
-                local effect, coefficient, reason = addon.archonTargets.ReadMasteryEffect()
+                local effect, coefficient = addon.archonTargets.ReadMasteryEffect()
                 targetContext.masterySampled = true
                 targetContext.masteryCoefficient = coefficient
-                targetContext.masteryCoefficientReason = reason
                 val, currentPercent = SAFE_NUM.ResolveDisplayNumber(effect, false)
             else
                 val, currentPercent = SAFE_NUM.SafeDisplayPercent(def.api)

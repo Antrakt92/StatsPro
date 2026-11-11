@@ -7254,8 +7254,10 @@ do
         "mastery", 800, mixedEnv.CR_MASTERY, 26)
     eq("render.mastery_mixed_bonus_missing_coefficient.state",
         mixed.comparisonState, "exact")
-    eq("render.mastery_mixed_bonus_missing_coefficient.cached_target_pct",
-        mixed.targetPct, 30)
+    eq("render.mastery_mixed_bonus_missing_coefficient.target_pct_suppressed",
+        mixed.targetPct, nil)
+    eq("render.mastery_mixed_bonus_missing_coefficient.cache_target_pct_preserved",
+        mixedTest.archonComparisonCache().entries.mastery.targetPct, 30)
 end
 
 do

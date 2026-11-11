@@ -956,6 +956,53 @@ if not forever then
 end
 
 if not forever then
+    local phase = "clean"
+    local protectedCoefficient = {}
+    local env, addon, test = loadStatsPro("enUS", {
+        unitClassToken = "MAGE", specIndex = 1, specID = 64,
+        statsProArchonTargets = archonTargetsFixture(),
+        statsProDB = {
+            showOffensive = true, showCrit = false, showHaste = false,
+            showMastery = true, showVersatility = false, matchValueColorToStat = false,
+        },
+        getCombatRating = function()
+            if phase == "clean" then return 800 end
+            if phase == "mixed" then return 850 end
+        end,
+        getMasteryEffect = function()
+            if phase == "clean" then return 26, 2 end
+            return 41, protectedCoefficient
+        end,
+        getCombatRatingBonusForCombatRatingValue = function(_, value) return value / 100 end,
+        issecretvalue = function(value) return rawequal(value, protectedCoefficient) end,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    local function tooltipRows()
+        local meta = test.buildRenderBlocks()[2].targetRows[1]
+        assert(addon.archonTargets.ShowTooltip(env.UIParent, meta))
+        local rows = {}
+        for _, row in ipairs(test.getArchonTooltip().lines) do rows[row.left] = row.right end
+        return rows, meta
+    end
+    local cleanRows = tooltipRows()
+    assert(cleanRows["Target:"] == "1000 (~30.0%)")
+
+    phase = "mixed"
+    local mixedRows, mixed = tooltipRows()
+    assert(mixed.comparisonState == "exact" and mixedRows["Current:"] == "850 (~41.0%)"
+        and mixedRows["Target:"] == "1000" and mixedRows["Missing:"] == "150",
+        "an exact live rating cannot mix its clean percentage with an older Mastery target")
+
+    phase = "unavailable"
+    local cachedRows, lastKnown = tooltipRows()
+    assert(lastKnown.comparisonState == "lastKnown"
+        and cachedRows["Target:"] == "1000 (~30.0%)" and cachedRows["Current:"] == "800 (~26.0%)"
+        and cachedRows["Missing:"] == "200 (~+4.0%)",
+        "a partial Mastery sample does not overwrite the coherent last-known comparison")
+    print("Retail Archon mixed Mastery percentage regressions passed")
+end
+
+if not forever then
     local env, _, test = loadStatsPro("enUS", {
         issecretvalue = function(value) return value == -21 or value == -22 end,
         setFormattedText = function(_, _, value) return value == -21 and "41.2%" or "63.7%" end,

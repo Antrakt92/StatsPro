@@ -9697,7 +9697,7 @@ function Panel:New(globalName, dbKeyPrefix)
     -- icons inflate that line's height (`:14:14:2:0|t` yoffset=0 puts texture top above
     -- glyph top), causing cumulative drift vs labelText's pure-text rows.
     local repairText = frame:CreateFontString(nil, "OVERLAY")
-    repairText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)  -- y repositioned per render
+    repairText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)  -- y follows the repair row
     repairText:Hide()
 
     -- Repair row label — dedicated FontString anchored TOPLEFT below labelText (Y set
@@ -10002,8 +10002,8 @@ function Panel:Hide()
     self.lastValueText = nil
     self.lastRepairText = nil
     self.lastRepairLabelText = nil
-    self.repairText:Hide()
-    self.repairLabelText:Hide()
+    if self.repairText:IsShown() then self.repairText:Hide() end
+    if self.repairLabelText:IsShown() then self.repairLabelText:Hide() end
     -- WARNING: reset lineCount + hasRepair caches too; otherwise re-show may use stale
     -- height after font change OR fail to re-call SetHeight when hasRepair toggles.
     self.lastLineCount = -1
@@ -10514,6 +10514,24 @@ local function MeasuredOrCached(fs, current_cache, method, fallback)
     return current_cache, current_cache
 end
 
+function Panel:ApplyColumnOffset(region, key, offset)
+    if self[key] == offset then return end
+    -- A failed anchor write leaves the old geometry invalid, even if the next
+    -- render returns to its previous offset.
+    self[key] = nil
+    region:ClearAllPoints()
+    region:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", offset, 0)
+    region:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", offset, 0)
+    self[key] = offset
+end
+
+function Panel:ApplyWidth(region, key, width)
+    if self[key] == width then return end
+    self[key] = nil
+    region:SetWidth(width)
+    self[key] = width
+end
+
 -- Hide frame if no lines; otherwise apply text+height.
 -- WARNING: in 12.x, label/value strings may be secret-tainted (built from in-combat stat
 -- API returns). String comparisons (==, ~=) on secrets error. Use lineCount (always a
@@ -10613,10 +10631,17 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
         local repairLabelVisible = repairLabelStr and repairLabelStr ~= ""
         local repairRowY = hasRows and -(lineCount * lineH + 1) or 0  -- 1px gap only when below stat rows
 
+        if self.lastRepairRowY ~= repairRowY then
+            self.lastRepairRowY = nil
+            self.repairLabelText:ClearAllPoints()
+            self.repairLabelText:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, repairRowY)
+            self.repairText:ClearAllPoints()
+            self.repairText:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", 0, repairRowY)
+            self.lastRepairRowY = repairRowY
+        end
+
         -- Measure the entire label before alignment: its previous width may truncate
         -- a longer translation. Keep the intrinsic cache separate from the stat width.
-        self.repairLabelText:ClearAllPoints()
-        self.repairLabelText:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, repairRowY)
         self.repairLabelText:SetText(repairLabelStr or "")
         if repairLabelVisible then
             repairLabelW, self.cachedRepairLabelW = MeasuredOrCached(
@@ -10626,27 +10651,26 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
             -- Only the independent repair row widens for a long label; ordinary
             -- stat columns retain their natural spacing above it.
             if hasRows then repairLabelW = math.max(labelW, repairLabelW) end
-            self.repairLabelText:SetWidth(repairLabelW)
-            self.repairLabelText:Show()
         else
             self.cachedRepairLabelW = 0
-            self.repairLabelText:SetWidth(0)
+        end
+        self:ApplyWidth(self.repairLabelText, "lastRepairLabelWidth", repairLabelW)
+        if repairLabelVisible then
+            if not self.repairLabelText:IsShown() then self.repairLabelText:Show() end
+        elseif self.repairLabelText:IsShown() then
             self.repairLabelText:Hide()
         end
 
-        -- Coin: anchored to frame.right, same Y as the repair label.
-        self.repairText:ClearAllPoints()
-        self.repairText:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", 0, repairRowY)
         self.repairText:SetText(repairStr)
-        self.repairText:Show()
+        if not self.repairText:IsShown() then self.repairText:Show() end
 
         -- WHY measure here (not in width math below): coin width depends on Text just set.
         self.lastRenderedRepairW, self.cachedRepairW = MeasuredOrCached(
             self.repairText, self.cachedRepairW, "GetStringWidth",
             effectiveFontSize * Panel.SECRET_REPAIR_WIDTH_UNITS)
     else
-        self.repairLabelText:Hide()
-        self.repairText:Hide()
+        if self.repairLabelText:IsShown() then self.repairLabelText:Hide() end
+        if self.repairText:IsShown() then self.repairText:Hide() end
         -- Reset so a previously-wide coin doesn't keep the panel inflated after the user
         -- disables Show Repair Cost or repair drops to 0g (coin string becomes "").
         self.cachedRepairW = 0
@@ -10679,19 +10703,12 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- ratingText: shift LEFT by `extra` so right edge stays at "stat-content right edge"
     -- (frame.right - extra), not frame.right. Without this, when frame is widened for
     -- coin, ratings track frame.right and create a huge gap between labels and values.
-    local rOffset = -(extra + valueW + rGap)
-    self.ratingText:ClearAllPoints()
-    self.ratingText:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", rOffset, 0)
-    self.ratingText:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", rOffset, 0)
+    self:ApplyColumnOffset(self.ratingText, "lastRatingOffset", -(extra + valueW + rGap))
 
-    -- valueText: same shift. Was statically anchored in Panel:New (TOPRIGHT 0,0 = frame.right).
-    -- Switch to dynamic per-render so it also pulls back from frame.right when widened.
-    local vOffset = -extra
-    self.valueText:ClearAllPoints()
-    self.valueText:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", vOffset, 0)
-    self.valueText:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", vOffset, 0)
+    -- valueText also pulls back from frame.right when the repair row widens it.
+    self:ApplyColumnOffset(self.valueText, "lastValueOffset", -extra)
 
-    self.frame:SetWidth(totalW)
+    self:ApplyWidth(self.frame, "lastFrameWidth", totalW)
 
     -- Frame height: text content bounds only. The optional background texture adds
     -- symmetric visual padding around this frame, so the text itself stays anchored

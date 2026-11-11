@@ -1142,7 +1142,7 @@ Write-Host "== Lua syntax =="
 $SyntaxFiles = @($RuntimeLuaRefs | ForEach-Object { $_.FullPath })
 if (Test-Path $ArchonTargetsCheck) { $SyntaxFiles += $ArchonTargetsCheck }
 $SyntaxFiles += $SmokeFile
-foreach ($name in @("StatsPro_Forever.lua", "scripts/test-forever.lua", "scripts/test-forever-hud.lua", "scripts/test-forever-classes.lua", "scripts/test-appearance.lua", "scripts/test-retail-recovery.lua", "scripts/test-bundled-fonts.lua", "scripts/test-font-audit.lua", "scripts/test-font-hover.lua", "scripts/test-font-favorites.lua", "scripts/test-shared-fonts.lua", "scripts/test-settings-menus.lua", "scripts/test-profile-transfer-portability.lua", "scripts/test-selftest.lua")) {
+foreach ($name in @("StatsPro_Forever.lua", "scripts/test-forever.lua", "scripts/test-forever-hud.lua", "scripts/test-forever-classes.lua", "scripts/test-appearance.lua", "scripts/test-retail-recovery.lua", "scripts/test-bundled-fonts.lua", "scripts/test-font-audit.lua", "scripts/test-font-hover.lua", "scripts/test-font-favorites.lua", "scripts/test-shared-fonts.lua", "scripts/test-settings-menus.lua", "scripts/test-profile-transfer-portability.lua", "scripts/test-selftest.lua", "scripts/test-panel-geometry.lua")) {
     $path = Join-Path $RepoRoot $name
     if (-not (Test-Path -LiteralPath $path)) { throw "Missing Forever verification source: $name" }
     $SyntaxFiles += $path
@@ -1214,20 +1214,19 @@ if (-not $UpdateSmokeContract) {
 }
 
 Write-Host "== Forever stat and HUD regressions =="
-foreach ($script in @("scripts/test-forever.lua", "scripts/test-forever-hud.lua", "scripts/test-forever-classes.lua", "scripts/test-appearance.lua", "scripts/test-retail-recovery.lua", "scripts/test-bundled-fonts.lua", "scripts/test-font-audit.lua", "scripts/test-font-hover.lua", "scripts/test-font-favorites.lua", "scripts/test-shared-fonts.lua", "scripts/test-settings-menus.lua", "scripts/test-profile-transfer-portability.lua", "scripts/test-selftest.lua")) {
+foreach ($script in @("scripts/test-forever.lua", "scripts/test-forever-hud.lua", "scripts/test-forever-classes.lua", "scripts/test-appearance.lua", "scripts/test-retail-recovery.lua", "scripts/test-bundled-fonts.lua", "scripts/test-font-audit.lua", "scripts/test-font-hover.lua", "scripts/test-font-favorites.lua", "scripts/test-shared-fonts.lua", "scripts/test-settings-menus.lua", "scripts/test-profile-transfer-portability.lua", "scripts/test-selftest.lua", "scripts/test-panel-geometry.lua")) {
     $result = Invoke-NativeCapture -FilePath $Lua -Arguments @((Join-Path $RepoRoot $script)) `
         -TimeoutSeconds 60 -Description $script -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
     $result.Output | ForEach-Object { Write-Host $_ }
     if ($result.ExitCode -ne 0) { throw "$script exited with code $($result.ExitCode)" }
 }
 
-Write-Host "== Forever language and gear recovery regressions =="
-$ForeverRecoveryResult = Invoke-NativeCapture -FilePath $Lua `
-    -Arguments @((Join-Path $RepoRoot "scripts/test-retail-recovery.lua"), "forever") `
-    -TimeoutSeconds 60 -Description "Forever recovery" -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
-$ForeverRecoveryResult.Output | ForEach-Object { Write-Host $_ }
-if ($ForeverRecoveryResult.ExitCode -ne 0) {
-    throw "Forever recovery exited with code $($ForeverRecoveryResult.ExitCode)"
+Write-Host "== Shared regressions in Forever mode =="
+foreach ($script in @("scripts/test-retail-recovery.lua", "scripts/test-panel-geometry.lua")) {
+    $result = Invoke-NativeCapture -FilePath $Lua -Arguments @((Join-Path $RepoRoot $script), "forever") `
+        -TimeoutSeconds 60 -Description "$script (Forever)" -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
+    $result.Output | ForEach-Object { Write-Host $_ }
+    if ($result.ExitCode -ne 0) { throw "$script (Forever) exited with code $($result.ExitCode)" }
 }
 
 $StaticAnalysisFiles = @(

@@ -65,6 +65,39 @@ check(string.find(table.concat(blocks[1].labels, "\n"), "Spirit", 1, true), "Spi
 check(test.transferPrefix() == "SPF1:", "Forever transfer envelope")
 check(#addon.archonTargets.GetAvailableSnapshotOptions() == 0, "no Archon snapshot selector")
 check(addon.archonTargets.GetSnapshot("MAGE", "frost") == nil, "no Archon lookup")
+do
+    local available = true
+    local moveEnv, moveAddon, moveTest = fixtures.loadStatsPro("enUS", {
+        forever = true,
+        unitGUID = function() return "Player-Forever-UnknownUnits" end,
+        foreverAPIs = {
+            GetUnitSpeed = function() return 7, 7, 14, 4.9 end,
+            UnitOnTaxi = function() if available then return false end end,
+            GetCritChance = function() if available then return 5 end end,
+            GetManaRegen = function() if available then return 6, 1 end end,
+        },
+    })
+    moveEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local moveSettings = moveTest.profileState().settings
+    moveSettings.showMeleeCrit, moveSettings.showManaRegenMP5 = true, true
+    moveTest.cacheSettings()
+    local function valueFor(group, label)
+        local labels, ratings, values = {}, {}, {}
+        moveAddon.forever.BuildLines(group, labels, ratings, values, true)
+        for index, text in ipairs(labels) do
+            if text:find(label, 1, true) then return ratings[index] .. values[index] end
+        end
+        return ""
+    end
+    check(valueFor("utility", "Movement Speed"):find("100%", 1, true), "movement starts at a clean percentage")
+    check(valueFor("offensive", "Melee Crit"):find("5.00%", 1, true), "crit starts at a clean percentage")
+    check(valueFor("utility", "Mana Regen / 5 sec"):find("30.00", 1, true), "MP5 starts at a clean rate")
+    available = false
+    check(valueFor("utility", "Movement Speed"):find("?%", 1, true), "unknown movement retains the percentage unit")
+    check(valueFor("offensive", "Melee Crit"):find("?%", 1, true), "unknown crit retains the percentage unit")
+    local unknownMP5 = valueFor("utility", "Mana Regen / 5 sec")
+    check(unknownMP5:find("?", 1, true) and not unknownMP5:find("%", 1, true), "unknown MP5 retains its time unit")
+end
 local settings = test.profileState().settings
 local export = test.profileTransfer.serialize("Forever", settings, { stats = true, layout = true, appearance = true })
 check(type(export) == "string" and export:sub(1, 5) == "SPF1:", "profile export includes flavor")

@@ -11436,9 +11436,11 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
                 local hideLabel = cached.labelStyle == "hidden"
                 local suffix = hideLabel and definition.rateSeconds
                     and addon.forever.RateSuffix(cached.activeLabelsLocale, definition.rateSeconds) or ""
+                local unknownSuffix = (definition.kind == "movement" or definition.kind == "percent")
+                    and "%" or suffix
                 local text
                 if state == "unknown" then
-                    text = "|cff" .. valueColor .. "?" .. suffix .. "|r"
+                    text = "|cff" .. valueColor .. "?" .. unknownSuffix .. "|r"
                 elseif state == "secret" and definition.restrictedMP5FallbackLabel then
                     local formatted = addon.forever.FormatRestrictedMP5(value)
                     if type(formatted) == "string" then
@@ -11461,7 +11463,7 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
                     local format = definition.format or (group == "utility" and "%.2f" or "%d")
                     text = SAFE_NUM.FormatColorNumber(valueColor, value, format .. suffix, suffix)
                 end
-                local rCol, vCol = RouteValueOnly(text or ("|cff" .. valueColor .. "?" .. suffix .. "|r"))
+                local rCol, vCol = RouteValueOnly(text or ("|cff" .. valueColor .. "?" .. unknownSuffix .. "|r"))
                 PushRow(labels, ratings, values, FormatLabel(color, label), rCol, vCol)
             end
         end

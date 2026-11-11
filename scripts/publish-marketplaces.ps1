@@ -161,7 +161,8 @@ function Invoke-ExactUpload {
         [hashtable]$Form,
         [int[]]$ExpectedStatus,
         [string]$Description,
-        [scriptblock]$Request
+        [scriptblock]$Request,
+        [switch]$RequireFileId
     )
 
     try {
@@ -181,6 +182,18 @@ function Invoke-ExactUpload {
     $status = [int]$response.StatusCode
     if ($ExpectedStatus -notcontains $status) {
         throw "$Description failed with HTTP $status; do not retry this tag."
+    }
+    if ($RequireFileId) {
+        try {
+            $receipt = ConvertFrom-Json -InputObject $response.Content -NoEnumerate -ErrorAction Stop
+            $fileId = $receipt.id
+        } catch {
+            throw "$Description outcome is ambiguous: invalid file ID receipt; do not retry this tag."
+        }
+        if ($receipt -is [array] -or $receipt -isnot [pscustomobject] -or ($fileId -isnot [int] -and $fileId -isnot [long]) -or $fileId -le 0) {
+            throw "$Description outcome is ambiguous: invalid file ID receipt; do not retry this tag."
+        }
+        return [long]$fileId
     }
 }
 
@@ -435,15 +448,17 @@ function Publish-ExactMarketplacePlan {
         -ExpectedStatus @(200, 201) `
         -Description 'Wago upload' `
         -Request $UploadRequest
+    Write-Host "Wago upload accepted: project=$($context.Contract.ProjectIds.Wago) flavor=$Flavor tag=$Tag sha256=$Sha256."
 
     [void](Assert-ArchiveIdentity -Path $context.Archive -Tag $Tag -Sha256 $Sha256 -Flavor $Flavor)
-    Invoke-ExactUpload `
+    $cfFileId = Invoke-ExactUpload `
         -Uri "https://wow.curseforge.com/api/projects/$($context.Contract.ProjectIds.CurseForge)/upload-file" `
         -Headers @{ 'x-api-token' = $context.Credentials.CF_API_KEY } `
         -Form @{ metadata = $cfMetadata; file = Get-Item -LiteralPath $context.Archive } `
         -ExpectedStatus @(200) `
         -Description 'CurseForge upload' `
-        -Request $UploadRequest
+        -Request $UploadRequest -RequireFileId
+    Write-Host "CurseForge upload accepted: project=$($context.Contract.ProjectIds.CurseForge) fileId=$cfFileId flavor=$Flavor tag=$Tag sha256=$Sha256."
 
     if ($Flavor -ieq 'Forever') {
         Write-Host "Forever marketplace uploads accepted the exact attested archive for ${Tag}: $([System.IO.Path]::GetFileName($context.Archive)) sha256=$Sha256."
@@ -528,7 +543,7 @@ function Invoke-SelfTest {
             param([string]$Uri, [hashtable]$Headers, [hashtable]$Form)
             $calls.Add([pscustomobject]@{ Uri = $Uri; Headers = $Headers; Form = $Form })
             $status = if ($Uri -match 'wowinterface') { 202 } elseif ($Uri -match 'wago') { 201 } else { 200 }
-            return [pscustomobject]@{ StatusCode = $status }
+            return [pscustomobject]@{ StatusCode = $status; Content = '{"id":20402}' }
         }
         Publish-ExactMarketplaceArchive -Archive $archive -Tag $tag -Sha256 $sha -CredentialValues $credentials -ReadRequest $read -UploadRequest $upload
         $expectedReadUris = @(
@@ -608,7 +623,7 @@ function Invoke-SelfTest {
         Publish-ExactMarketplacePlan -Archive $archive -Tag $tag -Sha256 $sha -CredentialValues $credentials -Plan $loadedPlan -UploadRequest {
             param($uri, $headers, $form)
             $planCalls.Add([pscustomobject]@{ Uri = $uri; Headers = $headers; Form = $form })
-            [pscustomobject]@{ StatusCode = if ($uri -match 'wowinterface') { 202 } else { 200 } }
+            [pscustomobject]@{ StatusCode = if ($uri -match 'wowinterface') { 202 } else { 200 }; Content = '{"id":20402}' }
         }
         if ($planCalls.Count -ne 2) { throw "Prepared marketplace plan did not drive exactly two uploads." }
         $validPlanText = [System.IO.File]::ReadAllText($planPath)
@@ -786,7 +801,7 @@ function Invoke-SelfTest {
             -Plan $foreverPrepared.Plan -Flavor Forever -UploadRequest {
                 param($uri, $headers, $form)
                 $foreverCalls.Add([pscustomobject]@{ Uri = $uri; Metadata = ConvertFrom-JsonCompat $form.metadata })
-                [pscustomobject]@{ StatusCode = 200 }
+                [pscustomobject]@{ StatusCode = 200; Content = '{"id":20402}' }
             }
         if ($foreverCalls.Count -ne 2 -or $foreverCalls[0].Metadata.label -cne "$tag-Forever-beta" -or
             $foreverCalls[0].Metadata.stability -cne 'beta' -or
@@ -826,6 +841,28 @@ function Invoke-SelfTest {
             Read-MarketplacePlan -Path $foreverPath -ExpectedSha256 $foreverPrepared.Sha256 -Tag $tag -ArchiveSha256 $foreverSha -Flavor Forever
         } 'plan SHA-256'
         Write-Utf8NoBom -Path $foreverPath -Text $foreverPlanText
+        foreach ($receipt in @('<html>unexpected result</html>', '{"error":"denied"}', '{"id":"20402"}', '{"id":0}', '{"id":1.5}', '[{"id":20402}]')) {
+            $receiptCalls = [System.Collections.Generic.List[string]]::new()
+            $receiptLogs = @(& {
+                try {
+                    Publish-ExactMarketplacePlan -Archive $foreverArchive -Tag $tag -Sha256 $foreverSha -CredentialValues $credentials -Plan $foreverPrepared.Plan -Flavor Forever -UploadRequest {
+                        param($uri, $headers, $form)
+                        $receiptCalls.Add($uri)
+                        if ($uri -match 'wago') { return [pscustomobject]@{ StatusCode = 201 } }
+                        [pscustomobject]@{ StatusCode = 200; Content = $receipt }
+                    }
+                } catch {
+                    $_.Exception.Message
+                }
+            } 6>&1)
+            if (($receiptLogs -join " ") -notmatch 'CurseForge upload outcome is ambiguous.*do not retry' -or
+                ($receiptLogs -join " ") -notmatch "Wago upload accepted.*$foreverSha" -or
+                ($receiptLogs -join " ").Contains($receipt) -or
+                ($receiptLogs -join " ") -match 'marketplace uploads accepted' -or $receiptCalls.Count -ne 2) {
+                throw "Unexpected CurseForge upload receipt must stop with sanitized partial acceptance evidence."
+            }
+        }
+
         $foreverFailures = [System.Collections.Generic.List[string]]::new()
         Assert-ThrowsMatch 'Forever never retries failed upload' {
             Publish-ExactMarketplacePlan -Archive $foreverArchive -Tag $tag -Sha256 $foreverSha -CredentialValues $credentials -Plan $foreverPrepared.Plan -Flavor Forever -UploadRequest {

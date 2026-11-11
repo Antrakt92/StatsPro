@@ -1909,6 +1909,7 @@ local LABELS_BY_LOCALE = {
         ["Profiles changed; review and try again."] = "Profiles changed; review and try again.",
         ["The current character cannot be forgotten."] = "The current character cannot be forgotten.",
         ["Nothing changed."] = "Nothing changed.",
+        ["Out-of-combat samples are ready. Fight a creature to start combat sampling."] = "Out-of-combat samples are ready. Fight a creature to start combat sampling.",
         ["Profile operation failed. Review the selection and try again."] = "Profile operation failed. Review the selection and try again.",
         ["Profile storage is full. Use %s to make room."] = "Profile storage is full. Use %s to make room.",
         ["Profile storage is full."] = "Profile storage is full.",
@@ -2048,6 +2049,7 @@ local LABELS_BY_LOCALE = {
         ["Profiles changed; review and try again."] = "Профили изменились. Проверьте выбор и повторите попытку.",
         ["The current character cannot be forgotten."] = "Текущего персонажа нельзя забыть.",
         ["Nothing changed."] = "Ничего не изменилось.",
+        ["Out-of-combat samples are ready. Fight a creature to start combat sampling."] = "Замеры вне боя готовы. Вступите в бой с существом, чтобы начать боевые замеры.",
         ["Profile operation failed. Review the selection and try again."] = "Операция с профилем не выполнена. Проверьте выбор и повторите попытку.",
         ["Profile storage is full. Use %s to make room."] = "Хранилище профилей заполнено. Освободите место через «%s».",
         ["Profile storage is full."] = "Хранилище профилей заполнено.",
@@ -2181,6 +2183,7 @@ local LABELS_BY_LOCALE = {
         ["Profiles changed; review and try again."] = "Die Profile wurden geändert. Prüfe die Auswahl und versuche es erneut.",
         ["The current character cannot be forgotten."] = "Der aktuelle Charakter kann nicht vergessen werden.",
         ["Nothing changed."] = "Es wurde nichts geändert.",
+        ["Out-of-combat samples are ready. Fight a creature to start combat sampling."] = "Die Messungen außerhalb des Kampfes sind fertig. Kämpfe gegen eine Kreatur, um die Kampfmessung zu starten.",
         ["Profile operation failed. Review the selection and try again."] = "Der Profilvorgang ist fehlgeschlagen. Prüfe die Auswahl und versuche es erneut.",
         ["Profile storage is full. Use %s to make room."] = "Der Profilspeicher ist voll. Nutze „%s“, um Platz zu schaffen.",
         ["Profile storage is full."] = "Der Profilspeicher ist voll.",
@@ -2310,6 +2313,7 @@ local LABELS_BY_LOCALE = {
         ["Profiles changed; review and try again."] = "Les profils ont changé. Vérifiez la sélection et réessayez.",
         ["The current character cannot be forgotten."] = "Le personnage actuel ne peut pas être oublié.",
         ["Nothing changed."] = "Aucune modification.",
+        ["Out-of-combat samples are ready. Fight a creature to start combat sampling."] = "Les mesures hors combat sont terminées. Combattez une créature pour lancer les mesures en combat.",
         ["Profile operation failed. Review the selection and try again."] = "L’opération sur le profil a échoué. Vérifiez la sélection et réessayez.",
         ["Profile storage is full. Use %s to make room."] = "Le stockage des profils est plein. Utilisez « %s » pour libérer de la place.",
         ["Profile storage is full."] = "Le stockage des profils est plein.",
@@ -2440,6 +2444,7 @@ local LABELS_BY_LOCALE = {
         ["Profiles changed; review and try again."] = "Los perfiles han cambiado. Revisa la selección e inténtalo de nuevo.",
         ["The current character cannot be forgotten."] = "No se puede olvidar al personaje actual.",
         ["Nothing changed."] = "No se ha cambiado nada.",
+        ["Out-of-combat samples are ready. Fight a creature to start combat sampling."] = "Ya se han recogido las muestras fuera de combate. Lucha contra una criatura para iniciar el muestreo en combate.",
         ["Profile operation failed. Review the selection and try again."] = "La operación del perfil ha fallado. Revisa la selección e inténtalo de nuevo.",
         ["Profile storage is full. Use %s to make room."] = "El espacio para perfiles está lleno. Usa «%s» para liberar espacio.",
         ["Profile storage is full."] = "El espacio para perfiles está lleno.",
@@ -2568,6 +2573,7 @@ local LABELS_BY_LOCALE = {
         ["Profiles changed; review and try again."] = "Los perfiles cambiaron. Revisa la selección e inténtalo de nuevo.",
         ["The current character cannot be forgotten."] = "No se puede olvidar al personaje actual.",
         ["Nothing changed."] = "No se cambió nada.",
+        ["Out-of-combat samples are ready. Fight a creature to start combat sampling."] = "Las muestras fuera de combate están listas. Combate contra una criatura para iniciar el muestreo en combate.",
         ["Profile operation failed. Review the selection and try again."] = "La operación del perfil falló. Revisa la selección e inténtalo de nuevo.",
         ["Profile storage is full. Use %s to make room."] = "El espacio para perfiles está lleno. Usa «%s» para liberar espacio.",
         ["Profile storage is full."] = "El espacio para perfiles está lleno.",
@@ -2697,6 +2703,7 @@ local LABELS_BY_LOCALE = {
         ["Profiles changed; review and try again."] = "I profili sono cambiati. Controlla la selezione e riprova.",
         ["The current character cannot be forgotten."] = "Il personaggio attuale non può essere dimenticato.",
         ["Nothing changed."] = "Nessuna modifica.",
+        ["Out-of-combat samples are ready. Fight a creature to start combat sampling."] = "Le misurazioni fuori combattimento sono pronte. Affronta una creatura per iniziare le misurazioni in combattimento.",
         ["Profile operation failed. Review the selection and try again."] = "Operazione sul profilo non riuscita. Controlla la selezione e riprova.",
         ["Profile storage is full. Use %s to make room."] = "Lo spazio per i profili è esaurito. Usa «%s» per liberare spazio.",
         ["Profile storage is full."] = "Lo spazio per i profili è esaurito.",
@@ -2825,6 +2832,7 @@ local LABELS_BY_LOCALE = {
         ["Profiles changed; review and try again."] = "Os perfis mudaram. Revise a seleção e tente novamente.",
         ["The current character cannot be forgotten."] = "O personagem atual não pode ser esquecido.",
         ["Nothing changed."] = "Nada foi alterado.",
+        ["Out-of-combat samples are ready. Fight a creature to start combat sampling."] = "As amostras fora de combate estão prontas. Enfrente uma criatura para começar a coletar amostras em combate.",
         ["Profile operation failed. Review the selection and try again."] = "A operação do perfil falhou. Revise a seleção e tente novamente.",
         ["Profile storage is full. Use %s to make room."] = "O espaço para perfis está cheio. Use «%s» para liberar espaço.",
         ["Profile storage is full."] = "O espaço para perfis está cheio.",
@@ -2960,6 +2968,7 @@ local LABELS_BY_LOCALE = {
         ["Profiles changed; review and try again."] = "프로필이 변경되었습니다. 선택을 확인하고 다시 시도하세요.",
         ["The current character cannot be forgotten."] = "현재 캐릭터의 기록은 삭제할 수 없습니다.",
         ["Nothing changed."] = "변경된 내용이 없습니다.",
+        ["Out-of-combat samples are ready. Fight a creature to start combat sampling."] = "비전투 측정이 끝났습니다. 전투 측정을 시작하려면 몬스터와 싸우세요.",
         ["Profile operation failed. Review the selection and try again."] = "프로필 작업에 실패했습니다. 선택을 확인하고 다시 시도하세요.",
         ["Profile storage is full. Use %s to make room."] = "프로필 저장 공간이 가득 찼습니다. ‘%s’에서 공간을 확보하세요.",
         ["Profile storage is full."] = "프로필 저장 공간이 가득 찼습니다.",
@@ -3088,6 +3097,7 @@ local LABELS_BY_LOCALE = {
         ["Profiles changed; review and try again."] = "配置已发生变化。请检查选择后重试。",
         ["The current character cannot be forgotten."] = "无法移除当前角色的记录。",
         ["Nothing changed."] = "没有任何更改。",
+        ["Out-of-combat samples are ready. Fight a creature to start combat sampling."] = "非战斗采样已完成。与一个生物战斗即可开始战斗采样。",
         ["Profile operation failed. Review the selection and try again."] = "配置操作失败。请检查选择后重试。",
         ["Profile storage is full. Use %s to make room."] = "配置存储空间已满。请使用“%s”释放空间。",
         ["Profile storage is full."] = "配置存储空间已满。",
@@ -3216,6 +3226,7 @@ local LABELS_BY_LOCALE = {
         ["Profiles changed; review and try again."] = "設定檔已發生變更。請檢查選擇後再試一次。",
         ["The current character cannot be forgotten."] = "無法移除目前角色的記錄。",
         ["Nothing changed."] = "沒有任何變更。",
+        ["Out-of-combat samples are ready. Fight a creature to start combat sampling."] = "非戰鬥取樣已完成。與一個生物戰鬥即可開始戰鬥取樣。",
         ["Profile operation failed. Review the selection and try again."] = "設定檔操作失敗。請檢查選擇後再試一次。",
         ["Profile storage is full. Use %s to make room."] = "設定檔儲存空間已滿。請使用「%s」釋放空間。",
         ["Profile storage is full."] = "設定檔儲存空間已滿。",
@@ -9416,96 +9427,78 @@ local function RefreshArmorCache()
     cached.armorDR = raw
 end
 
--- Single-pass scan: computes avg %, worst %, and total repair cost across all slots.
--- WHY: C_TooltipInfo.GetInventoryItem returns a TooltipData table with a .repairCost
--- field. SetInventoryItem's 3rd return became a secret value in 12.x retail (after the
--- 10.0.2 tooltip rewrite) — issecretvalue filtered it out → cost was always 0.
--- TooltipUtil.SurfaceArgs unwraps secure args into plain Lua fields. This is the path
--- modern Blizzard UI and addons (Broker Durability Info, etc.) use.
+-- Both the cached HUD and the self-test classify the same live durability pair.
+function addon.durabilityRuntime.ReadSlot(slot)
+    local ok, current, maximum = pcall(GetInventoryItemDurability, slot)
+    if not ok then return "unavailable" end
+    if issecretvalue(current) or issecretvalue(maximum) then return "restricted" end
+    if current == nil and maximum == nil then
+        -- Empty and non-durable slots can look like equipment awaiting item data.
+        local itemID = addon.durabilityRuntime.GetUncachedEquippedItemID(slot)
+        if itemID then return "uncached", nil, nil, itemID end
+        return "empty"
+    end
+    if not SAFE_NUM.IsCleanFiniteNumber(current) or not SAFE_NUM.IsCleanFiniteNumber(maximum) then
+        return "invalid"
+    end
+    if current == 0 and maximum == 0 then return "empty" end
+    if maximum <= 0 or current < 0 or current > maximum then return "invalid" end
+    return "readable", (current / maximum) * 100, current < maximum
+end
+
+local function ReadSlotRepairCost(slot)
+    -- C_TooltipInfo exposes repairCost through TooltipData on both clients.
+    if not C_TooltipInfo or not C_TooltipInfo.GetInventoryItem then return nil, "unavailable" end
+    local okData, data = pcall(C_TooltipInfo.GetInventoryItem, "player", slot)
+    if not okData then return nil, "retryable" end
+    if issecretvalue(data) then return nil, "restricted" end
+    if type(data) ~= "table" then return nil, "retryable" end
+    if TooltipUtil and TooltipUtil.SurfaceArgs and not pcall(TooltipUtil.SurfaceArgs, data) then
+        return nil, "retryable"
+    end
+    local okCost, cost = pcall(function() return data.repairCost end)
+    if not okCost then return nil, "retryable" end
+    if issecretvalue(cost) then return nil, "restricted" end
+    if IsCleanNonNegativeNumber(cost) then return cost, "clean" end
+    return nil, "retryable"
+end
+
 local function ScanDurabilityAndCost()
     local sum, count, totalCost = 0, 0, 0
     local minPct
     local durabilityIncomplete = false
-    local repairCostPending = false
-    local repairCostRetryable = false
+    local repairCostPending, repairCostRetryable, repairCostRestricted = false, false, false
     local pendingItemSlots, pendingRepairItemSlots = {}, {}
     addon.durabilityRuntime.pendingItemSlots = pendingItemSlots
     addon.durabilityRuntime.pendingRepairItemSlots = pendingRepairItemSlots
     for slot = DURABILITY_SCAN.slotMin, DURABILITY_SCAN.slotMax do
         if not DURABILITY_SCAN.skipSlots[slot] then
-            -- WHY pcall fail-closed: a throwing durability API must not abort the
-            -- 19-slot scan. Route the failure into the restricted-read branch below,
-            -- which marks the aggregate incomplete and keeps the last complete values.
-            local okDur, cur, max = pcall(GetInventoryItemDurability, slot)
-            local curSecret, maxSecret
-            if not okDur then
-                curSecret, maxSecret = true, true
-            else
-                curSecret = issecretvalue(cur)
-                maxSecret = issecretvalue(max)
-            end
-            if curSecret or maxSecret then
-                durabilityIncomplete = true
-                if cached.showRepairCost then repairCostPending = true end
-            elseif cur ~= nil or max ~= nil then
-                -- Empty and non-durable inventory slots use the same nil/nil shape.
-                if SAFE_NUM.IsCleanFiniteNumber(cur) and SAFE_NUM.IsCleanFiniteNumber(max)
-                        and max > 0 and cur >= 0 and cur <= max then
-                    local pct = (cur / max) * 100
-                    sum = sum + pct
-                    count = count + 1
-                    if not minPct or pct < minPct then minPct = pct end
-                    if cached.showRepairCost and cur < max then
-                        local retrySlotRepair = false
-                        if C_TooltipInfo and C_TooltipInfo.GetInventoryItem then
-                            local okData, data = pcall(C_TooltipInfo.GetInventoryItem, "player", slot)
-                            if okData and data then
-                                local surfaced = true
-                                if TooltipUtil and TooltipUtil.SurfaceArgs then
-                                    surfaced = pcall(TooltipUtil.SurfaceArgs, data)
-                                end
-                                if surfaced then
-                                    local okCost, cost = pcall(function() return data.repairCost end)
-                                    if okCost and IsCleanNonNegativeNumber(cost) then
-                                        totalCost = totalCost + cost
-                                    else
-                                        repairCostPending = true
-                                        retrySlotRepair = not okCost or not issecretvalue(cost)
-                                    end
-                                else
-                                    repairCostPending = true
-                                    retrySlotRepair = true
-                                end
-                            else
-                                repairCostPending = true
-                                retrySlotRepair = true
-                            end
-                        else
-                            repairCostPending = true
-                        end
-                        if retrySlotRepair then
+            local state, pct, damaged, itemID = addon.durabilityRuntime.ReadSlot(slot)
+            if state == "readable" then
+                sum = sum + pct
+                count = count + 1
+                if not minPct or pct < minPct then minPct = pct end
+                if cached.showRepairCost and damaged then
+                    local cost, costState = ReadSlotRepairCost(slot)
+                    if costState == "clean" then
+                        totalCost = totalCost + cost
+                    else
+                        repairCostPending = true
+                        if costState == "restricted" then
+                            repairCostRestricted = true
+                        elseif costState == "retryable" then
                             repairCostRetryable = true
                             pendingRepairItemSlots[slot] = addon.durabilityRuntime.GetCleanEquippedItemID(slot)
                         end
                     end
-                elseif not (SAFE_NUM.IsCleanFiniteNumber(cur)
-                        and SAFE_NUM.IsCleanFiniteNumber(max) and cur == 0 and max == 0) then
-                    -- A clean 0/0 is a non-durable slot. Any other half/malformed pair
-                    -- makes the aggregate non-authoritative and may recover on an event.
-                    durabilityIncomplete = true
-                    if cached.showRepairCost then
-                        repairCostPending = true
-                        repairCostRetryable = true
-                    end
                 end
-            else
-                -- nil/nil also describes jewelry and empty slots. Only an explicitly
-                -- uncached equipped item proves that this aggregate is incomplete.
-                local pendingID = addon.durabilityRuntime.GetUncachedEquippedItemID(slot)
-                if pendingID then
-                    pendingItemSlots[slot] = pendingID
-                    durabilityIncomplete = true
-                    if cached.showRepairCost then repairCostPending = true end
+            elseif state ~= "empty" then
+                durabilityIncomplete = true
+                if state == "uncached" then pendingItemSlots[slot] = itemID end
+                if cached.showRepairCost then
+                    repairCostPending = true
+                    repairCostRestricted = repairCostRestricted or state == "restricted"
+                    repairCostRetryable = repairCostRetryable or state == "invalid"
                 end
             end
         end
@@ -9514,8 +9507,8 @@ local function ScanDurabilityAndCost()
     local durabilityCleanEmpty = count == 0 and not durabilityIncomplete
     local average = durabilityComplete and (sum / count) or nil
     local worst = durabilityComplete and minPct or nil
-    return average, worst, durabilityComplete,
-        totalCost, repairCostPending, repairCostRetryable, durabilityCleanEmpty
+    return average, worst, durabilityComplete, totalCost,
+        repairCostPending, repairCostRetryable, durabilityCleanEmpty, repairCostRestricted
 end
 
 -- WARNING: both durability and repairCost can lag after login. Durability APIs may
@@ -9526,8 +9519,9 @@ end
 -- timers harmless after a newer inventory/config event or retry step.
 
 local function RefreshDurabilityCache()
+    local inCombat = addon.profileRuntime.ReadCombatState()
     local avg, mn, durabilityComplete, cost,
-        repairCostPending, repairCostRetryable, durabilityCleanEmpty = ScanDurabilityAndCost()
+        repairCostPending, repairCostRetryable, durabilityCleanEmpty, repairCostRestricted = ScanDurabilityAndCost()
     if durabilityComplete then
         cached.durabilityLastCompleteAverage = avg
         cached.durabilityLastCompleteWorst = mn
@@ -9542,13 +9536,15 @@ local function RefreshDurabilityCache()
     cached.repairCostComplete = not repairCostPending
         and not (cached.showRepairCost and durabilityCleanEmpty)
     cached.repairCost = cached.repairCostComplete and cost or nil
+    cached.repairCostRestricted = repairCostRestricted
+    cached.repairCostCombat = inCombat
     durabilityDirty = false
 
     -- A cold/incomplete out-of-combat durability read must recover without requiring
     -- a vendor, gear swap, or combat transition. Restricted combat reads keep the
     -- last complete aggregate and rely on PLAYER_REGEN_ENABLED instead of polling.
     local durabilityRetryPending = (cached.showDurability or cached.showRepairCost)
-        and not durabilityComplete and addon.profileRuntime.ReadCombatState() == false
+        and not durabilityComplete and inCombat == false
     local repairRetryPending = repairCostPending and repairCostRetryable
     addon.durabilityRuntime.ScheduleRetry("durability", durabilityRetryPending)
     addon.durabilityRuntime.ScheduleRetry("repair", repairRetryPending)
@@ -21578,37 +21574,31 @@ function addon.selfTest.ClassifySelect(index, fn, ...)
 end
 
 function addon.selfTest.ProbeDurability()
-    local seenSecret = false
-    local seenUnknown = false
+    local count, sum, worst = 0, 0, 100
+    local incomplete = false
     for slot = DURABILITY_SCAN.slotMin, DURABILITY_SCAN.slotMax do
         if not DURABILITY_SCAN.skipSlots[slot] then
-            local ok, cur, max = pcall(GetInventoryItemDurability, slot)
-            if not ok then
-                seenUnknown = true
-            else
-                local secretOK, curSecret = pcall(issecretvalue, cur)
-                local secretOK2, maxSecret = pcall(issecretvalue, max)
-                if not secretOK or not secretOK2 or curSecret or maxSecret then
-                    seenSecret = true
-                end
+            local state, pct = addon.durabilityRuntime.ReadSlot(slot)
+            if state == "restricted" then return 1, nil end
+            if state == "readable" then
+                count, sum, worst = count + 1, sum + pct, math.min(worst, pct)
+            elseif state ~= "empty" then
+                incomplete = true
             end
         end
     end
-    if seenSecret then return 1, nil end
-    if cached.durabilityComplete == true and addon.IsCleanFiniteNumber(cached.durabilityValue) then
-        return 0, cached.durabilityValue
-    end
-    if seenUnknown then return 2, nil end
-    return 0, nil
+    if incomplete then return 2, nil end
+    if count == 0 then return 0, nil end
+    return 0, cached.useWorstDurability and worst or sum / count
 end
 
 function addon.selfTest.ProbeRepair()
-    if cached.repairCostComplete == true and addon.IsCleanFiniteNumber(cached.repairCost)
-        and cached.repairCost >= 0 then
+    if not cached.showRepairCost or durabilityDirty then return 2, nil end
+    local inCombat = addon.profileRuntime.ReadCombatState()
+    if inCombat == nil or cached.repairCostCombat ~= inCombat then return 2, nil end
+    if cached.repairCostRestricted then return 1, nil end
+    if cached.repairCostComplete == true and IsCleanNonNegativeNumber(cached.repairCost) then
         return 0, cached.repairCost
-    end
-    if cached.showRepairCost == true and addon.selfTest.ProbeDurability() == 1 then
-        return 1, nil
     end
     return 2, nil
 end
@@ -21728,7 +21718,8 @@ function addon.selfTest.TakeSample(inCombat, isRecovery)
     end
     if sampleSecret then addon.selfTest.secretsSeen = addon.selfTest.secretsSeen + 1 end
     addon.selfTest.samples[#addon.selfTest.samples + 1] = {
-        seq = addon.selfTest.seq, combat = inCombat == true, err = errDelta, rows = rows,
+        seq = addon.selfTest.seq, combat = inCombat == true, recovery = isRecovery == true,
+        err = errDelta, rows = rows,
     }
     if isRecovery then
         addon.selfTest.recoveryCount = addon.selfTest.recoveryCount + 1
@@ -21955,7 +21946,11 @@ function addon.selfTest.OnTick()
         if addon.selfTest.oocCount >= addon.selfTest.oocTarget then
             addon.selfTest.state = "await-combat"
             addon.selfTest.StopTicker()
-            PrintMsg("selftest: out-of-combat samples done. Hit a training dummy to start combat sampling.")
+            if addon.forever.enabled then
+                PrintMsg("selftest: " .. L("Out-of-combat samples are ready. Fight a creature to start combat sampling."))
+            else
+                PrintMsg("selftest: out-of-combat samples done. Hit a training dummy to start combat sampling.")
+            end
         end
         return
     end
@@ -22029,7 +22024,8 @@ end
 function addon.selfTest.Finish(reason)
     addon.selfTest.StopTicker()
     if reason == "timeout" then addon.selfTest.timeout = true end
-    if reason == "ok" and addon.selfTest.recoveryCount >= addon.selfTest.recoveryNeeded then
+    if reason == "ok" and addon.selfTest.combatCount > 0
+        and addon.selfTest.recoveryCount >= addon.selfTest.recoveryNeeded then
         addon.selfTest.recovered = true
     end
     addon.selfTest.BuildReport()
@@ -22187,12 +22183,8 @@ function addon.selfTest.BuildPayload()
             lines[#lines + 1] = "row." .. short .. "=" .. cell
         end
     end
-    local shown = 0
-    local omitted = 0
-    local size = 0
-    for _, header in ipairs(lines) do size = size + #header + 1 end
-    local budget = addon.selfTest.payloadBudget
-    if not addon.IsCleanFiniteNumber(budget) then budget = 16000 end
+    local sampleLines, recoveryIndices = {}, {}
+    local firstCombat, lastCombat
     if type(report.samples) == "table" then
         for _, sample in ipairs(report.samples) do
             if type(sample) == "table" and type(sample.rows) == "table" then
@@ -22206,20 +22198,40 @@ function addon.selfTest.BuildPayload()
                     end
                 end
                 local combatFlag = sample.combat == true and "1" or "0"
-                local line = "s." .. count(sample.seq) .. " c=" .. combatFlag
+                local index = #sampleLines + 1
+                sampleLines[index] = "s." .. count(sample.seq) .. " c=" .. combatFlag
                     .. " e=" .. count(sample.err) .. " " .. table.concat(parts, " ")
-                if size + #line + 1 > budget then
-                    omitted = omitted + 1
-                else
-                    lines[#lines + 1] = line
-                    size = size + #line + 1
-                    shown = shown + 1
+                if sample.recovery == true then
+                    recoveryIndices[#recoveryIndices + 1] = index
+                elseif sample.combat == true then
+                    firstCombat = firstCombat or index
+                    lastCombat = index
                 end
             end
         end
     end
+    local size = #("shown=" .. #sampleLines .. "\nomitted=" .. #sampleLines)
+    for _, header in ipairs(lines) do size = size + #header + 1 end
+    local budget = addon.selfTest.payloadBudget
+    if not addon.IsCleanFiniteNumber(budget) then budget = 16000 end
+    local included, shown = {}, 0
+    local function include(index)
+        if not index or included[index] then return end
+        local bytes = #sampleLines[index] + 1
+        if size + bytes > budget then return end
+        included[index], shown, size = true, shown + 1, size + bytes
+    end
+    -- Reserve the final recovery streak and combat boundaries before filling from the start.
+    local firstRecovery = math.max(1, #recoveryIndices - addon.selfTest.recoveryNeeded + 1)
+    for index = #recoveryIndices, firstRecovery, -1 do include(recoveryIndices[index]) end
+    include(firstCombat)
+    include(lastCombat)
+    for index = 1, #sampleLines do include(index) end
+    for index, line in ipairs(sampleLines) do
+        if included[index] then lines[#lines + 1] = line end
+    end
     add("shown", count(shown))
-    add("omitted", count(omitted))
+    add("omitted", count(#sampleLines - shown))
     return table.concat(lines, "\n")
 end
 
@@ -22269,12 +22281,17 @@ addon.selfTest.siblingAddons = {
 }
 
 function addon.selfTest.ReadAddonLoaded(addonName)
-    if type(C_AddOns) ~= "table" or type(C_AddOns.IsAddOnLoaded) ~= "function" then
+    local callback
+    if addon.dbRuntime.IsCleanTable(C_AddOns) then
+        callback = rawget(C_AddOns, "IsAddOnLoaded")
+    elseif not addon.dbRuntime.IsCleanType(C_AddOns, "nil") then
         return nil
     end
-    local ok, loaded = pcall(C_AddOns.IsAddOnLoaded, addonName)
-    if not ok or type(loaded) ~= "boolean" then return nil end
-    return loaded
+    if addon.dbRuntime.IsCleanType(callback, "nil") then callback = _G.IsAddOnLoaded end
+    if not addon.dbRuntime.IsCleanType(callback, "function") then return nil end
+    -- The first value also includes addons that are still loading.
+    local ok, _, loaded = pcall(callback, addonName)
+    if ok and addon.dbRuntime.IsCleanType(loaded, "boolean") then return loaded end
 end
 
 function addon.selfTest.ReadAddonVersion(addonName)

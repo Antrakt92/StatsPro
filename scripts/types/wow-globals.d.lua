@@ -68,6 +68,9 @@ function GetInventoryItemID(unit, slot) end
 ---@type StatsProItemAPI?
 C_Item = nil
 
+---@type (fun(addonName: string): boolean, boolean)?
+IsAddOnLoaded = nil
+
 ---@class (exact) StatsProCurrencyAPI
 ---@field GetCoinTextureString fun(amount: number, fontHeight: number): string
 

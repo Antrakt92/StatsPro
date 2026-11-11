@@ -6340,7 +6340,7 @@ do
     -- Sibling loaded with a numeric report.
     local allEnv = loadStatsPro("enUS", {})
     fireEvent("selftest.all.loaded_pew", allEnv, "PLAYER_ENTERING_WORLD")
-    allEnv.C_AddOns.IsAddOnLoaded = function(_) return true end
+    allEnv.C_AddOns.IsAddOnLoaded = function(_) return true, true end
     allEnv.DoYouNeedItSelfTest = { version = 1, finishedAt = 1720000000 }
     slash("selftest.all.loaded", allEnv, "selftest all")
     eq("selftest.all.loaded_line", printContains(allEnv, "DoYouNeedIt loaded 9.8.7, report 1720000000"), true)
@@ -6350,7 +6350,7 @@ do
     -- Unrecognized shape never fails.
     local allEnv = loadStatsPro("enUS", {})
     fireEvent("selftest.all.shape_pew", allEnv, "PLAYER_ENTERING_WORLD")
-    allEnv.C_AddOns.IsAddOnLoaded = function(_) return true end
+    allEnv.C_AddOns.IsAddOnLoaded = function(_) return true, true end
     allEnv.ApplicantScoutSelfTest = { version = 1, finishedAt = {} }
     slash("selftest.all.unrecognized", allEnv, "selftest all")
     eq("selftest.all.unrecognized_line", printContains(allEnv, "ApplicantScout loaded 9.8.7, report (unrecognized shape)"), true)
@@ -6360,7 +6360,7 @@ do
     -- String finishedAt passes through verbatim.
     local allEnv = loadStatsPro("enUS", {})
     fireEvent("selftest.all.string_pew", allEnv, "PLAYER_ENTERING_WORLD")
-    allEnv.C_AddOns.IsAddOnLoaded = function(_) return true end
+    allEnv.C_AddOns.IsAddOnLoaded = function(_) return true, true end
     allEnv.ApplicantScoutSelfTest = { version = 1, finishedAt = "2026-09-26" }
     slash("selftest.all.string_date", allEnv, "selftest all")
     eq("selftest.all.string_line", printContains(allEnv, "report 2026-09-26"), true)
@@ -6370,7 +6370,7 @@ do
     -- Explicitly not loaded; missing client API degrades to unknown.
     local allEnv = loadStatsPro("enUS", {})
     fireEvent("selftest.all.absent_pew", allEnv, "PLAYER_ENTERING_WORLD")
-    allEnv.C_AddOns.IsAddOnLoaded = function(_) return false end
+    allEnv.C_AddOns.IsAddOnLoaded = function(_) return false, false end
     slash("selftest.all.absent", allEnv, "selftest all")
     eq("selftest.all.absent_line", printContains(allEnv, "DoYouNeedIt not loaded 9.8.7, no report yet"), true)
     allEnv.C_AddOns = nil

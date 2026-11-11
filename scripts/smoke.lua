@@ -7504,6 +7504,7 @@ do
     local restricted = true
     local cleanRatings = {}
     local conversionArgs = {}
+    local restrictedConversionCalls = 0
     local targetHoverFixture = makeArchonV2Fixture("2026-05-15")
     setArchonFixtureTargets(targetHoverFixture, "mythicPlusCurrent", "MAGE", "frost",
         { crit = 1000, haste = 600, mastery = 900, versatility = 500 })
@@ -7545,6 +7546,7 @@ do
         end,
         getCombatRatingBonusForCombatRatingValue = function(_, value)
             if rawequal(value, secretRating) then
+                restrictedConversionCalls = restrictedConversionCalls + 1
                 error("hostile secret rating reached conversion", 0)
             end
             conversionArgs[#conversionArgs + 1] = value
@@ -7677,6 +7679,10 @@ do
                 #archonTooltip(hoverEnv).lines, 6)
             eq("render.target_hover_lifecycle.live_restricted.notice." .. index,
                 tooltipTextRow(archonTooltip(hoverEnv), "Live values; comparison unavailable").left, "Live values; comparison unavailable")
+            if meta.statKey == "haste" then
+                eq("render.target_hover_lifecycle.live_restricted.haste_target_rating_only",
+                    tooltipRowValue(tooltipNumericRow(archonTooltip(hoverEnv), 1)), tostring(meta.target))
+            end
         end
     end
     local cachedAfterRestriction = hoverTest.archonComparisonCache()
@@ -7709,6 +7715,7 @@ do
         hoverEnv.StatsProDB, savedAfterLoad)
     check("render.target_hover_lifecycle.conversion_exercised",
         #conversionArgs >= 8, "expected target conversion calls from both tooltip states")
+    eq("render.target_hover_lifecycle.protected_rating_never_converted", restrictedConversionCalls, 0)
     for index, value in ipairs(conversionArgs) do
         check("render.target_hover_lifecycle.clean_conversion_arg." .. index,
             type(value) == "number", "non-numeric conversion argument")

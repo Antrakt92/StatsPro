@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.23.3 - 12-Nov-2026 — Movement speed and profile fixes
+
+- Keep the swim-speed reading briefly when jumping out of water. Preserve the percent sign when a percentage stat is unavailable.
+- Apply class-appropriate starter rows when the game reports your class late, while preserving customized profiles.
+- Keep HUD panels on screen after resizing and preserve active font previews when a saved font becomes available. Retry enabling the shared fonts if the game fails to save the change.
+- Show deferred self-test reports after combat and keep them available when changing profiles or closing a profile dialog.
+
 ## 1.23.2 - 11-Nov-2026 — Character profiles and HUD fixes
 
 - Use class-appropriate starter rows on first login and after a reset. Preserve character profile details and accept older Forever profile codes.

@@ -187,14 +187,22 @@ function Get-CommitRecordsSinceTag {
     $result = Invoke-Git -Arguments @(
         "log",
         "--no-merges",
-        "--format=%s%n%b%x1e",
+        "--format=%H%n%s%n%b%x1e",
         "$PreviousTag..HEAD"
     )
     $raw = $result.Output -join "`n"
     return @(
         $raw -split [regex]::Escape($separator) |
             ForEach-Object { $_.Trim() } |
-            Where-Object { $_ }
+            Where-Object { $_ } |
+            ForEach-Object {
+                $commit, $message = $_ -split "`n", 2
+                # Classify the reviewed, already-pushed font notice fix without rewriting it.
+                if ($commit -ceq "cd6c45196b2a33da766f026c65bf0d7c29ae9844") {
+                    $message = "fix: $message"
+                }
+                $message
+            }
     )
 }
 

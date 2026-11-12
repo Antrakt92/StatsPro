@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.24.4 - 12-Nov-2026 — Archon and HUD recovery
+
+- Refresh bundled Mythic+ and raid targets from Archon data checked on 12 November.
+- Keep Retail profiles and stat samples in sync when the game reports a specialization change late. Improve Archon Haste and Mastery comparisons.
+- Recover HUD positions, saved fonts, and deferred self-test reports without interrupting active dialogs or previews.
+
 ## 1.24.3 - 11-Nov-2026 — Profile sharing and HUD fixes
 
 - Preserve panel positions when sharing a profile between screen sizes, and export the preferred font from older profiles.

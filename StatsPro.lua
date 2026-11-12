@@ -11667,6 +11667,18 @@ function addon.critRuntime.OnPlayerSpecChanged()
     runtime.specRecheckDelay = 0.1
 end
 
+function addon.critRuntime.ReconcileObservedSpec(force)
+    local crit = addon.critRuntime
+    local previousSpecID = crit.specID
+    local specID = crit.RefreshSpecIdentity(force)
+    if not previousSpecID or not specID or specID == previousSpecID then return end
+    local profile = addon.profileRuntime
+    -- A fresh change can arrive after the first profile callback or its retry budget.
+    if specID ~= profile.activeSpecID and not profile.scheduledToken then
+        profile.RequestResolution(false)
+    end
+end
+
 local function BuildOffensiveLines(labels, ratings, values, targetRows)
     if addon.forever.enabled then
         if not cached.showOffensive then return labels, ratings, values end
@@ -11678,7 +11690,7 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
     -- entirely. Without this guard the percent-only branch of FmtRatingPct would still
     -- fire (single-column routing), producing visible percent rows and ignoring intent.
     if not (cached.showRating or cached.showPercentage) then return labels, ratings, values end
-    addon.critRuntime.RefreshSpecIdentity(false)
+    addon.critRuntime.ReconcileObservedSpec(false)
     local specUnsettled = addon.critRuntime.HasUnsettledSpecIdentity()
     local cs = cached.colorStrings
 
@@ -12208,14 +12220,7 @@ tickerFrame:SetScript("OnUpdate", function(self, elapsed)
         crit.specRecheckDelay = crit.specRecheckDelay - elapsed
         if crit.specRecheckDelay <= 0 then
             crit.specRecheckDelay = nil
-            local previousSpecID = crit.specID
-            local specID = crit.RefreshSpecIdentity(true)
-            local profile = addon.profileRuntime
-            -- The earlier profile callback may have completed on the old ID.
-            if specID and specID ~= previousSpecID and specID ~= profile.activeSpecID
-                and not profile.pendingResolution then
-                profile.RequestResolution(false)
-            end
+            crit.ReconcileObservedSpec(true)
         end
     end
     timeSinceLastUpdate = timeSinceLastUpdate + elapsed

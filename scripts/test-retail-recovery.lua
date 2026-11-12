@@ -933,6 +933,31 @@ if not forever then
     env.__flushTimers(0)
     assert(test.profileRuntimeState().activeSpecID == 62,
         "the same late confirmation refreshes the active profile context")
+
+    restricted, ratingReady = false, true
+    assert(addon:RunUpdateStatsSafe() and test.versatilityState().total == 12)
+    env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(0)
+    specReady = false
+    ticker.scripts.OnUpdate(ticker, 0.11)
+    assert(test.profileRuntimeState().activeSpecID == 62)
+    spec, specReady, restricted, ratingReady = 63, true, true, false
+    assert(addon:RunUpdateStatsSafe())
+    env.__flushTimers(0)
+    assert(test.profileRuntimeState().activeSpecID == 63 and test.versatilityState().total == nil,
+        "a render that first sees the new ID updates the profile after an unreadable recheck")
+
+    specReady = false
+    env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__flushTimers(1)
+    local exhausted = test.profileRuntimeState()
+    assert(exhausted.pendingResolution and exhausted.contextRetryCount == 3
+        and not exhausted.contextRetryScheduled, "the unreadable context exhausts its bounded retries")
+    spec, specReady = 62, true
+    ticker.scripts.OnUpdate(ticker, 0.11)
+    env.__flushTimers(0)
+    assert(test.profileRuntimeState().activeSpecID == 62 and not test.profileRuntimeState().pendingResolution,
+        "a newly readable identity resumes exhausted profile resolution")
     print("Retail spec-scoped restricted stat recovery regressions passed")
 end
 

@@ -12208,7 +12208,14 @@ tickerFrame:SetScript("OnUpdate", function(self, elapsed)
         crit.specRecheckDelay = crit.specRecheckDelay - elapsed
         if crit.specRecheckDelay <= 0 then
             crit.specRecheckDelay = nil
-            crit.RefreshSpecIdentity(true)
+            local previousSpecID = crit.specID
+            local specID = crit.RefreshSpecIdentity(true)
+            local profile = addon.profileRuntime
+            -- The earlier profile callback may have completed on the old ID.
+            if specID and specID ~= previousSpecID and specID ~= profile.activeSpecID
+                and not profile.pendingResolution then
+                profile.RequestResolution(false)
+            end
         end
     end
     timeSinceLastUpdate = timeSinceLastUpdate + elapsed

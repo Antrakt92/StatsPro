@@ -930,6 +930,9 @@ if not forever then
     value, state = addon.GetBestCritChance()
     assert(value == nil and state == "restricted" and test.versatilityState().total == nil,
         "a spec change after the zero-delay queue still invalidates the old stat caches")
+    env.__flushTimers(0)
+    assert(test.profileRuntimeState().activeSpecID == 62,
+        "the same late confirmation refreshes the active profile context")
     print("Retail spec-scoped restricted stat recovery regressions passed")
 end
 

@@ -116,7 +116,12 @@ local function createCoordinator()
         }
         if state == "acknowledged" then acknowledged = true end
         if active and (active.owner == owner or (state == "acknowledged" and not active.manual)) then
-            dismissPresentation()
+            -- A show callback can register a replacement before making its window visible.
+            if active.opening then
+                active.dismissPending = true
+            else
+                dismissPresentation()
+            end
         end
         persistAcknowledgement()
         return true
@@ -131,7 +136,7 @@ local function createCoordinator()
             function() return suspend(token) end)
         if active == token then
             token.opening = false
-            if shown then
+            if shown and not token.dismissPending then
                 if token.confirmPending then confirm(token) end
                 return true, owner
             end
@@ -148,7 +153,9 @@ local function createCoordinator()
         local entry = participants[owner]
         dispatching = true
         local shown, host = false, nil
-        if callTrue(entry.canShow) then shown, host = present(owner, entry, true) end
+        if callTrue(entry.canShow) and participants[owner] == entry then
+            shown, host = present(owner, entry, true)
+        end
         dispatching = false
         return shown, host
     end
@@ -161,12 +168,12 @@ local function createCoordinator()
         if acknowledged then dispatching = false; return false end
         for _, owner in ipairs(owners()) do
             local entry = participants[owner]
-            if entry.state == nil and callTrue(entry.canShow) then
+            if entry.state == nil and callTrue(entry.canShow) and participants[owner] == entry and not acknowledged then
                 local shown, host = present(owner, entry, false)
                 if shown then dispatching = false; return true, host end
-                -- A real acknowledgement can arrive through a late registration.
-                if acknowledged then dispatching = false; return false end
             end
+            -- A real acknowledgement can arrive through a readiness or show callback.
+            if acknowledged then break end
         end
         dispatching = false
         return false

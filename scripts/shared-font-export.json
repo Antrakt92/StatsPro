@@ -3,7 +3,7 @@
   "catalogRevision": "8b1356da7399dd47e97fd22feed6b45e77f6767e13558fddb2fce91776559310",
   "modules": {
     "AntraktFontCatalog.lua": "16d19e3ec41f4d7a7ed65753aa9e0c3b0e0192b835302ed5d2d4fc36d5f474b2",
-    "AntraktFontNotice.lua": "541170c8311c2a5e8e7271521533039d670a3797b79528df23fa854e7ef2ecbf"
+    "AntraktFontNotice.lua": "ad8f6e15298a34e89facc577ca6c9163e47c64846c3b02354ae9550b687da52a"
   },
   "baseline": {
     "id": "antrakt-ui-sans",

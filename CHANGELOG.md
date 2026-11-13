@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.24.5 - 13-Nov-2026 — Archon target refresh
+
+- Refresh Mythic+ and raid stat targets using Archon data checked on 13 November.
+
 ## 1.24.4 - 12-Nov-2026 — Archon and HUD recovery
 
 - Refresh bundled Mythic+ and raid targets from Archon data checked on 12 November.

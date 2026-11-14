@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.23.4 - 14-Nov-2026 — Combat stat display
+
+- When the game blocks a live reading in combat, show the last pre-combat value with a tilde (~) for Hit, Attack Power, Ranged Haste and Defense.
+- Keep updating these stats whenever a live value can be displayed. Refresh the stored readings between fights.
+
 ## 1.23.3 - 12-Nov-2026 — Movement speed and profile fixes
 
 - Keep the swim-speed reading briefly when jumping out of water. Preserve the percent sign when a percentage stat is unavailable.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.24.0 - 14-Nov-2026 — Live attack power and steadier combat HUD
+
+- Show current melee attack power in combat when the game supplies a verified value. Show the last pre-combat reading in parentheses when a live total is unavailable.
+- Keep protected values from widening the HUD or creating space for an empty column.
+- Give the repair row enough room for its coin icons. Keep the last complete durability percentage and wait for a complete repair estimate when an equipped item temporarily stops reporting durability.
+
 ## 1.23.4 - 14-Nov-2026 — Combat stat display
 
 - When the game blocks a live reading in combat, show the last pre-combat value with a tilde (~) for Hit, Attack Power, Ranged Haste and Defense.

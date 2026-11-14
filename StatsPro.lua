@@ -10676,12 +10676,12 @@ end
 -- Mitigation: keep last non-secret measurement separate from the conservative fallback
 -- used by this render. The second return value is always the last CLEAN measurement;
 -- fallback geometry must not masquerade as clean cache state across content changes.
-local function MeasuredOrCached(fs, current_cache, method, fallback)
+local function MeasuredOrCached(fs, current_cache, method, fallback, keepKnownSize)
     local v = fs[method](fs)
     if v and not issecretvalue(v) then
         return v, v
     end
-    if fallback and (not current_cache or current_cache < fallback) then
+    if fallback and (not current_cache or (not keepKnownSize and current_cache < fallback)) then
         return fallback, current_cache
     end
     return current_cache, current_cache
@@ -10740,16 +10740,21 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     local labelH, ratingH, valueH
     if hasRows then
         local minTextH = lineCount * effectiveFontSize
-        ratingW, self.cachedRatingW = MeasuredOrCached(
-            self.ratingText, self.cachedRatingW, "GetStringWidth",
-            effectiveFontSize * Panel.SECRET_NUMERIC_WIDTH_UNITS)
-        valueW, self.cachedValueW = MeasuredOrCached(
-            self.valueText, self.cachedValueW, "GetStringWidth",
-            effectiveFontSize * Panel.SECRET_NUMERIC_WIDTH_UNITS)
-        ratingH, self.cachedRatingH = MeasuredOrCached(
-            self.ratingText, self.cachedRatingH, "GetStringHeight", minTextH)
-        valueH, self.cachedValueH = MeasuredOrCached(
-            self.valueText, self.cachedValueH, "GetStringHeight", minTextH)
+        -- An empty Forever column can report protected geometry after a combat update.
+        if not addon.forever.enabled or issecretvalue(ratingStr) or (ratingStr and ratingStr ~= "") then
+            ratingW, self.cachedRatingW = MeasuredOrCached(
+                self.ratingText, self.cachedRatingW, "GetStringWidth",
+                effectiveFontSize * Panel.SECRET_NUMERIC_WIDTH_UNITS, addon.forever.enabled)
+            ratingH, self.cachedRatingH = MeasuredOrCached(
+                self.ratingText, self.cachedRatingH, "GetStringHeight", minTextH)
+        end
+        if not addon.forever.enabled or issecretvalue(valueStr) or (valueStr and valueStr ~= "") then
+            valueW, self.cachedValueW = MeasuredOrCached(
+                self.valueText, self.cachedValueW, "GetStringWidth",
+                effectiveFontSize * Panel.SECRET_NUMERIC_WIDTH_UNITS, addon.forever.enabled)
+            valueH, self.cachedValueH = MeasuredOrCached(
+                self.valueText, self.cachedValueH, "GetStringHeight", minTextH)
+        end
         if not labelsHidden then
             local labelWidthUnits = labelStyle == "short"
                 and Panel.SECRET_SHORT_LABEL_WIDTH_UNITS
@@ -11005,6 +11010,10 @@ function Panel:ApplyStyle(font, size, force, requestedOutlineStyle)
     self.cachedValueH = nil
     self.cachedRepairH = nil
     self.cachedRepairLabelH = nil
+    if addon.forever.enabled then
+        self.cachedRatingW = nil
+        self.cachedValueW = nil
+    end
     self.heightDirty = true
     return true, effectiveFont, outlineStyle, effectiveFlags
 end
@@ -12156,9 +12165,12 @@ end
 
 local function RenderBucket(panel, bucket)
     if BucketHasContent(bucket) then
+        -- In dual-column mode Forever places all numbers in the value column.
+        local ratingText = addon.forever.enabled and IsDualColMode() and ""
+            or JoinLinesSecretSafe(bucket.ratings)
         panel:SetTextSafe(
             JoinLabelsCol(bucket.labels, cached.labelStyle),
-            JoinLinesSecretSafe(bucket.ratings),
+            ratingText,
             JoinValuesCol(bucket.values),
             #bucket.labels,
             bucket.repairStr,

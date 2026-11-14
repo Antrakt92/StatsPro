@@ -4686,10 +4686,10 @@ function SAFE_NUM.FormatDisplayNumber(value, cleanFormat, secretSuffix)
         end
         if not _G.C_StringUtil
             or type(_G.C_StringUtil.RoundToNearestString) ~= "function" then
-            return "?", true
+            return "?", true, true
         end
         local ok, text = pcall(_G.C_StringUtil.RoundToNearestString, value)
-        if not ok or type(text) ~= "string" then return "?", true end
+        if not ok or type(text) ~= "string" then return "?", true, true end
         return text .. (secretSuffix or ""), true
     end
     if not SAFE_NUM.IsCleanFiniteNumber(value) then return nil, false end
@@ -11396,10 +11396,10 @@ end
 -- Other unavailable/invalid values stay nil so callers can preserve intentional
 -- unsupported-API and pre-login row suppression.
 function SAFE_NUM.FormatColorNumber(colorHex, value, format, secretSuffix)
-    local text, renderable = SAFE_NUM.FormatDisplayNumber(
+    local text, renderable, placeholder = SAFE_NUM.FormatDisplayNumber(
         value, format, secretSuffix)
     if not renderable then return nil end
-    return "|cff" .. colorHex .. text .. "|r"
+    return "|cff" .. colorHex .. text .. "|r", placeholder
 end
 
 -- Compose colored "X.X%" string. 5-callsite hot path; centralizes precision.
@@ -11553,8 +11553,9 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
                     inCombat = addon.profileRuntime.ReadCombatState()
                     if addon.hudPresets.combatState == true then inCombat = true end
                 end
-                if inCombat == false and state == "clean" then
-                    addon.forever.preCombatValues[rowKey] = value
+                if inCombat == false then
+                    -- A newer unreadable sample invalidates the old snapshot.
+                    addon.forever.preCombatValues[rowKey] = state == "clean" and value or nil
                 elseif inCombat == true then
                     fallback = addon.forever.preCombatValues[rowKey]
                 end
@@ -11580,12 +11581,9 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
                     and addon.forever.RateSuffix(cached.activeLabelsLocale, definition.rateSeconds) or ""
                 local unknownSuffix = (definition.kind == "movement" or definition.kind == "percent")
                     and "%" or suffix
-                local text
-                if state == "unknown" and fallback ~= nil then
-                    local format = definition.kind == "percent" and "~%.2f%%" or "~%d"
-                    text = SAFE_NUM.FormatColorNumber(valueColor, fallback, format)
-                elseif state == "unknown" then
-                    text = "|cff" .. valueColor .. "?" .. unknownSuffix .. "|r"
+                local text, placeholder
+                if state == "unknown" then
+                    placeholder = true
                 elseif state == "secret" and definition.restrictedMP5FallbackLabel then
                     local formatted = addon.forever.FormatRestrictedMP5(value)
                     if type(formatted) == "string" then
@@ -11603,10 +11601,17 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
                         text = "|cff" .. valueColor .. formatted .. "|r"
                     end
                 elseif definition.kind == "percent" then
-                    text = SAFE_NUM.FormatColorNumber(valueColor, value, "%.2f%%", "%")
+                    text, placeholder = SAFE_NUM.FormatColorNumber(valueColor, value, "%.2f%%", "%")
                 else
                     local format = definition.format or (group == "utility" and "%.2f" or "%d")
-                    text = SAFE_NUM.FormatColorNumber(valueColor, value, format .. suffix, suffix)
+                    text, placeholder = SAFE_NUM.FormatColorNumber(valueColor, value, format .. suffix, suffix)
+                end
+                if placeholder and definition.usePreCombatValue then
+                    text = nil
+                    if fallback ~= nil then
+                        local format = definition.kind == "percent" and "~%.2f%%" or "~%d"
+                        text = SAFE_NUM.FormatColorNumber(valueColor, fallback, format)
+                    end
                 end
                 local rCol, vCol = RouteValueOnly(text or ("|cff" .. valueColor .. "?" .. unknownSuffix .. "|r"))
                 PushRow(labels, ratings, values, FormatLabel(color, label), rCol, vCol)
@@ -12307,6 +12312,7 @@ addon.profileRuntime.CompleteBootstrap = function()
 end
 
 local function OnPlayerEnteringWorld()
+    if addon.forever.enabled then addon.forever.preCombatValues = {} end
     SAFE_NUM.ReopenScaledFormatterRetries()
     if not addon.critRuntime.specRecheckDelay then addon.critRuntime.RefreshSpecIdentity(true) end
     if not isLoaded then
@@ -12421,6 +12427,7 @@ local EVENT_HANDLERS = {
     -- WHY: lock state is stored in cached.isLocked and read by OnDragStart. Mouse stays
     -- enabled permanently so right-click Settings works even while locked.
     PLAYER_REGEN_ENABLED        = function()
+        if addon.forever.enabled then addon.forever.preCombatValues = {} end
         SAFE_NUM.ReopenScaledFormatterRetries()
         cached.repairCostCombat = nil
         addon.hudPresets.combatState = false

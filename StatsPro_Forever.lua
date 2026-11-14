@@ -258,7 +258,7 @@ Row("offensive", "OffhandHit", "Offhand Hit", Hit("CR_HIT_MELEE", "GetOffhandHit
 Row("offensive", "RangedHit", "Ranged Hit", Hit("CR_HIT_RANGED", "GetRangedHitModifier"), "percent").usePreCombatValue = true
 Row("offensive", "SpellHit", "Spell Hit", Hit("CR_HIT_SPELL", "GetSpellHitModifier"), "percent").usePreCombatValue = true
 Row("offensive", "MeleeHaste", "Melee Haste", Scalar("GetMeleeHaste", 1), "percent", "haste")
-Row("offensive", "RangedHaste", "Ranged Haste", RangedHaste, "percent", "haste")
+Row("offensive", "RangedHaste", "Ranged Haste", RangedHaste, "percent", "haste").usePreCombatValue = true
 Row("offensive", "SpellHaste", "Spell Haste", Scalar("UnitSpellHaste", 1, "player"), "percent", "haste")
 Row("offensive", "AttackPower", "Attack Power", AttackPower("UnitAttackPower")).usePreCombatValue = true
 Row("offensive", "RangedAttackPower", "Ranged Attack Power", AttackPower("UnitRangedAttackPower")).usePreCombatValue = true
@@ -272,7 +272,7 @@ for index, name in ipairs({ "Mainhand", "Offhand", "Ranged" }) do
     Row("offensive", name .. "Expertise", name .. " Expertise", Scalar("GetExpertise", index), "percent")
 end
 Row("defensive", "Armor", "Armor", Scalar("UnitArmor", 2, "player"), "number", "armor")
-Row("defensive", "Defense", "Defense", Nonnegative(Sum("UnitDefenseSkill", 2, "player")))
+Row("defensive", "Defense", "Defense", Nonnegative(Sum("UnitDefenseSkill", 2, "player"))).usePreCombatValue = true
 Row("defensive", "Dodge", "Dodge", Scalar("GetDodgeChance", 1), "percent", "dodge")
 Row("defensive", "Parry", "Parry", Scalar("GetParryChance", 1), "percent", "parry")
 Row("defensive", "Block", "Block", Scalar("GetBlockChance", 1), "percent", "block")

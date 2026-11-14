@@ -53,7 +53,8 @@ local env, addon, test = fixtures.loadStatsPro("enUS", {
         UnitSpellHaste = function() return 0 end,
         GetManaRegen = function() return manaRegen, castingRegen end,
         GetExpertise = function() return 0, 0, 0 end,
-        UnitDefenseSkill = function() return 5, 0 end,
+        GetRangedHaste = function() return 4, restricted and secret or 10 end,
+        UnitDefenseSkill = function() return 5, restricted and secret or 0 end,
     },
 })
 env.__fireEvent("PLAYER_ENTERING_WORLD")
@@ -459,7 +460,8 @@ end
 settings = test.profileState().settings
 settings.showOffensive, settings.showMeleeCrit = true, true
 settings.hideZeroOffensive = true
-settings.showAttackPower, settings.showMeleeHit = true, true
+settings.showAttackPower, settings.showMeleeHit, settings.showRangedHaste = true, true, true
+settings.showDefensive, settings.showDefense = true, true
 test.cacheSettings()
 blocks = test.buildRenderBlocks()
 local function contains(block, text)
@@ -486,12 +488,18 @@ local function hasStat(block, label, expected)
     return false
 end
 check(hasStat(blocks[2], "Attack Power", "~11"), "restricted AP shows the last pre-combat value")
+check(hasStat(blocks[2], "Ranged Haste", "~14.00%"), "restricted ranged haste uses the current fight snapshot")
+check(hasStat(blocks[4], "Defense", "~5"), "restricted defense uses the current fight snapshot")
 check(hasStat(blocks[2], critLabel, "75%"), "restricted crit still shows its live value")
 check(hasStat(blocks[2], "Melee Hit", "4.00%"), "clean hit remains live in combat")
 hitBonus, hitModifier = -123456, -123456
 check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "~4.00%"), "restricted hit shows the last pre-combat value")
 hitModifier = 0
 check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "75%"), "exact restricted hit takes priority over fallback")
+local round = env.C_StringUtil.RoundToNearestString
+env.C_StringUtil.RoundToNearestString = nil
+check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "~4.00%"), "failed secret formatting uses the current snapshot")
+env.C_StringUtil.RoundToNearestString = round
 hitBonus, hitModifier = 5, 2
 check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "7.00%"), "clean hit changes during combat")
 hitBonus, hitModifier = -123456, -123456
@@ -522,6 +530,18 @@ combat = true
 settings.showOffhandHit = true
 test.cacheSettings()
 check(hasStat(test.buildRenderBlocks()[2], "Offhand Hit", "?%"), "first restricted read does not invent a fallback")
+combat = false
+test.buildRenderBlocks()
+combat = true
+check(hasStat(test.buildRenderBlocks()[2], "Attack Power", "?"), "unreadable out-of-combat sample invalidates old AP")
+combat, restricted = false, false
+test.buildRenderBlocks()
+combat, restricted = true, true
+env.__fireEvent("PLAYER_REGEN_DISABLED")
+combat = false
+env.__fireEvent("PLAYER_REGEN_ENABLED")
+combat = true
+check(hasStat(test.buildRenderBlocks()[2], "Attack Power", "?"), "combat end discards the snapshot even with no fresh HUD sample")
 combat, restricted = false, false
 settings.showTertiary, settings.showManaRegenMP5, settings.showCastingManaRegenMP5 = true, true, true
 test.cacheSettings()

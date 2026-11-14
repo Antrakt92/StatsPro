@@ -38,6 +38,7 @@ addon.durabilityRuntime = {
     generation = 0,
     pendingItemSlots = {},
     pendingRepairItemSlots = {},
+    knownDurableItemIDs = {},
     repairItemWakeups = {},
     retryDelays = RETRY_DELAYS,
     retryStates = {
@@ -1620,19 +1621,18 @@ function addon.durabilityRuntime.GetCleanEquippedItemID(slot)
     local getID = _G.GetInventoryItemID
     if type(getID) ~= "function" then return nil end
     local ok, itemID = pcall(getID, "player", slot)
-    if not ok or not addon.IsCleanFiniteNumber(itemID)
+    if not ok or issecretvalue(itemID) then return nil end
+    if itemID == nil then return nil, true end
+    if not addon.IsCleanFiniteNumber(itemID)
         or itemID <= 0 or itemID ~= math.floor(itemID) then return nil end
     return itemID
 end
 
-function addon.durabilityRuntime.GetUncachedEquippedItemID(slot)
+function addon.durabilityRuntime.IsItemDataPending(itemID)
     local itemAPI = _G.C_Item
-    if type(itemAPI) ~= "table" or type(itemAPI.IsItemDataCachedByID) ~= "function" then return nil end
-    local itemID = addon.durabilityRuntime.GetCleanEquippedItemID(slot)
-    if not itemID then return nil end
+    if type(itemAPI) ~= "table" or type(itemAPI.IsItemDataCachedByID) ~= "function" then return false end
     local ok, isCached = pcall(itemAPI.IsItemDataCachedByID, itemID)
-    if not ok or issecretvalue(isCached) or type(isCached) ~= "boolean" or isCached then return nil end
-    return itemID
+    return ok and not issecretvalue(isCached) and isCached == false
 end
 
 function addon.durabilityRuntime.OnItemDataReady(itemID, success)
@@ -1848,6 +1848,7 @@ local LABELS_BY_LOCALE = {
         ["Show Dodge"] = "Show Dodge", ["Show Parry"] = "Show Parry",
         ["Show Block"] = "Show Block", ["Show Armor"] = "Show Armor", ["Show Stagger"] = "Show Stagger",
         ["Show Durability"] = "Show Durability", ["Show Repair Cost"] = "Show Repair Cost",
+        ["Estimated repair cost for equipped gear."] = "Estimated repair cost for equipped gear.",
         ["Auto Color by Threshold"] = "Auto Color by Threshold",
         ["Use Worst Slot (instead of average)"] = "Use Worst Slot (instead of average)",
         -- Sliders:
@@ -1988,6 +1989,7 @@ local LABELS_BY_LOCALE = {
         ["Show Dodge"] = "Показывать Уклонение", ["Show Parry"] = "Показывать Парирование",
         ["Show Block"] = "Показывать Блок", ["Show Armor"] = "Показывать Броню", ["Show Stagger"] = "Показывать Пошатывание",
         ["Show Durability"] = "Показывать прочность", ["Show Repair Cost"] = "Показывать стоимость ремонта",
+        ["Estimated repair cost for equipped gear."] = "Примерная стоимость ремонта надетой экипировки.",
         ["Auto Color by Threshold"] = "Авто-цвет по порогу",
         ["Use Worst Slot (instead of average)"] = "По худшему слоту (вместо среднего)",
         -- Sliders:
@@ -2126,6 +2128,7 @@ local LABELS_BY_LOCALE = {
         ["Show Dodge"] = "Ausweichen anzeigen", ["Show Parry"] = "Parieren anzeigen",
         ["Show Block"] = "Blocken anzeigen", ["Show Armor"] = "Rüstung anzeigen", ["Show Stagger"] = "Staffeln anzeigen",
         ["Show Durability"] = "Haltbarkeit anzeigen", ["Show Repair Cost"] = "Reparaturkosten anzeigen",
+        ["Estimated repair cost for equipped gear."] = "Geschätzte Reparaturkosten für angelegte Ausrüstung.",
         ["Auto Color by Threshold"] = "Auto-Farbe nach Schwellwert",
         ["Use Worst Slot (instead of average)"] = "Schlechtester Slot (statt Durchschnitt)",
         ["Scale:"] = "Skalierung:", ["Refresh Rate (sec):"] = "Aktualisierungsrate (Sek.):", ["Font Size:"] = "Schriftgröße:", ["Text Opacity:"] = "Textdeckkraft:", ["Panel Background:"] = "Panelhintergrund:",
@@ -2256,6 +2259,7 @@ local LABELS_BY_LOCALE = {
         ["Show Dodge"] = "Afficher Esquive", ["Show Parry"] = "Afficher Parade",
         ["Show Block"] = "Afficher Blocage", ["Show Armor"] = "Afficher Armure", ["Show Stagger"] = "Afficher Report",
         ["Show Durability"] = "Afficher durabilité", ["Show Repair Cost"] = "Afficher coût de réparation",
+        ["Estimated repair cost for equipped gear."] = "Coût de réparation estimé de l’équipement porté.",
         ["Auto Color by Threshold"] = "Couleur auto par seuil",
         ["Use Worst Slot (instead of average)"] = "Pire emplacement (vs moyenne)",
         ["Scale:"] = "Échelle :", ["Refresh Rate (sec):"] = "Fréquence (sec) :", ["Font Size:"] = "Taille de police :", ["Text Opacity:"] = "Opacité du texte :", ["Panel Background:"] = "Arrière-plan du panneau :",
@@ -2387,6 +2391,7 @@ local LABELS_BY_LOCALE = {
         ["Show Dodge"] = "Mostrar Esquiva", ["Show Parry"] = "Mostrar Parada",
         ["Show Block"] = "Mostrar Bloqueo", ["Show Armor"] = "Mostrar Armadura", ["Show Stagger"] = "Mostrar Aplazar",
         ["Show Durability"] = "Mostrar durabilidad", ["Show Repair Cost"] = "Mostrar coste reparación",
+        ["Estimated repair cost for equipped gear."] = "Coste estimado de reparar el equipo puesto.",
         ["Auto Color by Threshold"] = "Color auto por umbral",
         ["Use Worst Slot (instead of average)"] = "Peor ranura (en vez de media)",
         ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:", ["Text Opacity:"] = "Opacidad del texto:", ["Panel Background:"] = "Fondo del panel:",
@@ -2516,6 +2521,7 @@ local LABELS_BY_LOCALE = {
         ["Show Dodge"] = "Mostrar Esquiva", ["Show Parry"] = "Mostrar Parada",
         ["Show Block"] = "Mostrar Bloqueo", ["Show Armor"] = "Mostrar Armadura", ["Show Stagger"] = "Mostrar Aplazar",
         ["Show Durability"] = "Mostrar durabilidad", ["Show Repair Cost"] = "Mostrar costo de reparación",
+        ["Estimated repair cost for equipped gear."] = "Costo estimado de reparar el equipo puesto.",
         ["Auto Color by Threshold"] = "Color auto por umbral",
         ["Use Worst Slot (instead of average)"] = "Peor ranura (en vez del promedio)",
         ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Frecuencia (s):", ["Font Size:"] = "Tamaño de fuente:", ["Text Opacity:"] = "Opacidad del texto:", ["Panel Background:"] = "Fondo del panel:",
@@ -2646,6 +2652,7 @@ local LABELS_BY_LOCALE = {
         ["Show Dodge"] = "Mostra Schivata", ["Show Parry"] = "Mostra Parata",
         ["Show Block"] = "Mostra Blocco", ["Show Armor"] = "Mostra Armatura", ["Show Stagger"] = "Mostra Barcollamento",
         ["Show Durability"] = "Mostra durata", ["Show Repair Cost"] = "Mostra costo riparazione",
+        ["Estimated repair cost for equipped gear."] = "Costo stimato per riparare l’equipaggiamento indossato.",
         ["Auto Color by Threshold"] = "Colore auto per soglia",
         ["Use Worst Slot (instead of average)"] = "Slot peggiore (anziché media)",
         ["Scale:"] = "Scala:", ["Refresh Rate (sec):"] = "Frequenza (sec):", ["Font Size:"] = "Dimensione font:", ["Text Opacity:"] = "Opacità del testo:", ["Panel Background:"] = "Sfondo pannello:",
@@ -2775,6 +2782,7 @@ local LABELS_BY_LOCALE = {
         ["Show Dodge"] = "Mostrar Esquiva", ["Show Parry"] = "Mostrar Aparar",
         ["Show Block"] = "Mostrar Bloqueio", ["Show Armor"] = "Mostrar Armadura", ["Show Stagger"] = "Mostrar Cambalear",
         ["Show Durability"] = "Mostrar durabilidade", ["Show Repair Cost"] = "Mostrar custo de reparo",
+        ["Estimated repair cost for equipped gear."] = "Custo estimado de reparo do equipamento em uso.",
         ["Auto Color by Threshold"] = "Cor auto por limite",
         ["Use Worst Slot (instead of average)"] = "Pior slot (em vez de média)",
         ["Scale:"] = "Escala:", ["Refresh Rate (sec):"] = "Atualização (s):", ["Font Size:"] = "Tamanho da fonte:", ["Text Opacity:"] = "Opacidade do texto:", ["Panel Background:"] = "Fundo do painel:",
@@ -2911,6 +2919,7 @@ local LABELS_BY_LOCALE = {
         ["Show Dodge"] = "회피 표시", ["Show Parry"] = "쳐막 표시",
         ["Show Block"] = "막기 표시", ["Show Armor"] = "방어도 표시", ["Show Stagger"] = "시간차 표시",
         ["Show Durability"] = "내구도 표시", ["Show Repair Cost"] = "수리 비용 표시",
+        ["Estimated repair cost for equipped gear."] = "착용 중인 장비의 예상 수리 비용입니다.",
         ["Auto Color by Threshold"] = "임계값 자동 색상",
         ["Use Worst Slot (instead of average)"] = "최악 슬롯 사용 (평균 대신)",
         ["Scale:"] = "크기:", ["Refresh Rate (sec):"] = "갱신 주기 (초):", ["Font Size:"] = "글꼴 크기:", ["Text Opacity:"] = "텍스트 투명도:", ["Panel Background:"] = "패널 배경:",
@@ -3040,6 +3049,7 @@ local LABELS_BY_LOCALE = {
         ["Show Dodge"] = "显示躲闪", ["Show Parry"] = "显示招架",
         ["Show Block"] = "显示格挡", ["Show Armor"] = "显示护甲", ["Show Stagger"] = "显示醉拳",
         ["Show Durability"] = "显示耐久", ["Show Repair Cost"] = "显示修理费用",
+        ["Estimated repair cost for equipped gear."] = "当前装备的预计修理费用。",
         ["Auto Color by Threshold"] = "按阈值自动着色",
         ["Use Worst Slot (instead of average)"] = "最差栏位（替代平均值）",
         ["Scale:"] = "缩放:", ["Refresh Rate (sec):"] = "刷新率 (秒):", ["Font Size:"] = "字体大小:", ["Text Opacity:"] = "文字不透明度:", ["Panel Background:"] = "面板背景:",
@@ -3169,6 +3179,7 @@ local LABELS_BY_LOCALE = {
         ["Show Dodge"] = "顯示躲避", ["Show Parry"] = "顯示招架",
         ["Show Block"] = "顯示格擋", ["Show Armor"] = "顯示護甲", ["Show Stagger"] = "顯示醉拳",
         ["Show Durability"] = "顯示耐久", ["Show Repair Cost"] = "顯示修理費用",
+        ["Estimated repair cost for equipped gear."] = "目前裝備的預估修理費用。",
         ["Auto Color by Threshold"] = "依閾值自動上色",
         ["Use Worst Slot (instead of average)"] = "最差欄位（替代平均值）",
         ["Scale:"] = "縮放:", ["Refresh Rate (sec):"] = "更新率 (秒):", ["Font Size:"] = "字型大小:", ["Text Opacity:"] = "文字不透明度:", ["Panel Background:"] = "面板背景:",
@@ -9538,17 +9549,28 @@ function addon.durabilityRuntime.ReadSlot(slot)
     local ok, current, maximum = pcall(GetInventoryItemDurability, slot)
     if not ok then return "unavailable" end
     if issecretvalue(current) or issecretvalue(maximum) then return "restricted" end
+    local runtime = addon.durabilityRuntime
     if current == nil and maximum == nil then
-        -- Empty and non-durable slots can look like equipment awaiting item data.
-        local itemID = addon.durabilityRuntime.GetUncachedEquippedItemID(slot)
-        if itemID then return "uncached", nil, nil, itemID end
+        local itemID, emptySlot = runtime.GetCleanEquippedItemID(slot)
+        if itemID and runtime.IsItemDataPending(itemID) then return "uncached", nil, nil, itemID end
+        -- Cached item metadata does not guarantee a current durability reading.
+        local knownDurableID = runtime.knownDurableItemIDs[slot]
+        if knownDurableID and (itemID == knownDurableID or not (itemID or emptySlot)) then
+            return "unavailable"
+        end
+        runtime.knownDurableItemIDs[slot] = nil
         return "empty"
     end
     if not SAFE_NUM.IsCleanFiniteNumber(current) or not SAFE_NUM.IsCleanFiniteNumber(maximum) then
         return "invalid"
     end
-    if current == 0 and maximum == 0 then return "empty" end
+    if current == 0 and maximum == 0 then
+        runtime.knownDurableItemIDs[slot] = nil
+        return "empty"
+    end
     if maximum <= 0 or current < 0 or current > maximum then return "invalid" end
+    local itemID, emptySlot = runtime.GetCleanEquippedItemID(slot)
+    if itemID or emptySlot then runtime.knownDurableItemIDs[slot] = itemID end
     return "readable", (current / maximum) * 100, current < maximum
 end
 
@@ -10772,12 +10794,12 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
             lineH = labelH / lineCount
         end
     end
-    local lineHChanged = self.lastLineH ~= lineH
     self.lastLineH = lineH
     self.lastRenderedLabelW = labelW
     self.lastRenderedRatingW = ratingW
     self.lastRenderedValueW = valueW
 
+    local repairH = 0
     if hasRepair then
         local repairLabelVisible = repairLabelStr and repairLabelStr ~= ""
         local repairRowY = hasRows and -(lineCount * lineH + 1) or 0  -- 1px gap only when below stat rows
@@ -10819,6 +10841,18 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
         self.lastRenderedRepairW, self.cachedRepairW = MeasuredOrCached(
             self.repairText, self.cachedRepairW, "GetStringWidth",
             effectiveFontSize * Panel.SECRET_REPAIR_WIDTH_UNITS)
+        -- Coin textures and the repair label can be taller than one stat line.
+        -- The frame's screen clamp only accounts for its measured bounds.
+        local coinH, captionH
+        coinH, self.cachedRepairH = MeasuredOrCached(
+            self.repairText, self.cachedRepairH, "GetStringHeight", lineH)
+        if repairLabelVisible then
+            captionH, self.cachedRepairLabelH = MeasuredOrCached(
+                self.repairLabelText, self.cachedRepairLabelH, "GetStringHeight", lineH)
+        else
+            self.cachedRepairLabelH = nil
+        end
+        repairH = math.max(lineH, coinH, captionH or 0) + (hasRows and 1 or 0)
     else
         if self.repairLabelText:IsShown() then self.repairLabelText:Hide() end
         if self.repairText:IsShown() then self.repairText:Hide() end
@@ -10826,6 +10860,8 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
         -- disables Show Repair Cost or repair drops to 0g (coin string becomes "").
         self.cachedRepairW = 0
         self.lastRenderedRepairW = 0
+        self.cachedRepairH = nil
+        self.cachedRepairLabelH = nil
     end
     self.lastRepairText = repairStr or ""
     -- WHY: completes the five-FontString font-change resilience surface (label / rating /
@@ -10864,14 +10900,12 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- Frame height: text content bounds only. The optional background texture adds
     -- symmetric visual padding around this frame, so the text itself stays anchored
     -- exactly where older transparent-panel users placed it.
-    -- Cache invalidates on lineCount change, hasRepair flip, font/size change
-    -- (heightDirty), OR an effective line-height change such as cold-fallback recovery.
-    -- Reusing lastLineCount alone would conflate "text changed" vs "font changed" —
-    -- Panel:Reflow needs it preserved across ApplyStyle as the content-line-count marker.
-    if lineCount ~= self.lastLineCount or hasRepair ~= self.lastHasRepair or self.heightDirty or lineHChanged then
-        local h = lineCount * lineH
-        if hasRepair then h = h + lineH + (hasRows and 1 or 0) end  -- repair row + gap when below stats
-        self.frame:SetHeight(h)
+    local height = lineCount * lineH + repairH
+    if lineCount ~= self.lastLineCount or hasRepair ~= self.lastHasRepair
+        or self.heightDirty or height ~= self.lastFrameHeight then
+        self.lastFrameHeight = nil
+        self.frame:SetHeight(height)
+        self.lastFrameHeight = height
         self.lastLineCount = lineCount
         self.lastHasRepair = hasRepair
         self.heightDirty = false
@@ -10969,6 +11003,8 @@ function Panel:ApplyStyle(font, size, force, requestedOutlineStyle)
     self.cachedLabelH = nil
     self.cachedRatingH = nil
     self.cachedValueH = nil
+    self.cachedRepairH = nil
+    self.cachedRepairLabelH = nil
     self.heightDirty = true
     return true, effectiveFont, outlineStyle, effectiveFlags
 end
@@ -11609,7 +11645,7 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
                 if placeholder and definition.usePreCombatValue then
                     text = nil
                     if fallback ~= nil then
-                        local format = definition.kind == "percent" and "~%.2f%%" or "~%d"
+                        local format = definition.kind == "percent" and "(%.2f%%)" or "(%d)"
                         text = SAFE_NUM.FormatColorNumber(valueColor, fallback, format)
                     end
                 end
@@ -12312,7 +12348,10 @@ addon.profileRuntime.CompleteBootstrap = function()
 end
 
 local function OnPlayerEnteringWorld()
-    if addon.forever.enabled then addon.forever.preCombatValues = {} end
+    if addon.forever.enabled then
+        addon.forever.preCombatValues = {}
+        addon.forever.ResetAttackPowerParity()
+    end
     SAFE_NUM.ReopenScaledFormatterRetries()
     if not addon.critRuntime.specRecheckDelay then addon.critRuntime.RefreshSpecIdentity(true) end
     if not isLoaded then
@@ -12399,6 +12438,10 @@ local EVENT_HANDLERS = {
     GET_ITEM_INFO_RECEIVED      = addon.durabilityRuntime.OnItemDataReady,
     ITEM_DATA_LOAD_RESULT       = addon.durabilityRuntime.OnItemDataReady,
     PLAYER_EQUIPMENT_CHANGED    = function()
+        if addon.forever.enabled then
+            addon.forever.ResetAttackPowerParity()
+            addon.forever.preCombatValues = {}
+        end
         addon.durabilityRuntime.MarkDirty()
         addon.itemLevelRuntime.MarkDirty()
     end,
@@ -20364,7 +20407,7 @@ function addon.settingsUI.BuildStatsTab(self, context)
                 self.settingsDesign.AttachTooltip(control, function()
                     return self.settingsDesign.DisabledControlTooltip(control) or L(definition.label),
                         definition.usePreCombatValue and
-                            (L("~ marks the last value read before combat.") .. "\n"
+                            (L("A value in parentheses is the last reading before combat.") .. "\n"
                             .. L("A ? means this stat is unavailable or cannot be calculated safely."))
                             or L("A ? means this stat is unavailable or cannot be calculated safely.")
                 end)
@@ -20401,8 +20444,13 @@ function addon.settingsUI.BuildStatsTab(self, context)
         AlignSwatchColumn(leftRows)
         AlignSwatchColumn(rightRows)
         cs.y = rowY - 26
-        CreateCheckbox(statsBody, "StatsProRepairCostCheck", "Show Repair Cost", "showRepairCost", cs.padX, cs.y,
+        local repairCheckbox = CreateCheckbox(statsBody, "StatsProRepairCostCheck", "Show Repair Cost", "showRepairCost", cs.padX, cs.y,
             function() addon.durabilityRuntime.MarkDirty() end)
+        self.settingsDesign.AttachTooltip(repairCheckbox, function()
+            local title, detail = self.settingsDesign.DisabledControlTooltip(repairCheckbox)
+            if title then return title, detail end
+            return L("Show Repair Cost"), L("Estimated repair cost for equipped gear.")
+        end)
         CursorAdvance(cs, 22)
         CreateCheckbox(statsBody, "StatsProAutoColorCheck",
             "Auto Color by Threshold", "useAutoColorDurability", cs.padX, cs.y)

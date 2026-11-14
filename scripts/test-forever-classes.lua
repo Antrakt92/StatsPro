@@ -198,8 +198,15 @@ for _, class in ipairs(classes) do
                             local controlText = env["StatsProForever" .. row.key .. "Text"]
                             check(control and controlText and controlText:GetText() == addon.forever.Translate(row.label, locale),
                                 class .. " Settings refreshes its localized label: " .. locale .. " " .. row.key)
-                            check(control.statsProTooltipProvider() == controlText:GetText(),
+                            local title, tooltip = control.statsProTooltipProvider()
+                            check(title == controlText:GetText(),
                                 class .. " tooltip follows Settings language: " .. locale .. " " .. row.key)
+                            if row.usePreCombatValue then
+                                local fallbackNote = addon.forever.Translate(
+                                    "A value in parentheses is the last reading before combat.", locale)
+                                check(fallbackNote and tooltip:find(fallbackNote, 1, true),
+                                    class .. " localized fallback tooltip: " .. locale .. " " .. row.key)
+                            end
                         end
                     end
                     check(block.ratings[rowIndex] ~= "" or block.values[rowIndex] ~= "",

@@ -487,23 +487,23 @@ local function hasStat(block, label, expected)
     end
     return false
 end
-check(hasStat(blocks[2], "Attack Power", "~11"), "restricted AP shows the last pre-combat value")
-check(hasStat(blocks[2], "Ranged Haste", "~14.00%"), "restricted ranged haste uses the current fight snapshot")
-check(hasStat(blocks[4], "Defense", "~5"), "restricted defense uses the current fight snapshot")
+check(hasStat(blocks[2], "Attack Power", "(11)"), "restricted AP shows the last pre-combat value")
+check(hasStat(blocks[2], "Ranged Haste", "(14.00%)"), "restricted ranged haste uses the current fight snapshot")
+check(hasStat(blocks[4], "Defense", "(5)"), "restricted defense uses the current fight snapshot")
 check(hasStat(blocks[2], critLabel, "75%"), "restricted crit still shows its live value")
 check(hasStat(blocks[2], "Melee Hit", "4.00%"), "clean hit remains live in combat")
 hitBonus, hitModifier = -123456, -123456
-check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "~4.00%"), "restricted hit shows the last pre-combat value")
+check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "(4.00%)"), "restricted hit shows the last pre-combat value")
 hitModifier = 0
 check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "75%"), "exact restricted hit takes priority over fallback")
 local round = env.C_StringUtil.RoundToNearestString
 env.C_StringUtil.RoundToNearestString = nil
-check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "~4.00%"), "failed secret formatting uses the current snapshot")
+check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "(4.00%)"), "failed secret formatting uses the current snapshot")
 env.C_StringUtil.RoundToNearestString = round
 hitBonus, hitModifier = 5, 2
 check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "7.00%"), "clean hit changes during combat")
 hitBonus, hitModifier = -123456, -123456
-check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "~4.00%"), "combat reads do not replace the pre-combat snapshot")
+check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "(4.00%)"), "combat reads do not replace the pre-combat snapshot")
 local firstRestricted = table.concat(blocks[2].values, "\n") .. table.concat(blocks[2].ratings, "\n")
 check(string.find(firstRestricted, "75", 1, true), "first restricted scalar displayed live")
 secret = -123457
@@ -519,11 +519,11 @@ check(not contains(blocks[2], "Melee Hit"), "Hide Zero hides a confirmed zero")
 combat, restricted = true, true
 hitBonus, hitModifier = -123456, -123456
 blocks = test.buildRenderBlocks()
-check(hasStat(blocks[2], "Attack Power", "~16"), "fallback refreshes before the next fight")
+check(hasStat(blocks[2], "Attack Power", "(16)"), "fallback refreshes before the next fight")
 check(not contains(blocks[2], "Melee Hit"), "Hide Zero also hides a cached zero")
 settings.hideZeroOffensive = false
 test.cacheSettings()
-check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "~0.00%"), "cached zero is displayed when Hide Zero is off")
+check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "(0.00%)"), "cached zero is displayed when Hide Zero is off")
 combat = false
 check(hasStat(test.buildRenderBlocks()[2], "Attack Power", "?"), "no stale fallback outside combat")
 combat = true
@@ -1150,5 +1150,89 @@ do
     local tooltipState = paletteTest.mainPanelTooltipState()
     check(tooltipState.overlayCount == 0 and tooltipState.lastTargetRows == nil,
         "Forever needs no Archon row metadata or mouse overlays")
+end
+do
+    local combatNow = false
+    local firstAP, secondAP, protectedMultiplier = {}, {}, {}
+    local currentAP = firstAP
+    local conversionActive = false
+    local apEnv, apAddon, apTest = fixtures.loadStatsPro("enUS", {
+        forever = true,
+        unitGUID = function() return "Player-ForeverProtectedAP" end,
+        inCombatLockdown = function() return combatNow end,
+        issecretvalue = function(value)
+            return rawequal(value, firstAP) or rawequal(value, secondAP)
+                or rawequal(value, protectedMultiplier)
+        end,
+        roundToNearestString = function(value)
+            if rawequal(value, firstAP) then return "79" end
+            if rawequal(value, secondAP) then return "95" end
+            error("unexpected AP passed to native formatter")
+        end,
+        foreverAPIs = {
+            UnitAttackPower = function()
+                if combatNow then return currentAP, currentAP, currentAP end
+                return 27, 52, 0
+            end,
+            GetOverrideAPBySpellPower = function() return combatNow and protectedMultiplier or 0 end,
+            HasSPEffectsAttackPower = function() return conversionActive end,
+            PlayerEffectiveAttackPower = function()
+                return 207, 43, 128, combatNow and currentAP or 79, 0
+            end,
+        },
+    })
+    apEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local apSettings = apTest.profileState().settings
+    apSettings.showOffensive, apSettings.showAttackPower = true, true
+    apSettings.hideZeroOffensive, apSettings.splitOffensive = true, true
+    apTest.cacheSettings()
+    check(hasStat(apTest.buildRenderBlocks()[2], "Attack Power", "79"),
+        "clean AP establishes the character-sheet comparison")
+    combatNow = true
+    apEnv.__fireEvent("PLAYER_REGEN_DISABLED")
+    check(hasStat(apTest.buildRenderBlocks()[2], "Attack Power", "79"),
+        "first protected AP is rendered without an approximation marker")
+    currentAP = secondAP
+    for _, locale in ipairs({ "enUS", "enGB", "deDE", "esES", "esMX", "frFR",
+        "itIT", "ptBR", "ruRU", "koKR", "zhCN", "zhTW" }) do
+        apEnv.StatsProDB.account.forceLocale = locale
+        for _, style in ipairs({ "full", "short", "hidden" }) do
+            apSettings.labelStyle = style
+            apTest.cacheSettings()
+            local function verifyAP(expected)
+                local rendered = apTest.buildRenderBlocks()
+                for _, mode in ipairs({ "flat", "sectioned", "split" }) do
+                    local main, side = apTest.routeRenderBlocks(rendered, mode, { splitOffensive = true }, style)
+                    local bucket = mode == "split" and side or main
+                    local found = false
+                    for index, value in ipairs(bucket.values) do
+                        if stripColor(bucket.ratings[index] .. value) == expected then found = true end
+                    end
+                    check(found, locale .. " " .. style .. " " .. mode .. " renders AP " .. expected)
+                end
+            end
+            verifyAP("95")
+            conversionActive = true
+            verifyAP("(79)")
+            conversionActive = false
+        end
+    end
+    check(apAddon:RunUpdateStatsSafe(), "native AP display values flow through the real HUD update")
+
+    apEnv.StatsProDB.account.forceLocale = "enUS"
+    apSettings.labelStyle = "full"
+    apSettings.hideZeroOffensive = false
+    apTest.cacheSettings()
+    conversionActive = true
+    check(hasStat(apTest.buildRenderBlocks()[2], "Attack Power", "(79)"),
+        "active conversion uses the last validated pre-combat total")
+    conversionActive = false
+    apEnv.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 16, true)
+    check(hasStat(apTest.buildRenderBlocks()[2], "Attack Power", "?"),
+        "combat equipment change discards AP parity and the pre-combat number")
+    combatNow = false
+    apEnv.__fireEvent("PLAYER_REGEN_ENABLED")
+    check(hasStat(apTest.buildRenderBlocks()[2], "Attack Power", "79"),
+        "the next clean equipment sample recovers AP")
 end
 print("StatsPro Forever HUD integration: PASS (" .. count .. " checks)")

@@ -187,6 +187,47 @@ end
 print(flavor .. " late repair tooltip recovery regressions passed")
 
 do
+    local slot = forever and 18 or 17
+    local equippedID, current, maximum = 1337, 40, 100
+    local env, addon, test = loadStatsPro("enUS", {
+        statsProDB = { showDurability = true, showRepairCost = true, useWorstDurability = false },
+        getInventoryItemDurability = function(index)
+            if index == 1 then return 80, 100 end
+            if index == slot then return current, maximum end
+        end,
+        getTooltipInventoryItem = function(_, index)
+            return { repairCost = index == slot and 300 or 100 }
+        end,
+    })
+    env.GetInventoryItemID = function(_, index) if index == slot then return equippedID end end
+    env.C_Item = { IsItemDataCachedByID = function() return true end }
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    local state = test.durabilityState()
+    assert(state.durabilityComplete and state.durabilityValue == 60 and state.repairCost == 400,
+        "both durable pieces seed the complete equipped totals")
+    current, maximum = nil, nil
+    env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+    assert(addon:RunUpdateStatsSafe(), "temporary empty durability data renders safely")
+    state = test.durabilityState()
+    assert(not state.durabilityComplete and state.durabilityValue == 60,
+        "a cached, still-equipped durable item cannot silently disappear from the average")
+    assert(not state.repairCostComplete and state.repairCost == nil and state.durabilityRetryScheduled,
+        "repair must not show a partial total while the same durable item is unreadable")
+    current, maximum = 10, 100
+    assert(env.__flushNextTimer() and addon:RunUpdateStatsSafe(), "durability retry reads the restored item")
+    state = test.durabilityState()
+    assert(state.durabilityComplete and state.durabilityValue == 45 and state.repairCost == 400,
+        "complete readings resume as soon as the existing item is readable")
+    equippedID, current, maximum = 99, nil, nil
+    env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", slot, true)
+    assert(addon:RunUpdateStatsSafe(), "replacement slot renders safely")
+    state = test.durabilityState()
+    assert(state.durabilityComplete and state.durabilityValue == 80 and state.repairCost == 100,
+        "a different cached item with no durability does not inherit the old identity")
+end
+print(flavor .. " equipped durability completeness regressions passed")
+
+do
     local env, addon, test = loadStatsPro("enUS", {
         unitGUID = function() return "Player-Capacity" end,
         getSpecialization = function() return 1 end, specID = 73, specRole = "TANK",

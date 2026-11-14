@@ -51,6 +51,9 @@ MAX_SPELL_SCHOOLS = 7
 ---@type (fun(): number)?
 GetOverrideAPBySpellPower = nil
 
+---@type (fun(): boolean)?
+HasSPEffectsAttackPower = nil
+
 ---@class (exact) StatsProStringUtil
 ---@field RoundToNearestString fun(value: number): string
 

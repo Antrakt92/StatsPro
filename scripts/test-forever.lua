@@ -12,7 +12,14 @@ issecretvalue = function(value) return rawequal(value, secret) end
 UnitGUID = function() return "Player-fixture" end
 CR_HIT_MELEE, CR_HIT_RANGED, CR_HIT_SPELL = 6, 7, 8
 local function Load()
-    local addon = { profileRuntime = { ReadCombatState = function() return false end } }
+    local addon = { profileRuntime = {
+        ReadCombatState = function() return false end,
+        ReadBooleanDecision = function(fn)
+            if type(fn) ~= "function" then return nil end
+            local ok, result = pcall(fn)
+            if ok and not issecretvalue(result) and type(result) == "boolean" then return result end
+        end,
+    } }
     assert(loadfile(source))("StatsPro", addon)
     return addon.forever
 end
@@ -130,6 +137,63 @@ for index = 1, 3 do
 end
 UnitAttackPower = function() return 100, nil, 0 end
 Expect("AttackPower", nil, "unknown")
+
+local nextAP = setmetatable({}, getmetatable(secret))
+local previousClassifier = issecretvalue
+issecretvalue = function(value) return previousClassifier(value) or rawequal(value, nextAP) end
+local multiplier, conversion, nativeAP = 0, false, 79
+GetOverrideAPBySpellPower = function() return multiplier end
+HasSPEffectsAttackPower = function() return conversion end
+PlayerEffectiveAttackPower = function() return 207, 43, 128, nativeAP, 430 end
+UnitAttackPower = function() return 27, 52, 0 end
+Expect("AttackPower", 79, "clean")
+UnitAttackPower = function() return secret, secret, secret end
+UnitRangedAttackPower = function() return secret, secret, secret end
+multiplier, nativeAP = secret, secret
+Expect("AttackPower", secret, "secret")
+nativeAP = nextAP
+Expect("AttackPower", nextAP, "secret")
+Expect("RangedAttackPower", nil, "unknown")
+for _, flag in ipairs({ true, 0, "false", secret }) do
+    conversion = flag
+    Expect("AttackPower", nil, "unknown")
+end
+conversion = nil
+Expect("AttackPower", nil, "unknown")
+conversion, nativeAP = false, nil
+Expect("AttackPower", nil, "unknown")
+PlayerEffectiveAttackPower = function() error("native player AP unavailable") end
+Expect("AttackPower", nil, "unknown")
+PlayerEffectiveAttackPower = function() return 207, 43, 128, nativeAP, 430 end
+multiplier, nativeAP = 0, nextAP
+Expect("AttackPower", nextAP, "secret")
+
+multiplier, nativeAP = 0.5, 79
+GetSpellBonusDamage = function() return 400 end
+GetSpellBonusHealing = function() return 450 end
+Expect("AttackPower", 200, "clean")
+multiplier, nativeAP = secret, secret
+Expect("AttackPower", nil, "unknown")
+
+multiplier, nativeAP = 0, 79
+UnitAttackPower = function() return 27, 52, 0 end
+Expect("AttackPower", 79, "clean")
+nativeAP = 80
+Expect("AttackPower", 79, "clean")
+UnitAttackPower = function() return secret, secret, secret end
+multiplier, nativeAP = secret, nextAP
+Expect("AttackPower", nil, "unknown")
+
+multiplier, nativeAP = 0, 79
+UnitAttackPower = function() return 27, 52, 0 end
+Expect("AttackPower", 79, "clean")
+F.ResetAttackPowerParity()
+UnitAttackPower = function() return secret, secret, secret end
+multiplier, nativeAP = secret, secret
+Expect("AttackPower", nil, "unknown")
+GetOverrideAPBySpellPower, HasSPEffectsAttackPower, PlayerEffectiveAttackPower = nil, nil, nil
+issecretvalue = previousClassifier
+
 GetRangedHaste = function() return 4, 10 end
 Expect("RangedHaste", 14, "clean")
 GetRangedHaste = function() return 4, secret end

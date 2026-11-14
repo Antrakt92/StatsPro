@@ -126,31 +126,68 @@ local function RangedHaste()
 end
 
 local function Nonnegative(reader)
-    return function()
-        local value, state = reader()
+    return function(...)
+        local value, state = reader(...)
         if state ~= "clean" then return nil, "unknown" end
         -- Match the client's effective AP and defense display after debuffs.
         return math.max(0, value), "clean"
     end
 end
 
+local meleeAttackPowerMatches = false
+
+function F.ResetAttackPowerParity()
+    meleeAttackPowerMatches = false
+end
+
+local function ReadConvertedAttackPower(multiplier)
+    -- Match the character sheet's spell-power override for both AP sources.
+    local minimum, healingState = Read("GetSpellBonusHealing", 1)
+    if healingState ~= "clean" then return nil, "unknown" end
+    for school = 2, 7 do
+        local power, powerState = Read("GetSpellBonusDamage", 1, school)
+        if powerState ~= "clean" then return nil, "unknown" end
+        minimum = math.min(minimum, power)
+    end
+    return Classify(minimum * multiplier)
+end
+
+local function ReadMeleeAttackPower(base)
+    local total, totalState = base()
+    if totalState == "clean" then
+        -- Return four excludes the extra weapon power seen in return one.
+        -- Verify the native result against the current character's usual total.
+        local native, nativeState = Read("PlayerEffectiveAttackPower", 4)
+        meleeAttackPowerMatches = nativeState == "clean" and native == total
+        return total, "clean"
+    end
+    if not meleeAttackPowerMatches then return nil, "unknown" end
+    return Read("PlayerEffectiveAttackPower", 4)
+end
+
 local function AttackPower(name)
-    local base = Sum(name, 3, "player")
-    return Nonnegative(function()
+    local base = Nonnegative(Sum(name, 3, "player"))
+    local converted = Nonnegative(ReadConvertedAttackPower)
+    local melee = name == "UnitAttackPower"
+    return function()
         if _G.GetOverrideAPBySpellPower == nil then return base() end
         local multiplier, state = Read("GetOverrideAPBySpellPower", 1)
-        if state ~= "clean" then return nil, "unknown" end
-        if multiplier <= 0 then return base() end
-        -- Match the character sheet's spell-power override for both AP sources.
-        local minimum, healingState = Read("GetSpellBonusHealing", 1)
-        if healingState ~= "clean" then return nil, "unknown" end
-        for school = 2, 7 do
-            local power, powerState = Read("GetSpellBonusDamage", 1, school)
-            if powerState ~= "clean" then return nil, "unknown" end
-            minimum = math.min(minimum, power)
+        if state == "clean" then
+            if multiplier > 0 then
+                if melee then F.ResetAttackPowerParity() end
+                return converted(multiplier)
+            end
+            if melee then return ReadMeleeAttackPower(base) end
+            return base()
         end
-        return Classify(minimum * multiplier)
-    end)
+        -- This flag is independent of the protected numeric multiplier and must
+        -- be readable and false on this sample before reusing a verified source.
+        if melee and state == "secret" and meleeAttackPowerMatches
+            and addon.profileRuntime.ReadBooleanDecision(_G.HasSPEffectsAttackPower) == false then
+            return Read("PlayerEffectiveAttackPower", 4)
+        end
+        return nil, "unknown"
+    end
 end
 
 local function ReadManaRegen(index, sample)
@@ -657,21 +694,21 @@ for locale, labels in pairs(statusLabels) do
     F.labels[locale]["A ? means this stat is unavailable or cannot be calculated safely."] = labels[2]
 end
 local preCombatLabels = {
-    enUS = "~ marks the last value read before combat.",
-    ruRU = "~ отмечает последнее значение, считанное до боя.",
-    deDE = "~ kennzeichnet den letzten vor dem Kampf gelesenen Wert.",
-    esES = "~ indica el último valor leído antes del combate.",
-    frFR = "~ indique la dernière valeur lue avant le combat.",
-    itIT = "~ indica l’ultimo valore letto prima del combattimento.",
-    ptBR = "~ indica o último valor lido antes do combate.",
-    koKR = "~는 전투 전에 마지막으로 읽은 값입니다.",
-    zhCN = "~ 表示进入战斗前最后一次读取的数值。",
-    zhTW = "~ 表示進入戰鬥前最後一次讀取的數值。",
+    enUS = "A value in parentheses is the last reading before combat.",
+    ruRU = "В скобках показано последнее значение, считанное до боя.",
+    deDE = "Ein Wert in Klammern ist der zuletzt vor dem Kampf gelesene Wert.",
+    esES = "Un valor entre paréntesis es el último valor leído antes del combate.",
+    frFR = "Une valeur entre parenthèses correspond à la dernière mesure avant le combat.",
+    itIT = "Un valore tra parentesi è l’ultimo valore letto prima del combattimento.",
+    ptBR = "Um valor entre parênteses é o último valor lido antes do combate.",
+    koKR = "괄호 안의 값은 전투 전에 마지막으로 읽은 값입니다.",
+    zhCN = "括号内为进入战斗前最后一次读取的数值。",
+    zhTW = "括號內為進入戰鬥前最後一次讀取的數值。",
 }
 preCombatLabels.enGB = preCombatLabels.enUS
 preCombatLabels.esMX = preCombatLabels.esES
 for locale, text in pairs(preCombatLabels) do
-    F.labels[locale]["~ marks the last value read before combat."] = text
+    F.labels[locale]["A value in parentheses is the last reading before combat."] = text
 end
 
 local presetSummaries = {

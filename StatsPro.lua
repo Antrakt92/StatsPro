@@ -11538,20 +11538,36 @@ function addon.forever.ReadHUDRow(definition, manaSample)
     return definition.Read(manaSample)
 end
 
+addon.forever.preCombatValues = {}
+
 function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
+    local inCombat
     local manaSample = group == "utility" and cached.shareManaRegenSample and {} or nil
     for _, definition in ipairs(addon.forever.rows[group]) do
         if cached[definition.showKey] then
             local value, state, visibilitySuffix = addon.forever.ReadHUDRow(definition, manaSample)
             local rowKey = "forever:" .. definition.key .. (visibilitySuffix or "")
+            local fallback
+            if definition.usePreCombatValue then
+                if inCombat == nil then
+                    inCombat = addon.profileRuntime.ReadCombatState()
+                    if addon.hudPresets.combatState == true then inCombat = true end
+                end
+                if inCombat == false and state == "clean" then
+                    addon.forever.preCombatValues[rowKey] = value
+                elseif inCombat == true then
+                    fallback = addon.forever.preCombatValues[rowKey]
+                end
+            end
             local visible
             if state == "clean" then
-                -- Cache only the clean visibility decision, never a numeric fallback.
                 cached.cleanRowVisibility[rowKey] = value ~= 0
                 visible = not hideZero or cached.cleanRowVisibility[rowKey]
             elseif state == "secret" then
                 -- On a cold start there is no clean zero to justify hiding a live value.
                 visible = not hideZero or cached.cleanRowVisibility[rowKey] ~= false
+            elseif state == "unknown" and fallback ~= nil then
+                visible = not hideZero or fallback ~= 0
             else
                 visible = shouldShowUnknown(rowKey, true, hideZero)
             end
@@ -11565,7 +11581,10 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
                 local unknownSuffix = (definition.kind == "movement" or definition.kind == "percent")
                     and "%" or suffix
                 local text
-                if state == "unknown" then
+                if state == "unknown" and fallback ~= nil then
+                    local format = definition.kind == "percent" and "~%.2f%%" or "~%d"
+                    text = SAFE_NUM.FormatColorNumber(valueColor, fallback, format)
+                elseif state == "unknown" then
                     text = "|cff" .. valueColor .. "?" .. unknownSuffix .. "|r"
                 elseif state == "secret" and definition.restrictedMP5FallbackLabel then
                     local formatted = addon.forever.FormatRestrictedMP5(value)
@@ -20337,7 +20356,10 @@ function addon.settingsUI.BuildStatsTab(self, context)
                     cs.padX + column * CONFIG_COL_OFFSET, cs.y)
                 self.settingsDesign.AttachTooltip(control, function()
                     return self.settingsDesign.DisabledControlTooltip(control) or L(definition.label),
-                        L("A ? means this stat is unavailable or cannot be calculated safely.")
+                        definition.usePreCombatValue and
+                            (L("~ marks the last value read before combat.") .. "\n"
+                            .. L("A ? means this stat is unavailable or cannot be calculated safely."))
+                            or L("A ? means this stat is unavailable or cannot be calculated safely.")
                 end)
                 subControls[#subControls + 1] = control
                 colorColumns[column + 1][#colorColumns[column + 1] + 1] = {

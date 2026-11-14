@@ -8,6 +8,8 @@ end
 local combat = false
 local value = 0
 local restricted = false
+local attackPower, hitBonus = 10, 3
+local hitModifier = 1
 local secret = -123456
 local restrictedRegen, nextRestrictedRegen = {}, {}
 local manaRegen, castingRegen = 6, 1
@@ -41,7 +43,10 @@ local env, addon, test = fixtures.loadStatsPro("enUS", {
     foreverAPIs = {
         UnitStat = function(_, index) return index, 20 + index, 0, 0 end,
         GetCritChance = function() return restricted and secret or value end,
-        UnitAttackPower = function() return 10, restricted and secret or 2, -1 end,
+        UnitAttackPower = function() return attackPower, restricted and secret or 2, -1 end,
+        CR_HIT_MELEE = 6,
+        GetCombatRatingBonus = function() return hitBonus end,
+        GetHitModifier = function() return hitModifier end,
         GetMeleeHaste = function() return 2 end,
         GetSpellCritChance = function() return 5 end,
         GetSpellBonusHealing = function() return 15 end,
@@ -454,7 +459,7 @@ end
 settings = test.profileState().settings
 settings.showOffensive, settings.showMeleeCrit = true, true
 settings.hideZeroOffensive = true
-settings.showAttackPower = true
+settings.showAttackPower, settings.showMeleeHit = true, true
 test.cacheSettings()
 blocks = test.buildRenderBlocks()
 local function contains(block, text)
@@ -471,7 +476,26 @@ restricted, combat = true, true
 blocks = test.buildRenderBlocks()
 check(contains(blocks[2], critLabel), "restricted after nonzero remains visible")
 check(contains(blocks[2], "Attack Power"), "unknown composite remains visible after clean nonzero")
-check(string.find(table.concat(blocks[2].values, "\n") .. table.concat(blocks[2].ratings, "\n"), "?", 1, true), "composite restricted value displays unknown")
+local function hasStat(block, label, expected)
+    local function plain(text) return (text:gsub("|cff%x%x%x%x%x%x", ""):gsub("|r", "")) end
+    for index, rowLabel in ipairs(block.labels) do
+        if plain(rowLabel):find(label, 1, true) then
+            return plain(block.ratings[index] .. block.values[index]) == expected
+        end
+    end
+    return false
+end
+check(hasStat(blocks[2], "Attack Power", "~11"), "restricted AP shows the last pre-combat value")
+check(hasStat(blocks[2], critLabel, "75%"), "restricted crit still shows its live value")
+check(hasStat(blocks[2], "Melee Hit", "4.00%"), "clean hit remains live in combat")
+hitBonus, hitModifier = -123456, -123456
+check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "~4.00%"), "restricted hit shows the last pre-combat value")
+hitModifier = 0
+check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "75%"), "exact restricted hit takes priority over fallback")
+hitBonus, hitModifier = 5, 2
+check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "7.00%"), "clean hit changes during combat")
+hitBonus, hitModifier = -123456, -123456
+check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "~4.00%"), "combat reads do not replace the pre-combat snapshot")
 local firstRestricted = table.concat(blocks[2].values, "\n") .. table.concat(blocks[2].ratings, "\n")
 check(string.find(firstRestricted, "75", 1, true), "first restricted scalar displayed live")
 secret = -123457
@@ -479,6 +503,25 @@ blocks = test.buildRenderBlocks()
 local secondRestricted = table.concat(blocks[2].values, "\n") .. table.concat(blocks[2].ratings, "\n")
 check(string.find(secondRestricted, "90", 1, true), "second consecutive restricted scalar displayed live")
 check(not string.find(secondRestricted, "75", 1, true), "previous restricted scalar not cached")
+combat, restricted = false, false
+attackPower, hitBonus, hitModifier = 15, 0, 0
+blocks = test.buildRenderBlocks()
+check(hasStat(blocks[2], "Attack Power", "16"), "fresh AP immediately replaces fallback")
+check(not contains(blocks[2], "Melee Hit"), "Hide Zero hides a confirmed zero")
+combat, restricted = true, true
+hitBonus, hitModifier = -123456, -123456
+blocks = test.buildRenderBlocks()
+check(hasStat(blocks[2], "Attack Power", "~16"), "fallback refreshes before the next fight")
+check(not contains(blocks[2], "Melee Hit"), "Hide Zero also hides a cached zero")
+settings.hideZeroOffensive = false
+test.cacheSettings()
+check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "~0.00%"), "cached zero is displayed when Hide Zero is off")
+combat = false
+check(hasStat(test.buildRenderBlocks()[2], "Attack Power", "?"), "no stale fallback outside combat")
+combat = true
+settings.showOffhandHit = true
+test.cacheSettings()
+check(hasStat(test.buildRenderBlocks()[2], "Offhand Hit", "?%"), "first restricted read does not invent a fallback")
 combat, restricted = false, false
 settings.showTertiary, settings.showManaRegenMP5, settings.showCastingManaRegenMP5 = true, true, true
 test.cacheSettings()

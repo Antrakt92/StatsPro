@@ -253,15 +253,15 @@ end
 Row("offensive", "MeleeCrit", "Melee Crit", Scalar("GetCritChance", 1), "percent", "crit")
 Row("offensive", "RangedCrit", "Ranged Crit", Scalar("GetRangedCritChance", 1), "percent", "crit")
 Row("offensive", "SpellCrit", "Spell Crit", Scalar("GetSpellCritChance", 1), "percent", "crit")
-Row("offensive", "MeleeHit", "Melee Hit", Hit("CR_HIT_MELEE", "GetHitModifier"), "percent")
-Row("offensive", "OffhandHit", "Offhand Hit", Hit("CR_HIT_MELEE", "GetOffhandHitModifier"), "percent")
-Row("offensive", "RangedHit", "Ranged Hit", Hit("CR_HIT_RANGED", "GetRangedHitModifier"), "percent")
-Row("offensive", "SpellHit", "Spell Hit", Hit("CR_HIT_SPELL", "GetSpellHitModifier"), "percent")
+Row("offensive", "MeleeHit", "Melee Hit", Hit("CR_HIT_MELEE", "GetHitModifier"), "percent").usePreCombatValue = true
+Row("offensive", "OffhandHit", "Offhand Hit", Hit("CR_HIT_MELEE", "GetOffhandHitModifier"), "percent").usePreCombatValue = true
+Row("offensive", "RangedHit", "Ranged Hit", Hit("CR_HIT_RANGED", "GetRangedHitModifier"), "percent").usePreCombatValue = true
+Row("offensive", "SpellHit", "Spell Hit", Hit("CR_HIT_SPELL", "GetSpellHitModifier"), "percent").usePreCombatValue = true
 Row("offensive", "MeleeHaste", "Melee Haste", Scalar("GetMeleeHaste", 1), "percent", "haste")
 Row("offensive", "RangedHaste", "Ranged Haste", RangedHaste, "percent", "haste")
 Row("offensive", "SpellHaste", "Spell Haste", Scalar("UnitSpellHaste", 1, "player"), "percent", "haste")
-Row("offensive", "AttackPower", "Attack Power", AttackPower("UnitAttackPower"))
-Row("offensive", "RangedAttackPower", "Ranged Attack Power", AttackPower("UnitRangedAttackPower"))
+Row("offensive", "AttackPower", "Attack Power", AttackPower("UnitAttackPower")).usePreCombatValue = true
+Row("offensive", "RangedAttackPower", "Ranged Attack Power", AttackPower("UnitRangedAttackPower")).usePreCombatValue = true
 for school, name in ipairs({ "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" }) do
     Row("offensive", "SpellPower" .. name, name .. " Spell Power", Scalar("GetSpellBonusDamage", 1, school + 1))
 end
@@ -656,6 +656,24 @@ for locale, labels in pairs(statusLabels) do
     F.labels[locale]["Forever Beta"] = labels[1]
     F.labels[locale]["A ? means this stat is unavailable or cannot be calculated safely."] = labels[2]
 end
+local preCombatLabels = {
+    enUS = "~ marks the last value read before combat.",
+    ruRU = "~ отмечает последнее значение, считанное до боя.",
+    deDE = "~ kennzeichnet den letzten vor dem Kampf gelesenen Wert.",
+    esES = "~ indica el último valor leído antes del combate.",
+    frFR = "~ indique la dernière valeur lue avant le combat.",
+    itIT = "~ indica l’ultimo valore letto prima del combattimento.",
+    ptBR = "~ indica o último valor lido antes do combate.",
+    koKR = "~는 전투 전에 마지막으로 읽은 값입니다.",
+    zhCN = "~ 表示进入战斗前最后一次读取的数值。",
+    zhTW = "~ 表示進入戰鬥前最後一次讀取的數值。",
+}
+preCombatLabels.enGB = preCombatLabels.enUS
+preCombatLabels.esMX = preCombatLabels.esES
+for locale, text in pairs(preCombatLabels) do
+    F.labels[locale]["~ marks the last value read before combat."] = text
+end
+
 local presetSummaries = {
     enUS = { "Class essentials; choose a role preset for a hybrid build.", "Attack power, crit, hit and haste; ranged stats for Hunters.", "Spell crit, hit, haste and your class's spell schools.", "Healing power, mana regeneration, spell crit and haste.", "Armor, defense and avoidance, plus melee hit and expertise." },
     ruRU = { "Основное для класса; для гибридного билда выбери пресет роли.", "Сила атаки, крит, меткость и скорость; у охотников — дальний бой.", "Крит, меткость, скорость и школы магии твоего класса.", "Сила исцеления, восстановление маны, крит и скорость заклинаний.", "Броня, защита и уклонение от атак, а также меткость и мастерство." },

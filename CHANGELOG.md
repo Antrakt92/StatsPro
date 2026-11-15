@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.24.7 - 15-Nov-2026 — Archon targets and gear HUD fixes
+
+- Refresh Mythic+ and raid stat targets using Archon data checked on 15 November.
+- Keep the last complete durability reading and wait for a full repair estimate when equipped gear temporarily stops reporting. Give repair coin icons room at the edge of the screen.
+
 ## 1.24.6 - 14-Nov-2026 — Archon target refresh
 
 - Refresh Mythic+ and raid stat targets using Archon data checked on 14 November.

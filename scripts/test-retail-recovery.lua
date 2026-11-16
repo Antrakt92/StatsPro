@@ -274,6 +274,34 @@ do
     state = test.durabilityState()
     assert(state.durabilityComplete and state.durabilityValue == 55 and state.repairCost == 400,
         "late recovery restores complete totals after API exceptions")
+    equippedID, durabilityUnavailable = 99, true
+    env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", slot, true)
+    assert(addon:RunUpdateStatsSafe(), "replacement with unavailable durability remains incomplete")
+    for _ = 1, limit + 1 do
+        if not test.durabilityState().durabilityRetryScheduled then break end
+        assert(env.__flushNextTimer() and addon:RunUpdateStatsSafe(), "drain retries for replacement item")
+    end
+    state = test.durabilityState()
+    assert(state.durabilityRetryAttempt == limit and not state.durabilityRetryScheduled,
+        "replacement item retries stop at the configured limit")
+    env.__fireEvent("ITEM_DATA_LOAD_RESULT", 1337, true)
+    assert(not test.durabilityState().dirty, "old item cannot wake the replacement scan")
+    env.__fireEvent("ITEM_DATA_LOAD_RESULT", 99, true)
+    assert(test.durabilityState().dirty and addon:RunUpdateStatsSafe(), "replacement ID wakes its own scan")
+    state = test.durabilityState()
+    assert(state.durabilityRetryAttempt == limit and not state.durabilityRetryScheduled,
+        "replacement readiness after API failure does not restart the retry budget")
+    env.__fireEvent("GET_ITEM_INFO_RECEIVED", 99, true)
+    assert(not test.durabilityState().dirty, "duplicates cannot wake an unavailable replacement again")
+    equippedID = 100
+    env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", slot, true)
+    assert(addon:RunUpdateStatsSafe(), "a new inventory generation retries the next replacement")
+    durabilityUnavailable, current, maximum = false, 50, 100
+    env.__fireEvent("GET_ITEM_INFO_RECEIVED", 100, true)
+    assert(test.durabilityState().dirty and addon:RunUpdateStatsSafe(), "late replacement data completes the scan")
+    state = test.durabilityState()
+    assert(state.durabilityComplete and state.durabilityValue == 65 and state.repairCost == 400,
+        "newly readable replacement contributes its own durability and repair cost")
     equippedID, current, maximum = 99, nil, nil
     env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", slot, true)
     assert(addon:RunUpdateStatsSafe(), "replacement slot renders safely")

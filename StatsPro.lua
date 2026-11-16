@@ -1641,11 +1641,11 @@ function addon.durabilityRuntime.OnItemDataReady(itemID, success)
     if not addon.IsCleanFiniteNumber(itemID) or issecretvalue(success)
         or type(success) ~= "boolean" or not success then return end
     local runtime = addon.durabilityRuntime
-    for slot, pendingID in pairs(runtime.pendingItemSlots) do
-        if itemID == pendingID and runtime.GetCleanEquippedItemID(slot) == itemID then
-            -- Item readiness can arrive after the retry budget. Preserve the
-            -- budget for previously readable gear and allow one wakeup per slot.
-            if runtime.knownDurableItemIDs[slot] ~= itemID then
+    for slot, pending in pairs(runtime.pendingItemSlots) do
+        if itemID == pending.itemID and runtime.GetCleanEquippedItemID(slot) == itemID then
+            -- Only first-time item hydration opens a new retry generation.
+            -- An unreadable durability sample gets one wakeup per slot.
+            if pending.restartOnLoad then
                 runtime.pendingItemSlots[slot] = nil
                 runtime.MarkDirty()
                 return
@@ -9650,7 +9650,11 @@ end
 function addon.durabilityRuntime.ReadSlot(slot)
     local runtime = addon.durabilityRuntime
     local ok, current, maximum = pcall(GetInventoryItemDurability, slot)
-    if not ok then return "unavailable", nil, nil, runtime.knownDurableItemIDs[slot] end
+    if not ok then
+        local itemID, emptySlot = runtime.GetCleanEquippedItemID(slot)
+        if not itemID and not emptySlot then itemID = runtime.knownDurableItemIDs[slot] end
+        return "unavailable", nil, nil, itemID
+    end
     if issecretvalue(current) or issecretvalue(maximum) then return "restricted" end
     if current == nil and maximum == nil then
         local itemID, emptySlot = runtime.GetCleanEquippedItemID(slot)
@@ -9698,9 +9702,10 @@ local function ScanDurabilityAndCost()
     local minPct
     local durabilityIncomplete = false
     local repairCostPending, repairCostRetryable, repairCostRestricted = false, false, false
+    local runtime = addon.durabilityRuntime
     local pendingItemSlots, pendingRepairItemSlots = {}, {}
-    addon.durabilityRuntime.pendingItemSlots = pendingItemSlots
-    addon.durabilityRuntime.pendingRepairItemSlots = pendingRepairItemSlots
+    runtime.pendingItemSlots = pendingItemSlots
+    runtime.pendingRepairItemSlots = pendingRepairItemSlots
     for slot = DURABILITY_SCAN.slotMin, DURABILITY_SCAN.slotMax do
         if not DURABILITY_SCAN.skipSlots[slot] then
             local state, pct, damaged, itemID = addon.durabilityRuntime.ReadSlot(slot)
@@ -9724,7 +9729,12 @@ local function ScanDurabilityAndCost()
                 end
             elseif state ~= "empty" then
                 durabilityIncomplete = true
-                pendingItemSlots[slot] = itemID
+                if itemID then
+                    pendingItemSlots[slot] = {
+                        itemID = itemID,
+                        restartOnLoad = state == "uncached" and runtime.knownDurableItemIDs[slot] ~= itemID,
+                    }
+                end
                 if cached.showRepairCost then
                     repairCostPending = true
                     repairCostRestricted = repairCostRestricted or state == "restricted"

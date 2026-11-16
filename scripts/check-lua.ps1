@@ -113,29 +113,40 @@ function Read-LuaLanguageServerDiagnostics {
         throw "lua-language-server did not write JSON diagnostics to $JsonPath"
     }
     $raw = Get-Content -LiteralPath $JsonPath -Raw -Encoding UTF8
+    # LuaLS emits [] or a map of file URIs to diagnostics. An empty,
+    # truncated or scalar result cannot establish a clean diagnostic run.
+    if ([string]::IsNullOrWhiteSpace($raw) -or $raw -notmatch '^\s*(?:\[|\{)') {
+        throw "lua-language-server JSON diagnostics must be an array or object: $JsonPath"
+    }
     try {
-        $parsed = $raw | ConvertFrom-Json
+        $parseOptions = @{ InputObject = $raw }
+        # Windows PowerShell already preserves the top-level array.
+        if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('NoEnumerate')) {
+            $parseOptions.NoEnumerate = $true
+        }
+        $parsed = ConvertFrom-Json @parseOptions
     }
     catch {
         throw "lua-language-server wrote invalid JSON diagnostics to ${JsonPath}: $($_.Exception.Message)"
     }
 
     $diagnostics = @()
-    if ($null -eq $parsed) {
-        return $diagnostics
-    }
     if ($parsed -is [System.Array]) {
         foreach ($item in $parsed) {
-            if ($null -ne $item) {
-                $diagnostics += $item
+            if ($item -isnot [pscustomobject]) {
+                throw "lua-language-server JSON diagnostics must contain diagnostic objects: $JsonPath"
             }
+            $diagnostics += $item
         }
         return $diagnostics
     }
     foreach ($property in $parsed.PSObject.Properties) {
-        foreach ($diagnostic in @($property.Value)) {
-            if ($null -eq $diagnostic) {
-                continue
+        if ($property.Value -isnot [System.Array]) {
+            throw "lua-language-server JSON diagnostics must map each file to an array: $JsonPath"
+        }
+        foreach ($diagnostic in $property.Value) {
+            if ($diagnostic -isnot [pscustomobject]) {
+                throw "lua-language-server JSON diagnostics must contain diagnostic objects: $JsonPath"
             }
             $diagnostics += [pscustomobject]@{
                 FileUri  = $property.Name
@@ -941,10 +952,23 @@ param([string]$Value, [AllowEmptyString()][string]$EmptyValue)
         } "did not write JSON"
 
         $invalidPath = Join-Path $root "invalid.json"
-        Set-Content -Path $invalidPath -Value "not-json" -Encoding UTF8
+        Set-Content -Path $invalidPath -Value "{not-json" -Encoding UTF8
         Assert-ThrowsMatch "invalid JSON rejected" {
             [void](Read-LuaLanguageServerDiagnostics -JsonPath $invalidPath)
         } "invalid JSON"
+        foreach ($invalidRoot in @('', 'null', 'false', '7', '"unexpected"')) {
+            [System.IO.File]::WriteAllText($invalidPath, $invalidRoot)
+            Assert-ThrowsMatch "missing or scalar JSON diagnostics rejected" {
+                [void](Read-LuaLanguageServerDiagnostics -JsonPath $invalidPath)
+            } "must be an array or object"
+        }
+
+        foreach ($invalidContainer in @('[null]', '[7]', '{"file":null}', '{"file":[null]}', '{"file":{}}')) {
+            [System.IO.File]::WriteAllText($invalidPath, $invalidContainer)
+            Assert-ThrowsMatch "malformed diagnostic containers rejected" {
+                [void](Read-LuaLanguageServerDiagnostics -JsonPath $invalidPath)
+            } "must contain diagnostic objects|must map each file to an array"
+        }
 
         Assert-ThrowsMatch "nonzero exit without diagnostics rejected" {
             Assert-NoLuaDiagnostics -Diagnostics @() -ExitCode 1

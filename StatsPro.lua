@@ -14993,6 +14993,7 @@ function addon.settingsDesign.RequestResponsiveFrameResize()
     local attempt = 0
     local function refresh()
         attempt = attempt + 1
+        local retryPositions = false
         if isLoaded then
             local active = addon.dbRuntime.GetActiveSettings()
             local mainOK, defensiveOK = true, true
@@ -15006,15 +15007,24 @@ function addon.settingsDesign.RequestResponsiveFrameResize()
             -- apply once more, always projecting the latest settings and viewport.
             local sensitive = mainPanel:HasViewportSensitivePosition(active)
                 or defensivePanel:HasViewportSensitivePosition(active)
-            if (attempt == 1 and sensitive) or (attempt == 2 and not (mainOK and defensiveOK)) then
-                RunCoalesced("responsiveFrameSize", 0.1, refresh)
-            end
+            retryPositions = (attempt == 1 and sensitive)
+                or (attempt == 2 and not (mainOK and defensiveOK))
         end
-        if attempt == 1 then
-            if addon.settingsUI.frame then addon.settingsUI.ApplyFrameSize(addon) end
-            local applyManager = addon.profileUI.ApplyManagerSize
-            if type(applyManager) == "function" then applyManager() end
+        local settingsFrame = addon.settingsUI.frame
+        local manager = addon.profileUI.manager
+        local settingsShown = settingsFrame and settingsFrame:IsVisible()
+        local managerShown = manager and manager:IsVisible()
+        local applyManager = addon.profileUI.ApplyManagerSize
+        -- Give each shown window one fresh viewport read after the first pass.
+        -- The sizing methods already skip the native resize at matching dimensions.
+        if settingsFrame and (attempt == 1 or (attempt == 2 and settingsShown)) then
+            pcall(addon.settingsUI.ApplyFrameSize, addon)
         end
+        if type(applyManager) == "function" and (attempt == 1 or (attempt == 2 and managerShown)) then
+            pcall(applyManager)
+        end
+        local retryWindows = attempt == 1 and (settingsShown or managerShown)
+        if retryPositions or retryWindows then RunCoalesced("responsiveFrameSize", 0.1, refresh) end
     end
     RunCoalesced("responsiveFrameSize", 0, refresh)
 end
@@ -18706,9 +18716,11 @@ end
 function addon.settingsUI.SaveActiveScroll()
     local context = addon.settingsUI.context
     if not context or context.restoringScroll then return end
+    local index = context.frame.activeTabIndex or 1
+    if context.scrollRestorePending[index] then return end
     local value = context.scrollFrame:GetVerticalScroll()
     if SAFE_NUM.IsCleanFiniteNumber(value) and value >= 0 then
-        context.scrollOffsets[context.frame.activeTabIndex or 1] = value
+        context.scrollOffsets[index] = value
     end
 end
 
@@ -18728,11 +18740,20 @@ function addon.settingsUI.RefreshActiveScroll()
     local target = context.scrollOffsets[index] or 0
     local maximum = math.max(0, tab.contentHeight - viewportHeight)
     target = math.max(0, math.min(target, maximum))
+    local wasRestoring = context.restoringScroll
     context.restoringScroll = true
-    context.scrollChild:SetHeight(tab.contentHeight)
-    context.scrollFrame:SetVerticalScroll(target)
-    context.restoringScroll = false
+    local refreshed = pcall(function()
+        context.scrollChild:SetHeight(tab.contentHeight)
+        context.scrollFrame:SetVerticalScroll(target)
+    end)
+    context.restoringScroll = wasRestoring
+    if not refreshed then
+        context.scrollRestorePending[index] = true
+        return false
+    end
+    context.scrollRestorePending[index] = nil
     context.scrollOffsets[index] = target
+    return true
 end
 
 function addon.settingsUI.ApplyFrameSize(self)
@@ -18744,16 +18765,24 @@ function addon.settingsUI.ApplyFrameSize(self)
     if not parentHeight then return false end
     local maxHeight = math.max(geometry.minHeight,
         math.min(geometry.maxHeight, parentHeight * geometry.parentHeightRatio))
-    if frame:GetWidth() == frameWidth and frame:GetHeight() == maxHeight then
-        return true
+    local ui = self.settingsUI
+    local navigation = ui.context
+    if frame:GetWidth() ~= frameWidth or frame:GetHeight() ~= maxHeight then
+        ui.SaveActiveScroll()
+        local wasRestoring = navigation and navigation.restoringScroll
+        if navigation then
+            navigation.restoringScroll = true
+            -- Native sizing can apply the dimensions before a callback fails.
+            local index = frame.activeTabIndex
+            if index then navigation.scrollRestorePending[index] = true end
+        end
+        local resized = pcall(frame.SetSize, frame, frameWidth, maxHeight)
+        if navigation then navigation.restoringScroll = wasRestoring end
+        if not resized then return false end
     end
-    self.settingsUI.SaveActiveScroll()
-    local navigation = self.settingsUI.context
-    local wasRestoring = navigation and navigation.restoringScroll
-    if navigation then navigation.restoringScroll = true end
-    frame:SetSize(frameWidth, maxHeight)
-    if navigation then navigation.restoringScroll = wasRestoring end
-    self.settingsUI.RefreshActiveScroll()
+    if navigation and navigation.scrollRestorePending[frame.activeTabIndex] then
+        return ui.RefreshActiveScroll() == true
+    end
     return true
 end
 
@@ -18963,9 +18992,6 @@ function addon.settingsUI.BuildShell(self)
         for i, content in ipairs(tabContents) do
             if i == idx then
                 content:Show()
-                if content.contentHeight then
-                    scrollChild:SetHeight(content.contentHeight)
-                end
                 self.settingsDesign.SetTabSelected(tabButtons[i], true)
             else
                 content:Hide()
@@ -18973,7 +18999,9 @@ function addon.settingsUI.BuildShell(self)
             end
         end
         if navigation then navigation.restoringScroll = wasRestoring end
-        self.settingsUI.RefreshActiveScroll()
+        if self.settingsUI.RefreshActiveScroll() == false then
+            self.settingsDesign.RequestResponsiveFrameResize()
+        end
     end
     configFrame.SwitchToTab = SwitchToTab
 
@@ -19015,6 +19043,7 @@ function addon.settingsUI.BuildShell(self)
         frame = configFrame,
         scrollFrame = scrollFrame,
         scrollOffsets = {},
+        scrollRestorePending = {},
         tabContents = tabContents,
         scrollChild = scrollChild,
         scrollChildWidth = scrollChildWidth,

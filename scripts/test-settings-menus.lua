@@ -398,4 +398,165 @@ do
         end
     end
 end
+do
+    local combat = false
+    local env, addon = fixtures.loadStatsPro('enUS', {
+        forever = true, uiParentWidth = 1280, uiParentHeight = 900,
+        inCombatLockdown = function() return combat end,
+    })
+    env.__fireEvent('PLAYER_ENTERING_WORLD')
+    addon:OpenConfigMenu()
+    addon.profileUI.OpenManager(true)
+    env.__flushTimers(0.1)
+    local settings, manager = env.StatsProConfigFrame, addon.profileUI.manager
+    local function near(actual, expected)
+        return math.abs(actual - expected) < 0.001
+    end
+    local function setMethod(frame, method, implementation)
+        frame[method] = implementation
+    end
+    env.__fireEvent('DISPLAY_SIZE_CHANGED')
+    env.__flushTimers(0)
+    env.UIParent:SetSize(640, 432)
+    env.__flushTimers(0.1)
+    check(near(settings:GetHeight(), 388.8), 'Settings catches a late viewport height')
+    check(near(manager:GetWidth(), 576) and near(manager:GetHeight(), 367.2),
+        'Profile Manager catches a late viewport width and height')
+
+    env.__fireEvent('UI_SCALE_CHANGED')
+    env.__flushTimers(0)
+    env.UIParent:SetSize(800, 500)
+    env.__fireEvent('DISPLAY_SIZE_CHANGED')
+    env.__flushTimers(0)
+    env.UIParent:SetSize(700, 460)
+    combat = true
+    env.__flushTimers(0.1)
+    check(near(settings:GetHeight(), 414) and near(manager:GetHeight(), 391),
+        'new resize replaces stale retry and refreshes shown Settings during combat')
+
+    env.__fireEvent('DISPLAY_SIZE_CHANGED')
+    env.__flushTimers(0)
+    manager:Hide()
+    settings:Hide()
+    env.UIParent:SetSize(680, 420)
+    env.__flushTimers(0.1)
+    check(near(settings:GetHeight(), 414) and near(manager:GetHeight(), 391),
+        'settled viewport retry leaves closed windows alone')
+    combat = false
+    addon:OpenConfigMenu()
+    addon.profileUI.OpenManager(true)
+    check(near(settings:GetHeight(), 378) and near(manager:GetHeight(), 357),
+        'reopening uses current dimensions after a skipped closed-window retry')
+
+    local readHeight = addon.settingsDesign.ReadUIParentHeight
+    local reads = 0
+    addon.settingsDesign.ReadUIParentHeight = function()
+        reads = reads + 1
+        if reads == 1 then return nil end
+        return readHeight()
+    end
+    env.UIParent:SetSize(720, 480)
+    env.__fireEvent('DISPLAY_SIZE_CHANGED')
+    env.__flushTimers(0)
+    addon.settingsDesign.ReadUIParentHeight = readHeight
+    check(near(settings:GetHeight(), 378) and near(manager:GetHeight(), 408),
+        'an unavailable Settings sample cannot block a good manager sample')
+    env.__flushTimers(0.1)
+    check(near(settings:GetHeight(), 432),
+        'Settings retries a missed viewport sample')
+
+    local settingsSize = settings.SetSize
+    setMethod(settings, 'SetSize', function()
+        setMethod(settings, 'SetSize', settingsSize)
+        error('native Settings resize failure')
+    end)
+    env.UIParent:SetSize(760, 490)
+    env.__fireEvent('DISPLAY_SIZE_CHANGED')
+    env.__flushTimers(0)
+    check(not addon.settingsUI.context.restoringScroll and near(manager:GetHeight(), 416.5),
+        'failed Settings SetSize restores scroll guard and leaves manager responsive')
+    env.__flushTimers(0.1)
+    check(near(settings:GetHeight(), 441), 'Settings recovers from a one-shot native resize failure')
+
+    local managerSize = manager.SetSize
+    local managerAttempts = 0
+    manager.SetSize = function()
+        managerAttempts = managerAttempts + 1
+        error('persistent native manager resize failure')
+    end
+    env.UIParent:SetSize(780, 520)
+    env.__fireEvent('DISPLAY_SIZE_CHANGED')
+    env.__flushTimers(0)
+    env.__flushTimers(1)
+    env.__flushTimers(1)
+    check(managerAttempts == 2 and near(settings:GetHeight(), 468),
+        'manager failures are bounded and do not undo Settings sizing')
+    manager.SetSize = managerSize
+    env.__fireEvent('UI_SCALE_CHANGED')
+    env.__flushTimers(0.1)
+    check(near(manager:GetHeight(), 440), 'a new event can recover after the manager retry budget')
+
+    local refreshScroll = addon.settingsUI.RefreshActiveScroll
+    local partialRefreshes = 0
+    addon.settingsUI.RefreshActiveScroll = function()
+        partialRefreshes = partialRefreshes + 1
+        return refreshScroll()
+    end
+    setMethod(settings, 'SetSize', function(self, ...)
+        setMethod(settings, 'SetSize', settingsSize)
+        settingsSize(self, ...)
+        error('native Settings resize partially applied')
+    end)
+    env.UIParent:SetSize(790, 510)
+    env.__fireEvent('DISPLAY_SIZE_CHANGED')
+    env.__flushTimers(0)
+    check(near(settings:GetHeight(), 459) and not addon.settingsUI.context.restoringScroll,
+        'partially applied native resize restores the original scroll guard')
+    env.__flushTimers(0.1)
+    check(partialRefreshes == 1, 'partially applied resize still refreshes scroll after matching dimensions')
+    addon.settingsUI.RefreshActiveScroll = refreshScroll
+
+    local scrollFrame = addon.settingsUI.context.scrollFrame
+    local setScroll = scrollFrame.SetVerticalScroll
+    local scrollAttempts = 0
+    setMethod(scrollFrame, 'SetVerticalScroll', function(self, ...)
+        scrollAttempts = scrollAttempts + 1
+        if scrollAttempts == 1 then error('native scroll refresh failure') end
+        return setScroll(self, ...)
+    end)
+    env.UIParent:SetSize(800, 475)
+    env.__fireEvent('DISPLAY_SIZE_CHANGED')
+    env.__flushTimers(0)
+    check(not addon.settingsUI.context.restoringScroll and near(settings:GetHeight(), 427.5),
+        'failed scroll refresh keeps the new geometry and restores the guard')
+    env.__flushTimers(0.1)
+    check(scrollAttempts == 2 and not addon.settingsUI.context.restoringScroll,
+        'scroll refresh retries when geometry already applied')
+
+    local navigation = addon.settingsUI.context
+    settings.SwitchToTab(1)
+    setScroll(scrollFrame, 230)
+    addon.settingsUI.SaveActiveScroll()
+    local failFirstScroll = true
+    setMethod(scrollFrame, 'SetVerticalScroll', function(self, ...)
+        if failFirstScroll then
+            failFirstScroll = false
+            error('first native scroll refresh fails after clamp')
+        end
+        return setScroll(self, ...)
+    end)
+    setMethod(settings, 'SetSize', function(self, ...)
+        setMethod(settings, 'SetSize', settingsSize)
+        settingsSize(self, ...)
+        setScroll(scrollFrame, 0)
+    end)
+    env.UIParent:SetSize(810, 485)
+    env.__fireEvent('DISPLAY_SIZE_CHANGED')
+    env.__flushTimers(0)
+    settings.SwitchToTab(2)
+    settings.SwitchToTab(1)
+    env.__flushTimers(0.1)
+    check(near(scrollFrame:GetVerticalScroll(), 230) and near(navigation.scrollOffsets[1], 230),
+        'tab switching cannot discard the saved offset after a failed resize refresh')
+end
 print('Settings menus: ' .. checks .. ' checks passed')

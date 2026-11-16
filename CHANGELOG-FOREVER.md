@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.24.1 - 16-Nov-2026 — Combat mana regeneration and gear recovery
+
+- Switch the adaptive mana regeneration row promptly when entering and leaving combat.
+- Refresh durability and repair totals when gear data arrives late, including after swapping an item.
+- Keep the percent sign on protected stats when the game withholds a displayable value.
+- Keep Settings and Profile Manager sized to the game window and preserve scroll position when switching tabs. Localize recovery and preview guidance.
+- End `/ss selftest` cleanly when the game cannot start its sampling timer.
+
 ## 1.24.0 - 14-Nov-2026 — Live attack power and steadier combat HUD
 
 - Show current melee attack power in combat when the game supplies a verified value. Show the last pre-combat reading in parentheses when a live total is unavailable.

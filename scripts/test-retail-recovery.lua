@@ -189,12 +189,15 @@ print(flavor .. " late repair tooltip recovery regressions passed")
 do
     local slot = forever and 18 or 17
     local equippedID, current, maximum = 1337, 40, 100
-    local identityUnavailable = false
+    local identityUnavailable, durabilityUnavailable = false, false
     local env, addon, test = loadStatsPro("enUS", {
         statsProDB = { showDurability = true, showRepairCost = true, useWorstDurability = false },
         getInventoryItemDurability = function(index)
             if index == 1 then return 80, 100 end
-            if index == slot then return current, maximum end
+            if index == slot then
+                if durabilityUnavailable then error("equipped durability temporarily unavailable") end
+                return current, maximum
+            end
         end,
         getTooltipInventoryItem = function(_, index)
             return { repairCost = index == slot and 300 or 100 }
@@ -259,6 +262,18 @@ do
     state = test.durabilityState()
     assert(state.durabilityComplete and state.durabilityValue == 55 and state.repairCost == 400,
         "matching readiness restarts complete durability and repair")
+    durabilityUnavailable = true
+    env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+    assert(addon:RunUpdateStatsSafe(), "durability exceptions leave the scan incomplete")
+    for _ = 1, limit do
+        assert(env.__flushNextTimer() and addon:RunUpdateStatsSafe(), "drain retries after API failure")
+    end
+    durabilityUnavailable = false
+    env.__fireEvent("ITEM_DATA_LOAD_RESULT", 1337, true)
+    assert(test.durabilityState().dirty and addon:RunUpdateStatsSafe(), "late data also recovers after API exceptions")
+    state = test.durabilityState()
+    assert(state.durabilityComplete and state.durabilityValue == 55 and state.repairCost == 400,
+        "late recovery restores complete totals after API exceptions")
     equippedID, current, maximum = 99, nil, nil
     env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", slot, true)
     assert(addon:RunUpdateStatsSafe(), "replacement slot renders safely")

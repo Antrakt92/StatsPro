@@ -9648,10 +9648,10 @@ end
 
 -- Both the cached HUD and the self-test classify the same live durability pair.
 function addon.durabilityRuntime.ReadSlot(slot)
-    local ok, current, maximum = pcall(GetInventoryItemDurability, slot)
-    if not ok then return "unavailable" end
-    if issecretvalue(current) or issecretvalue(maximum) then return "restricted" end
     local runtime = addon.durabilityRuntime
+    local ok, current, maximum = pcall(GetInventoryItemDurability, slot)
+    if not ok then return "unavailable", nil, nil, runtime.knownDurableItemIDs[slot] end
+    if issecretvalue(current) or issecretvalue(maximum) then return "restricted" end
     if current == nil and maximum == nil then
         local itemID, emptySlot = runtime.GetCleanEquippedItemID(slot)
         if itemID and runtime.IsItemDataPending(itemID) then return "uncached", nil, nil, itemID end

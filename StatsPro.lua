@@ -22257,7 +22257,7 @@ function addon.selfTest.Start()
     addon.selfTest.errBase = addon.selfTest.ReadErrorCount()
     addon.selfTest.CaptureEnv()
     addon.selfTest.state = "ooc-collect"
-    addon.selfTest.StartTicker()
+    if not addon.selfTest.StartTicker() then return false end
     if addon.forever.enabled then
         PrintMsg("selftest: " .. L("Collecting 10 out-of-combat samples, then fight a creature to test combat."))
     else
@@ -22271,6 +22271,8 @@ function addon.selfTest.Stop(reason)
     addon.selfTest.state = "idle"
     if reason == "cancelled" then
         PrintMsg("selftest: stopped, no report was saved.")
+    elseif reason == "timer" then
+        PrintMsg("selftest: sampling timer unavailable. Run /ss selftest to retry.")
     end
 end
 
@@ -22313,21 +22315,24 @@ function addon.selfTest.StartTicker()
     end
     -- A malformed native handle cannot own the run alongside the fallback.
     addon.selfTest.tickerGen = addon.selfTest.tickerGen + 1
-    addon.selfTest.ArmFallback()
-    return true
+    return addon.selfTest.ArmFallback()
 end
 
 function addon.selfTest.ArmFallback()
     local gen = addon.selfTest.tickerGen
     local timerLib = C_Timer
-    if type(timerLib) ~= "table" or type(timerLib.After) ~= "function" then return end
-    pcall(timerLib.After, 0.5, function()
-        if addon.selfTest.tickerGen ~= gen then return end
-        addon.selfTest.OnTick()
-        if addon.selfTest.tickerGen == gen and addon.selfTest.IsActive() then
-            addon.selfTest.ArmFallback()
-        end
-    end)
+    if type(timerLib) == "table" and type(timerLib.After) == "function" then
+        local scheduled = pcall(timerLib.After, 0.5, function()
+            if addon.selfTest.tickerGen ~= gen then return end
+            addon.selfTest.OnTick()
+            if addon.selfTest.tickerGen == gen and addon.selfTest.IsActive() then
+                addon.selfTest.ArmFallback()
+            end
+        end)
+        if scheduled then return true end
+    end
+    addon.selfTest.Stop("timer")
+    return false
 end
 
 function addon.selfTest.OnTick()
@@ -22403,8 +22408,9 @@ end
 
 function addon.selfTest.BeginRecovery()
     addon.selfTest.recoveryLeft = addon.selfTest.recoveryNeeded
-    addon.selfTest.StartTicker()
-    PrintMsg("selftest: combat ended, collecting 3 recovery samples.")
+    if addon.selfTest.StartTicker() then
+        PrintMsg("selftest: combat ended, collecting 3 recovery samples.")
+    end
 end
 
 -- WHY: combat entry/exit arrive through the shared EVENT_HANDLERS table only;

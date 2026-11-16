@@ -267,4 +267,22 @@ for _, forever in ipairs({ false, true }) do
         "the report still closes explicitly")
 end
 
+for _, forever in ipairs({ false, true }) do
+    local env, addon = loadStatsPro(forever)
+    local guided = addon.selfTest
+    local nativeTicker, nativeAfter = env.C_Timer.NewTicker, env.C_Timer.After
+    local function reject() error("timer unavailable") end
+    env.C_Timer.NewTicker, env.C_Timer.After = reject, reject
+    assert(not guided.Start() and not guided.IsActive(),
+        "a failed native ticker and fallback must not leave an active run")
+    env.C_Timer.After = nativeAfter
+    assert(guided.Start() and guided.IsActive(), "fallback can start a new run")
+    env.C_Timer.After = reject
+    env.__flushTimers(0.5)
+    assert(not guided.IsActive(), "a failed recurring fallback must end the run")
+    env.C_Timer.NewTicker, env.C_Timer.After = nativeTicker, nativeAfter
+    assert(guided.Start() and guided.IsActive(), "native ticker recovers after a failed run")
+    guided.Stop()
+end
+
 print("StatsPro self-test diagnostics regressions passed")

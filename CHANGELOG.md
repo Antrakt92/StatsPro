@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.24.8 - 16-Nov-2026 — Archon target refresh
+
+- Refresh Mythic+ and raid stat targets using Archon data checked on 16 November.
+
 ## 1.24.7 - 15-Nov-2026 — Archon targets and gear HUD fixes
 
 - Refresh Mythic+ and raid stat targets using Archon data checked on 15 November.

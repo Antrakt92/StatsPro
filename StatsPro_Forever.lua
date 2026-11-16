@@ -221,10 +221,34 @@ local function ReadManaRegenMP5(index, sample)
     return Classify(value * 5)
 end
 
+local manaCombatHint
+
+function F.NoteManaCombatTransition(inCombat)
+    -- Bridge event/API ordering for one HUD refresh. A missing or spurious event
+    -- must not keep this row on the wrong rate for the rest of the session.
+    local hint = { inCombat = inCombat }
+    manaCombatHint = hint
+    local timer = C_Timer
+    if type(timer) ~= "table" or type(timer.After) ~= "function" or not pcall(timer.After, 1, function()
+        if manaCombatHint == hint then manaCombatHint = nil end
+    end) then
+        manaCombatHint = nil
+    end
+end
+
 local function ReadAdaptiveManaRegenMP5(showBaseAlongsideCasting, sample)
     -- Profiles that select both rows keep distinct fixed rates.
     local inCombat = false
-    if not showBaseAlongsideCasting then inCombat = addon.profileRuntime.ReadCombatState() end
+    if not showBaseAlongsideCasting then
+        inCombat = addon.profileRuntime.ReadCombatState()
+        if manaCombatHint then
+            if manaCombatHint.inCombat == inCombat then
+                manaCombatHint = nil
+            else
+                inCombat = manaCombatHint.inCombat
+            end
+        end
+    end
     if inCombat == nil then return nil, "unknown" end
     local value, state = ReadManaRegenMP5(inCombat and 2 or 1, sample)
     -- Hide Zero must remember a separate clean result for each rate.

@@ -600,15 +600,27 @@ settings.showManaRegen, settings.showCastingManaRegen = false, false
 settings.showCastingManaRegenMP5 = false
 settings.labelStyle = "full"
 test.cacheSettings()
+env.__fireEvent("PLAYER_REGEN_DISABLED")
+check(hasManaRow("Mana Regen / 5 sec", "5.00"), "single MP5 follows combat entry while lockdown API lags")
 combat = true
-check(hasManaRow("Mana Regen / 5 sec", "5.00"), "single MP5 switches to casting in combat")
+check(hasManaRow("Mana Regen / 5 sec", "5.00"), "single MP5 uses casting when lockdown catches up")
 castingRegen = nextRestrictedRegen
 check(hasManaRow("Mana Regen / 5 sec", "38.75"), "single MP5 uses first restricted casting rate")
 castingRegen = restrictedRegen
 check(hasManaRow("Mana Regen / 5 sec", "30.25"), "single MP5 uses next restricted casting rate")
-combat, manaRegen, castingRegen = false, 6, 1
+manaRegen, castingRegen = 6, 1
 env.__fireEvent("PLAYER_REGEN_ENABLED")
+check(hasManaRow("Mana Regen / 5 sec", "30.00"), "single MP5 follows combat exit while lockdown API lags")
+combat = false
 check(hasManaRow("Mana Regen / 5 sec", "30.00"), "MP5 restored when restrictions end")
+combat = true
+check(hasManaRow("Mana Regen / 5 sec", "5.00"), "a settled hint cannot mask a missed entry event")
+combat = false
+env.__fireEvent("PLAYER_REGEN_DISABLED")
+check(hasManaRow("Mana Regen / 5 sec", "5.00"), "a new unsettled transition overrides lockdown briefly")
+env.__flushTimers(1)
+check(hasManaRow("Mana Regen / 5 sec", "30.00"), "an unsettled transition cannot mask the API indefinitely")
+env.__fireEvent("PLAYER_REGEN_ENABLED")
 settings.hideZeroTertiary = true
 test.cacheSettings()
 combat, castingRegen = true, 0

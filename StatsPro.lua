@@ -12584,7 +12584,10 @@ local EVENT_HANDLERS = {
     -- WHY: lock state is stored in cached.isLocked and read by OnDragStart. Mouse stays
     -- enabled permanently so right-click Settings works even while locked.
     PLAYER_REGEN_ENABLED        = function()
-        if addon.forever.enabled then addon.forever.preCombatValues = {} end
+        if addon.forever.enabled then
+            addon.forever.preCombatValues = {}
+            addon.forever.NoteManaCombatTransition(false)
+        end
         SAFE_NUM.ReopenScaledFormatterRetries()
         cached.repairCostCombat = nil
         addon.hudPresets.combatState = false
@@ -12613,6 +12616,7 @@ local EVENT_HANDLERS = {
         end
     end,
     PLAYER_REGEN_DISABLED       = function()
+        if addon.forever.enabled then addon.forever.NoteManaCombatTransition(true) end
         cached.repairCostCombat = nil
         addon.panelEditRuntime.FinishDrags()
         addon.hudPresets.combatState = true

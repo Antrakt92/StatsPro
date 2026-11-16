@@ -218,6 +218,27 @@ if ($SelfTest) {
             if (-not $rejected -or (Test-Path -LiteralPath $rejectedBuild)) { throw 'Modified dependency was not rejected before build writes' }
         }
         finally { [System.IO.File]::WriteAllBytes($vendoredPath, $vendoredBytes) }
+        $retryRoot = Join-Path $fixture 'retry-after-failed-build'
+        $builder = Join-Path $PSScriptRoot 'build-forever-package.ps1'
+        $sourceLua = Join-Path $fixture 'StatsPro.lua'
+        $sourceBytes = [System.IO.File]::ReadAllBytes($sourceLua)
+        [System.IO.File]::WriteAllText($sourceLua, 'local version = "unsubstitutable"')
+        try {
+            $rejected = $false
+            try { & $builder -SourceRoot $fixture -OutputRoot $retryRoot } catch {
+                if ($_.Exception.Message -notmatch 'Expected one version substitution token') { throw }
+                $rejected = $true
+            }
+            if (-not $rejected -or @(Get-ChildItem -LiteralPath $retryRoot -Force).Count) {
+                throw 'Failed Forever build left an unverified output file'
+            }
+        }
+        finally { [System.IO.File]::WriteAllBytes($sourceLua, $sourceBytes) }
+        & $builder -SourceRoot $fixture -OutputRoot $retryRoot
+        $retried = Join-Path $retryRoot 'StatsPro-v1.17.21-Forever-beta.zip'
+        if ((Get-FileHash -LiteralPath $first).Hash -cne (Get-FileHash -LiteralPath $retried).Hash) {
+            throw 'Retry after an interrupted build produced different bytes'
+        }
         $zip = [System.IO.Compression.ZipFile]::Open($first, [System.IO.Compression.ZipArchiveMode]::Update)
         try { $zip.CreateEntry('StatsPro/StatsPro_ArchonTargets.lua') | Out-Null } finally { $zip.Dispose() }
         $rejected = $false

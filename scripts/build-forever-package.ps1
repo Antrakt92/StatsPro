@@ -17,29 +17,38 @@ foreach ($name in $map.Values) { $snapshots[$name] = [System.IO.File]::ReadAllBy
 New-Item -ItemType Directory -Path $OutputRoot -Force | Out-Null
 $archivePath = Join-Path $OutputRoot "StatsPro-v$version-Forever-beta.zip"
 if (Test-Path -LiteralPath $archivePath) { throw "Refusing overwrite of existing build: $archivePath" }
-$zip = [System.IO.Compression.ZipFile]::Open($archivePath, [System.IO.Compression.ZipArchiveMode]::Create)
+$stagedPath = Join-Path $OutputRoot ('.statspro-forever-' + [guid]::NewGuid().ToString('N') + '.tmp')
+$stagedFile = [System.IO.File]::Open($stagedPath, [System.IO.FileMode]::CreateNew)
 try {
-    foreach ($name in @($map.Keys | Sort-Object)) {
-        $bytes = $snapshots[$map[$name]]
-        if ($name -ceq 'StatsPro.lua') {
-            $text = [System.Text.Encoding]::UTF8.GetString($bytes)
-            if ([regex]::Matches($text, '@project-version@').Count -ne 1) { throw 'Expected one version substitution token' }
-            $bytes = [System.Text.Encoding]::UTF8.GetBytes($text.Replace('@project-version@', "v$version"))
+    $zip = [System.IO.Compression.ZipArchive]::new($stagedFile, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($name in @($map.Keys | Sort-Object)) {
+            $bytes = $snapshots[$map[$name]]
+            if ($name -ceq 'StatsPro.lua') {
+                $text = [System.Text.Encoding]::UTF8.GetString($bytes)
+                if ([regex]::Matches($text, '@project-version@').Count -ne 1) { throw 'Expected one version substitution token' }
+                $bytes = [System.Text.Encoding]::UTF8.GetBytes($text.Replace('@project-version@', "v$version"))
+            }
+            $entry = $zip.CreateEntry("StatsPro/$name", [System.IO.Compression.CompressionLevel]::Optimal)
+            $entry.LastWriteTime = [DateTimeOffset]::new(2000,1,1,0,0,0,[TimeSpan]::Zero)
+            $stream = $entry.Open()
+            try { $stream.Write($bytes, 0, $bytes.Length) } finally { $stream.Dispose() }
         }
-        $entry = $zip.CreateEntry("StatsPro/$name", [System.IO.Compression.CompressionLevel]::Optimal)
-        $entry.LastWriteTime = [DateTimeOffset]::new(2000,1,1,0,0,0,[TimeSpan]::Zero)
-        $stream = $entry.Open()
-        try { $stream.Write($bytes, 0, $bytes.Length) } finally { $stream.Dispose() }
     }
-}
-finally { $zip.Dispose() }
-foreach ($name in $map.Values) {
-    if ([Convert]::ToBase64String($snapshots[$name]) -cne [Convert]::ToBase64String([System.IO.File]::ReadAllBytes((Join-Path $SourceRoot $name)))) {
-        throw "Source changed during packaging: $name; archive is unverified"
+    finally { $zip.Dispose() }
+    foreach ($name in $map.Values) {
+        if ([Convert]::ToBase64String($snapshots[$name]) -cne [Convert]::ToBase64String([System.IO.File]::ReadAllBytes((Join-Path $SourceRoot $name)))) {
+            throw "Source changed during packaging: $name; archive is unverified"
+        }
     }
+    Assert-ForeverArchive $stagedPath $SourceRoot
+    $hash = (Get-FileHash -LiteralPath $stagedPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    [System.IO.File]::Move($stagedPath, $archivePath)
 }
-Assert-ForeverArchive $archivePath $SourceRoot
-$hash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+finally {
+    $stagedFile.Dispose()
+    if ([System.IO.File]::Exists($stagedPath)) { [System.IO.File]::Delete($stagedPath) }
+}
 Write-Host "Local Forever beta archive: $archivePath"
 Write-Host "SHA256: $hash"
 Write-Host 'No release, marketplace upload or installation performed.'

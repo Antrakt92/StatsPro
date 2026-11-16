@@ -4703,13 +4703,13 @@ function SAFE_NUM.FormatDisplayNumber(value, cleanFormat, secretSuffix)
                 return text, true
             end
         end
-        if not _G.C_StringUtil
-            or type(_G.C_StringUtil.RoundToNearestString) ~= "function" then
-            return "?", true, true
+        local suffix = secretSuffix or ""
+        local fallback = _G.C_StringUtil and _G.C_StringUtil.RoundToNearestString
+        if type(fallback) == "function" then
+            local ok, text = pcall(fallback, value)
+            if ok and type(text) == "string" then return text .. suffix, true end
         end
-        local ok, text = pcall(_G.C_StringUtil.RoundToNearestString, value)
-        if not ok or type(text) ~= "string" then return "?", true, true end
-        return text .. (secretSuffix or ""), true
+        return "?" .. suffix, true, true
     end
     if not SAFE_NUM.IsCleanFiniteNumber(value) then return nil, false end
     return string.format(cleanFormat, value), true
@@ -4785,7 +4785,8 @@ function addon.movementRuntime.ResolvePercent(runSpeed)
             * addon.movementRuntime.percentAtBaseSpeed, nil, false, false
     end
     if not issecretvalue(displaySpeed) then return nil, nil, false, false end
-    local text, hasText = addon.movementRuntime.FormatRestricted(displaySpeed)
+    local text, hasText, placeholder = addon.movementRuntime.FormatRestricted(displaySpeed)
+    if placeholder then return nil, nil, false, true end
     return nil, text, hasText, true
 end
 

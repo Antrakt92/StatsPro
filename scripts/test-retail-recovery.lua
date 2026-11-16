@@ -696,6 +696,49 @@ for _, kind in ipairs(forever and { "Movement", "MP5" } or { "Movement" }) do
     print(flavor .. " " .. kind .. " protected formatter recovery regressions passed")
 end
 
+-- Native formatting failure must preserve each row's unknown-value unit.
+do
+    local secretSpeed, speed, combat = {}, 7, false
+    local function getUnitSpeed() return 0, speed, 0, 0 end
+    local function getParryChance() return combat and secretSpeed or 5 end
+    local env, _, test = loadStatsPro("enUS", {
+        inCombatLockdown = function() return combat end,
+        issecretvalue = function(value) return rawequal(value, secretSpeed) end,
+        getUnitSpeed = getUnitSpeed,
+        getParryChance = getParryChance,
+        foreverAPIs = { GetUnitSpeed = getUnitSpeed, GetParryChance = getParryChance },
+        abbreviateNumbers = function() error("abbreviation rejected") end,
+        setFormattedText = function() error("native format rejected") end,
+        roundToNearestString = function() error("native rounding rejected") end,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    local settings = test.profileState().settings
+    settings.showTertiary, settings.showPercentage, settings.showRating = true, true, false
+    settings.showSpeed, settings.showMovementSpeed, settings.hideZeroTertiary = true, true, true
+    settings.showDefensive, settings.showParry, settings.hideZeroDefensive = true, true, true
+    test.cacheSettings()
+    local function displayedStat(section, name)
+        for _, block in ipairs(test.buildRenderBlocks()) do
+            if block.splitKey == section then
+                for index, label in ipairs(block.labels) do
+                    if label:find(name, 1, true) then return block.ratings[index] .. block.values[index] end
+                end
+            end
+        end
+        return ""
+    end
+    assert(displayedStat("splitTertiary", "Movement"):find(forever and "100%" or "100.0%", 1, true),
+        "movement has a clean percentage before combat")
+    assert(displayedStat("splitDefensive", "Parry"):find(forever and "5.00%" or "5.0%", 1, true),
+        "parry has a clean percentage before combat")
+    speed, combat = secretSpeed, true
+    env.__fireEvent("PLAYER_REGEN_DISABLED")
+    assert(displayedStat("splitTertiary", "Movement"):find("?%", 1, true),
+        flavor .. ": protected movement formatting failure preserves the percentage placeholder")
+    assert(displayedStat("splitDefensive", "Parry"):find("?%", 1, true),
+        flavor .. ": protected parry formatting failure preserves the percentage placeholder")
+end
+
 for _, ownedAlias in ipairs({ false, true }) do
     local snapshot = assert(loadfile("AntraktFontCatalog.lua"))()
     local face = snapshot.fonts[1]

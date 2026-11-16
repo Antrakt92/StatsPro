@@ -562,31 +562,36 @@ function Assert-StatsProReleaseJson {
 
     Assert-StatsProReleaseTag -Value $ExpectedTag
     $json = ConvertFrom-JsonCompat $JsonText
-    $releases = @($json.releases)
-    if ($releases.Count -eq 0) {
-        throw "release.json contains no releases."
+    if ($json.releases -isnot [System.Array] -or $json.releases.Count -eq 0) {
+        throw "release.json requires a nonempty releases array."
     }
-    $statsProReleases = @($releases | Where-Object { $_.name -eq "StatsPro" })
+    $statsProReleases = @($json.releases | Where-Object { $_.name -is [string] -and $_.name -ceq "StatsPro" })
     if ($statsProReleases.Count -ne 1) {
         throw "release.json must contain exactly one StatsPro release, found $($statsProReleases.Count)."
     }
 
     $release = $statsProReleases[0]
-    if ($release.version -ne $ExpectedTag) {
+    if ($release.version -isnot [string] -or $release.version -cne $ExpectedTag) {
         throw "release.json StatsPro version is '$($release.version)', expected '$ExpectedTag'."
     }
     $expectedZip = "StatsPro-$ExpectedTag.zip"
-    if ($release.filename -ne $expectedZip) {
+    if ($release.filename -isnot [string] -or $release.filename -cne $expectedZip) {
         throw "release.json StatsPro filename is '$($release.filename)', expected '$expectedZip'."
     }
     if ($null -eq $release.nolib) {
         throw "release.json StatsPro release is missing nolib state."
     }
-    if ([bool]$release.nolib) {
+    if ($release.nolib -isnot [bool]) {
+        throw "release.json StatsPro nolib state must be boolean."
+    }
+    if ($release.nolib) {
         throw "release.json StatsPro release must be a lib-inclusive package, got nolib=true."
     }
 
-    $metadata = @($release.metadata)
+    if ($release.metadata -isnot [System.Array]) {
+        throw "release.json requires a metadata array."
+    }
+    $metadata = $release.metadata
     $expectedSet = [System.Collections.Generic.HashSet[int]]::new()
     foreach ($interface in $ExpectedInterfaces) {
         [void]$expectedSet.Add([int]$interface)
@@ -596,11 +601,15 @@ function Assert-StatsProReleaseJson {
     }
     $actualSet = [System.Collections.Generic.HashSet[int]]::new()
     foreach ($entry in $metadata) {
-        if ($entry.flavor -ne "mainline") {
+        if ($entry.flavor -isnot [string] -or $entry.flavor -cne "mainline") {
             throw "release.json metadata flavor is '$($entry.flavor)', expected 'mainline'."
         }
         if ($null -eq $entry.interface) {
             throw "release.json metadata entry is missing interface."
+        }
+        if (($entry.interface -isnot [int] -and $entry.interface -isnot [long]) -or
+            $entry.interface -lt 1 -or $entry.interface -gt [int]::MaxValue) {
+            throw "release.json metadata interface must be a positive 32-bit integer."
         }
         [void]$actualSet.Add([int]$entry.interface)
     }
@@ -1270,6 +1279,22 @@ function Invoke-SelfTest {
         Assert-ThrowsMatch "release json missing interface rejected" {
             Assert-StatsProReleaseJson -JsonText '{"releases":[{"name":"StatsPro","version":"v1.2.3","filename":"StatsPro-v1.2.3.zip","nolib":false,"metadata":[{"flavor":"mainline"}]}]}' -ExpectedTag "v1.2.3" -ExpectedInterfaces @(120007)
         } "interface"
+        foreach ($badReleaseJson in @(
+            '{"releases":{"name":"StatsPro","version":"v1.2.3","filename":"StatsPro-v1.2.3.zip","nolib":false,"metadata":[{"flavor":"mainline","interface":120007}]}}',
+            '{"releases":[{"name":["StatsPro"],"version":"v1.2.3","filename":"StatsPro-v1.2.3.zip","nolib":false,"metadata":[{"flavor":"mainline","interface":120007}]}]}',
+            '{"releases":[{"name":"StatsPro","version":[],"filename":"StatsPro-v1.2.3.zip","nolib":false,"metadata":[{"flavor":"mainline","interface":120007}]}]}',
+            '{"releases":[{"name":"StatsPro","version":"v1.2.3","filename":[],"nolib":false,"metadata":[{"flavor":"mainline","interface":120007}]}]}',
+            '{"releases":[{"name":"StatsPro","version":"v1.2.3","filename":"StatsPro-v1.2.3.zip","nolib":0,"metadata":[{"flavor":"mainline","interface":120007}]}]}',
+            '{"releases":[{"name":"StatsPro","version":"v1.2.3","filename":"StatsPro-v1.2.3.zip","nolib":false,"metadata":{"flavor":"mainline","interface":120007}}]}',
+            '{"releases":[{"name":"StatsPro","version":"v1.2.3","filename":"StatsPro-v1.2.3.zip","nolib":false,"metadata":[{"flavor":[],"interface":120007}]}]}',
+            '{"releases":[{"name":"StatsPro","version":"v1.2.3","filename":"StatsPro-v1.2.3.zip","nolib":false,"metadata":[{"flavor":"mainline","interface":"120007"}]}]}',
+            '{"releases":[{"name":"StatsPro","version":"v1.2.3","filename":"StatsPro-v1.2.3.zip","nolib":false,"metadata":[{"flavor":"mainline","interface":120006.7}]}]}'
+        )) {
+            Assert-ThrowsMatch "release json malformed field types rejected" {
+                Assert-StatsProReleaseJson -JsonText $badReleaseJson -ExpectedTag "v1.2.3" -ExpectedInterfaces @(120007)
+            } "release\.json"
+        }
+
         Assert-ThrowsMatch "release json duplicate metadata rejected" {
             Assert-StatsProReleaseJson -JsonText '{"releases":[{"name":"StatsPro","version":"v1.2.3","filename":"StatsPro-v1.2.3.zip","nolib":false,"metadata":[{"flavor":"mainline","interface":120007},{"flavor":"mainline","interface":120007}]}]}' -ExpectedTag "v1.2.3" -ExpectedInterfaces @(120007)
         } "entry count"

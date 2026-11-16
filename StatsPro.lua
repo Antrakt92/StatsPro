@@ -39,6 +39,7 @@ addon.durabilityRuntime = {
     pendingItemSlots = {},
     pendingRepairItemSlots = {},
     knownDurableItemIDs = {},
+    durabilityItemWakeups = {},
     repairItemWakeups = {},
     retryDelays = RETRY_DELAYS,
     retryStates = {
@@ -1603,6 +1604,7 @@ function addon.durabilityRuntime.MarkDirty()
     local runtime = addon.durabilityRuntime
     runtime.generation = runtime.generation + 1
     runtime.pendingRepairItemSlots = {}
+    runtime.durabilityItemWakeups = {}
     runtime.repairItemWakeups = {}
     local durabilityRetry = runtime.retryStates.durability
     durabilityRetry.generation = runtime.generation
@@ -1641,11 +1643,17 @@ function addon.durabilityRuntime.OnItemDataReady(itemID, success)
     local runtime = addon.durabilityRuntime
     for slot, pendingID in pairs(runtime.pendingItemSlots) do
         if itemID == pendingID and runtime.GetCleanEquippedItemID(slot) == itemID then
-            -- A completed item request can arrive after the bounded retry budget.
-            -- Validate the current slot identity; old equipment callbacks are inert.
-            runtime.pendingItemSlots[slot] = nil
-            runtime.MarkDirty()
-            return
+            -- Item readiness can arrive after the retry budget. Preserve the
+            -- budget for previously readable gear and allow one wakeup per slot.
+            if runtime.knownDurableItemIDs[slot] ~= itemID then
+                runtime.pendingItemSlots[slot] = nil
+                runtime.MarkDirty()
+                return
+            elseif not runtime.durabilityItemWakeups[slot] then
+                runtime.durabilityItemWakeups[slot] = true
+                runtime.pendingItemSlots[slot] = nil
+                durabilityDirty = true
+            end
         end
     end
     if not cached.showRepairCost or durabilityDirty
@@ -9556,7 +9564,7 @@ function addon.durabilityRuntime.ReadSlot(slot)
         -- Cached item metadata does not guarantee a current durability reading.
         local knownDurableID = runtime.knownDurableItemIDs[slot]
         if knownDurableID and (itemID == knownDurableID or not (itemID or emptySlot)) then
-            return "unavailable"
+            return "unavailable", nil, nil, knownDurableID
         end
         runtime.knownDurableItemIDs[slot] = nil
         return "empty"
@@ -9622,7 +9630,7 @@ local function ScanDurabilityAndCost()
                 end
             elseif state ~= "empty" then
                 durabilityIncomplete = true
-                if state == "uncached" then pendingItemSlots[slot] = itemID end
+                pendingItemSlots[slot] = itemID
                 if cached.showRepairCost then
                     repairCostPending = true
                     repairCostRestricted = repairCostRestricted or state == "restricted"

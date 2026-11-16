@@ -189,6 +189,7 @@ print(flavor .. " late repair tooltip recovery regressions passed")
 do
     local slot = forever and 18 or 17
     local equippedID, current, maximum = 1337, 40, 100
+    local identityUnavailable = false
     local env, addon, test = loadStatsPro("enUS", {
         statsProDB = { showDurability = true, showRepairCost = true, useWorstDurability = false },
         getInventoryItemDurability = function(index)
@@ -199,7 +200,12 @@ do
             return { repairCost = index == slot and 300 or 100 }
         end,
     })
-    env.GetInventoryItemID = function(_, index) if index == slot then return equippedID end end
+    env.GetInventoryItemID = function(_, index)
+        if index == slot then
+            if identityUnavailable then error("equipped identity temporarily unavailable") end
+            return equippedID
+        end
+    end
     env.C_Item = { IsItemDataCachedByID = function() return true end }
     env.__fireEvent("PLAYER_ENTERING_WORLD")
     local state = test.durabilityState()
@@ -218,6 +224,41 @@ do
     state = test.durabilityState()
     assert(state.durabilityComplete and state.durabilityValue == 45 and state.repairCost == 400,
         "complete readings resume as soon as the existing item is readable")
+    current, maximum = nil, nil
+    env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+    assert(addon:RunUpdateStatsSafe(), "durable item can become temporarily unreadable again")
+    local limit = test.durabilityState().retryLimit
+    for _ = 1, limit do
+        assert(env.__flushNextTimer() and addon:RunUpdateStatsSafe(), "drain bounded durability retries")
+    end
+    state = test.durabilityState()
+    assert(not state.dirty and not state.durabilityRetryScheduled and state.repairCost == nil,
+        "exhausted retries leave the cost unresolved")
+    env.__fireEvent("GET_ITEM_INFO_RECEIVED", 99, true)
+    env.__fireEvent("GET_ITEM_INFO_RECEIVED", 1337, false)
+    equippedID = 99
+    env.__fireEvent("GET_ITEM_INFO_RECEIVED", 1337, true)
+    assert(not test.durabilityState().dirty, "foreign, failed and stale item data cannot wake durability")
+    equippedID = 1337
+    env.__fireEvent("ITEM_DATA_LOAD_RESULT", 1337, true)
+    assert(test.durabilityState().dirty and addon:RunUpdateStatsSafe(), "first matching event wakes the scan")
+    state = test.durabilityState()
+    assert(state.durabilityRetryAttempt == limit and not state.durabilityRetryScheduled,
+        "a matching event does not restart the bounded retry budget")
+    env.__fireEvent("ITEM_DATA_LOAD_RESULT", 1337, true)
+    assert(not test.durabilityState().dirty, "a duplicate readiness event cannot spin another scan")
+    identityUnavailable = true
+    env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+    assert(addon:RunUpdateStatsSafe(), "new inventory generation can collect fresh evidence")
+    env.__fireEvent("ITEM_DATA_LOAD_RESULT", 1337, true)
+    assert(not test.durabilityState().dirty, "unknown current identity cannot validate item readiness")
+    identityUnavailable = false
+    current, maximum = 30, 100
+    env.__fireEvent("ITEM_DATA_LOAD_RESULT", 1337, true)
+    assert(test.durabilityState().dirty and addon:RunUpdateStatsSafe(), "next generation can use matching late data")
+    state = test.durabilityState()
+    assert(state.durabilityComplete and state.durabilityValue == 55 and state.repairCost == 400,
+        "matching readiness restarts complete durability and repair")
     equippedID, current, maximum = 99, nil, nil
     env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", slot, true)
     assert(addon:RunUpdateStatsSafe(), "replacement slot renders safely")

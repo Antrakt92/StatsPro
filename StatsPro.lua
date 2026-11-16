@@ -3745,7 +3745,88 @@ do
             ["Recover \"%s\" as new account-wide settings? The saved source, current setup and specialization assignments will be kept."] = "Восстановить «%s» как новые общие настройки аккаунта? Сохранённый источник, текущие настройки и назначения специализаций сохранятся.",
             ["These saved settings are now in use. Choose another setup."] = "Эти сохранённые настройки уже используются. Выберите другой вариант.",
         },
+        deDE = {
+            ["Recover saved settings..."] = "Gespeicherte Einstellungen wiederherstellen...",
+            ["Choose saved settings to recover"] = "Gespeicherte Einstellungen zur Wiederherstellung auswählen",
+            ["Saved settings"] = "Gespeicherte Einstellungen",
+            ["No saved settings are available to recover."] = "Es sind keine gespeicherten Einstellungen zur Wiederherstellung verfügbar.",
+            ["%s · Font %d · Scale %d%%"] = "%s · Schriftgröße %d · Skalierung %d%%",
+            ["Recover \"%s\" as a separate copy for \"%s\"? The saved source, current setup and other specializations will be kept."] = "„%s“ als separate Kopie für „%s“ wiederherstellen? Die gespeicherte Quelle, die aktuellen Einstellungen und andere Spezialisierungen bleiben erhalten.",
+            ["Recover \"%s\" as new account-wide settings? The saved source, current setup and specialization assignments will be kept."] = "„%s“ als neue accountweite Einstellungen wiederherstellen? Die gespeicherte Quelle, die aktuellen Einstellungen und die Spezialisierungszuweisungen bleiben erhalten.",
+            ["These saved settings are now in use. Choose another setup."] = "Diese gespeicherten Einstellungen werden jetzt verwendet. Wähle andere Einstellungen.",
+        },
+        frFR = {
+            ["Recover saved settings..."] = "Récupérer des paramètres enregistrés...",
+            ["Choose saved settings to recover"] = "Choisir les paramètres enregistrés à récupérer",
+            ["Saved settings"] = "Paramètres enregistrés",
+            ["No saved settings are available to recover."] = "Aucun paramètre enregistré à récupérer.",
+            ["%s · Font %d · Scale %d%%"] = "%s · Taille du texte %d · Échelle %d%%",
+            ["Recover \"%s\" as a separate copy for \"%s\"? The saved source, current setup and other specializations will be kept."] = "Récupérer « %s » comme copie distincte pour « %s » ? La source enregistrée, les paramètres actuels et les autres spécialisations seront conservés.",
+            ["Recover \"%s\" as new account-wide settings? The saved source, current setup and specialization assignments will be kept."] = "Récupérer « %s » comme nouveaux paramètres du compte ? La source enregistrée, les paramètres actuels et les affectations des spécialisations seront conservés.",
+            ["These saved settings are now in use. Choose another setup."] = "Ces paramètres enregistrés sont en cours d’utilisation. Choisissez d’autres paramètres.",
+        },
+        esES = {
+            ["Recover saved settings..."] = "Recuperar ajustes guardados...",
+            ["Choose saved settings to recover"] = "Elige los ajustes guardados que quieres recuperar",
+            ["Saved settings"] = "Ajustes guardados",
+            ["No saved settings are available to recover."] = "No hay ajustes guardados para recuperar.",
+            ["%s · Font %d · Scale %d%%"] = "%s · Tamaño de letra %d · Escala %d%%",
+            ["Recover \"%s\" as a separate copy for \"%s\"? The saved source, current setup and other specializations will be kept."] = "¿Recuperar «%s» como copia independiente para «%s»? Se conservarán la fuente guardada, los ajustes actuales y las demás especializaciones.",
+            ["Recover \"%s\" as new account-wide settings? The saved source, current setup and specialization assignments will be kept."] = "¿Recuperar «%s» como nuevos ajustes de cuenta? Se conservarán la fuente guardada, los ajustes actuales y las asignaciones de especialización.",
+            ["These saved settings are now in use. Choose another setup."] = "Estos ajustes guardados están ahora en uso. Elige otros ajustes.",
+        },
+        itIT = {
+            ["Recover saved settings..."] = "Recupera impostazioni salvate...",
+            ["Choose saved settings to recover"] = "Scegli le impostazioni salvate da recuperare",
+            ["Saved settings"] = "Impostazioni salvate",
+            ["No saved settings are available to recover."] = "Non ci sono impostazioni salvate da recuperare.",
+            ["%s · Font %d · Scale %d%%"] = "%s · Dimensione testo %d · Scala %d%%",
+            ["Recover \"%s\" as a separate copy for \"%s\"? The saved source, current setup and other specializations will be kept."] = "Recuperare «%s» come copia separata per «%s»? L’originale salvato, le impostazioni attuali e le altre specializzazioni saranno conservati.",
+            ["Recover \"%s\" as new account-wide settings? The saved source, current setup and specialization assignments will be kept."] = "Recuperare «%s» come nuove impostazioni dell’account? L’originale salvato, le impostazioni attuali e le assegnazioni delle specializzazioni saranno conservati.",
+            ["These saved settings are now in use. Choose another setup."] = "Queste impostazioni salvate sono ora in uso. Scegli altre impostazioni.",
+        },
+        ptBR = {
+            ["Recover saved settings..."] = "Recuperar configurações salvas...",
+            ["Choose saved settings to recover"] = "Escolha as configurações salvas que deseja recuperar",
+            ["Saved settings"] = "Configurações salvas",
+            ["No saved settings are available to recover."] = "Não há configurações salvas para recuperar.",
+            ["%s · Font %d · Scale %d%%"] = "%s · Tamanho da fonte %d · Escala %d%%",
+            ["Recover \"%s\" as a separate copy for \"%s\"? The saved source, current setup and other specializations will be kept."] = "Recuperar “%s” como uma cópia separada para “%s”? A fonte salva, a configuração atual e as outras especializações serão mantidas.",
+            ["Recover \"%s\" as new account-wide settings? The saved source, current setup and specialization assignments will be kept."] = "Recuperar “%s” como novas configurações da conta? A fonte salva, a configuração atual e as atribuições de especialização serão mantidas.",
+            ["These saved settings are now in use. Choose another setup."] = "Essas configurações salvas estão em uso. Escolha outras configurações.",
+        },
+        koKR = {
+            ["Recover saved settings..."] = "저장된 설정 복구...",
+            ["Choose saved settings to recover"] = "복구할 설정 선택",
+            ["Saved settings"] = "저장된 설정",
+            ["No saved settings are available to recover."] = "복구할 수 있는 저장된 설정이 없습니다.",
+            ["%s · Font %d · Scale %d%%"] = "%s · 글자 크기 %d · 배율 %d%%",
+            ["Recover \"%s\" as a separate copy for \"%s\"? The saved source, current setup and other specializations will be kept."] = "‘%s’ 설정을 ‘%s’의 별도 사본으로 복구하시겠습니까? 저장된 원본, 현재 설정, 다른 전문화는 유지됩니다.",
+            ["Recover \"%s\" as new account-wide settings? The saved source, current setup and specialization assignments will be kept."] = "‘%s’ 설정을 새 계정 공통 설정으로 복구하시겠습니까? 저장된 원본, 현재 설정, 전문화 할당은 유지됩니다.",
+            ["These saved settings are now in use. Choose another setup."] = "이 설정은 현재 사용 중입니다. 다른 설정을 선택하세요.",
+        },
+        zhCN = {
+            ["Recover saved settings..."] = "恢复已保存的设置...",
+            ["Choose saved settings to recover"] = "选择要恢复的设置",
+            ["Saved settings"] = "已保存的设置",
+            ["No saved settings are available to recover."] = "没有可恢复的已保存设置。",
+            ["%s · Font %d · Scale %d%%"] = "%s · 字号 %d · 缩放 %d%%",
+            ["Recover \"%s\" as a separate copy for \"%s\"? The saved source, current setup and other specializations will be kept."] = "将“%s”恢复为“%s”使用的独立副本？原设置、当前设置和其他专精将保留。",
+            ["Recover \"%s\" as new account-wide settings? The saved source, current setup and specialization assignments will be kept."] = "将“%s”恢复为新的账号通用设置？原设置、当前设置和专精分配将保留。",
+            ["These saved settings are now in use. Choose another setup."] = "这些已保存的设置正在使用中。请选择其他设置。",
+        },
+        zhTW = {
+            ["Recover saved settings..."] = "還原已儲存的設定...",
+            ["Choose saved settings to recover"] = "選擇要還原的設定",
+            ["Saved settings"] = "已儲存的設定",
+            ["No saved settings are available to recover."] = "沒有可還原的已儲存設定。",
+            ["%s · Font %d · Scale %d%%"] = "%s · 字型大小 %d · 縮放 %d%%",
+            ["Recover \"%s\" as a separate copy for \"%s\"? The saved source, current setup and other specializations will be kept."] = "將「%s」還原為「%s」使用的獨立副本？原始設定、目前設定和其他專精都會保留。",
+            ["Recover \"%s\" as new account-wide settings? The saved source, current setup and specialization assignments will be kept."] = "將「%s」還原為新的帳號通用設定？原始設定、目前設定和專精指派都會保留。",
+            ["These saved settings are now in use. Choose another setup."] = "這些已儲存的設定正在使用中。請選擇其他設定。",
+        },
     }
+    recoveryLabels.esMX = recoveryLabels.esES
     for locale in pairs(LABELS_BY_LOCALE) do
         local labels = recoveryLabels[locale] or recoveryLabels.enUS
         for key, value in pairs(labels) do LABELS_BY_LOCALE[locale][key] = value end
@@ -3754,9 +3835,21 @@ end
 
 do
     local key = "Apply or cancel the preview first."
+    local previewLabels = {
+        enUS = key,
+        ruRU = "Сначала примените или отмените предпросмотр.",
+        deDE = "Wende die Vorschau zuerst an oder brich sie ab.",
+        frFR = "Appliquez ou annulez d’abord l’aperçu.",
+        esES = "Aplica o cancela primero la vista previa.",
+        itIT = "Prima applica o annulla l’anteprima.",
+        ptBR = "Aplique ou cancele a prévia primeiro.",
+        koKR = "미리보기를 먼저 적용하거나 취소하세요.",
+        zhCN = "请先应用或取消预览。",
+        zhTW = "請先套用或取消預覽。",
+    }
+    previewLabels.esMX = previewLabels.esES
     for locale, labels in pairs(LABELS_BY_LOCALE) do
-        labels[key] = locale == "ruRU"
-            and "Сначала примените или отмените предпросмотр." or key
+        labels[key] = previewLabels[locale] or key
     end
 end
 

@@ -353,4 +353,49 @@ for locale, title in pairs({
     check(env.GameTooltip.lines[2].left:find('https://ko-fi.com/antrakt92', 1, true),
         locale .. ' keeps the exact approved destination')
 end
+do
+    local recoveryCaptions = {
+        enUS = 'Recover saved settings...',
+        enGB = 'Recover saved settings...',
+        ruRU = 'Восстановить сохранённые настройки...',
+        deDE = 'Gespeicherte Einstellungen wiederherstellen...',
+        frFR = 'Récupérer des paramètres enregistrés...',
+        esES = 'Recuperar ajustes guardados...',
+        esMX = 'Recuperar ajustes guardados...',
+        itIT = 'Recupera impostazioni salvate...',
+        ptBR = 'Recuperar configurações salvas...',
+        koKR = '저장된 설정 복구...',
+        zhCN = '恢复已保存的设置...',
+        zhTW = '還原已儲存的設定...',
+    }
+    for locale, expected in pairs(recoveryCaptions) do
+        for _, forever in ipairs({ false, true }) do
+            local env, addon = fixtures.loadStatsPro(locale, {
+                forever = forever, bundledFonts = true, isKnownFontFile = function() return true end,
+                unitClassToken = 'MAGE', specIndex = 1, specID = 64,
+            })
+            env.__fireEvent('PLAYER_ENTERING_WORLD')
+            addon:OpenConfigMenu()
+            addon.profileUI.OpenManager(true)
+            local recovery = env.StatsProProfileRecoverButton
+            check(recovery:GetText() == expected, locale .. ' translates the recovery action')
+            local noSettings = recovery.statsProTooltipProvider(recovery)
+            local englishCaption = locale == 'enUS' or locale == 'enGB'
+            check(type(noSettings) == 'string' and (noSettings
+                == 'No saved settings are available to recover.') == englishCaption,
+                locale .. ' translates the disabled recovery explanation')
+            local inUse = addon.profileUI.OperationErrorText('profile-in-use')
+            check(type(inUse) == 'string' and (inUse
+                == 'These saved settings are now in use. Choose another setup.') == englishCaption,
+                locale .. ' translates the stale recovery explanation')
+            addon.profileUI.manager:Hide()
+            local view = env.StatsProConfigFrame.tabContents[1].quickSetupView
+            view.refreshLayout(true, false)
+            local blocked = view.disclosure.statsProTooltipProvider(view.disclosure)
+            check(type(blocked) == 'string' and (blocked
+                == 'Apply or cancel the preview first.') == englishCaption,
+                locale .. ' translates the active preview explanation')
+        end
+    end
+end
 print('Settings menus: ' .. checks .. ' checks passed')

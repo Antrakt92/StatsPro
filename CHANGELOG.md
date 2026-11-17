@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.24.10 - 17-Nov-2026 — Archon target refresh
+
+- Refresh Mythic+ and raid stat targets using Archon data checked on 17 November.
+
 ## 1.24.9 - 16-Nov-2026 — Gear HUD and Settings recovery
 
 - Refresh durability and repair totals when gear data arrives late, including after swapping an item.

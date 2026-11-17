@@ -930,6 +930,13 @@ local longControl = env.StatsProForeverCastingManaRegenMP5
 check(type(longControl.statsProTooltipProvider) == "function", "long stat controls expose full labels on hover")
 check(longControl.statsProTooltipProvider() == "Casting Mana Regen / 5 sec",
     "long stat tooltip exposes complete untruncated name")
+local mp5Control = env.StatsProForeverManaRegenMP5
+local _, mp5Help = mp5Control.statsProTooltipProvider()
+local _, castingHelp = longControl.statsProTooltipProvider()
+check(mp5Help:find("out of combat and the casting rate in combat", 1, true)
+    and mp5Help:find("both 5-second rows", 1, true)
+    and not castingHelp:find("both 5-second rows", 1, true),
+    "only the adaptive row explains its mode switch and how to show both rates")
 env.__prints = {}
 env.SlashCmdList.STATSPRO("debug")
 local defaultDebug = table.concat(env.__prints, "\n")

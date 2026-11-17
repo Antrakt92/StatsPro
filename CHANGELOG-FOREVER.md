@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.24.2 - 17-Nov-2026 — Mana regeneration help
+
+- Explain in Settings when the adaptive mana regeneration row switches rates and how to show both rates at once.
+
 ## 1.24.1 - 16-Nov-2026 — Combat mana regeneration and gear recovery
 
 - Switch the adaptive mana regeneration row promptly when entering and leaving combat.

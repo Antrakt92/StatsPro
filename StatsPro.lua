@@ -20562,11 +20562,13 @@ function addon.settingsUI.BuildStatsTab(self, context)
                     definition.label, definition.showKey, definition.colorKey,
                     cs.padX + column * CONFIG_COL_OFFSET, cs.y)
                 self.settingsDesign.AttachTooltip(control, function()
-                    return self.settingsDesign.DisabledControlTooltip(control) or L(definition.label),
-                        definition.usePreCombatValue and
-                            (L("A value in parentheses is the last reading before combat.") .. "\n"
-                            .. L("A ? means this stat is unavailable or cannot be calculated safely."))
-                            or L("A ? means this stat is unavailable or cannot be calculated safely.")
+                    local detail = L("A ? means this stat is unavailable or cannot be calculated safely.")
+                    if definition.key == "ManaRegenMP5" then
+                        detail = L(self.forever.manaRegenTooltip) .. "\n" .. detail
+                    elseif definition.usePreCombatValue then
+                        detail = L("A value in parentheses is the last reading before combat.") .. "\n" .. detail
+                    end
+                    return self.settingsDesign.DisabledControlTooltip(control) or L(definition.label), detail
                 end)
                 subControls[#subControls + 1] = control
                 colorColumns[column + 1][#colorColumns[column + 1] + 1] = {

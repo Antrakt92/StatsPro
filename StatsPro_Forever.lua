@@ -1073,6 +1073,22 @@ translatedProfilePrompts.esMX = translatedProfilePrompts.esES
 for locale, labels in pairs(translatedProfilePrompts) do
     for index, key in ipairs(profilePromptKeys) do F.labels[locale][key] = labels[index] end
 end
+F.manaRegenTooltip = "Shows normal mana regeneration out of combat and the casting rate in combat. Enable both 5-second rows to see both rates at once."
+for locale, text in pairs({
+    deDE = "Zeigt außerhalb des Kampfes die normale Manaregeneration und im Kampf die Rate beim Zaubern. Aktiviere beide 5-Sekunden-Zeilen, um beide Werte gleichzeitig zu sehen.",
+    esES = "Muestra la regeneración de maná normal fuera de combate y la de lanzamiento en combate. Activa ambas filas de 5 segundos para ver los dos valores a la vez.",
+    esMX = "Muestra la regeneración de maná normal fuera de combate y la de lanzamiento en combate. Activa ambas filas de 5 segundos para ver los dos valores a la vez.",
+    frFR = "Affiche la régénération normale du mana hors combat et celle en cours d’incantation en combat. Activez les deux lignes sur 5 secondes pour voir les deux valeurs.",
+    itIT = "Mostra la rigenerazione normale del mana fuori dal combattimento e quella durante il lancio in combattimento. Attiva entrambe le righe da 5 secondi per vedere i due valori.",
+    koKR = "비전투 중에는 일반 마나 회복량을, 전투 중에는 시전 중 회복량을 표시합니다. 5초당 회복량 항목을 둘 다 켜면 두 값을 함께 볼 수 있습니다.",
+    ptBR = "Mostra a regeneração normal de mana fora de combate e a taxa de conjuração em combate. Ative as duas linhas de 5 segundos para ver as duas taxas juntas.",
+    ruRU = "Вне боя показывает обычное восстановление маны, а в бою — скорость восстановления при произнесении заклинаний. Включите обе строки за 5 секунд, чтобы видеть оба значения одновременно.",
+    zhCN = "脱离战斗时显示普通法力回复，战斗中显示施法时的回复速度。启用两条每 5 秒回复选项即可同时查看两种数值。",
+    zhTW = "脫離戰鬥時顯示一般法力恢復，戰鬥中顯示施法時的恢復速度。啟用兩條每 5 秒恢復選項即可同時查看兩種數值。",
+}) do
+    F.labels[locale][F.manaRegenTooltip] = text
+end
+
 local nativeLabelGlobals = {
     Strength = "SPELL_STAT1_NAME", Agility = "SPELL_STAT2_NAME", Stamina = "SPELL_STAT3_NAME",
     Intellect = "SPELL_STAT4_NAME", Spirit = "SPELL_STAT5_NAME", Armor = "ARMOR", Defense = "DEFENSE",

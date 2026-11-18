@@ -186,6 +186,54 @@ for _, costReadyOnWake in ipairs({ true, false }) do
 end
 print(flavor .. " late repair tooltip recovery regressions passed")
 
+for _, persistentFailure in ipairs({ false, true }) do
+    local available, reads = true, 0
+    local function readAverageItemLevel()
+        reads = reads + 1
+        if available then return 101, 100 end
+    end
+    local env, addon, test = loadStatsPro("enUS", {
+        statsProDB = { showItemLevel = true, showDurability = false, showRepairCost = false },
+        getAverageItemLevel = readAverageItemLevel,
+        foreverAPIs = { GetAverageItemLevel = readAverageItemLevel },
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    assert(test.itemLevelState().equipped == 100, "fixture first samples equipped item level")
+    local after = env.C_Timer.After
+    local arms = 0
+    env.C_Timer.After = function(delay, callback)
+        if delay >= 1 then
+            arms = arms + 1
+            if persistentFailure or arms == 1 then
+                -- The native timer may register a callback before raising.
+                after(delay, callback)
+                error("native item-level retry timer rejected")
+            end
+        end
+        return after(delay, callback)
+    end
+    available = false
+    env.__fireEvent("BAG_UPDATE_DELAYED")
+    local retryLimit = test.itemLevelState().retryLimit
+    for _ = 1, retryLimit do
+        assert(addon:RunUpdateStatsSafe(), "a rejected item-level timer cannot abort the HUD update")
+    end
+    assert(arms == 1 and test.itemLevelState().dirty,
+        "failed timer arm leaves one bounded retry on the existing ticker")
+    if persistentFailure then
+        for _ = 1, 12 do assert(addon:RunUpdateStatsSafe()) end
+        assert(arms == 4 and not test.itemLevelState().dirty, "persistent timer failures exhaust bounded attempts")
+        local settledReads = reads
+        env.__flushTimers(15)
+        assert(addon:RunUpdateStatsSafe() and settledReads == reads,
+            "partially registered timers cannot wake an exhausted generation")
+        env.__fireEvent("BAG_UPDATE_DELAYED")
+    end
+    available = true
+    assert(addon:RunUpdateStatsSafe() and test.itemLevelState().complete,
+        "a readable item level recovers on the next eligible scan")
+end
+
 do
     local slot = forever and 18 or 17
     local equippedID, current, maximum = 1337, 40, 100

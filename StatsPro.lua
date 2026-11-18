@@ -1752,7 +1752,7 @@ function addon.itemLevelRuntime.ScheduleRetry(pending)
     if not delay then return end
     runtime.scheduledGeneration = generation
     runtime.scheduledAttempt = armIndex
-    C_Timer.After(delay, function()
+    local scheduled = pcall(C_Timer.After, delay, function()
         if runtime.generation ~= generation
                 or runtime.scheduledGeneration ~= generation
                 or runtime.scheduledAttempt ~= armIndex then return end
@@ -1762,6 +1762,14 @@ function addon.itemLevelRuntime.ScheduleRetry(pending)
             itemLevelDirty = true
         end
     end)
+    if not scheduled and runtime.generation == generation
+        and runtime.scheduledGeneration == generation and runtime.scheduledAttempt == armIndex then
+        -- A failed arm spends this backoff step. Clear its ownership so a
+        -- partially registered callback cannot wake the scan again.
+        runtime.scheduledGeneration = nil
+        runtime.scheduledAttempt = nil
+        itemLevelDirty = true
+    end
 end
 -- Init guard: UpdateStats must not run before CacheSettings populates cached.colorStrings
 local isLoaded = false

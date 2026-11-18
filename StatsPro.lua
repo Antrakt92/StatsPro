@@ -1600,12 +1600,14 @@ local durabilityDirty = true
 -- External inventory/config events open one fresh bounded-retry generation.
 -- Timer callbacks never reset this budget, so stable nil tooltip data cannot
 -- create an endless polling loop.
-function addon.durabilityRuntime.MarkDirty()
+function addon.durabilityRuntime.MarkDirty(preserveItemWakeups)
     local runtime = addon.durabilityRuntime
     runtime.generation = runtime.generation + 1
     runtime.pendingRepairItemSlots = {}
-    runtime.durabilityItemWakeups = {}
-    runtime.repairItemWakeups = {}
+    if not preserveItemWakeups then
+        runtime.durabilityItemWakeups = {}
+        runtime.repairItemWakeups = {}
+    end
     local durabilityRetry = runtime.retryStates.durability
     durabilityRetry.generation = runtime.generation
     durabilityRetry.attempt = 0
@@ -1641,20 +1643,21 @@ function addon.durabilityRuntime.OnItemDataReady(itemID, success)
     if not addon.IsCleanFiniteNumber(itemID) or issecretvalue(success)
         or type(success) ~= "boolean" or not success then return end
     local runtime = addon.durabilityRuntime
+    local restartForHydration = false
     for slot, pending in pairs(runtime.pendingItemSlots) do
-        if itemID == pending.itemID and runtime.GetCleanEquippedItemID(slot) == itemID then
-            -- Only first-time item hydration opens a new retry generation.
-            -- An unreadable durability sample gets one wakeup per slot.
-            if pending.restartOnLoad then
-                runtime.pendingItemSlots[slot] = nil
-                runtime.MarkDirty()
-                return
-            elseif not runtime.durabilityItemWakeups[slot] then
-                runtime.durabilityItemWakeups[slot] = true
-                runtime.pendingItemSlots[slot] = nil
-                durabilityDirty = true
-            end
+        if itemID == pending.itemID and not runtime.durabilityItemWakeups[slot]
+            and runtime.GetCleanEquippedItemID(slot) == itemID then
+            runtime.durabilityItemWakeups[slot] = true
+            runtime.pendingItemSlots[slot] = nil
+            restartForHydration = restartForHydration or pending.restartOnLoad
+            durabilityDirty = true
         end
+    end
+    if restartForHydration then
+        -- Reopen the budgets for cold equipment, while duplicate data events
+        -- for the same slots remain consumed until an external inventory refresh.
+        runtime.MarkDirty(true)
+        return
     end
     if not cached.showRepairCost or durabilityDirty
         or runtime.retryStates.repair.scheduledGeneration == runtime.generation then return end

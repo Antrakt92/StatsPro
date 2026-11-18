@@ -360,6 +360,44 @@ end
 print(flavor .. " equipped durability completeness regressions passed")
 
 do
+    local firstSlot, secondSlot = 16, forever and 18 or 17
+    local durable, scans = false, 0
+    local equipped = { [firstSlot] = 1001, [secondSlot] = 1002 }
+    local env, addon, test = loadStatsPro("enUS", {
+        statsProDB = { showDurability = true, showRepairCost = true },
+        getInventoryItemDurability = function(slot)
+            if slot == firstSlot then scans = scans + 1 end
+            if slot == 1 or (equipped[slot] and durable) then return 80, 100 end
+        end,
+        getTooltipInventoryItem = function() return { repairCost = 100 } end,
+    })
+    env.GetInventoryItemID = function(_, slot) return equipped[slot] end
+    env.C_Item = { IsItemDataCachedByID = function() return false end }
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    local before = scans
+    for i = 1, 25 do
+        local event = i % 2 == 0 and "ITEM_DATA_LOAD_RESULT" or "GET_ITEM_INFO_RECEIVED"
+        env.__fireEvent(event, 1001, true)
+        assert(addon:RunUpdateStatsSafe(), "duplicate cold readiness is safe")
+    end
+    assert(scans == before + 1, "one cold slot cannot repeatedly restart the scan while metadata stays unavailable")
+    env.__fireEvent("ITEM_DATA_LOAD_RESULT", 1002, true)
+    assert(test.durabilityState().dirty and addon:RunUpdateStatsSafe(),
+        "another cold equipped slot may still wake the scan")
+    env.__fireEvent("ITEM_DATA_LOAD_RESULT", 1001, true)
+    assert(not test.durabilityState().dirty, "the other cold slot's wakeup does not reset deduplication")
+    env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", firstSlot, true)
+    assert(addon:RunUpdateStatsSafe(), "a real equipment event resets cold readiness")
+    durable = true
+    env.__fireEvent("ITEM_DATA_LOAD_RESULT", 1001, true)
+    assert(test.durabilityState().dirty and addon:RunUpdateStatsSafe(), "current gear may wake the new generation")
+    local state = test.durabilityState()
+    assert(state.durabilityComplete and state.repairCostComplete and state.repairCost == 300,
+        "a fresh bounded scan recovers the complete equipment totals")
+end
+print(flavor .. " cold equipped item readiness is bounded")
+
+do
     local env, addon, test = loadStatsPro("enUS", {
         unitGUID = function() return "Player-Capacity" end,
         getSpecialization = function() return 1 end, specID = 73, specRole = "TANK",

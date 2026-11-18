@@ -84,6 +84,11 @@ function Assert-ForeverArchive {
         if ($names.Count -ne $expected.Count -or @($names | Select-Object -Unique).Count -ne $names.Count -or
             (Compare-Object $names $expected -CaseSensitive)) { throw 'Forever archive contains missing, duplicate or extra entries' }
         foreach ($entry in $zip.Entries) {
+            $unixType = ($entry.ExternalAttributes -shr 16) -band 0xF000
+            # File-only inventory. Allow archives that omit Unix file types.
+            if (($entry.ExternalAttributes -band 0x0410) -or ($unixType -ne 0 -and $unixType -ne 0x8000)) {
+                throw "Forever archive contains unsupported ZIP entry type $($entry.FullName)."
+            }
             $relative = $entry.FullName.Substring('StatsPro/'.Length)
             $sourceBytes = [System.IO.File]::ReadAllBytes((Join-Path $Root $map[$relative]))
             if ($relative -ceq 'StatsPro.lua') {
@@ -198,6 +203,20 @@ if ($SelfTest) {
                 $rejected = $true
             }
             if (-not $rejected) { throw "Archive without font/license accepted: $relative" }
+        }
+        foreach ($attributes in @(0xA0000000, 0x0400, 0x40000000, 0x0010)) {
+            $nonFileZip = Join-Path $fixture 'nonfile-entry.zip'
+            [System.IO.File]::Copy($first, $nonFileZip, $true)
+            $nonFileArchive = [System.IO.Compression.ZipFile]::Open(
+                $nonFileZip, [System.IO.Compression.ZipArchiveMode]::Update)
+            try { $nonFileArchive.GetEntry('StatsPro/StatsPro.toc').ExternalAttributes = $attributes }
+            finally { $nonFileArchive.Dispose() }
+            $rejected = $false
+            try { Assert-ForeverArchive $nonFileZip $fixture } catch {
+                if ($_.Exception.Message -notmatch 'unsupported ZIP entry type') { throw }
+                $rejected = $true
+            }
+            if (-not $rejected) { throw "Forever archive accepted non-file ZIP metadata: $attributes" }
         }
         $vendoredPath = Join-Path $fixture 'libs/LibStub/LibStub.lua'
         $vendoredBytes = [System.IO.File]::ReadAllBytes($vendoredPath)

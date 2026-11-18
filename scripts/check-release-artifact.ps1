@@ -77,7 +77,22 @@ function Get-ZipEntries {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $archive = [System.IO.Compression.ZipFile]::OpenRead($Path)
     try {
-        return @($archive.Entries | ForEach-Object { $_.FullName })
+        foreach ($entry in $archive.Entries) {
+            $isDirectory = $entry.FullName.EndsWith('/') -or $entry.FullName.EndsWith('\')
+            $unixType = ($entry.ExternalAttributes -shr 16) -band 0xF000
+            $expectedUnixType = if ($isDirectory) { 0x4000 } else { 0x8000 }
+            # Platform-neutral archives may omit the Unix type. DOS reparse
+            # points and directories without slash are never ordinary files.
+            if (($entry.ExternalAttributes -band 0x0400) -or
+                (-not $isDirectory -and ($entry.ExternalAttributes -band 0x0010)) -or
+                ($unixType -ne 0 -and $unixType -ne $expectedUnixType)) {
+                throw "Package contains unsupported ZIP entry type $($entry.FullName)."
+            }
+            if ($isDirectory -and $entry.Length -ne 0) {
+                throw "Package contains directory entry with file data $($entry.FullName)."
+            }
+            $entry.FullName
+        }
     }
     finally {
         $archive.Dispose()
@@ -157,8 +172,23 @@ function Assert-StatsProPackageEntries {
     }
 
     $allowedFiles = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    $allowedDirs = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     foreach ($allowed in $contract.AllowedFiles) {
         [void]$allowedFiles.Add($allowed)
+        $parentEnd = $allowed.LastIndexOf('/')
+        while ($parentEnd -gt 0) {
+            [void]$allowedDirs.Add($allowed.Substring(0, $parentEnd + 1))
+            $parentEnd = $allowed.LastIndexOf('/', $parentEnd - 1)
+        }
+    }
+    $seenDirs = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($entry in $normalized | Where-Object { $_.EndsWith("/") }) {
+        if (-not $allowedDirs.Contains($entry)) {
+            throw "Package contains unexpected packaged directory $entry."
+        }
+        if (-not $seenDirs.Add($entry)) {
+            throw "Package contains duplicate directory entry $entry."
+        }
     }
     foreach ($entry in $fileEntries) {
         if (-not $allowedFiles.Contains($entry)) {
@@ -943,6 +973,15 @@ function Invoke-SelfTest {
         [void](Normalize-StatsProZipEntryPath "StatsPro/StatsPro.lua")
         $packageContract = Get-StatsProPackageFileContract
         Assert-StatsProPackageEntries -Entries $packageContract.RequiredFiles
+        Assert-StatsProPackageEntries -Entries @($packageContract.RequiredFiles + 'StatsPro/' + 'StatsPro/libs/LibStub/')
+        foreach ($unknownDir in @('StatsPro/.git/', 'StatsPro/private-audit/', 'StatsPro/StatsPro.lua/')) {
+            Assert-ThrowsMatch "unexpected ZIP directory rejected" {
+                Assert-StatsProPackageEntries -Entries @($packageContract.RequiredFiles + $unknownDir)
+            } "unexpected packaged directory"
+        }
+        Assert-ThrowsMatch "duplicate ZIP directory rejected" {
+            Assert-StatsProPackageEntries -Entries @($packageContract.RequiredFiles + 'StatsPro/libs/' + 'StatsPro/libs/')
+        } "duplicate directory entry"
         Assert-ThrowsMatch "obsolete language artwork rejected" {
             Assert-StatsProPackageEntries -Entries @($packageContract.RequiredFiles + "StatsPro/textures/language-flags.tga")
         } "language-flags\.tga"
@@ -961,6 +1000,29 @@ function Invoke-SelfTest {
 
         $zip = Join-Path $tempDir "StatsPro-$tag.zip"
         New-TestPackageZip -SourceRoot $sourceRoot -ZipPath $zip -PackagerProjectVersion $tag
+        $directoryPayloadZip = Join-Path $tempDir 'directory-payload.zip'
+        [System.IO.File]::Copy($zip, $directoryPayloadZip)
+        $directoryArchive = [System.IO.Compression.ZipFile]::Open(
+            $directoryPayloadZip, [System.IO.Compression.ZipArchiveMode]::Update)
+        try {
+            $directoryStream = $directoryArchive.CreateEntry('StatsPro/libs/LibStub/').Open()
+            try { $directoryStream.WriteByte(33) } finally { $directoryStream.Dispose() }
+        }
+        finally { $directoryArchive.Dispose() }
+        Assert-ThrowsMatch "nonempty directory entry rejected" {
+            [void](Get-ZipEntries -Path $directoryPayloadZip)
+        } "directory entry with file data"
+        foreach ($attributes in @(0xA0000000, 0x0400, 0x40000000, 0x0010)) {
+            $nonFileZip = Join-Path $tempDir 'nonfile-entry.zip'
+            [System.IO.File]::Copy($zip, $nonFileZip, $true)
+            $nonFileArchive = [System.IO.Compression.ZipFile]::Open(
+                $nonFileZip, [System.IO.Compression.ZipArchiveMode]::Update)
+            try { $nonFileArchive.GetEntry('StatsPro/StatsPro.toc').ExternalAttributes = $attributes }
+            finally { $nonFileArchive.Dispose() }
+            Assert-ThrowsMatch "non-file ZIP entry metadata rejected" {
+                [void](Get-ZipEntries -Path $nonFileZip)
+            } "unsupported ZIP entry type"
+        }
         $jsonPath = Join-Path $tempDir "release.json"
         Assert-ThrowsMatch "leading-zero artifact tag rejected" {
             Assert-StatsProReleaseArtifact -ZipPath $zip -ExpectedTag "v01.2.3" -PackagerProjectVersion $tag -SourceRoot $sourceRoot -ArchonMaxAgeDays 99999 -PackageOnly:$true -WithReleaseJson:$false

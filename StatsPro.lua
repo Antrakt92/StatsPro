@@ -4755,6 +4755,16 @@ SAFE_NUM.secretFormatterFrame:Hide()
 SAFE_NUM.secretFormatter = SAFE_NUM.secretFormatterFrame:CreateFontString(
     nil, "OVERLAY", "GameFontNormal")
 
+function SAFE_NUM.RecoverSecretFormatter()
+    if SAFE_NUM.secretFormatter or SAFE_NUM.secretFormatterRecoveryAttempted then return end
+    -- Never reuse the retired region. Allocate at most one replacement per
+    -- session to recover from a transient client error without leaking regions.
+    SAFE_NUM.secretFormatterRecoveryAttempted = true
+    local owner = SAFE_NUM.secretFormatterFrame
+    local ok, formatter = pcall(owner.CreateFontString, owner, nil, "OVERLAY", "GameFontNormal")
+    if ok then SAFE_NUM.secretFormatter = formatter end
+end
+
 function SAFE_NUM.IsRenderableNumberValue(value)
     if issecretvalue(value) then return true end
     return SAFE_NUM.IsCleanFiniteNumber(value)
@@ -4787,7 +4797,7 @@ function SAFE_NUM.FormatDisplayNumber(value, cleanFormat, secretSuffix)
             local postClearOK = pcall(formatter.ClearText, formatter)
             if not preClearOK or not setOK or not getOK or not postClearOK
                 or type(text) ~= "string" then
-                -- A failed holder is never reused this session: a sticky Text secret
+                -- A failed holder is never reused: a sticky Text secret
                 -- aspect would make its later output and dimensions untrustworthy.
                 SAFE_NUM.secretFormatter = nil
             elseif getOK then
@@ -12587,6 +12597,7 @@ local EVENT_HANDLERS = {
             addon.forever.NoteManaCombatTransition(false)
         end
         SAFE_NUM.ReopenScaledFormatterRetries()
+        SAFE_NUM.RecoverSecretFormatter()
         cached.repairCostCombat = nil
         addon.hudPresets.combatState = false
         addon.profileRuntime.ResumeCorruptRollbackApply()

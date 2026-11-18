@@ -782,6 +782,67 @@ do
         flavor .. ": protected parry formatting failure preserves the percentage placeholder")
 end
 
+-- A failed hidden FontString stays retired. The next combat gets one fresh
+-- holder, and repeated native failures stay bounded for the session.
+do
+    local combat, reject = false, false
+    local secretA, secretB = {}, {}
+    local parry = 5
+    local holderCalls = {}
+    local function getParryChance() return parry end
+    local env, addon, test = loadStatsPro("enUS", {
+        inCombatLockdown = function() return combat end,
+        issecretvalue = function(value) return rawequal(value, secretA) or rawequal(value, secretB) end,
+        getParryChance = getParryChance,
+        foreverAPIs = { GetParryChance = getParryChance },
+        setFormattedText = function(holder, _, value)
+            holderCalls[#holderCalls + 1] = holder
+            if reject then error("native formatter rejected") end
+            return rawequal(value, secretA) and "17.2%" or "23.9%"
+        end,
+        roundToNearestString = function(value) return rawequal(value, secretA) and "17" or "24" end,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    local settings = test.profileState().settings
+    settings.showDefensive, settings.showParry, settings.hideZeroDefensive = true, true, true
+    test.cacheSettings()
+    local function parryText()
+        for _, block in ipairs(test.buildRenderBlocks()) do
+            if block.splitKey == "splitDefensive" then
+                for index, label in ipairs(block.labels) do
+                    if label:find("Parry", 1, true) then return block.ratings[index] .. block.values[index] end
+                end
+            end
+        end
+        return ""
+    end
+    local function enter(value)
+        combat, parry = true, value
+        env.__fireEvent("PLAYER_REGEN_DISABLED")
+    end
+    local function leave()
+        combat, parry = false, 5
+        env.__fireEvent("PLAYER_REGEN_ENABLED")
+    end
+    assert(parryText():find("5.", 1, true), "clean Parry first seeds Hide Zero")
+    reject = true
+    enter(secretA)
+    assert(parryText():find("17%", 1, true) and #holderCalls == 1, "native failure uses integer fallback")
+    leave()
+    reject = false
+    enter(secretB)
+    assert(parryText():find("23.9%", 1, true) and #holderCalls == 2 and holderCalls[1] ~= holderCalls[2],
+        "next combat restores precision on a fresh native formatter")
+    reject = true
+    assert(parryText():find("24%", 1, true) and #holderCalls == 3, "failed replacement also falls back")
+    leave()
+    reject = false
+    enter(secretA)
+    assert(parryText():find("17%", 1, true) and #holderCalls == 3,
+        "later combat cannot allocate unbounded replacement holders")
+    assert(addon:RunUpdateStatsSafe(), "failed native formatters cannot abort the HUD update")
+end
+
 for _, ownedAlias in ipairs({ false, true }) do
     local snapshot = assert(loadfile("AntraktFontCatalog.lua"))()
     local face = snapshot.fonts[1]

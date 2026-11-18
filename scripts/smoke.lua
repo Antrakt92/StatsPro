@@ -1559,7 +1559,7 @@ do
         statsProArchonTargets = compactFixture,
     })
     eq("tooltip.compact.high_keys_label",
-        compactAddon.archonTargets.GetLocalizedSnapshotLabel("mythicPlusHighKeys"), "M+ High Keys")
+        compactAddon.archonTargets.GetLocalizedSnapshotTitle("mythicPlusHighKeys"), "M+ High Keys")
     compactTest.renderMainPanelForSmoke("Haste:", "971", "27.0%", 1, nil, nil, {
         { statKey = "haste", target = 1006, current = 971, delta = -35,
             snapshotKey = "mythicPlusHighKeys", capturedAt = "2026-10-13",
@@ -1853,9 +1853,10 @@ do
         local options = localeAddon.archonTargets.GetAvailableSnapshotOptions()
         eq(prefix .. ".option_count", #options, #profiles)
         for index, profile in ipairs(profiles) do
-            local expectedLabel = (labels[profile.label] or profile.label) .. profile.detail
+            local expectedTitle = labels[profile.label] or profile.label
+            local expectedLabel = expectedTitle .. profile.detail
             eq(prefix .. ".snapshot." .. profile.key,
-                localeAddon.archonTargets.GetLocalizedSnapshotLabel(profile.key), expectedLabel)
+                localeAddon.archonTargets.GetLocalizedSnapshotTitle(profile.key), expectedTitle)
             eq(prefix .. ".dropdown." .. profile.key,
                 localeAddon.settingsUI.FormatSimpleDropdownOptionText(options[index]), expectedLabel)
             localeTest.renderMainPanelForSmoke("Haste:", "971", "27.0%", 1, nil, nil, {
@@ -1905,7 +1906,8 @@ do
     }) do
         fixture.snapshots[case.key].difficultyLabel = case.detail
         local prefix = "tooltip.compact.detail." .. tostring(case.detail)
-        eq(prefix .. ".snapshot", detailAddon.archonTargets.GetLocalizedSnapshotLabel(case.key), case.label)
+        eq(prefix .. ".snapshot", detailAddon.archonTargets.GetSnapshotDetail(case.key,
+            fixture.snapshots[case.key]), case.label:match(" %((.*)%)$"))
         local options = detailAddon.archonTargets.GetAvailableSnapshotOptions()
         local index = case.key == "raidHeroic" and 4 or case.key == "mythicPlusCurrent" and 1 or 2
         eq(prefix .. ".dropdown",

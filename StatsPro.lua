@@ -10374,18 +10374,6 @@ function addon.archonTargets.GetMonthAbbr(monthNum)
     return monthAbbrs[monthNum]
 end
 
-function addon.archonTargets.GetLocalizedSnapshotLabel(snapshotKey)
-    local texts = addon.archonTargets.snapshotTexts
-    local key = addon.archonTargets.ResolveAvailableSnapshotKey(snapshotKey)
-    local entry = texts[key] or texts.mythicPlusCurrent
-    local text = L(entry.label)
-    local detail = addon.archonTargets.GetSnapshotDetail(key, addon.archonTargets.GetRootSnapshot(key))
-    if detail then
-        return text .. " (" .. detail .. ")"
-    end
-    return text
-end
-
 function addon.archonTargets.GetLocalizedSnapshotTitle(snapshotKey)
     local texts = addon.archonTargets.snapshotTexts
     local key = addon.archonTargets.ResolveAvailableSnapshotKey(snapshotKey)

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.24.3 - 18-Nov-2026 — Gear HUD recovery and clearer tooltips
+
+- Recover durability, repair and item level when the game temporarily fails to schedule an update. Keep the last reliable durability reading while equipment data is incomplete.
+- Restore precise formatting after a brief display error on protected stats. Wrap long help text in Settings, including the mana regeneration explanation.
+- Keep `/ss selftest all` working when another addon's diagnostic report is unreadable.
+
 ## 1.24.2 - 17-Nov-2026 — Mana regeneration help
 
 - Explain in Settings when the adaptive mana regeneration row switches rates and how to show both rates at once.

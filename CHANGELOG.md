@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.24.12 - 18-Nov-2026 — Gear HUD recovery and clearer tooltips
+
+- Recover durability, repair and item level when the game temporarily fails to schedule an update. Keep the last reliable durability reading while equipment data is incomplete.
+- Restore precise formatting after a brief display error on protected stats. Wrap long help text in Settings.
+- Keep `/ss selftest all` working when another addon's diagnostic report is unreadable.
+
 ## 1.24.11 - 18-Nov-2026 — Archon target refresh
 
 - Refresh Mythic+ and raid stat targets using Archon data checked on 18 November.

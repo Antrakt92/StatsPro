@@ -186,6 +186,73 @@ for _, costReadyOnWake in ipairs({ true, false }) do
 end
 print(flavor .. " late repair tooltip recovery regressions passed")
 
+for _, missing in ipairs({ "durability", "repair", "empty" }) do
+    for _, persistent in ipairs({ false, true }) do
+        local available, reads = true, 0
+        local env, addon, test = loadStatsPro("enUS", {
+            statsProDB = { showDurability = true, showRepairCost = true, showItemLevel = false },
+            getInventoryItemDurability = function(slot)
+                if slot ~= 1 then return end
+                reads = reads + 1
+                if missing == "repair" or available then return available and 60 or 65, 100 end
+            end,
+            getTooltipInventoryItem = function()
+                if missing ~= "repair" or available then return { repairCost = 200 } end
+            end,
+        })
+        if missing ~= "empty" then
+            env.GetInventoryItemID = function(_, slot) if slot == 1 then return 1337 end end
+            env.C_Item = { IsItemDataCachedByID = function() return true end }
+        end
+        env.__fireEvent("PLAYER_ENTERING_WORLD")
+        assert(test.durabilityState().durabilityValue == 60 and test.durabilityState().repairCost == 200,
+            "fixture starts with complete wear and repair cost")
+        local after = env.C_Timer.After
+        local arms = 0
+        local retryKind = missing == "repair" and "repair" or "durability"
+        local attemptKey, scheduledKey = retryKind .. "RetryAttempt", retryKind .. "RetryScheduled"
+        env.C_Timer.After = function(delay, callback)
+            after(delay, callback)
+            if delay >= 1 then
+                arms = arms + 1
+                if persistent or arms == 1 then error("native gear retry timer rejected") end
+            end
+        end
+        available = false
+        env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+        assert(addon:RunUpdateStatsSafe(), "a rejected gear retry timer cannot abort the HUD update")
+        local first = test.durabilityState()
+        assert(arms == 1 and first[attemptKey] == 1 and not first[scheduledKey] and first.dirty,
+            "failed arm spends one attempt and leaves a coalesced update")
+        if persistent then
+            for _ = 1, 2 * first.retryLimit do assert(addon:RunUpdateStatsSafe()) end
+            local exhausted = test.durabilityState()
+            local before = reads
+            assert(arms == first.retryLimit and exhausted[attemptKey] == first.retryLimit
+                and not exhausted[scheduledKey] and not exhausted.dirty,
+                "persistent failure spends only the bounded retry budget")
+            assert(exhausted.durabilityValue ~= nil and exhausted.repairCost == nil,
+                "failed timers cannot replace last clean wear with an authoritative empty inventory")
+            env.__flushTimers(15)
+            assert(addon:RunUpdateStatsSafe() and reads == before,
+                "partially registered timers cannot wake an exhausted generation")
+            env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+        end
+        available = true
+        assert(addon:RunUpdateStatsSafe(), "the next coalesced update succeeds")
+        local recovered = test.durabilityState()
+        assert(recovered.durabilityValue == 60 and recovered.repairCost == 200 and not recovered.dirty
+            and not recovered[scheduledKey], "complete gear data recovers")
+        if not persistent then
+            local before = reads
+            env.__flushTimers(1)
+            assert(addon:RunUpdateStatsSafe() and reads == before,
+                "a partially registered timer cannot wake already recovered gear")
+        end
+    end
+end
+print(flavor .. " durability and repair timer recovery regressions passed")
+
 for _, persistentFailure in ipairs({ false, true }) do
     local available, reads = true, 0
     local function readAverageItemLevel()

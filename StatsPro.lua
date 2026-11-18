@@ -1701,7 +1701,7 @@ function addon.durabilityRuntime.ScheduleRetry(kind, pending)
     state.attempt = attempt
     state.scheduledGeneration = generation
     state.scheduledAttempt = attempt
-    C_Timer.After(delay, function()
+    local scheduled = pcall(C_Timer.After, delay, function()
         if runtime.generation ~= generation
                 or state.generation ~= generation
                 or state.attempt ~= attempt
@@ -1717,8 +1717,20 @@ function addon.durabilityRuntime.ScheduleRetry(kind, pending)
             shouldRetry = cached.showRepairCost and cached.repairCostComplete == false
                 and addon.profileRuntime.ReadCombatState() == false
         end
-        if shouldRetry then durabilityDirty = true end
+        if shouldRetry then
+            if kind == "durability" and attempt == #runtime.retryDelays then
+                runtime.durabilityFinalRetryGeneration = generation
+            end
+            durabilityDirty = true
+        end
     end)
+    if not scheduled and runtime.generation == generation
+        and state.scheduledGeneration == generation and state.scheduledAttempt == attempt then
+        -- Spend this step on the regular ticker and discard any partially armed callback.
+        state.scheduledGeneration = nil
+        state.scheduledAttempt = nil
+        durabilityDirty = true
+    end
 end
 -- Dirty flag for item-level refresh (overall iLvl can change from gear or bags)
 local itemLevelDirty = true
@@ -9811,13 +9823,12 @@ local function RefreshDurabilityCache()
     addon.durabilityRuntime.ScheduleRetry("repair", repairRetryPending)
 
     -- nil/nil is also Blizzard's transient pre-cache shape, so a single empty scan
-    -- cannot erase a good value. Once this generation exhausts its bounded retries,
-    -- however, the repeated clean-empty result is authoritative (for example, after
-    -- the player removes every durable item) and must not leave stale wear on screen.
-    local durabilityRetry = addon.durabilityRuntime.retryStates.durability
+    -- cannot erase a good value. A repeated clean-empty result after the final
+    -- backoff really elapses is authoritative (for example, after the player
+    -- removes every durable item). A rejected timer only permits another read.
+    local runtime = addon.durabilityRuntime
     if durabilityCleanEmpty and durabilityRetryPending
-            and durabilityRetry.attempt >= #addon.durabilityRuntime.retryDelays
-            and durabilityRetry.scheduledGeneration ~= addon.durabilityRuntime.generation then
+            and runtime.durabilityFinalRetryGeneration == runtime.generation then
         cached.durabilityLastCompleteAverage = nil
         cached.durabilityLastCompleteWorst = nil
         cached.durabilityValue = nil

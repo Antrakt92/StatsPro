@@ -125,6 +125,39 @@ for _, forever in ipairs({ false, true }) do
     assert(guided.ReadAddonLoaded("DoYouNeedIt") == true, "missing modern method uses the legacy alias")
 end
 
+for _, forever in ipairs({ false, true }) do
+    local protectedString = "protected-sibling-marker"
+    local env, addon = loadStatsPro(forever, {
+        issecretvalue = function(value) return rawequal(value, protectedString) end,
+    })
+    local guided = addon.selfTest
+    local function failIndex(_, key) error("unexpected diagnostic lookup: " .. key) end
+    env.DoYouNeedItSelfTest = setmetatable({}, { __index = failIndex })
+    env.ApplicantScoutSelfTest = { finishedAt = 1720000000 }
+    env.C_AddOns = {
+        GetAddOnMetadata = function(name, field)
+            assert(field == "Version")
+            return name == "DoYouNeedIt" and protectedString or "1.2.3"
+        end,
+        IsAddOnLoaded = function() return true, true end,
+    }
+    env.SlashCmdList.STATSPRO("selftest all")
+    local messages = table.concat(env.__prints, "\n")
+    assert(messages:find("DoYouNeedIt loaded ?, report (unrecognized shape)", 1, true),
+        "a malformed sibling report and protected version are unrecognized")
+    assert(messages:find("ApplicantScout loaded 1.2.3, report 1720000000", 1, true),
+        "a malformed sibling cannot suppress the following valid sibling")
+    assert(not messages:find(protectedString, 1, true), "protected metadata cannot reach diagnostic output")
+    rawset(env, "DoYouNeedItSelfTest", { finishedAt = protectedString })
+    assert(guided.ReadSiblingReportState("DoYouNeedItSelfTest") == "report (unrecognized shape)",
+        "a protected sibling timestamp is unrecognized")
+    rawset(env, "ApplicantScoutSelfTest", { finishedAt = "ready" })
+    assert(guided.ReadSiblingReportState("ApplicantScoutSelfTest") == "report ready",
+        "a clean sibling timestamp string is accepted")
+    rawset(env, "C_AddOns", setmetatable({}, { __index = failIndex }))
+    assert(guided.ReadAddonVersion("DoYouNeedIt") == nil, "a malformed metadata API is unavailable")
+end
+
 for _, scenario in ipairs({ { cycles = 1, ticks = 24 }, { cycles = 25, ticks = 1 } }) do
     local combat = false
     local env, addon, test = loadStatsPro(true, {

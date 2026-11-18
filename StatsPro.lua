@@ -22892,24 +22892,23 @@ function addon.selfTest.ReadAddonLoaded(addonName)
 end
 
 function addon.selfTest.ReadAddonVersion(addonName)
-    if type(C_AddOns) ~= "table" or type(C_AddOns.GetAddOnMetadata) ~= "function" then
-        return nil
-    end
-    local ok, version = pcall(C_AddOns.GetAddOnMetadata, addonName, "Version")
-    if not ok or type(version) ~= "string" or version == "" then return nil end
-    return version
+    if not addon.dbRuntime.IsCleanTable(C_AddOns) then return nil end
+    local callback = rawget(C_AddOns, "GetAddOnMetadata")
+    if not addon.dbRuntime.IsCleanType(callback, "function") then return nil end
+    local ok, version = pcall(callback, addonName, "Version")
+    if ok then return addon.selfTest.CleanString(version) end
 end
 
 function addon.selfTest.ReadSiblingReportState(reportKey)
     local stored = _G[reportKey]
-    if type(stored) ~= "table" then return "no report yet" end
-    local finishedAt = stored.finishedAt
+    if not addon.dbRuntime.IsCleanType(stored, "table") then return "no report yet" end
+    if not addon.dbRuntime.IsCleanTable(stored) then return "report (unrecognized shape)" end
+    local finishedAt = rawget(stored, "finishedAt")
     if addon.IsCleanFiniteNumber(finishedAt) then
         return "report " .. string.format("%d", finishedAt)
     end
-    if type(finishedAt) == "string" and finishedAt ~= "" then
-        return "report " .. finishedAt
-    end
+    local cleanStamp = addon.selfTest.CleanString(finishedAt)
+    if cleanStamp then return "report " .. cleanStamp end
     return "report (unrecognized shape)"
 end
 

@@ -559,4 +559,22 @@ do
     check(near(scrollFrame:GetVerticalScroll(), 230) and near(navigation.scrollOffsets[1], 230),
         'tab switching cannot discard the saved offset after a failed resize refresh')
 end
+for _, locale in ipairs({ 'enUS', 'deDE', 'ruRU' }) do
+    local env, addon = fixtures.loadStatsPro(locale, {
+        forever = true, uiParentWidth = 640, uiParentHeight = 432,
+    })
+    env.__fireEvent('PLAYER_ENTERING_WORLD')
+    addon:OpenConfigMenu()
+    local control = env.StatsProForeverManaRegenMP5
+    fire(control, 'OnEnter')
+    local title, detail = env.GameTooltip.lines[1], env.GameTooltip.lines[2]
+    local localized = addon.forever.Translate(addon.forever.manaRegenTooltip, locale)
+        or addon.forever.manaRegenTooltip
+    check(title.left == addon.forever.Translate('Mana Regen / 5 sec', locale),
+        locale .. ' keeps the mana regeneration tooltip title')
+    check(detail.left:find(localized, 1, true) == 1 and detail.wrapText == true,
+        locale .. ' wraps adaptive mana regeneration help without dropping text')
+    fire(control, 'OnLeave')
+    check(not env.GameTooltip:IsShown(), locale .. ' dismisses the mana regeneration tooltip')
+end
 print('Settings menus: ' .. checks .. ' checks passed')

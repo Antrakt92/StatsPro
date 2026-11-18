@@ -14030,7 +14030,7 @@ function addon.settingsDesign.ShowControlTooltip(control)
     if not title or title == "" then return end
     GameTooltip:SetOwner(control, "ANCHOR_RIGHT")
     GameTooltip:AddLine(title, 1, 1, 1)
-    if detail and detail ~= "" then GameTooltip:AddLine(detail, 0.72, 0.77, 0.75) end
+    if detail and detail ~= "" then GameTooltip:AddLine(detail, 0.72, 0.77, 0.75, true) end
     GameTooltip:Show()
 end
 

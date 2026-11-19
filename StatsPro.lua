@@ -12181,6 +12181,7 @@ local function BuildRepairCostPayload()
     -- inline as textures and the color tag would tint them.
     repairLabelStr = FormatLabel(cs.durability, "Repair")
     if cached.repairCostComplete ~= true or not IsCleanNonNegativeNumber(cached.repairCost) then
+        if addon.durabilityRuntime.auctionOpen then return "", nil end
         return "?", repairLabelStr
     end
     if cached.repairCost <= 0 then return "", nil end
@@ -12561,7 +12562,10 @@ local EVENT_HANDLERS = {
         addon.fontRuntime.providerRefreshPending = true
         timeSinceLastUpdate = cached.updateInterval or 0.5
     end,
-    PLAYER_ENTERING_WORLD       = OnPlayerEnteringWorld,
+    PLAYER_ENTERING_WORLD       = function(...)
+        addon.durabilityRuntime.auctionOpen = false
+        OnPlayerEnteringWorld(...)
+    end,
     PLAYER_LOGOUT               = OnPlayerLogout,
     PLAYER_SPECIALIZATION_CHANGED = function(unit)
         if not addon.dbRuntime.IsCleanType(unit, "string") or unit ~= "player" then return end
@@ -12612,6 +12616,17 @@ local EVENT_HANDLERS = {
         timeSinceLastUpdate = cached.updateInterval or 0.5
     end,
     MERCHANT_SHOW               = function() addon.durabilityRuntime.MarkDirty() end,
+    AUCTION_HOUSE_SHOW          = function()
+        addon.durabilityRuntime.auctionOpen = true
+    end,
+    AUCTION_HOUSE_CLOSED        = function()
+        local runtime = addon.durabilityRuntime
+        local wasOpen = runtime.auctionOpen
+        runtime.auctionOpen = false
+        -- Closing the auction can leave a previously incomplete price without
+        -- another inventory event. Give it one fresh, coalesced retry budget.
+        if wasOpen and cached.showRepairCost and not cached.repairCostComplete then runtime.MarkDirty() end
+    end,
     -- WHY: lock state is stored in cached.isLocked and read by OnDragStart. Mouse stays
     -- enabled permanently so right-click Settings works even while locked.
     PLAYER_REGEN_ENABLED        = function()

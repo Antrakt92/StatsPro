@@ -256,6 +256,46 @@ for _, costReadyOnWake in ipairs({ true, false }) do
 end
 print(flavor .. " late repair tooltip recovery regressions passed")
 
+do
+    local cost, reads = 300, 0
+    local env, addon, test = loadStatsPro("enUS", {
+        statsProDB = { showDurability = true, showRepairCost = true },
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then return 80, 100 end
+        end,
+        getTooltipInventoryItem = function()
+            reads = reads + 1
+            if cost then return { repairCost = cost } end
+        end,
+    })
+    local function repairBlock()
+        for _, block in ipairs(test.buildRenderBlocks()) do
+            if block.splitKey == "splitRepairCost" then return block end
+        end
+    end
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    env.__fireEvent("AUCTION_HOUSE_SHOW")
+    assert(addon:RunUpdateStatsSafe() and repairBlock().repairStr == test.formatRepairCost(300, 14),
+        "auction does not hide a readable repair cost")
+    cost = nil
+    env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+    assert(addon:RunUpdateStatsSafe(), "unavailable auction-time repair data does not interrupt the HUD")
+    assert(repairBlock().repairStr == "" and repairBlock().repairLabelStr == nil
+        and test.durabilityState().durabilityValue == 80,
+        "auction hides the unresolved repair row and keeps readable durability")
+    cost = 450
+    local before = reads
+    env.__fireEvent("AUCTION_HOUSE_CLOSED")
+    assert(reads == before and test.durabilityState().dirty,
+        "closing the auction queues a repair refresh without reading in the event handler")
+    assert(addon:RunUpdateStatsSafe() and reads == before + 1 and test.durabilityState().repairCost == 450,
+        "closing the auction restores the current cost")
+    before = reads
+    env.__fireEvent("AUCTION_HOUSE_CLOSED")
+    assert(addon:RunUpdateStatsSafe() and reads == before, "complete repair costs need no extra auction-close scan")
+end
+print(flavor .. " auction repair display regressions passed")
+
 for _, missing in ipairs({ "durability", "repair", "empty" }) do
     for _, persistent in ipairs({ false, true }) do
         local available, reads = true, 0

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.24.15 - 19-Nov-2026 — Repair display at the auction house
+
+- Keep showing the repair cost at the auction house when it is available. Hide the repair row while the cost is unknown and check again when the auction window closes.
+
 ## 1.24.14 - 19-Nov-2026 — Readable names and HUD spacing
 
 - Show character, realm, profile, and font names in their original scripts across Settings and Appearance, even when the menu language differs. Recover the bundled name font if it loads late.

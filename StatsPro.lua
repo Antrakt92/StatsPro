@@ -12849,10 +12849,21 @@ ResolveConfigFont = function(activeLocale)
     return FindCompatibleFont(CONFIG_FONT, req, activeLocale) or CONFIG_FONT
 end
 
+function addon.fontRuntime.ConfigFontForEntry(entry, baseFont, displayFont)
+    if entry.nameText then
+        -- A name can contain scripts unrelated to the language of the Settings UI.
+        -- The bundled face covers the supported scripts without the optional provider.
+        local bundled = addon.fontRuntime.usableCatalogPath(addon.sharedFonts.baseline.path)
+        if bundled then return bundled end
+    end
+    return entry.previewIndependent and baseFont or displayFont
+end
+
 -- Settings FontStrings inherit from stable addon-owned FontObjects before their
 -- first localized SetText. Direct SetFont remains only a compatibility fallback:
 -- on a cold client it can leave a newly created region without any font at all.
-local function RegisterConfigFont(fs, size, flags, roleKey)
+---@param nameText? boolean
+local function RegisterConfigFont(fs, size, flags, roleKey, nameText)
     local entry = localizedConfigFonts[fs]
     if not entry then
         entry = { fs = fs }
@@ -12867,11 +12878,13 @@ local function RegisterConfigFont(fs, size, flags, roleKey)
         end
     end
     local groupKey = ConfigFontGroupKey(roleKey, size, flags)
+    if nameText then groupKey = "name\031" .. groupKey end
     if entry.group and entry.group.key ~= groupKey then
         RemoveConfigFontEntry(entry.group, entry)
         entry.group = nil
     end
     entry.roleKey = roleKey
+    entry.nameText = nameText == true
     entry.previewIndependent = fs.statsProFontPreviewIndependent == true
     entry.size = size
     entry.flags = flags
@@ -12919,8 +12932,10 @@ local function RegisterConfigFont(fs, size, flags, roleKey)
             tinsert(group.entries, entry)
         end
         if previousText ~= nil then fs:SetText(previousText) end
-        if not entry.previewIndependent or not addon.fontRuntime.configPreviewBaseFont then currentConfigFont = font end
-        addon.fontRuntime.configFontValidated = true
+        if not entry.nameText then
+            if not entry.previewIndependent or not addon.fontRuntime.configPreviewBaseFont then currentConfigFont = font end
+            addon.fontRuntime.configFontValidated = true
+        end
         group.appliedFont = font
         group.appliedSize = size
         group.appliedFlags = effectiveFlags
@@ -12931,8 +12946,8 @@ local function RegisterConfigFont(fs, size, flags, roleKey)
     end
 
     local resolvedFont, effectiveFlags
-    local registrationFont = entry.previewIndependent
-        and addon.fontRuntime.configPreviewBaseFont or currentConfigFont
+    local registrationFont = addon.fontRuntime.ConfigFontForEntry(
+        entry, addon.fontRuntime.configPreviewBaseFont, currentConfigFont)
     if addon.fontRuntime.configFontValidated then
         resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(
             registrationFont, size, flags)
@@ -12950,13 +12965,15 @@ local function RegisterConfigFont(fs, size, flags, roleKey)
     entry.group = nil
     if resolvedFont and addon.fontRuntime.setRegionFont(fs, resolvedFont, size, effectiveFlags) then
         if previousText ~= nil then fs:SetText(previousText) end
-        if not entry.previewIndependent or not addon.fontRuntime.configPreviewBaseFont then currentConfigFont = resolvedFont end
-        addon.fontRuntime.configFontValidated = true
+        if not entry.nameText then
+            if not entry.previewIndependent or not addon.fontRuntime.configPreviewBaseFont then currentConfigFont = resolvedFont end
+            addon.fontRuntime.configFontValidated = true
+        end
         entry.appliedFont = resolvedFont
         entry.appliedSize = size
         entry.appliedFlags = effectiveFlags
         if registryRollbackFailed then
-            return ApplyConfigFont(resolvedFont, true)
+            return ApplyConfigFont(entry.nameText and ResolveConfigFont(ResolveActiveLocale()) or resolvedFont, true)
         end
         return true, resolvedFont
     end
@@ -12974,7 +12991,9 @@ local function RegisterConfigFont(fs, size, flags, roleKey)
     if TryInherit(fallbackGroup, fallbackFont, fallbackFlags) then
         local applied, effective = CommitGroup(
             fallbackGroup, fallbackFont, fallbackFlags)
-        if registryRollbackFailed then ApplyConfigFont(fallbackFont, true) end
+        if registryRollbackFailed then
+            ApplyConfigFont(entry.nameText and ResolveConfigFont(active) or fallbackFont, true)
+        end
         return applied, effective
     end
     addon.fontRuntime.RecordConfigFontFailure("register", roleKey, "font-unavailable",
@@ -12994,7 +13013,7 @@ ApplyConfigFont = function(font, force, previewFont)
         local matches = true
         for _, entry in ipairs(localizedConfigFonts) do
             if not addon.fontRuntime.matchesAppliedFont(
-                entry.fs, entry.previewIndependent and font or displayFont,
+                entry.fs, addon.fontRuntime.ConfigFontForEntry(entry, font, displayFont),
                 entry.size, entry.appliedFlags) then matches = false; break end
         end
         if matches then
@@ -13031,7 +13050,8 @@ ApplyConfigFont = function(font, force, previewFont)
         if #group.entries > 0 then
             local oldFont, oldSize, oldFlags = addon.fontRuntime.ConfigFontSnapshot(group.object)
             local resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(
-                group.entries[1].previewIndependent and usable or displayFont, group.size, group.flags)
+                addon.fontRuntime.ConfigFontForEntry(group.entries[1], usable, displayFont),
+                group.size, group.flags)
             if not resolvedFont then return false end
             tinsert(groupPlans, {
                 group = group,
@@ -13049,7 +13069,7 @@ ApplyConfigFont = function(font, force, previewFont)
         previousFonts[entry] = { font = oldFont, size = oldSize, flags = oldFlags }
         if not entry.group then
             local resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(
-                entry.previewIndependent and usable or displayFont, entry.size, entry.flags)
+                addon.fontRuntime.ConfigFontForEntry(entry, usable, displayFont), entry.size, entry.flags)
             if not resolvedFont then return false end
             tinsert(directPlans, {
                 entry = entry,
@@ -13870,7 +13890,7 @@ addon.settingsDesign = {
         typography = {
             title = { size = 16, flags = "OUTLINE", color = "textPrimary" },
             metadata = { size = 11, color = "textSecondary" },
-            profile = { size = 12, color = "textPrimary" },
+            profile = { size = 12, color = "textPrimary", nameText = true },
             tab = { size = 13, flags = "OUTLINE", color = "textSecondary" },
             section = { size = 12, flags = "OUTLINE", color = "textAccent" },
             button = { size = 12, color = "textPrimary" },
@@ -13958,7 +13978,8 @@ function addon.settingsDesign.ApplyTextRole(region, roleName)
     local role = addon.settingsDesign.tokens.typography[roleName]
     if not role then return end
     local prefix = region.statsProFontPreviewIndependent and "catalogue:" or "role:"
-    RegisterConfigFont(region, role.size, role.flags, prefix .. roleName)
+    RegisterConfigFont(region, role.size, role.flags, prefix .. roleName,
+        role.nameText or region.statsProNameText)
     addon.settingsDesign.SetRegionColor(region, role.color)
     region.statsProTextRole = roleName
 end
@@ -16664,7 +16685,7 @@ function addon.profileUI.BuildOperationUI(manager)
     addon.settingsDesign.StyleCloseButton(dialogClose)
 
     local dialogMessage = dialog:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(dialogMessage, 12, nil, "dialogBody")
+    RegisterConfigFont(dialogMessage, 12, nil, "dialogBody", true)
     addon.settingsDesign.SetRegionColor(dialogMessage, "textPrimary")
     dialogMessage:SetPoint("TOPLEFT", 20, -54)
     dialogMessage:SetPoint("TOPRIGHT", -20, -54)
@@ -16695,7 +16716,7 @@ function addon.profileUI.BuildOperationUI(manager)
     PushLocalizedLabel(function() cancelButton:SetText(L("Cancel")) end)
 
     local transferSummary = dialog:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(transferSummary, 12, nil, "transferSummary")
+    RegisterConfigFont(transferSummary, 12, nil, "transferSummary", true)
     addon.settingsDesign.SetRegionColor(transferSummary, "textPrimary")
     transferSummary:SetPoint("TOPLEFT", 20, -56)
     transferSummary:SetPoint("TOPRIGHT", -20, -56)
@@ -17105,8 +17126,10 @@ function addon.profileUI.BuildOperationUI(manager)
         text:SetPoint("RIGHT", -8, 0)
         text:SetWordWrap(false)
         row.text = text
+        text.statsProNameText = true
         addon.settingsDesign.StyleListRow(row, text, "metadata")
         local detail = row:CreateFontString(nil, "OVERLAY")
+        detail.statsProNameText = true
         addon.settingsDesign.ApplyTextRole(detail, "controlMetadata")
         detail:SetPoint("TOPLEFT", 8, -25)
         detail:SetPoint("TOPRIGHT", -8, -25)
@@ -18101,13 +18124,13 @@ function addon.profileUI.BuildSettingsUI(owner)
     addon.settingsDesign.SetRegionColor(emptyText, "textMuted")
 
     local detailCharacter = manager:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(detailCharacter, 16, "OUTLINE", "managerCharacter")
+    RegisterConfigFont(detailCharacter, 16, "OUTLINE", "managerCharacter", true)
     detailCharacter:SetPoint("TOPLEFT", 266, -58)
     detailCharacter:SetPoint("TOPRIGHT", -20, -58)
     detailCharacter:SetJustifyH("LEFT")
 
     local detailContext = manager:CreateFontString(nil, "OVERLAY")
-    RegisterConfigFont(detailContext, 12, nil, "managerContext")
+    RegisterConfigFont(detailContext, 12, nil, "managerContext", true)
     detailContext:SetPoint("TOPLEFT", detailCharacter, "BOTTOMLEFT", 0, -8)
     detailContext:SetPoint("TOPRIGHT", detailCharacter, "BOTTOMRIGHT", 0, -8)
     detailContext:SetJustifyH("LEFT")
@@ -18173,6 +18196,7 @@ function addon.profileUI.BuildSettingsUI(owner)
         row.background = background
         row.text = text
         row.badge = badge
+        text.statsProNameText = true
         addon.settingsDesign.StyleListRow(row, text, "metadata")
         text:SetJustifyH("LEFT")
         row:SetScript("OnClick", function(button)
@@ -21802,6 +21826,7 @@ if addon and addon.__statsproSmoke == true then
                     appliedFont = entry.appliedFont,
                     appliedFlags = entry.appliedFlags,
                     actualFont = actualFont,
+                    nameText = entry.nameText,
                     actualFlags = actualFlags,
                     actualObject = actualObject,
                     ownedObject = entry.group and entry.group.object or nil,

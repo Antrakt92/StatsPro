@@ -641,11 +641,13 @@ for _, failFirst in ipairs({ false, true }) do
     end
     assert(test.applyConfigFont("Fonts\\ARIALN.TTF", true), "same-owner overrides recover through direct Settings update")
     for _, entry in ipairs(test.configFontState().entries) do
-        assert(entry.actualFont == "Fonts\\ARIALN.TTF", "every Settings font updates despite local override")
+        local expected = entry.nameText and addon.sharedFonts.baseline.path or "Fonts\\ARIALN.TTF"
+        assert(entry.actualFont == expected, "every Settings region gets its assigned font despite local override")
     end
     assert(test.applyConfigFont("Fonts\\2002.ttf", true), "subsequent Korean switch also updates direct regions")
     for _, entry in ipairs(test.configFontState().entries) do
-        assert(entry.actualFont == "Fonts\\2002.ttf", "every Settings font switches to Korean")
+        local expected = entry.nameText and addon.sharedFonts.baseline.path or "Fonts\\2002.ttf"
+        assert(entry.actualFont == expected, "every Settings region gets its assigned font after switching to Korean")
     end
 end
 print(flavor .. " Settings inherited-override recovery regressions passed")
@@ -672,7 +674,8 @@ do
         local applied, status = test.applyConfigFont(path, true)
         assert(applied, "hidden EditBox must not roll back Settings font switch: " .. tostring(status) .. " " .. tostring(addon.fontRuntime.configFontFailure) .. " " .. tostring(addon.fontRuntime.configFontFailureChild))
         for _, entry in ipairs(test.configFontState().entries) do
-            assert(entry.actualFont == path, "all Settings regions receive selected font")
+            local expected = entry.nameText and addon.sharedFonts.baseline.path or path
+            assert(entry.actualFont == expected, "all Settings regions receive their assigned font")
         end
     end
 end

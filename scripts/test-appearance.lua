@@ -26,7 +26,8 @@ detachedRegion:SetFont(oldFont, oldSize, oldFlags)
 local switched = test.applyConfigFont("Fonts\\ARKai_T.ttf", true)
 assert(switched, "Settings font switch survives a detached styled region")
 for _, entry in ipairs(test.configFontState().entries) do
-    assert(entry.actualFont == "Fonts\\ARKai_T.ttf", "all Settings regions switch together")
+    local expected = entry.nameText and addon.sharedFonts.baseline.path or "Fonts\\ARKai_T.ttf"
+    assert(entry.actualFont == expected, "Settings regions switch to their assigned fonts")
 end
 for _, locale in ipairs({ "ruRU", "koKR", "zhCN", "zhTW" }) do
     local requirement = test.registrySnapshot().localeGlyphReq[locale]
@@ -100,7 +101,8 @@ end
 private.failFontSwitch = false
 assert(rollbackTest.applyConfigFont("Fonts\\ARKai_T.ttf", true), "font switch recovers after direct failure")
 for _, entry in ipairs(rollbackTest.configFontState().entries) do
-    assert(entry.actualFont == "Fonts\\ARKai_T.ttf", "recovery updates all Settings fonts")
+    local expected = entry.nameText and addon.sharedFonts.baseline.path or "Fonts\\ARKai_T.ttf"
+    assert(entry.actualFont == expected, "recovery restores each Settings font role")
 end
 
 local warmed = {}

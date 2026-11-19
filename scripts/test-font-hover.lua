@@ -105,7 +105,8 @@ for _, forever in ipairs({ false, true }) do
             local baseline = configBaseline[entry.region]
             if baseline then
                 local actual, size, flags = entry.region:GetFont()
-                check(actual == ((catalogRegions[entry.region] or closeRegions[entry.region] or fieldRegions[entry.region]) and baseline.path or path), 'Settings text follows hover while catalogue, field captions and close icons stay readable')
+                local keepFont = entry.nameText or catalogRegions[entry.region] or closeRegions[entry.region] or fieldRegions[entry.region]
+                check(actual == (keepFont and baseline.path or path), 'Settings hover preserves dedicated fonts for names, catalogue, field captions and close icons')
                 check(size == baseline.size and addon.fontRuntime.semanticFlags(flags) == addon.fontRuntime.semanticFlags(baseline.flags), 'hover preserves semantic role size and outline flags')
                 if unchangedText then check(entry.region:GetText() == baseline.text, 'font preview restores every region text after mutation') end
             end

@@ -11467,7 +11467,7 @@ do
         local old = appearance[entry.region]
         eq("fonts.owned_settings.identity_stable." .. index, entry.actualObject, old.object)
         eq("fonts.owned_settings.inherited_font." .. index,
-            entry.actualFont, "Fonts\\ARIALN.TTF")
+            entry.actualFont, entry.nameText and ownedAddon.sharedFonts.baseline.path or "Fonts\\ARIALN.TTF")
         eq("fonts.owned_settings.no_direct_setfont." .. index,
             entry.region.setFontCalls or 0, old.directCalls)
         assertDeepEqual("fonts.owned_settings.color_preserved." .. index,
@@ -12715,8 +12715,7 @@ do
                     frame.font, frame.fontSize, frame.fontFlags = nil, nil, nil
                     return false
                 end
-            elseif mode == "partial-retry" and font == partialRestoreFont
-                and registeredRegions[frame] then
+            elseif mode == "partial-retry" and registeredRegions[frame] then
                 retryTouchedRegions[frame] = true
             end
             if font == configTarget and mode == "config-false" then return false end
@@ -12756,8 +12755,9 @@ do
     eq("fonts.config_registry.flag_fallback_current", after.currentFont, configTarget)
     eq("fonts.config_registry.flag_fallback_count", #after.entries, #before.entries)
     for i, entry in ipairs(after.entries) do
-        eq("fonts.config_registry.flag_fallback.applied_font." .. i, entry.appliedFont, configTarget)
-        eq("fonts.config_registry.flag_fallback.actual_font." .. i, entry.actualFont, configTarget)
+        local expected = entry.nameText and configAddon.sharedFonts.baseline.path or configTarget
+        eq("fonts.config_registry.flag_fallback.applied_font." .. i, entry.appliedFont, expected)
+        eq("fonts.config_registry.flag_fallback.actual_font." .. i, entry.actualFont, expected)
         eq("fonts.config_registry.flag_fallback.applied_flags." .. i, entry.appliedFlags, nil)
         eq("fonts.config_registry.flag_fallback.actual_flags." .. i, entry.actualFlags or "", "")
         eq("fonts.config_registry.flag_fallback.text_preserved." .. i, entry.actualText, before.entries[i].actualText)
@@ -12823,15 +12823,16 @@ do
         effective, partialRestoreFont)
     local retryTouchedCount = 0
     for _ in pairs(retryTouchedRegions) do retryTouchedCount = retryTouchedCount + 1 end
-    eq("fonts.config_registry.partial_rollback_failure.retry_touches_all",
-        retryTouchedCount, #partialState.entries)
     local recoveredState = configTest.configFontState()
     for i, entry in ipairs(recoveredState.entries) do
+        local expected = entry.nameText and configAddon.sharedFonts.baseline.path or partialRestoreFont
         eq("fonts.config_registry.partial_rollback_failure.retry_applied_font." .. i,
-            entry.appliedFont, partialRestoreFont)
+            entry.appliedFont, expected)
         eq("fonts.config_registry.partial_rollback_failure.retry_actual_font." .. i,
-            entry.actualFont, partialRestoreFont)
+            entry.actualFont, expected)
     end
+    eq("fonts.config_registry.partial_rollback_failure.retry_touches_all",
+        retryTouchedCount, #partialState.entries)
 
     mode = "pass"
     eq("fonts.language_preview_failed_swap.preprobe_arial",

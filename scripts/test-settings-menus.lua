@@ -577,4 +577,34 @@ for _, locale in ipairs({ 'enUS', 'deDE', 'ruRU' }) do
     fire(control, 'OnLeave')
     check(not env.GameTooltip:IsShown(), locale .. ' dismisses the mana regeneration tooltip')
 end
+for _, forever in ipairs({ false, true }) do
+    local playerName, realm = 'Охотник', '服务器'
+    local env, addon, test = fixtures.loadStatsPro('enUS', {
+        forever = forever,
+        unitGUID = function() return 'Player-1-MIXED-SCRIPT' end,
+        unitFullName = function() return playerName, realm end,
+        getSpecialization = function() return 1 end,
+        specID = 73,
+    })
+    env.__fireEvent('PLAYER_ENTERING_WORLD')
+    addon:OpenConfigMenu()
+    addon.profileUI.OpenManager(true)
+    local baseline = addon.sharedFonts.baseline.path
+    local header = env.StatsProActiveProfileButton.statsProText
+    local row = addon.profileUI.managerRows[1].text
+    local manage = env.StatsProManageProfilesButton.statsProText
+    for _, region in ipairs({ header, row }) do
+        check(region:GetText():find(playerName .. '-' .. realm, 1, true), 'profile text keeps mixed-script names')
+        check(region:GetFont() == baseline, 'names use a bundled font in English Settings')
+    end
+    check(manage:GetFont() ~= baseline, 'ordinary Settings controls keep the English UI face')
+    local base = manage:GetFont()
+    local preview = 'Fonts\\ARIALN.TTF'
+    check(test.applyConfigFont(base, false, preview), 'Settings font preview can apply')
+    check(manage:GetFont() == preview and header:GetFont() == baseline and row:GetFont() == baseline,
+        'font preview keeps mixed-script names readable')
+    check(addon.fontRuntime.ApplyCommittedConfigFont('enUS'), 'Settings fonts can be reapplied')
+    check(header:GetFont() == baseline and row:GetFont() == baseline,
+        'font refresh keeps Cyrillic-capable faces for names')
+end
 print('Settings menus: ' .. checks .. ' checks passed')

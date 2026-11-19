@@ -99,6 +99,76 @@ for _, client in ipairs({ "enUS", "ruRU" }) do
 end
 print(flavor .. " cross-language cold-font regressions passed")
 
+do
+    local available, combat = false, false
+    local function allowFont(_, path)
+        return available or not path:find("AntraktUISans.ttf", 1, true)
+    end
+    local env, addon, test = loadStatsPro("enUS", {
+        lsmFonts = {},
+        unitGUID = function() return "Player-1-COLD-NAME" end,
+        unitFullName = function() return "Охотник", "Сервер" end,
+        getSpecialization = function() return 1 end,
+        specID = 73,
+        setFontResult = allowFont,
+        fontObjectSetFontResult = allowFont,
+        inCombatLockdown = function() return combat end,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    addon:OpenConfigMenu()
+    local header = env.StatsProActiveProfileButton.statsProText
+    local baseline = addon.sharedFonts.baseline.path
+    local fallback = header:GetFont()
+    local text = header:GetText()
+    local first = env.UIParent:CreateFontString()
+    assert(test.registerConfigFont(first, 12, nil, "coldNameRows", true))
+    assert(fallback and fallback ~= baseline and text:find("Охотник", 1, true),
+        "cold names keep a valid font and their original text")
+    addon:RunUpdateStatsSafe()
+    combat, available = true, true
+    env.__flushTimers(1)
+    addon:RunUpdateStatsSafe()
+    assert(header:GetFont() == fallback, "cold-name recovery waits for combat to end")
+    combat = false
+    local second = env.UIParent:CreateFontString()
+    assert(test.registerConfigFont(second, 12, nil, "coldNameRows", true))
+    assert(first:GetFont() == baseline and second:GetFont() == baseline,
+        "registering a new row can upgrade an existing shared font group")
+    assert(addon.fontRuntime.ConfigFontDiagnostic():find("mismatched=0", 1, true),
+        "upgrading a shared font group updates diagnostics for its existing rows")
+    addon.profileUI.OpenManager(true)
+    assert(addon.profileUI.managerRows[1].text:GetFont() == baseline and header:GetFont() == fallback,
+        "new regions can use the ready face before the existing regions are reconciled")
+    for _ = 1, 12 do addon:RunUpdateStatsSafe(); env.__flushTimers(1) end
+    assert(header:GetFont() == baseline and header:GetText() == text,
+        "cold names automatically recover the bundled font and original text")
+    assert(test.configFontState().currentFont == fallback, "name recovery preserves the English UI face")
+end
+do
+    local headerSizeReady = false
+    local function allowFont(_, path, size)
+        return headerSizeReady or size ~= 12 or not path:find("AntraktUISans.ttf", 1, true)
+    end
+    local env, addon = loadStatsPro("enUS", {
+        lsmFonts = {},
+        unitGUID = function() return "Player-1-COLD-NAME-SIZE" end,
+        unitFullName = function() return "Охотник", "Сервер" end,
+        getSpecialization = function() return 1 end,
+        specID = 73,
+        setFontResult = allowFont,
+        fontObjectSetFontResult = allowFont,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    addon:OpenConfigMenu()
+    local header = env.StatsProActiveProfileButton.statsProText
+    local baseline = addon.sharedFonts.baseline.path
+    assert(header:GetFont() ~= baseline, "probe readiness alone does not guarantee the requested size")
+    headerSizeReady = true
+    for _ = 1, 12 do addon:RunUpdateStatsSafe(); env.__flushTimers(1) end
+    assert(header:GetFont() == baseline, "a failed name role recovers after its size becomes available")
+end
+print(flavor .. " cold name font recovery regressions passed")
+
 -- A client exposing only the namespaced money API must still render both gear rows.
 for _, mode in ipairs({ "modern", "modern-only", "legacy", "missing", "throwing",
     "nil-return", "number-return", "empty-return", "secret-return" }) do

@@ -579,8 +579,11 @@ for _, locale in ipairs({ 'enUS', 'deDE', 'ruRU' }) do
 end
 for _, forever in ipairs({ false, true }) do
     local playerName, realm = 'Охотник', '服务器'
+    local fontName, fontPath = 'Шрифт 體', 'Interface\\AddOns\\Media\\Mixed.ttf'
     local env, addon, test = fixtures.loadStatsPro('enUS', {
         forever = forever,
+        statsProDB = { font = fontPath },
+        lsmFonts = { { name = fontName, path = fontPath } },
         unitGUID = function() return 'Player-1-MIXED-SCRIPT' end,
         unitFullName = function() return playerName, realm end,
         getSpecialization = function() return 1 end,
@@ -591,20 +594,55 @@ for _, forever in ipairs({ false, true }) do
     addon.profileUI.OpenManager(true)
     local baseline = addon.sharedFonts.baseline.path
     local header = env.StatsProActiveProfileButton.statsProText
-    local row = addon.profileUI.managerRows[1].text
+    local currentRow = addon.profileUI.managerRows[1]
+    local row = currentRow.text
     local manage = env.StatsProManageProfilesButton.statsProText
     for _, region in ipairs({ header, row }) do
         check(region:GetText():find(playerName .. '-' .. realm, 1, true), 'profile text keeps mixed-script names')
         check(region:GetFont() == baseline, 'names use a bundled font in English Settings')
     end
     check(manage:GetFont() ~= baseline, 'ordinary Settings controls keep the English UI face')
+    local function mismatches()
+        return tonumber(addon.fontRuntime.ConfigFontDiagnostic():match('mismatched=(%d+)'))
+    end
+    check(mismatches() == 0, 'dedicated name fonts do not count as diagnostic mismatches')
     local base = manage:GetFont()
     local preview = 'Fonts\\ARIALN.TTF'
     check(test.applyConfigFont(base, false, preview), 'Settings font preview can apply')
     check(manage:GetFont() == preview and header:GetFont() == baseline and row:GetFont() == baseline,
         'font preview keeps mixed-script names readable')
+    check(mismatches() == 0, 'diagnostics accept different effective faces during preview')
+    local rowFont, rowSize, rowFlags = row:GetFont()
+    row:SetFont(preview, rowSize, rowFlags)
+    check(mismatches() == 1, 'diagnostics still detect a name region using the wrong font')
+    row:SetFont(rowFont, rowSize, rowFlags)
     check(addon.fontRuntime.ApplyCommittedConfigFont('enUS'), 'Settings fonts can be reapplied')
     check(header:GetFont() == baseline and row:GetFont() == baseline,
         'font refresh keeps Cyrillic-capable faces for names')
+    row:SetWidth(40)
+    row.GetStringWidth = function() error('must not measure by changing the width') end
+    local nameWidthWrites = 0
+    local originalSetWidth = row.SetWidth
+    row.SetWidth = function(self, width)
+        nameWidthWrites = nameWidthWrites + 1
+        return originalSetWidth(self, width)
+    end
+    fire(currentRow, 'OnEnter')
+    check(env.GameTooltip:IsShown() and env.GameTooltip.lines[1].left == row:GetText(),
+        'hover shows the full clipped character name')
+    check(nameWidthWrites == 0, 'measuring an anchored name does not change its layout')
+    fire(currentRow, 'OnLeave')
+    addon.profileUI.HideManager()
+    local picker = addon.settingsUI.fontPicker
+    picker.Show(addon)
+    local fontRow
+    for _, button in ipairs(picker.buttons) do
+        if button.fontName == fontName then fontRow = button; break end
+    end
+    check(fontRow and fontRow.text:GetText() == fontName and fontRow.text:GetFont() == baseline,
+        'catalogue renders third-party names written in multiple scripts')
+    local caption = env.StatsProFontDropdownText
+    check(caption:GetText() == fontName and caption:GetFont() == baseline,
+        'collapsed Font field renders the selected name with the same coverage')
 end
 print('Settings menus: ' .. checks .. ' checks passed')

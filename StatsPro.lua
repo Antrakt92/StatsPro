@@ -12728,7 +12728,7 @@ function addon.fontRuntime.ConfigFontDiagnostic()
             if not ok or not rawequal(object, entry.group.object) then detached = detached + 1 end
         end
         if not addon.fontRuntime.matchesAppliedFont(
-            entry.fs, currentConfigFont, entry.size, entry.appliedFlags) then
+            entry.fs, entry.appliedFont, entry.appliedSize, entry.appliedFlags) then
             mismatched = mismatched + 1
         end
     end
@@ -12849,13 +12849,24 @@ ResolveConfigFont = function(activeLocale)
     return FindCompatibleFont(CONFIG_FONT, req, activeLocale) or CONFIG_FONT
 end
 
-function addon.fontRuntime.ConfigFontForEntry(entry, baseFont, displayFont)
-    if entry.nameText then
-        -- A name can contain scripts unrelated to the language of the Settings UI.
-        -- The bundled face covers the supported scripts without the optional provider.
-        local bundled = addon.fontRuntime.usableCatalogPath(addon.sharedFonts.baseline.path)
-        if bundled then return bundled end
+function addon.fontRuntime.MarkConfigNameFontPending()
+    local runtime = addon.fontRuntime
+    if not runtime.configNameFontPending then
+        runtime.configNameFontPending = true
+        runtime.MarkCatalogLocaleDirty()
     end
+end
+
+function addon.fontRuntime.ResolveConfigNameFont()
+    -- Names may contain scripts unrelated to the language of the Settings UI.
+    local runtime = addon.fontRuntime
+    local bundled, status = runtime.usableCatalogPath(addon.sharedFonts.baseline.path)
+    if status == "pending" then runtime.MarkConfigNameFontPending() end
+    return bundled, status
+end
+
+function addon.fontRuntime.ConfigFontForEntry(entry, baseFont, displayFont, nameFont)
+    if entry.nameText then return nameFont or baseFont or displayFont end
     return entry.previewIndependent and baseFont or displayFont
 end
 
@@ -12885,6 +12896,7 @@ local function RegisterConfigFont(fs, size, flags, roleKey, nameText)
     end
     entry.roleKey = roleKey
     entry.nameText = nameText == true
+    if nameText then addon.fontRuntime.configHasNameRegions = true end
     entry.previewIndependent = fs.statsProFontPreviewIndependent == true
     entry.size = size
     entry.flags = flags
@@ -12919,6 +12931,16 @@ local function RegisterConfigFont(fs, size, flags, roleKey, nameText)
             end
         end
         if not objectReady then return false end
+        if oldFont ~= font or oldSize ~= size or oldFlags ~= effectiveFlags then
+            group.appliedFont = font
+            group.appliedSize = size
+            group.appliedFlags = effectiveFlags
+            for _, groupEntry in ipairs(group.entries) do
+                groupEntry.appliedFont = font
+                groupEntry.appliedSize = size
+                groupEntry.appliedFlags = effectiveFlags
+            end
+        end
         local inherited = addon.fontRuntime.ownedRegionsMatch(
             { fs }, group.object, font, size, effectiveFlags)
             or addon.fontRuntime.attachOwnedFontObject(fs, group.object)
@@ -12936,9 +12958,6 @@ local function RegisterConfigFont(fs, size, flags, roleKey, nameText)
             if not entry.previewIndependent or not addon.fontRuntime.configPreviewBaseFont then currentConfigFont = font end
             addon.fontRuntime.configFontValidated = true
         end
-        group.appliedFont = font
-        group.appliedSize = size
-        group.appliedFlags = effectiveFlags
         entry.appliedFont = font
         entry.appliedSize = size
         entry.appliedFlags = effectiveFlags
@@ -12946,8 +12965,9 @@ local function RegisterConfigFont(fs, size, flags, roleKey, nameText)
     end
 
     local resolvedFont, effectiveFlags
+    local nameFont = entry.nameText and addon.fontRuntime.ResolveConfigNameFont() or nil
     local registrationFont = addon.fontRuntime.ConfigFontForEntry(
-        entry, addon.fontRuntime.configPreviewBaseFont, currentConfigFont)
+        entry, addon.fontRuntime.configPreviewBaseFont, currentConfigFont, nameFont)
     if addon.fontRuntime.configFontValidated then
         resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(
             registrationFont, size, flags)
@@ -12980,6 +13000,7 @@ local function RegisterConfigFont(fs, size, flags, roleKey, nameText)
 
     -- A failed direct SetFont may clear the region. Attach a separate owned
     -- Blizzard fallback before any caller is allowed to set text.
+    if nameFont then addon.fontRuntime.MarkConfigNameFontPending() end
     local active = ResolveActiveLocale()
     local req = LOCALE_GLYPH_REQ[active] or GLYPH_LATIN
     local fallback = FindCompatibleFont(addon.fontRuntime.safeDefaultPath(), req)
@@ -13006,6 +13027,9 @@ end
 -- fast-path skips work when currentConfigFont already matches (covers PEW + back-to-
 -- default-locale scenarios). WHY no `local`: assigns the forward-decl'd upvalue.
 ApplyConfigFont = function(font, force, previewFont)
+    local runtime = addon.fontRuntime
+    local nameFont, nameStatus
+    if runtime.configHasNameRegions then nameFont, nameStatus = runtime.ResolveConfigNameFont() end
     local displayFont = previewFont or font
     if not force and addon.fontRuntime.configFontValidated
         and SameFontPath(displayFont, currentConfigFont)
@@ -13013,11 +13037,12 @@ ApplyConfigFont = function(font, force, previewFont)
         local matches = true
         for _, entry in ipairs(localizedConfigFonts) do
             if not addon.fontRuntime.matchesAppliedFont(
-                entry.fs, addon.fontRuntime.ConfigFontForEntry(entry, font, displayFont),
+                entry.fs, runtime.ConfigFontForEntry(entry, font, displayFont, nameFont),
                 entry.size, entry.appliedFlags) then matches = false; break end
         end
         if matches then
             addon.fontRuntime.configPreviewBaseFont = previewFont and font or nil
+            runtime.configNameFontPending = nameStatus == "pending"
             return true, currentConfigFont
         end
     end
@@ -13050,7 +13075,7 @@ ApplyConfigFont = function(font, force, previewFont)
         if #group.entries > 0 then
             local oldFont, oldSize, oldFlags = addon.fontRuntime.ConfigFontSnapshot(group.object)
             local resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(
-                addon.fontRuntime.ConfigFontForEntry(group.entries[1], usable, displayFont),
+                runtime.ConfigFontForEntry(group.entries[1], usable, displayFont, nameFont),
                 group.size, group.flags)
             if not resolvedFont then return false end
             tinsert(groupPlans, {
@@ -13069,7 +13094,7 @@ ApplyConfigFont = function(font, force, previewFont)
         previousFonts[entry] = { font = oldFont, size = oldSize, flags = oldFlags }
         if not entry.group then
             local resolvedFont, effectiveFlags = addon.fontRuntime.resolveUsableFlags(
-                addon.fontRuntime.ConfigFontForEntry(entry, usable, displayFont), entry.size, entry.flags)
+                runtime.ConfigFontForEntry(entry, usable, displayFont, nameFont), entry.size, entry.flags)
             if not resolvedFont then return false end
             tinsert(directPlans, {
                 entry = entry,
@@ -13210,6 +13235,7 @@ ApplyConfigFont = function(font, force, previewFont)
     currentConfigFont = displayFont
     addon.fontRuntime.configPreviewBaseFont = previewUsable and usable or nil
     addon.fontRuntime.configFontValidated = true
+    runtime.configNameFontPending = nameStatus == "pending"
     for _, plan in ipairs(groupPlans) do
         local group = plan.group
         group.appliedFont = plan.font
@@ -13286,11 +13312,13 @@ function addon.fontRuntime.ReconcileCatalogLocale()
             runtime.pendingRetryGeneration = runtime.pendingRetryGeneration + 1
             runtime.schedulePendingSavedFontRetry()
         end
+        if runtime.configNameFontPending then runtime.ApplyCommittedConfigFont(ResolveActiveLocale()) end
     elseif (usable and FontSupports(usable, req, ResolveActiveLocale())
         and not SameFontPath(usable, runtime.currentPath()))
         or not FontSupports(runtime.currentPath(), req, ResolveActiveLocale()) then
         MaybeAutoSwitchFont()
-    elseif runtime.configFontRecoveryPending or not FontSupports(currentConfigFont, req, ResolveActiveLocale()) then
+    elseif runtime.configNameFontPending or runtime.configFontRecoveryPending
+        or not FontSupports(currentConfigFont, req, ResolveActiveLocale()) then
         runtime.ApplyCommittedConfigFont(ResolveActiveLocale())
     end
     local context = addon.settingsUI.context
@@ -13300,7 +13328,7 @@ function addon.fontRuntime.ReconcileCatalogLocale()
         context.refreshLanguageWarning()
     end
     if generation ~= runtime.catalogLocaleGeneration then return end
-    if not runtime.configFontRecoveryPending
+    if not runtime.configNameFontPending and not runtime.configFontRecoveryPending
         and FontSupports(runtime.currentPath(), req, ResolveActiveLocale()) and FontSupports(currentConfigFont, req, ResolveActiveLocale()) then
         runtime.catalogLocaleGeneration = generation + 1
         return
@@ -14123,11 +14151,18 @@ function addon.settingsDesign.ControlTextTooltip(control)
     local textRegion = control.statsProText
     if not textRegion then return nil end
     local constrainedWidth = textRegion:GetWidth()
-    if not constrainedWidth or constrainedWidth <= 0 then return nil end
-    textRegion:SetWidth(10000)
-    local naturalWidth = textRegion:GetStringWidth()
-    textRegion:SetWidth(constrainedWidth)
-    if naturalWidth > constrainedWidth then return textRegion:GetText() end
+    if not SAFE_NUM.IsCleanFiniteNumber(constrainedWidth) or constrainedWidth <= 0 then return nil end
+    local naturalWidth
+    if type(textRegion.GetUnboundedStringWidth) == "function" then
+        naturalWidth = textRegion:GetUnboundedStringWidth()
+    else
+        textRegion:SetWidth(10000)
+        naturalWidth = textRegion:GetStringWidth()
+        textRegion:SetWidth(constrainedWidth)
+    end
+    if SAFE_NUM.IsCleanFiniteNumber(naturalWidth) and naturalWidth > constrainedWidth then
+        return textRegion:GetText()
+    end
     return nil
 end
 
@@ -14433,7 +14468,8 @@ function addon.settingsDesign.StyleSlider(slider, label, valueText, lowText, hig
     addon.settingsDesign.RefreshControl(slider)
 end
 
-function addon.settingsDesign.StyleDropdown(dropdown, label)
+---@param nameText? boolean
+function addon.settingsDesign.StyleDropdown(dropdown, label, nameText)
     local geometry = addon.settingsDesign.tokens.geometry
     local name = dropdown:GetName()
     local button = dropdown.Button or (name and _G[name .. "Button"])
@@ -14450,6 +14486,7 @@ function addon.settingsDesign.StyleDropdown(dropdown, label)
     surface:SetPoint("BOTTOMRIGHT", -8, 4)
     addon.settingsDesign.ApplyTextRole(label, "body")
     text.statsProFontPreviewIndependent = true
+    text.statsProNameText = nameText
     addon.settingsDesign.ApplyTextRole(text, "body")
     text:SetWidth(geometry.dropdownWidth - 16)
     text:SetJustifyH("LEFT")
@@ -19652,6 +19689,7 @@ function addon.settingsUI.fontPicker.Populate(self, centerSelection)
             button.bg:SetColorTexture(0, 0, 0, 0)
             button.text = button:CreateFontString(nil, "OVERLAY")
             button.text.statsProFontPreviewIndependent = true
+            button.text.statsProNameText = true
             button.text:SetPoint("LEFT", 6, 0)
             button.text:SetPoint("RIGHT", -24, 0)
             button.text:SetWordWrap(false)
@@ -20131,7 +20169,7 @@ function addon.settingsUI.BuildAppearanceTab(self, context)
         UIDropDownMenu_SetWidth(fontDropdown,
             addon.settingsDesign.tokens.geometry.dropdownWidth)
         UIDropDownMenu_JustifyText(fontDropdown, "LEFT")
-        addon.settingsDesign.StyleDropdown(fontDropdown, fontLabel)
+        addon.settingsDesign.StyleDropdown(fontDropdown, fontLabel, true)
         self.settingsUI.fontPicker.Initialize(self, context, fontDropdown)
 
 

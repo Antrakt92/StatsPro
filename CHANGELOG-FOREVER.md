@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.24.4 - 19-Nov-2026 — Readable names and HUD spacing
+
+- Show character, realm, profile, and font names in their original scripts across Settings and Appearance, even when the menu language differs. Recover the bundled name font if it loads late.
+- Keep HUD labels and values visually separate, including when combat restricts some stat values.
+
 ## 1.24.3 - 18-Nov-2026 — Gear HUD recovery and clearer tooltips
 
 - Recover durability, repair and item level when the game temporarily fails to schedule an update. Keep the last reliable durability reading while equipment data is incomplete.

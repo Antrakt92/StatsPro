@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.24.14 - 19-Nov-2026 — Readable names and HUD spacing
+
+- Show character, realm, profile, and font names in their original scripts across Settings and Appearance, even when the menu language differs. Recover the bundled name font if it loads late.
+- Keep HUD labels and values visually separate, including when combat restricts some stat values.
+
 ## 1.24.13 - 19-Nov-2026 — Archon target refresh
 
 - Refresh Mythic+ and raid stat targets using Archon data checked on 19 November.

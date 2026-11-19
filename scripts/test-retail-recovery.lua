@@ -256,7 +256,7 @@ for _, costReadyOnWake in ipairs({ true, false }) do
 end
 print(flavor .. " late repair tooltip recovery regressions passed")
 
-do
+for _, modernInteraction in ipairs({ false, true }) do
     local cost, reads = 300, 0
     local env, addon, test = loadStatsPro("enUS", {
         statsProDB = { showDurability = true, showRepairCost = true },
@@ -273,26 +273,47 @@ do
             if block.splitKey == "splitRepairCost" then return block end
         end
     end
+    local auctioneer, banker = 21, 8
+    env.Enum = modernInteraction and { PlayerInteractionType = { Auctioneer = auctioneer } } or nil
     env.__fireEvent("PLAYER_ENTERING_WORLD")
-    env.__fireEvent("AUCTION_HOUSE_SHOW")
+    if modernInteraction then
+        env.__fireEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", auctioneer)
+    else
+        env.__fireEvent("AUCTION_HOUSE_SHOW")
+    end
     assert(addon:RunUpdateStatsSafe() and repairBlock().repairStr == test.formatRepairCost(300, 14),
         "auction does not hide a readable repair cost")
     cost = nil
     env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
     assert(addon:RunUpdateStatsSafe(), "unavailable auction-time repair data does not interrupt the HUD")
+    env.__fireEvent("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", banker)
     assert(repairBlock().repairStr == "" and repairBlock().repairLabelStr == nil
         and test.durabilityState().durabilityValue == 80,
         "auction hides the unresolved repair row and keeps readable durability")
     cost = 450
     local before = reads
+    if modernInteraction then
+        env.__fireEvent("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", auctioneer)
+    else
+        env.__fireEvent("AUCTION_HOUSE_CLOSED")
+    end
+    local generation = addon.durabilityRuntime.generation
     env.__fireEvent("AUCTION_HOUSE_CLOSED")
+    env.__fireEvent("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", auctioneer)
     assert(reads == before and test.durabilityState().dirty,
         "closing the auction queues a repair refresh without reading in the event handler")
+    assert(addon.durabilityRuntime.generation == generation,
+        "duplicate close notifications don't reopen the retry budget")
     assert(addon:RunUpdateStatsSafe() and reads == before + 1 and test.durabilityState().repairCost == 450,
         "closing the auction restores the current cost")
     before = reads
     env.__fireEvent("AUCTION_HOUSE_CLOSED")
     assert(addon:RunUpdateStatsSafe() and reads == before, "complete repair costs need no extra auction-close scan")
+    cost = nil
+    env.__fireEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", banker)
+    env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+    assert(addon:RunUpdateStatsSafe() and repairBlock().repairStr == "?",
+        "other NPC interactions do not suppress unresolved repair")
 end
 print(flavor .. " auction repair display regressions passed")
 

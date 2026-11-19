@@ -171,8 +171,12 @@ WOW_PROJECT_ID = nil
 ---@field Shadow number
 ---@field Arcane number
 
+---@class (exact) StatsProPlayerInteractionTypeEnum
+---@field Auctioneer number
+
 ---@class (exact) StatsProEnum
 ---@field Damageclass StatsProDamageClassEnum
+---@field PlayerInteractionType? StatsProPlayerInteractionTypeEnum
 
 ---@type StatsProEnum?
 Enum = nil

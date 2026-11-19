@@ -12556,6 +12556,25 @@ local function OnPlayerLogout()
     end
 end
 
+function addon.durabilityRuntime.SetAuctionOpen(isOpen)
+    local runtime = addon.durabilityRuntime
+    if runtime.auctionOpen == isOpen then return end
+    local wasOpen = runtime.auctionOpen
+    runtime.auctionOpen = isOpen
+    -- Closing the auction can leave a previously incomplete price without
+    -- another inventory event. Give it one fresh, coalesced retry budget.
+    if wasOpen and not isOpen and cached.showRepairCost and not cached.repairCostComplete then
+        runtime.MarkDirty()
+    end
+end
+
+function addon.durabilityRuntime.IsAuctioneerInteraction(interactionType)
+    if not addon.dbRuntime.IsCleanType(interactionType, "number") then return false end
+    local enum = _G.Enum
+    local auctioneer = enum and enum.PlayerInteractionType and enum.PlayerInteractionType.Auctioneer
+    return interactionType == auctioneer
+end
+
 local EVENT_HANDLERS = {
     ADDON_LOADED = function(name)
         if not addon.dbRuntime.IsCleanType(name, "string") or name ~= "AntraktFonts" then return end
@@ -12617,15 +12636,20 @@ local EVENT_HANDLERS = {
     end,
     MERCHANT_SHOW               = function() addon.durabilityRuntime.MarkDirty() end,
     AUCTION_HOUSE_SHOW          = function()
-        addon.durabilityRuntime.auctionOpen = true
+        addon.durabilityRuntime.SetAuctionOpen(true)
     end,
     AUCTION_HOUSE_CLOSED        = function()
-        local runtime = addon.durabilityRuntime
-        local wasOpen = runtime.auctionOpen
-        runtime.auctionOpen = false
-        -- Closing the auction can leave a previously incomplete price without
-        -- another inventory event. Give it one fresh, coalesced retry budget.
-        if wasOpen and cached.showRepairCost and not cached.repairCostComplete then runtime.MarkDirty() end
+        addon.durabilityRuntime.SetAuctionOpen(false)
+    end,
+    PLAYER_INTERACTION_MANAGER_FRAME_SHOW = function(interactionType)
+        if addon.durabilityRuntime.IsAuctioneerInteraction(interactionType) then
+            addon.durabilityRuntime.SetAuctionOpen(true)
+        end
+    end,
+    PLAYER_INTERACTION_MANAGER_FRAME_HIDE = function(interactionType)
+        if addon.durabilityRuntime.IsAuctioneerInteraction(interactionType) then
+            addon.durabilityRuntime.SetAuctionOpen(false)
+        end
     end,
     -- WHY: lock state is stored in cached.isLocked and read by OnDragStart. Mouse stays
     -- enabled permanently so right-click Settings works even while locked.

@@ -10861,7 +10861,7 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     self.lastRatingText = ratingStr or ""
     self.lastValueText = hasRows and (valueStr or "") or ""
 
-    -- Measure stat columns. WHY 2px gaps: labels RIGHT-justified, rating RIGHT-justified,
+    -- Measure stat columns. Labels are RIGHT-justified, rating is RIGHT-justified,
     -- value LEFT-justified — at each column boundary one side is justified outward, so
     -- visible gap equals exactly this constant with no per-row variance.
     -- Cold secret reads use font-scaled geometry for this render only. Empty columns still
@@ -10912,7 +10912,8 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     local hasRating = ratingW > 0
     local hasValue  = valueW > 0
     local rGap = (hasRating and hasValue) and 2 or 0
-    local lGap = (labelW > 0 and (hasRating or hasValue)) and 2 or 0
+    -- Leave room for outlines on both glyphs at the label-to-number boundary.
+    local lGap = (labelW > 0 and (hasRating or hasValue)) and 6 or 0
 
     -- Repair row: rendered on a DEDICATED row below the stat rows (NOT as part of the
     -- multi-line labelText). Two FontStrings: repairLabelText for "Repair:" at frame.left

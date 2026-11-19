@@ -2476,11 +2476,11 @@ end
 
 do
     local scenarios = {
-        { name = "full_dual", style = "full", label = "Crit:\nMastery:", rating = "700 |\n500 |", value = "12.0%\n20.0%", showRating = true, showPercentage = true, labelW = 91, coldW = 228, expectedW = 207 },
-        { name = "short_dual", style = "short", label = "C:\nM:", rating = "700 |\n500 |", value = "12.0%\n20.0%", showRating = true, showPercentage = true, labelW = 35, coldW = 172, expectedW = 151 },
+        { name = "full_dual", style = "full", label = "Crit:\nMastery:", rating = "700 |\n500 |", value = "12.0%\n20.0%", showRating = true, showPercentage = true, labelW = 91, coldW = 232, expectedW = 211 },
+        { name = "short_dual", style = "short", label = "C:\nM:", rating = "700 |\n500 |", value = "12.0%\n20.0%", showRating = true, showPercentage = true, labelW = 35, coldW = 176, expectedW = 155 },
         { name = "hidden_dual", style = "hidden", label = "", rating = "700 |\n500 |", value = "12.0%\n20.0%", showRating = true, showPercentage = true, coldW = 114, expectedW = 114 },
-        { name = "full_single", style = "full", label = "Crit:\nMastery:", rating = "700\n500", value = "", showRating = true, showPercentage = false, labelW = 91, coldW = 170, expectedW = 156 },
-        { name = "short_single", style = "short", label = "C:\nM:", rating = "12.0%\n20.0%", value = "", showRating = false, showPercentage = true, labelW = 35, coldW = 114, expectedW = 100 },
+        { name = "full_single", style = "full", label = "Crit:\nMastery:", rating = "700\n500", value = "", showRating = true, showPercentage = false, labelW = 91, coldW = 174, expectedW = 160 },
+        { name = "short_single", style = "short", label = "C:\nM:", rating = "12.0%\n20.0%", value = "", showRating = false, showPercentage = true, labelW = 35, coldW = 118, expectedW = 104 },
         { name = "hidden_single", style = "hidden", label = "", rating = "12.0%\n20.0%", value = "", showRating = false, showPercentage = true, coldW = 80, expectedW = 80 },
     }
 
@@ -2611,7 +2611,7 @@ do
     end
     resizeTest.renderMainPanelForSmoke("Crit:", "700 |", "12.0%", 1)
     local cold = resizeTest.panelVisualState()
-    eq("panel.secret_resize.cold_frame_width", cold.mainFrameWidth, 324)
+    eq("panel.secret_resize.cold_frame_width", cold.mainFrameWidth, 328)
     eq("panel.secret_resize.cold_line_height", cold.mainLastLineH, 20)
     eq("panel.secret_resize.cold_frame_height", cold.mainFrameHeight, 20)
     eq("panel.secret_resize.clean_width_cache_preserved", cold.mainCachedLabelW, 35)
@@ -2622,7 +2622,7 @@ do
     resizeTest.setPanelMeasurementOverride("main", "value", 40, 20)
     resizeTest.renderMainPanelForSmoke("Crit:", "700 |", "12.0%", 1)
     local recovered = resizeTest.panelVisualState()
-    eq("panel.secret_resize.recovery_frame_width", recovered.mainFrameWidth, 164)
+    eq("panel.secret_resize.recovery_frame_width", recovered.mainFrameWidth, 168)
     eq("panel.secret_resize.recovery_line_height", recovered.mainLastLineH, 24)
     eq("panel.secret_resize.recovery_frame_height", recovered.mainFrameHeight, 24)
     eq("panel.secret_resize.recovery_label_cache", recovered.mainCachedLabelW, 70)
@@ -2658,9 +2658,9 @@ do
         eq(prefix .. ".cache_is_intrinsic", state.mainCachedRepairLabelW, width)
         eq(prefix .. ".stats_label_unchanged", state.mainRenderedLabelW, 35)
         eq(prefix .. ".rating_left_unchanged",
-            state.mainFrameWidth + state.mainRatingPoints[1][4] - state.mainRenderedRatingW, 37)
+            state.mainFrameWidth + state.mainRatingPoints[1][4] - state.mainRenderedRatingW, 41)
         eq(prefix .. ".value_left_unchanged",
-            state.mainFrameWidth + state.mainValuePoints[1][4] - state.mainRenderedValueW, 60)
+            state.mainFrameWidth + state.mainValuePoints[1][4] - state.mainRenderedValueW, 64)
         eq(prefix .. ".independent_row_width", state.mainFrameWidth, math.max(35, width) + 102)
         eq(prefix .. ".one_repair_line", state.mainFrameHeight, 29)
     end
@@ -2724,8 +2724,8 @@ do
     eq("panel.secret_repair.cold_cache_stays_clean", cold.mainCachedRepairW, nil)
     -- The full 49px repair label must fit when the stat-label column is only 14px.
     eq("panel.secret_repair.cold_frame_width", cold.mainFrameWidth, 163)
-    eq("panel.secret_repair.cold_rating_anchor", cold.mainRatingPoints[1][4], -126)
-    eq("panel.secret_repair.cold_value_anchor", cold.mainValuePoints[1][4], -89)
+    eq("panel.secret_repair.cold_rating_anchor", cold.mainRatingPoints[1][4], -122)
+    eq("panel.secret_repair.cold_value_anchor", cold.mainValuePoints[1][4], -85)
     eq("panel.secret_repair.cold_frame_height", cold.mainFrameHeight, 29)
 
     repairTest.setPanelMeasurementOverride("main", "repair", 28, 14)
@@ -2734,8 +2734,8 @@ do
     eq("panel.secret_repair.recovery_render_width", recovered.mainRenderedRepairW, 28)
     eq("panel.secret_repair.recovery_cache", recovered.mainCachedRepairW, 28)
     eq("panel.secret_repair.recovery_frame_width", recovered.mainFrameWidth, 80)
-    eq("panel.secret_repair.recovery_rating_anchor", recovered.mainRatingPoints[1][4], -42)
-    eq("panel.secret_repair.recovery_value_anchor", recovered.mainValuePoints[1][4], -5)
+    eq("panel.secret_repair.recovery_rating_anchor", recovered.mainRatingPoints[1][4], -38)
+    eq("panel.secret_repair.recovery_value_anchor", recovered.mainValuePoints[1][4], -1)
 
     repairTest.renderMainPanelForSmoke("C:", "700", "12.0%", 1)
     local disabled = repairTest.panelVisualState()
@@ -2844,8 +2844,8 @@ do
     splitTest.setPanelMeasurementOverride("side", "value", 42, 18)
     splitAddon:RunUpdateStatsSafe()
     local recovered = splitTest.panelVisualState()
-    eq("panel.secret_split.recovery_main_width", recovered.mainFrameWidth, 207)
-    eq("panel.secret_split.recovery_side_width", recovered.sideFrameWidth, 172)
+    eq("panel.secret_split.recovery_main_width", recovered.mainFrameWidth, 211)
+    eq("panel.secret_split.recovery_side_width", recovered.sideFrameWidth, 176)
     eq("panel.secret_split.recovery_main_height", recovered.mainFrameHeight, 14)
     eq("panel.secret_split.recovery_side_height", recovered.sideFrameHeight, 18)
     eq("panel.secret_split.recovery_main_rating_width", recovered.mainCachedRatingW, 63)

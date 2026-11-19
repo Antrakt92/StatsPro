@@ -62,7 +62,14 @@ local function renderStats(ratingText, valueText, repairCaption)
     render("Crit:", ratingText, valueText, 1, "coin", repairCaption)
 end
 
+local function labelToRatingGap()
+    local state = test.panelVisualState()
+    return state.mainFrameWidth + state.mainRatingPoints[1][4]
+        - state.mainRenderedRatingW - state.mainRenderedLabelW
+end
+
 renderStats("700", "12%", "Repair:")
+equal("wide repair row preserves label gap", labelToRatingGap(), 6)
 calls = {}
 renderStats("701", "13%", "Repair:")
 stable("steady clean repair layout")
@@ -98,6 +105,7 @@ renderStats(secretA, secretA, "Repair:")
 calls = {}
 renderStats(secretB, secretB, "Repair:")
 stable("steady restricted repair layout")
+equal("restricted geometry preserves label gap", labelToRatingGap(), 6)
 equal("new restricted rating delivered live", rating:GetText(), secretB)
 equal("new restricted value delivered live", value:GetText(), secretB)
 equal("new restricted rating passed through setter", count("rating.SetText"), 1)
@@ -120,7 +128,8 @@ calls = {}
 render("Crit:", "701", "13%", 1)
 equal("disabling repair hides coin once", count("coin.Hide"), 1)
 equal("already hidden caption not hidden again", count("repairLabel.Hide"), 0)
-equal("normal stats frame width", frame:GetWidth(), 101)
+equal("normal stats frame width", frame:GetWidth(), 105)
+equal("normal stats keep a visible label gap", labelToRatingGap(), 6)
 calls = {}
 render("Crit:", "702", "14%", 1)
 stable("steady without repair")

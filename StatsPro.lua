@@ -11717,6 +11717,7 @@ function addon.forever.ReadHUDRow(definition, manaSample)
 end
 
 addon.forever.preCombatValues = {}
+addon.forever.lastRangedValues = {}
 
 function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
     local inCombat
@@ -11726,7 +11727,10 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
             local value, state, visibilitySuffix = addon.forever.ReadHUDRow(definition, manaSample)
             local rowKey = "forever:" .. definition.key .. (visibilitySuffix or "")
             local fallback
-            if definition.usePreCombatValue then
+            if definition.keepLastValue then
+                if state == "clean" then addon.forever.lastRangedValues[rowKey] = value end
+                fallback = addon.forever.lastRangedValues[rowKey]
+            elseif definition.usePreCombatValue then
                 if inCombat == nil then
                     inCombat = addon.profileRuntime.ReadCombatState()
                     if addon.hudPresets.combatState == true then inCombat = true end
@@ -11784,14 +11788,15 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
                     local format = definition.format or (group == "utility" and "%.2f" or "%d")
                     text, placeholder = SAFE_NUM.FormatColorNumber(valueColor, value, format .. suffix, suffix)
                 end
-                if placeholder and definition.usePreCombatValue then
+                if placeholder and (definition.usePreCombatValue or definition.keepLastValue) then
                     text = nil
                     if fallback ~= nil then
                         local format = definition.kind == "percent" and "(%.2f%%)" or "(%d)"
                         text = SAFE_NUM.FormatColorNumber(valueColor, fallback, format)
                     end
                 end
-                local rCol, vCol = RouteValueOnly(text or ("|cff" .. valueColor .. "?" .. unknownSuffix .. "|r"))
+                local unavailable = definition.keepLastValue and "—" or "?" .. unknownSuffix
+                local rCol, vCol = RouteValueOnly(text or ("|cff" .. valueColor .. unavailable .. "|r"))
                 PushRow(labels, ratings, values, FormatLabel(color, label), rCol, vCol)
             end
         end
@@ -12496,6 +12501,7 @@ end
 local function OnPlayerEnteringWorld()
     if addon.forever.enabled then
         addon.forever.preCombatValues = {}
+        addon.forever.lastRangedValues = {}
         addon.forever.ResetAttackPowerParity()
     end
     SAFE_NUM.ReopenScaledFormatterRetries()
@@ -12609,6 +12615,7 @@ local EVENT_HANDLERS = {
         if addon.forever.enabled then
             addon.forever.ResetAttackPowerParity()
             addon.forever.preCombatValues = {}
+            addon.forever.lastRangedValues = {}
         end
         addon.durabilityRuntime.MarkDirty()
         addon.itemLevelRuntime.MarkDirty()

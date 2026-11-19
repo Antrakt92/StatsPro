@@ -134,10 +134,10 @@ local function Nonnegative(reader)
     end
 end
 
-local meleeAttackPowerMatches = false
+local nativeAttackPowerMatches = {}
 
 function F.ResetAttackPowerParity()
-    meleeAttackPowerMatches = false
+    nativeAttackPowerMatches = {}
 end
 
 local function ReadConvertedAttackPower(multiplier)
@@ -152,39 +152,38 @@ local function ReadConvertedAttackPower(multiplier)
     return Classify(minimum * multiplier)
 end
 
-local function ReadMeleeAttackPower(base)
+local function ReadWeaponAttackPower(base, nativeIndex)
     local total, totalState = base()
     if totalState == "clean" then
-        -- Return four excludes the extra weapon power seen in return one.
-        -- Verify the native result against the current character's usual total.
-        local native, nativeState = Read("PlayerEffectiveAttackPower", 4)
-        meleeAttackPowerMatches = nativeState == "clean" and native == total
+        -- The base melee/ranged returns exclude weapon-only attack power.
+        local native, nativeState = Read("PlayerEffectiveAttackPower", nativeIndex)
+        nativeAttackPowerMatches[nativeIndex] = nativeState == "clean" and native == total
         return total, "clean"
     end
-    if not meleeAttackPowerMatches then return nil, "unknown" end
-    return Read("PlayerEffectiveAttackPower", 4)
+    if not nativeAttackPowerMatches[nativeIndex] then return nil, "unknown" end
+    return Read("PlayerEffectiveAttackPower", nativeIndex)
 end
 
 local function AttackPower(name)
     local base = Nonnegative(Sum(name, 3, "player"))
     local converted = Nonnegative(ReadConvertedAttackPower)
     local melee = name == "UnitAttackPower"
+    local nativeIndex = melee and 4 or 5
     return function()
         if _G.GetOverrideAPBySpellPower == nil then return base() end
         local multiplier, state = Read("GetOverrideAPBySpellPower", 1)
         if state == "clean" then
             if multiplier > 0 then
-                if melee then F.ResetAttackPowerParity() end
+                nativeAttackPowerMatches[nativeIndex] = nil
                 return converted(multiplier)
             end
-            if melee then return ReadMeleeAttackPower(base) end
-            return base()
+            return ReadWeaponAttackPower(base, nativeIndex)
         end
-        -- This flag is independent of the protected numeric multiplier and must
-        -- be readable and false on this sample before reusing a verified source.
-        if melee and state == "secret" and meleeAttackPowerMatches
+        -- A clean false independently rules out the spell-power override.
+        if (not melee or (state == "secret" and nativeAttackPowerMatches[nativeIndex]))
             and addon.profileRuntime.ReadBooleanDecision(_G.HasSPEffectsAttackPower) == false then
-            return Read("PlayerEffectiveAttackPower", 4)
+            if melee then return Read("PlayerEffectiveAttackPower", nativeIndex) end
+            return ReadWeaponAttackPower(base, nativeIndex)
         end
         return nil, "unknown"
     end
@@ -319,10 +318,10 @@ Row("offensive", "OffhandHit", "Offhand Hit", Hit("CR_HIT_MELEE", "GetOffhandHit
 Row("offensive", "RangedHit", "Ranged Hit", Hit("CR_HIT_RANGED", "GetRangedHitModifier"), "percent").usePreCombatValue = true
 Row("offensive", "SpellHit", "Spell Hit", Hit("CR_HIT_SPELL", "GetSpellHitModifier"), "percent").usePreCombatValue = true
 Row("offensive", "MeleeHaste", "Melee Haste", Scalar("GetMeleeHaste", 1), "percent", "haste")
-Row("offensive", "RangedHaste", "Ranged Haste", RangedHaste, "percent", "haste").usePreCombatValue = true
+Row("offensive", "RangedHaste", "Ranged Haste", RangedHaste, "percent", "haste").keepLastValue = true
 Row("offensive", "SpellHaste", "Spell Haste", Scalar("UnitSpellHaste", 1, "player"), "percent", "haste")
 Row("offensive", "AttackPower", "Attack Power", AttackPower("UnitAttackPower")).usePreCombatValue = true
-Row("offensive", "RangedAttackPower", "Ranged Attack Power", AttackPower("UnitRangedAttackPower")).usePreCombatValue = true
+Row("offensive", "RangedAttackPower", "Ranged Attack Power", AttackPower("UnitRangedAttackPower")).keepLastValue = true
 for school, name in ipairs({ "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" }) do
     Row("offensive", "SpellPower" .. name, name .. " Spell Power", Scalar("GetSpellBonusDamage", 1, school + 1))
 end

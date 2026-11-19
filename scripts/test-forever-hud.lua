@@ -487,6 +487,47 @@ local function hasStat(block, label, expected)
     end
     return false
 end
+do
+    local readable, dead, inCombat = false, false, false
+    local haste, power = 25, 84
+    local kitEnv, kitAddon, kitTest = fixtures.loadStatsPro("enUS", {
+        forever = true,
+        unitGUID = function() return "Player-ForeverRangedRecovery" end,
+        inCombatLockdown = function() return inCombat end,
+        foreverAPIs = {
+            GetRangedHaste = function() if readable then return haste, 0 end end,
+            UnitRangedAttackPower = function() if readable then return power, 0, 0 end end,
+            UnitIsDeadOrGhost = function() return dead end,
+        },
+    })
+    kitEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local profile = kitTest.profileState().settings
+    profile.showOffensive, profile.showRangedHaste, profile.showRangedAttackPower = true, true, true
+    profile.hideZeroOffensive = false
+    kitTest.cacheSettings()
+    local function expectRanged(expectedHaste, expectedPower, phase)
+        local offense = kitTest.buildRenderBlocks()[2]
+        check(hasStat(offense, "Ranged Haste", expectedHaste), phase .. " ranged haste")
+        check(hasStat(offense, "Ranged Attack Power", expectedPower), phase .. " ranged power")
+    end
+    expectRanged("—", "—", "cold unavailable")
+    readable = true
+    expectRanged("25.00%", "84", "fresh stats")
+    readable, dead, inCombat = false, true, true
+    kitEnv.__fireEvent("PLAYER_REGEN_DISABLED")
+    kitEnv.__fireEvent("PLAYER_DEAD")
+    expectRanged("(25.00%)", "(84)", "dead with unavailable stats")
+    dead, inCombat = false, false
+    kitEnv.__fireEvent("PLAYER_REGEN_ENABLED")
+    kitEnv.__fireEvent("PLAYER_ALIVE")
+    expectRanged("(25.00%)", "(84)", "alive out of combat with unavailable stats")
+    readable, haste, power = true, 29, 101
+    expectRanged("29.00%", "101", "next live values replace fallback")
+    readable = false
+    kitEnv.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 18)
+    check(kitAddon:RunUpdateStatsSafe(), "gear change refreshes the HUD safely")
+    expectRanged("—", "—", "changed equipment discards old stats")
+end
 check(hasStat(blocks[2], "Attack Power", "(11)"), "restricted AP shows the last pre-combat value")
 check(hasStat(blocks[2], "Ranged Haste", "(14.00%)"), "restricted ranged haste uses the current fight snapshot")
 check(hasStat(blocks[4], "Defense", "(5)"), "restricted defense uses the current fight snapshot")

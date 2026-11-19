@@ -154,6 +154,29 @@ Expect("AttackPower", secret, "secret")
 nativeAP = nextAP
 Expect("AttackPower", nextAP, "secret")
 Expect("RangedAttackPower", nil, "unknown")
+multiplier, conversion = 0, false
+local rangedAP = 73
+PlayerEffectiveAttackPower = function() return 207, 43, 128, nativeAP, rangedAP end
+UnitRangedAttackPower = function() return 50, 30, -7 end
+Expect("RangedAttackPower", 73, "clean")
+UnitRangedAttackPower = function() return secret, secret, secret end
+multiplier, rangedAP = secret, nextAP
+Expect("RangedAttackPower", nextAP, "secret")
+conversion = true
+Expect("RangedAttackPower", nil, "unknown")
+conversion, rangedAP = false, 84
+UnitRangedAttackPower = function() return 80, 7, -3 end
+Expect("RangedAttackPower", 84, "clean")
+F.ResetAttackPowerParity()
+UnitRangedAttackPower = function() return secret, 0, 0 end
+Expect("RangedAttackPower", nil, "unknown")
+PlayerEffectiveAttackPower = function() return 207, 43, 128, nativeAP, 430 end
+nativeAP = 79
+multiplier = 0
+UnitAttackPower = function() return 27, 52, 0 end
+Expect("AttackPower", 79, "clean")
+UnitAttackPower = function() return secret, secret, secret end
+multiplier = secret
 for _, flag in ipairs({ true, 0, "false", secret }) do
     conversion = flag
     Expect("AttackPower", nil, "unknown")

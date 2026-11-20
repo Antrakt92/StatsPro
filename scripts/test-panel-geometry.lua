@@ -198,5 +198,161 @@ if forever then
     render("Intellect:", "", "71.13", 6, "coin", "Repair:")
     equal("next clean reading can resize the value column", test.panelVisualState().mainRenderedValueW, 30)
 end
+
+do
+    setMeasure("label", 22)
+    setMeasure("rating", 22)
+    setMeasure("value", 8)
+    setMeasure("repairLabel", 38)
+    for _, anchor in ipairs({ "TOPLEFT", "TOP", "TOPRIGHT" }) do
+        frame:ClearAllPoints()
+        frame:SetPoint(anchor, env.UIParent, anchor, 30, -18)
+        render("Crit:", "1", "2%", 1)
+        equal(anchor .. " short stats have the minimum panel width", frame:GetWidth(), 80)
+        local statGap = labelToRatingGap()
+        for _, case in ipairs({
+            { "unavailable", "—", 30, 80 },
+            { "plain", "1 Gold 23 Silver 45 Copper", 100, 140 },
+            { "texture", "coin", 80, 120 },
+            { "hidden", "", 0, 80 },
+        }) do
+            local name, repair, repairWidth, frameWidth = unpack(case)
+            local label = repair ~= "" and "Repair:" or nil
+            local prefix = anchor .. " " .. name
+            setMeasure("repair", repairWidth)
+            render("Crit:", "1", "2%", 1, repair, label)
+            equal(prefix .. " keeps the stat column gap", labelToRatingGap(), statGap)
+            equal(prefix .. " uses the visible repair width only", frame:GetWidth(), frameWidth)
+            equal(prefix .. " keeps the configured frame anchor", frame:GetPoint(), anchor)
+            equal(prefix .. " keeps the saved horizontal offset", select(4, frame:GetPoint()), 30)
+            equal(prefix .. " repair region visibility follows payload", coin:IsShown(), repair ~= "")
+        end
+    end
+end
+
+do
+    local reads, formattedAmount
+    reads = 0
+    local sizeEnv, sizeAddon, sizeTest = fixtures.loadStatsPro("enUS", {
+        forever = forever,
+        statsProDB = { showDurability = true, showRepairCost = true, fontSize = 14 },
+        getInventoryItemDurability = function(slot)
+            reads = reads + 1
+            if slot == 1 then return 75, 100 end
+        end,
+        getTooltipInventoryItem = function() return { repairCost = 12345 } end,
+    })
+    sizeEnv.GetCoinTextureString = nil
+    sizeEnv.C_CurrencyInfo = { GetCoinText = function(amount)
+        formattedAmount = amount
+        return "1 Gold 23 Silver 45 Copper"
+    end }
+    sizeEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    sizeAddon:OpenConfigMenu()
+    local repair = sizeTest.panelFontState().mainFontRegions[4]
+    local initialReads = reads
+    for _, size in ipairs({ 32, 8 }) do
+        sizeEnv.StatsProFontSlider:SetValue(size)
+        equal("reflow applies actual repair font size", select(2, repair:GetFont()), size)
+        equal("reflow preserves exact plain repair text", repair:GetText(), "1 Gold 23 Silver 45 Copper")
+        equal("reflow reuses the confirmed amount", formattedAmount, 12345)
+        equal("reflow does not rescan inventory", reads, initialReads)
+    end
+end
+
+for _, mode in ipairs({ "flat", "split" }) do
+    local available, equippedID, amount = true, 6001, 12345
+    local inventoryReads, tooltipReads = 0, 0
+    local refreshEnv, refreshAddon, refreshTest = fixtures.loadStatsPro("enUS", {
+        forever = forever,
+        statsProDB = {
+            showDurability = true, showRepairCost = true, fontSize = 14,
+            displayMode = mode, splitRepairCost = mode == "split",
+        },
+        getInventoryItemDurability = function(slot)
+            inventoryReads = inventoryReads + 1
+            if slot == 1 and available then return 75, 100 end
+        end,
+        getTooltipInventoryItem = function()
+            tooltipReads = tooltipReads + 1
+            if amount then return { repairCost = amount } end
+        end,
+    })
+    refreshEnv.GetInventoryItemID = function(_, slot) return slot == 1 and equippedID or nil end
+    refreshEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    refreshAddon:OpenConfigMenu()
+    local fonts = refreshTest.panelFontState()
+    local repair = (mode == "split" and fonts.sideFontRegions or fonts.mainFontRegions)[4]
+    local otherRepair = (mode == "split" and fonts.mainFontRegions or fonts.sideFontRegions)[4]
+    local function reflow(size, message, shown, text)
+        local beforeInventory, beforeTooltip = inventoryReads, tooltipReads
+        refreshEnv.StatsProFontSlider:SetValue(size)
+        local prefix = mode .. " " .. message
+        equal(prefix .. " repair visibility", repair:IsShown(), shown)
+        if text then equal(prefix .. " repair text", repair:GetText(), text) end
+        equal(prefix .. " other panel has no repair", otherRepair:IsShown(), false)
+        equal(prefix .. " reflow reads no inventory", inventoryReads, beforeInventory)
+        equal(prefix .. " reflow reads no tooltip", tooltipReads, beforeTooltip)
+    end
+
+    equal(mode .. " initially shows the confirmed price", repair:GetText(), "coin:12345:14")
+    equippedID, available = 6002, false
+    refreshEnv.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 1, true)
+    reflow(18, "dirty equipment", true, "—")
+    refreshEnv.__fireEvent("AUCTION_HOUSE_SHOW")
+    reflow(21, "dirty equipment at auction", false)
+    available, amount = true, 23456
+    refreshEnv.__fireEvent("AUCTION_HOUSE_CLOSED")
+    reflow(22, "closing auction defers read and reveal", false)
+    equal(mode .. " coalesced update succeeds", refreshAddon:RunUpdateStatsSafe(), true)
+    equal(mode .. " coalesced update reveals repair", repair:IsShown(), true)
+    equal(mode .. " coalesced update reveals current exact price", repair:GetText(), "coin:23456:22")
+
+    amount = nil
+    refreshEnv.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+    reflow(24, "dirty durability", true, "—")
+    amount = 34567
+    equal(mode .. " later durability update succeeds", refreshAddon:RunUpdateStatsSafe(), true)
+    equal(mode .. " later durability update shows current price", repair:GetText(), "coin:34567:24")
+end
+
+do
+    local available = true
+    local auctionEnv, _, auctionTest = fixtures.loadStatsPro("enUS", {
+        forever = forever,
+        statsProDB = {
+            displayMode = "sectioned", showRepairCost = true,
+            showDurability = false, showItemLevel = false,
+        },
+        getInventoryItemDurability = function(slot)
+            if slot == 1 and available then return 75, 100 end
+        end,
+        getTooltipInventoryItem = function() return { repairCost = 12345 } end,
+    })
+    auctionEnv.GetInventoryItemID = function(_, slot) return slot == 1 and 6001 or nil end
+    auctionEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local settings = auctionTest.profileState().settings
+    settings.showRepairCost, settings.showDurability = true, false
+    auctionTest.cacheSettings()
+    local ticker
+    for _, frame in ipairs(auctionEnv.__frames) do
+        if frame.scripts and frame.scripts.OnUpdate then
+            ticker = frame
+            break
+        end
+    end
+    assert(ticker, "expected the HUD update ticker")
+    ticker.scripts.OnUpdate(ticker, 1)
+    local regions = auctionTest.panelFontState().mainFontRegions
+    equal("sectioned repair starts with the Gear heading", regions[1]:GetText():find("Gear", 1, true) ~= nil, true)
+    available = false
+    auctionEnv.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 1)
+    auctionEnv.__fireEvent("AUCTION_HOUSE_SHOW")
+    ticker.scripts.OnUpdate(ticker, 0.001)
+    equal("the first auction frame hides pending repair", regions[4]:IsShown(), false)
+    local visibleLabel = auctionEnv.StatsProFrame:IsShown() and regions[1]:GetText() or ""
+    equal("the first auction frame removes the empty Gear heading", visibleLabel:find("Gear", 1, true), nil)
+end
+
 if #errors > 0 then error(table.concat(errors, "\n"), 0) end
 print((forever and "Forever" or "Retail") .. " HUD clean/restricted geometry and visibility passed")

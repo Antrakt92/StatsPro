@@ -5070,6 +5070,15 @@ local function FormatRepairCost(copper, fontSize)
     return text or "—"
 end
 
+function addon.durabilityRuntime.GetRepairCostText()
+    if not cached.showRepairCost then return "" end
+    local amount = cached.repairCost
+    if durabilityDirty or cached.repairCostComplete ~= true or not IsCleanNonNegativeNumber(amount) then
+        return addon.durabilityRuntime.auctionOpen and "" or "—"
+    end
+    return amount > 0 and FormatRepairCost(amount, cached.fontSize) or ""
+end
+
 local function ComputeDurabilityColor(pct)
     if pct >= DURABILITY_SCAN.greenThreshold then
         return 0.2, 1, 0.2
@@ -11089,12 +11098,11 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- nothing to do with repair, breaking the visual contract of column alignment.
     local repairGap = (repairLabelW > 0) and 2 or 0
     local repairTotal = hasRepair and (repairLabelW + repairGap + (self.lastRenderedRepairW or 0)) or 0
-    local totalW = math.max(rowsTotal, repairTotal, 80)
+    local statWidth = math.max(rowsTotal, 80)
+    local totalW = math.max(statWidth, repairTotal)
 
-    -- WHY gated extra: only widen-by-coin causes the offset compensation. Floor 80 (when
-    -- stats < 80 and no repair) must NOT trigger shift — pushing ratingText/valueText
-    -- left of frame.right unnecessarily creates a different visual bug.
-    local extra = (hasRepair and repairTotal > rowsTotal) and (repairTotal - rowsTotal) or 0
+    -- Compensate only for the width that repair added to the stat panel.
+    local extra = totalW - statWidth
 
     -- ratingText: shift LEFT by `extra` so right edge stays at "stat-content right edge"
     -- (frame.right - extra), not frame.right. Without this, when frame is widened for
@@ -11246,11 +11254,9 @@ end
 function Panel:Reflow()
     local hasRepair = self.lastRepairText and self.lastRepairText ~= ""
     if (not self.lastLabelText or self.lastLineCount < 0) and not hasRepair then return end
-    local repairText = self.lastRepairText or ""
-    if hasRepair and SAFE_NUM.IsCleanFiniteNumber(cached.repairCost) and cached.repairCost >= 0 then
-        -- Inline coin textures carry their own size; SetFont cannot resize them.
-        repairText = FormatRepairCost(cached.repairCost, cached.fontSize)
-    end
+    -- Inline coins carry their own size. Reformat only a currently valid price,
+    -- without reopening a row hidden by the previous render or scanning gear.
+    local repairText = hasRepair and addon.durabilityRuntime.GetRepairCostText() or ""
     self:SetTextSafe(
         self.lastLabelText,
         self.lastRatingText or "",
@@ -12303,9 +12309,8 @@ local function BuildDurabilityLines(labels, ratings, values)
 end
 
 local function BuildRepairCostPayload()
-    if not cached.showRepairCost then return "", nil end
-    local cs = cached.colorStrings
-    local repairLabelStr
+    local repairText = addon.durabilityRuntime.GetRepairCostText()
+    if repairText == "" then return "", nil end
     -- WHY no PushRow for Repair: the label + coin render on a DEDICATED row below
     -- the stat rows (see Panel:SetTextSafe), not as part of the multi-line labelText.
     -- Two reasons: (1) the coin string with inline gold/silver/copper icons is wider
@@ -12313,13 +12318,7 @@ local function BuildRepairCostPayload()
     -- stat rows. (2) Visual separation: stats render as one group, repair-cost info
     -- as a distinct row. Don't wrap the coin string in |cff...|r — coin icons render
     -- inline as textures and the color tag would tint them.
-    repairLabelStr = FormatLabel(cs.durability, "Repair")
-    if cached.repairCostComplete ~= true or not IsCleanNonNegativeNumber(cached.repairCost) then
-        if addon.durabilityRuntime.auctionOpen then return "", nil end
-        return "—", repairLabelStr
-    end
-    if cached.repairCost <= 0 then return "", nil end
-    return FormatRepairCost(cached.repairCost, cached.fontSize), repairLabelStr
+    return repairText, FormatLabel(cached.colorStrings.durability, "Repair")
 end
 
 -- WHY: separate header injector — sectioned mode places localized structural rows
@@ -12700,6 +12699,9 @@ function addon.durabilityRuntime.SetAuctionOpen(isOpen)
     if runtime.auctionOpen == isOpen then return end
     local wasOpen = runtime.auctionOpen
     runtime.auctionOpen = isOpen
+    -- Repair can be the only row in the Gear section. Let the normal renderer
+    -- update the section on the next frame without scanning in this callback.
+    if cached.showRepairCost then timeSinceLastUpdate = cached.updateInterval or 0.5 end
     -- Closing the auction can leave a previously incomplete price without
     -- another inventory event. Give it one fresh, coalesced retry budget.
     if wasOpen and not isOpen and cached.showRepairCost and not cached.repairCostComplete then

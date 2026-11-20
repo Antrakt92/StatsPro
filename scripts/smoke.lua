@@ -2724,8 +2724,9 @@ do
     eq("panel.secret_repair.cold_cache_stays_clean", cold.mainCachedRepairW, nil)
     -- The full 49px repair label must fit when the stat-label column is only 14px.
     eq("panel.secret_repair.cold_frame_width", cold.mainFrameWidth, 163)
-    eq("panel.secret_repair.cold_rating_anchor", cold.mainRatingPoints[1][4], -122)
-    eq("panel.secret_repair.cold_value_anchor", cold.mainValuePoints[1][4], -85)
+    -- Repair added 83px to the stat panel's 80px minimum width.
+    eq("panel.secret_repair.cold_rating_anchor", cold.mainRatingPoints[1][4], -120)
+    eq("panel.secret_repair.cold_value_anchor", cold.mainValuePoints[1][4], -83)
     eq("panel.secret_repair.cold_frame_height", cold.mainFrameHeight, 29)
 
     repairTest.setPanelMeasurementOverride("main", "repair", 28, 14)
@@ -2734,8 +2735,8 @@ do
     eq("panel.secret_repair.recovery_render_width", recovered.mainRenderedRepairW, 28)
     eq("panel.secret_repair.recovery_cache", recovered.mainCachedRepairW, 28)
     eq("panel.secret_repair.recovery_frame_width", recovered.mainFrameWidth, 80)
-    eq("panel.secret_repair.recovery_rating_anchor", recovered.mainRatingPoints[1][4], -38)
-    eq("panel.secret_repair.recovery_value_anchor", recovered.mainValuePoints[1][4], -1)
+    eq("panel.secret_repair.recovery_rating_anchor", recovered.mainRatingPoints[1][4], -37)
+    eq("panel.secret_repair.recovery_value_anchor", recovered.mainValuePoints[1][4], 0)
 
     repairTest.renderMainPanelForSmoke("C:", "700", "12.0%", 1)
     local disabled = repairTest.panelVisualState()
@@ -13796,7 +13797,7 @@ do
         blockDumpContains({ flatMain }, "—"), true)
     local sectionedMain = coldTest.routeRenderBlocks(blocks, "sectioned", nil, "full")
     eq("durability.cold_secret.sectioned_routes_unknown",
-        blockDumpContains({ sectionedMain }, "—"), true)
+        countValue(sectionedMain.ratings, "—") + countValue(sectionedMain.values, "—"), 1)
     local splitMain, splitSide = coldTest.routeRenderBlocks(blocks, "split", {
         splitDurability = true,
     }, "full")

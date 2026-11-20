@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.24.16 - 20-Nov-2026 — Reliable stats and gear readings
+
+- Mark the last reliable Versatility, Armor, durability, and item level when a fresh reading is unavailable. Keep old gear and specialization data out of current comparisons.
+- Identify the source of a live Crit value when the game withholds the other Crit values needed to find the highest one.
+- Wait for complete gear data before showing a repair total. Keep stat columns aligned as the repair row appears, changes width, or disappears.
+
 ## 1.24.15 - 19-Nov-2026 — Repair display at the auction house
 
 - Keep showing the repair cost at the auction house when it is available. Hide the repair row while the cost is unknown and check again when the auction window closes.

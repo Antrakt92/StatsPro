@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.24.7 - 20-Nov-2026 — Combat stats and gear readings
+
+- Show current Hit, Attack Power, Ranged Haste, and Defense when the game provides a usable value. Show the last reliable reading in parentheses or a dash if none is available. Refresh those readings after changes to equipment, talents, or form.
+- Use the exact Attack Power calculation when its inputs are available. Recheck the melee and ranged sources after spell power conversion changes.
+- Wait for complete gear data before showing a repair total, mark saved durability and item level readings, and keep stat columns aligned when the repair row changes.
+
 ## 1.24.6 - 20-Nov-2026 — Ranged stat recovery
 
 - Keep Ranged Haste and Ranged Attack Power readable when the client briefly withholds their values. The HUD shows the last reliable number in parentheses until a fresh value is available.

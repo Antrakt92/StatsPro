@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.24.17 - 20-Nov-2026 — Archon target refresh
+
+- Refresh Archon stat targets for Mythic+ and raids using data checked on 20 November.
+
 ## 1.24.16 - 20-Nov-2026 — Reliable stats and gear readings
 
 - Mark the last reliable Versatility, Armor, durability, and item level when a fresh reading is unavailable. Keep old gear and specialization data out of current comparisons.

@@ -201,10 +201,11 @@ for _, class in ipairs(classes) do
                             local title, tooltip = control.statsProTooltipProvider()
                             check(title == controlText:GetText(),
                                 class .. " tooltip follows Settings language: " .. locale .. " " .. row.key)
-                            if row.usePreCombatValue then
-                                local fallbackNote = addon.forever.Translate(
-                                    "A value in parentheses is the last reading before combat.", locale)
-                                check(fallbackNote and tooltip:find(fallbackNote, 1, true),
+                            if row.rememberLastClean then
+                                local key = addon.forever.compoundStatTooltip
+                                local fallbackNote = addon.forever.Translate(key, locale)
+                                check(fallbackNote and tooltip == fallbackNote
+                                    and (locale == "enUS" or locale == "enGB" or fallbackNote ~= key),
                                     class .. " localized fallback tooltip: " .. locale .. " " .. row.key)
                             end
                         end

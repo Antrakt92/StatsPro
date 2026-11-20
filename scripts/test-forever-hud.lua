@@ -481,52 +481,181 @@ check(contains(blocks[2], "Attack Power"), "unknown composite remains visible af
 local function hasStat(block, label, expected)
     local function plain(text) return (text:gsub("|cff%x%x%x%x%x%x", ""):gsub("|r", "")) end
     for index, rowLabel in ipairs(block.labels) do
-        if plain(rowLabel):find(label, 1, true) then
+        if plain(rowLabel):find(label, 1, true) == 1 then
             return plain(block.ratings[index] .. block.values[index]) == expected
         end
     end
     return false
 end
 do
-    local readable, dead, inCombat = false, false, false
+    local readable, dead, inCombat, rejectHaste = false, false, false, false
     local haste, power = 25, 84
+    local form, protectedHaste, protectedForm = nil, {}, {}
+    local function readDefense()
+        if readable then return 20, 3 end
+    end
     local kitEnv, kitAddon, kitTest = fixtures.loadStatsPro("enUS", {
         forever = true,
         unitGUID = function() return "Player-ForeverRangedRecovery" end,
         inCombatLockdown = function() return inCombat end,
+        issecretvalue = function(value)
+            return rawequal(value, protectedHaste) or rawequal(value, protectedForm)
+        end,
+        roundToNearestString = function(value)
+            assert(rawequal(value, protectedHaste) and not rejectHaste)
+            return "32"
+        end,
         foreverAPIs = {
             GetRangedHaste = function() if readable then return haste, 0 end end,
             UnitRangedAttackPower = function() if readable then return power, 0, 0 end end,
+            UnitAttackPower = function() if readable then return power + 1, 1, 0 end end,
+            UnitDefenseSkill = readDefense,
+            GetShapeshiftFormID = function() return form end,
+            CR_HIT_MELEE = 6,
+            CR_HIT_RANGED = 7,
+            CR_HIT_SPELL = 8,
+            GetCombatRatingBonus = function(rating) if readable then return rating end end,
+            GetHitModifier = function() return 1 end,
+            GetOffhandHitModifier = function() return 2 end,
+            GetRangedHitModifier = function() return 3 end,
+            GetSpellHitModifier = function() return 4 end,
             UnitIsDeadOrGhost = function() return dead end,
         },
     })
     kitEnv.__fireEvent("PLAYER_ENTERING_WORLD")
     local profile = kitTest.profileState().settings
     profile.showOffensive, profile.showRangedHaste, profile.showRangedAttackPower = true, true, true
+    profile.showMeleeHit, profile.showOffhandHit, profile.showRangedHit, profile.showSpellHit = true, true, true, true
+    profile.showAttackPower, profile.showDefensive, profile.showDefense = true, true, true
     profile.hideZeroOffensive = false
+    profile.hideZeroDefensive = false
     kitTest.cacheSettings()
     local function expectRanged(expectedHaste, expectedPower, phase)
         local offense = kitTest.buildRenderBlocks()[2]
         check(hasStat(offense, "Ranged Haste", expectedHaste), phase .. " ranged haste")
         check(hasStat(offense, "Ranged Attack Power", expectedPower), phase .. " ranged power")
     end
+    local function expectOtherCompound(phase, decorate)
+        local hud = kitTest.buildRenderBlocks()
+        for label, value in pairs({
+            ["Melee Hit"] = "7.00%",
+            ["Offhand Hit"] = "8.00%",
+            ["Ranged Hit"] = "10.00%",
+            ["Spell Hit"] = "12.00%",
+            ["Attack Power"] = tostring(power + 2),
+        }) do
+            check(hasStat(hud[2], label, decorate(value)), phase .. " " .. label)
+        end
+        check(hasStat(hud[4], "Defense", decorate("23")), phase .. " Defense")
+    end
+    local function dash() return "—" end
+    local function live(text) return text end
+    local function previous(text) return "(" .. text .. ")" end
     expectRanged("—", "—", "cold unavailable")
+    expectOtherCompound("cold unavailable", dash)
     readable = true
     expectRanged("25.00%", "84", "fresh stats")
+    expectOtherCompound("fresh stats", live)
     readable, dead, inCombat = false, true, true
     kitEnv.__fireEvent("PLAYER_REGEN_DISABLED")
     kitEnv.__fireEvent("PLAYER_DEAD")
     expectRanged("(25.00%)", "(84)", "dead with unavailable stats")
+    expectOtherCompound("dead with unavailable stats", previous)
     dead, inCombat = false, false
     kitEnv.__fireEvent("PLAYER_REGEN_ENABLED")
     kitEnv.__fireEvent("PLAYER_ALIVE")
     expectRanged("(25.00%)", "(84)", "alive out of combat with unavailable stats")
+    expectOtherCompound("alive out of combat with unavailable stats", previous)
     readable, haste, power = true, 29, 101
     expectRanged("29.00%", "101", "next live values replace fallback")
     readable = false
     kitEnv.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 18)
     check(kitAddon:RunUpdateStatsSafe(), "gear change refreshes the HUD safely")
     expectRanged("—", "—", "changed equipment discards old stats")
+    expectOtherCompound("changed equipment discards old stats", dash)
+    for _, event in ipairs({ "PLAYER_TALENT_UPDATE", "ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_LEVEL_UP", "PLAYER_ENTERING_WORLD" }) do
+        readable = true
+        expectRanged("29.00%", "101", event .. " seed")
+        expectOtherCompound(event .. " seed", live)
+        kitEnv.__fireEvent("BAG_UPDATE_DELAYED")
+        kitEnv.__fireEvent("COMBAT_RATING_UPDATE")
+        readable = false
+        expectRanged("(29.00%)", "(101)", "unrelated update keeps the last clean value")
+        expectOtherCompound("unrelated update keeps the last clean value", previous)
+        kitEnv.__fireEvent(event)
+        kitEnv.__fireEvent(event)
+        expectRanged("—", "—", event .. " clears old values even if emitted twice")
+        expectOtherCompound(event .. " clears old values", dash)
+    end
+    profile.hideZeroOffensive = true
+    kitTest.cacheSettings()
+    readable, haste = true, 0
+    check(not contains(kitTest.buildRenderBlocks()[2], "Ranged Haste"), "compound clean zero is hidden")
+    haste = protectedHaste
+    check(not contains(kitTest.buildRenderBlocks()[2], "Ranged Haste"), "compound same-context clean zero stays hidden")
+    kitEnv.__fireEvent("ACTIVE_TALENT_GROUP_CHANGED")
+    check(hasStat(kitTest.buildRenderBlocks()[2], "Ranged Haste", "32%"),
+        "first live protected value in the new context is not suppressed by the old zero")
+    rejectHaste = true
+    check(not contains(kitTest.buildRenderBlocks()[2], "Ranged Haste"),
+        "new context cannot infer nonzero when the native formatter fails")
+    profile.hideZeroOffensive = false
+    kitTest.cacheSettings()
+    check(hasStat(kitTest.buildRenderBlocks()[2], "Ranged Haste", "—"),
+        "formatting failure with no last clean value produces the cold marker")
+
+    readable, haste = true, 29
+    expectRanged("29.00%", "101", "normal form seed")
+    readable = false
+    kitEnv.__fireEvent("UPDATE_SHAPESHIFT_FORM")
+    expectRanged("(29.00%)", "(101)", "duplicate normal-form event preserves last values")
+    form = 1
+    kitEnv.__fireEvent("UPDATE_SHAPESHIFT_FORM")
+    expectRanged("—", "—", "new stance discards old values")
+    readable, haste, power = true, 33, 105
+    expectRanged("33.00%", "105", "new stance recovers")
+    readable = false
+    kitEnv.__fireEvent("UPDATE_SHAPESHIFT_FORM")
+    expectRanged("(33.00%)", "(105)", "duplicate stance event preserves new values")
+    form = protectedForm
+    kitEnv.__fireEvent("UPDATE_SHAPESHIFT_FORM")
+    expectRanged("—", "—", "unreadable new stance cannot reuse old values")
+    readable, form = true, 1
+    kitEnv.__fireEvent("UPDATE_SHAPESHIFT_FORM")
+    expectRanged("33.00%", "105", "known stance can seed after unreadable identity")
+    readable, form = false, nil
+    kitEnv.__fireEvent("UPDATE_SHAPESHIFT_FORM")
+    expectRanged("—", "—", "leaving a stance discards its values")
+
+    profile.showOffensive, profile.showTertiary = false, false
+    profile.showDurability, profile.showRepairCost = false, false
+    for _, row in ipairs(kitAddon.forever.rows.character) do profile[row.showKey] = false end
+    for _, row in ipairs(kitAddon.forever.rows.defensive) do profile[row.showKey] = row.key == "Defense" end
+    readable = true
+    kitTest.cacheSettings()
+    check(kitAddon:RunUpdateStatsSafe(), "defensive-only source session seeds Defense")
+    readable = false
+    local reloadEnv, reloadAddon, reloadTest = fixtures.loadStatsPro("enUS", {
+        forever = true,
+        statsProDB = kitTest.profileState().root,
+        unitGUID = function() return "Player-ForeverRangedRecovery" end,
+        foreverAPIs = { UnitDefenseSkill = readDefense },
+    })
+    reloadEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    check(hasStat(reloadTest.buildRenderBlocks()[4], "Defense", "—"),
+        "defensive-only reload renders a cold dash without carrying over a session cache")
+    readable = true
+    check(reloadAddon:RunUpdateStatsSafe(), "defensive-only reload recovers")
+    local cleanPanel = reloadTest.panelVisualState()
+    readable = false
+    check(reloadAddon:RunUpdateStatsSafe(), "defensive-only fallback updates the HUD")
+    local fallbackPanel = reloadTest.panelVisualState()
+    check(hasStat(reloadTest.buildRenderBlocks()[4], "Defense", "(23)"),
+        "defensive-only fallback has both parentheses")
+    check(fallbackPanel.mainFrameHeight == cleanPanel.mainFrameHeight
+        and fallbackPanel.mainRenderedRatingW == 0
+        and fallbackPanel.mainRenderedValueW > cleanPanel.mainRenderedValueW,
+        "parentheses grow only the existing value column and preserve row height")
 end
 check(hasStat(blocks[2], "Attack Power", "(11)"), "restricted AP shows the last pre-combat value")
 check(hasStat(blocks[2], "Ranged Haste", "(14.00%)"), "restricted ranged haste uses the current fight snapshot")
@@ -544,7 +673,7 @@ env.C_StringUtil.RoundToNearestString = round
 hitBonus, hitModifier = 5, 2
 check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "7.00%"), "clean hit changes during combat")
 hitBonus, hitModifier = -123456, -123456
-check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "(4.00%)"), "combat reads do not replace the pre-combat snapshot")
+check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "(7.00%)"), "a clean combat read replaces the previous sample")
 local firstRestricted = table.concat(blocks[2].values, "\n") .. table.concat(blocks[2].ratings, "\n")
 check(string.find(firstRestricted, "75", 1, true), "first restricted scalar displayed live")
 secret = -123457
@@ -566,15 +695,15 @@ settings.hideZeroOffensive = false
 test.cacheSettings()
 check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "(0.00%)"), "cached zero is displayed when Hide Zero is off")
 combat = false
-check(hasStat(test.buildRenderBlocks()[2], "Attack Power", "?"), "no stale fallback outside combat")
+check(hasStat(test.buildRenderBlocks()[2], "Attack Power", "(16)"), "fallback remains available outside combat")
 combat = true
 settings.showOffhandHit = true
 test.cacheSettings()
-check(hasStat(test.buildRenderBlocks()[2], "Offhand Hit", "?%"), "first restricted read does not invent a fallback")
+check(hasStat(test.buildRenderBlocks()[2], "Offhand Hit", "—"), "first restricted read does not invent a fallback")
 combat = false
 test.buildRenderBlocks()
 combat = true
-check(hasStat(test.buildRenderBlocks()[2], "Attack Power", "?"), "unreadable out-of-combat sample invalidates old AP")
+check(hasStat(test.buildRenderBlocks()[2], "Attack Power", "(16)"), "unreadable sample leaves the last clean value intact")
 combat, restricted = false, false
 test.buildRenderBlocks()
 combat, restricted = true, true
@@ -582,7 +711,7 @@ env.__fireEvent("PLAYER_REGEN_DISABLED")
 combat = false
 env.__fireEvent("PLAYER_REGEN_ENABLED")
 combat = true
-check(hasStat(test.buildRenderBlocks()[2], "Attack Power", "?"), "combat end discards the snapshot even with no fresh HUD sample")
+check(hasStat(test.buildRenderBlocks()[2], "Attack Power", "(16)"), "combat end keeps the last clean sample")
 combat, restricted = false, false
 settings.showTertiary, settings.showManaRegenMP5, settings.showCastingManaRegenMP5 = true, true, true
 test.cacheSettings()
@@ -815,6 +944,9 @@ end
 check(foundSpirit, "Forever Spirit checkbox exists")
 check(foundUtility, "utility section controls exist")
 check(not foundArchon, "Archon Settings control absent")
+local help = "Parentheses show the last reliable value. A dash means no reliable value is available."
+local _, compoundDetail = env.StatsProForeverMeleeHit.statsProTooltipProvider(env.StatsProForeverMeleeHit)
+check(compoundDetail == help, "compound tooltip explains both display markers")
 for _, group in ipairs({ "offensive", "defensive", "utility" }) do
     local master = env["StatsProForever" .. group .. "Master"]
     local row = addon.forever.rows[group][1]
@@ -1288,8 +1420,8 @@ do
         "active conversion uses the last validated pre-combat total")
     conversionActive = false
     apEnv.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 16, true)
-    check(hasStat(apTest.buildRenderBlocks()[2], "Attack Power", "?"),
-        "combat equipment change discards AP parity and the pre-combat number")
+    check(hasStat(apTest.buildRenderBlocks()[2], "Attack Power", "—"),
+        "combat equipment change discards AP parity and the last clean number")
     combatNow = false
     apEnv.__fireEvent("PLAYER_REGEN_ENABLED")
     check(hasStat(apTest.buildRenderBlocks()[2], "Attack Power", "79"),

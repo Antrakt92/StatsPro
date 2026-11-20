@@ -11757,41 +11757,47 @@ function addon.forever.ReadHUDRow(definition, manaSample)
     return definition.Read(manaSample)
 end
 
-addon.forever.preCombatValues = {}
-addon.forever.lastRangedValues = {}
+addon.forever.lastCleanCompoundValues = {}
+
+function addon.forever.InvalidateCompoundStats()
+    addon.forever.lastCleanCompoundValues = {}
+    addon.forever.ResetAttackPowerParity()
+end
+
+function addon.forever.ReadCompoundForm()
+    local getForm = _G.GetShapeshiftFormID
+    if type(getForm) ~= "function" then return nil end
+    local ok, form = pcall(getForm)
+    if not ok then return nil end
+    if addon.dbRuntime.IsCleanType(form, "nil") then return 0 end
+    if addon.dbRuntime.IsCleanType(form, "number")
+        and form >= 0 and form < math.huge and form % 1 == 0 then
+        return form
+    end
+end
 
 function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
-    local inCombat
     local manaSample = group == "utility" and cached.shareManaRegenSample and {} or nil
     for _, definition in ipairs(addon.forever.rows[group]) do
         if cached[definition.showKey] then
             local value, state, visibilitySuffix = addon.forever.ReadHUDRow(definition, manaSample)
             local rowKey = "forever:" .. definition.key .. (visibilitySuffix or "")
             local fallback
-            if definition.keepLastValue then
-                if state == "clean" then addon.forever.lastRangedValues[rowKey] = value end
-                fallback = addon.forever.lastRangedValues[rowKey]
-            elseif definition.usePreCombatValue then
-                if inCombat == nil then
-                    inCombat = addon.profileRuntime.ReadCombatState()
-                    if addon.hudPresets.combatState == true then inCombat = true end
-                end
-                if inCombat == false then
-                    -- A newer unreadable sample invalidates the old snapshot.
-                    addon.forever.preCombatValues[rowKey] = state == "clean" and value or nil
-                elseif inCombat == true then
-                    fallback = addon.forever.preCombatValues[rowKey]
-                end
+            if definition.rememberLastClean then
+                if state == "clean" then addon.forever.lastCleanCompoundValues[rowKey] = value end
+                fallback = addon.forever.lastCleanCompoundValues[rowKey]
             end
             local visible
-            if state == "clean" then
+            if definition.rememberLastClean then
+                -- Use the same context-bound sample for Hide Zero and fallback.
+                visible = not hideZero or (fallback ~= nil and fallback ~= 0)
+                    or (state == "secret" and fallback == nil)
+            elseif state == "clean" then
                 cached.cleanRowVisibility[rowKey] = value ~= 0
                 visible = not hideZero or cached.cleanRowVisibility[rowKey]
             elseif state == "secret" then
                 -- On a cold start there is no clean zero to justify hiding a live value.
                 visible = not hideZero or cached.cleanRowVisibility[rowKey] ~= false
-            elseif state == "unknown" and fallback ~= nil then
-                visible = not hideZero or fallback ~= 0
             else
                 visible = shouldShowUnknown(rowKey, true, hideZero)
             end
@@ -11829,16 +11835,21 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
                     local format = definition.format or (group == "utility" and "%.2f" or "%d")
                     text, placeholder = SAFE_NUM.FormatColorNumber(valueColor, value, format .. suffix, suffix)
                 end
-                if placeholder and (definition.usePreCombatValue or definition.keepLastValue) then
+                if placeholder and definition.rememberLastClean then
                     text = nil
+                    -- If the native formatter cannot display a secret result, it
+                    -- supplies no evidence to override the Hide Zero policy.
+                    visible = not hideZero or (fallback ~= nil and fallback ~= 0)
                     if fallback ~= nil then
                         local format = definition.kind == "percent" and "(%.2f%%)" or "(%d)"
                         text = SAFE_NUM.FormatColorNumber(valueColor, fallback, format)
                     end
                 end
-                local unavailable = definition.keepLastValue and "—" or "?" .. unknownSuffix
-                local rCol, vCol = RouteValueOnly(text or ("|cff" .. valueColor .. unavailable .. "|r"))
-                PushRow(labels, ratings, values, FormatLabel(color, label), rCol, vCol)
+                if visible then
+                    local unavailable = definition.rememberLastClean and "—" or "?" .. unknownSuffix
+                    local rCol, vCol = RouteValueOnly(text or ("|cff" .. valueColor .. unavailable .. "|r"))
+                    PushRow(labels, ratings, values, FormatLabel(color, label), rCol, vCol)
+                end
             end
         end
     end
@@ -12541,9 +12552,8 @@ end
 
 local function OnPlayerEnteringWorld()
     if addon.forever.enabled then
-        addon.forever.preCombatValues = {}
-        addon.forever.lastRangedValues = {}
-        addon.forever.ResetAttackPowerParity()
+        addon.forever.compoundForm = addon.forever.ReadCompoundForm()
+        addon.forever.InvalidateCompoundStats()
     end
     SAFE_NUM.ReopenScaledFormatterRetries()
     if not addon.critRuntime.specRecheckDelay then addon.critRuntime.RefreshSpecIdentity(true) end
@@ -12653,11 +12663,7 @@ local EVENT_HANDLERS = {
     GET_ITEM_INFO_RECEIVED      = addon.durabilityRuntime.OnItemDataReady,
     ITEM_DATA_LOAD_RESULT       = addon.durabilityRuntime.OnItemDataReady,
     PLAYER_EQUIPMENT_CHANGED    = function()
-        if addon.forever.enabled then
-            addon.forever.ResetAttackPowerParity()
-            addon.forever.preCombatValues = {}
-            addon.forever.lastRangedValues = {}
-        end
+        if addon.forever.enabled then addon.forever.InvalidateCompoundStats() end
         addon.durabilityRuntime.MarkDirty()
         addon.itemLevelRuntime.MarkDirty()
     end,
@@ -12703,7 +12709,6 @@ local EVENT_HANDLERS = {
     -- enabled permanently so right-click Settings works even while locked.
     PLAYER_REGEN_ENABLED        = function()
         if addon.forever.enabled then
-            addon.forever.preCombatValues = {}
             addon.forever.NoteManaCombatTransition(false)
         end
         SAFE_NUM.ReopenScaledFormatterRetries()
@@ -12750,6 +12755,24 @@ local EVENT_HANDLERS = {
         end
     end,
 }
+
+if addon.forever.enabled then
+    -- These are the talent changes consumed by the Forever character sheet.
+    local function onForeverStatContextChanged()
+        addon.forever.InvalidateCompoundStats()
+        timeSinceLastUpdate = cached.updateInterval or 0.5
+    end
+    EVENT_HANDLERS.PLAYER_TALENT_UPDATE = onForeverStatContextChanged
+    EVENT_HANDLERS.ACTIVE_TALENT_GROUP_CHANGED = onForeverStatContextChanged
+    EVENT_HANDLERS.PLAYER_LEVEL_UP = onForeverStatContextChanged
+    EVENT_HANDLERS.UPDATE_SHAPESHIFT_FORM = function()
+        local form = addon.forever.ReadCompoundForm()
+        if form ~= nil and form == addon.forever.compoundForm then return end
+        -- The event can signal a transition even when its new form is unreadable.
+        addon.forever.compoundForm = form
+        onForeverStatContextChanged()
+    end
+end
 
 local eventFrame = CreateFrame("Frame")
 for event in pairs(EVENT_HANDLERS) do
@@ -20736,8 +20759,8 @@ function addon.settingsUI.BuildStatsTab(self, context)
                     local detail = L("A ? means this stat is unavailable or cannot be calculated safely.")
                     if definition.key == "ManaRegenMP5" then
                         detail = L(self.forever.manaRegenTooltip) .. "\n" .. detail
-                    elseif definition.usePreCombatValue then
-                        detail = L("A value in parentheses is the last reading before combat.") .. "\n" .. detail
+                    elseif definition.rememberLastClean then
+                        detail = L(self.forever.compoundStatTooltip)
                     end
                     return self.settingsDesign.DisabledControlTooltip(control) or L(definition.label), detail
                 end)

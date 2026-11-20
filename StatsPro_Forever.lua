@@ -315,15 +315,15 @@ end
 Row("offensive", "MeleeCrit", "Melee Crit", Scalar("GetCritChance", 1), "percent", "crit")
 Row("offensive", "RangedCrit", "Ranged Crit", Scalar("GetRangedCritChance", 1), "percent", "crit")
 Row("offensive", "SpellCrit", "Spell Crit", Scalar("GetSpellCritChance", 1), "percent", "crit")
-Row("offensive", "MeleeHit", "Melee Hit", Hit("CR_HIT_MELEE", "GetHitModifier"), "percent").usePreCombatValue = true
-Row("offensive", "OffhandHit", "Offhand Hit", Hit("CR_HIT_MELEE", "GetOffhandHitModifier"), "percent").usePreCombatValue = true
-Row("offensive", "RangedHit", "Ranged Hit", Hit("CR_HIT_RANGED", "GetRangedHitModifier"), "percent").usePreCombatValue = true
-Row("offensive", "SpellHit", "Spell Hit", Hit("CR_HIT_SPELL", "GetSpellHitModifier"), "percent").usePreCombatValue = true
+Row("offensive", "MeleeHit", "Melee Hit", Hit("CR_HIT_MELEE", "GetHitModifier"), "percent").rememberLastClean = true
+Row("offensive", "OffhandHit", "Offhand Hit", Hit("CR_HIT_MELEE", "GetOffhandHitModifier"), "percent").rememberLastClean = true
+Row("offensive", "RangedHit", "Ranged Hit", Hit("CR_HIT_RANGED", "GetRangedHitModifier"), "percent").rememberLastClean = true
+Row("offensive", "SpellHit", "Spell Hit", Hit("CR_HIT_SPELL", "GetSpellHitModifier"), "percent").rememberLastClean = true
 Row("offensive", "MeleeHaste", "Melee Haste", Scalar("GetMeleeHaste", 1), "percent", "haste")
-Row("offensive", "RangedHaste", "Ranged Haste", RangedHaste, "percent", "haste").keepLastValue = true
+Row("offensive", "RangedHaste", "Ranged Haste", RangedHaste, "percent", "haste").rememberLastClean = true
 Row("offensive", "SpellHaste", "Spell Haste", Scalar("UnitSpellHaste", 1, "player"), "percent", "haste")
-Row("offensive", "AttackPower", "Attack Power", AttackPower("UnitAttackPower")).usePreCombatValue = true
-Row("offensive", "RangedAttackPower", "Ranged Attack Power", AttackPower("UnitRangedAttackPower")).keepLastValue = true
+Row("offensive", "AttackPower", "Attack Power", AttackPower("UnitAttackPower")).rememberLastClean = true
+Row("offensive", "RangedAttackPower", "Ranged Attack Power", AttackPower("UnitRangedAttackPower")).rememberLastClean = true
 for school, name in ipairs({ "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" }) do
     Row("offensive", "SpellPower" .. name, name .. " Spell Power", Scalar("GetSpellBonusDamage", 1, school + 1))
 end
@@ -334,7 +334,7 @@ for index, name in ipairs({ "Mainhand", "Offhand", "Ranged" }) do
     Row("offensive", name .. "Expertise", name .. " Expertise", Scalar("GetExpertise", index), "percent")
 end
 Row("defensive", "Armor", "Armor", Scalar("UnitArmor", 2, "player"), "number", "armor")
-Row("defensive", "Defense", "Defense", Nonnegative(Sum("UnitDefenseSkill", 2, "player"))).usePreCombatValue = true
+Row("defensive", "Defense", "Defense", Nonnegative(Sum("UnitDefenseSkill", 2, "player"))).rememberLastClean = true
 Row("defensive", "Dodge", "Dodge", Scalar("GetDodgeChance", 1), "percent", "dodge")
 Row("defensive", "Parry", "Parry", Scalar("GetParryChance", 1), "percent", "parry")
 Row("defensive", "Block", "Block", Scalar("GetBlockChance", 1), "percent", "block")
@@ -718,22 +718,23 @@ for locale, labels in pairs(statusLabels) do
     F.labels[locale]["Forever Beta"] = labels[1]
     F.labels[locale]["A ? means this stat is unavailable or cannot be calculated safely."] = labels[2]
 end
-local preCombatLabels = {
-    enUS = "A value in parentheses is the last reading before combat.",
-    ruRU = "В скобках показано последнее значение, считанное до боя.",
-    deDE = "Ein Wert in Klammern ist der zuletzt vor dem Kampf gelesene Wert.",
-    esES = "Un valor entre paréntesis es el último valor leído antes del combate.",
-    frFR = "Une valeur entre parenthèses correspond à la dernière mesure avant le combat.",
-    itIT = "Un valore tra parentesi è l’ultimo valore letto prima del combattimento.",
-    ptBR = "Um valor entre parênteses é o último valor lido antes do combate.",
-    koKR = "괄호 안의 값은 전투 전에 마지막으로 읽은 값입니다.",
-    zhCN = "括号内为进入战斗前最后一次读取的数值。",
-    zhTW = "括號內為進入戰鬥前最後一次讀取的數值。",
+F.compoundStatTooltip = "Parentheses show the last reliable value. A dash means no reliable value is available."
+local compoundStatHelp = {
+    enUS = F.compoundStatTooltip,
+    ruRU = "В скобках показано последнее достоверное значение. Тире означает, что достоверных данных пока нет.",
+    deDE = "In Klammern steht der letzte verlässliche Wert. Ein Strich bedeutet, dass kein verlässlicher Wert vorliegt.",
+    esES = "Los paréntesis muestran el último valor fiable. Un guion indica que no hay ningún valor fiable disponible.",
+    frFR = "Les parenthèses indiquent la dernière valeur fiable. Un tiret indique qu’aucune valeur fiable n’est disponible.",
+    itIT = "Le parentesi indicano l’ultimo valore attendibile. Un trattino indica che non è disponibile alcun valore attendibile.",
+    ptBR = "Os parênteses mostram o último valor confiável. Um traço indica que não há um valor confiável disponível.",
+    koKR = "괄호 안에는 마지막으로 확인된 값이 표시됩니다. 대시는 확인된 값이 없다는 뜻입니다.",
+    zhCN = "括号内显示最近一次确认的数值。破折号表示没有可用的可靠数值。",
+    zhTW = "括號內顯示最近一次確認的數值。破折號表示沒有可用的可靠數值。",
 }
-preCombatLabels.enGB = preCombatLabels.enUS
-preCombatLabels.esMX = preCombatLabels.esES
-for locale, text in pairs(preCombatLabels) do
-    F.labels[locale]["A value in parentheses is the last reading before combat."] = text
+compoundStatHelp.enGB = compoundStatHelp.enUS
+compoundStatHelp.esMX = compoundStatHelp.esES
+for locale, text in pairs(compoundStatHelp) do
+    F.labels[locale][F.compoundStatTooltip] = text
 end
 
 local presetSummaries = {

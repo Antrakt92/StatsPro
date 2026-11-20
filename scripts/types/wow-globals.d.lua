@@ -48,6 +48,9 @@
 ---@type number
 MAX_SPELL_SCHOOLS = 7
 
+---@type (fun(): number?)?
+GetShapeshiftFormID = nil
+
 ---@type (fun(): number)?
 GetOverrideAPBySpellPower = nil
 

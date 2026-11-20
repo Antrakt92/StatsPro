@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.24.6 - 20-Nov-2026 — Ranged stat recovery
+
+- Keep Ranged Haste and Ranged Attack Power readable when the client briefly withholds their values. The HUD shows the last reliable number in parentheses until a fresh value is available.
+
 ## 1.24.5 - 19-Nov-2026 — Repair display at the auction house
 
 - Keep showing the repair cost at the auction house when it is available. Hide the repair row while the cost is unknown and check again when the auction window closes.

@@ -175,7 +175,6 @@ nativeAP = 79
 multiplier = 0
 UnitAttackPower = function() return 27, 52, 0 end
 Expect("AttackPower", 79, "clean")
-UnitAttackPower = function() return secret, secret, secret end
 multiplier = secret
 UnitAttackPower = function() return 97, 0, 0 end
 nativeAP = 167
@@ -194,14 +193,30 @@ Expect("AttackPower", nil, "unknown")
 multiplier, nativeAP = 0, 79
 UnitAttackPower = function() return 27, 52, 0 end
 Expect("AttackPower", 79, "clean")
+UnitRangedAttackPower = function() return 430, 0, 0 end
+Expect("RangedAttackPower", 430, "clean")
 UnitAttackPower = function() return secret, secret, secret end
+UnitRangedAttackPower = function() return secret, 0, 0 end
 multiplier = secret
-for _, flag in ipairs({ true, 0, "false", secret }) do
+for _, flag in ipairs({ 0, "false", secret }) do
     conversion = flag
     Expect("AttackPower", nil, "unknown")
 end
 conversion = nil
 Expect("AttackPower", nil, "unknown")
+conversion, nativeAP = false, nextAP
+Expect("AttackPower", nextAP, "secret")
+Expect("RangedAttackPower", 430, "clean")
+conversion = true
+Expect("AttackPower", nil, "unknown")
+conversion, nativeAP = false, 167
+Expect("AttackPower", nil, "unknown")
+Expect("RangedAttackPower", nil, "unknown")
+multiplier, nativeAP = 0, 79
+UnitAttackPower = function() return 27, 52, 0 end
+Expect("AttackPower", 79, "clean")
+UnitAttackPower = function() return secret, secret, secret end
+multiplier = secret
 conversion, nativeAP = false, nil
 Expect("AttackPower", nil, "unknown")
 PlayerEffectiveAttackPower = function() error("native player AP unavailable") end
@@ -210,12 +225,16 @@ PlayerEffectiveAttackPower = function() return 207, 43, 128, nativeAP, 430 end
 multiplier, nativeAP = 0, nextAP
 Expect("AttackPower", nextAP, "secret")
 
+UnitRangedAttackPower = function() return 430, 0, 0 end
+Expect("RangedAttackPower", 430, "clean")
+UnitRangedAttackPower = function() return secret, 0, 0 end
 multiplier, nativeAP = 0.5, 79
 GetSpellBonusDamage = function() return 400 end
 GetSpellBonusHealing = function() return 450 end
 Expect("AttackPower", 200, "clean")
 multiplier, nativeAP = secret, secret
 Expect("AttackPower", nil, "unknown")
+Expect("RangedAttackPower", nil, "unknown")
 
 multiplier, nativeAP = 0, 79
 UnitAttackPower = function() return 27, 52, 0 end

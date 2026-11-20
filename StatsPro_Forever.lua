@@ -137,7 +137,7 @@ end
 local nativeAttackPowerMatches = {}
 
 function F.ResetAttackPowerParity()
-    nativeAttackPowerMatches = {}
+    nativeAttackPowerMatches[4], nativeAttackPowerMatches[5] = nil, nil
 end
 
 local function ReadConvertedAttackPower(multiplier)
@@ -178,15 +178,18 @@ local function AttackPower(name)
         local multiplier, state = Read("GetOverrideAPBySpellPower", 1)
         if state == "clean" then
             if multiplier > 0 then
-                nativeAttackPowerMatches[nativeIndex] = nil
+                F.ResetAttackPowerParity()
                 return converted(multiplier)
             end
             return ReadWeaponAttackPower(base, nativeIndex)
         end
         -- A clean false independently rules out the spell-power override.
-        if addon.profileRuntime.ReadBooleanDecision(_G.HasSPEffectsAttackPower) == false then
+        local conversion = addon.profileRuntime.ReadBooleanDecision(_G.HasSPEffectsAttackPower)
+        if conversion == false then
             return ReadWeaponAttackPower(base, nativeIndex)
         end
+        -- The override applies to both melee and ranged attack power.
+        if conversion == true then F.ResetAttackPowerParity() end
         return nil, "unknown"
     end
 end

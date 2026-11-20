@@ -1403,10 +1403,14 @@ do
                     check(found, locale .. " " .. style .. " " .. mode .. " renders AP " .. expected)
                 end
             end
+            combatNow = false
+            verifyAP("79")
+            combatNow = true
             verifyAP("95")
             conversionActive = true
             verifyAP("(79)")
             conversionActive = false
+            verifyAP("(79)")
         end
     end
     check(apAddon:RunUpdateStatsSafe(), "native AP display values flow through the real HUD update")

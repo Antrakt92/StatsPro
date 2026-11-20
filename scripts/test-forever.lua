@@ -177,6 +177,25 @@ UnitAttackPower = function() return 27, 52, 0 end
 Expect("AttackPower", 79, "clean")
 UnitAttackPower = function() return secret, secret, secret end
 multiplier = secret
+UnitAttackPower = function() return 97, 0, 0 end
+nativeAP = 167
+Expect("AttackPower", 97, "clean")
+UnitAttackPower = function() return secret, 0, 0 end
+Expect("AttackPower", nil, "unknown")
+F.ResetAttackPowerParity()
+UnitAttackPower = function() return 100, 0, 0 end
+Expect("AttackPower", 100, "clean")
+multiplier, nativeAP = 0, 0
+UnitAttackPower = function() return 0, 0, 0 end
+Expect("AttackPower", 0, "clean")
+multiplier, nativeAP = secret, 167
+UnitAttackPower = function() return secret, 0, 0 end
+Expect("AttackPower", nil, "unknown")
+multiplier, nativeAP = 0, 79
+UnitAttackPower = function() return 27, 52, 0 end
+Expect("AttackPower", 79, "clean")
+UnitAttackPower = function() return secret, secret, secret end
+multiplier = secret
 for _, flag in ipairs({ true, 0, "false", secret }) do
     conversion = flag
     Expect("AttackPower", nil, "unknown")

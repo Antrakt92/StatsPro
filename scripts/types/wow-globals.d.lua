@@ -67,6 +67,7 @@ function GetInventoryItemID(unit, slot) end
 
 ---@class (exact) StatsProItemAPI
 ---@field IsItemDataCachedByID fun(itemID: number): boolean
+---@field GetItemInventoryTypeByID? fun(itemID: number): number?
 
 ---@type StatsProItemAPI?
 C_Item = nil
@@ -76,6 +77,7 @@ IsAddOnLoaded = nil
 
 ---@class (exact) StatsProCurrencyAPI
 ---@field GetCoinTextureString fun(amount: number, fontHeight: number): string
+---@field GetCoinText? fun(amount: number, separator: string): string
 
 ---@type StatsProCurrencyAPI?
 C_CurrencyInfo = nil
@@ -174,9 +176,14 @@ WOW_PROJECT_ID = nil
 ---@class (exact) StatsProPlayerInteractionTypeEnum
 ---@field Auctioneer number
 
+---@class (exact) StatsProInventoryTypeEnum
+---@field IndexHoldableType number
+---@field IndexRelicType number
+
 ---@class (exact) StatsProEnum
 ---@field Damageclass StatsProDamageClassEnum
 ---@field PlayerInteractionType? StatsProPlayerInteractionTypeEnum
+---@field InventoryType? StatsProInventoryTypeEnum
 
 ---@type StatsProEnum?
 Enum = nil

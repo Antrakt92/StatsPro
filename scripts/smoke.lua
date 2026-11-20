@@ -13571,7 +13571,7 @@ do
             eq(name .. ".initial_coin_size", repairRegion:GetText(), "coin:12345:14")
             eq(name .. ".initial_font_size", select(2, repairRegion:GetFont()), 14)
         elseif mode == "unknown" then
-            eq(name .. ".initial_unknown", repairRegion:GetText(), "?")
+            eq(name .. ".initial_unknown", repairRegion:GetText(), "—")
         else
             eq(name .. ".initial_no_repair", repairRegion:IsShown(), false)
         end
@@ -13600,7 +13600,7 @@ do
                 eq(step .. ".repair_still_shown", repairRegion:IsShown(), true)
                 eq(step .. ".other_panel_has_no_repair", otherRepair:IsShown(), false)
             elseif mode == "unknown" then
-                eq(step .. ".unknown_preserved", repairRegion:GetText(), "?")
+                eq(step .. ".unknown_preserved", repairRegion:GetText(), "—")
                 eq(step .. ".unknown_not_formatted_as_zero", coinCalls, 0)
             else
                 eq(step .. ".no_repair_revealed", repairRegion:IsShown(), false)
@@ -13922,7 +13922,7 @@ do
     eq("repair.only_hydration.pending", state.repairCostComplete, false)
     eq("repair.only_hydration.no_false_zero", state.repairCost, nil)
     eq("repair.only_hydration.unknown_row", findBlockBySplitKey(
-        "repair.only_hydration.block", repairTest.buildRenderBlocks(), "splitRepairCost").repairStr, "?")
+        "repair.only_hydration.block", repairTest.buildRenderBlocks(), "splitRepairCost").repairStr, "—")
     eq("repair.only_hydration.one_timer", #repairEnv.__timers, 1)
     eq("repair.only_hydration.tooltip_budget_preserved", state.repairRetryAttempt, 0)
     mode = "tooltip_pending"
@@ -14111,7 +14111,7 @@ do
     eq("repair.pending_secret_has_no_timer", #repairEnv.__timers, 0)
     local repairBlock = findBlockBySplitKey("repair.pending_secret.block",
         repairTest.buildRenderBlocks(), "splitRepairCost")
-    eq("repair.pending_secret_renders_unknown", repairBlock.repairStr, "?")
+    eq("repair.pending_secret_renders_unknown", repairBlock.repairStr, "—")
     restricted = false
     fireEvent("repair.pending_secret_regen", repairEnv, "PLAYER_REGEN_ENABLED")
     eq("repair.pending_secret_regen_marks_dirty", repairTest.durabilityState().dirty, true)
@@ -14342,7 +14342,7 @@ do
     eq("repair.pending_all_nil_marks_incomplete", state.repairCostComplete, false)
     local repairBlock = findBlockBySplitKey("repair.pending_all_nil.block",
         repairTest.buildRenderBlocks(), "splitRepairCost")
-    eq("repair.pending_all_nil_renders_unknown", repairBlock.repairStr, "?")
+    eq("repair.pending_all_nil_renders_unknown", repairBlock.repairStr, "—")
     eq("repair.pending_all_nil_schedules_retry", state.repairRetryScheduled, true)
     eq("repair.pending_all_nil_one_timer", #repairEnv.__timers, 1)
     repairTest.refreshDurabilityCache()
@@ -14428,7 +14428,7 @@ do
     eq("repair.pending_partial_still_schedules_retry", state.repairRetryScheduled, true)
     local repairBlock = findBlockBySplitKey("repair.pending_partial.block",
         repairTest.buildRenderBlocks(), "splitRepairCost")
-    eq("repair.pending_partial_renders_unknown", repairBlock.repairStr, "?")
+    eq("repair.pending_partial_renders_unknown", repairBlock.repairStr, "—")
 end
 
 do
@@ -14637,8 +14637,10 @@ do
         end
         fireEvent("durability.cache_capability." .. mode .. ".enter", badEnv, "PLAYER_ENTERING_WORLD")
         check("durability.cache_capability." .. mode .. ".update", badAddon:RunUpdateStatsSafe())
-        eq("durability.cache_capability." .. mode .. ".legacy_complete", badTest.durabilityState().durabilityComplete, true)
-        eq("durability.cache_capability." .. mode .. ".no_retry", #badEnv.__timers, 0)
+        -- A missing metadata capability or unreadable identity cannot prove that
+        -- an unmeasured slot is empty. The scan must withhold the partial total.
+        eq("durability.cache_capability." .. mode .. ".legacy_complete", badTest.durabilityState().durabilityComplete, false)
+        eq("durability.cache_capability." .. mode .. ".no_retry", #badEnv.__timers, 1)
         local beforeScans = badState.scans
         fireEvent("durability.cache_capability." .. mode .. ".secret_id", badEnv, "GET_ITEM_INFO_RECEIVED", secretID, true)
         fireEvent("durability.cache_capability." .. mode .. ".secret_success", badEnv, "GET_ITEM_INFO_RECEIVED", 303, secretCached)
@@ -14828,7 +14830,7 @@ do
 end
 
 do
-    -- A cold secret repair cost with no prior complete total renders "?" and
+    -- A cold secret repair cost with no prior complete total renders "—" and
     -- never fabricates a zero cost.
     local secretCost = {}
     local coldEnv, _, coldTest = loadStatsPro("enUS", {
@@ -14860,7 +14862,7 @@ do
     eq("durability.repair_consecutive_cold_unknown.no_timer", #coldEnv.__timers, 0)
     local repairBlock = findBlockBySplitKey("durability.repair_consecutive_cold_unknown.block",
         coldTest.buildRenderBlocks(), "splitRepairCost")
-    eq("durability.repair_consecutive_cold_unknown.renders_unknown", repairBlock.repairStr, "?")
+    eq("durability.repair_consecutive_cold_unknown.renders_unknown", repairBlock.repairStr, "—")
 end
 
 smokeReachability:complete("durability-repair")

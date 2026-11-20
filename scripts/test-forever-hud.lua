@@ -1071,13 +1071,13 @@ do
     check(repairTest.durabilityState().repairCost == nil and not repairTest.durabilityState().repairCostComplete,
         "partial repair cost stays unknown")
     check(repairTest.durabilityState().repairRetryAttempt == 1, "missing repair cost gets bounded retry")
-    check(repairTest.buildRenderBlocks()[7].repairStr == "?", "incomplete repair row shows unknown instead of partial sum")
+    check(repairTest.buildRenderBlocks()[7].repairStr == "—", "incomplete repair row shows a dash instead of partial sum")
     phase = "ready"
     check(repairEnv.__flushNextTimer(1), "repair retry timer runs")
     check(repairAddon:RunUpdateStatsSafe(), "repair retry update")
     check(repairTest.durabilityState().repairCostComplete and repairTest.durabilityState().repairCost == 579,
         "repair sums repairCost, not sellPrice")
-    check(repairTest.buildRenderBlocks()[7].repairStr ~= "" and repairTest.buildRenderBlocks()[7].repairStr ~= "?",
+    check(repairTest.buildRenderBlocks()[7].repairStr ~= "" and repairTest.buildRenderBlocks()[7].repairStr ~= "—",
         "known nonzero repair row renders money")
     phase, visited = "repaired", {}
     repairEnv.__fireEvent("UPDATE_INVENTORY_DURABILITY")
@@ -1120,7 +1120,7 @@ do
     local pending = gearTest.durabilityState()
     check(not pending.durabilityComplete and not pending.repairCostComplete,
         "uncached ranged weapon prevents partial durability and repair totals")
-    check(gearTest.buildRenderBlocks()[7].repairStr == "?", "uncached ranged repair is unknown")
+    check(gearTest.buildRenderBlocks()[7].repairStr == "—", "uncached ranged repair is unknown")
     check(not pending.dirty, "initial hydration scan coalesces work")
     gearEnv.__fireEvent("ITEM_DATA_LOAD_RESULT", 1002, true)
     check(not gearTest.durabilityState().dirty, "cached jewelry callback does not invalidate ranged hydration")

@@ -107,6 +107,12 @@ local DURABILITY_SCAN = {
     slotMax = 19,
     -- WHY: slot 4 = shirt, slot 18 = deprecated ranged. Slot 19 (tabard) self-filters via max>0.
     skipSlots = { [4] = true, [18] = true },
+    -- The equipment slots covered by Blizzard's DurabilityFrame. A clean positive
+    -- durability reading from any scanned slot still takes precedence.
+    potentiallyDurableSlots = {
+        [1] = true, [3] = true, [5] = true, [6] = true, [7] = true, [8] = true,
+        [9] = true, [10] = true, [16] = true, [17] = true, [18] = true,
+    },
     greenThreshold = 60,
     yellowThreshold = 30,
 }
@@ -5007,6 +5013,14 @@ local function shouldShowUnknown(rowKey, isUnknown, hideZero)
     return rowKey and cached.cleanRowVisibility[rowKey] == true
 end
 
+function addon.durabilityRuntime.TryCoinFormatter(formatter, copper, formatArgument)
+    if type(formatter) ~= "function" then return nil end
+    local ok, text = pcall(formatter, copper, formatArgument)
+    if ok and not issecretvalue(text) and type(text) == "string" and text ~= "" then
+        return text
+    end
+end
+
 local function FormatRepairCost(copper, fontSize)
     -- WHY: Blizzard's GetCoinTextureString embeds gold/silver/copper icons inline,
     -- matching the vendor display exactly. Pass fontHeight explicitly — without it
@@ -5017,14 +5031,17 @@ local function FormatRepairCost(copper, fontSize)
     -- Omitted size falls back to the normalized DB value with no render change.
     local currencyAPI = _G.C_CurrencyInfo
     local formatter = type(currencyAPI) == "table" and currencyAPI.GetCoinTextureString
-    if type(formatter) ~= "function" then formatter = GetCoinTextureString end
-    if type(formatter) ~= "function" then return "?" end
-    -- A missing or failing money formatter must not suppress the entire HUD.
-    local ok, text = pcall(formatter, copper, fontSize or GetNumberDB("fontSize"))
-    if ok and not issecretvalue(text) and type(text) == "string" and text ~= "" then
-        return text
+    local size = fontSize or GetNumberDB("fontSize")
+    local tryFormat = addon.durabilityRuntime.TryCoinFormatter
+    local text = tryFormat(formatter, copper, size)
+    if not text and formatter ~= GetCoinTextureString then
+        text = tryFormat(GetCoinTextureString, copper, size)
     end
-    return "?"
+    -- The plain client formatter preserves all denominations without texture markup.
+    if not text and type(currencyAPI) == "table" then
+        text = tryFormat(currencyAPI.GetCoinText, copper, " ")
+    end
+    return text or "—"
 end
 
 local function ComputeDurabilityColor(pct)
@@ -9679,6 +9696,21 @@ local function RefreshArmorCache()
     cached.armorDR = raw
 end
 
+function addon.durabilityRuntime.CanHaveDurability(slot, itemID)
+    if not DURABILITY_SCAN.potentiallyDurableSlots[slot] then return false end
+    -- Offhand frills and Forever relics share slots with shields and weapons.
+    local inventoryTypes = _G.Enum and _G.Enum.InventoryType
+    local nonDurableType = inventoryTypes and
+        ((slot == 17 and inventoryTypes.IndexHoldableType) or (slot == 18 and inventoryTypes.IndexRelicType))
+    local itemAPI = _G.C_Item
+    if not SAFE_NUM.IsCleanFiniteNumber(nonDurableType) or type(itemAPI) ~= "table"
+        or type(itemAPI.GetItemInventoryTypeByID) ~= "function" then
+        return true
+    end
+    local ok, itemType = pcall(itemAPI.GetItemInventoryTypeByID, itemID)
+    return not (ok and SAFE_NUM.IsCleanFiniteNumber(itemType) and itemType == nonDurableType)
+end
+
 -- Both the cached HUD and the self-test classify the same live durability pair.
 function addon.durabilityRuntime.ReadSlot(slot)
     local runtime = addon.durabilityRuntime
@@ -9698,6 +9730,15 @@ function addon.durabilityRuntime.ReadSlot(slot)
             return "unavailable", nil, nil, knownDurableID
         end
         runtime.knownDurableItemIDs[slot] = nil
+        if itemID and runtime.CanHaveDurability(slot, itemID) then
+            return "unavailable", nil, nil, itemID
+        end
+        -- A failed identity read cannot confirm an empty slot either. Clients
+        -- lacking the identity API keep the legacy nil/nil behavior.
+        if not (itemID or emptySlot) and DURABILITY_SCAN.potentiallyDurableSlots[slot]
+            and type(_G.GetInventoryItemID) == "function" then
+            return "unavailable"
+        end
         return "empty"
     end
     if not SAFE_NUM.IsCleanFiniteNumber(current) or not SAFE_NUM.IsCleanFiniteNumber(maximum) then
@@ -12187,7 +12228,7 @@ local function BuildRepairCostPayload()
     repairLabelStr = FormatLabel(cs.durability, "Repair")
     if cached.repairCostComplete ~= true or not IsCleanNonNegativeNumber(cached.repairCost) then
         if addon.durabilityRuntime.auctionOpen then return "", nil end
-        return "?", repairLabelStr
+        return "—", repairLabelStr
     end
     if cached.repairCost <= 0 then return "", nil end
     return FormatRepairCost(cached.repairCost, cached.fontSize), repairLabelStr

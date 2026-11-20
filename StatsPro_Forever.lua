@@ -157,7 +157,12 @@ local function ReadWeaponAttackPower(base, nativeIndex)
     if totalState == "clean" then
         -- The base melee/ranged returns exclude weapon-only attack power.
         local native, nativeState = Read("PlayerEffectiveAttackPower", nativeIndex)
-        nativeAttackPowerMatches[nativeIndex] = nativeState == "clean" and native == total
+        if nativeState ~= "clean" or native ~= total then
+            nativeAttackPowerMatches[nativeIndex] = nil
+        elseif total > 0 then
+            -- A shared zero can occur before either source has real player data.
+            nativeAttackPowerMatches[nativeIndex] = true
+        end
         return total, "clean"
     end
     if not nativeAttackPowerMatches[nativeIndex] then return nil, "unknown" end
@@ -167,8 +172,7 @@ end
 local function AttackPower(name)
     local base = Nonnegative(Sum(name, 3, "player"))
     local converted = Nonnegative(ReadConvertedAttackPower)
-    local melee = name == "UnitAttackPower"
-    local nativeIndex = melee and 4 or 5
+    local nativeIndex = name == "UnitAttackPower" and 4 or 5
     return function()
         if _G.GetOverrideAPBySpellPower == nil then return base() end
         local multiplier, state = Read("GetOverrideAPBySpellPower", 1)
@@ -180,9 +184,7 @@ local function AttackPower(name)
             return ReadWeaponAttackPower(base, nativeIndex)
         end
         -- A clean false independently rules out the spell-power override.
-        if (not melee or (state == "secret" and nativeAttackPowerMatches[nativeIndex]))
-            and addon.profileRuntime.ReadBooleanDecision(_G.HasSPEffectsAttackPower) == false then
-            if melee then return Read("PlayerEffectiveAttackPower", nativeIndex) end
+        if addon.profileRuntime.ReadBooleanDecision(_G.HasSPEffectsAttackPower) == false then
             return ReadWeaponAttackPower(base, nativeIndex)
         end
         return nil, "unknown"

@@ -171,7 +171,8 @@ print(flavor .. " cold name font recovery regressions passed")
 
 -- A client exposing only the namespaced money API must still render both gear rows.
 for _, mode in ipairs({ "modern", "modern-only", "legacy", "missing", "throwing",
-    "nil-return", "number-return", "empty-return", "secret-return" }) do
+    "nil-return", "number-return", "empty-return", "secret-return", "plain-only",
+    "plain-fallback", "plain-secret", "plain-throwing", "legacy-rescue", "aliased-texture" }) do
     local env, addon, test = loadStatsPro("enUS", {
         statsProDB = { showDurability = true, showRepairCost = true },
         getInventoryItemDurability = function(slot)
@@ -181,6 +182,7 @@ for _, mode in ipairs({ "modern", "modern-only", "legacy", "missing", "throwing"
         issecretvalue = function(value) return value == "restricted-money" end,
     })
     local legacy = env.GetCoinTextureString
+    local plainCalls, legacyCalls, textureCalls = 0, 0, 0
     if mode ~= "legacy" then env.GetCoinTextureString = nil end
     if mode == "modern" or mode == "modern-only" then
         env.C_CurrencyInfo = { GetCoinTextureString = legacy }
@@ -194,13 +196,67 @@ for _, mode in ipairs({ "modern", "modern-only", "legacy", "missing", "throwing"
             if mode == "secret-return" then return "restricted-money" end
         end }
     end
+    if mode:find("plain-", 1, true) then
+        env.C_CurrencyInfo = { GetCoinText = function(amount, separator)
+            plainCalls = plainCalls + 1
+            assert(amount == 4458354 and separator == " ", "native plain formatter needs the exact copper amount")
+            if mode == "plain-secret" then return "restricted-money" end
+            if mode == "plain-throwing" then error("plain formatter unavailable") end
+            return "445 Gold 83 Silver 54 Copper"
+        end }
+        if mode == "plain-fallback" then
+            env.C_CurrencyInfo.GetCoinTextureString = function() return "restricted-money" end
+        end
+    end
+    if mode == "legacy-rescue" or mode == "aliased-texture" then
+        local function unusableTexture()
+            textureCalls = textureCalls + 1
+            return nil
+        end
+        env.GetCoinTextureString = mode == "aliased-texture" and unusableTexture or function(...)
+            legacyCalls = legacyCalls + 1
+            return legacy(...)
+        end
+        env.C_CurrencyInfo = {
+            GetCoinTextureString = unusableTexture,
+            GetCoinText = function() plainCalls = plainCalls + 1 end,
+        }
+    end
     env.__fireEvent("PLAYER_ENTERING_WORLD")
     assert(addon:RunUpdateStatsSafe(), mode .. ": repair formatting must not abort HUD rendering")
     assert(env.StatsProFrame:IsShown(), mode .. ": HUD remains visible")
     local state = test.durabilityState()
     assert(state.durabilityValue == 70 and state.repairCost == 4458354, mode .. ": gear data remains complete")
+    plainCalls, legacyCalls, textureCalls = 0, 0, 0
     local text = test.formatRepairCost(4458354, 15)
-    assert(text == ((mode == "modern" or mode == "modern-only" or mode == "legacy") and "coin:4458354:15" or "?"), mode .. ": repair display")
+    local expected = "—"
+    if mode == "modern" or mode == "modern-only" or mode == "legacy" or mode == "legacy-rescue" then
+        expected = "coin:4458354:15"
+    elseif mode == "plain-only" or mode == "plain-fallback" then
+        expected = "445 Gold 83 Silver 54 Copper"
+    end
+    assert(text == expected, mode .. ": repair display")
+    if mode:find("plain-", 1, true) then
+        assert(plainCalls == 1, mode .. ": use the native plain formatter")
+    elseif mode == "legacy-rescue" then
+        assert(textureCalls == 1 and legacyCalls == 1 and plainCalls == 0,
+            "a working distinct legacy texture formatter takes priority over plain text")
+    elseif mode == "aliased-texture" then
+        assert(textureCalls == 1 and plainCalls == 1, "a failing aliased texture formatter is called only once")
+    end
+    if mode == "plain-fallback" then
+        env.__fireEvent("AUCTION_HOUSE_SHOW")
+        assert(addon:RunUpdateStatsSafe(), "known repair data still renders during an auction")
+        local repairBlock
+        for _, block in ipairs(test.buildRenderBlocks()) do
+            if block.splitKey == "splitRepairCost" then
+                repairBlock = block
+                break
+            end
+        end
+        assert(repairBlock and repairBlock.repairStr == expected and repairBlock.repairLabelStr:find("Repair", 1, true),
+            "the auction HUD uses exact plain text when texture formatting fails")
+    end
 end
 print(flavor .. " money API and HUD recovery regressions passed")
 
@@ -312,7 +368,7 @@ for _, modernInteraction in ipairs({ false, true }) do
     cost = nil
     env.__fireEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", banker)
     env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
-    assert(addon:RunUpdateStatsSafe() and repairBlock().repairStr == "?",
+    assert(addon:RunUpdateStatsSafe() and repairBlock().repairStr == "—",
         "other NPC interactions do not suppress unresolved repair")
 end
 print(flavor .. " auction repair display regressions passed")
@@ -548,7 +604,7 @@ do
     state = test.durabilityState()
     assert(state.durabilityComplete and state.durabilityValue == 65 and state.repairCost == 400,
         "newly readable replacement contributes its own durability and repair cost")
-    equippedID, current, maximum = 99, nil, nil
+    equippedID, current, maximum = 99, 0, 0
     env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", slot, true)
     assert(addon:RunUpdateStatsSafe(), "replacement slot renders safely")
     state = test.durabilityState()
@@ -556,6 +612,77 @@ do
         "a different cached item with no durability does not inherit the old identity")
 end
 print(flavor .. " equipped durability completeness regressions passed")
+
+do
+    local pendingSlot = forever and 18 or 16
+    local available, reads = false, 0
+    local identityMode, secretItem = "throws", {}
+    local equipped = { [1] = 1001, [11] = 1011, [17] = 1017, [pendingSlot] = 2000 }
+    local env, addon, test = loadStatsPro("enUS", {
+        statsProDB = { showDurability = true, showRepairCost = true, useWorstDurability = false },
+        getInventoryItemDurability = function(slot)
+            if slot == 1 then return 80, 100 end
+            if slot == pendingSlot then
+                reads = reads + 1
+                if available then return 20, 100 end
+            end
+        end,
+        getTooltipInventoryItem = function(_, slot) return { repairCost = slot == 1 and 100 or 300 } end,
+        issecretvalue = function(value) return value == secretItem end,
+    })
+    env.GetInventoryItemID = function(_, slot)
+        if slot == pendingSlot then
+            if identityMode == "throws" then error("equipped identity unavailable") end
+            if identityMode == "secret" then return secretItem end
+            if identityMode == "invalid" then return 0 end
+        end
+        return equipped[slot]
+    end
+    env.Enum = { InventoryType = { IndexHoldableType = 23, IndexRelicType = 28 } }
+    env.C_Item = {
+        IsItemDataCachedByID = function() return true end,
+        GetItemInventoryTypeByID = function(itemID)
+            if itemID == 1017 then return env.Enum.InventoryType.IndexHoldableType end
+            if itemID == 2001 then return env.Enum.InventoryType.IndexRelicType end
+        end,
+    }
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    for _, mode in ipairs({ "throws", "secret", "invalid", "cached" }) do
+        identityMode = mode
+        env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+        assert(addon:RunUpdateStatsSafe(), mode .. ": the HUD remains usable")
+        local state = test.durabilityState()
+        assert(not state.durabilityComplete and not state.repairCostComplete and state.repairCost == nil,
+            mode .. ": an unreadable potentially durable slot must not publish partial gear totals")
+    end
+    local state = test.durabilityState()
+    local initialReads = reads
+    for _ = 1, state.retryLimit + 10 do
+        if not test.durabilityState().durabilityRetryScheduled then break end
+        assert(env.__flushNextTimer() and addon:RunUpdateStatsSafe(), "retry the new cached item")
+    end
+    state = test.durabilityState()
+    assert(not state.durabilityRetryScheduled and state.durabilityRetryAttempt == state.retryLimit
+        and reads == initialReads + state.retryLimit, "a newly observed cached item cannot retry without a bound")
+    local exhaustedReads = reads
+    env.__fireEvent("GET_ITEM_INFO_RECEIVED", 1017, true)
+    assert(addon:RunUpdateStatsSafe() and exhaustedReads == reads, "a holdable item cannot wake the scan")
+    available = true
+    env.__fireEvent("GET_ITEM_INFO_RECEIVED", 2000, true)
+    assert(addon:RunUpdateStatsSafe() and reads == exhaustedReads + 1, "the current item can wake one scan")
+    state = test.durabilityState()
+    assert(state.durabilityComplete and state.durabilityValue == 50 and state.repairCost == 400,
+        "the full durability and exact repair cost exclude only empty and non-durable slots")
+    if forever then
+        equipped[pendingSlot], available = 2001, false
+        env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", pendingSlot, true)
+        assert(addon:RunUpdateStatsSafe(), "a relic replacement renders safely")
+        state = test.durabilityState()
+        assert(state.durabilityComplete and state.durabilityValue == 80 and state.repairCost == 100,
+            "a Forever relic is a non-durable item in the ranged slot")
+    end
+end
+print(flavor .. " newly observed equipped item completeness regressions passed")
 
 do
     local firstSlot, secondSlot = 16, forever and 18 or 17

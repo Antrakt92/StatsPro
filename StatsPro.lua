@@ -655,12 +655,12 @@ function addon.GetBestCritChance()
         if runtime.selectedSource == "spell" then
             local school = runtime.selectedSpellSchool
             if spellStates[school] ~= "unavailable" then
-                return spellValues[school], "liveProxy"
+                return spellValues[school], "liveProxy", "Spell Crit"
             end
         elseif runtime.selectedSource == "ranged" and rangedState ~= "unavailable" then
-            return ranged, "liveProxy"
+            return ranged, "liveProxy", "Ranged Crit"
         elseif runtime.selectedSource == "melee" and meleeState ~= "unavailable" then
-            return melee, "liveProxy"
+            return melee, "liveProxy", "Melee Crit"
         end
         return nil, "restricted"
     end
@@ -1369,7 +1369,8 @@ end
 
 function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, currentPct,
                                        colorKey, currentPctDisplay, currentRatingDisplay, currentPctIsProxy,
-                                       renderContext)
+                                       renderContext, currentPctSourceLabel)
+    if addon.critRuntime.HasUnsettledSpecIdentity() then return nil end
     local hasCleanCurrent = addon.IsCleanFiniteNumber(currentRating) and currentRating >= 0
     local _, ratingDisplayIsSecret = addon.ClassifyRenderableNumber(currentRatingDisplay)
     local hasLiveCurrentRating = ratingDisplayIsSecret
@@ -1394,6 +1395,8 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
         sourceUrl = snapshot.sourceUrl,
         capturedAt = capturedAt,
         snapshotKey = snapshotKey,
+        comparisonGeneration = addon.archonTargets.comparisonCache.generation,
+        currentPctSourceLabel = currentPctSourceLabel,
         masterySampled = statKey == "mastery" and renderContext and renderContext.masterySampled or nil,
     }
     if hasCleanCurrent then
@@ -1578,7 +1581,9 @@ cached = {
     -- secret/nil reads do not render as a real 0.0%.
     versTotal = nil,
     versTotalRating = nil,
+    hasReadVersatilityPercent = false,
     armorDR = nil,
+    armorDRCurrent = nil,
     itemLevelOverall = nil,
     itemLevelEquipped = nil,
     itemLevelComplete = false,
@@ -3882,6 +3887,27 @@ do
     end
 end
 
+do
+    local critSourceLabels = {
+        enUS = { "Melee Crit", "Ranged Crit", "Spell Crit" },
+        ruRU = { "Крит ближнего боя", "Крит дальнего боя", "Крит заклинаний" },
+        deDE = { "Nahkampfkrit", "Distanzkrit", "Zauberkrit" },
+        frFR = { "Crit. en mêlée", "Crit. à distance", "Crit. des sorts" },
+        esES = { "Crít. cuerpo a cuerpo", "Crít. a distancia", "Crít. de hechizos" },
+        itIT = { "Crit. in mischia", "Crit. a distanza", "Crit. incantesimi" },
+        ptBR = { "Crít. corpo a corpo", "Crít. de longo alcance", "Crít. de feitiços" },
+        koKR = { "근접 치명타", "원거리 치명타", "주문 치명타" },
+        zhCN = { "近战暴击", "远程暴击", "法术暴击" },
+        zhTW = { "近戰致命", "遠程致命", "法術致命" },
+    }
+    critSourceLabels.esMX = critSourceLabels.esES
+    for locale, labels in pairs(critSourceLabels) do
+        for index, key in ipairs(critSourceLabels.enUS) do
+            LABELS_BY_LOCALE[locale][key] = labels[index]
+        end
+    end
+end
+
 -- A disabled copy/share action needs to explain the normal first-use state: the
 -- manager only knows specializations and characters that have been seen locally.
 do
@@ -4923,12 +4949,12 @@ function addon.movementRuntime.ResolvePercent(runSpeed)
 end
 
 function SAFE_NUM.SafeCompositePercent(fn, ...)
-    local ok, value, state = pcall(fn, ...)
+    local ok, value, state, sourceLabel = pcall(fn, ...)
     if not ok then return nil, nil, "unavailable" end
     local display, clean = SAFE_NUM.ResolveDisplayNumber(value, false)
     -- A readable winning-source proxy is still not an authoritative aggregate.
     if state == "liveProxy" then clean = nil end
-    return display, clean, state
+    return display, clean, state, sourceLabel
 end
 
 function SAFE_NUM.ReadRatingValue(fn, ...)
@@ -9651,8 +9677,8 @@ function addon.legacyImport.ImportFreshIfAvailable()
     return true
 end
 
-local function RefreshArmorCache()
-    if addon.profileRuntime.ReadCombatState() ~= false then return end
+local function ReadArmorDamageReduction()
+    if addon.hudPresets.combatState == true or addon.profileRuntime.ReadCombatState() ~= false then return end
     local reductionFn, returnsFraction
     if C_PaperDollInfo and type(C_PaperDollInfo.GetArmorEffectiveness) == "function" then
         reductionFn = C_PaperDollInfo.GetArmorEffectiveness
@@ -9672,10 +9698,7 @@ local function RefreshArmorCache()
     -- in M+/transitional moments, so OOC-only guard isn't enough — must verify the value
     -- itself isn't tainted before any comparison/arithmetic.
     if not ok or issecretvalue(effectiveArmor) or not SAFE_NUM.IsCleanFiniteNumber(effectiveArmor) then return end
-    if effectiveArmor <= 0 then
-        cached.armorDR = 0
-        return
-    end
+    if effectiveArmor <= 0 then return 0 end
 
     local okLevel, level = pcall(UnitEffectiveLevel, "player")
     if not okLevel or issecretvalue(level) or not SAFE_NUM.IsCleanFiniteNumber(level) or level <= 0 then return end
@@ -9693,7 +9716,7 @@ local function RefreshArmorCache()
     if returnsFraction then raw = raw * 100 end
     if raw < 0 then raw = 0 end
     if raw > 100 then raw = 100 end
-    cached.armorDR = raw
+    return raw
 end
 
 function addon.durabilityRuntime.CanHaveDurability(slot, itemID)
@@ -10667,6 +10690,10 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     if type(meta) ~= "table" or not SAFE_NUM.IsCleanFiniteNumber(meta.target) or meta.target < 0 then
         return false
     end
+    if addon.critRuntime.HasUnsettledSpecIdentity() or (meta.comparisonGeneration
+        and meta.comparisonGeneration ~= addon.archonTargets.comparisonCache.generation) then
+        return false
+    end
     local comparisonState = meta.comparisonState
     local hasCleanComparison = SAFE_NUM.IsCleanFiniteNumber(meta.current) and meta.current >= 0
         and SAFE_NUM.IsCleanFiniteNumber(meta.delta)
@@ -10757,6 +10784,9 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
         tooltip:AddLine(L("Last known comparison"), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], true)
     elseif comparisonState == "liveOnly" then
         tooltip:AddLine(L("Live values; comparison unavailable"), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], true)
+    end
+    if meta.currentPctIsProxy and meta.currentPctSourceLabel then
+        tooltip:AddLine(L(meta.currentPctSourceLabel), TOOLTIP_LABEL_COLOR[1], TOOLTIP_LABEL_COLOR[2], TOOLTIP_LABEL_COLOR[3], true)
     end
     addon.archonTargets.AddTooltipRow(L("Target:"), addon.archonTargets.FormatRatingWithBonus(meta.target, targetDisplayBonus, false))
     if hasComparison or hasLiveCurrent then
@@ -11622,18 +11652,27 @@ function SAFE_NUM.FormatColorNumber(colorHex, value, format, secretSuffix)
 end
 
 -- Compose colored "X.X%" string. 5-callsite hot path; centralizes precision.
-local function FmtColorPct(colorHex, pct)
+local function FmtColorPct(colorHex, pct, displayState)
+    if displayState == "lastKnown" then
+        return SAFE_NUM.FormatColorNumber(colorHex, pct, "(%.1f%%)", "%")
+    elseif displayState == "liveSource" then
+        local text, renderable, placeholder = SAFE_NUM.FormatDisplayNumber(pct, "%.1f%%", "%")
+        if not renderable then return nil end
+        if placeholder then return "|cff" .. colorHex .. text .. "|r" end
+        return "|cff" .. colorHex .. "[" .. text .. "]|r"
+    end
     return SAFE_NUM.FormatColorNumber(colorHex, pct, "%.1f%%", "%")
 end
 
 -- Format a stat value (rating + percentage variants honoring user toggles).
 -- Returns TWO strings (ratingStr, valueStr) — see IsDualColMode for routing rules.
 local function FmtRatingPct(rating, pct, statColor, forceUnknownPercent,
-        formattedValue, hasFormattedValue)
+        formattedValue, hasFormattedValue, ratingLastKnown, percentDisplayState)
     local cs = cached.colorStrings
     local rc = (cached.matchValueColorToStat and statColor) or cs.rating
     local pc = (cached.matchValueColorToStat and statColor) or cs.percentage
-    local ratingStr = SAFE_NUM.FormatColorNumber(rc, rating, "%d") or ("|cff" .. rc .. "?|r")
+    local ratingFormat = ratingLastKnown and "(%d)" or "%d"
+    local ratingStr = SAFE_NUM.FormatColorNumber(rc, rating, ratingFormat) or ("|cff" .. rc .. "?|r")
     local pctStr
     if hasFormattedValue then
         -- formattedValue may be secret; concatenate only, never inspect it.
@@ -11641,7 +11680,7 @@ local function FmtRatingPct(rating, pct, statColor, forceUnknownPercent,
     elseif forceUnknownPercent then
         pctStr = "|cff" .. pc .. "?%|r"
     else
-        pctStr = FmtColorPct(pc, pct)
+        pctStr = FmtColorPct(pc, pct, percentDisplayState)
     end
     if IsDualColMode() then
         return ratingStr .. " |cff808080|||r", pctStr or ""
@@ -11719,13 +11758,18 @@ local function PushItemLevelRow(labels, ratings, values)
     -- promote an equipped-vs-overall delta across the warning thresholds.
     local overall = math.floor(cached.itemLevelOverall)
     local equipped = math.floor(cached.itemLevelEquipped)
-    local delta = math.max(0, overall - equipped)
     local equippedColor = valueColor
-    if delta >= ITEM_LEVEL_ALERT.dangerDelta then
-        equippedColor = ITEM_LEVEL_ALERT.dangerColor
-    elseif delta >= ITEM_LEVEL_ALERT.warnDelta then
-        equippedColor = ITEM_LEVEL_ALERT.warnColor
+    if cached.itemLevelComplete then
+        local delta = math.max(0, overall - equipped)
+        if delta >= ITEM_LEVEL_ALERT.dangerDelta then
+            equippedColor = ITEM_LEVEL_ALERT.dangerColor
+        elseif delta >= ITEM_LEVEL_ALERT.warnDelta then
+            equippedColor = ITEM_LEVEL_ALERT.warnColor
+        end
     end
+    local numberFormat = cached.itemLevelComplete and "|cff%s%d|r" or "|cff%s(%d)|r"
+    local equippedText = string.format(numberFormat, equippedColor, equipped)
+    local overallText = string.format(numberFormat, valueColor, overall)
     local label = ""
     if labelStr ~= "" then
         label = string.format("|cff%s%s|r", itemLevelColor, labelStr)
@@ -11735,16 +11779,15 @@ local function PushItemLevelRow(labels, ratings, values)
         -- Dual: rating col gets "EQUIPPED |" (right-justified, aligns with rated
         -- "RATING |" rows); value col gets "OVERALL" (left-justified, aligns with
         -- rated "PERCENT%" rows).
-        rStr = string.format("|cff%s%d|r |cff808080|||r", equippedColor, equipped)
-        vStr = string.format("|cff%s%d|r", valueColor, overall)
+        rStr = equippedText .. " |cff808080|||r"
+        vStr = overallText
     else
         -- Single-col mode: ALL content routes into the rating column, value col is "".
         -- Mirrors FmtRatingPct's single-col fallback (and JoinValuesCol returns "" in
         -- non-dual-col mode regardless, so anything pushed to value col would be
         -- dropped). No whitespace around the pipe so the multi-line rating FontString
         -- won't word-wrap mid-string.
-        rStr = string.format("|cff%s%d|r|cff808080|||r|cff%s%d|r",
-                             equippedColor, equipped, valueColor, overall)
+        rStr = equippedText .. "|cff808080|||r" .. overallText
         vStr = ""
     end
     PushRow(labels, ratings, values, label, rStr, vStr)
@@ -11881,6 +11924,19 @@ local function BuildItemLevelLines(labels, ratings, values)
     return labels, ratings, values
 end
 
+function addon.critRuntime.InvalidateOffensiveFallbacks()
+    local runtime = addon.critRuntime
+    runtime.selectedSource = nil
+    runtime.selectedSpellSchool = nil
+    cached.versTotal = nil
+    cached.versTotalRating = nil
+    local visibility = cached.cleanRowVisibility
+    visibility.showCrit = nil
+    visibility.showCritRating = nil
+    visibility.showVersatility = nil
+    visibility.showVersatilityRating = nil
+end
+
 function addon.critRuntime.RefreshSpecIdentity(invalidate, confirmedSpecID)
     if addon.forever.enabled then return end
     local runtime = addon.critRuntime
@@ -11900,16 +11956,14 @@ function addon.critRuntime.RefreshSpecIdentity(invalidate, confirmedSpecID)
     end
     runtime.specIdentityDirty = false
     runtime.specRecheckDelay = nil
+    if runtime.specID then
+        cached.armorDR = nil
+        cached.armorDRCurrent = nil
+        addon.archonTargets.InvalidateComparisonCache()
+    end
     runtime.specID = specID
-    runtime.selectedSource = nil
-    runtime.selectedSpellSchool = nil
-    cached.versTotal = nil
-    cached.versTotalRating = nil
-    local visibility = cached.cleanRowVisibility
-    visibility.showCrit = nil
-    visibility.showCritRating = nil
-    visibility.showVersatility = nil
-    visibility.showVersatilityRating = nil
+    runtime.InvalidateOffensiveFallbacks()
+    cached.cleanRowVisibility = {}
     return specID
 end
 
@@ -11949,12 +12003,11 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
     -- entirely. Without this guard the percent-only branch of FmtRatingPct would still
     -- fire (single-column routing), producing visible percent rows and ignoring intent.
     if not (cached.showRating or cached.showPercentage) then return labels, ratings, values end
-    addon.critRuntime.ReconcileObservedSpec(false)
     local specUnsettled = addon.critRuntime.HasUnsettledSpecIdentity()
     local cs = cached.colorStrings
 
     -- Tooltip targets need the raw rating even when the rating column is hidden.
-    local needTargetRating = targetRows ~= nil
+    local needTargetRating = targetRows ~= nil and not specUnsettled
     -- Share one snapshot lookup across the rows, including a missing snapshot.
     local targetContext = needTargetRating and {} or nil
     -- Keep recording clean percent visibility for later toggles. Only enabled
@@ -11962,9 +12015,9 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
     local percentAffectsVisibility = cached.showPercentage or not cached.hideZeroOffensive
     for _, def in ipairs(OFFENSIVE_STATS) do
         if cached[def.showKey] then
-            local val, currentPercent, percentState
+            local val, currentPercent, percentState, sourceLabel
             if def.composite then
-                val, currentPercent, percentState = SAFE_NUM.SafeCompositePercent(def.api)
+                val, currentPercent, percentState, sourceLabel = SAFE_NUM.SafeCompositePercent(def.api)
             elseif def.statKey == "mastery" and targetContext then
                 local effect, coefficient = addon.archonTargets.ReadMasteryEffect()
                 targetContext.masterySampled = true
@@ -11977,8 +12030,7 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
             local ratingRead = false
             local forceUnknownPercent = percentState == "restricted"
             local percentIsProxy = percentState == "liveProxy"
-            local visibilityKey = def.showKey
-            if specUnsettled and def.statKey == "crit" then visibilityKey = nil end
+            local visibilityKey = not specUnsettled and def.showKey or nil
             local percentVisible = shouldShowUnknown(
                     visibilityKey, forceUnknownPercent or percentIsProxy, cached.hideZeroOffensive)
                 or (not percentIsProxy and shouldShow(visibilityKey, val, cached.hideZeroOffensive))
@@ -11999,15 +12051,24 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
                 local rating
                 if cached.showRating then rating = ratingDisplay end
                 local statColor = cs[def.colorKey]
+                local label = def.label
+                local percentDisplayState
+                if sourceLabel and cached.showPercentage then
+                    if cached.labelStyle == "full" then
+                        label = sourceLabel
+                    else
+                        percentDisplayState = "liveSource"
+                    end
+                end
                 local rStr, vStr = FmtRatingPct(
-                    rating, val, statColor, forceUnknownPercent)
+                    rating, val, statColor, forceUnknownPercent, nil, nil, nil, percentDisplayState)
                 if targetRows then
-                    targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta(
+                    targetRows[#targetRows + 1] = needTargetRating and addon.archonTargets.BuildMeta(
                         def.statKey, targetRating, def.ratingCR, currentPercent,
-                        def.colorKey, val, ratingDisplay, percentIsProxy, targetContext) or false
+                        def.colorKey, val, ratingDisplay, percentIsProxy, targetContext, sourceLabel) or false
                 end
                 PushRow(labels, ratings, values,
-                    FormatLabel(statColor, def.label),
+                    FormatLabel(statColor, label),
                     rStr, vStr)
             end
         end
@@ -12021,6 +12082,7 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
         local versFromRating = safeCall(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
         local versFlat       = safeCall(GetVersatilityBonus,  CR_VERSATILITY_DAMAGE_DONE)
         local versDisplay = not specUnsettled and cached.versTotal or nil
+        local versLastKnown = versDisplay ~= nil
         local visibilityKey = not specUnsettled and "showVersatility" or nil
         local ratingVisibilityKey = not specUnsettled and "showVersatilityRating" or nil
         local versClean
@@ -12038,7 +12100,9 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
         if ratingIsClean and flatIsClean then
             versClean = versFromRating + versFlat
             versDisplay = versClean
+            versLastKnown = false
             versTooltipDisplay = versClean
+            cached.hasReadVersatilityPercent = true
             if not specUnsettled then cached.versTotal = versClean end
         -- A secret component is still the complete total when its clean counterpart
         -- is exactly zero, so it may use the same whitelisted display-only path as
@@ -12046,46 +12110,54 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
         -- present one non-zero component as full Versatility.
         elseif ratingIsSecret and flatIsClean and versFlat == 0 then
             versDisplay = versFromRating
+            versLastKnown = false
             versTooltipDisplay = versFromRating
         elseif flatIsSecret and ratingIsClean and versFromRating == 0 then
             versDisplay = versFlat
+            versLastKnown = false
             versTooltipDisplay = versFlat
-        elseif versDisplay == nil and (ratingIsSecret or flatIsSecret) then
-            versDisplayUnknown = true
+        else
+            -- Preserve the unavailable cell after a context reset for an API
+            -- that has supplied a full value, even if its next read fails.
+            versDisplayUnknown = versDisplay == nil
+                and (ratingIsSecret or flatIsSecret or cached.hasReadVersatilityPercent)
         end
         if cached.showRating or needTargetRating then
             versRatingDisplay, targetVersRating = SAFE_NUM.ReadRatingValue(
                 GetCombatRating, CR_VERSATILITY_DAMAGE_DONE)
             if targetVersRating and not specUnsettled then
                 cached.versTotalRating = targetVersRating
+                -- Tooltip-only reads refresh the same visibility decision as
+                -- the visible rating column, without affecting this render.
+                if not cached.showRating then
+                    cached.cleanRowVisibility.showVersatilityRating = targetVersRating ~= 0
+                end
             end
         end
         local versPercentVisible = shouldShowUnknown(
-                visibilityKey, versDisplayUnknown, cached.hideZeroOffensive)
-            or shouldShow(visibilityKey, versDisplay, cached.hideZeroOffensive)
+                visibilityKey, versDisplayUnknown or versLastKnown, cached.hideZeroOffensive)
+            or (not versLastKnown and shouldShow(visibilityKey, versDisplay, cached.hideZeroOffensive))
         local versVisible = percentAffectsVisibility and versPercentVisible
+        local rating
+        local ratingLastKnown
         if cached.showRating then
-            local versRatingVisible = shouldShow(ratingVisibilityKey, versRatingDisplay, cached.hideZeroOffensive)
+            -- A protected direct rating is live. Only a missing value uses the clean cache.
+            rating = versRatingDisplay
+            ratingLastKnown = not specUnsettled and not SAFE_NUM.IsRenderableNumberValue(rating)
+                and SAFE_NUM.IsCleanFiniteNumber(cached.versTotalRating)
+            if ratingLastKnown then rating = cached.versTotalRating end
+            local versRatingVisible = shouldShowUnknown(
+                    ratingVisibilityKey, ratingLastKnown, cached.hideZeroOffensive)
+                or (not ratingLastKnown and shouldShow(ratingVisibilityKey, rating, cached.hideZeroOffensive))
             versVisible = versVisible or versRatingVisible
         end
         if versVisible then
             local versStr = cs.versatility
-            local rating
-            if cached.showRating then
-                -- Direct restricted ratings remain displayable; only an unavailable
-                -- read falls back to the clean cache used outside the live display.
-                if SAFE_NUM.IsRenderableNumberValue(versRatingDisplay) then
-                    rating = versRatingDisplay
-                elseif not specUnsettled and SAFE_NUM.IsCleanFiniteNumber(cached.versTotalRating) then
-                    rating = cached.versTotalRating
-                else
-                    rating = versRatingDisplay
-                end
-            end
             local vRatStr, vValStr = FmtRatingPct(
-                rating, versDisplay, versStr, versDisplayUnknown)
+                rating, versDisplay, versStr, versDisplayUnknown, nil, nil,
+                ratingLastKnown, versLastKnown and "lastKnown" or nil)
             if targetRows then
-                targetRows[#targetRows + 1] = addon.archonTargets.BuildMeta(
+                targetRows[#targetRows + 1] = needTargetRating and addon.archonTargets.BuildMeta(
                     "versatility", targetVersRating, CR_VERSATILITY_DAMAGE_DONE,
                     versClean, "versatility", versTooltipDisplay,
                     versRatingDisplay, nil, targetContext) or false
@@ -12108,6 +12180,7 @@ local function BuildTertiaryLines(labels, ratings, values)
     local cs = cached.colorStrings
 
     local needRating = cached.showRating
+    local specUnsettled = addon.critRuntime.HasUnsettledSpecIdentity()
     local percentAffectsVisibility = cached.showPercentage or not cached.hideZeroTertiary
     for _, def in ipairs(TERTIARY_STATS) do
         if cached[def.showKey] then
@@ -12127,13 +12200,15 @@ local function BuildTertiaryLines(labels, ratings, values)
                 val = SAFE_NUM.SafeDisplayPercent(def.api)
             end
             local ratingDisplay
+            local visibilityKey = not specUnsettled and def.showKey or nil
             local percentVisible = hasFormattedValue or shouldShowUnknown(
-                    def.showKey, forceUnknownPercent, cached.hideZeroTertiary)
-                or shouldShow(def.showKey, val, cached.hideZeroTertiary)
+                    visibilityKey, forceUnknownPercent, cached.hideZeroTertiary)
+                or shouldShow(visibilityKey, val, cached.hideZeroTertiary)
             local visible = percentAffectsVisibility and percentVisible
             if needRating then
                 ratingDisplay = SAFE_NUM.ReadRatingValue(GetCombatRating, def.ratingCR)
-                local ratingVisible = shouldShow(def.showKey .. "Rating", ratingDisplay, cached.hideZeroTertiary)
+                local ratingVisibilityKey = visibilityKey and visibilityKey .. "Rating"
+                local ratingVisible = shouldShow(ratingVisibilityKey, ratingDisplay, cached.hideZeroTertiary)
                 visible = visible or ratingVisible
             end
             if visible then
@@ -12159,12 +12234,14 @@ local function BuildDefensiveLines(labels, ratings, values)
     end
     if not cached.showDefensive then return labels, ratings, values end
     local cs = cached.colorStrings
+    local specUnsettled = addon.critRuntime.HasUnsettledSpecIdentity()
 
     -- Dodge / Parry / Block / Stagger (table-driven)
     for _, def in ipairs(DEFENSIVE_STATS) do
         if cached[def.showKey] and (not def.appliesFn or def.appliesFn()) then
             local val = SAFE_NUM.SafeDisplayPercent(def.api)
-            if shouldShow(def.showKey, val, cached.hideZeroDefensive) then
+            local visibilityKey = not specUnsettled and def.showKey or nil
+            if shouldShow(visibilityKey, val, cached.hideZeroDefensive) then
                 local statColor = cs[def.colorKey]
                 local rStr, vStr = FmtPctOnly(val, statColor)
                 PushRow(labels, ratings, values,
@@ -12179,8 +12256,14 @@ local function BuildDefensiveLines(labels, ratings, values)
     if cached.showArmor then
         local armorStr = cs.armor
         local valueColor = (cached.matchValueColorToStat and armorStr) or cs.percentage
-        if shouldShow("showArmor", cached.armorDR, cached.hideZeroDefensive) then
-            local rCol, vCol = RouteValueOnly(FmtColorPct(valueColor, cached.armorDR))
+        local visibilityKey = not specUnsettled and "showArmor" or nil
+        local armor = cached.armorDRCurrent
+        local armorLastKnown = armor == nil and not specUnsettled and cached.armorDR ~= nil
+        if armorLastKnown then armor = cached.armorDR end
+        if (not armorLastKnown and shouldShow(visibilityKey, armor, cached.hideZeroDefensive))
+            or shouldShowUnknown(visibilityKey, armorLastKnown, cached.hideZeroDefensive) then
+            local displayState = armorLastKnown and "lastKnown" or nil
+            local rCol, vCol = RouteValueOnly(FmtColorPct(valueColor, armor, displayState))
             PushRow(labels, ratings, values,
                 FormatLabel(armorStr, "Armor"),
                 rCol, vCol)
@@ -12202,26 +12285,20 @@ local function BuildDurabilityLines(labels, ratings, values)
     local pct = cached.durabilityValue
     local durStr = cs.durability
     if not SAFE_NUM.IsCleanFiniteNumber(pct) then
-        local rCol, vCol = RouteValueOnly("?")
+        local rCol, vCol = RouteValueOnly("—")
         PushRow(labels, ratings, values,
             FormatLabel(durStr, "Durability"), rCol, vCol)
         return labels, ratings, values
     end
     if pct < 0 then pct = 0 end
     if pct > 100 then pct = 100 end
-    local valueColor
-    if cached.useAutoColorDurability then
+    local valueColor = durStr
+    if cached.durabilityComplete and cached.useAutoColorDurability then
         valueColor = RGBToHex(ComputeDurabilityColor(pct))
-    else
-        valueColor = durStr
     end
-    -- %.1f%% matches vendor precision (95.2% vs 95%)
-    do
-        local rCol, vCol = RouteValueOnly(FmtColorPct(valueColor, pct))
-        PushRow(labels, ratings, values,
-            FormatLabel(durStr, "Durability"),
-            rCol, vCol)
-    end
+    local displayState = not cached.durabilityComplete and "lastKnown" or nil
+    local rCol, vCol = RouteValueOnly(FmtColorPct(valueColor, pct, displayState))
+    PushRow(labels, ratings, values, FormatLabel(durStr, "Durability"), rCol, vCol)
     return labels, ratings, values
 end
 
@@ -12420,11 +12497,16 @@ local function UpdateStats()
         return
     end
 
-    -- Armor refresh is unnecessary when either the master defensive block or the
-    -- Armor sub-row is hidden. Keep the API chain out of the recurring ticker then.
-    if not addon.forever.enabled and addon.profileRuntime.ReadCombatState() == false
-        and cached.showDefensive and cached.showArmor then
-        RefreshArmorCache()
+    if not addon.forever.enabled then
+        addon.critRuntime.ReconcileObservedSpec(false)
+        -- Keep the Armor API chain out of the ticker when its row is hidden.
+        if cached.showDefensive and cached.showArmor then
+            local armor = ReadArmorDamageReduction()
+            cached.armorDRCurrent = armor
+            if armor ~= nil and not addon.critRuntime.HasUnsettledSpecIdentity() then
+                cached.armorDR = armor
+            end
+        end
     end
 
     -- Gear cache: event-driven (avoid scanning 19 slots every 0.5s). Repair Cost can
@@ -12646,6 +12728,8 @@ local EVENT_HANDLERS = {
     PLAYER_SPECIALIZATION_CHANGED = function(unit)
         if not addon.dbRuntime.IsCleanType(unit, "string") or unit ~= "player" then return end
         addon.critRuntime.OnPlayerSpecChanged()
+        local tooltip = addon.archonTargets.tooltip
+        if tooltip then tooltip:Hide() end
         addon.profileRuntime.RequestResolution(false)
     end,
     -- Rating conversion is player-level dependent. PLAYER_LEVEL_CHANGED covers
@@ -12663,7 +12747,14 @@ local EVENT_HANDLERS = {
     GET_ITEM_INFO_RECEIVED      = addon.durabilityRuntime.OnItemDataReady,
     ITEM_DATA_LOAD_RESULT       = addon.durabilityRuntime.OnItemDataReady,
     PLAYER_EQUIPMENT_CHANGED    = function()
-        if addon.forever.enabled then addon.forever.InvalidateCompoundStats() end
+        if addon.forever.enabled then
+            addon.forever.InvalidateCompoundStats()
+        else
+            addon.archonTargets.InvalidateComparisonCache()
+            local tooltip = addon.archonTargets.tooltip
+            if tooltip then tooltip:Hide() end
+            addon.critRuntime.InvalidateOffensiveFallbacks()
+        end
         addon.durabilityRuntime.MarkDirty()
         addon.itemLevelRuntime.MarkDirty()
     end,

@@ -13752,7 +13752,7 @@ do
     local nilDurabilityBlock = findBlockBySplitKey("durability.cold_nil.block",
         nilBlocks, "splitDurability")
     eq("durability.cold_nil.rendered_unknown",
-        countValue(nilDurabilityBlock.ratings, "?") + countValue(nilDurabilityBlock.values, "?"), 1)
+        countValue(nilDurabilityBlock.ratings, "—") + countValue(nilDurabilityBlock.values, "—"), 1)
     eq("durability.cold_nil.no_fabricated_full",
         blockDumpContains({ nilDurabilityBlock }, "100.0%"), false)
     eq("durability.cold_nil.retry_scheduled", state.durabilityRetryScheduled, true)
@@ -13772,7 +13772,7 @@ do
     local durabilityBlock = findBlockBySplitKey("durability.cold_secret.block",
         blocks, "splitDurability")
     eq("durability.cold_secret.rendered_unknown",
-        countValue(durabilityBlock.ratings, "?") + countValue(durabilityBlock.values, "?"), 1)
+        countValue(durabilityBlock.ratings, "—") + countValue(durabilityBlock.values, "—"), 1)
     eq("durability.cold_secret.no_fabricated_full",
         blockDumpContains({ durabilityBlock }, "100.0%"), false)
 
@@ -13793,17 +13793,17 @@ do
 
     local flatMain = coldTest.routeRenderBlocks(blocks, "flat", nil, "full")
     eq("durability.cold_secret.flat_routes_unknown",
-        blockDumpContains({ flatMain }, "?"), true)
+        blockDumpContains({ flatMain }, "—"), true)
     local sectionedMain = coldTest.routeRenderBlocks(blocks, "sectioned", nil, "full")
     eq("durability.cold_secret.sectioned_routes_unknown",
-        blockDumpContains({ sectionedMain }, "?"), true)
+        blockDumpContains({ sectionedMain }, "—"), true)
     local splitMain, splitSide = coldTest.routeRenderBlocks(blocks, "split", {
         splitDurability = true,
     }, "full")
     eq("durability.cold_secret.split_main_has_no_unknown",
-        blockDumpContains({ splitMain }, "?"), false)
+        blockDumpContains({ splitMain }, "—"), false)
     eq("durability.cold_secret.split_side_routes_unknown",
-        blockDumpContains({ splitSide }, "?"), true)
+        blockDumpContains({ splitSide }, "—"), true)
 end
 
 do

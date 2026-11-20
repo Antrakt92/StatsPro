@@ -1605,6 +1605,293 @@ if not forever then
 end
 
 if not forever then
+    for _, case in ipairs({
+        { "enUS", "full", 1, "Melee Crit:", "19.0%" },
+        { "ruRU", "full", 2, "Крит дальнего боя:", "19.0%" },
+        { "enUS", "full", 3, "Spell Crit:", "19.0%" },
+        { "enUS", "short", 3, "C:", "[19.0%]" },
+        { "enUS", "hidden", 3, "", "[19.0%]" },
+    }) do
+        local restricted, livePercent = false, 19
+        local function crit(index)
+            return restricted and -71 or (case[3] == index and 31 or 9)
+        end
+        local env, addon, test = loadStatsPro(case[1], {
+            unitClassToken = "MAGE", specIndex = 1, specID = 64,
+            statsProDB = {
+                labelStyle = case[2], showOffensive = true, showCrit = true, showHaste = false,
+                showMastery = false, showVersatility = false, showRating = true,
+                showPercentage = true, hideZeroOffensive = true,
+                showMainStat = false, showStamina = false, showDefensive = false,
+                showTertiary = false, showDurability = false, showRepairCost = false, showItemLevel = false,
+            },
+            getCritChance = function() return crit(1) end,
+            getRangedCritChance = function() return crit(2) end,
+            getSpellCritChance = function() return crit(3) end,
+            getCombatRating = function() return 420 end,
+            issecretvalue = function(value) return value == -71 end,
+            setFormattedText = function(_, _, value)
+                assert(value == -71)
+                return string.format("%.1f%%", livePercent)
+            end,
+        })
+        env.__fireEvent("PLAYER_ENTERING_WORLD")
+        local clean = test.buildRenderBlocks()[2]
+        assert(#clean.labels == 1 and clean.values[1]:find("31.0%", 1, true))
+        local cleanGeometry = test.panelVisualState()
+        restricted = true
+        for _, probe in ipairs({ { 19, case[5] }, { 33, case[5]:gsub("19", "33") } }) do
+            livePercent = probe[1]
+            assert(addon:RunUpdateStatsSafe())
+            local geometry = test.panelVisualState()
+            local current = test.buildRenderBlocks()[2]
+            local label = current.labels[1]:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+            assert(#current.labels == 1 and label == case[4], "the same Crit row exposes the active source")
+            assert(current.ratings[1] == clean.ratings[1] and current.values[1]:find(probe[2], 1, true),
+                "the sourced percentage stays live and in its own column")
+            assert(geometry.mainFrameHeight == cleanGeometry.mainFrameHeight
+                and geometry.mainLastLineH == cleanGeometry.mainLastLineH
+                and geometry.mainValuePoints[1][5] == cleanGeometry.mainValuePoints[1][5],
+                "source notation does not move the value vertically or allocate a row")
+            if case[2] == "hidden" then
+                assert(geometry.mainRenderedLabelW == 0, "hidden labels allocate no width for the Crit source")
+            end
+        end
+        if case[3] == 1 then
+            env.__fireEvent("PLAYER_EQUIPMENT_CHANGED")
+            local swapped = test.buildRenderBlocks()[2]
+            assert(swapped.labels[1]:find("Crit:", 1, true)
+                and not swapped.labels[1]:find("Melee Crit:", 1, true)
+                and not swapped.values[1]:find("33.0%", 1, true),
+                "an equipment change retires the previous winning Crit source")
+        end
+    end
+    print("Retail localized Crit source rendering regressions passed")
+end
+
+if not forever then
+    local spec, rating, haste = 64, 1200, 13
+    local armor, combat = 2500, false
+    local versMode = "clean"
+    local armorReads = 0
+    local env, addon, test = loadStatsPro("enUS", {
+        unitClassToken = "MAGE", specIndex = 1,
+        getSpecializationInfo = function() if spec then return spec, "Mage", nil, nil, "DAMAGER", 4 end end,
+        statsProArchonTargets = archonTargetsFixture(),
+        statsProDB = {
+            showCrit = false, showVersatility = true, showHaste = true, showMastery = false,
+            showOffensive = true, showRating = true, showPercentage = true, hideZeroOffensive = true,
+            showDefensive = true, showArmor = true, showDodge = false, showParry = false,
+            showBlock = false, showStagger = false, hideZeroDefensive = true,
+        },
+        getCombatRating = function() return rating end,
+        getHaste = function() return haste end,
+        getCombatRatingBonus = function()
+            if versMode == "nil" then return end
+            if versMode == "failed" then error("the rating bonus is not ready") end
+            return versMode == "clean" and 10 or -9
+        end,
+        getVersatilityBonus = function()
+            if versMode == "nil" then return end
+            return versMode == "live" and 0 or 2
+        end,
+        unitArmor = function()
+            armorReads = armorReads + 1
+            return 0, armor
+        end,
+        unitEffectiveLevel = function() return 80 end,
+        paperDollFrameGetArmorReduction = function(effectiveArmor) return effectiveArmor / 100 end,
+        inCombatLockdown = function() return combat end,
+        issecretvalue = function(value) return value == -9 end,
+        setFormattedText = function(_, _, value)
+            assert(value == -9)
+            return "18.0%"
+        end,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    assert(test.profileOps.enableAccountWide(test.profileState().profileID))
+    assert(addon:RunUpdateStatsSafe())
+    local blocks = test.buildRenderBlocks()
+    local priorMeta = blocks[2].targetRows[1]
+    assert(priorMeta and priorMeta.comparisonState == "exact")
+    assert(addon.archonTargets.ShowTooltip(env.UIParent, priorMeta))
+    assert(blocks[4].values[1]:find("25.0%", 1, true) and not blocks[4].values[1]:find("(", 1, true))
+    versMode, rating, combat = "partial", nil, true
+    local priorArmorReads = armorReads
+    armor = 1100
+    assert(addon:RunUpdateStatsSafe())
+    blocks = test.buildRenderBlocks()
+    assert(blocks[2].ratings[2]:find("(1200)", 1, true) and blocks[2].values[2]:find("(12.0%)", 1, true),
+        "each reused Versatility cell carries last-known provenance")
+    assert(blocks[4].values[1]:find("(25.0%)", 1, true) and armorReads == priorArmorReads,
+        "combat does not read Armor and makes its held amount explicit")
+    assert(blocks[2].targetRows[1].comparisonState == "lastKnown")
+
+    local settings = test.profileState().settings
+    settings.showPercentage = false
+    test.cacheSettings()
+    local ratingOnly = test.buildRenderBlocks()[2]
+    assert(#ratingOnly.labels == 1 and ratingOnly.ratings[1]:find("(1200)", 1, true),
+        "rating-only Hide Zero retains a previous nonzero Versatility read for the same gear")
+    env.__fireEvent("PLAYER_EQUIPMENT_CHANGED")
+    assert(#test.buildRenderBlocks()[2].labels == 0, "rating-only fallback cannot cross an equipment change")
+    assert(not test.getArchonTooltip():IsShown() and not addon.archonTargets.ShowTooltip(env.UIParent, priorMeta),
+        "gear swaps close and retire a previously rendered comparison")
+    settings.showPercentage = true
+    test.cacheSettings()
+    assert(test.buildRenderBlocks()[2].targetRows[1].comparisonState == "targetOnly",
+        "an unavailable post-swap rating does not reuse a comparison from previous gear")
+    versMode = "clean"
+    assert(test.buildRenderBlocks()[2].values[2]:find("12.0%", 1, true))
+    versMode = "live"
+    assert(test.buildRenderBlocks()[2].values[2]:find("18.0%", 1, true)
+        and not test.buildRenderBlocks()[2].values[2]:find("(", 1, true),
+        "a restricted Versatility component is still live when the other component is exact zero")
+
+    settings.showRating, settings.showHaste, settings.hideZeroOffensive = false, false, false
+    test.cacheSettings()
+    versMode = "nil"
+    local unavailable = test.buildRenderBlocks()[2]
+    assert(#unavailable.labels == 1 and unavailable.ratings[1]:find("(12.0%)", 1, true),
+        "temporarily unavailable Versatility retains the last confirmed percentage for the same gear")
+    env.__fireEvent("PLAYER_EQUIPMENT_CHANGED")
+    for _, outcome in ipairs({ "nil", "failed", "partial" }) do
+        versMode = outcome
+        unavailable = test.buildRenderBlocks()[2]
+        assert(#unavailable.labels == 1 and unavailable.ratings[1]:find("?%", 1, true),
+            outcome .. " Versatility keeps its enabled percentage row with no confirmed sample")
+    end
+    settings.hideZeroOffensive = true
+    test.cacheSettings()
+    assert(#test.buildRenderBlocks()[2].labels == 0,
+        "cold unknown Versatility is hidden when Hide Zero is enabled")
+    settings.showRating, settings.showHaste, versMode = true, true, "live"
+    test.cacheSettings()
+
+    rating = 100
+    test.buildRenderBlocks()
+    settings.showRating, rating = false, 0
+    test.cacheSettings()
+    test.buildRenderBlocks()
+    settings.showRating, settings.showPercentage, rating = true, false, nil
+    test.cacheSettings()
+    assert(#test.buildRenderBlocks()[2].labels == 0,
+        "a newer zero sample received while the rating column is hidden supersedes its old nonzero decision")
+    settings.showRating, settings.showPercentage, rating = false, true, 670
+    test.cacheSettings()
+    test.buildRenderBlocks()
+    settings.showRating, settings.showPercentage, rating = true, false, nil
+    test.cacheSettings()
+    local newlyVisible = test.buildRenderBlocks()[2]
+    assert(#newlyVisible.labels == 1 and newlyVisible.ratings[1]:find("(670)", 1, true),
+        "a recent nonzero rating sample stays eligible when its column becomes visible")
+    settings.showPercentage = true
+    test.cacheSettings()
+
+    combat, armor = false, nil
+    assert(addon:RunUpdateStatsSafe())
+    assert(test.buildRenderBlocks()[4].values[1]:find("(25.0%)", 1, true),
+        "leaving combat does not imply that an inaccessible Armor sample is fresh")
+    armor = 1100
+    assert(addon:RunUpdateStatsSafe())
+    local currentArmor = test.buildRenderBlocks()[4].values[1]
+    assert(currentArmor:find("11.0%", 1, true) and not currentArmor:find("(", 1, true))
+    armor = 0
+    assert(addon:RunUpdateStatsSafe() and #test.buildRenderBlocks()[4].labels == 0)
+    combat = true
+    assert(addon:RunUpdateStatsSafe() and #test.buildRenderBlocks()[4].labels == 0,
+        "an explicitly stale zero continues to obey defensive Hide Zero")
+    settings.hideZeroDefensive = false
+    test.cacheSettings()
+    assert(test.buildRenderBlocks()[4].values[1]:find("(0.0%)", 1, true),
+        "the retained zero is visible as stale when defensive Hide Zero is disabled")
+    combat, settings.hideZeroDefensive = false, true
+    test.cacheSettings()
+
+    spec, haste = nil, -9
+    env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    env.__fireEvent("PLAYER_EQUIPMENT_CHANGED")
+    assert(addon:RunUpdateStatsSafe() and #test.buildRenderBlocks()[2].labels == 0,
+        "pending identity does not borrow a Haste or Versatility Hide Zero decision")
+    spec = 63
+    env.__flushTimers(0)
+    for _, frame in ipairs(env.__frames) do
+        if frame.scripts and frame.scripts.OnUpdate then
+            frame.scripts.OnUpdate(frame, 0.11)
+            break
+        end
+    end
+    assert(addon.critRuntime.specID == 63 and not addon.critRuntime.specIdentityDirty)
+    assert(addon:RunUpdateStatsSafe() and #test.buildRenderBlocks()[2].labels == 0,
+        "newly confirmed spec cannot reuse the old Haste decision")
+    haste = 22
+    test.buildRenderBlocks()
+    haste = -9
+    local resumed = test.buildRenderBlocks()[2]
+    assert(#resumed.labels == 1 and resumed.values[1]:find("18.0%", 1, true),
+        "new context resumes direct protected Haste after a fresh Hide Zero decision")
+    print("Retail provenance, context and gear comparison regressions passed")
+end
+
+if not forever then
+    local spec, armor = 64, 2500
+    local env, addon, test = loadStatsPro("enUS", {
+        unitClassToken = "MAGE", specIndex = 1,
+        getSpecializationInfo = function() if spec then return spec, "Mage", nil, nil, "DAMAGER", 4 end end,
+        statsProDB = {
+            showDefensive = true, showArmor = true, showDodge = false, showParry = false,
+            showBlock = false, showStagger = false, hideZeroDefensive = true,
+        },
+        unitArmor = function() return 0, armor end,
+        unitEffectiveLevel = function() return 80 end,
+        paperDollFrameGetArmorReduction = function(effectiveArmor) return effectiveArmor / 100 end,
+    })
+    local function armorValue()
+        assert(addon:RunUpdateStatsSafe())
+        return test.buildRenderBlocks()[4].values[1]
+    end
+    local function settleSpec(specID)
+        spec = specID
+        env.__flushTimers(0)
+        for _, frame in ipairs(env.__frames) do
+            if frame.scripts and frame.scripts.OnUpdate then
+                frame.scripts.OnUpdate(frame, 0.11)
+                break
+            end
+        end
+        assert(addon.critRuntime.specID == specID and not addon.critRuntime.specIdentityDirty)
+    end
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    assert(test.profileOps.enableAccountWide(test.profileState().profileID))
+    assert(armorValue():find("25.0%", 1, true))
+
+    spec, armor = nil, 7700
+    env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    assert(addon.critRuntime.specIdentityDirty)
+    local pending = armorValue()
+    assert(pending:find("77.0%", 1, true) and not pending:find("(", 1, true),
+        "Armor still displays a current reading while specialization is pending")
+    armor = nil
+    assert(armorValue() == nil, "an unresolved specialization cannot display stored Armor")
+    settleSpec(64)
+    assert(armorValue():find("(25.0%)", 1, true),
+        "resolving the original spec preserves its own last clean reading instead of the pending sample")
+
+    spec, armor = nil, 8800
+    env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    assert(armorValue():find("88.0%", 1, true))
+    armor = nil
+    settleSpec(63)
+    assert(armorValue() == nil, "the new specialization cannot reuse either old or pending Armor")
+    armor = 3400
+    assert(armorValue():find("34.0%", 1, true))
+    armor = nil
+    assert(armorValue():find("(34.0%)", 1, true), "the confirmed new spec stores its own clean reading")
+    print("Retail Armor fallback isolates unresolved specialization readings")
+end
+
+if not forever then
     local reads = 0
     local coefficientUnavailable = false
     local env, addon, test = loadStatsPro("enUS", {
@@ -1761,4 +2048,78 @@ if not forever then
     assert(not region:IsShown() and region:GetText() == "",
         "a shorter tooltip clears previously visible text regions")
     print("Retail Archon stable tooltip layout regressions passed")
+end
+
+do
+    local secret = {}
+    local unavailable, durability, overall, equipped = true, 20, 115, 90
+    local function readAverageItemLevel()
+        if unavailable then return overall, secret end
+        return overall, equipped
+    end
+    local env, addon, test = loadStatsPro("enUS", {
+        statsProDB = {
+            showMainStat = false, showStamina = false, showOffensive = false,
+            showDefensive = false, showTertiary = false, showRepairCost = false,
+            showItemLevel = true, showDurability = true, useAutoColorDurability = true,
+            showRating = true, showPercentage = true,
+        },
+        getInventoryItemDurability = function(slot)
+            if slot ~= 1 then return end
+            if unavailable then return secret, secret end
+            return durability, 100
+        end,
+        getAverageItemLevel = readAverageItemLevel,
+        foreverAPIs = { GetAverageItemLevel = readAverageItemLevel },
+        issecretvalue = function(value) return rawequal(value, secret) end,
+    })
+    local function getRow(key)
+        for _, block in ipairs(test.buildRenderBlocks()) do
+            if block.splitKey == key then
+                return block.ratings[1], block.values[1]
+            end
+        end
+        error("missing render block " .. key)
+    end
+    local function plain(text)
+        return (text:gsub("|cff%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("||", "|"))
+    end
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    assert(getRow("splitItemLevel") == nil, "cold partial item level cannot seed a pair")
+    local coldRating, coldValue = getRow("splitDurability")
+    assert(coldRating == "" and coldValue == "—", "cold unreadable durability shows a neutral dash")
+    unavailable = false
+    env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 1, true)
+    assert(addon:RunUpdateStatsSafe())
+    local rating, value = getRow("splitItemLevel")
+    assert(rating:find("|cffff3333", 1, true) and plain(value) == "115",
+        "a current item-level gap triggers the warning")
+    _, value = getRow("splitDurability")
+    assert(plain(value) == "20.0%", "current durability renders without a stale marker")
+
+    unavailable = true
+    env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 1, true)
+    assert(addon:RunUpdateStatsSafe())
+    rating, value = getRow("splitItemLevel")
+    assert(not rating:find("|cffff3333", 1, true) and plain(rating):find("(90)", 1, true)
+        and plain(value) == "(115)", "both halves of a stale item-level pair are marked without an alert")
+    _, value = getRow("splitDurability")
+    assert(plain(value) == "(20.0%)", "an incomplete scan marks the last complete durability reading")
+
+    local settings = test.profileState().settings
+    settings.labelStyle, settings.showRating = "hidden", false
+    test.cacheSettings()
+    rating, value = getRow("splitItemLevel")
+    assert(plain(rating) == "(90)|(115)" and value == "",
+        "a stale item-level pair stays intact with hidden labels and a single column")
+
+    durability, overall, equipped, unavailable = 65, 112, 110, false
+    env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+    assert(addon:RunUpdateStatsSafe())
+    local recoveredRating, recoveredValue = getRow("splitItemLevel")
+    assert(plain(recoveredRating) == "110|112" and recoveredValue == "",
+        "item level removes the stale marker after a complete read")
+    rating = getRow("splitDurability")
+    assert(plain(rating) == "65.0%", "durability removes the stale marker after a complete scan")
+    print(flavor .. " gear HUD freshness regressions passed")
 end

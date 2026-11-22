@@ -1477,18 +1477,11 @@ do
     local point, relativeTo, relativePoint = tooltip:GetPoint()
     check(point == "TOPRIGHT" and relativeTo == tooltip:GetOwner() and relativePoint == "TOPLEFT",
         "tooltip opens inward beside the hovered row near the right edge")
-    check(tooltip.lines[1].right:find("130", 1, true) and tooltip.backdropColor.a == 1
-        and tooltip.statDivider:GetHeight() == 1
+    check(#tooltip.lines == 1 and tooltip.lines[1].right:find("130", 1, true)
+        and tooltip.backdropColor.a == 1 and not tooltip.statDivider:IsShown()
         and tooltip.regions[1].leftText.justifyH == "LEFT"
-        and tooltip.regions[1].rightText.justifyH == "RIGHT"
-        and tooltip.regions[2].leftText.justifyH == "LEFT",
-        "the card has a readable header, description and contrast over the action bars")
-    local description = tooltip.regions[2].leftText
-    local _, _, _, backgroundX, backgroundY = tooltip.statDescription:GetPoint()
-    local _, _, _, textX, textY = description:GetPoint()
-    check(tooltip.statDescription:IsShown() and textX > backgroundX and textY < backgroundY
-        and tooltip.statDescription:GetHeight() > description:GetHeight(),
-        "description has a separate surface and is padded on both axes")
+        and tooltip.regions[1].rightText.justifyH == "RIGHT",
+        "a stat without confirmed details shows just its header with no empty separator")
     local layouts = 0
     local oldLayout = tooltip.Layout
     tooltip.Layout = function(self)
@@ -1510,18 +1503,20 @@ do
     end
     hoverAddon.forever.BuildAttackPowerTooltip = model
     check(hoverAddon:RunUpdateStatsSafe() and reads == 1, "only the hovered row calculates details")
-    local totalLabel, rateLabel, nextLabel = tooltip.regions[3].leftText,
-        tooltip.regions[4].leftText, tooltip.regions[5].leftText
+    local totalLabel, rateLabel, nextLabel = tooltip.regions[2].leftText,
+        tooltip.regions[3].leftText, tooltip.regions[4].leftText
     local _, _, _, totalX, totalY = totalLabel:GetPoint()
     local _, _, _, rateX, rateY = rateLabel:GetPoint()
     local _, _, _, _, nextY = nextLabel:GetPoint()
-    check(totalY < backgroundY - tooltip.statDescription:GetHeight() - 5,
-        "contributions are separated from the description box")
+    check(#tooltip.lines == 4 and tooltip.statDivider:IsShown()
+        and tooltip.lines[2].left == "Attack Power" and tooltip.lines[2].right == "260"
+        and tooltip.lines[3].left == "Per point" and tooltip.lines[3].right == "2",
+        "the confirmed contribution follows the header immediately with its per-point rate")
     check(rateX > totalX and totalY - rateY - totalLabel:GetHeight() < rateY - nextY - rateLabel:GetHeight(),
         "the indented rate is grouped more tightly with its contribution than with the next row")
     local last = tooltip.regions[#tooltip.lines]
     check(last.leftText.wordWrap and last.leftText:GetWidth() <= 224
-        and last.leftText:GetHeight() > tooltip.regions[3].leftText:GetHeight(),
+        and last.leftText:GetHeight() > totalLabel:GetHeight(),
         "long detail captions wrap inside a bounded column")
     stat = secretStat
     check(hoverAddon:RunUpdateStatsSafe() and reads == 1 and tooltip:IsShown(),
@@ -1529,6 +1524,12 @@ do
     info = hoverTest.mainPanelTooltipState()
     check(info.lastTargetRows[2].state == "secret" and info.lastTargetRows[2].value == nil,
         "protected raw input never enters tooltip metadata")
+    check(#tooltip.lines == 1 and not tooltip.statDivider:IsShown() and not totalLabel:IsShown(),
+        "a restricted reading clears the previous contribution rows and separator")
+    hoverAddon.forever.ShowStatTooltip(tooltip:GetOwner(),
+        { key = "Strength", label = "Strength", state = "stale", display = "(130)" })
+    check(#tooltip.lines == 2 and tooltip.lines[2].left == "Last reliable reading",
+        "stale totals retain their status note")
 
     settings.showStrength, settings.showAgility = false, true
     settings.displayMode, settings.splitRepairCost = "split", true
@@ -1545,8 +1546,7 @@ do
     check(tooltip:IsShown() and tooltip.lines[1].left == "Repair",
         "dedicated repair-only panel has its own hover row")
     check(coinSize == select(2, tooltip.regions[1].rightText:GetFont()), "repair coins match the header font")
-    hoverAddon.forever.ShowStatTooltip(tooltip:GetOwner(), { key = "Unknown", label = "Unknown", state = "unknown" })
-    check(not tooltip.statDescription:IsShown(), "recycled tooltip hides the empty description box")
+    check(#tooltip.lines == 1 and not tooltip.statDivider:IsShown(), "repair shows just the current cost")
     hoverTest.firePanelTooltipOverlayForSmoke("side", 1, "OnDragStart")
     check(not tooltip:IsShown() and hoverTest.panelTooltipState("side").wasDragging,
         "starting a drag closes the Forever tooltip")
@@ -1636,10 +1636,9 @@ do
         rateEnv.__fireEvent("PLAYER_REGEN_DISABLED")
         check(rateAddon:RunUpdateStatsSafe(), "the adaptive row keeps a live value when MP5 scaling is unavailable")
         checkRows("Casting Mana Regen / sec", "2.00")
-        local descriptions = rateAddon.forever.tooltipDescriptionKeys
         check(tooltip:IsShown() and tooltip:GetOwner() == owner
             and tooltip.lines[1].left == rateAddon.forever.Translate("Casting Mana Regen / sec", locale)
-            and tooltip.lines[#tooltip.lines].left == rateAddon.forever.Translate(descriptions.CastingManaRegen, locale),
+            and #tooltip.lines == 1 and stripColor(tooltip.lines[1].right) == "2.00",
             locale .. " the open tooltip follows the casting fallback without changing ownership")
 
         inCombat = false
@@ -1653,8 +1652,9 @@ do
         check(rateAddon:RunUpdateStatsSafe(), "the resting fallback accepts its live per-second value")
         checkRows("Mana Regen / sec", "5.00")
         check(tooltip:IsShown() and tooltip:GetOwner() == owner
-            and tooltip.lines[#tooltip.lines].left == rateAddon.forever.Translate(descriptions.ManaRegenMP5, locale),
-            locale .. " the resting fallback tooltip has the resting description")
+            and tooltip.lines[1].left == rateAddon.forever.Translate("Mana Regen / sec", locale)
+            and #tooltip.lines == 1 and stripColor(tooltip.lines[1].right) == "5.00",
+            locale .. " the resting fallback shows the live per-second rate without a description")
         restrictedResting = false
     end
 end

@@ -151,7 +151,7 @@ for _, class in ipairs(classes) do
                 check(#block.targetRows == #block.labels, class .. " aligned tooltip rows in " .. id)
                 for _, target in ipairs(block.targetRows) do
                     check(type(target) == "table" and target.statKey:match("^forever:")
-                        and addon.forever.tooltipDescriptionKeys[target.key] and target.category == nil,
+                        and type(target.key) == "string" and type(target.label) == "string" and target.category == nil,
                         class .. " uses Forever stat tooltips in " .. id)
                 end
             end

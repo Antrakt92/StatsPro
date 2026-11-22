@@ -793,6 +793,47 @@ do
 end
 print(flavor .. " profile capacity recovery regressions passed")
 
+do
+    local guid = "Player-PartialRealm"
+    local name, realm = "Дима", nil
+    local secretRealm = setmetatable({}, { __concat = function() error("restricted realm cannot enter a name") end })
+    local env, addon, test = loadStatsPro("enUS", {
+        unitGUID = function() return guid end,
+        unitFullName = function() return name, realm end,
+        unitClassToken = "MAGE",
+        getSpecialization = function() return 1 end,
+        specID = 64,
+        issecretvalue = function(value) return rawequal(value, secretRealm) end,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    local original = test.profileState()
+    local nextProfileID = original.account.nextProfileID
+    assert(original.profileID and original.characters[guid].displayName == "Дима",
+        "an unqualified first reading still initializes the character")
+    local function expectDisplay(expected)
+        env.__fireEvent("UNIT_NAME_UPDATE", "player")
+        env.__flushTimers(0)
+        local current = test.profileState()
+        assert(current.characters[guid].displayName == expected
+            and addon.profileRuntime.activeDisplayName == expected)
+        assert(current.profileID == original.profileID and current.settings == original.settings
+            and current.account.nextProfileID == nextProfileID, "metadata updates retain the same profile")
+    end
+    realm = "Гордунни"
+    expectDisplay("Дима-Гордунни")
+    for _, partial in ipairs({ {}, { realm = "" }, { realm = secretRealm } }) do
+        realm = partial.realm
+        expectDisplay("Дима-Гордунни")
+    end
+    realm = "ДругойСервер"
+    expectDisplay("Дима-ДругойСервер")
+    name, realm = "НовоеИмя", nil
+    expectDisplay("НовоеИмя")
+    realm = "ДругойСервер"
+    expectDisplay("НовоеИмя-ДругойСервер")
+    print(flavor .. " qualified character metadata survives partial realm readings")
+end
+
 local function rejectArm(env, selectedDelay)
     local original = env.C_Timer.After
     local retired

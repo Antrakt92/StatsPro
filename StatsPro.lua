@@ -7046,6 +7046,16 @@ function addon.profileRuntime.PopulateCharacterMetadata(context)
                 context.displayName = name .. "-" .. realm
             else
                 context.displayName = name
+                -- Name and realm can hydrate separately. Keep a proved realm
+                -- for the same GUID and exact name until a full read replaces it.
+                local root = addon.dbRuntime.registryReady and addon.dbRuntime.rootRef
+                local characters = root and rawget(root, "characters")
+                local character = addon.dbRuntime.IsCleanTable(characters) and rawget(characters, context.guid)
+                local previous = addon.dbRuntime.IsCleanTable(character) and rawget(character, "displayName")
+                if addon.dbRuntime.IsCleanType(previous, "string") and #previous > #name + 1
+                    and previous:sub(1, #name + 1) == name .. "-" then
+                    context.displayName = previous
+                end
             end
         end
     end

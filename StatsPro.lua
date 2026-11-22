@@ -10987,7 +10987,8 @@ function addon.forever.ShowStatTooltip(anchor, meta)
         add("Current:", display)
     end
     local descriptions = addon.forever.tooltipDescriptionKeys
-    if descriptions and descriptions[meta.key] then add(descriptions[meta.key]) end
+    local description = descriptions and descriptions[meta.descriptionKey or meta.key]
+    if description then add(description) end
     if meta.state == "clean" then
         if addon.forever.BuildAttackPowerTooltip then addon.forever.BuildAttackPowerTooltip(meta, add) end
     end
@@ -12063,6 +12064,7 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero, tool
                 local color = cached.colorStrings[definition.colorKey] or cached.colorStrings.mainStat
                 local valueColor = cached.matchValueColorToStat and color or cached.colorStrings.percentage
                 local label = definition.label
+                local descriptionKey
                 local hideLabel = cached.labelStyle == "hidden"
                 local suffix = hideLabel and definition.rateSeconds
                     and addon.forever.RateSuffix(cached.activeLabelsLocale, definition.rateSeconds) or ""
@@ -12078,6 +12080,10 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero, tool
                         text = "|cff" .. valueColor .. formatted .. suffix .. "|r"
                     else
                         label = definition.restrictedMP5FallbackLabel
+                        if visibilitySuffix == ":casting" then
+                            label = "Casting Mana Regen / sec"
+                            descriptionKey = "CastingManaRegen"
+                        end
                         suffix = hideLabel and addon.forever.RateSuffix(cached.activeLabelsLocale, 1) or ""
                         text = SAFE_NUM.FormatColorNumber(valueColor, value, "%.2f" .. suffix, suffix)
                     end
@@ -12120,6 +12126,7 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero, tool
                         local tooltipState = hasText and displayState or "unknown"
                         tooltipRows[#labels] = {
                             statKey = "forever:" .. definition.key, key = definition.key, label = label,
+                            descriptionKey = descriptionKey,
                             state = tooltipState, display = display,
                             value = tooltipState == "clean" and value or nil,
                             detail = tooltipState == "clean" and detail or nil,

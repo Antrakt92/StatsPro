@@ -1560,6 +1560,74 @@ do
         "the same hover restores the resting rate after combat")
 end
 do
+    local inCombat, restrictedResting = false, false
+    local protectedCasting, protectedResting = {}, {}
+    local rateEnv, rateAddon, rateTest = fixtures.loadStatsPro("enUS", {
+        forever = true,
+        unitGUID = function() return "Player-ForeverMP5FallbackLabel" end,
+        inCombatLockdown = function() return inCombat end,
+        issecretvalue = function(value) return rawequal(value, protectedCasting)
+            or rawequal(value, protectedResting) end,
+        setFormattedText = function(_, _, value) return value == protectedCasting and "2.00" or "5.00" end,
+        foreverAPIs = {
+            GetManaRegen = function() return restrictedResting and protectedResting or 5, protectedCasting end,
+            AbbreviateNumbers = function() return "2.05" end,
+        },
+    })
+    rateEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local rateSettings = rateTest.profileState().settings
+    for _, group in pairs(rateAddon.forever.rows) do
+        for _, row in ipairs(group) do rateSettings[row.showKey] = false end
+    end
+    rateSettings.showTertiary, rateSettings.showManaRegen, rateSettings.showManaRegenMP5 = true, true, true
+    rateSettings.showItemLevel, rateSettings.showDurability, rateSettings.showRepairCost = false, false, false
+    rateSettings.displayMode, rateSettings.labelStyle = "flat", "full"
+
+    for _, locale in ipairs({ "enUS", "ruRU" }) do
+        rateEnv.StatsProDB.account.forceLocale = locale
+        rateTest.cacheSettings()
+        local function checkRows(label, value)
+            local block = rateTest.buildRenderBlocks()[3]
+            check(#block.labels == 2 and hasStat(block, rateAddon.forever.Translate("Mana Regen / sec", locale), "5.00"),
+                locale .. " resting per-second rate remains enabled")
+            check(block.targetRows[2].key == "ManaRegenMP5" and block.targetRows[2].label == label
+                and stripColor(block.labels[2]) == rateAddon.forever.Translate(label, locale) .. ":"
+                and stripColor(block.ratings[2] .. block.values[2]) == value,
+                locale .. " adaptive mana row uses its actual rate and unit")
+        end
+
+        check(rateAddon:RunUpdateStatsSafe(), "the adaptive mana row renders before combat")
+        checkRows("Mana Regen / 5 sec", "25.00")
+        rateTest.fireMainPanelTooltipOverlayForSmoke(2, "OnEnter")
+        local tooltip = rateEnv.StatsProTargetTooltip
+        local owner = tooltip:GetOwner()
+        inCombat = true
+        rateEnv.__fireEvent("PLAYER_REGEN_DISABLED")
+        check(rateAddon:RunUpdateStatsSafe(), "the adaptive row keeps a live value when MP5 scaling is unavailable")
+        checkRows("Casting Mana Regen / sec", "2.00")
+        local descriptions = rateAddon.forever.tooltipDescriptionKeys
+        check(tooltip:IsShown() and tooltip:GetOwner() == owner
+            and tooltip.lines[1].left == rateAddon.forever.Translate("Casting Mana Regen / sec", locale)
+            and tooltip.lines[#tooltip.lines].left == rateAddon.forever.Translate(descriptions.CastingManaRegen, locale),
+            locale .. " the open tooltip follows the casting fallback without changing ownership")
+
+        inCombat = false
+        rateEnv.__fireEvent("PLAYER_REGEN_ENABLED")
+        check(rateAddon:RunUpdateStatsSafe(), "the adaptive mana row renders after combat")
+        checkRows("Mana Regen / 5 sec", "25.00")
+        check(tooltip:IsShown() and tooltip:GetOwner() == owner
+            and tooltip.lines[1].left == rateAddon.forever.Translate("Mana Regen / 5 sec", locale),
+            locale .. " the open tooltip restores its usual resting caption")
+        restrictedResting = true
+        check(rateAddon:RunUpdateStatsSafe(), "the resting fallback accepts its live per-second value")
+        checkRows("Mana Regen / sec", "5.00")
+        check(tooltip:IsShown() and tooltip:GetOwner() == owner
+            and tooltip.lines[#tooltip.lines].left == rateAddon.forever.Translate(descriptions.ManaRegenMP5, locale),
+            locale .. " the resting fallback tooltip has the resting description")
+        restrictedResting = false
+    end
+end
+do
     local protectedNumber = {}
     local protectedText = "protected number text"
     local function isProtected(value)

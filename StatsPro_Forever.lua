@@ -4,7 +4,7 @@ local F = { rows = { character = {}, offensive = {}, defensive = {}, utility = {
 addon.forever = F
 local buildOK, _, _, _, interface = pcall(GetBuildInfo)
 F.enabled = buildOK and interface == 16001 and WOW_PROJECT_ID == 18
-F.capabilities = { itemLevel = type(GetAverageItemLevel) == "function", repair = true, archon = false }
+F.capabilities = { itemLevel = type(GetAverageItemLevel) == "function" }
 
 local function Classify(value)
     if type(issecretvalue) ~= "function" then return nil, "unknown" end
@@ -450,17 +450,19 @@ function F.FormatRestrictedMP5(value)
     if mp5FormatterAvailable == nil then
         local ok, sample = pcall(formatter, 2.05, mp5Options)
         local classified, secret = pcall(issecretvalue, sample)
-        if not ok or not classified or secret ~= false or type(sample) ~= "string" then
+        if not ok or not classified or secret ~= false or type(sample) ~= "string" or sample == "" then
             mp5FormatterRetryBlocked = true
             return nil
         end
         mp5FormatterAvailable = sample == "10.25" or sample == "10,25"
     end
-    if mp5FormatterAvailable then
-        local ok, text = pcall(formatter, value, mp5Options)
-        if ok and type(text) == "string" then return text end
-        mp5FormatterRetryBlocked = true
+    if not mp5FormatterAvailable then return nil end
+    local ok, text = pcall(formatter, value, mp5Options)
+    if ok and type(text) == "string" then
+        local classified, secret = pcall(issecretvalue, text)
+        if classified and (secret == true or (secret == false and text ~= "")) then return text end
     end
+    mp5FormatterRetryBlocked = true
 end
 
 local function ReadResistance(school)

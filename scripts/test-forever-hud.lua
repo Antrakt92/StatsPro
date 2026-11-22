@@ -1525,4 +1525,38 @@ do
     check(hoverAddon:RunUpdateStatsSafe() and not hoverTest.panelTooltipState("side").shown[1],
         "removing repair retires its separate overlay")
 end
+do
+    local inCombat = false
+    local rateEnv, rateAddon, rateTest = fixtures.loadStatsPro("enUS", {
+        forever = true,
+        unitGUID = function() return "Player-ForeverMP5Tooltip" end,
+        inCombatLockdown = function() return inCombat end,
+        foreverAPIs = { GetManaRegen = function() return 7, 1 end },
+    })
+    rateEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local rateSettings = rateTest.profileState().settings
+    for _, group in pairs(rateAddon.forever.rows) do
+        for _, row in ipairs(group) do rateSettings[row.showKey] = false end
+    end
+    rateSettings.showTertiary, rateSettings.showManaRegenMP5 = true, true
+    rateSettings.showItemLevel, rateSettings.showDurability, rateSettings.showRepairCost = false, false, false
+    rateSettings.displayMode = "flat"
+    rateTest.cacheSettings()
+    check(rateAddon:RunUpdateStatsSafe(), "single adaptive MP5 draws before combat")
+    rateTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    local tooltip = rateEnv.StatsProTargetTooltip
+    local owner = tooltip and tooltip:GetOwner()
+    check(tooltip:IsShown() and tooltip.lines[2].right:find("35.00", 1, true),
+        "hovering the adaptive MP5 starts with the resting rate")
+    inCombat = true
+    rateEnv.__fireEvent("PLAYER_REGEN_DISABLED")
+    check(rateAddon:RunUpdateStatsSafe() and tooltip:IsShown() and tooltip:GetOwner() == owner
+        and tooltip.lines[2].right:find("5.00", 1, true) and not tooltip.lines[2].right:find("35.00", 1, true),
+        "the same hover stays open and updates to the casting rate")
+    inCombat = false
+    rateEnv.__fireEvent("PLAYER_REGEN_ENABLED")
+    check(rateAddon:RunUpdateStatsSafe() and tooltip:IsShown() and tooltip:GetOwner() == owner
+        and tooltip.lines[2].right:find("35.00", 1, true),
+        "the same hover restores the resting rate after combat")
+end
 print("StatsPro Forever HUD integration: PASS (" .. count .. " checks)")

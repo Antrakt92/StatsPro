@@ -397,6 +397,7 @@ function addon.fontRuntime.ReconcileProvider()
         or addon.settingsUI.fontPicker.previewedPath or addon.settingsUI.localization.previewActive then return end
     runtime.providerRefreshPending = nil
     runtime.RefreshSharedCatalog(true)
+    if addon.forever.enabled then addon.forever.ReopenTooltipFont() end
     addon.sharedFonts.RefreshPackageState()
     addon.sharedFonts.UpdateGuidance()
     local picker = addon.settingsUI.fontPicker
@@ -10640,8 +10641,9 @@ function addon.archonTargets.LayoutTooltip(tooltip)
             }
             tooltip.regions[index] = region
             if addon.forever.enabled and tooltip.statFont then
-                region.leftText:SetFont(tooltip.statFont, index == 1 and 14 or 12, "")
-                region.rightText:SetFont(tooltip.statFont, 12, "")
+                local leftApplied = addon.fontRuntime.setRegionFont(region.leftText, tooltip.statFont, index == 1 and 14 or 12)
+                local rightApplied = addon.fontRuntime.setRegionFont(region.rightText, tooltip.statFont, 12)
+                if not (leftApplied and rightApplied) then tooltip.statLocale = nil end
             end
         end
         if row.isDouble then
@@ -10859,27 +10861,58 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     return true
 end
 
+function addon.forever.ReopenTooltipFont()
+    local tooltip = addon.archonTargets.tooltip
+    if tooltip then tooltip.statFontRetry = nil end
+end
+
+function addon.forever.ApplyTooltipFont(tooltip, locale)
+    if tooltip.statLocale == locale then return end
+    local retry = tooltip.statFontRetry
+    if not retry or retry.locale ~= locale then
+        retry = { locale = locale, attempt = 0, ready = true }
+        tooltip.statFontRetry = retry
+    end
+    if not retry.ready then return end
+    retry.ready = false
+    tooltip.statLocale = nil
+    local requirement = LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN
+    local font = FindCompatibleFont(LocaleAwareDefaultFont(), requirement, locale)
+    if font then
+        local setFont = addon.fontRuntime.setRegionFont
+        local headerApplied = setFont(tooltip.headerProbe, font, 14)
+        local bodyApplied = setFont(tooltip.bodyProbe, font, 12)
+        local applied = headerApplied and bodyApplied
+        for index, region in ipairs(tooltip.regions) do
+            local leftApplied = setFont(region.leftText, font, index == 1 and 14 or 12)
+            local rightApplied = setFont(region.rightText, font, 12)
+            applied = applied and leftApplied and rightApplied
+        end
+        -- Partial changes can affect measurement, even when this locale is unready.
+        tooltip.layoutReusable = false
+        if applied then
+            tooltip.statFont = font
+            tooltip.statLocale = locale
+            tooltip.statFontRetry = nil
+            return
+        end
+    end
+    retry.attempt = retry.attempt + 1
+    local delay = addon.fontRuntime.pendingRetryDelays[retry.attempt]
+    if delay then
+        local scheduled = pcall(C_Timer.After, delay, function()
+            if tooltip.statFontRetry == retry then retry.ready = true end
+        end)
+        if not scheduled then retry.ready = true end
+    end
+end
+
 function addon.forever.ShowStatTooltip(anchor, meta)
     local panel = anchor:GetParent()
     if not panel or panel.wasDragging then return false end
     local tooltip = addon.archonTargets.GetTooltip()
     tooltip:SetOwner(anchor)
-    local locale = cached.activeLabelsLocale
-    if tooltip.statLocale ~= locale then
-        local requirement = LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN
-        local font = FindCompatibleFont(LocaleAwareDefaultFont(), requirement, locale)
-        if font then
-            tooltip.headerProbe:SetFont(font, 14, "")
-            tooltip.bodyProbe:SetFont(font, 12, "")
-            for index, region in ipairs(tooltip.regions) do
-                region.leftText:SetFont(font, index == 1 and 14 or 12, "")
-                region.rightText:SetFont(font, 12, "")
-            end
-            tooltip.statFont = font
-            tooltip.statLocale = locale
-            tooltip.layoutReusable = false
-        end
-    end
+    addon.forever.ApplyTooltipFont(tooltip, cached.activeLabelsLocale)
     local previousLines = tooltip.lines
     tooltip.lines = {}
     local function add(label, value)
@@ -12027,14 +12060,17 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero, tool
                 end
                 if visible then
                     local unavailable = definition.rememberLastClean and "—" or "?" .. unknownSuffix
-                    local rCol, vCol = RouteValueOnly(text or ("|cff" .. valueColor .. unavailable .. "|r"))
+                    local formatted = type(text) == "string"
+                    local rendered = text
+                    if not formatted then rendered = "|cff" .. valueColor .. unavailable .. "|r" end
+                    local rCol, vCol = RouteValueOnly(rendered)
                     PushRow(labels, ratings, values, FormatLabel(color, label), rCol, vCol)
                     if tooltipRows then
-                        local hasText = type(text) == "string" and not placeholder
+                        local hasText = formatted and not placeholder
                         local display = hasText and not issecretvalue(text) and text or nil
                         local tooltipState = hasText and displayState or "unknown"
                         tooltipRows[#labels] = {
-                            statKey = rowKey, key = definition.key, label = label,
+                            statKey = "forever:" .. definition.key, key = definition.key, label = label,
                             state = tooltipState, display = display,
                             value = tooltipState == "clean" and value or nil,
                             detail = tooltipState == "clean" and detail or nil,
@@ -12829,6 +12865,7 @@ local function OnPlayerEnteringWorld()
     if addon.forever.enabled then
         addon.forever.compoundForm = addon.forever.ReadCompoundForm()
         addon.forever.InvalidateCompoundStats()
+        addon.forever.ReopenTooltipFont()
     end
     SAFE_NUM.ReopenScaledFormatterRetries()
     if not addon.critRuntime.specRecheckDelay then addon.critRuntime.RefreshSpecIdentity(true) end

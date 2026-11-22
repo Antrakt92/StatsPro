@@ -419,5 +419,104 @@ for _, mode in ipairs({ "recovered", "superseded", "exhausted" }) do
     end
 end
 
+if forever then
+    local fontEnv, fontAddon, fontTest = fixtures.loadStatsPro("enUS", {
+        forever = true,
+        statsProDB = { dbVersion = 9, forceLocale = "ruRU" },
+    })
+    fontEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local tooltip = fontAddon.archonTargets.GetTooltip()
+    local originalSetFont = tooltip.headerProbe.SetFont
+    originalSetFont(tooltip.headerProbe, "WrongLatin.ttf", 12, "")
+    local attempts = 0
+    local function hover()
+        for index, meta in ipairs(fontTest.mainPanelTooltipState().lastTargetRows) do
+            if type(meta) == "table" then
+                return fontTest.fireMainPanelTooltipOverlayForSmoke(index, "OnEnter")
+            end
+        end
+        error("expected a visible Forever tooltip row")
+    end
+
+    local setHeaderFont = function(self, ...)
+        attempts = attempts + 1
+        if attempts == 1 then return false end
+        return originalSetFont(self, ...)
+    end
+    tooltip.headerProbe.SetFont = function(self, ...) return setHeaderFont(self, ...) end
+    hover()
+    equal("partial tooltip font application leaves locale unconfirmed", tooltip.statLocale, nil)
+    equal("the initially unavailable tooltip header font retains its previous path",
+        tooltip.headerProbe:GetFont(), "WrongLatin.ttf")
+    hover()
+    equal("immediate hover does not repeat the failed native font call", attempts, 1)
+    fontEnv.__flushTimers()
+    hover()
+    equal("tooltip font recovers on a later attempt", attempts, 2)
+    equal("only a confirmed font settles the tooltip locale", tooltip.statLocale, "ruRU")
+    equal("the recovered header uses the measured tooltip font", tooltip.headerProbe:GetFont(), tooltip.statFont)
+
+    local originalCreate = tooltip.CreateFontString
+    local nextRegion
+    tooltip.CreateFontString = function(self, ...)
+        local region = originalCreate(self, ...)
+        if not nextRegion then
+            nextRegion = region
+            local setFont = region.SetFont
+            setFont(region, "WrongLatin.ttf", 12, "")
+            region.SetFont = function(frame, ...)
+                region.SetFont = setFont
+                error("late tooltip font unavailable")
+            end
+        end
+        return region
+    end
+    fontAddon.forever.BuildStatTooltip = function(_, add)
+        for index = 1, 12 do add("Extra tooltip line " .. index) end
+    end
+    equal("a new tooltip FontString failure does not escape the hover handler", pcall(hover), true)
+    equal("a new unconfirmed region reopens font application", tooltip.statLocale, nil)
+    hover()
+    equal("later layout reconciles the new region", tooltip.statLocale, "ruRU")
+    equal("new tooltip region uses the confirmed font", nextRegion:GetFont(), tooltip.statFont)
+
+    tooltip.statLocale = nil
+    attempts = 0
+    setHeaderFont = function()
+        attempts = attempts + 1
+        error("persistent tooltip header failure")
+    end
+    originalSetFont(tooltip.headerProbe, "WrongLatin.ttf", 12, "")
+    for _ = 1, 12 do
+        equal("persistent font failure never escapes hover", pcall(hover), true)
+        fontEnv.__flushTimers()
+    end
+    equal("persistent tooltip font failures exhaust bounded attempts",
+        attempts, #fontAddon.fontRuntime.pendingRetryDelays + 1)
+    equal("an unresolved tooltip font does not confirm a locale", tooltip.statLocale, nil)
+    setHeaderFont = originalSetFont
+    hover()
+    equal("ordinary hover cannot reopen exhausted font attempts", tooltip.statLocale, nil)
+    fontEnv.__fireEvent("ADDON_LOADED", "AntraktFonts")
+    equal("provider arrival reconciles on the regular update", fontAddon:RunUpdateStatsSafe(), true)
+    hover()
+    equal("catalog reconciliation reopens the same-locale font", tooltip.statLocale, "ruRU")
+    equal("catalog recovery applies the expected header font", tooltip.headerProbe:GetFont(), tooltip.statFont)
+
+    tooltip.statLocale = nil
+    originalSetFont(tooltip.headerProbe, "WrongLatin.ttf", 12, "")
+    setHeaderFont = function() return false end
+    for _ = 1, 12 do
+        hover()
+        fontEnv.__flushTimers()
+    end
+    equal("the same locale may exhaust again under a new failure", tooltip.statLocale, nil)
+    setHeaderFont = originalSetFont
+    fontEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    hover()
+    equal("entering world reopens a late tooltip font recovery", tooltip.statLocale, "ruRU")
+    equal("world recovery applies the expected header font", tooltip.headerProbe:GetFont(), tooltip.statFont)
+end
+
 if #errors > 0 then error(table.concat(errors, "\n"), 0) end
 print((forever and "Forever" or "Retail") .. " HUD clean/restricted geometry and visibility passed")

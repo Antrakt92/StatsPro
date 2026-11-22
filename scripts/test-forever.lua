@@ -313,6 +313,31 @@ AbbreviateNumbers = function(value)
     return rawequal(value, secret) and "30,25" or "10,25"
 end
 assert(F.FormatRestrictedMP5(secret) == "30,25", "MP5 accepts the client's decimal separator")
+do
+    local calibration, output = "", ""
+    local calibrationReads, protectedReads = 0, 0
+    AbbreviateNumbers = function(value)
+        if rawequal(value, secret) then
+            protectedReads = protectedReads + 1
+            return output
+        end
+        calibrationReads = calibrationReads + 1
+        return calibration
+    end
+    assert(F.FormatRestrictedMP5(secret) == nil, "blank calibration falls back")
+    calibration = "10.25"
+    assert(F.FormatRestrictedMP5(secret) == nil and calibrationReads == 1 and protectedReads == 0,
+        "a failed calibration is retried only after a lifecycle reopen")
+    F.ReopenMP5FormatterRetry()
+    assert(F.FormatRestrictedMP5(secret) == nil and calibrationReads == 2 and protectedReads == 1,
+        "an empty protected result falls back instead of blanking the HUD cell")
+    output = "30.25"
+    assert(F.FormatRestrictedMP5(secret) == nil and protectedReads == 1,
+        "an empty protected result also spends this retry opportunity")
+    F.ReopenMP5FormatterRetry()
+    assert(F.FormatRestrictedMP5(secret) == "30.25" and calibrationReads == 2 and protectedReads == 2,
+        "a verified formatter recovers without repeating its calibration")
+end
 AbbreviateNumbers = nil
 GetManaRegen = function() return 2, nil end
 Expect("ManaRegen", 2, "clean")

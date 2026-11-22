@@ -1474,7 +1474,15 @@ do
     local tooltip = hoverEnv.StatsProTargetTooltip
     check(tooltip and tooltip:IsShown() and tooltip.lines[1].left == "Strength",
         "actual row opens its own tooltip")
-    check(tooltip:GetPoint() == "TOPRIGHT", "tooltip opens inward near right edge")
+    local point, relativeTo, relativePoint = tooltip:GetPoint()
+    check(point == "TOPRIGHT" and relativeTo == tooltip:GetOwner() and relativePoint == "TOPLEFT",
+        "tooltip opens inward beside the hovered row near the right edge")
+    check(tooltip.lines[1].right:find("130", 1, true) and tooltip.backdropColor.a == 0.98
+        and tooltip.statDivider:GetHeight() == 1
+        and tooltip.regions[1].leftText.justifyH == "LEFT"
+        and tooltip.regions[1].rightText.justifyH == "RIGHT"
+        and tooltip.regions[2].leftText.justifyH == "LEFT",
+        "the card has a readable header, description and contrast over the action bars")
     local layouts = 0
     local oldLayout = tooltip.Layout
     tooltip.Layout = function(self)
@@ -1490,10 +1498,15 @@ do
         if meta.key == "Strength" and meta.state == "clean" then
             reads = reads + 1
             add("Attack Power", tostring(meta.value * 2))
+            add(string.rep("Long translated label ", 10), "260")
         end
     end
     hoverAddon.forever.BuildAttackPowerTooltip = model
     check(hoverAddon:RunUpdateStatsSafe() and reads == 1, "only the hovered row calculates details")
+    local last = tooltip.regions[#tooltip.lines]
+    check(last.leftText.wordWrap and last.leftText:GetWidth() <= 224
+        and last.leftText:GetHeight() > tooltip.regions[3].leftText:GetHeight(),
+        "long detail captions wrap inside a bounded column")
     stat = secretStat
     check(hoverAddon:RunUpdateStatsSafe() and reads == 1 and tooltip:IsShown(),
         "restricted clean-input model is skipped while the tooltip stays open")
@@ -1546,17 +1559,17 @@ do
     rateTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     local tooltip = rateEnv.StatsProTargetTooltip
     local owner = tooltip and tooltip:GetOwner()
-    check(tooltip:IsShown() and tooltip.lines[2].right:find("35.00", 1, true),
+    check(tooltip:IsShown() and tooltip.lines[1].right:find("35.00", 1, true),
         "hovering the adaptive MP5 starts with the resting rate")
     inCombat = true
     rateEnv.__fireEvent("PLAYER_REGEN_DISABLED")
     check(rateAddon:RunUpdateStatsSafe() and tooltip:IsShown() and tooltip:GetOwner() == owner
-        and tooltip.lines[2].right:find("5.00", 1, true) and not tooltip.lines[2].right:find("35.00", 1, true),
+        and tooltip.lines[1].right:find("5.00", 1, true) and not tooltip.lines[1].right:find("35.00", 1, true),
         "the same hover stays open and updates to the casting rate")
     inCombat = false
     rateEnv.__fireEvent("PLAYER_REGEN_ENABLED")
     check(rateAddon:RunUpdateStatsSafe() and tooltip:IsShown() and tooltip:GetOwner() == owner
-        and tooltip.lines[2].right:find("35.00", 1, true),
+        and tooltip.lines[1].right:find("35.00", 1, true),
         "the same hover restores the resting rate after combat")
 end
 do

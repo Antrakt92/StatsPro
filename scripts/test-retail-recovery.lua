@@ -860,6 +860,24 @@ if not forever then
     expectRows(4, 2)
     rating, percent = 0, 5
     expectRows(4, 2)
+
+    settings.showRating, rating = false, 250
+    test.cacheSettings()
+    local hiddenRating = expectRows(4, 2)
+    for index = 1, 3 do
+        assert(hiddenRating.targetRows[index].current == 250, "Archon reads a new clean rating while it is hidden")
+    end
+    settings.showRating, settings.showPercentage, rating = true, false, -1234
+    test.cacheSettings()
+    expectRows(4, 0)
+
+    settings.showRating, settings.showPercentage, rating = false, true, 0
+    test.cacheSettings()
+    expectRows(4, 2)
+    settings.showRating, settings.showPercentage, rating = true, false, -1234
+    test.cacheSettings()
+    expectRows(0, 0)
+
     settings.showPercentage, settings.hideZeroOffensive, settings.hideZeroTertiary = false, false, false
     test.cacheSettings()
     expectRows(4, 2)
@@ -1936,7 +1954,7 @@ end
 
 if not forever then
     local phase = "clean"
-    local protectedCoefficient = {}
+    local protectedCoefficient, protectedEffect = {}, {}
     local env, addon, test = loadStatsPro("enUS", {
         unitClassToken = "MAGE", specIndex = 1, specID = 64,
         statsProArchonTargets = archonTargetsFixture(),
@@ -1947,13 +1965,19 @@ if not forever then
         getCombatRating = function()
             if phase == "clean" then return 800 end
             if phase == "mixed" then return 850 end
+            if phase == "restricted" then return 875 end
         end,
         getMasteryEffect = function()
             if phase == "clean" then return 26, 2 end
+            if phase == "restricted" then return protectedEffect, protectedCoefficient end
             return 41, protectedCoefficient
         end,
         getCombatRatingBonusForCombatRatingValue = function(_, value) return value / 100 end,
-        issecretvalue = function(value) return rawequal(value, protectedCoefficient) end,
+        issecretvalue = function(value) return rawequal(value, protectedCoefficient) or rawequal(value, protectedEffect) end,
+        setFormattedText = function(_, _, value)
+            assert(rawequal(value, protectedEffect), "only the protected effect reaches the client formatter")
+            return "55.0%"
+        end,
     })
     env.__fireEvent("PLAYER_ENTERING_WORLD")
     local function tooltipRows()
@@ -1971,6 +1995,12 @@ if not forever then
     assert(mixed.comparisonState == "exact" and mixedRows["Current:"] == "850 (~41.0%)"
         and mixedRows["Target:"] == "1000" and mixedRows["Missing:"] == "150",
         "an exact live rating cannot mix its clean percentage with an older Mastery target")
+
+    phase = "restricted"
+    local restrictedRows, restricted = tooltipRows()
+    assert(restricted.comparisonState == "exact" and restrictedRows["Current:"] == "875 (~55.0%)"
+        and restrictedRows["Target:"] == "1000 (~30.0%)" and restrictedRows["Missing:"] == "125",
+        "a restricted effect remains live while only its clean rating participates in the comparison")
 
     phase = "unavailable"
     local cachedRows, lastKnown = tooltipRows()

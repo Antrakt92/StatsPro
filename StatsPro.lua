@@ -1404,15 +1404,22 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
         local delta = currentRating - target
         if addon.IsCleanFiniteNumber(delta) then
             local targetPct
-            local cachedEntry
+            local preserveCompleteMasteryCache = false
             if statKey == "mastery" and cleanRatingCR == CR_MASTERY then
                 targetPct = addon.archonTargets.CalculateMasteryTargetPercent(
                     currentRating, displayPct, target, renderContext)
-                if targetPct == nil and displayIsSecret then
-                    cachedEntry = addon.archonTargets.GetCachedComparison(
+                if targetPct == nil then
+                    local cachedEntry = addon.archonTargets.GetCachedComparison(
                         classToken, specKey, snapshotKey, statKey,
                         target, cleanRatingCR, capturedAt)
-                    if cachedEntry then targetPct = cachedEntry.targetPct end
+                    if cachedEntry then
+                        -- A partial sample cannot replace a coherent snapshot.
+                        preserveCompleteMasteryCache = cachedEntry.currentPct ~= nil
+                            and cachedEntry.targetPct ~= nil
+                        -- Restricted live percentages can show the previous target,
+                        -- while a clean new effect must not be paired with it.
+                        if displayIsSecret then targetPct = cachedEntry.targetPct end
+                    end
                 end
             end
             meta.comparisonState = "exact"
@@ -1425,18 +1432,6 @@ function addon.archonTargets.BuildMeta(statKey, currentRating, ratingCR, current
             -- only to the same client formatter used by the live HUD.
             if hasCurrentPctDisplay then meta.currentPctDisplay = currentPctDisplay end
             meta.delta = delta
-            -- A partial Mastery read must not overwrite a complete comparison or
-            -- pair an older Target % with a new clean Current %. Restricted live
-            -- percentages can still show the previous target without a percent delta.
-            local preserveCompleteMasteryCache = statKey == "mastery"
-                and targetPct == nil and not displayIsSecret
-            if preserveCompleteMasteryCache and cachedEntry == nil then
-                cachedEntry = addon.archonTargets.GetCachedComparison(
-                    classToken, specKey, snapshotKey, statKey,
-                    target, cleanRatingCR, capturedAt)
-            end
-            preserveCompleteMasteryCache = preserveCompleteMasteryCache
-                and cachedEntry ~= nil and cachedEntry.targetPct ~= nil
             if not preserveCompleteMasteryCache then
                 addon.archonTargets.StoreCleanComparison(
                     classToken, specKey, snapshotKey, statKey, target, cleanRatingCR,
@@ -12160,6 +12155,7 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
             local forceUnknownPercent = percentState == "restricted"
             local percentIsProxy = percentState == "liveProxy"
             local visibilityKey = not specUnsettled and def.showKey or nil
+            local ratingVisibilityKey = visibilityKey and visibilityKey .. "Rating"
             local percentVisible = shouldShowUnknown(
                     visibilityKey, forceUnknownPercent or percentIsProxy, cached.hideZeroOffensive)
                 or (not percentIsProxy and shouldShow(visibilityKey, val, cached.hideZeroOffensive))
@@ -12168,14 +12164,18 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
                 ratingDisplay, targetRating = SAFE_NUM.ReadRatingValue(
                     GetCombatRating, def.ratingCR)
                 ratingRead = true
-                local ratingVisibilityKey = visibilityKey and visibilityKey .. "Rating"
                 local ratingVisible = shouldShow(ratingVisibilityKey, ratingDisplay, cached.hideZeroOffensive)
                 visible = visible or ratingVisible
             end
             if visible then
-                if (cached.showRating or needTargetRating) and not ratingRead then
+                if needTargetRating and not ratingRead then
                     ratingDisplay, targetRating = SAFE_NUM.ReadRatingValue(
                         GetCombatRating, def.ratingCR)
+                    -- A hidden rating can refresh the next Hide Zero decision
+                    -- without affecting this render's visible columns.
+                    if ratingVisibilityKey and targetRating ~= nil then
+                        cached.cleanRowVisibility[ratingVisibilityKey] = targetRating ~= 0
+                    end
                 end
                 local rating
                 if cached.showRating then rating = ratingDisplay end

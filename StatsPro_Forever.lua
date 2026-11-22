@@ -1487,16 +1487,16 @@ do
     })
 
     translate({
-        "Armor from Agility",
-        "Броня от ловкости",
-        "Rüstung durch Beweglichkeit",
-        "Armure conférée par l’agilité",
-        "Armadura por agilidad",
-        "Armatura dall’agilità",
-        "Armadura por agilidade",
-        "민첩성으로 얻는 방어도",
-        "敏捷提供的护甲",
-        "敏捷提供的護甲",
+        "Base Armor from Agility",
+        "Базовая броня от ловкости",
+        "Grundrüstung durch Beweglichkeit",
+        "Armure de base conférée par l’agilité",
+        "Armadura base por agilidad",
+        "Armatura base dall’agilità",
+        "Armadura base por agilidade",
+        "민첩성으로 얻는 기본 방어도",
+        "敏捷提供的基础护甲",
+        "敏捷提供的基礎護甲",
     })
 
     translate({
@@ -1714,10 +1714,14 @@ do
         { "OffhandExpertise", "Offhand Expertise" },
         { "RangedExpertise", "Ranged Expertise" },
     }
-    local critLabels = {
-        { "MeleeCrit", "Melee Crit", "GetCritChance" },
-        { "RangedCrit", "Ranged Crit", "GetRangedCritChance" },
-        { "SpellCrit", "Spell Crit", "GetSpellCritChance" },
+    local critTotals = {
+        MeleeCrit = "GetCritChance",
+        RangedCrit = "GetRangedCritChance",
+        SpellCrit = "GetSpellCritChance",
+    }
+    local critAttributes = {
+        [2] = { api = "GetCritChanceFromStat", label = "Physical Crit from Agility" },
+        [4] = { api = "GetSpellCritChanceFromStat", label = "Spell Crit from Intellect" },
     }
     local schools = { "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" }
 
@@ -1756,6 +1760,29 @@ do
         if ok and not issecretvalue(value) then return value end
     end
 
+    local function addCritFromAttribute(add, index, attribute, totalAPI, total)
+        local source = critAttributes[index]
+        local contribution = readClean(source.api, 1, index, attribute)
+        if readClean("UnitStat", 2, "player", index) ~= attribute then return end
+        if totalAPI and readClean(totalAPI, 1) ~= total then return end
+        addFraction(add, source.label, contribution)
+    end
+
+    local function addArmorFromAgility(add, agility)
+        addNumber(add, "Base Armor from Agility", agility * 2)
+    end
+
+    local function readShieldStrength()
+        local paperDoll = _G.C_PaperDollInfo
+        if type(paperDoll) == "table" and readPaperDoll(paperDoll.OffhandHasShield) == true then
+            return readClean("UnitStat", 2, "player", 1)
+        end
+    end
+
+    local function addBlockFromStrength(add, strength)
+        addNumber(add, "Block Value from Strength", math.floor(strength / 20))
+    end
+
     local function addArmor(add, armor)
         local paperDoll = _G.C_PaperDollInfo
         if type(paperDoll) ~= "table" then return end
@@ -1787,12 +1814,11 @@ do
     end
 
     local function addCrit(key, value, add)
-        for _, entry in ipairs(critLabels) do
-            if entry[1] == key and readClean(entry[3], 1) ~= value then return end
-        end
-        for _, entry in ipairs(critLabels) do
-            if entry[1] ~= key then addPercent(add, entry[2], readClean(entry[3], 1)) end
-        end
+        local totalAPI = critTotals[key]
+        if not totalAPI or readClean(totalAPI, 1) ~= value then return end
+        local index = key == "SpellCrit" and 4 or 2
+        local attribute = readClean("UnitStat", 2, "player", index)
+        if attribute ~= nil then addCritFromAttribute(add, index, attribute, totalAPI, value) end
     end
 
     local function addSpellPower(key, value, add)
@@ -1846,7 +1872,7 @@ do
             if canUseMana() then
                 addNumber(add, "Mana from Intellect", math.min(20, value) + math.max(0, value - 20) * 15)
             end
-            addFraction(add, "Spell Crit from Intellect", readClean("GetSpellCritChanceFromStat", 1, 4, value))
+            addCritFromAttribute(add, 4, value)
         elseif key == "Spirit" then
             if readClean("UnitStat", 2, "player", 5) ~= value then return end
             addScaled(add, "Health Regen from Spirit / 5 sec (standing)", readClean("GetHealthRegenFromSpirit", 1), 3.75, "%.2f")
@@ -1856,27 +1882,36 @@ do
                 addScaled(add, "Mana Regen / 5 sec", readClean("GetManaRegen", 1), 5, "%.2f")
             end
         elseif key == "Strength" then
-            local paperDoll = _G.C_PaperDollInfo
-            if readClean("UnitStat", 2, "player", 1) == value and type(paperDoll) == "table"
-                and readPaperDoll(paperDoll.OffhandHasShield) == true then
-                addNumber(add, "Block Value from Strength", math.floor(value / 20))
+            if readShieldStrength() == value then
+                addBlockFromStrength(add, value)
             end
         elseif key == "Agility" then
-            addNumber(add, "Armor from Agility", value * 2)
+            addArmorFromAgility(add, value)
             if readClean("UnitStat", 2, "player", 2) == value then
-                addFraction(add, "Physical Crit from Agility", readClean("GetCritChanceFromStat", 1, 2, value))
+                addCritFromAttribute(add, 2, value)
                 addFraction(add, "Dodge from Agility", readClean("GetDodgeChanceFromAttribute", 1))
             end
+        elseif key == "Dodge" then
+            if readClean("GetDodgeChance", 1) ~= value then return end
+            local contribution = readClean("GetDodgeChanceFromAttribute", 1)
+            if readClean("GetDodgeChance", 1) == value then addFraction(add, "Dodge from Agility", contribution) end
         elseif key == "Block" then
             if readClean("GetBlockChance", 1) == value then
                 addNumber(add, "Block Value", readClean("GetShieldBlock", 1))
             end
         elseif key == "BlockValue" then
-            if readClean("GetShieldBlock", 1) == value then
-                addPercent(add, "Block", readClean("GetBlockChance", 1))
-            end
+            if readClean("GetShieldBlock", 1) ~= value then return end
+            local strength = readShieldStrength()
+            local chance = readClean("GetBlockChance", 1)
+            if readClean("GetShieldBlock", 1) ~= value then return end
+            if strength ~= nil and readShieldStrength() == strength then addBlockFromStrength(add, strength) end
+            addPercent(add, "Block", chance)
         elseif key == "Armor" then
-            if readClean("UnitArmor", 2, "player") == value then addArmor(add, value) end
+            if readClean("UnitArmor", 2, "player") ~= value then return end
+            local agility = readClean("UnitStat", 2, "player", 2)
+            if readClean("UnitArmor", 2, "player") ~= value then return end
+            if agility ~= nil then addArmorFromAgility(add, agility) end
+            addArmor(add, value)
         elseif key == "Defense" then
             local fn = _G.UnitDefenseSkill
             if type(fn) ~= "function" then return end

@@ -11,6 +11,9 @@ local modifiers = { melee = 3, offhand = 4, ranged = -1, spell = 2 }
 local class = "MAGE"
 local agilityCritReads = 0
 local agilityCrit = 0.0125
+local rangedCrit = 5.45
+local hasShield = true
+local onAgilityCrit
 local primary = { 79, 25, 35, 25, 40 }
 local env = setmetatable({
     GetBuildInfo = function() return "1.60.1", "71037", "Nov 20 2026", 16001 end,
@@ -24,9 +27,14 @@ local env = setmetatable({
         return 0.0325
     end,
     GetDodgeChanceFromAttribute = function() return 0.0425 end,
+    GetDodgeChance = function() return 7.2 end,
+    GetCritChance = function() return 4.97 end,
+    GetRangedCritChance = function() return rangedCrit end,
+    GetSpellCritChance = function() return 5.89 end,
     GetCritChanceFromStat = function(index, agility)
         assert(index == 2 and agility == primary[2])
         agilityCritReads = agilityCritReads + 1
+        if onAgilityCrit then onAgilityCrit() end
         return agilityCrit
     end,
     GetHealthRegenFromSpirit = function() return 8 end,
@@ -53,7 +61,7 @@ local env = setmetatable({
             assert(armor == 1305)
             return secret
         end,
-        OffhandHasShield = function() return true end,
+        OffhandHasShield = function() return hasShield end,
     },
     CR_HIT_MELEE = 6, CR_HIT_RANGED = 7, CR_HIT_SPELL = 8,
     GetCombatRatingBonus = function(rating)
@@ -147,25 +155,52 @@ assert(spirit["Mana Regen from Spirit / 5 sec"] == "15.00" and spirit["Mana Rege
 assert(next(build("Spirit", "clean", 39)) == nil, "different current spirit cannot supplement the last render")
 assert(build("Strength", "clean", 79)["Block Value from Strength"] == "3")
 assert(next(build("Strength", "clean", 78)) == nil)
-env.C_PaperDollInfo.OffhandHasShield = function() return false end
+hasShield = false
 assert(not build("Strength", "clean", 79)["Block Value from Strength"])
 local agility = build("Agility", "clean", 25)
 assert(agility["Dodge from Agility"] == "4.25%")
 assert(agility["Physical Crit from Agility"] == "1.25%" and agilityCritReads == 1)
 local earlierAgility = build("Agility", "clean", 26)
-assert(earlierAgility["Armor from Agility"] == "52" and not earlierAgility["Physical Crit from Agility"])
+assert(earlierAgility["Base Armor from Agility"] == "52" and not earlierAgility["Physical Crit from Agility"])
 assert(agilityCritReads == 1, "a different current Agility must not be used to supplement an old reading")
+for key, total in pairs({ MeleeCrit = 4.97, RangedCrit = 5.45 }) do
+    local crit = build(key, "clean", total)
+    assert(crit["Physical Crit from Agility"] == agility["Physical Crit from Agility"])
+    assert(not crit["Melee Crit"] and not crit["Ranged Crit"] and not crit["Spell Crit"],
+        "other critical chances are not sources of the hovered total")
+    assert(next(build(key, "clean", total + 1)) == nil)
+end
+assert(build("SpellCrit", "clean", 5.89)["Spell Crit from Intellect"] == intellect["Spell Crit from Intellect"])
+assert(next(build("SpellCrit", "stale", 5.89)) == nil)
+onAgilityCrit = function() rangedCrit = 6.45 end
+assert(next(build("RangedCrit", "clean", 5.45)) == nil, "a changed total cannot take a newer contribution")
+rangedCrit = 5.45
+onAgilityCrit = function() primary[2] = 26 end
+assert(next(build("RangedCrit", "clean", 5.45)) == nil, "a changed attribute invalidates the contribution")
+onAgilityCrit = nil
+primary[2] = 25
 agilityCrit = secret
 assert(not build("Agility", "clean", 25)["Physical Crit from Agility"])
+assert(next(build("RangedCrit", "clean", 5.45)) == nil)
+primary[4] = secret
+assert(next(build("SpellCrit", "clean", 5.89)) == nil)
+primary[4] = 25
+assert(build("Dodge", "clean", 7.2)["Dodge from Agility"] == agility["Dodge from Agility"])
+assert(next(build("Dodge", "clean", 5)) == nil)
 for locale, labels in pairs(F.labels) do
     local label = labels["Physical Crit from Agility"]
     assert(type(label) == "string" and label ~= "", "missing Agility crit label for " .. locale)
+    assert(labels["Base Armor from Agility"], "missing base Agility armor label for " .. locale)
     assert(labels["Health Regen from Spirit / 5 sec (standing)"], "missing standing Spirit label for " .. locale)
 end
 assert(build("Block", "clean", 6.5)["Block Value"] == "27")
 assert(next(build("Block", "clean", 7.5)) == nil)
 assert(build("BlockValue", "clean", 27)["Block"] == "6.50%")
+assert(not build("BlockValue", "clean", 27)["Block Value from Strength"])
+hasShield = true
+assert(build("BlockValue", "clean", 27)["Block Value from Strength"] == "3")
 local armor = build("Armor", "clean", 1305)
+assert(armor["Base Armor from Agility"] == agility["Base Armor from Agility"])
 assert(armor["Damage Reduction at Your Level"] == "10.00%" and not armor["Damage Reduction Against Target"])
 assert(next(build("Armor", "clean", 1705)) == nil)
 local defense = build("Defense", "clean", 307)

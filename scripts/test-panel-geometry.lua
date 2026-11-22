@@ -571,5 +571,65 @@ if forever then
     equal("world recovery applies the expected header font", tooltip.headerProbe:GetFont(), tooltip.statFont)
 end
 
+do
+    local price = 12345
+    local function loadSplitRepair()
+        return fixtures.loadStatsPro("enUS", {
+            forever = forever,
+            statsProDB = {
+                dbVersion = 9, displayMode = "split", showDurability = true,
+                showRepairCost = true, splitRepairCost = true, fontSize = 14,
+            },
+            getInventoryItemDurability = function(slot)
+                if slot == 1 then return 75, 100 end
+            end,
+            getTooltipInventoryItem = function() return { repairCost = price } end,
+        })
+    end
+
+    local gearEnv, gearAddon, gearTest = loadSplitRepair()
+    local mainLabel = gearTest.setPanelMeasurementOverride("main", "label", 500, 48)
+    local sideRepair = gearTest.panelFontState().sideFontRegions[4]
+    gearEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    equal("valid label width is cached", gearTest.panelVisualState().mainCachedLabelW, 500)
+    equal("split repair starts with the original price", sideRepair:GetText(), "coin:12345:14")
+    local originalWidth, originalHeight = mainLabel.GetStringWidth, mainLabel.GetStringHeight
+    for index, failure in ipairs({
+        { "throwing", function() error("native measurement unavailable") end },
+        { "NaN", function() return 0 / 0 end },
+        { "infinite", function() return math.huge end },
+        { "incorrect type", function() return "500" end },
+        { "negative", function() return -1 end },
+    }) do
+        local name, measure = unpack(failure)
+        mainLabel.GetStringWidth, mainLabel.GetStringHeight = measure, measure
+        price = 23456 + index
+        gearEnv.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+        equal(name .. " measurement does not abort either panel", gearAddon:RunUpdateStatsSafe(), true)
+        local state = gearTest.panelVisualState()
+        equal(name .. " measurement keeps the last clean width", state.mainCachedLabelW, 500)
+        equal(name .. " measurement uses the last clean width", state.mainRenderedLabelW, 500)
+        equal(name .. " measurement keeps the last clean height", state.mainCachedLabelH, 48)
+        equal(name .. " measurement still renders current split repair", sideRepair:GetText(), "coin:" .. price .. ":14")
+    end
+    mainLabel.GetStringWidth, mainLabel.GetStringHeight = originalWidth, originalHeight
+    gearTest.setPanelMeasurementOverride("main", "label", 240, 31)
+    equal("valid measurement still succeeds after repeated failures", gearAddon:RunUpdateStatsSafe(), true)
+    equal("a later clean width replaces the previous cache", gearTest.panelVisualState().mainCachedLabelW, 240)
+
+    local coldEnv, coldAddon, coldTest = loadSplitRepair()
+    local coldLabel = coldTest.setPanelMeasurementOverride("main", "label", nil, nil)
+    coldLabel.GetStringWidth = function() error("cold native width unavailable") end
+    coldLabel.GetStringHeight = function() return math.huge end
+    coldEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    equal("cold measurement failure still renders", coldAddon:RunUpdateStatsSafe(), true)
+    local cold = coldTest.panelVisualState()
+    equal("cold unavailable width uses the conservative font-size fallback", cold.mainRenderedLabelW, 14 * 8)
+    equal("cold width estimate does not masquerade as a clean cache", cold.mainCachedLabelW, nil)
+    equal("cold height estimate does not masquerade as a clean cache", cold.mainCachedLabelH, nil)
+    equal("cold fallback does not stop the split repair row",
+        coldTest.panelFontState().sideFontRegions[4]:GetText(), "coin:" .. price .. ":14")
+end
+
 if #errors > 0 then error(table.concat(errors, "\n"), 0) end
 print((forever and "Forever" or "Retail") .. " HUD clean/restricted geometry and visibility passed")

@@ -11102,8 +11102,8 @@ end
 -- used by this render. The second return value is always the last CLEAN measurement;
 -- fallback geometry must not masquerade as clean cache state across content changes.
 local function MeasuredOrCached(fs, current_cache, method, fallback, keepKnownSize)
-    local v = fs[method](fs)
-    if v and not issecretvalue(v) then
+    local ok, v = pcall(fs[method], fs)
+    if ok and SAFE_NUM.IsCleanFiniteNumber(v) and v >= 0 then
         return v, v
     end
     if fallback and (not current_cache or (not keepKnownSize and current_cache < fallback)) then

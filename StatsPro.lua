@@ -4900,7 +4900,8 @@ function addon.movementRuntime.NativePercentFormatterAvailable(formatter)
     local boostSecretOK, boostSecret = pcall(issecretvalue, boostText)
     if not baseOK or not boostOK or not baseSecretOK or baseSecret ~= false
         or not boostSecretOK or boostSecret ~= false
-        or type(baseText) ~= "string" or type(boostText) ~= "string" then
+        or type(baseText) ~= "string" or type(boostText) ~= "string"
+        or baseText == "" or boostText == "" then
         runtime.nativePercentRetryBlocked = true
         return false
     end

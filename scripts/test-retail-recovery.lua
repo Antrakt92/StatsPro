@@ -1524,9 +1524,31 @@ for _, kind in ipairs(forever and { "Movement", "MP5" } or { "Movement" }) do
     assert(read(first) == nativeFirst and read(second) == nativeSecond and restrictedCalls == 4,
         kind .. ": resumed native path displays consecutive live values")
 
+    local readyFormatter = env.AbbreviateNumbers
+    local function replaceFormatter(formatter)
+        env.AbbreviateNumbers = formatter
+    end
+    local blankCalibration, blankProbes = true, 0
+    replaceFormatter(function(value, ...)
+        if type(value) == "number" and blankCalibration then
+            blankProbes = blankProbes + 1
+            return ""
+        end
+        return readyFormatter(value, ...)
+    end)
+    assert(read(first) == fallbackFirst and blankProbes > 0,
+        kind .. ": blank calibration safely uses the raw-unit fallback")
+    local priorProbeCalls = probeCalls
+    blankCalibration = false
+    assert(read(second) == fallbackSecond and probeCalls == priorProbeCalls,
+        kind .. ": recovered calibration waits until a normal retry event")
+    cycleCombat()
+    assert(read(second) == nativeSecond and probeCalls > priorProbeCalls,
+        kind .. ": blank calibration does not permanently reject the same native formatter")
+
     local incompatibleProbes, unexpectedProtectedCalls = 0, 0
     local compatible = false
-    env.AbbreviateNumbers = function(value)
+    replaceFormatter(function(value)
         if type(value) ~= "number" then
             unexpectedProtectedCalls = unexpectedProtectedCalls + 1
             return nativeFirst
@@ -1535,7 +1557,7 @@ for _, kind in ipairs(forever and { "Movement", "MP5" } or { "Movement" }) do
         if not compatible then return "1.0" end
         if kind == "Movement" then return value == 7 and "100%" or "150%" end
         return "10.25"
-    end
+    end)
     assert(read(first) == fallbackFirst and incompatibleProbes > 0, kind .. ": clean mismatch fails closed")
     local provenMismatch = incompatibleProbes
     compatible = true

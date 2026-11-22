@@ -354,5 +354,70 @@ do
     equal("the first auction frame removes the empty Gear heading", visibleLabel:find("Gear", 1, true), nil)
 end
 
+for _, mode in ipairs({ "recovered", "superseded", "exhausted" }) do
+    local guid, guidReads, rejected = nil, 0, 0
+    local profileEnv, _, profileTest = fixtures.loadStatsPro("enUS", {
+        forever = forever,
+        specIndex = 1, specID = 73, specRole = "TANK",
+        unitGUID = function()
+            guidReads = guidReads + 1
+            return guid
+        end,
+    })
+    local after = profileEnv.C_Timer.After
+    profileEnv.C_Timer.After = function(delay, callback)
+        if delay == 0.25 or delay == 0.5 or delay == 0.75 then
+            rejected = rejected + 1
+            -- Simulate native registration that accepts a callback before throwing.
+            if mode ~= "exhausted" then after(delay, callback) end
+            error("context timer is temporarily unavailable")
+        end
+        return after(delay, callback)
+    end
+    local ticker
+    for _, candidate in ipairs(profileEnv.__frames) do
+        if candidate.scripts and type(candidate.scripts.OnUpdate) == "function" then
+            ticker = candidate
+            break
+        end
+    end
+    assert(ticker, "expected the persistent StatsPro ticker")
+    local function tick(elapsed)
+        ticker.scripts.OnUpdate(ticker, elapsed)
+    end
+    profileEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local profile = profileTest.profileRuntimeState()
+    equal(mode .. " starts with a rejected native context timer", rejected, 1)
+    equal(mode .. " bootstrap waits while player context is unresolved", profile.pendingResolution, true)
+    equal(mode .. " the failed native callback no longer owns the retry", profile.contextRetryScheduled, false)
+    equal(mode .. " bootstrap HUD remains hidden initially", profileEnv.StatsProFrame:IsShown(), false)
+    local reads = guidReads
+    if mode ~= "exhausted" then guid = "Player-Timer-Recovery" end
+    profileEnv.__flushTimers()
+    equal(mode .. " a partially registered callback cannot resolve its stale request", guidReads, reads)
+    tick(0.1)
+    tick(0.1)
+    equal(mode .. " fallback never rereads context before its normal delay", guidReads, reads)
+    if mode == "superseded" then
+        profileEnv.__fireEvent("UNIT_NAME_UPDATE", "player")
+        profileEnv.__flushTimers()
+        equal("new native request resolves bootstrap before the stale fallback", profileEnv.StatsProFrame:IsShown(), true)
+        reads = guidReads
+        tick(0.1)
+        equal("superseded fallback cannot reread the new context", guidReads, reads)
+    elseif mode == "recovered" then
+        tick(0.1)
+        equal("one transient timer failure recovers without a new event", profileEnv.StatsProFrame:IsShown(), true)
+        equal("fallback completes profile resolution", profileTest.profileRuntimeState().pendingResolution, false)
+    else
+        for _ = 1, 30 do tick(0.1) end
+        equal("persistent timer failure retains the original bounded retry count", rejected, 3)
+        equal("persistent failure keeps the unresolved HUD hidden", profileEnv.StatsProFrame:IsShown(), false)
+        reads = guidReads
+        tick(10)
+        equal("exhausted fallback performs no additional reads", guidReads, reads)
+    end
+end
+
 if #errors > 0 then error(table.concat(errors, "\n"), 0) end
 print((forever and "Forever" or "Retail") .. " HUD clean/restricted geometry and visibility passed")

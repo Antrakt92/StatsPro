@@ -793,6 +793,213 @@ do
 end
 print(flavor .. " profile capacity recovery regressions passed")
 
+local function rejectArm(env, selectedDelay)
+    local original = env.C_Timer.After
+    local retired
+    env.C_Timer.After = function(delay, callback)
+        if delay == selectedDelay then
+            if not retired then retired = callback end
+            error("injected timer registration rejection")
+        end
+        return original(delay, callback)
+    end
+    return function()
+        env.C_Timer.After = original
+        return assert(retired, "the intended timer arm was rejected")
+    end
+end
+
+if not forever then
+    do
+        local env, addon, test = loadStatsPro("enUS", {
+            unitGUID = function() return "Player-PositionRollback" end,
+            specIndex = 1, specID = 64,
+        })
+        env.__fireEvent("PLAYER_ENTERING_WORLD")
+        local original = addon.dbRuntime.GetActiveSettings()
+        original.xOfs, original.yOfs = false, nil
+        test.profileOps.setFailureStage("validate")
+        local currentProfileID = test.profileState().profileID
+        assert(currentProfileID, "the fixture has an active profile")
+        assert(not test.profileOps.resetProfile(currentProfileID), "candidate validation rejects the reset")
+        assert(rawequal(original, addon.dbRuntime.GetActiveSettings())
+            and rawget(original, "xOfs") == false and rawget(original, "yOfs") == nil,
+            "rollback preserves explicit false independently of an absent position field")
+    end
+
+    do
+        local env, _, test = loadStatsPro("enUS", {
+            unitGUID = function() return "Player-BootstrapNoSpec" end,
+            getSpecialization = function() return nil end,
+        })
+        local restoreTimer = rejectArm(env, 0.1)
+        env.__fireEvent("PLAYER_ENTERING_WORLD")
+        local rejectedCallback = restoreTimer()
+        local ticker
+        for _, frame in ipairs(env.__frames) do
+            if frame.scripts and frame.scripts.OnUpdate then ticker = frame; break end
+        end
+        assert(ticker, "bootstrap keeps a persistent ticker")
+        rejectedCallback()
+        ticker.scripts.OnUpdate(ticker, 0.05)
+        assert(not env.StatsProFrame:IsShown(), "fallback waits for the usual no-spec settlement delay")
+        ticker.scripts.OnUpdate(ticker, 0.05)
+        assert(env.StatsProFrame:IsShown() and not test.profileRuntimeState().pendingResolution,
+            "cold no-spec settlement recovers from a rejected timer without an additional event")
+    end
+
+    local function profileFixture()
+        local identity = { spec = 64, index = 1 }
+        local env, addon, test = loadStatsPro("enUS", {
+            unitClassToken = "MAGE",
+            unitGUID = function() return "Player-RetryTimerArm" end,
+            getSpecialization = function() return identity.index end,
+            getSpecializationInfo = function()
+                return identity.spec, "Mage", nil, nil, "DAMAGER", 4
+            end,
+        })
+        env.__fireEvent("PLAYER_ENTERING_WORLD")
+        assert(test.profileRuntimeState().activeSpecID == 64)
+        return identity, env, addon.profileRuntime, test
+    end
+
+    do
+        local identity, env, runtime, test = profileFixture()
+        local restoreTimer = rejectArm(env, 0)
+        identity.spec = 63
+        env.__fireEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+        local rejectedCallback = restoreTimer()
+        assert(runtime.pendingResolution and runtime.scheduledToken == nil,
+            "failed registration leaves no phantom immediate callback")
+        env.__fireEvent("UNIT_NAME_UPDATE", "player")
+        rejectedCallback()
+        assert(test.profileRuntimeState().activeSpecID == 64 and runtime.scheduledToken ~= nil,
+            "an abandoned callback cannot consume the fresh request")
+        env.__flushTimers(0)
+        assert(test.profileRuntimeState().activeSpecID == 63 and not runtime.pendingResolution,
+            "the next ordinary event resolves specialization without combat or reload")
+    end
+
+    do
+        local identity, env, runtime, test = profileFixture()
+        identity.spec = nil
+        local restoreTimer = rejectArm(env, 0.25)
+        assert(not runtime.ResolveCurrent(false))
+        local rejectedCallback = restoreTimer()
+        assert(runtime.contextRetryToken == nil and runtime.contextRetryCount == 1,
+            "rejected context retry spends one attempt without blocking another")
+        assert(not runtime.ResolveCurrent(false) and runtime.contextRetryToken ~= nil
+            and runtime.contextRetryCount == 2)
+        rejectedCallback()
+        identity.spec = 63
+        env.__flushTimers(0.5)
+        assert(test.profileRuntimeState().activeSpecID == 63 and not runtime.pendingResolution)
+    end
+
+    do
+        local identity, env, runtime, test = profileFixture()
+        identity.index = nil
+        local restoreTimer = rejectArm(env, 0.1)
+        assert(not runtime.ResolveCurrent(false))
+        local rejectedCallback = restoreTimer()
+        assert(runtime.noSpecRetryToken == nil)
+        assert(not runtime.ResolveCurrent(false) and runtime.noSpecRetryToken ~= nil)
+        rejectedCallback()
+        assert(test.profileRuntimeState().activeSpecID == 64 and runtime.noSpecRetryToken ~= nil,
+            "a replacement no-spec retry owns a different token in the same request generation")
+        env.__flushTimers(0.1)
+        assert(test.profileRuntimeState().activeSpecID == nil and not runtime.pendingResolution,
+            "the accepted timer still settles the terminal no-spec fallback")
+    end
+
+    do
+        local _, env, runtime, test = profileFixture()
+        local restoreTimer = rejectArm(env, 0.25)
+        local apply = runtime.applyActiveSettings
+        runtime.applyActiveSettings = function() error("injected runtime apply failure") end
+        runtime.forceReapply = true
+        assert(not runtime.ResolveCurrent(false))
+        local rejectedCallback = restoreTimer()
+        assert(runtime.forceReapplyRetryToken == nil and runtime.forceReapplyRetryCount == 1)
+        assert(not runtime.ResolveCurrent(false) and runtime.forceReapplyRetryToken ~= nil)
+        rejectedCallback()
+        runtime.applyActiveSettings = apply
+        env.__flushTimers(0.5)
+        assert(test.profileRuntimeState().activeSpecID == 64 and not runtime.forceReapply
+            and not runtime.pendingResolution, "a rejected apply retry leaves the original profile recoverable")
+    end
+    do
+        local _, env, runtime, test = profileFixture()
+        local state = test.profileState()
+        local nextID = state.account.defaultProfileID
+        assert(state.profileID ~= nextID)
+        state.characters[runtime.activeGUID].specProfiles[64] = nextID
+        local restoreTimer = rejectArm(env, 0)
+        test.profileViewModel()
+        local rejectedCallback = restoreTimer()
+        assert(runtime.bindingReconciliationPending and runtime.bindingReconciliationToken == nil
+            and test.profileState().profileID == state.profileID,
+            "a rejected binding reconciliation retains the old applied payload")
+        test.profileViewModel()
+        assert(runtime.bindingReconciliationToken ~= nil)
+        rejectedCallback()
+        assert(test.profileState().profileID == state.profileID)
+        env.__flushTimers(0)
+        assert(test.profileState().profileID == nextID and not runtime.bindingReconciliationPending,
+            "a normal follow-up read re-arms and reconciles the assignment")
+    end
+    do
+        local env, addon = loadStatsPro("enUS", { statsProDB = { dbVersion = 11, account = {} } })
+        env.__fireEvent("PLAYER_ENTERING_WORLD")
+        local root, runtime = env.StatsProDB, addon.profileRuntime
+        assert(addon.dbRuntime.mode == "corrupt")
+        runtime.forceReapply = true
+        local restoreTimer = rejectArm(env, 0.25)
+        assert(not runtime.ScheduleCorruptRollbackApply(root))
+        local rejectedCallback = restoreTimer()
+        assert(runtime.corruptRollbackRetryToken == nil and runtime.corruptRollbackRetryCount == 0)
+        assert(runtime.ResumeCorruptRollbackApply())
+        rejectedCallback()
+        assert(runtime.corruptRollbackRetryToken ~= nil and runtime.forceReapply)
+        env.__flushTimers(0.25)
+        assert(not runtime.forceReapply and runtime.corruptRollbackRetryToken == nil
+            and addon.dbRuntime.mode == "corrupt" and env.StatsProDB == root,
+            "successful reapply keeps the original corrupt SavedVariables intact and read-only")
+    end
+else
+    local classReady = false
+    local env, addon, test = loadStatsPro("enUS", {
+        unitGUID = function() return "Player-DeferredStarterArm" end,
+        foreverAPIs = { UnitClass = function()
+            if classReady then return "Mage", "MAGE", 8 end
+        end },
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    local before = test.profileState()
+    local nextProfileID = before.root.account.nextProfileID
+    addon:OpenConfigMenu()
+    classReady = true
+    env.__fireEvent("UNIT_NAME_UPDATE", "player")
+    env.__flushTimers(0)
+    local runtime = addon.profileRuntime
+    local pending = assert(runtime.foreverPendingStarter)
+    assert(pending.deferred and not before.settings.showSpellCrit)
+    local restoreTimer = rejectArm(env, 0)
+    runtime.ResumeDeferredForeverStarter()
+    local rejectedCallback = restoreTimer()
+    assert(not pending.resumeScheduled)
+    env.StatsProConfigFrame:Hide()
+    local fresh = assert(pending.resumeScheduled)
+    rejectedCallback()
+    assert(pending.resumeScheduled == fresh and test.profileState().settings == before.settings)
+    env.__flushTimers(0)
+    local updated = test.profileState()
+    assert(updated.profileID == before.profileID and updated.settings.showSpellCrit
+        and updated.root.account.nextProfileID == nextProfileID,
+        "the deferred starter wakes on Settings close without allocating a duplicate profile")
+end
+print(flavor .. " rejected profile timer arm regressions passed")
+
 if not forever then
     local rating, percent = 0, 5
     local function readRating() return rating end

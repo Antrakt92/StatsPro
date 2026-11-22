@@ -6671,7 +6671,7 @@ function addon.profileRuntime.QueueBindingReconciliation()
     if runtime.bindingReconciliationToken ~= nil then return true end
     local token = {}
     runtime.bindingReconciliationToken = token
-    C_Timer.After(0, function()
+    local scheduled = pcall(C_Timer.After, 0, function()
         if runtime.bindingReconciliationToken ~= token then return end
         if runtime.bindingReconciliationPending
             and type(runtime.ResolvePending) == "function" then
@@ -6684,7 +6684,10 @@ function addon.profileRuntime.QueueBindingReconciliation()
             runtime.bindingReconciliationToken = nil
         end
     end)
-    return true
+    if not scheduled and runtime.bindingReconciliationToken == token then
+        runtime.bindingReconciliationToken = nil
+    end
+    return scheduled
 end
 
 function addon.dbRuntime.Refresh(forceFullValidation)
@@ -7146,8 +7149,10 @@ function addon.profileRuntime.ResumeDeferredForeverStarter()
     local runtime = addon.profileRuntime
     local expected = runtime.foreverPendingStarter
     if not expected or not expected.deferred or expected.resumeScheduled then return end
-    expected.resumeScheduled = true
-    C_Timer.After(0, function()
+    local token = {}
+    expected.resumeScheduled = token
+    local scheduled = pcall(C_Timer.After, 0, function()
+        if expected.resumeScheduled ~= token then return end
         expected.resumeScheduled = nil
         if not rawequal(runtime.foreverPendingStarter, expected)
             or runtime.transitioning or addon.profileOps.inProgress then return end
@@ -7155,6 +7160,9 @@ function addon.profileRuntime.ResumeDeferredForeverStarter()
         -- any dialog reopened before the queued repair runs.
         runtime.RequestResolution(false)
     end)
+    if not scheduled and expected.resumeScheduled == token then
+        expected.resumeScheduled = nil
+    end
 end
 
 function addon.profileRuntime.PrepareContextTransaction(context)
@@ -7369,14 +7377,19 @@ function addon.profileRuntime.ScheduleContextRetry()
     local retryToken = {}
     local requestGeneration = runtime.requestGeneration
     runtime.contextRetryToken = retryToken
-    C_Timer.After(math.min(0.25 * runtime.contextRetryCount, 1), function()
+    local delay = math.min(0.25 * runtime.contextRetryCount, 1)
+    local scheduled = pcall(C_Timer.After, delay, function()
         if runtime.contextRetryToken ~= retryToken then return end
         runtime.contextRetryToken = nil
         if runtime.requestGeneration ~= requestGeneration then return end
         runtime.ResolveCurrent(false)
     end)
+    if not scheduled and runtime.contextRetryToken == retryToken then
+        runtime.contextRetryToken = nil
+        runtime.QueueContextTickRetry(requestGeneration, delay)
+    end
     addon.profileUI.RefreshSafe()
-    return true
+    return scheduled
 end
 
 function addon.profileRuntime.ClearCorruptRollbackRetry()
@@ -7396,7 +7409,7 @@ function addon.profileRuntime.ScheduleCorruptRollbackApply(root)
 
     local token = {}
     runtime.corruptRollbackRetryToken = token
-    C_Timer.After(math.min(0.25 * (runtime.corruptRollbackRetryCount + 1), 1), function()
+    local scheduled = pcall(C_Timer.After, math.min(0.25 * (runtime.corruptRollbackRetryCount + 1), 1), function()
         if runtime.corruptRollbackRetryToken ~= token then return end
         runtime.corruptRollbackRetryToken = nil
         local currentRoot = addon.dbRuntime.Refresh()
@@ -7422,7 +7435,10 @@ function addon.profileRuntime.ScheduleCorruptRollbackApply(root)
         end
         addon.profileUI.RefreshSafe()
     end)
-    return true
+    if not scheduled and runtime.corruptRollbackRetryToken == token then
+        runtime.corruptRollbackRetryToken = nil
+    end
+    return scheduled
 end
 
 function addon.profileRuntime.ResumeCorruptRollbackApply()
@@ -7650,12 +7666,15 @@ function addon.profileRuntime.ResolveCurrent(initializing, combatEnded)
                 local retryToken = {}
                 local requestGeneration = runtime.requestGeneration
                 runtime.forceReapplyRetryToken = retryToken
-                C_Timer.After(math.min(0.25 * runtime.forceReapplyRetryCount, 1), function()
+                local scheduled = pcall(C_Timer.After, math.min(0.25 * runtime.forceReapplyRetryCount, 1), function()
                     if runtime.forceReapplyRetryToken ~= retryToken then return end
                     runtime.forceReapplyRetryToken = nil
                     if runtime.requestGeneration ~= requestGeneration then return end
                     runtime.ResolveCurrent(false)
                 end)
+                if not scheduled and runtime.forceReapplyRetryToken == retryToken then
+                    runtime.forceReapplyRetryToken = nil
+                end
             end
             addon.profileUI.RefreshSafe()
             return false
@@ -7687,16 +7706,24 @@ function addon.profileRuntime.ResolveCurrent(initializing, combatEnded)
         else
             runtime.pendingResolution = true
             if contextStatus == "no-spec" and runtime.noSpecRetryToken == nil then
-                local token = runtime.requestGeneration
-                runtime.noSpecRetryToken = token
-                C_Timer.After(0.1, function()
-                    if runtime.noSpecRetryToken ~= token then return end
-                    runtime.noSpecRetryToken = nil
-                    if runtime.requestGeneration ~= token then return end
+                local token = {}
+                local requestGeneration = runtime.requestGeneration
+                local function settle()
                     runtime.settlingNoSpec = true
                     runtime.ResolveCurrent(false)
                     runtime.settlingNoSpec = false
+                end
+                runtime.noSpecRetryToken = token
+                local scheduled = pcall(C_Timer.After, 0.1, function()
+                    if runtime.noSpecRetryToken ~= token then return end
+                    runtime.noSpecRetryToken = nil
+                    if runtime.requestGeneration ~= requestGeneration then return end
+                    settle()
                 end)
+                if not scheduled and runtime.noSpecRetryToken == token then
+                    runtime.noSpecRetryToken = nil
+                    if runtime.bootstrapPending then runtime.QueueContextTickRetry(requestGeneration, 0.1, settle) end
+                end
             elseif contextStatus == "unknown" then
                 runtime.ScheduleContextRetry()
             end
@@ -7820,12 +7847,15 @@ function addon.profileRuntime.RequestResolution(immediate)
     if runtime.scheduledToken ~= nil then return true end
     local token = runtime.requestGeneration
     runtime.scheduledToken = token
-    C_Timer.After(0, function()
+    local scheduled = pcall(C_Timer.After, 0, function()
         if runtime.scheduledToken ~= token then return end
         runtime.scheduledToken = nil
         runtime.ResolveCurrent(false)
     end)
-    return true
+    if not scheduled and runtime.scheduledToken == token then
+        runtime.scheduledToken = nil
+    end
+    return scheduled
 end
 
 function addon.profileRuntime.ResolvePending(combatEnded)
@@ -8183,7 +8213,11 @@ function addon.profileOps.RestorePositionFields(settings, snapshot)
     if not settings or not snapshot then return end
     for _, key in ipairs(addon.profileOps.positionKeys) do
         local entry = snapshot[key]
-        settings[key] = entry and entry.present and entry.value or nil
+        if entry and entry.present then
+            settings[key] = entry.value
+        else
+            settings[key] = nil
+        end
     end
 end
 
@@ -12693,7 +12727,31 @@ end
 -- The cost of running UpdateStats during /ss hide is one early-return per tick.
 local timeSinceLastUpdate = 0
 local tickerFrame = CreateFrame("Frame")
+function addon.profileRuntime.QueueContextTickRetry(generation, delay, resolve)
+    local runtime = addon.profileRuntime
+    runtime.contextTickRetry = {
+        generation = generation, attempt = runtime.contextRetryCount, delay = delay,
+        resolve = resolve or runtime.ResolveCurrent,
+    }
+end
+
 tickerFrame:SetScript("OnUpdate", function(self, elapsed)
+    local profile = addon.profileRuntime
+    local retry = profile.contextTickRetry
+    if retry then
+        -- A rejected native timer can leave bootstrap pending while the HUD is
+        -- still hidden. Spend the same bounded retry on this visible ticker.
+        if profile.requestGeneration ~= retry.generation or profile.contextRetryCount ~= retry.attempt
+            or profile.contextRetryToken ~= nil or profile.noSpecRetryToken ~= nil or not profile.pendingResolution then
+            profile.contextTickRetry = nil
+        else
+            retry.delay = retry.delay - elapsed
+            if retry.delay <= 0 then
+                profile.contextTickRetry = nil
+                retry.resolve(false)
+            end
+        end
+    end
     if not isLoaded then return end
     local crit = addon.critRuntime
     if crit.specRecheckDelay then

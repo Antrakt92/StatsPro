@@ -621,7 +621,8 @@ function addon.GetMaxSpellSchool()
         or value <= -math.huge or value >= math.huge or value < 2 then
         return 7
     end
-    return math.floor(value)
+    -- The supported character sheet has six non-physical school IDs (2–7).
+    return math.min(7, math.floor(value))
 end
 
 function addon.GetBestCritChance()
@@ -4830,6 +4831,11 @@ function SAFE_NUM.ResolveDisplayNumber(value, requireNonNegative)
     return value, value
 end
 
+function SAFE_NUM.HasFormattedNumberText(text)
+    -- The formatter may return protected text. Only clean strings can be inspected.
+    return type(text) == "string" and (issecretvalue(text) or text ~= "")
+end
+
 -- One formatter for every display-only numeric path. Restricted values go only
 -- through Blizzard's C formatter; the returned clean flag is separate so callers
 -- never have to compare or branch on the possibly secret result string.
@@ -4847,11 +4853,11 @@ function SAFE_NUM.FormatDisplayNumber(value, cleanFormat, secretSuffix)
             end
             local postClearOK = pcall(formatter.ClearText, formatter)
             if not preClearOK or not setOK or not getOK or not postClearOK
-                or type(text) ~= "string" then
+                or not SAFE_NUM.HasFormattedNumberText(text) then
                 -- A failed holder is never reused: a sticky Text secret
                 -- aspect would make its later output and dimensions untrustworthy.
                 SAFE_NUM.secretFormatter = nil
-            elseif getOK then
+            else
                 -- WARNING: text may itself be secret. Do not inspect, compare, cache,
                 -- or reformat it; callers may only concatenate and pass it to SetText.
                 return text, true
@@ -4861,7 +4867,7 @@ function SAFE_NUM.FormatDisplayNumber(value, cleanFormat, secretSuffix)
         local fallback = _G.C_StringUtil and _G.C_StringUtil.RoundToNearestString
         if type(fallback) == "function" then
             local ok, text = pcall(fallback, value)
-            if ok and type(text) == "string" then return text .. suffix, true end
+            if ok and SAFE_NUM.HasFormattedNumberText(text) then return text .. suffix, true end
         end
         return "?" .. suffix, true, true
     end
@@ -4914,7 +4920,7 @@ function addon.movementRuntime.FormatRestricted(runSpeed)
     local formatter = _G.AbbreviateNumbers
     if runtime.NativePercentFormatterAvailable(formatter) then
         local ok, text = pcall(formatter, runSpeed, runtime.nativePercentOptions)
-        if ok and type(text) == "string" then
+        if ok and SAFE_NUM.HasFormattedNumberText(text) then
             -- WARNING: text is secret. Callers may only concatenate it and pass it
             -- through the existing FontString render path; never inspect, compare,
             -- or reformat it.

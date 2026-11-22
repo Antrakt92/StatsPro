@@ -1559,4 +1559,93 @@ do
         and tooltip.lines[2].right:find("35.00", 1, true),
         "the same hover restores the resting rate after combat")
 end
+do
+    local protectedNumber = {}
+    local protectedText = "protected number text"
+    local function isProtected(value)
+        return rawequal(value, protectedNumber) or value == protectedText
+    end
+    local function renderText(blocks, key)
+        for _, block in ipairs(blocks) do
+            if block.splitKey == key then
+                return table.concat(block.ratings) .. table.concat(block.values)
+            end
+        end
+        error("expected to find HUD block " .. key)
+    end
+    for _, flavor in ipairs({ "Retail", "Forever" }) do
+        local isForever = flavor == "Forever"
+        for _, scenario in ipairs({
+            { "empty primary", "", "13", "13%" },
+            { "empty fallback", false, "", "?%" },
+            { "protected primary", protectedText, "unexpected fallback", protectedText },
+            { "protected fallback", false, protectedText, protectedText .. "%" },
+        }) do
+            local name, primary, fallback, expected = unpack(scenario)
+            local fallbackCalls = 0
+            local client, subject, view = fixtures.loadStatsPro("enUS", {
+                forever = isForever,
+                statsProDB = {
+                    dbVersion = 9, showDefensive = true, showParry = true,
+                    showPercentage = true, showRating = false, hideZeroDefensive = false,
+                },
+                issecretvalue = isProtected,
+                getParryChance = function() return protectedNumber end,
+                setFormattedText = function(_, _, value)
+                    assert(rawequal(value, protectedNumber))
+                    if primary == false then error("native formatter unavailable") end
+                    return primary
+                end,
+                roundToNearestString = function(value)
+                    assert(rawequal(value, protectedNumber))
+                    fallbackCalls = fallbackCalls + 1
+                    return fallback
+                end,
+            })
+            client.__fireEvent("PLAYER_ENTERING_WORLD")
+            check(subject:RunUpdateStatsSafe(), flavor .. " " .. name .. " formatting does not abort")
+            local text = renderText(view.buildRenderBlocks(), "splitDefensive")
+            check(text:find(expected, 1, true) ~= nil, flavor .. " " .. name .. " yields " .. expected)
+            check((fallbackCalls == 0) == (name == "protected primary"),
+                flavor .. " " .. name .. " observes the native fallback boundary")
+        end
+
+        local client, subject, view = fixtures.loadStatsPro("enUS", {
+            forever = isForever,
+            statsProDB = {
+                dbVersion = 9, showTertiary = true, showSpeed = true, showMovementSpeed = true,
+                showPercentage = true, showRating = false, hideZeroTertiary = false,
+            },
+            issecretvalue = isProtected,
+            getUnitSpeed = function() return 0, protectedNumber end,
+            abbreviateNumbers = function(value)
+                if rawequal(value, protectedNumber) then return "" end
+                return value == 7 and "100%" or "150%"
+            end,
+            setFormattedText = function(_, format, value)
+                assert(rawequal(value, protectedNumber) and format == "%.1f yd/s")
+                return "12.5 yd/s"
+            end,
+        })
+        client.__fireEvent("PLAYER_ENTERING_WORLD")
+        check(subject:RunUpdateStatsSafe(), flavor .. " empty scaled movement formatting does not abort")
+        check(renderText(view.buildRenderBlocks(), "splitTertiary"):find("12.5 yd/s", 1, true) ~= nil,
+            flavor .. " empty scaled movement text uses live yards per second")
+    end
+
+    local spellReads = 0
+    local client, subject = fixtures.loadStatsPro("enUS", {
+        getSpellCritChance = function()
+            spellReads = spellReads + 1
+            return 2
+        end,
+    })
+    client.MAX_SPELL_SCHOOLS = 10000
+    subject.GetBestCritChance()
+    check(spellReads == 6, "an overwritten upper bound cannot expand the supported spell school scan")
+    spellReads = 0
+    client.MAX_SPELL_SCHOOLS = 5
+    subject.GetBestCritChance()
+    check(spellReads == 4, "a valid smaller school limit still controls the scan")
+end
 print("StatsPro Forever HUD integration: PASS (" .. count .. " checks)")

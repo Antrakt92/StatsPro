@@ -1345,7 +1345,7 @@ do
         "Forever renders row tooltips independently of Archon comparison data")
     paletteTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
     local tooltip = paletteEnv.StatsProTargetTooltip
-    check(tooltip:IsShown() and tooltip.lines[1].left == "Strength", "Forever hover opens the actual stat")
+    check(not tooltip:IsShown(), "a Forever row without confirmed details has no tooltip")
     paletteTest.fireMainPanelTooltipOverlayForSmoke(1, "OnLeave")
     check(not tooltip:IsShown(), "Forever hover closes when the pointer leaves")
 end
@@ -1472,16 +1472,31 @@ do
     hoverEnv.UIParent:SetWidth(1000)
     hoverTest.fireMainPanelTooltipOverlayForSmoke(2, "OnEnter")
     local tooltip = hoverEnv.StatsProTargetTooltip
+    check(tooltip and not tooltip:IsShown(), "the header alone does not open a tooltip")
+    hoverTest.fireMainPanelTooltipOverlayForSmoke(2, "OnLeave")
+    local reads, expanded = 0, false
+    hoverAddon.forever.BuildAttackPowerTooltip = function(meta, add)
+        if meta.key ~= "Strength" then return end
+        add("Attack Power", tostring(meta.value * 2))
+        if expanded then
+            reads = reads + 1
+            add("Per point", "2", "rate")
+            add(string.rep("Long translated label ", 10), "260")
+        end
+    end
+    check(hoverAddon:RunUpdateStatsSafe() and not tooltip:IsShown(),
+        "new details do not reopen a tooltip after the pointer leaves")
+    hoverTest.fireMainPanelTooltipOverlayForSmoke(2, "OnEnter")
     check(tooltip and tooltip:IsShown() and tooltip.lines[1].left == "Strength",
         "actual row opens its own tooltip")
     local point, relativeTo, relativePoint = tooltip:GetPoint()
     check(point == "TOPRIGHT" and relativeTo == tooltip:GetOwner() and relativePoint == "TOPLEFT",
         "tooltip opens inward beside the hovered row near the right edge")
-    check(#tooltip.lines == 1 and tooltip.lines[1].right:find("130", 1, true)
-        and tooltip.backdropColor.a == 1 and not tooltip.statDivider:IsShown()
+    check(#tooltip.lines == 2 and tooltip.lines[1].right:find("130", 1, true)
+        and tooltip.backdropColor.a == 1 and tooltip.statDivider:IsShown()
         and tooltip.regions[1].leftText.justifyH == "LEFT"
         and tooltip.regions[1].rightText.justifyH == "RIGHT",
-        "a stat without confirmed details shows just its header with no empty separator")
+        "confirmed details preserve the card layout")
     local layouts = 0
     local oldLayout = tooltip.Layout
     tooltip.Layout = function(self)
@@ -1492,16 +1507,7 @@ do
     check(hoverAddon:RunUpdateStatsSafe() and layouts == 0, "identical clean hover reuses its layout")
     hoverEnv.__fireEvent("UI_SCALE_CHANGED")
     check(hoverAddon:RunUpdateStatsSafe() and layouts == 1, "scale event invalidates the same hover layout")
-    local reads = 0
-    local function model(meta, add)
-        if meta.key == "Strength" and meta.state == "clean" then
-            reads = reads + 1
-            add("Attack Power", tostring(meta.value * 2))
-            add("Per point", "2", "rate")
-            add(string.rep("Long translated label ", 10), "260")
-        end
-    end
-    hoverAddon.forever.BuildAttackPowerTooltip = model
+    expanded = true
     check(hoverAddon:RunUpdateStatsSafe() and reads == 1, "only the hovered row calculates details")
     local totalLabel, rateLabel, nextLabel = tooltip.regions[2].leftText,
         tooltip.regions[3].leftText, tooltip.regions[4].leftText
@@ -1519,13 +1525,22 @@ do
         and last.leftText:GetHeight() > totalLabel:GetHeight(),
         "long detail captions wrap inside a bounded column")
     stat = secretStat
-    check(hoverAddon:RunUpdateStatsSafe() and reads == 1 and tooltip:IsShown(),
-        "restricted clean-input model is skipped while the tooltip stays open")
+    check(hoverAddon:RunUpdateStatsSafe() and reads == 1 and not tooltip:IsShown(),
+        "losing the only confirmed detail hides the tooltip")
     info = hoverTest.mainPanelTooltipState()
     check(info.lastTargetRows[2].state == "secret" and info.lastTargetRows[2].value == nil,
         "protected raw input never enters tooltip metadata")
-    check(#tooltip.lines == 1 and not tooltip.statDivider:IsShown() and not totalLabel:IsShown(),
-        "a restricted reading clears the previous contribution rows and separator")
+    stat = 130
+    check(hoverAddon:RunUpdateStatsSafe() and reads == 2 and tooltip:IsShown(),
+        "the same hover recovers when the contribution becomes available again")
+    hoverTest.fireMainPanelTooltipOverlayForSmoke(2, "OnDragStart")
+    check(not tooltip:IsShown() and hoverTest.panelTooltipState("main").wasDragging,
+        "starting a drag closes the tooltip")
+    hoverTest.fireMainPanelTooltipOverlayForSmoke(2, "OnDragStop")
+    hoverEnv.__flushTimers()
+    check(hoverAddon:RunUpdateStatsSafe() and reads == 2 and not tooltip:IsShown(),
+        "ending a drag does not reopen a retired hover")
+    hoverTest.fireMainPanelTooltipOverlayForSmoke(2, "OnEnter")
     hoverAddon.forever.ShowStatTooltip(tooltip:GetOwner(),
         { key = "Strength", label = "Strength", state = "stale", display = "(130)" })
     check(#tooltip.lines == 2 and tooltip.lines[2].left == "Last reliable reading",
@@ -1536,25 +1551,8 @@ do
     hoverTest.cacheSettings()
     check(hoverAddon:RunUpdateStatsSafe() and not tooltip:IsShown(),
         "layout and semantic row changes retire an open tooltip")
-    local coinFormatter = hoverEnv.GetCoinTextureString
-    local coinSize
-    hoverEnv.GetCoinTextureString = function(amount, size)
-        coinSize = size
-        return coinFormatter(amount, size)
-    end
-    hoverTest.firePanelTooltipOverlayForSmoke("side", 1, "OnEnter")
-    check(tooltip:IsShown() and tooltip.lines[1].left == "Repair",
-        "dedicated repair-only panel has its own hover row")
-    check(coinSize == select(2, tooltip.regions[1].rightText:GetFont()), "repair coins match the header font")
-    check(#tooltip.lines == 1 and not tooltip.statDivider:IsShown(), "repair shows just the current cost")
-    hoverTest.firePanelTooltipOverlayForSmoke("side", 1, "OnDragStart")
-    check(not tooltip:IsShown() and hoverTest.panelTooltipState("side").wasDragging,
-        "starting a drag closes the Forever tooltip")
-    hoverTest.firePanelTooltipOverlayForSmoke("side", 1, "OnDragStop")
-    settings.showRepairCost = false
-    hoverTest.cacheSettings()
-    check(hoverAddon:RunUpdateStatsSafe() and not hoverTest.panelTooltipState("side").shown[1],
-        "removing repair retires its separate overlay")
+    check(hoverEnv.StatsProDefensiveFrame:IsShown() and not hoverTest.panelTooltipState("side").shown[1],
+        "a repair-only panel keeps its price without a separate hover overlay")
 end
 do
     local inCombat = false
@@ -1572,6 +1570,9 @@ do
     rateSettings.showTertiary, rateSettings.showManaRegenMP5 = true, true
     rateSettings.showItemLevel, rateSettings.showDurability, rateSettings.showRepairCost = false, false, false
     rateSettings.displayMode = "flat"
+    rateAddon.forever.BuildStatTooltip = function(meta, add)
+        if meta.key == "ManaRegenMP5" then add("Sample source", tostring(meta.value)) end
+    end
     rateTest.cacheSettings()
     check(rateAddon:RunUpdateStatsSafe(), "single adaptive MP5 draws before combat")
     rateTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
@@ -1631,30 +1632,21 @@ do
         checkRows("Mana Regen / 5 sec", "25.00")
         rateTest.fireMainPanelTooltipOverlayForSmoke(2, "OnEnter")
         local tooltip = rateEnv.StatsProTargetTooltip
-        local owner = tooltip:GetOwner()
         inCombat = true
         rateEnv.__fireEvent("PLAYER_REGEN_DISABLED")
         check(rateAddon:RunUpdateStatsSafe(), "the adaptive row keeps a live value when MP5 scaling is unavailable")
         checkRows("Casting Mana Regen / sec", "2.00")
-        check(tooltip:IsShown() and tooltip:GetOwner() == owner
-            and tooltip.lines[1].left == rateAddon.forever.Translate("Casting Mana Regen / sec", locale)
-            and #tooltip.lines == 1 and stripColor(tooltip.lines[1].right) == "2.00",
-            locale .. " the open tooltip follows the casting fallback without changing ownership")
+        check(not tooltip:IsShown(), locale .. " the casting rate already appears in the HUD")
 
         inCombat = false
         rateEnv.__fireEvent("PLAYER_REGEN_ENABLED")
         check(rateAddon:RunUpdateStatsSafe(), "the adaptive mana row renders after combat")
         checkRows("Mana Regen / 5 sec", "25.00")
-        check(tooltip:IsShown() and tooltip:GetOwner() == owner
-            and tooltip.lines[1].left == rateAddon.forever.Translate("Mana Regen / 5 sec", locale),
-            locale .. " the open tooltip restores its usual resting caption")
+        check(not tooltip:IsShown(), locale .. " the resting rate already appears in the HUD")
         restrictedResting = true
         check(rateAddon:RunUpdateStatsSafe(), "the resting fallback accepts its live per-second value")
         checkRows("Mana Regen / sec", "5.00")
-        check(tooltip:IsShown() and tooltip:GetOwner() == owner
-            and tooltip.lines[1].left == rateAddon.forever.Translate("Mana Regen / sec", locale)
-            and #tooltip.lines == 1 and stripColor(tooltip.lines[1].right) == "5.00",
-            locale .. " the resting fallback shows the live per-second rate without a description")
+        check(not tooltip:IsShown(), locale .. " the fallback rate also has no breakdown")
         restrictedResting = false
     end
 end

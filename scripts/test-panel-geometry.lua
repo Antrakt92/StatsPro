@@ -478,6 +478,10 @@ if forever then
         statsProDB = { dbVersion = 9, forceLocale = "ruRU" },
     })
     fontEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local detailCount = 1
+    fontAddon.forever.BuildStatTooltip = function(_, add)
+        for index = 1, detailCount do add("Extra tooltip line " .. index) end
+    end
     local tooltip = fontAddon.archonTargets.GetTooltip()
     local originalSetFont = tooltip.headerProbe.SetFont
     originalSetFont(tooltip.headerProbe, "WrongLatin.ttf", 12, "")
@@ -524,9 +528,7 @@ if forever then
         end
         return region
     end
-    fontAddon.forever.BuildStatTooltip = function(_, add)
-        for index = 1, 12 do add("Extra tooltip line " .. index) end
-    end
+    detailCount = 12
     equal("a new tooltip FontString failure does not escape the hover handler", pcall(hover), true)
     equal("a new unconfirmed region reopens font application", tooltip.statLocale, nil)
     hover()

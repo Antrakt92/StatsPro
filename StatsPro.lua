@@ -5073,13 +5073,13 @@ local function FormatRepairCost(copper, fontSize)
     return text or "—"
 end
 
-function addon.durabilityRuntime.GetRepairCostText(fontSize)
+function addon.durabilityRuntime.GetRepairCostText()
     if not cached.showRepairCost then return "" end
     local amount = cached.repairCost
     if durabilityDirty or cached.repairCostComplete ~= true or not IsCleanNonNegativeNumber(amount) then
         return addon.durabilityRuntime.auctionOpen and "" or "—"
     end
-    return amount > 0 and FormatRepairCost(amount, fontSize or cached.fontSize) or ""
+    return amount > 0 and FormatRepairCost(amount, cached.fontSize) or ""
 end
 
 local function ComputeDurabilityColor(pct)
@@ -10136,6 +10136,7 @@ function Panel:New(globalName, dbKeyPrefix)
             if addon.profileRuntime.ReadCombatState() ~= false or cached.isLocked then return end
             panel:StartMouseDrag()
             if addon.forever.enabled and panel.dragActive then
+                panel.foreverHoverOwner = nil
                 local tooltip = addon.archonTargets.tooltip
                 if tooltip and tooltip:GetOwner() == overlay then tooltip:Hide() end
             end
@@ -10149,6 +10150,7 @@ function Panel:New(globalName, dbKeyPrefix)
             end
         end)
         overlay:SetScript("OnLeave", function(f)
+            if panel.foreverHoverOwner == f then panel.foreverHoverOwner = nil end
             local tooltip = addon.archonTargets.tooltip
             if tooltip and tooltip:GetOwner() == f then tooltip:Hide() end
         end)
@@ -11008,8 +11010,6 @@ function addon.forever.ShowStatTooltip(anchor, meta)
     local panel = anchor:GetParent()
     if not panel or panel.wasDragging then return false end
     local tooltip = addon.archonTargets.GetTooltip()
-    tooltip:SetOwner(anchor)
-    addon.forever.ApplyTooltipFont(tooltip, cached.activeLabelsLocale)
     local previousLines = tooltip.lines
     tooltip.lines = {}
     local function add(label, value, style)
@@ -11023,10 +11023,6 @@ function addon.forever.ShowStatTooltip(anchor, meta)
         tooltip.lines[#tooltip.lines].style = style
     end
     local display = meta.display
-    if meta.key == "Repair" and meta.state == "clean" then
-        local repair = addon.durabilityRuntime.GetRepairCostText(14)
-        if repair ~= "" and repair ~= "—" then display = repair end
-    end
     local title = L(meta.label)
     if display then
         tooltip:AddDoubleLine(title, display, 0.68, 0.83, 1, 0.97, 0.98, 1)
@@ -11038,6 +11034,13 @@ function addon.forever.ShowStatTooltip(anchor, meta)
         if addon.forever.BuildAttackPowerTooltip then addon.forever.BuildAttackPowerTooltip(meta, add) end
     end
     if addon.forever.BuildStatTooltip then addon.forever.BuildStatTooltip(meta, add) end
+    if #tooltip.lines == 1 then
+        tooltip.lines = previousLines
+        if tooltip:GetOwner() == anchor then tooltip:Hide() end
+        return false
+    end
+    tooltip:SetOwner(anchor)
+    addon.forever.ApplyTooltipFont(tooltip, cached.activeLabelsLocale)
     if tooltip.layoutReusable and tooltip:IsShown()
         and addon.archonTargets.CanReuseTooltipLayout(tooltip, previousLines) then
         tooltip.lines = previousLines
@@ -11080,24 +11083,17 @@ function Panel:ApplyTooltipRows(targetRows, lineCount)
     local showTooltip = forever and addon.forever.ShowStatTooltip or addon.archonTargets.ShowTooltip
     local rowHeight = self.lastLineH or GetNumberDB("fontSize")
     if not SAFE_NUM.IsCleanFiniteNumber(rowHeight) or rowHeight <= 0 then rowHeight = 1 end
-    -- Refresh only the tooltip that is both visible and still owned by one of this
-    -- panel's overlays. Hide() may retain GetOwner(), so ownership alone would reopen
-    -- a tooltip after the cursor left. Semantic stat identity prevents a row-index
-    -- shift (headers, toggles, Split routing) from silently switching Crit to Haste.
-    local openOwner
     local tooltip = addon.archonTargets.tooltip
-    if tooltip and tooltip:IsShown() then
-        openOwner = tooltip:GetOwner()
-    end
+    local openOwner = tooltip and tooltip:IsShown() and tooltip:GetOwner()
+    -- Forever tracks the pointer even when details are temporarily unavailable.
+    -- Retail refreshes only an open comparison. Neither follows a recycled row.
+    local hoverOwner = openOwner
+    if forever then hoverOwner = self.foreverHoverOwner end
     lineCount = lineCount or 0
-    local repairIndex = forever and self:IsShown() and self.lastHasRepair and lineCount + 1 or nil
-    local repairMeta = repairIndex and {
-        key = "Repair", statKey = "forever:Repair", label = "Repair",
-        state = self.lastRepairText ~= "—" and "clean" or "unknown",
-    } or nil
     for i, overlay in pairs(self.tooltipOverlays) do
-        local meta = i == repairIndex and repairMeta or targetRows and targetRows[i] or nil
-        if type(meta) ~= "table" or (i > lineCount and i ~= repairIndex) then
+        local meta = targetRows and targetRows[i]
+        if type(meta) ~= "table" or i > lineCount then
+            if hoverOwner == overlay then self.foreverHoverOwner = nil end
             if openOwner == overlay then tooltip:Hide() end
             if overlay.statsProTargetMeta then
                 overlay:Hide()
@@ -11106,9 +11102,9 @@ function Panel:ApplyTooltipRows(targetRows, lineCount)
             end
         end
     end
-    local count = repairIndex or math.min(targetRows and #targetRows or 0, lineCount)
+    local count = math.min(targetRows and #targetRows or 0, lineCount)
     for i = 1, count do
-        local meta = i == repairIndex and repairMeta or targetRows and targetRows[i]
+        local meta = targetRows[i]
         if type(meta) == "table" then
             local overlay = self.tooltipOverlays[i]
             if not overlay then
@@ -11116,30 +11112,28 @@ function Panel:ApplyTooltipRows(targetRows, lineCount)
                 self.tooltipOverlays[i] = overlay
             end
             local previousMeta = overlay.statsProTargetMeta
-            local y, height = -((i - 1) * rowHeight), rowHeight
-            if i == repairIndex then
-                y = self.lastRepairRowY
-                height = self.lastFrameHeight + y
-            end
-            if overlay.statsProRowHeight ~= height or (forever and overlay.statsProRowY ~= y) then
+            local y = -((i - 1) * rowHeight)
+            if overlay.statsProRowHeight ~= rowHeight or (forever and overlay.statsProRowY ~= y) then
                 overlay:ClearAllPoints()
                 overlay:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, y)
                 overlay:SetPoint("RIGHT", self.frame, "RIGHT", 0, 0)
-                overlay:SetHeight(height)
-                overlay.statsProRowHeight = height
+                overlay:SetHeight(rowHeight)
+                overlay.statsProRowHeight = rowHeight
                 overlay.statsProRowY = y
             end
             if not previousMeta then
                 overlay:SetScript("OnEnter", function(f)
+                    if forever then self.foreverHoverOwner = f end
                     showTooltip(f, f.statsProTargetMeta)
                 end)
             end
             overlay.statsProTargetMeta = meta
             if not overlay:IsShown() then overlay:Show() end
-            if openOwner == overlay then
+            if hoverOwner == overlay then
                 local sameStat = type(previousMeta) == "table"
                     and previousMeta.statKey == meta.statKey
-                if not sameStat or not showTooltip(overlay, meta) then
+                if not sameStat then self.foreverHoverOwner = nil end
+                if not (sameStat and showTooltip(overlay, meta)) and openOwner == overlay and tooltip:IsShown() then
                     tooltip:Hide()
                 end
             end
@@ -12169,7 +12163,9 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero, tool
                     if not formatted then rendered = "|cff" .. valueColor .. unavailable .. "|r" end
                     local rCol, vCol = RouteValueOnly(rendered)
                     PushRow(labels, ratings, values, FormatLabel(color, label), rCol, vCol)
-                    if tooltipRows then
+                    if tooltipRows and definition.key == "MovementSpeed" then
+                        tooltipRows[#labels] = false
+                    elseif tooltipRows then
                         local hasText = formatted and not placeholder
                         local display = hasText and not issecretvalue(text) and text or nil
                         local tooltipState = hasText and displayState or "unknown"
@@ -12612,7 +12608,8 @@ local function BuildDurabilityLines(labels, ratings, values, tooltipRows)
             key = "Durability", statKey = "forever:Durability", label = "Durability",
             state = cached.durabilityComplete and "clean" or "stale", value = pct,
             display = display,
-            detail = { average = cached.durabilityLastCompleteAverage, worst = cached.durabilityLastCompleteWorst },
+            detail = { average = cached.durabilityLastCompleteAverage, worst = cached.durabilityLastCompleteWorst,
+                showsWorst = cached.useWorstDurability },
         }
     end
     return labels, ratings, values

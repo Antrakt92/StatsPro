@@ -1847,8 +1847,11 @@ do
                 if equippedState == "clean" then addNumber(add, "Equipped Item Level", math.floor(equipped), numberFormat) end
                 if overallState == "clean" then addNumber(add, "Overall Item Level", math.floor(overall), numberFormat) end
             else
-                addNumber(add, "Average Durability", detail.average, percentFormat)
-                addNumber(add, "Lowest Durability", detail.worst, percentFormat)
+                if detail.showsWorst then
+                    addNumber(add, "Average Durability", detail.average, percentFormat)
+                else
+                    addNumber(add, "Lowest Durability", detail.worst, percentFormat)
+                end
             end
             return
         end

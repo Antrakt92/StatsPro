@@ -149,10 +149,14 @@ for _, class in ipairs(classes) do
                 class .. " aligned columns for " .. id)
             if block.targetRows then
                 check(#block.targetRows == #block.labels, class .. " aligned tooltip rows in " .. id)
-                for _, target in ipairs(block.targetRows) do
-                    check(type(target) == "table" and target.statKey:match("^forever:")
-                        and type(target.key) == "string" and type(target.label) == "string" and target.category == nil,
-                        class .. " uses Forever stat tooltips in " .. id)
+                for index, target in ipairs(block.targetRows) do
+                    if block.labels[index]:find("Movement Speed", 1, true) then
+                        check(target == false, class .. " movement speed has no hover overlay in " .. id)
+                    else
+                        check(type(target) == "table" and target.statKey:match("^forever:")
+                            and type(target.key) == "string" and type(target.label) == "string" and target.category == nil,
+                            class .. " uses Forever stat tooltips in " .. id)
+                    end
                 end
             end
         end

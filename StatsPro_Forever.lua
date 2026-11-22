@@ -1862,6 +1862,19 @@ do
     })
 
     translate({
+        "Physical Crit from Agility",
+        "Физический крит от ловкости",
+        "Physischer Krit durch Beweglichkeit",
+        "Critique physique conféré par l’agilité",
+        "Crítico físico por agilidad",
+        "Critico fisico dall’agilità",
+        "Crítico físico por agilidade",
+        "민첩성으로 얻는 물리 치명타",
+        "敏捷提供的物理爆击",
+        "敏捷提供的物理致命一擊",
+    })
+
+    translate({
         "Dodge from Agility",
         "Уклонение от ловкости",
         "Ausweichen durch Beweglichkeit",
@@ -1888,16 +1901,16 @@ do
     })
 
     translate({
-        "Health Regen from Spirit / 5 sec",
-        "Здоровье от духа за 5 сек.",
-        "Gesundheitsregeneration durch Willenskraft / 5 Sek.",
-        "Régénération de vie conférée par l’esprit / 5 s",
-        "Regeneración de salud por espíritu / 5 s",
-        "Rigenerazione di salute dallo spirito / 5 sec",
-        "Regeneração de vida por espírito / 5 s",
-        "정신력으로 회복하는 생명력 / 5초",
-        "精神提供的生命回复 / 5秒",
-        "精神提供的生命恢復 / 5秒",
+        "Health Regen from Spirit / 5 sec (standing)",
+        "Здоровье от духа за 5 сек. (стоя)",
+        "Lebensregeneration durch Willenskraft / 5 Sek. (stehend)",
+        "Régénération de vie par l’esprit / 5 s (debout)",
+        "Regeneración de salud por espíritu / 5 s (de pie)",
+        "Rigenerazione di salute dallo spirito / 5 sec (in piedi)",
+        "Regeneração de vida por espírito / 5 s (em pé)",
+        "서 있을 때 정신력으로 회복하는 생명력 / 5초",
+        "站立时精神提供的生命回复 / 5秒",
+        "站立時精神提供的生命恢復 / 5秒",
     })
 
     translate({
@@ -2211,7 +2224,7 @@ do
             addFraction(add, "Spell Crit from Intellect", readClean("GetSpellCritChanceFromStat", 1, 4, value))
         elseif key == "Spirit" then
             if readClean("UnitStat", 2, "player", 5) ~= value then return end
-            addScaled(add, "Health Regen from Spirit / 5 sec", readClean("GetHealthRegenFromSpirit", 1), 3.75, "%.2f")
+            addScaled(add, "Health Regen from Spirit / 5 sec (standing)", readClean("GetHealthRegenFromSpirit", 1), 3.75, "%.2f")
             addScaled(add, "Health Regen / 5 sec", readClean("GetHealthRegen", 1), 5, "%.2f")
             if canUseMana() then
                 addScaled(add, "Mana Regen from Spirit / 5 sec", readClean("GetManaRegenFromSpirit", 1), 5, "%.2f")
@@ -2226,6 +2239,7 @@ do
         elseif key == "Agility" then
             addNumber(add, "Armor from Agility", value * 2)
             if readClean("UnitStat", 2, "player", 2) == value then
+                addFraction(add, "Physical Crit from Agility", readClean("GetCritChanceFromStat", 1, 2, value))
                 addFraction(add, "Dodge from Agility", readClean("GetDodgeChanceFromAttribute", 1))
             end
         elseif key == "Block" then

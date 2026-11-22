@@ -6676,9 +6676,7 @@ end
 function addon.profileRuntime.QueueBindingReconciliation()
     local runtime = addon.profileRuntime
     if runtime.bindingReconciliationToken ~= nil then return true end
-    local token = {}
-    runtime.bindingReconciliationToken = token
-    local scheduled = pcall(C_Timer.After, 0, function()
+    local function reconcile(token)
         if runtime.bindingReconciliationToken ~= token then return end
         if runtime.bindingReconciliationPending
             and type(runtime.ResolvePending) == "function" then
@@ -6690,9 +6688,18 @@ function addon.profileRuntime.QueueBindingReconciliation()
         if runtime.bindingReconciliationToken == token then
             runtime.bindingReconciliationToken = nil
         end
-    end)
+    end
+    local token = {}
+    runtime.bindingReconciliationToken = token
+    local scheduled = pcall(C_Timer.After, 0, function() reconcile(token) end)
     if not scheduled and runtime.bindingReconciliationToken == token then
         runtime.bindingReconciliationToken = nil
+        runtime.QueueContextTickRetry(runtime.requestGeneration, 0, function()
+            -- Own the nested refresh just as the successful native callback does.
+            local tickerToken = {}
+            runtime.bindingReconciliationToken = tickerToken
+            reconcile(tickerToken)
+        end)
     end
     return scheduled
 end
@@ -7156,19 +7163,33 @@ function addon.profileRuntime.ResumeDeferredForeverStarter()
     local runtime = addon.profileRuntime
     local expected = runtime.foreverPendingStarter
     if not expected or not expected.deferred or expected.resumeScheduled then return end
-    local token = {}
-    expected.resumeScheduled = token
-    local scheduled = pcall(C_Timer.After, 0, function()
-        if expected.resumeScheduled ~= token then return end
+    local function resume()
         expected.resumeScheduled = nil
         if not rawequal(runtime.foreverPendingStarter, expected)
             or runtime.transitioning or addon.profileOps.inProgress then return end
         -- Let the ordinary context resolver recheck combat, profile ownership and
         -- any dialog reopened before the queued repair runs.
         runtime.RequestResolution(false)
+    end
+    local token = {}
+    expected.resumeScheduled = token
+    local scheduled = pcall(C_Timer.After, 0, function()
+        if expected.resumeScheduled == token then resume() end
     end)
     if not scheduled and expected.resumeScheduled == token then
-        expected.resumeScheduled = nil
+        local tickerToken = {}
+        expected.resumeScheduled = tickerToken
+        runtime.foreverStarterTickRetry = function()
+            if expected.resumeScheduled ~= tickerToken then return end
+            if runtime.contextTickRetry or runtime.scheduledToken or runtime.contextRetryToken
+                or runtime.noSpecRetryToken or runtime.bindingReconciliationToken
+                or runtime.forceReapplyRetryToken then
+                -- The in-flight resolver already checks for a deferred starter.
+                expected.resumeScheduled = nil
+                return
+            end
+            resume()
+        end
     end
 end
 
@@ -7402,6 +7423,7 @@ end
 function addon.profileRuntime.ClearCorruptRollbackRetry()
     local runtime = addon.profileRuntime
     runtime.corruptRollbackRetryToken = nil
+    runtime.corruptRollbackTickRetry = nil
     runtime.corruptRollbackRetryCount = 0
     runtime.corruptRollbackRoot = nil
 end
@@ -7414,11 +7436,7 @@ function addon.profileRuntime.ScheduleCorruptRollbackApply(root)
     if runtime.corruptRollbackRetryToken ~= nil then return true end
     if runtime.corruptRollbackRetryCount >= 3 then return false end
 
-    local token = {}
-    runtime.corruptRollbackRetryToken = token
-    local scheduled = pcall(C_Timer.After, math.min(0.25 * (runtime.corruptRollbackRetryCount + 1), 1), function()
-        if runtime.corruptRollbackRetryToken ~= token then return end
-        runtime.corruptRollbackRetryToken = nil
+    local function retryApply()
         local currentRoot = addon.dbRuntime.Refresh()
         if not rawequal(currentRoot, root) or addon.dbRuntime.mode ~= "corrupt" then
             runtime.corruptRollbackRetryCount = 0
@@ -7441,9 +7459,19 @@ function addon.profileRuntime.ScheduleCorruptRollbackApply(root)
             runtime.ScheduleCorruptRollbackApply(root)
         end
         addon.profileUI.RefreshSafe()
+    end
+    local token = {}
+    local attempt = runtime.corruptRollbackRetryCount
+    local delay = math.min(0.25 * (attempt + 1), 1)
+    runtime.corruptRollbackRetryToken = token
+    local scheduled = pcall(C_Timer.After, delay, function()
+        if runtime.corruptRollbackRetryToken ~= token then return end
+        runtime.corruptRollbackRetryToken = nil
+        retryApply()
     end)
     if not scheduled and runtime.corruptRollbackRetryToken == token then
         runtime.corruptRollbackRetryToken = nil
+        runtime.corruptRollbackTickRetry = { root = root, attempt = attempt, delay = delay, apply = retryApply }
     end
     return scheduled
 end
@@ -7672,8 +7700,10 @@ function addon.profileRuntime.ResolveCurrent(initializing, combatEnded)
                 and runtime.forceReapplyRetryToken == nil then
                 local retryToken = {}
                 local requestGeneration = runtime.requestGeneration
+                local attempt = runtime.forceReapplyRetryCount
+                local delay = math.min(0.25 * attempt, 1)
                 runtime.forceReapplyRetryToken = retryToken
-                local scheduled = pcall(C_Timer.After, math.min(0.25 * runtime.forceReapplyRetryCount, 1), function()
+                local scheduled = pcall(C_Timer.After, delay, function()
                     if runtime.forceReapplyRetryToken ~= retryToken then return end
                     runtime.forceReapplyRetryToken = nil
                     if runtime.requestGeneration ~= requestGeneration then return end
@@ -7681,6 +7711,11 @@ function addon.profileRuntime.ResolveCurrent(initializing, combatEnded)
                 end)
                 if not scheduled and runtime.forceReapplyRetryToken == retryToken then
                     runtime.forceReapplyRetryToken = nil
+                    runtime.QueueContextTickRetry(requestGeneration, delay, function()
+                        if runtime.forceReapply and runtime.forceReapplyRetryCount == attempt then
+                            runtime.ResolveCurrent(false)
+                        end
+                    end)
                 end
             end
             addon.profileUI.RefreshSafe()
@@ -7729,7 +7764,7 @@ function addon.profileRuntime.ResolveCurrent(initializing, combatEnded)
                 end)
                 if not scheduled and runtime.noSpecRetryToken == token then
                     runtime.noSpecRetryToken = nil
-                    if runtime.bootstrapPending then runtime.QueueContextTickRetry(requestGeneration, 0.1, settle) end
+                    runtime.QueueContextTickRetry(requestGeneration, 0.1, settle)
                 end
             elseif contextStatus == "unknown" then
                 runtime.ScheduleContextRetry()
@@ -7861,6 +7896,7 @@ function addon.profileRuntime.RequestResolution(immediate)
     end)
     if not scheduled and runtime.scheduledToken == token then
         runtime.scheduledToken = nil
+        runtime.QueueContextTickRetry(token, 0)
     end
     return scheduled
 end
@@ -12777,10 +12813,13 @@ tickerFrame:SetScript("OnUpdate", function(self, elapsed)
     local profile = addon.profileRuntime
     local retry = profile.contextTickRetry
     if retry then
-        -- A rejected native timer can leave bootstrap pending while the HUD is
-        -- still hidden. Spend the same bounded retry on this visible ticker.
+        -- A rejected native timer gets one turn on the ticker, even before the
+        -- HUD appears. Newer requests and accepted timers supersede that work.
         if profile.requestGeneration ~= retry.generation or profile.contextRetryCount ~= retry.attempt
-            or profile.contextRetryToken ~= nil or profile.noSpecRetryToken ~= nil or not profile.pendingResolution then
+            or profile.contextRetryToken ~= nil or profile.noSpecRetryToken ~= nil
+            or profile.scheduledToken ~= nil or profile.bindingReconciliationToken ~= nil
+            or profile.forceReapplyRetryToken ~= nil
+            or not profile.pendingResolution then
             profile.contextTickRetry = nil
         else
             retry.delay = retry.delay - elapsed
@@ -12789,6 +12828,26 @@ tickerFrame:SetScript("OnUpdate", function(self, elapsed)
                 retry.resolve(false)
             end
         end
+    end
+    local corruptRetry = profile.corruptRollbackTickRetry
+    if corruptRetry then
+        -- Corrupt root recovery survives the ordinary context reset on combat end.
+        if not profile.forceReapply or profile.corruptRollbackRetryToken ~= nil
+            or profile.corruptRollbackRetryCount ~= corruptRetry.attempt
+            or not rawequal(profile.corruptRollbackRoot, corruptRetry.root) then
+            profile.corruptRollbackTickRetry = nil
+        else
+            corruptRetry.delay = corruptRetry.delay - elapsed
+            if corruptRetry.delay <= 0 then
+                profile.corruptRollbackTickRetry = nil
+                corruptRetry.apply()
+            end
+        end
+    end
+    local starterRetry = profile.foreverStarterTickRetry
+    if starterRetry then
+        profile.foreverStarterTickRetry = nil
+        starterRetry()
     end
     if not isLoaded then return end
     local crit = addon.critRuntime

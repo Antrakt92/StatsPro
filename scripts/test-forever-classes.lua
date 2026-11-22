@@ -147,7 +147,14 @@ for _, class in ipairs(classes) do
         for _, block in ipairs(blocks) do
             check(#block.labels == #block.ratings and #block.labels == #block.values,
                 class .. " aligned columns for " .. id)
-            for _, target in ipairs(block.targetRows or {}) do check(target == false, class .. " no Archon targets") end
+            if block.targetRows then
+                check(#block.targetRows == #block.labels, class .. " aligned tooltip rows in " .. id)
+                for _, target in ipairs(block.targetRows) do
+                    check(type(target) == "table" and target.statKey:match("^forever:")
+                        and addon.forever.tooltipDescriptionKeys[target.key] and target.category == nil,
+                        class .. " uses Forever stat tooltips in " .. id)
+                end
+            end
         end
     end
     local settings = test.profileState().settings

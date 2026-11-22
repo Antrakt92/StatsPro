@@ -106,23 +106,36 @@ local function AddPair(first, firstState, second, secondState)
 end
 
 local function Hit(constant, modifier)
-    return function()
-        local rating = _G[constant]
-        if type(rating) ~= "number" then return nil, "unknown" end
-        local bonus, bonusState = Read("GetCombatRatingBonus", 1, rating)
+    return function(sample)
+        local rating, ratingState = Classify(_G[constant])
+        if ratingState ~= "clean" then return nil, "unknown" end
+        local bonus, bonusState
+        local remembered = sample and sample[constant]
+        if remembered ~= nil then
+            bonus, bonusState = remembered, "clean"
+        else
+            bonus, bonusState = Read("GetCombatRatingBonus", 1, rating)
+            if sample and bonusState == "clean" then
+                sample[constant] = bonus
+            end
+        end
         local extra, extraState = Read(modifier, 1)
-        return AddPair(bonus, bonusState, extra, extraState)
+        local value, state = AddPair(bonus, bonusState, extra, extraState)
+        if state ~= "clean" then return value, state end
+        return value, state, nil, { rating = bonus, modifier = extra }
     end
 end
 
 local function RangedHaste()
     local fn = _G.GetRangedHaste
     if type(fn) ~= "function" then return nil, "unknown" end
-    local ok, base, quiver = pcall(fn)
+    local ok, base, ammo = pcall(fn)
     if not ok then return nil, "unknown" end
     local baseValue, baseState = Classify(base)
-    local quiverValue, quiverState = Classify(quiver)
-    return AddPair(baseValue, baseState, quiverValue, quiverState)
+    local ammoValue, ammoState = Classify(ammo)
+    local value, state = AddPair(baseValue, baseState, ammoValue, ammoState)
+    if state ~= "clean" then return value, state end
+    return value, state, nil, { base = baseValue, ammo = ammoValue }
 end
 
 local function Nonnegative(reader)
@@ -136,8 +149,34 @@ end
 
 local nativeAttackPowerMatches = {}
 
+local attackPowerSources = {
+    { key = "AttackPower", nativeIndex = 4, label = "Melee attack power",
+        rateLabel = "Melee attack power per point",
+        read = Nonnegative(Sum("UnitAttackPower", 3, "player")), statAPI = "GetAttackPowerForStat" },
+    { key = "RangedAttackPower", nativeIndex = 5, label = "Ranged attack power",
+        rateLabel = "Ranged attack power per point",
+        read = Nonnegative(Sum("UnitRangedAttackPower", 3, "player")), statAPI = "GetRangedAttackPowerForStat" },
+}
+local attackPowerAttributes = {
+    { key = "Strength", index = 1, label = "Attack power from Strength" },
+    { key = "Agility", index = 2, label = "Attack power from Agility" },
+}
+
 function F.ResetAttackPowerParity()
     nativeAttackPowerMatches[4], nativeAttackPowerMatches[5] = nil, nil
+end
+
+local function ReadAttackPowerMode()
+    if _G.GetOverrideAPBySpellPower == nil then return "legacy" end
+    local multiplier, state = Read("GetOverrideAPBySpellPower", 1)
+    if state == "clean" then
+        if multiplier > 0 then return "conversion", multiplier end
+        return "weapon"
+    end
+    -- A clean boolean can identify the active route if the multiplier is protected.
+    local conversion = addon.profileRuntime.ReadBooleanDecision(_G.HasSPEffectsAttackPower)
+    if conversion == false then return "weapon" end
+    if conversion == true then return "conversion" end
 end
 
 local function ReadConvertedAttackPower(multiplier)
@@ -149,7 +188,9 @@ local function ReadConvertedAttackPower(multiplier)
         if powerState ~= "clean" then return nil, "unknown" end
         minimum = math.min(minimum, power)
     end
-    return Classify(minimum * multiplier)
+    local total, state = Classify(minimum * multiplier)
+    if state ~= "clean" then return nil, "unknown" end
+    return math.max(0, total), "clean", minimum
 end
 
 local function ReadWeaponAttackPower(base, nativeIndex)
@@ -163,34 +204,161 @@ local function ReadWeaponAttackPower(base, nativeIndex)
             -- A shared zero can occur before either source has real player data.
             nativeAttackPowerMatches[nativeIndex] = true
         end
-        return total, "clean"
+        return total, "clean", nil, { mode = "weapon" }
     end
     if not nativeAttackPowerMatches[nativeIndex] then return nil, "unknown" end
     return Read("PlayerEffectiveAttackPower", nativeIndex)
 end
 
-local function AttackPower(name)
-    local base = Nonnegative(Sum(name, 3, "player"))
-    local converted = Nonnegative(ReadConvertedAttackPower)
-    local nativeIndex = name == "UnitAttackPower" and 4 or 5
+local function AttackPower(source)
     return function()
-        if _G.GetOverrideAPBySpellPower == nil then return base() end
-        local multiplier, state = Read("GetOverrideAPBySpellPower", 1)
-        if state == "clean" then
-            if multiplier > 0 then
-                F.ResetAttackPowerParity()
-                return converted(multiplier)
+        local mode, multiplier = ReadAttackPowerMode()
+        if mode == "legacy" then
+            local value, state = source.read()
+            if state == "clean" then return value, state, nil, { mode = mode } end
+            return value, state
+        end
+        if mode == "weapon" then return ReadWeaponAttackPower(source.read, source.nativeIndex) end
+        if mode == "conversion" then
+            -- The override applies to both melee and ranged attack power.
+            F.ResetAttackPowerParity()
+            if multiplier then
+                local value, state, basis = ReadConvertedAttackPower(multiplier)
+                if state == "clean" then
+                    return value, state, nil, { mode = mode, multiplier = multiplier, basis = basis }
+                end
+                return value, state
             end
-            return ReadWeaponAttackPower(base, nativeIndex)
         end
-        -- A clean false independently rules out the spell-power override.
-        local conversion = addon.profileRuntime.ReadBooleanDecision(_G.HasSPEffectsAttackPower)
-        if conversion == false then
-            return ReadWeaponAttackPower(base, nativeIndex)
-        end
-        -- The override applies to both melee and ranged attack power.
-        if conversion == true then F.ResetAttackPowerParity() end
         return nil, "unknown"
+    end
+end
+
+local function ReadTooltipAttribute(attribute)
+    local value, state = Read("UnitStat", 2, "player", attribute.index)
+    if state == "clean" and value >= 0 then return value end
+end
+
+local function FormatTooltipNumber(value)
+    if value == math.floor(value) then return string.format("%.0f", value) end
+    return string.format("%.6g", value)
+end
+
+local function NearlyEqualAttackPower(first, second)
+    return math.abs(first - second) <= math.max(math.abs(first), math.abs(second)) * 1e-9
+end
+
+local function ReadTooltipAttackPowerRate(source, attribute, effective, contribution)
+    if effective < 1 or effective + 1 == effective or contribution <= 0 then return nil end
+    local lower, lowerState = Read(source.statAPI, 1, attribute.index, effective - 1)
+    local higher, higherState = Read(source.statAPI, 1, attribute.index, effective + 1)
+    local current, currentState = Read(source.statAPI, 1, attribute.index, effective)
+    if currentState ~= "clean" or not NearlyEqualAttackPower(current, contribution) then
+        return nil, false
+    end
+    if lowerState ~= "clean" or higherState ~= "clean" or lower < 0 then
+        return nil
+    end
+    local lowerSlope = contribution - lower
+    local higherSlope = higher - contribution
+    local rate = contribution / effective
+    -- A matching local slope and proportional value rule out capped, stepped,
+    -- and offset results without assuming a fixed class coefficient.
+    if rate > 0 and lowerSlope > 0 and higherSlope > 0
+        and NearlyEqualAttackPower(lowerSlope, rate) and NearlyEqualAttackPower(higherSlope, rate) then
+        return rate
+    end
+end
+
+local function BuildAttributeAttackPowerTooltip(key, expected, mode, add)
+    local attributes, totals, lines = {}, {}, {}
+    for _, attribute in ipairs(attackPowerAttributes) do
+        if key == attribute.key or key == "AttackPower" or key == "RangedAttackPower" then
+            local value = ReadTooltipAttribute(attribute)
+            -- The hovered attribute must still match the rendered HUD value.
+            if key == attribute.key and value ~= expected then return end
+            attributes[attribute] = value
+        end
+    end
+
+    -- Read the relevant exact character-sheet totals before and after querying
+    -- contributions. A protected/live-only total is not a breakdown source.
+    for _, source in ipairs(attackPowerSources) do
+        if key == source.key or key == "Strength" or key == "Agility" then
+            local total, state = source.read()
+            if state == "clean" and (key ~= source.key or total == expected) then
+                totals[source] = total
+            end
+        end
+    end
+    for _, source in ipairs(attackPowerSources) do
+        if totals[source] ~= nil then
+            for _, attribute in ipairs(attackPowerAttributes) do
+                local value = attributes[attribute]
+                if value ~= nil then
+                    local contribution, state = Read(source.statAPI, 1, attribute.index, value)
+                    if state == "clean" and contribution >= 0 then
+                        local rate, stable
+                        if key == attribute.key then
+                            rate, stable = ReadTooltipAttackPowerRate(source, attribute, value, contribution)
+                        end
+                        if stable ~= false then
+                            lines[#lines + 1] = {
+                                source = source, attribute = attribute, value = contribution, rate = rate,
+                            }
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    for _, attribute in ipairs(attackPowerAttributes) do
+        if attributes[attribute] ~= nil and ReadTooltipAttribute(attribute) ~= attributes[attribute] then
+            attributes[attribute] = nil
+        end
+    end
+    for _, source in ipairs(attackPowerSources) do
+        if totals[source] ~= nil then
+            local total, state = source.read()
+            if state ~= "clean" or total ~= totals[source] then totals[source] = nil end
+        end
+    end
+    if ReadAttackPowerMode() ~= mode then return end
+    for _, line in ipairs(lines) do
+        if totals[line.source] ~= nil and attributes[line.attribute] ~= nil then
+            local label = key == line.attribute.key and line.source.label or line.attribute.label
+            add(label, FormatTooltipNumber(line.value))
+            if line.rate ~= nil then add(line.source.rateLabel, FormatTooltipNumber(line.rate)) end
+        end
+    end
+end
+
+function F.BuildAttackPowerTooltip(meta, add)
+    if meta.state ~= "clean" then return end
+    local expected, state = Classify(meta.value)
+    if state ~= "clean" then return end
+    local key = meta.key
+    if key ~= "Strength" and key ~= "Agility" and key ~= "AttackPower" and key ~= "RangedAttackPower" then return end
+    local isAttribute = key == "Strength" or key == "Agility"
+    local mode, multiplier = ReadAttackPowerMode()
+    if not isAttribute and (not meta.detail or meta.detail.mode ~= mode) then return end
+    if mode == "weapon" or mode == "legacy" then
+        BuildAttributeAttackPowerTooltip(key, expected, mode, add)
+    elseif mode == "conversion" then
+        if isAttribute then
+            if ReadAttackPowerMode() == mode then add("Attack power is based on spell power", nil) end
+        elseif multiplier and meta.detail.multiplier == multiplier then
+            local total, totalState, basis = ReadConvertedAttackPower(multiplier)
+            if totalState ~= "clean" or total ~= expected or basis ~= meta.detail.basis then return end
+            local verifiedTotal, verifiedState, verifiedBasis = ReadConvertedAttackPower(multiplier)
+            local verifiedMode, verifiedMultiplier = ReadAttackPowerMode()
+            if verifiedMode == mode and verifiedMultiplier == multiplier and verifiedState == "clean"
+                and verifiedTotal == total and verifiedBasis == basis then
+                add("Spell power used for conversion", FormatTooltipNumber(basis))
+                add("Conversion multiplier", FormatTooltipNumber(multiplier))
+            end
+        end
     end
 end
 
@@ -295,13 +463,11 @@ function F.FormatRestrictedMP5(value)
     end
 end
 
-local function Resistance(school)
-    return function()
-        local enum = _G.Enum
-        local index = enum and enum.Damageclass and enum.Damageclass[school]
-        if type(index) ~= "number" then return nil, "unknown" end
-        return Read("UnitResistance", 3, "player", index)
-    end
+local function ReadResistance(school)
+    local enum = _G.Enum
+    local index = enum and enum.Damageclass and enum.Damageclass[school]
+    if type(index) ~= "number" then return nil, "unknown" end
+    return Read("UnitResistance", 3, "player", index)
 end
 
 local function Row(group, key, label, reader, kind, color)
@@ -325,8 +491,8 @@ Row("offensive", "SpellHit", "Spell Hit", Hit("CR_HIT_SPELL", "GetSpellHitModifi
 Row("offensive", "MeleeHaste", "Melee Haste", Scalar("GetMeleeHaste", 1), "percent", "haste")
 Row("offensive", "RangedHaste", "Ranged Haste", RangedHaste, "percent", "haste").rememberLastClean = true
 Row("offensive", "SpellHaste", "Spell Haste", Scalar("UnitSpellHaste", 1, "player"), "percent", "haste")
-Row("offensive", "AttackPower", "Attack Power", AttackPower("UnitAttackPower")).rememberLastClean = true
-Row("offensive", "RangedAttackPower", "Ranged Attack Power", AttackPower("UnitRangedAttackPower")).rememberLastClean = true
+Row("offensive", "AttackPower", "Attack Power", AttackPower(attackPowerSources[1])).rememberLastClean = true
+Row("offensive", "RangedAttackPower", "Ranged Attack Power", AttackPower(attackPowerSources[2])).rememberLastClean = true
 for school, name in ipairs({ "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" }) do
     Row("offensive", "SpellPower" .. name, name .. " Spell Power", Scalar("GetSpellBonusDamage", 1, school + 1))
 end
@@ -343,7 +509,7 @@ Row("defensive", "Parry", "Parry", Scalar("GetParryChance", 1), "percent", "parr
 Row("defensive", "Block", "Block", Scalar("GetBlockChance", 1), "percent", "block")
 Row("defensive", "BlockValue", "Block Value", Scalar("GetShieldBlock", 1), "number", "block")
 for _, name in ipairs({ "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" }) do
-    Row("defensive", name .. "Resistance", name .. " Resistance", Resistance(name))
+    Row("defensive", name .. "Resistance", name .. " Resistance", function() return ReadResistance(name) end)
 end
 local function ManaRow(key, label, read, seconds, fallbackLabel)
     local row = Row("utility", key, label, read)
@@ -1111,4 +1277,989 @@ function F.Translate(label, locale)
     local translations = F.labels[locale]
     if translations and translations[label] then return translations[label] end
     return nil
+end
+
+do
+    local locales = { "enUS", "ruRU", "deDE", "frFR", "esES", "itIT", "ptBR", "koKR", "zhCN", "zhTW" }
+    F.tooltipDescriptionKeys = {}
+
+    local function translate(phrases)
+        local key = phrases[1]
+        for index, locale in ipairs(locales) do
+            F.labels[locale][key] = phrases[index]
+        end
+        F.labels.enGB[key] = key
+        F.labels.esMX[key] = F.labels.esES[key]
+        return key
+    end
+
+    local function describe(rowKeys, phrases)
+        local key = translate(phrases)
+        for _, rowKey in ipairs(rowKeys) do
+            F.tooltipDescriptionKeys[rowKey] = key
+        end
+    end
+
+    describe({ "Strength" }, {
+        "Contributes to melee attack power and shield block value.",
+        "Даёт силу атаки ближнего боя и величину блока щитом.",
+        "Trägt zur Nahkampfangriffskraft und zum Schildblockwert bei.",
+        "Contribue à la puissance d’attaque en mêlée et à la valeur de blocage du bouclier.",
+        "Contribuye al poder de ataque cuerpo a cuerpo y al valor de bloqueo con escudo.",
+        "Contribuisce alla potenza d’attacco in mischia e al valore di blocco con lo scudo.",
+        "Contribui para o poder de ataque corpo a corpo e o valor de bloqueio com escudo.",
+        "근접 전투력과 방패 피해 방어량에 영향을 줍니다.",
+        "影响近战攻击强度和盾牌格挡值。",
+        "影響近戰攻擊強度和盾牌格擋值。",
+    })
+
+    describe({ "Agility" }, {
+        "Contributes to physical critical strike chance, dodge, and armor.",
+        "Даёт шанс физического критического удара, уклонение и броню.",
+        "Trägt zur physischen kritischen Trefferchance, zum Ausweichen und zur Rüstung bei.",
+        "Contribue aux chances de coup critique physique et d’esquive ainsi qu’à l’armure.",
+        "Contribuye a la probabilidad de crítico físico y de esquivar, y a la armadura.",
+        "Contribuisce alla probabilità di critico fisico e di schivata e all’armatura.",
+        "Contribui para a chance de acerto crítico físico, a esquiva e a armadura.",
+        "물리 치명타 확률, 회피율, 방어도에 영향을 줍니다.",
+        "影响物理爆击几率、躲闪几率和护甲。",
+        "影響物理致命一擊機率、閃躲機率和護甲。",
+    })
+
+    describe({ "Stamina" }, {
+        "Increases maximum health.",
+        "Увеличивает максимальный запас здоровья.",
+        "Erhöht die maximale Gesundheit.",
+        "Augmente le maximum de points de vie.",
+        "Aumenta la salud máxima.",
+        "Aumenta la salute massima.",
+        "Aumenta a vida máxima.",
+        "최대 생명력이 증가합니다.",
+        "提高生命值上限。",
+        "提高生命值上限。",
+    })
+
+    describe({ "Intellect" }, {
+        "Contributes to maximum mana and spell critical strike chance.",
+        "Даёт максимальный запас маны и шанс критического эффекта заклинаний.",
+        "Trägt zum maximalen Mana und zur kritischen Zaubertrefferchance bei.",
+        "Contribue au maximum de mana et aux chances de coup critique des sorts.",
+        "Contribuye al maná máximo y a la probabilidad de crítico con hechizos.",
+        "Contribuisce al mana massimo e alla probabilità di critico degli incantesimi.",
+        "Contribui para o máximo de mana e a chance de acerto crítico de feitiços.",
+        "최대 마나와 주문 치명타 확률에 영향을 줍니다.",
+        "影响法力值上限和法术爆击几率。",
+        "影響法力值上限和法術致命一擊機率。",
+    })
+
+    describe({ "Spirit" }, {
+        "Contributes to health and mana regeneration.",
+        "Влияет на восстановление здоровья и маны.",
+        "Trägt zur Gesundheits- und Manaregeneration bei.",
+        "Contribue à la régénération des points de vie et du mana.",
+        "Contribuye a la regeneración de salud y de maná.",
+        "Contribuisce alla rigenerazione di salute e mana.",
+        "Contribui para a regeneração de vida e mana.",
+        "생명력과 마나 회복량에 영향을 줍니다.",
+        "影响生命值和法力值的回复。",
+        "影響生命值和法力值的恢復。",
+    })
+
+    describe({ "MeleeCrit", "RangedCrit", "SpellCrit" }, {
+        "Chance for these attacks or spells to score a critical hit.",
+        "Шанс критического эффекта этих атак или заклинаний.",
+        "Chance auf einen kritischen Treffer mit diesen Angriffen oder Zaubern.",
+        "Chances que ces attaques ou sorts infligent un coup critique.",
+        "Probabilidad de que estos ataques o hechizos logren un golpe crítico.",
+        "Probabilità che questi attacchi o incantesimi infliggano un colpo critico.",
+        "Chance de esses ataques ou feitiços causarem um acerto crítico.",
+        "해당 공격이나 주문이 치명타로 적중할 확률입니다.",
+        "这类攻击或法术造成爆击的几率。",
+        "這類攻擊或法術造成致命一擊的機率。",
+    })
+
+    describe({ "MeleeHit", "OffhandHit", "RangedHit", "SpellHit" }, {
+        "Reduces the chance for these attacks or spells to miss.",
+        "Снижает вероятность промаха этих атак или заклинаний.",
+        "Verringert die Chance, mit diesen Angriffen oder Zaubern zu verfehlen.",
+        "Réduit les chances que ces attaques ou sorts ratent leur cible.",
+        "Reduce la probabilidad de que estos ataques o hechizos fallen.",
+        "Riduce la probabilità che questi attacchi o incantesimi manchino il bersaglio.",
+        "Reduz a chance de esses ataques ou feitiços errarem o alvo.",
+        "해당 공격이나 주문이 빗나갈 확률이 감소합니다.",
+        "降低这类攻击或法术未命中的几率。",
+        "降低這類攻擊或法術未命中的機率。",
+    })
+
+    describe({ "MeleeHaste", "RangedHaste", "SpellHaste" }, {
+        "Increases the speed of these attacks or casts.",
+        "Увеличивает скорость этих атак или произнесения заклинаний.",
+        "Erhöht das Tempo dieser Angriffe oder Zauber.",
+        "Accélère ces attaques ou incantations.",
+        "Aumenta la velocidad de estos ataques o lanzamientos.",
+        "Aumenta la velocità di questi attacchi o lanci.",
+        "Aumenta a velocidade desses ataques ou lançamentos.",
+        "해당 공격이나 주문 시전이 빨라집니다.",
+        "提高这类攻击或施法的速度。",
+        "提高這類攻擊或施法的速度。",
+    })
+
+    describe({ "AttackPower", "RangedAttackPower" }, {
+        "Increases damage dealt by these weapon attacks.",
+        "Увеличивает урон этих атак оружием.",
+        "Erhöht den Schaden dieser Waffenangriffe.",
+        "Augmente les dégâts infligés par ces attaques avec une arme.",
+        "Aumenta el daño infligido por estos ataques con arma.",
+        "Aumenta i danni inflitti da questi attacchi con arma.",
+        "Aumenta o dano causado por esses ataques com arma.",
+        "해당 무기 공격으로 주는 피해가 증가합니다.",
+        "提高这类武器攻击造成的伤害。",
+        "提高這類武器攻擊造成的傷害。",
+    })
+
+    describe({ "SpellPowerHoly", "SpellPowerFire", "SpellPowerNature", "SpellPowerFrost", "SpellPowerShadow", "SpellPowerArcane" }, {
+        "Increases spell damage for this school.",
+        "Увеличивает урон заклинаний этой школы.",
+        "Erhöht den Zauberschaden dieser Schule.",
+        "Augmente les dégâts des sorts de cette école.",
+        "Aumenta el daño con hechizos de esta escuela.",
+        "Aumenta i danni magici di questa scuola.",
+        "Aumenta o dano de feitiços desta escola.",
+        "해당 계열 주문의 피해가 증가합니다.",
+        "提高这一系法术造成的伤害。",
+        "提高這一系法術造成的傷害。",
+    })
+
+    describe({ "HealingPower" }, {
+        "Increases healing done by your spells.",
+        "Увеличивает исцеление от ваших заклинаний.",
+        "Erhöht die Heilung durch deine Zauber.",
+        "Augmente les soins prodigués par vos sorts.",
+        "Aumenta la sanación de tus hechizos.",
+        "Aumenta le cure fornite dai tuoi incantesimi.",
+        "Aumenta a cura realizada por seus feitiços.",
+        "주문의 치유량이 증가합니다.",
+        "提高法术造成的治疗量。",
+        "提高法術造成的治療量。",
+    })
+
+    describe({ "SpellPenetration" }, {
+        "Reduces the target’s effective resistance to your spells.",
+        "Уменьшает сопротивление цели вашим заклинаниям.",
+        "Verringert den effektiven Widerstand des Ziels gegen deine Zauber.",
+        "Réduit la résistance effective de la cible à vos sorts.",
+        "Reduce la resistencia efectiva del objetivo a tus hechizos.",
+        "Riduce la resistenza effettiva del bersaglio ai tuoi incantesimi.",
+        "Reduz a resistência efetiva do alvo aos seus feitiços.",
+        "대상이 내 주문에 대해 적용받는 저항력이 감소합니다.",
+        "降低目标对你法术的有效抗性。",
+        "降低目標對你法術的有效抗性。",
+    })
+
+    describe({ "ArmorPenetration" }, {
+        "Reduces the armor applied against your physical attacks.",
+        "Уменьшает броню, которая защищает цель от ваших физических атак.",
+        "Verringert die gegen deine physischen Angriffe wirksame Rüstung.",
+        "Réduit l’armure qui protège la cible contre vos attaques physiques.",
+        "Reduce la armadura aplicada contra tus ataques físicos.",
+        "Riduce l’armatura applicata contro i tuoi attacchi fisici.",
+        "Reduz a armadura aplicada contra seus ataques físicos.",
+        "내 물리 공격에 적용되는 대상의 방어도가 감소합니다.",
+        "降低目标抵挡你物理攻击时生效的护甲。",
+        "降低目標抵擋你物理攻擊時生效的護甲。",
+    })
+
+    describe({ "MainhandExpertise", "OffhandExpertise", "RangedExpertise" }, {
+        "Reduces the target’s chance to avoid attacks with this weapon.",
+        "Снижает шанс цели избежать атак этим оружием.",
+        "Verringert die Chance des Ziels, Angriffen mit dieser Waffe zu entgehen.",
+        "Réduit les chances que la cible évite les attaques de cette arme.",
+        "Reduce la probabilidad de que el objetivo evite ataques con esta arma.",
+        "Riduce la probabilità che il bersaglio eviti gli attacchi con quest’arma.",
+        "Reduz a chance de o alvo evitar ataques com esta arma.",
+        "대상이 이 무기의 공격을 피할 확률이 감소합니다.",
+        "降低目标避开该武器攻击的几率。",
+        "降低目標避開這把武器攻擊的機率。",
+    })
+
+    describe({ "Armor" }, {
+        "Reduces physical damage taken.",
+        "Уменьшает получаемый физический урон.",
+        "Verringert erlittenen körperlichen Schaden.",
+        "Réduit les dégâts physiques subis.",
+        "Reduce el daño físico recibido.",
+        "Riduce i danni fisici subiti.",
+        "Reduz o dano físico recebido.",
+        "받는 물리 피해가 감소합니다.",
+        "降低受到的物理伤害。",
+        "降低受到的物理傷害。",
+    })
+
+    describe({ "Defense" }, {
+        "Improves your defenses against incoming weapon attacks.",
+        "Улучшает защиту от атак оружием.",
+        "Verbessert deine Verteidigung gegen Waffenangriffe.",
+        "Améliore votre défense contre les attaques avec une arme.",
+        "Mejora tu defensa contra los ataques con arma.",
+        "Migliora la tua difesa contro gli attacchi con arma.",
+        "Melhora sua defesa contra ataques com arma.",
+        "적의 무기 공격에 대한 방어 능력이 향상됩니다.",
+        "提高对敌方武器攻击的防御能力。",
+        "提高對敵方武器攻擊的防禦能力。",
+    })
+
+    describe({ "Dodge" }, {
+        "Chance to dodge an incoming attack.",
+        "Шанс уклониться от атаки.",
+        "Chance, einem Angriff auszuweichen.",
+        "Chances d’esquiver une attaque.",
+        "Probabilidad de esquivar un ataque.",
+        "Probabilità di schivare un attacco.",
+        "Chance de esquivar de um ataque.",
+        "공격을 회피할 확률입니다.",
+        "躲闪攻击的几率。",
+        "閃躲攻擊的機率。",
+    })
+
+    describe({ "Parry" }, {
+        "Chance to parry an incoming attack.",
+        "Шанс парировать атаку.",
+        "Chance, einen Angriff zu parieren.",
+        "Chances de parer une attaque.",
+        "Probabilidad de parar un ataque.",
+        "Probabilità di parare un attacco.",
+        "Chance de aparar um ataque.",
+        "공격을 무기로 막을 확률입니다.",
+        "招架攻击的几率。",
+        "招架攻擊的機率。",
+    })
+
+    describe({ "Block" }, {
+        "Chance to block part of the damage from an incoming attack.",
+        "Шанс заблокировать часть урона от атаки.",
+        "Chance, einen Teil des Schadens eines Angriffs zu blocken.",
+        "Chances de bloquer une partie des dégâts d’une attaque.",
+        "Probabilidad de bloquear parte del daño de un ataque.",
+        "Probabilità di bloccare parte dei danni di un attacco.",
+        "Chance de bloquear parte do dano de um ataque.",
+        "공격 피해의 일부를 방패로 막을 확률입니다.",
+        "格挡部分来袭伤害的几率。",
+        "格擋部分來襲傷害的機率。",
+    })
+
+    describe({ "BlockValue" }, {
+        "Amount of damage prevented by a successful shield block.",
+        "Количество урона, поглощаемого при успешном блокировании щитом.",
+        "Schadensmenge, die ein erfolgreicher Schildblock verhindert.",
+        "Quantité de dégâts absorbés lors d’un blocage réussi avec le bouclier.",
+        "Cantidad de daño evitada al bloquear con éxito con un escudo.",
+        "Quantità di danni evitati quando blocchi con successo con lo scudo.",
+        "Quantidade de dano evitada ao bloquear com sucesso usando o escudo.",
+        "방패로 공격을 막았을 때 줄어드는 피해량입니다.",
+        "盾牌成功格挡时抵消的伤害量。",
+        "盾牌成功格擋時抵銷的傷害量。",
+    })
+
+    describe({ "HolyResistance", "FireResistance", "NatureResistance", "FrostResistance", "ShadowResistance", "ArcaneResistance" }, {
+        "Helps resist magic from this school.",
+        "Помогает сопротивляться магии этой школы.",
+        "Hilft, Magie dieser Schule zu widerstehen.",
+        "Aide à résister à la magie de cette école.",
+        "Ayuda a resistir la magia de esta escuela.",
+        "Aiuta a resistere alla magia di questa scuola.",
+        "Ajuda a resistir à magia desta escola.",
+        "해당 계열의 마법에 저항하는 데 도움이 됩니다.",
+        "有助于抵抗这一系的魔法。",
+        "有助於抵抗這一系的魔法。",
+    })
+
+    describe({ "ManaRegen", "ManaRegenMP5" }, {
+        "Shows how quickly mana returns, using the rate selected by this row.",
+        "Показывает, сколько маны восстанавливается за указанный промежуток времени.",
+        "Zeigt, wie viel Mana im angegebenen Zeitraum regeneriert wird.",
+        "Indique la quantité de mana régénérée pendant la durée indiquée.",
+        "Muestra cuánto maná se regenera en el intervalo indicado.",
+        "Mostra quanto mana si rigenera nell’intervallo indicato.",
+        "Mostra quanto de mana é recuperado no intervalo indicado.",
+        "표시된 시간 동안 회복되는 마나량입니다.",
+        "显示在指定时长内回复的法力值。",
+        "顯示在指定時長內恢復的法力值。",
+    })
+
+    describe({ "CastingManaRegen", "CastingManaRegenMP5" }, {
+        "Shows how quickly mana returns while casting.",
+        "Показывает скорость восстановления маны при произнесении заклинаний.",
+        "Zeigt die Manaregeneration während des Zauberwirkens an.",
+        "Indique la vitesse de régénération du mana pendant l’incantation.",
+        "Muestra la velocidad de regeneración de maná al lanzar hechizos.",
+        "Mostra la velocità di rigenerazione del mana durante il lancio di incantesimi.",
+        "Mostra a velocidade de regeneração de mana durante o lançamento de feitiços.",
+        "주문을 시전하는 동안의 마나 회복 속도입니다.",
+        "显示施法时的法力回复速度。",
+        "顯示施法時的法力恢復速度。",
+    })
+
+    describe({ "MovementSpeed" }, {
+        "Current movement rate as a percentage of normal ground running speed.",
+        "Текущая скорость передвижения в процентах от обычной скорости бега по земле.",
+        "Aktuelles Bewegungstempo in Prozent des normalen Lauftempos am Boden.",
+        "Vitesse de déplacement actuelle en pourcentage de la vitesse normale de course au sol.",
+        "Velocidad de movimiento actual como porcentaje de la velocidad normal de carrera en tierra.",
+        "Velocità di movimento attuale in percentuale della normale velocità di corsa a terra.",
+        "Velocidade de movimento atual como porcentagem da velocidade normal de corrida em terra.",
+        "일반 지상 달리기 속도를 기준으로 표시한 현재 이동 속도입니다.",
+        "当前移动速度占普通地面奔跑速度的百分比。",
+        "當前移動速度占普通地面奔跑速度的百分比。",
+    })
+
+    describe({ "ItemLevel" }, {
+        "Average item level of your equipped gear and the gear counted by the game.",
+        "Средний уровень надетых предметов и предметов, которые учитывает игра.",
+        "Durchschnittliche Gegenstandsstufe deiner angelegten und der vom Spiel berücksichtigten Ausrüstung.",
+        "Niveau d’objet moyen de l’équipement porté et de l’équipement pris en compte par le jeu.",
+        "Nivel de objeto medio del equipo que llevas puesto y del que tiene en cuenta el juego.",
+        "Livello medio degli oggetti equipaggiati e di quelli considerati dal gioco.",
+        "Nível médio dos itens equipados e dos itens considerados pelo jogo.",
+        "착용한 장비와 게임이 집계하는 장비의 평균 아이템 레벨입니다.",
+        "已装备物品和游戏计入物品的平均物品等级。",
+        "已裝備物品和遊戲計入物品的平均物品等級。",
+    })
+
+    describe({ "Durability" }, {
+        "Condition of your equipped gear that can wear out.",
+        "Состояние надетых предметов, которые могут изнашиваться.",
+        "Zustand deiner angelegten Ausrüstung mit Haltbarkeit.",
+        "État des pièces d’équipement portées qui peuvent s’user.",
+        "Estado de las piezas de equipo que llevas puestas y se pueden desgastar.",
+        "Condizione dell’equipaggiamento indossato soggetto a usura.",
+        "Estado das peças equipadas que podem se desgastar.",
+        "내구도가 있는 착용 장비의 상태입니다.",
+        "会磨损的已装备物品的状态。",
+        "會磨損的已裝備物品的狀態。",
+    })
+
+    describe({ "Repair" }, {
+        "Estimated cost to repair your equipped gear.",
+        "Ориентировочная стоимость ремонта надетых предметов.",
+        "Geschätzte Kosten für die Reparatur deiner angelegten Ausrüstung.",
+        "Coût estimé de réparation de l’équipement porté.",
+        "Coste estimado de reparar el equipo que llevas puesto.",
+        "Costo stimato per riparare l’equipaggiamento indossato.",
+        "Custo estimado para reparar os itens equipados.",
+        "착용한 장비의 예상 수리 비용입니다.",
+        "已装备物品的预计修理费用。",
+        "已裝備物品的預計修理費用。",
+    })
+
+    translate({
+        "Last reliable reading",
+        "Последнее достоверное значение",
+        "Letzter verlässlicher Wert",
+        "Dernière valeur fiable",
+        "Última lectura fiable",
+        "Ultimo valore attendibile",
+        "Última leitura confiável",
+        "마지막으로 확인된 값",
+        "最近一次可靠读数",
+        "最近一次可靠讀數",
+    })
+
+    translate({
+        "Attack power from Strength",
+        "Сила атаки от силы",
+        "Angriffskraft durch Stärke",
+        "Puissance d’attaque conférée par la force",
+        "Poder de ataque por fuerza",
+        "Potenza d’attacco dalla forza",
+        "Poder de ataque por força",
+        "힘으로 얻는 전투력",
+        "力量提供的攻击强度",
+        "力量提供的攻擊強度",
+    })
+
+    translate({
+        "Attack power from Agility",
+        "Сила атаки от ловкости",
+        "Angriffskraft durch Beweglichkeit",
+        "Puissance d’attaque conférée par l’agilité",
+        "Poder de ataque por agilidad",
+        "Potenza d’attacco dall’agilità",
+        "Poder de ataque por agilidade",
+        "민첩성으로 얻는 전투력",
+        "敏捷提供的攻击强度",
+        "敏捷提供的攻擊強度",
+    })
+
+    translate({
+        "Melee attack power",
+        "Сила атаки ближнего боя",
+        "Nahkampfangriffskraft",
+        "Puissance d’attaque en mêlée",
+        "Poder de ataque cuerpo a cuerpo",
+        "Potenza d’attacco in mischia",
+        "Poder de ataque corpo a corpo",
+        "근접 전투력",
+        "近战攻击强度",
+        "近戰攻擊強度",
+    })
+
+    translate({
+        "Ranged attack power",
+        "Сила атаки дальнего боя",
+        "Fernkampfangriffskraft",
+        "Puissance d’attaque à distance",
+        "Poder de ataque a distancia",
+        "Potenza d’attacco a distanza",
+        "Poder de ataque de longo alcance",
+        "원거리 전투력",
+        "远程攻击强度",
+        "遠程攻擊強度",
+    })
+
+    translate({
+        "Spell power used for conversion",
+        "Сила заклинаний для пересчёта",
+        "Zur Umrechnung genutzte Zaubermacht",
+        "Puissance des sorts utilisée pour la conversion",
+        "Poder con hechizos usado en la conversión",
+        "Potenza magica usata per la conversione",
+        "Poder mágico usado na conversão",
+        "변환에 사용된 주문력",
+        "用于转换的法术强度",
+        "用於轉換的法術能量",
+    })
+
+    translate({
+        "Conversion multiplier",
+        "Множитель пересчёта",
+        "Umrechnungsfaktor",
+        "Coefficient de conversion",
+        "Multiplicador de conversión",
+        "Moltiplicatore di conversione",
+        "Multiplicador de conversão",
+        "변환 배율",
+        "转换倍率",
+        "轉換倍率",
+    })
+
+    translate({
+        "Attack power is based on spell power",
+        "Сила атаки рассчитывается из силы заклинаний",
+        "Angriffskraft basiert auf Zaubermacht",
+        "La puissance d’attaque dépend de la puissance des sorts",
+        "El poder de ataque depende del poder con hechizos",
+        "La potenza d’attacco si basa sulla potenza magica",
+        "O poder de ataque é calculado com base no poder mágico",
+        "전투력은 주문력을 기준으로 계산됩니다",
+        "攻击强度根据法术强度计算",
+        "攻擊強度依照法術能量計算",
+    })
+
+    translate({
+        "Equipped Item Level",
+        "Уровень надетых предметов",
+        "Gegenstandsstufe angelegt",
+        "Niveau d’objet équipé",
+        "Nivel de objeto equipado",
+        "Livello oggetti equipaggiati",
+        "Nível dos itens equipados",
+        "착용 아이템 레벨",
+        "已装备物品等级",
+        "已裝備物品等級",
+    })
+
+    translate({
+        "Overall Item Level",
+        "Общий уровень предметов",
+        "Gesamtgegenstandsstufe",
+        "Niveau d’objet global",
+        "Nivel de objeto total",
+        "Livello complessivo degli oggetti",
+        "Nível geral dos itens",
+        "전체 아이템 레벨",
+        "总体物品等级",
+        "整體物品等級",
+    })
+
+    translate({
+        "Average Durability",
+        "Средняя прочность",
+        "Durchschnittliche Haltbarkeit",
+        "Durabilité moyenne",
+        "Durabilidad media",
+        "Integrità media",
+        "Durabilidade média",
+        "평균 내구도",
+        "平均耐久度",
+        "平均耐久度",
+    })
+
+    translate({
+        "Lowest Durability",
+        "Самая низкая прочность",
+        "Niedrigste Haltbarkeit",
+        "Durabilité la plus basse",
+        "Durabilidad más baja",
+        "Integrità più bassa",
+        "Menor durabilidade",
+        "최저 내구도",
+        "最低耐久度",
+        "最低耐久度",
+    })
+
+    translate({
+        "Health from Stamina",
+        "Здоровье от выносливости",
+        "Gesundheit durch Ausdauer",
+        "Points de vie conférés par l’endurance",
+        "Salud por aguante",
+        "Salute dalla tempra",
+        "Vida por vigor",
+        "체력으로 얻는 생명력",
+        "耐力提供的生命值",
+        "耐力提供的生命值",
+    })
+
+    translate({
+        "Mana from Intellect",
+        "Мана от интеллекта",
+        "Mana durch Intelligenz",
+        "Mana conféré par l’intelligence",
+        "Maná por intelecto",
+        "Mana dall’intelletto",
+        "Mana por intelecto",
+        "지능으로 얻는 마나",
+        "智力提供的法力值",
+        "智力提供的法力值",
+    })
+
+    translate({
+        "Spell Crit from Intellect",
+        "Крит заклинаний от интеллекта",
+        "Kritische Zaubertreffer durch Intelligenz",
+        "Critique des sorts conféré par l’intelligence",
+        "Crítico con hechizos por intelecto",
+        "Critico degli incantesimi dall’intelletto",
+        "Crítico de feitiços por intelecto",
+        "지능으로 얻는 주문 치명타",
+        "智力提供的法术爆击",
+        "智力提供的法術致命一擊",
+    })
+
+    translate({
+        "Armor from Agility",
+        "Броня от ловкости",
+        "Rüstung durch Beweglichkeit",
+        "Armure conférée par l’agilité",
+        "Armadura por agilidad",
+        "Armatura dall’agilità",
+        "Armadura por agilidade",
+        "민첩성으로 얻는 방어도",
+        "敏捷提供的护甲",
+        "敏捷提供的護甲",
+    })
+
+    translate({
+        "Dodge from Agility",
+        "Уклонение от ловкости",
+        "Ausweichen durch Beweglichkeit",
+        "Esquive conférée par l’agilité",
+        "Esquiva por agilidad",
+        "Schivata dall’agilità",
+        "Esquiva por agilidade",
+        "민첩성으로 얻는 회피",
+        "敏捷提供的躲闪",
+        "敏捷提供的閃躲",
+    })
+
+    translate({
+        "Block Value from Strength",
+        "Величина блока от силы",
+        "Blockwert durch Stärke",
+        "Valeur de blocage conférée par la force",
+        "Valor de bloqueo por fuerza",
+        "Valore di blocco dalla forza",
+        "Valor de bloqueio por força",
+        "힘으로 얻는 방패 피해 방어량",
+        "力量提供的格挡值",
+        "力量提供的格擋值",
+    })
+
+    translate({
+        "Health Regen from Spirit / 5 sec",
+        "Здоровье от духа за 5 сек.",
+        "Gesundheitsregeneration durch Willenskraft / 5 Sek.",
+        "Régénération de vie conférée par l’esprit / 5 s",
+        "Regeneración de salud por espíritu / 5 s",
+        "Rigenerazione di salute dallo spirito / 5 sec",
+        "Regeneração de vida por espírito / 5 s",
+        "정신력으로 회복하는 생명력 / 5초",
+        "精神提供的生命回复 / 5秒",
+        "精神提供的生命恢復 / 5秒",
+    })
+
+    translate({
+        "Mana Regen from Spirit / 5 sec",
+        "Мана от духа за 5 сек.",
+        "Manaregeneration durch Willenskraft / 5 Sek.",
+        "Régénération de mana conférée par l’esprit / 5 s",
+        "Regeneración de maná por espíritu / 5 s",
+        "Rigenerazione di mana dallo spirito / 5 sec",
+        "Regeneração de mana por espírito / 5 s",
+        "정신력으로 회복하는 마나 / 5초",
+        "精神提供的法力回复 / 5秒",
+        "精神提供的法力恢復 / 5秒",
+    })
+
+    translate({
+        "Health Regen / 5 sec",
+        "Восстановление здоровья за 5 сек.",
+        "Gesundheitsregeneration / 5 Sek.",
+        "Régénération de vie / 5 s",
+        "Regeneración de salud / 5 s",
+        "Rigenerazione di salute / 5 sec",
+        "Regeneração de vida / 5 s",
+        "생명력 회복 / 5초",
+        "生命回复 / 5秒",
+        "生命恢復 / 5秒",
+    })
+
+    translate({
+        "Base Ranged Haste",
+        "Базовая скорость дальнего боя",
+        "Grundtempo im Fernkampf",
+        "Hâte à distance de base",
+        "Celeridad a distancia base",
+        "Celerità a distanza base",
+        "Aceleração a distância base",
+        "기본 원거리 가속",
+        "基础远程急速",
+        "基礎遠程加速",
+    })
+
+    translate({
+        "Ammo Haste",
+        "Скорость от боеприпасов",
+        "Tempo durch Munition",
+        "Hâte conférée par les munitions",
+        "Celeridad por munición",
+        "Celerità dalle munizioni",
+        "Aceleração por munição",
+        "탄약으로 얻는 가속",
+        "弹药提供的急速",
+        "彈藥提供的加速",
+    })
+
+    translate({
+        "Hit from Rating",
+        "Меткость от рейтинга",
+        "Trefferchance durch Wertung",
+        "Toucher conféré par le score",
+        "Golpe por índice",
+        "Impatto dall’indice",
+        "Acerto por taxa",
+        "적중도에 따른 적중 확률",
+        "命中等级提供的命中",
+        "命中等級提供的命中",
+    })
+
+    translate({
+        "Hit Modifier",
+        "Модификатор меткости",
+        "Trefferchance-Modifikator",
+        "Modificateur de toucher",
+        "Modificador de golpe",
+        "Modificatore d’impatto",
+        "Modificador de acerto",
+        "적중 보정치",
+        "命中修正",
+        "命中修正",
+    })
+
+    translate({
+        "Damage Reduction at Your Level",
+        "Снижение урона на вашем уровне",
+        "Schadensminderung auf deiner Stufe",
+        "Réduction des dégâts à votre niveau",
+        "Reducción de daño a tu nivel",
+        "Riduzione dei danni al tuo livello",
+        "Redução de dano no seu nível",
+        "자신의 레벨 기준 피해 감소",
+        "对同等级敌人的伤害减免",
+        "對同等級敵人的傷害減免",
+    })
+
+    translate({
+        "Damage Reduction Against Target",
+        "Снижение урона от выбранной цели",
+        "Schadensminderung gegen das Ziel",
+        "Réduction des dégâts contre la cible",
+        "Reducción de daño contra el objetivo",
+        "Riduzione dei danni contro il bersaglio",
+        "Redução de dano contra o alvo",
+        "현재 대상 기준 피해 감소",
+        "对当前目标的伤害减免",
+        "對當前目標的傷害減免",
+    })
+
+    translate({
+        "Expected Resistance at Your Level",
+        "Ожидаемое сопротивление на вашем уровне",
+        "Erwarteter Widerstand auf deiner Stufe",
+        "Résistance attendue à votre niveau",
+        "Resistencia esperada a tu nivel",
+        "Resistenza prevista al tuo livello",
+        "Resistência esperada no seu nível",
+        "자신의 레벨 기준 예상 저항",
+        "对同等级敌人的预计抗性效果",
+        "對同等級敵人的預計抗性效果",
+    })
+
+    translate({
+        "Base Defense",
+        "Базовая защита",
+        "Grundverteidigung",
+        "Défense de base",
+        "Defensa base",
+        "Difesa base",
+        "Defesa base",
+        "기본 방어 숙련",
+        "基础防御",
+        "基礎防禦",
+    })
+
+    translate({
+        "Defense Modifier",
+        "Модификатор защиты",
+        "Verteidigungsmodifikator",
+        "Modificateur de défense",
+        "Modificador de defensa",
+        "Modificatore di difesa",
+        "Modificador de defesa",
+        "방어 숙련 보정치",
+        "防御修正",
+        "防禦修正",
+    })
+
+    translate({
+        "Melee attack power per point",
+        "Сила атаки ближнего боя за очко",
+        "Nahkampfangriffskraft pro Punkt",
+        "Puissance d’attaque en mêlée par point",
+        "Poder de ataque cuerpo a cuerpo por punto",
+        "Potenza d’attacco in mischia per punto",
+        "Poder de ataque corpo a corpo por ponto",
+        "1점당 근접 전투력",
+        "每点属性提供的近战攻击强度",
+        "每點屬性提供的近戰攻擊強度",
+    })
+
+    translate({
+        "Ranged attack power per point",
+        "Сила атаки дальнего боя за очко",
+        "Fernkampfangriffskraft pro Punkt",
+        "Puissance d’attaque à distance par point",
+        "Poder de ataque a distancia por punto",
+        "Potenza d’attacco a distanza per punto",
+        "Poder de ataque de longo alcance por ponto",
+        "1점당 원거리 전투력",
+        "每点属性提供的远程攻击强度",
+        "每點屬性提供的遠程攻擊強度",
+    })
+end
+
+do
+    local expertiseLabels = {
+        { "MainhandExpertise", "Mainhand Expertise" },
+        { "OffhandExpertise", "Offhand Expertise" },
+        { "RangedExpertise", "Ranged Expertise" },
+    }
+    local critLabels = {
+        { "MeleeCrit", "Melee Crit", "GetCritChance" },
+        { "RangedCrit", "Ranged Crit", "GetRangedCritChance" },
+        { "SpellCrit", "Spell Crit", "GetSpellCritChance" },
+    }
+    local schools = { "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" }
+
+    local function readClean(name, index, ...)
+        local value, state = Read(name, index, ...)
+        if state == "clean" then return value end
+    end
+
+    local function addNumber(add, label, value, format)
+        local number, state = Classify(value)
+        if state == "clean" then add(label, string.format(format or "%d", number)) end
+    end
+
+    local function addPercent(add, label, value)
+        addNumber(add, label, value, "%.2f%%")
+    end
+
+    local function addScaled(add, label, value, scale, format)
+        local number, state = Classify(value)
+        if state == "clean" then addNumber(add, label, number * scale, format) end
+    end
+
+    local function addFraction(add, label, value)
+        if value ~= nil then addPercent(add, label, value * 100) end
+    end
+
+    local function canUseMana()
+        local ok, _, class = pcall(UnitClass, "player")
+        if not ok or issecretvalue(class) or type(class) ~= "string" then return false end
+        return class ~= "WARRIOR" and class ~= "ROGUE"
+    end
+
+    local function readPaperDoll(fn, ...)
+        if type(fn) ~= "function" then return nil end
+        local ok, value = pcall(fn, ...)
+        if ok and not issecretvalue(value) then return value end
+    end
+
+    local function addArmor(add, armor)
+        local paperDoll = _G.C_PaperDollInfo
+        if type(paperDoll) ~= "table" then return end
+        local level = readClean("UnitEffectiveLevel", 1, "player")
+        if level and level > 0 then
+            addScaled(add, "Damage Reduction at Your Level",
+                readPaperDoll(paperDoll.GetArmorEffectiveness, armor, level), 100, "%.2f%%")
+        end
+        addScaled(add, "Damage Reduction Against Target",
+            readPaperDoll(paperDoll.GetArmorEffectivenessAgainstTarget, armor), 100, "%.2f%%")
+    end
+
+    local function readExpertise(key, value, add)
+        local fn = _G.GetExpertise
+        if type(fn) ~= "function" then return end
+        local ok, mainhand, offhand, ranged = pcall(fn)
+        if not ok then return end
+        local values = { mainhand, offhand, ranged }
+        for index, entry in ipairs(expertiseLabels) do
+            if entry[1] == key then
+                local current, state = Classify(values[index])
+                if state ~= "clean" or current ~= value then return end
+                break
+            end
+        end
+        for index, entry in ipairs(expertiseLabels) do
+            if entry[1] ~= key then addPercent(add, entry[2], values[index]) end
+        end
+    end
+
+    local function addCrit(key, value, add)
+        for _, entry in ipairs(critLabels) do
+            if entry[1] == key and readClean(entry[3], 1) ~= value then return end
+        end
+        for _, entry in ipairs(critLabels) do
+            if entry[1] ~= key then addPercent(add, entry[2], readClean(entry[3], 1)) end
+        end
+    end
+
+    local function addSpellPower(key, value, add)
+        for index, school in ipairs(schools) do
+            if key == "SpellPower" .. school and readClean("GetSpellBonusDamage", 1, index + 1) ~= value then
+                return
+            end
+        end
+        for index, school in ipairs(schools) do
+            if key ~= "SpellPower" .. school then
+                addNumber(add, school .. " Spell Power", readClean("GetSpellBonusDamage", 1, index + 1))
+            end
+        end
+    end
+
+    function F.BuildStatTooltip(meta, add)
+        local key, state = meta.key, meta.state
+        local detail = not issecretvalue(meta.detail) and type(meta.detail) == "table" and meta.detail
+        if key == "ItemLevel" or key == "Durability" then
+            if not detail or (state ~= "clean" and state ~= "stale") then return end
+            local numberFormat = state == "stale" and "(%d)" or "%d"
+            local percentFormat = state == "stale" and "(%.1f%%)" or "%.1f%%"
+            if key == "ItemLevel" then
+                local equipped, equippedState = Classify(detail.equipped)
+                local overall, overallState = Classify(detail.overall)
+                if equippedState == "clean" then addNumber(add, "Equipped Item Level", math.floor(equipped), numberFormat) end
+                if overallState == "clean" then addNumber(add, "Overall Item Level", math.floor(overall), numberFormat) end
+            else
+                addNumber(add, "Average Durability", detail.average, percentFormat)
+                addNumber(add, "Lowest Durability", detail.worst, percentFormat)
+            end
+            return
+        end
+        if state ~= "clean" then return end
+        local value, valueState = Classify(meta.value)
+        if valueState ~= "clean" then return end
+        if key:match("Hit$") and detail then
+            addPercent(add, "Hit from Rating", detail.rating)
+            addPercent(add, "Hit Modifier", detail.modifier)
+        elseif key == "RangedHaste" and detail then
+            addPercent(add, "Base Ranged Haste", detail.base)
+            addPercent(add, "Ammo Haste", detail.ammo)
+        elseif key == "Stamina" then
+            if readClean("UnitStat", 2, "player", 3) ~= value then return end
+            local perStamina = readClean("UnitHPPerStamina", 1, "player")
+            if perStamina ~= nil then
+                addNumber(add, "Health from Stamina", math.min(20, value) + math.max(0, value - 20) * perStamina)
+            end
+        elseif key == "Intellect" then
+            if readClean("UnitStat", 2, "player", 4) ~= value then return end
+            if canUseMana() then
+                addNumber(add, "Mana from Intellect", math.min(20, value) + math.max(0, value - 20) * 15)
+            end
+            addFraction(add, "Spell Crit from Intellect", readClean("GetSpellCritChanceFromStat", 1, 4, value))
+        elseif key == "Spirit" then
+            if readClean("UnitStat", 2, "player", 5) ~= value then return end
+            addScaled(add, "Health Regen from Spirit / 5 sec", readClean("GetHealthRegenFromSpirit", 1), 3.75, "%.2f")
+            addScaled(add, "Health Regen / 5 sec", readClean("GetHealthRegen", 1), 5, "%.2f")
+            if canUseMana() then
+                addScaled(add, "Mana Regen from Spirit / 5 sec", readClean("GetManaRegenFromSpirit", 1), 5, "%.2f")
+                addScaled(add, "Mana Regen / 5 sec", readClean("GetManaRegen", 1), 5, "%.2f")
+            end
+        elseif key == "Strength" then
+            local paperDoll = _G.C_PaperDollInfo
+            if readClean("UnitStat", 2, "player", 1) == value and type(paperDoll) == "table"
+                and readPaperDoll(paperDoll.OffhandHasShield) == true then
+                addNumber(add, "Block Value from Strength", math.floor(value / 20))
+            end
+        elseif key == "Agility" then
+            addNumber(add, "Armor from Agility", value * 2)
+            if readClean("UnitStat", 2, "player", 2) == value then
+                addFraction(add, "Dodge from Agility", readClean("GetDodgeChanceFromAttribute", 1))
+            end
+        elseif key == "Block" then
+            if readClean("GetBlockChance", 1) == value then
+                addNumber(add, "Block Value", readClean("GetShieldBlock", 1))
+            end
+        elseif key == "BlockValue" then
+            if readClean("GetShieldBlock", 1) == value then
+                addPercent(add, "Block", readClean("GetBlockChance", 1))
+            end
+        elseif key == "Armor" then
+            if readClean("UnitArmor", 2, "player") == value then addArmor(add, value) end
+        elseif key == "Defense" then
+            local fn = _G.UnitDefenseSkill
+            if type(fn) ~= "function" then return end
+            local ok, base, modifier = pcall(fn, "player")
+            local cleanBase, baseState = Classify(base)
+            local cleanModifier, modifierState = Classify(modifier)
+            if ok and baseState == "clean" and modifierState == "clean"
+                and math.max(0, cleanBase + cleanModifier) == value then
+                addNumber(add, "Base Defense", cleanBase)
+                if cleanModifier ~= 0 then addNumber(add, "Defense Modifier", cleanModifier, "%+d") end
+            end
+        elseif key:match("Resistance$") then
+            local resistance, resistanceState = ReadResistance(key:match("^(.+)Resistance$"))
+            if resistanceState ~= "clean" or resistance ~= value then return end
+            local level = readClean("UnitLevel", 1, "player")
+            if level and level > 0 then
+                addNumber(add, "Expected Resistance at Your Level", math.floor(15 * value / level), "%d%%")
+            end
+        elseif key:match("Expertise$") then
+            readExpertise(key, value, add)
+        elseif key:match("Crit$") then
+            addCrit(key, value, add)
+        elseif key:match("^SpellPower") then
+            addSpellPower(key, value, add)
+        end
+    end
 end

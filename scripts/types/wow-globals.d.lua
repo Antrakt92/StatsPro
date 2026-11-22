@@ -85,6 +85,15 @@ IsAddOnLoaded = nil
 ---@type StatsProCurrencyAPI?
 C_CurrencyInfo = nil
 
+---@class (exact) StatsProPaperDollAPI
+---@field GetArmorEffectiveness? fun(armor: number, level: number): number
+---@field GetArmorEffectivenessAgainstTarget? fun(armor: number): number?
+---@field OffhandHasShield? fun(): boolean
+---@field GetStaggerPercentage? fun(unit: string): number
+
+---@type StatsProPaperDollAPI?
+C_PaperDollInfo = nil
+
 ---@param value number
 ---@param options table
 ---@return string

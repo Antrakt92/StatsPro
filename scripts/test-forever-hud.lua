@@ -1340,8 +1340,14 @@ do
     end
     check(paletteAddon:RunUpdateStatsSafe(), "Forever renders its full stat catalog")
     local tooltipState = paletteTest.mainPanelTooltipState()
-    check(tooltipState.overlayCount == 0 and tooltipState.lastTargetRows == nil,
-        "Forever needs no Archon row metadata or mouse overlays")
+    check(tooltipState.overlayCount > 0 and tooltipState.lastTargetRows[1].key == "Strength"
+        and tooltipState.lastTargetRows[1].target == nil,
+        "Forever renders row tooltips independently of Archon comparison data")
+    paletteTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    local tooltip = paletteEnv.StatsProTargetTooltip
+    check(tooltip:IsShown() and tooltip.lines[1].left == "Strength", "Forever hover opens the actual stat")
+    paletteTest.fireMainPanelTooltipOverlayForSmoke(1, "OnLeave")
+    check(not tooltip:IsShown(), "Forever hover closes when the pointer leaves")
 end
 do
     local combatNow = false
@@ -1430,5 +1436,93 @@ do
     apEnv.__fireEvent("PLAYER_REGEN_ENABLED")
     check(hasStat(apTest.buildRenderBlocks()[2], "Attack Power", "79"),
         "the next clean equipment sample recovers AP")
+end
+do
+    local stat = 130
+    local secretStat = {}
+    local hoverEnv, hoverAddon, hoverTest = fixtures.loadStatsPro("enUS", {
+        forever = true,
+        unitGUID = function() return "Player-ForeverTooltip" end,
+        issecretvalue = function(value) return value == secretStat end,
+        roundToNearestString = function(value) return value == secretStat and "131" or tostring(value) end,
+        getInventoryItemDurability = function(slot) if slot == 1 then return 90, 100 end end,
+        getTooltipInventoryItem = function() return { repairCost = 12345 } end,
+        foreverAPIs = {
+            UnitStat = function() return 0, stat, 0, 0 end,
+        },
+    })
+    hoverEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local settings = hoverTest.profileState().settings
+    for _, group in pairs(hoverAddon.forever.rows) do
+        for _, row in ipairs(group) do settings[row.showKey] = false end
+    end
+    settings.showStrength, settings.showDurability, settings.showRepairCost = true, false, true
+    settings.isLocked, settings.showItemLevel = false, false
+    settings.fontSize = 24
+    settings.displayMode = "sectioned"
+    hoverTest.cacheSettings()
+    check(hoverAddon:RunUpdateStatsSafe(), "Forever sectional hover updates")
+    local info = hoverTest.mainPanelTooltipState()
+    check(not info.firstShown and info.secondShown and info.lastTargetRows[1] == false,
+        "section header has no overlay and stat keeps its visual index")
+    local frame = hoverEnv.StatsProFrame
+    frame.GetRight = function() return 990 end
+    frame.GetEffectiveScale = function() return 1 end
+    hoverEnv.UIParent.GetEffectiveScale = function() return 1 end
+    hoverEnv.UIParent:SetWidth(1000)
+    hoverTest.fireMainPanelTooltipOverlayForSmoke(2, "OnEnter")
+    local tooltip = hoverEnv.StatsProTargetTooltip
+    check(tooltip and tooltip:IsShown() and tooltip.lines[1].left == "Strength",
+        "actual row opens its own tooltip")
+    check(tooltip:GetPoint() == "TOPRIGHT", "tooltip opens inward near right edge")
+    local layouts = 0
+    local oldLayout = tooltip.Layout
+    tooltip.Layout = function(self)
+        layouts = layouts + 1
+        return oldLayout(self)
+    end
+    tooltip.layoutReusable = true
+    check(hoverAddon:RunUpdateStatsSafe() and layouts == 0, "identical clean hover reuses its layout")
+    hoverEnv.__fireEvent("UI_SCALE_CHANGED")
+    check(hoverAddon:RunUpdateStatsSafe() and layouts == 1, "scale event invalidates the same hover layout")
+    local reads = 0
+    local function model(meta, add)
+        if meta.key == "Strength" and meta.state == "clean" then
+            reads = reads + 1
+            add("Attack Power", tostring(meta.value * 2))
+        end
+    end
+    hoverAddon.forever.BuildAttackPowerTooltip = model
+    check(hoverAddon:RunUpdateStatsSafe() and reads == 1, "only the hovered row calculates details")
+    stat = secretStat
+    check(hoverAddon:RunUpdateStatsSafe() and reads == 1 and tooltip:IsShown(),
+        "restricted clean-input model is skipped while the tooltip stays open")
+    info = hoverTest.mainPanelTooltipState()
+    check(info.lastTargetRows[2].state == "secret" and info.lastTargetRows[2].value == nil,
+        "protected raw input never enters tooltip metadata")
+
+    settings.showStrength, settings.showAgility = false, true
+    settings.displayMode, settings.splitRepairCost = "split", true
+    hoverTest.cacheSettings()
+    check(hoverAddon:RunUpdateStatsSafe() and not tooltip:IsShown(),
+        "layout and semantic row changes retire an open tooltip")
+    local coinFormatter = hoverEnv.GetCoinTextureString
+    local coinSize
+    hoverEnv.GetCoinTextureString = function(amount, size)
+        coinSize = size
+        return coinFormatter(amount, size)
+    end
+    hoverTest.firePanelTooltipOverlayForSmoke("side", 1, "OnEnter")
+    check(tooltip:IsShown() and tooltip.lines[1].left == "Repair",
+        "dedicated repair-only panel has its own hover row")
+    check(coinSize == 12, "repair tooltip sizes coins to its own font")
+    hoverTest.firePanelTooltipOverlayForSmoke("side", 1, "OnDragStart")
+    check(not tooltip:IsShown() and hoverTest.panelTooltipState("side").wasDragging,
+        "starting a drag closes the Forever tooltip")
+    hoverTest.firePanelTooltipOverlayForSmoke("side", 1, "OnDragStop")
+    settings.showRepairCost = false
+    hoverTest.cacheSettings()
+    check(hoverAddon:RunUpdateStatsSafe() and not hoverTest.panelTooltipState("side").shown[1],
+        "removing repair retires its separate overlay")
 end
 print("StatsPro Forever HUD integration: PASS (" .. count .. " checks)")

@@ -1009,12 +1009,16 @@ local sharedNotice = _G.AntraktFontNoticeCoordinator
 local sharedNoticeTypo = _G.AntraktFontNoticeCoordinatr
 local addonLoaded = _G.IsAddOnLoaded
 local addonLoadedTypo = _G.IsAddOnLoaedd
+local paperDoll = _G.C_PaperDollInfo
+local paperDollTypo = _G.C_PaperDollInf
+local shieldCheck = paperDoll and paperDoll.OffhandHasShield
+local shieldCheckTypo = paperDoll and paperDoll.OffhandHasSheild
 local suffix = "Text"
 local dynamic = _G["StatsProVisibleCheck" .. suffix]
 return state.retrySchedueld or globalTypo or maxSchoolsTypo
     or specInfoByID or specInfoByIDTypo or overrideAP or overrideAPTypo or dynamic
     or sharedFonts or sharedFontTypo or sharedNotice or sharedNoticeTypo
-    or addonLoaded or addonLoadedTypo
+    or addonLoaded or addonLoadedTypo or paperDollTypo or shieldCheck or shieldCheckTypo
 '@ -Encoding UTF8
         $fieldCheck = Invoke-LuaLanguageServerCheck `
             -ServerPath $luaLanguageServer `
@@ -1025,8 +1029,8 @@ return state.retrySchedueld or globalTypo or maxSchoolsTypo
             -IsolateLuaEnvironment
         $undefinedFieldDiagnostics = @($fieldCheck.Diagnostics | Where-Object { $_.Code -eq "undefined-field" })
         $fieldMessages = $undefinedFieldDiagnostics.Message -join "`n"
-        if ($fieldCheck.ExitCode -eq 0 -or $fieldCheck.Diagnostics.Count -ne 10 -or
-            $undefinedFieldDiagnostics.Count -ne 10 -or
+        if ($fieldCheck.ExitCode -eq 0 -or $fieldCheck.Diagnostics.Count -ne 12 -or
+            $undefinedFieldDiagnostics.Count -ne 12 -or
             $fieldMessages -notmatch "retrySchedueld" -or
             $fieldMessages -notmatch "StatsProFontPickre" -or
             $fieldMessages -notmatch "MAX_SPELL_SCHOOL" -or
@@ -1036,9 +1040,11 @@ return state.retrySchedueld or globalTypo or maxSchoolsTypo
             $fieldMessages -notmatch "GetOverrideAPBySpellPowre" -or
             $fieldMessages -notmatch "\bAntraktFont\b" -or
             $fieldMessages -notmatch "AntraktFontNoticeCoordinatr" -or
-            $fieldMessages -notmatch "IsAddOnLoaedd") {
+            $fieldMessages -notmatch "IsAddOnLoaedd" -or
+            $fieldMessages -notmatch "\bC_PaperDollInf\b" -or
+            $fieldMessages -notmatch "OffhandHasSheild") {
             $summary = @($fieldCheck.Diagnostics | ForEach-Object { "$($_.Code): $($_.Message)" }) -join " | "
-            throw "LuaLS field-typo fixture must report only the ten intentional field typos; exit=$($fieldCheck.ExitCode), diagnostics=$summary"
+            throw "LuaLS field-typo fixture must report only the twelve intentional field typos; exit=$($fieldCheck.ExitCode), diagnostics=$summary"
         }
     }
     finally {
@@ -1166,7 +1172,7 @@ Write-Host "== Lua syntax =="
 $SyntaxFiles = @($RuntimeLuaRefs | ForEach-Object { $_.FullPath })
 if (Test-Path $ArchonTargetsCheck) { $SyntaxFiles += $ArchonTargetsCheck }
 $SyntaxFiles += $SmokeFile
-foreach ($name in @("StatsPro_Forever.lua", "scripts/test-forever.lua", "scripts/test-forever-hud.lua", "scripts/test-forever-classes.lua", "scripts/test-appearance.lua", "scripts/test-retail-recovery.lua", "scripts/test-bundled-fonts.lua", "scripts/test-font-audit.lua", "scripts/test-font-hover.lua", "scripts/test-font-favorites.lua", "scripts/test-shared-fonts.lua", "scripts/test-settings-menus.lua", "scripts/test-profile-transfer-portability.lua", "scripts/test-selftest.lua", "scripts/test-panel-geometry.lua")) {
+foreach ($name in @("StatsPro_Forever.lua", "scripts/test-forever.lua", "scripts/test-forever-hud.lua", "scripts/test-forever-attack-power-tooltip.lua", "scripts/test-forever-tooltip-details.lua", "scripts/test-forever-classes.lua", "scripts/test-appearance.lua", "scripts/test-retail-recovery.lua", "scripts/test-bundled-fonts.lua", "scripts/test-font-audit.lua", "scripts/test-font-hover.lua", "scripts/test-font-favorites.lua", "scripts/test-shared-fonts.lua", "scripts/test-settings-menus.lua", "scripts/test-profile-transfer-portability.lua", "scripts/test-selftest.lua", "scripts/test-panel-geometry.lua")) {
     $path = Join-Path $RepoRoot $name
     if (-not (Test-Path -LiteralPath $path)) { throw "Missing Forever verification source: $name" }
     $SyntaxFiles += $path
@@ -1238,7 +1244,7 @@ if (-not $UpdateSmokeContract) {
 }
 
 Write-Host "== Forever stat and HUD regressions =="
-foreach ($script in @("scripts/test-forever.lua", "scripts/test-forever-hud.lua", "scripts/test-forever-classes.lua", "scripts/test-appearance.lua", "scripts/test-retail-recovery.lua", "scripts/test-bundled-fonts.lua", "scripts/test-font-audit.lua", "scripts/test-font-hover.lua", "scripts/test-font-favorites.lua", "scripts/test-shared-fonts.lua", "scripts/test-settings-menus.lua", "scripts/test-profile-transfer-portability.lua", "scripts/test-selftest.lua", "scripts/test-panel-geometry.lua")) {
+foreach ($script in @("scripts/test-forever.lua", "scripts/test-forever-hud.lua", "scripts/test-forever-attack-power-tooltip.lua", "scripts/test-forever-tooltip-details.lua", "scripts/test-forever-classes.lua", "scripts/test-appearance.lua", "scripts/test-retail-recovery.lua", "scripts/test-bundled-fonts.lua", "scripts/test-font-audit.lua", "scripts/test-font-hover.lua", "scripts/test-font-favorites.lua", "scripts/test-shared-fonts.lua", "scripts/test-settings-menus.lua", "scripts/test-profile-transfer-portability.lua", "scripts/test-selftest.lua", "scripts/test-panel-geometry.lua")) {
     $result = Invoke-NativeCapture -FilePath $Lua -Arguments @((Join-Path $RepoRoot $script)) `
         -TimeoutSeconds 60 -Description $script -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
     $result.Output | ForEach-Object { Write-Host $_ }

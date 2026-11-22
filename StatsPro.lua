@@ -5070,13 +5070,13 @@ local function FormatRepairCost(copper, fontSize)
     return text or "—"
 end
 
-function addon.durabilityRuntime.GetRepairCostText()
+function addon.durabilityRuntime.GetRepairCostText(fontSize)
     if not cached.showRepairCost then return "" end
     local amount = cached.repairCost
     if durabilityDirty or cached.repairCostComplete ~= true or not IsCleanNonNegativeNumber(amount) then
         return addon.durabilityRuntime.auctionOpen and "" or "—"
     end
-    return amount > 0 and FormatRepairCost(amount, cached.fontSize) or ""
+    return amount > 0 and FormatRepairCost(amount, fontSize or cached.fontSize) or ""
 end
 
 local function ComputeDurabilityColor(pct)
@@ -10052,6 +10052,10 @@ function Panel:New(globalName, dbKeyPrefix)
         overlay:SetScript("OnDragStart", function()
             if addon.profileRuntime.ReadCombatState() ~= false or cached.isLocked then return end
             panel:StartMouseDrag()
+            if addon.forever.enabled and panel.dragActive then
+                local tooltip = addon.archonTargets.tooltip
+                if tooltip and tooltip:GetOwner() == overlay then tooltip:Hide() end
+            end
         end)
         overlay:SetScript("OnDragStop", function()
             panel:FinishMouseDrag()
@@ -10606,6 +10610,10 @@ function addon.archonTargets.LayoutTooltip(tooltip)
                 rightText = tooltip:CreateFontString(nil, "OVERLAY", "GameTooltipText"),
             }
             tooltip.regions[index] = region
+            if addon.forever.enabled and tooltip.statFont then
+                region.leftText:SetFont(tooltip.statFont, index == 1 and 14 or 12, "")
+                region.rightText:SetFont(tooltip.statFont, 12, "")
+            end
         end
         if row.isDouble then
             numericIndex = numericIndex + 1
@@ -10822,9 +10830,87 @@ function addon.archonTargets.ShowTooltip(anchor, meta)
     return true
 end
 
+function addon.forever.ShowStatTooltip(anchor, meta)
+    local panel = anchor:GetParent()
+    if not panel or panel.wasDragging then return false end
+    local tooltip = addon.archonTargets.GetTooltip()
+    tooltip:SetOwner(anchor)
+    local locale = cached.activeLabelsLocale
+    if tooltip.statLocale ~= locale then
+        local requirement = LOCALE_GLYPH_REQ[locale] or GLYPH_LATIN
+        local font = FindCompatibleFont(LocaleAwareDefaultFont(), requirement, locale)
+        if font then
+            tooltip.headerProbe:SetFont(font, 14, "")
+            tooltip.bodyProbe:SetFont(font, 12, "")
+            for index, region in ipairs(tooltip.regions) do
+                region.leftText:SetFont(font, index == 1 and 14 or 12, "")
+                region.rightText:SetFont(font, 12, "")
+            end
+            tooltip.statFont = font
+            tooltip.statLocale = locale
+            tooltip.layoutReusable = false
+        end
+    end
+    local previousLines = tooltip.lines
+    tooltip.lines = {}
+    local function add(label, value)
+        if value == nil then
+            tooltip:AddLine(L(label), 0.9, 0.9, 0.9, true)
+        else
+            addon.archonTargets.AddTooltipRow(L(label), value)
+        end
+    end
+    tooltip:AddLine(L(meta.label), 1, 0.82, 0, true)
+    local display = meta.display
+    if meta.key == "Repair" and meta.state == "clean" then
+        local repair = addon.durabilityRuntime.GetRepairCostText(12)
+        if repair ~= "" and repair ~= "—" then display = repair end
+    end
+    if meta.state == "stale" then
+        add("Last reliable reading", display)
+    elseif display then
+        add("Current:", display)
+    end
+    local descriptions = addon.forever.tooltipDescriptionKeys
+    if descriptions and descriptions[meta.key] then add(descriptions[meta.key]) end
+    if meta.state == "clean" then
+        if addon.forever.BuildAttackPowerTooltip then addon.forever.BuildAttackPowerTooltip(meta, add) end
+    end
+    if addon.forever.BuildStatTooltip then addon.forever.BuildStatTooltip(meta, add) end
+    if tooltip.layoutReusable and tooltip:IsShown()
+        and addon.archonTargets.CanReuseTooltipLayout(tooltip, previousLines) then
+        tooltip.lines = previousLines
+    else
+        tooltip:Layout()
+        tooltip:Show()
+    end
+    if type(panel.GetRight) == "function" and type(panel.GetEffectiveScale) == "function"
+        and type(UIParent.GetEffectiveScale) == "function" then
+        local right, screenWidth = panel:GetRight(), UIParent:GetWidth()
+        local panelScale, rootScale = panel:GetEffectiveScale(), UIParent:GetEffectiveScale()
+        if SAFE_NUM.IsCleanFiniteNumber(right) and SAFE_NUM.IsCleanFiniteNumber(screenWidth)
+            and SAFE_NUM.IsCleanFiniteNumber(panelScale) and SAFE_NUM.IsCleanFiniteNumber(rootScale)
+            and rootScale > 0 then
+            local side = right * panelScale / rootScale + tooltip:GetWidth() + 8 > screenWidth
+                and "left" or "right"
+            if tooltip.statSide ~= side or tooltip.statAnchor ~= anchor then
+                tooltip:ClearAllPoints()
+                if side == "left" then
+                    tooltip:SetPoint("TOPRIGHT", panel, "TOPLEFT", -8, 0)
+                else
+                    tooltip:SetPoint("TOPLEFT", panel, "TOPRIGHT", 8, 0)
+                end
+                tooltip.statSide, tooltip.statAnchor = side, anchor
+            end
+        end
+    end
+    return true
+end
+
 function Panel:ApplyTooltipRows(targetRows, lineCount)
     self.lastTargetRows = targetRows
-    if addon.forever.enabled then return end
+    local forever = addon.forever.enabled
+    local showTooltip = forever and addon.forever.ShowStatTooltip or addon.archonTargets.ShowTooltip
     local rowHeight = self.lastLineH or GetNumberDB("fontSize")
     if not SAFE_NUM.IsCleanFiniteNumber(rowHeight) or rowHeight <= 0 then rowHeight = 1 end
     -- Refresh only the tooltip that is both visible and still owned by one of this
@@ -10837,9 +10923,14 @@ function Panel:ApplyTooltipRows(targetRows, lineCount)
         openOwner = tooltip:GetOwner()
     end
     lineCount = lineCount or 0
+    local repairIndex = forever and self:IsShown() and self.lastHasRepair and lineCount + 1 or nil
+    local repairMeta = repairIndex and {
+        key = "Repair", statKey = "forever:Repair", label = "Repair",
+        state = self.lastRepairText ~= "—" and "clean" or "unknown",
+    } or nil
     for i, overlay in pairs(self.tooltipOverlays) do
-        local meta = targetRows and targetRows[i] or nil
-        if type(meta) ~= "table" or i > lineCount then
+        local meta = i == repairIndex and repairMeta or targetRows and targetRows[i] or nil
+        if type(meta) ~= "table" or (i > lineCount and i ~= repairIndex) then
             if openOwner == overlay then tooltip:Hide() end
             if overlay.statsProTargetMeta then
                 overlay:Hide()
@@ -10848,9 +10939,9 @@ function Panel:ApplyTooltipRows(targetRows, lineCount)
             end
         end
     end
-    if not targetRows then return end
-    for i = 1, math.min(#targetRows, lineCount) do
-        local meta = targetRows[i]
+    local count = repairIndex or math.min(targetRows and #targetRows or 0, lineCount)
+    for i = 1, count do
+        local meta = i == repairIndex and repairMeta or targetRows and targetRows[i]
         if type(meta) == "table" then
             local overlay = self.tooltipOverlays[i]
             if not overlay then
@@ -10858,16 +10949,22 @@ function Panel:ApplyTooltipRows(targetRows, lineCount)
                 self.tooltipOverlays[i] = overlay
             end
             local previousMeta = overlay.statsProTargetMeta
-            if overlay.statsProRowHeight ~= rowHeight then
+            local y, height = -((i - 1) * rowHeight), rowHeight
+            if i == repairIndex then
+                y = self.lastRepairRowY
+                height = self.lastFrameHeight + y
+            end
+            if overlay.statsProRowHeight ~= height or (forever and overlay.statsProRowY ~= y) then
                 overlay:ClearAllPoints()
-                overlay:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, -((i - 1) * rowHeight))
+                overlay:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, y)
                 overlay:SetPoint("RIGHT", self.frame, "RIGHT", 0, 0)
-                overlay:SetHeight(rowHeight)
-                overlay.statsProRowHeight = rowHeight
+                overlay:SetHeight(height)
+                overlay.statsProRowHeight = height
+                overlay.statsProRowY = y
             end
             if not previousMeta then
                 overlay:SetScript("OnEnter", function(f)
-                    addon.archonTargets.ShowTooltip(f, f.statsProTargetMeta)
+                    showTooltip(f, f.statsProTargetMeta)
                 end)
             end
             overlay.statsProTargetMeta = meta
@@ -10875,7 +10972,7 @@ function Panel:ApplyTooltipRows(targetRows, lineCount)
             if openOwner == overlay then
                 local sameStat = type(previousMeta) == "table"
                     and previousMeta.statKey == meta.statKey
-                if not sameStat or not addon.archonTargets.ShowTooltip(overlay, meta) then
+                if not sameStat or not showTooltip(overlay, meta) then
                     tooltip:Hide()
                 end
             end
@@ -11799,11 +11896,11 @@ local function PushItemLevelRow(labels, ratings, values)
     PushRow(labels, ratings, values, label, rStr, vStr)
 end
 
-function addon.forever.ReadHUDRow(definition, manaSample)
+function addon.forever.ReadHUDRow(definition, sample)
     if definition.key == "ManaRegenMP5" then
-        return definition.Read(cached.showCastingManaRegenMP5, manaSample)
+        return definition.Read(cached.showCastingManaRegenMP5, sample)
     end
-    return definition.Read(manaSample)
+    return definition.Read(sample)
 end
 
 addon.forever.lastCleanCompoundValues = {}
@@ -11825,11 +11922,12 @@ function addon.forever.ReadCompoundForm()
     end
 end
 
-function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
-    local manaSample = group == "utility" and cached.shareManaRegenSample and {} or nil
+function addon.forever.BuildLines(group, labels, ratings, values, hideZero, tooltipRows)
+    local shareSample = group == "offensive" or (group == "utility" and cached.shareManaRegenSample)
+    local sample = shareSample and {} or nil
     for _, definition in ipairs(addon.forever.rows[group]) do
         if cached[definition.showKey] then
-            local value, state, visibilitySuffix = addon.forever.ReadHUDRow(definition, manaSample)
+            local value, state, visibilitySuffix, detail = addon.forever.ReadHUDRow(definition, sample)
             local rowKey = "forever:" .. definition.key .. (visibilitySuffix or "")
             local fallback
             if definition.rememberLastClean then
@@ -11860,6 +11958,7 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
                 local unknownSuffix = (definition.kind == "movement" or definition.kind == "percent")
                     and "%" or suffix
                 local text, placeholder
+                local displayState = state
                 if state == "unknown" then
                     placeholder = true
                 elseif state == "secret" and definition.restrictedMP5FallbackLabel then
@@ -11891,13 +11990,27 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
                     visible = not hideZero or (fallback ~= nil and fallback ~= 0)
                     if fallback ~= nil then
                         local format = definition.kind == "percent" and "(%.2f%%)" or "(%d)"
-                        text = SAFE_NUM.FormatColorNumber(valueColor, fallback, format)
+                        text, placeholder = SAFE_NUM.FormatColorNumber(valueColor, fallback, format)
+                        displayState = "stale"
+                    else
+                        displayState = "unknown"
                     end
                 end
                 if visible then
                     local unavailable = definition.rememberLastClean and "—" or "?" .. unknownSuffix
                     local rCol, vCol = RouteValueOnly(text or ("|cff" .. valueColor .. unavailable .. "|r"))
                     PushRow(labels, ratings, values, FormatLabel(color, label), rCol, vCol)
+                    if tooltipRows then
+                        local hasText = type(text) == "string" and not placeholder
+                        local display = hasText and not issecretvalue(text) and text or nil
+                        local tooltipState = hasText and displayState or "unknown"
+                        tooltipRows[#labels] = {
+                            statKey = rowKey, key = definition.key, label = label,
+                            state = tooltipState, display = display,
+                            value = tooltipState == "clean" and value or nil,
+                            detail = tooltipState == "clean" and detail or nil,
+                        }
+                    end
                 end
             end
         end
@@ -11905,9 +12018,9 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero)
     return labels, ratings, values
 end
 
-local function BuildCharacterLines(labels, ratings, values)
+local function BuildCharacterLines(labels, ratings, values, tooltipRows)
     if addon.forever.enabled then
-        return addon.forever.BuildLines("character", labels, ratings, values, false)
+        return addon.forever.BuildLines("character", labels, ratings, values, false, tooltipRows)
     end
     if not cached.showMainStat and not cached.showStamina then return labels, ratings, values end
     if cached.showMainStat then
@@ -11923,9 +12036,19 @@ local function BuildCharacterLines(labels, ratings, values)
     return labels, ratings, values
 end
 
-local function BuildItemLevelLines(labels, ratings, values)
+local function BuildItemLevelLines(labels, ratings, values, tooltipRows)
     if cached.showItemLevel then
+        local before = #labels
         PushItemLevelRow(labels, ratings, values)
+        if tooltipRows and #labels > before then
+            tooltipRows[#labels] = {
+                key = "ItemLevel", statKey = "forever:ItemLevel", label = "ItemLevel",
+                state = cached.itemLevelComplete and "clean" or "stale",
+                display = string.format("%d / %d", math.floor(cached.itemLevelEquipped),
+                    math.floor(cached.itemLevelOverall)),
+                detail = { equipped = cached.itemLevelEquipped, overall = cached.itemLevelOverall },
+            }
+        end
     end
     return labels, ratings, values
 end
@@ -12001,7 +12124,7 @@ end
 local function BuildOffensiveLines(labels, ratings, values, targetRows)
     if addon.forever.enabled then
         if not cached.showOffensive then return labels, ratings, values end
-        return addon.forever.BuildLines("offensive", labels, ratings, values, cached.hideZeroOffensive)
+        return addon.forever.BuildLines("offensive", labels, ratings, values, cached.hideZeroOffensive, targetRows)
     end
     -- Master gate: hide entire section when off (cheapest check, exits whole function).
     if not cached.showOffensive then return labels, ratings, values end
@@ -12176,10 +12299,10 @@ local function BuildOffensiveLines(labels, ratings, values, targetRows)
     return labels, ratings, values
 end
 
-local function BuildTertiaryLines(labels, ratings, values)
+local function BuildTertiaryLines(labels, ratings, values, tooltipRows)
     if addon.forever.enabled then
         if not cached.showTertiary then return labels, ratings, values end
-        return addon.forever.BuildLines("utility", labels, ratings, values, cached.hideZeroTertiary)
+        return addon.forever.BuildLines("utility", labels, ratings, values, cached.hideZeroTertiary, tooltipRows)
     end
     if not cached.showTertiary then return labels, ratings, values end
     if not (cached.showRating or cached.showPercentage) then return labels, ratings, values end
@@ -12233,10 +12356,10 @@ local function BuildTertiaryLines(labels, ratings, values)
     return labels, ratings, values
 end
 
-local function BuildDefensiveLines(labels, ratings, values)
+local function BuildDefensiveLines(labels, ratings, values, tooltipRows)
     if addon.forever.enabled then
         if not cached.showDefensive then return labels, ratings, values end
-        return addon.forever.BuildLines("defensive", labels, ratings, values, cached.hideZeroDefensive)
+        return addon.forever.BuildLines("defensive", labels, ratings, values, cached.hideZeroDefensive, tooltipRows)
     end
     if not cached.showDefensive then return labels, ratings, values end
     local cs = cached.colorStrings
@@ -12282,7 +12405,7 @@ end
 -- WHY: durability is independent of "Show Defensive Stats" — gear wear is not a
 -- defensive stat (one is mitigation %, the other is item integrity). Kept as its own
 -- builder so users can show only durability without enabling the dodge/parry/block block.
-local function BuildDurabilityLines(labels, ratings, values)
+local function BuildDurabilityLines(labels, ratings, values, tooltipRows)
     if not cached.showDurability then return labels, ratings, values end
     if cached.durabilityComplete and not cached.durabilityHasItems then
         return labels, ratings, values
@@ -12294,6 +12417,10 @@ local function BuildDurabilityLines(labels, ratings, values)
         local rCol, vCol = RouteValueOnly("—")
         PushRow(labels, ratings, values,
             FormatLabel(durStr, "Durability"), rCol, vCol)
+        if tooltipRows then
+            tooltipRows[#labels] = { key = "Durability", statKey = "forever:Durability",
+                label = "Durability", state = "unknown", display = "—" }
+        end
         return labels, ratings, values
     end
     if pct < 0 then pct = 0 end
@@ -12303,8 +12430,17 @@ local function BuildDurabilityLines(labels, ratings, values)
         valueColor = RGBToHex(ComputeDurabilityColor(pct))
     end
     local displayState = not cached.durabilityComplete and "lastKnown" or nil
-    local rCol, vCol = RouteValueOnly(FmtColorPct(valueColor, pct, displayState))
+    local display = FmtColorPct(valueColor, pct, displayState)
+    local rCol, vCol = RouteValueOnly(display)
     PushRow(labels, ratings, values, FormatLabel(durStr, "Durability"), rCol, vCol)
+    if tooltipRows then
+        tooltipRows[#labels] = {
+            key = "Durability", statKey = "forever:Durability", label = "Durability",
+            state = cached.durabilityComplete and "clean" or "stale", value = pct,
+            display = display,
+            detail = { average = cached.durabilityLastCompleteAverage, worst = cached.durabilityLastCompleteWorst },
+        }
+    end
     return labels, ratings, values
 end
 
@@ -12351,7 +12487,7 @@ end
 -- The return fallback preserves rows if a future builder accidentally stays mutate-only.
 local function BuildRowBlock(def)
     local labels, ratings, values = {}, {}, {}
-    local targetRows = not addon.forever.enabled and def.splitKey == "splitOffensive" and {} or nil
+    local targetRows = (addon.forever.enabled or def.splitKey == "splitOffensive") and {} or nil
     local outLabels, outRatings, outValues = def.buildFn(labels, ratings, values, targetRows)
     if outLabels then
         labels = outLabels
@@ -12394,7 +12530,7 @@ local RENDER_BLOCK_DEFS = {
 }
 
 local function NewRenderBucket()
-    return { labels = {}, ratings = {}, values = {}, targetRows = not addon.forever.enabled and {} or nil,
+    return { labels = {}, ratings = {}, values = {}, targetRows = {},
         repairStr = "", repairLabelStr = nil }
 end
 

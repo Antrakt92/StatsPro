@@ -417,7 +417,7 @@ function Get-TocRuntimeContract {
         throw "StatsPro.toc must contain exactly $($expectedRuntimeRefs.Count) runtime file reference(s): $($expectedRuntimeRefs -join ', ')."
     }
     for ($index = 0; $index -lt $expectedRuntimeRefs.Count; $index++) {
-        if ($actualRuntimeRefs[$index] -ne $expectedRuntimeRefs[$index]) {
+        if ($actualRuntimeRefs[$index] -cne $expectedRuntimeRefs[$index]) {
             throw "StatsPro.toc runtime ref $($index + 1) is '$($actualRuntimeRefs[$index])', expected '$($expectedRuntimeRefs[$index])'."
         }
     }
@@ -429,6 +429,18 @@ function Get-TocRuntimeContract {
         LoadRefs       = $loadRefs
         RuntimeLuaRefs = @($loadRefs | Where-Object { $_.Extension -eq ".lua" })
     }
+}
+
+function Assert-RepoForeverRuntimeContract {
+    param([string]$Root)
+
+    # Isolate the package script's parameter variables from this command.
+    & {
+        param([string]$Source)
+        . (Join-Path $PSScriptRoot "test-forever-package.ps1") -LibraryOnly
+        $path = Join-Path $Source "StatsPro_Forever.toc"
+        Assert-ForeverToc ([IO.File]::ReadAllText($path)) (Get-ForeverSourceVersion $Source)
+    } $Root
 }
 
 function New-TestRuntimeFiles {
@@ -580,6 +592,22 @@ function Invoke-SelfTest {
         Assert-ThrowsMatch "window layers loaded after font runtime rejected" {
             [void](Get-TocRuntimeContract -RepoRoot $root -TocPath (Join-Path $root "StatsPro.toc"))
         } "expected 'AntraktWindowLayers\.lua'"
+        $wrongCaseRefs = @($validRefs)
+        $wrongCaseRefs[-1] = "statspro.lua"
+        Set-TestToc -Root $root -Refs $wrongCaseRefs
+        Assert-ThrowsMatch "case mismatch in Retail runtime path rejected on every host" {
+            [void](Get-TocRuntimeContract -RepoRoot $root -TocPath (Join-Path $root "StatsPro.toc"))
+        } "Missing TOC file reference 'statspro\.lua'|expected 'StatsPro\.lua'"
+        $testForeverTocPath = Join-Path $root "StatsPro_Forever.toc"
+        $realForeverToc = [IO.File]::ReadAllText((Join-Path $PSScriptRoot "../StatsPro_Forever.toc"))
+        [IO.File]::WriteAllText($testForeverTocPath, $realForeverToc)
+        Assert-RepoForeverRuntimeContract -Root $root
+        $wrongForeverOrder = [regex]::Replace($realForeverToc, 'StatsPro_Forever\.lua\r?\nStatsPro\.lua', "StatsPro.lua`nStatsPro_Forever.lua")
+        if ($wrongForeverOrder -ceq $realForeverToc) { throw "Forever runtime-order fixture was not changed." }
+        [IO.File]::WriteAllText($testForeverTocPath, $wrongForeverOrder)
+        Assert-ThrowsMatch "Forever core loaded before its adapter rejected by metadata gate" {
+            Assert-RepoForeverRuntimeContract -Root $root
+        } "Forever runtime load order mismatch"
         Set-TestToc -Root $root -Refs $validRefs
         $noticeRequirements = @(Write-TestThirdPartyNotices -Root $root)
         $fontSourceRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -1048,6 +1076,7 @@ try {
     $foreverTocPath = Join-Path $RepoRoot 'StatsPro_Forever.toc'
     Assert-PathExists 'Forever TOC brand metadata' $foreverTocPath
     Assert-TocBrandContract -TocPath $foreverTocPath
+    Assert-RepoForeverRuntimeContract -Root $RepoRoot
 
     Assert-TocNotesContract -Metadata $contract.Metadata -TocPath $contract.TocPath
     Assert-BugReportTemplateContract -Path (Join-Path $RepoRoot ".github\ISSUE_TEMPLATE\bug_report.md")

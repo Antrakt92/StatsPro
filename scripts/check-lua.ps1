@@ -1168,13 +1168,32 @@ Write-Host "== Flavor release policy =="
 Write-Host "== Top-level locals =="
 Assert-StatsProTopLevelLocalBudget -Path (Join-Path $RepoRoot "StatsPro.lua")
 
+$RegressionScripts = @(
+    "scripts/test-forever.lua"
+    "scripts/test-forever-hud.lua"
+    "scripts/test-forever-attack-power-tooltip.lua"
+    "scripts/test-forever-tooltip-details.lua"
+    "scripts/test-forever-classes.lua"
+    "scripts/test-appearance.lua"
+    "scripts/test-retail-recovery.lua"
+    "scripts/test-bundled-fonts.lua"
+    "scripts/test-font-audit.lua"
+    "scripts/test-font-hover.lua"
+    "scripts/test-font-favorites.lua"
+    "scripts/test-shared-fonts.lua"
+    "scripts/test-settings-menus.lua"
+    "scripts/test-profile-transfer-portability.lua"
+    "scripts/test-selftest.lua"
+    "scripts/test-panel-geometry.lua"
+)
+
 Write-Host "== Lua syntax =="
 $SyntaxFiles = @($RuntimeLuaRefs | ForEach-Object { $_.FullPath })
 if (Test-Path $ArchonTargetsCheck) { $SyntaxFiles += $ArchonTargetsCheck }
 $SyntaxFiles += $SmokeFile
-foreach ($name in @("StatsPro_Forever.lua", "scripts/test-forever.lua", "scripts/test-forever-hud.lua", "scripts/test-forever-attack-power-tooltip.lua", "scripts/test-forever-tooltip-details.lua", "scripts/test-forever-classes.lua", "scripts/test-appearance.lua", "scripts/test-retail-recovery.lua", "scripts/test-bundled-fonts.lua", "scripts/test-font-audit.lua", "scripts/test-font-hover.lua", "scripts/test-font-favorites.lua", "scripts/test-shared-fonts.lua", "scripts/test-settings-menus.lua", "scripts/test-profile-transfer-portability.lua", "scripts/test-selftest.lua", "scripts/test-panel-geometry.lua")) {
+foreach ($name in (@("StatsPro_Forever.lua") + $RegressionScripts)) {
     $path = Join-Path $RepoRoot $name
-    if (-not (Test-Path -LiteralPath $path)) { throw "Missing Forever verification source: $name" }
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing Lua verification source: $name" }
     $SyntaxFiles += $path
 }
 $SyntaxResult = Invoke-NativeCapture `
@@ -1243,8 +1262,8 @@ if (-not $UpdateSmokeContract) {
     Write-Host "Smoke reachability contract passed: $($SmokeSummary.SuiteCount) suites, $($SmokeSummary.TotalAssertions) assertions."
 }
 
-Write-Host "== Forever stat and HUD regressions =="
-foreach ($script in @("scripts/test-forever.lua", "scripts/test-forever-hud.lua", "scripts/test-forever-attack-power-tooltip.lua", "scripts/test-forever-tooltip-details.lua", "scripts/test-forever-classes.lua", "scripts/test-appearance.lua", "scripts/test-retail-recovery.lua", "scripts/test-bundled-fonts.lua", "scripts/test-font-audit.lua", "scripts/test-font-hover.lua", "scripts/test-font-favorites.lua", "scripts/test-shared-fonts.lua", "scripts/test-settings-menus.lua", "scripts/test-profile-transfer-portability.lua", "scripts/test-selftest.lua", "scripts/test-panel-geometry.lua")) {
+Write-Host "== Lua regressions =="
+foreach ($script in $RegressionScripts) {
     $result = Invoke-NativeCapture -FilePath $Lua -Arguments @((Join-Path $RepoRoot $script)) `
         -TimeoutSeconds 60 -Description $script -IsolateLuaEnvironment:$EnforceToolLocks.IsPresent
     $result.Output | ForEach-Object { Write-Host $_ }

@@ -2329,7 +2329,9 @@ do
     env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 1, true)
     assert(addon:RunUpdateStatsSafe())
     local rating, value = getRow("splitItemLevel")
-    assert(rating:find("|cffff3333", 1, true) and plain(value) == "115",
+    local equippedCell = forever and value or rating
+    assert(equippedCell:find("|cffff3333", 1, true)
+        and plain(value) == (forever and "90|115" or "115"),
         "a current item-level gap triggers the warning")
     _, value = getRow("splitDurability")
     assert(plain(value) == "20.0%", "current durability renders without a stale marker")
@@ -2338,8 +2340,10 @@ do
     env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 1, true)
     assert(addon:RunUpdateStatsSafe())
     rating, value = getRow("splitItemLevel")
-    assert(not rating:find("|cffff3333", 1, true) and plain(rating):find("(90)", 1, true)
-        and plain(value) == "(115)", "both halves of a stale item-level pair are marked without an alert")
+    equippedCell = forever and value or rating
+    assert(not equippedCell:find("|cffff3333", 1, true) and plain(equippedCell):find("(90)", 1, true)
+        and plain(value) == (forever and "(90)|(115)" or "(115)"),
+        "both halves of a stale item-level pair are marked without an alert")
     _, value = getRow("splitDurability")
     assert(plain(value) == "(20.0%)", "an incomplete scan marks the last complete durability reading")
 

@@ -11946,20 +11946,16 @@ local function PushItemLevelRow(labels, ratings, values)
         label = string.format("|cff%s%s|r", itemLevelColor, labelStr)
     end
     local rStr, vStr
-    if IsDualColMode() then
+    if IsDualColMode() and not addon.forever.enabled then
         -- Dual: rating col gets "EQUIPPED |" (right-justified, aligns with rated
         -- "RATING |" rows); value col gets "OVERALL" (left-justified, aligns with
         -- rated "PERCENT%" rows).
         rStr = equippedText .. " |cff808080|||r"
         vStr = overallText
     else
-        -- Single-col mode: ALL content routes into the rating column, value col is "".
-        -- Mirrors FmtRatingPct's single-col fallback (and JoinValuesCol returns "" in
-        -- non-dual-col mode regardless, so anything pushed to value col would be
-        -- dropped). No whitespace around the pipe so the multi-line rating FontString
-        -- won't word-wrap mid-string.
-        rStr = equippedText .. "|cff808080|||r" .. overallText
-        vStr = ""
+        -- Forever uses one numeric column even in dual mode. Keep the pair in
+        -- that column and omit whitespace so the numbers cannot wrap apart.
+        rStr, vStr = RouteValueOnly(equippedText .. "|cff808080|||r" .. overallText)
     end
     PushRow(labels, ratings, values, label, rStr, vStr)
 end

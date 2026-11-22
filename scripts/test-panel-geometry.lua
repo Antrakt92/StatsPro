@@ -420,6 +420,59 @@ for _, mode in ipairs({ "recovered", "superseded", "exhausted" }) do
 end
 
 if forever then
+    local protectedLevel = {}
+    local readable = true
+    local function readItemLevel()
+        if readable then return 115, 90 end
+        return 115, protectedLevel
+    end
+    local gearEnv, gearAddon, gearTest = fixtures.loadStatsPro("enUS", {
+        forever = true,
+        foreverAPIs = { GetAverageItemLevel = readItemLevel },
+        issecretvalue = function(value) return rawequal(value, protectedLevel) end,
+    })
+    gearEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local settings = gearTest.profileState().settings
+    for _, rows in pairs(gearAddon.forever.rows) do
+        for _, row in ipairs(rows) do settings[row.showKey] = false end
+    end
+    settings.showOffensive, settings.showDefensive, settings.showTertiary = false, false, false
+    settings.showDurability, settings.showRepairCost, settings.showItemLevel = false, false, true
+    settings.labelStyle, settings.splitItemLevel, settings.showPercentage = "full", true, true
+    local function plain(text)
+        return (text:gsub("|cff%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("||", "|"))
+    end
+    local function currentColumns(mode)
+        local state = gearTest.panelVisualState()
+        if mode == "split" then return state.sideRatingText, state.sideValueText end
+        return state.mainRatingText, state.mainValueText
+    end
+    for _, mode in ipairs({ "flat", "sectioned", "split" }) do
+        for _, showRating in ipairs({ true, false }) do
+            settings.displayMode, settings.showRating = mode, showRating
+            gearTest.cacheSettings()
+            readable = true
+            gearEnv.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 1, true)
+            equal(mode .. " readable item level updates", gearAddon:RunUpdateStatsSafe(), true)
+            local rating, value = currentColumns(mode)
+            local populated, empty = value, rating
+            if not showRating then populated, empty = rating, value end
+            equal(mode .. " item-level pair reaches the actual HUD", plain(populated):find("90|115", 1, true) ~= nil, true)
+            equal(mode .. " equipped item-level alert stays visible", populated:find("|cffff333390|r", 1, true) ~= nil, true)
+            equal(mode .. " item levels share one value column", empty, "")
+
+            readable = false
+            gearEnv.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 1, true)
+            equal(mode .. " restricted item level updates", gearAddon:RunUpdateStatsSafe(), true)
+            rating, value = currentColumns(mode)
+            populated = showRating and value or rating
+            equal(mode .. " both stale item levels stay visible", plain(populated):find("(90)|(115)", 1, true) ~= nil, true)
+            equal(mode .. " stale item levels have no warning", populated:find("|cffff3333", 1, true), nil)
+        end
+    end
+end
+
+if forever then
     local fontEnv, fontAddon, fontTest = fixtures.loadStatsPro("enUS", {
         forever = true,
         statsProDB = { dbVersion = 9, forceLocale = "ruRU" },

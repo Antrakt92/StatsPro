@@ -10629,12 +10629,15 @@ function addon.archonTargets.GetTooltip()
     if addon.forever.enabled then
         local texture = "Interface\\Buttons\\WHITE8x8"
         tooltip:SetBackdrop({ bgFile = texture, edgeFile = texture, edgeSize = 1 })
-        tooltip:SetBackdropColor(0.045, 0.065, 0.095, 0.98)
-        tooltip:SetBackdropBorderColor(0.26, 0.37, 0.50, 1)
-        tooltip.padding, tooltip.columnGap, tooltip.lineGap = 12, 16, 4
+        tooltip:SetBackdropColor(0.035, 0.048, 0.070, 1)
+        tooltip:SetBackdropBorderColor(0.22, 0.32, 0.43, 1)
+        tooltip.padding, tooltip.columnGap, tooltip.lineGap = 14, 20, 5
         tooltip.statDivider = tooltip:CreateTexture(nil, "ARTWORK")
-        tooltip.statDivider:SetColorTexture(0.26, 0.37, 0.50, 0.8)
+        tooltip.statDivider:SetColorTexture(0.31, 0.43, 0.56, 0.55)
         tooltip.statDivider:SetHeight(1)
+        tooltip.statDescription = tooltip:CreateTexture(nil, "ARTWORK")
+        tooltip.statDescription:SetColorTexture(0.075, 0.105, 0.148, 1)
+        tooltip.statDescription:Hide()
     end
     tooltip.bodyProbe = tooltip:CreateFontString(nil, "OVERLAY", "GameTooltipText")
     tooltip.headerProbe = tooltip:CreateFontString(nil, "OVERLAY", "GameTooltipHeaderText")
@@ -10672,7 +10675,7 @@ function addon.archonTargets.CanReuseTooltipLayout(tooltip, previousLines)
     end
     for index, row in ipairs(tooltip.lines) do
         local previous = previousLines[index]
-        if row.isDouble ~= previous.isDouble
+        if row.isDouble ~= previous.isDouble or row.style ~= previous.style
             or issecretvalue(row.left) or issecretvalue(previous.left)
             or row.left ~= previous.left then return false end
         if row.isDouble then
@@ -10694,6 +10697,7 @@ end
 function addon.archonTargets.LayoutTooltip(tooltip)
     tooltip.layoutReusable = false
     local statDivider = tooltip.statDivider
+    local descriptionInset = 8
     local fullyMeasured = true
     local metadataWidth, labelWidth, valueWidth, numericIndex = 0, 0, 0, 0
     local fallbackWidth = addon.archonTargets.MeasureTooltipText(tooltip.bodyProbe, "99999 (~999.9%)") or 120
@@ -10702,43 +10706,46 @@ function addon.archonTargets.LayoutTooltip(tooltip)
         if not region then
             region = {
                 leftText = tooltip:CreateFontString(nil, "OVERLAY", index == 1 and "GameTooltipHeaderText" or "GameTooltipText"),
-                rightText = tooltip:CreateFontString(nil, "OVERLAY", "GameTooltipText"),
+                rightText = tooltip:CreateFontString(nil, "OVERLAY",
+                    statDivider and index == 1 and "GameTooltipHeaderText" or "GameTooltipText"),
             }
             tooltip.regions[index] = region
             if addon.forever.enabled and tooltip.statFont then
                 local leftApplied = addon.fontRuntime.setRegionFont(region.leftText, tooltip.statFont, index == 1 and 14 or 12)
-                local rightApplied = addon.fontRuntime.setRegionFont(region.rightText, tooltip.statFont, 12)
+                local rightApplied = addon.fontRuntime.setRegionFont(region.rightText, tooltip.statFont, index == 1 and 14 or 12)
                 if not (leftApplied and rightApplied) then tooltip.statLocale = nil end
             end
         end
         if row.isDouble then
             numericIndex = numericIndex + 1
+            local indent = row.style == "rate" and 12 or 0
             local labelProbe = statDivider and index == 1 and tooltip.headerProbe or tooltip.bodyProbe
             local measuredLabel, height = addon.archonTargets.MeasureTooltipText(
-                labelProbe, row.left, statDivider and 224 or nil)
-            local measuredValue, valueHeight = addon.archonTargets.MeasureTooltipText(tooltip.bodyProbe, row.right)
+                labelProbe, row.left, statDivider and 224 - indent or nil)
+            local measuredValue, valueHeight = addon.archonTargets.MeasureTooltipText(labelProbe, row.right)
             if not measuredLabel or not measuredValue or not height then fullyMeasured = false end
             if measuredValue then tooltip.lastCleanValueWidths[numericIndex] = measuredValue end
             region.cleanLabelWidth = measuredLabel or region.cleanLabelWidth
             row.height = height or region.cleanHeight or 12
             if statDivider and valueHeight then row.height = math.max(row.height, valueHeight) end
             if height then region.cleanHeight = height end
-            labelWidth = math.max(labelWidth, region.cleanLabelWidth or 72)
+            labelWidth = math.max(labelWidth, (region.cleanLabelWidth or 72) + indent)
             local displayWidth = measuredValue
                 or math.max(tooltip.lastCleanValueWidths[numericIndex] or 0, fallbackWidth)
             valueWidth = math.max(valueWidth, displayWidth)
         else
             local probe = index == 1 and tooltip.headerProbe or tooltip.bodyProbe
-            local width, height = addon.archonTargets.MeasureTooltipText(probe, row.left, 280)
+            local inset = row.style == "description" and descriptionInset * 2 or 0
+            local width, height = addon.archonTargets.MeasureTooltipText(probe, row.left, 280 - inset)
             if not width or not height then fullyMeasured = false end
             if width then region.cleanMetadataWidth = width end
             if height then region.cleanHeight = height end
             row.height = height or region.cleanHeight or (index == 1 and 14 or 12)
-            metadataWidth = math.max(metadataWidth, width or region.cleanMetadataWidth or 160)
+            metadataWidth = math.max(metadataWidth, (width or region.cleanMetadataWidth or 160) + inset)
         end
     end
     local blockWidth = labelWidth + tooltip.columnGap + valueWidth
-    local contentWidth = math.max(blockWidth, metadataWidth, statDivider and 216 or 0)
+    local contentWidth = math.max(blockWidth, metadataWidth, statDivider and 240 or 0)
     -- Center the comparison block itself. A long title/notice adds outer margins,
     -- never extra space between the label and value columns.
     local labelRight = tooltip.padding + (contentWidth - blockWidth) / 2 + labelWidth
@@ -10748,13 +10755,15 @@ function addon.archonTargets.LayoutTooltip(tooltip)
         valueRight = tooltip.padding + contentWidth
     end
     local y = tooltip.padding
+    local hasDescription = false
     for index, row in ipairs(tooltip.lines) do
         local region = tooltip.regions[index]
+        local indent = row.style == "rate" and 12 or 0
         region.leftText:ClearAllPoints()
         region.rightText:ClearAllPoints()
         if row.isDouble then
             if statDivider then
-                region.leftText:SetPoint("TOPLEFT", tooltip, "TOPLEFT", tooltip.padding, -y)
+                region.leftText:SetPoint("TOPLEFT", tooltip, "TOPLEFT", tooltip.padding + indent, -y)
                 region.rightText:SetPoint("TOPRIGHT", tooltip, "TOPRIGHT", -tooltip.padding, -y)
                 region.leftText:SetJustifyV("TOP")
                 region.rightText:SetJustifyV("TOP")
@@ -10762,7 +10771,7 @@ function addon.archonTargets.LayoutTooltip(tooltip)
                 region.leftText:SetPoint("TOPRIGHT", tooltip, "TOPLEFT", labelRight, -y)
                 region.rightText:SetPoint("TOPRIGHT", tooltip, "TOPLEFT", valueRight, -y)
             end
-            region.leftText:SetWidth(labelWidth)
+            region.leftText:SetWidth(labelWidth - indent)
             region.leftText:SetJustifyH(statDivider and "LEFT" or "RIGHT")
             region.leftText:SetWordWrap(statDivider ~= nil)
             region.rightText:SetJustifyH("RIGHT")
@@ -10775,8 +10784,18 @@ function addon.archonTargets.LayoutTooltip(tooltip)
             region.rightText:Show()
             region.leftText:SetTextColor(row.leftColor[1] or 1, row.leftColor[2] or 1, row.leftColor[3] or 1)
         else
-            region.leftText:SetPoint("TOPLEFT", tooltip, "TOPLEFT", tooltip.padding, -y)
-            region.leftText:SetWidth(statDivider and math.min(contentWidth, 280) or contentWidth)
+            local inset = 0
+            if row.style == "description" then
+                local background = tooltip.statDescription
+                background:ClearAllPoints()
+                background:SetPoint("TOPLEFT", tooltip, "TOPLEFT", tooltip.padding, -y)
+                background:SetPoint("TOPRIGHT", tooltip, "TOPRIGHT", -tooltip.padding, -y)
+                background:SetHeight(row.height + descriptionInset * 2)
+                hasDescription = true
+                inset = descriptionInset
+            end
+            region.leftText:SetPoint("TOPLEFT", tooltip, "TOPLEFT", tooltip.padding + inset, -y - inset)
+            region.leftText:SetWidth((statDivider and math.min(contentWidth, 280) or contentWidth) - inset * 2)
             region.leftText:SetJustifyH(statDivider and "LEFT" or "CENTER")
             if statDivider then region.leftText:SetJustifyV("TOP") end
             region.leftText:SetWordWrap(true)
@@ -10790,12 +10809,23 @@ function addon.archonTargets.LayoutTooltip(tooltip)
         region.leftText:SetText(row.left)
         region.leftText:Show()
         y = y + row.height + tooltip.lineGap
+        local nextRow = tooltip.lines[index + 1]
+        if row.style == "description" then
+            y = y + descriptionInset * 2 + (nextRow and 6 or 0)
+        elseif nextRow and nextRow.style == "rate" then
+            y = y - 3
+        elseif row.style == "rate" and nextRow then
+            y = y + 3
+        end
         if statDivider and index == 1 then
             statDivider:ClearAllPoints()
             statDivider:SetPoint("TOPLEFT", tooltip, "TOPLEFT", tooltip.padding, -y - 2)
             statDivider:SetPoint("TOPRIGHT", tooltip, "TOPRIGHT", -tooltip.padding, -y - 2)
             y = y + 8
         end
+    end
+    if tooltip.statDescription then
+        if hasDescription then tooltip.statDescription:Show() else tooltip.statDescription:Hide() end
     end
     for index = #tooltip.lines + 1, #tooltip.regions do
         local region = tooltip.regions[index]
@@ -10971,7 +11001,7 @@ function addon.forever.ApplyTooltipFont(tooltip, locale)
         local applied = headerApplied and bodyApplied
         for index, region in ipairs(tooltip.regions) do
             local leftApplied = setFont(region.leftText, font, index == 1 and 14 or 12)
-            local rightApplied = setFont(region.rightText, font, 12)
+            local rightApplied = setFont(region.rightText, font, index == 1 and 14 or 12)
             applied = applied and leftApplied and rightApplied
         end
         -- Partial changes can affect measurement, even when this locale is unready.
@@ -11001,16 +11031,19 @@ function addon.forever.ShowStatTooltip(anchor, meta)
     addon.forever.ApplyTooltipFont(tooltip, cached.activeLabelsLocale)
     local previousLines = tooltip.lines
     tooltip.lines = {}
-    local function add(label, value)
+    local function add(label, value, style)
         if value == nil then
-            tooltip:AddLine(L(label), 0.72, 0.78, 0.86, true)
+            tooltip:AddLine(L(label), 0.72, 0.80, 0.90, true)
+        elseif style == "rate" then
+            tooltip:AddDoubleLine(L(label), value, 0.53, 0.65, 0.77, 0.69, 0.79, 0.90)
         else
-            tooltip:AddDoubleLine(L(label), value, 0.79, 0.84, 0.91, 0.97, 0.98, 1)
+            tooltip:AddDoubleLine(L(label), value, 0.83, 0.88, 0.94, 0.97, 0.98, 1)
         end
+        tooltip.lines[#tooltip.lines].style = style
     end
     local display = meta.display
     if meta.key == "Repair" and meta.state == "clean" then
-        local repair = addon.durabilityRuntime.GetRepairCostText(12)
+        local repair = addon.durabilityRuntime.GetRepairCostText(14)
         if repair ~= "" and repair ~= "—" then display = repair end
     end
     local title = L(meta.label)
@@ -11022,7 +11055,7 @@ function addon.forever.ShowStatTooltip(anchor, meta)
     if meta.state == "stale" then add("Last reliable reading") end
     local descriptions = addon.forever.tooltipDescriptionKeys
     local description = descriptions and descriptions[meta.descriptionKey or meta.key]
-    if description then add(description) end
+    if description then add(description, nil, "description") end
     if meta.state == "clean" then
         if addon.forever.BuildAttackPowerTooltip then addon.forever.BuildAttackPowerTooltip(meta, add) end
     end

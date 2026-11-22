@@ -151,10 +151,8 @@ local nativeAttackPowerMatches = {}
 
 local attackPowerSources = {
     { key = "AttackPower", nativeIndex = 4, label = "Melee attack power",
-        rateLabel = "Melee attack power per point",
         read = Nonnegative(Sum("UnitAttackPower", 3, "player")), statAPI = "GetAttackPowerForStat" },
     { key = "RangedAttackPower", nativeIndex = 5, label = "Ranged attack power",
-        rateLabel = "Ranged attack power per point",
         read = Nonnegative(Sum("UnitRangedAttackPower", 3, "player")), statAPI = "GetRangedAttackPowerForStat" },
 }
 local attackPowerAttributes = {
@@ -329,7 +327,7 @@ local function BuildAttributeAttackPowerTooltip(key, expected, mode, add)
         if totals[line.source] ~= nil and attributes[line.attribute] ~= nil then
             local label = key == line.attribute.key and line.source.label or line.attribute.label
             add(label, FormatTooltipNumber(line.value))
-            if line.rate ~= nil then add(line.source.rateLabel, FormatTooltipNumber(line.rate)) end
+            if line.rate ~= nil then add("Per point", FormatTooltipNumber(line.rate), "rate") end
         end
     end
 end
@@ -2057,29 +2055,16 @@ do
     })
 
     translate({
-        "Melee attack power per point",
-        "Сила атаки ближнего боя за очко",
-        "Nahkampfangriffskraft pro Punkt",
-        "Puissance d’attaque en mêlée par point",
-        "Poder de ataque cuerpo a cuerpo por punto",
-        "Potenza d’attacco in mischia per punto",
-        "Poder de ataque corpo a corpo por ponto",
-        "1점당 근접 전투력",
-        "每点属性提供的近战攻击强度",
-        "每點屬性提供的近戰攻擊強度",
-    })
-
-    translate({
-        "Ranged attack power per point",
-        "Сила атаки дальнего боя за очко",
-        "Fernkampfangriffskraft pro Punkt",
-        "Puissance d’attaque à distance par point",
-        "Poder de ataque a distancia por punto",
-        "Potenza d’attacco a distanza per punto",
-        "Poder de ataque de longo alcance por ponto",
-        "1점당 원거리 전투력",
-        "每点属性提供的远程攻击强度",
-        "每點屬性提供的遠程攻擊強度",
+        "Per point",
+        "За 1 очко",
+        "Pro Punkt",
+        "Par point",
+        "Por punto",
+        "Per punto",
+        "Por ponto",
+        "1점당",
+        "每点属性",
+        "每點屬性",
     })
 end
 

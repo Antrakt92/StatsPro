@@ -1477,12 +1477,18 @@ do
     local point, relativeTo, relativePoint = tooltip:GetPoint()
     check(point == "TOPRIGHT" and relativeTo == tooltip:GetOwner() and relativePoint == "TOPLEFT",
         "tooltip opens inward beside the hovered row near the right edge")
-    check(tooltip.lines[1].right:find("130", 1, true) and tooltip.backdropColor.a == 0.98
+    check(tooltip.lines[1].right:find("130", 1, true) and tooltip.backdropColor.a == 1
         and tooltip.statDivider:GetHeight() == 1
         and tooltip.regions[1].leftText.justifyH == "LEFT"
         and tooltip.regions[1].rightText.justifyH == "RIGHT"
         and tooltip.regions[2].leftText.justifyH == "LEFT",
         "the card has a readable header, description and contrast over the action bars")
+    local description = tooltip.regions[2].leftText
+    local _, _, _, backgroundX, backgroundY = tooltip.statDescription:GetPoint()
+    local _, _, _, textX, textY = description:GetPoint()
+    check(tooltip.statDescription:IsShown() and textX > backgroundX and textY < backgroundY
+        and tooltip.statDescription:GetHeight() > description:GetHeight(),
+        "description has a separate surface and is padded on both axes")
     local layouts = 0
     local oldLayout = tooltip.Layout
     tooltip.Layout = function(self)
@@ -1498,11 +1504,21 @@ do
         if meta.key == "Strength" and meta.state == "clean" then
             reads = reads + 1
             add("Attack Power", tostring(meta.value * 2))
+            add("Per point", "2", "rate")
             add(string.rep("Long translated label ", 10), "260")
         end
     end
     hoverAddon.forever.BuildAttackPowerTooltip = model
     check(hoverAddon:RunUpdateStatsSafe() and reads == 1, "only the hovered row calculates details")
+    local totalLabel, rateLabel, nextLabel = tooltip.regions[3].leftText,
+        tooltip.regions[4].leftText, tooltip.regions[5].leftText
+    local _, _, _, totalX, totalY = totalLabel:GetPoint()
+    local _, _, _, rateX, rateY = rateLabel:GetPoint()
+    local _, _, _, _, nextY = nextLabel:GetPoint()
+    check(totalY < backgroundY - tooltip.statDescription:GetHeight() - 5,
+        "contributions are separated from the description box")
+    check(rateX > totalX and totalY - rateY - totalLabel:GetHeight() < rateY - nextY - rateLabel:GetHeight(),
+        "the indented rate is grouped more tightly with its contribution than with the next row")
     local last = tooltip.regions[#tooltip.lines]
     check(last.leftText.wordWrap and last.leftText:GetWidth() <= 224
         and last.leftText:GetHeight() > tooltip.regions[3].leftText:GetHeight(),
@@ -1528,7 +1544,9 @@ do
     hoverTest.firePanelTooltipOverlayForSmoke("side", 1, "OnEnter")
     check(tooltip:IsShown() and tooltip.lines[1].left == "Repair",
         "dedicated repair-only panel has its own hover row")
-    check(coinSize == 12, "repair tooltip sizes coins to its own font")
+    check(coinSize == select(2, tooltip.regions[1].rightText:GetFont()), "repair coins match the header font")
+    hoverAddon.forever.ShowStatTooltip(tooltip:GetOwner(), { key = "Unknown", label = "Unknown", state = "unknown" })
+    check(not tooltip.statDescription:IsShown(), "recycled tooltip hides the empty description box")
     hoverTest.firePanelTooltipOverlayForSmoke("side", 1, "OnDragStart")
     check(not tooltip:IsShown() and hoverTest.panelTooltipState("side").wasDragging,
         "starting a drag closes the Forever tooltip")

@@ -54,10 +54,10 @@ local function lines(key, value, state, detail)
         local _, _, _, sampled = sources[key]()
         detail = sampled
     end
-    adapter.BuildAttackPowerTooltip({ key = key, value = value, state = state or "clean", detail = detail }, function(label, text)
+    adapter.BuildAttackPowerTooltip({ key = key, value = value, state = state or "clean", detail = detail }, function(label, text, style)
         assert(type(label) == "string" and not env.issecretvalue(label))
         assert((text == nil or type(text) == "string") and not env.issecretvalue(text))
-        result[#result + 1] = { label, text }
+        result[#result + 1] = { label, text, style }
     end)
     return result
 end
@@ -65,15 +65,15 @@ local function expect(key, value, expected, state)
     local current = lines(key, value, state)
     assert(#current == #expected, key .. " wrong number of rows")
     for index, pair in ipairs(expected) do
-        assert(current[index][1] == pair[1] and current[index][2] == pair[2],
+        assert(current[index][1] == pair[1] and current[index][2] == pair[2] and current[index][3] == pair[3],
             key .. " incorrect row " .. index)
     end
 end
 local meleeLabel, rangedLabel = "Melee attack power", "Ranged attack power"
-local meleeRate, rangedRate = "Melee attack power per point", "Ranged attack power per point"
+local perPoint = "Per point"
 local strengthLabel, agilityLabel = "Attack power from Strength", "Attack power from Agility"
-expect("Strength", 40, { { meleeLabel, "80" }, { meleeRate, "2" }, { rangedLabel, "0" } })
-expect("Agility", 50, { { meleeLabel, "25" }, { meleeRate, "0.5" }, { rangedLabel, "100" }, { rangedRate, "2" } })
+expect("Strength", 40, { { meleeLabel, "80" }, { perPoint, "2", "rate" }, { rangedLabel, "0" } })
+expect("Agility", 50, { { meleeLabel, "25" }, { perPoint, "0.5", "rate" }, { rangedLabel, "100" }, { perPoint, "2", "rate" } })
 expect("AttackPower", 105, { { strengthLabel, "80" }, { agilityLabel, "25" } })
 expect("RangedAttackPower", 140, { { strengthLabel, "0" }, { agilityLabel, "100" } })
 
@@ -106,7 +106,7 @@ meleeContribution = function(_, value)
 end
 expect("Strength", 40, { { rangedLabel, "0" } })
 meleeContribution = function(_, value) return value * 0.07 end
-expect("Strength", 40, { { meleeLabel, "2.8" }, { meleeRate, "0.07" }, { rangedLabel, "0" } })
+expect("Strength", 40, { { meleeLabel, "2.8" }, { perPoint, "0.07", "rate" }, { rangedLabel, "0" } })
 meleeContribution = function(index, value)
     if index == 1 then return secret end
     return originalMelee(index, value)

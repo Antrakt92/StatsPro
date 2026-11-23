@@ -110,6 +110,18 @@ for _, forever in ipairs({false, true}) do
     check(next(shared.activeByID) == nil, 'a baseline filename collision cannot add a provider face')
 end
 for _, forever in ipairs({false,true}) do
+    local timerEnv, timerHost = fixtures.loadStatsPro('enUS', {
+        forever=forever, statsProDB={fontSize=14}, testSharedFontsNotice=true,
+    })
+    local after = timerEnv.C_Timer.After
+    timerEnv.C_Timer.After = function(delay, callback)
+        if delay == 0.6 then error('notice timer unavailable') end
+        after(delay, callback)
+    end
+    check(pcall(timerEnv.__fireEvent, 'PLAYER_ENTERING_WORLD'), 'notice timer rejection does not abort login')
+    check(timerHost.sharedFonts.notice and timerHost.sharedFonts.notice:IsShown(),
+        'existing account receives font guidance without the startup timer')
+
     local combat=false
     local env,addon,test=fixtures.loadStatsPro('enUS',{
         forever=forever, statsProDB={fontSize=14}, testSharedFontsNotice=true,

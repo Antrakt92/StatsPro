@@ -212,6 +212,9 @@ function shared.PersistAcknowledgement()
     root.account.sharedFontsNotice = "acknowledged"
     return true
 end
+local function scheduleNotice(delay)
+    if not pcall(C_Timer.After, delay, shared.RequestNotice) then shared.RequestNotice() end
+end
 function shared.InitializeNotice()
     shared.noticeInitialized = true
     shared.coordinator = addon.AntraktFontNotice.GetCoordinator()
@@ -228,7 +231,7 @@ function shared.InitializeNotice()
             for _, surface in pairs(surfaces) do
                 if not shared.noticeHooks[surface] then
                     shared.noticeHooks[surface] = true
-                    surface:HookScript('OnHide', function() C_Timer.After(0, shared.RequestNotice) end)
+                    surface:HookScript('OnHide', function() scheduleNotice(0) end)
                 end
                 if visible(surface) then return false end
             end
@@ -241,7 +244,7 @@ function shared.InitializeNotice()
     }
     shared.RefreshNoticeState()
     if not addon.__statsproSmoke or addon.__testSharedFontsNoticeEnabled then
-        C_Timer.After(0.6, function() shared.RequestNotice() end)
+        scheduleNotice(0.6)
     end
 end
 function shared.AttachGuidance(dropdown)

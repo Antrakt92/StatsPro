@@ -550,7 +550,6 @@ do
     end
     local function dash() return "—" end
     local function live(text) return text end
-    local function previous(text) return "(" .. text .. ")" end
     expectRanged("—", "—", "cold unavailable")
     expectOtherCompound("cold unavailable", dash)
     readable = true
@@ -559,13 +558,13 @@ do
     readable, dead, inCombat = false, true, true
     kitEnv.__fireEvent("PLAYER_REGEN_DISABLED")
     kitEnv.__fireEvent("PLAYER_DEAD")
-    expectRanged("(25.00%)", "(84)", "dead with unavailable stats")
-    expectOtherCompound("dead with unavailable stats", previous)
+    expectRanged("25.00%", "84", "dead with unavailable stats")
+    expectOtherCompound("dead with unavailable stats", live)
     dead, inCombat = false, false
     kitEnv.__fireEvent("PLAYER_REGEN_ENABLED")
     kitEnv.__fireEvent("PLAYER_ALIVE")
-    expectRanged("(25.00%)", "(84)", "alive out of combat with unavailable stats")
-    expectOtherCompound("alive out of combat with unavailable stats", previous)
+    expectRanged("25.00%", "84", "alive out of combat with unavailable stats")
+    expectOtherCompound("alive out of combat with unavailable stats", live)
     readable, haste, power = true, 29, 101
     expectRanged("29.00%", "101", "next live values replace fallback")
     readable = false
@@ -580,8 +579,8 @@ do
         kitEnv.__fireEvent("BAG_UPDATE_DELAYED")
         kitEnv.__fireEvent("COMBAT_RATING_UPDATE")
         readable = false
-        expectRanged("(29.00%)", "(101)", "unrelated update keeps the last clean value")
-        expectOtherCompound("unrelated update keeps the last clean value", previous)
+        expectRanged("29.00%", "101", "unrelated update keeps the last clean value")
+        expectOtherCompound("unrelated update keeps the last clean value", live)
         kitEnv.__fireEvent(event)
         kitEnv.__fireEvent(event)
         expectRanged("—", "—", event .. " clears old values even if emitted twice")
@@ -608,7 +607,7 @@ do
     expectRanged("29.00%", "101", "normal form seed")
     readable = false
     kitEnv.__fireEvent("UPDATE_SHAPESHIFT_FORM")
-    expectRanged("(29.00%)", "(101)", "duplicate normal-form event preserves last values")
+    expectRanged("29.00%", "101", "duplicate normal-form event preserves last values")
     form = 1
     kitEnv.__fireEvent("UPDATE_SHAPESHIFT_FORM")
     expectRanged("—", "—", "new stance discards old values")
@@ -616,7 +615,7 @@ do
     expectRanged("33.00%", "105", "new stance recovers")
     readable = false
     kitEnv.__fireEvent("UPDATE_SHAPESHIFT_FORM")
-    expectRanged("(33.00%)", "(105)", "duplicate stance event preserves new values")
+    expectRanged("33.00%", "105", "duplicate stance event preserves new values")
     form = protectedForm
     kitEnv.__fireEvent("UPDATE_SHAPESHIFT_FORM")
     expectRanged("—", "—", "unreadable new stance cannot reuse old values")
@@ -650,30 +649,31 @@ do
     readable = false
     check(reloadAddon:RunUpdateStatsSafe(), "defensive-only fallback updates the HUD")
     local fallbackPanel = reloadTest.panelVisualState()
-    check(hasStat(reloadTest.buildRenderBlocks()[4], "Defense", "(23)"),
-        "defensive-only fallback has both parentheses")
+    check(hasStat(reloadTest.buildRenderBlocks()[4], "Defense", "23"),
+        "defensive-only fallback keeps the same number")
     check(fallbackPanel.mainFrameHeight == cleanPanel.mainFrameHeight
+        and fallbackPanel.mainFrameWidth == cleanPanel.mainFrameWidth
         and fallbackPanel.mainRenderedRatingW == 0
-        and fallbackPanel.mainRenderedValueW > cleanPanel.mainRenderedValueW,
-        "parentheses grow only the existing value column and preserve row height")
+        and fallbackPanel.mainRenderedValueW == cleanPanel.mainRenderedValueW,
+        "switching to the previous value preserves both HUD dimensions")
 end
-check(hasStat(blocks[2], "Attack Power", "(11)"), "restricted AP shows the last pre-combat value")
-check(hasStat(blocks[2], "Ranged Haste", "(14.00%)"), "restricted ranged haste uses the current fight snapshot")
-check(hasStat(blocks[4], "Defense", "(5)"), "restricted defense uses the current fight snapshot")
+check(hasStat(blocks[2], "Attack Power", "11"), "restricted AP shows the last pre-combat value")
+check(hasStat(blocks[2], "Ranged Haste", "14.00%"), "restricted ranged haste uses the current fight snapshot")
+check(hasStat(blocks[4], "Defense", "5"), "restricted defense uses the current fight snapshot")
 check(hasStat(blocks[2], critLabel, "75%"), "restricted crit still shows its live value")
 check(hasStat(blocks[2], "Melee Hit", "4.00%"), "clean hit remains live in combat")
 hitBonus, hitModifier = -123456, -123456
-check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "(4.00%)"), "restricted hit shows the last pre-combat value")
+check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "4.00%"), "restricted hit shows the last pre-combat value")
 hitModifier = 0
 check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "75%"), "exact restricted hit takes priority over fallback")
 local round = env.C_StringUtil.RoundToNearestString
 env.C_StringUtil.RoundToNearestString = nil
-check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "(4.00%)"), "failed secret formatting uses the current snapshot")
+check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "4.00%"), "failed secret formatting uses the current snapshot")
 env.C_StringUtil.RoundToNearestString = round
 hitBonus, hitModifier = 5, 2
 check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "7.00%"), "clean hit changes during combat")
 hitBonus, hitModifier = -123456, -123456
-check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "(7.00%)"), "a clean combat read replaces the previous sample")
+check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "7.00%"), "a clean combat read replaces the previous sample")
 local firstRestricted = table.concat(blocks[2].values, "\n") .. table.concat(blocks[2].ratings, "\n")
 check(string.find(firstRestricted, "75", 1, true), "first restricted scalar displayed live")
 secret = -123457
@@ -689,13 +689,13 @@ check(not contains(blocks[2], "Melee Hit"), "Hide Zero hides a confirmed zero")
 combat, restricted = true, true
 hitBonus, hitModifier = -123456, -123456
 blocks = test.buildRenderBlocks()
-check(hasStat(blocks[2], "Attack Power", "(16)"), "fallback refreshes before the next fight")
+check(hasStat(blocks[2], "Attack Power", "16"), "fallback refreshes before the next fight")
 check(not contains(blocks[2], "Melee Hit"), "Hide Zero also hides a cached zero")
 settings.hideZeroOffensive = false
 test.cacheSettings()
-check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "(0.00%)"), "cached zero is displayed when Hide Zero is off")
+check(hasStat(test.buildRenderBlocks()[2], "Melee Hit", "0.00%"), "cached zero is displayed when Hide Zero is off")
 combat = false
-check(hasStat(test.buildRenderBlocks()[2], "Attack Power", "(16)"), "fallback remains available outside combat")
+check(hasStat(test.buildRenderBlocks()[2], "Attack Power", "16"), "fallback remains available outside combat")
 combat = true
 settings.showOffhandHit = true
 test.cacheSettings()
@@ -703,7 +703,7 @@ check(hasStat(test.buildRenderBlocks()[2], "Offhand Hit", "—"), "first restric
 combat = false
 test.buildRenderBlocks()
 combat = true
-check(hasStat(test.buildRenderBlocks()[2], "Attack Power", "(16)"), "unreadable sample leaves the last clean value intact")
+check(hasStat(test.buildRenderBlocks()[2], "Attack Power", "16"), "unreadable sample leaves the last clean value intact")
 combat, restricted = false, false
 test.buildRenderBlocks()
 combat, restricted = true, true
@@ -711,7 +711,7 @@ env.__fireEvent("PLAYER_REGEN_DISABLED")
 combat = false
 env.__fireEvent("PLAYER_REGEN_ENABLED")
 combat = true
-check(hasStat(test.buildRenderBlocks()[2], "Attack Power", "(16)"), "combat end keeps the last clean sample")
+check(hasStat(test.buildRenderBlocks()[2], "Attack Power", "16"), "combat end keeps the last clean sample")
 combat, restricted = false, false
 settings.showTertiary, settings.showManaRegenMP5, settings.showCastingManaRegenMP5 = true, true, true
 test.cacheSettings()
@@ -1416,9 +1416,9 @@ do
             combatNow = true
             verifyAP("95")
             conversionActive = true
-            verifyAP("(79)")
+            verifyAP("79")
             conversionActive = false
-            verifyAP("(79)")
+            verifyAP("79")
         end
     end
     check(apAddon:RunUpdateStatsSafe(), "native AP display values flow through the real HUD update")
@@ -1428,7 +1428,7 @@ do
     apSettings.hideZeroOffensive = false
     apTest.cacheSettings()
     conversionActive = true
-    check(hasStat(apTest.buildRenderBlocks()[2], "Attack Power", "(79)"),
+    check(hasStat(apTest.buildRenderBlocks()[2], "Attack Power", "79"),
         "active conversion uses the last validated pre-combat total")
     conversionActive = false
     apEnv.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 16, true)
@@ -1544,7 +1544,7 @@ do
         "ending a drag does not reopen a retired hover")
     hoverTest.fireMainPanelTooltipOverlayForSmoke(2, "OnEnter")
     hoverAddon.forever.ShowStatTooltip(tooltip:GetOwner(),
-        { key = "Strength", label = "Strength", state = "stale", display = "(130)" })
+        { key = "Strength", label = "Strength", state = "stale", display = "130" })
     check(#tooltip.lines == 2 and tooltip.lines[2].left == "Last reliable reading",
         "stale totals retain their status note")
 

@@ -12079,7 +12079,8 @@ local function PushItemLevelRow(labels, ratings, values)
             equippedColor = ITEM_LEVEL_ALERT.warnColor
         end
     end
-    local numberFormat = cached.itemLevelComplete and "|cff%s%d|r" or "|cff%s(%d)|r"
+    local numberFormat = (addon.forever.enabled or cached.itemLevelComplete)
+        and "|cff%s%d|r" or "|cff%s(%d)|r"
     local equippedText = string.format(numberFormat, equippedColor, equipped)
     local overallText = string.format(numberFormat, valueColor, overall)
     local label = ""
@@ -12197,7 +12198,7 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero, tool
                     -- supplies no evidence to override the Hide Zero policy.
                     visible = not hideZero or (fallback ~= nil and fallback ~= 0)
                     if fallback ~= nil then
-                        local format = definition.kind == "percent" and "(%.2f%%)" or "(%d)"
+                        local format = definition.kind == "percent" and "%.2f%%" or "%d"
                         text, placeholder = SAFE_NUM.FormatColorNumber(valueColor, fallback, format)
                         displayState = "stale"
                     else
@@ -12254,11 +12255,10 @@ local function BuildItemLevelLines(labels, ratings, values, tooltipRows)
         local before = #labels
         PushItemLevelRow(labels, ratings, values)
         if tooltipRows and #labels > before then
-            local format = cached.itemLevelComplete and "%d / %d" or "(%d) / (%d)"
             tooltipRows[#labels] = {
                 key = "ItemLevel", statKey = "forever:ItemLevel", label = "ItemLevel",
                 state = cached.itemLevelComplete and "clean" or "stale",
-                display = string.format(format, math.floor(cached.itemLevelEquipped),
+                display = string.format("%d / %d", math.floor(cached.itemLevelEquipped),
                     math.floor(cached.itemLevelOverall)),
                 detail = { equipped = cached.itemLevelEquipped, overall = cached.itemLevelOverall },
             }
@@ -12645,10 +12645,10 @@ local function BuildDurabilityLines(labels, ratings, values, tooltipRows)
     if pct < 0 then pct = 0 end
     if pct > 100 then pct = 100 end
     local valueColor = durStr
-    if cached.durabilityComplete and cached.useAutoColorDurability then
+    if (addon.forever.enabled or cached.durabilityComplete) and cached.useAutoColorDurability then
         valueColor = RGBToHex(ComputeDurabilityColor(pct))
     end
-    local displayState = not cached.durabilityComplete and "lastKnown" or nil
+    local displayState = not addon.forever.enabled and not cached.durabilityComplete and "lastKnown" or nil
     local display = FmtColorPct(valueColor, pct, displayState)
     local rCol, vCol = RouteValueOnly(display)
     PushRow(labels, ratings, values, FormatLabel(durStr, "Durability"), rCol, vCol)

@@ -2716,26 +2716,31 @@ do
         "a current item-level gap triggers the warning")
     _, value = getRow("splitDurability")
     assert(plain(value) == "20.0%", "current durability renders without a stale marker")
+    local lastGoodDurability = value
 
     unavailable = true
+    env.__fireEvent("AUCTION_HOUSE_SHOW")
     env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 1, true)
     assert(addon:RunUpdateStatsSafe())
     rating, value = getRow("splitItemLevel")
     equippedCell = forever and value or rating
-    assert(not equippedCell:find("|cffff3333", 1, true) and plain(equippedCell):find("(90)", 1, true)
-        and plain(value) == (forever and "(90)|(115)" or "(115)"),
-        "both halves of a stale item-level pair are marked without an alert")
+    assert(not equippedCell:find("|cffff3333", 1, true)
+        and plain(equippedCell):find(forever and "90|" or "(90)", 1, true)
+        and plain(value) == (forever and "90|115" or "(115)"),
+        "an incomplete item-level read keeps both previous values without an alert")
     _, value = getRow("splitDurability")
-    assert(plain(value) == "(20.0%)", "an incomplete scan marks the last complete durability reading")
+    assert(forever and value == lastGoodDurability or not forever and plain(value) == "(20.0%)",
+        "an incomplete scan keeps the previous durability number and Forever color")
 
     local settings = test.profileState().settings
     settings.labelStyle, settings.showRating = "hidden", false
     test.cacheSettings()
     rating, value = getRow("splitItemLevel")
-    assert(plain(rating) == "(90)|(115)" and value == "",
+    assert(plain(rating) == (forever and "90|115" or "(90)|(115)") and value == "",
         "a stale item-level pair stays intact with hidden labels and a single column")
 
     durability, overall, equipped, unavailable = 65, 112, 110, false
+    env.__fireEvent("AUCTION_HOUSE_CLOSED")
     env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
     assert(addon:RunUpdateStatsSafe())
     local recoveredRating, recoveredValue = getRow("splitItemLevel")

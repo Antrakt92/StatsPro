@@ -1837,18 +1837,16 @@ do
         local detail = not issecretvalue(meta.detail) and type(meta.detail) == "table" and meta.detail
         if key == "ItemLevel" or key == "Durability" then
             if not detail or (state ~= "clean" and state ~= "stale") then return end
-            local numberFormat = state == "stale" and "(%d)" or "%d"
-            local percentFormat = state == "stale" and "(%.1f%%)" or "%.1f%%"
             if key == "ItemLevel" then
                 local equipped, equippedState = Classify(detail.equipped)
                 local overall, overallState = Classify(detail.overall)
-                if equippedState == "clean" then addNumber(add, "Equipped Item Level", math.floor(equipped), numberFormat) end
-                if overallState == "clean" then addNumber(add, "Overall Item Level", math.floor(overall), numberFormat) end
+                if equippedState == "clean" then addNumber(add, "Equipped Item Level", math.floor(equipped)) end
+                if overallState == "clean" then addNumber(add, "Overall Item Level", math.floor(overall)) end
             else
                 if detail.showsWorst then
-                    addNumber(add, "Average Durability", detail.average, percentFormat)
+                    addNumber(add, "Average Durability", detail.average, "%.1f%%")
                 else
-                    addNumber(add, "Lowest Durability", detail.worst, percentFormat)
+                    addNumber(add, "Lowest Durability", detail.worst, "%.1f%%")
                 end
             end
             return

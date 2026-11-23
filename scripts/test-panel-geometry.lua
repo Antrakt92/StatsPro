@@ -221,12 +221,12 @@ if forever then
         local cleanWidth = frame:GetWidth()
 
         setMeasure(column, hiddenDimension)
-        renderHaste("(25.00%)")
+        renderHaste("125.00%")
         equal(column .. " wider combat text leaves the full label gap", visibleGap(region, 58), 6)
         equal(column .. " protected measurement keeps the HUD width", frame:GetWidth(), cleanWidth)
 
         setMeasure(column, 0)
-        renderHaste("(25.00%)")
+        renderHaste("125.00%")
         equal(column .. " zero-width combat reading preserves the HUD width", frame:GetWidth(), cleanWidth)
         equal(column .. " zero-width combat reading leaves the full label gap", visibleGap(region, 58), 6)
 
@@ -515,10 +515,12 @@ if forever then
             equal(mode .. " restricted item level updates", gearAddon:RunUpdateStatsSafe(), true)
             rating, value = currentColumns(mode)
             populated = showRating and value or rating
-            equal(mode .. " both stale item levels stay visible", plain(populated):find("(90)|(115)", 1, true) ~= nil, true)
+            equal(mode .. " both stale item levels stay visible", plain(populated):match("[^\n]+$"), "90|115")
             equal(mode .. " stale item levels have no warning", populated:find("|cffff3333", 1, true), nil)
-            equal(mode .. " the open tooltip header marks both stale readings", tooltip.lines[1].right, "(90) / (115)")
+            equal(mode .. " the open tooltip header keeps both readings", tooltip.lines[1].right, "90 / 115")
             equal(mode .. " stale tooltip status remains visible", tooltip.lines[2].left, "Last reliable reading")
+            equal(mode .. " stale equipped detail has no parentheses", tooltip.lines[3].right, "90")
+            equal(mode .. " stale overall detail has no parentheses", tooltip.lines[4].right, "115")
         end
     end
 end

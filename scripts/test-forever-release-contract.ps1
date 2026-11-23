@@ -58,6 +58,7 @@ try {
     $published = @(ConvertFrom-StatsProPublishedForeverInventory $inventoryFixture)
     if ($published.Count -ne 1 -or $published[0] -cne 'forever-v1.18.1') { throw 'Published release inventory included draft or wrong-channel entries' }
     Assert-ForeverTestRejected { ConvertFrom-StatsProPublishedForeverInventory '{"message":"API failure"}' } 'paginated arrays'
+    Assert-ForeverTestRejected { ConvertFrom-StatsProPublishedForeverInventory '[]' } 'paginated arrays'
     Assert-ForeverTestRejected { ConvertFrom-StatsProPublishedForeverInventory '[[{"tag_name":"forever-v1.18.1"}]]' } 'malformed'
     $realRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
     $files = @((Get-ForeverPackageMap).Values) + @(

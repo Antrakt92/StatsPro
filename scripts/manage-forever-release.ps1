@@ -200,6 +200,12 @@ function Assert-ForeverPublishedEvidence {
 
 function Invoke-ForeverReleaseMode {
     param([object]$Context, [string]$SelectedMode)
+    if ($SelectedMode -eq 'Verify') {
+        [void](Wait-ForeverReleaseState -Context $Context -Phase asset-upload-started -Published $true -AssetCount 1 -AdditionalCheck {
+            param($observed) Assert-ForeverPublishedEvidence -Context $Context -Release $observed
+        })
+        return
+    }
     Assert-ForeverRemoteTag -Context $Context
     $release = Get-ForeverRelease -Context $Context
     if ($SelectedMode -eq 'RefuseExisting') {
@@ -238,11 +244,6 @@ function Invoke-ForeverReleaseMode {
             [void](Invoke-ForeverMutationAndAttest -Context $Context -Phase asset-upload-started -Published $true -AssetCount 1 -Mutation {
                 [void](Invoke-ForeverGh -Arguments @('release', 'edit', $Context.Tag, '--repo', $Context.Repository, '--draft=false', '--prerelease', '--latest=false'))
             } -AdditionalCheck { param($observed) Assert-ForeverPublishedEvidence -Context $Context -Release $observed })
-        }
-        'Verify' {
-            [void](Wait-ForeverReleaseState -Context $Context -Phase asset-upload-started -Published $true -AssetCount 1 -AdditionalCheck {
-                param($observed) Assert-ForeverPublishedEvidence -Context $Context -Release $observed
-            })
         }
         default { throw "Unsupported Forever release mode '$SelectedMode'." }
     }

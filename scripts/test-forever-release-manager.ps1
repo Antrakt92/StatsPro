@@ -68,6 +68,8 @@ try {
     $script:remoteCommit = $context.Commit
     $script:remoteType = 'commit'
     $script:remoteTagObjectReads = 0
+    $script:tagReadFailuresRemaining = 0
+    $script:inventoryReadFailuresRemaining = 0
     $script:failUpload = $false
     $script:attestationFailuresRemaining = 0
     $script:visibilityLagReads = 0
@@ -79,6 +81,10 @@ try {
         param([string[]]$Arguments, [switch]$AllowMissing)
         if ($Arguments[0] -eq 'api') {
             if ($Arguments[1] -like '*/git/ref/tags/*') {
+                if ($script:tagReadFailuresRemaining -gt 0) {
+                    $script:tagReadFailuresRemaining--
+                    throw 'tag is temporarily unavailable'
+                }
                 Assert-Test ($Arguments -contains 'Accept: application/vnd.github+json' -and $Arguments -contains 'X-GitHub-Api-Version: 2026-03-10') 'tag reads use the same supported API version'
                 return (@{ object = @{ type = $script:remoteType; sha = $script:remoteCommit } } | ConvertTo-Json -Depth 5)
             }
@@ -87,6 +93,10 @@ try {
                 return (@{ object = @{ type = 'commit'; sha = $context.Commit } } | ConvertTo-Json -Depth 5)
             }
             if ($script:visibilityLagReads -gt 0) { $script:visibilityLagReads--; return $script:staleInventory }
+            if ($script:inventoryReadFailuresRemaining -gt 0) {
+                $script:inventoryReadFailuresRemaining--
+                throw 'release inventory is temporarily unavailable'
+            }
             if ($null -eq $script:remote) { return '[[]]' }
             return '[[' + ($script:remote | ConvertTo-Json -Depth 8 -Compress) + ']]'
         }
@@ -192,7 +202,12 @@ try {
     $before = $mutations.Count
     Invoke-ForeverReleaseMode $context Publish
     Assert-Test ($mutations.Count -eq $before + 1) 'attestation visibility retries never repeat publication'
+    $script:tagReadFailuresRemaining = 1
+    $script:inventoryReadFailuresRemaining = 1
+    $before = $mutations.Count
     Invoke-ForeverReleaseMode $context Verify
+    Assert-Test ($script:tagReadFailuresRemaining -eq 0 -and $script:inventoryReadFailuresRemaining -eq 0) 'Verify retries transient inventory and tag read failures'
+    Assert-Test ($mutations.Count -eq $before) 'Verify never issues publication mutations'
     $script:attestedCommit = 'c' * 40
     Assert-Rejected { Invoke-ForeverReleaseMode $context Verify } 'wrong attested commit fails verification'
     $script:attestedCommit = $context.Commit

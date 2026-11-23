@@ -26,7 +26,9 @@ function Get-StatsProForeverTextHash {
 function ConvertFrom-StatsProPublishedForeverInventory {
     param([Parameter(Mandatory)][string]$Json)
     $pages = ConvertFrom-Json -InputObject $Json -AsHashtable -NoEnumerate
-    if ($pages -isnot [System.Collections.IList]) { throw 'Forever published release inventory must contain paginated arrays' }
+    if ($pages -isnot [System.Collections.IList] -or $pages.Count -eq 0) {
+        throw 'Forever published release inventory must contain paginated arrays'
+    }
     foreach ($page in $pages) {
         if ($page -isnot [System.Collections.IList]) { throw 'Forever published release inventory page is malformed' }
         foreach ($release in $page) {

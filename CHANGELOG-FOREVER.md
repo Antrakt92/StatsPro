@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.25.1 - 23-Nov-2026 — More reliable HUD and tooltips
+
+- Keep mana regeneration in sync when showing both per-second and per-five-second rates.
+- Refresh durability and repair costs when equipment data arrives late, even after the initial retries finish.
+- Keep hover tooltips on the correct side of the HUD, mark both item levels when they show the last reliable reading, and restore hover after dragging.
+- Restore font selection, the font picker, and Escape navigation in Settings when a game timer fails to start.
+
 ## 1.25.0 - 23-Nov-2026 — Stat breakdowns on hover
 
 - Hover over a stat to see what contributes to its current value. See how much Attack Power comes from Strength or Agility, how much crit comes from Agility or Intellect, and the effects of other primary stats. Per-point values appear when the game data supports them.

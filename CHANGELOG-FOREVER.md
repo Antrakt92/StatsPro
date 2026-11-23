@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.25.0 - 23-Nov-2026 — Stat breakdowns on hover
+
+- Hover over a stat to see what contributes to its current value. See how much Attack Power comes from Strength or Agility, how much crit comes from Agility or Intellect, and the effects of other primary stats. Per-point values appear when the game data supports them.
+- See equipped and overall item level, or the durability reading that complements your HUD. Tooltips open beside the hovered row and appear only when there is extra information to show.
+- Keep both item levels visible and label mana regeneration with the rate currently shown by the game. Recover HUD readings after temporary formatting or measurement failures.
+
 ## 1.24.7 - 20-Nov-2026 — Combat stats and gear readings
 
 - Show current Hit, Attack Power, Ranged Haste, and Defense when the game provides a usable value. Show the last reliable reading in parentheses or a dash if none is available. Refresh those readings after changes to equipment, talents, or form.

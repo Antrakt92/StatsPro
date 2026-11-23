@@ -576,6 +576,27 @@ do
     state = test.durabilityState()
     assert(state.durabilityComplete and state.durabilityValue == 55 and state.repairCost == 400,
         "late recovery restores complete totals after API exceptions")
+    for _, partial in ipairs({ {}, { current = 110 } }) do
+        current, maximum = partial.current, 100
+        env.__fireEvent("UPDATE_INVENTORY_DURABILITY")
+        assert(addon:RunUpdateStatsSafe(), "invalid durability pair leaves the scan incomplete")
+        for _ = 1, limit * 3 do
+            state = test.durabilityState()
+            if not (state.durabilityRetryScheduled or state.repairRetryScheduled) then break end
+            assert(env.__flushNextTimer() and addon:RunUpdateStatsSafe(), "drain retries after invalid pair")
+        end
+        state = test.durabilityState()
+        assert(not state.dirty and not state.durabilityRetryScheduled and not state.repairRetryScheduled
+            and state.durabilityValue == 55 and state.repairCost == nil,
+            "invalid durability pairs preserve the last total and suppress incomplete repair")
+        current = 30
+        env.__fireEvent("ITEM_DATA_LOAD_RESULT", 1337, true)
+        assert(test.durabilityState().dirty and addon:RunUpdateStatsSafe(),
+            "matching late item data wakes the scan after an invalid durability pair")
+        state = test.durabilityState()
+        assert(state.durabilityComplete and state.durabilityValue == 55 and state.repairCost == 400,
+            "late item data recovers both totals after invalid pairs")
+    end
     equippedID, durabilityUnavailable = 99, true
     env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", slot, true)
     assert(addon:RunUpdateStatsSafe(), "replacement with unavailable durability remains incomplete")
@@ -683,6 +704,57 @@ do
     end
 end
 print(flavor .. " newly observed equipped item completeness regressions passed")
+
+for _, history in ipairs({ "cold", "replacement", "repair-only" }) do
+    local slot = forever and 18 or 16
+    local id, identityReady, pairReady, priceReady = 1000, history ~= "cold", true, true
+    local env, addon, test = loadStatsPro("enUS", {
+        statsProDB = { showDurability = true, showRepairCost = true, useWorstDurability = false },
+        getInventoryItemDurability = function(index)
+            if index == 1 then return 80, 100 end
+            if index == slot and pairReady then return 30, 100 end
+        end,
+        getTooltipInventoryItem = function(_, index)
+            if index == 1 then return { repairCost = 100 } end
+            if priceReady then return { repairCost = 300 } end
+        end,
+    })
+    env.GetInventoryItemID = function(_, index)
+        if index ~= slot then return end
+        if not identityReady then error("equipment identity is unavailable") end
+        return id
+    end
+    if history ~= "cold" then env.__fireEvent("PLAYER_ENTERING_WORLD") end
+    id, identityReady, pairReady, priceReady = 2000, false, history == "repair-only", false
+    if history == "cold" then
+        env.__fireEvent("PLAYER_ENTERING_WORLD")
+    else
+        env.__fireEvent("PLAYER_EQUIPMENT_CHANGED", slot, true)
+    end
+    local retries = test.durabilityState().retryLimit
+    for _ = 1, retries * 3 do
+        assert(addon:RunUpdateStatsSafe())
+        local state = test.durabilityState()
+        if not (state.durabilityRetryScheduled or state.repairRetryScheduled) then break end
+        assert(env.__flushNextTimer())
+    end
+    local state = test.durabilityState()
+    assert(not state.dirty and not state.repairCostComplete
+        and not state.durabilityRetryScheduled and not state.repairRetryScheduled)
+    env.__fireEvent("ITEM_DATA_LOAD_RESULT", id, true)
+    assert(not test.durabilityState().dirty, "event must not wake gear while its identity is still hidden")
+    identityReady, pairReady, priceReady = true, true, true
+    env.__fireEvent("GET_ITEM_INFO_RECEIVED", 1000, true)
+    assert(not test.durabilityState().dirty, "old item identity cannot wake the newly readable slot")
+    env.__fireEvent("ITEM_DATA_LOAD_RESULT", id, true)
+    assert(test.durabilityState().dirty and addon:RunUpdateStatsSafe(),
+        history .. ": matching late identity wakes the exhausted scan")
+    state = test.durabilityState()
+    assert(state.durabilityComplete and state.durabilityValue == 55 and state.repairCost == 400)
+    env.__fireEvent("GET_ITEM_INFO_RECEIVED", id, true)
+    assert(not test.durabilityState().dirty, "duplicate item events do not reopen the settled scan")
+end
+print(flavor .. " late equipment identity recovery passed")
 
 do
     local firstSlot, secondSlot = 16, forever and 18 or 17

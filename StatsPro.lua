@@ -105,6 +105,8 @@ local CURRENT_DB_VERSION = 11
 local DURABILITY_SCAN = {
     slotMin = 1,
     slotMax = 19,
+    -- Item readiness can supply the exact live identity after an unreadable scan.
+    unresolvedItem = {},
     -- WHY: slot 4 = shirt, slot 18 = deprecated ranged. Slot 19 (tabard) self-filters via max>0.
     skipSlots = { [4] = true, [18] = true },
     -- The equipment slots covered by Blizzard's DurabilityFrame. A clean positive
@@ -1653,7 +1655,8 @@ function addon.durabilityRuntime.OnItemDataReady(itemID, success)
     local runtime = addon.durabilityRuntime
     local restartForHydration = false
     for slot, pending in pairs(runtime.pendingItemSlots) do
-        if itemID == pending.itemID and not runtime.durabilityItemWakeups[slot]
+        if not runtime.durabilityItemWakeups[slot]
+            and (itemID == pending.itemID or pending.itemID == DURABILITY_SCAN.unresolvedItem)
             and runtime.GetCleanEquippedItemID(slot) == itemID then
             runtime.durabilityItemWakeups[slot] = true
             runtime.pendingItemSlots[slot] = nil
@@ -1670,7 +1673,8 @@ function addon.durabilityRuntime.OnItemDataReady(itemID, success)
     if not cached.showRepairCost or durabilityDirty
         or runtime.retryStates.repair.scheduledGeneration == runtime.generation then return end
     for slot, pendingID in pairs(runtime.pendingRepairItemSlots) do
-        if itemID == pendingID and not runtime.repairItemWakeups[slot]
+        if not runtime.repairItemWakeups[slot]
+            and (itemID == pendingID or pendingID == DURABILITY_SCAN.unresolvedItem)
             and runtime.GetCleanEquippedItemID(slot) == itemID then
             -- Item-data events can overlap. Allow one repair-only rescan per
             -- slot and generation without resetting either timer budget.
@@ -9826,14 +9830,23 @@ function addon.durabilityRuntime.CanHaveDurability(slot, itemID)
     return not (ok and SAFE_NUM.IsCleanFiniteNumber(itemType) and itemType == nonDurableType)
 end
 
+function addon.durabilityRuntime.ReadPendingSlotItemID(slot, confirmedDurable)
+    local runtime = addon.durabilityRuntime
+    local itemID, emptySlot = runtime.GetCleanEquippedItemID(slot)
+    if itemID or emptySlot then return itemID end
+    if (confirmedDurable or DURABILITY_SCAN.potentiallyDurableSlots[slot])
+        and type(_G.GetInventoryItemID) == "function" then
+        return DURABILITY_SCAN.unresolvedItem
+    end
+    if not confirmedDurable then return runtime.knownDurableItemIDs[slot] end
+end
+
 -- Both the cached HUD and the self-test classify the same live durability pair.
 function addon.durabilityRuntime.ReadSlot(slot)
     local runtime = addon.durabilityRuntime
     local ok, current, maximum = pcall(GetInventoryItemDurability, slot)
     if not ok then
-        local itemID, emptySlot = runtime.GetCleanEquippedItemID(slot)
-        if not itemID and not emptySlot then itemID = runtime.knownDurableItemIDs[slot] end
-        return "unavailable", nil, nil, itemID
+        return "unavailable", nil, nil, runtime.ReadPendingSlotItemID(slot)
     end
     if issecretvalue(current) or issecretvalue(maximum) then return "restricted" end
     if current == nil and maximum == nil then
@@ -9841,8 +9854,11 @@ function addon.durabilityRuntime.ReadSlot(slot)
         if itemID and runtime.IsItemDataPending(itemID) then return "uncached", nil, nil, itemID end
         -- Cached item metadata does not guarantee a current durability reading.
         local knownDurableID = runtime.knownDurableItemIDs[slot]
-        if knownDurableID and (itemID == knownDurableID or not (itemID or emptySlot)) then
-            return "unavailable", nil, nil, knownDurableID
+        local unresolved = not (itemID or emptySlot)
+        local canResolveLater = unresolved and DURABILITY_SCAN.potentiallyDurableSlots[slot]
+            and type(_G.GetInventoryItemID) == "function"
+        if knownDurableID and (itemID == knownDurableID or unresolved) then
+            return "unavailable", nil, nil, canResolveLater and DURABILITY_SCAN.unresolvedItem or knownDurableID
         end
         runtime.knownDurableItemIDs[slot] = nil
         if itemID and runtime.CanHaveDurability(slot, itemID) then
@@ -9850,20 +9866,19 @@ function addon.durabilityRuntime.ReadSlot(slot)
         end
         -- A failed identity read cannot confirm an empty slot either. Clients
         -- lacking the identity API keep the legacy nil/nil behavior.
-        if not (itemID or emptySlot) and DURABILITY_SCAN.potentiallyDurableSlots[slot]
-            and type(_G.GetInventoryItemID) == "function" then
-            return "unavailable"
+        if canResolveLater then
+            return "unavailable", nil, nil, DURABILITY_SCAN.unresolvedItem
         end
         return "empty"
     end
-    if not SAFE_NUM.IsCleanFiniteNumber(current) or not SAFE_NUM.IsCleanFiniteNumber(maximum) then
-        return "invalid"
-    end
-    if current == 0 and maximum == 0 then
+    local finitePair = SAFE_NUM.IsCleanFiniteNumber(current) and SAFE_NUM.IsCleanFiniteNumber(maximum)
+    if finitePair and current == 0 and maximum == 0 then
         runtime.knownDurableItemIDs[slot] = nil
         return "empty"
     end
-    if maximum <= 0 or current < 0 or current > maximum then return "invalid" end
+    if not finitePair or maximum <= 0 or current < 0 or current > maximum then
+        return "invalid", nil, nil, runtime.ReadPendingSlotItemID(slot)
+    end
     local itemID, emptySlot = runtime.GetCleanEquippedItemID(slot)
     if itemID or emptySlot then runtime.knownDurableItemIDs[slot] = itemID end
     return "readable", (current / maximum) * 100, current < maximum
@@ -9912,7 +9927,7 @@ local function ScanDurabilityAndCost()
                             repairCostRestricted = true
                         elseif costState == "retryable" then
                             repairCostRetryable = true
-                            pendingRepairItemSlots[slot] = addon.durabilityRuntime.GetCleanEquippedItemID(slot)
+                            pendingRepairItemSlots[slot] = runtime.ReadPendingSlotItemID(slot, true)
                         end
                     end
                 end

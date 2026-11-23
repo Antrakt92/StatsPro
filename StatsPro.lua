@@ -10325,11 +10325,12 @@ end
 
 function Panel:ScheduleDragGuardRelease()
     local generation = self.dragGuardGeneration or 0
-    C_Timer.After(0.1, function()
+    local function release()
         if self.dragGuardGeneration == generation then
             self.frame.wasDragging = false
         end
-    end)
+    end
+    if not pcall(C_Timer.After, 0.1, release) then release() end
 end
 
 function Panel:FinishMouseDrag(savePosition)
@@ -10652,6 +10653,7 @@ function addon.archonTargets.GetTooltip()
         if owner and not self.statDivider then relative = owner:GetParent() or owner end
         self:ClearAllPoints()
         self:SetPoint("TOPLEFT", relative or UIParent, "TOPRIGHT", self.statDivider and 10 or 8, 0)
+        if self.statDivider then self.statSide = "right" end
         self.owner = owner
     end
     function tooltip:AddLine(text, r, g, b, wrapText)
@@ -11063,14 +11065,14 @@ function addon.forever.ShowStatTooltip(anchor, meta)
                 local leftSpace = SAFE_NUM.IsCleanFiniteNumber(left) and left * panelScale / rootScale
                 if not leftSpace or leftSpace >= neededSpace or leftSpace >= rightSpace then side = "left" end
             end
-            if tooltip.statSide ~= side or tooltip.statAnchor ~= anchor then
+            if tooltip.statSide ~= side then
                 tooltip:ClearAllPoints()
                 if side == "left" then
                     tooltip:SetPoint("TOPRIGHT", anchor, "TOPLEFT", -10, 0)
                 else
                     tooltip:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 10, 0)
                 end
-                tooltip.statSide, tooltip.statAnchor = side, anchor
+                tooltip.statSide = side
             end
         end
     end
@@ -11112,14 +11114,12 @@ function Panel:ApplyTooltipRows(targetRows, lineCount)
                 self.tooltipOverlays[i] = overlay
             end
             local previousMeta = overlay.statsProTargetMeta
-            local y = -((i - 1) * rowHeight)
-            if overlay.statsProRowHeight ~= rowHeight or (forever and overlay.statsProRowY ~= y) then
+            if overlay.statsProRowHeight ~= rowHeight then
                 overlay:ClearAllPoints()
-                overlay:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, y)
+                overlay:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, -((i - 1) * rowHeight))
                 overlay:SetPoint("RIGHT", self.frame, "RIGHT", 0, 0)
                 overlay:SetHeight(rowHeight)
                 overlay.statsProRowHeight = rowHeight
-                overlay.statsProRowY = y
             end
             if not previousMeta then
                 overlay:SetScript("OnEnter", function(f)
@@ -12230,10 +12230,11 @@ local function BuildItemLevelLines(labels, ratings, values, tooltipRows)
         local before = #labels
         PushItemLevelRow(labels, ratings, values)
         if tooltipRows and #labels > before then
+            local format = cached.itemLevelComplete and "%d / %d" or "(%d) / (%d)"
             tooltipRows[#labels] = {
                 key = "ItemLevel", statKey = "forever:ItemLevel", label = "ItemLevel",
                 state = cached.itemLevelComplete and "clean" or "stale",
-                display = string.format("%d / %d", math.floor(cached.itemLevelEquipped),
+                display = string.format(format, math.floor(cached.itemLevelEquipped),
                     math.floor(cached.itemLevelOverall)),
                 detail = { equipped = cached.itemLevelEquipped, overall = cached.itemLevelOverall },
             }

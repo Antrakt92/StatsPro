@@ -460,6 +460,15 @@ if forever then
             equal(mode .. " item-level pair reaches the actual HUD", plain(populated):find("90|115", 1, true) ~= nil, true)
             equal(mode .. " equipped item-level alert stays visible", populated:find("|cffff333390|r", 1, true) ~= nil, true)
             equal(mode .. " item levels share one value column", empty, "")
+            local panelName = mode == "split" and "side" or "main"
+            for index, target in ipairs(gearTest.panelTooltipState(panelName).lastTargetRows) do
+                if type(target) == "table" and target.key == "ItemLevel" then
+                    gearTest.firePanelTooltipOverlayForSmoke(panelName, index, "OnEnter")
+                    break
+                end
+            end
+            local tooltip = gearEnv.StatsProTargetTooltip
+            equal(mode .. " item-level tooltip header shows both live readings", tooltip.lines[1].right, "90 / 115")
 
             readable = false
             gearEnv.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 1, true)
@@ -468,8 +477,69 @@ if forever then
             populated = showRating and value or rating
             equal(mode .. " both stale item levels stay visible", plain(populated):find("(90)|(115)", 1, true) ~= nil, true)
             equal(mode .. " stale item levels have no warning", populated:find("|cffff3333", 1, true), nil)
+            equal(mode .. " the open tooltip header marks both stale readings", tooltip.lines[1].right, "(90) / (115)")
+            equal(mode .. " stale tooltip status remains visible", tooltip.lines[2].left, "Last reliable reading")
         end
     end
+end
+
+if forever then
+    local hoverEnv, hoverAddon, hoverTest = fixtures.loadStatsPro("enUS", {
+        forever = true,
+        foreverAPIs = { UnitStat = function() return 0, 130, 0, 0 end },
+    })
+    hoverEnv.__fireEvent("PLAYER_ENTERING_WORLD")
+    local settings = hoverTest.profileState().settings
+    for _, rows in pairs(hoverAddon.forever.rows) do
+        for _, row in ipairs(rows) do settings[row.showKey] = false end
+    end
+    settings.showStrength, settings.showAgility = true, true
+    settings.showItemLevel, settings.showDurability, settings.showRepairCost = false, false, false
+    settings.displayMode = "flat"
+    settings.isLocked = false
+    hoverTest.cacheSettings()
+    hoverAddon.forever.BuildStatTooltip = function(_, add) add("Audit detail", "1") end
+    equal("both edge-anchor fixture rows render", hoverAddon:RunUpdateStatsSafe(), true)
+    local right = 995
+    hoverEnv.StatsProFrame.GetRight = function() return right end
+    hoverEnv.StatsProFrame.GetEffectiveScale = function() return 1 end
+    hoverEnv.UIParent.GetEffectiveScale = function() return 1 end
+    hoverEnv.UIParent:SetWidth(1000)
+    hoverTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    local tooltip = hoverEnv.StatsProTargetTooltip
+    equal("first row opens toward the viewport interior", tooltip:GetPoint(), "TOPRIGHT")
+    hoverTest.fireMainPanelTooltipOverlayForSmoke(1, "OnLeave")
+
+    right = nil
+    hoverTest.fireMainPanelTooltipOverlayForSmoke(2, "OnEnter")
+    equal("unavailable geometry uses the default anchor", tooltip:GetPoint(), "TOPLEFT")
+    hoverTest.fireMainPanelTooltipOverlayForSmoke(2, "OnLeave")
+
+    right = 995
+    hoverTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    equal("returning to the first row reapplies its inward anchor", tooltip:GetPoint(), "TOPRIGHT")
+
+    local after = hoverEnv.C_Timer.After
+    local failedRelease
+    hoverEnv.C_Timer.After = function(_, callback)
+        failedRelease = callback
+        error("drag guard timer unavailable")
+    end
+    hoverTest.fireMainPanelTooltipOverlayForSmoke(1, "OnDragStart")
+    equal("starting the drag guards hover", hoverTest.panelTooltipState("main").wasDragging, true)
+    equal("timer rejection is contained by drag stop",
+        pcall(hoverTest.fireMainPanelTooltipOverlayForSmoke, 1, "OnDragStop"), true)
+    hoverEnv.C_Timer.After = after
+    equal("timer rejection cannot keep hover guarded", hoverTest.panelTooltipState("main").wasDragging, false)
+    hoverTest.fireMainPanelTooltipOverlayForSmoke(1, "OnEnter")
+    equal("hover reopens after guard timer rejection", tooltip:IsShown(), true)
+
+    hoverTest.fireMainPanelTooltipOverlayForSmoke(1, "OnDragStart")
+    failedRelease()
+    equal("obsolete partial timer cannot release a newer drag", hoverTest.panelTooltipState("main").wasDragging, true)
+    hoverTest.fireMainPanelTooltipOverlayForSmoke(1, "OnDragStop")
+    hoverEnv.__flushTimers()
+    equal("normal drag stop releases the live guard", hoverTest.panelTooltipState("main").wasDragging, false)
 end
 
 if forever then

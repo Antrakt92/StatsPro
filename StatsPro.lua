@@ -11656,6 +11656,30 @@ function addon.fontRuntime.SavedFontRetryBlocked()
         or profile.ReadCombatState() ~= false
 end
 
+function addon.ArmTickerFallback(delay, callback)
+    local function run()
+        if not callback then return end
+        local invoke = callback
+        callback = nil
+        invoke()
+    end
+    if not pcall(C_Timer.After, delay, run) and callback then
+        -- A timer that enqueues and then throws can still fire. Both paths
+        -- share the same once-only callback.
+        return { delay = delay, run = run }
+    end
+end
+
+function addon.AdvanceTickerFallback(owner, key, elapsed)
+    local retry = owner[key]
+    if not retry then return end
+    retry.delay = retry.delay - elapsed
+    if retry.delay <= 0 then
+        owner[key] = nil
+        retry.run()
+    end
+end
+
 function addon.fontRuntime.schedulePendingSavedFontRetry()
     local runtime = addon.fontRuntime
     local pending = runtime.pendingSavedFont
@@ -11668,7 +11692,7 @@ function addon.fontRuntime.schedulePendingSavedFontRetry()
     runtime.pendingRetryAttempt = nextAttempt
     runtime.pendingRetryScheduled = true
     local generation = runtime.pendingRetryGeneration
-    C_Timer.After(delay, function()
+    runtime.pendingSavedFontTickRetry = addon.ArmTickerFallback(delay, function()
         if generation ~= runtime.pendingRetryGeneration then return end
         runtime.pendingRetryScheduled = false
         local writableDB = addon.dbRuntime.GetWritableSettings(false)
@@ -12913,6 +12937,24 @@ tickerFrame:SetScript("OnUpdate", function(self, elapsed)
         starterRetry()
     end
     if not isLoaded then return end
+    local font = addon.fontRuntime
+    if font.pendingSavedFontTickRetry or font.catalogLocaleTickRetry then
+        addon.AdvanceTickerFallback(font, "pendingSavedFontTickRetry", elapsed)
+        addon.AdvanceTickerFallback(font, "catalogLocaleTickRetry", elapsed)
+    end
+    local picker = addon.settingsUI.fontPicker
+    if picker.catalogRefreshTickRetry or picker.pendingFontTickRetry then
+        addon.AdvanceTickerFallback(picker, "pendingFontTickRetry", elapsed)
+        addon.AdvanceTickerFallback(picker, "catalogRefreshTickRetry", elapsed)
+    end
+    if addon.hudPresets.welcomeTickRetry then
+        addon.AdvanceTickerFallback(addon.hudPresets, "welcomeTickRetry", elapsed)
+    end
+    local specialFrameRestores = addon.profileUI.specialFrameTickRestores
+    if specialFrameRestores then
+        addon.profileUI.specialFrameTickRestores = nil
+        for _, restore in pairs(specialFrameRestores) do restore.run() end
+    end
     local crit = addon.critRuntime
     if crit.specRecheckDelay then
         crit.specRecheckDelay = crit.specRecheckDelay - elapsed
@@ -12977,7 +13019,7 @@ addon.profileRuntime.CompleteBootstrap = function()
     local account = addon.dbRuntime.GetAccount()
     if account and rawget(account, "quickSetupSeen") == false
         and (addon.__statsproSmoke ~= true or addon.__testWelcomeEnabled == true) then
-        C_Timer.After(0.5, function()
+        addon.hudPresets.welcomeTickRetry = addon.ArmTickerFallback(0.5, function()
             if isLoaded then addon.hudPresets.MaybeShowWelcome() end
         end)
     end
@@ -13898,7 +13940,7 @@ function addon.fontRuntime.ReconcileCatalogLocale()
     local delay = runtime.pendingRetryDelays[attempt]
     if not delay then return end
     runtime.catalogLocaleRetryAttempt = attempt
-    C_Timer.After(delay, function()
+    runtime.catalogLocaleTickRetry = addon.ArmTickerFallback(delay, function()
         if generation == runtime.catalogLocaleGeneration then
             runtime.catalogLocaleDirty = true
         end
@@ -17138,12 +17180,17 @@ end
 function addon.profileUI.DeferSpecialFrameRestore(frameName, shouldRestore)
     addon.profileUI.RemoveSpecialFrame(frameName)
     local token = addon.profileUI.CancelSpecialFrameRestore(frameName)
-    C_Timer.After(0, function()
+    local retry = addon.ArmTickerFallback(0, function()
         local tokens = addon.profileUI.specialFrameRestoreTokens
         if type(tokens) ~= "table" or tokens[frameName] ~= token then return end
         if type(shouldRestore) ~= "function" or shouldRestore() ~= true then return end
         addon.profileUI.PushSpecialFrame(frameName)
     end)
+    if retry then
+        local retries = addon.profileUI.specialFrameTickRestores or {}
+        addon.profileUI.specialFrameTickRestores = retries
+        retries[frameName] = retry
+    end
 end
 
 function addon.profileUI.BuildOperationUI(manager)
@@ -20381,7 +20428,7 @@ function addon.settingsUI.fontPicker.SchedulePendingRetry(self, generation, atte
     local picker = self.settingsUI.fontPicker
     local delays = self.fontRuntime.pendingRetryDelays
     if not picker.cachedFontsListHasPending or attempt > #delays then return end
-    C_Timer.After(delays[attempt], function()
+    picker.pendingFontTickRetry = addon.ArmTickerFallback(delays[attempt], function()
         -- Hidden/reopened pickers own a newer generation; stale probes are no-ops.
         if generation ~= picker.retryGeneration
             or not picker.frame or not picker.frame:IsShown() then
@@ -20452,7 +20499,7 @@ function addon.settingsUI.fontPicker.RegisterLSMCallback(self)
         picker.cachedFontsListHasPending = false
         if picker.catalogRefreshScheduled then return end
         picker.catalogRefreshScheduled = true
-        C_Timer.After(0, function()
+        picker.catalogRefreshTickRetry = addon.ArmTickerFallback(0, function()
             picker.catalogRefreshScheduled = false
             self.fontRuntime.RefreshSharedCatalog(true)
             picker.RefreshCaption(self)

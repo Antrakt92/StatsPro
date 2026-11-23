@@ -259,4 +259,45 @@ for _, forever in ipairs({ false, true }) do
     addon.settingsUI.dropdownMenu.Hide(addon)
     stableGeometry()
 end
+for _, forever in ipairs({ false, true }) do
+    local latePath = "Interface\\AddOns\\Media\\LateB.ttf"
+    local ready = false
+    local env, addon = fixtures.loadStatsPro("enUS", {
+        forever = forever, lsmFonts = {}, isKnownFontFile = function() return true end,
+        setFontResult = function(_, path) return path ~= latePath or ready end,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    addon:OpenConfigMenu()
+    local picker = addon.settingsUI.fontPicker
+    picker.Show(addon)
+    env.__flushTimers(0)
+    local after = env.C_Timer.After
+    local rejects = { [0] = true, [0.2] = true }
+    env.C_Timer.After = function(delay, callback)
+        if rejects[delay] then
+            rejects[delay] = nil
+            error("catalogue timer unavailable")
+        end
+        after(delay, callback)
+    end
+    check(pcall(env.__registerLSMFont, "Late A", "Interface\\AddOns\\Media\\LateA.ttf"),
+        "registering a font does not fail when the next-frame timer is unavailable")
+    local function tick(elapsed)
+        for _, frame in pairs(env.__frames) do
+            if frame.scripts and frame.scripts.OnUpdate then frame.scripts.OnUpdate(frame, elapsed) end
+        end
+    end
+    tick(0.01)
+    check(not picker.catalogRefreshScheduled, "a rejected refresh does not leave the scheduled flag stuck")
+    env.__registerLSMFont("Late B", latePath)
+    env.__flushTimers(0)
+    check(picker.pendingFontTickRetry, "a rejected cold-font probe falls back to the HUD ticker")
+    ready = true
+    tick(0.2)
+    local displayed = {}
+    for _, button in ipairs(picker.buttons) do
+        if button:IsShown() then displayed[button.fontName] = true end
+    end
+    check(displayed["Late A"] and displayed["Late B"], "the open picker includes both new fonts")
+end
 print("StatsPro font hover: PASS (" .. checks .. " checks)")

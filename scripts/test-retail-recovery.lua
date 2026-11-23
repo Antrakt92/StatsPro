@@ -1710,6 +1710,125 @@ for _, ownedAlias in ipairs({ false, true }) do
 end
 print(flavor .. " late catalogue font recovery regressions passed")
 
+do
+    local path = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\SavedFontTimerFixture.ttf"
+    local ready = false
+    local function canApply(_, font) return font ~= path or ready end
+    local env, addon, test = loadStatsPro("enUS", {
+        statsProDB = { font = path },
+        lsmFonts = { { name = "Saved font timer fixture", path = path } },
+        setFontResult = canApply,
+        fontObjectSetFontResult = canApply,
+    })
+    local restoreTimer = rejectArm(env, 0.2)
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    local lateCallback = restoreTimer()
+    assert(addon.sharedFonts.noticeInitialized and test.fontRuntimeState().pendingRetryScheduled,
+        "rejecting a saved-font timer must not abort bootstrap")
+    advanceTicker(env, 0.1)
+    assert(test.fontRuntimeState().pendingRetryAttempt == 1)
+    advanceTicker(env, 0.1)
+    assert(test.fontRuntimeState().pendingRetryAttempt == 2,
+        "the ticker consumes the rejected attempt and schedules the next retry")
+    ready = true
+    lateCallback()
+    assert(test.currentRuntimeFontPath() ~= path, "a late duplicate cannot apply the font ahead of the next timer")
+    env.__flushTimers(1)
+    assert(test.currentRuntimeFontPath() == path and test.profileState().settings.font == path
+        and not test.fontRuntimeState().pendingRetryScheduled,
+        "the pending preference recovers with no saved selection changes")
+end
+
+do
+    local ready = false
+    local function canApply(_, path, size)
+        return ready or size ~= 12 or not path:find("AntraktUISans.ttf", 1, true)
+    end
+    local env, addon = loadStatsPro("enUS", {
+        lsmFonts = {},
+        unitGUID = function() return "Player-1-COLD-NAME-RETRY" end,
+        unitFullName = function() return "Охотник", "Сервер" end,
+        getSpecialization = function() return 1 end,
+        specID = 73,
+        setFontResult = canApply,
+        fontObjectSetFontResult = canApply,
+    })
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    addon:OpenConfigMenu()
+    local header = env.StatsProActiveProfileButton.statsProText
+    local fallback, text = header:GetFont(), header:GetText()
+    local baseline = addon.sharedFonts.baseline.path
+    assert(fallback ~= baseline and addon:RunUpdateStatsSafe())
+    env.__flushTimers(0)
+    local restoreTimer = rejectArm(env, 0.2)
+    assert(addon:RunUpdateStatsSafe(), "rejecting a name-font timer must not abort the HUD")
+    local lateCallback = restoreTimer()
+    ready = true
+    advanceTicker(env, 0.1)
+    assert(header:GetFont() == fallback)
+    advanceTicker(env, 0.1)
+    assert(addon:RunUpdateStatsSafe() and header:GetFont() == baseline and header:GetText() == text,
+        "the rejected retry restores the original name with the bundled glyphs")
+    lateCallback()
+    assert(not addon.fontRuntime.catalogLocaleDirty, "a late duplicate cannot reopen reconciliation")
+end
+
+do
+    local env, addon, test = loadStatsPro("enUS", {
+        statsProDB = {},
+        testWelcomeEnabled = true,
+        unitGUID = function() return "Player-1-WELCOME-RETRY" end,
+        getSpecialization = function() return 1 end,
+        specID = 73,
+    })
+    local restoreTimer = rejectArm(env, 0.5)
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    local lateCallback = restoreTimer()
+    assert(addon.sharedFonts.noticeInitialized and not test.hudPresets.state().welcomeShown,
+        "rejecting the welcome timer must not abort the next bootstrap step")
+    advanceTicker(env, 0.25)
+    assert(not test.hudPresets.state().welcomeShown)
+    advanceTicker(env, 0.25)
+    assert(test.hudPresets.state().welcomeShown, "the welcome remains deferred until the first safe attempt")
+    env.StatsProQuickSetupWelcome:Hide()
+    lateCallback()
+    assert(not test.hudPresets.state().welcomeShown, "the retired welcome callback is harmless")
+end
+print(flavor .. " rejected font and welcome timers recover through the HUD ticker")
+
+do
+    local env, addon = loadStatsPro("enUS", {})
+    env.__fireEvent("PLAYER_ENTERING_WORLD")
+    assert(addon:OpenConfigMenu() ~= false)
+    local picker = addon.settingsUI.fontPicker
+    picker.Show(addon)
+    local function countSettingsFrames()
+        local count = 0
+        for _, frame in ipairs(env.UISpecialFrames) do
+            if frame == "StatsProConfigFrame" then count = count + 1 end
+        end
+        return count
+    end
+    local restoreTimer = rejectArm(env, 0)
+    picker.Hide(addon)
+    local lateCallback = restoreTimer()
+    assert(env.StatsProConfigFrame:IsShown() and countSettingsFrames() == 0,
+        "closing the picker during Escape must not synchronously register its parent")
+    advanceTicker(env, 0)
+    assert(countSettingsFrames() == 1, "a rejected timer still allows Escape to close Settings on the next frame")
+    picker.Show(addon)
+    lateCallback()
+    assert(picker.frame:IsShown() and countSettingsFrames() == 0,
+        "the retired callback does not claim Escape from a reopened picker")
+    restoreTimer = rejectArm(env, 0)
+    picker.Hide(addon)
+    restoreTimer()
+    picker.Show(addon)
+    advanceTicker(env, 0)
+    assert(countSettingsFrames() == 0, "a deferred restore cannot supersede a reopened child")
+end
+print(flavor .. " rejected Escape handoff timer recovery passed")
+
 for _, mode in ipairs({ "preview", "locale", "combat" }) do
     local path = "Interface\\AddOns\\SharedMedia_MyMedia\\fonts\\DelayedLatinFixture.ttf"
     local ready, combat = false, false

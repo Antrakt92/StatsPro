@@ -197,6 +197,46 @@ if forever then
     setMeasure("value", 30, 102)
     render("Intellect:", "", "71.13", 6, "coin", "Repair:")
     equal("next clean reading can resize the value column", test.panelVisualState().mainRenderedValueW, 30)
+
+    -- The last clean measurement may be narrower than the visible combat text.
+    -- Compute the gap from the actual glyph width, rather than the cached width.
+    local function visibleGap(region, measuredGlyphWidth)
+        local edge, _, _, offset = region:GetPoint()
+        local left = edge == "TOPLEFT" and offset or frame:GetWidth() + offset - measuredGlyphWidth
+        return left - test.panelVisualState().mainRenderedLabelW
+    end
+    local settings = test.profileState().settings
+    for _, showRating in ipairs({ true, false }) do
+        settings.showRating = showRating
+        test.cacheSettings()
+        local column = showRating and "value" or "rating"
+        local region = showRating and value or rating
+        local function renderHaste(text)
+            render("Ranged Haste:", showRating and "" or text, showRating and text or "", 1, "coin", "Repair:")
+        end
+        setMeasure("label", 174)
+        setMeasure(column, 44)
+        renderHaste("25.00%")
+        equal(column .. " clean value leaves the full label gap", visibleGap(region, 44), 6)
+        local cleanWidth = frame:GetWidth()
+
+        setMeasure(column, hiddenDimension)
+        renderHaste("(25.00%)")
+        equal(column .. " wider combat text leaves the full label gap", visibleGap(region, 58), 6)
+        equal(column .. " protected measurement keeps the HUD width", frame:GetWidth(), cleanWidth)
+
+        setMeasure(column, 0)
+        renderHaste("(25.00%)")
+        equal(column .. " zero-width combat reading preserves the HUD width", frame:GetWidth(), cleanWidth)
+        equal(column .. " zero-width combat reading leaves the full label gap", visibleGap(region, 58), 6)
+
+        setMeasure(column, 44)
+        renderHaste("25.00%")
+        equal(column .. " leaving combat restores the clean value", region:GetText(), "25.00%")
+        equal(column .. " leaving combat leaves the full label gap", visibleGap(region, 44), 6)
+    end
+    settings.showRating = true
+    test.cacheSettings()
 end
 
 do

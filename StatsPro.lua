@@ -11163,7 +11163,8 @@ end
 -- fallback geometry must not masquerade as clean cache state across content changes.
 local function MeasuredOrCached(fs, current_cache, method, fallback, keepKnownSize)
     local ok, v = pcall(fs[method], fs)
-    if ok and SAFE_NUM.IsCleanFiniteNumber(v) and v >= 0 then
+    -- For a populated Forever number column, zero is not a usable measurement.
+    if ok and SAFE_NUM.IsCleanFiniteNumber(v) and (v > 0 or (v == 0 and not keepKnownSize)) then
         return v, v
     end
     if fallback and (not current_cache or (not keepKnownSize and current_cache < fallback)) then
@@ -11172,14 +11173,17 @@ local function MeasuredOrCached(fs, current_cache, method, fallback, keepKnownSi
     return current_cache, current_cache
 end
 
-function Panel:ApplyColumnOffset(region, key, offset)
-    if self[key] == offset then return end
+function Panel:ApplyColumnOffset(region, key, offset, anchorLeft)
+    local edge = anchorLeft and "LEFT" or "RIGHT"
+    local edgeKey = key .. "Edge"
+    if self[key] == offset and self[edgeKey] == edge then return end
     -- A failed anchor write leaves the old geometry invalid, even if the next
     -- render returns to its previous offset.
     self[key] = nil
     region:ClearAllPoints()
-    region:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", offset, 0)
-    region:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", offset, 0)
+    region:SetPoint("TOP" .. edge, self.frame, "TOP" .. edge, offset, 0)
+    region:SetPoint("BOTTOM" .. edge, self.frame, "BOTTOM" .. edge, offset, 0)
+    self[edgeKey] = edge
     self[key] = offset
 end
 
@@ -11223,17 +11227,20 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     local effectiveFontSize = self.appliedSize or cached.fontSize or GetNumberDB("fontSize")
     local labelW, ratingW, valueW = 0, 0, 0
     local labelH, ratingH, valueH
+    local hasRatingText, hasValueText
     if hasRows then
         local minTextH = lineCount * effectiveFontSize
         -- An empty Forever column can report protected geometry after a combat update.
-        if not addon.forever.enabled or issecretvalue(ratingStr) or (ratingStr and ratingStr ~= "") then
+        hasRatingText = not addon.forever.enabled or issecretvalue(ratingStr) or (ratingStr and ratingStr ~= "")
+        hasValueText = not addon.forever.enabled or issecretvalue(valueStr) or (valueStr and valueStr ~= "")
+        if hasRatingText then
             ratingW, self.cachedRatingW = MeasuredOrCached(
                 self.ratingText, self.cachedRatingW, "GetStringWidth",
                 effectiveFontSize * Panel.SECRET_NUMERIC_WIDTH_UNITS, addon.forever.enabled)
             ratingH, self.cachedRatingH = MeasuredOrCached(
                 self.ratingText, self.cachedRatingH, "GetStringHeight", minTextH)
         end
-        if not addon.forever.enabled or issecretvalue(valueStr) or (valueStr and valueStr ~= "") then
+        if hasValueText then
             valueW, self.cachedValueW = MeasuredOrCached(
                 self.valueText, self.cachedValueW, "GetStringWidth",
                 effectiveFontSize * Panel.SECRET_NUMERIC_WIDTH_UNITS, addon.forever.enabled)
@@ -11377,13 +11384,15 @@ function Panel:SetTextSafe(labelStr, ratingStr, valueStr, lineCount, repairStr, 
     -- Compensate only for the width that repair added to the stat panel.
     local extra = totalW - statWidth
 
-    -- ratingText: shift LEFT by `extra` so right edge stays at "stat-content right edge"
-    -- (frame.right - extra), not frame.right. Without this, when frame is widened for
-    -- coin, ratings track frame.right and create a huge gap between labels and values.
-    self:ApplyColumnOffset(self.ratingText, "lastRatingOffset", -(extra + valueW + rGap))
-
-    -- valueText also pulls back from frame.right when the repair row widens it.
-    self:ApplyColumnOffset(self.valueText, "lastValueOffset", -extra)
+    -- Forever uses one number column. Pin its left edge to the labels so wider combat
+    -- text grows to the right even when the client withholds its current width.
+    local anchorRatingLeft = addon.forever.enabled and hasRatingText and not hasValueText
+    local anchorValueLeft = addon.forever.enabled and hasValueText and not hasRatingText
+    -- Right-anchored columns compensate for width added by the separate repair row.
+    self:ApplyColumnOffset(self.ratingText, "lastRatingOffset",
+        anchorRatingLeft and (labelW + lGap) or -(extra + valueW + rGap), anchorRatingLeft)
+    self:ApplyColumnOffset(self.valueText, "lastValueOffset",
+        anchorValueLeft and (labelW + lGap) or -extra, anchorValueLeft)
 
     self:ApplyWidth(self.frame, "lastFrameWidth", totalW)
 

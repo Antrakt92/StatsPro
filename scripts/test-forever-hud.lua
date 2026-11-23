@@ -830,7 +830,7 @@ do
             GetManaRegen = function()
                 calls = calls + 1
                 if mode == "mixed" then
-                    return calls == 1 and restrictedRegen or nextRestrictedRegen, 0
+                    return calls == 1 and restrictedRegen or nextRestrictedRegen, calls == 1 and 2 or 4
                 end
                 if mode == "failure" then
                     if calls == 2 then error("mana API read failed") end
@@ -866,13 +866,15 @@ do
     rows = renderMana()
     check(calls == 2 and rows["Mana Regen / sec:"] == "7"
         and rows["Mana Regen / 5 sec:"] == "40.00"
-        and rows["Casting Mana Regen / 5 sec:"] == "0.00",
-        "restricted rates render separately while the clean sibling is shared")
+        and rows["Casting Mana Regen / sec:"] == "2.00"
+        and rows["Casting Mana Regen / 5 sec:"] == "10.00",
+        "re-reading a restricted rate does not replace its already rendered clean sibling")
     mode = "failure"
     rows = renderMana()
-    check(calls == 3 and rows["Mana Regen / 5 sec:"] == "?"
-        and rows["Casting Mana Regen / 5 sec:"] == "20.00",
-        "a failed read does not leave a previously sampled clean rate in use")
+    check(calls == 2 and rows["Mana Regen / 5 sec:"] == "?"
+        and rows["Casting Mana Regen / sec:"] == "2.00"
+        and rows["Casting Mana Regen / 5 sec:"] == "10.00",
+        "a failed restricted read cannot erase the sibling's clean value in the current pass")
     mode, normal, casting = nil, math.huge, 0
     rows = renderMana()
     check(calls == 2 and rows["Mana Regen / sec:"] == "?"

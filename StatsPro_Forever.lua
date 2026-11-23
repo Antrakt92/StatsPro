@@ -365,10 +365,7 @@ local function ReadManaRegen(index, sample)
     local fn = _G.GetManaRegen
     local ok, normal, casting
     if type(fn) == "function" then ok, normal, casting = pcall(fn) end
-    if not ok then
-        if sample then sample[1], sample[2] = nil, nil end
-        return nil, "unknown"
-    end
+    if not ok then return nil, "unknown" end
     if not sample then
         if index == 1 then return Classify(normal) end
         return Classify(casting)
@@ -376,9 +373,10 @@ local function ReadManaRegen(index, sample)
 
     local normalValue, normalState = Classify(normal)
     local castingValue, castingState = Classify(casting)
-    -- Keep only clean values from the latest API read in this HUD pass.
-    sample[1] = normalState == "clean" and normalValue or nil
-    sample[2] = castingState == "clean" and castingValue or nil
+    -- Keep the first clean rate for each slot within a HUD pass. Retrying a
+    -- restricted sibling must not change a rate already used by another row.
+    if sample[1] == nil and normalState == "clean" then sample[1] = normalValue end
+    if sample[2] == nil and castingState == "clean" then sample[2] = castingValue end
     if index == 1 then return normalValue, normalState end
     return castingValue, castingState
 end

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.25.1 - 23-Nov-2026 — Gear and Settings recovery
+
+- Refresh durability and repair costs when the game finishes loading equipped items after the initial retries.
+- Restore HUD interactions after dragging if the game fails to start the timer.
+- Recover saved fonts and the font picker after timer failures, and restore Escape navigation when returning to Settings.
+
 ## 1.25.0 - 23-Nov-2026 — More reliable HUD readings
 
 - Keep stat and gear panels updating when a reading or text measurement is temporarily unavailable.

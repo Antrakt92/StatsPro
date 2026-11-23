@@ -12129,7 +12129,7 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero, tool
             else
                 visible = shouldShowUnknown(rowKey, true, hideZero)
             end
-            if visible and state ~= "missing" then
+            if visible then
                 local color = cached.colorStrings[definition.colorKey] or cached.colorStrings.mainStat
                 local valueColor = cached.matchValueColorToStat and color or cached.colorStrings.percentage
                 local label = definition.label
@@ -12164,7 +12164,7 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero, tool
                 elseif definition.kind == "percent" then
                     text, placeholder = SAFE_NUM.FormatColorNumber(valueColor, value, "%.2f%%", "%")
                 else
-                    local format = definition.format or (group == "utility" and "%.2f" or "%d")
+                    local format = group == "utility" and "%.2f" or "%d"
                     text, placeholder = SAFE_NUM.FormatColorNumber(valueColor, value, format .. suffix, suffix)
                 end
                 if placeholder and definition.rememberLastClean then

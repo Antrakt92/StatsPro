@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.25.0 - 23-Nov-2026 — More reliable HUD readings
+
+- Keep stat and gear panels updating when a reading or text measurement is temporarily unavailable.
+- Keep Archon comparisons reliable during combat and while rating columns are hidden.
+- Restore profile updates if a timer fails and keep confirmed realm names while character data loads.
+- Refresh Mythic+ and raid stat targets using Archon data checked on 23 November.
+
 ## 1.24.19 - 22-Nov-2026 — Archon target refresh
 
 - Refresh Archon stat targets for Mythic+ and raids using data checked on 22 November.

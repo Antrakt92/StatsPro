@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.25.3 - 24-Nov-2026 — Stable stat display
+
+- Keep the last reliable stat, durability, or item level reading in the HUD without parentheses when the game temporarily withholds a value. The tooltip still identifies the previous reading.
+
 ## 1.25.2 - 23-Nov-2026 — Combat HUD spacing
 
 - Keep a gap between stat labels and values in combat when a wider value appears, such as a last reliable Ranged Haste reading in parentheses.

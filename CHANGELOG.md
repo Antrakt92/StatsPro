@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.25.2 - 24-Nov-2026 — Archon target refresh
+
+- Refresh Mythic+ and raid stat targets using Archon data checked on 24 November.
+
 ## 1.25.1 - 23-Nov-2026 — Gear and Settings recovery
 
 - Refresh durability and repair costs when the game finishes loading equipped items after the initial retries.

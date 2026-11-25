@@ -55,9 +55,11 @@ for _, forever in ipairs({ false, true }) do
             if frame.scripts and frame.scripts.OnUpdate then frame.scripts.OnUpdate(frame, elapsed) end
         end
     end
+    local rejectedDelay = 0.05
     env.C_Timer.After = function(delay, callback)
-        if delay == 0.05 then error('slider timer unavailable') end
-        return after(delay, callback)
+        if rejectedDelay == 0.05 and delay == rejectedDelay then error('slider timer unavailable') end
+        after(delay, callback)
+        if rejectedDelay == 0 and delay == rejectedDelay then error('resize timer rejected after enqueue') end
     end
     local oldInterval = test.cachedUpdateInterval()
     check(pcall(slider.scripts.OnValueChanged, slider, 0.25), 'first slider move survives rejected scheduling')
@@ -76,14 +78,11 @@ for _, forever in ipairs({ false, true }) do
         reads = reads + 1
         return readHeight(parent)
     end
-    env.C_Timer.After = function(delay, callback)
-        after(delay, callback)
-        if delay == 0 then error('resize timer rejected after enqueue') end
-    end
+    rejectedDelay = 0
     check(pcall(env.__fireEvent, 'DISPLAY_SIZE_CHANGED'), 'viewport resize survives rejected scheduling')
     tick(0.01)
     check(window:GetHeight() < oldHeight, 'ticker applies the latest viewport dimensions')
-    env.C_Timer.After = after
+    rejectedDelay = nil
     local beforeLateTimer = reads
     env.__flushTimers(0)
     check(reads == beforeLateTimer, 'late native callback does not repeat the ticker resize')

@@ -42,6 +42,55 @@ local function fire(control, event)
     for _, hook in ipairs(control.hooks[event] or {}) do hook(control) end
 end
 for _, forever in ipairs({ false, true }) do
+    local env, addon, test = fixtures.loadStatsPro('enUS', {
+        forever = forever, unitGUID = function() return 'Player-SettingsTimer' end,
+        specIndex = 1, specID = 64,
+    })
+    env.__fireEvent('PLAYER_ENTERING_WORLD')
+    addon:OpenConfigMenu()
+    local slider, window = env.StatsProRefreshSlider, addon.settingsUI.frame
+    local after = env.C_Timer.After
+    local function tick(elapsed)
+        for _, frame in pairs(env.__frames) do
+            if frame.scripts and frame.scripts.OnUpdate then frame.scripts.OnUpdate(frame, elapsed) end
+        end
+    end
+    env.C_Timer.After = function(delay, callback)
+        if delay == 0.05 then error('slider timer unavailable') end
+        return after(delay, callback)
+    end
+    local oldInterval = test.cachedUpdateInterval()
+    check(pcall(slider.scripts.OnValueChanged, slider, 0.25), 'first slider move survives rejected scheduling')
+    tick(0.03)
+    check(pcall(slider.scripts.OnValueChanged, slider, 0.8), 'new slider move replaces the rejected scheduling')
+    tick(0.03)
+    check(test.cachedUpdateInterval() == oldInterval, 'superseded slider fallback cannot run before latest grace expires')
+    tick(0.03)
+    check(math.abs(test.cachedUpdateInterval() - 0.8) < 0.001, 'ticker applies the latest saved refresh interval')
+
+    local oldHeight = window:GetHeight()
+    env.UIParent:SetHeight(450)
+    local readHeight = env.UIParent.GetHeight
+    local reads = 0
+    env.UIParent.GetHeight = function(parent)
+        reads = reads + 1
+        return readHeight(parent)
+    end
+    env.C_Timer.After = function(delay, callback)
+        after(delay, callback)
+        if delay == 0 then error('resize timer rejected after enqueue') end
+    end
+    check(pcall(env.__fireEvent, 'DISPLAY_SIZE_CHANGED'), 'viewport resize survives rejected scheduling')
+    tick(0.01)
+    check(window:GetHeight() < oldHeight, 'ticker applies the latest viewport dimensions')
+    env.C_Timer.After = after
+    local beforeLateTimer = reads
+    env.__flushTimers(0)
+    check(reads == beforeLateTimer, 'late native callback does not repeat the ticker resize')
+    env.__flushTimers(0.1)
+    check(window:GetHeight() < oldHeight, 'normal settling pass keeps the recovered viewport dimensions')
+end
+for _, forever in ipairs({ false, true }) do
     local combat = false
     local env, addon, test = fixtures.loadStatsPro('enUS', {
         forever = forever, bundledFonts = true, isKnownFontFile = function() return true end,

@@ -209,6 +209,27 @@ for _, forever in ipairs({ false, true }) do
     leave(first)
     env.__flushTimers(0.2)
     check(applied(settings.font), "actual list exit restores committed font after grace")
+
+    local nativeAfter = env.C_Timer.After
+    for _, source in ipairs({ first, first.favorite }) do
+        enter(source)
+        check(applied(first.fontPath), "row and favorite both preview the font before leaving")
+        env.C_Timer.After = function(delay, callback)
+            if delay ~= 0.06 then return nativeAfter(delay, callback) end
+            if source == first.favorite then nativeAfter(delay, callback) end
+            error("hover timer unavailable")
+        end
+        check(pcall(source.scripts.OnLeave, source), "hover exit tolerates a rejected timer")
+        check(applied(first.fontPath), "ticker recovery preserves the exit grace")
+        for _, frame in pairs(env.__frames) do
+            if frame.scripts and frame.scripts.OnUpdate then frame.scripts.OnUpdate(frame, 0.07) end
+        end
+        check(applied(settings.font), "a rejected hover timer still restores the committed font")
+        env.C_Timer.After = nativeAfter
+        reset()
+        env.__flushTimers(0.1)
+        idle("an enqueued-then-rejected exit does not repeat the ticker restore")
+    end
     picker.Hide(addon)
     picker.Show(addon)
     enter(first)

@@ -12970,9 +12970,15 @@ tickerFrame:SetScript("OnUpdate", function(self, elapsed)
         addon.AdvanceTickerFallback(font, "catalogLocaleTickRetry", elapsed)
     end
     local picker = addon.settingsUI.fontPicker
-    if picker.catalogRefreshTickRetry or picker.pendingFontTickRetry then
+    if picker.catalogRefreshTickRetry or picker.pendingFontTickRetry or picker.hoverExitTickRetry then
         addon.AdvanceTickerFallback(picker, "pendingFontTickRetry", elapsed)
         addon.AdvanceTickerFallback(picker, "catalogRefreshTickRetry", elapsed)
+        addon.AdvanceTickerFallback(picker, "hoverExitTickRetry", elapsed)
+    end
+    local settingsDesign = addon.settingsDesign
+    if settingsDesign.updateIntervalTickRetry or settingsDesign.responsiveFrameSizeTickRetry then
+        addon.AdvanceTickerFallback(settingsDesign, "updateIntervalTickRetry", elapsed)
+        addon.AdvanceTickerFallback(settingsDesign, "responsiveFrameSizeTickRetry", elapsed)
     end
     if addon.hudPresets.welcomeTickRetry then
         addon.AdvanceTickerFallback(addon.hudPresets, "welcomeTickRetry", elapsed)
@@ -15688,7 +15694,7 @@ local coalesceGenerations = {}
 local function RunCoalesced(key, delay, fn)
     coalesceGenerations[key] = (coalesceGenerations[key] or 0) + 1
     local generation = coalesceGenerations[key]
-    C_Timer.After(delay, function()
+    addon.settingsDesign[key .. "TickRetry"] = addon.ArmTickerFallback(delay, function()
         if coalesceGenerations[key] == generation then
             fn()
         end
@@ -20174,6 +20180,15 @@ function addon.settingsUI.fontPicker.CancelPreview(self, force)
     return restored and configRestored
 end
 
+function addon.settingsUI.fontPicker.ScheduleHoverExit(self)
+    local picker = self.settingsUI.fontPicker
+    local generation = picker.hoverGeneration
+    -- Leave a brief gap between rows without restoring the committed font.
+    picker.hoverExitTickRetry = addon.ArmTickerFallback(0.06, function()
+        if generation == picker.hoverGeneration then picker.CancelPreview(self) end
+    end)
+end
+
 function addon.settingsUI.fontPicker.Pick(self, font)
     local picker = self.settingsUI.fontPicker
     if not self.fontRuntime.canMutateDB(true) then return false end
@@ -20258,6 +20273,7 @@ function addon.settingsUI.fontPicker.BuildFrame(self)
         -- Settings teardown. Invalidate every delayed pending-file retry first.
         picker.retryGeneration = picker.retryGeneration + 1
         picker.hoverGeneration = picker.hoverGeneration + 1
+        picker.hoverExitTickRetry = nil
         self.profileUI.RemoveSpecialFrame("StatsProFontPicker")
         if picker.catcher then picker.catcher:Hide() end
         local trigger = picker.dropdown and picker.dropdown.statsProTrigger
@@ -20360,10 +20376,7 @@ function addon.settingsUI.fontPicker.Populate(self, centerSelection)
                 picker.Preview(self, button.fontPath)
             end)
             star:SetScript("OnLeave", function()
-                local generation = picker.hoverGeneration
-                C_Timer.After(0.06, function()
-                    if generation == picker.hoverGeneration then picker.CancelPreview(self) end
-                end)
+                picker.ScheduleHoverExit(self)
             end)
             self.settingsDesign.RegisterMutationControl(star)
             self.settingsDesign.HookControl(star)
@@ -20384,12 +20397,7 @@ function addon.settingsUI.fontPicker.Populate(self, centerSelection)
                 end
             end)
             button:SetScript("OnLeave", function()
-                local generation = picker.hoverGeneration
-                -- Give the pointer a short exit grace across row gaps. Enter still
-                -- previews synchronously; only restoring the saved face waits.
-                C_Timer.After(0.06, function()
-                    if generation == picker.hoverGeneration then picker.CancelPreview(self) end
-                end)
+                picker.ScheduleHoverExit(self)
             end)
             button:SetScript("OnClick", function(target)
                 if picker.Pick(self, { name = target.fontName, path = target.fontPath }) then

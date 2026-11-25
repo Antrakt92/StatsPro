@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.25.3 - 25-Nov-2026 — Archon target refresh
+
+- Refreshed Retail Archon stat targets for Mythic+ and Normal, Heroic, and Mythic raids.
+
 ## 1.25.2 - 24-Nov-2026 — Archon target refresh
 
 - Refresh Mythic+ and raid stat targets using Archon data checked on 24 November.

@@ -174,6 +174,28 @@ equal("changed geometry exercises native failure", rendered, false)
 setMeasure("repair", 140)
 render("", "", "", 0, "coin", "Repair:")
 equal("partial anchor failure can recover prior geometry", select(4, rating:GetPoint()), oldRatingOffset)
+
+do
+    local targets = { false, { statKey = "crit" } }
+    setMeasure("label", 75, 28)
+    render("Strength:\nCrit:", "40\n10%", "", 2, nil, nil, targets)
+    local overlay
+    for _, child in ipairs({ frame:GetChildren() }) do
+        if child.statsProTargetMeta == targets[2] then overlay = child end
+    end
+    assert(overlay, "the second row must have a hover overlay")
+    local previousOffset = select(5, overlay:GetPoint())
+    local setHeight = overlay.SetHeight
+    overlay.SetHeight = function() error("fixture native hover height failure") end
+    setMeasure("label", 75, 40)
+    local ok = pcall(render, "Strength:\nCrit:", "40\n10%", "", 2, nil, nil, targets)
+    equal("partial row sizing failure reaches the caller", ok, false)
+    overlay.SetHeight = setHeight
+    setMeasure("label", 75, 28)
+    render("Strength:\nCrit:", "40\n10%", "", 2, nil, nil, targets)
+    equal("hover overlay returns to its previous row after failed resize", select(5, overlay:GetPoint()), previousOffset)
+end
+
 if forever then
     setMeasure("label", 174, 102)
     setMeasure("rating", 0, 102)

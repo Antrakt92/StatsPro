@@ -11130,6 +11130,8 @@ function Panel:ApplyTooltipRows(targetRows, lineCount)
             end
             local previousMeta = overlay.statsProTargetMeta
             if overlay.statsProRowHeight ~= rowHeight then
+                -- A partial native resize must invalidate the previous anchors.
+                overlay.statsProRowHeight = nil
                 overlay:ClearAllPoints()
                 overlay:SetPoint("TOPLEFT", self.frame, "TOPLEFT", 0, -((i - 1) * rowHeight))
                 overlay:SetPoint("RIGHT", self.frame, "RIGHT", 0, 0)

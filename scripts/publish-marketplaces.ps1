@@ -18,8 +18,6 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "marketplace-version-contract.ps1")
 $Flavor = ConvertTo-StatsProMarketplaceFlavor -Value $Flavor
 
-$ExpectedProjectIds = Get-StatsProExpectedMarketplaceProjectIdMap
-
 function Assert-ArchiveIdentity {
     param([string]$Path, [string]$Tag, [string]$Sha256, [ValidateSet('Retail', 'Forever')][string]$Flavor = 'Retail')
 
@@ -101,16 +99,7 @@ function Get-TocUploadContract {
     if (-not [System.StringComparer]::Ordinal.Equals("v$version", $Tag)) {
         throw "Packaged TOC version '$version' does not match release tag '$Tag'."
     }
-    $ids = [ordered]@{
-        CurseForge = Get-SingleTocValue -Text $text -Key 'X-Curse-Project-ID' -Pattern '^\d+$'
-        Wago = Get-SingleTocValue -Text $text -Key 'X-Wago-ID' -Pattern '^[A-Za-z0-9]{8}$'
-    }
-    if ($Flavor -ieq 'Retail') { $ids.WowInterface = Get-SingleTocValue -Text $text -Key 'X-WoWI-ID' -Pattern '^\d+$' }
-    foreach ($name in $ids.Keys) {
-        if (-not [System.StringComparer]::Ordinal.Equals($ids[$name], $ExpectedProjectIds[$name])) {
-            throw "Packaged TOC $name project ID '$($ids[$name])' is not the configured StatsPro project."
-        }
-    }
+    $ids = Get-StatsProMarketplaceProjectIdsFromToc -Text $text -Flavor $Flavor
     $interfaceMatches = [regex]::Matches($text, '^##\s+Interface:\s*(.+?)\s*$', [System.Text.RegularExpressions.RegexOptions]::Multiline)
     if ($interfaceMatches.Count -ne 1) {
         throw "Packaged TOC must contain exactly one Interface line."

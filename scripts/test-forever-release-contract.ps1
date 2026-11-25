@@ -86,6 +86,9 @@ try {
     $toc = [System.IO.File]::ReadAllText($tocPath)
     $toc = [regex]::Replace($toc, '(?m)^## Version:[^\r\n]+', '## Version: 1.18.1')
     $toc = [regex]::Replace($toc, '(?m)^## IconTexture:[^\r\n]+', '## IconTexture: Interface\AddOns\StatsPro\textures\forever-logo.png')
+    $tocWithoutMarketplaceIds = [regex]::Replace($toc, '(?m)^## X-(?:Curse-Project-ID|Wago-ID):[^\r\n]*(?:\r?\n|$)', '')
+    [System.IO.File]::WriteAllText($tocPath, $tocWithoutMarketplaceIds)
+    Assert-ForeverTestRejected { Get-StatsProForeverReleaseContract $fixture 'forever-v1.18.1' } 'exactly one X-Curse-Project-ID'
     [System.IO.File]::WriteAllText($tocPath, $toc)
     $history = "## 1.18.0 - 13-Oct-2026 — Forever beta`n`n- Original beta changes.`n`n## 1.17.21 - 12-Oct-2026 — Earlier`n`n- Earlier history.`n"
     [System.IO.File]::WriteAllText((Join-Path $fixture 'CHANGELOG.md'), "# Changelog`n`n$history")

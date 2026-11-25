@@ -27,6 +27,38 @@ function Get-StatsProExpectedMarketplaceProjectIdMap {
     }
 }
 
+function Get-RequiredTocMetadataValue {
+    param([string]$TocText, [string]$Key, [string]$ExpectedValue, [string]$ValuePattern)
+
+    $pattern = '(?mi)^##[ \t]+' + [regex]::Escape($Key) + '[ \t]*:[ \t]*([^\r\n]*)'
+    $matches = [regex]::Matches($TocText, $pattern)
+    if ($matches.Count -ne 1) {
+        throw "TOC must contain exactly one $Key value; found $($matches.Count)."
+    }
+    $value = $matches[0].Groups[1].Value.Trim()
+    if ($value -cnotmatch $ValuePattern) {
+        throw "TOC $Key value has an invalid format."
+    }
+    if ($value -cne $ExpectedValue) {
+        throw "TOC $Key must identify the configured StatsPro project '$ExpectedValue'."
+    }
+    return $value
+}
+
+function Get-StatsProMarketplaceProjectIdsFromToc {
+    param([string]$Text, [ValidateSet('Retail', 'Forever')][string]$Flavor = 'Retail')
+
+    $expected = Get-StatsProExpectedMarketplaceProjectIdMap
+    $ids = [ordered]@{
+        CurseForge = Get-RequiredTocMetadataValue -TocText $Text -Key 'X-Curse-Project-ID' -ExpectedValue $expected.CurseForge -ValuePattern '^[0-9]+$'
+        Wago = Get-RequiredTocMetadataValue -TocText $Text -Key 'X-Wago-ID' -ExpectedValue $expected.Wago -ValuePattern '^[A-Za-z0-9]{8}$'
+    }
+    if ($Flavor -ieq 'Retail') {
+        $ids.WowInterface = Get-RequiredTocMetadataValue -TocText $Text -Key 'X-WoWI-ID' -ExpectedValue $expected.WowInterface -ValuePattern '^[0-9]+$'
+    }
+    return $ids
+}
+
 function Get-StatsProAcceptedMarketplaceVersions {
     param(
         [Parameter(Mandatory = $true)]

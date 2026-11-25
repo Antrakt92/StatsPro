@@ -1,5 +1,6 @@
 . (Join-Path $PSScriptRoot 'release-tag-contract.ps1')
 . (Join-Path $PSScriptRoot 'native-process.ps1')
+. (Join-Path $PSScriptRoot 'marketplace-version-contract.ps1')
 # The package checker is also an executable script. Its parameter block must
 # not replace the manager's supplied archive or mode switches during import.
 $foreverLibraryParameterSnapshot = @{}
@@ -110,6 +111,7 @@ function Get-StatsProForeverReleaseContract {
     $version = $packageTag.Substring(1)
     $toc = [System.IO.File]::ReadAllText((Join-Path $root 'StatsPro_Forever.toc'))
     Assert-ForeverToc -Text $toc -Version $version
+    [void](Get-StatsProMarketplaceProjectIdsFromToc -Text $toc -Flavor Forever)
     $retail = [System.IO.File]::ReadAllText((Join-Path $root 'StatsPro.toc'))
     $retailMatches = [regex]::Matches($retail, '(?m)^## Version:[ \t]*([^\r\n]+)')
     if ($retailMatches.Count -ne 1) { throw 'Retail TOC version is ambiguous' }

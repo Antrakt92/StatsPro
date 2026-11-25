@@ -11,6 +11,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "third-party-contract.ps1")
 . (Join-Path $PSScriptRoot "release-tag-contract.ps1")
 . (Join-Path $PSScriptRoot "saved-variables-contract.ps1")
+. (Join-Path $PSScriptRoot "marketplace-version-contract.ps1")
 
 function Assert-TocBrandContract {
     param([string]$TocPath)
@@ -439,7 +440,9 @@ function Assert-RepoForeverRuntimeContract {
         param([string]$Source)
         . (Join-Path $PSScriptRoot "test-forever-package.ps1") -LibraryOnly
         $path = Join-Path $Source "StatsPro_Forever.toc"
-        Assert-ForeverToc ([IO.File]::ReadAllText($path)) (Get-ForeverSourceVersion $Source)
+        $text = [IO.File]::ReadAllText($path)
+        Assert-ForeverToc $text (Get-ForeverSourceVersion $Source)
+        [void](Get-StatsProMarketplaceProjectIdsFromToc -Text $text -Flavor Forever)
     } $Root
 }
 
@@ -1073,6 +1076,7 @@ try {
     Assert-PathExists "TOC IconTexture target" $IconRef.FullPath
 
     Assert-TocBrandContract -TocPath $contract.TocPath
+    [void](Get-StatsProMarketplaceProjectIdsFromToc -Text ([IO.File]::ReadAllText($contract.TocPath)))
     $foreverTocPath = Join-Path $RepoRoot 'StatsPro_Forever.toc'
     Assert-PathExists 'Forever TOC brand metadata' $foreverTocPath
     Assert-TocBrandContract -TocPath $foreverTocPath

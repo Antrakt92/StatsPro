@@ -10,42 +10,11 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "release-check-contract.ps1")
 . (Join-Path $PSScriptRoot "marketplace-version-contract.ps1")
 
-$ExpectedMarketplaceProjectIds = Get-StatsProExpectedMarketplaceProjectIdMap
-
-function Get-RequiredTocMetadataValue {
-    param(
-        [string]$TocText,
-        [string]$Key,
-        [string]$ExpectedValue,
-        [string]$ValuePattern
-    )
-
-    $matches = [regex]::Matches(
-        $TocText,
-        "^##\s+" + [regex]::Escape($Key) + ":\s*(\S+)\s*$",
-        [System.Text.RegularExpressions.RegexOptions]::Multiline)
-    if ($matches.Count -ne 1) {
-        throw "TOC must contain exactly one $Key value; found $($matches.Count)."
-    }
-    $value = $matches[0].Groups[1].Value
-    if ($value -notmatch $ValuePattern) {
-        throw "TOC $Key value has an invalid format."
-    }
-    if (-not [System.StringComparer]::Ordinal.Equals($value, $ExpectedValue)) {
-        throw "TOC $Key must identify the configured StatsPro project '$ExpectedValue'."
-    }
-    return $value
-}
-
 function Get-MarketplaceProjectIds {
     param([string]$Path)
 
     $tocText = Get-Content -LiteralPath (Resolve-Path $Path).Path -Raw -Encoding UTF8
-    return [ordered]@{
-        CurseForge = Get-RequiredTocMetadataValue -TocText $tocText -Key "X-Curse-Project-ID" -ExpectedValue $ExpectedMarketplaceProjectIds.CurseForge -ValuePattern '^\d+$'
-        Wago = Get-RequiredTocMetadataValue -TocText $tocText -Key "X-Wago-ID" -ExpectedValue $ExpectedMarketplaceProjectIds.Wago -ValuePattern '^[A-Za-z0-9]{8}$'
-        WowInterface = Get-RequiredTocMetadataValue -TocText $tocText -Key "X-WoWI-ID" -ExpectedValue $ExpectedMarketplaceProjectIds.WowInterface -ValuePattern '^\d+$'
-    }
+    return Get-StatsProMarketplaceProjectIdsFromToc -Text $tocText
 }
 
 function Get-RequiredMarketplaceCredentials {
@@ -400,6 +369,12 @@ function Invoke-SelfTest {
             -ExpectedValue "EGPemEN1" `
             -ValuePattern '^[A-Za-z0-9]{8}$')
     } "exactly one X-Wago-ID"
+    Assert-ThrowsMatch "empty duplicate marketplace ID rejected" {
+        [void](Get-StatsProMarketplaceProjectIdsFromToc -Text ($tocFixture + "`n## x-wago-id:"))
+    } "exactly one X-Wago-ID"
+    Assert-ThrowsMatch "missing Retail marketplace ID rejected" {
+        [void](Get-StatsProMarketplaceProjectIdsFromToc -Text ($tocFixture -replace 'X-Curse-Project-ID', 'Other'))
+    } "exactly one X-Curse-Project-ID"
     Assert-ThrowsMatch "wrong marketplace ID rejected" {
         [void](Get-RequiredTocMetadataValue `
             -TocText "## X-WoWI-ID: 99999" `

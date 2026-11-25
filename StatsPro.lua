@@ -12977,6 +12977,9 @@ tickerFrame:SetScript("OnUpdate", function(self, elapsed)
     if addon.hudPresets.welcomeTickRetry then
         addon.AdvanceTickerFallback(addon.hudPresets, "welcomeTickRetry", elapsed)
     end
+    if addon.selfTest and addon.selfTest.windowTickRetry then
+        addon.AdvanceTickerFallback(addon.selfTest, "windowTickRetry", elapsed)
+    end
     local specialFrameRestores = addon.profileUI.specialFrameTickRestores
     if specialFrameRestores then
         addon.profileUI.specialFrameTickRestores = nil
@@ -23091,6 +23094,7 @@ function addon.selfTest.Reset()
     addon.selfTest.recovered = false
     addon.selfTest.deferredWindow = false
     addon.selfTest.windowRetryToken = nil
+    addon.selfTest.windowTickRetry = nil
     addon.selfTest.env = nil
     addon.selfTest.report = nil
     addon.selfTest.pendingText = nil
@@ -23285,6 +23289,7 @@ end
 function addon.selfTest.ResumeDeferredWindow(attempt)
     local guided = addon.selfTest
     guided.windowRetryToken = nil
+    guided.windowTickRetry = nil
     if not guided.deferredWindow then return end
     local _, reason = guided.ShowWindow()
     attempt = (attempt or 0) + 1
@@ -23298,7 +23303,7 @@ function addon.selfTest.ScheduleDeferredWindow(delay, attempt)
     if not guided.deferredWindow then return end
     local token = {}
     guided.windowRetryToken = token
-    C_Timer.After(delay, function()
+    guided.windowTickRetry = addon.ArmTickerFallback(delay, function()
         if guided.windowRetryToken == token then guided.ResumeDeferredWindow(attempt) end
     end)
 end

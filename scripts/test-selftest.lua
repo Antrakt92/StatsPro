@@ -236,6 +236,37 @@ for _, forever in ipairs({ false, true }) do
     combat = false
     env.__fireEvent("PLAYER_REGEN_ENABLED")
     assert(not guided.deferredWindow, "later combat end can resume the deferred report")
+
+    assert(guided.Start())
+    combat = true
+    env.__fireEvent("PLAYER_REGEN_DISABLED")
+    guided.Finish("timeout")
+    local schedule = env.C_Timer.After
+    local pending
+    env.C_Timer.After = function(_, callback)
+        pending = callback
+        error("timer rejected after enqueuing")
+    end
+    assert(pcall(guided.OnCombatEnd), "a rejected deferred-report timer cannot abort combat-end handling")
+    env.C_Timer.After = schedule
+    local ticker
+    for _, frame in ipairs(env.__frames) do
+        if frame.scripts and frame.scripts.OnUpdate then ticker = frame; break end
+    end
+    assert(ticker and pending and guided.deferredWindow)
+    combat = false
+    ticker.scripts.OnUpdate(ticker, 0.11)
+    assert(not guided.deferredWindow and not guided.windowRetryToken,
+        "the HUD ticker opens the deferred report after the failed timer")
+    local shown = env.StaticPopup_Show
+    local showCount = 0
+    env.StaticPopup_Show = function(...)
+        showCount = showCount + 1
+        return shown(...)
+    end
+    pending()
+    env.StaticPopup_Show = shown
+    assert(showCount == 0, "the obsolete timer must not reopen the report")
 end
 
 for _, forever in ipairs({ false, true }) do

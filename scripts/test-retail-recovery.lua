@@ -1640,7 +1640,7 @@ for _, kind in ipairs(forever and { "Movement", "MP5" } or { "Movement" }) do
     print(flavor .. " " .. kind .. " protected formatter recovery regressions passed")
 end
 
--- Native formatting failure must preserve each row's unknown-value unit.
+-- Native formatting failure preserves either the previous reading or the unknown-value unit.
 do
     local secretSpeed, speed, combat = {}, 7, false
     local function getUnitSpeed() return 0, speed, 0, 0 end
@@ -1677,10 +1677,17 @@ do
         "parry has a clean percentage before combat")
     speed, combat = secretSpeed, true
     env.__fireEvent("PLAYER_REGEN_DISABLED")
-    assert(displayedStat("splitTertiary", "Movement"):find("?%", 1, true),
-        flavor .. ": protected movement formatting failure preserves the percentage placeholder")
-    assert(displayedStat("splitDefensive", "Parry"):find("?%", 1, true),
-        flavor .. ": protected parry formatting failure preserves the percentage placeholder")
+    assert(displayedStat("splitTertiary", "Movement"):find(forever and "100%" or "?%", 1, true),
+        flavor .. ": protected movement formatting failure keeps the previous reading when supported")
+    assert(displayedStat("splitDefensive", "Parry"):find(forever and "5.00%" or "?%", 1, true),
+        flavor .. ": protected parry formatting failure keeps the previous reading when supported")
+    if forever then
+        env.__fireEvent("PLAYER_EQUIPMENT_CHANGED")
+        assert(displayedStat("splitTertiary", "Movement"):find("?%", 1, true),
+            "Forever cold protected movement preserves the percentage placeholder")
+        assert(displayedStat("splitDefensive", "Parry"):find("?%", 1, true),
+            "Forever cold protected parry preserves the percentage placeholder")
+    end
 end
 
 -- A failed hidden FontString stays retired. The next combat gets one fresh

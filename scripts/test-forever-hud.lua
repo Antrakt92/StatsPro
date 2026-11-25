@@ -73,30 +73,44 @@ check(#addon.archonTargets.GetAvailableSnapshotOptions() == 0, "no Archon snapsh
 check(addon.archonTargets.GetSnapshot("MAGE", "frost") == nil, "no Archon lookup")
 do
     local available = true
+    local speedAvailable, inCombat = true, false
+    local runSpeed = 7
+    local crit, strength = 5, 48
+    local secretCrit, nextSecretCrit = {}, {}
+    local critFormatterAvailable = false
     local swimming, falling = false, false
     local movementReads = 0
     local moveEnv, moveAddon, moveTest = fixtures.loadStatsPro("enUS", {
         forever = true,
         unitGUID = function() return "Player-Forever-UnknownUnits" end,
+        inCombatLockdown = function() return inCombat end,
+        issecretvalue = function(value) return value == secretCrit or value == nextSecretCrit end,
+        setFormattedText = function() error("native number formatter unavailable") end,
+        roundToNearestString = function(value)
+            if not critFormatterAvailable then error("rounding formatter unavailable") end
+            return value == secretCrit and "7" or "8"
+        end,
         foreverAPIs = {
             GetUnitSpeed = function()
                 movementReads = movementReads + 1
-                return 7, 7, 14, 4.9
+                if speedAvailable then return 7, runSpeed, 14, 4.9 end
             end,
             IsSwimming = function() return swimming end,
             IsFalling = function() return falling end,
             UnitOnTaxi = function() if available then return false end end,
-            GetCritChance = function() if available then return 5 end end,
+            GetCritChance = function() if available then return crit end end,
+            UnitStat = function() if available then return strength, strength end end,
             GetManaRegen = function() if available then return 6, 1 end end,
         },
     })
     moveEnv.__fireEvent("PLAYER_ENTERING_WORLD")
     local moveSettings = moveTest.profileState().settings
-    moveSettings.showMeleeCrit, moveSettings.showManaRegenMP5 = true, true
+    moveSettings.showStrength, moveSettings.showMeleeCrit = true, true
+    moveSettings.showManaRegenMP5, moveSettings.showCastingManaRegenMP5 = true, false
     moveTest.cacheSettings()
-    local function valueFor(group, label)
+    local function valueFor(group, label, showUnknown)
         local labels, ratings, values = {}, {}, {}
-        moveAddon.forever.BuildLines(group, labels, ratings, values, true)
+        moveAddon.forever.BuildLines(group, labels, ratings, values, not showUnknown)
         for index, text in ipairs(labels) do
             if text:find(label, 1, true) then return ratings[index] .. values[index] end
         end
@@ -104,12 +118,62 @@ do
     end
     check(valueFor("utility", "Movement Speed"):find("100%", 1, true), "movement starts at a clean percentage")
     check(valueFor("offensive", "Melee Crit"):find("5.00%", 1, true), "crit starts at a clean percentage")
+    check(valueFor("character", "Strength"):find("48", 1, true), "strength starts at a clean value")
     check(valueFor("utility", "Mana Regen / 5 sec"):find("30.00", 1, true), "MP5 starts at a clean rate")
+    crit = secretCrit
+    check(valueFor("offensive", "Melee Crit"):find("5.00%", 1, true), "an unrenderable protected crit keeps the prior value")
+    critFormatterAvailable = true
+    check(valueFor("offensive", "Melee Crit"):find("7%", 1, true), "renderable protected crit takes priority")
+    crit = nextSecretCrit
+    check(valueFor("offensive", "Melee Crit"):find("8%", 1, true), "a second protected crit still updates immediately")
+    runSpeed = -1
+    check(valueFor("utility", "Movement Speed"):find("100%", 1, true),
+        "a negative raw speed cannot overwrite a usable speed percentage")
+    runSpeed = 1e308
+    check(valueFor("utility", "Movement Speed"):find("100%", 1, true),
+        "a speed percentage that overflows cannot overwrite the last usable value")
+    runSpeed = 7
+    speedAvailable = false
+    check(valueFor("utility", "Movement Speed"):find("100%", 1, true), "an unreadable speed keeps the confirmed ground rate")
+    swimming = true
+    check(valueFor("utility", "Movement Speed", true):find("?%", 1, true), "an unreadable swim rate cannot reuse ground speed")
+    swimming = false
+    check(valueFor("utility", "Movement Speed", true):find("?%", 1, true), "returning to ground cannot revive its old snapshot")
+    speedAvailable = true
+    check(valueFor("utility", "Movement Speed"):find("100%", 1, true), "movement recovers a clean speed")
     available = false
-    check(valueFor("utility", "Movement Speed"):find("?%", 1, true), "unknown movement retains the percentage unit")
-    check(valueFor("offensive", "Melee Crit"):find("?%", 1, true), "unknown crit retains the percentage unit")
-    local unknownMP5 = valueFor("utility", "Mana Regen / 5 sec")
-    check(unknownMP5:find("?", 1, true) and not unknownMP5:find("%", 1, true), "unknown MP5 retains its time unit")
+    check(valueFor("utility", "Movement Speed", true):find("?%", 1, true), "unknown movement mode cannot keep a ground rate")
+    check(valueFor("offensive", "Melee Crit"):find("5.00%", 1, true), "unreadable crit keeps the previous number")
+    check(valueFor("character", "Strength"):find("48", 1, true), "unreadable strength keeps the previous number")
+    check(valueFor("utility", "Mana Regen / 5 sec"):find("30.00", 1, true), "unreadable MP5 keeps the previous resting rate")
+    available, speedAvailable = true, false
+    check(valueFor("utility", "Movement Speed", true):find("?%", 1, true),
+        "returning from an unknown mode does not revive its previous ground speed")
+    available, speedAvailable = false, true
+
+    inCombat = true
+    moveEnv.__fireEvent("PLAYER_REGEN_DISABLED")
+    local unknownMP5 = valueFor("utility", "Mana Regen / 5 sec", true)
+    check(unknownMP5:find("?", 1, true) and not unknownMP5:find("%", 1, true),
+        "unreadable casting MP5 does not reuse resting MP5")
+    available, crit, strength = true, 0, 50
+    check(valueFor("utility", "Mana Regen / 5 sec"):find("5.00", 1, true), "clean casting MP5 takes priority")
+    check(valueFor("offensive", "Melee Crit") == "", "clean zero follows Hide Zero")
+    crit = secretCrit
+    check(valueFor("offensive", "Melee Crit") == "", "protected crit preserves the last clean zero for Hide Zero")
+    check(valueFor("offensive", "Melee Crit", true):find("7%", 1, true), "disabling Hide Zero exposes the protected live crit")
+    critFormatterAvailable = false
+    check(valueFor("offensive", "Melee Crit", true):find("0.00%", 1, true),
+        "unrenderable protected crit still reuses a confirmed zero")
+    check(valueFor("character", "Strength"):find("50", 1, true), "new strength replaces its prior sample")
+    available = false
+    check(valueFor("utility", "Mana Regen / 5 sec"):find("5.00", 1, true), "unreadable casting MP5 reuses the casting sample")
+    check(valueFor("offensive", "Melee Crit") == "", "unreadable crit preserves a confirmed zero")
+    inCombat = false
+    moveEnv.__fireEvent("PLAYER_REGEN_ENABLED")
+    check(valueFor("utility", "Mana Regen / 5 sec"):find("30.00", 1, true), "leaving combat returns to the resting sample")
+    moveEnv.__fireEvent("PLAYER_EQUIPMENT_CHANGED", 1)
+    check(valueFor("character", "Strength", true):find("?", 1, true), "a gear change clears the scalar fallback")
 
     available = true
     for _, visibilityKey in ipairs({ "showMovementSpeed", "showTertiary", "isVisible" }) do
@@ -871,15 +935,15 @@ do
         "re-reading a restricted rate does not replace its already rendered clean sibling")
     mode = "failure"
     rows = renderMana()
-    check(calls == 2 and rows["Mana Regen / 5 sec:"] == "?"
+    check(calls == 2 and rows["Mana Regen / 5 sec:"] == "45.00"
         and rows["Casting Mana Regen / sec:"] == "2.00"
         and rows["Casting Mana Regen / 5 sec:"] == "10.00",
-        "a failed restricted read cannot erase the sibling's clean value in the current pass")
+        "a failed read keeps the prior MP5 and the sibling's clean value in the current pass")
     mode, normal, casting = nil, math.huge, 0
     rows = renderMana()
-    check(calls == 2 and rows["Mana Regen / sec:"] == "?"
-        and rows["Mana Regen / 5 sec:"] == "?" and rows["Casting Mana Regen / 5 sec:"] == "0.00",
-        "nonfinite rates are never stored as clean samples")
+    check(calls == 2 and rows["Mana Regen / sec:"] == "9.00"
+        and rows["Mana Regen / 5 sec:"] == "45.00" and rows["Casting Mana Regen / 5 sec:"] == "0.00",
+        "nonfinite rates do not replace the stored clean samples")
     local single = sampleTest.profileState().settings
     single.showManaRegen, single.showCastingManaRegen, single.showCastingManaRegenMP5 = false, false, false
     sampleTest.cacheSettings()
@@ -946,9 +1010,9 @@ end
 check(foundSpirit, "Forever Spirit checkbox exists")
 check(foundUtility, "utility section controls exist")
 check(not foundArchon, "Archon Settings control absent")
-local help = "Parentheses show the last reliable value. A dash means no reliable value is available."
+local help = "When the game withholds a stat, the HUD keeps its last reliable value. A dash means no reliable reading is available."
 local _, compoundDetail = env.StatsProForeverMeleeHit.statsProTooltipProvider(env.StatsProForeverMeleeHit)
-check(compoundDetail == help, "compound tooltip explains both display markers")
+check(compoundDetail == help, "compound tooltip explains the last reliable value and the dash")
 for _, group in ipairs({ "offensive", "defensive", "utility" }) do
     local master = env["StatsProForever" .. group .. "Master"]
     local row = addon.forever.rows[group][1]

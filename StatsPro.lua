@@ -12111,10 +12111,10 @@ function addon.forever.ReadHUDRow(definition, sample)
     return definition.Read(sample)
 end
 
-addon.forever.lastCleanCompoundValues = {}
+addon.forever.lastCleanValues = {}
 
-function addon.forever.InvalidateCompoundStats()
-    addon.forever.lastCleanCompoundValues = {}
+function addon.forever.InvalidateStatValues()
+    addon.forever.lastCleanValues = {}
     addon.forever.ResetAttackPowerParity()
 end
 
@@ -12130,32 +12130,46 @@ function addon.forever.ReadCompoundForm()
     end
 end
 
+function addon.forever.FormatHUDValue(definition, group, color, value, suffix)
+    if definition.kind == "movement" then
+        if issecretvalue(value) then
+            local _, formatted, hasFormatted = addon.movementRuntime.ResolvePercent(value)
+            if hasFormatted then return "|cff" .. color .. formatted .. "|r" end
+        else
+            return SAFE_NUM.FormatColorNumber(color, math.floor(value + 0.5), "%.0f%%")
+        end
+    elseif definition.kind == "percent" then
+        return SAFE_NUM.FormatColorNumber(color, value, "%.2f%%", "%")
+    else
+        local format = group == "utility" and "%.2f" or "%d"
+        return SAFE_NUM.FormatColorNumber(color, value, format .. suffix, suffix)
+    end
+end
+
 function addon.forever.BuildLines(group, labels, ratings, values, hideZero, tooltipRows)
     local shareSample = group == "offensive" or (group == "utility" and cached.shareManaRegenSample)
     local sample = shareSample and {} or nil
     for _, definition in ipairs(addon.forever.rows[group]) do
         if cached[definition.showKey] then
             local value, state, visibilitySuffix, detail = addon.forever.ReadHUDRow(definition, sample)
-            local rowKey = "forever:" .. definition.key .. (visibilitySuffix or "")
-            local fallback
-            if definition.rememberLastClean then
-                if state == "clean" then addon.forever.lastCleanCompoundValues[rowKey] = value end
-                fallback = addon.forever.lastCleanCompoundValues[rowKey]
+            local isMovement = definition.kind == "movement"
+            local rowKey = "forever:" .. definition.key .. (not isMovement and visibilitySuffix or "")
+            local lastClean = addon.forever.lastCleanValues
+            if isMovement and addon.forever.lastMovementMode ~= visibilitySuffix then
+                lastClean[rowKey] = nil
+                addon.forever.lastMovementMode = visibilitySuffix
             end
-            local visible
-            if definition.rememberLastClean then
-                -- Use the same context-bound sample for Hide Zero and fallback.
-                visible = not hideZero or (fallback ~= nil and fallback ~= 0)
-                    or (state == "secret" and fallback == nil)
-            elseif state == "clean" then
-                cached.cleanRowVisibility[rowKey] = value ~= 0
-                visible = not hideZero or cached.cleanRowVisibility[rowKey]
-            elseif state == "secret" then
-                -- On a cold start there is no clean zero to justify hiding a live value.
-                visible = not hideZero or cached.cleanRowVisibility[rowKey] ~= false
-            else
-                visible = shouldShowUnknown(rowKey, true, hideZero)
+            if isMovement and state == "clean" then
+                -- Cache only a usable percentage. Clean raw speeds can be
+                -- negative or overflow when scaled.
+                value = addon.movementRuntime.ResolvePercent(value)
+                if not SAFE_NUM.IsCleanFiniteNumber(value) then state = "unknown" end
             end
+            if state == "clean" then lastClean[rowKey] = value end
+            local fallback = lastClean[rowKey]
+            -- A protected value may render live. Only a prior clean zero can hide it.
+            local visible = not hideZero or (fallback ~= nil and fallback ~= 0)
+                or (state == "secret" and fallback == nil)
             if visible then
                 local color = cached.colorStrings[definition.colorKey] or cached.colorStrings.mainStat
                 local valueColor = cached.matchValueColorToStat and color or cached.colorStrings.percentage
@@ -12163,7 +12177,7 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero, tool
                 local hideLabel = cached.labelStyle == "hidden"
                 local suffix = hideLabel and definition.rateSeconds
                     and addon.forever.RateSuffix(cached.activeLabelsLocale, definition.rateSeconds) or ""
-                local unknownSuffix = (definition.kind == "movement" or definition.kind == "percent")
+                local unknownSuffix = (isMovement or definition.kind == "percent")
                     and "%" or suffix
                 local text, placeholder
                 local displayState = state
@@ -12178,37 +12192,23 @@ function addon.forever.BuildLines(group, labels, ratings, values, hideZero, tool
                         if visibilitySuffix == ":casting" then
                             label = "Casting Mana Regen / sec"
                         end
-                        suffix = hideLabel and addon.forever.RateSuffix(cached.activeLabelsLocale, 1) or ""
-                        text = SAFE_NUM.FormatColorNumber(valueColor, value, "%.2f" .. suffix, suffix)
+                        local rawSuffix = hideLabel and addon.forever.RateSuffix(cached.activeLabelsLocale, 1) or ""
+                        text, placeholder = SAFE_NUM.FormatColorNumber(valueColor, value, "%.2f" .. rawSuffix, rawSuffix)
                     end
-                elseif definition.kind == "movement" then
-                    local percent, formatted, hasFormatted = addon.movementRuntime.ResolvePercent(value)
-                    if percent ~= nil then
-                        text = SAFE_NUM.FormatColorNumber(valueColor, math.floor(percent + 0.5), "%.0f%%")
-                    elseif hasFormatted then
-                        text = "|cff" .. valueColor .. formatted .. "|r"
-                    end
-                elseif definition.kind == "percent" then
-                    text, placeholder = SAFE_NUM.FormatColorNumber(valueColor, value, "%.2f%%", "%")
                 else
-                    local format = group == "utility" and "%.2f" or "%d"
-                    text, placeholder = SAFE_NUM.FormatColorNumber(valueColor, value, format .. suffix, suffix)
+                    text, placeholder = addon.forever.FormatHUDValue(definition, group, valueColor, value, suffix)
                 end
-                if placeholder and definition.rememberLastClean then
+                if (placeholder or type(text) ~= "string") and state ~= "clean" and fallback ~= nil then
+                    text, placeholder = addon.forever.FormatHUDValue(definition, group, valueColor, fallback, suffix)
+                    label = definition.label
+                    displayState = "stale"
+                elseif (placeholder or type(text) ~= "string") and definition.showDashWhenUnavailable then
+                    -- An unrenderable protected value cannot establish visibility.
                     text = nil
-                    -- If the native formatter cannot display a secret result, it
-                    -- supplies no evidence to override the Hide Zero policy.
-                    visible = not hideZero or (fallback ~= nil and fallback ~= 0)
-                    if fallback ~= nil then
-                        local format = definition.kind == "percent" and "%.2f%%" or "%d"
-                        text, placeholder = SAFE_NUM.FormatColorNumber(valueColor, fallback, format)
-                        displayState = "stale"
-                    else
-                        displayState = "unknown"
-                    end
+                    visible = not hideZero
                 end
                 if visible then
-                    local unavailable = definition.rememberLastClean and "—" or "?" .. unknownSuffix
+                    local unavailable = definition.showDashWhenUnavailable and "—" or "?" .. unknownSuffix
                     local formatted = type(text) == "string"
                     local rendered = text
                     if not formatted then rendered = "|cff" .. valueColor .. unavailable .. "|r" end
@@ -13066,7 +13066,7 @@ end
 local function OnPlayerEnteringWorld()
     if addon.forever.enabled then
         addon.forever.compoundForm = addon.forever.ReadCompoundForm()
-        addon.forever.InvalidateCompoundStats()
+        addon.forever.InvalidateStatValues()
         addon.forever.ReopenTooltipFont()
     end
     SAFE_NUM.ReopenScaledFormatterRetries()
@@ -13183,7 +13183,7 @@ local EVENT_HANDLERS = {
     ITEM_DATA_LOAD_RESULT       = addon.durabilityRuntime.OnItemDataReady,
     PLAYER_EQUIPMENT_CHANGED    = function()
         if addon.forever.enabled then
-            addon.forever.InvalidateCompoundStats()
+            addon.forever.InvalidateStatValues()
         else
             addon.archonTargets.InvalidateComparisonCache()
             local tooltip = addon.archonTargets.tooltip
@@ -13285,7 +13285,7 @@ local EVENT_HANDLERS = {
 if addon.forever.enabled then
     -- These are the talent changes consumed by the Forever character sheet.
     local function onForeverStatContextChanged()
-        addon.forever.InvalidateCompoundStats()
+        addon.forever.InvalidateStatValues()
         timeSinceLastUpdate = cached.updateInterval or 0.5
     end
     EVENT_HANDLERS.PLAYER_TALENT_UPDATE = onForeverStatContextChanged
@@ -21291,7 +21291,7 @@ function addon.settingsUI.BuildStatsTab(self, context)
                     local detail = L("A ? means this stat is unavailable or cannot be calculated safely.")
                     if definition.key == "ManaRegenMP5" then
                         detail = L(self.forever.manaRegenTooltip) .. "\n" .. detail
-                    elseif definition.rememberLastClean then
+                    elseif definition.showDashWhenUnavailable then
                         detail = L(self.forever.compoundStatTooltip)
                     end
                     return self.settingsDesign.DisabledControlTooltip(control) or L(definition.label), detail

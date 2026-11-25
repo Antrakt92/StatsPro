@@ -38,6 +38,8 @@ local wasSwimming = false
 
 function F.ResetMovementMode()
     wasSwimming = false
+    F.lastMovementMode = nil
+    if F.lastCleanValues then F.lastCleanValues["forever:MovementSpeed"] = nil end
 end
 
 local function ReadMovementFlag(name)
@@ -51,12 +53,17 @@ local function ReadMovementFlag(name)
     if ok then return enabled end
 end
 
+local function ReadMovementSpeed(unit, index, mode)
+    local value, state = Read("GetUnitSpeed", index, unit)
+    return value, state, mode
+end
+
 local function MovementSpeed()
     for _, mode in ipairs(transportModes) do
         local enabled = ReadMovementFlag(mode.flag)
         if enabled ~= false then
             wasSwimming = false
-            if enabled then return Read("GetUnitSpeed", mode.index, mode.unit) end
+            if enabled then return ReadMovementSpeed(mode.unit, mode.index, mode.flag) end
             return nil, "unknown"
         end
     end
@@ -66,12 +73,12 @@ local function MovementSpeed()
     wasSwimming = swimming == true or (swimming == false and wasSwimming
         and ReadMovementFlag("IsFalling") == true)
     if swimming == nil then return nil, "unknown" end
-    if wasSwimming then return Read("GetUnitSpeed", 4, "player") end
+    if wasSwimming then return ReadMovementSpeed("player", 4, "swimming") end
     local flying = ReadMovementFlag("IsFlying")
     if flying == nil then return nil, "unknown" end
-    if flying then return Read("GetUnitSpeed", 3, "player") end
+    if flying then return ReadMovementSpeed("player", 3, "flying") end
     -- Ground speed is the run rate even when the character is standing still.
-    return Read("GetUnitSpeed", 2, "player")
+    return ReadMovementSpeed("player", 2, "ground")
 end
 
 local function Sum(name, count, ...)
@@ -482,15 +489,15 @@ end
 Row("offensive", "MeleeCrit", "Melee Crit", Scalar("GetCritChance", 1), "percent", "crit")
 Row("offensive", "RangedCrit", "Ranged Crit", Scalar("GetRangedCritChance", 1), "percent", "crit")
 Row("offensive", "SpellCrit", "Spell Crit", Scalar("GetSpellCritChance", 1), "percent", "crit")
-Row("offensive", "MeleeHit", "Melee Hit", Hit("CR_HIT_MELEE", "GetHitModifier"), "percent").rememberLastClean = true
-Row("offensive", "OffhandHit", "Offhand Hit", Hit("CR_HIT_MELEE", "GetOffhandHitModifier"), "percent").rememberLastClean = true
-Row("offensive", "RangedHit", "Ranged Hit", Hit("CR_HIT_RANGED", "GetRangedHitModifier"), "percent").rememberLastClean = true
-Row("offensive", "SpellHit", "Spell Hit", Hit("CR_HIT_SPELL", "GetSpellHitModifier"), "percent").rememberLastClean = true
+Row("offensive", "MeleeHit", "Melee Hit", Hit("CR_HIT_MELEE", "GetHitModifier"), "percent").showDashWhenUnavailable = true
+Row("offensive", "OffhandHit", "Offhand Hit", Hit("CR_HIT_MELEE", "GetOffhandHitModifier"), "percent").showDashWhenUnavailable = true
+Row("offensive", "RangedHit", "Ranged Hit", Hit("CR_HIT_RANGED", "GetRangedHitModifier"), "percent").showDashWhenUnavailable = true
+Row("offensive", "SpellHit", "Spell Hit", Hit("CR_HIT_SPELL", "GetSpellHitModifier"), "percent").showDashWhenUnavailable = true
 Row("offensive", "MeleeHaste", "Melee Haste", Scalar("GetMeleeHaste", 1), "percent", "haste")
-Row("offensive", "RangedHaste", "Ranged Haste", RangedHaste, "percent", "haste").rememberLastClean = true
+Row("offensive", "RangedHaste", "Ranged Haste", RangedHaste, "percent", "haste").showDashWhenUnavailable = true
 Row("offensive", "SpellHaste", "Spell Haste", Scalar("UnitSpellHaste", 1, "player"), "percent", "haste")
-Row("offensive", "AttackPower", "Attack Power", AttackPower(attackPowerSources[1])).rememberLastClean = true
-Row("offensive", "RangedAttackPower", "Ranged Attack Power", AttackPower(attackPowerSources[2])).rememberLastClean = true
+Row("offensive", "AttackPower", "Attack Power", AttackPower(attackPowerSources[1])).showDashWhenUnavailable = true
+Row("offensive", "RangedAttackPower", "Ranged Attack Power", AttackPower(attackPowerSources[2])).showDashWhenUnavailable = true
 for school, name in ipairs({ "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" }) do
     Row("offensive", "SpellPower" .. name, name .. " Spell Power", Scalar("GetSpellBonusDamage", 1, school + 1))
 end
@@ -501,7 +508,7 @@ for index, name in ipairs({ "Mainhand", "Offhand", "Ranged" }) do
     Row("offensive", name .. "Expertise", name .. " Expertise", Scalar("GetExpertise", index), "percent")
 end
 Row("defensive", "Armor", "Armor", Scalar("UnitArmor", 2, "player"), "number", "armor")
-Row("defensive", "Defense", "Defense", Nonnegative(Sum("UnitDefenseSkill", 2, "player"))).rememberLastClean = true
+Row("defensive", "Defense", "Defense", Nonnegative(Sum("UnitDefenseSkill", 2, "player"))).showDashWhenUnavailable = true
 Row("defensive", "Dodge", "Dodge", Scalar("GetDodgeChance", 1), "percent", "dodge")
 Row("defensive", "Parry", "Parry", Scalar("GetParryChance", 1), "percent", "parry")
 Row("defensive", "Block", "Block", Scalar("GetBlockChance", 1), "percent", "block")
@@ -885,18 +892,18 @@ for locale, labels in pairs(statusLabels) do
     F.labels[locale]["Forever Beta"] = labels[1]
     F.labels[locale]["A ? means this stat is unavailable or cannot be calculated safely."] = labels[2]
 end
-F.compoundStatTooltip = "Parentheses show the last reliable value. A dash means no reliable value is available."
+F.compoundStatTooltip = "When the game withholds a stat, the HUD keeps its last reliable value. A dash means no reliable reading is available."
 local compoundStatHelp = {
     enUS = F.compoundStatTooltip,
-    ruRU = "В скобках показано последнее достоверное значение. Тире означает, что достоверных данных пока нет.",
-    deDE = "In Klammern steht der letzte verlässliche Wert. Ein Strich bedeutet, dass kein verlässlicher Wert vorliegt.",
-    esES = "Los paréntesis muestran el último valor fiable. Un guion indica que no hay ningún valor fiable disponible.",
-    frFR = "Les parenthèses indiquent la dernière valeur fiable. Un tiret indique qu’aucune valeur fiable n’est disponible.",
-    itIT = "Le parentesi indicano l’ultimo valore attendibile. Un trattino indica che non è disponibile alcun valore attendibile.",
-    ptBR = "Os parênteses mostram o último valor confiável. Um traço indica que não há um valor confiável disponível.",
-    koKR = "괄호 안에는 마지막으로 확인된 값이 표시됩니다. 대시는 확인된 값이 없다는 뜻입니다.",
-    zhCN = "括号内显示最近一次确认的数值。破折号表示没有可用的可靠数值。",
-    zhTW = "括號內顯示最近一次確認的數值。破折號表示沒有可用的可靠數值。",
+    ruRU = "Если игра не отдаёт данные, HUD сохраняет последнее достоверное значение. Тире означает, что достоверных данных пока нет.",
+    deDE = "Wenn das Spiel einen Wert nicht bereitstellt, zeigt das HUD den letzten verlässlichen Wert. Ein Strich bedeutet, dass kein verlässlicher Wert vorliegt.",
+    esES = "Si el juego no proporciona un valor, el HUD conserva el último valor fiable. Un guion indica que no hay ningún valor fiable disponible.",
+    frFR = "Si le jeu ne fournit pas une caractéristique, le HUD conserve sa dernière valeur fiable. Un tiret indique qu’aucune valeur fiable n’est disponible.",
+    itIT = "Se il gioco non fornisce un valore, l’HUD conserva l’ultimo valore attendibile. Un trattino indica che non è disponibile alcun valore attendibile.",
+    ptBR = "Se o jogo não fornecer um valor, o HUD mantém o último valor confiável. Um traço indica que não há um valor confiável disponível.",
+    koKR = "게임에서 수치를 제공하지 않으면 HUD에 마지막으로 확인된 값이 표시됩니다. 대시는 확인된 값이 없다는 뜻입니다.",
+    zhCN = "游戏未提供属性数据时，界面保留最近一次确认的数值。破折号表示没有可用的可靠数值。",
+    zhTW = "遊戲未提供屬性資料時，介面保留最近一次確認的數值。破折號表示沒有可用的可靠數值。",
 }
 compoundStatHelp.enGB = compoundStatHelp.enUS
 compoundStatHelp.esMX = compoundStatHelp.esES

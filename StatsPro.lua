@@ -20056,6 +20056,8 @@ function addon.settingsUI.fontPicker.BuildFontsList(self, retryPending)
             }
         end
     end
+    -- Bundled faces can support a selected output language that differs from the
+    -- client locale. Prefer their catalogue labels over matching LSM aliases.
     for _, font in ipairs(addon.bundledFonts or {}) do add(font.name, font.path) end
     if LSM then
         for _, name in ipairs(LSM:List(LSM.MediaType.FONT)) do
@@ -20063,9 +20065,6 @@ function addon.settingsUI.fontPicker.BuildFontsList(self, retryPending)
             add(name, path)
         end
     end
-    -- LSM registers media for the client language. Bundled faces can also be
-    -- used by a different selected output language, without changing LSM globals.
-    for _, font in ipairs(addon.bundledFonts or {}) do add(font.name, font.path) end
     do
         local clientLocale = GetLocale()
         for _, font in ipairs(BLIZZARD_SHIPPED_FONTS) do

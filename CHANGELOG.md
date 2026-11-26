@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.25.4 - 26-Nov-2026 — HUD and Settings recovery
+
+- Keep hover tooltips on the correct stat row if a HUD resize is interrupted.
+- Restore font previews, Settings changes, and deferred diagnostic reports when game timers fail.
+
 ## 1.25.3 - 25-Nov-2026 — Archon target refresh
 
 - Refreshed Retail Archon stat targets for Mythic+ and Normal, Heroic, and Mythic raids.

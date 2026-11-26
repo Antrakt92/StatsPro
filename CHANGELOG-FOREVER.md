@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.25.4 - 26-Nov-2026 — Stat and Settings recovery
+
+- Keep more HUD stats on their last reliable reading when the game temporarily withholds data. Discard invalid movement readings and refresh the HUD when live values return.
+- Keep hover tooltips aligned and recover font previews, Settings updates, and diagnostic reports after client timer failures.
+
 ## 1.25.3 - 24-Nov-2026 — Stable stat display
 
 - Keep the last reliable stat, durability, or item level reading in the HUD without parentheses when the game temporarily withholds a value. The tooltip still identifies the previous reading.
